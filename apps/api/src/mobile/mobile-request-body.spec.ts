@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
+import {
+  dtoMezok,
+  forras,
+  kodSzoveg,
+  mezok,
+} from "./mobile-contract-source.js";
+
 /**
  * AMIT A TELEFON A TÖRZSBEN KÜLD, AZ LÉTEZZEN A DTO-N.
  *
@@ -132,85 +139,12 @@ const PAROK: readonly Par[] = [
 ];
 
 /**
- * AZ UTVONALAK A CSOMAG GYOKEREHEZ KEPEST ALLNAK (`apps/api`), ugyanugy, mint a
- * szomszed tukor-orzoben: a teszt a `test-dist` alol fut, tehat a fajl SAJAT
- * helye nem hasznalhato horgonykent. A rossz utvonalat a lenti hossz-ellenorzes
- * fogja meg -- enelkul ket URES halmazt vetnenk ossze, zolden.
- */
-function forras(ut: string): string {
-  const s = readFileSync(ut, "utf8");
-  // POZITIV KONTROLL A BEOLVASASRA: rossz útvonalnál a lenti állítások két
-  // ÜRES halmazt vetnének össze -- zölden.
-  assert.ok(s.length > 500, `${ut}: üres vagy gyanúsan rövid`);
-  return s;
-}
-
-/** A blokk-kommentek nélküli szöveg: egy magyarázat nem mező. */
-function kodSzoveg(s: string): string {
-  return s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-}
-
-function torzs(s: string, fej: string, nev: string): string {
-  const start = s.indexOf(`${fej} ${nev} `);
-  assert.notEqual(start, -1, `nem találtam: ${fej} ${nev}`);
-  const veg = s.indexOf("\n}", start);
-  assert.notEqual(veg, -1, `nem találtam a végét: ${nev}`);
-  return kodSzoveg(s.slice(start, veg));
-}
-
-/**
- * AZ OSOSZTALY NEVE, HA VAN -- ES EZT EGY HAMIS PIROS KERTE.
+ * A FORRASOLVASOK A `mobile-contract-source.ts` MODULBAN ALLNAK, ES NEM ITT.
  *
- * Az elso alakom a munkalapra elbukott: a `CreateWorksheetDto extends
- * WorksheetContentDto`, tehat a `subject` es a `description` az OSBEN all. A
- * guard "a telefon ismeretlen mezot kuld" hibat jelentett olyan mezokre, amiket
- * a szerver ma is elfogad. Egy orzo, ami hamisan bukik, ugyanolyan drag, mint
- * amelyik hallgat: a kovetkezo ember a guardot veszi ki, nem a hibat.
- *
- * A LANCOT UGYANABBAN A FAJLBAN koveti. Ha egy DTO valaha masik fajlbol
- * orokol, ez a fuggveny nem talalja meg az ost -- es akkor a POZITIV KONTROLL
- * bukik el elobb (az ismert mezok hianyoznanak), nem a fo allitas. Vagyis a
- * korlat HANGOS, nem nema.
+ * Ket orzo hasznalja oket: ez, es a `mobile-request-call-site.spec.ts`, ami a
+ * HIVAS helyen kiirt kulcsokat meri. Ket masolat az elso napon egyezne, es
+ * utana elcsuszna -- pontosan az a hiba, amit ezek az orzok kerülnek.
  */
-function osNeve(s: string, nev: string): string | null {
-  const m = s.match(
-    new RegExp(`export class ${nev}\\s+extends\\s+([A-Za-z_]\\w*)`),
-  );
-  return m ? m[1]! : null;
-}
-
-/** Egy `interface` mezőneveinek halmaza. */
-function mezok(s: string, nev: string): Set<string> {
-  return new Set(
-    [
-      ...torzs(s, "export interface", nev).matchAll(
-        /^\s{2}([A-Za-z_]\w*)\??\s*:/gm,
-      ),
-    ].map((m) => m[1]!),
-  );
-}
-
-/**
- * EGY DTO OSZTÁLY MEZŐNEVEI.
- *
- * KÉT ALAKBAN állhatnak, és mind a kettő kell: saját soron
- * (`  assigneeIds?: string[];`), vagy a dekorátorok UTÁN, ugyanabban a sorban
- * (`  @IsString() @IsOptional() customerId?: string | null;`). Csak az elsőre
- * mérve a jegy DTO-jának a FELE kimaradna.
- */
-function dtoMezok(s: string, nev: string): Set<string> {
-  const osszes = new Set<string>();
-  const latott = new Set<string>();
-  let aktualis: string | null = nev;
-  while (aktualis && !latott.has(aktualis)) {
-    latott.add(aktualis);
-    const t = torzs(s, "export class", aktualis);
-    for (const m of t.matchAll(/(?:^\s{2}|\)\s+)([A-Za-z_]\w*)[!?]?\s*:/gm))
-      osszes.add(m[1]!);
-    aktualis = osNeve(s, aktualis);
-  }
-  return osszes;
-}
 
 /**
  * AMIT EZ AZ ORZO NEM FED LE, KIMONDVA -- ES EGY SZAM, AMI SZOL, HA NO A LISTA.
