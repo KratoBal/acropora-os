@@ -3,6 +3,7 @@ import type * as ImagePicker from "expo-image-picker";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +16,13 @@ import type { ReactNode } from "react";
 
 import { getAsset, uploadAssetDocuments } from "@/lib/api/assets";
 import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
+import {
+  describeDocuments,
+  describeUnviewableDocument,
+  formatDocumentSize,
+  isViewableImage,
+} from "@/lib/documents/document-view";
+import { useDocumentImageSource } from "@/lib/documents/use-document-image-source";
 import { toPickedImages } from "@/lib/api/picked-image";
 import {
   pickPhotosFromLibrary,
@@ -74,6 +82,16 @@ export default function AssetDetailScreen() {
 
   const [uploading, setUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+
+  /** Melyik kep van epp nagyban. Ratet, nem `Modal` -- ebben az appban ma nulla
+   * `Modal` all, es a bevezetese kulon dontes lenne, minden ratettel egyszerre. */
+  const [nagyKep, setNagyKep] = useState<string | null>(null);
+  const kepForras = useDocumentImageSource(
+    // AZ UTVONAL A KLIENS SAJAT `BASE`-EVEL EGYEZIK, nem a kepernyo mappajaval.
+    // A hibajegynel elso alakom a mappanevet hasznalta, es a hiba NEMA lett
+    // volna: a csempek megjelennek, es minden kep "nem tolthető be".
+    id ? `/service/assets/${encodeURIComponent(id)}` : null,
+  );
 
   /**
    * FÉNYKÉP AZ ESZKÖZHÖZ, A HELYSZÍNRŐL. KÉT BEMENET, EGY ÚT.
@@ -184,6 +202,21 @@ export default function AssetDetailScreen() {
   const cachedSummary = cached.data?.summary ?? null;
   const asset = query.data ?? cachedDetail;
   const fromCache = !query.data && Boolean(cachedDetail ?? cachedSummary);
+
+  /*
+    A CSATOLMANYOK A MAR LEKERT VALASZBOL JONNEK, nem masodik hivasbol.
+    A `loading`/`error` a MEGLEVO lekerdezes allapota: ha az bukik, a lap sem
+    all ossze, tehat a szakasz nem tud kulon elromlani.
+  */
+  const csatolmanyok = asset?.documents ?? [];
+  const kepek = csatolmanyok.filter((d) => isViewableImage(d.contentType));
+  const egyebek = csatolmanyok.filter((d) => !isViewableImage(d.contentType));
+  const csatolmanyNotice = describeDocuments({
+    loading: query.isPending && !asset,
+    error: query.isError && !asset,
+    total: csatolmanyok.length,
+    images: kepek.length,
+  });
   const notice = fromCache
     ? describeOfflineDetailNotice({
         online: online && !query.isError,
@@ -317,6 +350,24 @@ export default function AssetDetailScreen() {
               <Info label="Sorozatszám" value={asset.serialNumber} />
               <Info label="Partner azonosítója" value={asset.inventoryNumber} />
               {/*
+                A MATRICAKOD A BEGEPELT AZONOSITOK KOZE VALO, NEM A QR MELLE.
+
+                A ketto MAS FAJTA kod: a matricakod az, amit a szerelo a
+                matricarol leolvas es beir, a QR-token pedig a kirajzolt kod
+                sajat azonositoja. Egy panelbe teve osszemosodnanak, es a
+                szerelo azt hinne, hogy ugyanannak ket alakja.
+
+                UGYANEZ A DONTES ALL A WEBES ADATLAPON (a sajat kommentemmel,
+                2026-09-17), es szandekosan ugyanoda kerult ott is.
+
+                ES CSAK EBBEN AZ AGBAN ALL, A MENTETT MASOLATEBAN NEM: a
+                `cachedSummary` tipusa `AssetListItem`, ami a `labelCode`-ot NEM
+                hordozza (merve a kozos tipusokon). Ha valaki odateszi,
+                `undefined` lesz belole, hibauzenet nelkul -- a mobil sajat
+                tipus-masolatai miatt ott nincs fordito-szintu kapcsolat.
+              */}
+              <Info label="Matricakód" value={asset.labelCode} />
+              {/*
                 A TELJESITMENY EGY MEZOBEN, az ertekevel es a jelevel. A
                 szerkeszto ket mezobe keri be, mert ott ket dolgot kell
                 megadni; itt EGY adat all, es ket sorra bontva a szam
@@ -411,6 +462,79 @@ export default function AssetDetailScreen() {
             ) : null}
 
             {/*
+              A CSATOLMANYOK A `manage` KAPUN KIVUL ALLNAK, mint a munkalapon es
+              a hibajegyen: a MEGNEZES `assetsView` ala tartozik (a lap maga is
+              azon all), a FELTOLTES `assetsManage` ala. Ha a galeria a feltolto
+              szakasz kapujan belul allna, a nezo epp azt nem latna, amiert a
+              kepek felkerultek.
+
+              ES KULON HIVAS NELKUL: a lista MAR ITT VAN. Az `AssetDetail`
+              hordozza a `documents` mezot (merve a kozos tipusokon), es a
+              kepernyo azt a valaszt ugyis lekeri. A #781-ben most keszult
+              `@Get(":id/documents")` vegpont a WEBES oldalnak kell -- a mobil
+              nem igenyel masodik kort.
+
+              A MENTETT MASOLATON A CSEMPEK MEGJELENNEK, A KEPEK NEM: a lista az
+              elmentett valaszbol jon, a kep-bajtok viszont halozatot kivannak.
+              Ezert a hianyzo forras NEM nema, hanem kiirja, hogy nem tolthető be
+              -- egy ures csempe pontosan ugy nezne ki, mint egy elromlott kep.
+            */}
+            {csatolmanyok.length > 0 || csatolmanyNotice ? (
+              <Section title={`Csatolmányok (${csatolmanyok.length})`}>
+                {csatolmanyNotice ? (
+                  <Text style={styles.uploadNotice}>{csatolmanyNotice}</Text>
+                ) : null}
+
+                {kepek.length > 0 ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.galeria}>
+                      {kepek.map((kep) => {
+                        const forras = kepForras(kep.id);
+                        return (
+                          <Pressable
+                            key={kep.id}
+                            accessibilityRole="imagebutton"
+                            accessibilityLabel={`${kep.fileName} megnyitása nagyban`}
+                            disabled={forras === null}
+                            onPress={() => setNagyKep(kep.id)}
+                            style={({ pressed }) => [
+                              styles.csempe,
+                              pressed && styles.pressed,
+                            ]}
+                          >
+                            {forras ? (
+                              <Image
+                                source={forras}
+                                style={styles.csempeKep}
+                                resizeMode="cover"
+                                accessibilityLabel={kep.fileName}
+                              />
+                            ) : (
+                              <View style={styles.csempeKep}>
+                                <Text style={styles.uploadNotice}>
+                                  nem tölthető be
+                                </Text>
+                              </View>
+                            )}
+                            <Text style={styles.csempeMeret}>
+                              {formatDocumentSize(kep.sizeBytes)}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                ) : null}
+
+                {egyebek.map((doc) => (
+                  <Text key={doc.id} style={styles.uploadNotice}>
+                    {describeUnviewableDocument(doc)}
+                  </Text>
+                ))}
+              </Section>
+            ) : null}
+
+            {/*
               A FELTÖLTÉS SZERVERT KÍVÁN, tehát mentett lapon nem jelenik meg,
               ugyanabból az okból, amiért a szerkesztés sem: egy gomb, ami
               offline nem csinál semmit, rosszabb a hiányzó gombnál.
@@ -480,6 +604,34 @@ export default function AssetDetailScreen() {
           </>
         ) : null}
       </ScrollView>
+
+      {nagyKep ? (
+        <View style={styles.nagyRatet}>
+          {(() => {
+            const forras = kepForras(nagyKep);
+            return forras ? (
+              <Image
+                source={forras}
+                style={styles.nagyKep}
+                resizeMode="contain"
+                accessibilityLabel="A csatolmány nagyban"
+              />
+            ) : (
+              <Text style={styles.uploadNotice}>
+                A kép most nem tölthető be.
+              </Text>
+            );
+          })()}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kép bezárása"
+            onPress={() => setNagyKep(null)}
+            style={({ pressed }) => [styles.bezaro, pressed && styles.pressed]}
+          >
+            <Text style={styles.bezaroText}>Bezárás</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -608,6 +760,38 @@ const styles = StyleSheet.create({
   chevron: { color: "#52d6c7", fontSize: 26 },
   pressed: { opacity: 0.68 },
   message: { color: "#a9c4d1", lineHeight: 20, marginTop: 8 },
+  galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
+  csempe: { gap: 4, width: 104 },
+  csempeKep: {
+    width: 104,
+    height: 104,
+    borderRadius: 10,
+    backgroundColor: "#08192a",
+    borderColor: "#17394f",
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
+  nagyRatet: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#03101acc",
+    justifyContent: "center",
+    gap: 16,
+    padding: 20,
+  },
+  nagyKep: { flex: 1, width: "100%", borderRadius: 12 },
+  bezaro: {
+    backgroundColor: "#12384c",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  bezaroText: { color: "#eaf4fa", textAlign: "center" },
   uploadNotice: {
     color: "#475569",
     fontSize: 13,
