@@ -3,6 +3,7 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +19,7 @@ import {
   addWorksheetLine,
   getWorksheet,
   listAssignableWorksheetUsers,
+  listWorksheetDocuments,
   listWorksheetEntries,
   removeWorksheetLine,
   setWorksheetAssignees,
@@ -41,6 +43,13 @@ import {
   worksheetEntryByline,
 } from "@/lib/worksheets/worksheet-entry";
 import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
+import {
+  describeDocuments,
+  describeUnviewableDocument,
+  formatDocumentSize,
+  isViewableImage,
+} from "@/lib/documents/document-view";
+import { useDocumentImageSource } from "@/lib/documents/use-document-image-source";
 import {
   describeWorksheetPhotoUpload,
   WORKSHEET_PHOTO_NOTICE,
@@ -222,6 +231,35 @@ export default function WorksheetDetailScreen() {
   const queryClient = useQueryClient();
 
   /**
+   * A LAP CSATOLMANYAI -- ES EZ A SZAKASZ NEM A FELTOLTES PARJA.
+   *
+   * A MEGNEZES `service.view` alatt all, a FELTOLTES `service.manage` alatt.
+   * Ezert a galeria KIVUL all a feltolto szakasz jogosultsagi kapujan: aki a
+   * lapot latja, a hozza tartozo kepeket is lathatja. Ha a kapun BELUL allna,
+   * a szerelo-nezo epp azt nem latna, amiert a kepek felkerultek.
+   */
+  const documents = useQuery({
+    queryKey: ["worksheet-documents", id],
+    queryFn: () => listWorksheetDocuments(id),
+    enabled: Boolean(
+      id && capabilities?.worksheetsView && status === "authenticated",
+    ),
+  });
+
+  /**
+   * MELYIK KEP VAN EPP NAGYBAN. `null`, amig egyikre sem koppintottak.
+   *
+   * RATET, NEM `Modal`: ebben az appban ma NULLA `Modal` all (ujramerve
+   * 2026-09-17, 235 fajlon), es a `label-code-field.tsx` fejlece kimondja,
+   * hogy a `Modal` bevezetese KULON dontes lenne, mind a harom ratettel
+   * egyszerre. Nem hozom meg helyettuk.
+   */
+  const [nagyKep, setNagyKep] = useState<string | null>(null);
+  const kepForras = useDocumentImageSource(
+    id ? `/service/worksheets/${encodeURIComponent(id)}` : null,
+  );
+
+  /**
    * AKIRE A LAP KIOSZTHATO -- CSAK AKKOR TOLT, AMIKOR A SZERKESZTO KINYILIK.
    *
    * Ugyanaz a szabaly, mint a lista-kepernyo partner-valasztojanal: a lap
@@ -303,6 +341,14 @@ export default function WorksheetDetailScreen() {
         }),
       );
       await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+      /**
+       * A GALERIA IS FRISSUL, NEM CSAK A LAP. Enelkul a most feltoltott kep
+       * NEM jelenne meg a szakaszban -- vagyis a szerelo ugyanazt latna, amit
+       * a mai hianynal: feltoltott, es nincs sehol.
+       */
+      await queryClient.invalidateQueries({
+        queryKey: ["worksheet-documents", id],
+      });
     } catch (cause) {
       setPhotoNotice(
         cause instanceof Error
@@ -456,6 +502,15 @@ export default function WorksheetDetailScreen() {
       : null;
   const current = data?.currentVersion;
   const queuedLinesNotice = describeQueuedWorksheetLines(queuedLines.data ?? 0);
+  const csatolmanyok = documents.data?.items ?? [];
+  const kepek = csatolmanyok.filter((d) => isViewableImage(d.contentType));
+  const egyebek = csatolmanyok.filter((d) => !isViewableImage(d.contentType));
+  const csatolmanyNotice = describeDocuments({
+    loading: documents.isPending,
+    error: documents.isError,
+    total: csatolmanyok.length,
+    images: kepek.length,
+  });
   const readOnlyAssigneeNotice = describeAssigneeReadOnly(
     capabilities.worksheetsManage,
   );
@@ -694,6 +749,83 @@ export default function WorksheetDetailScreen() {
               NEM piszkozat-fuggo -- a szerver sem koti allapothoz. Egy alairt
               lapra is kerulhet kep.
             */}
+            {/*
+              A GALERIA A MANAGE-KAPUN KIVUL ALL. A megnezes `service.view`
+              alatt van, a feltoltes `service.manage` alatt -- ha a kapun BELUL
+              allna, a szerelo-nezo epp azt nem latna, amiert a kepek
+              felkerultek.
+
+              A CSEMPE OSZLOP-ELRENDEZESU, holott ma csak a kep all benne: a
+              kephez irhato megjegyzes KULON KARTYAN all (dbc3e19f, migraciot
+              kiván), es akkor egy sor szoveg a kep ALA kerul. Igy az a valtozas
+              nem rendezi at a szakaszt. ELORE NEM EPITEM MEG: a mezo ma nem
+              letezik, es egy ures helykitolto azt allitana, hogy letezik.
+            */}
+            <Text style={styles.sectionTitle}>
+              Csatolmányok ({csatolmanyok.length})
+            </Text>
+            <View style={styles.card}>
+              {csatolmanyNotice ? (
+                <Text style={styles.muted}>{csatolmanyNotice}</Text>
+              ) : null}
+
+              {kepek.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.galeria}>
+                    {kepek.map((kep) => {
+                      const forras = kepForras(kep.id);
+                      return (
+                        <Pressable
+                          key={kep.id}
+                          accessibilityRole="imagebutton"
+                          accessibilityLabel={`${kep.fileName} megnyitása nagyban`}
+                          disabled={forras === null}
+                          onPress={() => setNagyKep(kep.id)}
+                          style={({ pressed }) => [
+                            styles.csempe,
+                            pressed && styles.pressed,
+                          ]}
+                        >
+                          {forras ? (
+                            <Image
+                              source={forras}
+                              style={styles.csempeKep}
+                              resizeMode="cover"
+                              accessibilityLabel={kep.fileName}
+                            />
+                          ) : (
+                            /*
+                              A HIANYZO FORRAS NEM NEMA. Enelkul egy ures
+                              csempe allna itt, ami pontosan ugy nez ki, mint
+                              egy elromlott kep -- es ez az a hiba, amit ez az
+                              egesz kor javit.
+                            */
+                            <View style={styles.csempeKep}>
+                              <Text style={styles.muted}>nem tölthető be</Text>
+                            </View>
+                          )}
+                          <Text style={styles.csempeMeret}>
+                            {formatDocumentSize(kep.sizeBytes)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              ) : null}
+
+              {/*
+                A NEM MEGNEZHETO CSATOLMANY NEV SZERINT ALL, nem csempekent: a
+                natív kepbetolto nem rajzol ki PDF-et, es egy torott csempe
+                ugyanugy nez ki, mint egy elromlott kep.
+              */}
+              {egyebek.map((doc) => (
+                <Text key={doc.id} style={styles.muted}>
+                  {describeUnviewableDocument(doc)}
+                </Text>
+              ))}
+            </View>
+
             {capabilities.worksheetsManage ? (
               <>
                 <Text style={styles.sectionTitle}>Fénykép</Text>
@@ -1169,6 +1301,42 @@ export default function WorksheetDetailScreen() {
           </>
         ) : null}
       </ScrollView>
+
+      {/*
+        A NAGY KEP RATETKENT, NEM `Modal`-kent es nem masik kepernyokent.
+
+        Masik kepernyore navigalva a lap allapota (a felvitt tetel szovege, a
+        megnyitott felelos-szerkeszto) ELVESZNE, mert a kepernyo ujra epulne --
+        ugyanaz az indok, amiert a matrica-beolvaso is ratetkent nyilik.
+      */}
+      {nagyKep ? (
+        <View style={styles.nagyRatet}>
+          {(() => {
+            const forras = kepForras(nagyKep);
+            return forras ? (
+              <Image
+                source={forras}
+                style={styles.nagyKep}
+                resizeMode="contain"
+                accessibilityLabel="A csatolmány nagyban"
+              />
+            ) : (
+              <Text style={styles.muted}>A kép most nem tölthető be.</Text>
+            );
+          })()}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kép bezárása"
+            onPress={() => setNagyKep(null)}
+            style={({ pressed }) => [
+              styles.addLineButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={styles.addLineText}>Bezárás</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -1322,6 +1490,31 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
   },
+  galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
+  csempe: { gap: 4, width: 104 },
+  csempeKep: {
+    width: 104,
+    height: 104,
+    borderRadius: 10,
+    backgroundColor: "#08192a",
+    borderColor: "#17394f",
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
+  nagyRatet: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#03101acc",
+    justifyContent: "center",
+    gap: 16,
+    padding: 20,
+  },
+  nagyKep: { flex: 1, width: "100%", borderRadius: 12 },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.75 },
 });
