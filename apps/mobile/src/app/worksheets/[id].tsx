@@ -17,8 +17,10 @@ import {
   addWorksheetEntry,
   addWorksheetLine,
   getWorksheet,
+  listAssignableWorksheetUsers,
   listWorksheetEntries,
   removeWorksheetLine,
+  setWorksheetAssignees,
 } from "@/lib/api/worksheets";
 import { ApiError } from "@/lib/api/client";
 import { useIsOnline } from "@/lib/offline/connectivity";
@@ -37,6 +39,12 @@ import {
   describeEmptyEntries,
   worksheetEntryByline,
 } from "@/lib/worksheets/worksheet-entry";
+import {
+  describeAssignableUsers,
+  describeAssigneeReadOnly,
+  toggleWorksheetAssignee,
+  worksheetAssigneesChanged,
+} from "@/lib/worksheets/worksheet-assignees";
 import {
   buildWorksheetLinePayload,
   describeQueuedWorksheetLines,
@@ -93,6 +101,19 @@ export default function WorksheetDetailScreen() {
    */
   const [entryDraft, setEntryDraft] = useState<string | null>(null);
   const [entryError, setEntryError] = useState<string | null>(null);
+
+  /**
+   * A FELELOS-SZERKESZTO ALLAPOTA.
+   *
+   * `null`, amig a szerelo ra nem koppint a gombra -- ugyanaz az alak, mint a
+   * bejegyzes urlapjanal. NEM ures tomb: az nem kulonboztetne meg a "meg ki
+   * sem nyitottam" allapotot attol, hogy "kinyitottam es MINDENKIT levettem".
+   * A masodikbol valodi mentes lesz (a lap felelos nelkul marad), az elsobol
+   * semmi -- es a ket allapot kozott epp ez a kulonbseg.
+   */
+  const [assigneeDraft, setAssigneeDraft] = useState<string[] | null>(null);
+  const [assigneeError, setAssigneeError] = useState<string | null>(null);
+  const [assigneeSaving, setAssigneeSaving] = useState(false);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { status, user } = useAuth();
@@ -159,6 +180,59 @@ export default function WorksheetDetailScreen() {
    * borulna a sorrend, es a hiba nem itt jelenne meg.
    */
   const queryClient = useQueryClient();
+
+  /**
+   * AKIRE A LAP KIOSZTHATO -- CSAK AKKOR TOLT, AMIKOR A SZERKESZTO KINYILIK.
+   *
+   * Ugyanaz a szabaly, mint a lista-kepernyo partner-valasztojanal: a lap
+   * MEGNYITASA ne huzzon le egy listat, amire a legtobb esetben nincs szukseg.
+   *
+   * ES A JOG IS FELTETEL: a lekerdezes `service.view` alatt all, tehat a
+   * szerelonek megvan -- de aki nem irhatja at a kiosztast, annak a LISTA sem
+   * kell. A neveket o is latja, azok a lap valaszaban jonnek.
+   */
+  const assignableUsers = useQuery({
+    queryKey: ["worksheet-assignable-users"],
+    queryFn: listAssignableWorksheetUsers,
+    enabled:
+      assigneeDraft !== null &&
+      status === "authenticated" &&
+      Boolean(capabilities?.worksheetsManage),
+  });
+
+  /**
+   * A FELELOSOK MENTESE.
+   *
+   * A TELJES NEVSOR MEGY, NEM A KULONBSEG: a szerver `PUT`-ot vesz, es a
+   * bekuldott lista a lap felelőseinek TELJES allapota. Ez azt is jelenti,
+   * hogy ha kozben egy masik szerelo szerkesztett, az o valasztasa ELVESZ --
+   * ma a weben is igy van, nem a telefon vezeti be.
+   *
+   * A SZERKESZTO CSAK SIKER UTAN CSUKODIK BE. Egy hiba utan a kivalasztott
+   * nevsor az EGYETLEN peldany a kezunkben: eldobni ugyanaz a nema veszteseg,
+   * mint elvetni egy beirt tetelt kerdes nelkul.
+   */
+  const assigneeMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      if (!id) throw new Error("A munkalap azonosítója hiányzik.");
+      return setWorksheetAssignees(id, userIds);
+    },
+    onMutate: () => {
+      setAssigneeError(null);
+      setAssigneeSaving(true);
+    },
+    onSuccess: async () => {
+      setAssigneeDraft(null);
+      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+    },
+    onError: (cause) =>
+      setAssigneeError(
+        cause instanceof Error
+          ? cause.message
+          : "A felelősök mentése nem sikerült.",
+      ),
+    onSettled: () => setAssigneeSaving(false),
+  });
 
   /**
    * TETEL HOZZAADASA -- SOR-SZINTU MUVELET, NEM TELJES CSERE.
@@ -302,6 +376,23 @@ export default function WorksheetDetailScreen() {
       : null;
   const current = data?.currentVersion;
   const queuedLinesNotice = describeQueuedWorksheetLines(queuedLines.data ?? 0);
+  const readOnlyAssigneeNotice = describeAssigneeReadOnly(
+    capabilities.worksheetsManage,
+  );
+  const assignableNotice =
+    assigneeDraft === null
+      ? null
+      : describeAssignableUsers({
+          loading: assignableUsers.isPending,
+          error: assignableUsers.isError,
+          count: assignableUsers.data?.items.length ?? 0,
+        });
+  const assigneeChanged =
+    assigneeDraft !== null &&
+    worksheetAssigneesChanged(
+      assigneeDraft,
+      (data?.assignees ?? []).map((assignee) => assignee.userId),
+    );
   const rows = data ? worksheetDetailRows(data) : [];
   const continuesFrom = data?.continues ?? null;
   const olderVersions = data?.versions.filter(
@@ -359,6 +450,153 @@ export default function WorksheetDetailScreen() {
                   data.assignees.map((assignee) => assignee.name),
                 )}
               </Text>
+
+              {/*
+                AKI CSAK NEZHETI, ANNAK IS LATSZIK A NEVSOR, es a hianyzo gomb
+                OKA ki van mondva. Egy gomb, ami egyszeruen nincs ott, ugyanugy
+                nez ki, mint egy elromlott -- a szerelo a helyszinen nem tudja
+                eldonteni, melyikrol van szo, es keresni fogja.
+              */}
+              {readOnlyAssigneeNotice ? (
+                <Text style={styles.muted}>{readOnlyAssigneeNotice}</Text>
+              ) : null}
+
+              {/*
+                ALLAPOT-FELTETEL NINCS, ES EZ MERES: a szerver a kiosztast NEM
+                koti a lap allapotahoz (`worksheets.service.ts` `setAssignees`),
+                mert a kiosztas munkaszervezes, nem a dokumentum tartalma. Egy
+                piszkozat-kapu itt olyat tiltana, amit a szerver megenged -- es
+                egy tevesen kiosztott lezart lapot senki nem tudna javitani.
+              */}
+              {capabilities.worksheetsManage && assigneeDraft === null ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Felelősök szerkesztése"
+                  accessibilityState={{ disabled: fromCache }}
+                  disabled={fromCache}
+                  onPress={() =>
+                    setAssigneeDraft(
+                      data.assignees.map((assignee) => assignee.userId),
+                    )
+                  }
+                  style={({ pressed }) => [
+                    styles.assigneeEdit,
+                    fromCache && styles.disabled,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.assigneeEditText}>
+                    Felelősök szerkesztése
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {/*
+                MENTETT MASOLATBOL NEM MEGY, ES EZT IS KIMONDJUK. A mondat a
+                JELEN allapotrol szol, nem altalanos tiltasrol.
+              */}
+              {capabilities.worksheetsManage && fromCache ? (
+                <Text style={styles.muted}>
+                  Mentett másolatot nézel, ezért a kiosztás most nem írható át.
+                  Térerőnél tudod átosztani a lapot.
+                </Text>
+              ) : null}
+
+              {assigneeDraft !== null ? (
+                <>
+                  {/*
+                    A HAROM URES-ESET HAROM KULON MONDAT (tolti / elbukott /
+                    tenyleg nincs kit valasztani), mert a teendojuk mas. Egy
+                    ures doboz a felirat alatt mindharomra ugyanugy nezne ki.
+                  */}
+                  {assignableNotice ? (
+                    <Text style={styles.muted}>{assignableNotice}</Text>
+                  ) : null}
+
+                  {(assignableUsers.data?.items ?? []).map((jelolt) => {
+                    const kivalasztva = assigneeDraft.includes(jelolt.id);
+                    return (
+                      <Pressable
+                        key={jelolt.id}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: kivalasztva }}
+                        accessibilityLabel={jelolt.name}
+                        onPress={() =>
+                          setAssigneeDraft((elozo) =>
+                            elozo === null
+                              ? elozo
+                              : toggleWorksheetAssignee(elozo, jelolt.id),
+                          )
+                        }
+                        style={({ pressed }) => [
+                          styles.assigneeRow,
+                          kivalasztva && styles.assigneeRowOn,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text style={styles.assigneeName}>{jelolt.name}</Text>
+                        {kivalasztva ? (
+                          <Text style={styles.assigneeCheck}>kiosztva</Text>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+
+                  {/*
+                    AMI A LISTAN ALL, AZ LESZ A LAP TELJES NEVSORA -- ez nem
+                    diszites. A szerver `PUT`-ot vesz, tehat a mentes NEM
+                    hozzaad: felulirja. Enelkul a szerelo azt hinne, hogy a
+                    korabbi felelosok mellé kerul az uj.
+                  */}
+                  <Text style={styles.muted}>
+                    {assigneeDraft.length === 0
+                      ? "Mentés után a lapnak nem lesz felelőse."
+                      : `Mentés után pontosan ez a ${assigneeDraft.length} név lesz a lap felelőse.`}
+                  </Text>
+
+                  {assigneeError ? (
+                    <Text style={styles.lineError}>{assigneeError}</Text>
+                  ) : null}
+
+                  <View style={styles.lineRow}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Felelősök mentése"
+                      accessibilityState={{
+                        disabled: !assigneeChanged || assigneeSaving,
+                      }}
+                      disabled={!assigneeChanged || assigneeSaving}
+                      onPress={() => assigneeMutation.mutate(assigneeDraft)}
+                      style={({ pressed }) => [
+                        styles.addLineButton,
+                        styles.assigneeAction,
+                        (!assigneeChanged || assigneeSaving) && styles.disabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.addLineText}>
+                        {assigneeSaving ? "Mentés..." : "Mentés"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Kiosztás szerkesztésének elvetése"
+                      disabled={assigneeSaving}
+                      onPress={() => {
+                        setAssigneeDraft(null);
+                        setAssigneeError(null);
+                      }}
+                      style={({ pressed }) => [
+                        styles.assigneeEdit,
+                        styles.assigneeAction,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.assigneeEditText}>Mégsem</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
             </View>
 
             {current.description ? (
@@ -860,6 +1098,34 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center",
   },
+  assigneeEdit: {
+    backgroundColor: "#12415c",
+    borderColor: "#1c4963",
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 8,
+    padding: 12,
+  },
+  assigneeEditText: {
+    color: "#f4fbff",
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  assigneeAction: { flex: 1, marginTop: 0 },
+  assigneeRow: {
+    alignItems: "center",
+    backgroundColor: "#08192a",
+    borderColor: "#17394f",
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 6,
+    padding: 12,
+  },
+  assigneeRowOn: { borderColor: "#52d6c7" },
+  assigneeName: { color: "#f4fbff", fontSize: 14 },
+  assigneeCheck: { color: "#6de0ce", fontSize: 12, fontWeight: "800" },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.75 },
 });
