@@ -1,4 +1,8 @@
 import type { Prisma } from "@acropora/database";
+import {
+  computeWorksheetLineLaborHours,
+  sumWorksheetLaborHours,
+} from "./worksheet-labor.js";
 import { describeSignerSource } from "./worksheet-signer.js";
 import {
   formatWorksheetVersionLabel,
@@ -217,6 +221,23 @@ export function toVersionSummary(
     netAmount: row.netAmount.toString(),
     vatAmount: row.vatAmount.toString(),
     grossAmount: row.grossAmount.toString(),
+    /*
+      A LAP ÖSSZESÍTETT MUNKAÓRÁJA. Balázs kérése (2026-09-17): "a végén legyen
+      egy össz munkaóra ami automatikusan számol tételenként és az összes tétel
+      esetben is".
+
+      SZÁMOLT ÉRTÉK, NEM MENTETT OSZLOP -- és ez döntés, nem mulasztás. A
+      BEMENETE mentve van (a soron a `kind`, a `workerCount` és a `quantity`
+      mind tárolt oszlop), tehát egy aláírt lap adatai rögzültek. Ami nincs
+      rögzítve, az a SZORZÁS SZABÁLYA: ha az valaha változik, egy már aláírt lap
+      összesítése is mást adna.
+
+      Egy külön oszlop ezt lezárná, de két helyen álló igazságot hozna létre (a
+      sorok és az összeg), és a kettő elcsúszása LÁTHATÓ hiba -- míg a szabály
+      megváltozása néma. A kettő közül a láthatót választani csak akkor éri meg,
+      ha a szabály tényleg mozog; ma egy helyen áll, tesztekkel.
+    */
+    laborHours: sumWorksheetLaborHours(row.lines).toString(),
     signature: toSignatureDetail(row.signature),
   };
 }
@@ -244,6 +265,11 @@ export function toVersionDetail(
       inventoryNumber: line.asset?.inventoryNumber ?? null,
       quantity: line.quantity.toString(),
       unit: line.unit,
+      kind: line.kind,
+      workerCount: line.workerCount,
+      // MÁR KISZÁMOLVA MEGY: két felület ugyanazt a szorzást két helyen
+      // mondaná ki, és az elcsúszásuk néma lenne.
+      laborHours: computeWorksheetLineLaborHours(line).toString(),
       // A HIÁNYZÓ ÁR `null`-ként megy tovább, nem üres szövegként és nem
       // nullaként. Az üres szöveg a felületen kiírható értéknek látszana, a
       // nulla pedig ingyenes munkának - a `null` az egyetlen alak, amiről a
@@ -375,6 +401,11 @@ export function toComparableVersion(
       assetNumber: line.asset?.assetNumber ?? null,
       quantity: line.quantity.toString(),
       unit: line.unit,
+      kind: line.kind,
+      workerCount: line.workerCount,
+      // MÁR KISZÁMOLVA MEGY: két felület ugyanazt a szorzást két helyen
+      // mondaná ki, és az elcsúszásuk néma lenne.
+      laborHours: computeWorksheetLineLaborHours(line).toString(),
       unitNet: line.unitNet?.toString() ?? null,
       vatRatePercent: line.vatRatePercent?.toString() ?? null,
       netAmount: line.netAmount?.toString() ?? null,

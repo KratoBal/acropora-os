@@ -419,6 +419,22 @@ enum WorksheetVersionStatus {
 }
 
 /// Az ügyfél döntése egy adott munkalap-verzióról.
+/// Egy munkalap-tétel fajtája. MA KÉT ÉRTÉK VAN, és ez szándékosan nem
+/// bool: a `unit` mező szabad szöveg marad (db, óra, km, alkalom), a
+/// MUNKAÓRA-összesítésnek viszont megbízható jelölő kell.
+///
+/// MIÉRT NEM A `unit` SZÖVEGÉRE ÉPÜL AZ ÖSSZEGZÉS: egy elgépelt "ora", egy
+/// nagy kezdőbetűs "Óra" vagy egy "munkaóra" CSENDBEN kimaradna az összegből,
+/// és a hibás összeg hihetőnek látszana. A szöveg-egyezés minden új
+/// elgépelésnél újra téved; egy mező egyszer dől el.
+enum WorksheetLineKind {
+  /// Elvégzett munka: a mennyiség ÓRÁBAN értendő, és beleszámít az
+  /// összesített munkaórába.
+  LABOR
+  /// Minden más (anyag, kiszállás, egyéb tétel).
+  OTHER
+}
+
 enum WorksheetSignatureDecision {
   ACCEPTED
   REJECTED
@@ -3714,15 +3730,29 @@ model WorksheetVersion {
 /// köti hozzá. Az eszköz `Restrict`, nem `SetNull`: egy lezárt verzió
 /// tartalma nem változhat meg attól, hogy máshol törölnek egy sort.
 model WorksheetLine {
-  id                 String   @id @default(cuid())
+  id                 String            @id @default(cuid())
   worksheetVersionId String
   position           Int
   description        String
   detail             String?
   assetId            String?
-  quantity           Decimal  @db.Decimal(19, 6)
+  quantity           Decimal           @db.Decimal(19, 6)
   /// Mértékegység (db, óra) - soronként változik, ma szabad szöveg.
   unit               String
+  /// A tétel fajtája. Ez dönti el, beleszámít-e az összesített munkaórába --
+  /// NEM a `unit` szövege. Lásd a WorksheetLineKind fejlécét.
+  kind               WorksheetLineKind @default(OTHER)
+  /// HÁNYAN DOLGOZTAK A TÉTELEN. A tétel munkaórája: `quantity * workerCount`.
+  ///
+  /// Balázs kérése és egyben a mérce (2026-09-17): "ha egy tétel 0,5 óra de
+  /// ketten dolgoztak rajta akkor az 1 óra".
+  ///
+  /// MIÉRT KÖTELEZŐ, ALAPÉRTELMEZÉSSEL, ÉS NEM ELHAGYHATÓ: egy `null` és egy
+  /// `1` UGYANAZT jelentené (egy ember dolgozott rajta), tehát két állapot
+  /// állna egy jelentésre. Az alapértelmezés emellett a MA LÉTEZŐ sorokat is
+  /// értelmessé teszi: mindegyik egy emberrel számol, és egyik összeg sem
+  /// változik meg attól, hogy ez a mező megjelenik.
+  workerCount        Int               @default(1)
   /// AZ ÁR HIÁNYOZHAT, ÉS EZ SZÁNDÉKOS.
   ///
   /// A szerelő a helyszínen azt rögzíti, MIT csinált és MENNYIT; az árat az
@@ -3747,13 +3777,13 @@ model WorksheetLine {
   /// RENDELHETŐ egy tételhez. Ami megszűnt, az az, hogy a hiánya megállít
   /// valamit -- és ebből következik, hogy a számlázási alap nem a munkalapról
   /// jön.
-  unitNet            Decimal? @db.Decimal(19, 4)
-  vatRatePercent     Decimal? @db.Decimal(5, 2)
+  unitNet            Decimal?          @db.Decimal(19, 4)
+  vatRatePercent     Decimal?          @db.Decimal(5, 2)
   /// Az összegek az egységárból számolnak, tehát nélküle nincs mit tárolni.
   /// Nem nulla: a nulla összeg egy elvégzett, ingyenes munka, ami más.
-  netAmount          Decimal? @db.Decimal(19, 4)
-  vatAmount          Decimal? @db.Decimal(19, 4)
-  grossAmount        Decimal? @db.Decimal(19, 4)
+  netAmount          Decimal?          @db.Decimal(19, 4)
+  vatAmount          Decimal?          @db.Decimal(19, 4)
+  grossAmount        Decimal?          @db.Decimal(19, 4)
 
   worksheetVersion WorksheetVersion @relation(fields: [worksheetVersionId], references: [id], onDelete: Cascade)
   asset            Asset?           @relation(fields: [assetId], references: [id], onDelete: Restrict)
@@ -4096,24 +4126,24 @@ model MedusaConnectionSetting {
 }
 
 model UnasProductSyncRun {
-  id                        String                   @id @default(cuid())
-  activeKey                 String?                  @unique
-  kind                      UnasProductSyncKind
-  status                    UnasProductSyncRunStatus @default(PENDING)
-  windowStart               DateTime?
-  windowEnd                 DateTime
-  startedAt                 DateTime?
-  completedAt               DateTime?
-  productsSeen              Int                      @default(0)
-  createdCount              Int                      @default(0)
-  updatedCount              Int                      @default(0)
-  unchangedCount            Int                      @default(0)
-  conflictCount             Int                      @default(0)
-  missingCount              Int                      @default(0)
+  id                            String                   @id @default(cuid())
+  activeKey                     String?                  @unique
+  kind                          UnasProductSyncKind
+  status                        UnasProductSyncRunStatus @default(PENDING)
+  windowStart                   DateTime?
+  windowEnd                     DateTime
+  startedAt                     DateTime?
+  completedAt                   DateTime?
+  productsSeen                  Int                      @default(0)
+  createdCount                  Int                      @default(0)
+  updatedCount                  Int                      @default(0)
+  unchangedCount                Int                      @default(0)
+  conflictCount                 Int                      @default(0)
+  missingCount                  Int                      @default(0)
   /// Ahány terméket a futás kihagyott, mert a törzsadatát nem a UNAS gondozza.
   /// A többi számláló mellett a helye: egy kihagyás, ami csak a válaszban
   /// látszik, holnap már nem visszakereshető.
-  skippedCount              Int                      @default(0)
+  skippedCount                  Int                      @default(0)
   /// A kihagyottak közül ahánynál a FORRÁS IS VÁLTOZOTT ugyanabban a futásban.
   ///
   /// Ez a szám a jelzés, nem a `skippedCount`. A kihagyás maga ÁLLANDÓ: minden
@@ -4123,7 +4153,7 @@ model UnasProductSyncRun {
   /// EZ viszont esemény: azt mondja meg, hogy egy átvett termék szövege a
   /// boltban megváltozott, és mi nem vettük át. A legtöbb futáson nulla, és
   /// pontosan akkor nem az, amikor egy termék elkezd elavulni nálunk.
-  skippedSourceChangedCount Int                      @default(0)
+  skippedSourceChangedCount     Int                      @default(0)
   /// Ahány HASONLÓ kapcsolat-sort írt ez a futás, és ahány hivatkozás veszett
   /// el, mert a célpont nincs a katalógusunkban.
   ///
@@ -4137,19 +4167,86 @@ model UnasProductSyncRun {
   /// de az önhivatkozás és a duplikátum SZÁNDÉKOS kihagyás, nem veszteség --
   /// azok a naplóban maradnak. Itt az ADATVESZTÉS áll, és MELLÉ a nevező:
   /// egy "589 elveszett" szám önmagában nem mondja meg, sok-e.
-  similarRelationsWritten   Int                      @default(0)
-  similarReferencesUnresolved Int                    @default(0)
+  similarRelationsWritten       Int                      @default(0)
+  similarReferencesUnresolved   Int                      @default(0)
   /// Ugyanez a kettő a KIEGÉSZÍTŐ kapcsolatokra. Külön, mert a két ág külön is
   /// tud elromlani: 2026-09-08-án a forrásban 13854 kiegészítő kapcsolat állt,
   /// az OS-ben nulla -- miközben a hasonló ágon hét termék átment.
-  accessoryRelationsWritten Int                      @default(0)
-  accessoryReferencesUnresolved Int                  @default(0)
-  errorCode                 String?
-  createdAt                 DateTime                 @default(now())
-  updatedAt                 DateTime                 @updatedAt
+  accessoryRelationsWritten     Int                      @default(0)
+  accessoryReferencesUnresolved Int                      @default(0)
+  errorCode                     String?
+  createdAt                     DateTime                 @default(now())
+  updatedAt                     DateTime                 @updatedAt
 
   @@index([status, createdAt])
   @@index([kind, completedAt])
+}
+
+/// Egy KAPCSOLAT-UJRAEPITES futasa: a tarolt UNAS-pillanatkepekbol ujraepitett
+/// termek-kapcsolatok (hasonlo es kiegeszito).
+///
+/// === MIERT SAJAT TABLA, ES MIERT NEM EGY ESEMENY ===
+///
+/// Mert MA MAR MEGBUKTUNK EZEN A PONTOS KERDESEN, ugyanebben a temaban: a
+/// #796-ig az elveszett kapcsolat-hivatkozasok szama CSAK a naploban allt, a
+/// naplo pedig a kontener indulasakor kezdodik -- egy ujratelepites utan a
+/// tegnapi veszteseg sehol nem volt meg. Egy JSON-torzsu esemeny nem naplosor,
+/// de a DONTO tulajdonsagban ugyanott all: nem kerdezheto le ugy, hogy "mi
+/// tortent a kapcsolatokkal az elmult ket hetben". Egy NAPI futasnal pont ez az
+/// egyetlen kerdes, amit fel fognak tenni. (acrobot dontese, 2026-09-17.)
+///
+/// ES AMIERT NEM "BEFEKTETES A UNAS-UTBA": ez a tabla nem valtoztat semmilyen
+/// viselkedest, csak FELJEGYZI, mi tortent. Amikor a gazda-atvetel megtortenik,
+/// egy `DROP TABLE` a teljes ara.
+model UnasRelationRebuildRun {
+  id                              String    @id @default(cuid())
+  startedAt                       DateTime  @default(now())
+  completedAt                     DateTime?
+  /// Irt-e a futas (`--apply`), vagy csak tervet keszitett.
+  applied                         Boolean   @default(false)
+  /// MEGALLT-E a nagy valtozas hatarán -- es a sor ILYENKOR IS letrejon.
+  ///
+  /// Ez a legerdekesebb futas, amit rogziteni lehet: ha epp az nem hagyna
+  /// nyomot, a tabla pont azt nem tudna, amiert megepult. A megallas TENYE es a
+  /// TERVEZETT szamok kerulnek bele. (acrobot kikotese.)
+  ///
+  /// ES AMIT EBBOL MEG KI KELL OLVASNI: a `stopped = true` egyben azt is
+  /// jelenti, hogy a futas IRNI AKART. A hatar csak `--apply` mellett all fel,
+  /// terv-modban a CLI sosem all meg rajta. Tehat egy megallt sor nem egy
+  /// ovatos terv nyoma, hanem egy visszafogott IRAS-e. Enelkul a kovetkezo
+  /// olvaso ezt a levezetest nem fogja megtenni, es az `applied = false`
+  /// alapjan probalkozasnak nezi. (acrobot kikotese, 2026-09-17.)
+  stopped                         Boolean   @default(false)
+  /// Az osszes UNAS kapcsolat-sor a futas ELOTT, es amennyi a TERV szerint utana
+  /// allna. A ketto kulonbsege az, amin a hatar all.
+  rowsBefore                      Int       @default(0)
+  rowsPlanned                     Int       @default(0)
+  /// Hany termek visel hivatkozast, es mi tortent velük -- fajtankent.
+  ///
+  /// AZ ONHIVATKOZAS ES A DUPLIKATUM SZANDEKOSAN NINCS ITT: azok nem
+  /// veszteseg, hanem szandekos kihagyas, es a szamuk futasrol futasra
+  /// ugyanaz. Egy oszlop, ami sosem mozdul, nem jelzes, hanem alapzaj -- a
+  /// kimeneten viszont ott allnak. (Ugyanaz a dontes, mint a
+  /// `UnasProductSyncRun` kapcsolat-szamlaloinal.)
+  similarProductsWithReferences   Int       @default(0)
+  similarRelationsPlanned         Int       @default(0)
+  similarRelationsWritten         Int       @default(0)
+  similarRelationsRemoved         Int       @default(0)
+  similarReferencesUnresolved     Int       @default(0)
+  accessoryProductsWithReferences Int       @default(0)
+  accessoryRelationsPlanned       Int       @default(0)
+  accessoryRelationsWritten       Int       @default(0)
+  accessoryRelationsRemoved       Int       @default(0)
+  accessoryReferencesUnresolved   Int       @default(0)
+  /// Amin NEM dolgoztunk, es az okuk kulon: a pillanatkep nem volt olvashato,
+  /// illetve a termeknek nincs kulso azonositoja. Egy kozos szam a ket
+  /// kulonbozo teendot mosna ossze.
+  unreadableSnapshots             Int       @default(0)
+  withoutExternalId               Int       @default(0)
+  errorCode                       String?
+  createdAt                       DateTime  @default(now())
+
+  @@index([startedAt])
 }
 
 /// Egy webshop (UNAS) rendelés-szinkron futás: a getOrder TimeModStart

@@ -1,3 +1,4 @@
+import type { WorksheetLineKind } from "@acropora/database";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -28,6 +29,29 @@ export const WORKSHEET_VERSION_STATUSES = [
 ] as const;
 
 export const WORKSHEET_SIGNATURE_DECISIONS = ["ACCEPTED", "REJECTED"] as const;
+
+/**
+ * A TÉTEL-FAJTÁK, A SÉMÁHOZ KÖTVE -- ÉS A KÖTÉS ALAKJA MÉRVE VAN.
+ *
+ * Az első változatom `as const satisfies readonly WorksheetLineKind[]` volt, és
+ * az NEM VÉD: lemértem, egy érték KIVÉTELE után a typecheck ZÖLD MARADT. A
+ * `readonly T[]` csak azt kéri, hogy minden elem a típus TAGJA legyen -- azt
+ * nem, hogy minden tag szerepeljen. A komment, ami mellette állt, hamis
+ * védelmet ígért.
+ *
+ * A `Record<WorksheetLineKind, true>` ezt zárja le: MINDEN enum-értéknek
+ * kulcsként ott kell állnia. Ha a séma egy harmadik értéket kap (például
+ * MATERIAL), ez a sor fordítási hibát ad -- és ezt is lemértem, mindkét
+ * irányban.
+ */
+const LINE_KIND_SET = {
+  LABOR: true,
+  OTHER: true,
+} as const satisfies Record<WorksheetLineKind, true>;
+
+export const WORKSHEET_LINE_KINDS = Object.keys(
+  LINE_KIND_SET,
+) as WorksheetLineKind[];
 
 export class WorksheetListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() page = 1;
@@ -65,6 +89,23 @@ export class WorksheetLineDto {
   @IsString() @IsOptional() assetId?: string | null;
   @IsNumber({ maxDecimalPlaces: 6 }) @Min(0) quantity!: number;
   @IsString() @MinLength(1) @MaxLength(20) unit!: string;
+  /**
+   * A TÉTEL FAJTÁJA. Ez dönti el, beleszámít-e az összesített munkaórába --
+   * NEM a `unit` szövege, mert az szabad szöveg, és egy elgépelt "ora" csendben
+   * kimaradna az összegből.
+   *
+   * ELHAGYHATÓ, és a hiánya `OTHER`: a mai hívók (telefon és web) nem küldik,
+   * és a séma alapértelmezése ugyanez. Aki munkát rögzít, kimondja.
+   */
+  @IsIn(WORKSHEET_LINE_KINDS) @IsOptional() kind?: WorksheetLineKind;
+  /**
+   * HÁNYAN DOLGOZTAK A TÉTELEN. A tétel munkaórája: `quantity * workerCount`.
+   *
+   * `@Min(1)`: a nulla azt jelentené, hogy a tétel némán kiesik az összegből.
+   * Elhagyható, és a hiánya EGY -- ez a séma alapértelmezése is, tehát a mai
+   * hívók változatlanul küldhetnek nélküle tételt.
+   */
+  @IsInt() @Min(1) @Max(999) @IsOptional() workerCount?: number;
   /**
    * AZ ÁR ELHAGYHATÓ, ÉS A HIÁNY NEM NULLA.
    *
