@@ -6,6 +6,7 @@ import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import { ServiceJobsRepository } from "./service-jobs.repository.js";
 
 /**
  * A DELEGALAS ADATBAZIS-SZINTU IGERETEI.
@@ -300,6 +301,111 @@ describe(
       });
       assert.ok(row, "a delegálás eltűnt a kiosztó törlésekor");
       assert.equal(row?.assignedById, null);
+    });
+
+    /**
+     * A LISTA NEGY HATOKORE, A VALODI ADATBAZISON.
+     *
+     * MIERT NEM ELEG A `service-job-list-scope.spec.ts`: az a FELTETELT meri
+     * (tiszta fuggveny, mock nelkul), azt nem, hogy a Prisma ebbol talal-e
+     * barmit. A `mine` ag epp egy KAPCSOLOTABLAN keres -- es az a fajta
+     * feltetel akkor is helyesnek LATSZIK, ha soha nem ad vissza sort.
+     *
+     * A LATHATOSAGI SZURO HELYERE A SUITE SAJAT ELOTAGJA MEGY. Nem a szures
+     * kikapcsolasa: a `visibility` argumentum `AND` tagkent all be, tehat
+     * pontosan azt teszi, amit a valodi hivo is tenne -- csak a CI kozos
+     * adatbazisan a TOBBI suite jegyeit tartja ki a merésből.
+     */
+    describe("a lista hatokorei", () => {
+      const repository = new ServiceJobsRepository();
+      const ELOTAG = `${TEST_JOB_PREFIX}${suffix}-SCOPE-`;
+      /** A suite sajat sorai, es SEMMI MAS. */
+      const csakEnyem = { jobNumber: { startsWith: ELOTAG } };
+
+      async function szamok(
+        scope: "open" | "all" | "closed" | "mine",
+        userId: string,
+      ) {
+        const { rows } = await repository.list(
+          scope,
+          csakEnyem,
+          undefined,
+          userId,
+        );
+        return rows.map((row) => row.jobNumber).sort();
+      }
+
+      it("a negy hatokor negy kulonbozo halmazt ad", async () => {
+        const nyitottEnyem = `${ELOTAG}1`;
+        const lezartEnyem = `${ELOTAG}2`;
+        const nyitottMase = `${ELOTAG}3`;
+
+        const nyitottEnyemId = await prisma.serviceJob
+          .create({
+            data: {
+              jobNumber: nyitottEnyem,
+              title: "Nyitott, rám kiosztva",
+              openedById: officeUserId,
+              status: "NEW",
+            },
+            select: { id: true },
+          })
+          .then((job) => job.id);
+        const lezartEnyemId = await prisma.serviceJob
+          .create({
+            data: {
+              jobNumber: lezartEnyem,
+              title: "Lezárt, rám kiosztva",
+              openedById: officeUserId,
+              status: "COMPLETED",
+            },
+            select: { id: true },
+          })
+          .then((job) => job.id);
+        await prisma.serviceJob.create({
+          data: {
+            jobNumber: nyitottMase,
+            title: "Nyitott, nincs kiosztva",
+            openedById: officeUserId,
+            status: "NEW",
+          },
+        });
+        await prisma.serviceJobAssignee.createMany({
+          data: [
+            { serviceJobId: nyitottEnyemId, userId: technicianUserId },
+            { serviceJobId: lezartEnyemId, userId: technicianUserId },
+          ],
+        });
+
+        assert.deepEqual(
+          await szamok("all", technicianUserId),
+          [nyitottEnyem, lezartEnyem, nyitottMase].sort(),
+        );
+        assert.deepEqual(
+          await szamok("open", technicianUserId),
+          [nyitottEnyem, nyitottMase].sort(),
+        );
+        assert.deepEqual(await szamok("closed", technicianUserId), [
+          lezartEnyem,
+        ]);
+        /**
+         * A `mine` NEM SZUKUL NYITOTTRA: a lezart sajat jegy is rajta van. Ez
+         * a mai dontes, es ha valaha megvaltozik, ITT pirosodik ki, nem a
+         * helyszinen.
+         */
+        assert.deepEqual(
+          await szamok("mine", technicianUserId),
+          [nyitottEnyem, lezartEnyem].sort(),
+        );
+
+        /**
+         * NEGATIV KONTROLL, POZITIV PARJAVAL: a MASIK szerelonek nincs rajta
+         * egy sor sem, MIKOZBEN ugyanaz a hivas `all` hatokorrel harmat ad.
+         * A ket sor egyutt bizonyit: a nulla a SZUROE, nem a lekerdezese.
+         */
+        assert.deepEqual(await szamok("mine", secondTechnicianUserId), []);
+        assert.equal((await szamok("all", secondTechnicianUserId)).length, 3);
+      });
     });
 
     async function removeLeftovers() {

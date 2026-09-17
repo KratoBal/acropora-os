@@ -22,6 +22,9 @@ enum UserRole {
 
   /// Gépi ágens, ami CSAK tartalmat visz be és olvas. Nem hagyhat jóvá.
   CONTENT_AGENT
+
+  /// Partnerhez kötött emberi fiók: csak hibajegyek, munkalapok és eszközök.
+  PARTNER_SERVICE
 }
 
 enum ProductType {

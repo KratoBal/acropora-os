@@ -45,7 +45,24 @@ import { describe, it } from "node:test";
  * értéke nem fér bele, átcsúszik rajta. PADLÓ, nem garancia -- de a mai hibát
  * megfogta volna, mert az NÉV volt.
  */
-const PAROK = [
+interface Par {
+  mit: string;
+  mobil: string;
+  mobilNev: string;
+  dto: string;
+  dtoNev: string;
+  /** Ismert mezők: ha ezek eltűnnek, a kiolvasás romlott el, nem a kód. */
+  kontroll: readonly string[];
+  /**
+   * A POZITÍV KONTROLL KÜSZÖBE, PÁRONKÉNT. Alapból 2 és 3; egy EGY MEZŐS
+   * kérés-törzsnél a közös küszöb egy HELYES kiolvasásra adna pirosat, és a
+   * következő ember a küszöböt venné ki, nem a hibát keresné.
+   */
+  mobilMinimum?: number;
+  dtoMinimum?: number;
+}
+
+const PAROK: readonly Par[] = [
   {
     mit: "hibajegy felvitele",
     mobil: "../mobile/src/lib/service-jobs/types.ts",
@@ -79,7 +96,29 @@ const PAROK = [
     dtoNev: "CreateWorksheetDto",
     kontroll: ["customerId", "departmentId"],
   },
-] as const;
+  {
+    /**
+     * A FELELŐSÖK ÁTÍRÁSA. 2026-09-17-én került ide, amikor a telefonra
+     * megjött a kiosztás-szerkesztő: a lenti darabszám elmozdult, és a guard
+     * saját üzenete kérte a döntést. A válasz IGEN, mert a törzs NEVESÍTETT
+     * típussal megy -- tehát van mihez kötni.
+     */
+    mit: "felelősök átírása",
+    mobil: "../mobile/src/lib/api/worksheets.ts",
+    mobilNev: "SetWorksheetAssigneesInput",
+    dto: "src/worksheets/dto/worksheet.dto.ts",
+    dtoNev: "SetWorksheetAssigneesDto",
+    kontroll: ["userIds"],
+    /**
+     * EGY MEZŐS MIND A KÉT OLDALON. A kontroll ereje itt nem a darabszámból
+     * jön, hanem a `kontroll` mezőből: az NÉV szerint mondja meg, hogy a
+     * kiolvasás tényleg lát -- és egy rossz útvonalnál a `forras()`
+     * hossz-ellenőrzése szól előbb.
+     */
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
+];
 
 /**
  * AZ UTVONALAK A CSOMAG GYOKEREHEZ KEPEST ALLNAK (`apps/api`), ugyanugy, mint a
@@ -178,7 +217,13 @@ function dtoMezok(s: string, nev: string): Set<string> {
  * MIERT A SZAM ES NEM A NEVEK: egy nev-lista karbantartasa maga is elavul, es a
  * hianyat semmi nem jelzi. Egy szam viszont NEM tud csendben elavulni.
  */
-const IRAS_HIVASOK_MA = 11;
+/**
+ * 2026-09-17: 11 -> 12. Az új hívás a munkalap FELELŐSEINEK átírása
+ * (`setWorksheetAssignees`). NEM csak a szám mozdult: a törzs nevesített
+ * típust kapott (`SetWorksheetAssigneesInput`), és PÁR is lett belőle fent --
+ * vagyis a hívás nem a „nem mérjük" halmazba került.
+ */
+const IRAS_HIVASOK_MA = 12;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {
@@ -207,8 +252,17 @@ describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
     it(`POZITÍV KONTROLL: a(z) ${par.mit} két halmaza nem üres`, () => {
       const mobilMezok = mezok(forras(par.mobil), par.mobilNev);
       const dto = dtoMezok(forras(par.dto), par.dtoNev);
-      assert.ok(mobilMezok.size >= 2, `mobil oldal: ${[...mobilMezok]}`);
-      assert.ok(dto.size >= 3, `DTO oldal: ${[...dto]}`);
+      /**
+       * A MOBIL KÜSZÖB IS PÁRONKÉNT ÁLL: egy egy mezős kérés-törzsnél a `>= 2`
+       * ugyanúgy hamis pirosat adna, mint a DTO oldalán a `>= 3`.
+       */
+      const mobilMinimum = par.mobilMinimum ?? 2;
+      const dtoMinimum = par.dtoMinimum ?? 3;
+      assert.ok(
+        mobilMezok.size >= mobilMinimum,
+        `mobil oldal: ${[...mobilMezok]}`,
+      );
+      assert.ok(dto.size >= dtoMinimum, `DTO oldal: ${[...dto]}`);
       for (const ismert of par.kontroll)
         assert.ok(
           dto.has(ismert),

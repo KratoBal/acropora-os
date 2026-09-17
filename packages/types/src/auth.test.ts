@@ -67,6 +67,37 @@ describe("role permission mapping", () => {
     assert.ok(!ROLE_PERMISSIONS.SERVICE.includes(PERMISSIONS.PARTNERS_MANAGE));
   });
 
+  it("keeps the partner service role limited to the three service areas", () => {
+    const permissions = ROLE_PERMISSIONS.PARTNER_SERVICE;
+
+    // Ezek nem kovetkeztetett tiltások: nev szerint állnak itt, mert egy
+    // későbbi bővítés különben csendben megnyitná a partner-fiók menüjét.
+    assert.equal(
+      permissions.includes(PERMISSIONS.DASHBOARD_VIEW),
+      false,
+      "PARTNER_SERVICE nem kaphat dashboard.view jogosultságot",
+    );
+    assert.equal(
+      permissions.includes(PERMISSIONS.TASKS_VIEW),
+      false,
+      "PARTNER_SERVICE nem kaphat tasks.view jogosultságot",
+    );
+    assert.equal(
+      permissions.includes(PERMISSIONS.PARTNERS_VIEW),
+      false,
+      "PARTNER_SERVICE nem kaphat partners.view jogosultságot",
+    );
+    assert.equal(
+      permissions.includes(PERMISSIONS.AQUARIUMS_VIEW),
+      false,
+      "PARTNER_SERVICE nem kaphat aquariums.view jogosultságot",
+    );
+    assert.deepEqual([...permissions].sort(), [
+      PERMISSIONS.SERVICE_MANAGE,
+      PERMISSIONS.SERVICE_VIEW,
+    ]);
+  });
+
   /**
    * Partner access used to hang off the purchasing permissions, and the
    * supplier endpoints were moved onto the new pair. Anyone who could reach
@@ -146,8 +177,10 @@ describe("permission helpers", () => {
  * SERVICE -- Balazs 2026-09-02 08:39-i menu-listaja, ami TELJES lista, es az AI
  * teszt nincs rajta. Ez a 2026-08-26-i dontesben kimondott szukitesi feltetel
  * bekovetkezese, nem a felulirasa.
+ * PARTNER_SERVICE -- partner-fiók csak a három szerviz-területet kaphatja;
+ * egy belső AI-felület nem része ennek a munkának.
  */
-const SZUKITETT: readonly UserRole[] = ["SERVICE"];
+const SZUKITETT: readonly UserRole[] = ["SERVICE", "PARTNER_SERVICE"];
 
 describe("AI_TEST_VIEW", () => {
   it("is held by every role, because that is what was asked for", () => {

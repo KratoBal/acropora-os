@@ -1,4 +1,5 @@
 import { apiRequest } from "./client";
+import type { ServiceJobScope } from "../service-jobs/list-scope";
 import { buildDocumentUpload, type PickedFile } from "./document-upload";
 import type {
   CreateServiceJobInput,
@@ -62,13 +63,21 @@ export type {
 const BASE = "/service/jobs";
 
 /**
- * A NYITOTT JEGYEK, VAGY MIND.
+ * A JEGYEK, A VALASZTOTT SZUROVEL.
  *
  * A LÁTHATÓSÁGOT A SZERVER SZŰKÍTI, nem ez a hívás: a szervizes a saját
  * helyszíneit látja. Egy kliens-oldali szűrő itt azt ÍGÉRNÉ, hogy tudja, ki mit
  * láthat -- és a következő szabály-változásnál csendben hazudna.
+ *
+ * ES UGYANEZ AZ INDOK ALL A NEGY SZUROre is (2026-09-17): a lista a szerveren
+ * vagodik kettoszaz sornal, tehat egy itteni szures csendben kevesebbet
+ * mutatna, mint amit a felirata iger.
+ *
+ * NINCS ALAPERTELMEZES: a hivo MONDJA MEG, melyik halmazt keri. A korabbi
+ * `= "open"` alapertek epp azt rejtette el, hogy a kepernyo szukitett -- es
+ * abbol lett a bejelentes, hogy az elkeszult jegy "eltunik a listabol".
  */
-export function listServiceJobs(scope: "open" | "all" = "open") {
+export function listServiceJobs(scope: ServiceJobScope) {
   return apiRequest<ServiceJobListResponse>(
     `${BASE}?${new URLSearchParams({ scope })}`,
   );
@@ -101,6 +110,18 @@ export function getServiceJob(id: string) {
  * A SZERVER A LÁTOTT ÁLLAPOTRA ÍR: ha közben más lépett, 409-et ad, nem írja
  * felül csendben. Ezért nem is tesszük sorba offline: egy sorba tett lépés a
  * kiürítéskor bukna el, órákkal később, amikor a szerelő már nincs a gépnél.
+ *
+ * A VÁLASZ A TELJES RÉSZLETLAP, ÉS EZ A SOR ÉLES HIBÁBÓL ÁLL ITT.
+ *
+ * 2026-09-17-ig itt is `ServiceJobDetail` állt, a szerver viszont `{ ok: true }`
+ * nyugtát küldött. A fordító ezt nem láthatta: ez a csomag MÁSOLJA a válasz
+ * típusait (az Expo app nem húzhatja be a munkatér csomagjait), és a másolat
+ * önmagával konzisztens. A képernyő a nyugtát tette a gyorsítótárba, és a
+ * következő kirajzolás `detail.assets.length` értéken állt meg -- ami itt nem
+ * hibaüzenet, hanem KILÉPÉS. A szerver azóta a friss lapot adja, tehát ez a
+ * deklaráció mostantól IGAZ. Ha valaki a szervert nyugtára állítaná vissza, az
+ * `apps/api/src/service-jobs/service-jobs.move.spec.ts` pirosodik ki -- a
+ * TELEFON oldalán ma nincs képernyő-renderelő, ami elkapná.
  */
 export function moveServiceJob(
   id: string,

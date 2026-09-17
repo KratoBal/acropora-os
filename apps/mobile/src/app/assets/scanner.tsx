@@ -1,12 +1,42 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import {
+  describeLabelScanFailure,
+  extractAssetLabelCode,
+} from "@/lib/assets/scanned-payload";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
+/**
+ * ESZKOZ MEGNYITASA BEOLVASASSAL -- KET AZONOSITOVAL, NEM EGGYEL.
+ *
+ * === A MERT HIBA, 2026-09-17 ===
+ *
+ * Ez a kepernyo 2026-09-17-ig CSAK a `qrToken`-t ismerte: uuid, 128 bites
+ * veletlen, amit a rendszer minden eszkoznek ad. Egy elore nyomtatott MATRICA
+ * soha nem fog ennek latszani, tehat a matricaval nem lehetett megtalalni a
+ * gepet, amire fel van ragasztva -- holott a matrica pont ezert kerul ra.
+ *
+ * A szerveren a visszakereso vegpont 2026-09-02 ota all
+ * (`GET service/assets/scan-label/:code`), es egyetlen hivoja a WEB volt. Nem
+ * hianyzo kepesseg volt, hanem be nem kotott.
+ *
+ * === A SORREND NEM MINDEGY, ES EZ NEM IZLES ===
+ *
+ * ELOSZOR a `qrToken`, es CSAK UTANA a matricakod. Egy uuid hexadecimalis, tehat
+ * tartalmazhat `a1234` alaku reszletet -- forditott sorrendben egy ervenyes
+ * QR-kodbol csendben matricakodot nyernenk ki, es MASIK eszkozt nyitnank meg.
+ *
+ * === A KEZI BEVITEL NEM KENYELMI FUNKCIO ===
+ *
+ * Balazs harmadik mondata ("ha kezzel beirom a szamat") azt mutatta, hogy
+ * KERESTE a kezi utat. Ha a kamera nem lat ra a matricara egy gephazban, a
+ * kezi mezo az EGYETLEN ut.
+ */
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -28,7 +58,45 @@ export default function AssetScannerScreen() {
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [message, setMessage] = useState("Tartsd a QR-kódot a kereten belül.");
+  const [manual, setManual] = useState("");
+  const [message, setMessage] = useState(
+    "Tartsd a QR-kódot vagy a matricát a kereten belül.",
+  );
+
+  /**
+   * A BEOLVASOTT SZOVEG FELDOLGOZASA, EGY HELYEN.
+   *
+   * A kamera es a kezi mezo UGYANEZT hivja: kulonben a ket ut kulon romolhatna
+   * el, es a masodikat semmi nem merne.
+   */
+  const feldolgoz = (data: string) => {
+    const token = qrToken(data);
+    if (token) {
+      setScanned(true);
+      router.replace({ pathname: "/assets/scan/[token]", params: { token } });
+      return;
+    }
+    /**
+     * CSAK A QR UTAN A MATRICA. Forditva egy ervenyes uuid hexadecimalis
+     * reszletebol nyernenk ki kodot, es MASIK eszkozt nyitnank meg.
+     */
+    const cimke = extractAssetLabelCode(data);
+    if (cimke.kind === "code") {
+      setScanned(true);
+      router.replace({
+        pathname: "/assets/scan/[token]",
+        params: { token: cimke.code, kind: "label" },
+      });
+      return;
+    }
+    setScanned(true);
+    /**
+     * A HIBAUZENET MEGMONDJA, MIT OLVASOTT. 2026-09-17-ig csak annyit mondott,
+     * hogy "ez nem az" -- es epp emiatt kellett a gazdanak lefenykepeznie a
+     * matricat ahhoz, hogy megtudjuk, mi all rajta.
+     */
+    setMessage(describeLabelScanFailure(data, cimke) ?? "");
+  };
 
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
   if (!capabilities?.assetsView) return <Redirect href="/" />;
@@ -59,39 +127,57 @@ export default function AssetScannerScreen() {
         style={StyleSheet.absoluteFill}
         facing="back"
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-        onBarcodeScanned={
-          scanned
-            ? undefined
-            : ({ data }) => {
-                const token = qrToken(data);
-                if (!token) {
-                  setScanned(true);
-                  setMessage("Ez nem Acropora OS eszközazonosító.");
-                  return;
-                }
-                setScanned(true);
-                router.replace({
-                  pathname: "/assets/scan/[token]",
-                  params: { token },
-                });
-              }
-        }
+        onBarcodeScanned={scanned ? undefined : ({ data }) => feldolgoz(data)}
       />
       <SafeAreaView style={styles.overlay}>
         <Text style={styles.title}>QR-kód beolvasása</Text>
         <View style={styles.frame} />
-        <Text style={styles.message}>{message}</Text>
-        {scanned ? (
-          <Pressable
-            style={styles.button}
-            onPress={() => {
-              setMessage("Tartsd a QR-kódot a kereten belül.");
-              setScanned(false);
-            }}
-          >
-            <Text style={styles.buttonText}>Újraolvasás</Text>
-          </Pressable>
-        ) : null}
+        <View style={styles.bottom}>
+          <Text style={styles.message}>{message}</Text>
+
+          {/*
+            A KEZI BEVITEL MINDIG OTT ALL, nem csak bukas utan. Ha a kamera nem
+            lat ra a matricara egy gephazban, ez az EGYETLEN ut -- es egy mezo,
+            ami csak hiba utan jelenik meg, akkor kerul elo, amikor a szerelo
+            mar feladta.
+          */}
+          <View style={styles.manualRow}>
+            <TextInput
+              accessibilityLabel="Matrica kódja kézzel"
+              value={manual}
+              onChangeText={setManual}
+              placeholder="vagy írd be: D4204"
+              placeholderTextColor="#89a9bb"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              style={styles.manualInput}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Kézzel beírt kód megnyitása"
+              accessibilityState={{ disabled: manual.trim() === "" }}
+              disabled={manual.trim() === ""}
+              style={[styles.button, manual.trim() === "" && styles.disabled]}
+              onPress={() => feldolgoz(manual)}
+            >
+              <Text style={styles.buttonText}>Megnyitás</Text>
+            </Pressable>
+          </View>
+
+          {scanned ? (
+            <Pressable
+              style={styles.button}
+              onPress={() => {
+                setMessage(
+                  "Tartsd a QR-kódot vagy a matricát a kereten belül.",
+                );
+                setScanned(false);
+              }}
+            >
+              <Text style={styles.buttonText}>Újraolvasás</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -141,4 +227,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   buttonText: { color: "#fff", fontWeight: "900", textAlign: "center" },
+  bottom: { alignSelf: "stretch", gap: 12 },
+  manualRow: { flexDirection: "row", gap: 10, alignItems: "center" },
+  manualInput: {
+    flex: 1,
+    backgroundColor: "#071827cc",
+    borderColor: "#17394f",
+    borderRadius: 11,
+    borderWidth: 1,
+    color: "#fff",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  disabled: { opacity: 0.5 },
 });

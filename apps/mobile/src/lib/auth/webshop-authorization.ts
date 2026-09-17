@@ -128,6 +128,21 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
     partnersView: true,
     partnersManage: false,
   },
+  // Partner-fiók csak hibajegyet, munkalapot és eszközt kezel. A szerviz
+  // képességeit lent, a `getServiceCapabilities` adja; itt minden webshop- és
+  // partnerterület hamis marad, hogy a telefon is pontosan a szerver két
+  // `service.*` jogát tükrözze.
+  PARTNER_SERVICE: {
+    workspace: false,
+    ordersView: false,
+    ordersManage: false,
+    purchasingView: false,
+    purchasingManage: false,
+    productsView: false,
+    productsManage: false,
+    partnersView: false,
+    partnersManage: false,
+  },
   VIEWER: {
     workspace: true,
     ordersView: true,
@@ -151,12 +166,14 @@ export function getServiceCapabilities(role: UserRole): ServiceCapabilities {
     role === "ADMIN" ||
     role === "MANAGER" ||
     role === "SERVICE" ||
+    role === "PARTNER_SERVICE" ||
     role === "VIEWER";
   const canManage =
     role === "OWNER" ||
     role === "ADMIN" ||
     role === "MANAGER" ||
-    role === "SERVICE";
+    role === "SERVICE" ||
+    role === "PARTNER_SERVICE";
   return {
     workspace: canView,
     assetsView: canView,
@@ -176,6 +193,7 @@ export function userRoleLabel(role: UserRole): string {
     SALES: "Értékesítés",
     WAREHOUSE: "Raktár",
     SERVICE: "Szerviz",
+    PARTNER_SERVICE: "Partner szerviz",
     VIEWER: "Megtekintő",
   };
   return labels[role];

@@ -3,6 +3,7 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,8 +18,12 @@ import {
   addWorksheetEntry,
   addWorksheetLine,
   getWorksheet,
+  listAssignableWorksheetUsers,
+  listWorksheetDocuments,
   listWorksheetEntries,
   removeWorksheetLine,
+  setWorksheetAssignees,
+  uploadWorksheetDocuments,
 } from "@/lib/api/worksheets";
 import { ApiError } from "@/lib/api/client";
 import { useIsOnline } from "@/lib/offline/connectivity";
@@ -37,6 +42,24 @@ import {
   describeEmptyEntries,
   worksheetEntryByline,
 } from "@/lib/worksheets/worksheet-entry";
+import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
+import {
+  describeDocuments,
+  describeUnviewableDocument,
+  formatDocumentSize,
+  isViewableImage,
+} from "@/lib/documents/document-view";
+import { useDocumentImageSource } from "@/lib/documents/use-document-image-source";
+import {
+  describeWorksheetPhotoUpload,
+  WORKSHEET_PHOTO_NOTICE,
+} from "@/lib/worksheets/worksheet-photo";
+import {
+  describeAssignableUsers,
+  describeAssigneeReadOnly,
+  toggleWorksheetAssignee,
+  worksheetAssigneesChanged,
+} from "@/lib/worksheets/worksheet-assignees";
 import {
   buildWorksheetLinePayload,
   describeQueuedWorksheetLines,
@@ -93,6 +116,53 @@ export default function WorksheetDetailScreen() {
    */
   const [entryDraft, setEntryDraft] = useState<string | null>(null);
   const [entryError, setEntryError] = useState<string | null>(null);
+
+  /**
+   * A FELELOS-SZERKESZTO ALLAPOTA.
+   *
+   * `null`, amig a szerelo ra nem koppint a gombra -- ugyanaz az alak, mint a
+   * bejegyzes urlapjanal. NEM ures tomb: az nem kulonboztetne meg a "meg ki
+   * sem nyitottam" allapotot attol, hogy "kinyitottam es MINDENKIT levettem".
+   * A masodikbol valodi mentes lesz (a lap felelos nelkul marad), az elsobol
+   * semmi -- es a ket allapot kozott epp ez a kulonbseg.
+   */
+  const [assigneeDraft, setAssigneeDraft] = useState<string[] | null>(null);
+  const [assigneeError, setAssigneeError] = useState<string | null>(null);
+  const [assigneeSaving, setAssigneeSaving] = useState(false);
+
+  /**
+   * A FENYKEP ALLAPOTA.
+   *
+   * A VALASZTO FELE A KOZOS HOROG (`lib/photos/use-photo-attachments.ts`):
+   * engedelykeres, valaszto, a mar kivalasztott kep kiszurese, es a
+   * formatum miatt kimaradt fajlok kimondasa. Nem irom ujra -- ez a kod
+   * 2026-09-16 ota EGY helyen all, harom kepernyo hasznalja.
+   *
+   * AMI VISZONT MAS ITT, MINT A HAROM HIVONAL: azok UJ FELVITELI urlapok,
+   * ahol a rekord MEG NEM LETEZIK, tehat gyujtik a kepeket, es a sorsuk a
+   * mentes utan dol el. Ez a lap MAR LETEZIK, es van azonositoja: a kep
+   * AZONNAL felmehet, sajat gombbal.
+   *
+   * MIERT KULON "Feltoltes" GOMB, ES NEM AZONNALI KULDES A VALASZTAS UTAN
+   * (ahogy a hibajegy reszletlapja csinalja): a horog nem ad visszahivast, csak
+   * allapotot gyujt, tehat az azonnali kuldeshez egy `photos`-ra allo
+   * mellekhatas kellene. Az a BUKASNAL romlik el: egy sikertelen feltoltes utan
+   * a kepek bent maradnak, es a kovetkezo valasztas MEGINT elkuldene oket -- a
+   * lapra ket peldany kerulne ugyanabbol a kepbol. Igy a bukas utan a kepek
+   * egyszeruen ott allnak, es a gomb ujra megnyomhato.
+   *
+   * A KET KEPERNYO IGY ELTER EGYMASTOL, es ez KIMONDVA all, nem elnezes. Az
+   * egysegesites kulon kartya: ahhoz a hibajegy lapjahoz kellene hozzanyulni.
+   */
+  const [uploading, setUploading] = useState(false);
+  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+  const {
+    photos,
+    notice: photoPickNotice,
+    clear: clearPhotos,
+    takePhoto,
+    pickPhotos,
+  } = usePhotoAttachments();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { status, user } = useAuth();
@@ -159,6 +229,136 @@ export default function WorksheetDetailScreen() {
    * borulna a sorrend, es a hiba nem itt jelenne meg.
    */
   const queryClient = useQueryClient();
+
+  /**
+   * A LAP CSATOLMANYAI -- ES EZ A SZAKASZ NEM A FELTOLTES PARJA.
+   *
+   * A MEGNEZES `service.view` alatt all, a FELTOLTES `service.manage` alatt.
+   * Ezert a galeria KIVUL all a feltolto szakasz jogosultsagi kapujan: aki a
+   * lapot latja, a hozza tartozo kepeket is lathatja. Ha a kapun BELUL allna,
+   * a szerelo-nezo epp azt nem latna, amiert a kepek felkerultek.
+   */
+  const documents = useQuery({
+    queryKey: ["worksheet-documents", id],
+    queryFn: () => listWorksheetDocuments(id),
+    enabled: Boolean(
+      id && capabilities?.worksheetsView && status === "authenticated",
+    ),
+  });
+
+  /**
+   * MELYIK KEP VAN EPP NAGYBAN. `null`, amig egyikre sem koppintottak.
+   *
+   * RATET, NEM `Modal`: ebben az appban ma NULLA `Modal` all (ujramerve
+   * 2026-09-17, 235 fajlon), es a `label-code-field.tsx` fejlece kimondja,
+   * hogy a `Modal` bevezetese KULON dontes lenne, mind a harom ratettel
+   * egyszerre. Nem hozom meg helyettuk.
+   */
+  const [nagyKep, setNagyKep] = useState<string | null>(null);
+  const kepForras = useDocumentImageSource(
+    id ? `/service/worksheets/${encodeURIComponent(id)}` : null,
+  );
+
+  /**
+   * AKIRE A LAP KIOSZTHATO -- CSAK AKKOR TOLT, AMIKOR A SZERKESZTO KINYILIK.
+   *
+   * Ugyanaz a szabaly, mint a lista-kepernyo partner-valasztojanal: a lap
+   * MEGNYITASA ne huzzon le egy listat, amire a legtobb esetben nincs szukseg.
+   *
+   * ES A JOG IS FELTETEL: a lekerdezes `service.view` alatt all, tehat a
+   * szerelonek megvan -- de aki nem irhatja at a kiosztast, annak a LISTA sem
+   * kell. A neveket o is latja, azok a lap valaszaban jonnek.
+   */
+  const assignableUsers = useQuery({
+    queryKey: ["worksheet-assignable-users"],
+    queryFn: listAssignableWorksheetUsers,
+    enabled:
+      assigneeDraft !== null &&
+      status === "authenticated" &&
+      Boolean(capabilities?.worksheetsManage),
+  });
+
+  /**
+   * A FELELOSOK MENTESE.
+   *
+   * A TELJES NEVSOR MEGY, NEM A KULONBSEG: a szerver `PUT`-ot vesz, es a
+   * bekuldott lista a lap felelőseinek TELJES allapota. Ez azt is jelenti,
+   * hogy ha kozben egy masik szerelo szerkesztett, az o valasztasa ELVESZ --
+   * ma a weben is igy van, nem a telefon vezeti be.
+   *
+   * A SZERKESZTO CSAK SIKER UTAN CSUKODIK BE. Egy hiba utan a kivalasztott
+   * nevsor az EGYETLEN peldany a kezunkben: eldobni ugyanaz a nema veszteseg,
+   * mint elvetni egy beirt tetelt kerdes nelkul.
+   */
+  const assigneeMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      if (!id) throw new Error("A munkalap azonosítója hiányzik.");
+      return setWorksheetAssignees(id, userIds);
+    },
+    onMutate: () => {
+      setAssigneeError(null);
+      setAssigneeSaving(true);
+    },
+    onSuccess: async () => {
+      setAssigneeDraft(null);
+      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+    },
+    onError: (cause) =>
+      setAssigneeError(
+        cause instanceof Error
+          ? cause.message
+          : "A felelősök mentése nem sikerült.",
+      ),
+    onSettled: () => setAssigneeSaving(false),
+  });
+
+  /**
+   * A KIVALASZTOTT KEPEK FELKULDESE.
+   *
+   * A MONDATOKAT NEM ITT RAKOM OSSZE, hanem a `worksheet-photo.ts`-ben: ott
+   * MERHETO, itt nem. Ebben a csomagban nincs komponens-teszt eszkoz.
+   *
+   * A KEPEK CSAK SIKER UTAN URULNEK KI. Egy hibanal a kivalasztott kep az
+   * EGYETLEN peldany a kezunkben, es eldobni ugyanaz a nema veszteseg, mint
+   * elvetni egy beirt tetelt kerdes nelkul.
+   */
+  const feltolt = async () => {
+    if (photos.length === 0 || uploading || !id) return;
+    setPhotoNotice(null);
+    setUploading(true);
+    try {
+      const created = await uploadWorksheetDocuments(id, { files: photos });
+      clearPhotos();
+      setPhotoNotice(
+        describeWorksheetPhotoUpload({
+          uploaded: created.length,
+          /*
+           * A KIMARADT FAJLOKAT A HOROG SAJAT UZENETE HORDOZZA, es azt a
+           * kepernyo kulon kiirja. Ide nem masolom at: ket helyen allo szoveg
+           * ket kulonbozo halmazrol beszelne ugyanabban a percben.
+           */
+          skipped: [],
+        }),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+      /**
+       * A GALERIA IS FRISSUL, NEM CSAK A LAP. Enelkul a most feltoltott kep
+       * NEM jelenne meg a szakaszban -- vagyis a szerelo ugyanazt latna, amit
+       * a mai hianynal: feltoltott, es nincs sehol.
+       */
+      await queryClient.invalidateQueries({
+        queryKey: ["worksheet-documents", id],
+      });
+    } catch (cause) {
+      setPhotoNotice(
+        cause instanceof Error
+          ? cause.message
+          : "A feltöltés nem sikerült. Próbáld újra.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
 
   /**
    * TETEL HOZZAADASA -- SOR-SZINTU MUVELET, NEM TELJES CSERE.
@@ -302,6 +502,32 @@ export default function WorksheetDetailScreen() {
       : null;
   const current = data?.currentVersion;
   const queuedLinesNotice = describeQueuedWorksheetLines(queuedLines.data ?? 0);
+  const csatolmanyok = documents.data?.items ?? [];
+  const kepek = csatolmanyok.filter((d) => isViewableImage(d.contentType));
+  const egyebek = csatolmanyok.filter((d) => !isViewableImage(d.contentType));
+  const csatolmanyNotice = describeDocuments({
+    loading: documents.isPending,
+    error: documents.isError,
+    total: csatolmanyok.length,
+    images: kepek.length,
+  });
+  const readOnlyAssigneeNotice = describeAssigneeReadOnly(
+    capabilities.worksheetsManage,
+  );
+  const assignableNotice =
+    assigneeDraft === null
+      ? null
+      : describeAssignableUsers({
+          loading: assignableUsers.isPending,
+          error: assignableUsers.isError,
+          count: assignableUsers.data?.items.length ?? 0,
+        });
+  const assigneeChanged =
+    assigneeDraft !== null &&
+    worksheetAssigneesChanged(
+      assigneeDraft,
+      (data?.assignees ?? []).map((assignee) => assignee.userId),
+    );
   const rows = data ? worksheetDetailRows(data) : [];
   const continuesFrom = data?.continues ?? null;
   const olderVersions = data?.versions.filter(
@@ -359,7 +585,334 @@ export default function WorksheetDetailScreen() {
                   data.assignees.map((assignee) => assignee.name),
                 )}
               </Text>
+
+              {/*
+                AKI CSAK NEZHETI, ANNAK IS LATSZIK A NEVSOR, es a hianyzo gomb
+                OKA ki van mondva. Egy gomb, ami egyszeruen nincs ott, ugyanugy
+                nez ki, mint egy elromlott -- a szerelo a helyszinen nem tudja
+                eldonteni, melyikrol van szo, es keresni fogja.
+              */}
+              {readOnlyAssigneeNotice ? (
+                <Text style={styles.muted}>{readOnlyAssigneeNotice}</Text>
+              ) : null}
+
+              {/*
+                ALLAPOT-FELTETEL NINCS, ES EZ MERES: a szerver a kiosztast NEM
+                koti a lap allapotahoz (`worksheets.service.ts` `setAssignees`),
+                mert a kiosztas munkaszervezes, nem a dokumentum tartalma. Egy
+                piszkozat-kapu itt olyat tiltana, amit a szerver megenged -- es
+                egy tevesen kiosztott lezart lapot senki nem tudna javitani.
+              */}
+              {capabilities.worksheetsManage && assigneeDraft === null ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Felelősök szerkesztése"
+                  accessibilityState={{ disabled: fromCache }}
+                  disabled={fromCache}
+                  onPress={() =>
+                    setAssigneeDraft(
+                      data.assignees.map((assignee) => assignee.userId),
+                    )
+                  }
+                  style={({ pressed }) => [
+                    styles.assigneeEdit,
+                    fromCache && styles.disabled,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.assigneeEditText}>
+                    Felelősök szerkesztése
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {/*
+                MENTETT MASOLATBOL NEM MEGY, ES EZT IS KIMONDJUK. A mondat a
+                JELEN allapotrol szol, nem altalanos tiltasrol.
+              */}
+              {capabilities.worksheetsManage && fromCache ? (
+                <Text style={styles.muted}>
+                  Mentett másolatot nézel, ezért a kiosztás most nem írható át.
+                  Térerőnél tudod átosztani a lapot.
+                </Text>
+              ) : null}
+
+              {assigneeDraft !== null ? (
+                <>
+                  {/*
+                    A HAROM URES-ESET HAROM KULON MONDAT (tolti / elbukott /
+                    tenyleg nincs kit valasztani), mert a teendojuk mas. Egy
+                    ures doboz a felirat alatt mindharomra ugyanugy nezne ki.
+                  */}
+                  {assignableNotice ? (
+                    <Text style={styles.muted}>{assignableNotice}</Text>
+                  ) : null}
+
+                  {(assignableUsers.data?.items ?? []).map((jelolt) => {
+                    const kivalasztva = assigneeDraft.includes(jelolt.id);
+                    return (
+                      <Pressable
+                        key={jelolt.id}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: kivalasztva }}
+                        accessibilityLabel={jelolt.name}
+                        onPress={() =>
+                          setAssigneeDraft((elozo) =>
+                            elozo === null
+                              ? elozo
+                              : toggleWorksheetAssignee(elozo, jelolt.id),
+                          )
+                        }
+                        style={({ pressed }) => [
+                          styles.assigneeRow,
+                          kivalasztva && styles.assigneeRowOn,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text style={styles.assigneeName}>{jelolt.name}</Text>
+                        {kivalasztva ? (
+                          <Text style={styles.assigneeCheck}>kiosztva</Text>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+
+                  {/*
+                    AMI A LISTAN ALL, AZ LESZ A LAP TELJES NEVSORA -- ez nem
+                    diszites. A szerver `PUT`-ot vesz, tehat a mentes NEM
+                    hozzaad: felulirja. Enelkul a szerelo azt hinne, hogy a
+                    korabbi felelosok mellé kerul az uj.
+                  */}
+                  <Text style={styles.muted}>
+                    {assigneeDraft.length === 0
+                      ? "Mentés után a lapnak nem lesz felelőse."
+                      : `Mentés után pontosan ez a ${assigneeDraft.length} név lesz a lap felelőse.`}
+                  </Text>
+
+                  {assigneeError ? (
+                    <Text style={styles.lineError}>{assigneeError}</Text>
+                  ) : null}
+
+                  <View style={styles.lineRow}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Felelősök mentése"
+                      accessibilityState={{
+                        disabled: !assigneeChanged || assigneeSaving,
+                      }}
+                      disabled={!assigneeChanged || assigneeSaving}
+                      onPress={() => assigneeMutation.mutate(assigneeDraft)}
+                      style={({ pressed }) => [
+                        styles.addLineButton,
+                        styles.assigneeAction,
+                        (!assigneeChanged || assigneeSaving) && styles.disabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.addLineText}>
+                        {assigneeSaving ? "Mentés..." : "Mentés"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Kiosztás szerkesztésének elvetése"
+                      disabled={assigneeSaving}
+                      onPress={() => {
+                        setAssigneeDraft(null);
+                        setAssigneeError(null);
+                      }}
+                      style={({ pressed }) => [
+                        styles.assigneeEdit,
+                        styles.assigneeAction,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.assigneeEditText}>Mégsem</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
             </View>
+
+            {/*
+              A FENYKEP-SZAKASZ A MASOLAT-ALLAPOTTOL FUGGETLENUL ITT ALL, csak a
+              gombok vannak tiltva. Meresbol jovo szabaly: a hibajegy lapjan ez
+              a szakasz elso alakjaban EGYETLEN SZO NELKUL tunt el terero
+              nelkul, es egy hianyzo gomb ugyanugy nez ki, mint egy elromlott.
+
+              A JOGOSULTSAG UGYANAZ, MINT A SZERVEREN: a feltoltes SERVICE_MANAGE
+              alatt all (`worksheets.controller.ts`, `POST :id/documents`). Aki
+              csak nezhet, annak a gomb nem igerhetne olyat, amit a keres
+              ugyanabban a percben elutasitana.
+
+              ALLAPOT-FELTETEL NINCS: a tetel-felvitellel ellentetben a fenykep
+              NEM piszkozat-fuggo -- a szerver sem koti allapothoz. Egy alairt
+              lapra is kerulhet kep.
+            */}
+            {/*
+              A GALERIA A MANAGE-KAPUN KIVUL ALL. A megnezes `service.view`
+              alatt van, a feltoltes `service.manage` alatt -- ha a kapun BELUL
+              allna, a szerelo-nezo epp azt nem latna, amiert a kepek
+              felkerultek.
+
+              A CSEMPE OSZLOP-ELRENDEZESU, holott ma csak a kep all benne: a
+              kephez irhato megjegyzes KULON KARTYAN all (dbc3e19f, migraciot
+              kiván), es akkor egy sor szoveg a kep ALA kerul. Igy az a valtozas
+              nem rendezi at a szakaszt. ELORE NEM EPITEM MEG: a mezo ma nem
+              letezik, es egy ures helykitolto azt allitana, hogy letezik.
+            */}
+            <Text style={styles.sectionTitle}>
+              Csatolmányok ({csatolmanyok.length})
+            </Text>
+            <View style={styles.card}>
+              {csatolmanyNotice ? (
+                <Text style={styles.muted}>{csatolmanyNotice}</Text>
+              ) : null}
+
+              {kepek.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.galeria}>
+                    {kepek.map((kep) => {
+                      const forras = kepForras(kep.id);
+                      return (
+                        <Pressable
+                          key={kep.id}
+                          accessibilityRole="imagebutton"
+                          accessibilityLabel={`${kep.fileName} megnyitása nagyban`}
+                          disabled={forras === null}
+                          onPress={() => setNagyKep(kep.id)}
+                          style={({ pressed }) => [
+                            styles.csempe,
+                            pressed && styles.pressed,
+                          ]}
+                        >
+                          {forras ? (
+                            <Image
+                              source={forras}
+                              style={styles.csempeKep}
+                              resizeMode="cover"
+                              accessibilityLabel={kep.fileName}
+                            />
+                          ) : (
+                            /*
+                              A HIANYZO FORRAS NEM NEMA. Enelkul egy ures
+                              csempe allna itt, ami pontosan ugy nez ki, mint
+                              egy elromlott kep -- es ez az a hiba, amit ez az
+                              egesz kor javit.
+                            */
+                            <View style={styles.csempeKep}>
+                              <Text style={styles.muted}>nem tölthető be</Text>
+                            </View>
+                          )}
+                          <Text style={styles.csempeMeret}>
+                            {formatDocumentSize(kep.sizeBytes)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              ) : null}
+
+              {/*
+                A NEM MEGNEZHETO CSATOLMANY NEV SZERINT ALL, nem csempekent: a
+                natív kepbetolto nem rajzol ki PDF-et, es egy torott csempe
+                ugyanugy nez ki, mint egy elromlott kep.
+              */}
+              {egyebek.map((doc) => (
+                <Text key={doc.id} style={styles.muted}>
+                  {describeUnviewableDocument(doc)}
+                </Text>
+              ))}
+            </View>
+
+            {capabilities.worksheetsManage ? (
+              <>
+                <Text style={styles.sectionTitle}>Fénykép</Text>
+                <View style={styles.card}>
+                  {fromCache ? (
+                    <Text style={styles.muted}>
+                      {WORKSHEET_PHOTO_NOTICE.offlineCopy}
+                    </Text>
+                  ) : null}
+                  <View style={styles.lineRow}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Fénykép készítése"
+                      accessibilityState={{ disabled: uploading || fromCache }}
+                      disabled={uploading || fromCache}
+                      onPress={() => void takePhoto()}
+                      style={({ pressed }) => [
+                        styles.photoButton,
+                        (uploading || fromCache) && styles.disabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.photoButtonText}>Fényképezés</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Kép választása a galériából"
+                      accessibilityState={{ disabled: uploading || fromCache }}
+                      disabled={uploading || fromCache}
+                      onPress={() => void pickPhotos()}
+                      style={({ pressed }) => [
+                        styles.photoButton,
+                        (uploading || fromCache) && styles.disabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.photoButtonText}>Galéria</Text>
+                    </Pressable>
+                  </View>
+
+                  {/*
+                    A HOROG SAJAT UZENETE: a formatum miatt kimaradt fajlok.
+                    Egy csendben eldobott HEIC ugyanugy nez ki, mint egy
+                    sikeres valasztas.
+                  */}
+                  {photoPickNotice ? (
+                    <Text style={styles.muted}>{photoPickNotice}</Text>
+                  ) : null}
+
+                  {/*
+                    A KIVALASZTOTT KEPEK MEG NINCSENEK FENT, ES EZT KI KELL
+                    MONDANI. Enelkul a szerelo a valasztas utan azt hinne, hogy
+                    a kep mar a lapon van, es elmenne a helyszinrol.
+                  */}
+                  {photos.length > 0 ? (
+                    <>
+                      <Text style={styles.muted}>
+                        {photos.length} kép vár feltöltésre. Még egyik sincs a
+                        lapon.
+                      </Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Kiválasztott képek feltöltése"
+                        accessibilityState={{
+                          disabled: uploading || fromCache,
+                        }}
+                        disabled={uploading || fromCache}
+                        onPress={() => void feltolt()}
+                        style={({ pressed }) => [
+                          styles.addLineButton,
+                          (uploading || fromCache) && styles.disabled,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text style={styles.addLineText}>
+                          {uploading ? "Feltöltés..." : "Feltöltés"}
+                        </Text>
+                      </Pressable>
+                    </>
+                  ) : null}
+
+                  {photoNotice ? (
+                    <Text style={styles.muted}>{photoNotice}</Text>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
 
             {current.description ? (
               <>
@@ -748,6 +1301,42 @@ export default function WorksheetDetailScreen() {
           </>
         ) : null}
       </ScrollView>
+
+      {/*
+        A NAGY KEP RATETKENT, NEM `Modal`-kent es nem masik kepernyokent.
+
+        Masik kepernyore navigalva a lap allapota (a felvitt tetel szovege, a
+        megnyitott felelos-szerkeszto) ELVESZNE, mert a kepernyo ujra epulne --
+        ugyanaz az indok, amiert a matrica-beolvaso is ratetkent nyilik.
+      */}
+      {nagyKep ? (
+        <View style={styles.nagyRatet}>
+          {(() => {
+            const forras = kepForras(nagyKep);
+            return forras ? (
+              <Image
+                source={forras}
+                style={styles.nagyKep}
+                resizeMode="contain"
+                accessibilityLabel="A csatolmány nagyban"
+              />
+            ) : (
+              <Text style={styles.muted}>A kép most nem tölthető be.</Text>
+            );
+          })()}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kép bezárása"
+            onPress={() => setNagyKep(null)}
+            style={({ pressed }) => [
+              styles.addLineButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={styles.addLineText}>Bezárás</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -860,6 +1449,72 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center",
   },
+  assigneeEdit: {
+    backgroundColor: "#12415c",
+    borderColor: "#1c4963",
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 8,
+    padding: 12,
+  },
+  assigneeEditText: {
+    color: "#f4fbff",
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  assigneeAction: { flex: 1, marginTop: 0 },
+  assigneeRow: {
+    alignItems: "center",
+    backgroundColor: "#08192a",
+    borderColor: "#17394f",
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 6,
+    padding: 12,
+  },
+  assigneeRowOn: { borderColor: "#52d6c7" },
+  assigneeName: { color: "#f4fbff", fontSize: 14 },
+  assigneeCheck: { color: "#6de0ce", fontSize: 12, fontWeight: "800" },
+  photoButton: {
+    backgroundColor: "#12415c",
+    borderColor: "#1c4963",
+    borderRadius: 10,
+    borderWidth: 1,
+    flex: 1,
+    padding: 12,
+  },
+  photoButtonText: {
+    color: "#f4fbff",
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
+  csempe: { gap: 4, width: 104 },
+  csempeKep: {
+    width: 104,
+    height: 104,
+    borderRadius: 10,
+    backgroundColor: "#08192a",
+    borderColor: "#17394f",
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
+  nagyRatet: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#03101acc",
+    justifyContent: "center",
+    gap: 16,
+    padding: 20,
+  },
+  nagyKep: { flex: 1, width: "100%", borderRadius: 12 },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.75 },
 });

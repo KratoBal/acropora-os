@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -28,6 +28,12 @@ import {
   rememberServiceJobs,
 } from "@/lib/offline/service-job-cache";
 import {
+  cachedItemsForScope,
+  DEFAULT_SERVICE_JOB_SCOPE,
+  SERVICE_JOB_SCOPES,
+  type ServiceJobScope,
+} from "@/lib/service-jobs/list-scope";
+import {
   serviceJobStatusLabel,
   shortPath,
 } from "@/lib/service-jobs/service-job-status";
@@ -37,10 +43,19 @@ const CACHE_KEY = ["offline-service-jobs"] as const;
 /**
  * A HIBAJEGYEK LISTÁJA A TELEFONON.
  *
- * NYITOTT JEGYEK, NEM MIND. A helyszínen álló szerelőnek az kell, amin dolgozni
- * lehet; a lezárt jegyek a weben nézhetők vissza. Ez a döntés SZŰKÍT, tehát
- * hangos: aki keres valamit és nem találja, szól. A fordítottja (mindent
- * mutatni) néma lenne: a lista hosszabb, és a mai munka elveszne benne.
+ * NÉGY SZŰRŐ, ÉS AZ ÖSSZES AZ ALAPÉRTELMEZÉS (Balázs kérése, 2026-09-17).
+ *
+ * 2026-09-17-ig ez a képernyő FIXEN a nyitott jegyeket kérte. Az a szűkítés
+ * szándékos volt és ki is volt mondva a fejlécben -- de a helyszínen úgy
+ * jelent meg, hogy egy elkészültre léptetett jegy ELTŰNIK a listából, és nincs
+ * hova visszanézni rá. A választó ezt oldja fel, és a KIVÁLASZTOTT állapot is
+ * látszik: a lista soha ne legyen csendben szűkebb, mint a felirata.
+ *
+ * A SZŰRÉS A SZERVEREN TÖRTÉNIK, nem itt: a lista kétszáz sornál vágódik,
+ * tehát egy kliens-oldali szűrő kevesebbet mutatna, mint amit ígér. Az
+ * EGYETLEN kivétel a mentett másolat, ahol nincs kitől kérni -- azt a
+ * `cachedItemsForScope` intézi, és ki is mondja, ha egy szűrőhöz kapcsolat
+ * kell.
  *
  * A LÁTHATÓSÁGOT A SZERVER SZABJA, nem ez a képernyő: a szervizes a saját
  * helyszíneit látja. Egy kliens-oldali szűrő itt azt ígérné, hogy tudja, ki mit
@@ -51,12 +66,17 @@ export default function ServiceJobListScreen() {
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const online = useIsOnline();
+  const [scope, setScope] = useState<ServiceJobScope>(
+    DEFAULT_SERVICE_JOB_SCOPE,
+  );
 
   const query = useQuery({
-    queryKey: ["service-jobs", "open"],
+    // A HATOKOR RESZE A KULCSNAK. Enelkul a valaszto atkapcsolasa a REGI
+    // halmazt mutatna a masik felirat alatt, amig az uj lekerdezes befut.
+    queryKey: ["service-jobs", scope],
     // A hívás akkor is elindul, ha a készülék offline-nak mondja magát: a
     // jelzése tévedhet, és egy működő lekérdezést nem tarthat vissza.
-    queryFn: () => listServiceJobs("open"),
+    queryFn: () => listServiceJobs(scope),
     enabled:
       status === "authenticated" && Boolean(capabilities?.serviceJobsView),
     placeholderData: keepPreviousData,
@@ -69,10 +89,18 @@ export default function ServiceJobListScreen() {
       status === "authenticated" && Boolean(capabilities?.serviceJobsView),
   });
 
+  /**
+   * A MENTETT MASOLATOT CSAK A LEGTAGABB HALMAZ IRJA FELUL.
+   *
+   * Ha barmelyik szuro irna, a masolat ANNAK a szuronek a maradeka lenne, es a
+   * kovetkezo terero nelkuli inditasnal `Osszes` feliratot kapna egy szukebb
+   * lista. Igy viszont a masolat mindig ugyanazt jelenti: a legutobb latott
+   * TELJES lista.
+   */
   useEffect(() => {
-    if (!query.data) return;
+    if (!query.data || scope !== DEFAULT_SERVICE_JOB_SCOPE) return;
     void rememberServiceJobs(query.data.items);
-  }, [query.data]);
+  }, [query.data, scope]);
 
   if (status === "unauthenticated") return <Redirect href="/login" />;
   if (status === "authenticated" && !capabilities?.serviceJobsView)
@@ -92,7 +120,19 @@ export default function ServiceJobListScreen() {
    * hiba ÜRES listát adna, ami ugyanúgy néz ki, mint egy valóban üres nap.
    */
   const cachedItems = cached.data?.items ?? [];
-  const items: ServiceJobListItem[] = query.data?.items ?? cachedItems;
+  /**
+   * A MASOLAT A VALASZTOTT SZUROVEL, VAGY EGY KIMONDOTT NEMMEL.
+   *
+   * A mentett sorok allapota rajtuk van, a KIOSZTAS nincs -- a `ram kiosztva`
+   * tehat kapcsolat nelkul nem szamolhato ki. Ilyenkor a kepernyo NEM a teljes
+   * listat adja helyette: az tagabb lenne, mint a felirata, ami ugyanolyan
+   * hazugsag, mint a szukebb.
+   */
+  const fromCache = cachedItemsForScope(cachedItems, scope);
+  const cachedForScope = fromCache.kind === "items" ? fromCache.items : [];
+  const items: ServiceJobListItem[] = query.data?.items ?? cachedForScope;
+  const scopeNeedsConnection =
+    !query.data && fromCache.kind === "needs-connection";
   const notice = describeOfflineNotice({
     online: online && !query.isError,
     syncedAt: cached.data?.syncedAt ?? null,
@@ -111,16 +151,50 @@ export default function ServiceJobListScreen() {
           <View style={styles.header}>
             {notice ? <OfflineNoticeCard notice={notice} /> : null}
             {/*
+              A SZŰRŐ-SÁV. A KIVÁLASZTOTT ÁLLAPOT IS LÁTSZIK, nem csak a négy
+              felirat: egy szűrt lista, ami nem mondja meg, hogy szűrt, épp az
+              a hiba, amiért ez a sáv megszületett.
+            */}
+            <View style={styles.scopes}>
+              {SERVICE_JOB_SCOPES.map((option) => {
+                const selected = option.id === scope;
+                return (
+                  <Pressable
+                    key={option.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={option.label}
+                    onPress={() => setScope(option.id)}
+                    style={[styles.scope, selected && styles.scopeSelected]}
+                  >
+                    <Text
+                      style={[
+                        styles.scopeLabel,
+                        selected && styles.scopeLabelSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {scopeNeedsConnection ? (
+              <Text style={styles.hint}>
+                Ehhez a szűréshez kapcsolat kell: a mentett másolat nem tudja,
+                kire van kiosztva egy jegy. A többi szűrő offline is működik.
+              </Text>
+            ) : null}
+            {/*
               A KIHAGYÁSOK KIMONDVA, NEM ELHALLGATVA. Egy hiányzó gomb ugyanúgy
               néz ki, mint egy elromlott -- és a szerelő a helyszínen nem tudja
               eldönteni, melyikről van szó.
             */}
             <Text style={styles.hint}>
-              A nyitott hibajegyek. Telefonon a jegy olvasható, léptethető, és
-              fényképet lehet rátenni. Új jegyet a gép adatlapjáról nyithatsz
-              (Eszközök, majd Hibajegy nyitása), így a partner és a helyszín a
-              gépből következik. Partnert váltani és delegálni a webes felületen
-              lehet.
+              Telefonon a jegy olvasható, léptethető, és fényképet lehet
+              rátenni. Új jegyet a gép adatlapjáról nyithatsz (Eszközök, majd
+              Hibajegy nyitása), így a partner és a helyszín a gépből
+              következik. Partnert váltani és delegálni a webes felületen lehet.
             </Text>
           </View>
         }
@@ -129,9 +203,11 @@ export default function ServiceJobListScreen() {
             <ActivityIndicator style={styles.loading} />
           ) : (
             <Text style={styles.empty}>
-              {online
-                ? "Nincs nyitott hibajegy."
-                : "Nincs kapcsolat, és nincs mentett hibajegy ezen a készüléken."}
+              {scopeNeedsConnection
+                ? "Ehhez a szűréshez kapcsolat kell."
+                : online
+                  ? "Ebben a szűrésben nincs hibajegy."
+                  : "Nincs kapcsolat, és nincs mentett hibajegy ezen a készüléken."}
             </Text>
           )
         }
@@ -171,6 +247,16 @@ const styles = StyleSheet.create({
   safeArea: { backgroundColor: "#06202e", flex: 1 },
   list: { gap: 12, padding: 16 },
   header: { gap: 12 },
+  scopes: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  scope: {
+    backgroundColor: "#0d2a3a",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  scopeSelected: { backgroundColor: "#1f6f97" },
+  scopeLabel: { color: "#9fc4d8", fontSize: 13 },
+  scopeLabelSelected: { color: "#eaf4fa", fontWeight: "600" },
   hint: { color: "#9fc4d8", fontSize: 13, lineHeight: 18 },
   loading: { marginTop: 32 },
   empty: { color: "#9fc4d8", marginTop: 32, textAlign: "center" },

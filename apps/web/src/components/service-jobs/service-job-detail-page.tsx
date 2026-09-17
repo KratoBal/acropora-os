@@ -26,9 +26,9 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
-import { formatFileSize } from "@/lib/format/file-size";
 import { PartnerPicker } from "./partner-picker";
 import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
+import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import {
   ServiceBackLink,
@@ -182,8 +182,11 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   /**
    * A LÉPÉS UTÁN ÚJRATÖLTÜNK, nem a válaszból építünk.
    *
-   * A `move` csak nyugtát ad. Ha a képernyőt abból raknánk össze, a napló új
-   * sora hiányozna róla - és épp az a sor a bizonyíték, hogy a lépés megtörtént.
+   * ÉS EZ MÁR NEM KÉNYSZER, HANEM VÁLASZTÁS: a `move` 2026-09-17 óta a friss
+   * részletlapot adja (ugyanazt, amit a `load()` elhoz), tehát a képernyő
+   * felépíthető lenne belőle, egy kör megspórolásával. Az a csere viszont a
+   * WEBES viselkedést mozdítaná el, a mai javítás pedig a TELEFONOS kilépésről
+   * szól -- ezért marad, ahogy van. Külön lépésnek való, nem ennek.
    */
   const step = async (to: ServiceJobStatusValue) => {
     setStepping(true);
@@ -620,48 +623,24 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   description={documentsError}
                 />
               ) : null}
-              {documents.length ? (
-                <ul className="divide-y rounded border text-sm">
-                  {documents.map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex flex-wrap items-center justify-between gap-3 px-3 py-2"
-                    >
-                      <div>
-                        <p className="font-medium">{item.fileName}</p>
-                        <p className="text-xs text-dusk-500">
-                          {formatFileSize(item.sizeBytes)} ·{" "}
-                          {formatDateTime(item.createdAt)}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => void downloadDocument(item)}
-                        >
-                          Letöltés
-                        </Button>
-                        {canManage ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => setDocumentToDelete(item)}
-                          >
-                            Törlés
-                          </Button>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                /* A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik, es a
-             kezelo megvarja. Ez a mondat kimondja, hogy nincs mire varni. */
-                <p className="text-sm text-dusk-500">
-                  Ehhez a jegyhez még nincs fénykép vagy fájl csatolva.
-                </p>
-              )}
+              {/*
+                A KEPEK LATSZANAK, NEM LETOLTODNEK (Balazs kerese, 2026-09-17).
+                A galeria a `components/service/` alol jon, ugyanonnan, ahonnan a
+                lap tobbi szerviz-kulseje -- a munkalap es az eszkoz lapja
+                ugyanezt a csatolmany-listat mutatja, es harom masolat harom
+                kulon viselkedest jelentene ugyanarra a fogalomra.
+              */}
+              <ServiceDocumentGallery
+                items={documents}
+                loadBlob={(documentId) =>
+                  serviceJobsApi.downloadDocument(token, jobId, documentId)
+                }
+                onDownload={(item) => void downloadDocument(item)}
+                /* A JOG HIANYA ITT A FUGGVENY HIANYA, nem egy `false` zaszlo: igy
+                   a galeria nem tud "torol, de le van tiltva" allapotba kerulni. */
+                onDelete={canManage ? setDocumentToDelete : undefined}
+                emptyText="Ehhez a jegyhez még nincs fénykép vagy fájl csatolva."
+              />
               {canManage ? (
                 <div className="flex flex-wrap items-end gap-2 border-t pt-3">
                   <div className="space-y-1">

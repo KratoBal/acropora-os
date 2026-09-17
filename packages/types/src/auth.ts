@@ -26,6 +26,7 @@ export const USER_ROLES = [
   "SERVICE",
   "VIEWER",
   "CONTENT_AGENT",
+  "PARTNER_SERVICE",
 ] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
@@ -304,6 +305,20 @@ export const ROLE_PERMISSIONS: Readonly<
    * ne látszódjon szűkebbnek, mint amilyen.
    */
   CONTENT_AGENT: [PERMISSIONS.CONTENT_VIEW, PERMISSIONS.CONTENT_MANAGE],
+
+  /**
+   * PARTNERHEZ KOTOTT SZERVIZES FIÓK.
+   *
+   * Ez nem a belso `SERVICE` szerep szukitese: azt a sajat kollegaink
+   * hasznaljak, es a mukodesukhoz a dashboard, a feladatok, a partnerek es az
+   * akvariumok is kellenek. A partner-fiók viszont csak a sajat hatokorbe eso
+   * hibajegyeket, munkalapokat es eszkozoket kezelheti. A hatar ezert itt, a
+   * jogoknal all; a menuk es a szerver ugyanebből a ket jogbol indulnak ki.
+   *
+   * Kulonosen nincs benne `partners.view`: egy partner-fióknak a sajat
+   * cegén kivuli partnerek olvasasa sem megengedett.
+   */
+  PARTNER_SERVICE: [PERMISSIONS.SERVICE_VIEW, PERMISSIONS.SERVICE_MANAGE],
 };
 
 export interface AuthenticatedUser {
