@@ -4,6 +4,7 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,10 +22,18 @@ import { describeUploadFailure } from "@/lib/api/network-failure";
 import { ApiNetworkError } from "@/lib/api/client";
 import {
   getServiceJob,
+  listServiceJobDocuments,
   moveServiceJob,
   uploadServiceJobPhotos,
   type ServiceJobStatusValue,
 } from "@/lib/api/service-jobs";
+import {
+  describeDocuments,
+  describeUnviewableDocument,
+  formatDocumentSize,
+  isViewableImage,
+} from "@/lib/documents/document-view";
+import { useDocumentImageSource } from "@/lib/documents/use-document-image-source";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { useIsOnline } from "@/lib/offline/connectivity";
@@ -80,6 +89,45 @@ export default function ServiceJobDetailScreen() {
     queryFn: () => readCachedServiceJob(id!),
     enabled: status === "authenticated" && Boolean(id),
   });
+
+  /**
+   * A CSATOLMANYOK -- ES A LEKERDEZES A `view` KAPU ALATT ALL, NEM A `manage`
+   * ALATT.
+   *
+   * Ez nem elhelyezesi izles: a MEGNEZES `service.view` alatt all, a FELTOLTES
+   * `service.manage` alatt. Ha a galeria a feltolto szakasz kapujan BELUL allna,
+   * a szerelo-nezo epp azt nem latna, amiert a kepek felkerultek -- es a
+   * munkalap kepernyoje ugyanezt a dontest hordozza, sajat kommenttel.
+   *
+   * ES AMIERT MOST KERULT IDE, EGY MONDATBAN: a feltoltes 2026-09-17-ig SOHA nem
+   * ment at a telefonrol (a futtato `fetch`-e eldobta a torzs fajl-reszet), tehat
+   * ezen a lapon egyetlen kep sem volt, amit meg lehetett volna nezni. A
+   * feltoltes aznap javult meg; ez a szakasz a masik fele.
+   */
+  const documents = useQuery({
+    queryKey: ["service-job-documents", id],
+    queryFn: () => listServiceJobDocuments(id!),
+    enabled: Boolean(
+      id && capabilities?.serviceJobsView && status === "authenticated",
+    ),
+  });
+
+  /**
+   * MELYIK KEP VAN EPP NAGYBAN. `null`, amig egyikre sem koppintottak.
+   *
+   * RATET, NEM `Modal`: ebben az appban ma nulla `Modal` all, es a bevezetese
+   * KULON dontes lenne, minden ratettel egyszerre. Nem hozom meg itt.
+   */
+  const [nagyKep, setNagyKep] = useState<string | null>(null);
+  const kepForras = useDocumentImageSource(
+    /*
+      AZ UTVONAL A KLIENS SAJAT `BASE`-EVEL EGYEZIK (`/service/jobs`), NEM a
+      kepernyo mappanevevel. Elso alakom `/service/service-jobs` volt, a
+      mappa utan -- es az a hiba NEMA lett volna: a lista betoltodik, a
+      csempek megjelennek, es minden kep "nem tolthető be" felirattal all.
+    */
+    id ? `/service/jobs/${encodeURIComponent(id)}` : null,
+  );
 
   useEffect(() => {
     if (!query.data) return;
@@ -139,6 +187,17 @@ export default function ServiceJobDetailScreen() {
           ? `${created.length} kép feltöltve. Kimaradt: ${skipped.join(", ")}.`
           : `${created.length} kép feltöltve.`,
       );
+
+      /**
+       * ES A LISTA IS FRISSUL, KULONBEN A FRISS KEP NEM JELENIK MEG.
+       *
+       * Enelkul a szerelo PONTOSAN azt latna, amit a mai hianynal: feltoltott,
+       * es nincs sehol. A galeria-szakasz epp ezert keszult, tehat a feltoltes
+       * ervenytelenitese nem kiegeszites, hanem a szakasz resze.
+       */
+      await queryClient.invalidateQueries({
+        queryKey: ["service-job-documents", id],
+      });
     } catch (error) {
       /**
        * A BUKAS MEGMONDJA, MI TORTENT -- lasd `lib/api/network-failure.ts`.
@@ -198,6 +257,21 @@ export default function ServiceJobDetailScreen() {
    */
   const detail = query.data ?? cached.data?.detail ?? null;
   const masolatbol = !query.data && detail !== null;
+
+  /*
+    A CSATOLMANYOK SZARMAZTATOTT ERTEKEI. A kepek es a NEM megnezheto fajlok
+    kulon allnak: a natív kepbetolto nem rajzol ki PDF-et, es egy torott csempe
+    ugyanugy nez ki, mint egy elromlott kep.
+  */
+  const csatolmanyok = documents.data?.items ?? [];
+  const kepek = csatolmanyok.filter((d) => isViewableImage(d.contentType));
+  const egyebek = csatolmanyok.filter((d) => !isViewableImage(d.contentType));
+  const csatolmanyNotice = describeDocuments({
+    loading: documents.isPending,
+    error: documents.isError,
+    total: csatolmanyok.length,
+    images: kepek.length,
+  });
   const offlineNotice = describeOfflineDetailNotice({
     online: online && !query.isError,
     hasFullCopy: detail !== null,
@@ -313,6 +387,69 @@ export default function ServiceJobDetailScreen() {
           </Pressable>
         </View>
 
+        {/*
+          A CSATOLMANYOK A `manage` KAPUN KIVUL ALLNAK -- lasd a lekerdezes
+          kommentjet. Aki a lapot latja, a hozza tartozo kepeket is lathatja.
+        */}
+        <View style={styles.block}>
+          <Text style={styles.sectionTitle}>
+            Csatolmányok ({csatolmanyok.length})
+          </Text>
+          {csatolmanyNotice ? (
+            <Text style={styles.meta}>{csatolmanyNotice}</Text>
+          ) : null}
+
+          {kepek.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.galeria}>
+                {kepek.map((kep) => {
+                  const forras = kepForras(kep.id);
+                  return (
+                    <Pressable
+                      key={kep.id}
+                      accessibilityRole="imagebutton"
+                      accessibilityLabel={`${kep.fileName} megnyitása nagyban`}
+                      disabled={forras === null}
+                      onPress={() => setNagyKep(kep.id)}
+                      style={({ pressed }) => [
+                        styles.csempe,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      {forras ? (
+                        <Image
+                          source={forras}
+                          style={styles.csempeKep}
+                          resizeMode="cover"
+                          accessibilityLabel={kep.fileName}
+                        />
+                      ) : (
+                        /*
+                          A HIANYZO FORRAS NEM NEMA. Enelkul egy ures csempe
+                          allna itt, ami pontosan ugy nez ki, mint egy elromlott
+                          kep -- es epp az a hiba, amit ez a szakasz javit.
+                        */
+                        <View style={styles.csempeKep}>
+                          <Text style={styles.meta}>nem tölthető be</Text>
+                        </View>
+                      )}
+                      <Text style={styles.csempeMeret}>
+                        {formatDocumentSize(kep.sizeBytes)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          ) : null}
+
+          {egyebek.map((doc) => (
+            <Text key={doc.id} style={styles.meta}>
+              {describeUnviewableDocument(doc)}
+            </Text>
+          ))}
+        </View>
+
         {capabilities?.serviceJobsManage ? (
           <View style={styles.block}>
             <Text style={styles.sectionTitle}>Állapot léptetése</Text>
@@ -401,6 +538,37 @@ export default function ServiceJobDetailScreen() {
           leválasztani a webes felületen lehet.
         </Text>
       </ScrollView>
+
+      {/*
+        RATETKENT NYILIK, NEM MASIK KEPERNYON: masik lapra navigalva a
+        kepernyo allapota (a beirt jegyzet, a feltoltes-jelzes) ELVESZNE, mert
+        ujra epulne.
+      */}
+      {nagyKep ? (
+        <View style={styles.nagyRatet}>
+          {(() => {
+            const forras = kepForras(nagyKep);
+            return forras ? (
+              <Image
+                source={forras}
+                style={styles.nagyKep}
+                resizeMode="contain"
+                accessibilityLabel="A csatolmány nagyban"
+              />
+            ) : (
+              <Text style={styles.meta}>A kép most nem tölthető be.</Text>
+            );
+          })()}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kép bezárása"
+            onPress={() => setNagyKep(null)}
+            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+          >
+            <Text style={styles.actionText}>Bezárás</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -433,6 +601,32 @@ const styles = StyleSheet.create({
     minHeight: 64,
     padding: 12,
   },
+  galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
+  csempe: { gap: 4, width: 104 },
+  csempeKep: {
+    width: 104,
+    height: 104,
+    borderRadius: 10,
+    backgroundColor: "#08192a",
+    borderColor: "#17394f",
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
+  nagyRatet: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#03101acc",
+    justifyContent: "center",
+    gap: 16,
+    padding: 20,
+  },
+  nagyKep: { flex: 1, width: "100%", borderRadius: 12 },
+  pressed: { opacity: 0.75 },
   loading: { marginTop: 32 },
   empty: { color: "#9fc4d8", marginTop: 32, padding: 16, textAlign: "center" },
   notice: { color: "#eaf4fa", lineHeight: 20 },
