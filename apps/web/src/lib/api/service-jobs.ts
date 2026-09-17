@@ -289,17 +289,24 @@ export const serviceJobsApi = {
     );
   },
   /**
-   * A LÉPÉS VÁLASZA CSAK NYUGTA (`{ ok: true }`), nem a friss jegy.
+   * A LÉPÉS VÁLASZA 2026-09-17 ÓTA A FRISS RÉSZLETLAP, nem nyugta.
    *
-   * Ezért a hívó ÚJRATÖLT utána. Ha a nyugtából építenénk fel a képernyőt, a
-   * napló új sora hiányozna róla - és épp az a sor a lépés bizonyítéka.
+   * A korábbi `{ ok: true }` alak egy éles hibán bukott meg a TELEFONON (a
+   * léptetés kiléptette az alkalmazást), ezért a szerver most a teljes lapot
+   * adja vissza -- ugyanúgy, mint a felelős-kiosztás és a helyszín beállítása.
+   *
+   * A HÍVÓ ITT TOVÁBBRA IS ÚJRATÖLT, és ez nem feledékenység: a lépés a
+   * választó-listákat is elavulttá teszi, azokat pedig ez a válasz nem hozza.
+   * A típus viszont attól még IGAZAT mondjon: egy `{ ok: true }` deklaráció a
+   * mai válaszra hamis, és épp egy ilyen hamis deklaráció volt a telefonos
+   * hiba oka.
    */
   move(
     token: string,
     id: string,
     input: { to: ServiceJobStatusValue; note?: string | null },
   ) {
-    return apiRequest<{ ok: true }>(jobPath(id, "/move"), token, {
+    return apiRequest<ServiceJobDetail>(jobPath(id, "/move"), token, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),

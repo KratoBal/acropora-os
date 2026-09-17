@@ -101,6 +101,18 @@ export function getServiceJob(id: string) {
  * A SZERVER A LÁTOTT ÁLLAPOTRA ÍR: ha közben más lépett, 409-et ad, nem írja
  * felül csendben. Ezért nem is tesszük sorba offline: egy sorba tett lépés a
  * kiürítéskor bukna el, órákkal később, amikor a szerelő már nincs a gépnél.
+ *
+ * A VÁLASZ A TELJES RÉSZLETLAP, ÉS EZ A SOR ÉLES HIBÁBÓL ÁLL ITT.
+ *
+ * 2026-09-17-ig itt is `ServiceJobDetail` állt, a szerver viszont `{ ok: true }`
+ * nyugtát küldött. A fordító ezt nem láthatta: ez a csomag MÁSOLJA a válasz
+ * típusait (az Expo app nem húzhatja be a munkatér csomagjait), és a másolat
+ * önmagával konzisztens. A képernyő a nyugtát tette a gyorsítótárba, és a
+ * következő kirajzolás `detail.assets.length` értéken állt meg -- ami itt nem
+ * hibaüzenet, hanem KILÉPÉS. A szerver azóta a friss lapot adja, tehát ez a
+ * deklaráció mostantól IGAZ. Ha valaki a szervert nyugtára állítaná vissza, az
+ * `apps/api/src/service-jobs/service-jobs.move.spec.ts` pirosodik ki -- a
+ * TELEFON oldalán ma nincs képernyő-renderelő, ami elkapná.
  */
 export function moveServiceJob(
   id: string,
