@@ -1,3 +1,5 @@
+import { readFileBytes, type ReadFileBytes } from "./file-bytes";
+
 /**
  * A FELTÖLTENDŐ FÁJLOK ÖSSZERAKÁSA EGY KÉRÉSSÉ.
  *
@@ -42,6 +44,58 @@ export const UPLOAD_FIELD_NAME = "file";
  */
 export const MAX_FILES_PER_UPLOAD = 10;
 
+/**
+ * EGY FÁJL RÉSZE A TÖBBRÉSZES TÖRZSBEN.
+ *
+ * === EZ AZ ALAK MÉRÉSBŐL JÖN, NEM ÍZLÉSBŐL ===
+ *
+ * A futtató globális `fetch`-e (Expo 57 `winter/fetch`) a törzset maga építi
+ * fel, és HÁROM alakot ismer. A harmadik ág, betűre, a saját forrásából:
+ *
+ *     } else if (typeof entry === 'object' && 'bytes' in entry) {
+ *       results.push(await entry.bytes());
+ *     } else {
+ *       throw new Error('Unsupported FormDataPart implementation');
+ *     }
+ *
+ * A React Native szokásos `{uri, name, type}` alakja egyik ágra sem illeszkedik,
+ * tehát az UTOLSÓRA esik és DOB. Ezért nem ment fel SOHA egy fénykép sem a
+ * telefonról: a dobás a `fetch`-ből jött vissza, tehát a kérés el sem indult, a
+ * szerver naplójában nulla nyoma maradt, és a telefonon "a szerver jelenleg nem
+ * érhető el" látszott -- egy olyan hiba képe, ami sosem volt hálózati.
+ *
+ * === MIÉRT A `name` ÉS A `type` MARAD A MIÉNK ===
+ *
+ * A fejléceket ugyanaz a modul az OBJEKTUMRÓL olvassa (`'name' in part`,
+ * `'type' in part`), tehát a `picked-image.ts` ellenőrzött típusa és neve megy
+ * ki. Ez nem apróság: a szerver a bejelentett típust ÉS az első bájtokat együtt
+ * nézi. Az `expo-file-system` saját `File` példánya is átmenne ezen az ágon, DE
+ * a `name`-je a gyorsítótárbeli fájlnév (`Paths.basename`), a `type`-ja pedig
+ * natív MIME-felismerés -- vagyis pont az a két érték cserélődne ki, amiről a
+ * `picked-image.ts` fejléce kimondja, hogy nem találgatjuk.
+ */
+export interface UploadPart {
+  name: string;
+  type: string;
+  bytes: () => Promise<Uint8Array>;
+}
+
+/**
+ * A `bytes` LUSTA, és ez szándékos: a fájlokat a küldés pillanatában olvassuk
+ * be, nem a törzs összeállításakor. Egy elutasított válogatás (üres lista, tíz
+ * fölött) így egyetlen bájtot sem olvas fel a lemezről.
+ */
+export function uploadPart(
+  file: PickedFile,
+  readBytes: ReadFileBytes,
+): UploadPart {
+  return {
+    name: file.name,
+    type: file.type,
+    bytes: () => readBytes(file.uri),
+  };
+}
+
 export type BuildUploadResult =
   { ok: true; body: FormData } | { ok: false; reason: string };
 
@@ -67,6 +121,8 @@ export type BuildUploadResult =
 export function buildDocumentUpload(input: {
   type: string;
   files: readonly PickedFile[];
+  /** Tesztben cserélhető bájt-olvasó. Éles úton a `file-bytes.ts` valódija. */
+  readBytes?: ReadFileBytes;
 }): BuildUploadResult {
   if (input.files.length === 0)
     return { ok: false, reason: "Válassz ki legalább egy fájlt." };
@@ -77,17 +133,17 @@ export function buildDocumentUpload(input: {
       reason: `Egyszerre legfeljebb ${MAX_FILES_PER_UPLOAD} fájl tölthető fel.`,
     };
 
+  const readBytes = input.readBytes ?? readFileBytes;
   const body = new FormData();
   body.append("type", input.type);
   for (const file of input.files) {
-    // A React Native FormData a fájl-mezőt objektumként veszi át; a webes
-    // `File` típus itt nem létezik, és a `as unknown as Blob` csak azt mondja
-    // ki, hogy a futtató mást vár, mint a DOM típusdefiníció.
-    body.append(UPLOAD_FIELD_NAME, {
-      uri: file.uri,
-      name: file.name,
-      type: file.type,
-    } as unknown as Blob);
+    // A `as unknown as Blob` azt mondja ki, hogy a futtató mást vár, mint a DOM
+    // típusdefiníció -- a rész alakjáért az `uploadPart` felel, és azt a
+    // `document-upload.spec.ts` méri, nem ez a sor.
+    body.append(
+      UPLOAD_FIELD_NAME,
+      uploadPart(file, readBytes) as unknown as Blob,
+    );
   }
   return { ok: true, body };
 }
