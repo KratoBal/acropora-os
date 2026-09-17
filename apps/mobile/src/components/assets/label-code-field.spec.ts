@@ -105,12 +105,28 @@ describe("a matricakód mezője és beolvasója egy példányban", () => {
   });
 
   /**
-   * A BEOLVASOTT SZOVEG UGYANAZON AZ ALAK-ELLENORZESEN MEGY AT, mint a kezi
-   * bevitel. A QR TARTALMANAK formajat sehol nem irtuk le: nem tudjuk, a
-   * matrica a puszta kodot viszi-e vagy valami kore csomagolva.
+   * EZ AZ ALLITAS AT VAN IRVA, NEM KIEGESZITVE (2026-09-17) -- ES A PIROSA
+   * BIZONYITEK VOLT, NEM HIBA.
+   *
+   * Korabban azt kotötte ki, hogy a beolvasott szoveg UGYANAZON az
+   * alak-ellenorzesen megy at, mint a kezi bevitel
+   * (`normalizeAssetLabelCode(data)`), es az indoklasa az volt, hogy a QR
+   * tartalmanak formajat nem ismerjuk. AZ AZ INDOK MA MAR MERT ES HAMIS:
+   *
+   *   regi koteg (J elotag)   a QR tartalma:  J3049
+   *   uj   koteg (D elotag)   a QR tartalma:  D4204;D4204
+   *
+   * A teljes szovegre illesztes tehat epp a MAR KINYOMTATOTT uj koteget
+   * utasitotta volna el. Az allitast nem lazitottam: MASIK szabalyra allitottam
+   * at, ami ugyanazt vedi -- hogy a dontes a KOZOS, MERHETO modulban all, ne
+   * egy helyi mintaban a kepernyo torzseben.
    */
-  it("a beolvasott kód a közös alak-ellenőrzésen megy át", () => {
-    assert.match(olvas(MEZO), /normalizeAssetLabelCode\(data\)/);
+  it("a beolvasott szövegből a közös modul nyeri ki a kódot", () => {
+    const s = olvas(MEZO);
+    assert.match(s, /extractAssetLabelCode\(data\)/);
+    // ES A HIBAUZENET IS ONNAN JON: egy helyben megirt mondat megint elhallgatna,
+    // MIT olvasott a kamera -- pontosan az, ami miatt ez a kor egyaltalan kellett.
+    assert.match(s, /describeLabelScanFailure\(data, cimke\)/);
   });
 
   /**

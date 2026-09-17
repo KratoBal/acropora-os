@@ -3,7 +3,10 @@ import { useCallback, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { normalizeAssetLabelCode } from "@/lib/assets/asset-label-mirror";
+import {
+  describeLabelScanFailure,
+  extractAssetLabelCode,
+} from "@/lib/assets/scanned-payload";
 
 /**
  * A MATRICAKOD MEZO ES A BEOLVASOJA, EGY PELDANYBAN, MINDKET URLAPNAK.
@@ -85,22 +88,32 @@ export function useLabelScanner(onCode: (code: string) => void): LabelScanner {
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         onBarcodeScanned={({ data }) => {
           /*
-            AMIT A MATRICA HORDOZ, AZT NEM TALALJUK KI. A kod alakjat ismerjuk
-            (egy betu es negy szam), a QR TARTALMANAK formajat nem: sehol nincs
-            leirva, hogy a matrica a puszta kodot viszi-e vagy valami kore
-            csomagolva. Ezert a beolvasott szoveget UGYANAZON az
-            alak-ellenorzesen engedjuk at, ami a kezi bevitelt is meri -- ha nem
-            illik ra, megmondjuk, es a kezi mezo mindig ott marad mellette.
+            EZ A BLOKK AT VAN IRVA, NEM KIEGESZITVE (2026-09-17).
+
+            Itt korabban az allt, hogy a QR TARTALMANAK formajat nem ismerjuk,
+            ezert a TELJES beolvasott szoveget ugyanazon az alak-ellenorzesen
+            engedjuk at, ami a kezi bevitelt is meri. Az a mondat MA MAR NEM
+            IGAZ: Balazs lefenykepezte mind a ket koteget, es a ket alak mert:
+
+              regi koteg (J elotag)   a QR tartalma:  J3049
+              uj   koteg (D elotag)   a QR tartalma:  D4204;D4204
+
+            A masodik a MI CSV-alakunk teljes sora. A teljes szovegre illesztes
+            tehat epp a kinyomtatott uj koteget utasitotta volna el -- azt az
+            otven matricat, ami MA a gepekre megy.
+
+            Ezert mostantol KINYERUNK, nem illesztunk. A szabalyt es a hatarait
+            a `lib/assets/scanned-payload.ts` viszi, ahol MERHETO: ket kulonbozo
+            kod eseten NEM valasztunk, mert a rossz valasztas fizikai
+            kovetkezmennyel jar -- masik gepre kerul a cimke.
           */
-          const kod = normalizeAssetLabelCode(data);
-          if (!kod) {
-            setMessage(
-              "Ez nem matricakód. Írd be kézzel, vagy olvass be másikat.",
-            );
+          const cimke = extractAssetLabelCode(data);
+          if (cimke.kind !== "code") {
+            setMessage(describeLabelScanFailure(data, cimke) ?? "");
             setOpen(false);
             return;
           }
-          onCode(kod);
+          onCode(cimke.code);
           setMessage("");
           setOpen(false);
         }}
