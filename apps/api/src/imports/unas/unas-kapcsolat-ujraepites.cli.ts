@@ -122,6 +122,16 @@ export interface UjraepitesDeps {
 export interface UjraepitesFutas {
   applied: boolean;
   stopped: boolean;
+  /**
+   * A HIBA KODJA, vagy `null`, ha a futas nem hasalt el.
+   *
+   * MIERT KELL AZ ELHASALT FUTASNAK IS SOR: mert az utemezo a napi egy kort az
+   * UTOLSO FUTAS KEZDETEBOL szamolja. Ha az elhasalt kor nem hagyna nyomot, a
+   * kovetkezo ebredes ujra elindulna, es egy tartos hiba az ablakon belul
+   * negyedorankent ujraprobalna -- csendben, mert a kimenetet senki nem nezi.
+   * A sor tehat nem naplo-dísz: ez zarja le a hurkot.
+   */
+  errorCode: string | null;
   rowsBefore: number;
   rowsPlanned: number;
   similarProductsWithReferences: number;
@@ -418,6 +428,7 @@ export async function runKapcsolatUjraepitesCli(
     const futasSor = (megallt: boolean): UjraepitesFutas => ({
       applied: apply && !megallt,
       stopped: megallt,
+      errorCode: null,
       rowsBefore: jelenlegiOsszes,
       rowsPlanned: tervezettOsszes,
       similarProductsWithReferences: szamok.SIMILAR.hivatkozastVisel,
@@ -497,8 +508,63 @@ export async function runKapcsolatUjraepitesCli(
     return 0;
   } catch (error) {
     out.stderr(`A kapcsolat-újraépítés elhasalt: ${String(error)}\n`);
+    /*
+      A FELJEGYZES SAJAT `try`-BAN ALL: ha a rogzites maga hasal el (peldaul
+      mert epp az adatbazis nem erheto el, ami a leggyakoribb oka annak, hogy
+      idaig jutottunk), az EREDETI hibat nem szabad elfednie. Ilyenkor a kor
+      nyom nelkul marad -- az rosszabb, de nem tudjuk jobban.
+    */
+    try {
+      await deps.rogzit({
+        ...uresFutas(),
+        errorCode: hibaKod(error),
+      });
+    } catch {
+      out.stderr("A futás sorát sem sikerült feljegyezni.\n");
+    }
     return 1;
   }
+}
+
+/**
+ * EGY URES FUTAS-SOR. A hiba-ag hasznalja: ott meg nincsenek szamaink, mert a
+ * hiba a lekerdezesnel is jöhetett. NULLA HELYETT SEM irunk becslest -- egy
+ * kitalált szam rosszabb, mint egy nulla, amirol az `errorCode` megmondja,
+ * miert nulla.
+ */
+function uresFutas(): UjraepitesFutas {
+  return {
+    applied: false,
+    stopped: false,
+    errorCode: null,
+    rowsBefore: 0,
+    rowsPlanned: 0,
+    similarProductsWithReferences: 0,
+    similarRelationsPlanned: 0,
+    similarRelationsWritten: 0,
+    similarRelationsRemoved: 0,
+    similarReferencesUnresolved: 0,
+    accessoryProductsWithReferences: 0,
+    accessoryRelationsPlanned: 0,
+    accessoryRelationsWritten: 0,
+    accessoryRelationsRemoved: 0,
+    accessoryReferencesUnresolved: 0,
+    unreadableSnapshots: 0,
+    withoutExternalId: 0,
+  };
+}
+
+/**
+ * A HIBA KODJA, NEM A HIBA SZOVEGE.
+ *
+ * Egy Prisma- vagy halozati hiba uzenete tobb szaz karakter, es KAPCSOLATI
+ * ADATOT is tartalmazhat (gazdanev, felhasznalo). Az oszlopba ezert csak az
+ * megy be, ami mar eleve kod alaku; minden mas egyetlen allando erteket kap.
+ */
+function hibaKod(error: unknown): string {
+  return error instanceof Error && /^[A-Z0-9_:.-]+$/.test(error.message)
+    ? error.message.slice(0, 200)
+    : "UNAS_RELATION_REBUILD_FAILED";
 }
 
 function uresSzamok(): UjraepitesSzamok {
@@ -521,126 +587,23 @@ function uresSzamok(): UjraepitesSzamok {
 }
 
 /**
- * A UNAS KULSO AZONOSITOI, EGYSZER LEKERDEZVE.
+ * A PARANCSSORI ALAK. A VALODI ADATBAZIS-BEKOTES A FUTTATOBAN ALL
+ * (`unas-kapcsolat-ujraepites.runner.ts`), mert az utemezonek is ugyanaz kell.
  *
- * Ket varrat hasznalja (a jeloltek sajat azonositoja es a feloldas terkepe), es
- * a ket hivas ugyanabban a korben all -- egy masodik lekerdezes ugyanazt a
- * nehany ezer sort hozna le megegyszer.
+ * A torzs (`runKapcsolatUjraepitesCli`) tovabbra sem tud a Prismarol: ezert
+ * lehet fixture-on merni, es ezert bizonyithato, hogy `--apply` nelkul nem ir
+ * -- az `ir` varratot nem hivjuk.
  */
-let kulsoSorokGyorsitotar:
-  Promise<Array<{ externalId: string; entityId: string }>> | undefined;
-function kulsoAzonositoSorok() {
-  return (kulsoSorokGyorsitotar ??= prisma.externalReference.findMany({
-    where: { system: "UNAS", entityType: "Product" },
-    select: { externalId: true, entityId: true },
-  }));
-}
-
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  /**
-   * ITT KOTODIK OSSZE A PARANCS A VALODI ADATBAZISSAL, es CSAK itt.
-   *
-   * A torzs semmit nem tud a Prismarol: ezert lehet fixture-on merni, es ezert
-   * bizonyithato, hogy `--apply` nelkul nem ir -- az `ir` varratot nem hivjuk.
-   */
-  const code = await runKapcsolatUjraepitesCli(
-    process.argv.slice(2),
-    {
-      stdout: (t) => process.stdout.write(t),
-      stderr: (t) => process.stderr.write(t),
-    },
-    {
-      /**
-       * A KULSO AZONOSITO NEM A PILLANATKEPEN ALL.
-       *
-       * Az elso valtozat `externalId`-t kert a `UnasProductSnapshot` modelltol,
-       * es a parancs EL SEM INDULT: `Unknown field externalId for select
-       * statement`. A modellen `productId` all (unique); a kulso azonosito az
-       * `ExternalReference` tablan lakik -- pontosan ott, ahonnan a terkep is
-       * olvas.
-       *
-       * EZERT EGY LEKERDEZES SZOLGALJA MIND A KETTOT: a sorokbol elore-terkep
-       * lesz a feloldashoz, es FORDITOTT terkep a jeloltek sajat azonositojahoz.
-       */
-      jeloltek: async () => {
-        const [pillanatkepek, kulsoSorok] = await Promise.all([
-          prisma.unasProductSnapshot.findMany({
-            select: { productId: true, rawPayload: true },
-          }),
-          kulsoAzonositoSorok(),
-        ]);
-        const forditott = new Map(
-          kulsoSorok.map((sor) => [sor.entityId, sor.externalId]),
-        );
-        return pillanatkepek.map((sor) => ({
-          productId: sor.productId,
-          externalId: forditott.get(sor.productId) ?? null,
-          rawPayload: sor.rawPayload,
-        }));
-      },
-      terkep: async () =>
-        new Map(
-          (await kulsoAzonositoSorok()).map((sor) => [
-            sor.externalId,
-            sor.entityId,
-          ]),
-        ),
-      /*
-        EGY OSSZESITES, NEM TERMEKENKENTI LEKERDEZES: ketezer termeknel a
-        masodik alak negyezer kort jelentene, es a parancs epp azert letezik,
-        hogy EGYSZER fusson le.
-      */
-      meglevoKapcsolatok: async () =>
-        new Map(
-          (
-            await prisma.productRelation.groupBy({
-              by: ["sourceProductId", "relationType"],
-              where: { source: "UNAS" },
-              _count: { _all: true },
-            })
-          ).map((sor) => [
-            meglevoKulcs(
-              sor.sourceProductId,
-              sor.relationType as KapcsolatFajta,
-            ),
-            sor._count._all,
-          ]),
-        ),
-      rogzit: async (sor) => {
-        await prisma.unasRelationRebuildRun.create({
-          data: { ...sor, completedAt: new Date() },
-        });
-      },
-      ir: async ({ sourceProductId, fajta, celProductIdk }) =>
-        prisma.$transaction(async (tx) => {
-          /**
-           * TOROL, MAJD UJRAIR -- ugyanaz a sorrend, amit a szinkron hasznal.
-           *
-           * A torles a SAJAT forrasunkra szukit (`source: "UNAS"`): egy kezzel
-           * felvett kapcsolatot nem viszunk el.
-           */
-          const torolt = await tx.productRelation.deleteMany({
-            where: { sourceProductId, relationType: fajta, source: "UNAS" },
-          });
-          if (celProductIdk.length === 0)
-            return { torolt: torolt.count, irt: 0 };
-          const created = await tx.productRelation.createMany({
-            data: celProductIdk.map((targetProductId, index) => ({
-              sourceProductId,
-              targetProductId,
-              relationType: fajta,
-              sortOrder: index,
-              source: "UNAS",
-            })),
-            skipDuplicates: true,
-          });
-          return { torolt: torolt.count, irt: created.count };
-        }),
-    },
-  );
+  const { runKapcsolatUjraepites } =
+    await import("./unas-kapcsolat-ujraepites.runner.js");
+  const code = await runKapcsolatUjraepites(process.argv.slice(2), {
+    stdout: (t) => process.stdout.write(t),
+    stderr: (t) => process.stderr.write(t),
+  });
   await prisma.$disconnect();
   process.exit(code);
 }

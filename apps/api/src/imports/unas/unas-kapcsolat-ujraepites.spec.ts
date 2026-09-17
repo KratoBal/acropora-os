@@ -466,4 +466,73 @@ describe("kapcsolat-újraépítés", () => {
     assert.equal(code, 1);
     assert.match(sorok.join(""), /a tükör-tábla nem olvasható/);
   });
+
+  /**
+   * AZ ELHASALT FUTAS IS SORT IR -- ES EZ NEM A TELJESSEG KEDVEERT VAN.
+   *
+   * A napi utemezo az egy-kor-egy-nap szabalyt az UTOLSO FUTAS KEZDETEBOL
+   * szamolja. Ha az elhasalt kor nem hagyna nyomot, egy tartos hiba az
+   * ablakon belul negyedorankent ujraprobalna, csendben.
+   */
+  it("az elhasalt futás is sort ír, hibakóddal", async () => {
+    const futasok: UjraepitesFutas[] = [];
+    const { out } = kimenet();
+    const code = await runKapcsolatUjraepitesCli([], out, {
+      jeloltek: async () => {
+        throw new Error("a tükör-tábla nem olvasható");
+      },
+      terkep: async () => new Map(),
+      meglevoKapcsolatok: async () => new Map(),
+      ir: async () => ({ torolt: 0, irt: 0 }),
+      rogzit: async (sor) => {
+        futasok.push(sor);
+      },
+    });
+
+    assert.equal(code, 1);
+    assert.equal(futasok.length, 1);
+    // A HIBA SZOVEGE NEM MEGY BE: egy Prisma-hiba uzenete kapcsolati adatot is
+    // hordozhat. Az oszlopba allando kod kerul.
+    assert.equal(futasok[0]!.errorCode, "UNAS_RELATION_REBUILD_FAILED");
+    assert.equal(futasok[0]!.applied, false);
+    assert.equal(futasok[0]!.stopped, false);
+  });
+
+  /**
+   * ES A SIKERES FUTAS SORABAN NINCS HIBAKOD. Enelkul a fenti allitas attol is
+   * zold lenne, ha MINDEN sor hibakodot kapna.
+   */
+  it("a sikeres futás sorában nincs hibakód", async () => {
+    const { deps: d, futasok } = deps([jelolt("1", ["2"])], ["1", "2"]);
+    const { out } = kimenet();
+
+    await runKapcsolatUjraepitesCli([], out, d);
+
+    assert.equal(futasok.length, 1);
+    assert.equal(futasok[0]!.errorCode, null);
+  });
+
+  /**
+   * A ROGZITES HIBAJA NEM FEDHETI EL AZ EREDETI HIBAT. A leggyakoribb ok,
+   * amiert idaig jutunk, epp az, hogy az adatbazis nem erheto el -- olyankor a
+   * feljegyzes is elhasal.
+   */
+  it("a feljegyzés hibája nem nyeli el az eredeti hibát", async () => {
+    const { out, sorok } = kimenet();
+    const code = await runKapcsolatUjraepitesCli([], out, {
+      jeloltek: async () => {
+        throw new Error("a tükör-tábla nem olvasható");
+      },
+      terkep: async () => new Map(),
+      meglevoKapcsolatok: async () => new Map(),
+      ir: async () => ({ torolt: 0, irt: 0 }),
+      rogzit: async () => {
+        throw new Error("a futás-tábla sem érhető el");
+      },
+    });
+
+    assert.equal(code, 1);
+    assert.match(sorok.join(""), /a tükör-tábla nem olvasható/);
+    assert.match(sorok.join(""), /A futás sorát sem sikerült feljegyezni/);
+  });
 });
