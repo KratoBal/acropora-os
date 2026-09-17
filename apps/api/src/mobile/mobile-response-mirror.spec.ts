@@ -74,6 +74,35 @@ describe("a mobil válasz-típusai a közös csomaghoz mérve", () => {
   }
 
   /**
+   * A CSATOLMÁNY-ÖSSZEFOGLALÓ IS RÉSZHALMAZ, ÉS 2026-09-17-IG SEHOL NEM VOLT MÉRVE.
+   *
+   * A telefon másolata SZŰKEBB (a szerver `type`, `sha256` és `caption` mezőt
+   * is küld), tehát itt sem egyezést mérünk, hanem azt, hogy minden mezője
+   * LÉTEZIK a közösben.
+   *
+   * MIÉRT KELL, HA A SZŰKÍTÉS SZÁNDÉKOS: mert a másik irány NEM szándékos. A
+   * `caption` hónapokig hiányozhatott volna úgy, hogy a fordító zöld -- az
+   * irodában írt felirat a telefonon egyszerűen nincs sehol. A hiány nem
+   * hibázik; ez az állítás azt fogja meg, ha a telefon olyat OLVAS, amit a
+   * szerver nem küld.
+   */
+  it("a mobil ServiceJobDocumentSummary minden mezője létezik a közösben", () => {
+    const kozosMezok = mezok(forras(KOZOS), "ServiceJobDocumentSummary");
+    const mobilMezok = mezok(forras(MOBIL), "ServiceJobDocumentSummary");
+    // POZITIV KONTROLL: ket ures halmaz osszevetese zolden allna.
+    assert.ok(
+      mobilMezok.size >= 4 && kozosMezok.size >= 5,
+      `gyanúsan kevés mező: mobil ${mobilMezok.size}, közös ${kozosMezok.size}`,
+    );
+    const idegen = [...mobilMezok].filter((mezo) => !kozosMezok.has(mezo));
+    assert.deepEqual(
+      idegen,
+      [],
+      `a telefon olyan csatolmány-mezőt olvas, ami a válaszban nincs: ${idegen.join(", ")}`,
+    );
+  });
+
+  /**
    * A LEGSÚLYOSABB ESET: EGY MEZŐ, AMI A VÁLASZBAN NINCS.
    *
    * A mobil `ServiceJobDetail` SZŰKEBB, mint a közösé (csak azt sorolja, amit a

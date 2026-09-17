@@ -27,6 +27,7 @@ import {
   getServiceJob,
   listServiceJobDocuments,
   moveServiceJob,
+  setServiceJobDocumentCaption,
   uploadServiceJobPhotos,
   type ServiceJobStatusValue,
 } from "@/lib/api/service-jobs";
@@ -122,6 +123,15 @@ export default function ServiceJobDetailScreen() {
    * KULON dontes lenne, minden ratettel egyszerre. Nem hozom meg itt.
    */
   const [nagyKep, setNagyKep] = useState<string | null>(null);
+  /**
+   * A FELIRAT PISZKOZATA -- CSAK A NAGYBAN NYITOTT KEPE.
+   *
+   * Egyszerre EGY kep felirata szerkesztheto, mert egyszerre egy kep van
+   * nagyban. Csempenkenti allapot nem kell, es nem is lenne jo: ket nyitott
+   * mezo mellett a szerelo nem latna, melyiket mentette.
+   */
+  const [felirat, setFelirat] = useState("");
+  const [feliratHiba, setFeliratHiba] = useState<string | null>(null);
   const kepForras = useDocumentImageSource(
     /*
       AZ UTVONAL A KLIENS SAJAT `BASE`-EVEL EGYEZIK (`/service/jobs`), NEM a
@@ -157,6 +167,37 @@ export default function ServiceJobDetailScreen() {
           ? error.message
           : "A léptetés nem ment át. Próbáld újra.",
       ),
+  });
+
+  /**
+   * A FELIRAT MENTESE -- ES UTANA A LISTA UJRATOLT.
+   *
+   * Nem a helyi allapotot irjuk at: a csempe a SZERVER szerinti allapotot
+   * mutassa. Egy elutasitott mentes utan kulonben a sajat begepelt szoveg
+   * allna tovabb a kepernyon, mintha mentve lenne.
+   *
+   * A MEZO CSAK SIKER UTAN URUL: ha a hivas elbukik, a begepelt szoveg
+   * OTTMARAD. Egy elveszett felirat ujra leirando, es a masodik nekifutas
+   * ugyanolyan hosszu lenne, mint az elso -- kesztyuben, a gepnel.
+   */
+  const feliratMentes = useMutation({
+    mutationFn: (bemenet: { documentId: string; caption: string | null }) =>
+      setServiceJobDocumentCaption(id!, bemenet.documentId, bemenet.caption),
+    onSuccess: async () => {
+      setFeliratHiba(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["service-job-documents", id],
+      });
+    },
+    onError: (error: unknown) => {
+      setFeliratHiba(
+        error instanceof ApiNetworkError
+          ? "A felirat nem ment el: a szerver most nem érhető el."
+          : error instanceof Error
+            ? error.message
+            : "A felirat mentése nem sikerült.",
+      );
+    },
   });
 
   /**
@@ -271,6 +312,8 @@ export default function ServiceJobDetailScreen() {
   */
   const csatolmanyok = documents.data?.items ?? [];
   const kepek = csatolmanyok.filter((d) => isViewableImage(d.contentType));
+  /** A nagyban nyitott kep SORA, nem csak az azonositoja: a felirat is kell. */
+  const nagyKepSor = csatolmanyok.find((d) => d.id === nagyKep) ?? null;
   const egyebek = csatolmanyok.filter((d) => !isViewableImage(d.contentType));
   const csatolmanyNotice = describeDocuments({
     loading: documents.isPending,
@@ -416,7 +459,14 @@ export default function ServiceJobDetailScreen() {
                       accessibilityRole="imagebutton"
                       accessibilityLabel={`${kep.fileName} megnyitása nagyban`}
                       disabled={forras === null}
-                      onPress={() => setNagyKep(kep.id)}
+                      onPress={() => {
+                        setNagyKep(kep.id);
+                        // A PISZKOZAT A SZERVER SZERINTI ALLAPOTBOL INDUL, nem
+                        // az elozo kepe mellol: kulonben az egyik kep felirata
+                        // atlatszana a masikra.
+                        setFelirat(kep.caption ?? "");
+                        setFeliratHiba(null);
+                      }}
                       style={({ pressed }) => [
                         styles.csempe,
                         pressed && styles.pressed,
@@ -439,6 +489,18 @@ export default function ServiceJobDetailScreen() {
                           <Text style={styles.meta}>nem tölthető be</Text>
                         </View>
                       )}
+                      {/*
+                        A FELIRAT A MERET FOLOTT ALL, es ez nem elrendezesi
+                        izles: a felirat azt mondja meg, MIT LATUNK, a meret
+                        csak azt, mekkora a fajl. A kettobol az elso az, amit a
+                        szerelo keres. Ha nincs felirat, a sor sem all ott --
+                        egy ures sor helyet foglalna a csempen.
+                      */}
+                      {kep.caption ? (
+                        <Text style={styles.csempeFelirat} numberOfLines={2}>
+                          {kep.caption}
+                        </Text>
+                      ) : null}
                       <Text style={styles.csempeMeret}>
                         {formatDocumentSize(kep.sizeBytes)}
                       </Text>
@@ -565,10 +627,73 @@ export default function ServiceJobDetailScreen() {
               <Text style={styles.meta}>A kép most nem tölthető be.</Text>
             );
           })()}
+          {/*
+            A FELIRAT ITT ALL, ES NEM A CSEMPEN.
+            
+            A csempe 104 pont szeles: ott egy beviteli mezo hasznalhatatlan
+            lenne, es a kep sem latszana mellette. Nagyban viszont EPP az a kep
+            van a szerelo elott, amit meg akar nevezni.
+          */}
+          {nagyKepSor?.caption ? (
+            <Text style={styles.nagyFelirat}>{nagyKepSor.caption}</Text>
+          ) : null}
+
+          {capabilities?.serviceJobsManage && nagyKepSor ? (
+            masolatbol ? (
+              <Text style={styles.meta}>{OFFLINE_COPY_NOTICE.caption}</Text>
+            ) : (
+              <>
+                <TextInput
+                  accessibilityLabel="A kép felirata"
+                  value={felirat}
+                  onChangeText={setFelirat}
+                  style={styles.input}
+                  placeholder="Mit látunk a képen?"
+                  placeholderTextColor="#5c7e92"
+                  maxLength={500}
+                  editable={!feliratMentes.isPending}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Felirat mentése"
+                  disabled={feliratMentes.isPending}
+                  onPress={() =>
+                    feliratMentes.mutate({
+                      documentId: nagyKepSor.id,
+                      /*
+                        AZ URES MEZO TORLEST JELENT, es `null`-kent megy le --
+                        nem ures stringkent. Ket alak mellett a "nincs felirat"
+                        es a "szandekosan ures felirat" megkulonboztethetetlen
+                        lenne, es a szerver ugyanezt a szabalyt mondja ki.
+                      */
+                      caption: felirat.trim() ? felirat.trim() : null,
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.action,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.actionText}>
+                    {feliratMentes.isPending
+                      ? "Mentés folyamatban…"
+                      : "Felirat mentése"}
+                  </Text>
+                </Pressable>
+                {feliratHiba ? (
+                  <Text style={styles.meta}>{feliratHiba}</Text>
+                ) : null}
+              </>
+            )
+          ) : null}
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Kép bezárása"
-            onPress={() => setNagyKep(null)}
+            onPress={() => {
+              setNagyKep(null);
+              setFeliratHiba(null);
+            }}
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
             <Text style={styles.actionText}>Bezárás</Text>
@@ -619,7 +744,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  csempeFelirat: { color: "#eaf4fa", fontSize: 12, textAlign: "center" },
   csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
+  nagyFelirat: { color: "#eaf4fa", fontSize: 15, textAlign: "center" },
   nagyRatet: {
     position: "absolute",
     top: 0,

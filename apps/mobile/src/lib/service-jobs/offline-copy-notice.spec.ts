@@ -63,7 +63,21 @@ describe("a mentett másolat kimondja, mi nem megy", () => {
    */
   it("a képernyő MIND A KÉT mondatot kiteszi", () => {
     const forras = kepernyo();
-    for (const kulcs of ["step", "photo"] as const)
+    /**
+     * A KULCSOKAT A TABLABOL VESSZUK, NEM KEZZEL FELSOROLVA.
+     *
+     * A kezzel irt lista pontosan azt a hibat engedne vissza, ami miatt ez a
+     * fajl letezik: egy UJ mondat felkerul a tablara, a kepernyo nem hasznalja,
+     * es az allitas -- ami csak a regi ket kulcsot nezi -- ZOLD marad. A
+     * kiesett muvelet megint nemán tunne el.
+     */
+    const kulcsok = Object.keys(OFFLINE_COPY_NOTICE);
+    // POZITIV KONTROLL: ures kulcs-halmazon a lenti ciklus zolden allna.
+    assert.ok(
+      kulcsok.length >= 3,
+      `gyanúsan kevés mondat a táblán: ${kulcsok.join(", ")}`,
+    );
+    for (const kulcs of kulcsok)
       assert.match(
         forras,
         new RegExp(`OFFLINE_COPY_NOTICE\\.${kulcs}`),

@@ -21,6 +21,16 @@ const KLIENS = "src/lib/api/service-jobs.ts";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
 
+/**
+ * A BLOKK- ES SOR-KOMMENTEK NELKULI KOD.
+ *
+ * Merve 2026-09-17: egy nap alatt NEGYSZER bukott el hamisan egy szoveg-alapu
+ * meres attol, hogy a SAJAT magyarazo szovegunk tartalmazta, amit a kereses
+ * keres. A jo komment epp azokat a szavakat hasznalja.
+ */
+const kodSzoveg = (forras: string) =>
+  forras.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
 describe("a hibajegy csatolmány-szakasza", () => {
   it("POZITÍV KONTROLL: a két fájl olvasható és nem üres", () => {
     for (const ut of [KEPERNYO, KLIENS])
@@ -119,16 +129,69 @@ describe("a hibajegy csatolmány-szakasza", () => {
      */
     const s = olvas(KEPERNYO);
     const db = s.split('queryKey: ["service-job-documents", id]').length - 1;
+    /**
+     * A SZAM 2026-09-17-EN KETTOROL HAROMRA NOTT, ES EZ A GUARD JOL MUKODOTT:
+     * a felirat-mentes bevezetesekor PIROSRA VALTOTT, nev szerint. A harom hely:
+     *
+     *   1. a lekerdezes definicioja (`useQuery`)
+     *   2. a FELTOLTES utani ervenytelenites
+     *   3. a FELIRAT mentese utani ervenytelenites
+     *
+     * A harmadik nem kenyelmi kerdes: a csempe a SZERVER szerinti feliratot
+     * mutassa, ne azt, amit a telefon hisz rola. Ha valaki elveszi, ez az
+     * allitas ujra pirosodik -- es akkor a szamot IGAZITANI kell, a nevekkel
+     * egyutt, nem lejjebb vinni.
+     */
     assert.equal(
       db,
-      2,
-      `a lista-kulcs ${db} helyen áll: a lekérdezés ÉS az érvénytelenítés kell, különben a friss kép nem jelenne meg`,
+      3,
+      `a lista-kulcs ${db} helyen áll: a lekérdezés, a feltöltés ÉS a felirat érvénytelenítése kell`,
     );
     assert.match(
       s,
       /invalidateQueries\(\{\s*queryKey: \["service-job-documents", id\],\s*\}\)/,
       "a feltöltés után a galéria nem frissül: a friss kép nem jelenne meg",
     );
+  });
+
+  /**
+   * A FELIRAT: KIIRVA A CSEMPEN, ES IRHATO A NAGY KEPNEL.
+   *
+   * MIERT A TELEFONON IS: a kepet a SZERELO keszíti, tehat o tudja, mit
+   * abrazol. A szerver 2026-09-17 ota kuldi a mezot, es a telefon tukre eddig
+   * NEM IS ISMERTE -- az irodaban irt felirat itt egyszeruen nem letezett.
+   *
+   * A KOMMENTEKET KISZEDJUK a meres elol: a fenti magyarazo mondatok ugyanazokat
+   * a szavakat hasznaljak, amiket a kereses keres.
+   */
+  it("a felirat a csempén látszik, és a nagy képnél írható", () => {
+    const kod = kodSzoveg(olvas(KEPERNYO));
+
+    // A CSEMPEN: a sor tartalma.
+    assert.match(kod, /kep\.caption/);
+    // A NAGY KEPNEL: a mento hivas, a kliens fuggvenyevel.
+    assert.match(kod, /setServiceJobDocumentCaption\(/);
+    assert.match(
+      olvas(KLIENS),
+      /export function setServiceJobDocumentCaption\(/,
+    );
+
+    /*
+      AZ URES MEZO `null`-KENT MEGY LE, nem ures stringkent: kulonben a "nincs
+      felirat" es a "szandekosan ures felirat" ket allapota egyformanak tunne.
+    */
+    assert.match(kod, /caption: felirat\.trim\(\) \? felirat\.trim\(\) : null/);
+  });
+
+  /**
+   * A MENTETT MASOLAT NEM NEMA A FELIRATNAL SEM.
+   *
+   * Ugyanaz a szabaly, mint a leptetesnel es a fenykepnel: ami terero nelkul
+   * kiesik, azt a kepernyo MONDJA KI. Egy letiltott mezo enelkul ugyanugy nez
+   * ki, mint egy elromlott.
+   */
+  it("másolatból a felirat kiesését kimondja", () => {
+    assert.match(kodSzoveg(olvas(KEPERNYO)), /OFFLINE_COPY_NOTICE\.caption/);
   });
 
   it("a nagy kép rátét, nem Modal", () => {

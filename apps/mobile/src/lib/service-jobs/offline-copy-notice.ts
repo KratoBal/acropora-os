@@ -26,4 +26,14 @@ export const OFFLINE_COPY_NOTICE = {
   /** A feltöltés kiesik: a kép a szerverre megy, nem a másolatba. */
   photo:
     "Mentett másolatot nézel, ezért a fénykép most nem tölthető fel. Térerőnél tudsz képet tenni a jegyre.",
+  /**
+   * A FELIRAT KIESIK: egy MÁR FELTÖLTÖTT sorra ír, és az a szerveren áll.
+   *
+   * A sorba tenni MÁS kérdés lenne, mint a fénykép: a felirat egy létező
+   * rekordot módosít, tehát harmadik sorfajta kellene hozzá. Amíg nincs, ez a
+   * mondat mondja ki, miért nem megy -- egy letiltott mező enélkül ugyanúgy néz
+   * ki, mint egy elromlott.
+   */
+  caption:
+    "Mentett másolatot nézel, ezért a felirat most nem írható. Térerőnél tudod megnevezni a képet.",
 } as const;

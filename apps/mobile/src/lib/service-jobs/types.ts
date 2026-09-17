@@ -103,6 +103,18 @@ export interface ServiceJobDocumentSummary {
   fileName: string;
   contentType: string;
   sizeBytes: number;
+  /**
+   * MIT LATUNK A KEPEN. `null`, ha nincs felirat.
+   *
+   * A SZERVER 2026-09-17 OTA KULDI, es a telefon EDDIG NEM IS ISMERTE: az
+   * irodaban irt felirat a webes lapokon latszott, a szerelo telefonjan nem. Egy
+   * hianyzo mezo a tukorben NEM hibazik -- egyszeruen nincs mit kiirni.
+   *
+   * A HIANY EGYFELE ALAKBAN ALL (`null`, nem ures string), ugyanugy, mint a
+   * szerveren: kulonben a "nincs felirat" es a "szandekosan ures felirat" ket
+   * allapota egyformanak tunne.
+   */
+  caption: string | null;
   createdAt: string;
 }
 

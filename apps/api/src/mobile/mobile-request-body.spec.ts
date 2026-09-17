@@ -103,6 +103,17 @@ const PAROK: readonly Par[] = [
      * saját üzenete kérte a döntést. A válasz IGEN, mert a törzs NEVESÍTETT
      * típussal megy -- tehát van mihez kötni.
      */
+    mit: "hibajegy-fénykép felirata",
+    mobil: "../mobile/src/lib/api/service-jobs.ts",
+    mobilNev: "SetServiceJobDocumentCaptionInput",
+    dto: "src/service-jobs/service-job-documents.dto.ts",
+    dtoNev: "UpdateServiceJobDocumentCaptionDto",
+    kontroll: ["caption"],
+    /* EGY MEZOS TORZS: a kozos kuszob itt egy HELYES kiolvasasra adna pirosat. */
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
+  {
     mit: "felelősök átírása",
     mobil: "../mobile/src/lib/api/worksheets.ts",
     mobilNev: "SetWorksheetAssigneesInput",
@@ -218,12 +229,21 @@ function dtoMezok(s: string, nev: string): Set<string> {
  * hianyat semmi nem jelzi. Egy szam viszont NEM tud csendben elavulni.
  */
 /**
+ * 2026-09-17: 12 -> 13. Az új hívás a hibajegy fényképének FELIRATA
+ * (`setServiceJobDocumentCaption`). A guard saját üzenete kérte a döntést, és a
+ * válasz IGEN: a törzs NEVESÍTETT típust kapott
+ * (`SetServiceJobDocumentCaptionInput`), tehát PÁR lett belőle fent -- nem a
+ * „nem mérjük" halmazba került. Egy mezős törzs, ezért a páron a küszöbök
+ * EGYRE mennek: a közös kettes-hármas küszöb egy HELYES kiolvasásra adna
+ * pirosat.
+ */
+/**
  * 2026-09-17: 11 -> 12. Az új hívás a munkalap FELELŐSEINEK átírása
  * (`setWorksheetAssignees`). NEM csak a szám mozdult: a törzs nevesített
  * típust kapott (`SetWorksheetAssigneesInput`), és PÁR is lett belőle fent --
  * vagyis a hívás nem a „nem mérjük" halmazba került.
  */
-const IRAS_HIVASOK_MA = 12;
+const IRAS_HIVASOK_MA = 13;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

@@ -145,6 +145,46 @@ export function listServiceJobDocuments(id: string) {
 }
 
 /**
+ * EGY FELTOLTOTT KEP FELIRATA -- MIT LATUNK RAJTA.
+ *
+ * MIERT A TELEFONON IS, HOLOTT A WEBEN MAR MEGY: a kepet a SZERELO keszíti, a
+ * gepnel, gyakran kesztyuben -- o az, aki TUDJA, mit abrazol. Az iroda utolag
+ * legfeljebb talalgat. A vegpont 2026-09-17 ota all, es eddig csak a ket webes
+ * lap hivta.
+ *
+ * A `null` a TORLES, nem az ures string: a szerver ugyanezt a szabalyt mondja
+ * ki, es ket alak mellett a "nincs felirat" es a "szandekosan ures felirat"
+ * megkulonboztethetetlen lenne.
+ */
+/**
+ * A TORZS NEVESITETT TIPUSSAL MEGY, EGYETLEN MEZONEL IS.
+ *
+ * MIERT: a `mobile-request-body.spec.ts` orzo a NEVESITETT tipusokat veti ossze
+ * a szerver DTO-javal. Egy helyben megirt objektum (`{ caption }`) atcsuszna
+ * rajta -- es pontosan egy ilyen mezo (a `clientOperationId`) volt az, ami
+ * 2026-09-17-en nyolc zold kapun ment at, es MINDEN jegynyitast elbuktatott
+ * volna elesben.
+ */
+export interface SetServiceJobDocumentCaptionInput {
+  caption: string | null;
+}
+
+export function setServiceJobDocumentCaption(
+  id: string,
+  documentId: string,
+  caption: string | null,
+) {
+  const torzs: SetServiceJobDocumentCaptionInput = { caption };
+  return apiRequest<{ ok: true }>(
+    `${BASE}/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(torzs),
+    },
+  );
+}
+
+/**
  * FÉNYKÉP A JEGYRE. LISTÁT AD VISSZA, EGY FÁJLNÁL IS.
  *
  * A `type` itt mindig `PHOTO`: a telefonról az megy fel, amit a szerelő a
