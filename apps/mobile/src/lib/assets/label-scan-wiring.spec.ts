@@ -41,7 +41,12 @@ describe("a beolvasó a matricát is ismeri", () => {
 
   it("a beolvasó a közös kinyerőt használja, nem saját mintát", () => {
     // A HIVAS ALAKJARA, nem a nevre: az import-sor kulonben zolden tartana.
-    assert.match(olvas(BEOLVASO), /extractAssetLabelCode\(data\)/);
+    // A HIVAS ALAKJARA, ES A VALTOZOVAL EGYUTT: a puszta nevet az `import`
+    // sor is eletben tartja.
+    assert.match(
+      olvas(BEOLVASO),
+      /const cimke = extractAssetLabelCode\(data\);/,
+    );
   });
 
   /**
