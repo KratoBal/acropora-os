@@ -59,7 +59,20 @@ describe("a helyszin-valaszto kozos peldanya", () => {
    * valasztani, es a helyszint csak az urlap elhagyasaval lehet javitani.
    */
   it("a már eldöntött lépés visszanyitható", () => {
-    assert.match(olvas(VALASZTO), /Koppints a módosításhoz/);
+    /**
+     * MIND A KET HELYEN: a LATHATO szovegben es a kepernyoolvasonak szolo
+     * cimkeben. A ketto kulon all a komponensben, es egy jelenlet-illesztes
+     * zolden atengedne barmelyik elvesztését -- epp azt, amelyik a vaknak szol.
+     */
+    const s = olvas(VALASZTO);
+    assert.match(
+      s,
+      /<Text style=\{styles\.meta\}>Koppints a módosításhoz<\/Text>/,
+    );
+    assert.match(
+      s,
+      /accessibilityLabel=\{`\$\{label\}: \$\{summary\}\. Koppints a módosításhoz\.`\}/,
+    );
   });
 
   /**
