@@ -28,6 +28,24 @@ import { describe, it } from "node:test";
  * amiért ez az őrző létezik. A lista ezért a sémából jön: ha valaki holnap
  * felvesz egy oszlopot a WorksheetLine modellre és nem vezeti át a másolásba,
  * EZ pirosodik ki, név szerint megnevezve a mezőt.
+ *
+ * === ÉS EZ NEM EGYEDI ESET: UGYANEZ AZ ALAK HÁROM HELYEN ÁLLT ELŐ EGY NAPON ===
+ *
+ * 2026-09-17-én három különböző helyen jelentkezett ugyanez, és külön-külön
+ * három különböző hibának látszott:
+ *
+ *   a #801 őrző fájllistája    kézzel írt, és a három érintett fájlból egyet fedett
+ *   a `lineData()` mezőlistája kézzel írt, és az új mezőt hagyta volna ki (ez itt)
+ *   a #799 éles hibája         egy kézzel írt `select` blokk okozta
+ *
+ * Egy alak: KÉZZEL KARBANTARTOTT LISTA egy olyan halmazról, ami magától nő. És
+ * mindháromnál ugyanaz a javítás, amit ez a fájl is csinál: a listát a FORRÁSBÓL
+ * kell előállítani, nem kézzel vezetni.
+ *
+ * A kereszthivatkozás azért áll itt, mert enélkül a három eset három külön
+ * tanulság marad, és a negyediket senki nem fogja felismerni.
+ *
+ * Nautilus mérése, 2026-09-18.
  */
 
 const SEMA = "../../packages/database/prisma/schema.prisma";
