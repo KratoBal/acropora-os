@@ -7,7 +7,7 @@
     "dev": "next dev --port 3002",
     "build": "next build",
     "start": "next start --port 3002",
-    "test": "tsc --noEmit",
+    "test": "rm -rf test-dist && tsc -p tsconfig.test.json && specs=$(find test-dist -name '*.spec.js') && { [ -n \"$specs\" ] || { echo 'Nem talaltam unit spec fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $specs",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .next"
   },
