@@ -12,6 +12,7 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
 import {
   AssetListQueryDto,
   AssetOwnersQueryDto,
+  UpdateAssetDocumentCaptionDto,
   UploadAssetDocumentDto,
 } from "../service-assets/dto/asset.dto.js";
 import { ServiceAssetsController } from "../service-assets/service-assets.controller.js";
@@ -166,6 +167,14 @@ describe(
     let invoiceFileNameOfA: string;
     /** Kulon eszkoz a torles-esemenyekhez, hogy a tobbi allitas ne mozduljon. */
     let assetForDeletes: string;
+    /**
+     * KULON ESZKOZ AZ IRO UTAKHOZ, ugyanabbol az okbol, mint a torleses: a
+     * pozitiv kontroll FELTOLT es TOROL rajta, tehat a dokumentum-listaja es az
+     * esemenynaploja a teszt kozben mozog. Egy megosztott eszkozon ez a mozgas
+     * MAS allitasok alol huzna ki a talajt, es a hiba a futasi sorrendtol
+     * fuggene -- vagyis billegne.
+     */
+    let assetForWrites: string;
     let deletedInvoiceFileName: string;
     let deletedWarrantyFileName: string;
     /** A MASIK partner eszkozen, a letoltes tulajdonos-agahoz. */
@@ -525,6 +534,21 @@ describe(
         toDeleteWarranty[0]!.id,
         asInternal,
       );
+
+      const forWrites = await prisma.asset.create({
+        data: {
+          assetNumber: `${TEST_ASSET_PREFIX}${suffix}-W`,
+          name: `${shared} eszköz A íráshoz`,
+          customerId: customerA,
+        },
+      });
+      assetForWrites = forWrites.id;
+      /**
+       * CSATOLMANY NELKUL INDUL, es ez szandekos: a pozitiv kontroll MAGA
+       * tolt fel egyet, irja at a feliratat, majd torli. Igy a harom iro ut
+       * egy lancban mérhető, es az eszkoz a teszt vegen ugyanott all, ahol
+       * kezdte -- nincs sor, amit egy kesobbi allitas veletlenul megtalalna.
+       */
     });
 
     after(async () => {
@@ -636,6 +660,7 @@ describe(
           assetB,
           assetSupplierA,
           assetForDeletes,
+          assetForWrites,
           assetSupplierAOther,
           assetSupplierB,
         ].sort(),
@@ -771,6 +796,195 @@ describe(
       });
     });
 
+    /**
+     * AZ ÍRÓ UTAK -- ÉS EZEK 2026-09-17-IG HATÓKÖR NÉLKÜL FUTOTTAK.
+     *
+     * Mindhárom `{ kind: "internal" }` hatókörrel dolgozott, arra hivatkozva,
+     * hogy a `SERVICE_MANAGE` jogot partner-fiók nem kapja meg. MEGKAPJA:
+     * `PARTNER_SERVICE: [SERVICE_VIEW, SERVICE_MANAGE]`. A hivatkozás egy másik
+     * jogra (`SERVICE_ASSET_DELETE`) igaz.
+     *
+     * ITT, VALÓDI SOROKON MÉRJÜK, mert a szűrés a betöltött soron áll: egy
+     * hamis tárolóval pontosan az a két lépés maradna ki, ami a tárgy.
+     */
+    describe("a csatolmányok írása a hívó hatókörével megy", () => {
+      /**
+       * A POZITÍV KONTROLL ELÖL ÁLL, ÉS NEM UDVARIASSÁGBÓL. Nélküle a lenti
+       * három elutasítás akkor is zöld lenne, ha a partner-fiók EGYÁLTALÁN nem
+       * tudna csatolmányt írni -- és akkor a javítás egy működő funkciót vett
+       * volna el, csendben.
+       */
+      it("a saját eszközén mind a három írás megy", async () => {
+        const feltoltve = await assets.uploadDocument(
+          assetForWrites,
+          Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
+          [pdf(`${shared}-partner-feltoltes.pdf`)],
+          asCustomerA,
+        );
+        assert.equal(feltoltve.length, 1);
+
+        const felirat = await assets.setDocumentCaption(
+          assetForWrites,
+          feltoltve[0]!.id,
+          Object.assign(new UpdateAssetDocumentCaptionDto(), {
+            caption: "A saját garanciám",
+          }),
+          asCustomerA,
+        );
+        assert.deepEqual(felirat, { ok: true });
+
+        assert.deepEqual(
+          await assets.deleteDocument(
+            assetForWrites,
+            feltoltve[0]!.id,
+            asCustomerA,
+          ),
+          { ok: true },
+        );
+      });
+
+      /**
+       * A BELSŐS ÚT IS MÉRVE VAN, ÉS EZT A JAVÍTÁS TETTE SZÜKSÉGESSÉ.
+       *
+       * A felirat lekérdezése két ÚJ feltételt kapott: egy beágyazott
+       * kapcsolat-szűrőt (`asset: { AND: [...] }`) és egy fajta-listát
+       * (`type: { in: ... }`). Belsős hívóra mindkettőnek MINDENT engednie
+       * kell -- ha valamelyik üresre szűkülne, az `updateMany` nulla sort
+       * érintene, abból 404 lenne, és a saját kollégáink feliratai NÉMÁN
+       * elvesznének. Éppen az az út, amit a legtöbben használnak.
+       *
+       * SZÁMLÁN mérjük, mert az a fajta, amit egy partner NEM lát: így az
+       * állítás a fajta-lista belsős ágát is kipróbálja, nem csak a
+       * tulajdonosét.
+       *
+       * A sor a teszt végén eltűnik, hogy a többi állítás ne találjon rá.
+       */
+      it("belsős hívó a számla feliratát is átírhatja", async () => {
+        const feltoltve = await assets.uploadDocument(
+          assetForWrites,
+          Object.assign(new UploadAssetDocumentDto(), { type: "INVOICE" }),
+          [pdf(`${shared}-belsos-szamla.pdf`)],
+          asInternal,
+        );
+
+        assert.deepEqual(
+          await assets.setDocumentCaption(
+            assetForWrites,
+            feltoltve[0]!.id,
+            Object.assign(new UpdateAssetDocumentCaptionDto(), {
+              caption: "belsős felirat",
+            }),
+            asInternal,
+          ),
+          { ok: true },
+        );
+
+        // ES A SORBAN IS OTT ALL: a `{ ok: true }` annyit mond, hogy erintett
+        // sort -- azt nem, hogy a HELYESET.
+        const sor = await prisma.assetDocument.findUniqueOrThrow({
+          where: { id: feltoltve[0]!.id },
+          select: { caption: true },
+        });
+        assert.equal(sor.caption, "belsős felirat");
+
+        await assets.deleteDocument(
+          assetForWrites,
+          feltoltve[0]!.id,
+          asInternal,
+        );
+      });
+
+      it("idegen vevő eszközére nem tölthet fel", async () => {
+        await assert.rejects(
+          () =>
+            assets.uploadDocument(
+              assetB,
+              Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
+              [pdf(`${shared}-idegenre.pdf`)],
+              asCustomerA,
+            ),
+          NotFoundException,
+        );
+
+        // ES NEM IS KELETKEZETT SOR. Egy orzot nem az minosit, hogy szol, hanem
+        // hogy NEM TORTENT SEMMI -- a hibauzenet melle a kimenetet is meg kell
+        // nezni, amit vedeni akart.
+        const bDocs = await prisma.assetDocument.count({
+          where: { assetId: assetB },
+        });
+        assert.equal(bDocs, 1, "csak a fixtúra garanciája állhat a B eszközön");
+      });
+
+      it("idegen vevő csatolmányának feliratát nem írhatja át", async () => {
+        await assert.rejects(
+          () =>
+            assets.setDocumentCaption(
+              assetB,
+              warrantyOfB,
+              Object.assign(new UpdateAssetDocumentCaptionDto(), {
+                caption: "ide nem írhatok",
+              }),
+              asCustomerA,
+            ),
+          NotFoundException,
+        );
+
+        const sor = await prisma.assetDocument.findUniqueOrThrow({
+          where: { id: warrantyOfB },
+          select: { caption: true },
+        });
+        assert.equal(sor.caption, null, "a felirat nem változott meg");
+      });
+
+      it("idegen vevő csatolmányát nem törölheti", async () => {
+        await assert.rejects(
+          () => assets.deleteDocument(assetB, warrantyOfB, asCustomerA),
+          NotFoundException,
+        );
+
+        // A SOR MEGVAN. Enelkul ez az allitas egy olyan torlestol is zold
+        // lenne, ami ELVEGZI a muveletet, es UTANA dob.
+        assert.equal(
+          await prisma.assetDocument.count({ where: { id: warrantyOfB } }),
+          1,
+        );
+      });
+
+      /**
+       * A MÁSODIK TENGELY: A SAJÁT ESZKÖZÖN IS SZÁMÍT A FAJTA.
+       *
+       * A vevő a saját eszközén sem látja a SZÁMLÁT (`scopeMaySeeDocumentType`),
+       * és amit nem lát, azt ne is írhassa át és ne is törölhesse. E nélkül a
+       * válaszból azt is megtudná, hogy az a sor LÉTEZIK.
+       *
+       * A tulajdonos-ág ezt nem fedi le: ez az eszköz az övé.
+       */
+      it("a saját eszközén sem nyúlhat a számlához", async () => {
+        await assert.rejects(
+          () =>
+            assets.setDocumentCaption(
+              assetA,
+              invoiceOfA,
+              Object.assign(new UpdateAssetDocumentCaptionDto(), {
+                caption: "a számlához nem",
+              }),
+              asCustomerA,
+            ),
+          NotFoundException,
+        );
+        await assert.rejects(
+          () => assets.deleteDocument(assetA, invoiceOfA, asCustomerA),
+          NotFoundException,
+        );
+
+        assert.equal(
+          await prisma.assetDocument.count({ where: { id: invoiceOfA } }),
+          1,
+          "a számla sora megmaradt",
+        );
+      });
+    });
+
     describe("GET /service/assets", () => {
       it("mindegyik vevő CSAK a saját eszközét kapja", async () => {
         const forA = await assets.list(
@@ -779,7 +993,7 @@ describe(
         );
         assert.deepEqual(
           forA.items.map((item) => item.id).sort(),
-          [assetA, assetForDeletes].sort(),
+          [assetA, assetForDeletes, assetForWrites].sort(),
         );
 
         const forB = await assets.list(

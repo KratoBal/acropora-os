@@ -1,8 +1,10 @@
 import {
+  ASSET_DOCUMENT_TYPES,
   rowBelongsToScope,
   rowIsScopeOwner,
   scopeMaySeeDocumentType,
   scopeOwnWhereForAndBranch,
+  scopeVisibleDocumentTypes,
   scopeWhereForAndBranch,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
@@ -135,7 +137,12 @@ function payloadNamesADocument(value: unknown, depth = 0): boolean {
  * Vagyis a tipus-lista nem elavult otlet, csak onmagaban nem eleg.
  */
 const DOCUMENT_EVENT_TYPES = ["DOCUMENT_UPLOADED", "DOCUMENT_DELETED"];
-const DOCUMENT_TYPES = ["INVOICE", "WARRANTY", "MANUAL", "OTHER"] as const;
+/**
+ * A NEGY FAJTA A KOZOS HELYROL JON (`partner-scope.util.ts`), es nem itt all
+ * masodszor: a szures szabalya es a felsorolasa egy fajlban lakik, tehat egy
+ * otodik fajta felvetelenel nincs lemarado ag.
+ */
+const DOCUMENT_TYPES = ASSET_DOCUMENT_TYPES;
 
 /**
  * A KERT MATRICAKOD NEM KOTHETO: vagy nincs a keszletben, vagy mar mason all.
@@ -1866,17 +1873,41 @@ export class ServiceAssetsRepository extends Repository {
     };
   }
 
+  /**
+   * A TORLES HATOKORE 2026-09-17 OTA PARAMETER, ES EZ JAVITAS VOLT, NEM BOVITES.
+   *
+   * Addig a metodus egyaltalan nem vett at hatokort, es a mellette allo indok
+   * (hogy a vegpont olyan jog alatt all, amit partner-fiok nem kap meg) MAR NEM
+   * VOLT IGAZ: a `PARTNER_SERVICE` szerep megkapja a `SERVICE_MANAGE` jogot.
+   * Amit tenyleg nem kap meg, az a `SERVICE_ASSET_DELETE` -- az az ESZKOZ
+   * torlese, nem a csatolmanye.
+   *
+   * ES AMIERT SEMMI NEM SZOLT: a `partner-scope-usage.spec.ts` azt meri, hogy
+   * amelyik metodus hatokort VESZ AT, az hasznalja is. Ami sosem vett at, az
+   * kivul allt a latoteren. Ettol a parametertol lett lathato.
+   */
   async deleteDocument(
     assetId: string,
     documentId: string,
     actorUserId: string,
+    scope: PartnerScope,
   ) {
     return prisma.$transaction(async (tx) => {
       const document = await tx.assetDocument.findFirst({
         where: { id: documentId, assetId },
-        select: { id: true, type: true, fileName: true },
+        select: {
+          id: true,
+          type: true,
+          fileName: true,
+          asset: { select: { customerId: true, supplierId: true } },
+        },
       });
       if (!document) return false;
+      // KET FELTETEL, ugyanaz a ketto, amit az olvasas is nez: az eszkoz a
+      // keroe, ES a fajta lathato neki. Aki nem latja, ne is torolhesse -- egy
+      // torles kulonben a LETEZEST is elarulna arrol, amit meg sem lat.
+      if (!rowBelongsToScope(document.asset, scope)) return false;
+      if (!scopeMaySeeDocumentType(document.type, scope)) return false;
       await tx.assetDocument.delete({ where: { id: document.id } });
       await tx.assetEvent.create({
         data: {
@@ -2099,9 +2130,28 @@ export class ServiceAssetsRepository extends Repository {
     assetId: string,
     documentId: string,
     caption: string | null,
+    scope: PartnerScope,
   ): Promise<number> {
+    /**
+     * A HATOKOR A FELTETELBEN ALL, ES KET AGON, ugyanaz a ketto, amit az
+     * olvasas is nez (`document`): AZ ESZKOZ a keroe, ES a fajta lathato neki.
+     *
+     * A MASODIK NEM TULBUZGOSAG: enelkul egy partner ATIRHATNA egy olyan
+     * csatolmany feliratat, amit meg sem lat -- es a valaszbol azt is
+     * megtudna, hogy az a sor LETEZIK. A felirat a jegy tartalma, nem
+     * megjegyzes a margon.
+     *
+     * A TIPUS-LISTA a kozos fuggvenybol jon, nem kezzel felsorolva: a
+     * `scopeMaySeeDocumentType` egy BETOLTOTT sorrol dont, ez a hivas viszont
+     * nem tolt be sort, tehat a szabalyt feltetel alakban kell megkapnia.
+     */
     const result = await prisma.assetDocument.updateMany({
-      where: { id: documentId, assetId },
+      where: {
+        id: documentId,
+        assetId,
+        type: { in: scopeVisibleDocumentTypes(scope) },
+        asset: { AND: [scopeWhereForAndBranch(scope)] },
+      },
       data: { caption },
     });
     return result.count;

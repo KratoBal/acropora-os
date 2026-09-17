@@ -330,20 +330,47 @@ export class ServiceAssetsService {
     };
   }
 
+  /**
+   * A HIVO HATOKOREVEL, ES EZ 2026-09-17 OTA IGY VAN.
+   *
+   * === AMI ITT ALLT, ES MIERT VOLT HAMIS ===
+   *
+   * "BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all (QR-forgatas,
+   * dokumentum-feltoltes), amit partner-oldali felhasznalo nem kap meg."
+   *
+   * A mondat masodik fele MA NEM IGAZ, es merheto: a `PARTNER_SERVICE` szerep
+   * jogai `[SERVICE_VIEW, SERVICE_MANAGE]` (`packages/types/src/auth.ts`).
+   * Amit a partner-fiok tenyleg NEM kap meg, az a `SERVICE_ASSET_DELETE` -- es
+   * ott, ahol ugyanez a mondat az ESZKOZ torlese mellett all (`remove`), HELYES
+   * is. Egy igaz mondat kerult at egy masik helyre, ahol az ellenkezojet
+   * allitja.
+   *
+   * === MIERT EZ A ROSSZABBIK FELE ===
+   *
+   * A kod egy kor alatt javithato; egy hamis vedelem-leiras evekig all, es a
+   * kovetkezo olvaso RA TAMASZKODIK. Ezert nem eleg atvezetni a hatokort: a
+   * mondatot is ki kell cserelni arra, ami igaz.
+   *
+   * === MIERT CSAK A TULAJDONOS, ES NEM A FAJTA IS ===
+   *
+   * A feltoltes UJ sort hoz letre, tehat nem tud elarulni semmit egy letezo
+   * sorrol. A fajta-szures (`scopeMaySeeDocumentType`) azokon az utakon all,
+   * amelyek egy MAR LETEZO csatolmanyt erintenek (felirat, torles, olvasas) --
+   * ott a szures a LETEZES elfedeserol is szol. Ha valaha kiderul, hogy egy
+   * partner ne tolthessen fel szamlat, az EGY KERDES lesz, nem csendes
+   * bovites.
+   */
   async addDocument(
     id: string,
     type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER",
     file: Express.Multer.File,
     actorUserId: string,
+    scope: PartnerScope,
     caption?: string | null,
   ) {
     // A HIANY EGYFELE ALAKBAN ALL, es a szabaly KOZOS a harom gazdan.
     const felirat = normalizeDocumentCaption(caption);
-    await this.detail(id, {
-      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all (QR-forgatas,
-      // dokumentum-feltoltes), amit partner-oldali felhasznalo nem kap meg.
-      kind: "internal",
-    });
+    await this.detail(id, scope);
     // A BEJELENTETT TÍPUS ÉS A TARTALOM EGYÜTT DÖNT, és ez a szabály nem
     // lazult azzal, hogy a kép is bekerült: mindkettőnek egyeznie kell.
     // A lista és a szándékosan kihagyott formátumok indoka a
@@ -422,19 +449,27 @@ export class ServiceAssetsService {
    * mint a magyarazata -- egy szamla vagy egy garancialevel kepe utolag kap
    * nevet attol, aki iktatja.
    *
-   * BELSOS UT, ugyanugy, mint a feltoltes: a `detail` hivasa `internal`
-   * hatokorrel szuri, es a vegpont `SERVICE_MANAGE` alatt all.
+   * A HIVO HATOKOREVEL MEGY, es ez 2026-09-17 ota igy van: addig `internal`
+   * hatokorrel hivta a `detail`-t, arra hivatkozva, hogy a `SERVICE_MANAGE`
+   * jogot partner-fiok nem kapja meg. Megkapja (`PARTNER_SERVICE`), tehat a
+   * hivatkozas nem allt.
+   *
+   * KET SZURES ALL RAJTA, nem egy: az ESZKOZ a keroe (itt, a `detail`-ben), ES
+   * a FAJTA lathato neki (a tarolo feltetelben). A masodik nelkul egy partner
+   * atirhatna egy olyan csatolmany feliratat, amit meg sem lat.
    */
   async setDocumentCaption(
     id: string,
     documentId: string,
     caption: string | null | undefined,
+    scope: PartnerScope,
   ): Promise<{ ok: true }> {
-    await this.detail(id, { kind: "internal" });
+    await this.detail(id, scope);
     const erintett = await this.repository.setDocumentCaption(
       id,
       documentId,
       normalizeDocumentCaption(caption),
+      scope,
     );
     // A NULLA ERINTETT SOR NEM SIKER: a felulet a sajat begepelt szoveget
     // mutatna tovabb, mintha mentve lenne.
@@ -591,8 +626,31 @@ export class ServiceAssetsService {
     return { ...document, bytes };
   }
 
-  async deleteDocument(id: string, documentId: string, actorUserId: string) {
-    if (!(await this.repository.deleteDocument(id, documentId, actorUserId)))
+  /**
+   * A CSATOLMANY TORLESE, A HIVO HATOKOREVEL.
+   *
+   * A KET SZURES A TAROLOBAN ALL, nem itt, es ennek oka van: a torles egyetlen
+   * tranzakcioban keresi meg es viszi el a sort. Egy kulon `detail` hivas itt
+   * masodik korkerdes lenne ugyanarrol, es a KETTO KOZOTT valtozhatna a vilag.
+   *
+   * A `SERVICE_ASSET_DELETE` jog, ami a vegpont mellett szokott allni
+   * indokkent, EZ ALATT AZ UT ALATT NINCS: a csatolmany torlese
+   * `SERVICE_MANAGE` alatt all, es azt a `PARTNER_SERVICE` szerep megkapja.
+   */
+  async deleteDocument(
+    id: string,
+    documentId: string,
+    actorUserId: string,
+    scope: PartnerScope,
+  ) {
+    if (
+      !(await this.repository.deleteDocument(
+        id,
+        documentId,
+        actorUserId,
+        scope,
+      ))
+    )
       throw new NotFoundException("A dokumentum nem található.");
   }
 

@@ -112,11 +112,47 @@ export function rowIsScopeOwner(
  *                      partnernek, az EGY KERDES lesz, nem csendes szivargas.
  */
 export function scopeMaySeeDocumentType(
-  type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER",
+  type: AssetDocumentTypeValue,
   scope: PartnerScope,
 ): boolean {
   if (scope.kind === "internal") return true;
   return type === "WARRANTY" || type === "MANUAL";
+}
+
+/**
+ * A NEGY FAJTA, EGY HELYEN.
+ *
+ * A lista eddig KETSZER allt (itt es a tarolo fajljaban), ugyanazzal a negy
+ * ertekkel. Ket masolat eseten egy otodik fajta felvetelenel az egyik atvezetve
+ * marad, a masik nem -- es az elteres NEMA: a lemarado ag egyszeruen kihagyja
+ * az uj fajtat a szuresbol.
+ */
+export const ASSET_DOCUMENT_TYPES = [
+  "INVOICE",
+  "WARRANTY",
+  "MANUAL",
+  "OTHER",
+] as const;
+
+export type AssetDocumentTypeValue = (typeof ASSET_DOCUMENT_TYPES)[number];
+
+/**
+ * UGYANAZ A SZABALY, LISTAKENT -- annak, aki nem EGY sorrol dont, hanem
+ * LEKERDEZESI FELTETELT ir.
+ *
+ * MIERT KELL A PREDIKATUM MELLE: a `scopeMaySeeDocumentType` egy MAR BETOLTOTT
+ * sorrol mond igent vagy nemet. Egy `updateMany` viszont nem tolt be sort: a
+ * feltetelben kell megmondani, mire szabad rairni. A ketto ugyanabbol a
+ * fuggvenybol dolgozik, tehat nem tud szetcsuszni -- egy kulon felsorolas a
+ * lekerdezes oldalan pont az a masodik masolat lenne, ami eloszor-utoljara
+ * egyezik.
+ */
+export function scopeVisibleDocumentTypes(
+  scope: PartnerScope,
+): AssetDocumentTypeValue[] {
+  return ASSET_DOCUMENT_TYPES.filter((type) =>
+    scopeMaySeeDocumentType(type, scope),
+  );
 }
 
 /**
