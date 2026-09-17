@@ -319,7 +319,27 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                   setCustomerId(partner.customerId);
                   setRole("PARTNER_SERVICE");
                 }}
-                onClear={() => setCustomerId("")}
+                /**
+                 * A TORLES A SZEREPET IS VISSZAVESZI -- KULONBEN A FIOK
+                 * KOTES NELKULI PARTNER-SZEREPET KAPNA.
+                 *
+                 * Az `onPick` beallitja a szerepet; a `onClear` 2026-09-17-ig
+                 * CSAK a vevot vette vissza. Aki valasztott egy partnert,
+                 * aztan meggondolta magat, `PARTNER_SERVICE` szerepu, kotes
+                 * nelkuli fiokot mentett -- annak pedig a HATOKORE belsos
+                 * lenne (a `partnerScopeOf` kotes hianyaban `internal`-t ad),
+                 * vagyis MINDEN vevo szerviz-sorat latna.
+                 *
+                 * A `VIEWER` ugyanaz, amivel egy UJ fiok indul: a legszukebb
+                 * szerep. Nem talalgatunk helyette, es nem hagyunk ott egy
+                 * olyan szerepet, amihez mar nincs partner -- a valaszto
+                 * ilyenkor ujra a TELJES listat kinalja, tehat a szerep
+                 * tudatos valasztas marad.
+                 */
+                onClear={() => {
+                  setCustomerId("");
+                  setRole("VIEWER");
+                }}
               />
             </FormField>
             <p className="pt-1 text-xs text-dusk-500">
