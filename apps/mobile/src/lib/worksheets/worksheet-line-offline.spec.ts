@@ -194,9 +194,21 @@ describe("a sor kiürítése és a tétel", () => {
       drainForras,
       /case "worksheet-line":\s*\n\s*return tetelKuld\(row\);/,
     );
-    // ES A SZERKEZET MAGA: e nelkul az elso allitas akkor is zold lenne, ha
-    // valaki a `switch`-et visszaalakitana if-lancca alapertelmezessel.
-    assert.match(drainForras, /const soha: never = row\.entityType;/);
+    /*
+      A SZERKEZETET NEM ITT MERJUK, ES EZ SZANDEKOS.
+
+      2026-09-17-ig itt allt egy `assert.match(drainForras, /const soha: never =
+      row.entityType;/)`. Az a minta KET helyen illeszkedik (a lehivoban ket
+      kimerito `switch` all), tehat ZOLD MARADT volna, ha csak az EGYIK marad
+      kimerito -- pont az a helyzet, ami 2026-09-16 delutanjan fennallt.
+
+      A lentebbi allitas ("mind a KET switch kimerito") ugyanezt DARABSZAMMAL
+      meri, es az szigorubb. Ket allitas ugyanarra a dologra, kulonbozo erovel,
+      nem ketszeres vedelem: a gyengebbik csak elfedi, hogy melyik fogott.
+
+      Egy szukitett valtozat (a `case` agtol a `never` sorig) sem segit: a
+      lusta illesztes MINDKET switchre raall, tehat ugyanugy ketszer talal.
+    */
     assert.match(
       drainForras,
       /addWorksheetLine\(row\.entityId, \{ id: row\.id/,
