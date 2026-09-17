@@ -17,6 +17,8 @@ import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
 import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
 import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages } from "@/lib/api/picked-image";
+import { describeUploadFailure } from "@/lib/api/network-failure";
+import { ApiNetworkError } from "@/lib/api/client";
 import {
   getServiceJob,
   moveServiceJob,
@@ -138,10 +140,15 @@ export default function ServiceJobDetailScreen() {
           : `${created.length} kép feltöltve.`,
       );
     } catch (error) {
+      /**
+       * A BUKAS MEGMONDJA, MI TORTENT -- lasd `lib/api/network-failure.ts`.
+       */
       setNotice(
-        error instanceof Error
-          ? error.message
-          : "A feltöltés nem sikerült. Próbáld újra.",
+        describeUploadFailure({
+          error,
+          uris: files.map((f) => f.uri),
+          networkFailure: error instanceof ApiNetworkError,
+        }),
       );
     } finally {
       setUploading(false);

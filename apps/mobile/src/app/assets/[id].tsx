@@ -17,6 +17,8 @@ import { getAsset, uploadAssetDocuments } from "@/lib/api/assets";
 import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
 import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages } from "@/lib/api/picked-image";
+import { describeUploadFailure } from "@/lib/api/network-failure";
+import { ApiNetworkError } from "@/lib/api/client";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -112,10 +114,17 @@ export default function AssetDetailScreen() {
       );
       void query.refetch();
     } catch (error) {
+      /**
+       * A BUKAS MEGMONDJA, MI TORTENT. A halozati agon a mai mondat ("a
+       * szerver nem erheto el") ELHALLGATJA, mit panaszol a telefon -- es
+       * emiatt kerestuk harom korben vakon, mi hal el.
+       */
       setUploadNotice(
-        error instanceof Error
-          ? error.message
-          : "A feltöltés nem sikerült. Próbáld újra.",
+        describeUploadFailure({
+          error,
+          uris: files.map((f) => f.uri),
+          networkFailure: error instanceof ApiNetworkError,
+        }),
       );
     } finally {
       setUploading(false);
