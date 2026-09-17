@@ -42,11 +42,34 @@ import { describe, it } from "node:test";
  *
  * A KETTO EGYUTT FED: a kiirt alak a hivo oldalan, ez a spec a lekerdezesen.
  *
- * === ES AMIT EZ MA NEM FED: AZ IRO OLDAL (merve 2026-09-17, acrobot kerdesere) ===
+ * === A MAI HATOKOR, ES EZ A BEKEZDES EGYSZER MAR HAZUDOTT ===
  *
- * Ez a fajl az OLVASO oldalt meri. Kezenfekvo lenne azt hinni, hogy az iro
- * oldalt (`create` / `update` `data` blokk) a fordito amugy is vedi. NEM VEDI.
- * Negy meres, ugyanazon a fan, a VALODI generalt kliensen:
+ * A fajl KET oldalt mer: a lekerdezesek `select` / `include` agait ES az iro
+ * oldal (`create` / `update` `data`, plusz az `upsert` ket aga) FELSO SZINTU
+ * kulcsait. A hivast nem a kliens NEVEROL ismeri fel, hanem az alakjarol
+ * (`<barmi>.<modell>.<muvelet>({`, ahol a modell a semaban all es a muvelet a
+ * Prisma sajat API-ja), tehat a tranzakcios kliensen mennо hivasokat is latja.
+ *
+ * MERVE 2026-09-17 este: a bejaras 68 forrasfajlt huz be. A SZAM UJRAMERHETO,
+ * es nem is all mashol: a `vizsgaltFajlok()` visszateresi ertekenek a hossza,
+ * es a lenti POZITIV KONTROLL uzenete ki is irja, ha valaha lecsokken.
+ *
+ * ES A SZAM MOZOG: ugyanazon az estén 67 volt, majd 68 lett, amikor a
+ * kapcsolat-futasok olvaso parancsa bekerult. Ezert all mellette a DATUM es az,
+ * hogy MIBOL jon -- egy puszta szam egy ilyen lapon par ora alatt elavul, es
+ * ugy nez ki, mint egy tulajdonsag.
+ *
+ * ES AMIERT EZ A BEKEZDES IGY KEZDODIK: 2026-09-17 este a fejlec meg azt
+ * allitotta, hogy "ez a fajl az OLVASO oldalt meri" es hogy "feloldalas halo",
+ * MIKOZBEN a torzs mar merte az iro oldalt -- sot, a torzsben allo megjegyzes
+ * EPP EHHEZ A FEJLECHEZ kuldte az olvasot ellenorzesert. Egy elavult komment
+ * csak nem igaz; egy KERESZTHIVATKOZAS egy hamis allitasra kettot teved
+ * egyszerre, es ugy nez ki, mint egy megerositett tény.
+ *
+ * === AZ IRO OLDAL AZERT VAN ITT, MERT A FORDITO NEM NEZI ===
+ *
+ * Kezenfekvo lenne azt hinni, hogy az iro oldalt a fordito amugy is vedi.
+ * NEM VEDI. Negy meres, ugyanazon a fan, a VALODI generalt kliensen:
  *
  *     kitalalt MODELL-nev                          PIROS   TS2339, nev szerint
  *     rossz TIPUS egy LETEZO mezon a `data`-ban    PIROS   TS2322
@@ -59,16 +82,38 @@ import { describe, it } from "node:test";
  * a LETEZO mezok ERTEKENEK TIPUSAT nezi, a kulcs LETEZESET nem -- pontosan
  * ugyanaz a hatar, mint a `select` oldalon.
  *
- * VAGYIS EZ AZ ORZO MA FELOLDALAS HALO, es ezt tudni kell: ha valaki a mondatra
- * hagyatkozva azt hiszi, hogy a Prisma-hivasok mezonevei fedve vannak, tevedni
- * fog az iro oldalon.
+ * EZ AZ A RES, AMIT AZ IRO OLDAL MERESE ZAR BE. A hatara viszont marad, es ki
+ * kell mondani: a `data` blokk FELSO SZINTU kulcsait latja, a SPREADDEL
+ * (`...sor`) bevitteket nem -- azok nem allnak a forrasban, tehat semmilyen
+ * szoveg-olvaso nem latja oket. Ott a mezot az ATADOTT TIPUS kiirasa vedi.
  *
- * AMIT NEM SIKERULT LEMERNI, ES A KONTROLL MONDTA MEG: hogy futaskor a Prisma
- * MEGFOGJA-E a nem letezo `data` kulcsot (dob-e, vagy csendben kihagyja). A
- * probam mind a harom hivasra ugyanazt a `PrismaClientInitializationError`-t
- * adta -- BELEERTVE A HELYES KONTROLL-HIVAST --, mert ebben a kontenerben nincs
- * elerheto adatbazis, es a kapcsolati hiba mindent elfed. Harom azonos eredmeny
- * nem lelet: a meres ERVENYTELEN, nem negativ. Ehhez elerheto adatbazis kell.
+ * AMI EGY IDEIG MERETLEN VOLT, ES AMI VEGUL MEGLETT: hogy futaskor a Prisma
+ * MEGFOGJA-E a nem letezo `data` kulcsot. Az elso probanal mind a harom hivas
+ * ugyanazt a `PrismaClientInitializationError`-t adta -- BELEERTVE A HELYES
+ * KONTROLL-HIVAST --, mert abban a kontenerben nem volt elerheto adatbazis, es
+ * a kapcsolati hiba mindent elfedett. Harom azonos eredmeny nem lelet: az a
+ * meres ERVENYTELEN volt, nem negativ.
+ *
+ * ELERHETO ADATBAZISSAL UJRAMERVE (acrobot, 2026-09-17 20:25, a fejlesztoi
+ * peldanyon, nem letezo azonositora, tehat iras nelkul):
+ *
+ *     kontroll olvasas (a kapcsolat el)            SIKER
+ *     update HELYES mezovel, nem letezo sorra      P2022 -- eljut az adatbazisig
+ *     nem letezo `data` kulcs, sima literal        PrismaClientValidationError
+ *     nem letezo `data` kulcs, SPREAD-del          PrismaClientValidationError
+ *     nem letezo `select` kulcs                    PrismaClientValidationError
+ *
+ * A VALASZ TEHAT: DOB, ES NEV SZERINT MEGMONDJA, melyik kulcs a rossz (a hiba
+ * alahuzza a kulcsot es kiirja a modell letezo mezoit). NEM hagyja ki csendben,
+ * es ezt a SPREAD alak sem valtoztatja meg: a szorast a FORDITO nem nezi, a
+ * FUTAS viszont igen, mert futaskor mar egyetlen objektum all ott.
+ *
+ * ES EZ NEM TESZI FELESLEGESSE AZ IRO OLDALI ORZOT, UGYANAZON AZ ALAPON, AMIN
+ * EZ A FAJL IS LETEZIK: az OLVASO oldal is hangosan bukik futaskor (`Unknown
+ * field externalId for select statement`, eles adatbazison, 2026-09-17) -- csak
+ * epp egy olyan parancsban, ami ritkan fut, es tizenkilenc zold allitas UTAN.
+ * A hangos futaskori hiba nem ugyanaz, mint egy kapu: az elso az eles futasban
+ * all meg, a masodik a CI-ben.
  *
  * (Az OLVASO oldalrol viszont van megfigyelesunk: a 2026-09-17-i futas eles
  * adatbazison `Unknown field externalId for select statement` hibaval allt meg,
@@ -544,8 +589,8 @@ function selectMezok(kod: string, sema: string): Map<string, Set<string>> {
       }
       /*
         AZ IRO OLDAL: a `data` (es az `upsert` ket aga) FELSO SZINTU kulcsai
-        ugyanugy mezonevek, es a fordito ezeket SEM ellenorzi -- merve
-        2026-09-17, lasd a fajl fejlecet.
+        ugyanugy mezonevek, es a fordito ezeket SEM ellenorzi. A negy meres a
+        fejlec "AZ IRO OLDAL AZERT VAN ITT" szakaszaban all, nevvel.
       */
       if (
         kulcs.nev !== "data" &&
