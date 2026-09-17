@@ -63,6 +63,10 @@ function versionRow(
         assetId: null,
         quantity: decimal("2"),
         unit: "óra",
+        // A fixtúra ÓRA-tétel, tehát LABOR: két óra, egy emberrel. Így a
+        // munkaóra-összesítés is mér rajta valamit, nem csak nullát ad.
+        kind: "LABOR" as const,
+        workerCount: 1,
         unitNet: decimal("15000"),
         vatRatePercent: decimal("27"),
         netAmount: decimal("30000"),

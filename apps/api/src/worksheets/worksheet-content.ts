@@ -1,4 +1,4 @@
-import { Prisma } from "@acropora/database";
+import { Prisma, type WorksheetLineKind } from "@acropora/database";
 
 import {
   computeWorksheetLineAmounts,
@@ -17,6 +17,10 @@ export interface NormalizedWorksheetLine {
   assetId: string | null;
   quantity: Prisma.Decimal;
   unit: string;
+  /** A tétel fajtája. Ez dönti el, beleszámít-e az összesített munkaórába. */
+  kind: WorksheetLineKind;
+  /** Hányan dolgoztak rajta. A séma alapértelmezése 1, a hiány is annyi. */
+  workerCount: number;
   /**
    * Az ár és az összegek EGYÜTT vannak meg, vagy EGYÜTT hiányoznak - a
    * `priceOf` fejléce mondja meg, miért nincs köztes állapot. A `null` a
@@ -82,6 +86,13 @@ export function normalizeWorksheetLine(
     assetId: line.assetId?.trim() || null,
     quantity: new Prisma.Decimal(line.quantity),
     unit: line.unit.trim(),
+    /*
+      A HIÁNY ITT DŐL EL, ÉS UGYANAZT ADJA, MINT A SÉMA ALAPÉRTELMEZÉSE.
+      Így a mai hívók (telefon, web) változatlanul küldhetnek tételt e két mező
+      nélkül, és a viselkedés nem attól függ, melyik úton jött be a sor.
+    */
+    kind: line.kind ?? "OTHER",
+    workerCount: line.workerCount ?? 1,
     ...priceOf(line),
   };
 }
