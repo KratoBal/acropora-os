@@ -52,10 +52,18 @@ export interface CliOutput {
   stderr: (t: string) => void;
 }
 
-/** Egy termek, ahogy a parancs latja: az azonositoi es a tarolt pillanatkep. */
+/**
+ * EGY TERMEK, AHOGY A PARANCS LATJA.
+ *
+ * A `externalId` LEHET `null`, es ez nem elovigyazatossag: a kulso azonosito NEM
+ * a pillanatkepen all, hanem az `ExternalReference` tablan. Egy pillanatkep,
+ * amihez nincs hivatkozas-sor, nem kihagyhato CSENDBEN -- az a termek
+ * onhivatkozaskent sem lenne felismerheto, tehat a sajat kapcsolatai kozott
+ * megjelenhetne.
+ */
 export interface UjraepitesJelolt {
   productId: string;
-  externalId: string;
+  externalId: string | null;
   rawPayload: unknown;
 }
 
@@ -175,7 +183,22 @@ export async function runKapcsolatUjraepitesCli(
       ACCESSORY: [],
     };
 
+    let kulsoAzonositoNelkul = 0;
     for (const jelolt of jeloltek) {
+      /**
+       * KULSO AZONOSITO NELKUL NEM DOLGOZUNK FEL -- ES NEM CSENDBEN.
+       *
+       * A feloldas SAJAT azonositoval szamol: az onhivatkozast abbol ismeri fel
+       * (`reference.externalId === sourceExternalId`). Enelkul egy termek a
+       * SAJAT kapcsolatai koze kerulhetne.
+       *
+       * A szam a fejlecben all, nem fajtankent: ez a termek tulajdonsaga, nem a
+       * kapcsolate.
+       */
+      if (jelolt.externalId === null) {
+        kulsoAzonositoNelkul += 1;
+        continue;
+      }
       for (const fajta of FAJTAK) {
         const szam = szamok[fajta];
         szam.termek += 1;
@@ -267,7 +290,8 @@ export async function runKapcsolatUjraepitesCli(
 
     out.stdout(
       `${apply ? "Megírva" : "Terv"}: ${jeloltek.length} termék, ` +
-        `${terkep.size} külső azonosító a térképen.\n`,
+        `${terkep.size} külső azonosító a térképen; ` +
+        `külső azonosító nélkül kihagyva ${kulsoAzonositoNelkul}.\n`,
     );
     for (const fajta of FAJTAK) {
       const szam = szamok[fajta];
@@ -324,6 +348,22 @@ function uresSzamok(): UjraepitesSzamok {
   };
 }
 
+/**
+ * A UNAS KULSO AZONOSITOI, EGYSZER LEKERDEZVE.
+ *
+ * Ket varrat hasznalja (a jeloltek sajat azonositoja es a feloldas terkepe), es
+ * a ket hivas ugyanabban a korben all -- egy masodik lekerdezes ugyanazt a
+ * nehany ezer sort hozna le megegyszer.
+ */
+let kulsoSorokGyorsitotar:
+  Promise<Array<{ externalId: string; entityId: string }>> | undefined;
+function kulsoAzonositoSorok() {
+  return (kulsoSorokGyorsitotar ??= prisma.externalReference.findMany({
+    where: { system: "UNAS", entityType: "Product" },
+    select: { externalId: true, entityId: true },
+  }));
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
@@ -341,24 +381,40 @@ if (
       stderr: (t) => process.stderr.write(t),
     },
     {
-      jeloltek: async () =>
-        (
-          await prisma.unasProductSnapshot.findMany({
-            select: { productId: true, externalId: true, rawPayload: true },
-          })
-        ).map((sor) => ({
+      /**
+       * A KULSO AZONOSITO NEM A PILLANATKEPEN ALL.
+       *
+       * Az elso valtozat `externalId`-t kert a `UnasProductSnapshot` modelltol,
+       * es a parancs EL SEM INDULT: `Unknown field externalId for select
+       * statement`. A modellen `productId` all (unique); a kulso azonosito az
+       * `ExternalReference` tablan lakik -- pontosan ott, ahonnan a terkep is
+       * olvas.
+       *
+       * EZERT EGY LEKERDEZES SZOLGALJA MIND A KETTOT: a sorokbol elore-terkep
+       * lesz a feloldashoz, es FORDITOTT terkep a jeloltek sajat azonositojahoz.
+       */
+      jeloltek: async () => {
+        const [pillanatkepek, kulsoSorok] = await Promise.all([
+          prisma.unasProductSnapshot.findMany({
+            select: { productId: true, rawPayload: true },
+          }),
+          kulsoAzonositoSorok(),
+        ]);
+        const forditott = new Map(
+          kulsoSorok.map((sor) => [sor.entityId, sor.externalId]),
+        );
+        return pillanatkepek.map((sor) => ({
           productId: sor.productId,
-          externalId: sor.externalId,
+          externalId: forditott.get(sor.productId) ?? null,
           rawPayload: sor.rawPayload,
-        })),
+        }));
+      },
       terkep: async () =>
         new Map(
-          (
-            await prisma.externalReference.findMany({
-              where: { system: "UNAS", entityType: "Product" },
-              select: { externalId: true, entityId: true },
-            })
-          ).map((sor) => [sor.externalId, sor.entityId]),
+          (await kulsoAzonositoSorok()).map((sor) => [
+            sor.externalId,
+            sor.entityId,
+          ]),
         ),
       /*
         EGY OSSZESITES, NEM TERMEKENKENTI LEKERDEZES: ketezer termeknel a
