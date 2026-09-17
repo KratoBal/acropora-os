@@ -19,6 +19,34 @@
 -- Az író oldal ugyanígy: az egyetlen `upsert` create/update blokkja
 -- egyik oszlopot sem tölti ki.
 --
+-- === ÉS A MÁSODIK MÉRÉS, AMI NEM A KÓDRÓL SZÓL: MAGA AZ ADAT ===
+--
+-- A fenti mérés arra válaszol, hogy HOZZÁFÉR-e valaki az oszlophoz. Azt NEM
+-- mondja meg, hogy VAN-E BENNE ADAT -- az a kérdés nem a kódban lakik, hanem az
+-- adatbázisban, és külön kellett megmérni.
+--
+-- Acrobot mérése, 2026-09-17 22:28, az ÉLES acropora adatbázison:
+--
+--   összes sor a UnasProductSnapshot táblában      1901
+--   propertiesHtml         nem NULL                   0
+--   initialOrderQuantity   nem NULL                   0
+--   propertiesHtml         nem üres szöveg            0
+--
+-- A harmadik sor külön mérés, és nem szőrszálhasogatás: a `count(oszlop)` csak a
+-- NULL-t hagyja ki, tehát egy üres szöveg ott ÉRTÉKNEK számítana. Mind a kettő
+-- nulla.
+--
+-- AZ ADATBÁZIS AZONOSSÁGA IS MÉRVE, NEM FELTÉTELEZVE: ugyanazon a gépen áll egy
+-- MÁSIK postgres is, azonos `POSTGRES_DB` és `POSTGRES_USER` értékkel
+-- (`acropora` / `acropora`) -- azon a `Worksheet` tábla nem is létezik. Egy
+-- sikeres kapcsolódás tehát semmit nem mond arról, melyik adatbázisban vagyunk.
+-- Az éleset a tartalma azonosítja: 6 felhasználó, 8 munkalap, 1901 pillanatkép,
+-- és az utolsó lefutott migráció a 20260917170000_sync_run_relation_counters
+-- (konténer: iwm34jaqp9xmwb72qkrqkwhy).
+--
+-- Fél év múlva senki nem fogja tudni visszakeresni, hogy megmértük-e -- hacsak
+-- itt nem áll.
+--
 -- KONTROLL, hogy a fenti nullák ne a kérdés tulajdonságai legyenek:
 -- ugyanezzel a méréssel a `reportedStockSyncedAt` 19 fájlt ad, az ismerten
 -- írt mezők pedig 5 találatot ugyanabban az upsert-blokkban. A mérő lát.
