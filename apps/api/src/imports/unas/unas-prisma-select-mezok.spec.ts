@@ -326,6 +326,31 @@ function selectAgak(
 }
 
 /**
+ * AZ IRO OLDAL EGY AGA: a `data` blokk FELSO SZINTU kulcsai.
+ *
+ * NEM MEGYUNK BELJEBB, es ez tudatos: egy relacios mezo erteke Prisma-muvelet
+ * (`connect`, `connectOrCreate`, `create`), nem mezonev. Egy szinttel lejjebb
+ * tehat mar MAS a nyelv, es a lefele menes hamis pirosat adna.
+ *
+ * ES AMIT EZ NEM LAT: a spreaddel (`...sor`) bevitt kulcsokat. Azok nem allnak
+ * a forrasban, tehat semmilyen szoveg-olvaso nem latja oket -- ott a mezot az
+ * ATADOTT TIPUS kiirasa vedi, nem ez.
+ */
+function adatAg(
+  kod: string,
+  nyito: number,
+  modell: string,
+  gyujto: SelectAg[],
+): void {
+  gyujto.push({
+    modell,
+    mezok: felsoKulcsok(kod, nyito)
+      .map((k) => k.nev)
+      .filter((nev) => !PRISMA_META.has(nev)),
+  });
+}
+
+/**
  * A KONSTANSBA TETT VALASZTAS FELOLDASA -- `select: VALASZTAS` alak.
  *
  * MIERT KELL: a repo tobb tarolója modul-szintu konstansba emeli ki a
@@ -365,11 +390,34 @@ function selectMezok(kod: string, sema: string): Map<string, Set<string>> {
     const argKezd = kod.indexOf("{", m.index!);
     const agak: SelectAg[] = [];
     for (const kulcs of felsoKulcsok(kod, argKezd)) {
-      if (kulcs.nev !== "select" && kulcs.nev !== "include") continue;
+      if (kulcs.nev === "select" || kulcs.nev === "include") {
+        const blokk = agKezdete(kod, kulcs.ertekKezd);
+        if (blokk !== null) selectAgak(kod, blokk, modell, sema, agak);
+        continue;
+      }
+      /*
+        AZ IRO OLDAL: a `data` (es az `upsert` ket aga) FELSO SZINTU kulcsai
+        ugyanugy mezonevek, es a fordito ezeket SEM ellenorzi -- merve
+        2026-09-17, lasd a fajl fejlecet.
+      */
+      if (
+        kulcs.nev !== "data" &&
+        kulcs.nev !== "create" &&
+        kulcs.nev !== "update"
+      )
+        continue;
       const blokk = agKezdete(kod, kulcs.ertekKezd);
-      if (blokk !== null) selectAgak(kod, blokk, modell, sema, agak);
+      if (blokk !== null) adatAg(kod, blokk, modell, agak);
     }
-    for (const ag of agak)
+    /*
+      AZ URES AG NEM KERUL BE, ES EZT EGY SAJAT ROSSZ JOSLAT TANITOTTA MEG.
+      Kalibraciokor kiiktattam az iro oldal mezo-gyujteset, es azt vartam, hogy
+      egy fajl visszakerul a vakfoltba. NEM kerult: az ures ag ATTOL MEG
+      bekerult a terkepbe, tehat a fajl "lathatonak" szamitott, mikozben NULLA
+      mezot ellenoriztunk rajta. Egy "lathato" fajl, amin nincs mit merni,
+      ugyanaz, mint a vakfolt -- csak nem latszik annak.
+    */
+    for (const ag of agak.filter((ag) => ag.mezok.length > 0))
       talalt.set(
         ag.modell,
         new Set([...(talalt.get(ag.modell) ?? []), ...ag.mezok]),
@@ -417,19 +465,19 @@ describe("a parancsok select-mezői léteznek a sémán", () => {
    * valakinek el kell dontenie, hogy az olvasot bovitjuk-e vagy tudomasul
    * vesszuk. Enelkul a vakfolt csendben nohetne.
    *
-   *   brands.repository.ts          az egyetlen `select` egy `_count` alatt all,
-   *                                 tehat nincs is ellenorizheto mezoje
-   *   nav-incoming-invoice.rep.ts   a lekerdezesek a TRANZAKCIOS kliensen
-   *                                 (`tx.<modell>`) mennek, amit a minta nem fog
+   *   brands.repository.ts   az egyetlen olvasasa egy `include` konstanson megy,
+   *                          amiben csak `_count` es egy relacio all -- tehat
+   *                          nincs is ellenorizheto mezoneve --, az irasai
+   *                          pedig a TRANZAKCIOS kliensen (`tx.<modell>`)
    *
-   * A masodik fajta a tagabb: a tranzakcios kliens a repoban tobb helyen all,
-   * es a mintat rá kiterjeszteni KULON kerdes -- ott a modell neve ugyanugy ott
-   * van, de a valtozo neve nem rogzitett.
+   * A TRANZAKCIOS KLIENS A TAGABB FAJTA, es kulon kerdes: ott a modell neve
+   * ugyanugy ott van, de a valtozo neve nem rogzitett (`tx`, `trx`, barmi).
+   *
+   * EGY FAJL KIKERULT EBBOL A LISTABOL, amikor az iro oldal is bekerult
+   * (`nav-incoming-invoice.repository.ts`): a `data` blokkjai lathatova valtak.
+   * Ez a lista tehat nem allando -- epp ezert all rajta pontos allitas.
    */
-  const LATATLAN = [
-    "src/brands/brands.repository.ts",
-    "src/purchasing/nav-incoming-invoices/nav-incoming-invoice.repository.ts",
-  ];
+  const LATATLAN = ["src/brands/brands.repository.ts"];
 
   it("a vakfolt listája pontos: se több, se kevesebb", () => {
     const uresek = FAJLOK.filter(
