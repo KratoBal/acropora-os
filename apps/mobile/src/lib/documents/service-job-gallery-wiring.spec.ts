@@ -75,10 +75,28 @@ describe("a hibajegy csatolmány-szakasza", () => {
     );
   });
 
-  it("a kép a hitelesített forrásból jön, nem csupasz címről", () => {
+  /**
+   * A KÉP HITELESÍTETT FORRÁSBÓL JÖN -- MIND A KÉT HELYEN.
+   *
+   * A DARABSZÁM NEM DÍSZ, ÉS MÉRÉSBŐL KERÜLT IDE. A képernyőn KÉT `<Image>` áll:
+   * a listában a CSEMPE, és rákoppintásra a NAGY KÉP rátéte. Egy pusztán
+   * jelenlétre illesztő állítás (ez volt az első alakja) ZÖLDEN átengedné, ha az
+   * egyik csupasz `uri`-ra váltana -- a másik egyedül tartaná életben. A hiba
+   * pedig NÉMA: a végpont 401-et adna, és a kép üres csempeként állna ott,
+   * pontosan úgy, mint a szakasz előtti hiány.
+   *
+   * Ha egyszer harmadik nézet is kap képet, ez az állítás pirosra vált, és a
+   * következő ember a számot IGAZÍTJA, nem a mérést ejti el.
+   */
+  it("a kép a hitelesített forrásból jön, mind a két nézetben", () => {
     const s = olvas(KEPERNYO);
     assert.match(s, /useDocumentImageSource\(/);
-    assert.match(s, /source=\{forras\}/);
+    const db = s.split("source={forras}").length - 1;
+    assert.equal(
+      db,
+      2,
+      `a hitelesített forrás ${db} helyen áll; a csempe ÉS a nagy kép rátéte kell, különben az egyik nézet üresen maradna`,
+    );
   });
 
   /**
@@ -89,11 +107,27 @@ describe("a hibajegy csatolmány-szakasza", () => {
    * bekötést az első változatomból KIHAGYTAM, és a munkalap mintája hozta elő.
    */
   it("a feltöltés a csatolmány-listát is érvényteleníti", () => {
+    /**
+     * PONTOSAN KETTŐ, ÉS A HÍVÁS ALAKJÁRA IS. Az első alakom `>= 2` volt, ami a
+     * mai kettőn átmegy -- de a felső határ hiánya azt is jelenti, hogy nem
+     * mondja meg, MELYIK kettő kell. A munkalap ikerállítása pontos számot mér,
+     * és ugyanazt a két helyet nevezi meg: a lekérdezést és az érvénytelenítést.
+     *
+     * A kulcsra illesztés ÖNMAGÁBAN nem elég, és ezt a kalibráció tanította meg:
+     * a puszta kulcs-minta ZÖLD MARAD, ha az érvénytelenítést kiveszik, mert
+     * ugyanaz a kulcs ott áll a `useQuery` DEFINÍCIÓJÁBAN is.
+     */
     const s = olvas(KEPERNYO);
     const db = s.split('queryKey: ["service-job-documents", id]').length - 1;
-    assert.ok(
-      db >= 2,
-      `a lista-kulcs ${db} helyen áll; a lekérdezés mellett az érvénytelenítésnél is kell`,
+    assert.equal(
+      db,
+      2,
+      `a lista-kulcs ${db} helyen áll: a lekérdezés ÉS az érvénytelenítés kell, különben a friss kép nem jelenne meg`,
+    );
+    assert.match(
+      s,
+      /invalidateQueries\(\{\s*queryKey: \["service-job-documents", id\],\s*\}\)/,
+      "a feltöltés után a galéria nem frissül: a friss kép nem jelenne meg",
     );
   });
 
