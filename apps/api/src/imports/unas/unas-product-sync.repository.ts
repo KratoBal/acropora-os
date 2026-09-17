@@ -415,6 +415,10 @@ export class UnasProductSyncRepository extends Repository {
         missingCount: true,
         skippedCount: true,
         skippedSourceChangedCount: true,
+        similarRelationsWritten: true,
+        similarReferencesUnresolved: true,
+        accessoryRelationsWritten: true,
+        accessoryReferencesUnresolved: true,
         errorCode: true,
       },
     });
@@ -442,6 +446,10 @@ export class UnasProductSyncRepository extends Repository {
         missingCount: true,
         skippedCount: true,
         skippedSourceChangedCount: true,
+        similarRelationsWritten: true,
+        similarReferencesUnresolved: true,
+        accessoryRelationsWritten: true,
+        accessoryReferencesUnresolved: true,
         errorCode: true,
       },
     });
@@ -1338,6 +1346,19 @@ export class UnasProductSyncRepository extends Repository {
             missingCount,
             skippedCount: skipped.length,
             skippedSourceChangedCount: skippedSourceChanged,
+            /**
+             * A KAPCSOLAT-SZAMOK IS A SORBA MENNEK, es ezert: a naplo a
+             * kontener indulasakor kezdodik, tehat egy ujratelepites utan a
+             * tegnapi futas vesztesege mar sehol nincs meg.
+             *
+             * NEGY SZAM A NYOLCBOL: a valasz tipusonkent negyet ad, de az
+             * onhivatkozas es a duplikatum SZANDEKOS kihagyas -- azok a
+             * naplosorban maradnak. Itt az ADATVESZTES all, es MELLE a nevezo.
+             */
+            similarRelationsWritten,
+            similarReferencesUnresolved,
+            accessoryRelationsWritten,
+            accessoryReferencesUnresolved,
           },
         });
 

@@ -4112,6 +4112,26 @@ model UnasProductSyncRun {
   /// boltban megváltozott, és mi nem vettük át. A legtöbb futáson nulla, és
   /// pontosan akkor nem az, amikor egy termék elkezd elavulni nálunk.
   skippedSourceChangedCount Int                      @default(0)
+  /// Ahány HASONLÓ kapcsolat-sort írt ez a futás, és ahány hivatkozás veszett
+  /// el, mert a célpont nincs a katalógusunkban.
+  ///
+  /// MIÉRT A SORBAN, ÉS NEM CSAK A NAPLÓBAN: a napló a konténer indulásakor
+  /// kezdődik (mérve 2026-09-15: mindhárom élő alkalmazás naplójának ELSŐ sora
+  /// a saját bootja). Egy újratelepítés után tehát a tegnapi futás vesztesége
+  /// már sehol nincs meg, és pont az a kérdés, ami másnap merül fel:
+  /// "mennyi veszett el a héten?".
+  ///
+  /// MIÉRT NÉGY SZÁM, ÉS NEM NYOLC: a válaszban nyolc áll (típusonként négy),
+  /// de az önhivatkozás és a duplikátum SZÁNDÉKOS kihagyás, nem veszteség --
+  /// azok a naplóban maradnak. Itt az ADATVESZTÉS áll, és MELLÉ a nevező:
+  /// egy "589 elveszett" szám önmagában nem mondja meg, sok-e.
+  similarRelationsWritten   Int                      @default(0)
+  similarReferencesUnresolved Int                    @default(0)
+  /// Ugyanez a kettő a KIEGÉSZÍTŐ kapcsolatokra. Külön, mert a két ág külön is
+  /// tud elromlani: 2026-09-08-án a forrásban 13854 kiegészítő kapcsolat állt,
+  /// az OS-ben nulla -- miközben a hasonló ágon hét termék átment.
+  accessoryRelationsWritten Int                      @default(0)
+  accessoryReferencesUnresolved Int                  @default(0)
   errorCode                 String?
   createdAt                 DateTime                 @default(now())
   updatedAt                 DateTime                 @updatedAt

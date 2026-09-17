@@ -43,6 +43,10 @@ const run: UnasProductSyncRun = {
   missingCount: 1,
   skippedCount: 0,
   skippedSourceChangedCount: 0,
+  similarRelationsWritten: 0,
+  similarReferencesUnresolved: 0,
+  accessoryRelationsWritten: 0,
+  accessoryReferencesUnresolved: 0,
   errorCode: null,
 };
 
@@ -72,6 +76,34 @@ describe("UnasProductSyncPage", () => {
       20,
       expect.anything(),
     );
+  });
+
+  /**
+   * AZ ELVESZETT KAPCSOLATOK OSZLOPA -- ES A KIEMELES CSAK AKKOR, HA VAN MIT.
+   *
+   * Ugyanaz az alak, mint az elsodrodas-szamnal, es ugyanabbol az okbol: a szam
+   * a legtobb futason nulla, es epp attol jelzes, hogy amikor nem az, kiugrik.
+   *
+   * A KET AG OSSZEGE all a cellaban, a bontas a cim-buborekban: a kerdes
+   * ("veszett-e el valami") az osszegen dol el, a "melyik agon" viszont csak
+   * akkor erdekes, ha mar tudjuk, hogy igen.
+   */
+  it("kiírja az elveszett kapcsolatokat, a két ág összegeként", async () => {
+    api.listRuns.mockResolvedValue([
+      {
+        ...run,
+        id: "run-relations",
+        similarReferencesUnresolved: 4,
+        accessoryReferencesUnresolved: 3,
+      },
+    ]);
+
+    render(<UnasProductSyncPage />);
+
+    const cella = await screen.findByTitle("hasonló: 4, kiegészítő: 3");
+    expect(cella.textContent).toBe("7");
+    // A KIEMELES IS ALLITAS: enelkul egy allandora halvanyitott cella is atmenne.
+    expect(cella.className).toContain("amber");
   });
 
   /**

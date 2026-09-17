@@ -240,6 +240,9 @@ export function UnasProductSyncPage() {
                     <th>Új</th>
                     <th>Frissített</th>
                     <th>Hiányzó</th>
+                    <th title="Ahány kapcsolat-hivatkozás elveszett: a célpont nincs a katalógusunkban. A hasonló és a kiegészítő ág összege; a bontás a futás sorában áll. Az önhivatkozás és a duplikátum NEM számít bele, azok szándékos kihagyások.">
+                      Elveszett kapcsolat
+                    </th>
                     <th title="A kihagyottak közül ahánynál a boltban is változott a termék, tehát a változás nem jött át. A legtöbb futáson nulla.">
                       Elavult
                     </th>
@@ -266,6 +269,29 @@ export function UnasProductSyncPage() {
                       <td>{run.createdCount}</td>
                       <td>{run.updatedCount}</td>
                       <td>{run.missingCount}</td>
+                      {/*
+                        AZ ELVESZETT KAPCSOLATOK -- ES EZ A SZAM 2026-09-17 OTA
+                        TULELI A FUTAST. Addig csak a naplóban állt, a napló
+                        viszont a konténer indulásakor kezdődik, tehát egy
+                        újratelepítés után a tegnapi veszteség sehol nem volt meg.
+
+                        A KETTO OSSZEGE all itt, a bontás a sorban: egy tizedik
+                        oszlop többet venne el a táblából, mint amennyit ad, és
+                        a kérdés ("veszett-e el valami") az összegen dől el.
+                      */}
+                      <td
+                        className={
+                          run.similarReferencesUnresolved +
+                            run.accessoryReferencesUnresolved >
+                          0
+                            ? "font-semibold text-amber-700"
+                            : "text-dusk-400"
+                        }
+                        title={`hasonló: ${run.similarReferencesUnresolved}, kiegészítő: ${run.accessoryReferencesUnresolved}`}
+                      >
+                        {run.similarReferencesUnresolved +
+                          run.accessoryReferencesUnresolved}
+                      </td>
                       {/*
                         A nulla halvany, a nem-nulla kiemelt. Ez a szam a legtobb
                         futason nulla, es epp attol jelzes, hogy amikor nem az,
