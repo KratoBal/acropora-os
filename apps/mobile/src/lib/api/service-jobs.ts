@@ -1,4 +1,5 @@
 import { apiRequest } from "./client";
+import type { ServiceJobScope } from "../service-jobs/list-scope";
 import { buildDocumentUpload, type PickedFile } from "./document-upload";
 import type {
   CreateServiceJobInput,
@@ -62,13 +63,21 @@ export type {
 const BASE = "/service/jobs";
 
 /**
- * A NYITOTT JEGYEK, VAGY MIND.
+ * A JEGYEK, A VALASZTOTT SZUROVEL.
  *
  * A LÁTHATÓSÁGOT A SZERVER SZŰKÍTI, nem ez a hívás: a szervizes a saját
  * helyszíneit látja. Egy kliens-oldali szűrő itt azt ÍGÉRNÉ, hogy tudja, ki mit
  * láthat -- és a következő szabály-változásnál csendben hazudna.
+ *
+ * ES UGYANEZ AZ INDOK ALL A NEGY SZUROre is (2026-09-17): a lista a szerveren
+ * vagodik kettoszaz sornal, tehat egy itteni szures csendben kevesebbet
+ * mutatna, mint amit a felirata iger.
+ *
+ * NINCS ALAPERTELMEZES: a hivo MONDJA MEG, melyik halmazt keri. A korabbi
+ * `= "open"` alapertek epp azt rejtette el, hogy a kepernyo szukitett -- es
+ * abbol lett a bejelentes, hogy az elkeszult jegy "eltunik a listabol".
  */
-export function listServiceJobs(scope: "open" | "all" = "open") {
+export function listServiceJobs(scope: ServiceJobScope) {
   return apiRequest<ServiceJobListResponse>(
     `${BASE}?${new URLSearchParams({ scope })}`,
   );

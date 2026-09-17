@@ -600,7 +600,12 @@ export class ServiceJobsService {
      */
     const visibility = await this.visibilityFor(user);
     const [{ rows, truncated }, counts] = await Promise.all([
-      this.repository.list(query.scope ?? "open", visibility, query.search),
+      this.repository.list(
+        query.scope ?? "open",
+        visibility,
+        query.search,
+        user.id,
+      ),
       this.repository.countsByStatus(visibility, query.search),
     ]);
     return {

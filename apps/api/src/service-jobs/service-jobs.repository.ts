@@ -5,15 +5,13 @@ import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
 import { DOCUMENT_DELETED_ACTION } from "./service-job-documents.repository.js";
+import {
+  serviceJobScopeWhere,
+  type ServiceJobListScope,
+} from "./service-job-list-scope.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
 import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
-
-/**
- * A LEZÁRT ÁLLAPOTOK, EGY HELYEN. A lista alapból ezeket hagyja ki - és ha egy
- * új záró állapot keletkezik, itt kell felvenni, nem a lekérdezésben.
- */
-const FINISHED: ServiceJobStatus[] = ["COMPLETED", "CANCELLED"];
 
 /**
  * A LISTA HATARA. Nevet kapott, mert ket helyen kell: a lekerdezesben es abban
@@ -675,9 +673,17 @@ export class ServiceJobsRepository {
   }
 
   async list(
-    scope: "open" | "all",
+    scope: ServiceJobListScope,
     visibility: Prisma.ServiceJobWhereInput,
-    search?: string,
+    search: string | undefined,
+    /**
+     * A NEZO AZONOSITOJA, ES KOTELEZO ARGUMENTUM, NEM ELHAGYHATO.
+     *
+     * A `mine` hatokor ezen all. Ha elhagyhato lenne, egy hivo, aki elfelejti
+     * atadni, NEM hibat kapna, hanem egy CSENDBEN URES listat -- ami pontosan
+     * ugy nez ki, mint "nincs rad kiosztva semmi".
+     */
+    viewerUserId: string,
   ): Promise<{ rows: ServiceJobRow[]; truncated: boolean }> {
     /**
      * A LATHATOSAGI SZURO `AND` AGBAN ALL, nem kulcskent. Ugyanaz az indok, mint
@@ -685,11 +691,15 @@ export class ServiceJobsRepository {
      * azonos kulcsu spread FELULIRNA a jogosultsagit. A `visibility` sajat
      * `OR`-t is hordozhat -- egy szinten a statusz-szurovel az `OR` mindent
      * atengedne, ami az egyik agara illik.
+     *
+     * ES A HATOKOR UGYANIGY TOVABBI `AND` TAG, nem egy masik `OR` ag: a
+     * "ram kiosztva" SZUKIT a lathatoon belul, nem nyit meg semmit, amit a
+     * nezo amugy nem lathatna.
      */
     const where: Prisma.ServiceJobWhereInput = {
       AND: [
         visibility,
-        scope === "open" ? { status: { notIn: FINISHED } } : {},
+        serviceJobScopeWhere(scope, viewerUserId),
         searchWhere(search),
       ],
     };

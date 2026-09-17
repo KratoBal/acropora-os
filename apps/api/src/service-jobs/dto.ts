@@ -10,6 +10,11 @@ import {
   MinLength,
 } from "class-validator";
 
+import {
+  SERVICE_JOB_LIST_SCOPES,
+  type ServiceJobListScope,
+} from "./service-job-list-scope.js";
+
 /**
  * A hibajegy felvitele.
  *
@@ -205,7 +210,14 @@ export class SetServiceJobPlacementDto {
   acceptWorksheetAssetsOutsideSite?: boolean;
 }
 
-export const SERVICE_JOB_LIST_SCOPES = ["open", "all"] as const;
+/**
+ * A HATOKOROK LISTAJA EGY HELYEN ALL, es az a `service-job-list-scope.ts`.
+ *
+ * Nem kenyelem: ugyanaz a felsorolas donti el, mit FOGAD EL a vegpont (itt) es
+ * mit JELENT a hatokor (ott). Ket masolatbol az egyik elobb-utobb bovul, es a
+ * kulonbseg NEMA: egy uj ertek vagy 400-at kapna egy mukodo szurore, vagy
+ * atmenne ugy, hogy a lekerdezes nem tud vele mit kezdeni.
+ */
 
 /**
  * A lista alapból csak a NYITOTT jegyeket adja.
@@ -213,11 +225,16 @@ export const SERVICE_JOB_LIST_SCOPES = ["open", "all"] as const;
  * Nem kényelem: egy hibajegy-lista, ami a lezártakat is hozza, az első
  * hónap után használhatatlan - a napi munkában az számít, ami MÉG nyitva van.
  * A teljes lista külön kérésre jön.
+ *
+ * A TELEFON 2026-09-17 OTA MAST KULD: ott az `osszes` az alapertelmezes (Balazs
+ * kerese), es a kepernyo ezt KIIRJA magabol. A szerveren azert marad az `open`,
+ * mert a kerese a MOBIL alkalmazasra szolt -- itt atallitva a WEBES lista is
+ * elmozdulna, amirol senki nem kert semmit.
  */
 export class ServiceJobListQueryDto {
   @IsIn(SERVICE_JOB_LIST_SCOPES)
   @IsOptional()
-  scope?: (typeof SERVICE_JOB_LIST_SCOPES)[number];
+  scope?: ServiceJobListScope;
 
   /**
    * SZABAD SZAVAS KERESES, A SZERVEREN.
