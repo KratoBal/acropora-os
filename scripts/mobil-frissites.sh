@@ -40,6 +40,14 @@
 #                                                 vart runtimeVersion erteket
 #   scripts/mobil-frissites.sh --kiadom        <- KIAD. Eles muvelet.
 #
+# EZ A KET ALAK VAN, ES MAS NINCS. A valtozat, a kornyezet es a csatorna
+# KORNYEZETI VALTOZOBOL jon (APP_VARIANT, EAS_ENVIRONMENT, EAS_CHANNEL), nem
+# kapcsolobol -- egy `--kornyezet production` alaku argumentum CSENDBEN
+# ELDOBODIK. Merve 2026-09-17: ket futast hasonlitottam ossze, az egyiket ezzel
+# az argumentummal, es ugyanazt kaptam -- nem azert, mert nem szamit, hanem mert
+# EGY alakot futtattam ketszer. A fejlec sora (`kornyezet=...`) megmondja, mi
+# ment at; ezt kell megnezni, mielott ket futast osszevetunk.
+#
 # Az ALAPERTELMEZETT ag SZANDEKOSAN nem ad ki semmit. Egy kiadas a felhasznalok
 # telefonjara megy, es a lapunk szerint ami sikeres futas utan barmit hagy maga
 # utan, az muvelet, nem meres. Igy ez a fajl LEFUTTATHATO -- egy szabaly, aminek
@@ -91,6 +99,25 @@ if [ -f "$FP" ]; then
   # olvasonak, hogy hagyja figyelmen kivul az android szamot. Ha az valojaban
   # helyes, azzal epp azt az ellenorzest dobjuk el, amivel az android kiadas
   # utolag igazolhato.
+  # ES AZ IOS SZAM A TITOKTOL FUGGETLEN -- EZ MERVE VAN, NEM FELTEVES.
+  #
+  # Harom allapot ugyanazon a fan (2026-09-17, nautilus). Csak a
+  # google-services.json ter el, minden mas azonos:
+  #
+  #   a fajl HIANYZIK                ios ba70c226   android 2c93a755
+  #   egy PLACEHOLDER all ott        ios ba70c226   android 1ecf6378
+  #   a VALODI fajl all ott          ios ba70c226   android a5666bdb
+  #                                  (a harmadik acrobot merese, az o fajan)
+  #
+  # Harom kulonbozo android szam, es az ios MIND A HAROMSZOR AZONOS. Ebbol ket
+  # dolog kovetkezik: a fajl tenyleg benne van az android ujjlenyomatban (a
+  # placeholder megmozditotta), es az IOS SZAM BARHOL MERHETO -- akkor is, ahol
+  # a titok nem elerheto.
+  #
+  # ES AMI NEM MAGYARAZZA: az `--environment` kapcsolo. Az a KIADO ag
+  # parancsaban all, a mero ag nem hiv `eas`-t egyaltalan -- csak a helyi
+  # `@expo/fingerprint` binarist. A kornyezet itt az EAS_ENVIRONMENT valtozobol
+  # jon, es a szamot nem erinti.
   TITOK="${GOOGLE_SERVICES_JSON:-$MOBIL/google-services.json}"
   if [ -r "$TITOK" ]; then
     echo "  (android: a google-services.json OLVASHATO ($TITOK), tehat az android szam is mervado)"
