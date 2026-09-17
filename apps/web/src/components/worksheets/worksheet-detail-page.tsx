@@ -211,6 +211,16 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
               <th className={`${sv.tableHead} text-right`}>Mennyiség</th>
               <th className={sv.tableHead}>Egység</th>
               {/*
+                A MUNKAORA OSZLOP A SZERVERTOL JON, NEM ITT SZAMOLODIK.
+
+                `quantity * workerCount`, de csak `LABOR` fajtanal -- es a
+                szabaly egy helyen all (`worksheet-labor.ts`). Ha itt
+                szoroznank, ugyanaz a szabaly KET feluleten allna (web es
+                telefon), es a ketto elcsuszasa nema lenne: ugyanarra a munkara
+                ket kulonbozo ora latszana ket kepernyon.
+              */}
+              <th className={`${sv.tableHead} text-right`}>Munkaóra</th>
+              {/*
                 AZ EGYSÉGÁR, AZ ÁFA ÉS A NETTÓ OSZLOP 2026-09-17-ÉN KIKERÜLT.
                 Balázs döntése ("B"): a nettó, bruttó és áfa mezők sehol nem
                 jelennek meg. Az ADAT megmarad, és ár továbbra is rendelhető
@@ -254,11 +264,24 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                   {line.quantity}
                 </td>
                 <td className={`${sv.tableCell} text-ink`}>{line.unit}</td>
+                <td
+                  className={`${sv.tableCell} text-right tabular-nums text-ink`}
+                >
+                  {/*
+                    A NEM-MUNKA TETEL GONDOLATJELET KAP, NEM NULLAT. A szerver
+                    "0"-t kuld (a hiany es a nulla igy nem keveredik a
+                    szamolasban), a LAPON viszont a nulla ora ERTEKNEK latszik:
+                    ugy nezne ki, mintha valaki nulla orat dolgozott volna
+                    rajta. A gondolatjel azt mondja, hogy a kerdes fel sem
+                    merul.
+                  */}
+                  {line.kind === "LABOR" ? line.laborHours : "–"}
+                </td>
               </tr>
             ))}
             {current.lines.length === 0 ? (
               <tr>
-                <td className={`${sv.tableCell} ${sv.rowMeta}`} colSpan={4}>
+                <td className={`${sv.tableCell} ${sv.rowMeta}`} colSpan={5}>
                   Nincs tétel. Tétel nélküli munkalap nem zárható le.
                 </td>
               </tr>
@@ -519,7 +542,30 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
     ár-elrejtés ELVESZ innen, a munkaóra HOZZÁAD, és a kettő egy PR-ben
     visszavonhatatlanul összeállna.
   */
-  const summary = null;
+  /*
+    ES A HELYERE A MUNKAORA KERULT (2026-09-17, Balazs kerese).
+
+    Szó szerint: "a vegen legyen egy ossz munkaora ami automatikusan szamol
+    tetelenkent es az osszes tetel eseteben is". A tetelenkenti szam a
+    tablazat utolso oszlopa, ez itt az OSSZES.
+
+    A SZAM A SZERVERTOL JON (`current.laborHours`), es nem itt adodik ossze:
+    ugyanaz az indok, mint a soronkenti oszlopnal -- egy masodik osszegzo
+    kesobb elcsuszna a szervertol, es a ket szam kozul senki nem tudna, melyik
+    a jo.
+
+    ES AKKOR IS KIIRJUK, HA NULLA. Egy elrejtett nulla ket kulonbozo allapotot
+    mosna ossze: hogy nincs munkaora-tetel a lapon, es hogy a panel elromlott.
+    A "0 óra" allitas; a hianyzo panel kerdes.
+  */
+  const summary = (
+    <ServicePanel>
+      <ServicePanelHeading title="Összesítés" />
+      <ServiceContextRow icon="clock" label="Összes munkaóra">
+        <span className="tabular-nums">{current.laborHours} óra</span>
+      </ServiceContextRow>
+    </ServicePanel>
+  );
 
   const facts = (
     <ServicePanel>
