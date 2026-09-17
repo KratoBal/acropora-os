@@ -4,17 +4,26 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { partnerApi } from "@/lib/api";
+import { DocumentPanel } from "./document-panel";
 import { Empty, Message } from "./ticket-list";
 
 export function TicketDetail({ id }: { id: string }) {
   const [ticket, setTicket] = useState<Awaited<
     ReturnType<typeof partnerApi.ticket>
   > | null>(null);
+  const [documents, setDocuments] = useState<
+    Awaited<ReturnType<typeof partnerApi.ticketDocuments>>["items"]
+  >([]);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
     setError(null);
     try {
-      setTicket(await partnerApi.ticket(id));
+      const [detail, documentList] = await Promise.all([
+        partnerApi.ticket(id),
+        partnerApi.ticketDocuments(id),
+      ]);
+      setTicket(detail);
+      setDocuments(documentList.items);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A hibajegy nem tölthető be.",
@@ -116,6 +125,15 @@ export function TicketDetail({ id }: { id: string }) {
           />
         )}
       </section>
+      <DocumentPanel
+        title="Fényképek és fájlok"
+        items={documents}
+        loadBlob={(documentId) => partnerApi.ticketDocumentBlob(id, documentId)}
+        upload={(file, caption) =>
+          partnerApi.uploadTicketDocument(id, file, caption)
+        }
+        onUploaded={load}
+      />
     </section>
   );
 }

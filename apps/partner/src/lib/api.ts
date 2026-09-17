@@ -2,9 +2,13 @@ import type {
   AssetListResponse,
   AuthenticatedUser,
   ServiceJobDetail,
+  ServiceJobDocumentSummary,
   ServiceJobListResponse,
+  WorksheetDetail,
   WorksheetDepartmentListResponse,
+  WorksheetDocumentListResponse,
   WorksheetListResponse,
+  WorksheetSignerListResponse,
 } from "@acropora/types";
 
 const apiPrefix = "/api";
@@ -68,6 +72,22 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export async function requestBlob(path: string): Promise<Blob> {
+  const response = await fetch(`${apiPrefix}${path}`, {
+    headers: { Accept: "application/octet-stream" },
+  });
+  if (!response.ok)
+    throw new ApiError("A fájl nem tölthető le.", response.status);
+  return response.blob();
+}
+
+function documentForm(file: File, caption: string) {
+  const form = new FormData();
+  form.append("file", file);
+  if (caption.trim()) form.append("caption", caption.trim());
+  return form;
+}
+
 export const partnerApi = {
   me: () => request<AuthenticatedUser>("/auth/me"),
   login: (email: string, password: string) =>
@@ -92,6 +112,19 @@ export const partnerApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  ticketDocuments: (id: string) =>
+    request<{ items: ServiceJobDocumentSummary[] }>(
+      `/service/jobs/${encodeURIComponent(id)}/documents`,
+    ),
+  ticketDocumentBlob: (jobId: string, documentId: string) =>
+    requestBlob(
+      `/service/jobs/${encodeURIComponent(jobId)}/documents/${encodeURIComponent(documentId)}`,
+    ),
+  uploadTicketDocument: (id: string, file: File, caption: string) =>
+    request(`/service/jobs/${encodeURIComponent(id)}/documents`, {
+      method: "POST",
+      body: documentForm(file, caption),
+    }),
   departments: (customerId: string) =>
     request<WorksheetDepartmentListResponse>(
       `/service/worksheets/customers/${encodeURIComponent(customerId)}/departments`,
@@ -108,4 +141,45 @@ export const partnerApi = {
   },
   worksheets: () =>
     request<WorksheetListResponse>("/service/worksheets?page=1&pageSize=100"),
+  worksheet: (id: string) =>
+    request<WorksheetDetail>(`/service/worksheets/${encodeURIComponent(id)}`),
+  worksheetDocuments: (id: string) =>
+    request<WorksheetDocumentListResponse>(
+      `/service/worksheets/${encodeURIComponent(id)}/documents`,
+    ),
+  worksheetDocumentBlob: (worksheetId: string, documentId: string) =>
+    requestBlob(
+      `/service/worksheets/${encodeURIComponent(worksheetId)}/documents/${encodeURIComponent(documentId)}`,
+    ),
+  uploadWorksheetDocument: (id: string, file: File, caption: string) =>
+    request(`/service/worksheets/${encodeURIComponent(id)}/documents`, {
+      method: "POST",
+      body: documentForm(file, caption),
+    }),
+  worksheetSigners: (id: string) =>
+    request<WorksheetSignerListResponse>(
+      `/service/worksheets/${encodeURIComponent(id)}/signers`,
+    ),
+  signWorksheet: (id: string, signerUserId: string, signatureCode: string) =>
+    request<WorksheetDetail>(
+      `/service/worksheets/${encodeURIComponent(id)}/sign`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          decision: "ACCEPTED",
+          signerUserId,
+          signatureCode,
+        }),
+      },
+    ),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ updated: true }>("/account/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  changeSigningCode: (currentPassword: string, signingCode: string) =>
+    request<{ updated: true }>("/account/signing-code", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, signingCode }),
+    }),
 };

@@ -1,4 +1,5 @@
 import {
+  partnerScopeOf,
   rowBelongsToScope,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
@@ -36,6 +37,7 @@ import { assertStorageKeyMatches } from "../service-assets/document-store/docume
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 import type {
+  AuthenticatedUser,
   WorksheetAttachableListResponse,
   WorksheetDetail,
   WorksheetVersionDiff,
@@ -762,9 +764,15 @@ export class WorksheetsService {
   async sign(
     id: string,
     input: SignWorksheetVersionDto,
-    actorUserId: string,
+    actor: AuthenticatedUser | string,
     now: Date = new Date(),
   ): Promise<WorksheetDetail> {
+    const actorUserId = typeof actor === "string" ? actor : actor.id;
+    const scope =
+      typeof actor === "string"
+        ? { kind: "internal" as const }
+        : partnerScopeOf(actor);
+    await this.requireWorksheet(id, scope);
     /**
      * AZ ELUTASÍTÁS OKA KÖTELEZŐ (Balázs döntése, 2026-08-26).
      *
@@ -926,8 +934,11 @@ export class WorksheetsService {
    *
    * BELSOS UT, mint a tobbi sor-vegpont: a valaszto a szerelo eszkoze.
    */
-  async signerCandidates(id: string) {
-    const worksheet = await this.requireWorksheet(id, { kind: "internal" });
+  async signerCandidates(
+    id: string,
+    scope: PartnerScope = { kind: "internal" },
+  ) {
+    const worksheet = await this.requireWorksheet(id, scope);
     const items = await this.repository.customerContacts(worksheet.customerId);
     const partnerSelectable = await this.repository.isSelectablePartner(
       worksheet.customerId,

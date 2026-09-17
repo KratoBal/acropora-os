@@ -204,8 +204,8 @@ export class WorksheetsController {
    */
   @Get(":id/signers")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  signers(@Param("id") id: string) {
-    return this.service.signerCandidates(id);
+  signers(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.signerCandidates(id, partnerScopeOf(user));
   }
 
   /**
@@ -325,7 +325,7 @@ export class WorksheetsController {
     @Body() input: SignWorksheetVersionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.sign(id, input, user.id);
+    return this.service.sign(id, input, user);
   }
 
   /**

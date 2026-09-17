@@ -276,6 +276,34 @@ button:disabled {
   margin: 0;
   padding: 0 0 0 1rem;
 }
+
+.document-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 1rem;
+}
+.document-card {
+  display: grid;
+  gap: 0.45rem;
+  color: var(--ink);
+}
+.document-card img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 0.6rem;
+  background: #edf1ee;
+}
+.document-upload {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1.25rem;
+}
+.document-upload label {
+  display: grid;
+  gap: 0.3rem;
+  font-weight: 600;
+}
 .timeline li {
   display: grid;
   gap: 0.25rem;
