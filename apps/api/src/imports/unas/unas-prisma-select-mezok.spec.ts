@@ -41,6 +41,38 @@ import { describe, it } from "node:test";
  * eredmeny tipusaba is beleveszik.
  *
  * A KETTO EGYUTT FED: a kiirt alak a hivo oldalan, ez a spec a lekerdezesen.
+ *
+ * === ES AMIT EZ MA NEM FED: AZ IRO OLDAL (merve 2026-09-17, acrobot kerdesere) ===
+ *
+ * Ez a fajl az OLVASO oldalt meri. Kezenfekvo lenne azt hinni, hogy az iro
+ * oldalt (`create` / `update` `data` blokk) a fordito amugy is vedi. NEM VEDI.
+ * Negy meres, ugyanazon a fan, a VALODI generalt kliensen:
+ *
+ *     kitalalt MODELL-nev                          PIROS   TS2339, nev szerint
+ *     rossz TIPUS egy LETEZO mezon a `data`-ban    PIROS   TS2322
+ *     kitalalt MEZO-nev a `data`-ban, spread-del   ZOLD
+ *     kitalalt MEZO-nev a `data`-ban, sima literal ZOLD
+ *
+ * A harmadik es a negyedik kulon all, mert elso ranezesre a SPREAD tunik
+ * okolhatonak (a felesleges-tulajdonsag ellenorzes a spread tagjait nem nezi).
+ * Nem az: a sima, kezzel kiirt literal is atmegy. A fordito tehat a MODELLT es
+ * a LETEZO mezok ERTEKENEK TIPUSAT nezi, a kulcs LETEZESET nem -- pontosan
+ * ugyanaz a hatar, mint a `select` oldalon.
+ *
+ * VAGYIS EZ AZ ORZO MA FELOLDALAS HALO, es ezt tudni kell: ha valaki a mondatra
+ * hagyatkozva azt hiszi, hogy a Prisma-hivasok mezonevei fedve vannak, tevedni
+ * fog az iro oldalon.
+ *
+ * AMIT NEM SIKERULT LEMERNI, ES A KONTROLL MONDTA MEG: hogy futaskor a Prisma
+ * MEGFOGJA-E a nem letezo `data` kulcsot (dob-e, vagy csendben kihagyja). A
+ * probam mind a harom hivasra ugyanazt a `PrismaClientInitializationError`-t
+ * adta -- BELEERTVE A HELYES KONTROLL-HIVAST --, mert ebben a kontenerben nincs
+ * elerheto adatbazis, es a kapcsolati hiba mindent elfed. Harom azonos eredmeny
+ * nem lelet: a meres ERVENYTELEN, nem negativ. Ehhez elerheto adatbazis kell.
+ *
+ * (Az OLVASO oldalrol viszont van megfigyelesunk: a 2026-09-17-i futas eles
+ * adatbazison `Unknown field externalId for select statement` hibaval allt meg,
+ * tehat ott a futas hangos. Az iro oldalrol ilyen megfigyelesunk nincs.)
  */
 const SEMA = "../../packages/database/prisma/schema.prisma";
 
