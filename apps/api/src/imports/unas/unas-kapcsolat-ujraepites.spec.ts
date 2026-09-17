@@ -224,8 +224,15 @@ describe("kapcsolat-újraépítés", () => {
    * kapcsolat nalunk is eltunik.
    */
   it("a forrásból eltűnt kapcsolat sorait eltávolítja", async () => {
+    /*
+       A MASIK TERMEK SORAI AZERT ALLNAK ITT, hogy a NAGY VALTOZAS hatara ne
+       szoljon bele: harom sor eltavolitasa egy harom soros allomanyban szaz
+       szazalek, es a parancs -- helyesen -- megallna. Az a hatar kulon
+       tesztben all; ez a teszt a TORLEST meri.
+     */
     const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
       [meglevoKulcs("p-1", "SIMILAR")]: 3,
+      [meglevoKulcs("p-9", "SIMILAR")]: 40,
     });
     const { out, sorok } = kimenet();
 
@@ -246,6 +253,7 @@ describe("kapcsolat-újraépítés", () => {
   it("terv módban megmondja, hány sor tűnne el, és nem ír", async () => {
     const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
       [meglevoKulcs("p-1", "SIMILAR")]: 3,
+      [meglevoKulcs("p-9", "SIMILAR")]: 40,
     });
     const { out, sorok } = kimenet();
 
@@ -299,6 +307,67 @@ describe("kapcsolat-újraépítés", () => {
     const szoveg = sorok.join("");
     assert.match(szoveg, /eltávolított 0 sor/);
     assert.match(szoveg, /csak feloldatlan hivatkozás 1 terméken/);
+  });
+
+  /**
+   * A NAGY VALTOZAS MEGALLIT -- ES EZ A KAPCSOLO NELKUL NEM KERULHETO MEG.
+   *
+   * acrobot kikotese (2026-09-17), es az indoka nem elmeleti: egy ISMETLODO
+   * futasnal nem lesz ott senki, aki eszreveszi, ha egyszer csak minden
+   * kapcsolat eltunik. A ket eset, amit ez szetvalaszt: egy hirtelen nagy
+   * valtozas vagy VALODI, vagy egy elromlott pillanatkep-kinyeres jele.
+   */
+  it("nagy változásnál megáll, és nem ír semmit", async () => {
+    const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 30,
+    });
+    const { out, sorok } = kimenet();
+
+    // A KILEPESI KOD KULON ERTEK: a 2 nem hiba (az az 1), hanem MEGALLAS.
+    assert.equal(await runKapcsolatUjraepitesCli(["--apply"], out, d), 2);
+    assert.deepEqual(irasok, []);
+    const szoveg = sorok.join("");
+    assert.match(szoveg, /MEGÁLLTAM/);
+    // ES MEGMONDJA, MIT KELL TENNI ANNAK, AKI SZAMITOTT RA.
+    assert.match(szoveg, /--nagy-valtozas-is/);
+  });
+
+  /**
+   * ES A KAPCSOLOVAL ATMEGY. Enelkul a fenti allitas egy olyan parancstol is
+   * zold lenne, ami MINDIG megall -- es akkor az elso eles futas sem indulna el.
+   */
+  it("kontroll: a kapcsolóval a nagy változás is lefut", async () => {
+    const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 30,
+    });
+    const { out } = kimenet();
+
+    assert.equal(
+      await runKapcsolatUjraepitesCli(
+        ["--apply", "--nagy-valtozas-is"],
+        out,
+        d,
+      ),
+      0,
+    );
+    assert.deepEqual(irasok, [
+      { sourceProductId: "p-1", fajta: "SIMILAR", celProductIdk: [] },
+    ]);
+  });
+
+  /**
+   * A TERV-AG SOHA NEM ALL MEG A HATARON: ott nincs mit megallitani, es epp az
+   * a dolga, hogy MEGMUTASSA a nagy valtozast, mielott barki dontene rola.
+   */
+  it("terv módban a nagy változás nem megállás, hanem kiírás", async () => {
+    const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 30,
+    });
+    const { out, sorok } = kimenet();
+
+    assert.equal(await runKapcsolatUjraepitesCli([], out, d), 0);
+    assert.deepEqual(irasok, []);
+    assert.match(sorok.join(""), /Összesen: 30 sor ma, 0 a futás után/);
   });
 
   /**

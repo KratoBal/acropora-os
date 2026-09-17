@@ -148,11 +148,28 @@ export interface UjraepitesSzamok {
    * egy hibas terkep miatt veszitenenk el olyan kapcsolatot, ami helyes.
    */
   csakFeloldatlan: number;
+  /**
+   * AMIT A TAROLO TENYLEG IRT ES TOROLT -- a TERV szamai mellett, kulon.
+   *
+   * A ketto elterhet, es az elteres INFORMACIO: a `skipDuplicates` miatt egy
+   * mar letezo sor nem keletkezik ujra, es a torles is csak azt viszi, ami ott
+   * van. Egy kozos szam ezt elfedne.
+   */
+  irtMert: number;
+  eltavolitottMert: number;
 }
 
 const FAJTAK: readonly KapcsolatFajta[] = ["SIMILAR", "ACCESSORY"];
 /** Ennyi feloldatlan hivatkozast sorolunk fel nevvel; a TELJES szam mellette áll. */
 const MINTA = 10;
+/**
+ * ENNEL NAGYOBB NETTO VALTOZASNAL MEGALLUNK.
+ *
+ * Tiz szazalek: acrobot kikotese. A szam maga kevesbe fontos, mint az, hogy
+ * VAN hatar -- egy ismetlodo futasnal nem lesz ott senki, aki eszreveszi, ha
+ * egyszer csak minden kapcsolat eltunik.
+ */
+const NAGY_VALTOZAS_ARANY = 0.1;
 
 export async function runKapcsolatUjraepitesCli(
   argv: readonly string[],
@@ -167,6 +184,12 @@ export async function runKapcsolatUjraepitesCli(
    * irt -- es a terv-ag epp azt mutatja meg, hogy a helyukre ugyanaz kerulne-e.
    */
   const apply = argv.includes("--apply");
+  /**
+   * A NAGY VALTOZAS TUDATOS ATENGEDESE. Kulon kapcsolo, es nem az `--apply`
+   * resze: az elso futas SZAMIT nagynak, es epp azt akarjuk, hogy valaki
+   * kimondja, hogy szamitott ra.
+   */
+  const nagyValtozasIs = argv.includes("--nagy-valtozas-is");
   try {
     const [jeloltek, terkep, meglevo] = await Promise.all([
       deps.jeloltek(),
@@ -183,6 +206,23 @@ export async function runKapcsolatUjraepitesCli(
       ACCESSORY: [],
     };
 
+    /**
+     * A TELJES TERV, MIELOTT BARMIT IRNANK.
+     *
+     * KET MENET, ES EZ 2026-09-17 OTA IGY VAN. Az elso alak menet kozben irt,
+     * tehat a "mennyit valtozik osszesen" kerdesre CSAK A VEGEN lehetett volna
+     * valaszolni -- amikor mar minden sor a helyen van. Egy biztonsagi hatar
+     * ilyenkor nem hatar, hanem utolagos jelentes.
+     *
+     * Mellekhatasa is van, es az is jo: a terv- es az iras-ag ugyanabbol a
+     * listabol dolgozik, tehat a ket szam SZERKEZETILEG nem tud elterni.
+     */
+    const terv: Array<{
+      sourceProductId: string;
+      fajta: KapcsolatFajta;
+      celProductIdk: string[];
+      meglevoDb: number;
+    }> = [];
     let kulsoAzonositoNelkul = 0;
     for (const jelolt of jeloltek) {
       /**
@@ -228,14 +268,13 @@ export async function runKapcsolatUjraepitesCli(
           }
           const meglevoDb = meglevo.get(meglevoKulcs(jelolt.productId, fajta));
           if (!meglevoDb) continue;
-          if (apply) {
-            const eredmeny = await deps.ir({
-              sourceProductId: jelolt.productId,
-              fajta,
-              celProductIdk: [],
-            });
-            szam.eltavolitott += eredmeny.torolt;
-          } else szam.eltavolitott += meglevoDb;
+          terv.push({
+            sourceProductId: jelolt.productId,
+            fajta,
+            celProductIdk: [],
+            meglevoDb,
+          });
+          szam.eltavolitott += meglevoDb;
           szam.eltavolitottTermek += 1;
           continue;
         }
@@ -277,14 +316,13 @@ export async function runKapcsolatUjraepitesCli(
           continue;
         }
         szam.kapcsolatotKapott += 1;
-        if (apply) {
-          const eredmeny = await deps.ir({
-            sourceProductId: jelolt.productId,
-            fajta,
-            celProductIdk: mapping.targets.map((cel) => cel.productId),
-          });
-          szam.irhatoKapcsolat += eredmeny.irt;
-        } else szam.irhatoKapcsolat += mapping.targets.length;
+        terv.push({
+          sourceProductId: jelolt.productId,
+          fajta,
+          celProductIdk: mapping.targets.map((cel) => cel.productId),
+          meglevoDb: meglevo.get(meglevoKulcs(jelolt.productId, fajta)) ?? 0,
+        });
+        szam.irhatoKapcsolat += mapping.targets.length;
       }
     }
 
@@ -319,7 +357,75 @@ export async function runKapcsolatUjraepitesCli(
       if (minta[fajta].length > 0)
         out.stdout(`    minta: ${minta[fajta].join(", ")}\n`);
     }
-    if (!apply)
+    /**
+     * A NAGY VALTOZAS MEGALLIT -- ES EZ NEM OVATOSSAG, HANEM MERT KIKOTES.
+     *
+     * acrobot kerese (2026-09-17), es az indoka a mai napbol jon: ketszer
+     * szamolt aranyt torzitott mintabol, es mind a ketszer tevedett. Egy
+     * ISMETLODO futasnal nem lesz ott senki, aki eszreveszi.
+     *
+     * A KET ESET, AMIT EZ SZETVALASZT: egy hirtelen nagy valtozas vagy VALODI
+     * (es akkor tudni akarunk rola), vagy egy elromlott pillanatkep-kinyeres
+     * jele. Mind a kettonel jobb, ha szol, mint ha vegigviszi.
+     *
+     * A HATAR A NETTO VALTOZASRA SZOL, nem a mozgasra: az ujraepites amugy is
+     * torol es ujrair minden erintett terméknél, tehat a "megmozgatott sorok"
+     * szama majdnem mindig a teljes allomany.
+     *
+     * ES AZ ELSO FUTAS TUDATOSAN AT FOG AKADNI RAJTA: a stage-en 1165 sorrol
+     * 32196-ra ment. Ez helyes viselkedes -- olyankor a `--nagy-valtozas-is`
+     * kapcsolo kell hozza, vagyis valaki KIMONDJA, hogy szamitott ra.
+     */
+    const jelenlegiOsszes = [...meglevo.values()].reduce((a, b) => a + b, 0);
+    const tervezettOsszes =
+      jelenlegiOsszes +
+      terv.reduce(
+        (osszeg, tetel) =>
+          osszeg + tetel.celProductIdk.length - tetel.meglevoDb,
+        0,
+      );
+    const valtozas = Math.abs(tervezettOsszes - jelenlegiOsszes);
+    const hatar = Math.ceil(jelenlegiOsszes * NAGY_VALTOZAS_ARANY);
+    out.stdout(
+      `Összesen: ${jelenlegiOsszes} sor ma, ${tervezettOsszes} a futás után ` +
+        `(változás ${valtozas}, határ ${hatar}).\n`,
+    );
+
+    if (apply && jelenlegiOsszes > 0 && valtozas > hatar && !nagyValtozasIs) {
+      out.stderr(
+        `MEGÁLLTAM: a futás ${valtozas} sorral változtatná az állományt, ` +
+          `ami több, mint a mai ${jelenlegiOsszes} sor ` +
+          `${Math.round(NAGY_VALTOZAS_ARANY * 100)} százaléka (${hatar}). ` +
+          `Ez vagy valódi változás, vagy egy elromlott pillanatkép-kinyerés ` +
+          `jele -- mind a kettőről tudni akarunk. Ha számítottál rá, ` +
+          `a \`--nagy-valtozas-is\` kapcsolóval fut le.\n`,
+      );
+      return 2;
+    }
+
+    if (apply) {
+      for (const tetel of terv) {
+        /*
+          A `meglevoDb` a TERV konyvelese, nem az irase: a varrat csak azt kapja
+          meg, amit az iras hasznal. Egy tobblet-mezo a szerzodesben azt
+          allitana, hogy az irasnak tudnia kell a mai allapotrol -- nem kell.
+        */
+        const eredmeny = await deps.ir({
+          sourceProductId: tetel.sourceProductId,
+          fajta: tetel.fajta,
+          celProductIdk: tetel.celProductIdk,
+        });
+        const szam = szamok[tetel.fajta];
+        if (tetel.celProductIdk.length === 0)
+          szam.eltavolitottMert += eredmeny.torolt;
+        else szam.irtMert += eredmeny.irt;
+      }
+      out.stdout(
+        `  megírva: ${szamok.SIMILAR.irtMert + szamok.ACCESSORY.irtMert} sor, ` +
+          `eltávolítva ${szamok.SIMILAR.eltavolitottMert + szamok.ACCESSORY.eltavolitottMert} sor ` +
+          `(a tároló szerint, nem a terv szerint).\n`,
+      );
+    } else
       out.stdout(
         "Nem írtam semmit. Az `--apply` kapcsolóval fut le élesben.\n",
       );
@@ -345,6 +451,8 @@ function uresSzamok(): UjraepitesSzamok {
     eltavolitottTermek: 0,
     olvashatatlan: 0,
     csakFeloldatlan: 0,
+    irtMert: 0,
+    eltavolitottMert: 0,
   };
 }
 
