@@ -390,6 +390,63 @@ describe("ServiceDocumentGallery", () => {
     expect((mezo as HTMLInputElement).value).toBe("Tömítés");
   });
 
+  /**
+   * A CSATOLMANY FAJTAJA -- DE CSAK OTT, AHOL VAN MIT MONDANI.
+   *
+   * MIERT KELL: az eszkoz adatlapjan NEGY fajta all (szamla, garanciajegy,
+   * hasznalati utasitas, egyeb), es a fajlnev nem kulonbozteti meg oket. A
+   * korabbi, kezzel rajzolt lista kiirta; a galeriara valtas ezt elvette volna.
+   *
+   * MINDKET LISTAN MERJUK, mert a komponens ket helyen rajzol (kep-csempe es
+   * letoltheto sor), es EGY hely atvezetese ugyanugy "mukodne" -- csak a
+   * masikon tunne el a fajta, nemán.
+   *
+   * ES A NEGATIV IRANY IS ALL ITT: cimke-fuggveny nelkul NINCS cimke. Enelkul
+   * ez az allitas akkor is zold lenne, ha a komponens minden elemre kiirna
+   * valamit -- a hibajegy pedig epp azt nem akarja.
+   */
+  it("a dokumentum fajtája a galériában is látszik, ha a hívó ad rá címkét", async () => {
+    const elemek = [
+      doku({ id: "doc-1", fileName: "medence.jpg", contentType: "image/jpeg" }),
+      doku({
+        id: "doc-2",
+        fileName: "szamla-2026-08.pdf",
+        contentType: "application/pdf",
+      }),
+    ];
+    const cimke = (item: ServiceDocumentGalleryItem) =>
+      item.contentType === "application/pdf" ? "Számla" : "Fénykép";
+
+    const { unmount } = render(
+      <ServiceDocumentGallery
+        items={elemek}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        itemLabel={cimke}
+        emptyText="nincs"
+      />,
+    );
+
+    await screen.findByAltText("medence.jpg");
+    // A KEP-CSEMPEN...
+    expect(screen.getByText(/Fénykép ·/)).toBeTruthy();
+    // ...ES A LETOLTHETO SORON IS.
+    expect(screen.getByText(/Számla ·/)).toBeTruthy();
+    unmount();
+
+    render(
+      <ServiceDocumentGallery
+        items={elemek}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+    await screen.findByAltText("medence.jpg");
+    expect(screen.queryByText(/Számla ·/)).toBeNull();
+    expect(screen.queryByText(/Fénykép ·/)).toBeNull();
+  });
+
   /** A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik. */
   it("üres listán kimondja, hogy nincs mire várni", () => {
     render(

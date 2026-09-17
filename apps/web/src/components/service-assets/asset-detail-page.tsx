@@ -24,13 +24,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { formatFileSize } from "@/lib/format/file-size";
 import { useReturnTo } from "@/components/navigation-history";
 import {
   ServiceBackLink,
   ServiceDataItem,
   ServiceDetailHeader,
 } from "@/components/service/service-detail-chrome";
+import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
 import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { assetsApi } from "@/lib/api/assets";
@@ -549,64 +549,87 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
 
               <Card className="p-6">
                 <h2 className="text-[16px] font-bold text-ink">Dokumentumok</h2>
+                {/*
+                  A MONDAT KET DOLGOT MOND, MERT A KETTO MAS: innen PDF tolthetó
+                  fel (az urlap `accept` erteke ma is csak azt engedi), a
+                  FENYKEPEK viszont a telefonrol erkeznek, es ITT LATSZANAK. A
+                  korabbi szoveg csak a feltoltesrol beszelt, es a lista alatta
+                  mostantol tobbet mutat annal.
+                */}
                 <p className="mt-1 text-sm text-dusk-500">
                   Számla, garanciajegy és használati utasítás PDF formátumban,
-                  legfeljebb 10 MB méretben.
+                  legfeljebb 10 MB méretben. A telefonról feltöltött fényképek
+                  is itt jelennek meg.
                 </p>
-                {asset.documents.length > 0 ? (
-                  <div className="mt-4 divide-y rounded-lg border">
-                    {asset.documents.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"
-                      >
-                        <div>
-                          <p className="text-sm font-semibold text-dusk-800">
-                            {documentTypeLabel[item.type]} · {item.fileName}
-                          </p>
-                          <p className="mt-0.5 text-xs text-dusk-500">
-                            {formatFileSize(item.sizeBytes)} ·{" "}
-                            {formatDateTime(item.createdAt)}
-                            {item.uploadedBy
-                              ? ` · ${item.uploadedBy.displayName}`
-                              : ""}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() =>
-                              void downloadDocument(item.id, item.fileName)
-                            }
-                          >
-                            Letöltés
-                          </Button>
-                          {canManage ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() =>
-                                setPending({
-                                  kind: "delete-document",
-                                  documentId: item.id,
-                                  fileName: item.fileName,
-                                })
-                              }
-                            >
-                              Törlés
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-4 text-sm text-dusk-500">
-                    Ehhez az eszközhöz még nincs dokumentum feltöltve.
-                  </p>
-                )}
+                {/*
+                  A KEP LATSZIK, NEM LETOLTODIK (Balazs kerese, 2026-09-17).
+                  A galeria ugyanaz a komponens, amit a hibajegy es a munkalap
+                  lapja hasznal -- harom masolat harom kulon viselkedest
+                  jelentene ugyanarra a fogalomra.
+
+                  A KEP ES A NEM-KEP SZETVALASZTASA A KOMPONENSE, es a
+                  `contentType` alapjan megy, NEM a fajlnev kiterjesztesebol: a
+                  kiterjesztes a kliens allitasa, a tarolt tipus a szerveré (a
+                  bajtokbol allapitja meg, `canonicalMimetypeFor`).
+                */}
+                <div className="mt-4">
+                  <ServiceDocumentGallery
+                    items={asset.documents}
+                    loadBlob={(documentId) =>
+                      assetsApi.downloadDocument(token, asset.id, documentId)
+                    }
+                    onDownload={(item) =>
+                      void downloadDocument(item.id, item.fileName)
+                    }
+                    /* A JOG HIANYA A FUGGVENY HIANYA, nem egy `false` zaszlo:
+                       igy a csempe nem tud "torolheto, de le van tiltva"
+                       allapotba kerulni. */
+                    onDelete={
+                      canManage
+                        ? (item) =>
+                            setPending({
+                              kind: "delete-document",
+                              documentId: item.id,
+                              fileName: item.fileName,
+                            })
+                        : undefined
+                    }
+                    /**
+                     * A FELIRAT MENTESE UTAN A LAP UJRATOLT, es nem a helyi
+                     * allapotot irjuk at: a csempe a SZERVER szerinti allapotot
+                     * mutassa, ne azt, amit mi hiszunk rola.
+                     *
+                     * A TELJES ADATLAPOT tolti ujra, nem csak a listat, holott
+                     * a szuk vegpont 2026-09-17 ota all (#781). SZANDEKOS: a
+                     * feltoltes es a torles ESEMENYT is ir az eszkozre, es azt a
+                     * lap alján allo esemenynaplo mutatja -- egy szuk
+                     * ujratoltes utan az a naplo maradna el, nemán. A harom
+                     * dokumentum-muvelet ezert egy uton frissit.
+                     */
+                    onSaveCaption={
+                      canManage
+                        ? async (item, caption) => {
+                            await assetsApi.setDocumentCaption(
+                              token,
+                              asset.id,
+                              item.id,
+                              caption,
+                            );
+                            await load();
+                          }
+                        : undefined
+                    }
+                    /**
+                     * A FAJTA KIIRVA, mert az eszkozon NEGY all, es a fajlnev
+                     * nem kulonbozteti meg oket: egy szamla es egy garancialevel
+                     * ugyanugy `szamla-2026.pdf` lehet. A hibajegy nem ad
+                     * cimket, ott ket ertek van, es egyik sem mond tobbet, mint
+                     * amit a csempe amugy is mutat.
+                     */
+                    itemLabel={(item) => documentTypeLabel[item.type]}
+                    emptyText="Ehhez az eszközhöz még nincs dokumentum feltöltve."
+                  />
+                </div>
                 {canManage ? (
                   <div className="mt-5 grid gap-3 border-t pt-5 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
                     <FormField label="Dokumentumtípus">

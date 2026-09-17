@@ -91,6 +91,7 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
   onDownload,
   onDelete,
   onSaveCaption,
+  itemLabel,
   emptyText,
 }: {
   items: readonly T[];
@@ -109,6 +110,20 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
    * A `null` a TORLES: a hivo ugyanezen az uton veszi le a feliratot.
    */
   onSaveCaption?: (item: T, caption: string | null) => Promise<void>;
+  /**
+   * EGY ROVID CIMKE A CSATOLMANY FAJTAJARA -- `null`, ha nincs mit mondani.
+   *
+   * MIERT VISSZAHIVAS, ES MIERT NEM MEZO AZ ELEMEN: a fajta a GAZDAE, nem a
+   * galeriae. A hibajegyen ket ertek van (fenykep, egyeb), es a kepernyo egyiket
+   * sem irja ki -- ott a cimke csak zaj lenne. Az eszkozon NEGY all (szamla,
+   * garanciajegy, hasznalati utasitas, egyeb), es ott a fajta az elso, amit a
+   * kezelo keres: egy szamlat es egy garancialevelet a fajlnev nem kulonboztet
+   * meg.
+   *
+   * ELHAGYHATO, tehat a ket mai hivo (hibajegy, munkalap) VALTOZATLAN marad --
+   * nem kapnak ures cimke-helyet, es nem kell semmit atvezetni rajtuk.
+   */
+  itemLabel?: (item: T) => string | null;
   emptyText: string;
 }) {
   const kepek = items.filter(isGalleryImage);
@@ -265,6 +280,9 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {kepek.map((item) => {
             const allapot = allapotok[item.id] ?? { allapot: "tolt" };
+            // EGYSZER HIVJUK MEG, es nem ketszer a JSX-ben: a visszahivas a
+            // HIVOE, tehat nem tudhatjuk, mit csinal mellette.
+            const cimke = itemLabel?.(item) ?? null;
             return (
               <li
                 key={item.id}
@@ -314,6 +332,13 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                     {item.fileName}
                   </p>
                   <p className="text-xs text-dusk-500">
+                    {/*
+                      A FAJTA A MERET ELE KERUL, egy sorban: kulon sorkent egy
+                      negyedik szoveget vinne a csempere, es a csempe magassaga
+                      a kepbol elvenne. A sorrend nem izles -- a fajta MONDJA
+                      MEG, mit latunk, a meret csak leirja.
+                    */}
+                    {cimke ? `${cimke} · ` : ""}
                     {formatFileSize(item.sizeBytes)} ·{" "}
                     {formatDateTime(item.createdAt)}
                   </p>
@@ -395,38 +420,42 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
 
       {egyeb.length ? (
         <ul className="divide-y rounded border text-sm">
-          {egyeb.map((item) => (
-            <li
-              key={item.id}
-              className="flex flex-wrap items-center justify-between gap-3 px-3 py-2"
-            >
-              <div>
-                <p className="font-medium">{item.fileName}</p>
-                <p className="text-xs text-dusk-500">
-                  {formatFileSize(item.sizeBytes)} ·{" "}
-                  {formatDateTime(item.createdAt)}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => onDownload(item)}
-                >
-                  Letöltés
-                </Button>
-                {onDelete ? (
+          {egyeb.map((item) => {
+            const cimke = itemLabel?.(item) ?? null;
+            return (
+              <li
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-3 py-2"
+              >
+                <div>
+                  <p className="font-medium">{item.fileName}</p>
+                  <p className="text-xs text-dusk-500">
+                    {cimke ? `${cimke} · ` : ""}
+                    {formatFileSize(item.sizeBytes)} ·{" "}
+                    {formatDateTime(item.createdAt)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => onDelete(item)}
+                    onClick={() => onDownload(item)}
                   >
-                    Törlés
+                    Letöltés
                   </Button>
-                ) : null}
-              </div>
-            </li>
-          ))}
+                  {onDelete ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => onDelete(item)}
+                    >
+                      Törlés
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
 
