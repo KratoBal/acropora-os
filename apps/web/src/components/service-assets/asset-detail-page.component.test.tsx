@@ -358,27 +358,35 @@ describe("az eszköz matricakódja az adatlapon", () => {
   });
 
   /**
-   * A KIRAJZOLT QR NEM A MATRICAKODBOL KESZUL, ES EZ KIMONDOTT DONTES.
+   * A QR-PANEL A SAJAT KODJAT MUTATJA, NEM A MATRICAKODOT.
    *
    * A lapon KET kod all. A QR a `qrToken`-en (128 bit), a matricakod egy kiadott
    * keszletbol jon -- 260 ezer lehetoseg, amit egy belepett partner
    * vegigprobalhatna. Ezert nem cserelheto fel a ketto.
    *
-   * MI PIROSIT: ha valaki a QR-t a matricakodra allitana at. A ket kod
-   * OSSZEKEVERESE kivulrol nem latszik -- a QR ugyanugy kirajzolodna.
+   * MI PIROSIT: ha valaki a QR-panelbe teszi ki a matricakodot, vagy a
+   * kirajzolt kodot arra csereli. Kivulrol mind a ketto ugy nez ki, mintha a
+   * lap rendben lenne.
+   *
+   * === ES AZ ELSO VALTOZATA HALOTT VOLT, EZERT ALL ITT MASKEPP ===
+   *
+   * Eloszor a `assetsApi.qr(...)` ARGUMENTUMAIRA allitottam, hogy a matricakod
+   * nem megy at. Lemertem: a QR-hivas AKKOR indul, amikor az eszkoz MEG NINCS
+   * betoltve, tehat ott a matricakod nem is letezik -- egy szandekos "szivarogtato"
+   * rontas is `undefined`-ot adott volna at, es az allitas ZOLD maradt. Nem a
+   * kod volt jo: az allitas nem tudott elbukni.
    */
-  it("a QR továbbra is a saját tokenjéből készül, nem a matricakódból", async () => {
+  it("a QR-panel a saját kódját mutatja, nem a matricakódot", async () => {
     api.detail.mockResolvedValue({
       ...asset,
       labelCode: "V2196",
     } as unknown as AssetDetail);
     render(<AssetDetailPage assetId="asset-1" />);
-    await screen.findByText("V2196");
 
-    // A HIVAS HARMADIK ARGUMENTUMA egy AbortSignal, ami koronkent mas peldany --
-    // ezert az ELSO KETTORE allitunk, nem a teljes listara.
-    expect(api.qr.mock.calls[0]?.[1]).toBe("asset-1");
-    // ES A MATRICAKOD NEM MEGY AT a QR-lekerdezesbe egyik argumentumkent sem.
-    expect(api.qr.mock.calls[0]).not.toContain("V2196");
+    const panel = await screen.findByLabelText("ESZ-0001 QR-kódja");
+    // POZITIV KONTROLL: a panel a VEGPONT valaszat rajzolja ki. Enelkul az alabbi
+    // tagadas egy URES panelre is teljesulne.
+    expect(panel.querySelector("svg")).toBeTruthy();
+    expect(panel.textContent).not.toContain("V2196");
   });
 });
