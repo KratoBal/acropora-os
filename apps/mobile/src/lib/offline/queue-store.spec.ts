@@ -51,7 +51,42 @@ describe("a sor tárolójának szerkezete", () => {
       MI PIROSIT: egy ures `catch {}` blokk, vagy barmi, ami nem adja tovabb a
       hibat.
     */
-    assert.match(forras, /return\s*\{\s*\n?\s*ok:\s*false/);
+    /**
+     * MINDEN `enqueue*` FUGGVENYBEN, NEM CSAK VALAHOL A FAJLBAN.
+     *
+     * Az elso alakom a TELJES forrasra illesztett, es a minta 2026-09-17-en
+     * TIZENEGY helyen allt: minden hibakezelo ag igy nez ki. Vagyis ha EGY
+     * enqueue elnyelne a hibat, a masik tiz zolden tartana ezt az allitast --
+     * epp azt, aminek a neve az `enqueue`-t mondja.
+     *
+     * A javitas nem darabszam: az nem stabil (barmely uj hibaag mozditja).
+     * A fajlt FUGGVENYEKRE bontjuk, es MINDEGYIKBEN megkoveteljuk.
+     */
+    /*
+      A VAGAS A KOVETKEZO `export`-IG MEGY, NEM AZ ELSO SOR-ELEJI `}`-IG.
+
+      Az elso alakom `[\s\S]*?\n\}` volt, es RAVIDEN vagott: az
+      `enqueueServiceJobCreate` igy OT sor lett, mert a parameter-objektum
+      zarojele elobb jott. Negy fuggveny latszott ugy, mintha elnyelne a hibat.
+
+      A rontas/meres maga is meres: a piros elso kerdese nem az volt, hogy melyik
+      fuggveny hibas, hanem hogy a VAGASOM tenyleg a fuggvenyt adja-e.
+    */
+    const enqueueBlokkok = [
+      ...forras.matchAll(
+        /export async function (enqueue\w+)[\s\S]*?(?=\nexport |$)/g,
+      ),
+    ];
+    assert.ok(
+      enqueueBlokkok.length >= 6,
+      `csak ${enqueueBlokkok.length} enqueue fuggvenyt talaltam; a kereses hibas lehet`,
+    );
+    for (const [torzs, nev] of enqueueBlokkok)
+      assert.match(
+        torzs,
+        /return\s*\{\s*\n?\s*ok:\s*false/,
+        `${nev}: nem adja vissza a hibat, hanem elnyeli`,
+      );
     // ES NINCS BENNE URES CATCH. Az `asset-cache.ts` mintaja itt HIBA lenne.
     assert.doesNotMatch(forras, /catch\s*\{\s*\/\/[^\n]*\n\s*\}/);
   });
@@ -71,8 +106,15 @@ describe("a sor tárolójának szerkezete", () => {
   it("a küldhető sorok listája ÁLLAPOT szerint szűr", () => {
     // Egy szures nelkuli lekerdezes a `conflict` sorokat is ujrakuldene --
     // azokat, amik emberre varnak.
-    assert.match(forras, /WHERE state IN/);
-    assert.match(forras, /KULDHETO/);
+    /**
+     * A HIVAS ALAKJARA, NEM A PUSZTA NEVRE.
+     *
+     * Merve 2026-09-17: a `WHERE state IN` KET helyen all (itt es az ismetlodo
+     * hibak lekerdezeseben), a `KULDHETO` HAROM helyen (a definicio, ez a
+     * lekerdezes es a parametere). Mindket puszta minta zolden maradna, ha EZT
+     * a szurest kivennek -- a masik elofordulas tartana eletben.
+     */
+    assert.match(forras, /WHERE state IN \(\$\{KULDHETO\.map\(/);
   });
 });
 
@@ -86,9 +128,21 @@ describe("a fénykép sora", () => {
 
       MI PIROSIT: a literal visszairasa a lekepezesbe.
     */
-    assert.match(
-      forras,
-      /operation: r\.operation as SyncQueueRow\["operation"\]/,
+    /**
+     * MIND A KET LEKERDEZESBEN, EZERT DARABSZAM.
+     *
+     * A lekepezes KET helyen all: a kuldheto sorok es a teljes lista
+     * lekerdezesenel. Egy jelenlet-illesztes zolden atengedne, ha az EGYIKBEN
+     * visszakerulne a literal -- a masik tartana eletben. Merve 2026-09-17-en a
+     * minta-egyediseg merohellyel: `2x`.
+     */
+    const operationLekepezesek =
+      forras.split('operation: r.operation as SyncQueueRow["operation"]')
+        .length - 1;
+    assert.equal(
+      operationLekepezesek,
+      2,
+      `a operation olvasasa ${operationLekepezesek} helyen all; mind a ket lekerdezesben kell`,
     );
   });
 
@@ -96,7 +150,20 @@ describe("a fénykép sora", () => {
     // Egy ismeretlen muveletet vagy entitast egy UJABB valtozat irhatott a
     // sorba. Nem talalgatjuk (az a szerverig menne), es nem is toroljuk (az a
     // felvitel egyetlen peldanya lehet): a sorban marad, csak nem indul el.
-    assert.match(forras, /ismertSor/);
+    /**
+     * A SZURES HASZNALATA, ES MIND A KET LEKERDEZESBEN.
+     *
+     * A puszta nev HAROM helyen all, koztuk a DEFINICIOBAN -- az zolden tartana
+     * egy allitast akkor is, ha egyetlen lekerdezes sem hasznalna. A ket hivas
+     * viszont KET kulon uton megy (a kuldheto sorok es a teljes lista), es
+     * mindkettonek szurnie kell: egy ismeretlen sor a szerverig menne.
+     */
+    const szuresek = forras.split("rows.filter(ismertSor)").length - 1;
+    assert.equal(
+      szuresek,
+      2,
+      `az ismertSor szures ${szuresek} helyen all; a kuldheto sorok ES a teljes lista lekerdezesenel is kell`,
+    );
     assert.doesNotMatch(forras, /DELETE FROM sync_queue WHERE operation/);
   });
 
@@ -122,9 +189,21 @@ describe("a fénykép sora", () => {
 
       MI PIROSIT: a literal visszairasa a lekepezesbe.
     */
-    assert.match(
-      forras,
-      /entityType: r\.entity_type as SyncQueueRow\["entityType"\]/,
+    /**
+     * MIND A KET LEKERDEZESBEN, EZERT DARABSZAM.
+     *
+     * A lekepezes KET helyen all: a kuldheto sorok es a teljes lista
+     * lekerdezesenel. Egy jelenlet-illesztes zolden atengedne, ha az EGYIKBEN
+     * visszakerulne a literal -- a masik tartana eletben. Merve 2026-09-17-en a
+     * minta-egyediseg merohellyel: `2x`.
+     */
+    const entityTypeLekepezesek =
+      forras.split('entityType: r.entity_type as SyncQueueRow["entityType"]')
+        .length - 1;
+    assert.equal(
+      entityTypeLekepezesek,
+      2,
+      `a entityType olvasasa ${entityTypeLekepezesek} helyen all; mind a ket lekerdezesben kell`,
     );
   });
 
@@ -165,7 +244,11 @@ describe("a fénykép sora", () => {
       MI PIROSIT: ha a modositas aga `OR IGNORE`-ra vagy `OR REPLACE`-re
       valtozik, vagy ha az osszefesules kimarad.
     */
-    assert.match(forras, /mergeQueuedAssetUpdate/);
+    /**
+     * A HIVAS ALAKJARA: a puszta nevet az IMPORT sor ES egy komment is eletben
+     * tartja (harom elofordulas, egyetlen valodi hivas).
+     */
+    assert.match(forras, /mergeQueuedAssetUpdate\(elozo, input\.payload\)/);
     assert.match(forras, /INSERT INTO sync_queue\n\s*\(id, operation/);
     assert.doesNotMatch(forras, /INSERT OR REPLACE INTO sync_queue/);
   });
