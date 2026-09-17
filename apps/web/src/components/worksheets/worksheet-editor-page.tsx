@@ -390,6 +390,18 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
             detail: line.detail ?? "",
             quantity: line.quantity,
             unit: line.unit,
+            /*
+              A FAJTA ES A LETSZAM A SZERVERROL JON, NEM AZ URLAP
+              ALAPERTELMEZESEBOL.
+
+              Az `emptyLine()` uj sort MUNKAORAKENT nyit, mert a szerelo azt
+              rogziti a leggyakrabban. Egy MEGLEVO sornal viszont az a kerdes,
+              minek rogzitettek -- es azt a szerver mondja meg. Ha itt az urlap
+              alapertelmezese allna, minden szerkesztes atallitana a regi
+              anyag-teteleket munkaorara, es a lap osszege NEMAN nőne.
+            */
+            kind: line.kind,
+            workerCount: String(line.workerCount),
             // A HIÁNYZÓ ÁR ÜRES MEZŐ AZ ŰRLAPON. A szerkesztőben az üres
             // mező a "még nincs kitöltve" alakja, és a mentés ugyanígy
             // küldi vissza - a nulla ott is értéknek látszana.

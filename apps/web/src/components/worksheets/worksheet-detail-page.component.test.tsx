@@ -472,10 +472,61 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
     */
     await screen.findByText("Kompresszor bevizsgálás");
 
-    expect(screen.queryByText("Összesítés")).toBeNull();
+    /*
+      AZ "ÖSSZESÍTÉS" PANEL 2026-09-17 ESTE VISSZATÉRT -- MÁS TARTALOMMAL.
+
+      Itt korábban az állt, hogy a panel SEHOL nem jelenik meg. Az akkor igaz
+      volt: mind a három sora ár volt. Ugyanaznap este ugyanabba a helyre került
+      az ÖSSZES MUNKAÓRA (Balázs ugyanannak a kérésnek a másik fele).
+
+      Ezért a panel LÉTE már nem mérce; a mérce az, hogy ÁR nem áll benne. A
+      három ár-sor állítása változatlanul itt van, név szerint.
+    */
     expect(screen.queryByText("Nettó összeg")).toBeNull();
     expect(screen.queryByText("Bruttó összeg")).toBeNull();
     expect(screen.queryByText("Egységár")).toBeNull();
+  });
+
+  /**
+   * A MUNKAÓRA A LAP VÉGÉN ÉS TÉTELENKÉNT (2026-09-17, Balázs kérése).
+   *
+   * Szó szerint: "a végén legyen egy össz munkaóra ami automatikusan számol
+   * tételenként és az összes tétel esetben is".
+   */
+  it("az összes munkaóra a lap végén áll", async () => {
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByText("Kompresszor bevizsgálás");
+
+    expect(screen.getByText("Összesítés")).toBeTruthy();
+    expect(screen.getByText("Összes munkaóra")).toBeTruthy();
+    expect(screen.getByText("2 óra")).toBeTruthy();
+  });
+
+  it("a tétel sorában is ott a saját munkaórája", async () => {
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    const sor = (await screen.findByText("Kompresszor bevizsgálás")).closest(
+      "tr",
+    );
+
+    /*
+      AZ ÁLLÍTÁS A CELLÁRA MEGY, NEM A SOR SZÖVEGÉRE -- ÉS EZT A KALIBRÁCIÓ
+      TANÍTOTTA MEG.
+
+      Az első változatom `sor.textContent` tartalmazza-e a "2" karaktert
+      alakban állt. Az ZÖLD MARADT akkor is, amikor a munkaóra-cellát ÜRESRE
+      rontottam: a sorban a MENNYISÉG is "2". Az állítás neve a munkaóráról
+      szólt, a mérés pedig a mennyiséget találta meg.
+    */
+    const cellak = Array.from(sor?.querySelectorAll("td") ?? []);
+
+    // ISMERT POZITÍV KONTROLL: a sor egyáltalán felépült, öt cellával.
+    expect(cellak.length).toBe(5);
+    expect(cellak[1]?.textContent).toContain("Kompresszor bevizsgálás");
+
+    // A fejléc NEVEZI el az oszlopot, a cella HORDOZZA az értéket. Külön-külön
+    // egyik sem elég: egy fejléc üres oszlop fölött is állhat.
+    expect(screen.getByText("Munkaóra")).toBeTruthy();
+    expect(cellak[4]?.textContent).toBe("2");
   });
 
   /**

@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -105,6 +106,19 @@ export default function WorksheetDetailScreen() {
   const [description, setDescription] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("óra");
+  /*
+    A FAJTA ES A LETSZAM MENTES UTAN NEM ALL VISSZA -- ugyanaz a dontes, mint az
+    EGYSEGNEL (az sem urul ki). A szerelo egymas utan tobb tetelt ir be
+    ugyanarrol a munkarol, es ha minden sor utan ujra be kellene allitania, hogy
+    munkaora es hanyan voltak, akkor a harmadik tetelnel elfelejti.
+
+    AZ ALAPERTELMEZES MUNKAORA. Nem az egyseg szovegebol vezetjuk le (az szabad
+    szoveg, es egy elgepelt "ora" csendben kimaradna), hanem abbol, hogy a
+    telefonon a szerelo tulnyomoreszt munkat rogzit -- ugyanaz a meres, amibol
+    az egyseg alapertelmezese "óra" lett.
+  */
+  const [isLabor, setIsLabor] = useState(true);
+  const [workerCount, setWorkerCount] = useState("1");
   const [lineError, setLineError] = useState<string | null>(null);
   /**
    * A SORBA KERULT TETEL UZENETE, KULON A HIBATOL. Nem hiba: a felvitel
@@ -446,7 +460,13 @@ export default function WorksheetDetailScreen() {
         random: Math.random(),
       });
       const built = buildWorksheetLinePayload(
-        { description, quantity, unit },
+        {
+          description,
+          quantity,
+          unit,
+          kind: isLabor ? "LABOR" : "OTHER",
+          workerCount,
+        },
         lineId,
       );
       if (!built.ok) throw new Error(built.message);
@@ -1046,6 +1066,44 @@ export default function WorksheetDetailScreen() {
                   </View>
                 </View>
                 {/*
+                  A FAJTA KAPCSOLO, ES A LETSZAM CSAK MELLETTE LATSZIK.
+
+                  A LETSZAM MEZO ITT ELTUNIK a nem-munka tetelnel, a weben
+                  viszont csak TILTOTT -- es a ket dontes nem mond ellent
+                  egymasnak. A weben a sorok EGY RACSBAN allnak, tehat egy
+                  eltuno cella elcsusztatna az alatta levo sorokat; a telefonon
+                  a mezok egymas alatt vannak, ott nincs mit elcsusztatni, es a
+                  kis kijelzon minden fololeges sor szamit.
+                */}
+                <View style={styles.lineRow}>
+                  <View style={styles.lineCell}>
+                    <Text style={styles.label}>Munkaóra</Text>
+                    <View style={styles.switchRow}>
+                      <Switch
+                        value={isLabor}
+                        onValueChange={setIsLabor}
+                        accessibilityLabel="Munkaóra-tétel"
+                      />
+                      <Text style={styles.muted}>
+                        {isLabor ? "Beleszámít" : "Nem számít bele"}
+                      </Text>
+                    </View>
+                  </View>
+                  {isLabor ? (
+                    <View style={styles.lineCell}>
+                      <Text style={styles.label}>Hányan</Text>
+                      <TextInput
+                        value={workerCount}
+                        onChangeText={setWorkerCount}
+                        placeholder="1"
+                        placeholderTextColor="#5b7d8f"
+                        keyboardType="number-pad"
+                        style={styles.input}
+                      />
+                    </View>
+                  ) : null}
+                </View>
+                {/*
                   AZ AR NINCS ITT, ES EZ DONTES: az arat az iroda adja meg
                   (Balazs, 2026-09-02).
 
@@ -1133,10 +1191,26 @@ export default function WorksheetDetailScreen() {
               weben, sem az appban -- es ezert a lezarasi ar-feltetel is kikerult
               (#809, beolvadt). Az ADAT megmarad, ar tovabbra is rendelheto.
 
-              ES A HELYE NEM MARAD URESEN: a #806-tal megjott az osszesitett
-              MUNKAORA (`current.laborHours`), es Balazs ugyanabban a keresben
-              azt kerte a lap vegere. Az a kovetkezo szelet, kulon PR-ben.
+              ES A HELYERE A MUNKAORA KERULT (ugyanaznap este, kulon PR-ben).
+              Balazs szo szerint: "a vegen legyen egy ossz munkaora ami
+              automatikusan szamol tetelenkent es az osszes tetel eseteben is".
+              A tetelenkenti szam a tetel sorabban all, ez itt az OSSZES.
             */}
+
+            {/*
+              A SZAM A SZERVERTOL JON, NEM ITT ADODIK OSSZE. Ha a telefon
+              szamolna, ugyanaz a szabaly KET feluleten allna (itt es a weben),
+              es a ketto elcsuszasa NEMA lenne: ugyanarra a lapra ket kulonbozo
+              ora latszana ket kepernyon.
+
+              ES AKKOR IS KIIRJUK, HA NULLA. Egy elrejtett nulla ket allapotot
+              mosna ossze: hogy nincs munkaora-tetel a lapon, es hogy a kartya
+              elromlott. A "0 óra" allitas; a hianyzo kartya kerdes.
+            */}
+            <View style={styles.card}>
+              <Text style={styles.label}>Összes munkaóra</Text>
+              <Text style={styles.laborTotal}>{current.laborHours} óra</Text>
+            </View>
 
             {/*
               AZ ALAIRAS GOMBJA. UGYANAZ A KET FELTETEL, mint a szerveren
@@ -1485,6 +1559,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   lineRow: { flexDirection: "row", gap: 10, marginTop: 8 },
+  laborTotal: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#e8f4f8",
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    height: 44,
+  },
   lineCell: { flex: 1 },
   lineError: { color: "#ffb4ab", fontSize: 12, marginTop: 8 },
   addLineButton: {

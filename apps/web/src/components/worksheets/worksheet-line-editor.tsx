@@ -2,13 +2,28 @@
 
 import { Button, Card, Input } from "@acropora/ui";
 
-import type { WorksheetLineInput } from "@acropora/types";
+import type {
+  WorksheetLineInput,
+  WorksheetLineKindValue,
+} from "@acropora/types";
 
 export interface WorksheetLineDraft {
   description: string;
   detail: string;
   quantity: string;
   unit: string;
+  /**
+   * A TETEL FAJTAJA. Ez donti el, beleszamit-e az osszesitett munkaoraba -- a
+   * `unit` szovege NEM (egy elgepelt "ora" csendben kimaradna).
+   *
+   * KOTELEZO MEZO, NEM ELHAGYHATO, es ez szandekos: igy a fordito kiirja
+   * annak a helynek a nevet, ahol egy meglevo lap sorai draftta alakulnak
+   * (`worksheet-editor-page.tsx`). Egy elhagyhato mezo ott CSENDBEN hianyozna,
+   * es minden szerkesztes atallitana a sorok fajtajat.
+   */
+  kind: WorksheetLineKindValue;
+  /** Hanyan dolgoztak a tetelen. Ures mezo = a szerver alapertelmezese (1). */
+  workerCount: string;
   unitNet: string;
   vatRatePercent: string;
 }
@@ -18,6 +33,23 @@ export function emptyLine(): WorksheetLineDraft {
     description: "",
     detail: "",
     quantity: "1",
+    /*
+      AZ UJ SOR ALAPERTELMEZESBEN MUNKAORA -- ES EZ NEM UGYANAZ A KERDES, MINT
+      A SEMA ALAPERTELMEZESE.
+
+      A semaban az `OTHER` all, mert a MAR MEGLEVO sorokrol senki nem mondta,
+      hogy munkaorak voltak. Itt viszont arrol van szo, mit rogzit MOST a
+      szerelo, es arra van meresunk: az egyseg alapertelmezese ezen a lapon es
+      a telefonon is "óra".
+
+      ES A KET TEVEDES ARA NEM EGYFORMA. Ha egy anyag-tetel bent marad
+      munkaorakent, az osszeg TUL MAGAS lesz, es a lapon ott all a sor, ami
+      okozza -- lathato. Ha egy munka-tetel marad ki, az osszeg TUL ALACSONY,
+      es a hianyzo ora semmilyen nyomot nem hagy. A hangosabb tevedest
+      valasztjuk.
+    */
+    kind: "LABOR",
+    workerCount: "1",
     unit: "óra",
     unitNet: "0",
     vatRatePercent: "27",
@@ -53,6 +85,17 @@ export function toLineInput(line: WorksheetLineDraft): WorksheetLineInput {
     detail: line.detail.trim() ? line.detail.trim() : null,
     quantity: Number(line.quantity),
     unit: line.unit.trim(),
+    kind: line.kind,
+    /*
+      AZ URES LETSZAM-MEZO NEM NULLA ES NEM HIBA, hanem hiany: a szerver
+      alapertelmezese (1) all a helyere. Ugyanaz a dontes, mint az arnal --
+      csak itt a hianynak VAN ertelmes alapertelmezese, az arnal nincs.
+
+      Ami NEM megy at: egy elgepelt ertek. Azt a szerver utasitja el nev
+      szerint (`@IsInt() @Min(1) @Max(999)`), es ez szandekos: egy csendben
+      1-re javitott "11" a lap osszeget rontana el, hangtalanul.
+    */
+    workerCount: optionalNumber(line.workerCount),
     unitNet: optionalNumber(line.unitNet),
     vatRatePercent: optionalNumber(line.vatRatePercent),
   };
@@ -112,9 +155,15 @@ export interface WorksheetLineEditorProps {
  * literal marad (a JIT nem lat osszefuzott osztalynevet) -- azt a komponens
  * teszt koti ossze: a racs oszlopainak szama legyen `MEZO_FEJLECEK.length + 1`.
  */
-const MEZO_FEJLECEK = ["Megnevezés", "Mennyiség", "Mértékegység"] as const;
+const MEZO_FEJLECEK = [
+  "Megnevezés",
+  "Mennyiség",
+  "Mértékegység",
+  "Munkaóra",
+  "Hányan",
+] as const;
 
-const COLUMNS = "md:grid-cols-[2fr_1fr_1fr_auto]";
+const COLUMNS = "md:grid-cols-[2fr_1fr_1fr_auto_1fr_auto]";
 
 /** A keskeny nézet felirata. Széles nézetben a fejlécsor mondja ugyanezt. */
 function NarrowLabel({ children }: { children: string }) {
@@ -223,6 +272,57 @@ export function WorksheetLineEditor({
                 disabled={disabled}
                 onChange={(event) =>
                   update(index, { unit: event.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              {/*
+                A FAJTA JELOLONEGYZET, NEM LENYILO. Ket ertek van, es a
+                legordulonel egy kattintas helyett ketto kellene -- a
+                szerkeszto pedig SORONKENT ismetlodik. Nyers `input` all itt,
+                nem keszlet-komponens: a keszletben nincs jelolonegyzet, es a
+                webes fan tizenket helyen all mar ugyanez a nyers alak (koztuk
+                a szomszed `worksheet-assignee-picker.tsx`).
+              */}
+              <NarrowLabel>Munkaóra</NarrowLabel>
+              <label className="flex h-10 items-center gap-2 text-sm text-dusk-700">
+                <input
+                  type="checkbox"
+                  aria-label={`${index + 1}. tétel munkaóra`}
+                  checked={line.kind === "LABOR"}
+                  disabled={disabled}
+                  className="size-4 rounded border-dusk-300"
+                  onChange={(event) =>
+                    update(index, {
+                      kind: event.target.checked ? "LABOR" : "OTHER",
+                    })
+                  }
+                />
+                <span className="md:hidden">Munkaóra</span>
+              </label>
+            </div>
+            <div className="space-y-1">
+              {/*
+                A LETSZAM MEZO NEM TUNIK EL A NEM-MUNKA TETELNEL, HANEM TILTOTT.
+
+                Ha kikapcsolaskor ELTUNNE, a sor cellainak szama valtozna, es a
+                racs alatta elcsuszna -- pontosan az a hiba, amit ez a fajl ma
+                mar egyszer elszenvedett. A tiltott mezo ezen kivul MEGMONDJA,
+                miert nem irhato: a fajta donti el, nem o.
+              */}
+              <NarrowLabel>Hányan</NarrowLabel>
+              <Input
+                aria-label={`${index + 1}. tételen hányan dolgoztak`}
+                value={line.workerCount}
+                disabled={disabled || line.kind !== "LABOR"}
+                inputMode="numeric"
+                title={
+                  line.kind === "LABOR"
+                    ? "Hányan dolgoztak ezen a tételen"
+                    : "Csak munkaóra-tételnél adható meg"
+                }
+                onChange={(event) =>
+                  update(index, { workerCount: event.target.value })
                 }
               />
             </div>

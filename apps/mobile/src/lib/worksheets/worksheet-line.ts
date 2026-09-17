@@ -31,11 +31,17 @@
 
 import type { QueueWriteOutcome } from "../offline/save-or-queue";
 
+import type { WorksheetLineKind } from "./worksheet-line-kind";
+
 export interface WorksheetLineForm {
   description: string;
   /** Szovegkent, ahogy a felhasznalo beirja: vesszovel vagy ponttal. */
   quantity: string;
   unit: string;
+  /** Munkaora-e a tetel. Csak az szamit bele az osszesitett munkaoraba. */
+  kind: WorksheetLineKind;
+  /** Hanyan dolgoztak rajta, szovegkent. Ures = egy fo. */
+  workerCount: string;
 }
 
 export interface WorksheetLinePayload {
@@ -44,9 +50,20 @@ export interface WorksheetLinePayload {
   description: string;
   quantity: number;
   unit: string;
+  kind: WorksheetLineKind;
+  /**
+   * HANYAN DOLGOZTAK RAJTA. A NEM-MUNKA TETELNEL IS ELMEGY, ertelemszeruen 1.
+   *
+   * Miert nem hagyjuk el olyankor: a szerver a `kind` alapjan szamol
+   * (`OTHER` -> nulla ora), tehat a letszam ott nem valtoztat semmin. Egy
+   * elhagyhato mezo viszont KET alakot adna ugyanannak a tetelnek, es a
+   * kesobbi olvaso azt kerdezne, mit jelent a hianya. Egy alak, egy jelentes.
+   */
+  workerCount: number;
 }
 
-export type WorksheetLineField = "description" | "quantity" | "unit";
+export type WorksheetLineField =
+  "description" | "quantity" | "unit" | "workerCount";
 
 export type WorksheetLineResult =
   | { ok: true; payload: WorksheetLinePayload }
@@ -54,6 +71,16 @@ export type WorksheetLineResult =
 
 const DESCRIPTION_MAX = 500;
 const UNIT_MAX = 20;
+
+/**
+ * A LETSZAM FELSO HATARA A SZERVERE (`@Max(999)`), ES ITT MEGISMETLODIK.
+ *
+ * Ez ket helyen allo szabaly, tehat elcsuszhat -- ezert all melle egy szam a
+ * specben. A megismetles indoka az, hogy a telefon TERERO NELKUL is rogzit: ha
+ * csak a szerver szolna, a hibas tetel a sorba kerulne, es orakkal kesobb
+ * bukna el, amikor a szerelo mar nem a lapnal all.
+ */
+const WORKER_COUNT_MAX = 999;
 
 /**
  * A MENNYISEG MAGYAR ALAKBAN IS ERKEZHET.
@@ -87,6 +114,37 @@ export function parseQuantity(
  * NEM hasznalhatjuk ugyanazt a `muvelet:kulcs:idopont` alakot, mint a
  * rogzitesnel -- ott kettospont es pont is van benne.
  */
+/**
+ * HANYAN DOLGOZTAK A TETELEN.
+ *
+ * === AZ URES MEZO EGY FO, ES EZ NEM UGYANAZ, MINT AZ ARNAL ===
+ *
+ * Az ur mezot a szerkeszto HIANYKENT kezeli, mert a nulla forint ERTEKNEK
+ * latszana. A letszamnal forditva all: nulla fo nem ertelmezheto allapot, es a
+ * "hanyan dolgoztak rajta" kerdesre a hallgatas valasza az, hogy EGY. Ezert
+ * itt a hianynak van alapertelmezese, az arnal nincs.
+ *
+ * === AMI VISZONT NEM MEGY AT: AZ ELGEPELES ===
+ *
+ * A `Number("2 fo")` erteke `NaN`, a `Number("")` viszont NULLA -- tehat egy
+ * csupasz `Number()` hivas ket kulonbozo hibat adna: az elsot eldobna, a
+ * masodikat CSENDBEN nullava tenne. Mindketto kulon agon all itt.
+ *
+ * A tizedes alak (`1,5`) SZANDEKOSAN elbukik: fel ember nem dolgozik egy
+ * tetelen. A mennyisegnel a vesszo megengedett, itt nem -- a ket mezo ket
+ * kulonbozo dolgot mer, es a telefon billentyuzete mindkettonel ugyanaz.
+ */
+export function parseWorkerCount(
+  value: string,
+): { ok: true; value: number } | { ok: false } {
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true, value: 1 };
+  if (!/^\d+$/.test(trimmed)) return { ok: false };
+  const parsed = Number(trimmed);
+  if (parsed < 1 || parsed > WORKER_COUNT_MAX) return { ok: false };
+  return { ok: true, value: parsed };
+}
+
 export function worksheetLineId(input: {
   now: number;
   random: number;
@@ -130,6 +188,14 @@ export function buildWorksheetLinePayload(
       field: "unit",
       message: "Add meg az egységet (például óra, db, km).",
     };
+
+  const workerCount = parseWorkerCount(form.workerCount);
+  if (!workerCount.ok)
+    return {
+      ok: false,
+      field: "workerCount",
+      message: `Hányan dolgoztak rajta: egész szám, 1 és ${WORKER_COUNT_MAX} között.`,
+    };
   if (unit.length > UNIT_MAX)
     return {
       ok: false,
@@ -139,7 +205,14 @@ export function buildWorksheetLinePayload(
 
   return {
     ok: true,
-    payload: { id, description, quantity: quantity.value, unit },
+    payload: {
+      id,
+      description,
+      quantity: quantity.value,
+      unit,
+      kind: form.kind,
+      workerCount: workerCount.value,
+    },
   };
 }
 
@@ -167,11 +240,37 @@ export function readQueuedWorksheetLine(
 ): QueuedWorksheetLine | null {
   try {
     const p = JSON.parse(json) as Partial<QueuedWorksheetLine>;
-    return typeof p.description === "string" &&
-      typeof p.quantity === "number" &&
-      typeof p.unit === "string"
-      ? { description: p.description, quantity: p.quantity, unit: p.unit }
-      : null;
+    if (
+      typeof p.description !== "string" ||
+      typeof p.quantity !== "number" ||
+      typeof p.unit !== "string"
+    )
+      return null;
+
+    /*
+      A FAJTA ES A LETSZAM HIANYA NEM TESZI ERVENYTELENNE A SORT.
+
+      A telefonon MAR ALLHAT tetel a sorban, amit a ket mezo bevezetese ELOTT
+      irtak be. Ha ezeket kotelezove tennenk, az a sor "nem ertelmes tetel"
+      againak esne, es CSENDBEN ELVESZNE -- egy mar elvegzett munka, amirol a
+      szerelo azt hiszi, hogy fel fog menni.
+
+      ES A HIANY `OTHER`, NEM `LABOR`. Az uj sort a keperno munkaorakent
+      nyitja, mert ott a szerelo LATJA es atirhatja. Egy MAR SORBAN ALLO
+      tetelnel nincs jelen senki, es a `LABOR` olyan orakat adna a laphoz,
+      amiket senki nem adott meg -- lathatatlanul. Az `OTHER` ezzel szemben a
+      lapon gondolatjelkent latszik egy "óra" egyseg mellett, tehat kerdez.
+    */
+    return {
+      description: p.description,
+      quantity: p.quantity,
+      unit: p.unit,
+      kind: p.kind === "LABOR" ? "LABOR" : "OTHER",
+      workerCount:
+        typeof p.workerCount === "number" && p.workerCount >= 1
+          ? p.workerCount
+          : 1,
+    };
   } catch {
     return null;
   }
