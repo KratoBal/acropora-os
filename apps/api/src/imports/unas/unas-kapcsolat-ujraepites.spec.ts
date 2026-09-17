@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  meglevoKulcs,
   runKapcsolatUjraepitesCli,
   type UjraepitesDeps,
   type UjraepitesJelolt,
@@ -37,6 +38,8 @@ function jelolt(
 function deps(
   jeloltek: UjraepitesJelolt[],
   terkepbol: readonly string[],
+  /** A MAR MEGLEVO sorok: `${productId}|${fajta}` -> darab. */
+  meglevo: Record<string, number> = {},
 ): { deps: UjraepitesDeps; irasok: unknown[] } {
   const irasok: unknown[] = [];
   return {
@@ -45,9 +48,19 @@ function deps(
       jeloltek: async () => jeloltek,
       terkep: async () =>
         new Map(terkepbol.map((externalId) => [externalId, `p-${externalId}`])),
+      meglevoKapcsolatok: async () => new Map(Object.entries(meglevo)),
       ir: async (input) => {
         irasok.push(input);
-        return input.celProductIdk.length;
+        /*
+          A TOROLT SZAM A MEGLEVO TERKEPBOL JON, nem talalomra: igy a teszt azt
+          meri, amit a valodi iras is adna vissza -- a torolt sorok szamat, nem
+          a celokét.
+        */
+        return {
+          torolt:
+            meglevo[meglevoKulcs(input.sourceProductId, input.fajta)] ?? 0,
+          irt: input.celProductIdk.length,
+        };
       },
     },
   };
@@ -82,8 +95,16 @@ describe("kapcsolat-újraépítés", () => {
     // ES A KIIRAS IS MEGMONDJA: egy nema terv-futas ugyanugy nez ki, mint egy
     // olyan, ami irt.
     assert.match(sorok.join(""), /Nem írtam semmit/);
-    // A TERV MEGIS SZAMOL: a "nulla kapcsolat" itt hamis lenne.
-    assert.match(sorok.join(""), /SIMILAR: 1 kapcsolat/);
+    /*
+      A TERV MEGIS SZAMOL: a "nulla kapcsolat" itt hamis lenne.
+      A KET TERMEK-SZAM KULON all a mondatban, es itt EGYEZIK -- ezert
+      allitom mind a kettot: egy olyan kiiras, ami csak az egyiket hozza,
+      pontosan azt a kulonbseget rejtene el, amiert a mondat atirodott.
+    */
+    assert.match(
+      sorok.join(""),
+      /SIMILAR: hivatkozást visel 1 termék, ebből 1 kap kapcsolatot \(1 sor\)/,
+    );
   });
 
   /**
@@ -130,7 +151,7 @@ describe("kapcsolat-újraépítés", () => {
     ]);
     // ES A HASONLO AG NULLA: enelkul az allitas nem mondana meg, hogy a
     // kiegeszito ag irt-e, vagy a hasonlo ag irt rossz tipussal.
-    assert.match(sorok.join(""), /SIMILAR: 0 kapcsolat/);
+    assert.match(sorok.join(""), /SIMILAR: hivatkozást visel 0 termék/);
   });
 
   /**
@@ -178,14 +199,106 @@ describe("kapcsolat-újraépítés", () => {
     ]);
   });
 
-  /** A hivatkozas nelkuli termekre nem hivunk irast: nincs mit torolni-ujrairni. */
-  it("a hivatkozás nélküli terméket nem írja újra", async () => {
+  /**
+   * AMIRE NINCS MEGLEVO SORUNK, AHHOZ NEM NYULUNK: nincs mit torolni.
+   *
+   * Ez a ket eset kulonbseget meri: ugyanaz a nulla hivatkozas, MEGLEVO sor
+   * nelkul es MEGLEVO sorral.
+   */
+  it("hivatkozás nélkül és meglévő sor nélkül nem hív írást", async () => {
     const { deps: d, irasok } = deps([jelolt("1", [])], ["1"]);
     const { out } = kimenet();
 
     await runKapcsolatUjraepitesCli(["--apply"], out, d);
 
     assert.deepEqual(irasok, []);
+  });
+
+  /**
+   * A FORRASBOL ELTUNT KAPCSOLAT SORAIT ELTAVOLITJA -- EZ A PARANCS
+   * LEGFONTOSABB AGA, ES AZ ELSO VALTOZATBOL HIANYZOTT.
+   *
+   * A szinkron erre SOHA nem jut el: a diff motor hat mezot vet ossze, es a
+   * kapcsolat NINCS koztuk -- egy termek, amiben csak a kapcsolatok valtoztak,
+   * UNCHANGED marad. Vagyis ez az EGYETLEN ut, amin egy UNAS-ban torolt
+   * kapcsolat nalunk is eltunik.
+   */
+  it("a forrásból eltűnt kapcsolat sorait eltávolítja", async () => {
+    const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 3,
+    });
+    const { out, sorok } = kimenet();
+
+    await runKapcsolatUjraepitesCli(["--apply"], out, d);
+
+    assert.deepEqual(irasok, [
+      { sourceProductId: "p-1", fajta: "SIMILAR", celProductIdk: [] },
+    ]);
+    assert.match(sorok.join(""), /eltávolított 3 sor 1 terméken/);
+  });
+
+  /**
+   * ES A TERV-AG UGYANEZT A SZAMOT MONDJA, IRAS NELKUL.
+   *
+   * Enelkul a futas legfontosabb hatasa lathatatlan lenne: a terv nem hivja az
+   * irast, tehat a szamot a MEGLEVO sorok terkepebol kell vennie.
+   */
+  it("terv módban megmondja, hány sor tűnne el, és nem ír", async () => {
+    const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 3,
+    });
+    const { out, sorok } = kimenet();
+
+    await runKapcsolatUjraepitesCli([], out, d);
+
+    assert.deepEqual(irasok, []);
+    assert.match(sorok.join(""), /eltávolítandó 3 sor 1 terméken/);
+  });
+
+  /**
+   * AZ OLVASHATATLAN PILLANATKEPEN NEM TORLUNK -- MEG AKKOR SEM, HA VAN SORUNK.
+   *
+   * A nem-olvashato pillanatkep NEM azt allitja, hogy nincs kapcsolat, hanem
+   * hogy nem tudjuk. Torolni belole annyi, mintha egy meretlen allitasra irnank.
+   */
+  it("olvashatatlan pillanatképnél nem töröl", async () => {
+    const { deps: d, irasok } = deps(
+      [{ productId: "p-1", externalId: "1", rawPayload: null }],
+      ["1"],
+      { [meglevoKulcs("p-1", "SIMILAR")]: 3 },
+    );
+    const { out, sorok } = kimenet();
+
+    await runKapcsolatUjraepitesCli(["--apply"], out, d);
+
+    assert.deepEqual(irasok, []);
+    const szoveg = sorok.join("");
+    assert.match(szoveg, /eltávolított 0 sor 0 terméken/);
+    // ES KIMONDJA, HOGY VOLT ILYEN: egy nema kihagyas ugyanugy nez ki, mint egy
+    // termek, aminek nincs is kapcsolata.
+    assert.match(szoveg, /olvashatatlan pillanatkép 1/);
+  });
+
+  /**
+   * HA VAN HIVATKOZAS, DE EGYIK SEM OLDODIK FEL, NEM TORLUNK -- ES ITT
+   * SZANDEKOSAN ELTERUNK A SZINKRONTOL.
+   *
+   * A szinkron ilyenkor is torol (a torlese a hataron KIVUL all). A feloldatlan
+   * hivatkozas a TERKEP hibajanak a jele, nem a forrasenak: egy hibas terkep
+   * miatt elvinni a meglevo, helyes sorokat rosszabb tevedes.
+   */
+  it("csak feloldatlan hivatkozásnál nem töröl, eltérve a szinkrontól", async () => {
+    const { deps: d, irasok } = deps([jelolt("1", ["999"])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 2,
+    });
+    const { out, sorok } = kimenet();
+
+    await runKapcsolatUjraepitesCli(["--apply"], out, d);
+
+    assert.deepEqual(irasok, []);
+    const szoveg = sorok.join("");
+    assert.match(szoveg, /eltávolított 0 sor/);
+    assert.match(szoveg, /csak feloldatlan hivatkozás 1 terméken/);
   });
 
   /**
@@ -198,7 +311,8 @@ describe("kapcsolat-újraépítés", () => {
         throw new Error("a tükör-tábla nem olvasható");
       },
       terkep: async () => new Map(),
-      ir: async () => 0,
+      meglevoKapcsolatok: async () => new Map(),
+      ir: async () => ({ torolt: 0, irt: 0 }),
     });
 
     assert.equal(code, 1);

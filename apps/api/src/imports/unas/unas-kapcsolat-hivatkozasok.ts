@@ -40,6 +40,22 @@ export interface KapcsolatHivatkozas {
 export interface KapcsolatOlvasas {
   hivatkozasok: KapcsolatHivatkozas[];
   /**
+   * OLVASHATO VOLT-E A PILLANATKEP -- ES EZ NEM UGYANAZ, MINT A NULLA HIVATKOZAS.
+   *
+   * A ket eset TEENDOJE mas, es ezert nem szabad osszemosni:
+   *
+   *   olvashato, nulla hivatkozas   a forrasban NINCS kapcsolat. Amit nalunk
+   *                                 talalunk, az elavult -- torolni kell.
+   *   NEM olvashato                 nem tudjuk, mi van a forrasban. Itt a
+   *                                 torles ADATVESZTES lenne, egy olyan
+   *                                 allitas alapjan, amit meg sem mertunk.
+   *
+   * A hianyzo `SimilarProducts` mezo OLVASHATO: az azt jelenti, hogy a termek
+   * nem visel kapcsolatot. A hianyzo vagy nem-objektum `rawPayload` viszont
+   * nem.
+   */
+  olvashato: boolean;
+  /**
    * HANY HIVATKOZAS MARADT KI AZONOSITO NELKUL -- SZAMKENT, NEM CSENDBEN.
    *
    * A kliens ugyanezt teszi: `Id` nelkul a hivatkozas feloldhatatlan, tehat
@@ -64,10 +80,10 @@ export function kapcsolatHivatkozasok(
   fajta: KapcsolatFajta,
 ): KapcsolatOlvasas {
   const mezok = KAPCSOLAT_MEZOK[fajta];
-  const gyoker =
-    rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)
-      ? (rawPayload as Record<string, unknown>)
-      : {};
+  const olvashato = Boolean(
+    rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload),
+  );
+  const gyoker = olvashato ? (rawPayload as Record<string, unknown>) : {};
   const szulo = gyoker[mezok.szulo];
   const sorok =
     szulo && typeof szulo === "object" && !Array.isArray(szulo)
@@ -91,5 +107,5 @@ export function kapcsolatHivatkozasok(
       name: szoveg(sor.Name) || null,
     });
   }
-  return { hivatkozasok, azonositoNelkul };
+  return { hivatkozasok, azonositoNelkul, olvashato };
 }

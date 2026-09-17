@@ -71,22 +71,75 @@ export interface UjraepitesDeps {
    * ujrair, a meglevo kapcsolatok is ELTUNNENEK.
    */
   terkep(): Promise<Map<string, string>>;
-  /** A tenyleges iras. CSAK `--apply` mellett hivodik. */
+  /**
+   * A MAR MEGLEVO UNAS-KAPCSOLATOK DARABSZAMA, termekenkent es fajtankent.
+   *
+   * MIERT KELL, ES MIERT EGY LEKERDEZESSEL: a terv-ag nem hivja az irast, tehat
+   * kulonben NEM TUDNA megmondani, hany sor tunne el. A legfontosabb hatas
+   * maradna lathatatlan: a futas utan senki nem tudna, fogytak-e a kapcsolatok.
+   *
+   * Termekenkenti lekerdezes ketezer termeknel negyezer kort jelentene; ez
+   * EGY osszesites, a hivo pedig terkepbol olvas.
+   */
+  meglevoKapcsolatok(): Promise<Map<string, number>>;
+  /**
+   * A TENYLEGES IRAS. CSAK `--apply` mellett hivodik.
+   *
+   * URES `celProductIdk` MELLETT IS HIVJUK, es az nem ures muvelet: olyankor a
+   * TORLES tortenik meg, ujrairas nelkul -- ez a forrasbol eltunt kapcsolatok
+   * esete. Ezert ad vissza KET szamot: ami eltunt, es ami a helyere kerult.
+   */
   ir(input: {
     sourceProductId: string;
     fajta: KapcsolatFajta;
     celProductIdk: readonly string[];
-  }): Promise<number>;
+  }): Promise<{ torolt: number; irt: number }>;
+}
+
+/** A terkep kulcsa: egy termek egy kapcsolat-fajtaja. */
+export function meglevoKulcs(productId: string, fajta: KapcsolatFajta): string {
+  return `${productId}|${fajta}`;
 }
 
 export interface UjraepitesSzamok {
   termek: number;
   hivatkozastVisel: number;
+  /**
+   * HANY TERMEK KAP TENYLEGESEN KAPCSOLATOT -- ES EZ NEM A `hivatkozastVisel`.
+   *
+   * A ketto MAS HALMAZ: aminek a hivatkozasai kozul EGY SEM oldodik fel, az
+   * visel hivatkozast, de nem kap kapcsolatot. Egy kozos mondat ("120 kapcsolat
+   * 60 termeken") ugy olvasodna, mintha mind a hatvan kapott volna.
+   */
+  kapcsolatotKapott: number;
   irhatoKapcsolat: number;
   feloldatlan: number;
   onhivatkozas: number;
   duplikatum: number;
   azonositoNelkul: number;
+  /**
+   * HANY SOR TUNIK EL, mert a forrasban mar nincs kapcsolat.
+   *
+   * A terv-agon is szamolodik (a meglevo sorok terkepebol), kulonben a futas
+   * legfontosabb hatasa lathatatlan maradna: utana senki nem tudna megmondani,
+   * hogy a kapcsolatok fogytak-e, es hol.
+   */
+  eltavolitott: number;
+  /** Hany termeken TORTENT eltavolitas -- a sorok szama melle a hely. */
+  eltavolitottTermek: number;
+  /**
+   * HANY PILLANATKEP NEM VOLT OLVASHATO. Ezeken NEM torlunk: a nem-olvashato
+   * nem azt mondja, hogy nincs kapcsolat, hanem hogy nem tudjuk.
+   */
+  olvashatatlan: number;
+  /**
+   * HANY TERMEKNEL VAN HIVATKOZAS, DE EGYIK SEM OLDODIK FEL. Ezeken SEM torlunk,
+   * es itt SZANDEKOSAN elterunk a szinkrontol: az ilyenkor is torol, mielott
+   * ujrair. A feloldatlan hivatkozas a TERKEP hibajanak a jele (a celpont nincs
+   * a katalogusunkban), es ilyenkor a meglevo sorok elvitele a rosszabb tevedes:
+   * egy hibas terkep miatt veszitenenk el olyan kapcsolatot, ami helyes.
+   */
+  csakFeloldatlan: number;
 }
 
 const FAJTAK: readonly KapcsolatFajta[] = ["SIMILAR", "ACCESSORY"];
@@ -107,9 +160,10 @@ export async function runKapcsolatUjraepitesCli(
    */
   const apply = argv.includes("--apply");
   try {
-    const [jeloltek, terkep] = await Promise.all([
+    const [jeloltek, terkep, meglevo] = await Promise.all([
       deps.jeloltek(),
       deps.terkep(),
+      deps.meglevoKapcsolatok(),
     ]);
 
     const szamok: Record<KapcsolatFajta, UjraepitesSzamok> = {
@@ -127,7 +181,41 @@ export async function runKapcsolatUjraepitesCli(
         szam.termek += 1;
         const olvasas = kapcsolatHivatkozasok(jelolt.rawPayload, fajta);
         szam.azonositoNelkul += olvasas.azonositoNelkul;
-        if (olvasas.hivatkozasok.length === 0) continue;
+
+        if (olvasas.hivatkozasok.length === 0) {
+          /**
+           * A FORRASBAN NINCS KAPCSOLAT -- DE CSAK AKKOR TORLUNK, HA EZT TUDJUK IS.
+           *
+           * EZ AZ AG A PARANCS LEGFONTOSABB RESZE, es az elso valtozatbol
+           * HIANYZOTT. Az indok, amit odairtam ("nincs mit torolni-ujrairni"),
+           * EGY esetben hamis, es epp abban, amiert a parancs letezik: ha egy
+           * termek 2026-09-05-en kapott kapcsolatokat (akkor valtozott, tehat a
+           * szinkron irt ra), es azota a forrasban KIVETTEK oket, a regi sorok
+           * bent maradnak.
+           *
+           * ES NINCS MAS UT, AMIN ELTUNNENEK: a diff motor hat mezot vet ossze
+           * (cim, marka, kategoria, kepek, csatorna-lista, aktiv allapot), es a
+           * KAPCSOLAT NINCS KOZTUK. Egy termek, amiben CSAK a kapcsolatok
+           * valtoztak, UNCHANGED marad -- a szinkron soha nem ir ra.
+           * (acrobot merese, 2026-09-17.)
+           */
+          if (!olvasas.olvashato) {
+            szam.olvashatatlan += 1;
+            continue;
+          }
+          const meglevoDb = meglevo.get(meglevoKulcs(jelolt.productId, fajta));
+          if (!meglevoDb) continue;
+          if (apply) {
+            const eredmeny = await deps.ir({
+              sourceProductId: jelolt.productId,
+              fajta,
+              celProductIdk: [],
+            });
+            szam.eltavolitott += eredmeny.torolt;
+          } else szam.eltavolitott += meglevoDb;
+          szam.eltavolitottTermek += 1;
+          continue;
+        }
         szam.hivatkozastVisel += 1;
 
         /**
@@ -153,14 +241,27 @@ export async function runKapcsolatUjraepitesCli(
               `${jelolt.externalId}->${hianyzo.externalId} (${hianyzo.sku})`,
             );
 
-        if (mapping.targets.length === 0) continue;
-        szam.irhatoKapcsolat += apply
-          ? await deps.ir({
-              sourceProductId: jelolt.productId,
-              fajta,
-              celProductIdk: mapping.targets.map((cel) => cel.productId),
-            })
-          : mapping.targets.length;
+        if (mapping.targets.length === 0) {
+          /*
+            VAN HIVATKOZAS, DE EGYIK SEM OLDODIK FEL -- ES ITT NEM TORLUNK.
+            A szinkron ilyenkor is torol (a torlese a hataron KIVUL all), es
+            ezen a ponton SZANDEKOSAN elterek tole: a feloldatlan hivatkozas a
+            TERKEP hibajanak a jele, nem a forrasenak. Egy hibas terkep miatt
+            elvinni a meglevo, helyes sorokat rosszabb tevedes, mint megtartani
+            oket egy korrel tovabb.
+          */
+          szam.csakFeloldatlan += 1;
+          continue;
+        }
+        szam.kapcsolatotKapott += 1;
+        if (apply) {
+          const eredmeny = await deps.ir({
+            sourceProductId: jelolt.productId,
+            fajta,
+            celProductIdk: mapping.targets.map((cel) => cel.productId),
+          });
+          szam.irhatoKapcsolat += eredmeny.irt;
+        } else szam.irhatoKapcsolat += mapping.targets.length;
       }
     }
 
@@ -170,11 +271,26 @@ export async function runKapcsolatUjraepitesCli(
     );
     for (const fajta of FAJTAK) {
       const szam = szamok[fajta];
+      /*
+        MINDEN SZAM MEGNEVEZVE, ES A KET TERMEK-SZAM KULON.
+        Az elso alak `${irhatoKapcsolat} kapcsolat ${hivatkozastVisel} termeken`
+        volt, es az ket KULONBOZO halmazt tett egy mondatba: aminek egyetlen
+        hivatkozasa sem oldodik fel, az visel hivatkozast, de nem kap kapcsolatot.
+        Sok feloldatlannal a mondat ugy olvasodott, mintha mind kapott volna.
+      */
       out.stdout(
-        `  ${fajta}: ${szam.irhatoKapcsolat} kapcsolat ` +
-          `${szam.hivatkozastVisel} terméken; feloldatlan ${szam.feloldatlan}, ` +
+        `  ${fajta}: hivatkozást visel ${szam.hivatkozastVisel} termék, ` +
+          `ebből ${szam.kapcsolatotKapott} kap kapcsolatot ` +
+          `(${szam.irhatoKapcsolat} sor); feloldatlan ${szam.feloldatlan}, ` +
           `önhivatkozás ${szam.onhivatkozas}, duplikátum ${szam.duplikatum}, ` +
           `azonosító nélkül ${szam.azonositoNelkul}.\n`,
+      );
+      out.stdout(
+        `    ${apply ? "eltávolított" : "eltávolítandó"} ${szam.eltavolitott} sor ` +
+          `${szam.eltavolitottTermek} terméken (a forrásban már nincs kapcsolat); ` +
+          `olvashatatlan pillanatkép ${szam.olvashatatlan}, ` +
+          `csak feloldatlan hivatkozás ${szam.csakFeloldatlan} terméken -- ` +
+          `ezeken NEM törlünk.\n`,
       );
       if (minta[fajta].length > 0)
         out.stdout(`    minta: ${minta[fajta].join(", ")}\n`);
@@ -195,11 +311,16 @@ function uresSzamok(): UjraepitesSzamok {
   return {
     termek: 0,
     hivatkozastVisel: 0,
+    kapcsolatotKapott: 0,
     irhatoKapcsolat: 0,
     feloldatlan: 0,
     onhivatkozas: 0,
     duplikatum: 0,
     azonositoNelkul: 0,
+    eltavolitott: 0,
+    eltavolitottTermek: 0,
+    olvashatatlan: 0,
+    csakFeloldatlan: 0,
   };
 }
 
@@ -239,6 +360,27 @@ if (
             })
           ).map((sor) => [sor.externalId, sor.entityId]),
         ),
+      /*
+        EGY OSSZESITES, NEM TERMEKENKENTI LEKERDEZES: ketezer termeknel a
+        masodik alak negyezer kort jelentene, es a parancs epp azert letezik,
+        hogy EGYSZER fusson le.
+      */
+      meglevoKapcsolatok: async () =>
+        new Map(
+          (
+            await prisma.productRelation.groupBy({
+              by: ["sourceProductId", "relationType"],
+              where: { source: "UNAS" },
+              _count: { _all: true },
+            })
+          ).map((sor) => [
+            meglevoKulcs(
+              sor.sourceProductId,
+              sor.relationType as KapcsolatFajta,
+            ),
+            sor._count._all,
+          ]),
+        ),
       ir: async ({ sourceProductId, fajta, celProductIdk }) =>
         prisma.$transaction(async (tx) => {
           /**
@@ -247,9 +389,11 @@ if (
            * A torles a SAJAT forrasunkra szukit (`source: "UNAS"`): egy kezzel
            * felvett kapcsolatot nem viszunk el.
            */
-          await tx.productRelation.deleteMany({
+          const torolt = await tx.productRelation.deleteMany({
             where: { sourceProductId, relationType: fajta, source: "UNAS" },
           });
+          if (celProductIdk.length === 0)
+            return { torolt: torolt.count, irt: 0 };
           const created = await tx.productRelation.createMany({
             data: celProductIdk.map((targetProductId, index) => ({
               sourceProductId,
@@ -260,7 +404,7 @@ if (
             })),
             skipDuplicates: true,
           });
-          return created.count;
+          return { torolt: torolt.count, irt: created.count };
         }),
     },
   );

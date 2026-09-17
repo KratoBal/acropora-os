@@ -98,10 +98,33 @@ describe("kapcsolatHivatkozasok", () => {
 
   it("a hiányzó mező üres lista, nem hiba", () => {
     for (const payload of [{}, { SimilarProducts: "" }, null, "szöveg"])
-      assert.deepEqual(kapcsolatHivatkozasok(payload, "SIMILAR"), {
-        hivatkozasok: [],
-        azonositoNelkul: 0,
-      });
+      assert.deepEqual(
+        kapcsolatHivatkozasok(payload, "SIMILAR").hivatkozasok,
+        [],
+      );
+  });
+
+  /**
+   * AZ OLVASHATATLAN PILLANATKEP NEM UGYANAZ, MINT A NULLA HIVATKOZAS.
+   *
+   * A ket eset TEENDOJE mas: a nulla hivatkozas azt allitja, hogy a forrasban
+   * nincs kapcsolat (tehat amit nalunk talalunk, elavult); az olvashatatlan
+   * pillanatkep viszont azt, hogy NEM TUDJUK. A masodikbol torolni annyi,
+   * mintha egy meretlen allitasra irnank.
+   */
+  it("az olvashatóságot külön jelzi, nem a nulla hivatkozásból következik", () => {
+    // A HIANYZO MEZO OLVASHATO: a termek nem visel kapcsolatot.
+    const uresDeOlvashato = kapcsolatHivatkozasok({ Id: "1" }, "SIMILAR");
+    assert.deepEqual(uresDeOlvashato.hivatkozasok, []);
+    assert.equal(uresDeOlvashato.olvashato, true);
+
+    // A HIANYZO VAGY NEM-OBJEKTUM PILLANATKEP NEM.
+    for (const payload of [null, undefined, "szöveg", 42, ["tömb"]])
+      assert.equal(
+        kapcsolatHivatkozasok(payload, "SIMILAR").olvashato,
+        false,
+        `olvashatónak jelölt: ${JSON.stringify(payload)}`,
+      );
   });
 
   /**
