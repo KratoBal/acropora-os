@@ -7,6 +7,7 @@ import {
   ConfirmDialog,
   EmptyState,
   FormField,
+  Input,
   Skeleton,
   Textarea,
 } from "@acropora/ui";
@@ -119,6 +120,15 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const [documents, setDocuments] = useState<ServiceJobDocumentSummary[]>([]);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [documentFiles, setDocumentFiles] = useState<File[]>([]);
+  /**
+   * A FELTOLTESKORI FELIRAT, EGY KERESRE EGY (Balazs kerese, 2026-09-17:
+   * "akar mar a feltoltesnel is").
+   *
+   * A vegpont tiz fajlt fogad, es ez az egy szoveg MINDEGYIKRE rakerul --
+   * tipikusan egy helyszinen, egy percen belul keszult sorozatrol van szo.
+   * Kepenkent mast a csempen lehet irni, a feltoltes utan.
+   */
+  const [documentCaption, setDocumentCaption] = useState("");
   const [uploading, setUploading] = useState(false);
   const [documentToDelete, setDocumentToDelete] =
     useState<ServiceJobDocumentSummary | null>(null);
@@ -314,10 +324,25 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
       // parhuzamosan: a keret-ellenorzes a mar felhasznalt helyet olvassa, es
       // parhuzamos irasoknal mindketto ugyanazt a regi osszeget latna.
       if (kepek.length)
-        await serviceJobsApi.uploadDocument(token, jobId, "PHOTO", kepek);
+        await serviceJobsApi.uploadDocument(
+          token,
+          jobId,
+          "PHOTO",
+          kepek,
+          documentCaption,
+        );
       if (egyeb.length)
-        await serviceJobsApi.uploadDocument(token, jobId, "OTHER", egyeb);
+        await serviceJobsApi.uploadDocument(
+          token,
+          jobId,
+          "OTHER",
+          egyeb,
+          documentCaption,
+        );
       setDocumentFiles([]);
+      // A MEZOK CSAK SIKER UTAN URULNEK: egy elhasalt feltoltes utan a
+      // begepelt felirat ottmarad, es a masodik nekifutas rovidebb.
+      setDocumentCaption("");
       await loadDocuments();
     } catch (cause) {
       setDocumentsError(
@@ -639,6 +664,25 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 /* A JOG HIANYA ITT A FUGGVENY HIANYA, nem egy `false` zaszlo: igy
                    a galeria nem tud "torol, de le van tiltva" allapotba kerulni. */
                 onDelete={canManage ? setDocumentToDelete : undefined}
+                /**
+                 * A FELIRAT UTOLAG IS IRHATO, es a lista UJRATOLTODIK utana --
+                 * nem a helyi allapotot irjuk at. A valasz csak nyugta, tehat a
+                 * csempe a szerver szerinti allapotot mutassa, ne azt, amit mi
+                 * hiszunk rola.
+                 */
+                onSaveCaption={
+                  canManage
+                    ? async (item, caption) => {
+                        await serviceJobsApi.setDocumentCaption(
+                          token,
+                          jobId,
+                          item.id,
+                          caption,
+                        );
+                        await loadDocuments();
+                      }
+                    : undefined
+                }
                 emptyText="Ehhez a jegyhez még nincs fénykép vagy fájl csatolva."
               />
               {canManage ? (
@@ -664,6 +708,28 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                       onChange={(event) =>
                         setDocumentFiles(Array.from(event.target.files ?? []))
                       }
+                    />
+                  </div>
+                  {/*
+                    A FELIRAT MEZO A VALASZTO MELLETT ALL, es ELHAGYHATO: egy
+                    kep magaert is beszelhet. Aki nem ir bele, ugyanugy tolt
+                    fel, mint eddig.
+                  */}
+                  <div className="space-y-1">
+                    <label
+                      className="block text-sm font-semibold"
+                      htmlFor="hibajegy-csatolmany-felirat"
+                    >
+                      Felirat (elhagyható)
+                    </label>
+                    <Input
+                      id="hibajegy-csatolmany-felirat"
+                      value={documentCaption}
+                      maxLength={500}
+                      onChange={(event) =>
+                        setDocumentCaption(event.target.value)
+                      }
+                      placeholder="Mit látunk a képeken?"
                     />
                   </div>
                   <Button

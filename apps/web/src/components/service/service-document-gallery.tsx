@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@acropora/ui";
+import { Button, Input } from "@acropora/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
@@ -51,6 +51,14 @@ export interface ServiceDocumentGalleryItem {
   fileName: string;
   contentType: string;
   sizeBytes: number;
+  /**
+   * MIT LATUNK A KEPEN. `null`, ha nincs felirat.
+   *
+   * A HIANY EGYFELE ALAKBAN ALL, ugyanugy, mint a szerveren: kulonben a "nincs
+   * felirat" es a "szandekosan ures felirat" ket allapota egyformanak tunne, es
+   * a rajzolonak ket agat kellene nyitnia ugyanarra a hianyra.
+   */
+  caption: string | null;
   createdAt: string;
 }
 
@@ -82,6 +90,7 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
   loadBlob,
   onDownload,
   onDelete,
+  onSaveCaption,
   emptyText,
 }: {
   items: readonly T[];
@@ -90,6 +99,16 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
   onDownload: (item: T) => void;
   /** `undefined`, ha a nezonek nincs joga torolni. */
   onDelete?: (item: T) => void;
+  /**
+   * A FELIRAT MENTESE. `undefined`, ha a nezonek nincs joga irni.
+   *
+   * A JOG HIANYA ITT IS A FUGGVENY HIANYA, nem egy `false` zaszlo: igy a
+   * csempe nem tud "szerkesztheto, de le van tiltva" allapotba kerulni. A
+   * felirat OLVASHATO marad annak is, aki nem irhatja.
+   *
+   * A `null` a TORLES: a hivo ugyanezen az uton veszi le a feliratot.
+   */
+  onSaveCaption?: (item: T, caption: string | null) => Promise<void>;
   emptyText: string;
 }) {
   const kepek = items.filter(isGalleryImage);
@@ -97,6 +116,17 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
 
   const [allapotok, setAllapotok] = useState<Record<string, KepAllapot>>({});
   const [nagyitott, setNagyitott] = useState<T | null>(null);
+  /**
+   * A FELIRAT SZERKESZTESE EGYSZERRE EGY CSEMPEN NYITHATO.
+   *
+   * `null`, ha egyik sincs nyitva. Nem csempenkenti allapot: ket egyszerre
+   * nyitott mezo mellett a mentes gombja mellett allna egy masik, el nem
+   * mentett szoveg -- es a felhasznalo nem latna, melyiket mentette.
+   */
+  const [szerkesztett, setSzerkesztett] = useState<string | null>(null);
+  const [piszkozat, setPiszkozat] = useState("");
+  const [mentes, setMentes] = useState(false);
+  const [feliratHiba, setFeliratHiba] = useState<string | null>(null);
 
   /**
    * A LETOLTO FUGGVENY `ref`-BEN ALL, ES NEM A FUGGOSEGI LISTABAN.
@@ -191,6 +221,37 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
     return () => window.removeEventListener("keydown", kezelo);
   }, [nagyitott]);
 
+  /**
+   * A FELIRAT MENTESE -- ES AZ URES MEZO TORLEST JELENT.
+   *
+   * `null` megy le, nem ures string: a szerver ugyanezt a szabalyt mondja ki, es
+   * ha a kliens ures stringet kuldene, a "nincs felirat" es a "szandekosan ures
+   * felirat" ket allapota egyformanak tunne.
+   *
+   * A MEZO CSAK SIKER UTAN ZAR BE. Ha a hivas elbukik, a begepelt szoveg
+   * OTTMARAD -- egy elveszett felirat ujra leirando, es a masodik nekifutas
+   * rovidebb lenne, mint az elso. Ugyanaz a megfontolas, mint a jegy
+   * lepteteseneel a megjegyzes-mezonel.
+   */
+  async function feliratMentese(item: T) {
+    if (!onSaveCaption) return;
+    setMentes(true);
+    setFeliratHiba(null);
+    try {
+      const szoveg = piszkozat.trim();
+      await onSaveCaption(item, szoveg ? szoveg : null);
+      setSzerkesztett(null);
+    } catch (cause) {
+      setFeliratHiba(
+        cause instanceof Error
+          ? cause.message
+          : "A felirat mentése nem sikerült.",
+      );
+    } finally {
+      setMentes(false);
+    }
+  }
+
   if (items.length === 0)
     /* A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik, es a kezelo
        megvarja. Ez a mondat kimondja, hogy nincs mire varni. */
@@ -231,31 +292,100 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                   </div>
                 )}
                 <div className="space-y-1 px-2 py-2">
-                  <p className="truncate font-medium" title={item.fileName}>
+                  {/*
+                    A FELIRAT A FAJLNEV FOLOTT ALL, es ez nem elrendezesi izles:
+                    a felirat azt mondja meg, MIT LATUNK, a fajlnev csak azt,
+                    hogy a telefon minek nevezte el. A kettobol az elso az, amit
+                    a kezelo keres.
+                  */}
+                  {item.caption ? (
+                    <p className="font-medium" title={item.caption}>
+                      {item.caption}
+                    </p>
+                  ) : null}
+                  <p
+                    className={
+                      item.caption
+                        ? "truncate text-xs text-dusk-500"
+                        : "truncate font-medium"
+                    }
+                    title={item.fileName}
+                  >
                     {item.fileName}
                   </p>
                   <p className="text-xs text-dusk-500">
                     {formatFileSize(item.sizeBytes)} ·{" "}
                     {formatDateTime(item.createdAt)}
                   </p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => onDownload(item)}
-                    >
-                      Letöltés
-                    </Button>
-                    {onDelete ? (
+                  {onSaveCaption && szerkesztett === item.id ? (
+                    <div className="space-y-1">
+                      <label className="sr-only" htmlFor={`felirat-${item.id}`}>
+                        Felirat
+                      </label>
+                      <Input
+                        id={`felirat-${item.id}`}
+                        value={piszkozat}
+                        maxLength={500}
+                        onChange={(event) => setPiszkozat(event.target.value)}
+                        placeholder="Mit látunk a képen?"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          disabled={mentes}
+                          onClick={() => void feliratMentese(item)}
+                        >
+                          Mentés
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={mentes}
+                          onClick={() => {
+                            setSzerkesztett(null);
+                            setFeliratHiba(null);
+                          }}
+                        >
+                          Mégse
+                        </Button>
+                      </div>
+                      {feliratHiba ? (
+                        <p className="text-xs text-rose-600">{feliratHiba}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => onDelete(item)}
+                        onClick={() => onDownload(item)}
                       >
-                        Törlés
+                        Letöltés
                       </Button>
-                    ) : null}
-                  </div>
+                      {onSaveCaption ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setSzerkesztett(item.id);
+                            setPiszkozat(item.caption ?? "");
+                            setFeliratHiba(null);
+                          }}
+                        >
+                          {item.caption ? "Felirat átírása" : "Felirat"}
+                        </Button>
+                      ) : null}
+                      {onDelete ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => onDelete(item)}
+                        >
+                          Törlés
+                        </Button>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
               </li>
             );

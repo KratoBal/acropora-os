@@ -28,6 +28,7 @@ const api = vi.hoisted(() => ({
   documents: vi.fn(),
   uploadDocument: vi.fn(),
   downloadDocument: vi.fn(),
+  setDocumentCaption: vi.fn(),
   deleteDocument: vi.fn(),
 }));
 const sheets = vi.hoisted(() => ({
@@ -179,6 +180,7 @@ describe("ServiceJobDetailPage", () => {
     api.uploadDocument.mockReset().mockResolvedValue([csatolmany()]);
     api.downloadDocument.mockReset().mockResolvedValue(new Blob(["x"]));
     api.deleteDocument.mockReset().mockResolvedValue({ removed: true });
+    api.setDocumentCaption.mockReset().mockResolvedValue({ ok: true });
     api.setAssignees.mockReset();
     /*
       A VALASZTHATO KOLLEGAK MOCKJA MINDIG ALL: a `useAssignableUsers` a
@@ -761,6 +763,76 @@ describe("ServiceJobDetailPage", () => {
       screen.queryByRole("button", { name: "Delegálás mentése" }),
     ).toBeNull();
     expect(screen.getByText("Delegált kollégák")).toBeTruthy();
+  });
+
+  /**
+   * A FELTOLTESKORI FELIRAT ELJUT A HIVASIG.
+   *
+   * Balazs kerese (2026-09-17): "akar mar a feltoltesnel is". A mezo
+   * ELHAGYHATO, tehat a felirat NELKULI feltoltes is ugyanugy megy -- azt a
+   * masodik allitas meri, kulonben ez akkor is teljesulne, ha a mezo kotelezo
+   * lenne.
+   */
+  it("a feltöltéskor megadott felirat eljut a hívásig", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    const valaszto = (await screen.findByLabelText(
+      "Új csatolmány",
+    )) as HTMLInputElement;
+    const kep = new File(["kep"], "medence.jpg", { type: "image/jpeg" });
+    fireEvent.change(valaszto, { target: { files: [kep] } });
+    fireEvent.change(screen.getByPlaceholderText("Mit látunk a képeken?"), {
+      target: { value: "  A hármas medence  " },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Feltöltés" }));
+
+    await waitFor(() => expect(api.uploadDocument).toHaveBeenCalledTimes(1));
+    expect(api.uploadDocument.mock.calls[0]?.[4]).toBe("  A hármas medence  ");
+  });
+
+  it("felirat nélkül is feltölthető", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    const valaszto = (await screen.findByLabelText(
+      "Új csatolmány",
+    )) as HTMLInputElement;
+    fireEvent.change(valaszto, {
+      target: {
+        files: [new File(["x"], "a.pdf", { type: "application/pdf" })],
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Feltöltés" }));
+
+    await waitFor(() => expect(api.uploadDocument).toHaveBeenCalledTimes(1));
+    expect(api.uploadDocument.mock.calls[0]?.[4]).toBe("");
+  });
+
+  /**
+   * A CSEMPEN IRT FELIRAT A SZERVERRE MEGY, ES A LISTA UJRATOLT.
+   *
+   * MIERT KELL AZ UJRATOLTES ALLITAS IS: a valasz csak nyugta. Ha a lap a helyi
+   * allapotot irna at helyette, a csempe azt mutatna, amit MI hiszunk rola, nem
+   * azt, amit a szerver tarol -- es egy elutasitott vagy megvagott szoveg
+   * csendben masnak latszana.
+   */
+  it("a csempén írt felirat a szerverre megy, és a lista újratölt", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Felirat" }));
+    fireEvent.change(screen.getByPlaceholderText("Mit látunk a képen?"), {
+      target: { value: "Törött tömítés" },
+    });
+    const elozoBetoltes = api.documents.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() =>
+      expect(api.setDocumentCaption).toHaveBeenCalledTimes(1),
+    );
+    expect(api.setDocumentCaption.mock.calls[0]?.[2]).toBe("doc-1");
+    expect(api.setDocumentCaption.mock.calls[0]?.[3]).toBe("Törött tömítés");
+    await waitFor(() =>
+      expect(api.documents.mock.calls.length).toBeGreaterThan(elozoBetoltes),
+    );
   });
 
   /**
