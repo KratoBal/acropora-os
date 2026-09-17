@@ -74,7 +74,6 @@ import { canSignWorksheetVersion } from "@/lib/worksheets/worksheet-signature";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
-  formatWorksheetAmount,
   formatWorksheetDate,
   worksheetAssigneeLine,
   worksheetDetailRows,
@@ -1127,26 +1126,17 @@ export default function WorksheetDetailScreen() {
               ))
             )}
 
-            <View style={styles.card}>
-              <View style={styles.row}>
-                <Text style={styles.label}>Nettó</Text>
-                <Text style={styles.value}>
-                  {formatWorksheetAmount(current.netAmount, current.currency)}
-                </Text>
-              </View>
-              <View style={styles.row}>
-                <Text style={styles.label}>Áfa</Text>
-                <Text style={styles.value}>
-                  {formatWorksheetAmount(current.vatAmount, current.currency)}
-                </Text>
-              </View>
-              <View style={styles.row}>
-                <Text style={styles.label}>Bruttó</Text>
-                <Text style={styles.total}>
-                  {formatWorksheetAmount(current.grossAmount, current.currency)}
-                </Text>
-              </View>
-            </View>
+            {/*
+              AZ OSSZESITES KARTYA (netto, afa, brutto) 2026-09-17-EN KIKERULT.
+
+              Balazs dontese ("B"): az ar-mezok sehol nem jelennek meg, sem a
+              weben, sem az appban -- es ezert a lezarasi ar-feltetel is kikerult
+              (#809, beolvadt). Az ADAT megmarad, ar tovabbra is rendelheto.
+
+              ES A HELYE NEM MARAD URESEN: a #806-tal megjott az osszesitett
+              MUNKAORA (`current.laborHours`), es Balazs ugyanabban a keresben
+              azt kerte a lap vegere. Az a kovetkezo szelet, kulon PR-ben.
+            */}
 
             {/*
               AZ ALAIRAS GOMBJA. UGYANAZ A KET FELTETEL, mint a szerveren

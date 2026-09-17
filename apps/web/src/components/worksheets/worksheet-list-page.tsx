@@ -28,7 +28,6 @@ import { sv } from "@/components/service/service-theme";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
-  formatAmount,
   formatDateTime,
   worksheetLabelOrDraft,
   worksheetStatusLabel,
@@ -316,7 +315,8 @@ export function WorksheetListPage() {
                     <th className={sv.tableHead}>Partner</th>
                     <th className={sv.tableHead}>Felelős</th>
                     <th className={sv.tableHead}>Állapot</th>
-                    <th className={`${sv.tableHead} text-right`}>Bruttó</th>
+                    {/* A "Bruttó" oszlop 2026-09-17-én kikerült: Balázs
+                        döntése ("B") szerint az ár sehol nem jelenik meg. */}
                     <th className={sv.tableHead}>Módosítva</th>
                   </tr>
                 </thead>
@@ -395,11 +395,6 @@ export function WorksheetListPage() {
                           valoban ingyenes munka. A kulonbseg a sorokban van, a
                           lista viszont nem kapja meg oket. Kitalalni nem
                           szabad: a kartyan kulon tetel, es a vegpont donti el. */}
-                      <td
-                        className={`${sv.tableCell} whitespace-nowrap text-right tabular-nums text-ink`}
-                      >
-                        {formatAmount(worksheet.grossAmount)}
-                      </td>
                       <td className={`${sv.tableCell} ${sv.rowMeta}`}>
                         {formatDateTime(worksheet.updatedAt)}
                       </td>
