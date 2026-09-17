@@ -184,7 +184,19 @@ describe("a kiosztás a képernyőn", () => {
    * AKI CSAK NÉZHET, AZ IS LÁTJA A NEVEKET, ÉS MEGTUDJA, MIÉRT NINCS GOMB.
    */
   it("a képernyő kimondja, miért nincs gombja annak, aki csak nézhet", () => {
-    assert.match(kepernyo(), /readOnlyAssigneeNotice/);
+    /**
+     * A KIRAJZOLT ALAKRA ÁLL, NEM A NÉVRE -- és ez mérésből jön, nem
+     * óvatosságból. Az első alakja a puszta `readOnlyAssigneeNotice` névre
+     * illeszkedett, és a kalibráció NULLA pirosat adott, amikor a mondatot
+     * kivettem a jelölésből: a DEKLARÁCIÓ ott maradt, tehát a név megvolt.
+     * Az az állítás a saját segédváltozóm létezését mérte, nem azt, hogy a
+     * szerelő elolvassa a mondatot.
+     */
+    assert.match(
+      kepernyo(),
+      /<Text[^>]*>\{readOnlyAssigneeNotice\}<\/Text>/,
+      "a mondat nincs kirajzolva: a hiányzó gomb oka némán tűnne el",
+    );
   });
 
   /**
