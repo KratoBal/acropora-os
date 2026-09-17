@@ -135,7 +135,15 @@ describe("a kezdőképernyő ugyanezt a sort írja ki", () => {
     // Az `isEmbeddedLaunch` az EGYETLEN mező, ami megmondja, hogy a futó csomag
     // a buildé vagy egy letöltött frissítésé. Ha valaha kikerül a hívásból, a
     // felirat megmarad, de a lényeget hallgatja el.
-    assert.match(source, /isEmbeddedLaunch/);
-    assert.match(source, /updateId/);
+    /**
+     * A TELJES LEKEPEZESRE, NEM A PUSZTA NEVRE.
+     *
+     * Mindket nev KETSZER all -- UGYANABBAN a sorban, kulcskent es ertekkent
+     * (`isEmbeddedLaunch: Updates.isEmbeddedLaunch`). Egy puszta nev-illesztes
+     * tehat akkor is zold, ha a MEZO megmarad, de az `Updates` oldalrol mar nem
+     * jon ertek -- es pont az a bekotes, amit ez az allitas ved.
+     */
+    assert.match(source, /isEmbeddedLaunch: Updates\.isEmbeddedLaunch/);
+    assert.match(source, /updateId: Updates\.updateId/);
   });
 });

@@ -103,7 +103,13 @@ describe("a kezdőképernyő kimondja, ha nincs csempe", () => {
     const forras = kepernyo();
 
     // KONTROLL A KERESESRE: a fajl be is toltodott, es a modul-szakasz benne van.
-    assert.match(forras, /Modulok/);
+    // A CIMSORRA, NEM A PUSZTA SZORA: a "Modulok" egy KOMMENTBEN is all
+    // (az ures szakaszrol szolo magyarazatban), es az zolden tartana egy
+    // allitast akkor is, ha a cimsor eltunne.
+    assert.match(
+      forras,
+      /<Text style=\{styles\.sectionTitle\}>Modulok<\/Text>/,
+    );
 
     assert.match(forras, /lathatoCsempek === 0/);
     assert.match(forras, /Nincs megjeleníthető modul/);

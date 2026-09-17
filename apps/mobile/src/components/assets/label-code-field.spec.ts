@@ -90,7 +90,8 @@ describe("a matricakód mezője és beolvasója egy példányban", () => {
     // talalnak -- peldaul egy atnevezes utan, amirol senki nem tud.
     const s = olvas(MEZO);
     assert.match(s, /<CameraView/);
-    assert.match(s, /useCameraPermissions/);
+    // A HIVAS ALAKJARA: a puszta nevet az `import` sor is eletben tartja.
+    assert.match(s, /useCameraPermissions\(\)/);
   });
 
   /**
