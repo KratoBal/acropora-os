@@ -14,8 +14,11 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from "class-validator";
+
+import { DOCUMENT_CAPTION_MAX_LENGTH } from "../../documents/document-caption.js";
 
 export const WORKSHEET_VERSION_STATUSES = [
   "DRAFT",
@@ -430,4 +433,34 @@ export class UploadWorksheetDocumentDto {
   @IsIn(WORKSHEET_DOCUMENT_TYPES)
   @IsOptional()
   type?: (typeof WORKSHEET_DOCUMENT_TYPES)[number];
+
+  /**
+   * A FELIRAT MAR A FELTOLTESKOR MEGADHATO.
+   *
+   * EGY KERESRE EGY FELIRAT: a vegpont egyszerre tiz fajlt fogad, es ez az egy
+   * szoveg MINDEGYIKRE rakerul. Aki kepenkent mast ir, a szerkeszto uton teszi
+   * (`PATCH`), vagy egyesevel tolt fel. A fajlonkenti, tomb-alaku felirat
+   * SZANDEKOSAN nem szerepel: a multipart mezok sorrendje nem garantalja az
+   * igazitast a fajlokhoz, es egy elcsuszott felirat NEM hibazna -- csak rossz
+   * kepre kerulne.
+   */
+  @IsString()
+  @MaxLength(DOCUMENT_CAPTION_MAX_LENGTH)
+  @IsOptional()
+  caption?: string;
+}
+
+/**
+ * A FELIRAT UTOLAGOS ATIRASA EGY MUNKALAP-CSATOLMANYON.
+ *
+ * A HIANYZO MEZO ES A `null` UGYANAZT JELENTI: toroljem a feliratot. Ez a
+ * vegpont EGY mezot ir, tehat nincs mit megkulonboztetni -- a `ValidateIf`
+ * ezert engedi at mind a kettot, es a szoveg-ellenorzes csak akkor fut, ha van
+ * szoveg.
+ */
+export class UpdateWorksheetDocumentCaptionDto {
+  @ValidateIf((_, ertek) => ertek !== null && ertek !== undefined)
+  @IsString()
+  @MaxLength(DOCUMENT_CAPTION_MAX_LENGTH)
+  caption?: string | null;
 }

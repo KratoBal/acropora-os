@@ -380,3 +380,132 @@ describe("a hibajegy-csatolmány törlése", () => {
     );
   });
 });
+
+/**
+ * A CSATOLMANY FELIRATA.
+ *
+ * Balazs kerese (2026-09-17): a fenykephez lehessen megjegyzest irni, akar mar
+ * a feltoltesnel is. AMIT ITT MERUNK: hogy a felirat eljut a SORIG, es hogy a
+ * hiany EGYFELE alakban all. A szoveg tisztitasanak szabalya kulon all
+ * (`documents/document-caption.spec.ts`), a valodi oszlop pedig az adatbazison
+ * (`packages/database` migracio, a CI-ben).
+ */
+describe("a hibajegy-csatolmány felirata", () => {
+  it("a feltöltéskor megadott felirat eljut a sorig", async () => {
+    delete process.env.DOCUMENT_STORE_ROOT;
+    let written: { caption: unknown } | null = null;
+    const service = serviceWith({
+      addDocument: async (input: { caption: unknown }) => {
+        written = input;
+        return { id: "doc-1" };
+      },
+    });
+
+    await service.addDocument(
+      "job-1",
+      "PHOTO",
+      JPEG,
+      BELSOS,
+      "  A hármas medence szivattyúja  ",
+    );
+
+    assert.equal(
+      (written as { caption: unknown } | null)?.caption,
+      "A hármas medence szivattyúja",
+    );
+  });
+
+  /**
+   * A HIANY `null`-KENT MEGY LE, NEM `undefined`-KENT.
+   *
+   * MI PIROSIT: ha a szolgaltatas a kapott erteket TOVABBADNA tisztitas nelkul.
+   * Akkor a sorba `undefined` kerulne, a Prisma pedig a mezot KIHAGYNA -- ami
+   * egy UJ sornal ugyanaz, mint a `null`, egy SZERKESZTESNEL viszont NEM: ott a
+   * torles maradna el, csendben.
+   */
+  it("felirat nélkül null megy a sorba, nem undefined", async () => {
+    delete process.env.DOCUMENT_STORE_ROOT;
+    let written: { caption: unknown } | null = null;
+    const service = serviceWith({
+      addDocument: async (input: { caption: unknown }) => {
+        written = input;
+        return { id: "doc-1" };
+      },
+    });
+
+    await service.addDocument("job-1", "PHOTO", PDF, BELSOS);
+
+    assert.equal((written as { caption: unknown } | null)?.caption, null);
+    // ES A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI.
+    await service.addDocument("job-1", "PHOTO", PDF, BELSOS, "   ");
+    assert.equal((written as { caption: unknown } | null)?.caption, null);
+  });
+
+  /**
+   * A NEM LETEZO CSATOLMANY FELIRATA NEM IRHATO AT -- ES EZ NEM MAGATOL ERTETODO.
+   *
+   * A tarolo `updateMany` hivasa NULLA sorra is SIKERES. Ha a szolgaltatas ezt
+   * sikernek venne, a felulet a sajat begepelt szoveget mutatna tovabb, mintha
+   * mentve lenne -- es a kovetkezo betoltesnel tunne el, magyarazat nelkul.
+   *
+   * MI PIROSIT: a nulla-ellenorzes elhagyasa.
+   */
+  it("nem létező csatolmány feliratára nem találhatót mond", async () => {
+    const service = serviceWith({ setCaption: async () => 0 });
+
+    await assert.rejects(
+      () => service.setDocumentCaption("job-1", "doc-9", "bármi", BELSOS),
+      /nem található/,
+    );
+  });
+
+  /**
+   * POZITIV KONTROLL A FENTI MELLE: ha a tarolo EGY sort erintett, a hivas
+   * ATMEGY, es a felirat tisztitva erkezik le. Enelkul a fenti allitas akkor is
+   * teljesulne, ha a metodus MINDIG dobna.
+   */
+  it("létező csatolmány feliratát megírja, tisztított szöveggel", async () => {
+    const kapott: unknown[] = [];
+    const service = serviceWith({
+      setCaption: async (...args: unknown[]) => {
+        kapott.push(args);
+        return 1;
+      },
+    });
+
+    const valasz = await service.setDocumentCaption(
+      "job-1",
+      "doc-1",
+      "  A kompresszor tömítése  ",
+      BELSOS,
+    );
+
+    assert.deepEqual(valasz, { ok: true });
+    assert.deepEqual(kapott, [["job-1", "doc-1", "A kompresszor tömítése"]]);
+  });
+
+  /**
+   * A FELIRAT TORLESE UGYANEZEN AZ UTON MEGY, es `null`-kent er le.
+   *
+   * MI PIROSIT: ha az ures szoveg ures stringkent menne le. Akkor a "nincs
+   * felirat" es a "szandekosan ures felirat" ket allapota egyformanak tunne, es
+   * senki nem tudna megmondani, melyiket jelenti.
+   */
+  it("a felirat törlése null-ként ér le", async () => {
+    const kapott: unknown[] = [];
+    const service = serviceWith({
+      setCaption: async (...args: unknown[]) => {
+        kapott.push(args);
+        return 1;
+      },
+    });
+
+    await service.setDocumentCaption("job-1", "doc-1", "", BELSOS);
+    await service.setDocumentCaption("job-1", "doc-1", null, BELSOS);
+
+    assert.deepEqual(kapott, [
+      ["job-1", "doc-1", null],
+      ["job-1", "doc-1", null],
+    ]);
+  });
+});

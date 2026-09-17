@@ -6,6 +6,7 @@ import {
   Get,
   Header,
   Param,
+  Patch,
   Post,
   StreamableFile,
   UploadedFiles,
@@ -19,6 +20,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import {
   MAX_SERVICE_JOB_DOCUMENTS_PER_UPLOAD,
+  UpdateServiceJobDocumentCaptionDto,
   UploadServiceJobDocumentDto,
 } from "./service-job-documents.dto.js";
 import { ServiceJobDocumentsService } from "./service-job-documents.service.js";
@@ -79,7 +81,13 @@ export class ServiceJobDocumentsController {
     const created = [];
     for (const file of files) {
       created.push(
-        await this.service.addDocument(id, input.type ?? "PHOTO", file, user),
+        await this.service.addDocument(
+          id,
+          input.type ?? "PHOTO",
+          file,
+          user,
+          input.caption,
+        ),
       );
     }
     // MINDIG LISTA, EGY FAJLNAL IS: egy valasz, aminek a TIPUSA a bemenettol
@@ -114,6 +122,22 @@ export class ServiceJobDocumentsController {
       length: document.bytes.length,
       disposition: `attachment; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
     });
+  }
+
+  /**
+   * A FELIRAT ATIRASA. `PATCH`, mert a sornak EGY mezojet mozditja -- a
+   * csatolmany tobbi adata (fajl, meret, lenyomat) a feltoltes pillanatabol
+   * valo, es nem is irhato felul.
+   */
+  @Patch(":id/documents/:documentId")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setDocumentCaption(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @Body() input: UpdateServiceJobDocumentCaptionDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setDocumentCaption(id, documentId, input.caption, user);
   }
 
   @Delete(":id/documents/:documentId")
