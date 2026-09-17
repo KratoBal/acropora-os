@@ -147,10 +147,30 @@ describe("a hibajegy csatolmány-szakasza", () => {
       3,
       `a lista-kulcs ${db} helyen áll: a lekérdezés, a feltöltés ÉS a felirat érvénytelenítése kell`,
     );
-    assert.match(
-      s,
-      /invalidateQueries\(\{\s*queryKey: \["service-job-documents", id\],\s*\}\)/,
-      "a feltöltés után a galéria nem frissül: a friss kép nem jelenne meg",
+    /**
+     * ES AZ ERVENYTELENITES ALAKJAT IS DARABSZAMMAL MERJUK, NEM JELENLETTEL.
+     *
+     * MERVE 2026-09-17 este, a csomag OSSZES forras-olvaso specjenek
+     * vegigmeresevel: ez a minta MA MAR KETSZER illeszkedik, mert a
+     * felirat-mentes ugyanezt a kulcsot ervenyteleniti. Egy `assert.match`
+     * tehat ZOLD MARADNA, ha a FELTOLTES utani ervenytelenitest kivennek --
+     * a felirate egyedul tartana eletben.
+     *
+     * Ez pontosan az a res, amit a kulcs-darabszam melle irt indoklas mar
+     * egyszer megnevezett, csak egy szinttel feljebb: ott a `useQuery`
+     * definicioja tartotta volna zolden, itt a masik ervenytelenites.
+     *
+     * A KET SZAM EGYUTT ZAR: harom kulcs (definicio + ket ervenytelenites) es
+     * KET ervenytelenito hivas. Ha barmelyik eltunik, valamelyik pirosodik.
+     */
+    const ervenytelenitesek =
+      s.split(
+        /invalidateQueries\(\{\s*queryKey: \["service-job-documents", id\],\s*\}\)/,
+      ).length - 1;
+    assert.equal(
+      ervenytelenitesek,
+      2,
+      `${ervenytelenitesek} érvénytelenítés áll a dokumentum-kulcsra; a feltöltés ÉS a felirat mentése után is kell`,
     );
   });
 
