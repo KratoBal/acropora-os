@@ -30,6 +30,13 @@ describe("getWebshopCapabilities", () => {
     assert.equal(capabilities.ordersView, false);
   });
 
+  it("keeps the partner service role out of the webshop and partner workspace", () => {
+    const capabilities = getWebshopCapabilities("PARTNER_SERVICE");
+    assert.equal(capabilities.workspace, false);
+    assert.equal(capabilities.partnersView, false);
+    assert.equal(capabilities.partnersManage, false);
+  });
+
   /**
    * The products tile used to be `available` for this role while
    * `enabled={false}` - visible and unreachable, which reads as a fault rather
@@ -88,6 +95,16 @@ describe("getServiceCapabilities", () => {
     assert.equal(getServiceCapabilities("SALES").assetsView, false);
   });
 
+  it("gives the partner service role only the shared service capabilities", () => {
+    const capabilities = getServiceCapabilities("PARTNER_SERVICE");
+    assert.equal(capabilities.assetsView, true);
+    assert.equal(capabilities.assetsManage, true);
+    assert.equal(capabilities.worksheetsView, true);
+    assert.equal(capabilities.worksheetsManage, true);
+    assert.equal(capabilities.serviceJobsView, true);
+    assert.equal(capabilities.serviceJobsManage, true);
+  });
+
   /**
    * A MUNKALAP KULCSAI UGYANAZT A KÉT SZERVER-JOGOT TÜKRÖZIK, mint az eszközé
    * (`service.view`, `service.manage`), tehát szerepenként EGYÜTT KELL
@@ -102,6 +119,7 @@ describe("getServiceCapabilities", () => {
       "SALES",
       "WAREHOUSE",
       "SERVICE",
+      "PARTNER_SERVICE",
       "VIEWER",
     ] as const) {
       const capabilities = getServiceCapabilities(role);

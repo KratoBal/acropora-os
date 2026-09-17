@@ -85,7 +85,11 @@ export function UserEditorPage({ userId }: { userId?: string }) {
       setLastName(next.lastName);
       setNickname(next.nickname ?? "");
       setEmail(next.email);
-      setRole(next.role);
+      // Egy korábbi, tág szereppel létrehozott partner-fiók sem kaphatja meg
+      // újra azt a szerepet a szerkesztőből. A mentés továbbra is tudatos
+      // művelet; itt csak azt akadályozzuk meg, hogy az érvénytelen érték
+      // néma, üres választóként jelenjen meg.
+      setRole(next.customerId ? "PARTNER_SERVICE" : next.role);
       setCustomerId(next.customerId ?? "");
     } catch (cause) {
       setError(
@@ -216,6 +220,10 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   const accessibleItems = allNavigationItems.filter((item) =>
     isNavigationEntryVisible(item.entryId, role),
   );
+  const isPartnerAccount = Boolean(customerId);
+  const availableRoleOptions = isPartnerAccount
+    ? ROLE_OPTIONS.filter((option) => option.value === "PARTNER_SERVICE")
+    : ROLE_OPTIONS;
   return (
     <div className="space-y-6">
       <PageHeader
@@ -276,13 +284,21 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                 value={role}
                 onChange={(event) => setRole(event.target.value as typeof role)}
               >
-                {ROLE_OPTIONS.map((option) => (
+                {availableRoleOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
               </Select>
             </FormField>
+            {isPartnerAccount ? (
+              <p className="text-xs text-dusk-500 sm:col-span-2">
+                A partnerhez kötött fiók szerepe szándékosan csak Partner
+                szerviz lehet: a saját hatókörében hibajegyeket, munkalapokat és
+                eszközöket kezelhet, de nem kap belső irányítópult-, feladat-,
+                partner- vagy akvárium-hozzáférést.
+              </p>
+            ) : null}
           </div>
           {/*
             A PARTNER-KOTES KULON SORBAN, A TOBBI MEZO ALATT -- ES EZ NEM
@@ -299,7 +315,10 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                 id="felhasznalo-vevo"
                 value={customerId}
                 emptyLabel="Nem partner: saját kolléga"
-                onPick={(partner) => setCustomerId(partner.customerId)}
+                onPick={(partner) => {
+                  setCustomerId(partner.customerId);
+                  setRole("PARTNER_SERVICE");
+                }}
                 onClear={() => setCustomerId("")}
               />
             </FormField>

@@ -15,6 +15,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
    * ugyanaz a kézi lépés lenne, amit ezzel az egésszel megszüntetünk.
    */
   CONTENT_AGENT: "Tartalom-ágens (gépi)",
+  PARTNER_SERVICE: "Partner szerviz",
 };
 
 export const ROLE_OPTIONS = USER_ROLES.map((role) => ({
