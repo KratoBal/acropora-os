@@ -194,8 +194,32 @@ describe("formatWorksheetDate", () => {
 });
 
 describe("worksheetLineSummary", () => {
-  it("shows what was done in what quantity, and what it costs", () => {
-    assert.equal(spaces(worksheetLineSummary(line)), "2 db · 38 100 Ft");
+  /**
+   * A BRUTTO OSSZEG 2026-09-17 OTA NINCS A SORBAN -- es ez Balazs dontese.
+   *
+   * Itt korabban az allt, hogy a sor megmondja, "mit vegeztek, mennyit, es
+   * mennyibe kerul". Az ar-resz targytalan lett: a mezok sehol nem jelennek
+   * meg, sem a weben, sem az appban.
+   *
+   * MIERT NEM TOROLTEM, HANEM MEGFORDITOTTAM: egy torolt teszt utan semmi nem
+   * mondana meg, hogy a viselkedes MEGVALTOZOTT, es nem elfelejtettuk.
+   */
+  it("megmondja, mit vegeztek es mennyit -- arat NEM", () => {
+    assert.equal(spaces(worksheetLineSummary(line)), "2 db");
+  });
+
+  /**
+   * ES A TILTO ALLITAS KULON, NEV SZERINT. Az elozo allitas egy URES
+   * visszateres mellett is teljesulne ("2 db" helyett semmi), tehat az
+   * onmagaban nem mondja meg, hogy epp az AR tunt el.
+   */
+  it("a brutto osszeg SEHOL nem all a sorban", () => {
+    const sor = worksheetLineSummary(line);
+
+    assert.equal(sor.includes("38"), false, `ar-nyom a sorban: ${sor}`);
+    assert.equal(sor.includes("Ft"), false, `penznem a sorban: ${sor}`);
+    // ISMERT POZITIV KONTROLL: a sor egyaltalan nem ures.
+    assert.ok(sor.length > 0, "a sor ures -- akkor nem az arat mertuk");
   });
 });
 

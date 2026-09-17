@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -28,37 +28,35 @@ describe("WorksheetLineEditor feliratai", () => {
   });
 
   /**
-   * A LÉNYEGI ÁLLÍTÁS, és ez Acrobot kikötése: a jel NEM az érték része.
+   * AZ ÁR-MEZŐK 2026-09-17 ÓTA NEM JELENNEK MEG -- ÉS EZ BALÁZS DÖNTÉSE.
    *
-   * Ha a mező tartalma `27 %` lenne, azt vissza kellene fejteni számmá, és az
-   * első elgépelésnél elszállna. A jel a mező MELLETT áll, az érték szám marad.
+   * Itt korábban az a teszt állt, hogy a `%` és a `Ft` jel a mező MELLETT áll,
+   * nem az értékben. Az az állítás tárgytalan lett: a két beviteli mező
+   * kikerült a szerkesztőből.
+   *
+   * MIÉRT NEM TÖRÖLTEM, HANEM MEGFORDÍTOTTAM: egy törölt teszt után semmi nem
+   * mondaná meg, hogy a viselkedés MEGVÁLTOZOTT, és nem elfelejtettük. Ha
+   * valaki visszateszi a mezőket -- jó szándékkal, mert az adat ott van --, EZ
+   * pirosodik ki, és a neve megmondja, hogy döntés volt.
    */
-  it("a jelet a mező mellé teszi, nem az értékbe", () => {
-    const onChange = vi.fn();
+  it("az egységár és az ÁFA beviteli mezője NEM jelenik meg", () => {
     render(
       <WorksheetLineEditor
         lines={[line({ vatRatePercent: "27", unitNet: "12000" })]}
-        onChange={onChange}
+        onChange={vi.fn()}
       />,
     );
 
-    const vat = screen.getByLabelText(
-      "1. tétel ÁFA-kulcsa",
-    ) as HTMLInputElement;
-    const price = screen.getByLabelText(
-      "1. tétel egységára",
-    ) as HTMLInputElement;
+    expect(screen.queryByLabelText("1. tétel egységára")).toBeNull();
+    expect(screen.queryByLabelText("1. tétel ÁFA-kulcsa")).toBeNull();
 
-    expect(vat.value).toBe("27");
-    expect(price.value).toBe("12000");
-    expect(screen.getByText("%")).toBeTruthy();
-    expect(screen.getByText("Ft")).toBeTruthy();
-
-    // És gépelés után is szám marad: a jel nem kerül bele.
-    fireEvent.change(vat, { target: { value: "5" } });
-    expect(onChange).toHaveBeenCalledWith([
-      expect.objectContaining({ vatRatePercent: "5" }),
-    ]);
+    /*
+      ÉS A KONTROLL, AMI NÉLKÜL EZ A KÉT NULLA SEMMIT NEM MOND: egy mező, ami
+      MEGMARADT. Ha a komponens egyáltalán nem renderelne (üres lista, hibás
+      fixtúra), a fenti két állítás ugyanígy teljesülne -- és akkor nem az
+      elrejtést mérnénk, hanem a semmit.
+    */
+    expect(screen.getByLabelText("1. tétel megnevezése")).toBeTruthy();
   });
 
   /**

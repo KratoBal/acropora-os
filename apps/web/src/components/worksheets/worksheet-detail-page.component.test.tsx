@@ -446,28 +446,36 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
   });
 
   /**
-   * AZ OSSZEGEK A HELYUKON, ES NEM FELCSERELVE.
+   * AZ ÖSSZEGEK 2026-09-17 ÓTA NEM JELENNEK MEG -- ÉS EZ BALÁZS DÖNTÉSE.
    *
-   * Harom szam, harom cimke, egymas alatt -- a csere (nettot irni a brutto
-   * helyere) semmilyen hibat nem okoz, es egy pillantasra helyesnek latszik.
-   * Az allitas ezert a CIMKEHEZ koti az erteket, nem csak azt nezi, hogy a
-   * szamok megjelennek valahol a lapon.
+   * Itt korábban az állt, hogy a nettó, az áfa és a bruttó a SAJÁT sorában áll,
+   * címkéhez kötve (a csere semmilyen hibát nem okozna, és egy pillantásra
+   * helyesnek látszana). Az az állítás tárgytalan lett: az "Összesítés" panel
+   * kikerült, mert mind a három sora ár volt.
+   *
+   * MIÉRT NEM TÖRÖLTEM, HANEM MEGFORDÍTOTTAM: egy törölt teszt után semmi nem
+   * mondaná meg, hogy a viselkedés MEGVÁLTOZOTT, és nem elfelejtettük.
+   *
+   * ÉS A PANEL HELYE NEM MARAD ÜRESEN: a #806-tal megjött az összesített
+   * munkaóra, és Balázs ugyanabban a kérésében azt kérte a lap végére. Az a
+   * következő szelet, külön PR-ben -- ez a teszt akkor ismét megfordul, és a
+   * MUNKAÓRÁT fogja a címkéjéhez kötni.
    */
-  it("az összesítésben a nettó, az áfa és a bruttó a saját sorában áll", async () => {
+  it("az árak és az Összesítés panel NEM jelenik meg a lapon", async () => {
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
-    await screen.findByText("Összesítés");
 
-    const sorErteke = (cimke: string) => {
-      const label = screen.getByText(cimke);
-      // A cimke es az ertek EGY sorban all, testverkent: a szulo szovege
-      // ezert a ketto osszege, es az ertek az, ami a cimke utan marad.
-      return (label.parentElement?.textContent ?? "").replace(cimke, "").trim();
-    };
+    /*
+      ISMERT POZITÍV KONTROLL ELŐSZÖR, ÉS EZ NÉLKÜLÖZHETETLEN: a lap
+      ASZINKRON töltődik. Ha csak a hiányt állítanám, a teszt akkor is zöld
+      lenne, ha a lap MÉG SEMMIT nem rajzolt ki -- és akkor nem az elrejtést
+      mérném, hanem a betöltés lassúságát.
+    */
+    await screen.findByText("Kompresszor bevizsgálás");
 
-    const szam = (value: string) => value.replace(/\D/g, "");
-    expect(szam(sorErteke("Nettó összeg"))).toBe("30000");
-    expect(szam(sorErteke("ÁFA"))).toBe("8100");
-    expect(szam(sorErteke("Bruttó összeg"))).toBe("38100");
+    expect(screen.queryByText("Összesítés")).toBeNull();
+    expect(screen.queryByText("Nettó összeg")).toBeNull();
+    expect(screen.queryByText("Bruttó összeg")).toBeNull();
+    expect(screen.queryByText("Egységár")).toBeNull();
   });
 
   /**

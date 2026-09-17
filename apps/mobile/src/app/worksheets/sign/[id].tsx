@@ -21,7 +21,6 @@ import {
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
-  formatWorksheetAmount,
   worksheetLabelOrDraft,
   worksheetStatusLabel,
 } from "@/lib/worksheets/worksheet-presentation";
@@ -261,10 +260,25 @@ export default function WorksheetSignScreen() {
                 <Text style={styles.value}>{current.lines.length} db</Text>
               </View>
               <View style={styles.row}>
-                <Text style={styles.label}>Fizetendő (bruttó)</Text>
-                <Text style={styles.total}>
-                  {formatWorksheetAmount(current.grossAmount, current.currency)}
-                </Text>
+                {/*
+                  A "FIZETENDO (BRUTTO)" SOR KIKERULT, ES EZ A LEGTOBB
+                  MAGYARAZATOT IGENYLO HELY A HAROM KOZUL.
+
+                  Balazs dontese ("B") minden ar-mezore all, es az alairo lap az
+                  appban van. DE ITT A VEVO ir ala, nem a szerelo -- ezert
+                  kulon kimondom, mit igazol ezutan az alairas:
+
+                  az ELVEGZETT MUNKAT, nem az osszeget.
+
+                  Ez nem atertelmezes, hanem a dontes kovetkezmenye: ugyanabban
+                  a korben derult ki, hogy a szamlazasi alap NEM a munkalaprol
+                  jon (lasd a worksheet-close-blockers.ts fejlecet). Egy osszeg,
+                  amit a vevo alair, de ami nem a szamlazas alapja, tobbet allit,
+                  mint amennyi all.
+
+                  HA EZ MEGIS KELL a vevonek, az UJ dontes -- es akkor NEM ez a
+                  sor jon vissza, hanem egy kulon, szamlazasi celu kimutatas.
+                */}
               </View>
             </View>
 

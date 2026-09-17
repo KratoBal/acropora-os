@@ -232,19 +232,25 @@ export function worksheetDetailRows(
 }
 
 /**
- * EGY TÉTEL EGY SORBAN: mennyiség, egység és a bruttó összeg.
+ * EGY TÉTEL EGY SORBAN: mennyiség és egység.
  *
- * A nettó egységár szándékosan nincs benne. A szerelő azt magyarázza el a
- * helyszínen, amit a partner is lát az aláírandó lapon, és ott a tétel VÉGE a
- * kérdés. A bontás a webes lapon és a nyomtatott példányon megvan.
+ * A BRUTTÓ ÖSSZEG 2026-09-17-ÉN KIKERÜLT INNEN. Balázs döntése ("B") szerint az
+ * ár-mezők sehol nem jelennek meg, sem a weben, sem az appban.
+ *
+ * ÉS EZT A HELYET A SAJÁT MÉRÉSEM ELŐSZÖR KIHAGYTA: a felületi hatókört
+ * `.tsx` fájlokra szűkítve mértem, ez pedig `.ts`. A fordító nevezte meg,
+ * amikor a három képernyőről kivett formázó itt MÉG hívva maradt -- vagyis egy
+ * árva import mutatott rá, nem a keresésem.
+ *
+ * A currency paraméter szándékosan MEGMARAD a szignatúrában: a hívók ma is
+ * átadják, és a pénznem a következő körben (munkaóra-felület) még kellhet.
  */
 export function worksheetLineSummary(
   line: WorksheetLineLike,
-  currency = "HUF",
+  _currency = "HUF",
 ): string {
   return [
     `${formatWorksheetQuantity(line.quantity)} ${clean(line.unit)}`.trim(),
-    formatWorksheetAmount(line.grossAmount, currency),
   ]
     .filter(Boolean)
     .join(" · ");

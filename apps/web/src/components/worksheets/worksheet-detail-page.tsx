@@ -39,8 +39,6 @@ import { WorksheetAssetEditor } from "./worksheet-asset-editor";
 import { WorksheetAssigneeEditor } from "./worksheet-assignee-editor";
 import { WorksheetDocuments } from "./worksheet-documents";
 import {
-  formatAmount,
-  MISSING_AMOUNT,
   formatDate,
   formatDateTime,
   worksheetLabelOrDraft,
@@ -212,9 +210,13 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
               <th className={sv.tableHead}>Megnevezés</th>
               <th className={`${sv.tableHead} text-right`}>Mennyiség</th>
               <th className={sv.tableHead}>Egység</th>
-              <th className={`${sv.tableHead} text-right`}>Egységár</th>
-              <th className={`${sv.tableHead} text-right`}>ÁFA %</th>
-              <th className={`${sv.tableHead} text-right`}>Nettó</th>
+              {/*
+                AZ EGYSÉGÁR, AZ ÁFA ÉS A NETTÓ OSZLOP 2026-09-17-ÉN KIKERÜLT.
+                Balázs döntése ("B"): a nettó, bruttó és áfa mezők sehol nem
+                jelennek meg. Az ADAT megmarad, és ár továbbra is rendelhető
+                egy tételhez -- csak nem látszik, és a hiánya nem állít meg
+                semmit (#809, beolvadt).
+              */}
             </tr>
           </thead>
           <tbody>
@@ -252,26 +254,11 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                   {line.quantity}
                 </td>
                 <td className={`${sv.tableCell} text-ink`}>{line.unit}</td>
-                <td
-                  className={`${sv.tableCell} text-right tabular-nums text-ink`}
-                >
-                  {formatAmount(line.unitNet, current.currency)}
-                </td>
-                <td
-                  className={`${sv.tableCell} text-right tabular-nums text-ink`}
-                >
-                  {line.vatRatePercent ?? MISSING_AMOUNT}
-                </td>
-                <td
-                  className={`${sv.tableCell} text-right tabular-nums text-ink`}
-                >
-                  {formatAmount(line.netAmount, current.currency)}
-                </td>
               </tr>
             ))}
             {current.lines.length === 0 ? (
               <tr>
-                <td className={`${sv.tableCell} ${sv.rowMeta}`} colSpan={7}>
+                <td className={`${sv.tableCell} ${sv.rowMeta}`} colSpan={4}>
                   Nincs tétel. Tétel nélküli munkalap nem zárható le.
                 </td>
               </tr>
@@ -518,29 +505,21 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
    * gordul a teteleken. A tablazat lableceben ezert MAR NEM all -- ket helyen
    * allo osszeg kesobb elcsuszna, es a masodikat senki nem javitana.
    */
-  const summary = (
-    <ServicePanel>
-      <ServicePanelHeading title="Összesítés" />
-      <div className="flex items-center justify-between border-b border-line py-2.5 text-xs">
-        <span className="text-muted">Nettó összeg</span>
-        <span className="font-semibold tabular-nums text-ink">
-          {formatAmount(current.netAmount, current.currency)}
-        </span>
-      </div>
-      <div className="flex items-center justify-between border-b border-line py-2.5 text-xs">
-        <span className="text-muted">ÁFA</span>
-        <span className="tabular-nums text-ink">
-          {formatAmount(current.vatAmount, current.currency)}
-        </span>
-      </div>
-      <div className="flex items-center justify-between py-2.5 text-[13px]">
-        <span className="font-semibold text-ink">Bruttó összeg</span>
-        <strong className="tabular-nums text-ink">
-          {formatAmount(current.grossAmount, current.currency)}
-        </strong>
-      </div>
-    </ServicePanel>
-  );
+  /*
+    AZ "ÖSSZESÍTÉS" PANEL 2026-09-17-ÉN KIKERÜLT, mert mind a három sora ár volt
+    (nettó, ÁFA, bruttó) -- Balázs döntése ("B") szerint azok sehol nem
+    jelennek meg.
+
+    ÜRES PANELT NEM HAGYOK A LAPON: egy fejléc tartalom nélkül azt mondja a
+    nézőnek, hogy valami elromlott, holott döntés történt.
+
+    ÉS A HELYE NEM MARAD ÜRESEN SOKÁIG: a #806-tal megjött az összesített
+    MUNKAÓRA (`current.laborHours`), és Balázs ugyanabban a kérésében ezt kérte
+    a lap végére. Az a következő szelet, szándékosan külön PR-ben -- az
+    ár-elrejtés ELVESZ innen, a munkaóra HOZZÁAD, és a kettő egy PR-ben
+    visszavonhatatlanul összeállna.
+  */
+  const summary = null;
 
   const facts = (
     <ServicePanel>

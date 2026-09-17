@@ -1,11 +1,8 @@
 "use client";
 
 import { Button, Card, Input } from "@acropora/ui";
-import type { ReactNode } from "react";
 
 import type { WorksheetLineInput } from "@acropora/types";
-
-import { currencySuffix, formatAmount } from "./worksheet-labels";
 
 export interface WorksheetLineDraft {
   description: string;
@@ -61,21 +58,18 @@ export function toLineInput(line: WorksheetLineDraft): WorksheetLineInput {
   };
 }
 
-/**
- * A sor nettója. Csak megjelenítés: a lapra kerülő összeget a szerver
- * számolja a sorokból, a kliens értékét nem veszi át. Ha a két szám
- * eltérne, a szerveré az igaz.
- */
-function lineNet(line: WorksheetLineDraft): number {
-  const quantity = Number(line.quantity);
-  const unitNet = Number(line.unitNet);
-  if (!Number.isFinite(quantity) || !Number.isFinite(unitNet)) return 0;
-  return quantity * unitNet;
-}
+/*
+  A `lineNet` ÉS A `linesNetTotal` 2026-09-17-ÉN KIKERÜLT.
 
-export function linesNetTotal(lines: readonly WorksheetLineDraft[]): number {
-  return lines.reduce((total, line) => total + lineNet(line), 0);
-}
+  Mind a kettő a megjelenített összeget számolta, és az összeg már nem látszik
+  (Balázs döntése). Mérve, mielőtt kivettem: a `linesNetTotal` exportált volt, és
+  NULLA hívója állt más fájlban -- a szerkesztő-oldal és a komponens-teszt is
+  csak az `emptyLine`, a `toLineInput`, a `WorksheetLineEditor` és a
+  `WorksheetLineDraft` nevet importálja innen.
+
+  A `purchasing` modulban is áll egy `lineNet`, de az SAJÁT függvénye
+  (`InvoiceLineState` bemenettel), nem ez -- ezért nem lett belőle árva hívás.
+*/
 
 export interface WorksheetLineEditorProps {
   lines: WorksheetLineDraft[];
@@ -119,20 +113,6 @@ function NarrowLabel({ children }: { children: string }) {
  * Ha a mező tartalma `27 %` lenne, azt vissza kellene fejteni számmá, és az
  * első elgépelésnél elszállna. Az érték szám marad; a jel a szeme mellett áll.
  */
-function Suffixed({
-  suffix,
-  children,
-}: {
-  suffix: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-1">
-      <div className="min-w-0 flex-1">{children}</div>
-      <span className="shrink-0 text-xs text-dusk-500">{suffix}</span>
-    </div>
-  );
-}
 
 export function WorksheetLineEditor({
   lines,
@@ -229,34 +209,25 @@ export function WorksheetLineEditor({
                 }
               />
             </div>
-            <div className="space-y-1">
-              <NarrowLabel>Egységár</NarrowLabel>
-              <Suffixed suffix={currencySuffix()}>
-                <Input
-                  aria-label={`${index + 1}. tétel egységára`}
-                  value={line.unitNet}
-                  disabled={disabled}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    update(index, { unitNet: event.target.value })
-                  }
-                />
-              </Suffixed>
-            </div>
-            <div className="space-y-1">
-              <NarrowLabel>ÁFA</NarrowLabel>
-              <Suffixed suffix="%">
-                <Input
-                  aria-label={`${index + 1}. tétel ÁFA-kulcsa`}
-                  value={line.vatRatePercent}
-                  disabled={disabled}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    update(index, { vatRatePercent: event.target.value })
-                  }
-                />
-              </Suffixed>
-            </div>
+            {/*
+              AZ EGYSÉGÁR ÉS AZ ÁFA BEVITELE 2026-09-17-ÉN KIKERÜLT INNEN.
+
+              Balázs kérése: a nettó, bruttó és áfa mezők ne jelenjenek meg sem
+              a weben, sem az appban. Két utat tettünk elé, és a "B"-t
+              választotta: tűnjenek el mindenhonnan, és akkor a lezárásból is ki
+              kell venni az ár-feltételt (#809, beolvadt).
+
+              AMI SZÁNDÉKOSAN NEM VÁLTOZOTT: a `WorksheetLineDraft` továbbra is
+              TARTJA a `unitNet` és `vatRatePercent` értéket, a betöltés kiolvassa
+              a szerverről, és a `toLineInput` VISSZAKÜLDI. Balázs kifejezetten
+              azt kérte, hogy "ne töröljük ezeket" -- és egy szerkesztés, ami a
+              mezőt nem küldi vissza, NÉMÁN törölné a meglévő árat: a lap
+              tartalma teljes, a mentés sikeres, és az érték eltűnik.
+
+              EZT EGY ŐRZŐ MÉRI (`worksheet-line-price-megorzes.component.test.tsx`).
+              Ha valaki egyszer "takarítja" a draftot -- jó szándékkal, mert a
+              mező már nem látszik --, az a teszt pirosodik ki.
+            */}
             <Button
               type="button"
               variant="ghost"
@@ -271,14 +242,10 @@ export function WorksheetLineEditor({
           </div>
         ))}
       </div>
-      {lines.length ? (
-        <p className="text-right text-sm text-dusk-600">
-          Nettó összesen (előnézet):{" "}
-          <strong className="tabular-nums">
-            {formatAmount(String(linesNetTotal(lines)))}
-          </strong>
-        </p>
-      ) : null}
+      {/*
+        A "Nettó összesen (előnézet)" sor ugyanabban a körben került ki: az ár
+        nem látszik, tehát egy belőle számolt összeg sem.
+      */}
     </Card>
   );
 }
