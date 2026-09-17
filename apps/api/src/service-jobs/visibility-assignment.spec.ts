@@ -3,9 +3,23 @@ import { describe, it } from "node:test";
 
 import { mayAssignUnit } from "./visibility-assignment.js";
 
+/**
+ * AZ ALAPESET A SZALLITOHOZ KOTOTT FIOK, tehat a vevo-kotese `null`. A ket
+ * kotes KIZARJA EGYMAST (`User_at_most_one_partner_check` az adatbazisban),
+ * ezert nem is fordul elo olyan bemenet, amiben mind a ketto all.
+ */
 const alap = {
   userSupplierId: "sup-1",
+  userCustomerId: null,
   supplierMirrorCustomerId: "cust-1",
+  unitCustomerId: "cust-1",
+};
+
+/** A VEVOHOZ KOTOTT FIOK: nincs szallitoja, es tukre sincs mihez. */
+const vevos = {
+  userSupplierId: null,
+  userCustomerId: "cust-1",
+  supplierMirrorCustomerId: null,
   unitCustomerId: "cust-1",
 };
 
@@ -44,6 +58,38 @@ describe("mehet-e ez az alegység ehhez a felhasználóhoz", () => {
     assert.deepEqual(mayAssignUnit({ ...alap, userSupplierId: null }), {
       ok: false,
       reason: "not-partner-user",
+    });
+  });
+
+  /**
+   * === A VEVOHOZ KOTOTT FIOK, ES EZ AZ AG MA AZ ELES AKADALY ===
+   *
+   * A `PARTNER_SERVICE` szerepkor kikotese a `customerId` mezore all, tehat a
+   * mai partner-fiokok TOBBSEGE vevohoz kotott, `supplierId` NELKUL.
+   *
+   * MI PIROSIT: a vevos ag elhagyasa. Akkor ez a bemenet a `userSupplierId ===
+   * null` feltetelen esik ki, `not-partner-user` okkal -- es a felhasznalo azt
+   * az uzenetet kapja, hogy "Ez a fiok nem partner-oldali: belso hatokorrel
+   * amugy is mindent lat". Pont az ELLENKEZOJE az igazsagnak.
+   */
+  it("vevőhöz kötött fiókhoz mehet a SAJÁT vevője alegysége", () => {
+    assert.deepEqual(mayAssignUnit(vevos), { ok: true });
+  });
+
+  /**
+   * A NEGATIV PARJA, ES UGYANAZ A KAR, MINT A SZALLITOS AGON: egy masik vevo
+   * alegysege sikeres hozzarendelesnek latszana, es a fiok attol kezdve IDEGEN
+   * hibajegyeket latna.
+   *
+   * ES SAJAT, MEGNEVEZETT OKA VAN (`other-customer`), nem csuszik bele a
+   * `no-mirror` uzenetbe: az a TUKOR-VEVOROL beszel, ami egy vevos fioknal
+   * ertelmetlen mondat. A harom eddigi ok epp azert all kulon, mert HAROM
+   * kulonbozo teendot ad.
+   */
+  it("vevőhöz kötött fiók NEM kaphat másik vevő alegységét", () => {
+    assert.deepEqual(mayAssignUnit({ ...vevos, unitCustomerId: "cust-2" }), {
+      ok: false,
+      reason: "other-customer",
     });
   });
 

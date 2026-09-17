@@ -15,16 +15,47 @@
  */
 export type VisibilityAssignmentCheck =
   | { ok: true }
-  | { ok: false; reason: "not-partner-user" | "no-mirror" | "other-partner" };
+  | {
+      ok: false;
+      reason:
+        "not-partner-user" | "no-mirror" | "other-partner" | "other-customer";
+    };
 
 export function mayAssignUnit(input: {
   /** A cel-felhasznalo partnere. `null`, ha sajat kollega. */
   userSupplierId: string | null;
+  /** A cel-felhasznalo VEVOJE. `null`, ha nem vevohoz kotott fiok. */
+  userCustomerId: string | null;
   /** A partner tukor-vevo sora. `null`, ha nincs (nem szerviz partner). */
   supplierMirrorCustomerId: string | null;
   /** Az alegyseg vevoje. */
   unitCustomerId: string;
 }): VisibilityAssignmentCheck {
+  /**
+   * A VEVOHOZ KOTOTT FIOK SAJAT AGA, ES ELOL ALL.
+   *
+   * MIERT KELL: a mai partner-fiokok TOBBSEGE ilyen. A `PARTNER_SERVICE`
+   * szerepkor kikotese a `customerId` mezore all (`users.service.ts`,
+   * `requirePartnerRole`), tehat minden ujonnan felvett partner-fiok vevohoz
+   * kotott -- es a `supplierId` mezoje NULL.
+   *
+   * ES A REGI SORREND MELLETT EZ A FIOK AZ ELSO FELTETELEN ESETT KI, a
+   * `not-partner-user` okkal. A felhasznalo ezt az uzenetet kapta: "Ez a fiok
+   * nem partner-oldali: belso hatokorrel amugy is mindent lat." -- ami pont az
+   * ELLENKEZOJE az igazsagnak, es a kezelo joggal hitte, hogy a rendszer
+   * elromlott. (Merve 2026-09-17: Balazs ezen akadt el egy eles
+   * partner-bevezetesnel.)
+   *
+   * A KET KOTES KIZARJA EGYMAST, tehat a sorrend nem rejt el semmit: az
+   * adatbazisban `User_at_most_one_partner_check` all rajta, es a
+   * `requireAtMostOnePartner` meg is nevezi, ha valaki megis megprobalna.
+   */
+  if (input.userCustomerId !== null) {
+    if (input.userCustomerId !== input.unitCustomerId)
+      return { ok: false, reason: "other-customer" };
+    return { ok: true };
+  }
+
   /**
    * SAJAT KOLLEGANAK NINCS ERTELME HOZZARENDELNI: o belsos hatokorrel mindent
    * lat, tehat a hozzarendeles nem bovitene semmit -- viszont azt sugallna,

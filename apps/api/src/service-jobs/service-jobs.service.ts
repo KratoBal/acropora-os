@@ -572,7 +572,16 @@ export class ServiceJobsService {
           ? "Ez a fiók nem partner-oldali: belső hatókörrel amúgy is mindent lát."
           : check.reason === "no-mirror"
             ? "A partnernek nincs tükör-vevő sora, ezért alegysége sincs. Előbb szerviz partnernek kell jelölni."
-            : "Ez az alegység másik partnerhez tartozik.",
+            : /**
+               * A VEVOS AGNAK SAJAT MONDATA VAN, es ez nem stilus: a
+               * `tukor-vevo` szo egy vevohoz kotott fioknal ertelmetlen, a
+               * "masik partnerhez tartozik" pedig rossz helyre kuld -- ott nem
+               * partnert kell valtani, hanem a SAJAT vevo alegysegei kozul
+               * valasztani.
+               */
+              check.reason === "other-customer"
+              ? "Ez az alegység másik vevőhöz tartozik. Ehhez a fiókhoz csak a saját vevője alegységei rendelhetők."
+              : "Ez az alegység másik partnerhez tartozik.",
       );
     }
     return this.repository.addAssignment(userId, departmentId);

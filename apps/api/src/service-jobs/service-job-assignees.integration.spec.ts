@@ -61,6 +61,9 @@ const TEST_EMAIL_DOMAIN = "service-job-assignees-integration.invalid";
  */
 const TEST_JOB_PREFIX = "HJ-INT-";
 
+/** A SUITE SAJAT VEVOINEK ELOTAGJA -- a takaritas ebbol dolgozik. */
+const TEST_CUSTOMER_PREFIX = "SJA-INT-";
+
 describe(
   "ServiceJobAssignee integration",
   { skip: gate.mode === "skip" },
@@ -408,6 +411,123 @@ describe(
       });
     });
 
+    /**
+     * A VALASZTHATO ALEGYSEGEK, A VALODI ADATBAZISON -- MIND A KET FIOK-ALAKRA.
+     *
+     * MIERT NEM ELEG A TISZTA FUGGVENY SPECJE: a `mayAssignUnit` azt meri, hogy
+     * mit SZABAD; ez azt, hogy mit KINALUNK FEL. A ketto kulon lanc, es epp a
+     * masodik hianyzott: a valaszto KIZAROLAG a szallitos againn jart, tehat egy
+     * VEVOHOZ kotott fiok SOHA nem kapott semmit -- akarhany aktiv alegyseg allt
+     * a vevo alatt. (Merve 2026-09-17, eles akadaskent.)
+     *
+     * A HAROM ALLITAS EGYUTT bizonyit: a vevos fiok a SAJATJAT kapja, a masik
+     * vevoet NEM, es a szallitos ag valtozatlanul mukodik.
+     */
+    describe("a valaszthato alegysegek", () => {
+      const repository = new ServiceJobsRepository();
+
+      it("vevőhöz kötött fiók a saját vevője aktív alegységeit kapja", async () => {
+        const vevo = await prisma.customer.create({
+          data: {
+            customerNumber: `${TEST_CUSTOMER_PREFIX}${suffix}-A`,
+            type: "COMPANY",
+            displayName: "Választó Integrációs Vevő",
+          },
+          select: { id: true },
+        });
+        const masikVevo = await prisma.customer.create({
+          data: {
+            customerNumber: `${TEST_CUSTOMER_PREFIX}${suffix}-B`,
+            type: "COMPANY",
+            displayName: "Idegen Vevő",
+          },
+          select: { id: true },
+        });
+
+        const sajat = await prisma.worksheetDepartment.create({
+          data: { customerId: vevo.id, code: "SAJ", name: "Saját helyszín" },
+          select: { id: true },
+        });
+        // KIKAPCSOLT ALEGYSEG: nem szabad felkinalni. Enelkul az allitas nem
+        // kulonboztetne meg a "vevo alegysegei" es az "AKTIV alegysegei" esetet.
+        await prisma.worksheetDepartment.create({
+          data: {
+            customerId: vevo.id,
+            code: "ARC",
+            name: "Archivált helyszín",
+            isActive: false,
+          },
+        });
+        // A MASIK VEVO ALEGYSEGE: a negativ kontroll targya.
+        await prisma.worksheetDepartment.create({
+          data: { customerId: masikVevo.id, code: "IDG", name: "Idegen hely" },
+        });
+
+        const vevosFiok = await prisma.user.create({
+          data: {
+            email: `valaszto-vevos-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "Vevős Viktor",
+            role: "PARTNER_SERVICE",
+            customerId: vevo.id,
+          },
+          select: { id: true },
+        });
+
+        const kinalt = await repository.selectableUnits(vevosFiok.id);
+
+        assert.deepEqual(
+          (kinalt ?? []).map((egyseg) => egyseg.id),
+          [sajat.id],
+          "a vevős fiók a saját vevője AKTÍV alegységeit kapja, és csak azokat",
+        );
+      });
+
+      /**
+       * A SZALLITOS AG VALTOZATLAN -- POZITIV KONTROLL A MASIK IRANYBA.
+       *
+       * Enelkul a fenti allitas akkor is teljesulne, ha a vevos agat ugy
+       * vezettem volna be, hogy a szallitos lancot elrontom.
+       */
+      it("szállítóhoz kötött fiók továbbra is a tükör-vevő alegységeit kapja", async () => {
+        const tukorVevo = await prisma.customer.create({
+          data: {
+            customerNumber: `${TEST_CUSTOMER_PREFIX}${suffix}-T`,
+            type: "COMPANY",
+            displayName: "Tükör Vevő",
+          },
+          select: { id: true },
+        });
+        const egyseg = await prisma.worksheetDepartment.create({
+          data: { customerId: tukorVevo.id, code: "TUK", name: "Tükör hely" },
+          select: { id: true },
+        });
+        const szallito = await prisma.supplier.create({
+          data: {
+            code: `SJA${suffix}`,
+            name: "Választó Integrációs Szállító",
+            customerId: tukorVevo.id,
+          },
+          select: { id: true },
+        });
+        const szallitosFiok = await prisma.user.create({
+          data: {
+            email: `valaszto-szallitos-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "Szállítós Sára",
+            role: "SERVICE",
+            supplierId: szallito.id,
+          },
+          select: { id: true },
+        });
+
+        const kinalt = await repository.selectableUnits(szallitosFiok.id);
+
+        assert.deepEqual(
+          (kinalt ?? []).map((sor) => sor.id),
+          [egyseg.id],
+        );
+      });
+    });
+
     async function removeLeftovers() {
       await prisma.serviceJobAssignee.deleteMany({
         where: { serviceJob: { jobNumber: { startsWith: TEST_JOB_PREFIX } } },
@@ -418,6 +538,34 @@ describe(
       await prisma.user.deleteMany({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
       });
+
+      /**
+       * A VALASZTO SUITE SAJAT SORAI, LEVELROL GYOKER FELE.
+       *
+       * A SORREND NEM IZLES: a szallito a VEVORE mutat, az alegyseg szinten, es
+       * az alegyseg-fa szulojen `Restrict` all. Egy rossz sorrendu torles nem
+       * csendes -- elhasal --, de a suite utana szemetet hagyna.
+       *
+       * A FELHASZNALOK MAR FENT KIESTEK (a domain alapjan), tehat a vevo-kotesuk
+       * nem tartja vissza a vevot.
+       */
+      const vevoim = await prisma.customer.findMany({
+        where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+        select: { id: true },
+      });
+      const vevoIdk = vevoim.map((vevo) => vevo.id);
+      if (vevoIdk.length) {
+        await prisma.supplier.deleteMany({
+          where: { customerId: { in: vevoIdk } },
+        });
+        for (;;) {
+          const torolt = await prisma.worksheetDepartment.deleteMany({
+            where: { customerId: { in: vevoIdk }, children: { none: {} } },
+          });
+          if (torolt.count === 0) break;
+        }
+        await prisma.customer.deleteMany({ where: { id: { in: vevoIdk } } });
+      }
     }
   },
 );
