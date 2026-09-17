@@ -26,6 +26,13 @@ const api = vi.hoisted(() => ({
    * nem allit, az a dupla biztos hibaja.
    */
   signers: vi.fn(),
+  /**
+   * UGYANAZ A VARRAT, MASODSZOR (2026-09-17): a lap mostantol lekeri a
+   * CSATOLMANYOKAT is. Ami a hivo hasznal, de a dupla nem ad meg, az a dupla
+   * biztos hibaja -- a szomszed komment epp errol szol, egy korral korabbrol.
+   */
+  documents: vi.fn(),
+  downloadDocument: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -140,6 +147,7 @@ describe("WorksheetDetailPage és az ügyfél saját kódja a tételsoron", () =
     auth.session = session;
     api.detail.mockReset();
     api.assignableUsers.mockResolvedValue({ items: [] });
+    api.documents.mockResolvedValue({ items: [] });
     api.signers.mockResolvedValue({ items: [], emptyReason: null });
   });
 
@@ -226,6 +234,7 @@ describe("WorksheetDetailPage és az aláíró", () => {
     api.detail.mockReset();
     api.sign.mockReset();
     api.assignableUsers.mockResolvedValue({ items: [] });
+    api.documents.mockResolvedValue({ items: [] });
     api.signers.mockResolvedValue({
       items: [{ id: "kontakt-1", name: "Vevő Vilmos" }],
       emptyReason: null,
@@ -357,6 +366,7 @@ describe("WorksheetDetailPage és az aláírókód", () => {
     api.detail.mockReset();
     api.sign.mockReset();
     api.assignableUsers.mockResolvedValue({ items: [] });
+    api.documents.mockResolvedValue({ items: [] });
     api.signers.mockResolvedValue({
       items: [{ id: "kontakt-1", name: "Vevő Vilmos" }],
       emptyReason: null,
@@ -424,6 +434,7 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
     auth.session = session;
     api.detail.mockReset().mockResolvedValue(detail(null));
     api.assignableUsers.mockResolvedValue({ items: [] });
+    api.documents.mockResolvedValue({ items: [] });
     api.signers.mockResolvedValue({ items: [], emptyReason: null });
   });
 
@@ -576,5 +587,43 @@ describe("WorksheetDetailPage alegység-útja", () => {
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
 
     expect(await screen.findByText(/BIO —/)).toBeTruthy();
+  });
+});
+
+describe("WorksheetDetailPage és a csatolmányok", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.detail.mockReset();
+    api.assignableUsers.mockResolvedValue({ items: [] });
+    api.documents.mockResolvedValue({ items: [] });
+    api.signers.mockResolvedValue({ items: [], emptyReason: null });
+  });
+
+  /**
+   * A SZAKASZ BE VAN KÖTVE A LAPBA -- ÉS EZT AZ ÁLLÍTÁST EGY KALIBRÁCIÓ KÉRTE.
+   *
+   * A komponens saját tesztje IZOLÁLTAN mér: ha valaki a lapból kiveszi a
+   * hívást, az a készlet ZÖLD MARAD. Mérve 2026-09-17: a szakaszt kivéve
+   * mind a 762 teszt átment.
+   *
+   * Ez pontosan az a hibafajta, amit ez a kártya javít: a képesség megvan, és
+   * senki nem hívja. Egy izolált teszt azt méri, hogy a doboz MŰKÖDIK, nem
+   * azt, hogy OTT VAN.
+   *
+   * MI PIROSÍT: a `<WorksheetDocuments ... />` eltávolítása a lapból.
+   */
+  it("a lap lekéri és kiírja a csatolmány-szakaszt", async () => {
+    api.detail.mockResolvedValue(detail("LEL-1"));
+
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    expect(await screen.findByText("Csatolmányok")).toBeTruthy();
+    await waitFor(() =>
+      expect(api.documents).toHaveBeenCalledWith(
+        "token-1",
+        "worksheet-1",
+        expect.anything(),
+      ),
+    );
   });
 });

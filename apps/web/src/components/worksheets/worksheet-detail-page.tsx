@@ -37,6 +37,7 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { WorksheetEntries } from "./worksheet-entries";
 import { WorksheetAssetEditor } from "./worksheet-asset-editor";
 import { WorksheetAssigneeEditor } from "./worksheet-assignee-editor";
+import { WorksheetDocuments } from "./worksheet-documents";
 import {
   formatAmount,
   MISSING_AMOUNT,
@@ -773,6 +774,22 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
               assets={worksheet.assets}
               canManage={canManage}
               onSaved={setWorksheet}
+            />
+            {/*
+              A CSATOLMANYOK AZ ESZKOZOK ALATT.
+
+              A MEGNEZES `service.view` alatt all, nem `service.manage` alatt:
+              aki a lapot latja, a hozza tartozo fenykepeket is lathatja. A
+              helyszini kep MUNKAUTASITAS, nem szerkesztes.
+
+              ES AMIT EZ A DOBOZ ELOSZOR MUTAT MEG: magat a listat. A telefonrol
+              feltoltott fenykepek eddig SEHOL nem latszottak a weben -- a lapon
+              a "documents" szo egyszer sem fordult elo.
+            */}
+            <WorksheetDocuments
+              worksheetId={worksheet.id}
+              token={token}
+              canView={canView}
             />
           </>
         }

@@ -10,12 +10,14 @@ import type {
   WorksheetDepartmentListResponse,
   WorksheetDepartmentSummary,
   WorksheetDetail,
+  WorksheetDocumentListResponse,
   WorksheetEntryListResponse,
   WorksheetListResponse,
   WorksheetSignerListResponse,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { apiAuthHeaders, apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
 
 const base = "/service/worksheets";
 
@@ -113,6 +115,38 @@ export const worksheetsApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
+  },
+  /**
+   * A LAP CSATOLMANYAI -- KULON HIVAS, NEM A RESZLETLAP RESZE.
+   *
+   * Ugyanaz az indok, ami a hibajegynel: a csatolmany nem a lap TARTALMA,
+   * hanem allomany rajta. Kulon hivas mellett a lista frissitheto feltoltes
+   * utan anelkul, hogy a teljes lapot (es vele a naplot) ujra le kellene kerni.
+   */
+  documents(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<WorksheetDocumentListResponse>(
+      worksheetPath(id, "/documents"),
+      token,
+      { signal },
+    );
+  },
+  /**
+   * LETOLTES. NYERS `fetch`, NEM `apiRequest`: a valasz BAJT, nem JSON.
+   *
+   * A CIM ITT KIIRVA ALL, NEM a `worksheetPath` helperrel osszerakva -- es ez
+   * MERT megkotes, nem stilus. A repo hasonlosag-meroje
+   * (`mobile-api-routes.spec.ts`) a kliens-fajlokbol olvassa ki a hivott
+   * cimeket, es a helper-hivast egy sablonon BELUL nem tudja feloldani. A
+   * hibajegy es az eszkoz oldali letoltes ugyanezt az alakot hasznalja, es a
+   * sajat kommentjuk ugyanezt mondja ki.
+   */
+  async downloadDocument(token: string, id: string, documentId: string) {
+    const response = await fetch(
+      `${API_PREFIX}/service/worksheets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok) throw new Error("A csatolmány nem tölthető le.");
+    return response.blob();
   },
   close(token: string, id: string) {
     return apiRequest<WorksheetDetail>(worksheetPath(id, "/close"), token, {
