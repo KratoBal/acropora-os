@@ -39,7 +39,20 @@ describe("a munkalap fényképe térerő nélkül is felvehető", () => {
    * nem menne fel, némán.
    */
   it("a sorba tétel a már létező lap azonosítójával megy", () => {
-    assert.match(olvas(KEPERNYO), /ownerId: id,/);
+    /**
+     * A DARABSZÁMOT IS MÉRI, MERT A MINTA KÉT HELYEN ÁLL: a sor KULCSÁT képző
+     * hívásban és magában a sorba tételben. Egy puszta jelenlét-vizsgálat
+     * zöld maradna, ha a MÁSODIKAT kivennék -- és épp az teszi a gazdát a
+     * sorra. (Mérve ugyanaznap, ez a negyedik ilyen alak nálam.)
+     */
+    const s = olvas(KEPERNYO);
+    const db = s.split("ownerId: id,").length - 1;
+    assert.equal(
+      db,
+      2,
+      `az \`ownerId: id\` ${db} helyen áll: a sor kulcsában ÉS a sorba tételben kell`,
+    );
+    assert.match(s, /enqueuePhoto\(\{[\s\S]{0,900}?ownerId: id,\s*\}\)/);
   });
 
   /**
