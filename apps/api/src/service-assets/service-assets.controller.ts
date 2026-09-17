@@ -175,6 +175,31 @@ export class ServiceAssetsController {
     return this.service.qrCode(id, partnerScopeOf(user));
   }
 
+  /**
+   * A CSATOLMÁNYOK LISTÁJA -- ÉS A MEGNÉZÉSHEZ `SERVICE_VIEW` ELÉG.
+   *
+   * NEM `SERVICE_MANAGE`, és ez átvett döntés, nem új: a hibajegy ugyanezen a
+   * jogkörön adja ki a saját listáját, és a mobil munkalap-galéria kommentje
+   * mondja ki az indokot (`worksheets/[id].tsx`): a galéria a manage-kapun
+   * KÍVÜL áll, különben a szerelő feltölt, és nem látja, amit feltöltött.
+   *
+   * A letöltés (`:id/documents/:documentId`) már ma is `SERVICE_VIEW` alatt
+   * áll, tehát ez a sor nem nyit új utat: azt a listát adja ki, amit ugyanez a
+   * hívó az adatlapon (`GET :id`) amúgy is megkap.
+   *
+   * A DEKLARÁCIÓ A `@Get(":id")` FÖLÖTT ÁLL, ugyanúgy, mint a `:id/qr`.
+   * Az útvonal-feloldást INNEN NEM TUDOM MEGMÉRNI (a csomagban nincs sem
+   * `@nestjs/testing`, sem `supertest`, tehát futó alkalmazás kellene
+   * hozzá), és egy két szegmensű GET eddig nem is állt a `:id` UTÁN ebben a
+   * fájlban -- a `:id/documents/:documentId` három szegmensű. Ahol nem
+   * tudok mérni, ott a fájl saját, működő sorrendjét követem.
+   */
+  @Get(":id/documents")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  documents(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.documents(id, partnerScopeOf(user));
+  }
+
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {

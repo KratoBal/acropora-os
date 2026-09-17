@@ -14,7 +14,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
-import type { AssetQrCode } from "@acropora/types";
+import type { AssetDocumentSummary, AssetQrCode } from "@acropora/types";
 import {
   ASSET_LABEL_CODE_SHAPE_MESSAGE,
   assetLabelCreateProblem,
@@ -484,6 +484,56 @@ export class ServiceAssetsService {
       enabled: true,
       status: await this.documentStore.describe(),
     };
+  }
+
+  /**
+   * EGY ESZKÖZ CSATOLMÁNYAI, TARTALOM NÉLKÜL.
+   *
+   * === A VÁLASZ BURKA A JEGYÉÉ, ÉS EZ KIKÖTÉS VOLT ===
+   *
+   * `{ items: [...] }`, ugyanúgy, mint a hibajegynél
+   * (`ServiceJobDocumentsService.documents`). Két képernyő ugyanazt a galériát
+   * rajzolja, és ha a burkok eltérnének, a kliensnek két alakot kellene
+   * kezelnie ugyanarra a dologra -- a következő javítás pedig megint kétszer
+   * kellene.
+   *
+   * A TÉTELEK TÍPUSA VISZONT KÜLÖNBÖZIK, és ezt kimondom, mert mérhető: az
+   * `AssetDocumentSummary` négy fajtát ismer (INVOICE/WARRANTY/MANUAL/OTHER)
+   * és van `uploadedBy` mezője, a jegyé kettőt (PHOTO/OTHER) és nincs. A
+   * burkok egyezése tehát NEM jelenti azt, hogy egy közös típus alá vonhatók.
+   *
+   * === MIÉRT A `detail` ÚTJÁN MEGY, ÉS MIÉRT NEM SAJÁT LEKÉRDEZÉSSEL ===
+   *
+   * A hatókör-szűrés itt NEM ismétlődik meg: ez a metódus ugyanazt a `detail`
+   * utat használja, amit az adatlap. Kettő van belőle, és mindkettő ugyanabban
+   * a hívásban áll:
+   *
+   *   1. LÁTHATÓ-E MAGA AZ ESZKÖZ    `rowBelongsToScope`, a `repository.detail`-ben
+   *   2. LÁTHATÓ-E EZ A FAJTA IRAT   `scopeMaySeeDocumentType`, a `toDetail`-ben
+   *
+   * Egy saját lekérdezés mindkettőt megismételné, és az ismétlés NÉMÁN csúszik
+   * el: egy ötödik dokumentum-fajta felvételénél az egyik ágat átvezetjük, a
+   * másikat nem, és a lista TÁGABB lesz, mint az adatlap. A hibajegy oldalán
+   * pontosan ezért áll a `requireVisibleJob` egyetlen helyen.
+   *
+   * AMIT EZ AZ ALAK CSERÉBE ELKÉR, ÉS AMIT KIMONDOK: a `detail` TÖBBET olvas,
+   * mint amennyit ez visszaad (száz esemény, a gyerekek, az ősök, az
+   * egység-utak). Ez a végpont a galéria FRISSÍTÉSE feltöltés vagy törlés után
+   * -- az első betöltésnél az adatlap válasza már tartalmazza a listát --,
+   * tehát a többlet egy felhasználói mozdulatra jut. Ha ez valaha mérhető
+   * teherré nő, a szűkebb lekérdezés MELLÉ a két szűrésnek közös függvénybe
+   * kell kerülnie, különben a fenti csúszás kinyílik.
+   *
+   * A NEM LÁTHATÓ ESZKÖZ 404, NEM ÜRES LISTA. A kettő a kliensen
+   * megkülönböztethetetlen lenne, és az üres lista azt állítaná, hogy nincs
+   * csatolmány -- holott az van, csak nem a kérőé.
+   */
+  async documents(
+    id: string,
+    scope: PartnerScope,
+  ): Promise<{ items: AssetDocumentSummary[] }> {
+    const asset = await this.detail(id, scope);
+    return { items: asset.documents };
   }
 
   async document(id: string, documentId: string, scope: PartnerScope) {
