@@ -54,8 +54,14 @@ export interface WorksheetSheetLine {
 
 /** Amit a lap a munkalapról és a verzióról kiír. */
 export interface WorksheetSheetInput {
-  /** A lap azonosítója, ahogy az ügyfél is látja: „BIO-2026-001/1". */
-  label: string;
+  /**
+   * A lap azonosítója, ahogy az ügyfél is látja: „BIO-2026-001/1".
+   *
+   * ELHAGYHATÓ, ÉS EZ NEM ELŐVIGYÁZATOSSÁG: a munkalapszám a LEZÁRÁSKOR
+   * keletkezik (a `close()` a tranzakcióban foglalja le, ha még nincs). Egy
+   * PISZKOZAT tehát szám nélkül áll -- és piszkozat is kap lapot.
+   */
+  label: string | null;
   status: "DRAFT" | "AWAITING_SIGNATURE" | "SIGNED" | "REJECTED";
   customerName: string;
   /** A mi vevőkódunk a partnerről. A partner saját rendszerében ez azonosít. */
@@ -177,7 +183,17 @@ export function worksheetSheetLines(
   // szerelő az ügyfél elé tesz.
   if (input.status !== "SIGNED") out.push(DRAFT_MARK, "");
 
-  out.push(`MUNKALAP  ${input.label}`, "");
+  /*
+    SZÁM NÉLKÜL IS VAN FEJLÉC, ÉS KIMONDJA, HOGY NINCS SZÁMA.
+
+    A `${null}` behelyettesítés „MUNKALAP null"-t írna a vevő lapjára. Az üresen
+    hagyás pedig azt sugallná, hogy elveszett a szám -- holott még meg sem
+    született: a munkalapszámot a lezárás foglalja le.
+  */
+  out.push(
+    input.label ? `MUNKALAP  ${input.label}` : "MUNKALAP  (még nincs száma)",
+    "",
+  );
   /*
     A VEVŐKÓD A NÉV MELLETT, ZÁRÓJELBEN -- ugyanaz az alak, mint az alegységnél.
     Nem külön sor: a kód a nevet AZONOSÍTJA, nem egy második tény róla.
