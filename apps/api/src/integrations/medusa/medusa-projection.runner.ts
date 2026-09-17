@@ -219,10 +219,15 @@ export function projectValtozatMezok(
  * A HAROM MEZO A `UnasProductSnapshot` MODELLEN UL, nem a varianson es nem a
  * terméken -- ezert jon MASIK relaciobol, mint a mertekegyseg.
  *
- * A NEGYEDIK, az `initialOrderQuantity`, SZANDEKOSAN HIANYZIK: merve az egesz
- * fan, mindossze KET elofordulasa van (a sema es a migracio), nulla iras es
- * nulla olvasas. A UNAS kliens ki sem bontja, tehat a tukorbe el sem jut. Nincs
- * mit atvinni belole, es a torlese kulon dontes.
+ * A NEGYEDIK, az `initialOrderQuantity`, MA MAR NEM LETEZIK. Merve holt volt
+ * (nulla iras, nulla olvasas, a UNAS kliens ki sem bontotta), ezert a
+ * `20260917233000_drop_dead_unas_snapshot_columns` migracio eldobta, az eles
+ * adatbazisbol is. Nincs mit atvinni belole, es nincs rajta mit eldonteni.
+ *
+ * A MONDAT ELOZO ALAKJA AZT ALLITOTTA, HOGY AZ OSZLOP MEG LETEZIK es hogy a
+ * torlese meg nyitott dontes. A megirasakor igaz volt, es egy KESOBBI lepes
+ * tette hamissa -- ezert all itt a migracio NEVE, szam helyett: egy darabszam
+ * ("ket elofordulasa van") a kovetkezo mozgatasnal megint hazudni fog.
  */
 export interface TukorKorlatok {
   minimumOrderQuantity?: { toString(): string } | null;
