@@ -59,9 +59,19 @@ interface ExpoFileSystemModule {
 }
 
 export const readFileBytes: ReadFileBytes = async (uri) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- lásd fent:
-  // egy típus-feloldó `import()` behúzza a React Native globális típusait, és
-  // eltöri a csomag mérhetőségét `node --test` alatt.
+  /*
+    A MAGYARAZAT A DIREKTIVA FOLE KERUL, NEM KOZE ES A SOR KOZE.
+
+    Az `eslint-disable-next-line` a KOVETKEZO sorra hat. Az elso alakomban a
+    direktiva utan meg ket komment-sor allt, tehat a "kovetkezo sor" egy
+    KOMMENT volt: a direktiva folosleges lett, a `require` pedig vedtelen
+    maradt. A lint mind a kettot jelezte -- de FIGYELMEZTETESKENT, tehat a kapu
+    ZOLD MARADT, es a hiba a kimenetben ult tovabb.
+
+    Az indok valtozatlan: egy tipus-feloldo `import()` behuzza a React Native
+    globalis tipusait, es eltori a csomag merhetoseget `node --test` alatt.
+  */
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require("expo-file-system") as ExpoFileSystemModule;
   return new mod.File(uri).bytes();
 };
