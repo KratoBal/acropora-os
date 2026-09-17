@@ -227,6 +227,66 @@ export function listSelectableWorksheetPartners() {
   );
 }
 
+/**
+ * AKIRE A LAP KIOSZTHATÓ.
+ *
+ * `service.view` jogot kér, tehát a szerelőnek megvan -- a MENTÉS viszont
+ * `service.manage` alatt áll (`PUT :id/assignees`). A kettő szándékosan nem
+ * ugyanaz: a nevek MEGNÉZÉSE nem ugyanaz a döntés, mint az átírásuk.
+ *
+ * A LISTA ÜRES IS LEHET, és ez nem hiba: partner-hatókörű felhasználónál a
+ * szerver `{ items: [] }`-t ad (a kiosztás belső munkaszervezés). Aki ezt
+ * hívja, MONDJA KI az üres esetet -- egy üres doboz a „Felelősök" felirat
+ * alatt úgy néz ki, mintha a betöltés akadt volna el.
+ */
+export interface WorksheetAssignableUser {
+  id: string;
+  name: string;
+  role: string;
+}
+
+export function listAssignableWorksheetUsers() {
+  return apiRequest<{ items: WorksheetAssignableUser[] }>(
+    `${BASE}/assignable-users`,
+  );
+}
+
+/**
+ * A LAP FELELŐSEI, TELJES ÁLLAPOTKÉNT.
+ *
+ * `PUT`, és a beküldött névsor a lap felelőseinek TELJES állapota, nem egy
+ * hozzáadás -- a szerver kommentje ezt külön kimondja. Vagyis aki hívja, a
+ * teljes listát küldi, és ha közben egy másik szerelő is szerkesztett, az ő
+ * választása ELVÉSZ. Ez ma a weben is így van; nem a telefon vezeti be.
+ *
+ * ÁLLAPOT-FELTÉTEL NINCS, és ez sem mulasztás: a kiosztás munkaszervezés, nem a
+ * dokumentum tartalma. Egy tévesen kiosztott lapot a lezárás pillanatában sem
+ * szabad javíthatatlanul otthagyni.
+ *
+ * A válasz a TELJES lap, tehát a képernyő frissül külön lekérdezés nélkül.
+ */
+/**
+ * A KÉRÉS TÖRZSE NEVESÍTETT TÍPUS, HOLOTT EGY MEZŐ.
+ *
+ * Nem stílus: az `apps/api/src/mobile/mobile-request-body.spec.ts` hálója a
+ * NEVESÍTETT típusokat tudja a szerver DTO-jához mérni. Egy helyben megírt
+ * `{ userIds }` objektumnak nincs mihez kötni a nevét, tehát abba a halmazba
+ * kerülne, amit ma semmi nem mér -- és épp az a hibafajta maradna fedetlen,
+ * amiért az a háló létezik: egy mezőnév, amit a telefon küld és a DTO nem
+ * ismer, 400-at ad, térerő nélkül pedig a sorban ragad.
+ */
+export interface SetWorksheetAssigneesInput {
+  userIds: string[];
+}
+
+export function setWorksheetAssignees(id: string, userIds: readonly string[]) {
+  const torzs: SetWorksheetAssigneesInput = { userIds: [...userIds] };
+  return apiRequest<WorksheetDetail>(
+    `${BASE}/${encodeURIComponent(id)}/assignees`,
+    { method: "PUT", body: JSON.stringify(torzs) },
+  );
+}
+
 export function listWorksheets({
   page = 1,
   pageSize = 25,
