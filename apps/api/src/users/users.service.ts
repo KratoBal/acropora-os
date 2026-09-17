@@ -30,6 +30,7 @@ export class UsersService {
 
   async create(input: CreateUserDto, actorId: string) {
     await this.requireCustomerExists(input.customerId);
+    this.requirePartnerRole(input.customerId, input.role);
     try {
       return await this.repository.create(input, actorId);
     } catch (error) {
@@ -41,6 +42,10 @@ export class UsersService {
     const existing = await this.detail(id);
     await this.requireCustomerExists(input.customerId);
     this.requireAtMostOnePartner(existing, input.customerId);
+    this.requirePartnerRole(
+      input.customerId === undefined ? existing.customerId : input.customerId,
+      input.role ?? existing.role,
+    );
     try {
       return await this.repository.update(id, input, actorId);
     } catch (error) {
@@ -94,6 +99,25 @@ export class UsersService {
     if (!(await this.repository.customerExists(customerId)))
       throw new BadRequestException(
         "A megadott vevő nem található, ezért a felhasználót nem lehet hozzákötni.",
+      );
+  }
+
+  /**
+   * A PARTNER-FIOK SZEREPE NEM FELULETI SZABALY.
+   *
+   * A szerep-valaszto csak kenyelmi kapu. Egy kozvetlen API-hivas, egy regebbi
+   * kliens vagy egy kesobbi kepernyo nem adhat a partnerhez kotott fioknak
+   * belso szerepet, mert akkor a partner-hatokor csak az adatokat szurne, a
+   * menu es a vegpontjogok mar tul tagok lennenek. Update-nel a tenylegesen
+   * megmarado ket erteket ellenorizzuk: a kihagyott mezo nem jelenthet kiskaput.
+   */
+  private requirePartnerRole(
+    customerId: string | null | undefined,
+    role: string,
+  ) {
+    if (customerId && role !== "PARTNER_SERVICE")
+      throw new BadRequestException(
+        "Partnerhez kötött felhasználó csak a Partner szerviz szerepkört kaphatja.",
       );
   }
 

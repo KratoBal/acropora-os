@@ -9,7 +9,14 @@
  * matching manual update.
  */
 export type UserRole =
-  "OWNER" | "ADMIN" | "MANAGER" | "SALES" | "WAREHOUSE" | "SERVICE" | "VIEWER";
+  | "OWNER"
+  | "ADMIN"
+  | "MANAGER"
+  | "SALES"
+  | "WAREHOUSE"
+  | "SERVICE"
+  | "VIEWER"
+  | "PARTNER_SERVICE";
 
 /**
  * Egy menutetel ugy, ahogy a szerver kiadja (`@acropora/types`
