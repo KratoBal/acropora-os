@@ -1,3 +1,7 @@
+import {
+  DOCUMENT_THUMBNAIL_VARIANT,
+  DOCUMENT_VARIANT_PARAM,
+} from "@acropora/types";
 import type {
   CreateWorksheetDepartmentInput,
   CreateWorksheetInput,
@@ -140,6 +144,38 @@ export const worksheetsApi = {
    * hibajegy es az eszkoz oldali letoltes ugyanezt az alakot hasznalja, es a
    * sajat kommentjuk ugyanezt mondja ki.
    */
+  /**
+   * A CSEMPE KEPE -- KULON FUGGVENY, ES EZ SZANDEKOS.
+   *
+   * MIERT NEM EGY ELHAGYHATO PARAMETER a `downloadDocument`-en: egy
+   * alapertelmezett ertek mellett a MENTES is kaphatna belyegkepet, ha valaki
+   * elgepeli vagy elfelejti. Ket kulon nev mellett ez nem lehetseges: a
+   * `downloadDocument` SOHA nem ker valtozatot.
+   *
+   * A HIANYZO BELYEGKEP NEM HIBA: a szerver ilyenkor az EREDETIT adja vissza.
+   * Regi sor, PDF vagy egy epp most feltoltott kep eseten a csempe tehat
+   * ugyanugy megjelenik, csak nem gyorsabban.
+   */
+  async downloadDocumentThumbnail(
+    token: string,
+    id: string,
+    documentId: string,
+  ) {
+    const response = await fetch(
+      /*
+        A CIM ITT KIIRVA ALL, A VALTOZAT-PARAMETERREL EGYUTT -- ES EZ MERT
+        MEGKOTES. A repo utvonal-meroje (`mobile-api-routes.spec.ts`) a
+        kliens-fajlokbol olvassa ki a hivott cimeket, es egy MASIK fajlbol
+        hozott helper-hivast nem tud feloldani: nem hagyja ki nemán, hanem
+        ELHASAL. Merve 2026-09-18: a `withThumbnailVariant(...)` alak ket
+        allitast dontott pirosra.
+      */
+      `${API_PREFIX}/service/worksheets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}?${DOCUMENT_VARIANT_PARAM}=${DOCUMENT_THUMBNAIL_VARIANT}`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok) throw new Error("A csatolmány nem tölthető le.");
+    return response.blob();
+  },
   async downloadDocument(token: string, id: string, documentId: string) {
     const response = await fetch(
       `${API_PREFIX}/service/worksheets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,

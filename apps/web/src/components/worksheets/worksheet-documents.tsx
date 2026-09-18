@@ -105,7 +105,7 @@ export function WorksheetDocuments({
     <ServiceDocumentGallery
       items={sorok}
       loadBlob={(documentId) =>
-        worksheetsApi.downloadDocument(token, worksheetId, documentId)
+        worksheetsApi.downloadDocumentThumbnail(token, worksheetId, documentId)
       }
       onDownload={(item) => void mentes(item)}
       emptyText={ures}

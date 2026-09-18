@@ -473,6 +473,32 @@ button:disabled {
   font-size: 0.9rem;
   margin: 0;
 }
+.download-package {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin: -0.8rem 0 1.5rem;
+}
+.download-package button {
+  background: #28429c;
+  border: 0;
+  border-radius: 0.5rem;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.7rem 0.9rem;
+}
+.download-package button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.error-message {
+  color: #a22222;
+  font-size: 0.9rem;
+  margin: 0;
+}
 @media (max-width: 680px) {
   .topbar,
   .page-header,

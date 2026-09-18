@@ -8,6 +8,7 @@ vi.mock("@/lib/api/worksheets", () => ({
   worksheetsApi: {
     documents: vi.fn(),
     downloadDocument: vi.fn(),
+    downloadDocumentThumbnail: vi.fn(),
   },
 }));
 
@@ -67,6 +68,7 @@ describe("WorksheetDocuments", () => {
   it("lekéri a csatolmányokat, és megjeleníti a képet", async () => {
     api.documents.mockResolvedValue({ items: [doku()] });
     api.downloadDocument.mockResolvedValue(new Blob(["kep"]));
+    api.downloadDocumentThumbnail.mockResolvedValue(new Blob(["kep"]));
 
     render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
 
@@ -85,6 +87,7 @@ describe("WorksheetDocuments", () => {
   it("nem kínál törlést, mert a szerveren nincs törlő végpont", async () => {
     api.documents.mockResolvedValue({ items: [doku()] });
     api.downloadDocument.mockResolvedValue(new Blob(["kep"]));
+    api.downloadDocumentThumbnail.mockResolvedValue(new Blob(["kep"]));
 
     render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
 

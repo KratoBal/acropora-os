@@ -3,9 +3,11 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   Post,
   Query,
+  StreamableFile,
 } from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
@@ -23,6 +25,7 @@ import {
   SetServiceJobPlacementDto,
 } from "./dto.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
+import { ServiceJobPackageService } from "./service-job-package.service.js";
 
 /**
  * A HIBAJEGY MODUL ELSŐ SZELETE: felvitel és lista.
@@ -43,7 +46,10 @@ import { ServiceJobsService } from "./service-jobs.service.js";
  */
 @Controller("service/jobs")
 export class ServiceJobsController {
-  constructor(private readonly service: ServiceJobsService) {}
+  constructor(
+    private readonly service: ServiceJobsService,
+    private readonly packageService: ServiceJobPackageService,
+  ) {}
 
   @Get()
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
@@ -109,6 +115,21 @@ export class ServiceJobsController {
    * A `:id` útvonal a `@Get()` UTÁN áll, de a konkrét utak (ha lesznek) elé
    * kell kerülniük, különben a `:id` elnyeli őket.
    */
+  @Get(":id/download")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  @Header("Cache-Control", "private, no-store")
+  async downloadPackage(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const packageFile = await this.packageService.download(id, user);
+    return new StreamableFile(packageFile.bytes, {
+      type: "application/zip",
+      length: packageFile.bytes.length,
+      disposition: `attachment; filename*=UTF-8''${encodeURIComponent(packageFile.fileName)}`,
+    });
+  }
+
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {

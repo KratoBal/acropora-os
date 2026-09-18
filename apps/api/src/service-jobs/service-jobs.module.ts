@@ -8,6 +8,8 @@ import { ServiceJobDocumentsService } from "./service-job-documents.service.js";
 import { ServiceJobsController } from "./service-jobs.controller.js";
 import { ServiceJobsRepository } from "./service-jobs.repository.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
+import { ServiceJobPackageRepository } from "./service-job-package.repository.js";
+import { ServiceJobPackageService } from "./service-job-package.service.js";
 
 /**
  * A `documentStoreProvider` ITT IS SZEREPEL, ES EZ NEM MASOLASI HIBA.
@@ -41,6 +43,8 @@ import { ServiceJobsService } from "./service-jobs.service.js";
     ServiceJobsService,
     ServiceJobDocumentsRepository,
     ServiceJobDocumentsService,
+    ServiceJobPackageRepository,
+    ServiceJobPackageService,
   ],
   exports: [ServiceJobsRepository, ServiceJobsService],
 })

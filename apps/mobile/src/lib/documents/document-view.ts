@@ -34,6 +34,24 @@
 /** A lista egy sora, ahogy a szerver adja. */
 export interface ServiceDocumentSummary {
   id: string;
+  /**
+   * A DOKUMENTUM FAJTAJA, AHOGY A SZERVER KULDI -- ES SZANDEKOSAN SIMA
+   * `string`, NEM UNIO.
+   *
+   * Ezt az osszefoglalot KET kulonbozo tartomany hasznalja a telefonon (a
+   * munkalap es a hibajegy csatolmanyai), es a ket oldalnak MAS az enumja a
+   * szerveren. Egy kozos unio tehat vagy hazudna (olyan erteket igerne, amit az
+   * egyik oldal nem tud eloallitani), vagy mind a kettot fel kellene sorolnia --
+   * es akkor mind a ket oldalon lehetne ragaztatni olyan ertekre, ami ott soha
+   * nem fordul elo.
+   *
+   * A webes oldalon EPP EZ A HIBA allt 2026-09-18-ig: a megosztott unio harom
+   * LEHETETLEN erteket sorolt, es azt az egyet nem ismerte, amire szukseg volt.
+   *
+   * ELHAGYHATO: ha egy valasz nem kuldene, a hivo NEM ismeri fel kulon
+   * fajtanak -- vagyis a mai viselkedesre esik vissza, nem allit valotlant.
+   */
+  type?: string;
   fileName: string;
   contentType: string;
   sizeBytes: number;
@@ -56,21 +74,56 @@ export function isViewableImage(contentType: string): boolean {
 }
 
 /**
+ * A CSATOLMÁNY-VÁLTOZAT NEVE ÉS A KÉRÉS-PARAMÉTER -- KÉZI MÁSOLAT.
+ *
+ * A FORRÁS a `packages/types/src/document-variant.ts`. Ez a csomag SZÁNDÉKOSAN
+ * kívül van a pnpm workspace-en, tehát nem tudja importálni; ugyanaz a helyzet,
+ * mint a válasz-típusoknál. A két oldal egyezését a szerver oldali
+ * `mobile-response-mirror` háló méri, nem a fordító.
+ *
+ * ÉS AZ ELTÉRÉS ITT NÉMA LENNE: egy elgépelt érték mellett a szerver az
+ * EREDETIT adná vissza, a csempe megjelenne, semmi nem hibázna -- csak a
+ * megtakarítás maradna el, és pont az a kliens fizetné meg, ahol a sávszélesség
+ * a legdrágább.
+ */
+export const DOCUMENT_VARIANT_PARAM = "variant";
+export const DOCUMENT_THUMBNAIL_VARIANT = "thumbnail";
+
+/**
  * A HITELESÍTETT KÉP-FORRÁS.
  *
  * TISZTA FÜGGVÉNY, hogy MÉRHETŐ legyen: a token és a cím kívülről jön, nem a
  * tárolóból. Így egy elgépelt útvonal vagy egy lemaradt fejléc állításon bukik
  * el, nem a helyszínen, egy üres csempén.
+ *
+ * === A `variant` KÖTELEZŐ, ÉS EZ ACROBOT DÖNTÉSE (2026-09-18) ===
+ *
+ * Mind a három képernyő EGY horgot használ, és abból épül a 104 pontos CSEMPE
+ * ÉS a TELJES KÉPERNYŐS kép is. Ha ez a paraméter elhagyható lenne, egy
+ * lemaradt hívóhely csendben BÉLYEGKÉPET adna a nagy képnek: nem hibázna, nem
+ * állna meg, csak ELMOSÓDNA. Egy elmosódott szerviz-fénykép az a fajta
+ * károsodás, amit senki nem jelent be hibaként, csak egyszer csak nem lehet
+ * elolvasni róla a típustáblát.
+ *
+ * Kötelezőként minden hívóhely KIMONDJA, melyiket kéri, és egy új képernyő
+ * fordítási hibát kap, amíg nem dönt.
  */
+export type DocumentImageVariant = "thumbnail" | "original";
+
 export function documentImageSource(input: {
   apiUrl: string;
   token: string;
   ownerPath: string;
   documentId: string;
+  variant: DocumentImageVariant;
 }): { uri: string; headers: Record<string, string> } {
   const alap = input.apiUrl.replace(/\/+$/, "");
+  const cim = `${alap}${input.ownerPath}/documents/${encodeURIComponent(input.documentId)}`;
   return {
-    uri: `${alap}${input.ownerPath}/documents/${encodeURIComponent(input.documentId)}`,
+    uri:
+      input.variant === "thumbnail"
+        ? `${cim}?${DOCUMENT_VARIANT_PARAM}=${DOCUMENT_THUMBNAIL_VARIANT}`
+        : cim,
     headers: { Authorization: `Bearer ${input.token}` },
   };
 }

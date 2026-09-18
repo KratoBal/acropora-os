@@ -126,6 +126,45 @@ describe("a belyegkep bekotese", () => {
   }
 
   /**
+   * A MOBIL KEZI MASOLATA UGYANAZT MONDJA, MINT A KOZOS FORRAS.
+   *
+   * Az `apps/mobile` SZANDEKOSAN kivul van a pnpm workspace-en, tehat nem tudja
+   * importalni a `@acropora/types` erteket -- ugyanaz a helyzet, mint a
+   * valasz-tipusoknal, es ott is halo meri.
+   *
+   * ES AZ ELTERES ITT NEMA LENNE: egy elgepelt ertek mellett a szerver az
+   * EREDETIT adna vissza, a csempe megjelenne, semmi nem hibazna -- csak a
+   * megtakaritas maradna el, es pont azon a kliensen, ahol a savszelesseg a
+   * legdragabb.
+   */
+  it("a mobil valtozat-nevei egyeznek a kozos forrassal", () => {
+    const kozos = readFileSync(
+      `${GYOKER}../../packages/types/src/document-variant.ts`,
+      "utf8",
+    );
+    const mobil = readFileSync(
+      `${GYOKER}../../apps/mobile/src/lib/documents/document-view.ts`,
+      "utf8",
+    );
+
+    for (const nev of [
+      "DOCUMENT_VARIANT_PARAM",
+      "DOCUMENT_THUMBNAIL_VARIANT",
+    ]) {
+      const minta = new RegExp(`export const ${nev} = "([^"]+)";`);
+      const a = minta.exec(kozos);
+      const b = minta.exec(mobil);
+      assert.ok(a, `a kozos forrasban nincs ${nev}`);
+      assert.ok(b, `a mobil masolatban nincs ${nev}`);
+      assert.equal(
+        b[1],
+        a[1],
+        `${nev}: a mobil "${b[1]}" erteket visel, a kozos forras "${a[1]}" erteket`,
+      );
+    }
+  });
+
+  /**
    * A HATOKOR-KAPUK AZ ESZKOZNEL: EZ A BIZTONSAGI ALLITAS.
    *
    * A masik ket gazdanal a lathatosag a szolgaltatasban dol el (`detail`,
