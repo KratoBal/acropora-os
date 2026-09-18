@@ -4,6 +4,20 @@ node_modules/
 
 # Build output and caches
 .next/
+# A Next SAJAT generalt fajlja, alkalmazasonkent kulonbozo tartalommal: minden
+# `next build` ujrairja. Kovetve a fa MINDEN build utan piszkos lesz, es a
+# valtozas elobb-utobb bekerul valakinek a PR-jebe eszrevetlenul -- pontosan az
+# a fajta sor, amit senki nem nez meg, mert nem o irta. (Megtortent: a #709
+# hozta be az elozo ilyen sort.)
+#
+# AMI EZT BIZTONSAGOSSA TESZI, ES AMI NEM: a fajl ket dolgot deklaral, az
+# eszkoz-importok (kep, svg) tipusait es az utvonal-tipusokat. Merve
+# 2026-09-18: a `tsc --noEmit` MINDKET alkalmazason zold a fajl NELKUL is, meg
+# `.next` konyvtar nelkul is -- de ennek az oka az, hogy ma EGYETLEN eszkoz-
+# import sincs a fanban. Ha egyszer lesz, a `turbo typecheck` (ami NEM fugg a
+# buildtol) hianyolni fogja. Az a bukas HANGOS, es ket uton oldhato: vagy build
+# fut elotte, vagy ez a sor kikerul innen, es a fajl visszakerul a repoba.
+next-env.d.ts
 dist/
 # A renamed build directory (`mv dist dist.old-<timestamp>`, to keep a build
 # around while rebuilding) no longer matches `dist/`, so git starts tracking
