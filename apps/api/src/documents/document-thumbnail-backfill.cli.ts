@@ -156,7 +156,32 @@ async function writeThumbnail(
   else await prisma.serviceJobDocument.update({ where, data });
 }
 
-export async function main(argv: readonly string[]): Promise<number> {
+/**
+ * A KIMENET NYELO, ES EZ NEM KENYELMI PARAMETER.
+ *
+ * MERVE 2026-09-18, a sajat integracios suite-om elso CI-futasan: a teszt
+ * eredetileg a `process.stdout.write` fuggvenyt CSERELTE LE, hogy elnyelje a
+ * parancs kimenetet -- es ezzel elnyelte a TESZT-FUTTATO SAJAT TAP-SORAIT is.
+ * A naploban NEGY teszt futott (`1..4`), de csak KETTONEK jelent meg az `ok`
+ * sora; a masik ketto az elnyelt szovegbe kerult.
+ *
+ * Ez nem kozmetikai: a repo TAP-naplot OLVASO kapui (`tap-stream-gate.mjs`,
+ * `integration-suite-gate.mjs`) ebbol a folyambol dolgoznak. Egy elnyelt
+ * `not ok` sor LATHATATLAN bukast jelentene.
+ *
+ * Ezert a parancs mostantol a kapott nyelobe ir. A globalis csere nem a teszt
+ * hibaja volt, hanem azt, hogy nem volt hova irni.
+ */
+export type Nyelo = (szoveg: string) => void;
+
+const ALAPERTELMEZETT_NYELO: Nyelo = (szoveg) => {
+  process.stdout.write(szoveg);
+};
+
+export async function main(
+  argv: readonly string[],
+  ki: Nyelo = ALAPERTELMEZETT_NYELO,
+): Promise<number> {
   const ir = argv.includes("--ir");
   let rows: ThumbnailBackfillRow[];
   try {
@@ -167,17 +192,25 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   const terv = planThumbnailBackfill(rows);
-  process.stdout.write(`${describeThumbnailCoverage(terv)}\n`);
+  ki(`${describeThumbnailCoverage(terv)}\n`);
 
   if (terv.candidates.length === 0) {
-    process.stdout.write("nincs teendo.\n");
+    ki("nincs teendo.\n");
     return 0;
   }
 
   if (!ir) {
-    process.stdout.write(
+    ki(
       `${terv.candidates.length} sorhoz keszulne belyegkep, osszesen ${terv.candidateBytes} bajt eredetibol.\n` +
-        "Ez a futas NEM IRT semmit. Az irashoz: --ir\n",
+        "Ez a futas NEM IRT semmit. Az irashoz: --ir\n" +
+        /*
+          A KILEPESI KOD JELENTESE KIIRVA, ES EZ ACROBOT MERT ESZREVETELE
+          (2026-09-18, a staging probaja utan): jelentes modban az 1 azt
+          jelenti, hogy VAN teendo -- nem azt, hogy hiba tortent. Ertelmes
+          konvencio, de egy gepi hivo (vagy egy ember egy naploban) konnyen
+          hibanak olvassa, es a szam onmagaban nem mondja meg a kulonbseget.
+        */
+        "A kilepesi kod 1: VAN teendo. Hiba eseten a kod 2.\n",
     );
     return 1;
   }
@@ -190,30 +223,26 @@ export async function main(argv: readonly string[]): Promise<number> {
     const bajtok = await bytesFor(jelolt, store);
     if (!bajtok) {
       bukott += 1;
-      process.stdout.write(
-        `  NINCS TARTALOM  ${jelolt.owner}/${jelolt.documentId}\n`,
-      );
+      ki(`  NINCS TARTALOM  ${jelolt.owner}/${jelolt.documentId}\n`);
       continue;
     }
     const belyeg = await makeThumbnail(bajtok, jelolt.kind);
     if (!belyeg) {
       bukott += 1;
-      process.stdout.write(
-        `  NEM KESZULT     ${jelolt.owner}/${jelolt.documentId}\n`,
-      );
+      ki(`  NEM KESZULT     ${jelolt.owner}/${jelolt.documentId}\n`);
       continue;
     }
     await writeThumbnail(jelolt, belyeg);
     eredetiBajt += bajtok.length;
     belyegBajt += belyeg.length;
-    process.stdout.write(
+    ki(
       `  KESZ            ${jelolt.owner}/${jelolt.documentId}  ${bajtok.length} -> ${belyeg.length} bajt\n`,
     );
   }
 
-  process.stdout.write(`${describeThumbnailGain(eredetiBajt, belyegBajt)}\n`);
+  ki(`${describeThumbnailGain(eredetiBajt, belyegBajt)}\n`);
   if (bukott > 0) {
-    process.stdout.write(
+    ki(
       `${bukott} sorhoz NEM keszult belyegkep. Azoknal a csempe tovabbra is az eredetibol keszul.\n`,
     );
     return 1;
