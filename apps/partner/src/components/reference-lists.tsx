@@ -86,7 +86,7 @@ export function Assets() {
   useEffect(() => {
     if (!user?.customerId) return;
     void partnerApi
-      .assets(user.customerId)
+      .assets()
       .then(setData)
       .catch((cause) =>
         setError(

@@ -75,7 +75,7 @@ export function NewTicket() {
       return;
     }
     void partnerApi
-      .assets(customerId, departmentId)
+      .assets(departmentId)
       .then((result) => {
         setAssets(result.items);
         setAssetIds([]);
