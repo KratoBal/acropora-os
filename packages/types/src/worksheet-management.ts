@@ -311,6 +311,14 @@ export interface WorksheetLineInput {
 export interface WorksheetSignatureDetail {
   decision: WorksheetSignatureDecision;
   /**
+   * MILYEN MINŐSÉGBEN írta alá: a partner munkatársa, egy helyszínen beírt
+   * név, vagy a SZOLGÁLTATÓ saját munkatársa.
+   *
+   * `null` a 2026-09-04 előtti sorokon: ott nem tudjuk, és a séma szerint „egy
+   * kitalált érték rosszabb, mint egy kétértelmű".
+   */
+  signerSource: "SELECTED" | "TYPED" | "INTERNAL" | null;
+  /**
    * AZ ALAIRO NEVE. 2026-09-04 ota az UGYFEL embere, mindket feluleten.
    *
    * Korabban a mobil a SZERELO nevet kuldte ide, a web az ugyfelet -- ugyanaz a

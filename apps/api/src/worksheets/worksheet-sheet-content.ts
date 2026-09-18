@@ -1,3 +1,8 @@
+import {
+  worksheetSignerLabel,
+  type WorksheetSignerSource,
+} from "./worksheet-signer.js";
+
 /**
  * A NYOMTATOTT MUNKALAP TARTALMA -- SOROKKÉNT, PDF NÉLKÜL.
  *
@@ -84,6 +89,14 @@ export interface WorksheetSheetInput {
     decision: "ACCEPTED" | "REJECTED";
     /** Az ÜGYFÉL embere, aki aláírt. */
     signerName: string;
+    /**
+     * MILYEN MINŐSÉGBEN írta alá. A lap ebből mondja ki, hogy a partner
+     * munkatársa, egy helyszínen beírt név, vagy a SAJÁT kollégánk volt.
+     *
+     * `null`-t is felvehet: a régi sorokon nincs jelölve, és a séma szerint
+     * „egy kitalált érték rosszabb, mint egy kétértelmű".
+     */
+    signerSource: WorksheetSignerSource | null;
     /**
      * A KOLLÉGÁNK, aki az aláírást rögzítette. NEM az aláíró.
      *
@@ -280,8 +293,14 @@ export function worksheetSheetLines(
   } else {
     const decision =
       input.signature.decision === "ACCEPTED" ? "Elfogadva" : "Elutasítva";
+    /*
+      A MINOSEG A NEV ELOTT ALL, nem utana zarojelben: aki a lapot olvassa, a
+      mondat elejen dont arrol, kinek az alairasat latja.
+    */
     out.push(
-      `${decision}. Aláírta: ${input.signature.signerName}, ` +
+      `${decision}. ` +
+        `${worksheetSignerLabel(input.signature.signerSource)}: ` +
+        `${input.signature.signerName}, ` +
         `${sheetDate(input.signature.signedAt)}`,
     );
     out.push(label("Az aláírást rögzítette", input.signature.signedByName));

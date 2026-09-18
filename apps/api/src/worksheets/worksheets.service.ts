@@ -8,7 +8,10 @@ import {
   canEditWorksheetEntry,
   describeEntryEditRefusal,
 } from "./worksheet-entry-permission.js";
-import { describeEmptySignerList } from "./worksheet-signer.js";
+import {
+  describeEmptySignerList,
+  type WorksheetSignerSource,
+} from "./worksheet-signer.js";
 import {
   describeSigningCodeFailure,
   isWellFormedSigningCode,
@@ -820,7 +823,7 @@ export class WorksheetsService {
         "Az elutasítás okát meg kell adni, legalább három karakterrel: enélkül nem derül ki, mit kell javítani.",
       );
 
-    const signer = await this.resolveSigner(id, input);
+    const signer = await this.resolveSigner(id, input, actorUserId);
     const result = await this.repository.sign({
       worksheetId: id,
       decision: input.decision,
@@ -993,11 +996,44 @@ export class WorksheetsService {
   private async resolveSigner(
     worksheetId: string,
     input: SignWorksheetVersionDto,
+    actorUserId: string,
   ): Promise<{
     signerName: string;
     signerUserId: string | null;
-    signerSource: "SELECTED" | "TYPED";
+    signerSource: WorksheetSignerSource;
   }> {
+    /**
+     * A BELSOS AG ALL ELOL, ES EZ NEM SORREND-IZLES.
+     *
+     * Ha hatrebb allna, egy olyan keres, ami MIND A KETTOT kuldi, csendben a
+     * partner-agra futna -- vagyis a kliens a `signerUserId` mezovel felul
+     * tudna irni azt, hogy "en irom ala". A ket ag ezert kizarja egymast, es
+     * az utkozes HIBA, nem valasztas: egy keres, ami ket kulonbozo dolgot
+     * mond, nem talalgatas targya.
+     */
+    if (input.signSelf) {
+      if (input.signerUserId || input.signerName?.trim())
+        throw new BadRequestException(
+          "A saját aláírás mellé nem adható meg másik aláíró: döntsd el, ki írja alá.",
+        );
+      const alairo = await this.repository.userLegalName(actorUserId);
+      if (!alairo)
+        throw new BadRequestException(
+          "A bejelentkezett felhasználó nem található, ezért nem tud aláírni.",
+        );
+      /**
+       * ALAIROKOD NINCS EZEN AZ AGON (acrobot dontese, 2026-09-18 13:22): a
+       * vedelem ugyanaz a munkamenet, ami a lapot lezarja es a teteleit atirja.
+       * Egy masodik titok kizarolag itt azt allitana, hogy ez a lepes erosebben
+       * vedett, mint a tobbi.
+       */
+      return {
+        signerName: alairo,
+        signerUserId: actorUserId,
+        signerSource: "INTERNAL",
+      };
+    }
+
     if (input.signerUserId) {
       const worksheet = await this.requireWorksheet(worksheetId, {
         kind: "internal",

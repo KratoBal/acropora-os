@@ -113,6 +113,13 @@ function repository(overrides: Record<string, unknown> = {}) {
      */
     signingCodeHash: async () => KOD_HASH,
     isSelectablePartner: async () => true,
+    /**
+     * A SAJAT KOLLEGA TELJES NEVE. A dupla ITT is a `userLegalName` nevet
+     * hasznalja, nem a `userDisplayName`-et: a valodi kod a becenevet
+     * SZANDEKOSAN kerüli az alairasnal, es egy elteresen nevezett dupla ezt a
+     * kulonbseget csendben eltuntetne.
+     */
+    userLegalName: async () => "Szerelő Sándor",
     sign: async () => ({ ok: true }) as const,
     ...overrides,
   } as unknown as WorksheetsRepository;
@@ -395,5 +402,103 @@ describe("az aláírókód ellenőrzése", () => {
       "szerelo-1",
     );
     assert.equal(kapott[0]?.signerSource, "TYPED");
+  });
+});
+
+describe("a SAJÁT kollégánk aláírása (`signSelf`)", () => {
+  /*
+    Balazs kerese, 2026-09-18 07:01 UTC: "Es az elozo kepernyon utolso gomb
+    Alairom." A sajat szervizesunk sajat maga ir ala, AZONOSITVA.
+
+    A KLIENS NEM KULD AZONOSITOT: a szerver a hitelesitett aktort veszi.
+  */
+  it("az aláíró a HITELESÍTETT AKTOR, nem a kérés törzse", async () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS EBBEN A BLOKKBAN. Ha a kliens valaszthatna
+      alairot, a mezo NEVESITVE adna at egy hatalmat, amit ma senki nem kapott
+      meg -- es a lapon egy MASIK ember neve allna alairokent.
+
+      MI PIROSIT: ha a szolgaltatas barmit atvesz a torzsbol a szemelyhez.
+    */
+    const kapott: Record<string, unknown>[] = [];
+    await service({
+      sign: async (input: Record<string, unknown>) => {
+        kapott.push(input);
+        return { ok: true } as const;
+      },
+    }).sign(
+      "worksheet-1",
+      { decision: "ACCEPTED", signSelf: true, note: null } as never,
+      "szerelo-1",
+    );
+
+    assert.equal(kapott[0]?.signerUserId, "szerelo-1");
+    assert.equal(kapott[0]?.signerName, "Szerelő Sándor");
+    assert.equal(kapott[0]?.signerSource, "INTERNAL");
+  });
+
+  it("ALÁÍRÓKÓD NÉLKÜL is megy -- ez a döntés, nem mulasztás", async () => {
+    /*
+      acrobot dontese, 2026-09-18 13:22: ugyanaz az ember ugyanezzel a
+      bejelentkezessel lezarja a lapot es atirja a teteleit. Egy masodik titok
+      KIZAROLAG itt azt allitana, hogy ez a lepes erosebben vedett.
+
+      A DUPLA SZANDEKOSAN OLYAN, AMI KOD-ELLENORZESNEL ELHASALNA
+      (`signingCodeHash` dob): igy az allitas nem csak azt meri, hogy nem jott
+      hiba, hanem azt is, hogy a kod-ut MEG SEM INDULT.
+    */
+    await service({
+      signingCodeHash: async () => {
+        throw new Error("a belső ág NEM kérhet aláírókódot");
+      },
+    }).sign(
+      "worksheet-1",
+      { decision: "ACCEPTED", signSelf: true, note: null } as never,
+      "szerelo-1",
+    );
+  });
+
+  it("MÁSIK aláíró mellé nem adható: az ütközés HIBA, nem választás", async () => {
+    /*
+      MI PIROSIT: ha a ket ag sorrendre bizza a dontest. Akkor egy keres, ami
+      MIND A KETTOT kuldi, csendben az egyik agra futna -- es a kliens a
+      `signerUserId` mezovel felul tudna irni azt, hogy "en irom ala".
+    */
+    for (const tobblet of [
+      { signerUserId: "kontakt-2" },
+      { signerName: "Hamis Hugó" },
+    ])
+      await assert.rejects(
+        () =>
+          service().sign(
+            "worksheet-1",
+            {
+              decision: "ACCEPTED",
+              signSelf: true,
+              note: null,
+              ...tobblet,
+            } as never,
+            "szerelo-1",
+          ),
+        BadRequestException,
+        `a többlet mező átment: ${JSON.stringify(tobblet)}`,
+      );
+  });
+
+  it("ISMERETLEN aktornál NEM ír alá üres névvel", async () => {
+    /*
+      A `userLegalName` `null`-t ad, ha a sor nem letezik (torolt felhasznalo,
+      ervenytelen munkamenet). Ures nevvel alairni rosszabb, mint elhasalni: a
+      lapon egy nevtelen "szolgaltato munkatarsa" allna.
+    */
+    await assert.rejects(
+      () =>
+        service({ userLegalName: async () => null }).sign(
+          "worksheet-1",
+          { decision: "ACCEPTED", signSelf: true, note: null } as never,
+          "szerelo-1",
+        ),
+      BadRequestException,
+    );
   });
 });

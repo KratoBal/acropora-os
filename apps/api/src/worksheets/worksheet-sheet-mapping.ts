@@ -84,6 +84,7 @@ export function worksheetSheetInput(
       ? {
           decision: version.signature.decision,
           signerName: version.signature.signerName,
+          signerSource: version.signature.signerSource,
           signedByName: version.signature.signedByName,
           signedAt: version.signature.signedAt,
           note: version.signature.note,
