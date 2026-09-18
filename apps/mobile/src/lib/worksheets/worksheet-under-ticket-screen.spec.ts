@@ -73,6 +73,35 @@ describe("a munkalap a hibajegy alá kerül", () => {
       /jegy\.kind === "server"\s*\n?\s*\? \{ \.\.\.payload, serviceJobId: jegy\.serviceJobId \}/,
     );
   });
+
+  /**
+   * AZ ELOTOLTES BEKOTESE -- A DONTES A TISZTA MODULBAN ALL, DE A BEKOTES ITT.
+   *
+   * A modul (`worksheet-prefill-from-ticket.ts`) sajat speckel all, es azt meri,
+   * MIT kell atvenni. Amit CSAK itt lehet megmerni: hogy a kepernyo egyaltalan
+   * hivja-e, es hogy a jegy a SZERVERTOL jon-e.
+   *
+   * MIERT KELL A MASODIK: egy params-ban atadott `customerId` egyszerubb lenne,
+   * es a kepernyon sokaig ugy is nezne ki, hogy mukodik -- a szerver viszont
+   * (`mayWorksheetJoinTicket`) a lapot utana utasitana vissza. A hiba a
+   * KULDESKOR jelenne meg, a helyszintol tavol.
+   */
+  it("a jegy partnerét a szerverről kérdezi le, nem a címből", () => {
+    assert.match(urlap, /prefillFromTicket\(\{/);
+    assert.match(urlap, /getServiceJob\(/);
+    // A CIMBOL CSAK A JEGY AZONOSITOJA JOHET: partner-azonosito nem.
+    assert.doesNotMatch(urlap, /useLocalSearchParams<\{[^}]*customerId/);
+  });
+
+  /**
+   * ES A VALASZTO ZART, HA A LAP JEGY ALA KESZUL. Egy valaszto, ami olyat kinal,
+   * amit a szerver elutasit, rosszabb a hianyanal -- es a szerelo csak a
+   * kuldeskor tudna meg.
+   */
+  it("jegy alatt a partner-választó zárt", () => {
+    assert.match(urlap, /partnerLezarva\(elotoltes\)/);
+    assert.match(urlap, /disabled=\{partnerLezarva\(elotoltes\)\}/);
+  });
 });
 
 /**

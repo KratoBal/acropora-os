@@ -51,6 +51,11 @@ import {
   ticketNotice,
 } from "@/lib/worksheets/worksheet-under-ticket";
 import { worksheetOperationId } from "@/lib/offline/sync-queue";
+import { getServiceJob } from "@/lib/api/service-jobs";
+import {
+  partnerLezarva,
+  prefillFromTicket,
+} from "@/lib/worksheets/worksheet-prefill-from-ticket";
 import {
   buildWorksheetCreatePayload,
   describeWorksheetQueueWrite,
@@ -96,7 +101,15 @@ export default function NewWorksheetScreen() {
   const [partner, setPartner] = useState<WorksheetSelectablePartner | null>(
     null,
   );
-  const [partnerPickerOpen, setPartnerPickerOpen] = useState(true);
+  /**
+   * JEGY ALATT A VALASZTO KI SEM NYILIK. A partner a jegybol jon, es egy
+   * valaszto, ami olyat kinal, amit a szerver elutasit, rosszabb a hianyanal.
+   * A SORBAN allo jegynel viszont nyitva marad: ott tenyleg a szerelo valaszt,
+   * mert a jegy meg le sem kerdezheto.
+   */
+  const [partnerPickerOpen, setPartnerPickerOpen] = useState(
+    jegy.kind !== "server",
+  );
   const [departmentId, setDepartmentId] = useState("");
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
@@ -138,16 +151,65 @@ export default function NewWorksheetScreen() {
   });
 
   /**
-   * A HELYSZÍNEK A PARTNERTŐL FÜGGNEK, ezért a lekérdezés is.
+   * A JEGY A SZERVERTOL JON, NEM A CIMBOL -- ES EZ NEM KERULOUT.
    *
-   * A `customerId` a munkalapé, nem a partneré, és a végpont is ezen a néven
-   * kéri -- a `partners.ts` alegység-hívása MÁS azonosítóra megy, tehát nem
-   * cserélhető fel vele.
+   * A navigacio csak a jegy AZONOSITOJAT adja at. A partnert egy params-ban
+   * atadott `customerId` egyszerubben hozna, de azt barki atirhatna, es a
+   * vegpont (`mayWorksheetJoinTicket`) utana visszautasitana a lapot. A web
+   * ugyanezert kerdezi le a jegyet.
    */
+  const jegyQuery = useQuery({
+    queryKey: [
+      "worksheet-new-ticket",
+      jegy.kind === "server" ? jegy.serviceJobId : null,
+    ],
+    queryFn: () =>
+      getServiceJob(jegy.kind === "server" ? jegy.serviceJobId : ""),
+    enabled: jegy.kind === "server" && status === "authenticated",
+  });
+
+  /**
+   * MIT VESZ AT A LAP A JEGYBOL. A dontes tiszta modulban all
+   * (`worksheet-prefill-from-ticket.ts`), mert ebben az appban nincs
+   * komponens-teszt: ami ide kerulne, azt soha senki nem merne le.
+   */
+  const elotoltes = prefillFromTicket({
+    link: jegy,
+    jegy: jegyQuery.data
+      ? {
+          customerId: jegyQuery.data.customerId,
+          customerName: jegyQuery.data.customerName,
+          departmentId: jegyQuery.data.departmentId,
+        }
+      : null,
+    betoltes: jegyQuery.isPending,
+    hiba: jegyQuery.isError,
+    partnerek: partnersQuery.data?.items ?? [],
+  });
+
+  /**
+   * AZ ELOTOLTES SZARMAZTATOTT ERTEK, NEM MASOLT ALLAPOT.
+   *
+   * Az elso valtozatom egy `useEffect`-ben irta at a ket allapotot, es a mobil
+   * lint ELUTASITOTTA: "Calling setState synchronously within an effect can
+   * trigger cascading renders". A szabaly itt nem formasag -- egy masolt allapot
+   * KET forrast csinal ugyanabbol az adatbol, es a ketto elcsuszhat.
+   *
+   * Szarmaztatva nincs mit elcsusztatni: jegy alatt a jegy partnere ER, minden
+   * mas esetben a szerelo valasztasa. A helyszinnel ugyanez, azzal a
+   * kulonbseggel, hogy ott a szerelo felul tudja irni -- a sajat valasztasa
+   * nyer, amint megtortent.
+   */
+  const partnerHatasos =
+    elotoltes.kind === "kesz" ? elotoltes.partner : partner;
+  const departmentIdHatasos =
+    departmentId ||
+    (elotoltes.kind === "kesz" ? (elotoltes.departmentId ?? "") : "");
+
   const departmentsQuery = useQuery({
-    queryKey: ["worksheet-departments", partner?.customerId],
-    queryFn: () => listWorksheetDepartments(partner!.customerId),
-    enabled: Boolean(partner?.customerId),
+    queryKey: ["worksheet-departments", partnerHatasos?.customerId],
+    queryFn: () => listWorksheetDepartments(partnerHatasos!.customerId),
+    enabled: Boolean(partnerHatasos?.customerId),
   });
 
   /**
@@ -156,11 +218,11 @@ export default function NewWorksheetScreen() {
    * működne, ahol a legtöbbet érne.
    */
   useEffect(() => {
-    const customerId = partner?.customerId;
+    const customerId = partnerHatasos?.customerId;
     const items = departmentsQuery.data?.items;
     if (!customerId || !items) return;
     void rememberWorksheetDepartments(customerId, items);
-  }, [partner?.customerId, departmentsQuery.data]);
+  }, [partnerHatasos?.customerId, departmentsQuery.data]);
 
   /**
    * A MENTETT MÁSOLAT CSAK AKKOR KERÜL ELŐ, HA A HÍVÁS TÉNYLEG ELHASALT -- nem
@@ -174,7 +236,7 @@ export default function NewWorksheetScreen() {
   }>({ items: [], syncedAt: null });
 
   useEffect(() => {
-    const customerId = partner?.customerId;
+    const customerId = partnerHatasos?.customerId;
     if (!customerId || !departmentsQuery.isError) return;
     let ervenyes = true;
     void (async () => {
@@ -184,7 +246,7 @@ export default function NewWorksheetScreen() {
     return () => {
       ervenyes = false;
     };
-  }, [partner?.customerId, departmentsQuery.isError]);
+  }, [partnerHatasos?.customerId, departmentsQuery.isError]);
 
   const fromCache = departmentsQuery.isError;
   const departments = useMemo(
@@ -361,8 +423,8 @@ export default function NewWorksheetScreen() {
   const submit = () => {
     setError(null);
     const result = buildWorksheetCreatePayload({
-      customerId: partner?.customerId ?? "",
-      departmentId,
+      customerId: partnerHatasos?.customerId ?? "",
+      departmentId: departmentIdHatasos,
       subject,
       description,
     });
@@ -409,18 +471,39 @@ export default function NewWorksheetScreen() {
           <Section title="Partner">
             <Pressable
               accessibilityRole="button"
+              disabled={partnerLezarva(elotoltes)}
               onPress={() => setPartnerPickerOpen((open) => !open)}
-              style={[styles.pickerRow, partner && styles.pickerSelected]}
+              style={[
+                styles.pickerRow,
+                partnerHatasos && styles.pickerSelected,
+              ]}
             >
               <Text style={styles.pickerName}>
-                {partner ? partner.name : "Válassz partnert"}
+                {partnerHatasos
+                  ? partnerHatasos.name
+                  : elotoltes.kind === "toltes"
+                    ? "A hibajegy partnere töltődik…"
+                    : "Válassz partnert"}
               </Text>
               <Text style={styles.pickerMeta}>
-                {partner ? partner.partnerCode : "Koppints a listához"}
+                {partnerHatasos
+                  ? partnerLezarva(elotoltes)
+                    ? "A hibajegyről — nem módosítható"
+                    : partnerHatasos.partnerCode
+                  : "Koppints a listához"}
               </Text>
             </Pressable>
+            {/*
+              A KET ALLAPOT KET KULON MONDAT, es nem egy kozos "nem sikerult".
+              A betoltesi hibanal UJRA lehet probalni; partner nelkuli jegynel a
+              JEGYET kell rendbe tenni, es addig a lap sehogy nem mehet fel.
+            */}
+            {elotoltes.kind === "hiba" || elotoltes.kind === "nincs-partner" ? (
+              <Text style={styles.hint}>{elotoltes.uzenet}</Text>
+            ) : null}
             <FieldError error={error} field="customer" />
-            {!partnerPickerOpen ? null : partnersQuery.isPending ? (
+            {partnerLezarva(elotoltes) ||
+            !partnerPickerOpen ? null : partnersQuery.isPending ? (
               <ActivityIndicator color="#52d6c7" />
             ) : partnersQuery.isError ? (
               <Text style={styles.hint}>
@@ -446,7 +529,7 @@ export default function NewWorksheetScreen() {
                     }}
                     style={[
                       styles.listRow,
-                      partner?.customerId === item.customerId &&
+                      partnerHatasos?.customerId === item.customerId &&
                         styles.listRowOn,
                     ]}
                   >
@@ -459,7 +542,7 @@ export default function NewWorksheetScreen() {
           </Section>
 
           <Section title="Helyszín">
-            {!partner ? (
+            {!partnerHatasos ? (
               <Text style={styles.hint}>
                 Előbb válassz partnert: a helyszínek hozzá tartoznak.
               </Text>
@@ -485,7 +568,7 @@ export default function NewWorksheetScreen() {
                     onPress={() => setDepartmentId(unit.id)}
                     style={[
                       styles.listRow,
-                      departmentId === unit.id && styles.listRowOn,
+                      departmentIdHatasos === unit.id && styles.listRowOn,
                     ]}
                   >
                     <Text style={styles.listName}>{unit.name}</Text>

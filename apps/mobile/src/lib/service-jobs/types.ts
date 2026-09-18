@@ -120,6 +120,20 @@ export interface ServiceJobDocumentSummary {
 
 export interface ServiceJobDetail extends ServiceJobListItem {
   description: string | null;
+  /**
+   * A JEGY PARTNERE ES HELYSZINE, AZONOSITOVAL -- ES EZ NEM UJ VEGPONT.
+   *
+   * A szerver MAR MA kuldi mind a kettot (`service-jobs.service.ts`, a
+   * reszletlap valasza), es a kozos tipuson is ott allnak. A telefon
+   * tukor-tipusa viszont nem ismerte oket, tehat a munkalap-felvitel nem tudta
+   * atvenni a jegy partnerét -- holott az adat ott volt a valaszban.
+   *
+   * Merve 2026-09-18: nulla `customerId` talalat volt ebben a fajlban. Ez az
+   * "adat megvan, a parancs nincs" fajta, es a feloldasa nem szerver-munka,
+   * hanem ez a ket sor.
+   */
+  customerId: string | null;
+  departmentId: string | null;
   departmentName: string | null;
   scheduledAt: string | null;
   startedAt: string | null;
