@@ -48,22 +48,31 @@ const gate = integrationDatabaseGate(process.env);
 
 const PREFIX = "THUMB-INT-";
 
-/** Elnyelt kimenet: a parancs stdout-ra ir, es a suite naplojaba nem kell. */
+/**
+ * A PARANCS KIMENETE GYUJTOBE MEGY, NEM A GLOBALIS `process.stdout`-BA.
+ *
+ * AZ ELSO ALAKOM A `process.stdout.write` FUGGVENYT CSERELTE LE, ES AZ
+ * ELNYELTE A TESZT-FUTTATO SAJAT TAP-SORAIT. Merve a CI elso futasan: NEGY
+ * teszt futott le (`1..4`), es csak KETTONEK jelent meg az `ok` sora a
+ * naploban -- a masik ketto az en gyujtomben kotott ki.
+ *
+ * A suite ettol ZOLD volt, tehat semmi nem szolt. A baj a TAP-FOLYAMBAN allt:
+ * a repo naplot OLVASO kapui (`tap-stream-gate.mjs`,
+ * `integration-suite-gate.mjs`) ebbol dolgoznak, es egy elnyelt `not ok` sor
+ * LATHATATLAN bukast jelentene.
+ *
+ * A javitas nem itt van, hanem a parancsban: a `main` mostantol kapott nyelobe
+ * ir. Egy teszt, aminek GLOBALIS allapotot kell atirnia ahhoz, hogy merjen, azt
+ * mondja meg, hogy a MERT KOD felulete hianyzik -- nem azt, hogy a teszt ugyes.
+ */
 async function futtat(
   argv: string[],
 ): Promise<{ kod: number; kimenet: string }> {
-  const eredeti = process.stdout.write.bind(process.stdout);
   let kimenet = "";
-  process.stdout.write = ((darab: string | Uint8Array) => {
-    kimenet +=
-      typeof darab === "string" ? darab : Buffer.from(darab).toString();
-    return true;
-  }) as typeof process.stdout.write;
-  try {
-    return { kod: await main(argv), kimenet };
-  } finally {
-    process.stdout.write = eredeti;
-  }
+  const kod = await main(argv, (szoveg) => {
+    kimenet += szoveg;
+  });
+  return { kod, kimenet };
 }
 
 /**
