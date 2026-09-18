@@ -33,12 +33,19 @@ describe("worksheetListWheres", () => {
       { id: { in: ["ws-1", "ws-2"] } },
     );
 
+    /*
+      A MASODIK AG 2026-09-18 OTA A REJTES SZUROJE. Az allitas a TELJES tombre
+      megy, nem csak a hatokor-agra: igy egy felcserelt sorrend is kipirosodik,
+      es a rejtes-ag sem tunhet el eszrevetlenul.
+    */
     assert.deepEqual(list.AND, [
       { customerId: "customer-1" },
+      { hiddenAt: null },
       { customerId: "customer-1", id: { in: ["ws-1", "ws-2"] } },
     ]);
     assert.deepEqual(counts.AND, [
       { customerId: "customer-1" },
+      { hiddenAt: null },
       { customerId: "customer-1" },
     ]);
   });
@@ -63,8 +70,9 @@ describe("worksheetListWheres", () => {
       { id: { in: ["ws-9"] } },
     );
 
-    const listaSzuro = (list.AND as Record<string, unknown>[])[1];
-    const szamlaloSzuro = (counts.AND as Record<string, unknown>[])[1];
+    // A FELHASZNALOI SZURO A HARMADIK AG: a masodik 2026-09-18 ota a rejtese.
+    const listaSzuro = (list.AND as Record<string, unknown>[])[2];
+    const szamlaloSzuro = (counts.AND as Record<string, unknown>[])[2];
 
     assert.deepEqual(szamlaloSzuro, felhasznaloiSzuro);
     assert.deepEqual(listaSzuro, {
@@ -77,7 +85,67 @@ describe("worksheetListWheres", () => {
     assert.deepEqual(
       worksheetListWheres({ kind: "supplier", supplierId: "s-1" }, {}, {})
         .counts.AND,
-      [{ supplierId: "s-1" }, {}],
+      [{ supplierId: "s-1" }, { hiddenAt: null }, {}],
     );
+  });
+});
+
+/**
+ * A REJTETT LAPOK A LISTABOL ES A SZAMLALOBOL IS KIMARADNAK.
+ *
+ * UGYANAZ A SZERKEZETI OK, AMIRT A HATOKOR IS EGY HIVASBOL SZULETIK: ha a
+ * rejtes csak az egyikbe kerulne bele, a lista ures maradna es a csempen allo
+ * szam nem nulla. Az a fajta elteres, amit a felhasznalo hibanak lat, es
+ * amirol nem tudja megmondani, melyik oldal hazudik.
+ */
+describe("a rejtett lapok a listából és a számlálóból is kimaradnak", () => {
+  const BELSO = { kind: "internal" } as const;
+
+  /** A `where` `AND` tombjenek agai, ellenorzott alakkal. */
+  function agak(where: unknown): unknown[] {
+    assert.ok(
+      where && typeof where === "object" && "AND" in where,
+      "a where nem AND-ágakból áll",
+    );
+    const value = (where as { AND: unknown }).AND;
+    assert.ok(Array.isArray(value), "az AND nem tömb");
+    return value;
+  }
+
+  const rejtett = (where: unknown) =>
+    agak(where).some(
+      (ag) =>
+        ag !== null &&
+        typeof ag === "object" &&
+        "hiddenAt" in ag &&
+        (ag as { hiddenAt: unknown }).hiddenAt === null,
+    );
+
+  it("alapból MIND A KETTŐBEN ott a szűrő", () => {
+    const { list, counts } = worksheetListWheres(BELSO, {}, {});
+    assert.equal(rejtett(list), true, "a listából hiányzik");
+    assert.equal(rejtett(counts), true, "a számlálóból hiányzik");
+  });
+
+  it("a kapcsolóval MIND A KETTŐBŐL kikerül", () => {
+    /*
+      POZITIV KONTROLL A FENTI ALLITASHOZ: ha a kereso `rejtett()` barmit
+      igaznak mondana, ez a ket allitas is zold lenne. Igy viszont a ket irany
+      egyutt bizonyit: a szuro OTT VAN, amikor kell, es NINCS ott, amikor nem.
+    */
+    const { list, counts } = worksheetListWheres(BELSO, {}, {}, true);
+    assert.equal(rejtett(list), false);
+    assert.equal(rejtett(counts), false);
+  });
+
+  it("PARTNER hatókörön a kapcsoló nem hat", () => {
+    const { list, counts } = worksheetListWheres(
+      { kind: "customer", customerId: "cust-1" },
+      {},
+      {},
+      true,
+    );
+    assert.equal(rejtett(list), true);
+    assert.equal(rejtett(counts), true);
   });
 });

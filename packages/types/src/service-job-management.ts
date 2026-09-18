@@ -46,6 +46,15 @@ export interface ServiceJobListItem {
   departmentPath: string[] | null;
   worksheetCount: number;
   createdAt: string;
+  /**
+   * EL VAN-E REJTVE. Ugyanaz a mező és ugyanaz a szabály, mint a
+   * munkalap-listán: alapból minden sor `false`, mert rejtett sor nem is jön.
+   *
+   * A PARTNER VÁLASZÁBAN IS OTT ÁLL, és mindig `false`: a partner-úton a
+   * rejtett sor soha nem értelmezett. Nem külön alakot adunk a két oldalnak,
+   * mert egy elágazó válasz-típus a KÖVETKEZŐ mezőnél is elágazna.
+   */
+  hidden: boolean;
 }
 
 /**
@@ -192,6 +201,17 @@ export interface ServiceJobDocumentSummary {
  */
 export interface ServiceJobDetail {
   id: string;
+  /**
+   * EL VAN-E REJTVE. A RÉSZLETLAP REJTETT SORNÁL IS ELÉRHETŐ -- egy rejtett
+   * elem nem „nem létezik", csak nincs a listákban --, tehát ez a mező itt
+   * MIND A KÉT értéket felveheti, szemben a lista-elemmel, ahol alapból
+   * mindig hamis.
+   *
+   * A FELÜLET EBBŐL TUDJA, MELYIK IRÁNYT KÍNÁLJA fel: elrejtést vagy
+   * visszaállítást. E nélkül a gombnak találgatnia kellene, és egy rossz
+   * irányba mutató gomb visszaállítás helyett újra elrejtene.
+   */
+  hidden: boolean;
   jobNumber: string;
   title: string;
   description: string | null;

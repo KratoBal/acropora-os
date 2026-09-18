@@ -9,6 +9,7 @@ import type { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import { hiddenRowsWhere } from "../common/hidden-rows.js";
 import { serviceJobVisibilityWhere } from "./service-job-visibility.js";
 import { mayWriteServiceJob } from "./service-job-write-scope.js";
 import { mayAssignUnit } from "./visibility-assignment.js";
@@ -627,7 +628,23 @@ export class ServiceJobsService {
      * nezne ki hibasnak. Ezert all egy valtozoban: ket kulon hivas ket kulon
      * helyen elobb-utobb elcsuszna.
      */
-    const visibility = await this.visibilityFor(user);
+    /**
+     * A REJTES A LATHATOSAGI FELTETEL RESZE, ES EZ NEM KENYELMI DONTES.
+     *
+     * A lista es a szamlalo KET kulon hivas, es ugyanazt a `visibility` agat
+     * kapja. Ha a rejtes kulon argumentum lenne, EGYIKBOL kimaradhatna: a
+     * lista ures maradna, a csempeken allo szam mellette nem nulla. Igy
+     * viszont szerkezetileg nem tud szetcsuszni.
+     *
+     * A KAPCSOLOT A HATOKOR ERTELMEZI, nem a hivo (`hiddenRowsWhere`): a
+     * partner portaljan a rejtett jegy soha nem ertelmezett, akarmit kuld.
+     */
+    const visibility: Prisma.ServiceJobWhereInput = {
+      AND: [
+        await this.visibilityFor(user),
+        hiddenRowsWhere(partnerScopeOf(user), query.includeHidden),
+      ],
+    };
     const [{ rows, truncated }, counts] = await Promise.all([
       this.repository.list(
         query.scope ?? "open",
@@ -651,6 +668,7 @@ export class ServiceJobsService {
         departmentPath: row.departmentPath,
         worksheetCount: row.worksheetCount,
         createdAt: row.createdAt.toISOString(),
+        hidden: row.hiddenAt !== null,
       })),
     };
   }
@@ -697,6 +715,11 @@ export class ServiceJobsService {
       jobNumber: row.jobNumber,
       title: row.title,
       description: row.description,
+      /**
+       * A RESZLETLAP REJTETT JEGYNEL IS ELERHETO, tehat itt mind a ket ertek
+       * elofordulhat -- a lista-elemen alapbol mindig hamis.
+       */
+      hidden: row.hiddenAt !== null,
       status: row.status,
       partnerStatus: partnerVisibleStatus(row.status),
       partnerStatusLabel: partnerStatusLabel(row.status),
@@ -1031,6 +1054,35 @@ export class ServiceJobsService {
    * arra kényszerítené a felhasználót, hogy sorra próbálgassa a gombokat -
    * és a válasz úgyis a szerveren áll, tehát olcsóbb kimondani.
    */
+  /**
+   * A JEGY ELREJTESE VAGY VISSZAALLITASA.
+   *
+   * UGYANAZ AZ ALAK, MINT A MUNKALAPNAL: egy metodus ket iranyra, es a
+   * hatokor-korlat itt all, nem a kontrolleren. A `requireWriteScope` az a
+   * meglevo ellenorzes, ami mar ma kimondja, hogy iras csak belso utrol jon --
+   * nem irtam melle masodikat.
+   *
+   * ES AMIT EZ SZANDEKOSAN NEM CSINAL: nem rejti el a jegy MUNKALAPJAIT. Egy
+   * jegy alatt allhat valodi lap, es a lanc (jegy -> lap -> teljesitesi
+   * igazolas -> szamla) ep marad. A rejtes per sor megy.
+   */
+  async setHidden(
+    id: string,
+    hidden: boolean,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    this.requireWriteScope(user);
+    /**
+     * A LETEZES ELLENORZESE ELOSZOR. Enelkul egy ismeretlen azonositora a
+     * Prisma `update` dobna, es a hivo nyers adatbazis-hibat kapna a "nem
+     * talalhato" helyett.
+     */
+    const status = await this.repository.statusOf(id);
+    if (status === null)
+      throw new NotFoundException("A hibajegy nem található.");
+    await this.repository.setHidden(id, hidden ? new Date() : null, user.id);
+  }
+
   async move(
     id: string,
     input: MoveServiceJobDto,

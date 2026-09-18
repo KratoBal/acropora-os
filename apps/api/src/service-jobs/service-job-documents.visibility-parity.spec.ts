@@ -84,12 +84,25 @@ function csatolmanySzuroje(user: AuthenticatedUser) {
   return serviceJobVisibilityFor(user, async () => EGYSEGEK);
 }
 
+/**
+ * A LISTA SZUROJE 2026-09-18 OTA KET AGBOL ALL, ES EZ NEM GYENGITI AZ ALLITAST.
+ *
+ * A jegy-lista `where`-je azota `{ AND: [lathatosag, { hiddenAt: null }] }`
+ * alaku: a rejtes a LISTARA szol, a csatolmanyokra NEM. Ez szandekos -- a
+ * rejtes nem jogosultsag, es egy rejtett jegy reszletlapja (a csatolmanyaival
+ * egyutt) tovabbra is elerheto azonositoval.
+ *
+ * AMIERT NEM ELEG KICSOMAGOLNI ES AZ ELSO AGAT NEZNI: akkor egy felcserelt
+ * sorrend eseten a spec a MASIK agat hasonlitana ossze, es zold maradna. Ezert
+ * a TELJES alakra allitunk, a rejtes-aggal egyutt.
+ */
+const REJTETT_NELKUL = { hiddenAt: null };
+
 describe("a jegy és a csatolmányai ugyanazt a láthatóságot használják", () => {
   it("belsős hívóra azonos a két szűrő", async () => {
-    assert.deepEqual(
-      await csatolmanySzuroje(BELSOS),
-      await szolgaltatasSzuroje(BELSOS),
-    );
+    assert.deepEqual(await szolgaltatasSzuroje(BELSOS), {
+      AND: [await csatolmanySzuroje(BELSOS), REJTETT_NELKUL],
+    });
   });
 
   /**
@@ -100,7 +113,9 @@ describe("a jegy és a csatolmányai ugyanazt a láthatóságot használják", (
    */
   it("partner hívóra azonos a két szűrő, mindkét tengellyel", async () => {
     const csatolmany = await csatolmanySzuroje(PARTNER);
-    assert.deepEqual(csatolmany, await szolgaltatasSzuroje(PARTNER));
+    assert.deepEqual(await szolgaltatasSzuroje(PARTNER), {
+      AND: [csatolmany, REJTETT_NELKUL],
+    });
 
     // ES A KET TENGELY TENYLEG OTT VAN: enelkul a fenti sor ket URES
     // objektumot is osszevethetne, es zold maradna.

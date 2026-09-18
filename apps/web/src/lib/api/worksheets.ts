@@ -148,6 +148,18 @@ export const worksheetsApi = {
     if (!response.ok) throw new Error("A csatolmány nem tölthető le.");
     return response.blob();
   },
+  /**
+   * A LAP ELREJTESE VAGY VISSZAALLITASA -- EGY HIVAS KET IRANYRA.
+   *
+   * A jelolo a TORZSBEN megy, nem az utvonalban: ket kulon ut eseten a
+   * visszaallitas konnyen kapna eltero kezelest, es az elteres nema lenne.
+   */
+  setHidden(token: string, id: string, hidden: boolean) {
+    return apiRequest<WorksheetDetail>(worksheetPath(id, "/hidden"), token, {
+      method: "POST",
+      body: JSON.stringify({ hidden }),
+    });
+  },
   close(token: string, id: string) {
     return apiRequest<WorksheetDetail>(worksheetPath(id, "/close"), token, {
       method: "POST",
