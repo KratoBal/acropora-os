@@ -15,6 +15,8 @@ export function TicketDetail({ id }: { id: string }) {
     Awaited<ReturnType<typeof partnerApi.ticketDocuments>>["items"]
   >([]);
   const [error, setError] = useState<string | null>(null);
+  const [packageError, setPackageError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -44,6 +46,27 @@ export function TicketDetail({ id }: { id: string }) {
       </section>
     );
   if (!ticket) return <p className="muted">Hibajegy betöltése…</p>;
+  const downloadPackage = async () => {
+    setDownloading(true);
+    setPackageError(null);
+    try {
+      const blob = await partnerApi.ticketPackageBlob(id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${ticket.jobNumber}-dokumentumcsomag.zip`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setPackageError(
+        cause instanceof Error
+          ? cause.message
+          : "A dokumentumcsomag nem tölthető le.",
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
   const date = new Intl.DateTimeFormat("hu-HU", {
     dateStyle: "long",
     timeStyle: "short",
@@ -65,6 +88,22 @@ export function TicketDetail({ id }: { id: string }) {
           {ticket.partnerStatusLabel}
         </span>
       </header>
+      {ticket.partnerStatus === "COMPLETED" ? (
+        <div className="download-package">
+          <button
+            type="button"
+            onClick={() => void downloadPackage()}
+            disabled={downloading}
+          >
+            {downloading
+              ? "Dokumentumcsomag letöltése…"
+              : "Dokumentumcsomag letöltése"}
+          </button>
+          {packageError ? (
+            <p className="error-message">{packageError}</p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="detail-grid">
         <article className="panel">
           <h2>Mi a probléma?</h2>

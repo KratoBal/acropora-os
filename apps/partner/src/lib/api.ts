@@ -120,6 +120,8 @@ export const partnerApi = {
     requestBlob(
       `/service/jobs/${encodeURIComponent(jobId)}/documents/${encodeURIComponent(documentId)}`,
     ),
+  ticketPackageBlob: (id: string) =>
+    requestBlob(`/service/jobs/${encodeURIComponent(id)}/download`),
   uploadTicketDocument: (id: string, file: File, caption: string) =>
     request(`/service/jobs/${encodeURIComponent(id)}/documents`, {
       method: "POST",
