@@ -1263,6 +1263,45 @@ export class WorksheetsRepository extends Repository {
    * alairasra varo munkalap, aminek nincs hiteles dokumentuma --, es ugyanezt
    * a dontest hozza a `worksheetSheetDocument` is, amikor ervenytelen PDF-nel
    * inkabb dob, mint hogy a sort letrehozza.
+   *
+   * === EZ AZ IRAS SZANDEKOSAN NEM NEZ TAROLASI KERETET ===
+   *
+   * A feltoltesi ut (`prepareDocument`) a LEGELSO lepeskent ellenorzi a keretet,
+   * es teli keret mellett 409-cel elutasit. Ez az ut NEM megy at rajta: nincs
+   * `refuseIfOverQuota`, nincs `decideQuota`. Teli keret mellett is leirodik a
+   * lap, es a lezaras nem hibazik.
+   *
+   * MIERT IGY, KET MERT SZAMMAL (nautilus, 2026-09-18):
+   *
+   *   egy lap merete   13,2 - 16,0 KiB, VALODI rendereléssel merve. A harom
+   *                    eset (1 tetel naplo nelkul / 5 tetel 2 naplo-sorral /
+   *                    30 tetel 10 naplo-sorral) HAROM KULONBOZO szamot adott
+   *                    -- ez zarja ki, hogy egy allandot mertunk volna.
+   *   egy 1 GiB keret  igy ~75 500 lapot tartana
+   *
+   * A MASIK IRANY ARA NAGYOBB: ha ez az ut keretet nezne, egy KOTELEZOEN
+   * kiadando dokumentum akadna el azon, hogy a FENYKEP-tarhely betelt. Ket
+   * kulonbozo dolog egy szamon.
+   *
+   * AMIT EZ MEGIS OKOZ, ES KIMONDVA ALL: a lap UTOLAG beleszamit a keretbe (a
+   * `sumDocumentBytesInUse` a harom dokumentum-tabla `sizeBytes` osszege, es a
+   * lap egy `WorksheetDocument` sor). Egy lezaras tehat ATLEPHETI a keretet, es
+   * a koltseget a KOVETKEZO FELTOLTES fizeti meg: az kap 409-et. A tullepes
+   * viszont a fenti meret miatt bounded es apro.
+   *
+   * === A FELTETEL, AMI A KERDEST VISSZAHOZZA: DOCUMENT_STORE_LIMIT_BYTES ===
+   *
+   * A valtozo NEVE azert all itt kiirva, mert egy "ha valaha bekapcsoljuk"
+   * mondat nev nelkul nem talalhato meg attol, aki epp bekapcsolja.
+   *
+   * MA SEHOL NEM HAT (acrobot merese, 2026-09-18, az ELES api kontener sajat
+   * kornyezetebol, nem a sablonbol): a `DOCUMENT_STORE_LIMIT_BYTES` nincs
+   * beallitva, es a Coolify oldalan allo 91 valtozo kozott sem szerepel. A
+   * `limitBytes <= 0` ag fut, tehat az ellenorzes visszater.
+   *
+   * HA EGYSZER BEKAPCSOL, ez a dontes UJRA KERDES lesz -- es akkor nem a
+   * lezaras elutasitasa a valoszinu valasz, hanem az, hogy a 409 uzenete meg
+   * tudja mondani, MI vitte el a helyet.
    */
   private async writeGeneratedSheet(
     transaction: TransactionClient,
