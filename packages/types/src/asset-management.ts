@@ -143,6 +143,31 @@ export interface AssetListItem extends AssetHierarchyItem {
    * másodszor.
    */
   inventoryNumber?: string;
+  /**
+   * AZ ESZKOZON ALLO ELORE NYOMTATOTT MATRICA KODJA, HA VAN.
+   *
+   * MIERT KERULT BE (2026-09-16): a kodot eddig CSAK IRNI lehetett -- egyetlen
+   * felulet sem mutatta meg, melyik matrica all egy eszkozon. Amig a kod csak
+   * FELVITELKOR volt megadhato, ez nem latszott hianynak. Az utolagos felvitel
+   * viszont CSERET is megenged, es egy csere, amit a szerelo nem lat, egy
+   * MUKODO matricat ir felul nemán: az urlap ures mezot mutatna, o beirna egy
+   * kodot, es a regi visszakerulne a keszletbe anelkul, hogy barki tudna rola.
+   *
+   * Ezert a szerkeszto urlap ebbol tolti elo a mezot: ami ott all, az a
+   * VALOSAG, nem egy ures hely.
+   *
+   * ES A LISTASORON IS, NEM CSAK AZ ADATLAPON (2026-09-18, Balazs kerese).
+   * Ugyanaz az indok, ami az `inventoryNumber`-nel all felette: a KERESES
+   * eddig is nezte (a lista `search` aga a matricakodra is illeszkedik), a sor
+   * viszont nem mutatta -- tehat a talalatrol nem latszott, MIRE illeszkedett.
+   * Nem jar extra adatbazis-koltseggel: a `label` relacio egy mezoje, es a
+   * lekerdezes ugyanabban a korben hozza.
+   *
+   * `?: string` ES NEM `| null`, SZANDEKOSAN: a hianyzo matrica azt jelenti,
+   * hogy NINCS kod -- nem azt, hogy nem kertuk le. A szomszedos szuro-mezonel
+   * ezzel ELLENTETES alak all, es az sem veletlen; a kettot ne egysegesitsd.
+   */
+  labelCode?: string;
   nextServiceAt?: string;
   /**
    * A QR-matricán lévő azonosító.
@@ -207,20 +232,6 @@ export interface AssetEventSummary {
 }
 
 export interface AssetDetail extends AssetListItem {
-  /**
-   * AZ ESZKOZON ALLO ELORE NYOMTATOTT MATRICA KODJA, HA VAN.
-   *
-   * MIERT KERULT BE (2026-09-16): a kodot eddig CSAK IRNI lehetett -- egyetlen
-   * felulet sem mutatta meg, melyik matrica all egy eszkozon. Amig a kod csak
-   * FELVITELKOR volt megadhato, ez nem latszott hianynak. Az utolagos felvitel
-   * viszont CSERET is megenged, es egy csere, amit a szerelo nem lat, egy
-   * MUKODO matricat ir felul nemán: az urlap ures mezot mutatna, o beirna egy
-   * kodot, es a regi visszakerulne a keszletbe anelkul, hogy barki tudna rola.
-   *
-   * Ezert a szerkeszto urlap ebbol tolti elo a mezot: ami ott all, az a
-   * VALOSAG, nem egy ures hely.
-   */
-  labelCode?: string;
   /**
    * A TELJESÍTMÉNY, SZÖVEGKÉNT -- ÉS EZ NEM KÉNYELMETLENSÉG, HANEM A PONTOSSÁG.
    *

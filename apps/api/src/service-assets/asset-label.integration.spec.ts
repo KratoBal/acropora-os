@@ -430,6 +430,56 @@ describe(
         assert.equal(lap?.labelCode, undefined);
       });
 
+      /**
+       * ES A LISTASOR IS VISSZAADJA, NEM CSAK AZ ADATLAP (2026-09-18).
+       *
+       * MIERT KULON ALLITAS, HOLOTT UGYANAZ A MEZO: a ket ut KET KULON
+       * lekerdezesbol epul (`assetSummaryInclude` es `assetDetailInclude`), es
+       * a lista sokaig NEM hozta a `label` relaciot. Egy adatlap-allitas tehat
+       * ZOLD MARAD akkor is, ha a listarol eltunik a kod -- a felulet pedig ott
+       * csendben elhagyna a sort.
+       *
+       * ES A KERESESSEL IS OSSZEFUGG: a lista `search` aga MA IS illeszkedik a
+       * matricakodra. Ha a sor nem mutatja, a talalat feljon, es semmi nem
+       * arulja el, MIRE illeszkedett.
+       */
+      it("a LISTASOR is visszaadja a felvitt kódot", async () => {
+        const lista = await repository.list(
+          Object.assign(new AssetListQueryDto(), {
+            labelCode: CODE_D,
+            status: "ALL" as const,
+          }),
+          { kind: "internal" },
+        );
+
+        const sor = lista.items.find((item) => item.id === eszkozId);
+        assert.ok(sor, "a kódra szűrt lista tartalmazza az eszközt");
+        assert.equal(sor.labelCode, CODE_D);
+      });
+
+      it("matrica nélküli eszköz LISTASORÁN a mező üres, nem hibázik", async () => {
+        // TESTVER-KONTROLL, ugyanabbol az okbol, mint az adatlapnal: egy mindig
+        // kitoltott mezo a fenti allitason ugyanugy atmenne.
+        const masik = await repository.create(
+          createInput({ name: `${PREFIX} listasor matrica nélkül` }),
+          actorUserId,
+        );
+
+        const lista = await repository.list(
+          Object.assign(new AssetListQueryDto(), {
+            ownerId: customerId,
+            ownerType: "CUSTOMER" as const,
+            label: "without" as const,
+            status: "ALL" as const,
+          }),
+          { kind: "internal" },
+        );
+
+        const sor = lista.items.find((item) => item.id === masik.id);
+        assert.ok(sor, "a matrica nélküli eszköz benne van a listában");
+        assert.equal(sor.labelCode, undefined);
+      });
+
       it("másik kódra CSERÉL, és a régi visszakerül a szabad készletbe", async () => {
         await mentes(eszkozId, { labelCode: CODE_E });
 

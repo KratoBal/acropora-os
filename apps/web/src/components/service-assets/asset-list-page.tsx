@@ -418,6 +418,27 @@ export function AssetListPage() {
                           </span>
                         </span>
                       ) : null}
+                      {/* AZ ELORE NYOMTATOTT MATRICA KODJA, csak ha VAN.
+                          Balazs kerese (2026-09-18): a nev es az azonosito ala
+                          kerul a felvitt kod.
+
+                          FELIRAT JAR HOZZA, ES EZ NEM DISZ: enelkul HAROM
+                          szam-alaku sor allna egymas alatt (eszkozszam, leltari
+                          szam, matricakod), es a kezelo nem tudna, melyik
+                          melyik. Ugyanaz az indok, ami a leltari szamnal all
+                          felette.
+
+                          ES UGYANARRA A MEZORE MEGY, AMIRE A KERESO ILLESZKEDIK
+                          (a lista `search` aga a `label.code`-ra is nez). Ha a
+                          ketto valaha eltavolodna, a talalat feljonne, es a sor
+                          nem arulna el, MIRE illeszkedett -- pontosan az a
+                          hiba, amit a leltari szam kiirasa mar egyszer javitott. */}
+                      {asset.labelCode ? (
+                        <span className={`mt-1 block ${sv.rowMeta}`}>
+                          Matricakód:{" "}
+                          <span className="font-mono">{asset.labelCode}</span>
+                        </span>
+                      ) : null}
                     </td>
                     <td className={sv.tableCell}>
                       <div className="text-xs font-medium text-ink">

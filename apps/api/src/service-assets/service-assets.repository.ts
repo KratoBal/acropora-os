@@ -2050,6 +2050,13 @@ export class ServiceAssetsRepository extends Repository {
        * már benne van a betöltött sorban.
        */
       inventoryNumber: row.inventoryNumber ?? undefined,
+      /**
+       * A MATRICAKOD A LISTASORON is, ugyanabbol az okbol, mint felette az
+       * ugyfel sajat kodja: a kereses eddig is nezte, a sor viszont nem
+       * mutatta. A relacio hianyzo volta azt jelenti, hogy NINCS matrica --
+       * ezert `undefined`, nem ures szoveg.
+       */
+      labelCode: row.label?.code,
       childCount: row._count.childAssets,
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -2078,7 +2085,6 @@ export class ServiceAssetsRepository extends Repository {
       ...this.toListItem(row, paths),
       category: row.category ?? undefined,
       description: row.description ?? undefined,
-      labelCode: row.label?.code,
       performance: row.performance?.toString(),
       performanceUnit: row.performanceUnit ?? undefined,
       installedAt: row.installedAt?.toISOString(),
