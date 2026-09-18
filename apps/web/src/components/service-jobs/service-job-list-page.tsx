@@ -67,6 +67,24 @@ export function ServiceJobListPage() {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
+  /**
+   * A REJTES SAJAT JOG, ES NEM A `canManage`.
+   *
+   * Balazs kerese, 2026-09-18 11:09 UTC, mar eles hasznalat kozben: "a gomb
+   * ottmarad es megnyomhato barmelyik lapnal, jegynel. Azt szeretnem, hogy csak
+   * admin jogos felhasznalonal jelenjen meg".
+   *
+   * A `SERVICE_MANAGE` a napi szerviz-munka jogkore: a sajat szerelo
+   * kollegaink ES a partner-fiokok is viselik. A `SERVICE_HIDE` csak OWNER es
+   * ADMIN.
+   *
+   * ES EZ CSAK A FELULET. A vegpont a felulet nelkul is hivhato, ezert a
+   * szerver is kapuz (`RequirePermissions(SERVICE_HIDE)` plusz a szolgaltatas
+   * sajat ellenorzese). Egy UI-only kapu nem kapu.
+   */
+  const canHide = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SERVICE_HIDE),
+  );
   const token = session?.token ?? "";
   const { scope } = tabDefinition(tab);
 
@@ -220,7 +238,7 @@ export function ServiceJobListPage() {
           {/* A jelolo CSAK annak latszik, aki vissza is tudja allitani a
               rejtett jegyeket: egy nezo szamara a hosszabb lista magyarazat
               nelkul maradna. */}
-          {canManage ? (
+          {canHide ? (
             <Button
               variant={includeHidden ? "primary" : "secondary"}
               onClick={() => setIncludeHidden((elozo) => !elozo)}
