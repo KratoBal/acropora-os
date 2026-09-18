@@ -24,6 +24,8 @@ import {
   worksheetLabelOrDraft,
   worksheetStatusLabel,
 } from "@/lib/worksheets/worksheet-presentation";
+import { unlockWithBiometrics } from "@/lib/auth/biometric-unlock";
+import { selfSignatureGate } from "@/lib/worksheets/worksheet-self-signature";
 import {
   buildWorksheetSignaturePayload,
   canSignWorksheetVersion,
@@ -142,6 +144,49 @@ export default function WorksheetSignScreen() {
    * hozzaer az elutasitas gombjahoz, es az elfogadasnak indult muvelet
    * elutasitaskent menne el. Egy argumentum ezt szerkezetileg kizarja.
    */
+  /**
+   * A SAJAT KOLLEGANK ALAIRASA -- KULON MUTACIO, NEM A MASIK PARAMETERE.
+   *
+   * Balazs kerese, 2026-09-18 07:01 UTC: "Es az elozo kepernyon utolso gomb
+   * Alairom. itt jo lenne ha valami biometrikus azonositas tortenne"
+   *
+   * KULON UT, mert MAS a torzse (nincs alairo-valasztas, nincs alairokod) es
+   * MAS a kapuja (biometria). Egy kozos mutacio harom felteteles agra esne
+   * szet, es a ket ut osszecsuszasa epp ott lenne a legdragabb: az egyik
+   * tevedes az ugyfel neveben irna ala.
+   *
+   * A BIOMETRIA HELYI, KENYELMI KAPU: a keszulek tulajdonosat azonositja, nem
+   * a szerver fele bizonyit. A kimenetet NEM kuldjuk el es nem taroljuk --
+   * egy elmentett "biometriaval alairva" mezo azt a latszatot keltene, hogy
+   * ellenoriztuk.
+   */
+  const signSelf = useMutation({
+    mutationFn: async () => {
+      const kapu = selfSignatureGate(await unlockWithBiometrics());
+      if (!kapu.mayProceed)
+        throw new Error(kapu.message ?? "Az azonosítás nem sikerült.");
+      /*
+        A BEALLITATLAN KESZULEK MONDATA IS MEGJELENIK, holott az alairas megy:
+        e nelkul a szerelo azt hinne, hogy azonositas tortent.
+      */
+      if (kapu.message) setFormError(kapu.message);
+      return signWorksheet(id, {
+        decision: "ACCEPTED",
+        signSelf: true,
+        note: note.trim() ? note.trim() : null,
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+      await queryClient.invalidateQueries({ queryKey: ["worksheets"] });
+      router.replace({ pathname: "/worksheets/[id]", params: { id } });
+    },
+    onError: (cause) =>
+      setFormError(
+        cause instanceof Error ? cause.message : "Az aláírás nem rögzíthető.",
+      ),
+  });
+
   const sign = useMutation({
     mutationFn: async (chosen: WorksheetSignatureDecision) => {
       const built = buildWorksheetSignaturePayload(
@@ -495,6 +540,32 @@ export default function WorksheetSignScreen() {
                         {sign.isPending ? "Rögzítés…" : "Aláírás"}
                       </Text>
                     </Pressable>
+                    {/*
+                      A HARMADIK GOMB: A SAJAT KOLLEGANK IRJA ALA.
+
+                      A KET FELIRAT KULONBOZIK, es ez nem stilus: a fenti gomb
+                      az UGYFEL alairasat rogziti, ez a SAJATUNKAT. A lapon is
+                      kulon mondat all majd rola ("Alairta a szolgaltato
+                      munkatarsa"), tehat a ket ut nem cserelheto fel.
+                    */}
+                    <Pressable
+                      disabled={sign.isPending || signSelf.isPending}
+                      onPress={() => signSelf.mutate()}
+                      style={[
+                        styles.submitButton,
+                        styles.selfSignButton,
+                        (sign.isPending || signSelf.isPending) &&
+                          styles.disabled,
+                      ]}
+                    >
+                      <Text style={styles.submitText}>
+                        {signSelf.isPending ? "Azonosítás…" : "Aláírom"}
+                      </Text>
+                    </Pressable>
+                    <Text style={styles.muted}>
+                      Ez a gomb a SAJÁT aláírásod: a lapon a szolgáltató
+                      munkatársaként fogsz szerepelni, nem az ügyfélként.
+                    </Text>
                     <Text style={styles.muted}>
                       Az aláírás végleges: a lap ezután nem írható át, a munka
                       folytatása új lapra kerül.
@@ -610,6 +681,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 4,
     padding: 16,
+  },
+  /**
+   * A SAJAT ALAIRAS GOMBJA MASIK SZINU, es ez nem diszites: a ket gomb
+   * kozvetlenul egymas alatt all, es a KETTO KOZTI TEVEDES a draga -- az egyik
+   * az ugyfel neveben ir ala, a masik a mienkben.
+   */
+  selfSignButton: {
+    backgroundColor: "#0e4f6e",
+    marginTop: 12,
   },
   submitText: {
     color: "#fff",

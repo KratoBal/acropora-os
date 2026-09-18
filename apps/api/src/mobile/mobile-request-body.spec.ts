@@ -157,6 +157,30 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  {
+    /**
+     * A MUNKALAP ALAIRASA -- ES EZ A PAR EGY KET-PR-ES SZETVALASZTAS MIATT KELL.
+     *
+     * A belsos alairas SZERVER-oldala (852) es a TELEFON gombja (854) ket kulon
+     * korben keszult, es a ketto kozott EGYETLEN kapcsolodasi pont van: a
+     * `signSelf` mezo NEVE. Mind a ket oldalon sztring, tehat egy elgepeles
+     * barmelyik oldalon forditasidoben NEMA -- a keres kimegy, a szerver a
+     * mezot nem ismeri fel, es a nev nelkuli agra fut. A hiba hangos, de CSAK
+     * telefonon derul ki.
+     *
+     * A KONTROLLBAN KET MEZO ALL: a `signSelf` a belsos ag, a `signerUserId` a
+     * partner-ag. Ha barmelyik kiesik a kiolvasasbol, a par ket ures halmazt
+     * vetne ossze, zolden.
+     */
+    mit: "munkalap aláírása",
+    mobil: "../mobile/src/lib/api/worksheets.ts",
+    mobilNev: "SignWorksheetInput",
+    dto: "src/worksheets/dto/worksheet.dto.ts",
+    dtoNev: "SignWorksheetVersionDto",
+    kontroll: ["signSelf", "signerUserId"],
+    mobilMinimum: 4,
+    dtoMinimum: 5,
+  },
 ];
 
 /**
