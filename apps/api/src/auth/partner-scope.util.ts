@@ -1,3 +1,4 @@
+import type { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
 /**
@@ -185,6 +186,53 @@ export function scopeWhereForAndBranch(scope: PartnerScope): {
       return {};
     case "customer":
       return { customerId: scope.customerId };
+    case "supplier":
+      return { supplierId: scope.supplierId };
+  }
+}
+
+/**
+ * AZ ESZKÖZ-LÁTHATÓSÁG: TULAJDON **VAGY** SAJÁT HELYSZÍN.
+ *
+ * === MIÉRT KÜLÖN FÜGGVÉNY, ÉS NEM A FENTI BŐVÍTÉSE ===
+ *
+ * A `scopeWhereForAndBranch` KÖZÖS: a munkalapok, a hibajegyek és a partnerek
+ * lekérdezése is azt hívja. Ha ott nyitnánk ki az ágat, a láthatóság MINDEN
+ * táblán szélesedne -- és azt egyik mérés sem kérte. Ez a függvény kizárólag az
+ * `Asset` táblára szól, ahol a helyszín fogalma értelmezett.
+ *
+ * === A SZABÁLY, ÉS MIÉRT EZ ===
+ *
+ * Mérve 2026-09-18 (acrobot, stage): a partner helyszínén álló eszközök
+ * SZÁLLÍTÓ-tulajdonúak (2 sorból 2), vevő-tulajdonú NULLA van. A portál viszont
+ * vevő-tulajdonút kért, tehát a kérdés szükségszerűen nulla sort adott: a lap
+ * pont azt nem kaphatta meg, amit meg akart mutatni.
+ *
+ * A séma ugyanezt mondja a másik irányból (`Asset.departmentId` fejléce): a
+ * helyszín CSAK szállító tulajdonosnál értelmes, a vevő-oldali finomítás a
+ * `customerAddressId`.
+ *
+ * === AMI SZÁNDÉKOSAN NEM VÁLTOZIK ===
+ *
+ * A SZÁLLÍTÓ-hatókör marad tulajdon-alapú. Egy szállító a saját eszközeit látja;
+ * nincs olyan fogalom, hogy "a szállító helyszíne", és egy `OR` ág ott csak
+ * tágítana, mérés nélkül.
+ *
+ * A BELSŐS hatókör üres marad, ahogy eddig.
+ */
+export function assetVisibilityForAndBranch(
+  scope: PartnerScope,
+): Prisma.AssetWhereInput {
+  switch (scope.kind) {
+    case "internal":
+      return {};
+    case "customer":
+      return {
+        OR: [
+          { customerId: scope.customerId },
+          { department: { customerId: scope.customerId } },
+        ],
+      };
     case "supplier":
       return { supplierId: scope.supplierId };
   }

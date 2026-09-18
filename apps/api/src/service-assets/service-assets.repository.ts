@@ -3,6 +3,7 @@ import {
   rowBelongsToScope,
   rowIsScopeOwner,
   scopeMaySeeDocumentType,
+  assetVisibilityForAndBranch,
   scopeOwnWhereForAndBranch,
   scopeVisibleDocumentTypes,
   scopeWhereForAndBranch,
@@ -350,11 +351,13 @@ export function assetListWheres(
   return {
     list: {
       AND: [
-        scopeWhereForAndBranch(scope),
+        assetVisibilityForAndBranch(scope),
         { ...userWhereWithoutStatus, ...statusWhere },
       ],
     },
-    counts: { AND: [scopeWhereForAndBranch(scope), userWhereWithoutStatus] },
+    counts: {
+      AND: [assetVisibilityForAndBranch(scope), userWhereWithoutStatus],
+    },
   };
 }
 

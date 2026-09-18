@@ -129,13 +129,20 @@ export const partnerApi = {
     request<WorksheetDepartmentListResponse>(
       `/service/worksheets/customers/${encodeURIComponent(customerId)}/departments`,
     ),
-  assets: (customerId: string, departmentId?: string) => {
-    const query = new URLSearchParams({
-      ownerType: "CUSTOMER",
-      ownerId: customerId,
-      status: "ALL",
-      pageSize: "100",
-    });
+  /**
+   * A LATHATOSAGOT A SZERVER DONTI EL, NEM EZ A HIVAS.
+   *
+   * 2026-09-18-ig itt `ownerType=CUSTOMER` + `ownerId` allt, es EZ URITETTE KI a
+   * lapot: a partner helyszinen allo eszkoz SZALLITO-tulajdonu (merve stage-en:
+   * 2 sorbol 2), tehat a vevo-tulajdonura szukitett kerdes szuksegszeruen nulla
+   * sort adott.
+   *
+   * A `customerId` parameter AZERT KERULT KI, es nem csak a ket query-mezo: egy
+   * bennhagyott azonosito azt sugallna, hogy a hivo szabalyozza a lathatosagot.
+   * Ma a `PartnerScope` szabalyozza, a szerveren.
+   */
+  assets: (departmentId?: string) => {
+    const query = new URLSearchParams({ status: "ALL", pageSize: "100" });
     if (departmentId) query.set("departmentId", departmentId);
     return request<AssetListResponse>(`/service/assets?${query}`);
   },

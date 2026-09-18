@@ -41,7 +41,14 @@ const FILES = [
   "src/suppliers/suppliers.repository.ts",
 ];
 
-const SCOPE_HELPERS = ["scopeWhereForAndBranch", "scopeOwnWhereForAndBranch"];
+const SCOPE_HELPERS = [
+  "scopeWhereForAndBranch",
+  "scopeOwnWhereForAndBranch",
+  // 2026-09-18: az eszkoz-lathatosag sajat fuggvenyt kapott (tulajdon VAGY sajat
+  // helyszin). EZ A LISTA KEZZEL IRT, tehat egy uj hatokor-seged CSENDBEN kikerulne
+  // az orzo alol -- ezert kerul ide ugyanabban a korben, amiben megszuletett.
+  "assetVisibilityForAndBranch",
+];
 
 describe("a jogosultsági szűrő AND ágban áll, nem kulcsként", () => {
   for (const file of FILES) {
