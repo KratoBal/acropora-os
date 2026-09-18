@@ -172,7 +172,18 @@ describe("az eszköz matricakódja a telefonon", () => {
       es az indok ott all kiirva: egy elhagyhato mezo mellett a "nincs felirat"
       es a "szandekosan ures felirat" megkulonboztethetetlen lenne.
     */
-    assert.match(olvas(KLIENS), /^ {2}caption: string \| null;$/m);
+    /*
+      A MINTA A SZOMSZED SORT IS VISZI, ES EZ NEM OVATOSSAG. A
+      `caption: string | null;` a fajlban KETSZER all: a tukorben ES a
+      keres-torzs tipusaban (`SetAssetDocumentCaptionInput`). Az elso alakom
+      csak a mezot nezte, es a kalibracio megmutatta, hogy NULLA pirosat ad:
+      a tukorbol kivett mezo mellett is illeszkedett a masik elofordulasra.
+      Egy allitas, ami barhol illeszkedhet, nem azt orzi, amit a neve mond.
+    */
+    assert.match(
+      olvas(KLIENS),
+      /^ {2}caption: string \| null;\n {2}uploadedBy\?: \{ id: string; displayName: string \};$/m,
+    );
   });
 
   it("a felirat MEGJELENIK a csempén, és csak ha van", () => {
@@ -186,7 +197,12 @@ describe("az eszköz matricakódja a telefonon", () => {
 
   it("a felirat SZERKESZTHETO, és a mező a manage jogon ÁLL", () => {
     const kepernyo = olvas(KEPERNYO);
-    assert.match(kepernyo, /setAssetDocumentCaption/);
+    /*
+      A HIVASRA ILLESZTUNK, NEM A NEVRE. A `setAssetDocumentCaption` a fajlban
+      KETSZER all -- az importban es a hivasban --, tehat a puszta nev nem a
+      bekotest orzi. A `minta-egyedi.py` ezt `GYANU 2x` alakban jelezte.
+    */
+    assert.match(kepernyo, /await setAssetDocumentCaption\(/);
     /*
       A KAPU A JOGON ES A HALOZATON EGYUTT ALL. Offline (`fromCache`) a mentes
       nem menne at, es egy letiltott gomb azt igerne, hogy van mit megnyomni.
