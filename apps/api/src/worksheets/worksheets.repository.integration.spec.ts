@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
 import { nincsMaradek } from "../common/takaritas-leltar.js";
@@ -482,6 +483,111 @@ describe(
       });
       assert.equal(version.status, "AWAITING_SIGNATURE");
       assert.notEqual(version.closedAt, null);
+    });
+
+    /**
+     * A LEZÁRÁS ELŐ IS ÁLLÍTJA A LAPOT -- ÉS EZ AZ ÁLLÍTÁS A `close()`-T
+     * INDÍTJA EL, NEM A KÖZÖS TÖRZSET.
+     *
+     * A lánc három modulja (tartalom, leképezés, dokumentum) külön-külön mérve
+     * van, és MIND ZÖLD VOLT ANÉLKÜL, hogy bárki hívta volna őket: a
+     * `worksheetSheetInput` és a `worksheetSheetDocument` mai napig egyetlen
+     * éles hívóhelyet sem látott. Egy közös-törzs-állítás tehát akkor is zöld
+     * marad, ha a bekötés hiányzik -- épp azt a szakadást nem méri, amit ez a
+     * szelet bezár.
+     *
+     * A FÁJLNÉV ITT NEM DÍSZ. Az a mező, amiből a sorrend-hiba KIDERÜL: a
+     * sorszám a státusz-váltás UTÁN kerül kiosztásra, tehát egy korábban
+     * előállított lap `munkalap-piszkozat.pdf` nevet kapna, és a hiba NÉMA
+     * lenne -- a fájl elkészül, a lezárás sikerül.
+     */
+    it("a lezárás létrehozza a generált lapot, a SZÁM szerinti névvel", async () => {
+      const id = await createDraft(bioDepartmentId);
+      assert.deepEqual(await repository.close(id, actorUserId, new Date()), {
+        ok: true,
+      });
+
+      const number = (await numberOf(id)).number ?? "";
+      const version = await prisma.worksheetVersion.findFirstOrThrow({
+        where: { worksheetId: id },
+        orderBy: { version: "desc" },
+        select: { id: true },
+      });
+
+      const sheets = await prisma.worksheetDocument.findMany({
+        where: { worksheetId: id, type: "GENERATED_SHEET" },
+      });
+      assert.equal(sheets.length, 1, "verziónként pontosan egy hiteles lap");
+
+      const sheet = sheets[0]!;
+      assert.equal(sheet.worksheetVersionId, version.id);
+      assert.equal(sheet.contentType, "application/pdf");
+
+      // A NÉV A SZÁMOT HORDOZZA. A perjelet a névadó kötőjelre cseréli, ezért
+      // a lap száma önmagában a horgony -- a verzió-utótag nem.
+      assert.ok(
+        sheet.fileName.includes(number),
+        `a lap neve nem hordozza a számot: ${sheet.fileName}`,
+      );
+      assert.notEqual(
+        sheet.fileName,
+        "munkalap-piszkozat.pdf",
+        "számozott lap piszkozat-nevet kapott: a lap a sorszám kiosztása ELŐTT készült",
+      );
+
+      // A BÁJTOK TÉNYLEG OTT VANNAK, és a lenyomat rájuk megy. Enélkül egy
+      // üres tartalmú sor is kielégítené a fenti állításokat.
+      assert.ok(sheet.content && sheet.content.length > 0);
+      assert.equal(sheet.sizeBytes, sheet.content.length);
+      assert.equal(
+        createHash("sha256").update(sheet.content).digest("hex"),
+        sheet.sha256,
+      );
+    });
+
+    /**
+     * A MÁSIK ÁG: A LAPNAK MÁR VAN SZÁMA.
+     *
+     * Az első lezárás OSZTJA a számot, a módosítás utáni MÁR TALÁLJA. A kettő
+     * a `close()` két külön ága (`if (!worksheet.number && partnerCode)`), és
+     * egy állítás csak az elsőt járja be. Itt az a kérdés, hogy a második
+     * verzió is kap-e saját hiteles lapot -- a séma egyedi indexe
+     * verziónként EGYET enged, tehát a második lezárás nem írhatja felül az
+     * elsőt, és nem is akadhat el rajta.
+     */
+    it("módosítás után a MÁSODIK verzió is kap lapot, ugyanazzal a számmal", async () => {
+      const id = await createDraft(bioDepartmentId);
+      await repository.close(id, actorUserId, new Date());
+      const number = (await numberOf(id)).number ?? "";
+
+      const amended = await repository.amend({
+        worksheetId: id,
+        content: content(),
+        changeReason: "A vevő kérésére pontosítva.",
+        actorUserId,
+      });
+      assert.equal(amended.ok, true);
+      assert.deepEqual(await repository.close(id, actorUserId, new Date()), {
+        ok: true,
+      });
+
+      // A SZÁM NEM VÁLTOZIK: a második lezárás nem oszt újat.
+      assert.equal((await numberOf(id)).number, number);
+
+      const sheets = await prisma.worksheetDocument.findMany({
+        where: { worksheetId: id, type: "GENERATED_SHEET" },
+        orderBy: { createdAt: "asc" },
+      });
+      assert.equal(sheets.length, 2, "verziónként egy lap, tehát most kettő");
+      assert.notEqual(
+        sheets[0]!.worksheetVersionId,
+        sheets[1]!.worksheetVersionId,
+      );
+      for (const sheet of sheets)
+        assert.ok(
+          sheet.fileName.includes(number),
+          `a lap neve nem hordozza a számot: ${sheet.fileName}`,
+        );
     });
 
     it("does not spend a sequence number on a draft that is never closed", async () => {
