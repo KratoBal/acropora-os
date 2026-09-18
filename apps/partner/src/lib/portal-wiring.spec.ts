@@ -29,6 +29,7 @@ const KLIENS = "src/lib/api.ts";
 const BEALLITASOK = "src/components/settings.tsx";
 const DOKUMENTUMOK = "src/components/document-panel.tsx";
 const BEJELENTO = "src/components/new-ticket.tsx";
+const HIBAJEGY_RESZLET = "src/components/ticket-detail.tsx";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
 
@@ -156,5 +157,13 @@ describe("a bejelentő űrlap fájl-melléklete", () => {
       együtt: ez az, ami a sorrendet bizonyítja.
     */
     assert.match(olvas(BEJELENTO), /uploadTicketDocument\(\s*created\.id/);
+  });
+});
+
+describe("a dokumentumcsomag letöltése", () => {
+  it("a partner felületén a letöltés csak lezárt jegynél jelenik meg", () => {
+    const s = olvas(HIBAJEGY_RESZLET);
+    assert.match(s, /ticket\.partnerStatus === "CLOSED"/);
+    assert.match(s, /Dokumentumcsomag letöltése/);
   });
 });

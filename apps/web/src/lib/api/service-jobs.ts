@@ -298,6 +298,14 @@ export const serviceJobsApi = {
     if (!response.ok) throw new Error("A csatolmány nem tölthető le.");
     return response.blob();
   },
+  async downloadPackage(token: string, id: string) {
+    const response = await fetch(
+      `${API_PREFIX}/service/jobs/${encodeURIComponent(id)}/download`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok) throw new Error("A dokumentumcsomag nem tölthető le.");
+    return response.blob();
+  },
   /**
    * A FELIRAT ATIRASA EGY MAR FELTOLTOTT CSATOLMANYON.
    *

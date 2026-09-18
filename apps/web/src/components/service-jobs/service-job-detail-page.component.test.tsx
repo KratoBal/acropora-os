@@ -28,6 +28,7 @@ const api = vi.hoisted(() => ({
   documents: vi.fn(),
   uploadDocument: vi.fn(),
   downloadDocument: vi.fn(),
+  downloadPackage: vi.fn(),
   setDocumentCaption: vi.fn(),
   deleteDocument: vi.fn(),
 }));
@@ -766,6 +767,14 @@ describe("ServiceJobDetailPage", () => {
       screen.queryByRole("button", { name: "Delegálás mentése" }),
     ).toBeNull();
     expect(screen.getByText("Delegált kollégák")).toBeTruthy();
+  });
+
+  it("nem lezárt hibajegyen nincs dokumentumcsomag-letöltés", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("Cápasuli szivattyú leállt");
+    expect(
+      screen.queryByRole("button", { name: "Dokumentumcsomag letöltése" }),
+    ).toBeNull();
   });
 
   /**

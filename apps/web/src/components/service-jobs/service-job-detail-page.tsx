@@ -132,6 +132,8 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const [uploading, setUploading] = useState(false);
   const [documentToDelete, setDocumentToDelete] =
     useState<ServiceJobDocumentSummary | null>(null);
+  const [downloadingPackage, setDownloadingPackage] = useState(false);
+  const [packageError, setPackageError] = useState<string | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
@@ -376,6 +378,28 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
     }
   };
 
+  const downloadPackage = async () => {
+    setDownloadingPackage(true);
+    setPackageError(null);
+    try {
+      const blob = await serviceJobsApi.downloadPackage(token, jobId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${job?.jobNumber ?? "hibajegy"}-dokumentumcsomag.zip`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setPackageError(
+        cause instanceof Error
+          ? cause.message
+          : "A dokumentumcsomag nem tölthető le.",
+      );
+    } finally {
+      setDownloadingPackage(false);
+    }
+  };
+
   const deleteDocument = async (documentId: string) => {
     setDocumentToDelete(null);
     setDocumentsError(null);
@@ -530,7 +554,30 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           </ServiceStatusBadge>
         }
         sub={job.departmentName ?? undefined}
+        actions={
+          job.partnerStatus === "CLOSED" ? (
+            <Button
+              variant="secondary"
+              disabled={downloadingPackage}
+              onClick={() => void downloadPackage()}
+            >
+              {downloadingPackage
+                ? "Dokumentumcsomag letöltése…"
+                : "Dokumentumcsomag letöltése"}
+            </Button>
+          ) : null
+        }
       />
+
+      {packageError ? (
+        <div className="mb-5">
+          <Alert
+            variant="danger"
+            title="Letöltési hiba"
+            description={packageError}
+          />
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mb-5">

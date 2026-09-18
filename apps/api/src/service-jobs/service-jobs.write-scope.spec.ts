@@ -313,7 +313,9 @@ describe("a kontroller atadja a hivot, es a partner igy sem ir", () => {
   for (const ut of KONTROLLER_UTAK) {
     it(`${ut.nev}: a kontrolleren át sem ír vevő-hatókörnél`, async () => {
       const { service, irasok } = serviceWith(ut.elofeltetel);
-      const controller = new ServiceJobsController(service);
+      const controller = new ServiceJobsController(service, {
+        download: async () => undefined,
+      } as never);
 
       await assert.rejects(
         () => ut.hivas(controller, VEVO),
@@ -325,7 +327,9 @@ describe("a kontroller atadja a hivot, es a partner igy sem ir", () => {
     /** A KONTROLL: belsos hivonal a lanc VEGIG megy, a taroloig. */
     it(`${ut.nev}: belsős hívónál a kontrolleren át is ír`, async () => {
       const { service, irasok } = serviceWith(ut.elofeltetel);
-      const controller = new ServiceJobsController(service);
+      const controller = new ServiceJobsController(service, {
+        download: async () => undefined,
+      } as never);
 
       await ut.hivas(controller, BELSOS);
 
