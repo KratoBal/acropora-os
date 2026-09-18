@@ -45,6 +45,8 @@ export function NewTicket() {
   const [assetIds, setAssetIds] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -101,6 +103,36 @@ export function NewTicket() {
           departmentId: departmentId || undefined,
           assetIds,
         });
+        /*
+          A FELTOLTES CSAK A LETREJOTT JEGYRE MEHET, tehat a sorrend kotott: a
+          vegpont a jegy azonositojara ir (`POST service/jobs/:id/documents`),
+          es az azonosito csak itt szuletik meg.
+
+          ES HA A JEGY LETREJON, DE A KEP NEM MEGY FEL: NEM iranyitunk at, es NEM
+          mondjuk, hogy "a hibajegy nem nyithato meg" -- mert megnyilt. Egy
+          altalanos hibauzenet itt arra vinne a bejelentot, hogy MEGISMETELJE a
+          bejelentest, es ket jegy keletkezne ugyanarrol.
+
+          A masik irany (atiranyitas, hallgatva a bukasrol) azt eredmenyezne,
+          hogy a bejelento azt hiszi, a kep ott van. A kettobol ez a rosszabb:
+          a duplikalt jegy LATSZIK, a hianyzo kep nem.
+        */
+        try {
+          for (const file of files)
+            await partnerApi.uploadTicketDocument(created.id, file, "");
+        } catch (uploadCause) {
+          // A JEGY MAR MEGVAN: a hibauzenet ezt MONDJA KI, es a link ott all
+          // hozza. Enelkul a bejelento ujra bekuldene, es ket jegy lenne.
+          setError(
+            `A hibajegy megnyílt, de a fájl feltöltése nem sikerült: ${
+              uploadCause instanceof Error
+                ? uploadCause.message
+                : "ismeretlen hiba"
+            } A képet az adatlapon pótolhatja.`,
+          );
+          setCreatedId(created.id);
+          return;
+        }
         router.replace(`/hibajegyek/${created.id}`);
       } catch (cause) {
         setError(
@@ -112,7 +144,7 @@ export function NewTicket() {
         setSubmitting(false);
       }
     },
-    [assetIds, departmentId, description, router, title],
+    [assetIds, departmentId, description, files, router, title],
   );
 
   return (
@@ -125,6 +157,18 @@ export function NewTicket() {
         </div>
       </header>
       {error ? <Message tone="error" text={error} /> : null}
+      {createdId ? (
+        /*
+          A LINK NELKUL AZ UZENET ZSAKUTCA: azt mondja, hogy a jegy megnyilt, de
+          a bejelento az urlapon all, es az egyetlen kezenfekvo lepese az, hogy
+          ujra bekuldi. Ez a sor viszi oda, ahol a kepet potolni tudja.
+        */
+        <p>
+          <a href={`/hibajegyek/${createdId}`}>
+            A megnyílt hibajegy megnyitása
+          </a>
+        </p>
+      ) : null}
       <form className="form panel" onSubmit={submit}>
         <label>
           Mi a probléma?
@@ -194,6 +238,24 @@ export function NewTicket() {
               Ezen a helyszínen nincs megjeleníthető eszköz.
             </p>
           )}
+        </fieldset>
+        <fieldset>
+          <legend>Fénykép, dokumentum</legend>
+          {/*
+            A HIBAT A KEPPEL EGYUTT JELENTI BE AZ EMBER. 2026-09-18-ig ez a mezo
+            nem letezett: csatolni csak a MAR LETREJOTT jegy adatlapjan lehetett,
+            tehat a bejelentonek ket lepesben kellett elmondania ugyanazt.
+          */}
+          <input
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,application/pdf"
+            onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+          />
+          <p className="muted">
+            Nem kötelező. A kép a bejelentés elküldése után kerül fel, és utólag
+            az adatlapon is pótolható.
+          </p>
         </fieldset>
         <div className="form-actions">
           <button

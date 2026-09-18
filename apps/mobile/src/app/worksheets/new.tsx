@@ -57,6 +57,18 @@ import {
   prefillFromTicket,
 } from "@/lib/worksheets/worksheet-prefill-from-ticket";
 import {
+  oroklendoEszkozok,
+  oroklendoFelelosok,
+  oroklesUzenete,
+} from "@/lib/worksheets/worksheet-inherit-from-ticket";
+import { listAssignableWorksheetUsers } from "@/lib/api/worksheets";
+import {
+  kezdoValaszto,
+  valasztasUtan,
+  valasztoraKoppint,
+  type NyitottValaszto,
+} from "@/lib/worksheets/worksheet-pickers";
+import {
   buildWorksheetCreatePayload,
   describeWorksheetQueueWrite,
   type WorksheetCreateField,
@@ -102,14 +114,18 @@ export default function NewWorksheetScreen() {
     null,
   );
   /**
-   * JEGY ALATT A VALASZTO KI SEM NYILIK. A partner a jegybol jon, es egy
-   * valaszto, ami olyat kinal, amit a szerver elutasit, rosszabb a hianyanal.
-   * A SORBAN allo jegynel viszont nyitva marad: ott tenyleg a szerelo valaszt,
-   * mert a jegy meg le sem kerdezheto.
+   * EGY ALLAPOT, NEM KETTO -- ES EZ SZERKEZETI, NEM STILUS.
+   *
+   * Ket fuggetlen jelzo megengedne, hogy a partner- ES a helyszin-lista
+   * egyszerre alljon nyitva; epp az a kep, amire Balazs jelentese szol. A
+   * dontes a `worksheet-pickers.ts` modulban all, mert ebben az appban nincs
+   * komponens-teszt.
+   *
+   * ZARVA INDUL. Jegy alatt a partner amugy sem valaszthato (`partnerLezarva`),
+   * ott ZART MEZO a helyes alak, nem csukott valaszto.
    */
-  const [partnerPickerOpen, setPartnerPickerOpen] = useState(
-    jegy.kind !== "server",
-  );
+  const [nyitottValaszto, setNyitottValaszto] =
+    useState<NyitottValaszto>(kezdoValaszto());
   const [departmentId, setDepartmentId] = useState("");
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
@@ -188,6 +204,19 @@ export default function NewWorksheetScreen() {
   });
 
   /**
+   * A KIOSZTHATO KOLLEGAK -- CSAK JEGY ALATT, mert csak ott van kit orokolni.
+   *
+   * A jegy felelose NEM feltetlenul oszthato ki a lapra: a ket lista mas jogra
+   * szur. Egyetlen nem kioszthato nev az EGESZ lapot elutasittatna, tehat a
+   * metszetet kuldjuk -- es ahhoz ez a lista kell.
+   */
+  const kioszthatokQuery = useQuery({
+    queryKey: ["worksheet-assignable-users"],
+    queryFn: listAssignableWorksheetUsers,
+    enabled: jegy.kind === "server" && status === "authenticated",
+  });
+
+  /**
    * AZ ELOTOLTES SZARMAZTATOTT ERTEK, NEM MASOLT ALLAPOT.
    *
    * Az elso valtozatom egy `useEffect`-ben irta at a ket allapotot, es a mobil
@@ -205,6 +234,28 @@ export default function NewWorksheetScreen() {
   const departmentIdHatasos =
     departmentId ||
     (elotoltes.kind === "kesz" ? (elotoltes.departmentId ?? "") : "");
+
+  /**
+   * AMIT A JEGYBOL OROKOL A LAP. A szabalyok a
+   * `worksheet-inherit-from-ticket.ts` modulban allnak, mert a szerver ket
+   * ellenorzesehez igazodnak -- es egy elutasitott letrehozas a telefonon nem
+   * piros doboz, hanem egy lap, ami a SORBAN ragad.
+   */
+  const jegyEszkozok = jegyQuery.data?.assets ?? [];
+  const oroklendoEszkozIdk = oroklendoEszkozok({
+    jegyEszkozok,
+    jegyDepartmentId: jegyQuery.data?.departmentId ?? null,
+    lapDepartmentId: departmentIdHatasos,
+  });
+  const oroklendoFelelosIdk = oroklendoFelelosok({
+    jegyFelelosok: jegyQuery.data?.assignees ?? [],
+    kioszthatok: kioszthatokQuery.data?.items ?? [],
+  });
+  const oroklesSzoveg = oroklesUzenete({
+    jegyEszkozok,
+    oroklendoEszkozok: oroklendoEszkozIdk,
+    oroklendoFelelosok: oroklendoFelelosIdk,
+  });
 
   const departmentsQuery = useQuery({
     queryKey: ["worksheet-departments", partnerHatasos?.customerId],
@@ -427,6 +478,8 @@ export default function NewWorksheetScreen() {
       departmentId: departmentIdHatasos,
       subject,
       description,
+      assetIds: oroklendoEszkozIdk,
+      assigneeIds: oroklendoFelelosIdk,
     });
     if (!result.ok) {
       setError({ field: result.field, message: result.message });
@@ -468,11 +521,28 @@ export default function NewWorksheetScreen() {
             </View>
           ) : null}
 
+          {/*
+            AMIT ATVESZ A LAP -- A KULDES ELOTT, nem utana. A telefonon a ket
+            lista nem valaszthato, tehat ez az EGYETLEN visszajelzes arrol, mi
+            kerul a lapra. Es az ELMARADT orokles oka is ide tartozik: enelkul
+            a szerelo annyit latna, hogy az eszkoz "eltunt".
+          */}
+          {oroklesSzoveg ? (
+            <View style={styles.notice}>
+              <Text style={styles.noticeTitle}>A hibajegyről</Text>
+              <Text style={styles.noticeBody}>{oroklesSzoveg}</Text>
+            </View>
+          ) : null}
+
           <Section title="Partner">
             <Pressable
               accessibilityRole="button"
               disabled={partnerLezarva(elotoltes)}
-              onPress={() => setPartnerPickerOpen((open) => !open)}
+              onPress={() =>
+                setNyitottValaszto((nyitott) =>
+                  valasztoraKoppint(nyitott, "partner"),
+                )
+              }
               style={[
                 styles.pickerRow,
                 partnerHatasos && styles.pickerSelected,
@@ -503,7 +573,7 @@ export default function NewWorksheetScreen() {
             ) : null}
             <FieldError error={error} field="customer" />
             {partnerLezarva(elotoltes) ||
-            !partnerPickerOpen ? null : partnersQuery.isPending ? (
+            nyitottValaszto !== "partner" ? null : partnersQuery.isPending ? (
               <ActivityIndicator color="#52d6c7" />
             ) : partnersQuery.isError ? (
               <Text style={styles.hint}>
@@ -517,7 +587,7 @@ export default function NewWorksheetScreen() {
                     key={item.customerId}
                     onPress={() => {
                       setPartner(item);
-                      setPartnerPickerOpen(false);
+                      setNyitottValaszto(valasztasUtan());
                       /**
                        * A HELYSZÍN A PARTNERHEZ TARTOZIK: partnerváltásnál a
                        * korábbi választás ÉRVÉNYTELEN. Enélkül egy másik
@@ -542,11 +612,42 @@ export default function NewWorksheetScreen() {
           </Section>
 
           <Section title="Helyszín">
+            {/*
+              A HELYSZIN IS FEJSORT KAP, ES EZ A JELENTES MASIK FELE. Eddig ez a
+              szekcio nem ismert nyitott/zart allapotot: a teljes listat MINDIG
+              kiirta, valasztas utan is. A partner utan igy rogton a helyszinek
+              teljes listaja nyilt ki alatta -- kivulrol ugyanaz a kep, mintha a
+              partner-lista maradt volna ott.
+            */}
+            {partnerHatasos ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  setNyitottValaszto((nyitott) =>
+                    valasztoraKoppint(nyitott, "helyszin"),
+                  )
+                }
+                style={[
+                  styles.pickerRow,
+                  departmentIdHatasos && styles.pickerSelected,
+                ]}
+              >
+                <Text style={styles.pickerName}>
+                  {departments.find((d) => d.id === departmentIdHatasos)
+                    ?.name ?? "Válassz helyszínt"}
+                </Text>
+                <Text style={styles.pickerMeta}>
+                  {departments.find((d) => d.id === departmentIdHatasos)
+                    ?.code ?? "Koppints a listához"}
+                </Text>
+              </Pressable>
+            ) : null}
             {!partnerHatasos ? (
               <Text style={styles.hint}>
                 Előbb válassz partnert: a helyszínek hozzá tartoznak.
               </Text>
-            ) : departmentsQuery.isPending ? (
+            ) : nyitottValaszto !==
+              "helyszin" ? null : departmentsQuery.isPending ? (
               <ActivityIndicator color="#52d6c7" />
             ) : departments.length === 0 ? (
               /**
@@ -565,7 +666,10 @@ export default function NewWorksheetScreen() {
                 {departments.map((unit: WorksheetDepartment) => (
                   <Pressable
                     key={unit.id}
-                    onPress={() => setDepartmentId(unit.id)}
+                    onPress={() => {
+                      setDepartmentId(unit.id);
+                      setNyitottValaszto(valasztasUtan());
+                    }}
                     style={[
                       styles.listRow,
                       departmentIdHatasos === unit.id && styles.listRowOn,

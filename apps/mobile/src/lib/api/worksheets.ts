@@ -513,6 +513,21 @@ export function signWorksheet(
 }
 
 /**
+ * A MUNKALAP LEZARASA A HELYSZINEN.
+ *
+ * A vegpont MAR MA LETEZIK (`POST :id/close`, `service.manage` joggal), csak a
+ * telefon nem hivta: a lezaras 2026-09-18-ig az irodae volt. A valasz a TELJES
+ * lap, tehat a kepernyo frissul, es az alairas gombja ugyanabban a korben
+ * megjelenhet -- Balazs egy mozdulatban varja a kettot.
+ */
+export function closeWorksheet(id: string) {
+  return apiRequest<WorksheetDetail>(
+    `${BASE}/${encodeURIComponent(id)}/close`,
+    { method: "POST" },
+  );
+}
+
+/**
  * A MUNKALAP MUNKANAPLOJA.
  *
  * A `canEdit` es az `editRefusal` A SZERVERTOL JON, es a telefon NEM szamolja
