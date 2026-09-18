@@ -18,7 +18,11 @@ import {
 } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
-import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
@@ -54,7 +58,11 @@ export class WorksheetsController {
     @Query() query: WorksheetListQueryDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.list(query, partnerScopeOf(user));
+    return this.service.list(
+      query,
+      partnerScopeOf(user),
+      hasPermission(user, PERMISSIONS.SERVICE_HIDE),
+    );
   }
 
   @Get("customers/:customerId/departments")
@@ -311,7 +319,7 @@ export class WorksheetsController {
    * (csak belso ut) a szolgaltatas ellenorzi.
    */
   @Post(":id/hidden")
-  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  @RequirePermissions(PERMISSIONS.SERVICE_HIDE)
   setHidden(
     @Param("id") id: string,
     @Body() input: SetWorksheetHiddenDto,

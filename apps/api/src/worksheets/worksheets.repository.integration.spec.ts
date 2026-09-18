@@ -401,6 +401,13 @@ describe(
       const mindet = await repository.list(
         { page: 1, pageSize: 100, includeHidden: true },
         { kind: "internal" },
+        /*
+          A HARMADIK ARGUMENTUM A `SERVICE_HIDE` JOG, TENYKENT (2026-09-18 ota).
+          Alapertelmezese `false`, tehat nelkule a kapcsolo hatastalan -- es ez
+          a spec pontosan azt merne, hogy a jog hianyaban nem latszik a rejtett
+          sor, nem azt, amit a neve mond.
+        */
+        true,
       );
       const sor = mindet.items.find((item) => item.id === rejtett);
       assert.ok(sor, "a kapcsolóval sem jött vissza");
@@ -449,10 +456,56 @@ describe(
       const partnerLista = await repository.list(
         { page: 1, pageSize: 100, includeHidden: true },
         { kind: "customer", customerId },
+        /*
+          JOGGAL EGYUTT, ES EZ A LENYEG. A jog nelkul ez az allitas zold lenne
+          akkor is, ha a HATOKOR-feltetel egyaltalan nem letezne -- vagyis a
+          neve ("a hatokor miatt") tobbet mondana, mint amit mer. Ugyanaz a
+          gyengeseg, amit a `service-hide-scope.spec.ts` partner-esetenel a
+          kalibracio talalt meg.
+        */
+        true,
       );
       const idk = partnerLista.items.map((item) => item.id);
       assert.equal(idk.includes(rejtett), false, "a partner látja a rejtettet");
       assert.ok(idk.includes(latszik), "a partner a nem rejtettet sem látja");
+    });
+
+    /**
+     * AZ ALAIRASRA HASZNALT NEV A TELJES NEV, SOHA NEM A BECENEV.
+     *
+     * A `person-name.ts` sajat megjegyzese mondja ki, melyik fuggveny hova
+     * valo: "The name for documents and signatures: always the full one, never
+     * the nickname." Egy alairt munkalap dokumentum.
+     *
+     * MIERT ITT, ES NEM UNIT-SZINTEN: a szolgaltatas duplaja FIX szoveget ad
+     * vissza, tehat ezt a kulonbseget egyetlen unit-allitas sem latja --
+     * lemertem: a `personLegalName` -> `personDisplayName` csere zolden atment
+     * a teljes unit-keszleten. Valodi sor kell hozza, becenevvel.
+     */
+    it("az aláíráshoz a TELJES nevet adja, nem a becenevet", async () => {
+      const nev = await repository.userLegalName(technicianUserId);
+
+      /*
+        POZITIV KONTROLL: ha a fixture-on nem allna becenev, ez az allitas
+        akkor is teljesulne, es semmit nem bizonyitana.
+      */
+      const sor = await prisma.user.findUniqueOrThrow({
+        where: { id: technicianUserId },
+        select: { displayName: true, nickname: true },
+      });
+      assert.ok(sor.nickname, "a fixture-on nincs becenév: az állítás vak");
+      assert.notEqual(sor.nickname, sor.displayName);
+
+      assert.equal(nev, sor.displayName);
+      assert.notEqual(nev, sor.nickname);
+    });
+
+    it("ISMERETLEN felhasználóra `null`-t ad, nem üres nevet", async () => {
+      /*
+        Ures nevvel alairni rosszabb, mint elhasalni: a lapon egy nevtelen
+        "szolgaltato munkatarsa" allna. A szolgaltatas ezert hibaval all meg.
+      */
+      assert.equal(await repository.userLegalName("nincs-ilyen-user"), null);
     });
 
     it("leaves a draft without a number", async () => {

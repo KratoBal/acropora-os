@@ -73,6 +73,7 @@ describe("a nyomtatott munkalap tartalma", () => {
         status: "SIGNED",
         signature: {
           decision: "ACCEPTED",
+          signerSource: "SELECTED" as const,
           signerName: "Nagy Béla",
           signedByName: null,
           signedAt: "2026-09-17T20:10:00.000Z",
@@ -234,6 +235,7 @@ describe("a nyomtatott munkalap tartalma", () => {
         status: "SIGNED",
         signature: {
           decision: "ACCEPTED",
+          signerSource: "SELECTED" as const,
           signerName: "Nagy Béla",
           signedByName: "Szerelő Sándor",
           signedAt: "2026-09-17T20:10:00.000Z",
@@ -242,8 +244,28 @@ describe("a nyomtatott munkalap tartalma", () => {
       }),
     );
 
-    assert.match(lap, /Aláírta: Nagy Béla/);
+    /*
+      A FELIRAT 2026-09-18 OTA A MINOSEGET IS KIMONDJA ("Alairta a partner
+      munkatarsa"), nem csak azt, hogy "Alairta". A REGI allitas szo szerint a
+      `Aláírta: <nev>` alakra ment, tehat jogosan pirosodott ki.
+
+      ES NEM CSAK A SZOVEGET IRTAM AT: az allitas eredeti szandeka az volt, hogy
+      a ket nev KULONBOZO cimket kap. Az uj alak ezt KIMONDJA, ahelyett hogy ket
+      rogzitett mondatra bizna.
+    */
+    assert.match(lap, /Aláírta a partner munkatársa: Nagy Béla/);
     assert.match(lap, /Az aláírást rögzítette: Szerelő Sándor/);
+
+    const alairoSor = lap.split("\n").find((sor) => sor.includes("Nagy Béla"));
+    const rogzitoSor = lap
+      .split("\n")
+      .find((sor) => sor.includes("Szerelő Sándor"));
+    assert.ok(alairoSor && rogzitoSor, "az egyik név nem került a lapra");
+    assert.notEqual(
+      alairoSor,
+      rogzitoSor,
+      "a két név ugyanabban a sorban áll: nincs külön címkéjük",
+    );
   });
 
   it("az ÜGYFÉL saját eszközkódja rákerül", () => {

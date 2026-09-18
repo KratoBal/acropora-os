@@ -315,6 +315,20 @@ export interface AssetDocumentSummary {
   contentType: "application/pdf" | "image/jpeg" | "image/png";
   sizeBytes: number;
   sha256: string;
+  /**
+   * A CSATOLMANY FELIRATA -- MIT LATUNK A KEPEN. `null`, ha nincs.
+   *
+   * A HIANY EGYFELE ALAKBAN ALL (`null`, nem ures string), ugyanugy, mint a
+   * kozos tipusban: kulonben a "nincs felirat" es a "szandekosan ures felirat"
+   * megkulonboztethetetlen lenne.
+   *
+   * MIERT HIANYZOTT EDDIG: a szerver 2026-09-17 ota kuldi, es a WEBES lap
+   * hasznalja is -- csak EBBOL a masolatbol maradt ki. A mobil szandekosan
+   * sajat tipus-masolatot tart, tehat a ket oldal kozott nincs fordito-szintu
+   * kapocs: a mezo NEV NELKUL is atjott a valaszban, es a hianya nem hibazott.
+   * Ugyanaz az alak, mint a `documents` mezo hianya egy szinttel feljebb.
+   */
+  caption: string | null;
   uploadedBy?: { id: string; displayName: string };
   createdAt: string;
 }
@@ -327,6 +341,42 @@ export interface AssetDocumentSummary {
  *
  * A válasz LISTA, egyetlen fájlnál is: a végpont mindig azzal felel.
  */
+/**
+ * A TORZS NEVESITETT TIPUSSAL MEGY, EGYETLEN MEZONEL IS.
+ *
+ * MIERT: a `mobile-request-body.spec.ts` orzo a NEVESITETT tipusokat veti ossze
+ * a szerver DTO-javal. Egy helyben megirt objektum (`{ caption }`) atcsuszna
+ * rajta. Ugyanez az alak all a hibajegy-oldalon
+ * (`SetServiceJobDocumentCaptionInput`), es ez SZANDEKOS ismetles: a ket ut
+ * ket kulon vegpontra megy, tehat egy kozos tipus azt allitana, hogy egyszerre
+ * valtoznak.
+ */
+export interface SetAssetDocumentCaptionInput {
+  caption: string | null;
+}
+
+/**
+ * A FELIRAT ATIRASA EGY ESZKOZ-CSATOLMANYON.
+ *
+ * `PATCH`, mert a sornak EGY mezojet mozditja: a fajl, a meret es a lenyomat a
+ * feltoltes pillanatabol valo, es nem is irhato felul. A szerver ugyanezen az
+ * utvonalon `SERVICE_MANAGE` jogot ker.
+ */
+export function setAssetDocumentCaption(
+  id: string,
+  documentId: string,
+  caption: string | null,
+) {
+  const torzs: SetAssetDocumentCaptionInput = { caption };
+  return apiRequest<{ ok: true }>(
+    `${BASE}/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(torzs),
+    },
+  );
+}
+
 export async function uploadAssetDocuments(
   id: string,
   input: { type: AssetDocumentType; files: readonly PickedFile[] },

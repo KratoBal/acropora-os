@@ -329,6 +329,32 @@ export class SignWorksheetVersionDto {
    * klienstol jovo "forras" mezo ellentmondhatna a valasztott szemelynek, es
    * akkor a lapon egy hamis jelzes allna.
    */
+  /**
+   * A SAJÁT KOLLÉGÁNK ÍRJA ALÁ, AZONOSÍTVA.
+   *
+   * Balázs kérése, 2026-09-18 07:01 UTC: „Es az elozo kepernyon utolso gomb
+   * Alairom."
+   *
+   * === A KLIENS NEM KÜLD AZONOSÍTÓT, ÉS EZ A MEZŐ LÉNYEGE ===
+   *
+   * Csak annyit mond, hogy a HITELESÍTETT AKTOR írja alá; a szerver onnan veszi
+   * a személyt. Így nincs mit hamisítani a kérés törzsében. Ha a kliens
+   * választhatna aláírót, ez a mező nevesítve adna át egy hatalmat, amit ma
+   * senki nem kapott meg.
+   *
+   * === ALÁÍRÓKÓD NINCS EZEN AZ ÁGON (acrobot döntése, 2026-09-18 13:22) ===
+   *
+   * Ugyanaz az ember ugyanezzel a bejelentkezéssel lezárja a lapot, átírja a
+   * tételeket és rejt is. Egyik sem kér második titkot; egy második titok
+   * KIZÁRÓLAG itt azt állítaná, hogy ez a lépés erősebben védett, mint a többi.
+   *
+   * A PARTNER-ÁGON VISZONT MARAD, és nem ugyanazért: ott a telefon a MI
+   * szerelőnk kezében van, és a kód azt bizonyítja, hogy a PARTNER embere volt
+   * ott. Két különböző kérdés, két különböző válasz.
+   */
+  @IsBoolean({ message: "A saját aláírás jelölése csak igen vagy nem lehet." })
+  @IsOptional()
+  signSelf?: boolean;
   @IsString() @IsOptional() signerUserId?: string;
   /**
    * AZ ALAIROKOD, amit az UGYFEL ir be. CSAK a listarol valasztott agon kell.

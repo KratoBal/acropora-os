@@ -8,7 +8,10 @@ import {
   canEditWorksheetEntry,
   describeEntryEditRefusal,
 } from "./worksheet-entry-permission.js";
-import { describeEmptySignerList } from "./worksheet-signer.js";
+import {
+  describeEmptySignerList,
+  type WorksheetSignerSource,
+} from "./worksheet-signer.js";
 import {
   describeSigningCodeFailure,
   isWellFormedSigningCode,
@@ -37,6 +40,7 @@ import {
 import { assertStorageKeyMatches } from "../service-assets/document-store/document-storage-key.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
+import { hasPermission, PERMISSIONS } from "@acropora/types";
 import type {
   AuthenticatedUser,
   WorksheetAttachableListResponse,
@@ -296,8 +300,8 @@ export class WorksheetsService {
     return { ...document, bytes };
   }
 
-  list(query: WorksheetListQueryDto, scope: PartnerScope) {
-    return this.repository.list(query, scope);
+  list(query: WorksheetListQueryDto, scope: PartnerScope, mayHide = false) {
+    return this.repository.list(query, scope, mayHide);
   }
 
   /**
@@ -724,9 +728,17 @@ export class WorksheetsService {
     user: AuthenticatedUser,
   ): Promise<WorksheetDetail> {
     const scope = partnerScopeOf(user);
-    if (!mayHideRows(scope))
+    /**
+     * A KONTROLLEREN IS ALL `SERVICE_HIDE` KAPU, ES EZ MEGIS KELL.
+     *
+     * A dekorator a HTTP utat vedi; ez a sort magat. Ha valaha egy masodik hivo
+     * keletkezik (utemezett feladat, import, egy masik vegpont), az a
+     * dekoratort megkeruli, ezt nem. Es a ketto egyutt mondja ki a teljes
+     * szabalyt: a hatokor a partnert zarja ki, a jog a sajat szereloinket.
+     */
+    if (!mayHideRows(scope, hasPermission(user, PERMISSIONS.SERVICE_HIDE)))
       throw new ForbiddenException(
-        "A munkalap elrejtése belső művelet: a partner-hozzáférés nem végezheti el.",
+        "A munkalap elrejtése admin jogkör: ehhez a művelethez nincs jogosultságod.",
       );
     /**
      * A LETEZES ELLENORZESE A SAJAT HATOKORBEN. Enelkul egy ismeretlen
@@ -820,7 +832,7 @@ export class WorksheetsService {
         "Az elutasítás okát meg kell adni, legalább három karakterrel: enélkül nem derül ki, mit kell javítani.",
       );
 
-    const signer = await this.resolveSigner(id, input);
+    const signer = await this.resolveSigner(id, input, actorUserId);
     const result = await this.repository.sign({
       worksheetId: id,
       decision: input.decision,
@@ -993,11 +1005,44 @@ export class WorksheetsService {
   private async resolveSigner(
     worksheetId: string,
     input: SignWorksheetVersionDto,
+    actorUserId: string,
   ): Promise<{
     signerName: string;
     signerUserId: string | null;
-    signerSource: "SELECTED" | "TYPED";
+    signerSource: WorksheetSignerSource;
   }> {
+    /**
+     * A BELSOS AG ALL ELOL, ES EZ NEM SORREND-IZLES.
+     *
+     * Ha hatrebb allna, egy olyan keres, ami MIND A KETTOT kuldi, csendben a
+     * partner-agra futna -- vagyis a kliens a `signerUserId` mezovel felul
+     * tudna irni azt, hogy "en irom ala". A ket ag ezert kizarja egymast, es
+     * az utkozes HIBA, nem valasztas: egy keres, ami ket kulonbozo dolgot
+     * mond, nem talalgatas targya.
+     */
+    if (input.signSelf) {
+      if (input.signerUserId || input.signerName?.trim())
+        throw new BadRequestException(
+          "A saját aláírás mellé nem adható meg másik aláíró: döntsd el, ki írja alá.",
+        );
+      const alairo = await this.repository.userLegalName(actorUserId);
+      if (!alairo)
+        throw new BadRequestException(
+          "A bejelentkezett felhasználó nem található, ezért nem tud aláírni.",
+        );
+      /**
+       * ALAIROKOD NINCS EZEN AZ AGON (acrobot dontese, 2026-09-18 13:22): a
+       * vedelem ugyanaz a munkamenet, ami a lapot lezarja es a teteleit atirja.
+       * Egy masodik titok kizarolag itt azt allitana, hogy ez a lepes erosebben
+       * vedett, mint a tobbi.
+       */
+      return {
+        signerName: alairo,
+        signerUserId: actorUserId,
+        signerSource: "INTERNAL",
+      };
+    }
+
     if (input.signerUserId) {
       const worksheet = await this.requireWorksheet(worksheetId, {
         kind: "internal",
