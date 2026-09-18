@@ -8,7 +8,11 @@ import {
   Skeleton,
   Textarea,
 } from "@acropora/ui";
-import type { WorksheetEntryDetail } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  type WorksheetEntryDetail,
+} from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -45,13 +49,32 @@ export function WorksheetEntries({
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
+  const canView = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
+  );
   const [entries, setEntries] = useState<WorksheetEntryDetail[] | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!token) return;
+    /*
+      A KAPU A MUNKAMENETRE ES A JOGRA MEGY, SOHA NEM ARRA, HOGY VAN-E KLIENS
+      OLDALON OLVASHATO TOKEN. Termelesben a munkamenet httpOnly SUTIN all (a
+      `ProductionAuthAdapter` a `session.token` mezot nem tolti ki), tehat egy
+      `!token` kapu VEGLEGESEN kizarja ezt a hivast -- eles kornyezetben SOHA
+      nem fut le, fejlesztoiben mindig. A ket kornyezet igy mast csinal, es a
+      kulonbseg nema: hibauzenet nincs, a lista egyszeruen ures marad.
+
+      A `token` (akar ures) VALTOZATLANUL megy at az apiRequest-nek: OTT dol
+      el, hogy Bearer fejlec megy-e vagy a suti.
+
+      Merve 2026-09-18: Balazs azt jelentette, hogy a mentett bejegyzes
+      frissites utan eltunik. Az iras azert mukodott, mert azt gombnyomas
+      hivja, kapu nelkul. Ugyanez a szabaly mar le volt irva a repoban
+      (`product-list-page.tsx`), csak ide nem jutott el.
+    */
+    if (!canView) return;
     try {
       const response = await worksheetsApi.entries(token, worksheetId);
       setEntries(response.items);
@@ -60,7 +83,7 @@ export function WorksheetEntries({
         cause instanceof Error ? cause.message : "A napló nem tölthető be.",
       );
     }
-  }, [token, worksheetId]);
+  }, [canView, token, worksheetId]);
 
   useEffect(() => {
     void load();

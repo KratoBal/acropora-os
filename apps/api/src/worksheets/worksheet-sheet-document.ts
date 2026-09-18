@@ -81,6 +81,42 @@ export function worksheetSheetFileName(label: string | null): string {
 }
 
 /**
+ * A LEZÁRÁSKOR KELETKEZŐ LAPNAK SZÁMOZOTTNAK KELL LENNIE.
+ *
+ * MIÉRT NEM A `worksheetSheetFileName`-BEN ÁLL EZ: ott a szám nélküli alak
+ * HELYES. A piszkozat is kap lapot, és annak `munkalap-piszkozat.pdf` a neve.
+ * Egy közös őrző tehát egy jogos esetet vágna el -- és ugyanennyire rossz
+ * irányban: a lap KÉT hívója közül mind a kettőre zöld maradna, akkor is, ha
+ * a lezárási úton hibás.
+ *
+ * AMIT VÉD, ÉS EZ NÉMA HIBA: a lezárás a sorszámot a STÁTUSZ-VÁLTÁS UTÁN
+ * osztja ki. Aki a tranzakció ELEJÉN olvasott sorból állítja elő a lapot,
+ * `null` címkét kap, abból `munkalap-piszkozat.pdf` lesz, és A FÁJL ELKÉSZÜL:
+ * a lezárás sikerül, a sor létrejön, és a vevő egy piszkozat nevű
+ * dokumentumot kap egy számozott munkalapról. Semmi nem szólna.
+ *
+ * MIÉRT SZABAD ILYEN SZIGORÚNAK LENNIE: a lezárás feltételei
+ * (`worksheetCloseBlocker`) szám nélkül nem engedik tovább a lapot -- vagy már
+ * van száma, vagy a rövidítés és az alegység-kód megvan, és akkor a kiosztás
+ * lefut. Sikeres lezárás után tehát MINDIG van szám. Ez az őrző nem új
+ * feltétel, hanem ennek az UTÓFELTÉTELE.
+ *
+ * TISZTA FÜGGVÉNY, ugyanazért, amiért a `worksheetCloseBlocker` is az: így a
+ * szabály adatbázis nélkül mérhető.
+ */
+export function requireClosedSheetLabel(
+  label: string | null,
+  worksheetId: string,
+): string {
+  if (!label)
+    throw new Error(
+      `A lezárt munkalap (${worksheetId}) száma nem érhető el a lap előállításakor. ` +
+        "A lapot a sorszám kiosztása UTÁN kell előállítani, különben piszkozat-nevet kapna.",
+    );
+  return label;
+}
+
+/**
  * A LAP BEMENETÉBŐL A TÁROLHATÓ FÁJL.
  *
  * A `sha256` a TARTALOMRA megy, ugyanúgy, ahogy a feltöltési úton
