@@ -3942,6 +3942,19 @@ enum WorksheetSignerSource {
   SELECTED
   /// "Egyik sem": a szerelo irta be a nevet. A lap ezt KIMONDJA.
   TYPED
+  /// A SZOLGALTATO SAJAT MUNKATARSA irta ala, azonositva.
+  ///
+  /// Balazs kerese, 2026-09-18 07:01 UTC: "Es az elozo kepernyon utolso gomb
+  /// Alairom." A sajat szervizesunk sajat maga ir ala, nem az ugyfel.
+  ///
+  /// A KLIENS NEM KULD AZONOSITOT: a szerver a HITELESITETT AKTORT veszi.
+  /// Ettol nincs mit hamisitani a keres torzseben -- ha a kliens valaszthatna
+  /// alairot, a mezo nevesitve adna at egy hatalmat, amit ma senki nem kapott.
+  ///
+  /// ES EZ AZ ERTEK A LAPON IS LATSZIK, nem csak a naploban. Egy alairt
+  /// munkalap bizonyitek: ha a papiron nem latszik, hogy az alairo a
+  /// SZOLGALTATO embere volt, a lap tobbet allit, mint ami tortent.
+  INTERNAL
 }
 
 model WorksheetVersionSignature {

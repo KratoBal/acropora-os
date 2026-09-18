@@ -470,6 +470,44 @@ describe(
       assert.ok(idk.includes(latszik), "a partner a nem rejtettet sem látja");
     });
 
+    /**
+     * AZ ALAIRASRA HASZNALT NEV A TELJES NEV, SOHA NEM A BECENEV.
+     *
+     * A `person-name.ts` sajat megjegyzese mondja ki, melyik fuggveny hova
+     * valo: "The name for documents and signatures: always the full one, never
+     * the nickname." Egy alairt munkalap dokumentum.
+     *
+     * MIERT ITT, ES NEM UNIT-SZINTEN: a szolgaltatas duplaja FIX szoveget ad
+     * vissza, tehat ezt a kulonbseget egyetlen unit-allitas sem latja --
+     * lemertem: a `personLegalName` -> `personDisplayName` csere zolden atment
+     * a teljes unit-keszleten. Valodi sor kell hozza, becenevvel.
+     */
+    it("az aláíráshoz a TELJES nevet adja, nem a becenevet", async () => {
+      const nev = await repository.userLegalName(technicianUserId);
+
+      /*
+        POZITIV KONTROLL: ha a fixture-on nem allna becenev, ez az allitas
+        akkor is teljesulne, es semmit nem bizonyitana.
+      */
+      const sor = await prisma.user.findUniqueOrThrow({
+        where: { id: technicianUserId },
+        select: { displayName: true, nickname: true },
+      });
+      assert.ok(sor.nickname, "a fixture-on nincs becenév: az állítás vak");
+      assert.notEqual(sor.nickname, sor.displayName);
+
+      assert.equal(nev, sor.displayName);
+      assert.notEqual(nev, sor.nickname);
+    });
+
+    it("ISMERETLEN felhasználóra `null`-t ad, nem üres nevet", async () => {
+      /*
+        Ures nevvel alairni rosszabb, mint elhasalni: a lapon egy nevtelen
+        "szolgaltato munkatarsa" allna. A szolgaltatas ezert hibaval all meg.
+      */
+      assert.equal(await repository.userLegalName("nincs-ilyen-user"), null);
+    });
+
     it("leaves a draft without a number", async () => {
       const id = await createDraft(bioDepartmentId);
       const row = await numberOf(id);

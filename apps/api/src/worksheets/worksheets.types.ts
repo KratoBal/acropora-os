@@ -201,6 +201,15 @@ function toSignatureDetail(
      * es a mondat ott azt mondja meg, hogy NEM TUDJUK, ki irta ala.
      */
     signerNotice: describeSignerSource(row.signerSource ?? null),
+    /**
+     * A NYERS ERTEK IS ATMEGY, nem csak a belole szamolt mondat.
+     *
+     * A `signerNotice` azt mondja meg, mit NEM tudunk; a felulet viszont azt is
+     * ki akarja irni, KI irta ala (partner munkatarsa / kezzel beirt nev /
+     * sajat kollega). Abbol az egy mondatbol ez nem vezetheto vissza, es egy
+     * szoveg-egyezesre epulo visszafejtes az elso atfogalmazasnal elszakadna.
+     */
+    signerSource: row.signerSource ?? null,
   };
 }
 
