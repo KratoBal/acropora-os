@@ -28,6 +28,7 @@ import { describe, it } from "node:test";
 const KLIENS = "src/lib/api.ts";
 const BEALLITASOK = "src/components/settings.tsx";
 const DOKUMENTUMOK = "src/components/document-panel.tsx";
+const BEJELENTO = "src/components/new-ticket.tsx";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
 
@@ -127,5 +128,33 @@ describe("a partner portál bekötése", () => {
     // ÉS A TÚLSÓ IRÁNY: a kép forrása a letöltött URL, nem egy összefűzött cím.
     assert.match(s, /<img src=\{urls\[item\.id\]\}/);
     assert.doesNotMatch(s, /<img[^>]*src=\{`/);
+  });
+});
+
+describe("a bejelentő űrlap fájl-melléklete", () => {
+  it("a bejelentő űrlapon VAN fájl-mező", () => {
+    /*
+      MI PIROSÍT: a mező elhagyása. 2026-09-18-ig nem is létezett -- csatolni
+      csak a MÁR LÉTREJÖTT jegy adatlapján lehetett, tehát a bejelentőnek két
+      lépésben kellett elmondania ugyanazt.
+
+      A MINTA A MEZŐ ALAKJÁRA ILLESZT (`type="file"`), nem a "file" szóra: az
+      utóbbit egy komment vagy egy változónév zölden tartaná.
+    */
+    assert.match(olvas(BEJELENTO), /type="file"/);
+  });
+
+  it("a feltöltés a MÁR LÉTREJÖTT jegy azonosítójára megy", () => {
+    /*
+      === MIÉRT EZ A LÉNYEG, ÉS NEM A MEZŐ MEGLÉTE ===
+
+      A végpont a jegy azonosítójára ír, az azonosító pedig csak a létrehozás
+      után létezik. Egy fájl-mező, ami a létrehozás ELŐTT próbálna feltölteni,
+      ugyanúgy ott állna a képernyőn -- és soha nem csatolna semmit.
+
+      A minta ezért a HÍVÁS ALAKJÁRA illeszt, a `created.id` argumentummal
+      együtt: ez az, ami a sorrendet bizonyítja.
+    */
+    assert.match(olvas(BEJELENTO), /uploadTicketDocument\(\s*created\.id/);
   });
 });
