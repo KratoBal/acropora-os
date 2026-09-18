@@ -35,7 +35,6 @@ function bemenet(
     status: "SIGNED",
     customerName: "Fánk Kft.",
     customerNumber: "VEVO-A",
-    jobNumber: "HJ-2026-0007",
     departmentName: "Biodóm",
     departmentCode: "BIO",
     subject: "Kompresszorok bevizsgálása",

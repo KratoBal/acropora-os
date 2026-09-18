@@ -17,7 +17,6 @@ function sheet(
     status: "AWAITING_SIGNATURE",
     customerName: "Fánk Kft.",
     customerNumber: "VEVO-A",
-    jobNumber: "HJ-2026-0007",
     departmentName: "Biodóm",
     departmentCode: "BIO",
     subject: "Kompresszorok bevizsgálása",
@@ -186,12 +185,39 @@ describe("a nyomtatott munkalap tartalma", () => {
     assert.equal(lap.includes("()"), false);
   });
 
-  it("a hibajegy száma rákerül, ha van", () => {
-    assert.match(szoveg(sheet()), /Hibajegy: HJ-2026-0007/);
-    assert.equal(
-      szoveg(sheet({ jobNumber: null })).includes("Hibajegy"),
-      false,
-    );
+  /**
+   * AZ ALLITAS MEGFORDULT 2026-09-18-KOR, ES EZ NEM A TESZT GYENGITESE.
+   *
+   * Korabban azt merte, hogy a hibajegy szama RAKERUL a lapra. Azota dontes
+   * all rola (acrobot, 10:56): NEM kerul ra, mert egy LEZART laphoz utolag is
+   * csatolhato jegy -- tehat ez lenne az egyetlen sor, aminek az erteke a
+   * fagyasztas utan is valtozhat.
+   *
+   * MI PIROSIT: a sor visszatetele. Egy torolt teszt ezt nem fogna meg; egy
+   * megfordított igen, es KIMONDJA, hogy a hiany DONTES, nem feledekenyseg.
+   */
+  it("a lapon nem áll hibajegy-sor", () => {
+    /*
+      AMIT EZ AZ ALLITAS MER, ES AMIT NEM -- KALIBRACIOVAL MERVE, NEM BECSULVE.
+
+      Az elso neve az volt, hogy "akkor sem, ha van". Az TOBBET IGERT, mint
+      amit mer: a fixtura MAR NEM hordoz jegyszamot (a mezo nincs a tipusban),
+      tehat egy visszatett `label("Hibajegy", input.jobNumber)` sor URESEN esne
+      ki, es ez az allitas ZOLD maradna. Lemertem, es pontosan ez tortent.
+
+      AMI EZT A RESIDUALIS ESETET FOGJA MEG: egy BEIRT ertek (`label("Hibajegy",
+      "HJ-...")` vagy barmi, ami nem a bemenetbol jon). Arra ez az allitas
+      pirosodik -- es az a valoszinu alak, ha valaki "visszateszi" a sort.
+
+      A TIPUS-SZINTU garanciat nem ez adja, hanem a mezohalmaz-orzo lentebb: ha
+      a `jobNumber` visszakerul a bemeneti tipusba, AZ pirosodik. Ket kulon
+      szint, ket kulon allitas.
+    */
+    assert.equal(szoveg(sheet()).includes("Hibajegy"), false);
+    // ISMERT POZITIV KONTROLL: a lap NEM ures, es a szomszed sorok allnak.
+    // Enelkul ez az allitas egy ures lapon is zold lenne.
+    assert.match(szoveg(sheet()), /Partner: Fánk Kft\./);
+    assert.match(szoveg(sheet()), /Lezárva: /);
   });
 
   it("az aláíró és a RÖGZÍTŐ külön címkét kap", () => {
@@ -312,7 +338,6 @@ describe("a lap mezőhalmaza végiggondolt", () => {
       "entries",
       "fulfillmentDate",
       "issueDate",
-      "jobNumber",
       "label",
       "laborHours",
       "lines",
@@ -321,9 +346,14 @@ describe("a lap mezőhalmaza végiggondolt", () => {
       "subject",
     ]);
 
-    // ÉS A KIMARADÓ MEZŐ NÉV SZERINT: a fizetési határidő NEM kerül a lapra.
-    // Egy darabszám-egyezés ezt nem mondaná meg, mert egy csere is 19 mezőt ad.
+    // ÉS A KIMARADÓ MEZŐK NÉV SZERINT: a fizetési határidő NEM kerül a lapra.
+    // Egy darabszám-egyezés ezt nem mondaná meg, mert egy csere is ugyanannyi
+    // mezőt ad.
     assert.equal(mezok.includes("dueDate"), false);
+    // ÉS A HIBAJEGY SZÁMA SEM (döntés, 2026-09-18): a lezárt laphoz utólag is
+    // csatolható jegy, tehát ez lenne az egyetlen mező, ami a fagyasztás után
+    // is mozdulhat. Az indok a tartalom-modul fejlécén áll.
+    assert.equal(mezok.includes("jobNumber"), false);
   });
 
   it("a tétel a MI eszközszámunkat ÉS az ügyfélét is viseli", () => {

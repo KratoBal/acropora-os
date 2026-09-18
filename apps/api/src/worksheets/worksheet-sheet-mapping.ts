@@ -54,7 +54,15 @@ export function worksheetSheetInput(
     status: version.status,
     customerName: detail.customer.displayName,
     customerNumber: detail.customer.customerNumber,
-    jobNumber: detail.serviceJob?.jobNumber ?? null,
+    /*
+      A HIBAJEGY SZAMA SZANDEKOSAN NEM KERUL AT, holott a valasz HORDOZZA
+      (`detail.serviceJob`). Az indok a tartalom-modul fejlecen all: a lezart
+      laphoz utolag is csatolhato jegy, tehat ez lenne az egyetlen sor, ami a
+      fagyasztas utan is mozdulhat.
+
+      A MEZO A VALASZBAN MARAD, es ez nem mulasztas: a lap adatlapjan nalunk
+      tovabbra is latszik. Csak a VEVONEK szant lapra nem kerul ki.
+    */
     departmentName: detail.department.name,
     departmentCode: detail.department.code,
     subject: version.subject,
