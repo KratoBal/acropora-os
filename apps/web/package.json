@@ -7,7 +7,7 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
-    "test": "tsc -p tsconfig.test.json && node --test test-dist/lib/products/list-state.test.js && vitest run",
+    "test": "rm -rf test-dist && tsc -p tsconfig.test.json && tests=$(find test-dist -name '*.test.js') && { [ -n \"$tests\" ] || { echo 'Nem talaltam teszt fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $tests && vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .next"
   },
