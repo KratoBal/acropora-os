@@ -233,18 +233,39 @@ export function AssetListPage() {
   const [units, setUnits] = useState<
     Awaited<ReturnType<typeof suppliersApi.units>>["items"]
   >([]);
+  /**
+   * NEM SIKERULT BETOLTENI a helyszineket -- szemben azzal, hogy NINCS
+   * helyszin. A ketto eddig ugyanazt a kepernyot adta.
+   */
+  const [unitsFailed, setUnitsFailed] = useState(false);
   useEffect(() => {
     if (!canView || !unitsOwnerId) {
       setUnits([]);
       return;
     }
     const controller = new AbortController();
+    setUnitsFailed(false);
     void suppliersApi
       .units(token, unitsOwnerId, controller.signal)
       .then((response) => setUnits(response.items))
-      // A HELYSZINEK HIANYA NEM TORI EL A LISTAT: a tobbi szuro mukodik
-      // tovabb, es a valaszto egyszeruen nem kinal semmit.
-      .catch(() => setUnits([]));
+      /*
+        A HELYSZINEK HIANYA NEM TORI EL A LISTAT: a tobbi szuro mukodik tovabb,
+        es a valaszto egyszeruen nem kinal semmit. EZ A DONTES VALTOZATLAN --
+        egy mellekes szuro miatt nem veszunk el egy mukodo lapot.
+
+        AMI VALTOZOTT: a HIBA es az URES EREDMENY eddig ugyanugy nezett ki. A
+        panel `unitRows.length > 0` mellett rajzolodik, tehat egy sikertelen
+        lekerdezes utan EGYSZERUEN ELTUNIK -- es az ugy olvasodik, hogy a
+        partnernek nincs helyszine. Offline ez az ALAPHELYZET lenne, nem a
+        kivetel, ezert nem hagyhato igy.
+
+        Az `AbortError` NEM hiba: a sajat lemondasunk, amikor a hatas ujrafut.
+      */
+      .catch((cause) => {
+        setUnits([]);
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setUnitsFailed(true);
+      });
     return () => controller.abort();
   }, [canView, token, unitsOwnerId]);
   const selectedUnits = useMemo(() => readUnitFilter(params), [params]);
@@ -594,6 +615,17 @@ export function AssetListPage() {
         onSelect={selectStatus}
         label="Eszközök státusz szerint"
       />
+      {/*
+        A HIBA A GRID FOLOTT ALL, nem benne: a szuro-panel csak akkor
+        rajzolodik, ha VAN mit kinalni, es egy hibauzenetet nem akarunk egy
+        ures fa helyere tenni. Igy a lap elrendezese valtozatlan marad.
+      */}
+      {unitsFailed ? (
+        <p className="mb-3 text-xs text-muted">
+          A helyszín-szűrő most nem tölthető be. A többi szűrő működik, és a
+          lista teljes: ez NEM azt jelenti, hogy a partnernek nincs helyszíne.
+        </p>
+      ) : null}
       {unitRows.length > 0 ? (
         <div className="grid gap-[18px] lg:grid-cols-[190px_minmax(0,1fr)]">
           {/* A HELYSZINFA TOBBSZOROS VALASZTAST ENGED, es ez nem a design

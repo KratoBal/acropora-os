@@ -113,6 +113,12 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   const [performanceUnitId, setPerformanceUnitId] = useState("");
   const [performanceUnits, setPerformanceUnits] = useState<UnitOfMeasure[]>([]);
   /**
+   * NEM SIKERULT BETOLTENI a mertekegysegeket -- szemben azzal, hogy NINCS
+   * ilyen torzsadat. A ketto eddig ugyanazt a legordulot adta: csak a "Nincs
+   * megadva" sort.
+   */
+  const [performanceUnitsFailed, setPerformanceUnitsFailed] = useState(false);
+  /**
    * AZ ESZKOZON MA ALLO EGYSEG, KULON -- MERT LEHET, HOGY MAR KIVEZETTEK.
    *
    * A valaszto az AKTIVAKAT kinalja. Ha az eszkozon egy azota kivezetett
@@ -253,7 +259,21 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
     void unitsOfMeasureApi
       .list(token, "PERFORMANCE", { signal: controller.signal })
       .then((result) => setPerformanceUnits(result.items))
-      .catch(() => setPerformanceUnits([]));
+      /*
+        AZ URLAPOT NEM ALLITJUK MEG (lasd a fenti jegyzetet) -- EZ VALTOZATLAN.
+
+        AMI VALTOZOTT: a HIBA es az URES TORZSADAT eddig ugyanugy nezett ki. A
+        legordulo mind a ket esetben csak a "Nincs megadva" sort kinalja, es a
+        kezelo abbol azt olvassa ki, hogy nincs mertekegyseg -- nem azt, hogy
+        most nem tudtuk lekerdezni. Offline ez lenne az ALAPHELYZET.
+
+        Az `AbortError` NEM hiba: a sajat lemondasunk.
+      */
+      .catch((cause) => {
+        setPerformanceUnits([]);
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setPerformanceUnitsFailed(true);
+      });
     return () => controller.abort();
   }, [token]);
 
@@ -677,6 +697,13 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                   ),
                 )}
               </Select>
+              {performanceUnitsFailed ? (
+                <p className="mt-1 text-xs text-muted">
+                  A mértékegységek most nem tölthetők be. Ez NEM azt jelenti,
+                  hogy nincs mértékegység: a mező üresen hagyható, a többi adat
+                  menthető.
+                </p>
+              ) : null}
             </FormField>
             {/*
               A MI MATRICANK, NEM A PARTNERE. A fenti mezo a partner sajat
