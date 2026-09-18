@@ -503,6 +503,17 @@ export function signWorksheet(
     signerName?: string;
     /** A valasztott munkatars. A szerver ebbol szamolja a forrast. */
     signerUserId?: string;
+    /**
+     * A SAJAT KOLLEGANK IRJA ALA, AZONOSITVA.
+     *
+     * AZONOSITOT NEM KULDUNK: a szerver a hitelesitett aktort veszi. Ha a
+     * kliens valaszthatna alairot, ez a mezo nevesitve adna at egy hatalmat,
+     * amit ma senki nem kapott meg.
+     *
+     * A szerver a masik ket alairo-mezovel EGYUTT elutasitja: az utkozes hiba,
+     * nem valasztas.
+     */
+    signSelf?: boolean;
     note: string | null;
   },
 ) {
