@@ -172,21 +172,36 @@ export interface ServiceJobAssignee {
 }
 
 /**
- * AMIT A TELEFON KULD EGY UJ JEGYHEZ -- ES EZ SZUKEBB, MINT A WEBE.
+ * AMIT A TELEFON KULD EGY UJ JEGYHEZ -- KET UTON.
  *
- * A webes urlap partnert, helyszint es eszkozoket valasztat. A helyszinen a
- * szerelo EGY gep elott all, es abbol a harom KOVETKEZIK: az `originAssetId`-bol
- * a SZERVER vezeti le oket (`placementOfAsset`).
+ * GEP ELOL (a gyakori eset): a szerelo EGY gep elott all, es a partner meg a
+ * helyszin abbol KOVETKEZIK -- az `originAssetId`-bol a SZERVER vezeti le oket
+ * (`placementOfAsset`). Ilyenkor a telefon nem kuld partnert.
  *
  * MIERT NEM A TELEFON VEZETI LE: szallitoi eszkoznel a jegy partnere a szallito
  * TUKOR-sora (`Supplier.customerId`), ami a partner BELSO reszlete. Kliens-
  * szerzodesse teve nem lehetne megvaltoztatni anelkul, hogy a telefon elromoljon.
+ *
+ * GEP NELKUL (Balazs kerese, 2026-09-18): nincs mibol levezetni, tehat amit a
+ * szerelo megad, az megy fel. A HAROM MEZO MIND ELHAGYHATO, es ez nem uj
+ * szerzodes: a szerver DTO-jaban mind a harom `@IsOptional()`, a sema ket
+ * oszlopa nullazhato, es a WEBES felvitel ma is igy mukodik -- `originAssetId`
+ * nelkul, `customerId`/`departmentId` mezokkel. A telefon eddig csak nem
+ * hasznalta ezt az utat.
+ *
+ * AMIT A KETTO KOZUL KULDUNK, AZT A `uj-jegy-torzs.ts` donti el, egy helyen:
+ * gep mellett partner es helyszin NEM megy fel, mert a megadott ertek a
+ * szerveren ELSOBBSEGET elvezne, es csendben felulirna azt, amit a gep mond.
  */
 export interface CreateServiceJobInput {
   title: string;
   description?: string;
   /** Melyik eszkoznel nyitottak. Ebbol jon a partner es a helyszin. */
-  originAssetId: string;
+  originAssetId?: string;
+  /** Csak gep NELKUL: amit a szerelo megadott. */
+  customerId?: string;
+  /** Csak gep NELKUL, es csak partnerrel egyutt -- a szerver is ezt orzi. */
+  departmentId?: string;
   /**
    * A SOR AZONOSITOJA, ami a szerver IDEMPOTENCIA-KULCSA is. A sor a halozati
    * hibat SZANDEKOSAN ujraprobalja, es epp ott lehet, hogy a szerver mar

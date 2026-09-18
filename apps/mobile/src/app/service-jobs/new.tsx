@@ -36,7 +36,12 @@ import {
   newServiceJobProblem,
   placementNotice,
 } from "@/lib/service-jobs/new-service-job";
-import { serviceJobOperationId } from "@/lib/service-jobs/types";
+import {
+  listSelectableWorksheetPartners,
+  listWorksheetDepartments,
+  type WorksheetSelectablePartner,
+} from "@/lib/api/worksheets";
+import { ujJegyTorzse } from "@/lib/service-jobs/uj-jegy-torzs";
 
 /**
  * ÚJ HIBAJEGY A GÉPNÉL.
@@ -115,18 +120,49 @@ export default function NewServiceJobScreen() {
   const asset =
     query.data ?? cached.data?.detail ?? cached.data?.summary ?? null;
 
+  /**
+   * A PARTNER ES A HELYSZIN CSAK GEP NELKUL KERDES.
+   *
+   * Gep mellol a szerver vezeti le mind a kettot, tehat ezek a lekerdezesek el
+   * sem indulnak -- a szerelo egy gep elott allva egy folosleges kort sem fizet
+   * erte, tereró nelkul pedig egy folosleges hibat sem lat.
+   */
+  const [partner, setPartner] = useState<WorksheetSelectablePartner | null>(
+    null,
+  );
+  const [departmentId, setDepartmentId] = useState("");
+  const [partnerValasztoNyitva, setPartnerValasztoNyitva] = useState(false);
+  const [helyszinValasztoNyitva, setHelyszinValasztoNyitva] = useState(false);
+  const partnerek = useQuery({
+    queryKey: ["uj-jegy-partnerek"],
+    queryFn: listSelectableWorksheetPartners,
+    enabled: !assetId && status === "authenticated",
+  });
+  const helyszinek = useQuery({
+    queryKey: ["uj-jegy-helyszinek", partner?.customerId],
+    queryFn: () => listWorksheetDepartments(partner!.customerId),
+    enabled: !assetId && status === "authenticated" && Boolean(partner),
+  });
+
   const save = useMutation({
     mutationFn: async () => {
       const openedAt = new Date().toISOString();
-      const operationId = serviceJobOperationId({
-        originAssetId: assetId!,
+      /**
+       * A TORZS ES A KULCS EGY HELYEN DOL EL, ket utra (gep elol, gep nelkul).
+       * A modul ugyanazt a ket szabalyt orzi, amit a szerver, es a gep nelkuli
+       * kulcsba a FELHASZNALOT is beveszi -- lasd a modul fejlecet.
+       */
+      const torzs = ujJegyTorzse({
+        cim: title,
+        leiras: description,
+        originAssetId: assetId ?? null,
+        customerId: partner?.customerId ?? null,
+        departmentId: departmentId || null,
+        userId: user?.id ?? "ismeretlen",
         openedAt,
       });
-      const payload = {
-        title: title.trim(),
-        description: description.trim() || undefined,
-        originAssetId: assetId!,
-      };
+      if (!torzs.ok) throw new Error(torzs.hiba);
+      const { operationId, payload } = torzs;
       const outcome = await saveOrQueue({
         save: () =>
           createServiceJob({ ...payload, clientOperationId: operationId }),
@@ -261,9 +297,14 @@ export default function NewServiceJobScreen() {
   if (status === "unauthenticated") return <Redirect href="/login" />;
   if (status === "authenticated" && !capabilities?.serviceJobsManage)
     return <Redirect href="/" />;
-  if (!assetId) return <Redirect href="/service-jobs" />;
-
-  if (!asset)
+  /*
+    GEP NELKUL IS BEENGEDUNK (Balazs kerese: "legyen olyan hibajegy, amihez nem
+    tartozik eszkoz"). A szerver ezt MAR fogadja: az `originAssetId`, a
+    `customerId` es a `departmentId` egyarant opcionalis, es a WEBES felvitel
+    ma is igy mukodik. Ez a kepernyo tehat nem uj utat nyit, hanem a meglevot
+    hasznalja a telefonrol is.
+  */
+  if (assetId && !asset)
     return (
       <SafeAreaView style={styles.safeArea}>
         {query.isPending ? (
@@ -282,36 +323,182 @@ export default function NewServiceJobScreen() {
    * rendelheto (`assetDepartmentRefusal` -> `CUSTOMER_OWNER`), ott a cim a
    * pontositas. Alegyseg nelkul tehat nem hianyt kell kiirni, hanem a cimet.
    */
-  const hova = placementNotice({
-    owner: asset.owner ? { displayName: asset.owner.displayName } : undefined,
-    ownerType: asset.owner?.type,
-    unit: asset.unit,
-    address: asset.address,
-  });
+  const hova = asset
+    ? placementNotice({
+        owner: asset.owner
+          ? { displayName: asset.owner.displayName }
+          : undefined,
+        ownerType: asset.owner?.type,
+        unit: asset.unit,
+        address: asset.address,
+      })
+    : null;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.page}>
-        <View style={styles.block}>
-          <Text style={styles.sectionTitle}>A gép</Text>
-          <Text style={styles.rowText}>
-            {asset.assetNumber} -- {asset.name}
-          </Text>
-        </View>
+        {asset && hova ? (
+          <>
+            <View style={styles.block}>
+              <Text style={styles.sectionTitle}>A gép</Text>
+              <Text style={styles.rowText}>
+                {asset.assetNumber} -- {asset.name}
+              </Text>
+            </View>
 
-        {/*
-          HOVA KERUL A JEGY -- KIIRVA, NEM VALASZTVA.
-          Egy ures mezo harom kulon dolgot jelenthet (nincs, nem latod, nem
-          toltodott be), es a felulet ezeket egybemossa.
-        */}
-        <View style={styles.block}>
-          <Text style={styles.sectionTitle}>Hova kerül</Text>
-          <Text style={styles.meta}>Partner: {hova.partner}</Text>
-          <Text style={styles.meta}>Helyszín: {hova.helyszin}</Text>
-          {hova.figyelmeztetes ? (
-            <Text style={styles.warning}>{hova.figyelmeztetes}</Text>
-          ) : null}
-        </View>
+            {/*
+              HOVA KERUL A JEGY -- KIIRVA, NEM VALASZTVA.
+              Egy ures mezo harom kulon dolgot jelenthet (nincs, nem latod, nem
+              toltodott be), es a felulet ezeket egybemossa.
+            */}
+            <View style={styles.block}>
+              <Text style={styles.sectionTitle}>Hova kerül</Text>
+              <Text style={styles.meta}>Partner: {hova.partner}</Text>
+              <Text style={styles.meta}>Helyszín: {hova.helyszin}</Text>
+              {hova.figyelmeztetes ? (
+                <Text style={styles.warning}>{hova.figyelmeztetes}</Text>
+              ) : null}
+            </View>
+          </>
+        ) : (
+          /*
+            GEP NELKUL A SZERELO VALASZT -- ES CSAK AZT, AMIT A SZERVER IS
+            ELFOGAD.
+
+            A sorrend a szerver harom orzojenek az alakja, nem sajat otlet:
+            helyszin CSAK partnerrel egyutt adhato meg. Ezert a helyszin-valaszto
+            addig nem is jelenik meg, amig nincs partner -- egy olyan mezo, amit
+            ugyis elutasitanak, csak a helyszinen derulne ki.
+
+            MIND A KETTO ELHAGYHATO: a cim onmagaban eleg. A partner nelkuli
+            jegy ervenyes allapot (a sema ket oszlopa nullazhato), es epp ez volt
+            a keres -- olyan bejelentes, ami meg nem kotodik senkihez.
+          */
+          <View style={styles.block}>
+            <Text style={styles.sectionTitle}>Kihez tartozik</Text>
+            <Text style={styles.meta}>
+              Ha már tudod, válaszd ki. Ha nem, a jegy enélkül is felvihető, és
+              a partnert később az irodában lehet megadni.
+            </Text>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                partner
+                  ? `Partner: ${partner.name}. Koppints a módosításhoz.`
+                  : "Partner választása"
+              }
+              onPress={() => setPartnerValasztoNyitva((open) => !open)}
+              style={({ pressed }) => [
+                styles.picker,
+                pressed && styles.pressed,
+              ]}
+              testID="partner-valaszto"
+            >
+              <Text style={styles.rowText}>
+                {partner ? `Partner: ${partner.name}` : "Partner: nincs"}
+              </Text>
+            </Pressable>
+
+            {partnerValasztoNyitva ? (
+              <View style={styles.pickerList}>
+                {partnerek.isPending ? (
+                  <ActivityIndicator color="#52d6c7" />
+                ) : null}
+                <Pressable
+                  onPress={() => {
+                    setPartner(null);
+                    setDepartmentId("");
+                    setPartnerValasztoNyitva(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.pickerRow,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.rowText}>Nincs</Text>
+                </Pressable>
+                {(partnerek.data?.items ?? []).map((item) => (
+                  <Pressable
+                    key={item.customerId}
+                    onPress={() => {
+                      setPartner(item);
+                      /* Partnert valtva a regi helyszin MAR NEM az ove. */
+                      setDepartmentId("");
+                      setPartnerValasztoNyitva(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.pickerRow,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.rowText}>{item.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+
+            {partner ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Helyszín választása"
+                  onPress={() => setHelyszinValasztoNyitva((open) => !open)}
+                  style={({ pressed }) => [
+                    styles.picker,
+                    pressed && styles.pressed,
+                  ]}
+                  testID="helyszin-valaszto"
+                >
+                  <Text style={styles.rowText}>
+                    {departmentId
+                      ? `Helyszín: ${
+                          helyszinek.data?.items?.find(
+                            (item) => item.id === departmentId,
+                          )?.name ?? departmentId
+                        }`
+                      : "Helyszín: nincs"}
+                  </Text>
+                </Pressable>
+
+                {helyszinValasztoNyitva ? (
+                  <View style={styles.pickerList}>
+                    {helyszinek.isPending ? (
+                      <ActivityIndicator color="#52d6c7" />
+                    ) : null}
+                    <Pressable
+                      onPress={() => {
+                        setDepartmentId("");
+                        setHelyszinValasztoNyitva(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.pickerRow,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.rowText}>Nincs</Text>
+                    </Pressable>
+                    {(helyszinek.data?.items ?? []).map((item) => (
+                      <Pressable
+                        key={item.id}
+                        onPress={() => {
+                          setDepartmentId(item.id);
+                          setHelyszinValasztoNyitva(false);
+                        }}
+                        style={({ pressed }) => [
+                          styles.pickerRow,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text style={styles.rowText}>{item.name}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+          </View>
+        )}
 
         <View style={styles.block}>
           <Text style={styles.sectionTitle}>Mi a hiba</Text>
@@ -438,6 +625,21 @@ const styles = StyleSheet.create({
   block: { backgroundColor: "#0d2a3a", borderRadius: 12, gap: 8, padding: 14 },
   sectionTitle: { color: "#eaf4fa", fontWeight: "600" },
   rowText: { color: "#eaf4fa" },
+  /* A gep nelkuli felvitel valasztoi. Ugyanaz az alak, mint a
+     munkalap-listaban: ugyanaz a mozdulat, ugyanaz a kinezet. */
+  picker: {
+    backgroundColor: "#06202e",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  pickerList: { backgroundColor: "#06202e", borderRadius: 10, padding: 8 },
+  pickerRow: {
+    borderBottomColor: "#123b50",
+    borderBottomWidth: 1,
+    paddingVertical: 10,
+  },
+  pressed: { opacity: 0.7 },
   meta: { color: "#9fc4d8", fontSize: 13 },
   warning: { color: "#f0c674", fontSize: 13, lineHeight: 18 },
   input: {
