@@ -153,6 +153,22 @@ export interface ServiceJobDetail extends ServiceJobListItem {
    */
   timeline: ServiceJobTimelineEntry[];
   assets: ServiceJobAssetLink[];
+  /**
+   * A JEGY FELELOSEI -- ES EZT IS A SZERVER KULDI MAR MA.
+   *
+   * A `detail()` valasza tartalmazza (userId, name, assignedAt), a kozos tipus
+   * is ismeri; a telefon tukre nem. A munkalap-felvitel emiatt nem tudta
+   * atvenni a jegy feleloset. Ugyanaz a fajta, mint a `customerId`: az adat
+   * megvan, a parancs nincs.
+   */
+  assignees: ServiceJobAssignee[];
+}
+
+/** Egy felelos a jegyen. A `name` a becenev, ha van. */
+export interface ServiceJobAssignee {
+  userId: string;
+  name: string;
+  assignedAt: string;
 }
 
 /**

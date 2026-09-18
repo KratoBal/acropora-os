@@ -57,6 +57,12 @@ import {
   prefillFromTicket,
 } from "@/lib/worksheets/worksheet-prefill-from-ticket";
 import {
+  oroklendoEszkozok,
+  oroklendoFelelosok,
+  oroklesUzenete,
+} from "@/lib/worksheets/worksheet-inherit-from-ticket";
+import { listAssignableWorksheetUsers } from "@/lib/api/worksheets";
+import {
   kezdoValaszto,
   valasztasUtan,
   valasztoraKoppint,
@@ -198,6 +204,19 @@ export default function NewWorksheetScreen() {
   });
 
   /**
+   * A KIOSZTHATO KOLLEGAK -- CSAK JEGY ALATT, mert csak ott van kit orokolni.
+   *
+   * A jegy felelose NEM feltetlenul oszthato ki a lapra: a ket lista mas jogra
+   * szur. Egyetlen nem kioszthato nev az EGESZ lapot elutasittatna, tehat a
+   * metszetet kuldjuk -- es ahhoz ez a lista kell.
+   */
+  const kioszthatokQuery = useQuery({
+    queryKey: ["worksheet-assignable-users"],
+    queryFn: listAssignableWorksheetUsers,
+    enabled: jegy.kind === "server" && status === "authenticated",
+  });
+
+  /**
    * AZ ELOTOLTES SZARMAZTATOTT ERTEK, NEM MASOLT ALLAPOT.
    *
    * Az elso valtozatom egy `useEffect`-ben irta at a ket allapotot, es a mobil
@@ -215,6 +234,28 @@ export default function NewWorksheetScreen() {
   const departmentIdHatasos =
     departmentId ||
     (elotoltes.kind === "kesz" ? (elotoltes.departmentId ?? "") : "");
+
+  /**
+   * AMIT A JEGYBOL OROKOL A LAP. A szabalyok a
+   * `worksheet-inherit-from-ticket.ts` modulban allnak, mert a szerver ket
+   * ellenorzesehez igazodnak -- es egy elutasitott letrehozas a telefonon nem
+   * piros doboz, hanem egy lap, ami a SORBAN ragad.
+   */
+  const jegyEszkozok = jegyQuery.data?.assets ?? [];
+  const oroklendoEszkozIdk = oroklendoEszkozok({
+    jegyEszkozok,
+    jegyDepartmentId: jegyQuery.data?.departmentId ?? null,
+    lapDepartmentId: departmentIdHatasos,
+  });
+  const oroklendoFelelosIdk = oroklendoFelelosok({
+    jegyFelelosok: jegyQuery.data?.assignees ?? [],
+    kioszthatok: kioszthatokQuery.data?.items ?? [],
+  });
+  const oroklesSzoveg = oroklesUzenete({
+    jegyEszkozok,
+    oroklendoEszkozok: oroklendoEszkozIdk,
+    oroklendoFelelosok: oroklendoFelelosIdk,
+  });
 
   const departmentsQuery = useQuery({
     queryKey: ["worksheet-departments", partnerHatasos?.customerId],
@@ -437,6 +478,8 @@ export default function NewWorksheetScreen() {
       departmentId: departmentIdHatasos,
       subject,
       description,
+      assetIds: oroklendoEszkozIdk,
+      assigneeIds: oroklendoFelelosIdk,
     });
     if (!result.ok) {
       setError({ field: result.field, message: result.message });
@@ -475,6 +518,19 @@ export default function NewWorksheetScreen() {
             <View style={styles.notice}>
               <Text style={styles.noticeTitle}>Hibajegy alá kerül</Text>
               <Text style={styles.noticeBody}>{ticketNotice(jegy)}</Text>
+            </View>
+          ) : null}
+
+          {/*
+            AMIT ATVESZ A LAP -- A KULDES ELOTT, nem utana. A telefonon a ket
+            lista nem valaszthato, tehat ez az EGYETLEN visszajelzes arrol, mi
+            kerul a lapra. Es az ELMARADT orokles oka is ide tartozik: enelkul
+            a szerelo annyit latna, hogy az eszkoz "eltunt".
+          */}
+          {oroklesSzoveg ? (
+            <View style={styles.notice}>
+              <Text style={styles.noticeTitle}>A hibajegyről</Text>
+              <Text style={styles.noticeBody}>{oroklesSzoveg}</Text>
             </View>
           ) : null}
 

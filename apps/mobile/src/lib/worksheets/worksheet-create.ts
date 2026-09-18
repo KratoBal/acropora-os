@@ -35,6 +35,13 @@ export interface WorksheetCreateForm {
   subject: string;
   /** Elhagyható; a szerver 4000 karakterig fogadja. */
   description: string;
+  /**
+   * AMIT A JEGYBOL OROKOL A LAP. A kepernyo szamolja ki
+   * (`worksheet-inherit-from-ticket.ts`), mert a szabalyuk a SZERVER ket
+   * ellenorzesehez igazodik, es azt merni kell.
+   */
+  assetIds?: readonly string[];
+  assigneeIds?: readonly string[];
 }
 
 export interface WorksheetCreatePayload {
@@ -42,6 +49,17 @@ export interface WorksheetCreatePayload {
   departmentId: string;
   subject: string;
   description?: string;
+  /**
+   * AMIT A JEGYBOL OROKOL A LAP. A szerver mind a kettot MA IS fogadja
+   * (`create()`: `requireAssetsInDepartment`, `requireAssignableUsers`), csak a
+   * telefon nem kuldte -- es a szerver nem orokol magatol: a jegybol CSAK a
+   * partner-egyezest ellenorzi.
+   *
+   * URESEN NEM KERUL BE a torzsbe: egy `[]` ugyanazt jelentene a szervernek,
+   * mint a hianyzo mezo, de a sorban allo alakban felesleges zajt hordozna.
+   */
+  assetIds?: string[];
+  assigneeIds?: string[];
 }
 
 /** Melyik mezőnél kell a hibát megmutatni. */
@@ -106,12 +124,22 @@ export function buildWorksheetCreatePayload(
       message: `A leírás legfeljebb ${DESCRIPTION_MAX} karakter lehet, most ${description.length}.`,
     };
 
+  /**
+   * AZ URES LISTA KI SEM MEGY. A szervernek ugyanazt jelenti, mint a hianyzo
+   * mezo, a sorban allo alakban viszont zajt hordozna -- es egy sorban allo
+   * torzset kesobb ember is olvas.
+   */
+  const assetIds = [...new Set(form.assetIds ?? [])].filter(Boolean);
+  const assigneeIds = [...new Set(form.assigneeIds ?? [])].filter(Boolean);
+
   return {
     ok: true,
     payload: {
       customerId: form.customerId.trim(),
       departmentId: form.departmentId.trim(),
       subject,
+      ...(assetIds.length > 0 ? { assetIds } : {}),
+      ...(assigneeIds.length > 0 ? { assigneeIds } : {}),
       /**
        * ÜRES LEÍRÁS ESETÉN A MEZŐ KI SEM MEGY. Egy üres sztring a szerveren
        * megkülönböztethetetlen lenne a szándékosan üresre írt leírástól, és a
