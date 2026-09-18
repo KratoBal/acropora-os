@@ -66,6 +66,20 @@ const TABS = [
   { key: "RETIRED", label: "Kivezetett" },
 ];
 
+/**
+ * HANY ESZKOZ EGY OLDALON -- KOTOTT HAROM ERTEK, NEM SZABAD SZAM.
+ *
+ * Balazs kerese (2026-09-18): "a lista tetejere egy olyan legordulo, hogy hany
+ * eszkoz jelenjen meg egy oldalon. itt lehetne 25, 50, 100".
+ *
+ * ES AZERT KOTOTT, MERT A SZERVERNEK FELSO HATARA VAN: a vegpont `@Max(100)`-at
+ * ker (`asset.dto.ts`). Egy szabadon beirt 200 nem tobb sort adna, hanem
+ * VALIDACIOS HIBAT -- a kezelo pedig nem ertene, miert. A harom ertek mind a
+ * hataron BELUL all, a 100 epp rajta.
+ */
+const PAGE_SIZES = [25, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = String(PAGE_SIZES[0]);
+
 export function AssetListPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -82,13 +96,23 @@ export function AssetListPage() {
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
   const token = session?.token ?? "";
-  /** A szerver alapertelmezese `ACTIVE`, tehat a hianyzo parameter NEM "osszes". */
-  const activeStatus = params.get("status") ?? "ACTIVE";
+  /**
+   * A FELULET SZANDEKOSAN MAST KULD, MINT A SZERVER SAJAT ALAPERTELMEZESE.
+   *
+   * A szerver parameter nelkul `ACTIVE`-ra szur, tehat a hianyzo ertek NEM
+   * "osszes" -- ez valtozatlanul igaz, es ezert kuldunk MINDIG erteket.
+   *
+   * AMIT KULDUNK, AZ VISZONT `IN_PLACE` (Balazs kerese, 2026-09-18: "ha
+   * betoltom az eszkozok listat akkor a beepitett legyen alapbol kivalasztva").
+   * A ketto elterese NEM elirás: ha valaki "javitja" vissza `ACTIVE`-ra, a lista
+   * mast fog mutatni elso betolteskor, mint amit Balazs kert.
+   */
+  const activeStatus = params.get("status") ?? "IN_PLACE";
   const query = useMemo(() => {
     const value = new URLSearchParams(params.toString());
     if (!value.has("page")) value.set("page", "1");
-    if (!value.has("pageSize")) value.set("pageSize", "25");
-    if (!value.has("status")) value.set("status", "ACTIVE");
+    if (!value.has("pageSize")) value.set("pageSize", DEFAULT_PAGE_SIZE);
+    if (!value.has("status")) value.set("status", "IN_PLACE");
     return value;
   }, [params]);
   const load = useCallback(
@@ -343,6 +367,30 @@ export function AssetListPage() {
               {Object.entries(assetKindLabel).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* HANY ESZKOZ EGY OLDALON.
+
+              A `filter()`-en megy at, ES EZ A LENYEGE: az a segéd a vegen
+              VISSZAALLIT AZ ELSO OLDALRA. Enelkul ez a valaszto a leggyakoribb
+              nema hibat adna: aki a 7. oldalon all 25-osevel es 100-ra valt, egy
+              olyan oldalszamon maradna, ami MAR NEM LETEZIK -- ures listat
+              kapna, es az ugy nez ki, mintha nem lenne eszkoze.
+
+              Az ertek a CIMBEN all, nem allapotban: igy a lap megoszthato es
+              frissiteskor megmarad. Ez nem uj minta, a mai kod is igy tarolja. */}
+          <label>
+            <span className="sr-only">Hány eszköz egy oldalon</span>
+            <select
+              className={sv.select}
+              value={params.get("pageSize") ?? DEFAULT_PAGE_SIZE}
+              onChange={(event) => filter("pageSize", event.target.value)}
+            >
+              {PAGE_SIZES.map((size) => (
+                <option key={size} value={String(size)}>
+                  {size} / oldal
                 </option>
               ))}
             </select>
