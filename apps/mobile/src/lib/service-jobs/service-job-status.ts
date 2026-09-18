@@ -38,7 +38,8 @@ export const SERVICE_JOB_STATUS_LABELS: Record<ServiceJobStatusValue, string> =
     WAITING_FOR_PARTS: "Alkatrészre vár",
     WAITING_FOR_CUSTOMER: "Ügyfélre vár",
     COMPLETED: "Elkészült",
-    CANCELLED: "Elállt",
+    /* Balazs dontese, 2026-09-18: "legyen a Meghiúsult". A KULCS marad. */
+    CANCELLED: "Meghiúsult",
   };
 
 /**

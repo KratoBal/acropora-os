@@ -20,7 +20,7 @@ describe("serviceJobNoteDescription", () => {
     ]);
 
     expect(text).toContain("alkatrészre váráskor");
-    expect(text).toContain("elálláskor");
+    expect(text).toContain("meghiúsuláskor");
   });
 
   /**
@@ -38,7 +38,7 @@ describe("serviceJobNoteDescription", () => {
       "WAITING_FOR_CUSTOMER",
     ]);
 
-    expect(text).not.toContain("elálláskor");
+    expect(text).not.toContain("meghiúsuláskor");
     expect(text).toContain("alkatrészre váráskor");
     expect(text).toContain("ügyfélre váráskor");
   });
