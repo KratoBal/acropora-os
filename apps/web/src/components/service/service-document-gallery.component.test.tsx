@@ -461,4 +461,73 @@ describe("ServiceDocumentGallery", () => {
       screen.getByText("Ehhez a jegyhez még nincs fénykép vagy fájl csatolva."),
     ).toBeTruthy();
   });
+
+  /**
+   * A CSEMPE NEM VAGHATJA LE A SAJAT MUVELETET.
+   *
+   * === A BEJELENTES (Balazs, 2026-09-18, keppel) ===
+   *
+   * A munkalap Csatolmanyok szakaszaban a `Letoltes` gomb FELBEVAGVA latszott
+   * ("Leto"), a meret-sor pedig HAT sorba tordelve. A csempe szelessege a racs
+   * oszlopszelessege (ketto, harom vagy negy oszlop), es a tartalom nem birta el.
+   *
+   * === MIERT A GOMBSOR A SULYOSABB FELE ===
+   *
+   * A csempen `overflow-hidden` all. Egy NEM tordelheto gombsor keskeny oszlopban
+   * kilog, es az `overflow-hidden` LEVAGJA -- vagyis a muvelet felirata hianyzik,
+   * nem csak csunya. Tordelessel a sor a csempe MAGASSAGAT noveli, ami
+   * helyreallithato; a levagott felirat nem.
+   *
+   * === A HATAR, KIMONDVA ===
+   *
+   * Ez az allitas az OSZTALYT meri, nem a pixeleket: a `happy-dom` nem szamol
+   * elrendezest, tehat azt, hogy a gomb TENYLEG befer, itt semmi nem tudja
+   * megmondani. Amit ez fog meg: ha valaki a tordelest kiveszi, a levagas
+   * visszater -- es az a valtozas ma NEMA lenne.
+   */
+  it("a művelet-sor TÖRDELHET, tehát nem vágódhat le a csempe szélén", () => {
+    render(
+      <ServiceDocumentGallery
+        items={[doku()]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+
+    const gomb = screen.getByRole("button", { name: "Letöltés" });
+    const sor = gomb.parentElement;
+    expect(sor?.className).toContain("flex-wrap");
+  });
+
+  /**
+   * A MERET-SOR EGY SOR, ES A SUGOJA UGYANAZT MONDJA.
+   *
+   * A sor `{fajta} · {meret} · {datum}` alaku, es a DATUM FORMATUMA ONMAGABAN
+   * NEGY szokozt tartalmaz ("2026. 09. 18. 9:10"). Tordelesi szabaly nelkul
+   * keskeny oszlopban SZAVANKENT tort -- igy allt elo hat sor egyetlen fenykep
+   * alatt.
+   *
+   * AMIT KULON ALLITUNK, ES NEM A `truncate` MEGLETET: hogy a `title` PONTOSAN
+   * azt mondja, ami a sorban all. A kettot ket kulon kiiras is eloallithatna, es
+   * akkor a sugo MAST mondana, mint a lathato szoveg -- egy levagott sornal epp
+   * a sugo az egyetlen, amibol az egesz kiderul.
+   */
+  it("a méret-sor egy sorban marad, és a súgója betűre ugyanaz", () => {
+    render(
+      <ServiceDocumentGallery
+        items={[doku()]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+
+    const sor = screen
+      .getByText(/·/, { selector: "p" })
+      .closest("p") as HTMLElement;
+
+    expect(sor.className).toContain("truncate");
+    expect(sor.getAttribute("title")).toBe(sor.textContent);
+  });
 });

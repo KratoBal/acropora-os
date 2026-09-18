@@ -283,6 +283,9 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
             // EGYSZER HIVJUK MEG, es nem ketszer a JSX-ben: a visszahivas a
             // HIVOE, tehat nem tudhatjuk, mit csinal mellette.
             const cimke = itemLabel?.(item) ?? null;
+            const meta = `${cimke ? `${cimke} · ` : ""}${formatFileSize(
+              item.sizeBytes,
+            )} · ${formatDateTime(item.createdAt)}`;
             return (
               <li
                 key={item.id}
@@ -331,16 +334,24 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                   >
                     {item.fileName}
                   </p>
-                  <p className="text-xs text-dusk-500">
-                    {/*
-                      A FAJTA A MERET ELE KERUL, egy sorban: kulon sorkent egy
-                      negyedik szoveget vinne a csempere, es a csempe magassaga
-                      a kepbol elvenne. A sorrend nem izles -- a fajta MONDJA
-                      MEG, mit latunk, a meret csak leirja.
-                    */}
-                    {cimke ? `${cimke} · ` : ""}
-                    {formatFileSize(item.sizeBytes)} ·{" "}
-                    {formatDateTime(item.createdAt)}
+                  {/*
+                    A FAJTA A MERET ELE KERUL, egy sorban: kulon sorkent egy
+                    negyedik szoveget vinne a csempere, es a csempe magassaga
+                    a kepbol elvenne. A sorrend nem izles -- a fajta MONDJA
+                    MEG, mit latunk, a meret csak leirja.
+
+                    ES 2026-09-18 OTA `truncate` ALL RAJTA, UGYANUGY, MINT A
+                    FAJLNEVEN. Enelkul a sor MINDEN SZOKOZNEL torhetett, es a
+                    datum formatuma onmagaban NEGY szokozt tartalmaz
+                    ("2026. 09. 18. 9:10") -- keskeny oszlopban ezert allt elo
+                    egy HAT SOROS meret-sor egyetlen fenykep alatt.
+
+                    A szoveg EGY valtozobol megy a tartalomba ES a `title`-be:
+                    ket kulon kiiras elcsuszhatna, es a sugo mast mondana, mint
+                    a lathato sor.
+                  */}
+                  <p className="truncate text-xs text-dusk-500" title={meta}>
+                    {meta}
                   </p>
                   {onSaveCaption && szerkesztett === item.id ? (
                     <div className="space-y-1">
@@ -354,7 +365,7 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                         onChange={(event) => setPiszkozat(event.target.value)}
                         placeholder="Mit látunk a képen?"
                       />
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
                           disabled={mentes}
@@ -379,7 +390,7 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
                       ) : null}
                     </div>
                   ) : (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"
                         variant="secondary"
