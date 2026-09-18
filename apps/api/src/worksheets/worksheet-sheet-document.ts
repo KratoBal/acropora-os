@@ -1,0 +1,109 @@
+import { createHash } from "node:crypto";
+
+import {
+  renderMinimalPdf,
+  type MinimalPdfOptions,
+} from "../documents/pdf/minimal-pdf.js";
+import {
+  canonicalMimetypeFor,
+  detectUploadedFileKind,
+} from "../service-assets/uploaded-file-type.js";
+
+import {
+  worksheetSheetLines,
+  type WorksheetSheetInput,
+} from "./worksheet-sheet-content.js";
+
+/**
+ * A LAP BEMENETÉBŐL A TÁROLHATÓ FÁJL -- A VARRAT A TARTALOM ÉS A SOR KÖZÖTT.
+ *
+ * === MI EZ, ÉS MI NEM ===
+ *
+ * Ez a lánc harmadik szeme. Az első a leképezés (a válaszból a lap bemenete), a
+ * második a tartalom (a bemenetből sorok), a harmadik ez: a sorokból BÁJTOK, és
+ * mellé az a négy mező, amit a `WorksheetDocument` sor visel.
+ *
+ * Ami NEM: nem dönti el, HOVA kerül a fájl (adatbázis vagy tároló), nem néz
+ * keretet, és nem ír sort. Azok a lezárási tranzakció kérdései, és külön
+ * szeletben állnak -- ott ugyanis olyan döntések nyílnak meg (mi történjen, ha
+ * a keret betelt egy LEZÁRÁSKOR), amiket ez a függvény nem hozhat meg.
+ *
+ * === MIÉRT A BEMENETET KAPJA, ÉS NEM A VÁLASZT ===
+ *
+ * A leképezés (`worksheetSheetInput`) már létezik, és saját állításai vannak.
+ * Ha ez a függvény a `WorksheetDetail`-t venné, a két lépés egy mérőhelyre
+ * kerülne, és egy rossz mező-kiolvasás meg egy rossz rajzolás ugyanazt a pirosat
+ * adná. Így mindegyik szem külön romlik el, és külön is mérhető.
+ *
+ * === ÉS AMIÉRT ŐRIZZÜK, HOGY A BÁJTOK TÉNYLEG PDF-ET ADNAK ===
+ *
+ * A feltöltési út (`document-intake.ts`) MINDEN fájlra megnézi, hogy a bejelentett
+ * típus és a tartalom egyezik-e. A generált lap ugyanabba a táblába kerül, és épp
+ * ŐT nevezzük hitelesnek -- tehát nem kaphat lazább mércét, mint amit bárki
+ * feltöltése kap. A tartalom-típust ezért nem beírjuk, hanem a FELISMERT fajtából
+ * vesszük: ha a rajzoló valaha mást adna vissza, itt hangosan áll meg, nem a
+ * böngészőben, hetekkel később.
+ */
+
+/** A tárolható fájl: bájtok, és a `WorksheetDocument` sor négy mezője. */
+export interface WorksheetSheetDocument {
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256: string;
+  content: Buffer;
+}
+
+/**
+ * A FÁJL NEVE A MUNKALAPSZÁMBÓL -- KÜLÖN FÜGGVÉNYBEN, ÉS EZ NEM STÍLUS.
+ *
+ * Ezt a nevet a VEVŐ látja, amikor lementi. Külön áll, mert külön is romlik el:
+ * a bájtok attól még hibátlanok, hogy a név rossz, és egy közös állítás a kettőt
+ * egy pirosba mosná.
+ *
+ * A PERJEL A LÉNYEG. A munkalapszám `BIO-2026-001/1` alakú (a lap száma, per a
+ * verzió), és a perjel fájlnévben KÖNYVTÁRAT jelent. Kezeletlenül a letöltés
+ * vagy a tároló-kulcs törne el -- olyan helyen, ami a rajzolástól távol van.
+ *
+ * ÉS AMIÉRT VAN SZÁM NÉLKÜLI ALAK: a munkalapszámot a LEZÁRÁS foglalja le, a
+ * piszkozat viszont szintén kap lapot (a séma is ezt mondja ki). A `${null}`
+ * behelyettesítés „munkalap-null.pdf"-et adna a vevő kezébe.
+ */
+export function worksheetSheetFileName(label: string | null): string {
+  const tiszta = (label ?? "")
+    .normalize("NFKC")
+    // Ugyanaz a karakterkészlet, amit a feltöltési út is kivesz a névből
+    // (`document-intake.ts`): perjel, visszaperjel és vezérlőkarakterek.
+    .replace(/[\\/\p{Cc}\p{Cf}]/gu, "-")
+    .trim()
+    .slice(0, 120);
+  return tiszta ? `munkalap-${tiszta}.pdf` : "munkalap-piszkozat.pdf";
+}
+
+/**
+ * A LAP BEMENETÉBŐL A TÁROLHATÓ FÁJL.
+ *
+ * A `sha256` a TARTALOMRA megy, ugyanúgy, ahogy a feltöltési úton
+ * (`document-intake.ts`): abból derül ki utólag, hogy a tárolt bájtok azonosak-e
+ * azzal, amit kiadtunk.
+ */
+export async function worksheetSheetDocument(
+  input: WorksheetSheetInput,
+  options: MinimalPdfOptions = {},
+): Promise<WorksheetSheetDocument> {
+  const content = await renderMinimalPdf(worksheetSheetLines(input), options);
+
+  const kind = detectUploadedFileKind("application/pdf", content);
+  if (kind === null)
+    throw new Error(
+      "A generált munkalap nem érvényes PDF. A sort nem hozzuk létre, mert épp ezt neveznénk hitelesnek.",
+    );
+
+  return {
+    fileName: worksheetSheetFileName(input.label),
+    contentType: canonicalMimetypeFor(kind),
+    sizeBytes: content.length,
+    sha256: createHash("sha256").update(content).digest("hex"),
+    content,
+  };
+}
