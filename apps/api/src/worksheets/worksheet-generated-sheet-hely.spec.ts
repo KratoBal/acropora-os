@@ -113,3 +113,75 @@ describe("es a migracio ugyanazt mondja", () => {
     assert.doesNotMatch(sql, /(UPDATE|INSERT)[\s\S]*GENERATED_SHEET/);
   });
 });
+
+/**
+ * A MEGOSZTOTT TIPUS UGYANAZT A HARMAT ISMERJE, MINT A SEMA.
+ *
+ * === A MERT HIBA (2026-09-18) ===
+ *
+ * A `packages/types` `WorksheetDocumentType` unioja eddig ezt sorolta:
+ * `PHOTO | INVOICE | WARRANTY | MANUAL | OTHER`. Ebbol harom (`INVOICE`,
+ * `WARRANTY`, `MANUAL`) az ESZKOZ-oldali halmaz (`AssetDocumentType`) erteke --
+ * a munkalap enumja SOHA nem tartalmazta oket, tehat az adatbazis egyiket sem
+ * tudja eloallitani. Kozben a valodi `GENERATED_SHEET` HIANYZOTT a listarol.
+ *
+ * A szerzodes tehat KET IRANYBA tevedett egyszerre: harom lehetetlen erteket
+ * igert, es azt az egyet nem ismerte, amire a partner hivatkozni fog.
+ *
+ * === MIERT NEM VETTE ESZRE SEMMI ===
+ *
+ * A `type` mezot a felulet eddig csak TOVABBADTA, nem agaztatott rajta. Egy
+ * unio, amin senki nem agaztat, barmit allithat: a fordito csak akkor szol,
+ * amikor valaki eloszor ir ra `case`-t vagy osszehasonlitast.
+ *
+ * A fenti specek a SEMAT oriztek (a mezo elhagyhatosagat, az egyedi megkotest,
+ * az uj enum-erteket) -- azt viszont EGYIK SEM, hogy a megosztott tipus
+ * ugyanazt mondja. A ket oldal kozott nem allt semmi.
+ */
+describe("a megosztott típus és a séma enumja ugyanaz", () => {
+  const TIPUS_FAJL = "../../packages/types/src/worksheet-management.ts";
+
+  /** A Prisma enum ertekei, a sema szovegebol. */
+  function semaErtekek(): string[] {
+    const sema = olvas(SEMA);
+    const blokk = /enum WorksheetDocumentType \{([\s\S]*?)\}/.exec(sema);
+    if (!blokk) throw new Error("nincs WorksheetDocumentType enum a sémában");
+    return [...(blokk[1] ?? "").matchAll(/^\s*([A-Z_]+)\s*$/gm)].map(
+      (m) => m[1]!,
+    );
+  }
+
+  /** A megosztott unio ertekei, a tipus-fajl szovegebol. */
+  function tipusErtekek(): string[] {
+    const forras = olvas(TIPUS_FAJL);
+    const m = /export type WorksheetDocumentType =([^;]*);/.exec(forras);
+    if (!m)
+      throw new Error("nincs WorksheetDocumentType a megosztott típusban");
+    return [...(m[1] ?? "").matchAll(/"([A-Z_]+)"/g)].map((t) => t[1]!);
+  }
+
+  it("POZITÍV KONTROLL: mind a két kiolvasás lát értékeket", () => {
+    /*
+      Ket URES halmaz barmikor egyezik. Az ISMERT ertek azert all itt, hogy a
+      kiolvasas ne csak SZAMOLJON, hanem lasson is.
+    */
+    assert.ok(semaErtekek().length >= 3, semaErtekek().join(", "));
+    assert.ok(tipusErtekek().length >= 3, tipusErtekek().join(", "));
+    assert.ok(semaErtekek().includes("PHOTO"));
+    assert.ok(tipusErtekek().includes("PHOTO"));
+  });
+
+  it("ugyanaz a HÁROM érték, egyik oldalon sem több", () => {
+    /*
+      MI PIROSIT, ES MIND A KET IRANY SZAMIT:
+
+      - egy uj sema-ertek, ami nem kerul at a megosztott tipusba: a felulet nem
+        tud ragaztatni, es a fordito csak az elso `case`-nel szol -- ugy, ahogy
+        ma tortent;
+      - egy megosztott ertek, ami a semaban nincs: a felulet olyan agat epithet,
+        ami SOHA nem fut le, es az a leg csendesebb -- semmi nem hibazik, csak
+        egy kepernyo-resz elerhetetlen.
+    */
+    assert.deepEqual(tipusErtekek().sort(), semaErtekek().sort());
+  });
+});

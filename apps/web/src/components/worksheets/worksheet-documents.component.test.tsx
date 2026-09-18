@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WorksheetDocuments } from "./worksheet-documents";
@@ -13,6 +13,19 @@ vi.mock("@/lib/api/worksheets", () => ({
 }));
 
 const api = vi.mocked(worksheetsApi);
+
+/**
+ * EGY PANEL ELEME A CIME ALAPJAN. A cim `<h2>`, a panel a kozos oset adja --
+ * enelkul a `screen` az EGESZ oldalon keresne, es a hely-allitas ertelmet
+ * vesztene.
+ */
+function szakasz(cim: string): HTMLElement {
+  const fejlec = screen.getByText(cim);
+  const panel =
+    fejlec.closest("section") ?? fejlec.parentElement?.parentElement;
+  if (!panel) throw new Error(`nem találtam a panelt: ${cim}`);
+  return panel as HTMLElement;
+}
 
 function doku(overrides: Record<string, unknown> = {}) {
   return {
@@ -126,5 +139,66 @@ describe("WorksheetDocuments", () => {
 
     await waitFor(() => expect(api.documents).not.toHaveBeenCalled());
     expect(screen.queryByText("Csatolmányok")).toBeNull();
+  });
+
+  /**
+   * A KIADOTT LAP SAJAT SZAKASZBAN ALL, NEM A CSATOLMANYOK KOZOTT.
+   *
+   * acrobot dontese, 2026-09-18. Ket indok: a csatolmany az, amit VALAKI
+   * FELTOLTOTT, a lap az, amit a RENDSZER ADOTT KI -- es a munkalap-oldal nem
+   * ad torles-gombot, tehat ez volt az EGYETLEN fajl a panelben, amit nem lehet
+   * eltavolitani.
+   */
+  it("a KIADOTT lap nem a csatolmányok között jelenik meg", async () => {
+    api.documents.mockResolvedValue({
+      items: [
+        doku(),
+        doku({
+          id: "lap-1",
+          type: "GENERATED_SHEET",
+          fileName: "BIO-2026-002-v1.pdf",
+          contentType: "application/pdf" as const,
+        }),
+      ],
+    });
+
+    render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
+
+    /*
+      A HELY A BIZONYITEK, NEM A LATHATOSAG -- ES EZT A KALIBRACIO KENYSZERITETTE
+      KI. Az elso alakom csak annyit allitott, hogy a ket szakasz neve es a
+      fajlnev megvan valahol. Amikor a szetvalasztast elrontottam (mind a ket
+      szakasz a TELJES listat kapta), az allitas kipirosodott ugyan -- de azert,
+      mert a fajlnev KETSZER szerepelt, nem azert, mert rossz helyen allt.
+
+      Ezert a ket szakaszra SZUKITVE keresunk: a lap a sajatjaban van, a
+      csatolmanyok kozott pedig NINCS ott.
+    */
+    await screen.findByText("A kiadott munkalap");
+    const kiadott = szakasz("A kiadott munkalap");
+    const csatolmanyok = szakasz("Csatolmányok");
+
+    expect(within(kiadott).getByText("BIO-2026-002-v1.pdf")).toBeTruthy();
+    expect(within(csatolmanyok).queryByText("BIO-2026-002-v1.pdf")).toBeNull();
+    // ES A FENYKEP A MASIK OLDALON: enelkul egy ures csatolmany-szakasz is
+    // kielegitene a fenti tagadast.
+    expect(within(csatolmanyok).getByText("szivattyu.jpg")).toBeTruthy();
+    expect(within(kiadott).queryByText("szivattyu.jpg")).toBeNull();
+  });
+
+  it("piszkozatnál a szakasz ÁLL, és kimondja, miért üres", async () => {
+    /*
+      MI PIROSIT: ha a szakasz elrejtodik, amikor meg nincs kiadott peldany.
+      Akkor a felhasznalo nem tudna, hova fog kerulni -- es a lezaras utan egy
+      uj panel jelenne meg magyarazat nelkul.
+    */
+    api.documents.mockResolvedValue({ items: [doku()] });
+
+    render(<WorksheetDocuments worksheetId="ws-1" token="t" canView />);
+
+    expect(await screen.findByText("A kiadott munkalap")).toBeTruthy();
+    expect(
+      screen.getByText(/még nincs lezárva, ezért kiadott példány sem készült/),
+    ).toBeTruthy();
   });
 });
