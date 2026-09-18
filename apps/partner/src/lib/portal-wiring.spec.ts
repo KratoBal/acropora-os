@@ -161,9 +161,9 @@ describe("a bejelentő űrlap fájl-melléklete", () => {
 });
 
 describe("a dokumentumcsomag letöltése", () => {
-  it("a partner felületén a letöltés csak lezárt jegynél jelenik meg", () => {
+  it("a partner felületén a letöltés csak elkészült jegynél jelenik meg", () => {
     const s = olvas(HIBAJEGY_RESZLET);
-    assert.match(s, /ticket\.partnerStatus === "CLOSED"/);
+    assert.match(s, /ticket\.partnerStatus === "COMPLETED"/);
     assert.match(s, /Dokumentumcsomag letöltése/);
   });
 });

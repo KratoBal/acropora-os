@@ -555,7 +555,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
         }
         sub={job.departmentName ?? undefined}
         actions={
-          job.partnerStatus === "CLOSED" ? (
+          job.partnerStatus === "COMPLETED" ? (
             <Button
               variant="secondary"
               disabled={downloadingPackage}

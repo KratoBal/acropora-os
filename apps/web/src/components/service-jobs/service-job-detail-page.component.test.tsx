@@ -769,12 +769,30 @@ describe("ServiceJobDetailPage", () => {
     expect(screen.getByText("Delegált kollégák")).toBeTruthy();
   });
 
-  it("nem lezárt hibajegyen nincs dokumentumcsomag-letöltés", async () => {
+  it("nem elkészült hibajegyen nincs dokumentumcsomag-letöltés", async () => {
     render(<ServiceJobDetailPage jobId="job-1" />);
     await screen.findByText("Cápasuli szivattyú leállt");
     expect(
       screen.queryByRole("button", { name: "Dokumentumcsomag letöltése" }),
     ).toBeNull();
+  });
+
+  it("elkészült hibajegyen van dokumentumcsomag-letöltés", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        status: "COMPLETED",
+        partnerStatus: "COMPLETED",
+        partnerStatusLabel: "Elkészült",
+        allowedSteps: [],
+      }),
+    );
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Dokumentumcsomag letöltése",
+      }),
+    ).toBeTruthy();
   });
 
   /**

@@ -88,7 +88,7 @@ export function TicketDetail({ id }: { id: string }) {
           {ticket.partnerStatusLabel}
         </span>
       </header>
-      {ticket.partnerStatus === "CLOSED" ? (
+      {ticket.partnerStatus === "COMPLETED" ? (
         <div className="download-package">
           <button
             type="button"

@@ -31,7 +31,7 @@ function job(overrides: Record<string, unknown> = {}) {
     jobNumber: "SRV-2026-00482",
     title: "Hűtőkör nyomásvesztése",
     description: "A nyomás a normál érték alá esett.",
-    status: "CANCELLED",
+    status: "COMPLETED",
     createdAt: new Date("2026-09-14T08:42:00Z"),
     customer: { displayName: "AquaForma Kft." },
     departmentPath: ["Kossuth Lajos utca 18."],
@@ -39,7 +39,7 @@ function job(overrides: Record<string, unknown> = {}) {
       {
         id: "close-event",
         createdAt: new Date("2026-09-16T12:18:00Z"),
-        toStatus: "CANCELLED",
+        toStatus: "COMPLETED",
         note: null,
       },
     ],
@@ -64,7 +64,7 @@ function serviceWith(
   return new ServiceJobPackageService(repository);
 }
 
-describe("lezárt hibajegy dokumentumcsomagja", () => {
+describe("elkészült hibajegy dokumentumcsomagja", () => {
   it("a partner másik partner hibajegyét elutasítja, nem üres csomagot ad", async () => {
     let visibility: unknown;
     const service = serviceWith(null, (value) => {
@@ -120,16 +120,37 @@ describe("lezárt hibajegy dokumentumcsomagja", () => {
     );
   });
 
-  it("munkalap nélküli lezárt hibajegyből is elkészül a hibajegy PDF-je", async () => {
+  it("munkalap nélküli elkészült hibajegyből is elkészül a hibajegy PDF-je", async () => {
     const packageFile = await serviceWith(job()).download("job-a", PARTNER_A);
     assert.ok(
       packageFile.bytes.includes(Buffer.from("hibajegy-SRV-2026-00482.pdf")),
     );
   });
 
-  it("nem lezárt hibajegyhez a szerver nem ad dokumentumcsomagot", async () => {
+  it("nem elkészült hibajegyhez a szerver nem ad dokumentumcsomagot", async () => {
     const service = serviceWith(
-      job({ status: "COMPLETED", events: [], worksheets: [] }),
+      job({ status: "IN_PROGRESS", events: [], worksheets: [] }),
+    );
+    await assert.rejects(
+      () => service.download("job-a", PARTNER_A),
+      (error: unknown) => error instanceof BadRequestException,
+    );
+  });
+
+  it("a meghiúsult hibajegy nem ad dokumentumcsomagot", async () => {
+    const service = serviceWith(
+      job({
+        status: "CANCELLED",
+        events: [
+          {
+            id: "cancel-event",
+            createdAt: new Date("2026-09-16T12:18:00Z"),
+            toStatus: "CANCELLED",
+            note: null,
+          },
+        ],
+        worksheets: [],
+      }),
     );
     await assert.rejects(
       () => service.download("job-a", PARTNER_A),

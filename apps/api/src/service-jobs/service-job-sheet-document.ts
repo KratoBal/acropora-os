@@ -36,7 +36,7 @@ function drawHeader(
   document
     .fillColor(MUTED)
     .fontSize(8.5)
-    .text("LEZÁRT HIBAJEGY", LEFT, 64, { characterSpacing: 1.8 });
+    .text("ELKÉSZÜLT HIBAJEGY", LEFT, 64, { characterSpacing: 1.8 });
   document
     .fillColor(INK)
     .fontSize(22)
@@ -130,7 +130,7 @@ export function serviceJobSheetDocument(
         ["PARTNER", summary.customer],
         ["HELYSZÍN", summary.department],
         ["MEGNYITVA", summary.openedAt],
-        ["LEZÁRVA", summary.closedAt],
+        ["ELKÉSZÜLT", summary.closedAt],
       ] as const;
       const cardTop = FIRST_PAGE_TOP + 38;
       const cardHeight = 62;

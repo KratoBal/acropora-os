@@ -13,10 +13,7 @@ import { assertStorageKeyMatches } from "../service-assets/document-store/docume
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 
-import {
-  partnerVisibleStatus,
-  partnerStatusLabel,
-} from "./service-job-status.js";
+import { partnerStatusLabel } from "./service-job-status.js";
 import { serviceJobVisibilityFor } from "./service-job-visibility-scope.js";
 import { serviceJobSheetDocument } from "./service-job-sheet-document.js";
 import {
@@ -80,17 +77,17 @@ export class ServiceJobPackageService {
     );
     const job = await this.repository.packageData(id, visibility);
     if (!job) throw new NotFoundException("A hibajegy nem található.");
-    if (partnerVisibleStatus(job.status) !== "CLOSED")
+    if (job.status !== "COMPLETED")
       throw new BadRequestException(
-        "Dokumentumcsomag csak lezárt hibajegyhez tölthető le.",
+        "Dokumentumcsomag csak elkészült hibajegyhez tölthető le.",
       );
 
-    const closedEvent = [...job.events]
+    const completedEvent = [...job.events]
       .reverse()
-      .find((event) => event.toStatus === "CANCELLED");
-    if (!closedEvent)
+      .find((event) => event.toStatus === "COMPLETED");
+    if (!completedEvent)
       throw new ServiceUnavailableException(
-        "A hibajegy lezárási időpontja nem érhető el, ezért a dokumentumcsomag nem állítható elő.",
+        "A hibajegy elkészülési időpontja nem érhető el, ezért a dokumentumcsomag nem állítható elő.",
       );
 
     const jobPdf = await serviceJobSheetDocument({
@@ -101,7 +98,7 @@ export class ServiceJobPackageService {
       title: job.title,
       description: job.description,
       openedAt: job.createdAt,
-      closedAt: closedEvent.createdAt,
+      closedAt: completedEvent.createdAt,
       assets: job.assets.map(({ asset }) => ({
         assetNumber: asset.assetNumber,
         assetName: asset.name,
