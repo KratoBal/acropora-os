@@ -530,4 +530,65 @@ describe("ServiceDocumentGallery", () => {
     expect(sor.className).toContain("truncate");
     expect(sor.getAttribute("title")).toBe(sor.textContent);
   });
+
+  /**
+   * AZ OSZLOPSZÁM A BEFOGLALÓ DOBOZÉ, NEM A KÉPERNYŐÉ.
+   *
+   * Ez a galéria HÁROM helyen fut, és az egyikük egy 288 pixeles oldalsó hasáb
+   * (a munkalap adatlapja). Nézetablak-töréspontokkal ott is négy oszlop állt
+   * széles monitoron, tehát ~52 pixeles csempe -- amiben a `Letöltés` gomb
+   * (75 pixel, acrobot mérése 2026-09-18 10:0x) fizikailag nem fér el.
+   *
+   * MI PIROSÍT: a visszatérés `sm:` / `lg:` alakra. Az a változtatás „egyszerűbb"
+   * kódnak látszik, és a hibája CSAK széles monitoron, CSAK a szűk hasábban jön
+   * elő -- vagyis pontosan ott, ahol senki nem nézi.
+   *
+   * AMIT EZ AZ ÁLLÍTÁS NEM MÉR, KIMONDVA: a tényleges pixeleket. A happy-dom nem
+   * számol elrendezést. A pixel-méréseket acrobot végezte éles stíluslappal; ez
+   * az állítás a MECHANIZMUST őrzi, ami azokat érvényre juttatja.
+   */
+  it("az oszlopszám a BEFOGLALÓ DOBOZHOZ igazodik, nem a nézetablakhoz", () => {
+    render(
+      <ServiceDocumentGallery
+        items={[doku()]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+
+    const racs = screen.getByRole("list");
+
+    expect(racs.className).toMatch(/@\w+:grid-cols-\d/);
+    expect(racs.className).not.toMatch(
+      /(?:^|\s)(?:sm|md|lg|xl|2xl):grid-cols-/,
+    );
+    // A mérethivatkozási pont a galéria SAJÁT doboza: enélkül a `@md:` alakok
+    // a legközelebbi külső konténerhez igazodnának, vagy sehová.
+    expect(racs.closest("[class~='@container']")).not.toBeNull();
+  });
+
+  /**
+   * SZŰK DOBOZBAN EGY OSZLOP AZ ALAP.
+   *
+   * MI PIROSÍT: a `grid-cols-2` visszatérése alapként. A 288 pixeles hasábban
+   * (belső kerettel 244 pixel) két oszlop 116 pixeles csempét ad -- a két gomb
+   * egymás mellett 213 pixelt kér, tehát tördelne, és a méret-sor három sorba
+   * törne. Egy oszlopnál a csempe a teljes 244 pixel.
+   */
+  it("szűk dobozban EGY oszlop az alap, nem kettő", () => {
+    render(
+      <ServiceDocumentGallery
+        items={[doku()]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+
+    const racs = screen.getByRole("list");
+
+    expect(racs.className).toMatch(/(?:^|\s)grid-cols-1(?:\s|$)/);
+    expect(racs.className).not.toMatch(/(?:^|\s)grid-cols-[2-9](?:\s|$)/);
+  });
 });

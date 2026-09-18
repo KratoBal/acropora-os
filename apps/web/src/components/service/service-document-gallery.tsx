@@ -275,9 +275,65 @@ export function ServiceDocumentGallery<T extends ServiceDocumentGalleryItem>({
   const nagyitottAllapot = nagyitott ? allapotok[nagyitott.id] : undefined;
 
   return (
-    <div className="space-y-3">
+    /*
+      === AZ OSZLOPSZÁM A BEFOGLALÓ DOBOZHOZ IGAZODIK, NEM A NÉZETABLAKHOZ ===
+
+      A `@container` teszi ezt a dobozt mérethivatkozási ponttá, a rácson pedig
+      `@md:` / `@2xl:` / `@4xl:` áll a `sm:` / `lg:` helyett. A különbség nem
+      stílus: a galéria HÁROM helyen fut, és az egyikük egy 288 pixeles oldalsó
+      hasáb.
+
+      MIÉRT VOLT ROSSZ A NÉZETABLAK: az oszlopszám a KÉPERNYŐ szélességéből jött,
+      a csempe szélességét viszont a BEFOGLALÓ doboz adja. Széles monitoron a
+      `lg:grid-cols-4` a 288 pixeles hasábban is négy oszlopot rakott, tehát
+      (288 - 44 panelkeret - 36 rés) / 4 = 52 pixeles csempét -- amiben a
+      `Letöltés` gomb (75 pixel) fizikailag nem fér el.
+
+      A PIXELEKET ACROBOT MÉRTE (2026-09-18 10:0x, fejnélküli böngésző, az ÉLES
+      stíluslappal és a csempe valódi markupjával), nem én becsültem:
+
+        a `Letöltés` gomb önmagában       75 px   ->  93 px oszloptól befér
+        a két gomb egymás mellett        195 px   -> 213 px oszloptól befér
+        a méret-sor                      220 px alatt 2 sor, 120 px alatt 3
+
+      A LÉTRA:
+
+        alap   (< 320 px doboz)   1 oszlop
+        `@xs`  (>= 320 px)        2 oszlop   (320 - 12) / 2 = 154 px
+        `@md`  (>= 448 px)        3 oszlop   (448 - 24) / 3 = 141 px
+        `@2xl` (>= 672 px)        4 oszlop   (672 - 36) / 4 = 159 px
+
+      A LEGKISEBB CSEMPE A TÖRÉSEKNÉL 141 PIXEL, tehát a `Letöltés` gomb (93 px
+      oszloptól) MINDIG elfér. A két gomb egymás mellé 213 pixelt kér, ami ez
+      alatt nem jön ki -- ott a fölöttük álló `flex-wrap` tördel, és az a hálónk,
+      nem a hiba.
+
+      === MIÉRT EZ A LÉTRA, ÉS NEM EGY BŐVEBB ===
+
+      Volt egy szigorúbb jelölt (`@md` / `@2xl` / `@4xl`), amiben minden csempe
+      215 pixel fölött marad, tehát a gombok SOSEM tördelnek. Kiszámolva a
+      MÉRT doboz-szélességeken (a keret `max-w-[1600px]`, `lg:px-8`, `lg:pl-64`,
+      a hasáb 288, a rés 20, a panelkeret 44) az a létra a SZÉLES lapokat is
+      átrendezte volna:
+
+        1280 px képernyő   a mai 4 oszlop helyett 2
+        1512 px képernyő   a mai 4 oszlop helyett 3
+
+      Az a két lap (a hibajegy és az eszköz adatlapja) ma HELYESEN négyoszlopos,
+      és nem ez a kártya kérdése. Ez a létra ott 1512 és 1920 pixelen megtartja a
+      négy oszlopot, 1280-on hármat ad (a mai négy helyett), és csak a szűk
+      hasábot viszi egyre -- vagyis a jelentett hibát javítja, nem tervez újra
+      két lapot.
+
+      === ÉS MIÉRT NEM EGY `columns` PROP (a másik járható út) ===
+
+      Egy prop esetén a KÖVETKEZŐ hívóhely, aki szűk dobozba teszi a galériát és
+      nem adja meg, az alapértelmezést kapja -- és a törés NÉMA. Így viszont
+      minden mai és jövőbeli hívóhely magától helyes, és egy hiba LÁTSZIK.
+    */
+    <div className="@container space-y-3">
       {kepek.length ? (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <ul className="grid grid-cols-1 gap-3 @xs:grid-cols-2 @md:grid-cols-3 @2xl:grid-cols-4">
           {kepek.map((item) => {
             const allapot = allapotok[item.id] ?? { allapot: "tolt" };
             // EGYSZER HIVJUK MEG, es nem ketszer a JSX-ben: a visszahivas a
