@@ -98,6 +98,37 @@ describe("a munkalap a hibajegy alá kerül", () => {
    * amit a szerver elutasit, rosszabb a hianyanal -- es a szerelo csak a
    * kuldeskor tudna meg.
    */
+  /**
+   * A KET VALASZTO EGY ALLAPOTON OSZTOZIK -- ES EZT CSAK ITT LEHET MEGMERNI.
+   *
+   * A modul (`worksheet-pickers.ts`) azt meri, hogy EGY ertek nem tud ket
+   * nyitottat hordozni. Hogy a kepernyo tenyleg EZT az egy erteket hasznalja
+   * mind a ket szekcioban -- es nem tett vissza egy masodik jelzot --, csak a
+   * forrasbol latszik.
+   */
+  it("a két választó egyetlen állapoton osztozik", () => {
+    assert.match(urlap, /useState<NyitottValaszto>\(kezdoValaszto\(\)\)/);
+    assert.match(urlap, /valasztoraKoppint\(nyitott, "partner"\)/);
+    assert.match(urlap, /valasztoraKoppint\(nyitott, "helyszin"\)/);
+    // NINCS MASODIK JELZO: a regi `partnerPickerOpen` nem terhet vissza.
+    assert.doesNotMatch(urlap, /partnerPickerOpen/);
+  });
+
+  /**
+   * ES A VALASZTAS UTAN MIND A KETTO ZAR. Ez a jelentes masik fele: a
+   * kivalasztott ertek mellett a teljes lista nem informacio tobbe, csak zaj.
+   */
+  it("választás után mind a két lista bezárul", () => {
+    const valasztasok = [
+      ...urlap.matchAll(/setNyitottValaszto\(valasztasUtan\(\)\)/g),
+    ];
+    assert.equal(
+      valasztasok.length,
+      2,
+      `a választás utáni zárás nem mind a két listán áll: ${valasztasok.length}`,
+    );
+  });
+
   it("jegy alatt a partner-választó zárt", () => {
     assert.match(urlap, /partnerLezarva\(elotoltes\)/);
     assert.match(urlap, /disabled=\{partnerLezarva\(elotoltes\)\}/);
