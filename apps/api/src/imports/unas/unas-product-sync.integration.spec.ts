@@ -1257,4 +1257,159 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
       0,
     );
   });
+
+  /**
+   * AZ AR-TORTENET IRO UTJA, VEGIG -- ES EZ AZ ELSO ALLITAS, AMI A VISELKEDEST
+   * MERI, NEM A FORRAS SZOVEGET.
+   *
+   * === MIERT KELLETT (78fe08f2, merve 2026-09-18) ===
+   *
+   * Az elesen TIZENKET sor all a tablaban, MIND `INITIAL`, es egyetlen
+   * `UNAS_SYNC` sem. Ket olvasata volt: vagy nincs bekotve az iro ut, vagy be
+   * van, csak egyetlen ar sem mozdult.
+   *
+   * A SZAM MAGA EGYIKET SEM TUDJA ELDONTENI, es ez szerkezeti ok, nem
+   * adathiany: a `source` akkor lesz `UNAS_SYNC`, ha a termeknek MAR VAN
+   * sora. Minden termek ELSO sora `INITIAL`, barmi tortent -- tehat amig egy
+   * termeket masodszor is meg nem latunk VALTOZOTT arral, a nulla pontosan az,
+   * amit varni kell.
+   *
+   * Eddig ezt az agat kizarolag egy FORRAS-OLVASO allitas fedte
+   * (`unas-ar-tortenet.spec.ts`: benne van-e a fajlban a
+   * `source: utolsoArSor ? "UNAS_SYNC" : "INITIAL"` szoveg). Az megmondja, hogy
+   * a sor OTT VAN a kodban; azt nem, hogy egy masodik futas tenylegesen ir-e.
+   *
+   * === A HAROM SZAKASZ, ES MIERT EZ A HAROM ===
+   *
+   * Az elso a kezdo sort adja, a masodik a valtozast, a harmadik pedig azt,
+   * hogy valtozatlan arnal NEM keletkezik sor. A harmadik nelkul egy olyan kod
+   * is atmenne, ami MINDEN futasban ir egy sort: a masodik szakasz szamai
+   * ugyanugy stimmelnenek.
+   */
+  it("a masodik, VALTOZOTT aru futas UNAS_SYNC sort ir, a valtozatlan egyet sem", async () => {
+    await cleanup();
+    deletedProducts = [];
+    categoryPage = [category];
+
+    const alap = () => product("PRICE-HISTORY-SKU", { externalId: "920001" });
+
+    liveProducts = [alap()];
+    await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-25T10:00:00.000Z"),
+      100,
+    );
+
+    const valtozat = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "PRICE-HISTORY-SKU" },
+      select: { productId: true },
+    });
+    const sorok = async () =>
+      prisma.productPriceHistory.findMany({
+        where: { productId: valtozat.productId },
+        orderBy: { observedAt: "asc" },
+        select: { source: true, netPrice: true, grossPrice: true },
+      });
+
+    const kezdo = await sorok();
+    assert.equal(kezdo.length, 1);
+    assert.equal(kezdo[0]!.source, "INITIAL");
+    assert.equal(Number(kezdo[0]!.netPrice), 1000);
+
+    // MASODIK FUTAS: ugyanaz a termek, MAS arral. A kanonikus hash az egesz
+    // termek-alakot fedi, tehat az ar valtozasa `UPDATE` agra viszi.
+    liveProducts = [{ ...alap(), netPrice: "1200", grossPrice: "1524" }];
+    await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-25T11:00:00.000Z"),
+      100,
+    );
+
+    const valtozas = await sorok();
+    assert.equal(valtozas.length, 2);
+    assert.equal(valtozas[1]!.source, "UNAS_SYNC");
+    assert.equal(Number(valtozas[1]!.netPrice), 1200);
+    assert.equal(Number(valtozas[1]!.grossPrice), 1524);
+    // A kezdo sor a helyen marad: a tortenet nem felulirodik, hanem no.
+    assert.equal(valtozas[0]!.source, "INITIAL");
+    assert.equal(Number(valtozas[0]!.netPrice), 1000);
+
+    // HARMADIK FUTAS: valtozatlan termek. Sem uj sor, sem felulirt sor.
+    liveProducts = [{ ...alap(), netPrice: "1200", grossPrice: "1524" }];
+    await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-25T12:00:00.000Z"),
+      100,
+    );
+    assert.equal((await sorok()).length, 2);
+  });
+
+  /**
+   * AHOL A GYUJTES MA MEGALL: AZ ATVETT TERMEKNEK NEM KESZUL TOBB SOR.
+   *
+   * Ez nem hiba, hanem a kihagyas KOVETKEZMENYE: a kulonbseg-ciklus a sajat
+   * gondozasunkba vett termekeket a legelejen atugorja, es az ar-tortenet sora
+   * azon a ponton TUL van. Amint egy termek katalogus-gazdaja `ACROPORA` lesz,
+   * a UNAS-bol jovo ar-tortenete befagy.
+   *
+   * MIERT ALL ITT ALLITASKENT, HOLOTT MA HELYES: mert az Omnibus-ablak
+   * szempontjabol ez EGY HIANYZO FORRAS, es a potlasa (a sajat arunk taplalja
+   * a tortenetet) meg nincs megirva. Ha valaki egyszer megirja, ennek az
+   * allitasnak KI KELL pirosodnia -- akkor kell ide a masodik ut, nem egy
+   * csendes szamnovekedes.
+   */
+  it("az atvett termek ara nem kerul be a tortenetbe", async () => {
+    await cleanup();
+    deletedProducts = [];
+    categoryPage = [category];
+
+    const alap = () => product("PRICE-TAKEOVER-SKU", { externalId: "920002" });
+
+    liveProducts = [alap()];
+    await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-26T10:00:00.000Z"),
+      100,
+    );
+
+    const valtozat = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "PRICE-TAKEOVER-SKU" },
+      select: { productId: true },
+    });
+    assert.equal(
+      await prisma.productPriceHistory.count({
+        where: { productId: valtozat.productId },
+      }),
+      1,
+    );
+
+    await new ProductRepository().takeCatalogAuthority(
+      valtozat.productId,
+      undefined,
+    );
+
+    liveProducts = [{ ...alap(), netPrice: "1900", grossPrice: "2413" }];
+    const atvett = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-26T11:00:00.000Z"),
+      100,
+    );
+
+    // A kihagyas MAGA is allitva van: enelkul egy olyan futas is atmenne,
+    // amelyik eszre sem vette a termeket (pl. mert ki sem toltottuk).
+    assert.equal(atvett.skippedCount, 1);
+    assert.equal(atvett.skippedSourceChangedCount, 1);
+    assert.equal(
+      await prisma.productPriceHistory.count({
+        where: { productId: valtozat.productId },
+      }),
+      1,
+    );
+    assert.equal(
+      await prisma.productPriceHistory.count({
+        where: { productId: valtozat.productId, source: "UNAS_SYNC" },
+      }),
+      0,
+    );
+  });
 });
