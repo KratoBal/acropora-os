@@ -88,6 +88,10 @@ import {
   toWorksheetDetail,
   type WorksheetDetailRow,
 } from "./worksheets.types.js";
+import {
+  thumbnailResponse,
+  wantsThumbnail,
+} from "../documents/document-thumbnail.js";
 
 function isNumberIssue(reason: string): reason is WorksheetNumberIssue {
   return reason in WORKSHEET_NUMBER_ISSUE_MESSAGES;
@@ -256,9 +260,31 @@ export class WorksheetsService {
    * mas elrendezessel keszult, a helyes viselkedes a MEGALLAS, nem az, hogy a
    * mai elrendezes szerint keresunk egy fajlt, ami nincs ott.
    */
-  async documentBytes(id: string, documentId: string, scope: PartnerScope) {
+  async documentBytes(
+    id: string,
+    documentId: string,
+    scope: PartnerScope,
+    variant?: string,
+  ) {
     const lap = await this.repository.detail(id, scope);
     if (!lap) throw new NotFoundException("A munkalap nem található.");
+
+    /*
+      A CSEMPE KEPE ELOSZOR, ES CSAK AKKOR, HA A HIVO AZT KERTE.
+
+      A HATOKOR-ELLENORZES MAR MEGTORTENT FELETTE: ez az ag ugyanazon a kapun
+      belul all, tehat egy belyegkep sem erheto el olyannak, aki a csatolmanyt
+      magat nem lathatja.
+
+      A VISSZAESES HALLGATOLAGOS, ES EZ MEGKOTES (acrobot, 2026-09-18): ha nincs
+      belyegkep -- mert regi a sor, mert PDF, vagy mert az eloallitas elhasalt --,
+      a valasz az EREDETI. Egy hibauzenet itt azt jelentene, hogy a csempe
+      eltorik olyan sorokon, amik ma hibatlanul mukodnek.
+    */
+    if (wantsThumbnail(variant)) {
+      const kicsi = await this.repository.documentThumbnail(id, documentId);
+      if (kicsi) return thumbnailResponse(kicsi);
+    }
 
     const document = await this.repository.document(id, documentId);
     if (!document) throw new NotFoundException("A csatolmány nem található.");

@@ -112,6 +112,8 @@ async function csatolmany(
     sizeBytes: 5,
     sha256: sha256(),
     contentType: "application/pdf",
+    // PDF: belyegkep nem keszul hozza, es a lista nem is ker ilyet.
+    thumbnail: null,
     caption: null,
     actorUserId,
   });

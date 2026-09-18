@@ -48,6 +48,10 @@ import {
 } from "../documents/document-intake.js";
 import { createAssetQrSvg } from "./qr-svg.js";
 import { ServiceAssetsRepository } from "./service-assets.repository.js";
+import {
+  thumbnailResponse,
+  wantsThumbnail,
+} from "../documents/document-thumbnail.js";
 
 /**
  * A KET UZENET, EGYMAS MELLETT, HOGY A KULONBSEG LATSZODJON.
@@ -592,7 +596,33 @@ export class ServiceAssetsService {
    * ő veszi észre a bajt, nem mi. Az 503 azt is kimondja, hogy a hiba a mi
    * oldalunkon van, nem az övén, tehát az újrapróbálás értelmes.
    */
-  async documentBytes(id: string, documentId: string, scope: PartnerScope) {
+  async documentBytes(
+    id: string,
+    documentId: string,
+    scope: PartnerScope,
+    variant?: string,
+  ) {
+    /*
+      A CSEMPE KEPE ELOSZOR, ES CSAK AKKOR, HA A HIVO AZT KERTE.
+
+      A HATOKOR-ELLENORZES MAR MEGTORTENT FELETTE: ez az ag ugyanazon a kapun
+      belul all, tehat egy belyegkep sem erheto el olyannak, aki a csatolmanyt
+      magat nem lathatja.
+
+      A VISSZAESES HALLGATOLAGOS, ES EZ MEGKOTES (acrobot, 2026-09-18): ha nincs
+      belyegkep -- mert regi a sor, mert PDF, vagy mert az eloallitas elhasalt --,
+      a valasz az EREDETI. Egy hibauzenet itt azt jelentene, hogy a csempe
+      eltorik olyan sorokon, amik ma hibatlanul mukodnek.
+    */
+    if (wantsThumbnail(variant)) {
+      const kicsi = await this.repository.documentThumbnail(
+        id,
+        documentId,
+        scope,
+      );
+      if (kicsi) return thumbnailResponse(kicsi);
+    }
+
     const document = await this.document(id, documentId, scope);
 
     if (document.storageKey === null) {

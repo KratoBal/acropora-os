@@ -13,6 +13,7 @@ import {
   canonicalMimetypeFor,
   detectUploadedFileKind,
 } from "../service-assets/uploaded-file-type.js";
+import { makeThumbnail } from "./document-thumbnail.js";
 
 /**
  * A FELTOLTES SZABALYAI, EGY HELYEN, GAZDATOL FUGGETLENUL.
@@ -49,6 +50,17 @@ export interface DocumentIntakeCommon {
   contentType: string;
   sizeBytes: number;
   sha256: string;
+  /**
+   * A CSEMPE KEPE, VAGY `null`. A `null` ERVENYES ALLAPOT, es harom okbol allhat
+   * elo: a fajl nem kep (PDF), a `sharp` nem elerheto a telepitesben, vagy az
+   * atmeretezes elhasalt. Mindharomnal a csempe az EREDETIBOL keszul -- a
+   * visszaeses a kiszolgalo vegponton all, nem itt.
+   *
+   * NEM ELHAGYHATO MEZO (`?`), HANEM `null`: igy a harom hivo sora mindharom
+   * helyen KIIRJA, hogy mi kerul az oszlopba, es egy uj gazda nem felejtheti
+   * el csendben. Egy hianyzo mezo sehol nem all ott.
+   */
+  thumbnail: Buffer | null;
 }
 
 /** A ket elhelyezes KULON ALAK, mert a hivo mast ir a sorba. */
@@ -92,6 +104,15 @@ export async function prepareDocument(
     .replace(/[\\/\u0000-\u001f\u007f]/g, "-")
     .slice(0, 180);
 
+  /*
+    A KERET A LEGELSO ELLENORZES, MEG BARMILYEN MUNKA ELOTT. Eddig a `common`
+    felepitese utan allt, es az akkor ugyanaz volt; a belyegkep-eloallitas
+    (median 115 ms egy 12 MP fenykepnel) viszont MUNKA, es egy elutasitott
+    feltoltesnel karba veszne. A megkotes valtozatlan: elutasitas utan sem a
+    tarolon, sem a tablaban nem keletkezhet semmi.
+  */
+  await refuseIfOverQuota(input.file.buffer.length, deps);
+
   const common: DocumentIntakeCommon = {
     id: input.documentId,
     // A TARTALEK NEV NEM MONDHAT TIPUST, amit nem tudunk.
@@ -101,11 +122,17 @@ export async function prepareDocument(
     contentType: canonicalMimetypeFor(kind),
     sizeBytes: input.file.buffer.length,
     sha256: createHash("sha256").update(input.file.buffer).digest("hex"),
-  };
+    /*
+      A CSEMPE KEPE ITT KESZUL EL, A HAROM GAZDA KOZOS UTJAN. Kulon-kulon
+      megirva a harmadik elobb-utobb lemaradna rola -- ugyanaz az indok, amiert
+      a tobbi feltoltesi szabaly is ebben a modulban all.
 
-  // A KERET A LEGELSO ELLENORZES, MEG AZ IRAS ELOTT. Egy elutasitas utan sem a
-  // tarolon, sem a tablaban nem keletkezhet semmi.
-  await refuseIfOverQuota(input.file.buffer.length, deps);
+      Az ARA MERT: egy 12 MP fenykepnel a median 115 ms (sajat meres,
+      2026-09-18). Ugyanez a keres tobb megabajtot tolt fel es ir ki -- a
+      belyegkep ehhez kepest nem uj nagysagrend.
+    */
+    thumbnail: await makeThumbnail(input.file.buffer, kind, deps.logger),
+  };
 
   if (!documentStoreEnabled())
     return { placement: "database", common, content: input.file.buffer };
