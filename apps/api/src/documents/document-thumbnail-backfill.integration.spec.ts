@@ -8,6 +8,7 @@ import { prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 
+import { parseThumbnailCoverage } from "./document-thumbnail-backfill.js";
 import { main } from "./document-thumbnail-backfill.cli.js";
 import { THUMBNAIL_MAX_EDGE } from "./document-thumbnail.js";
 
@@ -83,32 +84,23 @@ async function futtat(
  * NAGYOBB a hatarnal, hogy a kicsinyites tenylegesen megtortenjen.
  */
 /**
- * A KIIRT LEFEDETTSEGI SOR SZAMAI.
+ * A LEFEDETTSEGI SOR VISSZAOLVASASA -- a parser a TISZTA MODULBAN all.
  *
- * MIERT A KIIRT SZOVEGBOL, ES NEM UJRA LEKERDEZESBOL: epp azt merjuk, hogy amit
- * a parancs MOND, az egyezik azzal, ami TORTENT. Egy sajat lekerdezes a
- * parancstol fuggetlenul ugyanazt adna, es a kettejuk elterese -- vagyis a
- * kerdes -- kimaradna.
+ * Eloszor itt volt megirva, es ott NEM merheto helyben: a suite Postgres nelkul
+ * kihagyva fut. Az elso alakom csak a NEM-URES mondatot ismerte, az URES-et nem
+ * -- es epp az ures allapotban keszul az alapvonal. A CI fogta meg, egy
+ * `hookFailed`-del, ami az egesz suite-ot megszakitotta.
+ *
+ * Itt csak a `null` eset kap hangos uzenetet: ha a parancs egyaltalan nem irt
+ * lefedettsegi sort, az mas baj, mint egy rossz szam.
  */
-function lefedettseg(kimenet: string): {
-  kepSor: number;
-  lefedve: number;
-  hianyzik: number;
-  nemKep: number;
-} {
-  const minta =
-    /kep-sor: (\d+), ebbol belyegkeppel: (\d+) \(\d+%\), hianyzik: (\d+)\. Nem kep: (\d+)/;
-  const talalat = minta.exec(kimenet);
+function lefedettseg(kimenet: string) {
+  const szamok = parseThumbnailCoverage(kimenet);
   assert.ok(
-    talalat,
+    szamok,
     `a lefedettsegi sor nem olvashato ki a kimenetbol:\n${kimenet}`,
   );
-  return {
-    kepSor: Number(talalat[1]),
-    lefedve: Number(talalat[2]),
-    hianyzik: Number(talalat[3]),
-    nemKep: Number(talalat[4]),
-  };
+  return szamok;
 }
 
 /**
