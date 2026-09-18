@@ -495,28 +495,41 @@ export function removeWorksheetLine(id: string, lineId: string) {
  * fuggvenyben azt jelentene, hogy a webes felulettel kozos szerzodes ket
  * kulonbozo dolgot jelent a ket oldalon.
  */
-export function signWorksheet(
-  id: string,
-  input: {
-    decision: "ACCEPTED" | "REJECTED";
-    /** CSAK az "egyik sem" agon. Listarol valasztva a szerver adja a nevet. */
-    signerName?: string;
-    /** A valasztott munkatars. A szerver ebbol szamolja a forrast. */
-    signerUserId?: string;
-    /**
-     * A SAJAT KOLLEGANK IRJA ALA, AZONOSITVA.
-     *
-     * AZONOSITOT NEM KULDUNK: a szerver a hitelesitett aktort veszi. Ha a
-     * kliens valaszthatna alairot, ez a mezo nevesitve adna at egy hatalmat,
-     * amit ma senki nem kapott meg.
-     *
-     * A szerver a masik ket alairo-mezovel EGYUTT elutasitja: az utkozes hiba,
-     * nem valasztas.
-     */
-    signSelf?: boolean;
-    note: string | null;
-  },
-) {
+/**
+ * A MUNKALAP ALAIRASANAK TORZSE -- NEVESITETT TIPUS, ES EZ NEM STILUS.
+ *
+ * A nev azert kell, mert igy kerul bele a szerzodes-orzobe
+ * (`apps/api/src/mobile/mobile-request-body.spec.ts`), ami a telefon altal
+ * KULDOTT mezoket veti ossze a szerver DTO-javal.
+ *
+ * MIERT EPP ITT SZAMIT: a `signSelf` az EGYETLEN kapcsolodasi pont a telefon es
+ * a szerver belsos alairas-aga kozott, es MIND A KET oldalon sztring. Egy
+ * elgepeles a telefon oldalan forditasidoben NEMA -- a keres kimegy, a szerver
+ * a mezot nem ismeri fel, es a nev nelkuli agra fut. A hiba hangos, de CSAK
+ * telefonon derul ki. (A szerver oldali atnevezest a fordito mar ma megfogja:
+ * a szolgaltatas olvassa a mezot.)
+ */
+export interface SignWorksheetInput {
+  decision: "ACCEPTED" | "REJECTED";
+  /** CSAK az "egyik sem" agon. Listarol valasztva a szerver adja a nevet. */
+  signerName?: string;
+  /** A valasztott munkatars. A szerver ebbol szamolja a forrast. */
+  signerUserId?: string;
+  /**
+   * A SAJAT KOLLEGANK IRJA ALA, AZONOSITVA.
+   *
+   * AZONOSITOT NEM KULDUNK: a szerver a hitelesitett aktort veszi. Ha a
+   * kliens valaszthatna alairot, ez a mezo nevesitve adna at egy hatalmat,
+   * amit ma senki nem kapott meg.
+   *
+   * A szerver a masik ket alairo-mezovel EGYUTT elutasitja: az utkozes hiba,
+   * nem valasztas.
+   */
+  signSelf?: boolean;
+  note: string | null;
+}
+
+export function signWorksheet(id: string, input: SignWorksheetInput) {
   return apiRequest<WorksheetDetail>(`${BASE}/${encodeURIComponent(id)}/sign`, {
     method: "POST",
     body: JSON.stringify(input),
