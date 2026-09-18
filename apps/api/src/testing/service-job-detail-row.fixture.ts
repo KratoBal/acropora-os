@@ -28,6 +28,7 @@ export function serviceJobDetailRow(
     status: "TRIAGED" as const,
     createdAt: new Date("2026-09-01T08:00:00.000Z"),
     scheduledAt: null,
+    hiddenAt: null,
     startedAt: null,
     completedAt: new Date("2026-09-04T08:00:00.000Z"),
     customerId: "cust-1",

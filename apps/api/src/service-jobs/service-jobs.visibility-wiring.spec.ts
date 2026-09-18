@@ -61,11 +61,44 @@ const partner = {
   supplierId: "sup-1",
 } as unknown as AuthenticatedUser;
 
+/**
+ * A SZURO 2026-09-18 OTA KET AGBOL ALL: a lathatosag MELLE bekerult a rejtes.
+ *
+ * Az allitasok azert a TELJES alakra mennek, es nem csak a lathatosagi agra,
+ * mert egy kicsomagolo allitas egy felcserelt sorrendnel a masik agat nezne,
+ * es zold maradna. Igy viszont mind a ketto nev szerint all itt.
+ */
+const REJTETT_NELKUL = { hiddenAt: null };
+
 describe("a láthatóság eljut a lekérdezésig", () => {
-  it("belsős hívónál üres a szűrő", async () => {
+  it("belsős hívónál csak a rejtés-szűrő marad", async () => {
     const kapott: { where?: Prisma.ServiceJobWhereInput } = {};
     await serviceWith(kapott).list({}, belsos);
-    assert.deepEqual(kapott.where, {});
+    assert.deepEqual(kapott.where, { AND: [{}, REJTETT_NELKUL] });
+  });
+
+  it("belsős hívónál a KAPCSOLÓVAL a rejtés-szűrő is eltűnik", async () => {
+    /*
+      POZITIV KONTROLL A FENTIHEZ: e nelkul a `{ hiddenAt: null }` ag akkor is
+      ott allna az allitasban, ha SOHA nem tudna eltunni -- vagyis a kapcsolo
+      halott lehetne, es ez a spec nem venne eszre.
+    */
+    const kapott: { where?: Prisma.ServiceJobWhereInput } = {};
+    await serviceWith(kapott).list({ includeHidden: true }, belsos);
+    assert.deepEqual(kapott.where, { AND: [{}, {}] });
+  });
+
+  it("PARTNER hívónál a kapcsoló NEM hat", async () => {
+    /*
+      A LENYEG: az `includeHidden` keres-parameter, tehat a partner portalja is
+      megadhatja. Ha a hivo dontene el, a rejtett jegyek pont ott jelennenek
+      meg, ahol a legrosszabb.
+    */
+    const kapott: { where?: Prisma.ServiceJobWhereInput } = {};
+    await serviceWith(kapott).list({ includeHidden: true }, partner);
+    assert.deepEqual((kapott.where as { AND: unknown[] }).AND[1], {
+      hiddenAt: null,
+    });
   });
 
   /**
@@ -77,11 +110,18 @@ describe("a láthatóság eljut a lekérdezésig", () => {
     const kapott: { where?: Prisma.ServiceJobWhereInput } = {};
     await serviceWith(kapott).list({}, partner);
     assert.deepEqual(kapott.where, {
-      OR: [
-        { openedById: "user-2" },
+      AND: [
         {
-          customer: { worksheetDepartments: { some: { id: { in: ["u1"] } } } },
+          OR: [
+            { openedById: "user-2" },
+            {
+              customer: {
+                worksheetDepartments: { some: { id: { in: ["u1"] } } },
+              },
+            },
+          ],
         },
+        REJTETT_NELKUL,
       ],
     });
   });

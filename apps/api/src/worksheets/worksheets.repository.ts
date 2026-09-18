@@ -38,6 +38,7 @@ import type {
   NormalizedWorksheetContent,
   NormalizedWorksheetLine,
 } from "./worksheet-content.js";
+import { hiddenRowsWhere } from "../common/hidden-rows.js";
 import { attachableWorksheetFilters } from "./attachable-worksheets.js";
 import {
   worksheetCloseBlocker,
@@ -211,15 +212,29 @@ export function worksheetListWheres(
   scope: PartnerScope,
   userWhereWithoutStatus: Prisma.WorksheetWhereInput,
   statusWhere: Prisma.WorksheetWhereInput,
+  includeHidden?: boolean,
 ): { list: Prisma.WorksheetWhereInput; counts: Prisma.WorksheetWhereInput } {
+  /**
+   * A REJTES SZURJE `AND` AGKENT, UGYANOTT, AHOL A HATOKOR -- ES UGYANABBOL A
+   * HIVASBOL, MINT A SZAMLALOE.
+   *
+   * Ha csak a listaba kerulne bele, a csempek a rejtett lapokat is megszamolnak:
+   * a lista ures maradna, a szam mellette pedig nem nulla. Az a fajta elteres,
+   * amit a felhasznalo hibanak lat, es amirol nem tudja megmondani, melyik
+   * oldal hazudik.
+   */
+  const hidden = hiddenRowsWhere(scope, includeHidden);
   return {
     list: {
       AND: [
         scopeWhereForAndBranch(scope),
+        hidden,
         { ...userWhereWithoutStatus, ...statusWhere },
       ],
     },
-    counts: { AND: [scopeWhereForAndBranch(scope), userWhereWithoutStatus] },
+    counts: {
+      AND: [scopeWhereForAndBranch(scope), hidden, userWhereWithoutStatus],
+    },
   };
 }
 
@@ -240,6 +255,29 @@ const ZERO_PER_WORKSHEET_STATUS: Record<WorksheetVersionStatus, 0> = {
 
 @Injectable()
 export class WorksheetsRepository extends Repository {
+  /**
+   * A REJTES BEALLITASA -- ES A VISSZAVONAS UGYANEZ, `null`-lal.
+   *
+   * EGY METODUS KET IRANYRA, es ez nem rovidites: a ket muvelet ugyanazt a ket
+   * mezot irja, es ket masolatban az egyik elobb-utobb elfelejtene torolni a
+   * `hiddenById` erteket. Egy rejtett lap, amin egy REGI rejto neve all, a
+   * kovetkezo olvasonak tenynek latszik.
+   *
+   * A VISSZAVONAS MIND A KET MEZOT NULLAZZA. A "ki rejtette el utoljara"
+   * kerdes nem ezen a soron lakik: erre a naplo valaszol, nem egy mezo, ami
+   * mar nem all fenn.
+   */
+  async setHidden(
+    id: string,
+    hiddenAt: Date | null,
+    hiddenById: string | null,
+  ): Promise<void> {
+    await this.database.worksheet.update({
+      where: { id },
+      data: { hiddenAt, hiddenById: hiddenAt ? hiddenById : null },
+    });
+  }
+
   constructor() {
     super(prisma);
   }
@@ -498,6 +536,16 @@ export class WorksheetsRepository extends Repository {
       where: {
         AND: [
           scopeWhereForAndBranch(scope),
+          /**
+           * REJTETT LAP NEM CSATOLHATO JEGY ALA, es itt NINCS kapcsolo. Ez nem
+           * lista, hanem VALASZTO: aki innen valaszt, egy uj kapcsolatot hoz
+           * letre. Egy rejtett lapot ujra elohuzni azzal, hogy egy jegy ala
+           * teszik, pont azt a rejtest vonna vissza, amit senki nem kert.
+           *
+           * A hatokor itt mindig belso is lehetne, megis a kozos fuggveny dont,
+           * hogy a szabaly EGY helyen alljon.
+           */
+          hiddenRowsWhere(scope, false),
           ...attachableWorksheetFilters(customerId),
         ],
       },
@@ -728,6 +776,7 @@ export class WorksheetsRepository extends Repository {
       scope,
       userWhereWithoutStatus,
       latestStatusIds ? { id: { in: latestStatusIds } } : {},
+      query.includeHidden,
     );
 
     const [rows, totalItems, counts] = await Promise.all([

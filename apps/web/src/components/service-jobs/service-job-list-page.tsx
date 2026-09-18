@@ -56,6 +56,7 @@ export function ServiceJobListPage() {
   const { session } = useAuth();
   const [tab, setTab] = useState<ServiceJobTab>("open");
   const [search, setSearch] = useState("");
+  const [includeHidden, setIncludeHidden] = useState(false);
   const [appliedSearch, setAppliedSearch] = useState("");
   const [data, setData] = useState<ServiceJobListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,7 +86,15 @@ export function ServiceJobListPage() {
       setLoading(true);
       setError(null);
       try {
-        setData(await serviceJobsApi.list(token, scope, signal, appliedSearch));
+        setData(
+          await serviceJobsApi.list(
+            token,
+            scope,
+            signal,
+            appliedSearch,
+            includeHidden,
+          ),
+        );
       } catch (cause) {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
           setError(
@@ -97,7 +106,7 @@ export function ServiceJobListPage() {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [appliedSearch, canView, scope, token],
+    [appliedSearch, canView, includeHidden, scope, token],
   );
 
   useEffect(() => {
@@ -208,6 +217,17 @@ export function ServiceJobListPage() {
             value={search}
             onChange={setSearch}
           />
+          {/* A jelolo CSAK annak latszik, aki vissza is tudja allitani a
+              rejtett jegyeket: egy nezo szamara a hosszabb lista magyarazat
+              nelkul maradna. */}
+          {canManage ? (
+            <Button
+              variant={includeHidden ? "primary" : "secondary"}
+              onClick={() => setIncludeHidden((elozo) => !elozo)}
+            >
+              {includeHidden ? "Rejtettek nélkül" : "Rejtettek is"}
+            </Button>
+          ) : null}
         </div>
         {loading && !data ? (
           <p className="px-5 py-8 text-xs text-muted">
@@ -238,6 +258,11 @@ export function ServiceJobListPage() {
                           {job.title}
                         </Link>
                         <div className={sv.rowMeta}>{job.jobNumber}</div>
+                        {job.hidden ? (
+                          <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                            Rejtett
+                          </span>
+                        ) : null}
                       </td>
                       <td className={sv.tableCell}>
                         <div>{job.customerName ?? "Nincs megadva"}</div>

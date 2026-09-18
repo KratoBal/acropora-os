@@ -659,6 +659,34 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
         sub={worksheet.customer.displayName}
         actions={
           <>
+            {/* A REJTES ES A VISSZAALLITAS AZ ADATLAPON ALL, NEM A LISTA
+                SORABAN -- ES EZ MERT OKBOL VAN IGY.
+
+                A rejtendo tetelek kozott olyan is van, aminek a NEVE valodi
+                munkanak hangzik ("Rendrakas"). Egy lista-sorban a rejtes egy
+                felrekattintas; az adatlapon az ember mar latja, MELYIK lapot
+                rejti el. A muvelet visszavonhato, de egy eszrevetlen rejtes
+                addig all, amig valaki keresi a lapot -- es nem talalja.
+
+                A LEZART LAPRA IS SZOL: a rejtes nem a lap allapotarol szol,
+                hanem arrol, hogy latszik-e a listakban. */}
+            {canManage ? (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() =>
+                  void run(() =>
+                    worksheetsApi.setHidden(
+                      token,
+                      worksheet.id,
+                      !worksheet.hidden,
+                    ),
+                  )
+                }
+              >
+                {worksheet.hidden ? "Visszaállítás" : "Elrejtés"}
+              </Button>
+            ) : null}
             {canManage && isDraft ? (
               <Link href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}>
                 <Button variant="secondary">Szerkesztés</Button>

@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
+import { NOT_HIDDEN } from "../common/hidden-rows.js";
 import { expandAssignedUnits } from "./assigned-units.js";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
@@ -57,11 +58,34 @@ export interface ServiceJobRow {
   departmentPath: string[] | null;
   createdAt: Date;
   worksheetCount: number;
+  /** A rejtes idopontja, vagy `null`. A felulet ebbol csinal jelolot. */
+  hiddenAt: Date | null;
 }
 
 @Injectable()
 export class ServiceJobsRepository {
   private readonly database = prisma;
+
+  /**
+   * A JEGY REJTESE VAGY VISSZAALLITASA -- ES A LAPJAIT NEM VISZI MAGAVAL.
+   *
+   * Egy jegy alatt allhat VALODI munkalap, es a lanc (jegy -> lap ->
+   * teljesitesi igazolas -> szamla) ep marad. A rejtes PER SOR megy, mind a ket
+   * modellen kulon.
+   *
+   * A VISSZAVONAS MIND A KET MEZOT NULLAZZA, ugyanugy, mint a munkalapnal: egy
+   * mar nem rejtett soron alldogalo regi rejto-nev tenynek latszik.
+   */
+  async setHidden(
+    id: string,
+    hiddenAt: Date | null,
+    hiddenById: string | null,
+  ): Promise<void> {
+    await this.database.serviceJob.update({
+      where: { id },
+      data: { hiddenAt, hiddenById: hiddenAt ? hiddenById : null },
+    });
+  }
 
   /**
    * A HELYSZIN A PARTNERE-E. Egy sor, egy kerdes: a `WorksheetDepartment`
@@ -375,7 +399,19 @@ export class ServiceJobsRepository {
     }[]
   > {
     const rows = await this.database.worksheet.findMany({
-      where: { serviceJobId },
+      /**
+       * A REJTETT LAP A JEGY ALATT SEM JELENIK MEG, ES ITT NINCS KAPCSOLO.
+       *
+       * Ez lista, csak egy reszletlapon belul -- es pont az a hely, ahol a
+       * probalapok a legjobban zavarnak. A lap SAJAT reszletlapja tovabbra is
+       * elerheto azonositoval; az egyedi lekeresre a rejtes nem szol.
+       *
+       * AMIT EZ JELENT, KIMONDVA: egy rejtett lapot a jegy alatt nem lehet
+       * visszahozni kapcsoloval. Elo kell venni a munkalap-listabol, a
+       * "Rejtettek is" jelolovel -- ott van az egyetlen hely, ahol a rejtes
+       * visszavonhato, es ez szandekos: EGY hely, ahol a visszavonas tortenik.
+       */
+      where: { ...NOT_HIDDEN, serviceJobId },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: {
         id: true,
@@ -757,6 +793,7 @@ export class ServiceJobsRepository {
         title: true,
         status: true,
         createdAt: true,
+        hiddenAt: true,
         customer: { select: { displayName: true } },
         // A HELYSZIN AZONOSITOJA A LISTARA IS. A nevet nem kerjuk el: a listan
         // a TELJES ut all majd, azt pedig egy kotegelt lekerdezes epiti fel,
@@ -791,6 +828,7 @@ export class ServiceJobsRepository {
           : null,
         createdAt: row.createdAt,
         worksheetCount: row._count.worksheets,
+        hiddenAt: row.hiddenAt,
       })),
       truncated: rows.length > LIST_LIMIT,
     };
@@ -968,6 +1006,7 @@ export class ServiceJobsRepository {
         status: true,
         createdAt: true,
         scheduledAt: true,
+        hiddenAt: true,
         startedAt: true,
         completedAt: true,
         // AZ AZONOSITO A NEV MELLE: a nev megjelenitesre jo, szuresre nem. A

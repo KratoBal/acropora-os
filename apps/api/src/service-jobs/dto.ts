@@ -10,6 +10,9 @@ import {
   MinLength,
 } from "class-validator";
 
+import { Transform } from "class-transformer";
+
+import { optionalQueryBoolean } from "../common/query-boolean.util.js";
 import {
   SERVICE_JOB_LIST_SCOPES,
   type ServiceJobListScope,
@@ -256,6 +259,19 @@ export class ServiceJobListQueryDto {
   @IsString()
   @IsOptional()
   search?: string;
+
+  /**
+   * A REJTETT JEGYEK IS JÖJJENEK. Alapból nem jönnek.
+   *
+   * Ugyanaz a mező és ugyanaz a szabály, mint a munkalap-listán: a kapcsoló
+   * KÉRÉS, nem engedély. Hogy hat-e, azt a hatókör dönti el
+   * (`hiddenRowsWhere`), nem a hívó -- a partner portálján a rejtett sor soha
+   * nem értelmezett.
+   */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => optionalQueryBoolean(value))
+  @IsBoolean()
+  includeHidden?: boolean;
 }
 
 /**
@@ -317,4 +333,15 @@ export class SetServiceJobPartnerDto {
  */
 export class AssignVisibilityUnitDto {
   @IsString() @MaxLength(64) departmentId!: string;
+}
+
+/**
+ * A REJTES JELOLOJE -- ES KOTELEZO, NEM ELHAGYHATO.
+ *
+ * Ugyanaz az indok, mint a munkalapnal: egy ures torzsu keres CSENDBEN az
+ * egyik iranyt valasztana, es a hivo azt hinne, a masikat kerte.
+ */
+export class SetServiceJobHiddenDto {
+  @IsBoolean({ message: "A rejtés jelölése csak igen vagy nem lehet." })
+  hidden!: boolean;
 }

@@ -146,6 +146,7 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
       ],
     },
     versions: [],
+    hidden: false,
   };
 }
 

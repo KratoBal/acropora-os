@@ -47,6 +47,7 @@ const RESZLETLAP: DetailRow = {
   status: "NEW",
   createdAt: new Date("2026-09-16T08:00:00.000Z"),
   scheduledAt: null,
+  hiddenAt: null,
   startedAt: null,
   completedAt: null,
   customerId: "vevo-1",

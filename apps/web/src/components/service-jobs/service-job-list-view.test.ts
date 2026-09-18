@@ -43,6 +43,7 @@ function item(
     departmentPath: null,
     worksheetCount: 0,
     createdAt: "2026-09-01T08:00:00.000Z",
+    hidden: false,
   };
 }
 

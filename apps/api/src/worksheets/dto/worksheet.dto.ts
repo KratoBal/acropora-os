@@ -1,5 +1,5 @@
 import type { WorksheetLineKind } from "@acropora/database";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
   IsArray,
@@ -19,6 +19,7 @@ import {
   ValidateNested,
 } from "class-validator";
 
+import { optionalQueryBoolean } from "../../common/query-boolean.util.js";
 import { DOCUMENT_CAPTION_MAX_LENGTH } from "../../documents/document-caption.js";
 
 export const WORKSHEET_VERSION_STATUSES = [
@@ -81,6 +82,19 @@ export class WorksheetListQueryDto {
   @IsIn(WORKSHEET_VERSION_STATUSES)
   @IsOptional()
   status?: (typeof WORKSHEET_VERSION_STATUSES)[number];
+
+  /**
+   * A REJTETT LAPOK IS JÖJJENEK. Alapból nem jönnek.
+   *
+   * A KAPCSOLÓ A BELSŐ ÚTON ÉRTELMEZETT, ÉS EZT NEM ITT DÖNTJÜK EL, hanem a
+   * `hiddenRowsWhere` a hatókörből. Egy kérés-paramétert a partner portálja is
+   * megadhat; ha a hívó döntené el, a próbasorok pont ott jelennének meg, ahol
+   * a legrosszabb. Ez a mező tehát KÉRÉS, nem engedély.
+   */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => optionalQueryBoolean(value))
+  @IsBoolean()
+  includeHidden?: boolean;
 }
 
 export class WorksheetLineDto {
@@ -506,4 +520,17 @@ export class UpdateWorksheetDocumentCaptionDto {
   @IsString()
   @MaxLength(DOCUMENT_CAPTION_MAX_LENGTH)
   caption?: string | null;
+}
+
+/**
+ * A REJTES JELOLOJE -- ES KOTELEZO, NEM ELHAGYHATO.
+ *
+ * Ha elhagyhato lenne, egy ures torzsu keres CSENDBEN az egyik iranyt
+ * valasztana (amelyik az alapertelmezes), es a hivo azt hinne, a masikat
+ * kerte. Egy rejtes, ami veletlenul visszaallitas, pontosan olyan nema, mint
+ * a forditottja.
+ */
+export class SetWorksheetHiddenDto {
+  @IsBoolean({ message: "A rejtés jelölése csak igen vagy nem lehet." })
+  hidden!: boolean;
 }

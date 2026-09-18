@@ -835,6 +835,31 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   </Link>
                 </div>
               ) : null}
+              {/* A REJTES ES A VISSZAALLITAS AZ ADATLAPON ALL, nem a lista
+                  soraban: ott egy felrekattintas rejtene el egy valodi jegyet.
+
+                  ES A JEGY REJTESE NEM VISZI MAGAVAL A MUNKALAPJAIT -- a
+                  mondat ott all a gomb alatt, mert ezt a felhasznalo nem tudja
+                  kitalalni, es a kovetkezmenye a lapokon latszana. */}
+              {canManage ? (
+                <div className="space-y-2 border-t pt-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      void serviceJobsApi
+                        .setHidden(token, jobId, !job.hidden)
+                        .then(() => load())
+                    }
+                  >
+                    {job.hidden ? "Visszaállítás" : "Elrejtés"}
+                  </Button>
+                  <p className="text-xs text-muted">
+                    {job.hidden
+                      ? "Ez a jegy nincs benne a listákban. A visszaállítás után újra megjelenik."
+                      : "A jegy kikerül a listákból, de megmarad, és a munkalapjai változatlanul látszanak."}
+                  </p>
+                </div>
+              ) : null}
               {canManage ? (
                 <div className="space-y-2 border-t pt-3">
                   <label

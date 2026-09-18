@@ -62,6 +62,7 @@ export function WorksheetListPage() {
   const userId = session?.user.id ?? "";
   const mineOnly = params.get("assigneeId") === userId && Boolean(userId);
   const activeStatus = params.get("status") ?? "";
+  const includeHidden = params.get("includeHidden") === "true";
 
   const query = useMemo(() => {
     const value = new URLSearchParams(params.toString());
@@ -297,6 +298,22 @@ export function WorksheetListPage() {
             >
               {mineOnly ? "Minden munkalap" : "Csak amit rám osztottak"}
             </Button>
+            {/* A REJTETTEK CSAK KERESRE JONNEK, ES A JELOLO CSAK ANNAK LATSZIK,
+                AKI VISSZA IS TUDJA ALLITANI OKET.
+
+                Egy nezo, aki latja a rejtett sorokat, de nem tud rajtuk
+                valtoztatni, csak annyit lat, hogy a lista neha hosszabb --
+                es nem erti, miert. */}
+            {canManage ? (
+              <Button
+                variant={includeHidden ? "primary" : "secondary"}
+                onClick={() =>
+                  filter("includeHidden", includeHidden ? "" : "true")
+                }
+              >
+                {includeHidden ? "Rejtettek nélkül" : "Rejtettek is"}
+              </Button>
+            ) : null}
           </div>
         </div>
         {loading && !data ? (
@@ -341,6 +358,15 @@ export function WorksheetListPage() {
                             ? ` · ${worksheet.versionCount} verzió`
                             : ""}
                         </span>
+                        {/* A REJTETT SOR MEGJELOLVE. Csak akkor kerulhet ide
+                            sor, ha valaki kifejezetten kerte oket -- de akkor
+                            a listan EGYUTT allnak a tobbivel, es jeloles
+                            nelkul semmi nem mondana meg, melyik melyik. */}
+                        {worksheet.hidden ? (
+                          <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                            Rejtett
+                          </span>
+                        ) : null}
                       </td>
                       <td className={sv.tableCell}>
                         <div className="text-xs font-medium text-ink">

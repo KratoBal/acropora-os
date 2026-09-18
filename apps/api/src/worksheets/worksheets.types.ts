@@ -296,6 +296,12 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
   const current = currentVersionRow(row);
   return {
     id: row.id,
+    /**
+     * A RESZLETLAP REJTETT LAPNAL IS ELERHETO, tehat ez a mezo itt MIND A KET
+     * erteket felveheti -- szemben a lista-elemmel, ahol alapbol mindig hamis.
+     * A felulet ebbol tudja, melyik iranyt kinalja fel.
+     */
+    hidden: row.hiddenAt !== null,
     number: row.number,
     numberYear: row.numberYear,
     sequence: row.sequence,
@@ -368,6 +374,12 @@ export function toWorksheetListItem(
       personDisplayName(assignee.user),
     ),
     updatedAt: row.updatedAt.toISOString(),
+    /**
+     * A JELOLO AZ IDOBELYEGBOL, NEM MAGA AZ IDOBELYEG. A felulet arra
+     * valaszol, hogy meg kell-e jelolni a sort; a "mikor" es a "ki" az
+     * adatbazisban all, es ha egyszer kell, KULON mezokent jojjon.
+     */
+    hidden: row.hiddenAt !== null,
   };
 }
 

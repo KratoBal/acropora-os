@@ -473,6 +473,17 @@ export interface WorksheetAssetLink {
 
 export interface WorksheetDetail {
   id: string;
+  /**
+   * EL VAN-E REJTVE. A RÉSZLETLAP REJTETT SORNÁL IS ELÉRHETŐ -- egy rejtett
+   * elem nem „nem létezik", csak nincs a listákban --, tehát ez a mező itt
+   * MIND A KÉT értéket felveheti, szemben a lista-elemmel, ahol alapból
+   * mindig hamis.
+   *
+   * A FELÜLET EBBŐL TUDJA, MELYIK IRÁNYT KÍNÁLJA fel: elrejtést vagy
+   * visszaállítást. E nélkül a gombnak találgatnia kellene, és egy rossz
+   * irányba mutató gomb visszaállítás helyett újra elrejtene.
+   */
+  hidden: boolean;
   number: string | null;
   numberYear: number | null;
   sequence: number | null;
@@ -556,6 +567,17 @@ export interface WorksheetListItem {
   /** A felelősök neve, ahogy a listán megjelenik. Üres, ha még nincs kiosztva. */
   assigneeNames: string[];
   updatedAt: string;
+  /**
+   * EL VAN-E REJTVE. Alapból egyetlen listán sem szerepel rejtett sor, tehát
+   * ez a mező ott mindig `false` -- csak a „Rejtettek is" jelölővel lekért
+   * listában lehet `true`.
+   *
+   * MIÉRT BOOLEAN, ÉS NEM AZ IDŐBÉLYEG: a felületnek arra kell válaszolnia,
+   * hogy a sort meg kell-e jelölni és a visszaállítás gombot ki kell-e
+   * rajzolni. A „mikor" és a „ki" az adatbázisban áll; ha egyszer kell,
+   * KÜLÖN mezőként jöjjön, ne ennek a jelentését tágítsuk.
+   */
+  hidden: boolean;
 }
 
 export interface WorksheetListResponse {

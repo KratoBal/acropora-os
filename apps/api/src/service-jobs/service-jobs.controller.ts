@@ -18,6 +18,7 @@ import {
   MoveServiceJobDto,
   ServiceJobListQueryDto,
   SetServiceJobAssigneesDto,
+  SetServiceJobHiddenDto,
   SetServiceJobPartnerDto,
   SetServiceJobPlacementDto,
 } from "./dto.js";
@@ -224,6 +225,22 @@ export class ServiceJobsController {
    * engedi; hogy KI teheti meg, az ez a jogkör. A kettő szándékosan külön:
    * egy táblába gyúrva egy meg nem hozott döntést rögzítenénk.
    */
+  /**
+   * A JEGY ELREJTESE ES VISSZAALLITASA -- EGY UT, TORZSBEN KAPOTT JELOLOVEL.
+   *
+   * Ugyanaz a jog es ugyanaz az alak, mint a munkalapnal. A rejtes nem uj
+   * hatalom, hanem ugyanannak a jegynek a kezelese.
+   */
+  @Post(":id/hidden")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setHidden(
+    @Param("id") id: string,
+    @Body() input: SetServiceJobHiddenDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setHidden(id, input.hidden, user);
+  }
+
   @Post(":id/move")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   move(

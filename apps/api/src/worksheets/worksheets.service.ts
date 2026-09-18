@@ -3,6 +3,7 @@ import {
   rowBelongsToScope,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
+import { mayHideRows } from "../common/hidden-rows.js";
 import {
   canEditWorksheetEntry,
   describeEntryEditRefusal,
@@ -703,6 +704,37 @@ export class WorksheetsService {
         "A munkalapot időközben lezárták, ezért a piszkozat nem menthető.",
       );
     }
+    return this.detailAfterWrite(id);
+  }
+
+  /**
+   * A LAP ELREJTESE VAGY VISSZAALLITASA.
+   *
+   * EGY METODUS KET IRANYRA, torzsben kapott jeloloval -- nem ket ut. A ket
+   * muvelet ugyanazt a ket mezot irja es ugyanaz a joga; ket kulon uton a
+   * visszaallitas konnyen kapna eltero ellenorzest, es az elteres NEMA lenne.
+   *
+   * A HATOKOR-ELLENORZES ITT ALL, nem a kontrolleren: a `SERVICE_MANAGE` jog
+   * arra valaszol, hogy szabad-e szerkeszteni, a hatokor arra, hogy melyik
+   * oldalrol jott a keres. A ketto nem helyettesiti egymast.
+   */
+  async setHidden(
+    id: string,
+    hidden: boolean,
+    user: AuthenticatedUser,
+  ): Promise<WorksheetDetail> {
+    const scope = partnerScopeOf(user);
+    if (!mayHideRows(scope))
+      throw new ForbiddenException(
+        "A munkalap elrejtése belső művelet: a partner-hozzáférés nem végezheti el.",
+      );
+    /**
+     * A LETEZES ELLENORZESE A SAJAT HATOKORBEN. Enelkul egy ismeretlen
+     * azonositora a Prisma `update` dobna, es a hivo egy nyers
+     * adatbazis-hibat kapna a "nem talalhato" helyett.
+     */
+    await this.requireWorksheet(id, scope);
+    await this.repository.setHidden(id, hidden ? new Date() : null, user.id);
     return this.detailAfterWrite(id);
   }
 

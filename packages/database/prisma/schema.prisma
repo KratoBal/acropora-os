@@ -658,6 +658,9 @@ model User {
   /// Amiket ez a felhasználó adott át a szolgáltatónak, a helyszíni munka
   /// befejeztével.
   handedOverWorksheets       Worksheet[]                   @relation("WorksheetHandedOverBy")
+  /// A LAPOK, AMIKET EZ A KOLLEGA REJTETT EL. A rejtes visszavonhato, tehat
+  /// ez a lista fogyhat is.
+  hiddenWorksheets           Worksheet[]                   @relation("WorksheetHiddenBy")
   /// Amit ez a felhasználó léptetett egy hibajegyen.
   serviceJobEvents           ServiceJobEvent[]             @relation("ServiceJobEventActor")
   assignedWorksheets         WorksheetAssignee[]           @relation("WorksheetAssignee")
@@ -2682,6 +2685,25 @@ model ServiceJob {
   /// az eltérés pedig HIBA, nem két egyenrangú igazság.
   startedAt         DateTime?
   completedAt       DateTime?
+  /**
+   * A REJTES: A JEGY KIKERUL A LISTAKBOL, DE MEGMARAD.
+   * Ugyanaz a fogalom es ugyanaz a par, mint a `Worksheet.hiddenAt` mezonel --
+   * a magyarazat ott all teljes egeszeben. Ket dolog viszont ITT dol el, es
+   * ezert all itt is szoveg:
+   * 1. A JEGY REJTESE NEM VISZI MAGAVAL A LAPJAIT. Egy jegy alatt allhat VALODI
+   * munkalap, es a lanc (jegy -> lap -> teljesitesi igazolas -> szamla) ep
+   * marad. A rejtes PER SOR megy, mind a ket modellen kulon.
+   * 2. NINCS RAJTA IDEGENKULCS, ugyanugy, ahogy az `openedById` es az
+   * `assignedUserId` mezon sincs. Ez NEM masolas: ezen a modellen EGYETLEN
+   * `User` kapcsolat sincs, es az `openedById` fejlece kimondja, miert. Az
+   * azonosito igy akkor is megmarad, ha a felhasznalo sora eltunik.
+   * A MASIK MODELLEN VISZONT VAN KAPCSOLAT, es az elteres szandekos: ott a
+   * kozvetlen szomszed (`handedOverById`) is kapcsolattal all, tehat mind a
+   * ket modellen a SAJAT kornyezetet kovettem. Egy egyseges alak az egyik
+   * helyen idegen test lett volna.
+   */
+  hiddenAt          DateTime?
+  hiddenById        String?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
@@ -2708,6 +2730,8 @@ model ServiceJob {
   /// eseteben: a partner-oldali lista a sajat egysegeire szur, es a `Restrict`
   /// torles-ellenorzes is ezt az oszlopot olvassa.
   @@index([departmentId])
+  /// MINDEN LISTA EZEN SZUR, ALAPBOL -- ugyanaz az ok, mint a munkalapnal.
+  @@index([hiddenAt])
 }
 
 /// KI DOLGOZIK A HIBAJEGYEN. Kapcsolótábla, nem oszlop a jegyen.
@@ -3618,6 +3642,25 @@ model Worksheet {
    */
   handedOverAt         DateTime?
   handedOverById       String?
+  /**
+   * A REJTES: A LAP KIKERUL A LISTAKBOL, DE MEGMARAD.
+   * Balazs kerese, 2026-09-18 08:01 UTC, szo szerint: "tunjenek el" -- a
+   * kerdesre, hogy a probalapok tunjenek el a listakrol VAGY legyenek vegleg
+   * torolve. Az elso agat valasztotta.
+   * IDOBELYEG PLUSZ SZERZO, NEM `isActive` BOOLEAN, es a minta a KOZVETLEN
+   * szomszed (`handedOverAt` plusz `handedOverById`), nem a
+   * `WorksheetDepartment.isActive`. A par a "mikor" es a "ki" kerdesre is
+   * valaszol; egy boolean csak arra, hogy "rejtett-e".
+   * AMIT EZ NEM CSINAL, ES EZ A LENYEG: nem torol. Sem sort, sem fajlt. A lap
+   * dokumentumai mogott VALODI fajlok allnak a taroloban -- egy rejtes, ami
+   * takarit, mar torles, csak mas neven. Es a SZAM is foglalva marad: a
+   * `number` egyedi, es a papiron mar kint levo peldany kulonben egyszer csak
+   * valami masra mutatna.
+   * A RESZLETLAP ELERHETO MARAD azonositoval. Egy rejtett lap nem "nem
+   * letezik", csak nincs a listaban.
+   */
+  hiddenAt             DateTime?
+  hiddenById           String?
   /// A lap, aminek ez a folytatása.
   ///
   /// Egy aláírt munkalap végleges: nem készül róla új verzió, a munka
@@ -3642,6 +3685,10 @@ model Worksheet {
   /// második út.
   serviceJob       ServiceJob?         @relation(fields: [serviceJobId], references: [id], onDelete: SetNull)
   handedOverBy     User?               @relation("WorksheetHandedOverBy", fields: [handedOverById], references: [id], onDelete: SetNull)
+  /// `SetNull`, ugyanugy, mint az atadonal: ha a rejto kollega sora eltunik, a
+  /// lap REJTVE MARAD, csak a nev veszik el. Forditva (kaszkad) egy torolt
+  /// kollega osszes rejtese visszaallna, es a probalapok ujra megjelennenek.
+  hiddenBy         User?               @relation("WorksheetHiddenBy", fields: [hiddenById], references: [id], onDelete: SetNull)
   versions         WorksheetVersion[]
   assignees        WorksheetAssignee[]
   /// `Restrict`: a folytatás a régi lapra hivatkozik mint előzményre, és egy
@@ -3667,6 +3714,9 @@ model Worksheet {
   @@index([continuesWorksheetId])
   /// A hibajegy lapjainak listázása ezen megy: egy hibajegyhez több lap.
   @@index([serviceJobId])
+  /// MINDEN LISTA EZEN SZUR, ALAPBOL. Nem "hatha" index: a rejtes bevezetese
+  /// utan a lista-lekerdezesnek NINCS olyan utja, ami ne nezne ezt az oszlopot.
+  @@index([hiddenAt])
 }
 
 /// Ki dolgozik a munkalapon. Kapcsolótábla és nem `assigneeId` mező, mert

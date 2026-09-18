@@ -39,6 +39,7 @@ import {
   UpdateWorksheetLineDto,
   UpdateWorksheetDocumentCaptionDto,
   UploadWorksheetDocumentDto,
+  SetWorksheetHiddenDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
 import { WorksheetsService } from "./worksheets.service.js";
@@ -296,6 +297,27 @@ export class WorksheetsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.continueFrom(id, user.id);
+  }
+
+  /**
+   * A LAP ELREJTESE ES VISSZAALLITASA -- EGY UT, TORZSBEN KAPOTT JELOLOVEL.
+   *
+   * Balazs kerese, 2026-09-18 08:01 UTC: "tunjenek el". A probalapok
+   * kikerulnek a listakbol, es MEGMARADNAK -- a reszletlap azonositoval
+   * tovabbra is elerheto.
+   *
+   * `SERVICE_MANAGE`, ugyanaz a jog, ami a lap szerkeszteset engedi: a rejtes
+   * nem uj hatalom, hanem ugyanannak a lapnak a kezelese. A hatokor-korlatot
+   * (csak belso ut) a szolgaltatas ellenorzi.
+   */
+  @Post(":id/hidden")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setHidden(
+    @Param("id") id: string,
+    @Body() input: SetWorksheetHiddenDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setHidden(id, input.hidden, user);
   }
 
   @Post(":id/close")
