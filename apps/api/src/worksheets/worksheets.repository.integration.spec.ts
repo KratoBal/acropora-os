@@ -369,6 +369,91 @@ describe(
       });
     });
 
+    /**
+     * A REJTES MERCEJE, ES SZANDEKOSAN KET SORON MER.
+     *
+     * Egy allitas, ami csak annyit mond, hogy a rejtett lap ELTUNT, egy
+     * OSSZEOMLOTT listaval is teljesulne: ha a szuro veletlenul mindent
+     * kizarna, ez az egy allitas zold maradna. Ezert all mellette a masodik
+     * sor, aminek MARADNIA kell -- ez a pozitiv kontroll, ugyanabban a
+     * valaszban.
+     */
+    it("a rejtett lap eltűnik a listából, a másik marad", async () => {
+      const rejtett = await createDraft(bioDepartmentId);
+      const latszik = await createDraft(bioDepartmentId);
+
+      await repository.setHidden(rejtett, new Date(), actorUserId);
+
+      const alap = await repository.list(
+        { page: 1, pageSize: 100 },
+        { kind: "internal" },
+      );
+      const idk = alap.items.map((item) => item.id);
+      assert.equal(idk.includes(rejtett), false, "a rejtett lap ott maradt");
+      assert.ok(idk.includes(latszik), "a NEM rejtett lap is eltűnt");
+    });
+
+    it("a kapcsolóval visszajön, és MEG VAN JELÖLVE", async () => {
+      const rejtett = await createDraft(bioDepartmentId);
+      await repository.setHidden(rejtett, new Date(), actorUserId);
+
+      const mindet = await repository.list(
+        { page: 1, pageSize: 100, includeHidden: true },
+        { kind: "internal" },
+      );
+      const sor = mindet.items.find((item) => item.id === rejtett);
+      assert.ok(sor, "a kapcsolóval sem jött vissza");
+      /*
+        A JELOLO NELKUL a rejtett sor a tobbi kozott allna, es semmi nem
+        mondana meg, melyik melyik -- vagyis a kapcsolo hasznalhatatlan lenne.
+      */
+      assert.equal(sor.hidden, true);
+    });
+
+    it("a visszaállítás után a lap újra a listában van", async () => {
+      const id = await createDraft(bioDepartmentId);
+      await repository.setHidden(id, new Date(), actorUserId);
+      await repository.setHidden(id, null, actorUserId);
+
+      const alap = await repository.list(
+        { page: 1, pageSize: 100 },
+        { kind: "internal" },
+      );
+      assert.ok(alap.items.some((item) => item.id === id));
+      /*
+        A VISSZAALLITAS A REJTO NEVET IS TORLI. Egy mar nem rejtett soron
+        alldogalo regi nev a kovetkezo olvasonak tenynek latszik.
+      */
+      const row = await prisma.worksheet.findUniqueOrThrow({
+        where: { id },
+        select: { hiddenAt: true, hiddenById: true },
+      });
+      assert.deepEqual(row, { hiddenAt: null, hiddenById: null });
+    });
+
+    it("PARTNER hatókörön a kapcsoló NEM hozza vissza", async () => {
+      /*
+        AZ `includeHidden` KERES-PARAMETER, tehat a partner portalja is
+        megadhatja. Ha a hivo dontene el, a probasorok pont ott jelennenek meg,
+        ahol a legrosszabb.
+
+        A POZITIV KONTROLL ITT IS KELL: a partner-lista amugy is szukebb, tehat
+        egy ures valasz semmit nem bizonyitana. A nem rejtett lapnak latszania
+        kell ugyanabban a valaszban.
+      */
+      const rejtett = await createDraft(bioDepartmentId);
+      const latszik = await createDraft(bioDepartmentId);
+      await repository.setHidden(rejtett, new Date(), actorUserId);
+
+      const partnerLista = await repository.list(
+        { page: 1, pageSize: 100, includeHidden: true },
+        { kind: "customer", customerId },
+      );
+      const idk = partnerLista.items.map((item) => item.id);
+      assert.equal(idk.includes(rejtett), false, "a partner látja a rejtettet");
+      assert.ok(idk.includes(latszik), "a partner a nem rejtettet sem látja");
+    });
+
     it("leaves a draft without a number", async () => {
       const id = await createDraft(bioDepartmentId);
       const row = await numberOf(id);

@@ -26,10 +26,17 @@ export const serviceJobsApi = {
     scope: "open" | "all",
     signal?: AbortSignal,
     search?: string,
+    includeHidden?: boolean,
   ) {
     const query = new URLSearchParams({ scope });
     const trimmed = search?.trim();
     if (trimmed) query.set("search", trimmed);
+    /**
+     * CSAK AKKOR KERUL BE, HA KERTEK. Egy `includeHidden=false` ugyanazt
+     * jelentene a szervernek, mint a hianyzo mezo, es minden lekerest
+     * megkulonboztethetetlenne tenne a naplokban attol, amelyik tenyleg kerte.
+     */
+    if (includeHidden) query.set("includeHidden", "true");
     return apiRequest<ServiceJobListResponse>(`${base}?${query}`, token, {
       signal,
     });
@@ -335,6 +342,21 @@ export const serviceJobsApi = {
    * mai válaszra hamis, és épp egy ilyen hamis deklaráció volt a telefonos
    * hiba oka.
    */
+  /**
+   * A JEGY ELREJTESE VAGY VISSZAALLITASA. Ugyanaz az alak, mint a
+   * munkalapnal: a jelolo a torzsben megy, egy uton.
+   *
+   * A valasz URES, es ez nem hianyossag: a rejtes a jegy egyetlen mezojet
+   * mozditja, a reszletlap pedig ugyis ujratoltodik utana. Egy fel-frissitett
+   * reszlet-objektum visszaadasa azt igerne, hogy a tobbi mezo is friss.
+   */
+  setHidden(token: string, id: string, hidden: boolean) {
+    return apiRequest<void>(jobPath(id, "/hidden"), token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hidden }),
+    });
+  },
   move(
     token: string,
     id: string,

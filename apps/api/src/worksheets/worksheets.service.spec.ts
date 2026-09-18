@@ -100,6 +100,8 @@ function worksheetRow(
     serviceJob: null,
     handedOverAt: null,
     handedOverById: null,
+    hiddenAt: null,
+    hiddenById: null,
     customerId: "customer-1",
     continuesWorksheetId: null,
     continues: null,

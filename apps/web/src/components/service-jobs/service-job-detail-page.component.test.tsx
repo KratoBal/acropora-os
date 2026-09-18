@@ -147,6 +147,7 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
       },
     ],
     ...overrides,
+    hidden: false,
   };
 }
 

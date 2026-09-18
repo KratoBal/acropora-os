@@ -87,6 +87,7 @@ function response(
         grossAmount: "38100",
         assigneeNames: ["Sanyi", "Kiss Péter"],
         updatedAt: "2026-08-19T10:00:00.000Z",
+        hidden: false,
       },
       {
         id: "worksheet-2",
@@ -102,6 +103,7 @@ function response(
         grossAmount: "0",
         assigneeNames: [],
         updatedAt: "2026-08-19T11:00:00.000Z",
+        hidden: false,
       },
     ],
     pagination: { page: 1, pageSize: 25, totalItems: 40, totalPages: 2 },
