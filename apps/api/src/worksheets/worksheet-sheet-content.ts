@@ -66,7 +66,6 @@ export interface WorksheetSheetInput {
   customerName: string;
   /** A mi vevőkódunk a partnerről. A partner saját rendszerében ez azonosít. */
   customerNumber: string | null;
-  /** A hibajegy száma, ha a munka egy bejelentésből indult. */
   departmentName: string;
   departmentCode: string;
   subject: string;
