@@ -676,7 +676,11 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
               <ServiceDocumentGallery
                 items={documents}
                 loadBlob={(documentId) =>
-                  serviceJobsApi.downloadDocument(token, jobId, documentId)
+                  serviceJobsApi.downloadDocumentThumbnail(
+                    token,
+                    jobId,
+                    documentId,
+                  )
                 }
                 onDownload={(item) => void downloadDocument(item)}
                 /* A JOG HIANYA ITT A FUGGVENY HIANYA, nem egy `false` zaszlo: igy

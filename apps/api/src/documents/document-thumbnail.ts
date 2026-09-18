@@ -1,5 +1,7 @@
 import type { Logger } from "@nestjs/common";
 
+import { DOCUMENT_THUMBNAIL_VARIANT } from "@acropora/types";
+
 import type { UploadedFileKind } from "../service-assets/uploaded-file-type.js";
 
 /**
@@ -60,13 +62,22 @@ export const THUMBNAIL_MAX_EDGE = 640;
 export const THUMBNAIL_QUALITY = 78;
 
 /**
- * A KERESBEN ALLO VALTOZAT NEVE. Zart halmaz, nem szabad szoveg: egy elgepelt
- * `?variant=thumbnial` igy az EREDETIT adja (a biztonsagos irany), es nem egy
- * ures valaszt.
+ * A KERESBEN ALLO VALTOZAT NEVE -- A KOZOS CSOMAGBOL, NEM ITT LEIRVA.
+ *
+ * Ez a szoveg a HALOZATON megy at: a kliens beirja a keresbe, mi osszevetjuk.
+ * Ket kulon leirt sztringnel egy elgepeles NEM hibazna: az eredetit adnank
+ * vissza, a csempe tovabbra is a teljes meretu fajlt toltene le, es semmi nem
+ * szolna. Egy definicioval ez forditasi kerdesse valik.
  */
-export const THUMBNAIL_VARIANT = "thumbnail";
+export const THUMBNAIL_VARIANT = DOCUMENT_THUMBNAIL_VARIANT;
 
-/** A hivo a keres-parametert adja at; minden mas ertek az eredetit jelenti. */
+/**
+ * A hivo a keres-parametert adja at; minden mas ertek az eredetit jelenti.
+ *
+ * PONTOS EGYEZES, NEM ELOTAG: egy `thumbnail-xyz` erteknek nem szabad
+ * belyegkepet adnia, mert az ugy nezne ki, mintha ertenenk egy parametert,
+ * amit nem.
+ */
 export function wantsThumbnail(variant: string | undefined): boolean {
   return variant === THUMBNAIL_VARIANT;
 }
