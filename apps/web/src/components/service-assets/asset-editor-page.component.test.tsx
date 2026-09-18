@@ -632,3 +632,53 @@ describe("AssetEditorPage teljesítmény-mezője", () => {
     });
   });
 });
+
+/**
+ * A HIBA ES AZ URES TORZSADAT NEM UGYANAZ -- ES EDDIG UGYANUGY NEZETT KI.
+ *
+ * A mertekegyseg-legordulo mind a ket esetben csak a "Nincs megadva" sort
+ * kinalja, es a kezelo abbol azt olvassa ki, hogy nincs mertekegyseg -- nem
+ * azt, hogy most nem tudtuk lekerdezni. Offline ez lenne az ALAPHELYZET.
+ *
+ * A HAROM ALLITAS EGYUTT ER VALAMIT: az elso azt meri, hogy a hiba LATSZIK, a
+ * masodik azt, hogy az URES eredmeny NEM ad hamis riasztast, a harmadik azt,
+ * hogy a sajat lemondasunk nem szamit hibanak. Barmelyik nelkul a tobbi egy
+ * olyan komponensen is teljesulne, ami mindig (vagy soha) kiirja.
+ */
+describe("a mértékegységek hibája megkülönböztethető az ürestől", () => {
+  const UZENET = /A mértékegységek most nem tölthetők be/;
+
+  it("HIBÁNÁL kiírja, hogy nem tölthetők be", async () => {
+    api.detail.mockResolvedValue(asset);
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    unitsOfMeasure.list.mockRejectedValue(new Error("hálózati hiba"));
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    expect(await screen.findByText(UZENET)).toBeTruthy();
+  });
+
+  it("ÜRES törzsadatnál NEM ír ki semmit", async () => {
+    api.detail.mockResolvedValue(asset);
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    unitsOfMeasure.list.mockResolvedValue({ items: [] });
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    await waitFor(() => expect(api.owners).toHaveBeenCalled());
+    expect(screen.queryByText(UZENET)).toBeNull();
+  });
+
+  it("a saját LEMONDÁSUNK nem hiba", async () => {
+    api.detail.mockResolvedValue(asset);
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    unitsOfMeasure.list.mockRejectedValue(
+      new DOMException("megszakítva", "AbortError"),
+    );
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    await waitFor(() => expect(api.owners).toHaveBeenCalled());
+    expect(screen.queryByText(UZENET)).toBeNull();
+  });
+});
