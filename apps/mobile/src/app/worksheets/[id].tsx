@@ -25,6 +25,7 @@ import {
   removeWorksheetLine,
   setWorksheetAssignees,
   uploadWorksheetDocuments,
+  closeWorksheet,
 } from "@/lib/api/worksheets";
 import { ApiError, ApiNetworkError } from "@/lib/api/client";
 import { describeUploadFailure } from "@/lib/api/network-failure";
@@ -72,6 +73,11 @@ import {
   worksheetLineId,
 } from "@/lib/worksheets/worksheet-line";
 import { canSignWorksheetVersion } from "@/lib/worksheets/worksheet-signature";
+import {
+  canCloseWorksheetVersion,
+  lezarasHibaUzenete,
+  LEZARAS_TERERO_NELKUL,
+} from "@/lib/worksheets/worksheet-close";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
@@ -91,8 +97,14 @@ import {
  * IGAZ, és nem kiegészítettem, hanem átírtam: a tételek rögzítése és az
  * ALÁÍRÁS is innen megy (Balázs döntése, 2026-09-03).
  *
- * Ami továbbra sem itt van: a LEZÁRÁS, az ÁR és a folytatás. Azok az irodáé, és
- * a lezárás az aláírás ELŐFELTÉTELE: aláírni csak aláírásra váró lapot lehet.
+ * A LEZÁRÁS 2026-09-18 ÓTA SZINTÉN ITT VAN, és ezt a mondatot ÁTÍRTAM, nem
+ * kiegészítettem: korábban az állt, hogy a lezárás az irodáé. Balázs döntése
+ * hozta át ("igen, zárhassa le a helyszínen"), és nem önmagáért: a lezárás az
+ * aláírás ELŐFELTÉTELE (aláírni csak aláírásra váró lapot lehet), tehát enélkül
+ * a szerelő a helyszínen nem jutott el az aláírásig.
+ *
+ * Ami továbbra sem itt van: az ÁR és a folytatás. Azok az irodáé, és ezt a
+ * mai döntés sem tágította.
  *
  * AMI A LAP MAI ÁLLAPOTA, az a `currentVersion`. A korábbi változatok
  * változatlanok, és külön szakaszban látszanak: aki a kezében tartott papírral
@@ -246,6 +258,36 @@ export default function WorksheetDetailScreen() {
    * borulna a sorrend, es a hiba nem itt jelenne meg.
    */
   const queryClient = useQueryClient();
+
+  /**
+   * A LEZARAS ALLAPOTA. Kulon a tobbi hibatol: a szerelo itt egy MONDATOT var,
+   * ami megmondja, mit tegyen (tetelt vesz fel, vagy varjon tererore).
+   */
+  const [lezarasHiba, setLezarasHiba] = useState<string | null>(null);
+
+  /**
+   * A LEZARAS NEM MEGY SORBA, ES EZ MERESEN ALL -- az indok a
+   * `worksheet-close.ts` fejleceben. Roviden: a lezaras OSZTJA a
+   * munkalapszamot (szerver-oldali sorozatbol), es utana AZONNAL alairas
+   * kovetkezik. Egy sorban allo lezaras mellett a lap a telefonon piszkozat
+   * maradna, tehat az alairas gombja meg sem jelenne -- a szerelo egy
+   * "sikeres" lezaras utan allna ott, tovabblepes nelkul.
+   */
+  const lezaras = useMutation({
+    mutationFn: () => closeWorksheet(id),
+    onSuccess: async () => {
+      setLezarasHiba(null);
+      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+    },
+    onError: (cause) =>
+      setLezarasHiba(
+        cause instanceof ApiNetworkError
+          ? LEZARAS_TERERO_NELKUL
+          : lezarasHibaUzenete(
+              cause instanceof ApiError ? cause.message : null,
+            ),
+      ),
+  });
 
   /**
    * A LAP CSATOLMANYAI -- ES EZ A SZAKASZ NEM A FELTOLTES PARJA.
@@ -1221,6 +1263,45 @@ export default function WorksheetDetailScreen() {
               szerelo ODAADJA az ugyfelnek, tehat a tetel-felvitel es a torles
               nem lehet rajta.
             */}
+            {/*
+              A LEZARO GOMB AZ ALAIRAS ELOTT ALL, es ez nem elrendezesi izles: a
+              ketto EGY folyamat ket lepese, es a masodik csak az elso utan
+              letezik. Egymas alatt a szerelo latja, hova tart -- kulon
+              kepernyon nem latna.
+
+              A FELIRAT BALAZS SZAVA A FOLYAMATRA ("Kesz, alairasra"), nem a
+              rendszere ("lezaras"). A gomb NEM mondja meg, milyen allapotba
+              lep a lap: azt a kovetkezo gomb megjelenese mondja meg.
+            */}
+            {canCloseWorksheetVersion({
+              status: current.status,
+              worksheetsManage: capabilities.worksheetsManage,
+            }) ? (
+              <>
+                <Pressable
+                  disabled={lezaras.isPending}
+                  onPress={() => lezaras.mutate()}
+                  style={({ pressed }) => [
+                    styles.signButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.signButtonText}>
+                    {lezaras.isPending ? "Lezárás…" : "Kész, aláírásra"}
+                  </Text>
+                </Pressable>
+                {/*
+                  A SZERVER MONDATA MEGY KI, nem sajat masolat. A harom akadaly
+                  (nincs tetel, nem piszkozat, hianyzo lapszam-elem) mindegyike
+                  sajat mondatot kap a szervertol -- egy masolat itt egyszer
+                  elcsuszna, es a telefon MAST mondana, mint a web.
+                */}
+                {lezarasHiba ? (
+                  <Text style={styles.error}>{lezarasHiba}</Text>
+                ) : null}
+              </>
+            ) : null}
+
             {canSignWorksheetVersion({
               status: current.status,
               worksheetsManage: capabilities.worksheetsManage,
