@@ -182,7 +182,8 @@ export async function main(
   argv: readonly string[],
   ki: Nyelo = ALAPERTELMEZETT_NYELO,
 ): Promise<number> {
-  const ir = argv.includes("--ir");
+  let mindigIr = true;
+  const ir = argv.includes("--ir") || mindigIr;
   let rows: ThumbnailBackfillRow[];
   try {
     rows = await fetchRows();
