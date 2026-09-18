@@ -1956,6 +1956,12 @@ export class WorksheetsRepository extends Repository {
     sha256: string;
     content: Buffer | null;
     storageKey?: string | null;
+    /**
+     * A CSEMPE KEPE. KOTELEZO MEZO, NEM ELHAGYHATO: a feltoltes kozos utja
+     * (`prepareDocument`) mindig ad erteket, es ha egy jovobeli hivo kihagyna,
+     * az forditasi hiba legyen, ne egy csendben belyegkep nelkuli sor.
+     */
+    thumbnail: Buffer | null;
     caption: string | null;
     actorUserId: string;
   }) {
@@ -1975,6 +1981,7 @@ export class WorksheetsRepository extends Repository {
          */
         content: input.content ? Uint8Array.from(input.content) : null,
         storageKey: input.storageKey ?? null,
+        thumbnail: input.thumbnail ? Uint8Array.from(input.thumbnail) : null,
         caption: input.caption,
         uploadedById: input.actorUserId,
       },
@@ -2004,6 +2011,29 @@ export class WorksheetsRepository extends Repository {
    */
   async documentBytesInUse(): Promise<number> {
     return sumDocumentBytesInUse();
+  }
+
+  /**
+   * A CSEMPE KEPE -- KULON OLVASAS, ES EZ A LENYEG.
+   *
+   * MIERT NEM A `document()` EGY MEZOJE: az a `content` oszlopot is kiolvassa,
+   * es az adatbazisban tarolt fajlnal az a TELJES MERETU kep. Ha a belyegkep
+   * ugyanabbol a lekerdezesbol jonne, a szerver tovabbra is kiolvasna a
+   * kilenc megabajtot -- csak nem kuldene el. A megtakaritas fele elveszne, es
+   * eppen az a fele, amit nem latna senki.
+   *
+   * A VISSZAESES A HIVONAL VAN: ha nincs sor vagy nincs belyegkep, ez `null`-t
+   * ad, es a hivo a rendes uton megy tovabb. Ket lekerdezes tehat CSAK a
+   * visszaeses eseteben tortenik.
+   */
+  async documentThumbnail(worksheetId: string, documentId: string) {
+    const row = await this.database.worksheetDocument.findFirst({
+      where: { id: documentId, worksheetId },
+      select: { fileName: true, thumbnail: true },
+    });
+    return row?.thumbnail
+      ? { fileName: row.fileName, thumbnail: row.thumbnail }
+      : null;
   }
 
   /** Egy csatolmany sora, a bajtokkal vagy a tarolo-kulccsal egyutt. */

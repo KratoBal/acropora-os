@@ -38,6 +38,7 @@
     "unas:webshop-sellable-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-webshop-sellable-backfill.cli.js",
     "unas:kapcsolat-ujraepites": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-kapcsolat-ujraepites.cli.js",
     "unas:kapcsolat-futasok": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-kapcsolat-futasok.cli.js",
+    "documents:thumbnails": "tsc -p tsconfig.json && node --env-file=../../.env dist/documents/document-thumbnail-backfill.cli.js",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist test-dist"
   },
@@ -54,6 +55,7 @@
     "pdfjs-dist": "6.2.108",
     "pdfkit": "0.20.2",
     "redis": "^6.1.0",
+    "sharp": "0.35.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "saxes": "^6.0.0"

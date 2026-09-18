@@ -3121,6 +3121,10 @@ model AssetDocument {
   sha256       String            @db.VarChar(64)
   content      Bytes?
   storageKey   String?
+  /// A CSEMPE KEPE -- egy kicsi, szerver-oldalon eloallitott valtozat. A teljes
+  /// indoklas a `ServiceJobDocument.thumbnail` fejlecen all; a harom
+  /// dokumentum-tabla alakja SZANDEKOSAN azonos.
+  thumbnail    Bytes?
   uploadedById String?
   /// A CSATOLMANY FELIRATA -- MIT LATUNK A KEPEN. Elhagyhato, es utolag is
   /// irhato. A teljes indoklas a `ServiceJobDocument.caption` fejlecen all; a
@@ -3200,6 +3204,10 @@ model WorksheetDocument {
   sha256             String                @db.VarChar(64)
   content            Bytes?
   storageKey         String?
+  /// A CSEMPE KEPE -- egy kicsi, szerver-oldalon eloallitott valtozat. A teljes
+  /// indoklas a `ServiceJobDocument.thumbnail` fejlecen all; a harom
+  /// dokumentum-tabla alakja SZANDEKOSAN azonos.
+  thumbnail          Bytes?
   uploadedById       String?
   /// A CSATOLMANY FELIRATA -- MIT LATUNK A KEPEN. Elhagyhato, es utolag is
   /// irhato. A teljes indoklas a `ServiceJobDocument.caption` fejlecen all; a
@@ -3283,6 +3291,31 @@ model ServiceJobDocument {
   sha256       String                 @db.VarChar(64)
   content      Bytes?
   storageKey   String?
+  /// A CSEMPE KEPE -- EGY KICSI, SZERVER-OLDALON ELOALLITOTT VALTOZAT.
+  ///
+  /// A MERT HIANY (acrobot merese az eles adatbazison, 2026-09-18, a `0e8abe19`
+  /// kartyan): belyegkep-ut nem letezett, tehat a galeria MINDEN csempeje a
+  /// teljes meretu fajlbol keszult. Egy eszkoz-galeria megnyitasa atlagosan
+  /// 5,3 MB letoltes volt, a legrosszabb 9,9 MB -- huszonkilenc kepbol.
+  /// Egyetlen munkalap-fenykep 8,85 MB, es az a telefonon, mobilneten, egy
+  /// csempeben jelent meg.
+  ///
+  /// NEM HELYETTESITI AZ EREDETIT, es ez megkotes, nem megvalositasi reszlet
+  /// (acrobot, 2026-09-18): a letoltes, a PDF es a hiteles peldany tovabbra is
+  /// a teljes meretu fajlbol megy. Ezert KULON oszlop, es ezert nem ir felul
+  /// semmit -- a `content` es a `storageKey` erintetlen.
+  ///
+  /// ELHAGYHATO, ES A HIANY HAROM KULONBOZO ALLAPOTOT JELENTHET: a fajl nem kep
+  /// (PDF), a sor a belyegkep-ut ELOTT keletkezett, vagy az eloallitas
+  /// elhasalt. Mindharomnal a csempe az EREDETIRE esik vissza, es ezt a
+  /// kiszolgalo vegpont donti el -- nem a kliens, mert akkor harom kliensnek
+  /// kellene ugyanazt a szabalyt tudnia.
+  ///
+  /// NEM SZAMIT A KERETBE. A kvota a `sizeBytes` oszlopok osszege, es az az
+  /// EREDETI merete. A belyegkep ehhez kepest ket nagysagrenddel kisebb
+  /// (mert: ~33 kB egy 10,7 MB-os fenykepnel), tehat a keret jelentese nem
+  /// csuszik el erzekelhetoen -- de kimondva all, nem hallgatolagosan.
+  thumbnail    Bytes?
   uploadedById String?
   /// A CSATOLMANY FELIRATA -- MIT LATUNK A KEPEN.
   ///
