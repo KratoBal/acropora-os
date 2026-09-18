@@ -461,4 +461,134 @@ describe("ServiceDocumentGallery", () => {
       screen.getByText("Ehhez a jegyhez még nincs fénykép vagy fájl csatolva."),
     ).toBeTruthy();
   });
+
+  /**
+   * A CSEMPE NEM VAGHATJA LE A SAJAT MUVELETET.
+   *
+   * === A BEJELENTES (Balazs, 2026-09-18, keppel) ===
+   *
+   * A munkalap Csatolmanyok szakaszaban a `Letoltes` gomb FELBEVAGVA latszott
+   * ("Leto"), a meret-sor pedig HAT sorba tordelve. A csempe szelessege a racs
+   * oszlopszelessege (ketto, harom vagy negy oszlop), es a tartalom nem birta el.
+   *
+   * === MIERT A GOMBSOR A SULYOSABB FELE ===
+   *
+   * A csempen `overflow-hidden` all. Egy NEM tordelheto gombsor keskeny oszlopban
+   * kilog, es az `overflow-hidden` LEVAGJA -- vagyis a muvelet felirata hianyzik,
+   * nem csak csunya. Tordelessel a sor a csempe MAGASSAGAT noveli, ami
+   * helyreallithato; a levagott felirat nem.
+   *
+   * === A HATAR, KIMONDVA ===
+   *
+   * Ez az allitas az OSZTALYT meri, nem a pixeleket: a `happy-dom` nem szamol
+   * elrendezest, tehat azt, hogy a gomb TENYLEG befer, itt semmi nem tudja
+   * megmondani. Amit ez fog meg: ha valaki a tordelest kiveszi, a levagas
+   * visszater -- es az a valtozas ma NEMA lenne.
+   */
+  it("a művelet-sor TÖRDELHET, tehát nem vágódhat le a csempe szélén", () => {
+    render(
+      <ServiceDocumentGallery
+        items={[doku()]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+
+    const gomb = screen.getByRole("button", { name: "Letöltés" });
+    const sor = gomb.parentElement;
+    expect(sor?.className).toContain("flex-wrap");
+  });
+
+  /**
+   * A MERET-SOR EGY SOR, ES A SUGOJA UGYANAZT MONDJA.
+   *
+   * A sor `{fajta} · {meret} · {datum}` alaku, es a DATUM FORMATUMA ONMAGABAN
+   * NEGY szokozt tartalmaz ("2026. 09. 18. 9:10"). Tordelesi szabaly nelkul
+   * keskeny oszlopban SZAVANKENT tort -- igy allt elo hat sor egyetlen fenykep
+   * alatt.
+   *
+   * AMIT KULON ALLITUNK, ES NEM A `truncate` MEGLETET: hogy a `title` PONTOSAN
+   * azt mondja, ami a sorban all. A kettot ket kulon kiiras is eloallithatna, es
+   * akkor a sugo MAST mondana, mint a lathato szoveg -- egy levagott sornal epp
+   * a sugo az egyetlen, amibol az egesz kiderul.
+   */
+  it("a méret-sor egy sorban marad, és a súgója betűre ugyanaz", () => {
+    render(
+      <ServiceDocumentGallery
+        items={[doku()]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+
+    const sor = screen
+      .getByText(/·/, { selector: "p" })
+      .closest("p") as HTMLElement;
+
+    expect(sor.className).toContain("truncate");
+    expect(sor.getAttribute("title")).toBe(sor.textContent);
+  });
+
+  /**
+   * AZ OSZLOPSZÁM A BEFOGLALÓ DOBOZÉ, NEM A KÉPERNYŐÉ.
+   *
+   * Ez a galéria HÁROM helyen fut, és az egyikük egy 288 pixeles oldalsó hasáb
+   * (a munkalap adatlapja). Nézetablak-töréspontokkal ott is négy oszlop állt
+   * széles monitoron, tehát ~52 pixeles csempe -- amiben a `Letöltés` gomb
+   * (75 pixel, acrobot mérése 2026-09-18 10:0x) fizikailag nem fér el.
+   *
+   * MI PIROSÍT: a visszatérés `sm:` / `lg:` alakra. Az a változtatás „egyszerűbb"
+   * kódnak látszik, és a hibája CSAK széles monitoron, CSAK a szűk hasábban jön
+   * elő -- vagyis pontosan ott, ahol senki nem nézi.
+   *
+   * AMIT EZ AZ ÁLLÍTÁS NEM MÉR, KIMONDVA: a tényleges pixeleket. A happy-dom nem
+   * számol elrendezést. A pixel-méréseket acrobot végezte éles stíluslappal; ez
+   * az állítás a MECHANIZMUST őrzi, ami azokat érvényre juttatja.
+   */
+  it("az oszlopszám a BEFOGLALÓ DOBOZHOZ igazodik, nem a nézetablakhoz", () => {
+    render(
+      <ServiceDocumentGallery
+        items={[doku()]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+
+    const racs = screen.getByRole("list");
+
+    expect(racs.className).toMatch(/@\w+:grid-cols-\d/);
+    expect(racs.className).not.toMatch(
+      /(?:^|\s)(?:sm|md|lg|xl|2xl):grid-cols-/,
+    );
+    // A mérethivatkozási pont a galéria SAJÁT doboza: enélkül a `@md:` alakok
+    // a legközelebbi külső konténerhez igazodnának, vagy sehová.
+    expect(racs.closest("[class~='@container']")).not.toBeNull();
+  });
+
+  /**
+   * SZŰK DOBOZBAN EGY OSZLOP AZ ALAP.
+   *
+   * MI PIROSÍT: a `grid-cols-2` visszatérése alapként. A 288 pixeles hasábban
+   * (belső kerettel 244 pixel) két oszlop 116 pixeles csempét ad -- a két gomb
+   * egymás mellett 213 pixelt kér, tehát tördelne, és a méret-sor három sorba
+   * törne. Egy oszlopnál a csempe a teljes 244 pixel.
+   */
+  it("szűk dobozban EGY oszlop az alap, nem kettő", () => {
+    render(
+      <ServiceDocumentGallery
+        items={[doku()]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+
+    const racs = screen.getByRole("list");
+
+    expect(racs.className).toMatch(/(?:^|\s)grid-cols-1(?:\s|$)/);
+    expect(racs.className).not.toMatch(/(?:^|\s)grid-cols-[2-9](?:\s|$)/);
+  });
 });
