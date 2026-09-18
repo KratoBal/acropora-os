@@ -12,6 +12,7 @@ import {
   type WorksheetSheetInput,
 } from "./worksheet-sheet-content.js";
 import {
+  requireClosedSheetLabel,
   worksheetSheetDocument,
   worksheetSheetFileName,
 } from "./worksheet-sheet-document.js";
@@ -209,5 +210,47 @@ describe("a fájl neve a munkalapszámból", () => {
       bemenet({ label: "BIO-2026-009/2" }),
     );
     assert.equal(doc.fileName, "munkalap-BIO-2026-009-2.pdf");
+  });
+});
+
+/**
+ * A LEZÁRÁSI ÚT UTÓFELTÉTELE -- ÉS AMIÉRT KÜLÖN `describe` A NÉVADÓ MELLETT.
+ *
+ * A FÖLÖTTE ÁLLÓ készlet azt méri, hogy szám nélkül `munkalap-piszkozat.pdf`
+ * lesz a név, és az HELYES: a piszkozat is kap lapot. Ez a kettő tehát
+ * SZÁNDÉKOSAN ellentmond egymásnak, csak más úton -- és ha valaki a kettőt egy
+ * szabállyá vonja össze, az egyik út elromlik. A komment ezért áll itt.
+ */
+describe("a lezáráskor keletkező lapnak számozottnak kell lennie", () => {
+  it("szám nélkül MEGÁLL, nem ad piszkozat-nevet a lezárt lapnak", () => {
+    /*
+      MI PIROSÍT: ha az őrző kikerül a lezárási útból, vagy ha `null` címkét is
+      átenged. Ez a NÉMA hiba: enélkül a fájl elkészülne, a lezárás sikerülne,
+      és a vevő piszkozat nevű dokumentumot kapna egy számozott munkalapról.
+    */
+    assert.throws(
+      () => requireClosedSheetLabel(null, "worksheet-1"),
+      /worksheet-1/,
+      "szám nélkül nem szabad lapot előállítani a lezárási úton",
+    );
+  });
+
+  it("üres szöveg ugyanúgy megáll, mint a hiányzó szám", () => {
+    // A `worksheetSheetFileName` az ÜRES címkére is piszkozat-nevet ad (a
+    // `trim()` után), tehát a két bemenet ugyanazt a néma hibát adná.
+    assert.throws(() => requireClosedSheetLabel("", "worksheet-2"));
+  });
+
+  it("A LEGKÖZELEBBI HELYES ESET ÁTMEGY, és változatlanul adja vissza", () => {
+    /*
+      POZITÍV KONTROLL, és szándékosan nem egy „nyilvánvalóan jó" érték: a
+      perjeles alak az, ami a valódi lezárásból jön (`BIO-2026-001/1`). Egy túl
+      szigorú őrző -- például ami a perjelet is kifogásolná -- pontosan ezen az
+      egy soron bukna el, és e nélkül a kontroll nélkül minden zöld maradna.
+    */
+    assert.equal(
+      requireClosedSheetLabel("BIO-2026-001/1", "worksheet-3"),
+      "BIO-2026-001/1",
+    );
   });
 });

@@ -46,6 +46,12 @@ import {
 } from "./worksheet-close-blockers.js";
 import { buildWorksheetNumber, worksheetYear } from "./worksheet-number.js";
 import {
+  requireClosedSheetLabel,
+  worksheetSheetDocument,
+} from "./worksheet-sheet-document.js";
+import { worksheetSheetInput } from "./worksheet-sheet-mapping.js";
+import {
+  toWorksheetDetail,
   toWorksheetListItem,
   worksheetDetailInclude,
   worksheetSummaryInclude,
@@ -902,17 +908,23 @@ export class WorksheetsRepository extends Repository {
    * tarolot kapnak, tehat egy ottani adatbazis-hivas kivezetne oket a fedes
    * alol. (Merve: huszonhat teszt bukott el, amikor eloszb odatettem.)
    */
-  private async detailRow(id: string): Promise<WorksheetDetailRow | null> {
-    const sor = await this.detailRowInner(id);
+  private async detailRow(
+    id: string,
+    client: TransactionClient = this.database,
+  ): Promise<WorksheetDetailRow | null> {
+    const sor = await this.detailRowInner(id, client);
     if (!sor) return sor;
     return {
       ...sor,
-      departmentPath: await unitPathFor(this.database, sor.department.id),
+      departmentPath: await unitPathFor(client, sor.department.id),
     };
   }
 
-  private detailRowInner(id: string): Promise<WorksheetDetailRow | null> {
-    return this.database.worksheet.findUnique({
+  private detailRowInner(
+    id: string,
+    client: TransactionClient = this.database,
+  ): Promise<WorksheetDetailRow | null> {
+    return client.worksheet.findUnique({
       where: { id },
       include: worksheetDetailInclude,
     });
@@ -1206,7 +1218,97 @@ export class WorksheetsRepository extends Repository {
         });
       }
 
+      /*
+        A LAP ITT KESZUL EL, A SZAM-KIOSZTAS UTAN -- ES EZ A SORREND A LENYEG,
+        NEM A HELY. A fajl neve a lap szamabol epul
+        (`formatWorksheetVersionLabel` -> `worksheetSheetFileName`), es szam
+        nelkul `munkalap-piszkozat.pdf` lesz belole. Aki a tranzakcio ELEJEN
+        olvasott sorbol dolgozik, tehat PISZKOZAT-NEVET AD EGY SZAMOZOTT
+        LAPNAK, es a hiba NEMA: a fajl elkeszul, a lezaras sikerul, es a vevo
+        kap egy dokumentumot, aminek a neve nem az ove.
+      */
+      await this.writeGeneratedSheet(
+        transaction,
+        worksheet.id,
+        current.id,
+        actorUserId,
+      );
+
       return { ok: true } as const;
+    });
+  }
+
+  /**
+   * A LEZARASKOR KELETKEZO LAP. A hivoja a `close()`, a tranzakcion belulrol.
+   *
+   * A SZAMOT NEM PARAMETERKENT VESSZUK AT, HANEM UJRAOLVASSUK. A kiosztas
+   * ugyanebben a tranzakcioban mar megtortent, tehat a sor magatol a helyes
+   * szamot hozza -- es igy nincs ket hely, ahol ugyanaz az ertek all. (A
+   * tranzakcio elejen olvasott `worksheet.number` elso lezarasnal meg `null`.)
+   *
+   * ES HA A LAP NEM KESZUL EL, A LEZARAS SEM: a kivetel visszagorgeti a
+   * tranzakciot. A masik irany CSENDBEN hagyna hibas allapotot -- egy
+   * alairasra varo munkalap, aminek nincs hiteles dokumentuma --, es ugyanezt
+   * a dontest hozza a `worksheetSheetDocument` is, amikor ervenytelen PDF-nel
+   * inkabb dob, mint hogy a sort letrehozza.
+   */
+  private async writeGeneratedSheet(
+    transaction: TransactionClient,
+    worksheetId: string,
+    versionId: string,
+    actorUserId: string,
+  ): Promise<void> {
+    const row = await this.detailRow(worksheetId, transaction);
+    if (!row)
+      throw new Error(
+        `A lezárt munkalap (${worksheetId}) nem olvasható vissza a lap előállításához.`,
+      );
+
+    const detail = toWorksheetDetail(row);
+    /*
+      A KET VERZIO-AZONOSITO EGYEZESE ORZO, NEM FORMASAG. A `close()` a
+      lefoglalt verziot nevezi meg; a `currentVersion` a MOSTANI legmagasabbat.
+      A ketto ma egybeesik, de a Prisma alapertelmezett izolacioja mellett egy
+      parhuzamos tranzakcio kozben uj verziot vihet be -- es akkor egy MASIK
+      verzio tartalmabol keszulne fajl, a REGI verzio azonositojara kotve. A
+      sor letrejonne, a lezaras sikerulne, es semmi nem szolna.
+    */
+    if (detail.currentVersion.id !== versionId)
+      throw new Error(
+        `A lezárt verzió (${versionId}) közben megváltozott (${detail.currentVersion.id}); a lapot nem állítjuk elő.`,
+      );
+
+    /*
+      A SZAM ELERHETOSEGE A FAJL ELOALLITASA ELOTT -- UTOFELTETEL, NEM UJ
+      FELTETEL. Az indoklas a `requireClosedSheetLabel` fejlecen all: szam
+      nelkul a fajl ELKESZULNE, piszkozat-nevvel, es a hiba nema maradna.
+    */
+    requireClosedSheetLabel(detail.currentVersion.label, worksheetId);
+
+    const entries = await this.entries(worksheetId, transaction);
+    const document = await worksheetSheetDocument(
+      worksheetSheetInput(
+        detail,
+        detail.currentVersion,
+        entries?.rows.map((entry) => entry.body) ?? [],
+      ),
+    );
+
+    await transaction.worksheetDocument.create({
+      data: {
+        worksheetId,
+        worksheetVersionId: versionId,
+        type: "GENERATED_SHEET",
+        fileName: document.fileName,
+        contentType: document.contentType,
+        sizeBytes: document.sizeBytes,
+        sha256: document.sha256,
+        // A bajtok masolva mennek be, ugyanugy, mint az `addDocument`-ben: a
+        // Prisma `Uint8Array`-t var, es a `Buffer` alosztaly.
+        content: Uint8Array.from(document.content),
+        uploadedById: actorUserId,
+      },
+      select: { id: true },
     });
   }
 
@@ -1598,7 +1700,10 @@ export class WorksheetsRepository extends Repository {
    * ebbol a kettobol dol el, es enelkul a hivo minden bejegyzesnel kulon
    * kerdezne ra ugyanarra a ket azonositora.
    */
-  async entries(worksheetId: string): Promise<{
+  async entries(
+    worksheetId: string,
+    client: TransactionClient = this.database,
+  ): Promise<{
     worksheetCreatedById: string | null;
     serviceJobOpenedById: string | null;
     rows: {
@@ -1609,7 +1714,7 @@ export class WorksheetsRepository extends Repository {
       updatedAt: Date;
     }[];
   } | null> {
-    const worksheet = await this.database.worksheet.findUnique({
+    const worksheet = await client.worksheet.findUnique({
       where: { id: worksheetId },
       select: {
         createdById: true,
