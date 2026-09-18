@@ -219,6 +219,13 @@ export function worksheetListWheres(
   userWhereWithoutStatus: Prisma.WorksheetWhereInput,
   statusWhere: Prisma.WorksheetWhereInput,
   includeHidden?: boolean,
+  /**
+   * LATHAT-E EGYALTALAN REJTETT SORT. A `SERVICE_HIDE` jog megletet a hivo
+   * adja at TENYKENT; a DONTES (hatokor ES jog egyutt) a `hiddenRowsWhere`-ben
+   * marad. Alapertelmezese `false`: aki elfelejti atadni, KEVESEBBET lat, nem
+   * tobbet -- a nema irany a szigorubb.
+   */
+  mayHide = false,
 ): { list: Prisma.WorksheetWhereInput; counts: Prisma.WorksheetWhereInput } {
   /**
    * A REJTES SZURJE `AND` AGKENT, UGYANOTT, AHOL A HATOKOR -- ES UGYANABBOL A
@@ -229,7 +236,7 @@ export function worksheetListWheres(
    * amit a felhasznalo hibanak lat, es amirol nem tudja megmondani, melyik
    * oldal hazudik.
    */
-  const hidden = hiddenRowsWhere(scope, includeHidden);
+  const hidden = hiddenRowsWhere(scope, includeHidden, mayHide);
   return {
     list: {
       AND: [
@@ -551,7 +558,7 @@ export class WorksheetsRepository extends Repository {
            * A hatokor itt mindig belso is lehetne, megis a kozos fuggveny dont,
            * hogy a szabaly EGY helyen alljon.
            */
-          hiddenRowsWhere(scope, false),
+          hiddenRowsWhere(scope, false, false),
           ...attachableWorksheetFilters(customerId),
         ],
       },
@@ -730,6 +737,8 @@ export class WorksheetsRepository extends Repository {
   async list(
     query: WorksheetListQueryDto,
     scope: PartnerScope,
+    /** Lasd a `worksheetListWheres` azonos nevu parameteret. */
+    mayHide = false,
   ): Promise<WorksheetListResponse> {
     /**
      * A szűrt azonosító-halmaz ELŐBB áll elő, mint a `where`, mert a `where`-be
@@ -783,6 +792,7 @@ export class WorksheetsRepository extends Repository {
       userWhereWithoutStatus,
       latestStatusIds ? { id: { in: latestStatusIds } } : {},
       query.includeHidden,
+      mayHide,
     );
 
     const [rows, totalItems, counts] = await Promise.all([

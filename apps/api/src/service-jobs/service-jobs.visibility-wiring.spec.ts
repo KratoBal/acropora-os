@@ -55,10 +55,23 @@ function serviceWith(kapott: {
   return new ServiceJobsService(repository as ServiceJobsRepository);
 }
 
-const belsos = { id: "user-1" } as AuthenticatedUser;
+/**
+ * A SZEREP 2026-09-18 OTA KOTELEZO A FIXTURE-ON, ES EZ NEM FORMASAG.
+ *
+ * A rejtes-szuro azota `hasPermission`-t hiv, az pedig a `ROLE_PERMISSIONS`
+ * tablat INDEXELI a szereppel -- egy szerep nelkuli fixture-on `TypeError`-t
+ * dob, nem hamisat ad. Vagyis a fixture hianya HANGOS, es ez jo: egy csendes
+ * `false` azt jelentette volna, hogy a spec a jog-agat meri, holott csak a
+ * hianyzo mezot.
+ *
+ * `ADMIN`, mert a spec allitasai a KAPCSOLO hatasat merik -- ahhoz jog kell.
+ * A jog-tengelyt kulon spec meri (`hidden-rows.spec.ts`, `service-hide-scope.spec.ts`).
+ */
+const belsos = { id: "user-1", role: "ADMIN" } as AuthenticatedUser;
 const partner = {
   id: "user-2",
   supplierId: "sup-1",
+  role: "PARTNER_SERVICE",
 } as unknown as AuthenticatedUser;
 
 /**

@@ -138,6 +138,24 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
+  /**
+   * A REJTES SAJAT JOG, ES NEM A `canManage`.
+   *
+   * Balazs kerese, 2026-09-18 11:09 UTC, mar eles hasznalat kozben: "a gomb
+   * ottmarad es megnyomhato barmelyik lapnal, jegynel. Azt szeretnem, hogy csak
+   * admin jogos felhasznalonal jelenjen meg".
+   *
+   * A `SERVICE_MANAGE` a napi szerviz-munka jogkore: a sajat szerelo
+   * kollegaink ES a partner-fiokok is viselik. A `SERVICE_HIDE` csak OWNER es
+   * ADMIN.
+   *
+   * ES EZ CSAK A FELULET. A vegpont a felulet nelkul is hivhato, ezert a
+   * szerver is kapuz (`RequirePermissions(SERVICE_HIDE)` plusz a szolgaltatas
+   * sajat ellenorzese). Egy UI-only kapu nem kapu.
+   */
+  const canHide = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SERVICE_HIDE),
+  );
   const token = session?.token ?? "";
 
   const load = useCallback(
@@ -841,7 +859,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   ES A JEGY REJTESE NEM VISZI MAGAVAL A MUNKALAPJAIT -- a
                   mondat ott all a gomb alatt, mert ezt a felhasznalo nem tudja
                   kitalalni, es a kovetkezmenye a lapokon latszana. */}
-              {canManage ? (
+              {canHide ? (
                 <div className="space-y-2 border-t pt-3">
                   <Button
                     variant="secondary"
