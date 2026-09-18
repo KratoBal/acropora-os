@@ -155,4 +155,67 @@ describe("az eszköz matricakódja a telefonon", () => {
       "a mentett másolat típusa nem hordozza a labelCode-ot: undefined lenne",
     );
   });
+  /**
+   * A FELIRAT: A TUKOR, A MEGJELENITES ES A SZERKESZTES -- HAROM KULON ALLITAS.
+   *
+   * MIERT NEM EGY: a harom KULON tud elromlani, es a hianyuk MAS alaku. A mezo
+   * nelkul a felirat `undefined` lenne; a megjelenites nelkul a szerver ertekе
+   * megjon es senki nem latja; a szerkesztes nelkul csak a webrol lehetne
+   * feliratozni. Egy kozos allitas a harmat egy pirosba mosna.
+   *
+   * A HATAR UGYANAZ, MINT A FENTIEKNEL: ez a FORRAST olvassa, nem a kepernyot
+   * rendereli. Azt meri, hogy a kepernyo a helyes hivast irja le.
+   */
+  it("a mobil típus-másolata ismeri a caption mezőt", () => {
+    /*
+      A `string | null` ALAK SZAMIT, nem csak a nev. A kozos tipus is igy all,
+      es az indok ott all kiirva: egy elhagyhato mezo mellett a "nincs felirat"
+      es a "szandekosan ures felirat" megkulonboztethetetlen lenne.
+    */
+    assert.match(olvas(KLIENS), /^ {2}caption: string \| null;$/m);
+  });
+
+  it("a felirat MEGJELENIK a csempén, és csak ha van", () => {
+    /*
+      A FELTETELES ALAK A LENYEG. Felirat nelkul a sor SEM all ott: egy ures
+      `Text` helyet foglalna a 104 pontos csempen, es ugy nezne ki, mintha
+      betoltodne valami.
+    */
+    assert.match(olvas(KEPERNYO), /\{kep\.caption \? \(/);
+  });
+
+  it("a felirat SZERKESZTHETO, és a mező a manage jogon ÁLL", () => {
+    const kepernyo = olvas(KEPERNYO);
+    assert.match(kepernyo, /setAssetDocumentCaption/);
+    /*
+      A KAPU A JOGON ES A HALOZATON EGYUTT ALL. Offline (`fromCache`) a mentes
+      nem menne at, es egy letiltott gomb azt igerne, hogy van mit megnyomni.
+      A webes minta ugyanez: ott a fuggvenyt NEM adjak at, nem gombot tiltanak.
+    */
+    assert.match(
+      kepernyo,
+      /capabilities\?\.assetsManage && !fromCache && nagyKepSor \? \(/,
+    );
+  });
+
+  it("az ÜRES mező TÖRLÉST jelent: `null` megy le, nem üres szöveg", () => {
+    /*
+      MI PIROSIT: ha valaki `felirat.trim()`-et ad at feltetel nelkul. Akkor a
+      torles ures stringkent menne le, es a szerver ket kulonbozo allapotot
+      kapna ugyanarra a szandekra.
+    */
+    assert.match(
+      olvas(KEPERNYO),
+      /felirat\.trim\(\) \? felirat\.trim\(\) : null/,
+    );
+  });
+
+  it("a nagyban nyitott kép piszkozata a SZERVER értékéből indul", () => {
+    /*
+      MI PIROSIT: ha a megnyitas nem allitja a piszkozatot. Akkor az elozo kep
+      felirata atlatszana a kovetkezore, es a szerelo azt irna felul, amit lat
+      -- a hiba NEMA lenne, mert a mezoben all szoveg.
+    */
+    assert.match(olvas(KEPERNYO), /setFelirat\(kep\.caption \?\? ""\)/);
+  });
 });
