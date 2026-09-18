@@ -44,6 +44,36 @@ describe("az új munkalap űrlapja", () => {
     });
   });
 
+  /**
+   * A JEGYBOL OROKOLT KET LISTA ATMEGY -- ES EZ A POZITIV KONTROLL A FENTI
+   * "nem kuld tobbet" allitashoz.
+   *
+   * Nelkule a fenti allitas attol is zold lenne, ha a ket mezo SOHA nem kerulne
+   * a torzsbe -- vagyis epp a mai hibatol (a telefon nem kuldi oket).
+   */
+  it("a jegyből örökölt eszköz és felelős átmegy a törzsbe", () => {
+    const r = buildWorksheetCreatePayload({
+      ...teljes,
+      assetIds: ["a-1", "a-2"],
+      assigneeIds: ["u-1"],
+    });
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.ok ? r.payload.assetIds : null, ["a-1", "a-2"]);
+    assert.deepEqual(r.ok ? r.payload.assigneeIds : null, ["u-1"]);
+  });
+
+  /**
+   * AZ ISMETLODES EGYSZER MEGY KI. A szerver amugy is kiszurné, de a sorban allo
+   * torzset ember is olvassa, es ket azonos azonosito ott zavaro.
+   */
+  it("az ismétlődő azonosító egyszer szerepel a törzsben", () => {
+    const r = buildWorksheetCreatePayload({
+      ...teljes,
+      assetIds: ["a-1", "a-1"],
+    });
+    assert.deepEqual(r.ok ? r.payload.assetIds : null, ["a-1"]);
+  });
+
   it("partner nélkül a PARTNER mezőnél áll meg", () => {
     const r = buildWorksheetCreatePayload(ures);
     assert.equal(r.ok, false);
