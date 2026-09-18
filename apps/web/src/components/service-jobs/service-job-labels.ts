@@ -21,7 +21,15 @@ export const serviceJobStatusLabel: Record<ServiceJobStatusValue, string> = {
   WAITING_FOR_PARTS: "Alkatrészre vár",
   WAITING_FOR_CUSTOMER: "Ügyfélre vár",
   COMPLETED: "Elkészült",
-  CANCELLED: "Elállt",
+  /**
+   * BALAZS DONTESE, 2026-09-18 07:13 UTC: "legyen a Meghiúsult".
+   *
+   * A BELSO KULCS MARAD `CANCELLED`. Csak a magyar felirat valtozik -- az
+   * adatbazis, az atmenet-szabaly es az API valasza valtozatlan. Es a PARTNER
+   * EZT A SZOT NEM LATJA: neki a szerver kulon allapot-feliratot kuld
+   * (`partnerStatusLabel`), tehat ott nincs mit atirni.
+   */
+  CANCELLED: "Meghiúsult",
 };
 
 /**
@@ -38,7 +46,7 @@ export const serviceJobStatusLabel: Record<ServiceJobStatusValue, string> = {
  * ket kulonbozo alakot kellene tartani ugyanarra a szovegre.
  */
 const NOTE_HINT: Partial<Record<ServiceJobStatusValue, string>> = {
-  CANCELLED: "elálláskor azt, miért nem lesz belőle munka",
+  CANCELLED: "meghiúsuláskor azt, miért nem lesz belőle munka",
   WAITING_FOR_PARTS: "alkatrészre váráskor azt, milyen alkatrész és mikorra",
   WAITING_FOR_CUSTOMER: "ügyfélre váráskor azt, mit kérdeztünk és mikor",
 };
