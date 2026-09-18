@@ -34,6 +34,24 @@
 /** A lista egy sora, ahogy a szerver adja. */
 export interface ServiceDocumentSummary {
   id: string;
+  /**
+   * A DOKUMENTUM FAJTAJA, AHOGY A SZERVER KULDI -- ES SZANDEKOSAN SIMA
+   * `string`, NEM UNIO.
+   *
+   * Ezt az osszefoglalot KET kulonbozo tartomany hasznalja a telefonon (a
+   * munkalap es a hibajegy csatolmanyai), es a ket oldalnak MAS az enumja a
+   * szerveren. Egy kozos unio tehat vagy hazudna (olyan erteket igerne, amit az
+   * egyik oldal nem tud eloallitani), vagy mind a kettot fel kellene sorolnia --
+   * es akkor mind a ket oldalon lehetne ragaztatni olyan ertekre, ami ott soha
+   * nem fordul elo.
+   *
+   * A webes oldalon EPP EZ A HIBA allt 2026-09-18-ig: a megosztott unio harom
+   * LEHETETLEN erteket sorolt, es azt az egyet nem ismerte, amire szukseg volt.
+   *
+   * ELHAGYHATO: ha egy valasz nem kuldene, a hivo NEM ismeri fel kulon
+   * fajtanak -- vagyis a mai viselkedesre esik vissza, nem allit valotlant.
+   */
+  type?: string;
   fileName: string;
   contentType: string;
   sizeBytes: number;

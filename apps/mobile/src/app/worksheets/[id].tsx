@@ -53,6 +53,10 @@ import {
 } from "@/lib/worksheets/worksheet-entry";
 import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
 import {
+  describeIssuedSheet,
+  splitIssuedSheet,
+} from "@/lib/worksheets/worksheet-issued-sheet";
+import {
   describeDocuments,
   describeUnviewableDocument,
   formatDocumentSize,
@@ -625,7 +629,16 @@ export default function WorksheetDetailScreen() {
       : null;
   const current = data?.currentVersion;
   const queuedLinesNotice = describeQueuedWorksheetLines(queuedLines.data ?? 0);
-  const csatolmanyok = documents.data?.items ?? [];
+  /**
+   * A KIADOTT LAP KULON SZAKASZBA KERUL, ES A SZAM SEM SZAMOLJA BELE.
+   *
+   * Eddig a lezaraskor kiadott hiteles lap a "Csatolmanyok" kozott allt, es a
+   * fejlec szama is beleszamolta: HARMAT allitott ott, ahol ketto csatolmany
+   * van es egy kiadott lap. A besorolas es a szam volt rossz, nem a hozzaferes.
+   */
+  const { issued: kiadottLapok, attachments: csatolmanyok } = splitIssuedSheet(
+    documents.data?.items ?? [],
+  );
   const kepek = csatolmanyok.filter((d) => isViewableImage(d.contentType));
   const egyebek = csatolmanyok.filter((d) => !isViewableImage(d.contentType));
   const csatolmanyNotice = describeDocuments({
@@ -890,6 +903,34 @@ export default function WorksheetDetailScreen() {
               nem rendezi at a szakaszt. ELORE NEM EPITEM MEG: a mezo ma nem
               letezik, es egy ures helykitolto azt allitana, hogy letezik.
             */}
+            {/*
+              A KIADOTT LAP SAJAT SZAKASZA, A CSATOLMANYOK ELOTT.
+
+              Elol all, mert ez az, amire a partner hivatkozni fog -- a
+              csatolmanyok bizonyitekok a munkarol, ez maga a dokumentum.
+
+              A SOR MEGTARTJA AZ UTBAIGAZITAST ("a webes feluleten nyithato
+              meg"): a telefonon EGYETLEN dokumentumra sincs letoltesi ut, tehat
+              ez az egyetlen mondat, ami megmondja, hol lehet megnyitni. E
+              nelkul a szam helyre allna, es csereben az utbaigazitas tunne el.
+
+              URESEN NEM ALL OTT: piszkozat lapnal meg nincs kiadott peldany, es
+              egy ures szakasz a telefon kis kepernyojen csak gorgetest visz --
+              szemben a webbel, ahol a hely amugy is megvan. A lezaras utan a
+              szakasz magatol megjelenik.
+            */}
+            {kiadottLapok.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>A kiadott munkalap</Text>
+                <View style={styles.card}>
+                  {kiadottLapok.map((doc) => (
+                    <Text key={doc.id} style={styles.muted}>
+                      {describeIssuedSheet(doc)}
+                    </Text>
+                  ))}
+                </View>
+              </>
+            ) : null}
             <Text style={styles.sectionTitle}>
               Csatolmányok ({csatolmanyok.length})
             </Text>
