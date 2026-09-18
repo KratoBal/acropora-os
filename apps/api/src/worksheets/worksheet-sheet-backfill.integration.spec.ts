@@ -96,12 +96,28 @@ describe(
         data: { customerId: customer.id, code: "SHT", name: "Kiadott lap" },
       });
 
+      /*
+        A SZAM HAROM MEZOBOL ALL, ES AZ ADATBAZIS EZT KIKENYSZERITI.
+
+        A `Worksheet_number_parts_check` megkoveteli, hogy a `number`, a
+        `numberYear` es a `sequence` EGYUTT alljon vagy egyutt hianyozzon. Az
+        elso fixturam csak a `number`-t adta meg, es a CI-ben elhasalt
+        (23514) -- helyesen: egy szam ev es sorszam nelkul nem szam, csak egy
+        sztring.
+
+        A `sequence` legalabb 1 (`Worksheet_sequence_check`), ezert megy a
+        szamlalo egytol.
+      */
+      let sorszam = 0;
       const lap = async (nev: string, szam: string | null, lezart: boolean) => {
+        sorszam += 1;
         const ws = await prisma.worksheet.create({
           data: {
             customerId: customer.id,
             departmentId: department.id,
             number: szam,
+            numberYear: szam ? 2026 : null,
+            sequence: szam ? sorszam : null,
             versions: {
               create: {
                 version: 1,
