@@ -113,3 +113,52 @@ export function describeThumbnailGain(
     `(${(100 / arany).toFixed(2)}%, ${arany.toFixed(0)}x kisebb)`
   );
 }
+
+/**
+ * A KIIRT LEFEDETTSEGI SOR VISSZAOLVASASA.
+ *
+ * === MIERT ITT ALL, ES NEM A TESZTBEN ===
+ *
+ * Eloszor a integracios spec BELSEJEBEN irtam meg. Ott NEM merheto helyben (a
+ * suite Postgres nelkul kihagyva fut), es pontosan ez utott vissza: az elso
+ * alakom csak a NEM-URES mondatot ismerte, az URES-et nem -- es epp az ures
+ * allapot az, amiben az alapvonal keszul. A hiba nem billego volt, hanem
+ * SZERKEZETI, es csak a CI-ben latszott, egy `hookFailed`-del.
+ *
+ * Itt viszont tiszta fuggveny: a sajat egysegteszte mind a HAROM valodi alakot
+ * meri, amit a `describeThumbnailCoverage` eloallit.
+ *
+ * === MIERT A KIIRT SZOVEGBOL, ES NEM UJRA SZAMOLVA ===
+ *
+ * A hivo (a teszt) epp azt meri, hogy amit a parancs MOND, az egyezik azzal,
+ * ami TORTENT. Egy fuggetlen ujraszamolas ugyanazt adna, es a kettejuk
+ * elterese -- vagyis a kerdes -- kimaradna.
+ */
+export interface ThumbnailCoverageNumbers {
+  kepSor: number;
+  lefedve: number;
+  hianyzik: number;
+  nemKep: number;
+}
+
+const URES_ALAK = /kep-sor: 0 \(nincs mit lefedni\)\. Nem kep: (\d+)/;
+const TELJES_ALAK =
+  /kep-sor: (\d+), ebbol belyegkeppel: (\d+) \(\d+%\), hianyzik: (\d+)\. Nem kep: (\d+)/;
+
+/** `null`, ha a szovegben nincs lefedettsegi sor -- a hivo dolga, mit kezd vele. */
+export function parseThumbnailCoverage(
+  kimenet: string,
+): ThumbnailCoverageNumbers | null {
+  const ures = URES_ALAK.exec(kimenet);
+  if (ures)
+    return { kepSor: 0, lefedve: 0, hianyzik: 0, nemKep: Number(ures[1]) };
+
+  const teljes = TELJES_ALAK.exec(kimenet);
+  if (!teljes) return null;
+  return {
+    kepSor: Number(teljes[1]),
+    lefedve: Number(teljes[2]),
+    hianyzik: Number(teljes[3]),
+    nemKep: Number(teljes[4]),
+  };
+}

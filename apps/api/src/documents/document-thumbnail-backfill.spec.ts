@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   describeThumbnailCoverage,
   describeThumbnailGain,
+  parseThumbnailCoverage,
   planThumbnailBackfill,
   type ThumbnailBackfillRow,
 } from "./document-thumbnail-backfill.js";
@@ -91,5 +92,70 @@ describe("a mert nyereseg", () => {
 
   it("belyegkep nelkul nem allit aranyt", () => {
     assert.match(describeThumbnailGain(10_000_000, 0), /nincs mit merni/);
+  });
+});
+
+/**
+ * A LEFEDETTSEGI SOR VISSZAOLVASASA.
+ *
+ * A BEMENET NEM KITALALT SZOVEG: minden esetben a `describeThumbnailCoverage`
+ * VALODI kimenete. Egy kezzel beirt minta azt merne, amit a parserrol hiszek --
+ * es pontosan ez utott vissza egyszer mar: az elso alakom csak a nem-ures
+ * mondatot ismerte, mert csak azt lattam.
+ */
+describe("a lefedettsegi sor visszaolvasasa", () => {
+  const kimenet = (...tipusok: string[]) =>
+    describeThumbnailCoverage(
+      planThumbnailBackfill(
+        tipusok.map((contentType, i) => ({
+          owner: "asset" as const,
+          ownerId: "a",
+          documentId: `d${i}`,
+          contentType,
+          sizeBytes: 10,
+          hasThumbnail: false,
+        })),
+      ),
+    );
+
+  /**
+   * AZ URES ALLAPOT SAJAT MONDATOT KAP, es ez az az eset, amiben az
+   * integracios suite alapvonala keszul -- a takaritas utan, a fixturak elott.
+   */
+  it("az ures adatbazis sorat is olvassa", () => {
+    assert.deepEqual(parseThumbnailCoverage(kimenet()), {
+      kepSor: 0,
+      lefedve: 0,
+      hianyzik: 0,
+      nemKep: 0,
+    });
+  });
+
+  /** CSAK PDF: szinten az ures alak, de a nem-kep szamlalo NEM nulla. */
+  it("a csak nem-kepes allapotban is kiolvassa a nem-kep szamlalot", () => {
+    assert.deepEqual(parseThumbnailCoverage(kimenet("application/pdf")), {
+      kepSor: 0,
+      lefedve: 0,
+      hianyzik: 0,
+      nemKep: 1,
+    });
+  });
+
+  it("a teljes alakot mind a negy szammal olvassa", () => {
+    assert.deepEqual(
+      parseThumbnailCoverage(
+        kimenet("image/jpeg", "image/jpeg", "image/png", "application/pdf"),
+      ),
+      { kepSor: 3, lefedve: 0, hianyzik: 3, nemKep: 1 },
+    );
+  });
+
+  /**
+   * `null`, HA NINCS LEFEDETTSEGI SOR -- es ez MAS baj, mint egy rossz szam.
+   * Nullakat visszaadni itt csendes hazugsag lenne: ugy nezne ki, mintha ures
+   * adatbazist mertunk volna.
+   */
+  it("`null`-t ad, ha a szovegben nincs lefedettsegi sor", () => {
+    assert.equal(parseThumbnailCoverage("nincs teendo.\n"), null);
   });
 });

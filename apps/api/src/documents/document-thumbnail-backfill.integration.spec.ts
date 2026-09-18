@@ -8,6 +8,7 @@ import { prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 
+import { parseThumbnailCoverage } from "./document-thumbnail-backfill.js";
 import { main } from "./document-thumbnail-backfill.cli.js";
 import { THUMBNAIL_MAX_EDGE } from "./document-thumbnail.js";
 
@@ -82,6 +83,43 @@ async function futtat(
  * vagyis a suite ZOLD lenne ugy, hogy semmit nem irt. A meret szandekosan
  * NAGYOBB a hatarnal, hogy a kicsinyites tenylegesen megtortenjen.
  */
+/**
+ * A LEFEDETTSEGI SOR VISSZAOLVASASA -- a parser a TISZTA MODULBAN all.
+ *
+ * Eloszor itt volt megirva, es ott NEM merheto helyben: a suite Postgres nelkul
+ * kihagyva fut. Az elso alakom csak a NEM-URES mondatot ismerte, az URES-et nem
+ * -- es epp az ures allapotban keszul az alapvonal. A CI fogta meg, egy
+ * `hookFailed`-del, ami az egesz suite-ot megszakitotta.
+ *
+ * Itt csak a `null` eset kap hangos uzenetet: ha a parancs egyaltalan nem irt
+ * lefedettsegi sort, az mas baj, mint egy rossz szam.
+ */
+function lefedettseg(kimenet: string) {
+  const szamok = parseThumbnailCoverage(kimenet);
+  assert.ok(
+    szamok,
+    `a lefedettsegi sor nem olvashato ki a kimenetbol:\n${kimenet}`,
+  );
+  return szamok;
+}
+
+/**
+ * A TAROLT BELYEGKEP VALODI, DEKODOLHATO KEP-E.
+ *
+ * ACROBOT KERTE KULON ALLITASKENT (2026-09-18), es a stagingen o a bajt-elotagot
+ * nezte (`ffd8ffdb`, JPEG SOI plusz DQT). A DEKODOLAS ennel erosebb: egy csonka
+ * fajl is kezdodhet helyes elotaggal.
+ *
+ * A "KISEBB az eredetinel" allitas ezt NEM fedi: egy nulla bajtos vagy serult
+ * kimenet is kisebb.
+ */
+async function belyegAlakja(
+  bajtok: Uint8Array,
+): Promise<{ format?: string; width?: number; height?: number }> {
+  const { default: sharp } = await import("sharp");
+  return sharp(Buffer.from(bajtok)).metadata();
+}
+
 async function kepBajtok(): Promise<Buffer> {
   const { default: sharp } = await import("sharp");
   const el = THUMBNAIL_MAX_EDGE * 2;
@@ -101,10 +139,21 @@ describe(
     let assetPdf = "";
     let worksheetKep = "";
     let jobKep = "";
+    let alapvonal: ReturnType<typeof lefedettseg>;
 
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await takarit();
+
+      /*
+        AZ ALAPVONAL A SAJAT SOROK ELOTT KESZUL, ES EZ A LENYEG.
+
+        A parancs a TELJES adatbazison dolgozik, tehat a kiirt szamokban a
+        szomszed suite-ok sorai is benne allnak. Egy ABSZOLUT szamra epulo
+        allitas ezert torekeny lenne. A KULONBSEG viszont pontosan a mienk:
+        harom kep es egy PDF.
+      */
+      alapvonal = lefedettseg((await futtat([])).kimenet);
 
       const kep = await kepBajtok();
       const pdf = Buffer.from("%PDF-1.4\n% proba\n");
@@ -244,6 +293,42 @@ describe(
       });
     });
 
+    /**
+     * A NEVEZO: A PDF NEM SZAMIT KEPNEK, A HAROM KEP IGEN.
+     *
+     * Acrobot kulon kerte allitaskent (2026-09-18). A `planThumbnailBackfill`
+     * egysegtesztje a SZABALYT meri; ez azt, hogy a parancs a VALODI sorokon is
+     * igy szamol -- vagyis hogy a tarolt `contentType` ertekek tenyleg
+     * atmennek a fajta-felismeresen.
+     *
+     * A KULONBSEGET MERJUK, NEM AZ ABSZOLUT SZAMOT: a parancs a teljes
+     * adatbazison dolgozik, tehat a kiirt szamokban a szomszed suite-ok sorai
+     * is benne allnak.
+     *
+     * ES EGY DELTA NEM ELEG ONMAGABAN: ha a PDF-et KEPNEK szamolna, a
+     * `hianyzik` kulonbsege NEGY lenne harom helyett, a `nemKep`-e pedig nulla.
+     * Ezert all mind a ketto allitasban.
+     */
+    it("a nevezobe a harom kep kerul, a PDF nem", async () => {
+      const mostani = lefedettseg((await futtat([])).kimenet);
+
+      assert.equal(
+        mostani.kepSor - alapvonal.kepSor,
+        3,
+        "a harom kep-sornak kell a kep-nevezobe kerulnie",
+      );
+      assert.equal(
+        mostani.hianyzik - alapvonal.hianyzik,
+        3,
+        "a harom kepnek hianyzo belyegkeppel kell allnia",
+      );
+      assert.equal(
+        mostani.nemKep - alapvonal.nemKep,
+        1,
+        "a PDF-nek a nem-kep szamlaloba kell kerulnie",
+      );
+    });
+
     it("iras modban mind a harom tabla kepet kap, a PDF nem", async () => {
       const { kimenet } = await futtat(["--ir"]);
 
@@ -274,6 +359,36 @@ describe(
       assert.ok(
         sor.thumbnail.length < sor.sizeBytes,
         `a belyegkep (${sor.thumbnail.length}) nem kisebb az eredetinel (${sor.sizeBytes})`,
+      );
+    });
+
+    /**
+     * A TAROLT BAJTOK VALODI KEPET ADNAK -- ES EZ NEM UGYANAZ, MINT A MERET.
+     *
+     * Acrobot kulon kerte (2026-09-18): "az eredmeny valoban kep legyen". A
+     * fenti allitas csak azt mondja, hogy KISEBB -- egy nulla bajtos vagy
+     * csonka kimenet is kisebb, es mind a ket allitason atmenne.
+     *
+     * DEKODOLUNK, nem bajt-elotagot nezunk: egy csonka fajl is kezdodhet
+     * helyes JPEG-elotaggal. A meret-hatar is itt all, mert a kicsinyites
+     * ELMARADASA (a teljes meretu kep bemasolasa) ugyanugy "valodi kep" lenne.
+     */
+    it("a tarolt belyegkep dekodolhato JPEG, a hataron belul", async () => {
+      const sor = await prisma.assetDocument.findUniqueOrThrow({
+        where: { id: assetKep },
+        select: { thumbnail: true },
+      });
+      assert.ok(sor.thumbnail);
+
+      const alak = await belyegAlakja(sor.thumbnail);
+      assert.equal(alak.format, "jpeg");
+      assert.ok(
+        alak.width && alak.width > 0 && alak.width <= THUMBNAIL_MAX_EDGE,
+        `a szelesseg (${alak.width}) nem esik a hataron belulre`,
+      );
+      assert.ok(
+        alak.height && alak.height > 0 && alak.height <= THUMBNAIL_MAX_EDGE,
+        `a magassag (${alak.height}) nem esik a hataron belulre`,
       );
     });
 
