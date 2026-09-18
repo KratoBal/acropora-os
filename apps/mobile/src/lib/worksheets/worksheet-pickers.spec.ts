@@ -43,7 +43,7 @@ describe("melyik választó áll nyitva", () => {
    * probaljuk: nincs olyan lepes-sorozat, ami ket nyitottat adna.
    */
   it("nincs olyan lépés, ami után kettő állna nyitva", () => {
-    const allapotok: Array<"partner" | "helyszin" | null> = [
+    const allapotok: ("partner" | "helyszin" | null)[] = [
       null,
       "partner",
       "helyszin",
