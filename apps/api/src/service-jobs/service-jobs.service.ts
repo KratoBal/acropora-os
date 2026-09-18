@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   Optional,
@@ -15,6 +16,8 @@ import { mayWriteServiceJob } from "./service-job-write-scope.js";
 import { mayAssignUnit } from "./visibility-assignment.js";
 
 import {
+  hasPermission,
+  PERMISSIONS,
   personDisplayName,
   serviceJobTimeline,
   type ServiceJobDetail,
@@ -642,7 +645,11 @@ export class ServiceJobsService {
     const visibility: Prisma.ServiceJobWhereInput = {
       AND: [
         await this.visibilityFor(user),
-        hiddenRowsWhere(partnerScopeOf(user), query.includeHidden),
+        hiddenRowsWhere(
+          partnerScopeOf(user),
+          query.includeHidden,
+          hasPermission(user, PERMISSIONS.SERVICE_HIDE),
+        ),
       ],
     };
     const [{ rows, truncated }, counts] = await Promise.all([
@@ -1071,7 +1078,24 @@ export class ServiceJobsService {
     hidden: boolean,
     user: AuthenticatedUser,
   ): Promise<void> {
+    /**
+     * KET KULONBOZO KERDES, ES MIND A KETTO KELL.
+     *
+     * A `requireWriteScope` a PARTNERT zarja ki (csak belso utrol jon iras); a
+     * `SERVICE_HIDE` a sajat szerelo kollegainkat, akik `SERVICE_MANAGE`-et
+     * viselnek. Egyik sem helyettesiti a masikat: a `SERVICE_MANAGE` jogot a
+     * partner-fiokok is viselik, tehat jog-ellenorzes onmagaban nem zarna ki
+     * oket.
+     *
+     * A kontrolleren is all `SERVICE_HIDE` kapu. Ez a sor azt vedi, ami a
+     * dekoratort megkerulne: egy masodik hivo (utemezes, import, masik
+     * vegpont).
+     */
     this.requireWriteScope(user);
+    if (!hasPermission(user, PERMISSIONS.SERVICE_HIDE))
+      throw new ForbiddenException(
+        "A hibajegy elrejtése admin jogkör: ehhez a művelethez nincs jogosultságod.",
+      );
     /**
      * A LETEZES ELLENORZESE ELOSZOR. Enelkul egy ismeretlen azonositora a
      * Prisma `update` dobna, es a hivo nyers adatbazis-hibat kapna a "nem

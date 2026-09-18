@@ -39,10 +39,12 @@ import { ServiceJobsService } from "./service-jobs.service.js";
  * a BEKOTEST is meri.
  */
 
-const BELSOS = { id: "user-1" } as AuthenticatedUser;
+/** `ADMIN`: a lista-szuro 2026-09-18 ota jogot is nez (lasd `hidden-rows.ts`). */
+const BELSOS = { id: "user-1", role: "ADMIN" } as AuthenticatedUser;
 const PARTNER = {
   id: "user-2",
   supplierId: "sup-1",
+  role: "PARTNER_SERVICE",
 } as unknown as AuthenticatedUser;
 
 const EGYSEGEK = ["u1", "u2"];

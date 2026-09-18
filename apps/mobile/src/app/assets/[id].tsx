@@ -8,13 +8,18 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { getAsset, uploadAssetDocuments } from "@/lib/api/assets";
+import {
+  getAsset,
+  setAssetDocumentCaption,
+  uploadAssetDocuments,
+} from "@/lib/api/assets";
 import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
 import {
   describeDocuments,
@@ -86,6 +91,16 @@ export default function AssetDetailScreen() {
   /** Melyik kep van epp nagyban. Ratet, nem `Modal` -- ebben az appban ma nulla
    * `Modal` all, es a bevezetese kulon dontes lenne, minden ratettel egyszerre. */
   const [nagyKep, setNagyKep] = useState<string | null>(null);
+  /*
+    A FELIRAT PISZKOZATA ES A MENTES ALLAPOTA.
+
+    A piszkozat a SZERVER SZERINTI ertekbol indul, valahanyszor egy kep
+    nagyban megnyilik -- nem az elozo kep mellol. Enelkul az egyik kep
+    felirata atlatszana a masikra, es a szerelo azt irna felul, amit lat.
+  */
+  const [felirat, setFelirat] = useState("");
+  const [feliratHiba, setFeliratHiba] = useState<string | null>(null);
+  const [feliratMentes, setFeliratMentes] = useState(false);
   const kepForras = useDocumentImageSource(
     // AZ UTVONAL A KLIENS SAJAT `BASE`-EVEL EGYEZIK, nem a kepernyo mappajaval.
     // A hibajegynel elso alakom a mappanevet hasznalta, es a hiba NEMA lett
@@ -183,6 +198,38 @@ export default function AssetDetailScreen() {
     await feltoltAValasztasbol(await takePhotoFromCamera());
   };
 
+  /*
+    A FELIRAT MENTESE. A KEPERNYON MA NINCS `useMutation`, es nem is hozok be
+    egyet: a feltoltes is sajat allapottal es `query.refetch()`-csel dolgozik,
+    es ket kulonbozo frissitesi minta egy lapon azt jelentene, hogy a kettonek
+    MAS a viselkedese -- holott ugyanaz.
+  */
+  const feliratMentese = async (documentId: string) => {
+    if (feliratMentes) return;
+    setFeliratMentes(true);
+    setFeliratHiba(null);
+    try {
+      /*
+        AZ URES MEZO TORLEST JELENT, es `null`-kent megy le -- nem ures
+        stringkent. Ket alak mellett a "nincs felirat" es a "szandekosan ures
+        felirat" megkulonboztethetetlen lenne, es a szerver ugyanezt a
+        szabalyt mondja ki.
+      */
+      await setAssetDocumentCaption(
+        id!,
+        documentId,
+        felirat.trim() ? felirat.trim() : null,
+      );
+      void query.refetch();
+    } catch (cause) {
+      setFeliratHiba(
+        cause instanceof Error ? cause.message : "A felirat nem menthető.",
+      );
+    } finally {
+      setFeliratMentes(false);
+    }
+  };
+
   /** A MÁSODIK ÚT: egy korábban készült kép a galériából. */
   const pickAndUploadPhotos = async () => {
     if (!query.data || uploading) return;
@@ -211,6 +258,12 @@ export default function AssetDetailScreen() {
   const csatolmanyok = asset?.documents ?? [];
   const kepek = csatolmanyok.filter((d) => isViewableImage(d.contentType));
   const egyebek = csatolmanyok.filter((d) => !isViewableImage(d.contentType));
+  /*
+    A NAGYBAN NYITOTT KEP SORA. A ratet eddig csak az AZONOSITOT tartotta, es a
+    kephez ennyi eleg is volt -- a felirathoz viszont a SOR kell, mert az
+    hordozza a mai erteket es azt, amit a mentes utan vissza kell olvasni.
+  */
+  const nagyKepSor = csatolmanyok.find((d) => d.id === nagyKep) ?? null;
   const csatolmanyNotice = describeDocuments({
     loading: query.isPending && !asset,
     error: query.isError && !asset,
@@ -496,7 +549,13 @@ export default function AssetDetailScreen() {
                             accessibilityRole="imagebutton"
                             accessibilityLabel={`${kep.fileName} megnyitása nagyban`}
                             disabled={forras === null}
-                            onPress={() => setNagyKep(kep.id)}
+                            onPress={() => {
+                              setNagyKep(kep.id);
+                              // A PISZKOZAT A SZERVER SZERINTI ALLAPOTBOL
+                              // INDUL, nem az elozo kepe mellol.
+                              setFelirat(kep.caption ?? "");
+                              setFeliratHiba(null);
+                            }}
                             style={({ pressed }) => [
                               styles.csempe,
                               pressed && styles.pressed,
@@ -516,6 +575,22 @@ export default function AssetDetailScreen() {
                                 </Text>
                               </View>
                             )}
+                            {/*
+                              A FELIRAT A MERET FOLOTT ALL, es ez nem
+                              elrendezesi izles: a felirat azt mondja meg, MIT
+                              LATUNK, a meret csak azt, mekkora a fajl. A
+                              kettobol az elso az, amit a szerelo keres. Ha
+                              nincs felirat, a sor sem all ott -- egy ures sor
+                              helyet foglalna a 104 pontos csempen.
+                            */}
+                            {kep.caption ? (
+                              <Text
+                                style={styles.csempeFelirat}
+                                numberOfLines={2}
+                              >
+                                {kep.caption}
+                              </Text>
+                            ) : null}
                             <Text style={styles.csempeMeret}>
                               {formatDocumentSize(kep.sizeBytes)}
                             </Text>
@@ -622,10 +697,62 @@ export default function AssetDetailScreen() {
               </Text>
             );
           })()}
+          {/*
+            A FELIRAT ITT ALL, ES NEM A CSEMPEN.
+
+            A csempe 104 pont szeles: ott egy beviteli mezo hasznalhatatlan
+            lenne, es a kep sem latszana mellette. Nagyban viszont EPP az a kep
+            van a szerelo elott, amit meg akar nevezni.
+          */}
+          {nagyKepSor?.caption ? (
+            <Text style={styles.nagyFelirat}>{nagyKepSor.caption}</Text>
+          ) : null}
+
+          {/*
+            A SZERKESZTO A JOGON ES A HALOZATON MULIK, ES A HIANY NEM LETILTOTT
+            GOMB: ha nincs joga vagy mentett masolatot lat, a mezo NEM all ott.
+            Egy letiltott gomb azt igerne, hogy van mit megnyomni -- offline
+            pedig epp az a baj, hogy nincs.
+          */}
+          {capabilities?.assetsManage && !fromCache && nagyKepSor ? (
+            <>
+              <TextInput
+                accessibilityLabel="A kép felirata"
+                value={felirat}
+                onChangeText={setFelirat}
+                style={styles.feliratMezo}
+                placeholder="Mit látunk a képen?"
+                placeholderTextColor="#5c7e92"
+                maxLength={500}
+                editable={!feliratMentes}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Felirat mentése"
+                disabled={feliratMentes}
+                onPress={() => void feliratMentese(nagyKepSor.id)}
+                style={({ pressed }) => [
+                  styles.bezaro,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.bezaroText}>
+                  {feliratMentes ? "Mentés folyamatban…" : "Felirat mentése"}
+                </Text>
+              </Pressable>
+              {feliratHiba ? (
+                <Text style={styles.uploadNotice}>{feliratHiba}</Text>
+              ) : null}
+            </>
+          ) : null}
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Kép bezárása"
-            onPress={() => setNagyKep(null)}
+            onPress={() => {
+              setNagyKep(null);
+              setFeliratHiba(null);
+            }}
             style={({ pressed }) => [styles.bezaro, pressed && styles.pressed]}
           >
             <Text style={styles.bezaroText}>Bezárás</Text>
@@ -772,7 +899,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  csempeFelirat: { color: "#d7e7ef", fontSize: 11, textAlign: "center" },
   csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
+  nagyFelirat: { color: "#d7e7ef", fontSize: 15, textAlign: "center" },
+  feliratMezo: {
+    backgroundColor: "#0d2430",
+    borderColor: "#1d4356",
+    borderRadius: 10,
+    borderWidth: 1,
+    color: "#e8f3f8",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    width: "100%",
+  },
   nagyRatet: {
     position: "absolute",
     top: 0,

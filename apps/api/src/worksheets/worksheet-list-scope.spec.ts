@@ -133,7 +133,7 @@ describe("a rejtett lapok a listából és a számlálóból is kimaradnak", () 
       igaznak mondana, ez a ket allitas is zold lenne. Igy viszont a ket irany
       egyutt bizonyit: a szuro OTT VAN, amikor kell, es NINCS ott, amikor nem.
     */
-    const { list, counts } = worksheetListWheres(BELSO, {}, {}, true);
+    const { list, counts } = worksheetListWheres(BELSO, {}, {}, true, true);
     assert.equal(rejtett(list), false);
     assert.equal(rejtett(counts), false);
   });
@@ -143,6 +143,7 @@ describe("a rejtett lapok a listából és a számlálóból is kimaradnak", () 
       { kind: "customer", customerId: "cust-1" },
       {},
       {},
+      true,
       true,
     );
     assert.equal(rejtett(list), true);

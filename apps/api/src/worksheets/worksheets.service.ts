@@ -40,6 +40,7 @@ import {
 import { assertStorageKeyMatches } from "../service-assets/document-store/document-storage-key.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
+import { hasPermission, PERMISSIONS } from "@acropora/types";
 import type {
   AuthenticatedUser,
   WorksheetAttachableListResponse,
@@ -299,8 +300,8 @@ export class WorksheetsService {
     return { ...document, bytes };
   }
 
-  list(query: WorksheetListQueryDto, scope: PartnerScope) {
-    return this.repository.list(query, scope);
+  list(query: WorksheetListQueryDto, scope: PartnerScope, mayHide = false) {
+    return this.repository.list(query, scope, mayHide);
   }
 
   /**
@@ -727,9 +728,17 @@ export class WorksheetsService {
     user: AuthenticatedUser,
   ): Promise<WorksheetDetail> {
     const scope = partnerScopeOf(user);
-    if (!mayHideRows(scope))
+    /**
+     * A KONTROLLEREN IS ALL `SERVICE_HIDE` KAPU, ES EZ MEGIS KELL.
+     *
+     * A dekorator a HTTP utat vedi; ez a sort magat. Ha valaha egy masodik hivo
+     * keletkezik (utemezett feladat, import, egy masik vegpont), az a
+     * dekoratort megkeruli, ezt nem. Es a ketto egyutt mondja ki a teljes
+     * szabalyt: a hatokor a partnert zarja ki, a jog a sajat szereloinket.
+     */
+    if (!mayHideRows(scope, hasPermission(user, PERMISSIONS.SERVICE_HIDE)))
       throw new ForbiddenException(
-        "A munkalap elrejtése belső művelet: a partner-hozzáférés nem végezheti el.",
+        "A munkalap elrejtése admin jogkör: ehhez a művelethez nincs jogosultságod.",
       );
     /**
      * A LETEZES ELLENORZESE A SAJAT HATOKORBEN. Enelkul egy ismeretlen

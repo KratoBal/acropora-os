@@ -58,6 +58,24 @@ export function WorksheetListPage() {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
+  /**
+   * A REJTES SAJAT JOG, ES NEM A `canManage`.
+   *
+   * Balazs kerese, 2026-09-18 11:09 UTC, mar eles hasznalat kozben: "a gomb
+   * ottmarad es megnyomhato barmelyik lapnal, jegynel. Azt szeretnem, hogy csak
+   * admin jogos felhasznalonal jelenjen meg".
+   *
+   * A `SERVICE_MANAGE` a napi szerviz-munka jogkore: a sajat szerelo
+   * kollegaink ES a partner-fiokok is viselik. A `SERVICE_HIDE` csak OWNER es
+   * ADMIN.
+   *
+   * ES EZ CSAK A FELULET. A vegpont a felulet nelkul is hivhato, ezert a
+   * szerver is kapuz (`RequirePermissions(SERVICE_HIDE)` plusz a szolgaltatas
+   * sajat ellenorzese). Egy UI-only kapu nem kapu.
+   */
+  const canHide = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SERVICE_HIDE),
+  );
   const token = session?.token ?? "";
   const userId = session?.user.id ?? "";
   const mineOnly = params.get("assigneeId") === userId && Boolean(userId);
@@ -304,7 +322,7 @@ export function WorksheetListPage() {
                 Egy nezo, aki latja a rejtett sorokat, de nem tud rajtuk
                 valtoztatni, csak annyit lat, hogy a lista neha hosszabb --
                 es nem erti, miert. */}
-            {canManage ? (
+            {canHide ? (
               <Button
                 variant={includeHidden ? "primary" : "secondary"}
                 onClick={() =>

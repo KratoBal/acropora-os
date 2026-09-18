@@ -401,6 +401,13 @@ describe(
       const mindet = await repository.list(
         { page: 1, pageSize: 100, includeHidden: true },
         { kind: "internal" },
+        /*
+          A HARMADIK ARGUMENTUM A `SERVICE_HIDE` JOG, TENYKENT (2026-09-18 ota).
+          Alapertelmezese `false`, tehat nelkule a kapcsolo hatastalan -- es ez
+          a spec pontosan azt merne, hogy a jog hianyaban nem latszik a rejtett
+          sor, nem azt, amit a neve mond.
+        */
+        true,
       );
       const sor = mindet.items.find((item) => item.id === rejtett);
       assert.ok(sor, "a kapcsolóval sem jött vissza");
@@ -449,6 +456,14 @@ describe(
       const partnerLista = await repository.list(
         { page: 1, pageSize: 100, includeHidden: true },
         { kind: "customer", customerId },
+        /*
+          JOGGAL EGYUTT, ES EZ A LENYEG. A jog nelkul ez az allitas zold lenne
+          akkor is, ha a HATOKOR-feltetel egyaltalan nem letezne -- vagyis a
+          neve ("a hatokor miatt") tobbet mondana, mint amit mer. Ugyanaz a
+          gyengeseg, amit a `service-hide-scope.spec.ts` partner-esetenel a
+          kalibracio talalt meg.
+        */
+        true,
       );
       const idk = partnerLista.items.map((item) => item.id);
       assert.equal(idk.includes(rejtett), false, "a partner látja a rejtettet");

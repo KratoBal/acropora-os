@@ -30,6 +30,21 @@ import type { PartnerScope } from "../auth/partner-scope.util.js";
  * NEM az EGYEDI lekérésre szól. Egy rejtett lap nem "nem létezik", csak nincs a
  * listában: a részletlap azonosítóval továbbra is elérhető, különben egy már
  * kiküldött hivatkozás 404-re futna attól, hogy valaki elrejtette a listában.
+ *
+ * === A JOG 2026-09-18-AN KERULT A HATOKOR MELLE, ES KETTO KELL, NEM EGY ===
+ *
+ * Balazs eles hasznalat kozben irta, szo szerint (11:09 UTC): "megcsinaltam, de
+ * a gomb ottmarad es megnyomhato barmelyik lapnal, jegynel. Azt szeretnem, hogy
+ * csak admin jogos felhasznalonal jelenjen meg".
+ *
+ * A hatokor a PARTNERT zarja ki, a jog a SAJAT szerelo kollegainkat. A ketto
+ * KULONBOZO kerdes, es egyik sem helyettesiti a masikat: a `SERVICE_MANAGE`
+ * jogot a partner-fiokok is viselik, tehat jog-ellenorzes ONMAGABAN nem zarna
+ * ki oket; a hatokor viszont a sajat SERVICE szerepunket engedi at.
+ *
+ * ES A KETTO EGY HELYEN TALALKOZIK (`mayHideRows`), nem ket kulon feltetelben:
+ * ket helyen az egyik elobb-utobb kimarad, es a hiba NEMA -- a lista nem
+ * hibazik, csak tobbet mutat.
  */
 
 /** A rejtettek kihagyása: a Prisma `where` egy ága. */
@@ -45,8 +60,9 @@ export const NOT_HIDDEN = { hiddenAt: null } as const;
 export function hiddenRowsWhere(
   scope: PartnerScope,
   includeHidden: boolean | undefined,
+  mayHide: boolean,
 ): { hiddenAt?: null } {
-  if (scope.kind !== "internal") return { ...NOT_HIDDEN };
+  if (!mayHideRows(scope, mayHide)) return { ...NOT_HIDDEN };
   return includeHidden === true ? {} : { ...NOT_HIDDEN };
 }
 
@@ -62,6 +78,6 @@ export function hiddenRowsWhere(
  * A JOG (`SERVICE_MANAGE`) EZEN FELÜL KELL, nem helyette: az a kérdés, hogy
  * szabad-e szerkeszteni, ez pedig az, hogy melyik oldalról jött a kérés.
  */
-export function mayHideRows(scope: PartnerScope): boolean {
-  return scope.kind === "internal";
+export function mayHideRows(scope: PartnerScope, mayHide: boolean): boolean {
+  return scope.kind === "internal" && mayHide;
 }
