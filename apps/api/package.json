@@ -39,6 +39,7 @@
     "unas:kapcsolat-ujraepites": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-kapcsolat-ujraepites.cli.js",
     "unas:kapcsolat-futasok": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-kapcsolat-futasok.cli.js",
     "documents:thumbnails": "tsc -p tsconfig.json && node --env-file=../../.env dist/documents/document-thumbnail-backfill.cli.js",
+    "worksheets:sheets": "tsc -p tsconfig.json && node --env-file=../../.env dist/worksheets/worksheet-sheet-backfill.cli.js",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist test-dist"
   },

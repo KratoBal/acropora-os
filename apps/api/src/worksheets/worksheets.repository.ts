@@ -1303,11 +1303,54 @@ export class WorksheetsRepository extends Repository {
    * lezaras elutasitasa a valoszinu valasz, hanem az, hogy a 409 uzenete meg
    * tudja mondani, MI vitte el a helyet.
    */
+  /**
+   * A KIADOTT LAP ELOALLITASA EGY MAR LEZART VERZIOHOZ, A `close()`-ON KIVULROL.
+   *
+   * === MIERT KELL, ES MIERT UGYANEZ A TORZS ===
+   *
+   * A kepesseg 2026-09-18-ban erkezett (#847), es a lezaras EGYSZERI: a
+   * korabban lezart lapok magatol SOHA nem kapnanak kiadott peldanyt. A
+   * visszamenoleges generalas ezert a `worksheet-sheet-backfill.cli` dolga --
+   * de a TORZS ugyanaz kell hogy legyen, kulonben ket helyen allna ugyanaz a
+   * szabaly, es az egyik elobb-utobb elcsuszna.
+   *
+   * === A HAROM ORZO VALTOZATLAN, ES AZ ELSO MAS INDOKOT KAP ===
+   *
+   * A verzio-egyezes orzoje a `close()`-ban a parhuzamos lezaras ellen szol.
+   * INNEN HIVVA MASERT KELL: a lap kaphatott ujabb verziot azota, es akkor a
+   * REGI verzio tartalmabol keszulne fajl az UJ verzio melle. A parancs
+   * ezert a LEZART verziot nevezi meg, es az orzo azt ellenorzi, hogy az MA IS
+   * a jelenlegi -- kulonben nem ir, hanem dob.
+   *
+   * === A KLIENS PARAMETER, NEM TRANZAKCIO ===
+   *
+   * A `PrismaClient` kielegiti a `TransactionClient` alakot, tehat a parancs a
+   * sima klienst adja at. Egy kulon tranzakcio itt nem adna tobbet: EGY sor
+   * keletkezik, es a `@@unique([worksheetVersionId, type])` amugy is megvedi a
+   * ketszer-irastol.
+   */
+  async writeGeneratedSheetFor(
+    client: TransactionClient,
+    worksheetId: string,
+    versionId: string,
+    actorUserId: string | null,
+  ): Promise<void> {
+    await this.writeGeneratedSheet(client, worksheetId, versionId, actorUserId);
+  }
+
   private async writeGeneratedSheet(
     transaction: TransactionClient,
     worksheetId: string,
     versionId: string,
-    actorUserId: string,
+    /*
+      `null` IS ATMEHET, ES EZ NEM LAZITAS. A lezarasnal mindig van lezaro
+      kollega; a VISSZAMENOLEGES generalasnal viszont NINCS -- azt a lapot nem
+      egy ember allitotta elo. Egy kitalalt azonosito (vagy egy ures sztring)
+      ott azt allitana, hogy valaki feltoltotte, es az ures sztring ezen felul
+      az idegen kulcson is elhasalna. A `uploadedById` a semaban elhagyhato,
+      tehat a `null` ERVENYES allapot, nem hianyzo adat.
+    */
+    actorUserId: string | null,
   ): Promise<void> {
     const row = await this.detailRow(worksheetId, transaction);
     if (!row)
