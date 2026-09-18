@@ -1463,6 +1463,12 @@ model ProductPriceHistory {
 
   /// A tortenet mindig EGY termekre, idorendben. Az Omnibus-kerdes ("mi volt a
   /// legalacsonyabb az elmult 30 napban") pontosan ezen az indexen fut.
+  ///
+  /// KEZDO SORBOL TERMEKENKENT EGY LEHET, es ezt egy RESZLEGES egyedi index
+  /// tartja (`ProductPriceHistory_product_initial_key`, `WHERE "source" =
+  /// 'INITIAL'`), amit a Prisma sema nem tud kifejezni, ezert a migracioban
+  /// all nyers SQL-kent. A teljes `([productId, source])` par rossz lenne: a
+  /// `UNAS_SYNC` sorok termekenkent SOKSZOR ismetlodnek, eppen az a lenyegük.
   @@index([productId, observedAt])
 }
 

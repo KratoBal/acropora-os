@@ -1,0 +1,43 @@
+-- TERMEKENKENT EGYETLEN KEZDO SOR (78fe08f2).
+--
+-- A kezdo sor azt allitja, hogy "ekkor mar ez volt az ar" -- egy termeknek
+-- ebbol pontosan EGY lehet. A `UNAS_SYNC` sorok szandekosan ismetlodnek,
+-- eppen az a lenyegük, ezert a teljes `("productId", "source")` par rossz
+-- megkotes lenne: az a valtozas-agat is elvagna.
+--
+-- A Prisma sema RESZLEGES egyedi indexet nem tud kifejezni, ezert all itt
+-- nyers SQL-kent, ugyanugy, mint a
+-- `WorksheetDepartment_customer_root_code_key` eseteben. A sema oldalan
+-- dokumentacio all rola a modell fejlecen.
+--
+-- === MIT VED, ES MIERT NEM ELEG A MAI KOD ===
+--
+-- Ket iro van: a szinkron (`unas-product-sync.repository.ts`) es a kezdo-sor
+-- parancs (`unas-kezdo-ar-sorok.cli.ts`). Mindketto ELLENORIZ, mielott ir --
+-- de a ket ellenorzes kulon tranzakcioban all, tehat ha a parancs epp akkor
+-- fut, amikor a szinkron ugyanarra a termekre ir, mindketto "nincs meg sora"
+-- allapotot lat, es KET kezdo sor keletkezik. Ez csendes: a tortenet
+-- olvasojanak ket egyforma pontja lesz ugyanarra a pillanatra.
+--
+-- === AMI EZZEL EGYUTT JAR, ES NEM ELHALLGATHATO ===
+--
+-- A szinkron ar-sora egy NAGY tranzakcion belul all, ami az egesz koteget
+-- viszi. Egy utkozes ezert nem egy termeket bukik el, hanem az EGESZ futast --
+-- a kovetkezo utemezett kor tizenot perccel kesobb ujraprobalja. A csere
+-- tudatos: egy elveszett futas hangos es potolhato, egy duplikalt kezdo sor
+-- nema es visszamenoleg nem javithato.
+--
+-- A gyakorlati kovetkezmeny egy mondat: a kezdo-sor parancsot NE futtassuk
+-- akkor, amikor a szinkron utemezoje be van kapcsolva, vagy szamoljunk azzal,
+-- hogy egy szinkron-kor elbukik.
+--
+-- === AZ ELES ALLAPOT A MIGRACIO IRASAKOR ===
+--
+-- acrobot merese, 2026-09-18 17:56, az eles adatbazison: 12 sor, mind
+-- `INITIAL`, 12 termeken, TOBB MINT EGY kezdo sorral rendelkezo termek NULLA.
+-- Az index tehat utkozes nelkul letrehozhato volt akkor. A szam a merés
+-- napjara szol: egy elbukott migracio (P3009) MINDEN tovabbi telepitest
+-- blokkol, ezert a telepites elott ujra le kell merni.
+CREATE UNIQUE INDEX "ProductPriceHistory_product_initial_key"
+  ON "ProductPriceHistory"("productId")
+  WHERE "source" = 'INITIAL';
