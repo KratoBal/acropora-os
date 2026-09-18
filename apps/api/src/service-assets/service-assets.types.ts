@@ -82,6 +82,20 @@ export const assetSummaryInclude = {
   aquarium: true,
   parentAsset: true,
   _count: { select: { childAssets: true } },
+  /**
+   * A MATRICA, HOGY A SZERKESZTO MEG TUDJA MUTATNI, MI ALL AZ ESZKOZON.
+   *
+   * EGYES SZAMBAN, ES EZT A SEMA DONTI EL, NEM EN: az `AssetLabel.assetId`
+   * EGYEDI, ezert a Prisma egy-az-egyhez kapcsolatot general (`label`), nem
+   * listat. Eloszor `labels`-t irtam ide -- a fordito javitott ki, es jol tette:
+   * egy lista azt allitotta volna, hogy egy eszkozon TOBB matrica is allhat.
+   *
+   * ES AZ OSSZEFOGLALOBAN ALL, NEM A RESZLETESBEN (2026-09-18): a listasor is
+   * kiirja a kodot, es az adatlap ezt SZORASSAL veszi at -- tehat egy helyen
+   * all, nem kettoben. Ha ket kulon bejegyzes lenne, az egyik kivetele
+   * CSENDBEN vinne el a masik agat.
+   */
+  label: { select: { code: true } },
 } satisfies Prisma.AssetInclude;
 
 /**
@@ -121,15 +135,6 @@ export const assetDetailInclude = {
     select: assetDocumentSummarySelect,
     orderBy: { createdAt: "desc" as const },
   },
-  /**
-   * A MATRICA, HOGY A SZERKESZTO MEG TUDJA MUTATNI, MI ALL AZ ESZKOZON.
-   *
-   * EGYES SZAMBAN, ES EZT A SEMA DONTI EL, NEM EN: az `AssetLabel.assetId`
-   * EGYEDI, ezert a Prisma egy-az-egyhez kapcsolatot general (`label`), nem
-   * listat. Eloszor `labels`-t irtam ide -- a fordito javitott ki, es jol tette:
-   * egy lista azt allitotta volna, hogy egy eszkozon TOBB matrica is allhat.
-   */
-  label: { select: { code: true } },
   /**
    * A TELJESITMENY EGYSEGE KIIRVA, NEM CSAK AZONOSITOKENT.
    *

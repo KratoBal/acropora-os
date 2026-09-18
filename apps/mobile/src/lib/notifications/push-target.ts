@@ -40,15 +40,61 @@ export interface PushResponseLike {
 }
 
 /**
- * AMIRE EGY ERTESITES VIHET. MA EGY ERTEK, ES EZ SZANDEKOS.
+ * AMIRE EGY ERTESITES VIHET.
  *
- * Balazs kerese (2026-09-03 20:20): hibajegy-keperno ma nincs a telefonon,
- * tehat oda nem lehet vinni senkit -- de az ALAK legyen olyan, hogy a masodik
- * tipus ne kivanjon atirast. Ez ma egy elagazas EGY aggal.
+ * A MASODIK ERTEK 2026-09-18-AN KERULT FEL, es a felvetel FELTETELE teljesult,
+ * nem lejart: a hibajegy-keperno 2026-09-16 ota letezik a telefonon
+ * (`app/service-jobs/[id].tsx`, a 735 pull requestben). Addig a tipus felvetele
+ * annyit tett volna, hogy a koppintas egy ures utvonalra visz, es az rosszabb
+ * lett volna a nem mukodo koppintasnal.
+ *
+ * A SZERVER MAR 2026-09-14 OTA KULDI (`deliverServiceJobAssignment`:
+ * `targetType: "serviceJob"`), tehat a ket oldal negy napig ELTERT: az
+ * ertesites megjelent a zarolt kepernyon, es a koppintas nem vitt sehova.
+ * Ez a ket lista most merve is egyutt mozog, lasd
+ * `apps/api/src/mobile/push-targets.spec.ts`.
  */
-export const PUSH_TARGET_TYPES = ["worksheet"] as const;
+export const PUSH_TARGET_TYPES = ["worksheet", "serviceJob"] as const;
 
 export type PushTargetType = (typeof PUSH_TARGET_TYPES)[number];
+
+/**
+ * MELYIK TIPUS MELYIK KEPERNYOT NYITJA -- ES EZ AZ A HELY, AHOL A FORDITO
+ * TENYLEG SZOL.
+ *
+ * === MIERT NEM `switch`, HOLOTT EDDIG AZ VOLT ===
+ *
+ * A `usePushNavigation.ts`-ben egy `switch` allt, es a komment fole azt
+ * allitotta, hogy "a `PushTargetType` zart halmaz, tehat a fordito MEG FOGJA
+ * MONDANI, ha egy uj tipus bekerul es ez a hely nem kezeli".
+ *
+ * EZT 2026-09-18-AN LEMERTEM, ES NEM IGAZ: felvettem a `serviceJob` erteket a
+ * listara, a `switch`-hez NEM nyultam, es a mobil `typecheck` ZOLDEN futott le
+ * (kilepesi kod 0). Nem is szolhatott: a `switch` egy `void` visszateresu
+ * callback torzseben all, default ag nelkul, tehat a hianyzo ag egyszeruen
+ * kiesik az aljan. Kimerito-ellenorzes nelkul a `switch` NEM orzo.
+ *
+ * Egy komment, ami egy NEM LETEZO vedelmet ir le, rosszabb a semminel: aki
+ * olvassa, nem epit melle igazit.
+ *
+ * === AMIT A `satisfies` AD, ES AMIT NEM ===
+ *
+ * AD: ha egy uj tipus kerul a `PUSH_TARGET_TYPES` listajara es ide nem kerul
+ * utvonal, a fordulas ELHASAL. Ez a kimerito-ellenorzes, amit a `switch` csak
+ * igert.
+ *
+ * NEM AD: azt nem tudja, hogy a leirt utvonalhoz VAN-E kepernyo-fajl. Egy
+ * elgepelt ut ugyanugy `string`. Azt a fajlrendszeren kell merni, es meri is:
+ * `apps/api/src/mobile/push-targets.spec.ts`.
+ *
+ * AZ ERTEKEK EXPO-ROUTER UTVONAL-ALAKOK (`/mappa/[id]`), es a horog adja at a
+ * `router.push`-nak. A tipusuk az `as const` miatt SZUK literal-unio, tehat a
+ * tipusos utvonalak ellenorzese a hivas helyen megmarad.
+ */
+export const PUSH_TARGET_ROUTES = {
+  worksheet: "/worksheets/[id]",
+  serviceJob: "/service-jobs/[id]",
+} as const satisfies Record<PushTargetType, string>;
 
 export interface PushTarget {
   type: PushTargetType;
@@ -94,10 +140,14 @@ function szoveg(value: unknown): string | null {
  * koppintas rajta a frissites UTAN tortenne, es fallback nelkul sehova nem
  * vinne. Ez elo eset, nem elmeleti.
  *
- * ES AMI NEM ESIK VISSZA: az ISMERETLEN tipus. Ha egyszer jon egy hibajegy-
- * ertesites, es egy REGI app kapja meg, az NEM nyithatja meg helyette a
- * munkalapot. Inkabb ne vigyen sehova, mint rossz helyre -- egy rossz kepernyo
- * az ugyfel elott rosszabb, mint egy nem mukodo koppintas.
+ * ES AMI NEM ESIK VISSZA: az ISMERETLEN tipus. Ha a szerver egyszer egy
+ * HARMADIK tipust kezd kuldeni, es egy REGI app kapja meg, az NEM nyithatja
+ * meg helyette a munkalapot. Inkabb ne vigyen sehova, mint rossz helyre -- egy
+ * rossz keperno az ugyfel elott rosszabb, mint egy nem mukodo koppintas.
+ *
+ * EZ NEM ELMELETI: pontosan ez tortent a `serviceJob` tipussal 2026-09-14 es
+ * 2026-09-18 kozott. A szerver kuldte, a telefon nem ismerte, es a koppintas
+ * nem vitt sehova -- de legalabb nem vitt ROSSZ helyre.
  *
  * MIKOR HAGYHATO EL A VISSZAESES: ha egyszer biztosak vagyunk benne, hogy
  * egyetlen keszuleken sem all bontatlan, tipus nelkuli ertesites.

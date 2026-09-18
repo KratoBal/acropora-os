@@ -255,6 +255,43 @@ describe("AssetListPage es az ugyfel sajat kodja", () => {
     expect(await screen.findByText("ESZ-0001")).toBeTruthy();
     expect(screen.queryByText(/Leltári szám/)).toBeNull();
   });
+
+  /**
+   * A MATRICAKOD IS A SOROn, FELIRATTAL (Balazs kerese, 2026-09-18).
+   *
+   * MIERT KELL A FELIRAT, ES MIERT NEM DISZ: enelkul HAROM szam-alaku sor allna
+   * egymas alatt (eszkozszam, leltari szam, matricakod), es a kezelo nem tudna,
+   * melyik melyik. Ugyanaz az indok, ami a leltari szamnal all felette.
+   *
+   * ES A KOD MAGA IS ALLITAS: a lista valasza sokaig NEM hordozta a mezot (az
+   * `AssetDetail`-en allt, az `AssetListItem`-en nem). Ez az allitas tehat nem
+   * csak a megjelenitest meri, hanem azt is, hogy a sor egyaltalan MEGKAPJA.
+   */
+  it("shows the printed label code on the row when there is one", async () => {
+    const withLabel = response(1);
+    withLabel.items[0]!.labelCode = "V2196";
+    api.list.mockResolvedValue(withLabel);
+
+    render(<AssetListPage />);
+
+    expect(await screen.findByText("V2196")).toBeTruthy();
+    expect(screen.getByText(/Matricakód/)).toBeTruthy();
+  });
+
+  /**
+   * ES MATRICA NELKUL NINCS FELIRAT SEM -- testver-kontroll a fentihez.
+   *
+   * Egy "Matricakód:" cimke ertek nelkul azt allitana, hogy all matrica az
+   * eszkozon, csak nem tudjuk, melyik.
+   */
+  it("writes no label-code row when the asset has no sticker", async () => {
+    api.list.mockResolvedValue(response(1));
+
+    render(<AssetListPage />);
+
+    expect(await screen.findByText("ESZ-0001")).toBeTruthy();
+    expect(screen.queryByText(/Matricakód/)).toBeNull();
+  });
 });
 
 /**

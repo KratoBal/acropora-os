@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import {
   decidePushNavigation,
+  PUSH_TARGET_ROUTES,
+  PUSH_TARGET_TYPES,
   pushResponseKey,
   pushTarget,
   type PushResponseLike,
@@ -79,27 +81,88 @@ describe("a célpont a törzsből", () => {
 
   it("ISMERETLEN tipusnal viszont NEM esik vissza", () => {
     /*
-      EZ A LENYEG, ES EZ A KULONBSEG A KET AG KOZOTT. Ha egyszer jon egy
-      hibajegy-ertesites, es egy REGI app kapja meg, az NEM nyithatja meg
-      helyette a munkalapot. Inkabb ne vigyen sehova, mint rossz helyre: egy
+      EZ A LENYEG, ES EZ A KULONBSEG A KET AG KOZOTT. Ha a szerver egyszer egy
+      HARMADIK tipust kezd kuldeni, es egy REGI app kapja meg, az NEM nyithatja
+      meg helyette a munkalapot. Inkabb ne vigyen sehova, mint rossz helyre: egy
       rossz keperno az ugyfel elott rosszabb, mint egy nem mukodo koppintas.
 
       A visszaeses tehat CSAK a tipus HIANYARA szol, nem az ismeretlen
       tipusra -- meg akkor sem, ha a regi mezo is ott van.
+
+      === EZ AZ ALLITAS 2026-09-18-IG A `serviceJob` ERTEKEN ALLT ===
+
+      Akkor az volt az ismeretlen tipus. Ma ismert, tehat ugyanazzal az ertekkel
+      az allitas MAR NEM AZT MERNE, amit a neve mond -- ezert kapott egy olyan
+      erteket, amit a szerver nem kuld. Ha egyszer az `invoice` is valodi
+      tipussa valik, ezt a ket sort ugyanigy at kell allitani, nem torolni.
     */
     assert.equal(
-      pushTarget(valasz({ targetType: "serviceJob", targetId: "job-1" })),
+      pushTarget(valasz({ targetType: "invoice", targetId: "inv-1" })),
       null,
     );
     assert.equal(
       pushTarget(
         valasz({
-          targetType: "serviceJob",
-          targetId: "job-1",
+          targetType: "invoice",
+          targetId: "inv-1",
           worksheetId: "ws-1",
         }),
       ),
       null,
+    );
+  });
+
+  it("a HIBAJEGY ma ismert celpont", () => {
+    /*
+      A SZERVER 2026-09-14 OTA KULDI (`deliverServiceJobAssignment`), a telefon
+      2026-09-18 ota ismeri. A negy nap kozte NEM regresszio volt, hanem
+      megnevezett kihagyas: a hibajegy-keperno csak 09-16-an keszult el.
+
+      MI PIROSIT: a `serviceJob` kivetele a `PUSH_TARGET_TYPES` listabol. Akkor
+      az elozo allitas (ismeretlen tipus -> null) ezt is elnyelne, es a
+      koppintas ujra sehova nem vinne.
+    */
+    assert.deepEqual(
+      pushTarget(valasz({ targetType: "serviceJob", targetId: "job-1" })),
+      { type: "serviceJob", id: "job-1" },
+    );
+  });
+});
+
+describe("melyik típus melyik képernyőt nyitja", () => {
+  /*
+    MIERT ITT MERJUK, ES NEM A HOROGBAN: az appban NULLA komponens-teszt van, a
+    horog pedig Expo futasidot kivan. A tablat viszont egy sima modul hordozza,
+    tehat merheto -- ugyanaz a szetvalasztas, mint a dontesnel.
+
+    AMIT EZ NEM FED, ES KIMONDOM: azt nem tudja, hogy a leirt utvonalhoz VAN-E
+    kepernyo-fajl. Egy elgepelt ut ugyanugy sztring. Azt a fajlrendszeren kell
+    merni, es meri is: `apps/api/src/mobile/push-targets.spec.ts`.
+  */
+  it("MINDEN ismert típusnak van útvonala", () => {
+    /*
+      POZITIV KONTROLL A TABLARA: ezt ma a fordito is tartja (a tabla
+      `satisfies Record<PushTargetType, string>` alakban all). Ez az allitas
+      akkor er valamit, ha valaki a `satisfies`-t leveszi -- es EPP ez tortent
+      volna eszrevetlenul, ha a korabbi `switch`-re hagyatkozunk.
+    */
+    const hianyzo = PUSH_TARGET_TYPES.filter(
+      (t) => !(PUSH_TARGET_ROUTES[t] ?? "").startsWith("/"),
+    );
+    assert.deepEqual(hianyzo, []);
+  });
+
+  it("a munkalap és a hibajegy KÜLÖN képernyőre megy", () => {
+    /*
+      MI PIROSIT: ha valaki masolassal veszi fel az uj sort es benne hagyja a
+      munkalap utjat. A koppintas akkor MUKODNE -- egy letezo kepernyot nyitna
+      meg, egy hibajegy azonositojaval --, es ez a fajta hiba a legcsendesebb.
+    */
+    assert.equal(PUSH_TARGET_ROUTES.worksheet, "/worksheets/[id]");
+    assert.equal(PUSH_TARGET_ROUTES.serviceJob, "/service-jobs/[id]");
+    assert.notEqual(
+      PUSH_TARGET_ROUTES.worksheet,
+      PUSH_TARGET_ROUTES.serviceJob,
     );
   });
 });
