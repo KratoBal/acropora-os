@@ -206,7 +206,18 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
  * kotott szamlalas a szomszed mappat nem hibanak latja, hanem nem letezonek --
  * ezert all itt a TELJES fa szama.
  */
-const IRAS_HIVASOK_A_FAN = 14;
+/**
+ * 2026-09-18: 14 -> 15. Az uj hivas az ESZKOZ fenykepenek FELIRATA
+ * (`setAssetDocumentCaption`, `lib/api/assets.ts`). A szomszed orzo szama is
+ * mozdult (13 -> 14), es a torzs NEVESITETT tipust kapott
+ * (`SetAssetDocumentCaptionInput`), tehat PAR is lett belole ott.
+ *
+ * A KET SZAM SZANDEKOSAN KULON MOZOG: ez a TELJES fat szamolja, a szomszed a
+ * `lib/api` mappat. Ha egyszer egy uj hivas CSAK ezt mozditja, az azt jelenti,
+ * hogy a mappan KIVUL keletkezett -- es epp az az eset, amit a szomszed nem
+ * hibanak lat, hanem nem letezonek.
+ */
+const IRAS_HIVASOK_A_FAN = 15;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

@@ -33,6 +33,12 @@ import { describe, it } from "node:test";
  */
 const KOZOS = "../../packages/types/src/service-job-management.ts";
 const MOBIL = "../mobile/src/lib/service-jobs/types.ts";
+/*
+  A MASODIK PAR: AZ ESZKOZ-TUKOR. Kulon fajlpar, mert a ket valasz ket kulon
+  modulban all -- egy kozos utvonal azt allitana, hogy egyszerre valtoznak.
+*/
+const KOZOS_ESZKOZ = "../../packages/types/src/asset-management.ts";
+const MOBIL_ESZKOZ = "../mobile/src/lib/api/assets.ts";
 
 function forras(ut: string): string {
   const s = readFileSync(ut, "utf8");
@@ -76,9 +82,16 @@ describe("a mobil válasz-típusai a közös csomaghoz mérve", () => {
   /**
    * A CSATOLMÁNY-ÖSSZEFOGLALÓ IS RÉSZHALMAZ, ÉS 2026-09-17-IG SEHOL NEM VOLT MÉRVE.
    *
-   * A telefon másolata SZŰKEBB (a szerver `type`, `sha256` és `caption` mezőt
-   * is küld), tehát itt sem egyezést mérünk, hanem azt, hogy minden mezője
-   * LÉTEZIK a közösben.
+   * A telefon másolata SZŰKEBB (a szerver `type` és `sha256` mezőt is küld),
+   * tehát itt sem egyezést mérünk, hanem azt, hogy minden mezője LÉTEZIK a
+   * közösben.
+   *
+   * EZ A FELSOROLÁS 2026-09-18-IG HÁROM ELEMŰ VOLT, és a harmadik a `caption`.
+   * Az íráskor igaz volt; azóta a telefon TÜKRÖZI, tehát a mondat kettőre
+   * szűkült. Nem stílus: úgy, ahogy állt, azt tanította a következő olvasónak,
+   * hogy a `caption` SZÁNDÉKOSAN marad ki -- vagyis épp az ellenkezőjét annak,
+   * ami történt. Egy komment, ami egy azóta betöltött hiányt ír le, rosszabb a
+   * semminél: egy már bezárt lyukat őriz.
    *
    * MIÉRT KELL, HA A SZŰKÍTÉS SZÁNDÉKOS: mert a másik irány NEM szándékos. A
    * `caption` hónapokig hiányozhatott volna úgy, hogy a fordító zöld -- az
@@ -99,6 +112,78 @@ describe("a mobil válasz-típusai a közös csomaghoz mérve", () => {
       idegen,
       [],
       `a telefon olyan csatolmány-mezőt olvas, ami a válaszban nincs: ${idegen.join(", ")}`,
+    );
+  });
+
+  /**
+   * AZ ESZKÖZ-TÜKÖR: UGYANEZ A MÉRÉS A MÁSIK PÁRON.
+   *
+   * === MIÉRT KERÜLT IDE, ÉS MIT FOG MEG ===
+   *
+   * A `caption` 2026-09-18-ig hiányzott a mobil `AssetDocumentSummary`-ből,
+   * miközben a szerver küldte és a webes lap használta. Minden kapu zöld volt:
+   * a fordító a másolat és a képernyő viszonyát nézi, nem a másolat és a
+   * szerver viszonyát, és EZ a fájl addig egyetlen fájlpárra szólt (a
+   * hibajegyére). A hiány tehát nem átcsúszott egy őrzőn -- NEM VOLT ŐRZŐ.
+   *
+   * === ÉS AMIÉRT A DOKUMENTUM-ÖSSZEFOGLALÓNÁL TELJES EGYEZÉST MÉRÜNK ===
+   *
+   * A szomszéd, hibajegy-oldali állítás RÉSZHALMAZT mér, mert ott a telefon
+   * másolata szándékosan szűkebb. Az eszköz-oldalon ma NEM az: mérve
+   * 2026-09-18-án, mind a kilenc mező mindkét oldalon áll, nulla eltéréssel
+   * MINDKÉT IRÁNYBAN.
+   *
+   * A teljes egyezés ezért nem szigorítás, hanem a MAI állapot rögzítése -- és
+   * ez az egyetlen alak, ami a MOST JAVÍTOTT hibát meg is fogná: egy új
+   * szerver-mező, amit senki nem tükröz, részhalmaz-méréssel CSENDBEN átmegy.
+   * Ha egyszer valaki szándékosan szűkíteni akarja a telefon másolatát, az
+   * DÖNTÉS, és ez az állítás kikényszeríti, hogy ki is mondja.
+   */
+  it("a mobil AssetDocumentSummary mezői PONTOSAN egyeznek a közössel", () => {
+    const kozosMezok = mezok(forras(KOZOS_ESZKOZ), "AssetDocumentSummary");
+    const mobilMezok = mezok(forras(MOBIL_ESZKOZ), "AssetDocumentSummary");
+    // POZITIV KONTROLL: ket ures halmaz osszevetese zolden allna.
+    assert.ok(
+      kozosMezok.size >= 8,
+      `gyanúsan kevés mező a közösben: ${kozosMezok.size}`,
+    );
+    assert.deepEqual(
+      [...mobilMezok].sort(),
+      [...kozosMezok].sort(),
+      "az eszköz-csatolmány tükre eltér a szervertől: vagy a telefon olvas nem létező mezőt, vagy a szerver küld olyat, amit a telefon nem tükröz",
+    );
+  });
+
+  /**
+   * AZ ESZKÖZ ADATLAPJA VISZONT SZŰKEBB, ÉS AZ SZÁNDÉK.
+   *
+   * Mérve 2026-09-18: a telefon a teljes láncból (`AssetDetail` +
+   * `AssetListItem` + `AssetHierarchyItem`) KETTŐT nem tükröz, az
+   * `archivedAt`-ot és a `purchasedAt`-ot. Ezért itt RÉSZHALMAZT mérünk, mint a
+   * hibajegynél.
+   *
+   * A LÁNCOT EGYBEN KELL VENNI, ÉS EZ NEM RÉSZLET: a `labelCode` a
+   * `AssetListItem`-en áll, a `AssetDetail` csak örökli. Az első mérésem CSAK a
+   * saját törzseket nézte, és ettől a `labelCode` "idegen mezőnek" látszott --
+   * egy hamis piros, ami az első futáson kikapcsolta volna ezt az őrzőt.
+   */
+  it("a mobil AssetDetail minden mezője létezik a közösben", () => {
+    const lanc = ["AssetDetail", "AssetListItem", "AssetHierarchyItem"];
+    const kozosMezok = new Set(
+      lanc.flatMap((nev) => [...mezok(forras(KOZOS_ESZKOZ), nev)]),
+    );
+    const mobilMezok = new Set(
+      lanc.flatMap((nev) => [...mezok(forras(MOBIL_ESZKOZ), nev)]),
+    );
+    assert.ok(
+      kozosMezok.size >= 20,
+      `gyanúsan kevés mező a közösben: ${kozosMezok.size}`,
+    );
+    const idegen = [...mobilMezok].filter((mezo) => !kozosMezok.has(mezo));
+    assert.deepEqual(
+      idegen,
+      [],
+      `a telefon olyan eszköz-mezőt olvas, ami a válaszban nincs: ${idegen.join(", ")}`,
     );
   });
 
