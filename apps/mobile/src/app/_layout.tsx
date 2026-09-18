@@ -160,9 +160,32 @@ function RootNavigator() {
       <Stack.Screen name="worksheets/index" options={{ title: "Munkalapok" }} />
       <Stack.Screen name="worksheets/new" options={{ title: "Új munkalap" }} />
       <Stack.Screen name="worksheets/[id]" options={{ title: "Munkalap" }} />
+      {/*
+        AZ ALAIRAS FEDO MODALISKENT NYILIK, ES A KET OPCIO NEM DISZ.
+
+        Balazs kerese (2026-09-18 07:01 UTC): "Szeretnek egy Alairas gombot az
+        aljara. ha azt megnyomjuk akkor egy felugro ablakban..."
+
+        A `fullScreenModal` adja a felugro alakot UGY, hogy a mogotte levo
+        munkalap-adatlap NEM latszik es nem erheto el. A `gestureEnabled: false`
+        pedig azt zarja el, hogy egy lehuzo mozdulat visszavigyen ra.
+
+        MIERT KELL MIND A KETTO: ezt a kepernyot a szerelo ODAADJA az ugyfelnek.
+        A mogotte allo adatlapon tetel-felvitel es torles van -- egy veletlen
+        lehuzas az ugyfel kezebe adna a szerelo munkaeszkozet. A kifele vezeto
+        ut CSAK a fejlec vissza-gombja marad, amit a szerelo nyom meg, miutan
+        visszavette a telefont.
+
+        Ezt a ket opciot orzo meri (`apps/api/src/mobile/worksheet-sign-modal.spec.ts`):
+        a vedelem KIZAROLAG rajtuk all, es a hianyuk semmilyen mas jelet nem adna.
+      */}
       <Stack.Screen
         name="worksheets/sign/[id]"
-        options={{ title: "Munkalap aláírása" }}
+        options={{
+          title: "Munkalap aláírása",
+          presentation: "fullScreenModal",
+          gestureEnabled: false,
+        }}
       />
       <Stack.Screen name="assets/index" options={{ title: "Eszközök" }} />
       <Stack.Screen name="assets/new" options={{ title: "Új eszköz" }} />

@@ -1318,9 +1318,17 @@ export default function WorksheetDetailScreen() {
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={styles.signButtonText}>
-                  Aláíratás az ügyféllel
-                </Text>
+                {/*
+                  A FELIRAT "Aláírás", Balazs kerese (2026-09-18 07:01 UTC):
+                  "Szeretnek egy Alairas gombot az aljara."
+
+                  A regi felirat ("Aláíratás az ügyféllel") EGY utat nevezett
+                  meg, es Balazs HAROM agat kert ugyanerre a lapra: a partner
+                  helyszini alairasat, az elkuldest alairasra, es azt, hogy a
+                  sajat szervizesunk irja ala. A szukebb felirat a masik ket
+                  agnak nem hagyna helyet.
+                */}
+                <Text style={styles.signButtonText}>Aláírás</Text>
               </Pressable>
             ) : null}
 
