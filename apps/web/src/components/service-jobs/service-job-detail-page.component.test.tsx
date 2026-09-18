@@ -406,7 +406,9 @@ describe("ServiceJobDetailPage", () => {
     await screen.findByText("A hibajegy létrejött (Új).");
 
     expect(screen.getByLabelText("Megjegyzés a lépéshez")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Elállt" })).not.toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Meghiúsult" }),
+    ).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Ütemezve" })).not.toBeDisabled();
   });
 
@@ -436,7 +438,7 @@ describe("ServiceJobDetailPage", () => {
 
     const field = screen.getByLabelText("Megjegyzés a lépéshez");
     fireEvent.change(field, { target: { value: "  A vevő mégsem kéri.  " } });
-    fireEvent.click(screen.getByRole("button", { name: "Elállt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Meghiúsult" }));
 
     await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
     expect(api.move.mock.calls[0]?.[2]).toEqual({
