@@ -311,6 +311,14 @@ export interface WorksheetLineInput {
 export interface WorksheetSignatureDetail {
   decision: WorksheetSignatureDecision;
   /**
+   * MILYEN MINŐSÉGBEN írta alá: a partner munkatársa, egy helyszínen beírt
+   * név, vagy a SZOLGÁLTATÓ saját munkatársa.
+   *
+   * `null` a 2026-09-04 előtti sorokon: ott nem tudjuk, és a séma szerint „egy
+   * kitalált érték rosszabb, mint egy kétértelmű".
+   */
+  signerSource: "SELECTED" | "TYPED" | "INTERNAL" | null;
+  /**
    * AZ ALAIRO NEVE. 2026-09-04 ota az UGYFEL embere, mindket feluleten.
    *
    * Korabban a mobil a SZERELO nevet kuldte ide, a web az ugyfelet -- ugyanaz a
@@ -727,8 +735,29 @@ export interface WorksheetAttachableListResponse {
  * A szerver alapértelmezése a `PHOTO`: a helyszínről érkező kép az, ami a lapra
  * kerül. A többi az irodából jön.
  */
-export type WorksheetDocumentType =
-  "PHOTO" | "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER";
+/**
+ * A MUNKALAPHOZ TARTOZO DOKUMENTUM FAJTAJA -- A `WorksheetDocumentType` PRISMA
+ * ENUMMAL EGYEZOEN.
+ *
+ * === EZ A LISTA 2026-09-18-IG HAROM OLYAN ERTEKET SOROLT, AMI NEM LETEZIK ===
+ *
+ * `INVOICE`, `WARRANTY`, `MANUAL` -- ezek az ESZKOZ-oldali halmaz
+ * (`AssetDocumentType`) ertekei. A munkalap enumja soha nem tartalmazta oket,
+ * tehat az adatbazis nem tudja eloallitani egyiket sem. Kozben a valodi
+ * `GENERATED_SHEET` (a lezaraskor kiadott hiteles lap) HIANYZOTT innen.
+ *
+ * Vagyis a szerzodes ket iranyba is tevedett: harom lehetetlen erteket igert,
+ * es az EGYETLENT, amire a partner hivatkozni fog, nem ismerte.
+ *
+ * MIERT NEM VETTE ESZRE SENKI: a `type` mezot a felulet eddig csak
+ * TOVABBADTA, nem agaztatott rajta. Az elso ag (a kiadott lap kulon szakasza)
+ * azonnal forditasi hibat adott -- es a hiba nem a kodrol szolt, hanem errol a
+ * listarol.
+ *
+ * AZ EGYEZEST MOSTANTOL ALLITAS ORZI:
+ * `apps/api/src/worksheets/worksheet-generated-sheet-hely.spec.ts`.
+ */
+export type WorksheetDocumentType = "PHOTO" | "OTHER" | "GENERATED_SHEET";
 
 /**
  * EGY CSATOLMÁNY A MUNKALAPON -- a leíró adat, a bájtok nélkül.

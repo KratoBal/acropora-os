@@ -253,7 +253,7 @@ export class ServiceJobsController {
    * hatalom, hanem ugyanannak a jegynek a kezelese.
    */
   @Post(":id/hidden")
-  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  @RequirePermissions(PERMISSIONS.SERVICE_HIDE)
   setHidden(
     @Param("id") id: string,
     @Body() input: SetServiceJobHiddenDto,

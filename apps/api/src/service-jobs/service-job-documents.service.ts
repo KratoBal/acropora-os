@@ -29,6 +29,10 @@ import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.
 import { ServiceJobDocumentsRepository } from "./service-job-documents.repository.js";
 import { ServiceJobsRepository } from "./service-jobs.repository.js";
 import { serviceJobVisibilityFor } from "./service-job-visibility-scope.js";
+import {
+  thumbnailResponse,
+  wantsThumbnail,
+} from "../documents/document-thumbnail.js";
 
 /** A gazda neve a taroloban. EGY helyen all, mert negy hivas hasznalja. */
 const OWNER = "service-job" as const;
@@ -223,8 +227,30 @@ export class ServiceJobDocumentsService {
    * neztek ki, mintha a csatolmany nem letezne -- es aki azt latja, ADATOT fog
    * keresni, nem beallitast.
    */
-  async documentBytes(id: string, documentId: string, user: AuthenticatedUser) {
+  async documentBytes(
+    id: string,
+    documentId: string,
+    user: AuthenticatedUser,
+    variant?: string,
+  ) {
     await this.requireVisibleJob(id, user);
+
+    /*
+      A CSEMPE KEPE ELOSZOR, ES CSAK AKKOR, HA A HIVO AZT KERTE.
+
+      A HATOKOR-ELLENORZES MAR MEGTORTENT FELETTE: ez az ag ugyanazon a kapun
+      belul all, tehat egy belyegkep sem erheto el olyannak, aki a csatolmanyt
+      magat nem lathatja.
+
+      A VISSZAESES HALLGATOLAGOS, ES EZ MEGKOTES (acrobot, 2026-09-18): ha nincs
+      belyegkep -- mert regi a sor, mert PDF, vagy mert az eloallitas elhasalt --,
+      a valasz az EREDETI. Egy hibauzenet itt azt jelentene, hogy a csempe
+      eltorik olyan sorokon, amik ma hibatlanul mukodnek.
+    */
+    if (wantsThumbnail(variant)) {
+      const kicsi = await this.repository.documentThumbnail(id, documentId);
+      if (kicsi) return thumbnailResponse(kicsi);
+    }
 
     const document = await this.repository.document(id, documentId);
     if (!document) throw new NotFoundException("A csatolmány nem található.");

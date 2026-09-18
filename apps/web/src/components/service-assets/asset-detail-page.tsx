@@ -576,7 +576,11 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                   <ServiceDocumentGallery
                     items={asset.documents}
                     loadBlob={(documentId) =>
-                      assetsApi.downloadDocument(token, asset.id, documentId)
+                      assetsApi.downloadDocumentThumbnail(
+                        token,
+                        asset.id,
+                        documentId,
+                      )
                     }
                     onDownload={(item) =>
                       void downloadDocument(item.id, item.fileName)

@@ -13,6 +13,7 @@ import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import {
   personDisplayName,
+  personLegalName,
   type WorksheetAssignableUserListResponse,
   type WorksheetSelectablePartnerListResponse,
   type WorksheetDepartmentListResponse,
@@ -39,6 +40,7 @@ import type {
   NormalizedWorksheetLine,
 } from "./worksheet-content.js";
 import { hiddenRowsWhere } from "../common/hidden-rows.js";
+import type { WorksheetSignerSource } from "./worksheet-signer.js";
 import { attachableWorksheetFilters } from "./attachable-worksheets.js";
 import {
   worksheetCloseBlocker,
@@ -219,6 +221,13 @@ export function worksheetListWheres(
   userWhereWithoutStatus: Prisma.WorksheetWhereInput,
   statusWhere: Prisma.WorksheetWhereInput,
   includeHidden?: boolean,
+  /**
+   * LATHAT-E EGYALTALAN REJTETT SORT. A `SERVICE_HIDE` jog megletet a hivo
+   * adja at TENYKENT; a DONTES (hatokor ES jog egyutt) a `hiddenRowsWhere`-ben
+   * marad. Alapertelmezese `false`: aki elfelejti atadni, KEVESEBBET lat, nem
+   * tobbet -- a nema irany a szigorubb.
+   */
+  mayHide = false,
 ): { list: Prisma.WorksheetWhereInput; counts: Prisma.WorksheetWhereInput } {
   /**
    * A REJTES SZURJE `AND` AGKENT, UGYANOTT, AHOL A HATOKOR -- ES UGYANABBOL A
@@ -229,7 +238,7 @@ export function worksheetListWheres(
    * amit a felhasznalo hibanak lat, es amirol nem tudja megmondani, melyik
    * oldal hazudik.
    */
-  const hidden = hiddenRowsWhere(scope, includeHidden);
+  const hidden = hiddenRowsWhere(scope, includeHidden, mayHide);
   return {
     list: {
       AND: [
@@ -551,7 +560,7 @@ export class WorksheetsRepository extends Repository {
            * A hatokor itt mindig belso is lehetne, megis a kozos fuggveny dont,
            * hogy a szabaly EGY helyen alljon.
            */
-          hiddenRowsWhere(scope, false),
+          hiddenRowsWhere(scope, false, false),
           ...attachableWorksheetFilters(customerId),
         ],
       },
@@ -730,6 +739,8 @@ export class WorksheetsRepository extends Repository {
   async list(
     query: WorksheetListQueryDto,
     scope: PartnerScope,
+    /** Lasd a `worksheetListWheres` azonos nevu parameteret. */
+    mayHide = false,
   ): Promise<WorksheetListResponse> {
     /**
      * A szűrt azonosító-halmaz ELŐBB áll elő, mint a `where`, mert a `where`-be
@@ -783,6 +794,7 @@ export class WorksheetsRepository extends Repository {
       userWhereWithoutStatus,
       latestStatusIds ? { id: { in: latestStatusIds } } : {},
       query.includeHidden,
+      mayHide,
     );
 
     const [rows, totalItems, counts] = await Promise.all([
@@ -1438,7 +1450,13 @@ export class WorksheetsRepository extends Repository {
     /** A valasztott munkatars, ha listarol ment. `null` az "egyik sem" agon. */
     signerUserId: string | null;
     /** Honnan jott a nev. TAROLT allapot, nem kepernyo-szoveg. */
-    signerSource: "SELECTED" | "TYPED";
+    /**
+     * A HARMADIK ERTEK 2026-09-18-AN KERULT FEL (`INTERNAL`): a sajat
+     * kollegank alairasa. A tipus a KOZOS `WorksheetSignerSource` unio, nem egy
+     * kezzel ismetelt felsorolas -- ket masolatban a negyedik ertek az egyikbol
+     * kimaradna, es a fordito a HIVAS helyen jelezne, nem itt.
+     */
+    signerSource: WorksheetSignerSource;
     note: string | null;
     actorUserId: string;
     now: Date;
@@ -1751,6 +1769,34 @@ export class WorksheetsRepository extends Repository {
    * CSAK A HASH JON VISSZA, es a szolgaltatas hasonlit -- a nyers kod sehol nem
    * hagyja el az adatbazist, mert sehol nem is letezik nyersen.
    */
+  /**
+   * EGY FELHASZNALO NEVE ALAIRASHOZ, VAGY `null`, HA NINCS ILYEN SOR.
+   *
+   * A BELSOS ALAIRASHOZ KELL: a kliens nem kuld nevet, a szerver a
+   * hitelesitett aktorbol veszi.
+   *
+   * === `personLegalName`, ES NEM `personDisplayName` ===
+   *
+   * A ket fuggveny kozott a kulonbseg a BECENEV, es a `person-name.ts` sajat
+   * megjegyzese mondja ki, melyik hova valo: "The name for documents and
+   * signatures: always the full one, never the nickname."
+   *
+   * Egy alairt munkalap dokumentum. Ha a becenev kerulne ra, a lap egy olyan
+   * nevet allitana alairokent, ami sehol maskepp nem azonositja az embert --
+   * es epp az alairas az a hely, ahol ez szamit.
+   *
+   * A `null` NEM ugyanaz, mint az ures nev: azt jelenti, hogy a sor nem letezik
+   * (torolt felhasznalo, ervenytelen munkamenet). A hivo ezert hibaval all meg,
+   * nem ir ala ures nevvel.
+   */
+  async userLegalName(userId: string): Promise<string | null> {
+    const row = await this.database.user.findUnique({
+      where: { id: userId },
+      select: { displayName: true, nickname: true },
+    });
+    return row ? personLegalName(row) : null;
+  }
+
   async signingCodeHash(userId: string): Promise<string | null> {
     const row = await this.database.user.findUnique({
       where: { id: userId },
@@ -1910,6 +1956,12 @@ export class WorksheetsRepository extends Repository {
     sha256: string;
     content: Buffer | null;
     storageKey?: string | null;
+    /**
+     * A CSEMPE KEPE. KOTELEZO MEZO, NEM ELHAGYHATO: a feltoltes kozos utja
+     * (`prepareDocument`) mindig ad erteket, es ha egy jovobeli hivo kihagyna,
+     * az forditasi hiba legyen, ne egy csendben belyegkep nelkuli sor.
+     */
+    thumbnail: Buffer | null;
     caption: string | null;
     actorUserId: string;
   }) {
@@ -1929,6 +1981,7 @@ export class WorksheetsRepository extends Repository {
          */
         content: input.content ? Uint8Array.from(input.content) : null,
         storageKey: input.storageKey ?? null,
+        thumbnail: input.thumbnail ? Uint8Array.from(input.thumbnail) : null,
         caption: input.caption,
         uploadedById: input.actorUserId,
       },
@@ -1958,6 +2011,29 @@ export class WorksheetsRepository extends Repository {
    */
   async documentBytesInUse(): Promise<number> {
     return sumDocumentBytesInUse();
+  }
+
+  /**
+   * A CSEMPE KEPE -- KULON OLVASAS, ES EZ A LENYEG.
+   *
+   * MIERT NEM A `document()` EGY MEZOJE: az a `content` oszlopot is kiolvassa,
+   * es az adatbazisban tarolt fajlnal az a TELJES MERETU kep. Ha a belyegkep
+   * ugyanabbol a lekerdezesbol jonne, a szerver tovabbra is kiolvasna a
+   * kilenc megabajtot -- csak nem kuldene el. A megtakaritas fele elveszne, es
+   * eppen az a fele, amit nem latna senki.
+   *
+   * A VISSZAESES A HIVONAL VAN: ha nincs sor vagy nincs belyegkep, ez `null`-t
+   * ad, es a hivo a rendes uton megy tovabb. Ket lekerdezes tehat CSAK a
+   * visszaeses eseteben tortenik.
+   */
+  async documentThumbnail(worksheetId: string, documentId: string) {
+    const row = await this.database.worksheetDocument.findFirst({
+      where: { id: documentId, worksheetId },
+      select: { fileName: true, thumbnail: true },
+    });
+    return row?.thumbnail
+      ? { fileName: row.fileName, thumbnail: row.thumbnail }
+      : null;
   }
 
   /** Egy csatolmany sora, a bajtokkal vagy a tarolo-kulccsal egyutt. */

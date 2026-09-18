@@ -305,6 +305,15 @@ export class ServiceAssetsController {
     @Param("id") id: string,
     @Param("documentId") documentId: string,
     @CurrentUser() user: AuthenticatedUser,
+    /**
+     * MELYIK VALTOZAT. `thumbnail` eseten a csempe kepe, minden mas ertek
+     * (beleertve a hianyzot es az elgepeltet) az EREDETI -- az a biztonsagos
+     * irany: egy elirt parameter teljes meretu kepet ad, nem uresat.
+     *
+     * A LETOLTES EZT SOHA NEM ADJA MEG, es ez megkotes: a letoltes, a PDF es a
+     * hiteles peldany a teljes meretu fajlbol megy.
+     */
+    @Query("variant") variant?: string,
   ) {
     // A KET FORRAS KOZTI DONTES A SZOLGALTATASE, nem a controlleré: az a
     // dolga, hogy a valaszt osszerakja, nem az, hogy tudja, hol allnak a
@@ -313,6 +322,7 @@ export class ServiceAssetsController {
       id,
       documentId,
       partnerScopeOf(user),
+      variant,
     );
 
     return new StreamableFile(document.bytes, {

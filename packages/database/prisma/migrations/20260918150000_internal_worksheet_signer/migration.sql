@@ -1,0 +1,24 @@
+-- A SZOLGÁLTATÓ SAJÁT MUNKATÁRSA IS ALÁÍRHAT, AZONOSÍTVA.
+--
+-- Balázs kérése, 2026-09-18 07:01 UTC (Acropora OS mobilalkalmazás szál), szó
+-- szerint: "Es az elozo kepernyon utolso gomb Alairom."
+--
+-- === MI HIÁNYZOTT EDDIG ===
+--
+-- A `resolveSigner` két ágat ismert. A `SELECTED` a lap PARTNERÉNEK
+-- munkatársaihoz kötött (a saját kollégánk azonosítóját elutasította), a
+-- `TYPED` pedig névtelen: szabad szöveg, semmi nem köti felhasználóhoz.
+--
+-- A saját kollégánk aláírása a `TYPED` ágon nemcsak névtelen lenne, hanem
+-- FÉLREVEZETŐ is: a lapon ugyanúgy jelenne meg, mint egy kézzel beírt
+-- ügyfél-név.
+--
+-- === AMIT EZ AZ ÉRTÉK NEM VÁLTOZTAT MEG ===
+--
+-- Egyetlen meglévő sort sem érint: az `ALTER TYPE ... ADD VALUE` csak bővíti a
+-- felsorolást. A `signerSource` továbbra is nullázható, és a `NULL` marad a
+-- régi, kétértelmű állapot jelölése -- a séma saját megjegyzése szerint egy
+-- kitalált érték rosszabb volna, mint egy kétértelmű.
+
+-- AlterEnum
+ALTER TYPE "WorksheetSignerSource" ADD VALUE 'INTERNAL';

@@ -172,6 +172,40 @@ export const PERMISSIONS = {
   /// kerül, és megmarad. Ez a jog a téves felvitel visszavonására való.
   SERVICE_ASSET_DELETE: "service.asset.delete",
   /**
+   * MUNKALAP VAGY HIBAJEGY ELREJTÉSE A LISTÁKBÓL -- ÉS A VISSZAÁLLÍTÁSA.
+   *
+   * Balázs kérése, 2026-09-18 11:09 UTC, szó szerint, MÁR ÉLES HASZNÁLAT
+   * KÖZBEN: „megcsinaltam, de a gomb ottmarad es megnyomhato barmelyik lapnal,
+   * jegynel. Azt szeretnem, hogy csak admin jogos felhasznalonal jelenjen meg"
+   *
+   * === MIÉRT KÜLÖN JOG, ÉS MIÉRT NEM A `SERVICE_MANAGE` ===
+   *
+   * A `SERVICE_MANAGE`-et a saját szerelő kollégáink (SERVICE) ÉS a
+   * partner-fiókok (PARTNER_SERVICE) is viselik -- az a NAPI szerviz-munka
+   * jogköre. A rejtés viszont azt dönti el, mit LÁT a többi ember: egy
+   * elrejtett lap senki listájában nem szerepel, és aki keresi, nem találja.
+   *
+   * === MIÉRT NEM A `SERVICE_WORKSHEET_AMEND` ÚJRAHASZNÁLÁSA ===
+   *
+   * Az is admin-körű, tehát kézenfekvő volna. Attól viszont az a jog KÉT dolgot
+   * jelentene, és ha valaha változik, ki módosíthat lezárt lapot, azzal EGYÜTT
+   * változna az is, ki rejthet -- némán, mert senki nem keresné az összefüggést.
+   *
+   * === A MANAGER SEM KAPJA MEG, ÉS EZ MA DÖNTÉS, NEM KÖVETKEZMÉNY ===
+   *
+   * Balázs „admin jogos felhasználót" mondott. Ugyanabba a szűk körbe kerül,
+   * mint a `SETTINGS_MANAGE`, a `SERVICE_ASSET_DELETE` és a
+   * `SERVICE_WORKSHEET_AMEND` (lásd `ROLE_PERMISSIONS` lent). Ha ez valaha
+   * megváltozik, LÁTSZÓDJON: ezért áll rá saját állítás is.
+   *
+   * === ÉS A REJTÉS NEM TÖRLÉS ===
+   *
+   * A sor megmarad, a szám foglalva marad, a fájlok megmaradnak, és a művelet
+   * visszavonható. Ez a jog mégis szűk körű: nem a kár mérete miatt, hanem
+   * mert egy észrevétlen rejtés addig áll, amíg valaki keresi a lapot.
+   */
+  SERVICE_HIDE: "service.hide",
+  /**
    * KI LATHATJA MELYIK ALEGYSEG HIBAJEGYEIT -- A LATHATOSAGI HOZZARENDELES.
    *
    * KULON JOGKOR, ES NEM A `service.manage` alatt, mert MAS FAJTA: a
@@ -239,6 +273,11 @@ export const ROLE_PERMISSIONS: Readonly<
       permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR &&
       permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND &&
       permission !== PERMISSIONS.SERVICE_ASSET_DELETE &&
+      // A REJTES SEM VEZETOI JOG: Balazs "admin jogos felhasznalot" kert
+      // (2026-09-18 11:09 UTC). Egy MANAGER, aki rejthet, csendben kivehetne
+      // sorokat masok listajabol -- es a hianyt senki nem keresne, mert a
+      // lista nem hibazik, csak rovidebb.
+      permission !== PERMISSIONS.SERVICE_HIDE &&
       // A LATHATOSAGI HOZZARENDELES NEM VEZETOI JOG. Egy MANAGER, aki
       // hozzarendelest allithat, sajat magat is beallithatna -- es a lathatosag
       // epp az a fajta, ahol a tullepes NEM latszik: a lista tobb sort ad, es

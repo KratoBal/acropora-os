@@ -104,3 +104,25 @@ export function canonicalMimetypeFor(kind: UploadedFileKind): string {
   if (!signature) throw new Error(`Ismeretlen fájlfajta: ${kind}`);
   return signature.canonicalMimetype;
 }
+
+/**
+ * A TAROLT TIPUSBOL VISSZA A FAJTAHOZ -- vagy `null`, ha nem a mienk.
+ *
+ * MIERT KELL: a MAR TAROLT sorokrol (visszamenoleges belyegkep-generalas,
+ * egyeztetes) csak a `contentType` all rendelkezesre, a felismeres eredmenye
+ * nem. Enelkul a hivo egy SAJAT listat tartana arrol, mi szamit kepnek -- es az
+ * a lista egyszer elcsuszna ettol a tablatol.
+ *
+ * A KANONIKUS ALAKRA ILLESZT, nem a bejelentettre: a tarolt sor mindig azt
+ * viseli (a `canonicalMimetypeFor` irja bele), tehat az `image/jpg` alak itt
+ * SZANDEKOSAN nem ad talalatot -- ha megis elofordulna, az maga a lelet.
+ */
+export function kindForStoredMimetype(
+  contentType: string,
+): UploadedFileKind | null {
+  const alak = contentType.trim().toLowerCase();
+  return (
+    SIGNATURES.find((signature) => signature.canonicalMimetype === alak)
+      ?.kind ?? null
+  );
+}

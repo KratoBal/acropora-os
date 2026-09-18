@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { describe, it } from "node:test";
 
 /**
@@ -41,6 +41,46 @@ import { describe, it } from "node:test";
 const FORDITOTT = "dist/imports/unas/unas-kapcsolat-ujraepites.cli.js";
 const FORRAS = "src/imports/unas/unas-kapcsolat-ujraepites";
 
+/**
+ * A LEFORDITOTT PARANCS ALLAPOTA -- ES AMIERT EZ KULON LEPES.
+ *
+ * Ez a spec a `dist`-bol indit, a csomag `test` parancsa viszont a `test-dist`-et
+ * torli es epiti ujra: a `dist`-hez SEM NEM NYUL, sem nem torli. Ez rendben van,
+ * mert a repo sajat kapuja (`pnpm test`, illetve `turbo run test --filter=...`)
+ * a `build` feladattol FUGG (`turbo.json`: test dependsOn ["build", "^build"]),
+ * tehat ott a `dist` mindig friss.
+ *
+ * A RES A ROVIDITESBEN VAN: a `pnpm --filter @acropora/api test` a csomag nyers
+ * npm-parancsat futtatja, kihagyva a fuggosegi grafot -- es akkor ez az allitas
+ * egy HIANYZO vagy REGI `dist`-en fut.
+ *
+ * MERVE 2026-09-18, hianyzo `dist` mellett:
+ *     pnpm --filter @acropora/api test              exit 1, "Cannot find module"
+ *     turbo run test --filter=@acropora/api         exit 0, a build ujraepitette
+ *
+ * AMIERT EZ A NEHANY SOR MEGIS ITT ALL: a nyers hiba ROSSZ IRANYBA KULD. A
+ * "Cannot find module" ugy nez ki, mint a sajat valtoztatasod hibaja, es ma ket
+ * agens keresett tole nem letezo regressziot (nautilus es murena, fc174f47).
+ * Nem uj vedelem tehat, hanem DIAGNOZIS: ugyanaz a bukas, megnevezett okkal.
+ *
+ * ES A HATARA: a repo sajat parancsaval ez az ag SOHA nem sul el, mert ott a
+ * `dist` a futas elott epul. Ha megis elsul, az azt jelenti, hogy a hivas
+ * kerulte meg a grafot -- nem azt, hogy a kod romlott el.
+ */
+function forditottAllapota(): string | null {
+  if (!existsSync(FORDITOTT))
+    return `a lefordított parancs NINCS MEG (${FORDITOTT})`;
+
+  const forditottKora = statSync(FORDITOTT).mtimeMs;
+  const regebbi = [".mag.ts", ".runner.ts", ".cli.ts"]
+    .map((veg) => `${FORRAS}${veg}`)
+    .filter((ut) => statSync(ut).mtimeMs > forditottKora);
+  if (regebbi.length)
+    return `a lefordított parancs RÉGEBBI, mint a forrása: ${regebbi.join(", ")}`;
+
+  return null;
+}
+
 describe("a kapcsolat-újraépítés parancsa", () => {
   /**
    * A `--help` AZ EGYETLEN UT, amin az INDULAS adatbazis nelkul merheto. Minden
@@ -48,6 +88,18 @@ describe("a kapcsolat-újraépítés parancsa", () => {
    * kapcsolati hiba pedig ELFEDNE azt, amit merni akarunk.
    */
   it("külön folyamatban elindul, és nem üres kimenettel tér vissza", () => {
+    /*
+      A DIAGNOZIS A FUTTATAS ELOTT All, nem utana: a `execFileSync` hibaja a
+      LEFORDITOTT fajlrol szol, es elfedne, hogy a BUILD hianyzik.
+    */
+    const baj = forditottAllapota();
+    assert.equal(
+      baj,
+      null,
+      `${baj} -- ez NEM a kód hibája. A csomag \`test\` parancsa a \`dist\`-et nem építi; ` +
+        "futtasd a repó saját alakjával: `turbo run test --filter=@acropora/api` (vagy `pnpm test`).",
+    );
+
     const kimenet = execFileSync("node", [FORDITOTT, "--help"], {
       encoding: "utf8",
     });

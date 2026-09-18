@@ -17,6 +17,7 @@ const navigation = vi.hoisted(() => ({
 }));
 
 const api = vi.hoisted(() => ({ list: vi.fn() }));
+const suppliers = vi.hoisted(() => ({ units: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
 vi.mock("next/navigation", () => ({
@@ -36,6 +37,7 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
 vi.mock("@/lib/api/assets", () => ({ assetsApi: api }));
+vi.mock("@/lib/api/suppliers", () => ({ suppliersApi: suppliers }));
 
 const session: Session = {
   id: "session-1",
@@ -730,5 +732,63 @@ describe("AssetListPage oldalmeret es alapertelmezett szuro", () => {
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     expect(lastTarget().get("status")).toBe("ALL");
+  });
+
+  /**
+   * A HIBA ES AZ URES EREDMENY NEM UGYANAZ -- ES EDDIG UGYANUGY NEZETT KI.
+   *
+   * A helyszin-szuro panelje `unitRows.length > 0` mellett rajzolodik, tehat egy
+   * sikertelen lekerdezes utan EGYSZERUEN ELTUNIK. A kezelo abbol azt olvassa
+   * ki, hogy a partnernek nincs helyszine -- nem azt, hogy most nem tudtuk
+   * lekerdezni. Offline ez lenne az ALAPHELYZET, nem a kivetel.
+   *
+   * A KET ALLITAS EGYUTT ER VALAMIT: az elso azt meri, hogy a hiba LATSZIK, a
+   * masodik azt, hogy az URES eredmeny NEM ad hamis riasztast. Egyik nelkul a
+   * masik egy olyan komponensen is teljesulne, ami MINDIG (vagy soha) kiirja.
+   */
+  describe("a helyszín-szűrő hibája megkülönböztethető az ürestől", () => {
+    const UZENET = /A helyszín-szűrő most nem tölthető be/;
+
+    beforeEach(() => {
+      navigation.params = new URLSearchParams({
+        ownerType: "SUPPLIER",
+        ownerId: "supplier-1",
+      });
+    });
+
+    it("HIBÁNÁL kiírja, hogy nem tölthető be", async () => {
+      suppliers.units.mockRejectedValue(new Error("hálózati hiba"));
+
+      render(<AssetListPage />);
+      await screen.findByText("Cápasuli kompresszor");
+
+      expect(await screen.findByText(UZENET)).toBeTruthy();
+    });
+
+    it("ÜRES eredménynél NEM ír ki semmit", async () => {
+      suppliers.units.mockResolvedValue({ items: [] });
+
+      render(<AssetListPage />);
+      await screen.findByText("Cápasuli kompresszor");
+
+      expect(screen.queryByText(UZENET)).toBeNull();
+    });
+
+    it("a saját LEMONDÁSUNK nem hiba", async () => {
+      /*
+        Az `AbortError` akkor keletkezik, amikor a hatas ujrafut es lemondjuk az
+        elozo kerest. Ha azt is hibanak vennenk, a mondat egy SZOKASOS
+        allapotban jelenne meg -- es egy figyelmeztetes, ami mindig ott van,
+        ugyanaz, mint ami soha.
+      */
+      suppliers.units.mockRejectedValue(
+        new DOMException("megszakítva", "AbortError"),
+      );
+
+      render(<AssetListPage />);
+      await screen.findByText("Cápasuli kompresszor");
+
+      expect(screen.queryByText(UZENET)).toBeNull();
+    });
   });
 });

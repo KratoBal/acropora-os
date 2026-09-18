@@ -1786,6 +1786,12 @@ export class ServiceAssetsRepository extends Repository {
     sizeBytes: number;
     sha256: string;
     contentType: string;
+    /**
+     * A CSEMPE KEPE. KOTELEZO MEZO, NEM ELHAGYHATO: a feltoltes kozos utja
+     * (`prepareDocument`) mindig ad erteket, es ha egy jovobeli hivo kihagyna,
+     * az forditasi hiba legyen, ne egy csendben belyegkep nelkuli sor.
+     */
+    thumbnail: Buffer | null;
     caption: string | null;
     actorUserId: string;
   }): Promise<AssetDocumentSummary> {
@@ -1803,6 +1809,7 @@ export class ServiceAssetsRepository extends Repository {
           sha256,
           content: input.content ? Uint8Array.from(input.content) : null,
           storageKey: input.storageKey ?? null,
+          thumbnail: input.thumbnail ? Uint8Array.from(input.thumbnail) : null,
           caption: input.caption,
           uploadedById: input.actorUserId,
         },
@@ -1853,6 +1860,46 @@ export class ServiceAssetsRepository extends Repository {
    *                      belole valami a partnernek, az EGY KERDES lesz, nem egy
    *                      csendes szivargas.
    */
+  /**
+   * A CSEMPE KEPE -- KULON OLVASAS, ES A HATOKOR UGYANAZ.
+   *
+   * MIERT NEM A `document()` EGY MEZOJE: az a `content` oszlopot is kiolvassa,
+   * es az adatbazisban tarolt fajlnal az a TELJES MERETU kep. Ha a belyegkep
+   * ugyanabbol a lekerdezesbol jonne, a szerver tovabbra is kiolvasna a
+   * kilenc megabajtot -- csak nem kuldene el.
+   *
+   * ES A KET HATOKOR-ELLENORZES ITT SEM HAGYHATO EL, BETURE UGYANAZ: a
+   * tulajdonos (`rowBelongsToScope`) ES a dokumentum-fajta
+   * (`scopeMaySeeDocumentType`). Egy belyegkep ugyanannak a kepnek a kicsinyitett
+   * masa -- egy INTERNAL csatolmany csempeje ugyanugy szivargas lenne, csak
+   * kisebb felbontasban. Ezert all itt masolat helyett ugyanaz a ket hivas, es
+   * ezert all ra kulon allitas.
+   *
+   * A VISSZAESES A HIVONAL VAN: ha nincs sor, nincs jogosultsag vagy nincs
+   * belyegkep, ez `null`-t ad, es a hivo a rendes uton megy tovabb. Ket
+   * lekerdezes tehat CSAK a visszaeses eseteben tortenik.
+   */
+  async documentThumbnail(
+    assetId: string,
+    documentId: string,
+    scope: PartnerScope,
+  ) {
+    const row = await prisma.assetDocument.findFirst({
+      where: { id: documentId, assetId },
+      select: {
+        fileName: true,
+        thumbnail: true,
+        type: true,
+        asset: { select: { customerId: true, supplierId: true } },
+      },
+    });
+    if (!row) return null;
+    if (!rowBelongsToScope(row.asset, scope)) return null;
+    if (!scopeMaySeeDocumentType(row.type, scope)) return null;
+    if (!row.thumbnail) return null;
+    return { fileName: row.fileName, thumbnail: row.thumbnail };
+  }
+
   async document(assetId: string, documentId: string, scope: PartnerScope) {
     const row = await prisma.assetDocument.findFirst({
       where: { id: documentId, assetId },

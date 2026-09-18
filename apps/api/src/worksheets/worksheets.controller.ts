@@ -18,7 +18,11 @@ import {
 } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
-import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
@@ -54,7 +58,11 @@ export class WorksheetsController {
     @Query() query: WorksheetListQueryDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.list(query, partnerScopeOf(user));
+    return this.service.list(
+      query,
+      partnerScopeOf(user),
+      hasPermission(user, PERMISSIONS.SERVICE_HIDE),
+    );
   }
 
   @Get("customers/:customerId/departments")
@@ -311,7 +319,7 @@ export class WorksheetsController {
    * (csak belso ut) a szolgaltatas ellenorzi.
    */
   @Post(":id/hidden")
-  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  @RequirePermissions(PERMISSIONS.SERVICE_HIDE)
   setHidden(
     @Param("id") id: string,
     @Body() input: SetWorksheetHiddenDto,
@@ -437,11 +445,21 @@ export class WorksheetsController {
     @Param("id") id: string,
     @Param("documentId") documentId: string,
     @CurrentUser() user: AuthenticatedUser,
+    /**
+     * MELYIK VALTOZAT. `thumbnail` eseten a csempe kepe, minden mas ertek
+     * (beleertve a hianyzot es az elgepeltet) az EREDETI -- az a biztonsagos
+     * irany: egy elirt parameter teljes meretu kepet ad, nem uresat.
+     *
+     * A LETOLTES EZT SOHA NEM ADJA MEG, es ez megkotes: a letoltes, a PDF es a
+     * hiteles peldany a teljes meretu fajlbol megy.
+     */
+    @Query("variant") variant?: string,
   ) {
     const document = await this.service.documentBytes(
       id,
       documentId,
       partnerScopeOf(user),
+      variant,
     );
     return new StreamableFile(document.bytes, {
       type: document.contentType,

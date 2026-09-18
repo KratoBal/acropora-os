@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
+import { splitWorksheetDocuments } from "./worksheet-issued-sheet";
 import {
   ServicePanel,
   ServicePanelHeading,
@@ -92,24 +93,75 @@ export function WorksheetDocuments({
 
   if (!canView) return null;
 
+  const { issued, attachments } = splitWorksheetDocuments(items);
+
+  /**
+   * A KET SZAKASZ UGYANAZT A GALERIAT ES UGYANAZT A LETOLTESI UTAT HASZNALJA.
+   *
+   * A szetvalasztas a MEGJELENITESROL szol, nem az elerésről: a kiadott lap ma
+   * is letoltheto a meglevo vegponton at, es ez a valtozas azt NEM irja at.
+   */
+  const galeria = (sorok: WorksheetDocumentSummary[], ures: string) => (
+    <ServiceDocumentGallery
+      items={sorok}
+      loadBlob={(documentId) =>
+        worksheetsApi.downloadDocumentThumbnail(token, worksheetId, documentId)
+      }
+      onDownload={(item) => void mentes(item)}
+      emptyText={ures}
+    />
+  );
+
   return (
-    <ServicePanel>
-      <ServicePanelHeading title="Csatolmányok" />
+    <>
+      {/*
+        A KIADOTT LAP SAJAT SZAKASZT KAP (acrobot dontese, 2026-09-18).
+
+        KET INDOK: a csatolmany az, amit VALAKI FELTOLTOTT, a lap az, amit a
+        RENDSZER ADOTT KI -- egy listaban a felhasznalo nem tudja megmondani,
+        melyik a hiteles peldany, es epp erre a fajlra fog a partner hivatkozni.
+        A masodik merve van: a munkalap-oldal nem ad torles-gombot, tehat ez
+        volt az EGYETLEN fajl a panelben, amit nem lehet eltavolitani.
+
+        A SZAKASZ AKKOR IS ALL, HA MEG URES: piszkozat lapnal meg nincs kiadott
+        peldany, es a mondat megmondja, mikor lesz. Elrejtve a felhasznalo nem
+        tudna, hova fog kerulni.
+      */}
+      {/*
+        A HIBA EGYSZER ALL, A KET SZAKASZ FOLOTT -- ES EZT EGY MEGLEVO ALLITAS
+        KENYSZERITETTE KI.
+
+        Eloszor mind a ket panelbe betettem, es a "betoltesi hibat
+        megkulonbozteti az ures listatol" teszt kipirosodott: ket azonos szoveg
+        allt a kepernyon. Egy lekeres bukott el, tehat EGY mondat jar rola --
+        ket panel meg nem ket hiba.
+      */}
       {error ? (
-        <p className="text-sm font-medium text-rose-600">{error}</p>
-      ) : loading ? (
-        <p className="text-sm text-dusk-500">A csatolmányok töltődnek…</p>
-      ) : (
-        <ServiceDocumentGallery
-          items={items}
-          loadBlob={(documentId) =>
-            worksheetsApi.downloadDocument(token, worksheetId, documentId)
-          }
-          onDownload={(item) => void mentes(item)}
-          emptyText="Ehhez a munkalaphoz még nincs fénykép vagy fájl csatolva."
-        />
-      )}
-    </ServicePanel>
+        <p className="mb-3 text-sm font-medium text-rose-600">{error}</p>
+      ) : null}
+      <ServicePanel>
+        <ServicePanelHeading title="A kiadott munkalap" />
+        {error ? null : loading ? (
+          <p className="text-sm text-dusk-500">A kiadott lap töltődik…</p>
+        ) : (
+          galeria(
+            issued,
+            "Ez a munkalap még nincs lezárva, ezért kiadott példány sem készült róla.",
+          )
+        )}
+      </ServicePanel>
+      <ServicePanel>
+        <ServicePanelHeading title="Csatolmányok" />
+        {error ? null : loading ? (
+          <p className="text-sm text-dusk-500">A csatolmányok töltődnek…</p>
+        ) : (
+          galeria(
+            attachments,
+            "Ehhez a munkalaphoz még nincs fénykép vagy fájl csatolva.",
+          )
+        )}
+      </ServicePanel>
+    </>
   );
 
   /**

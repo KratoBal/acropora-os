@@ -121,6 +121,27 @@ const PAROK: readonly Par[] = [
     dtoMinimum: 1,
   },
   {
+    /**
+     * AZ ESZKÖZ-FÉNYKÉP FELIRATA. 2026-09-18-án került ide, amikor a telefonra
+     * megjött az eszköz-galéria feliratozása -- a lenti darabszám elmozdult, és
+     * a guard saját üzenete kérte a döntést. A válasz IGEN, ugyanabból az
+     * okból, mint a hibajegynél: a törzs NEVESÍTETT típussal megy.
+     *
+     * ÉS AMIÉRT KÜLÖN PÁR, NEM A HIBAJEGYÉ ÚJRAHASZNÁLVA: két külön végpont,
+     * két külön DTO. Egy közös bejegyzés azt állítaná, hogy a kettő együtt
+     * változik -- és amikor az egyik elmozdul, a guard a MÁSIKAT nevezné meg.
+     */
+    mit: "eszköz-fénykép felirata",
+    mobil: "../mobile/src/lib/api/assets.ts",
+    mobilNev: "SetAssetDocumentCaptionInput",
+    dto: "src/service-assets/dto/asset.dto.ts",
+    dtoNev: "UpdateAssetDocumentCaptionDto",
+    kontroll: ["caption"],
+    /* EGY MEZOS TORZS, ugyanazert, amiert a hibajegynel. */
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
+  {
     mit: "felelősök átírása",
     mobil: "../mobile/src/lib/api/worksheets.ts",
     mobilNev: "SetWorksheetAssigneesInput",
@@ -135,6 +156,30 @@ const PAROK: readonly Par[] = [
      */
     mobilMinimum: 1,
     dtoMinimum: 1,
+  },
+  {
+    /**
+     * A MUNKALAP ALAIRASA -- ES EZ A PAR EGY KET-PR-ES SZETVALASZTAS MIATT KELL.
+     *
+     * A belsos alairas SZERVER-oldala (852) es a TELEFON gombja (854) ket kulon
+     * korben keszult, es a ketto kozott EGYETLEN kapcsolodasi pont van: a
+     * `signSelf` mezo NEVE. Mind a ket oldalon sztring, tehat egy elgepeles
+     * barmelyik oldalon forditasidoben NEMA -- a keres kimegy, a szerver a
+     * mezot nem ismeri fel, es a nev nelkuli agra fut. A hiba hangos, de CSAK
+     * telefonon derul ki.
+     *
+     * A KONTROLLBAN KET MEZO ALL: a `signSelf` a belsos ag, a `signerUserId` a
+     * partner-ag. Ha barmelyik kiesik a kiolvasasbol, a par ket ures halmazt
+     * vetne ossze, zolden.
+     */
+    mit: "munkalap aláírása",
+    mobil: "../mobile/src/lib/api/worksheets.ts",
+    mobilNev: "SignWorksheetInput",
+    dto: "src/worksheets/dto/worksheet.dto.ts",
+    dtoNev: "SignWorksheetVersionDto",
+    kontroll: ["signSelf", "signerUserId"],
+    mobilMinimum: 4,
+    dtoMinimum: 5,
   },
 ];
 
@@ -163,6 +208,18 @@ const PAROK: readonly Par[] = [
  * hianyat semmi nem jelzi. Egy szam viszont NEM tud csendben elavulni.
  */
 /**
+ * 2026-09-18: 13 -> 14. Az új hívás az ESZKÖZ fényképének FELIRATA
+ * (`setAssetDocumentCaption`). A guard saját üzenete kérte a döntést, és a
+ * válasz IGEN: a törzs NEVESÍTETT típust kapott
+ * (`SetAssetDocumentCaptionInput`), tehát PÁR lett belőle fent.
+ *
+ * ÉS EZ A GUARD PONTOSAN AZT TETTE, AMIÉRT MEGÍRTÁK: a mai munkám a mobil
+ * tükrét és a képernyőt írta át, és a beégetett szám volt az EGYETLEN, ami
+ * megállított, hogy a törzsről is döntsek. Sem a fordító, sem a mobil
+ * teszt-készlet nem szólt volna -- a 2026-09-17-i `clientOperationId` pontosan
+ * ugyanígy ment át nyolc zöld kapun.
+ */
+/**
  * 2026-09-17: 12 -> 13. Az új hívás a hibajegy fényképének FELIRATA
  * (`setServiceJobDocumentCaption`). A guard saját üzenete kérte a döntést, és a
  * válasz IGEN: a törzs NEVESÍTETT típust kapott
@@ -177,7 +234,7 @@ const PAROK: readonly Par[] = [
  * típust kapott (`SetWorksheetAssigneesInput`), és PÁR is lett belőle fent --
  * vagyis a hívás nem a „nem mérjük" halmazba került.
  */
-const IRAS_HIVASOK_MA = 13;
+const IRAS_HIVASOK_MA = 14;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

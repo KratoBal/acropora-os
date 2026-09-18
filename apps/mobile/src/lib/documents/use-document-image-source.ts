@@ -3,7 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { environment } from "@/config/env";
 import { authSessionStore } from "@/lib/auth/token-store";
 
-import { documentImageSource } from "./document-view";
+import {
+  documentImageSource,
+  type DocumentImageVariant,
+} from "./document-view";
 
 /**
  * A HITELESÍTETT KÉP-FORRÁS ELŐÁLLÍTÁSA -- a tárolóhoz kötött fele.
@@ -34,8 +37,35 @@ export function useDocumentImageSource(ownerPath: string | null) {
    * szerveren 401-et kapna, a képernyőn pedig ÜRES CSEMPEKÉNT jelenne meg --
    * vagyis pontosan úgy, mint a hiba, amit ez az egész kör javít.
    */
-  return (documentId: string) =>
-    ownerPath && apiUrl && ertek
-      ? documentImageSource({ apiUrl, token: ertek, ownerPath, documentId })
+  function forras(documentId: string, variant: DocumentImageVariant) {
+    return ownerPath && apiUrl && ertek
+      ? documentImageSource({
+          apiUrl,
+          token: ertek,
+          ownerPath,
+          documentId,
+          variant,
+        })
       : null;
+  }
+
+  /**
+   * KÉT NEVESÍTETT FÜGGVÉNY, NEM EGY ELHAGYHATÓ PARAMÉTER -- ACROBOT DÖNTÉSE
+   * (2026-09-18).
+   *
+   * A MÉRT KOCKÁZAT: mind a három képernyő EBBŐL az egy horogból építi a 104
+   * pontos CSEMPÉT ÉS a TELJES KÉPERNYŐS képet is. Egy alapértelmezett érték
+   * mellett egy lemaradt hívóhely csendben bélyegképet adna a nagy képnek: nem
+   * hibázna, nem állna meg, csak ELMOSÓDNA.
+   *
+   * A CSEMPE GYORSULÁSA LÁTSZIK, A NAGY KÉP ELMOSÓDÁSA NEM. Ezért a hívóhelynek
+   * KI KELL MONDANIA, melyiket kéri, és a név mondja meg, nem egy paraméter,
+   * amit el lehet felejteni.
+   */
+  return {
+    /** A csempe képe: a szerver bélyegképe, ha van. */
+    csempe: (documentId: string) => forras(documentId, "thumbnail"),
+    /** A teljes képernyős nézet: MINDIG az eredeti fájl. */
+    teljes: (documentId: string) => forras(documentId, "original"),
+  };
 }

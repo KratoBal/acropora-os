@@ -452,7 +452,7 @@ export default function ServiceJobDetailScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.galeria}>
                 {kepek.map((kep) => {
-                  const forras = kepForras(kep.id);
+                  const forras = kepForras.csempe(kep.id);
                   return (
                     <Pressable
                       key={kep.id}
@@ -615,7 +615,7 @@ export default function ServiceJobDetailScreen() {
       {nagyKep ? (
         <View style={styles.nagyRatet}>
           {(() => {
-            const forras = kepForras(nagyKep);
+            const forras = kepForras.teljes(nagyKep);
             return forras ? (
               <Image
                 source={forras}
