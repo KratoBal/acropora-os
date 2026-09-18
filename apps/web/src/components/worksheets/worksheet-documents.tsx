@@ -103,7 +103,11 @@ export function WorksheetDocuments({
         <ServiceDocumentGallery
           items={items}
           loadBlob={(documentId) =>
-            worksheetsApi.downloadDocument(token, worksheetId, documentId)
+            worksheetsApi.downloadDocumentThumbnail(
+              token,
+              worksheetId,
+              documentId,
+            )
           }
           onDownload={(item) => void mentes(item)}
           emptyText="Ehhez a munkalaphoz még nincs fénykép vagy fájl csatolva."
