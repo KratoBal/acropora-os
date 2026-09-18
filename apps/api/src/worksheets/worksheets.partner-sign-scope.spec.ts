@@ -84,6 +84,39 @@ function sajatLap() {
   };
 }
 
+/**
+ * A KALIBRÁCIÓ NYOMA (nautilus, 2026-09-18 10:0x) -- MÉRVE, NEM ÁLLÍTVA.
+ *
+ * === MIÉRT ÁLL ITT, ÉS MIÉRT NEM ELÉG A ZÖLD ===
+ *
+ * Ez a két állítás 2026-09-17-én íródott, és a kalibrációjának SEHOL nem volt
+ * nyoma: sem itt, sem a kártyán. A hiány nem azt jelentette, hogy nem futott le
+ * -- azt, hogy a két esetet nem lehetett megkülönböztetni. Egy őrző, amit senki
+ * nem látott bukni, kívülről ugyanúgy néz ki, mint egy díszlet.
+ *
+ * === A KÉT RONTÁS ÉS AZ EREDMÉNYÜK ===
+ *
+ *   az első lekérdezés BELSŐS hatókörrel megy
+ *     (`requireWorksheet(id, { kind: "internal" })`)
+ *       -> a POZITÍV állítás piros, a negatív ZÖLD
+ *
+ *   a kapu dobása elnyelve (a hívás megmarad, csak az eredménye közömbös)
+ *       -> a NEGATÍV állítás piros, a pozitív ZÖLD
+ *
+ * MINDKETTŐ PONTOSAN EGYET DÖNT PIROSRA, és a másikat zölden hagyja. EZ a
+ * bizonyíték, nem a piros maga: ha mindkét rontásra mindkettő pirosodna, a pár
+ * nem különböztetne, és akkor a SPEC szorulna javításra, nem a kód.
+ *
+ * === EGY BUKTATÓ A RONTÁS ALAKJÁRÓL, HOGY A KÖVETKEZŐ NE FUSSON BELE ===
+ *
+ * Az első változatom a `scope` változót ÁRVÁN hagyta (`TS6133`), és a fordító
+ * megállt. A teszt akkor is adott eredményt -- de az egy BUKOTT FORDÍTÁS melletti
+ * futás volt, nem mérés. A helyes alak a nevet HASZNÁLATBAN tartja:
+ *
+ *   scope.kind === "internal" ? scope : { kind: "internal" as const }
+ *
+ * Visszaállítás után `diff` bájtra azonos, és a készlet 2/2 zöld.
+ */
 describe("partneri munkalap-aláírás", () => {
   it("a partner nem tudja aláírni másik partner munkalapját", async () => {
     let signCalled = false;
