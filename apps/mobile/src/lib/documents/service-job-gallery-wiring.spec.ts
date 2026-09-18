@@ -232,6 +232,31 @@ describe("a hibajegy csatolmány-szakasza", () => {
     assert.match(kodSzoveg(olvas(KEPERNYO)), /OFFLINE_COPY_NOTICE\.caption/);
   });
 
+  /**
+   * A KET HIVOHELY KET KULONBOZO VALTOZATOT KER -- ACROBOT DONTESE
+   * (2026-09-18), es a fontosabb fele a MASODIK sor.
+   *
+   * A csempe gyorsulasa LATSZIK; a nagy kep elmosodasa NEM. Egy elmosodott
+   * szerviz-fenykepet senki nem jelent be hibakent, csak egyszer csak nem
+   * lehet elolvasni rola a tipustablat.
+   *
+   * DARABSZAMOT MERUNK, NEM JELENLETET: egy nem egyedi minta mellett az egyik
+   * hivohely elvesztese zolden atmenne, mert a masik tartana eletben.
+   */
+  it("a csempe belyegkepet ker, a nagy kep az EREDETIT", () => {
+    const s = olvas(KEPERNYO);
+    assert.equal(
+      s.split("kepForras.csempe(").length - 1,
+      1,
+      "a csempe nem a belyegkep-agat hivja",
+    );
+    assert.equal(
+      s.split("kepForras.teljes(").length - 1,
+      1,
+      "a nagy kep nem az eredeti-agat hivja",
+    );
+  });
+
   it("a nagy kép rátét, nem Modal", () => {
     const s = olvas(KEPERNYO);
     assert.doesNotMatch(s, /<Modal/);

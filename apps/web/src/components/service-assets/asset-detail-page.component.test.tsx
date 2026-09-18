@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({
   uploadDocument: vi.fn(),
   documentUrl: vi.fn(),
   downloadDocument: vi.fn(),
+  downloadDocumentThumbnail: vi.fn(),
   setDocumentCaption: vi.fn(),
 }));
 
@@ -107,6 +108,12 @@ beforeEach(() => {
   api.qr.mockResolvedValue(qr);
   api.documentUrl.mockReturnValue("https://pelda.invalid/doc-1");
   api.downloadDocument.mockResolvedValue(new Blob(["kep"]));
+  /*
+    A CSEMPE A BELYEGKEP-AGAT HIVJA (2026-09-18 ota), a `downloadDocument`
+    pedig a MENTESE marad. Mind a kettot fel kell venni: egy hianyzo mock
+    ugyanugy ures csempet adna, mint a valodi hiba.
+  */
+  api.downloadDocumentThumbnail.mockResolvedValue(new Blob(["kep"]));
   api.setDocumentCaption.mockResolvedValue({ ok: true });
 });
 

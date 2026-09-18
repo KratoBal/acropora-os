@@ -57,6 +57,7 @@ describe("documentImageSource", () => {
       token: "abc",
       ownerPath: "/service/worksheets/ws-1",
       documentId: "doc-1",
+      variant: "original",
     });
     assert.equal(
       forras.uri,
@@ -76,8 +77,36 @@ describe("documentImageSource", () => {
       token: "abc",
       ownerPath: "/service/worksheets/ws-1",
       documentId: "doc-1",
+      variant: "original",
     });
     assert.doesNotMatch(forras.uri, /\/\/documents/);
+  });
+
+  /**
+   * A KET VALTOZAT KET KULONBOZO CIM, ES EZ AZ AZ ALLITAS, AMI ACROBOT
+   * MEGKOTESET ORZI (2026-09-18): a teljes kepernyos nezet NEM a belyegkepet
+   * keri.
+   *
+   * MIERT EZ A FONTOSABB A KETTOBOL: a csempe gyorsulasa LATSZIK, a nagy kep
+   * elmosodasa NEM. Egy elmosodott szerviz-fenykepet senki nem jelent be
+   * hibakent -- csak egyszer csak nem lehet elolvasni rola a tipustablat.
+   */
+  it("a csempe belyegkepet ker, a teljes nezet NEM", () => {
+    const kozos = {
+      apiUrl: "https://api.acropora.hu",
+      token: "abc",
+      ownerPath: "/service/assets/a-1",
+      documentId: "doc-1",
+    } as const;
+
+    assert.equal(
+      documentImageSource({ ...kozos, variant: "thumbnail" }).uri,
+      "https://api.acropora.hu/service/assets/a-1/documents/doc-1?variant=thumbnail",
+    );
+    assert.equal(
+      documentImageSource({ ...kozos, variant: "original" }).uri,
+      "https://api.acropora.hu/service/assets/a-1/documents/doc-1",
+    );
   });
 
   it("escapes an identifier that would break the path", () => {
@@ -86,6 +115,7 @@ describe("documentImageSource", () => {
       token: "abc",
       ownerPath: "/service/worksheets/ws-1",
       documentId: "a/b",
+      variant: "original",
     });
     assert.match(forras.uri, /documents\/a%2Fb$/);
   });
