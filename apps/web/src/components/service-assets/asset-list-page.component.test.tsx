@@ -553,7 +553,20 @@ describe("AssetListPage Beépített szűrő", () => {
     api.list.mockResolvedValue(response(1));
   });
 
+  /*
+    A KIINDULOALLAPOT 2026-09-18-TOL `ACTIVE`, ES EZ NEM A TESZT GYENGITESE.
+
+    Az allitas UGYANAZT mondja, mint eddig: a ful az `IN_PLACE` erteket teszi a
+    cimbe. Ami megvaltozott, az a FELULET ALAPERTELMEZESE: Balazs kerese ota
+    ures cim mellett MAR a "Beepitett" a kivalasztott ful -- es egy MAR
+    kivalasztott fulre kattintva a kapcsolo-viselkedes `ALL`-t ir, nem `IN_PLACE`-t.
+
+    Ures cimbol indulva tehat ez az allitas azt merne, hogy a ful ki tud-e
+    KAPCSOLNI, nem azt, hogy be tud-e. Egy masik fulrol indulva ugyanazt meri,
+    amit eddig.
+  */
   it("a fül az IN_PLACE értéket teszi a címbe", async () => {
+    navigation.params = new URLSearchParams("status=ACTIVE");
     render(<AssetListPage />);
 
     fireEvent.click(await screen.findByRole("tab", { name: "Beépített" }));
@@ -611,5 +624,111 @@ describe("AssetListPage Beépített szűrő", () => {
     render(<AssetListPage />);
 
     expect(screen.queryByRole("tab", { name: "Nem üzemel" })).toBeNull();
+  });
+});
+
+describe("AssetListPage oldalmeret es alapertelmezett szuro", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(1));
+  });
+
+  /**
+   * A VALASZTAS VISSZAVISZ AZ ELSO OLDALRA -- EZ A LENYEG, NEM A MERET.
+   *
+   * Ez a funkcio leggyakoribb nema hibaja: aki a 7. oldalon all 25-osevel es
+   * 100-ra valt, olyan oldalszamon maradna, ami MAR NEM LETEZIK. A lista
+   * uresen jonne vissza, es az ugy nez ki, mintha nem lenne eszkoze -- nem
+   * hibazik, csak hazudik.
+   *
+   * MI PIROSIT: ha a valaszto megkerulné a `filter()` segedet (az allitja
+   * vissza a lapot), es kozvetlenul irna a cimbe.
+   */
+  it("a lapmeret valtasa az ELSO oldalra visz vissza", async () => {
+    navigation.params = new URLSearchParams("page=7&pageSize=25");
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    fireEvent.change(screen.getByLabelText("Hány eszköz egy oldalon"), {
+      target: { value: "100" },
+    });
+
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    expect(lastTarget().get("pageSize")).toBe("100");
+    expect(lastTarget().get("page")).toBe("1");
+  });
+
+  /**
+   * ES AZ ERTEK EL IS JUT A LEKERDEZESIG, nem csak a cimbe.
+   *
+   * KULON ALLITAS, MERT KULON ROMLIK EL: a cim attol meg helyes lehet, hogy a
+   * keres a regi merettel megy ki -- a felhasznalo 100-at valaszt, es 25 sort
+   * kap. A fenti allitas ezt nem latja, mert az csak a cimet nezi.
+   */
+  it("a valasztott lapmeret a LEKERDEZESBE is bekerul", async () => {
+    navigation.params = new URLSearchParams("pageSize=100");
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    const query = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(query.get("pageSize")).toBe("100");
+  });
+
+  /**
+   * A HAROM ERTEK KOTOTT, es ez a szerver felso hatarabol kovetkezik: a vegpont
+   * `@Max(100)`-at ker. Egy szabadon beirt 200 nem tobb sort adna, hanem
+   * validacios hibat -- a kezelo pedig nem ertene, miert.
+   */
+  it("pontosan harom lapmeret valaszthato: 25, 50, 100", async () => {
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    const valaszto = screen.getByLabelText(
+      "Hány eszköz egy oldalon",
+    ) as HTMLSelectElement;
+    expect([...valaszto.options].map((option) => option.value)).toEqual([
+      "25",
+      "50",
+      "100",
+    ]);
+  });
+
+  /**
+   * AZ ALAPERTELMEZETT SZURO A "BEEPITETT", NEM AZ "AKTIV".
+   *
+   * Balazs kerese (2026-09-18): "ha betoltom az eszkozok listat akkor a
+   * beepitett legyen alapbol kivalasztva".
+   *
+   * ES A LEKERDEZESEN ALLITJUK, NEM A CIMEN: a cim attol meg tartalmazhat
+   * `IN_PLACE`-t, hogy a keres mast visz ki. A felhasznalo azt latja, ami a
+   * VALASZBAN jon.
+   */
+  it("elso betoltesnel a BEEPITETT szuro megy ki, nem az Aktiv", async () => {
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    const query = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(query.get("status")).toBe("IN_PLACE");
+  });
+
+  /**
+   * ES A MELLEKHATAS, KIMONDVA: a MAR AKTIV szurore kattintva ALL lesz.
+   *
+   * Ez a csempe- es ful-viselkedes kapcsolo alaku, es az uj alapertelmezessel
+   * azt jelenti, hogy a "Beepitett" fulre kattintva az OSSZES lista jon. Nem en
+   * dontottem el, hogy igy legyen -- a viselkedes a valtozas ELOTT is ez volt,
+   * csak masik kulcsra. Az allitas azert all itt, hogy ha valaha megvaltozik,
+   * az DONTES legyen, ne mellekhatas.
+   */
+  it("a mar kivalasztott Beepitett fulre kattintva ALL lesz", async () => {
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Beépített" }));
+
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    expect(lastTarget().get("status")).toBe("ALL");
   });
 });
