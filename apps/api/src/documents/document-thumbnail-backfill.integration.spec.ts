@@ -229,6 +229,13 @@ describe(
 
       assert.equal(kod, 1, "van teendo, tehat a kilepesi kod 1");
       assert.match(kimenet, /NEM IRT semmit/);
+      /*
+        A KILEPESI KOD JELENTESE A KIMENETBEN IS ALL. Acrobot eszrevetele a
+        staging probaja utan: jelentes modban az 1 azt jelenti, hogy VAN
+        teendo -- egy gepi hivo (vagy egy ember egy naploban) viszont konnyen
+        hibanak olvassa, es a szam onmagaban nem mondja meg a kulonbseget.
+      */
+      assert.match(kimenet, /A kilepesi kod 1: VAN teendo/);
       assert.deepEqual(await belyegHosszak(), {
         assetKep: null,
         assetPdf: null,

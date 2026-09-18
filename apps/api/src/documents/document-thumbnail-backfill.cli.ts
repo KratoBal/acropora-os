@@ -202,7 +202,15 @@ export async function main(
   if (!ir) {
     ki(
       `${terv.candidates.length} sorhoz keszulne belyegkep, osszesen ${terv.candidateBytes} bajt eredetibol.\n` +
-        "Ez a futas NEM IRT semmit. Az irashoz: --ir\n",
+        "Ez a futas NEM IRT semmit. Az irashoz: --ir\n" +
+        /*
+          A KILEPESI KOD JELENTESE KIIRVA, ES EZ ACROBOT MERT ESZREVETELE
+          (2026-09-18, a staging probaja utan): jelentes modban az 1 azt
+          jelenti, hogy VAN teendo -- nem azt, hogy hiba tortent. Ertelmes
+          konvencio, de egy gepi hivo (vagy egy ember egy naploban) konnyen
+          hibanak olvassa, es a szam onmagaban nem mondja meg a kulonbseget.
+        */
+        "A kilepesi kod 1: VAN teendo. Hiba eseten a kod 2.\n",
     );
     return 1;
   }
