@@ -57,6 +57,12 @@ import {
   prefillFromTicket,
 } from "@/lib/worksheets/worksheet-prefill-from-ticket";
 import {
+  kezdoValaszto,
+  valasztasUtan,
+  valasztoraKoppint,
+  type NyitottValaszto,
+} from "@/lib/worksheets/worksheet-pickers";
+import {
   buildWorksheetCreatePayload,
   describeWorksheetQueueWrite,
   type WorksheetCreateField,
@@ -102,14 +108,18 @@ export default function NewWorksheetScreen() {
     null,
   );
   /**
-   * JEGY ALATT A VALASZTO KI SEM NYILIK. A partner a jegybol jon, es egy
-   * valaszto, ami olyat kinal, amit a szerver elutasit, rosszabb a hianyanal.
-   * A SORBAN allo jegynel viszont nyitva marad: ott tenyleg a szerelo valaszt,
-   * mert a jegy meg le sem kerdezheto.
+   * EGY ALLAPOT, NEM KETTO -- ES EZ SZERKEZETI, NEM STILUS.
+   *
+   * Ket fuggetlen jelzo megengedne, hogy a partner- ES a helyszin-lista
+   * egyszerre alljon nyitva; epp az a kep, amire Balazs jelentese szol. A
+   * dontes a `worksheet-pickers.ts` modulban all, mert ebben az appban nincs
+   * komponens-teszt.
+   *
+   * ZARVA INDUL. Jegy alatt a partner amugy sem valaszthato (`partnerLezarva`),
+   * ott ZART MEZO a helyes alak, nem csukott valaszto.
    */
-  const [partnerPickerOpen, setPartnerPickerOpen] = useState(
-    jegy.kind !== "server",
-  );
+  const [nyitottValaszto, setNyitottValaszto] =
+    useState<NyitottValaszto>(kezdoValaszto());
   const [departmentId, setDepartmentId] = useState("");
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
@@ -472,7 +482,11 @@ export default function NewWorksheetScreen() {
             <Pressable
               accessibilityRole="button"
               disabled={partnerLezarva(elotoltes)}
-              onPress={() => setPartnerPickerOpen((open) => !open)}
+              onPress={() =>
+                setNyitottValaszto((nyitott) =>
+                  valasztoraKoppint(nyitott, "partner"),
+                )
+              }
               style={[
                 styles.pickerRow,
                 partnerHatasos && styles.pickerSelected,
@@ -503,7 +517,7 @@ export default function NewWorksheetScreen() {
             ) : null}
             <FieldError error={error} field="customer" />
             {partnerLezarva(elotoltes) ||
-            !partnerPickerOpen ? null : partnersQuery.isPending ? (
+            nyitottValaszto !== "partner" ? null : partnersQuery.isPending ? (
               <ActivityIndicator color="#52d6c7" />
             ) : partnersQuery.isError ? (
               <Text style={styles.hint}>
@@ -517,7 +531,7 @@ export default function NewWorksheetScreen() {
                     key={item.customerId}
                     onPress={() => {
                       setPartner(item);
-                      setPartnerPickerOpen(false);
+                      setNyitottValaszto(valasztasUtan());
                       /**
                        * A HELYSZÍN A PARTNERHEZ TARTOZIK: partnerváltásnál a
                        * korábbi választás ÉRVÉNYTELEN. Enélkül egy másik
@@ -542,11 +556,42 @@ export default function NewWorksheetScreen() {
           </Section>
 
           <Section title="Helyszín">
+            {/*
+              A HELYSZIN IS FEJSORT KAP, ES EZ A JELENTES MASIK FELE. Eddig ez a
+              szekcio nem ismert nyitott/zart allapotot: a teljes listat MINDIG
+              kiirta, valasztas utan is. A partner utan igy rogton a helyszinek
+              teljes listaja nyilt ki alatta -- kivulrol ugyanaz a kep, mintha a
+              partner-lista maradt volna ott.
+            */}
+            {partnerHatasos ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  setNyitottValaszto((nyitott) =>
+                    valasztoraKoppint(nyitott, "helyszin"),
+                  )
+                }
+                style={[
+                  styles.pickerRow,
+                  departmentIdHatasos && styles.pickerSelected,
+                ]}
+              >
+                <Text style={styles.pickerName}>
+                  {departments.find((d) => d.id === departmentIdHatasos)
+                    ?.name ?? "Válassz helyszínt"}
+                </Text>
+                <Text style={styles.pickerMeta}>
+                  {departments.find((d) => d.id === departmentIdHatasos)
+                    ?.code ?? "Koppints a listához"}
+                </Text>
+              </Pressable>
+            ) : null}
             {!partnerHatasos ? (
               <Text style={styles.hint}>
                 Előbb válassz partnert: a helyszínek hozzá tartoznak.
               </Text>
-            ) : departmentsQuery.isPending ? (
+            ) : nyitottValaszto !==
+              "helyszin" ? null : departmentsQuery.isPending ? (
               <ActivityIndicator color="#52d6c7" />
             ) : departments.length === 0 ? (
               /**
@@ -565,7 +610,10 @@ export default function NewWorksheetScreen() {
                 {departments.map((unit: WorksheetDepartment) => (
                   <Pressable
                     key={unit.id}
-                    onPress={() => setDepartmentId(unit.id)}
+                    onPress={() => {
+                      setDepartmentId(unit.id);
+                      setNyitottValaszto(valasztasUtan());
+                    }}
                     style={[
                       styles.listRow,
                       departmentIdHatasos === unit.id && styles.listRowOn,
