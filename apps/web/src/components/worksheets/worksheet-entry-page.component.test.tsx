@@ -151,6 +151,37 @@ describe("egy bejegyzés saját lapja", () => {
 
     expect(await savotMond("empty")).toBeTruthy();
   });
+  /**
+   * A TERMELESI MUNKAMENET ALAKJA: NINCS KLIENS OLDALON OLVASHATO TOKEN.
+   *
+   * MI PIROSIT: ha a kapu visszakerul a `!token` alakra. Ez a hiba eles
+   * kornyezetben MINDIG fennall es fejlesztoiben SOHA -- a helyi futas tehat
+   * magatol nem cafolja. Balazs 2026-09-18-an jelentette: a mentett bejegyzes
+   * frissites utan eltunik.
+   *
+   * AZ ALLITAS A HIVAST MERI, NEM A KEPERNYOT: a `!token` kapu mellett a
+   * lekerdezes EL SEM INDUL, es egy kepernyo-allitas (ures lista) MAS okbol
+   * is zold lehetne.
+   */
+  it("URES TOKENU munkamenettel is elindul a lekerdezes (httpOnly sütis alak)", async () => {
+    auth.session = { ...session, token: undefined };
+    /*
+      A MOCKOT ITT KELL NULLAZNI, ES EZ NEM FORMASAG. A `beforeEach` csak a
+      visszateresi erteket allitja be, a hivas-listat nem -- vagyis a
+      `mock.calls` a KORABBI tesztek hivasait is tartalmazza. Enelkul a lenti
+      ket allitas AKKOR IS ZOLD, ha ez a rendereles egyaltalan nem hiv semmit:
+      egy allitas, ami nem tud elbukni.
+    */
+    api.entries.mockClear();
+    render(<WorksheetEntryPage worksheetId="w-1" entryId="entry-1" />);
+    await waitFor(() => expect(api.entries).toHaveBeenCalled());
+    /*
+      A TOKEN URESEN, DE ATADVA megy tovabb: az apiRequest-ben dol el, hogy
+      Bearer fejlec megy-e vagy a suti. Ha itt `undefined` allna, az MAS hiba
+      lenne -- es a fenti allitas ettol meg zold maradna.
+    */
+    expect(api.entries.mock.lastCall?.[0]).toBe("");
+  });
 });
 
 afterEach(() => setOnLine(true));

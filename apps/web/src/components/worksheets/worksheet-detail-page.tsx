@@ -115,14 +115,30 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
     null,
   );
   useEffect(() => {
-    if (!token || !worksheetId) return;
+    /*
+      A KAPU A MUNKAMENETRE ES A JOGRA MEGY, SOHA NEM ARRA, HOGY VAN-E KLIENS
+      OLDALON OLVASHATO TOKEN. Termelesben a munkamenet httpOnly SUTIN all (a
+      `ProductionAuthAdapter` a `session.token` mezot nem tolti ki), tehat egy
+      `!token` kapu VEGLEGESEN kizarja ezt a hivast -- eles kornyezetben SOHA
+      nem fut le, fejlesztoiben mindig. A ket kornyezet igy mast csinal, es a
+      kulonbseg nema: hibauzenet nincs, a lista egyszeruen ures marad.
+
+      A `token` (akar ures) VALTOZATLANUL megy at az apiRequest-nek: OTT dol
+      el, hogy Bearer fejlec megy-e vagy a suti.
+
+      Merve 2026-09-18: Balazs azt jelentette, hogy a mentett bejegyzes
+      frissites utan eltunik. Az iras azert mukodott, mert azt gombnyomas
+      hivja, kapu nelkul. Ugyanez a szabaly mar le volt irva a repoban
+      (`product-list-page.tsx`), csak ide nem jutott el.
+    */
+    if (!canView || !worksheetId) return;
     const controller = new AbortController();
     worksheetsApi
       .signers(token, worksheetId, controller.signal)
       .then(setSigners)
       .catch(() => undefined);
     return () => controller.abort();
-  }, [token, worksheetId]);
+  }, [canView, token, worksheetId]);
 
   const run = async (action: () => Promise<WorksheetDetail>) => {
     setBusy(true);
