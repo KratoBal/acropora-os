@@ -68,8 +68,16 @@ export interface KezdoSorDeps {
    * INITIAL-t tenne egy MAR TORTENETTEL BIRO termekre.
    *
    * A HATARA KIMONDVA: ez SZUKITI az ablakot a teljes futasrol egy termekere,
-   * NEM ZARJA BE. Teljes kizarashoz reszleges egyedi index kell a semaban
-   * (`WHERE source = 'INITIAL'`), az viszont migracio es kulon dontes.
+   * NEM ZARJA BE.
+   *
+   * AZ ABLAKOT MA MAR EGY INDEX ZARJA BE (#863, 2026-09-18): reszleges egyedi
+   * index all a tablan, `WHERE source = 'INITIAL'`. Ez a bekezdes korabban azt
+   * mondta, hogy az "migracio es kulon dontes" -- megtortent mind a ketto.
+   *
+   * AMIT EZ AZ ELLENORZES EZUTAN IS ER: az index HIBAT ad, nem kihagyast. E
+   * nelkul az ellenorzes nelkul a veszitett verseny a parancsot allitana meg;
+   * igy a tipikus esetet meg a lekerdezes fogja meg, es csak a valodi
+   * egyideju iras jut el az indexig (azt a `utkozoKezdoSor` kezeli).
    */
   vanMarSora(productId: string): Promise<boolean>;
   /** A tenyleges iras. CSAK `--apply` mellett hivodik. */
@@ -83,6 +91,31 @@ export interface KezdoSorDeps {
     source: "INITIAL";
     observedAt: Date;
   }): Promise<void>;
+}
+
+/**
+ * A VESZTETT VERSENY JELE -- ES MIERT NEM A PARANCS HIBAJA.
+ *
+ * A tablan reszleges egyedi index all (`WHERE source = 'INITIAL'`, #863), tehat
+ * ha a szinkron ugyanarra a termekre EPP KOZBEN ir kezdo sort, a mi irasunk
+ * `P2002`-vel elszall. Ez NEM hiba: pontosan az tortent, amit akartunk -- a
+ * terméknek van kezdo sora --, csak nem mi irtuk.
+ *
+ * AZ ALTERNATIVA, AMIT EZ KIVALT: egyetlen utkozes MEGALLITANA az egesz
+ * futast, es a maradek (akar tobb ezer) termek sor nelkul maradna. Egy
+ * ujraindítas olcso ugyan (a parancs csak a sor nelkulieket nezi), de az a
+ * megallas OLYAN hibanak latszik, ami nem az.
+ *
+ * A KOD DUCK-TYPE-RA MEGY, NEM `instanceof`-ra: igy a varrat (`deps.ir`)
+ * Prisma nelkul is merheto, es a teszt nem a Prisma belso osztalyat utanozza.
+ * A `P2002` a Prisma egyedi-megkotes kodja.
+ */
+export function utkozoKezdoSor(hiba: unknown): boolean {
+  return (
+    typeof hiba === "object" &&
+    hiba !== null &&
+    (hiba as { code?: unknown }).code === "P2002"
+  );
 }
 
 export async function runKezdoArSorokCli(
@@ -125,6 +158,15 @@ export async function runKezdoArSorokCli(
      * NEM irtunk fole.
      */
     let kozbenKapott = 0;
+    /**
+     * HANYSZOR VESZTETTUNK VERSENYT AZ IRAS PILLANATABAN.
+     *
+     * A `kozbenKapott` azt szamolja, amit a lekerdezes MEG megfogott; ez azt,
+     * ami csak az indexnel derult ki. A ketto kulon all, mert mast mond a
+     * futasrol: az elso normalis (percekig tarto futas mellett varhato), a
+     * masodik azt jelenti, hogy pontosan egyszerre irtunk a szinkronnal.
+     */
+    let utkozott = 0;
 
     for (const termek of termekek) {
       const tukor = termek.unasSnapshot;
@@ -155,16 +197,28 @@ export async function runKezdoArSorokCli(
       }
 
       if (apply) {
-        await deps.ir({
-          productId: termek.id,
-          currency: tukor?.currency ?? null,
-          netPrice: tukor?.netPrice ?? null,
-          grossPrice: tukor?.grossPrice ?? null,
-          saleNetPrice: tukor?.saleNetPrice ?? null,
-          saleGrossPrice: tukor?.saleGrossPrice ?? null,
-          source: "INITIAL",
-          observedAt: kezdoSorIdopontja(tukor, most),
-        });
+        try {
+          await deps.ir({
+            productId: termek.id,
+            currency: tukor?.currency ?? null,
+            netPrice: tukor?.netPrice ?? null,
+            grossPrice: tukor?.grossPrice ?? null,
+            saleNetPrice: tukor?.saleNetPrice ?? null,
+            saleGrossPrice: tukor?.saleGrossPrice ?? null,
+            source: "INITIAL",
+            observedAt: kezdoSorIdopontja(tukor, most),
+          });
+        } catch (hiba) {
+          /*
+            CSAK AZ UTKOZEST NYELJUK LE, MINDEN MAST TOVABBDOBUNK. Egy tag
+            `catch` itt azt jelentene, hogy egy elirt mezo vagy egy megszakadt
+            kapcsolat is "kihagyott termek"-kent menne el, es a parancs
+            zolden, csonka eredmennyel allna meg.
+          */
+          if (!utkozoKezdoSor(hiba)) throw hiba;
+          utkozott += 1;
+          continue;
+        }
       }
       irt += 1;
     }
@@ -180,6 +234,12 @@ export async function runKezdoArSorokCli(
         ? `${irt} kezdő ár-sor keletkezett | ${termekek.length} termék volt sor nélkül.\n`
         : `${irt} kezdő ár-sor KELETKEZNE | ${termekek.length} termék volt sor nélkül.\n`,
     );
+    if (utkozott)
+      out.stdout(
+        `${utkozott} terméknél a szinkron ÉPP KÖZBEN írt kezdő sort, ezeket ` +
+          `kihagytuk. Az index megfogta, adat nem veszett el -- de ez azt ` +
+          `jelenti, hogy a parancs futó ütemező mellett ment.\n`,
+      );
     if (kozbenKapott)
       out.stdout(
         `${kozbenKapott} termék a lekérdezés ÓTA kapott sort, ezeket kihagytuk. ` +

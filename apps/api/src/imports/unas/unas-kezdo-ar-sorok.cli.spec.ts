@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   runKezdoArSorokCli,
+  utkozoKezdoSor,
   type CliOutput,
   type KezdoSorJelolt,
 } from "./unas-kezdo-ar-sorok.cli.js";
@@ -38,6 +39,8 @@ function tukor(net: number | null): KezdoSorJelolt["unasSnapshot"] {
 function cliWith(
   jeloltek: KezdoSorJelolt[],
   marVanSora: ReadonlySet<string> = new Set(),
+  /** Amelyik termek irasa hibara fut, es MILYEN hibaval. */
+  irasHiba: ReadonlyMap<string, unknown> = new Map(),
 ) {
   const irt: string[] = [];
   const hivasok: string[] = [];
@@ -57,6 +60,8 @@ function cliWith(
     },
     ir: async (sor: { productId: string }) => {
       hivasok.push(`ir:${sor.productId}`);
+      const hiba = irasHiba.get(sor.productId);
+      if (hiba) throw hiba;
       irt.push(sor.productId);
     },
   };
@@ -136,5 +141,63 @@ describe("kezdő ár-sorok parancs", () => {
     const { out, deps, szoveg } = cliWith([]);
     assert.equal(await runKezdoArSorokCli([], out, deps), 0);
     assert.match(szoveg(), /0 kezdő ár-sor KELETKEZNE \| 0 termék/);
+  });
+
+  /**
+   * A VESZTETT VERSENY: AZ INDEX SZOL, ES A FUTAS MEGY TOVABB.
+   *
+   * A tablan 2026-09-18 ota reszleges egyedi index all (#863). Ha a szinkron
+   * EPP KOZBEN ir kezdo sort ugyanarra a termekre, a mi irasunk `P2002`-vel
+   * elszall. Az eredmeny helyes -- a terméknek VAN kezdo sora --, tehat a
+   * parancsnak nincs mit javitania rajta.
+   *
+   * AMI ENELKUL TORTENNE: egyetlen utkozes megallitana az EGESZ futast, es a
+   * maradek termek sor nelkul maradna. Ez az allitas azt meri, hogy a
+   * kovetkezo termek MEG IRODIK.
+   */
+  it("a szinkronnal vesztett versenyt kihagyja, és tovább ír", async () => {
+    const { out, deps, irt, szoveg } = cliWith(
+      [
+        { id: "p1", unasSnapshot: tukor(100) },
+        { id: "utkozo", unasSnapshot: tukor(200) },
+        { id: "p3", unasSnapshot: tukor(300) },
+      ],
+      new Set(),
+      new Map([["utkozo", { code: "P2002" }]]),
+    );
+
+    assert.equal(await runKezdoArSorokCli(["--apply"], out, deps), 0);
+    assert.deepEqual(irt, ["p1", "p3"]);
+    assert.match(szoveg(), /1 terméknél a szinkron ÉPP KÖZBEN írt kezdő sort/);
+    /* A mérleg SZAMA is csokken: ami nem irodott, az nem "keletkezett". */
+    assert.match(szoveg(), /^2 kezdő ár-sor keletkezett/);
+  });
+
+  /**
+   * ES A MASIK IRANY, ENELKUL AZ ELOZO ALLITAS VESZELYES: egy tag `catch`
+   * ugyanugy atmenne rajta, es akkor egy elirt mezo vagy egy megszakadt
+   * kapcsolat is "kihagyott termek"-kent menne el -- a parancs zolden, csonka
+   * eredmennyel allna meg.
+   */
+  it("minden MÁS írási hibán elhasal, nem hagyja ki csendben", async () => {
+    const { out, deps, szoveg } = cliWith(
+      [
+        { id: "p1", unasSnapshot: tukor(100) },
+        { id: "rossz", unasSnapshot: tukor(200) },
+      ],
+      new Set(),
+      new Map([["rossz", new Error("kapcsolat megszakadt")]]),
+    );
+
+    assert.equal(await runKezdoArSorokCli(["--apply"], out, deps), 1);
+    assert.match(szoveg(), /ERR .*kapcsolat megszakadt/);
+  });
+
+  it("az ütközés-felismerő CSAK a P2002-t fogadja el", () => {
+    assert.equal(utkozoKezdoSor({ code: "P2002" }), true);
+    assert.equal(utkozoKezdoSor({ code: "P2025" }), false);
+    assert.equal(utkozoKezdoSor(new Error("P2002")), false);
+    assert.equal(utkozoKezdoSor(null), false);
+    assert.equal(utkozoKezdoSor(undefined), false);
   });
 });
