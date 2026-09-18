@@ -693,4 +693,33 @@ describe("WorksheetDetailPage és a csatolmányok", () => {
       ),
     );
   });
+  /**
+   * AZ ALAIROK LISTAJA A HARMADIK, NEMA HELY.
+   *
+   * A masik ketto (a naplo listaja es az egy bejegyzes lapja) URES LISTAT ad,
+   * ami legalabb latszik. Ez a lekerdezes viszont a valasztot az "egyik sem"
+   * agra allitja, es a komponens sajat kommentje szerint AZ AG SZANDEKOS --
+   * vagyis ugy nez ki, mintha a partnernek nem lenne alairo munkatarsa,
+   * holott a hivas el sem indult. Egy hianyt allit egy elmaradt keresbol.
+   *
+   * MI PIROSIT: ha a kapu visszakerul a `!token` alakra.
+   */
+  it("az ALAIROK lekerdezese URES TOKENU munkamenettel is elindul", async () => {
+    auth.session = { ...session, token: undefined };
+    /*
+      A MOCKOT ITT KELL NULLAZNI, ES EZ NEM FORMASAG. A `beforeEach` csak a
+      visszateresi erteket allitja be, a hivas-listat nem -- vagyis a
+      `mock.calls` a KORABBI tesztek hivasait is tartalmazza. Enelkul a lenti
+      ket allitas AKKOR IS ZOLD, ha ez a rendereles egyaltalan nem hiv semmit:
+      egy allitas, ami nem tud elbukni.
+    */
+    api.signers.mockClear();
+    api.detail.mockResolvedValue(detail(null));
+
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    await waitFor(() => expect(api.signers).toHaveBeenCalled());
+    // A token URESEN, de ATADVA: az apiRequest donti el, Bearer vagy suti.
+    expect(api.signers.mock.lastCall?.[0]).toBe("");
+  });
 });
