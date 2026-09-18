@@ -2,10 +2,10 @@ import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import { useEffect, useRef } from "react";
 
-import { decidePushNavigation } from "./push-target";
+import { decidePushNavigation, PUSH_TARGET_ROUTES } from "./push-target";
 
 /**
- * AZ ERTESITESRE ADOTT KOPPINTAS MEGNYITJA A MUNKALAPOT.
+ * AZ ERTESITESRE ADOTT KOPPINTAS MEGNYITJA A MUNKALAPOT VAGY A HIBAJEGYET.
  *
  * A DONTES a `push-target.ts`-ben all, mert ott MERHETO; ez a horog csak a
  * natv modul es a navigacio koze all, ugyanolyan vekonyan, ahogy a
@@ -41,22 +41,22 @@ export function usePushNavigation(status: string): void {
      */
     handled.current = decision.key;
     /**
-     * A TIPUS VALASZT UTVONALAT, ES EZ MA EGY ELAGAZAS EGY AGGAL.
+     * A TIPUS VALASZT UTVONALAT, ES A VALASZTAS A `push-target.ts` TABLAJABAN
+     * ALL -- NEM ITT.
      *
-     * Balazs kerese (2026-09-03 20:20): hibajegy-keperno ma nincs a
-     * telefonon, tehat oda nem lehet vinni senkit -- de az alak legyen olyan,
-     * hogy a masodik tipus ne kivanjon atirast. A `switch` egy aggal
-     * ertelmetlennek latszik; a `PushTargetType` viszont zart halmaz, tehat a
-     * fordito MEG FOGJA MONDANI, ha egy uj tipus bekerul es ez a hely nem
-     * kezeli. Egy `if` ezt a jelzest nem adna meg.
+     * KORABBAN ITT EGY `switch` ALLT, es a kommentje azt allitotta, hogy a
+     * fordito szol, ha egy uj tipus bekerul es ez a hely nem kezeli. Merve
+     * 2026-09-18: NEM SZOL. Felvettem a masodik tipust, a `switch`-hez nem
+     * nyultam, es a `typecheck` zolden futott le -- egy default ag nelkuli
+     * `switch` `void` torzsben nem kimerito-ellenorzes, csak annak latszik.
+     *
+     * A tabla `satisfies Record<PushTargetType, string>` alakban all, tehat az
+     * elmaradt utvonal MOST MAR forditasi hiba. A csere lenyege nem a
+     * rovidseg, hanem hogy az igeret es a mechanizmus ugyanaz legyen.
      */
-    switch (decision.target.type) {
-      case "worksheet":
-        router.push({
-          pathname: "/worksheets/[id]",
-          params: { id: decision.target.id },
-        });
-        return;
-    }
+    router.push({
+      pathname: PUSH_TARGET_ROUTES[decision.target.type],
+      params: { id: decision.target.id },
+    });
   }, [response, status]);
 }
