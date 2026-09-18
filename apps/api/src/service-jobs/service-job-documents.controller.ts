@@ -111,6 +111,30 @@ export class ServiceJobDocumentsController {
    */
   @Get(":id/documents/:documentId")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  /*
+    A `no-store` DONTES, NEM MULASZTAS -- ES A BELYEGKEP-UT OTA EZ A VEGPONT A
+    KEZENFEKVO OPTIMALIZACIOS CELPONT.
+
+    Aki egy kep-vegponton csupasz `no-store`-t lat, elnezesnek olvassa: egy
+    galeria ugyanazt a kepet ujra es ujra lehivja, es a gyorsitotarazas
+    nagysagrenddel tobbet erne, mint maga a kicsinyites. Ezert all itt az
+    indok, nem a kartyan: a kartyat nem talalja meg az, aki epp atirja ezt a
+    sort.
+
+    ACROBOT DONTESE, 2026-09-18, harom okbol:
+
+      1. A NYERESEG EPP MOST ZSUGORODOTT. A belyegkep-ut a koltseg nagy reszet
+         elviszi (egy eszkoz-galeria atlagos megnyitasa 5,3 MB-rol par szaz
+         kilobajtra), tehat ami marad, azert nem er meg uj kockazatot vallalni.
+      2. AMIT CSEREBE ADNANK: a szerviz-fenykep UZEMI KEP a partner
+         telephelyerol, es egy gyorsitotarazott valtozat a BONGESZO LEMEZEN
+         marad -- akar kozos gepen.
+      3. A HATAR: ez adatvedelmi dontes, nem fejlesztoi valasztas.
+
+    A FELTETEL, AMI VISSZAHOZZA: ha meresbol latszik, hogy ugyanazt a galeriat
+    naponta sokszor nyitjak UGYANAZON a gepen. Es akkor a dontes BALAZSE, nem a
+    miénk -- egy SZUKITES nem igenyel engedelyt, egy TAGITAS igen.
+  */
   @Header("Cache-Control", "private, no-store")
   async downloadDocument(
     @Param("id") id: string,

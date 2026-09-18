@@ -300,6 +300,13 @@ export class ServiceAssetsController {
 
   @Get(":id/documents/:documentId")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  /*
+    A `no-store` DONTES, NEM MULASZTAS. A teljes indoklas a
+    `service-job-documents.controller.ts` ugyanezen fejlecen all; roviden: a
+    belyegkep-ut ota a nyereseg kicsi, a szerviz-fenykep uzemi kep a partner
+    telephelyerol, es egy gyorsitotarazott peldany a bongeszo lemezen maradna.
+    A kerdes ujranyitasa adatvedelmi dontes, nem fejlesztoi valasztas.
+  */
   @Header("Cache-Control", "private, no-store")
   async downloadDocument(
     @Param("id") id: string,
