@@ -67,7 +67,6 @@ export interface WorksheetSheetInput {
   /** A mi vevőkódunk a partnerről. A partner saját rendszerében ez azonosít. */
   customerNumber: string | null;
   /** A hibajegy száma, ha a munka egy bejelentésből indult. */
-  jobNumber: string | null;
   departmentName: string;
   departmentCode: string;
   subject: string;
@@ -214,7 +213,29 @@ export function worksheetSheetLines(
       ? `Dolgozott rajta: ${input.assigneeNames.join(", ")}`
       : null,
   );
-  out.push(label("Hibajegy", input.jobNumber));
+  /*
+    A HIBAJEGY SZAMA NEM KERUL A LAPRA (acrobot dontese, 2026-09-18 10:56).
+
+    NEM UJ DONTES, hanem ket meglevobol kovetkezik, es epp ezert nem ment
+    Balazs ele:
+
+      a kod sajat mondata (`attachable-worksheets.ts`): a lezaras a
+        DOKUMENTUMROL szol, a csatolas a BESOROLASROL
+      Balazs 2. dontese: a lapon az all, ami a VEVONEK szol
+
+    ES AMI EZT ELDONTOTTE, AZ EGY MERES: egy LEZART laphoz utolag is csatolhato
+    hibajegy (a csatolo ut nem nezi a lap allapotat, es a valaszto szuroje
+    kifejezetten kimondja, hogy a lezart lap is csatolhato). A jegyszam tehat ma
+    az EGYETLEN sor volt a lapon, aminek az erteke a FAGYASZTAS UTAN is
+    valtozhat -- minden mas egy lezart verziobol jon. Egy dokumentum, aminek egy
+    sora a kiadas utan mozdul, nem pillanatkep tobbe.
+
+    AMIT EZ NEM JELENT: a jegyszam nem tunik el a rendszerbol. A lap adatlapjan
+    nalunk tovabbra is ott all -- csak a VEVONEK szant lapra nem kerul ki.
+
+    HA VALAKI VISSZATENNE: eloszor azt kell eldonteni, mi tortenjen az utolagos
+    csatolassal, mert a ket dolog egyutt nem lehet igaz.
+  */
   out.push(label("Lezárva", sheetDate(input.closedAt)));
   out.push(label("Folytatás", input.continuesLabel ?? null));
 

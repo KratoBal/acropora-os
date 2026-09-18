@@ -99,7 +99,6 @@ describe("a válaszból a lap bemenete", () => {
     assert.equal(input.label, "BIO-2026-001/1");
     assert.equal(input.customerName, "Fánk Kft.");
     assert.equal(input.customerNumber, "VEVO-A");
-    assert.equal(input.jobNumber, "HJ-2026-0007");
     assert.equal(input.departmentName, "Biodóm");
     assert.equal(input.departmentCode, "BIO");
     assert.equal(input.subject, "Kompresszorok bevizsgálása");
@@ -125,18 +124,27 @@ describe("a válaszból a lap bemenete", () => {
     assert.equal(input.continuesLabel, "BIO-2026-000");
   });
 
-  it("hibajegy nélkül a mező üres, nem hiányzik", () => {
-    /*
-      Munkalap keletkezhet úgy is, hogy még nincs hibajegy (Balázs döntése,
-      2026-09-02). Az `undefined` és a `null` itt nem ugyanaz: a lap a `null`-t
-      hiányként kezeli és elhagyja a sort.
-    */
-    const input = worksheetSheetInput(
-      detail({ serviceJob: null }),
-      version(),
-      [],
-    );
-    assert.equal(input.jobNumber, null);
+  /**
+   * A HIBAJEGY SZAMA AKKOR SEM KERUL AT, HA A VALASZ HORDOZZA.
+   *
+   * EZ AZ ALLITAS MEGFORDULT 2026-09-18-KOR. Korabban azt merte, hogy a szam
+   * atmegy; azota dontes all rola (acrobot, 10:56): a lezart laphoz utolag is
+   * csatolhato jegy, tehat ez lenne az egyetlen mezo, ami a fagyasztas utan is
+   * mozdulhat.
+   *
+   * ES A FIXTURA SZANDEKOSAN TARTALMAZZA a `serviceJob`-ot: epp az a lenyeg,
+   * hogy a valasz HORDOZZA, es a lekepezes MEGSEM viszi at. Egy `serviceJob:
+   * null` fixturan ez az allitas akkor is zold lenne, ha a lekepezes atvinne.
+   */
+  it("a hibajegy száma NEM megy át, pedig a válaszban ott áll", () => {
+    const teljes = detail();
+    assert.ok(teljes.serviceJob?.jobNumber, "a fixtúra előfeltétele: van jegy");
+
+    const input = worksheetSheetInput(teljes, version(), []);
+    assert.equal("jobNumber" in input, false);
+    // ISMERT POZITIV KONTROLL: a tobbi mezo ATMEGY, tehat nem egy ures
+    // objektumot merunk.
+    assert.equal(input.customerName, "Fánk Kft.");
   });
 
   it("a napló KÜLÖN paraméterként érkezik, és átmegy", () => {
@@ -197,7 +205,6 @@ describe("a válaszból a lap bemenete", () => {
 
     assert.match(lap, /MUNKALAP {2}BIO-2026-001\/1/);
     assert.match(lap, /Partner: Fánk Kft\. \(VEVO-A\)/);
-    assert.match(lap, /Hibajegy: HJ-2026-0007/);
     assert.match(lap, /Eszköz: ESZK-000123/);
     assert.match(lap, /Leltári szám: UGYFEL-42/);
     assert.match(lap, /Dolgozott rajta: Kovács Anna/);
