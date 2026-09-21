@@ -143,27 +143,123 @@ describe("a jegy az eredet-eszközből veszi az elhelyezését", () => {
   });
 
   /**
-   * A MEGADOTT ERTEK ELSOBBSEGET ELVEZ: ez a mezo POTOL, nem felulir. Enelkul
-   * egy webes hivas, ami veletlenul eredetet is kuld, csendben athelyezne a
-   * jegyet egy masik partnerhez.
+   * A "POTOL, NEM FELULIR" ELV VALTOZATLANUL ALL -- CSAK MAR NEM AZ
+   * ELLENTMONDASRA.
+   *
+   * === MIT ALLITOTT EZ A TESZT 2026-09-21 ELOTT, ES MIERT VALTOZOTT ===
+   *
+   * A korabbi alakja azt rogzitette, hogy a megadott partner AKKOR IS nyer, ha
+   * az eredet-eszkoz MASIK partnere. Az indoka helyes volt (egy webes hivas,
+   * ami veletlenul eredetet is kuld, ne helyezze at csendben a jegyet) -- csak
+   * a valasza nem: a "megadott nyer" ugyanugy CSENDES dontes ket ellentmondo
+   * ertek kozott, csak a masik iranyba.
+   *
+   * Balazs dontese (2026-09-21 10:48:51 UTC, message_id 1551545743054082049):
+   * "utasitsa el". Vagyis egyik ertek sem nyer: a keres all meg.
+   *
+   * EZ AZ ALLITAS TEHAT MOSTANTOL A POTLAST MERI, NEM AZ ELSOBBSEGET, es a
+   * ket ertek SZANDEKOSAN azonos partnere mutat -- kulonben a lenti kapu
+   * fogna meg, es nem arrol szolna, amirol a neve.
    */
-  it("a kifejezetten megadott partner és helyszín NEM íródik felül", async () => {
+  it("azonos partner mellett a megadott HELYSZÍN nem íródik felül", async () => {
     const { service, created } = serviceWith({
-      placement: { customerId: "eredet-customer", departmentId: "eredet-dep" },
+      placement: { customerId: "azonos-customer", departmentId: "eredet-dep" },
     });
 
     await service.create(
       torzs({
         originAssetId: "asset-4",
-        customerId: "megadott-customer",
+        customerId: "azonos-customer",
         departmentId: "megadott-dep",
       }),
       BELSOS.id,
     );
 
     const sor = created[0] as { customerId: string; departmentId: string };
-    assert.equal(sor.customerId, "megadott-customer");
+    assert.equal(sor.customerId, "azonos-customer");
     assert.equal(sor.departmentId, "megadott-dep");
+  });
+
+  /**
+   * AZ UJ SZABALY: A KET ERTEK ELLENTMONDASA ELUTASITAS.
+   *
+   * Ez az az eset, amit Balazs elutasittatni akart: a jegy partnere "A", az
+   * eredetkent megadott gep "B" partneré. A regi kod CSENDBEN az "A"-t
+   * valasztotta, es a "B" gepet ugyanugy felvette a jegyre.
+   */
+  it("eltérő partnernél ELUTASÍTÁS, és a jegy nem jön létre", async () => {
+    const { service, created } = serviceWith({
+      placement: { customerId: "partner-B", departmentId: null },
+    });
+
+    await assert.rejects(
+      () =>
+        service.create(
+          torzs({ originAssetId: "asset-5", customerId: "partner-A" }),
+          BELSOS.id,
+        ),
+      /másik partnerhez tartozik, mint a hibajegy partnere/,
+    );
+    assert.deepEqual(created, [], "a jegy nem jöhetett létre");
+  });
+
+  /**
+   * A LEGKOZELEBBI TEVESZTES: A GAZDATLAN ESZKOZ NEM ELLENTMONDAS.
+   *
+   * Ha az eszkoznek nincs tulajdonosa, nincs ket ertek, amit ossze lehetne
+   * vetni -- a megadott partner egy HIANYT tolt ki, es pontosan erre valo a
+   * potlas. Egy `!=` osszevetes `null` mellett elutasitana, es epp a POTLAST
+   * venne el: ez az allitas azt orzi, hogy a kapu nem lett tul szeles.
+   */
+  it("gazdátlan eszköznél a megadott partner ÁTMEGY", async () => {
+    const { service, created } = serviceWith({
+      placement: { customerId: null, departmentId: null },
+    });
+
+    await service.create(
+      torzs({ originAssetId: "asset-6", customerId: "partner-A" }),
+      BELSOS.id,
+    );
+
+    const sor = created[0] as { customerId: string; assetIds: string[] };
+    assert.equal(sor.customerId, "partner-A");
+    // ES AZ ESZKOZ FELKERUL: a potlas nem jarhat azzal, hogy a gep lemarad.
+    assert.deepEqual(sor.assetIds, ["asset-6"]);
+  });
+
+  /**
+   * ES UGYANEZ EGY PARTNER-FIOKBOL, MERT ONNAN MAS UTON ER IDE.
+   *
+   * A `partnerScope.kind === "customer"` ag mar ma is elutasit minden kerest,
+   * ahol a megadott `customerId` ELTER a kero sajat cegetol. EZ AZ ESET
+   * ATCSUSZIK rajta: a kero a SAJAT azonositojat adja meg (tehat az az ag
+   * elegedett), es csak a GEP idegen.
+   *
+   * AMIT EZ AZ ALLITAS ORIZ: hogy az uj kapu a PARTNER-UTAT is fedi, nem csak
+   * a belsost. Kalibralva: a kaput semlegesitve ez a sor pirosodik.
+   *
+   * AMIT NEM ORIZ, ES ELOSZOR TEVESEN AZT IRTAM IDE: a kapu HELYET. A kaput a
+   * kenyszerites FOLE mozgatva NULLA allitas pirosodott -- a ket elhelyezes ma
+   * egyenerteku, mert a ket ertek ekkor mar mindig egyezik.
+   */
+  it("partner-fiókból sem vihető fel MÁSIK partner gépe", async () => {
+    const { service, created } = serviceWith({
+      placement: { customerId: "partner-B", departmentId: null },
+    });
+    const PARTNER = {
+      id: "user-9",
+      customerId: "partner-A",
+    } as AuthenticatedUser;
+
+    await assert.rejects(
+      () =>
+        service.create(
+          torzs({ originAssetId: "asset-7", customerId: "partner-A" }),
+          PARTNER,
+        ),
+      /másik partnerhez tartozik, mint a hibajegy partnere/,
+    );
+    assert.deepEqual(created, [], "a jegy nem jöhetett létre");
   });
 
   /**
