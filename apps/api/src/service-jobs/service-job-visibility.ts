@@ -20,10 +20,26 @@ import type { PartnerScope } from "../auth/partner-scope.util.js";
  * Ha tehat a szures csak az egyseg-tengelyre epulne, a vevo nelkuli jegyek
  * SENKINEK nem latszananak -- meg annak sem, aki nyitotta oket.
  *
- * === AMIERT A NYITO A NAPLOBOL JON, ES NEM A JEGYROL ===
+ * === A NYITO A JEGYEN ALL -- ES EZ A BEKEZDES KORABBAN AZ ELLENKEZOJET ALLITOTTA ===
  *
- * A `ServiceJob` modellen NINCS `createdById` vagy `openedById` mezo (merve a
- * fo agon). A nyito egyetlen forrasa a keletkezes esemenye a naplotablaban.
+ * A `ServiceJob` modellen VAN `openedById` mezo (`schema.prisma`, `String?`,
+ * sajat indexszel), es EZ A FAJL IRJA is: a `nyitoTengely` where-zaradeka
+ * `openedById: input.userId` alakban all, a 60-as sorok korul.
+ *
+ * ITT KORABBAN AZ ALLT, hogy a modellen NINCS ilyen mezo, "merve a fo agon",
+ * es hogy a nyito egyetlen forrasa a naplotabla keletkezes-esemenye. AZ
+ * ALLITAS IGAZ VOLT, AMIKOR MEGIRTAK: a nyito tenyleg a naplobol jott. Aztan a
+ * mezo bekerult, a lekerdezes atallt ra -- a fejlec viszont nem.
+ *
+ * MIERT NEM CSAK PONTATLANSAG: ez a bekezdes EGY FAJLON BELUL mondott ellent a
+ * sajat kodjanak, negyven sor tavolsagbol. Aki a fejlecet olvassa, a naplotabla
+ * fele indul el egy olyan mezoert, ami a jegyen all -- es a kereses, amit
+ * inditana, NULLA talalatot adna a helyes nevre.
+ *
+ * A VALTAS INDOKA valtozatlanul a mezo folott all a semaban; roviden: a naplo
+ * aktora `SetNull` a felhasznalo torlesekor, indexeletlen oszlopon szurtunk
+ * volna, es az aktor azt mondja meg, ki IRTA BE az elso sort, nem azt, kie a
+ * jegy.
  *
  * ES AZ AZONOSITASA BIZONYITHATO, nem heurisztika: az atmenet-tabla
  * (`service-job-transitions.ts`) szerint a `NEW` allapotba EGYETLEN atmenet sem
