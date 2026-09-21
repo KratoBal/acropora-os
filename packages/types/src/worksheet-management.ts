@@ -788,3 +788,25 @@ export interface WorksheetDocumentSummary {
 export interface WorksheetDocumentListResponse {
   items: WorksheetDocumentSummary[];
 }
+
+/**
+ * A NÉGY MUNKALAP-ÁLLAPOT MAGYARUL.
+ *
+ * === MIÉRT ITT ÁLL, ÉS NEM A WEBES CSOMAGBAN (2026-09-21) ===
+ *
+ * 2026-09-21-ig az `apps/web` `worksheet-labels.ts` fájljában lakott, és a
+ * partnerportál nem érte el (a `@acropora/partner` egyetlen belső függősége a
+ * `@acropora/types`). A portál ezért a NYERS enum-értéket írta ki: a partner
+ * a saját munkalapján `SIGNED` és `DRAFT` feliratot látott.
+ *
+ * ÉS EZ NEM UGYANAZ AZ ESET, MINT A HIBAJEGYÉ. Ott a nyolc belső állapotot a
+ * partner szándékosan NEM látja: a szerver neki külön, négyértékű állapotot és
+ * saját feliratot küld. A munkalapnak NINCS ilyen partneri változata -- egy
+ * állapota van, és azt mind a két felület ugyanúgy nevezi meg.
+ */
+export const worksheetStatusLabel: Record<WorksheetVersionStatus, string> = {
+  DRAFT: "Piszkozat",
+  AWAITING_SIGNATURE: "Aláírásra vár",
+  SIGNED: "Aláírva",
+  REJECTED: "Elutasítva",
+};
