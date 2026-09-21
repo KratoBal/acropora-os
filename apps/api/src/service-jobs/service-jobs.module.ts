@@ -9,6 +9,7 @@ import { ServiceJobsController } from "./service-jobs.controller.js";
 import { ServiceJobsRepository } from "./service-jobs.repository.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
 import { ServiceJobPackageRepository } from "./service-job-package.repository.js";
+import { HandoverMailController } from "../notifications/mail/handover-mail.controller.js";
 import { ServiceJobPackageService } from "./service-job-package.service.js";
 
 /**
@@ -36,7 +37,17 @@ import { ServiceJobPackageService } from "./service-job-package.service.js";
   // ahol a valodi kuldo a helyere kerul -- es a hianya NEMA volna: a delegalas
   // lefutna, csak nem szolna senkinek. Ezert all ra kulon allitas.
   imports: [NotificationsModule],
-  controllers: [ServiceJobsController, ServiceJobDocumentsController],
+  /*
+    A KIKULDES VEGPONTJA A `notifications/mail` ALATT AL, DE ITT VAN
+    REGISZTRALVA -- mert ITT all mind a ket fuggosege: a csomag-szolgaltatas
+    (ebben a modulban) es a levelkuldo (a mar importalt `NotificationsModule`
+    exportja). Forditva korkoros lenne a modul-graf.
+  */
+  controllers: [
+    ServiceJobsController,
+    ServiceJobDocumentsController,
+    HandoverMailController,
+  ],
   providers: [
     documentStoreProvider,
     ServiceJobsRepository,
