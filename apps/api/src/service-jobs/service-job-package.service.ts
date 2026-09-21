@@ -13,7 +13,7 @@ import { assertStorageKeyMatches } from "../service-assets/document-store/docume
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 
-import { partnerStatusLabel } from "./service-job-status.js";
+import { jegyNaploSora } from "./service-job-package-log.js";
 import { serviceJobVisibilityFor } from "./service-job-visibility-scope.js";
 import { serviceJobSheetDocument } from "./service-job-sheet-document.js";
 import {
@@ -111,11 +111,20 @@ export class ServiceJobPackageService {
       ),
       log: [
         { at: job.createdAt, text: "Hibajegy megnyitva.", authorName: null },
-        ...job.events.map((event) => ({
-          at: event.createdAt,
-          text: `Állapot módosítva: ${event.toStatus ? partnerStatusLabel(event.toStatus) : "nincs megadva"}${event.note ? ` — ${event.note}` : ""}`,
-          authorName: event.actor ? personLegalName(event.actor) : null,
-        })),
+        /*
+          A MEGJEGYZES CSAK A BELSO CSOMAGBA KERUL (Balazs, 2026-09-21). A
+          kulonbseget PARAMETER valasztja szet, nem az, hogy melyik hivo
+          felejti el -- reszletek a `service-job-package-log.ts` fejleceben.
+        */
+        ...job.events.map((event) =>
+          jegyNaploSora({
+            at: event.createdAt,
+            toStatus: event.toStatus,
+            note: event.note,
+            authorName: event.actor ? personLegalName(event.actor) : null,
+            belso: scope.kind === "internal",
+          }),
+        ),
       ],
     });
     const entries: { name: string; bytes: Uint8Array }[] = [
