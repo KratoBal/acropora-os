@@ -43,6 +43,7 @@ import {
   partnerVisibleStatus,
 } from "./service-job-status.js";
 import { mayWorksheetJoinTicket } from "../common/worksheet-under-ticket.js";
+import { worksheetsBlockingTicketClose } from "../common/worksheet-signature-gate.js";
 import {
   allowedServiceJobSteps,
   isServiceJobStepAllowed,
@@ -532,6 +533,46 @@ export class ServiceJobsService {
   private requireWriteScope(user: AuthenticatedUser): void {
     if (!mayWriteServiceJob(partnerScopeOf(user)))
       throw new NotFoundException("A hibajegy nem található.");
+  }
+
+  /**
+   * MEGALL, HA A JEGY ALATT ALAIRATLAN MUNKALAP ALL.
+   *
+   * A MONDAT MEGNEVEZI A LAPOT, es ez nem kenyelem: egy jegy alatt tobb lap is
+   * allhat, es a „nem zarhato le" onmagaban keresesre kuldi a kezelot.
+   *
+   * ES KIMONDJA, HA A LAP REJTETT. A jegy alatti lista szandekosan nem mutatja
+   * a rejtett lapokat (`worksheetsForPlacement`), tehat a kezelo ott hiaba
+   * keresi. Enelkul a hibauzenet IGAZ lenne es hasznalhatatlan -- pontosan az
+   * a fajta hamis diagnozis, ami orakra rossz iranyba visz.
+   *
+   * A KIUTAT IS MEGMONDJA, mert ketto van, es a helyes valasztas a lapon mulik:
+   * ha a munka megtortent, ala kell iratni; ha a lap nem ide tartozik, le kell
+   * valasztani a jegyrol.
+   */
+  private async requireSignedWorksheets(serviceJobId: string): Promise<void> {
+    const rows = await this.repository.worksheetSignatureStates(serviceJobId);
+    const blocking = worksheetsBlockingTicketClose(
+      rows.map((row) => ({
+        id: row.id,
+        number: row.number,
+        currentVersionStatus: row.versions[0]?.status ?? null,
+        hidden: row.hiddenAt !== null,
+      })),
+    );
+    if (blocking.length === 0) return;
+
+    const nevek = blocking
+      .map((sheet) => {
+        const nev = sheet.number ?? "szám nélküli munkalap";
+        return sheet.hidden ? `${nev} (rejtett)` : nev;
+      })
+      .join(", ");
+    throw new BadRequestException(
+      `Ez a hibajegy nem zárható le, amíg a munkalapja nincs aláírva: ${nevek}. ` +
+        "Írasd alá a lapot, vagy ha nem ide tartozik, vedd le a hibajegyről. " +
+        "A rejtett lap a hibajegy alatt nem látszik: a munkalap-listán, a „Rejtettek is” jelölővel találod meg.",
+    );
   }
 
   private async visibilityFor(
@@ -1125,6 +1166,21 @@ export class ServiceJobsService {
           : `Ebből az állapotból ezek a lépések mehetnek: ${lehet.join(", ")}.`,
       );
     }
+
+    /**
+     * A LEZARAS KAPUJA: ALAIRATLAN MUNKALAP FOLOTT NEM ZARHATO LE A JEGY.
+     *
+     * Balazs, 2026-09-18 18:06:13 UTC: „Ha nem kerul ala munkalap, akkor
+     * lezarhato. Ha kerul ala munkalap, akkor csak ugy zarhato le ha a munkalap
+     * ala van irva."
+     *
+     * CSAK A `COMPLETED` LEPESRE ALL, A `CANCELLED`-RE NEM, es ez dontes:
+     * az elallt jegyre epp az a jellemzo, hogy NEM lett belole munka. Ha a kapu
+     * arra is allna, egy tevedesbol nyitott jegyet nem lehetne lezarni egy
+     * felig kitoltott lap miatt -- vagyis a rendes kiutat vennenk el attol az
+     * esettol, amire valo. Balazs szava is a lezarasrol szolt, nem az elallasrol.
+     */
+    if (input.to === "COMPLETED") await this.requireSignedWorksheets(id);
 
     /**
      * A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI. A megjegyzes ELHAGYHATO (Balazs

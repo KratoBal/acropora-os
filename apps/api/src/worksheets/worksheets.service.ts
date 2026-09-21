@@ -64,6 +64,7 @@ import type {
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
 import { mayWorksheetJoinTicket } from "../common/worksheet-under-ticket.js";
+import { mayWorksheetBeSigned } from "../common/worksheet-signature-gate.js";
 import { normalizeDocumentCaption } from "../documents/document-caption.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { normalizeAssigneeIds } from "./worksheet-assignment.js";
@@ -838,7 +839,34 @@ export class WorksheetsService {
       typeof actor === "string"
         ? { kind: "internal" as const }
         : partnerScopeOf(actor);
-    await this.requireWorksheet(id, scope);
+    const worksheet = await this.requireWorksheet(id, scope);
+
+    /**
+     * HIBAJEGY NÉLKÜL A LAP NEM ÍRHATÓ ALÁ.
+     *
+     * NEM ÚJ DÖNTÉS: Balázs 2026-09-02 08:08-kor már kimondta („ha egy
+     * Munkalapnak nincs hibajegye, akkor nem lehet alairni, lezarni es nem
+     * keszulhet rola TIG, Szamla"), és 2026-09-18 18:06-kor újra, ugyanabban a
+     * szerkezetben. Három hét, két megfogalmazás, egy szabály.
+     *
+     * A HIVÁS INGYEN VAN: a részletlap már hordozza a hibajegyet
+     * (`worksheetDetailInclude`), tehát ez nem új lekérdezés.
+     *
+     * A KÉT MONDAT AZÉRT KÉT MONDAT, mert a két hívó MÁST tud tenni. A belső
+     * kolléga fölé tud hibajegyet nyitni vagy csatolni; a partner nem -- neki
+     * egy „nyiss hibajegyet" mondat olyan teendőt adna, amihez nincs jogosultsága,
+     * és a képernyőn úgy nézne ki, mintha ő rontott volna el valamit.
+     */
+    const gate = mayWorksheetBeSigned({
+      serviceJobId: worksheet.serviceJob?.id ?? null,
+    });
+    if (!gate.ok)
+      throw new BadRequestException(
+        scope.kind === "internal"
+          ? "Ez a munkalap nem írható alá, amíg nincs fölötte hibajegy. Nyiss fölé hibajegyet, vagy csatold egy meglévőhöz, és utána írasd alá."
+          : "Ez a munkalap még nem írható alá: hiányzik hozzá a hibajegy. Szólj nekünk, és pótoljuk.",
+      );
+
     /**
      * AZ ELUTASÍTÁS OKA KÖTELEZŐ (Balázs döntése, 2026-08-26).
      *

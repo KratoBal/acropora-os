@@ -11,7 +11,12 @@ import {
   type ServiceJobListScope,
 } from "./service-job-list-scope.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
-import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
+import {
+  prisma,
+  type Prisma,
+  type ServiceJobStatus,
+  type WorksheetVersionStatus,
+} from "@acropora/database";
 import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
 
 /**
@@ -1147,6 +1152,47 @@ export class ServiceJobsRepository {
     return this.database.worksheet.findUnique({
       where: { id },
       select: { serviceJobId: true, customerId: true },
+    });
+  }
+
+  /**
+   * A JEGY MUNKALAPJAI, ANNYI ALLAPOTTAL, AMENNYI A LEZARASI KAPUHOZ KELL.
+   *
+   * A REJTETT LAPOT SZANDEKOSAN NEM SZURI KI, es ezert nem hasznalja a
+   * `NOT_HIDDEN` feltetelt, amit a `worksheetsForPlacement` igen. A ketto ket
+   * kulonbozo kerdesre valaszol: ott MEGJELENITES a tet (a probalapok
+   * zavarnak), itt DONTES. Ha a rejtes itt is szurne, egy aláiratlan lap
+   * elrejtesevel csendben lezarhato lenne a jegy -- a rejtes nezet-kapcsolobol
+   * jogosultsagi eszkozze valna.
+   *
+   * A `hidden` MEZOT EZERT ADJA VISSZA: a hivo mondata ki tudja mondani, hogy
+   * a lap rejtett. A jegy alatti lista nem mutatja, tehat a kezelo hiaba
+   * keresi ott -- enelkul a hibauzenet helyes lenne es hasznalhatatlan.
+   *
+   * A VERZIOBOL EGY KELL, A LEGMAGASABB: a "jelenlegi verzio" ugyanaz a fogalom,
+   * mint a modul tobbi lekerdezeseben (`orderBy: { version: "desc" }, take: 1`).
+   */
+  async worksheetSignatureStates(serviceJobId: string): Promise<
+    {
+      id: string;
+      number: string | null;
+      hiddenAt: Date | null;
+      versions: { status: WorksheetVersionStatus }[];
+    }[]
+  > {
+    return this.database.worksheet.findMany({
+      where: { serviceJobId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        number: true,
+        hiddenAt: true,
+        versions: {
+          orderBy: { version: "desc" },
+          take: 1,
+          select: { status: true },
+        },
+      },
     });
   }
 

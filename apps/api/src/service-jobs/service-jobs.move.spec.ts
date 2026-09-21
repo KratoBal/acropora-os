@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import type { AuthenticatedUser } from "@acropora/types";
 import { describe, it } from "node:test";
 
-import type { ServiceJobStatus } from "@acropora/database";
+import type {
+  ServiceJobStatus,
+  WorksheetVersionStatus,
+} from "@acropora/database";
 
 import { serviceJobDetailRow } from "../testing/service-job-detail-row.fixture.js";
 import type { ServiceJobsRepository } from "./service-jobs.repository.js";
@@ -17,6 +20,13 @@ function serviceWith(behaviour: {
   moved?: boolean;
   /** A LEPES UTANI allapot, ahogy a tarolo mar latja. */
   utana?: ServiceJobStatus;
+  /** A jegy munkalapjai, ahogy a lezarasi kapu latja oket. */
+  lapok?: {
+    id: string;
+    number: string | null;
+    hiddenAt: Date | null;
+    versions: { status: WorksheetVersionStatus }[];
+  }[];
 }) {
   const calls: unknown[] = [];
   // A VARRAT A VALODI SZERZODES TIPUSAT KAPJA, nem `unknown`-t: igy a fordito
@@ -29,9 +39,19 @@ function serviceWith(behaviour: {
   // hasznal -- a sajat allitasai attol meg zoldek maradnanak.
   const repository: Pick<
     ServiceJobsRepository,
-    "statusOf" | "move" | "detail" | "documentRemovals"
+    | "statusOf"
+    | "move"
+    | "detail"
+    | "documentRemovals"
+    | "worksheetSignatureStates"
   > = {
     statusOf: async () => behaviour.status,
+    /*
+      A LEZARASI KAPU EZT OLVASSA. Alapbol URES: a jegyek tobbsegehez nincs lap,
+      es Balazs 3. szabalya szerint az ilyen jegy lezarhato. Amelyik allitas a
+      kaput meri, az adja meg a `lapok` erteket.
+    */
+    worksheetSignatureStates: async () => behaviour.lapok ?? [],
     move: async (input) => {
       calls.push(input);
       return behaviour.moved === false ? { ok: false } : { ok: true };
@@ -90,6 +110,113 @@ describe("egy lépés a hibajegyen", () => {
       /TRIAGED/,
     );
     assert.equal(calls.length, 0);
+  });
+
+  /**
+   * A LEZARASI KAPU -- BALAZS SZABALYAI, 2026-09-18 18:06.
+   *
+   * A SZABALYT a `common/worksheet-signature-gate.spec.ts` meri; EZEK a
+   * BEKOTEST. A ketto kulon romolhat el, es a szakadas nema: a tiszta fuggveny
+   * zolden all, kozben a kaput senki nem hivja.
+   */
+  it("alairatlan lap folott NEM zarhato le, megnevezi a lapot, es NEM ir", async () => {
+    const { service, calls } = serviceWith({
+      status: "IN_PROGRESS",
+      lapok: [
+        {
+          id: "ws-1",
+          number: "BIO-2026-004",
+          hiddenAt: null,
+          versions: [{ status: "AWAITING_SIGNATURE" }],
+        },
+      ],
+    });
+
+    await assert.rejects(
+      () => service.move("job-1", { to: "COMPLETED" }, "user-1", BELSOS),
+      /BIO-2026-004/,
+    );
+    // AZ ORZOT NEM AZ BIZONYITJA, HOGY SZOL, HANEM HOGY NEM TORTENT SEMMI.
+    assert.equal(calls.length, 0);
+  });
+
+  it("a REJTETT alairatlan lap is visszatartja, es a mondat kimondja, hogy rejtett", async () => {
+    const { service, calls } = serviceWith({
+      status: "IN_PROGRESS",
+      lapok: [
+        {
+          id: "ws-2",
+          number: "BIO-2026-005",
+          hiddenAt: new Date("2026-09-20T10:00:00Z"),
+          versions: [{ status: "DRAFT" }],
+        },
+      ],
+    });
+
+    await assert.rejects(
+      () => service.move("job-1", { to: "COMPLETED" }, "user-1", BELSOS),
+      (hiba: unknown) => {
+        const uzenet = (hiba as { message: string }).message;
+        assert.match(uzenet, /BIO-2026-005 \(rejtett\)/);
+        // A JEGY ALATT NEM LATSZIK: a mondat megmondja, HOL talalja meg.
+        assert.match(uzenet, /Rejtettek is/);
+        return true;
+      },
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it("munkalap nelkul lezarhato (Balazs 3. szabalya)", async () => {
+    const { service, calls } = serviceWith({
+      status: "IN_PROGRESS",
+      lapok: [],
+      utana: "COMPLETED",
+    });
+
+    await service.move("job-1", { to: "COMPLETED" }, "user-1", BELSOS);
+    assert.equal(calls.length, 1);
+  });
+
+  it("alairt lap folott lezarhato", async () => {
+    const { service, calls } = serviceWith({
+      status: "IN_PROGRESS",
+      lapok: [
+        {
+          id: "ws-3",
+          number: "BIO-2026-006",
+          hiddenAt: null,
+          versions: [{ status: "SIGNED" }],
+        },
+      ],
+      utana: "COMPLETED",
+    });
+
+    await service.move("job-1", { to: "COMPLETED" }, "user-1", BELSOS);
+    assert.equal(calls.length, 1);
+  });
+
+  /**
+   * A KAPU HATARA, NEV SZERINT. Az elallt jegyre epp az a jellemzo, hogy NEM
+   * lett belole munka -- ha a kapu arra is allna, egy tevedesbol nyitott jegy
+   * bent ragadna egy felig kitoltott lap miatt. Ez az allitas azert all itt,
+   * hogy a kapu kesobbi szelesitese NE csendben tortenjen.
+   */
+  it("az ELALLAS nem esik a kapu ala, alairatlan lap mellett sem", async () => {
+    const { service, calls } = serviceWith({
+      status: "SCHEDULED",
+      lapok: [
+        {
+          id: "ws-4",
+          number: "BIO-2026-007",
+          hiddenAt: null,
+          versions: [{ status: "DRAFT" }],
+        },
+      ],
+      utana: "CANCELLED",
+    });
+
+    await service.move("job-1", { to: "CANCELLED" }, "user-1", BELSOS);
+    assert.equal(calls.length, 1);
   });
 
   it("végállapotban azt mondja, hogy nincs több lépés", async () => {

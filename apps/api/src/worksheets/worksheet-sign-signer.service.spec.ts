@@ -52,6 +52,13 @@ function worksheetRow() {
       isActive: true,
     },
     createdBy: { displayName: "Szerelő Sándor" },
+    /*
+      A HIBAJEGY 2026-09-21 OTA KELL: Balazs szabalya szerint jegy nelkul a lap
+      nem irhato ala, es a szolgaltatas ezt a mezot nezi. E nelkul MINDEN alairas
+      elakadna itt -- nem azert, mert a mert viselkedes romlott el, hanem mert a
+      dupla egy olyan vilagot irt le, ami azota tiltott.
+    */
+    serviceJob: { id: "job-1", jobNumber: "HJ-2026-001" },
     assignees: [],
     /*
       A VARRAT LAZA (`as unknown as`), tehat a HIANYZO mezorol a fordito nem

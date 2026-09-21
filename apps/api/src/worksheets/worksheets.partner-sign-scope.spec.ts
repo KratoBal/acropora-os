@@ -79,8 +79,15 @@ function sajatLap() {
     ],
     signatures: [],
     lines: [],
-    serviceJobId: null,
-    serviceJob: null,
+    /*
+      A HIBAJEGY 2026-09-21 OTA ELOFELTETELE AZ ALAIRASNAK (Balazs 5. szabalya).
+      Ez a ket mezo MAR ITT ALLT, `null` ertekkel: a dupla egy olyan vilagot irt
+      le, ami azota tiltott. A partner NEM tud jegyet nyitni, tehat null mellett
+      a partneri ag egy olyan mondaton allna meg, amire neki nincs teendoje --
+      es a piros nem a hatokorrol szolna, hanem a hianyzo jegyrol.
+    */
+    serviceJobId: "job-1",
+    serviceJob: { id: "job-1", jobNumber: "HJ-2026-001" },
   };
 }
 

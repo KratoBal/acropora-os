@@ -133,6 +133,22 @@ function worksheetRow(
   };
 }
 
+/**
+ * EGY LAP, AMI ALAIRHATO -- vagyis VAN folotte hibajegy.
+ *
+ * A `worksheetRow()` alapbol jegy NELKULI, es ez helyes: a lap tenyleg
+ * keletkezhet jegy nelkul. Az ALAIRAS viszont 2026-09-21 ota jegyhez kotott
+ * (Balazs 5. szabalya), tehat az alairast mero tesztek ezt a sort hasznaljak.
+ * A kettot KULON tartjuk, hogy a jegy nelkuli alapeset tovabbra is mert
+ * maradjon -- lasd a "jegy nelkul nem irhato ala" allitast.
+ */
+function alairhatoLap() {
+  return worksheetRow({
+    serviceJobId: "job-1",
+    serviceJob: { id: "job-1", jobNumber: "HJ-2026-001" },
+  } as Partial<WorksheetDetailRow>);
+}
+
 function repository(
   overrides: Partial<Record<keyof WorksheetsRepository, unknown>> = {},
 ) {
@@ -249,6 +265,7 @@ describe("WorksheetsService", () => {
   it("refuses a signature on a version that is not awaiting one", async () => {
     const service = new WorksheetsService(
       repository({
+        detail: async () => alairhatoLap(),
         sign: async () => ({ ok: false, reason: "NOT_AWAITING_SIGNATURE" }),
       }),
     );
@@ -456,6 +473,7 @@ describe("WorksheetsService", () => {
     let received: { note?: string | null } | null = null;
     const service = new WorksheetsService(
       repository({
+        detail: async () => alairhatoLap(),
         sign: async (input: { note?: string | null }) => {
           received = input;
           return { ok: true };
@@ -484,12 +502,42 @@ describe("WorksheetsService", () => {
    * szabály nem szigorúbb lenne, hanem MÁS, és a partner az aláírásnál akadna el.
    */
   it("leaves acceptance without a note exactly as it was", async () => {
-    const service = new WorksheetsService(repository());
+    const service = new WorksheetsService(
+      repository({ detail: async () => alairhatoLap() }),
+    );
 
     await service.sign(
       "worksheet-1",
       { decision: "ACCEPTED", signerName: "Kovács Béla" },
       "user-1",
+    );
+  });
+
+  /**
+   * A BEKOTES ALLITASA, NEM A SZABALYE. A szabalyt a
+   * `worksheet-signature-gate.spec.ts` meri; ez azt meri, hogy a szolgaltatas
+   * HIVJA is. A ketto kulon romolhat el: egy tiszta fuggveny, amit senki nem
+   * hiv, zolden all a keszletben, es a kapu kozben nyitva van.
+   *
+   * A LAP ITT AZ ALAPERTELMEZETT SOR, ami jegy NELKULI -- tehat ez az allitas
+   * egyben azt is rogziti, hogy a jegy nelkuli lap a rendes kiindulas.
+   */
+  it("jegy nelkul nem irhato ala a lap (belso kollega mondata)", async () => {
+    const service = new WorksheetsService(repository());
+    await assert.rejects(
+      service.sign(
+        "worksheet-1",
+        { decision: "ACCEPTED", signerName: "Kovács Béla" },
+        "user-1",
+      ),
+      (hiba: unknown) => {
+        assert.ok(hiba instanceof BadRequestException);
+        const uzenet = (hiba as BadRequestException).message;
+        assert.match(uzenet, /nincs fölötte hibajegy/);
+        // A TEENDOT IS MEGMONDJA: a belso kollega tud jegyet nyitni vagy csatolni.
+        assert.match(uzenet, /Nyiss fölé hibajegyet, vagy csatold/);
+        return true;
+      },
     );
   });
 
