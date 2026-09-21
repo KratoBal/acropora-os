@@ -503,7 +503,6 @@ export class SetWorksheetPartnerCodeDto {
  * ugyanazt a kotetet es ugyanazt a keretet hasznalja, tehat ket kulonbozo
  * hatar csak azt jelentene, hogy az egyiket elfelejtettuk karbantartani.
  */
-export const MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD = 10;
 
 const WORKSHEET_DOCUMENT_TYPES = ["PHOTO", "OTHER"] as const;
 

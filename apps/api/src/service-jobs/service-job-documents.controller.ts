@@ -14,13 +14,13 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
+import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 import { memoryStorage } from "multer";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import {
-  MAX_SERVICE_JOB_DOCUMENTS_PER_UPLOAD,
   UpdateServiceJobDocumentCaptionDto,
   UploadServiceJobDocumentDto,
 } from "./service-job-documents.dto.js";
@@ -58,9 +58,9 @@ export class ServiceJobDocumentsController {
   @Post(":id/documents")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   @UseInterceptors(
-    FilesInterceptor("file", MAX_SERVICE_JOB_DOCUMENTS_PER_UPLOAD + 1, {
+    FilesInterceptor("file", DOCUMENT_UPLOAD_LIMITS.files + 1, {
       storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 },
+      limits: { fileSize: DOCUMENT_UPLOAD_LIMITS.fileSizeBytes },
     }),
   )
   async uploadDocument(
@@ -71,9 +71,9 @@ export class ServiceJobDocumentsController {
   ) {
     if (!files?.length)
       throw new BadRequestException("A feltöltendő fájl kötelező.");
-    if (files.length > MAX_SERVICE_JOB_DOCUMENTS_PER_UPLOAD)
+    if (files.length > DOCUMENT_UPLOAD_LIMITS.files)
       throw new BadRequestException(
-        `Egyszerre legfeljebb ${MAX_SERVICE_JOB_DOCUMENTS_PER_UPLOAD} fájl tölthető fel.`,
+        `Egyszerre legfeljebb ${DOCUMENT_UPLOAD_LIMITS.files} fájl tölthető fel.`,
       );
 
     // EGYESEVEL, SORBAN, NEM PARHUZAMOSAN: a keret-ellenorzes a mar felhasznalt
