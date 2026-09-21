@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import { munkaoraEgysegFigyelmeztetes } from "./munkaora-egyseg";
@@ -41,5 +43,34 @@ describe("a munkaóra-sor mértékegysége a telefonon", () => {
     const uzenet = munkaoraEgysegFigyelmeztetes({ kind: "LABOR", unit: "db" });
     assert.ok(uzenet);
     assert.match(uzenet, /kapcsold ki/);
+  });
+});
+
+/**
+ * A KEPERNYO TENYLEG HIVJA -- FORRAS SZINTEN.
+ *
+ * A modul megléte nem bizonyitja, hogy hasznaljak: ugyanaz a res, amit a
+ * webes oldalon a kulon komponens-allitas zar be. Itt nincs renderelo, tehat
+ * a HIVAS ALAKJAT merjuk.
+ */
+describe("a munkalap képernyő bekötése", () => {
+  const forras = readFileSync(
+    join(__dirname, "..", "..", "..", "src", "app", "worksheets", "[id].tsx"),
+    "utf8",
+  );
+
+  it("a képernyő a közös szabályt hívja, a KAPCSOLÓ állásával", () => {
+    assert.match(
+      forras,
+      /munkaoraEgysegFigyelmeztetes\(\{\s*kind: isLabor \? "LABOR" : "OTHER",\s*unit,?\s*\}\)/,
+    );
+  });
+
+  /**
+   * ES KI IS RAJZOLJA. Enelkul a fenti allitas egy olyan valtozatot is zolden
+   * hagyna, ami kiszamolja az uzenetet, es sehol nem mutatja meg.
+   */
+  it("POZITÍV KONTROLL: a képernyő ki is írja az üzenetet", () => {
+    assert.match(forras, /\{egysegFigyelmeztetes\}/);
   });
 });
