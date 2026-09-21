@@ -80,18 +80,22 @@ describe("beállítások gyűjtőoldal", () => {
     expect(existsSync(oldalFajlja(belepes!.href))).toBe(true);
   });
 
-  it("mind az öt területet megmutatja a tulajdonosnak", () => {
+  /**
+   * MINDEN TERULET LATSZIK A TULAJDONOSNAK -- ES A LISTA A FORRASBOL JON.
+   *
+   * KORABBAN OT CIM ALLT ITT, KEZZEL. Az a lista pontosan az UJ teruletet
+   * hagyta volna ki: egy hatodik felvetele utan a teszt ZOLD MARAD, a NEVE
+   * viszont ("mind az ot") hamissa valik, es semmi nem szol rola. Ugyanaz az
+   * alak, mint a lap sajat linkjeinel: a merce a FORRAS, nem egy masolat.
+   */
+  it("minden területet megmutat a tulajdonosnak", () => {
     auth.role = "OWNER";
     render(<SettingsOverviewPage />);
-    for (const cim of [
-      "Felhasználók",
-      "Márkák",
-      "Integrációk",
-      "Importok",
-      "Matricák",
-    ]) {
-      expect(screen.getAllByText(cim).length).toBeGreaterThan(0);
+    for (const area of SETTINGS_AREAS) {
+      expect(screen.getAllByText(area.title).length).toBeGreaterThan(0);
     }
+    // ES A LISTA NEM URES: egy ures tombre a fenti ciklus le sem futna.
+    expect(SETTINGS_AREAS.length).toBeGreaterThanOrEqual(6);
   });
 
   /**

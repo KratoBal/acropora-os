@@ -14,6 +14,16 @@ export {
   serviceJobTimeline,
   serviceJobWorksheetLabel,
 } from "./service-job-management.js";
+export {
+  MAIL_TEMPLATE_VARIABLES,
+  renderMailTemplate,
+  unknownTemplateVariables,
+} from "./mail-template.js";
+export type {
+  MailTemplateRender,
+  MailTemplateValues,
+  MailTemplateVariable,
+} from "./mail-template.js";
 export { worksheetStatusLabel } from "./worksheet-management.js";
 export type {
   ServiceJobAssetLink,

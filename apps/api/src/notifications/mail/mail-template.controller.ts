@@ -8,14 +8,15 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { IsString, MaxLength, MinLength } from "class-validator";
-import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+import {
+  MAIL_TEMPLATE_VARIABLES,
+  PERMISSIONS,
+  unknownTemplateVariables,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
-import {
-  MAIL_TEMPLATE_VARIABLES,
-  unknownTemplateVariables,
-} from "./mail-template.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
   DEFAULT_WORKSHEET_SIGNED_TEMPLATE,
