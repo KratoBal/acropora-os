@@ -33,6 +33,7 @@ const HIBAJEGY_RESZLET = "src/components/ticket-detail.tsx";
 const ESZKOZ_LISTA = "src/components/reference-lists.tsx";
 const ESZKOZ_RESZLET = "src/components/asset-detail.tsx";
 const ESZKOZ_UTVONAL = "src/app/(portal)/eszkozok/[id]/page.tsx";
+const NAPLO_SOR = "src/lib/naplo-sor.ts";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
 
@@ -150,9 +151,21 @@ describe("a partner portál bekötése", () => {
       s,
       /URL\.createObjectURL\(await loader\.current\(item\.id\)\)/,
     );
-    // ÉS A TÚLSÓ IRÁNY: a kép forrása a letöltött URL, nem egy összefűzött cím.
-    assert.match(s, /<img src=\{urls\[item\.id\]\}/);
-    assert.doesNotMatch(s, /<img[^>]*src=\{`/);
+    /*
+      ÉS A TÚLSÓ IRÁNY: a kép forrása a letöltött URL, nem egy összefűzött cím.
+
+      A MINTA 2026-09-21-EN ÁTÍRÓDOTT, ÉS A PIROS JOGOS VOLT. A korábbi alak
+      a `<img src={urls[item.id]}` SORT illesztette, egy sorban. A csempe azóta
+      gomb belsejébe került, a formázó pedig több sorra tördelte az `img`
+      elemet -- a kód JOBB lett, az állítás pedig a tördelésre volt kötve.
+
+      Az új alak a FORRÁS-MEGADÁST méri, nem a sortörést, és MIND A KETTŐT: a
+      csempéét és a nagyított képét. A negatív ág a lényeg: sehol nincs
+      sablon-sztringből összefűzött cím.
+    */
+    assert.match(s, /src=\{urls\[item\.id\]\}/);
+    assert.match(s, /src=\{urls\[nagyitott\]\}/);
+    assert.doesNotMatch(s, /src=\{`/);
   });
 });
 
@@ -295,5 +308,124 @@ describe("a partner eszköz-adatlapja és szűrői", () => {
    */
   it("a lista kártyája az adatlapra visz", () => {
     assert.match(olvas(ESZKOZ_LISTA), /href=\{`\/eszkozok\/\$\{asset\.id\}`\}/);
+  });
+});
+
+/**
+ * A HIBAJEGY ADATLAPJA (6559eab5, 2. szelet).
+ *
+ * Ugyanaz a két elv, mint az eszköz-adatlapnál: a TARTALOM a belső felület
+ * megfelelőjéből jön, a MŰVELETEK a jogosultságból. A negatív állítások mellé
+ * a pozitív kontroll a szakasz végén áll -- enélkül mind zöld lenne egy üres
+ * lapon is.
+ *
+ * A sor SZÖVEGÉT nem ez a szakasz méri, hanem a `naplo-sor.spec.ts`: az a
+ * függvényt FUTTATJA. Itt csak az van, ami a képernyő bekötéséről szól.
+ */
+describe("a partner hibajegy-adatlapja", () => {
+  it("POZITÍV KONTROLL: a lap és a naplósor olvasható és nem üres", () => {
+    for (const ut of [HIBAJEGY_RESZLET, NAPLO_SOR])
+      assert.ok(olvas(ut).length > 500, `${ut}: üres vagy gyanúsan rövid`);
+  });
+
+  /**
+   * 1. A NÉGY KEZELŐI MŰVELET NINCS A LAPON -- MIND KÜLÖN NÉVVEL.
+   *
+   * Nem azért, mert nincs rá jog: a `PARTNER_SERVICE` szerep viseli a
+   * `SERVICE_MANAGE` jogot (auth.ts:388), tehát a szerver ma átengedné mind a
+   * négyet. MA SZÁNDÉKOSAN NEM KÍNÁLJUK őket, és a rés ki van mondva a pull
+   * request törzsében.
+   */
+  it("a lap nem kínálja az állapot léptetését", () => {
+    assert.ok(!/allowedSteps|\/step|stepJob/.test(kod(HIBAJEGY_RESZLET)));
+  });
+
+  it("a lap nem kínálja a delegálást", () => {
+    assert.ok(!/assignees|assignJob|\/assignees/.test(kod(HIBAJEGY_RESZLET)));
+  });
+
+  it("a lap nem kínálja a helyszín és az eszközök szerkesztését", () => {
+    const s = kod(HIBAJEGY_RESZLET);
+    assert.ok(!/method: "PATCH"|updateTicket|setPlacement/.test(s));
+  });
+
+  it("a lap nem kínálja a munkalap csatolását és leválasztását", () => {
+    const s = kod(HIBAJEGY_RESZLET);
+    assert.ok(!/attachWorksheet|detachWorksheet|method: "DELETE"/.test(s));
+  });
+
+  /**
+   * 2. IDEGEN AZONOSÍTÓRA NINCS KLIENS-OLDALI SZŰRÉS: a hatókört a SZERVER
+   * szabja. Egy `customerId` a hívásban azt sugallná, hogy a láthatóságot a
+   * hívó dönti el.
+   */
+  it("a jegy-adatlap hívása nem visz partner-azonosítót", () => {
+    const hivas = kod(KLIENS).match(
+      /ticket: \(id: string\) =>[\s\S]{0,200}?\),/,
+    );
+    assert.ok(hivas, "nem találom a jegy adatlapjának hívását");
+    assert.ok(!/customerId|ownerId|ownerType/.test(hivas[0]));
+  });
+
+  /**
+   * 3. AZ ESZKÖZ SORA AZ `assetId`-VEL VISZ TOVÁBB, NEM A CSATOLÁS SORÁNAK
+   * AZONOSÍTÓJÁVAL.
+   *
+   * A `ServiceJobAssetLink` KÉT azonosítót hordoz, és a rossz választás NÉMA:
+   * a hivatkozás megjelenne, a lap pedig „nem található" hibát adna, mert az
+   * `id` egy csatolási sor, nem egy eszköz. A típus nem fogja meg -- mind a
+   * kettő `string`.
+   */
+  it("az érintett eszköz sora az eszköz adatlapjára visz", () => {
+    assert.match(
+      olvas(HIBAJEGY_RESZLET),
+      /href=\{`\/eszkozok\/\$\{asset\.assetId\}`\}/,
+    );
+    assert.doesNotMatch(
+      olvas(HIBAJEGY_RESZLET),
+      /href=\{`\/eszkozok\/\$\{asset\.id\}`\}/,
+    );
+  });
+
+  /**
+   * 4. A MUNKALAPOK A NAPLÓBÓL JÖNNEK, és a saját adatlapjukra visznek.
+   *
+   * A `ServiceJobDetail` NEM hordoz `worksheets` mezőt: a végpont egy
+   * időrendet ad. Egy `ticket.worksheets` alak tehát nem fordulna le -- ez az
+   * állítás azt méri, hogy a szűrés a naplóra megy.
+   */
+  it("a munkalap-panel a naplóból szűr, és a munkalap lapjára visz", () => {
+    const s = olvas(HIBAJEGY_RESZLET);
+    assert.match(
+      s,
+      /entry\.kind === "worksheet" \? \[entry\.worksheet\] : \[\]/,
+    );
+    assert.match(s, /href=\{`\/munkalapok\/\$\{worksheet\.id\}`\}/);
+  });
+
+  /**
+   * 5. A NAGYÍTÁS GOMB, NEM KÉPRE AKASZTOTT KATTINTÁS. Így billentyűzetről is
+   * elérhető, és a képernyőolvasó műveletnek mondja. A panel MIND A HÁROM lap
+   * (jegy, munkalap, eszköz) csatolmányait rajzolja, tehát ez egy helyen
+   * javít hármat.
+   */
+  it("a nagyított kép gombról nyílik, és az Escape zárja", () => {
+    const s = olvas(DOKUMENTUMOK);
+    assert.match(
+      s,
+      /className="document-thumb"[\s\S]{0,200}?onClick=\{\(\) => setNagyitott\(item\.id\)\}/,
+    );
+    assert.match(s, /esemeny\.key === "Escape"/);
+  });
+
+  /**
+   * POZITÍV KONTROLL: a partner megmaradt művelete ott van a lapon. Enélkül a
+   * fenti négy negatív állítás akkor is zöld lenne, ha a lap üres volna.
+   */
+  it("a partner továbbra is csatolhat a saját jegyéhez", () => {
+    assert.match(
+      olvas(HIBAJEGY_RESZLET),
+      /partnerApi\.uploadTicketDocument\(id, file, caption\)/,
+    );
   });
 });

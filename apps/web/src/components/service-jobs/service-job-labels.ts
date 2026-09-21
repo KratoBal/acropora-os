@@ -118,26 +118,14 @@ export function serviceJobStatusTone(
 }
 
 /**
- * EGY MUNKALAP NEVE A JEGY ALATT: NÉV, ÉS ZÁRÓJELBEN AMI AZONOSÍTJA.
+ * A MUNKALAP CÍMKÉJE A `@acropora/types`-BÓL JÖN, ÉS ITT CSAK ÁTMEGY.
  *
- * Balázs kérése, 2026-09-16: a jegy alatt eddig CSAK a szám állt, piszkozatnál
- * pedig a "Piszkozat" szó. Az utóbbi MINDEN számozatlan lapnál ugyanaz, tehát
- * két piszkozat a jegy alatt megkülönböztethetetlen volt, és a lista nem
- * mondta meg, miről szól a lap - csak azt, hogy van.
+ * 2026-09-21-ig ennek a fájlnak a törzsében állt. A partnerportál ugyanezt a
+ * sort rajzolja ki a jegy alatt, és az `apps/web` forrását nem éri el -- két
+ * másolatnál ugyanaz a munkalap kétféleképpen nézne ki a két felületen.
  *
- * A NÉV ELŐRE KERÜL, A ZÁRÓJELBE AZ, AMI EDDIG OTT ÁLLT. Lezárt lapnál ez a
- * szám, piszkozatnál a szó. Így a sor akkor is olvasható marad, ha valaki a
- * számot keresi - csak már nem az az első, amit lát.
- *
- * NÉV NÉLKÜL A RÉGI ALAK MARAD, üres zárójel nélkül: a `""` azt jelenti, hogy
- * nem tudjuk a nevet (a laphoz nincs verzió), és egy "(Piszkozat)" felirat egy
- * hiányzó név előtt többet állítana, mint amit tudunk.
+ * A RE-EXPORT AZÉRT MARAD, és nem a hívók importja lett átírva: ennek a
+ * modulnak a többi címkéje (`serviceJobStatusLabel`, a megjegyzés leírása)
+ * webes marad, tehát a hívóknak amúgy is innen kell importálniuk.
  */
-export function serviceJobWorksheetLabel(worksheet: {
-  number: string | null;
-  subject: string;
-}): string {
-  const azonosito = worksheet.number ?? "Piszkozat";
-  const nev = worksheet.subject.trim();
-  return nev ? `${nev} (${azonosito})` : azonosito;
-}
+export { serviceJobWorksheetLabel } from "@acropora/types";
