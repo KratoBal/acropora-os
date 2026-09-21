@@ -35,15 +35,23 @@ function futtat(naplo: string, vartSorok: string[] | null) {
     writeFileSync(vartUt, vartSorok.join("\n"));
   }
   try {
-    execFileSync(process.execPath, [KAPU, naplo, vartUt], {
+    kimenet = execFileSync(process.execPath, [KAPU, naplo, vartUt], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
     return 0;
   } catch (hiba) {
+    kimenet = String((hiba as { stdout?: string }).stdout ?? "");
     return (hiba as { status?: number }).status ?? -1;
   }
 }
+
+/**
+ * AZ UTOLSO FUTAS KIMENETE. Modul-szintu, mert a `futtat` a KILEPESI KODOT
+ * adja vissza -- az a hat meglevo allitas szerzodese, es azt nem irom at egy
+ * hetedik kedveert. A lathatosagi jelzest viszont csak a SZOVEG mutatja.
+ */
+let kimenet = "";
 
 /** A ket nev, ami a ket meres-kort elvalasztja egymastol. */
 const VART = [
@@ -154,5 +162,61 @@ describe("meres-kapu", () => {
     const naplo = join(mappa, "naplo.txt");
     writeFileSync(naplo, "    not ok 1 - a torles-sor MEGJELENIK");
     assert.equal(futtat(naplo, ["a torles-sor MEGJELENIK"]), 0);
+  });
+
+  /**
+   * A TOREDEK-VARAKOZAS LATHATOSAGA -- NEM VERDIKT, HANEM JELZES.
+   *
+   * Egy elotag nelkuli toredek szandekosan illeszkedik a `not ok` sorra is: a
+   * hivo nem nyilatkozott a kimenetelrol. A 2026-09-21-i eset gyokere viszont
+   * eppen az volt, hogy a szerzo fejeben SIKERT nevezett meg a varakozas.
+   *
+   * A kapu ezert KIIRJA, ha egy toredek CSAK bukott allitason jelent meg -- es
+   * a SORT is, nem csak a tenyt. A verdikt valtozatlan: a varakozas
+   * teljesitette, amit kert.
+   */
+  it("jelzi, ha egy toredek CSAK bukott allitason jelent meg", () => {
+    const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-jelzes-"));
+    const naplo = join(mappa, "naplo.txt");
+    writeFileSync(naplo, "    not ok 3 - a lap MEGJELENIK");
+
+    assert.equal(
+      futtat(naplo, ["a lap MEGJELENIK"]),
+      0,
+      "a verdikt NEM valtozik",
+    );
+    assert.match(kimenet, /CSAK bukott allitason/);
+    assert.match(kimenet, /not ok 3 - a lap MEGJELENIK/);
+  });
+
+  /**
+   * ES A PARJA: ha a toredek SIKERES allitason is megjelenik, NINCS jelzes.
+   * Enelkul egy "mindig szolo" valtozat is atmenne a fenti allitason -- es egy
+   * orzo, ami folyamatosan szol, ugyanaz, mint amelyik sosem.
+   */
+  it("NEM jelez, ha a toredek sikeres allitason is megjelenik", () => {
+    const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-jelzes2-"));
+    const naplo = join(mappa, "naplo.txt");
+    writeFileSync(
+      naplo,
+      ["    not ok 3 - a lap MEGJELENIK", "    ok 9 - a lap MEGJELENIK"].join(
+        "\n",
+      ),
+    );
+
+    assert.equal(futtat(naplo, ["a lap MEGJELENIK"]), 0);
+    assert.doesNotMatch(kimenet, /CSAK bukott allitason/);
+  });
+
+  /**
+   * ES A HARMADIK: a te sajat fixturaid egyikere SEM sul el. Ezt lemertem,
+   * mielott a jelzest megirtam volna: a `teljes.naplo.txt`-ben a ket varakozas
+   * a bukas DIAGNOSZTIKAI soraira illeszkedik (`- a suite ...: 8`), nem `not
+   * ok` sorra. Ha elsulne, a jelzes minden meres-korben szolna, es akkor
+   * ugyanaz lenne, mint amelyik sosem.
+   */
+  it("a meglevo fixturakon NEM szolal meg", () => {
+    assert.equal(futtat(join(FIXTURAK, "teljes.naplo.txt"), VART), 0);
+    assert.doesNotMatch(kimenet, /CSAK bukott allitason/);
   });
 });
