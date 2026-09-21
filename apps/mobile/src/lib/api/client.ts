@@ -1,6 +1,7 @@
 import { environment } from "@/config/env";
 import { authSessionStore } from "@/lib/auth/token-store";
 
+import { keresIdokorlatja } from "./idokorlat";
 import { needsJsonContentType } from "./json-content-type";
 import { resolveRequestToken } from "./request-auth";
 
@@ -49,6 +50,11 @@ export interface ApiRequestOptions extends RequestInit {
    * Used only to invalidate a just-issued session that failed to persist
    * locally, before it was ever saved (see sign-in.ts). */
   authToken?: string;
+  /**
+   * A HIVAS IDOKORLATJA EZREDMASODPERCBEN. Elhagyhato: enelkul a torzs alakja
+   * dont (`keresIdokorlatja`) -- rendes kerésnel rovid, `FormData`-nal hosszu.
+   */
+  timeoutMs?: number;
 }
 
 export async function apiRequest<T>(
@@ -59,7 +65,7 @@ export async function apiRequest<T>(
     throw new ApiConfigError(environment.problems);
   }
 
-  const { skipAuth, authToken, ...requestInit } = init;
+  const { skipAuth, authToken, timeoutMs, ...requestInit } = init;
   const storedToken = await authSessionStore.getToken();
   const token = resolveRequestToken({ skipAuth, authToken, storedToken });
 
@@ -73,28 +79,59 @@ export async function apiRequest<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  let response: Response;
+  /**
+   * AZ IDOKORLAT A TELJES KORRE SZOL, NEM CSAK A KAPCSOLODASRA.
+   *
+   * A `clearTimeout` a `finally`-ben all, a TORZS BEOLVASASA UTAN: egy
+   * megallt valasz-torzs ugyanugy befagyasztana a kort, mint egy megallt
+   * kapcsolat. Ha az idozito a `fetch` utan azonnal allna le, ez a fele
+   * vedtelen maradna.
+   *
+   * A MEGSZAKITAS `ApiNetworkError`-ra fordul, amit a `saveOrQueue` nem
+   * elutasitasnak lat -- tehat az irast SORBA TESZI, es onnan ugyanazzal a
+   * muvelet-azonositoval megy fel. Ket felvitel nem keletkezik.
+   */
+  const vezerlo = new AbortController();
+  const idozito = setTimeout(
+    () => vezerlo.abort(),
+    keresIdokorlatja({ body: requestInit.body, timeoutMs }),
+  );
+
   try {
-    response = await fetch(`${environment.config.apiUrl}${path}`, {
-      ...requestInit,
-      headers,
-    });
-  } catch (cause) {
-    // Never let a raw fetch error (which may embed request details)
-    // surface directly — normalize to a fixed, safe message.
-    throw new ApiNetworkError(cause);
-  }
+    let response: Response;
+    try {
+      response = await fetch(`${environment.config.apiUrl}${path}`, {
+        ...requestInit,
+        headers,
+        signal: vezerlo.signal,
+      });
+    } catch (cause) {
+      // Never let a raw fetch error (which may embed request details)
+      // surface directly — normalize to a fixed, safe message.
+      throw new ApiNetworkError(cause);
+    }
 
-  if (!response.ok) {
-    const message = await readErrorMessage(response);
-    throw new ApiError(message, response.status);
-  }
+    if (!response.ok) {
+      const message = await readErrorMessage(response);
+      throw new ApiError(message, response.status);
+    }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
+    if (response.status === 204) {
+      return undefined as T;
+    }
 
-  return (await response.json()) as T;
+    /*
+      A TORZS BEOLVASASA IS A HALOZATON MEGY, tehat ugyanugy elakadhat -- es a
+      hibaja ugyanugy nem kerulhet nyersen a felhasznalo ele.
+    */
+    try {
+      return (await response.json()) as T;
+    } catch (cause) {
+      throw new ApiNetworkError(cause);
+    }
+  } finally {
+    clearTimeout(idozito);
+  }
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
