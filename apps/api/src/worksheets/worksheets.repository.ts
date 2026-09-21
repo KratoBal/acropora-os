@@ -1384,7 +1384,16 @@ export class WorksheetsRepository extends Repository {
       worksheetSheetInput(
         detail,
         detail.currentVersion,
-        entries?.rows.map((entry) => entry.body) ?? [],
+        entries?.rows.map((entry) => ({
+          body: entry.body,
+          authorName: entry.authorName,
+        })) ?? [],
+        row.assignees.map((assignee) => personLegalName(assignee.user)),
+        (row.documents ?? []).flatMap((document) =>
+          document.thumbnail
+            ? [{ thumbnail: document.thumbnail, caption: document.caption }]
+            : [],
+        ),
       ),
     );
 

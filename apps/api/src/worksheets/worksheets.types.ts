@@ -116,6 +116,11 @@ export const worksheetDetailInclude = {
     },
     orderBy: { createdAt: "asc" as const },
   },
+  documents: {
+    where: { type: "PHOTO" as const },
+    orderBy: [{ createdAt: "asc" as const }, { id: "asc" as const }],
+    select: { thumbnail: true, caption: true },
+  },
   versions: {
     include: worksheetVersionInclude,
     orderBy: { version: "desc" as const },
@@ -142,9 +147,16 @@ export const worksheetSummaryInclude = {
   _count: { select: { versions: true } },
 } satisfies Prisma.WorksheetInclude;
 
-export type WorksheetDetailRow = Prisma.WorksheetGetPayload<{
+type WorksheetDetailRowWithDocuments = Prisma.WorksheetGetPayload<{
   include: typeof worksheetDetailInclude;
-}> & {
+}>;
+
+export type WorksheetDetailRow = Omit<
+  WorksheetDetailRowWithDocuments,
+  "documents"
+> & {
+  /** Optional for older projection fixtures; repository reads always include it. */
+  documents?: WorksheetDetailRowWithDocuments["documents"];
   /**
    * A HELYSZIN TELJES UTJA, a tarolo teszi melle -- NEM a Prisma `include`
    * eredmenye.

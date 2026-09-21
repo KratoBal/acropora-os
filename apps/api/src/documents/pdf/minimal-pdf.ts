@@ -1,8 +1,6 @@
-import { statSync } from "node:fs";
-
 import PDFDocument from "pdfkit";
 
-import { resolvePdfFontPath } from "./pdf-font.js";
+import { registerEmbeddedPdfFont } from "./branded-document.js";
 
 /**
  * A LEGKISEBB LAP, AMIN A LÁNC VÉGIGMÉRHETŐ.
@@ -36,7 +34,7 @@ import { resolvePdfFontPath } from "./pdf-font.js";
  */
 
 /** A regisztrált betű neve a dokumentumon belül. */
-export const PDF_BODY_FONT = "body";
+export { PDF_BODY_FONT } from "./branded-document.js";
 
 export interface MinimalPdfOptions {
   /** Alapértelmezés: A4. */
@@ -63,23 +61,6 @@ export interface MinimalPdfOptions {
  * akkor a lap némán elromlik. Egy név nem fájl, tehát ez az ellenőrzés
  * szerkezetileg zárja ki őket -- és a hiányzó fájlt is hangosan megállítja.
  */
-function assertEmbeddableFontFile(fontPath: string): void {
-  let isFile = false;
-  try {
-    isFile = statSync(fontPath).isFile();
-  } catch {
-    isFile = false;
-  }
-
-  if (!isFile) {
-    throw new Error(
-      `A PDF betűje nem létező fájlra mutat: ${JSON.stringify(fontPath)}. ` +
-        `A készítés itt SZÁNDÉKOSAN áll meg, és nem esik vissza a beépített ` +
-        `betűkészletre: azon az "ő" betű "P"-ként állna a partner lapján.`,
-    );
-  }
-}
-
 /**
  * Sorokból PDF-bájtok, beágyazott betűvel.
  *
@@ -101,10 +82,7 @@ export function renderMinimalPdf(
     doc.on("end", () => resolve(Buffer.concat(chunks)));
 
     try {
-      const fontPath = options.fontPath ?? resolvePdfFontPath();
-      assertEmbeddableFontFile(fontPath);
-      doc.registerFont(PDF_BODY_FONT, fontPath);
-      doc.font(PDF_BODY_FONT).fontSize(fontSize);
+      registerEmbeddedPdfFont(doc, options.fontPath).fontSize(fontSize);
       for (const line of lines) doc.text(line);
       doc.end();
     } catch (error) {

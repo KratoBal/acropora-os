@@ -1,9 +1,20 @@
 import { createHash } from "node:crypto";
 
+import type { MinimalPdfOptions } from "../documents/pdf/minimal-pdf.js";
 import {
-  renderMinimalPdf,
-  type MinimalPdfOptions,
-} from "../documents/pdf/minimal-pdf.js";
+  PDF_CONTENT_BOTTOM,
+  PDF_CONTENT_WIDTH,
+  PDF_CONTINUATION_CONTENT_TOP,
+  PDF_FIRST_CONTENT_TOP,
+  PDF_INK,
+  PDF_LEFT,
+  PDF_MUTED,
+  addPage,
+  createBrandedPdf,
+  drawDocumentFooter,
+  drawDocumentHeader,
+  drawSectionTitle,
+} from "../documents/pdf/branded-document.js";
 import {
   canonicalMimetypeFor,
   detectUploadedFileKind,
@@ -127,7 +138,7 @@ export async function worksheetSheetDocument(
   input: WorksheetSheetInput,
   options: MinimalPdfOptions = {},
 ): Promise<WorksheetSheetDocument> {
-  const content = await renderMinimalPdf(worksheetSheetLines(input), options);
+  const content = await renderWorksheetPdf(input, options);
 
   const kind = detectUploadedFileKind("application/pdf", content);
   if (kind === null)
@@ -142,4 +153,139 @@ export async function worksheetSheetDocument(
     sha256: createHash("sha256").update(content).digest("hex"),
     content,
   };
+}
+
+function renderWorksheetPdf(
+  input: WorksheetSheetInput,
+  options: MinimalPdfOptions,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let document: PDFKit.PDFDocument;
+    try {
+      document = createBrandedPdf({ fontPath: options.fontPath });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    document.on("data", (chunk: Buffer) => chunks.push(chunk));
+    document.on("error", reject);
+    document.on("end", () => resolve(Buffer.concat(chunks)));
+    try {
+      const subtitle = input.label ?? "Munkalap - még nincs száma";
+      let y = PDF_FIRST_CONTENT_TOP;
+      const nextPage = () => {
+        addPage(document);
+        y = PDF_CONTINUATION_CONTENT_TOP;
+      };
+      const need = (height: number) => {
+        if (y + height > PDF_CONTENT_BOTTOM) nextPage();
+      };
+      const sections = worksheetSections(input);
+      for (const section of sections) {
+        const estimate =
+          28 +
+          section.lines.reduce(
+            (total, line) =>
+              total +
+              document.heightOfString(line, {
+                width: PDF_CONTENT_WIDTH - 16,
+                lineGap: 2,
+              }) +
+              8,
+            0,
+          );
+        need(Math.min(estimate, 180));
+        y = drawSectionTitle(document, section.title, y);
+        for (const line of section.lines) {
+          const height = document.heightOfString(line, {
+            width: PDF_CONTENT_WIDTH - 16,
+            lineGap: 2,
+          });
+          need(height + 10);
+          document.fillColor(PDF_INK).fontSize(10).text(line, PDF_LEFT, y, {
+            width: PDF_CONTENT_WIDTH,
+            lineGap: 2,
+          });
+          y += height + 8;
+        }
+        y += 12;
+      }
+      const photos = input.photos ?? [];
+      if (photos.length) {
+        need(42);
+        y = drawSectionTitle(document, "FÉNYKÉPEK", y);
+        const columnWidth = (PDF_CONTENT_WIDTH - 12) / 2;
+        for (let index = 0; index < photos.length; index += 2) {
+          const row = photos.slice(index, index + 2);
+          const imageHeight = 116;
+          const captions = row.map((photo) => photo.caption?.trim() ?? "");
+          const captionHeight = captions.some(Boolean) ? 20 : 0;
+          need(imageHeight + captionHeight + 14);
+          row.forEach((photo, column) => {
+            const x = PDF_LEFT + column * (columnWidth + 12);
+            try {
+              document.image(Buffer.from(photo.thumbnail), x, y, {
+                fit: [columnWidth, imageHeight],
+                align: "center",
+                valign: "center",
+              });
+              document
+                .rect(x, y, columnWidth, imageHeight)
+                .strokeColor("#c9dadd")
+                .lineWidth(0.5)
+                .stroke();
+            } catch {
+              // A sérült bélyegkép nem teheti kiadhatatlanná a dokumentumot.
+            }
+            if (captions[column])
+              document
+                .fillColor(PDF_MUTED)
+                .fontSize(7.5)
+                .text(captions[column]!, x, y + imageHeight + 4, {
+                  width: columnWidth,
+                });
+          });
+          y += imageHeight + captionHeight + 14;
+        }
+      }
+      const range = document.bufferedPageRange();
+      for (
+        let page = range.start;
+        page < range.start + range.count;
+        page += 1
+      ) {
+        document.switchToPage(page);
+        drawDocumentHeader(document, {
+          eyebrow:
+            input.status === "SIGNED" ? "MUNKALAP" : "PISZKOZAT MUNKALAP",
+          title: input.subject,
+          subtitle,
+          compact: page !== range.start,
+        });
+        drawDocumentFooter(document);
+      }
+      document.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function worksheetSections(
+  input: WorksheetSheetInput,
+): { title: string; lines: string[] }[] {
+  const lines = worksheetSheetLines(input).filter((line) => line.trim() !== "");
+  const sections: { title: string; lines: string[] }[] = [];
+  let title = "MUNKALAP ADATAI";
+  let current: string[] = [];
+  for (const line of lines) {
+    if (["TÉTELEK", "NAPLÓ", "ALÁÍRÁS"].includes(line)) {
+      if (current.length) sections.push({ title, lines: current });
+      title = line;
+      current = [];
+    } else current.push(line);
+  }
+  if (current.length) sections.push({ title, lines: current });
+  return sections;
 }

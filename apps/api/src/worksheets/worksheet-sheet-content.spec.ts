@@ -363,6 +363,7 @@ describe("a lap mezőhalmaza végiggondolt", () => {
       "label",
       "laborHours",
       "lines",
+      "photos",
       "signature",
       "status",
       "subject",

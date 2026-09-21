@@ -22,7 +22,13 @@ export class ServiceJobPackageRepository {
         events: {
           where: { kind: "STATUS_CHANGE" },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          select: { id: true, createdAt: true, toStatus: true, note: true },
+          select: {
+            id: true,
+            createdAt: true,
+            toStatus: true,
+            note: true,
+            actor: { select: { displayName: true } },
+          },
         },
         assets: {
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -30,7 +36,12 @@ export class ServiceJobPackageRepository {
         },
         assignees: {
           orderBy: [{ assignedAt: "asc" }, { userId: "asc" }],
-          select: { user: { select: { displayName: true, nickname: true } } },
+          select: { user: { select: { displayName: true } } },
+        },
+        documents: {
+          where: { type: "PHOTO" },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { thumbnail: true, caption: true },
         },
         worksheets: {
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],

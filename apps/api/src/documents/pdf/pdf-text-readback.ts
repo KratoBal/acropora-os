@@ -31,6 +31,11 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 export interface PdfTextLine {
   pageNumber: number;
   text: string;
+  /** PDF coordinates converted to a top-origin page box. */
+  x?: number;
+  top?: number;
+  width?: number;
+  height?: number;
 }
 
 /** Két darab akkor van egy soron, ha a függőleges helyük ennél közelebb van. */
@@ -62,7 +67,10 @@ export async function readPdfTextLines(
       const page = await doc.getPage(pageNumber);
       const content = await page.getTextContent();
 
-      const buckets: { y: number; parts: { x: number; text: string }[] }[] = [];
+      const buckets: {
+        y: number;
+        parts: { x: number; text: string; width: number; height: number }[];
+      }[] = [];
 
       for (const item of content.items) {
         if (!("str" in item)) continue;
@@ -71,8 +79,10 @@ export async function readPdfTextLines(
         const bucket = buckets.find(
           (candidate) => Math.abs(candidate.y - y) <= SAME_LINE_TOLERANCE,
         );
-        if (bucket) bucket.parts.push({ x, text: item.str });
-        else buckets.push({ y, parts: [{ x, text: item.str }] });
+        const width = item.width as number;
+        const height = Math.abs(item.height as number);
+        if (bucket) bucket.parts.push({ x, text: item.str, width, height });
+        else buckets.push({ y, parts: [{ x, text: item.str, width, height }] });
       }
 
       // Fentről lefelé, soron belül balról jobbra: a PDF y tengelye fölfelé nő.
@@ -81,7 +91,13 @@ export async function readPdfTextLines(
         bucket.parts.sort((a, b) => a.x - b.x);
         const text = bucket.parts.map((part) => part.text).join("");
         if (text.trim() === "") continue;
-        lines.push({ pageNumber, text });
+        const x = Math.min(...bucket.parts.map((part) => part.x));
+        const right = Math.max(
+          ...bucket.parts.map((part) => part.x + part.width),
+        );
+        const height = Math.max(...bucket.parts.map((part) => part.height));
+        const top = (page.view[3] ?? 842) - bucket.y - height;
+        lines.push({ pageNumber, text, x, top, width: right - x, height });
       }
     }
   } finally {
