@@ -83,6 +83,14 @@ export function handoverMailDecision(input: {
     adaton lehetne allitast tenni, es a Postgres-fuggo blokk helyben kimarad.
   */
   const elok = input.recipients.filter((jelolt) => jelolt.isActive);
+  /*
+    EZ AZ ELSO RETEG AZ URES CIMZETT-LISTA ELLEN, es ELOSZOR EZ SZOLAL MEG.
+
+    A MASODIK a `buildMimeMessage`-ben all (`MAIL_NO_RECIPIENT`). A ketto NEM
+    ugyanaz ketszer: ez a HELYES OKOT adja ("ennek a vevonek nincs aktiv
+    portal-fiokja"), a masik azt zarja ki, hogy egy jovobeli hivo megkerulje.
+    A reszletes bontas a `mime.ts` megfelelo pontjan all.
+  */
   if (elok.length === 0) return { kind: "skip", reason: "no-recipient" };
 
   return {
