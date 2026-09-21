@@ -90,6 +90,10 @@ import {
   handoverGombFelirata,
   handoverKuldendoErtek,
 } from "@/lib/worksheets/worksheet-handover";
+import {
+  kikuldesAllapotSora,
+  kikuldhetoAlairasra,
+} from "@/lib/worksheets/worksheet-send-for-signature";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
@@ -714,6 +718,16 @@ export default function WorksheetDetailScreen() {
       assigneeDraft,
       (data?.assignees ?? []).map((assignee) => assignee.userId),
     );
+  /**
+   * A KIKULDES ALLAPOT-SORA, EGYSZER kiszamolva. `null`, amig nem kuldtuk ki.
+   */
+  const kikuldesSora = current
+    ? kikuldesAllapotSora({
+        sentForSignatureAt: current.sentForSignatureAt,
+        sentForSignatureToName: current.sentForSignatureToName,
+      })
+    : null;
+
   const rows = data ? worksheetDetailRows(data) : [];
   const continuesFrom = data?.continues ?? null;
   const olderVersions = data?.versions.filter(
@@ -754,6 +768,23 @@ export default function WorksheetDetailScreen() {
         {data && current ? (
           <>
             <Text style={styles.subject}>{current.subject}</Text>
+
+            {/*
+              KINEK KULDTUK EL -- A LAP TETEJEN, NEM CSAK A NAPLOBAN.
+
+              Balazs dontese, 2026-09-21 14:00:58 UTC (Discord, fo csatorna,
+              message_id 1551594090242510969), egy betu: "b". Az indok, amit
+              elfogadott: a szerelo NEM a naplot olvassa, amikor azt kerdezi,
+              hogy ezzel most mi van -- ha nem latja ranezesre, ketszer kuldi
+              el vagy feleslegesen telefonal.
+
+              ES EZ A SOR PAROS A GOMBBAL: a kikuldes utan a gomb ELTUNIK. Ha
+              csak a gomb tunne el es semmi nem kerulne a helyere, a szerelo
+              azt latna, hogy a lehetoseg eltunt, nem azt, hogy MEGTORTENT.
+            */}
+            {kikuldesSora ? (
+              <Text style={styles.subject}>{kikuldesSora}</Text>
+            ) : null}
 
             <View style={styles.card}>
               {rows.map((row) => (
@@ -1527,6 +1558,42 @@ export default function WorksheetDetailScreen() {
                   agnak nem hagyna helyet.
                 */}
                 <Text style={styles.signButtonText}>Aláírás</Text>
+              </Pressable>
+            ) : null}
+
+            {/*
+              AZ "ELKULDOM ALAIRASRA" GOMB -- BALAZS SPECJE SZERINT AZ ALAIRAS
+              GOMB ALATT (2026-09-18 07:01 UTC): "Az elozo oldalon az a Alairas
+              gomb ala Elkuldom alairasra gomb."
+
+              A FELTETEL A `kikuldhetoAlairasra`-BAN ALL, nem itt: ebbol a
+              fajlbol semmilyen allitas nem tud elsulni (a telefon renderelo
+              nelkul teszteli magat), tehat egy ide irt feltetel merhetetlen
+              lenne.
+
+              A VEGPONT 2026-09-21 OTA ALL A SZERVEREN, es eddig CSAK a web
+              hivta: a kepesseg megvolt, a telefonrol nem volt bekotve.
+            */}
+            {kikuldhetoAlairasra({
+              status: current.status,
+              sentForSignatureAt: current.sentForSignatureAt,
+              worksheetsManage: capabilities.worksheetsManage,
+            }) ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Elküldöm aláírásra"
+                onPress={() =>
+                  router.push({
+                    pathname: "/worksheets/send-for-signature/[id]",
+                    params: { id },
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.signButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.signButtonText}>Elküldöm aláírásra</Text>
               </Pressable>
             ) : null}
 

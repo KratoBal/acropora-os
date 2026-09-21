@@ -151,6 +151,24 @@ export interface WorksheetVersionSummary {
   createdAt: string;
   closedAt: string | null;
   closedByName: string | null;
+  /**
+   * MIKOR KULDTUK KI ALAIRASRA, ES KINEK.
+   *
+   * A ket mezo valasztja szet a "kiallitottuk" es a "ki is kuldtuk" allapotot.
+   * 2026-09-21-ig ilyen lepes nem letezett: a lezaras MAGA tette alairhatova a
+   * lapot, tehat a portalon MINDEN lezart lap alairhatonak latszott.
+   *
+   * A FELULET A DATUMRA KAPUZZON, NE A NEVRE: a cimzett fiokja torolheto
+   * (`SetNull` a semaban), es a kikuldes tenye ilyenkor is all. Egy torolt
+   * cimzett nem teheti ujra kikuldhetove a lapot.
+   *
+   * A MEZONEVEK A SZERVER TIPUSABOL VANNAK MASOLVA, nem gepelve: a telefon
+   * sajat tipus-masolatot tart (lasd a fajl fejlecet), tehat a ket oldal kozott
+   * NINCS forditoi kapcsolat -- egy elgepelt mezonev `undefined`-kent jelenne
+   * meg a kepernyon, hibauzenet nelkul.
+   */
+  sentForSignatureAt: string | null;
+  sentForSignatureToName: string | null;
   netAmount: string;
   vatAmount: string;
   grossAmount: string;
@@ -589,6 +607,28 @@ export function closeWorksheet(id: string) {
  *
  * A valasz a TELJES lap, tehat a kepernyo ugyanabban a korben frissul.
  */
+/**
+ * KIKULDES ALAIRASRA -- A LEZARAS UTANI, KULON LEPES.
+ *
+ * A vegpont 2026-09-21 ota all a szerveren (#912), es a WEB hivta, a telefon
+ * nem: a kepesseg megvolt, csak senki nem kototte be innen. Balazs specje
+ * (2026-09-18 07:01 UTC) viszont a TELEFONRA kerte: "Az elozo oldalon az a
+ * Alairas gomb ala Elkuldom alairasra gomb."
+ *
+ * A CIMZETT AZONOSITOJA KOTELEZO, es ugyanabbol a `signers` listabol jon,
+ * amibol a helyszini alairas valasztoja. Ket lista ugyanarra a kerdesre elso
+ * nap kette valna.
+ *
+ * A valasz a TELJES lap, tehat a kepernyo ugyanabban a korben frissul --
+ * ugyanaz az alak, mint az atadasnal.
+ */
+export function sendWorksheetForSignature(id: string, signerUserId: string) {
+  return apiRequest<WorksheetDetail>(
+    `${BASE}/${encodeURIComponent(id)}/send-for-signature`,
+    { method: "POST", body: JSON.stringify({ signerUserId }) },
+  );
+}
+
 export function setWorksheetHandedOver(id: string, handedOver: boolean) {
   return apiRequest<WorksheetDetail>(
     `${BASE}/${encodeURIComponent(id)}/handover`,

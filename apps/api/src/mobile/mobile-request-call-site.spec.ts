@@ -107,12 +107,31 @@ const HIVOHELYEK: readonly Hivohely[] = [
   },
   {
     /**
-     * AZ ATADAS JELOLESE (2026-09-21). Helyben kiirt kulccsal megy
-     * (`{ handedOver }`), tehat nincs nevesitett tipusa -- ez a fajta
+     * A KIKULDES ALAIRASRA (2026-09-21). Helyben kiirt kulccsal megy
+     * (`{ signerUserId }`), tehat nincs nevesitett tipusa -- ez a fajta
      * KIZAROLAG itt merheto.
+     *
+     * A vegpont 2026-09-21 ota all a szerveren, es eddig CSAK a web hivta: a
+     * telefonrol most lett bekotve.
      */
     fajl: "lib/api/worksheets.ts",
     sorszam: 4,
+    dto: "src/worksheets/dto/worksheet.dto.ts",
+    dtoNev: "SendWorksheetForSignatureDto",
+    kontroll: ["signerUserId"],
+  },
+  {
+    /**
+     * AZ ATADAS JELOLESE (2026-09-21). Helyben kiirt kulccsal megy
+     * (`{ handedOver }`), tehat nincs nevesitett tipusa -- ez a fajta
+     * KIZAROLAG itt merheto.
+     *
+     * A SORSZAM 4-ROL 5-RE MOZDULT (2026-09-21), ES NEM AZERT, MERT EZ A HIVAS
+     * VALTOZOTT: a kikuldes hivasa a fajlban FELETTE all, tehat eggyel hatrebb
+     * tolta. Ugyanaz az alak, mint amit a kovetkezo bejegyzes mar egyszer leirt.
+     */
+    fajl: "lib/api/worksheets.ts",
+    sorszam: 5,
     dto: "src/worksheets/dto/worksheet.dto.ts",
     dtoNev: "SetWorksheetHandedOverDto",
     kontroll: ["handedOver"],
@@ -124,9 +143,13 @@ const HIVOHELYEK: readonly Hivohely[] = [
      * Az atadas hivasa a fajlban FELETTE all, tehat eggyel hatrebb tolta. A
      * sorszam a fajlon beluli SORRENDET jelenti, nem azonositot -- aki uj
      * irast tesz egy fajl kozepere, itt minden alatta allot atszamoz.
+     *
+     * ES MASODSZOR IS EZ TORTENT (2026-09-21): 5 -> 6, a kikuldes hivasa miatt.
+     * Ketszer ugyanaz az alak, ugyanabban a fajlban -- tehat nem veletlen: a
+     * `lib/api/worksheets.ts` az a fajl, ahova a munkalap uj lepesei kerulnek.
      */
     fajl: "lib/api/worksheets.ts",
-    sorszam: 5,
+    sorszam: 6,
     dto: "src/worksheets/dto/worksheet.dto.ts",
     dtoNev: "CreateWorksheetEntryDto",
     kontroll: ["body"],
@@ -242,7 +265,16 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
  * kulcs (`{ handedOver }`), tehat a szomszed orzo -- ami nevesitett tipusokat
  * par-baalit -- nem latja: ez a hivas KIZAROLAG a hivohelyek kozott merheto.
  */
-const IRAS_HIVASOK_A_FAN = 16;
+/**
+ * 2026-09-21: 16 -> 17. Az uj hivas a KIKULDES ALAIRASRA
+ * (`sendWorksheetForSignature`, `lib/api/worksheets.ts`). A torzse HELYBEN
+ * kiirt kulcs (`{ signerUserId }`), tehat ugyanaz a fajta, mint az atadas: a
+ * szomszed orzo nem latja, ez a hivas KIZAROLAG a hivohelyek kozott merheto.
+ *
+ * A VEGPONT NEM UJ -- a szerveren 2026-09-21 ota all, es a web mar hivta. Ami
+ * uj, az a TELEFON bekotese: a kepesseg megvolt, csak innen nem hivta senki.
+ */
+const IRAS_HIVASOK_A_FAN = 17;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

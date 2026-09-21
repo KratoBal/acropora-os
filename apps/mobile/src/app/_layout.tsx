@@ -187,6 +187,25 @@ function RootNavigator() {
           gestureEnabled: false,
         }}
       />
+      {/*
+        A KIKULDES ALAIRASRA UGYANUGY FELUGRO, DE `gestureEnabled` NELKUL.
+
+        A felugro alak Balazs kerese (2026-09-18 07:01 UTC): "Utana felugro
+        ablak es kivalaszthatom minek kuldom el a partner alairoibol".
+
+        ES A `gestureEnabled: false` ITT SZANDEKOSAN HIANYZIK. Az alairas-
+        kepernyon azert all, mert azt a szerelo ODAADJA az ugyfelnek, es egy
+        lehuzas az ugyfel kezebe adna a mogotte levo tetel-szerkesztest. A
+        kikuldesnel a telefon VEGIG a szerelonel marad -- itt a lehuzas
+        elzarasa nem vedene semmit, csak elvenne a megszokott kifele utat.
+      */}
+      <Stack.Screen
+        name="worksheets/send-for-signature/[id]"
+        options={{
+          title: "Kiküldés aláírásra",
+          presentation: "fullScreenModal",
+        }}
+      />
       <Stack.Screen name="assets/index" options={{ title: "Eszközök" }} />
       <Stack.Screen name="assets/new" options={{ title: "Új eszköz" }} />
       <Stack.Screen

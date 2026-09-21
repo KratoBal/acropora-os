@@ -246,7 +246,18 @@ const PAROK: readonly Par[] = [
  * leir, csak FORDITVA: itt MIND A KETTO mozdult (a hivas a `lib/api`-ban van),
  * de PAR csak az egyikben lett belole.
  */
-const IRAS_HIVASOK_MA = 15;
+/**
+ * 2026-09-21: 15 -> 16. Az uj hivas a KIKULDES ALAIRASRA
+ * (`sendWorksheetForSignature`, `lib/api/worksheets.ts`). A guard sajat
+ * uzenete kerte a dontest, es a valasz UGYANAZ, mint az atadasnal: NEM. A
+ * torzs HELYBEN kiirt kulcs (`{ signerUserId }`), nincs nevesitett tipusa,
+ * tehat nincs mihez PARBA allitani ITT.
+ *
+ * A HIVAS ETTOL NEM MERETLEN, es ezt ki kell mondani, kulonben a kovetkezo
+ * olvaso hianynak veszi: a szomszed orzo a HIVOHELYEK kozott meri, kulcs
+ * szerint, a `SendWorksheetForSignatureDto`-hoz -- oda fel is vettem.
+ */
+const IRAS_HIVASOK_MA = 16;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {
