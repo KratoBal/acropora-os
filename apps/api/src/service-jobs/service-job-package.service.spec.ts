@@ -330,6 +330,28 @@ describe("a csomag nem adhato at lezaratlan lappal", () => {
    * ISMERT POZITIV KONTROLL A BEKOTESRE. Enelkul a fenti harom allitas akkor
    * is zold lenne, ha a kapu MINDIG dobna -- es a csomag sosem allna elo.
    */
+  /**
+   * LAP NELKULI JEGY ATMEGY A KAPUN -- MEGNEVEZVE.
+   *
+   * A `download()` utjat egy regebbi allitas is bejarja ("munkalap nelkuli
+   * elkeszult hibajegybol is elkeszul a hibajegy PDF-je"), es az a kapu hibas
+   * bevezetesetol pirosodna is. De a NEVE nem errol szol, tehat egy kesobbi
+   * olvaso nem tudna, hogy ezt is vedi. Ez az allitas kimondja.
+   *
+   * A csapda, ami ellen all: jegy es lap kozott LEFT JOIN van, es egy
+   * `closedAt IS NULL` alaku szuro a LAP NELKULI jegyet is beleszamolja.
+   * Acrobot eles meresen pont ebbe futott bele.
+   */
+  it("lap nelkuli jegy csomagja tovabbra is elkeszul", async () => {
+    const csomag = await serviceWith(job({ worksheets: [] })).download(
+      "job-a",
+      INTERNAL,
+    );
+    assert.ok(
+      csomag.bytes.includes(Buffer.from("hibajegy-SRV-2026-00482.pdf")),
+    );
+  });
+
   it("rendben levo lappal a csomag tovabbra is elkeszul", async () => {
     const csomag = await serviceWith(job({ worksheets: [lap({})] })).download(
       "job-a",

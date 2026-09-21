@@ -253,8 +253,26 @@ describe("a csomag atadasanak kapuja", () => {
     assert.deepEqual(csomag([csomagLap()], "partner"), []);
   });
 
-  it("munkalap nelkul nincs mi visszatartsa", () => {
+  /**
+   * LAP NELKUL A JEGY ATADHATO -- es ez NEM magatol ertetodo.
+   *
+   * Egy jegy allhat lap nelkul, es akkor nincs mit lezarni. A csapda a
+   * LEKERDEZES oldalan van: jegy es lap kozott LEFT JOIN all, tehat egy
+   * `closedAt IS NULL` szuro a LAP NELKULI jegyet is beleszamolja -- a nem
+   * letezo sor minden mezoje NULL. Acrobot eles meresen pont ebbe futott bele
+   * (egy nulla lapos jegy ugy jelent meg, hogy "1 lezaratlan lapja van").
+   *
+   * A MI OLDALUNKON EZ NEM ALLHAT ELO, mert a szabaly egy TOMBON iteral, nem
+   * SQL-en: ures tombbol ures lista lesz. De az allitas akkor is kell, mert a
+   * kovetkezo ember a mondatot fogja olvasni, nem a ciklust.
+   *
+   * ES EZ AZ ALLITAS ONMAGABAN URESEN IS IGAZ (`deepEqual([], [])`), tehat nem
+   * bizonyit. A valodi orzo a bekotes oldalan all: "lap nelkuli jegy csomagja
+   * tovabbra is elkeszul" a `service-job-package.service.spec.ts`-ben.
+   */
+  it("lap nelkul nincs mi visszatartsa", () => {
     assert.deepEqual(csomag([]), []);
+    assert.deepEqual(csomag([], "partner"), []);
   });
 
   it("a lezaratlan lap visszatartja", () => {
