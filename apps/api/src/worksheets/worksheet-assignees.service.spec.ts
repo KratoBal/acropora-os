@@ -183,7 +183,7 @@ describe("WorksheetsService assignees", () => {
 
   // A kiosztás belső munkaszervezés, ezért a felületre a becenév kerül. A
   // hivatalos név a dokumentumon marad (aláírás), ahol az számít.
-  it("shows an assignee by the name the team calls them", async () => {
+  it("a felületi válasz továbbra is a becenevet adja", async () => {
     const service = new WorksheetsService(
       repository({
         detail: async () =>

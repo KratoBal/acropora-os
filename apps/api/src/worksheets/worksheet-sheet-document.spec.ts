@@ -65,7 +65,7 @@ function bemenet(
 }
 
 describe("a lap bemenetéből tárolható fájl lesz", () => {
-  it("a többoldalas munkalap folytatása a kompakt fejléc alatt indul, a fényképek pedig csak adatból jelennek meg", async () => {
+  it("többoldalas munkalapon egyetlen tartalmi szövegdoboz sem metszi a fejlécsávot", async () => {
     const photo = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
       "base64",
@@ -94,6 +94,26 @@ describe("a lap bemenetéből tárolható fájl lesz", () => {
       "a munkalap folytató tartalma nem érhet a fejlécsávba",
     );
     assert.ok(
+      rows.some((row) => row.text.includes("Kovács Anna")),
+      "a napló a hivatalos nevet írja ki",
+    );
+  });
+
+  it("a munkalapfotók két oszlopban állnak, fotó nélkül pedig nincs üres szakasz", async () => {
+    const photo = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    );
+    const withPhotos = await worksheetSheetDocument(
+      bemenet({
+        photos: [
+          { thumbnail: photo, caption: "bal fénykép" },
+          { thumbnail: photo, caption: "jobb fénykép" },
+        ],
+      }),
+    );
+    const rows = await readPdfTextLines(withPhotos.content);
+    assert.ok(
       rows.some(
         (row) =>
           row.text.includes("bal fénykép") &&
@@ -101,10 +121,6 @@ describe("a lap bemenetéből tárolható fájl lesz", () => {
           (row.width ?? 0) > 200,
       ),
       "két munkalapfénykép egy sor két oszlopába kerül",
-    );
-    assert.ok(
-      rows.some((row) => row.text.includes("Kovács Anna")),
-      "a napló a hivatalos nevet írja ki",
     );
     const withoutPhotos = await worksheetSheetDocument(bemenet());
     assert.equal(

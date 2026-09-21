@@ -1388,7 +1388,7 @@ export class WorksheetsRepository extends Repository {
           body: entry.body,
           authorName: entry.authorName,
         })) ?? [],
-        row.assignees.map((assignee) => assignee.user.displayName),
+        row.assignees.map((assignee) => personLegalName(assignee.user)),
         (row.documents ?? []).flatMap((document) =>
           document.thumbnail
             ? [{ thumbnail: document.thumbnail, caption: document.caption }]

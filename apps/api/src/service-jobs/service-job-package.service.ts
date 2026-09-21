@@ -6,7 +6,7 @@ import {
   Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import type { AuthenticatedUser } from "@acropora/types";
+import { personLegalName, type AuthenticatedUser } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { assertStorageKeyMatches } from "../service-assets/document-store/document-storage-key.js";
@@ -103,7 +103,7 @@ export class ServiceJobPackageService {
         assetNumber: asset.assetNumber,
         assetName: asset.name,
       })),
-      assignees: job.assignees.map(({ user }) => user.displayName),
+      assignees: job.assignees.map(({ user }) => personLegalName(user)),
       photos: (job.documents ?? []).flatMap((document) =>
         document.thumbnail
           ? [{ thumbnail: document.thumbnail, caption: document.caption }]
@@ -114,7 +114,7 @@ export class ServiceJobPackageService {
         ...job.events.map((event) => ({
           at: event.createdAt,
           text: `Állapot módosítva: ${event.toStatus ? partnerStatusLabel(event.toStatus) : "nincs megadva"}${event.note ? ` — ${event.note}` : ""}`,
-          authorName: event.actor?.displayName ?? null,
+          authorName: event.actor ? personLegalName(event.actor) : null,
         })),
       ],
     });

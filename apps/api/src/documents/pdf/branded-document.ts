@@ -34,8 +34,18 @@ export function registerEmbeddedPdfFont(
   requestedPath?: string,
 ): PDFKit.PDFDocument {
   const fontPath = requestedPath ?? resolvePdfFontPath();
-  if (!statSync(fontPath).isFile())
-    throw new Error("The PDF font must be an embeddable font file.");
+  let isFile = false;
+  try {
+    isFile = statSync(fontPath).isFile();
+  } catch {
+    isFile = false;
+  }
+  if (!isFile)
+    throw new Error(
+      `A PDF betűje nem létező fájlra mutat: ${JSON.stringify(fontPath)}. ` +
+        `A készítés itt SZÁNDÉKOSAN áll meg, és nem esik vissza a beépített ` +
+        `betűkészletre: azon az "ő" betű "P"-ként állna a partner lapján.`,
+    );
   document.registerFont(PDF_BODY_FONT, fontPath);
   return document.font(PDF_BODY_FONT);
 }
