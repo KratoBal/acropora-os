@@ -1,17 +1,37 @@
 import type { SyncQueueRow } from "./sync-queue";
 
 /**
- * EZ A MODUL MAR NEM CSAK A FOTOKROL SZOL, ES A NEVE EZT NEM MONDJA MEG.
+ * A SOR SORRENDJE ES FUGGOSEGEI. A foto ennek EGY ESETE, nem a targya.
  *
  * 2026-09-16 ota a `nextBatch` ALTALANOS szabalyt hordoz: barmelyik sor varhat
  * barmelyik masikra (`dependsOnOperationId`), es a foto ennek a SPECIALIS
- * ESETE. A fajl neve viszont `photo-queue.ts` maradt -- vagyis aki a sor
- * fuggoseg-szabalyat keresi, nem itt fogja keresni.
+ * ESETE. A fajl neve viszont `photo-queue.ts` maradt, tehat aki a sor
+ * fuggoseg-szabalyat kereste, nem itt kereste.
  *
- * AZ ATNEVEZES TUDATOSAN MARADT KI EBBOL A KORBOL: tizenegy hivatkozast
- * mozgatna, ugyanabban a valtozasban, ami a sor VISELKEDESET irja at -- es a
- * ket fajta diff egymast fedne el pont akkor, amikor az atnezes a legtobbet
- * er. Kulon kartyan all.
+ * ATNEVEZVE 2026-09-21-en, kulon korben, ahogy az elozo fejlec elore
+ * megmondta. A SZAMA VISZONT ELAVULT: tizenegy hivatkozast igert, es
+ * TIZENKETTO lett -- kozben egy uj fogyaszto keletkezett. Ezert all itt a
+ * szam helyett az, hogy MI lett atirva: minden import (negy kulonbozo alakban,
+ * az `@/` aliast is beleertve), minden NEV SZERINTI komment-hivatkozas, es a
+ * `docs/MOBILE-DEVELOPMENT.md`-ben allo mutato.
+ *
+ * ES EGY CSAPDA, AMIBE BELE IS LEPTEM: a tomeges csere ezt a FEJLECET is
+ * atirta, es ettol egy IGAZ mondat ("a fajl neve viszont `photo-queue.ts`
+ * maradt") HAMISSA valt. Egy atnevezesnel a regi nevet IDEZO magyarazat nem
+ * hivatkozas, hanem TORTENET -- azt nem cserelni kell, hanem megtartani.
+ *
+ * === A FOTO-SPECIFIKUS RESZEK ITT MARADTAK, ES EZ DONTES ===
+ *
+ * A modul ketfele dolgot exportal: a sorrend-szabalyt (`nextBatch`,
+ * `dependencyOf`, `dependencyResolved`, `batchForPass`) es a foto sorainak
+ * payload-segedeit (`PhotoPayload`, `photoOperationId`, `readPhotoPayload`,
+ * `describePhotoBacklog`). A ketto SZETVALASZTASA kezenfekvo lenne, es
+ * szandekosan nem tortent meg: az TERVEZESI valtozas, amit senki nem kert, es
+ * egy atnevezes diffjeben rejtve menne at.
+ *
+ * Amit a nev igy iger: a modul MAGJA a sorrend. A foto-segedek azert allnak
+ * itt, mert a fuggoseget OK allitjak elo -- ha egyszer masik sor-fajta is kap
+ * sajat payload-segedet, AKKOR lesz indok a szetvalasztasra, nem elobb.
  *
  * A FOTO A ROGZITES UTAN MEGY -- ES EZ NEM SORREND-IZLES, HANEM FUGGOSEG.
  *

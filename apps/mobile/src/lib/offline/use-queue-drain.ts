@@ -23,7 +23,7 @@ import { ApiError } from "@/lib/api/client";
 import { readQueuedAssetUpdate } from "./asset-update-queue";
 import { drainOfflineQueue } from "./drain-offline-queue";
 import type { SyncQueueRow } from "./sync-queue";
-import { readPhotoPayload } from "./photo-queue";
+import { readPhotoPayload } from "./queue-order";
 import {
   describeQueueRun,
   describeStalled,

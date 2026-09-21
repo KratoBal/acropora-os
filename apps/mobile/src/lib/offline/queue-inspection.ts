@@ -1,5 +1,5 @@
 import { readQueuedAssetUpdate } from "./asset-update-queue";
-import { readPhotoPayload } from "./photo-queue";
+import { readPhotoPayload } from "./queue-order";
 import { queueDiscardEligibility } from "./queue-discard";
 import {
   queueResendEligibility,

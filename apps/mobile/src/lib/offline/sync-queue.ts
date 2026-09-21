@@ -163,7 +163,7 @@ export interface SyncQueueRow {
    * EGY OSZLOP, HAROM MENET -- nem harom tabla. A kozos szabalyok (idempotencia,
    * a negy allapot, az ujraprobalas) igy EGY helyen allnak; kulon sorokkal
    * tobbszor kellene oket karbantartani, es elcsuszhatnanak. A sorrendet a
-   * `photo-queue.ts` `nextBatch` fuggvenye adja, nem a tabla szerkezete.
+   * `queue-order.ts` `nextBatch` fuggvenye adja, nem a tabla szerkezete.
    *
    * AZ `update` ABBAN TER EL A MASIK KETTOTOL, HOGY NEM VAR SENKIRE ES NEM IS
    * VARAKOZTAT SENKIT. A kep a rogzitesere var, mert amig az fel nem ment,

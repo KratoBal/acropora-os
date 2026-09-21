@@ -36,7 +36,7 @@ import {
   enqueueWorksheetLine,
   queuedWorksheetLineCount,
 } from "@/lib/offline/queue-store";
-import { ownerPhotoOperationId } from "@/lib/offline/photo-queue";
+import { ownerPhotoOperationId } from "@/lib/offline/queue-order";
 import {
   describePhotoSend,
   uploadOrQueuePhotos,

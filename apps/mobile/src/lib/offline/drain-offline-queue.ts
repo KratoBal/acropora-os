@@ -1,4 +1,4 @@
-import { batchForPass } from "./photo-queue";
+import { batchForPass } from "./queue-order";
 import { isDueForRetry } from "./queue-drain";
 import { drainQueue, type QueueRunReport } from "./queue-runner";
 import {
@@ -76,7 +76,7 @@ export async function drainOfflineQueue(
  * EGY MENET: amit a `nextBatch` EPP most enged el.
  *
  * A futtato eddig KOZVETLENUL a tarolobol olvasott, tehat a ket menet szabalya
- * (`photo-queue.ts`) le volt irva, es senki nem kerdezte meg. Ez a fuggveny az
+ * (`queue-order.ts`) le volt irva, es senki nem kerdezte meg. Ez a fuggveny az
  * a hivas -- e nelkul a kepek a rogzitesekkel egyutt, sorrend nelkul indultak
  * volna el, es a szerver utasitotta volna el oket.
  */

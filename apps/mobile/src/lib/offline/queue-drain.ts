@@ -1,4 +1,4 @@
-import { describePhotoBacklog } from "./photo-queue";
+import { describePhotoBacklog } from "./queue-order";
 import {
   backoffMs,
   canRetryState,

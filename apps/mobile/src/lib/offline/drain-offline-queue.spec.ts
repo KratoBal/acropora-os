@@ -121,7 +121,7 @@ describe("a három menet", () => {
 
   it("a MENET TARTALMÁT a batchForPass dönti el, nem a lekérdezés", () => {
     /*
-      A szabaly a `photo-queue.ts`-ben all, es ott VISELKEDESSEL is meg van
+      A szabaly a `queue-order.ts`-ben all, es ott VISELKEDESSEL is meg van
       kotve (`batchForPass` specje). Ez a sor csak a HIVAS -- e nelkul a szabaly
       le lenne irva, es senki nem kerdezne meg.
     */
