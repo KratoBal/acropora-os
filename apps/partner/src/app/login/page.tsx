@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth";
+import { CIMKE, LAP_CIM } from "@/components/frame";
 
 export default function LoginPage() {
   const { user, loading, login } = useAuth();
@@ -37,9 +38,11 @@ export default function LoginPage() {
   return (
     <main className="login-page">
       <form className="login-card" onSubmit={submit} noValidate>
-        <p className="eyebrow">ACROPORA SZERVIZ</p>
-        <h1>Partneri bejelentkezés</h1>
-        <p>Adja meg a partneri szervizfiók céges e-mail címét és jelszavát.</p>
+        <p className={CIMKE}>ACROPORA SZERVIZ</p>
+        <h1 className={LAP_CIM}>Partneri bejelentkezés</h1>
+        <p className="mx-0 mt-0 mb-2 leading-[1.5] text-[#626273]">
+          Adja meg a partneri szervizfiók céges e-mail címét és jelszavát.
+        </p>
         <label>
           E-mail cím
           <input

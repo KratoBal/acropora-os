@@ -10,6 +10,15 @@ import {
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
 import { Empty, Message } from "./ticket-list";
+import {
+  ALLAPOT_CIMKE,
+  CIMKE,
+  LAP_CIM,
+  LAP_FEJLEC,
+  LAP_LEIRAS,
+  PANEL,
+  PANEL_CIM,
+} from "./frame";
 
 function locationRows(items: WorksheetDepartmentSummary[]) {
   const children = new Map<string | null, WorksheetDepartmentSummary[]>();
@@ -49,16 +58,18 @@ export function Locations() {
   const rows = useMemo(() => locationRows(items), [items]);
   return (
     <section>
-      <header className="page-header">
+      <header className={LAP_FEJLEC}>
         <div>
-          <p className="eyebrow">SAJÁT ADATOK</p>
-          <h1>Helyszínek</h1>
-          <p>A cégéhez tartozó helyszínek csak olvasható nézetben.</p>
+          <p className={CIMKE}>SAJÁT ADATOK</p>
+          <h1 className={LAP_CIM}>Helyszínek</h1>
+          <p className={LAP_LEIRAS}>
+            A cégéhez tartozó helyszínek csak olvasható nézetben.
+          </p>
         </div>
       </header>
       {error ? <Message tone="error" text={error} /> : null}
       {rows.length ? (
-        <div className="panel">
+        <div className={PANEL}>
           <ul className="tree-list">
             {rows.map(({ item, depth }) => (
               <li key={item.id} style={{ paddingLeft: `${depth * 1.25}rem` }}>
@@ -126,11 +137,11 @@ export function Assets() {
   }, [user?.customerId, helyszin, kereses]);
   return (
     <section>
-      <header className="page-header">
+      <header className={LAP_FEJLEC}>
         <div>
-          <p className="eyebrow">SAJÁT ADATOK</p>
-          <h1>Eszközök</h1>
-          <p>
+          <p className={CIMKE}>SAJÁT ADATOK</p>
+          <h1 className={LAP_CIM}>Eszközök</h1>
+          <p className={LAP_LEIRAS}>
             A cégéhez tartozó eszközök. Kattintson egy eszközre az adatlapjáért.
           </p>
         </div>
@@ -175,7 +186,7 @@ export function Assets() {
               href={`/eszkozok/${asset.id}`}
             >
               <div>
-                <h2>{asset.name}</h2>
+                <h2 className={PANEL_CIM}>{asset.name}</h2>
                 <p>
                   {asset.assetNumber}
                   {asset.inventoryNumber ? ` · ${asset.inventoryNumber}` : ""}
@@ -185,7 +196,7 @@ export function Assets() {
                 <span>
                   {asset.unit?.path.join(" / ") ?? "Helyszín nincs megadva"}
                 </span>
-                <span className="status neutral">{asset.status}</span>
+                <span className={ALLAPOT_CIMKE}>{asset.status}</span>
               </div>
             </Link>
           ))}
@@ -219,11 +230,13 @@ export function Worksheets() {
   }, []);
   return (
     <section>
-      <header className="page-header">
+      <header className={LAP_FEJLEC}>
         <div>
-          <p className="eyebrow">SZERVIZMUNKA</p>
-          <h1>Munkalapok</h1>
-          <p>A saját munkalapok itt olvashatók, fényképekkel és aláírással.</p>
+          <p className={CIMKE}>SZERVIZMUNKA</p>
+          <h1 className={LAP_CIM}>Munkalapok</h1>
+          <p className={LAP_LEIRAS}>
+            A saját munkalapok itt olvashatók, fényképekkel és aláírással.
+          </p>
         </div>
       </header>
       {error ? <Message tone="error" text={error} /> : null}
@@ -237,7 +250,7 @@ export function Worksheets() {
             >
               <div>
                 <p className="ticket-number">{sheet.number ?? "Piszkozat"}</p>
-                <h2>{sheet.subject}</h2>
+                <h2 className={PANEL_CIM}>{sheet.subject}</h2>
                 <p>
                   {sheet.departmentPath?.join(" / ") ?? sheet.departmentCode}
                 </p>
@@ -250,7 +263,7 @@ export function Worksheets() {
                   csomag nem importálhat. 2026-09-21 óta a `@acropora/types`-ban
                   áll, egy helyen mind a két felületnek.
                 */}
-                <span className="status neutral">
+                <span className={ALLAPOT_CIMKE}>
                   {worksheetStatusLabel[sheet.status]}
                 </span>
                 <time dateTime={sheet.updatedAt}>

@@ -12,6 +12,19 @@ import {
 import { partnerApi } from "@/lib/api";
 import { DocumentPanel } from "./document-panel";
 import { Message } from "./ticket-list";
+import {
+  ADATLISTA,
+  ADAT_CIMKE,
+  ADAT_ERTEK,
+  ALLAPOT_CIMKE,
+  CIMKE,
+  LAP_CIM,
+  LAP_FEJLEC,
+  LAP_LEIRAS,
+  PANEL,
+  PANEL_CIM,
+  VISSZA_LINK,
+} from "./frame";
 
 /**
  * A MUNKALAP ADATLAPJA A PARTNER PORTÁLON.
@@ -116,13 +129,14 @@ export function WorksheetDetail({ id }: { id: string }) {
   if (error && !worksheet)
     return (
       <section>
-        <Link className="back-link" href="/munkalapok">
+        <Link className={VISSZA_LINK} href="/munkalapok">
           ← Munkalapok
         </Link>
         <Message tone="error" text={error} retry={load} />
       </section>
     );
-  if (!worksheet) return <p className="muted">Munkalap betöltése…</p>;
+  if (!worksheet)
+    return <p className="leading-[1.5] text-[#666677]">Munkalap betöltése…</p>;
   const current = worksheet.currentVersion;
   const signature = current.signature;
   /**
@@ -150,19 +164,19 @@ export function WorksheetDetail({ id }: { id: string }) {
     current.sentForSignatureAt !== null;
   return (
     <section>
-      <Link className="back-link" href="/munkalapok">
+      <Link className={VISSZA_LINK} href="/munkalapok">
         ← Munkalapok
       </Link>
-      <header className="page-header detail-header">
+      <header className={`detail-header ${LAP_FEJLEC}`}>
         <div>
-          <p className="eyebrow">{worksheet.number ?? "PISZKOZAT"}</p>
-          <h1>{current.subject}</h1>
-          <p>
+          <p className={CIMKE}>{worksheet.number ?? "PISZKOZAT"}</p>
+          <h1 className={LAP_CIM}>{current.subject}</h1>
+          <p className={LAP_LEIRAS}>
             {worksheet.department.path?.join(" / ") ??
               worksheet.department.name}
           </p>
         </div>
-        <span className="status neutral">
+        <span className={ALLAPOT_CIMKE}>
           {worksheetStatusLabel[current.status]}
         </span>
       </header>
@@ -195,18 +209,18 @@ export function WorksheetDetail({ id }: { id: string }) {
       ) : null}
 
       <div className="detail-grid">
-        <article className="panel">
-          <h2>A munka leírása</h2>
+        <article className={PANEL}>
+          <h2 className={PANEL_CIM}>A munka leírása</h2>
           <p className="preline">
             {current.description ?? "Nem rögzítettek részletes leírást."}
           </p>
         </article>
-        <aside className="panel">
-          <h2>Munkalap adatai</h2>
-          <dl>
+        <aside className={PANEL}>
+          <h2 className={PANEL_CIM}>Munkalap adatai</h2>
+          <dl className={ADATLISTA}>
             <div>
-              <dt>Hibajegy</dt>
-              <dd>
+              <dt className={ADAT_CIMKE}>Hibajegy</dt>
+              <dd className={ADAT_ERTEK}>
                 {/*
                   A HIÁNY IS ÁLLÍTÁS, ezért nem gondolatjel áll itt: a lap
                   keletkezhet hibajegy nélkül, és az nem hiányzó ADAT, hanem a
@@ -222,34 +236,36 @@ export function WorksheetDetail({ id }: { id: string }) {
               </dd>
             </div>
             <div>
-              <dt>Összes munkaóra</dt>
+              <dt className={ADAT_CIMKE}>Összes munkaóra</dt>
               {/*
                 ÉS AKKOR IS KIÍRJUK, HA NULLA. Egy elrejtett nulla két
                 különböző állapotot mosna össze: hogy nincs munkaóra-tétel a
                 lapon, és hogy a mező elromlott. A „0 óra" állítás; a hiányzó
                 sor kérdés.
               */}
-              <dd>{current.laborHours} óra</dd>
+              <dd className={ADAT_ERTEK}>{current.laborHours} óra</dd>
             </div>
             <div>
-              <dt>Keltezés</dt>
-              <dd>{datum(current.issueDate)}</dd>
+              <dt className={ADAT_CIMKE}>Keltezés</dt>
+              <dd className={ADAT_ERTEK}>{datum(current.issueDate)}</dd>
             </div>
             <div>
-              <dt>Teljesítés</dt>
-              <dd>{datum(current.fulfillmentDate)}</dd>
+              <dt className={ADAT_CIMKE}>Teljesítés</dt>
+              <dd className={ADAT_ERTEK}>{datum(current.fulfillmentDate)}</dd>
             </div>
             <div>
-              <dt>Határidő</dt>
-              <dd>{datum(current.dueDate)}</dd>
+              <dt className={ADAT_CIMKE}>Határidő</dt>
+              <dd className={ADAT_ERTEK}>{datum(current.dueDate)}</dd>
             </div>
             <div>
-              <dt>Felvette</dt>
-              <dd>{worksheet.createdByName ?? "Nincs megadva"}</dd>
+              <dt className={ADAT_CIMKE}>Felvette</dt>
+              <dd className={ADAT_ERTEK}>
+                {worksheet.createdByName ?? "Nincs megadva"}
+              </dd>
             </div>
             <div>
-              <dt>Verzió</dt>
-              <dd>{`${current.version}. verzió`}</dd>
+              <dt className={ADAT_CIMKE}>Verzió</dt>
+              <dd className={ADAT_ERTEK}>{`${current.version}. verzió`}</dd>
             </div>
           </dl>
         </aside>
@@ -257,8 +273,8 @@ export function WorksheetDetail({ id }: { id: string }) {
 
       <Tetelek lines={current.lines} />
 
-      <section className="panel">
-        <h2>Érintett eszközök</h2>
+      <section className={PANEL}>
+        <h2 className={PANEL_CIM}>Érintett eszközök</h2>
         {worksheet.assets.length ? (
           <ul className="plain-list">
             {worksheet.assets.map((asset) => (
@@ -277,18 +293,22 @@ export function WorksheetDetail({ id }: { id: string }) {
             ))}
           </ul>
         ) : (
-          <p className="muted">A munkalaphoz nincs eszköz megjelölve.</p>
+          <p className="leading-[1.5] text-[#666677]">
+            A munkalaphoz nincs eszköz megjelölve.
+          </p>
         )}
       </section>
 
       {signature ? (
-        <article className="panel">
-          <h2>Aláírva</h2>
+        <article className={PANEL}>
+          <h2 className={PANEL_CIM}>Aláírva</h2>
           <p>
             {signature.signerName} · {idopont(signature.signedAt)}
           </p>
           {signature.signerNotice ? (
-            <p className="muted">{signature.signerNotice}</p>
+            <p className="leading-[1.5] text-[#666677]">
+              {signature.signerNotice}
+            </p>
           ) : null}
           {signature.note ? <p className="preline">{signature.note}</p> : null}
         </article>
@@ -300,14 +320,14 @@ export function WorksheetDetail({ id }: { id: string }) {
           nincs mit tennie, a kiallitott lapnal pedig MINK tartozunk egy
           lepessel.
         */
-        <p className="muted">
+        <p className="leading-[1.5] text-[#666677]">
           {current.status === "AWAITING_SIGNATURE"
             ? "Ez a munkalap még nem érkezett meg aláírásra. Amint kiküldjük, itt tudja aláírni."
             : `Ez a munkalap most nem írható alá (${worksheetStatusLabel[current.status].toLowerCase()}).`}
         </p>
       ) : (
-        <form className="form panel" onSubmit={sign}>
-          <h2>Munkalap aláírása</h2>
+        <form className={`form ${PANEL}`} onSubmit={sign}>
+          <h2 className={PANEL_CIM}>Munkalap aláírása</h2>
           <p>Válassza ki az aláírót, majd adja meg a négyjegyű aláírókódját.</p>
           <label>
             Aláíró
@@ -336,7 +356,9 @@ export function WorksheetDetail({ id }: { id: string }) {
             />
           </label>
           {signers?.emptyReason ? (
-            <p className="muted">{signers.emptyReason}</p>
+            <p className="leading-[1.5] text-[#666677]">
+              {signers.emptyReason}
+            </p>
           ) : null}
           <button type="submit" disabled={signing || !signers?.items.length}>
             {signing ? "Aláírás rögzítése…" : "Aláírás rögzítése"}
@@ -370,8 +392,8 @@ export function WorksheetDetail({ id }: { id: string }) {
  */
 function Tetelek({ lines }: { lines: WorksheetLineDetail[] }) {
   return (
-    <section className="panel">
-      <h2>Elvégzett munka és anyagok</h2>
+    <section className={PANEL}>
+      <h2 className={PANEL_CIM}>Elvégzett munka és anyagok</h2>
       {lines.length ? (
         <div className="table-scroll">
           <table className="data-table">
@@ -420,7 +442,9 @@ function Tetelek({ lines }: { lines: WorksheetLineDetail[] }) {
           </table>
         </div>
       ) : (
-        <p className="muted">A munkalapon még nincs tétel.</p>
+        <p className="leading-[1.5] text-[#666677]">
+          A munkalapon még nincs tétel.
+        </p>
       )}
     </section>
   );
@@ -436,8 +460,8 @@ function Tetelek({ lines }: { lines: WorksheetLineDetail[] }) {
  */
 function Verziok({ versions }: { versions: WorksheetVersionSummary[] }) {
   return (
-    <section className="panel">
-      <h2>Verziók</h2>
+    <section className={PANEL}>
+      <h2 className={PANEL_CIM}>Verziók</h2>
       <div className="table-scroll">
         <table className="data-table">
           <thead>

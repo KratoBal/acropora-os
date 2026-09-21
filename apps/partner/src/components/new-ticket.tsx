@@ -13,6 +13,7 @@ import type { WorksheetDepartmentSummary } from "@acropora/types";
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
 import { Message } from "./ticket-list";
+import { CIMKE, LAP_CIM, LAP_FEJLEC, LAP_LEIRAS, PANEL } from "./frame";
 
 function orderedDepartments(items: WorksheetDepartmentSummary[]) {
   const byParent = new Map<string | null, WorksheetDepartmentSummary[]>();
@@ -149,11 +150,13 @@ export function NewTicket() {
 
   return (
     <section>
-      <header className="page-header">
+      <header className={LAP_FEJLEC}>
         <div>
-          <p className="eyebrow">ÚJ BEJELENTÉS</p>
-          <h1>Hibajegy nyitása</h1>
-          <p>Az itt rögzített hibajegy a saját cégéhez kerül.</p>
+          <p className={CIMKE}>ÚJ BEJELENTÉS</p>
+          <h1 className={LAP_CIM}>Hibajegy nyitása</h1>
+          <p className={LAP_LEIRAS}>
+            Az itt rögzített hibajegy a saját cégéhez kerül.
+          </p>
         </div>
       </header>
       {error ? <Message tone="error" text={error} /> : null}
@@ -169,7 +172,7 @@ export function NewTicket() {
           </a>
         </p>
       ) : null}
-      <form className="form panel" onSubmit={submit}>
+      <form className={`form ${PANEL}`} onSubmit={submit}>
         <label>
           Mi a probléma?
           <input
@@ -209,7 +212,7 @@ export function NewTicket() {
         <fieldset disabled={!departmentId || submitting}>
           <legend>Érintett eszközök</legend>
           {!departmentId ? (
-            <p className="muted">
+            <p className="leading-[1.5] text-[#666677]">
               Előbb válasszon helyszínt; ezután csak az ott található eszközök
               jelennek meg.
             </p>
@@ -234,7 +237,7 @@ export function NewTicket() {
               ))}
             </div>
           ) : (
-            <p className="muted">
+            <p className="leading-[1.5] text-[#666677]">
               Ezen a helyszínen nincs megjeleníthető eszköz.
             </p>
           )}
@@ -252,7 +255,7 @@ export function NewTicket() {
             accept="image/jpeg,image/png,application/pdf"
             onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
           />
-          <p className="muted">
+          <p className="leading-[1.5] text-[#666677]">
             Nem kötelező. A kép a bejelentés elküldése után kerül fel, és utólag
             az adatlapon is pótolható.
           </p>

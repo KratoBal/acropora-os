@@ -110,25 +110,10 @@ button:disabled {
   max-width: 1160px;
   padding: 2.5rem 1.25rem 4rem;
 }
-.page-header {
-  align-items: flex-start;
-  display: flex;
-  gap: 1.5rem;
-  justify-content: space-between;
-  margin-bottom: 1.8rem;
-}
-.page-header h1 {
-  font-size: clamp(1.8rem, 3vw, 2.5rem);
-  letter-spacing: -0.03em;
-  margin: 0.15rem 0 0.55rem;
-}
-.page-header p {
-  color: #616173;
-  line-height: 1.55;
-  margin: 0;
-  max-width: 43rem;
-}
-.eyebrow,
+/* Az `.eyebrow` innen ELKERULT (2026-09-21): a keret atallt a megosztott
+   vizualis alapra, es a kilenc hivohelye a `frame.ts` CIMKE konstansat
+   hasznalja. A `.ticket-number` MARAD, mert ket elo hivohelye van -- egy
+   szabaly, aminek meg van fogyasztoja, nem mehet el. */
 .ticket-number {
   color: #67539c !important;
   font-size: 0.72rem;
@@ -224,16 +209,6 @@ button:disabled {
   background: #eeeaf8;
   color: #58457e;
 }
-.panel {
-  background: white;
-  border: 1px solid #e2e2ea;
-  border-radius: 0.85rem;
-  padding: 1.4rem;
-}
-.panel h2 {
-  font-size: 1.1rem;
-  margin: 0 0 1rem;
-}
 .detail-grid {
   display: grid;
   gap: 1rem;
@@ -243,32 +218,9 @@ button:disabled {
 .detail-header {
   align-items: center;
 }
-.back-link {
-  color: #4c397f;
-  display: inline-block;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  text-decoration: none;
-}
 .preline {
   line-height: 1.6;
   white-space: pre-wrap;
-}
-.panel dl {
-  border-top: 1px solid #eeeef2;
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 1.2rem 0 0;
-  padding-top: 1rem;
-}
-.panel dt {
-  color: #696979;
-  font-size: 0.78rem;
-  margin-bottom: 0.25rem;
-}
-.panel dd {
-  margin: 0;
 }
 .plain-list,
 .tree-list {
@@ -429,7 +381,9 @@ button:disabled {
   margin: 0 0 0.4rem;
 }
 .empty p,
-.muted,
+/* A `.muted` innen ELKERULT (2026-09-21): tizennegy hivohelye volt, mind
+   azonos alaku (`<p className="muted">`), es mind a ket tulajdonsaga (szin,
+   sormagassag) helyben all most. A `.notice` MARAD, harom elo hivohellyel. */
 .notice {
   color: #666677;
   line-height: 1.5;
@@ -471,11 +425,12 @@ button:disabled {
 .login-card h1 {
   margin: 0;
 }
-.login-card p:not(.eyebrow):not(.error) {
-  color: #626273;
-  line-height: 1.5;
-  margin: 0 0 0.5rem;
-}
+/* A `.login-card p:not(.eyebrow)` SZABALY ELKERULT (2026-09-21), es ez NEM
+   mellektermek volt. A `.eyebrow` megszunesevel a `:not()` mar nem zarta volna
+   ki a lap kis cimkejet, a szabaly specifikussaga (0,3,1) pedig VERI a
+   Tailwind-osztalyt (0,1,0) -- vagyis a cimke csendben szurke lett volna, also
+   margoval. A ket megmaradt bekezdes helyben kapta meg ugyanazt a harom
+   tulajdonsagot. */
 .login-card label {
   display: grid;
   font-weight: 700;
@@ -519,7 +474,6 @@ button:disabled {
 }
 @media (max-width: 680px) {
   .topbar,
-  .page-header,
   .ticket-card,
   .reference-card {
     align-items: stretch;
@@ -527,9 +481,6 @@ button:disabled {
   }
   .account {
     justify-content: space-between;
-  }
-  .page-header {
-    gap: 1rem;
   }
   .primary-link {
     text-align: center;
@@ -542,9 +493,9 @@ button:disabled {
   .detail-grid {
     grid-template-columns: 1fr;
   }
-  .panel dl {
-    grid-template-columns: 1fr;
-  }
+  /* A `.page-header` es a `.panel dl` reszponziv szabalya a `frame.ts`
+     LAP_FEJLEC es ADATLISTA konstansaba kerult (`max-[680px]:` elotaggal),
+     az osztalyaikkal egyutt. */
   .content {
     padding-top: 1.7rem;
   }

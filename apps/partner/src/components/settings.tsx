@@ -4,6 +4,14 @@ import { useState } from "react";
 
 import { partnerApi } from "@/lib/api";
 import { Message } from "./ticket-list";
+import {
+  CIMKE,
+  LAP_CIM,
+  LAP_FEJLEC,
+  LAP_LEIRAS,
+  PANEL,
+  PANEL_CIM,
+} from "./frame";
 
 export function Settings() {
   const [password, setPassword] = useState({ current: "", next: "" });
@@ -46,18 +54,20 @@ export function Settings() {
 
   return (
     <section>
-      <header className="page-header">
+      <header className={LAP_FEJLEC}>
         <div>
-          <p className="eyebrow">FIÓK</p>
-          <h1>Beállítások</h1>
-          <p>Itt kizárólag a saját fiókjának adatait módosíthatja.</p>
+          <p className={CIMKE}>FIÓK</p>
+          <h1 className={LAP_CIM}>Beállítások</h1>
+          <p className={LAP_LEIRAS}>
+            Itt kizárólag a saját fiókjának adatait módosíthatja.
+          </p>
         </div>
       </header>
       {message ? <Message tone="info" text={message} /> : null}
       {error ? <Message tone="error" text={error} /> : null}
       <div className="detail-grid">
-        <form className="form panel" onSubmit={changePassword}>
-          <h2>Jelszó módosítása</h2>
+        <form className={`form ${PANEL}`} onSubmit={changePassword}>
+          <h2 className={PANEL_CIM}>Jelszó módosítása</h2>
           <label>
             Jelenlegi jelszó
             <input
@@ -83,8 +93,8 @@ export function Settings() {
           </label>
           <button type="submit">Jelszó módosítása</button>
         </form>
-        <form className="form panel" onSubmit={changeSigningCode}>
-          <h2>Aláírókód módosítása</h2>
+        <form className={`form ${PANEL}`} onSubmit={changeSigningCode}>
+          <h2 className={PANEL_CIM}>Aláírókód módosítása</h2>
           <p>A négyjegyű kód módosításához a jelenlegi jelszava szükséges.</p>
           <label>
             Jelenlegi jelszó

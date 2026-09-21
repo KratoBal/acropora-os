@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Message } from "./ticket-list";
+import { PANEL, PANEL_CIM } from "./frame";
 
 type DocumentItem = {
   id: string;
@@ -90,8 +91,8 @@ export function DocumentPanel<T extends DocumentItem>({
   }
 
   return (
-    <section className="panel document-panel">
-      <h2>{title}</h2>
+    <section className={`document-panel ${PANEL}`}>
+      <h2 className={PANEL_CIM}>{title}</h2>
       {items.length ? (
         <div className="document-grid">
           {items.map((item) => (
@@ -122,7 +123,9 @@ export function DocumentPanel<T extends DocumentItem>({
           ))}
         </div>
       ) : (
-        <p className="muted">Még nincs feltöltött fénykép vagy fájl.</p>
+        <p className="leading-[1.5] text-[#666677]">
+          Még nincs feltöltött fénykép vagy fájl.
+        </p>
       )}
       <form className="document-upload" onSubmit={submit}>
         <label>
