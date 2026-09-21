@@ -28,6 +28,15 @@ export interface MailTemplateResponse {
   subject: string;
   body: string;
   /**
+   * AZ ALAPÉRTELMEZÉS MINDIG ITT VAN, AKKOR IS, HA MÁR MENTETTEK.
+   *
+   * A `subject` és a `body` a HATÁLYOS szöveget hordozza (tárolt vagy
+   * alapértelmezett); ez a mező a kódban állót, mindig. Enélkül az első mentés
+   * után nem lenne mihez visszatérni -- a szöveg ott állna a szerveren, és
+   * semmi nem adná oda.
+   */
+  defaultTemplate: { subject: string; body: string };
+  /**
    * A VÁLTOZÓK A VÁLASZBAN JÖNNEK, NEM A KLIENS LISTÁJÁBÓL.
    *
    * A felület ezt rajzolja ki a szerkesztő mellé. Egy kézzel karbantartott

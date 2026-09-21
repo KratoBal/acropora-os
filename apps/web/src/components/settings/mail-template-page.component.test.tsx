@@ -46,6 +46,16 @@ const VALASZ = {
     zold vitest-futas ebben a csomagban NEM kapu.
   */
   source: "default" as "default" | "stored",
+  /*
+    A DUPLA VARRATA, ES A FORDITO ITT NEM SZOL: az `api.read` egy `vi.fn()`,
+    tehat a valasz alakja NINCS a `MailTemplateResponse` tipushoz merve. Amit a
+    HIVO hasznal (a visszatoltes gombja ezt olvassa), de a dupla nem ad meg, az
+    a dupla biztos hibaja -- es itt `undefined`-kent erkezne, nem hibauzenetkent.
+  */
+  defaultTemplate: {
+    subject: "{{jegyszam}} alapértelmezett tárgy",
+    body: "Alapértelmezett törzs: {{jegy_targya}}",
+  },
   subject: "{{jegyszam}} {{jegy_targya}}",
   body: "Kedves {{cimzett}}!",
   variables: [
@@ -196,5 +206,80 @@ describe("a levélsablon szerkesztője", () => {
     expect(api.save.mock.calls[0]?.[2]).toMatchObject({ body: "Új törzs" });
     // AZ ELSO olvasas a betoltes volt; a mentes utan MEG egy kell.
     await waitFor(() => expect(api.read).toHaveBeenCalledTimes(2));
+  });
+});
+
+/**
+ * AZ ALAPERTELMEZES VISSZAHOZHATO AZ ELSO MENTES UTAN IS (880f3588).
+ *
+ * 2026-09-21-ig a szerver a tarolt sort VAGY a kodban allot adta, soha a
+ * kettot egyutt -- tehat az elso mentes utan az alapertelmezes elerhetetlen
+ * volt. Nem tunt el: ott allt a kodban, csak semmi nem adta oda.
+ */
+describe("MailTemplatePage és az alapértelmezés visszatöltése", () => {
+  it("MENTETT sablonnál felkínálja a visszatöltést", async () => {
+    await megjelenit({
+      source: "stored",
+      subject: "Átírt tárgy",
+      body: "Átírt törzs",
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Alapértelmezés visszatöltése" }),
+    ).toBeTruthy();
+  });
+
+  it("a visszatöltés a mezőkbe tölt, és NEM ment", async () => {
+    api.save.mockClear();
+    await megjelenit({
+      source: "stored",
+      subject: "Átírt tárgy",
+      body: "Átírt törzs",
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Alapértelmezés visszatöltése" }),
+    );
+
+    expect(
+      (screen.getByLabelText("Tárgy") as HTMLInputElement).value,
+    ).toContain("alapértelmezett tárgy");
+
+    /*
+      A GOMB NEM IR. Egy visszatoltes, ami egy kattintasra felulirja a ma
+      hatalyos sablont, ugyanaz a nema muvelet, mint amit ez a kartya javit --
+      csak forditva. A mentes a szerkeszto dontese marad.
+    */
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  /*
+    ISMERT POZITIV KONTROLL A FENTI TAGADAS MELLE: a Mentes gomb ATTOL MEG ir.
+    Enelkul a "nem hivta a mentest" allitas egy olyan lapon is zold lenne, ahol
+    SEMMI nem ment -- es akkor nem a gombot mernenk, hanem a lap halalat.
+  */
+  it("a Mentés gomb továbbra is ír (pozitív kontroll)", async () => {
+    api.save.mockClear().mockResolvedValue({ ok: true });
+    await megjelenit({ source: "stored" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+  });
+
+  /*
+    ES AHOL NINCS MIT VISSZAALLITANI, OTT NINCS GOMB. Egy gomb, ami nem
+    valtoztat semmin, azt igeri, hogy a mezoben mas all, mint ami.
+  */
+  it("ha a szerkesztőben ÉPPEN az alapértelmezés áll, nincs gomb", async () => {
+    await megjelenit({
+      source: "stored",
+      subject: "{{jegyszam}} alapértelmezett tárgy",
+      body: "Alapértelmezett törzs: {{jegy_targya}}",
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Alapértelmezés visszatöltése" }),
+    ).toBeNull();
   });
 });
