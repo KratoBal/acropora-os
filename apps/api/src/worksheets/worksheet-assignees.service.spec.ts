@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+/**
+ * A BELSOS KERO, MERT A HATOKOR MOSTANTOL A KEROBOL JON.
+ *
+ * A `setAssignees` 2026-09-21-ig a kero AZONOSITOJAT kapta, es a hatokort
+ * beegetve allitotta belsosre. A meres szerint ez nem zarta ki a partnert (a
+ * `PARTNER_SERVICE` szerep viseli a `SERVICE_MANAGE` jogot), ezert a metodus
+ * mostantol a TELJES kerot kapja, es a hatokort abbol vezeti le.
+ */
+const BELSOS_KERO = {
+  id: "user-1",
+  customerId: null,
+  supplierId: null,
+} as never;
+
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
@@ -128,7 +142,7 @@ describe("WorksheetsService assignees", () => {
       service.setAssignees(
         "worksheet-1",
         { userIds: ["user-2", "user-3"] },
-        "user-1",
+        BELSOS_KERO,
       ),
       (error: unknown) =>
         error instanceof BadRequestException &&
@@ -153,7 +167,7 @@ describe("WorksheetsService assignees", () => {
     await service.setAssignees(
       "worksheet-1",
       { userIds: ["user-2", " user-2 ", "user-3"] },
-      "user-1",
+      BELSOS_KERO,
     );
     assert.deepEqual(received, ["user-2", "user-3"]);
   });
@@ -172,7 +186,7 @@ describe("WorksheetsService assignees", () => {
       }),
     );
 
-    await service.setAssignees("worksheet-1", { userIds: [] }, "user-1");
+    await service.setAssignees("worksheet-1", { userIds: [] }, BELSOS_KERO);
     assert.deepEqual(received, []);
   });
 
@@ -181,7 +195,7 @@ describe("WorksheetsService assignees", () => {
       repository({ detail: async () => null }),
     );
     await assert.rejects(
-      service.setAssignees("worksheet-1", { userIds: [] }, "user-1"),
+      service.setAssignees("worksheet-1", { userIds: [] }, BELSOS_KERO),
       NotFoundException,
     );
   });
@@ -191,7 +205,7 @@ describe("WorksheetsService assignees", () => {
       repository({ setAssignees: async () => false }),
     );
     await assert.rejects(
-      service.setAssignees("worksheet-1", { userIds: [] }, "user-1"),
+      service.setAssignees("worksheet-1", { userIds: [] }, BELSOS_KERO),
       NotFoundException,
     );
   });
@@ -259,7 +273,7 @@ describe("WorksheetsService assignees", () => {
     await service.setAssignees(
       "worksheet-1",
       { userIds: ["user-2", "user-3"] },
-      "user-1",
+      BELSOS_KERO,
     );
 
     assert.equal(notified.length, 1);
@@ -280,7 +294,7 @@ describe("WorksheetsService assignees", () => {
     await service.setAssignees(
       "worksheet-1",
       { userIds: ["user-2"] },
-      "user-1",
+      BELSOS_KERO,
     );
 
     assert.equal(notified, 0);

@@ -17,6 +17,7 @@ import {
   isWellFormedSigningCode,
 } from "./worksheet-signing-code.js";
 import { verifyPassword } from "../users/password.util.js";
+import { requireInternalWriter } from "./worksheet-internal-write.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -343,13 +344,27 @@ export class WorksheetsService {
    * A FRISSEN IRT LAP VISSZAADASA, BELSOS HATOKORREL -- es azert kulon nev,
    * mert tiz irasi metodus vegen all ugyanez.
    *
-   * Mindegyik SERVICE_MANAGE jog alatt fut, amit partner-oldali felhasznalo nem
-   * kap meg, es mindegyik a SAJAT, epp irt lapjat adja vissza. A hatokort ki
-   * kell mondani (a parameter kotelezo), de tiz azonos komment helyett egy nev
-   * hordozza: aki ezt olvassa, egy helyen latja, MIERT nem szukitunk.
+   * === AZ INDOK 2026-09-21-IG HAMIS VOLT, ES EZERT AT VAN IRVA ===
    *
-   * HA VALAHA IRASI VEGPONT KERUL PARTNER-JOG ALA, ez az egy fuggveny a hely,
-   * ahol at kell gondolni -- nem tiz hivasi hely.
+   * Itt az allt, hogy "mindegyik SERVICE_MANAGE jog alatt fut, amit
+   * partner-oldali felhasznalo nem kap meg". A masodik fele NEM IGAZ: a
+   * `PARTNER_SERVICE` szerep VISELI a `SERVICE_MANAGE` jogot (`auth.ts`), tehat
+   * a jog onmagaban SOHA nem zarta ki a partnert.
+   *
+   * === AMI MA TENYLEG VED, ES AMI NEM ===
+   *
+   * HAROM irasi uton a hivo hatokore MOSTANTOL ellenorzott
+   * (`requireInternalWriter`): `updateDraft`, `setAssignees`, `setAssets`. Ott
+   * ez a fuggveny bizonyitottan belsos kerot szolgal ki.
+   *
+   * A TOBBI irasi uton NEM ellenorzott, es ezt ki kell mondani: a sor- es
+   * bejegyzes-vegpontok ugyanezen a mintan allnak, es a 4f1f92db kartya tartja
+   * szamon oket. Vagyis ez a fuggveny MA nem tudja magarol, hogy minden hivoja
+   * belsos -- csak azt, hogy harom biztosan az.
+   *
+   * MIERT MARAD MEGIS BELSOS A VISSZAADAS: a FRISSEN IRT lapot adja vissza
+   * annak, aki epp irta. Egy szukites itt azt jelentene, hogy a sikeres iras
+   * utan a valasz ures -- a hiba a hatokor-kapunal all meg, nem itt.
    */
   private detailAfterWrite(id: string): Promise<WorksheetDetail> {
     return this.detail(id, { kind: "internal" });
@@ -516,15 +531,18 @@ export class WorksheetsService {
   async setAssignees(
     id: string,
     input: SetWorksheetAssigneesDto,
-    actorUserId: string,
+    actor: AuthenticatedUser,
   ): Promise<WorksheetDetail> {
-    await this.requireWorksheet(id, {
-      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all, amit partner-oldali
-      // felhasznalo nem kap meg, es a metodus a TELJES sort hasznalja, nem csak
-      // a letezeset. A hatokort azert irjuk ki, mert a kotelezo parameter a
-      // dontest a hivo helyre hozza: itt nem szukitunk, es ez latszik.
-      kind: "internal",
-    });
+    const actorUserId = actor.id;
+    /*
+      A HATOKOR A KEROBOL JON. A korabbi komment a `SERVICE_MANAGE` jogra
+      hivatkozott ugy, mintha az kizarna a partnert -- nem zarja ki.
+    */
+    const scope = requireInternalWriter(
+      actor,
+      "A munkalap felelőseinek beállítása",
+    );
+    await this.requireWorksheet(id, scope);
     const userIds = normalizeAssigneeIds(input.userIds);
     await this.requireAssignableUsers(userIds);
 
@@ -692,12 +710,17 @@ export class WorksheetsService {
   async setAssets(
     id: string,
     input: SetWorksheetAssetsDto,
+    actor: AuthenticatedUser,
   ): Promise<WorksheetDetail> {
-    const worksheet = await this.requireWorksheet(id, {
-      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all, amit partner-oldali
-      // felhasznalo nem kap meg.
-      kind: "internal",
-    });
+    /*
+      A HATOKOR A KEROBOL JON. Ez a vegpont 2026-09-21-ig egyaltalan NEM kapta
+      meg a kerot -- tehat szerkezetileg nem is tudott hatokort szukiteni.
+    */
+    const scope = requireInternalWriter(
+      actor,
+      "A munkalap eszközeinek beállítása",
+    );
+    const worksheet = await this.requireWorksheet(id, scope);
     const assetIds = await this.requireAssetsInDepartment(
       input.assetIds,
       worksheet.departmentId,
@@ -715,14 +738,19 @@ export class WorksheetsService {
   async updateDraft(
     id: string,
     input: UpdateWorksheetDraftDto,
+    actor: AuthenticatedUser,
   ): Promise<WorksheetDetail> {
-    const worksheet = await this.requireWorksheet(id, {
-      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all, amit partner-oldali
-      // felhasznalo nem kap meg, es a metodus a TELJES sort hasznalja, nem csak
-      // a letezeset. A hatokort azert irjuk ki, mert a kotelezo parameter a
-      // dontest a hivo helyre hozza: itt nem szukitunk, es ez latszik.
-      kind: "internal",
-    });
+    /*
+      A HATOKOR A KEROBOL JON, ES NEM BEEGETVE.
+
+      Itt allt 2026-09-21-ig, hogy "a vegpont SERVICE_MANAGE jog alatt all, amit
+      partner-oldali felhasznalo nem kap meg". A masodik fele HAMIS: a
+      `PARTNER_SERVICE` szerep VISELI a `SERVICE_MANAGE` jogot. A beegetett
+      internal hatokor pedig nem szukit semmit -- `rowBelongsToScope` internal
+      eseten feltetel nelkul igazat ad.
+    */
+    const scope = requireInternalWriter(actor, "A munkalap szerkesztése");
+    const worksheet = await this.requireWorksheet(id, scope);
     const current = worksheet.versions[0];
     if (!current) throw new NotFoundException("A munkalap nem található.");
     if (current.status !== "DRAFT") {
@@ -1504,10 +1532,19 @@ export class WorksheetsService {
 
   private async requireDraftVersionId(id: string): Promise<string> {
     const worksheet = await this.requireWorksheet(id, {
-      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all, amit partner-oldali
-      // felhasznalo nem kap meg, es a metodus a TELJES sort hasznalja, nem csak
-      // a letezeset. A hatokort azert irjuk ki, mert a kotelezo parameter a
-      // dontest a hivo helyre hozza: itt nem szukitunk, es ez latszik.
+      /*
+        ITT MA NINCS HATOKOR-ELLENORZES, ES EZ NEM DONTES, HANEM NYITOTT TETEL.
+
+        A korabbi komment azt allitotta, hogy a `SERVICE_MANAGE` jog kizarja a
+        partnert. NEM zarja ki: a `PARTNER_SERVICE` szerep viseli a jogot. A
+        beegetett internal hatokor pedig nem szukit -- `rowBelongsToScope`
+        internal eseten feltetel nelkul igazat ad.
+
+        A sor- es bejegyzes-vegpontok javitasa NEM ebben a korben megy (acrobot
+        dontese, 2026-09-21: a harom mert vegpont eloszor, a tobbi kulon, mert
+        mindegyiknel kulon kell megnezni, mit tor el a szukites). A 4f1f92db
+        kartya tartja szamon oket, a mert listaval egyutt.
+      */
       kind: "internal",
     });
     const current = worksheet.versions[0];

@@ -262,6 +262,7 @@ describe("WorksheetsService", () => {
       service.updateDraft(
         "worksheet-1",
         contentDto() as UpdateWorksheetDraftDto,
+        { id: "user-1", customerId: null, supplierId: null } as never,
       ),
       (error: unknown) =>
         error instanceof ConflictException &&

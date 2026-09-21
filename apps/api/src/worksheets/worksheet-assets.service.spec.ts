@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+const BELSOS_KERO = {
+  id: "user-1",
+  customerId: null,
+  supplierId: null,
+} as never;
+
 import type { CreateWorksheetDto } from "./dto/worksheet.dto.js";
 import type { WorksheetsRepository } from "./worksheets.repository.js";
 import { WorksheetsService } from "./worksheets.service.js";
@@ -183,7 +189,7 @@ async function beallitas(
   assetIds: string[],
 ): Promise<void> {
   try {
-    await service.setAssets("worksheet-1", { assetIds });
+    await service.setAssets("worksheet-1", { assetIds }, BELSOS_KERO);
   } catch {
     // a visszaolvasashoz teljes reszletlap-sor kellene; lasd a `felvitel`-t
   }
@@ -207,7 +213,12 @@ describe("a meglévő munkalap eszközei", () => {
     const { service, hivasok } = beallitoServiceWith(["asset-idegen"]);
 
     await assert.rejects(
-      () => service.setAssets("worksheet-1", { assetIds: ["asset-idegen"] }),
+      () =>
+        service.setAssets(
+          "worksheet-1",
+          { assetIds: ["asset-idegen"] },
+          BELSOS_KERO,
+        ),
       (hiba: { status?: number; message?: string }) =>
         hiba.status === 400 && /nem ezen a helyszínen/.test(hiba.message ?? ""),
     );
