@@ -366,3 +366,91 @@ describe("a modul beköti az értesítőt", () => {
     );
   });
 });
+
+/**
+ * AKI EPP KIOSZT, NEM KAP SAJAT TETTEROL ERTESITEST (efc139ba).
+ *
+ * A KET HIVOHELY BEMENETE MAST JELENT, ES EZERT ALL MIND A KETTORE KULON
+ * ALLITAS: a felvitelnel a TELJES uj nevsor megy, a kesobbi atszervezesnel
+ * CSAK a hozzaadottak. A szures szabalya ugyanaz, a jelentese nem -- egy kozos
+ * helper mogott konnyu osszemosni oket, es akkor egy rontas mind a kettot
+ * elvinne eszrevetlenul.
+ */
+describe("a kiosztó nem kap értesítést a saját tettéről", () => {
+  it("FELVITELKOR kimarad a listából, a többiek megkapják", async () => {
+    const world = setup();
+
+    await world.service.create(
+      {
+        title: "Nem indul a szivattyú",
+        assigneeIds: ["user-1", "user-2", "user-3"],
+      },
+      "user-1",
+    );
+
+    assert.deepEqual(world.notified, [
+      {
+        serviceJobId: "job-1",
+        subject: "Nem indul a szivattyú",
+        userIds: ["user-2", "user-3"],
+      },
+    ]);
+
+    /*
+      ES A JEGYRE ATTOL MEG FELKERUL. A szures az ERTESITESROL szol, nem a
+      delegalasrol -- aki magat is ratette, ott all a nevsoron.
+    */
+    assert.deepEqual(world.created[0]?.assigneeIds, [
+      "user-1",
+      "user-2",
+      "user-3",
+    ]);
+  });
+
+  it("ÁTSZERVEZÉSKOR kimarad a hozzáadottak közül", async () => {
+    const world = setup({
+      setAssignees: async () => ({ ok: true, added: ["user-1", "user-3"] }),
+    });
+
+    await world.service.setAssignees(
+      "job-1",
+      { userIds: ["user-1", "user-2", "user-3"] },
+      BELSOS,
+    );
+
+    assert.deepEqual(world.notified, [
+      {
+        serviceJobId: "job-1",
+        subject: "Nem indul a szivattyú",
+        userIds: ["user-3"],
+      },
+    ]);
+  });
+
+  /**
+   * ES EZ DONTES, NEM KOVETKEZMENY (acrobot, 2026-09-21): aki EGYEDUL sajat
+   * magat osztja ki, EGYALTALAN nem kap ertesitest.
+   *
+   * Lehetne maskepp is -- mindenki kap, aki a listan all --, es akkor a sajat
+   * nev is jarna. Azert all igy, mert aki epp most nyomta meg a gombot, TUDJA.
+   *
+   * A KULON ALLITAS AZERT KELL, mert e nelkul a dontes csak a kodban allna, es
+   * a kovetkezo olvasonak kovetkezmenynek latszana -- barmikor
+   * "egyszerusithetonek".
+   *
+   * ES A FELTETEL A SZURT LISTARA ALL: nyers hosszra kotve itt egy URES
+   * nevsorral hivnank az ertesitot.
+   */
+  it("aki EGYEDÜL magát osztja ki, egy értesítés sem megy", async () => {
+    const world = setup();
+
+    await world.service.create(
+      { title: "Nem indul a szivattyú", assigneeIds: ["user-1"] },
+      "user-1",
+    );
+
+    assert.equal(world.notified.length, 0);
+    // ISMERT POZITIV KONTROLL: a jegy attol meg letrejott, a nevsorral egyutt.
+    assert.deepEqual(world.created[0]?.assigneeIds, ["user-1"]);
+  });
+});
