@@ -92,12 +92,31 @@ export function ticketMailDecision(input: {
 /**
  * MIT MONDUNK A NAPLONAK, ES MIT NEM.
  *
- * A JEGY NAPLOJA ATMEGY A PARTNER PORTALRA (fb945858 kartya merese, 2026-09-21:
- * a `/service/jobs/{id}` valasza szo szerint ugyanaz a partnernek es a belsos
- * felhasznalonak). Ezert a naplo-sor CIMET NEM TARTALMAZ, csak a tenyt.
+ * A NAPLO-SOR CIMET NEM TARTALMAZ, CSAK A TENYT ES A DARABSZAMOT.
  *
- * Egy cim, ami egyszer bekerul egy naplo szovegebe, onnantol minden jovobeli
- * feluletnel egyutt utazik, es senki nem fogja megkerdezni, szabad-e kiirni.
+ * AZ INDOK, ES EZ NEM AVUL EL: egy cim, ami egyszer bekerul egy naplo
+ * SZOVEGEBE, onnantol minden jovobeli feluletnel egyutt utazik, es senki nem
+ * fogja megkerdezni, szabad-e kiirni. A dontes tehat nem azon all, hogy MA
+ * kimegy-e a naplo-sor a partnernek, hanem azon, hogy egy szovegbe irt cimet
+ * kesobb mar nem lehet visszavenni.
+ *
+ * === AMI EBBOL A BEKEZDESBOL ELAVULT (visszamerve 2026-09-21 este) ===
+ *
+ * Itt korabban az allt, hogy a `/service/jobs/{id}` valasza SZO SZERINT
+ * ugyanaz a partnernek es a belsos felhasznalonak (az fb945858 kartya
+ * meresebol). Az a meres a sajat napjan igaz volt; MA MAR NEM AZ, es
+ * ugyanazon a napon valt hamissa:
+ *
+ *   a reszletlap   `detail` a belsosnek a belso alakot adja, a partnernek
+ *                  `partnerServiceJobDetail(belso)` alakot, es abbol a naplo-sor
+ *                  MEGJEGYZESE (`note`) hianyzik. Balazs dontese, 2026-09-21
+ *                  10:5x: "a megjegyzes nem kell a nev igen".
+ *   a csomag       ugyanez: a megjegyzes a `scope.kind === "internal"`
+ *                  kapcsolon all (`service-job-package.service.ts`).
+ *
+ * A HIVATKOZOTT TENY VALTOZOTT MEG, NEM A DONTES. Azert all itt mind a ketto,
+ * mert egy kijelento alaku komment datum nelkul masnap is ugyanolyan
+ * magabiztosan nez ki -- pontosan ez tortent ezzel a bekezdessel.
  */
 export function mailAuditNote(decision: MailDecision): string {
   return decision.kind === "send"
