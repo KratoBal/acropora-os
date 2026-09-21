@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { Badge, Card, EmptyState } from "@acropora/ui";
+
 import { partnerApi } from "@/lib/api";
 import { DocumentPanel } from "./document-panel";
-import { Empty, Message } from "./ticket-list";
+import { Message } from "./ticket-list";
 
 /**
  * AZ ESZKÖZ ADATLAPJA A PARTNER PORTÁLON.
@@ -27,6 +29,23 @@ import { Empty, Message } from "./ticket-list";
  * fiókjának MA VAN joga hozzájuk. Egyedül a törlés áll külön jog alatt
  * (`SERVICE_ASSET_DELETE`), a kivezetésnek pedig nincs saját végpontja: az
  * `archivedAt` a szerkesztés része.
+ *
+ * === AZ ELRENDEZÉS A BELSŐ RENDSZERÉ (2026-09-21) ===
+ *
+ * Balázs kérése, 2026-09-21 14:25:28 UTC: az ügyfél „ugyanolyan elrendezesben
+ * es desigban lassa" a lapot, mint mi az app.acropora.hu oldalon. Ez a lap az
+ * ELSŐ, amelyik átáll: a közös `@acropora/ui` elemeire és Tailwindre.
+ *
+ * A TARTALOM EBBEN A KÖRBEN NEM VÁLTOZIK. Ugyanaz a kilenc adatsor, ugyanabban
+ * a sorrendben, ugyanazokkal a hívásokkal. Ha a mezők halmaza ugyanabban a
+ * diffben mozdulna, egy elrendezési hiba nem lenne megkülönböztethető egy
+ * jogosultsági szivárgástól.
+ *
+ * A KÖZÖS RÉTEG A `@acropora/ui`, NEM az `apps/web`. A belső lap saját
+ * `Service*` keretet használ, ami az `apps/web`-ben él; arra a portál NEM
+ * hivatkozhat (őrző méri: `visual-base.spec.ts`). Hogy az a keret közös
+ * csomagba kerüljön-e, az a MÁSODIK szakasz kérdése, és csak ezen a lapon
+ * mérve dönthető el.
  *
  * EZEKET TEHÁT NEM AZÉRT NEM KÍNÁLJUK, MERT NINCS RÁ JOG, hanem mert Balázs
  * ezt kérte. A különbség nem szőrszálhasogatás: egy hamis indok túléli azt a
@@ -71,34 +90,35 @@ export function AssetDetail({ id }: { id: string }) {
 
   if (error)
     return (
-      <section>
-        <Link className="back-link" href="/eszkozok">
-          ← Eszközök
-        </Link>
+      <section className="flex flex-col gap-4">
+        <VisszaLink />
         <Message tone="error" text={error} retry={load} />
       </section>
     );
-  if (!asset) return <p className="muted">Eszköz betöltése…</p>;
+  if (!asset)
+    return <p className="text-[13px] text-muted">Eszköz betöltése…</p>;
 
   return (
-    <section>
-      <Link className="back-link" href="/eszkozok">
-        ← Eszközök
-      </Link>
-      <header className="page-header">
+    <section className="flex flex-col gap-4">
+      <VisszaLink />
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="eyebrow">ESZKÖZ</p>
-          <h1>{asset.name}</h1>
-          <p>
+          <p className="mb-1 text-[11px] tracking-[0.08em] text-muted">
+            ESZKÖZ
+          </p>
+          <h1 className="m-0 text-[22px] leading-tight font-semibold text-ink">
+            {asset.name}
+          </h1>
+          <p className="mt-1 text-[13px] text-muted">
             {asset.assetNumber}
             {asset.inventoryNumber ? ` · ${asset.inventoryNumber}` : ""}
           </p>
         </div>
-        <span className="status neutral">{asset.status}</span>
+        <Badge>{asset.status}</Badge>
       </header>
 
-      <div className="panel">
-        <dl className="asset-facts">
+      <Card className="p-[22px]">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
           <Sor cim="Helyszín">
             {asset.unit?.path.join(" / ") ?? "Nincs megadva"}
           </Sor>
@@ -121,7 +141,7 @@ export function AssetDetail({ id }: { id: string }) {
           <Sor cim="Utolsó karbantartás">{datum(asset.lastServicedAt)}</Sor>
           <Sor cim="QR-azonosító">{asset.qrToken}</Sor>
         </dl>
-      </div>
+      </Card>
 
       {/*
         A DOKUMENTUMOK ES A FENYKEPEK UGYANAZON A PANELEN allnak, ugyanugy, mint
@@ -142,14 +162,21 @@ export function AssetDetail({ id }: { id: string }) {
         onUploaded={load}
       />
 
-      <div className="panel">
-        <h2>Előzmények</h2>
+      <Card className="p-[22px]">
+        <h2 className="mt-0 mb-3 text-[15px] font-semibold text-ink">
+          Előzmények
+        </h2>
         {asset.events.length ? (
-          <ul className="event-list">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {asset.events.map((esemeny) => (
-              <li key={esemeny.id}>
-                <strong>{esemeny.type}</strong>
-                <span>
+              <li
+                key={esemeny.id}
+                className="flex flex-wrap items-baseline justify-between gap-2 border-b border-dusk-200 pb-2 last:border-0 last:pb-0"
+              >
+                <strong className="text-[13px] font-semibold text-ink">
+                  {esemeny.type}
+                </strong>
+                <span className="text-[12px] text-muted">
                   {new Date(esemeny.occurredAt).toLocaleString("hu-HU")}
                   {esemeny.actor ? ` · ${esemeny.actor.displayName}` : ""}
                 </span>
@@ -157,22 +184,45 @@ export function AssetDetail({ id }: { id: string }) {
             ))}
           </ul>
         ) : (
-          <Empty
+          <EmptyState
             title="Nincs előzmény"
-            text="Ehhez az eszközhöz még nem rögzítettünk eseményt."
+            description="Ehhez az eszközhöz még nem rögzítettünk eseményt."
           />
         )}
-      </div>
+      </Card>
     </section>
   );
 }
 
+/**
+ * EGY ADATSOR, A BELSO LAP ALAKJABAN.
+ *
+ * A meretek (`11px` cimke, `13px` ertek) a belso `ServiceDataItem`-bol jonnek,
+ * hogy a ket felulet UGYANAZT a ritmust adja. Az a komponens az `apps/web`-ben
+ * el, es a portal nem hivatkozhat ra -- ezert all itt ujra, nem importalva.
+ *
+ * ES EZ A HAROM SOR AZ, AMI A 2. SZAKASZ KERDESET ELDONTI: ha ot tovabbi nezet
+ * is ugyanezt ismetli meg, akkor a keretet kozos csomagba kell emelni. EGY
+ * lapbol ezt nem lehet megallapitani, es epp ezert all itt meg masolatkent.
+ */
 function Sor({ cim, children }: { cim: string; children: React.ReactNode }) {
   return (
-    <>
-      <dt>{cim}</dt>
-      <dd>{children}</dd>
-    </>
+    <div>
+      <dt className="mb-1.5 text-[11px] text-muted">{cim}</dt>
+      <dd className="m-0 text-[13px] leading-[1.5] text-ink">{children}</dd>
+    </div>
+  );
+}
+
+/** A VISSZAFELE VEZETO UT. Egy helyen all, mert a lap KET agan is kell. */
+function VisszaLink() {
+  return (
+    <Link
+      className="text-[13px] text-muted no-underline hover:text-ink"
+      href="/eszkozok"
+    >
+      ← Eszközök
+    </Link>
   );
 }
 
