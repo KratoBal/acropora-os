@@ -7,11 +7,13 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
+import { listAssets } from "@/lib/api/assets";
 import {
   listServiceJobs,
   type ServiceJobListItem,
@@ -37,6 +39,11 @@ import {
   serviceJobStatusLabel,
   shortPath,
 } from "@/lib/service-jobs/service-job-status";
+import {
+  ujJegyEszkozzel,
+  valaszthatoEszkozok,
+} from "@/lib/service-jobs/uj-jegy-eszkoz";
+import { readCachedAssets } from "@/lib/offline/asset-cache";
 
 const CACHE_KEY = ["offline-service-jobs"] as const;
 
@@ -97,6 +104,37 @@ export default function ServiceJobListScreen() {
    * lista. Igy viszont a masolat mindig ugyanazt jelenti: a legutobb latott
    * TELJES lista.
    */
+  /**
+   * AZ ESZKOZ-VALASZTO CSAK KINYITVA TOLT BE LISTAT.
+   *
+   * Ugyanaz az indok, mint a munkalap-lista partner-valasztojanal: a
+   * szerelonek a JEGYEI kellenek, nem az eszkoz-torzs, es a megnyitasok
+   * tulnyomo reszeben hozza sem nyul. Egy alapbol futo lekerdezes minden
+   * lista-megnyitasnal egy folosleges kort vinne, tereró nelkul pedig egy
+   * folosleges hibat.
+   */
+  const [ujJegyNyitva, setUjJegyNyitva] = useState(false);
+  const [eszkozKereses, setEszkozKereses] = useState("");
+  const eszkozok = useQuery({
+    queryKey: ["uj-jegy-eszkozok", eszkozKereses],
+    queryFn: () => listAssets(1, 50, eszkozKereses),
+    enabled:
+      ujJegyNyitva &&
+      status === "authenticated" &&
+      Boolean(capabilities?.serviceJobsManage),
+    placeholderData: keepPreviousData,
+  });
+  const mentettEszkozok = useQuery({
+    queryKey: ["offline-assets"],
+    queryFn: readCachedAssets,
+    enabled: ujJegyNyitva && status === "authenticated",
+  });
+  const valaszthato = valaszthatoEszkozok({
+    szerverElemek: eszkozok.data?.items,
+    mentettElemek: mentettEszkozok.data?.items,
+    kereses: eszkozKereses,
+  });
+
   useEffect(() => {
     if (!query.data || scope !== DEFAULT_SERVICE_JOB_SCOPE) return;
     void rememberServiceJobs(query.data.items);
@@ -186,15 +224,95 @@ export default function ServiceJobListScreen() {
               </Text>
             ) : null}
             {/*
+              ÚJ JEGY INNEN IS, NEM CSAK A GÉP ADATLAPJÁRÓL (Balázs kérése).
+              A gomb CSAK annak jelenik meg, aki jegyet is nyithat: a felvitel
+              képernyője `serviceJobsManage` nélkül visszairányít, tehát egy
+              mindenkinek mutatott gomb némán visszadobná a szerelőt a
+              kezdőlapra.
+            */}
+            {capabilities?.serviceJobsManage ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Új hibajegy nyitása: gép választása"
+                  onPress={() => setUjJegyNyitva((open) => !open)}
+                  style={({ pressed }) => [
+                    styles.newJob,
+                    pressed && styles.pressed,
+                  ]}
+                  testID="uj-jegy-gomb"
+                >
+                  <Text style={styles.newJobText}>
+                    {ujJegyNyitva ? "Mégsem" : "Új hibajegy"}
+                  </Text>
+                </Pressable>
+
+                {ujJegyNyitva ? (
+                  <View style={styles.assetPicker}>
+                    {/*
+                      A GÉP KIVÁLASZTÁSA NEM KÉNYELMI LÉPÉS: a jegy partnerét és
+                      helyszínét a SZERVER vezeti le a gépből, tehát gép nélkül
+                      nem tudná, hova tartozik a bejelentés.
+                    */}
+                    <Text style={styles.hint}>
+                      Válaszd ki a gépet: a partner és a helyszín abból
+                      következik.
+                    </Text>
+                    <TextInput
+                      value={eszkozKereses}
+                      onChangeText={setEszkozKereses}
+                      placeholder="Keresés: azonosító, név, gyártó"
+                      placeholderTextColor="#7b8a97"
+                      style={styles.search}
+                      autoCorrect={false}
+                      testID="uj-jegy-kereso"
+                    />
+                    {eszkozok.isPending && ujJegyNyitva ? (
+                      <ActivityIndicator color="#52d6c7" />
+                    ) : null}
+                    {valaszthato.length === 0 && !eszkozok.isPending ? (
+                      <Text style={styles.hint}>
+                        {online
+                          ? "Ebben a keresésben nincs gép."
+                          : "Nincs kapcsolat, és a mentett másolatban nincs ilyen gép."}
+                      </Text>
+                    ) : null}
+                    {valaszthato.map((asset) => (
+                      <Pressable
+                        key={asset.id}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setUjJegyNyitva(false);
+                          setEszkozKereses("");
+                          router.push(ujJegyEszkozzel(asset.id));
+                        }}
+                        style={({ pressed }) => [
+                          styles.assetRow,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text style={styles.assetName}>{asset.name}</Text>
+                        <Text style={styles.assetMeta}>
+                          {asset.assetNumber}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+
+            {/*
               A KIHAGYÁSOK KIMONDVA, NEM ELHALLGATVA. Egy hiányzó gomb ugyanúgy
               néz ki, mint egy elromlott -- és a szerelő a helyszínen nem tudja
               eldönteni, melyikről van szó.
             */}
             <Text style={styles.hint}>
-              Telefonon a jegy olvasható, léptethető, és fényképet lehet
-              rátenni. Új jegyet a gép adatlapjáról nyithatsz (Eszközök, majd
-              Hibajegy nyitása), így a partner és a helyszín a gépből
-              következik. Partnert váltani és delegálni a webes felületen lehet.
+              Telefonon a jegy olvasható, léptethető, fényképet lehet rátenni,
+              és új jegy is nyitható: a fenti gombbal vagy a gép adatlapjáról
+              (Eszközök, majd Hibajegy nyitása). Mindkét úton a gépből
+              következik a partner és a helyszín. Partnert váltani és delegálni
+              a webes felületen lehet.
             </Text>
           </View>
         }
@@ -258,6 +376,38 @@ const styles = StyleSheet.create({
   scopeLabel: { color: "#9fc4d8", fontSize: 13 },
   scopeLabelSelected: { color: "#eaf4fa", fontWeight: "600" },
   hint: { color: "#9fc4d8", fontSize: 13, lineHeight: 18 },
+  /* Az "Új hibajegy" gomb es a hozza tartozo gep-valaszto. A szinek a
+     munkalap-lista partner-valasztojabol jonnek: ugyanaz a mozdulat, ugyanaz
+     a kinezet. */
+  newJob: {
+    alignItems: "center",
+    backgroundColor: "#1f6f97",
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  newJobText: { color: "#eaf4fa", fontSize: 15, fontWeight: "600" },
+  pressed: { opacity: 0.7 },
+  assetPicker: {
+    backgroundColor: "#0d2a3a",
+    borderRadius: 12,
+    gap: 8,
+    padding: 12,
+  },
+  search: {
+    backgroundColor: "#06202e",
+    borderRadius: 10,
+    color: "#eaf4fa",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  assetRow: {
+    borderBottomColor: "#123b50",
+    borderBottomWidth: 1,
+    gap: 2,
+    paddingVertical: 10,
+  },
+  assetName: { color: "#eaf4fa", fontSize: 15 },
+  assetMeta: { color: "#9fc4d8", fontSize: 13 },
   loading: { marginTop: 32 },
   empty: { color: "#9fc4d8", marginTop: 32, textAlign: "center" },
   card: { backgroundColor: "#0d2a3a", borderRadius: 12, gap: 4, padding: 14 },
