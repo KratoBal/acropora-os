@@ -657,6 +657,35 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
       <ServiceContextRow icon="users" label="Felvette">
         {worksheet.createdByName ?? "—"}
       </ServiceContextRow>
+      {/*
+        AZ ÁTADÁS: NÁLUNK VAN-E MÉG AZ ÜGYFÉL ESZKÖZE.
+
+        A "Még nálunk van" mondat 2026-09-07-ig MINDEN lapon állt, mert a
+        mezőnek nem volt írója -- ezért került ki. Mostantól van írója (Balázs
+        döntése, 2026-09-21), tehát a mondat visszatérhet, és MOST már igazat
+        mond mind a két ágon.
+
+        A NÉV A DÁTUM MELLETT ÁLL, DE NEM FELTÉTELE: egy azóta törölt kolléga
+        neve eltűnik (`onDelete: SetNull`), az átadás ténye nem. Ha a kettőt
+        összevonnánk, a lap visszaállna „nálunk levőnek".
+      */}
+      <ServiceContextRow icon="checkCircle" label="Átadás">
+        {worksheet.handedOverAt ? (
+          <span data-testid="munkalap-atadas">
+            {formatDateTime(worksheet.handedOverAt)}
+            {worksheet.handedOverByName
+              ? ` · ${worksheet.handedOverByName}`
+              : ""}
+          </span>
+        ) : (
+          <span
+            className="font-normal text-muted"
+            data-testid="munkalap-atadas"
+          >
+            Még nálunk van
+          </span>
+        )}
+      </ServiceContextRow>
       {/* A SORSZAM A FEJLECBEN ALL, ITT A HANYADIK. Korabban a cimke allt itt
           is, es a fejlecben is -- ugyanaz a szoveg ketszer egy lapon nem
           megerosites, hanem zaj, es a kerdesre ("hanyadik verzio ez, es hany
@@ -719,6 +748,44 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                 }
               >
                 {worksheet.hidden ? "Visszaállítás" : "Elrejtés"}
+              </Button>
+            ) : null}
+            {/*
+              AZ ÁTADÁS KÜLÖN LÉPÉS, NEM A LEZÁRÁS MELLÉKE.
+
+              Balázs döntése, 2026-09-21 11:10 UTC. A helyszíni munkánál a
+              kettő egybeesik (a gép nem is mozdult), a MŰHELYBEN javított
+              gépnél viszont az aláírás hetekkel megelőzheti a
+              visszaszállítást -- ott egy összekötött jelölés hazudna.
+
+              AZ IRODA IS ÁLLÍTHATJA, nem csak a szerelő a telefonján, és nem
+              a jobb tudás miatt: ha a szerelő elfelejti, és a jegy emiatt nem
+              zárható, valakinek meg kell tudnia oldani anélkül, hogy
+              visszaküldenénk a helyszínre. Ugyanez az ok a VISSZAVONÁSRA is:
+              egy tévedésből bejelölt átadás engedné lezárni a jegyet, holott
+              az eszköz még nálunk van, és ez a hiba NÉMA.
+
+              LEZÁRT LAPRA IS SZÓL: a lap állapota és az eszköz helye két
+              külön kérdés.
+            */}
+            {canManage ? (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                data-testid="munkalap-atadas-gomb"
+                onClick={() =>
+                  void run(() =>
+                    worksheetsApi.setHandedOver(
+                      token,
+                      worksheet.id,
+                      !worksheet.handedOverAt,
+                    ),
+                  )
+                }
+              >
+                {worksheet.handedOverAt
+                  ? "Átadás visszavonása"
+                  : "Átadás rögzítése"}
               </Button>
             ) : null}
             {canManage && isDraft ? (

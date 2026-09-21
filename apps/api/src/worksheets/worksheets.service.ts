@@ -785,6 +785,53 @@ export class WorksheetsService {
     return this.detailAfterWrite(id);
   }
 
+  /**
+   * AZ ATADAS JELOLESE: VISSZAKERULT-E AZ UGYFEL ESZKOZE.
+   *
+   * === MIERT KULON MEZO, ES MIERT NEM A LEZARAS MELLEKE ===
+   *
+   * Balazs dontese, 2026-09-21 11:10 UTC. A helyszini munkanal a ketto
+   * egybeesik (a gep nem is mozdult), a MUHELYBEN javitott gepnel viszont nem:
+   * ott az alairas megtortenhet hetekkel a visszaszallitas elott. Egy
+   * osszekotott mezo tehat a lapok egyik feleen igazat mondana, a masikon
+   * hazudna -- es epp a hazug felen szamit, mert ott van meg nalunk az eszkoz.
+   *
+   * === A HATOKOR-KAPU, ES MIERT NEM A JOG VEDI ===
+   *
+   * A kontrolleren `SERVICE_MANAGE` all, es azt a `PARTNER_SERVICE` szerep
+   * MEGKAPJA (merve 2026-09-21: `ROLE_PERMISSIONS.PARTNER_SERVICE` a
+   * `SERVICE_VIEW` mellett a `SERVICE_MANAGE` jogot is tartalmazza). A jog
+   * tehat NEM zarja ki a partnert; a hatokor igen.
+   *
+   * AZ ATADAS BELSOS ALLITAS: mi mondjuk ki, hogy visszaadtuk az eszkozt. Ha a
+   * partner allithatna, a sajat jegyet tehetne lezarhatova -- es epp az a kapu
+   * szunne meg, amiert ez a mezo egyaltalan iródik.
+   *
+   * A VALASZ 404, NEM 403, ugyanugy, mint a hibajegy irasi kapujanal: egy
+   * idegen hatokorbol nezve az a lap nem letezik. A 403 elarulna, hogy letezik.
+   *
+   * === A LETEZES ELLENORZESE KULON LEPES ===
+   *
+   * Enelkul egy ismeretlen azonositora a Prisma `update` dobna, es a hivo egy
+   * nyers adatbazis-hibat kapna a "nem talalhato" helyett.
+   */
+  async setHandedOver(
+    id: string,
+    handedOver: boolean,
+    user: AuthenticatedUser,
+  ): Promise<WorksheetDetail> {
+    if (partnerScopeOf(user).kind !== "internal")
+      throw new NotFoundException("A munkalap nem található.");
+    await this.requireWorksheet(id, { kind: "internal" });
+    await this.repository.setHandedOver(
+      id,
+      handedOver
+        ? { handedOver: true, at: new Date(), byUserId: user.id }
+        : { handedOver: false },
+    );
+    return this.detailAfterWrite(id);
+  }
+
   async close(
     id: string,
     actorUserId: string,

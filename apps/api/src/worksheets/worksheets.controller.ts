@@ -43,6 +43,7 @@ import {
   UpdateWorksheetLineDto,
   UpdateWorksheetDocumentCaptionDto,
   UploadWorksheetDocumentDto,
+  SetWorksheetHandedOverDto,
   SetWorksheetHiddenDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
@@ -326,6 +327,34 @@ export class WorksheetsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.setHidden(id, input.hidden, user);
+  }
+
+  /**
+   * AZ ATADAS JELOLESE: VISSZAKERULT-E AZ UGYFEL ESZKOZE.
+   *
+   * Balazs dontese, 2026-09-21 11:10 UTC: a SZERELO jeloli meg a telefonjan,
+   * amikor visszaadja, ES az iroda is tudja allitani a weben. KULON LEPES,
+   * nem a lezarashoz vagy az alairashoz kotve -- a muhelyben javitott gepnel
+   * az alairas hetekkel megelozheti a visszaszallitast, tehat a ketto
+   * osszekotese ott HAZUDNA.
+   *
+   * MIERT AZ IRODA IS: nem a jobb tudas miatt, hanem hogy JAVITANI lehessen.
+   * Ha a szerelo elfelejti, es a jegy emiatt nem zarhato, valakinek meg kell
+   * tudnia oldani anelkul, hogy visszakuldenenk a helyszinre.
+   *
+   * `SERVICE_MANAGE`, ugyanaz a jog, ami a lapot szerkesztheti: az atadas nem
+   * uj hatalom, hanem ugyanannak a lapnak a kezelese. A PARTNERT nem ez zarja
+   * ki (a `PARTNER_SERVICE` szerep MEGKAPJA a `SERVICE_MANAGE` jogot, merve
+   * 2026-09-21), hanem a szolgaltatasban allo hatokor-kapu.
+   */
+  @Post(":id/handover")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setHandedOver(
+    @Param("id") id: string,
+    @Body() input: SetWorksheetHandedOverDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setHandedOver(id, input.handedOver, user);
   }
 
   @Post(":id/close")

@@ -78,6 +78,10 @@ const worksheet: WorksheetDetailLike = {
   department: { code: "BIO", name: "Biodóm" },
   createdByName: "Szabó Péter",
   serviceJob: { id: "job-7", jobNumber: "HJ-2026-007" },
+  // ALAPBOL NALUNK VAN AZ ESZKOZ: ez a lap eletenek nagy resze. Ami a masik
+  // allapotot meri, az a hivas helyen allitja be.
+  handedOverAt: null,
+  handedOverByName: null,
   currentVersion: {
     unitName: "Biodóm",
     issueDate: "2026-08-26T00:00:00.000Z",
@@ -489,5 +493,50 @@ describe("worksheetListStartsMineOnly", () => {
    */
   it("opens with the whole set before the role is known", () => {
     assert.equal(worksheetListStartsMineOnly(undefined), false);
+  });
+});
+
+/**
+ * AZ ATADAS SORA MINDIG OTT ALL -- a hibajegy melle a MASODIK kimondott
+ * hiany ebben a fuggvenyben.
+ */
+describe("worksheetDetailRows és az átadás", () => {
+  function atadasSor(sorok: { label: string; value: string }[]) {
+    return sorok.find((sor) => sor.label === "Átadás");
+  }
+
+  it("átadás nélkül kimondja, hogy az eszköz még nálunk van", () => {
+    const sor = atadasSor(worksheetDetailRows(worksheet));
+    assert.equal(sor?.value, "Az eszköz még nálunk van");
+  });
+
+  it("átadás után a dátum és az átadó neve áll ott", () => {
+    const sor = atadasSor(
+      worksheetDetailRows({
+        ...worksheet,
+        handedOverAt: "2026-09-21T10:00:00.000Z",
+        handedOverByName: "Kiss Péter",
+      }),
+    );
+    assert.ok(sor?.value.includes("Kiss Péter"));
+    assert.ok(sor?.value.includes("2026"));
+    assert.ok(!sor?.value.includes("még nálunk van"));
+  });
+
+  /*
+    A NEV HIANYA NEM VONJA VISSZA AZ ATADAST, es ez a sor SZOVEGEN is
+    latszania kell: ha a sor a nevre agazna, a visszaadott eszkoz ujra
+    "nalunk levonek" latszana a szerelo telefonjan.
+  */
+  it("a dátum egymagában is átadást jelent, név nélkül", () => {
+    const sor = atadasSor(
+      worksheetDetailRows({
+        ...worksheet,
+        handedOverAt: "2026-09-21T10:00:00.000Z",
+        handedOverByName: null,
+      }),
+    );
+    assert.ok(!sor?.value.includes("még nálunk van"));
+    assert.ok(sor?.value.includes("2026"));
   });
 });

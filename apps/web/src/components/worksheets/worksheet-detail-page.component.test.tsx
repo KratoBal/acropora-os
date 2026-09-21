@@ -33,6 +33,12 @@ const api = vi.hoisted(() => ({
    */
   documents: vi.fn(),
   downloadDocument: vi.fn(),
+  /**
+   * UGYANAZ A VARRAT, HARMADSZOR (2026-09-21): a lap mostantol JELOLNI tudja
+   * az atadast. A gomb a duplat hivja, tehat ha itt nem all, a kattintas
+   * `undefined`-ot hivna fuggvenykent.
+   */
+  setHandedOver: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -87,6 +93,13 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
       isActive: true,
     },
     createdByName: "Szerelő Sándor",
+    /*
+      ALAPBOL NINCS ATADVA, es ez a rendes kiindulas: a lap eletenek nagy
+      reszeben nalunk van az eszkoz. Ami a masik allapotot meri, az a hivas
+      helyen allitja be -- ugyanaz a szokas, mint a hibajegynel fentebb.
+    */
+    handedOverAt: null,
+    handedOverByName: null,
     assignees: [],
     /*
       A MEZO KOTELEZO, NEM ELHAGYHATO -- es epp ezert szolt a fordito, amikor
@@ -787,5 +800,118 @@ describe("a kiállítás a munkalap adatlapján", () => {
     expect(
       screen.queryByRole("button", { name: /Kiállítás és lezárás/ }),
     ).toBeNull();
+  });
+});
+
+/**
+ * AZ ATADAS A MUNKALAP ADATLAPJAN (Balazs dontese, 2026-09-21).
+ *
+ * A mezo 2026-09-02 ota all a semaban, es 2026-09-21-ig SEMMI nem irta. A
+ * lap 2026-09-07-ig azt allitotta MINDEN munkalapra, hogy "Meg nalunk van" --
+ * a mondat akkor kikerult, mert iro nelkul hamis allitas volt. Mostantol van
+ * iroja, tehat a mondat visszater, es itt mind a KET aga merve van.
+ */
+describe("WorksheetDetailPage és az eszköz átadása", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.detail.mockReset().mockResolvedValue(detail(null));
+    api.assignableUsers.mockResolvedValue({ items: [] });
+    api.documents.mockResolvedValue({ items: [] });
+    api.signers.mockResolvedValue({ items: [], emptyReason: null });
+    api.setHandedOver.mockReset().mockResolvedValue(detail(null));
+  });
+
+  afterEach(() => {
+    setOnLine(true);
+  });
+
+  it("átadás nélkül kimondja, hogy az eszköz még nálunk van", async () => {
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    // ISMERT POZITIV KONTROLL: a lap egyaltalan felepult. Enelkul a felirat
+    // hianya a betoltes lassusagat merne, nem az allapotot.
+    await screen.findByText("Kompresszor bevizsgálás");
+
+    expect(screen.getByTestId("munkalap-atadas").textContent).toBe(
+      "Még nálunk van",
+    );
+  });
+
+  it("átadás után a DÁTUM és az ÁTADÓ NEVE áll ott", async () => {
+    api.detail.mockResolvedValue({
+      ...detail(null),
+      handedOverAt: "2026-09-21T10:00:00.000Z",
+      handedOverByName: "Szerelő Sándor",
+    });
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByText("Kompresszor bevizsgálás");
+
+    const szoveg = screen.getByTestId("munkalap-atadas").textContent ?? "";
+    expect(szoveg).toContain("Szerelő Sándor");
+    /*
+      A DATUMOT A SAJAT FORMAZOJA ADJA, ezert nem betu szerint allitok ra:
+      az EV eleg ahhoz, hogy a datum ott van, es nem kot meg egy
+      megjelenitesi dontest, ami holnap valtozhat.
+    */
+    expect(szoveg).toContain("2026");
+    // ES A REGI, HAMIS MONDAT NINCS OTT. Ez kulon allitas: egy rosszul irt
+    // felteteles ag mind a kettot kirajzolhatna.
+    expect(szoveg).not.toContain("Még nálunk van");
+  });
+
+  /*
+    A NEV HIANYA NEM VONJA VISSZA AZ ATADAST. A semaban a kapcsolat
+    `onDelete: SetNull`, tehat egy azota torolt kollega neve eltunik -- az
+    atadas tenye nem. Ha a lap a NEVRE agazna, a visszaadott eszkoz
+    ujra "nalunk levonek" latszana.
+  */
+  it("a dátum egymagában is átadást jelent, név nélkül", async () => {
+    api.detail.mockResolvedValue({
+      ...detail(null),
+      handedOverAt: "2026-09-21T10:00:00.000Z",
+      handedOverByName: null,
+    });
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByText("Kompresszor bevizsgálás");
+
+    expect(screen.getByTestId("munkalap-atadas").textContent).not.toContain(
+      "Még nálunk van",
+    );
+  });
+
+  it("a gomb az ELLENKEZŐ irányt küldi el, nem fordít vakon", async () => {
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    const gomb = await screen.findByTestId("munkalap-atadas-gomb");
+    expect(gomb.textContent).toBe("Átadás rögzítése");
+
+    fireEvent.click(gomb);
+
+    await waitFor(() => {
+      expect(api.setHandedOver).toHaveBeenCalledWith(
+        "token-1",
+        "worksheet-1",
+        true,
+      );
+    });
+  });
+
+  it("már átadott lapon a VISSZAVONÁST kínálja fel", async () => {
+    api.detail.mockResolvedValue({
+      ...detail(null),
+      handedOverAt: "2026-09-21T10:00:00.000Z",
+      handedOverByName: "Szerelő Sándor",
+    });
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    const gomb = await screen.findByTestId("munkalap-atadas-gomb");
+    expect(gomb.textContent).toBe("Átadás visszavonása");
+
+    fireEvent.click(gomb);
+
+    await waitFor(() => {
+      expect(api.setHandedOver).toHaveBeenCalledWith(
+        "token-1",
+        "worksheet-1",
+        false,
+      );
+    });
   });
 });

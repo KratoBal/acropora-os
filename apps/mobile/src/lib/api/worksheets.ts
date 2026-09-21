@@ -210,6 +210,19 @@ export interface WorksheetDetail {
    * kepesseg volt, hanem be nem kotott.
    */
   serviceJob: { id: string; jobNumber: string } | null;
+  /**
+   * AZ ATADAS: VISSZAKERULT-E AZ UGYFEL ESZKOZE, ES KITOL.
+   *
+   * `null`, amig nem adtuk at. Balazs dontese, 2026-09-21: a SZERELO jeloli
+   * meg a telefonjan, amikor visszaadja -- tehat ez a ket mezo NEM csak
+   * kijelzesre kell itt, hanem a gomb IRANYAT is ez adja.
+   *
+   * A NEV kulon agon all a datumtol: egy azota torolt kollega neve `null`
+   * lesz, az atadas tenye viszont megmarad. A ketto osszevonasa epp azt a
+   * lapot allitana vissza nalunk levonek, amit visszaadtunk.
+   */
+  handedOverAt: string | null;
+  handedOverByName: string | null;
   assignees: WorksheetAssignee[];
   createdAt: string;
   updatedAt: string;
@@ -559,6 +572,27 @@ export function closeWorksheet(id: string) {
   return apiRequest<WorksheetDetail>(
     `${BASE}/${encodeURIComponent(id)}/close`,
     { method: "POST" },
+  );
+}
+
+/**
+ * AZ ATADAS JELOLESE VAGY VISSZAVONASA A HELYSZINEN.
+ *
+ * Balazs dontese, 2026-09-21 11:10 UTC: a szerelo jeloli meg, amikor
+ * visszaadja a gepet. KULON LEPES, nem a lezaras vagy az alairas melleke --
+ * a muhelyben javitott gepnel az alairas hetekkel megelozheti a
+ * visszaszallitast.
+ *
+ * A JELOLO A TORZSBEN MEGY, nem az utvonalban: a gomb megmondja, melyik
+ * iranyba indul. Egy allapot-fordito ut ket kezelonel csendben az
+ * ellenkezojet csinalna.
+ *
+ * A valasz a TELJES lap, tehat a kepernyo ugyanabban a korben frissul.
+ */
+export function setWorksheetHandedOver(id: string, handedOver: boolean) {
+  return apiRequest<WorksheetDetail>(
+    `${BASE}/${encodeURIComponent(id)}/handover`,
+    { method: "POST", body: JSON.stringify({ handedOver }) },
   );
 }
 
