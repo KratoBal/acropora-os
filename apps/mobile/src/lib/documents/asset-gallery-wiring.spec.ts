@@ -102,12 +102,26 @@ describe("az eszkoz-adatlap csatolmany-szakasza", () => {
    */
   it("a kép a hitelesített forrásból jön, mind a két helyen", () => {
     const s = olvas(KEPERNYO);
-    assert.match(s, /useDocumentImageSource\(/);
+    /*
+      A MECHANIZMUS 2026-09-21-EN MEGVALTOZOTT, ES AZ ALLITAS UGYANAZT MERI.
+
+      A hitelesitett kerest eddig a natív betolto vegezte (`source={forras}`, a
+      tokennel a fejlecben). Androidon az a fejlec NEM ert celba: Balazs eles
+      hibaja, 2026-09-21, es a meroeszkozom 401-et hozott vissza a keszulekrol.
+      A bajtokat innentol a `DocumentImage` keri le, es helyi fajlba irja.
+
+      A DARABSZAM MERESE VALTOZATLANUL KELL, pontosan azert, amiert eddig: egy
+      jelenletre illeszto allitas ZOLDEN atengedne, ha az egyik nezet lemaradna
+      -- a masik tartana eletben --, es a hiba NEMA lenne.
+    */
+    const db = s.split("<DocumentImage").length - 1;
     assert.equal(
-      s.split("source={forras}").length - 1,
+      db,
       2,
-      "a csempe és a nagy rátét közül az egyik nem a hitelesített forrásból tölt",
+      `a hitelesített kép ${db} helyen áll; a csempe ÉS a nagy kép rátéte kell, különben az egyik nézet üresen maradna`,
     );
+    /* ES MIND A KETTO A GAZDA-UTVONALAT KAPJA, nem egy beirt cimet. */
+    assert.equal(s.split("ownerPath={gazdaUtvonal}").length - 1, 2);
   });
 
   /**
@@ -123,15 +137,20 @@ describe("az eszkoz-adatlap csatolmany-szakasza", () => {
    */
   it("a csempe belyegkepet ker, a nagy kep az EREDETIT", () => {
     const s = olvas(KEPERNYO);
+    /*
+      A KET NEVESITETT FUGGVENY HELYETT MOSTANTOL EGY NEVESITETT PROP all
+      (`variant`), de a MERT ALLITAS ugyanaz: a ket hivohely KET KULONBOZO
+      valtozatot ker, es a darabszam mondja meg, hogy egyik sem maradt le.
+    */
     assert.equal(
-      s.split("kepForras.csempe(").length - 1,
+      s.split('variant="thumbnail"').length - 1,
       1,
-      "a csempe nem a belyegkep-agat hivja",
+      "a csempe nem a belyegkep-valtozatot keri",
     );
     assert.equal(
-      s.split("kepForras.teljes(").length - 1,
+      s.split('variant="original"').length - 1,
       1,
-      "a nagy kep nem az eredeti-agat hivja",
+      "a nagy kep nem az eredeti valtozatot keri",
     );
   });
 
