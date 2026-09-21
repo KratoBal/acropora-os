@@ -1,3 +1,4 @@
+export { magyarSzamErteke } from "./magyar-szam.js";
 export { personDisplayName, personLegalName } from "./person-name.js";
 export {
   DOCUMENT_THUMBNAIL_VARIANT,
