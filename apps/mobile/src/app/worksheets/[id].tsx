@@ -3,7 +3,6 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -62,7 +61,7 @@ import {
   formatDocumentSize,
   isViewableImage,
 } from "@/lib/documents/document-view";
-import { useDocumentImageSource } from "@/lib/documents/use-document-image-source";
+import { DocumentImage } from "@/components/documents/DocumentImage";
 import { WORKSHEET_PHOTO_NOTICE } from "@/lib/worksheets/worksheet-photo";
 import {
   describeAssignableUsers,
@@ -318,9 +317,15 @@ export default function WorksheetDetailScreen() {
    * egyszerre. Nem hozom meg helyettuk.
    */
   const [nagyKep, setNagyKep] = useState<string | null>(null);
-  const kepForras = useDocumentImageSource(
-    id ? `/service/worksheets/${encodeURIComponent(id)}` : null,
-  );
+  /*
+    AZ UTVONAL A KLIENS SAJAT `BASE`-EVEL EGYEZIK, nem a kepernyo mappajaval.
+    A bajtokat innentol a `DocumentImage` keri le, a TOKENNEL egyutt, es helyi
+    fajlba irja -- a bongeszo `<img>` eleme ott nem letezik, a natív betolto
+    pedig Authorization fejlecet NEM kuld.
+  */
+  const gazdaUtvonal = id
+    ? `/service/worksheets/${encodeURIComponent(id)}`
+    : null;
 
   /**
    * AKIRE A LAP KIOSZTHATO -- CSAK AKKOR TOLT, AMIKOR A SZERKESZTO KINYILIK.
@@ -942,44 +947,41 @@ export default function WorksheetDetailScreen() {
               {kepek.length > 0 ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={styles.galeria}>
-                    {kepek.map((kep) => {
-                      const forras = kepForras.csempe(kep.id);
-                      return (
-                        <Pressable
-                          key={kep.id}
-                          accessibilityRole="imagebutton"
-                          accessibilityLabel={`${kep.fileName} megnyitása nagyban`}
-                          disabled={forras === null}
-                          onPress={() => setNagyKep(kep.id)}
-                          style={({ pressed }) => [
-                            styles.csempe,
-                            pressed && styles.pressed,
-                          ]}
-                        >
-                          {forras ? (
-                            <Image
-                              source={forras}
-                              style={styles.csempeKep}
-                              resizeMode="cover"
-                              accessibilityLabel={kep.fileName}
-                            />
-                          ) : (
-                            /*
-                              A HIANYZO FORRAS NEM NEMA. Enelkul egy ures
-                              csempe allna itt, ami pontosan ugy nez ki, mint
-                              egy elromlott kep -- es ez az a hiba, amit ez az
-                              egesz kor javit.
-                            */
-                            <View style={styles.csempeKep}>
-                              <Text style={styles.muted}>nem tölthető be</Text>
-                            </View>
-                          )}
-                          <Text style={styles.csempeMeret}>
-                            {formatDocumentSize(kep.sizeBytes)}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
+                    {kepek.map((kep) => (
+                      <Pressable
+                        key={kep.id}
+                        accessibilityRole="imagebutton"
+                        accessibilityLabel={`${kep.fileName} megnyitása nagyban`}
+                        onPress={() => setNagyKep(kep.id)}
+                        style={({ pressed }) => [
+                          styles.csempe,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        {/*
+                          A CSEMPE MOSTANTOL NEM TILTOTT, AMIG A FORRAS
+                          HIANYZIK. A regi alak a token megerkezeseig
+                          `disabled` volt, es egy kozos "nem tölthető be"
+                          feliratot mutatott -- ami a HIANYZO FORRAST es a
+                          BETOLTESI HIBAT ugyanugy nevezte meg. A
+                          `DocumentImage` a ket esetet KET kulon mondattal
+                          valaszolja meg, es a nagy nezet is megnyithato
+                          marad, ahol a teljes uzenet elfer.
+                        */}
+                        <DocumentImage
+                          ownerPath={gazdaUtvonal}
+                          documentId={kep.id}
+                          variant="thumbnail"
+                          style={styles.csempeKep}
+                          hibaStyle={styles.csempeHiba}
+                          resizeMode="cover"
+                          accessibilityLabel={kep.fileName}
+                        />
+                        <Text style={styles.csempeMeret}>
+                          {formatDocumentSize(kep.sizeBytes)}
+                        </Text>
+                      </Pressable>
+                    ))}
                   </View>
                 </ScrollView>
               ) : null}
@@ -1578,19 +1580,15 @@ export default function WorksheetDetailScreen() {
       */}
       {nagyKep ? (
         <View style={styles.nagyRatet}>
-          {(() => {
-            const forras = kepForras.teljes(nagyKep);
-            return forras ? (
-              <Image
-                source={forras}
-                style={styles.nagyKep}
-                resizeMode="contain"
-                accessibilityLabel="A csatolmány nagyban"
-              />
-            ) : (
-              <Text style={styles.muted}>A kép most nem tölthető be.</Text>
-            );
-          })()}
+          <DocumentImage
+            ownerPath={gazdaUtvonal}
+            documentId={nagyKep}
+            variant="original"
+            style={styles.nagyKep}
+            hibaStyle={styles.nagyKepHiba}
+            resizeMode="contain"
+            accessibilityLabel="A csatolmány nagyban"
+          />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Kép bezárása"
@@ -1779,6 +1777,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  /*
+    A HIBA-DOBOZ KERETE A CSEMPEN ES NAGYBAN MAS MERET.
+
+    A csempe 104 pont szeles: ott csak annyi fer ki, hogy MERES, es aki azt
+    latja, rakoppint. A TELJES szoveg a nagy nezetben olvashato, ahol van hely.
+  */
+  csempeHiba: { padding: 4 },
+  nagyKepHiba: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
   },
   csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
   nagyRatet: {

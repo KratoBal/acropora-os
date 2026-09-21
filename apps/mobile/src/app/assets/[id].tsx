@@ -3,7 +3,6 @@ import type * as ImagePicker from "expo-image-picker";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,7 +26,7 @@ import {
   formatDocumentSize,
   isViewableImage,
 } from "@/lib/documents/document-view";
-import { useDocumentImageSource } from "@/lib/documents/use-document-image-source";
+import { DocumentImage } from "@/components/documents/DocumentImage";
 import { toPickedImages } from "@/lib/api/picked-image";
 import {
   pickPhotosFromLibrary,
@@ -101,12 +100,14 @@ export default function AssetDetailScreen() {
   const [felirat, setFelirat] = useState("");
   const [feliratHiba, setFeliratHiba] = useState<string | null>(null);
   const [feliratMentes, setFeliratMentes] = useState(false);
-  const kepForras = useDocumentImageSource(
-    // AZ UTVONAL A KLIENS SAJAT `BASE`-EVEL EGYEZIK, nem a kepernyo mappajaval.
-    // A hibajegynel elso alakom a mappanevet hasznalta, es a hiba NEMA lett
-    // volna: a csempek megjelennek, es minden kep "nem tolthető be".
-    id ? `/service/assets/${encodeURIComponent(id)}` : null,
-  );
+  // AZ UTVONAL A KLIENS SAJAT `BASE`-EVEL EGYEZIK, nem a kepernyo mappajaval.
+  // A hibajegynel elso alakom a mappanevet hasznalta, es a hiba NEMA lett
+  // volna: a csempek megjelennek, es minden kep "nem tolthető be".
+  //
+  // A BAJTOKAT INNENTOL A `DocumentImage` KERI LE, a tokennel egyutt, es helyi
+  // fajlba irja: a nativ betolto Authorization fejlecet NEM kuld, es ezen a
+  // ket lapon eddig ugyanaz a 401 allt, mint a hibajegyen.
+  const gazdaUtvonal = id ? `/service/assets/${encodeURIComponent(id)}` : null;
 
   /**
    * FÉNYKÉP AZ ESZKÖZHÖZ, A HELYSZÍNRŐL. KÉT BEMENET, EGY ÚT.
@@ -542,13 +543,11 @@ export default function AssetDetailScreen() {
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={styles.galeria}>
                       {kepek.map((kep) => {
-                        const forras = kepForras.csempe(kep.id);
                         return (
                           <Pressable
                             key={kep.id}
                             accessibilityRole="imagebutton"
                             accessibilityLabel={`${kep.fileName} megnyitása nagyban`}
-                            disabled={forras === null}
                             onPress={() => {
                               setNagyKep(kep.id);
                               // A PISZKOZAT A SZERVER SZERINTI ALLAPOTBOL
@@ -561,20 +560,23 @@ export default function AssetDetailScreen() {
                               pressed && styles.pressed,
                             ]}
                           >
-                            {forras ? (
-                              <Image
-                                source={forras}
-                                style={styles.csempeKep}
-                                resizeMode="cover"
-                                accessibilityLabel={kep.fileName}
-                              />
-                            ) : (
-                              <View style={styles.csempeKep}>
-                                <Text style={styles.uploadNotice}>
-                                  nem tölthető be
-                                </Text>
-                              </View>
-                            )}
+                            {/*
+                              A HIANYZO FORRAS ES A BETOLTESI HIBA KET KULON
+                              MONDAT. Eddig egy kozos "nem tölthető be" allt
+                              itt, ami pontosan azt a kulonbseget torolte el,
+                              amit merni akarunk -- es a csempe TILTOTT is
+                              volt, tehat a szerelo nagyban sem tudta
+                              megnezni, mi a baj.
+                            */}
+                            <DocumentImage
+                              ownerPath={gazdaUtvonal}
+                              documentId={kep.id}
+                              variant="thumbnail"
+                              style={styles.csempeKep}
+                              hibaStyle={styles.csempeHiba}
+                              resizeMode="cover"
+                              accessibilityLabel={kep.fileName}
+                            />
                             {/*
                               A FELIRAT A MERET FOLOTT ALL, es ez nem
                               elrendezesi izles: a felirat azt mondja meg, MIT
@@ -682,21 +684,15 @@ export default function AssetDetailScreen() {
 
       {nagyKep ? (
         <View style={styles.nagyRatet}>
-          {(() => {
-            const forras = kepForras.teljes(nagyKep);
-            return forras ? (
-              <Image
-                source={forras}
-                style={styles.nagyKep}
-                resizeMode="contain"
-                accessibilityLabel="A csatolmány nagyban"
-              />
-            ) : (
-              <Text style={styles.uploadNotice}>
-                A kép most nem tölthető be.
-              </Text>
-            );
-          })()}
+          <DocumentImage
+            ownerPath={gazdaUtvonal}
+            documentId={nagyKep}
+            variant="original"
+            style={styles.nagyKep}
+            hibaStyle={styles.nagyKepHiba}
+            resizeMode="contain"
+            accessibilityLabel="A csatolmány nagyban"
+          />
           {/*
             A FELIRAT ITT ALL, ES NEM A CSEMPEN.
 
@@ -900,6 +896,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   csempeFelirat: { color: "#d7e7ef", fontSize: 11, textAlign: "center" },
+  /*
+    A HIBA-DOBOZ KERETE A CSEMPEN ES NAGYBAN MAS MERET. A csempe 104 pont
+    szeles: ott csak annyi fer ki, hogy MERES, es aki azt latja, rakoppint. A
+    teljes szoveg a nagy nezetben olvashato, ahol van hely.
+  */
+  csempeHiba: { padding: 4 },
+  nagyKepHiba: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
   csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
   nagyFelirat: { color: "#d7e7ef", fontSize: 15, textAlign: "center" },
   feliratMezo: {
