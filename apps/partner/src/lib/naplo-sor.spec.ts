@@ -64,12 +64,30 @@ describe("a partner naplósora", () => {
   });
 
   /**
-   * POZITÍV KONTROLL A FENTIHEZ: a sor nem is üres. Enélkül a négy negatív
-   * állítás akkor is zöld lenne, ha a függvény minden ágon `""`-t adna.
+   * POZITÍV KONTROLL A FENTIHEZ: a két ág szövege nem üres, és KÜLÖNBÖZIK.
+   * Enélkül a fenti negatív állítás akkor is zöld lenne, ha a függvény minden
+   * ágon `""`-t adna.
+   *
+   * === MIÉRT NEM A TELJES MONDATRA ILLESZT, HOLOTT ELŐSZÖR ÚGY ÍRTAM ===
+   *
+   * Kalibrálva 2026-09-21: a belső állapot nevét a váltás mondatába téve KÉT
+   * állítás pirosodott ki, nem egy. A második azért, mert a TELJES mondatot
+   * rögzítette -- vagyis ugyanazt a rontást mérte, mint a fenti, csak
+   * szigorúbban. Két állítás, ami ugyanarra a bemenetre pirosodik, nem két
+   * mérés: az egyik nem mond semmi újat.
+   *
+   * Így viszont a kontroll a SAJÁT kérdését méri (van-e két különböző,
+   * nem üres mondat), és a rontás pontosan a fenti állítást viszi pirosra.
    */
-  it("a létrejövés és a váltás KÜLÖNBÖZŐ mondatot kap", () => {
-    assert.equal(naploSor(status(null)), "A hibajegy létrejött.");
-    assert.equal(naploSor(status("NEW")), "A hibajegy állapota változott.");
+  it("a létrejövés és a váltás KÜLÖNBÖZŐ, nem üres mondatot kap", () => {
+    const letrejott = naploSor(status(null));
+    const valtott = naploSor(status("NEW"));
+    assert.ok(letrejott.length > 10, "a létrejövés sora üres vagy csonka");
+    assert.ok(valtott.length > 10, "a váltás sora üres vagy csonka");
+    assert.notEqual(letrejott, valtott);
+    /* ÉS A KETTŐ KÖZTI KÜLÖNBSÉG A LÉNYEG: csak az egyik szól létrejövésről. */
+    assert.ok(letrejott.includes("létrejött"));
+    assert.ok(!valtott.includes("létrejött"));
   });
 
   it("a munkalap sora a nevet és zárójelben az azonosítót viseli", () => {
