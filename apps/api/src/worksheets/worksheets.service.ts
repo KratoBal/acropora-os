@@ -67,6 +67,7 @@ import { mayWorksheetJoinTicket } from "../common/worksheet-under-ticket.js";
 import { mayWorksheetBeSigned } from "../common/worksheet-signature-gate.js";
 import { normalizeDocumentCaption } from "../documents/document-caption.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
+import { TicketMailService } from "../notifications/mail/ticket-mail.service.js";
 import { normalizeAssigneeIds } from "./worksheet-assignment.js";
 import {
   normalizeWorksheetContent,
@@ -132,6 +133,13 @@ export class WorksheetsService {
     @Optional()
     @Inject(DOCUMENT_STORE)
     private readonly documentStore?: DocumentStore,
+    /**
+     * A LEVELKULDO IS ELHAGYHATO, ugyanabbol az okbol, mint a push-ertesito: a
+     * lap-tesztek tobb tucat helyen allitjak elo ezt a szolgaltatast, es egyik
+     * sem var levelet. A hianya NEM nema: a `TicketMailService` sajat specje
+     * meri, hogy mikor kuld es mikor nem.
+     */
+    @Optional() private readonly ticketMail?: TicketMailService,
   ) {}
 
   /**
@@ -904,6 +912,37 @@ export class WorksheetsService {
         "Ez a verzió nem írható alá: vagy még piszkozat, vagy már megszületett róla a döntés.",
       );
     }
+
+    /**
+     * A JEGY NYITOJA LEVELET KAP -- CSAK ALAIRASNAL, ELUTASITASNAL NEM.
+     *
+     * Balazs dontese, 2026-09-21 11:25:35 UTC (message_id 1551554987992289302):
+     * "igen ertesitsuk, de a ticket@acropora.hu cimet hasznaljuk".
+     *
+     * AZ ELUTASITAS SZANDEKOSAN NEM KULD: a kartya az ALAIRASROL szol, es egy
+     * elutasitas BELSO munkafolyamat -- a lap visszamegy javitasra. Ha errol is
+     * ertesitenenk, a nyito egy olyan lepesrol kapna levelet, ami meg nem
+     * eredmeny. Ha kell, az KULON dontes es egy sor.
+     *
+     * A JEGY AZONOSITOJA BIZTOSAN MEGVAN: a fenti `mayWorksheetBeSigned` kapu
+     * nelkule el sem engedte volna idaig a kerest.
+     *
+     * FIRE AND FORGET, a haz mintaja szerint: az alairas valasza NEM fugghet
+     * attol, hogy a levelezo eppen elerheto-e.
+     */
+    const jegyId = worksheet.serviceJob?.id ?? null;
+    /*
+      AZ ERTEK `ACCEPTED`, NEM `SIGNED` -- es ezt a fordito javitotta ki.
+      A VERZIO allapota lesz `SIGNED`, a DONTES bemenete viszont
+      `ACCEPTED | REJECTED`. Ket szokincs ugyanarrol a lepesrol, es kivulrol
+      egyformanak latszanak.
+    */
+    if (input.decision === "ACCEPTED" && jegyId)
+      this.ticketMail?.notifyWorksheetSigned({
+        serviceJobId: jegyId,
+        actorUserId,
+      });
+
     return this.detailAfterWrite(id);
   }
 

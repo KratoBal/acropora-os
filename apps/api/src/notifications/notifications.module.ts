@@ -6,9 +6,14 @@ import { DeviceTokenController } from "./device-token.controller.js";
 import { DeviceTokenRepository } from "./device-token.repository.js";
 import { NotificationLogRepository } from "./notification-log.repository.js";
 import { NotificationsService } from "./notifications.service.js";
+import { GmailMailSender } from "./mail/gmail-mail.sender.js";
+import { MailTemplateController } from "./mail/mail-template.controller.js";
+import { MAIL_SENDER } from "./mail/mail.port.js";
+import { TicketMailRepository } from "./mail/ticket-mail.repository.js";
+import { TicketMailService } from "./mail/ticket-mail.service.js";
 
 @Module({
-  controllers: [DeviceTokenController],
+  controllers: [DeviceTokenController, MailTemplateController],
   providers: [
     // A KÜLDŐ a tokenen át érkezik, nem osztályként. MA MÁR KETTŐ VAN, és a
     // 2026-08-28-i komment ("ha egyszer több lesz") ezzel a sorral járt le: a
@@ -16,10 +21,19 @@ import { NotificationsService } from "./notifications.service.js";
     // konstruktor-paraméter csendes átírásával.
     { provide: APNS_SENDING, useClass: ApnsSender },
     { provide: FCM_SENDING, useClass: FcmSender },
+    /*
+      A LEVELKULDO IS TOKENEN AT ERKEZIK, ugyanabbol az okbol, mint a ket
+      push-kuldo: a hivo a `MailSender` interfeszt latja, es a Gmail
+      lecserelese EGY megnevezett sor atirasa lesz, nem egy konstruktor csendes
+      valtozasa.
+    */
+    { provide: MAIL_SENDER, useClass: GmailMailSender },
+    TicketMailRepository,
+    TicketMailService,
     DeviceTokenRepository,
     NotificationLogRepository,
     NotificationsService,
   ],
-  exports: [NotificationsService],
+  exports: [NotificationsService, TicketMailService],
 })
 export class NotificationsModule {}
