@@ -65,6 +65,9 @@ describe("a token alakja, a token kiírása nélkül", () => {
       supported: true,
       permission: { granted: true, canAskAgain: true },
       token: FCM,
+      // IOS: itt az FCM-alak VALOBAN rossz. Androidon ugyanez atmegy -- arra
+      // sajat allitas all a `push-registration.spec.ts`-ben.
+      platform: "IOS",
     });
 
     assert.equal(eredmeny.status, "failed");

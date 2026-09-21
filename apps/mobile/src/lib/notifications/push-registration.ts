@@ -7,6 +7,8 @@
  * and an app that argues about it is worse than one that stays quiet. The
  * outcomes exist so the caller can log the difference, not so it can nag.
  */
+import type { DevicePlatform } from "./push-platform";
+
 export type PushRegistrationOutcome =
   /** A token was obtained and can be sent to the server. */
   | { status: "ready"; token: string }
@@ -35,6 +37,93 @@ export interface PermissionAnswer {
 export function isNativeDeviceToken(value: string): boolean {
   return /^[0-9a-fA-F]{64}$/.test(value);
 }
+
+/**
+ * BEFOGADHATO-E EZ A TOKEN EZEN A PLATFORMON.
+ *
+ * === SZANDEKOSAN UGYANAZ AZ ALAK, MINT A SZERVEREN ===
+ *
+ * A parja: `apps/api/src/notifications/device-token.rules.ts`, ugyanezzel a
+ * nevvel es ugyanezekkel az okokkal. Ez nem masolas kenyelembol: a ket oldal
+ * UGYANAZT A SZABALYT futtatja, es 2026-09-21-ig mind a ketto 64 hexet kovetelt,
+ * platform-ag nelkul. Ha a ket alak elcsuszik, a kovetkezo ember az egyiket
+ * fogja megtalalni, es azt hiszi, kesz.
+ *
+ * === AZ ANDROID AG NEM IR ELO MINTAT ===
+ *
+ * Hogy egy FCM token pontosan milyen alaku, az a Firebase-rol szolo tudas, nem
+ * errol a kodrol. Ezert az ag csak azt zarja ki, amirol TUDJUK, hogy rossz: az
+ * Expo-tokent, ami az eredeti hiba volt.
+ *
+ *   egy SZUK minta      CSENDBEN dobna el a valodi tokent, es megint nulla
+ *                       androidos eszkozunk lenne, ugyanazzal a tunettel
+ *   egy TAG kizaras     legfeljebb beenged valamit, ami a KULDESNEL hasal el --
+ *                       es ott HANGOS, mert az FCM valasza megnevezi
+ *
+ * HOSSZHATAR NINCS, es ez dontes (acrobot, 2026-09-21): egy hosszhatar, amit
+ * nem mertunk, ugyanugy neman dob, mint a 64-hex. A felso hatart a szerver DTO
+ * adja (1..512). Az URES eset viszont bent van: az nem hosszhatar, hanem az az
+ * allitas, hogy az ures ertek nem token.
+ */
+export type DeviceTokenAcceptance =
+  { ok: true } | { ok: false; reason: "empty" | "expo-token" | "not-apns" };
+
+export function acceptDeviceToken(input: {
+  token: string;
+  platform: DevicePlatform;
+}): DeviceTokenAcceptance {
+  if (input.token.trim().length === 0) return { ok: false, reason: "empty" };
+
+  // AZ EXPO-TOKEN MINDKET PLATFORMON ROSSZ, ezert all az ag ELOTT. Ez volt az
+  // eredeti hiba: a telefon az Expo tokenjet kerte a nativ helyett.
+  if (input.token.startsWith("ExponentPushToken"))
+    return { ok: false, reason: "expo-token" };
+
+  if (input.platform === "IOS")
+    return isNativeDeviceToken(input.token)
+      ? { ok: true }
+      : { ok: false, reason: "not-apns" };
+
+  // ANDROID: mintat nem irunk elo -- lasd a fenti bekezdest.
+  return { ok: true };
+}
+
+/**
+ * A TOVABBKULDOTT ALAK. CSAK AZ APNS TOKEN KISBETUS.
+ *
+ * MERT HIBA, 2026-09-21: ez a fuggveny eddig nem letezett, es a
+ * `registrationOutcome` MINDEN tokenre `toLowerCase()`-t hivott. Hexadecimalis
+ * erteknel ez artalmatlan normalizalas; egy FCM token viszont KIS- ES
+ * NAGYBETURE ERZEKENY, tehat ugyanez a hivas elrontotta volna -- mielott a
+ * token egyaltalan elindul a szerver fele.
+ *
+ * ES AMIERT EZ ITT IS KELL, NEM CSAK A SZERVEREN: a szerver ugyanezt a hibat
+ * javitotta ugyanaznap. Ha csak ott javulna, a telefon MAR KISBETUSITVE kuldene
+ * -- a szerver pedig valtozatlanul tarolna egy elrontott tokent. A ket javitas
+ * kulon-kulon nem eleg.
+ */
+export function storedTokenForm(input: {
+  token: string;
+  platform: DevicePlatform;
+}): string {
+  return input.platform === "IOS" ? input.token.toLowerCase() : input.token;
+}
+
+/**
+ * A HAROM ELUTASITASI OK HAROM KULON MONDATA.
+ *
+ * A kozos "not a native APNs token" ANDROIDON HAMIS lenne: ott nem ez a
+ * szabaly. Egy igaznak latszo, de rossz magyarazat rosszabb a hianyzonal -- aki
+ * olvassa, a rossz iranyba indul el. Ugyanaz a szetvalasztas, mint a szerveren.
+ */
+const ELUTASITAS_OKA: Record<
+  Exclude<DeviceTokenAcceptance, { ok: true }>["reason"],
+  string
+> = {
+  empty: "empty token",
+  "expo-token": "an Expo push token, not the native one",
+  "not-apns": "not a native APNs token",
+};
 
 /**
  * MILYEN ALAKU EZ A TOKEN -- A TOKEN KIIRASA NELKUL.
@@ -70,26 +159,45 @@ export function describeTokenShape(value: string): string {
     : `${hossz} karakter`;
 }
 
+/**
+ * A PLATFORM KOTELEZO PARAMETER, NEM ALAPERTELMEZETT `"IOS"`.
+ *
+ * Ugyanaz a dontes, mint a szerver `recipients()` hivasanal (#716): egy
+ * alapertelmezes azt a hivot vedi meg, aki ugyis figyel, a MASODIK platform
+ * viszont epp attol lesz veszelyes, hogy valaki elfelejti atallitani. Igy a
+ * fordito kerdezi meg, minden hivohelyen.
+ */
 export function registrationOutcome(input: {
   supported: boolean;
   permission: PermissionAnswer;
   token: string | null;
+  platform: DevicePlatform;
 }): PushRegistrationOutcome {
   if (!input.supported) return { status: "unavailable" };
   if (!input.permission.granted) return { status: "declined" };
   if (!input.token) return { status: "failed", reason: "missing token" };
-  if (!isNativeDeviceToken(input.token))
+
+  const befogadas = acceptDeviceToken({
+    token: input.token,
+    platform: input.platform,
+  });
+  if (!befogadas.ok)
     return {
       status: "failed",
       /*
-        A NEV ES AZ ALAK EGYUTT. A puszta "not a native APNs token" IGAZ, de
-        nem mondja meg, MI JOTT helyette -- es epp ez a kulonbseg valasztja
-        szet az Expo tokent (rossz hivas) az FCM tokentol (masik platform,
-        masik szabaly kellene).
+        A NEV ES AZ ALAK EGYUTT. A puszta ok IGAZ, de nem mondja meg, MI JOTT
+        helyette -- es epp ez a kulonbseg valasztja szet az Expo tokent (rossz
+        hivas) az FCM tokentol (masik platform, masik szabaly).
       */
-      reason: `not a native APNs token (${describeTokenShape(input.token)})`,
+      reason: `${ELUTASITAS_OKA[befogadas.reason]} (${describeTokenShape(
+        input.token,
+      )})`,
     };
-  return { status: "ready", token: input.token.toLowerCase() };
+
+  return {
+    status: "ready",
+    token: storedTokenForm({ token: input.token, platform: input.platform }),
+  };
 }
 
 /**
