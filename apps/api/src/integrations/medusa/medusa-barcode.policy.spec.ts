@@ -466,7 +466,36 @@ describe("a vonalkód sora a közzétételi döntés UTÁN kerül ki", () => {
       .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
 
     const hivasok = [...kod.matchAll(/describe(?:Skipped|Blocked)Barcode\(/g)];
-    // Ketto a lezarasban, plusz ketto az import-sorban.
+    /*
+      KETTO, ES AZ IMPORT-SOR NEM SZAMIT BELE: ott a nev vesszovel all
+      (`describeBlockedBarcode,`), a minta viszont NYITO ZAROJELET kovetel.
+      Ez a mondat korabban azt allitotta, hogy az import-sor is illeszkedik,
+      es a szam megis 2 volt -- vagyis a komment egy MASIK szamot indokolt,
+      mint amit az allitas mer. Aki javitani akarta volna, 4-re irja at.
+    */
     assert.equal(hivasok.length, 2, "a kiírók csak a lezárásban hívhatók");
+  });
+
+  /*
+    ES A HARMADIK ALLITAS, MERT A MASIK KETTO EGY HALLGATOLAGOS FELTEVESEN ALL:
+    hogy a lezaras a VALODI kozzeteteli okot kapja meg.
+
+    A sorrend-allitas a HELYEKET meri, a darabszam a HIVOK szamat. Egyik sem
+    nezi, MIT adunk at. Ha valaki a `outcome.publication.reason` helyere
+    `null`-t irna, a kapu CSENDBEN megszunne (a `null` az "ismeretlen ok" ag,
+    ami mindig kiir), es mind a ket fenti allitas zold maradna.
+
+    Ez ugyanaz a csalad, mint a szakadas: mind a ket vegpont helyes, csak a
+    kettot nem koti ossze semmi.
+  */
+  it("a lezárás a valódi közzétételi okot kapja", () => {
+    const kod = readFileSync(FUTTATO_FORRAS, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
+
+    assert.ok(
+      /vonalkodSort\([^)]*outcome\.publication\.reason/s.test(kod),
+      "a lezárás hívása nem a közzétételi okot kapja",
+    );
   });
 });
