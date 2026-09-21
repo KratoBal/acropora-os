@@ -27,6 +27,12 @@ function fuggosegek(
         hivasok.push(input);
         return `file:///cache/${input.fileName}`;
       }),
+    /*
+      ALAPBAN NINCS LEMEZEN ALLO MASOLAT. Igy a mai allitasok valtozatlanul
+      azt merik, amit eddig -- es a masolatos agat kulon, kimondva kapcsoljuk
+      be, ott, ahol epp az a kerdes.
+    */
+    helyiFajl: reszlet.helyiFajl ?? (async () => null),
   };
 }
 
@@ -161,5 +167,75 @@ describe("a kép lehívása a mi kérésünkkel", () => {
     if (eredmeny.allapot !== "hiba") return;
     assert.ok(eredmeny.uzenet.includes("nincs cím"));
     assert.equal(deps.hivasok.length, 0);
+  });
+});
+
+/**
+ * A LEMEZEN ALLO MASOLAT -- A HELYSZIN-LETOLTES MIATT (2026-09-21).
+ *
+ * A helyszin-letolto elore lehozza a belyegkepeket ugyanabba a konyvtarba,
+ * ugyanazzal a fajlnevvel. Enelkul az elore letoltes ertelmetlen: a kep ott
+ * allna a lemezen, es a csempe hibat mutatna folotte.
+ */
+describe("a lemezen álló másolat", () => {
+  it("a letöltés bukása után a másolat jön elő", async () => {
+    const eredmeny = await kepLetoltese(
+      ALAP,
+      fuggosegek({
+        letolt: async () => {
+          throw new Error("nincs térerő");
+        },
+        helyiFajl: async (fileName) => `file:///cache/${fileName}`,
+      }),
+    );
+
+    assert.equal(eredmeny.allapot, "kesz");
+    if (eredmeny.allapot !== "kesz") return;
+    assert.match(eredmeny.uri, /dokumentum-doc-1-thumbnail\.img$/);
+  });
+
+  /**
+   * ES A HIBA NEM TUNIK EL, CSAK AKKOR, HA VAN MIT MUTATNI.
+   *
+   * MI PIROSIT: egy olyan valtozat, ami a masolat hianyaban is elnyeli a
+   * hibat. A nyers uzenet az a meroeszkoz, ami ezt az egesz kort elinditotta
+   * -- Balazs keszuleke abbol mondta meg, hogy 401 jott.
+   */
+  it("másolat NÉLKÜL a nyers üzenet változatlanul kimegy", async () => {
+    const eredmeny = await kepLetoltese(
+      ALAP,
+      fuggosegek({
+        letolt: async () => {
+          throw new Error("Unexpected HTTP code 401");
+        },
+      }),
+    );
+
+    assert.equal(eredmeny.allapot, "hiba");
+    if (eredmeny.allapot !== "hiba") return;
+    assert.match(eredmeny.uzenet, /401/);
+  });
+
+  /**
+   * A MASOLAT CSAK A BUKAS UTAN JON ELO, NEM HELYETTE.
+   *
+   * MI PIROSIT: egy valtozat, ami eloszor a lemezt nezi. Online akkor a
+   * szerelo egy REGI kepet latna, es semmi nem szolna rola -- ugyanaz a nema
+   * alak, mint az elavult lista.
+   */
+  it("sikeres letöltésnél a másolatot meg sem kérdezzük", async () => {
+    let kerdeztuk = false;
+    const eredmeny = await kepLetoltese(
+      ALAP,
+      fuggosegek({
+        helyiFajl: async () => {
+          kerdeztuk = true;
+          return "file:///cache/regi.img";
+        },
+      }),
+    );
+
+    assert.equal(eredmeny.allapot, "kesz");
+    assert.equal(kerdeztuk, false);
   });
 });

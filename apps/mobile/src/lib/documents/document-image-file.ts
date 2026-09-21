@@ -66,6 +66,21 @@ export interface KepLetoltesFuggosegek {
     headers: Record<string, string>;
     fileName: string;
   }): Promise<string>;
+  /**
+   * A MAR LEMEZEN ALLO MASOLAT UTJA, vagy `null`, ha nincs.
+   *
+   * === MIERT KELL, ES MIERT MOST (2026-09-21) ===
+   *
+   * A helyszin-letolto elore lehozza a belyegkepeket, hogy a pinceben is
+   * legyen mit nezni. A letoltes viszont EDDIG mindig a halozatra ment: a
+   * `downloadFileAsync` tereró nelkul elhasal, tehat az elore lehozott kep ott
+   * allt a lemezen, es a csempe MEGIS hibat mutatott.
+   *
+   * A MASOLAT CSAK A BUKAS UTAN JON ELO, nem helyette: online tovabbra is
+   * friss kep jon. Ugyanaz a szabaly, mint a listaknal -- a masolat akkor
+   * kerul elo, ha a hivas TENYLEG elhasalt.
+   */
+  helyiFajl(fileName: string): Promise<string | null>;
 }
 
 export type KepLetoltesEredmeny =
@@ -128,6 +143,26 @@ export async function kepLetoltese(
       kulonbozo szoveg, es mind a harom mas kovetkezo lepest ad.
     */
     const nyers = cause instanceof Error ? cause.message : String(cause ?? "");
+
+    /*
+      A LEMEZEN ALLO MASOLAT A BUKAS UTAN JON ELO.
+
+      Ha a helyszin-letolto mar lehozta ezt a belyegkepet, a szerelo a
+      pinceben LASSA -- enelkul az elore letoltes ertelmetlen: a kep ott
+      allna a lemezen, es a csempe hibat mutatna folotte.
+
+      ES A HIBA NEM TUNIK EL, CSAK AKKOR, HA VAN MIT MUTATNI. Ha nincs
+      masolat, a nyers uzenet valtozatlanul kimegy -- az a meroeszkoz, ami
+      ezt az egesz kort elinditotta.
+    */
+    const masolat = await deps.helyiFajl(
+      documentCacheFileName({
+        documentId: input.documentId,
+        variant: input.variant,
+      }),
+    );
+    if (masolat) return { allapot: "kesz", uri: masolat };
+
     return {
       allapot: "hiba",
       uzenet: nyers.trim()
