@@ -88,10 +88,27 @@ export function buildMimeMessage(
       throw new MailBuildError("MAIL_HEADER_INJECTION_ATTACHMENT");
 
   /*
-    URES CIMZETT-LISTA NEM MEHET. A `To:` fejlec ilyenkor uresen allna, es a
-    level vagy elszallna a szolgaltatonal, vagy -- rosszabb -- CSENDBEN
-    sehova nem menne. A hivo oldalan all ra kapu (`no-recipient`), ez a
-    masodik reteg.
+    URES CIMZETT-LISTA NEM MEHET -- ES EZ A MASODIK RETEG. MEGMONDOM, HOL AZ
+    ELSO, ES MI TORTENIK, HA CSAK AZ EGYIK MARAD (acrobot kerese, 2026-09-22).
+
+    ELSO RETEG:  `handoverMailDecision` (`handover-mail-recipients.ts`), a
+                 `no-recipient` ag. ELOSZOR EZ SZOLAL MEG: a dontes a kuldes
+                 elott fut, tehat idaig el sem jutunk.
+
+    HA CSAK AZ ELSO MARAD:  ezen az uton semmi nem romlik el -- de egy MASIK
+                 hivo (a munkalap-eljuttatas, a szamla-kuldes) ures listaval
+                 hivhatna az epitot, es akkor a `To:` fejlec URESEN allna. A
+                 level vagy elszall a szolgaltatonal, vagy -- rosszabb --
+                 csendben sehova nem megy.
+
+    HA CSAK A MASODIK MARAD:  a level NEM megy ki hibasan, de az ARA MAS. A
+                 szolgaltatas eljutna az epitesig, itt DOBNA, es a nyom
+                 `FAILED` lenne egy tiszta `no-recipient` kihagyas helyett. A
+                 kezelo egy technikai hibat latna a helyett, hogy "ennek a
+                 vevonek nincs aktiv portal-fiokja".
+
+    A KETTO TEHAT NEM UGYANAZ KETSZER: az elso a HELYES OKOT adja, a masodik
+    azt zarja ki, hogy egy jovobeli hivo megkerulje.
   */
   if (mail.to.length === 0) throw new MailBuildError("MAIL_NO_RECIPIENT");
 

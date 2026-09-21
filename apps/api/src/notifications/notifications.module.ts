@@ -7,6 +7,8 @@ import { DeviceTokenRepository } from "./device-token.repository.js";
 import { NotificationLogRepository } from "./notification-log.repository.js";
 import { NotificationsService } from "./notifications.service.js";
 import { GmailMailSender } from "./mail/gmail-mail.sender.js";
+import { HandoverMailRepository } from "./mail/handover-mail.repository.js";
+import { HandoverMailService } from "./mail/handover-mail.service.js";
 import { MailTemplateController } from "./mail/mail-template.controller.js";
 import { MAIL_SENDER } from "./mail/mail.port.js";
 import { TicketMailRepository } from "./mail/ticket-mail.repository.js";
@@ -30,10 +32,12 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
     { provide: MAIL_SENDER, useClass: GmailMailSender },
     TicketMailRepository,
     TicketMailService,
+    HandoverMailRepository,
+    HandoverMailService,
     DeviceTokenRepository,
     NotificationLogRepository,
     NotificationsService,
   ],
-  exports: [NotificationsService, TicketMailService],
+  exports: [NotificationsService, TicketMailService, HandoverMailService],
 })
 export class NotificationsModule {}
