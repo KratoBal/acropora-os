@@ -60,6 +60,24 @@ export class MailTemplateController {
       */
       source: tarolt ? "stored" : "default",
       ...(tarolt ?? DEFAULT_WORKSHEET_SIGNED_TEMPLATE),
+      /*
+        AZ ALAPERTELMEZES A TAROLT ERTEK MELLE MEGY, NEM HELYETTE.
+
+        2026-09-21-ig a valasz a kettot EGYMAST KIZAROAN adta: vagy a tarolt
+        sort, vagy a kodban allot. Az elso mentes utan tehat az alapertelmezes
+        ELERHETETLENNE valt -- nem azert, mert eltunt (ott all a kodban), hanem
+        mert semmi nem adta oda a szerkesztonek.
+
+        EGYIRANYU AJTO VOLT: aki atirta a sablont, es vissza akart terni, nem
+        tudott. Es a kar nem hangos -- a lap tovabbra is mukodik, csak egy
+        lehetoseg nincs.
+
+        MIERT NEM TORLO VEGPONT: egy `DELETE` a tarolt sort szuntetne meg, es
+        ezzel a "ki es mikor irta at" nyomat is. A visszaallitas igy MENTES
+        marad: lathato, szerzos, visszakereseheto -- es a szerkeszto latja, mit
+        ment, mielott megnyomja.
+      */
+      defaultTemplate: DEFAULT_WORKSHEET_SIGNED_TEMPLATE,
       variables: MAIL_TEMPLATE_VARIABLES,
     };
   }

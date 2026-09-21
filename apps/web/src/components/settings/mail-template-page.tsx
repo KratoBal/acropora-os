@@ -166,6 +166,30 @@ export function MailTemplatePage() {
     });
   };
 
+  /**
+   * AZ ALAPERTELMEZES VISSZATOLTESE -- A SZERKESZTOBE, NEM A SZERVERRE.
+   *
+   * A gomb NEM ment. Kitolti a ket mezot a kodban allo szoveggel, es onnantol
+   * ugyanaz tortenik, mint barmelyik kezi szerkesztesnel: a szerkeszto latja,
+   * mit fog menteni, es o nyomja meg a Mentest.
+   *
+   * MIERT NEM MENT AZONNAL: egy gomb, ami egy kattintasra felulirja a ma
+   * hatalyos sablont, ugyanaz a fajta nema muvelet, mint amit ez a kartya
+   * javit -- csak forditva. Igy a lepes visszavonhato: aki megnyomta es
+   * meggondolta, ujratolti a lapot.
+   *
+   * AMI EZUTAN IS IGAZ MARAD, ES KI KELL MONDANI: mentes utan a `source`
+   * "stored" marad, nem "default". Ez NEM hiba: a sor tenyleg letezik, es
+   * tenyleg valaki irta -- csak epp az alapertelmezes szovegevel. A `source`
+   * arrol szol, KI irta, nem arrol, MI all benne.
+   */
+  const alapertelmezesVisszatoltese = () => {
+    if (!template) return;
+    setSubject(template.defaultTemplate.subject);
+    setBody(template.defaultTemplate.body);
+    setSaved(false);
+  };
+
   const mentes = async () => {
     setSaving(true);
     setSaveError(null);
@@ -277,6 +301,24 @@ export function MailTemplatePage() {
             ) : null}
 
             <div className="flex items-center gap-3">
+              {/*
+                A GOMB CSAK AKKOR ALL OTT, HA VAN MIT VISSZAALLITANI.
+
+                Ha a szerkesztoben eppen az alapertelmezes all, a gomb nem
+                valtoztatna semmit -- egy gomb, ami nem csinal semmit, azt
+                igeri, hogy a mezoben mas all, mint ami.
+              */}
+              {template &&
+              (subject !== template.defaultTemplate.subject ||
+                body !== template.defaultTemplate.body) ? (
+                <Button
+                  variant="secondary"
+                  onClick={alapertelmezesVisszatoltese}
+                  disabled={saving}
+                >
+                  Alapértelmezés visszatöltése
+                </Button>
+              ) : null}
               <Button
                 onClick={() => void mentes()}
                 disabled={saving || ismeretlen.length > 0}
