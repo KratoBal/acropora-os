@@ -47,16 +47,22 @@ describe("a kép-hiba mérőeszköz bekötése a hibajegy lapján", () => {
    * akkor is, ha ugyanaz a hely szerepelne kétszer.
    */
   it("a csempe a mérő komponenst rajzolja", () => {
+    /*
+      A FORRAS 2026-09-21 OTA NEM PROP: a komponens maga tolti le a kepet a
+      tokennel (a natív betolto fejlece Androidon nem er celba, merve a
+      keszuleken). Amit az allitas mer, az valtozatlan: a csempe a MERO
+      komponenst rajzolja, nem egy nyers `Image`-et.
+    */
     assert.match(
       forras,
-      /<DocumentImage\s+source=\{forras\}\s+style=\{styles\.csempeKep\}/,
+      /<DocumentImage\s+ownerPath=\{gazdaUtvonal\}[\s\S]*?style=\{styles\.csempeKep\}/,
     );
   });
 
   it("a teljes nézet is a mérő komponenst rajzolja", () => {
     assert.match(
       forras,
-      /<DocumentImage\s+source=\{forras\}\s+style=\{styles\.nagyKep\}/,
+      /<DocumentImage\s+ownerPath=\{gazdaUtvonal\}[\s\S]*?style=\{styles\.nagyKep\}/,
     );
   });
 
@@ -66,9 +72,19 @@ describe("a kép-hiba mérőeszköz bekötése a hibajegy lapján", () => {
    * tudja találni a kép-helyeket, amikor ott vannak.
    */
   it("nem maradt nyers Image a hitelesített forrásra", () => {
+    /*
+      A REGI ALAK (`source={forras}`) MEGSZUNT, tehat a mai tiltas a
+      HOROG-hivasra szol: ha barhol visszajon a `kepForras` epitese, akkor a
+      kep megint a natív betoltore bizna a fejlecet -- es az Androidon 401-et
+      ad (merve, Balazs keszuleken).
+    */
     assert.ok(
       !/<Image\s+source=\{forras\}/.test(forras),
       "egy nyers Image még ott áll a kép-forráson",
+    );
+    assert.ok(
+      !/useDocumentImageSource\(/.test(forras),
+      "a képernyő megint a natív betöltőre bízza a fejlécet",
     );
   });
 });

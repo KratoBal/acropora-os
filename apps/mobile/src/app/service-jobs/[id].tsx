@@ -37,7 +37,6 @@ import {
   formatDocumentSize,
   isViewableImage,
 } from "@/lib/documents/document-view";
-import { useDocumentImageSource } from "@/lib/documents/use-document-image-source";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { useIsOnline } from "@/lib/offline/connectivity";
@@ -132,15 +131,19 @@ export default function ServiceJobDetailScreen() {
    */
   const [felirat, setFelirat] = useState("");
   const [feliratHiba, setFeliratHiba] = useState<string | null>(null);
-  const kepForras = useDocumentImageSource(
+  /*
+    AZ UTVONAL MOSTANTOL ERTEK, NEM HOROG. A kepet nem a natív betolto keri le
+    (annak a fejlece Androidon nem er celba -- merve 2026-09-21), hanem a
+    `DocumentImage` sajat letoltese, ami ezt az utvonalat kapja meg.
+  */
+  const gazdaUtvonal =
     /*
       AZ UTVONAL A KLIENS SAJAT `BASE`-EVEL EGYEZIK (`/service/jobs`), NEM a
       kepernyo mappanevevel. Elso alakom `/service/service-jobs` volt, a
       mappa utan -- es az a hiba NEMA lett volna: a lista betoltodik, a
       csempek megjelennek, es minden kep "nem tolthető be" felirattal all.
     */
-    id ? `/service/jobs/${encodeURIComponent(id)}` : null,
-  );
+    id ? `/service/jobs/${encodeURIComponent(id)}` : null;
 
   useEffect(() => {
     if (!query.data) return;
@@ -452,13 +455,11 @@ export default function ServiceJobDetailScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.galeria}>
                 {kepek.map((kep) => {
-                  const forras = kepForras.csempe(kep.id);
                   return (
                     <Pressable
                       key={kep.id}
                       accessibilityRole="imagebutton"
                       accessibilityLabel={`${kep.fileName} megnyitása nagyban`}
-                      disabled={forras === null}
                       onPress={() => {
                         setNagyKep(kep.id);
                         // A PISZKOZAT A SZERVER SZERINTI ALLAPOTBOL INDUL, nem
@@ -480,7 +481,9 @@ export default function ServiceJobDetailScreen() {
                         (Balazs eles hibaja Androidon, 2026-09-21).
                       */}
                       <DocumentImage
-                        source={forras}
+                        ownerPath={gazdaUtvonal}
+                        documentId={kep.id}
+                        variant="thumbnail"
                         style={styles.csempeKep}
                         hibaStyle={styles.csempeHiba}
                         resizeMode="cover"
@@ -612,10 +615,11 @@ export default function ServiceJobDetailScreen() {
       {nagyKep ? (
         <View style={styles.nagyRatet}>
           {(() => {
-            const forras = kepForras.teljes(nagyKep);
             return (
               <DocumentImage
-                source={forras}
+                ownerPath={gazdaUtvonal}
+                documentId={nagyKep}
+                variant="original"
                 style={styles.nagyKep}
                 hibaStyle={styles.nagyKepHiba}
                 resizeMode="contain"

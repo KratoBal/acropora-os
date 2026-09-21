@@ -1,66 +1,105 @@
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Text,
   View,
-  type StyleProp,
   type ImageStyle,
+  type StyleProp,
   type ViewStyle,
 } from "react-native";
 
-import {
-  HIANYZO_FORRAS_UZENET,
-  kepHibaSzovege,
-} from "@/lib/documents/kep-hiba";
+import { kepHibaSzovege } from "@/lib/documents/kep-hiba";
+import type { DocumentImageVariant } from "@/lib/documents/document-view";
+import { useDocumentImageFile } from "@/lib/documents/use-document-image-file";
 
 /**
- * EGY CSATOLMÁNY-KÉP, ÉS AMI A HELYÉN ÁLL, HA NEM JÖN KI.
+ * EGY CSATOLMÁNY-KÉP, A MI KÉRÉSÜNKKEL LEHÍVVA.
  *
- * === MIÉRT KÜLÖN KOMPONENS (2026-09-21) ===
+ * === MIÉRT NEM A NATÍV BETÖLTŐ KÉRI LE (mérve a készüléken, 2026-09-21) ===
  *
- * Balázs éles hibát jelentett Androidon: a lista betöltődik, a kép nem -- sem a
- * csempén, sem nagyban. Öt különböző ok adja pontosan ezt a képet, és kívülről
- * megkülönböztethetetlenek. A készülék viszont TUDJA a választ: a natív
- * betöltő hibaüzenetét a `onError` visszaadja.
+ * Balázs androidos készüléke a saját mérő-mondatunkat mutatta:
+ * `Unexpected HTTP code Response{protocol=h2, code=401, ...}`. A kérés tehát
+ * ELMENT a szerverig, és a szerver ELUTASÍTOTTA -- vagyis az `Authorization`
+ * fejléc nem jutott el vele. A `ImageURISource.headers` mező létezik a
+ * típusban, de Androidon nem ér célba.
  *
- * Ez a komponens azért van, hogy az a mondat MEGJELENJEN a képernyőn, ott, ahol
- * a kép lenne. Enélkül a hiba csak üres helyként látszik, és egy felolvasott
- * "nem jelenik meg" mondat semmit nem zár ki.
+ * Ezért a lehívás átkerült hozzánk: a bájtokat a `expo-file-system` tölti le a
+ * fejléccel, lemezre, és a kép a HELYI fájlt tölti be -- ahol már nincs mit
+ * hitelesíteni.
  *
- * === EZ MÉRŐESZKÖZ, NEM VÉGLEGES FELÜLET ===
+ * === A MÉRŐESZKÖZ BENT MARAD, ÉS EZ NEM ÓVATOSSÁG ===
  *
- * A szövegek `MÉRÉS:` szóval kezdődnek, szándékosan: aki látja, tudja, hogy ez
- * egy kérdés, amire válasz kell, nem a kész alak. Amint megvan a válasz, a
- * mondatok helyére a VALÓDI kezelés kerül -- és akkor ez a komponens marad, de
- * a szövege más lesz.
+ * Két hiba-út van, és MIND A KETTŐ látszik:
+ *   - a letöltés hibája (401, időtúllépés, lemez) -- a horog adja
+ *   - a helyi fájl betöltésének hibája (sérült vagy nem kép tartalom) -- az
+ *     `onError` adja, szó szerint
+ *
+ * A második azért kell, mert azt NEM tudom megmérni innen, mit ír a lemezre a
+ * letöltő egy 401-es válasznál. Ha hibát dob, az első út mutatja; ha a
+ * hibatörzset írja fájlba, a második. Egy javítás, ami az üzenetet is elviszi,
+ * vakká tenne a következő alkalomra.
  */
 export function DocumentImage({
-  source,
+  ownerPath,
+  documentId,
+  variant,
   style,
   hibaStyle,
   resizeMode,
   accessibilityLabel,
+  enabled,
 }: {
-  /** A hitelesített forrás, vagy `null`, ha a token még nem állt készen. */
-  source: { uri: string; headers: Record<string, string> } | null;
+  ownerPath: string | null;
+  documentId: string;
+  variant: DocumentImageVariant;
   style: StyleProp<ImageStyle>;
   /** A hiba-doboz kerete: a csempén és nagyban más méret kell. */
   hibaStyle?: StyleProp<ViewStyle>;
   resizeMode: "cover" | "contain";
   accessibilityLabel: string;
+  enabled?: boolean;
 }) {
   const [hiba, setHiba] = useState<string | null>(null);
+  const letoltes = useDocumentImageFile({
+    ownerPath,
+    documentId,
+    variant,
+    enabled,
+  });
 
-  /*
-    A HIÁNYZÓ FORRÁS KÜLÖN ÁG, ÉS KÜLÖN MONDAT: ott kérés EL SEM INDULT, tehát
-    a natív betöltő nem is hibázhatott. Egy közös szöveg a kettőt összemosná,
-    és pont a mérés értelme veszne el.
-  */
-  if (!source)
+  if (letoltes.isPending)
     return (
       <View style={[style, hibaStyle]}>
-        <Text style={{ color: "#f5b78a", fontSize: 11 }}>
-          {HIANYZO_FORRAS_UZENET}
+        <ActivityIndicator color="#52d6c7" />
+      </View>
+    );
+
+  /*
+    A LEKERDEZES SAJAT HIBAJA (halozat, kivetel a horogban) KULON All a
+    letoltes sajat, MERT valaszatol: az elobbi nem jutott el odaig, hogy
+    barmit mondjon rola a keszulek.
+  */
+  if (letoltes.isError)
+    return (
+      <View style={[style, hibaStyle]}>
+        <Text style={{ color: "#f5b78a", fontSize: 11 }} selectable>
+          MÉRÉS: a letöltés el sem indult (
+          {letoltes.error instanceof Error
+            ? letoltes.error.message
+            : "ismeretlen ok"}
+          ).
+        </Text>
+      </View>
+    );
+
+  const eredmeny = letoltes.data;
+
+  if (!eredmeny || eredmeny.allapot === "hiba")
+    return (
+      <View style={[style, hibaStyle]}>
+        <Text style={{ color: "#f5b78a", fontSize: 11 }} selectable>
+          {eredmeny?.uzenet ?? "MÉRÉS: a letöltés nem adott eredményt."}
         </Text>
       </View>
     );
@@ -68,10 +107,6 @@ export function DocumentImage({
   if (hiba)
     return (
       <View style={[style, hibaStyle]}>
-        {/*
-          A TELJES ÜZENET LÁTSZIK, nem levágva: a `numberOfLines` itt pont azt
-          vinné el, amiért a mérés készült.
-        */}
         <Text style={{ color: "#f5b78a", fontSize: 11 }} selectable>
           {hiba}
         </Text>
@@ -80,7 +115,7 @@ export function DocumentImage({
 
   return (
     <Image
-      source={source}
+      source={{ uri: eredmeny.uri }}
       style={style}
       resizeMode={resizeMode}
       accessibilityLabel={accessibilityLabel}
