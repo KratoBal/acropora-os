@@ -902,3 +902,76 @@ describe("ServiceJobDetailPage", () => {
  * szolna, amit megirt.
  */
 afterEach(() => setOnLine(true));
+
+/**
+ * A MEGTARTOTT MEGJEGYZES NEM MEHET EL MASIK LEPESSEL (6af98246, picasso lelete).
+ *
+ * A szabaly maga a `megjegyzes-celja.ts`-ben all, es ott kulon merve van. Ami
+ * CSAK ITT dolhet el: hogy a kepernyo HASZNALJA-e, es hogy a megallas tenyleg
+ * megall-e -- nem csak szol, kozben meg elkuldi a lepest.
+ */
+describe("ServiceJobDetailPage és a megtartott megjegyzés", () => {
+  beforeEach(() => {
+    auth.session = sessionAs("SERVICE");
+    api.detail.mockReset().mockResolvedValue(detail());
+    api.move.mockReset();
+    api.documents.mockResolvedValue({ items: [] });
+    sheets.attachable.mockResolvedValue({ items: [] });
+    sheets.selectablePartners.mockResolvedValue({ items: [] });
+    sheets.assignableUsers.mockResolvedValue({ items: [] });
+  });
+
+  afterEach(() => {
+    setOnLine(true);
+  });
+
+  async function megjegyzesMezo() {
+    return await screen.findByLabelText("Megjegyzés a lépéshez");
+  }
+
+  it("a bukás után MÁSIK lépésre megáll, és NEM küld el semmit", async () => {
+    api.move.mockRejectedValueOnce(new Error("A hálózat nem elérhető."));
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    fireEvent.change(await megjegyzesMezo(), {
+      target: { value: "Szivattyú rendelve" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ütemezve" }));
+
+    // ELSO LEPES: elment, es elbukott. Enelkul nincs mihez kotni a szoveget.
+    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Meghiúsult" }));
+
+    await screen.findByText(/Ütemezve.*lépéshez készült|lépéshez készült/);
+
+    /*
+      A KAPU BIZONYITEKA AZ, HOGY NEM TORTENT MASODIK HIVAS. Egy orzo, ami szol
+      ES kozben elkuldi a lepest, kivulrol ugyanigy nez ki: a kezelo lat egy
+      mondatot, es a jegy kozben atlep.
+    */
+    expect(api.move).toHaveBeenCalledTimes(1);
+  });
+
+  /*
+    ISMERT POZITIV KONTROLL: UGYANAZ a lepes ujraprobalva ATMEGY. Enelkul a
+    fenti allitas egy olyan kepernyon is zold lenne, ami a bukas utan MINDEN
+    lepest megtagad -- vagyis a javitas hasznalhatatlanna tenne a lapot.
+  */
+  it("a bukás után UGYANAZT a lépést újra engedi", async () => {
+    api.move
+      .mockRejectedValueOnce(new Error("A hálózat nem elérhető."))
+      .mockResolvedValue({ ok: true });
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    fireEvent.change(await megjegyzesMezo(), {
+      target: { value: "Szivattyú rendelve" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ütemezve" }));
+    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Ütemezve" }));
+
+    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(2));
+  });
+});

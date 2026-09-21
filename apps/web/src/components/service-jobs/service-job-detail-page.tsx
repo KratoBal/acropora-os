@@ -27,6 +27,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
+import { megjegyzesKuldheto } from "./megjegyzes-celja";
 import { PartnerPicker } from "./partner-picker";
 import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
@@ -111,6 +112,17 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const [stepError, setStepError] = useState<string | null>(null);
   const [stepping, setStepping] = useState(false);
   const [note, setNote] = useState("");
+  /**
+   * MELYIK LEPESHEZ KESZULT A MEZOBEN ALLO SZOVEG.
+   *
+   * `null`, amig friss. Csak egy SIKERTELEN lepes allitja be: onnantol a
+   * megtartott szoveg egy konkret atmenethez tartozik, es egy masik gomb
+   * megnyomasa nem viheti el csendben. A szabaly a `megjegyzes-celja.ts`-ben
+   * all, hogy felulet nelkul is merheto legyen.
+   */
+  const [noteCelja, setNoteCelja] = useState<ServiceJobStatusValue | null>(
+    null,
+  );
   const [attachable, setAttachable] = useState<WorksheetAttachableItem[]>([]);
   const [chosenSheet, setChosenSheet] = useState("");
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -219,6 +231,26 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
    * szól -- ezért marad, ahogy van. Külön lépésnek való, nem ennek.
    */
   const step = async (to: ServiceJobStatusValue) => {
+    /*
+      A KAPU A HIVAS ELOTT ALL, ES MEGALL -- nem dont helyette.
+
+      Egy megtartott szoveg egy MASIK atmenethez irodott; ha ezt csendben
+      elkuldenenk, a jegynaplo egy olyan mondatot orizne, ami mashoz tartozik.
+      Ha viszont csendben ELDOBNANK, a kezelo begepelt indoka tunne el nyom
+      nelkul. Mind a ketto nema, ezert egyik sem jo: a mondat megnevezi MIND A
+      KET lepest, a szoveg megmarad, es a dontes a kezeloe.
+    */
+    const ellenorzes = megjegyzesKuldheto({
+      szoveg: note,
+      celzott: noteCelja,
+      most: to,
+      cimke: (lepes) => serviceJobStatusLabel[lepes],
+    });
+    if (!ellenorzes.rendben) {
+      setStepError(ellenorzes.uzenet);
+      return;
+    }
+
     setStepping(true);
     setStepError(null);
     try {
@@ -233,11 +265,20 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
        * rovidebb lenne, mint az elso.
        */
       setNote("");
+      // A SIKERES LEPES A CELT IS ELENGEDI: ures mezohoz nem tartozik lepes.
+      setNoteCelja(null);
       await load();
     } catch (cause) {
       setStepError(
         cause instanceof Error ? cause.message : "A lépés nem sikerült.",
       );
+      /*
+        A BUKAS KOTI A SZOVEGET AHHOZ A LEPESHEZ, amihez keszult. Enelkul a
+        megtartas (ami szandekos) csendben atvinne a kovetkezo gombra.
+        URES mezonel nincs mit kotni -- kulonben egy ures mezo blokkolna a
+        kovetkezo lepest.
+      */
+      setNoteCelja(note.trim() === "" ? null : to);
     } finally {
       setStepping(false);
     }
