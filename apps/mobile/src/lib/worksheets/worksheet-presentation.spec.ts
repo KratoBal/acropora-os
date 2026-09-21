@@ -77,7 +77,7 @@ const worksheet: WorksheetDetailLike = {
   customer: { displayName: "Fánk Kft." },
   department: { code: "BIO", name: "Biodóm" },
   createdByName: "Szabó Péter",
-  serviceJob: { jobNumber: "HJ-2026-007" },
+  serviceJob: { id: "job-7", jobNumber: "HJ-2026-007" },
   currentVersion: {
     unitName: "Biodóm",
     issueDate: "2026-08-26T00:00:00.000Z",
@@ -308,7 +308,17 @@ describe("worksheetDetailRows", () => {
       (row) => row.label === "Hibajegy",
     );
 
-    assert.deepEqual(ticket, { label: "Hibajegy", value: "HJ-2026-007" });
+    /*
+      A `serviceJobId` 2026-09-21 OTA RESZE A SORNAK: ebbol tudja a kepernyo,
+      hogy ATKATTINTHATOT rajzoljon. A `deepEqual` itt nem kenyelem -- egy
+      mezonkenti allitas mellett egy VELETLENUL bekerult tovabbi mezo (peldaul
+      egy belso azonosito) csendben atmenne.
+    */
+    assert.deepEqual(ticket, {
+      label: "Hibajegy",
+      value: "HJ-2026-007",
+      serviceJobId: "job-7",
+    });
   });
 
   it("says out loud when there is no ticket behind the sheet", () => {
@@ -322,6 +332,14 @@ describe("worksheetDetailRows", () => {
       (row) => row.label === "Hibajegy",
     );
 
+    /*
+      ES EZ AZ ALLITAS EGYBEN AZT IS ORZI, HOGY A SOR NEM NEZ KI GOMBNAK.
+
+      A `deepEqual` PONTOSAN ket mezot enged: ha a `serviceJobId` ide is
+      bekerulne, a kepernyo megnyomhatot rajzolna egy olyan sorra, ami sehova
+      nem visz. Ezt nem kellett kulon allitassal potolni -- a teljes
+      objektum-egyezes mar meri.
+    */
     assert.deepEqual(ticket, {
       label: "Hibajegy",
       value: "Nincs mögötte hibajegy",
