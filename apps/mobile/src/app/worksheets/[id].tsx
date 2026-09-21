@@ -1310,9 +1310,24 @@ export default function WorksheetDetailScreen() {
               letezik. Egymas alatt a szerelo latja, hova tart -- kulon
               kepernyon nem latna.
 
-              A FELIRAT BALAZS SZAVA A FOLYAMATRA ("Kesz, alairasra"), nem a
-              rendszere ("lezaras"). A gomb NEM mondja meg, milyen allapotba
-              lep a lap: azt a kovetkezo gomb megjelenese mondja meg.
+              A FELIRATROL SZOLO BEKEZDEST ATIRTAM, NEM KIEGESZITETTEM, MERT
+              EGY UJABB DONTES IRJA FELUL.
+
+              KORABBAN EZ ALLT ITT: "a felirat Balazs szava a folyamatra
+              ('Kesz, alairasra'), nem a rendszere ('lezaras'); a gomb NEM
+              mondja meg, milyen allapotba lep a lap". Ez egy VALODI dontes
+              volt, es nem tevedes -- csak azota Balazs MASKENT dontott.
+
+              2026-09-21 12:10:42 UTC (message_id 1551566340169539655): a
+              felirat MONDJA MEG, MIT CSINAL. Az elozmeny a sajat 09-18-i
+              mondata: "Ha alairjak akkor zarodik le szerintem es ez igy van
+              jol" -- vagyis a regi felirat mellett a SORREND kitalalando
+              maradt, es o forditva talalta ki.
+
+              AMI A KET DONTES KOZOTT VALTOZOTT: nem a szohasznalat, hanem az,
+              hogy MIT KELL A GOMBNAK ELARULNIA. A regi alak a KOVETKEZO
+              lepesre mutatott ("alairasra"); az uj azt mondja meg, mi tortenik
+              MOST -- szam, dokumentum, lezaras.
             */}
             {canCloseWorksheetVersion({
               status: current.status,
@@ -1327,8 +1342,21 @@ export default function WorksheetDetailScreen() {
                     pressed && styles.pressed,
                   ]}
                 >
+                  {/*
+                    A FELIRAT MEGMONDJA, MIT CSINAL -- UGYANAZ A SZOVEG, MINT A
+                    WEBEN (Balazs dontese, 2026-09-21 12:10:42 UTC, message_id
+                    1551566340169539655).
+
+                    A "Kesz, alairasra" IGAZ volt, de a lenyeget nem mondta meg:
+                    ez a lepes osztja ki a munkalap SZAMAT es allitja elo a
+                    DOKUMENTUMOT. Az alairas ezutan jon, es csak az allapotot
+                    viszi at -- alairni csak azt lehet, ami mar letezik.
+
+                    KET FELULET, EGY FELIRAT: ha csak az egyik mondana meg, mit
+                    csinal, ugyanarra a muveletre mast igernenk.
+                  */}
                   <Text style={styles.signButtonText}>
-                    {lezaras.isPending ? "Lezárás…" : "Kész, aláírásra"}
+                    {lezaras.isPending ? "Kiállítás…" : "Kiállítás és lezárás"}
                   </Text>
                 </Pressable>
                 {/*

@@ -36,9 +36,9 @@ import { sv } from "./service-theme";
  * A VISSZA-HIVATKOZAS AZ ADATLAP FOLOTT, nem a muveletek kozott.
  *
  * A prototipus szandekosan valasztja szet a kettot: a "vissza" NEM muvelet a
- * lapon, hanem kilepes belole. Gombkent, a "Lezaras" es a "Szerkesztes"
- * mellett allva ugyanolyan sulyunak latszik, mint azok -- pedig az egyetlen,
- * ami nem valtoztat semmin.
+ * lapon, hanem kilepes belole. Gombkent, a lap muveletei (ma: "Kiallitas es
+ * lezaras", "Szerkesztes") mellett allva ugyanolyan sulyunak latszik, mint
+ * azok -- pedig az egyetlen, ami nem valtoztat semmin.
  */
 export function ServiceBackLink({
   href,

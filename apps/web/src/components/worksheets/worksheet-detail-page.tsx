@@ -726,6 +726,28 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                 <Button variant="secondary">Szerkesztés</Button>
               </Link>
             ) : null}
+            {/*
+              A FELIRAT MEGMONDJA, MIT CSINAL A GOMB -- ES EZ NEM SZOHASZNALAT.
+
+              Balazs dontese, 2026-09-21 12:10:42 UTC (Discord, fo csatorna,
+              message_id 1551566340169539655). Elotte, 2026-09-18 18:09:59-kor
+              ezt irta: "Nem tudok lezarni munkalapot. Nincs olyan gomb. Ha
+              alairjak akkor zarodik le szerintem es ez igy van jol".
+
+              A SORREND FORDITVA ALL, es a "Lezaras" felirat ezt nem mondta meg:
+
+                a `close()`  kiosztja a munkalap SZAMAT, beallitja a closedAt-ot,
+                             ES eloallitja a GENERATED_SHEET dokumentumot
+                a `sign()`   ezutan jon, es csak az allapotot viszi at
+
+              Vagyis a lezaras NEM adminisztrativ befejezes, hanem az a
+              pillanat, amikor a munkalapbol DOKUMENTUM lesz. Alairni csak azt
+              lehet, ami mar letezik -- ezert nem tudja az alairas lezarni, es
+              ezert utasit el a `close()` egy mar alairt lapot.
+
+              A TELEFONON UGYANEZ A FELIRAT ALL. Ha csak itt mondana meg, mit
+              csinal, a ket felulet ugyanarra a muveletre mast igerne.
+            */}
             {canManage && isDraft ? (
               <Button
                 disabled={busy}
@@ -733,8 +755,45 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                   void run(() => worksheetsApi.close(token, worksheet.id))
                 }
               >
-                Lezárás
+                Kiállítás és lezárás
               </Button>
+            ) : null}
+            {/*
+              A NEM-PISZKOZAT LAP KIMONDJA, MIERT NINCS GOMB.
+
+              === A MERT ESET, ES AZ ARA ===
+
+              Balazs, 2026-09-18 18:09:59 UTC: "Nem tudok lezarni munkalapot.
+              Nincs olyan gomb." A gomb VOLT -- a #87 ota all itt --, csak a
+              lapja nem volt piszkozat, tehat nem jelent meg.
+
+              A NEMA ELREJTES ES A HIANYZO FUNKCIO A KEPERNYON
+              MEGKULONBOZTETHETETLEN. Ez nem elmelet: ebbol olvasta le, hogy
+              nincs ilyen funkcio, es ebbol szuletett egy kartya, ami egy nem
+              letezo hianyt javitott volna. A hallgatas ara ket kor volt.
+
+              === MIERT AZ ALLAPOTOT MONDJA KI, ES NEM AZT, HOGY "NEM LEHET" ===
+
+              acrobot kikotese, 2026-09-21: egy "A lezaras nem erheto el" alaku
+              mondat ugyanazt a nemasagot irna korul, csak hosszabban. Az
+              ALLAPOT megmondja, MIERT nincs gomb -- es egyben azt is, hol tart
+              a lap.
+
+              === ES AZ ALLITAS, AMIN A MONDAT ALL, MERVE ===
+
+              Minden nem-piszkozat allapot a lezarason KERESZTUL jott letre: a
+              `close()` allitja be a `closedAt`-ot ES viszi a lapot
+              `AWAITING_SIGNATURE`-be (worksheets.repository.ts:1206-1207), az
+              alairas pedig onnan indul. Eles kodban nincs masik iro erre az
+              allapotra. Ezert igaz, hogy "mar ki van allitva" MINDHAROM
+              nem-piszkozat allapotra.
+            */}
+            {canManage && !isDraft ? (
+              <p className="pt-1 text-xs text-muted">
+                Ez a lap már ki van állítva (
+                {worksheetStatusLabel[current.status].toLowerCase()}
+                ). Kiállítani csak piszkozatot lehet.
+              </p>
             ) : null}
             {/* A signed sheet is final: the way onward is a new sheet, not a
                 new version of this one. The button stands where the edit
