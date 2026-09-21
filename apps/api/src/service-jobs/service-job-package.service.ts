@@ -6,7 +6,11 @@ import {
   Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { personLegalName, type AuthenticatedUser } from "@acropora/types";
+import {
+  personLegalName,
+  preferSignedSheet,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { assertStorageKeyMatches } from "../service-assets/document-store/document-storage-key.js";
@@ -134,8 +138,20 @@ export class ServiceJobPackageService {
     for (const worksheet of job.worksheets) {
       if (scope.kind !== "internal" && worksheet.hiddenAt !== null) continue;
       const currentVersionId = worksheet.versions[0]?.id;
-      const document = worksheet.documents.find(
-        (candidate) => candidate.worksheetVersionId === currentVersionId,
+      /*
+        EGY VERZIOHOZ KET LAP TARTOZHAT (2026-09-21 ota), es a VEGLEGES megy a
+        csomagba: azon nincs piszkozat-felirat, es rajta all az alairas.
+
+        A `preferSignedSheet` TIPUSRA valaszt, nem keletkezesi idore. A ketto ma
+        ugyanazt adna -- a vegleges kesobb keszul --, de az EGYBEESES: egy
+        visszamenoleges potlas, ami a LEZARASKORIT gyartja utolag egy mar alairt
+        verziora, a ket szabalyt szetvalasztana, es akkor a piszkozat-feliratos
+        lap menne a vevonek.
+      */
+      const document = preferSignedSheet(
+        worksheet.documents.filter(
+          (candidate) => candidate.worksheetVersionId === currentVersionId,
+        ),
       );
       if (!document) continue;
       entries.push({

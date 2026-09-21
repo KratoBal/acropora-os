@@ -80,9 +80,21 @@ describe("elkészült hibajegy dokumentumcsomagja", () => {
   });
 
   it("a rejtett munkalap nincs a partner csomagjában, belső csomagban viszont benne van", async () => {
-    const generated = (id: string, fileName: string) => ({
-      id,
+    /*
+      A `type` 2026-09-21 ota KELL IDE, es a hianya NEM forditasi hiba volt: a
+      `serviceWith` a bemenetet `unknown`-kent veszi at, tehat a varrat nem
+      ellenoriz semmit. A mezo hianya igy CSENDBEN azt jelentette, hogy a
+      csomag-osszeallito egyetlen lapot sem talal -- a teszt bukott, nem a
+      fordito szolt.
+    */
+    const generated = (
+      id: string,
+      fileName: string,
+      type: "GENERATED_SHEET" | "SIGNED_SHEET" = "GENERATED_SHEET",
+    ) => ({
+      id: `${id}-${type}`,
       worksheetVersionId: `${id}-version`,
+      type,
       fileName,
       contentType: "application/pdf",
       content: Buffer.from("%PDF-1.4\nworksheet"),
@@ -117,6 +129,61 @@ describe("elkészült hibajegy dokumentumcsomagja", () => {
     );
     assert.ok(
       internalPackage.bytes.includes(Buffer.from("munkalap-rejtett.pdf")),
+    );
+  });
+
+  /**
+   * KET LAP EGY VERZIOHOZ -- A VEGLEGES MEGY A CSOMAGBA.
+   *
+   * 2026-09-21 ota egy verziohoz ketto tartozhat: a lezaraskori
+   * (`GENERATED_SHEET`, PISZKOZAT felirattal) es az alairas utani vegleges
+   * (`SIGNED_SHEET`). A csomag az, amit a vevo es a partner megkap, tehat oda a
+   * vegleges valo.
+   *
+   * MI PIROSIT: ha a valasztas visszaesik "az elso talalat"-ra vagy idorendre.
+   * Az ELSO TALALAT azert veszelyes, mert a lekerdezes sorrendjetol fugg -- egy
+   * `orderBy` atirasa MASIK fajlban csendben megforditana.
+   */
+  it("egy verzió KÉT lapjából a VÉGLEGES megy a csomagba", async () => {
+    const lap = (
+      id: string,
+      fileName: string,
+      type: "GENERATED_SHEET" | "SIGNED_SHEET",
+    ) => ({
+      id,
+      worksheetVersionId: "v1",
+      type,
+      fileName,
+      contentType: "application/pdf",
+      content: Buffer.from("%PDF-1.4\nworksheet"),
+      storageKey: null,
+    });
+    const service = serviceWith(
+      job({
+        worksheets: [
+          {
+            id: "w1",
+            hiddenAt: null,
+            versions: [{ id: "v1" }],
+            /*
+              A LEZARASKORI ALL ELOL a listaban -- szandekosan. Ha a valasztas
+              "az elso talalat" lenne, EZ a sorrend adna a rossz lapot, es a
+              teszt ettol a sortol pirosodik.
+            */
+            documents: [
+              lap("d1", "munkalap-lezaraskori.pdf", "GENERATED_SHEET"),
+              lap("d2", "munkalap-vegleges.pdf", "SIGNED_SHEET"),
+            ],
+          },
+        ],
+      }),
+    );
+
+    const packageFile = await service.download("job-a", PARTNER_A);
+
+    assert.ok(packageFile.bytes.includes(Buffer.from("munkalap-vegleges.pdf")));
+    assert.ok(
+      !packageFile.bytes.includes(Buffer.from("munkalap-lezaraskori.pdf")),
     );
   });
 

@@ -508,7 +508,10 @@ export {
   formatWorksheetNumber,
   formatWorksheetSequence,
   formatWorksheetVersionLabel,
+  isWorksheetIssuedSheet,
+  preferSignedSheet,
   WORKSHEET_DEPARTMENT_CODE_PATTERN,
+  WORKSHEET_ISSUED_SHEET_TYPES,
   WORKSHEET_PARTNER_CODE_PATTERN,
   WORKSHEET_SEQUENCE_MIN_DIGITS,
 } from "./worksheet-management.js";

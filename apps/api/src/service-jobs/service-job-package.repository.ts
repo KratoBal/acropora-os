@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
 
+import { WORKSHEET_ISSUED_SHEET_TYPES } from "@acropora/types";
 import { unitPathFor } from "../common/unit-path-lookup.js";
 
 @Injectable()
@@ -54,11 +55,24 @@ export class ServiceJobPackageRepository {
               select: { id: true },
             },
             documents: {
-              where: { type: "GENERATED_SHEET" },
+              /*
+                MIND A KET KIADOTT LAP, es a halmaz KOZOS konstansbol jon: a
+                lezaraskori (`GENERATED_SHEET`) mellett 2026-09-21 ota all az
+                alairas utani, vegleges (`SIGNED_SHEET`). A valasztast a
+                `preferSignedSheet` vegzi a szolgaltatasban -- ide a teljes
+                halmaz kell, kulonben a vegleges lap ELO SEM KERUL.
+              */
+              where: { type: { in: [...WORKSHEET_ISSUED_SHEET_TYPES] } },
               orderBy: [{ createdAt: "desc" }, { id: "desc" }],
               select: {
                 id: true,
                 worksheetVersionId: true,
+                /*
+                  A TIPUS AZERT KELL A VALASZBA, mert a valasztas RAJTA all
+                  (`preferSignedSheet`). Enelkul a hivo csak a sorrendbol
+                  tudna valasztani -- es az EGYBEESES, nem szabaly.
+                */
+                type: true,
                 fileName: true,
                 contentType: true,
                 content: true,
