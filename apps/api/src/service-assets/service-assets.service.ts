@@ -97,6 +97,42 @@ export class ServiceAssetsService {
     );
   }
 
+  /**
+   * AZ ESZKOZ LETEZIK-E, ES A KEROE-E -- A KET IRO UT KOZOS KAPUJA.
+   *
+   * === MIERT KELL, HOLOTT A VEGPONTON MAR ALL EGY JOG ===
+   *
+   * A `PATCH :id` es a `POST :id/qr/rotate` a `SERVICE_MANAGE` jog alatt all,
+   * es ez a jog NEM belsos jelolo: a `PARTNER_SERVICE` szerep MEGKAPJA
+   * (`ROLE_PERMISSIONS`, merve 2026-09-21). Balazs kifejezetten kerte, hogy a
+   * partner tudjon dokumentumot feltolteni az eszkozre es a hibajegyre, es az
+   * UGYANEZEN a jogon all -- tehat a jogot elvenni nem lehet, mert azzal a
+   * feltoltes is elveszne.
+   *
+   * A HATAR EZERT A HATOKOR, NEM A JOG. Es a kerdes, amit ez a sor feltesz,
+   * nem az, hogy a hivonak VAN-E JOGA szerkeszteni, hanem hogy EZT AZ
+   * ESZKOZT kezeli-e. A ketto kulonbsege nem szohasznalat: a partner a SAJAT
+   * eszkozet tovabbra is szerkesztheti, es epp ezert lenne felrevezeto egy
+   * "nincs jogod" alaku elutasitas.
+   *
+   * === MIERT 404, ES NEM 403 ===
+   *
+   * Ugyanaz, mint a `detail` es a `scan` agan: egy idegen hatokorbol nezve az
+   * a sor NEM LETEZIK. Egy 403 elarulna, hogy letezik -- es epp az eszkoz
+   * azonositoja az, amibol egy vegigprobalas indulna.
+   *
+   * === AMIT EZ A KAPU SZANDEKOSAN NEM ERINT ===
+   *
+   * A `remove` tovabbra is BELSOS agon ellenorzi a letezest, es az helyes: az
+   * a vegpont `SERVICE_ASSET_DELETE` jog alatt all, amit partner-fiok NEM kap
+   * meg (merve ugyanakkor). Ott tehat a jog tenyleg kapu, itt nem volt az.
+   */
+  private async requireAssetInScope(id: string, scope: PartnerScope) {
+    const asset = await this.repository.detail(id, scope);
+    if (!asset) throw new NotFoundException("Az eszköz nem található.");
+    return asset;
+  }
+
   async detail(id: string, scope: PartnerScope) {
     const asset = await this.repository.detail(id, scope);
     if (!asset) throw new NotFoundException("Az eszköz nem található.");
@@ -248,7 +284,24 @@ export class ServiceAssetsService {
     return this.repository.listFreeLabels(limit);
   }
 
-  async update(id: string, input: UpdateAssetDto, actorUserId: string) {
+  async update(
+    id: string,
+    input: UpdateAssetDto,
+    actorUserId: string,
+    scope: PartnerScope,
+  ) {
+    /*
+      A HATOKOR AZ ELSO SOR, ES EZ A HELYE SZAMIT.
+
+      2026-09-21-ig ez a metodus SEMMILYEN hatokort nem kapott: a
+      `repository.basic(id)` a teljes tablat nezi. Egy partner-fioku hivo
+      tehat barmelyik eszkozt atirhatta, a sajat helyszinen kivul is -- a
+      felulet nem kinalta fel, de az API nyitva allt.
+
+      A kapu a MODOSITAS ELOTT all, nem a valasz osszeallitasakor: egy
+      hatokor-ellenorzes az iras UTAN nem hatokor-ellenorzes, hanem elfedes.
+    */
+    await this.requireAssetInScope(id, scope);
     const existing = await this.repository.basic(id);
     if (!existing) throw new NotFoundException("Az eszköz nem található.");
     if ((input.ownerType === undefined) !== (input.ownerId === undefined))
@@ -306,12 +359,22 @@ export class ServiceAssetsService {
     }
   }
 
-  async rotateQr(id: string, actorUserId: string) {
-    await this.detail(id, {
-      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all (QR-forgatas,
-      // dokumentum-feltoltes), amit partner-oldali felhasznalo nem kap meg.
-      kind: "internal",
-    });
+  async rotateQr(id: string, actorUserId: string, scope: PartnerScope) {
+    /*
+      A KOMMENT, AMI ITT ALLT, HAMIS VOLT, ES EZ NEM ELIRAS.
+
+      Szo szerint ezt mondta: "a vegpont SERVICE_MANAGE jog alatt all
+      (QR-forgatas, dokumentum-feltoltes), amit partner-oldali felhasznalo nem
+      kap meg". A masodik fele NEM IGAZ: a `PARTNER_SERVICE` szerep megkapja a
+      `SERVICE_MANAGE` jogot (merve 2026-09-21).
+
+      A kovetkezmenye nem elmeleti volt: a `{ kind: "internal" }` hatokorrel a
+      letezes-ellenorzes a TELJES tablan ment, tehat egy partner-fiok BARMELYIK
+      eszkoz QR-kodjat lecserelhette. Egy lecserelt kod a regi matricat
+      ervenytelenne teszi -- a helyszinen allo eszkozt onnantol nem lehet
+      beolvasni.
+    */
+    await this.requireAssetInScope(id, scope);
     try {
       return await this.repository.rotateQr(id, actorUserId);
     } catch (error) {

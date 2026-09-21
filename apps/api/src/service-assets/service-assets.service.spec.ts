@@ -179,6 +179,8 @@ test("rejects a cyclic parent update before writing", async () => {
           expectedUpdatedAt: asset.updatedAt,
         },
         "user-1",
+        // BELSOS UT: ezek a tesztek a sajat kollegank altali szerkesztest merik.
+        { kind: "internal" as const },
       ),
     BadRequestException,
   );
@@ -404,6 +406,8 @@ test("a szerkesztő ág a BELSŐS üzenetet adja, nem a partnerét", async () =>
         "asset-1",
         { labelCode: "V2196", expectedUpdatedAt: asset.updatedAt },
         "user-1",
+        // BELSOS UT: ezek a tesztek a sajat kollegank altali szerkesztest merik.
+        { kind: "internal" as const },
       ),
     (error: unknown) => {
       assert.ok(error instanceof ConflictException);
@@ -437,6 +441,8 @@ test("a szerkesztő ágon a rossz ALAK 400-at ad, nem 409-et", async () => {
         "asset-1",
         { labelCode: "nem-jo-alak", expectedUpdatedAt: asset.updatedAt },
         "user-1",
+        // BELSOS UT: ezek a tesztek a sajat kollegank altali szerkesztest merik.
+        { kind: "internal" as const },
       ),
     (error: unknown) => {
       assert.ok(
