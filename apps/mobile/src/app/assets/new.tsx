@@ -152,7 +152,6 @@ export default function NewAssetScreen() {
    * piros dobozban jelenne meg, a kollega azt hinne, hogy elveszett -- es
    * ujra felvinne, most mar ket sorral.
    */
-  const [queued, setQueued] = useState<string | null>(null);
 
   /**
    * A HELYSZINEN KESZULT KEPEK, MEG A MENTES ELOTT.
@@ -326,7 +325,8 @@ export default function NewAssetScreen() {
    * negy kimenet KULON valaszt kap:
    *
    *   saved     -> atlepunk az eszkoz lapjara, ahogy eddig
-   *   queued    -> a felvitel a telefonon var; kiirjuk, mihez kepest ellenoriztunk
+   *   queued    -> a felvitel a telefonon var; visszalepunk a listara, es
+   *                az ellenorzo mondat ODA megy at (lasd a `queued` agat)
    *   lost      -> a rogzites SEHOL nincs; ezt HIBAKENT mondjuk, nem zolden
    *   rejected  -> a szerver elutasitotta; nem kerul sorba
    */
@@ -402,7 +402,26 @@ export default function NewAssetScreen() {
         return;
       }
       if (outcome.type === "queued") {
-        setQueued(outcome.message);
+        /**
+         * OFFLINE MENTES UTAN IS VISSZALEPUNK A LISTARA (Balazs dontese,
+         * 2026-09-21: "elfogadom"). Eddig a kepernyo ITT MARADT, es egy
+         * borostyan dobozt irt a gomb FOLE, a gorgetheto lap aljan -- Balazs
+         * jelentese szerint ez ugy latszott, mintha "semmi visszajelzes" nem
+         * lenne.
+         *
+         * A LISTARA MEGYUNK, NEM AZ ADATLAPRA, es ez nem mulasztas: terero
+         * nelkul az eszkoznek MEG NINCS azonositoja (azt a szerver adja a
+         * felmenetelkor), tehat az `/assets/[id]` utvonalra nincs hova lepni.
+         * A listan viszont ott all a sor, megjelolve.
+         *
+         * AZ ELLENORZO MONDAT ATMEGY A LISTARA. A doboz eddig azt is
+         * hordozta, hany eszkoz ellen ellenoriztunk es mikori az adat -- ha a
+         * doboz eltunik, ez az informacio nem veszhet el nyom nelkul.
+         */
+        router.replace({
+          pathname: "/assets",
+          params: { varakozoUzenet: outcome.message },
+        });
         return;
       }
       /**
@@ -901,7 +920,6 @@ export default function NewAssetScreen() {
             A rogzites megtortent, csak meg a telefonon var. Ugyanabban a piros
             dobozban a kollega elveszettnek hinne, es ujra felvinne.
           */}
-          {queued ? <Text style={styles.queued}>{queued}</Text> : null}
 
           <Pressable
             disabled={mutation.isPending}
@@ -1011,15 +1029,6 @@ const styles = StyleSheet.create({
   error: {
     color: "#fecaca",
     backgroundColor: "#541b2b",
-    padding: 12,
-    borderRadius: 10,
-  },
-  /** Nem piros: a felvitel megvan, csak var. Lasd a kiiras helyet. */
-  queued: {
-    color: "#e6d5b0",
-    backgroundColor: "#3a2a12",
-    borderColor: "#8a6a2a",
-    borderWidth: 1,
     padding: 12,
     borderRadius: 10,
   },
