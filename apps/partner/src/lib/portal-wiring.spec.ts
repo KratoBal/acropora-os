@@ -30,8 +30,32 @@ const BEALLITASOK = "src/components/settings.tsx";
 const DOKUMENTUMOK = "src/components/document-panel.tsx";
 const BEJELENTO = "src/components/new-ticket.tsx";
 const HIBAJEGY_RESZLET = "src/components/ticket-detail.tsx";
+const ESZKOZ_LISTA = "src/components/reference-lists.tsx";
+const ESZKOZ_RESZLET = "src/components/asset-detail.tsx";
+const ESZKOZ_UTVONAL = "src/app/(portal)/eszkozok/[id]/page.tsx";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
+
+/**
+ * A FÁJL KÓDJA, A KOMMENTEK NÉLKÜL -- ÉS EZ NEM ÓVATOSSÁG.
+ *
+ * MÉRVE 2026-09-21, ebben a körben: a „nem kínálja a QR-cserét" állítás
+ * PIROSRA ment, miközben a lap NEM kínálja. Az ok a saját fejléc-kommentem
+ * volt, ami a `qr/rotate` végpontot IDÉZI, hogy elmagyarázza, miért nincs ott
+ * gomb. Vagyis a jó magyarázat buktatta el a mérést.
+ *
+ * A jó komment épp azokat a szavakat használja, amiket a szöveg-alapú mérés
+ * keres -- a kettő ugyanabból a forrásból jön. Ezért a komment-kiszedés az
+ * ALAPÉRTELMEZÉS a hiány-állításoknál, nem a kivétel.
+ *
+ * A HATÁRA KIMONDVA: egy szöveges KONSTANS (például egy hibaüzenet), ami
+ * idézi a keresett alakot, ugyanúgy találat marad. A kódra mérni több, mint a
+ * kommenteket kiszedni.
+ */
+const kod = (ut: string) =>
+  olvas(ut)
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 describe("a partner portál bekötése", () => {
   it("POZITÍV KONTROLL: mind a három fájl olvasható és nem üres", () => {
@@ -165,5 +189,111 @@ describe("a dokumentumcsomag letöltése", () => {
     const s = olvas(HIBAJEGY_RESZLET);
     assert.match(s, /ticket\.partnerStatus === "COMPLETED"/);
     assert.match(s, /Dokumentumcsomag letöltése/);
+  });
+});
+
+/**
+ * AZ ESZKÖZ-ADATLAP ÉS A KÉT SZŰRŐ (6559eab5).
+ *
+ * Az öt állítás a feladatlap leadási mércéje. Mind a forrás szövegét olvassa,
+ * a fenti fejléc határával együtt: azt mérik, hogy a felület a helyes hívásokat
+ * írja le, NEM azt, hogy a partner mit lát a képernyőn.
+ */
+describe("a partner eszköz-adatlapja és szűrői", () => {
+  it("POZITÍV KONTROLL: mind a három új fájl olvasható és nem üres", () => {
+    for (const ut of [ESZKOZ_LISTA, ESZKOZ_RESZLET, ESZKOZ_UTVONAL])
+      assert.ok(olvas(ut).length > 200, `${ut}: üres vagy gyanúsan rövid`);
+  });
+
+  /**
+   * 1. A NÉGY ÍRÁSI MŰVELET NINCS AZ ADATLAPON -- MIND A NÉGY KÜLÖN NÉVVEL.
+   *
+   * A negatív állítás mellé a POZITÍV KONTROLL az 5. pont (a megmaradt
+   * műveletek): enélkül ez a négy akkor is zöld lenne, ha az egész lap üres.
+   */
+  it("az adatlap nem kínálja a szerkesztést", () => {
+    const s = kod(ESZKOZ_RESZLET);
+    assert.ok(!/partnerApi\.updateAsset|method: "PATCH"/.test(s));
+  });
+
+  it("az adatlap nem kínálja a QR-cserét", () => {
+    assert.ok(!/qr\/rotate/.test(kod(ESZKOZ_RESZLET)));
+  });
+
+  it("az adatlap nem kínálja a kivezetést", () => {
+    assert.ok(!/archivedAt:|archiveAsset/.test(kod(ESZKOZ_RESZLET)));
+  });
+
+  it("az adatlap nem kínálja a végleges törlést", () => {
+    assert.ok(!/method: "DELETE"|deleteAsset/.test(kod(ESZKOZ_RESZLET)));
+  });
+
+  /**
+   * 2. IDEGEN AZONOSÍTÓRA NINCS KLIENS-OLDALI SZŰRÉS, mert a hatókört a
+   * SZERVER szabja. Egy `customerId` a hívásban azt sugallná, hogy a
+   * láthatóságot a hívó dönti el -- és a portál API-rétegének fejléce épp ezt
+   * a hibát írja le egy korábbi körből.
+   */
+  it("az adatlap-hívás nem visz partner-azonosítót", () => {
+    const s = kod(KLIENS);
+    const hivas = s.match(/asset: \(id: string\) =>[\s\S]{0,200}?\),/);
+    assert.ok(hivas, "nem találom az adatlap hívását");
+    assert.ok(!/customerId|ownerId|ownerType/.test(hivas[0]));
+  });
+
+  /**
+   * 3. A KERESŐ A SZERVERNEK ADJA ÁT A SZÓT. A lista lapozott: egy betöltött
+   * oldal fölötti szűrés a lapozás első napján csendben hiányos lenne.
+   */
+  it("a kereső a szerver hívásába kerül, nem a betöltött lista fölé", () => {
+    assert.match(
+      olvas(KLIENS),
+      /query\.set\("search", input\.search\.trim\(\)\)/,
+    );
+    /* ES A LISTA NEM SZUR HELYBEN: nincs `filter` a betoltott tetelek folott. */
+    const lista = kod(ESZKOZ_LISTA);
+    assert.ok(
+      !/data\.items\.filter\(/.test(lista),
+      "a lista a betöltött tételek fölött szűr",
+    );
+  });
+
+  /**
+   * 4. A HELYSZÍN-SZŰRŐ AZ AZONOSÍTÓT KÜLDI, ÉS ÜRES VÁLASZTÁSNÁL NEM KÜLD
+   * PARAMÉTERT. Egy üres sztring NEM ugyanaz: a szerver egy nem létező
+   * egységre futtatná a részfa-kibontást.
+   */
+  it("a helyszín-szűrő üres választásnál nem küld paramétert", () => {
+    assert.match(
+      olvas(KLIENS),
+      /if \(input\?\.departmentId\) query\.set\("departmentId", input\.departmentId\)/,
+    );
+    assert.match(
+      olvas(ESZKOZ_LISTA),
+      /\.\.\.\(helyszin \? \{ departmentId: helyszin \} : \{\}\)/,
+    );
+  });
+
+  /**
+   * 5. A POZITÍV KONTROLL: a partner megmaradt műveletei ott vannak. Enélkül a
+   * fenti négy negatív állítás akkor is zöld lenne, ha mindent letiltanánk.
+   */
+  it("a partner megmaradt műveletei megvannak", () => {
+    /* hibajegy nyitasa */
+    assert.match(olvas(KLIENS), /createTicket: \(input: \{/);
+    /* csatolas a sajat jegyhez */
+    assert.match(olvas(KLIENS), /uploadTicketDocument: \(/);
+    /* munkalap alairasa */
+    assert.match(olvas(KLIENS), /signWorksheet|worksheetSigners/);
+    /* es az eszkoz-lapon a csatolas, amire a partnernek VAN joga */
+    assert.match(olvas(ESZKOZ_RESZLET), /partnerApi\.uploadAssetDocument\(/);
+  });
+
+  /**
+   * ÉS A LISTÁRÓL ODA IS JUT: a kártya hivatkozás, nem `article`. A hibajegy
+   * és a munkalap listája ezt a mintát követi, és a feladatlap is ezt kérte.
+   */
+  it("a lista kártyája az adatlapra visz", () => {
+    assert.match(olvas(ESZKOZ_LISTA), /href=\{`\/eszkozok\/\$\{asset\.id\}`\}/);
   });
 });

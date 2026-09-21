@@ -83,10 +83,35 @@ export function Assets() {
     ReturnType<typeof partnerApi.assets>
   > | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [kereses, setKereses] = useState("");
+  const [helyszin, setHelyszin] = useState("");
+  const [helyszinek, setHelyszinek] = useState<
+    { id: string; name: string; code: string }[]
+  >([]);
+
+  /*
+    A HELYSZINEK UGYANABBOL A FORRASBOL JONNEK, mint a `Helyszinek` lap. Egy
+    masodik forras ket kulonbozo listat adna ugyanarra a kerdesre.
+  */
   useEffect(() => {
     if (!user?.customerId) return;
     void partnerApi
-      .assets()
+      .departments(user.customerId)
+      .then((valasz) => setHelyszinek(valasz.items))
+      .catch(() => setHelyszinek([]));
+  }, [user?.customerId]);
+
+  useEffect(() => {
+    if (!user?.customerId) return;
+    /*
+      A SZURES A SZERVEREN TORTENIK. A lista lapozott, tehat a betoltott
+      oldal folotti szures a lapozas elso napjan csendben hianyos lenne.
+    */
+    void partnerApi
+      .assets({
+        ...(helyszin ? { departmentId: helyszin } : {}),
+        ...(kereses.trim() ? { search: kereses } : {}),
+      })
       .then(setData)
       .catch((cause) =>
         setError(
@@ -95,21 +120,57 @@ export function Assets() {
             : "Az eszközök nem tölthetők be.",
         ),
       );
-  }, [user?.customerId]);
+  }, [user?.customerId, helyszin, kereses]);
   return (
     <section>
       <header className="page-header">
         <div>
           <p className="eyebrow">SAJÁT ADATOK</p>
           <h1>Eszközök</h1>
-          <p>A cégéhez tartozó eszközök csak olvasható nézetben.</p>
+          <p>
+            A cégéhez tartozó eszközök. Kattintson egy eszközre az adatlapjáért.
+          </p>
         </div>
       </header>
+      {/*
+        A KET SZURO EGYUTT MEGY FEL A SZERVERNEK. A helyszin-valasztasnal a
+        szerver a RESZFAT is beleveszi, tehat egy nagyobb helyszint valasztva
+        az alatta allo egysegek eszkozei is jonnek -- ez szandekos.
+      */}
+      <div className="filter-bar">
+        <label>
+          <span>Keresés</span>
+          <input
+            type="search"
+            value={kereses}
+            onChange={(esemeny) => setKereses(esemeny.target.value)}
+            placeholder="Név, eszközszám, gyártó"
+          />
+        </label>
+        <label>
+          <span>Helyszín</span>
+          <select
+            value={helyszin}
+            onChange={(esemeny) => setHelyszin(esemeny.target.value)}
+          >
+            <option value="">Mind</option>
+            {helyszinek.map((egyseg) => (
+              <option key={egyseg.id} value={egyseg.id}>
+                {egyseg.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       {error ? <Message tone="error" text={error} /> : null}
       {data?.items.length ? (
         <div className="card-list">
           {data.items.map((asset) => (
-            <article className="reference-card" key={asset.id}>
+            <Link
+              className="reference-card"
+              key={asset.id}
+              href={`/eszkozok/${asset.id}`}
+            >
               <div>
                 <h2>{asset.name}</h2>
                 <p>
@@ -123,7 +184,7 @@ export function Assets() {
                 </span>
                 <span className="status neutral">{asset.status}</span>
               </div>
-            </article>
+            </Link>
           ))}
         </div>
       ) : (
