@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+/**
+ * A BELSOS KERO. A harom sor-vegpont 2026-09-21 ota a kerobol vezeti le a
+ * hatokort: a `SERVICE_MANAGE` jog NEM zarja ki a partnert.
+ */
+const BELSOS_KERO = {
+  id: "user-1",
+  customerId: null,
+  supplierId: null,
+} as never;
+
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
@@ -140,7 +150,7 @@ describe("worksheet line endpoints", () => {
         }),
       );
 
-      await service.addLine("worksheet-1", lineDto());
+      await service.addLine("worksheet-1", lineDto(), BELSOS_KERO);
 
       assert.equal(
         (received as { versionId: string }).versionId,
@@ -160,7 +170,7 @@ describe("worksheet line endpoints", () => {
         }),
       );
 
-      await service.addLine("worksheet-1", lineDto());
+      await service.addLine("worksheet-1", lineDto(), BELSOS_KERO);
 
       assert.equal(received?.line.netAmount.toString(), "30000");
     });
@@ -179,7 +189,11 @@ describe("worksheet line endpoints", () => {
         }),
       );
 
-      await service.addLine("worksheet-1", lineDto({ id: "line-from-phone" }));
+      await service.addLine(
+        "worksheet-1",
+        lineDto({ id: "line-from-phone" }),
+        BELSOS_KERO,
+      );
 
       assert.equal(received?.lineId, "line-from-phone");
     });
@@ -195,7 +209,7 @@ describe("worksheet line endpoints", () => {
         }),
       );
 
-      await service.addLine("worksheet-1", lineDto());
+      await service.addLine("worksheet-1", lineDto(), BELSOS_KERO);
 
       assert.ok(received?.lineId);
       assert.notEqual(received?.lineId, "");
@@ -211,7 +225,11 @@ describe("worksheet line endpoints", () => {
         }),
       );
 
-      await service.addLine("worksheet-1", lineDto({ id: "line-1" }));
+      await service.addLine(
+        "worksheet-1",
+        lineDto({ id: "line-1" }),
+        BELSOS_KERO,
+      );
     });
 
     it("refuses to add a line to a closed sheet", async () => {
@@ -223,7 +241,7 @@ describe("worksheet line endpoints", () => {
       );
 
       await assert.rejects(
-        () => service.addLine("worksheet-1", lineDto()),
+        () => service.addLine("worksheet-1", lineDto(), BELSOS_KERO),
         ConflictException,
       );
     });
@@ -238,7 +256,7 @@ describe("worksheet line endpoints", () => {
       );
 
       await assert.rejects(
-        () => service.addLine("worksheet-1", lineDto()),
+        () => service.addLine("worksheet-1", lineDto(), BELSOS_KERO),
         ConflictException,
       );
     });
@@ -256,7 +274,7 @@ describe("worksheet line endpoints", () => {
         }),
       );
 
-      await service.updateLine("worksheet-1", "line-9", lineDto());
+      await service.updateLine("worksheet-1", "line-9", lineDto(), BELSOS_KERO);
 
       assert.equal(received?.lineId, "line-9");
     });
@@ -271,7 +289,8 @@ describe("worksheet line endpoints", () => {
       );
 
       await assert.rejects(
-        () => service.updateLine("worksheet-1", "missing", lineDto()),
+        () =>
+          service.updateLine("worksheet-1", "missing", lineDto(), BELSOS_KERO),
         NotFoundException,
       );
     });
@@ -289,7 +308,7 @@ describe("worksheet line endpoints", () => {
         }),
       );
 
-      await service.removeLine("worksheet-1", "line-9");
+      await service.removeLine("worksheet-1", "line-9", BELSOS_KERO);
 
       assert.equal(received?.lineId, "line-9");
     });
@@ -307,7 +326,7 @@ describe("worksheet line endpoints", () => {
         }),
       );
 
-      await service.removeLine("worksheet-1", "line-9");
+      await service.removeLine("worksheet-1", "line-9", BELSOS_KERO);
     });
 
     it("refuses to remove from a closed sheet", async () => {
@@ -319,7 +338,7 @@ describe("worksheet line endpoints", () => {
       );
 
       await assert.rejects(
-        () => service.removeLine("worksheet-1", "line-9"),
+        () => service.removeLine("worksheet-1", "line-9", BELSOS_KERO),
         ConflictException,
       );
     });

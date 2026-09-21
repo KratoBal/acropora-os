@@ -386,9 +386,16 @@ export class WorksheetsService {
   }
 
   async createDepartment(
+    actor: AuthenticatedUser,
     customerId: string,
     input: CreateWorksheetDepartmentDto,
   ) {
+    /*
+      A HATOKOR A KEROBOL JON. Az alegyseg a vevo torzsadata: egy partner-fiok
+      BARMELYIK vevo ala vehetett fel alegyseget, mert a `customerId` az
+      UTVONALBOL jott, es a kero sehonnan.
+    */
+    requireInternalWriter(actor, "Alegység létrehozása");
     await this.requireCustomer(customerId);
     try {
       return await this.repository.createDepartment(customerId, input);
@@ -405,7 +412,26 @@ export class WorksheetsService {
     }
   }
 
-  async setPartnerCode(customerId: string, input: SetWorksheetPartnerCodeDto) {
+  async setPartnerCode(
+    actor: AuthenticatedUser,
+    customerId: string,
+    input: SetWorksheetPartnerCodeDto,
+  ) {
+    /*
+      A JOG HELYES, A HATOKOR HIANYZOTT -- es ezt acrobot merese dontotte el
+      (2026-09-21), nem jogkor-valtas.
+
+      A 866fd6cd kartya ugy allt, mintha a kerdes az lenne, hogy
+      `SERVICE_MANAGE` vagy `PARTNERS_MANAGE`. A ket kor nem esik egybe: a
+      `SERVICE` szerep SZANDEKOSAN nem kap `PARTNERS_MANAGE` jogot ("a
+      szervizesek csak lassak egyelore", 2026-08-21). Ha atallnank ra, a SAJAT
+      szerelo kollegainktol vennenk el -- es a mezo nelkul a munkalap LEZARASA
+      sem megy.
+
+      A mezo a munkalap miatt letezik, nem partner-torzsadat. Tehat ugyanaz az
+      eset, mint a masik negy: `customerId` az utvonalbol, kero SEHOL.
+    */
+    requireInternalWriter(actor, "A partnerkód beállítása");
     await this.requireCustomer(customerId);
     const partnerCode = input.partnerCode.trim().toUpperCase();
     try {
@@ -479,7 +505,18 @@ export class WorksheetsService {
     return this.repository.selectablePartners(scope);
   }
 
-  async continueFrom(id: string, actorUserId: string) {
+  async continueFrom(id: string, actor: AuthenticatedUser) {
+    const actorUserId = actor.id;
+    /*
+      A KAPU A SZOLGALTATASBAN ALL, ES EZ MERESEN NYUGSZIK: a
+      `repository.continueFrom` EGYETLEN hivoja ez a metodus (merve 2026-09-21).
+      Egy tarolo-szintu szuro itt nem adna tobbet, csak egy masodik helyet, ahol
+      ugyanaz a szabaly allhat -- es ket helyen allo szabaly elcsuszik.
+
+      HA VALAHA MASIK HIVO IS LESZ, a kapu helye ujra kerdes: akkor a tarolo az
+      egyetlen pont, amit mindenki erint.
+    */
+    requireInternalWriter(actor, "A munkalap folytatása");
     const result = await this.repository.continueFrom({
       worksheetId: id,
       actorUserId,
@@ -622,8 +659,16 @@ export class WorksheetsService {
 
   async create(
     input: CreateWorksheetDto,
-    actorUserId: string,
+    actor: AuthenticatedUser,
   ): Promise<WorksheetDetail> {
+    const actorUserId = actor.id;
+    /*
+      A `requireCustomer` LETEZEST ellenoriz, nem hatokort -- es a kettot konnyu
+      osszekeverni, mert az elso is "ellenorzesnek" nez ki. Enelkul egy
+      partner-fiok BARMELYIK vevore nyithatott lapot: a `customerId` a TORZSBOL
+      jott, es a kero sehonnan.
+    */
+    requireInternalWriter(actor, "Munkalap létrehozása");
     await this.requireCustomer(input.customerId);
     await this.requireDepartment(input.departmentId, input.customerId);
     const serviceJobId = input.serviceJobId?.trim() || null;
@@ -862,9 +907,15 @@ export class WorksheetsService {
 
   async close(
     id: string,
-    actorUserId: string,
+    actor: AuthenticatedUser,
     now: Date = new Date(),
   ): Promise<WorksheetDetail> {
+    const actorUserId = actor.id;
+    /*
+      Ugyanaz, mint a `continueFrom`-nal: a `repository.close` EGYETLEN hivoja
+      ez a metodus (merve 2026-09-21), tehat a szolgaltatas-szintu kapu teljes.
+    */
+    requireInternalWriter(actor, "A munkalap lezárása");
     const result = await this.repository.close(id, actorUserId, now);
     if (!result.ok) throw closeFailure(result.reason);
     return this.detailAfterWrite(id);
@@ -1141,8 +1192,9 @@ export class WorksheetsService {
   async addLine(
     id: string,
     input: CreateWorksheetLineDto,
+    actor: AuthenticatedUser,
   ): Promise<WorksheetDetail> {
-    const versionId = await this.requireDraftVersionId(id);
+    const versionId = await this.requireDraftVersionId(id, actor);
     const line = this.normalizeLine(input);
     await this.requireLineAsset(line);
 
@@ -1159,8 +1211,9 @@ export class WorksheetsService {
     id: string,
     lineId: string,
     input: UpdateWorksheetLineDto,
+    actor: AuthenticatedUser,
   ): Promise<WorksheetDetail> {
-    const versionId = await this.requireDraftVersionId(id);
+    const versionId = await this.requireDraftVersionId(id, actor);
     const line = this.normalizeLine(input);
     await this.requireLineAsset(line);
 
@@ -1173,8 +1226,12 @@ export class WorksheetsService {
     return this.detailAfterWrite(id);
   }
 
-  async removeLine(id: string, lineId: string): Promise<WorksheetDetail> {
-    const versionId = await this.requireDraftVersionId(id);
+  async removeLine(
+    id: string,
+    lineId: string,
+    actor: AuthenticatedUser,
+  ): Promise<WorksheetDetail> {
+    const versionId = await this.requireDraftVersionId(id, actor);
     const result = await this.repository.removeLine({ versionId, lineId });
     this.assertLineWritten(result);
     return this.detailAfterWrite(id);
@@ -1480,8 +1537,27 @@ export class WorksheetsService {
    * veszitene el egy jegyzetet. Az engedes LATSZIK, mert a bejegyzesen ott az
    * idopont -- az alairas utani darabok utana allnak a listaban.
    */
-  async addEntry(id: string, body: string, actorUserId: string) {
-    await this.requireWorksheet(id, { kind: "internal" });
+  async addEntry(id: string, body: string, actor: AuthenticatedUser) {
+    const actorUserId = actor.id;
+    /*
+      A MUNKANAPLO BELSOS -- ES EZT KET FUGGETLEN JEL MONDJA, NEM EGY.
+
+      1. A `:id/entries` vegpont sajat megjegyzese szerint a bejegyzes a MI
+         munkanaplonk.
+      2. A PARTNER-PORTAL nem is nyul hozza, es ezt nem megfigyeles tartja:
+         `apps/partner/src/lib/portal-wiring.spec.ts` ALLITJA, hogy sem a lap,
+         sem a kliens nem hiv `/entries` vegpontot.
+
+      A SZERZOSEG-ELLENORZES MELLE KERUL, NEM HELYETTE. A szerzoseg jo kerdesre
+      valaszol (a sajat sorat szerkessze az ember), csak eddig EGYEDUL allt -- es
+      a partner ATFERT alatta, mert a jegy nyitojakent o is "szerzo".
+
+      MITOL AVUL EL (acrobot kikotese, 2026-09-21): ez a dontes azon all, hogy a
+      partner-portal ma nem ir munkanaplot. Ha a ticket.acropora.hu oldal valaha
+      ir, ez UJRA dontes lesz -- nem marad csendben ervenyes.
+    */
+    const scope = requireInternalWriter(actor, "A munkanapló írása");
+    await this.requireWorksheet(id, scope);
     await this.repository.addEntry({
       worksheetId: id,
       body: body.trim(),
@@ -1501,8 +1577,27 @@ export class WorksheetsService {
     id: string,
     entryId: string,
     body: string,
-    actorUserId: string,
+    actor: AuthenticatedUser,
   ) {
+    const actorUserId = actor.id;
+    /*
+      A MUNKANAPLO BELSOS -- ES EZT KET FUGGETLEN JEL MONDJA, NEM EGY.
+
+      1. A `:id/entries` vegpont sajat megjegyzese szerint a bejegyzes a MI
+         munkanaplonk.
+      2. A PARTNER-PORTAL nem is nyul hozza, es ezt nem megfigyeles tartja:
+         `apps/partner/src/lib/portal-wiring.spec.ts` ALLITJA, hogy sem a lap,
+         sem a kliens nem hiv `/entries` vegpontot.
+
+      A SZERZOSEG-ELLENORZES MELLE KERUL, NEM HELYETTE. A szerzoseg jo kerdesre
+      valaszol (a sajat sorat szerkessze az ember), csak eddig EGYEDUL allt -- es
+      a partner ATFERT alatta, mert a jegy nyitojakent o is "szerzo".
+
+      MITOL AVUL EL (acrobot kikotese, 2026-09-21): ez a dontes azon all, hogy a
+      partner-portal ma nem ir munkanaplot. Ha a ticket.acropora.hu oldal valaha
+      ir, ez UJRA dontes lesz -- nem marad csendben ervenyes.
+    */
+    requireInternalWriter(actor, "A munkanapló szerkesztése");
     const data = await this.repository.entries(id);
     if (!data) throw new NotFoundException("A munkalap nem található.");
     const context = {
@@ -1530,23 +1625,23 @@ export class WorksheetsService {
     return this.entries(id, actorUserId);
   }
 
-  private async requireDraftVersionId(id: string): Promise<string> {
-    const worksheet = await this.requireWorksheet(id, {
-      /*
-        ITT MA NINCS HATOKOR-ELLENORZES, ES EZ NEM DONTES, HANEM NYITOTT TETEL.
+  private async requireDraftVersionId(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<string> {
+    /*
+      A HATOKOR A KEROBOL JON -- 2026-09-21 ota.
 
-        A korabbi komment azt allitotta, hogy a `SERVICE_MANAGE` jog kizarja a
-        partnert. NEM zarja ki: a `PARTNER_SERVICE` szerep viseli a jogot. A
-        beegetett internal hatokor pedig nem szukit -- `rowBelongsToScope`
-        internal eseten feltetel nelkul igazat ad.
-
-        A sor- es bejegyzes-vegpontok javitasa NEM ebben a korben megy (acrobot
-        dontese, 2026-09-21: a harom mert vegpont eloszor, a tobbi kulon, mert
-        mindegyiknel kulon kell megnezni, mit tor el a szukites). A 4f1f92db
-        kartya tartja szamon oket, a mert listaval egyutt.
-      */
-      kind: "internal",
-    });
+      Itt allt korabban, hogy a `SERVICE_MANAGE` jog kizarja a partnert. NEM
+      zarja ki: a `PARTNER_SERVICE` szerep viseli a jogot. Ez a fuggveny HAROM
+      sor-vegpont kozos kapuja (`addLine`, `updateLine`, `removeLine`), tehat
+      egy helyen zarodik mind a harom.
+    */
+    const scope = requireInternalWriter(
+      actor,
+      "A munkalap tételsorainak írása",
+    );
+    const worksheet = await this.requireWorksheet(id, scope);
     const current = worksheet.versions[0];
     if (!current) throw new NotFoundException("A munkalap nem található.");
     if (current.status !== "DRAFT") {

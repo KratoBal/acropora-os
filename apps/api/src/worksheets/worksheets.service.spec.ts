@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+/** A BELSOS KERO -- a partnerkod-allitas 2026-09-21 ota a kerobol szurkit. */
+const BELSOS_KERO = {
+  id: "user-1",
+  customerId: null,
+  supplierId: null,
+} as never;
+
 import {
   BadRequestException,
   ConflictException,
@@ -224,7 +231,7 @@ describe("WorksheetsService", () => {
       }),
     );
     await assert.rejects(
-      service.close("worksheet-1", "user-1"),
+      service.close("worksheet-1", BELSOS_KERO),
       (error: unknown) =>
         error instanceof BadRequestException &&
         error.message.includes("rövidítés"),
@@ -236,7 +243,7 @@ describe("WorksheetsService", () => {
       repository({ close: async () => ({ ok: false, reason: "NO_LINES" }) }),
     );
     await assert.rejects(
-      service.close("worksheet-1", "user-1"),
+      service.close("worksheet-1", BELSOS_KERO),
       BadRequestException,
     );
   });
@@ -313,7 +320,7 @@ describe("WorksheetsService", () => {
       }),
     );
     await assert.rejects(
-      service.create(contentDto(), "user-1"),
+      service.create(contentDto(), BELSOS_KERO),
       (error: unknown) =>
         error instanceof BadRequestException &&
         error.message.includes("alegység"),
@@ -350,7 +357,7 @@ describe("WorksheetsService", () => {
     );
 
     await assert.rejects(
-      service.create(contentDto(), "user-1"),
+      service.create(contentDto(), BELSOS_KERO),
       (error: unknown) =>
         error instanceof BadRequestException &&
         error.message.includes("nem aktív"),
@@ -369,7 +376,7 @@ describe("WorksheetsService", () => {
       repository({ customer: async () => null }),
     );
     await assert.rejects(
-      service.create(contentDto(), "user-1"),
+      service.create(contentDto(), BELSOS_KERO),
       (error: unknown) =>
         error instanceof NotFoundException &&
         error.message.includes("partner") &&
@@ -384,7 +391,7 @@ describe("WorksheetsService", () => {
       repository({ existingAssetIds: async () => new Set<string>() }),
     );
     await assert.rejects(
-      service.create(input, "user-1"),
+      service.create(input, BELSOS_KERO),
       (error: unknown) =>
         error instanceof BadRequestException &&
         error.message.includes("eszköz"),
@@ -510,7 +517,7 @@ describe("WorksheetsService", () => {
         signerName: "Kovács Béla",
         note: "A 3. sor mennyisége nem egyezik a leszállítottal.",
       },
-      "user-1",
+      BELSOS_KERO,
     );
 
     assert.equal(
@@ -531,7 +538,7 @@ describe("WorksheetsService", () => {
     await service.sign(
       "worksheet-1",
       { decision: "ACCEPTED", signerName: "Kovács Béla" },
-      "user-1",
+      BELSOS_KERO,
     );
   });
 
@@ -589,7 +596,9 @@ describe("WorksheetsService", () => {
       }),
     );
     await assert.rejects(
-      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      service.setPartnerCode(BELSOS_KERO, "customer-1", {
+        partnerCode: "FANK",
+      }),
       (error: unknown) =>
         error instanceof ConflictException &&
         error.message.includes("vevő") &&
@@ -606,7 +615,9 @@ describe("WorksheetsService", () => {
       }),
     );
     await assert.rejects(
-      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      service.setPartnerCode(BELSOS_KERO, "customer-1", {
+        partnerCode: "FANK",
+      }),
       (error: unknown) =>
         error instanceof ConflictException &&
         error.message.includes("szállító") &&
@@ -641,7 +652,9 @@ describe("WorksheetsService", () => {
       }),
     );
     await assert.rejects(
-      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      service.setPartnerCode(BELSOS_KERO, "customer-1", {
+        partnerCode: "FANK",
+      }),
       (error: unknown) =>
         error instanceof ConflictException &&
         error.message.includes("Válassz másikat") &&
@@ -660,7 +673,9 @@ describe("WorksheetsService", () => {
       }),
     );
     await assert.rejects(
-      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      service.setPartnerCode(BELSOS_KERO, "customer-1", {
+        partnerCode: "FANK",
+      }),
       (error: unknown) =>
         error instanceof ConflictException &&
         error.message.includes("Fankó Kft.") &&
@@ -689,7 +704,7 @@ describe("WorksheetsService.create és a felelősök", () => {
 
     await service.create(
       { ...contentDto(), assigneeIds: ["user-7", "user-8"] },
-      "user-1",
+      BELSOS_KERO,
     );
 
     assert.deepEqual((received as { assigneeIds?: string[] }).assigneeIds, [
@@ -709,7 +724,7 @@ describe("WorksheetsService.create és a felelősök", () => {
       }),
     );
 
-    await service.create(contentDto(), "user-1");
+    await service.create(contentDto(), BELSOS_KERO);
 
     assert.deepEqual((received as { assigneeIds?: string[] }).assigneeIds, []);
   });
@@ -733,7 +748,10 @@ describe("WorksheetsService.create és a felelősök", () => {
       }),
     );
 
-    await service.create({ ...contentDto(), serviceJobId: "job-1" }, "user-1");
+    await service.create(
+      { ...contentDto(), serviceJobId: "job-1" },
+      BELSOS_KERO,
+    );
 
     assert.equal(
       (received as { serviceJobId?: string | null }).serviceJobId,
@@ -761,7 +779,7 @@ describe("WorksheetsService.create és a felelősök", () => {
 
     await service.create(
       { ...contentDto(), clientOperationId: "worksheet-create:abc:123" },
-      "user-1",
+      BELSOS_KERO,
     );
 
     assert.equal(
@@ -788,7 +806,7 @@ describe("WorksheetsService.create és a felelősök", () => {
       }),
     );
 
-    await service.create(contentDto(), "user-1");
+    await service.create(contentDto(), BELSOS_KERO);
 
     assert.equal(
       (received as { clientOperationId?: string }).clientOperationId,
@@ -814,7 +832,7 @@ describe("WorksheetsService.create és a felelősök", () => {
       }),
     );
 
-    await service.create(contentDto(), "user-1");
+    await service.create(contentDto(), BELSOS_KERO);
 
     assert.equal(
       (received as { serviceJobId?: string | null }).serviceJobId,
@@ -841,7 +859,10 @@ describe("WorksheetsService.create és a felelősök", () => {
     );
 
     await assert.rejects(
-      service.create({ ...contentDto(), serviceJobId: "hianyzik" }, "user-1"),
+      service.create(
+        { ...contentDto(), serviceJobId: "hianyzik" },
+        BELSOS_KERO,
+      ),
       /hibajegy nem található/,
     );
     assert.equal(created, false);
@@ -860,7 +881,7 @@ describe("WorksheetsService.create és a felelősök", () => {
     );
 
     await assert.rejects(
-      service.create({ ...contentDto(), serviceJobId: "job-1" }, "user-1"),
+      service.create({ ...contentDto(), serviceJobId: "job-1" }, BELSOS_KERO),
       /még nincs partner/,
     );
     assert.equal(created, false);
@@ -879,7 +900,7 @@ describe("WorksheetsService.create és a felelősök", () => {
     );
 
     await assert.rejects(
-      service.create({ ...contentDto(), serviceJobId: "job-1" }, "user-1"),
+      service.create({ ...contentDto(), serviceJobId: "job-1" }, BELSOS_KERO),
       /nem egyezik a hibajegyével/,
     );
     assert.equal(created, false);
@@ -905,7 +926,7 @@ describe("WorksheetsService.create és a felelősök", () => {
     await assert.rejects(
       service.create(
         { ...contentDto(), assigneeIds: ["nem-letezik"] },
-        "user-1",
+        BELSOS_KERO,
       ),
       BadRequestException,
     );
@@ -930,7 +951,7 @@ describe("WorksheetsService.create és a felelősök", () => {
 
     await service.create(
       { ...contentDto(), assigneeIds: ["user-7"] },
-      "user-1",
+      BELSOS_KERO,
     );
 
     assert.equal(notified.length, 1);
@@ -945,7 +966,7 @@ describe("WorksheetsService.create és a felelősök", () => {
       },
     } as never);
 
-    await service.create(contentDto(), "user-1");
+    await service.create(contentDto(), BELSOS_KERO);
 
     assert.equal(calls, 0);
   });
