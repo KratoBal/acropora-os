@@ -178,8 +178,12 @@ export class WorksheetsController {
 
   @Patch(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  updateDraft(@Param("id") id: string, @Body() input: UpdateWorksheetDraftDto) {
-    return this.service.updateDraft(id, input);
+  updateDraft(
+    @Param("id") id: string,
+    @Body() input: UpdateWorksheetDraftDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.updateDraft(id, input, user);
   }
 
   /**
@@ -276,7 +280,12 @@ export class WorksheetsController {
     @Body() input: SetWorksheetAssigneesDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.setAssignees(id, input, user.id);
+    /*
+      A TELJES KERO MEGY AT, NEM CSAK AZ AZONOSITOJA. Ez a vegpont eddig is
+      megkapta a felhasznalot, de CSAK aktorkent hasznalta -- a hatokor
+      leszarmaztatasahoz a teljes sor kell.
+    */
+    return this.service.setAssignees(id, input, user);
   }
 
   /**
@@ -291,8 +300,12 @@ export class WorksheetsController {
    */
   @Put(":id/assets")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  setAssets(@Param("id") id: string, @Body() input: SetWorksheetAssetsDto) {
-    return this.service.setAssets(id, input);
+  setAssets(
+    @Param("id") id: string,
+    @Body() input: SetWorksheetAssetsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setAssets(id, input, user);
   }
 
   /**

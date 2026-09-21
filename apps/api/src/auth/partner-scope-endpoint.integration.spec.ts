@@ -4,7 +4,7 @@ import { after, before, describe, it } from "node:test";
 
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 
-import { NotFoundException } from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
@@ -735,6 +735,94 @@ describe(
         await assert.rejects(
           () => worksheets.detail(worksheetB, asCustomerA),
           NotFoundException,
+        );
+      });
+    });
+
+    /**
+     * A HAROM IRO VEGPONT: PARTNERKENT EGYIK SEM MEGY -- ES A PAR A BIZONYITEK.
+     *
+     * === A MERT RES (2026-09-21, a mai fo agon) ===
+     *
+     * Ot kod-megjegyzes allitotta, hogy ezek a vegpontok `SERVICE_MANAGE` jog
+     * alatt allnak, "amit partner-oldali felhasznalo nem kap meg". A masodik
+     * fele hamis: a `PARTNER_SERVICE` szerep VISELI a jogot. A harom vegpont
+     * pedig beegetett `{ kind: "internal" }` hatokorrel hivott, ami
+     * `rowBelongsToScope`-ban FELTETEL NELKUL igazat ad.
+     *
+     * Kettonek a metodusa a kerot MEG SEM KAPTA -- tehat nem is tudott
+     * hatokort szukiteni.
+     *
+     * === MIERT PAR, ES NEM EGY ALLITAS (acrobot kikotese) ===
+     *
+     * Egy elutasitas HAROM okbol lehet piros, es kivulrol mind egyforma: a
+     * kero be sem tud lepni, a keres el sem jut idaig, vagy TENYLEG a hianyzo
+     * hatokor miatt. Ezert all mellette az OLVASO ag: ugyanaz a partner,
+     * ugyanabban a korben, a SAJAT lapjat betolti.
+     *
+     * Ha az iro ag elutasit es az olvaso ag megy, akkor az elutasitas oka
+     * bizonyitottan a hatokor -- nem a hitelesites.
+     *
+     * ES A JAVITAS TULLOVESET IS EZ A PAR FOGJA MEG: ha valaki az olvaso agat
+     * is elvagja, ez a masodik allitas azonnal pirosodik.
+     */
+    describe("a három író végpont partnerként nem megy", () => {
+      it("KONTROLL: ugyanaz a partner a SAJÁT lapját betölti", async () => {
+        const detail = await worksheets.detail(worksheetA, asCustomerA);
+        assert.equal(detail.id, worksheetA);
+      });
+
+      it("a saját lapját sem szerkesztheti", async () => {
+        await assert.rejects(
+          () =>
+            worksheets.updateDraft(
+              worksheetA,
+              { subject: "Partner írta" } as never,
+              asCustomerA,
+            ),
+          ForbiddenException,
+        );
+      });
+
+      it("felelőst sem állíthat be, a saját lapján sem", async () => {
+        await assert.rejects(
+          () =>
+            worksheets.setAssignees(
+              worksheetA,
+              { userIds: [] } as never,
+              asCustomerA,
+            ),
+          ForbiddenException,
+        );
+      });
+
+      it("eszközt sem köthet rá, a saját lapján sem", async () => {
+        await assert.rejects(
+          () =>
+            worksheets.setAssets(
+              worksheetA,
+              { assetIds: [] } as never,
+              asCustomerA,
+            ),
+          ForbiddenException,
+        );
+      });
+
+      /**
+       * ES AZ IDEGEN LAP UGYANIGY -- de MAS okbol, es ezert kulon all: itt a
+       * kapu MAR a hatokornel elvag, tehat a 404-ig el sem jutunk. Ha valaha
+       * valaki a partnert beengedne az iro utra, EZ az allitas mondja meg,
+       * hogy az idegen lap is nyitva allna.
+       */
+      it("idegen lapot sem szerkeszthet", async () => {
+        await assert.rejects(
+          () =>
+            worksheets.updateDraft(
+              worksheetB,
+              { subject: "Idegen lap" } as never,
+              asCustomerA,
+            ),
+          ForbiddenException,
         );
       });
     });

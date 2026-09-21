@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+const BELSOS_KERO = {
+  id: "user-1",
+  customerId: null,
+  supplierId: null,
+} as never;
+
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -343,9 +349,11 @@ describe(
         actorUserId,
       );
 
-      await service.setAssets(detail.id, {
-        assetIds: [eszkozAlcsomoponton],
-      });
+      await service.setAssets(
+        detail.id,
+        { assetIds: [eszkozAlcsomoponton] },
+        BELSOS_KERO,
+      );
 
       assert.deepEqual(await assetIdsOf(detail.id), [eszkozAlcsomoponton]);
     });
@@ -363,7 +371,12 @@ describe(
       );
 
       await assert.rejects(
-        () => service.setAssets(detail.id, { assetIds: [idegenEszkoz] }),
+        () =>
+          service.setAssets(
+            detail.id,
+            { assetIds: [idegenEszkoz] },
+            BELSOS_KERO,
+          ),
         /nem ezen a helyszínen/,
       );
 
@@ -390,9 +403,11 @@ describe(
       const eredetiIdo = eredeti.get(eszkozHelyszinen);
       assert.ok(eredetiIdo, "a felvitel nem írt sort");
 
-      await service.setAssets(detail.id, {
-        assetIds: [eszkozHelyszinen, eszkozAlcsomoponton],
-      });
+      await service.setAssets(
+        detail.id,
+        { assetIds: [eszkozHelyszinen, eszkozAlcsomoponton] },
+        BELSOS_KERO,
+      );
 
       const utana = await csatolasiIdok(detail.id);
       assert.deepEqual(
