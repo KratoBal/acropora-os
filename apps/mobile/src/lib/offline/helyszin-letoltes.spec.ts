@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  LETOLTES_UTAN_UJRAOLVASANDO,
   osszegezHelyszinLetoltes,
   type ReszEredmeny,
 } from "./helyszin-letoltes";
@@ -125,5 +126,64 @@ describe("mit mondunk a helyszín letöltése után", () => {
     });
     assert.equal(eredmeny.teljes, false);
     assert.match(eredmeny.cim, /HIÁNYOS/);
+  });
+});
+
+/**
+ * MIT OLVASUNK UJRA A LETOLTES UTAN (Balazs merese, 2026-09-21).
+ *
+ * A letoltes JOL IRT: ugyanazt a tablat tolti fel, amibol a lista olvas. Ami
+ * hianyzott: a kepernyok a mentett masolatot SAJAT lekerdezesen at olvassak,
+ * es annak a valasza a letoltes utan is a regi maradt -- tehat a lehuzas utan
+ * a lista egy elavult, akar URES eredmenyre esett vissza.
+ */
+describe("a letöltés után újraolvasandó másolatok", () => {
+  /**
+   * A DARABSZAM A LENYEG, NEM A JELENLET.
+   *
+   * Harom fele adat jon le, es mindegyik KET helyen latszik: a listan es az
+   * adatlapon. Ot kulcs -- es az otodiket felejti el az ember, miközben a
+   * tobbi frissul, tehat a felulet MUKODONEK latszik.
+   */
+  it("mind az öt mentett másolat szerepel", () => {
+    assert.equal(LETOLTES_UTAN_UJRAOLVASANDO.length, 5);
+    assert.deepEqual(
+      LETOLTES_UTAN_UJRAOLVASANDO.map((kulcs) => kulcs[0] as string).sort(),
+      [
+        "offline-asset",
+        "offline-assets",
+        "offline-service-job",
+        "offline-service-jobs",
+        "worksheet-cache",
+      ],
+    );
+  });
+
+  /**
+   * A LISTA ES AZ ADATLAP KULCSA KULON All, ES EZ NEM ISMETLES.
+   *
+   * A `["offline-asset"]` NEM elozmenye a `["offline-assets"]`-nek: a
+   * react-query ELEMENKENT hasonlit, nem szoveg-elotaggal. Ha csak az egyiket
+   * ervenytelenitenenk, a masik kepernyo a regi masolatot tartana -- es epp ez
+   * a hiba, amit Balazs latott.
+   */
+  it("a lista és az adatlap kulcsa külön áll", () => {
+    /*
+      A `string`-re hozott alak NEM kenyelem. Az `as const` lista tipusa
+      SZUKITI a lehetseges ertekeket, tehat egy hianyzo kulcsra a
+      `includes("...")` FORDITASI hibat adna -- es akkor a keszlet EL SEM
+      INDULNA: nulla piros, semmi jelentes. Kalibralva 2026-09-21: pontosan ez
+      tortent, es ez ma NEGYEDSZER ugyanaz az alak.
+
+      Igy viszont a hiany FUTASIDOBEN bukik el, nev szerint -- ami a merheto
+      valtozat.
+    */
+    const kulcsok = LETOLTES_UTAN_UJRAOLVASANDO.map(
+      (kulcs) => kulcs[0] as string,
+    );
+    assert.ok(kulcsok.includes("offline-assets"));
+    assert.ok(kulcsok.includes("offline-asset"));
+    assert.ok(kulcsok.includes("offline-service-jobs"));
+    assert.ok(kulcsok.includes("offline-service-job"));
   });
 });

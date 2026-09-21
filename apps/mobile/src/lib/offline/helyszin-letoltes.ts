@@ -100,3 +100,42 @@ export function osszegezHelyszinLetoltes(input: {
     sorok: input.reszek.map(sor),
   };
 }
+
+/**
+ * MIT KELL UJRAOLVASNI A LETOLTES UTAN -- ES MIERT NEM ELEG A MENTES.
+ *
+ * === A MERT HIBA (Balazs, 2026-09-21 13:11:56 UTC, Discord) ===
+ *
+ * „megvan, de valahogy nem mukodik jol. ha letoltom kiirja hogy hany eszkozt
+ * toltott le. aztan repulogep uzemmod de utana minden latszik, de pl androidon
+ * meg ott van de ha lehuzassal frissitesz akkor nincs"
+ *
+ * A LETOLTES JOL IRT. Ugyanazt a tablat tolti fel, amibol a lista olvas, es a
+ * `rememberAssets` upsertel, nem cserel.
+ *
+ * AMI HIANYZOTT: a kepernyok a mentett masolatot SAJAT lekerdezesen keresztul
+ * olvassak, es annak a valasza a letoltes utan is a REGI marad. A lista tehat
+ * a letoltes elotti allapotot tartja -- es amikor a lehuzas utan visszaesne a
+ * masolatra, egy elavult (adott esetben URES) eredmenyt kap.
+ *
+ * === MIERT LISTA, ES MIERT NEM A KOMPONENSBEN SOROLJUK FEL ===
+ *
+ * A letolto HAROM FELE adatot ment (eszkoz, hibajegy, munkalap), es mindegyik
+ * KET helyen latszik: a listan es az adatlapon. Ot kulcs, egy kepernyon
+ * felsorolva -- az OTODIKET felejti el az ember, es a hiba NEMA: a tobbi
+ * frissul, tehat a felulet mukodonek latszik.
+ *
+ * Igy a darabszam merheto, es az allitas megmondja, HANY kulcsot varunk.
+ */
+export const LETOLTES_UTAN_UJRAOLVASANDO = [
+  /** Az eszkoz-lista mentett masolata (`assets/index.tsx`). */
+  ["offline-assets"],
+  /** Egy eszkoz mentett adatlapja (`assets/[id].tsx`). */
+  ["offline-asset"],
+  /** A hibajegy-lista mentett masolata (`service-jobs/index.tsx`). */
+  ["offline-service-jobs"],
+  /** Egy hibajegy mentett adatlapja (`service-jobs/[id].tsx`). */
+  ["offline-service-job"],
+  /** Egy munkalap mentett adatlapja (`worksheets/[id].tsx`). */
+  ["worksheet-cache"],
+] as const;

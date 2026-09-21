@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -17,6 +17,7 @@ import {
   listWorksheets,
 } from "@/lib/api/worksheets";
 import { rememberAssetDetail, rememberAssets } from "@/lib/offline/asset-cache";
+import { LETOLTES_UTAN_UJRAOLVASANDO } from "@/lib/offline/helyszin-letoltes";
 import { letoltHelyszin } from "@/lib/offline/helyszin-letoltes-futtato";
 import {
   rememberServiceJobDetail,
@@ -57,6 +58,7 @@ import { rememberWorksheet } from "@/lib/offline/worksheet-cache";
  * szovege ezert csak letoltesrol beszel, nem arrol, hogy mit lehet majd tenni.
  */
 export function HelyszinLetolto() {
+  const queryClient = useQueryClient();
   const [customerId, setCustomerId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [nyitva, setNyitva] = useState(false);
@@ -103,6 +105,25 @@ export function HelyszinLetolto() {
           munkalapReszlet: getWorksheet,
           munkalapMentese: rememberWorksheet,
         },
+      );
+    },
+    /**
+     * A MENTES UTAN A KEPERNYOKNEK UJRA KELL OLVASNIUK A MASOLATOT.
+     *
+     * Balazs merese (2026-09-21): a letoltes lefutott es szamot mondott, de a
+     * lista LEHUZASRA kiurult. A mentes jo volt -- a kepernyok viszont a
+     * mentett masolatot SAJAT lekerdezesen at olvassak, es annak a valasza a
+     * letoltes utan is a REGI maradt.
+     *
+     * A `onSettled`, NEM az `onSuccess`: a RESZLEGES letoltes is hoz uj sorokat
+     * (egy elhasalt reszletlap mellett a tobbi lement), es azokat ugyanugy latni
+     * kell. Ami tenyleg nem jott le, arrol a zaro mondat szol.
+     */
+    onSettled: async () => {
+      await Promise.all(
+        LETOLTES_UTAN_UJRAOLVASANDO.map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey: [...queryKey] }),
+        ),
       );
     },
   });
