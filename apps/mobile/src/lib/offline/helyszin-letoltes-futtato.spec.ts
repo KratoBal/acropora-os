@@ -47,7 +47,11 @@ function fuggosegek(
     */
     eszkozReszlet: async (id: string) => ({
       id,
-      documents: [] as { id: string; contentType: string }[],
+      documents: [] as {
+        id: string;
+        contentType: string;
+        sizeBytes: number;
+      }[],
     }),
     belyegkepLetoltese: async () => {},
     eszkozokMentese: async () => {},
@@ -102,7 +106,14 @@ describe("a helyszín letöltésének menete", () => {
     const eredmeny = await futtat({
       eszkozReszlet: async (id: string) => {
         if (id === "a2") throw new Error("nincs térerő");
-        return { id, documents: [] as { id: string; contentType: string }[] };
+        return {
+          id,
+          documents: [] as {
+            id: string;
+            contentType: string;
+            sizeBytes: number;
+          }[],
+        };
       },
     });
     assert.equal(eredmeny.teljes, false);
@@ -248,8 +259,8 @@ describe("a helyszín bélyegképei", () => {
   const kepesReszlet = (id: string) => ({
     id,
     documents: [
-      { id: `${id}-kep`, contentType: "image/jpeg" },
-      { id: `${id}-pdf`, contentType: "application/pdf" },
+      { id: `${id}-kep`, contentType: "image/jpeg", sizeBytes: 2_000_000 },
+      { id: `${id}-pdf`, contentType: "application/pdf", sizeBytes: 500 },
     ],
   });
 
@@ -292,5 +303,58 @@ describe("a helyszín bélyegképei", () => {
     const eredmeny = await futtat();
     assert.equal(eredmeny.teljes, true);
     assert.match(sorAmi(eredmeny.sorok, /bélyegkép/), /0 bélyegkép letöltve/);
+  });
+});
+
+/**
+ * A TELJES MERETU KEPEK LISTAJA (d1cd720a, 3. tetel).
+ *
+ * A letoltes NEM hozza le oket -- Balazs merese szerint ugyanaz a helyszin
+ * teljes meretben 51 MB, belyegkepben 567 KB. Amit a menet ad, az a LISTA es
+ * a MERET, hogy a gomb a szammal egyutt kerdezhessen.
+ */
+describe("a teljes méretű képek listája", () => {
+  const kepesReszlet = (id: string) => ({
+    id,
+    documents: [
+      { id: `${id}-kep`, contentType: "image/jpeg", sizeBytes: 2_000_000 },
+      { id: `${id}-pdf`, contentType: "application/pdf", sizeBytes: 500 },
+    ],
+  });
+
+  it("csak a KÉPEK kerülnek a listába, a méretükkel", async () => {
+    const eredmeny = await futtat({
+      eszkozLista: async () => eszkozLap([eszkozSor("a1")], 1),
+      eszkozReszlet: async (id: string) => kepesReszlet(id),
+    });
+    assert.deepEqual(eredmeny.teljesKepek, [
+      { assetId: "a1", documentId: "a1-kep", sizeBytes: 2_000_000 },
+    ]);
+  });
+
+  /**
+   * A LISTA A BELYEGKEP BUKASATOL FUGGETLEN.
+   *
+   * A ketto KET KULON keres: egy sikertelen belyegkep nem mondja meg, hogy a
+   * teljes sem johetne le. Egy kihagyott sor viszont CSENDBEN csokkentene a
+   * gombra irt szamot -- es a szerelo kevesebbet varna, mint amennyi jon.
+   */
+  it("a bélyegkép bukása nem viszi el a teljes kép sorát", async () => {
+    const eredmeny = await futtat({
+      eszkozLista: async () => eszkozLap([eszkozSor("a1")], 1),
+      eszkozReszlet: async (id: string) => kepesReszlet(id),
+      belyegkepLetoltese: async () => {
+        throw new Error("nincs térerő");
+      },
+    });
+    assert.equal(eredmeny.teljesKepek.length, 1);
+    /* ES A ZARO MONDAT ETTOL MEG HIANYOS -- a ket allitas KET dolgot mer. */
+    assert.equal(eredmeny.teljes, false);
+  });
+
+  /** POZITIV KONTROLL: kep nelkuli helyszinen a lista URES, nem hianyzo. */
+  it("kép nélküli helyszínen a lista üres", async () => {
+    const eredmeny = await futtat();
+    assert.deepEqual(eredmeny.teljesKepek, []);
   });
 });

@@ -18,8 +18,13 @@ import {
 } from "@/lib/api/worksheets";
 import { rememberAssetDetail, rememberAssets } from "@/lib/offline/asset-cache";
 import { environment } from "@/config/env";
-import { kepLetoltese } from "@/lib/documents/document-image-file";
+import {
+  documentCacheFileName,
+  kepLetoltese,
+} from "@/lib/documents/document-image-file";
 import { kepFajlFuggosegek } from "@/lib/documents/kep-fajl-deps";
+import { atvitelOsszege } from "@/lib/offline/teljes-kep-meret";
+import { formatDocumentSize } from "@/lib/documents/document-view";
 import { LETOLTES_UTAN_UJRAOLVASANDO } from "@/lib/offline/helyszin-letoltes";
 import { letoltHelyszin } from "@/lib/offline/helyszin-letoltes-futtato";
 import {
@@ -156,6 +161,89 @@ export function HelyszinLetolto() {
   });
 
   const osszegzes = letoltes.data;
+  const teljesKepek = letoltes.data?.teljesKepek ?? [];
+
+  /**
+   * AMIT A GOMB IGER, AZ AZ ATVITT ADAT, NEM A TELJES KESZLET.
+   *
+   * Ha egy kep MAR LENT VAN, nem szamol bele -- kulonben a masodik megnyomas
+   * ugyanazt a szamot mutatna, es a felhasznalo azt hinne, semmi nem tortent.
+   *
+   * A lemez-nezes ASZINKRON, ezert lekerdezes. A kulcs a lista, tehat egy uj
+   * letoltes utan magatol ujraszamol; a `letoltes.data` valtozasa is ide fut.
+   */
+  const atvivendo = useQuery({
+    queryKey: [
+      "teljes-kepek-atvivendo",
+      teljesKepek.map((kep) => kep.documentId).join(","),
+    ],
+    enabled: teljesKepek.length > 0,
+    queryFn: async () => {
+      const hianyzo: typeof teljesKepek = [];
+      for (const kep of atvivendoKepek) {
+        const helyi = await kepFajlFuggosegek.helyiFajl(
+          documentCacheFileName({
+            documentId: kep.documentId,
+            variant: "original",
+          }),
+        );
+        if (!helyi) hianyzo.push(kep);
+      }
+      return hianyzo;
+    },
+  });
+
+  const atvivendoKepek = atvivendo.data ?? [];
+  const osszeg = atvitelOsszege(atvivendoKepek);
+
+  /**
+   * A TELJES KEPEK KULON LEPESBEN, ES A GOMBON OTT A SZAM.
+   *
+   * Balazs merese: a legnagyobb kepanyagu helyszin TELJES meretben 51 MB,
+   * belyegkepben 567 KB. A belyegkep tehat mindig jon; ez a gomb a KULONBSEG,
+   * es a szerelo a szammal a kezeben dont.
+   *
+   * A SZAM CSAK A BELYEGKEPES KOR UTAN ISMERT, es ez nem kenyelmi kerdes: a
+   * meretek a csatolmany-sorokban allnak, azokat pedig az eszkoz-adatlapokkal
+   * egyutt hozzuk le. Elotte nincs mibol osszeadni -- ezert all ez a gomb a
+   * zaro mondat ALATT, nem az elso gomb mellett.
+   */
+  const teljesLetoltes = useMutation({
+    mutationFn: async () => {
+      let kesz = 0;
+      let hibas = 0;
+      for (const kep of atvivendoKepek) {
+        const eredmeny = await kepLetoltese(
+          {
+            apiUrl: environment.ok ? environment.config.apiUrl : null,
+            ownerPath: `/service/assets/${encodeURIComponent(kep.assetId)}`,
+            documentId: kep.documentId,
+            variant: "original",
+          },
+          kepFajlFuggosegek,
+        );
+        if (eredmeny.allapot === "kesz") kesz += 1;
+        else hibas += 1;
+      }
+      return { kesz, hibas };
+    },
+    onSettled: async () => {
+      await Promise.all([
+        ...LETOLTES_UTAN_UJRAOLVASANDO.map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey: [...queryKey] }),
+        ),
+        /*
+          ES A SAJAT LISTAJA IS: a lemezre most lekerult kepek mar nem
+          atvivendok. Enelkul a gomb a letoltes utan is a REGI szamot
+          mutatna, es ugy nezne ki, mintha semmi nem tortent volna -- pont az
+          a hiba, ami ellen a 2. kikotes szol.
+        */
+        queryClient.invalidateQueries({
+          queryKey: ["teljes-kepek-atvivendo"],
+        }),
+      ]);
+    },
+  });
 
   return (
     <View style={styles.card}>
@@ -249,6 +337,54 @@ export function HelyszinLetolto() {
             : "ismeretlen hiba"}
         </Text>
       ) : null}
+      {atvivendoKepek.length ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`A teljes méretű képek letöltése: ${osszeg.darab} kép`}
+          disabled={teljesLetoltes.isPending}
+          onPress={() => teljesLetoltes.mutate()}
+          style={({ pressed }) => [
+            styles.button,
+            teljesLetoltes.isPending && styles.buttonDisabled,
+            pressed && styles.pressed,
+          ]}
+          testID="teljes-kepek-gomb"
+        >
+          <Text style={styles.buttonText}>
+            {teljesLetoltes.isPending
+              ? "Teljes képek letöltése…"
+              : /*
+                  ISMERETLEN MERET MELLETT NEM ALL SZAM A GOMBON. A hianyzo
+                  meret nulla megabajtnak latszana, es a nulla itt azt
+                  IGERNE, hogy ingyen van. A DARABSZAM viszont akkor is
+                  kimehet: abbol a szerelo tudja, mibe vag bele.
+                */
+                `Teljes képek letöltése (${
+                  osszeg.ismeretlen
+                    ? `${osszeg.darab} kép`
+                    : formatDocumentSize(osszeg.bytes)
+                })`}
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {/*
+        A TELJES KEPEK SAJAT ZARO MONDATOT KAPNAK, ugyanazzal a szaballyal,
+        mint a helyszin letoltese: ha nem jott le minden, azt KI KELL MONDANI.
+        A szerelo a pinceben abbol indul ki, hogy megvan, amit kert.
+      */}
+      {teljesLetoltes.data ? (
+        <View
+          style={teljesLetoltes.data.hibas === 0 ? styles.kesz : styles.hianyos}
+        >
+          <Text style={styles.osszegzesCim}>
+            {teljesLetoltes.data.hibas === 0
+              ? `${teljesLetoltes.data.kesz} teljes kép letöltve.`
+              : `A teljes képek letöltése HIÁNYOS: ${teljesLetoltes.data.kesz} lejött, ${teljesLetoltes.data.hibas} nem.`}
+          </Text>
+        </View>
+      ) : null}
+
       {osszegzes ? (
         <View style={osszegzes.teljes ? styles.kesz : styles.hianyos}>
           <Text style={styles.osszegzesCim}>{osszegzes.cim}</Text>
