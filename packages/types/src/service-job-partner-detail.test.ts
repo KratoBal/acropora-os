@@ -20,7 +20,14 @@ const BELSO: ServiceJobDetail = {
   description: "Reggel óta hangos.",
   status: "WAITING_FOR_PARTS",
   partnerStatus: "IN_PROGRESS",
-  partnerStatusLabel: "Folyamatban",
+  /*
+    A VALODI PARTNERI FELIRAT, NEM A BELSO. 2026-09-21-ig "Folyamatban" allt
+    itt -- az az `IN_PROGRESS` BELSO cimkeje, a partnere "Feldolgozas alatt".
+    A kulonbseg addig nem szamitott (a mezo csak atment), most viszont ebben a
+    fajlban mar ket partneri felirat all, es egy kitalalt szo mellett nem lehet
+    megkulonboztetni, melyik jon a valodi tablabol.
+  */
+  partnerStatusLabel: "Feldolgozás alatt",
   customerName: "Teszt Kft.",
   customerId: "cust-1",
   departmentId: "dep-1",
@@ -98,7 +105,7 @@ describe("a partner reszletlapja", () => {
     assert.equal(partner.jobNumber, "HJ-2026-001");
     assert.equal(partner.title, "Szivattyú zúg");
     assert.equal(partner.description, "Reggel óta hangos.");
-    assert.equal(partner.partnerStatusLabel, "Folyamatban");
+    assert.equal(partner.partnerStatusLabel, "Feldolgozás alatt");
     assert.deepEqual(partner.departmentPath, ["Biodóm", "Nagymedence"]);
     assert.equal(partner.createdAt, "2026-09-20T08:00:00.000Z");
     assert.equal(partner.assets.length, 1);
@@ -132,6 +139,90 @@ describe("a partner reszletlapja", () => {
     const sor = partner.timeline[0];
     if (!sor || sor.kind !== "status") return assert.fail("nem status sor");
     assert.equal(sor.event.actorName, "Kiss Márta");
+  });
+
+  /**
+   * A NAPLO-SOR MEGNEVEZI AZ ALLAPOTOT -- PARTNERI SZOVAL (147d9a1d).
+   *
+   * A `#895` utan a partner napló-alakjából kikerült a nyolcértékű enum, és
+   * ettől a portál naplósora nem tudta MEGNEVEZNI, milyen állapotba lépett a
+   * jegy. A mező a feliratot teszi vissza, a belső szókincset nem.
+   *
+   * A BEMENET SZANDEKOSAN `WAITING_FOR_PARTS`, es ez a lenyeg: ott a ket
+   * szokincs KULONBOZIK ("Alkatreszre var" kontra "Feldolgozas alatt"). Egy
+   * `NEW` bemeneten mind a ket irany ugyanarra a szora mutatna ("Uj"), tehat
+   * az allitas nem tudna megkulonboztetni a kettot.
+   */
+  it("a naplo-sor a PARTNERI feliratot viszi, a belsot nem", () => {
+    const sor = partnerServiceJobDetail({
+      ...BELSO,
+      timeline: [
+        {
+          kind: "status",
+          at: "2026-09-20T09:00:00.000Z",
+          sortKey: "e2",
+          event: {
+            id: "e2",
+            fromStatus: "TRIAGED",
+            toStatus: "WAITING_FOR_PARTS",
+            note: null,
+            actorName: "Kiss Márta",
+            createdAt: "2026-09-20T09:00:00.000Z",
+          },
+        },
+      ],
+    }).timeline[0];
+    if (!sor || sor.kind !== "status") return assert.fail("nem status sor");
+    assert.equal(sor.event.partnerStatusLabel, "Feldolgozás alatt");
+  });
+
+  /**
+   * ES VISSZAFELE, KULON ALLITASKENT: a belso alak SEHOL nincs a naplo-soron.
+   *
+   * MIERT KULON `it()`: a ket irany kulon is el tud romlani, es ha egy
+   * allitasban allnanak, a futtato a TESZT nevet irna ki, nem az allitasét --
+   * a kalibracio kimenetebol nem latszana, melyik fogott.
+   *
+   * ES A KET IRANY HATARA, MERVE (ne bizzunk benne tobbet, mint amennyit tud):
+   * egy olyan rontas, ami a felirat HELYERE teszi a nyers enumot, MIND A KETTOT
+   * pirosra dontí -- egy edit, ket kovetkezmeny. Az also allitas AKKOR all
+   * egyedul, ha a belso ertek egy MASIK mezon szivarog ki (azonosito,
+   * rendezesi kulcs), es pontosan ez az eset az, amit a tipus NEM zar ki.
+   */
+  it("a naplo-soron a belso alak SEHOL nem szerepel", () => {
+    const sor = partnerServiceJobDetail({
+      ...BELSO,
+      timeline: [
+        {
+          kind: "status",
+          at: "2026-09-20T09:00:00.000Z",
+          sortKey: "e2",
+          event: {
+            id: "e2",
+            fromStatus: "TRIAGED",
+            toStatus: "WAITING_FOR_PARTS",
+            note: null,
+            actorName: "Kiss Márta",
+            createdAt: "2026-09-20T09:00:00.000Z",
+          },
+        },
+      ],
+    }).timeline[0];
+    if (!sor || sor.kind !== "status") return assert.fail("nem status sor");
+    const szoveg = JSON.stringify(sor);
+    for (const belso of ["Alkatrészre vár", "WAITING_FOR_PARTS", "TRIAGED"])
+      assert.ok(!szoveg.includes(belso), `kiment a belso alak: ${belso}`);
+    /*
+      KONTROLL: a sor NEM ures -- van rajta valodi adat. Enelkul ez az allitas
+      egy elhagyott naplo-soron is zold lenne.
+
+      ES A KONTROLL SZANDEKOSAN NEM A FELIRAT: ha azt merne, akkor minden
+      olyan rontas, ami a feliratot elrontja, EZT IS pirosra dontene -- vagyis
+      a ket `it()` ugyanarra a bemenetre pirosodna, es a kalibracio nem tudna
+      megkulonboztetni oket. A nev az az adat, ami MIND A KET iranytol
+      fuggetlen.
+    */
+    assert.ok(szoveg.includes("Kiss Márta"));
   });
 
   /**
