@@ -125,6 +125,32 @@ describe("a lezárt hibajegy kiküldése", () => {
     assert.match(JSON.stringify(t.nyomok[0]?.recipients), /uzem@partner\.hu/);
   });
 
+  /**
+   * A TORZS A KEZELO SZOVEGE, ES SEMMI MAS -- EZ acrobot DONTESENEK A KAPUJA.
+   *
+   * A dontes (2026-09-22 00:57): "NEM MEGY KI OLYAN LINK A VEVONEK, AMIT NEM
+   * ELLENORIZTUNK." Ma ez SZERKEZETILEG all, mert a rendszer SEMMIT nem fuz a
+   * kezelo szovegehez -- nincs mibe linket tenni.
+   *
+   * EZ AZ ALLITAS AZT ORZI, hogy igy is maradjon. Ha valaki kesobb egy
+   * generalt mondatot (letoltesi linket, lablecet, aláírást) fuz a torzs vegere,
+   * ez pirosra valt -- es akkor a dontes ELOKERUL, ahelyett hogy csendben
+   * kikerulne egy ellenorizetlen cim a vevohoz.
+   *
+   * AMIT NEM TILT: hogy a KEZELO irjon be linket. Az az o szava, es o latja,
+   * mit kuld. A dontes a RENDSZER altal generalt linkrol szol.
+   */
+  it("a levél törzse pontosan a kezelő szövege, semmit nem fűzünk hozzá", async () => {
+    const t = felallit();
+    await t.service.send({
+      serviceJobId: "job-1",
+      message: "  Köszönjük a bizalmat.  ",
+      actorUserId: "user-1",
+      package: t.csomag,
+    });
+    assert.equal(t.kuldott[0]?.text, "Köszönjük a bizalmat.");
+  });
+
   it("zárt kapunál NEM megy ki, és a jegy naplójába sem kerül sor", async () => {
     const t = felallit({ mode: "off" });
     const eredmeny = await t.service.send({
