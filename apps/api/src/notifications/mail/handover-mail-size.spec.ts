@@ -64,7 +64,7 @@ describe("handoverAttachmentVerdict", () => {
   it("a mai méret (~100 KB) bőven átmegy", () => {
     assert.deepEqual(
       handoverAttachmentVerdict({ bytes: 58_553, limit: 4 * 1024 * 1024 }),
-      { kind: "ok" },
+      { kind: "attach" },
     );
   });
 
@@ -80,7 +80,7 @@ describe("handoverAttachmentVerdict", () => {
       bytes: 4 * 1024 * 1024,
       limit: 4 * 1024 * 1024,
     });
-    assert.equal(v.kind, "too-large");
+    assert.equal(v.kind, "link");
   });
 
   /**
@@ -88,14 +88,14 @@ describe("handoverAttachmentVerdict", () => {
    * es hogy a letoltes JARHATO UT. Enelkul a kezelo annyit latna, hogy nem ment
    * ki, es nem tudna, mit tegyen.
    */
-  it("a megtagadás megmondja a méretet és a járható utat", () => {
+  it("a visszaesés mondata megmondja a méretet és a letöltést", () => {
     const v = handoverAttachmentVerdict({
       bytes: 9 * 1024 * 1024,
       limit: 4 * 1024 * 1024,
     });
-    assert.equal(v.kind, "too-large");
-    if (v.kind !== "too-large") return;
-    assert.match(v.message, /KB/);
-    assert.match(v.message, /letöltés/);
+    assert.equal(v.kind, "link");
+    if (v.kind !== "link") return;
+    assert.match(v.sentence, /KB/);
+    assert.match(v.sentence, /letöltés/);
   });
 });

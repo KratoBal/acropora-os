@@ -92,9 +92,22 @@ export function ticketMailDecision(input: {
 /**
  * MIT MONDUNK A NAPLONAK, ES MIT NEM.
  *
- * A JEGY NAPLOJA ATMEGY A PARTNER PORTALRA (fb945858 kartya merese, 2026-09-21:
- * a `/service/jobs/{id}` valasza szo szerint ugyanaz a partnernek es a belsos
- * felhasznalonak). Ezert a naplo-sor CIMET NEM TARTALMAZ, csak a tenyt.
+ * A NAPLO-SOR CIMET NEM TARTALMAZ, CSAK A TENYT -- DE MAR NEM AZERT, AMIERT
+ * EZ A FEJLEC EREDETILEG MONDTA.
+ *
+ * AZ EREDETI INDOK 2026-09-21 OTA HAMIS, es ezt ki kell mondani, mert egy
+ * datum nelkuli kijelento mondat masnap ugyanolyan magabiztosan nez ki. Az
+ * fb945858 azt merte, hogy a `/service/jobs/{id}` valasza "szo szerint
+ * ugyanaz" a partnernek es a belsosnek. UGYANAZON A NAPON ez megszunt:
+ * `partnerServiceJobDetail` sajat alakot vetit, es abban a `note` mezo NINCS
+ * BENNE (visszamerve 2026-09-22: a status-bejegyzes `id`, `isCreation`,
+ * `partnerStatusLabel`, `actorName`, `createdAt` mezot kap, a `note`-ot nem).
+ * Balazs dontese ugyanerrol, szo szerint: "a megjegyzes nem kell a nev igen".
+ *
+ * AZ INDOK TEHAT MAS, ES ATTOL MEG ALL: ennek a mezonek a LATHATOSAGA egy nap
+ * alatt KETSZER valtozott. Egy cim, ami egyszer bekerul egy naplo szovegebe,
+ * onnantol minden jovobeli feluletnel egyutt utazik -- fuggetlenul attol, hogy
+ * MA melyik alak megy ki.
  *
  * Egy cim, ami egyszer bekerul egy naplo szovegebe, onnantol minden jovobeli
  * feluletnel egyutt utazik, es senki nem fogja megkerdezni, szabad-e kiirni.

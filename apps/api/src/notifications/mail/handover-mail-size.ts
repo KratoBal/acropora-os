@@ -80,39 +80,47 @@ export function base64Meret(bajtok: number): number {
 }
 
 export type HandoverAttachmentVerdict =
-  | { readonly kind: "ok" }
+  | { readonly kind: "attach" }
   | {
-      readonly kind: "too-large";
+      readonly kind: "link";
       readonly bytes: number;
       readonly limit: number;
-      readonly message: string;
+      readonly sentence: string;
     };
 
 /**
- * HATAR FELETT A KULDES MEGTAGADVA -- NEM CSONKITVA.
+ * HATAR FELETT A LEVEL KIMEGY -- LINKKEL, NEM CSATOLMANNYAL.
  *
- * acrobot harmadik kikotese, es ez a lenyeg: egy csonka csomag pontosan az a
- * nema hallgatas, amit Balazs 2026-09-18-an megrott. A vevo kapna egy levelet,
- * ami teljesnek latszik, es hianyozna belole egy munkalap -- errol sem o, sem
- * mi nem tudnank.
+ * acrobot dontese (2026-09-21 23:29), es ez KET dolgot zar ki egyszerre:
  *
- * A HIBAUZENET MEGMONDJA A MERETET ES A JARHATO UTAT. Enelkul a kezelo annyit
- * latna, hogy "nem ment ki", es nem tudna, mit tegyen: a letoltes (#860) ma is
- * mukodik, tehat a csomag ATADHATO, csak nem ezen az uton.
+ *   CSONKA CSOMAG   nem mehet. Az a nema hallgatas, amit Balazs 09-18-an
+ *                   megrott: a vevo teljesnek latszo levelet kapna, amibol
+ *                   hianyzik egy munkalap, es errol sem o, sem mi nem tudnank.
+ *   MEGHIUSULT LEVEL sem. A lezart jegyrol a vevo AKKOR IS ertesuljon, ha a
+ *                   csomag nem fert ra -- a letoltes a #860 ota all, tehat a
+ *                   visszaeses nem uj epites.
+ *
+ * A LINK TEHAT NEM ALTERNATIVA, HANEM VISSZAESES: csak akkor fut, amikor
+ * tenyleg kell. (A kuldes alapertelmezese a csatolmany, mert a level akkor er
+ * a legtobbet, ha magaban hordja, amit igazol.)
+ *
+ * ES A MONDAT A LEVEL TORZSEBE MEGY, NEM HIBAUZENETKENT. Ezert `sentence` a
+ * mezo neve: a vevo olvassa, nem a kezelo. Ha nem mondanank ki, a level ugy
+ * nezne ki, mint egy szokasos ertesites -- csak epp hianyozna rola a csomag,
+ * es senki nem tudna, miert.
  */
 export function handoverAttachmentVerdict(input: {
   bytes: number;
   limit: number;
 }): HandoverAttachmentVerdict {
   const kodolt = base64Meret(input.bytes);
-  if (kodolt <= input.limit) return { kind: "ok" };
+  if (kodolt <= input.limit) return { kind: "attach" };
   return {
-    kind: "too-large",
+    kind: "link",
     bytes: kodolt,
     limit: input.limit,
-    message:
-      `A csomag mérete ${Math.round(kodolt / 1024)} KB, ami meghaladja a ` +
-      `levélben küldhető ${Math.round(input.limit / 1024)} KB-ot. ` +
-      `A hibajegy csomagja letöltéssel átadható.`,
+    sentence:
+      `A hibajegy dokumentumcsomagja ${Math.round(kodolt / 1024)} KB, ` +
+      `ami nem fért rá erre a levélre, ezért letöltéssel érhető el.`,
   };
 }
