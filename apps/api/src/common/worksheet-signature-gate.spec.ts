@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 
 import {
   mayWorksheetBeSigned,
+  worksheetsBlockingPackage,
   worksheetsBlockingTicketClose,
+  type PackageWorksheetState,
   type TicketWorksheetSignatureState,
 } from "./worksheet-signature-gate.js";
 
@@ -221,5 +223,118 @@ describe("a munkalap alairasi kapuja", () => {
     assert.deepEqual(mayWorksheetBeSigned({ serviceJobId: "job-1" }), {
       ok: true,
     });
+  });
+});
+
+describe("a csomag atadasanak kapuja", () => {
+  function csomagLap(
+    reszek: Partial<PackageWorksheetState> = {},
+  ): PackageWorksheetState {
+    return {
+      id: "ws-1",
+      number: "MUNKA-2026-001",
+      hidden: false,
+      closed: true,
+      hasIssuedSheet: true,
+      ...reszek,
+    };
+  }
+  const csomag = (
+    lapok: PackageWorksheetState[],
+    scope: "internal" | "partner" = "internal",
+  ) => worksheetsBlockingPackage({ worksheets: lapok, scope });
+
+  /**
+   * ISMERT POZITIV KONTROLL. A lenti allitasok tobbsege azt meri, hogy valami
+   * VISSZATART; egy mindig-visszatarto szabaly mindet kielegitene.
+   */
+  it("lezart, kiadott peldannyal allo lap egyik hivonak sem tartja vissza", () => {
+    assert.deepEqual(csomag([csomagLap()]), []);
+    assert.deepEqual(csomag([csomagLap()], "partner"), []);
+  });
+
+  it("munkalap nelkul nincs mi visszatartsa", () => {
+    assert.deepEqual(csomag([]), []);
+  });
+
+  it("a lezaratlan lap visszatartja", () => {
+    const blokkolo = csomag([csomagLap({ closed: false })]);
+    assert.equal(blokkolo.length, 1);
+    assert.equal(blokkolo[0]?.reason, "not-closed");
+  });
+
+  /**
+   * A KET OK KULON MER, ES EZ A KARTYA LELETE. A "lezaratlan" szo egyetlen
+   * feltetelt sugall; a kodban ketto all, es a TEENDOJUK kulonbozik. Merve:
+   * 2026-09-18-ig NEGY lezart lap allt kiadott peldany NELKUL az elesen.
+   */
+  it("a LEZART, de peldany nelkuli lap MASIK okkal tartja vissza", () => {
+    const blokkolo = csomag([
+      csomagLap({ closed: true, hasIssuedSheet: false }),
+    ]);
+    assert.equal(blokkolo.length, 1);
+    assert.equal(blokkolo[0]?.reason, "no-issued-sheet");
+  });
+
+  /**
+   * A KET OK KIZARJA EGYMAST. Egy le nem zart lapnak definicio szerint nincs
+   * kiadott peldanya -- ket mondat egy okrol felrevinne a kezelot.
+   */
+  it("a lezaratlan lap CSAK a lezaratlansagot jelenti, a peldany hianyat nem", () => {
+    const blokkolo = csomag([
+      csomagLap({ closed: false, hasIssuedSheet: false }),
+    ]);
+    assert.deepEqual(
+      blokkolo.map((sor) => sor.reason),
+      ["not-closed"],
+    );
+  });
+
+  /**
+   * A REJTETT LAP ITT MASKENT SZAMIT, MINT A LEZARASI KAPUNAL, ES EZ DONTES.
+   *
+   * Nem engedmeny: a csomag maga hagyja ki a rejtett lapot a partner
+   * csomagjabol. Egy kapu, ami olyan lapon all meg, ami a hivo csomagjaba
+   * amugy sem kerulne, olyat ker szamon, amit a hivo nem is lathat.
+   */
+  it("a rejtett lezaratlan lap a PARTNERT nem tartja vissza, a BELSOST igen", () => {
+    const rejtett = csomagLap({ hidden: true, closed: false });
+    assert.deepEqual(csomag([rejtett], "partner"), []);
+
+    const belso = csomag([rejtett], "internal");
+    assert.equal(belso.length, 1);
+    assert.equal(belso[0]?.reason, "not-closed");
+  });
+
+  /**
+   * ES A KIZARAS A LAPRA SZOL, NEM AZ EGESZ HIVASRA: egy rejtett lap melletti
+   * LATHATO, lezaratlan lap tovabbra is visszatartja a partnert.
+   */
+  it("a rejtett lap kihagyasa nem menti fel a lathato lapot", () => {
+    const blokkolo = csomag(
+      [
+        csomagLap({ id: "a", hidden: true, closed: false }),
+        csomagLap({ id: "b", number: "MUNKA-2026-002", closed: false }),
+      ],
+      "partner",
+    );
+    assert.deepEqual(
+      blokkolo.map((sor) => [sor.sheet.id, sor.reason]),
+      [["b", "not-closed"]],
+    );
+  });
+
+  it("ket lap ket kulonbozo okkal, nem osszemosva", () => {
+    const blokkolo = csomag([
+      csomagLap({ id: "a", closed: false }),
+      csomagLap({ id: "b", closed: true, hasIssuedSheet: false }),
+    ]);
+    assert.deepEqual(
+      blokkolo.map((sor) => [sor.sheet.id, sor.reason]),
+      [
+        ["a", "not-closed"],
+        ["b", "no-issued-sheet"],
+      ],
+    );
   });
 });
