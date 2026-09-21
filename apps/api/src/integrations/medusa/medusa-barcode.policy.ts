@@ -290,6 +290,41 @@ export function decideMedusaBarcode(
 }
 
 /**
+ * KIIRJUK-E A VONALKOD SORAT -- ES MIERT NEM MINDIG.
+ *
+ * === A HAMIS MONDAT, AMIT EZ MEGAKADALYOZ (0c1fb1c2) ===
+ *
+ * A `skipped` sora szo szerint azt allitja, hogy "a tisztitas helye a forras:
+ * ott dol el, melyik terméke a kod". Egy NEM-TERMEK soron (a bolt sajat
+ * kedvezmeny-tetele, egy sablon-rekord) ez HAMIS: nem az a kerdes, melyikuke,
+ * hanem hogy EGYIKUKE SEM, mert nem is termek.
+ *
+ * A kozzeteteli kapu ezt a sort `not-a-product` okkal kizarja -- de a
+ * vonalkod-sor KORABBAN keletkezik, tehat a jelentesben megis megjelenne.
+ *
+ * === ES EZ A FUGGVENY SZANDEKOSAN NEM ISMERI A NEM-TERMEK LISTAT ===
+ *
+ * A hivo a KOZZETETELI DONTES sajat okat adja be, nem a listat. Igy a ket
+ * szabaly nem kotodik ossze: a vonalkod-policy tovabbra sem tud arrol, mely
+ * cikkszamok nem termekek, es a nem-termek lista sem tud a vonalkodrol.
+ *
+ * === AMIT SZANDEKOSAN NEM SZURUNK ===
+ *
+ * A megallt futas (`stopped`) NEM jut el a kozzeteteli dontesig, tehat ott az
+ * ok ISMERETLEN. Olyankor a sor KIMEGY -- ugyanugy, mint eddig. Egy ismeretlen
+ * allapotban elhallgatott jelzes rosszabb, mint egy folosleges: a masodikat
+ * valaki elolvassa es legyint, az elsot senki nem keresi.
+ */
+export function vonalkodSorKiirhato(input: {
+  kind: MedusaBarcodeDecision["kind"];
+  /** A kozzeteteli dontes oka, vagy `null`, ha a futas addig el sem jutott. */
+  publikacioOka: string | null;
+}): boolean {
+  if (input.kind !== "skipped" && input.kind !== "blocked") return false;
+  return input.publikacioOka !== "not-a-product";
+}
+
+/**
  * A KIHAGYAS SORA. Megnevezi a kodot es a termeket, mert a tisztitas pontosan
  * azon a kodon mulik.
  *

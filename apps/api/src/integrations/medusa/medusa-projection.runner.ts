@@ -20,6 +20,8 @@ import {
 } from "./medusa-category.policy.js";
 import {
   decideMedusaBarcode,
+  vonalkodSorKiirhato,
+  type MedusaBarcodeDecision,
   vonalkodAlakjai,
   describeBlockedBarcode,
   describeSkippedBarcode,
@@ -619,6 +621,31 @@ export async function runProjectionCli(
    * termeken. Egy kozos szamlalo a naploban osszemosna oket.
    */
   let tiltottVonalkod = 0;
+
+  /**
+   * A VONALKOD SORA, A KOZZETETELI DONTES ISMERETEBEN (0c1fb1c2).
+   *
+   * Azert helyi lezaras, mert a kimenetre kell latnia -- a DONTES viszont
+   * tiszta fuggvenyben all (`vonalkodSorKiirhato`), adatbazis es kimenet
+   * nelkul merhetoen.
+   */
+  const vonalkodSort = (
+    dontes: MedusaBarcodeDecision,
+    termekId: string,
+    nyers: string | null,
+    azonosDarab: number,
+    publikacioOka: string | null,
+  ): void => {
+    if (!vonalkodSorKiirhato({ kind: dontes.kind, publikacioOka })) return;
+    if (dontes.kind === "blocked") {
+      out.stdout(`${describeBlockedBarcode(termekId, (nyers ?? "").trim())}\n`);
+      return;
+    }
+    if (dontes.kind === "skipped")
+      out.stdout(
+        `${describeSkippedBarcode(termekId, dontes.duplicate, azonosDarab)}\n`,
+      );
+  };
   /**
    * A LISTA EGYSZER TOLTODIK BE, A FUTAS ELEJEN, ES KIIRJA A MERETET.
    *
@@ -935,22 +962,22 @@ export async function runProjectionCli(
         tiltoIndex,
       ),
     );
-    if (vonalkod.kind === "blocked") {
-      tiltottVonalkod += 1;
-      out.stdout(
-        `${describeBlockedBarcode(product.id, (nyersVonalkod ?? "").trim())}\n`,
-      );
-    }
-    if (vonalkod.kind === "skipped") {
-      kihagyottVonalkod += 1;
-      out.stdout(
-        `${describeSkippedBarcode(
-          product.id,
-          vonalkod.duplicate,
-          azonosKodudarab,
-        )}\n`,
-      );
-    }
+    /*
+      A SZAMLALAS ITT MARAD, A KIIRAS VISZONT A KOZZETETELI DONTES UTANRA
+      KERULT (0c1fb1c2).
+
+      A `skipped` mondata azt allitja, hogy "a tisztitas helye a forras: ott
+      dol el, melyik terméke a kod". Egy NEM-TERMEK soron ez hamis -- es a
+      kozzeteteli kapu epp ezt a sort zarja ki `not-a-product` okkal, csak
+      KESOBB. Amig a kiiras itt allt, a jelentesben megjelent volna.
+
+      A SZAMLALO SZANDEKOSAN MARAD ELOL: a futas vegi osszesito arrol szol,
+      hany kod maradt ki a VETITESBOL, es az a nem-termek soroknal is igaz.
+      Ha a szamot is a kiirashoz kotnenk, ket kulonbozo kerdesre adnank egy
+      valaszt.
+    */
+    if (vonalkod.kind === "blocked") tiltottVonalkod += 1;
+    if (vonalkod.kind === "skipped") kihagyottVonalkod += 1;
 
     const futasIdeje = new Date();
 
@@ -1226,12 +1253,27 @@ export async function runProjectionCli(
     );
 
     if (outcome.action === "stopped") {
+      /*
+        A MEGALLT FUTAS NEM JUT EL A KOZZETETELI DONTESIG, tehat az ok
+        ISMERETLEN -- a vonalkod sora ezert KIMEGY, ugyanugy, mint korabban.
+        Egy ismeretlen allapotban elhallgatott jelzes rosszabb, mint egy
+        folosleges.
+      */
+      vonalkodSort(vonalkod, product.id, nyersVonalkod, azonosKodudarab, null);
       out.stderr(
         `${productId}: MEGÁLLT (${outcome.reason}) ${outcome.details}\n`,
       );
       failed += 1;
       continue;
     }
+
+    vonalkodSort(
+      vonalkod,
+      product.id,
+      nyersVonalkod,
+      azonosKodudarab,
+      outcome.publication.reason,
+    );
     /**
      * AMI NEM KERULT RA, A SIKER MELLE -- ES CSAK AKKOR, HA VAN MIT MONDANIA.
      *
