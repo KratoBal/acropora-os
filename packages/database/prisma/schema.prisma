@@ -328,6 +328,9 @@ enum ServiceJobEventKind {
   /// Egy munkalap lekerult a jegyrol. KELL a parja: enelkul egy levalasztott
   /// lap CSENDBEN tunne el a jegyrol, es a naplo azt allitana, hogy ma is ott van.
   WORKSHEET_DETACHED
+  /// Kimenő értesítés ténye (ma: levél a jegy nyitójának). A jegy állapota
+  /// NEM változik tőle, ezért nem fér a STATUS_CHANGE alá: az hazugság lenne.
+  NOTIFICATION_SENT
 }
 
 enum ServiceJobStatus {
@@ -683,6 +686,7 @@ model User {
   /// torles hangosan elakad, es ember dont a fiok sorsarol.
   customer                   Customer?                     @relation("CustomerPortalUser", fields: [customerId], references: [id], onDelete: Restrict)
   supplier                   Supplier?                     @relation("SupplierPortalUser", fields: [supplierId], references: [id], onDelete: Restrict)
+  ticketMailTemplates        TicketMailTemplate[]          @relation("TicketMailTemplateUpdatedBy")
 
   @@index([role, isActive])
   /// A Restrict ellenorzese MINDEN partner-torlesnel lefut, es index nelkul
@@ -5110,4 +5114,37 @@ model ContentComment {
   createdAt DateTime    @default(now())
 
   @@index([contentId, createdAt])
+}
+
+/// A KIMENŐ LEVELEK SZERKESZTHETŐ SABLONJA, ESEMÉNYENKÉNT EGY SOR.
+///
+/// Balázs kérése (2026-09-21 11:39:56 UTC, message_id 1551558600474886145):
+/// a levél törzsébe beilleszthető változók kellenek, és a szöveget ő írja át.
+///
+/// MIÉRT TÁBLA, ÉS NEM FÁJL: a fájl a képbe sül, tehát az átírásához
+/// újratelepítés kellene. A "bármikor átírom" ezt kizárja. A ház is így teszi
+/// minden szerkeszthető beállítással (UnasConnectionSetting és társai).
+///
+/// AZ AZONOSÍTÓ AZ ESEMÉNY NEVE, nem egy generált kulcs: ugyanezen az úton megy
+/// majd a lezárt jegy kiküldése és a munkalap eljuttatása is. Egy tábla, három
+/// felhasználás, és a sor MEGTALÁLHATÓ anélkül, hogy bárhol azonosítót kellene
+/// tárolni róla.
+model TicketMailTemplate {
+  /// Az esemény neve, például `WORKSHEET_SIGNED`.
+  id String @id
+
+  /// A levél tárgya. A behelyettesítés UTÁN is fejléc marad, tehát a küldő
+  /// oldalán sortörés-őrzőn megy át.
+  subject String
+
+  /// A levél törzse, `{{valtozo}}` alakú helyekkel.
+  body String
+
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  updatedBy User? @relation("TicketMailTemplateUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([updatedByUserId])
 }
