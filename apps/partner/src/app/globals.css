@@ -648,3 +648,40 @@ button:disabled {
   font-weight: 700;
   padding: 0.55rem 1.4rem;
 }
+
+/*
+  A TÁBLÁZAT SAJÁT GÖRGETŐT KAP, NEM A LAP. Telefonon a tételsor öt oszlopa
+  nem fér ki, és egy vízszintesen csúszó LAP minden más szakaszt is elmozdít.
+*/
+.table-scroll {
+  margin-top: 1.1rem;
+  overflow-x: auto;
+}
+.data-table {
+  border-collapse: collapse;
+  min-width: 34rem;
+  width: 100%;
+}
+.data-table th {
+  border-bottom: 1px solid #e4e4ec;
+  color: #696979;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0 0.7rem 0.55rem 0;
+  text-align: left;
+  white-space: nowrap;
+}
+.data-table td {
+  border-bottom: 1px solid #f1f1f5;
+  padding: 0.7rem 0.7rem 0.7rem 0;
+  vertical-align: top;
+}
+.data-table td span {
+  color: #666677;
+  display: block;
+  font-size: 0.85rem;
+}
+.data-table .numeric {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

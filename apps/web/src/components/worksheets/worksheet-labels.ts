@@ -2,12 +2,17 @@ import type { WorksheetVersionStatus } from "@acropora/types";
 
 import type { ServiceTone } from "@/components/service/service-theme";
 
-export const worksheetStatusLabel: Record<WorksheetVersionStatus, string> = {
-  DRAFT: "Piszkozat",
-  AWAITING_SIGNATURE: "Aláírásra vár",
-  SIGNED: "Aláírva",
-  REJECTED: "Elutasítva",
-};
+/**
+ * AZ ÁLLAPOT-FELIRATOK A `@acropora/types`-BÓL JÖNNEK, ÉS ITT CSAK ÁTMENNEK.
+ *
+ * 2026-09-21-ig ennek a fájlnak a törzsében álltak. A partnerportál ugyanezt a
+ * négy állapotot írja ki, és az `apps/web` forrását nem éri el -- addig a
+ * NYERS enum-érték látszott nála (`SIGNED`, `DRAFT`).
+ *
+ * A re-export marad, mert a modul többi címkéje (szín, összegformázás)
+ * webes, tehát a hívóknak amúgy is innen kell importálniuk.
+ */
+export { worksheetStatusLabel } from "@acropora/types";
 
 /**
  * AZ ALLAPOT MEGITELESE: jo, rossz, varakozo vagy semleges. EGY helyen.
