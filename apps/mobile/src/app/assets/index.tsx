@@ -3,7 +3,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Redirect, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -23,6 +23,11 @@ import { filterAssets } from "@/lib/assets/asset-search";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { readCachedAssets, rememberAssets } from "@/lib/offline/asset-cache";
+import { pendingQueueRows } from "@/lib/offline/queue-store";
+import {
+  eszkozokVarakozokkal,
+  varakozoEszkozok,
+} from "@/lib/offline/varakozo-eszkozok";
 import {
   syncAssetsForOffline,
   type OfflineSyncResult,
@@ -92,6 +97,40 @@ export default function AssetListScreen() {
     })();
   }, [query.data, queryClient]);
 
+  /*
+    A KET HOOK A KORAI VISSZATERESEK FOLOTT ALL, ES EZ NEM IZLES: a React
+    megkoveteli, hogy minden renderben UGYANANNYI hook fusson le. Egy
+    `Redirect` utan elhelyezve az elso atiranyitasnal eltunnenek, es a
+    kovetkezo render mar mas sorrendben talalna oket.
+  */
+  /**
+   * A MEG FEL NEM MENT FELVITELEK, A LISTA ELEJEN.
+   *
+   * Balazs jelentese (2026-09-18) es dontese (2026-09-21, "elfogadom"): offline
+   * mentes utan a kepernyo lepjen vissza a listara, es a felvitt eszkoz
+   * JELENJEN MEG rajta, megjelolve, hogy meg feltoltesre var.
+   *
+   * A SOR A FORRAS, NEM EGY MASODIK NYILVANTARTAS: ugyanaz a tabla, amibol a
+   * kiurites dolgozik. Egy kulon lista ket helyen allo igazsagot csinalna, es a
+   * ketto elcsuszasa nema lenne -- a szerelo egy mar felment eszkozt latna
+   * varakozokent, vagy forditva.
+   */
+  const sorbanAllok = useQuery({
+    queryKey: ["varakozo-eszkozok"],
+    queryFn: pendingQueueRows,
+    enabled: status === "authenticated" && Boolean(capabilities?.assetsView),
+  });
+  /*
+    AZ ELLENORZO MONDAT A FELVITELROL, ATADVA. A felviteli kepernyo eddig egy
+    borostyan dobozban irta ki (hany eszkoz ellen ellenoriztunk, es mikori az
+    adat); a doboz a visszalepessel eltunt volna. A mondat ITT jelenik meg,
+    egyszer, a lista tetejen.
+  */
+  const params = useLocalSearchParams<{ varakozoUzenet?: string | string[] }>();
+  const varakozoUzenet = Array.isArray(params.varakozoUzenet)
+    ? params.varakozoUzenet[0]
+    : params.varakozoUzenet;
+
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
   if (!capabilities?.assetsView) return <Redirect href="/" />;
 
@@ -111,6 +150,16 @@ export default function AssetListScreen() {
    * mezőt nézi, mint a szerver.
    */
   const items = serverItems ?? filterAssets(cachedItems, search);
+
+  const varakozok = varakozoEszkozok(sorbanAllok.data ?? []);
+  /*
+    KERESES KOZBEN A VARAKOZOK IS KIESNEK. A talalati lista mast allitana, mint
+    a felirata: a szerelo egy szukitett listaban latna egy oda nem tartozo sort.
+  */
+  const sorok = eszkozokVarakozokkal({
+    szerverElemek: items,
+    varakozok: search.trim() ? [] : varakozok,
+  });
   const totalPages = query.data?.pagination.totalPages ?? 1;
 
   const notice = describeOfflineNotice({
@@ -124,14 +173,22 @@ export default function AssetListScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
       <FlatList
-        data={items}
-        keyExtractor={(item) => item.id}
+        data={sorok}
+        keyExtractor={(sor) =>
+          sor.fajta === "varakozo" ? sor.tetel.operationId : sor.tetel.id
+        }
         contentContainerStyle={styles.container}
         refreshing={query.isRefetching}
         onRefresh={() => void query.refetch()}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListHeaderComponent={
           <View style={styles.header}>
+            {varakozoUzenet ? (
+              <View style={styles.varakozoUzenet}>
+                <Text style={styles.varakozoCimke}>MENTVE A TELEFONRA</Text>
+                <Text style={styles.varakozoMeta}>{varakozoUzenet}</Text>
+              </View>
+            ) : null}
             <Text style={styles.eyebrow}>ASSET MANAGEMENT</Text>
             <Text style={styles.title}>Partnereszközök</Text>
             <Text style={styles.subtitle}>
@@ -266,14 +323,40 @@ export default function AssetListScreen() {
             </View>
           ) : null
         }
-        renderItem={({ item }) => (
-          <AssetCard
-            asset={item}
-            onPress={() =>
-              router.push({ pathname: "/assets/[id]", params: { id: item.id } })
-            }
-          />
-        )}
+        renderItem={({ item: sor }) =>
+          sor.fajta === "varakozo" ? (
+            /*
+              A VARAKOZO SOR NEM UGY NEZ KI, MINT A TOBBI, ES EZ A KIKOTES.
+              Balazs epp azt panaszolta, hogy nem tudja, sikerult-e. Egy sor,
+              ami ugyanugy nez ki, mint a kesz eszkozok, MASIK hazugsag
+              ugyanarrol -- ezert kap sajat hatteret, keretet es feliratot,
+              nem csak egy halvany arnyalatot.
+
+              ES NEM KATTINTHATO: adatlapja meg nincs, mert azonositot a
+              szerver ad a felmenetelkor. Egy kattintas ures kepernyore
+              vinne, es az ugy nezne ki, mintha elveszett volna.
+            */
+            <View style={styles.varakozoSor}>
+              <Text style={styles.varakozoCimke}>FELTÖLTÉSRE VÁR</Text>
+              <Text style={styles.varakozoNev}>{sor.tetel.name}</Text>
+              <Text style={styles.varakozoMeta}>
+                {sor.tetel.labelCode
+                  ? `Matricakód: ${sor.tetel.labelCode}`
+                  : "Eszközszámot a feltöltéskor kap."}
+              </Text>
+            </View>
+          ) : (
+            <AssetCard
+              asset={sor.tetel}
+              onPress={() =>
+                router.push({
+                  pathname: "/assets/[id]",
+                  params: { id: sor.tetel.id },
+                })
+              }
+            />
+          )
+        }
       />
     </SafeAreaView>
   );
@@ -281,6 +364,34 @@ export default function AssetListScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#071827" },
+  varakozoSor: {
+    backgroundColor: "#3a2a12",
+    borderColor: "#d9a441",
+    borderRadius: 12,
+    borderWidth: 2,
+    padding: 14,
+  },
+  varakozoCimke: {
+    color: "#ffd48a",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  varakozoNev: {
+    color: "#f4fbff",
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 6,
+  },
+  varakozoMeta: { color: "#d8c3a0", fontSize: 13, marginTop: 4 },
+  varakozoUzenet: {
+    backgroundColor: "#3a2a12",
+    borderColor: "#d9a441",
+    borderRadius: 12,
+    borderWidth: 2,
+    marginBottom: 16,
+    padding: 14,
+  },
   container: { padding: 18, paddingBottom: 36 },
   header: { marginBottom: 20 },
   eyebrow: {
