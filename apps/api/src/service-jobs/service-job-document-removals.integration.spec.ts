@@ -46,6 +46,29 @@ import { ServiceJobsRepository } from "./service-jobs.repository.js";
  * tovabbi szurese), mi koti ossze (semmi: szabad szoveg-oszlop), nohet-e a
  * halmaz (igen, barmelyik feature irhat).
  *
+ * === KET FELET KELL VEDENI, ES A FORDITO CSAK AZ EGYIKET LATJA ===
+ *
+ * (acrobot pontositasa, 2026-09-21 23:49, a kalibracios kor naplojabol.)
+ *
+ *   a szuro KIVETELET     ma a FORDITO fogja meg. Ha a sor eltunik, a
+ *                         `DOCUMENT_DELETED_ACTION` importja hasznalatlan
+ *                         marad, es a build TS6133-mal elhasal.
+ *   a szuro KITAGITASAT   SEMMI nem fogja meg ezen az allitason kivul. Egy
+ *                         `not` alaku vagy tagabb egyenloseg lefordul, lefut,
+ *                         es tobb sort ad vissza.
+ *
+ * A kalibracio EPPEN A MASODIKAT meri: a rontas nem torli a feltetelt, hanem
+ * olyanra csereli, amit minden sor teljesit. Igy a konstans hasznalatban marad
+ * (tehat lefordul), es a viselkedes valtozik -- pontosan a fordito VAK FOLTJA.
+ *
+ * ES AZ ELSO VEDELEM ESETLEGES: csak addig all, amig a konstanst KIZAROLAG ez
+ * az egy sor hasznalja. Aki holnap masutt is behivja, ott a kivetel is nemava
+ * valik, es onnantol egyedul ez az allitas marad.
+ *
+ * (Az elso kalibracios probam epp a torlo alakkal ment ki, a build lepesen allt
+ * meg, es NULLA teszt futott. A meres-ag kapuja azert fogta meg, mert a VART
+ * NYOMOKAT keresi, nem azt, hogy "elbukott valami".)
+ *
  * === MIERT NEM ELEG MOCKKAL MERNI ===
  *
  * Merve a fo agon, 2026-09-21: ot spec emliti a `documentRemovals`-t, es MIND
