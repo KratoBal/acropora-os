@@ -203,11 +203,23 @@ describe(
      */
     it("a torles-sor MEGJELENIK", async () => {
       const sorok = await new ServiceJobsRepository().documentRemovals(jobId);
-      assert.equal(sorok.length >= 1, true, "a torles-sor nem jott vissza");
-      assert.equal(
-        (sorok[0]?.metadata as { fileName?: string } | null)?.fileName,
-        "torolt-csatolmany.pdf",
+      /*
+        NEV SZERINT KERESSUK, NEM A NULLADIK ELEMET NEZZUK -- es ezt eles eset
+        tanitotta (2026-09-21). Az elso alak a `sorok[0]` `fileName` mezojet
+        allitotta, vagyis a SORRENDTOL fuggott: amint a kalibracios rontas
+        kitagitotta a szurot, a lista elejere a level-sor kerult, aminek nincs
+        `fileName`-je, es a POZITIV KONTROLL is elbukott.
+
+        Egy kontroll, ami ugyanattol romlik el, amit ellenoriznie kellene, nem
+        kontroll: eppen azt nem tudja megmondani, hogy a lekerdezes egyaltalan
+        ad-e vissza valamit.
+      */
+      const torles = sorok.find(
+        (sor) =>
+          (sor.metadata as { fileName?: string } | null)?.fileName ===
+          "torolt-csatolmany.pdf",
       );
+      assert.ok(torles, "a torles-sor nem jott vissza");
     });
 
     /**
