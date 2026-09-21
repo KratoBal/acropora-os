@@ -3709,6 +3709,29 @@ model Worksheet {
    * A CÍMZETT NINCS TÁROLVA, mert nincs is: a lap hozzánk kerül vissza, a
    * szolgáltatóhoz. Amikor a lap hibajegy nélkül születik, még felelős sincs,
    * akinek címezni lehetne.
+   * === A JELENTÉSE 2026-09-21-ÉN BŐVÜLT, ÉS EL IS DŐLT ===
+   * A fenti bekezdés 2026-09-02-i, és AKKOR IGAZ VOLT: a mezőnek nem volt
+   * írója, tehát csak a LAP mozgásáról szólt (a szerelő végzett, a lap a
+   * szolgáltatóé). Egy író nélküli mező dokumentációja nem viselkedést ír le,
+   * hanem egy feltevést.
+   * 2026-09-21-én írót kapott (#908), és ezzel a jelentése az ESZKÖZRE
+   * szélesedett. Balázs döntése (2026-09-21 09:39, Discord, Munkalap
+   * folyamatok szál), szó szerint: „ne zarhassuk le amig nalunk van".
+   * Vagyis az átadás NEM dátum-mező, hanem FELTÉTEL: a hibajegy lezárásának
+   * egyik kapuja.
+   * A KÉT OLVASAT ELLENTÉTES IRÁNYÚ VOLT (az egyik szerint az átadás felénk
+   * történik, a másik szerint tőlünk), és a gazda mondata döntött: TŐLÜNK.
+   * === AMIT EBBŐL A KÓDNAK TUDNIA KELL ===
+   * A HELYSZÍNI MUNKÁNÁL NINCS MIT VISSZAADNI, és a mező mégis kitöltendő.
+   * Ez tudatos: a jelölés MINDEN lapra kell, mert nem a gép helyét tároljuk
+   * (azt nem tudjuk), hanem azt, hogy a szerelő LEZÁRTA-e a lap útját. Ezért
+   * a felhasználónak szóló szöveg sem azt mondja, hogy az eszköz nálunk van,
+   * hanem hogy az átadás nincs rögzítve -- az utóbbi helyszíni munkánál is
+   * igaz marad.
+   * ÉS EGY MÉRT TÉNY, AMIRE NE ÉPÍTSEN SENKI: a kapu bevezetésekor (mérve az
+   * éles adaton, 2026-09-21) KÉT MÁR LEZÁRT hibajegynek volt jelöletlen
+   * lapja. Vagyis a `COMPLETED` állapot megléte NEM bizonyítja, hogy a lapjai
+   * át voltak adva. Aki ebből visszafelé következtet, hibás eredményt kap.
    */
   handedOverAt         DateTime?
   handedOverById       String?

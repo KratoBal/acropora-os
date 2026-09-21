@@ -870,22 +870,41 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   ÁTADÁS-ÁLLAPOTOT CSAK AKKOR ÁLLÍTUNK, HA VAN MIRE.
 
                   Itt korábban a hiányzó dátum ágán a "Még nálunk van" mondat
-                  állt. Mérve 2026-09-07: a `handedOverAt` mezőt SEMMI nem írja
-                  -- nincs írója az API-ban (négy helyen csak olvassa), a
-                  kliensek nem is tudnának írni (sem a web, sem a mobil nem
-                  hivatkozik az adatbázis-csomagra), és a mobil fában a
-                  `handedOver` szó nulla alkalommal fordul elő, miközben 49
-                  fájl említi a munkalapot.
+                  állt, és 2026-09-07-én kivettük. Az AKKORI indok: a
+                  `handedOverAt` mezőnek nem volt írója, tehát az a mondat
+                  MINDEN munkalapnál, MINDIG megjelent, és egy állapotot
+                  állított, ami nem létezik. Nem hiányzó adat volt, hanem hamis
+                  állítás: aki azt olvassa, hogy az eszköze még nálunk van, nem
+                  kérdez utána -- egy üres mező után igen.
 
-                  Vagyis az a mondat MINDEN munkalapnál, MINDIG megjelent, és
-                  egy állapotot állított, ami nem létezik. Ez nem hiányzó adat,
-                  hanem hamis állítás: a partner, aki azt olvassa, hogy az
-                  eszköze még nálunk van, nem fog utánakérdezni -- egy üres
-                  mező után igen.
+                  === A MÉRÉS RÉSZE 2026-09-21 ÓTA ELAVULT ===
 
-                  Ez NEM az átadás funkció eltávolítása: az soha nem létezett.
-                  Egy meg nem lévő viselkedés ÁLLÍTÁSÁT vonjuk vissza. Ha egyszer
-                  lesz írója, az alábbi ág magától megjelenik.
+                  A blokk korábban azt állította, hogy a mezőt SEMMI nem írja,
+                  és hogy a mobil fában a `handedOver` szó nulla alkalommal
+                  fordul elő. A #908 óta egyik sem áll. Visszamérve a fő ágon
+                  2026-09-21-én: az írás a `worksheets.repository.ts` 335-336.
+                  sorában áll (mind a két ágon, a visszavonáson is), a végpont
+                  a `worksheets.controller.ts` 375. sorában (`POST
+                  :id/handover`), és a mobil fában KILENC fájl említi.
+
+                  A blokk utolsó mondata ("Ha egyszer lesz írója, az alábbi ág
+                  magától megjelenik") pedig BETELJESÜLT: az "Átadva" sor ma
+                  valódi adatot mutat.
+
+                  AZ INDOK VISZONT ÉRVÉNYES MARAD, ezért maradt itt: állapotot
+                  nem állítunk író nélkül. Ez a mondat nem a mezőről szól,
+                  hanem arról, hogyan szabad hiányzó adatot megjeleníteni.
+
+                  === AMI NYITOTT, ÉS SZÁNDÉKOSAN NEM ITT DŐL EL ===
+
+                  A NEGATÍV ág (a "Még nálunk van" mondat) itt továbbra SINCS
+                  visszatéve, holott ma már tudna igazat mondani. Nem felejtés:
+                  a jegy alatt több lap is állhat, tehát ez a lista soronként
+                  ismételné a mondatot. És a kérdés összefügg a készülő lezárási
+                  kapuval (6515e700): ha a kapu visszatartja a jegyet, a kezelő
+                  ITT fogja keresni az okot. A két szöveget EGYÜTT kell
+                  eldönteni, különben a kapu mondata és a lista némasága két
+                  külön meglepetés lesz.
                 */}
                       {worksheet.handedOverAt ? (
                         <span className="ml-2 text-xs text-dusk-500">
