@@ -1,4 +1,5 @@
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 import {
   Body,
   BadRequestException,
@@ -38,7 +39,6 @@ import { ServiceAssetsService } from "./service-assets.service.js";
  * Hány fájl mehet egy feltöltési kérésben. A fájlok a memóriában gyűlnek, így
  * a legrosszabb eset ennek és a 10 megabájtos fájlméretnek a szorzata.
  */
-export const MAX_DOCUMENTS_PER_UPLOAD = 10;
 
 @Controller("service/assets")
 export class ServiceAssetsController {
@@ -252,9 +252,9 @@ export class ServiceAssetsController {
     // hibáját semmi nem alakítja át: a hívó 500-at kapna, holott csak túl sok
     // fájlt jelölt ki. Egy fájllal több beolvasása legfeljebb tíz megabájt, és
     // cserébe a válasz megmondja, mi a baj és mi a határ.
-    FilesInterceptor("file", MAX_DOCUMENTS_PER_UPLOAD + 1, {
+    FilesInterceptor("file", DOCUMENT_UPLOAD_LIMITS.files + 1, {
       storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 },
+      limits: { fileSize: DOCUMENT_UPLOAD_LIMITS.fileSizeBytes },
     }),
   )
   async uploadDocument(
@@ -265,9 +265,9 @@ export class ServiceAssetsController {
   ) {
     if (!files?.length)
       throw new BadRequestException("A feltöltendő fájl kötelező.");
-    if (files.length > MAX_DOCUMENTS_PER_UPLOAD)
+    if (files.length > DOCUMENT_UPLOAD_LIMITS.files)
       throw new BadRequestException(
-        `Egyszerre legfeljebb ${MAX_DOCUMENTS_PER_UPLOAD} fájl tölthető fel.`,
+        `Egyszerre legfeljebb ${DOCUMENT_UPLOAD_LIMITS.files} fájl tölthető fel.`,
       );
 
     // EGYESÉVEL, SORBAN, ÉS NEM PÁRHUZAMOSAN. A keret-ellenőrzés a már

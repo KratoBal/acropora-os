@@ -1,4 +1,5 @@
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 import {
   BadRequestException,
   Body,
@@ -33,7 +34,6 @@ import {
   CreateWorksheetDto,
   CreateWorksheetEntryDto,
   CreateWorksheetLineDto,
-  MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD,
   SetWorksheetAssetsDto,
   SetWorksheetAssigneesDto,
   SetWorksheetPartnerCodeDto,
@@ -432,9 +432,9 @@ export class WorksheetsController {
   @Post(":id/documents")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   @UseInterceptors(
-    FilesInterceptor("file", MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD + 1, {
+    FilesInterceptor("file", DOCUMENT_UPLOAD_LIMITS.files + 1, {
       storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 },
+      limits: { fileSize: DOCUMENT_UPLOAD_LIMITS.fileSizeBytes },
     }),
   )
   async uploadDocument(
@@ -445,9 +445,9 @@ export class WorksheetsController {
   ) {
     if (!files?.length)
       throw new BadRequestException("A feltöltendő fájl kötelező.");
-    if (files.length > MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD)
+    if (files.length > DOCUMENT_UPLOAD_LIMITS.files)
       throw new BadRequestException(
-        `Egyszerre legfeljebb ${MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD} fájl tölthető fel.`,
+        `Egyszerre legfeljebb ${DOCUMENT_UPLOAD_LIMITS.files} fájl tölthető fel.`,
       );
 
     // EGYESEVEL, SORBAN, NEM PARHUZAMOSAN: a keret-ellenorzes a mar

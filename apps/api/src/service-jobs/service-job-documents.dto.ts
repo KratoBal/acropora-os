@@ -16,7 +16,6 @@ import { DOCUMENT_CAPTION_MAX_LENGTH } from "../documents/document-caption.js";
  * kulonbozo hatar csak azt jelentene, hogy az egyiket elfelejtettuk
  * karbantartani.
  */
-export const MAX_SERVICE_JOB_DOCUMENTS_PER_UPLOAD = 10;
 
 const SERVICE_JOB_DOCUMENT_TYPES = ["PHOTO", "OTHER"] as const;
 
