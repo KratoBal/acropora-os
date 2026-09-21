@@ -12,6 +12,7 @@ import type { AuthenticatedUser } from "@acropora/types";
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { hiddenRowsWhere } from "../common/hidden-rows.js";
 import { serviceJobVisibilityWhere } from "./service-job-visibility.js";
+import { ertesitendoDelegaltak } from "./ertesitendo-delegaltak.js";
 import { mayWriteServiceJob } from "./service-job-write-scope.js";
 import { mayAssignUnit } from "./visibility-assignment.js";
 
@@ -300,13 +301,24 @@ export class ServiceJobsService {
       clientOperationId: kulcs,
     });
 
-    // ERTESITES CSAK AZUTAN, hogy a jegy tarolva van. Felvitelkor minden
-    // delegalt uj, tehat a lista maga a kulonbseg.
-    if (assigneeIds.length > 0)
+    /*
+      ERTESITES CSAK AZUTAN, hogy a jegy tarolva van. Felvitelkor minden
+      delegalt uj, tehat a lista maga a kulonbseg.
+
+      A FELTETEL A SZURT LISTARA ALL, NEM A NYERSRE, es ez nem stilus: ha
+      valaki EGYEDUL sajat magat teszi a jegyre, a szures utan URES lista
+      marad. A nyers hosszra kotott feltetel mellett egy ures nevsorral hivnank
+      az ertesitot -- egy kuldes, aminek nincs cimzettje.
+    */
+    const ertesitendok = ertesitendoDelegaltak({
+      jeloltek: assigneeIds,
+      cselekvo: actorUserId,
+    });
+    if (ertesitendok.length > 0)
       this.notifications?.notifyServiceJobAssignment({
         serviceJobId: created.id,
         subject: title,
-        userIds: assigneeIds,
+        userIds: ertesitendok,
       });
 
     return created;
@@ -346,11 +358,20 @@ export class ServiceJobsService {
 
     const detail = await this.internalDetail(id, user);
 
-    if (updated.added.length > 0)
+    /*
+      A MASIK HIVOHELY, ES A BEMENET MAST JELENT: itt CSAK a hozzaadottak
+      allnak a listan, nem a teljes nevsor. A szures szabalya ugyanaz, a
+      jelentese nem -- ezert all mind a kettore KULON allitas.
+    */
+    const ujErtesitendok = ertesitendoDelegaltak({
+      jeloltek: updated.added,
+      cselekvo: user.id,
+    });
+    if (ujErtesitendok.length > 0)
       this.notifications?.notifyServiceJobAssignment({
         serviceJobId: id,
         subject: detail.title,
-        userIds: updated.added,
+        userIds: ujErtesitendok,
       });
 
     return detail;
