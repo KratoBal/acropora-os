@@ -42,6 +42,19 @@ export interface ServiceJobListItem {
 
 export interface ServiceJobListResponse {
   items: ServiceJobListItem[];
+  /**
+   * A SZERVER ELVAGTA-E A LISTAT. Ketszaz sornal vagodik, es a valasz EZ ELOTT
+   * is mindig kuldte -- a mobil TUKOR nem deklaralta, tehat a telefon nem
+   * tudott rola.
+   *
+   * ES EZ NEM ELMELETI: a helyszin-letoltes epp ebbol tudja megmondani, hogy a
+   * keszuleken levo masolat HIANYOS. Egy nem deklaralt mezo itt ugyanaz, mint
+   * egy hianyzo: az adat a droton van, es senki nem olvassa.
+   *
+   * Elhagyhato, mert a tukor REGEBBI valaszokkal is talalkozhat (sorban allo,
+   * mentett torzsek), es egy kotelezo mezo azokat forditaskor vagna el.
+   */
+  truncated?: boolean;
 }
 
 /**
