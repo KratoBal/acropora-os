@@ -72,6 +72,19 @@ export function WorksheetDetail({ id }: { id: string }) {
       setWorksheet(detail);
       setDocuments(documentList.items);
       setSigners(signerList);
+      /*
+        EGY VALASZTHATO ALAIRONAL ELORE KIVALASZTJUK -- ES EZ NEM KENYELEM.
+
+        A szerver 2026-09-21 ota a KEROre szukiti a listat (külsős partner csak
+        a sajat neveben irhat ala). A valaszto igy egy elemu, es a beküldés
+        `if (!signerUserId) return;` agon all: aki nem nyitja le a legordulot,
+        megnyomja a gombot, ES NEM TORTENIK SEMMI -- hibauzenet nelkul.
+
+        Egy nema no-op rosszabb, mint egy hibauzenet: a felhasznalo azt hiszi,
+        a rendszer romlott el.
+      */
+      if (signerList.items.length === 1)
+        setSignerUserId(signerList.items[0]!.id);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A munkalap nem tölthető be.",

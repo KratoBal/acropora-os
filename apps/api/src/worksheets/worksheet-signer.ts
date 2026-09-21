@@ -77,8 +77,21 @@ export function describeEmptySignerList(input: {
   /** A lap partnere szerepel-e a valaszthato szervizpartnerek kozott. */
   partnerSelectable: boolean;
   count: number;
+  /**
+   * KULSOS (partner hatokoru) KERO-E. Ilyenkor a lista SZUKITVE van a kerore,
+   * tehat az uresseg MAS okbol all elo, es MAS a teendo is: nem az irodaban
+   * kell munkatarsat felvenni, hanem a kero sajat fiokja nem all a lap
+   * partnerenek munkatarsai kozott.
+   */
+  kulsoKero?: boolean;
 }): string | null {
   if (input.count > 0) return null;
+  if (input.kulsoKero)
+    return (
+      "A saját fiókod nem szerepel ennek a munkalapnak a partnerénél " +
+      "nyilvántartott munkatársak között, ezért nem tudod aláírni. Szólj nekünk, " +
+      "és rendbe tesszük."
+    );
   if (!input.partnerSelectable)
     return (
       "Ehhez a partnerhez nem lehet munkatársat kötni, mert a partner nem " +

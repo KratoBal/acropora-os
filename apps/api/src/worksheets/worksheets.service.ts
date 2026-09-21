@@ -894,7 +894,7 @@ export class WorksheetsService {
         "Az elutasítás okát meg kell adni, legalább három karakterrel: enélkül nem derül ki, mit kell javítani.",
       );
 
-    const signer = await this.resolveSigner(id, input, actorUserId);
+    const signer = await this.resolveSigner(id, input, actorUserId, scope);
     const result = await this.repository.sign({
       worksheetId: id,
       decision: input.decision,
@@ -1070,17 +1070,46 @@ export class WorksheetsService {
   async signerCandidates(
     id: string,
     scope: PartnerScope = { kind: "internal" },
+    actorUserId?: string,
   ) {
     const worksheet = await this.requireWorksheet(id, scope);
-    const items = await this.repository.customerContacts(worksheet.customerId);
+    const mind = await this.repository.customerContacts(worksheet.customerId);
     const partnerSelectable = await this.repository.isSelectablePartner(
       worksheet.customerId,
     );
+    /**
+     * KULSOS KERONEK CSAK ONMAGA -- ES NEM URES LISTA.
+     *
+     * acrobot masodik kikotese: ha a partner csak magat irhatja ala, a valaszto
+     * NE adja oda a kollegai nevsorat. Az ma egy olyan lista, amit nem
+     * hasznalhat, es kozben megmutatja, ki dolgozik a cegnel.
+     *
+     * URES LISTA VISZONT NEM A HELYES SZUKITES: a portal a listarol valaszt, es
+     * a gombja a lista hosszara van kotve (merve: `worksheet-detail.tsx`).
+     * Ures halmaz mellett a partner EGYALTALAN nem tudna alairni -- egy tul
+     * szigoru javitas pontosan azt a munkat allitana le, amit vedeni akarunk.
+     *
+     * A SZURES UGYANAZT A FELTETELT HASZNALJA, mint az alairas kapuja: a kero
+     * SAJAT azonositoja. Igy a valaszto es az alairas nem tud elcsuszni --
+     * amit a lista felkinal, azt a `sign` elfogadja, es forditva.
+     */
+    const kulsos = scope.kind !== "internal";
+    const items =
+      kulsos && actorUserId
+        ? mind.filter((contact) => contact.id === actorUserId)
+        : mind;
     return {
       items,
       emptyReason: describeEmptySignerList({
         partnerSelectable,
         count: items.length,
+        /*
+          A KULSOS URES ESET MAS OKBOL URES, ES MAS A TEENDO IS. A "nincs
+          hozzakotott munkatars" mondat az IRODAHOZ kuld -- itt viszont a
+          partner sajat fiokja nem all a lap partnerenek munkatarsai kozott,
+          es azt nem o oldja fel.
+        */
+        kulsoKero: kulsos,
       }),
     };
   }
@@ -1099,11 +1128,60 @@ export class WorksheetsService {
     worksheetId: string,
     input: SignWorksheetVersionDto,
     actorUserId: string,
+    scope: PartnerScope = { kind: "internal" },
   ): Promise<{
     signerName: string;
     signerUserId: string | null;
     signerSource: WorksheetSignerSource;
   }> {
+    /**
+     * KULSOS KERO CSAK SAJAT MAGAT IRHATJA ALA.
+     *
+     * Balazs merese, 2026-09-21 14:25:28 UTC (Discord, Munkalap folyamatok),
+     * szo szerint: "masodszor is ki tudja valasztani hogy ki irja ala. ez nem
+     * jo. minden kulsos partner csak a sajat neveben irhat ala".
+     *
+     * === MIERT ITT ALL, ES NEM A FELULETEN ===
+     *
+     * A valaszto elrejtese semmit nem zarna le: a `POST /worksheets/:id/sign`
+     * torzsben veszi at az alairo azonositojat, es a `PARTNER_SERVICE` szerep
+     * viseli a `SERVICE_MANAGE` jogot (`auth.ts`). A keres tehat a felulet
+     * nelkul is elkuldheto barmelyik munkatars azonositojaval.
+     *
+     * === EGY FELTETEL, HAROM AG ===
+     *
+     * A `resolveSigner` harom agra fut, es kulsos keroval MINDHAROM elerheto
+     * volt. A kartya csak az elsot nevezte meg:
+     *
+     *   signerUserId: <kollega>   a kollegat irja ala. Kodot ker.
+     *   signerName: "barki"       TYPED ag: SZABAD SZOVEG, es KOD SEM KELL.
+     *   signSelf: true            sajat nevben -- DE a lapra `INTERNAL` forras
+     *                             kerul, vagyis a dokumentum azt allitja, hogy
+     *                             a MI kollegank irta ala, es kod sem kell.
+     *
+     * A masodik a legtagabb (nem kell hozza egyetlen letezo azonosito sem), a
+     * harmadik a legalattomosabb: a szabaly betujet teljesiti ("sajat nevben"),
+     * es kozben HAMISAT allit egy dokumentumon, ami bizonyitekkent all.
+     *
+     * Ez az EGY feltetel mind a hármat lezarja: a `signSelf` es a TYPED agon
+     * nincs `signerUserId`, a kollegae pedig elter. Az ELLENORZOTT ut valtozik
+     * a legkevesbé: a kero ugyanugy a listarol valaszt es kodot ad -- csak a
+     * lista egy elemu.
+     *
+     * === A HATOKOR DONT, NEM A SZEREP (acrobot kikotese) ===
+     *
+     * Es a kapu TELJES: egy `PARTNER_SERVICE` fiok KOTES NELKUL belsos
+     * hatokort kapna, de ilyen fiok 2026-09-17 ota LETRE SEM JON -- a
+     * `users.service.ts` elutasitja, es a hibauzenete pontosan ezt az okot
+     * nevezi meg. Tehat minden partner-fioknak van kotese, es egyik sem esik
+     * at ezen a feltetelen.
+     */
+    if (scope.kind !== "internal" && input.signerUserId !== actorUserId)
+      throw new BadRequestException(
+        "Külsős partnerként csak a saját nevedben írhatod alá a munkalapot. " +
+          "Válaszd ki magad a listából, és add meg az aláírókódodat.",
+      );
+
     /**
      * A BELSOS AG ALL ELOL, ES EZ NEM SORREND-IZLES.
      *

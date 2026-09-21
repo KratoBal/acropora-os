@@ -5,6 +5,7 @@ import type { AuthenticatedUser } from "@acropora/types";
 
 import type { WorksheetsRepository } from "./worksheets.repository.js";
 import { WorksheetsService } from "./worksheets.service.js";
+import { hashPassword } from "../users/password.util.js";
 
 const PARTNER = {
   id: "partner-a-user",
@@ -161,6 +162,25 @@ describe("partneri munkalap-aláírás", () => {
    *
    * === ES A HATOKOR IS MERVE VAN, NEM CSAK AZ, HOGY ATMENT ===
    *
+   * === A BEMENETE 2026-09-21-EN MEGVALTOZOTT, ES EZ NEM A TESZT GYENGITESE ===
+   *
+   * Ez az allitas korabban SZABAD SZOVEGES nevvel irt ala (`signerName: "Teszt
+   * alairo"`), mert akkor az volt a legrovidebb ut a POZITIV ag bejarasahoz.
+   * Azt az agat a 9188d799 LEZARTA kulsos keronek: Balazs merese szerint
+   * "minden kulsos partner csak a sajat neveben irhat ala", a szabad szoveges
+   * ag pedig barmilyen nevet a lapra tett volna, ALAIROKOD NELKUL.
+   *
+   * AMIT EZ A TESZT MER, VALTOZATLAN: hogy a partner a SAJAT lapjat ala tudja
+   * irni, es hogy az ELSO lekerdezes a KERO hatokorevel megy. Csak a bemenet
+   * kerult at a ma is megengedett utra (sajat azonosito a listarol, plusz
+   * alairokod) -- vagyis a teszt ma a VALODI portal-utat jarja be, nem egy
+   * rovidebbet.
+   *
+   * A KULONBSEG KIMONDVA: a regi alak azt allitotta, hogy a partner BARMILYEN
+   * nevvel alairhat; az uj azt, hogy a SAJATJAVAL. Ha valaki a jovoben ezt a
+   * bemenetet "egyszerusiti" vissza szabad szovegre, a szolgaltatas elutasitja
+   * -- es ez a bekezdes mondja meg, miert.
+   *
    * A `detail` KETSZER hivodik: eloszor a KERO hatokorevel (a szures), majd a
    * sikeres iras utan BELSO hatokorrel (a valasz osszeallitasa). Az allitas az
    * ELSO hivast nezi: ha az belso hatokorrel menne, a szures ELTUNNE, es a
@@ -181,6 +201,15 @@ describe("partneri munkalap-aláírás", () => {
         hatokorok.push(scope);
         return sajatLap();
       },
+      /*
+        A KET UJ DUPLA 2026-09-21 OTA KELL, es a bemenet valtozasa miatt --
+        lasd a teszt fejlecet. A partner mostantol a LISTAROL valasztja ki
+        magat es kodot ad, tehat a szolgaltatas ezt a ket varratot hasznalja.
+        A hash ugyanabbol a fuggvenybol jon, amit a valodi kod hasznal: egy
+        kezzel kitalalt "hash" sosem egyezne, es a teszt rossz okbol lenne zold.
+      */
+      customerContacts: async () => [{ id: PARTNER.id, name: "Partner Petra" }],
+      signingCodeHash: async () => await hashPassword("0000"),
       sign: async (input: Record<string, unknown>) => {
         signInput = input;
         return { ok: true } as const;
@@ -190,7 +219,11 @@ describe("partneri munkalap-aláírás", () => {
 
     await service.sign(
       SAJAT_LAP_ID,
-      { decision: "ACCEPTED", signerName: "Teszt aláíró" },
+      {
+        decision: "ACCEPTED",
+        signerUserId: PARTNER.id,
+        signatureCode: "0000",
+      } as never,
       PARTNER,
     );
 
@@ -201,7 +234,7 @@ describe("partneri munkalap-aláírás", () => {
     );
     const bemenet = signInput as unknown as Record<string, unknown>;
     assert.equal(bemenet.worksheetId, SAJAT_LAP_ID);
-    assert.equal(bemenet.signerName, "Teszt aláíró");
+    assert.equal(bemenet.signerName, "Partner Petra");
 
     // AZ ELSO LEKERDEZES A KERO HATOKOREVEL MEGY, nem belsovel.
     assert.deepEqual(hatokorok[0], {

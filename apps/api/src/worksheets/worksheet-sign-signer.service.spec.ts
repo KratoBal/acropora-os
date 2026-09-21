@@ -248,6 +248,205 @@ describe("az aláíró feloldása", () => {
   });
 });
 
+/**
+ * KULSOS KERO CSAK SAJAT MAGAT IRHATJA ALA (9188d799).
+ *
+ * Balazs merese, 2026-09-21 14:25:28 UTC: "minden kulsos partner csak a sajat
+ * neveben irhat ala".
+ *
+ * MIND A KET IRANY MERVE, es a masodik nem formasag: egy tul szigoru javitas a
+ * SZERELO mai munkajat allitana le, aki a helyszinen a vevo neveben irat ala.
+ *
+ * A HATOKORT a `partnerScopeOf` adja, tehat a teszt aktora OBJEKTUM (kotessel),
+ * nem string -- a string alak belsos hatokort jelent, es epp azt a kulonbseget
+ * merjuk.
+ */
+const PARTNER = { id: "kontakt-1", customerId: "customer-1" };
+
+describe("a külsős partner aláírása", () => {
+  it("MÁSIK munkatársat nem írhat alá", async () => {
+    await assert.rejects(
+      () =>
+        service().sign(
+          "worksheet-1",
+          {
+            decision: "ACCEPTED",
+            signerUserId: "kontakt-2",
+            signatureCode: KOD,
+            note: null,
+          } as never,
+          PARTNER as never,
+        ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /csak a saját nevedben/.test(error.message),
+    );
+  });
+
+  /**
+   * A TYPED AG IS ZARVA -- ES EZ A TAGABB LYUK VOLT.
+   *
+   * Ott nem kell egyetlen letezo azonosito sem: szabad szoveg megy a lapra, es
+   * alairokodot SEM ker a rendszer. A kartya csak a valaszto agat nevezte meg.
+   */
+  it("SZABAD SZÖVEGES nevet sem írhat a lapra", async () => {
+    await assert.rejects(
+      () =>
+        service().sign(
+          "worksheet-1",
+          {
+            decision: "ACCEPTED",
+            signerName: "Akárki Aladár",
+            note: null,
+          } as never,
+          PARTNER as never,
+        ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /csak a saját nevedben/.test(error.message),
+    );
+  });
+
+  /**
+   * A `signSelf` AG IS ZARVA, ES EZ A LEGALATTOMOSABB.
+   *
+   * A szabaly BETUJET teljesitene (sajat nevben ir ala), de a lapra `INTERNAL`
+   * forras kerulne -- vagyis a dokumentum azt allitana, hogy a MI kollegank
+   * irta ala --, es alairokodot sem kerne. Egy alairt munkalap BIZONYITEK: egy
+   * hamis minoseg-jelzes rajta rosszabb, mint egy elmaradt alairas.
+   */
+  it("`signSelf`-fel sem, mert az a lapra BELSŐS aláírást írna", async () => {
+    await assert.rejects(
+      () =>
+        service().sign(
+          "worksheet-1",
+          { decision: "ACCEPTED", signSelf: true, note: null } as never,
+          PARTNER as never,
+        ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /csak a saját nevedben/.test(error.message),
+    );
+  });
+
+  /**
+   * ES A MASIK IRANY: SAJAT MAGAT ALAIRHATJA, a szokasos uton.
+   *
+   * Enelkul a fenti harom allitas egy MINDENT TILTO kapuval is zold lenne -- es
+   * akkor a partner egyaltalan nem tudna alairni. A kod is ugyanugy kell, es a
+   * forras `SELECTED` marad: a szukites nem vesz el garanciat.
+   */
+  it("SAJÁT MAGÁT aláírhatja, kóddal, SELECTED forrással", async () => {
+    const kapott: Record<string, unknown>[] = [];
+    await service({
+      sign: async (input: Record<string, unknown>) => {
+        kapott.push(input);
+        return { ok: true } as const;
+      },
+    }).sign(
+      "worksheet-1",
+      {
+        decision: "ACCEPTED",
+        signerUserId: "kontakt-1",
+        signatureCode: KOD,
+        note: null,
+      } as never,
+      PARTNER as never,
+    );
+    assert.equal(kapott[0]?.signerName, "Vevő Vilmos");
+    assert.equal(kapott[0]?.signerUserId, "kontakt-1");
+    assert.equal(kapott[0]?.signerSource, "SELECTED");
+  });
+
+  /**
+   * A LAPRA NEM `INTERNAL` FORRAS KERUL (acrobot 1. kiegeszitese).
+   *
+   * A harmadik lyuk lenyege NEM az volt, hogy atengedte a kerest, hanem hogy
+   * `INTERNAL` forrast irt a lapra -- vagyis a dokumentum azt allitotta, hogy a
+   * MI kollegank irta ala. Ha az ENGEDELYEZETT ut is `INTERNAL`-t rogzitene, a
+   * kaput bezartuk volna, es a lap TOVABBRA IS hamisat allitana; csak mar nem
+   * lehetne szandekosan eloidezni.
+   *
+   * Ez nem hozzaferesi kerdes, hanem ADATHIBA: aki a jogosultsagokat nezi at,
+   * ezt nem talalja meg. Ezert all sajat allitaskent, nem a nev es az azonosito
+   * melle bujtatva -- a `signerSource` kulon is elromolhat.
+   */
+  it("a lapra NEM belsős aláírás kerül", async () => {
+    const kapott: Record<string, unknown>[] = [];
+    await service({
+      sign: async (input: Record<string, unknown>) => {
+        kapott.push(input);
+        return { ok: true } as const;
+      },
+    }).sign(
+      "worksheet-1",
+      {
+        decision: "ACCEPTED",
+        signerUserId: "kontakt-1",
+        signatureCode: KOD,
+        note: null,
+      } as never,
+      PARTNER as never,
+    );
+    assert.notEqual(kapott[0]?.signerSource, "INTERNAL");
+  });
+
+  /**
+   * ES AZ ALAIROKOD TOVABBRA IS KELL (acrobot 2. kiegeszitese).
+   *
+   * A masodik es a harmadik lyuk kozos vonasa, hogy KOD NELKUL mentek at. Az
+   * engedelyezett ut ma kodot ker -- de ha a szukites kozben ez elveszne, a
+   * kapu zarva lenne, es a bizonyito ereje MEGIS eltunne. Egy zold kapu mellett
+   * ez a vesztes NEMA: a keres atmenne, a lapra rakerulne az alairas, es semmi
+   * nem szolna.
+   *
+   * KULON ALLITAS A PARTNER-UTRA, holott a belsos uton mar all egy ugyanilyen:
+   * a ket ut MOSTANTOL kulon feltetelen megy at, tehat kulon is el tud romlani.
+   */
+  it("a saját aláíráshoz is KELL az aláírókód", async () => {
+    await assert.rejects(
+      () =>
+        service().sign(
+          "worksheet-1",
+          {
+            decision: "ACCEPTED",
+            signerUserId: "kontakt-1",
+            note: null,
+          } as never,
+          PARTNER as never,
+        ),
+      (error: unknown) => error instanceof BadRequestException,
+    );
+  });
+
+  /**
+   * ES A BELSOS KOLLEGA VALASZTASI LEHETOSEGE NEM VALTOZIK (acrobot 3.
+   * kikotese). A szerelo a helyszinen ma is a vevo neveben irat ala.
+   *
+   * KULON `it()`: ez az az allitas, ami egy TUL SZIGORU javitasra pirosodik --
+   * a masik harom egy mindent tilto kapuval is zold maradna.
+   */
+  it("a BELSŐS kolléga továbbra is MÁST írathat alá", async () => {
+    const kapott: Record<string, unknown>[] = [];
+    await service({
+      sign: async (input: Record<string, unknown>) => {
+        kapott.push(input);
+        return { ok: true } as const;
+      },
+    }).sign(
+      "worksheet-1",
+      {
+        decision: "ACCEPTED",
+        signerUserId: "kontakt-2",
+        signatureCode: KOD,
+        note: null,
+      } as never,
+      "szerelo-1",
+    );
+    assert.equal(kapott[0]?.signerUserId, "kontakt-2");
+  });
+});
+
 describe("az aláírók listája", () => {
   it("ÜRES listánál MEGMONDJA, melyik ok áll fenn", async () => {
     /*
@@ -282,6 +481,65 @@ describe("az aláírók listája", () => {
  * bizonyitja. Ezek az allitasok azt kotik le, hogy a kapu NEM engedheto meg
  * -- kulonben a lapon egy ellenorzottnek latszo alairas allna.
  */
+/**
+ * A VALASZTO IS SZUKUL (acrobot 2. kikotese).
+ *
+ * Ha a partner csak magat irhatja ala, a lista NE adja oda a kollegai nevsorat:
+ * az egy olyan halmaz, amit nem hasznalhat, es kozben megmutatja, ki dolgozik
+ * a cegnel.
+ */
+describe("az aláírók listája külsős kérőnek", () => {
+  it("CSAK a kérőt adja, a kollégáit nem", async () => {
+    const out = await service().signerCandidates(
+      "worksheet-1",
+      { kind: "customer", customerId: "customer-1" },
+      "kontakt-1",
+    );
+    assert.deepEqual(out.items, [{ id: "kontakt-1", name: "Vevő Vilmos" }]);
+  });
+
+  /**
+   * ES A BELSOS LISTA VALTOZATLAN -- kulon allitas, mert ez az, ami egy tul
+   * szeles szuresre pirosodik.
+   *
+   * === AZ AKTOR AZONOSITOJA ITT NEM ELHAGYHATO, ES EZT A KALIBRACIO TANITOTTA ===
+   *
+   * Elso alakjaban ez a sor `signerCandidates("worksheet-1")` volt, harmadik
+   * argumentum nelkul. Az a hivas-alak a VEZERLOBEN NEM LETEZIK: a kontroller
+   * MINDIG atadja a `user.id`-t. Es a kulonbseg nem elmeleti -- a "szurjunk a
+   * belsosnel is" rontasra ez az allitas ZOLD MARADT, mert az elhagyott
+   * azonosito melle a szures ki sem sult.
+   *
+   * Vagyis a teszt egy olyan vilagot mert, ami a futo rendszerben nincs. A
+   * hivas mostantol ugyanazt az alakot hasznalja, amit a kontroller.
+   */
+  it("a BELSŐS kérő továbbra is MINDENKIT lát", async () => {
+    const out = await service().signerCandidates(
+      "worksheet-1",
+      { kind: "internal" },
+      "szerelo-1",
+    );
+    assert.equal(out.items.length, 2);
+  });
+
+  /**
+   * ES HA A KERO NINCS A LISTAN, A MONDAT MAS OKOT NEVEZ MEG.
+   *
+   * A regi ures-mondat az IRODAHOZ kuld ("vegyetek fel munkatarsat"), ami itt
+   * felrevezetne: a lista nem azert ures, mert a partnernek nincs munkatarsa,
+   * hanem mert a KERO nincs kozottuk.
+   */
+  it("ha a kérő nincs a partner munkatársai között, MÁS okot mond", async () => {
+    const out = await service().signerCandidates(
+      "worksheet-1",
+      { kind: "customer", customerId: "customer-1" },
+      "idegen-9",
+    );
+    assert.deepEqual(out.items, []);
+    assert.match(String(out.emptyReason), /A saját fiókod nem szerepel/);
+  });
+});
+
 describe("az aláírókód ellenőrzése", () => {
   it("KÓD NÉLKÜL a listáról választott aláírás NEM megy át", async () => {
     /*
