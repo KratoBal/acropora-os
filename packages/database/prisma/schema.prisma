@@ -3709,6 +3709,28 @@ model Worksheet {
    * A CÍMZETT NINCS TÁROLVA, mert nincs is: a lap hozzánk kerül vissza, a
    * szolgáltatóhoz. Amikor a lap hibajegy nélkül születik, még felelős sincs,
    * akinek címezni lehetne.
+   * === MA KÉT OLVASATA VAN, ÉS EZ NINCS ELDÖNTVE (2026-09-21) ===
+   * A fenti bekezdés 2026-09-02-i, és AKKOR IGAZ VOLT: a mezőnek nem volt
+   * írója, tehát csak a LAP mozgásáról szólt (a szerelő végzett, a lap a
+   * szolgáltatóé).
+   * 2026-09-21-én írót kapott (#908), és a kiment felirat mást mond:
+   * „Az eszköz még nálunk van". Ez Balázs mondatából jön (2026-09-21 09:39,
+   * szó szerint: „ne zarhassuk le amig nalunk van"), vagyis az ESZKÖZ
+   * visszaadásáról.
+   * A KETTŐ ELLENTÉTES IRÁNYÚ: az egyik szerint az átadás FELÉNK történik
+   * (a lap hozzánk kerül), a másik szerint TŐLÜNK (a gép visszamegy).
+   * MIÉRT NEM DÖNTÖM EL ITT: a tervezett lezárási kapu ALAKJA múlik rajta.
+   * A lap-olvasat mellett minden lapot át kell adni, a helyszínit is, és a
+   * kapu önmagában megáll. Az eszköz-olvasat mellett a helyszíni munkánál
+   * nincs mit visszaadni, tehát a mező ott örökre `null` maradna, és a jegy
+   * soha nem lenne lezárható -- ahhoz előbb egy külön jel kellene arról,
+   * hogy a gépet elhoztuk. Ilyen jel ma NINCS a sémában (mérve: sem a
+   * `ServiceJob`, sem a `Worksheet`, sem a `WorksheetAsset` nem hordoz
+   * helyszíni/műhely megkülönböztetést; az `AssetStatus.IN_REPAIR` azt
+   * mondja, hogy javítás alatt áll, nem azt, hogy nálunk van).
+   * Amíg a döntés nincs meg, ITT MIND A KETTŐ ÁLL. Egy komment, ami az
+   * egyiket ténynek írja, a következő olvasót egy meg nem hozott döntésre
+   * hivatkoztatná.
    */
   handedOverAt         DateTime?
   handedOverById       String?
