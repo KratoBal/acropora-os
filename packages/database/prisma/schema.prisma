@@ -673,6 +673,7 @@ model User {
   serviceJobAssignmentsMade  ServiceJobAssignee[]          @relation("ServiceJobAssignedBy")
   createdWorksheetVersions   WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
   closedWorksheetVersions    WorksheetVersion[]            @relation("WorksheetVersionClosedBy")
+  sentWorksheetVersions      WorksheetVersion[]            @relation("WorksheetVersionSentTo")
   worksheetSignatures        WorksheetVersionSignature[]   @relation("WorksheetSignedBy")
   /// Amiket EZ a szemely irt ala (a lap partnerenek munkatarsakent).
   signedWorksheets           WorksheetVersionSignature[]   @relation("WorksheetSigner")
@@ -3835,15 +3836,46 @@ model WorksheetVersion {
   closedAt     DateTime?
   closedById   String?
 
-  worksheet Worksheet                  @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
-  createdBy User?                      @relation("WorksheetVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  closedBy  User?                      @relation("WorksheetVersionClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
-  lines     WorksheetLine[]
-  signature WorksheetVersionSignature?
+  /// MIKOR KULDTUK KI ALAIRASRA, ES KINEK.
+  ///
+  /// === MIERT KET MEZO, ES MIERT NEM UJ ALLAPOT (2026-09-21) ===
+  ///
+  /// A lezaras 2026-09-21-ig MAGA tette alairhatova a lapot: a `close()` a
+  /// `DRAFT`-ot `AWAITING_SIGNATURE`-re allitja, es az alairas pontosan ezt az
+  /// egy allapotot koveteli meg. Balazs kerese viszont KET dolgot kulonboztet
+  /// meg: lezartuk, ES ki is kuldtuk. Amig ez a ket mezo nem letezett, MINDEN
+  /// lezart lap alairhato volt a portalon -- akkor is, ha soha nem kuldtuk ki.
+  ///
+  /// UJ ENUM-ERTEK HELYETT AZERT MEZO:
+  ///   - a CIMZETTET amugy is tarolni kell (Balazs dontese, 2026-09-21 14:00:58:
+  ///     a lap tetejen is latszodjon, kinek kuldtuk el) -- azt egy enum-ertek
+  ///     nem hordozza;
+  ///   - additiv: a negy allapotot olvaso tizennegy forrasfajl egyike sem torik;
+  ///   - es a kesobbi "a modositas ervenyteleniti a kerest" dontes (2026-09-21
+  ///     13:59) igy egy mezo NULLAZASA, nem allapot-visszalepteles -- az utobbi
+  ///     a SIGNED es a REJECTED aggal utkozne.
+  ///
+  /// NEM KELL BACKFILL, ES EZ MERVE VAN: az eles adatbazisban NULLA
+  /// `AWAITING_SIGNATURE` sor all (a teljes tabla negy sor: 2 SIGNED, 2 DRAFT,
+  /// merve 2026-09-21 18:05, acropora-prod-01). Nincs olyan meglevo lap, amit a
+  /// `NULL` kezdoertek megbenitana.
+  sentForSignatureAt       DateTime?
+  sentForSignatureToUserId String?
+
+  worksheet          Worksheet                  @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  createdBy          User?                      @relation("WorksheetVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  closedBy           User?                      @relation("WorksheetVersionClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  /// A CIMZETT `SetNull`-lal all, mint a tobbi aktor-mezo: egy azota torolt
+  /// felhasznalo nem viheti magaval a lap tortenetet. A KIKULDES TENYE
+  /// (`sentForSignatureAt`) ilyenkor is megmarad -- a ketto kulon mezo, es a
+  /// "kikuldtuk" allitas nem fugghet attol, hogy a cimzett fiokja meg el-e.
+  sentForSignatureTo User?                      @relation("WorksheetVersionSentTo", fields: [sentForSignatureToUserId], references: [id], onDelete: SetNull)
+  lines              WorksheetLine[]
+  signature          WorksheetVersionSignature?
   /// A VERZIOHOZ KOTOTT DOKUMENTUMOK: ma kizarolag a lezaraskor generalt lap.
   /// A feltoltott fenykep NEM ide tartozik, hanem a MUNKALAPHOZ -- egy keszulek
   /// fenykepe nem egy verziorol szol.
-  documents WorksheetDocument[]
+  documents          WorksheetDocument[]
 
   @@unique([worksheetId, version])
   @@index([status, closedAt])

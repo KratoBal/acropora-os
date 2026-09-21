@@ -121,6 +121,13 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
       createdAt: "2026-08-27T08:00:00.000Z",
       closedAt: "2026-08-27T09:00:00.000Z",
       closedByName: "Szerelő Sándor",
+      /*
+      A KET UJ MEZO 2026-09-21 OTA KOTELEZO A FIXTURABAN IS, es ezt a FORDITO
+      kenyszeritette ki. `null` = a lap ki van allitva, de nem kuldtuk ki
+      alairasra -- epp az az allapot, amirol ez a kor szol.
+    */
+      sentForSignatureAt: null,
+      sentForSignatureToName: null,
       netAmount: "30000",
       vatAmount: "8100",
       grossAmount: "38100",
@@ -262,13 +269,67 @@ describe("WorksheetDetailPage és az aláíró", () => {
     });
   });
 
+  /**
+   * KIALLITOTT **ES KIKULDOTT** LAP.
+   *
+   * A `sentForSignatureAt` 2026-09-21 ota KELL ide: az alairas kapuja azota KET
+   * feltetelt nez (kiallitott ES kikuldve), es a felulet ugyanazt a kettot.
+   * Nelkule ez a fixtura olyan lapot ir le, amit MA NEM LEHET alairni -- tehat
+   * az alairas-urlapot mero allitasok nem a szabalyrol szolnanak, hanem egy
+   * olyan vilagrol, ami nem all fenn.
+   */
   function awaitingSignature() {
     const alap = detail(null);
     return {
       ...alap,
-      currentVersion: { ...alap.currentVersion, status: "AWAITING_SIGNATURE" },
+      currentVersion: {
+        ...alap.currentVersion,
+        status: "AWAITING_SIGNATURE",
+        sentForSignatureAt: "2026-09-21T16:00:00.000Z",
+        sentForSignatureToName: "Vevő Vilmos",
+      },
     };
   }
+
+  /**
+   * A KI NEM KULDOTT LAP A KIKULDES-BLOKKOT KAPJA, NEM AZ ALAIRAS-URLAPOT.
+   *
+   * 2026-09-21-ig a lezaras MAGA tette alairhatova a lapot. A szerver kapuja
+   * azota KET feltetelt nez, es ha a felulet csak az allapotot nezne, olyat
+   * kinalna fel, amit a szerver elutasit.
+   */
+  it("kiállított, de KI NEM KÜLDÖTT lapon a kiküldés áll, nem az aláírás", async () => {
+    const alap = detail(null);
+    api.detail.mockResolvedValue({
+      ...alap,
+      currentVersion: {
+        ...alap.currentVersion,
+        status: "AWAITING_SIGNATURE",
+        sentForSignatureAt: null,
+        sentForSignatureToName: null,
+      },
+    });
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await waitFor(() =>
+      expect(screen.getByText("Kiküldés aláírásra")).toBeTruthy(),
+    );
+    expect(screen.queryByText("Ügyfél döntésének rögzítése")).toBeNull();
+  });
+
+  /**
+   * ES A MASIK IRANY: A KIKULDOTT LAPON AZ ALAIRAS ALL, A KIKULDES NEM.
+   *
+   * Enelkul egy "soha ne mutasd az alairast" javitas is zold lenne -- es akkor
+   * a belsos rogzites egyaltalan nem lenne elerheto.
+   */
+  it("KIKÜLDÖTT lapon az aláírás áll, a kiküldés-blokk nem", async () => {
+    api.detail.mockResolvedValue(awaitingSignature());
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await waitFor(() =>
+      expect(screen.getByText("Ügyfél döntésének rögzítése")).toBeTruthy(),
+    );
+    expect(screen.queryByText("Kiküldés aláírásra")).toBeNull();
+  });
 
   it("a LISTÁRÓL választott aláírónál CSAK az azonosító megy fel", async () => {
     /*
@@ -394,11 +455,25 @@ describe("WorksheetDetailPage és az aláírókód", () => {
     });
   });
 
+  /**
+   * KIALLITOTT **ES KIKULDOTT** LAP.
+   *
+   * A `sentForSignatureAt` 2026-09-21 ota KELL ide: az alairas kapuja azota KET
+   * feltetelt nez (kiallitott ES kikuldve), es a felulet ugyanazt a kettot.
+   * Nelkule ez a fixtura olyan lapot ir le, amit MA NEM LEHET alairni -- tehat
+   * az alairas-urlapot mero allitasok nem a szabalyrol szolnanak, hanem egy
+   * olyan vilagrol, ami nem all fenn.
+   */
   function awaitingSignature() {
     const alap = detail(null);
     return {
       ...alap,
-      currentVersion: { ...alap.currentVersion, status: "AWAITING_SIGNATURE" },
+      currentVersion: {
+        ...alap.currentVersion,
+        status: "AWAITING_SIGNATURE",
+        sentForSignatureAt: "2026-09-21T16:00:00.000Z",
+        sentForSignatureToName: "Vevő Vilmos",
+      },
     };
   }
 

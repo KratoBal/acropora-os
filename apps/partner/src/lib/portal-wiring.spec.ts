@@ -458,6 +458,38 @@ describe("a partner hibajegy-adatlapja", () => {
   });
 
   /**
+   * AZ ALÁÍRÁS-ŰRLAP A KÉT FELTÉTELHEZ KÖTŐDIK -- ÉS 2026-09-21-IG EGYIKHEZ SEM.
+   *
+   * Addig az egyetlen feltétel az volt, hogy MÁR ALÁÍRTÁK-E. Vagyis az űrlap
+   * PISZKOZATON IS megjelent (a partner-lista nem szűr állapotra), és minden
+   * lezárt lapon is -- akkor is, ha soha nem küldtük ki senkinek. Balázs ezt
+   * be is jelentette: „van egy nyitott munkalap, amit ala tudna irni ha akarna."
+   *
+   * A SZERVER KAPUJA UGYANEZT A KETTŐT NÉZI. Ez nem két szabály két helyen: a
+   * szerveré a döntő, ez csak azt zárja ki, hogy a felület olyat kínáljon fel,
+   * amit a szerver elutasít.
+   *
+   * MI PIROSÍT: bármelyik feltétel elhagyása.
+   */
+  it("az aláírás-űrlap a kiállított ÉS kiküldött laphoz kötődik", () => {
+    const s = kod(MUNKALAP_RESZLET);
+    assert.match(s, /current\.status === "AWAITING_SIGNATURE"/);
+    assert.match(s, /current\.sentForSignatureAt !== null/);
+  });
+
+  /**
+   * ÉS NEM CSAK ELREJTI: KIMONDJA, MIÉRT.
+   *
+   * Egy eltűnő űrlap ugyanúgy néz ki, mint egy elromlott lap -- a partner nem
+   * tudja, rá vár-e valami. Ugyanaz a lelet, amit a belső lapon a lezárás-gomb
+   * néma elrejtése okozott (Balázs 2026-09-18: „Nem tudok lezarni munkalapot.
+   * Nincs olyan gomb." -- a gomb ott volt).
+   */
+  it("a nem aláírható lapon MEGMONDJA, miért nincs űrlap", () => {
+    assert.match(kod(MUNKALAP_RESZLET), /még nem érkezett meg aláírásra/);
+  });
+
+  /**
    * POZITÍV KONTROLL: a partner megmaradt művelete ott van a lapon. Enélkül a
    * fenti négy negatív állítás akkor is zöld lenne, ha a lap üres volna.
    */

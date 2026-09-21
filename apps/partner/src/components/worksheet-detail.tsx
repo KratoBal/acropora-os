@@ -125,6 +125,29 @@ export function WorksheetDetail({ id }: { id: string }) {
   if (!worksheet) return <p className="muted">Munkalap betöltése…</p>;
   const current = worksheet.currentVersion;
   const signature = current.signature;
+  /**
+   * AZ ALAIRAS-URLAP KET FELTETELHEZ KOTODIK, ES 2026-09-21-IG EGYIKHEZ SEM.
+   *
+   * Addig az egyetlen feltetel az volt, hogy MAR ALAIRTAK-E. Vagyis az urlap
+   * PISZKOZATON IS megjelent (a partner-lista nem szur allapotra), es minden
+   * lezart lapon is -- akkor is, ha soha nem kuldtuk ki senkinek.
+   *
+   * Balazs ezt be is jelentette: "van egy nyitott munkalap, amit ala tudna irni
+   * ha akarna". A szerver a piszkozatot elutasitja, tehat ott hangos hiba jon;
+   * a lezart-de-ki-nem-kuldott lapot viszont ELFOGADTA.
+   *
+   * A KET FELTETEL UGYANAZ, AMIT A SZERVER KAPUJA NEZ (`worksheets.repository`
+   * `sign` aga): kiallitott lap ES kikuldve alairasra. Ez nem ket szabaly ket
+   * helyen -- a szervere a donto, ez csak azt zarja ki, hogy a felulet olyat
+   * kinaljon fel, amit a szerver elutasit.
+   *
+   * ES A DATUMRA KAPUZ, NEM A NEVRE: a cimzett fiokja torolheto, a kikuldes
+   * tenye viszont megmarad. Egy torolt cimzett nem teheti ujra
+   * alairhatatlanna a lapot.
+   */
+  const alairhato =
+    current.status === "AWAITING_SIGNATURE" &&
+    current.sentForSignatureAt !== null;
   return (
     <section>
       <Link className="back-link" href="/munkalapok">
@@ -269,6 +292,19 @@ export function WorksheetDetail({ id }: { id: string }) {
           ) : null}
           {signature.note ? <p className="preline">{signature.note}</p> : null}
         </article>
+      ) : !alairhato ? (
+        /*
+          ES NEM CSAK ELREJTJUK: MEGMONDJUK, MIERT. Egy eltuno urlap ugyanugy
+          nez ki, mint egy elromlott lap -- a partner nem tudja, ra var-e valami.
+          A ket eset KET KULON mondatot kap, mert MAS a teendo: a piszkozatnal
+          nincs mit tennie, a kiallitott lapnal pedig MINK tartozunk egy
+          lepessel.
+        */
+        <p className="muted">
+          {current.status === "AWAITING_SIGNATURE"
+            ? "Ez a munkalap még nem érkezett meg aláírásra. Amint kiküldjük, itt tudja aláírni."
+            : `Ez a munkalap most nem írható alá (${worksheetStatusLabel[current.status].toLowerCase()}).`}
+        </p>
       ) : (
         <form className="form panel" onSubmit={sign}>
           <h2>Munkalap aláírása</h2>

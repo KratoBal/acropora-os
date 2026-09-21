@@ -379,6 +379,20 @@ export interface WorksheetVersionSummary {
   createdAt: string;
   closedAt: string | null;
   closedByName: string | null;
+  /**
+   * MIKOR KULDTUK KI ALAIRASRA, ES KINEK.
+   *
+   * 2026-09-21-ig ilyen lepes nem letezett: a lezaras MAGA tette alairhatova a
+   * lapot, tehat a portalon MINDEN lezart lap alairhatonak latszott -- akkor is,
+   * ha soha nem kuldtuk ki. A ket mezo valasztja szet a "kiallitottuk" es a
+   * "ki is kuldtuk" allapotot.
+   *
+   * A FELULET A DATUMRA KAPUZZON, NE A NEVRE: a cimzett fiokja torolheto
+   * (`SetNull` a semaban), es a kikuldes tenye ilyenkor is all. Egy torolt
+   * cimzett nem teheti ujra alairhatatlanna a lapot.
+   */
+  sentForSignatureAt: string | null;
+  sentForSignatureToName: string | null;
   netAmount: string;
   vatAmount: string;
   grossAmount: string;

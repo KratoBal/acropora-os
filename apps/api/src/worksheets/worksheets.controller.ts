@@ -37,6 +37,7 @@ import {
   SetWorksheetAssetsDto,
   SetWorksheetAssigneesDto,
   SetWorksheetPartnerCodeDto,
+  SendWorksheetForSignatureDto,
   SignWorksheetVersionDto,
   UpdateWorksheetDraftDto,
   UpdateWorksheetEntryDto,
@@ -375,6 +376,23 @@ export class WorksheetsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.amend(id, input, user.id);
+  }
+
+  /**
+   * KIKULDES ALAIRASRA -- A LEZARAS UTANI, KULON LEPES.
+   *
+   * `SERVICE_MANAGE`, mint a lezaras. A BELSOS hatokort a szolgaltatas
+   * koveteli meg, nem ez a sor: a jog es a hatokor ket kulonbozo kerdes, es a
+   * `PARTNER_SERVICE` szerep is viseli ezt a jogot.
+   */
+  @Post(":id/send-for-signature")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  sendForSignature(
+    @Param("id") id: string,
+    @Body() input: SendWorksheetForSignatureDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.sendForSignature(id, input.signerUserId, user);
   }
 
   @Post(":id/sign")

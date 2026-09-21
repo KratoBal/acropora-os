@@ -842,6 +842,46 @@ export class WorksheetsService {
     return this.detailAfterWrite(id);
   }
 
+  /**
+   * KIKULDES ALAIRASRA. BELSOS LEPES, es ezt a hatokor mondja ki, nem a szerep.
+   *
+   * A partner nem kuldhet ki: neki a lap MEGERKEZIK. Ha egy partner-hatokoru
+   * kero mégis ide jutna, az nem "kevesebb jog" kerdese, hanem ertelmetlen
+   * muvelet -- sajat maganak kuldene ki.
+   */
+  async sendForSignature(
+    id: string,
+    signerUserId: string,
+    actor: AuthenticatedUser,
+    now: Date = new Date(),
+  ): Promise<WorksheetDetail> {
+    const scope = partnerScopeOf(actor);
+    if (scope.kind !== "internal")
+      throw new ForbiddenException(
+        "A munkalap kiküldése aláírásra belsős lépés: partnerként nem küldhető ki.",
+      );
+    await this.requireWorksheet(id, scope);
+
+    const result = await this.repository.sendForSignature({
+      worksheetId: id,
+      signerUserId,
+      actorUserId: actor.id,
+      now,
+    });
+    if (!result.ok) {
+      if (result.reason === "NOT_FOUND")
+        throw new NotFoundException("A munkalap nem található.");
+      if (result.reason === "SIGNER_NOT_IN_PARTNER")
+        throw new BadRequestException(
+          "A választott aláíró nem a munkalap partnerének munkatársa, ezért nem küldhető ki neki.",
+        );
+      throw new ConflictException(
+        "Csak kiállított munkalap küldhető ki aláírásra: ez még piszkozat, vagy már megszületett róla a döntés.",
+      );
+    }
+    return this.detailAfterWrite(id);
+  }
+
   async amend(
     id: string,
     input: AmendWorksheetDto,
@@ -955,6 +995,25 @@ export class WorksheetsService {
     if (!result.ok) {
       if (result.reason === "NOT_FOUND")
         throw new NotFoundException("A munkalap nem található.");
+      /*
+        KET OK, KET MONDAT, MERT KET KULONBOZO TEENDOT AD.
+
+        A `NOT_SENT` 2026-09-21-en szuletett: addig a lezaras MAGA tette
+        alairhatova a lapot, tehat ez az eset elo sem allhatott. Ha ugyanazt a
+        mondatot kapna ("vagy piszkozat, vagy mar dontottek"), az MINDKET
+        olvasot rossz helyre kuldene -- a lap se nem piszkozat, se nem doltek
+        rola, csak nem kuldtuk ki.
+
+        ES A PARTNERNEK MAS A MONDAT, mint a belsos kollegának: a partner nem
+        tud kikuldeni, tehat egy "kuldd ki" felszolitas olyan teendot adna neki,
+        amihez nincs joga -- ugyanaz a megfontolas, mint a hibajegy-kapunal.
+      */
+      if (result.reason === "NOT_SENT")
+        throw new ConflictException(
+          scope.kind === "internal"
+            ? "Ez a munkalap még nincs kiküldve aláírásra. Küldd ki az aláírónak, és utána írható alá."
+            : "Ez a munkalap még nem érkezett meg aláírásra. Szólj nekünk, és kiküldjük.",
+        );
       throw new ConflictException(
         "Ez a verzió nem írható alá: vagy még piszkozat, vagy már megszületett róla a döntés.",
       );

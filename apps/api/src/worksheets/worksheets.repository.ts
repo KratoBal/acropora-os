@@ -81,7 +81,35 @@ export type WorksheetAmendResult =
     };
 
 export type WorksheetSignResult =
-  { ok: true } | { ok: false; reason: "NOT_FOUND" | "NOT_AWAITING_SIGNATURE" };
+  | { ok: true }
+  | {
+      ok: false;
+      /**
+       * A `NOT_SENT` 2026-09-21-en kerult fel, es NEM a `NOT_AWAITING_SIGNATURE`
+       * finomitasa: KET KULONBOZO allapotrol szol, es MAS a teendo.
+       *
+       *   NOT_AWAITING_SIGNATURE   a lap meg piszkozat, vagy mar dontottek rola
+       *   NOT_SENT                 a lap KI VAN ALLITVA, de senkinek nem kuldtuk
+       *                            ki alairasra
+       *
+       * Amig csak az elso letezett, a lezaras MAGA tette alairhatova a lapot --
+       * es a portalon MINDEN lezart lap alairhatonak latszott.
+       */
+      reason: "NOT_FOUND" | "NOT_AWAITING_SIGNATURE" | "NOT_SENT";
+    };
+
+/**
+ * A KIKULDES EREDMENYE. A `SIGNER_NOT_IN_PARTNER` ugyanazt a hatart orzi, amit
+ * az alairasnal a valasztott alairo ellenorzese: a cimzett a lap partnerenek
+ * nyilvantartott munkatarsa legyen, kulonben a lap tetejere egy idegen ember
+ * neve kerulne.
+ */
+export type WorksheetSendForSignatureResult =
+  | { ok: true; signerName: string }
+  | {
+      ok: false;
+      reason: "NOT_FOUND" | "NOT_AWAITING_SIGNATURE" | "SIGNER_NOT_IN_PARTNER";
+    };
 
 type TransactionClient = Prisma.TransactionClient;
 
@@ -1160,6 +1188,77 @@ export class WorksheetsRepository extends Repository {
   }
 
   /**
+   * KIKULDES ALAIRASRA -- A LEZARAS UTANI, KULON LEPES.
+   *
+   * 2026-09-21-ig ilyen lepes NEM LETEZETT: a `close()` egyben alairhatova is
+   * tette a lapot, tehat a portalon MINDEN lezart lap alairhatonak latszott --
+   * akkor is, ha soha nem kuldtuk ki senkinek. Balazs ezt be is jelentette:
+   * "van egy nyitott munkalap, amit ala tudna irni ha akarna".
+   *
+   * A CIMZETT NEM DISZ: Balazs 2026-09-21 14:00:58-i dontese szerint a lap
+   * TETEJEN is latszodjon, KINEK kuldtuk el -- a szerelo nem a naplot olvassa,
+   * amikor azt kerdezi, hogy ezzel most mi van.
+   *
+   * ES A CIMZETT ELLENORIZVE VAN, ugyanazzal a hatarral, mint az alairas: a
+   * lap partnerenek nyilvantartott munkatarsa legyen. Enelkul a lap tetejere egy
+   * IDEGEN ember neve kerulne, ugy, hogy a jelzes szerint a partner munkatarsa
+   * varja az alairast.
+   *
+   * UJRAKULDES MEGENGEDETT, es ez nem mulasztas: a cimzett elgepelheto, es a
+   * kikuldes tenye nem visszafordithatatlan. A mezo egyszeruen az UTOLSO
+   * kikuldest hordozza; a tortenetet a naplo viszi.
+   */
+  async sendForSignature(input: {
+    worksheetId: string;
+    signerUserId: string;
+    actorUserId: string;
+    now: Date;
+  }): Promise<WorksheetSendForSignatureResult> {
+    return this.database.$transaction(async (transaction) => {
+      const worksheet = await transaction.worksheet.findUnique({
+        where: { id: input.worksheetId },
+        select: { customerId: true },
+      });
+      if (!worksheet) return { ok: false, reason: "NOT_FOUND" } as const;
+
+      const signer = await transaction.user.findFirst({
+        where: {
+          id: input.signerUserId,
+          customerId: worksheet.customerId,
+          isActive: true,
+        },
+        select: { displayName: true },
+      });
+      if (!signer)
+        return { ok: false, reason: "SIGNER_NOT_IN_PARTNER" } as const;
+
+      const current = await transaction.worksheetVersion.findFirst({
+        where: { worksheetId: input.worksheetId },
+        orderBy: { version: "desc" },
+        select: { id: true },
+      });
+      if (!current) return { ok: false, reason: "NOT_FOUND" } as const;
+
+      /*
+        FELTETELES IRAS, ugyanugy, mint a lezarasnal es az alairasnal: az
+        allapotot a LEKERDEZES zarja le, nem egy elotte allo olvasas. Ket kulon
+        lepes kozott a lapot alairhatnak vagy visszavehetnek piszkozatba.
+      */
+      const claimed = await transaction.worksheetVersion.updateMany({
+        where: { id: current.id, status: "AWAITING_SIGNATURE" },
+        data: {
+          sentForSignatureAt: input.now,
+          sentForSignatureToUserId: input.signerUserId,
+        },
+      });
+      if (claimed.count !== 1)
+        return { ok: false, reason: "NOT_AWAITING_SIGNATURE" } as const;
+
+      return { ok: true, signerName: signer.displayName } as const;
+    });
+  }
+
+  /**
    * Lezárás: itt és csak itt kap sorszámot a lap. A verzió állapotát
    * feltételes írás foglalja le (`status: "DRAFT"`), így két egyszerre
    * indított lezárásból a második nem kap saját sorszámot, hanem elakad.
@@ -1575,14 +1674,42 @@ export class WorksheetsRepository extends Repository {
       });
       if (!current) return { ok: false, reason: "NOT_FOUND" } as const;
 
+      /*
+        KET FELTETEL, ES A MASODIK 2026-09-21 OTA ALL ITT: a lap legyen
+        KIALLITVA (`AWAITING_SIGNATURE`) ES KI IS KULDVE alairasra.
+
+        A ket feltetel EGY felteteles irasban all, nem ket lepesben: igy a
+        lekerdezes maga zarja ki a versenyt, ugyanugy, ahogy a lezarasnal a
+        `status: "DRAFT"`. Ket kulon olvasas kozott a masodik kero atcsuszhatna.
+
+        ES A KET BUKAS KET KULON OKOT KAP: a `status` es a kikuldes hianya MAS
+        teendot ad, es a hivo mas mondatot mond rola. Ezert olvassuk vissza a
+        sort a bukas utan -- nem azert, hogy "szebb" legyen az uzenet, hanem mert
+        egy "nem irhato ala" mondat a ket esetre MAST jelent.
+      */
       const claimed = await transaction.worksheetVersion.updateMany({
-        where: { id: current.id, status: "AWAITING_SIGNATURE" },
+        where: {
+          id: current.id,
+          status: "AWAITING_SIGNATURE",
+          sentForSignatureAt: { not: null },
+        },
         data: {
           status: input.decision === "ACCEPTED" ? "SIGNED" : "REJECTED",
         },
       });
-      if (claimed.count !== 1)
-        return { ok: false, reason: "NOT_AWAITING_SIGNATURE" } as const;
+      if (claimed.count !== 1) {
+        const allapot = await transaction.worksheetVersion.findUnique({
+          where: { id: current.id },
+          select: { status: true, sentForSignatureAt: true },
+        });
+        return {
+          ok: false,
+          reason:
+            allapot?.status === "AWAITING_SIGNATURE"
+              ? "NOT_SENT"
+              : "NOT_AWAITING_SIGNATURE",
+        } as const;
+      }
 
       await transaction.worksheetVersionSignature.create({
         data: {

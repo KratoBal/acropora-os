@@ -52,6 +52,21 @@ function versionRow(
     updatedAt: CREATED_AT,
     closedAt: null,
     closedById: null,
+    /*
+      A KET UJ OSZLOP 2026-09-21 OTA KOTELEZO A DUPLAN IS, es ezt a FORDITO
+      kenyszeritette ki -- nem en vettem eszre. A mezok `DateTime?` es `String?`
+      a semaban, de a Prisma sor-tipusaban NEM elhagyhatok: a `null` ott all,
+      tehat a hivo latja. Egy `?` alakkal a dupla csendben atment volna, es a
+      hiany a kepernyon jelent volna meg.
+    */
+    sentForSignatureAt: null,
+    sentForSignatureToUserId: null,
+    /*
+      A KAPCSOLT CIMZETT IS KELL A DUPLABA: az `include` behozza, tehat a sor
+      tipusa tartalmazza. Ez a VARRAT -- amit a hivo hasznal, de a dupla nem ad
+      meg, az a dupla biztos hibaja.
+    */
+    sentForSignatureTo: null,
     createdBy: { displayName: "Teszt Elek" },
     closedBy: null,
     signature: null,
