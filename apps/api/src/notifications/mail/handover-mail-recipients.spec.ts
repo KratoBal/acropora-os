@@ -102,10 +102,15 @@ describe("handoverMailAuditNote", () => {
   /**
    * A NAPLO-SOR CIMET NEM TARTALMAZ, es ez nem szohasznalat.
    *
-   * A jegy naploja ATMEGY a partner portalra (fb945858 merese): a
-   * `/service/jobs/{id}` valasza szo szerint ugyanaz a partnernek es a belsos
-   * felhasznalonak. Egy cim, ami egyszer bekerul egy naplo szovegebe, onnantol
-   * minden jovobeli feluletnel egyutt utazik.
+   * ES NEM AZERT, MERT A PARTNER MA LATNA. Ma nem latja: merve 2026-09-22-en
+   * a fo agon, a partner a `partnerServiceJobDetail` vetiteset kapja, ami a
+   * naplo-bejegyzest ot nevesitett mezobol epiti ujra, es a `note` nincs
+   * koztuk.
+   *
+   * AZ INDOK, ES EZ NEM AVUL EL: ennek a mezonek a lathatosaga egy nap alatt
+   * KETSZER valtozott (2026-09-21 10:5x es 12:07). A lathatosag nem
+   * tulajdonsag, hanem pillanat -- es egy cim, ami egyszer bekerul egy naplo
+   * szovegebe, minden jovobeli feluletnel egyutt utazik.
    */
   it("a kiküldés sora nem tartalmaz címet", () => {
     const sor = handoverMailAuditNote({

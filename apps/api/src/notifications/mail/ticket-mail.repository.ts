@@ -73,9 +73,18 @@ export class TicketMailRepository {
   /**
    * A KIKULDES TENYE A JEGY NAPLOJABA.
    *
-   * A `note` CIMET NEM TARTALMAZ -- a naplo atmegy a partner portalra
-   * (fb945858 merese). Es a `toStatus` `null`: a jegy allapota nem valtozik
-   * ettol az esemenytol, tehat a `STATUS_CHANGE` ala tenni hazugsag lenne.
+   * A `note` CIMET NEM TARTALMAZ. AZ INDOK NEM AZ, HOGY A PARTNER MA LATNA
+   * EZT A SORT -- ma nem latja: merve 2026-09-22-en a fo agon, a partner a
+   * `partnerServiceJobDetail` vetiteset kapja, ami a naplo-bejegyzest ot
+   * nevesitett mezobol epiti ujra, es a `note` nincs koztuk.
+   *
+   * AZ INDOK EZ: ennek a mezonek a LATHATOSAGA egy nap alatt KETSZER valtozott
+   * (2026-09-21 10:5x es 12:07), tehat a lathatosag nem tulajdonsag, hanem
+   * pillanat. Egy cim, ami egyszer bekerul egy naplo szovegebe, minden
+   * jovobeli feluletnel egyutt utazik.
+   *
+   * Es a `toStatus` `null`: a jegy allapota nem valtozik ettol az esemenytol,
+   * tehat a `STATUS_CHANGE` ala tenni hazugsag lenne.
    */
   async recordNotification(input: {
     serviceJobId: string;
