@@ -169,9 +169,21 @@ describe("a belyegkep bekotese", () => {
    *
    * A masik ket gazdanal a lathatosag a szolgaltatasban dol el (`detail`,
    * `requireVisibleJob`), es a belyegkep-ag AZ UTAN all. Az eszkoznel viszont
-   * a KET kapu magaban a lekerdezesben van (`rowBelongsToScope` a tulajdonosra,
-   * `scopeMaySeeDocumentType` a fajtara), es egy masolat, ami ezeket kihagyja,
-   * SEMMILYEN meglevo teszten nem bukna el.
+   * a KET kapu magaban az agban van (az ESZKOZ lathatosaga es a dokumentum
+   * FAJTAJA), es egy masolat, ami ezeket kihagyja, SEMMILYEN meglevo teszten
+   * nem bukna el.
+   *
+   * === A TULAJDONOS-KAPU ALAKJA 2026-09-21-EN MEGVALTOZOTT ===
+   *
+   * Addig `rowBelongsToScope(row.asset, scope)` allt a BETOLTOTT soron, es ez
+   * az allitas azt a sort kereste. Az a szabaly viszont szukebb volt, mint amit
+   * a LISTA hasznal (a lista a reszlegen at is beenged), es a kulonbsegtol a
+   * partner sajat helyszinen allo eszkoz csatolmanya 404-et adott.
+   *
+   * A kapu ezert a LEKERDEZESBE kerult, ugyanabbol a fuggvenybol, amit a lista
+   * es a reszletlap hasznal. AMIT EZ AZ ALLITAS MER, VALTOZATLAN: hogy mind a
+   * ket kapu ott van. Csak az ALAKJA kovette a kodot -- egy allitas, ami a regi
+   * alakot keresi, a javitas utan a HELYES kodot dontene pirosra.
    *
    * ES A KAR NEM ELMELETI: a belyegkep ugyanannak a kepnek a kicsinyitett masa.
    * Egy INTERNAL csatolmany csempeje ugyanugy szivargas, csak kisebb
@@ -187,8 +199,8 @@ describe("a belyegkep bekotese", () => {
 
     assert.match(
       torzs,
-      /if \(!rowBelongsToScope\(row\.asset, scope\)\) return null;/,
-      "a tulajdonos-kapu hianyzik a belyegkep-olvasasbol",
+      /asset: \{ AND: \[assetVisibilityForAndBranch\(scope\)\] \}/,
+      "az eszkoz-lathatosag kapuja hianyzik a belyegkep-olvasasbol",
     );
     assert.match(
       torzs,

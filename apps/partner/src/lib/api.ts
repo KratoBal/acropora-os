@@ -149,6 +149,17 @@ export const partnerApi = {
    * A `customerId` parameter AZERT KERULT KI, es nem csak a ket query-mezo: egy
    * bennhagyott azonosito azt sugallna, hogy a hivo szabalyozza a lathatosagot.
    * Ma a `PartnerScope` szabalyozza, a szerveren.
+   *
+   * === ES AKKOR CSAK EZ A FELE LETT KIJAVITVA (2026-09-21) ===
+   *
+   * A szerver KET kulonbozo szaballyal dontott arrol, mit lat a partner: a
+   * LISTA a reszlegen at is beengedett, az ADATLAP csak a sor sajat gazdajat
+   * nezte. A 2026-09-18-i javitas a listat hozta helyre, es az adatlapot
+   * mellette hagyta -- ugyanaz a hiba, egy kattintassal odebb.
+   *
+   * Merve 2026-09-21 az eles adaton: 79 eszkozbol 79 szallitoi tulajdonu, sajat
+   * `customerId`-je EGYIKNEK SINCS. A lista mind a 79-et megmutatta, az adatlap
+   * mind a 79-re nemet mondott.
    */
   assets: (input?: { departmentId?: string; search?: string }) => {
     const query = new URLSearchParams({ status: "ALL", pageSize: "100" });
@@ -170,6 +181,20 @@ export const partnerApi = {
    * EGY ESZKOZ ADATLAPJA. A hatokort a SZERVER szabja (`partnerScopeOf`),
    * tehat idegen eszkozre 404 jon -- a portal nem szur mellé sajat feltetelt.
    * Egy kliens-oldali szures azt sugallna, hogy a lathatosagot a hivo dönti el.
+   *
+   * === AZ "IDEGEN" SZO 2026-09-21-IG MAST JELENTETT, MINT AMIT A SZERZOJE GONDOLT ===
+   *
+   * Ez a mondat vegig IGAZ volt, es kozben a hibat irta le helyesnek: a szerver
+   * szukebb szabalyt futtatott az adatlapon, mint a listan, tehat "idegen" MIND
+   * A 79 eszkozt jelentette. Balazs szo szerinti jelzese: "ha rakattint egyre
+   * akkor mindenre azt mondja, hogy nincs ilyen eszkoz."
+   *
+   * Mostantol az adatlap UGYANAZT a lathatosagot hasznalja, mint a lista
+   * (`assetVisibilityForAndBranch`), tehat az "idegen" azt jelenti, amit a
+   * szerzoje ertett rajta: ami NEM a kero helyszinen all es nem is az ove.
+   *
+   * A CSATOLMANY-AGAK IS EGYUTT MOZDULTAK (belyegkep, letoltes): kulonben a lap
+   * megnyilna, a fajljai megjelennenek, es a megnyitasuk 404-et adna.
    */
   asset: (id: string) =>
     request<AssetDetail>(`/service/assets/${encodeURIComponent(id)}`),

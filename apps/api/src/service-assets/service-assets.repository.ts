@@ -329,6 +329,29 @@ function jsonPayload(value: Record<string, unknown>): Prisma.InputJsonObject {
  * szuro `customerId` / `supplierId` kulcson spreadel es felso szintu `OR`-t is
  * tartalmaz (kereses), barmelyik hatastalanitana egy szinten.
  */
+/**
+ * A RESZLETLAP FELTETELE -- KIEMELVE, HOGY MERHETO LEGYEN.
+ *
+ * Ugyanaz a megfontolas, ami az `assetListWheres`-t is kiemelte: a feltetel
+ * ADATBAZIS NELKUL is allithato, tehat nem egy integracios futasra kell varni
+ * ahhoz, hogy a lathatosagi hatar merve legyen.
+ *
+ * ES A LATHATOSAG UGYANABBOL A FUGGVENYBOL JON, AMIT A LISTA HASZNAL. Ez a
+ * lenyeg, nem a kiemeles: 2026-09-21-ig a reszletlap egy MASIK szabalyt
+ * futtatott (`rowBelongsToScope`, a betoltott soron), ami csak a sor sajat
+ * gazdajat nezte -- es ettol a reszlegen at lathato eszkoz adatlapja 404-et
+ * adott. Eles adat aznap: 79 eszkozbol 79 ilyen.
+ *
+ * A JOGOSULTSAGI SZURO `AND` AGKENT ALL, ugyanabbol az okbol, mint a listanal:
+ * egy kesobb spreadelt testverkulcs kulonben hatastalanitana.
+ */
+export function assetDetailWhere(
+  id: string,
+  scope: PartnerScope,
+): Prisma.AssetWhereInput {
+  return { AND: [{ id }, assetVisibilityForAndBranch(scope)] };
+}
+
 export function assetListWheres(
   scope: PartnerScope,
   userWhereWithoutStatus: Prisma.AssetWhereInput,
@@ -714,20 +737,39 @@ export class ServiceAssetsRepository extends Repository {
 
   /**
    * A KOTELEZO `scope` a mechanizmus maga (lasd a partner-scope.util.ts
-   * jegyzetet): elem-lekeresnel az elfelejtett ellenorzes NEMA. Az ellenorzes a
-   * BETOLTOTT soron all, es a nem egyezo sor `null` -- tehat 404, nem 403.
+   * jegyzetet): elem-lekeresnel az elfelejtett ellenorzes NEMA. A nem lathato
+   * sor `null` -- tehat 404, nem 403.
    *
-   * AZ ESZKOZ KET OLDALON KOTODHET (`customerId` VAGY `supplierId`), es a
-   * `rowBelongsToScope` pont ezt kezeli: egy vevo-hatokoru kero nem lat
-   * szerviz-partner eszkozt attol, hogy a masik oszlopban all az azonosito.
+   * === 2026-09-21: UGYANAZ A LATHATOSAG, AMIT A LISTA HASZNAL ===
+   *
+   * Ez a sor `rowBelongsToScope`-ot hivott, ami CSAK a sor sajat gazdajat nezi
+   * (`customerId` / `supplierId`). A LISTA viszont az
+   * `assetVisibilityForAndBranch`-et, ami vevoi hatokornel a RESZLEGEN keresztul
+   * is beenged. A ket szabaly nem ugyanaz, es a kulonbseg nem elmeleti volt:
+   *
+   *   eles adat, 2026-09-21: 79 eszkozbol 79 SZALLITOI tulajdonu, sajat
+   *   `customerId`-je EGYIKNEK SINCS, es mind a 79 a reszlegen at latszik a
+   *   listan. Az egyetlen partner felhasznalo vevoi hatokoru -- vagyis a lista
+   *   mind a 79-et megmutatta, es ez a sor mind a 79-re nemet mondott.
+   *
+   * Balazs 2026-09-21 14:34:07 UTC-kor kimondta a szabalyt ("a partner azokat
+   * az eszkozoket latja, aminek a helyszine hozza van rendelve"), tehat A LISTA
+   * A HELYES, es ez az oldal veszi at.
+   *
+   * ES A LATHATOSAG A LEKERDEZESBE KERULT, NEM EGY MASODIK PREDIKATUMBA. Egy
+   * `assetVisibleToScope(row, scope)` alaku parhuzamos alak ugyanazt a
+   * szetcsuszast szulne ujra, csak kesobb: ket kifejezes ugyanarra a kerdesre.
+   * Igy EGY forras van, es ez a fuggveny is csak HIVOJA.
+   *
+   * A `findUnique` ezert lett `findFirst`: egyedi kulcsra is az AND-elt
+   * feltetel dont, nem egy utana futo ellenorzes.
    */
   async detail(id: string, scope: PartnerScope): Promise<AssetDetail | null> {
-    const row = await prisma.asset.findUnique({
-      where: { id },
+    const row = await prisma.asset.findFirst({
+      where: assetDetailWhere(id, scope),
       include: assetDetailInclude,
     });
     if (!row) return null;
-    if (!rowBelongsToScope(row, scope)) return null;
     return this.toDetail(
       row,
       await this.ancestors(row.parentAssetId),
@@ -1868,12 +1910,17 @@ export class ServiceAssetsRepository extends Repository {
    * ugyanabbol a lekerdezesbol jonne, a szerver tovabbra is kiolvasna a
    * kilenc megabajtot -- csak nem kuldene el.
    *
-   * ES A KET HATOKOR-ELLENORZES ITT SEM HAGYHATO EL, BETURE UGYANAZ: a
-   * tulajdonos (`rowBelongsToScope`) ES a dokumentum-fajta
+   * ES A KET HATOKOR-ELLENORZES ITT SEM HAGYHATO EL: az ESZKOZ lathatosaga
+   * (`assetVisibilityForAndBranch`, a lekerdezesben) ES a dokumentum-fajta
    * (`scopeMaySeeDocumentType`). Egy belyegkep ugyanannak a kepnek a kicsinyitett
    * masa -- egy INTERNAL csatolmany csempeje ugyanugy szivargas lenne, csak
-   * kisebb felbontasban. Ezert all itt masolat helyett ugyanaz a ket hivas, es
+   * kisebb felbontasban. Ezert all itt masolat helyett ugyanaz a ket feltetel, es
    * ezert all ra kulon allitas.
+   *
+   * AZ ELSO 2026-09-21-IG `rowBelongsToScope` VOLT, betoltott soron. Az a
+   * szabaly szukebb, mint amit a lista hasznal, es ettol a reszlegen at lathato
+   * eszkoz csatolmanya 404-et adott -- a lap megmutatta a fajlt, es a csempeje
+   * nem jott meg.
    *
    * A VISSZAESES A HIVONAL VAN: ha nincs sor, nincs jogosultsag vagy nincs
    * belyegkep, ez `null`-t ad, es a hivo a rendes uton megy tovabb. Ket
@@ -1885,16 +1932,26 @@ export class ServiceAssetsRepository extends Repository {
     scope: PartnerScope,
   ) {
     const row = await prisma.assetDocument.findFirst({
-      where: { id: documentId, assetId },
-      select: {
-        fileName: true,
-        thumbnail: true,
-        type: true,
-        asset: { select: { customerId: true, supplierId: true } },
+      /*
+        A HATOKOR A KAPCSOLT ESZKOZON, UGYANAZZAL A FUGGVENNYEL, amit a lista
+        es a reszletlap hasznal. Korabban `rowBelongsToScope` allt a betoltott
+        soron, ami a RESZLEGEN at lathato eszkoz belyegkepet elutasitotta --
+        vagyis a lap megmutatta a csatolmanyt, es a csempeje nem jott meg.
+      */
+      where: {
+        id: documentId,
+        assetId,
+        /*
+          AND TOMBON BELUL, mint minden hatokor-hivas ebben a fajlban. A
+          `partner-scope-and-branch.spec.ts` ezt a FORRASBOL oriz, es az indoka
+          itt is all: egy kesobb felvett testverkulcs (vagy egy `OR`) ugyanezen
+          a szinten hatastalanitana a szurest, hibauzenet nelkul.
+        */
+        asset: { AND: [assetVisibilityForAndBranch(scope)] },
       },
+      select: { fileName: true, thumbnail: true, type: true },
     });
     if (!row) return null;
-    if (!rowBelongsToScope(row.asset, scope)) return null;
     if (!scopeMaySeeDocumentType(row.type, scope)) return null;
     if (!row.thumbnail) return null;
     return { fileName: row.fileName, thumbnail: row.thumbnail };
@@ -1902,18 +1959,31 @@ export class ServiceAssetsRepository extends Repository {
 
   async document(assetId: string, documentId: string, scope: PartnerScope) {
     const row = await prisma.assetDocument.findFirst({
-      where: { id: documentId, assetId },
+      /*
+        A HATOKOR A KAPCSOLT ESZKOZON -- ugyanaz a fuggveny, mint a listanal es
+        a reszletlapnal. A letoltes es a belyegkep EGYUTT mozdul: kulonben a lap
+        mutatna a csatolmanyt, es a megnyitasa 404-et adna.
+      */
+      where: {
+        id: documentId,
+        assetId,
+        /*
+          AND TOMBON BELUL, mint minden hatokor-hivas ebben a fajlban. A
+          `partner-scope-and-branch.spec.ts` ezt a FORRASBOL oriz, es az indoka
+          itt is all: egy kesobb felvett testverkulcs (vagy egy `OR`) ugyanezen
+          a szinten hatastalanitana a szurest, hibauzenet nelkul.
+        */
+        asset: { AND: [assetVisibilityForAndBranch(scope)] },
+      },
       select: {
         fileName: true,
         contentType: true,
         content: true,
         storageKey: true,
         type: true,
-        asset: { select: { customerId: true, supplierId: true } },
       },
     });
     if (!row) return null;
-    if (!rowBelongsToScope(row.asset, scope)) return null;
     if (!scopeMaySeeDocumentType(row.type, scope)) return null;
     return {
       fileName: row.fileName,
@@ -1953,9 +2023,27 @@ export class ServiceAssetsRepository extends Repository {
         },
       });
       if (!document) return false;
-      // KET FELTETEL, ugyanaz a ketto, amit az olvasas is nez: az eszkoz a
-      // keroe, ES a fajta lathato neki. Aki nem latja, ne is torolhesse -- egy
-      // torles kulonben a LETEZEST is elarulna arrol, amit meg sem lat.
+      /*
+        KET FELTETEL: az eszkoz a keroe, ES a fajta lathato neki. Aki nem latja,
+        ne is torolhesse -- egy torles kulonben a LETEZEST is elarulna arrol,
+        amit meg sem lat.
+
+        === ES EZ A SOR 2026-09-21 OTA SZUKEBB, MINT AZ OLVASAS. SZANDEKOSAN. ===
+
+        Korabban itt is ugyanaz a szabaly allt, mint az olvaso agakon. Azok
+        aznap atalltak a LISTA lathatosagara (a reszlegen at is beenged), mert
+        Balazs igy mondta ki a szabalyt az eszkozok LATASARA.
+
+        A TORLESRE NEM MONDTA KI. A "latja, tehat torolhesse" nem kovetkezik a
+        "latja" mondatbol, es a ketto ara nem egyforma: egy elmaradt torles
+        panaszt szul, egy kereetlen torles visszafordithatatlan.
+
+        Ezert marad `rowBelongsToScope` -- a szukebb alak --, amig valaki, akinek
+        joga van kimondani, nem donti el. A kulonbseg KOVETKEZMENYE ma nulla: a
+        partner-fiokok egyike sem tulajdonosa egyetlen eszkoznek sem, tehat ezen
+        az agon ma egyetlen torles sem mehet at. Ha a szabaly egyszer kinyilik,
+        EZ a sor az, amit at kell irni.
+      */
       if (!rowBelongsToScope(document.asset, scope)) return false;
       if (!scopeMaySeeDocumentType(document.type, scope)) return false;
       await tx.assetDocument.delete({ where: { id: document.id } });
