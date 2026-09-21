@@ -84,7 +84,45 @@ try {
   megall(3, `FAIL: a naplot nem tudtam elolvasni: ${naploUt}`);
 }
 
-const hianyzo = vart.filter((sor) => !naplo.includes(sor));
+/**
+ * AZ ILLESZTES SOR-ALAPU, ES EGY `ok ` VARAKOZAST NEM ELEGIT KI EGY `not ok` SOR.
+ *
+ * === MIERT KELLETT ATIRNI (merve 2026-09-21, eles eset) ===
+ *
+ * Az elozo alak a TELJES naplora hivta a `includes`-t. A TAP-ban a bukas
+ * jelolese `not ok`, vagyis a sikeres alak (`ok 1 - X`) SZOVEGRESZE a bukott
+ * alaknak (`not ok 1 - X`). Egy meres-ag ezert zoldet kapott ugy, hogy a
+ * POZITIV KONTROLLJA ELBUKOTT: a varakozas a SAJAT BUKASARA illeszkedett.
+ *
+ * Ez nem eliras volt, hanem a kapu szerkezeti vaksaga, es a flotta MINDEN
+ * meres-agara allt: `ok N - ...` alaku varakozas ma NEM TUDOTT elbukni --
+ * eppen az a fajta orzo, ami ellen ennek a fajlnak a fejlece ervel.
+ *
+ * === AMI SZANDEKOSAN MARAD: A RESZSZO-ILLESZTES ===
+ *
+ * A varakozasok tobbsege NEM teljes TAP-sor, hanem toredek (egy allitas neve,
+ * egy hibauzenet darabja). Ezert a sor-alapu illesztes tovabbra is `includes`,
+ * csak mar SORONKENT -- igy a behuzott alteszt-sorok is illeszkednek, es egy
+ * varakozas nem ferhet at ket kulonbozo sor kozott.
+ *
+ * A SZUKITES EGYETLEN SZABALY: ha a varakozas `ok ` szoval kezdodik (tehat a
+ * hivo egy SIKERES allitast var), akkor egy `not ok` kezdetu sor NEM elegiti
+ * ki. Egy toredek-varakozas (`a torles-sor MEGJELENIK`) ettol valtozatlanul
+ * illeszkedik mind a kettore -- az a hivo dontese, hogy nem nyilatkozik a
+ * kimenetelrol.
+ */
+const naploSorok = naplo.split("\n").map((sor) => sor.trim());
+
+function megjelent(varakozas) {
+  const sikertVar = varakozas.startsWith("ok ");
+  return naploSorok.some((sor) => {
+    if (!sor.includes(varakozas)) return false;
+    if (sikertVar && sor.startsWith("not ok")) return false;
+    return true;
+  });
+}
+
+const hianyzo = vart.filter((sor) => !megjelent(sor));
 
 console.log(`MERES-KAPU  (${naploUt})`);
 console.log(`  vart nyom:      ${vart.length}`);
