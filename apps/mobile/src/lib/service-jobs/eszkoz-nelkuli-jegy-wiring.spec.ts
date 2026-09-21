@@ -92,3 +92,92 @@ describe("hibajegy gép nélkül: a képernyő bekötése", () => {
     assert.match(forras, /\{partner \? \(\s*\n\s*<>/);
   });
 });
+
+/**
+ * AZ ESZKOZ-VALASZTO A GEP NELKULI UTON (9dfa03c7).
+ *
+ * Ugyanaz a hatar, mint fent: ezek a HIVAS ALAKJAT merik, nem a kepernyot.
+ * Hogy MI megy fel, az a `uj-jegy-torzs.ts` valodi allitasaiban all.
+ */
+describe("hibajegy gép nélkül: az eszköz-választó", () => {
+  /**
+   * A SZURES A SZERVEREN FUT, A HELYSZINRE. A szerver a reszfat is beleveszi,
+   * tehat egy nagyobb egyseget valasztva az alatta allo egysegek eszkozei is
+   * jonnek -- ugyanaz a halmaz, amit a felvitel elfogad.
+   *
+   * MI PIROSIT: egy `departmentId` nelkuli hivas (a partner OSSZES eszkoze
+   * jonne), vagy egy bongeszo-oldali szures a betoltott lista folott.
+   */
+  it("a lista a helyszínre szűrve, a szerverről jön", () => {
+    assert.match(
+      forras,
+      /listAssets\(eszkozOldal, 50, eszkozKereses, departmentId\)/,
+    );
+  });
+
+  /**
+   * A VALASZTO CSAK HELYSZINNEL EGYUTT INDUL EL, es ez a szerver harmadik
+   * orzojenek az alakja: az eszkoz csak helyszinnel egyutt ervenyes.
+   */
+  it("a lekérdezés a helyszín meglétéhez kötött", () => {
+    assert.match(forras, /eszkozValasztoNyitva/);
+    assert.match(forras, /Boolean\(departmentId\)/);
+  });
+
+  /**
+   * A LAPOZO OTT ALL, ES EZ NEM DISZ.
+   *
+   * Elesen merve 2026-09-21: a legnagyobb reszfa 49 eszkoz, a lapmeret 50.
+   * Ma befer -- es PONT EZERT veszelyes: egy uj eszkoz barmelyik alegysegbe
+   * atviszi a hataron, es onnantol a valaszto CSENDBEN hianyos lenne.
+   *
+   * MI PIROSIT: a lapozo elhagyasa, vagy a lapszam elrejtese. Egy `1 / 2`
+   * felirat az egyetlen jel, ami MEGELOZI a hianyt.
+   */
+  it("a választó lapozható, és a lapszám ki van írva", () => {
+    assert.match(forras, /eszkozok\.data\?\.pagination\.totalPages/);
+    assert.match(forras, /\{eszkozOldal\} \/ \{eszkozOldalakSzama\}/);
+  });
+
+  /**
+   * A HELYSZIN VALTASA TORLI A VALASZTAST.
+   *
+   * A szerver a helyszin (reszfastul) eszkozeit fogadja el: egy ottfelejtett
+   * valasztas a TELJES felvitelt elutasittatna, es a szerelo a helyszinen egy
+   * olyan sor miatt allna meg, amit nem is lat.
+   *
+   * A SZAM SZAMIT: a torles MIND A NEGY helyen kell (partner-valtas,
+   * partner-torles, helyszin-valtas, helyszin-torles). Egy jelenlet-illesztes
+   * zolden atengedne, ha barmelyikbol kimaradna.
+   */
+  it("partner- vagy helyszín-váltásnál a választás törlődik", () => {
+    const db = forras.split("setValasztottEszkozok([])").length - 1;
+    assert.equal(
+      db,
+      4,
+      `a törlés ${db} helyen áll; mind a négy váltásnál kell`,
+    );
+  });
+
+  /**
+   * A VALASZTOTT ESZKOZ A NEVET IS VISZI, NEM CSAK AZ AZONOSITOT.
+   *
+   * MIERT: a valasztott eszkoz egy KESOBBI lapon vagy egy szukebb keresesben
+   * mar nem latszik a listaban. Ha csak az azonositot tartanank, a szerelo egy
+   * szamot latna a valaszto feliratan, vagy semmit.
+   */
+  it("a választott eszközök neve is látszik a feliraton", () => {
+    assert.match(forras, /valasztottEszkozok\s*\.map\(\(item\) => item\.nev\)/);
+  });
+
+  /**
+   * ES A TORZS TENYLEG MEGKAPJA. Enelkul a fenti ot allitas egy olyan
+   * valasztot is zolden hagyna, ami sehova nem kuldi el, amit kivalasztottak.
+   */
+  it("POZITÍV KONTROLL: a kiválasztott eszközök a törzsbe kerülnek", () => {
+    assert.match(
+      forras,
+      /assetIds: valasztottEszkozok\.map\(\(item\) => item\.id\)/,
+    );
+  });
+});

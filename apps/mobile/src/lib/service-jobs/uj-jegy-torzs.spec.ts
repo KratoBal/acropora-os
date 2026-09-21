@@ -13,6 +13,7 @@ const ALAP: UjJegyAllapot = {
   originAssetId: null,
   customerId: null,
   departmentId: null,
+  assetIds: [],
   userId: "user-1",
   openedAt: "2026-09-18T18:00:00.000Z",
 };
@@ -134,5 +135,97 @@ describe("mi megy fel egy új hibajegyből", () => {
 
     assert.match(gepes.ok ? gepes.operationId : "", minta);
     assert.match(gepNelkul.ok ? gepNelkul.operationId : "", minta);
+  });
+});
+
+/**
+ * AZ ESZKOZOK A GEP NELKULI UTON (9dfa03c7).
+ *
+ * A szerver harmadik orzoje: az `assetIds` CSAK helyszinnel egyutt ervenyes, es
+ * a kert halmaz maga a helyszin (reszfastul) eszkozeibol all.
+ */
+describe("a gép nélküli úton megadott eszközök", () => {
+  it("helyszínnel együtt felmennek", () => {
+    const eredmeny = torzs({
+      customerId: "cust-1",
+      departmentId: "dept-1",
+      assetIds: ["asset-1", "asset-2"],
+    });
+    assert.equal(eredmeny.ok, true);
+    if (!eredmeny.ok) return;
+    assert.deepEqual(eredmeny.payload, {
+      title: "Szivattyú zúg",
+      customerId: "cust-1",
+      departmentId: "dept-1",
+      assetIds: ["asset-1", "asset-2"],
+    });
+  });
+
+  /**
+   * A SZERVER HARMADIK ORZOJE, A KULDES ELOTT. Nem azert, hogy helyettesitse a
+   * szervert, hanem hogy a szerelo a helyszinen ne egy szerver-hibauzenetbol
+   * tudja meg, mit hagyott ki.
+   */
+  it("helyszín nélkül a felvitel megáll, mielőtt elindulna", () => {
+    const eredmeny = torzs({
+      customerId: "cust-1",
+      assetIds: ["asset-1"],
+    });
+    assert.equal(eredmeny.ok, false);
+    if (eredmeny.ok) return;
+    assert.match(eredmeny.hiba, /helyszínnel/i);
+  });
+
+  /**
+   * AZ URES AZONOSITO KIESIK, ES EZ NEM OVATOSSAG: a valaszto allapota egy
+   * tomb, es egy torolt sor ures sztringet hagyhat benne. Egy ures azonosito
+   * a szerveren nem letezo eszkozre mutatna, es a TELJES felvitel hasalna el
+   * rajta -- egy olyan sor miatt, amit a szerelo mar levett.
+   *
+   * ES A CSUPA-URES LISTA NEM KULD MEZOT: egy `assetIds: []` a kerésben azt
+   * allitana, hogy a szerelo SEMMIT nem valasztott -- ami igaz, de akkor a
+   * mezonek nincs is helye a torzsben.
+   */
+  it("az üres azonosító kiesik, és csupa üresnél nincs mező", () => {
+    const egy = torzs({
+      customerId: "cust-1",
+      departmentId: "dept-1",
+      assetIds: ["  ", "asset-1", ""],
+    });
+    assert.equal(egy.ok, true);
+    if (!egy.ok) return;
+    assert.deepEqual(egy.payload.assetIds, ["asset-1"]);
+
+    const semmi = torzs({
+      customerId: "cust-1",
+      departmentId: "dept-1",
+      assetIds: ["", "   "],
+    });
+    assert.equal(semmi.ok, true);
+    if (!semmi.ok) return;
+    assert.ok(!("assetIds" in semmi.payload));
+  });
+
+  /**
+   * GEP MELLOL AZ `assetIds` SEM MEGY FEL. Ott a jegy MAGAROL a geprol szol,
+   * es azt az `originAssetId` mondja meg -- egy melle tett lista ugyanazt az
+   * eszkozt MASODSZOR is rakotne, mas jelentessel.
+   *
+   * MI PIROSIT: ha a lista az `originAssetId` melle kerulne. A tipus ezt nem
+   * fogja meg: mind a ketto ervenyes mezo a szerveren.
+   */
+  it("gép mellől az eszköz-lista NEM megy fel", () => {
+    const eredmeny = torzs({
+      originAssetId: "asset-1",
+      customerId: "cust-1",
+      departmentId: "dept-1",
+      assetIds: ["asset-2"],
+    });
+    assert.equal(eredmeny.ok, true);
+    if (!eredmeny.ok) return;
+    assert.deepEqual(eredmeny.payload, {
+      title: "Szivattyú zúg",
+      originAssetId: "asset-1",
+    });
   });
 });

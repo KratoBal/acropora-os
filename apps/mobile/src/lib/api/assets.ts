@@ -226,7 +226,23 @@ export interface AssetListResponse {
  * tulajdonos nevét. A telefonon szűrni egy már lapozott halmazt annyi lenne,
  * hogy ötven sorból hármat mutatunk, miközben a darabszám a többit is számolja.
  */
-export function listAssets(page = 1, pageSize = 50, search = "") {
+/**
+ * A HELYSZIN-SZURO A SZERVEREN MAR LETEZIK, ES A RESZFAT IS BELEVESZI.
+ *
+ * Egy nagyobb egyseget valasztva az alatta allo egysegek eszkozei is jonnek
+ * (`collectUnitSubtreeIds`) -- ez szandekos, es ugyanaz a szabaly, amit a jegy
+ * felvitele var: "a Biodom alatti medencen logo eszkoz IS a Biodom eszkoze".
+ *
+ * AZ URES ERTEK NEM MEGY KI. Egy `departmentId=` alaku, ures parameter nem
+ * ugyanaz, mint a parameter hianya: a szerver egy ures azonositot kapna, es a
+ * reszfa-kibontast egy nem letezo egysegre futtatna.
+ */
+export function listAssets(
+  page = 1,
+  pageSize = 50,
+  search = "",
+  departmentId = "",
+) {
   const query = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
@@ -234,6 +250,7 @@ export function listAssets(page = 1, pageSize = 50, search = "") {
     ownerScope: "SERVICE_PARTNER",
   });
   if (search.trim()) query.set("search", search.trim());
+  if (departmentId.trim()) query.set("departmentId", departmentId.trim());
   return apiRequest<AssetListResponse>(`${BASE}?${query}`);
 }
 

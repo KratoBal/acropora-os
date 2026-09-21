@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -12,7 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getAsset } from "@/lib/api/assets";
+import { getAsset, listAssets } from "@/lib/api/assets";
 import {
   createServiceJob,
   uploadServiceJobPhotos,
@@ -133,6 +138,19 @@ export default function NewServiceJobScreen() {
   const [departmentId, setDepartmentId] = useState("");
   const [partnerValasztoNyitva, setPartnerValasztoNyitva] = useState(false);
   const [helyszinValasztoNyitva, setHelyszinValasztoNyitva] = useState(false);
+  /*
+    A VALASZTOTT ESZKOZOK AZONOSITOSTUL ES NEVESTUL.
+
+    Nem eleg az azonosito-lista: a valasztott eszkoz egy KESOBBI lapon vagy egy
+    szukebb keresesben mar nem latszik, es a szerelo akkor csak egy szamot
+    latna. A nev a valasztas PILLANATABAN ismert, tehat ott is tesszuk el.
+  */
+  const [valasztottEszkozok, setValasztottEszkozok] = useState<
+    { id: string; nev: string }[]
+  >([]);
+  const [eszkozValasztoNyitva, setEszkozValasztoNyitva] = useState(false);
+  const [eszkozKereses, setEszkozKereses] = useState("");
+  const [eszkozOldal, setEszkozOldal] = useState(1);
   const partnerek = useQuery({
     queryKey: ["uj-jegy-partnerek"],
     queryFn: listSelectableWorksheetPartners,
@@ -142,6 +160,28 @@ export default function NewServiceJobScreen() {
     queryKey: ["uj-jegy-helyszinek", partner?.customerId],
     queryFn: () => listWorksheetDepartments(partner!.customerId),
     enabled: !assetId && status === "authenticated" && Boolean(partner),
+  });
+  /**
+   * A HELYSZIN ESZKOZEI -- ES A SZURES A SZERVEREN FUT.
+   *
+   * A lista LAPOZOTT, es ez nem elmeleti ovatossag: elesen merve 2026-09-21-en
+   * a legnagyobb reszfa 49 eszkoz, a lapmeret 50. Ma tehat befer, es PONT
+   * EZERT veszelyes -- egy uj eszkoz barmelyik alegysegbe atviszi a hataron, es
+   * onnantol a valaszto CSENDBEN hianyos lenne. A lapozo ezt vagja el.
+   *
+   * ES CSAK HELYSZINNEL EGYUTT INDUL EL: a szerver a jegyhez csatolt eszkozt
+   * ugyanugy csak helyszinnel egyutt fogadja el. Egy helyszin nelkuli lista a
+   * partner OSSZES eszkozet adna, amibol a bejelento nem tud valasztani.
+   */
+  const eszkozok = useQuery({
+    queryKey: ["uj-jegy-eszkozok", departmentId, eszkozKereses, eszkozOldal],
+    queryFn: () => listAssets(eszkozOldal, 50, eszkozKereses, departmentId),
+    enabled:
+      !assetId &&
+      status === "authenticated" &&
+      eszkozValasztoNyitva &&
+      Boolean(departmentId),
+    placeholderData: keepPreviousData,
   });
 
   const save = useMutation({
@@ -158,6 +198,7 @@ export default function NewServiceJobScreen() {
         originAssetId: assetId ?? null,
         customerId: partner?.customerId ?? null,
         departmentId: departmentId || null,
+        assetIds: valasztottEszkozok.map((item) => item.id),
         userId: user?.id ?? "ismeretlen",
         openedAt,
       });
@@ -304,6 +345,14 @@ export default function NewServiceJobScreen() {
     ma is igy mukodik. Ez a kepernyo tehat nem uj utat nyit, hanem a meglevot
     hasznalja a telefonrol is.
   */
+  /*
+    A LISTA ES A LAPSZAM EGY HELYEN, hogy a render ne ismetelje. A lapszam
+    alapertelmezese 1, nem 0: egy "1 / 0" felirat elromlott lapozonak latszik,
+    holott csak meg nem jott meg a valasz.
+  */
+  const eszkozLista = eszkozok.data?.items ?? [];
+  const eszkozOldalakSzama = eszkozok.data?.pagination.totalPages ?? 1;
+
   if (assetId && !asset)
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -409,6 +458,9 @@ export default function NewServiceJobScreen() {
                   onPress={() => {
                     setPartner(null);
                     setDepartmentId("");
+                    setValasztottEszkozok([]);
+                    setEszkozKereses("");
+                    setEszkozOldal(1);
                     setPartnerValasztoNyitva(false);
                   }}
                   style={({ pressed }) => [
@@ -423,8 +475,12 @@ export default function NewServiceJobScreen() {
                     key={item.customerId}
                     onPress={() => {
                       setPartner(item);
-                      /* Partnert valtva a regi helyszin MAR NEM az ove. */
+                      /* Partnert valtva a regi helyszin MAR NEM az ove -- es
+                         vele a helyszinhez kotott eszkozok sem. */
                       setDepartmentId("");
+                      setValasztottEszkozok([]);
+                      setEszkozKereses("");
+                      setEszkozOldal(1);
                       setPartnerValasztoNyitva(false);
                     }}
                     style={({ pressed }) => [
@@ -470,6 +526,9 @@ export default function NewServiceJobScreen() {
                       onPress={() => {
                         setDepartmentId("");
                         setHelyszinValasztoNyitva(false);
+                        setValasztottEszkozok([]);
+                        setEszkozKereses("");
+                        setEszkozOldal(1);
                       }}
                       style={({ pressed }) => [
                         styles.pickerRow,
@@ -484,6 +543,16 @@ export default function NewServiceJobScreen() {
                         onPress={() => {
                           setDepartmentId(item.id);
                           setHelyszinValasztoNyitva(false);
+                          /*
+                            HELYSZINT VALTVA A REGI ESZKOZOK MAR NEM ITT
+                            ALLNAK. A szerver a helyszin (reszfastul) eszkozeit
+                            fogadja el: egy ottfelejtett valasztas a TELJES
+                            felvitelt elutasittatna, es a szerelo a helyszinen
+                            egy olyan sor miatt allna meg, amit nem is lat.
+                          */
+                          setValasztottEszkozok([]);
+                          setEszkozKereses("");
+                          setEszkozOldal(1);
                         }}
                         style={({ pressed }) => [
                           styles.pickerRow,
@@ -494,6 +563,148 @@ export default function NewServiceJobScreen() {
                       </Pressable>
                     ))}
                   </View>
+                ) : null}
+
+                {/*
+                  AZ ESZKOZ-VALASZTO CSAK HELYSZINNEL EGYUTT JELENIK MEG.
+
+                  Ugyanaz a sorrend, mint a helyszinnel: a szerver az eszkozt
+                  CSAK helyszinnel egyutt fogadja el, mert a kert halmaz maga a
+                  helyszin (reszfastul) eszkozeibol all. Egy mezo, amit ugyis
+                  elutasitanak, csak a helyszinen derulne ki.
+                */}
+                {departmentId ? (
+                  <>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Eszköz választása a helyszínről"
+                      onPress={() => setEszkozValasztoNyitva((open) => !open)}
+                      style={({ pressed }) => [
+                        styles.picker,
+                        pressed && styles.pressed,
+                      ]}
+                      testID="eszkoz-valaszto"
+                    >
+                      <Text style={styles.rowText}>
+                        {valasztottEszkozok.length
+                          ? `Eszközök: ${valasztottEszkozok
+                              .map((item) => item.nev)
+                              .join(", ")}`
+                          : "Eszközök: nincs"}
+                      </Text>
+                    </Pressable>
+
+                    {eszkozValasztoNyitva ? (
+                      <View style={styles.pickerList}>
+                        <TextInput
+                          accessibilityLabel="Eszköz keresése"
+                          value={eszkozKereses}
+                          onChangeText={(ertek) => {
+                            setEszkozKereses(ertek);
+                            /* UJ KERDES, ELSO LAP. Enelkul egy szukebb
+                               keresesnel a harmadik lapon allnank, ami
+                               ureskent jelenne meg -- ugy, mintha nem lenne
+                               talalat. */
+                            setEszkozOldal(1);
+                          }}
+                          style={styles.input}
+                          placeholder="Keresés: azonosító, név, gyártó"
+                          placeholderTextColor="#5c7e92"
+                          autoCorrect={false}
+                          testID="eszkoz-kereso"
+                        />
+                        {eszkozok.isPending ? (
+                          <ActivityIndicator color="#52d6c7" />
+                        ) : null}
+                        {!eszkozok.isPending && !eszkozLista.length ? (
+                          <Text style={styles.meta}>
+                            Ezen a helyszínen ebben a keresésben nincs eszköz.
+                          </Text>
+                        ) : null}
+                        {eszkozLista.map((item) => {
+                          const valasztott = valasztottEszkozok.some(
+                            (valasztas) => valasztas.id === item.id,
+                          );
+                          return (
+                            <Pressable
+                              key={item.id}
+                              accessibilityRole="checkbox"
+                              accessibilityState={{ checked: valasztott }}
+                              onPress={() =>
+                                setValasztottEszkozok((eddigi) =>
+                                  valasztott
+                                    ? eddigi.filter(
+                                        (valasztas) => valasztas.id !== item.id,
+                                      )
+                                    : [
+                                        ...eddigi,
+                                        {
+                                          id: item.id,
+                                          nev: `${item.assetNumber} -- ${item.name}`,
+                                        },
+                                      ],
+                                )
+                              }
+                              style={({ pressed }) => [
+                                styles.pickerRow,
+                                pressed && styles.pressed,
+                              ]}
+                            >
+                              <Text style={styles.rowText}>
+                                {valasztott ? "\u2713 " : ""}
+                                {item.assetNumber} -- {item.name}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                        {/*
+                          A LAPOZO AKKOR IS OTT ALL, HA MA EGY LAP VAN.
+
+                          A legnagyobb reszfa ma 49 eszkoz, a lapmeret 50 --
+                          egyetlen uj eszkoz atviszi a hataron. A lapszam
+                          kiirasa ezt LATHATOVA teszi: egy "1 / 2" felirat
+                          megmondja, hogy van tovabb, mielott barki hianyt
+                          keresne.
+                        */}
+                        <View style={styles.pager}>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Előző oldal"
+                            disabled={eszkozOldal <= 1}
+                            onPress={() =>
+                              setEszkozOldal((oldal) => Math.max(1, oldal - 1))
+                            }
+                            style={[
+                              styles.pagerButton,
+                              eszkozOldal <= 1 && styles.pagerDisabled,
+                            ]}
+                          >
+                            <Text style={styles.rowText}>Előző</Text>
+                          </Pressable>
+                          <Text style={styles.meta}>
+                            {eszkozOldal} / {eszkozOldalakSzama}
+                          </Text>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Következő oldal"
+                            disabled={eszkozOldal >= eszkozOldalakSzama}
+                            onPress={() =>
+                              setEszkozOldal((oldal) =>
+                                Math.min(eszkozOldalakSzama, oldal + 1),
+                              )
+                            }
+                            style={[
+                              styles.pagerButton,
+                              eszkozOldal >= eszkozOldalakSzama &&
+                                styles.pagerDisabled,
+                            ]}
+                          >
+                            <Text style={styles.rowText}>Következő</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : null}
+                  </>
                 ) : null}
               </>
             ) : null}
@@ -639,6 +850,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     paddingVertical: 10,
   },
+  /*
+    A LAPOZO A VALASZTO ALJAN. Ugyanaz az alak, mint az eszkoz-listan
+    (`app/assets/index.tsx`): ott mar bevalt, es ket kulonbozo lapozo ugyanabban
+    az alkalmazasban ket kulonbozo mozdulatot tanitana.
+  */
+  pager: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    paddingTop: 10,
+  },
+  pagerButton: {
+    backgroundColor: "#164057",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  pagerDisabled: { opacity: 0.5 },
   pressed: { opacity: 0.7 },
   meta: { color: "#9fc4d8", fontSize: 13 },
   warning: { color: "#f0c674", fontSize: 13, lineHeight: 18 },
