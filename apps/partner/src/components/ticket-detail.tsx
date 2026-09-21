@@ -2,11 +2,42 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { serviceJobWorksheetLabel } from "@acropora/types";
 
 import { partnerApi } from "@/lib/api";
+import { naploSor } from "@/lib/naplo-sor";
 import { DocumentPanel } from "./document-panel";
 import { Empty, Message } from "./ticket-list";
 
+/**
+ * A HIBAJEGY ADATLAPJA A PARTNER PORTÁLON.
+ *
+ * === MI KERÜL RÁ, ÉS MI NEM (Balázs kérése, 2026-09-21) ===
+ *
+ * Szó szerint: „sot: ugyanaz legyen a hibajegy es a munkalap oldal is", és
+ * „csak ott megtudja csinalni azt amihez jogosultsaga van". A tartalom tehát a
+ * belső lapé (`apps/web/.../service-job-detail-page.tsx`), a kezelői műveletek
+ * viszont nem kerülnek át.
+ *
+ * === AMI A BELSŐ LAPON VAN, ÉS ITT NINCS ===
+ *
+ * A léptetés („Következő lépés"), a delegálás, a helyszín és az eszközök
+ * szerkesztése, a munkalap csatolása és leválasztása. Mind a belső lapon
+ * `canManage` mögött áll.
+ *
+ * ÉS AZ INDOK ITT UGYANAZ A RÉS, AMIT AZ ESZKÖZ-ADATLAPNÁL MÉRTEM: a
+ * `PARTNER_SERVICE` szerep `[SERVICE_VIEW, SERVICE_MANAGE]` (auth.ts:388),
+ * vagyis a partner fiókjának MA VAN joga ezekhez a végpontokhoz. Nem azért
+ * hiányoznak, mert nincs rá jog, hanem mert MA SZÁNDÉKOSAN NEM KÍNÁLJUK őket.
+ * A különbség nem szőrszálhasogatás: egy hamis indok túléli azt a feltételt,
+ * ami létrehozta, és a következő olvasó a jogosultságok között keresné, miért
+ * nincs itt gomb. A rés a pull request törzsében ki van mondva.
+ *
+ * === AMIT VISZONT KÍNÁLUNK ===
+ *
+ * A fájl- és fénykép-csatolás marad: a partner a saját jegyéhez ma is csatol,
+ * és ez a képesség a korábbi köreinkben épült meg.
+ */
 export function TicketDetail({ id }: { id: string }) {
   const [ticket, setTicket] = useState<Awaited<
     ReturnType<typeof partnerApi.ticket>
@@ -71,6 +102,14 @@ export function TicketDetail({ id }: { id: string }) {
     dateStyle: "long",
     timeStyle: "short",
   });
+  /*
+    A MUNKALAPOK A NAPLÓBÓL JÖNNEK, nem külön mezőből: a `ServiceJobDetail` NEM
+    hordoz `worksheets` listát -- a végpont egy időrendet ad, és a belső lap
+    munkalap-doboza is abból szűr.
+  */
+  const worksheets = ticket.timeline.flatMap((entry) =>
+    entry.kind === "worksheet" ? [entry.worksheet] : [],
+  );
   return (
     <section>
       <Link className="back-link" href="/hibajegyek">
@@ -107,10 +146,24 @@ export function TicketDetail({ id }: { id: string }) {
       <div className="detail-grid">
         <article className="panel">
           <h2>Mi a probléma?</h2>
+          {/*
+            AZ ÜRES LEÍRÁS KIMONDVA. Egy hiányzó bekezdés ugyanúgy néz ki, mint
+            egy betöltési hiba, és a különbséget csak az tudja, aki a jegyet
+            felvitte.
+          */}
           <p className="preline">
             {ticket.description ||
               "A hibajegyhez nem rögzítettek részletes leírást."}
           </p>
+        </article>
+        {/*
+          AZ ÜGY ADATAI: AMI A JEGYET AZONOSÍTJA A HELYSZÍNEN. A belső lapon ez
+          külön doboz a jobb hasábban, ugyanezzel a négy sorral -- a „Partner"
+          sor kivételével, ami itt maga a bejelentkezett cég, tehát egy üres
+          ismétlés lenne.
+        */}
+        <aside className="panel">
+          <h2>Az ügy adatai</h2>
           <dl>
             <div>
               <dt>Bejelentés ideje</dt>
@@ -120,40 +173,67 @@ export function TicketDetail({ id }: { id: string }) {
               <dt>Helyszín</dt>
               <dd>{ticket.departmentPath?.join(" / ") ?? "Nincs megadva"}</dd>
             </div>
+            <div>
+              <dt>Az ügy állapota</dt>
+              <dd>{ticket.partnerStatusLabel}</dd>
+            </div>
           </dl>
-        </article>
-        <aside className="panel">
-          <h2>Érintett eszközök</h2>
-          {ticket.assets.length ? (
-            <ul className="plain-list">
-              {ticket.assets.map((asset) => (
-                <li key={asset.id}>
-                  <strong>{asset.assetName}</strong>
-                  <span>{asset.assetNumber}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted">A hibajegyhez nincs eszköz megjelölve.</p>
-          )}
         </aside>
       </div>
+      <section className="panel">
+        <h2>Érintett eszközök</h2>
+        {ticket.assets.length ? (
+          <ul className="plain-list">
+            {ticket.assets.map((asset) => (
+              <li key={asset.id}>
+                {/*
+                  A SOR AZ ESZKÖZ ADATLAPJÁRA VISZ, és az `assetId`-vel, nem a
+                  csatolás sorának azonosítójával: a kettő két különböző dolog,
+                  és az utóbbi egy nem létező lapra vinne.
+                */}
+                <Link href={`/eszkozok/${asset.assetId}`}>
+                  <strong>{asset.assetName}</strong>
+                </Link>
+                <span>{asset.assetNumber}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">A hibajegyhez nincs eszköz megjelölve.</p>
+        )}
+      </section>
       <section className="panel">
         <h2>Mi történt a hibajeggyel?</h2>
         {ticket.timeline.length ? (
           <ol className="timeline">
             {ticket.timeline.map((entry) => (
               <li key={`${entry.kind}-${entry.sortKey}`}>
-                <time>{date.format(new Date(entry.at))}</time>
-                <span>
-                  {entry.kind === "status"
-                    ? "A hibajegy állapotát frissítették"
-                    : entry.kind === "asset"
-                      ? `${entry.asset.assetName} eszköz hozzáadva`
-                      : entry.kind === "worksheet"
-                        ? "Munkalap kapcsolódik a hibajegyhez"
-                        : "Egy csatolmány törölve lett"}
-                </span>
+                <span>{naploSor(entry)}</span>
+                <time dateTime={entry.at}>
+                  {date.format(new Date(entry.at))}
+                  {entry.kind === "status" && entry.event.actorName
+                    ? ` · ${entry.event.actorName}`
+                    : ""}
+                </time>
+                {/*
+                  A TÖRÖLT CSATOLMÁNY SORA ALATT AZ ÁLL, AMIT A TÖRLÉS ELVITT
+                  VOLNA: ki töltötte fel, és mikor. A fájl sora addigra nincs
+                  meg, tehát ez az egyetlen hely, ahol ez látszik. Régebbi
+                  bejegyzésnél `null`, és olyankor nem írunk semmit: a „nem
+                  tudjuk" nem ugyanaz, mint a „nem volt".
+                */}
+                {entry.kind === "document" &&
+                entry.removal.uploadedAt !== null ? (
+                  <time dateTime={entry.removal.uploadedAt}>
+                    Feltöltve: {date.format(new Date(entry.removal.uploadedAt))}
+                    {entry.removal.uploadedByName
+                      ? ` · ${entry.removal.uploadedByName}`
+                      : ""}
+                  </time>
+                ) : null}
+                {entry.kind === "status" && entry.event.note ? (
+                  <p className="preline">{entry.event.note}</p>
+                ) : null}
               </li>
             ))}
           </ol>
@@ -173,6 +253,28 @@ export function TicketDetail({ id }: { id: string }) {
         }
         onUploaded={load}
       />
+      {/*
+        A MUNKALAPOK A CSATOLMÁNYOK UTÁN ÁLLNAK, ugyanabban a sorrendben, mint a
+        belső lapon. Nem ízlés: a fénykép a BEJELENTETT hibáról szól, a munkalap
+        arról, amit TETTÜNK vele.
+      */}
+      <section className="panel">
+        <h2>Munkalapok a jegy mögött</h2>
+        {worksheets.length ? (
+          <ul className="plain-list">
+            {worksheets.map((worksheet) => (
+              <li key={worksheet.id}>
+                <Link href={`/munkalapok/${worksheet.id}`}>
+                  <strong>{serviceJobWorksheetLabel(worksheet)}</strong>
+                </Link>
+                <span>{date.format(new Date(worksheet.createdAt))}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">Ehhez a jegyhez még nem tartozik munkalap.</p>
+        )}
+      </section>
     </section>
   );
 }

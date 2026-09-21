@@ -444,3 +444,41 @@ export function serviceJobTimeline(detail: {
     return a.sortKey < b.sortKey ? -1 : 1;
   });
 }
+
+/**
+ * EGY MUNKALAP NEVE A JEGY ALATT: NÉV, ÉS ZÁRÓJELBEN AMI AZONOSÍTJA.
+ *
+ * Balázs kérése, 2026-09-16: a jegy alatt eddig CSAK a szám állt, piszkozatnál
+ * pedig a "Piszkozat" szó. Az utóbbi MINDEN számozatlan lapnál ugyanaz, tehát
+ * két piszkozat a jegy alatt megkülönböztethetetlen volt, és a lista nem
+ * mondta meg, miről szól a lap - csak azt, hogy van.
+ *
+ * A NÉV ELŐRE KERÜL, A ZÁRÓJELBE AZ, AMI EDDIG OTT ÁLLT. Lezárt lapnál ez a
+ * szám, piszkozatnál a szó. Így a sor akkor is olvasható marad, ha valaki a
+ * számot keresi - csak már nem az az első, amit lát.
+ *
+ * NÉV NÉLKÜL A RÉGI ALAK MARAD, üres zárójel nélkül: a `""` azt jelenti, hogy
+ * nem tudjuk a nevet (a laphoz nincs verzió), és egy "(Piszkozat)" felirat egy
+ * hiányzó név előtt többet állítana, mint amit tudunk.
+ *
+ * === MIÉRT ITT ÁLL, ÉS NEM A WEBES CSOMAGBAN (2026-09-21) ===
+ *
+ * 2026-09-21-ig az `apps/web` saját `service-job-labels.ts` fájljában lakott.
+ * A partnerportál ugyanezt a listát rajzolja ki a jegy alatt, és az `apps/web`
+ * forrását nem érheti el (a `@acropora/partner` egyetlen belső függősége a
+ * `@acropora/types`). Két másolat két helyen ugyanarra a sorra: a portálon és
+ * a belső lapon UGYANAZ a munkalap kétféleképpen nézne ki, és a különbség
+ * néma volna.
+ *
+ * A HELYE NEM ÖNKÉNY: a `serviceJobTimeline` -- ugyanennek a naplónak a
+ * rendezése -- már itt áll, ugyanabból az okból (a mobil és a web külön
+ * írná meg, és a két sorrend elcsúszna).
+ */
+export function serviceJobWorksheetLabel(worksheet: {
+  number: string | null;
+  subject: string;
+}): string {
+  const azonosito = worksheet.number ?? "Piszkozat";
+  const nev = worksheet.subject.trim();
+  return nev ? `${nev} (${azonosito})` : azonosito;
+}

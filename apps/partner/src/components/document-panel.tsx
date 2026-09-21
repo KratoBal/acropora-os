@@ -29,6 +29,12 @@ export function DocumentPanel<T extends DocumentItem>({
   const [caption, setCaption] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  /*
+    A NAGYÍTOTT KÉP AZONOSÍTÓJA, nem maga a tétel: a lista újratöltődhet
+    feltöltés után, és egy eltárolt objektum akkor egy már lecserélt sorra
+    mutatna. Az azonosító a `urls` térképet is ugyanúgy feloldja.
+  */
+  const [nagyitott, setNagyitott] = useState<string | null>(null);
   const loader = useRef(loadBlob);
   loader.current = loadBlob;
 
@@ -53,6 +59,16 @@ export function DocumentPanel<T extends DocumentItem>({
       created.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [items]);
+
+  /** A nagyított képet az Escape is bezárja, nem csak a háttérre kattintás. */
+  useEffect(() => {
+    if (!nagyitott) return;
+    const kezelo = (esemeny: KeyboardEvent) => {
+      if (esemeny.key === "Escape") setNagyitott(null);
+    };
+    window.addEventListener("keydown", kezelo);
+    return () => window.removeEventListener("keydown", kezelo);
+  }, [nagyitott]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -81,7 +97,22 @@ export function DocumentPanel<T extends DocumentItem>({
           {items.map((item) => (
             <article key={item.id} className="document-card">
               {urls[item.id] ? (
-                <img src={urls[item.id]} alt={item.caption ?? item.fileName} />
+                /*
+                  A CSEMPE GOMB, NEM PUSZTA KÉP. A nagyítás így billentyűzetről
+                  is elérhető, és a képernyőolvasó is műveletnek mondja -- egy
+                  `onClick` a `<img>`-en mindkettőt elvenné.
+                */
+                <button
+                  type="button"
+                  className="document-thumb"
+                  onClick={() => setNagyitott(item.id)}
+                  aria-label={`${item.fileName} megnyitása nagyban`}
+                >
+                  <img
+                    src={urls[item.id]}
+                    alt={item.caption ?? item.fileName}
+                  />
+                </button>
               ) : (
                 <p>{item.fileName}</p>
               )}
@@ -116,6 +147,31 @@ export function DocumentPanel<T extends DocumentItem>({
         </button>
       </form>
       {error ? <Message tone="error" text={error} /> : null}
+      {nagyitott && urls[nagyitott] ? (
+        <div
+          className="image-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Nagyított kép"
+          onClick={() => setNagyitott(null)}
+        >
+          <img src={urls[nagyitott]} alt={nagyitottNeve(items, nagyitott)} />
+          <button type="button" onClick={() => setNagyitott(null)}>
+            Bezárás
+          </button>
+        </div>
+      ) : null}
     </section>
   );
+}
+
+/*
+  A NAGYÍTOTT KÉP SZÖVEGES NEVE. Külön függvény, mert a `null` azonosítót a
+  hívó már kizárta, a tételt viszont meg kell keresni -- és egy hiányzó sor
+  (időzítés: a lista újratöltődött alatta) nem dobhat kivételt egy megnyitott
+  képnézőben.
+*/
+function nagyitottNeve<T extends DocumentItem>(items: T[], id: string): string {
+  const tetel = items.find((item) => item.id === id);
+  return tetel?.caption ?? tetel?.fileName ?? "Nagyított kép";
 }

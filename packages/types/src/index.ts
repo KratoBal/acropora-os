@@ -3,7 +3,10 @@ export {
   DOCUMENT_THUMBNAIL_VARIANT,
   DOCUMENT_VARIANT_PARAM,
 } from "./document-variant.js";
-export { serviceJobTimeline } from "./service-job-management.js";
+export {
+  serviceJobTimeline,
+  serviceJobWorksheetLabel,
+} from "./service-job-management.js";
 export type {
   ServiceJobAssetLink,
   ServiceJobAssignee,
