@@ -41,6 +41,7 @@ import type {
 } from "./worksheet-content.js";
 import { hiddenRowsWhere } from "../common/hidden-rows.js";
 import type { WorksheetSignerSource } from "./worksheet-signer.js";
+import { signedSheetTypeFor } from "./worksheet-signed-sheet.js";
 import { attachableWorksheetFilters } from "./attachable-worksheets.js";
 import {
   worksheetCloseBlocker,
@@ -1358,6 +1359,7 @@ export class WorksheetsRepository extends Repository {
         worksheet.id,
         current.id,
         actorUserId,
+        "GENERATED_SHEET",
       );
 
       return { ok: true } as const;
@@ -1448,8 +1450,23 @@ export class WorksheetsRepository extends Repository {
     worksheetId: string,
     versionId: string,
     actorUserId: string | null,
+    /*
+      AZ ALAPERTELMEZES A LEZARASKORI LAP, es ez nem kenyelmi dontes: a
+      visszamenoleges parancs REGI alakja ezt a helpert hivja, negy
+      argumentummal. Egy kotelezo otodik argumentum ott forditasi hibat adna --
+      helyesen --, de egy alapertelmezes NELKULI valtozat azt is jelentene,
+      hogy minden jovobeli hivo ujra eldonti a kerdest. A lezaraskori lap a
+      GYAKORI eset; a vegleges a kivetel, es azt kimondva kell kerni.
+    */
+    type: "GENERATED_SHEET" | "SIGNED_SHEET" = "GENERATED_SHEET",
   ): Promise<void> {
-    await this.writeGeneratedSheet(client, worksheetId, versionId, actorUserId);
+    await this.writeGeneratedSheet(
+      client,
+      worksheetId,
+      versionId,
+      actorUserId,
+      type,
+    );
   }
 
   private async writeGeneratedSheet(
@@ -1465,6 +1482,22 @@ export class WorksheetsRepository extends Repository {
       tehat a `null` ERVENYES allapot, nem hianyzo adat.
     */
     actorUserId: string | null,
+    /*
+      MELYIK LAP KESZUL. A ket ertek ket KULONBOZO pillanatot jelol, es
+      SZANDEKOSAN ket kulon sor lesz beloluk:
+
+        GENERATED_SHEET   a LEZARASKOR, a lezarasi tranzakcioban
+        SIGNED_SHEET      az ALAIRAS UTAN, az alairasi tranzakcioban
+
+      A tartalom eloallitasa UGYANAZ -- a kulonbseget az adja, hogy mire a
+      masodik lefut, a verzio allapota mar `SIGNED` es all mellette az alairas
+      sora. Vagyis a piszkozat-felirat magatol marad el, es az alairas-blokk
+      magatol kerul ra: EGY sorral sem kell a tartalomhoz nyulni.
+
+      Az egyedi index a `(worksheetVersionId, type)` parosra szol, tehat a ket
+      lap megfer egymas mellett, es egyik sem irja felul a masikat.
+    */
+    type: "GENERATED_SHEET" | "SIGNED_SHEET",
   ): Promise<void> {
     const row = await this.detailRow(worksheetId, transaction);
     if (!row)
@@ -1515,7 +1548,7 @@ export class WorksheetsRepository extends Repository {
       data: {
         worksheetId,
         worksheetVersionId: versionId,
-        type: "GENERATED_SHEET",
+        type,
         fileName: document.fileName,
         contentType: document.contentType,
         sizeBytes: document.sizeBytes,
@@ -1741,6 +1774,38 @@ export class WorksheetsRepository extends Repository {
           note: input.note,
         },
       });
+
+      /*
+        A VEGLEGES LAP ITT KESZUL EL -- ES A SORREND A LENYEG, NEM A HELY.
+
+        A lap tartalmat ugyanaz a fuggveny allitja elo, mint a lezaraskor. A
+        kulonbseget KET dolog adja, es MIND A KETTO csak EZEN a ponton all fenn:
+
+          a verzio allapota mar `SIGNED`  ->  a PISZKOZAT felirat magatol elmarad
+          az alairas sora mar letezik     ->  az ALAIRAS blokk magatol felkerul
+
+        Ezert all a `signature.create` UTAN: egy sorral feljebb a lap ugyanolyan
+        lenne, mint a lezaraskori. Ugyanabban a tranzakcioban vagyunk, tehat a
+        visszaolvasas latja a sajat irasainkat.
+
+        CSAK ELFOGADASNAL, ES EZ AZ EN DONTESEM (nautilus, 2026-09-21):
+        elutasitasnal az allapot `REJECTED`, tehat a felirat-feltetel
+        (`status !== "SIGNED"`) IGAZ maradna -- vagyis egy "vegleges"-nek
+        nevezett dokumentum PISZKOZAT felirattal kerulne a vevo ele. Az rosszabb
+        lenne, mint ha nem keszul: a felirat epp azt a kerdest nyitna ujra, amit
+        ez a tetel lezar. Es tartalmilag sem vegleges: elutasitas utan a munka
+        folytatodik, uj lappal.
+      */
+      const vegleges = signedSheetTypeFor(input.decision);
+      if (vegleges)
+        await this.writeGeneratedSheet(
+          transaction,
+          input.worksheetId,
+          current.id,
+          input.actorUserId,
+          vegleges,
+        );
+
       return { ok: true } as const;
     });
   }

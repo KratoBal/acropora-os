@@ -1,0 +1,46 @@
+-- AZ ALAIRAS UTAN KESZULO, VEGLEGES MUNKALAP HELYE: egy uj dokumentum-tipus.
+--
+-- Balázs döntése, 2026-09-21 09:02:39 UTC (Discord, digitális aláírás szál,
+-- message_id 1551519015673929841), szó szerint: "igen jo igy". A kérdés a
+-- B alak jóváhagyása volt: az aláírás tegyen MELLÉ egy külön, végleges
+-- dokumentumot, és a lezáráskor készült lap maradjon ÉRINTETLEN.
+--
+-- === A LELET, ÉS AMIÉRT A FELTÉTELHEZ NEM NYÚLUNK ===
+--
+-- A lezáráskori lapon PISZKOZAT felirat áll. A felirat feltétele
+-- (`status !== "SIGNED"`) HELYES -- a lelet a SORRENDBEN van: a lapot a
+-- `close()` állítja elő, az aláírás pedig csak AZUTÁN jön, tehát a generálás
+-- pillanatában az állapot SOHA nem `SIGNED`. Mérve az éles VID-2026-004 lapon:
+-- lezárva 17:33:19.041, a lap 17:33:19.189, az ALÁÍRÁS 17:34:01.697 -- negyvenkét
+-- másodperccel később.
+--
+-- Ha a feltételhez nyúlnánk, egy aláírásra VÁRÓ lap menne jelöletlenül az ügyfél
+-- elé. Ezért nem a jelölést vesszük el, hanem adunk egy dokumentumot, ami az
+-- aláírás UTÁN keletkezik -- és azon a feltétel magától hamis.
+--
+-- === MIÉRT ÚJ ENUM ÉRTÉK, ÉS NEM ÚJ SOR A RÉGI TÍPUSSAL ===
+--
+-- Az egyedi index a `(worksheetVersionId, type)` páron áll, tehát két sor
+-- UGYANAZZAL a típussal nem fér meg egy verzió alatt. A meglévő lap típusa
+-- marad, ami; a végleges kap sajátot.
+--
+-- === AZ ELUTASÍTOTT ALAK, KIMONDVA ===
+--
+-- A másik lehetőség az volt, hogy az aláírás GYÁRTSA ÚJRA a meglévő lapot. Az
+-- ütközik a 2026-08-21-i döntéssel (Balázs: "Igen jól érted"): az aláírt munkalap
+-- végleges, sem szerkesztéssel, sem új verzióval nem nyúl hozzá senki. Egy már
+-- eltárolt hiteles dokumentum tartalma ÉS lenyomata változna meg -- és a lenyomat
+-- változna akkor is, ha a szöveg nem: ugyanaz a tartalom kétszer renderelve MÁS
+-- bájtsorozat (készítési időpont plusz véletlen /ID; mérve 2026-09-17).
+--
+-- === A MA LÉTEZŐ SOROK, KIMONDVA ===
+--
+-- Ez a migráció EGYETLEN meglévő sort sem ír át: csak egy új felsorolás-értéket
+-- vesz fel, amit ma egyetlen sor sem visel. A már lezárt lapok végleges példánya
+-- külön, visszamenőleges lépés, és az nem ebben a migrációban áll.
+
+-- Az `ALTER TYPE ... ADD VALUE` ugyanabban a tranzakcióban akkor biztonságos, ha
+-- a migráció az új értéket nem is használja DML-ben -- itt nem használja. Ugyanez
+-- az alak áll a repó eddigi öt enum-bővítésében, köztük abban, amelyik magát a
+-- `GENERATED_SHEET` értéket vette fel.
+ALTER TYPE "WorksheetDocumentType" ADD VALUE 'SIGNED_SHEET';

@@ -72,14 +72,53 @@ const ALAPERTELMEZETT_NYELO: Nyelo = (szoveg) => {
  * es egy allapot-lista mindharmat kulon felsorolna -- a negyedik erteknel
  * pedig csendben kihagyna.
  */
-async function fetchRows(): Promise<WorksheetSheetBackfillRow[]> {
+/**
+ * A KET FUTAS KET KULONBOZO KERDESRE VALASZOL, ES EZERT KET SZURO.
+ *
+ *   lezaraskori (`GENERATED_SHEET`)  minden LEZART verzio, aminek nincs
+ *                                    lezaraskori lapja
+ *   vegleges    (`SIGNED_SHEET`)     minden ALAIRT verzio, aminek nincs
+ *                                    vegleges lapja
+ *
+ * A LEFEDETTSEG MINDIG UGYANARRA A TIPUSRA KERDEZ, AMIT IRNA. Ez nem formasag:
+ * ha a lefedettseg egy MASIK tipust nezne, a parancs ujra es ujra legyartana
+ * ugyanazt a lapot -- minden futasnal egyet, csendben.
+ */
+export type BackfillMod = {
+  type: "GENERATED_SHEET" | "SIGNED_SHEET";
+  /** MELY VERZIOKAT nezi egyaltalan. */
+  where: { closedAt: { not: null } } | { status: "SIGNED" };
+  cimke: string;
+};
+
+export const LEZARASKORI: BackfillMod = {
+  type: "GENERATED_SHEET",
+  where: { closedAt: { not: null } },
+  cimke: "lezaraskori",
+};
+
+export const VEGLEGES: BackfillMod = {
+  type: "SIGNED_SHEET",
+  /*
+    AZ ALLAPOTRA SZUR, NEM A `closedAt`-RE -- es ez a kulonbseg szandekos. A
+    vegleges lap az ALAIRAS utan letezik; egy lezart, de alairatlan verzion
+    ugyanaz a piszkozat-felirat allna rajta, mint a lezaraskorin, tehat nem
+    lenne vegleges semmiben, csak a neveben.
+  */
+  where: { status: "SIGNED" },
+  cimke: "vegleges",
+};
+
+async function fetchRows(
+  mod: BackfillMod,
+): Promise<WorksheetSheetBackfillRow[]> {
   const versions = await prisma.worksheetVersion.findMany({
-    where: { closedAt: { not: null } },
+    where: mod.where,
     select: {
       id: true,
       worksheetId: true,
       worksheet: { select: { number: true } },
-      documents: { where: { type: "GENERATED_SHEET" }, select: { id: true } },
+      documents: { where: { type: mod.type }, select: { id: true } },
     },
   });
   return versions.map((v) => ({
@@ -95,9 +134,16 @@ export async function main(
   ki: Nyelo = ALAPERTELMEZETT_NYELO,
 ): Promise<number> {
   const ir = argv.includes("--ir");
+  /*
+    AZ ALAPERTELMEZES A REGI VISELKEDES. Egy mukodo parancs jelentese nem
+    valtozhat meg attol, hogy uj kepesseget kap: aki a regi alakot hivja, a
+    regi eredmenyt kapja.
+  */
+  const mod = argv.includes("--vegleges") ? VEGLEGES : LEZARASKORI;
+  ki(`mod: ${mod.cimke} (${mod.type})\n`);
   let rows: WorksheetSheetBackfillRow[];
   try {
-    rows = await fetchRows();
+    rows = await fetchRows(mod);
   } catch (cause) {
     process.stderr.write(`a lekerdezes elhasalt: ${String(cause)}\n`);
     return 2;
@@ -137,6 +183,7 @@ export async function main(
         sor.worksheetId,
         sor.versionId,
         null,
+        mod.type,
       );
       ki(`  KESZ            ${sor.worksheetNumber} (${sor.versionId})\n`);
     } catch (cause) {

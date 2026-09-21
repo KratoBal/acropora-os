@@ -3170,6 +3170,32 @@ enum WorksheetDocumentType {
   /// feltoltott PDF MEGKULONBOZTETHETETLEN lenne tole -- es a "a tarolt fajl a
   /// hiteles" allitas olyan sorra mutatna, amit barki letrehozhatott.
   GENERATED_SHEET
+
+  /// AZ ALAIRAS UTAN KESZULT, VEGLEGES MUNKALAP.
+  ///
+  /// === MIERT KELL, ES MIERT NEM ELEG A `GENERATED_SHEET` ATIRASA ===
+  ///
+  /// A lezaraskori lapon PISZKOZAT felirat all, es ez NEM elirat: a felirat
+  /// feltetele (`status !== "SIGNED"`) helyes, csak a SORREND mas. A lapot a
+  /// `close()` allitja elo, az alairas pedig CSAK AZUTAN jon -- tehat a
+  /// generalas pillanataban az allapot SOHA nem `SIGNED`. (A lelet ebben az
+  /// alakban murenatol jon, 2026-09-21; ugyanarra a sorra jutott, mint acrobot,
+  /// ket fuggetlen meresbol.)
+  ///
+  /// Balazs a B alakot hagyta jova (2026-09-21 09:02:39 UTC, Discord, digitalis
+  /// alairas szal, message_id 1551519015673929841, szo szerint: "igen jo igy"):
+  /// az alairas tegyen MELLE egy kulon, vegleges dokumentumot, a lezaraskori
+  /// lap maradjon ERINTETLEN.
+  ///
+  /// AZ ELUTASITOTT ALAK (ujragyartas alairaskor) egy MAR ELTAROLT hiteles
+  /// dokumentum tartalmat ES lenyomatat irna at. Ez utkozik a 2026-08-21-i
+  /// dontessel (Balazs: "Igen jol erted"): az alairt munkalap vegleges, sem
+  /// szerkesztessel, sem uj verzioval nem nyul hozza senki.
+  ///
+  /// ES AZERT UJ ERTEK, NEM UJ SOR A REGI TIPUSSAL: az egyedi index a
+  /// `(worksheetVersionId, type)` parosra szol, tehat ket sor UGYANAZZAL a
+  /// tipussal nem fer meg egy verzio alatt.
+  SIGNED_SHEET
 }
 
 /// MUNKALAPHOZ CSATOLT FENYKEP VAGY EGYEB FAJL.

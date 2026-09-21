@@ -789,7 +789,57 @@ export interface WorksheetAttachableListResponse {
  * AZ EGYEZEST MOSTANTOL ALLITAS ORZI:
  * `apps/api/src/worksheets/worksheet-generated-sheet-hely.spec.ts`.
  */
-export type WorksheetDocumentType = "PHOTO" | "OTHER" | "GENERATED_SHEET";
+export type WorksheetDocumentType =
+  "PHOTO" | "OTHER" | "GENERATED_SHEET" | "SIGNED_SHEET";
+
+/**
+ * A RENDSZER ALTAL KIADOTT LAPOK -- szemben azzal, amit EMBER toltott fel.
+ *
+ * KET ERTEK, MERT KET PILLANAT VAN: a lezaraskori lap es az alairas utani,
+ * vegleges. Mind a ketto a rendszer kiadvanya, tehat a feluleten EGY szakaszba
+ * tartoznak, es egyiket sem lehet torolni.
+ *
+ * ES AZERT KOZOS KONSTANS, NEM KET HELYEN LEIRT FELSOROLAS: a webes valaszto es
+ * a hibajegy-csomag ugyanezt a halmazt kerdezi. Ket masolat kozul a masodik az
+ * uj erteknel marad le, es a hiba NEMA lenne -- a vegleges lap a "feltoltott
+ * csatolmanyok" koze csuszna, ahol ugy nezne ki, mintha valaki feltoltotte volna.
+ */
+export const WORKSHEET_ISSUED_SHEET_TYPES = [
+  "GENERATED_SHEET",
+  "SIGNED_SHEET",
+] as const satisfies readonly WorksheetDocumentType[];
+
+/**
+ * KIADOTT LAP-E EZ A CSATOLMANY.
+ */
+export function isWorksheetIssuedSheet(type: WorksheetDocumentType): boolean {
+  return (WORKSHEET_ISSUED_SHEET_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * EGY VERZIOHOZ KET LAP TARTOZHAT -- ES A VEGLEGES AZ, AMIT MUTATNI KELL.
+ *
+ * Balazs dontese (2026-09-21, "igen jo igy") szerint az alairas MELLE tesz egy
+ * kulon, vegleges dokumentumot, es a lezaraskori lap erintetlen marad. Ebbol
+ * kovetkezik, hogy ugyanahhoz a verziohoz ket sor tartozhat, es a vevo fele a
+ * `SIGNED_SHEET` a mervado: azon nincs piszkozat-felirat, es rajta all az
+ * alairas.
+ *
+ * A LETREJOTTUK IDEJE NEM ELEG MERCENEK. A vegleges kesobb keletkezik, tehat egy
+ * "legfrissebb nyer" szabaly MA ugyanezt adna -- de az EGYBEESES, nem szabaly:
+ * egy visszamenoleges potlas forditva is eloallhat (a vegleges lapot utolag
+ * gyartjuk egy regi lezaraskori melle, es akkor... szinten kesobbi). Az elso
+ * olyan potlasnal viszont, ami a LEZARASKORIT gyartja utolag egy mar alairt
+ * verziora, a ket szabaly szetvalna -- es a rossz lap menne a vevonek.
+ */
+export function preferSignedSheet<T extends { type: WorksheetDocumentType }>(
+  sheets: readonly T[],
+): T | undefined {
+  return (
+    sheets.find((sheet) => sheet.type === "SIGNED_SHEET") ??
+    sheets.find((sheet) => sheet.type === "GENERATED_SHEET")
+  );
+}
 
 /**
  * EGY CSATOLMÁNY A MUNKALAPON -- a leíró adat, a bájtok nélkül.

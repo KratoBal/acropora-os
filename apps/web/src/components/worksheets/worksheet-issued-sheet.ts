@@ -1,3 +1,4 @@
+import { isWorksheetIssuedSheet } from "@acropora/types";
 import type { WorksheetDocumentSummary } from "@acropora/types";
 
 /**
@@ -16,8 +17,18 @@ import type { WorksheetDocumentSummary } from "@acropora/types";
  * === VERZIÓNKÉNT PONTOSAN EGY LAP LEHET, ÉS EZT A SÉMA TARTJA ===
  *
  * A `WorksheetDocument` modellen `@@unique([worksheetVersionId, type])` áll,
- * tehát egy verzióhoz legfeljebb egy `GENERATED_SHEET` tartozik. Több verzió
+ * tehát egy verzióhoz TÍPUSONKÉNT legfeljebb egy lap tartozik. Több verzió
  * viszont több lapot jelent, egyet-egyet.
+ *
+ * ÉS 2026-09-21 ÓTA EGY VERZIÓHOZ KETTŐ IS TARTOZHAT: a lezáráskori
+ * (`GENERATED_SHEET`) és az aláírás után készült végleges (`SIGNED_SHEET`).
+ * Mind a kettő a RENDSZER kiadványa, tehát ugyanabba a szakaszba tartoznak --
+ * a `SIGNED_SHEET` később keletkezik, így a lenti rendezés magától előre teszi.
+ *
+ * A HALMAZ KÖZÖS KONSTANSBÓL JÖN (`isWorksheetIssuedSheet`), nem itt leírt
+ * felsorolásból: ugyanezt a kérdést a hibajegy-csomag is felteszi, és két
+ * másolat közül a második az új értéknél marad le. A hiba NÉMA lenne -- a
+ * végleges lap a feltöltött csatolmányok közé csúszna.
  *
  * EBBŐL KÖVETKEZIK A SORREND, ÉS NEM ÍZLÉS KÉRDÉSE: a LEGFRISSEBB áll elöl,
  * mert az tartozik a mai verzióhoz; a régebbiek előzmények. Fordítva a lap
@@ -39,7 +50,7 @@ export interface WorksheetDocumentSplit {
 export function splitWorksheetDocuments(
   items: readonly WorksheetDocumentSummary[],
 ): WorksheetDocumentSplit {
-  const issued = items.filter((item) => item.type === "GENERATED_SHEET");
+  const issued = items.filter((item) => isWorksheetIssuedSheet(item.type));
   return {
     /*
       A RENDEZES MASOLATON MEGY (`filter` mar uj tombot ad), tehat a hivo altal
@@ -47,6 +58,6 @@ export function splitWorksheetDocuments(
       hogy a csatolmanyok sorrendje is elmozdulhat a hivo szeme elott.
     */
     issued: issued.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    attachments: items.filter((item) => item.type !== "GENERATED_SHEET"),
+    attachments: items.filter((item) => !isWorksheetIssuedSheet(item.type)),
   };
 }

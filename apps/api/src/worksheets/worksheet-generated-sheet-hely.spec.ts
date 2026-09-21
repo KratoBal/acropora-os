@@ -171,7 +171,7 @@ describe("a megosztott típus és a séma enumja ugyanaz", () => {
     assert.ok(tipusErtekek().includes("PHOTO"));
   });
 
-  it("ugyanaz a HÁROM érték, egyik oldalon sem több", () => {
+  it("ugyanaz a NÉGY érték, egyik oldalon sem több", () => {
     /*
       MI PIROSIT, ES MIND A KET IRANY SZAMIT:
 

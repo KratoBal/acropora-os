@@ -36,6 +36,34 @@ describe("a kiadott lap és a csatolmány szétválasztása", () => {
     expect(attachments.map((d) => d.id)).toEqual(["foto", "egyeb"]);
   });
 
+  /**
+   * A VEGLEGES LAP IS KIADOTT LAP, NEM CSATOLMANY.
+   *
+   * 2026-09-21 ota egy verziohoz KETTO tartozhat: a lezaraskori
+   * (`GENERATED_SHEET`) es az alairas utani vegleges (`SIGNED_SHEET`). Mind a
+   * ketto a RENDSZER kiadvanya.
+   *
+   * MI PIROSIT: ha a valaszto visszaesik egyetlen tipusra. Akkor a vegleges lap
+   * a feltoltott csatolmanyok koze csuszna -- ott torolheto gombot kapna, es ugy
+   * nezne ki, mintha valaki feltoltotte volna. A hiba NEMA lenne: semmi nem
+   * hibazik, csak a hiteles peldany all rossz helyen.
+   */
+  it("a VEGLEGES lap is a kiadott szakaszba kerül, a csatolmányok közé nem", () => {
+    const { issued, attachments } = splitWorksheetDocuments([
+      doc("foto", "PHOTO", "2026-09-21T10:00:00.000Z"),
+      doc("lezaraskori", "GENERATED_SHEET", "2026-09-21T11:00:00.000Z"),
+      doc("vegleges", "SIGNED_SHEET", "2026-09-21T11:00:42.000Z"),
+    ]);
+
+    /*
+      A SORREND IS ALLITAS: a vegleges kesobb keletkezik, tehat a legfrissebb
+      elol szabaly magatol elore teszi -- es epp az a lap, amire hivatkozni
+      fognak.
+    */
+    expect(issued.map((d) => d.id)).toEqual(["vegleges", "lezaraskori"]);
+    expect(attachments.map((d) => d.id)).toEqual(["foto"]);
+  });
+
   it("TÖBB verzió lapjából a LEGFRISSEBB áll elöl", () => {
     /*
       A semaban `@@unique([worksheetVersionId, type])` all, tehat verziónkent
