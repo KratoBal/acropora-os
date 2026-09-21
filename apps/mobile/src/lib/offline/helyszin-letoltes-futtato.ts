@@ -70,11 +70,44 @@ interface JegySor extends Sor {
 /** Egy hivas, ami elhasalhat: a hiba SORONKENT szamit, nem allitja meg a menetet. */
 type Probalkozas<T> = () => Promise<T>;
 
-export interface EszkozFuggosegek<Tetel extends Sor, Reszlet> {
+/**
+ * EGY CSATOLMANY, ANNYIBAN, AMENNYIT EZ A MENET OLVAS BELOLE.
+ *
+ * A kepet a `contentType` valasztja ki, nem a fajlnev vege: egy `.pdf` lehet
+ * szkennelt fenykep, es egy kiterjesztes nelkuli fajl is lehet kep.
+ */
+interface CsatolmanySor {
+  id: string;
+  contentType: string;
+}
+
+/** Az eszkoz adatlapja hordozza a csatolmanyait -- kulon hivas nem kell. */
+interface EszkozReszletAlak {
+  documents?: readonly CsatolmanySor[];
+}
+
+export interface EszkozFuggosegek<
+  Tetel extends Sor,
+  Reszlet extends EszkozReszletAlak,
+> {
   eszkozLista: (oldal: number) => Promise<LapozottValasz<Tetel>>;
   eszkozReszlet: (id: string) => Promise<Reszlet>;
   eszkozokMentese: (items: Tetel[]) => Promise<void>;
   eszkozReszletMentese: (detail: Reszlet) => Promise<void>;
+  /**
+   * EGY BELYEGKEP LEMEZRE. A TELJES KEP NEM JON, ES EZ MERT DONTES.
+   *
+   * Balazs merese (eles adatbazis, 2026-09-21): a legnagyobb kepanyagu
+   * helyszin 11 eszkoz, 17 fenykep -- TELJES meretben 51 MB, BELYEGKEPBEN
+   * 567 KB. Kilencvenszeres kulonbseg.
+   *
+   * A belyegkep tehat mindig jon (fel megabajt alatt), a teljes kep kulon
+   * valasztas lesz, ahol a gomb ELORE kiirja, hany megabajtrol van szo.
+   */
+  belyegkepLetoltese: (input: {
+    assetId: string;
+    documentId: string;
+  }) => Promise<void>;
 }
 
 export interface JegyFuggosegek<Tetel extends JegySor, Reszlet> {
@@ -104,7 +137,7 @@ export interface MunkalapFuggosegek<Tetel extends Sor, Reszlet> {
  */
 export type HelyszinLetoltesFuggosegek<
   Eszkoz extends Sor = Sor,
-  EszkozReszlet = unknown,
+  EszkozReszlet extends EszkozReszletAlak = EszkozReszletAlak,
   Jegy extends JegySor = JegySor,
   JegyReszlet = unknown,
   Munkalap extends Sor = Sor,
@@ -141,7 +174,7 @@ function utEgyezik(
 
 export async function letoltHelyszin<
   Eszkoz extends Sor,
-  EszkozReszlet,
+  EszkozReszlet extends EszkozReszletAlak,
   Jegy extends JegySor,
   JegyReszlet,
   Munkalap extends Sor,
@@ -168,8 +201,10 @@ export async function letoltHelyszin<
     MunkalapReszlet
   >,
 ): Promise<LetoltesOsszegzes> {
+  const eszkozEredmeny = await eszkozok(deps);
   const reszek: ReszEredmeny[] = [
-    await eszkozok(deps),
+    eszkozEredmeny.resz,
+    eszkozEredmeny.kepek,
     await hibajegyek(input.helyszinUt, deps),
     await munkalapok(deps),
   ];
@@ -179,11 +214,20 @@ export async function letoltHelyszin<
   });
 }
 
-async function eszkozok<Tetel extends Sor, Reszlet>(
+async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
   deps: EszkozFuggosegek<Tetel, Reszlet>,
-): Promise<ReszEredmeny> {
+): Promise<{ resz: ReszEredmeny; kepek: ReszEredmeny }> {
   const elso = await probald(() => deps.eszkozLista(1));
-  if (!elso) return { resz: "eszkozok", allapot: "elhasalt", darab: 0 };
+  if (!elso)
+    return {
+      resz: { resz: "eszkozok", allapot: "elhasalt", darab: 0 },
+      /*
+        HA AZ ESZKOZOK SEM JOTTEK LE, A KEPEKRE NINCS MIT MONDANI -- de a
+        rész akkor sem maradhat ki a zaro mondatbol: egy hianyzo sor ugy
+        nezne ki, mintha a kepek rendben lennenek.
+      */
+      kepek: { resz: "fenykepek", allapot: "elhasalt", darab: 0 },
+    };
 
   const sorok = [...elso.items];
   let hianyzoLap = false;
@@ -206,6 +250,8 @@ async function eszkozok<Tetel extends Sor, Reszlet>(
   const kerheto = sorok.slice(0, RESZLET_HATAR);
   let reszletek = 0;
   let hibasReszlet = false;
+  let kepek = 0;
+  let hibasKep = false;
   for (const sor of kerheto) {
     const detail = await probald(() => deps.eszkozReszlet(sor.id));
     if (!detail) {
@@ -214,23 +260,62 @@ async function eszkozok<Tetel extends Sor, Reszlet>(
     }
     await probald(() => deps.eszkozReszletMentese(detail));
     reszletek += 1;
+
+    /*
+      A BELYEGKEPEK UGYANEBBOL A VALASZBOL JONNEK: az eszkoz adatlapja
+      hordozza a csatolmanyait, tehat KULON hivas nem kell. Amit letoltunk, az
+      a belyegkep -- a teljes kep kulon valasztas lesz.
+
+      A KEPET A `contentType` VALASZTJA KI, nem a fajlnev vege: egy `.pdf`
+      lehet szkennelt fenykep, es egy kiterjesztes nelkuli fajl is lehet kep.
+    */
+    for (const csatolmany of detail.documents ?? []) {
+      if (!csatolmany.contentType.trim().toLowerCase().startsWith("image/"))
+        continue;
+      const siker = await probald(() =>
+        deps.belyegkepLetoltese({
+          assetId: sor.id,
+          documentId: csatolmany.id,
+        }),
+      );
+      /*
+        A `probald` `null`-t ad a bukasra, es a siker itt `undefined` -- ezert
+        a KULONBSEGTETEL kimondva all. Egy `if (siker)` alak MINDEN sikeres
+        letoltest bukasnak venne, es a szam csendben nulla maradna.
+      */
+      if (siker === null) hibasKep = true;
+      else kepek += 1;
+    }
   }
 
-  if (hianyzoLap || hibasReszlet)
-    return {
-      resz: "eszkozok",
-      allapot: "reszleges",
-      darab: reszletek,
-      ok: "hibas-sor",
-    };
-  if (sorok.length > RESZLET_HATAR)
-    return {
-      resz: "eszkozok",
-      allapot: "reszleges",
-      darab: reszletek,
-      ok: "vagott",
-    };
-  return { resz: "eszkozok", allapot: "kesz", darab: reszletek };
+  const eszkozResz: ReszEredmeny =
+    hianyzoLap || hibasReszlet
+      ? {
+          resz: "eszkozok",
+          allapot: "reszleges",
+          darab: reszletek,
+          ok: "hibas-sor",
+        }
+      : sorok.length > RESZLET_HATAR
+        ? {
+            resz: "eszkozok",
+            allapot: "reszleges",
+            darab: reszletek,
+            ok: "vagott",
+          }
+        : { resz: "eszkozok", allapot: "kesz", darab: reszletek };
+
+  return {
+    resz: eszkozResz,
+    kepek: hibasKep
+      ? {
+          resz: "fenykepek",
+          allapot: "reszleges",
+          darab: kepek,
+          ok: "hibas-sor",
+        }
+      : { resz: "fenykepek", allapot: "kesz", darab: kepek },
+  };
 }
 
 async function hibajegyek<Tetel extends JegySor, Reszlet>(

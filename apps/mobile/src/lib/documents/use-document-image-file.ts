@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Directory, File, Paths } from "expo-file-system";
 
 import { environment } from "@/config/env";
-import { authSessionStore } from "@/lib/auth/token-store";
 
 import { kepLetoltese, type KepLetoltesEredmeny } from "./document-image-file";
+import { kepFajlFuggosegek } from "./kep-fajl-deps";
 import type { DocumentImageVariant } from "./document-view";
 
 /**
@@ -55,20 +54,7 @@ export function useDocumentImageFile(input: {
           documentId: input.documentId,
           variant: input.variant,
         },
-        {
-          /* A TOKEN A KERES PILLANATABAN, nem egy gyorsitotarazott ertekbol. */
-          token: () => authSessionStore.getToken(),
-          letolt: async ({ uri, headers, fileName }) => {
-            const konyvtar = new Directory(Paths.cache, "dokumentum-kepek");
-            if (!konyvtar.exists) konyvtar.create({ intermediates: true });
-            const cel = new File(konyvtar, fileName);
-            const fajl = await File.downloadFileAsync(uri, cel, {
-              headers,
-              idempotent: true,
-            });
-            return fajl.uri;
-          },
-        },
+        kepFajlFuggosegek,
       ),
   });
 }

@@ -28,10 +28,18 @@
  */
 
 /** A harom dolog, ami egy helyszinrol lejon. */
-export type LetoltesResz = "eszkozok" | "hibajegyek" | "munkalapok";
+export type LetoltesResz =
+  "eszkozok" | "fenykepek" | "hibajegyek" | "munkalapok";
 
 const RESZ_NEVE: Record<LetoltesResz, string> = {
   eszkozok: "eszköz",
+  /*
+    A BELYEGKEP, NEM A "KEP". Balazs merese szerint a legnagyobb kepanyagu
+    helyszin TELJES meretben 51 MB, belyegkepben 567 KB -- kilencvenszeres
+    kulonbseg. A szo megmondja, MI jott le, hogy senki ne varja a nagy kepet
+    tereró nelkul.
+  */
+  fenykepek: "bélyegkép",
   hibajegyek: "hibajegy",
   munkalapok: "munkalap",
 };
