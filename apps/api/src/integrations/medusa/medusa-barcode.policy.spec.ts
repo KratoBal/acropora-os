@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
@@ -6,6 +8,7 @@ import {
   describeSkippedBarcode,
   hasValidCheckDigit,
   vonalkodAlakjai,
+  vonalkodSorKiirhato,
 } from "./medusa-barcode.policy.js";
 
 describe("hasValidCheckDigit", () => {
@@ -307,5 +310,163 @@ describe("a belso hasznalatu tartomany mind a ket hosszon", () => {
 
     // A nyers alakon viszont a dontes helyes marad.
     assert.equal(decideMedusaBarcode(belso12, 1).kind, "none");
+  });
+});
+
+/**
+ * A VONALKOD SORA NEM ALLHAT EGY NEM-TERMEK MELLETT (0c1fb1c2).
+ *
+ * A `skipped` mondata azt allitja, hogy "a tisztitas helye a forras: ott dol
+ * el, melyik terméke a kod". Egy kedvezmeny-tetelnel vagy egy sablon-rekordnal
+ * ez HAMIS -- nem az a kerdes, melyikuke, hanem hogy egyikuke sem.
+ *
+ * A kozzeteteli kapu ezeket `not-a-product` okkal kizarja, de a vonalkod-sor
+ * KORABBAN keletkezett, tehat a jelentesbe megis bekerult volna.
+ */
+describe("vonalkodSorKiirhato", () => {
+  /*
+    A POZITIV KONTROLL ELOSZOR: egy VALODI termek kihagyasa TOVABBRA IS
+    megjelenik. Enelkul egy "soha ne irjunk sort" valtozat is zold lenne -- es
+    akkor a tisztitasi lista nemulna el, ami a sor egesz celja.
+  */
+  it("valódi terméknél a kihagyás sora kimegy", () => {
+    assert.equal(
+      vonalkodSorKiirhato({ kind: "skipped", publikacioOka: "sellable" }),
+      true,
+    );
+    assert.equal(
+      vonalkodSorKiirhato({ kind: "blocked", publikacioOka: "sellable" }),
+      true,
+    );
+  });
+
+  it("nem-terméknél NEM megy ki", () => {
+    assert.equal(
+      vonalkodSorKiirhato({ kind: "skipped", publikacioOka: "not-a-product" }),
+      false,
+    );
+    assert.equal(
+      vonalkodSorKiirhato({ kind: "blocked", publikacioOka: "not-a-product" }),
+      false,
+    );
+  });
+
+  /*
+    ES A TOBBI ELUTASITASI OK NEM NEMITJA EL. Egy inaktiv termek vonalkodja
+    ugyanugy tisztitando: az a sor VALODI termek, csak most nem megy ki.
+    Enelkul a szures csendben minden elutasitott terméket elnyelne.
+  */
+  it("más elutasítási ok nem némítja el", () => {
+    for (const ok of [
+      "product-inactive",
+      "not-webshop-sellable",
+      "no-active-variant",
+      "unknown-authority",
+    ])
+      assert.equal(
+        vonalkodSorKiirhato({ kind: "skipped", publikacioOka: ok }),
+        true,
+        `a(z) ${ok} ok nem némíthat`,
+      );
+  });
+
+  /*
+    A MEGALLT FUTASNAL AZ OK ISMERETLEN, es a sor KIMEGY. Egy ismeretlen
+    allapotban elhallgatott jelzes rosszabb, mint egy folosleges: a masodikat
+    valaki elolvassa es legyint, az elsot senki nem keresi.
+  */
+  it("ismeretlen ok mellett kimegy", () => {
+    assert.equal(
+      vonalkodSorKiirhato({ kind: "skipped", publikacioOka: null }),
+      true,
+    );
+  });
+
+  /*
+    ES AMI SOSEM VOLT SOR, AZ EZUTAN SEM LESZ: a `none`, az `ean` es az `upc`
+    dontesnek nincs kimeneti sora. Enelkul egy "mindig igazat adunk" valtozat
+    is zold lenne a fenti allitasokon.
+  */
+  it("a sor nélküli döntéseknek továbbra sincs sora", () => {
+    for (const kind of ["none", "ean", "upc"] as const)
+      assert.equal(
+        vonalkodSorKiirhato({ kind, publikacioOka: "sellable" }),
+        false,
+      );
+  });
+});
+
+/**
+ * A FUTTATO FORRASA -- ES AZ UTVONAL HAROM SZINTET LEP FEL.
+ *
+ * A forditott spec a `test-dist` alol fut, tehat az `import.meta.url` ODA
+ * mutat, es a `.ts` forras NINCS mellette. Az elso alakom ezert `ENOENT`-tel
+ * hasalt el -- ugyanaz a csapda, amit a mobil kepernyo-specek fejlece is leir.
+ */
+const FUTTATO_FORRAS = join(
+  new URL("../../../", import.meta.url).pathname,
+  "src",
+  "integrations",
+  "medusa",
+  "medusa-projection.runner.ts",
+);
+
+/**
+ * ES A SORREND A FUTTATOBAN -- MERT A SZABALY ONMAGABAN NEM VED SEMMIT.
+ *
+ * A `vonalkodSorKiirhato` a kozzeteteli dontes OKAT kapja. Ha a futtato a sort
+ * MEGIS a dontes ELOTT irja ki, az okot nem is tudja atadni -- es a fenti ot
+ * allitas valtozatlanul zold marad.
+ *
+ * Ezert olvas ez az allitas FORRAST, es a HELYEKET veti ossze, nem a szoveget.
+ */
+describe("a vonalkód sora a közzétételi döntés UTÁN kerül ki", () => {
+  it("a futtatóban a kiírás a projekció hívása után áll", () => {
+    const forras = readFileSync(FUTTATO_FORRAS, "utf8");
+
+    // ISMERT POZITIV KONTROLL: a fajlt tenyleg beolvastuk.
+    assert.ok(forras.length > 10000, "gyanúsan rövid futtató-forrás");
+
+    const kod = forras
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
+
+    const dontes = kod.indexOf("decideMedusaBarcode(");
+    const vetites = kod.indexOf("service!.project(");
+    const kiiras = kod.indexOf("vonalkodSort(");
+
+    // Mind a harom helyet MEG kell talalni: egy -1 csendben kielegitene a
+    // lenti osszehasonlitasokat.
+    assert.ok(dontes > 0, "nincs decideMedusaBarcode hívás");
+    assert.ok(vetites > 0, "nincs service.project hívás");
+    assert.ok(kiiras > 0, "nincs vonalkodSort hívás");
+
+    assert.ok(dontes < vetites, "a döntésnek a vetítés ELŐTT kell születnie");
+    assert.ok(vetites < kiiras, "a kiírásnak a vetítés UTÁN kell állnia");
+  });
+
+  /*
+    ES A REGI, KORAI KIIRAS NEM TERHET VISSZA -- ES A KALIBRACIO MEGMUTATTA,
+    HOGY EZ A KETTO NEM UGYANAZT MERI.
+
+    Azt vartam, hogy egy visszatett korai kiiras MIND A KET allitast pirosra
+    viszi. NEM igy lett: a sorrend-allitas ZOLD maradt, mert az a HELYEKET
+    veti ossze (`decideMedusaBarcode` < `service.project` < `vonalkodSort`), es
+    egy NEGYEDIK, korai hivas ezeket nem mozditja.
+
+    Vagyis:
+      a sorrend-allitas   azt vedi, hogy a LEZARAS a helyen van
+      a darabszam         azt, hogy RAJTA KIVUL senki nem ir
+
+    A ketto egyutt fed; kulon-kulon egyik sem.
+  */
+  it("a kiíró függvényeket csak a lezárás hívja", () => {
+    const kod = readFileSync(FUTTATO_FORRAS, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
+
+    const hivasok = [...kod.matchAll(/describe(?:Skipped|Blocked)Barcode\(/g)];
+    // Ketto a lezarasban, plusz ketto az import-sorban.
+    assert.equal(hivasok.length, 2, "a kiírók csak a lezárásban hívhatók");
   });
 });
