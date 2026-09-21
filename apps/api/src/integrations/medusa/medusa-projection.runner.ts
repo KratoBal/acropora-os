@@ -1214,6 +1214,12 @@ export async function runProjectionCli(
           isActive: product.isActive,
           webshopSellable: product.webshopSellable,
           activeVariantCount: product.variants.length,
+          /*
+            A CIKKSZAMOK A NEM-TERMEK KAPUHOZ KELLENEK. A lekerdezes mar
+            hozza oket (`variants.select.sku`), tehat ez nem uj kor -- csak
+            eddig nem jutottak el a szabalyig.
+          */
+          variantSkus: product.variants.map((valtozat) => valtozat.sku),
         },
       },
       futasIdeje,

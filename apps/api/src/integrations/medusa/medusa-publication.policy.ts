@@ -64,6 +64,15 @@ export interface ProductPublicationState {
   webshopSellable: boolean;
   /** Hany AKTIV valtozata van a termeknek. */
   activeVariantCount: number;
+  /**
+   * A TERMEK VALTOZATAINAK CIKKSZAMAI -- a nem-termek sorok felismeresehez.
+   *
+   * Elhagyhato, es ez szandekos: a regi hivok (es a fixturak) valtozatlanul
+   * ervenyesek maradnak, es hianyaban a szabaly UGYANUGY dont, mint eddig.
+   * Egy kotelezo mezo itt minden meglevo hivohelyet atirna anelkul, hogy
+   * barmelyik dontese valtozna.
+   */
+  variantSkus?: readonly string[];
 }
 
 /**
@@ -76,7 +85,8 @@ export type PublicationReason =
   | "unknown-authority"
   | "product-inactive"
   | "no-active-variant"
-  | "not-webshop-sellable";
+  | "not-webshop-sellable"
+  | "not-a-product";
 
 export interface PublicationDecision {
   sellable: boolean;
@@ -106,6 +116,44 @@ export interface PublicationDecision {
  * torzsadat, hanem hogy ISMERJUK-E a gazdajat. A ket ismert ertek (UNAS es
  * ACROPORA) egyarant atmegy rajta.
  */
+/**
+ * A SOROK, AMIK NEM TERMEKEK -- NEVESITVE, INDOKKAL ES A MERES DATUMAVAL.
+ *
+ * === MIERT KELL, HOLOTT MA EGYIK SEM MENNE KI ===
+ *
+ * Merve a staging adatbazison, 2026-09-21: mind a ketto BEJUT hozzank, es
+ * AKTIV valtozatkent all (`isActive = true` a termeken es a valtozaton is).
+ * Ami ma visszatartja oket, az KIZAROLAG a `webshopSellable = false`, vagyis a
+ * `not-webshop-sellable` ag.
+ *
+ * ES AZ A VEDELEM VELETLEN. A `webshopSellable` nem azert hamis, mert ezek a
+ * sorok NEM TERMEKEK, hanem mert a UNAS-ban a statuszuk 0 -- nincsenek kint az
+ * elo boltban. A ket allitas MA egybeesik, de nem ugyanaz:
+ *
+ *   ami ma vedi        "ez a termek nincs kint a boltban"
+ *   amit ez a lista    "ez a sor nem is termek"
+ *
+ * Ha valaki a UNAS-ban elo allapotba teszi barmelyiket -- egy kedvezmeny-tetelnel
+ * ez nem elkepzelhetetlen, mert a bolt sajat mechanikaja hasznalja --, a mai
+ * vedelem AZONNAL megszunik, es semmi nem szolna.
+ *
+ * Ugyanaz az alak, amit a vonalkod-szabaly mar kimond a kiadvany-elotagrol:
+ * "nem azert maradnak bent, mert generaltak, hanem mert TOBBSZOR allnak".
+ *
+ * === AMIT A KET SOR VALOJABAN CSINAL (a 2026-09-02-i UNAS exportbol) ===
+ *
+ *   discount-amount   "Kedvezmeny", 1 Ft brutto. A bolt sajat kedvezmeny-tetele,
+ *                     nem arucikk. Az erteke a "Gyartoi cikkszam" oszlopban is
+ *                     all, tehat a vonalkod-mezobe is beszivarog.
+ *   Alap_Hal          "Aalap_Hal", 1,27 Ft brutto. Sablon-rekord uj halak
+ *                     felvitelehez. A "SEF URL" oszlopban is all, tehat a bolti
+ *                     cim is ebbol kepzodne.
+ */
+const NEM_TERMEK_CIKKSZAMOK: readonly string[] = [
+  "discount-amount",
+  "Alap_Hal",
+];
+
 export function decidePublication(
   state: ProductPublicationState,
 ): PublicationDecision {
@@ -115,6 +163,17 @@ export function decidePublication(
     status: "draft",
     salesChannel: "detach",
   });
+
+  /*
+    A NEM-TERMEK SOR AZ ELSO KAPU, ES A SORREND ITT INDOK.
+
+    A tobbi ok mind arrol szol, hogy egy TERMEK miert nem ertekesitheto most.
+    Ez arrol, hogy a sor nem is termek -- tehat a tobbi kerdes fel sem merul.
+    Ha kesobb allna, a jelentes azt mondana egy kedvezmeny-tetelrol, hogy
+    "nincs webshopos ertekesitesre jelolve", mintha barmikor lehetne.
+  */
+  if (state.variantSkus?.some((sku) => NEM_TERMEK_CIKKSZAMOK.includes(sku)))
+    return refuse("not-a-product");
 
   if (!isKnownCatalogAuthority(state.catalogAuthority))
     return refuse("unknown-authority");
@@ -137,4 +196,5 @@ export const PUBLICATION_REASON_TEXT: Record<PublicationReason, string> = {
   "product-inactive": "a termék inaktív",
   "no-active-variant": "nincs aktív változata",
   "not-webshop-sellable": "nincs webshopos értékesítésre jelölve",
+  "not-a-product": "ez a sor nem termék (a bolt saját segédtétele)",
 };

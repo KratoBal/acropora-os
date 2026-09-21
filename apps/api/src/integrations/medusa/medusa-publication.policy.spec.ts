@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
@@ -148,5 +150,134 @@ describe("a publikációs döntés", () => {
     const input = state();
 
     assert.deepEqual(decidePublication(input), decidePublication(input));
+  });
+});
+
+/**
+ * A NEM-TERMEK SOROK NEVESITVE ALLNAK MEG (f39fdef4).
+ *
+ * === A MAI MERES, A DATUMAVAL -- EZ MONDJA MEG, MIERT NEM ELEG A MEGLEVO AG ===
+ *
+ * Staging adatbazis, 2026-09-21: mind a ket sor BEJUT hozzank, es AKTIV
+ * (`isActive = true` a termeken ES a valtozaton). Ami ma visszatartja oket,
+ * az KIZAROLAG a `webshopSellable = false`.
+ *
+ * ES AZ A VEDELEM VELETLEN: a `webshopSellable` nem azert hamis, mert ezek nem
+ * termekek, hanem mert a UNAS-ban a statuszuk 0 (nincsenek kint a boltban). Ha
+ * valaki elo allapotba teszi barmelyiket, a mai vedelem AZONNAL megszunik.
+ *
+ * A nyers UNAS exportbol (2026-09-02): a `discount-amount` a bolt sajat
+ * kedvezmeny-tetele (1 Ft), az `Alap_Hal` sablon-rekord uj halak felvitelehez
+ * (1,27 Ft).
+ */
+describe("a nem-termék sorok nem mennek ki", () => {
+  const valodiTermek = {
+    catalogAuthority: "UNAS",
+    isActive: true,
+    webshopSellable: true,
+    activeVariantCount: 1,
+  };
+
+  /*
+    ISMERT POZITIV KONTROLL ELOSZOR: egy VALODI termek atmegy. Enelkul a lenti
+    ket tagadas egy olyan kapun is zold lenne, ami MINDENT kizar -- es akkor a
+    bolt uresen maradna.
+  */
+  it("egy valódi termék továbbra is kimegy", () => {
+    const d = decidePublication({
+      ...valodiTermek,
+      variantSkus: ["AQ-1234"],
+    });
+    assert.equal(d.sellable, true);
+    assert.equal(d.reason, "sellable");
+  });
+
+  it("a kedvezmény-tétel SAJÁT okkal áll meg", () => {
+    const d = decidePublication({
+      ...valodiTermek,
+      variantSkus: ["discount-amount"],
+    });
+    assert.equal(d.sellable, false);
+    /*
+      AZ OK NEVE A LENYEG, NEM A TAGADAS. A `not-webshop-sellable` azt
+      allitana, hogy barmikor kimehetne, csak most nincs bejelolve -- egy
+      kedvezmeny-tetelnel ez hamis.
+    */
+    assert.equal(d.reason, "not-a-product");
+  });
+
+  it("a sablon-rekord SAJÁT okkal áll meg", () => {
+    const d = decidePublication({
+      ...valodiTermek,
+      variantSkus: ["Alap_Hal"],
+    });
+    assert.equal(d.reason, "not-a-product");
+  });
+
+  /**
+   * ES A MAI VEDELEM NELKUL IS MEGALL -- EZ AZ ALLITAS MERI A KARTYA LENYEGET.
+   *
+   * A `webshopSellable: true` epp azt az allapotot allitja elo, ami akkor
+   * keletkezne, ha valaki a UNAS-ban elo allapotba tenne a tetelt. Ma ez az
+   * eset nem all fenn; a kapu viszont ettol fuggetlenul szol.
+   *
+   * A fenti harom allitas mind `webshopSellable: true` mellett fut, tehat ez
+   * NEM kulon eset -- itt csak KIMONDOM, hogy miert igy vannak megirva.
+   */
+  it("a nem-termék akkor is megáll, ha webshopra jelölnék", () => {
+    const d = decidePublication({
+      catalogAuthority: "UNAS",
+      isActive: true,
+      webshopSellable: true,
+      activeVariantCount: 1,
+      variantSkus: ["Alap_Hal"],
+    });
+    assert.equal(d.reason, "not-a-product");
+  });
+
+  /*
+    A CIKKSZAM-LISTA ELHAGYHATO, es a regi hivok viselkedese VALTOZATLAN.
+    Enelkul egy hianyzo mezo csendben MINDENT atengedne vagy mindent kizarna --
+    es a meglevo hivohelyek egyike sem szolna rola.
+  */
+  it("cikkszámok nélkül a döntés változatlan", () => {
+    const d = decidePublication(valodiTermek);
+    assert.equal(d.sellable, true);
+  });
+});
+
+/**
+ * ES A BEKOTES, MERT A SZABALY ONMAGABAN NEM VED SEMMIT.
+ *
+ * A `variantSkus` mezo ELHAGYHATO -- ez szandekos, hogy a regi hivok
+ * valtozatlanok maradjanak. De epp ezert: ha a futtato nem adja at, a kapu
+ * SOHA nem sul el, es a fenti ot allitas VALTOZATLANUL ZOLD marad.
+ *
+ * Ez a szakadas alakja: a kepesseg megvan, es senki nem hivja. Egy tiszta
+ * fuggveny tesztje ezt szerkezetileg nem tudja megfogni -- ezert olvas ez az
+ * allitas FORRAST.
+ */
+describe("a nem-termék kapu be van kötve a futtatóba", () => {
+  it("a futtató átadja a változatok cikkszámait", () => {
+    const forras = readFileSync(
+      join(
+        new URL("../../../", import.meta.url).pathname,
+        "src",
+        "integrations",
+        "medusa",
+        "medusa-projection.runner.ts",
+      ),
+      "utf8",
+    );
+
+    // ISMERT POZITIV KONTROLL: a fajlt tenyleg beolvastuk. Rossz utvonalnal
+    // ures szovegen a lenti allitas is elbukna, de a hibauzenet mast mondana.
+    assert.ok(forras.length > 5000, "gyanúsan rövid futtató-forrás");
+
+    const kod = forras
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
+
+    assert.match(kod, /variantSkus:\s*product\.variants\.map\(/);
   });
 });
