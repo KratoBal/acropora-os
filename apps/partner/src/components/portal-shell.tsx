@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 
 import { useAuth } from "./auth";
+import { LAP_CIM } from "./frame";
 
 const navigation = [
   { href: "/hibajegyek", label: "Hibajegyek" },
@@ -30,7 +31,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
   if (user.role !== "PARTNER_SERVICE" || !user.customerId) {
     return (
       <main className="access-denied">
-        <h1>Ez a portál partneri fiókhoz készült</h1>
+        <h1 className={LAP_CIM}>Ez a portál partneri fiókhoz készült</h1>
         <p>
           Kérjük, a partneri szervizfiók céges e-mail címével jelentkezzen be.
         </p>

@@ -8,6 +8,18 @@ import { partnerApi } from "@/lib/api";
 import { naploSor } from "@/lib/naplo-sor";
 import { DocumentPanel } from "./document-panel";
 import { Empty, Message } from "./ticket-list";
+import {
+  ADATLISTA,
+  ADAT_CIMKE,
+  ADAT_ERTEK,
+  CIMKE,
+  LAP_CIM,
+  LAP_FEJLEC,
+  LAP_LEIRAS,
+  PANEL,
+  PANEL_CIM,
+  VISSZA_LINK,
+} from "./frame";
 
 /**
  * A HIBAJEGY ADATLAPJA A PARTNER PORTÁLON.
@@ -70,13 +82,14 @@ export function TicketDetail({ id }: { id: string }) {
   if (error)
     return (
       <section>
-        <Link className="back-link" href="/hibajegyek">
+        <Link className={VISSZA_LINK} href="/hibajegyek">
           ← Hibajegyek
         </Link>
         <Message tone="error" text={error} retry={load} />
       </section>
     );
-  if (!ticket) return <p className="muted">Hibajegy betöltése…</p>;
+  if (!ticket)
+    return <p className="leading-[1.5] text-[#666677]">Hibajegy betöltése…</p>;
   const downloadPackage = async () => {
     setDownloading(true);
     setPackageError(null);
@@ -112,14 +125,14 @@ export function TicketDetail({ id }: { id: string }) {
   );
   return (
     <section>
-      <Link className="back-link" href="/hibajegyek">
+      <Link className={VISSZA_LINK} href="/hibajegyek">
         ← Hibajegyek
       </Link>
-      <header className="page-header detail-header">
+      <header className={`detail-header ${LAP_FEJLEC}`}>
         <div>
-          <p className="eyebrow">{ticket.jobNumber}</p>
-          <h1>{ticket.title}</h1>
-          <p>
+          <p className={CIMKE}>{ticket.jobNumber}</p>
+          <h1 className={LAP_CIM}>{ticket.title}</h1>
+          <p className={LAP_LEIRAS}>
             {ticket.departmentPath?.join(" / ") ?? "Helyszín nincs megadva"}
           </p>
         </div>
@@ -144,8 +157,8 @@ export function TicketDetail({ id }: { id: string }) {
         </div>
       ) : null}
       <div className="detail-grid">
-        <article className="panel">
-          <h2>Mi a probléma?</h2>
+        <article className={PANEL}>
+          <h2 className={PANEL_CIM}>Mi a probléma?</h2>
           {/*
             AZ ÜRES LEÍRÁS KIMONDVA. Egy hiányzó bekezdés ugyanúgy néz ki, mint
             egy betöltési hiba, és a különbséget csak az tudja, aki a jegyet
@@ -162,26 +175,30 @@ export function TicketDetail({ id }: { id: string }) {
           sor kivételével, ami itt maga a bejelentkezett cég, tehát egy üres
           ismétlés lenne.
         */}
-        <aside className="panel">
-          <h2>Az ügy adatai</h2>
-          <dl>
+        <aside className={PANEL}>
+          <h2 className={PANEL_CIM}>Az ügy adatai</h2>
+          <dl className={ADATLISTA}>
             <div>
-              <dt>Bejelentés ideje</dt>
-              <dd>{date.format(new Date(ticket.createdAt))}</dd>
+              <dt className={ADAT_CIMKE}>Bejelentés ideje</dt>
+              <dd className={ADAT_ERTEK}>
+                {date.format(new Date(ticket.createdAt))}
+              </dd>
             </div>
             <div>
-              <dt>Helyszín</dt>
-              <dd>{ticket.departmentPath?.join(" / ") ?? "Nincs megadva"}</dd>
+              <dt className={ADAT_CIMKE}>Helyszín</dt>
+              <dd className={ADAT_ERTEK}>
+                {ticket.departmentPath?.join(" / ") ?? "Nincs megadva"}
+              </dd>
             </div>
             <div>
-              <dt>Az ügy állapota</dt>
-              <dd>{ticket.partnerStatusLabel}</dd>
+              <dt className={ADAT_CIMKE}>Az ügy állapota</dt>
+              <dd className={ADAT_ERTEK}>{ticket.partnerStatusLabel}</dd>
             </div>
           </dl>
         </aside>
       </div>
-      <section className="panel">
-        <h2>Érintett eszközök</h2>
+      <section className={PANEL}>
+        <h2 className={PANEL_CIM}>Érintett eszközök</h2>
         {ticket.assets.length ? (
           <ul className="plain-list">
             {ticket.assets.map((asset) => (
@@ -199,11 +216,13 @@ export function TicketDetail({ id }: { id: string }) {
             ))}
           </ul>
         ) : (
-          <p className="muted">A hibajegyhez nincs eszköz megjelölve.</p>
+          <p className="leading-[1.5] text-[#666677]">
+            A hibajegyhez nincs eszköz megjelölve.
+          </p>
         )}
       </section>
-      <section className="panel">
-        <h2>Mi történt a hibajeggyel?</h2>
+      <section className={PANEL}>
+        <h2 className={PANEL_CIM}>Mi történt a hibajeggyel?</h2>
         {ticket.timeline.length ? (
           <ol className="timeline">
             {ticket.timeline.map((entry) => (
@@ -270,8 +289,8 @@ export function TicketDetail({ id }: { id: string }) {
         belső lapon. Nem ízlés: a fénykép a BEJELENTETT hibáról szól, a munkalap
         arról, amit TETTÜNK vele.
       */}
-      <section className="panel">
-        <h2>Munkalapok a jegy mögött</h2>
+      <section className={PANEL}>
+        <h2 className={PANEL_CIM}>Munkalapok a jegy mögött</h2>
         {worksheets.length ? (
           <ul className="plain-list">
             {worksheets.map((worksheet) => (
@@ -284,7 +303,9 @@ export function TicketDetail({ id }: { id: string }) {
             ))}
           </ul>
         ) : (
-          <p className="muted">Ehhez a jegyhez még nem tartozik munkalap.</p>
+          <p className="leading-[1.5] text-[#666677]">
+            Ehhez a jegyhez még nem tartozik munkalap.
+          </p>
         )}
       </section>
     </section>

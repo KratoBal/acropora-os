@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { partnerApi } from "@/lib/api";
+import { CIMKE, LAP_CIM, LAP_FEJLEC, LAP_LEIRAS, PANEL_CIM } from "./frame";
 
 const filters = [
   ["open", "Nyitott ügyek"],
@@ -37,11 +38,11 @@ export function TicketList() {
 
   return (
     <section>
-      <header className="page-header">
+      <header className={LAP_FEJLEC}>
         <div>
-          <p className="eyebrow">PARTNERI SZERVIZ</p>
-          <h1>Hibajegyek</h1>
-          <p>
+          <p className={CIMKE}>PARTNERI SZERVIZ</p>
+          <h1 className={LAP_CIM}>Hibajegyek</h1>
+          <p className={LAP_LEIRAS}>
             Tekintse át a saját cége hibajegyeit és azok aktuális állapotát.
           </p>
         </div>
@@ -63,7 +64,9 @@ export function TicketList() {
         ))}
       </div>
       {error ? <Message tone="error" text={error} retry={load} /> : null}
-      {!data && !error ? <p className="muted">Hibajegyek betöltése…</p> : null}
+      {!data && !error ? (
+        <p className="leading-[1.5] text-[#666677]">Hibajegyek betöltése…</p>
+      ) : null}
       {data?.items.length === 0 ? (
         <Empty
           title="Nincs megjeleníthető hibajegy"
@@ -80,7 +83,7 @@ export function TicketList() {
             >
               <div>
                 <p className="ticket-number">{ticket.jobNumber}</p>
-                <h2>{ticket.title}</h2>
+                <h2 className={PANEL_CIM}>{ticket.title}</h2>
                 <p>
                   {ticket.departmentPath?.join(" / ") ??
                     "Helyszín nincs megadva"}
@@ -139,7 +142,7 @@ export function Message({
 export function Empty({ title, text }: { title: string; text: string }) {
   return (
     <div className="empty">
-      <h2>{title}</h2>
+      <h2 className={PANEL_CIM}>{title}</h2>
       <p>{text}</p>
     </div>
   );

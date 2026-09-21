@@ -27,6 +27,19 @@ import { describe, it } from "node:test";
 const GYOKER = "src";
 
 /** Minden `.ts` es `.tsx` a portal forrasaban, a specek NELKUL. */
+/**
+ * A KOMMENTEK NELKULI KOD.
+ *
+ * Ugyanaz az alak, mint a mobil forras-olvaso specjeiben: a sajat magyarazo
+ * szovegunk tartalmazza azt, amit a meres keres, tehat egy nyers illesztes a
+ * DOKUMENTACIOT venne leletnek.
+ */
+function kodSzoveg(forras: string): string {
+  return forras
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
+}
+
 function forrasok(konyvtar: string, gyujto: string[] = []): string[] {
   for (const b of readdirSync(konyvtar, { withFileTypes: true })) {
     const ut = join(konyvtar, b.name);
@@ -101,6 +114,66 @@ describe("a portál vizuális alapja", () => {
       "utf8",
     );
     assert.match(lap, /from\s+"@acropora\/ui"/);
+  });
+
+  /**
+   * A KERET OSZTALYAI NEM JOHETNEK VISSZA.
+   *
+   * Ot osztaly kerult el a stiluslapbol (2026-09-21), mert a keret atallt a
+   * `frame.ts` konstansaira. Ha barmelyik VISSZAKERUL egy uj lapra, a stilusa
+   * MAR NINCS MEG -- es ez NEMA: az elem megjelenik, csak keret, kitoltes es
+   * szin nelkul. Sem fordito, sem futasido nem szol.
+   */
+  it("a keret régi osztályai nem térnek vissza", () => {
+    const eltavolitott = [
+      "panel",
+      "page-header",
+      "eyebrow",
+      "back-link",
+      "muted",
+    ];
+    const vetkesek: string[] = [];
+    for (const ut of fajlok) {
+      /*
+        A KOMMENTEKET KI KELL SZEDNI, ES EZT A KALIBRACIO MUTATTA MEG.
+
+        Az elso valtozatom KET talalatot adott, mindkettot a `frame.tsx`
+        SAJAT DOKUMENTACIOJABOL: ott szo szerint all, hogy `className="form
+        panel"` es `className="muted"` -- epp azert, hogy a kovetkezo olvaso
+        lassa, mi volt a regi alak. A merohely a magyarazo szoveget vette
+        leletnek.
+      */
+      const kod = kodSzoveg(readFileSync(ut, "utf8"));
+      for (const m of kod.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
+        const nyers = (m[1] ?? m[2] ?? "").replace(/\$\{[^}]*\}/g, " ");
+        for (const osztaly of nyers.split(/\s+/))
+          if (eltavolitott.includes(osztaly))
+            vetkesek.push(`${ut}: ${osztaly}`);
+      }
+    }
+    assert.deepEqual(vetkesek, []);
+  });
+
+  /**
+   * ES A TUKRE: A DINAMIKUSAN EPULO OSZTALYOK NEM TUNHETNEK EL A STILUSLAPBOL.
+   *
+   * A hibajegy allapot-cimkeje `status-${allapot.toLowerCase()}` alakban epul,
+   * tehat a `.status-new`, `.status-in_progress`, `.status-completed` es
+   * `.status-closed` osztalyok SEHOL nem allnak kiirva a forrasban. Egy
+   * "hasznalatlan osztaly" takaritas johiszemuen elvinne mind a negyet.
+   *
+   * EZ A KOR PONTOSAN EZT MERTE MEG: az elso meresem NULLA hivohelyet adott
+   * rajuk, es ha akkor megallok, a partner allapot-cimkéi szintelenne valtak
+   * volna -- eles feluleten, nema modon.
+   */
+  it("a dinamikusan épülő állapot-osztályok megvannak", () => {
+    const css = readFileSync(join(GYOKER, "app", "globals.css"), "utf8");
+    for (const allapot of ["new", "in_progress", "completed", "closed"])
+      assert.match(
+        css,
+        new RegExp(`\\.status-${allapot}\\b`),
+        `hiányzik a .status-${allapot} szabály`,
+      );
   });
 
   /**
