@@ -34,6 +34,7 @@ const ESZKOZ_LISTA = "src/components/reference-lists.tsx";
 const ESZKOZ_RESZLET = "src/components/asset-detail.tsx";
 const ESZKOZ_UTVONAL = "src/app/(portal)/eszkozok/[id]/page.tsx";
 const NAPLO_SOR = "src/lib/naplo-sor.ts";
+const MUNKALAP_RESZLET = "src/components/worksheet-detail.tsx";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
 
@@ -427,5 +428,124 @@ describe("a partner hibajegy-adatlapja", () => {
       olvas(HIBAJEGY_RESZLET),
       /partnerApi\.uploadTicketDocument\(id, file, caption\)/,
     );
+  });
+});
+
+/**
+ * A MUNKALAP ADATLAPJA (6559eab5, 3. szelet).
+ *
+ * Ugyanaz a két elv: a TARTALOM a belső lapé, a MŰVELETEK a jogosultságból.
+ * A negatív állítások mellé a pozitív kontroll a szakasz végén áll.
+ */
+describe("a partner munkalap-adatlapja", () => {
+  it("POZITÍV KONTROLL: a lap olvasható és nem üres", () => {
+    assert.ok(olvas(MUNKALAP_RESZLET).length > 2000);
+  });
+
+  /**
+   * 1. A MUNKANAPLÓ NINCS A LAPON -- ÉS EZ NEM A MI DÖNTÉSÜNK.
+   *
+   * A `:id/entries` végpont saját megjegyzése mondja ki, hogy a bejegyzés a
+   * MI munkanaplónk, és Balázs nem kérte, hogy a partner lássa. Ez tehát
+   * eldöntött hiány, nem elmaradt munka -- a többi negatív állítástól ezért
+   * áll külön.
+   */
+  it("a lap nem kéri le a munkanaplót", () => {
+    const s = kod(MUNKALAP_RESZLET);
+    assert.ok(!/\/entries|worksheetEntries|addEntry/.test(s));
+    /* ÉS A KLIENS SEM TUD RÓLA: egy bennhagyott hívás később visszakerülne. */
+    assert.ok(!/entries/.test(kod(KLIENS)));
+  });
+
+  /**
+   * 2. A KEZELŐI SZERKESZTŐK NINCSENEK A LAPON. Nem jogosultsági okból: a
+   * `PARTNER_SERVICE` szerep viseli a `SERVICE_MANAGE` jogot (auth.ts:388).
+   * MA SZÁNDÉKOSAN NEM KÍNÁLJUK őket.
+   */
+  it("a lap nem kínálja a tételek szerkesztését", () => {
+    const s = kod(MUNKALAP_RESZLET);
+    assert.ok(!/szerkesztes|method: "PATCH"|updateWorksheet/.test(s));
+  });
+
+  it("a lap nem kínálja a felelősök és az eszközök szerkesztését", () => {
+    const s = kod(MUNKALAP_RESZLET);
+    assert.ok(!/assignees|attachAsset|detachAsset|method: "DELETE"/.test(s));
+  });
+
+  /**
+   * 3. ÖSSZEG SEHOL. A válasz hordozza a nettó, áfa és bruttó mezőket, de
+   * azok 2026-09-17 óta a BELSŐ lapról is kikerültek (#809). Ez tehát nem
+   * partneri csonkítás -- és pont ezért kell mérni: a mezők ott vannak a
+   * típusban, tehát egy jóhiszemű bővítés bármikor visszateheti őket.
+   */
+  it("a lap egyetlen összeget sem ír ki", () => {
+    const s = kod(MUNKALAP_RESZLET);
+    for (const mezo of [
+      "netAmount",
+      "vatAmount",
+      "grossAmount",
+      "unitNet",
+      "vatRatePercent",
+    ])
+      assert.ok(!s.includes(mezo), `a lap kiírja a(z) ${mezo} mezőt`);
+  });
+
+  /**
+   * 4. AZ ESZKÖZ SORA AZ `assetId`-VEL VISZ TOVÁBB. Ugyanaz a néma csapda,
+   * mint a hibajegy lapján: mind a két mező `string`.
+   */
+  it("az érintett eszköz sora az eszköz adatlapjára visz", () => {
+    const s = olvas(MUNKALAP_RESZLET);
+    assert.match(s, /href=\{`\/eszkozok\/\$\{asset\.assetId\}`\}/);
+    assert.doesNotMatch(s, /href=\{`\/eszkozok\/\$\{asset\.id\}`\}/);
+  });
+
+  /**
+   * 5. A HIBAJEGY HIVATKOZÁS A PORTÁL ÚTVONALÁRA MEGY, nem a belső felületére.
+   *
+   * MI PIROSÍT: a belső lap alakjának átvétele (`/szerviz/hibajegyek/...`). Az
+   * egy létező cím, csak nem ezen a kiszolgálón -- a partner egy bejelentkező
+   * képernyőre vagy egy 404-re futna, és a hivatkozás közben helyesnek
+   * látszana.
+   */
+  it("a hibajegy hivatkozás a portál útvonalára megy", () => {
+    const s = olvas(MUNKALAP_RESZLET);
+    assert.match(s, /href=\{`\/hibajegyek\/\$\{worksheet\.serviceJob\.id\}`\}/);
+    assert.ok(!/\/szerviz\//.test(kod(MUNKALAP_RESZLET)));
+  });
+
+  /**
+   * 6. AZ ÁLLAPOT FELIRATA A KÖZÖS SZÓTÁRBÓL JÖN, MIND A KÉT HELYEN.
+   *
+   * A portál 2026-09-21-ig a NYERS enum-értéket írta ki (`SIGNED`, `DRAFT`):
+   * a szótár az `apps/web`-ben lakott, ahonnan ez a csomag nem importálhat.
+   *
+   * A LISTA IS MÉRVE, nem csak az adatlap: a hiba ott volt látható először, és
+   * egy adatlapra szűkített állítás a listát zölden hagyná.
+   */
+  it("az állapot felirata a közös szótárból jön, a listán is", () => {
+    assert.match(
+      olvas(MUNKALAP_RESZLET),
+      /worksheetStatusLabel\[current\.status\]/,
+    );
+    assert.match(olvas(ESZKOZ_LISTA), /worksheetStatusLabel\[sheet\.status\]/);
+    /* ES A NYERS ERTEK SEHOL: egy bennmaradt alak a masik helyen allna. */
+    assert.doesNotMatch(olvas(ESZKOZ_LISTA), /\{sheet\.status\}/);
+  });
+
+  /**
+   * POZITÍV KONTROLL: a partner megmaradt műveletei ott vannak, ÉS a két új
+   * táblázat tényleg kirajzolódik. Enélkül a fenti négy negatív állítás akkor
+   * is zöld lenne, ha a lap üres volna.
+   */
+  it("az aláírás, a csatolás és a két táblázat megvan", () => {
+    const s = olvas(MUNKALAP_RESZLET);
+    assert.match(
+      s,
+      /partnerApi\.signWorksheet\(id, signerUserId, signatureCode\)/,
+    );
+    assert.match(s, /partnerApi\.uploadWorksheetDocument\(id, file, caption\)/);
+    assert.match(s, /<Tetelek lines=\{current\.lines\} \/>/);
+    assert.match(s, /<Verziok versions=\{worksheet\.versions\} \/>/);
   });
 });

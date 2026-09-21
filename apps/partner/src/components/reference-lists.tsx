@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { WorksheetDepartmentSummary } from "@acropora/types";
+import {
+  worksheetStatusLabel,
+  type WorksheetDepartmentSummary,
+} from "@acropora/types";
 
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
@@ -240,7 +243,16 @@ export function Worksheets() {
                 </p>
               </div>
               <div>
-                <span className="status neutral">{sheet.status}</span>
+                {/*
+                  A FELIRAT A KÖZÖS SZÓTÁRBÓL JÖN, nem a nyers enum-érték. A
+                  partner eddig `SIGNED` és `DRAFT` feliratot látott a saját
+                  munkalapján: a szótár az `apps/web`-ben lakott, ahonnan ez a
+                  csomag nem importálhat. 2026-09-21 óta a `@acropora/types`-ban
+                  áll, egy helyen mind a két felületnek.
+                */}
+                <span className="status neutral">
+                  {worksheetStatusLabel[sheet.status]}
+                </span>
                 <time dateTime={sheet.updatedAt}>
                   {new Intl.DateTimeFormat("hu-HU", {
                     dateStyle: "medium",

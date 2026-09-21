@@ -7,6 +7,7 @@ export {
   serviceJobTimeline,
   serviceJobWorksheetLabel,
 } from "./service-job-management.js";
+export { worksheetStatusLabel } from "./worksheet-management.js";
 export type {
   ServiceJobAssetLink,
   ServiceJobAssignee,
