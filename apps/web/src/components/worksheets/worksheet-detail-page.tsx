@@ -129,6 +129,15 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
    * torenik meg: nem esik vissza ures listara csendben -- olyankor a valaszto
    * "egyik sem" agra all, ami LATSZIK.
    */
+  /*
+    A KIKULDES CIMZETTJE. A HOOK ITT ALL, A TOBBI MELLETT, ES NEM LENTEBB:
+    elso alakom a `current` melle tette, ami MAR A KORAI VISSZATERESEK UTAN van
+    (nincs jog / toltes / nincs lap). Ettol a hookok SZAMA renderenkent valtozott,
+    es a React "Rendered more hooks than during the previous render" hibaval
+    allt meg -- a lap EGYALTALAN nem jelent meg, tehat a komponens-tesztek nem
+    az alairasrol buktak el, hanem arrol, hogy nincs mit megnezni.
+  */
+  const [sendToUserId, setSendToUserId] = useState("");
   const [signers, setSigners] = useState<WorksheetSignerListResponse | null>(
     null,
   );
@@ -326,6 +335,78 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
     </section>
   );
 
+  /**
+   * KIKULDES ALAIRASRA -- A LEZARAS UTANI, KULON LEPES (2026-09-21).
+   *
+   * Addig a lezaras MAGA tette alairhatova a lapot, tehat a portalon MINDEN
+   * lezart lap alairhatonak latszott, akkor is, ha soha nem kuldtuk ki. Balazs
+   * be is jelentette: "van egy nyitott munkalap, amit ala tudna irni ha akarna".
+   *
+   * A CIMZETT UGYANABBOL A LISTABOL JON, amibol a belso alairas valasztoja
+   * (`signers`) -- nem egy masodik lekerdezesbol. Ket lista ugyanarra a kerdesre
+   * elso nap ketté valna.
+   */
+  const sendForSignatureBlock =
+    canManage &&
+    current.status === "AWAITING_SIGNATURE" &&
+    current.sentForSignatureAt === null ? (
+      <ServicePanel>
+        <ServicePanelHeading title="Kiküldés aláírásra" />
+        <p className="-mt-3 mb-4 text-xs text-muted">
+          A lap ki van állítva, de még nem küldtük ki. Amíg nem megy ki, az
+          ügyfél a partnerportálon sem tudja aláírni.
+        </p>
+        <div className="grid gap-3 md:grid-cols-[2fr_auto]">
+          <FormField label="Kinek küldjük ki">
+            <Select
+              aria-label="Kinek küldjük ki"
+              value={sendToUserId}
+              onChange={(event) => setSendToUserId(event.target.value)}
+            >
+              <option value="">Válassz aláírót</option>
+              {signers?.items.map((jelolt) => (
+                <option key={jelolt.id} value={jelolt.id}>
+                  {jelolt.name}
+                </option>
+              ))}
+            </Select>
+            {signers?.emptyReason ? (
+              <p className="pt-1 text-xs text-muted">{signers.emptyReason}</p>
+            ) : null}
+          </FormField>
+          <div className="flex items-end">
+            <Button
+              disabled={busy || sendToUserId === ""}
+              onClick={() =>
+                void run(() =>
+                  worksheetsApi.sendForSignature(
+                    token,
+                    worksheet.id,
+                    sendToUserId,
+                  ),
+                )
+              }
+            >
+              Elküldöm aláírásra
+            </Button>
+          </div>
+        </div>
+      </ServicePanel>
+    ) : null;
+
+  /**
+   * A BELSO ROGZITES NEM KOTODIK A KIKULDESHEZ -- ES EZ EGY PIROS CI UTAN
+   * ALL IGY (2026-09-21).
+   *
+   * Elso alakjaban ez a blokk a kikuldest is megkovetelte, "a szerver kapuja
+   * ugyanezt nezi" indokkal. A szerver kapuja azota SZUKEBB: a kikuldes csak a
+   * KULSOS keronek feltetel. A belso rogzites a SZEMELYES alairas helye -- a
+   * kollega a helyszinen vetet ala, gepelt nevvel --, es ahhoz nincs kikuldes,
+   * nem is lehet: a cimzett kotelezoen a vevo aktiv munkatarsa.
+   *
+   * VAGYIS A KET BLOKK EGYSZERRE IS ALLHAT, es ez nem ellentmondas: "kuldd ki
+   * az ugyfelnek" VAGY "irasd ala most itt". Ket ut ugyanahhoz az allapothoz.
+   */
   const signatureForm =
     canManage && current.status === "AWAITING_SIGNATURE" ? (
       <ServicePanel>
@@ -719,7 +800,27 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
             {worksheetStatusLabel[current.status]}
           </ServiceStatusBadge>
         }
-        sub={worksheet.customer.displayName}
+        sub={
+          /*
+            KINEK KULDTUK EL -- A LAP TETEJEN, NEM CSAK A NAPLOBAN.
+
+            Balazs dontese, 2026-09-21 14:00:58 UTC, egy betu: "b". A kerdes az
+            volt, latszodjon-e a lapon, kinek kuldtuk el alairasra: csak a
+            naploban, vagy a lap tetejen is. Az indok, amit elfogadott: a
+            szerelo NEM a naplot olvassa, amikor azt kerdezi, hogy ezzel most mi
+            van -- ha nem latja ranezesre, ketszer kuldi el vagy telefonal.
+
+            A DATUM DONT, NEM A NEV: a cimzett fiokja torolheto (`SetNull`), a
+            kikuldes tenye viszont megmarad. Nev nelkul is kiirjuk, hogy kiment.
+          */
+          current.sentForSignatureAt
+            ? `${worksheet.customer.displayName} · kiküldve aláírásra${
+                current.sentForSignatureToName
+                  ? `: ${current.sentForSignatureToName}`
+                  : ""
+              }`
+            : worksheet.customer.displayName
+        }
         actions={
           <>
             {/* A REJTES ES A VISSZAALLITAS AZ ADATLAPON ALL, NEM A LISTA
@@ -943,6 +1044,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
               </ServicePanel>
             ) : null}
             {lineRows}
+            {sendForSignatureBlock}
             {signatureForm}
             {/*
               A MUNKANAPLO. Ugyanazok a funkciok, mint a telefonon (Balazs kerese,

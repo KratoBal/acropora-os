@@ -121,6 +121,13 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
       createdAt: "2026-08-27T08:00:00.000Z",
       closedAt: "2026-08-27T09:00:00.000Z",
       closedByName: "Szerelő Sándor",
+      /*
+      A KET UJ MEZO 2026-09-21 OTA KOTELEZO A FIXTURABAN IS, es ezt a FORDITO
+      kenyszeritette ki. `null` = a lap ki van allitva, de nem kuldtuk ki
+      alairasra -- epp az az allapot, amirol ez a kor szol.
+    */
+      sentForSignatureAt: null,
+      sentForSignatureToName: null,
       netAmount: "30000",
       vatAmount: "8100",
       grossAmount: "38100",
@@ -262,13 +269,79 @@ describe("WorksheetDetailPage és az aláíró", () => {
     });
   });
 
+  /**
+   * KIALLITOTT **ES KIKULDOTT** LAP.
+   *
+   * A `sentForSignatureAt` NEM azert all itt, mintha az alairas-urlap tole
+   * fuggne -- az a belso feluleten CSAK az allapotot nezi (a kikuldes-kapu a
+   * partnerportale). Azert all itt, mert ez a fixtura a KIKULDOTT lapot irja
+   * le, es a kikuldes-blokk EZEN tunik el. A ket blokk igy megkulonboztetheto:
+   * egy "soha ne mutasd a kikuldest" javitas ettol a fixturatol lesz piros.
+   *
+   * AZ ELSO ALAKJA MAST ALLITOTT ("a felulet ugyanazt a kettot nezi"), es egy
+   * piros CI cafolta meg (2026-09-21): a tul szeles kapu a SZEMELYES alairast
+   * zarta volna el.
+   */
   function awaitingSignature() {
     const alap = detail(null);
     return {
       ...alap,
-      currentVersion: { ...alap.currentVersion, status: "AWAITING_SIGNATURE" },
+      currentVersion: {
+        ...alap.currentVersion,
+        status: "AWAITING_SIGNATURE",
+        sentForSignatureAt: "2026-09-21T16:00:00.000Z",
+        sentForSignatureToName: "Vevő Vilmos",
+      },
     };
   }
+
+  /**
+   * A KI NEM KULDOTT LAPON MIND A KETTO ALL -- ES EZ EGY PIROS CI UTAN IGY
+   * HELYES (2026-09-21).
+   *
+   * Elso alakjaban ez az allitas azt mondta ki, hogy a ki nem kuldott lapon az
+   * alairas-urlap NEM latszik. Az a felulet a SZEMELYES alairas helye: a belso
+   * kollega a helyszinen vetet ala, gepelt nevvel, es ahhoz nincs kikuldes --
+   * nem is lehet, mert a cimzett kotelezoen a vevo aktiv munkatarsa. Egy ilyen
+   * vevonel az urlap elrejtese azt jelentette volna, hogy a lapot SOHA nem
+   * lehet alairni.
+   *
+   * A KIKULDES-KAPU A PARTNERPORTALRA VALO, ES OTT ALL (`worksheet-detail.tsx`).
+   * Itt a ket blokk egyszerre kinal ket utat: "kuldd ki az ugyfelnek" VAGY
+   * "irasd ala most itt".
+   */
+  it("kiállított, de KI NEM KÜLDÖTT lapon MINDKÉT út nyitva áll", async () => {
+    const alap = detail(null);
+    api.detail.mockResolvedValue({
+      ...alap,
+      currentVersion: {
+        ...alap.currentVersion,
+        status: "AWAITING_SIGNATURE",
+        sentForSignatureAt: null,
+        sentForSignatureToName: null,
+      },
+    });
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await waitFor(() =>
+      expect(screen.getByText("Kiküldés aláírásra")).toBeTruthy(),
+    );
+    expect(screen.getByText("Ügyfél döntésének rögzítése")).toBeTruthy();
+  });
+
+  /**
+   * ES A MASIK IRANY: A KIKULDOTT LAPON AZ ALAIRAS ALL, A KIKULDES NEM.
+   *
+   * Enelkul egy "soha ne mutasd az alairast" javitas is zold lenne -- es akkor
+   * a belsos rogzites egyaltalan nem lenne elerheto.
+   */
+  it("KIKÜLDÖTT lapon az aláírás áll, a kiküldés-blokk nem", async () => {
+    api.detail.mockResolvedValue(awaitingSignature());
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await waitFor(() =>
+      expect(screen.getByText("Ügyfél döntésének rögzítése")).toBeTruthy(),
+    );
+    expect(screen.queryByText("Kiküldés aláírásra")).toBeNull();
+  });
 
   it("a LISTÁRÓL választott aláírónál CSAK az azonosító megy fel", async () => {
     /*
@@ -394,11 +467,29 @@ describe("WorksheetDetailPage és az aláírókód", () => {
     });
   });
 
+  /**
+   * KIALLITOTT **ES KIKULDOTT** LAP.
+   *
+   * A `sentForSignatureAt` NEM azert all itt, mintha az alairas-urlap tole
+   * fuggne -- az a belso feluleten CSAK az allapotot nezi (a kikuldes-kapu a
+   * partnerportale). Azert all itt, mert ez a fixtura a KIKULDOTT lapot irja
+   * le, es a kikuldes-blokk EZEN tunik el. A ket blokk igy megkulonboztetheto:
+   * egy "soha ne mutasd a kikuldest" javitas ettol a fixturatol lesz piros.
+   *
+   * AZ ELSO ALAKJA MAST ALLITOTT ("a felulet ugyanazt a kettot nezi"), es egy
+   * piros CI cafolta meg (2026-09-21): a tul szeles kapu a SZEMELYES alairast
+   * zarta volna el.
+   */
   function awaitingSignature() {
     const alap = detail(null);
     return {
       ...alap,
-      currentVersion: { ...alap.currentVersion, status: "AWAITING_SIGNATURE" },
+      currentVersion: {
+        ...alap.currentVersion,
+        status: "AWAITING_SIGNATURE",
+        sentForSignatureAt: "2026-09-21T16:00:00.000Z",
+        sentForSignatureToName: "Vevő Vilmos",
+      },
     };
   }
 

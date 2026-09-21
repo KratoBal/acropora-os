@@ -215,6 +215,21 @@ export const worksheetsApi = {
       method: "POST",
     });
   },
+  /**
+   * KIKULDES ALAIRASRA -- A LEZARAS UTANI, KULON LEPES.
+   *
+   * A CIMZETT KOTELEZO, es ezt a szerver is megkoveteli: a lap tetejen meg kell
+   * jelennie, KINEK kuldtuk el (Balazs dontese, 2026-09-21 14:00:58). Egy
+   * cimzett nelkuli kikuldes olyan allapotot hozna letre, amirol a felulet nem
+   * tud mit mondani.
+   */
+  sendForSignature(token: string, id: string, signerUserId: string) {
+    return apiRequest<WorksheetDetail>(
+      worksheetPath(id, "/send-for-signature"),
+      token,
+      { method: "POST", body: JSON.stringify({ signerUserId }) },
+    );
+  },
   continueFrom(token: string, id: string) {
     return apiRequest<WorksheetDetail>(`${worksheetPath(id)}/continue`, token, {
       method: "POST",

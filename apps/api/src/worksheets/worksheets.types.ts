@@ -31,6 +31,12 @@ export const worksheetVersionInclude = {
   },
   createdBy: { select: { displayName: true } },
   closedBy: { select: { displayName: true } },
+  /*
+    A KIKULDES CIMZETTJE: a lap tetejen meg kell jelennie, KINEK kuldtuk el
+    (Balazs dontese, 2026-09-21 14:00:58) -- a szerelo nem a naplot olvassa,
+    amikor azt kerdezi, hogy ezzel most mi van.
+  */
+  sentForSignatureTo: { select: { displayName: true } },
   signature: { include: { signedBy: { select: { displayName: true } } } },
 } satisfies Prisma.WorksheetVersionInclude;
 
@@ -245,6 +251,14 @@ export function toVersionSummary(
     createdAt: row.createdAt.toISOString(),
     closedAt: row.closedAt?.toISOString() ?? null,
     closedByName: row.closedBy?.displayName ?? null,
+    /*
+      A KIKULDES KET MEZOJE KULON MEGY KI, es a masodik `null` is lehet a
+      mellett, hogy az elso all: a cimzett fiokja torolheto (`SetNull`), a
+      KIKULDES TENYE viszont megmarad. A felulet ezert a DATUMRA kapuzzon, ne a
+      nevre -- egy torolt cimzett nem teheti ujra alairhatatlanna a lapot.
+    */
+    sentForSignatureAt: row.sentForSignatureAt?.toISOString() ?? null,
+    sentForSignatureToName: row.sentForSignatureTo?.displayName ?? null,
     netAmount: row.netAmount.toString(),
     vatAmount: row.vatAmount.toString(),
     grossAmount: row.grossAmount.toString(),

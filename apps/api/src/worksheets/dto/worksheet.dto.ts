@@ -579,3 +579,21 @@ export class SetWorksheetHandedOverDto {
   @IsBoolean({ message: "Az átadás jelölése csak igen vagy nem lehet." })
   handedOver!: boolean;
 }
+
+/**
+ * KIKULDES ALAIRASRA -- A CIMZETT KOTELEZO.
+ *
+ * NEM ELHAGYHATO, es ez nem szigorusag: a lap tetejen meg kell jelennie, KINEK
+ * kuldtuk el (Balazs dontese, 2026-09-21 14:00:58). Egy cimzett nelkuli
+ * kikuldes olyan allapotot hozna letre, amirol a felulet nem tud mit mondani --
+ * "elkuldve, de nem tudjuk kinek" --, es az rosszabb, mint a mai semmi.
+ *
+ * A HALMAZT NEM ITT SZURJUK: hogy a cimzett a lap partnerenek munkatarsa-e,
+ * azt a szolgaltatas nezi meg, mert ahhoz a LAP is kell. Egy dekorator itt
+ * csak az alakot tudna ellenorizni, es az alak onmagaban semmit nem mond.
+ */
+export class SendWorksheetForSignatureDto {
+  @IsString({ message: "Válassz aláírót a listáról." })
+  @MinLength(1, { message: "Válassz aláírót a listáról." })
+  signerUserId!: string;
+}

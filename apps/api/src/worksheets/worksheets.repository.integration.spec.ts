@@ -846,6 +846,13 @@ describe(
         signerName: "Kovács Béla",
         note: null,
         actorUserId,
+        /*
+          SZEMELYES ALAIRAS: gepelt nev, nincs valasztott munkatars, es NINCS
+          kikuldes -- a belso kollega a helyszinen vetette ala. A `requireSent`
+          ezert `false`, es ez nem a teszt kenyelme: pontosan ez az az ut, amit
+          az elso, tul szeles kapum elzart volna.
+        */
+        requireSent: false,
         now: new Date(),
       });
 
@@ -1201,6 +1208,7 @@ describe(
         signerName: "Gondnok Gábor",
         note: null,
         actorUserId,
+        requireSent: false,
         now: new Date(),
       });
       assert.equal(signed.ok, true);
