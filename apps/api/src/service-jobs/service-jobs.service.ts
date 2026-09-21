@@ -154,6 +154,69 @@ export class ServiceJobsService {
     }
     if (partnerScope.kind === "supplier")
       throw new NotFoundException("A hibajegy nem található.");
+
+    /**
+     * AZ EREDET-ESZKOZ ES A JEGY PARTNERE NEM MONDHAT ELLENT EGYMASNAK.
+     *
+     * BALAZS DONTESE, 2026-09-21 10:48:51 UTC (Discord, fo csatorna,
+     * message_id 1551545743054082049), szo szerint: "utasitsa el. johet a
+     * kovetkezo". A kerdes az volt, mi tortenjen, ha valaki MASIK partner
+     * gepet ad meg egy hibajegy eredetekent.
+     *
+     * === EZ EGY KORABBI, SZANDEKOS VISELKEDEST IR AT ===
+     *
+     * A fenti "POTOL, nem felulir" elv VALTOZATLANUL all, es nem is szabad
+     * elvenni: a helyszinen a szerelo tenyleg nem tud partnert megadni, es
+     * akkor az eszkozbol kell levezetni. Amit ez a kapu elutasit, az nem a
+     * POTLAS, hanem a ket ertek ELLENTMONDASA. Harom eset van, es csak a
+     * harmadik hibas:
+     *
+     *   csak eszkoz               az eszkozbol jon a partner       -- marad
+     *   csak partner              nincs mit osszevetni             -- marad
+     *   mind a ketto, ES ELTER    ELUTASITAS
+     *
+     * === A NEGYEDIK ESET, AMI NEM ELLENTMONDAS: A GAZDATLAN ESZKOZ ===
+     *
+     * Ha az eszkoznek NINCS tulajdonosa (`eredet.customerId === null`), akkor
+     * nincs ket ertek, amit ossze lehetne vetni -- egy HIANYT tolt ki a
+     * megadott partner, es pontosan erre valo a potlas. Ezt a sort tehat
+     * atengedjuk, es ez a legkozelebbi teveszes: egy `!=` osszevetes null
+     * mellett elutasitana, es epp a POTLAST venne el.
+     *
+     * === MIERT ELUTASITAS, ES NEM CSENDES FIGYELMEN KIVUL HAGYAS ===
+     *
+     * Ez nem tamadas, hanem ELGEPELES: egy belsos kollega a teljes listabol
+     * valaszt, a jegy partnere kozben mas ceg. Az elutasitas AZONNAL latszik
+     * es javithato; ha az eszkozt csendben hagynank el, a jegy letrejonne, es
+     * senki nem tudna meg, hogy hianyzik rola a gep.
+     *
+     * === A HELYE: A VEGLEGES ERTEKEN MER, DE MA NEM TEHERHORDO ===
+     *
+     * Ez a kapu a `partnerScope` KENYSZERITESE UTAN all, tehat a VEGLEGES
+     * `customerId`-t veti ossze. Elsore azt irtam ide, hogy enelkul egy
+     * partner-fiok idegen gepet vihetne fel -- A KALIBRACIO EZT MEGCAFOLTA:
+     * a kaput a kenyszerites FOLE mozgatva NULLA allitas pirosodott.
+     *
+     * AZ OK: a fenti ag mar elutasit minden olyan kerest, ahol a megadott
+     * `customerId` eltér a kero sajat cegetol. Mire ide erunk, a ket ertek
+     * (a kenyszerites elotti es utani) MINDIG egyezik -- tehat a ket elhelyezes
+     * ma EGYENERTEKU.
+     *
+     * AKKOR MIERT ITT: mert a VEGLEGES erteken mer. Ha a kenyszerites logikaja
+     * valaha valtozik (peldaul megengedobb lesz), egy feljebb allo kapu
+     * CSENDBEN a regi erteket vetne ossze. Ez elovigyazatossag, nem mert
+     * vedelem, es igy is kell olvasni.
+     */
+    if (
+      eredet &&
+      eredet.customerId !== null &&
+      customerId !== null &&
+      eredet.customerId !== customerId
+    ) {
+      throw new BadRequestException(
+        "A megadott eszköz másik partnerhez tartozik, mint a hibajegy partnere. Vagy a partnert javítsd, vagy az eszközt.",
+      );
+    }
     const departmentId =
       input.departmentId?.trim() || eredet?.departmentId || null;
     /**
