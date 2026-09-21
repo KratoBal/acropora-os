@@ -72,6 +72,22 @@ const HELPERS = [
   "scopeMaySeeDocumentType",
   "assetOwnerScopeWhere",
   /**
+   * AZ ESZKOZ-LATHATOSAG WHERE-EPITOJE (2026-09-21).
+   *
+   * 2026-09-18 ota letezik, es eddig CSAK a lista hivta -- azon at viszont az
+   * `assetListWheres` (mar a listan), tehat kozvetlenul egyetlen metodus sem
+   * hasznalta. Amikor a `detail` atallt ra, ez az orzo ugy latta, hogy a
+   * metodus ELFELEJTETTE a hatokort, holott epp akkor lett helyes.
+   *
+   * ES EGY LELET A KET KEZZEL IRT LISTAROL: ugyanez a nev a
+   * `partner-scope-and-branch.spec.ts` sajat listajara MAR 2026-09-18-ban
+   * felkerult, ide viszont nem. Ket orzo, ket kezzel karbantartott lista,
+   * ugyanarrol a helperrol -- es a hiany addig NEM latszott, amig egy metodus
+   * kozvetlenul nem hivta. Aki uj hatokor-segedet vesz fel, MIND A KETTOBE
+   * irja be.
+   */
+  "assetVisibilityForAndBranch",
+  /**
    * A KET LISTA-`where`-EPITO. Mind a ketto a hatokort MAGA teszi bele a
    * feltetelbe, es EGYSZERRE adja a lista es az allapot-szamlalo feltetelet --
    * epp azert, hogy a hatokor ne tudjon csak az egyikbol kimaradni. Egy
@@ -86,6 +102,18 @@ const HELPERS = [
    * all, mert nem errol a ket nevrol szol, hanem arrol, hogyan kell uj nevet
    * felvenni ide.)
    */
+  /**
+   * A RESZLETLAP `where`-EPITOJE (2026-09-21). Ugyanaz a fajta, mint a lentebbi
+   * ketto: a hatokort MAGA teszi a feltetelbe, tehat egy metodus, ami ezt
+   * hivja, HASZNALJA a hatokort.
+   *
+   * ES UGYANAZ A CSAPDA, MINT A LISTANAL, CSAK EGY SZINTTEL LEJJEBB: amikor a
+   * `detail` feltetelet kiemeltem ebbe a fuggvenybe, a metodus torzsebol
+   * eltunt a hatokor-seged NEVE -- es ez az orzo ugy latta, hogy a `detail`
+   * elfelejtette. Az elso alakom meg `assetVisibilityForAndBranch`-et hivott
+   * kozvetlenul; a kiemeles utan MASIK nevet kellett ide irni.
+   */
+  "assetDetailWhere",
   "assetListWheres",
   "worksheetListWheres",
   /**
