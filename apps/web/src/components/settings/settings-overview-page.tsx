@@ -156,6 +156,26 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "Levelezés",
+    icon: "settings",
+    links: [
+      {
+        /**
+         * A JOGOT NEVEZI MEG, NEM MENUPONT-AZONOSITOT -- ugyanaz az alak, mint
+         * az import-oldalnal. A lapnak MA nincs menupontja, a vegpontja viszont
+         * `SETTINGS_MANAGE`-et ker (`mail-template.controller.ts`), tehat a
+         * link is azt kapja. Ha kesobb menupont lesz belole, ez `entryId`-re
+         * valt.
+         */
+        label: "Levélsablon",
+        description:
+          "Az aláírt munkalapról szóló automatikus levél tárgya és szövege.",
+        href: "/beallitasok/levelsablonok",
+        permission: PERMISSIONS.SETTINGS_MANAGE,
+      },
+    ],
+  },
+  {
     title: "Mértékegységek",
     icon: "settings",
     links: [

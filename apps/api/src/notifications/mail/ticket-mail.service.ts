@@ -1,9 +1,9 @@
+import { renderMailTemplate } from "@acropora/types";
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
 import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
 import { headerSafe } from "./mail-header.js";
-import { renderMailTemplate } from "./mail-template.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import { ticketMailContent } from "./ticket-mail.content.js";
 import {

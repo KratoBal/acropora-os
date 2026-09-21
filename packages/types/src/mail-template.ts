@@ -15,6 +15,25 @@
  * EZERT A LISTA KOD, NEM KOMMENT: a felulet ugyanezt a tombot kapja meg a
  * vegponton at, tehat a szotar es a motor NEM TUD ELCSUSZNI egymastol. Ha
  * kezzel irt lista allna a feluleten, az elso uj valtozonal ketté valna.
+ *
+ * === MIERT A KOZOS CSOMAGBAN ALL, ES NEM AZ API-BAN (2026-09-21 delutan) ===
+ *
+ * 2026-09-21 delelottig az `apps/api/src/notifications/mail/` alatt lakott, es
+ * az HELYES volt, amig egyetlen fogyasztoja a kuldes volt.
+ *
+ * A szerkeszto felulet ELONEZETET mutat: a szerkesztett szoveget behelyettesiti
+ * minta-ertekekkel, hogy a szerkeszto lassa, mit kap a vevo. Egy MASODIK
+ * behelyettesito azt jelentene, hogy az elonezet HAZUDHAT -- es epp az elonezet
+ * az egyetlen dolog, amiben bizni fognak, mielott level megy egy vevonek.
+ *
+ * EZERT NEM MASOLAT KESZULT, HANEM KOLTOZES. A modul TISZTA: nincs benne Node,
+ * nincs halozat, nincs adatbazis -- ugyanaz a fajta logika, mint a
+ * `partnerStatusLabel`, ami ma delelott ugyanebbol az okbol kerult ide (a
+ * partnerportal nem erte el a szerveren).
+ *
+ * ES AMI EZZEL NEM KERUL SEHOVA: a sablon SZOVEGE es a titkok. Ez a fajl a
+ * behelyettesites SZABALYAT hordozza es a valtozok NEVET -- a tarolt sablon az
+ * adatbazisban all, a kuldes pedig tovabbra is kizarolag a szerveren tortenik.
  */
 
 export interface MailTemplateVariable {
