@@ -72,7 +72,7 @@ export function describeTokenShape(value: string): string {
 }
 
 export type DeviceTokenAcceptance =
-  { ok: true } | { ok: false; reason: "expo-token" | "not-apns" };
+  { ok: true } | { ok: false; reason: "empty" | "expo-token" | "not-apns" };
 
 /**
  * BEFOGADHATÓ-E EZ A TOKEN EZEN A PLATFORMON.
@@ -93,6 +93,20 @@ export function acceptDeviceToken(input: {
    * Egy platformonként megismételt tiltólista ugyanazt a szabályt vinné két
    * helyen -- és egyszer az egyik maradna le.
    */
+  /**
+   * A CSUPA SZOKOZ NEM TOKEN, ES A DTO EZT NEM FOGJA MEG.
+   *
+   * A `RegisterDeviceTokenDto` `MinLength(1)` feltetele a SZOKOZT IS SZAMOLJA,
+   * tehat egy harom szokozbol allo ertek ma atmenne -- iOS-en a 64-hex minta
+   * megallitana, az ANDROID agon viszont beirodna a tablaba. Ott allna egy sor,
+   * amire a kuldo hiaba kuld.
+   *
+   * EZ AZ EGYETLEN HOSSZ-JELLEGU FELTETEL, es nem talalgatas: azt mondja ki,
+   * hogy az URES ertek nem token. Felso hatart NEM szabunk -- azt a DTO adja
+   * (512), es egy meretlen hatar itt ugyanugy neman dobna, mint a 64-hex.
+   */
+  if (input.token.trim().length === 0) return { ok: false, reason: "empty" };
+
   if (input.token.startsWith("ExponentPushToken"))
     return { ok: false, reason: "expo-token" };
 
@@ -133,5 +147,9 @@ export const DEVICE_TOKEN_SHAPE_MESSAGE =
  * igazi okhoz. Ugyanaz a fajta hiba, amit a telefon beállítás-képernyőjén is
  * javítani kellett.
  */
+/** Az ures ertek sajat mondata: itt nincs mit alakrol mondani. */
+export const DEVICE_TOKEN_EMPTY_MESSAGE =
+  "Az eszköz-token üres. A telefon nem kapott tokent, vagy nem azt küldte tovább.";
+
 export const DEVICE_TOKEN_EXPO_MESSAGE =
   "A telefon az Expo push tokenjét küldte. A natív eszköz-token kell helyette (iOS-en APNs, Androidon FCM).";

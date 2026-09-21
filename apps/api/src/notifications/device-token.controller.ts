@@ -15,6 +15,7 @@ import {
   acceptDeviceToken,
   describeTokenShape,
   storedTokenForm,
+  DEVICE_TOKEN_EMPTY_MESSAGE,
   DEVICE_TOKEN_EXPO_MESSAGE,
 } from "./device-token.rules.js";
 import {
@@ -73,9 +74,11 @@ export class DeviceTokenController {
         `Eszköz-token elutasítva (${befogadas.reason}): felhasználó ${user.id}, alkalmazás ${bundleId}, platform ${platform}, alak: ${alak}.`,
       );
       throw new BadRequestException(
-        befogadas.reason === "expo-token"
-          ? DEVICE_TOKEN_EXPO_MESSAGE
-          : DEVICE_TOKEN_SHAPE_MESSAGE,
+        befogadas.reason === "empty"
+          ? DEVICE_TOKEN_EMPTY_MESSAGE
+          : befogadas.reason === "expo-token"
+            ? DEVICE_TOKEN_EXPO_MESSAGE
+            : DEVICE_TOKEN_SHAPE_MESSAGE,
       );
     }
 

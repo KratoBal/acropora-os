@@ -49,6 +49,38 @@ describe("melyik tokent fogadjuk be", () => {
    * android ag nem nyithatja ki elotte az ajtot. Ket kulon allitas, mert a ket
    * platform ket kulon uton jut ide.
    */
+  /**
+   * A CSUPA SZOKOZ SAJAT OKKAL BUKIK, ES EZ NEM SZORSZALHASOGATAS: a DTO
+   * `MinLength(1)` feltetele a szokozt IS szamolja, tehat ez az ertek eljut
+   * idaig. Az ANDROID ag mintat nem ir elo -- ha ez a feltetel nem allna,
+   * beirodna a tablaba egy sor, amire a kuldo hiaba kuld.
+   */
+  it("a csupa szokoz Androidon elbukik, sajat okkal", () => {
+    assert.deepEqual(acceptDeviceToken({ token: "   ", platform: "ANDROID" }), {
+      ok: false,
+      reason: "empty",
+    });
+  });
+
+  it("a csupa szokoz iOS-en is elbukik, ugyanazzal az okkal", () => {
+    assert.deepEqual(acceptDeviceToken({ token: "  ", platform: "IOS" }), {
+      ok: false,
+      reason: "empty",
+    });
+  });
+
+  /**
+   * A LEGKOZELEBBI TEVESZTES: egy VALODI token, ami szokozt IS tartalmaz a
+   * szelen. A `trim()` csak az URES esetet zarja ki -- a tartalmas erteket nem
+   * szabad elvennie.
+   */
+  it("a szokozzel korbevett, de TARTALMAS ertek Androidon atmegy", () => {
+    assert.deepEqual(
+      acceptDeviceToken({ token: `  ${FCM}  `, platform: "ANDROID" }),
+      { ok: true },
+    );
+  });
+
   it("az Expo-token iOS-en elbukik, sajat okkal", () => {
     assert.deepEqual(acceptDeviceToken({ token: EXPO, platform: "IOS" }), {
       ok: false,
