@@ -105,3 +105,78 @@ describe("a helyszín-letöltő bekötése", () => {
     );
   });
 });
+
+/**
+ * A LETOLTES UTAN A KEPERNYOK UJRAOLVASSAK A MASOLATOT.
+ *
+ * A modul MEGLETE nem bizonyitja, hogy hivjak: a lista kulcsainak felsorolasa
+ * onmagaban egy olyan valtozatban is ott allna, ami soha nem ervenytelenit.
+ */
+describe("a letöltés utáni újraolvasás", () => {
+  it("a komponens VÉGIGMEGY a listán, nem egy kulcsot érvénytelenít", () => {
+    const s = kod(KEPERNYO);
+    assert.match(s, /LETOLTES_UTAN_UJRAOLVASANDO\.map\(/);
+    assert.match(
+      s,
+      /queryClient\.invalidateQueries\(\{ queryKey: \[\.\.\.queryKey\] \}\)/,
+    );
+  });
+
+  /**
+   * `onSettled`, NEM `onSuccess`: a RESZLEGES letoltes is hoz uj sorokat (egy
+   * elhasalt reszletlap mellett a tobbi lement), es azokat ugyanugy latni kell.
+   *
+   * MI PIROSIT: az `onSuccess` alak. Az a valtozat a sikeres futasra jol
+   * mukodne, es EPP a reszleges letoltesnel hagyna a kepernyot a regi
+   * masolaton -- vagyis ott, ahol a szerelonek a legnagyobb szuksege van ra.
+   */
+  it("a részleges letöltés után IS újraolvas", () => {
+    const s = kod(KEPERNYO);
+    assert.match(s, /onSettled:/);
+    assert.ok(
+      !/onSuccess:/.test(s),
+      "a részleges letöltés után nem olvasna újra",
+    );
+  });
+});
+
+/**
+ * A LEHUZAS HIBAJA NE URESSEGET ADJON (Balazs merese, 2026-09-21).
+ *
+ * Ez a szakasz NEM a letoltot meri, hanem az ESZKOZ-LISTAT -- azert all itt,
+ * mert ugyanannak a hibanak a masik fele: a letoltes feltolti a masolatot, a
+ * lista pedig akkor is arra essen vissza, ha a halozati lekeres elhasal.
+ *
+ * A HATARA KIMONDVA: ez a forras szoveget olvassa. Azt NEM meri, hogy futas
+ * kozben a `query.data` megmarad-e egy elbukott lehuzas utan -- azt csak
+ * keszuleken lehet megnezni, es Balazstol kulon meres fut ra.
+ */
+describe("az eszköz-lista visszaesése a mentett másolatra", () => {
+  const LISTA = join(
+    __dirname,
+    "..",
+    "..",
+    "..",
+    "src",
+    "app",
+    "assets",
+    "index.tsx",
+  );
+
+  it("a lista a MÁSOLATRA esik vissza, nem üresre", () => {
+    assert.match(
+      kod(LISTA),
+      /const items = serverItems \?\? filterAssets\(cachedItems, search\)/,
+    );
+  });
+
+  /**
+   * ES A SAV KIMONDJA, HOGY A MASOLATOT LATJA. A `query.isError` beleszamit az
+   * "online" megitelesbe: enelkul egy elhasalt lekeres utan a kepernyo
+   * ONLINE-nak vallana magat, es a masolatbol jovo lista FRISS adatkent
+   * latszana -- pontosan az a nema alak, ami miatt ez a kor letezik.
+   */
+  it("a sáv a hibás lekérést is offline-ként kezeli", () => {
+    assert.match(kod(LISTA), /online: online && !query\.isError/);
+  });
+});
