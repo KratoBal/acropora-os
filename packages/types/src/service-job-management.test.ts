@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  ALL_SERVICE_JOB_STATUS_VALUES,
+  PARTNER_STATUS_LABELS,
+  partnerStatusLabel,
+  partnerVisibleStatus,
   serviceJobTimeline,
   type ServiceJobAssetLink,
   type ServiceJobStatusEvent,
@@ -179,5 +183,70 @@ describe("serviceJobTimeline", () => {
        semmisitene meg -- a fajlt es azt, hogy ki hozta. */
     assert.equal(entry.removal.uploadedByName, "Nagy Dániel");
     assert.equal(entry.removal.uploadedAt, "2026-09-14T08:00:00.000Z");
+  });
+});
+
+/**
+ * A PARTNERI ÁLLAPOT-LEKÉPEZÉS, AMI 2026-09-21-EN IDE KÖLTÖZÖTT.
+ *
+ * A VISELKEDÉST a szerver oldali spec (`service-job-status.spec.ts`) méri a
+ * burkolókon keresztül, és az továbbra is fut. Ami CSAK itt mérhető: hogy a
+ * felsorolás teljes, és hogy a csomag gyökeréből tényleg elérhető -- a
+ * partnerportál onnan importálja, nem a modulból.
+ */
+describe("a partneri állapot-leképezés", () => {
+  /**
+   * A FELSOROLÁS A LEKÉPEZÉS KULCSAIBÓL SZÁRMAZIK, nem kézzel írt tömbből.
+   *
+   * MI PIROSÍT: egy kilencedik állapot, amihez nem írtak leképezést -- akkor a
+   * `Record` miatt már a fordítás elhasal --, vagy egy külön, kézzel írt
+   * lista, ami elcsúszik. A darabszám azért áll itt számmal, mert egy
+   * `length > 0` állítás egy elcsúszott listát is zölden hagyna.
+   */
+  it("mind a nyolc belső állapot szerepel a felsorolásban", () => {
+    assert.equal(ALL_SERVICE_JOB_STATUS_VALUES.length, 8);
+    assert.deepEqual([...ALL_SERVICE_JOB_STATUS_VALUES].sort(), [
+      "CANCELLED",
+      "COMPLETED",
+      "IN_PROGRESS",
+      "NEW",
+      "SCHEDULED",
+      "TRIAGED",
+      "WAITING_FOR_CUSTOMER",
+      "WAITING_FOR_PARTS",
+    ]);
+  });
+
+  /**
+   * POZITÍV KONTROLL: minden állapot NEM ÜRES feliratot kap. Enélkül a fenti
+   * állítás akkor is zöld lenne, ha a leképezés üres sztringeket adna --
+   * és a partner egy üres állapotot látna a lapján.
+   */
+  it("minden belső állapotnak van nem üres partneri felirata", () => {
+    for (const status of ALL_SERVICE_JOB_STATUS_VALUES) {
+      assert.ok(partnerVisibleStatus(status), `nincs párja: ${status}`);
+      /*
+        A KUSZOB 2, NEM 3, ES EZT A SAJAT ALLITASOM MERTE KI: a legrovidebb
+        valodi felirat az „Uj", ami KET karakter. Egy magasabb kuszob nem a
+        csonka feliratot fogta volna meg, hanem a legrovidebb helyeset.
+      */
+      assert.ok(
+        partnerStatusLabel(status).length >= 2,
+        `üres vagy csonka felirat: ${status}`,
+      );
+    }
+  });
+
+  /**
+   * A NÉGY LÁTSZÓ ÁLLAPOT NEVE A PARTNER NYELVE. A „Feldolgozás alatt" szó
+   * szerint Balázstól van (2026-08-26).
+   */
+  it("a négy látszó állapot neve a partneré", () => {
+    assert.deepEqual(PARTNER_STATUS_LABELS, {
+      NEW: "Új",
+      IN_PROGRESS: "Feldolgozás alatt",
+      COMPLETED: "Elkészült",
+      CLOSED: "Lezárva",
+    });
   });
 });

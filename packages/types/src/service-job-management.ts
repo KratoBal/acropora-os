@@ -482,3 +482,80 @@ export function serviceJobWorksheetLabel(worksheet: {
   const nev = worksheet.subject.trim();
   return nev ? `${nev} (${azonosito})` : azonosito;
 }
+
+/**
+ * A NÉGY LÁTSZÓ ÁLLAPOT FELIRATA, A PARTNER NYELVÉN.
+ *
+ * NÉGY ÁLLAPOT KIFELÉ, NYOLC BELÜL (Balázs döntése, 2026-09-02: „Legyen a
+ * 4/8"). A kettő nem két rendszer: a nyolc a négynek a RÉSZLETEZÉSE. Hogy egy
+ * jegy alkatrészre vár vagy az ügyfélre, az a MI munkaszervezésünk -- a
+ * partnernek mindkettő egyszerűen „feldolgozás alatt".
+ *
+ * A NÉGY NEVE A PARTNER NYELVE, nem a miénk: „Feldolgozás alatt" -- ezt
+ * Balázs 2026-08-26-án szó szerint így mondta.
+ */
+export const PARTNER_STATUS_LABELS: Record<ServiceJobPartnerStatus, string> = {
+  NEW: "Új",
+  IN_PROGRESS: "Feldolgozás alatt",
+  COMPLETED: "Elkészült",
+  CLOSED: "Lezárva",
+};
+
+/**
+ * A nyolc belső állapot leképezése a négy látszóra.
+ *
+ * A `CANCELLED` a `CLOSED` alá esik: a partner felé az elállt jegy is lezárt
+ * ügy. Hogy MIÉRT zárult le, az a mi oldalunk -- és egy külön „elállt" állapot
+ * kifelé olyan magyarázatot kérne, amit nem minden esetben akarunk megadni.
+ *
+ * === MIÉRT ITT ÁLL, ÉS NEM A SZERVEREN (2026-09-21) ===
+ *
+ * 2026-09-21-ig az `apps/api` `service-job-status.ts` fájljában lakott, és
+ * EGY HELYEN állt -- ami helyes volt, amíg egyetlen felületnek kellett. A
+ * partnerportál viszont a jegy NAPLÓJÁBAN is meg akarja nevezni, melyik
+ * állapotba lépett a jegy, és a napló-bejegyzés csak a BELSŐ értéket hordozza
+ * (`ServiceJobStatusEvent.toStatus`). A szerver a lista- és a részletválaszba
+ * beteszi a mai feliratot, a naplósorokba nem.
+ *
+ * A TARTALOM TEHÁT LÉTEZETT, csak nem volt olyan helye, ahonnan a portál
+ * elérhette volna -- a partner saját, letölthető dokumentumcsomagja MA IS
+ * ezzel a felirattal írja ki ugyanazt az eseményt.
+ *
+ * AMI NEM VÁLTOZIK: a szerver továbbra is ugyanezt küldi a válaszban, és a
+ * leképezés továbbra is EGY helyen áll. Az `apps/api` innen olvassa, a saját
+ * Prisma-típusára szabott burkolókkal, és a séma-tükör őrzője ott is marad --
+ * ez a csomag a kliensé is, tehát nem függhet az adatbázis-klienstől.
+ */
+const PARTNER_STATUS: Record<ServiceJobStatusValue, ServiceJobPartnerStatus> = {
+  NEW: "NEW",
+  TRIAGED: "IN_PROGRESS",
+  SCHEDULED: "IN_PROGRESS",
+  IN_PROGRESS: "IN_PROGRESS",
+  WAITING_FOR_PARTS: "IN_PROGRESS",
+  WAITING_FOR_CUSTOMER: "IN_PROGRESS",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CLOSED",
+};
+
+/**
+ * A NYOLC ÁLLAPOT, FUTÁSIDŐBEN -- ÉS NEM KÉZZEL ÍRT LISTAKÉNT.
+ *
+ * A `PARTNER_STATUS` típusa `Record<ServiceJobStatusValue, ...>`, tehát a
+ * FORDÍTÓ követeli meg, hogy minden állapot szerepeljen benne. A kulcsai így
+ * egy TELJES felsorolást adnak, ami egy kilencedik állapot felvételekor
+ * magától bővül -- egy külön, kézzel írt tömb épp az új esetet hagyná ki, és
+ * nem szólna róla semmi.
+ */
+export const ALL_SERVICE_JOB_STATUS_VALUES = Object.keys(
+  PARTNER_STATUS,
+) as ServiceJobStatusValue[];
+
+export function partnerVisibleStatus(
+  status: ServiceJobStatusValue,
+): ServiceJobPartnerStatus {
+  return PARTNER_STATUS[status];
+}
+
+export function partnerStatusLabel(status: ServiceJobStatusValue): string {
+  return PARTNER_STATUS_LABELS[partnerVisibleStatus(status)];
+}
