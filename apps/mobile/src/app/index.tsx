@@ -18,6 +18,7 @@ import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { describeOfflineSession } from "@/lib/auth/offline-session-notice";
 import { useIsOnline } from "@/lib/offline/connectivity";
+import { HelyszinLetolto } from "@/components/offline/HelyszinLetolto";
 import { useFormCachePrefetch } from "@/lib/offline/use-form-cache-prefetch";
 import { useQueueBacklog } from "@/lib/offline/use-queue-backlog";
 import { useQueueDrain } from "@/lib/offline/use-queue-drain";
@@ -380,6 +381,16 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
             ) : null}
+
+            {/*
+              A HELYSZIN-LETOLTO A MODULOK ALATT, ES CSAK SZERVIZES SZEMNEK.
+
+              Balazs kerese, 2026-09-21: a kollega a pinceben dolgozik, es ma
+              minden eszkoz adatlapjat kezzel kell megnyitnia, MIELOTT lemegy.
+              A gomb a fokepernyon all, mert a szerelo innen indul -- es itt fut
+              ma is az urlap-elotoltes (`useFormCachePrefetch`), ugyanezert.
+            */}
+            {serviceCapabilities.assetsView ? <HelyszinLetolto /> : null}
 
             {capabilities.ordersView ? (
               <View style={styles.ordersSection}>

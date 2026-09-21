@@ -237,6 +237,15 @@ export interface WorksheetListParams {
    */
   customerId?: string;
   /**
+   * A HELYSZÍN szűrője, RÉSZFÁSTUL.
+   *
+   * A szerver `WorksheetListQueryDto`-ja MÁR fogadja (mérve 2026-09-21) -- a
+   * telefon egyszerűen nem küldte. A helyszín-letöltés ebből tudja lekérni
+   * EGY helyszín lapjait anélkül, hogy a betöltött oldal fölött szűrne: egy
+   * lapozott halmazon a böngésző-oldali szűrés csendben hiányos lenne.
+   */
+  departmentId?: string;
+  /**
    * ÁLLAPOT SZERINTI SZŰRÉS, a LEGUTOLSÓ verzió állapotára.
    *
    * A szerver ezt `DISTINCT ON`-nal oldja meg, tehát egy háromszor átírt, ma
@@ -333,6 +342,7 @@ export function listWorksheets({
   search = "",
   assigneeId,
   customerId,
+  departmentId,
   status,
 }: WorksheetListParams = {}) {
   const query = new URLSearchParams({
@@ -342,6 +352,7 @@ export function listWorksheets({
   if (search.trim()) query.set("search", search.trim());
   if (assigneeId) query.set("assigneeId", assigneeId);
   if (customerId) query.set("customerId", customerId);
+  if (departmentId) query.set("departmentId", departmentId);
   if (status) query.set("status", status);
   return apiRequest<WorksheetListResponse>(`${BASE}?${query}`);
 }
