@@ -124,9 +124,44 @@ function megjelent(varakozas) {
 
 const hianyzo = vart.filter((sor) => !megjelent(sor));
 
+/**
+ * LATHATOSAG, NEM VERDIKT: melyik toredek-varakozas jelent meg KIZAROLAG
+ * bukott allitason.
+ *
+ * A fenti szukites azt a varakozast vedi, amelyik `ok ` szoval KEZDODIK. Egy
+ * toredek (`a torles-sor MEGJELENIK`) tovabbra is illeszkedik a `not ok`
+ * sorra, es ez SZANDEKOS: aki elotag nelkul ir, nem nyilatkozik a
+ * kimenetelrol.
+ *
+ * A BAJ AZ, HOGY A HIVO EZT NEM MINDIG IGY GONDOLJA. A 2026-09-21-i eset
+ * gyokere pontosan ez volt: a varakozas sikert NEVEZETT meg a szerzo fejeben,
+ * a naplo pedig bukast adott ra. A szukites azt a KONKRET alakot lezarja
+ * (`ok 1 - X`), ez a sor a SZOMSZEDOSAT teszi lathatova.
+ *
+ * NEM VALTOZTAT VERDIKTET, es ez nem ovatossag: a toredek-varakozas
+ * TELJESITETTE, amit kert. Aki mast akart, annak a szoveget kell javitania,
+ * nem a kapunak dontenie helyette.
+ *
+ * ES A SORT IS KIIRJA, NEM CSAK A TENYT: igy az olvaso a BIZONYITEKOT latja,
+ * nem egy allitast rola. Eppen ez a kulonbseg hianyzott ebbol a kapubol.
+ */
+const csakBukotton = [];
+for (const varakozas of vart) {
+  if (varakozas.startsWith("ok ") || varakozas.startsWith("not ok")) continue;
+  const illeszkedo = naploSorok.filter((sor) => sor.includes(varakozas));
+  if (illeszkedo.length && illeszkedo.every((sor) => sor.startsWith("not ok")))
+    csakBukotton.push({ varakozas, sor: illeszkedo[0] });
+}
+
 console.log(`MERES-KAPU  (${naploUt})`);
 console.log(`  vart nyom:      ${vart.length}`);
 console.log(`  megjelent:      ${vart.length - hianyzo.length}`);
+for (const { varakozas, sor } of csakBukotton) {
+  console.log(
+    `  FIGYELEM: ez a nyom CSAK bukott allitason jelent meg: ${JSON.stringify(varakozas)}`,
+  );
+  console.log(`            a sor: ${sor}`);
+}
 
 if (hianyzo.length > 0) {
   console.log("");
