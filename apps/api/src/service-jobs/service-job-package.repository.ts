@@ -48,11 +48,23 @@ export class ServiceJobPackageRepository {
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: {
             id: true,
+            /*
+              A SZAM A KAPU MONDATAHOZ KELL. A csomag maga nem hasznalja (a
+              fajlnev a dokumentum sorabol jon), de a visszatartas mondatanak
+              MEG KELL NEVEZNIE a lapot -- egy puszta "van lezaratlan lap" a
+              kezelot keresesre kuldi.
+            */
+            number: true,
             hiddenAt: true,
             versions: {
               orderBy: { version: "desc" },
               take: 1,
-              select: { id: true },
+              /*
+                A `closedAt` A KAPUE, NEM A CSOMAGE. Ez az EGYETLEN mezo, ami
+                megkulonbozteti a "meg nincs lezarva" esetet a "le van zarva,
+                de a kiadott lap hianyzik" esettol -- es a ketto TEENDOJE mas.
+              */
+              select: { id: true, closedAt: true },
             },
             documents: {
               /*
