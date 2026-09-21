@@ -11,7 +11,7 @@
  * A nevet ezert a sor KULON hordozza, a patch MELLETT. Beleirni a patchbe nem
  * lehet: az a szerveren ATIRNA a nevet, holott a szerelo hozza sem nyult.
  *
- * Ugyanaz az alak, mint a `photo-queue.ts` `PhotoPayload` tipusanal es a
+ * Ugyanaz az alak, mint a `queue-order.ts` `PhotoPayload` tipusanal es a
  * `worksheet-line` sorainal: a sor torzse a KULDESHEZ es a MEGMUTATASHOZ
  * egyutt eleg, es egy olvaso fuggveny donti el, hogy ertelmes-e.
  */

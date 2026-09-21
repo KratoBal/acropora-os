@@ -4,7 +4,7 @@ import {
   type QueuedAssetUpdate,
 } from "./asset-update-queue";
 import { initializeOfflineDatabase } from "./database";
-import { readPhotoPayload, type PhotoPayload } from "./photo-queue";
+import { readPhotoPayload, type PhotoPayload } from "./queue-order";
 import {
   isSyncEntityType,
   type SyncQueueRow,
@@ -375,7 +375,7 @@ export async function enqueueWorksheetLine(input: {
  * SORBA TESZ EGY FENYKEPET, EGY MEG FEL NEM MENT ROGZITESHEZ.
  *
  * UGYANAZ A TABLA, MASIK `operation` -- a ket menet sorrendjet a
- * `photo-queue.ts` `nextBatch` adja, nem a tabla szerkezete.
+ * `queue-order.ts` `nextBatch` adja, nem a tabla szerkezete.
  *
  * AZ `entity_id` ITT SZANDEKOSAN `NULL`: a szerver-oldali eszkoz-azonosito a
  * rogzites felmenetelekor keletkezik, es a kep sorba tetelekor MEG NEM

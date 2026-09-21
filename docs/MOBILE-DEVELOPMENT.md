@@ -350,7 +350,7 @@ How the queue behaves, and why:
 
 - **The order is two passes, not a sort.** First every `create`, then every
   `upload-photo`. A photo attaches to an asset that must already exist server
-  side, so the passes ARE the dependency (`offline/photo-queue.ts`).
+  side, so the passes ARE the dependency (`offline/queue-order.ts`).
 - **The operation id comes from the content, not from a random number**, and the
   same id goes to the server as `clientOperationId`. A resend after a lost
   response therefore returns the EXISTING record instead of creating a second

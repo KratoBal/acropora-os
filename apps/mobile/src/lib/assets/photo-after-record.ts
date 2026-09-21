@@ -2,7 +2,7 @@
 // (`tsconfig.test.json`-ban nincs `paths`), es a feloldasa behuzna az Expo
 // futasi kornyezetet.
 import type { PickedFile } from "../api/picked-image";
-import { photoOperationId, type PhotoPayload } from "../offline/photo-queue";
+import { photoOperationId, type PhotoPayload } from "../offline/queue-order";
 import type { SaveOutcome } from "../offline/save-or-queue";
 
 /**

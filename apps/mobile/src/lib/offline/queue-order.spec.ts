@@ -9,7 +9,7 @@ import {
   nextBatch,
   ownerPhotoOperationId,
   photoOperationId,
-} from "./photo-queue";
+} from "./queue-order";
 import type { SyncQueueRow } from "./sync-queue";
 
 /**
