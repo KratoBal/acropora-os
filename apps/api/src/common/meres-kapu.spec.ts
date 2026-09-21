@@ -89,4 +89,70 @@ describe("meres-kapu", () => {
   it("olvashatatlan naplonal sajat kodot ad (3), nem pirosat", () => {
     assert.equal(futtat(join(FIXTURAK, "nincs-ilyen.naplo.txt"), VART), 3);
   });
+
+  /**
+   * A KAPU SAJAT VAK FOLTJA, NEV SZERINT -- ES EZ ELES ESETBOL JON.
+   *
+   * A TAP-ban a bukas jelolese `not ok`, vagyis a SIKERES alak (`ok 1 - X`)
+   * SZOVEGRESZE a bukott alaknak (`not ok 1 - X`). Amig a kapu a TELJES
+   * naplora hivta a `includes`-t, egy `ok N - ...` alaku varakozas a SAJAT
+   * BUKASARA illeszkedett.
+   *
+   * MERVE 2026-09-21, a 35659262803 futason: a meres-ag ZOLDET kapott ugy,
+   * hogy a POZITIV KONTROLLJA elbukott. A naploban `not ok 1 - a torles-sor
+   * MEGJELENIK` allt, a vart-fajlban `ok 1 - a torles-sor MEGJELENIK`, es a
+   * kapu haromból harom nyomot talalt.
+   *
+   * EZ NEM EGY AG HIBAJA VOLT: a flotta MINDEN meres-aganak a pozitiv
+   * kontrollja szerkezetileg NEM TUDOTT ELBUKNI -- eppen az a fajta orzo,
+   * ami ellen a kapu fejlece ervel.
+   */
+  it("`ok N` varakozast NEM elegit ki a sajat `not ok N` bukasa", () => {
+    const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-notok-"));
+    const naplo = join(mappa, "naplo.txt");
+    writeFileSync(
+      naplo,
+      [
+        "TAP version 13",
+        "    not ok 1 - a torles-sor MEGJELENIK",
+        "# fail 1",
+      ].join("\n"),
+    );
+    assert.equal(
+      futtat(naplo, ["ok 1 - a torles-sor MEGJELENIK"]),
+      1,
+      "a bukott allitas NEM elegitheti ki a sikert varo sort",
+    );
+  });
+
+  /**
+   * ES A PARJA, MERT KULONBEN A FENTI EGY MINDENT ELUTASITO KAPUVAL IS ZOLD:
+   * ugyanaz a naplo, `not ok` alaku varakozassal, ATMEGY. Ez mutatja, hogy a
+   * szukites CSAK a kimenetelre szol, nem a sor megtalalasara.
+   */
+  it("ugyanazon a naplon a `not ok` alaku varakozas ATMEGY", () => {
+    const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-notok2-"));
+    const naplo = join(mappa, "naplo.txt");
+    writeFileSync(
+      naplo,
+      [
+        "TAP version 13",
+        "    not ok 1 - a torles-sor MEGJELENIK",
+        "# fail 1",
+      ].join("\n"),
+    );
+    assert.equal(futtat(naplo, ["not ok 1 - a torles-sor MEGJELENIK"]), 0);
+  });
+
+  /**
+   * A TOREDEK-VARAKOZAS VALTOZATLAN: aki nem ir `ok` vagy `not ok` elotagot,
+   * NEM NYILATKOZIK a kimenetelrol, es mind a kettore illeszkedik. A meglevo
+   * meres-agak tobbsege ilyen, tehat ezt elvenni csendben elvagna oket.
+   */
+  it("a kimenetelrol nem nyilatkozo toredek tovabbra is illeszkedik", () => {
+    const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-toredek-"));
+    const naplo = join(mappa, "naplo.txt");
+    writeFileSync(naplo, "    not ok 1 - a torles-sor MEGJELENIK");
+    assert.equal(futtat(naplo, ["a torles-sor MEGJELENIK"]), 0);
+  });
 });

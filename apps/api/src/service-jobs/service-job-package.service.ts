@@ -13,6 +13,12 @@ import {
 } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import {
+  worksheetsBlockingPackage,
+  type BlockingPackageWorksheet,
+  type PackageBlockReason,
+  type PackageWorksheetState,
+} from "../common/worksheet-signature-gate.js";
 import { assertStorageKeyMatches } from "../service-assets/document-store/document-storage-key.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
@@ -131,6 +137,31 @@ export class ServiceJobPackageService {
         ),
       ],
     });
+    /*
+      A KAPU A CSOMAG OSSZEALLITASA ELOTT ALL, es ez nem stilus: ha a ciklusban
+      allna meg, a PDF-ek egy resze mar eloallt volna feleslegesen.
+
+      ES A SZERVEREN ALL, NEM A GOMBON. Ma egyetlen szerver-ut vezet ide
+      (`GET :id/download`), es csak a webes felulet hivja -- de a dontes az
+      ATADASROL szol, nem a letoltesrol. Egy gomb-szintu tiltas a telefont es a
+      partnerportalt valtozatlanul hagyna, amint azok is ideernek.
+    */
+    const visszatarto = worksheetsBlockingPackage({
+      worksheets: job.worksheets.map((worksheet) => ({
+        id: worksheet.id,
+        number: worksheet.number,
+        hidden: worksheet.hiddenAt !== null,
+        closed: worksheet.versions[0]?.closedAt != null,
+        hasIssuedSheet: worksheet.documents.some(
+          (document) =>
+            document.worksheetVersionId === worksheet.versions[0]?.id,
+        ),
+      })),
+      scope: scope.kind === "internal" ? "internal" : "partner",
+    });
+    if (visszatarto.length)
+      throw new BadRequestException(csomagHiba(visszatarto));
+
     const entries: { name: string; bytes: Uint8Array }[] = [
       { name: `hibajegy-${job.jobNumber}.pdf`, bytes: jobPdf },
     ];
@@ -165,4 +196,46 @@ export class ServiceJobPackageService {
       bytes: serviceJobPackageZip(entries),
     };
   }
+}
+
+/**
+ * A VISSZATARTAS MONDATA -- MIND A KET OK EGY MONDATBAN.
+ *
+ * Ugyanaz az alak, mint a lezarasi kapunal (#929): ket feltetel ugyanarra a
+ * lepesre, es kulon-kulon elmondva a kezelo megjavitja az elsot, visszajon, es
+ * a masodikon all meg. Ugyanaz az ut ketszer.
+ *
+ * A KET OK KULON MONDATOT KAP, mert a TEENDO kulonbozik. A lezaratlan lapot a
+ * kezelo le tudja zarni; a kiadott peldany hianyat NEM -- az a lap mar zart,
+ * tehat ott nincs mit tennie, es a mondat ezt ki is mondja. Egy kozos „nem
+ * adhato at" mondat a masodik esetben olyan teendore kuldene, ami nem letezik.
+ */
+function csomagHiba(visszatarto: readonly BlockingPackageWorksheet[]): string {
+  const nev = (sheet: PackageWorksheetState): string => {
+    const alap = sheet.number ?? "szám nélküli munkalap";
+    return sheet.hidden ? `${alap} (rejtett)` : alap;
+  };
+  const nevekAhol = (ok: PackageBlockReason): string =>
+    visszatarto
+      .filter((tetel) => tetel.reason === ok)
+      .map((tetel) => nev(tetel.sheet))
+      .join(", ");
+
+  const reszek: string[] = [];
+  const lezaratlan = nevekAhol("not-closed");
+  if (lezaratlan)
+    reszek.push(
+      `Nincs lezárva: ${lezaratlan}. Zárd le a lapot, vagy ha nem ide tartozik, vedd le a hibajegyről.`,
+    );
+  const peldanytalan = nevekAhol("no-issued-sheet");
+  if (peldanytalan)
+    reszek.push(
+      `Le van zárva, de a kiadott munkalap hiányzik: ${peldanytalan}. ` +
+        "Ezt lezárással nem lehet pótolni, szólj a fejlesztésnek.",
+    );
+
+  return [
+    "A hibajegy dokumentumcsomagja nem adható át, amíg a munkalapjai nincsenek rendben.",
+    ...reszek,
+  ].join(" ");
 }

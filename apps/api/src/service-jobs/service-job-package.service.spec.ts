@@ -25,6 +25,15 @@ const PARTNER_A = {
   supplierId: null,
 } as AuthenticatedUser;
 
+/*
+  LEZARVA: a meglevo allitasok lapjai MIND zartak, es ez nem kenyelem.
+  Mindegyiknek van KIADOTT PELDANYA, ami a lezarasi tranzakcioban keletkezik --
+  egy nyitott verzio mellett tehat olyan allapotot allitanank elo, ami a
+  valosagban nem all elo. A csomag-kapu allitasai a sajat lapjaikat maguk
+  allitjak be.
+*/
+const LEZARVA = new Date("2026-09-16T12:00:00Z");
+
 function job(overrides: Record<string, unknown> = {}) {
   return {
     id: "job-a",
@@ -104,14 +113,16 @@ describe("elkészült hibajegy dokumentumcsomagja", () => {
       worksheets: [
         {
           id: "visible",
+          number: "visible".toUpperCase(),
           hiddenAt: null,
-          versions: [{ id: "visible-version" }],
+          versions: [{ id: "visible-version", closedAt: LEZARVA }],
           documents: [generated("visible", "munkalap-látható.pdf")],
         },
         {
           id: "hidden",
+          number: "hidden".toUpperCase(),
           hiddenAt: new Date("2026-09-16T13:00:00Z"),
-          versions: [{ id: "hidden-version" }],
+          versions: [{ id: "hidden-version", closedAt: LEZARVA }],
           documents: [generated("hidden", "munkalap-rejtett.pdf")],
         },
       ],
@@ -164,7 +175,7 @@ describe("elkészült hibajegy dokumentumcsomagja", () => {
           {
             id: "w1",
             hiddenAt: null,
-            versions: [{ id: "v1" }],
+            versions: [{ id: "v1", closedAt: LEZARVA }],
             /*
               A LEZARASKORI ALL ELOL a listaban -- szandekosan. Ha a valasztas
               "az elso talalat" lenne, EZ a sorrend adna a rossz lapot, es a
@@ -223,5 +234,129 @@ describe("elkészült hibajegy dokumentumcsomagja", () => {
       () => service.download("job-a", PARTNER_A),
       (error: unknown) => error instanceof BadRequestException,
     );
+  });
+});
+
+/**
+ * A SZABALYT a `common/worksheet-signature-gate.spec.ts` meri; EZEK a
+ * BEKOTEST. A ketto kulon romolhat el, es a szakadas NEMA: a tiszta fuggveny
+ * zolden all, kozben a csomag ugyanugy szo nelkul kihagyja a lapot.
+ */
+describe("a csomag nem adhato at lezaratlan lappal", () => {
+  const lap = (reszek: Record<string, unknown>) => ({
+    id: "ws",
+    number: "BIO-2026-100",
+    hiddenAt: null,
+    versions: [{ id: "v", closedAt: LEZARVA }],
+    documents: [
+      {
+        id: "doc",
+        worksheetVersionId: "v",
+        type: "GENERATED_SHEET",
+        fileName: "munkalap.pdf",
+        contentType: "application/pdf",
+        content: Buffer.from("%PDF-1.4\nsheet"),
+        storageKey: null,
+      },
+    ],
+    ...reszek,
+  });
+
+  it("a lezaratlan lap megallitja a csomagot, es MEGNEVEZI", async () => {
+    const service = serviceWith(
+      job({
+        worksheets: [
+          lap({ versions: [{ id: "v", closedAt: null }], documents: [] }),
+        ],
+      }),
+    );
+
+    await assert.rejects(
+      () => service.download("job-a", INTERNAL),
+      (hiba: unknown) => {
+        const uzenet = (hiba as { message: string }).message;
+        assert.match(uzenet, /Nincs lezárva: BIO-2026-100/);
+        return true;
+      },
+    );
+  });
+
+  /**
+   * A MASIK OK MAS MONDATOT KAP, mert a TEENDO mas. Egy lezart lapot nem lehet
+   * "lezarni" -- ha a mondat oda kuldene, a kezelo olyat probalna, ami nem
+   * letezik.
+   */
+  it("a LEZART, de peldany nelkuli lap NEM lezarasra kuld", async () => {
+    const service = serviceWith(job({ worksheets: [lap({ documents: [] })] }));
+
+    await assert.rejects(
+      () => service.download("job-a", INTERNAL),
+      (hiba: unknown) => {
+        const uzenet = (hiba as { message: string }).message;
+        assert.match(uzenet, /kiadott munkalap hiányzik: BIO-2026-100/);
+        assert.doesNotMatch(uzenet, /Nincs lezárva/);
+        assert.doesNotMatch(uzenet, /Zárd le a lapot/);
+        return true;
+      },
+    );
+  });
+
+  /**
+   * A HATOKOR-DONTES BEKOTVE: a partner csomagjaba a rejtett lap amugy sem
+   * kerul bele, tehat nem is tarthatja vissza. A belso hivot igen.
+   */
+  it("a rejtett lezaratlan lap a partnernek ATENGEDI a csomagot, a belsosnek nem", async () => {
+    const data = job({
+      worksheets: [
+        lap({
+          id: "rejtett",
+          hiddenAt: new Date("2026-09-16T13:00:00Z"),
+          versions: [{ id: "v", closedAt: null }],
+          documents: [],
+        }),
+      ],
+    });
+
+    const csomag = await serviceWith(data).download("job-a", PARTNER_A);
+    assert.ok(csomag.bytes.length > 0);
+
+    await assert.rejects(
+      () => serviceWith(data).download("job-a", INTERNAL),
+      /Nincs lezárva/,
+    );
+  });
+
+  /**
+   * ISMERT POZITIV KONTROLL A BEKOTESRE. Enelkul a fenti harom allitas akkor
+   * is zold lenne, ha a kapu MINDIG dobna -- es a csomag sosem allna elo.
+   */
+  /**
+   * LAP NELKULI JEGY ATMEGY A KAPUN -- MEGNEVEZVE.
+   *
+   * A `download()` utjat egy regebbi allitas is bejarja ("munkalap nelkuli
+   * elkeszult hibajegybol is elkeszul a hibajegy PDF-je"), es az a kapu hibas
+   * bevezetesetol pirosodna is. De a NEVE nem errol szol, tehat egy kesobbi
+   * olvaso nem tudna, hogy ezt is vedi. Ez az allitas kimondja.
+   *
+   * A csapda, ami ellen all: jegy es lap kozott LEFT JOIN van, es egy
+   * `closedAt IS NULL` alaku szuro a LAP NELKULI jegyet is beleszamolja.
+   * Acrobot eles meresen pont ebbe futott bele.
+   */
+  it("lap nelkuli jegy csomagja tovabbra is elkeszul", async () => {
+    const csomag = await serviceWith(job({ worksheets: [] })).download(
+      "job-a",
+      INTERNAL,
+    );
+    assert.ok(
+      csomag.bytes.includes(Buffer.from("hibajegy-SRV-2026-00482.pdf")),
+    );
+  });
+
+  it("rendben levo lappal a csomag tovabbra is elkeszul", async () => {
+    const csomag = await serviceWith(job({ worksheets: [lap({})] })).download(
+      "job-a",
+      INTERNAL,
+    );
+    assert.ok(csomag.bytes.includes(Buffer.from("munkalap.pdf")));
   });
 });

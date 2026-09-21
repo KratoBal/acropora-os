@@ -134,6 +134,105 @@ export function worksheetsBlockingTicketClose(input: {
   return blocking;
 }
 
+/**
+ * === A HARMADIK KAPU: A CSOMAG ATADASA (80657ab7) ===
+ *
+ * Balazs dontese, 2026-09-21 11:56:49 UTC (Discord, fo csatorna, message_id
+ * 1551562845588820019), szo szerint: „nem adunk at addig hibajegyet amig
+ * nincs lezarva minden munkalap".
+ *
+ * A FAJL NEVE SZUKEBB, MINT A TARTALMA, es ez tudatos: ide azok a szabalyok
+ * kerulnek, amik a jegy es a lapjai VISZONYAROL szolnak. Harom feltetel, ket
+ * kulonbozo muveleten (allapot-lepes, csomag-atadas). Egy kulon fajl
+ * ugyanazt a hibat hozna, amit a modul fejlece mar egyszer megnevez: a
+ * szigoritas az egyik oldalon csendben tenne uresse a masikat.
+ *
+ * === AMIT EZ A KAPU MEGSZUNTET ===
+ *
+ * A csomag ma SZO NELKUL kihagyja azt a lapot, aminek a jelenlegi verziojahoz
+ * nincs kiadott peldanya (`service-job-package.service.ts`, a `download()`
+ * ciklusaban: `if (!document) continue;`). Balazs panasza 2026-09-18-an nem a
+ * hianyzo lap volt, hanem hogy nem tudta, MIERT hianyzik.
+ *
+ * === KET OK, NEM EGY -- ES EZT MERNI KELLETT, NEM KIOLVASNI A SZOBOL ===
+ *
+ * A „lezaratlan" szo egyetlen feltetelt sugall. A kodban KETTO all, es a
+ * TEENDOJUK KULONBOZIK:
+ *
+ *   not-closed        a jelenlegi verzio `closedAt`-ja ures. A kezelo MEG
+ *                     TUDJA oldani: le kell zarni a lapot.
+ *   no-issued-sheet   le VAN zarva, de a verziohoz nincs kiadott peldany. Ezt
+ *                     a kezelo NEM tudja megoldani lezarassal -- a lap mar
+ *                     zart --, ez belso hiany, potlast igenyel.
+ *
+ * MA A KETTO EGYUTT JAR, DE NEM UGYANAZ, ES VAN RA MERESUNK: a kiadott lap
+ * eloallitasa a lezarasi tranzakcion BELUL fut, tehat uj lapnal nem valhatnak
+ * szet. A kepesseg viszont 2026-09-18 14:09:31-kor olvadt be (#847), es
+ * akkor az eles adatbazisban NEGY lezart munkalap allt NULLA kiadott
+ * peldannyal -- pontosan ezert kellett a `worksheet-sheet-backfill`. Vagyis a
+ * ket halmaz harom napja bizonyithatoan kulonbozott.
+ *
+ * Egy kozos „lezaratlan" ok tehat NEGY lapra azt allitotta volna, hogy nincs
+ * lezarva, holott zart. A kezelo lezarni probalta volna, amit nem lehet.
+ *
+ * === A KET OK KIZARJA EGYMAST, ES EZ IS DONTES ===
+ *
+ * Egy le nem zart lapnak DEFINICIO SZERINT nincs kiadott peldanya. Ha
+ * mindkettot jelentenenk, egy okrol ket mondat menne ki, es a masodik
+ * felreviszi a kezelot. A `no-issued-sheet` tehat csak a MAR ZART lapokra
+ * ertelmes.
+ *
+ * === A REJTETT LAP ITT MASKENT SZAMIT, MINT A LEZARASI KAPUNAL ===
+ *
+ * A lezarasi kapunal a rejtes NEM mentesit (lasd fent). Itt IGEN, de csak
+ * partner-hivonal -- es nem engedmeny, hanem a csomag sajat hatokore: a
+ * `download()` elso sora kihagyja a rejtett lapokat a partner csomagjabol
+ * (`scope.kind !== "internal" && worksheet.hiddenAt !== null`). Egy kapu, ami
+ * olyan lapon all meg, ami a hivo csomagjaba amugy sem kerulne bele, olyat
+ * kerne szamon, amit a hivo nem is lathat.
+ *
+ * A KAPU TEHAT PONTOSAN AZT A HALMAZT NEZI, AMIT A CSOMAG OSSZERAKNA. Ez nem
+ * stilus: igy nem keletkezik MASODIK fogalom arrol, hogy mi kerul a csomagba.
+ */
+export type PackageBlockReason = "not-closed" | "no-issued-sheet";
+
+/** Egy munkalap annyi allapota, amennyi a csomag-kapuhoz kell. */
+export interface PackageWorksheetState {
+  id: string;
+  /** A lap szama, vagy `null`. A mondat ezt nevezi meg. */
+  number: string | null;
+  hidden: boolean;
+  /** A JELENLEGI verzio le van-e zarva (`closedAt`). */
+  closed: boolean;
+  /** Van-e a JELENLEGI verziohoz kiadott peldany. */
+  hasIssuedSheet: boolean;
+}
+
+export interface BlockingPackageWorksheet {
+  sheet: PackageWorksheetState;
+  reason: PackageBlockReason;
+}
+
+/**
+ * MELYIK MUNKALAP TARTJA VISSZA A CSOMAG ATADASAT.
+ *
+ * A `scope` NEM jogosultsagi dontes: azt mondja meg, MELYIK lapok kerulnenek
+ * bele ennek a hivonak a csomagjaba. A jogosultsagot a hivo mar elvegezte.
+ */
+export function worksheetsBlockingPackage(input: {
+  worksheets: readonly PackageWorksheetState[];
+  scope: "internal" | "partner";
+}): BlockingPackageWorksheet[] {
+  const blocking: BlockingPackageWorksheet[] = [];
+  for (const sheet of input.worksheets) {
+    if (input.scope === "partner" && sheet.hidden) continue;
+    if (!sheet.closed) blocking.push({ sheet, reason: "not-closed" });
+    else if (!sheet.hasIssuedSheet)
+      blocking.push({ sheet, reason: "no-issued-sheet" });
+  }
+  return blocking;
+}
+
 export type WorksheetSignatureCheck =
   { ok: true } | { ok: false; reason: "no-ticket" };
 
