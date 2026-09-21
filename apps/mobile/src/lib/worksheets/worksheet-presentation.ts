@@ -1,7 +1,7 @@
 // RELATÍV ÚT, NEM `@/`: a teszt-fordító nem ismeri az aliast
 // (`tsconfig.test.json`-ban szándékosan nincs `paths`).
 import type { UserRole } from "../auth/types";
-import { atadasAllapota, MEG_NALUNK_VAN } from "./worksheet-handover";
+import { atadasAllapota, ATADAS_NINCS_ROGZITVE } from "./worksheet-handover";
 import type { WorksheetLineKind } from "./worksheet-line-kind";
 
 /**
@@ -267,7 +267,7 @@ export function worksheetDetailRows(
       ? [formatWorksheetDate(atadas.mikor), clean(atadas.ki)]
           .filter(Boolean)
           .join(" · ")
-      : MEG_NALUNK_VAN,
+      : ATADAS_NINCS_ROGZITVE,
   });
 
   /**

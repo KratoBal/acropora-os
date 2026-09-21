@@ -1177,6 +1177,7 @@ export class ServiceJobsRepository {
       id: string;
       number: string | null;
       hiddenAt: Date | null;
+      handedOverAt: Date | null;
       versions: { status: WorksheetVersionStatus }[];
     }[]
   > {
@@ -1187,6 +1188,7 @@ export class ServiceJobsRepository {
         id: true,
         number: true,
         hiddenAt: true,
+        handedOverAt: true,
         versions: {
           orderBy: { version: "desc" },
           take: 1,

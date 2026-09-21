@@ -505,9 +505,13 @@ describe("worksheetDetailRows és az átadás", () => {
     return sorok.find((sor) => sor.label === "Átadás");
   }
 
-  it("átadás nélkül kimondja, hogy az eszköz még nálunk van", () => {
+  /*
+    A FELIRAT A JELOLES HIANYAT MONDJA KI, NEM A GEP HELYET: helyszini
+    munkanal a "meg nalunk van" hamis lenne, mert a gep el sem jott.
+  */
+  it("átadás nélkül kimondja, hogy a jelölés hiányzik", () => {
     const sor = atadasSor(worksheetDetailRows(worksheet));
-    assert.equal(sor?.value, "Az eszköz még nálunk van");
+    assert.equal(sor?.value, "Átadás nincs rögzítve");
   });
 
   it("átadás után a dátum és az átadó neve áll ott", () => {
@@ -520,7 +524,7 @@ describe("worksheetDetailRows és az átadás", () => {
     );
     assert.ok(sor?.value.includes("Kiss Péter"));
     assert.ok(sor?.value.includes("2026"));
-    assert.ok(!sor?.value.includes("még nálunk van"));
+    assert.ok(!sor?.value.includes("nincs rögzítve"));
   });
 
   /*
@@ -536,7 +540,7 @@ describe("worksheetDetailRows és az átadás", () => {
         handedOverByName: null,
       }),
     );
-    assert.ok(!sor?.value.includes("még nálunk van"));
+    assert.ok(!sor?.value.includes("nincs rögzítve"));
     assert.ok(sor?.value.includes("2026"));
   });
 });

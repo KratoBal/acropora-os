@@ -739,12 +739,17 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
         {worksheet.createdByName ?? "—"}
       </ServiceContextRow>
       {/*
-        AZ ÁTADÁS: NÁLUNK VAN-E MÉG AZ ÜGYFÉL ESZKÖZE.
+        AZ ÁTADÁS: RÖGZÍTETTE-E VALAKI, HOGY A LAP ÚTJA LEZÁRULT.
 
         A "Még nálunk van" mondat 2026-09-07-ig MINDEN lapon állt, mert a
         mezőnek nem volt írója -- ezért került ki. Mostantól van írója (Balázs
-        döntése, 2026-09-21), tehát a mondat visszatérhet, és MOST már igazat
-        mond mind a két ágon.
+        döntése, 2026-09-21), tehát a hiány ága visszatérhet.
+
+        DE NEM UGYANAZZAL A SZÖVEGGEL, és ez a lényeg: a "Még nálunk van" a GÉP
+        HELYÉT állítja, amit nem tárolunk, és helyszíni munkánál egyenesen
+        hamis, mert a gép el sem jött. Amit tudunk, az a jelölés hiánya. Ezzel
+        a szöveggel a mondat a helyszíni esetben is igaz marad -- különben
+        újraépítenénk pontosan azt a hibát, amit két hete kiszedtünk.
 
         A NÉV A DÁTUM MELLETT ÁLL, DE NEM FELTÉTELE: egy azóta törölt kolléga
         neve eltűnik (`onDelete: SetNull`), az átadás ténye nem. Ha a kettőt
@@ -763,7 +768,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
             className="font-normal text-muted"
             data-testid="munkalap-atadas"
           >
-            Még nálunk van
+            Átadás nincs rögzítve
           </span>
         )}
       </ServiceContextRow>
