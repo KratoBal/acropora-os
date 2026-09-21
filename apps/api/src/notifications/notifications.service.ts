@@ -1,13 +1,32 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 
 import { APNS_SENDING, type ApnsSending } from "./apns.sender.js";
-import { DeviceTokenRepository } from "./device-token.repository.js";
+import {
+  DeviceTokenRepository,
+  type DevicePlatformName,
+  type DeviceTokenRecipient,
+} from "./device-token.repository.js";
+import { FCM_SENDING, type FcmSending } from "./fcm.sender.js";
 import {
   NotificationLogRepository,
   type NotificationAttempt,
 } from "./notification-log.repository.js";
 
 /** Hany ertesites ment ki, hany eszkoz-token evult el, es hany bukott el. */
+/**
+ * AMIT EGY KULDO UT VALASZOL, PLATFORMTOL FUGGETLENUL.
+ *
+ * Az `ApnsResult` es az `FcmResult` ALAKJA MA AZONOS, es ez nem veletlen: a
+ * kozos torzsnek harom dologra van szuksege (sikerult-e, el kell-e dobni a
+ * tokent, es mi az oka), es a ket protokoll kulonbsegei ez alatt maradnak.
+ *
+ * KULON NEVET KAPOTT, hogy a torzs NE az egyik protokoll tipusan alljon: ha az
+ * Apple valasza egyszer bovul, az nem szabad, hogy a Google-ag forditasat
+ * torje el -- es forditva.
+ */
+export type PushOutcome =
+  { ok: true } | { ok: false; retired: boolean; reason: string };
+
 export interface AssignmentSummary {
   sent: number;
   retired: number;
@@ -60,6 +79,7 @@ export class NotificationsService {
     private readonly deviceTokens: DeviceTokenRepository,
     @Inject(APNS_SENDING) private readonly sender: ApnsSending,
     private readonly log: NotificationLogRepository,
+    @Inject(FCM_SENDING) private readonly fcm: FcmSending,
   ) {}
 
   /**
@@ -206,41 +226,78 @@ export class NotificationsService {
   }): Promise<AssignmentSummary> {
     const empty: AssignmentSummary = { sent: 0, retired: 0, failed: 0 };
     if (input.userIds.length === 0) return empty;
-    if (!this.sender.configured()) return empty;
 
     /**
-     * `IOS`, MERT EZ AZ APPLE KULDO -- es a platform itt all, nem a taroloban.
+     * A KET KULDO UT, MEGNEVEZVE -- ES A PLATFORM ITT ALL, NEM A TAROLOBAN.
      *
-     * A `sender` ebben az osztalyban az APNs kliens, tehat a kerdes, amire ez a
-     * sor valaszol, nem az, hogy "kit lehet elerni", hanem hogy "kit lehet
-     * elerni EZEN AZ UTON". Egy androidos token a valaszban azt jelentene, hogy
-     * egy Google-tokent kuldunk az Apple-nek: az elutasitana, a lenti `retired`
-     * ag pedig TOROLNE a sort -- vagyis a telefon csendben lekerulne az
-     * ertesitesekrol, anelkul hogy valaha kaphatott volna egyet.
+     * A `recipients` kerdese nem az, hogy „kit lehet elerni", hanem hogy „kit
+     * lehet elerni EZEN AZ UTON". Egy androidos token az Apple valaszaban azt
+     * jelentene, hogy egy Google-tokent kuldunk az Apple-nek: az elutasitana, a
+     * lenti `retired` ag pedig TOROLNE a sort -- a telefon csendben lekerulne az
+     * ertesitesekrol, anelkul hogy valaha kaphatott volna egyet. Ezert kap minden
+     * ut sajat platformot ES sajat kuldot.
      *
-     * AMIKOR A MASODIK KULDO MEGJON (Google fele), az NEM ezt a sort irja at,
-     * hanem sajat `deliver` hivassal jon, sajat platformmal. A ket kuldot
-     * ugyanaz a harom szabaly koti (sor nelkuli kuldes, elavult token
-     * nyugdijazasa, naplozas bukas eseten is), es azok mar ebben a kozos
-     * torzsben allnak.
+     * A NEM BEALLITOTT UT KIMARAD, nem hibazik: egy fejlesztoi gepen egyik kulcs
+     * sincs meg, es ket eles telepites kozul az egyik eloszor csak az egyiket
+     * kapja meg. Ha EGYIK ut sincs beallitva, a korabbi viselkedes all: nem
+     * tortenik semmi.
      */
-    const recipients = await this.deviceTokens.recipients(input.userIds, "IOS");
-    if (recipients.length === 0) return empty;
+    const routes: {
+      platform: DevicePlatformName;
+      send: (recipient: DeviceTokenRecipient) => Promise<PushOutcome>;
+    }[] = [];
+    if (this.sender.configured())
+      routes.push({
+        platform: "IOS",
+        send: (recipient) =>
+          this.sender.send({
+            deviceToken: recipient.token,
+            // AZ APNS-TOPIC AZ APPLE-UT SAJATJA: a Google oldalan a cimzettet
+            // maga a token azonositja, csomagnev nelkul.
+            bundleId: recipient.bundleId,
+            title: input.title,
+            body: input.body,
+            data: input.data,
+          }),
+      });
+    if (this.fcm.configured())
+      routes.push({
+        platform: "ANDROID",
+        send: (recipient) =>
+          this.fcm.send({
+            deviceToken: recipient.token,
+            title: input.title,
+            body: input.body,
+            data: input.data,
+          }),
+      });
+    if (routes.length === 0) return empty;
 
-    const results = await Promise.all(
-      recipients.map(async (recipient) => {
-        const result = await this.sender.send({
-          deviceToken: recipient.token,
-          bundleId: recipient.bundleId,
-          title: input.title,
-          body: input.body,
-          data: input.data,
-        });
-        if (!result.ok && result.retired)
-          await this.deviceTokens.retire(recipient.token);
-        return { recipient, result };
-      }),
-    );
+    /**
+     * A KET UT EREDMENYE EGY LISTABA FUT OSSZE, ES EZ SZANDEKOS: a naplo EGY
+     * bejegyzest kap ertesitesenkent, nem utankent egyet. Aki holnap megkerdezi,
+     * hogy szoltunk-e a kollegának, egy sort akar olvasni, nem kettot, amik
+     * kulon-kulon feligazak.
+     */
+    const results = (
+      await Promise.all(
+        routes.map(async (route) => {
+          const recipients = await this.deviceTokens.recipients(
+            input.userIds,
+            route.platform,
+          );
+          return Promise.all(
+            recipients.map(async (recipient) => {
+              const result = await route.send(recipient);
+              if (!result.ok && result.retired)
+                await this.deviceTokens.retire(recipient.token);
+              return { recipient, result };
+            }),
+          );
+        }),
+      )
+    ).flat();
+    if (results.length === 0) return empty;
 
     const summary = results.reduce<AssignmentSummary>(
       (totals, { result }) => ({
