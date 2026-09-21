@@ -97,7 +97,12 @@ describe("a nyito ertesitese levelben", () => {
       { kind: "sent" },
     );
     assert.equal(kuldott.length, 1);
-    assert.equal(kuldott[0]?.to, "nyito@partner.hu");
+    /*
+      A CIMZETT-MEZO 2026-09-21 ota TOMB (a lezart hibajegy tobb cimzettnek
+      megy). EZ AZ UT valtozatlanul EGY cimzettet ismer, es az allitas epp ezt
+      rogziti: a nyito, egyedul -- nem csak azt, hogy "benne van".
+    */
+    assert.deepEqual(kuldott[0]?.to, ["nyito@partner.hu"]);
     assert.equal(naplo.length, 1);
     assert.ok(!naplo[0]?.note.includes("@"));
   });

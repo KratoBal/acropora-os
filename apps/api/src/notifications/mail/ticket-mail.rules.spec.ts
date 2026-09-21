@@ -116,9 +116,14 @@ describe("kinek megy level, es mikor nem", () => {
 
 describe("a naplo-sor nem szivarogtat cimet", () => {
   /**
-   * A JEGY NAPLOJA ATMEGY A PARTNER PORTALRA (fb945858 merese). Egy cim, ami
-   * egyszer bekerul egy naplo szovegebe, onnantol minden jovobeli felulettel
-   * egyutt utazik, es senki nem fogja megkerdezni, szabad-e kiirni.
+   * A NAPLO-SOR CIMET NEM TARTALMAZ -- de NEM azert, mert a partner ma latna.
+   * Ma nem latja (merve 2026-09-22: a partner sajat vetitest kap, amiben a
+   * `note` mezo nincs benne).
+   *
+   * AZ INDOK, ES EZ NEM AVUL EL: ennek a mezonek a lathatosaga egy nap alatt
+   * KETSZER valtozott. Egy cim, ami egyszer bekerul egy naplo szovegebe,
+   * onnantol minden jovobeli felulettel egyutt utazik, es senki nem fogja
+   * megkerdezni, szabad-e kiirni.
    */
   it("a sikeres kuldes sora sem cimet, sem nevet nem tartalmaz", () => {
     const sor = mailAuditNote({

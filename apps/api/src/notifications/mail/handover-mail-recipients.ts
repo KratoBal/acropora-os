@@ -97,10 +97,18 @@ export function handoverMailDecision(input: {
 /**
  * MIT MOND A NAPLO, ES MIT NEM.
  *
- * A JEGY NAPLOJA ATMEGY A PARTNER PORTALRA (fb945858 merese, 2026-09-21: a
- * `/service/jobs/{id}` valasza szo szerint ugyanaz a partnernek es a belsos
- * felhasznalonak). A szomszed `mailAuditNote` ezert CIMET NEM IR KI, csak a
- * tenyt -- es ez a fuggveny ugyanazt a dontest koveti.
+ * A SZOMSZED `mailAuditNote` CIMET NEM IR KI, csak a tenyt, es ez a fuggveny
+ * ugyanazt a dontest koveti. AZ INDOK VISZONT NEM AZ, AMIT ELOSZOR IDE IRTAM.
+ *
+ * Atvettem az fb945858 mereset ("a valasz szo szerint ugyanaz a partnernek es
+ * a belsosnek"), es UGYANAZON A NAPON mar nem volt igaz: a
+ * `partnerServiceJobDetail` sajat alakot vetit, amiben a `note` NINCS benne.
+ * Visszamerve 2026-09-22-en, a fo agon.
+ *
+ * A HELYES INDOK: ennek a mezonek a lathatosaga egy nap alatt KETSZER
+ * valtozott. Egy cim, ami egyszer bekerul egy naplo szovegebe, onnantol
+ * minden jovobeli feluletnel egyutt utazik -- fuggetlenul attol, hogy ma
+ * melyik alak megy ki.
  *
  * AMI ITT TOBB: a DARABSZAM. Egy cim nem kerul be, de az, hogy HANY cimzettnek
  * ment ki, a partnernek is a sajat kore -- es enelkul a "kiment" sor nem

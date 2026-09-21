@@ -10,10 +10,45 @@
  * kodolas, hibakodok), az az implementacioban marad.
  */
 
+/**
+ * EGY CSATOLMANY. A `bytes` MAR KESZ: ez a hatar nem allit elo semmit.
+ *
+ * A lezart hibajegy csomagjat a `ServiceJobPackageService` gyartja, es ez a
+ * felulet csak ATVESZI. Ha itt keletkezne, a levelkuldo hatara tudna a
+ * hibajegyekrol -- es a kovetkezo kuldes-fajta (munkalap, szamla) ujra
+ * kibontana ugyanezt.
+ */
+export interface MailAttachment {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly bytes: Uint8Array;
+}
+
 export interface OutgoingMail {
-  readonly to: string;
+  /**
+   * A CIMZETTEK. TOMB, NEM EGY CIM -- es a valtozas nem kenyelmi.
+   *
+   * A lezart hibajegy a HELYSZINT BIRTOKLOKNAK megy (Balazs specje,
+   * 2026-09-18), ami tobb fiok is lehet.
+   *
+   * ES AMIERT NEM A FEJLEC-INJEKCIO AZ INDOK -- EZT A KALIBRACIO MUTATTA MEG.
+   * Eloszor azt irtam ide, hogy egy osszefuzott listan az ellenorzes egyszer
+   * futna, es egy rossz cim a tobbi moge bujhatna. LEMERVE: NEM IGAZ. A
+   * `", "` mente osszefuzott szovegben a sortores MEGMARAD, tehat a
+   * `hasHeaderInjection` ugyanugy elkapja. A rontas, ami az egyenkenti
+   * ellenorzest osszefuzottre cserelte, ZOLD MARADT.
+   *
+   * AMIT A TOMB VALOBAN AD, es amire allitas is all:
+   *   - a DARABSZAM ismert (`to.length`), tehat az ures lista MEGFOGHATO,
+   *     es a naplo ki tudja irni, hany cimzettnek ment
+   *   - az ELVALASZTO a level epitojenel dol el, nem a hivonal -- egy hivo
+   *     nem adhat at vesszos szoveget, amit az epito EGY cimnek venne
+   */
+  readonly to: readonly string[];
   readonly subject: string;
   readonly text: string;
+  /** Ures vagy hianyzo lista mellett a level EGYRESZES marad. */
+  readonly attachments?: readonly MailAttachment[];
 }
 
 export interface MailSender {
