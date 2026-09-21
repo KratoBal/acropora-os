@@ -37,6 +37,13 @@ export interface UjJegyAllapot {
   originAssetId: string | null;
   customerId: string | null;
   departmentId: string | null;
+  /**
+   * A HELYSZINEN ALLO ESZKOZOK, AMIKROL A JEGY SZOL. Tobb is lehet.
+   *
+   * CSAK A GEP NELKULI UTON ERTELMES: gep mellol a jegy MAGAROL a geprol szol,
+   * es azt az `originAssetId` mondja meg.
+   */
+  assetIds: string[];
   /** A bejelentkezett felhasznalo, a muvelet-azonositohoz. */
   userId: string;
   openedAt: string;
@@ -53,6 +60,7 @@ export type UjJegyTorzs =
         originAssetId?: string;
         customerId?: string;
         departmentId?: string;
+        assetIds?: string[];
       };
     };
 
@@ -90,6 +98,27 @@ export function ujJegyTorzse(allapot: UjJegyAllapot): UjJegyTorzs {
       hiba: "Helyszínt csak partnerrel együtt lehet megadni.",
     };
 
+  /*
+    AZ ESZKOZ CSAK HELYSZINNEL EGYUTT ERVENYES, es ez a szerver HARMADIK orzoje
+    (`CreateServiceJobDto.assetIds`). A kert halmaz maga a HELYSZIN eszkozeibol
+    all -- helyszin nelkul a partner OSSZES eszkoze jonne szoba, amibol a
+    bejelento nem tud valasztani.
+
+    A KULON URES-SZURES NEM OVATOSSAG: a valaszto allapota egy tomb, es egy
+    torolt sor ures sztringet hagyhat benne. Egy ures azonosito a szerveren nem
+    letezo eszkozre mutatna, es a TELJES felvitel hasalna el rajta -- egy olyan
+    sor miatt, amit a szerelo mar levett.
+  */
+  const assetIds = allapot.assetIds
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+
+  if (assetIds.length > 0 && !departmentId)
+    return {
+      ok: false,
+      hiba: "Eszközt csak helyszínnel együtt lehet megadni.",
+    };
+
   const leiras = allapot.leiras.trim();
   const originAssetId = allapot.originAssetId?.trim() || null;
 
@@ -122,6 +151,13 @@ export function ujJegyTorzse(allapot: UjJegyAllapot): UjJegyTorzs {
         : {
             ...(customerId ? { customerId } : {}),
             ...(departmentId ? { departmentId } : {}),
+            /*
+              A GEPES UTON AZ `assetIds` SEM MEGY FEL, akkor sem, ha az allapot
+              hordozna. Ott a jegy MAGAROL a geprol szol, es azt az
+              `originAssetId` mondja meg -- egy melle tett lista ugyanazt az
+              eszkozt MASODSZOR is rakotne, mas jelentessel.
+            */
+            ...(assetIds.length ? { assetIds } : {}),
           }),
     },
   };
