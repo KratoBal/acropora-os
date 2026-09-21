@@ -560,3 +560,22 @@ export class SetWorksheetHiddenDto {
   @IsBoolean({ message: "A rejtés jelölése csak igen vagy nem lehet." })
   hidden!: boolean;
 }
+
+/**
+ * AZ ATADAS JELOLESE -- EGY UT, TORZSBEN KAPOTT JELOLOVEL.
+ *
+ * UGYANAZ AZ ALAK, MINT A REJTESNEL, ES AZ INDOK IS UGYANAZ: a felulet ne
+ * talalgasson. Ha a jelolo a torzsben all, a gomb MEGMONDJA, melyik iranyba
+ * megy, es ket egymast koveto kattintas nem fordit oda-vissza egy allapotot,
+ * amit kozben valaki mas is allithatott.
+ *
+ * A VISSZAVONAS TUDATOSAN BENNE VAN, es a ket tevedes ara nem egyforma:
+ * egy TEVEDESBOL bejelolt atadas engedne lezarni a jegyet, holott az eszkoz
+ * meg nalunk van -- ez NEMA. Egy tevedesbol visszavont atadas megallitja a
+ * lezarast -- ez HANGOS, valaki azonnal szol. A visszavonhatatlan alak tehat
+ * a nemabb hibat teszi javithatatlanna.
+ */
+export class SetWorksheetHandedOverDto {
+  @IsBoolean({ message: "Az átadás jelölése csak igen vagy nem lehet." })
+  handedOver!: boolean;
+}

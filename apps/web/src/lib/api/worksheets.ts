@@ -196,6 +196,20 @@ export const worksheetsApi = {
       body: JSON.stringify({ hidden }),
     });
   },
+  /**
+   * AZ ATADAS JELOLESE VAGY VISSZAVONASA -- EGY HIVAS KET IRANYRA.
+   *
+   * Ugyanaz az alak, mint a rejtesnel, es ugyanabbol az okbol: a jelolo a
+   * TORZSBEN megy, tehat a gomb megmondja, melyik iranyba indul. Egy
+   * ALLAPOT-FORDITO ut (ugyanaz a hivas oda-vissza) ket egymast koveto
+   * kattintasnal vagy ket kezelonel csendben az ellenkezojet csinalna.
+   */
+  setHandedOver(token: string, id: string, handedOver: boolean) {
+    return apiRequest<WorksheetDetail>(worksheetPath(id, "/handover"), token, {
+      method: "POST",
+      body: JSON.stringify({ handedOver }),
+    });
+  },
   close(token: string, id: string) {
     return apiRequest<WorksheetDetail>(worksheetPath(id, "/close"), token, {
       method: "POST",

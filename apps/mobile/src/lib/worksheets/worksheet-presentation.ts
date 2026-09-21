@@ -1,6 +1,7 @@
 // RELATÍV ÚT, NEM `@/`: a teszt-fordító nem ismeri az aliast
 // (`tsconfig.test.json`-ban szándékosan nincs `paths`).
 import type { UserRole } from "../auth/types";
+import { atadasAllapota, MEG_NALUNK_VAN } from "./worksheet-handover";
 import type { WorksheetLineKind } from "./worksheet-line-kind";
 
 /**
@@ -80,6 +81,14 @@ export interface WorksheetDetailLike {
    * sajat bemeneti tipus nem kerte.
    */
   serviceJob: { id: string; jobNumber: string } | null;
+  /**
+   * AZ ATADAS KET MEZOJE. `null`, amig nalunk van az eszkoz.
+   *
+   * A NEV KULON MEZO, NEM A DATUM RESZE: egy azota torolt kollega neve
+   * eltunik (`onDelete: SetNull`), az atadas tenye nem.
+   */
+  handedOverAt: string | null;
+  handedOverByName: string | null;
   currentVersion: {
     unitName: string | null;
     issueDate: string | null;
@@ -236,6 +245,30 @@ export function worksheetDetailRows(
 
   const createdBy = clean(worksheet.createdByName);
   if (createdBy) rows.push({ label: "Felvette", value: createdBy });
+
+  /**
+   * AZ ATADAS SORA MINDIG OTT ALL -- A MASODIK KIMONDOTT HIANY EBBEN A
+   * FUGGVENYBEN, a hibajegy melle.
+   *
+   * Az indok ugyanaz: a hiany itt nem kitoltetlen mezo, hanem a lap eletenek
+   * nagy resze. Es van kovetkezmenye: nalunk levo eszkoz mellett a hibajegy
+   * nem zarhato le (Balazs dontese, 2026-09-21 09:39, "ne zarhassuk le amig
+   * nalunk van"). Aki csak azt latja, hogy a lezaras nem megy, nem tudja meg,
+   * mi hianyzik hozza.
+   *
+   * A MONDAT UGYANAZ, MINT A WEBEN. Ket felulet, egy allitas: ha csak az
+   * egyik mondana ki, ugyanarrol a lapról ket kulonbozo kep alakulna ki az
+   * irodaban es a helyszinen.
+   */
+  const atadas = atadasAllapota(worksheet);
+  rows.push({
+    label: "Átadás",
+    value: atadas.atadva
+      ? [formatWorksheetDate(atadas.mikor), clean(atadas.ki)]
+          .filter(Boolean)
+          .join(" · ")
+      : MEG_NALUNK_VAN,
+  });
 
   /**
    * A SOR NEM `if` MOGOTT ALL: a hiany is allitas. A szoveg a webes lape

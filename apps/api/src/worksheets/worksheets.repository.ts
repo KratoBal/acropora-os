@@ -54,6 +54,7 @@ import {
 import { worksheetSheetInput } from "./worksheet-sheet-mapping.js";
 import {
   toWorksheetDetail,
+  type WorksheetHandover,
   toWorksheetListItem,
   worksheetDetailInclude,
   worksheetSummaryInclude,
@@ -290,6 +291,20 @@ export class WorksheetsRepository extends Repository {
     await this.database.worksheet.update({
       where: { id },
       data: { hiddenAt, hiddenById: hiddenAt ? hiddenById : null },
+    });
+  }
+
+  /**
+   * AZ ATADAS IRASA. A KET MEZO EGYUTT MOZDUL, es ezt a TIPUS tartja, nem egy
+   * futasideju feltetel: a `WorksheetHandover` ket alakja kozul az egyik nevet
+   * ES datumot hoz, a masik egyiket sem. Fel-kitoltott allapot nem all elo.
+   */
+  async setHandedOver(id: string, handover: WorksheetHandover): Promise<void> {
+    await this.database.worksheet.update({
+      where: { id },
+      data: handover.handedOver
+        ? { handedOverAt: handover.at, handedOverById: handover.byUserId }
+        : { handedOverAt: null, handedOverById: null },
     });
   }
 

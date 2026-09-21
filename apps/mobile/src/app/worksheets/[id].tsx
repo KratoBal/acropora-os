@@ -25,6 +25,7 @@ import {
   setWorksheetAssignees,
   uploadWorksheetDocuments,
   closeWorksheet,
+  setWorksheetHandedOver,
 } from "@/lib/api/worksheets";
 import { ApiError, ApiNetworkError } from "@/lib/api/client";
 import { describeUploadFailure } from "@/lib/api/network-failure";
@@ -82,6 +83,13 @@ import {
   lezarasHibaUzenete,
   LEZARAS_TERERO_NELKUL,
 } from "@/lib/worksheets/worksheet-close";
+import {
+  atadasHibaUzenete,
+  ATADAS_TERERO_NELKUL,
+  canMarkWorksheetHandover,
+  handoverGombFelirata,
+  handoverKuldendoErtek,
+} from "@/lib/worksheets/worksheet-handover";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
@@ -295,6 +303,32 @@ export default function WorksheetDetailScreen() {
           : lezarasHibaUzenete(
               cause instanceof ApiError ? cause.message : null,
             ),
+      ),
+  });
+
+  /**
+   * AZ ATADAS JELOLESE A HELYSZINEN.
+   *
+   * Balazs dontese, 2026-09-21: a szerelo jeloli meg, amikor visszaadja a
+   * gepet. KULON LEPES, nem a lezaras melleke -- a reszletes indok a
+   * `worksheet-handover.ts` fejleceben all.
+   *
+   * TERERO NELKUL MEGTAGADVA, NEM SORBA TEVE, es ennek is ott all az indoka:
+   * a sorba tett valtozat a telefonon mar atadottnak mutatna a lapot, kozben
+   * a szerver -- es a ra epulo lezarasi kapu -- meg nem tudna rola.
+   */
+  const [atadasHiba, setAtadasHiba] = useState<string | null>(null);
+  const atadas = useMutation({
+    mutationFn: (handedOver: boolean) => setWorksheetHandedOver(id, handedOver),
+    onSuccess: async () => {
+      setAtadasHiba(null);
+      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+    },
+    onError: (cause) =>
+      setAtadasHiba(
+        cause instanceof ApiNetworkError
+          ? ATADAS_TERERO_NELKUL
+          : atadasHibaUzenete(cause instanceof ApiError ? cause.message : null),
       ),
   });
 
@@ -1422,6 +1456,46 @@ export default function WorksheetDetailScreen() {
                 */}
                 {lezarasHiba ? (
                   <Text style={styles.error}>{lezarasHiba}</Text>
+                ) : null}
+              </>
+            ) : null}
+
+            {/*
+              AZ ATADAS GOMBJA -- ES A LAP ALLAPOTA ITT SZANDEKOSAN NEM KAPU.
+
+              A lezarasnal `DRAFT` kell, az alairasnal `AWAITING_SIGNATURE`.
+              Az atadas MAS kerdesre valaszol: hol van a gep. Egy mar alairt
+              lap gepe ugyanugy allhat meg nalunk, es egy piszkozat gepet is
+              vissza lehet adni.
+
+              A FELIRAT MEGMONDJA, MELYIK IRANYBA INDUL. Egy allapot-fordito
+              "Atadas" felirat mellett a szerelo nem tudja, mit csinal a
+              koppintas -- es ket kezelonel csendben az ellenkezojet tenne.
+            */}
+            {canMarkWorksheetHandover({
+              worksheetsManage: capabilities.worksheetsManage,
+            }) ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={handoverGombFelirata(data.handedOverAt)}
+                  disabled={atadas.isPending}
+                  onPress={() =>
+                    atadas.mutate(handoverKuldendoErtek(data.handedOverAt))
+                  }
+                  style={({ pressed }) => [
+                    styles.signButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.signButtonText}>
+                    {atadas.isPending
+                      ? "Mentés…"
+                      : handoverGombFelirata(data.handedOverAt)}
+                  </Text>
+                </Pressable>
+                {atadasHiba ? (
+                  <Text style={styles.error}>{atadasHiba}</Text>
                 ) : null}
               </>
             ) : null}

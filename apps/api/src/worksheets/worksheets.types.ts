@@ -116,6 +116,12 @@ export const worksheetDetailInclude = {
     },
     orderBy: { createdAt: "asc" as const },
   },
+  /**
+   * AKI ATADTA A LAPOT AZ UGYFELNEK. A DATUM MELLE A NEV IS KELL (Balazs
+   * dontese, 2026-09-21): a `handedOverAt` onmagaban nem mondja meg, ki volt
+   * ott, es utolag nem potolhato.
+   */
+  handedOverBy: { select: { displayName: true as const } },
   documents: {
     where: { type: "PHOTO" as const },
     orderBy: [{ createdAt: "asc" as const }, { id: "asc" as const }],
@@ -313,6 +319,21 @@ export function currentVersionRow(
   return current;
 }
 
+/**
+ * AZ ATADAS ALLAPOTA, KET KULON ALAKKENT -- NEM KET FUGGETLEN MEZOKENT.
+ *
+ * A `handedOverAt` es a `handedOverById` EGYUTT JAR: egy datum nelkuli nev azt
+ * allitana, hogy valaki atadta a lapot, kozben nem adtuk at, egy nev nelkuli
+ * datum pedig epp azt veszitene el, amit Balazs kikotott (2026-09-21: "ha
+ * valaha irjuk, meg kell mondani, KI adta at").
+ *
+ * KET AG, KET ALAK, es a feltetel az OBJEKTUM FOLOTT all, nem benne. Egy
+ * `{ at: Date | null, byUserId: string | null }` alaku parameternel a forditó
+ * nem tudna szolni a fel-kitoltott esetrol; igy nem is eloallithato.
+ */
+export type WorksheetHandover =
+  { handedOver: true; at: Date; byUserId: string } | { handedOver: false };
+
 export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
   const current = currentVersionRow(row);
   return {
@@ -343,6 +364,15 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
       isActive: row.department.isActive,
     },
     createdByName: row.createdBy?.displayName ?? null,
+    /*
+      A NEV KULON AGON ALL A DATUMTOL, ES EZ NEM ELNEZES. Egy azota torolt
+      kollega neve `null` lesz (a semaban `onDelete: SetNull`), a datum viszont
+      megmarad -- az atadas MEGTORTENT, csak nem tudjuk, ki volt. A ket mezo
+      osszevonasa ("ha nincs nev, nem volt atadas") epp azt a lapot allitana
+      vissza nalunk levonek, amit visszaadtunk.
+    */
+    handedOverAt: row.handedOverAt?.toISOString() ?? null,
+    handedOverByName: row.handedOverBy?.displayName ?? null,
     serviceJob: row.serviceJob
       ? { id: row.serviceJob.id, jobNumber: row.serviceJob.jobNumber }
       : null,

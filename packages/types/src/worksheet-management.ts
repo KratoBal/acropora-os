@@ -499,6 +499,24 @@ export interface WorksheetDetail {
   department: WorksheetDepartmentSummary;
   createdByName: string | null;
   /**
+   * AZ ÁTADÁS: MIKOR KERÜLT VISSZA AZ ÜGYFÉL ESZKÖZE, ÉS KITŐL.
+   *
+   * `null`, amíg nem adtuk át -- és ez 2026-09-21-ig MINDEN lapra igaz volt,
+   * mert a mezőnek nem volt írója. A felület ezért nem is állíthatott róla
+   * semmit; a "Még nálunk van" mondat épp emiatt került ki 2026-09-07-én.
+   *
+   * A KÉT MEZŐ EGYÜTT JÁR, ÉS EZ BALÁZS DÖNTÉSE (2026-09-21 11:10): ha valaha
+   * írjuk, meg kell mondani, KI adta át. A dátumból ez nem vezethető le, és
+   * utólag nem pótolható.
+   *
+   * A NÉV MEGY KI, NEM AZ AZONOSÍTÓ: a képernyő nevet ír ki, és egy azonosító
+   * senkinek nem mond semmit. `null` akkor is lehet, ha a dátum megvan -- egy
+   * azóta törölt kolléga nem viszi magával az átadás tényét (`onDelete:
+   * SetNull` a sémában).
+   */
+  handedOverAt: string | null;
+  handedOverByName: string | null;
+  /**
    * A HIBAJEGY, AMI MÖGÖTT EZ A LAP ÁLL. `null`, amíg nincs.
    *
    * NEM HIÁNY, HANEM AZ EGYIK RENDES ÚT: a lap keletkezhet hibajegy nélkül
