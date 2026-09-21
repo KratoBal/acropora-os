@@ -30,7 +30,10 @@ import { naploSor } from "./naplo-sor.js";
   allitast szandekosan NEM vettem ki: az a MONDATOT ellenorzi, a tipus a
   BEMENETET.
 */
-const status = (isCreation: boolean) =>
+const status = (
+  isCreation: boolean,
+  partnerStatusLabel = "Feldolgozás alatt",
+) =>
   ({
     kind: "status",
     at: "2026-09-20T08:00:00.000Z",
@@ -38,6 +41,7 @@ const status = (isCreation: boolean) =>
     event: {
       id: "e1",
       isCreation,
+      partnerStatusLabel,
       actorName: "Kiss Márta",
       createdAt: "2026-09-20T08:00:00.000Z",
     },
@@ -45,30 +49,63 @@ const status = (isCreation: boolean) =>
 
 describe("a partner naplósora", () => {
   /**
-   * A LEGFONTOSABB ÁLLÍTÁS: A BELSŐ ÁLLAPOT NEVE NEM KERÜL A SORBA.
+   * A SOR A KAPOTT PARTNERI FELIRATOT NEVEZI MEG -- MIND A KÉT ÁGON (147d9a1d).
    *
-   * A nyolc belső állapot az, amit a partner NEM lát -- a szerver neki külön,
-   * négyértékű állapotot és saját feliratot küld. A napló-bejegyzés viszont a
-   * belső értéket hordozza, tehát egy gondatlan sor kiírná.
+   * A napló-esemény 2026-09-21 délután óta viszi a négyértékű partneri
+   * feliratot. Enélkül ez a sor csak annyit tudott mondani, hogy „az állapot
+   * változott", de nem, hogy MIRE.
    *
-   * MI PIROSÍT: bármelyik belső címke beírása a mondatba. Kalibrálva:
+   * A KELETKEZÉS ÁGA IS MÉRVE, és ez nem felesleges: ma ott mindig „Új" áll (a
+   * jegynek egyetlen létrehozó útja van, `NEW` állapottal). Egy beégetett szó
+   * ugyanott NÉMÁN tévedne, ha ez egyszer megváltozik.
+   */
+  it("megnevezi a kapott partneri feliratot, létrejövéskor is", () => {
+    for (const kezdo of [true, false])
+      assert.ok(
+        naploSor(status(kezdo, "Lezárva")).includes("Lezárva"),
+        `a sor nem nevezi meg az állapotot (isCreation=${kezdo})`,
+      );
+  });
+
+  /**
+   * ÉS VISSZAFELÉ: A FÜGGVÉNY NEM ÍR A MONDATBA BELSŐ CÍMKÉT.
+   *
+   * MI VÁLTOZOTT A HATÓKÖRÉN (2026-09-21): amíg a sor semmilyen állapotot nem
+   * nevezett meg, ez az állítás a TELJES mondatot védte. Ma a feliratot a
+   * SZERVER adja, tehát a „nem megy ki belső szó" garancia ott áll (a típus a
+   * belső enumot be sem engedi, és a `service-job-partner-detail.test.ts`
+   * külön méri mind a két irányban). Ez az állítás innentől azt őrzi, amit
+   * EZ A FÜGGVÉNY ronthat el: hogy ne írjon a mondatba SAJÁT, belső szót.
+   *
+   * === A LISTÁBÓL KÉT SZÓ KIKERÜLT, ÉS AZ MÉRÉS, NEM ENGEDMÉNY ===
+   *
+   * Az „Új" és az „Elkészült" MIND A KÉT szókincsben szerepel, mert azokra a
+   * leképezés azonosság (`NEW -> NEW`, `COMPLETED -> COMPLETED`). Mérve
+   * 2026-09-21: a nyolc belső és a négy partneri felirat metszete pontosan ez
+   * a két szó.
+   *
+   * ÉS AZ ÁRÁT IS MEGMÉRTEM, NEM LEVEZETTEM: a régi listát visszatéve, a
+   * keletkezés ágán a VALÓDI felirattal („Új" -- a jegy egyetlen létrehozó
+   * útja `NEW` állapottal nyit), ez az állítás PIROSRA vált egy tökéletesen
+   * helyes mondaton. Vagyis nem szigorúbb lenne, hanem HAMIS -- és a javítója
+   * a listát nézné, nem a mondatot.
+   *
+   * MI PIROSÍT: bármelyik csak-belső címke beírása a mondatba. Kalibrálva:
    * `Alkatrészre vár`-t téve a sorba ez az állítás pirosodik ki, egyedül.
    */
-  it("nem nevezi meg a belső állapotot", () => {
-    const belso = [
-      "Új",
+  it("nem ír a mondatba belső címkét", () => {
+    const csakBelso = [
       "Felmérve",
       "Ütemezve",
       "Folyamatban",
       "Alkatrészre vár",
       "Ügyfélre vár",
-      "Elkészült",
       "Meghiúsult",
       "WAITING_FOR_PARTS",
       "NEW",
     ];
     for (const kezdo of [true, false])
-      for (const cimke of belso)
+      for (const cimke of csakBelso)
         assert.ok(
           !naploSor(status(kezdo)).includes(cimke),
           `a sor megnevezi a belső állapotot: ${cimke}`,

@@ -1,6 +1,9 @@
 "use client";
 
-import { magyarSzamErteke } from "@acropora/types";
+import {
+  magyarSzamErteke,
+  munkaoraEgysegFigyelmeztetes,
+} from "@acropora/types";
 import { Button, Card, Input } from "@acropora/ui";
 
 import type {
@@ -232,58 +235,89 @@ export function WorksheetLineEditor({
         </div>
       ) : null}
       <div className="space-y-3">
-        {lines.map((line, index) => (
-          <div
-            key={index}
-            className={`grid gap-2 border-b pb-3 last:border-0 last:pb-0 ${COLUMNS}`}
-          >
-            <div className="space-y-2">
-              <Input
-                aria-label={`${index + 1}. tétel megnevezése`}
-                value={line.description}
-                disabled={disabled}
-                placeholder="Megnevezés"
-                onChange={(event) =>
-                  update(index, { description: event.target.value })
-                }
-              />
-              <Input
-                aria-label={`${index + 1}. tétel kiegészítő sora`}
-                value={line.detail}
-                disabled={disabled}
-                placeholder="Kiegészítő sor (pl. gépazonosító)"
-                onChange={(event) =>
-                  update(index, { detail: event.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <NarrowLabel>Mennyiség</NarrowLabel>
-              <Input
-                aria-label={`${index + 1}. tétel mennyisége`}
-                value={line.quantity}
-                disabled={disabled}
-                inputMode="decimal"
-                onChange={(event) =>
-                  update(index, { quantity: event.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              {/* A mértékegységnek nincs jele: a mező TARTALMA maga a jel
+        {lines.map((line, index) => {
+          /*
+            A SOR ELLENTMONDASA: munkaorakent szamit, de az egysege nem ora.
+            A szabaly a kozos csomagban all, mert a telefonon ugyanez a csapda
+            van -- es ket masolat elobb-utobb mast engedne meg ugyanarra a
+            sorra.
+          */
+          const egysegFigyelmeztetes = munkaoraEgysegFigyelmeztetes({
+            kind: line.kind,
+            unit: line.unit,
+          });
+          return (
+            <div
+              key={index}
+              className={`grid gap-2 border-b pb-3 last:border-0 last:pb-0 ${COLUMNS}`}
+            >
+              <div className="space-y-2">
+                <Input
+                  aria-label={`${index + 1}. tétel megnevezése`}
+                  value={line.description}
+                  disabled={disabled}
+                  placeholder="Megnevezés"
+                  onChange={(event) =>
+                    update(index, { description: event.target.value })
+                  }
+                />
+                <Input
+                  aria-label={`${index + 1}. tétel kiegészítő sora`}
+                  value={line.detail}
+                  disabled={disabled}
+                  placeholder="Kiegészítő sor (pl. gépazonosító)"
+                  onChange={(event) =>
+                    update(index, { detail: event.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <NarrowLabel>Mennyiség</NarrowLabel>
+                <Input
+                  aria-label={`${index + 1}. tétel mennyisége`}
+                  value={line.quantity}
+                  disabled={disabled}
+                  inputMode="decimal"
+                  onChange={(event) =>
+                    update(index, { quantity: event.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                {/* A mértékegységnek nincs jele: a mező TARTALMA maga a jel
                   (`óra`, `db`), tehát egy melléírt egység csak ismételné. */}
-              <NarrowLabel>Mértékegység</NarrowLabel>
-              <Input
-                aria-label={`${index + 1}. tétel mértékegysége`}
-                value={line.unit}
-                disabled={disabled}
-                onChange={(event) =>
-                  update(index, { unit: event.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              {/*
+                <NarrowLabel>Mértékegység</NarrowLabel>
+                <Input
+                  aria-label={`${index + 1}. tétel mértékegysége`}
+                  value={line.unit}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    update(index, { unit: event.target.value })
+                  }
+                />
+                {/*
+                A FIGYELMEZTETES A MEZO ALATT ALL, ahol az ertek, amirol szol.
+
+                NEM TILTJA A MENTEST (Balazs dontese, 2026-09-21): lehet valodi
+                eset, amikor valaki munkaorat `db`-ben ir. Ez TERELES, nem zar
+                -- ezert nincs `aria-invalid`, es a gomb sem valtozik.
+
+                A `role="status"` es nem `alert`: a sor nem hibas, csak
+                ellentmondasos, es egy riaszto hangnem minden anyag-sornal
+                megallitana a kollegat.
+              */}
+                {egysegFigyelmeztetes ? (
+                  <p
+                    role="status"
+                    className="text-xs leading-5 text-amber-700"
+                    data-testid={`tetel-${index + 1}-egyseg-figyelmeztetes`}
+                  >
+                    {egysegFigyelmeztetes}
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-1">
+                {/*
                 A FAJTA JELOLONEGYZET, NEM LENYILO. Ket ertek van, es a
                 legordulonel egy kattintas helyett ketto kellene -- a
                 szerkeszto pedig SORONKENT ismetlodik. Nyers `input` all itt,
@@ -291,25 +325,25 @@ export function WorksheetLineEditor({
                 webes fan tizenket helyen all mar ugyanez a nyers alak (koztuk
                 a szomszed `worksheet-assignee-picker.tsx`).
               */}
-              <NarrowLabel>Munkaóra</NarrowLabel>
-              <label className="flex h-10 items-center gap-2 text-sm text-dusk-700">
-                <input
-                  type="checkbox"
-                  aria-label={`${index + 1}. tétel munkaóra`}
-                  checked={line.kind === "LABOR"}
-                  disabled={disabled}
-                  className="size-4 rounded border-dusk-300"
-                  onChange={(event) =>
-                    update(index, {
-                      kind: event.target.checked ? "LABOR" : "OTHER",
-                    })
-                  }
-                />
-                <span className="md:hidden">Munkaóra</span>
-              </label>
-            </div>
-            <div className="space-y-1">
-              {/*
+                <NarrowLabel>Munkaóra</NarrowLabel>
+                <label className="flex h-10 items-center gap-2 text-sm text-dusk-700">
+                  <input
+                    type="checkbox"
+                    aria-label={`${index + 1}. tétel munkaóra`}
+                    checked={line.kind === "LABOR"}
+                    disabled={disabled}
+                    className="size-4 rounded border-dusk-300"
+                    onChange={(event) =>
+                      update(index, {
+                        kind: event.target.checked ? "LABOR" : "OTHER",
+                      })
+                    }
+                  />
+                  <span className="md:hidden">Munkaóra</span>
+                </label>
+              </div>
+              <div className="space-y-1">
+                {/*
                 A LETSZAM MEZO NEM TUNIK EL A NEM-MUNKA TETELNEL, HANEM TILTOTT.
 
                 Ha kikapcsolaskor ELTUNNE, a sor cellainak szama valtozna, es a
@@ -317,23 +351,23 @@ export function WorksheetLineEditor({
                 mar egyszer elszenvedett. A tiltott mezo ezen kivul MEGMONDJA,
                 miert nem irhato: a fajta donti el, nem o.
               */}
-              <NarrowLabel>Hányan</NarrowLabel>
-              <Input
-                aria-label={`${index + 1}. tételen hányan dolgoztak`}
-                value={line.workerCount}
-                disabled={disabled || line.kind !== "LABOR"}
-                inputMode="numeric"
-                title={
-                  line.kind === "LABOR"
-                    ? "Hányan dolgoztak ezen a tételen"
-                    : "Csak munkaóra-tételnél adható meg"
-                }
-                onChange={(event) =>
-                  update(index, { workerCount: event.target.value })
-                }
-              />
-            </div>
-            {/*
+                <NarrowLabel>Hányan</NarrowLabel>
+                <Input
+                  aria-label={`${index + 1}. tételen hányan dolgoztak`}
+                  value={line.workerCount}
+                  disabled={disabled || line.kind !== "LABOR"}
+                  inputMode="numeric"
+                  title={
+                    line.kind === "LABOR"
+                      ? "Hányan dolgoztak ezen a tételen"
+                      : "Csak munkaóra-tételnél adható meg"
+                  }
+                  onChange={(event) =>
+                    update(index, { workerCount: event.target.value })
+                  }
+                />
+              </div>
+              {/*
               AZ EGYSÉGÁR ÉS AZ ÁFA BEVITELE 2026-09-17-ÉN KIKERÜLT INNEN.
 
               Balázs kérése: a nettó, bruttó és áfa mezők ne jelenjenek meg sem
@@ -352,19 +386,20 @@ export function WorksheetLineEditor({
               Ha valaki egyszer "takarítja" a draftot -- jó szándékkal, mert a
               mező már nem látszik --, az a teszt pirosodik ki.
             */}
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={disabled}
-              aria-label={`${index + 1}. tétel törlése`}
-              onClick={() =>
-                onChange(lines.filter((_, position) => position !== index))
-              }
-            >
-              Törlés
-            </Button>
-          </div>
-        ))}
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={disabled}
+                aria-label={`${index + 1}. tétel törlése`}
+                onClick={() =>
+                  onChange(lines.filter((_, position) => position !== index))
+                }
+              >
+                Törlés
+              </Button>
+            </div>
+          );
+        })}
       </div>
       {/*
         A "Nettó összesen (előnézet)" sor ugyanabban a körben került ki: az ár

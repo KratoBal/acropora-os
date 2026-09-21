@@ -62,6 +62,7 @@ import {
   isViewableImage,
 } from "@/lib/documents/document-view";
 import { DocumentImage } from "@/components/documents/DocumentImage";
+import { munkaoraEgysegFigyelmeztetes } from "@/lib/worksheets/munkaora-egyseg";
 import { WORKSHEET_PHOTO_NOTICE } from "@/lib/worksheets/worksheet-photo";
 import {
   describeAssignableUsers,
@@ -133,6 +134,11 @@ export default function WorksheetDetailScreen() {
     az egyseg alapertelmezese "óra" lett.
   */
   const [isLabor, setIsLabor] = useState(true);
+  /*
+    A SOR ELLENTMONDASA. A szabaly sajat modulban all, mert ott MERHETO -- es
+    azert van kulon peldanya a webestol, mert ez a csomag nem tud a
+    `@acropora/types`-bol importalni (kivul esik a pnpm munkateren).
+  */
   const [workerCount, setWorkerCount] = useState("1");
   const [lineError, setLineError] = useState<string | null>(null);
   /**
@@ -323,6 +329,11 @@ export default function WorksheetDetailScreen() {
     fajlba irja -- a bongeszo `<img>` eleme ott nem letezik, a natív betolto
     pedig Authorization fejlecet NEM kuld.
   */
+  const egysegFigyelmeztetes = munkaoraEgysegFigyelmeztetes({
+    kind: isLabor ? "LABOR" : "OTHER",
+    unit,
+  });
+
   const gazdaUtvonal = id
     ? `/service/worksheets/${encodeURIComponent(id)}`
     : null;
@@ -1178,6 +1189,21 @@ export default function WorksheetDetailScreen() {
                   </View>
                 </View>
                 {/*
+                  A SOR ELLENTMONDASA KIMONDVA: munkaorakent szamit, de az
+                  egysege nem ora. NEM tiltja a mentest (Balazs dontese,
+                  2026-09-21): lehet valodi eset, amikor valaki munkaorat
+                  `db`-ben ir. Tereles, nem zar.
+
+                  A MEZOK ALATT ALL: a kis kijelzon az egyseg es a kapcsolo
+                  egymas alatt van, tehat az ellentmondas egyikhez sem tartozik
+                  kulon -- a ketto EGYUTT adja.
+                */}
+                {egysegFigyelmeztetes ? (
+                  <Text style={styles.egysegFigyelmeztetes}>
+                    {egysegFigyelmeztetes}
+                  </Text>
+                ) : null}
+                {/*
                   A FAJTA KAPCSOLO, ES A LETSZAM CSAK MELLETTE LATSZIK.
 
                   A LETSZAM MEZO ITT ELTUNIK a nem-munka tetelnel, a weben
@@ -1733,6 +1759,12 @@ const styles = StyleSheet.create({
   lineTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
   lineSummary: { color: "#6de0ce", fontSize: 13, fontWeight: "700" },
   muted: { color: "#789cad", fontSize: 12 },
+  egysegFigyelmeztetes: {
+    color: "#ffd48a",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 8,
+  },
   error: {
     color: "#fecaca",
     backgroundColor: "#541b2b",

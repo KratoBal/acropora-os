@@ -199,6 +199,48 @@ describe("WorksheetLineEditor munkaóra-mezői", () => {
     expect(toLineInput(line({ unitNet: "1,2,3" })).unitNet).toBeNaN();
   });
 
+  /**
+   * A LAP SZÓL, HA A SOR MUNKAÓRA, DE AZ EGYSÉGE NEM ÓRA (957be72d).
+   *
+   * Balázs esete: a csapágy sora munkaóraként került fel, és az összesítőbe
+   * két óra került egy fél óra munkából. A számolás jól számolt -- a jelölés
+   * volt rossz, és semmi nem szólt róla.
+   *
+   * MIND A KÉT IRÁNY MÉRVE. A második nélkül egy túl tág figyelmeztetés MINDEN
+   * soron elsülne, és akkor senki nem olvassa el.
+   */
+  it("db mellett a munkaóra-sor figyelmeztetést kap", async () => {
+    render(
+      <WorksheetLineEditor
+        lines={[line({ unit: "db", kind: "LABOR" })]}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(
+      await screen.findByTestId("tetel-1-egyseg-figyelmeztetes"),
+    ).toBeTruthy();
+  });
+
+  it("óra mellett NINCS figyelmeztetés", () => {
+    render(
+      <WorksheetLineEditor
+        lines={[line({ unit: "óra", kind: "LABOR" })]}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("tetel-1-egyseg-figyelmeztetes")).toBeNull();
+  });
+
+  it("a NEM-munka soron db mellett sincs figyelmeztetés", () => {
+    render(
+      <WorksheetLineEditor
+        lines={[line({ unit: "db", kind: "OTHER" })]}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("tetel-1-egyseg-figyelmeztetes")).toBeNull();
+  });
+
   it("az ÜRES létszám nem nulla, hanem hiány", () => {
     /*
       MI PIROSÍT: egy csupasz `Number()` hívás. A `Number("")` értéke NULLA, nem

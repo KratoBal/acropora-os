@@ -619,11 +619,45 @@ export interface ServiceJobPartnerDetail {
  *
  * AZ `isCreation` NEVE SZANDEKOSAN NEM UTAL AZ ENUM ERTEKEIRE. Egy
  * `fromStatusWasNew` alaku nev a szokincset a NEVEN keresztul szivarogtatna ki.
+ *
+ * === A PARTNERI FELIRAT (2026-09-21 delutan) ===
+ *
+ * A belso enum kivetele utan a portal naplosora nem tudta MEGNEVEZNI, milyen
+ * allapotba lepett a jegy -- nem azert, mert nem fert hozza a lekepezeshez
+ * (az ITT all, ebben a fajlban), hanem mert az ERTEK nem volt a kezeben.
+ *
+ * A `partnerStatusLabel` ezt a hianyt zarja be, es NEM TAGITJA vissza a
+ * szukitest. Harom fuggetlen merés all mogotte:
+ *
+ *   1. ugyanez a felirat MA IS kimegy a JEGY szintjen
+ *      (`ServiceJobPartnerDetail.partnerStatusLabel`);
+ *   2. ugyanez a felirat MA IS kimegy UGYANERRE AZ ESEMENYRE a partner
+ *      letoltheto dokumentumcsomagjaban (`service-job-package-log.ts`, a
+ *      `belso` kapcsolo `scope.kind === "internal"`-bol jon, tehat partnernel
+ *      hamis -- es a felirat akkor is ott van);
+ *   3. a szokincs a NEGY erteku partner-tabla, nem a nyolcé.
+ *
+ * AZ ATFEDES, MERVE, MERT KULONBEN FELREVEZET: a nyolc belso es a negy partneri
+ * felirat KET SZON azonos (`Uj`, `Elkeszult`), mert azokra a lekepezes
+ * azonossag (NEW -> NEW, COMPLETED -> COMPLETED). Ez NEM szivargas: ugyanaz a
+ * szo ugyanazt az allapotot jelenti mind a ket szokincsben. Ami kifele SOHA nem
+ * mehet, az a hat tobbi belso felirat (`Felmerve`, `Utemezve`, `Folyamatban`,
+ * `Alkatreszre var`, `Ugyfelre var`, `Meghiusult`) es maga az enum.
+ *
+ * A MEZO A FELIRAT, NEM AZ ALLAPOT. A negy erteku `partnerStatus` enumot
+ * SZANDEKOSAN nem tesszuk ide: a portal ma szoveget rajzol, es egy mezo, amit
+ * senki nem olvas, ugyanugy a droton van.
  */
 export interface ServiceJobPartnerStatusEvent {
   id: string;
   /** Igaz, ha ez a sor a jegy KELETKEZESE, nem egy kesobbi allapotvaltas. */
   isCreation: boolean;
+  /**
+   * A PARTNERI felirat ahhoz az allapothoz, amibe a jegy ekkor lepett
+   * (`PARTNER_STATUS_LABELS`, negy ertek). A belso, nyolc erteku felirat
+   * SOHA nem kerul ide -- lasd a fejlec atfedes-bekezdeset.
+   */
+  partnerStatusLabel: string;
   actorName: string | null;
   createdAt: string;
 }
@@ -681,6 +715,13 @@ export function partnerServiceJobDetail(
             event: {
               id: entry.event.id,
               isCreation: entry.event.fromStatus === null,
+              /*
+                A BELSO ERTEKBOL LESZ PARTNERI FELIRAT, ES A NYERS ERTEK ITT
+                MARAD. Ez a fuggveny az EGYETLEN hely, ahol a ketto talalkozik
+                -- ezert all a lekepezes ugyanebben a fajlban, es ezert nem kell
+                hozza sem uj vegpont, sem szerver-oldali szamitas.
+              */
+              partnerStatusLabel: partnerStatusLabel(entry.event.toStatus),
               actorName: entry.event.actorName,
               createdAt: entry.event.createdAt,
             },

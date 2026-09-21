@@ -1,4 +1,5 @@
 export { magyarSzamErteke } from "./magyar-szam.js";
+export { munkaoraEgysegFigyelmeztetes } from "./munkaora-egyseg.js";
 export { personDisplayName, personLegalName } from "./person-name.js";
 export {
   DOCUMENT_THUMBNAIL_VARIANT,

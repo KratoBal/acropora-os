@@ -14,34 +14,63 @@ import {
  *
  * Az állapotváltás sora a belső lapon a BELSŐ állapotot nevezi meg
  * (`Felmérve -> Alkatrészre vár`). A nyolc belső állapot az, amit a partner
- * NEM lát: a szerver külön, négyértékű állapotot és saját feliratot küld neki
- * (`partnerStatusLabel`), és az `apps/web` címke-táblájának fejléce ezt szó
- * szerint ki is mondja.
+ * NEM lát, és ezt az `apps/web` címke-táblájának fejléce szó szerint kimondja.
+ * Ez a sor a NÉGYÉRTÉKŰ partneri feliratot nevezi meg helyette.
  *
- * A NAPLÓ-BEJEGYZÉS VISZONT CSAK A BELSŐ ÁLLAPOTOT HORDOZZA, a partneri
- * feliratot pedig a szerver számolja (`service-job-status.ts`), ahonnan ez a
- * csomag nem importálhat. Ezért ez a sor MEGNEVEZETLENÜL hagyja az állapotot.
+ * === EZ A BEKEZDÉS KÉTSZER ÁTÍRÓDOTT EGY NAPON, ÉS A KETTŐ NEM UGYANAZ ===
  *
- * A TARTALOM LÉTEZIK, csak nincs honnan elérni: a partner letölthető
- * dokumentumcsomagja ugyanezt az eseményt MA IS a partneri felirattal írja ki
- * (`service-job-package.service.ts`). Ha a leképezés egyszer a
- * `@acropora/types`-ba kerül, ez a sor magától megnevezhetővé válik -- addig
- * egy megnevezetlen állapot pontosabb, mint egy olyan szó, amit a partnernek
- * nem szánunk.
+ * A sor sokáig MEGNEVEZETLENÜL hagyta az állapotot, és az indok kétszer
+ * változott meg alatta -- mindkétszer úgy, hogy a kód egy betűt sem hibázott:
+ *
+ *   ELŐSZÖR a leképezés helye. Azt írta itt, hogy a partneri feliratot a
+ *   szerver számolja (`service-job-status.ts`), ahonnan ez a csomag nem
+ *   importálhat. Ez 2026-09-21 délelőttig igaz volt; akkor a leképezés
+ *   átkerült a `@acropora/types`-ba, és a hozzáférés megszűnt akadálynak
+ *   lenni.
+ *
+ *   AZTÁN az érték. A partner saját napló-alakja (`ServiceJobPartnerStatusEvent`)
+ *   kivette a nyolcértékű enumot a válaszból -- helyesen --, és ettől a hiány
+ *   FAJTÁJA változott meg: nem a leképezést nem értük el, hanem a megnevezendő
+ *   érték nem volt a kezünkben. A kettő feloldása is más: az elsőé egy import,
+ *   a másodiké SZERVER-OLDALI döntés.
+ *
+ * AZT A DÖNTÉST 2026-09-21 délután meghozták: a szerver a PARTNERI feliratot
+ * odateszi a napló-eseményhez is (`partnerStatusLabel`). Így a sor megnevezi az
+ * állapotot -- és a belső szókincs továbbra sem megy ki, mert nem is fér a
+ * típusba.
+ *
+ * === AMIT A KÖVETKEZŐ OLVASÓ TUDJON ===
+ *
+ * A NÉGY FELIRAT DURVÁBB A NYOLCNÁL, és ez látszani is fog: a nyolc belső
+ * állapotból ÖT ugyanarra a „Feldolgozás alatt" feliratra képződik. Egy jegy
+ * naplójában tehát állhat két-három egymás utáni sor UGYANAZZAL a mondattal,
+ * különböző időponttal és névvel. Ez nem hiba: a partner felől tényleg nem
+ * változott semmi. Ha egyszer zavaró lesz, az ÖSSZEVONÁS termékdöntés, nem
+ * ezé a függvényé -- és addig sem szabad csendben összevonni, mert az időpont
+ * és a név soronként más.
  */
 export function naploSor(entry: ServiceJobPartnerTimelineEntry): string {
   if (entry.kind === "status")
     /*
-      AZ `isCreation` A BELSO ALLAPOT-NEV HELYETT (2026-09-21).
+      KET MEZO, KET KULONBOZO KERDES (2026-09-21).
 
-      Ez a sor korabban a `fromStatus === null` osszevetest vegezte -- vagyis a
-      valasz a NYOLC ERTEKU BELSO enumot vitte a partnerhez, hogy aztan a
+      Az `isCreation` a `fromStatus === null` osszevetes helyett all: a valasz
+      korabban a NYOLC ERTEKU BELSO enumot vitte a partnerhez, hogy aztan a
       kliens EGYETLEN bitet olvasson ki belole. A szerver mostantol azt az egy
       bitet kuldi.
+
+      A `partnerStatusLabel` MAS kerdesre felel: nem azt, hogy KELETKEZES-e,
+      hanem hogy MILYEN allapotba lepett a jegy. A ketto kulon romlik el, ezert
+      kulon allitas orzi oket.
+
+      A KELETKEZES SORA IS MEGNEVEZI AZ ALLAPOTOT, holott ma az mindig "Uj" (a
+      jegy egyetlen letrehozo utja `NEW` allapottal nyit). Szandekos: ha egyszer
+      egy jegy mas allapotban szuletik, ez a sor HANGOSAN mast fog irni -- egy
+      beegetett "Uj" szo ugyanott NEMAN tevedne.
     */
     return entry.event.isCreation
-      ? "A hibajegy létrejött."
-      : "A hibajegy állapota változott.";
+      ? `A hibajegy létrejött. Állapota: ${entry.event.partnerStatusLabel}.`
+      : `A hibajegy állapota: ${entry.event.partnerStatusLabel}.`;
 
   if (entry.kind === "worksheet")
     return `Munkalap a jegy alatt: ${serviceJobWorksheetLabel(entry.worksheet)}`;
