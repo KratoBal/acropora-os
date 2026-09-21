@@ -12,7 +12,10 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { DeviceTokenRepository } from "./device-token.repository.js";
 import {
   DEVICE_TOKEN_SHAPE_MESSAGE,
-  isNativeDeviceToken,
+  acceptDeviceToken,
+  describeTokenShape,
+  storedTokenForm,
+  DEVICE_TOKEN_EXPO_MESSAGE,
 } from "./device-token.rules.js";
 import {
   ForgetDeviceTokenDto,
@@ -49,22 +52,42 @@ export class DeviceTokenController {
   ) {
     const bundleId = input.bundleId.trim();
 
-    if (!isNativeDeviceToken(input.token)) {
+    const platform = input.platform ?? "IOS";
+    /**
+     * AZ ALAK LEIRASA MINDKET AGON NAPLOBA KERUL, ES EZ A LENYEG.
+     *
+     * Az elutasitasnal eddig is allt egy hossz. Az ELFOGADASNAL nem allt semmi
+     * -- pedig epp az az erdekes eset: ettol a SZERVER mondja meg, milyen alaku
+     * az elso valodi androidos token, amint egy keszulek regisztral. Nem kell
+     * megvarni, hogy valaki felolvassa egy kepernyorol.
+     *
+     * A LEIRO ALAK SZANDEKOSAN UGYANAZ, mint a telefonon (`describeTokenShape`,
+     * murena): a ket oldal igy OSSZEVETHETO. A token maga egyik oldalon sem
+     * kerul naploba.
+     */
+    const alak = describeTokenShape(input.token);
+    const befogadas = acceptDeviceToken({ token: input.token, platform });
+
+    if (!befogadas.ok) {
       this.logger.warn(
-        `Eszköz-token elutasítva, nem natív alak: felhasználó ${user.id}, alkalmazás ${bundleId}, hossz ${input.token.length}.`,
+        `Eszköz-token elutasítva (${befogadas.reason}): felhasználó ${user.id}, alkalmazás ${bundleId}, platform ${platform}, alak: ${alak}.`,
       );
-      throw new BadRequestException(DEVICE_TOKEN_SHAPE_MESSAGE);
+      throw new BadRequestException(
+        befogadas.reason === "expo-token"
+          ? DEVICE_TOKEN_EXPO_MESSAGE
+          : DEVICE_TOKEN_SHAPE_MESSAGE,
+      );
     }
 
     const { firstTime } = await this.repository.register({
       userId: user.id,
-      token: input.token.toLowerCase(),
+      token: storedTokenForm({ token: input.token, platform }),
       bundleId,
-      platform: input.platform ?? "IOS",
+      platform,
     });
 
     this.logger.log(
-      `Eszköz-token regisztrálva: felhasználó ${user.id}, alkalmazás ${bundleId}, ${
+      `Eszköz-token regisztrálva: felhasználó ${user.id}, alkalmazás ${bundleId}, platform ${platform}, alak: ${alak}, ${
         firstTime ? "új eszköz" : "ismert eszköz"
       }.`,
     );

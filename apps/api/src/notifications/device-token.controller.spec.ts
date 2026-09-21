@@ -111,13 +111,24 @@ describe("device token registration", () => {
       ),
       (error: unknown) =>
         error instanceof BadRequestException &&
-        error.message.includes("natív APNs"),
+        /*
+          JELENTESRE ALLIT, NEM BETURE. 2026-09-21-ig ez a sor a
+          „natív APNs" karakterlancot kerte, es a mondat azota MEGVALTOZOTT:
+          az Expo-token sajat mondatot kapott, mert a kozos „64 hexadecimalis
+          karakter lehet" ANDROIDON HAMIS lenne.
+
+          Amit a teszt tenylegesen ved, az nem a szoveg, hanem hogy a valasz
+          megnevezi a VALODI okot: a telefon az Expo tokenjet kuldte.
+        */
+        /expo/i.test(error.message),
     );
 
     assert.deepEqual(registered, []);
     assert.equal(lines[0]?.level, "warn");
     assert.match(lines[0]!.message, /user-2/);
-    assert.match(lines[0]!.message, /nem natív alak/);
+    // AZ OK NEVE A NAPLOBAN -- ez valasztja szet az Expo-tokent a tobbi
+    // elutasitastol, es ez a resz hordozza a jelentest, nem a mondat szovege.
+    assert.match(lines[0]!.message, /expo-token/);
   });
 
   /**
