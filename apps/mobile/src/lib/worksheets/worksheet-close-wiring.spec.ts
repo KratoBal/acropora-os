@@ -48,6 +48,26 @@ describe("a lezárás bekötése a munkalap-képernyőn", () => {
   });
 
   /**
+   * A FELIRAT MEGMONDJA, MIT CSINAL -- ES UGYANAZ, MINT A WEBEN.
+   *
+   * Balazs dontese, 2026-09-21 12:10:42 UTC (message_id 1551566340169539655).
+   * Elotte a gomb "Kesz, alairasra" volt: IGAZ, de a lenyeget nem mondta meg.
+   * Ez a lepes osztja ki a munkalap SZAMAT es allitja elo a DOKUMENTUMOT; az
+   * alairas ezutan jon, es csak az allapotot viszi at.
+   *
+   * MIERT ITT, ES MIERT NEM A WEBEN: a ket felulet KET csomagban all, es a
+   * mobil SEMMIT nem importal a kozosbol (merve: nulla @acropora fuggoseg).
+   * Kozos konstans tehat nem koti ossze oket -- marad ket allitas, egy-egy a
+   * sajat oldalan. Ha az egyik feliratot atirjak, EZ pirosodik.
+   */
+  it("a gomb felirata a KIÁLLÍTÁST nevezi meg, nem csak a lezárást", () => {
+    assert.match(lap, /Kiállítás és lezárás/);
+    /* ES A REGI FELIRAT MAR NEM ALL OTT: kulonben a ket szoveg egyszerre
+       elne, es a kepernyon az dontene, melyik ag fut. */
+    assert.doesNotMatch(lap, /"Kész, aláírásra"/);
+  });
+
+  /**
    * A SORREND ALLITAS, NEM IZLES: a lezaras az alairas ELOFELTETELE, es a ket
    * gomb egymas alatt mutatja meg a szerelonek, hova tart. Forditva az alairas
    * gombja allna elol egy olyan lapon, amin meg sosem jelenhet meg.

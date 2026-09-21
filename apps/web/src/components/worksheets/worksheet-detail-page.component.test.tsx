@@ -723,3 +723,69 @@ describe("WorksheetDetailPage és a csatolmányok", () => {
     expect(api.signers.mock.lastCall?.[0]).toBe("");
   });
 });
+
+/**
+ * A KIALLITO GOMB ES A HELYETTE ALLO MONDAT.
+ *
+ * Balazs, 2026-09-18 18:09:59 UTC: "Nem tudok lezarni munkalapot. Nincs olyan
+ * gomb." A gomb a #87 ota itt all -- csak a lapja nem volt piszkozat. A nema
+ * elrejtes es a hianyzo funkcio a kepernyon megkulonboztethetetlen, es ebbol
+ * szuletett egy kartya, ami egy nem letezo hianyt javitott volna.
+ */
+describe("a kiállítás a munkalap adatlapján", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.signers.mockResolvedValue({ items: [], emptyReason: null });
+  });
+
+  /**
+   * A FELIRAT MEGMONDJA, MIT CSINAL (Balazs dontese, 2026-09-21 12:10:42 UTC).
+   * A puszta "Lezaras" nem mondta meg, hogy ez a lepes osztja ki a SZAMOT es
+   * allitja elo a DOKUMENTUMOT -- es a sorrend emiatt maradt kitalalhato.
+   */
+  it("piszkozaton a gomb megnevezi a KIÁLLÍTÁST, nem csak a lezárást", async () => {
+    /*
+      A FIXTURA IS MERES: a kozos `detail()` alapbol SIGNED lapot ad, tehat egy
+      "piszkozaton" nevu allitas ott NEM piszkozatot merne. Az elso valtozatom
+      pontosan ezen bukott el -- a teszt NEVE mast igert, mint a bemenete.
+    */
+    const alap = detail(null);
+    api.detail.mockResolvedValue({
+      ...alap,
+      currentVersion: { ...alap.currentVersion, status: "DRAFT" },
+    });
+
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    const gomb = await screen.findByRole("button", {
+      name: /Kiállítás és lezárás/,
+    });
+    expect(gomb).toBeTruthy();
+    /* ES A HELYETTE ALLO MONDAT ILYENKOR NEM LATSZIK: ket allapot, ket kimenet. */
+    expect(screen.queryByText(/Kiállítani csak piszkozatot lehet/)).toBeNull();
+  });
+
+  /**
+   * A LENYEGI ALLITAS: nem-piszkozat lapon a lap KIMONDJA az ALLAPOTOT.
+   *
+   * acrobot kikotese: az allapotot nevezze meg, ne azt, hogy "nem lehet" --
+   * egy "nem erheto el" alaku mondat ugyanazt a nemasagot irna korul.
+   */
+  it("nem-piszkozat lapon az ÁLLAPOT áll a gomb helyén", async () => {
+    /* A NEM-PISZKOZAT ALLAPOT ITT EPUL, nem egy masik describe segedjebol: a
+       blokkok kozott nincs lathatosag, es egy masolt seged csendben elcsuszna
+       a sajatjatol. */
+    const alap = detail(null);
+    api.detail.mockResolvedValue({
+      ...alap,
+      currentVersion: { ...alap.currentVersion, status: "AWAITING_SIGNATURE" },
+    });
+
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    expect(await screen.findByText(/Ez a lap már ki van állítva/)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /Kiállítás és lezárás/ }),
+    ).toBeNull();
+  });
+});
