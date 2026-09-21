@@ -71,8 +71,15 @@ export interface WorksheetDetailLike {
   customer: { displayName: string };
   department: { code: string; name: string };
   createdByName: string | null;
-  /** `null`, ha a lap hibajegy nelkul keletkezett -- lasd a sor indokat lent. */
-  serviceJob: { jobNumber: string } | null;
+  /**
+   * `null`, ha a lap hibajegy nelkul keletkezett -- lasd a sor indokat lent.
+   *
+   * AZ `id` 2026-09-21 OTA KELL, es nem csak kenyelembol: abbol lesz a
+   * `serviceJobId` a soron, amivel a kepernyo atkattinthatova teszi. A mezot a
+   * szerver EDDIG IS kuldte (`lib/api/worksheets.ts`), csak ez a szukebb,
+   * sajat bemeneti tipus nem kerte.
+   */
+  serviceJob: { id: string; jobNumber: string } | null;
   currentVersion: {
     unitName: string | null;
     issueDate: string | null;
@@ -106,6 +113,15 @@ export function worksheetLabelOrDraft(label: string | null): string {
 export interface WorksheetDetailRow {
   label: string;
   value: string;
+  /**
+   * HA ALL, A SOR ATKATTINTHATO ERRE A HIBAJEGYRE.
+   *
+   * KONKRET NEV, NEM ALTALANOS `link`: pontosan EGY ilyen sor van, es egy
+   * altalanos cel-mezo tobbet igerne, mint amit a fuggveny tud. A kepernyo
+   * ebbol dönti el, hogy megnyomhatot rajzol-e -- es ha a mezo hianyzik, NEM
+   * rajzol gombot.
+   */
+  serviceJobId?: string;
 }
 
 function clean(value?: string | null): string {
@@ -226,13 +242,26 @@ export function worksheetDetailRows(
    * (`worksheet-detail-page.tsx`), hogy ugyanarrol a lapról az irodaban es a
    * helyszinen ugyanaz a mondat hangozzon el.
    *
-   * A telefonon a szam CSAK SZOVEG, nem hivatkozas: hibajegy-keperno ma nincs
-   * a mobil alkalmazasban, es egy megnyomhatonak latszo szam olyat igerne,
-   * ami sehova nem visz.
+   * === A SZAM 2026-09-21 OTA ATKATTINTHATO, ES A REGI INDOKOT ATIRTAM ===
+   *
+   * KORABBAN EZ ALLT ITT: "a telefonon a szam CSAK SZOVEG, nem hivatkozas:
+   * hibajegy-keperno ma nincs a mobil alkalmazasban, es egy megnyomhatonak
+   * latszo szam olyat igerne, ami sehova nem visz."
+   *
+   * AZ ALLITAS IGAZ VOLT, AMIKOR MEGIRTAK (#480), es egy KESOBBI PR tette
+   * hamissa: a #735 behozta a hibajegy-kepernyot
+   * (`app/service-jobs/[id].tsx`). Semmi nem hibazott tole -- a sor tovabbra
+   * is helyesen rajzolodott ki, csak mar folosleges volt szovegnek maradnia.
+   *
+   * A REGI INDOK VEDELME VISZONT ERVENYBEN MARAD, es ezert all a
+   * `serviceJobId` CSAK akkor, ha van jegy: egy megnyomhatonak latszo szoveg,
+   * ami sehova nem visz, rosszabb egy sima cimkenel.
    */
+  const jegy = worksheet.serviceJob;
   rows.push({
     label: "Hibajegy",
-    value: clean(worksheet.serviceJob?.jobNumber) || "Nincs mögötte hibajegy",
+    value: clean(jegy?.jobNumber) || "Nincs mögötte hibajegy",
+    ...(jegy ? { serviceJobId: jegy.id } : {}),
   });
 
   return rows;

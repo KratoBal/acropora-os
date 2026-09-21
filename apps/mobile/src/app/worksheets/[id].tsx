@@ -714,7 +714,34 @@ export default function WorksheetDetailScreen() {
               {rows.map((row) => (
                 <View key={row.label} style={styles.row}>
                   <Text style={styles.label}>{row.label}</Text>
-                  <Text style={styles.value}>{row.value}</Text>
+                  {/*
+                    ATKATTINTHATO CSAK AKKOR, HA VAN HOVA.
+
+                    A `serviceJobId` a sorra CSAK jegyhez kotott lapon kerul
+                    ra. Enelkul sima szoveg all itt -- egy megnyomhatonak
+                    latszo cimke, ami sehova nem visz, rosszabb a sima
+                    szovegnel. (Ez a regi indok, es ERVENYBEN MARAD: csak a
+                    feltetele valtozott meg, amikor a #735 behozta a
+                    hibajegy-kepernyot.)
+                  */}
+                  {row.serviceJobId ? (
+                    <Pressable
+                      onPress={() =>
+                        router.push({
+                          pathname: "/service-jobs/[id]",
+                          params: { id: row.serviceJobId as string },
+                        })
+                      }
+                      style={({ pressed }) => [
+                        styles.valueLink,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.valueLinkText}>{row.value}</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.value}>{row.value}</Text>
+                  )}
                 </View>
               ))}
             </View>
@@ -1687,6 +1714,14 @@ const styles = StyleSheet.create({
   },
   label: { color: "#789cad", fontSize: 12, fontWeight: "700" },
   value: { color: "#f4fbff", flex: 1, fontSize: 14, textAlign: "right" },
+  /* A HIVATKOZAS LATSZIK ANNAK: sajat szin, hogy a sima ertektol elvaljon. */
+  valueLink: { flex: 1 },
+  valueLinkText: {
+    color: "#6de0ce",
+    fontSize: 14,
+    textAlign: "right",
+    textDecorationLine: "underline",
+  },
   total: {
     color: "#6de0ce",
     flex: 1,
