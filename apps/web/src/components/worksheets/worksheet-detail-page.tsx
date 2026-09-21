@@ -395,16 +395,20 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
     ) : null;
 
   /**
-   * A BELSO ROGZITES IS A KIKULDESHEZ KOTODIK, NEM CSAK AZ ALLAPOTHOZ.
+   * A BELSO ROGZITES NEM KOTODIK A KIKULDESHEZ -- ES EZ EGY PIROS CI UTAN
+   * ALL IGY (2026-09-21).
    *
-   * A szerver kapuja 2026-09-21 ota KET feltetelt nez (kiallitott ES kikuldott).
-   * Ha ez a blokk csak az allapotot nezne, a felulet olyat kinalna fel, amit a
-   * szerver elutasit -- ugyanaz a nema ellentmondas, amit a portalon javitunk.
+   * Elso alakjaban ez a blokk a kikuldest is megkovetelte, "a szerver kapuja
+   * ugyanezt nezi" indokkal. A szerver kapuja azota SZUKEBB: a kikuldes csak a
+   * KULSOS keronek feltetel. A belso rogzites a SZEMELYES alairas helye -- a
+   * kollega a helyszinen vetet ala, gepelt nevvel --, es ahhoz nincs kikuldes,
+   * nem is lehet: a cimzett kotelezoen a vevo aktiv munkatarsa.
+   *
+   * VAGYIS A KET BLOKK EGYSZERRE IS ALLHAT, es ez nem ellentmondas: "kuldd ki
+   * az ugyfelnek" VAGY "irasd ala most itt". Ket ut ugyanahhoz az allapothoz.
    */
   const signatureForm =
-    canManage &&
-    current.status === "AWAITING_SIGNATURE" &&
-    current.sentForSignatureAt !== null ? (
+    canManage && current.status === "AWAITING_SIGNATURE" ? (
       <ServicePanel>
         <ServicePanelHeading title="Ügyfél döntésének rögzítése" />
         <p className="-mt-3 mb-4 text-xs text-muted">

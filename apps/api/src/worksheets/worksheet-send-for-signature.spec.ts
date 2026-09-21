@@ -187,21 +187,57 @@ describe("az alairas kapuja a kikuldest is nezi", () => {
     );
 
   /**
-   * A BELSOS KOLLEGA TEENDOT KAP: o TUD kikuldeni.
+   * A KAPU CSAK A KULSOS KERORE ALL -- ES EZ A LENYEG, NEM A MONDAT.
+   *
+   * AZ ELSO VALTOZATOM MINDENKIRE ALLT, ES EGY PIROS CI CAFOLTA MEG
+   * (2026-09-21): ket integracios allitas bukott el, mindketto a SZEMELYES
+   * alairason (gepelt nev, nincs valasztott munkatars). Ahhoz SOHA nincs
+   * kikuldes, es nem is lehet: a `sendForSignature` cimzettje kotelezoen a vevo
+   * AKTIV munkatarsa. Portal-felhasznalo nelkuli vevonel a lapot ezutan soha
+   * nem lehetett volna alairni -- egy orzo, amit senki nem tud kielegiteni.
+   *
+   * EZ AZ ALLITAS AZT A SZAMOT MERI, AMI A HATART HORDOZZA (`requireSent`), nem
+   * a hibauzenetet: a mondatot egy szoveg-csere is atirja, a kapu hatarat nem.
    */
-  it("belsos kerőnek a mondat a KIKULDESRE mutat", async () => {
-    await assert.rejects(
-      () => alairasra("NOT_SENT", BELSOS, false),
-      (error: unknown) =>
-        error instanceof ConflictException &&
-        /Küldd ki az aláírónak/.test(error.message),
-    );
+  it("belsos kerőnek NEM feltetel a kikuldes, a kulsosnek IGEN", async () => {
+    const latott: boolean[] = [];
+    const kapuval = (actor: { id: string }, partner: boolean) =>
+      new WorksheetsService({
+        detail: async () => ({
+          id: "worksheet-1",
+          customerId: "customer-1",
+          serviceJob: { id: "job-1" },
+          versions: [{ id: "v1", status: "AWAITING_SIGNATURE" }],
+        }),
+        userLegalName: async () => "Szerelő Sándor",
+        customerContacts: async () => [{ id: actor.id, name: "Vevő Vilmos" }],
+        signingCodeHash: async () => KOD_HASH,
+        sign: async (bemenet: { requireSent: boolean }) => {
+          latott.push(bemenet.requireSent);
+          return { ok: false, reason: "NOT_AWAITING_SIGNATURE" };
+        },
+      } as unknown as WorksheetsRepository).sign(
+        "worksheet-1",
+        (partner
+          ? {
+              decision: "ACCEPTED",
+              signerUserId: actor.id,
+              signatureCode: KOD,
+              note: null,
+            }
+          : { decision: "ACCEPTED", signSelf: true, note: null }) as never,
+        actor as never,
+      );
+
+    await assert.rejects(() => kapuval(BELSOS, false));
+    await assert.rejects(() => kapuval(PARTNER, true));
+    assert.deepEqual(latott, [false, true]);
   });
 
   /**
-   * A PARTNERNEK MAS: o NEM tud kikuldeni, tehat egy "kuldd ki" felszolitas
-   * olyan teendot adna neki, amihez nincs joga -- ugyanaz a megfontolas, mint a
-   * hibajegy-kapunal.
+   * A PARTNERNEK SZOLO MONDAT NEM AD NEKI VEGEZHETETLEN TEENDOT: o nem tud
+   * kikuldeni, tehat egy "kuldd ki" felszolitas olyat kerne tole, amihez nincs
+   * joga -- ugyanaz a megfontolas, mint a hibajegy-kapunal.
    */
   it("partner kerőnek a mondat NEM ad neki vegezhetetlen teendot", async () => {
     await assert.rejects(

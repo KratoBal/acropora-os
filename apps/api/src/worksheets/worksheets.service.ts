@@ -990,6 +990,16 @@ export class WorksheetsService {
       signerSource: signer.signerSource,
       note: input.note?.trim() || null,
       actorUserId,
+      /*
+        A KIKULDES CSAK A KULSOS KERONEK FELTETEL.
+
+        Balazs bejelentese a PORTALROL szolt ("van egy nyitott munkalap, amit
+        ala tudna irni ha akarna"), es a kapu is oda valo. A belso kollega
+        SZEMELYESEN vetet ala lapot a helyszinen, gepelt nevvel -- ahhoz nincs
+        kikuldes, es nem is lehet: a cimzett kotelezoen a vevo aktiv
+        munkatarsa, portal-felhasznalo nelkuli vevonel pedig ilyen nincs.
+      */
+      requireSent: scope.kind !== "internal",
       now,
     });
     if (!result.ok) {
@@ -1004,15 +1014,15 @@ export class WorksheetsService {
         olvasot rossz helyre kuldene -- a lap se nem piszkozat, se nem doltek
         rola, csak nem kuldtuk ki.
 
-        ES A PARTNERNEK MAS A MONDAT, mint a belsos kollegának: a partner nem
-        tud kikuldeni, tehat egy "kuldd ki" felszolitas olyan teendot adna neki,
-        amihez nincs joga -- ugyanaz a megfontolas, mint a hibajegy-kapunal.
+        ES EGY MONDAT VAN, NEM KETTO, mert a `NOT_SENT` CSAK a kulsos kerohoz
+        jut el (`requireSent`). Irtam ide eloszor egy belsos agat is ("kuldd ki
+        az alaironak"), de az ELERHETETLEN volt: egy ag, ami sosem fut, ugyanaz,
+        mint egy allitas, ami nem tud elbukni -- ugy nez ki, mintha kezelne egy
+        esetet.
       */
       if (result.reason === "NOT_SENT")
         throw new ConflictException(
-          scope.kind === "internal"
-            ? "Ez a munkalap még nincs kiküldve aláírásra. Küldd ki az aláírónak, és utána írható alá."
-            : "Ez a munkalap még nem érkezett meg aláírásra. Szólj nekünk, és kiküldjük.",
+          "Ez a munkalap még nem érkezett meg aláírásra. Szólj nekünk, és kiküldjük.",
         );
       throw new ConflictException(
         "Ez a verzió nem írható alá: vagy még piszkozat, vagy már megszületett róla a döntés.",

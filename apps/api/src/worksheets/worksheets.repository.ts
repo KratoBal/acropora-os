@@ -1664,6 +1664,24 @@ export class WorksheetsRepository extends Repository {
     signerSource: WorksheetSignerSource;
     note: string | null;
     actorUserId: string;
+    /**
+     * KELL-E A KIKULDES AHHOZ, HOGY ALA LEHESSEN IRNI.
+     *
+     * NEM MINDENKINEK, ES EZT EGY PIROS CI TANITOTTA MEG (2026-09-21). Az elso
+     * valtozatom MINDEN alairashoz megkovetelte a kikuldest, es ezzel elzarta a
+     * SZEMELYES alairast: azt a belso kollega rogziti a helyszinen, gepelt
+     * nevvel (`signerSource: "TYPED"`, `signerUserId: null`), es hozza SOHA nem
+     * tortenik kikuldes -- nincs is kinek, mert a `sendForSignature` cimzettje
+     * kotelezoen a vevo AKTIV munkatarsa. Egy olyan vevonel, akinek nincs
+     * portal-felhasznaloja, a lapot ezutan SOHA nem lehetett volna alairni.
+     *
+     * A ket integracios allitas, ami ezt megfogta (`refuses a new version once
+     * the worksheet has been signed` es `reads the customer's own code from the
+     * asset, even on a signed sheet`), HELYYESEN bukott el: nem a fixtura volt
+     * elavult, hanem a kapum volt tul szeles. Postgres nelkul a blokk helyben
+     * KIMARAD, tehat a helyi zold errol semmit nem allitott.
+     */
+    requireSent: boolean;
     now: Date;
   }): Promise<WorksheetSignResult> {
     return this.database.$transaction(async (transaction) => {
@@ -1691,7 +1709,7 @@ export class WorksheetsRepository extends Repository {
         where: {
           id: current.id,
           status: "AWAITING_SIGNATURE",
-          sentForSignatureAt: { not: null },
+          ...(input.requireSent ? { sentForSignatureAt: { not: null } } : {}),
         },
         data: {
           status: input.decision === "ACCEPTED" ? "SIGNED" : "REJECTED",
@@ -1705,7 +1723,7 @@ export class WorksheetsRepository extends Repository {
         return {
           ok: false,
           reason:
-            allapot?.status === "AWAITING_SIGNATURE"
+            input.requireSent && allapot?.status === "AWAITING_SIGNATURE"
               ? "NOT_SENT"
               : "NOT_AWAITING_SIGNATURE",
         } as const;
