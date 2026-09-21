@@ -21,6 +21,7 @@ import {
   currentBundleId,
   obtainDeviceToken,
 } from "@/lib/notifications/push-device";
+import { describeRegistrationOutcome } from "@/lib/notifications/push-registration";
 import { usePushPreference } from "@/lib/notifications/usePushPreference";
 
 /**
@@ -75,10 +76,15 @@ export default function SettingsScreen() {
        * szerveren nincs mit levenni vagy felvenni -- és ezt jobb megmondani,
        * mint azt hinni, hogy megtörtént.
        */
-      if (outcome.status !== "ready")
-        setError(
-          "A beállítás elmentve, de ez a készülék most nem tud értesítést fogadni (nincs engedély vagy nincs push a készüléken).",
-        );
+      /*
+        A NEGY KIMENETEL NEGY KULON MONDAT. Eddig EGY kozos mondat allt itt, es
+        az Androidon valoszinuleg HAMIS: ha a keszulek ad tokent, de az nem
+        APNs-alaku, akkor VAN engedely ES van push -- csak az alak-szabaly
+        utasitja el. Egy hamis magyarazat rosszabb a hianyzonal: aki elolvassa,
+        az engedelyeket fogja piszkalni, es soha nem jut el az igazi okig.
+      */
+      const uzenet = describeRegistrationOutcome(outcome);
+      if (uzenet) setError(uzenet);
     } catch (cause) {
       setError(
         cause instanceof Error
