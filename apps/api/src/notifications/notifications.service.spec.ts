@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import type { ApnsMessage, ApnsResult } from "./apns.client.js";
 import type { ApnsSending } from "./apns.sender.js";
+import type { FcmMessage, FcmResult } from "./fcm.client.js";
+import type { FcmSending } from "./fcm.sender.js";
 import type { DeviceTokenRepository } from "./device-token.repository.js";
 import type {
   NotificationLogRepository,
@@ -23,6 +25,31 @@ function sender(
       return answer(message);
     },
   } as unknown as ApnsSending;
+  return { sender: value, sent };
+}
+
+/**
+ * AZ ANDROIDOS KULDO DUPLAJA, ALAPBOL NEM BEALLITVA.
+ *
+ * Ez az alapertek nem kenyelem, hanem a valosag: egy fejlesztoi gepen nincs
+ * szolgaltatasfiok-kulcs, es a kozos torzs a be nem allitott utat KIHAGYJA.
+ * Igy a meglevo Apple-allitasok pontosan annyit merek, amennyit eddig -- koztuk
+ * az a ketto, ami azt mondja, hogy CSAK `IOS` tokeneket kerunk le.
+ *
+ * Amelyik allitas a masodik utat meri, az adja meg a `configured = true` erteket.
+ */
+function fcmSender(
+  answer: (message: FcmMessage) => FcmResult = () => ({ ok: true }),
+  configured = false,
+) {
+  const sent: FcmMessage[] = [];
+  const value = {
+    configured: () => configured,
+    send: async (message: FcmMessage) => {
+      sent.push(message);
+      return answer(message);
+    },
+  } as unknown as FcmSending;
   return { sender: value, sent };
 }
 
@@ -90,6 +117,7 @@ describe("worksheet assignment notifications", () => {
       ]),
       apns,
       log().log,
+      fcmSender().sender,
     );
 
     const summary = await service.deliverWorksheetAssignment(notice);
@@ -131,6 +159,7 @@ describe("worksheet assignment notifications", () => {
       ),
       apns,
       log().log,
+      fcmSender().sender,
     );
 
     const summary = await service.deliverWorksheetAssignment(notice);
@@ -164,6 +193,7 @@ describe("worksheet assignment notifications", () => {
       ),
       apns,
       log().log,
+      fcmSender().sender,
     );
 
     const summary = await service.deliverWorksheetAssignment(notice);
@@ -184,6 +214,7 @@ describe("worksheet assignment notifications", () => {
       ]),
       apns,
       log().log,
+      fcmSender().sender,
     );
 
     const summary = await service.deliverWorksheetAssignment(notice);
@@ -194,7 +225,12 @@ describe("worksheet assignment notifications", () => {
 
   it("stays quiet when nobody was added", async () => {
     const { sender: apns, sent } = sender();
-    const service = new NotificationsService(tokens([]), apns, log().log);
+    const service = new NotificationsService(
+      tokens([]),
+      apns,
+      log().log,
+      fcmSender().sender,
+    );
 
     await service.deliverWorksheetAssignment({ ...notice, userIds: [] });
 
@@ -232,6 +268,7 @@ describe("worksheet assignment notifications", () => {
       ]),
       apns,
       written.log,
+      fcmSender().sender,
     );
 
     await service.deliverWorksheetAssignment(notice);
@@ -283,6 +320,7 @@ describe("a hibajegy delegálásának értesítése", () => {
         ]),
         apns,
         written.log,
+        fcmSender().sender,
       ),
     };
   }
@@ -400,7 +438,12 @@ describe("a küldő a saját platformjára kér címzettet", () => {
   it("munkalap-kiosztásnál IOS tokeneket kér", async () => {
     const { sender: apns } = sender();
     const store = eszkozok();
-    const service = new NotificationsService(store, apns, log().log);
+    const service = new NotificationsService(
+      store,
+      apns,
+      log().log,
+      fcmSender().sender,
+    );
 
     await service.deliverWorksheetAssignment(notice);
 
@@ -415,10 +458,115 @@ describe("a küldő a saját platformjára kér címzettet", () => {
   it("hibajegy-kiosztásnál is IOS tokeneket kér", async () => {
     const { sender: apns } = sender();
     const store = eszkozok();
-    const service = new NotificationsService(store, apns, log().log);
+    const service = new NotificationsService(
+      store,
+      apns,
+      log().log,
+      fcmSender().sender,
+    );
 
     await service.deliverServiceJobAssignment(jegyErtesites);
 
     assert.deepEqual(store.kertPlatformok, ["IOS"]);
+  });
+
+  /**
+   * A MASODIK UT BEKOTESE -- ES EZ MAS KERDES, MINT A KULDO HELYESSEGE.
+   *
+   * Az FCM kuldo sajat allitasai (`fcm.client.spec.ts`, `fcm.config.spec.ts`) azt
+   * merik, hogy a kuldo JOL viselkedik. Ezek azt, hogy a szolgaltatas HASZNALJA.
+   * A ketto kulon romolhat el, es a szakadas NEMA: egy megirt, de be nem kotott
+   * kuldo zolden all a keszletben, kozben a telefonra semmi nem megy.
+   *
+   * A KET FELETTI ALLITAS EGYBEN KONTROLL IS: ott az FCM NINCS beallitva, es
+   * pontosan `["IOS"]` all. Ha a platform-valasztas elromlana, azok pirosodnanak.
+   */
+  function ketPlatformos() {
+    const kertPlatformok: string[] = [];
+    const nyugdijazott: string[] = [];
+    const value = {
+      recipients: async (_userIds: readonly string[], platform: string) => {
+        kertPlatformok.push(platform);
+        return platform === "ANDROID"
+          ? [
+              {
+                userId: "user-2",
+                token: "dd".repeat(32),
+                bundleId: "hu.acropora.os",
+              },
+            ]
+          : [
+              {
+                userId: "user-2",
+                token: "aa".repeat(32),
+                bundleId: "hu.acropora.os",
+              },
+            ];
+      },
+      retire: async (token: string) => {
+        nyugdijazott.push(token);
+        return { count: 1 };
+      },
+    } as unknown as DeviceTokenRepository;
+    return Object.assign(value, {
+      kertPlatformok,
+      nyugdijazott,
+    }) as DeviceTokenRepository & {
+      kertPlatformok: string[];
+      nyugdijazott: string[];
+    };
+  }
+
+  it("beallitott androidos kuldonel MIND A KET platformot lekeri", async () => {
+    const { sender: apns } = sender();
+    const { sender: fcm } = fcmSender(() => ({ ok: true }), true);
+    const store = ketPlatformos();
+    const service = new NotificationsService(store, apns, log().log, fcm);
+
+    await service.deliverWorksheetAssignment(notice);
+
+    assert.deepEqual([...store.kertPlatformok].sort(), ["ANDROID", "IOS"]);
+  });
+
+  it("az androidos cimzettnek EL IS KULDI az uzenetet", async () => {
+    const { sender: apns } = sender();
+    const { sender: fcm, sent } = fcmSender(() => ({ ok: true }), true);
+    const service = new NotificationsService(
+      ketPlatformos(),
+      apns,
+      log().log,
+      fcm,
+    );
+
+    const summary = await service.deliverWorksheetAssignment(notice);
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]?.deviceToken, "dd".repeat(32));
+    assert.equal(sent[0]?.body, "Szivattyú csere");
+    assert.equal(sent[0]?.data?.worksheetId, "worksheet-1");
+    // A KET UT EGY OSSZEGBE FUT: egy iOS es egy androidos cimzett.
+    assert.equal(summary.sent, 2);
+  });
+
+  /**
+   * AZ ELDOBOTT ANDROIDOS TOKEN UGYANUGY TOROLODIK, MINT AZ APPLE OLDALON. Ez a
+   * harom kozos szabaly egyike, es a kozos torzsben all -- de hogy a MASODIK
+   * uton is elsul, azt kulon kell merni.
+   */
+  it("a nyugdijazott androidos tokent torli", async () => {
+    const { sender: apns } = sender();
+    const { sender: fcm } = fcmSender(
+      () => ({ ok: false, retired: true, reason: "UNREGISTERED" }),
+      true,
+    );
+    const store = ketPlatformos();
+    const service = new NotificationsService(store, apns, log().log, fcm);
+
+    const summary = await service.deliverWorksheetAssignment(notice);
+
+    assert.deepEqual(store.nyugdijazott, ["dd".repeat(32)]);
+    assert.equal(summary.retired, 1);
+    // AZ APPLE OLDAL ETTOL FUGGETLENUL SIKERES: a ket ut kulon all.
+    assert.equal(summary.sent, 1);
   });
 });

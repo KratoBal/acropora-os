@@ -6,10 +6,25 @@ import { Prisma, Repository, prisma } from "@acropora/database";
 export interface NotificationAttempt {
   userId: string;
   delivered: boolean;
-  /** Apple's own word for the refusal, or the local one. Absent on success. */
+  /**
+   * A KULDO SAJAT SZAVA AZ ELUTASITASRA, vagy a mi helyi indokunk. Sikernel
+   * hianyzik.
+   *
+   * 2026-09-21-IG EZ A SOR „Apple's own word"-ot mondott, es akkor igaz volt:
+   * egy kuldo ut letezett. Ma ketto van, tehat ide a Google `UNREGISTERED` vagy
+   * `SENDER_ID_MISMATCH` szava is bekerulhet.
+   */
   reason?: string;
   /** Whether the device was dropped as a result. */
   retired?: boolean;
+  /**
+   * AMI ITT NINCS, ES KIMONDVA JOBB, MINT HALLGATVA: a PLATFORM.
+   *
+   * Egy felhasznalonak lehet iPhone-ja ES androidos keszuleke is; ilyenkor ket
+   * `attempt` all ugyanazzal a `userId`-val, es a naplobol nem derul ki,
+   * melyik keszulekrol van szo. A megkulonboztetes uj mezot kivanna a naplo
+   * tablajan -- az mar sema-valtozas, es nem ennek a kartyanak a targya.
+   */
 }
 
 export interface NotificationOutcome {
