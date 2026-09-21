@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ServiceJobTimelineEntry } from "@acropora/types";
+import type { ServiceJobPartnerTimelineEntry } from "@acropora/types";
 
 import { naploSor } from "./naplo-sor.js";
 
@@ -16,20 +16,32 @@ import { naploSor } from "./naplo-sor.js";
  * az egyetlen függősége a `@acropora/types`, ami a teszt előtt felépül.
  */
 
-const status = (fromStatus: "NEW" | null, note: string | null = null) =>
+/*
+  A FIXTURA 2026-09-21 OTA A PARTNER ALAKJAT EPITI.
+
+  Korabban `fromStatus`, `toStatus` es `note` allt benne -- vagyis a teszt
+  olyan adatot adott at, ami MA MAR EL SEM JUT a partnerhez. A szerver a
+  `{{isCreation}}` bitet kuldi a nyolc erteku belso enum helyett, es a
+  megjegyzest egyaltalan nem.
+
+  A FORDITO KENYSZERITETTE KI EZT A VALTOZAST, es ez a lenyeg: a lenti
+  "nem nevezi meg a belso allapotot" allitas mostantol NEM az egyetlen vedelem
+  -- a belso nev BE SEM FER a tipusba. A ketto kulon all, es a regebbi
+  allitast szandekosan NEM vettem ki: az a MONDATOT ellenorzi, a tipus a
+  BEMENETET.
+*/
+const status = (isCreation: boolean) =>
   ({
     kind: "status",
     at: "2026-09-20T08:00:00.000Z",
     sortKey: "e1",
     event: {
       id: "e1",
-      fromStatus,
-      toStatus: "WAITING_FOR_PARTS",
-      note,
+      isCreation,
       actorName: "Kiss Márta",
       createdAt: "2026-09-20T08:00:00.000Z",
     },
-  }) satisfies ServiceJobTimelineEntry;
+  }) satisfies ServiceJobPartnerTimelineEntry;
 
 describe("a partner naplósora", () => {
   /**
@@ -55,7 +67,7 @@ describe("a partner naplósora", () => {
       "WAITING_FOR_PARTS",
       "NEW",
     ];
-    for (const kezdo of [null, "NEW" as const])
+    for (const kezdo of [true, false])
       for (const cimke of belso)
         assert.ok(
           !naploSor(status(kezdo)).includes(cimke),
@@ -80,8 +92,8 @@ describe("a partner naplósora", () => {
    * nem üres mondat), és a rontás pontosan a fenti állítást viszi pirosra.
    */
   it("a létrejövés és a váltás KÜLÖNBÖZŐ, nem üres mondatot kap", () => {
-    const letrejott = naploSor(status(null));
-    const valtott = naploSor(status("NEW"));
+    const letrejott = naploSor(status(true));
+    const valtott = naploSor(status(false));
     assert.ok(letrejott.length > 10, "a létrejövés sora üres vagy csonka");
     assert.ok(valtott.length > 10, "a váltás sora üres vagy csonka");
     assert.notEqual(letrejott, valtott);
@@ -91,7 +103,7 @@ describe("a partner naplósora", () => {
   });
 
   it("a munkalap sora a nevet és zárójelben az azonosítót viseli", () => {
-    const entry: ServiceJobTimelineEntry = {
+    const entry: ServiceJobPartnerTimelineEntry = {
       kind: "worksheet",
       at: "2026-09-20T09:00:00.000Z",
       sortKey: "w1",
@@ -116,7 +128,7 @@ describe("a partner naplósora", () => {
    * másolat előbb-utóbb elcsúszna.
    */
   it("a piszkozat lap is megkülönböztethető marad", () => {
-    const entry: ServiceJobTimelineEntry = {
+    const entry: ServiceJobPartnerTimelineEntry = {
       kind: "worksheet",
       at: "2026-09-20T09:00:00.000Z",
       sortKey: "w2",
@@ -135,7 +147,7 @@ describe("a partner naplósora", () => {
   });
 
   it("az eszköz sora a számot ÉS a nevet is viseli", () => {
-    const entry: ServiceJobTimelineEntry = {
+    const entry: ServiceJobPartnerTimelineEntry = {
       kind: "asset",
       at: "2026-09-20T10:00:00.000Z",
       sortKey: "a1",
@@ -171,7 +183,7 @@ describe("a partner naplósora", () => {
         uploadedByName: null,
         uploadedAt: null,
       },
-    } satisfies ServiceJobTimelineEntry;
+    } satisfies ServiceJobPartnerTimelineEntry;
     assert.equal(
       naploSor(alap),
       "Nagy Béla törölt egy fényképet (szivattyu.jpg)",

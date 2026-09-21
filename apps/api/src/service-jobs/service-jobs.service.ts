@@ -22,6 +22,8 @@ import {
   serviceJobTimeline,
   type ServiceJobDetail,
   type ServiceJobListResponse,
+  partnerServiceJobDetail,
+  type ServiceJobPartnerDetail,
 } from "@acropora/types";
 
 import type {
@@ -342,7 +344,7 @@ export class ServiceJobsService {
     });
     if (!updated.ok) throw new NotFoundException("A hibajegy nem található.");
 
-    const detail = await this.detail(id, user);
+    const detail = await this.internalDetail(id, user);
 
     if (updated.added.length > 0)
       this.notifications?.notifyServiceJobAssignment({
@@ -557,7 +559,7 @@ export class ServiceJobsService {
     });
     if (!ok) throw new NotFoundException("A hibajegy nem található.");
 
-    return this.detail(id, user);
+    return this.internalDetail(id, user);
   }
 
   /**
@@ -796,7 +798,23 @@ export class ServiceJobsService {
    * `completedAt` is, de azokat ma semmi nem írja, és ha ez a metódus írná
    * őket, két írónk lenne egy tényre. Az elcsúszásuk néma hiba volna.
    */
-  async detail(id: string, user: AuthenticatedUser): Promise<ServiceJobDetail> {
+  /**
+   * A BELSO ALAK, KULON METODUSBAN -- ES CSAK IRASRA JOGOSULT HIVONAK.
+   *
+   * A `setAssignees`, a `setPlacement` es a `move` valasza 2026-09-17 ota a
+   * TELJES reszletlap, es mind a harom `requireWriteScope`-pal kezdodik. Az
+   * pedig `mayWriteServiceJob` = `scope.kind === "internal"` -- vagyis partner
+   * ezekre az utakra EL SEM JUT (sajat specje van:
+   * `service-jobs.write-scope.spec.ts`).
+   *
+   * EZERT NEM VETIT EZ A METODUS: nem "elfelejtettuk", hanem a hivoi kore
+   * kizarolag belso. A PRIVAT lathatosag tartja igy: aki uj publikus utat nyit
+   * ra, annak a `detail()`-t kell hivnia, vagy sajat orzot tennie.
+   */
+  private async internalDetail(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<ServiceJobDetail> {
     /**
      * A NEM LATHATO JEGY UGYANAZT A VALASZT ADJA, MINT A NEM LETEZO.
      *
@@ -821,7 +839,7 @@ export class ServiceJobsService {
     // AZ UT A SORRAL EGYUTT ERKEZIK a tarolobol -- lasd ott az indokot.
     const ut = row.departmentPath ?? null;
 
-    return {
+    const belso: ServiceJobDetail = {
       id: row.id,
       jobNumber: row.jobNumber,
       title: row.title,
@@ -967,6 +985,47 @@ export class ServiceJobsService {
         assignedAt: assignee.assignedAt.toISOString(),
       })),
     };
+
+    /**
+     * A PARTNER SAJAT ALAKOT KAP, NEM A BELSOT MEGSZURVE.
+     *
+     * Balazs dontese, 2026-09-21 12:07:32 UTC (message_id 1551565542886740020).
+     * Az indok, amit elfogadott: a "nem latja" NEM vedelem -- a bongeszo
+     * fejlesztoi ablaka elolvassa a valaszt, es ezek a mezok EGYETLEN feluleti
+     * valtozasnyira vannak attol, hogy ki is rajzolodjanak.
+     *
+     * A VETITES A KOZOS CSOMAGBAN ALL (`partnerServiceJobDetail`), tehat a
+     * partner KLIENS ugyanazt a tipust latja, amit a szerver eloallit.
+     *
+     * ES A SZALLITO IS PARTNER: a `supplier` hatokor ide el sem jut (a fenti
+     * lathatosagi szuro eldobja), de ha egyszer eljutna, a `!== "internal"`
+     * alak a SZUKEBB iranyba esik -- a `=== "customer"` alak csendben a belso
+     * valaszt adna neki.
+     */
+    return belso;
+  }
+
+  /**
+   * A RESZLETLAP, A HIVO HATOKORE SZERINT.
+   *
+   * A partner SAJAT ALAKOT kap, nem a belsot megszurve (Balazs dontese,
+   * 2026-09-21 12:07:32 UTC, message_id 1551565542886740020). Az indok, amit
+   * elfogadott: a "nem latja" NEM vedelem -- a bongeszo fejlesztoi ablaka
+   * elolvassa a valaszt.
+   *
+   * ES A SZALLITO IS PARTNER: a `supplier` hatokor ide ma el sem jut (a
+   * lathatosagi szuro eldobja), de ha egyszer eljutna, a `!== "internal"` alak
+   * a SZUKEBB iranyba esik. A `=== "customer"` alak csendben a belso valaszt
+   * adna neki.
+   */
+  async detail(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<ServiceJobDetail | ServiceJobPartnerDetail> {
+    const belso = await this.internalDetail(id, user);
+    return partnerScopeOf(user).kind === "internal"
+      ? belso
+      : partnerServiceJobDetail(belso);
   }
 
   /**
@@ -1285,6 +1344,6 @@ export class ServiceJobsService {
      * között a jegy már mozdulhatott. Egy körből friss lap jön, és a napló
      * új sora -- a lépés bizonyítéka -- rajta van.
      */
-    return this.detail(id, user);
+    return this.internalDetail(id, user);
   }
 }

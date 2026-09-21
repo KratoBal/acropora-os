@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import type { AuthenticatedUser } from "@acropora/types";
+import {
+  isPartnerServiceJobDetail,
+  type ServiceJobDetail,
+  type ServiceJobPartnerDetail,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import type { NotificationsService } from "../notifications/notifications.service.js";
 import { NotificationsModule } from "../notifications/notifications.module.js";
@@ -90,6 +95,24 @@ function setup(
     assigned,
     notified,
   };
+}
+
+/**
+ * A BELSO HIVO A TELJES RESZLETLAPOT KAPJA -- ES EZ ALLITAS, NEM KENYELEM.
+ *
+ * A `detail` 2026-09-21 ota ket alakot ad vissza (a partner sajat, szukebb
+ * tipust kap). Ez a segedfuggveny nem csak szukit: KIMONDJA, hogy a belso
+ * hivo tovabbra is a teljeset kapja. Enelkul egy kesobbi "egyszerusites"
+ * MINDENKITOL elvehetne a mezoket, es a tesztek ettol meg zoldek maradnanak.
+ */
+function belsoReszletlap(
+  detail: ServiceJobDetail | ServiceJobPartnerDetail,
+): ServiceJobDetail {
+  assert.ok(
+    !isPartnerServiceJobDetail(detail),
+    "a belso hivo a TELJES reszletlapot kapja",
+  );
+  return detail;
 }
 
 describe("a hibajegy delegálása felvitelkor", () => {
@@ -289,7 +312,7 @@ describe("a delegáltak a részletlapon", () => {
         ]),
     });
 
-    const detail = await world.service.detail("job-1", BELSOS);
+    const detail = belsoReszletlap(await world.service.detail("job-1", BELSOS));
 
     assert.deepEqual(detail.assignees, [
       {
@@ -313,7 +336,7 @@ describe("a delegáltak a részletlapon", () => {
   it("delegálatlan jegyen üres lista áll, nem hiányzó mező", async () => {
     const world = setup();
 
-    const detail = await world.service.detail("job-1", BELSOS);
+    const detail = belsoReszletlap(await world.service.detail("job-1", BELSOS));
 
     assert.deepEqual(detail.assignees, []);
   });
