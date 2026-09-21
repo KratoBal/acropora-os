@@ -231,9 +231,21 @@ export function TicketDetail({ id }: { id: string }) {
                       : ""}
                   </time>
                 ) : null}
-                {entry.kind === "status" && entry.event.note ? (
-                  <p className="preline">{entry.event.note}</p>
-                ) : null}
+                {/*
+                  A BELSŐ MEGJEGYZÉS NEM MEGY A PARTNER ELÉ (Balázs döntése,
+                  2026-09-21 10:5x UTC, Discord, szó szerint: „a megjegyzes nem
+                  kell a nev igen").
+
+                  EZ A SOR 2026-09-21 DÉLUTÁNIG KIÍRTA. Az érvem az volt, hogy
+                  nem új közzététel: a partner letölthető dokumentumcsomagja MA
+                  IS tartalmazza ugyanezt a megjegyzést. A mérés igaz volt, a
+                  KÖVETKEZTETÉS nem -- Balázs ugyanazzal a mondattal a CSOMAGBÓL
+                  is kivetette. Egy meglévő közzététel tehát nem igazol egy
+                  másodikat: lehet, hogy az első sem kellett volna.
+
+                  A KOLLÉGA NEVE MARAD, és ezt ő külön kimondta („a nev igen").
+                  A sor fölött áll, az időpont mellett.
+                */}
               </li>
             ))}
           </ol>
