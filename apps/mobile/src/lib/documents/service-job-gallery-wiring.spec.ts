@@ -76,11 +76,15 @@ describe("a hibajegy csatolmány-szakasza", () => {
   it("a kép-forrás a kliens BASE útvonalával egyezik", () => {
     const base = olvas(KLIENS).match(/^const BASE = "([^"]+)";/m);
     assert.ok(base, "nem találom a kliens BASE értékét");
+    /*
+      AZ UTVONAL 2026-09-21 OTA ERTEK, NEM HOROG-HIVAS: a kepet a
+      `DocumentImage` sajat letoltese keri le (a natív betolto fejlece
+      Androidon nem er celba, merve). AMIT AZ ALLITAS MER, AZ VALTOZATLAN:
+      hogy az utvonal a kliens BASE-ebol epul, es nem a kepernyo mappanevebol.
+    */
     assert.match(
       olvas(KEPERNYO),
-      new RegExp(
-        `useDocumentImageSource\\(\\s*(/\\*[\\s\\S]*?\\*/\\s*)?id \\? \`${base[1]}/`,
-      ),
+      new RegExp(`id \\? \`${base[1]}/`),
       `a kép-forrás útvonala nem a kliens BASE-ét (${base[1]}) használja`,
     );
   });
@@ -100,13 +104,21 @@ describe("a hibajegy csatolmány-szakasza", () => {
    */
   it("a kép a hitelesített forrásból jön, mind a két nézetben", () => {
     const s = olvas(KEPERNYO);
-    assert.match(s, /useDocumentImageSource\(/);
-    const db = s.split("source={forras}").length - 1;
+    /*
+      A MECHANIZMUS 2026-09-21-EN MEGVALTOZOTT: a hitelesitett keres nem a
+      natív betoltoe, hanem a `DocumentImage` sajat letoltese. A DARABSZAM
+      merese viszont valtozatlanul kell -- pontosan azert, amiert eddig: egy
+      jelenletre illeszto allitas zolden atengedne, ha az egyik nezet
+      lemaradna, es a hiba NEMA lenne.
+    */
+    const db = s.split("<DocumentImage").length - 1;
     assert.equal(
       db,
       2,
-      `a hitelesített forrás ${db} helyen áll; a csempe ÉS a nagy kép rátéte kell, különben az egyik nézet üresen maradna`,
+      `a hitelesített kép ${db} helyen áll; a csempe ÉS a nagy kép rátéte kell, különben az egyik nézet üresen maradna`,
     );
+    /* ES MIND A KETTO A GAZDA-UTVONALAT KAPJA, nem egy beirt cimet. */
+    assert.equal(s.split("ownerPath={gazdaUtvonal}").length - 1, 2);
   });
 
   /**
@@ -245,15 +257,20 @@ describe("a hibajegy csatolmány-szakasza", () => {
    */
   it("a csempe belyegkepet ker, a nagy kep az EREDETIT", () => {
     const s = olvas(KEPERNYO);
+    /*
+      A VALTOZAT MOSTANTOL PROP, NEM KET KULON FUGGVENY-NEV. Amit az allitas
+      mer, az valtozatlan: a csempe a BELYEGKEPET keri, a nagy kep az
+      EREDETIT -- es darabszamot merunk, nem jelenletet.
+    */
     assert.equal(
-      s.split("kepForras.csempe(").length - 1,
+      s.split('variant="thumbnail"').length - 1,
       1,
-      "a csempe nem a belyegkep-agat hivja",
+      "a csempe nem a belyegkepet keri",
     );
     assert.equal(
-      s.split("kepForras.teljes(").length - 1,
+      s.split('variant="original"').length - 1,
       1,
-      "a nagy kep nem az eredeti-agat hivja",
+      "a nagy kep nem az eredetit keri",
     );
   });
 
