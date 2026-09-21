@@ -222,13 +222,13 @@ export class ServiceAssetsController {
     @Body() input: UpdateAssetDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.update(id, input, user.id);
+    return this.service.update(id, input, user.id, partnerScopeOf(user));
   }
 
   @Post(":id/qr/rotate")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   rotateQr(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.rotateQr(id, user.id);
+    return this.service.rotateQr(id, user.id, partnerScopeOf(user));
   }
 
   /**
