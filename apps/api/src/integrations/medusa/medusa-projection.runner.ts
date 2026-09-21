@@ -20,6 +20,7 @@ import {
 } from "./medusa-category.policy.js";
 import {
   decideMedusaBarcode,
+  vonalkodAlakjai,
   describeBlockedBarcode,
   describeSkippedBarcode,
 } from "./medusa-barcode.policy.js";
@@ -895,9 +896,26 @@ export async function runProjectionCli(
      * pillanatban futna, tehat a dontes es a rola szolo mondat MAS szamon
      * allhatna.
      */
-    const azonosKodudarab = nyersVonalkod
+    /*
+      A SZAMLALAS MIND A KET IRASMODOT LATJA (2026-09-21).
+
+      Eddig pontos egyezessel ment, tehat a `653341191120` es a `0653341191120`
+      -- UGYANAZ a nyomtatott kod -- ket kulonbozo erteknek szamitott. Ket
+      termek viselhette ugyanazt a fizikai kodot ugy, hogy az ismetlodes-ag
+      egyiknel sem sult el, es a cel oldali egyedi indexek sem, mert a ket alak
+      KET KULONBOZO mezobe megy.
+
+      A jelolt-lista a `vonalkodAlakjai`-bol jon, hogy a szabaly adatbazis
+      nelkul merheto legyen. Nem vonalkod-szeru erteknel egyelemu, tehat a
+      valodi gyartoi cikkszamokon a viselkedes valtozatlan.
+    */
+    const kodAlakok = vonalkodAlakjai(nyersVonalkod);
+    const azonosKodudarab = kodAlakok.length
       ? await db.productVariant.count({
-          where: { manufacturerPartNumber: nyersVonalkod, isActive: true },
+          where: {
+            manufacturerPartNumber: { in: kodAlakok },
+            isActive: true,
+          },
         })
       : 0;
     /**

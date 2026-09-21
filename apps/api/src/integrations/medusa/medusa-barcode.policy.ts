@@ -102,6 +102,27 @@ const KIADVANY_ELOTAGOK = ["977", "978", "979"];
  *
  * A 2-es elotagra a mert adatban NULLA eset van. Elore szol, nem visszamenoleg:
  * a belso hasznalatu kodok epp attol veszelyesek, hogy barmikor keletkezhetnek.
+ *
+ * === A 12 JEGYU ALAKRA IS FUT, ES A NORMALIZALAS ITT ROSSZ VALASZ LENNE ===
+ *
+ * Ez a vizsgalat 2026-09-21-ig CSAK a 13 jegyu agon futott, mert a mezo-valasztas
+ * ott hivta. A 12 jegyu UPC-A vizsgalat NELKUL kapott `upc` mezot -- holott a
+ * 2-es SZAMRENDSZER-JEGY az UPC-A-ban UGYANAZT jelenti (belso hasznalat), ahogy
+ * a fenti felsorolas is mondja.
+ *
+ * KEZENFEKVO VOLT VOLNA a 12 jegyu kodot vezeto nullaval kiegesziteni, es a
+ * vizsgalatot a kiegeszitett alakra futtatni. AZ ELRONTANA: a `2xxxxxxxxxxx`
+ * alakbol `02xxxxxxxxxxx` lesz, tehat a szamrendszer-jegy a MASODIK helyre
+ * kerul, es az elso-jegy vizsgalat nem fogja meg.
+ *
+ * Vagyis a normalizalas epp a MEGKULONBOZTETO JELET torolne el. Ezert a
+ * vizsgalat a NYERS alakon fut, es mind a ket hossznal az ELSO jegyet nezi.
+ *
+ * A TOBBI TARTOMANY (950-969, 980-984, 99) EAN-13 ELOTAG, es a 13 jegyu alakra
+ * szol. Egy 12 jegyu UPC-A soha nem kezdodik igy: EAN-13 alakban vezeto nullat
+ * kap, tehat a haromjegyu elotagja `0xx`. A haromjegyu agak ezert a 13 jegyu
+ * alakon is ugyanazt mondjak, a 12 jegyun pedig sosem sulnek el -- nem hibasan,
+ * hanem mert nem is ertelmezhetok ott.
  */
 function nemTermekTartomany(kod: string): boolean {
   const elso = kod.slice(0, 1);
@@ -151,6 +172,52 @@ export type MedusaBarcodeDecision =
  * megis, ugy kezeljuk, mint az egyedit: a hivo szamlalasi hibaja miatt NEM
  * dobunk el egy jo kodot.
  */
+/**
+ * UGYANAZ A FIZIKAI KOD KET IRASMODBAN -- ES AZ ISMETLODES-SZAMLALAS EDDIG
+ * KETTONEK LATTA.
+ *
+ * Egy UPC-A kod ket alakban allhat ugyanarrol a csomagolasrol leolvasva:
+ * 12 jegyen (`653341191120`), vagy EAN-13-kent, vezeto nullaval
+ * (`0653341191120`). Ugyanaz a NYOMTATOTT kod.
+ *
+ * A hivo eddig PONTOS EGYEZESSEL szamolt
+ * (`where: { manufacturerPartNumber: nyersVonalkod }`), tehat a ket alak ket
+ * kulonbozo ertek volt: ket termek viselhette ugyanazt a fizikai kodot ugy,
+ * hogy az ismetlodes-ag egyiknel sem sult el -- es a cel oldali egyedi indexek
+ * sem, mert a ket alak KET KULONBOZO MEZOBE megy (`upc` es `ean`).
+ *
+ * === A SZAMOK, AMIK MIATT EZ NEM ELMELETI (merve 2026-09-21) ===
+ *
+ * A nyers UNAS exporton, a szamjegyes cikkszamok kozott:
+ *
+ *   12 jegyu ertek   165    a MASODIK leggyakoribb hossz
+ *   13 jegyu ertek   783
+ *
+ * A staging adatbazis fuggetlenul ugyanezt mondja (998 kitoltott cikkszambol
+ * 92 tizenket jegyu, 388 tizenharom jegyu).
+ *
+ * ES A DONTO SZAM: HARMINCHET olyan 13 jegyu kod all a katalogusban, ami
+ * VEZETO NULLAVAL kezdodik -- vagyis mar a kiegeszitett alakban. A katalogus
+ * tehat MA IS ket konvenciot visel egymas mellett. Utkozo par ma nincs (merve,
+ * mukodo pozitiv kontrollal), de harminchet kod all EGYETLEN forras-oldali
+ * szerkesztesnyire tole.
+ *
+ * === ES EZ A NORMALIZALAS HELYE, A MEZO-VALASZTAS VISZONT NEM ===
+ *
+ * Itt a ket alakot EGYNEK kell latni, mert ugyanaz a fizikai kod. A
+ * mezo-valasztasnal es a tartomany-orzonel viszont NEM szabad normalizalni:
+ * ott a `2` szamrendszer-jegy helye a megkulonbozteto jel, es a vezeto nulla
+ * eltolna. Ugyanaz az ertek, ket kerdes, ket ellentetes valasz.
+ */
+export function vonalkodAlakjai(value: string | null): string[] {
+  const kod = (value ?? "").trim();
+  if (!kod) return [];
+  if (!/^\d+$/.test(kod)) return [kod];
+  if (kod.length === 12) return [kod, `0${kod}`];
+  if (kod.length === 13 && kod.startsWith("0")) return [kod, kod.slice(1)];
+  return [kod];
+}
+
 export function decideMedusaBarcode(
   value: string | null,
   sameValueCount: number,
@@ -201,7 +268,7 @@ export function decideMedusaBarcode(
     !KIADVANY_ELOTAGOK.some((elotag) => kod.startsWith(elotag)) &&
     !nemTermekTartomany(kod)
       ? "ean"
-      : kod.length === 12
+      : kod.length === 12 && !nemTermekTartomany(kod)
         ? "upc"
         : null;
 
