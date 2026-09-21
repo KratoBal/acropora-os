@@ -17,6 +17,9 @@ import {
   listWorksheets,
 } from "@/lib/api/worksheets";
 import { rememberAssetDetail, rememberAssets } from "@/lib/offline/asset-cache";
+import { environment } from "@/config/env";
+import { kepLetoltese } from "@/lib/documents/document-image-file";
+import { kepFajlFuggosegek } from "@/lib/documents/kep-fajl-deps";
 import { LETOLTES_UTAN_UJRAOLVASANDO } from "@/lib/offline/helyszin-letoltes";
 import { letoltHelyszin } from "@/lib/offline/helyszin-letoltes-futtato";
 import {
@@ -96,6 +99,30 @@ export function HelyszinLetolto() {
           eszkozReszlet: getAsset,
           eszkozokMentese: rememberAssets,
           eszkozReszletMentese: rememberAssetDetail,
+          /*
+            A BELYEGKEP UGYANABBA A KONYVTARBA es UGYANAZZAL a fajlnevvel
+            kerul, amit a galeria horga keres -- kulonben ott allna a
+            lemezen, es a csempe megsem talalna meg. A ket ut ezert EGY
+            modulbol veszi a varratokat (`kep-fajl-deps.ts`).
+          */
+          belyegkepLetoltese: async ({ assetId, documentId }) => {
+            const eredmeny = await kepLetoltese(
+              {
+                apiUrl: environment.ok ? environment.config.apiUrl : null,
+                ownerPath: `/service/assets/${encodeURIComponent(assetId)}`,
+                documentId,
+                variant: "thumbnail",
+              },
+              kepFajlFuggosegek,
+            );
+            /*
+              A BUKAST KIVETELKENT DOBJUK TOVABB, mert a menet a `probald`
+              burkolójával szamol: egy csendben elnyelt hiba ugy latszana,
+              mintha a kep lejott volna, es a zaro mondat TOBBET allitana,
+              mint amennyi igaz.
+            */
+            if (eredmeny.allapot === "hiba") throw new Error(eredmeny.uzenet);
+          },
           jegyLista: () => listServiceJobs("open"),
           jegyReszlet: getServiceJob,
           jegyekMentese: rememberServiceJobs,

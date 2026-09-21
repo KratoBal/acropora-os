@@ -39,7 +39,17 @@ function fuggosegek(
 ): HelyszinLetoltesFuggosegek {
   return {
     eszkozLista: async () => eszkozLap([eszkozSor("a1"), eszkozSor("a2")], 1),
-    eszkozReszlet: async (id: string) => ({ id }),
+    /*
+      A RESZLETLAP CSATOLMANY-LISTAT IS HORDOZ: a belyegkepek ebbol jonnek,
+      kulon hivas nelkul. Alapban URES, hogy a mai allitasok valtozatlanul azt
+      merjek, amit eddig -- a kepes agat ott kapcsoljuk be, ahol epp az a
+      kerdes.
+    */
+    eszkozReszlet: async (id: string) => ({
+      id,
+      documents: [] as { id: string; contentType: string }[],
+    }),
+    belyegkepLetoltese: async () => {},
     eszkozokMentese: async () => {},
     eszkozReszletMentese: async () => {},
     jegyLista: async () => ({
@@ -55,6 +65,19 @@ function fuggosegek(
     ...felulir,
   } as HelyszinLetoltesFuggosegek;
 }
+
+/**
+ * EGY ZARO SOR A TARTALMA ALAPJAN, NEM A HELYE ALAPJAN.
+ *
+ * A sorok sorrendje VALTOZOTT, amikor a belyegkepek resze bekerult -- es
+ * harom allitas azonnal pirosra ment, holott a MERT dolog valtozatlan volt.
+ * Egy index a listaban nem a szandekot rogziti, hanem a mai elrendezest.
+ */
+const sorAmi = (sorok: readonly string[], minta: RegExp) => {
+  const talalt = sorok.find((sor) => minta.test(sor));
+  assert.ok(talalt, `nincs ilyen záró sor: ${minta}`);
+  return talalt;
+};
 
 const futtat = (felulir: Partial<HelyszinLetoltesFuggosegek> = {}) =>
   letoltHelyszin(
@@ -77,14 +100,14 @@ describe("a helyszín letöltésének menete", () => {
    */
   it("egyetlen elhasalt eszköz-adatlaptól HIÁNYOS lesz az egész", async () => {
     const eredmeny = await futtat({
-      eszkozReszlet: async (id) => {
+      eszkozReszlet: async (id: string) => {
         if (id === "a2") throw new Error("nincs térerő");
-        return { id };
+        return { id, documents: [] as { id: string; contentType: string }[] };
       },
     });
     assert.equal(eredmeny.teljes, false);
     assert.match(eredmeny.cim, /HIÁNYOS/);
-    assert.match(eredmeny.sorok[0]!, /1 eszköz jött le/);
+    assert.match(sorAmi(eredmeny.sorok, /eszköz/), /1 eszköz jött le/);
   });
 
   /**
@@ -130,7 +153,7 @@ describe("a helyszín letöltésének menete", () => {
       }),
     });
     assert.equal(eredmeny.teljes, false);
-    assert.match(eredmeny.sorok[1]!, /NEM került a készülékre/);
+    assert.match(sorAmi(eredmeny.sorok, /hibajegy/), /NEM került a készülékre/);
   });
 
   /**
@@ -177,7 +200,7 @@ describe("a helyszín letöltésének menete", () => {
       eszkozLista: async () => eszkozLap(sok, 1),
     });
     assert.equal(eredmeny.teljes, false);
-    assert.match(eredmeny.sorok[0]!, /NEM került a készülékre/);
+    assert.match(sorAmi(eredmeny.sorok, /eszköz/), /NEM került a készülékre/);
   });
 
   /**
@@ -212,5 +235,62 @@ describe("a helyszín letöltésének menete", () => {
       "munkalap",
     ])
       assert.ok(irasok.includes(vart), `nem irt a masolatba: ${vart}`);
+  });
+});
+
+/**
+ * A BELYEGKEPEK (d1cd720a, 2026-09-21).
+ *
+ * Balazs merese: „kepeket nem hozza be UnableToDownloadException". A letolto
+ * EGYETLEN sort sem tartalmazott keprol -- nem hiba volt, hanem HIANY.
+ */
+describe("a helyszín bélyegképei", () => {
+  const kepesReszlet = (id: string) => ({
+    id,
+    documents: [
+      { id: `${id}-kep`, contentType: "image/jpeg" },
+      { id: `${id}-pdf`, contentType: "application/pdf" },
+    ],
+  });
+
+  it("csak a KÉPEKET tölti le, a többi csatolmányt nem", async () => {
+    const kertek: string[] = [];
+    const eredmeny = await futtat({
+      eszkozLista: async () => eszkozLap([eszkozSor("a1")], 1),
+      eszkozReszlet: async (id: string) => kepesReszlet(id),
+      belyegkepLetoltese: async ({ documentId }) => {
+        kertek.push(documentId);
+      },
+    });
+    assert.deepEqual(kertek, ["a1-kep"]);
+    assert.match(sorAmi(eredmeny.sorok, /bélyegkép/), /1 bélyegkép letöltve/);
+  });
+
+  /**
+   * A KEP A `contentType`-BOL DOL EL, nem a fajlnev vegebol: egy `.pdf`
+   * lehet szkennelt fenykep, es egy kiterjesztes nelkuli fajl is lehet kep.
+   */
+  it("a bélyegkép hibája HIÁNYOSSÁ teszi az egészet", async () => {
+    const eredmeny = await futtat({
+      eszkozLista: async () => eszkozLap([eszkozSor("a1")], 1),
+      eszkozReszlet: async (id: string) => kepesReszlet(id),
+      belyegkepLetoltese: async () => {
+        throw new Error("nincs térerő");
+      },
+    });
+    assert.equal(eredmeny.teljes, false);
+    assert.match(eredmeny.cim, /HIÁNYOS/);
+  });
+
+  /**
+   * POZITIV KONTROLL: kep nelkuli helyszinen a resz KESZ, nem elhasalt.
+   *
+   * Enelkul a fenti allitas egy olyan valtozatot is zolden hagyna, ami MINDEN
+   * helyszint hianyosnak mond -- es akkor a zaro mondat elveszti a jelenteset.
+   */
+  it("kép nélküli helyszínen a rész KÉSZ", async () => {
+    const eredmeny = await futtat();
+    assert.equal(eredmeny.teljes, true);
+    assert.match(sorAmi(eredmeny.sorok, /bélyegkép/), /0 bélyegkép letöltve/);
   });
 });
