@@ -4,7 +4,6 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { DocumentImage } from "@/components/documents/DocumentImage";
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
 import { toPickedImages } from "@/lib/api/picked-image";
 import {
@@ -472,23 +472,20 @@ export default function ServiceJobDetailScreen() {
                         pressed && styles.pressed,
                       ]}
                     >
-                      {forras ? (
-                        <Image
-                          source={forras}
-                          style={styles.csempeKep}
-                          resizeMode="cover"
-                          accessibilityLabel={kep.fileName}
-                        />
-                      ) : (
-                        /*
-                          A HIANYZO FORRAS NEM NEMA. Enelkul egy ures csempe
-                          allna itt, ami pontosan ugy nez ki, mint egy elromlott
-                          kep -- es epp az a hiba, amit ez a szakasz javit.
-                        */
-                        <View style={styles.csempeKep}>
-                          <Text style={styles.meta}>nem tölthető be</Text>
-                        </View>
-                      )}
+                      {/*
+                        A HIANYZO FORRAS ES A BETOLTESI HIBA KET KULON MONDAT,
+                        es mind a ketto a csempe HELYEN jelenik meg. Eddig egy
+                        kozos "nem tölthető be" allt itt, ami pontosan azt a
+                        kulonbseget torolte el, amit most merni akarunk
+                        (Balazs eles hibaja Androidon, 2026-09-21).
+                      */}
+                      <DocumentImage
+                        source={forras}
+                        style={styles.csempeKep}
+                        hibaStyle={styles.csempeHiba}
+                        resizeMode="cover"
+                        accessibilityLabel={kep.fileName}
+                      />
                       {/*
                         A FELIRAT A MERET FOLOTT ALL, es ez nem elrendezesi
                         izles: a felirat azt mondja meg, MIT LATUNK, a meret
@@ -616,15 +613,14 @@ export default function ServiceJobDetailScreen() {
         <View style={styles.nagyRatet}>
           {(() => {
             const forras = kepForras.teljes(nagyKep);
-            return forras ? (
-              <Image
+            return (
+              <DocumentImage
                 source={forras}
                 style={styles.nagyKep}
+                hibaStyle={styles.nagyKepHiba}
                 resizeMode="contain"
                 accessibilityLabel="A csatolmány nagyban"
               />
-            ) : (
-              <Text style={styles.meta}>A kép most nem tölthető be.</Text>
             );
           })()}
           {/*
@@ -743,6 +739,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  /*
+    A MERES DOBOZA. A csempe 104 pont szeles, tehat a natív hibauzenet nem fer
+    ki egeszben -- ezert GORGETHETO helyett egyszeruen kicsi betuvel all, es a
+    TELJES szoveg a nagy nezetben olvashato, ahol van hely. Aki a csempen csak
+    annyit lat, hogy MERES, az rakoppint.
+  */
+  csempeHiba: { padding: 4 },
+  nagyKepHiba: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
   },
   csempeFelirat: { color: "#eaf4fa", fontSize: 12, textAlign: "center" },
   csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
