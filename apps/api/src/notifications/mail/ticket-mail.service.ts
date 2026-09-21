@@ -171,7 +171,13 @@ export class TicketMailService {
       masodik reteg, es akkor is all, ha valaki egy masik hivot ir melle.
     */
     await this.sender.send({
-      to: decision.to,
+      /*
+        EGY CIMZETT, TOMBBE TEVE. A port `to` mezoje 2026-09-21 ota tomb, mert
+        a lezart hibajegy TOBB cimzettnek megy. Ez az ut valtozatlanul EGY
+        cimzettet ismer: a jegy nyitojat -- a `ticketMailDecision` egyetlen
+        cimet ad vissza, es ezen a kor nem valtoztat.
+      */
+      to: [decision.to],
       subject: headerSafe(targy.text),
       text: level.text,
     });
