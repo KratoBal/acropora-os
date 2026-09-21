@@ -66,7 +66,7 @@ async function felvitel(
   dto: CreateWorksheetDto,
 ): Promise<void> {
   try {
-    await service.create(dto, "user-1");
+    await service.create(dto, BELSOS_KERO);
   } catch {
     // a letrehozas UTANI visszaolvasas hianyzik a duplabol; lasd fent
   }
@@ -87,7 +87,7 @@ describe("a munkalap eszközei és a helyszín", () => {
     const { service, hivasok } = serviceWith(["asset-idegen"]);
 
     await assert.rejects(
-      () => service.create(input(["asset-idegen"]), "user-1"),
+      () => service.create(input(["asset-idegen"]), BELSOS_KERO),
       (hiba: { status?: number; message?: string }) =>
         hiba.status === 400 && /nem ezen a helyszínen/.test(hiba.message ?? ""),
     );
@@ -99,7 +99,7 @@ describe("a munkalap eszközei és a helyszín", () => {
     const { service } = serviceWith(["a", "b"]);
 
     await assert.rejects(
-      () => service.create(input(["a", "b"]), "user-1"),
+      () => service.create(input(["a", "b"]), BELSOS_KERO),
       (hiba: { message?: string }) =>
         /2 megadott eszköz/.test(hiba.message ?? ""),
     );

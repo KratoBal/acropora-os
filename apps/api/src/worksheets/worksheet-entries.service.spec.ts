@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+/**
+ * A KERO, BELSOS HATOKORREL, MEGADOTT AZONOSITOVAL.
+ *
+ * A `customerId`/`supplierId` NULLA NEM RESZLET: a munkanaplo-vegpontok
+ * 2026-09-21 ota belsos-only kapun mennek at. Egy partner alaku kero eseten a
+ * teszt MAR OTT elbukna -- es akkor a SZERZOSEG-allitasok nem arrol szolnanak,
+ * amirol a nevuk.
+ */
+const belsos = (id: string) =>
+  ({ id, customerId: null, supplierId: null }) as never;
+
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
 
 import type { WorksheetsRepository } from "./worksheets.repository.js";
@@ -92,7 +103,7 @@ describe("a bejegyzés szerkesztése a szerveren", () => {
       "worksheet-1",
       "entry-1",
       "Javított szöveg",
-      "keszito-1",
+      belsos("keszito-1"),
     );
     assert.equal(out.items.length, 1);
   });
@@ -104,7 +115,7 @@ describe("a bejegyzés szerkesztése a szerveren", () => {
       "worksheet-1",
       "entry-1",
       "Javított szöveg",
-      "nyito-1",
+      belsos("nyito-1"),
     );
     assert.equal(out.items.length, 1);
   });
@@ -120,7 +131,13 @@ describe("a bejegyzés szerkesztése a szerveren", () => {
       tehat a felulet helyesen viselkedne, es csak a vegpont engedne at.
     */
     await assert.rejects(
-      () => service().updateEntry("worksheet-1", "entry-1", "Idegen", "user-9"),
+      () =>
+        service().updateEntry(
+          "worksheet-1",
+          "entry-1",
+          "Idegen",
+          belsos("user-9"),
+        ),
       ForbiddenException,
     );
   });
@@ -140,7 +157,7 @@ describe("a bejegyzés szerkesztése a szerveren", () => {
           "worksheet-1",
           "masik-lap-bejegyzese",
           "Javított",
-          "keszito-1",
+          belsos("keszito-1"),
         ),
       NotFoundException,
     );

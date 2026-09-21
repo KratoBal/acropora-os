@@ -81,8 +81,9 @@ export class WorksheetsController {
   createDepartment(
     @Param("customerId") customerId: string,
     @Body() input: CreateWorksheetDepartmentDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.createDepartment(customerId, input);
+    return this.service.createDepartment(user, customerId, input);
   }
 
   /**
@@ -96,8 +97,9 @@ export class WorksheetsController {
   setPartnerCode(
     @Param("customerId") customerId: string,
     @Body() input: SetWorksheetPartnerCodeDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.setPartnerCode(customerId, input);
+    return this.service.setPartnerCode(user, customerId, input);
   }
 
   /**
@@ -173,7 +175,7 @@ export class WorksheetsController {
     @Body() input: CreateWorksheetDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.create(input, user.id);
+    return this.service.create(input, user);
   }
 
   @Patch(":id")
@@ -196,8 +198,12 @@ export class WorksheetsController {
    */
   @Post(":id/lines")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  addLine(@Param("id") id: string, @Body() input: CreateWorksheetLineDto) {
-    return this.service.addLine(id, input);
+  addLine(
+    @Param("id") id: string,
+    @Body() input: CreateWorksheetLineDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.addLine(id, input, user);
   }
 
   @Patch(":id/lines/:lineId")
@@ -206,8 +212,9 @@ export class WorksheetsController {
     @Param("id") id: string,
     @Param("lineId") lineId: string,
     @Body() input: UpdateWorksheetLineDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.updateLine(id, lineId, input);
+    return this.service.updateLine(id, lineId, input, user);
   }
 
   /**
@@ -243,7 +250,7 @@ export class WorksheetsController {
     @Body() input: CreateWorksheetEntryDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.addEntry(id, input.body, user.id);
+    return this.service.addEntry(id, input.body, user);
   }
 
   /**
@@ -260,13 +267,17 @@ export class WorksheetsController {
     @Body() input: UpdateWorksheetEntryDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.updateEntry(id, entryId, input.body, user.id);
+    return this.service.updateEntry(id, entryId, input.body, user);
   }
 
   @Delete(":id/lines/:lineId")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  removeLine(@Param("id") id: string, @Param("lineId") lineId: string) {
-    return this.service.removeLine(id, lineId);
+  removeLine(
+    @Param("id") id: string,
+    @Param("lineId") lineId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.removeLine(id, lineId, user);
   }
 
   /**
@@ -319,7 +330,7 @@ export class WorksheetsController {
     @Param("id") id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.continueFrom(id, user.id);
+    return this.service.continueFrom(id, user);
   }
 
   /**
@@ -374,7 +385,7 @@ export class WorksheetsController {
   @Post(":id/close")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   close(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.close(id, user.id);
+    return this.service.close(id, user);
   }
 
   /**

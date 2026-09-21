@@ -27,16 +27,16 @@ import { describe, it } from "node:test";
  *
  * A "MEGKAPJA A KEROT" SZUKSEGES, DE NEM ELEGSEGES.
  *
- * Merve ugyanaznap, a TELJES fan, ugyanezzel a kiolvasassal: OT iro utvonal all
- * partner-jog alatt ugy, hogy MEGKAPJA a kerot, es csak az AZONOSITOJAT adja
- * tovabb -- aktorkent, nem hatokorkent:
+ * Egy handler MEGKAPHATJA a kerot, es tovabbadhatja csak az AZONOSITOJAT --
+ * aktorkent, nem hatokorkent. Az ATMEGY ezen a halon, es a halo semmit nem
+ * allit rola.
  *
- *   create, addEntry, updateEntry, continueFrom, close
- *   (mind a worksheets kontrolleren)
+ * MERVE 2026-09-21 ESTE: ilyen ma NULLA van (a masodik javitasi kor utan). A
+ * nulla viszont a MAI allapot, nem a halo erdeme -- ezt a halmazt SEMMI nem
+ * oriz, tehat holnap ujra kelethezhet, es ez a halo nem fog szolni.
  *
- * Ezek mind ATMENNEK ezen a halon, es a halo egyikrol sem allitja, hogy
- * hatokort szukit. A szamuk azert all itt, mert egy "nehany" szo ugyanugy
- * elfedne a meretet, mint egy hianyzo mondat.
+ * A szam azert all itt, es nem egy "nehany" szo, mert egy meret csak akkor
+ * ellenorizheto, ha ki van mondva.
  *
  * Egy halo, amirol azt hisszuk, tobbet ved, mint amennyit, ugyanaz a fajta
  * hamis biztonsag, mint egy hamis korlat. Ezert all ez a bekezdes ITT, es nem
@@ -72,13 +72,22 @@ const PARTNERI_JOGOK = ["SERVICE_VIEW", "SERVICE_MANAGE"] as const;
  * a hosszat kulon allitas meri.
  */
 const KIVETELEK: readonly { handler: string; kartya: string }[] = [
-  { handler: "createDepartment", kartya: "9c818503" },
-  // A setPartnerCode-ra KULON dontesi kartya all (866fd6cd: melyik jogkor
-  // allithat partnerkodot). Ott a mechanika kesz es a SZABALY hianyzik.
-  { handler: "setPartnerCode", kartya: "866fd6cd" },
-  { handler: "addLine", kartya: "9c818503" },
-  { handler: "updateLine", kartya: "9c818503" },
-  { handler: "removeLine", kartya: "9c818503" },
+  /*
+    URES, 2026-09-21 ota -- es ez a lista MAGATOL rovidult.
+
+    Ot elemmel indult (createDepartment, setPartnerCode, addLine, updateLine,
+    removeLine). Amikor mind az ot megkapta a kerot, EZ A HALO sult el a sajat
+    javitasomra: a halmaz-allitas pirosodott, es a hosszat is at kellett irni.
+
+    Pontosan ezert all itt a hossz allitaskent. Egy uj kivetel nem csuszhat be
+    csendben -- at kell irni egy szamot, es az a diffben latszik.
+
+    ES A setPartnerCode NEM JOGKOR-KERDES VOLT. A 866fd6cd kartya ugy allt,
+    mintha Balazsra varna (SERVICE_MANAGE vagy PARTNERS_MANAGE). Acrobot
+    lemerte: a `SERVICE` szerep SZANDEKOSAN nem kap `PARTNERS_MANAGE` jogot, es
+    a mezo a MUNKALAP miatt letezik, nem partner-torzsadatkent. A jog helyes
+    volt, a hatokor hianyzott -- ugyanaz az eset, mint a masik negy.
+  */
 ];
 
 interface Utvonal {
@@ -176,8 +185,13 @@ describe("minden partner-jog alatt álló író útvonal megkapja a kérőt", ()
    * halo tovabbra is zold maradna. Igy at kell irni a szamot -- es az a
    * diffben latszik.
    */
-  it("a kivétel-lista PONTOSAN öt elemű", () => {
-    assert.equal(KIVETELEK.length, 5);
+  it("a kivétel-lista PONTOSAN ÜRES", () => {
+    /*
+      A NULLA ITT NEM "nincs mit merni", HANEM EREDMENY. A lista ot elemmel
+      indult, es a javitasok kiuritettek. Ha valaha no, ez a sor pirosodik --
+      es akkor a felvevonek ki kell mondania, melyik kartya tartja szamon.
+    */
+    assert.equal(KIVETELEK.length, 0);
   });
 
   it("minden kivételhez tartozik kártya", () => {

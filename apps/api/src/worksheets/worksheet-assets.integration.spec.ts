@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-const BELSOS_KERO = {
-  id: "user-1",
-  customerId: null,
-  supplierId: null,
-} as never;
+/** A belsos kero -- a `before` blokkban kapja meg a VALODI felhasznalo sorat. */
+let BELSOS_KERO: never;
 
 import { prisma } from "@acropora/database";
 
@@ -94,7 +91,6 @@ describe(
     const suffix = `${Date.now() % 1_000_000}`.padStart(6, "0");
     const service = new WorksheetsService(new WorksheetsRepository());
 
-    let actorUserId: string;
     let customerId: string;
     /** A lap helyszíne. */
     let helyszin: string;
@@ -124,7 +120,19 @@ describe(
         },
         select: { id: true },
       });
-      actorUserId = user.id;
+      /*
+        A KERO A VALODI SORBOL EPUL, nem beegetett azonositobol: ez integracios
+        keszlet, es az `actorUserId` idegen kulcskent all a munkalapon. Egy
+        kitalalt azonosito itt nem "kicsit rosszabb", hanem elhasal.
+
+        `customerId`/`supplierId` NULL -- belsos kero, mert a munkalap iro utjai
+        2026-09-21 ota belsos-only kapun mennek at.
+      */
+      BELSOS_KERO = {
+        id: user.id,
+        customerId: null,
+        supplierId: null,
+      } as never;
 
       const customer = await prisma.customer.create({
         data: {
@@ -233,7 +241,7 @@ describe(
     it("a helyszín részfájában álló két eszköz felkerül a lapra", async () => {
       const detail = await service.create(
         input([eszkozHelyszinen, eszkozAlcsomoponton]),
-        actorUserId,
+        BELSOS_KERO,
       );
 
       assert.deepEqual(
@@ -251,7 +259,7 @@ describe(
      */
     it("idegen helyszín eszközénél 400 a válasz", async () => {
       await assert.rejects(
-        () => service.create(input([idegenEszkoz]), actorUserId),
+        () => service.create(input([idegenEszkoz]), BELSOS_KERO),
         (hiba: { status?: number; message?: string }) =>
           hiba.status === 400 &&
           /nem ezen a helyszínen/.test(hiba.message ?? ""),
@@ -265,7 +273,7 @@ describe(
       // Ez a sor a TABLAT meri, es akkor is mernie kell, ha a hivas egyaltalan
       // nem dobna.
       await service
-        .create(input([idegenEszkoz]), actorUserId)
+        .create(input([idegenEszkoz]), BELSOS_KERO)
         .catch(() => undefined);
 
       assert.equal(await lapokSzama(), elotte);
@@ -283,7 +291,7 @@ describe(
     it("ugyanaz az azonosító kétszer beküldve egy sort ad", async () => {
       const detail = await service.create(
         input([eszkozHelyszinen, eszkozHelyszinen]),
-        actorUserId,
+        BELSOS_KERO,
       );
 
       assert.deepEqual(await assetIdsOf(detail.id), [eszkozHelyszinen]);
@@ -303,7 +311,7 @@ describe(
     it("a lap törlése viszi a kapcsolatsorokat, az eszközt nem", async () => {
       const detail = await service.create(
         input([eszkozHelyszinen]),
-        actorUserId,
+        BELSOS_KERO,
       );
       assert.deepEqual(await assetIdsOf(detail.id), [eszkozHelyszinen]);
 
@@ -346,7 +354,7 @@ describe(
     it("a meglévő lapon a beküldött lista lecseréli a sorokat", async () => {
       const detail = await service.create(
         input([eszkozHelyszinen]),
-        actorUserId,
+        BELSOS_KERO,
       );
 
       await service.setAssets(
@@ -367,7 +375,7 @@ describe(
     it("idegen helyszín eszközénél a meglévő sorok nem mozdulnak", async () => {
       const detail = await service.create(
         input([eszkozHelyszinen]),
-        actorUserId,
+        BELSOS_KERO,
       );
 
       await assert.rejects(
@@ -397,7 +405,7 @@ describe(
     it("a maradó eszköz csatolási ideje változatlan, az újé friss", async () => {
       const detail = await service.create(
         input([eszkozHelyszinen]),
-        actorUserId,
+        BELSOS_KERO,
       );
       const eredeti = await csatolasiIdok(detail.id);
       const eredetiIdo = eredeti.get(eszkozHelyszinen);
