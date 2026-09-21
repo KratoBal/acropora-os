@@ -1,5 +1,6 @@
 "use client";
 
+import { magyarSzamErteke } from "@acropora/types";
 import { Button, Card, Input } from "@acropora/ui";
 
 import type {
@@ -76,14 +77,20 @@ export function emptyLine(): WorksheetLineDraft {
 function optionalNumber(value: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  return Number(trimmed);
+  /*
+    A MAGYAR ÍRÁSMÓD IS ÁTMEGY (Balázs jelentése, 2026-09-21): a `Number("0,5")`
+    `NaN`, tehát aki vesszővel ír, ma egyáltalán nem tud sort felvinni. A
+    közös függvény a vesszőt pontra cseréli, és SEMMI MÁSBAN nem megengedőbb:
+    ami eddig elbukott, az ezután is elbukik, a szerveren, név szerint.
+  */
+  return magyarSzamErteke(trimmed);
 }
 
 export function toLineInput(line: WorksheetLineDraft): WorksheetLineInput {
   return {
     description: line.description.trim(),
     detail: line.detail.trim() ? line.detail.trim() : null,
-    quantity: Number(line.quantity),
+    quantity: magyarSzamErteke(line.quantity),
     unit: line.unit.trim(),
     kind: line.kind,
     /*

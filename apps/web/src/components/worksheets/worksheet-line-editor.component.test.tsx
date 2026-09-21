@@ -153,6 +153,52 @@ describe("WorksheetLineEditor munkaóra-mezői", () => {
     expect(input.workerCount).toBe(2);
   });
 
+  /**
+   * A MAGYAR ÍRÁSMÓD ÁTMEGY -- MIND A NÉGY MEZŐN (cdb2796b).
+   *
+   * Balázs jelentése, 2026-09-21: „ha a munkalapon vesszot és nem pontot ir a
+   * kollega az orahoz akkor hibat dob: pl. 0,5". A `Number("0,5")` nem rossz
+   * számot ad, hanem `NaN`-t, és a szerver ezt utasítja el -- vagyis aki
+   * vesszővel ír, ma EGYÁLTALÁN nem tud sort felvinni.
+   *
+   * MIND A NÉGY MEZŐT MÉRJÜK, nem csak a mennyiséget: a hiba ugyanabban a
+   * függvényben NÉGYSZER állt, és egy mezőre szűkített állítás a másik hármat
+   * zölden hagyná.
+   */
+  it("a vesszős tizedesjel mind a négy mezőn átmegy", () => {
+    const input = toLineInput(
+      line({
+        quantity: "0,5",
+        workerCount: "2",
+        unitNet: "1200,75",
+        vatRatePercent: "27,5",
+      }),
+    );
+    expect(input.quantity).toBe(0.5);
+    expect(input.workerCount).toBe(2);
+    expect(input.unitNet).toBe(1200.75);
+    expect(input.vatRatePercent).toBe(27.5);
+  });
+
+  it("a pontos írásmód TOVÁBBRA IS átmegy", () => {
+    const input = toLineInput(line({ quantity: "0.5", unitNet: "1200.75" }));
+    expect(input.quantity).toBe(0.5);
+    expect(input.unitNet).toBe(1200.75);
+  });
+
+  /**
+   * AMI MA ELBUKIK, AZ EZUTÁN IS BUKJON EL.
+   *
+   * Ez a POZITÍV KONTROLL a fenti kettőhöz: egy „mindent elfogad" normalizálás
+   * azokon is átmenne, és a rossz adat CSENDBEN kerülne a lapra. A `NaN`-t a
+   * szerver utasítja el, NÉV SZERINT -- ez a viselkedés változatlan.
+   */
+  it("az értelmetlen érték TOVÁBBRA IS NaN-ként megy a szerverre", () => {
+    expect(toLineInput(line({ quantity: "0,5,5" })).quantity).toBeNaN();
+    expect(toLineInput(line({ quantity: "abc" })).quantity).toBeNaN();
+    expect(toLineInput(line({ unitNet: "1,2,3" })).unitNet).toBeNaN();
+  });
+
   it("az ÜRES létszám nem nulla, hanem hiány", () => {
     /*
       MI PIROSÍT: egy csupasz `Number()` hívás. A `Number("")` értéke NULLA, nem
