@@ -79,6 +79,26 @@ type Probalkozas<T> = () => Promise<T>;
 interface CsatolmanySor {
   id: string;
   contentType: string;
+  /** A TELJES fajl merete. A belyegkep ennel nagysagrendekkel kisebb. */
+  sizeBytes: number;
+}
+
+/**
+ * EGY TELJES MERETU KEP, AMIT A SZERELO KULON KERHET.
+ *
+ * MIERT ADJUK VISSZA A LISTAT, ES MIERT NEM TOLTJUK LE: Balazs merese szerint
+ * a legnagyobb kepanyagu helyszin TELJES meretben 51 MB, belyegkepben 567 KB.
+ * Az elso kor tehat a belyegkepet hozza, es MEGSZAMOLJA, mennyibe kerulne a
+ * tobbi -- a dontest a szerelo hozza meg, a szammal a kezeben.
+ *
+ * ES A SZAM CSAK IGY LEHET A GOMBON A LETOLTES ELOTT: a meretek a
+ * csatolmany-sorokban allnak, azokat pedig az eszkoz-adatlapokkal egyutt
+ * hozzuk le. Elotte nincs mibol osszeadni.
+ */
+export interface TeljesKep {
+  assetId: string;
+  documentId: string;
+  sizeBytes: number;
 }
 
 /** Az eszkoz adatlapja hordozza a csatolmanyait -- kulon hivas nem kell. */
@@ -154,6 +174,17 @@ export type HelyszinLetoltesFuggosegek<
  * hogy nem jott le minden. Egy csendben lerovidult letoltes pont az a hiba,
  * ami ellen ez az egesz funkcio szol.
  */
+/**
+ * A MENET EREDMENYE: a zaro mondat, ES a teljes kepek listaja.
+ *
+ * A KETTO EGYUTT JON VISSZA, mert ugyanabbol a korbol szarmazik: a meretek a
+ * csatolmany-sorokban allnak, es azokat az eszkoz-adatlapokkal egyutt hozzuk
+ * le. Egy kulon lekerdezes ugyanazt az utat jarna be masodszor.
+ */
+export type LetoltesEredmeny = LetoltesOsszegzes & {
+  teljesKepek: TeljesKep[];
+};
+
 export const RESZLET_HATAR = 60;
 
 async function probald<T>(hivas: Probalkozas<T>): Promise<T | null> {
@@ -200,7 +231,7 @@ export async function letoltHelyszin<
     Munkalap,
     MunkalapReszlet
   >,
-): Promise<LetoltesOsszegzes> {
+): Promise<LetoltesEredmeny> {
   const eszkozEredmeny = await eszkozok(deps);
   const reszek: ReszEredmeny[] = [
     eszkozEredmeny.resz,
@@ -208,15 +239,24 @@ export async function letoltHelyszin<
     await hibajegyek(input.helyszinUt, deps),
     await munkalapok(deps),
   ];
-  return osszegezHelyszinLetoltes({
-    helyszin: input.helyszinNeve,
-    reszek,
-  });
+  return {
+    ...osszegezHelyszinLetoltes({ helyszin: input.helyszinNeve, reszek }),
+    /*
+      A TELJES KEPEK LISTAJA A ZARO MONDAT MELLE. Nem toltjuk le oket: a
+      meretuk nagysagrendekkel nagyobb, es a dontes a szereloe. A lista
+      viszont MAR MOST megvan, tehat a gomb ki tudja irni a szamot.
+    */
+    teljesKepek: eszkozEredmeny.teljesKepek,
+  };
 }
 
 async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
   deps: EszkozFuggosegek<Tetel, Reszlet>,
-): Promise<{ resz: ReszEredmeny; kepek: ReszEredmeny }> {
+): Promise<{
+  resz: ReszEredmeny;
+  kepek: ReszEredmeny;
+  teljesKepek: TeljesKep[];
+}> {
   const elso = await probald(() => deps.eszkozLista(1));
   if (!elso)
     return {
@@ -227,6 +267,7 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
         nezne ki, mintha a kepek rendben lennenek.
       */
       kepek: { resz: "fenykepek", allapot: "elhasalt", darab: 0 },
+      teljesKepek: [],
     };
 
   const sorok = [...elso.items];
@@ -252,6 +293,7 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
   let hibasReszlet = false;
   let kepek = 0;
   let hibasKep = false;
+  const teljesKepek: TeljesKep[] = [];
   for (const sor of kerheto) {
     const detail = await probald(() => deps.eszkozReszlet(sor.id));
     if (!detail) {
@@ -285,6 +327,18 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
       */
       if (siker === null) hibasKep = true;
       else kepek += 1;
+
+      /*
+        A TELJES KEP A LISTABA KERUL, AKKOR IS, HA A BELYEGKEPE ELHASALT: a
+        ketto KET KULON keres, es egy sikertelen belyegkep nem mondja meg,
+        hogy a teljes sem johetne le. Egy kihagyott sor viszont CSENDBEN
+        csokkentene a gombra irt szamot.
+      */
+      teljesKepek.push({
+        assetId: sor.id,
+        documentId: csatolmany.id,
+        sizeBytes: csatolmany.sizeBytes,
+      });
     }
   }
 
@@ -307,6 +361,7 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
 
   return {
     resz: eszkozResz,
+    teljesKepek,
     kepek: hibasKep
       ? {
           resz: "fenykepek",

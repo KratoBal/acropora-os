@@ -180,3 +180,70 @@ describe("az eszköz-lista visszaesése a mentett másolatra", () => {
     assert.match(kod(LISTA), /online: online && !query\.isError/);
   });
 });
+
+/**
+ * A TELJES MERETU KEPEK GOMBJA (d1cd720a, 3. tetel).
+ *
+ * A kartya azt kerte, hogy a gomb ELORE irja ki a megabajtot. A szam viszont
+ * csak a belyegkepes kor UTAN ismert -- a meretek a csatolmany-sorokban
+ * allnak, azokat pedig az eszkoz-adatlapokkal egyutt hozzuk le. A gomb ezert
+ * a zaro mondat ALATT all, es a szam RAJTA van.
+ */
+describe("a teljes méretű képek gombja", () => {
+  it("a gombon OTT a mért méret, a letöltés előtt", () => {
+    const s = kod(KEPERNYO);
+    assert.match(s, /formatDocumentSize\(osszeg\.bytes\)/);
+    assert.match(s, /atvitelOsszege\(atvivendoKepek\)/);
+  });
+
+  /**
+   * A GOMB AZ ATVITT ADATOT IGERI, NEM A TELJES KESZLETET (acrobot 2. kikotese).
+   *
+   * Ha egy kep mar lent van, nem szamol bele. MI PIROSIT: a `teljesKepek`
+   * visszaterese a gombra vagy a letoltesbe -- akkor a masodik megnyomas
+   * ugyanazt a szamot mutatna, es a felhasznalo azt hinne, semmi nem tortent.
+   */
+  it("a már lementett kép nem kerül bele sem a számba, sem a letöltésbe", () => {
+    const s = kod(KEPERNYO);
+    assert.match(s, /for \(const kep of atvivendoKepek\)/);
+    assert.match(s, /helyiFajl\(/);
+    assert.match(s, /variant: "original",/);
+  });
+
+  /**
+   * ISMERETLEN MERET MELLETT NINCS SZAM A GOMBON (3. kikotes). A hianyzo
+   * meret nulla megabajtnak latszana, es a nulla azt IGERI, hogy ingyen van.
+   */
+  it("ismeretlen méretnél a gomb darabszámot mond, nem megabájtot", () => {
+    assert.match(
+      kod(KEPERNYO),
+      /osszeg\.ismeretlen\s*\?\s*`\$\{osszeg\.darab\} kép`/,
+    );
+  });
+
+  /**
+   * A LETOLTES UTAN A SAJAT LISTAJA IS ERVENYTELENEDIK. Enelkul a gomb a
+   * letoltes utan is a REGI szamot mutatna -- ugyanaz a hiba, mint a 2.
+   * kikotesnel, csak egy lepessel kesobb.
+   */
+  it("a teljes letöltés után az átvivendők listája újraszámol", () => {
+    assert.match(kod(KEPERNYO), /queryKey: \["teljes-kepek-atvivendo"\]/);
+  });
+
+  /**
+   * A TELJES KEP AZ EREDETIT KERI, a belyegkep helyett. Ez az egesz tetel
+   * lenyege: ha itt `thumbnail` allna, a gomb megabajtokat igerne, es
+   * ugyanazt a fel megabajtot hozna le megegyszer.
+   */
+  it("a teljes kép az EREDETI változatot kéri", () => {
+    assert.match(kod(KEPERNYO), /variant: "original"/);
+  });
+
+  /**
+   * ES A ZARO MONDATA IS KIMONDJA A HIANYT, ugyanazzal a szaballyal, mint a
+   * helyszin letoltese: ha nem jott le minden, azt ki kell mondani.
+   */
+  it("a teljes képek záró mondata kimondja a hiányt", () => {
+    assert.match(kod(KEPERNYO), /HIÁNYOS/);
+  });
+});
