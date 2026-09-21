@@ -5210,6 +5210,69 @@ model ContentComment {
 /// majd a lezárt jegy kiküldése és a munkalap eljuttatása is. Egy tábla, három
 /// felhasználás, és a sor MEGTALÁLHATÓ anélkül, hogy bárhol azonosítót kellene
 /// tárolni róla.
+/// EGY KIMENŐ LEVÉL NYOMA -- CSAK BELSŐS, A PORTÁL SOHA NEM OLVASSA.
+///
+/// acrobot kikötése (2026-09-21 23:11): ez az első út, ami a házon KÍVÜLRE
+/// küld dokumentumot, és egy kimenő küldés, amiről nincs sorunk, utólag nem
+/// létezik. Mérve ugyanakkor: a sémában a levelezéshez CSAK a
+/// `TicketMailTemplate` tartozott, küldés-tábla nem volt, a `Logger` sora
+/// pedig jegyenként nem kereshető.
+///
+/// === MIÉRT KÜLÖN TÁBLA, ÉS NEM A JEGY NAPLÓJA ===
+///
+/// A jegy naplója ÁTMEGY a partner portálra: a `/service/jobs/{id}` válaszában
+/// az esemény `note` mezője hatókör nélkül megy át (mérve 2026-09-21, a
+/// fb945858 kártya leletének visszamérése). Ezért ott a sor CÍMET NEM
+/// TARTALMAZ, csak a tényt és a darabszámot.
+///
+/// A KÉT HELY KÉT KÜLÖNBÖZŐ ÁLLÍTÁS, és ezt ki kell mondani, mert összevonva
+/// ártalmatlannak látszana: a jegy naplója azt mondja, hogy TÖRTÉNT küldés
+/// (ezt a partner is láthatja); ez a tábla azt, hogy KINEK. Aki a kettőt
+/// egyszer összevonja, azzal a címek kiszivárognak a portálra.
+///
+/// APPEND-ONLY: a sor nem módosul és nem törlődik. Egy kiküldött levelet nem
+/// lehet meg nem történtté tenni, tehát a nyoma sem írható át.
+model TicketMailDelivery {
+  id String @id @default(cuid())
+
+  /// MELYIK JEGYRŐL van szó. Idegenkulcs NINCS rajta, ugyanúgy, ahogy a
+  /// `ServiceJob.openedById` mezőn sincs: egy kiküldött levél nyoma akkor is
+  /// megmarad, ha a jegy sora eltűnik.
+  serviceJobId String
+
+  /// A jegy száma a küldés pillanatában. Azért ÍRJUK LE, és nem a jegyből
+  /// olvassuk vissza: a levél EZT a számot vitte, és ha a jegy száma valaha
+  /// változna, a nyom akkor is arról szólna, ami kiment.
+  jobNumber String
+
+  /// KI INDÍTOTTA. `SetNull` nélkül, idegenkulcs nélkül -- ugyanaz a döntés,
+  /// mint a jegynél: a tény túléli a fiókot.
+  initiatedByUserId String?
+
+  /// A levél tárgya, ahogy elment.
+  subject String
+
+  /// A CÍMZETTEK, névvel és címmel. EZ AZ, AMI A JEGY NAPLÓJÁBA NEM KERÜLHET.
+  recipients Json
+
+  /// A csomag mérete bájtban, a base64 UTÁN számolva -- ugyanaz a szám, amin a
+  /// méret-kapu áll. Enélkül egy megtagadott küldésnél nem lehetne megmondani,
+  /// mennyivel lépte túl a határt.
+  attachmentBytes Int
+
+  /// `SENT`, `REFUSED_TOO_LARGE` vagy `FAILED`. Szövegként, nem enumként: egy
+  /// új kimenetel felvétele ne igényeljen migrációt egy append-only naplóban.
+  outcome String
+
+  /// A hiba szövege, ha volt. Titok NEM kerülhet bele: a küldő a tokent nem
+  /// adja tovább a hibaüzenetben (mérve: `gmail-mail.sender.ts`).
+  error String?
+
+  createdAt DateTime @default(now())
+
+  @@index([serviceJobId, createdAt])
+}
+
 model TicketMailTemplate {
   /// Az esemény neve, például `WORKSHEET_SIGNED`.
   id String @id
