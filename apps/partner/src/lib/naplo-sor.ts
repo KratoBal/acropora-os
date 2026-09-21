@@ -14,20 +14,33 @@ import {
  *
  * Az állapotváltás sora a belső lapon a BELSŐ állapotot nevezi meg
  * (`Felmérve -> Alkatrészre vár`). A nyolc belső állapot az, amit a partner
- * NEM lát: a szerver külön, négyértékű állapotot és saját feliratot küld neki
- * (`partnerStatusLabel`), és az `apps/web` címke-táblájának fejléce ezt szó
- * szerint ki is mondja.
+ * NEM lát, és ezt az `apps/web` címke-táblájának fejléce szó szerint kimondja.
+ * Ez a sor ezért MEGNEVEZETLENÜL hagyja az állapotot.
  *
- * A NAPLÓ-BEJEGYZÉS VISZONT CSAK A BELSŐ ÁLLAPOTOT HORDOZZA, a partneri
- * feliratot pedig a szerver számolja (`service-job-status.ts`), ahonnan ez a
- * csomag nem importálhat. Ezért ez a sor MEGNEVEZETLENÜL hagyja az állapotot.
+ * === EZ A BEKEZDÉS 2026-09-21-EN ÁTÍRÓDOTT, MERT AZ INDOKA MEGVÁLTOZOTT ===
  *
- * A TARTALOM LÉTEZIK, csak nincs honnan elérni: a partner letölthető
- * dokumentumcsomagja ugyanezt az eseményt MA IS a partneri felirattal írja ki
- * (`service-job-package.service.ts`). Ha a leképezés egyszer a
- * `@acropora/types`-ba kerül, ez a sor magától megnevezhetővé válik -- addig
- * egy megnevezetlen állapot pontosabb, mint egy olyan szó, amit a partnernek
- * nem szánunk.
+ * KORÁBBAN az állt itt, hogy a napló-bejegyzés a BELSŐ állapotot hordozza, a
+ * partneri feliratot pedig a szerver számolja, ahonnan ez a csomag nem
+ * importálhat -- és hogy ha a leképezés egyszer a `@acropora/types`-ba kerül,
+ * ez a sor magától megnevezhetővé válik.
+ *
+ * MA MIND A KÉT MONDAT HAMIS, két külön változás miatt:
+ *
+ *   1. A LEKÉPEZÉS MÁR A KÖZÖS CSOMAGBAN ÁLL (`partnerStatusLabel`, 2026-09-21).
+ *      Tehát nem a hozzáférés hiányzik.
+ *   2. A VÁLASZBÓL VISZONT ELTŰNT AZ ÉRTÉK: a partner saját napló-alakja
+ *      (`ServiceJobPartnerStatusEvent`) `{ id, isCreation, actorName,
+ *      createdAt }` -- állapot-mező NINCS benne. A szerver szándékosan nem
+ *      küldi többé, épp azért, hogy a belső állapot ne jusson ki.
+ *
+ * VAGYIS A HIÁNY OKA MÁS LETT: nem a leképezést nem értük el, hanem a
+ * MEGNEVEZENDŐ ÉRTÉK nincs a kezünkben. Ez a különbség nem szőrszálhasogatás:
+ * az első feloldása egy import volt, a másodiké egy SZERVER-OLDALI döntés --
+ * és az a döntés épp az ellenkező irányba mutat, mint amit ez a sor kérne.
+ *
+ * Amit tehát a következő olvasó tudjon: itt nincs elmaradt munka. Ha a
+ * partnernek mégis meg kell tudnia, MILYEN állapotba lépett a jegy, az a
+ * szerver válaszán múlik, nem ezen a fájlon.
  */
 export function naploSor(entry: ServiceJobPartnerTimelineEntry): string {
   if (entry.kind === "status")
