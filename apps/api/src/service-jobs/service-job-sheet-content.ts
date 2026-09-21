@@ -19,7 +19,8 @@ export interface ServiceJobSheetInput {
   closedAt: Date;
   assets: readonly { assetNumber: string; assetName: string }[];
   assignees: readonly string[];
-  log: readonly { at: Date; text: string }[];
+  photos?: readonly { thumbnail: Uint8Array; caption: string | null }[];
+  log: readonly { at: Date; text: string; authorName: string | null }[];
 }
 
 export interface ServiceJobSheetSection {
@@ -58,7 +59,10 @@ export function serviceJobSheetSections(
     {
       title: "Jegynapló",
       lines: input.log.length
-        ? input.log.map(({ at, text }) => `${dateTime.format(at)} · ${text}`)
+        ? input.log.map(
+            ({ at, text, authorName }) =>
+              `${dateTime.format(at)} · ${text}${authorName ? ` · ${authorName}` : ""}`,
+          )
         : ["Nincs további naplóbejegyzés."],
     },
   ];

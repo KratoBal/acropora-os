@@ -47,7 +47,9 @@ function sheetLine(
 export function worksheetSheetInput(
   detail: WorksheetDetail,
   version: WorksheetVersionDetail,
-  entries: readonly string[],
+  entries: readonly ({ body: string; authorName: string | null } | string)[],
+  assigneeNames = detail.assignees.map((assignee) => assignee.name),
+  photos: readonly { thumbnail: Uint8Array; caption: string | null }[] = [],
 ): WorksheetSheetInput {
   return {
     label: version.label,
@@ -76,8 +78,9 @@ export function worksheetSheetInput(
       hordoz, és az a MI nyilvántartásunké -- a lapon a név áll, ahogy Balázs
       kérte (2026-09-17 22:49:52).
     */
-    assigneeNames: detail.assignees.map((assignee) => assignee.name),
+    assigneeNames,
     entries,
+    photos,
     lines: version.lines.map(sheetLine),
     laborHours: version.laborHours,
     signature: version.signature

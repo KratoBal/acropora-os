@@ -103,14 +103,18 @@ export class ServiceJobPackageService {
         assetNumber: asset.assetNumber,
         assetName: asset.name,
       })),
-      assignees: job.assignees.map(
-        ({ user }) => user.nickname ?? user.displayName,
+      assignees: job.assignees.map(({ user }) => user.displayName),
+      photos: (job.documents ?? []).flatMap((document) =>
+        document.thumbnail
+          ? [{ thumbnail: document.thumbnail, caption: document.caption }]
+          : [],
       ),
       log: [
-        { at: job.createdAt, text: "Hibajegy megnyitva." },
+        { at: job.createdAt, text: "Hibajegy megnyitva.", authorName: null },
         ...job.events.map((event) => ({
           at: event.createdAt,
           text: `Állapot módosítva: ${event.toStatus ? partnerStatusLabel(event.toStatus) : "nincs megadva"}${event.note ? ` — ${event.note}` : ""}`,
+          authorName: event.actor?.displayName ?? null,
         })),
       ],
     });

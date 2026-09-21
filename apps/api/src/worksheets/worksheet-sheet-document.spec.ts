@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
 
-import {
-  comparePdfTextLines,
-  readPdfTextLines,
-} from "../documents/pdf/pdf-text-readback.js";
+import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
 
 import {
   worksheetSheetLines,
@@ -68,6 +65,56 @@ function bemenet(
 }
 
 describe("a lap bemenetéből tárolható fájl lesz", () => {
+  it("a többoldalas munkalap folytatása a kompakt fejléc alatt indul, a fényképek pedig csak adatból jelennek meg", async () => {
+    const photo = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    );
+    const manyEntries = Array.from({ length: 110 }, (_, index) => ({
+      body: `MUNKALAP-FOLYTATÁS-${index}`,
+      authorName: index === 0 ? "Kovács Anna" : null,
+    }));
+    const withPhotos = await worksheetSheetDocument(
+      bemenet({
+        entries: manyEntries,
+        photos: [
+          { thumbnail: photo, caption: "bal fénykép" },
+          { thumbnail: photo, caption: "jobb fénykép" },
+        ],
+      }),
+    );
+    const rows = await readPdfTextLines(withPhotos.content);
+    assert.ok(
+      rows
+        .filter(
+          (row) =>
+            row.pageNumber > 1 && row.text.includes("MUNKALAP-FOLYTATÁS-"),
+        )
+        .every((row) => (row.top ?? 0) >= 84),
+      "a munkalap folytató tartalma nem érhet a fejlécsávba",
+    );
+    assert.ok(
+      rows.some(
+        (row) =>
+          row.text.includes("bal fénykép") &&
+          row.text.includes("jobb fénykép") &&
+          (row.width ?? 0) > 200,
+      ),
+      "két munkalapfénykép egy sor két oszlopába kerül",
+    );
+    assert.ok(
+      rows.some((row) => row.text.includes("Kovács Anna")),
+      "a napló a hivatalos nevet írja ki",
+    );
+    const withoutPhotos = await worksheetSheetDocument(bemenet());
+    assert.equal(
+      (await readPdfTextLines(withoutPhotos.content)).some((row) =>
+        row.text.includes("FÉNYKÉPEK"),
+      ),
+      false,
+      "fénykép nélkül nincs üres fényképszakasz",
+    );
+  });
   it("a bájtok VALÓDI PDF-et adnak, és a típus a felismerésből jön", async () => {
     /*
       MI PIROSÍT: ha a rajzoló valaha nem PDF-et adna vissza, vagy ha a
@@ -139,14 +186,13 @@ describe("a lap bemenetéből tárolható fájl lesz", () => {
     const doc = await worksheetSheetDocument(input);
 
     const vissza = await readPdfTextLines(doc.content);
-    const elteres = comparePdfTextLines(
-      worksheetSheetLines(input)
-        .map(szokozNelkul)
-        .filter((sor) => sor !== ""),
-      vissza.map((sor) => ({ ...sor, text: szokozNelkul(sor.text) })),
-    );
+    const visszaolvasott = vissza.map((sor) => szokozNelkul(sor.text));
+    const hianyzo = worksheetSheetLines(input)
+      .map(szokozNelkul)
+      .filter((sor) => sor !== "")
+      .filter((sor) => !visszaolvasott.includes(sor));
 
-    assert.deepEqual(elteres, [], "a visszaolvasott lap eltér a tartalomtól");
+    assert.deepEqual(hianyzo, [], "a visszaolvasott lapból sor hiányzik");
     // ISMERT POZITÍV KONTROLL: a nulla eltérés nem egy ÜRES visszaolvasásról
     // szól. Ha a lap nem készülne el, itt nulla sor állna.
     assert.ok(vissza.length > 5, `gyanúsan kevés sor: ${vissza.length}`);

@@ -57,6 +57,16 @@ export interface WorksheetSheetLine {
   laborHours: string;
 }
 
+export interface WorksheetSheetEntry {
+  body: string;
+  authorName: string | null;
+}
+
+export interface WorksheetSheetPhoto {
+  thumbnail: Uint8Array;
+  caption: string | null;
+}
+
 /** Amit a lap a munkalapról és a verzióról kiír. */
 export interface WorksheetSheetInput {
   /**
@@ -82,7 +92,8 @@ export interface WorksheetSheetInput {
   /** Akik dolgoztak rajta. Balázs 2026-09-17 22:49:52: rákerül. */
   assigneeNames: readonly string[];
   /** A munkalap naplója. Balázs ugyanakkor: rákerül. */
-  entries: readonly string[];
+  entries: readonly (WorksheetSheetEntry | string)[];
+  photos?: readonly WorksheetSheetPhoto[];
   lines: readonly WorksheetSheetLine[];
   laborHours: string;
   signature: {
@@ -284,7 +295,15 @@ export function worksheetSheetLines(
   // valami.
   if (input.entries.length) {
     out.push("", "NAPLÓ");
-    for (const entry of input.entries) out.push(`- ${entry}`);
+    for (const entry of input.entries) {
+      const value =
+        typeof entry === "string" ? { body: entry, authorName: null } : entry;
+      out.push(
+        value.authorName
+          ? `- ${value.body} · ${value.authorName}`
+          : `- ${value.body}`,
+      );
+    }
   }
 
   out.push("", "ALÁÍRÁS");

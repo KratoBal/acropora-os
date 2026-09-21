@@ -1,9 +1,16 @@
-import { statSync } from "node:fs";
-
-import PDFDocument from "pdfkit";
-
-import { drawAcroporaLogo } from "../documents/pdf/acropora-logo.js";
-import { resolvePdfFontPath } from "../documents/pdf/pdf-font.js";
+import {
+  PDF_CONTENT_BOTTOM,
+  PDF_CONTENT_WIDTH,
+  PDF_CONTINUATION_CONTENT_TOP,
+  PDF_FIRST_CONTENT_TOP,
+  PDF_INK,
+  PDF_LEFT,
+  addPage,
+  createBrandedPdf,
+  drawDocumentFooter,
+  drawDocumentHeader,
+  drawSectionTitle,
+} from "../documents/pdf/branded-document.js";
 
 import {
   serviceJobSheetSections,
@@ -11,80 +18,10 @@ import {
   type ServiceJobSheetInput,
 } from "./service-job-sheet-content.js";
 
-const PAGE_WIDTH = 595.28;
-const LEFT = 54;
-const RIGHT = 54;
-const CONTENT_WIDTH = PAGE_WIDTH - LEFT - RIGHT;
-const FIRST_PAGE_TOP = 194;
-const CONTINUATION_TOP = 76;
-const CONTENT_BOTTOM = 760;
-const INK = "#18353d";
 const MUTED = "#56777e";
 const RULE = "#c9dadd";
 const PALE = "#f2f7f7";
 const STATUS = "#1e604c";
-
-function assertFont(path: string): void {
-  if (!statSync(path).isFile())
-    throw new Error("The PDF font must be an embeddable font file.");
-}
-
-function drawHeader(
-  document: PDFKit.PDFDocument,
-  input: ServiceJobSheetInput,
-): void {
-  document
-    .fillColor(MUTED)
-    .fontSize(8.5)
-    .text("ELKÉSZÜLT HIBAJEGY", LEFT, 64, { characterSpacing: 1.8 });
-  document
-    .fillColor(INK)
-    .fontSize(22)
-    .text(input.title, LEFT, 86, { width: 305, lineGap: 2 });
-  document
-    .fillColor(MUTED)
-    .fontSize(10)
-    .text(
-      `${input.jobNumber} · kiállítva: ${new Intl.DateTimeFormat("hu-HU", { dateStyle: "long", timeZone: "Europe/Budapest" }).format(input.closedAt)}`,
-      LEFT,
-      136,
-      { width: 310 },
-    );
-  drawAcroporaLogo(document, 440, 64, 76);
-  document
-    .moveTo(0, 170)
-    .lineTo(PAGE_WIDTH, 170)
-    .strokeColor(RULE)
-    .lineWidth(1)
-    .stroke();
-}
-
-function drawFooter(document: PDFKit.PDFDocument): void {
-  document
-    .moveTo(LEFT, 774)
-    .lineTo(PAGE_WIDTH - RIGHT, 774)
-    .strokeColor(RULE)
-    .lineWidth(0.75)
-    .stroke();
-  document
-    .fillColor(MUTED)
-    .fontSize(7.2)
-    .text(
-      "Acropora Kft. · 1106 Budapest, Pesti Gábor utca 35 · info@acropora.hu · hibabejelentés: ticket@acropora.hu · +36-30-982-3634",
-      LEFT,
-      786,
-      { width: CONTENT_WIDTH, align: "center" },
-    );
-}
-
-function drawSectionTitle(
-  document: PDFKit.PDFDocument,
-  title: string,
-  y: number,
-): number {
-  document.fillColor(INK).fontSize(12).text(title, LEFT, y);
-  return y + 22;
-}
 
 /** Build the closed service job document. Kept separate so a later seal can wrap these exact bytes. */
 export function serviceJobSheetDocument(
@@ -92,24 +29,15 @@ export function serviceJobSheetDocument(
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    const document = new PDFDocument({
-      size: "A4",
-      margin: 0,
-      bufferPages: true,
-    });
+    const document = createBrandedPdf();
     document.on("data", (chunk: Buffer) => chunks.push(chunk));
     document.on("error", reject);
     document.on("end", () => resolve(Buffer.concat(chunks)));
 
     try {
-      const font = resolvePdfFontPath();
-      assertFont(font);
-      document.registerFont("acropora", font);
-      document.font("acropora");
-
       const summary = serviceJobSheetSummary(input);
       document
-        .rect(LEFT, FIRST_PAGE_TOP, CONTENT_WIDTH, 38)
+        .rect(PDF_LEFT, PDF_FIRST_CONTENT_TOP, PDF_CONTENT_WIDTH, 38)
         .fill("#ffffff")
         .strokeColor("#b9d9cb")
         .lineWidth(1)
@@ -117,12 +45,12 @@ export function serviceJobSheetDocument(
       document
         .fillColor(STATUS)
         .fontSize(10)
-        .text(summary.status, LEFT + 16, FIRST_PAGE_TOP + 13);
+        .text(summary.status, PDF_LEFT + 16, PDF_FIRST_CONTENT_TOP + 13);
       document
         .fillColor("#48705f")
         .fontSize(9.5)
-        .text(summary.closedAt, LEFT + 255, FIRST_PAGE_TOP + 13, {
-          width: CONTENT_WIDTH - 271,
+        .text(summary.closedAt, PDF_LEFT + 255, PDF_FIRST_CONTENT_TOP + 13, {
+          width: PDF_CONTENT_WIDTH - 271,
           align: "right",
         });
 
@@ -132,15 +60,15 @@ export function serviceJobSheetDocument(
         ["MEGNYITVA", summary.openedAt],
         ["ELKÉSZÜLT", summary.closedAt],
       ] as const;
-      const cardTop = FIRST_PAGE_TOP + 38;
+      const cardTop = PDF_FIRST_CONTENT_TOP + 38;
       const cardHeight = 62;
       cards.forEach(([label, value], index) => {
         const column = index % 2;
         const row = Math.floor(index / 2);
-        const x = LEFT + column * (CONTENT_WIDTH / 2);
+        const x = PDF_LEFT + column * (PDF_CONTENT_WIDTH / 2);
         const y = cardTop + row * cardHeight;
         document
-          .rect(x, y, CONTENT_WIDTH / 2, cardHeight)
+          .rect(x, y, PDF_CONTENT_WIDTH / 2, cardHeight)
           .fill(PALE)
           .strokeColor(RULE)
           .lineWidth(0.75)
@@ -150,10 +78,10 @@ export function serviceJobSheetDocument(
           .fontSize(7.5)
           .text(label, x + 14, y + 13, { characterSpacing: 1.35 });
         document
-          .fillColor(INK)
+          .fillColor(PDF_INK)
           .fontSize(10.3)
           .text(value, x + 14, y + 30, {
-            width: CONTENT_WIDTH / 2 - 28,
+            width: PDF_CONTENT_WIDTH / 2 - 28,
             height: 24,
             ellipsis: true,
           });
@@ -161,11 +89,11 @@ export function serviceJobSheetDocument(
 
       let y = cardTop + cardHeight * 2 + 34;
       const newPage = () => {
-        document.addPage({ size: "A4", margin: 0 });
-        y = CONTINUATION_TOP;
+        addPage(document);
+        y = PDF_CONTINUATION_CONTENT_TOP;
       };
       const need = (height: number) => {
-        if (y + height > CONTENT_BOTTOM) newPage();
+        if (y + height > PDF_CONTENT_BOTTOM) newPage();
       };
 
       for (const section of serviceJobSheetSections(input)) {
@@ -176,33 +104,72 @@ export function serviceJobSheetDocument(
             document.fontSize(10);
             return (
               total +
-              document.heightOfString(line, { width: CONTENT_WIDTH }) +
+              document.heightOfString(line, { width: PDF_CONTENT_WIDTH }) +
               8
             );
           }, 0);
         need(Math.min(estimated, 200));
         y = drawSectionTitle(document, section.title, y);
         for (const line of lines) {
-          document.fillColor(INK).fontSize(10);
+          document.fillColor(PDF_INK).fontSize(10);
           const height = document.heightOfString(line, {
-            width: CONTENT_WIDTH - 16,
+            width: PDF_CONTENT_WIDTH - 16,
             lineGap: 2,
           });
           need(height + 10);
           document
             .fillColor(MUTED)
             .fontSize(10)
-            .text("•", LEFT, y, { width: 10 });
+            .text("•", PDF_LEFT, y, { width: 10 });
           document
-            .fillColor(INK)
+            .fillColor(PDF_INK)
             .fontSize(10)
-            .text(line, LEFT + 16, y, {
-              width: CONTENT_WIDTH - 16,
+            .text(line, PDF_LEFT + 16, y, {
+              width: PDF_CONTENT_WIDTH - 16,
               lineGap: 2,
             });
           y += height + 8;
         }
         y += 17;
+      }
+
+      const photos = input.photos ?? [];
+      if (photos.length) {
+        need(42);
+        y = drawSectionTitle(document, "FÉNYKÉPEK", y);
+        const columnWidth = (PDF_CONTENT_WIDTH - 12) / 2;
+        for (let index = 0; index < photos.length; index += 2) {
+          const row = photos.slice(index, index + 2);
+          const imageHeight = 116;
+          const captions = row.map((photo) => photo.caption?.trim() ?? "");
+          const captionHeight = captions.some(Boolean) ? 20 : 0;
+          need(imageHeight + captionHeight + 14);
+          row.forEach((photo, column) => {
+            const x = PDF_LEFT + column * (columnWidth + 12);
+            try {
+              document.image(Buffer.from(photo.thumbnail), x, y, {
+                fit: [columnWidth, imageHeight],
+                align: "center",
+                valign: "center",
+              });
+              document
+                .rect(x, y, columnWidth, imageHeight)
+                .strokeColor(RULE)
+                .lineWidth(0.5)
+                .stroke();
+            } catch {
+              // A sérült thumbnail nem teheti kiadhatatlanná a hiteles PDF-et.
+            }
+            if (captions[column])
+              document
+                .fillColor(MUTED)
+                .fontSize(7.5)
+                .text(captions[column]!, x, y + imageHeight + 4, {
+                  width: columnWidth,
+                });
+          });
+          y += imageHeight + captionHeight + 14;
+        }
       }
 
       const range = document.bufferedPageRange();
@@ -212,8 +179,13 @@ export function serviceJobSheetDocument(
         page += 1
       ) {
         document.switchToPage(page);
-        drawHeader(document, input);
-        drawFooter(document);
+        drawDocumentHeader(document, {
+          eyebrow: "ELKÉSZÜLT HIBAJEGY",
+          title: input.title,
+          subtitle: `${input.jobNumber} · kiállítva: ${new Intl.DateTimeFormat("hu-HU", { dateStyle: "long", timeZone: "Europe/Budapest" }).format(input.closedAt)}`,
+          compact: page !== range.start,
+        });
+        drawDocumentFooter(document);
       }
       document.end();
     } catch (error) {
