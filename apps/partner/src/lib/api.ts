@@ -3,7 +3,7 @@ import type {
   AssetDocumentSummary,
   AssetListResponse,
   AuthenticatedUser,
-  ServiceJobDetail,
+  ServiceJobPartnerDetail,
   ServiceJobDocumentSummary,
   ServiceJobListResponse,
   WorksheetDetail,
@@ -103,7 +103,12 @@ export const partnerApi = {
       `/service/jobs?${new URLSearchParams({ scope })}`,
     ),
   ticket: (id: string) =>
-    request<ServiceJobDetail>(`/service/jobs/${encodeURIComponent(id)}`),
+    /*
+      A PARTNER SAJAT ALAKOT KAP, NEM A BELSOT. A tipus a kozos csomagbol jon,
+      es UGYANAZ, amit a szerver eloallit (`partnerServiceJobDetail`) -- tehat
+      a ket oldal nem tud elcsuszni egymastol.
+    */
+    request<ServiceJobPartnerDetail>(`/service/jobs/${encodeURIComponent(id)}`),
   createTicket: (input: {
     title: string;
     description?: string;

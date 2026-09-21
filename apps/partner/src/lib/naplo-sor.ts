@@ -1,6 +1,6 @@
 import {
   serviceJobWorksheetLabel,
-  type ServiceJobTimelineEntry,
+  type ServiceJobPartnerTimelineEntry,
 } from "@acropora/types";
 
 /**
@@ -29,9 +29,17 @@ import {
  * egy megnevezetlen állapot pontosabb, mint egy olyan szó, amit a partnernek
  * nem szánunk.
  */
-export function naploSor(entry: ServiceJobTimelineEntry): string {
+export function naploSor(entry: ServiceJobPartnerTimelineEntry): string {
   if (entry.kind === "status")
-    return entry.event.fromStatus === null
+    /*
+      AZ `isCreation` A BELSO ALLAPOT-NEV HELYETT (2026-09-21).
+
+      Ez a sor korabban a `fromStatus === null` osszevetest vegezte -- vagyis a
+      valasz a NYOLC ERTEKU BELSO enumot vitte a partnerhez, hogy aztan a
+      kliens EGYETLEN bitet olvasson ki belole. A szerver mostantol azt az egy
+      bitet kuldi.
+    */
+    return entry.event.isCreation
       ? "A hibajegy létrejött."
       : "A hibajegy állapota változott.";
 

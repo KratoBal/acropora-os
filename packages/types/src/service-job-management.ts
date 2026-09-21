@@ -559,3 +559,150 @@ export function partnerVisibleStatus(
 export function partnerStatusLabel(status: ServiceJobStatusValue): string {
   return PARTNER_STATUS_LABELS[partnerVisibleStatus(status)];
 }
+
+/**
+ * A PARTNERNEK KULDOTT RESZLETLAP -- SAJAT TIPUS, NEM A BELSO MEGSZURVE.
+ *
+ * === A DONTES, ES AMIERT NEM SZURO-LISTA ===
+ *
+ * Balazs, 2026-09-21 12:07:32 UTC (Discord, fo csatorna, message_id
+ * 1551565542886740020): "elfogadom a javaslatodat, johet a kovetkezo".
+ * A javaslat: a partner PARTNER ALAKU valaszt kapjon, ne a belso reszletlapot
+ * egy kepernyovel megszurve. Az indok: a "nem latja" NEM vedelem -- a bongeszo
+ * fejlesztoi ablaka elolvassa a valaszt.
+ *
+ * A KULONBSEG AZ ALAPERTELMEZESBEN VAN, es ez a lenyeg: ha valaki holnap uj
+ * mezot tesz a belso reszletlapra, a SAJAT TIPUS mellett az NEM megy ki
+ * magatol. Egy szuro-lista ("ezeket vedd ki") mellett igen. Ugyanaz az elv,
+ * mint a default-deny.
+ *
+ * === MI HIANYZIK A BELSOHOZ KEPEST, ES MIERT ===
+ *
+ * Tizenegy mezo, amit a portal MA SEM olvas (merve 2026-09-21, ket modszerrel
+ * es kontrollal): hidden, status, customerName, customerId, departmentId,
+ * departmentName, scheduledAt, startedAt, completedAt, allowedSteps,
+ * assignees.
+ *
+ * A `status` kulon emlitest erdemel: a partner a `partnerStatus` es a
+ * `partnerStatusLabel` mezot kapja. A belso, nyolc erteku allapot SOHA nem
+ * megy ki -- pontosan ezert letezik a ket partner-mezo.
+ */
+export interface ServiceJobPartnerDetail {
+  id: string;
+  jobNumber: string;
+  title: string;
+  description: string | null;
+  partnerStatus: ServiceJobPartnerStatus;
+  partnerStatusLabel: string;
+  departmentPath: string[] | null;
+  createdAt: string;
+  timeline: ServiceJobPartnerTimelineEntry[];
+  assets: ServiceJobAssetLink[];
+}
+
+/**
+ * A NAPLO-SOR PARTNER ALAKJA.
+ *
+ * KET DOLOG HIANYZIK A BELSOHOZ KEPEST, ES KET KULON DONTES ALL MOGOTTUK:
+ *
+ *   a MEGJEGYZES (`note`)   Balazs, 2026-09-21 10:5x: "a megjegyzes nem kell a
+ *                           nev igen". A kezelo szabad szoveget ir a
+ *                           statuszvaltashoz; semmi nem mondja ki rola, hogy
+ *                           ugyfelnek szol.
+ *   a BELSO ALLAPOT         a `fromStatus` es a `toStatus` a nyolc erteku belso
+ *                           enum. Helyettuk `isCreation` all -- a portal
+ *                           EDDIG IS csak annyit hasznalt beloluk, hogy a
+ *                           `fromStatus` null-e (merve: `naplo-sor.ts`).
+ *
+ * A NEV MARAD (`actorName`), mert Balazs kimondta. Kulon allitas orzi,
+ * kulonben a takaritas azt is elvinne.
+ *
+ * AZ `isCreation` NEVE SZANDEKOSAN NEM UTAL AZ ENUM ERTEKEIRE. Egy
+ * `fromStatusWasNew` alaku nev a szokincset a NEVEN keresztul szivarogtatna ki.
+ */
+export interface ServiceJobPartnerStatusEvent {
+  id: string;
+  /** Igaz, ha ez a sor a jegy KELETKEZESE, nem egy kesobbi allapotvaltas. */
+  isCreation: boolean;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export type ServiceJobPartnerTimelineEntry =
+  | {
+      kind: "status";
+      at: string;
+      sortKey: string;
+      event: ServiceJobPartnerStatusEvent;
+    }
+  | {
+      kind: "worksheet";
+      at: string;
+      sortKey: string;
+      worksheet: ServiceJobWorksheetLink;
+    }
+  | { kind: "asset"; at: string; sortKey: string; asset: ServiceJobAssetLink }
+  | {
+      kind: "document";
+      at: string;
+      sortKey: string;
+      removal: ServiceJobDocumentRemoval;
+    };
+
+/**
+ * A BELSO RESZLETLAPBOL A PARTNER ALAKJA -- TISZTA FUGGVENY.
+ *
+ * ITT, A KOZOS CSOMAGBAN ALL, nem az API-ban: igy a partner kliens ugyanazt a
+ * TIPUST latja, amit a szerver eloallit, es a ketto nem tud elcsuszni.
+ *
+ * MINDEN MEZO KIIRVA, nem `...detail` szorassal. Ez nem stilus: a szoras
+ * pontosan azt az alapertelmezest venne el, amiert ez a tipus letezik -- egy
+ * holnap felvett belso mezo magatol atmenne rajta.
+ */
+export function partnerServiceJobDetail(
+  detail: ServiceJobDetail,
+): ServiceJobPartnerDetail {
+  return {
+    id: detail.id,
+    jobNumber: detail.jobNumber,
+    title: detail.title,
+    description: detail.description,
+    partnerStatus: detail.partnerStatus,
+    partnerStatusLabel: detail.partnerStatusLabel,
+    departmentPath: detail.departmentPath,
+    createdAt: detail.createdAt,
+    assets: detail.assets,
+    timeline: detail.timeline.map((entry) =>
+      entry.kind === "status"
+        ? {
+            kind: "status" as const,
+            at: entry.at,
+            sortKey: entry.sortKey,
+            event: {
+              id: entry.event.id,
+              isCreation: entry.event.fromStatus === null,
+              actorName: entry.event.actorName,
+              createdAt: entry.event.createdAt,
+            },
+          }
+        : entry,
+    ),
+  };
+}
+
+/**
+ * MELYIK ALAKOT KAPTUK -- ES MIERT KELL EZ KIMONDOTTAN.
+ *
+ * A `detail` vegpont ket kulonbozo alakot ad vissza a hivo hatokoretol
+ * fuggoen. Aki a valaszt olvassa, ezzel valaszthat kozottuk.
+ *
+ * A JELOLO MEZO AZ `assignees`: a delegaltak listaja BELSO munkaszervezes, es
+ * a partner alakjaban SOHA nem szerepel. Egy kulon `kind` mezo olcsobbnak
+ * latszana, de AZ IS kimenne a droton -- egy mezo, ami csak arrol szol, hogy
+ * mit NEM kuldtunk.
+ */
+export function isPartnerServiceJobDetail(
+  detail: ServiceJobDetail | ServiceJobPartnerDetail,
+): detail is ServiceJobPartnerDetail {
+  return !("assignees" in detail);
+}
