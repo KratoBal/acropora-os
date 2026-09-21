@@ -3709,28 +3709,29 @@ model Worksheet {
    * A CÍMZETT NINCS TÁROLVA, mert nincs is: a lap hozzánk kerül vissza, a
    * szolgáltatóhoz. Amikor a lap hibajegy nélkül születik, még felelős sincs,
    * akinek címezni lehetne.
-   * === MA KÉT OLVASATA VAN, ÉS EZ NINCS ELDÖNTVE (2026-09-21) ===
+   * === A JELENTÉSE 2026-09-21-ÉN BŐVÜLT, ÉS EL IS DŐLT ===
    * A fenti bekezdés 2026-09-02-i, és AKKOR IGAZ VOLT: a mezőnek nem volt
    * írója, tehát csak a LAP mozgásáról szólt (a szerelő végzett, a lap a
-   * szolgáltatóé).
-   * 2026-09-21-én írót kapott (#908), és a kiment felirat mást mond:
-   * „Az eszköz még nálunk van". Ez Balázs mondatából jön (2026-09-21 09:39,
-   * szó szerint: „ne zarhassuk le amig nalunk van"), vagyis az ESZKÖZ
-   * visszaadásáról.
-   * A KETTŐ ELLENTÉTES IRÁNYÚ: az egyik szerint az átadás FELÉNK történik
-   * (a lap hozzánk kerül), a másik szerint TŐLÜNK (a gép visszamegy).
-   * MIÉRT NEM DÖNTÖM EL ITT: a tervezett lezárási kapu ALAKJA múlik rajta.
-   * A lap-olvasat mellett minden lapot át kell adni, a helyszínit is, és a
-   * kapu önmagában megáll. Az eszköz-olvasat mellett a helyszíni munkánál
-   * nincs mit visszaadni, tehát a mező ott örökre `null` maradna, és a jegy
-   * soha nem lenne lezárható -- ahhoz előbb egy külön jel kellene arról,
-   * hogy a gépet elhoztuk. Ilyen jel ma NINCS a sémában (mérve: sem a
-   * `ServiceJob`, sem a `Worksheet`, sem a `WorksheetAsset` nem hordoz
-   * helyszíni/műhely megkülönböztetést; az `AssetStatus.IN_REPAIR` azt
-   * mondja, hogy javítás alatt áll, nem azt, hogy nálunk van).
-   * Amíg a döntés nincs meg, ITT MIND A KETTŐ ÁLL. Egy komment, ami az
-   * egyiket ténynek írja, a következő olvasót egy meg nem hozott döntésre
-   * hivatkoztatná.
+   * szolgáltatóé). Egy író nélküli mező dokumentációja nem viselkedést ír le,
+   * hanem egy feltevést.
+   * 2026-09-21-én írót kapott (#908), és ezzel a jelentése az ESZKÖZRE
+   * szélesedett. Balázs döntése (2026-09-21 09:39, Discord, Munkalap
+   * folyamatok szál), szó szerint: „ne zarhassuk le amig nalunk van".
+   * Vagyis az átadás NEM dátum-mező, hanem FELTÉTEL: a hibajegy lezárásának
+   * egyik kapuja.
+   * A KÉT OLVASAT ELLENTÉTES IRÁNYÚ VOLT (az egyik szerint az átadás felénk
+   * történik, a másik szerint tőlünk), és a gazda mondata döntött: TŐLÜNK.
+   * === AMIT EBBŐL A KÓDNAK TUDNIA KELL ===
+   * A HELYSZÍNI MUNKÁNÁL NINCS MIT VISSZAADNI, és a mező mégis kitöltendő.
+   * Ez tudatos: a jelölés MINDEN lapra kell, mert nem a gép helyét tároljuk
+   * (azt nem tudjuk), hanem azt, hogy a szerelő LEZÁRTA-e a lap útját. Ezért
+   * a felhasználónak szóló szöveg sem azt mondja, hogy az eszköz nálunk van,
+   * hanem hogy az átadás nincs rögzítve -- az utóbbi helyszíni munkánál is
+   * igaz marad.
+   * ÉS EGY MÉRT TÉNY, AMIRE NE ÉPÍTSEN SENKI: a kapu bevezetésekor (mérve az
+   * éles adaton, 2026-09-21) KÉT MÁR LEZÁRT hibajegynek volt jelöletlen
+   * lapja. Vagyis a `COMPLETED` állapot megléte NEM bizonyítja, hogy a lapjai
+   * át voltak adva. Aki ebből visszafelé következtet, hibás eredményt kap.
    */
   handedOverAt         DateTime?
   handedOverById       String?
