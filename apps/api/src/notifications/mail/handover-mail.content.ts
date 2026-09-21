@@ -27,19 +27,31 @@ export function handoverMailDefaultSubject(jobNumber: string): string {
 }
 
 /**
- * A LEVEL TORZSE: A KEZELO SZOVEGE, ES AMI MELLE KERUL.
+ * A LEVEL TORZSE: A KEZELO SZOVEGE, ES SEMMI MAS.
  *
- * A `note` a meret-kapu mondata, ha a csomag nem fert ra. `null`, ha ratett.
+ * === ITT ALLT EGY `note` PARAMETER, ES ELKERULT ===
  *
- * A KEZELO SZOVEGE ELOL ALL, es ez szandekos: a vevo azt olvassa el eloszor,
- * amit EMBER irt neki. A rendszer mondata utana jon, ures sorral elvalasztva --
- * kulonben a ket hang osszefolyik, es a vevo nem tudja, melyik melyik.
+ * A meret-kapu link-visszaesesenek szantam: ha a csomag nem fer ra, a rendszer
+ * mondata kerult volna a kezelo szovege ala. Ket dolog szuntette meg:
+ *
+ *   1. MERVE (2026-09-22): NINCS link, amit a levelbe tehetnenk. A letoltes
+ *      hitelesitett vegpont, a partner-portal nem hivja (nulla hivas,
+ *      kontrollal), es alairt vagy publikus ut nincs.
+ *   2. acrobot dontese (2026-09-22 00:57): "NEM MEGY KI OLYAN LINK A VEVONEK,
+ *      AMIT NEM ELLENORIZTUNK." A kuldes elott meg kell gyozodni arrol, hogy a
+ *      cel TENYLEG felold; ha nem, a kuldes NEM indul, es a nyom NEVESITETT
+ *      okot kap.
+ *
+ * Egy parameter, amit az egyetlen hivohely mindig `null`-ra allit, nem
+ * rugalmassag: az az UT, amin egy jovobeli link ELLENORZES NELKUL becsuszhat.
+ *
+ * === A FELTETEL, AMI EZT UJRA ELOVESZI ===
+ *
+ * Ha valaha link kerul a levelbe, akkor acrobot fenti dontese MAR AKKOR is all,
+ * es a kuldes-ut feladata, hogy a cel feloldasat ELLENORIZZE -- fuggetlenul
+ * attol, hogy az elettartamrol (orak, napok, a jegy lezarasaig) Balazs mit
+ * dont. A ket kerdes kulon all.
  */
-export function handoverMailBody(input: {
-  message: string;
-  note: string | null;
-}): string {
-  const reszek = [input.message.trim()];
-  if (input.note) reszek.push(input.note);
-  return reszek.join("\n\n");
+export function handoverMailBody(input: { message: string }): string {
+  return input.message.trim();
 }

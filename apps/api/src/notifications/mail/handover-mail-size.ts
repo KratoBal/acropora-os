@@ -13,7 +13,9 @@
  * (eles adatbazis, 2026-09-21 23:2x, acrobot merese)
  *
  * Vagyis a mai legnagyobb csomag SZAZ KILOBAJT nagysagrendu. A base64
- * egyharmados novekedesevel is a dokumentalt 5 MB-os hatar harom szazaleka.
+ * egyharmados novekedesevel is a dokumentalt 5 MB-os hatar KET szazaleka
+ * (97 204 bajt / 5 MiB = 1,9%). A "harom szazalek" ELIRAS volt: acrobot
+ * kerdezett ra, es a visszameres adta a helyes szamot.
  * Egy resumable feltoltes ma nem valtana ki semmit, es onnantol karban kellene
  * tartani.
  *
@@ -29,8 +31,27 @@
  *
  * Az alapertelmezes NEGY MEGABAJT: a dokumentalt 5 MB-os hatar alatt marad
  * annyival, hogy a level SAJAT resze (targy, torzs, fejlecek) is elferjen
- * mellette. A mai legnagyobb csomag ennek a szazad resze -- a szam tehat NEM
- * a mai adathoz van szabva, hanem a vegponthoz.
+ * mellette.
+ *
+ * === A TARTALEK, ES A SZAM ALAPJA MEGNEVEZVE ===
+ *
+ *     belyegkep (a legnagyobb)                58 553 bajt
+ *     plusz a legnagyobb munkalap PDF         14 349 bajt
+ *     egyutt, nyersen                         72 902 bajt
+ *     base64 utan -- EZEN all a kapu          97 204 bajt
+ *     a hatarhoz (4 MiB) merve                ~43-szoros tartalek
+ *
+ * A 97 204 ALSO BECSLES: a ZIP- es PDF-keretet NEM tartalmazza. Vagyis a
+ * 43-szoros FELSO korlat, nem mert ertek -- a valodi tartalek ennel kisebb,
+ * de ugyanabban a nagysagrendben.
+ *
+ * ES EGY SZAM, AMIT VISSZA KELLETT VONNOM: eloszor "negyvenszeres tartalekot"
+ * irtam a 58 553 bajt MELLE. A szorzo egy MASIK alapra vonatkozott (a ~100 kB
+ * base64 utani csomagra), a szam melle irt bemenet pedig a nyers belyegkep
+ * volt: abbol 71,6-szoros jon ki. A kovetkeztetes nem valtozott, de a SZAM
+ * utazik tovabb, nem a kovetkeztetes -- ezert all itt most az ALAPJA is.
+ *
+ * A szam tehat NEM a mai adathoz van szabva, hanem a vegponthoz.
  *
  * MIERT SZAMIT, HOGY EZ ALLITHATO: ha egyszer egy jegy a hatar fele megy, a
  * valasz nem az lesz, hogy kiadunk egy uj verziot, hanem hogy atallitjuk az

@@ -142,7 +142,7 @@ export class HandoverMailService {
     const subject = headerSafe(
       input.subject?.trim() || handoverMailDefaultSubject(job.jobNumber),
     );
-    const text = handoverMailBody({ message: input.message, note: null });
+    const text = handoverMailBody({ message: input.message });
 
     if (!this.sender) return this.skip(job, decision, input, "mode-off");
 
