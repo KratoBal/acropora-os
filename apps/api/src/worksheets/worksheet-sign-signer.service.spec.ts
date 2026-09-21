@@ -359,6 +359,67 @@ describe("a külsős partner aláírása", () => {
   });
 
   /**
+   * A LAPRA NEM `INTERNAL` FORRAS KERUL (acrobot 1. kiegeszitese).
+   *
+   * A harmadik lyuk lenyege NEM az volt, hogy atengedte a kerest, hanem hogy
+   * `INTERNAL` forrast irt a lapra -- vagyis a dokumentum azt allitotta, hogy a
+   * MI kollegank irta ala. Ha az ENGEDELYEZETT ut is `INTERNAL`-t rogzitene, a
+   * kaput bezartuk volna, es a lap TOVABBRA IS hamisat allitana; csak mar nem
+   * lehetne szandekosan eloidezni.
+   *
+   * Ez nem hozzaferesi kerdes, hanem ADATHIBA: aki a jogosultsagokat nezi at,
+   * ezt nem talalja meg. Ezert all sajat allitaskent, nem a nev es az azonosito
+   * melle bujtatva -- a `signerSource` kulon is elromolhat.
+   */
+  it("a lapra NEM belsős aláírás kerül", async () => {
+    const kapott: Record<string, unknown>[] = [];
+    await service({
+      sign: async (input: Record<string, unknown>) => {
+        kapott.push(input);
+        return { ok: true } as const;
+      },
+    }).sign(
+      "worksheet-1",
+      {
+        decision: "ACCEPTED",
+        signerUserId: "kontakt-1",
+        signatureCode: KOD,
+        note: null,
+      } as never,
+      PARTNER as never,
+    );
+    assert.notEqual(kapott[0]?.signerSource, "INTERNAL");
+  });
+
+  /**
+   * ES AZ ALAIROKOD TOVABBRA IS KELL (acrobot 2. kiegeszitese).
+   *
+   * A masodik es a harmadik lyuk kozos vonasa, hogy KOD NELKUL mentek at. Az
+   * engedelyezett ut ma kodot ker -- de ha a szukites kozben ez elveszne, a
+   * kapu zarva lenne, es a bizonyito ereje MEGIS eltunne. Egy zold kapu mellett
+   * ez a vesztes NEMA: a keres atmenne, a lapra rakerulne az alairas, es semmi
+   * nem szolna.
+   *
+   * KULON ALLITAS A PARTNER-UTRA, holott a belsos uton mar all egy ugyanilyen:
+   * a ket ut MOSTANTOL kulon feltetelen megy at, tehat kulon is el tud romlani.
+   */
+  it("a saját aláíráshoz is KELL az aláírókód", async () => {
+    await assert.rejects(
+      () =>
+        service().sign(
+          "worksheet-1",
+          {
+            decision: "ACCEPTED",
+            signerUserId: "kontakt-1",
+            note: null,
+          } as never,
+          PARTNER as never,
+        ),
+      (error: unknown) => error instanceof BadRequestException,
+    );
+  });
+
+  /**
    * ES A BELSOS KOLLEGA VALASZTASI LEHETOSEGE NEM VALTOZIK (acrobot 3.
    * kikotese). A szerelo a helyszinen ma is a vevo neveben irat ala.
    *
