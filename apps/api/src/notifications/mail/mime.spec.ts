@@ -146,11 +146,32 @@ describe("buildMimeMessage: csatolmány és több címzett", () => {
    * a valtozashoz. Enelkul az allitas nelkul a regresszio NEMA lenne: a level
    * kimenne, csak maskepp nezne ki a fogado oldalan.
    */
-  it("csatolmány nélkül a levél EGYRÉSZES marad", () => {
-    const nyers = buildMimeMessage(LEVEL, FELADO);
-    assert.match(nyers, /^Content-Type: text\/plain; charset="UTF-8"$/m);
-    assert.doesNotMatch(nyers, /multipart\/mixed/);
-    assert.doesNotMatch(nyers, /Content-Disposition/);
+  it("csatolmány nélkül a levél BETŰRE ugyanaz marad", () => {
+    /*
+      A TELJES UZENET, KARAKTERRE. Nem `match`, nem `doesNotMatch`.
+
+      acrobot kerese (2026-09-22 00:04), es az elso valtozatom NEM ezt csinalta:
+      azt allitottam, hogy a level EGYRESZES (van `text/plain`, nincs
+      `multipart`, nincs `Content-Disposition`). Az GYENGEBB, mint a neve: egy
+      ATRENDEZETT fejlec-sorrend vagy egy UJ fejlec atmenne rajta.
+
+      Ez a level az, amit a `WORKSHEET_SIGNED` ut MA kuld. Egy csendes
+      valtozas rajta minden mai levelet maskepp mutatna a fogado oldalan, es
+      SEMMI nem hibazna tole -- ezert all itt a teljes szoveg, nem egy minta.
+    */
+    assert.equal(
+      buildMimeMessage(LEVEL, FELADO),
+      [
+        "From: ticket@acropora.hu",
+        "To: nyito@partner.hu",
+        "Subject: [HJ-2026-001] Szivattyu zug",
+        "MIME-Version: 1.0",
+        'Content-Type: text/plain; charset="UTF-8"',
+        "Content-Transfer-Encoding: base64",
+        "",
+        Buffer.from("Kedves Nóra!", "utf8").toString("base64"),
+      ].join(`${CR}${LF}`),
+    );
   });
 
   it("üres csatolmány-lista ugyanaz, mint a hiányzó", () => {
