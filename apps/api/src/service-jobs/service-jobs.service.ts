@@ -46,7 +46,10 @@ import {
   partnerVisibleStatus,
 } from "./service-job-status.js";
 import { mayWorksheetJoinTicket } from "../common/worksheet-under-ticket.js";
-import { worksheetsBlockingTicketClose } from "../common/worksheet-signature-gate.js";
+import {
+  worksheetsBlockingTicketClose,
+  type TicketCloseBlockReason,
+} from "../common/worksheet-signature-gate.js";
 import {
   allowedServiceJobSteps,
   isServiceJobStepAllowed,
@@ -636,29 +639,63 @@ export class ServiceJobsService {
    * ha a munka megtortent, ala kell iratni; ha a lap nem ide tartozik, le kell
    * valasztani a jegyrol.
    */
-  private async requireSignedWorksheets(serviceJobId: string): Promise<void> {
+  private async requireClosableWorksheets(
+    serviceJobId: string,
+    to: "COMPLETED" | "CANCELLED",
+  ): Promise<void> {
     const rows = await this.repository.worksheetSignatureStates(serviceJobId);
-    const blocking = worksheetsBlockingTicketClose(
-      rows.map((row) => ({
+    const blocking = worksheetsBlockingTicketClose({
+      worksheets: rows.map((row) => ({
         id: row.id,
         number: row.number,
         currentVersionStatus: row.versions[0]?.status ?? null,
         hidden: row.hiddenAt !== null,
+        handedOver: row.handedOverAt !== null,
       })),
-    );
+      to,
+    });
     if (blocking.length === 0) return;
 
-    const nevek = blocking
-      .map((sheet) => {
-        const nev = sheet.number ?? "szám nélküli munkalap";
-        return sheet.hidden ? `${nev} (rejtett)` : nev;
-      })
-      .join(", ");
-    throw new BadRequestException(
-      `Ez a hibajegy nem zárható le, amíg a munkalapja nincs aláírva: ${nevek}. ` +
-        "Írasd alá a lapot, vagy ha nem ide tartozik, vedd le a hibajegyről. " +
+    const nev = (sheet: { number: string | null; hidden: boolean }): string => {
+      const alap = sheet.number ?? "szám nélküli munkalap";
+      return sheet.hidden ? `${alap} (rejtett)` : alap;
+    };
+    const nevekAhol = (ok: TicketCloseBlockReason): string =>
+      blocking
+        .filter((tetel) => tetel.reasons.includes(ok))
+        .map((tetel) => nev(tetel.sheet))
+        .join(", ");
+
+    /**
+     * MIND A KET FELTETEL EGY MONDATBAN MEGY KI.
+     *
+     * Ha csak az elso dobo feltetelt mondanank el, a kezelo megjavitana,
+     * visszajonne, es a MASODIKON allna meg: ugyanaz az ut ketszer, es a
+     * masodik megallas ugyanolyan indokolatlannak latszana, mint az elso.
+     * Az ara vallalt: a mondat hosszabb, es emlithet olyan feltetelt, ami azt
+     * a kezelot epp nem erinti.
+     */
+    const reszek: string[] = [];
+    const alairatlan = nevekAhol("unsigned");
+    if (alairatlan)
+      reszek.push(
+        `Nincs aláírva: ${alairatlan}. Írasd alá a lapot, vagy ha nem ide tartozik, vedd le a hibajegyről.`,
+      );
+    const jeloletlen = nevekAhol("not-handed-over");
+    if (jeloletlen)
+      reszek.push(
+        `Az átadás nincs rögzítve: ${jeloletlen}. Jelöld meg a lapon, hogy az átadás megtörtént, vagy vedd le a hibajegyről.`,
+      );
+    if (blocking.some((tetel) => tetel.sheet.hidden))
+      reszek.push(
         "A rejtett lap a hibajegy alatt nem látszik: a munkalap-listán, a „Rejtettek is” jelölővel találod meg.",
-    );
+      );
+
+    const nyito =
+      to === "COMPLETED"
+        ? "Ez a hibajegy nem zárható le."
+        : "Ez a hibajegy nem állítható elállt állapotba.";
+    throw new BadRequestException([nyito, ...reszek].join(" "));
   }
 
   private async visibilityFor(
@@ -1317,13 +1354,22 @@ export class ServiceJobsService {
      * lezarhato. Ha kerul ala munkalap, akkor csak ugy zarhato le ha a munkalap
      * ala van irva."
      *
-     * CSAK A `COMPLETED` LEPESRE ALL, A `CANCELLED`-RE NEM, es ez dontes:
-     * az elallt jegyre epp az a jellemzo, hogy NEM lett belole munka. Ha a kapu
-     * arra is allna, egy tevedesbol nyitott jegyet nem lehetne lezarni egy
-     * felig kitoltott lap miatt -- vagyis a rendes kiutat vennenk el attol az
-     * esettol, amire valo. Balazs szava is a lezarasrol szolt, nem az elallasrol.
+     * KET FELTETEL, KET KULONBOZO HATOKORREL -- a reszletes indok a policy
+     * fejleceben all (`worksheet-signature-gate.ts`), itt csak a lenyeg:
+     *
+     *   alairas  CSAK a `COMPLETED` lepesre. Nautilus indoka (2026-09-18)
+     *            valtozatlanul all: az elallt jegyre epp az a jellemzo, hogy
+     *            NEM lett belole munka.
+     *   atadas   a `CANCELLED` lepesre IS. Az atadas a GEPROL szol, ami nem
+     *            allt el: ha elallunk, mikozben a vevo eszkoze nalunk van, a
+     *            jegy kikerul az aktiv listabol, es SEMMI nem koveti tovabb.
+     *
+     * A HIVAS EZERT ATADJA A CELALLAPOTOT, nem a hivohely donti el, melyik
+     * feltetel all. Igy a ket hatokor EGY helyen latszik, es nem lehet az
+     * egyiket a masik elgepelesenek nezni.
      */
-    if (input.to === "COMPLETED") await this.requireSignedWorksheets(id);
+    if (input.to === "COMPLETED" || input.to === "CANCELLED")
+      await this.requireClosableWorksheets(id, input.to);
 
     /**
      * A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI. A megjegyzes ELHAGYHATO (Balazs

@@ -101,4 +101,16 @@ export function atadasAllapota(input: {
   };
 }
 
-export const MEG_NALUNK_VAN = "Az eszköz még nálunk van";
+/**
+ * A FELIRAT AZT MONDJA, AMIT TUDUNK: HOGY A JELOLES HIANYZIK.
+ *
+ * Korabban "Az eszkoz meg nalunk van" allt itt. Az a mondat a GEP HELYET
+ * allitja, amit NEM tarolunk -- es helyszini munkanal egyenesen HAMIS, mert a
+ * gep el sem jott. Amit tudunk, az a `handedOverAt` hianya.
+ *
+ * Ez ugyanaz a hiba lett volna, amit 2026-09-07-en ezen a mezon mar egyszer
+ * kiszedtunk: egy allapot allitasa, amirol nincs adatunk. Akkor azert volt
+ * hamis, mert a mezonek nem volt iroja; most azert lenne, mert a mezo mast
+ * jelent, mint amit a mondat allit.
+ */
+export const ATADAS_NINCS_ROGZITVE = "Átadás nincs rögzítve";

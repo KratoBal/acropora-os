@@ -15,6 +15,13 @@ import { ServiceJobsService } from "./service-jobs.service.js";
  * A REPOSITORY HELYETTESÍTVE, mert a kérdés a DÖNTÉS, nem az adatbázis:
  * engedjük-e a lépést, és mit mondunk, ha nem.
  */
+/*
+  ATADVA: a REGI, alairasrol szolo allitasok lapjai MIND meg vannak jelolve.
+  Enelkul mindegyik KET okbol blokkolna, es egy elrontott alairas-szabaly
+  melle is odaallna egy masik ok, ami zolden tartana oket.
+*/
+const ATADVA = new Date("2026-09-20T12:00:00Z");
+
 function serviceWith(behaviour: {
   status: ServiceJobStatus | null;
   moved?: boolean;
@@ -25,6 +32,7 @@ function serviceWith(behaviour: {
     id: string;
     number: string | null;
     hiddenAt: Date | null;
+    handedOverAt: Date | null;
     versions: { status: WorksheetVersionStatus }[];
   }[];
 }) {
@@ -127,6 +135,7 @@ describe("egy lépés a hibajegyen", () => {
           id: "ws-1",
           number: "BIO-2026-004",
           hiddenAt: null,
+          handedOverAt: ATADVA,
           versions: [{ status: "AWAITING_SIGNATURE" }],
         },
       ],
@@ -148,6 +157,7 @@ describe("egy lépés a hibajegyen", () => {
           id: "ws-2",
           number: "BIO-2026-005",
           hiddenAt: new Date("2026-09-20T10:00:00Z"),
+          handedOverAt: ATADVA,
           versions: [{ status: "DRAFT" }],
         },
       ],
@@ -185,6 +195,7 @@ describe("egy lépés a hibajegyen", () => {
           id: "ws-3",
           number: "BIO-2026-006",
           hiddenAt: null,
+          handedOverAt: ATADVA,
           versions: [{ status: "SIGNED" }],
         },
       ],
@@ -196,12 +207,21 @@ describe("egy lépés a hibajegyen", () => {
   });
 
   /**
-   * A KAPU HATARA, NEV SZERINT. Az elallt jegyre epp az a jellemzo, hogy NEM
-   * lett belole munka -- ha a kapu arra is allna, egy tevedesbol nyitott jegy
-   * bent ragadna egy felig kitoltott lap miatt. Ez az allitas azert all itt,
-   * hogy a kapu kesobbi szelesitese NE csendben tortenjen.
+   * A KAPU HATARA, NEV SZERINT -- ES A HATAR 2026-09-21-EN ELMOZDULT.
+   *
+   * Nautilus ezt az allitast azzal a szandekkal irta, hogy a kapu kesobbi
+   * szelesitese NE csendben tortenjen. Nem is tortent csendben: a szeles
+   * megtortent, es ez a mondat pontosabb lett, nem gyengebb.
+   *
+   * AZ ALAIRAS-FELTETEL HATOKORE VALTOZATLAN: az elallt jegyre epp az a
+   * jellemzo, hogy NEM lett belole munka, tehat egy tevedesbol nyitott jegy
+   * nem ragadhat bent egy felig kitoltott lap miatt.
+   *
+   * AZ ATADAS-FELTETEL VISZONT AZ ELALLASRA IS ALL (a kovetkezo allitas meri):
+   * a gep nem allt el. A lap itt ezert JELOLT, kulonben nem azt mernenk,
+   * amit a cim mond.
    */
-  it("az ELALLAS nem esik a kapu ala, alairatlan lap mellett sem", async () => {
+  it("elallaskor az ALAIRAS hianya nem tartja vissza", async () => {
     const { service, calls } = serviceWith({
       status: "SCHEDULED",
       lapok: [
@@ -209,6 +229,7 @@ describe("egy lépés a hibajegyen", () => {
           id: "ws-4",
           number: "BIO-2026-007",
           hiddenAt: null,
+          handedOverAt: ATADVA,
           versions: [{ status: "DRAFT" }],
         },
       ],
@@ -217,6 +238,92 @@ describe("egy lépés a hibajegyen", () => {
 
     await service.move("job-1", { to: "CANCELLED" }, "user-1", BELSOS);
     assert.equal(calls.length, 1);
+  });
+
+  it("elallaskor a JELOLETLEN lap visszatartja, es NEM ir", async () => {
+    const { service, calls } = serviceWith({
+      status: "SCHEDULED",
+      lapok: [
+        {
+          id: "ws-5",
+          number: "BIO-2026-008",
+          hiddenAt: null,
+          handedOverAt: null,
+          versions: [{ status: "SIGNED" }],
+        },
+      ],
+    });
+
+    await assert.rejects(
+      () => service.move("job-1", { to: "CANCELLED" }, "user-1", BELSOS),
+      (hiba: unknown) => {
+        const uzenet = (hiba as { message: string }).message;
+        // A MONDAT AZ ELALLASROL SZOLJON, ne a lezarasrol: a kezelo azt a
+        // gombot nyomta meg.
+        assert.match(uzenet, /nem állítható elállt állapotba/);
+        assert.match(uzenet, /BIO-2026-008/);
+        return true;
+      },
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it("a jeloletlen lap a lezarast is visszatartja, alairva is", async () => {
+    const { service, calls } = serviceWith({
+      status: "IN_PROGRESS",
+      lapok: [
+        {
+          id: "ws-6",
+          number: "BIO-2026-009",
+          hiddenAt: null,
+          handedOverAt: null,
+          versions: [{ status: "SIGNED" }],
+        },
+      ],
+    });
+
+    await assert.rejects(
+      () => service.move("job-1", { to: "COMPLETED" }, "user-1", BELSOS),
+      (hiba: unknown) => {
+        const uzenet = (hiba as { message: string }).message;
+        assert.match(uzenet, /Az átadás nincs rögzítve: BIO-2026-009/);
+        // ES NEM allithatja, hogy alairatlan: a lap ALA VAN IRVA.
+        assert.doesNotMatch(uzenet, /Nincs aláírva/);
+        return true;
+      },
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  /**
+   * A DONTES, AMIERT A VISSZATERES OKOKAT AD, NEM CSAK LAPOKAT: egy lapon ket
+   * ok is allhat, es MIND A KETTO egy mondatban megy ki. Ha csak az elso dobo
+   * feltetelt mondanank el, a kezelo megjavitana, visszajonne, es a masodikon
+   * allna meg -- ugyanaz az ut ketszer.
+   */
+  it("ket ok EGY mondatban megy ki, nem ket korben", async () => {
+    const { service } = serviceWith({
+      status: "IN_PROGRESS",
+      lapok: [
+        {
+          id: "ws-7",
+          number: "BIO-2026-010",
+          hiddenAt: null,
+          handedOverAt: null,
+          versions: [{ status: "DRAFT" }],
+        },
+      ],
+    });
+
+    await assert.rejects(
+      () => service.move("job-1", { to: "COMPLETED" }, "user-1", BELSOS),
+      (hiba: unknown) => {
+        const uzenet = (hiba as { message: string }).message;
+        assert.match(uzenet, /Nincs aláírva: BIO-2026-010/);
+        assert.match(uzenet, /Az átadás nincs rögzítve: BIO-2026-010/);
+        return true;
+      },
+    );
   });
 
   it("végállapotban azt mondja, hogy nincs több lépés", async () => {

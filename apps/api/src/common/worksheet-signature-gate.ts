@@ -45,14 +45,43 @@ export interface TicketWorksheetSignatureState {
   currentVersionStatus: WorksheetVersionStatus | null;
   /** Rejtett-e a lap. MÉRVE VAN, de NEM mentesít -- lásd alább. */
   hidden: boolean;
+  /**
+   * RÖGZÍTETTE-E VALAKI, HOGY A LAP ÚTJA LEZÁRULT (`handedOverAt`).
+   *
+   * BOOLEAN, NEM DÁTUM, és ez szándékos: a kapunak a jelölés MEGLÉTE kell, a
+   * dátum a megjelenítésé. Egy `Date | null` itt arra csábítana, hogy a
+   * szabály az időponttal számoljon, és akkor a tiszta függvény egy órajelet
+   * kapna bemenetnek.
+   *
+   * ÉS AMIT EZ NEM TUD: azt, hogy hol van a gép. Azt nem is tároljuk. Ezért
+   * hívják jelölésnek, és ezért mondja a felhasználónak szóló szöveg, hogy az
+   * átadás nincs rögzítve, nem azt, hogy az eszköz nálunk van -- helyszíni
+   * munkánál az utóbbi hamis lenne.
+   */
+  handedOver: boolean;
+}
+
+/** Miért tart vissza egy lap. Laponként TÖBB ok is állhat egyszerre. */
+export type TicketCloseBlockReason = "unsigned" | "not-handed-over";
+
+/** Egy visszatartó lap, az OKAIVAL együtt. */
+export interface BlockingWorksheet {
+  sheet: TicketWorksheetSignatureState;
+  reasons: TicketCloseBlockReason[];
 }
 
 /**
- * MELYIK MUNKALAP TARTJA VISSZA A JEGY LEZÁRÁSÁT.
+ * MELYIK MUNKALAP TARTJA VISSZA A JEGY LEZÁRÁSÁT, ÉS MIÉRT.
  *
  * A visszatérés LISTA, nem igen/nem, mert a hívónak meg kell neveznie a lapot.
  * Egy puszta „nem zárható le" a kezelőt keresésre küldi, és a jegy alatt akár
  * öt lap is állhat.
+ *
+ * ÉS LAPONKÉNT AZ OKOKAT IS ADJA, NEM CSAK A LAPOT. Amíg egyetlen feltétel
+ * volt, a lap neve elég volt. Kettőnél nem: ha a hívó csak az első dobó
+ * feltételt mondaná el, a kezelő megjavítaná, visszajönne, és a MÁSODIK
+ * feltételen állna meg -- ugyanaz az út kétszer, és a második megállás
+ * ugyanolyan indokolatlannak látszana, mint az első.
  *
  * === A REJTETT LAP IS VISSZATARTJA, ÉS EZ DÖNTÉS ===
  *
@@ -66,16 +95,43 @@ export interface TicketWorksheetSignatureState {
  * marad rejtve. A fölösleges szigor HANGOS (valaki nem tud lezárni, és szól);
  * a fölösleges engedékenység NÉMA.
  *
- * ÉS VAN KIÚT, TEHÁT EZ NEM CSAPDA: a lap aláírható, vagy leválasztható a
- * jegyről (`DELETE /service/service-jobs/:id/worksheets/:worksheetId`). A
- * rejtés maga is visszavonható, a munkalap-listán a „Rejtettek is" jelölővel.
- * Ezért a hívó mondatának KI KELL MONDANIA, hogy a lap rejtett: a jegy alatti
- * lista szándékosan nem mutatja, tehát a kezelő hiába keresi ott.
+ * ÉS VAN KIÚT, TEHÁT EZ NEM CSAPDA: a lap aláírható, megjelölhető átadottként,
+ * vagy leválasztható a jegyről
+ * (`DELETE /service/service-jobs/:id/worksheets/:worksheetId`). A rejtés maga
+ * is visszavonható, a munkalap-listán a „Rejtettek is" jelölővel. Ezért a hívó
+ * mondatának KI KELL MONDANIA, hogy a lap rejtett: a jegy alatti lista
+ * szándékosan nem mutatja, tehát a kezelő hiába keresi ott.
+ *
+ * === A KÉT FELTÉTEL HATÓKÖRE KÜLÖNBÖZIK, ÉS EZ NEM ELGÉPELÉS ===
+ *
+ *   aláírás  CSAK a `COMPLETED` lépésre
+ *   átadás   a `COMPLETED` ÉS a `CANCELLED` lépésre is
+ *
+ * Az aláírás a MUNKÁRÓL szól, ami elállt jegynél épp elmaradt -- nautilus
+ * indoka (2026-09-18) változatlanul áll: egy tévedésből nyitott jegyet nem
+ * szabad egy félig kitöltött lap miatt fogva tartani.
+ *
+ * Az átadás a GÉPRŐL szól, ami nem állt el. Ha elállunk, miközben a vevő
+ * eszköze nálunk van, a jegy kikerül az aktív listából, és onnantól SEMMI nem
+ * követi. A két tévedés ára itt fordítva áll: a fölösleges szigor hangos (a
+ * kezelő nem tud elállni, és szól), a fölösleges engedékenység NÉMA.
+ *
+ * A „tévedésből nyitott jegy" esete tehát nem szorul ki, csak nem az
+ * alapértelmezett úton megy: a lapot le kell választani róla.
  */
-export function worksheetsBlockingTicketClose(
-  worksheets: readonly TicketWorksheetSignatureState[],
-): TicketWorksheetSignatureState[] {
-  return worksheets.filter((sheet) => sheet.currentVersionStatus !== "SIGNED");
+export function worksheetsBlockingTicketClose(input: {
+  worksheets: readonly TicketWorksheetSignatureState[];
+  to: "COMPLETED" | "CANCELLED";
+}): BlockingWorksheet[] {
+  const blocking: BlockingWorksheet[] = [];
+  for (const sheet of input.worksheets) {
+    const reasons: TicketCloseBlockReason[] = [];
+    if (input.to === "COMPLETED" && sheet.currentVersionStatus !== "SIGNED")
+      reasons.push("unsigned");
+    if (!sheet.handedOver) reasons.push("not-handed-over");
+    if (reasons.length) blocking.push({ sheet, reasons });
+  }
+  return blocking;
 }
 
 export type WorksheetSignatureCheck =

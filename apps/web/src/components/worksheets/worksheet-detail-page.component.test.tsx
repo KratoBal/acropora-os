@@ -916,14 +916,20 @@ describe("WorksheetDetailPage és az eszköz átadása", () => {
     setOnLine(true);
   });
 
-  it("átadás nélkül kimondja, hogy az eszköz még nálunk van", async () => {
+  /*
+    A FELIRAT A JELOLES HIANYAT MONDJA KI, NEM A GEP HELYET.
+    A korabbi "Meg nalunk van" helyszini munkanal hamis volt (a gep el sem
+    jott), es ugyanaz a hibafajta, amit 2026-09-07-en ezen a mezon mar
+    kiszedtunk: allapot allitasa adat nelkul.
+  */
+  it("átadás nélkül kimondja, hogy a jelölés hiányzik", async () => {
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
     // ISMERT POZITIV KONTROLL: a lap egyaltalan felepult. Enelkul a felirat
     // hianya a betoltes lassusagat merne, nem az allapotot.
     await screen.findByText("Kompresszor bevizsgálás");
 
     expect(screen.getByTestId("munkalap-atadas").textContent).toBe(
-      "Még nálunk van",
+      "Átadás nincs rögzítve",
     );
   });
 
@@ -944,8 +950,10 @@ describe("WorksheetDetailPage és az eszköz átadása", () => {
       megjelenitesi dontest, ami holnap valtozhat.
     */
     expect(szoveg).toContain("2026");
-    // ES A REGI, HAMIS MONDAT NINCS OTT. Ez kulon allitas: egy rosszul irt
-    // felteteles ag mind a kettot kirajzolhatna.
+    // ES A HIANY-AG NINCS OTT. Ez kulon allitas: egy rosszul irt felteteles
+    // ag mind a kettot kirajzolhatna. A REGI szoveget is meri, hogy egy
+    // felig elvegzett atnevezes se maradjon eszrevetlen.
+    expect(szoveg).not.toContain("Átadás nincs rögzítve");
     expect(szoveg).not.toContain("Még nálunk van");
   });
 
@@ -965,7 +973,7 @@ describe("WorksheetDetailPage és az eszköz átadása", () => {
     await screen.findByText("Kompresszor bevizsgálás");
 
     expect(screen.getByTestId("munkalap-atadas").textContent).not.toContain(
-      "Még nálunk van",
+      "Átadás nincs rögzítve",
     );
   });
 
