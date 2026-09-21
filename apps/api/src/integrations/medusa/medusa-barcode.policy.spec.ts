@@ -5,6 +5,7 @@ import {
   decideMedusaBarcode,
   describeSkippedBarcode,
   hasValidCheckDigit,
+  vonalkodAlakjai,
 } from "./medusa-barcode.policy.js";
 
 describe("hasValidCheckDigit", () => {
@@ -202,5 +203,109 @@ describe("describeSkippedBarcode", () => {
     // A tisztitas helye a forras, nem a vetites -- enelkul a kovetkezo olvaso
     // a vetitesben keresne a hibat.
     assert.ok(sor.includes("UNAS"));
+  });
+});
+
+/**
+ * UGYANAZ A FIZIKAI KOD KET IRASMODBAN (02ef8620).
+ *
+ * === A SZAMOK, AMIK MIATT EZ NEM ELMELETI (merve 2026-09-21) ===
+ *
+ * A nyers UNAS exporton a szamjegyes cikkszamok kozott a 12 jegyu alak a
+ * MASODIK leggyakoribb hossz: 165 kulonbozo ertek (a 13 jegyu 783). A staging
+ * adatbazis fuggetlenul ugyanezt mondja: 998 kitoltott cikkszambol 92 tizenket
+ * jegyu.
+ *
+ * ES A DONTO SZAM: HARMINCHET 13 jegyu kod all VEZETO NULLAVAL -- vagyis mar a
+ * kiegeszitett alakban. A katalogus MA IS ket konvenciot visel egymas mellett.
+ * Utkozo par ma nincs (merve, mukodo pozitiv kontrollal), de harminchet kod all
+ * EGYETLEN forras-oldali szerkesztesnyire tole.
+ *
+ * KORABBAN EGY SZARMAZTATOTT FAJLBOL AZT MERTEM, hogy 12 jegyu kod NINCS. Az
+ * hamis volt: a szarmaztato szkript `len in (13, 8)` szerint szur, tehat a 12
+ * jegyu SZERKEZETILEG nem kerulhetett a kimenetbe. Egy szarmaztatott fajl nem
+ * tud arrol, amit a szuro kihagyott.
+ */
+describe("ugyanaz a kod ket irasmodban", () => {
+  it("a 12 jegyu alak mellett a vezeto nullas 13 jegyu is jelolt", () => {
+    assert.deepEqual(vonalkodAlakjai("653341191120"), [
+      "653341191120",
+      "0653341191120",
+    ]);
+  });
+
+  it("a vezeto nullas 13 jegyu mellett a csupasz 12 jegyu is jelolt", () => {
+    assert.deepEqual(vonalkodAlakjai("0653341191120"), [
+      "0653341191120",
+      "653341191120",
+    ]);
+  });
+
+  /*
+    ISMERT POZITIV KONTROLL A LENTI EGYELEMU ESETEKHEZ: a fenti ket allitas
+    bizonyitja, hogy a fuggveny TUD ket alakot adni. Enelkul egy olyan
+    valtozat is zold lenne, ami MINDIG egyelemu listat ad.
+  */
+  it("a nem nullas 13 jegyu alaknak nincs masik irasmodja", () => {
+    assert.deepEqual(vonalkodAlakjai("5999860770015"), ["5999860770015"]);
+  });
+
+  it("a valodi gyartoi cikkszamon a viselkedes valtozatlan", () => {
+    assert.deepEqual(vonalkodAlakjai("core7_otherm_bulk"), [
+      "core7_otherm_bulk",
+    ]);
+    assert.deepEqual(vonalkodAlakjai(null), []);
+    assert.deepEqual(vonalkodAlakjai("  "), []);
+  });
+});
+
+/**
+ * A BELSO HASZNALATU TARTOMANY A 12 JEGYU ALAKON IS SZAMIT.
+ *
+ * A `2` szamrendszer-jegy az UPC-A-ban ugyanazt jelenti, mint a `2` elotag az
+ * EAN-13-ban: boltonkent szabadon kiosztott kod, ami a boltunkon KIVUL semmit
+ * nem azonosit. 2026-09-21-ig a vizsgalat CSAK a 13 jegyu agon futott.
+ */
+describe("a belso hasznalatu tartomany mind a ket hosszon", () => {
+  it("a 12 jegyu, 2-vel kezdodo kod NEM megy ki", () => {
+    // 222000000419 -- ervenyes ellenorzo szamjeggyel, belso tartomany
+    const kod = "222000000419";
+    assert.equal(hasValidCheckDigit(kod), true, "a proba-kod ervenyes legyen");
+    assert.equal(decideMedusaBarcode(kod, 1).kind, "none");
+  });
+
+  /*
+    ISMERT POZITIV KONTROLL: egy RENDES 12 jegyu kod tovabbra is kimegy `upc`
+    mezoben. Enelkul egy "minden 12 jegyut eldobunk" valtozat is zold lenne.
+  */
+  it("a rendes 12 jegyu kod tovabbra is upc mezot kap", () => {
+    const kod = "653341191120";
+    assert.equal(hasValidCheckDigit(kod), true, "a proba-kod ervenyes legyen");
+    const d = decideMedusaBarcode(kod, 1);
+    assert.equal(d.kind, "upc");
+    assert.equal(d.field, "upc");
+  });
+
+  /**
+   * ES EZ AZ ALLITAS AZ INDOKOT VEDI, NEM A VISELKEDEST.
+   *
+   * Kezenfekvo volna a 12 jegyu kodot vezeto nullaval kiegesziteni, es a
+   * tartomany-vizsgalatot a kiegeszitett alakra futtatni. EZ MERHETOEN ROSSZ:
+   * a `2xxxxxxxxxxx`-bol `02xxxxxxxxxxx` lesz, tehat a szamrendszer-jegy a
+   * MASODIK helyre kerul, es az elso-jegy vizsgalat nem fogja meg.
+   *
+   * A normalizalas itt EPP a megkulonbozteto jelet torolne el. Ez az allitas
+   * azert all itt, hogy a kovetkezo olvaso ne "egyszerusitse" oda.
+   */
+  it("a vezeto nullas alak NEM helyettesiti a nyers vizsgalatot", () => {
+    const belso12 = "222000000419";
+    const kiegeszitett = `0${belso12}`;
+
+    // A kiegeszitett alak MAR NEM 2-vel kezdodik: a jel eltolodott.
+    assert.equal(kiegeszitett.startsWith("2"), false);
+    assert.equal(kiegeszitett.startsWith("02"), true);
+
+    // A nyers alakon viszont a dontes helyes marad.
+    assert.equal(decideMedusaBarcode(belso12, 1).kind, "none");
   });
 });
