@@ -1,4 +1,6 @@
 import type {
+  AssetDetail,
+  AssetDocumentSummary,
   AssetListResponse,
   AuthenticatedUser,
   ServiceJobDetail,
@@ -143,11 +145,42 @@ export const partnerApi = {
    * bennhagyott azonosito azt sugallna, hogy a hivo szabalyozza a lathatosagot.
    * Ma a `PartnerScope` szabalyozza, a szerveren.
    */
-  assets: (departmentId?: string) => {
+  assets: (input?: { departmentId?: string; search?: string }) => {
     const query = new URLSearchParams({ status: "ALL", pageSize: "100" });
-    if (departmentId) query.set("departmentId", departmentId);
+    /*
+      A KET SZURO A SZERVERNEK MEGY, NEM A BETOLTOTT LISTA FOLE. A lista
+      lapozott (ma 100-as lap, elesen 79 eszkoz): egy bongeszo-oldali szures a
+      lapozas elso napjan CSENDBEN hianyos lenne -- a megjelenitett oldalbol
+      valogatna, es a tobbirol nem tudna.
+
+      ES AZ URES ERTEK NEM MEGY KI. Egy `departmentId=` alaku, ures parameter
+      nem ugyanaz, mint a parameter hianya: a szerver egy ures azonositot
+      kapna, es a reszfa-kibontas azt egy nem letezo egysegre futtatna.
+    */
+    if (input?.departmentId) query.set("departmentId", input.departmentId);
+    if (input?.search?.trim()) query.set("search", input.search.trim());
     return request<AssetListResponse>(`/service/assets?${query}`);
   },
+  /**
+   * EGY ESZKOZ ADATLAPJA. A hatokort a SZERVER szabja (`partnerScopeOf`),
+   * tehat idegen eszkozre 404 jon -- a portal nem szur mellé sajat feltetelt.
+   * Egy kliens-oldali szures azt sugallna, hogy a lathatosagot a hivo dönti el.
+   */
+  asset: (id: string) =>
+    request<AssetDetail>(`/service/assets/${encodeURIComponent(id)}`),
+  assetDocuments: (id: string) =>
+    request<{ items: AssetDocumentSummary[] }>(
+      `/service/assets/${encodeURIComponent(id)}/documents`,
+    ),
+  assetDocumentBlob: (assetId: string, documentId: string) =>
+    requestBlob(
+      `/service/assets/${encodeURIComponent(assetId)}/documents/${encodeURIComponent(documentId)}`,
+    ),
+  uploadAssetDocument: (id: string, file: File, caption: string) =>
+    request(`/service/assets/${encodeURIComponent(id)}/documents`, {
+      method: "POST",
+      body: documentForm(file, caption),
+    }),
   worksheets: () =>
     request<WorksheetListResponse>("/service/worksheets?page=1&pageSize=100"),
   worksheet: (id: string) =>
