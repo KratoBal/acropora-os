@@ -420,6 +420,27 @@ describe("a partner hibajegy-adatlapja", () => {
   });
 
   /**
+   * A BELSŐ MEGJEGYZÉS NEM KERÜL A PARTNER ELÉ (Balázs döntése, 2026-09-21).
+   *
+   * EZ AZ ÁLLÍTÁS EGY SAJÁT TÉVEDÉSEMET ŐRZI. A megjegyzést BEÍRTAM a naplóba,
+   * azzal az érvvel, hogy nem új közzététel: a partner letölthető csomagja MA
+   * IS tartalmazza. A mérés igaz volt, a következtetés nem -- Balázs ugyanazzal
+   * a mondattal a CSOMAGBÓL is kivetette.
+   *
+   * MI PIROSÍT: a `note` bármilyen kirajzolása. És a KOLLÉGA NEVE a pozitív
+   * kontroll hozzá: Balázs külön kimondta, hogy az marad, tehát egy állítás,
+   * ami csak a megjegyzés hiányát méri, zölden hagyná a név elvesztését is.
+   */
+  it("a napló nem írja ki a belső megjegyzést, a nevet viszont igen", () => {
+    const s = kod(HIBAJEGY_RESZLET);
+    assert.ok(
+      !/event\.note/.test(s),
+      "a belső megjegyzés kirajzolódik a partner naplójában",
+    );
+    assert.match(s, /entry\.event\.actorName/);
+  });
+
+  /**
    * POZITÍV KONTROLL: a partner megmaradt művelete ott van a lapon. Enélkül a
    * fenti négy negatív állítás akkor is zöld lenne, ha a lap üres volna.
    */
