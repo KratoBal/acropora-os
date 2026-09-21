@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -75,5 +76,46 @@ describe("mit lát a partner a hibajegy állapotából", () => {
     ] as const) {
       assert.ok(partnerStatusLabel(belso), `hiányzik: ${belso}`);
     }
+  });
+});
+
+/**
+ * A LEKÉPEZÉS EGY HELYEN ÁLL -- ÉS EZ 2026-09-21 ÓTA NEM ITT VAN.
+ *
+ * A táblázat a `@acropora/types`-ba költözött, hogy a partnerportál is
+ * elérje. Ez a modul azóta BURKOLÓ: a Prisma típusára szabja a hívást, és a
+ * séma tükrét őrzi.
+ *
+ * AMIT EZ AZ ÁLLÍTÁS MÉR, ÉS AMIT A FORDÍTÓ NEM: hogy ide vissza ne
+ * keletkezzen egy MÁSODIK táblázat. Egy második leképezés nem hibázna -- a
+ * fordító mind a kettőt elfogadná --, csak elcsúszna, és onnantól a partner
+ * mást látna, mint amit mi hiszünk róla.
+ *
+ * A HATÁRA KIMONDVA: ez a forrás SZÖVEGÉT olvassa. Egy második táblázat, ami
+ * más nevet és más alakot használ, átcsúszna rajta. A négy partneri feliratot
+ * viszont bárki átvenné, aki másolna -- azokra mér.
+ */
+describe("a leképezés nem keletkezik vissza ide", () => {
+  const forras = readFileSync(
+    new URL("../../src/service-jobs/service-job-status.ts", import.meta.url),
+    "utf8",
+  ).replace(/\/\*[\s\S]*?\*\//g, " ");
+
+  it("a modul nem hordoz saját felirat-táblázatot", () => {
+    for (const felirat of ['"Feldolgozás alatt"', '"Elkészült"', '"Lezárva"'])
+      assert.ok(
+        !forras.includes(felirat),
+        `a felirat visszakerült a szerverre: ${felirat}`,
+      );
+  });
+
+  /**
+   * POZITÍV KONTROLL: a séma tükrének őrzője VISZONT itt maradt, és itt is a
+   * helye -- a közös csomag a kliensé is, tehát nem függhet a Prismától. Ha ez
+   * is elköltözne, a fenti állítás zölden hagyná az egész modul kiürülését.
+   */
+  it("a séma-tükör őrzője itt maradt", () => {
+    assert.ok(forras.includes("_SCHEMA_COVERS_MIRROR"));
+    assert.ok(forras.includes("_MIRROR_COVERS_SCHEMA"));
   });
 });
