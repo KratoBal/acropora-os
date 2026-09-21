@@ -234,7 +234,19 @@ const PAROK: readonly Par[] = [
  * típust kapott (`SetWorksheetAssigneesInput`), és PÁR is lett belőle fent --
  * vagyis a hívás nem a „nem mérjük" halmazba került.
  */
-const IRAS_HIVASOK_MA = 14;
+/**
+ * 2026-09-21: 14 -> 15. Az uj hivas az ATADAS jelolese
+ * (`setWorksheetHandedOver`, `lib/api/worksheets.ts`). A guard sajat uzenete
+ * kerte a dontest, es a valasz NEM: a torzs HELYBEN kiirt kulcs
+ * (`{ handedOver }`), nincs nevesitett tipusa, tehat nincs mihez PARBA
+ * allitani itt. A hivas ettol nem meretlen: a szomszed orzo a HIVOHELYEK
+ * kozott meri, kulcs szerint, a `SetWorksheetHandedOverDto`-hoz.
+ *
+ * Ez tehat az az eset, amit a ket szam kulon mozgasarol szolo jegyzet lent
+ * leir, csak FORDITVA: itt MIND A KETTO mozdult (a hivas a `lib/api`-ban van),
+ * de PAR csak az egyikben lett belole.
+ */
+const IRAS_HIVASOK_MA = 15;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

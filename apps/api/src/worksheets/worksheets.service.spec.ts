@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
+import type { AuthenticatedUser } from "@acropora/types";
 
 import type {
   AmendWorksheetDto,
@@ -17,6 +18,7 @@ import type { WorksheetsRepository } from "./worksheets.repository.js";
 import { WorksheetsService } from "./worksheets.service.js";
 import type {
   WorksheetDetailRow,
+  WorksheetHandover,
   WorksheetVersionRow,
 } from "./worksheets.types.js";
 
@@ -100,6 +102,10 @@ function worksheetRow(
     serviceJob: null,
     handedOverAt: null,
     handedOverById: null,
+    // A BETOLTOTT ATADO IS `null` ALAPBOL, nem csak az azonosito -- ugyanaz a
+    // ket-mezos par, mint a hibajegynel fentebb. A reszletlap a NEVET irja ki,
+    // es az a kapcsolatrol jon, nem az azonositorol.
+    handedOverBy: null,
     hiddenAt: null,
     hiddenById: null,
     customerId: "customer-1",
@@ -926,5 +932,153 @@ describe("WorksheetsService.create és a felelősök", () => {
     await service.create(contentDto(), "user-1");
 
     assert.equal(calls, 0);
+  });
+});
+
+/**
+ * AZ ATADAS IRASA -- A LANC UTOLSO, HIANYZO SZEME.
+ *
+ * A mezo 2026-09-02 ota all a semaban, az API OLVASSA, a felulet KIRAJZOLJA,
+ * es 2026-09-21-ig SEMMI nem irta: tiz hivatkozas a nem-teszt kodban, mind
+ * olvasas vagy tipus-deklaracio, iras NULLA. Ez a blokk az irast meri.
+ */
+describe("WorksheetsService.setHandedOver", () => {
+  const BELSOS: AuthenticatedUser = {
+    id: "user-1",
+    email: "szerelo@acropora.hu",
+    displayName: "Kiss Péter",
+    role: "SERVICE",
+    customerId: null,
+    supplierId: null,
+  };
+
+  const PARTNER: AuthenticatedUser = {
+    id: "user-partner",
+    email: "kapcsolat@partner.hu",
+    displayName: "Partner Kapcsolattartó",
+    role: "PARTNER_SERVICE",
+    customerId: "customer-1",
+    supplierId: null,
+  };
+
+  function figyeloTarolo(overrides: Record<string, unknown> = {}) {
+    const irasok: { id: string; handover: WorksheetHandover }[] = [];
+    const repo = repository({
+      setHandedOver: async (id: string, handover: WorksheetHandover) => {
+        irasok.push({ id, handover });
+      },
+      ...overrides,
+    });
+    return { repo, irasok };
+  }
+
+  it("rögzíti az átadás időpontját és azt, ki adta át", async () => {
+    const { repo, irasok } = figyeloTarolo();
+    await new WorksheetsService(repo).setHandedOver(
+      "worksheet-1",
+      true,
+      BELSOS,
+    );
+
+    assert.equal(irasok.length, 1);
+    const iras = irasok[0]?.handover;
+    assert.equal(iras?.handedOver, true);
+    assert.ok(iras?.handedOver === true && iras.at instanceof Date);
+    assert.equal(iras?.handedOver === true ? iras.byUserId : null, "user-1");
+  });
+
+  it("visszavonáskor MIND A KÉT mezőt törli, nem csak a dátumot", async () => {
+    const { repo, irasok } = figyeloTarolo();
+    await new WorksheetsService(repo).setHandedOver(
+      "worksheet-1",
+      false,
+      BELSOS,
+    );
+
+    /*
+      A VISSZAVONAS AGA NEM HORDOZ NEVET, ES EZT A TIPUS TARTJA. Egy ottmaradt
+      nev azt allitana, hogy valaki atadta a lapot, kozben a datum szerint nem
+      adtuk at -- es a kepernyo a NEVET irja ki. Az elso valtozatban a
+      szolgaltatas MINDIG atadta a sajat azonositojat, es a torlest a tarolo
+      vegezte egy masodik feltetellel: ez az allitas epp azt fogta meg.
+    */
+    assert.equal(irasok[0]?.handover.handedOver, false);
+    assert.equal(Object.keys(irasok[0]?.handover ?? {}).length, 1);
+  });
+
+  /*
+    A KAPU BIZONYITEKA AZ, HOGY NEM TORTENT SEMMI -- nem a hibauzenet.
+    Egy orzo, ami szol ES kozben atengedi a muveletet, pontosan igy nezne ki
+    kivulrol: a hivo hibat kap, a sor megis megvaltozik. Ezert all itt ket
+    allitas, es a masodik a fontosabb.
+  */
+  it("partner hatókörű hívót elutasít, ÉS nem ír semmit", async () => {
+    const { repo, irasok } = figyeloTarolo();
+    await assert.rejects(
+      new WorksheetsService(repo).setHandedOver("worksheet-1", true, PARTNER),
+      NotFoundException,
+    );
+    assert.equal(irasok.length, 0);
+  });
+
+  /*
+    ISMERT POZITIV KONTROLL A FENTI TAGADAS MELLE. Enelkul a "nem irt semmit"
+    allitas egy olyan tarolon is zold lenne, ami SOHA nem ir -- a nulla a
+    figyelo tulajdonsaga is lehetne, nem a kapue. Ez a sor bizonyitja, hogy
+    ugyanaz a figyelo TUD szamolni, amikor van mit.
+  */
+  it("a figyelő ugyanezen az úton MÉR egy belsős írást (pozitív kontroll)", async () => {
+    const { repo, irasok } = figyeloTarolo();
+    await new WorksheetsService(repo).setHandedOver(
+      "worksheet-1",
+      true,
+      BELSOS,
+    );
+    assert.equal(irasok.length, 1);
+  });
+
+  it("a részletlap kiadja az átadás idejét ÉS az átadó nevét", async () => {
+    const { repo } = figyeloTarolo({
+      detail: async () =>
+        worksheetRow({
+          handedOverAt: new Date("2026-09-21T10:00:00.000Z"),
+          handedOverById: "user-1",
+          handedOverBy: { displayName: "Kiss Péter" },
+        }),
+    });
+    const detail = await new WorksheetsService(repo).setHandedOver(
+      "worksheet-1",
+      true,
+      BELSOS,
+    );
+
+    assert.equal(detail.handedOverAt, "2026-09-21T10:00:00.000Z");
+    assert.equal(detail.handedOverByName, "Kiss Péter");
+  });
+
+  /*
+    A DATUM TULELI AZ ATADO TORLESET, es ezt ki kell mondani: a semaban a
+    kapcsolat `onDelete: SetNull`, tehat egy azota torolt kollega neve
+    eltunik, az ATADAS TENYE viszont megmarad. Ha a felulet a ket mezot
+    osszevonna ("nincs nev -> nem volt atadas"), epp azt a lapot allitana
+    vissza nalunk levonek, amit visszaadtunk.
+  */
+  it("átadottnak mutatja a lapot akkor is, ha az átadó neve már nincs meg", async () => {
+    const { repo } = figyeloTarolo({
+      detail: async () =>
+        worksheetRow({
+          handedOverAt: new Date("2026-09-21T10:00:00.000Z"),
+          handedOverById: null,
+          handedOverBy: null,
+        }),
+    });
+    const detail = await new WorksheetsService(repo).setHandedOver(
+      "worksheet-1",
+      true,
+      BELSOS,
+    );
+
+    assert.equal(detail.handedOverAt, "2026-09-21T10:00:00.000Z");
+    assert.equal(detail.handedOverByName, null);
   });
 });

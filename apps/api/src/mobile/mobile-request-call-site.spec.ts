@@ -106,8 +106,27 @@ const HIVOHELYEK: readonly Hivohely[] = [
     kontroll: ["to", "note"],
   },
   {
+    /**
+     * AZ ATADAS JELOLESE (2026-09-21). Helyben kiirt kulccsal megy
+     * (`{ handedOver }`), tehat nincs nevesitett tipusa -- ez a fajta
+     * KIZAROLAG itt merheto.
+     */
     fajl: "lib/api/worksheets.ts",
     sorszam: 4,
+    dto: "src/worksheets/dto/worksheet.dto.ts",
+    dtoNev: "SetWorksheetHandedOverDto",
+    kontroll: ["handedOver"],
+  },
+  {
+    /**
+     * A SORSZAM 4-ROL 5-RE MOZDULT, ES NEM AZERT, MERT EZ A HIVAS VALTOZOTT.
+     *
+     * Az atadas hivasa a fajlban FELETTE all, tehat eggyel hatrebb tolta. A
+     * sorszam a fajlon beluli SORRENDET jelenti, nem azonositot -- aki uj
+     * irast tesz egy fajl kozepere, itt minden alatta allot atszamoz.
+     */
+    fajl: "lib/api/worksheets.ts",
+    sorszam: 5,
     dto: "src/worksheets/dto/worksheet.dto.ts",
     dtoNev: "CreateWorksheetEntryDto",
     kontroll: ["body"],
@@ -217,7 +236,13 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
  * hogy a mappan KIVUL keletkezett -- es epp az az eset, amit a szomszed nem
  * hibanak lat, hanem nem letezonek.
  */
-const IRAS_HIVASOK_A_FAN = 15;
+/**
+ * 2026-09-21: 15 -> 16. Az uj hivas az ATADAS jelolese
+ * (`setWorksheetHandedOver`, `lib/api/worksheets.ts`). A torzse HELYBEN kiirt
+ * kulcs (`{ handedOver }`), tehat a szomszed orzo -- ami nevesitett tipusokat
+ * par-baalit -- nem latja: ez a hivas KIZAROLAG a hivohelyek kozott merheto.
+ */
+const IRAS_HIVASOK_A_FAN = 16;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

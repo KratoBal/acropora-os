@@ -441,6 +441,23 @@ describe("a partner hibajegy-adatlapja", () => {
   });
 
   /**
+   * EGY VÁLASZTHATÓ ALÁÍRÓNÁL A LAP ELŐRE KIVÁLASZTJA (9188d799).
+   *
+   * A szerver a kérőre szűkíti a listát, tehát a választó egy elemű. A beküldés
+   * `if (!signerUserId) return;` ágon áll: előválasztás nélkül aki nem nyitja le
+   * a legördülőt, megnyomja a gombot, és NEM TÖRTÉNIK SEMMI -- hibaüzenet
+   * nélkül. Egy néma no-op rosszabb, mint egy hibaüzenet.
+   *
+   * MI PIROSÍT: az előválasztás elhagyása.
+   */
+  it("egy választható aláírónál előre kiválasztja", () => {
+    assert.match(
+      kod(MUNKALAP_RESZLET),
+      /signerList\.items\.length === 1[\s\S]{0,120}?setSignerUserId\(/,
+    );
+  });
+
+  /**
    * POZITÍV KONTROLL: a partner megmaradt művelete ott van a lapon. Enélkül a
    * fenti négy negatív állítás akkor is zöld lenne, ha a lap üres volna.
    */
