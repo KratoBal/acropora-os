@@ -30,10 +30,17 @@ describe("push registration outcome", () => {
       token: "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
     });
 
-    assert.deepEqual(outcome, {
-      status: "failed",
-      reason: "not a native APNs token",
-    });
+    /*
+      AZ OK MOSTANTOL AZ ALAKOT IS HORDOZZA (2026-09-21), ezert nem betu szerinti
+      egyezest allitunk, hanem a KET RESZT kulon: a nevet (ez valasztja el a
+      tobbi kimeneteltol) es azt, hogy az Expo-tokent NEVEN nevezi (ez valasztja
+      el a rossz hivast a masik platform tokenjetol). Egy betu szerinti allitas
+      itt a bovitest tiltana, nem a hibat fogna meg.
+    */
+    assert.equal(outcome.status, "failed");
+    if (outcome.status !== "failed") return;
+    assert.ok(outcome.reason.startsWith("not a native APNs token"));
+    assert.ok(outcome.reason.includes("Expo-token"));
   });
 
   it("treats a simulator as a device without push, not as a fault", () => {
