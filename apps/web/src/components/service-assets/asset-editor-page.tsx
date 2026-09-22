@@ -22,6 +22,7 @@ import {
   type AssetOwnerType,
   type AssetStatus,
   type UnitOfMeasure,
+  type AssetCategory,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,6 +34,7 @@ import { ServiceListHeader } from "@/components/service/service-list-chrome";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { useReturnTo } from "@/components/navigation-history";
 import { assetsApi } from "@/lib/api/assets";
+import { assetCategoriesApi } from "@/lib/api/asset-categories";
 import { suppliersApi } from "@/lib/api/suppliers";
 import { unitsOfMeasureApi } from "@/lib/api/units-of-measure";
 import {
@@ -72,7 +74,15 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   const [status, setStatus] = useState<AssetStatus>("ACTIVE");
   const [criticality, setCriticality] = useState<AssetCriticality>("NORMAL");
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("");
+  /**
+   * A KATEGORIA MOSTANTOL AZONOSITO, NEM SZOVEG.
+   *
+   * Az ures sztring a „nincs megadva" allapot -- a `null`-t a mentes allitja
+   * elo belole. Ket kulon allapotot (ures kontra null) a valaszto nem tud
+   * megkulonboztetni, es nem is kell: a `<option value="">` ugyanazt jelenti.
+   */
+  const [categoryId, setCategoryId] = useState("");
+  const [categories, setCategories] = useState<AssetCategory[]>([]);
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
@@ -180,7 +190,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         setStatus(asset.status);
         setCriticality(asset.criticality);
         setName(asset.name);
-        setCategory(asset.category ?? "");
+        setCategoryId(asset.categoryId ?? "");
         setManufacturer(asset.manufacturer ?? "");
         setModel(asset.model ?? "");
         setSerialNumber(asset.serialNumber ?? "");
@@ -223,6 +233,31 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   // AZ ALEGYSEGEK a partner sajat kepernyojerol mar ismert vegponton jonnek: ez
   // ugyanaz a fa, amit ott „Alegysegek" neven szerkesztenek. Vevo tulajdonosnal
   // nincs mit betolteni -- ott a cim a pontositas.
+  /**
+   * A KATEGORIA-LISTA EGYSZER TOLTODIK BE, a lap eletere.
+   *
+   * Nem fugg a partnertol vagy az eszkoztol: GLOBALIS torzsadat. Ha a
+   * betoltes elhasal, a valaszto URES marad -- es akkor a felvivo nem tud
+   * kategoriat adni, de a TOBBI mezot igen. Ez szandekosan nem blokkolja a
+   * lapot: a kategoria elhagyhato, es egy fel-betoltott urlap tobbet er, mint
+   * egy hibauzenet a helyen.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    void assetCategoriesApi
+      .list(token, false, controller.signal)
+      .then((result) => setCategories(result.items))
+      .catch((cause) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "A kategóriák nem tölthetők be.",
+          );
+      });
+    return () => controller.abort();
+  }, [token]);
+
   useEffect(() => {
     setUnits([]);
     if (!owner || owner.type !== "SUPPLIER") return;
@@ -397,7 +432,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             status,
             criticality,
             name: name.trim(),
-            category: category.trim() || null,
+            categoryId: categoryId || null,
             manufacturer: manufacturer.trim() || null,
             model: model.trim() || null,
             serialNumber: serialNumber.trim() || null,
@@ -430,7 +465,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             status,
             criticality,
             name: name.trim(),
-            category: category.trim() || undefined,
+            categoryId: categoryId || undefined,
             manufacturer: manufacturer.trim() || undefined,
             model: model.trim() || undefined,
             serialNumber: serialNumber.trim() || undefined,
@@ -614,13 +649,31 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 placeholder="pl. Fóka felnyomó szivattyú"
               />
             </FormField>
+            {/*
+              LEGORDULO, NEM SZABAD SZOVEG (Balazs kerese, 2026-09-22).
+
+              A szabad szoveg 110 eszkozon TIZ kulonbozo erteket szult, de
+              csak HAT volt valodi: a masik negy elgepeles. A „Vízkezelés"
+              szuro ezert KET eszkozt hagyott ki, es senki nem vette eszre --
+              a lista helyesnek latszott.
+
+              A LISTA CSAK AZ AKTIVAKAT HOZZA. Egy kivezetett kategoria itt
+              pont azt hozna vissza, ami miatt kivezettuk. Ami viszont MAR
+              rajta all egy eszkozon, az az adatlapon tovabbra is olvashato.
+            */}
             <FormField label="Kategória">
-              <Input
+              <Select
                 aria-label="Kategória"
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                placeholder="pl. Vízmozgatás"
-              />
+                value={categoryId}
+                onChange={(event) => setCategoryId(event.target.value)}
+              >
+                <option value="">Nincs megadva</option>
+                {categories.map((kategoria) => (
+                  <option key={kategoria.id} value={kategoria.id}>
+                    {kategoria.name}
+                  </option>
+                ))}
+              </Select>
             </FormField>
             <FormField label="Gyártó">
               <Input

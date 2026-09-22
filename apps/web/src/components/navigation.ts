@@ -324,6 +324,16 @@ export const settingsNavigation: AppNavigationItem[] = [
     icon: "settings",
     entryId: "units-of-measure",
   },
+  {
+    /*
+      A MERTEKEGYSEGEK MELLETT ALL, mert ugyanaz a fajta tetel: sajat,
+      uzemeltetesi torzsadat, amit ember tart karban.
+    */
+    href: "/beallitasok/eszkoz-kategoriak",
+    label: "Eszköz-kategóriák",
+    icon: "settings",
+    entryId: "asset-categories",
+  },
 ];
 
 export const allSettingsNavigation: AppNavigationItem[] = [
