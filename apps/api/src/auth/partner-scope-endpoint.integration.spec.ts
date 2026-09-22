@@ -290,7 +290,18 @@ describe(
           // BENNMARAD -- a kovetkezo futast pedig az egyedi kodon buktatna el,
           // olyan hibaval, aminek semmi koze a mert viselkedeshez.
           code: `${TEST_SUPPLIER_PREFIX}${suffix}-C`,
-          name: `${shared} szállító C`,
+          /*
+            A NEVE SZANDEKOSAN NEM TARTALMAZZA A KOZOS KERESOSZOT.
+
+            A partner-lista allitasa `search: shared` alakkal kerdez, es a
+            kereses a NEVRE is illeszkedik. Ha ez a szallito is viselne a
+            kozos szot, harmadikkent feljonne egy olyan allitasban, aminek a
+            targya a KET partner -- es a vart lista bovitese elfedne, hogy itt
+            csak egy TULAJDONOS all, nem egy harmadik szereplo.
+
+            A takaritast ez nem erinti: az a KODRA szur, nem a nevre.
+          */
+          name: `Tulajdonos ${suffix}`,
         },
         select: { id: true },
       });

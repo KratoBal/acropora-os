@@ -33,6 +33,15 @@ const CODE_A = "Z9001";
 const CODE_B = "Z9002";
 const CODE_C = "Z9003";
 /**
+ * A HATOKOR-MERES SAJAT KODJA, SZANDEKOSAN A KESZLETEN KIVUL.
+ *
+ * A `CODE_A`..`CODE_F` kodokra keszlet-allitasok epulnek (mi szabad, mi
+ * foglalt). Ha a hatokor-meres is azokbol venne egyet, minden ilyen allitas
+ * szamat mozditana -- es a kovetkezo olvaso nem tudna eldonteni, melyik
+ * valtozas okozta.
+ */
+const HATOKOR_KOD = "Z9100";
+/**
  * AZ UTOLAGOS FELVITELHEZ KET SAJAT KOD, es ez nem ovatoskodas: a fenti harom
  * allapota a suite-on BELUL valtozik (a `CODE_C` peldaul lefoglaltta valik, es
  * egy kesobbi allitas EPP arra epul, hogy nem szabad). Ha az utolagos felvitel
@@ -99,7 +108,11 @@ async function removeLeftovers() {
    * a suite zold marad, es a sor orokre ott all.
    */
   const kotegek = await prisma.assetLabel.findMany({
-    where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F] } },
+    where: {
+      code: {
+        in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F, HATOKOR_KOD],
+      },
+    },
     select: { batchId: true },
   });
   const kotegIdk = [
@@ -111,7 +124,11 @@ async function removeLeftovers() {
   ];
 
   await prisma.assetLabel.deleteMany({
-    where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F] } },
+    where: {
+      code: {
+        in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F, HATOKOR_KOD],
+      },
+    },
   });
 
   // CSAK AZ ARVAKAT, es ez nem ovatoskodas: ha egy koteghez idegen cimke is
@@ -126,6 +143,14 @@ async function removeLeftovers() {
   });
   await prisma.asset.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
+  });
+  // A SZALLITOI TULAJDONU SOR SEM A VEVOT NEM VISELI: a HELYSZINEN at kell
+  // megtalalni, kulonben a helyszin torlese `Asset_departmentId_fkey` hibaval
+  // all meg -- es a takaritas bukasa a KOVETKEZO futast viszi el.
+  await prisma.asset.deleteMany({
+    where: {
+      department: { customer: { customerNumber: { startsWith: PREFIX } } },
+    },
   });
   // A HELYSZIN AZ ESZKOZOK UTAN ES A VEVO ELOTT (`Asset.departmentId` Restrict),
   // a szallito szinten az eszkozok utan (`Asset.supplierId`).
@@ -191,6 +216,33 @@ describe(
         select: { id: true },
       });
       helyszinId = helyszin.id;
+
+      /*
+        SAJAT SOR A KET HATOKOR-ALLITASHOZ, ES KULON A TOBBI TESZTTOL.
+
+        A hatokor-meresnek SZALLITOI tulajdonu, HELYSZINEN allo eszkoz kell:
+        vevo-tulajdonu sornak a kod nem enged helyszint adni, helyszin nelkul
+        pedig a partner 2026-09-22 ota nem latja. A tobbi teszt viszont a
+        vevo-tulajdonu alakra epul (szabad keszlet, darabszamok, szerkeszto ag),
+        ezert AZOKAT nem irom at: ez a sor KULON all, sajat koddal, a
+        CODE_A..CODE_F keszleten KIVUL.
+      */
+      const hatokorEszkoz = await prisma.asset.create({
+        data: {
+          assetNumber: `${PREFIX}-HATOKOR`,
+          name: `${PREFIX} hatókör-eszköz`,
+          supplierId: szallitoId,
+          departmentId: helyszinId,
+        },
+        select: { id: true },
+      });
+      await prisma.assetLabel.create({
+        data: {
+          code: HATOKOR_KOD,
+          assetId: hatokorEszkoz.id,
+          assignedAt: new Date(),
+        },
+      });
     });
 
     after(async () => {
@@ -256,19 +308,7 @@ describe(
 
     it("egy kód nem kerülhet két eszközre", async () => {
       const first = await repository.create(
-        /*
-          SZALLITOI TULAJDON A VEVO HELYSZINEN.
-
-          A lenti ket hatokor-allitas EZEN a soron mer, es csak ez az alak
-          letezhet elesben: vevo-tulajdonu sornak a kod nem enged helyszint
-          adni, helyszin nelkul pedig 2026-09-22 ota nem is lathato.
-        */
-        createInput({
-          labelCode: CODE_C,
-          ownerType: "SUPPLIER",
-          ownerId: szallitoId,
-          departmentId: helyszinId,
-        }),
+        createInput({ labelCode: CODE_C }),
         actorUserId,
       );
       // POZITÍV KONTROLL: az elsőre TÉNYLEG rákerült. Enélkül a lenti elutasítás
@@ -324,7 +364,7 @@ describe(
       // ISMERT POZITIV KONTROLL a lenti tagadashoz. Enelkul egy olyan
       // lekerdezes is atmenne, ami SENKINEK nem ad vissza semmit.
       const found = await repository.detailByLabelCode(
-        CODE_C,
+        HATOKOR_KOD,
         { kind: "customer", customerId },
         [helyszinId],
       );
@@ -332,7 +372,7 @@ describe(
       // A KOD ALAPJAN TALALT ESZKOZ TENYLEG AZ, AMIRE A MATRICA KERULT.
       // Enelkul az allitas beerne barmelyik eszkozzel, amit a lekerdezes ad.
       const label = await prisma.assetLabel.findUnique({
-        where: { code: CODE_C },
+        where: { code: HATOKOR_KOD },
         select: { assetId: true },
       });
       assert.equal(found.id, label?.assetId);
@@ -354,7 +394,7 @@ describe(
         egyaltalan nem letezne.
       */
       const found = await repository.detailByLabelCode(
-        CODE_C,
+        HATOKOR_KOD,
         { kind: "customer", customerId: masik.id },
         [helyszinId],
       );
