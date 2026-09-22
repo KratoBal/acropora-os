@@ -247,7 +247,25 @@ export class ServiceJobsRepository {
         title: input.title,
         description: input.description,
         customerId: input.customerId,
-        departmentId: input.departmentId,
+        /**
+         * `!` -- ISMERT, NYITOTT KOCKAZAT, NEM GARANCIA. A `department_required`
+         * migracio ota a `ServiceJob.departmentId` NOT NULL, DE ezen a
+         * hivason NINCS OLYAN VALIDACIO, MINT AZ ASSET-EN
+         * (`assetDepartmentPresenceRefusal`), ami kikenyszeritene, hogy
+         * `input.departmentId` sose legyen `null`. Kulonosen a "partner
+         * nelkuli jegy" eset (a `customerId` a DTO-ban opcionalis) SOHA nem
+         * tud helyszint kapni -- ez zart kor, hasonlo az Asset
+         * CUSTOMER_OWNER esetehez, de MEG NINCS FELOLDVA (jelentve, 15c9cd7a
+         * kartya, 4953-as komment).
+         *
+         * A `!` ITT KIZAROLAG A TIPUSHIBAT (es vele a konteneres build
+         * hibajat) oldja fel -- NEM VALTOZTAT a futasideju viselkedesen:
+         * ha `input.departmentId` valoban `null`, ez a hivas MA IS, EZUTAN
+         * IS ugyanugy a NOT NULL megkotesbe futna. A `!` nem uj kockazatot
+         * vezet be, csak nem allitja meg a forditot ott, ahol a kockazat MAR
+         * MEGVAN es MASHOL van dokumentalva.
+         */
+        departmentId: input.departmentId!,
         // A NYITO A JEGYEN, NEM CSAK A NAPLOBAN. Ugyanaz az aktor kerul mindket
         // helyre, egy tranzakcioban -- de a naplo aktora `SetNull` egy kesobbi
         // felhasznalo-torlesnel, ez a mezo pedig megmarad. A ketto tehat nem

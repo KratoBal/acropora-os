@@ -1185,10 +1185,28 @@ export class ServiceAssetsRepository extends Repository {
                       : null,
                   aquariumId:
                     input.ownerType === "CUSTOMER" ? input.aquariumId : null,
-                  // Az alegyseg a masik iranyban all: SZERVIZ PARTNER eszkozehez
-                  // tartozik, vevoehez nem. A ket mezo nem ugyanaz a fogalom.
+                  /**
+                   * Az alegyseg a masik iranyban all: SZERVIZ PARTNER
+                   * eszkozehez tartozik, vevoehez nem. A ket mezo nem
+                   * ugyanaz a fogalom.
+                   *
+                   * A `!` NEM VAKMEROSEG, HANEM A HIVO OLDAL GARANCIAJA.
+                   * Ez a `create` metodus KIZAROLAG a
+                   * `service-assets.service.ts` `create()`-jebol hivodik
+                   * (egyetlen hivohely), es AZ MAR ELUTASITOTTA MIELOTT
+                   * idaig eljutna: CUSTOMER eseten a `CUSTOMER_OWNER` ag
+                   * (asset-department.ts, `requested`-tol fuggetlenul fut),
+                   * SUPPLIER eseten pedig az `assetDepartmentPresenceRefusal`
+                   * (letrehozaskor kotelezo). A `departmentId` MEZO tehat
+                   * SOHA nem lehet `null`/`undefined` ezen a ponton -- ha
+                   * ez a garancia megszunik (uj hivo, a validacio
+                   * eltavolitasa), ez a sor a helyes hiba helye, nem a
+                   * csendes elnyeles.
+                   */
                   departmentId:
-                    input.ownerType === "SUPPLIER" ? input.departmentId : null,
+                    input.ownerType === "SUPPLIER"
+                      ? input.departmentId!
+                      : (undefined as unknown as string),
                   parentAssetId: input.parentAssetId,
                   productVariantId: input.productVariantId,
                   kind: input.kind,
@@ -1717,10 +1735,28 @@ export class ServiceAssetsRepository extends Repository {
           customerAddressId:
             input.ownerType === "SUPPLIER" ? null : input.customerAddressId,
           aquariumId: input.ownerType === "SUPPLIER" ? null : input.aquariumId,
-          // Vevo tulajdonosra valtaskor az alegyseg TORLODIK, ahogy a cim is
-          // torlodik szallitora valtaskor: a ket mezo egymast zarja ki.
+          /**
+           * Vevo tulajdonosra valtaskor az alegyseg TORLODIK, ahogy a cim is
+           * torlodik szallitora valtaskor: a ket mezo egymast zarja ki.
+           *
+           * A `!` ITT IS A HIVO OLDAL GARANCIAJA: a
+           * `assetDepartmentPresenceRefusal` (update) mar elutasitotta, ha
+           * a SZAMITOTT tulajdonos SUPPLIER es a hivo explicit `null`-t
+           * kuldott. `undefined` (erintetlen) tovabbra is atmegy, mert az
+           * a Prisma szamara "ne modositsd" jelentesu.
+           *
+           * ISMERT, KIS RES: ez a feltetel a NYERS `input.ownerType`
+           * DTO-mezot nezi, nem a service altal SZAMITOTT vegso tulajdonost
+           * (`ownerType ?? existing alapjan`). Ha egy MEGLEVO CUSTOMER-
+           * eszkozt (ma 0/108 az eles adatbazison, es ujat a
+           * CUSTOMER_OWNER szabaly miatt letre sem lehet hozni) explicit
+           * ownerType nelkul modositananak, ez az ag `input.departmentId`-t
+           * irna, nem `null`-t -- ez a mai adaton nem all elo, de EZ NEM
+           * UGYANAZ a garancia, mint a CREATE agon. Kulon figyelmet erdemel,
+           * ha valaha ismet lesz CUSTOMER-tulajdonu sor.
+           */
           departmentId:
-            input.ownerType === "CUSTOMER" ? null : input.departmentId,
+            input.ownerType === "CUSTOMER" ? undefined : input.departmentId!,
           parentAssetId: input.parentAssetId,
           productVariantId: input.productVariantId,
           kind: input.kind,
