@@ -41,6 +41,11 @@ export interface AssetCreateForm {
   unitId: string;
   name: string;
   kind: AssetKind;
+  /**
+   * A kivalasztott kategoria azonositoja. URES, amig nincs valasztva -- a
+   * mezo elhagyhato, tehat az ures allapot ervenyes vegallapot is.
+   */
+  categoryId: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
@@ -85,6 +90,15 @@ export interface AssetCreatePayload {
   model?: string;
   serialNumber?: string;
   inventoryNumber?: string;
+  /**
+   * AZ ESZKOZ KATEGORIAJA -- TORZSADAT-AZONOSITO, NEM SZOVEG.
+   *
+   * A webes urlapon 2026-09-22-ig szabad szoveg volt, es 110 eszkozon TIZ
+   * kulonbozo erteket szult, hat helyett. A telefonon eddig NEM VOLT ilyen
+   * mezo egyaltalan -- ez az elso alkalom, hogy a szerelo a helyszinen
+   * megadhatja, es epp ezert nem szovegkent kapja meg.
+   */
+  categoryId?: string;
   /** A MI előre nyomtatott matricánk kódja, normalizálva (pl. `V2196`). */
   labelCode?: string;
   /** A normalizált teljesítmény-érték (`0,5` -> `0.5`). A párjával együtt. */
@@ -330,6 +344,16 @@ export function buildAssetCreatePayload(
         : {}),
       kind: form.kind,
       name,
+      /*
+        A KATEGORIA ELHAGYHATO: a szerelo a helyszinen nem mindig tudja, es egy
+        kotelezo mezo itt a felvitelt allitana meg -- az adat pedig ott es akkor
+        van. Ures valasztasnal a mezo KIMARAD, nem ures sztringkent megy: a
+        szerver `null`-t vagy hianyt var, es az ures sztring egy nem letezo
+        kategoria azonositoja lenne.
+      */
+      ...(form.categoryId?.trim()
+        ? { categoryId: form.categoryId.trim() }
+        : {}),
       manufacturer: form.manufacturer.trim() || undefined,
       model: form.model.trim() || undefined,
       serialNumber: form.serialNumber.trim() || undefined,

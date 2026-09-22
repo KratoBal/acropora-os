@@ -254,7 +254,14 @@ export class CreateAssetDto {
   @IsOptional()
   criticality?: (typeof ASSET_CRITICALITIES)[number];
   @IsString() @MinLength(1) name!: string;
-  @IsString() @IsOptional() category?: string;
+  /**
+   * A KATEGORIA MOSTANTOL HIVATKOZAS, NEM SZOVEG.
+   *
+   * A szabad szoveg 110 eszkozon tiz kulonbozo erteket szult, de csak hat
+   * volt valodi -- a masik negy elgepeles. A `category` szoveges mezo a
+   * SEMABAN megmarad (a meglevo sorok miatt), de a felvitel mar NEM irja.
+   */
+  @IsString() @IsOptional() categoryId?: string | null;
   @IsString() @IsOptional() manufacturer?: string;
   @IsString() @IsOptional() model?: string;
   @IsString() @IsOptional() serialNumber?: string;
@@ -339,7 +346,7 @@ export class UpdateAssetDto {
   @IsOptional()
   criticality?: (typeof ASSET_CRITICALITIES)[number];
   @IsString() @MinLength(1) @IsOptional() name?: string;
-  @IsString() @IsOptional() category?: string | null;
+  @IsString() @IsOptional() categoryId?: string | null;
   @IsString() @IsOptional() manufacturer?: string | null;
   @IsString() @IsOptional() model?: string | null;
   @IsString() @IsOptional() serialNumber?: string | null;
