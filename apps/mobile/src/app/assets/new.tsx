@@ -32,6 +32,7 @@ import { listPartnerUnits, type PartnerUnit } from "@/lib/api/partners";
 import { listPerformanceUnits } from "@/lib/api/units-of-measure";
 import { selectableUnitOptions } from "@/lib/partners/site-tree";
 import { CollapsedPicker, UnitPicker } from "@/components/assets/unit-picker";
+import { CategoryPicker } from "@/components/assets/category-picker";
 import {
   LabelCodeField,
   useLabelScanner,
@@ -811,52 +812,16 @@ export default function NewAssetScreen() {
               UGYANAZ A VALASZTO-ALAK, mint a tipusnal: a lista egy
               koppintasra nyilik, es nem tolja szet az urlapot.
             */}
-            <CollapsedPicker
-              summary={
-                categories.find((k) => k.id === categoryId)?.name ??
-                "Nincs megadva"
-              }
-              hint="Koppints a listához"
-              label="Kategória választása"
+            <CategoryPicker
+              options={categories}
+              value={categoryId}
               open={categoryPickerOpen}
               onToggle={() => setCategoryPickerOpen((open) => !open)}
-            >
-              <View style={styles.kindGrid}>
-                {/*
-                  AZ URES VALASZTAS IS GOMB. A kategoria elhagyhato, es aki
-                  tevedesbol valasztott, annak vissza kell tudnia venni -- egy
-                  lista, amibol csak befele vezet ut, pont a rossz erteket
-                  rogziti.
-                */}
-                <Pressable
-                  onPress={() => {
-                    setCategoryId("");
-                    setCategoryPickerOpen(false);
-                  }}
-                  style={[
-                    styles.kindButton,
-                    categoryId === "" && styles.kindSelected,
-                  ]}
-                >
-                  <Text style={styles.kindText}>Nincs megadva</Text>
-                </Pressable>
-                {categories.map((item) => (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => {
-                      setCategoryId(item.id);
-                      setCategoryPickerOpen(false);
-                    }}
-                    style={[
-                      styles.kindButton,
-                      categoryId === item.id && styles.kindSelected,
-                    ]}
-                  >
-                    <Text style={styles.kindText}>{item.name}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </CollapsedPicker>
+              onChange={(id) => {
+                setCategoryId(id);
+                setCategoryPickerOpen(false);
+              }}
+            />
             <Field
               label="Gyártó"
               value={manufacturer}

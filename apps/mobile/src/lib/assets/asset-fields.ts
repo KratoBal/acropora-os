@@ -32,6 +32,19 @@ export interface UpdateAssetInput {
   departmentId?: string | null;
   status?: AssetStatus;
   criticality?: AssetCriticality;
+  /**
+   * A KATEGORIA AZONOSITOJA, A TORZSADATBOL.
+   *
+   * `null` TOROL, a mezo elhagyasa erintetlenul hagy -- ugyanaz a harmas
+   * jelentes, mint a szoveges mezoknel, es a matricaval ELLENTETES. A
+   * kulonbseg oka ugyanaz a szabaly: a `null` torlest jelent, es a kategoria
+   * torlese LETEZIK (az eszkoz allhat kategoria nelkul; az atvezeto migracio
+   * szandekosan hagy ilyen sorokat).
+   *
+   * AZONOSITO MEGY, NEM NEV: a nev a torzsadaton atnevezheto, es egy
+   * atnevezes kulonben valtozasnak latszana.
+   */
+  categoryId?: string | null;
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;

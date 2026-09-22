@@ -34,6 +34,20 @@ export interface EditableAsset {
   /** A partner alegysége, ahol az eszköz áll. Hiányzik, ha nincs megadva. */
   unit?: { id: string };
   /**
+   * A MOSTANI KATEGORIA AZONOSITOJA ES NEVE.
+   *
+   * MIND A KETTO KELL, es a NEV az, ami nem magatol ertetodo: a valaszto a
+   * TORZSADAT aktiv sorait kinalja, egy eszkozon viszont allhat KIVEZETETT
+   * kategoria is. Ha csak az azonositot ismernenk, a kepernyo ures dobozt
+   * mutatna -- es a szerelo azt hinne, nincs kategoria beallitva.
+   *
+   * Ugyanaz a hiba, amit a matricakodnal mar egyszer megfizettunk, es a
+   * kovetkezmenye is ugyanaz: a szerelo vakon felulirna egy meglevo,
+   * ervenyes erteket.
+   */
+  categoryId?: string;
+  category?: string;
+  /**
    * A TELJESÍTMÉNY, AHOGY A SZERVER ADJA -- SZÖVEGKÉNT.
    *
    * A tárolt alak `decimal(19,6)`. Számmá alakítva a lebegőpontos típuson
@@ -86,6 +100,13 @@ export interface AssetEditForm {
   unitId: string;
   status: AssetStatus;
   criticality: AssetCriticality;
+  /**
+   * A VALASZTOTT KATEGORIA AZONOSITOJA. Ures szoveg annyit tesz: nincs
+   * megadva -- es mivel a szerver a `null` erteket torlesnek veszi, egy
+   * kiuritett valasztas tenylegesen leszedi az eszkozrol a kategoriat.
+   * Ugyanaz a harmas jelentes, mint a helyszinnel.
+   */
+  categoryId: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
@@ -121,6 +142,7 @@ const TEXT_FIELDS = [
 export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
   return {
     unitId: asset.unit?.id ?? "",
+    categoryId: asset.categoryId ?? "",
     status: asset.status,
     criticality: asset.criticality,
     manufacturer: asset.manufacturer ?? "",
@@ -213,6 +235,18 @@ export function buildAssetPatch(
   if (ertek !== regiErtek) patch.performance = ertek;
   if (egyseg !== regiEgyseg)
     patch.performanceUnitId = egyseg === "" ? null : egyseg;
+
+  /**
+   * A KATEGORIA MINDEN TULAJDONOSNAL MEHET, ELLENTETBEN AZ ALEGYSEGGEL.
+   *
+   * Az alegyseget a kovetkezo blokk a tulajdonos TIPUSAHOZ koti, mert vevonel
+   * a szerver elutasitana. A kategoria nem ilyen: torzsadat, ami minden
+   * eszkozon ertelmes -- tehat a feltetel ide NEM jar, es a masolas kedveert
+   * sem szabad odatenni.
+   */
+  const kategoria = form.categoryId.trim();
+  if (kategoria !== (asset.categoryId ?? ""))
+    patch.categoryId = kategoria === "" ? null : kategoria;
 
   if (asset.ownerType === "SUPPLIER") {
     const chosen = form.unitId.trim();
@@ -313,6 +347,12 @@ export function baseValuesFor(
   if ("status" in patch) base.status = asset.status;
   if ("criticality" in patch) base.criticality = asset.criticality;
   if ("departmentId" in patch) base.departmentId = asset.unit?.id ?? null;
+  /**
+   * A KATEGORIA IS BEKERUL A SORBA, ugyanabbol az okbol, mint a tobbi: a
+   * feloldas kulonben nem tudna, MIHEZ kepest keszult a pinceben beirt ertek,
+   * es a szerelo nem latna, hogy kozben az iroda irt ra masikat.
+   */
+  if ("categoryId" in patch) base.categoryId = asset.categoryId ?? null;
   /**
    * A TELJESITMENY-PAR IS BEKERUL A SORBA, ES A KET FELE KULON.
    *
