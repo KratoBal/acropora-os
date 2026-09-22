@@ -17,6 +17,7 @@
     "dev:mobile:go": "npm --prefix apps/mobile run start:go",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
+    "gates": "node scripts/kapusor.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "clean": "turbo run clean",
