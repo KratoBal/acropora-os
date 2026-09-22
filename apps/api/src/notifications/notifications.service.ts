@@ -314,12 +314,15 @@ export class NotificationsService {
    * ANYAGIGENY ERKEZETT -- a "szerviz anyagbeszerzes" ertesulesi szerep
    * birtokosainak. UGYANAZ A TORZS, MAS CIM, ugyanugy, mint a masik harom.
    *
-   * `data` SZANDEKOSAN URES -- NINCS `targetType`. A `push-targets.spec.ts`
-   * MEGALLITOTT: az a fajta hiba, amit maga az orzo dokumental a sajat
-   * fejleceben ("egy tipus alakja elobb keszul el, mint a kuldoje") --
-   * mobil kepernyo ehhez az esemenyhez MA nincs (a harmadik, mobil szelet
-   * hozza), tehat egy koppintas sehova nem vinne. A koppintheto celpont a
-   * mobil szelettel erkezik, egy uj `targetType` bevezetesevel EGYUTT.
+   * `targetType: "materialRequest"` 2026-09-23-TOL MEGY, A MOBIL SZELETTEL
+   * EGYUTT -- addig itt `data: {}` allt, mert a koppintheto celpont (a
+   * mobil kepernyo) meg nem letezett, lasd a `push-targets.spec.ts` fejleceit.
+   *
+   * A `targetId` A MUNKALAP AZONOSITOJA, NEM AZ IGENYE: az anyagigenynek
+   * nincs sajat reszletlapja, sem a weben, sem a telefonon -- a koppintas
+   * a munkalapra visz, ahol az "Anyagigénylés" szakasz all. Lasd
+   * `apps/mobile/src/app/material-requests/[id].tsx` es a
+   * `PUSH_TARGET_ROUTES` fejleceit, miert nem a `worksheet` tipust hasznalja.
    */
   async deliverMaterialRequestCreated(
     notice: MaterialRequestCreatedNotice,
@@ -328,7 +331,10 @@ export class NotificationsService {
       userIds: notice.userIds,
       title: "Új anyagigény",
       body: notice.worksheetLabel,
-      data: {},
+      data: {
+        targetType: "materialRequest",
+        targetId: notice.worksheetId,
+      },
       record: (attempts) =>
         this.log.recordMaterialRequestCreated({
           materialRequestId: notice.materialRequestId,
@@ -361,8 +367,11 @@ export class NotificationsService {
       userIds: notice.userIds,
       title: "Anyag beérkezett",
       body: notice.worksheetLabel,
-      // `data` szandekosan ures -- lasd `deliverMaterialRequestCreated` fejleceit.
-      data: {},
+      // Ugyanaz a celpont, mint a letrehozasnal -- lasd annak fejleceit.
+      data: {
+        targetType: "materialRequest",
+        targetId: notice.worksheetId,
+      },
       record: (attempts) =>
         this.log.recordMaterialRequestReceived({
           materialRequestId: notice.materialRequestId,

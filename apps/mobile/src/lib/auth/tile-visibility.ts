@@ -27,6 +27,14 @@ export const TILE_ENTRY = {
   TE: "products",
   NAV: "nav-integration-mobile",
   PA: "partners",
+  /**
+   * A `material-requests-pending` tetel 2026-09-23-IG CSAK web feluletu volt
+   * (`packages/types/src/navigation.ts`). A mobil szelet ADTA hozza a
+   * `mobile` felulet a kozos forrasban -- ha ott hianyozna, a
+   * `mobile-capability-values.spec.ts` "MINDEN MOBIL feluletu tetelnek legyen
+   * csempeje" allitasa ARRA figyelmeztetne, hogy EZ a par hianyzik.
+   */
+  AI: "material-requests-pending",
 } as const;
 
 export type TileCode = keyof typeof TILE_ENTRY;

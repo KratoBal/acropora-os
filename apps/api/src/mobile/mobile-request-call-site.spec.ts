@@ -274,7 +274,14 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
  * A VEGPONT NEM UJ -- a szerveren 2026-09-21 ota all, es a web mar hivta. Ami
  * uj, az a TELEFON bekotese: a kepesseg megvolt, csak innen nem hivta senki.
  */
-const IRAS_HIVASOK_A_FAN = 17;
+/**
+ * 2026-09-23: 17 -> 18. Az uj hivas az ANYAGIGENYLES FELVITELE
+ * (`createMaterialRequest`, `lib/api/material-requests.ts`). A torzse
+ * NEVESITETT tipussal megy (`CreateMaterialRequestInput`), tehat a szomszed
+ * orzo -- ami nevesitett tipusokat par-ba allit -- MAR LATJA: ez a hivas NEM
+ * kerul a HIVOHELYEK koze, csak ebbe a teljes-fa szamlalasba.
+ */
+const IRAS_HIVASOK_A_FAN = 18;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

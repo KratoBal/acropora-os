@@ -53,8 +53,19 @@ export interface PushResponseLike {
  * ertesites megjelent a zarolt kepernyon, es a koppintas nem vitt sehova.
  * Ez a ket lista most merve is egyutt mozog, lasd
  * `apps/api/src/mobile/push-targets.spec.ts`.
+ *
+ * A HARMADIK ERTEK, `materialRequest`, 2026-09-23-AN KERULT FEL, UGYANAZZAL
+ * A SZABALLYAL: a felvetel feltetele (letezik-e kepernyo, ahova vinni lehet)
+ * ekkor teljesult, a mobil szelettel egyutt. A szerver KET esemenyre kuldi
+ * (`deliverMaterialRequestCreated`, `deliverMaterialRequestReceived`), a
+ * `targetId` mindkettonel a MUNKALAP azonositoja, nem az igenye -- lasd a
+ * `PUSH_TARGET_ROUTES` fejleceit, miert.
  */
-export const PUSH_TARGET_TYPES = ["worksheet", "serviceJob"] as const;
+export const PUSH_TARGET_TYPES = [
+  "worksheet",
+  "serviceJob",
+  "materialRequest",
+] as const;
 
 export type PushTargetType = (typeof PUSH_TARGET_TYPES)[number];
 
@@ -91,9 +102,27 @@ export type PushTargetType = (typeof PUSH_TARGET_TYPES)[number];
  * `router.push`-nak. A tipusuk az `as const` miatt SZUK literal-unio, tehat a
  * tipusos utvonalak ellenorzese a hivas helyen megmarad.
  */
+/**
+ * A `materialRequest` NEM MEHET A `/worksheets/[id]` UTVONALRA, HOLOTT
+ * SZEMANTIKAILAG ODA KELLENE VINNIE.
+ *
+ * A LENTI TESZT ("ket tipus nem visz ugyanarra a kepernyore") ERTEKKENT
+ * MERI a tablat: ket kulcs UGYANAZT az utvonal-sztringet nem hordozhatja.
+ * Ha ide is a `/worksheets/[id]` kerulne, a mar letezo `worksheet` kulccsal
+ * UTKOZNE -- nem hiba, csak ez az orzo szandekosan nem tudja megkulonboztetni
+ * a "ket tipus egy dolog fele mutat SZANDEKOSAN" es a "masolassal bennmaradt a
+ * regi ut" esetet.
+ *
+ * EZERT KULON, VEKONY UTVONAL: `/material-requests/[id]`, amit a
+ * `app/material-requests/[id].tsx` kepernyo AZONNAL tovabbiranyit a
+ * megfelelo munkalapra (`Redirect href={{ pathname: "/worksheets/[id]",
+ * params: { id } }}`). A `targetId` ezert a MUNKALAP azonositoja, nem az
+ * anyagigenye -- a cel a munkalap, nem egy nem letezo reszletlap.
+ */
 export const PUSH_TARGET_ROUTES = {
   worksheet: "/worksheets/[id]",
   serviceJob: "/service-jobs/[id]",
+  materialRequest: "/material-requests/[id]",
 } as const satisfies Record<PushTargetType, string>;
 
 export interface PushTarget {

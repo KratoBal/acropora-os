@@ -71,13 +71,14 @@ describe("a csempék a kiadott menüt követik", () => {
     const kodok = Object.keys(TILE_ENTRY);
     const tetelek = Object.values(TILE_ENTRY);
 
-    // KONTROLL: nyolc csempe all a kepernyon. Egy ures tabla mellett a fenti
+    // KONTROLL: kilenc csempe all a kepernyon. Egy ures tabla mellett a fenti
     // allitasok is atmennenek, mert egyik sem nezne meg semmit.
     //
-    // 2026-09-16: hetrol nyolcra nott a hibajegy-csempevel (`HJ`). Ez az
-    // allitas ELSULT, es ez a helyes viselkedes -- egy uj belepesi pont ne
-    // csusszon be szo nelkul.
-    assert.equal(kodok.length, 8);
+    // 2026-09-16: hetrol nyolcra nott a hibajegy-csempevel (`HJ`).
+    // 2026-09-23: nyolcrol kilencre nott az anyagigenyles-csempevel (`AI`).
+    // Mindket alkalommal ez az allitas ELSULT, es ez a helyes viselkedes --
+    // egy uj belepesi pont ne csusszon be szo nelkul.
+    assert.equal(kodok.length, 9);
     assert.deepEqual([...new Set(tetelek)].sort(), [...tetelek].sort());
   });
 });

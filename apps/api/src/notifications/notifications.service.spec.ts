@@ -7,6 +7,7 @@ import type { FcmMessage, FcmResult } from "./fcm.client.js";
 import type { FcmSending } from "./fcm.sender.js";
 import type { DeviceTokenRepository } from "./device-token.repository.js";
 import type {
+  MaterialRequestNotificationOutcome,
   NotificationLogRepository,
   NotificationOutcome,
   ServiceJobNotificationOutcome,
@@ -56,6 +57,7 @@ function fcmSender(
 function log() {
   const written: NotificationOutcome[] = [];
   const jobs: ServiceJobNotificationOutcome[] = [];
+  const materialRequests: MaterialRequestNotificationOutcome[] = [];
   const value = {
     recordWorksheetAssignment: async (outcome: NotificationOutcome) => {
       written.push(outcome);
@@ -65,8 +67,18 @@ function log() {
     ) => {
       jobs.push(outcome);
     },
+    recordMaterialRequestCreated: async (
+      outcome: MaterialRequestNotificationOutcome,
+    ) => {
+      materialRequests.push(outcome);
+    },
+    recordMaterialRequestReceived: async (
+      outcome: MaterialRequestNotificationOutcome,
+    ) => {
+      materialRequests.push(outcome);
+    },
   } as unknown as NotificationLogRepository;
-  return { log: value, written, jobs };
+  return { log: value, written, jobs, materialRequests };
 }
 
 function tokens(
@@ -568,5 +580,85 @@ describe("a küldő a saját platformjára kér címzettet", () => {
     assert.equal(summary.retired, 1);
     // AZ APPLE OLDAL ETTOL FUGGETLENUL SIKERES: a ket ut kulon all.
     assert.equal(summary.sent, 1);
+  });
+});
+
+/**
+ * AZ ANYAGIGENY-ERTESITESEK CELPONTJA -- 2026-09-23-TOL, A MOBIL SZELETTEL
+ * EGYUTT.
+ *
+ * Addig ez a blokk nem letezett: a `data` mezo szandekosan ures volt (nincs
+ * koppintheto celpont, lasd a szolgaltatas fejleceit a valtoztatas elott), es
+ * egy `targetType`-ot varo allitas akkor hamisan bukott volna.
+ *
+ * A `targetId` A MUNKALAP AZONOSITOJA, NEM AZ IGENYE -- ez a lenyegi allitas,
+ * ugyanabban a szellemben, mint a hibajegy blokk "a regi munkalap-mezot NEM
+ * viszi" tesztje: egy rossz azonosito nem hibazna, csak MAS munkalapra vinne.
+ */
+describe("az anyagigény-értesítések célpontja", () => {
+  const createdNotice = {
+    materialRequestId: "request-1",
+    worksheetId: "worksheet-9",
+    worksheetLabel: "Bio Kft.",
+    userIds: ["user-2"],
+  };
+  const receivedNotice = {
+    materialRequestId: "request-1",
+    worksheetId: "worksheet-9",
+    worksheetLabel: "Bio Kft.",
+    userIds: ["user-2"],
+  };
+
+  function serviceFor(written: ReturnType<typeof log>) {
+    const { sender: apns, sent } = sender();
+    return {
+      sent,
+      service: new NotificationsService(
+        tokens([
+          {
+            userId: "user-2",
+            token: "cc".repeat(32),
+            bundleId: "hu.acropora.os",
+          },
+        ]),
+        apns,
+        written.log,
+        fcmSender().sender,
+      ),
+    };
+  }
+
+  it("a LÉTREHOZÁS a munkalapot viszi célpontként", async () => {
+    const written = log();
+    const { service, sent } = serviceFor(written);
+
+    await service.deliverMaterialRequestCreated(createdNotice);
+
+    assert.equal(sent[0]?.data?.targetType, "materialRequest");
+    assert.equal(sent[0]?.data?.targetId, "worksheet-9");
+  });
+
+  it("a BEÉRKEZÉS UGYANARRA a munkalapra visz, mint a létrehozás", async () => {
+    const written = log();
+    const { service, sent } = serviceFor(written);
+
+    await service.deliverMaterialRequestReceived(receivedNotice);
+
+    assert.equal(sent[0]?.data?.targetType, "materialRequest");
+    assert.equal(sent[0]?.data?.targetId, "worksheet-9");
+  });
+
+  /**
+   * TESTVER-KONTROLL: ha valaki tevedesbol az IGENY azonositojat kuldene a
+   * munkalape helyett, ez az allitas fogja meg -- a `worksheet-9` es a
+   * `request-1` ma szandekosan KULONBOZIK.
+   */
+  it("NEM az igény saját azonosítóját küldi", async () => {
+    const written = log();
+    const { service, sent } = serviceFor(written);
+
+    await service.deliverMaterialRequestCreated(createdNotice);
+
+    assert.notEqual(sent[0]?.data?.targetId, "request-1");
   });
 });
