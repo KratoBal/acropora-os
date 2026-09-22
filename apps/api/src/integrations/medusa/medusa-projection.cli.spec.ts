@@ -1065,7 +1065,40 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
         },
         findUnique: async (args: unknown) => {
           hivasok.push({ metodus: "product.findUnique", args });
-          return sor;
+          /*
+            A BEAGYAZOTT `where` ALKALMAZASA A BESOROLASOKRA -- ES CSAK ARRA.
+
+            MIERT KELL: a vetites azt keri, hogy MINDEN besorolas jojjon
+            (`categories: { select: { categoryId: true } }`, where NELKUL). Ha
+            valaki elsodlegesre szukiti, a WYSIWYG halmaz csendben zsugorodik.
+            Eddig ezt CSAK forras-szoveg orizte, es lemertem, hogy a szukites
+            egyetlen viselkedes-allitast sem dont meg: a dupla a fixturat
+            VALTOZATLANUL adta vissza, tehat a `where` nem is latszott.
+
+            MIERT NEM TOBB: ez nem a Prisma utanzasa. Egyetlen szurot alkalmaz,
+            azt, amirol az allitas szol -- es csak ha a hivo KERTE. `where`
+            nelkul a viselkedes beture a regi, tehat a meglevo esetek nem
+            mozdulnak.
+          */
+          const valasztas = (
+            args as {
+              select?: { categories?: { where?: Record<string, unknown> } };
+            }
+          ).select?.categories;
+          const szuro = valasztas?.where;
+          if (!szuro) return sor;
+          const besorolasok = (
+            sor as { categories?: Record<string, unknown>[] }
+          ).categories;
+          if (!besorolasok) return sor;
+          return {
+            ...sor,
+            categories: besorolasok.filter((egy) =>
+              Object.entries(szuro).every(
+                ([kulcs, ertek]) => egy[kulcs] === ertek,
+              ),
+            ),
+          };
         },
         /**
          * A KEP-BLOKKOLAS OKA A TERMEK SORARA.
@@ -1521,7 +1554,14 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
   it("a WYSIWYG reszfa alatt allo termek EGYEDI DARABKENT megy ki", async () => {
     const { out, stdout, stderr } = collector();
     const { db } = adatbazis(
-      termek({ categories: [{ categoryId: "cat_wysiwyg" }] }),
+      /*
+        AZ `isPrimary` KIIRVA, ES EZ NEM DISZ: a dupla mostantol alkalmazza a
+        beagyazott `where`-t. Nelkule egy elsodlegesre szukito rontas EZT a
+        tesztet is pirosra vinne -- de nem azert, amit mer (a reszfa logikaja),
+        hanem mert a fixturabol hianyzik a jelzo. Igy minden piros
+        megnevezheto okbol jon.
+      */
+      termek({ categories: [{ categoryId: "cat_wysiwyg", isPrimary: true }] }),
       {
         category: {
           findMany: async () => [
@@ -1553,6 +1593,75 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       .metadata;
 
     assert.equal(metadata?.unique_piece, "true");
+  });
+
+  /**
+   * ES A SZUKITETLEN BESOROLAS-VALASZTAS, AMIT EDDIG CSAK SZOVEG ORZOTT.
+   *
+   * === A MERT RES (2026-09-22) ===
+   *
+   * A vetites `where` NELKUL keri a besorolasokat, tehat a WYSIWYG jelzo a
+   * termek MINDEN besorolasa alapjan dol el. Elrontottam ugy, hogy a valasztas
+   * `where: { isPrimary: true }`-t kapjon, es lefuttattam mindent: EGYETLEN
+   * viselkedes-allitas sem dolt meg, csak a forras-szoveget olvaso sor
+   * (`medusa-wysiwyg.besorolas.spec.ts`).
+   *
+   * Az ok szerkezeti volt, nem figyelmetlenseg: az adatbazis-dupla a fixturat
+   * VALTOZATLANUL adta vissza, tehat a szukites nem is latszott rajta. Ezert
+   * kapott a dupla egy szuk kiegeszitest: a beagyazott `where`-t alkalmazza a
+   * besorolasokra, es csak arra.
+   *
+   * === MIERT EPP EZ A FIXTURA ===
+   *
+   * A termek elsodleges besorolasa NEM a WYSIWYG ag, a masodlagos IGEN. A
+   * meglevo esettel (egyetlen besorolas) a szukites nem valtoztatna semmit --
+   * az az allitas a szukitesre VAK LENNE, es rossz okbol maradna zold.
+   */
+  it("a MASODLAGOS besorolas is szamit: a szukites elveszitene a jelzot", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(
+      termek({
+        categories: [
+          { categoryId: "cat_egyeb", isPrimary: true },
+          { categoryId: "cat_wysiwyg", isPrimary: false },
+        ],
+      }),
+      {
+        category: {
+          findMany: async () => [
+            { id: "cat_korall", parentId: null, name: "Korallok" },
+            { id: "cat_wysiwyg", parentId: "cat_korall", name: "WYSIWYG" },
+            { id: "cat_egyeb", parentId: null, name: "Egyeb" },
+          ],
+        },
+      },
+    );
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.ok(letrehozas, "a termek letrehozasa nem futott le");
+    const metadata = (letrehozas.body as { metadata?: Record<string, string> })
+      .metadata;
+
+    assert.equal(
+      metadata?.unique_piece,
+      "true",
+      "a masodlagos WYSIWYG besorolas nem szamitott: a valasztas elsodlegesre szukult",
+    );
   });
 
   it("a fo ut: egy termek kimegy, es a lekepezes sora megszuletik", async () => {
@@ -1771,7 +1880,10 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
    */
   it("kiirja a siker melle, hogy a kategoria nem kerult ra", async () => {
     const { out, stdout, stderr } = collector();
-    const { db } = adatbazis(termek({ categories: [{ categoryId: "kat-1" }] }));
+    // Az `isPrimary` ugyanabbol az okbol all itt, mint a reszfa-tesztnel.
+    const { db } = adatbazis(
+      termek({ categories: [{ categoryId: "kat-1", isPrimary: true }] }),
+    );
 
     const code = await boltiKorben(() =>
       runProjectionCli(
