@@ -32,6 +32,8 @@ import {
   rememberServiceJobs,
 } from "@/lib/offline/service-job-cache";
 import { rememberWorksheet } from "@/lib/offline/worksheet-cache";
+import { menthetoMasolatkent } from "@/lib/service-jobs/jegy-alak";
+import type { ServiceJobDetail } from "@/lib/service-jobs/types";
 
 /**
  * "LETOLTOM A HELYSZINT" -- GOMB, NEM VALTOKAPCSOLO.
@@ -129,7 +131,28 @@ export function HelyszinLetolto() {
             if (eredmeny.allapot === "hiba") throw new Error(eredmeny.uzenet);
           },
           jegyLista: () => listServiceJobs("open"),
-          jegyReszlet: getServiceJob,
+          /*
+            A LETOLTO A BELSO ALAKOT MENTI, tehat a partner-alakot NEM veheti
+            at: a visszaolvaso belso alaknak feltetelezne, es a kovetkezo
+            megnyitas ugyanabba a hibaba futna, amit ez a javitas megszuntet.
+
+            HANGOSAN ALL MEG, nem csendben hagyja ki: a letoltes `probald`
+            burkolója a kivetelt sorkent jeleniti meg, tehat a szerelo LATJA,
+            hogy az a jegy nem kerult a keszulekre. Egy nema kihagyas azt
+            allitana, hogy minden lejott.
+
+            ES MA EZ NEM ALL ELO: a helyszin-letolto a BELSO munkateren all.
+            A sor azert van itt, mert a tipus mostantol MEGKOVETELI a dontest --
+            es a kovetkezo olvaso igy latja, MELYIK dontes az.
+          */
+          jegyReszlet: async (id: string): Promise<ServiceJobDetail> => {
+            const jegy = await getServiceJob(id);
+            if (!menthetoMasolatkent(jegy))
+              throw new Error(
+                "Ez a hibajegy partner-nézetben érkezett, ezért nem menthető a készülékre.",
+              );
+            return jegy;
+          },
           jegyekMentese: rememberServiceJobs,
           jegyReszletMentese: rememberServiceJobDetail,
           munkalapLista: (oldal) =>

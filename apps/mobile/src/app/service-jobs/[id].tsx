@@ -38,6 +38,11 @@ import {
   isViewableImage,
 } from "@/lib/documents/document-view";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import {
+  jegyFejlec,
+  menthetoMasolatkent,
+  partnerAlak,
+} from "@/lib/service-jobs/jegy-alak";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { useIsOnline } from "@/lib/offline/connectivity";
 import { describeOfflineDetailNotice } from "@/lib/offline/offline-notice";
@@ -145,8 +150,14 @@ export default function ServiceJobDetailScreen() {
     */
     id ? `/service/jobs/${encodeURIComponent(id)}` : null;
 
+  /*
+    CSAK A BELSO ALAK KERUL A KESZULEKRE. A mentett masolat a belso alakot
+    tarolja, es a visszaolvaso is annak feltetelezi -- egy partner-alakot oda
+    beirni ugyanaz a hazugsag, amit ez a javitas megszuntet. A partner offline
+    masolata kulon kerdes, es nem ez a kor donti el.
+  */
   useEffect(() => {
-    if (!query.data) return;
+    if (!query.data || !menthetoMasolatkent(query.data)) return;
     void rememberServiceJobDetail(query.data);
   }, [query.data]);
 
@@ -346,7 +357,15 @@ export default function ServiceJobDetailScreen() {
       </SafeAreaView>
     );
 
-  const lephet = masolatbol ? [] : detail.allowedSteps;
+  /**
+   * MIT MUTAT A FEJLEC, ES KINALJUNK-E LEPTETEST -- MIND A KET ALAKRA.
+   *
+   * A dontes tiszta fuggvenyben all (`jegyFejlec`), mert ebben a csomagban
+   * nincs komponens-teszt. Ott all a magyarazat is, hogy miert az ADATBOL
+   * dontunk, es nem a szerepbol.
+   */
+  const fejlec = jegyFejlec(detail, masolatbol, serviceJobStatusLabel);
+  const lephet = masolatbol || partnerAlak(detail) ? [] : detail.allowedSteps;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
@@ -356,11 +375,13 @@ export default function ServiceJobDetailScreen() {
         <View style={styles.block}>
           <Text style={styles.number}>{detail.jobNumber}</Text>
           <Text style={styles.title}>{detail.title}</Text>
-          <Text style={styles.status}>
-            {serviceJobStatusLabel(detail.status)}
-          </Text>
-          {detail.customerName ? (
-            <Text style={styles.meta}>{detail.customerName}</Text>
+          <Text style={styles.status}>{fejlec.allapotFelirat}</Text>
+          {/*
+            A VEVO NEVE CSAK BELSO ALAKNAL. Partnernel a vevo MAGA a nezo: a
+            sajat nevet kiirni zaj, es a szerver nem is kuldi.
+          */}
+          {fejlec.ugyfelNeve ? (
+            <Text style={styles.meta}>{fejlec.ugyfelNeve}</Text>
           ) : null}
           {shortPath(detail.departmentPath) ? (
             <Text style={styles.meta}>{shortPath(detail.departmentPath)}</Text>
@@ -518,7 +539,16 @@ export default function ServiceJobDetailScreen() {
           ))}
         </View>
 
-        {capabilities?.serviceJobsManage ? (
+        {/*
+          A LEPTETES AZ ADATBOL DOL EL, NEM A SZEREPBOL.
+
+          A `serviceJobsManage` MA IGAZAT MOND partnerre is: a szerver tenyleg
+          megadja neki a `service.manage` jogot. A leptetest nem a JOG tiltja,
+          hanem az ALAK -- a kiszolgalo nem ad lepeslistat partner-hatokorben.
+          Ezert all itt a `partnerAlak` is: a blokk csak akkor rajzolodik ki,
+          ha van mit kinalni.
+        */}
+        {capabilities?.serviceJobsManage && !partnerAlak(detail) ? (
           <View style={styles.block}>
             <Text style={styles.sectionTitle}>Állapot léptetése</Text>
             {masolatbol ? (

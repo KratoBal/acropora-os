@@ -62,6 +62,7 @@ import {
   oroklesUzenete,
 } from "@/lib/worksheets/worksheet-inherit-from-ticket";
 import { listAssignableWorksheetUsers } from "@/lib/api/worksheets";
+import { jegyOroklendo } from "@/lib/service-jobs/jegy-alak";
 import {
   kezdoValaszto,
   valasztasUtan,
@@ -189,13 +190,24 @@ export default function NewWorksheetScreen() {
    * (`worksheet-prefill-from-ticket.ts`), mert ebben az appban nincs
    * komponens-teszt: ami ide kerulne, azt soha senki nem merne le.
    */
+  /*
+    A JEGY PARTNER-ALAKBAN IS ERKEZHET, ES AKKOR NINCS MIT OROKOLNI.
+
+    A `jegyOroklendo` EGY dontest ker (van-e mit orokolni), nem negyet: ha a
+    negy mezot kulon-kulon kerdeznenk, a negyedik helyen elfelejtenenk. Merve
+    2026-09-22: ez a kepernyo addig FELTETEL NELKUL olvasta mind a negyet, es
+    partner-alaknal `undefined` erteket vett at -- a lap a jegy vevoje,
+    helyszine es felelose NELKUL jott volna letre. A jegy adatlapja HANGOSAN
+    halt meg ugyanettol; ez CSENDBEN rontott volna.
+  */
+  const jegyAdatai = jegyQuery.data ? jegyOroklendo(jegyQuery.data) : null;
   const elotoltes = prefillFromTicket({
     link: jegy,
-    jegy: jegyQuery.data
+    jegy: jegyAdatai
       ? {
-          customerId: jegyQuery.data.customerId,
-          customerName: jegyQuery.data.customerName,
-          departmentId: jegyQuery.data.departmentId,
+          customerId: jegyAdatai.customerId,
+          customerName: jegyAdatai.customerName,
+          departmentId: jegyAdatai.departmentId,
         }
       : null,
     betoltes: jegyQuery.isPending,
@@ -244,11 +256,11 @@ export default function NewWorksheetScreen() {
   const jegyEszkozok = jegyQuery.data?.assets ?? [];
   const oroklendoEszkozIdk = oroklendoEszkozok({
     jegyEszkozok,
-    jegyDepartmentId: jegyQuery.data?.departmentId ?? null,
+    jegyDepartmentId: jegyAdatai?.departmentId ?? null,
     lapDepartmentId: departmentIdHatasos,
   });
   const oroklendoFelelosIdk = oroklendoFelelosok({
-    jegyFelelosok: jegyQuery.data?.assignees ?? [],
+    jegyFelelosok: jegyAdatai?.assignees ?? [],
     kioszthatok: kioszthatokQuery.data?.items ?? [],
   });
   const oroklesSzoveg = oroklesUzenete({

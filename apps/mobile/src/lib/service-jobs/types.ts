@@ -131,6 +131,37 @@ export interface ServiceJobDocumentSummary {
   createdAt: string;
 }
 
+/**
+ * A HIBAJEGY ADATLAPJA PARTNER-HATOKORBEN -- ES EZ A TUKOR EDDIG NEM LETEZETT.
+ *
+ * A szerver a `detail` vegponton partner-hatokoru hivonak MASIK alakot ad
+ * (`partnerServiceJobDetail`), ami tizenegy belso mezot szandekosan elhagy.
+ * A telefon tipusa viszont MINDIG a belso alakot allitotta -- tehat HAZUDOTT,
+ * es a fordito ezert nem szolt, amikor a kepernyo olyan mezot olvasott, ami
+ * partnernel nincs ott.
+ *
+ * AZ ARA MERT ES ELES VOLT (2026-09-22 20:05, Balazs iOS build 19): partner
+ * fiokkal megnyitva a jegyet az alkalmazas OSSZEOMLOTT
+ * (`detail.allowedSteps.length` egy `undefined` erteken).
+ *
+ * A MEZOK, AMIK ITT NINCSENEK, es amiket a belso alak visz: `status`,
+ * `customerName`, `customerId`, `departmentId`, `departmentName`,
+ * `scheduledAt`, `startedAt`, `completedAt`, `allowedSteps`, `assignees`,
+ * `hidden`. Helyettuk `partnerStatus` es `partnerStatusLabel` all.
+ */
+export interface ServiceJobPartnerDetail {
+  id: string;
+  jobNumber: string;
+  title: string;
+  description: string | null;
+  partnerStatus: string;
+  partnerStatusLabel: string;
+  departmentPath: string[] | null;
+  createdAt: string;
+  timeline: ServiceJobTimelineEntry[];
+  assets: ServiceJobAssetLink[];
+}
+
 export interface ServiceJobDetail extends ServiceJobListItem {
   description: string | null;
   /**

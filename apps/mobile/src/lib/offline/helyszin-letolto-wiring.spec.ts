@@ -62,7 +62,25 @@ describe("a helyszín-letöltő bekötése", () => {
     const s = kod(KEPERNYO);
     assert.match(s, /eszkozReszlet: getAsset/);
     assert.match(s, /eszkozReszletMentese: rememberAssetDetail/);
-    assert.match(s, /jegyReszlet: getServiceJob/);
+    /*
+      A HIVAS MEGMARADT, AZ ALAKJA VALTOZOTT (2026-09-22).
+
+      Az allitas eddig a `jegyReszlet: getServiceJob` szo szerinti alakot
+      kereste. A letolto azota BURKOLJA a hivast, mert a valasz ket alakban
+      johet, es a partner-alak NEM menthető a keszulekre -- a visszaolvaso a
+      belso alakot feltetelezi.
+
+      A MONDANIVALO UGYANAZ: a reszletlap LEJON, nem csak a listasor. Ezert az
+      allitas a HIVASRA megy, nem a hozzarendeles alakjara -- kulonben minden
+      kesobbi burkolas ujra pirosra vinne anelkul, hogy barmi romlana.
+    */
+    assert.match(s, /jegyReszlet:[\s\S]{0,600}?getServiceJob\(/);
+    /*
+      ES A PARTNER-ALAK NEM KERUL A KESZULEKRE. Ez UJ allitas, es azert all
+      ITT, mert ugyanez a blokk donti el, mi kerul a masolatba: egy kesobbi
+      "egyszerusites", ami a burkolast kiveszi, ezt is elvinne.
+    */
+    assert.match(s, /menthetoMasolatkent\(/);
     assert.match(s, /munkalapReszlet: getWorksheet/);
   });
 
