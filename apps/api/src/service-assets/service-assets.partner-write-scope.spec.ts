@@ -85,10 +85,23 @@ function tarolo(overrides: Record<string, unknown> = {}) {
     assignedUnitIds: async () => ["dept-1"],
     detail: async (_id: string, scope: PartnerScope) =>
       lathato(scope) ? ESZKOZ : null,
+    /**
+     * SUPPLIER, NEM CUSTOMER -- ES EZ NEM A HATOKOR-TESZT RESZE.
+     *
+     * Az `update()` az `ownerType`-ot ebbol a sorbol szamolja
+     * (`existing.customerId ? "CUSTOMER" : "SUPPLIER"`), es a
+     * `CUSTOMER_OWNER` szabaly (2026-09-22 ota `requested`-tol fuggetlenul
+     * fut) MOST MAR mindig elutasitana, ha itt customerId allna. Ez a fajl a
+     * HATOKORT meri (ki latja/irhatja a sort a `PartnerScope` alapjan, lasd
+     * `lathato()`), nem a tulajdonos-alegyseg szabalyt -- az `ESZKOZ.owner`
+     * es a `lathato()` fuggveny VALTOZATLAN maradt, mert azok a MEGJELENITETT
+     * valaszt es a lathatosagi dontest adjak, nem az `update()` bemeno
+     * ownerType-jat.
+     */
     basic: async () => ({
       id: "asset-1",
-      customerId: "customer-1",
-      supplierId: null,
+      customerId: null,
+      supplierId: "supplier-1",
       customerAddressId: null,
       aquariumId: null,
       parentAssetId: null,
@@ -98,8 +111,8 @@ function tarolo(overrides: Record<string, unknown> = {}) {
       _count: { childAssets: 0 },
     }),
     validationContext: async () => ({
-      customer: { id: "customer-1", isActive: true },
-      supplier: null,
+      customer: null,
+      supplier: { id: "supplier-1", isActive: true },
       address: null,
       aquarium: null,
       parent: null,
