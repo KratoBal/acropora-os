@@ -87,12 +87,22 @@ export class ServiceAssetsController {
    * beallitva, es a ket env-sablonban tenyleg uresen all. Ebbol azt irtam ide,
    * hogy a valasz MA a `not-enabled` agra esik.
    *
-   * ACROBOT AZ ELES OLDALT MERTE, ES AZ MAST MOND: a `DOCUMENT_STORE_ROOT` az
-   * eles `acropora-api` alkalmazason BE VAN JEGYEZVE 2026-09-02 09:48:39 ota,
-   * buildtime ES runtime jelzovel. Az ERTEKET viszont sem a Coolify API, sem a
-   * repo nem mutatja meg -- es a `None` valasz nem bizonyitek a hianyra:
-   * KONTROLL, hogy ugyanaz az API a `NODE_ENV`-re es a `PORT`-ra is `None`-t
-   * ad. A `docker` parancs ebbol a kontenerbol nem letezik.
+   * ACROBOT AZ ELES OLDALT MERTE, ES AZ MAST MOND: a `DOCUMENT_STORE_ROOT`
+   * kulcs MIND A KET GEPEN BE VAN JEGYEZVE --
+   *
+   *     ELES        `acropora-api`
+   *     AI/STAGING  `acropora-stage-api`
+   *
+   * -- gepenkent KET bejegyzessel (egy normal, egy preview), mindegyik
+   * 2026-09-02 09:48:39-kor letrehozva, `is_buildtime=true` ES
+   * `is_runtime=true`. Vagyis valaki szandekosan vette fel, es a FUTO
+   * konteneri kornyezetbe is beleszol.
+   *
+   * Az ERTEKET viszont sem a Coolify API, sem a repo nem mutatja meg -- es a
+   * `None` valasz NEM bizonyitek a hianyra: KONTROLL, hogy ugyanaz az API a
+   * `NODE_ENV`-re es a `PORT`-ra is `None`-t ad, pedig azok bizonyosan be
+   * vannak allitva. A masik ut sem jarhato: a `docker` parancs ebbol a
+   * kontenerbol nem letezik. Ez a meres HATARA, es igy all 2026-09-22-en.
    *
    * VAGYIS A `not-enabled` AG MA NEM BIZONYITOTT, csak a SABLON uressege az --
    * es a ketto nem ugyanaz a kerdes. Egy repo-oldali sablon nem mondja meg, mi
