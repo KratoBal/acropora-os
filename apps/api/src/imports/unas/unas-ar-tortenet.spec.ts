@@ -146,7 +146,7 @@ describe("az ar-tortenet bekotese", () => {
     const forras = await readFile(CLI, "utf-8");
 
     assert.equal(forras.includes("priceHistory: { none: {} }"), true);
-    assert.equal(forras.includes('source: "INITIAL"'), true);
+    assert.equal(forras.includes('source: "INITIAL",'), true);
     /* A tukor ideje, ha van -- nem egysegesen "most". */
     assert.equal(forras.includes("kezdoSorIdopontja(tukor, most)"), true);
   });
