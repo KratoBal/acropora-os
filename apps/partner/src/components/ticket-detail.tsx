@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { serviceJobWorksheetLabel } from "@acropora/types";
 
+import { TicketFieldsEditor } from "./ticket-fields-editor";
+
 import { partnerApi } from "@/lib/api";
 import { naploSor } from "@/lib/naplo-sor";
 import { DocumentPanel } from "./document-panel";
@@ -168,6 +170,20 @@ export function TicketDetail({ id }: { id: string }) {
             {ticket.description ||
               "A hibajegyhez nem rögzítettek részletes leírást."}
           </p>
+          {/*
+            CSAK AMIG NINCS MUNKALAP. Amint elindult a munka, a bejelentés
+            szövege ahhoz a munkához tartozik, és nem változhat a háta mögött.
+            A `worksheets` ugyanaz a lista, amit a lap alján a munkalap-doboz is
+            mutat -- nem egy második szűrés ugyanarra.
+          */}
+          {worksheets.length === 0 ? (
+            <TicketFieldsEditor
+              ticketId={ticket.id}
+              title={ticket.title}
+              description={ticket.description}
+              onSaved={() => load()}
+            />
+          ) : null}
         </article>
         {/*
           AZ ÜGY ADATAI: AMI A JEGYET AZONOSÍTJA A HELYSZÍNEN. A belső lapon ez
