@@ -109,6 +109,41 @@ export class HandoverMailService {
    * `null`, ha a jegy nem letezik. A KET HIVO MASKENT kezeli, es ez szandekos:
    * a kuldes `skipped` okot ad vissza (a hivas mar elindult, es nyoma kell
    * legyen), az elonezet 404-et dob (a felulet meg nem kezdett semmit).
+   *
+   * === ES A KERDES, AMI EZT A DONTEST MAR KETSZER FELULVIZSGALTATTA ===
+   *
+   * "Ugyanarra a jegyre ket kulonbozo valasz -- nem kellene egysegesiteni?"
+   * 2026-09-22-en acrobot hozott ra dontest (az elonezet is `skipped`-et adjon),
+   * es a MERES VONTA VISSZA, meg aznap. A ket sor, ami eldonti:
+   *
+   *     a `resolve()` egyetlen null-aga a `if (!job) return null`
+   *     a `jobForMail` `findUnique`-ja hatokor-szures NELKUL kerdez
+   *
+   * Vagyis NINCS "letezik, de nem oldhato fel" allapot ezen az uton: a `null`
+   * egyetlen jelentese az, hogy a jegy NEM LETEZIK. Az ervelés arra epult, hogy
+   * a 404 hamisat allit ("van ilyen, csak a kuldes kihagyja") -- a meres szerint
+   * IGAZAT allit. A megmarado indok (ki hol tart a folyamatban) nem uj erv,
+   * hanem a fenti bekezdes, es az valtozatlanul all.
+   *
+   * Aki harmadszor teszi fel ezt a kerdest: a valasz nem a HTTP-kodban van,
+   * hanem abban, hogy a POST mar letoltotte a csomagot, mire idaig ert.
+   *
+   * === ES A `no-job` MAS FAJTA, MINT A TOBBI KIHAGYASI OK (acrobot, 2026-09-22) ===
+   *
+   * Ez a csoportositas DONTES, nem veletlen, es ki kell mondani:
+   *
+   *     `no-sender`, `no-recipient`, `mail-off`, ...   UZLETI allapot
+   *         a rendszer dontott valamit, es van mit kozolni a kezelovel
+   *     `no-job`                                       HIVOI HIBA
+   *         rossz azonositoval jott a keres
+   *
+   * A ketto ma ugyanabban a listaban all, ugyanolyan alakban, es a kezelo
+   * (a #998 ota) ugyanugy latja mind a kettot. EZ MA NEM OKOZ KART, es
+   * szandekosan marad igy -- egy kulon ag a felulet oldalan ket mondatot adna
+   * ugyanarra a teendore ("frissitsd az oldalt").
+   *
+   * A kovetkezo olvasonak ket tevedes all nyitva enelkul a bekezdes nelkul:
+   * szetvalasztani (folosleges), vagy uzleti allapotnak nezni (teves).
    */
   private async resolve(serviceJobId: string) {
     const job = await this.repository.jobForMail(serviceJobId);
