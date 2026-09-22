@@ -16,13 +16,16 @@ export {
   serviceJobWorksheetLabel,
 } from "./service-job-management.js";
 export {
+  MAIL_TEMPLATE_EVENTS,
   MAIL_TEMPLATE_VARIABLES,
+  isMailTemplateEvent,
   renderMailTemplate,
   unknownTemplateVariables,
 } from "./mail-template.js";
 export type {
   MailTemplateRender,
   MailTemplateValues,
+  MailTemplateEvent,
   MailTemplateVariable,
 } from "./mail-template.js";
 export { worksheetStatusLabel } from "./worksheet-management.js";
@@ -562,3 +565,12 @@ export type {
   WorksheetDocumentSummary,
   WorksheetDocumentType,
 } from "./worksheet-management.js";
+
+export {
+  NOTIFICATION_ROLES,
+  NOTIFICATION_ROLE_VALUES,
+} from "./notification-roles.js";
+export type {
+  NotificationRoleInfo,
+  NotificationRoleValue,
+} from "./notification-roles.js";

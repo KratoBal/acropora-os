@@ -1,7 +1,15 @@
 "use client";
 
-import { Alert, Button, Card, CardContent, CardHeader } from "@acropora/ui";
 import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  Select,
+} from "@acropora/ui";
+import {
+  MAIL_TEMPLATE_EVENTS,
   renderMailTemplate,
   unknownTemplateVariables,
   type MailTemplateVariable,
@@ -11,7 +19,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   mailTemplatesApi,
-  WORKSHEET_SIGNED_TEMPLATE,
   type MailTemplateResponse,
 } from "@/lib/api/mail-templates";
 
@@ -63,6 +70,17 @@ export function MailTemplatePage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
 
+  /**
+   * MELYIK ESEMENY SABLONJAT SZERKESZTJUK.
+   *
+   * 2026-09-22-ig egyetlen esemeny letezett, es a lap bedrotozta. Balazs tobb
+   * sablont kert; a lista a KOZOS csomagbol jon (`MAIL_TEMPLATE_EVENTS`),
+   * ugyanabbol, amit a vegpont is kerdez -- egy felveheto nev, amire semmi nem
+   * kuld, pont az a fajta elcsuszas, amit ez elkerul.
+   */
+  const [esemenyId, setEsemenyId] = useState<string>(
+    MAIL_TEMPLATE_EVENTS[0]?.id ?? "",
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [template, setTemplate] = useState<MailTemplateResponse | null>(null);
@@ -78,11 +96,9 @@ export function MailTemplatePage() {
       setLoading(true);
       setLoadError(null);
       try {
-        const response = await mailTemplatesApi.read(
-          token,
-          WORKSHEET_SIGNED_TEMPLATE,
-          { signal },
-        );
+        const response = await mailTemplatesApi.read(token, esemenyId, {
+          signal,
+        });
         setTemplate(response);
         setSubject(response.subject);
         setBody(response.body);
@@ -98,7 +114,9 @@ export function MailTemplatePage() {
         setLoading(false);
       }
     },
-    [token],
+    // A VALASZTOTT ESEMENY IS FUGGOSEG: enelkul a valaszto atallna, a lapon
+    // viszont a REGI sablon maradna -- es a mentes a MASIK esemenyre irna.
+    [token, esemenyId],
   );
 
   useEffect(() => {
@@ -195,7 +213,7 @@ export function MailTemplatePage() {
     setSaveError(null);
     setSaved(false);
     try {
-      await mailTemplatesApi.save(token, WORKSHEET_SIGNED_TEMPLATE, {
+      await mailTemplatesApi.save(token, esemenyId, {
         subject,
         body,
       });
@@ -236,10 +254,31 @@ export function MailTemplatePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-dusk-900">Levélsablon</h1>
-        <p className="mt-1 text-sm text-dusk-600">
-          Ez a szöveg megy ki a hibajegy bejelentőjének, amikor a jegyhez
-          tartozó munkalapot aláírják. Ma ez az egyetlen automatikus levél.
+        <h1 className="text-xl font-semibold text-dusk-900">Levélsablonok</h1>
+        {/*
+          A LAP KORABBAN AZT ALLITOTTA, hogy „ma ez az egyetlen automatikus
+          levél". 2026-09-22 ota nem igaz: az ugyfel-bejelentes levele
+          AUTOMATIKUSAN megy ki, a jegy felvitelekor -- ez az ELSO ilyen a
+          rendszerben. A mondat ezert a VALASZTOTT esemeny sajat leirasabol jon,
+          nem egy allando szovegbol, ami elavul.
+        */}
+        <label className="mt-3 block max-w-md space-y-1">
+          <span className="text-sm font-medium text-dusk-700">Esemény</span>
+          <Select
+            aria-label="Esemény"
+            value={esemenyId}
+            onChange={(event) => setEsemenyId(event.target.value)}
+          >
+            {MAIL_TEMPLATE_EVENTS.map((esemeny) => (
+              <option key={esemeny.id} value={esemeny.id}>
+                {esemeny.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <p className="mt-2 text-sm text-dusk-600">
+          {MAIL_TEMPLATE_EVENTS.find((esemeny) => esemeny.id === esemenyId)
+            ?.description ?? ""}
         </p>
       </div>
 

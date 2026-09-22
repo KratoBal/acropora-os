@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
-import type { UserDetail, UserListResponse } from "@acropora/types";
+import type {
+  NotificationRoleValue,
+  UserDetail,
+  UserListResponse,
+} from "@acropora/types";
 
 import { hashPassword } from "./password.util.js";
 import { DEFAULT_SIGNING_CODE } from "../worksheets/worksheet-signing-code.js";
@@ -61,9 +65,35 @@ export class UsersRepository extends Repository {
     };
   }
 
+  /**
+   * AZ ERTESITESI SZEREPEK EGY HELYROL JONNEK, MINDEN VALASZHOZ.
+   *
+   * Az elso valtozatban mind az ot hivasi hely URES tombot adott at -- a
+   * fordito atengedte (a tipus stimmelt), es a kepernyon egy BEJELOLT
+   * felhasznalo jelolonegyzete URESNEK latszott volna. Pont az a hiba, amit a
+   * `user-view.ts` fejlece leir: a mezo kiesik, a fordito hallgat.
+   *
+   * A `tx` parameter azert all itt, mert a frissites TRANZAKCIOBAN olvassa
+   * vissza: a tranzakcion kivuli kliens a MAR MEGIRT, de meg nem commitolt
+   * sorokat nem latna, es a valasz a MENTES ELOTTI allapotot adna vissza.
+   */
+  private async szerepekOlvasasa(
+    tx: Prisma.TransactionClient | typeof prisma,
+    userId: string,
+  ): Promise<NotificationRoleValue[]> {
+    const sorok = await tx.userNotificationRole.findMany({
+      where: { userId },
+      select: { role: true },
+      orderBy: { role: "asc" },
+    });
+    return sorok.map((sor) => sor.role as NotificationRoleValue);
+  }
+
   async detail(id: string): Promise<UserDetail | null> {
     const user = await prisma.user.findUnique({ where: { id } });
-    return user ? toUserDetail(user) : null;
+    return user
+      ? toUserDetail(user, await this.szerepekOlvasasa(prisma, id))
+      : null;
   }
 
   async passwordHash(id: string): Promise<string | null> {
@@ -182,7 +212,7 @@ export class UsersRepository extends Repository {
             } satisfies Prisma.JsonObject,
           },
         });
-        return toUserDetail(user);
+        return toUserDetail(user, await this.szerepekOlvasasa(tx, user.id));
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -235,6 +265,34 @@ export class UsersRepository extends Repository {
           },
         });
         if (changed.count !== 1) throw new Error("STALE_UPDATE");
+
+        /**
+         * AZ ERTESITESI SZEREPEK -- TELJES CSERE, UGYANABBAN A TRANZAKCIOBAN.
+         *
+         * A HIANYZO MEZO NEM NYUL HOZZAJUK: egy nev- vagy szerep-javitas nem
+         * szedheti le a jelolonegyzeteket. A tomb viszont a TELJES halmaz,
+         * ugyanaz az alak, mint a delegaltaknal -- aki nincs rajta, lekerul,
+         * es az ures tomb a kimondott „egyiket sem".
+         *
+         * EGY TRANZAKCIOBAN a felhasznalo sorával: ha a szerep-iras elhasalna,
+         * a nev-valtozas sem marad ott. Ket kulon irassal a lap FELIG mentett
+         * allapotot mutatna, es a kezelo nem tudna, melyik fele ment at.
+         *
+         * AZ OPTIMISTA ZAR A FENTI `updateMany`-ben all, es EZ A SOR IS ALATTA
+         * van: a `changed.count !== 1` mar eldobta a kort, mielott ide erunk.
+         */
+        if (input.notificationRoles !== undefined) {
+          await tx.userNotificationRole.deleteMany({ where: { userId: id } });
+          if (input.notificationRoles.length > 0)
+            await tx.userNotificationRole.createMany({
+              data: input.notificationRoles.map((role) => ({
+                userId: id,
+                role,
+              })),
+              skipDuplicates: true,
+            });
+        }
+
         const user = await tx.user.findUniqueOrThrow({ where: { id } });
         /**
          * A NAPLO ALAKJA A `user-audit.ts`-BEN DOL EL, mert ott MERHETO: ez a
@@ -256,7 +314,7 @@ export class UsersRepository extends Repository {
             metadata: metadata satisfies Prisma.JsonObject,
           },
         });
-        return toUserDetail(user);
+        return toUserDetail(user, await this.szerepekOlvasasa(tx, user.id));
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -284,7 +342,7 @@ export class UsersRepository extends Repository {
             } satisfies Prisma.JsonObject,
           },
         });
-        return toUserDetail(user);
+        return toUserDetail(user, await this.szerepekOlvasasa(tx, user.id));
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -308,7 +366,7 @@ export class UsersRepository extends Repository {
             metadata: { email: user.email } satisfies Prisma.JsonObject,
           },
         });
-        return toUserDetail(user);
+        return toUserDetail(user, await this.szerepekOlvasasa(tx, user.id));
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );

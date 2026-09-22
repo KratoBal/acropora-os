@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from "@nestjs/common";
@@ -10,6 +11,7 @@ import type { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import { TicketMailService } from "../notifications/mail/ticket-mail.service.js";
 import { hiddenRowsWhere } from "../common/hidden-rows.js";
 import { serviceJobVisibilityWhere } from "./service-job-visibility.js";
 import { ertesitendoDelegaltak } from "./ertesitendo-delegaltak.js";
@@ -78,7 +80,17 @@ export class ServiceJobsService {
      * modul metaadatat olvassa -- nem azt, hogy a mezo letezik.
      */
     @Optional() private readonly notifications?: NotificationsService,
+    /**
+     * A LEVELEZO UGYANUGY ELHAGYHATO, mint az ertesito, es ugyanabbol az okbol:
+     * a felvitel nem bukhat el attol, hogy a levelezes nincs bekotve.
+     *
+     * ES UGYANUGY NEMA, ha a modul elfelejti: ezert all ra kulon allitas, ami a
+     * modul metaadatat olvassa, nem azt, hogy a mezo letezik.
+     */
+    @Optional() private readonly ticketMail?: TicketMailService,
   ) {}
+
+  private readonly logger = new Logger(ServiceJobsService.name);
 
   /**
    * A DELEGALTAK MAR ITT KIOSZTHATOK, es ez nem kenyelmi rovidites.
@@ -368,7 +380,66 @@ export class ServiceJobsService {
         userIds: ertesitendok,
       });
 
+    /**
+     * UGYFEL NYITOTTA A JEGYET -> ERTESITES A FELELOS-SZEREP BIRTOKOSAINAK.
+     *
+     * Balazs kerese, 2026-09-22 (ertesitesi folyamat, 1. pont).
+     *
+     * A FELTETEL A HATOKOR, NEM A DELEGALT-LISTA. A partner-urlap ma egyaltalan
+     * nem kuld delegaltat (merve: `createTicket` a partner kliensben negy mezot
+     * kuld, `assigneeIds` nincs kozte), tehat a fenti ag ilyenkor URES -- de a
+     * feltetel akkor sem a lista hossza lenne: egy belsos kollega is nyithat
+     * jegyet delegalt nelkul, es arrol NEM szol ez az ertesites.
+     *
+     * A KET KULDES EGY HALMAZT KAP. A cimzetteket EGYSZER kerdezzuk le, es
+     * ugyanazt adjuk a push-nak es a levelnek -- ket kulon lekerdezes kozott a
+     * halmaz megvaltozhatna, es a ketto mas embernek menne ki ugyanarrol a
+     * jegyrol.
+     */
+    if (partnerScope.kind === "customer")
+      await this.ertesitsUgyfelBejelentesrol(created.id, title, actorUserId);
+
     return created;
+  }
+
+  /**
+   * A KET ERTESITES EGY HELYEN, es SOHA nem buktathatja el a felvitelt.
+   *
+   * A jegy MAR TAROLVA van, amikor ez fut. Egy ertesitesi hiba (nincs token,
+   * nem megy a levelezo) nem teheti meg nem tortentte a bejelentest -- a
+   * bejelento ilyenkor ujra bekuldene, es ket jegy lenne ugyanarrol.
+   */
+  private async ertesitsUgyfelBejelentesrol(
+    serviceJobId: string,
+    subject: string,
+    actorUserId: string | null,
+  ): Promise<void> {
+    try {
+      const cimzettek =
+        await this.repository.notificationRoleRecipients("SERVICE_JOB_OPENED");
+      if (cimzettek.length === 0) return;
+
+      const partnerCode = await this.repository.partnerCodeOf(serviceJobId);
+
+      this.notifications?.notifyServiceJobOpened({
+        serviceJobId,
+        subject,
+        partnerCode,
+        userIds: cimzettek.map((cimzett) => cimzett.id),
+      });
+
+      await this.ticketMail?.deliverServiceJobOpened({
+        serviceJobId,
+        actorUserId,
+        recipients: cimzettek,
+      });
+    } catch (cause) {
+      this.logger.warn(
+        `Az ügyfél-bejelentés értesítése nem sikerült (${serviceJobId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
+    }
   }
 
   /**

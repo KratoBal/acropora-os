@@ -16,6 +16,7 @@ import {
   type Prisma,
   type ServiceJobStatus,
   type WorksheetVersionStatus,
+  type NotificationRole,
 } from "@acropora/database";
 import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
 
@@ -496,6 +497,47 @@ export class ServiceJobsRepository {
    * `worksheets` mezot (merve 2026-09-22: a lapjai a `timeline`-ba olvadnak),
    * tehat egy onnan vett darabszam nem is letezik.
    */
+  /**
+   * KINEL VAN BEJELOLVE EGY ERTESITESI SZEREP.
+   *
+   * EGY HELYEN ALL, ES A HIVO ADJA TOVABB. Ugyanez a halmaz kell a PUSH-hoz es
+   * a LEVELHEZ is; ket kulon lekerdezes kozott a halmaz meg is valtozhatna, es
+   * akkor a push egy embernek menne ki, a level egy masiknak -- ugyanarrol a
+   * jegyrol.
+   *
+   * CSAK AKTIV FELHASZNALO. Egy kilepett kollega sora megmaradhat (a szerep
+   * beallitas, nem esemeny), de kuldes nem mehet neki -- ugyanaz a szabaly,
+   * amit a nyito-ertesites is alkalmaz (`opener.isActive`).
+   *
+   * A RENDEZES DETERMINALT: azonos nev mellett az azonosito dont. A kuldesnek
+   * mindegy, a meresnek nem -- enelkul ugyanaz a hivas ket sorrendet adhatna.
+   */
+  async notificationRoleRecipients(role: NotificationRole): Promise<
+    {
+      id: string;
+      email: string;
+      displayName: string;
+    }[]
+  > {
+    const sorok = await this.database.userNotificationRole.findMany({
+      where: { role, user: { isActive: true } },
+      select: {
+        user: { select: { id: true, email: true, displayName: true } },
+      },
+      orderBy: [{ user: { displayName: "asc" } }, { userId: "asc" }],
+    });
+    return sorok.map((sor) => sor.user);
+  }
+
+  /** Az ugyfel rovidítése a jegyrol -- a push cimehez es a levelhez. */
+  async partnerCodeOf(serviceJobId: string): Promise<string | null> {
+    const sor = await this.database.serviceJob.findUnique({
+      where: { id: serviceJobId },
+      select: { customer: { select: { worksheetPartnerCode: true } } },
+    });
+    return sor?.customer?.worksheetPartnerCode ?? null;
+  }
+
   async hasWorksheet(serviceJobId: string): Promise<boolean> {
     const darab = await this.database.worksheet.count({
       where: { serviceJobId },

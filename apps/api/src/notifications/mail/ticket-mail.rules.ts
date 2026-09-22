@@ -72,6 +72,40 @@ export type MailDecision =
  * melletti futas is "nincs kinek" okot adna -- es az a naploban ugy nezne ki,
  * mintha a jegyen lenne a baj, nem a kornyezeten.
  */
+/**
+ * UGYFEL NYITOTT JEGYET -- MEHET-E LEVEL, ES KINEK.
+ *
+ * KULON DONTES A NYITO-ERTESITES MELLETT, es nem ugyanaz mas cimzettel:
+ *
+ *   a nyito-ertesites   EGY cimzettet ismer, es a jegyrol vezet hozza
+ *                       (`openedById` -> `opener`)
+ *   ez                  TOBB cimzett, es a SZEREPBOL jon, nem a jegyrol
+ *
+ * AMI KOZOS: a `mode` kapu. Az ugyanaz a kornyezeti allapot, es szandekosan
+ * ELOL all mind a kettonel -- ha a levelezes ki van kapcsolva, a cimzettek
+ * lekerdezese is fölösleges munka lenne.
+ *
+ * AZ URES CIMZETT-LISTA SAJAT OK, nem „mode-off": a kulonbseg az, hogy az
+ * elsot a kornyezet okozza, a masodikat az, hogy SENKINEL nincs bejelolve a
+ * szerep. A masodik a felhasznalonak szol es javithato a beallitasokban; az
+ * elso nem.
+ */
+export type ServiceJobOpenedMailDecision =
+  | { readonly kind: "send"; readonly to: readonly string[] }
+  | { readonly kind: "skip"; readonly reason: "mode-off" | "no-recipient" };
+
+export function serviceJobOpenedMailDecision(input: {
+  mode: MailMode;
+  recipients: readonly { readonly email: string }[];
+}): ServiceJobOpenedMailDecision {
+  if (input.mode !== "live") return { kind: "skip", reason: "mode-off" };
+  const cimek = input.recipients
+    .map((cimzett) => cimzett.email.trim())
+    .filter((email) => email.length > 0);
+  if (cimek.length === 0) return { kind: "skip", reason: "no-recipient" };
+  return { kind: "send", to: cimek };
+}
+
 export function ticketMailDecision(input: {
   mode: MailMode;
   openedById: string | null;
