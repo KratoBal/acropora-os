@@ -24,8 +24,29 @@ export function assetDepartmentRefusal(input: {
   requested: boolean;
 }): AssetDepartmentRefusal | null {
   if (!input.requested) return null;
-  // Vevő tulajdonosnál a finomítás a CÍM, nem az alegység. A két fogalom külön
-  // mező, és a felületen is külön címke -- pont ezért készült ez az egész.
+  /*
+    Vevő tulajdonosnál a finomítás a CÍM, nem az alegység. A két fogalom külön
+    mező, és a felületen is külön címke -- pont ezért készült ez az egész.
+
+    === EZ AZ ÁG 2026-09-22 ÓTA ELÉRHETETLEN, ÉS SZÁNDÉKOSAN MARAD ITT ===
+
+    Balázs, 2026-09-22 19:13:19 UTC (Discord, Acropora OS szál, message_id
+    1552035084578586696). A kérdés az volt, lesz-e valaha olyan eszköz a
+    rendszerben, ami a vevőé, nem a miénk vagy a partneré. A válasza szó
+    szerint: „nem lesz".
+
+    Mérve ugyanazon a napon, éles adatbázison: 124 eszközből MIND a 124 visel
+    `supplierId`-t, vevői tulajdonosú NULLA. Az ág tehát ma nulla soron fut, és
+    a döntés szerint később sem fog.
+
+    AMIÉRT MÉGIS ITT ÁLL: a törlése KÜLÖN döntés, nem ennek a változásnak a
+    része. A fenti mondat egy korábbi, szó szerint leírt döntés; azt nem
+    töröljük azzal az indokkal, hogy útban van egy másiknak.
+
+    ÉS AMIÉRT A DÁTUMOZOTT IDÉZET KELL IDE: enélkül a következő olvasó két
+    dolog közül választ, és mind a kettő rossz. Vagy törli indok nélkül, vagy
+    ÉLŐ ágnak nézi és épít rá. Egy dátumozott idézet mind a kettőt kizárja.
+  */
   if (input.ownerType === "CUSTOMER") return "CUSTOMER_OWNER";
   if (!input.department) return "NOT_FOUND";
   // A tükör-soron keresztül kötjük össze: az alegység a partner tükör vevőjéhez
