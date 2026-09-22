@@ -30,20 +30,27 @@ import type {
  */
 
 /**
- * A NEGY KIHAGYASI OK NEGY KULON MONDATA.
+ * AZ OT KIHAGYASI OK OT KULON MONDATA.
  *
  * `Record<...>`, NEM egy `switch` alapertelmezett aggal: ha a szerver egy
- * otodik okot vezet be, ez FORDITASI HIBA lesz. Egy alapertelmezett ag
- * csendben "ismeretlen ok"-ot mutatna a kezelonek, es a felulet zolden allna
- * tovabb.
+ * ujabb okot vezet be, ez FORDITASI HIBA lesz. Egy alapertelmezett ag csendben
+ * "ismeretlen ok"-ot mutatna a kezelonek, es a felulet zolden allna tovabb.
  *
- * Mindegyik mondat a TEENDOT nevezi meg, nem az allapotot: a negy ok negy
+ * ES EZ A JOSLAT BEVALT, 2026-09-22-en. Amikor a levelezes harom utja kulon
+ * kapcsolot kapott, a `mode-off` ketteesett (`mail-off` es `path-off`), es a
+ * fordito PONTOSAN ITT allt meg -- nem a felhasznalonal, egy ures mondattal.
+ * Ez a bekezdes ezert nem a szandekot irja le tovabb, hanem egy MERT esetet.
+ *
+ * Mindegyik mondat a TEENDOT nevezi meg, nem az allapotot: az ot ok ot
  * kulonbozo embert erint, es egy kozos "nem kuldheto" mondat mindegyiknel
- * ugyanoda vezetne -- hozzank.
+ * ugyanoda vezetne -- hozzank. A ket kapcsolos ok kozott is VALODI a
+ * kulonbseg: az egyik az egesz kornyezetre szol, a masik EGY levelfajtara.
  */
 const KIHAGYAS_OKA: Record<ServiceJobHandoverMailSkipReason, string> = {
-  "mode-off":
+  "mail-off":
     "A levélküldés ki van kapcsolva ezen a környezeten, ezért most nem megy ki semmi. Ez üzemeltetési beállítás.",
+  "path-off":
+    "A levélküldés be van kapcsolva, de az átadási levél külön ki van kapcsolva. Ez is üzemeltetési beállítás, és a többi levéltípust nem érinti.",
   "no-department":
     "A hibajegyhez nincs helyszín rendelve, így nincs kinek kiküldeni. Előbb a hibajegy helyszínét kell megadni.",
   "no-customer":

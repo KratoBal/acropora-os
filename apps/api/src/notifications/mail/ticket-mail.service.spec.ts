@@ -33,6 +33,19 @@ function szolgaltatas(be: {
   context?: TicketMailContext | null;
   template?: StoredMailTemplate | null;
   mode?: string;
+  /**
+   * A KET UT KULCSA KULON, ES A SPEC ALAPERTELMEZESE `live` -- A TERMELESE NEM.
+   *
+   * Itt azert nyitottak alapbol, hogy a 2026-09-22 ELOTT irt allitasok PONTOSAN
+   * azt merjek tovabb, amit eddig: a FO kapu viselkedeset. Ha zartak lennenek,
+   * mindegyik `path-off`-ra futna, es a regi allitasok nem a regi kerdesre
+   * felelnenek.
+   *
+   * A TERMELESBEN FORDITVA ALL: ott mindharom kulcs alapertelmezesben ZARVA, es
+   * kinyitni kell. Aki ezt a fixturat olvassa, ne vonja le belole az ellenkezot.
+   */
+  worksheetSigned?: string;
+  jobOpened?: string;
   sender?: MailSender | null;
 }) {
   const kuldott: OutgoingMail[] = [];
@@ -64,6 +77,8 @@ function szolgaltatas(be: {
   return {
     service: new TicketMailService(repository as TicketMailRepository, sender, {
       TICKET_MAIL_MODE: be.mode,
+      TICKET_MAIL_WORKSHEET_SIGNED: be.worksheetSigned ?? "live",
+      TICKET_MAIL_JOB_OPENED: be.jobOpened ?? "live",
     } as NodeJS.ProcessEnv),
     kuldott,
     naplo,
@@ -83,7 +98,7 @@ describe("a nyito ertesitese levelben", () => {
       actorUserId: "user-2",
     });
 
-    assert.deepEqual(eredmeny, { kind: "skipped", reason: "mode-off" });
+    assert.deepEqual(eredmeny, { kind: "skipped", reason: "mail-off" });
     assert.deepEqual(kuldott, [], "zart kapunal nem mehet ki level");
     assert.deepEqual(
       naplo,
@@ -202,5 +217,170 @@ describe("a nyito ertesitese levelben", () => {
       freeText: "Holnap reggel kimegyünk.",
     });
     assert.ok(kuldott[0]?.text.includes("Holnap reggel kimegyünk."));
+  });
+
+  /**
+   * A SZETVALASZTAS BIZONYITEKA: EGY KORNYEZET, KET UT, KET KULONBOZO EREDMENY.
+   *
+   * Ez a ket allitas NEM azt meri, hogy a kapcsolok letezenek -- azt egy kozos
+   * rontas is "igazolna", ami mind a harmat elnemitja. Azt meri, hogy AZ EGYIK
+   * kulcs elzarasa a MASIK utat NEM erinti.
+   *
+   * acrobot kikotese, 2026-09-22, szo szerint: "Egy kozos rontas, ami
+   * mindharmat elnemitja, SEMMIT nem bizonyit a szetvalasztasrol."
+   *
+   * A FO KAPU MINDKET ESETBEN NYITVA (`live`), kulonben `mail-off` jonne, es
+   * akkor a ket kulcsrol semmit nem tudnank meg.
+   */
+  it("CSAK a munkalap-út kulcsa zárva: az a levél kimarad, az ügyfél-bejelentés KIMEGY", async () => {
+    const { service, kuldott, naplo } = szolgaltatas({
+      mode: "live",
+      worksheetSigned: "off",
+      jobOpened: "live",
+    });
+
+    const zart = await service.deliverWorksheetSigned({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+    });
+    const nyitott = await service.deliverServiceJobOpened({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+      recipients: [{ email: "felelos@example.invalid" }],
+    });
+
+    assert.deepEqual(zart, { kind: "skipped", reason: "path-off" });
+    assert.equal(nyitott.kind, "sent");
+    assert.equal(
+      kuldott.length,
+      1,
+      "pontosan a MASIK ut levele mehetett ki, nem tobb es nem kevesebb",
+    );
+    /*
+      A NAPLO NEM URES, ES EZ A HELYES -- de PONTOSAN EGY sor all benne, es az a
+      KIMENO utrol szol. A zart UT nem irt semmit: az a KORNYEZET allapota.
+
+      Elso alakomban ures naplot vartam, es az allitas elbukott. A fixtura
+      helyes volt, az ELVARASOM nem: ugyanabban a korben a masik ut SIKERESEN
+      kikuldott egy levelet, es a sikeres kuldes naploz.
+    */
+    assert.equal(naplo.length, 1, "csak a KIMENO ut irhatott naplot");
+    assert.match(
+      naplo[0]?.note ?? "",
+      /kiment/,
+      "a naplo-sor a sikeres kuldesrol szol, nem a zart utrol",
+    );
+  });
+
+  it("CSAK az ügyfél-bejelentés kulcsa zárva: az marad ki, a munkalap-levél KIMEGY", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      worksheetSigned: "live",
+      jobOpened: "off",
+    });
+
+    const nyitott = await service.deliverWorksheetSigned({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+    });
+    const zart = await service.deliverServiceJobOpened({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+      recipients: [{ email: "felelos@example.invalid" }],
+    });
+
+    assert.deepEqual(zart, { kind: "skipped", reason: "path-off" });
+    assert.equal(nyitott.kind, "sent");
+    assert.equal(kuldott.length, 1);
+  });
+
+  /**
+   * A FO KAPU FOLOTTE ALL MIND A KETTONEK, ES AZ OK `mail-off`, NEM `path-off`.
+   *
+   * A sorrend nem izles: ha az UT kulcsat kerdeznenk eloszor, egy teljesen
+   * kikapcsolt kornyezet `path-off`-ot adna, es az uzemeltetot EGY kulcshoz
+   * kuldenenk, holott az egesz levelezes all.
+   */
+  it("a FŐ kapu zárva MINDKÉT utat elzárja, és az ok mail-off marad", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "off",
+      worksheetSigned: "live",
+      jobOpened: "live",
+    });
+
+    assert.deepEqual(
+      await service.deliverWorksheetSigned({
+        serviceJobId: "job-1",
+        actorUserId: null,
+      }),
+      { kind: "skipped", reason: "mail-off" },
+    );
+    assert.deepEqual(
+      await service.deliverServiceJobOpened({
+        serviceJobId: "job-1",
+        actorUserId: null,
+        recipients: [{ email: "felelos@example.invalid" }],
+      }),
+      { kind: "skipped", reason: "mail-off" },
+    );
+    assert.deepEqual(kuldott, []);
+  });
+
+  /**
+   * A HIANYZO KULDO SAJAT OKOT KAP, ES EZ EGY MAI, KONKRET ESETROL SZOL.
+   *
+   * 2026-09-22-ig ez `mail-off`-ot adott, vagyis UGYANAZT, mint a zart fo
+   * kapcsolo. Ma este kapcsoljuk be eloszor a levelezest, es a Gmail-kuldo
+   * beallitasa meg soha nem futott eles modban: ha hianyzik, a naplo a
+   * KAPCSOLOHOZ kuldene az uzemeltetot, ami helyesen all.
+   *
+   *     mail-off    a kornyezeti valtozot nezd
+   *     no-sender   a Gmail-hitelesitest nezd
+   *
+   * ES A KET KAPCSOLO ITT SZANDEKOSAN NYITVA VAN: enelkul a kapu allna meg
+   * elobb, es az allitas a kapurol szolna, nem a kuldorol.
+   */
+  it("hiányzó küldőnél az ok no-sender, nem mail-off", async () => {
+    const { service, kuldott, naplo } = szolgaltatas({
+      mode: "live",
+      worksheetSigned: "live",
+      sender: null,
+    });
+
+    assert.deepEqual(
+      await service.deliverWorksheetSigned({
+        serviceJobId: "job-1",
+        actorUserId: "user-2",
+      }),
+      { kind: "skipped", reason: "no-sender" },
+    );
+    assert.deepEqual(kuldott, [], "kuldo nelkul nem mehet ki level");
+    assert.deepEqual(
+      naplo,
+      [],
+      "a hianyzo kuldo a KORNYEZET allapota: nem a jegy naplojaba valo",
+    );
+  });
+
+  /**
+   * ES A MASIK UTON UGYANIGY -- mert a ket ut KET KULON `!this.sender` agat
+   * visel, es egy kozos allitas csak az egyiket merne.
+   */
+  it("az ügyfél-bejelentés útján is no-sender az ok", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      jobOpened: "live",
+      sender: null,
+    });
+
+    assert.deepEqual(
+      await service.deliverServiceJobOpened({
+        serviceJobId: "job-1",
+        actorUserId: null,
+        recipients: [{ email: "felelos@example.invalid" }],
+      }),
+      { kind: "skipped", reason: "no-sender" },
+    );
+    assert.deepEqual(kuldott, []);
   });
 });

@@ -11,7 +11,7 @@ import type { ServiceJobHandoverMailPreview } from "@acropora/types";
 import { headerSafe } from "./mail-header.js";
 import { TICKET_MAIL_ENV, TicketMailError } from "./gmail-mail.sender.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
-import { mailModeOf } from "./ticket-mail.rules.js";
+import { isMailEnvironmentReason, mailModeOf } from "./ticket-mail.rules.js";
 import {
   handoverMailBody,
   handoverMailDefaultSubject,
@@ -113,6 +113,7 @@ export class HandoverMailService {
       job,
       decision: handoverMailDecision({
         mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+        pathMode: mailModeOf(this.environment.TICKET_MAIL_HANDOVER),
         departmentId: job.departmentId,
         customerId,
         recipients,
@@ -215,7 +216,7 @@ export class HandoverMailService {
     );
     const text = handoverMailBody({ message: input.message });
 
-    if (!this.sender) return this.skip(job, decision, input, "mode-off");
+    if (!this.sender) return this.skip(job, decision, input, "no-sender");
 
     try {
       await this.sender.send({
@@ -315,9 +316,18 @@ export class HandoverMailService {
    * A KIHAGYAS NEM NEMA -- DE A ZART KAPU NEM A JEGYROL SZOL.
    *
    * Ugyanaz a bontas, mint a szomszed `TicketMailService`-ben: naplo-sort CSAK
-   * akkor irunk a jegyre, ha a jegyen tortent volna valami. A `mode-off` a
-   * KORNYEZET allapota -- egy "nem ment ki level" sor minden teszt-kornyezetben
-   * odakerulne, es a jegy naplojat toltene fel zajjal.
+   * akkor irunk a jegyre, ha a jegyen tortent volna valami. A HAROM
+   * KORNYEZETI OK (`mail-off`, `path-off`, `no-sender`) a KORNYEZET allapota -- egy "nem ment ki level"
+   * sor minden teszt-kornyezetben odakerulne, es a jegy naplojat toltene fel
+   * zajjal.
+   *
+   * 2026-09-22 ota ez `isMailEnvironmentReason`-nel dol el, nem egyetlen szo
+   * osszehasonlitasaval: igy egy ujabb kornyezeti ok bevezetese nem tudja
+   * csendben ide engedni a naplo-irast.
+   *
+   * ES EZ MEG AZNAP HASZNALT IS: a `no-sender` ugyanabban a korben kerult be,
+   * es a halmazhoz eleg volt hozzaadni -- a naplo-dontest nem kellett
+   * hozzanyulni, mert nem szoban all, hanem halmazban.
    */
   private async skip(
     job: { id: string },
@@ -326,8 +336,8 @@ export class HandoverMailService {
     felulir?: string,
   ): Promise<HandoverMailResult> {
     const reason =
-      felulir ?? (decision.kind === "skip" ? decision.reason : "mode-off");
-    if (reason !== "mode-off")
+      felulir ?? (decision.kind === "skip" ? decision.reason : "mail-off");
+    if (!isMailEnvironmentReason(reason))
       await this.ticketMail.recordNotification({
         serviceJobId: job.id,
         note: handoverMailAuditNote(decision),

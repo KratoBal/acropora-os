@@ -7,6 +7,7 @@ import { headerSafe } from "./mail-header.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import { ticketMailContent } from "./ticket-mail.content.js";
 import {
+  isMailEnvironmentReason,
   mailAuditNote,
   mailModeOf,
   serviceJobOpenedMailDecision,
@@ -94,9 +95,10 @@ export type TicketMailOutcome =
        * A `no-recipient` 2026-09-22-en kerult ide, es SAJAT ok, nem a meglevok
        * egyike: azt mondja, hogy a levelezes MEGY, csak a hibajegy-felelos
        * szerep egyetlen aktiv felhasznalonal sincs bejelolve. Ez a
-       * beallitasokban javithato -- a `mode-off` nem.
+       * beallitasokban javithato -- a ket kapu-ok nem.
        */
-      readonly reason: MailSkipReason | "no-ticket" | "no-recipient";
+      readonly reason:
+        MailSkipReason | "no-ticket" | "no-recipient" | "no-sender";
     }
   | { readonly kind: "failed"; readonly unknown?: readonly string[] };
 
@@ -144,6 +146,7 @@ export class TicketMailService {
 
     const decision = ticketMailDecision({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      pathMode: mailModeOf(this.environment.TICKET_MAIL_WORKSHEET_SIGNED),
       openedById: context.openedById,
       opener: context.opener,
     });
@@ -156,7 +159,7 @@ export class TicketMailService {
         a jegye -- egy "nem ment ki level" sor minden teszt-kornyezetben
         odakerulne, es a jegy naplojat toltene fel zajjal.
       */
-      if (decision.reason !== "mode-off")
+      if (!isMailEnvironmentReason(decision.reason))
         await this.repository.recordNotification({
           serviceJobId: input.serviceJobId,
           note: mailAuditNote(decision),
@@ -204,7 +207,7 @@ export class TicketMailService {
       freeText: input.freeText ?? null,
     });
 
-    if (!this.sender) return { kind: "skipped", reason: "mode-off" };
+    if (!this.sender) return { kind: "skipped", reason: "no-sender" };
     /*
       A TARGY ITT VALIK FEJLECCE, TEHAT ITT TISZTUL. A behelyettesitett ertek
       (a jegy CIME) ember altal beirt kulso adat, es a `CreateServiceJobDto`
@@ -267,6 +270,7 @@ export class TicketMailService {
 
     const decision = serviceJobOpenedMailDecision({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      pathMode: mailModeOf(this.environment.TICKET_MAIL_JOB_OPENED),
       recipients: input.recipients,
     });
 
@@ -277,7 +281,7 @@ export class TicketMailService {
         allapota, es minden teszt-kornyezetben odakerulne; a „senkinel nincs
         bejelolve" viszont a JEGYROL szolo teny, es javithato.
       */
-      if (decision.reason !== "mode-off")
+      if (!isMailEnvironmentReason(decision.reason))
         await this.repository.recordNotification({
           serviceJobId: input.serviceJobId,
           note: "Értesítő levél kimaradt: a hibajegy-felelős szerep egyetlen aktív felhasználónál sincs bejelölve.",
@@ -313,7 +317,7 @@ export class TicketMailService {
       return { kind: "failed", unknown: [...new Set(ismeretlen)] };
     }
 
-    if (!this.sender) return { kind: "skipped", reason: "mode-off" };
+    if (!this.sender) return { kind: "skipped", reason: "no-sender" };
     await this.sender.send({
       to: [...decision.to],
       subject: headerSafe(targy.text),
