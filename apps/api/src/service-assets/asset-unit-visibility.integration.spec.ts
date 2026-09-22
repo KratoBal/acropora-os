@@ -334,11 +334,43 @@ describe(
      * es a letrehozo DTO-ban a mezo elhagyhato, tehat ilyen sor MA IS keletkezhet.
      * Egy `departmentId: { in: [...] }` feltetel a NULL-t nem engedi at.
      *
-     * A KET TEVEDES ARA NEM EGYFORMA: ha lathato lenne, egy sor, ami semmilyen
-     * helyszinhez nem tartozik, atmenne a szuron, es a szabaly kivetelt kapna,
-     * amit kesobb senki nem ert. Igy viszont a partner SZOL, hogy hianyzik
-     * valami, es kiderul, hogy az adat hianyos -- a tevedes HANGOS, es a javitas
-     * a helyes helyen tortenik.
+     * === AZ INDOK BALAZSE, ES KET MONDATA EGYUTT ADJA KI ===
+     *
+     *   2026-09-21 14:34:07   "a partner azokat az eszkozoket latja, aminek a
+     *                          helyszine HOZZA van rendelve"
+     *   2026-09-22 07:46:59   "akkor semmit se lasson"
+     *
+     * Egy helyszin nelkuli sor helyszine SENKIHEZ nincs hozzarendelve, tehat az
+     * elso mondat szerint nem latszik. NEM KIVETELT CSINALUNK, HANEM A SZABALYT
+     * ALKALMAZZUK EGY HATARESETRE -- es ez a kulonbseg szamit, mert egy kivetelt
+     * a kovetkezo olvaso megkerdojelez, egy hatareset alkalmazasat nem.
+     *
+     * === A KET TEVEDES ARA NEM EGYFORMA, ES AZ ELSO ALAKOM TOBBET ALLITOTT ===
+     *
+     * ITT KORABBAN AZ ALLT, hogy a "nem latszik" iranyu tevedes HANGOS, mert a
+     * partner szol, hogy hianyzik valami. EZ GYENGEBB, MINT AHOGY HANGZIK, es
+     * acrobot szukitette (2026-09-22 11:04): a partner csak akkor szol, ha
+     * ESZREVESZI a hianyt -- egy eszkoz, amit sosem latott, nem hianyzik neki.
+     *
+     * A HELYES ALLITAS TEHAT NEM AZ, HOGY HANGOS, HANEM HOGY A KET TEVEDES KOZUL
+     * EZ AZ, AMELYIK NEM SZIVARGAS. Ha a sor lathato lenne, egy olyan eszkoz
+     * menne at a szuron, ami semmilyen helyszinhez nem tartozik, es a szabaly
+     * kivetelt kapna, amit kesobb senki nem ert.
+     *
+     * === ES EPP EZERT KELL MELLE SZAMLALHATO ORZO, NEM A PARTNER FIGYELME ===
+     *
+     * Ez az allitas MAGA az orzo: ha a dontes valaha megfordul, PIROSODIK.
+     *
+     * AMI VISZONT HIANYZIK, ES INNEN NEM POTOLHATO: a bevezetes napjan HANY sor
+     * all helyszin nelkul a harom erintett tablan (Asset, ServiceJob, Worksheet).
+     * Az a szam adna meg, hogy ez a szabaly valaha HARAPOTT-e -- egy kesobbi
+     * olvaso csak akkor tudja megmondani, ha latja, mennyi volt a bevezeteskor.
+     *
+     * NEM EN MERTEM, ES NEM IS TUDOM: ehhez az agenshez nem tartozik
+     * `DATABASE_URL`, es az egyetlen elerheto adatbazis az ELES -- amin Balazs
+     * kikotese szerint semmit nem futtatunk. ACROBOT TUDJA LEMERNI (o merte a
+     * szomszedos 83/0 szamot is, 2026-09-22 09:5x). Amig a szam nem all itt,
+     * ez a bekezdes a HIANYT nevezi meg, nem a nullat allitja.
      *
      * HA EZ A DONTES VALAHA MEGFORDUL, EZ AZ ALLITAS PIROSODIK, es akkor a
      * valtozast ki kell mondani, nem csendben atirni.
