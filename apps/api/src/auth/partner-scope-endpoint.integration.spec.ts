@@ -711,6 +711,44 @@ describe(
       Object.assign(new SupplierListQueryDto(), over);
 
     /**
+     * A MASODIK KONTROLL A FIXTURARA, ES NEM UGYANAZT MERI, MINT AZ ALATTA ALLO.
+     *
+     * Az alatta allo azt bizonyitja, hogy MINDKET sor LETEZIK es lekerdezheto.
+     * Ez azt, hogy a ket felhasznalo hozzarendelese KULONBOZIK -- mert
+     * 2026-09-22 ota a vevo-hatokoru olvasas a HOZZARENDELT helyszinekre szur.
+     *
+     * AMI NELKULE ELVESZNE, ES CSENDBEN: ha valaki a fixturat ugy "javitja",
+     * hogy mindket felhasznalonak MINDKET helyszint adja, az osszes lenti
+     * "csak a sajatjat latja" allitas ZOLD MARAD egy MINDENT ATENGEDO szuro
+     * mellett is. A defektus maga elegiti ki a tobbi allitast.
+     *
+     * A feltetel a fixtura fejleceben MONDATKENT mar allt. Egy mondat, amit
+     * nem allit senki, a sajat vedelmet nem meri.
+     */
+    it("kontroll: mindkét partner-felhasználónak PONTOSAN EGY, és KÜLÖNBÖZŐ helyszíne van", async () => {
+      const [a, b] = await Promise.all([
+        prisma.userWorksheetDepartment.findMany({
+          where: { userId: asCustomerA.id },
+          select: { departmentId: true },
+        }),
+        prisma.userWorksheetDepartment.findMany({
+          where: { userId: asCustomerB.id },
+          select: { departmentId: true },
+        }),
+      ]);
+
+      assert.deepEqual(
+        a.map((sor) => sor.departmentId),
+        [departmentOfA],
+      );
+      assert.deepEqual(
+        b.map((sor) => sor.departmentId),
+        [departmentOfB],
+      );
+      assert.notEqual(departmentOfA, departmentOfB);
+    });
+
+    /**
      * A KONTROLL A FIXTURE-RE, es ez az allitas tartja a tobbit.
      *
      * Egy hatokor-teszt, aminek a ket sora nem is letezik vagy nem is latszik,
