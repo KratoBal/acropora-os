@@ -26,8 +26,11 @@ import type {
 import {
   ASSET_LABEL_CODE_SHAPE_MESSAGE,
   assetLabelCreateProblem,
+  hasPermission,
   normalizeAssetLabelCode,
+  PERMISSIONS,
 } from "@acropora/types";
+import { scanLabelOutcome } from "./scan-label-outcome.js";
 import {
   AssetLabelPoolExhaustedError,
   AssetLabelUnavailableError,
@@ -267,12 +270,28 @@ export class ServiceAssetsService {
   }
 
   /**
-   * ESZKOZ KERESESE A BEOLVASOTT MATRICAKODROL.
+   * MIT TALALTUNK A BEOLVASOTT MATRICAKODON.
    *
-   * A HAROM VALASZ HATARA: rossz ALAK -> 400 (a keresen kell javitani),
-   * nem talalhato -> 404. A "nincs ilyen kod" es a "mas partnere" KOZOTT NEM
-   * teszunk kulonbseget: a tarolo mindkettore `null`-t ad, es a kettot
-   * megkulonbozteto valasz maga lenne a szivargas.
+   * A VALASZOK HATARA: rossz ALAK -> 400 (a keresen kell javitani); minden mas
+   * esetben a valasz vagy egy UNIO-TAG, vagy 404.
+   *
+   * === EZ A FEJLEC 2026-09-22-EN ATIRODOTT, ES A REGI ALAKJA MA MAR KEVES ===
+   *
+   * Az allt itt, hogy „nem talalhato -> 404", es hogy a „nincs ilyen kod" meg a
+   * „mas partnere" kozott nem teszunk kulonbseget. A MASODIK MONDAT VALTOZATLANUL
+   * ALL -- az elso viszont ma mar nem fedi a valosagot: a SZABAD kod (kiadott,
+   * de eszkozhoz nem rendelt) KULON valaszt kap, mert a FEL 2 belepesi pontja
+   * ebbol indul.
+   *
+   * A HAROM ESET ES A KETTO VALASZ:
+   *
+   *     lathato eszkozon all   -> { kind: "ASSET", asset }
+   *     SZABAD                 -> { kind: "FREE", code }, DE csak belso
+   *                               hatokornek es irasi joggal
+   *     minden mas             -> 404, EGYETLEN alakban
+   *
+   * A dontes es a MERES, ami eldontotte (a `PARTNER_SERVICE` szerepnek VAN
+   * `service.manage` joga), a `scanLabelOutcome` fejleceben all.
    */
   async scanLabel(rawCode: string, user: AuthenticatedUser) {
     const code = normalizeAssetLabelCode(rawCode);
@@ -284,11 +303,38 @@ export class ServiceAssetsService {
       scope,
       assignedUnitIds,
     );
-    if (!asset)
-      throw new NotFoundException(
-        "Ehhez a matricakódhoz nem tartozik elérhető eszköz.",
-      );
-    return asset;
+    /**
+     * A HAROM ESET SZETVALASZTASA -- A DONTES TISZTA FUGGVENYBEN ALL
+     * (`scanLabelOutcome`), es ott all a MERES is, ami eldontotte.
+     *
+     * ITT CSAK A BEMENETEK ALLNAK ELO. A szabad keszletet CSAK AKKOR kerdezzuk
+     * le, ha nincs lathato eszkoz: egy talalat eseten a kerdes fol sem merul,
+     * es egy folosleges lekerdezes minden beolvasasra ratenne magat.
+     */
+    const canManage = hasPermission(user, PERMISSIONS.SERVICE_MANAGE);
+    const freeLabel = asset
+      ? false
+      : await this.repository.freeLabelExists(code);
+    const outcome = scanLabelOutcome({
+      visibleAsset: asset !== null,
+      freeLabel,
+      scope,
+      canManage,
+    });
+
+    if (outcome.kind === "ASSET")
+      return { kind: "ASSET" as const, asset: asset! };
+    if (outcome.kind === "FREE") return { kind: "FREE" as const, code };
+    /*
+      A 404 SZOVEGE VALTOZATLAN, ES EZ NEM VELETLEN: HAROM allapotot fed (nem
+      letezik, nem lathato, illetve szabad ugy, hogy a hivo nem jogosult a
+      szabad valaszra), es a harom kozott kivulrol nem szabad kulonbseget
+      tenni. Egy bovebb uzenet („ez a kod szabad, de nincs jogod") pont azt a
+      szivargast nyitna meg, amit a szetvalasztas elkerul.
+    */
+    throw new NotFoundException(
+      "Ehhez a matricakódhoz nem tartozik elérhető eszköz.",
+    );
   }
 
   /**
