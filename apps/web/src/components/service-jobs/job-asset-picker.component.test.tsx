@@ -451,7 +451,13 @@ describe("JobAssetPicker", () => {
      */
     it("mas helyszinen allo eszkozt nem ad hozza, es megnevezi a helyet", async () => {
       assets.list.mockResolvedValue(valasz([]));
-      assets.scanLabel.mockResolvedValue(reszletek());
+      // A VALASZ 2026-09-22 OTA UNIO. A dupla ezt KOVETI, nem kerüli meg: egy
+      // nyers `AssetDetail` mellett a hivo `eredmeny.asset` aga `undefined`-ot
+      // olvasna, es a spec ROSSZ alakra allitana valamit.
+      assets.scanLabel.mockResolvedValue({
+        kind: "ASSET",
+        asset: reszletek(),
+      });
       const valasztas: string[][] = [];
       render(
         <JobAssetPicker
@@ -482,7 +488,10 @@ describe("JobAssetPicker", () => {
      */
     it("kivezetett eszkozre azt mondja, hogy kivezetett", async () => {
       assets.list.mockResolvedValue(valasz([]));
-      assets.scanLabel.mockResolvedValue(reszletek({ status: "RETIRED" }));
+      assets.scanLabel.mockResolvedValue({
+        kind: "ASSET",
+        asset: reszletek({ status: "RETIRED" }),
+      });
       const valasztas: string[][] = [];
       render(
         <JobAssetPicker
@@ -497,6 +506,41 @@ describe("JobAssetPicker", () => {
 
       expect(await screen.findByText(/ki van vezetve/)).toBeTruthy();
       // ES NEM ALLITJA, HOGY MASHOL ALLNA: a ket ag kulonbozik.
+      expect(screen.queryByText(/MÁS helyszínen áll/)).toBeNull();
+      expect(valasztas).toEqual([]);
+    });
+
+    /**
+     * A SZABAD MATRICA SAJAT MONDATOT KAP -- ES EZ AZ, AMIT EDDIG NEM LEHETETT
+     * MEGTUDNI.
+     *
+     * 2026-09-22-ig a vegpont a szabad kodra UGYANAZT a 404-et adta, mint egy
+     * ismeretlen kodra. A kezelo tehat azt latta, hogy „nem talaltam", es a
+     * MATRICAT hitte rossznak -- holott az ep, csak meg nincs eszkozhoz
+     * ragasztva. A teendo is MAS: nem ujra beolvasni, hanem felvinni az
+     * eszkozt ezzel a koddal.
+     *
+     * MI PIROSIT: ha a hivo a `FREE` tagot ugyanabba az agba ejti, mint a
+     * talalatot vagy a hibat.
+     */
+    it("szabad matricara azt mondja, hogy meg nincs eszkozhoz rendelve", async () => {
+      assets.list.mockResolvedValue(valasz([]));
+      assets.scanLabel.mockResolvedValue({ kind: "FREE", code: "V2196" });
+      const valasztas: string[][] = [];
+      render(
+        <JobAssetPicker
+          departmentId="unit-9"
+          selected={[]}
+          onChange={(ids) => valasztas.push(ids)}
+        />,
+      );
+      await waitFor(() => expect(assets.list).toHaveBeenCalledTimes(1));
+
+      await beir("V2196");
+
+      expect(await screen.findByText(/még szabad/)).toBeTruthy();
+      // ES NEM A MASIK KET MONDAT: a harom ag kulonbozik, es a teendo is.
+      expect(screen.queryByText(/ki van vezetve/)).toBeNull();
       expect(screen.queryByText(/MÁS helyszínen áll/)).toBeNull();
       expect(valasztas).toEqual([]);
     });
