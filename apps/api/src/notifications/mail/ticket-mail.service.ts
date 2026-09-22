@@ -4,6 +4,7 @@ import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
 import { headerSafe } from "./mail-header.js";
+import { internalTicketLink } from "./ticket-link.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import { ticketMailContent } from "./ticket-mail.content.js";
 import {
@@ -50,6 +51,8 @@ export const DEFAULT_WORKSHEET_SIGNED_TEMPLATE = {
     "A(z) {{jegyszam}} számú hibajegyhez tartozó munkalapot aláírták.",
     "",
     "A bejelentés tárgya: {{jegy_targya}}",
+    "",
+    "Hibajegy: {{jegy_linkje}}",
   ].join("\n"),
 } as const;
 
@@ -85,6 +88,8 @@ export const DEFAULT_SERVICE_JOB_OPENED_TEMPLATE = {
     "",
     "A bejelentés szövege:",
     "{{jegy_leirasa}}",
+    "",
+    "Hibajegy: {{jegy_linkje}}",
   ].join("\n"),
 } as const;
 
@@ -178,11 +183,20 @@ export class TicketMailService {
 
     const tarolt = await this.repository.template(WORKSHEET_SIGNED);
     const sablon = tarolt ?? DEFAULT_WORKSHEET_SIGNED_TEMPLATE;
+    const link = internalTicketLink({
+      webUrl: this.environment.WEB_URL,
+      serviceJobId: input.serviceJobId,
+    });
+    if (!link)
+      this.logger.warn(
+        `A hibajegy linkje kimaradt a levélből: WEB_URL nincs beállítva (hibajegy ${input.serviceJobId}).`,
+      );
     const ertekek = {
       cimzett: decision.name,
       jegyszam: context.jobNumber,
       jegy_targya: context.title,
       jegy_leirasa: context.description ?? "",
+      jegy_linkje: link,
     };
 
     const targy = renderMailTemplate(sablon.subject, ertekek);
@@ -304,6 +318,14 @@ export class TicketMailService {
 
     const tarolt = await this.repository.template(SERVICE_JOB_OPENED);
     const sablon = tarolt ?? DEFAULT_SERVICE_JOB_OPENED_TEMPLATE;
+    const link = internalTicketLink({
+      webUrl: this.environment.WEB_URL,
+      serviceJobId: input.serviceJobId,
+    });
+    if (!link)
+      this.logger.warn(
+        `A hibajegy linkje kimaradt a levélből: WEB_URL nincs beállítva (hibajegy ${input.serviceJobId}).`,
+      );
     const ertekek = {
       cimzett: "Kolléga",
       jegyszam: context.jobNumber,
@@ -311,6 +333,7 @@ export class TicketMailService {
       jegy_leirasa: context.description ?? "",
       bejelento: context.opener?.displayName ?? "",
       ugyfelkod: context.partnerCode ?? "",
+      jegy_linkje: link,
     };
 
     const targy = renderMailTemplate(sablon.subject, ertekek);

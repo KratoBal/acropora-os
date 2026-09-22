@@ -56,6 +56,7 @@ const MINTA: Readonly<Record<string, string>> = {
   jegyszam: "HJ-2026-001",
   jegy_targya: "Szivattyú zúg",
   jegy_leirasa: "Reggel óta hangos, és melegszik a motor.",
+  jegy_linkje: "https://os.acropora.hu/szerviz/hibajegyek/HJ-2026-001",
 };
 
 function mintaErtekek(
