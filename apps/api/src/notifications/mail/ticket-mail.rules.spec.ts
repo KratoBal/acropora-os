@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   mailAuditNote,
+  mailGate,
   mailModeOf,
   ticketMailDecision,
   type TicketOpener,
@@ -36,6 +37,41 @@ describe("a kapu alapertelmezesben ZARVA", () => {
   it("ismeretlen ertek ZARVA marad, nem nyit", () => {
     for (const ertek of ["true", "on", "yes", "1", "liv", "LIVE!", "enabled"])
       assert.equal(mailModeOf(ertek), "off", `nem maradt zarva: ${ertek}`);
+  });
+});
+
+describe("a ket reteg SORRENDJE", () => {
+  /**
+   * A KET KAPU KOZUL A FO ALL ELOL, ES EZ AZ ALLITAS PONTOSAN EZT MERI.
+   *
+   * MIERT KELL KULON: ha a ket kulcs kozul csak az EGYIK zarna egy-egy
+   * allitasban, a sorrend megforditasa SEMMIT nem valtoztatna -- mindket alak
+   * ugyanazt az okot adna. A kulonbseg CSAK akkor latszik, amikor MINDKETTO
+   * zarva van: a helyes sorrend `mail-off`-ot ad, a forditott `path-off`-ot.
+   *
+   * ES A TEENDO MIATT SZAMIT, nem eleganciabol: egy teljesen kikapcsolt
+   * kornyezetben a `path-off` EGY kulcshoz kuldene az uzemeltetot, holott az
+   * egesz levelezes all. Rossz iranyba indulna, es a kulcs kinyitasa utan sem
+   * menne ki semmi.
+   */
+  it("MINDKÉT kapcsoló zárva: az ok a FŐ kapué, mert oda kell menni", () => {
+    assert.deepEqual(mailGate({ mode: "off", pathMode: "off" }), {
+      kind: "closed",
+      reason: "mail-off",
+    });
+  });
+
+  it("csak az ÚT zárva: az ok path-off, és EGY kulcshoz vezet", () => {
+    assert.deepEqual(mailGate({ mode: "live", pathMode: "off" }), {
+      kind: "closed",
+      reason: "path-off",
+    });
+  });
+
+  it("mindkettő nyitva: a kapu NEM zár", () => {
+    assert.deepEqual(mailGate({ mode: "live", pathMode: "live" }), {
+      kind: "open",
+    });
   });
 });
 
