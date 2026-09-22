@@ -650,7 +650,8 @@ model User {
   sessions                   Session[]
   /// A LATHATOSAGI HOZZARENDELESEI: melyik alegysegeket latja (a reszfaval egyutt).
   unitAssignments            UserWorksheetDepartment[]
-  notificationRoles          UserNotificationRole[]   @relation("UserNotificationRole")
+  notificationRoles          UserNotificationRole[]        @relation("UserNotificationRole")
+  serviceCapabilities        UserServiceCapability[]       @relation("UserServiceCapability")
   auditLogs                  AuditLog[]
   domainEvents               DomainEvent[]
   stockMovements             StockMovement[]
@@ -700,6 +701,10 @@ model User {
   /// A munkanaplo-bejegyzesei. `SetNull` a torleskor: a bejegyzes marad, a
   /// szerzo neve nelkul.
   worksheetEntries           WorksheetEntry[]              @relation("WorksheetEntryAuthor")
+  /// Anyagigenyek, amiket ez a kollega adott fel a munkalaprol.
+  requestedMaterialRequests  MaterialRequest[]             @relation("MaterialRequestRequestedBy")
+  /// Anyagigenyek, amiket ez a kollega jelolt "beerkezett"-nek.
+  receivedMaterialRequests   MaterialRequest[]             @relation("MaterialRequestReceivedBy")
   deviceTokens               DeviceToken[]
   /// A torles SZANDEKOSAN Restrict, nem SetNull. SetNull mellett egy partner
   /// torlese a fiokot csendben "sajat kollegava" tenne (mindket mezo NULL),
@@ -3680,6 +3685,13 @@ model WorksheetDepartment {
 enum NotificationRole {
   /// Ugyfel hibajegyet nyitott a partnerportalon.
   SERVICE_JOB_OPENED
+  /// A MASODIK PONT, AMIT A FEJLEC MEGJOSOLT. Szervizes anyagigenyt kuldott a
+  /// munkalaprol (Balazs kerese, 2026-09-22 12:15:46 UTC). Csak az ERTESULES
+  /// szerepe -- a beerkezes JELOLESE kulon jogosultsag, lasd
+  /// `ServiceCapability.MATERIAL_REQUEST_MARK_RECEIVED`: Balazs kifejezetten
+  /// KET FUGGETLEN jelolonegyzetet kert (2026-09-22 20:28:56 UTC, "Nem. Ket
+  /// kulon jelolo legyen"), es a ketto EGYMAS NELKUL is allithato.
+  MATERIAL_REQUEST_CREATED
 }
 
 /// KI KAP ERTESITEST, ES MIROL.
@@ -3699,6 +3711,43 @@ model UserNotificationRole {
 
   @@id([userId, role])
   @@index([role])
+}
+
+/// KI VEGEZHET EGY MUVELETET, MEGNEVEZETT KESZLET -- UGYANAZ A HAZI MINTA,
+/// MINT `UserNotificationRole`-NAL, DE SZANDEKOSAN KULON TABLA.
+///
+/// A ketto MAS TENGELY: az ertesites arrol szol, KI ERTESUL, ez arrol, KI
+/// VEGEZHETI EL. Egy kozos tablaba tenni oket pontosan az a hiba lenne, amit
+/// ez a haz mashol elkerul (lasd a mobil valasz-tukor orzojet, 2026-09-22
+/// este): egy megkulonbozteto ket szerepet viselne, es a kesobbi olvaso nem
+/// tudna, melyiket nezi.
+///
+/// Balazs a ket jelolot KIFEJEZETTEN fuggetlennek kerte (2026-09-22 20:28:56
+/// UTC): ugyanaz az ember lehet mindkettő, csak egyik sem, vagy barmelyik
+/// egyedul.
+enum ServiceCapability {
+  /// A "szerviz anyagbeszerzes" jelolonegyzet MASODIK fele: az "anyag
+  /// beerkezett" gomb megnyomasa a munkalapnal. SZANDEKOSAN NEM
+  /// "MATERIAL_REQUEST_FULFILL" -- az a szerepet neveznte meg (a beszerzest
+  /// vegzi), holott a jelolo csak EGY dolgot enged: a beerkezes RÖGZITESET.
+  /// A ketto ma egyben jar (aki beszerzi, az jelzi is), de a nev a
+  /// MUVELETET mondja, nem a szemelyt mogotte -- acrobot javaslata,
+  /// 2026-09-22 22:41.
+  MATERIAL_REQUEST_MARK_RECEIVED
+}
+
+/// LASD `UserNotificationRole` FEJLECET -- BETURE UGYANAZ AZ ALAK, MAS
+/// TENGELYRE. A `role` nev helyett `capability`, hogy egy olvaso a mezo
+/// nevebol is lassa, melyik tablat nezi.
+model UserServiceCapability {
+  userId     String
+  capability ServiceCapability
+  assignedAt DateTime          @default(now())
+
+  user User @relation("UserServiceCapability", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, capability])
+  @@index([capability])
 }
 
 model UserWorksheetDepartment {
@@ -3909,9 +3958,14 @@ model Worksheet {
   /// indul; onnantól a lap saját adata.
   assets           WorksheetAsset[]
 
-  documents WorksheetDocument[]
+  documents        WorksheetDocument[]
   /// A MUNKANAPLO: mit csinalt a szerelo, sajat szavaival.
-  entries   WorksheetEntry[]
+  entries          WorksheetEntry[]
+  /// ANYAGIGENYEK -- A LAPHOZ KOTVE, NEM A VERZIOHOZ, UGYANAZON OKBOL, MINT A
+  /// `documents` ES AZ `assignees`: a munka kozben merul fel, nem a szamlazott
+  /// tartalom resze, es egy lezart verzio nem korlatozhatja. Lasd a
+  /// `MaterialRequest` fejlecet.
+  materialRequests MaterialRequest[]
 
   @@index([customerId, createdAt])
   @@index([departmentId])
@@ -4149,6 +4203,124 @@ model WorksheetEntry {
   /// parost fedi, mert a lekerdezes mindig egy lapra szol.
   @@index([worksheetId, createdAt])
   @@index([authorId])
+}
+
+/// ANYAG, AMI HIANYZIK A MUNKA ELVEGZESEHEZ. Balazs szo szerinti kerese,
+/// 2026-09-22 12:15:46 UTC: a szervizes munka kozben veszi eszre, hogy kell
+/// valami, felviszi a teteleket, es "ha kesz van ranyom az elkuld gombra".
+///
+/// === A MUNKALAPHOZ TARTOZIK, NEM A VERZIOHOZ ===
+///
+/// Nem talalgatas: a haz mar ketszer eldontotte ugyanezt a kerdest, es mindket
+/// dontes ide illik.
+///
+///   WorksheetLine (szamlazhato, alairt TARTALOM)  -> worksheetVersionId
+///   WorksheetDocument (a munkarol szolo BIZONYITEK) -> worksheetId
+///   WorksheetAssignee (ki dolgozik a lapon)          -> worksheetId
+///
+/// Az anyagigeny a masodik ket fajtaba tartozik: nem szamlazott, nem az
+/// ugyfel irja ala, es a munkavegzes KOZBEN keletkezik. A verziohoz kotve
+/// vagy elveszne egy uj verzional, vagy egy lezart verziohoz kellene nyulni.
+///
+/// === A "BEJEGYZES" MAGA EZ A SOR, NINCS KULON NAPLO-TETEL ===
+///
+/// Balazs szava: "errol keszul egy bejegyzes". A hazban NINCS WorksheetEvent
+/// (van AssetEvent, ServiceJobEvent, de a Worksheet-nek nincs sajat
+/// esemeny-tablaja), es a `WorksheetEntry` (munkanaplo) szabad szoveg, nem
+/// strukturalt tetel-lista. Uj altalanos esemeny-rendszert epiteni csak
+/// emiatt tulepitesnek tunik -- ez a sor MAGA a bejegyzes: ki kerte, mikor,
+/// mit, es (ha megtortent) ki es mikor jelolte beerkezettnek. EZ AZ EN
+/// OLVASATOM, nem meres.
+///
+/// === KET LEPES, KET ALLAPOT -- JAVITVA, MIELOTT MEGEPULT VOLNA ===
+///
+/// Balazs kerese ket mozzanatot ir le (tetel-felvitel, majd kulon "elkuld"
+/// gomb). Az ELSO valtozatom ezt UGY-kerdesnek nezte (a felhasznalo
+/// helyileg allitja ossze a listat, a sor csak kuldeskor jon letre, EGY
+/// hivasban) -- acrobot kijavitotta, mielott kod epult volna ra: "Az
+/// API-reteg tudja, hogy a letrehozas es az ELKULDES ket kulon muvelet...
+/// Ha ez a szeletbe nem kerul bele, a web-szelet fogja kitalalni, es akkor
+/// az allapot-gep a feluleten szuletik meg -- rossz helyen."
+///
+/// EZERT A `MaterialRequestStatus` HAROM ERTEKET VESZ FEL, LASD LENT. A sor
+/// MAR A FELVITELKOR letrejon `DRAFT` allapotban; a kuldes egy KULON,
+/// KIMONDOTT atmenet (`DRAFT` -> `OPEN`), es CSAK ez inditja az elso
+/// ertesitesi kort. Ha egy DRAFT sosem kerul elkuldesre, orokre igy marad
+/// -- ez nem hiba, csak nem lehet lathatatlan (acrobot kikotese): a
+/// szervizes lassa a SAJAT piszkozatat a munkalapon (webes/mobil szelet).
+/// HAROM ALLAPOT, NEM KETTO -- acrobot kikotese, 2026-09-22 22:52:23 UTC:
+/// "Az API-reteg tudja, hogy a letrehozas es az ELKULDES ket kulon muvelet,
+/// es CSAK a masodik indit ertesitest." A DRAFT -> OPEN atmenet EGYETLEN,
+/// KIMONDOTT lepes -- ha ez a mezoben nincs benne, az allapot-gep a
+/// FELULETEN szuletne meg, rossz helyen (lasd `MaterialRequest` fejlecet).
+enum MaterialRequestStatus {
+  /// A szervizes MEG FELVISZI a teteleket, nem kuldte el. Ertesites NEM megy
+  /// -- addig nincs mit ertesiteni. Ha egy DRAFT sosem kerul elkuldesre,
+  /// orokre itt marad; ez nem hiba, de a feluleten LATHATO kell maradjon a
+  /// SAJAT letrehozojanak (acrobot kikotese).
+  DRAFT
+  /// Elkuldve ("elkuld" gomb), a beszerzesre var. Ekkor indul az ELSO
+  /// ertesitesi kor.
+  OPEN
+  /// Valaki megnyomta az "anyag beerkezett" gombot. Ekkor indul a MASODIK,
+  /// tagabb ertesitesi kor.
+  RECEIVED
+}
+
+model MaterialRequest {
+  id            String                @id @default(cuid())
+  worksheetId   String
+  status        MaterialRequestStatus @default(DRAFT)
+  requestedById String?
+  /// A PISZKOZAT LETREHOZASANAK IDEJE -- NEM AZ ELKULDESE. Lasd
+  /// `submittedAt` a masik idopontert.
+  createdAt     DateTime              @default(now())
+  /// MIKOR NYOMTA MEG AZ "ELKULD" GOMBOT. `null`, amig DRAFT. Kulon mezo a
+  /// `createdAt` mellett, ugyanazon okbol, mint a `receivedAt` a
+  /// `createdAt` mellett: ket kulon esemeny, ket kulon idopont.
+  submittedAt   DateTime?
+  receivedAt    DateTime?
+  receivedById  String?
+
+  worksheet   Worksheet             @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  /// `SetNull`, ugyanazon okbol, mint a `WorksheetEntry.authorId`-nal: egy
+  /// tavozo kollega kerese nem tunhet el, csak a neve.
+  requestedBy User?                 @relation("MaterialRequestRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  receivedBy  User?                 @relation("MaterialRequestReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  items       MaterialRequestItem[]
+
+  /// A LISTA IDOREND SZERINT MEGY, es a lap az egyetlen szuro -- ugyanaz a
+  /// minta, mint a `WorksheetEntry`-nel.
+  @@index([worksheetId, createdAt])
+  /// A BESZERZO SAJAT LISTAJA EZEN FUT: "ram varo anyagigenyek", vagyis a
+  /// meg nem `RECEIVED` sorok, allapot szerint szurve.
+  @@index([status, createdAt])
+}
+
+/// EGY TETEL AZ ANYAGIGENYEN. HAROM SZABAD SZOVEGES MEZO, NEM KETTO, ES EGYIK
+/// SEM VALIDALT -- Balazs kifejezett kerese, 2026-09-22 20:26:14 UTC: "A nev
+/// szabad szoveg utana a mennyiseg es egyseg kulon mezoben hogy legyen valami
+/// formalya. Oda is azt irbe amit akar de legyen kulon."
+///
+/// A `quantity` SZANDEKOSAN String, NEM Decimal: az eredeti peldaja "10
+/// meter" volt, ami egy szam-mezobe nem fer, es Balazs kimondta, hogy oda is
+/// szabad szoveg megy ("kb 10" is). A harom mezo a FORMAROL szol, nem az
+/// ellenorzesrol -- keszlet-kapcsolat, termek-azonosito es
+/// egyseg-torzsadat MA nincs.
+model MaterialRequestItem {
+  id                String @id @default(cuid())
+  materialRequestId String
+  position          Int
+  /// Pl. "40mm konyok".
+  name              String
+  /// Pl. "2", vagy "10 meter" -- szabad szoveg.
+  quantity          String
+  /// Pl. "db" -- szabad szoveg.
+  unit              String
+
+  materialRequest MaterialRequest @relation(fields: [materialRequestId], references: [id], onDelete: Cascade)
+
+  @@unique([materialRequestId, position])
 }
 
 /// Az aláírás a VERZIÓHOZ tartozik, nem a munkalaphoz. Ha egy már aláírt lap

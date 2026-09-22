@@ -719,3 +719,187 @@ describe("a munkalap kikuldese alairasra", () => {
     assert.deepEqual(kuldott, []);
   });
 });
+
+/**
+ * AZ ANYAGIGENY KET LEVELEZESI UTJA.
+ *
+ * SAJAT, ONALLO FIXTURA a fenti `alairasSzolgaltatas()` helyett: az a fenti
+ * ut `context`/`recordNotification` mockjait viszi, amiket ez a ket ut
+ * EGYIKE sem hasznal (lasd `TicketMailService.deliverMaterialRequestMail`
+ * fejlecet). Egy kozos helyettes csak zajt vinne be.
+ */
+function anyagigenySzolgaltatas(be: {
+  template?: { subject: string; body: string } | null;
+  mode?: string;
+  created?: string;
+  received?: string;
+  redirect?: string;
+  sender?: MailSender | null;
+}) {
+  const kuldott: OutgoingMail[] = [];
+  const repository: Pick<TicketMailRepository, "template"> = {
+    template: async () => be.template ?? null,
+  };
+  const sender: MailSender | null =
+    be.sender === undefined
+      ? {
+          send: async (mail) => {
+            kuldott.push(mail);
+          },
+        }
+      : be.sender;
+  return {
+    service: new TicketMailService(repository as TicketMailRepository, sender, {
+      TICKET_MAIL_MODE: be.mode ?? "live",
+      TICKET_MAIL_MATERIAL_REQUEST_CREATED: be.created ?? "live",
+      TICKET_MAIL_MATERIAL_REQUEST_RECEIVED: be.received ?? "live",
+      TICKET_MAIL_REDIRECT_TO: be.redirect ?? "off",
+    } as NodeJS.ProcessEnv),
+    kuldott,
+  };
+}
+
+const EGY_TETEL = "- 40mm könyök: 2 db";
+
+describe("az anyagigény levele -- létrehozáskor", () => {
+  it("zárt kapunál nem küld", async () => {
+    const { service, kuldott } = anyagigenySzolgaltatas({ mode: "off" });
+    const eredmeny = await service.deliverMaterialRequestCreated({
+      materialRequestId: "mr-1",
+      worksheetNumber: "BIO-2026-001",
+      worksheetLink: "",
+      requesterName: "Szerelő Sándor",
+      itemsText: EGY_TETEL,
+      recipients: [{ email: "beszerzo@example.invalid" }],
+    });
+    assert.deepEqual(eredmeny, { kind: "skipped", reason: "mail-off" });
+    assert.deepEqual(kuldott, []);
+  });
+
+  it('üres címzettlistánál "no-recipient" -- ez a jegy tulajdonsága, nem a környezeté', async () => {
+    const { service, kuldott } = anyagigenySzolgaltatas({});
+    const eredmeny = await service.deliverMaterialRequestCreated({
+      materialRequestId: "mr-1",
+      worksheetNumber: "BIO-2026-001",
+      worksheetLink: "",
+      requesterName: "Szerelő Sándor",
+      itemsText: EGY_TETEL,
+      recipients: [],
+    });
+    assert.deepEqual(eredmeny, { kind: "skipped", reason: "no-recipient" });
+    assert.deepEqual(kuldott, []);
+  });
+
+  it("nyitott kapunál kimegy, az alapértelmezett sablonnal", async () => {
+    const { service, kuldott } = anyagigenySzolgaltatas({});
+    const eredmeny = await service.deliverMaterialRequestCreated({
+      materialRequestId: "mr-1",
+      worksheetNumber: "BIO-2026-001",
+      worksheetLink: "https://os.acropora.hu/szerviz/munkalapok/w-1",
+      requesterName: "Szerelő Sándor",
+      itemsText: EGY_TETEL,
+      recipients: [{ email: "beszerzo@example.invalid" }],
+    });
+    assert.deepEqual(eredmeny, { kind: "sent" });
+    assert.equal(kuldott.length, 1);
+    assert.deepEqual(kuldott[0]?.to, ["beszerzo@example.invalid"]);
+    assert.equal(kuldott[0]?.subject, "Új anyagigény: BIO-2026-001");
+    assert.match(kuldott[0]?.text ?? "", /Szerelő Sándor/);
+    assert.match(kuldott[0]?.text ?? "", /40mm könyök: 2 db/);
+    assert.match(
+      kuldott[0]?.text ?? "",
+      /https:\/\/os\.acropora\.hu\/szerviz\/munkalapok\/w-1/,
+    );
+  });
+
+  it("piszkozat munkalapnál (nincs szám) a sablon nem hasal el", async () => {
+    /*
+      A `munkalap_szama` URESEN IS ERVENYES ERTEK a `renderMailTemplate`
+      szamara (lasd a valtozo fejlecet a kozos csomagban) -- csak a HIANYZO
+      kulcs szamit "ismeretlennek". Ez az allitas azt zarja ki, hogy valaki
+      veletlenul kikapcsolja ezt az utat null szammal.
+    */
+    const { service, kuldott } = anyagigenySzolgaltatas({});
+    const eredmeny = await service.deliverMaterialRequestCreated({
+      materialRequestId: "mr-1",
+      worksheetNumber: null,
+      worksheetLink: "",
+      requesterName: "Szerelő Sándor",
+      itemsText: EGY_TETEL,
+      recipients: [{ email: "beszerzo@example.invalid" }],
+    });
+    assert.deepEqual(eredmeny, { kind: "sent" });
+    assert.equal(kuldott.length, 1);
+  });
+
+  it("a tárolt admin-sablon felülírja az alapértelmezettet", async () => {
+    const { service, kuldott } = anyagigenySzolgaltatas({
+      template: { subject: "Anyag kell: {{kero}}", body: "{{tetelek}}" },
+    });
+    await service.deliverMaterialRequestCreated({
+      materialRequestId: "mr-1",
+      worksheetNumber: "BIO-2026-001",
+      worksheetLink: "",
+      requesterName: "Szerelő Sándor",
+      itemsText: EGY_TETEL,
+      recipients: [{ email: "beszerzo@example.invalid" }],
+    });
+    assert.equal(kuldott[0]?.subject, "Anyag kell: Szerelő Sándor");
+    assert.equal(kuldott[0]?.text, EGY_TETEL);
+  });
+
+  it("a másik útvonal saját kapcsolóján áll -- a kettő függetlenül zárható", async () => {
+    const { service, kuldott } = anyagigenySzolgaltatas({ created: "off" });
+    const eredmeny = await service.deliverMaterialRequestCreated({
+      materialRequestId: "mr-1",
+      worksheetNumber: "BIO-2026-001",
+      worksheetLink: "",
+      requesterName: "Szerelő Sándor",
+      itemsText: EGY_TETEL,
+      recipients: [{ email: "beszerzo@example.invalid" }],
+    });
+    assert.deepEqual(eredmeny, { kind: "skipped", reason: "path-off" });
+    assert.deepEqual(kuldott, []);
+  });
+});
+
+describe("az anyagigény levele -- beérkezéskor", () => {
+  it("nyitott kapunál kimegy, a kérő és a felelősök egyszerre kapják", async () => {
+    const { service, kuldott } = anyagigenySzolgaltatas({});
+    const eredmeny = await service.deliverMaterialRequestReceived({
+      materialRequestId: "mr-1",
+      worksheetNumber: "BIO-2026-001",
+      worksheetLink: "https://os.acropora.hu/szerviz/munkalapok/w-1",
+      itemsText: EGY_TETEL,
+      recipients: [
+        { email: "kero@example.invalid" },
+        { email: "felelos@example.invalid" },
+      ],
+    });
+    assert.deepEqual(eredmeny, { kind: "sent" });
+    assert.equal(kuldott.length, 1);
+    assert.deepEqual(kuldott[0]?.to, [
+      "kero@example.invalid",
+      "felelos@example.invalid",
+    ]);
+    assert.equal(kuldott[0]?.subject, "Megérkezett az anyag: BIO-2026-001");
+  });
+
+  /**
+   * A KET UT FUGGETLENUL ZARHATO -- ugyanaz az allitas, mint a
+   * letrehozasnal, csak a MASIK kapcsolora. Ha egy kozos kapcsolot
+   * hasznalnank, ez az allitas nem tudna megkulonboztetni a ket esetet.
+   */
+  it("a saját kapcsolóján zárva, a másik (created) nyitva marad hatástalan", async () => {
+    const { service, kuldott } = anyagigenySzolgaltatas({ received: "off" });
+    const eredmeny = await service.deliverMaterialRequestReceived({
+      materialRequestId: "mr-1",
+      worksheetNumber: "BIO-2026-001",
+      worksheetLink: "",
+      itemsText: EGY_TETEL,
+      recipients: [{ email: "kero@example.invalid" }],
+    });
+    assert.deepEqual(eredmeny, { kind: "skipped", reason: "path-off" });
+    assert.deepEqual(kuldott, []);
+  });
+});

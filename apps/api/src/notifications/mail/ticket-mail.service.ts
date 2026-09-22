@@ -124,6 +124,57 @@ export const DEFAULT_WORKSHEET_SEND_FOR_SIGNATURE_TEMPLATE = {
   ].join("\n"),
 } as const;
 
+/**
+ * AZ OTODIK ES HATODIK LEVELEZESI ESEMENY: ANYAGIGENY A MUNKALAPROL.
+ *
+ * Balazs szo szerinti kerese, 2026-09-22 12:15:46 UTC: "...kap rola pusht es
+ * emailt is." KET KULON ESEMENY, mert KET FUGGETLEN cimzettkor tartozik
+ * hozzajuk (lasd `MaterialRequestCreatedNotice`/`...ReceivedNotice`
+ * fejleceit) -- egy kozos esemeny egy kozos cimzettlistat sugallna.
+ *
+ * `{{munkalap_belso_linkje}}`, NEM `{{munkalap_linkje}}` -- REBASE UTANI
+ * JAVITAS. A rebase pillanataban a `WORKSHEET_SEND_FOR_SIGNATURE` esemeny
+ * (fent) MAR letezett a fo agon, es UGYANEZT a nevet hasznalta a PARTNER-
+ * PORTALRA mutato linkhez. Ket kulonbozo URL egy kozos nev alatt pont az a
+ * fajta csuszas, amit ez a fajl fejleceben mar leirtunk ("ket masolat
+ * csuszik szet, ahol senki nem nez") -- csak itt nem ket masolat volt,
+ * hanem ket FUGGETLENUL kitalalt valtozo egyezett meg neven. Az anyagigeny
+ * cimzettjei (belsos szervizesek, beszerzok) a BELSO feluletre kell
+ * jussanak, nem a partner-portalra -- oda nincs is belepesuk.
+ */
+export const MATERIAL_REQUEST_CREATED = "MATERIAL_REQUEST_CREATED";
+export const MATERIAL_REQUEST_RECEIVED = "MATERIAL_REQUEST_RECEIVED";
+
+export const DEFAULT_MATERIAL_REQUEST_CREATED_TEMPLATE = {
+  subject: "Új anyagigény: {{munkalap_szama}}",
+  body: [
+    "Kedves {{cimzett}}!",
+    "",
+    "{{kero}} anyagigényt küldött a munkalapról.",
+    "",
+    "Munkalap: {{munkalap_szama}}",
+    "",
+    "Kért tételek:",
+    "{{tetelek}}",
+    "",
+    "Munkalap: {{munkalap_belso_linkje}}",
+  ].join("\n"),
+} as const;
+
+export const DEFAULT_MATERIAL_REQUEST_RECEIVED_TEMPLATE = {
+  subject: "Megérkezett az anyag: {{munkalap_szama}}",
+  body: [
+    "Kedves {{cimzett}}!",
+    "",
+    "Megérkezett a kért anyag a(z) {{munkalap_szama}} munkalaphoz.",
+    "",
+    "Kért tételek:",
+    "{{tetelek}}",
+    "",
+    "Munkalap: {{munkalap_belso_linkje}}",
+  ].join("\n"),
+} as const;
+
 export type TicketMailOutcome =
   | { readonly kind: "sent" }
   | {
@@ -512,5 +563,137 @@ export class TicketMailService {
       });
 
     return { kind: "sent" };
+  }
+
+  /**
+   * A KOZOS TORZS, ANYAGIGENYRE -- a KET esemeny (letrehozva, beerkezett)
+   * ugyanazt a sablon-feloldast es kuldest hasznalja, csak mas esemeny-id-t
+   * es mas ertekeket kap.
+   *
+   * NINCS `this.repository.recordNotification`: az a `ServiceJobEvent`
+   * tablaba ir, es `serviceJobId`-t var -- ide nem illik. A push-kuldes
+   * naploja (`NotificationLogRepository`) mar fedi az auditot; kulon,
+   * lathato idovonal-bejegyzest ehhez a lepeshez NEM epitunk (lasd a
+   * `MaterialRequest` sema-fejlecet: "a bejegyzes MAGA ez a sor").
+   */
+  private async deliverMaterialRequestMail(input: {
+    eventId: string;
+    defaultTemplate: { subject: string; body: string };
+    recipients: readonly { readonly email: string }[];
+    values: Record<string, string>;
+    logLabel: string;
+  }): Promise<TicketMailOutcome> {
+    const decision = serviceJobOpenedMailDecision({
+      mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+      pathMode: mailModeOf(this.environment[`TICKET_MAIL_${input.eventId}`]),
+      recipients: input.recipients,
+    });
+    if (decision.kind === "skip") {
+      this.logger.log(
+        `${input.logLabel} levele kihagyva (${decision.reason}).`,
+      );
+      return { kind: "skipped", reason: decision.reason };
+    }
+
+    const tarolt = await this.repository.template(input.eventId);
+    const sablon = tarolt ?? input.defaultTemplate;
+    const targy = renderMailTemplate(sablon.subject, input.values);
+    const torzs = renderMailTemplate(sablon.body, input.values);
+    if (!targy.ok || !torzs.ok) {
+      const ismeretlen = [
+        ...(targy.ok ? [] : targy.unknown),
+        ...(torzs.ok ? [] : torzs.unknown),
+      ];
+      this.logger.warn(
+        `A levél sablonja ismeretlen változót tartalmaz: ${ismeretlen.join(", ")}.`,
+      );
+      return { kind: "failed", unknown: [...new Set(ismeretlen)] };
+    }
+
+    if (!this.sender) return { kind: "skipped", reason: "no-sender" };
+    await this.sender.send({
+      to: [...decision.to],
+      subject: headerSafe(targy.text),
+      text: torzs.text,
+    });
+    return { kind: "sent" };
+  }
+
+  async deliverMaterialRequestCreated(input: {
+    materialRequestId: string;
+    worksheetNumber: string | null;
+    worksheetLink: string;
+    requesterName: string;
+    itemsText: string;
+    recipients: readonly { readonly email: string }[];
+  }): Promise<TicketMailOutcome> {
+    return this.deliverMaterialRequestMail({
+      eventId: MATERIAL_REQUEST_CREATED,
+      defaultTemplate: DEFAULT_MATERIAL_REQUEST_CREATED_TEMPLATE,
+      recipients: input.recipients,
+      values: {
+        cimzett: "Kolléga",
+        munkalap_szama: input.worksheetNumber ?? "",
+        kero: input.requesterName,
+        tetelek: input.itemsText,
+        munkalap_belso_linkje: input.worksheetLink,
+      },
+      logLabel: "Anyagigény",
+    });
+  }
+
+  notifyMaterialRequestCreated(input: {
+    materialRequestId: string;
+    worksheetNumber: string | null;
+    worksheetLink: string;
+    requesterName: string;
+    itemsText: string;
+    recipients: readonly { readonly email: string }[];
+  }): void {
+    void this.deliverMaterialRequestCreated(input).catch((cause: unknown) => {
+      this.logger.warn(
+        `Az anyagigény levele nem sikerült (${input.materialRequestId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
+    });
+  }
+
+  async deliverMaterialRequestReceived(input: {
+    materialRequestId: string;
+    worksheetNumber: string | null;
+    worksheetLink: string;
+    itemsText: string;
+    recipients: readonly { readonly email: string }[];
+  }): Promise<TicketMailOutcome> {
+    return this.deliverMaterialRequestMail({
+      eventId: MATERIAL_REQUEST_RECEIVED,
+      defaultTemplate: DEFAULT_MATERIAL_REQUEST_RECEIVED_TEMPLATE,
+      recipients: input.recipients,
+      values: {
+        cimzett: "Kolléga",
+        munkalap_szama: input.worksheetNumber ?? "",
+        tetelek: input.itemsText,
+        munkalap_belso_linkje: input.worksheetLink,
+      },
+      logLabel: '"Anyag beérkezett"',
+    });
+  }
+
+  notifyMaterialRequestReceived(input: {
+    materialRequestId: string;
+    worksheetNumber: string | null;
+    worksheetLink: string;
+    itemsText: string;
+    recipients: readonly { readonly email: string }[];
+  }): void {
+    void this.deliverMaterialRequestReceived(input).catch((cause: unknown) => {
+      this.logger.warn(
+        `Az "anyag beérkezett" levél nem sikerült (${input.materialRequestId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
+    });
   }
 }

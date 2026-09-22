@@ -38,6 +38,12 @@ export interface ServiceJobNotificationOutcome {
   attempts: NotificationAttempt[];
 }
 
+/** Ugyanaz a kimenetel, anyagigenyre. */
+export interface MaterialRequestNotificationOutcome {
+  materialRequestId: string;
+  attempts: NotificationAttempt[];
+}
+
 /**
  * Writes down who was reached and who was not.
  *
@@ -81,6 +87,30 @@ export class NotificationLogRepository extends Repository {
       eventType: "serviceJob.assignment.notified",
       aggregateType: "ServiceJob",
       aggregateId: outcome.serviceJobId,
+      attempts: outcome.attempts,
+    });
+  }
+
+  /** Ugyanaz a kimenetel, anyagigenyre -- lasd a fenti ket metodus fejleceit. */
+  async recordMaterialRequestCreated(
+    outcome: MaterialRequestNotificationOutcome,
+  ): Promise<void> {
+    await this.record({
+      eventType: "materialRequest.created.notified",
+      aggregateType: "MaterialRequest",
+      aggregateId: outcome.materialRequestId,
+      attempts: outcome.attempts,
+    });
+  }
+
+  /** Kulon esemeny-tipus, ugyanazon okbol, mint fent: kulon aggregatum. */
+  async recordMaterialRequestReceived(
+    outcome: MaterialRequestNotificationOutcome,
+  ): Promise<void> {
+    await this.record({
+      eventType: "materialRequest.received.notified",
+      aggregateType: "MaterialRequest",
+      aggregateId: outcome.materialRequestId,
       attempts: outcome.attempts,
     });
   }
