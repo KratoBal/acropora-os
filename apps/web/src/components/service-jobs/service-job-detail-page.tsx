@@ -31,6 +31,7 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { megjegyzesKuldheto } from "./megjegyzes-celja";
 import { HandoverMailDialog } from "./handover-mail-dialog";
+import { KULDES_KIHAGYAS_OKA } from "./handover-mail-skip-reason";
 import { PartnerPicker } from "./partner-picker";
 import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
@@ -523,10 +524,20 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
         A KET NEM-KULDO KIMENETEL AZ ABLAKBAN MARAD, es ez szandekos: a
         kezelo szovege ilyenkor MEGVAN, es egy bezarodo ablak elvenne tole.
       */
+      /*
+        A KIHAGYAS OKA A KEZELOHOZ IS ELJUT, NEM CSAK A NAPLOBA (2026-09-22).
+
+        Eddig itt EGY mondat allt minden kihagyasra, es a `reason`-t el sem
+        olvastuk. A nyolc okbol kettonel (`no-sender`, `no-job`) a cimzettek
+        HELYESEK -- a regi mondat tehat epp oda kuldte a kezelot, ahol nincs
+        mit javitani. A tablat a szerver oka indexeli, alapertelmezett ag
+        NELKUL: egy ujabb ok igy forditasi hiba lesz, nem "ismeretlen ok" a
+        kepernyon.
+      */
       setMailSendError(
         eredmeny.kind === "refused"
           ? eredmeny.message
-          : "A levél nem ment ki. Frissítsd az oldalt, és nézd meg újra a címzetteket.",
+          : KULDES_KIHAGYAS_OKA[eredmeny.reason],
       );
     } catch (cause) {
       setMailSendError(

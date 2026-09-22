@@ -16,6 +16,7 @@ import {
   savotMond,
   setOnLine,
 } from "@/components/service/service-offline-notice.testing";
+import { KULDES_KIHAGYAS_OKA } from "./handover-mail-skip-reason";
 import { ServiceJobDetailPage } from "./service-job-detail-page";
 
 const api = vi.hoisted(() => ({
@@ -1335,5 +1336,47 @@ describe("a lezárt hibajegy kiküldése", () => {
     ).toBeTruthy();
     expect(screen.queryByText(/A hibajegy kiküldve/)).toBeNull();
     expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy();
+  });
+
+  /**
+   * ES A KIHAGYAS OKA IS ELJUT A KEZELOHOZ (2026-09-22).
+   *
+   * === AMIT MER, ES AMIT SZANDEKOSAN NEM ===
+   *
+   * A vart erteket a TABLABOL kerem el, nem gepelem be. Igy az allitas a
+   * KOTEST meri (a szerver oka -> a hozza tartozo mondat), nem a szoveget: egy
+   * jobb megfogalmazas nem lehet piros teszt.
+   *
+   * === MIERT EPP A `no-sender` A BEMENET ===
+   *
+   * Ez az EGYETLEN ok, amit az elonezet szerkezetileg nem tud adni -- a kuldot
+   * csak a kuldes utja nezi meg. Vagyis pont az az allapot, amiben a kezelo az
+   * elonezetben KULDHETOT lat, megnyomja a gombot, es a valasz utan kell
+   * megtudnia, hogy a kornyezet hianyzik, nem a cimzettek.
+   *
+   * A regi, egyetlen mondat ("nezd meg ujra a cimzetteket") epp ilyenkor volt a
+   * legrosszabb: a cimzettek HELYESEK, tehat a kezelo ott keresne a hibat, ahol
+   * nincs.
+   */
+  it("a küldés kihagyásának OKA jut el a kezelőhöz, nem egy közös mondat", async () => {
+    api.sendHandoverMail.mockResolvedValue({
+      kind: "skipped",
+      reason: "no-sender",
+    });
+    const ablak = await ablakotNyit();
+    await waitFor(() =>
+      expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy(),
+    );
+
+    fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+      target: { value: "Köszönjük." },
+    });
+    fireEvent.click(
+      within(ablak).getByRole("button", { name: "Elküldés 2 címzettnek" }),
+    );
+
+    expect(
+      await within(ablak).findByText(KULDES_KIHAGYAS_OKA["no-sender"]),
+    ).toBeTruthy();
   });
 });
