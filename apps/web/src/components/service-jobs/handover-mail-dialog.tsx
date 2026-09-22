@@ -30,7 +30,7 @@ import type {
  */
 
 /**
- * AZ OT KIHAGYASI OK OT KULON MONDATA.
+ * A HAT KIHAGYASI OK HAT KULON MONDATA.
  *
  * `Record<...>`, NEM egy `switch` alapertelmezett aggal: ha a szerver egy
  * ujabb okot vezet be, ez FORDITASI HIBA lesz. Egy alapertelmezett ag csendben
@@ -41,16 +41,25 @@ import type {
  * fordito PONTOSAN ITT allt meg -- nem a felhasznalonal, egy ures mondattal.
  * Ez a bekezdes ezert nem a szandekot irja le tovabb, hanem egy MERT esetet.
  *
- * Mindegyik mondat a TEENDOT nevezi meg, nem az allapotot: az ot ok ot
+ * Mindegyik mondat a TEENDOT nevezi meg, nem az allapotot: a hat ok hat
  * kulonbozo embert erint, es egy kozos "nem kuldheto" mondat mindegyiknel
- * ugyanoda vezetne -- hozzank. A ket kapcsolos ok kozott is VALODI a
- * kulonbseg: az egyik az egesz kornyezetre szol, a masik EGY levelfajtara.
+ * ugyanoda vezetne -- hozzank. A harom kapcsolos ok kozott is VALODI a
+ * kulonbseg: az elso az egesz kornyezetre szol, a masodik EGY levelfajtara, a
+ * harmadik (`no-redirect`) pedig azt mondja meg, hogy a kuldes MINDEN mas
+ * felteteltol keszen all, es CSAK a cel hianyzik.
+ *
+ * ES A HARMADIK MASODSZOR IGAZOLTA A JOSLATOT, 2026-09-22-en: amikor a hianyzo
+ * atiranyitas sajat okot kapott, a fordito megint PONTOSAN ITT allt meg. Egy
+ * alapertelmezett ag helyette azt mondta volna a kezelonek, hogy "ismeretlen
+ * ok" -- epp abban az allapotban, ahol a level MAJDNEM kiment.
  */
 const KIHAGYAS_OKA: Record<ServiceJobHandoverMailSkipReason, string> = {
   "mail-off":
     "A levélküldés ki van kapcsolva ezen a környezeten, ezért most nem megy ki semmi. Ez üzemeltetési beállítás.",
   "path-off":
     "A levélküldés be van kapcsolva, de az átadási levél külön ki van kapcsolva. Ez is üzemeltetési beállítás, és a többi levéltípust nem érinti.",
+  "no-redirect":
+    "A levélküldés be van kapcsolva, de nincs megadva, hová menjenek a levelek. Amíg ez hiányzik, egyetlen levél sem megy ki senkinek. Ez üzemeltetési beállítás.",
   "no-department":
     "A hibajegyhez nincs helyszín rendelve, így nincs kinek kiküldeni. Előbb a hibajegy helyszínét kell megadni.",
   "no-customer":

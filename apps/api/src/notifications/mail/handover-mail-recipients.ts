@@ -84,6 +84,7 @@ export type HandoverMailDecision =
 export function handoverMailDecision(input: {
   mode: "off" | "live";
   pathMode: "off" | "live";
+  redirect: MailRedirect;
   departmentId: string | null;
   customerId: string | null;
   recipients: readonly HandoverRecipient[];

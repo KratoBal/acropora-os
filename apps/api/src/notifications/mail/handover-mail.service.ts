@@ -117,6 +117,7 @@ export class HandoverMailService {
       job,
       decision: handoverMailDecision({
         mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+        redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
         pathMode: mailModeOf(this.environment.TICKET_MAIL_HANDOVER),
         departmentId: job.departmentId,
         customerId,

@@ -21,6 +21,8 @@ const INAKTIV: HandoverRecipient = {
 const ELO = {
   mode: "live" as const,
   pathMode: "live" as const,
+  /* A teritest a `mailGate` harmadik kapuja nezi; ez a fajl a TOBBI okot meri. */
+  redirect: { kind: "off" } as const,
   departmentId: "dep-1",
   customerId: "cus-1",
   recipients: [AKTIV],
@@ -57,6 +59,7 @@ describe("handoverMailDecision", () => {
     const d = handoverMailDecision({
       mode: "off",
       pathMode: "live",
+      redirect: { kind: "off" } as const,
       departmentId: null,
       customerId: null,
       recipients: [],

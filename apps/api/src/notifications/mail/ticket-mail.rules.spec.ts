@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   mailAuditNote,
   mailGate,
+  mailRedirect,
   mailModeOf,
   ticketMailDecision,
   type TicketOpener,
@@ -55,22 +56,107 @@ describe("a ket reteg SORRENDJE", () => {
    * menne ki semmi.
    */
   it("MINDKÉT kapcsoló zárva: az ok a FŐ kapué, mert oda kell menni", () => {
-    assert.deepEqual(mailGate({ mode: "off", pathMode: "off" }), {
-      kind: "closed",
-      reason: "mail-off",
-    });
+    assert.deepEqual(
+      mailGate({ mode: "off", pathMode: "off", redirect: { kind: "off" } }),
+      {
+        kind: "closed",
+        reason: "mail-off",
+      },
+    );
   });
 
   it("csak az ÚT zárva: az ok path-off, és EGY kulcshoz vezet", () => {
-    assert.deepEqual(mailGate({ mode: "live", pathMode: "off" }), {
-      kind: "closed",
-      reason: "path-off",
-    });
+    assert.deepEqual(
+      mailGate({ mode: "live", pathMode: "off", redirect: { kind: "off" } }),
+      {
+        kind: "closed",
+        reason: "path-off",
+      },
+    );
   });
 
   it("mindkettő nyitva: a kapu NEM zár", () => {
-    assert.deepEqual(mailGate({ mode: "live", pathMode: "live" }), {
-      kind: "open",
+    assert.deepEqual(
+      mailGate({ mode: "live", pathMode: "live", redirect: { kind: "off" } }),
+      {
+        kind: "open",
+      },
+    );
+  });
+
+  /**
+   * A HARMADIK KAPU: HIANYZO ATIRANYITAS MELLETT NEM KULDUNK.
+   *
+   * acrobot dontese (2026-09-22, msg 22022), Balazs keresebol: "nyissuk mind a
+   * harmat de nem menjen ki veletlenul se level senkinek". Az elso alakomban a
+   * vedelem KET ember-lepes helyes SORRENDJEN allt -- ha a negy kapcsolot
+   * beallitja es az otodiket elfelejti, epp az tortenik, amit kizart.
+   *
+   * A SORREND ITT SZAMIT, es kulon allitas all ra lentebb: a `no-redirect` a ket
+   * kapcsolo-ok UTAN jon.
+   */
+  it("nyitott kapcsolók mellett a HIÁNYZÓ átirányítás megállítja a küldést", () => {
+    assert.deepEqual(
+      mailGate({ mode: "live", pathMode: "live", redirect: { kind: "block" } }),
+      { kind: "closed", reason: "no-redirect" },
+    );
+  });
+
+  /**
+   * ES A KIMONDOTT `off` NYIT -- EZ A VEGALLAPOT.
+   *
+   * Enelkul a fenti allitas egy olyan kaputol is zold lenne, ami SOHA nem nyit.
+   * A ketto egyutt mondja meg, hogy a kulonbseget a HIANY es a KIMONDOTT ERTEK
+   * kozott tesszuk, nem a kuldest zarjuk el.
+   */
+  it("KONTROLL: a kimondott `off` átirányítás mellett a kapu NYITVA van", () => {
+    assert.deepEqual(
+      mailGate({ mode: "live", pathMode: "live", redirect: { kind: "off" } }),
+      { kind: "open" },
+    );
+  });
+
+  /**
+   * A SORREND: TELJESEN KIKAPCSOLT KORNYEZETBEN A FO KAPCSOLOT NEVEZZUK MEG.
+   *
+   * Egy rontas, ami a `no-redirect` agat a ket kapcsolo-ok ELE teszi, ezt az
+   * allitast dontene pirosra -- es a naplo azt mondana, hogy egy cim beirasa
+   * eleg, holott meg ket kapcsolo is kell.
+   */
+  it("teljesen zárt környezetben a FŐ kapcsolót nevezi meg, nem a hiányzó címet", () => {
+    assert.deepEqual(
+      mailGate({ mode: "off", pathMode: "off", redirect: { kind: "block" } }),
+      { kind: "closed", reason: "mail-off" },
+    );
+  });
+
+  /**
+   * A HAROM ALLAPOTU FELISMERO, ES A HATARA A HIANY MEG A KIMONDOTT ERTEK KOZOTT.
+   *
+   * A masik negy kapcsolo felismeroje (`mailModeOf`) a hianyzo erteket `off`-nak
+   * veszi. EZ NEM: ott egy elfelejtett ertek csendben NEM KULD, itt csendben
+   * KIKULDENE. A ket irany ara nem egyforma.
+   */
+  it("a hiányzó és az ÜRES érték BLOKKOL, nem irányít át és nem is nyit", () => {
+    for (const ertek of [undefined, null, "", "   "]) {
+      assert.deepEqual(
+        mailRedirect(ertek),
+        { kind: "block" },
+        `érték: ${JSON.stringify(ertek)}`,
+      );
+    }
+  });
+
+  it("a kimondott `off` és `none` NYIT, bármilyen betűzéssel", () => {
+    for (const ertek of ["off", "OFF", " none ", "None"]) {
+      assert.deepEqual(mailRedirect(ertek), { kind: "off" }, `érték: ${ertek}`);
+    }
+  });
+
+  it("minden más értéket CÍMNEK vesz, a körülötte álló szóköz nélkül", () => {
+    assert.deepEqual(mailRedirect(" proba@acropora.hu "), {
+      kind: "on",
+      to: "proba@acropora.hu",
     });
   });
 });
@@ -86,6 +172,7 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "off",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "user-1",
         opener: AKTIV,
       }),
@@ -98,6 +185,7 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: null,
         opener: null,
       }),
@@ -115,6 +203,7 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "user-9",
         opener: null,
       }),
@@ -127,6 +216,7 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "user-1",
         opener: { ...AKTIV, isActive: false },
       }),
@@ -139,6 +229,7 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "user-1",
         opener: AKTIV,
       }),
@@ -156,24 +247,28 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "off",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "u",
         opener: AKTIV,
       }),
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: null,
         opener: null,
       }),
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "u",
         opener: null,
       }),
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "u",
         opener: { ...AKTIV, isActive: false },
       }),

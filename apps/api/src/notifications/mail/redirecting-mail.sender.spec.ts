@@ -34,23 +34,19 @@ function kuldo(env: NodeJS.ProcessEnv) {
 
 describe("a levél-átirányító burok", () => {
   /**
-   * A HIANYZO VALTOZO NEM IRANYIT AT -- ES EZ acrobot MASODIK KIKOTESE.
+   * A HAROM ALLAPOT, ES A HIANYZO ERTEK NEM AZ "off".
    *
-   * MIERT ITT ALL A HATAR: ez az egyetlen allitas, ami megkulonbozteti a
-   * "nincs atiranyitas" allapotot attol, hogy a burok EGYALTALAN NEM HAT. A
-   * ketto kivulrol egyforma (a level a valodi cimzetthez er), es a kulonbseg
-   * csak akkor latszik, ha a kapcsolo ALL -- azt a lenti allitasok merik.
+   * acrobot dontese (2026-09-22, msg 22022): a hianyzo `TICKET_MAIL_REDIRECT_TO`
+   * NE csak ne iranyitson at, hanem NE IS KULDJON. Az elso alakomban a vedelem
+   * ket ember-lepes helyes SORRENDJEN allt -- es egy vedohalo, ami egy
+   * emlekezesen mulik, nem vedohalo.
+   *
+   * A VEGALLAPOT EZERT KIMONDOTT ERTEKEN ALL: amikor tenyleg a vevonek kell
+   * mennie, a valtozo `off` (vagy `none`). Igy az eles kuldes POZITIV allitas
+   * lesz, nem egy uresen hagyott mezo.
    */
-  it("beállítatlan változó mellett a levél ÉRINTETLENÜL megy tovább", async () => {
-    const { belso, sender } = kuldo({});
-    await sender.send(LEVEL);
-
-    assert.equal(belso.kapott.length, 1);
-    assert.deepEqual(belso.kapott[0], LEVEL);
-  });
-
-  it("ÜRES és csupa szóköz értékre sem irányít át", async () => {
-    for (const ertek of ["", "   "]) {
+  it("a kimondott `off` és `none` mellett a levél ÉRINTETLENÜL megy tovább", async () => {
+    for (const ertek of ["off", "OFF", " none "]) {
       const { belso, sender } = kuldo({ TICKET_MAIL_REDIRECT_TO: ertek });
       await sender.send(LEVEL);
       assert.deepEqual(
@@ -59,6 +55,33 @@ describe("a levél-átirányító burok", () => {
         `érték: ${JSON.stringify(ertek)}`,
       );
     }
+  });
+
+  /**
+   * A MASODIK RETEG: HIANYZO ERTEK MELLETT DOB, ES NEM KULD.
+   *
+   * === EZ SOHA NEM SULHET EL RENDES UZEMBEN, ES EPP EZERT KELL ===
+   *
+   * A hianyzo erteket a KAPU fogja meg mind a harom uton (`no-redirect` ok),
+   * MIELOTT a vezerles ideerne. Ha megis idaig jut, az azt jelenti, hogy valaki
+   * a kapu MEGKERULESEVEL hivott kuldest.
+   *
+   * A DOBAS IRANYA A LENYEG: a `block` azt jelenti, hogy nem tudjuk, hova menne
+   * a level -- es a "nem tudjuk" alapertelmezese nem lehet a VALODI cimzett.
+   *
+   * ES A KET ALLITAS KULON ALL: a dobas ONMAGABAN nem bizonyitja, hogy nem ment
+   * ki semmi. Egy alak, ami ELOSZOR kuld es AZUTAN dob, az elsore zold lenne.
+   */
+  it("beállítatlan cím mellett DOB, a valódi címzett helyett", async () => {
+    const { sender } = kuldo({});
+    await assert.rejects(() => sender.send(LEVEL), /TICKET_MAIL_REDIRECT_TO/);
+  });
+
+  it("és a dobás előtt a belső küldő EGYETLEN levelet sem kapott", async () => {
+    const { belso, sender } = kuldo({});
+    await sender.send(LEVEL).catch(() => undefined);
+
+    assert.equal(belso.kapott.length, 0);
   });
 
   /**

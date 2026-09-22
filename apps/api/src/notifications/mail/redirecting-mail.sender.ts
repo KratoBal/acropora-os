@@ -57,6 +57,25 @@ export class RedirectingMailSender implements MailSender {
 
   async send(mail: OutgoingMail): Promise<void> {
     const redirect = mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO);
+
+    /*
+      A MASODIK RETEG, ES SOHA NEM SZABAD ELSULNIE.
+
+      A `block` allapotot (hianyzo `TICKET_MAIL_REDIRECT_TO`) a KAPU fogja meg,
+      mind a harom uton, MIELOTT ide erne a vezerles -- ott `no-redirect` okkal
+      all meg, es a naplo is azt irja. Ha megis idaig jutna, az azt jelenti,
+      hogy valaki a kapu MEGKERULESEVEL hivott kuldest.
+
+      Ilyenkor DOBUNK, nem kuldunk: a `block` azt jelenti, hogy nem tudjuk,
+      hova menne a level, es a "nem tudjuk" alapertelmezese nem lehet a valodi
+      cimzett. A dobas HANGOS es nyomot hagy; egy csendes tovabbkuldes epp azt
+      a kart okozna, amiert ez a kapcsolo letezik.
+    */
+    if (redirect.kind === "block")
+      throw new Error(
+        "TICKET_MAIL_REDIRECT_TO nincs beallitva: a kuldes a kapu megkerulesevel jutott a kuldoig.",
+      );
+
     if (redirect.kind === "off") return this.inner.send(mail);
 
     this.logger.warn(

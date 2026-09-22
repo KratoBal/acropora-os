@@ -147,6 +147,7 @@ export class TicketMailService {
 
     const decision = ticketMailDecision({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
       pathMode: mailModeOf(this.environment.TICKET_MAIL_WORKSHEET_SIGNED),
       openedById: context.openedById,
       opener: context.opener,
@@ -277,6 +278,7 @@ export class TicketMailService {
 
     const decision = serviceJobOpenedMailDecision({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
       pathMode: mailModeOf(this.environment.TICKET_MAIL_JOB_OPENED),
       recipients: input.recipients,
     });
