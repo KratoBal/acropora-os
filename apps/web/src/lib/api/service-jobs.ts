@@ -207,6 +207,28 @@ export const serviceJobsApi = {
    * EZ a megerosites helye -- a felulet megnevezi a leeso eszkozoket, es amit a
    * felhasznalo jovahagy, az utazik itt.
    */
+  /**
+   * A JEGY SZERKESZTHETO MEZOI (cim, leiras).
+   *
+   * `PATCH`, es nem `POST`: RESZLEGES frissites. A hianyzo mezo azt jelenti,
+   * hogy NE NYULJ hozza -- a `description` `null` erteke viszont ERVENYES, az
+   * az urites. A cim `null`-t nem vesz fel: a semaban kotelezo.
+   *
+   * A HATART A SZERVER DONTI EL, nem ez a fuggveny. Ha a jegy mar nem
+   * szerkesztheto, 409 (allapot-hatar) vagy 403 (hatokor) jon, es az uzenet
+   * MEGNEVEZI az okot -- a felulet azt mutatja meg, nem egy sajat mondatot.
+   */
+  updateFields(
+    token: string,
+    id: string,
+    input: { title?: string; description?: string | null },
+  ) {
+    return apiRequest<ServiceJobDetail>(jobPath(id), token, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  },
   setPlacement(
     token: string,
     id: string,

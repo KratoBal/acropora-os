@@ -13,6 +13,7 @@ import {
 } from "@acropora/ui";
 import {
   hasPermission,
+  isFinishedServiceJob,
   PERMISSIONS,
   type ServiceJobDetail,
   type ServiceJobDocumentSummary,
@@ -45,6 +46,7 @@ import {
 } from "@/components/service/service-detail-chrome";
 import { ServiceJobAssigneeEditor } from "./service-job-assignee-editor";
 import { ServiceJobPlacementEditor } from "./service-job-placement-editor";
+import { ServiceJobFieldsEditor } from "./service-job-fields-editor";
 
 import {
   serviceJobNoteDescription,
@@ -796,6 +798,25 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   A bejelentéshez nem írtak leírást.
                 </p>
               )}
+              {/*
+                A SZERKESZTO A BEJELENTES MELLETT ALL, es nem a lap tetejen: a
+                cim es a leiras UGYANANNAK a szovegnek a ket fele, es a kezelo
+                ott keresi a javitast, ahol a hibat olvassa.
+
+                LEZART JEGYEN NEM JELENIK MEG (`isFinishedServiceJob`, a KOZOS
+                csomagbol -- ugyanabbol a listabol, amibol a szerver dolgozik,
+                nem egy masodik felsorolasbol). A szerver akkor is elutasitana,
+                de egy szerkeszto, ami biztosan elhasal, hamis igeret.
+              */}
+              {canManage && !isFinishedServiceJob(job.status) ? (
+                <ServiceJobFieldsEditor
+                  jobId={jobId}
+                  token={token}
+                  title={job.title}
+                  description={job.description}
+                  onSaved={() => load()}
+                />
+              ) : null}
             </ServicePanel>
 
             <ServicePanel className="space-y-3">

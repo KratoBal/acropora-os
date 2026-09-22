@@ -1,11 +1,20 @@
 import type { Prisma, ServiceJobStatus } from "@acropora/database";
+import { SERVICE_JOB_FINISHED_STATUSES } from "@acropora/types";
 
 /**
- * A LEZART ALLAPOTOK, EGY HELYEN. Ha egy uj zaro allapot keletkezik, itt kell
- * felvenni -- es ettol a `nyitott` ES a `lezart` hatokor EGYSZERRE mozdul,
- * tehat a ketto nem tud elcsuszni egymastol.
+ * A LEZART ALLAPOTOK -- A KOZOS CSOMAGBOL, NEM ITT.
+ *
+ * 2026-09-22-ig ez a fajl tartotta a listat, privatkent. Akkor kellett a
+ * FELULETNEK is (a leiras-szerkeszto megjeleniteséhez), es egy masodik masolat
+ * pontosan az a nema elcsuszas lett volna, amit az eredeti jegyzet megnevez.
+ * A lista a `packages/types`-ban all, es minden olvaso onnan veszi -- ez a
+ * fajl is.
  */
-const FINISHED: ServiceJobStatus[] = ["COMPLETED", "CANCELLED"];
+// A MASOLAT ITT A PRISMA MIATT VAN, NEM A SZABALY MIATT: a `where` zaradek
+// MUTABLE tombot var, a kozos lista viszont `readonly` (szandekosan -- egy
+// exportalt tomb, amit barki atirhat, nem konstans). A SZABALY tehat tovabbra
+// is EGY helyen all; ez a sor csak a tipus alakjat igazitja.
+const FINISHED = [...SERVICE_JOB_FINISHED_STATUSES] as ServiceJobStatus[];
 
 /**
  * LEZART-E EGY JEGY -- UGYANABBOL A LISTABOL, NEM EGY MASODIKBOL.
