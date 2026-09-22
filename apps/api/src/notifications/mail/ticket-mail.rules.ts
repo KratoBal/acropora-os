@@ -78,24 +78,54 @@ export type MailPathKey =
 export type MailGateSkipReason = "mail-off" | "path-off";
 
 /**
- * A KAPU-OKOK HALMAZA, ES A `Record<..., true>` ALAK SZANDEKOS.
+ * ES EGY HARMADIK KORNYEZETI OK, AMI NEM A KAPUBOL JON: HIANYZIK A KULDO.
+ *
+ * A `mailGate` a KET KAPCSOLOT nezi. Van viszont egy harmadik allapot, amiben
+ * ugyanugy nem megy ki level, es ugyanugy a KORNYEZET a felelos: a Gmail-kuldo
+ * nincs beallitva (`!this.sender`).
+ *
+ * 2026-09-22-IG EZ IS `mail-off`-OT ADOTT, ES EZ A MAI ESTE PONT ROSSZ IRANYBA
+ * KULDENE. Ma kapcsoljuk be eloszor a levelezest, es a kuldo beallitasa meg
+ * soha nem futott eles modban. Ha hianyzik, a naplo `mail-off`-ot mondana --
+ * es akkor a KAPCSOLOT neznenk, ami helyesen all. Egy fel ora, pont a probanal.
+ *
+ *     mail-off    a fo kapcsolo zarva      -> a kornyezeti valtozot nezd
+ *     path-off    az ut kapcsoloja zarva   -> EZT az egy kulcsot nyisd ki
+ *     no-sender   a kuldo nincs beallitva  -> a Gmail-hitelesitest nezd
+ *
+ * Harom allapot, harom kulon teendo, harom kulon szo.
+ *
+ * ES A NAPLO-DONTES SZEMPONTJABOL MINDHAROM EGYFORMA: a KORNYEZET allapota,
+ * nem a jegye. Ezert all a harom EGY halmazban -- az donti el, hogy irunk-e
+ * naplo-sort a jegyre, es arra a kerdesre mindharomnal ugyanaz a valasz.
+ */
+export type MailEnvironmentSkipReason = MailGateSkipReason | "no-sender";
+
+/**
+ * A KORNYEZETI OKOK HALMAZA, ES A `Record<..., true>` ALAK SZANDEKOS.
  *
  * A hivok ebbol dontik el, hogy a kihagyas a KORNYEZET allapota-e (akkor nem
  * irunk naplot a jegyre), vagy a jegyen mulik-e (akkor igen).
  *
  * MIERT NEM EGY `||` LANC vagy egy `readonly T[]`: mind a ketto elfogadna egy
- * HIANYOS felsorolast. Egy harmadik kapu-ok bevezetese utan a lanc csendben
+ * HIANYOS felsorolast. Egy ujabb kornyezeti ok bevezetese utan a lanc csendben
  * `false`-ot adna ra -- es akkor egy zart kapu melletti futas naplo-sort irna a
- * jegyre, minden kornyezetben. A `Record<MailGateSkipReason, true>` TELJESSEGET
- * kovetel: egy uj ertek FORDITASI HIBA, amig ide nem kerul.
+ * jegyre, minden kornyezetben. A `Record<MailEnvironmentSkipReason, true>`
+ * TELJESSEGET kovetel: egy uj ertek FORDITASI HIBA, amig ide nem kerul.
+ *
+ * ES EZ NEM ELMELETI: a `no-sender` felvetelekor (2026-09-22) a fordito
+ * PONTOSAN ITT allt meg, nem a hivohelyeken.
  */
-const KAPU_OKOK: Record<MailGateSkipReason, true> = {
+const KORNYEZETI_OKOK: Record<MailEnvironmentSkipReason, true> = {
   "mail-off": true,
   "path-off": true,
+  "no-sender": true,
 };
 
-export function isMailGateReason(reason: string): reason is MailGateSkipReason {
-  return Object.hasOwn(KAPU_OKOK, reason);
+export function isMailEnvironmentReason(
+  reason: string,
+): reason is MailEnvironmentSkipReason {
+  return Object.hasOwn(KORNYEZETI_OKOK, reason);
 }
 
 export function mailGate(input: {

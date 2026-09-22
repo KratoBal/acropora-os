@@ -325,4 +325,62 @@ describe("a nyito ertesitese levelben", () => {
     );
     assert.deepEqual(kuldott, []);
   });
+
+  /**
+   * A HIANYZO KULDO SAJAT OKOT KAP, ES EZ EGY MAI, KONKRET ESETROL SZOL.
+   *
+   * 2026-09-22-ig ez `mail-off`-ot adott, vagyis UGYANAZT, mint a zart fo
+   * kapcsolo. Ma este kapcsoljuk be eloszor a levelezest, es a Gmail-kuldo
+   * beallitasa meg soha nem futott eles modban: ha hianyzik, a naplo a
+   * KAPCSOLOHOZ kuldene az uzemeltetot, ami helyesen all.
+   *
+   *     mail-off    a kornyezeti valtozot nezd
+   *     no-sender   a Gmail-hitelesitest nezd
+   *
+   * ES A KET KAPCSOLO ITT SZANDEKOSAN NYITVA VAN: enelkul a kapu allna meg
+   * elobb, es az allitas a kapurol szolna, nem a kuldorol.
+   */
+  it("hiányzó küldőnél az ok no-sender, nem mail-off", async () => {
+    const { service, kuldott, naplo } = szolgaltatas({
+      mode: "live",
+      worksheetSigned: "live",
+      sender: null,
+    });
+
+    assert.deepEqual(
+      await service.deliverWorksheetSigned({
+        serviceJobId: "job-1",
+        actorUserId: "user-2",
+      }),
+      { kind: "skipped", reason: "no-sender" },
+    );
+    assert.deepEqual(kuldott, [], "kuldo nelkul nem mehet ki level");
+    assert.deepEqual(
+      naplo,
+      [],
+      "a hianyzo kuldo a KORNYEZET allapota: nem a jegy naplojaba valo",
+    );
+  });
+
+  /**
+   * ES A MASIK UTON UGYANIGY -- mert a ket ut KET KULON `!this.sender` agat
+   * visel, es egy kozos allitas csak az egyiket merne.
+   */
+  it("az ügyfél-bejelentés útján is no-sender az ok", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      jobOpened: "live",
+      sender: null,
+    });
+
+    assert.deepEqual(
+      await service.deliverServiceJobOpened({
+        serviceJobId: "job-1",
+        actorUserId: null,
+        recipients: [{ email: "felelos@example.invalid" }],
+      }),
+      { kind: "skipped", reason: "no-sender" },
+    );
+    assert.deepEqual(kuldott, []);
+  });
 });
