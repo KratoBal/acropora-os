@@ -20,6 +20,7 @@ const INAKTIV: HandoverRecipient = {
 
 const ELO = {
   mode: "live" as const,
+  pathMode: "live" as const,
   departmentId: "dep-1",
   customerId: "cus-1",
   recipients: [AKTIV],
@@ -44,22 +45,23 @@ describe("handoverMailDecision", () => {
 
   it("zárt kapunál NEM megy ki", () => {
     const d = handoverMailDecision({ ...ELO, mode: "off" });
-    assert.deepEqual(d, { kind: "skip", reason: "mode-off" });
+    assert.deepEqual(d, { kind: "skip", reason: "mail-off" });
   });
 
   /**
-   * A KAPU ELOL ALL, ES EZ MERHETO: zart kapunal AKKOR IS `mode-off` az ok, ha
+   * A KAPU ELOL ALL, ES EZ MERHETO: zart kapunal AKKOR IS `mail-off` az ok, ha
    * a jegyen SEMMI nincs. Enelkul egy zart kapu melletti futas a jegyre
    * mutatna, holott a kornyezeten all.
    */
   it("zárt kapunál a kapu az ok, nem a hiányzó helyszín", () => {
     const d = handoverMailDecision({
       mode: "off",
+      pathMode: "live",
       departmentId: null,
       customerId: null,
       recipients: [],
     });
-    assert.deepEqual(d, { kind: "skip", reason: "mode-off" });
+    assert.deepEqual(d, { kind: "skip", reason: "mail-off" });
   });
 
   it("helyszín nélküli jegy NEM megy ki", () => {

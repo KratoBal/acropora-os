@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   mailAuditNote,
+  mailGate,
   mailModeOf,
   ticketMailDecision,
   type TicketOpener,
@@ -39,6 +40,41 @@ describe("a kapu alapertelmezesben ZARVA", () => {
   });
 });
 
+describe("a ket reteg SORRENDJE", () => {
+  /**
+   * A KET KAPU KOZUL A FO ALL ELOL, ES EZ AZ ALLITAS PONTOSAN EZT MERI.
+   *
+   * MIERT KELL KULON: ha a ket kulcs kozul csak az EGYIK zarna egy-egy
+   * allitasban, a sorrend megforditasa SEMMIT nem valtoztatna -- mindket alak
+   * ugyanazt az okot adna. A kulonbseg CSAK akkor latszik, amikor MINDKETTO
+   * zarva van: a helyes sorrend `mail-off`-ot ad, a forditott `path-off`-ot.
+   *
+   * ES A TEENDO MIATT SZAMIT, nem eleganciabol: egy teljesen kikapcsolt
+   * kornyezetben a `path-off` EGY kulcshoz kuldene az uzemeltetot, holott az
+   * egesz levelezes all. Rossz iranyba indulna, es a kulcs kinyitasa utan sem
+   * menne ki semmi.
+   */
+  it("MINDKÉT kapcsoló zárva: az ok a FŐ kapué, mert oda kell menni", () => {
+    assert.deepEqual(mailGate({ mode: "off", pathMode: "off" }), {
+      kind: "closed",
+      reason: "mail-off",
+    });
+  });
+
+  it("csak az ÚT zárva: az ok path-off, és EGY kulcshoz vezet", () => {
+    assert.deepEqual(mailGate({ mode: "live", pathMode: "off" }), {
+      kind: "closed",
+      reason: "path-off",
+    });
+  });
+
+  it("mindkettő nyitva: a kapu NEM zár", () => {
+    assert.deepEqual(mailGate({ mode: "live", pathMode: "live" }), {
+      kind: "open",
+    });
+  });
+});
+
 describe("kinek megy level, es mikor nem", () => {
   /**
    * acrobot ELSO KIKOTESE SAJAT ALLITASSAL: zart kapunal akkor sem indul
@@ -49,16 +85,22 @@ describe("kinek megy level, es mikor nem", () => {
     assert.deepEqual(
       ticketMailDecision({
         mode: "off",
+        pathMode: "live",
         openedById: "user-1",
         opener: AKTIV,
       }),
-      { kind: "skip", reason: "mode-off" },
+      { kind: "skip", reason: "mail-off" },
     );
   });
 
   it("nyito nelkuli jegynel sajat okkal hagyjuk ki", () => {
     assert.deepEqual(
-      ticketMailDecision({ mode: "live", openedById: null, opener: null }),
+      ticketMailDecision({
+        mode: "live",
+        pathMode: "live",
+        openedById: null,
+        opener: null,
+      }),
       { kind: "skip", reason: "no-opener" },
     );
   });
@@ -70,7 +112,12 @@ describe("kinek megy level, es mikor nem", () => {
    */
   it("torolt nyitonal MAS okkal hagyjuk ki, mint hianyzo nyitonal", () => {
     assert.deepEqual(
-      ticketMailDecision({ mode: "live", openedById: "user-9", opener: null }),
+      ticketMailDecision({
+        mode: "live",
+        pathMode: "live",
+        openedById: "user-9",
+        opener: null,
+      }),
       { kind: "skip", reason: "opener-missing" },
     );
   });
@@ -79,6 +126,7 @@ describe("kinek megy level, es mikor nem", () => {
     assert.deepEqual(
       ticketMailDecision({
         mode: "live",
+        pathMode: "live",
         openedById: "user-1",
         opener: { ...AKTIV, isActive: false },
       }),
@@ -88,7 +136,12 @@ describe("kinek megy level, es mikor nem", () => {
 
   it("ervenyes nyitonak megy, cimmel es nevvel", () => {
     assert.deepEqual(
-      ticketMailDecision({ mode: "live", openedById: "user-1", opener: AKTIV }),
+      ticketMailDecision({
+        mode: "live",
+        pathMode: "live",
+        openedById: "user-1",
+        opener: AKTIV,
+      }),
       { kind: "send", to: "nyito@partner.hu", name: "Nyitó Nóra" },
     );
   });
@@ -100,11 +153,27 @@ describe("kinek megy level, es mikor nem", () => {
    */
   it("a NEGY kimenet NEGY kulonbozo valasz, nem harom", () => {
     const valaszok = [
-      ticketMailDecision({ mode: "off", openedById: "u", opener: AKTIV }),
-      ticketMailDecision({ mode: "live", openedById: null, opener: null }),
-      ticketMailDecision({ mode: "live", openedById: "u", opener: null }),
+      ticketMailDecision({
+        mode: "off",
+        pathMode: "live",
+        openedById: "u",
+        opener: AKTIV,
+      }),
       ticketMailDecision({
         mode: "live",
+        pathMode: "live",
+        openedById: null,
+        opener: null,
+      }),
+      ticketMailDecision({
+        mode: "live",
+        pathMode: "live",
+        openedById: "u",
+        opener: null,
+      }),
+      ticketMailDecision({
+        mode: "live",
+        pathMode: "live",
         openedById: "u",
         opener: { ...AKTIV, isActive: false },
       }),

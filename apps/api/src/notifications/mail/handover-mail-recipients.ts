@@ -31,6 +31,8 @@
 
 import type { ServiceJobHandoverMailSkipReason } from "@acropora/types";
 
+import { mailGate } from "./ticket-mail.rules.js";
+
 /** Egy jelolt cimzett, ugy, ahogy az adatbazisbol jon. */
 export interface HandoverRecipient {
   readonly email: string;
@@ -63,7 +65,9 @@ export type HandoverMailDecision =
  *
  * A NEGY KIHAGYASI OK NEGY KULON SOR, NEM EGY. Mindegyikhez MAS a teendo:
  *
- *     mode-off        a kapcsolo zarva      -> uzemeltetes
+ *     mail-off        a FO kapcsolo zarva   -> a kornyezetet kell megnezni
+ *     path-off        EZ az ut zarva        -> a TICKET_MAIL_HANDOVER kulcsot
+ *                     kell kinyitni, es semmi mast
  *     no-department   a jegyen nincs helyszin -> a jegy adata hianyos
  *     no-customer     a helyszinnek nincs gazdaja -> torzsadat-hiba
  *     no-recipient    a gazdanak nincs AKTIV portal-fiokja -> a vevonel
@@ -75,11 +79,13 @@ export type HandoverMailDecision =
  */
 export function handoverMailDecision(input: {
   mode: "off" | "live";
+  pathMode: "off" | "live";
   departmentId: string | null;
   customerId: string | null;
   recipients: readonly HandoverRecipient[];
 }): HandoverMailDecision {
-  if (input.mode !== "live") return { kind: "skip", reason: "mode-off" };
+  const kapu = mailGate(input);
+  if (kapu.kind === "closed") return { kind: "skip", reason: kapu.reason };
   if (input.departmentId === null)
     return { kind: "skip", reason: "no-department" };
   if (input.customerId === null) return { kind: "skip", reason: "no-customer" };

@@ -25,6 +25,8 @@ const AKTIV = {
  */
 function felallit(be?: {
   mode?: string;
+  /** Az ATADASI ut sajat kulcsa (`TICKET_MAIL_HANDOVER`), a fo kapun BELUL. */
+  utMode?: string;
   recipients?: (typeof AKTIV)[];
   departmentId?: string | null;
   customerId?: string | null;
@@ -77,8 +79,16 @@ function felallit(be?: {
     },
   };
 
+  /**
+   * AZ UT KULCSA A SPECBEN ALAPBOL NYITVA -- A TERMELESBEN NEM.
+   *
+   * Itt azert `live` az alapertelmezes, hogy a 2026-09-22 ELOTT irt allitasok
+   * pontosan azt merjek tovabb, amit eddig: a FO kapu viselkedeset. A
+   * termelesben a `TICKET_MAIL_HANDOVER` alapertelmezesben ZARVA all.
+   */
   const service = new HandoverMailService(repository, ticketMail, sender, {
     TICKET_MAIL_MODE: be?.mode ?? "live",
+    TICKET_MAIL_HANDOVER: be?.utMode ?? "live",
   } as NodeJS.ProcessEnv);
 
   const csomag = {
@@ -165,7 +175,7 @@ describe("a lezárt hibajegy kiküldése", () => {
       package: t.csomag,
     });
 
-    assert.deepEqual(eredmeny, { kind: "skipped", reason: "mode-off" });
+    assert.deepEqual(eredmeny, { kind: "skipped", reason: "mail-off" });
     assert.equal(t.kuldott.length, 0);
     assert.equal(t.naplo.length, 0);
   });
@@ -259,18 +269,57 @@ describe("a kiküldés előnézete", () => {
   });
 
   /**
-   * A NEGY OK KULON-KULON, NEV SZERINT.
+   * AZ OT OK KULON-KULON, NEV SZERINT.
    *
    * Nem egy darabszam: a felulet MINDEGYIKHEZ mas mondatot mutat, mert
    * mindegyikhez mas a teendo. Ha egy kozos "nem kuldheto" allapot lenne, a
    * kezelo ugyanazt latna egy zart kapcsolora es egy hianyos torzsadatra.
    */
-  it("a kapu zárva: mode-off", async () => {
+  it("a kapu zárva: mail-off", async () => {
     const t = felallit({ mode: "off" });
     assert.deepEqual(await t.service.preview("job-1"), {
       kind: "skip",
-      reason: "mode-off",
+      reason: "mail-off",
     });
+  });
+
+  /**
+   * AZ UT SAJAT KULCSA: A FO KAPU NYITVA, ES EZ AZ EGY LEVELFAJTA MEGSEM MEGY.
+   *
+   * Ez NEM ugyanaz az allitas, mint a fenti `mail-off`, es a kulonbseget a
+   * TEENDO adja: ott az egesz kornyezetet kell megnezni, itt EGY kulcsot kell
+   * kinyitni (`TICKET_MAIL_HANDOVER`). Ha a ket ok osszecsuszna, a kezelo a
+   * rossz helyen keresne.
+   *
+   * A `mode: "live"` KIMONDVA all itt, nem az alapertelmezesre bizva: ez az
+   * allitas PONTOSAN attol mer valamit, hogy a fo kapu NYITVA van.
+   */
+  it("a fő kapu nyitva, de EZ az út zárva: path-off", async () => {
+    const t = felallit({ mode: "live", utMode: "off" });
+    assert.deepEqual(await t.service.preview("job-1"), {
+      kind: "skip",
+      reason: "path-off",
+    });
+    assert.deepEqual(
+      t.kuldott,
+      [],
+      "zart uton nem mehet ki level, elonezet utan sem",
+    );
+  });
+
+  /**
+   * ES A FORDITOTT IRANY, MERT KULONBEN EGY MINDIG-`path-off` VISELKEDES IS
+   * ATMENNE: nyitott uton a ket kapu EGYIKE SEM zar.
+   */
+  it("mindkét kapcsoló nyitva: a kapu NEM az ok", async () => {
+    const t = felallit({ mode: "live", utMode: "live" });
+    const elonezet = await t.service.preview("job-1");
+    assert.notEqual(elonezet, null, "a fixtura jegye letezik");
+    assert.equal(
+      elonezet?.kind,
+      "send",
+      "ket nyitott kapcsolonal a kapu NEM lehet a kihagyas oka",
+    );
   });
 
   it("a jegyen nincs helyszín: no-department", async () => {
