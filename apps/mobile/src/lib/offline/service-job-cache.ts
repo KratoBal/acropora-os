@@ -98,11 +98,27 @@ export async function rememberServiceJobDetail(
      * a listán se a tegnapi állapota jöjjön elő -- és a léptetés UTÁN ez a
      * mentés az, ami a listát is előreviszi.
      *
-     * A `detail` a listasor MINDEN mezőjét hordozza (kiterjeszti), tehát itt
-     * nincs mit külön leképezni; ha a két alak valaha szétválik, a fordító
-     * szól.
+     * A `detail` A LISTASOR MEZŐINEK CSAK EGY RÉSZÉT HORDOZZA -- MÉRVE
+     * 2026-09-22: a `worksheetCount`-ot a szerver a lap-válaszban SOHA nem
+     * küldi (lásd `ServiceJobDetail` fejlécét a `packages/types`-ban). A régi
+     * alak ezt a mezőt `undefined`-ként írta a listasorba, és a lista utána
+     * csendben "0 munkalap"-ot mutatott, akkor is, ha valójában volt. A
+     * fordító EZT a hiányt fogta meg, amikor a két alak szétvált -- pontosan
+     * úgy, ahogy ez a megjegyzés korábban megígérte.
+     *
+     * A JAVÍTÁS: a hiányzó mezőt a MÁR MEGLÉVŐ listasorból vesszük át. Ha
+     * nincs korábbi sor (a jegyet még sosem húzta le a lista), a szám 0 --
+     * ez ugyanaz a hiányos állapot, ami korábban is fennállt, csak most
+     * KIMONDOTTAN, nem `undefined`-ből fakadó véletlenül.
      */
-    await rememberServiceJobs([detail]);
+    const korabbiSor = await db.getFirstAsync<{ payload_json: string }>(
+      `SELECT payload_json FROM cached_service_jobs WHERE id = ?`,
+      [detail.id],
+    );
+    const korabbiSzam =
+      (korabbiSor && parse<ServiceJobListItem>(korabbiSor.payload_json))
+        ?.worksheetCount ?? 0;
+    await rememberServiceJobs([{ ...detail, worksheetCount: korabbiSzam }]);
   } catch {
     // Ugyanaz, mint fent.
   }
