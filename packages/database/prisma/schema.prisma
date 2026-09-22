@@ -280,12 +280,21 @@ enum OrderBusinessStatusEventSource {
   CARRIER
 }
 
+/// Honnan SZÁRMAZIK a rendelés. Nem megjelenítési címke: ebből dől el, hova megy
+/// vissza az állapot, és kinek a készlete fogy.
+///
+/// A `MEDUSA` külön érték, és NEM az `API` alá került. Az `API` azt mondja, hogy
+/// egy külső hívó hozta létre; a `MEDUSA` azt, hogy MELYIK bolt. A megkülönböztetés
+/// nélkül a visszairányú kérdések (státusz-visszaírás, készletmozgás gazdája)
+/// megválaszolhatatlanok lennének, és épp azokat rejtené el, amiket a
+/// Medusa-átállás során meg kell tudnunk válaszolni.
 enum SalesChannel {
   UNAS
   POS
   MANUAL
   SERVICE
   API
+  MEDUSA
 }
 
 /// A UNAS rendelés saját, dedikált Invoice.Status mezőjének read-only

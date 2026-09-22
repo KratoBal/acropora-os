@@ -424,3 +424,116 @@ describe("a handle elutasítása is megnevezi a mezőt, de az ÉRTÉKET nem", ()
     );
   });
 });
+
+/**
+ * A RENDELES-LEHIVAS KERESENEK ALAKJA.
+ *
+ * Ugyanaz az indok, mint a kulso azonositos keresesnel: a szolgaltatas tesztje
+ * ezt nem foghatja meg, mert ott a sorok mar keszen erkeznek. A novekmenyes
+ * szures es a csonkolas-jelzes a KLIENSBEN tortenik, tehat itt kell merni.
+ */
+function orderClientReturning(rows: { id: string; created_at: string }[]) {
+  const urls: string[] = [];
+  const fetchImpl = (async (url: string) => {
+    urls.push(String(url));
+    const limit = Number(
+      new URL(String(url)).searchParams.get("limit") ?? rows.length,
+    );
+    return {
+      ok: true,
+      json: async () => ({ orders: rows.slice(0, limit) }),
+    } as unknown as Response;
+  }) as unknown as typeof fetch;
+
+  return {
+    urls,
+    client: new HttpMedusaAdminClient(
+      { baseUrl: "https://példa.invalid", apiKey: "sk_teszt" },
+      fetchImpl,
+    ),
+  };
+}
+
+describe("HttpMedusaAdminClient.listOrders", () => {
+  it("az elso futasban idoszuro NELKUL kerdez, de rendezve", async () => {
+    const { client, urls } = orderClientReturning([
+      { id: "order_egy", created_at: "2026-09-22T08:00:00.000Z" },
+    ]);
+
+    const eredmeny = await client.listOrders(null);
+
+    assert.equal(eredmeny.rows.length, 1);
+    assert.equal(eredmeny.truncated, false);
+    /**
+     * AZ ELSO ALAKOM ITT A PUSZTA `created_at` SZORA TILTOTT, ES SOSEM TUDOTT
+     * VOLNA TELJESULNI: ugyanaz a szo all a `fields` listaban es a rendezesben
+     * is. Tul tag minta, ami a KODOT vadolta volna a sajat hibam helyett --
+     * szerencsere hangosan bukott, nem csendben. A tiltas az OPERATORRA szol,
+     * mert a szures azon mulik, nem a mezo emlitesen.
+     */
+    assert.doesNotMatch(
+      urls[0]!,
+      /%24gte?%5D=/,
+      "ido nelkul ne szurjon idore: az elso futas MINDENT lat, ameddig a hatar engedi",
+    );
+    assert.match(
+      urls[0]!,
+      /created_at/,
+      "KONTROLL: a mezo maga ATTOL meg ott van",
+    );
+    assert.match(urls[0]!, /order=created_at/, "a rendezes nem elhagyhato");
+  });
+
+  /**
+   * A SZIGORU NAGYOBB A LENYEG, NEM AZ, HOGY VAN SZURO.
+   *
+   * Egy `$gte` alakra ez az allitas is zold lenne, ha csak a `created_at` szo
+   * meglétét nezne -- ezert a mintaba BELE van irva a `$gt` operator, es a
+   * lenti allitas kulon kizarja a `$gte` alakot.
+   */
+  it("a kovetkezo futasban SZIGORUAN a legutobbi utan kerdez", async () => {
+    const { client, urls } = orderClientReturning([]);
+
+    await client.listOrders("2026-09-22T08:00:00.000Z");
+
+    assert.match(urls[0]!, /created_at%5B%24gt%5D=/, "a `$gt` operator kell");
+    assert.doesNotMatch(
+      urls[0]!,
+      /%24gte/,
+      "a `$gte` ugyanazt a rendelest minden korben visszahozna",
+    );
+  });
+
+  it("a hatar kimeritese CSONKOLASKENT jelenik meg, nem csendben", async () => {
+    const sok = Array.from({ length: 250 }, (_, i) => ({
+      id: `order_${i}`,
+      created_at: "2026-09-22T08:00:00.000Z",
+    }));
+    const { client } = orderClientReturning(sok);
+
+    const eredmeny = await client.listOrders(null);
+
+    assert.equal(eredmeny.rows.length, 200, "a kiszolgalo betartja a limitet");
+    assert.equal(
+      eredmeny.truncated,
+      true,
+      "a hivonak tudnia kell, hogy lehet tobb",
+    );
+  });
+
+  /**
+   * KONTROLL a csonkolas-jelzesre: a hatar ALATT ne alljon igazra. Enelkul egy
+   * `truncated: true` konstans is atmenne a fenti alliteson.
+   */
+  it("KONTROLL: a hatar alatt NEM jelez csonkolast", async () => {
+    const { client } = orderClientReturning([
+      { id: "order_egy", created_at: "2026-09-22T08:00:00.000Z" },
+      { id: "order_ketto", created_at: "2026-09-22T08:01:00.000Z" },
+    ]);
+
+    const eredmeny = await client.listOrders(null);
+
+    assert.equal(eredmeny.rows.length, 2);
+    assert.equal(eredmeny.truncated, false);
+  });
+});
