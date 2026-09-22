@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
 import { prisma } from "@acropora/database";
+import { DOCUMENT_THUMBNAIL_VARIANT } from "@acropora/types";
 
 import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -48,6 +49,8 @@ let vevoAId = "";
 let vevoBId = "";
 let eszkozAId = "";
 let eszkozBId = "";
+/** A kepes csatolmany a masik vevo eszkozen -- a belyegkep-ag merESEhez. */
+let kepDokumentumId = "";
 let actorUserId = "";
 
 function sha256() {
@@ -119,6 +122,38 @@ async function csatolmany(
   });
 }
 
+/**
+ * KEPES CSATOLMANY, BELYEGKEPPEL -- a belyegkep-ag hatokorehez kell.
+ *
+ * A PDF-es valtozat `thumbnail: null`-t ad, es azon a `documentBytes` SOHA nem
+ * lepne be a belyegkep-agba: a `wantsThumbnail` utan a `documentThumbnail`
+ * ures kezzel ter vissza, es a hivas a VISSZAESESRE megy, ahol MASIK
+ * hatokor-ellenorzes all. Vagyis egy PDF-fel merve a lenti allitas akkor is
+ * zold lenne, ha a belyegkep-lekerdezesbol hianyozna a hatokor.
+ */
+async function kepesCsatolmany(assetId: string, fileName: string) {
+  return repository.addDocument({
+    assetId,
+    /*
+      `MANUAL`, ES EZ NEM IZLES. A `scopeMaySeeDocumentType` szerint egy vevo
+      CSAK `WARRANTY` vagy `MANUAL` tipust lat. `OTHER`-rel a jogos kero sem
+      kapna meg a belyegkepet: a `documentThumbnail` ures kezzel terne vissza,
+      a hivas atesne a `this.document(...)` agra, es a belyegkep-ag EGYSZER SEM
+      futna le. A negativ allitast akkor a TIPUS dontene el, nem a hatokor --
+      vagyis a javitas nelkul is ugyanugy nezne ki.
+    */
+    type: "MANUAL",
+    fileName,
+    content: Buffer.from("eredeti-kep"),
+    sizeBytes: 11,
+    sha256: sha256(),
+    contentType: "image/png",
+    thumbnail: Buffer.from("belyegkep"),
+    caption: null,
+    actorUserId,
+  });
+}
+
 describe(
   "egy eszköz csatolmány-listája, hatókörrel",
   { skip: gate.mode === "skip" },
@@ -150,6 +185,16 @@ describe(
       // A MÁSIK VEVŐ ESZKÖZÉN IS ÁLL CSATOLMÁNY -- e nélkül a lenti tiltás egy
       // üres eszközön is zöld lenne, és semmit nem bizonyítana.
       await csatolmany(eszkozBId, "MANUAL", `${PREFIX}-masik-vevo.pdf`);
+      /*
+        A KEPES CSATOLMANY IS ITT KESZUL, NEM A SAJAT TESZTJEBEN -- KULONBEN A
+        SUITE SORRENDFUGGO LENNE. A `node --test` deklaracios sorrendben fut,
+        tehat egy tesztben letrehozott sor a KESOBBI allitasok szamait mozditja,
+        a korabbiakét nem. Aki atrendezi a teszteket, vagy egyetlen tesztet
+        futtat `--test-name-pattern`-nel, egy olyan allitason kapna pirosat,
+        amihez semmi koze.
+      */
+      kepDokumentumId = (await kepesCsatolmany(eszkozBId, `${PREFIX}-kep.png`))
+        .id;
     });
 
     after(async () => {
@@ -191,7 +236,8 @@ describe(
         { nev: "Customer (prefix szerint)", darab: maradtVevo },
       ]);
 
-      assert.equal(dokumentumok, 3);
+      // NEGY: harom PDF plusz a belyegkepes kep (a belyegkep-ag merESEhez).
+      assert.equal(dokumentumok, 4);
       assert.equal(eszkozok, 2);
       assert.equal(vevok, 2);
       await prisma.$disconnect();
@@ -245,7 +291,65 @@ describe(
       // ÉS A MÁSIK VEVŐ ESZKÖZÉN TÉNYLEG ÁLL SOR: enélkül a fenti elutasítás
       // egy üres eszközön is ugyanígy nézne ki.
       const { items } = await service.documents(eszkozBId, BELSOS);
-      assert.equal(items.length, 1);
+      // KETTO: a PDF es a belyegkepes kep, mind a ketto a masik vevo eszkozen.
+      assert.equal(items.length, 2);
+    });
+
+    /**
+     * A BELYEGKEP-AG SAJAT LEKERDEZESSEL FUT, ES SAJAT HATOKORREL (2026-09-22).
+     *
+     * A `documentBytes` a `variant=thumbnail` keresre ELOSZOR a
+     * `repository.documentThumbnail`-t hivja, es CSAK ha az ures kezzel ter
+     * vissza, esik at a `this.document(...)` agra, ahol a masik
+     * hatokor-ellenorzes all. Vagyis a belyegkepet a SAJAT lekerdezesenek
+     * szukitese vedi -- ha abbol kiesne a hatokor, egy idegen partner a
+     * `variant=thumbnail` keressel megkerulne a lenti, mar mert tiltast.
+     *
+     * EDDIG EZT CSAK FORRAS-SZOVEG ORIZTE (`document-thumbnail-wiring.spec.ts`
+     * es `asset-detail-scope.spec.ts`). Egy forras-allitas a TORLEST elkapja,
+     * a KIKAPCSOLAST nem: ha a szukites a helyen marad, de mar nem hat, a
+     * szoveg valtozatlan, es mind a ketto zold marad.
+     *
+     * A KEPES CSATOLMANY NEM RESZLET: a suite tobbi sora PDF, `thumbnail:
+     * null`-lal, es azon a `documentThumbnail` amugy is ures kezzel ter
+     * vissza -- ez az allitas ott a VISSZAESEST merne, nem a belyegkep-agat.
+     */
+    it("idegen vevő a bélyegképet sem éri el a variant=thumbnail kéréssel", async () => {
+      // ISMERT POZITIV KONTROLL: a belyegkep-ag LETEZIK es ad is vissza valamit
+      // a jogos kerőnek. Enelkul a lenti elutasitas egy sosem mukodo agon is
+      // ugyanigy nezne ki.
+      const sajat = await service.documentBytes(
+        eszkozBId,
+        kepDokumentumId,
+        { kind: "customer", customerId: vevoBId },
+        DOCUMENT_THUMBNAIL_VARIANT,
+      );
+      assert.deepEqual(
+        Buffer.from(sajat.bytes),
+        Buffer.from("belyegkep"),
+        "a jogos kérő nem a bélyegképet kapta -- az ág nem is futott le",
+      );
+
+      await assert.rejects(
+        () =>
+          service.documentBytes(
+            eszkozBId,
+            kepDokumentumId,
+            { kind: "customer", customerId: vevoAId },
+            DOCUMENT_THUMBNAIL_VARIANT,
+          ),
+        /*
+          A MONDAT A DOKUMENTUMROL SZOL, NEM AZ ESZKOZROL, es ez nem veletlen:
+          a `service.document(...)` MINDIG ezt dobja, akkor is, ha valojaban az
+          ESZKOZ volt lathatatlan. Egy uzenet, ket kulonbozo ok.
+
+          AMIT EZ AZ ALLITAS EZERT NEM MOND MEG: hogy melyik kapu utasitott el.
+          Amit MEGMOND: hogy bajt NEM jott vissza -- es a kikapcsolt hatokornel
+          eppen az jonne, kivetel nelkul. A megkulonboztetest a POZITIV
+          KONTROLL adja: az bizonyitja, hogy a belyegkep-ag egyaltalan mukodik.
+        */
+        /A dokumentum nem található/,
+      );
     });
 
     /**
