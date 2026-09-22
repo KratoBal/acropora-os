@@ -112,6 +112,43 @@ export class HandoverMailController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     /*
+      A KULDES IS BELSOS HATOKORRE ZARUL, ES EZ KIMONDOTT DONTES.
+
+      === MIERT NEM ELEG A JOG ===
+
+      A `SERVICE_MANAGE`-et a `PARTNER_SERVICE` szerep IS VISELI
+      (`packages/types/src/auth.ts:388`), es a `download()` sem utasitja el a
+      partnert: az egyetlen "internal" vizsgalata a REJTETT munkalapokrol szol
+      (`service-job-package.service.ts:170`). Egy partner-fiok tehat a sajat
+      hatokoreben lathato, elkeszult jegyen SZERKEZETILEG el tudta volna
+      inditani a kikuldest.
+
+      === AZ INDOK NEM CSAK HATOKOR-FINOMHANGOLAS (acrobot dontese, 2026-09-22
+      02:29) ===
+
+      A level SZOVEGET a hivo irja (targy es torzs), a CIMZETTEKET viszont a
+      rendszer oldja fel, a VEVO portal-fiokjaibol. Egy partner-fiok tehat
+      szabad szoveget kuldhetne A MI NEVUNKBEN a MI vevonknek, olyan cimekre,
+      amiket nem is o valasztott ki. Az nem jogosultsagi reszletkerdes, hanem
+      egy UJ KIMENO CSATORNA egy harmadik fel fele -- es ilyet senki nem
+      dontott el.
+
+      Balazs specje (2026-09-18 11:29 UTC) a BELSO kezelorol szol, aki lezarja
+      a jegyet. Amig mas nem hangzik el, a kuldes az ove.
+
+      === ES AZERT ALL ITT LEIRVA, MERT A MAI ALLAPOT EGYIK IRANYT SEM MONDTA KI ===
+
+      A vegpont eddig sem tiltotta, sem nem engedte KIMONDVA a partnert -- a
+      kovetkezo olvaso nem tudta volna eldonteni, szandek volt-e vagy
+      feledekenyseg. Ha ezt valaha megnyitjuk, ez a bekezdes valtozik, nem egy
+      csendes feltetel.
+    */
+    if (partnerScopeOf(user).kind !== "internal")
+      throw new ForbiddenException(
+        "A lezárt hibajegyet csak belsős felhasználó küldheti ki.",
+      );
+
+    /*
       A CSOMAG ELOSZOR. Ha a jegy nem letezik vagy nem kesz, a `download()`
       dob -- es akkor level SEM epul. A sorrend szandekos: egy elkuldott
       level utan mar nem lehet megallapitani, hogy a csomag hianyos volt.

@@ -31,14 +31,30 @@ import type { HandoverMailService } from "./handover-mail.service.js";
  */
 function felallit(elonezet: unknown = { kind: "skip", reason: "mode-off" }) {
   const hivasok: string[] = [];
+  const kuldesek: string[] = [];
+  const csomagLekeresek: string[] = [];
   const mail = {
     preview: async (id: string) => {
       hivasok.push(id);
       return elonezet;
     },
+    send: async (input: { serviceJobId: string }) => {
+      kuldesek.push(input.serviceJobId);
+      return { kind: "sent", recipients: 1 };
+    },
   } as unknown as HandoverMailService;
-  const csomag = {} as unknown as ServiceJobPackageService;
-  return { controller: new HandoverMailController(csomag, mail), hivasok };
+  const csomag = {
+    download: async (id: string) => {
+      csomagLekeresek.push(id);
+      return { fileName: "csomag.zip", bytes: Buffer.alloc(8, 1) };
+    },
+  } as unknown as ServiceJobPackageService;
+  return {
+    controller: new HandoverMailController(csomag, mail),
+    hivasok,
+    kuldesek,
+    csomagLekeresek,
+  };
 }
 
 function hivo(be: {
@@ -103,6 +119,76 @@ describe("HandoverMailController.preview", () => {
     await assert.rejects(
       t.controller.preview("nincs-ilyen", hivo({})),
       NotFoundException,
+    );
+  });
+});
+
+/**
+ * A KULDES IS BELSOS HATOKORRE VAN ZARVA (acrobot dontese, 2026-09-22 02:29).
+ *
+ * === MIERT KULON ALLITAS, HOLOTT AZ ELONEZETRE MAR VAN ===
+ *
+ * A ket vegpont ket kulon kapu, es a jogi alapjuk KOZOS (`SERVICE_MANAGE`,
+ * amit a `PARTNER_SERVICE` is visel). Ha csak az egyikre allna allitas, a
+ * masikat egy kesobbi szerkesztes csendben kinyithatna -- es epp a SULYOSABB
+ * felet, mert ott nem cim szivarog ki, hanem LEVEL MEGY KI a mi nevunkben.
+ *
+ * === ES A CSOMAG-LEKERES SZAMA IS ALLITAS, NEM DISZ ===
+ *
+ * A kapu a `download()` ELOTT all. Ha moge kerulne, a partner hivasa
+ * eloallitana a teljes csomagot (PDF-generalas), mielott elutasitjuk --
+ * vagyis a tiltas ugy nezne ki, mintha mukodne, es kozben minden hivas
+ * elvegezne a draga munkat.
+ */
+describe("HandoverMailController.send", () => {
+  const torzs = { message: "Köszönjük a bizalmat." };
+
+  it("BELSOS hívó küldése végigmegy", async () => {
+    const t = felallit();
+
+    const valasz = await t.controller.send("job-1", torzs, hivo({}));
+
+    assert.deepEqual(valasz, { kind: "sent", recipients: 1 });
+    assert.deepEqual(t.kuldesek, ["job-1"]);
+    assert.deepEqual(t.csomagLekeresek, ["job-1"]);
+  });
+
+  /*
+    A KET KERDES KET KULON TESZT, es ez nem tagolasi izles.
+
+    Ha az elutasitas ES a sorrend ugyanabban a tesztben allna, a kalibracio
+    kimenetebol nem lehetne megmondani, MELYIK fogott: a futtato a TESZT nevet
+    irja ki, nem az allitasét. Merve ugyanezen a napon: a kapu semlegesitese es
+    a kapu ATHELYEZESE a csomag moge PONTOSAN UGYANAZT a ket sort adta.
+  */
+  it("VEVŐ hatókörű hívót elutasít", async () => {
+    const t = felallit();
+    await assert.rejects(
+      t.controller.send("job-1", torzs, hivo({ customerId: "cus-1" })),
+      ForbiddenException,
+    );
+    assert.deepEqual(t.kuldesek, [], "a kapu után is elment a levél");
+  });
+
+  it("SZÁLLÍTÓ hatókörű hívót elutasít", async () => {
+    const t = felallit();
+    await assert.rejects(
+      t.controller.send("job-1", torzs, hivo({ supplierId: "sup-1" })),
+      ForbiddenException,
+    );
+    assert.deepEqual(t.kuldesek, [], "a kapu után is elment a levél");
+  });
+
+  it("az elutasítás a csomag ELŐÁLLÍTÁSA ELŐTT történik", async () => {
+    const t = felallit();
+    await assert.rejects(
+      t.controller.send("job-1", torzs, hivo({ customerId: "cus-1" })),
+      ForbiddenException,
+    );
+    assert.deepEqual(
+      t.csomagLekeresek,
+      [],
+      "a kapu a csomag-előállítás MÖGÖTT áll",
     );
   });
 });
