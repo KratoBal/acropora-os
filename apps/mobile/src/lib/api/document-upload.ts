@@ -119,7 +119,18 @@ export type BuildUploadResult =
  * hibajegy legyen a harmadik hivo egy olyan nev alatt, ami kizarja.
  */
 export function buildDocumentUpload(input: {
-  type: string;
+  /**
+   * A FAJTA ELHAGYHATO, ES HA HIANYZIK, NEM KERUL A TORZSBE.
+   *
+   * MIERT NEM ALLANDO ALAPERTELMEZES: a szerver 2026-09-22 ota a FAJL BAJTJAIBOL
+   * donti el (kep -> PHOTO, minden mas -> OTHER), fajlonkent. Ha a kliens kuld
+   * egy allando erteket, az a dontest ELVESZI -- es akkor a fajta nem a fajlrol
+   * allit valamit, hanem arrol, melyik kepernyorol indult a feltoltes.
+   *
+   * A HIANY TEHAT NEM MULASZTAS, HANEM A KERES RESZE. Aki ide erteket ir, annak
+   * meg kell tudnia mondani, MIERT tudja jobban a kliens, mint a fajl tartalma.
+   */
+  type?: string;
   files: readonly PickedFile[];
   /** Tesztben cserélhető bájt-olvasó. Éles úton a `file-bytes.ts` valódija. */
   readBytes?: ReadFileBytes;
@@ -135,7 +146,7 @@ export function buildDocumentUpload(input: {
 
   const readBytes = input.readBytes ?? readFileBytes;
   const body = new FormData();
-  body.append("type", input.type);
+  if (input.type !== undefined) body.append("type", input.type);
   for (const file of input.files) {
     // A `as unknown as Blob` azt mondja ki, hogy a futtató mást vár, mint a DOM
     // típusdefiníció -- a rész alakjáért az `uploadPart` felel, és azt a

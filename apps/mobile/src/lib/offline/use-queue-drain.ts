@@ -198,12 +198,13 @@ async function kepetKuld(row: SyncQueueRow): Promise<{
         await uploadServiceJobPhotos(row.entityId, files);
         break;
       case "asset":
-        await uploadAssetDocuments(row.entityId, {
-          // A SZAMLA ES A GARANCIALEVEL AZ IRODABOL KERUL FEL; a helyszini kep
-          // az eszkoznel OTHER, a munkalapnal PHOTO (a szerver alapertelmezese).
-          type: "OTHER",
-          files,
-        });
+        // A FAJTAT A SZERVER DONTI EL, A FAJL BAJTJAIBOL (2026-09-22 ota).
+        //
+        // ITT KORABBAN `type: "OTHER"` ALLT, es ez a hivohely a legfontosabb a
+        // harombol: az offline sor a HELYSZINEN keszult kepeket viszi fel,
+        // amikor ujra van halozat. Amig az `OTHER` ment vele, a partner epp
+        // azokat a fenykepeket nem latta, amikert a fajta letezik.
+        await uploadAssetDocuments(row.entityId, { files });
         break;
       case "worksheet-line":
         /**

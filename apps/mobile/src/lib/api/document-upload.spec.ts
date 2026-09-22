@@ -31,6 +31,34 @@ describe("a feltöltés törzsének összeállítása", () => {
   });
 
   /**
+   * FAJTA NELKUL A `type` MEZO EL SEM INDUL -- ES EZ AZ EGESZ VALTOZTATAS OKA.
+   *
+   * A szerver 2026-09-22 ota a FAJL BAJTJAIBOL donti el a fajtat, fajlonkent.
+   * Az a dontes viszont CSAK AKKOR fut le, ha a kliens nem kuld tipust: egy
+   * elkuldott ertek felulirja, akarmi is a fajl.
+   *
+   * MIERT KELL RA ALLITAS, HOLOTT "csak egy `if`": az eszkoz-uton HAROM
+   * hivohelyen allt beegetett `type: "OTHER"`, koztuk az OFFLINE SORBAN, ami a
+   * helyszinen keszult kepeket viszi fel. Amig azok mentek, a partner epp
+   * azokat a fenykepeket nem latta, amikert a PHOTO fajta letezik. Ha valaki
+   * egyszer visszair egy allando erteket, ez az allitas NEM fog pirosodni --
+   * ezert meri az ELLENKEZOJET is a fenti allitas (kuldott tipus ATMEGY).
+   *
+   * A KETTO EGYUTT hataroz meg: kuldott tipus atmegy, hianyzo tipus nem kerul
+   * a torzsbe. Egyik onmagaban nem kulonbozteti meg a ket viselkedest.
+   */
+  it("fajta nelkul a type mezo NEM kerul a torzsbe", () => {
+    const result = buildDocumentUpload({
+      files: [file("helyszini.jpg")],
+    });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.body.getAll(UPLOAD_FIELD_NAME).length, 1);
+    assert.equal(result.body.get("type"), null);
+  });
+
+  /**
    * A KÉT ELUTASÍTÁS A KÜLDÉS ELŐTT TÖRTÉNIK, és ez a lényegük: mindkettő
    * elmenne a szerverig is, csak lassabban, és a szerelő addig a töltés-jelzőt
    * nézné egy olyan hibáért, amit a telefon már tudott.

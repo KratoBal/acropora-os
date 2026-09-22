@@ -139,10 +139,11 @@ export default function AssetDetailScreen() {
 
     setUploading(true);
     try {
-      const created = await uploadAssetDocuments(query.data.id, {
-        type: "OTHER",
-        files,
-      });
+      // A FAJTAT NEM MI DONTJUK EL: a szerver a fajl bajtjaibol allapitja meg,
+      // fajlonkent (kep -> PHOTO, minden mas -> OTHER). Ide beirni egy allando
+      // erteket azt jelentene, hogy a fajta nem a fajlrol allit valamit, hanem
+      // arrol, melyik kepernyorol indult a feltoltes.
+      const created = await uploadAssetDocuments(query.data.id, { files });
       // A KIHAGYOTTAKAT AKKOR IS KIMONDJUK, HA A TÖBBI SIKERÜLT. Egy néma
       // részleges siker azt a hitet hagyná, hogy mind a kép fent van.
       setUploadNotice(

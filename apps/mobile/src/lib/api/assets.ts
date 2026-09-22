@@ -403,7 +403,7 @@ export function setAssetDocumentCaption(
 
 export async function uploadAssetDocuments(
   id: string,
-  input: { type: AssetDocumentType; files: readonly PickedFile[] },
+  input: { type?: AssetDocumentType; files: readonly PickedFile[] },
 ): Promise<AssetDocumentSummary[]> {
   const built = buildDocumentUpload(input);
   if (!built.ok) throw new Error(built.reason);
