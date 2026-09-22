@@ -428,6 +428,19 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                     <Data label="Vevő címe" value={asset.address?.formatted} />
                   )}
                   <Data label="Akvárium" value={asset.aquarium?.name} />
+                  {/*
+                    A KATEGORIA AZ ADATLAPON, ES EZ HIANY VOLT, NEM ELHAGYAS.
+
+                    A 2026-09-22-i torzsadat-munka (#987) ota a kategoria egy
+                    `AssetCategory` sorbol jon, a szerkesztoben legordulomenu
+                    keri be, es a szerver ki is adja (`AssetDetail.category`).
+                    Az ADATLAP viszont egyetlen helyen sem irta ki: be lehetett
+                    allitani, es utana csak a szerkesztot ujranyitva latszott.
+
+                    A GYARTO FOLOTT ALL, mert a ketto ugyanaz a fajta adat --
+                    „mi ez es kitol van" --, es a kategoria a tagabb.
+                  */}
+                  <Data label="Kategória" value={asset.category} />
                   <Data label="Gyártó" value={asset.manufacturer} />
                   <Data label="Modell" value={asset.model} />
                   <Data label="Sorozatszám" value={asset.serialNumber} />

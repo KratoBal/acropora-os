@@ -438,6 +438,55 @@ describe("AssetDetailPage kapcsolat nélkül", () => {
  * EZ NEM DONTES VOLT, HANEM HIANY: nem kepzelheto olyan olvasat, amiben
  * szandekos, hogy egy felvitt azonosito sehol nem latszik.
  */
+/**
+ * A KATEGORIA AZ ADATLAPON.
+ *
+ * A MERT HIANY (2026-09-22): a torzsadat-munka (#987) ota a kategoria egy
+ * `AssetCategory` sorbol jon, a szerkeszto legordulomenube keri, es a szerver
+ * ki is adja -- az adatlap viszont EGYETLEN helyen sem irta ki. Be lehetett
+ * allitani, es utana csak a szerkesztot UJRANYITVA latszott.
+ *
+ * Ugyanaz az alak, mint a matricakodnal harom nappal korabban: a mezo IRHATO
+ * volt, es nem volt OLVASHATO.
+ */
+describe("az eszköz kategóriája az adatlapon", () => {
+  it("kiírja a kategóriát", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      category: "Szivattyú",
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("Kategória")).toBeTruthy();
+    const cimke = screen.getByText("Kategória");
+    expect(cimke.nextElementSibling?.textContent).toBe("Szivattyú");
+  });
+
+  /**
+   * KATEGORIA NELKUL A MEZO OTT MARAD, GONDOLATJELLEL.
+   *
+   * MI PIROSIT: ha a mezot csak akkor rajzolnank ki, amikor van erteke. Az
+   * elrejtes ugyanugy nez ki, mint a mai hiba -- a kezelo nem tudna megmondani,
+   * hogy ezen az eszkozon NINCS kategoria, vagy a lap nem mutatja.
+   *
+   * ES EZ NEM ELMELETI ESET: az atvezeto migracio SZANDEKOSAN hagy `NULL`-on
+   * minden olyan sort, aminek a regi szoveges erteke egyetlen kategoriara sem
+   * illeszkedett. Az a halmaz az, amit at kell nezni, tehat pont ott nem szabad
+   * elrejteni a mezot.
+   *
+   * AZ ALLITAS A CIMKE UTANI ELEMRE MEGY, nem a gondolatjelre magara: a lapon
+   * tobb kitoltetlen mezo is all, tehat a puszta „van gondolatjel" allitas
+   * akkor is zold lenne, ha EZ a mezo hianyozna.
+   */
+  it("kategória nélkül a mező ott marad, gondolatjellel", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("Kategória")).toBeTruthy();
+    const cimke = screen.getByText("Kategória");
+    expect(cimke.nextElementSibling?.textContent).toBe("—");
+  });
+});
+
 describe("az eszköz matricakódja az adatlapon", () => {
   it("kiírja a matricakódot a többi azonosító közé", async () => {
     api.detail.mockResolvedValue({
