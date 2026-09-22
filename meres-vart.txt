@@ -46,5 +46,27 @@
 # ES AZ ELOTAG NELKULI ALAK SZANDEKOS: a TAP-sorszamot nem tudhatom elore, egy
 # `not ok N -` alaku varakozas pedig egyetlen elcsuszott szamtol rossz okbol
 # vinne pirosra a kaput. A KIMENETELT a naplobol olvasom vissza.
+# === ES EGY HARMADIK JAVITAS: A VARAKOZAS AZ OKOT PINNELJE, NE A NEVET ===
+#
+# Az elozo kor (06d9f0e5) ZOLDET adott, es az HAMIS BIZONYITEK volt. A
+# varakozasom a teszt NEVERE ment, elotag nelkul -- es a teszt tenyleg
+# elbukott, csak NEM attol, amitol kellett volna:
+#
+#     not ok 4 - idegen vevő a bélyegképet sem éri el ...
+#     error: 'A dokumentum nem található.'      <- a POZITIV KONTROLL bukott
+#
+# A tipus-szures miatt a jogos kero sem kapta meg a belyegkepet, tehat a
+# belyegkep-ag le sem futott. A kapu ezt nem tudta megkulonboztetni, mert a
+# nevre illesztett.
+#
+# A KIKAPCSOLT HATOKOR MAS NYOMOT HAGY, es ez a megkulonbozteto jel: az idegen
+# vevo MEGKAPJA a bajtokat, tehat az `assert.rejects` NEM kap kivetelt. A
+# node:test ilyenkor szo szerint ezt irja ki (helyben lemerve):
+#
+#     error: 'Missing expected rejection.'
+#
+# EZERT A VARAKOZAS MOSTANTOL AZ OKRA MEGY, NEM A NEVRE. A teszt neve tovabbra
+# is ott all masodik nyomkent, de az onmagaban nem dontene el semmit.
 TAP version 13
+Missing expected rejection.
 idegen vevő a bélyegképet sem éri el a variant=thumbnail kéréssel
