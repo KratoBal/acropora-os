@@ -51,6 +51,7 @@ let eszkozAId = "";
 let eszkozBId = "";
 /** A kepes csatolmany a masik vevo eszkozen -- a belyegkep-ag merESEhez. */
 let kepDokumentumId = "";
+let szamlaKepDokumentumId = "";
 let actorUserId = "";
 
 function sha256() {
@@ -131,7 +132,17 @@ async function csatolmany(
  * hatokor-ellenorzes all. Vagyis egy PDF-fel merve a lenti allitas akkor is
  * zold lenne, ha a belyegkep-lekerdezesbol hianyozna a hatokor.
  */
-async function kepesCsatolmany(assetId: string, fileName: string) {
+async function kepesCsatolmany(
+  assetId: string,
+  fileName: string,
+  /*
+    A TIPUS MOSTANTOL PARAMETER, ES EZ A TIPUS-KAPU MERESEHEZ KELL.
+    Az alapertelmezes valtozatlanul `MANUAL` (lasd a lenti indoklast); egy
+    TILTOTT tipusu, DE BELYEGKEPES sor az egyetlen alak, amin a belyegkep-ag
+    tipus-kapuja egyaltalan merheto.
+  */
+  type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER" = "MANUAL",
+) {
   return repository.addDocument({
     assetId,
     /*
@@ -142,7 +153,7 @@ async function kepesCsatolmany(assetId: string, fileName: string) {
       futna le. A negativ allitast akkor a TIPUS dontene el, nem a hatokor --
       vagyis a javitas nelkul is ugyanugy nezne ki.
     */
-    type: "MANUAL",
+    type,
     fileName,
     content: Buffer.from("eredeti-kep"),
     sizeBytes: 11,
@@ -195,6 +206,14 @@ describe(
       */
       kepDokumentumId = (await kepesCsatolmany(eszkozBId, `${PREFIX}-kep.png`))
         .id;
+      /*
+        TILTOTT TIPUSU, DE BELYEGKEPES SOR -- a tipus-kapu merESEhez.
+        Ugyanazon a vevo eszkozen all, mint a fenti kep: a hatokor-kapu tehat
+        ATENGEDI, es ami elutasit, az CSAK a tipus lehet.
+      */
+      szamlaKepDokumentumId = (
+        await kepesCsatolmany(eszkozBId, `${PREFIX}-szamla-kep.png`, "INVOICE")
+      ).id;
     });
 
     after(async () => {
@@ -236,8 +255,8 @@ describe(
         { nev: "Customer (prefix szerint)", darab: maradtVevo },
       ]);
 
-      // NEGY: harom PDF plusz a belyegkepes kep (a belyegkep-ag merESEhez).
-      assert.equal(dokumentumok, 4);
+      // OT: harom PDF plusz KET belyegkepes kep (hatokor- es tipus-kapu).
+      assert.equal(dokumentumok, 5);
       assert.equal(eszkozok, 2);
       assert.equal(vevok, 2);
       await prisma.$disconnect();
@@ -291,8 +310,8 @@ describe(
       // ÉS A MÁSIK VEVŐ ESZKÖZÉN TÉNYLEG ÁLL SOR: enélkül a fenti elutasítás
       // egy üres eszközön is ugyanígy nézne ki.
       const { items } = await service.documents(eszkozBId, BELSOS);
-      // KETTO: a PDF es a belyegkepes kep, mind a ketto a masik vevo eszkozen.
-      assert.equal(items.length, 2);
+      // HAROM: a PDF es KET belyegkepes kep, mind a harom a masik vevo eszkozen.
+      assert.equal(items.length, 3);
     });
 
     /**
@@ -348,6 +367,62 @@ describe(
           eppen az jonne, kivetel nelkul. A megkulonboztetest a POZITIV
           KONTROLL adja: az bizonyitja, hogy a belyegkep-ag egyaltalan mukodik.
         */
+        /A dokumentum nem található/,
+      );
+    });
+
+    /**
+     * A BELYEGKEP-AG TIPUS-KAPUJA, ES EDDIG EZT SEMMI NEM MERTE.
+     *
+     * A `documentThumbnail` KET kaput visel: a hatokort es a dokumentum-fajtat
+     * (`if (!scopeMaySeeDocumentType(row.type, scope)) return null;`). A fenti
+     * allitas a HATOKORT meri -- idegen vevovel. A TIPUS-kapura viszont ott
+     * semmi nem szol: a kepes sor `MANUAL`, amit a vevo LATHAT, a jogos kero
+     * pedig epp ezert kapja meg.
+     *
+     * EZ AZ ALLITAS A MASIK TENGELY: SAJAT eszkoz, SAJAT vevo, tehat a
+     * hatokor-kapu ATENGEDI -- es ami elutasit, az CSAK a tipus lehet.
+     *
+     * AMIT A JELENLEGI KOD CSINAL: a tipus-kapu miatt a `documentThumbnail`
+     * URES kezzel ter vissza, a hivas atesik a `this.document(...)` agra, es
+     * OTT a masik tipus-ellenorzes utasitja el. Vagyis ma ketto ved.
+     *
+     * AMI A RONTASNAL TORTENIK: ha a belyegkep-ag tipus-kapujat kivesszuk, a
+     * `documentThumbnail` VISSZAADJA a belyegkepet, a visszaeses el sem indul,
+     * es a szamla csempeje kimegy a vevonek. Egy belyegkep ugyanannak a kepnek
+     * a kicsinyitett masa: ez szivargas, csak kisebb felbontasban.
+     *
+     * EDDIG EZT CSAK FORRAS-SZOVEG ORIZTE (`document-thumbnail-wiring.spec.ts`
+     * 205. sora). Az a statikus allitas MARAD, horgonynak: a TORLEST tovabbra
+     * is az fogja meg, a KIKAPCSOLAST ez.
+     */
+    it("a vevő a SAJÁT eszközén sem éri el a számla bélyegképét", async () => {
+      /*
+        ISMERT POZITIV KONTROLL, UGYANAZZAL A VEVOVEL ES UGYANAZON AZ ESZKOZON:
+        a belyegkep-ag ennek a kerőnek MUKODIK. Enelkul a lenti elutasitas egy
+        olyan agon is ugyanigy nezne ki, ami ennel a vevonel sosem fut le --
+        es akkor a tipusrol semmit nem mondana.
+      */
+      const engedett = await service.documentBytes(
+        eszkozBId,
+        kepDokumentumId,
+        { kind: "customer", customerId: vevoBId },
+        DOCUMENT_THUMBNAIL_VARIANT,
+      );
+      assert.deepEqual(
+        Buffer.from(engedett.bytes),
+        Buffer.from("belyegkep"),
+        "a jogos kérő nem a bélyegképet kapta -- az ág nem is futott le",
+      );
+
+      await assert.rejects(
+        () =>
+          service.documentBytes(
+            eszkozBId,
+            szamlaKepDokumentumId,
+            { kind: "customer", customerId: vevoBId },
+            DOCUMENT_THUMBNAIL_VARIANT,
+          ),
         /A dokumentum nem található/,
       );
     });
