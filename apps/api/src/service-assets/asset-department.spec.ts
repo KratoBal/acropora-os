@@ -97,6 +97,28 @@ describe("which unit an asset may be tied to", () => {
     );
   });
 
+  /**
+   * A MAI VAKSÁG HELYE, 2026-09-22-ig: a `requested: false` eset -- amikor a
+   * hívó SOSEM küld departmentId-t -- a `!input.requested` sornál `null`-lal
+   * tért vissza, MIELŐTT a CUSTOMER_OWNER ágat egyáltalán elérte volna. Egy
+   * vevő-tulajdonú eszköz LÉTREHOZÁSA (ami sosem küld departmentId-t, mert a
+   * vevőknek sosem volt alegységük) így átment ezen a validáción, és a
+   * `NOT NULL` megkötés alatt nyers, megnevezetlen adatbázis-hibával végződött
+   * volna. A CUSTOMER_OWNER ág mostantól `requested`-től FÜGGETLENÜL fut --
+   * lásd a függvény fejlécét.
+   */
+  it("refuses a unit on a customer-owned asset even when no unit was requested", () => {
+    assert.equal(
+      assetDepartmentRefusal({
+        ownerType: "CUSTOMER",
+        mirrorCustomerId: null,
+        department: null,
+        requested: false,
+      }),
+      "CUSTOMER_OWNER",
+    );
+  });
+
   /** A mező elhagyása nem törlés és nem hiba: az eszköz alegység nélkül is
    * rögzíthető, a meglévők pedig NULL értékkel maradnak. */
   it("says nothing when no unit was sent at all", () => {

@@ -23,31 +23,37 @@ export function assetDepartmentRefusal(input: {
   /** Küldött-e a hívó alegységet. A `null` törlés, az `undefined` érintetlen. */
   requested: boolean;
 }): AssetDepartmentRefusal | null {
+  /*
+    A CUSTOMER_OWNER ÁG `requested`-TŐL FÜGGETLENÜL FUT, 2026-09-22 ÓTA -- ÉS
+    EZ A HELY VÁLTOZOTT, NEM CSAK A FELTÉTEL.
+
+    Balázs, 2026-09-22 19:13:19 UTC (Discord, Acropora OS szál, message_id
+    1552035084578586696), szó szerint: „nem lesz" -- nem lesz olyan eszköz a
+    rendszerben, ami a vevőé, nem a miénk vagy a partneré.
+
+    A `20260922210000_department_required` migráció óta az `Asset.departmentId`
+    `NOT NULL`, és a repository vevő-tulajdonosnál MINDIG `null`-t ír ebbe a
+    mezőbe -- létrehozáskor is, tulajdonos-váltáskor is --, FÜGGETLENÜL attól,
+    küldött-e a hívó `departmentId`-t. Egy vevő-tulajdonú eszköz létrehozása
+    vagy arra váltása tehát MA MÁR AKKOR IS a NOT NULL megkötésbe ütközne, ha a
+    hívó sosem említi a mezőt -- és enélkül a hiba nyers, megnevezetlen
+    adatbázis-hibaként érné el a felhasználót, nem ezzel a tiszta üzenettel.
+
+    Ezért ez az ág a `requested` ellenőrzés ELŐTT fut: a séma fizikailag nem
+    tudja ábrázolni a vevő-tulajdonú eszközt, tehát maga a KÍSÉRLET utasítandó
+    el -- nem csak az, ha valaki emellett explicit `departmentId`-t is küld.
+
+    Acrobot döntése, msg 22200, 2026-09-22 23:09:19: nem új szabály, hanem egy
+    már előállt lehetetlenség olvashatóvá tétele. Balázs a VILÁGRÓL állított
+    valamit ("nem lesz"), nem a rendszernek adott tiltó parancsot -- a kettő
+    a séma szigorítása óta esik egybe, nem korábban.
+  */
+  if (input.ownerType === "CUSTOMER") return "CUSTOMER_OWNER";
   if (!input.requested) return null;
   /*
     Vevő tulajdonosnál a finomítás a CÍM, nem az alegység. A két fogalom külön
     mező, és a felületen is külön címke -- pont ezért készült ez az egész.
-
-    === EZ AZ ÁG 2026-09-22 ÓTA ELÉRHETETLEN, ÉS SZÁNDÉKOSAN MARAD ITT ===
-
-    Balázs, 2026-09-22 19:13:19 UTC (Discord, Acropora OS szál, message_id
-    1552035084578586696). A kérdés az volt, lesz-e valaha olyan eszköz a
-    rendszerben, ami a vevőé, nem a miénk vagy a partneré. A válasza szó
-    szerint: „nem lesz".
-
-    Mérve ugyanazon a napon, éles adatbázison: 124 eszközből MIND a 124 visel
-    `supplierId`-t, vevői tulajdonosú NULLA. Az ág tehát ma nulla soron fut, és
-    a döntés szerint később sem fog.
-
-    AMIÉRT MÉGIS ITT ÁLL: a törlése KÜLÖN döntés, nem ennek a változásnak a
-    része. A fenti mondat egy korábbi, szó szerint leírt döntés; azt nem
-    töröljük azzal az indokkal, hogy útban van egy másiknak.
-
-    ÉS AMIÉRT A DÁTUMOZOTT IDÉZET KELL IDE: enélkül a következő olvasó két
-    dolog közül választ, és mind a kettő rossz. Vagy törli indok nélkül, vagy
-    ÉLŐ ágnak nézi és épít rá. Egy dátumozott idézet mind a kettőt kizárja.
   */
-  if (input.ownerType === "CUSTOMER") return "CUSTOMER_OWNER";
   if (!input.department) return "NOT_FOUND";
   // A tükör-soron keresztül kötjük össze: az alegység a partner tükör vevőjéhez
   // tartozik, nem magához a szállítóhoz. Ha a partnernek nincs tükre, akkor
@@ -63,7 +69,9 @@ export const ASSET_DEPARTMENT_REFUSAL_MESSAGES: Record<
   string
 > = {
   CUSTOMER_OWNER:
-    "Alegység csak szerviz partner eszközéhez rendelhető. Vevő eszközénél a cím a pontosítás.",
+    "Az eszköz alegysége kötelező, vevő tulajdonában lévő eszköznek viszont " +
+    "nem lehet alegysége -- nála a cím a pontosítás. Emiatt vevő tulajdonába " +
+    "eszköz nem hozható létre, és meglévő eszköz nem váltható vevő tulajdonába.",
   NOT_FOUND: "A kiválasztott alegység nem található.",
   OTHER_PARTNER: "A kiválasztott alegység nem ehhez a partnerhez tartozik.",
   INACTIVE: "A kiválasztott alegység már nem aktív.",
