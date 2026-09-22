@@ -162,7 +162,21 @@ export interface ServiceJobPartnerDetail {
   assets: ServiceJobAssetLink[];
 }
 
-export interface ServiceJobDetail extends ServiceJobListItem {
+/**
+ * A RESZLETLAP VALASZA -- ES A `worksheetCount` SZANDEKOSAN NINCS BENNE.
+ *
+ * MERVE 2026-09-22: a szerver a `worksheetCount` mezot CSAK a LISTA valaszaban
+ * epiti fel (`service-jobs.service.ts`, a `list` metodus); a reszletlap sosem
+ * kuldi. Amig ez a tipus orokolte, a telefon egy olyan mezot IGERT, ami nem
+ * erkezik meg -- ugyanaz a fajta hazugsag, ami aznap este az eles
+ * osszeomlast okozta, csak eppen meg senki nem olvasta ki innen.
+ *
+ * Az `Omit` ezt MONDJA KI, a csendes orokles helyett.
+ */
+export interface ServiceJobDetail extends Omit<
+  ServiceJobListItem,
+  "worksheetCount"
+> {
   description: string | null;
   /**
    * A JEGY PARTNERE ES HELYSZINE, AZONOSITOVAL -- ES EZ NEM UJ VEGPONT.
