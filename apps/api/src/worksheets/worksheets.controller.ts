@@ -62,7 +62,7 @@ export class WorksheetsController {
   ) {
     return this.service.list(
       query,
-      partnerScopeOf(user),
+      user,
       hasPermission(user, PERMISSIONS.SERVICE_HIDE),
     );
   }

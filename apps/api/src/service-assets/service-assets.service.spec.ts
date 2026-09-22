@@ -1,3 +1,5 @@
+import type { PartnerScope } from "../auth/partner-scope.util.js";
+import { belsosUser } from "../testing/scope-user.fixture.js";
 import assert from "node:assert/strict";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 import test from "node:test";
@@ -5,7 +7,6 @@ import test from "node:test";
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import type { AssetDetail } from "@acropora/types";
 
-import type { PartnerScope } from "../auth/partner-scope.util.js";
 import {
   AssetLabelUnavailableError,
   AssetPerformancePairError,
@@ -22,7 +23,16 @@ import {
  * BELSOS HATOKOR, KIIRVA. Ezek az allitasok a `keep` paros KEZELESET merik, nem
  * a jogosultsagot -- azt kulon suite meri, adatbazison.
  */
-const INTERNAL: PartnerScope = { kind: "internal" };
+/*
+  A HATOKORT MOSTANTOL A SZOLGALTATAS OLDJA FEL A FELHASZNALOBOL (2026-09-22),
+  mert a lathatosag mar nem csak a tulajdonrol szol, hanem a hozzarendelt
+  helyszinekrol is. A spec ezert USERT ad at (`belsosUser()`), nem kesz hatokort.
+
+  AZ `owners` NEM VALTOZOTT, ES EZ SZANDEKOS: az nem eszkoz-sorokat listaz,
+  hanem a tulajdonos-valaszto partnereit. A hozzarendelt helyszin fogalma ott
+  nem ertelmes, tehat az a metodus tovabbra is kesz hatokort vesz at.
+*/
+const INTERNAL_HATOKOR: PartnerScope = { kind: "internal" };
 
 const asset = {
   id: "asset-1",
@@ -180,7 +190,7 @@ test("rejects a cyclic parent update before writing", async () => {
         },
         "user-1",
         // BELSOS UT: ezek a tesztek a sajat kollegank altali szerkesztest merik.
-        { kind: "internal" as const },
+        belsosUser(),
       ),
     BadRequestException,
   );
@@ -194,7 +204,7 @@ test("generates an app deep link QR without exposing database ids", async () => 
     const result = await new ServiceAssetsService(
       repository(),
       new InMemoryDocumentStore(),
-    ).qrCode("asset-1", { kind: "internal" });
+    ).qrCode("asset-1", belsosUser());
     assert.equal(
       result.value,
       "acropora-os://assets/scan/550e8400-e29b-41d4-a716-446655440000",
@@ -260,7 +270,7 @@ test("keeps the owner an existing asset already has", async () => {
 
   await service.owners(
     { ownerType: "CUSTOMER", ownerId: "customer-9" },
-    INTERNAL,
+    INTERNAL_HATOKOR,
   );
 
   assert.deepEqual(asked, { type: "CUSTOMER", id: "customer-9" });
@@ -278,7 +288,7 @@ test("passes nothing to keep when the caller is creating a new asset", async () 
     new InMemoryDocumentStore(),
   );
 
-  await service.owners({}, INTERNAL);
+  await service.owners({}, INTERNAL_HATOKOR);
 
   assert.equal(asked, null);
 });
@@ -297,11 +307,11 @@ test("refuses half of an owner reference instead of ignoring it", () => {
   // A visszautasítás AZONNAL történik, még a tároló hívása előtt: nem
   // elutasított ígéret, hanem dobott hiba.
   assert.throws(
-    () => service.owners({ ownerType: "CUSTOMER" }, INTERNAL),
+    () => service.owners({ ownerType: "CUSTOMER" }, INTERNAL_HATOKOR),
     BadRequestException,
   );
   assert.throws(
-    () => service.owners({ ownerId: "customer-9" }, INTERNAL),
+    () => service.owners({ ownerId: "customer-9" }, INTERNAL_HATOKOR),
     BadRequestException,
   );
 });
@@ -407,7 +417,7 @@ test("a szerkesztő ág a BELSŐS üzenetet adja, nem a partnerét", async () =>
         { labelCode: "V2196", expectedUpdatedAt: asset.updatedAt },
         "user-1",
         // BELSOS UT: ezek a tesztek a sajat kollegank altali szerkesztest merik.
-        { kind: "internal" as const },
+        belsosUser(),
       ),
     (error: unknown) => {
       assert.ok(error instanceof ConflictException);
@@ -442,7 +452,7 @@ test("a szerkesztő ágon a rossz ALAK 400-at ad, nem 409-et", async () => {
         { labelCode: "nem-jo-alak", expectedUpdatedAt: asset.updatedAt },
         "user-1",
         // BELSOS UT: ezek a tesztek a sajat kollegank altali szerkesztest merik.
-        { kind: "internal" as const },
+        belsosUser(),
       ),
     (error: unknown) => {
       assert.ok(

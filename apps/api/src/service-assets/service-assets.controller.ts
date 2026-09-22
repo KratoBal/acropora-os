@@ -51,7 +51,7 @@ export class ServiceAssetsController {
     @Query() query: AssetListQueryDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.list(query, partnerScopeOf(user));
+    return this.service.list(query, user);
   }
 
   /**
@@ -182,7 +182,7 @@ export class ServiceAssetsController {
     @Param("code") code: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.scanLabel(code, partnerScopeOf(user));
+    return this.service.scanLabel(code, user);
   }
 
   /**
@@ -240,9 +240,28 @@ export class ServiceAssetsController {
   }
 
   /**
-   * A TULAJDONOST SZANDEKOSAN NEM ELLENORIZZUK (spec 4.1): a token maga a
-   * kulcs. A hatokor MEGIS atmegy, mert a dokumentum-tipus szabalya nem a
-   * tulajdonosrol szol -- lasd a tarolo `detailByQrToken` jegyzetet.
+   * A BEOLVASAS A HIVO LATHATOSAGAN BELUL MARAD -- ES EZ FELULIR EGY KORABBI
+   * SPEC-DONTEST.
+   *
+   * AMI ITT ALLT 2026-09-22-IG: "A TULAJDONOST SZANDEKOSAN NEM ELLENORIZZUK
+   * (spec 4.1): a token maga a kulcs." Ez a mondat a PARTNER-hatokorre
+   * MOSTANTOL NEM all.
+   *
+   * AKI FELULIRTA, ES MIKOR: Balazs, 2026-09-22 08:55:25 UTC (Discord, uzenet
+   * 1551879584851431436), szo szerint: "ne lassa". A kerdes, amire valaszolt
+   * (uzenet 1551879397806448701): "Ha a partner embere odamegy egy olyan
+   * helyszinre, ami nincs hozza rendelve, es beolvassa a gepen a QR kodot,
+   * lassa az eszkozt vagy ne?"
+   *
+   * A valasz tehat PONTOSAN erre az utra szol, es nem tagabb annal.
+   *
+   * ES A REGI INDOK AMUGY IS PONTATLAN VOLT: a vegpont `SERVICE_VIEW` jog alatt
+   * all es `@CurrentUser`-t vesz, tehat a token sosem volt "a kulcs", csak a
+   * masodik tenyezo.
+   *
+   * A BELSOS HIVO VALTOZATLAN: ott a lathatosagi fuggveny ures szurot ad, tehat
+   * a szerelonk beolvasasa barmelyik ott allo eszkozt megnyitja -- a 2026-08-21-i
+   * dontes szerint. Ha ez valaha valtozik, ITT kell atirni, nem a taroloban.
    */
   @Get("scan/:qrToken")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
@@ -250,13 +269,13 @@ export class ServiceAssetsController {
     @Param("qrToken") qrToken: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.scan(qrToken, partnerScopeOf(user));
+    return this.service.scan(qrToken, user);
   }
 
   @Get(":id/qr")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   qrCode(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.qrCode(id, partnerScopeOf(user));
+    return this.service.qrCode(id, user);
   }
 
   /**
@@ -281,13 +300,13 @@ export class ServiceAssetsController {
   @Get(":id/documents")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   documents(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.documents(id, partnerScopeOf(user));
+    return this.service.documents(id, user);
   }
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.detail(id, partnerScopeOf(user));
+    return this.service.detail(id, user);
   }
 
   @Post()
@@ -306,13 +325,13 @@ export class ServiceAssetsController {
     @Body() input: UpdateAssetDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.update(id, input, user.id, partnerScopeOf(user));
+    return this.service.update(id, input, user.id, user);
   }
 
   @Post(":id/qr/rotate")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   rotateQr(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.rotateQr(id, user.id, partnerScopeOf(user));
+    return this.service.rotateQr(id, user.id, user);
   }
 
   /**
@@ -366,7 +385,7 @@ export class ServiceAssetsController {
           input.type,
           file,
           user.id,
-          partnerScopeOf(user),
+          user,
           input.caption,
         ),
       );
@@ -412,7 +431,7 @@ export class ServiceAssetsController {
     const document = await this.service.documentBytes(
       id,
       documentId,
-      partnerScopeOf(user),
+      user,
       variant,
     );
 
@@ -447,12 +466,7 @@ export class ServiceAssetsController {
     @Body() input: UpdateAssetDocumentCaptionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.setDocumentCaption(
-      id,
-      documentId,
-      input.caption,
-      partnerScopeOf(user),
-    );
+    return this.service.setDocumentCaption(id, documentId, input.caption, user);
   }
 
   @Delete(":id/documents/:documentId")
@@ -462,12 +476,7 @@ export class ServiceAssetsController {
     @Param("documentId") documentId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    await this.service.deleteDocument(
-      id,
-      documentId,
-      user.id,
-      partnerScopeOf(user),
-    );
+    await this.service.deleteDocument(id, documentId, user.id, user);
     return { ok: true as const };
   }
 }

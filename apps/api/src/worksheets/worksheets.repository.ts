@@ -1,3 +1,4 @@
+import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import {
   rowBelongsToScope,
   scopeOwnWhereForAndBranch,
@@ -248,6 +249,18 @@ function lineData(content: NormalizedWorksheetContent, versionId: string) {
  */
 export function worksheetListWheres(
   scope: PartnerScope,
+  /**
+   * A HIVOHOZ RENDELT HELYSZINEK. KOTELEZO, ES NEM `?`-OS.
+   *
+   * Balazs, 2026-09-22 07:46:59 UTC: egy partner-felhasznalo CSAK a hozza
+   * rendelt helyszinek dolgait lassa. Ha ez elhagyhato lenne, egy kifelejtett
+   * hivohely CSENDBEN a regi, tagabb viselkedest tartana meg; igy FORDITASI
+   * HIBA lesz belole.
+   *
+   * AZ URES LISTA ERVENYES ERTEK, ES "SEMMIT" JELENT, nem "nem szurunk" --
+   * ugyanaz a dontes, mint a hibajegyeknel es az eszkozoknel.
+   */
+  assignedUnitIds: readonly string[],
   userWhereWithoutStatus: Prisma.WorksheetWhereInput,
   statusWhere: Prisma.WorksheetWhereInput,
   includeHidden?: boolean,
@@ -269,16 +282,53 @@ export function worksheetListWheres(
    * oldal hazudik.
    */
   const hidden = hiddenRowsWhere(scope, includeHidden, mayHide);
+
+  /**
+   * A HELYSZIN-TENGELY KULON AG, ES SZANDEKOSAN NEM A `scopeWhereForAndBranch`
+   * BELSEJEBEN.
+   *
+   * Az a fuggveny KOZOS: a hibajegyek, a partnerek es a munkalapok is hivjak,
+   * es tobbsegukhoz a helyszin fogalma nem is tartozik. Ha a szukites oda
+   * kerulne, egy ELTERO jelentesu valtozas hatna minden hivojara -- pontosan az
+   * a "egy szabaly ket helyen" alak, amit a repo tobb orzoje is tilt.
+   *
+   * A BELSOS HIVO VALTOZATLAN: ott a hatokor `{}`, es ez az ag sem sul el.
+   */
+  /*
+    CSAK A VEVO-HATOKOR SZUKUL, ES EZ SZANDEKOS -- UGYANAZ A DONTES, MINT AZ
+    ESZKOZ OLDALAN (`assetVisibilityForAndBranch`).
+
+    A szallitoi hatokort azert nem szukitem, mert MA NULLA ilyen felhasznalo
+    letezik (acrobot merese, 2026-09-22), tehat nincs hozza pozitiv kontroll:
+    egy szukites ott olyan allitast rogzitene helyesnek, amit senki nem tud
+    megcafolni. A nulla egy PILLANAT, nem allapot -- ha keletkezik ilyen fiok,
+    ez a dontes ujramerendo.
+
+    ES A KET OLDALNAK EGYEZNIE KELL: ha a munkalap szukitene a szallitot es az
+    eszkoz nem, ugyanaz a felhasznalo ket felulet kozott mast latna, es a
+    kulonbsegre semmilyen szabaly nem mutatna ra.
+  */
+  const egysegTengely: Prisma.WorksheetWhereInput =
+    scope.kind === "customer"
+      ? { departmentId: { in: [...assignedUnitIds] } }
+      : {};
+
   return {
     list: {
       AND: [
         scopeWhereForAndBranch(scope),
+        egysegTengely,
         hidden,
         { ...userWhereWithoutStatus, ...statusWhere },
       ],
     },
     counts: {
-      AND: [scopeWhereForAndBranch(scope), hidden, userWhereWithoutStatus],
+      AND: [
+        scopeWhereForAndBranch(scope),
+        egysegTengely,
+        hidden,
+        userWhereWithoutStatus,
+      ],
     },
   };
 }
@@ -780,9 +830,23 @@ export class WorksheetsRepository extends Repository {
     return rows.map((row) => row.worksheetId);
   }
 
+  /**
+   * A FELHASZNALOHOZ RENDELT HELYSZINEK, A KOZOS LEKERDEZESSEL.
+   *
+   * Vekony atjaro: a valodi lekerdezes a `service-jobs/assigned-units.query.ts`
+   * fajlban all, es ugyanaz szolgalja ki a hibajegyeket, az eszkozoket es a
+   * munkalapokat. Harom kulon bejaras ugyanarra a fara harom kulonbozo valaszt
+   * tudna adni -- es a kulonbseg csendes lenne.
+   */
+  async assignedUnitIds(userId: string): Promise<string[]> {
+    return assignedUnitIdsFor(userId);
+  }
+
   async list(
     query: WorksheetListQueryDto,
     scope: PartnerScope,
+    /** Lasd a `worksheetListWheres` azonos nevu parameteret. */
+    assignedUnitIds: readonly string[],
     /** Lasd a `worksheetListWheres` azonos nevu parameteret. */
     mayHide = false,
   ): Promise<WorksheetListResponse> {
@@ -835,6 +899,7 @@ export class WorksheetsRepository extends Repository {
     // pontosan annyival ter el, hogy az ALLAPOT nincs benne.
     const { list: where, counts: countsWhere } = worksheetListWheres(
       scope,
+      assignedUnitIds,
       userWhereWithoutStatus,
       latestStatusIds ? { id: { in: latestStatusIds } } : {},
       query.includeHidden,

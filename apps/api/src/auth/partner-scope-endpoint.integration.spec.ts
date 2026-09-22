@@ -271,6 +271,41 @@ describe(
           },
         }),
       ]);
+      /*
+        HARMADIK SZALLITO, AKIT EGYIK FIXTURA-FELHASZNALO SEM KEPVISEL.
+
+        A vevo-oldali eszkozok 2026-09-22 ota szallitoi tulajdonuak (a valos
+        alak: vevo-tulajdonu sornak nem lehet helyszine). Ha ezek a `supplierA`
+        nevehez kerulnenek, a SZALLITOI hatokoru allitas ("a sajat eszkozet
+        kapja, a vevoket nem") beleutkozne: az a kero a sajat sorait a vevo
+        helyszinen is latna.
+
+        EZ A SZALLITO TEHAT CSAK TULAJDONOS, NEM HIVO -- igy a ket tengely (ki a
+        tulajdonos, ki a kero) fuggetlenul merheto.
+      */
+      const szallitoC = await prisma.supplier.create({
+        data: {
+          // A KOD A KOZOS ELOTAGGAL MEGY: a takaritas arra szur, es egy
+          // sajat nevkonvencio itt azt jelentene, hogy ez az egy sor
+          // BENNMARAD -- a kovetkezo futast pedig az egyedi kodon buktatna el,
+          // olyan hibaval, aminek semmi koze a mert viselkedeshez.
+          code: `${TEST_SUPPLIER_PREFIX}${suffix}-C`,
+          /*
+            A NEVE SZANDEKOSAN NEM TARTALMAZZA A KOZOS KERESOSZOT.
+
+            A partner-lista allitasa `search: shared` alakkal kerdez, es a
+            kereses a NEVRE is illeszkedik. Ha ez a szallito is viselne a
+            kozos szot, harmadikkent feljonne egy olyan allitasban, aminek a
+            targya a KET partner -- es a vart lista bovitese elfedne, hogy itt
+            csak egy TULAJDONOS all, nem egy harmadik szereplo.
+
+            A takaritast ez nem erinti: az a KODRA szur, nem a nevre.
+          */
+          name: `Tulajdonos ${suffix}`,
+        },
+        select: { id: true },
+      });
+
       const [unitA, unitB] = await Promise.all([
         prisma.worksheetDepartment.create({
           data: {
@@ -347,6 +382,26 @@ describe(
       departmentOfA = departmentA.id;
       departmentOfB = departmentB.id;
 
+      /*
+        A HOZZARENDELES A FIXTURA RESZE, NEM DISZ.
+
+        2026-09-22 ota a vevo-hatokoru olvasas a HOZZARENDELT helyszinekre szur.
+        Egy hozzarendeles nelkuli felhasznalo SEMMIT nem lat -- es akkor minden
+        "csak a sajatjat latja" allitas egy ures listan lenne zold, vagyis a
+        tulajdon hatarat nem merne semmi.
+
+        MINDEGYIK PONTOSAN EGY helyszint kap, es a ketto KULONBOZIK: e nelkul
+        egy "mindent atengedo" es egy "helyesen szukito" szuro ugyanazt adna.
+      */
+      await Promise.all([
+        prisma.userWorksheetDepartment.create({
+          data: { userId: userA.id, departmentId: departmentA.id },
+        }),
+        prisma.userWorksheetDepartment.create({
+          data: { userId: userB.id, departmentId: departmentB.id },
+        }),
+      ]);
+
       const [sheetA, sheetB] = await Promise.all([
         prisma.worksheet.create({
           data: {
@@ -375,14 +430,36 @@ describe(
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-A`,
             name: `${shared} eszköz A`,
-            customerId: customerA,
+            /*
+              SZALLITOI TULAJDON A VEVO HELYSZINEN -- ES EZ A VALOS ALAK.
+
+              Merve 2026-09-22, a kodbol: a `create` ES az `update` is NULLARA
+              kenyszeriti a `departmentId` mezot, ha a tulajdonos VEVO
+              (`ownerType === "SUPPLIER" ? input.departmentId : null`). Vagyis
+              egy vevo-tulajdonu eszkoznek SOHA nincs helyszine -- a sajat
+              jegyzete szerint ott `customerAddressId` es `aquariumId` all.
+
+              A partner tehat a sajat helyszinen allo, SZALLITOI tulajdonu
+              eszkozt latja (a lathatosag masodik aga). Ugyanezt mutatja acrobot
+              2026-09-21-i eles merese is: 79 eszkozbol 79 szallitoi tulajdonu.
+
+              A KORABBI FIXTURA VEVO-TULAJDONT ADOTT HELYSZIN NELKUL, es 2026-09-22
+              elott az is lathato volt. A mai szabaly alatt az a sor nem letezhet
+              ugy, hogy latszik -- egy fixtura, ami lehetetlen allapotot mer,
+              semmit nem bizonyit.
+            */
+            supplierId: szallitoC.id,
+            departmentId: departmentA.id,
           },
         }),
         prisma.asset.create({
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-B`,
             name: `${shared} eszköz B`,
-            customerId: customerB,
+            // Ugyanaz az alak, mint az A eszkoznel: szallitoi tulajdon a MASIK
+            // vevo helyszinen. A ket sor CSAK a helyszinben ter el.
+            supplierId: szallitoC.id,
+            departmentId: departmentB.id,
           },
         }),
         prisma.asset.create({
@@ -504,7 +581,8 @@ describe(
           // Ezert a lista-allitasok SOROLJAK FEL ezt a sort is, ahelyett hogy
           // egy allapot-trukkel rejtenenk el.
           name: `${shared} eszköz A törléshez`,
-          customerId: customerA,
+          supplierId: szallitoC.id,
+          departmentId: departmentOfA,
         },
       });
       assetForDeletes = forDeletes.id;
@@ -539,7 +617,8 @@ describe(
         data: {
           assetNumber: `${TEST_ASSET_PREFIX}${suffix}-W`,
           name: `${shared} eszköz A íráshoz`,
-          customerId: customerA,
+          supplierId: szallitoC.id,
+          departmentId: departmentOfA,
         },
       });
       assetForWrites = forWrites.id;
@@ -902,7 +981,24 @@ describe(
        * tudna csatolmányt írni -- és akkor a javítás egy működő funkciót vett
        * volna el, csendben.
        */
-      it("a saját eszközén mind a három írás megy", async () => {
+      /**
+       * === A HAROMBOL KETTO MEGY, ES A HARMADIK SZANDEKOSAN NEM (2026-09-22) ===
+       *
+       * Ez az allitas 2026-09-22-ig mind a harmat egyben merte. Aznap a
+       * torles ELVALT a masik kettotol, es a kulonbseg DONTES:
+       *
+       *   feltoltes, felirat   a LISTA kapujan mennek (`detail`)
+       *   torles               a szukebb, tulajdon-alapu ellenorzesen marad
+       *
+       * AZ INDOK: a ket muvelet ara nem egyforma. Egy rossz felirat javithato,
+       * egy torolt dokumentum nem -- egy visszafordithatatlan tagitasra kulon
+       * engedely kell, es a gazda erre nem valaszolt.
+       *
+       * EZERT BONTOTTAM KET ALLITASRA, es nem irtam at egyet. Ha a harom egy
+       * tesztben maradna, a kalibracio kimenete nem mondana meg, MELYIK ut
+       * romlott el: harom kulonbozo rontas ugyanazt az egy pirosat adna.
+       */
+      it("a saját eszközén a feltöltés és a felirat MEGY", async () => {
         const feltoltve = await assets.uploadDocument(
           assetForWrites,
           Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
@@ -921,11 +1017,54 @@ describe(
         );
         assert.deepEqual(felirat, { ok: true });
 
+        // A TAKARITAST BELSOS HIVOVAL VEGEZZUK, mert a partner nem torolhet --
+        // lasd a kovetkezo allitast. E nelkul a sor bennmaradna, es a kovetkezo
+        // futas mas szamokat latna.
+        await assets.deleteDocument(
+          assetForWrites,
+          feltoltve[0]!.id,
+          asInternal,
+        );
+      });
+
+      /**
+       * ES A TORLES A PARTNERNEK NEM MEGY -- KULON ALLITAS, NEV SZERINT.
+       *
+       * Nem hiany es nem feledekenyseg: a `deleteDocument` szandekosan a
+       * szukebb, tulajdon-alapu ellenorzesen maradt, mert a torles
+       * visszafordithatatlan, es a gazda a megnyitasara nem adott engedelyt
+       * (2026-09-22). A reszletek a tarolo `deleteDocument` jegyzeteben.
+       *
+       * HA EZ AZ ALLITAS PIROSODIK, a valtozas nem feltetlenul hiba -- de akkor
+       * a dontest ki kell mondani, nem csendben atirni.
+       */
+      it("a saját eszközén a TÖRLÉS viszont NEM megy", async () => {
+        const feltoltve = await assets.uploadDocument(
+          assetForWrites,
+          Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
+          [pdf(`${shared}-partner-torles-proba.pdf`)],
+          asCustomerA,
+        );
+        assert.equal(feltoltve.length, 1);
+
+        await assert.rejects(
+          () =>
+            assets.deleteDocument(
+              assetForWrites,
+              feltoltve[0]!.id,
+              asCustomerA,
+            ),
+          /A dokumentum nem található/,
+        );
+
+        // ISMERT POZITIV KONTROLL: a sor LETEZIK, es belsos hivoval torolheto.
+        // E nelkul a fenti elutasitas akkor is zold lenne, ha a feltoltes
+        // egyaltalan nem hozott volna letre semmit.
         assert.deepEqual(
           await assets.deleteDocument(
             assetForWrites,
             feltoltve[0]!.id,
-            asCustomerA,
+            asInternal,
           ),
           { ok: true },
         );
@@ -1095,12 +1234,19 @@ describe(
       });
 
       /**
-       * EZ AZ AN ALLITAS, AMIERT A KET FELIDO EGYUTT TARTOZIK. A `scan/:qrToken`
-       * vegpont SZANDEKOSAN nem ellenoriz tulajdonost (a token 128 bites veletlen
-       * uuid), tehat a lista szurese az EGYETLEN dolog, ami miatt egy partner nem
-       * jut hozza egy idegen eszkoz tokenjehez. A tokent a valasz EGESZEBEN
-       * keressuk, nem csak a sor azonositojat nezve: egy szivargas nem feltetlenul
-       * kulon sorkent jelenik meg.
+       * A TOKEN A VALASZ EGESZEBEN NEM JELENHET MEG, nem csak kulon sorkent: egy
+       * szivargas nem feltetlenul uj sor alakjaban jon.
+       *
+       * === A JEGYZET INDOKA 2026-09-22-EN MEGVALTOZOTT ===
+       *
+       * Itt az allt, hogy a `scan/:qrToken` vegpont SZANDEKOSAN nem ellenoriz
+       * tulajdonost, tehat a lista szurese az EGYETLEN vedelem az idegen token
+       * ellen. Ez MA MAR NEM IGAZ: Balazs 2026-09-22 08:55:25 UTC-kor felulirta
+       * ("ne lassa"), es a beolvasas is a hivo lathatosagan belul marad.
+       *
+       * AZ ALLITAS ATTOL MEG ALL, es szandekosan maradt: a ket vedelem KULON tud
+       * elromlani. Ha a beolvasas szurese egyszer kiesne, ez a sor az EGYETLEN,
+       * ami meg megfogja, hogy a token egyaltalan a partner kezebe jut.
        */
       it("az idegen eszköz qrToken-je SEHOL nem jelenik meg a válaszban", async () => {
         const forA = await assets.list(

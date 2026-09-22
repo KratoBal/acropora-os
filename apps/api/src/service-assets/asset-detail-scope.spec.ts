@@ -31,22 +31,55 @@ describe("assetDetailWhere", () => {
    */
   it("vevő-hatókörnél a tulajdon ÉS a saját helyszín is beenged", () => {
     assert.deepEqual(
-      assetDetailWhere("asset-1", {
-        kind: "customer",
-        customerId: "customer-1",
-      }),
+      assetDetailWhere(
+        "asset-1",
+        { kind: "customer", customerId: "customer-1" },
+        ["dept-1", "dept-2"],
+      ),
       {
         AND: [
           { id: "asset-1" },
           {
-            OR: [
-              { customerId: "customer-1" },
-              { department: { customerId: "customer-1" } },
+            AND: [
+              {
+                OR: [
+                  { customerId: "customer-1" },
+                  { department: { customerId: "customer-1" } },
+                ],
+              },
+              { departmentId: { in: ["dept-1", "dept-2"] } },
             ],
           },
         ],
       },
     );
+  });
+
+  /**
+   * A HOZZARENDELT HELYSZINEK AGA KULON ALLITAST KAP, ES EZ NEM ISMETLES.
+   *
+   * Balazs, 2026-09-22 07:46:59 UTC: egy partner-felhasznalo CSAK a hozza
+   * rendelt helyszinek dolgait lassa. A fenti `deepEqual` ezt is meri -- de egy
+   * `deepEqual` a kalibracio kimenetebol NEM mondja meg, MELYIK ag romlott el:
+   * ha a tulajdon-ag es a helyszin-ag ugyanabban az allitasban all, ket
+   * kulonbozo rontas UGYANAZT az egy pirosat adja.
+   *
+   * Ez az allitas ezert CSAK a helyszin-tengelyre szol, nev szerint.
+   */
+  it("az ÜRES hozzárendelés semmit nem enged át", () => {
+    const where = assetDetailWhere(
+      "asset-1",
+      { kind: "customer", customerId: "customer-1" },
+      [],
+    ) as { AND: [unknown, { AND: unknown[] }] };
+
+    /*
+      AZ URES LISTA NEM "NEM SZURUNK", HANEM "SEMMIT". A Prisma `in: []` alakja
+      nulla sorra illeszkedik, es ez SZANDEK: akinek nincs hozzarendelese, nem
+      lat eszkozt. Ha ez valaha elhagyott agga valna, a partner MINDENT latna,
+      amit a tulajdon-ag beenged -- vagyis pont a mai hibat kapnank vissza.
+    */
+    assert.deepEqual(where.AND[1].AND[1], { departmentId: { in: [] } });
   });
 
   /**
@@ -71,10 +104,11 @@ describe("assetDetailWhere", () => {
    */
   it("MÁSIK vevő azonosítója nem kerül a feltételbe", () => {
     const szoveg = JSON.stringify(
-      assetDetailWhere("asset-1", {
-        kind: "customer",
-        customerId: "customer-2",
-      }),
+      assetDetailWhere(
+        "asset-1",
+        { kind: "customer", customerId: "customer-2" },
+        ["dept-1"],
+      ),
     );
     assert.ok(!szoveg.includes("customer-1"), `idegen azonosito: ${szoveg}`);
     // KONTROLL: a sajat azonosito VISZONT ott van -- kulonben ez az allitas egy
@@ -91,15 +125,18 @@ describe("assetDetailWhere", () => {
    */
   it("a szállító-hatókör NEM mozdul: tulajdon, helyszín nélkül", () => {
     assert.deepEqual(
-      assetDetailWhere("asset-1", { kind: "supplier", supplierId: "sup-1" }),
+      assetDetailWhere("asset-1", { kind: "supplier", supplierId: "sup-1" }, [
+        "dept-1",
+      ]),
       { AND: [{ id: "asset-1" }, { supplierId: "sup-1" }] },
     );
   });
 
   it("belsős hatókörnél nincs szűkítés", () => {
-    assert.deepEqual(assetDetailWhere("asset-1", { kind: "internal" }), {
-      AND: [{ id: "asset-1" }, {}],
-    });
+    assert.deepEqual(
+      assetDetailWhere("asset-1", { kind: "internal" }, ["dept-1"]),
+      { AND: [{ id: "asset-1" }, {}] },
+    );
   });
 
   /**
@@ -112,10 +149,14 @@ describe("assetDetailWhere", () => {
    */
   it("a láthatósági ág BETŰRE a lista függvényéből jön", () => {
     const scope = { kind: "customer", customerId: "c-9" } as const;
-    const where = assetDetailWhere("asset-1", scope) as {
+    const egysegek = ["dept-7"];
+    const where = assetDetailWhere("asset-1", scope, egysegek) as {
       AND: unknown[];
     };
-    assert.deepEqual(where.AND[1], assetVisibilityForAndBranch(scope));
+    assert.deepEqual(
+      where.AND[1],
+      assetVisibilityForAndBranch(scope, egysegek),
+    );
   });
 });
 
@@ -149,7 +190,7 @@ describe("a csatolmány-ágak ugyanazt a láthatóságot használják", () => {
     it(`${nev}: az eszköz láthatósága a lekérdezésben áll`, () => {
       assert.match(
         torzs(nev),
-        /asset: \{ AND: \[assetVisibilityForAndBranch\(scope\)\] \}/,
+        /asset: \{ AND: \[assetVisibilityForAndBranch\(scope, assignedUnitIds\)\] \}/,
       );
     });
   }

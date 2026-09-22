@@ -222,18 +222,109 @@ export function scopeWhereForAndBranch(scope: PartnerScope): {
  */
 export function assetVisibilityForAndBranch(
   scope: PartnerScope,
+  assignedUnitIds: readonly string[],
 ): Prisma.AssetWhereInput {
   switch (scope.kind) {
     case "internal":
       return {};
     case "customer":
+      /**
+       * A VEVO-AG A KIOSZTOTT HELYSZINEKRE SZUKIT, NEM AZ UGYFELERE
+       * (2026-09-22, c654a5d4).
+       *
+       * === A SZABALY MAR KI VOLT MONDVA, KET MONDATBAN, KET NAPON ===
+       *
+       * Balazs, 2026-09-21 14:34:07 (idezve az `asset-detail-scope.spec.ts`
+       * fejlecebol): "a partner azokat az eszkozoket latja, aminek a helyszine
+       * hozza van rendelve"
+       *
+       * Balazs, 2026-09-22 07:46:59 (Discord, a hozzarendeles nelkuli
+       * portal-felhasznalorol): "akkor semmit se lasson"
+       *
+       * A MASODIK DONTI EL AZ ELSOT. Az elso mondat olvashato ugy is, hogy a
+       * helyszin az UGYFELHEZ tartozik -- ezt epitette meg a korabbi alak --,
+       * es ugy is, hogy a FELHASZNALOHOZ. Ha az ugyfel-szintu olvasat allna, a
+       * hozzarendeles nelkuli felhasznalo az ugyfel MINDENET latna, es epp azt
+       * mondta, hogy ne.
+       *
+       * === AMI A KORABBI ALAKBAN FELCSUSZOTT ===
+       *
+       * A masodik ag felmegy a DEPARTMENT-re, es annak a CUSTOMER-et nezi:
+       * "ennek az eszkoznek az egysege az en ugyfelemhez tartozik-e", NEM
+       * "az en kiosztott egysegeimben all-e". Ugyanaz a felcsuszas, mint a
+       * hibajegy-tengelynel a #966 elott, csak `some` nelkul: nem a SORROL
+       * kerdez, hanem a SZULORE megy fel.
+       *
+       * === AZ URES HALMAZ URES EREDMENYT AD, ES EZ DONTES ===
+       *
+       * `{ in: [] }` all itt, nem elhagyott ag. Ugyanaz az alak, amit a
+       * `scopeOwnWhereForAndBranch` hasznal a kereszt-esetre, ugyanabbol az
+       * okbol: egy ures halmaz, amit a kod "nincs szures"-nek fordit, pontosan
+       * a javitott hibat adna vissza.
+       *
+       * === A KULSO `OR` MINDKET AGA ALA ESIK, ES EZ IS DONTES ===
+       *
+       * Egy eszkoz, ami az UGYFEL NEVEN all, de nem kiosztott helyszinen,
+       * SZINTEN kiesik. Ez meresbol ma nem donthetо el, mert olyan sor nincs:
+       *
+       *   korabbi meres (mas nap, az asset-detail-scope fejlecebol):
+       *     79 eszkozbol 79 SZALLITOI tulajdonu, sajat `customerId`-je
+       *     egyiknek sincs
+       *   mai meres (acrobot, 2026-09-22 09:5x, eles):
+       *     83 eszkoz, 0 az ugyfel NEVEN, mind a 83 a helyszinein
+       *
+       * Ket kulonbozo nap, ket kulonbozo szam, UGYANAZ AZ ALAK. Ezert all ra
+       * kulon allitas KITALALT fixturaval: a valos adat ezt az agat nem
+       * allitja elo, tehat egy valos fixtura a feltetel mindket allasan
+       * ugyanazt adna.
+       */
+      /*
+        A VEVO-TULAJDONU ESZKOZ A HELYSZIN-TENGELYEN NEM TUD ATMENNI, mert a kod
+        MINDKET irasi uton nullara kenyszeriti a `departmentId` mezot
+        (`create` es `update`: `ownerType === "SUPPLIER" ? input.departmentId : null`).
+        A sajat jegyzetuk szerint a vevo-tulajdonu eszkozon `customerAddressId`
+        es `aquariumId` all helyette -- a ket mezo nem ugyanaz a fogalom.
+
+        EZ MA NEM VESZ EL SEMMIT, ES A NEVEZO TOBBET MOND, MINT A NULLA:
+        2026-09-22-en 83 eszkozbol 0 vevo-tulajdonu (acrobot merese az eles
+        adatbazison, acropora-prod-01; `customerAddressId` sem all egyetlen
+        soron sem). HA EZ A SZAM VALAHA NEM NULLA, EZ A DONTES UJRANYITANDO.
+
+        A MASIK ALAK, amit emiatt NEM valasztottunk: a helyszin-tengely csak ott
+        szurjon, ahol helyszin VAN. Az visszahozna az UGYFEL-SZINTU lathatosagot
+        erre a kategoriara -- egy vevo-tulajdonu eszkozt a vevo BARMELYIK embere
+        latna, helyszintol fuggetlenul --, vagyis pont azt, amit a gazda
+        2026-09-22 07:46:59 UTC-kor elutasitott.
+      */
       return {
-        OR: [
-          { customerId: scope.customerId },
-          { department: { customerId: scope.customerId } },
+        AND: [
+          {
+            OR: [
+              { customerId: scope.customerId },
+              { department: { customerId: scope.customerId } },
+            ],
+          },
+          { departmentId: { in: [...assignedUnitIds] } },
         ],
       };
     case "supplier":
+      /**
+       * A SZALLITO-AG SZANDEKOSAN NEM SZUKUL (acrobot dontese, 2026-09-22).
+       *
+       * Ket kulon indok all mogotte, es a masodik a merheto:
+       *
+       *   a fejlec erve  "nincs olyan fogalom, hogy a szallito helyszine"
+       *   a mert nulla   szallito-hatokoru felhasznalo: 0 (eles, 2026-09-22;
+       *                  vevo-hatokoru 2, belsos 6)
+       *
+       * A nulla ketszeresen szamit: ma senkit nem erintene a szukites, ES nem
+       * is lenne mivel kalibralni -- nincs egyetlen sor sem, amin megmutathato
+       * lenne, hogy a szukites LAT. Egy valtozas, amihez nem tudunk pozitiv
+       * kontrollt allitani, epp az, amit ez a hazban mashol elutasitunk.
+       *
+       * Ha egyszer lesz szallito-felhasznalo, ez a nulla lejar, es akkor ezt a
+       * dontest ujra kell merni -- nem automatikusan atvenni.
+       */
       return { supplierId: scope.supplierId };
   }
 }

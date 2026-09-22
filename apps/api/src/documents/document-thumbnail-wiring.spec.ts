@@ -37,8 +37,12 @@ const GAZDAK = [
     service: "service-assets/service-assets.service.ts",
     controller: "service-assets/service-assets.controller.ts",
     /** A tartalmat olvaso hivas -- a belyegkep-agnak EZ ELE kell kerulnie. */
+    /*
+      A HARMADIK ARGUMENTUM 2026-09-22 OTA A FELHASZNALO, nem a kesz hatokor: a
+      szolgaltatas belole oldja fel a hatokort ES a hozzarendelt helyszineket.
+    */
     tartalomOlvasas:
-      "const document = await this.document(id, documentId, scope);",
+      "const document = await this.document(id, documentId, user);",
   },
   {
     nev: "munkalap",
@@ -199,7 +203,7 @@ describe("a belyegkep bekotese", () => {
 
     assert.match(
       torzs,
-      /asset: \{ AND: \[assetVisibilityForAndBranch\(scope\)\] \}/,
+      /asset: \{ AND: \[assetVisibilityForAndBranch\(scope, assignedUnitIds\)\] \}/,
       "az eszkoz-lathatosag kapuja hianyzik a belyegkep-olvasasbol",
     );
     assert.match(

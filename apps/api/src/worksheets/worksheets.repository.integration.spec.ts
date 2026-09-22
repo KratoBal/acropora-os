@@ -388,6 +388,8 @@ describe(
       const alap = await repository.list(
         { page: 1, pageSize: 100 },
         { kind: "internal" },
+        // `internal` -> a helyszin-ag ures, a lista nem sul el
+        [],
       );
       const idk = alap.items.map((item) => item.id);
       assert.equal(idk.includes(rejtett), false, "a rejtett lap ott maradt");
@@ -401,6 +403,8 @@ describe(
       const mindet = await repository.list(
         { page: 1, pageSize: 100, includeHidden: true },
         { kind: "internal" },
+        // `internal` -> a helyszin-ag ures, a lista nem sul el
+        [],
         /*
           A HARMADIK ARGUMENTUM A `SERVICE_HIDE` JOG, TENYKENT (2026-09-18 ota).
           Alapertelmezese `false`, tehat nelkule a kapcsolo hatastalan -- es ez
@@ -426,6 +430,8 @@ describe(
       const alap = await repository.list(
         { page: 1, pageSize: 100 },
         { kind: "internal" },
+        // `internal` -> a helyszin-ag ures, a lista nem sul el
+        [],
       );
       assert.ok(alap.items.some((item) => item.id === id));
       /*
@@ -456,6 +462,13 @@ describe(
       const partnerLista = await repository.list(
         { page: 1, pageSize: 100, includeHidden: true },
         { kind: "customer", customerId },
+        /*
+          A HOZZARENDELT HELYSZIN, ES NEM URES LISTA. A ket lap a
+          `bioDepartmentId` alatt all; ures listaval MIND A KETTO kiesne, es az
+          allitas ("a partner a nem rejtettet LATJA") egy ures listan bukna el --
+          vagyis nem a rejtest merne, hanem a helyszin-szurest.
+        */
+        [bioDepartmentId],
         /*
           JOGGAL EGYUTT, ES EZ A LENYEG. A jog nelkul ez az allitas zold lenne
           akkor is, ha a HATOKOR-feltetel egyaltalan nem letezne -- vagyis a
@@ -996,6 +1009,8 @@ describe(
           assigneeId: technicianUserId,
         },
         { kind: "internal" },
+        // `internal` -> a helyszin-ag ures, a lista nem sul el
+        [],
       );
       const ids = response.items.map((item) => item.id);
       assert.ok(ids.includes(mine));
@@ -1028,6 +1043,8 @@ describe(
           status: "AWAITING_SIGNATURE",
         },
         { kind: "internal" },
+        // `internal` -> a helyszin-ag ures, a lista nem sul el
+        [],
       );
       assert.equal(
         awaiting.items.some((item) => item.id === id),
@@ -1041,6 +1058,8 @@ describe(
           status: "DRAFT",
         },
         { kind: "internal" },
+        // `internal` -> a helyszin-ag ures, a lista nem sul el
+        [],
       );
       assert.equal(
         draftsWhileAwaiting.items.some((item) => item.id === id),
@@ -1063,6 +1082,8 @@ describe(
           status: "DRAFT",
         },
         { kind: "internal" },
+        // `internal` -> a helyszin-ag ures, a lista nem sul el
+        [],
       );
       assert.equal(
         draftsAfterAmend.items.some((item) => item.id === id),
@@ -1076,6 +1097,8 @@ describe(
           status: "AWAITING_SIGNATURE",
         },
         { kind: "internal" },
+        // `internal` -> a helyszin-ag ures, a lista nem sul el
+        [],
       );
       assert.equal(
         awaitingAfterAmend.items.some((item) => item.id === id),
@@ -1098,6 +1121,8 @@ describe(
           status: "DRAFT",
         },
         { kind: "internal" },
+        // `internal` -> a helyszin-ag ures, a lista nem sul el
+        [],
       );
 
       assert.equal(drafts.pagination.totalItems, drafts.items.length);

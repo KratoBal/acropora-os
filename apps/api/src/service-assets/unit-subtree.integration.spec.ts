@@ -213,6 +213,7 @@ describe(
       const result = await repository.list(
         query({ departmentId: childId }),
         INTERNAL,
+        [],
       );
       assert.deepEqual(result.items.map((item) => item.assetNumber).sort(), [
         `${PREFIX}-CHILD`,
@@ -224,6 +225,7 @@ describe(
       const result = await repository.list(
         query({ departmentId: siblingId }),
         INTERNAL,
+        [],
       );
       assert.deepEqual(
         result.items.map((item) => item.assetNumber),
@@ -235,6 +237,7 @@ describe(
       const result = await repository.list(
         query({ departmentId: rootId }),
         INTERNAL,
+        [],
       );
       assert.deepEqual(result.items.map((item) => item.assetNumber).sort(), [
         `${PREFIX}-CHILD`,
@@ -257,6 +260,7 @@ describe(
       const missing = await repository.list(
         query({ departmentId: "00000000-0000-4000-8000-000000000000" }),
         INTERNAL,
+        [],
       );
       assert.equal(missing.items.length, 0);
       assert.equal(missing.pagination.totalItems, 0);
@@ -264,6 +268,7 @@ describe(
       const control = await repository.list(
         query({ departmentId: rootId }),
         INTERNAL,
+        [],
       );
       assert.equal(control.items.length, 4);
     });
@@ -280,6 +285,7 @@ describe(
       const result = await repository.list(
         query({ departmentIds: [childId, otherRootId] }),
         INTERNAL,
+        [],
       );
       assert.deepEqual(result.items.map((item) => item.assetNumber).sort(), [
         `${PREFIX}-CHILD`,
@@ -306,6 +312,7 @@ describe(
           ],
         }),
         INTERNAL,
+        [],
       );
       assert.deepEqual(
         withUnknown.items.map((item) => item.assetNumber).sort(),
@@ -315,6 +322,7 @@ describe(
       const withoutUnknown = await repository.list(
         query({ departmentIds: [siblingId, otherRootId] }),
         INTERNAL,
+        [],
       );
       assert.deepEqual(
         withUnknown.items.map((item) => item.assetNumber).sort(),
@@ -338,10 +346,12 @@ describe(
       const both = await repository.list(
         query({ departmentIds: [rootId, childId] }),
         INTERNAL,
+        [],
       );
       const rootOnly = await repository.list(
         query({ departmentIds: [rootId] }),
         INTERNAL,
+        [],
       );
 
       assert.deepEqual(both.items.map((item) => item.assetNumber).sort(), [
@@ -361,6 +371,7 @@ describe(
       const result = await repository.list(
         query({ departmentId: siblingId, departmentIds: [otherRootId] }),
         INTERNAL,
+        [],
       );
       assert.deepEqual(result.items.map((item) => item.assetNumber).sort(), [
         `${PREFIX}-OTHER`,

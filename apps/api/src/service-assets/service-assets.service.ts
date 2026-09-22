@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { PartnerScope } from "../auth/partner-scope.util.js";
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { assetDeletionRefusal } from "./asset-deletion.js";
 import { normalizeDocumentCaption } from "../documents/document-caption.js";
 import { describeFieldConflict } from "./asset-field-conflict.js";
@@ -14,7 +15,11 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
-import type { AssetDocumentSummary, AssetQrCode } from "@acropora/types";
+import type {
+  AssetDocumentSummary,
+  AssetQrCode,
+  AuthenticatedUser,
+} from "@acropora/types";
 import {
   ASSET_LABEL_CODE_SHAPE_MESSAGE,
   assetLabelCreateProblem,
@@ -74,8 +79,42 @@ export class ServiceAssetsService {
 
   private readonly logger = new Logger(ServiceAssetsService.name);
 
-  list(query: AssetListQueryDto, scope: PartnerScope) {
-    return this.repository.list(query, scope);
+  /**
+   * A HIVO LATASI HATOKORE, EGY HELYEN FELOLDVA.
+   *
+   * Ket adatot ad vissza, mert a szabaly KETTOBOL all: kie a sor (ugyfel vagy
+   * szallito), ES melyik helyszinen all. Balazs 2026-09-22 07:46:59: egy partner
+   * csak a hozza RENDELT helyszinek dolgait lassa.
+   *
+   * === MIERT ITT, ES NEM A KONTROLLERBEN ===
+   *
+   * A repoban MAR VAN pontosan ilyen alak: `serviceJobVisibilityFor(user, ...)`.
+   * A kontroller a USER-t adja at, a szolgaltatas oldja fel mindkettot. Ha a
+   * kontroller oldana fel, a szabaly annyi helyen allna, ahany vegpont -- es a
+   * tizennegy hivohely kozul eleg lenne EGYET kifelejteni ahhoz, hogy csendben
+   * tagabb maradjon.
+   *
+   * === A BELSOS AGON A MASODIK LEKERDEZEST EL SEM INDITJUK ===
+   *
+   * `internal` hatokornel a szuro ures, tehat a hozzarendelt egysegek nem
+   * szamitanak. Ez nem gyorsitas: egy belsos hivo nem is visel hozzarendelest,
+   * es a lekerdezes ures listat adna -- amibol a HIVO oldalan mar nem latszana,
+   * hogy szandekosan ures.
+   */
+  private async latasiHatokor(
+    user: AuthenticatedUser,
+  ): Promise<{ scope: PartnerScope; assignedUnitIds: string[] }> {
+    const scope = partnerScopeOf(user);
+    if (scope.kind === "internal") return { scope, assignedUnitIds: [] };
+    return {
+      scope,
+      assignedUnitIds: await this.repository.assignedUnitIds(user.id),
+    };
+  }
+
+  async list(query: AssetListQueryDto, user: AuthenticatedUser) {
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    return this.repository.list(query, scope, assignedUnitIds);
   }
 
   /**
@@ -127,14 +166,14 @@ export class ServiceAssetsService {
    * a vegpont `SERVICE_ASSET_DELETE` jog alatt all, amit partner-fiok NEM kap
    * meg (merve ugyanakkor). Ott tehat a jog tenyleg kapu, itt nem volt az.
    */
-  private async requireAssetInScope(id: string, scope: PartnerScope) {
-    const asset = await this.repository.detail(id, scope);
-    if (!asset) throw new NotFoundException("Az eszköz nem található.");
+  private async requireAssetInScope(id: string, user: AuthenticatedUser) {
+    const asset = await this.detail(id, user);
     return asset;
   }
 
-  async detail(id: string, scope: PartnerScope) {
-    const asset = await this.repository.detail(id, scope);
+  async detail(id: string, user: AuthenticatedUser) {
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    const asset = await this.repository.detail(id, scope, assignedUnitIds);
     if (!asset) throw new NotFoundException("Az eszköz nem található.");
     return asset;
   }
@@ -148,7 +187,13 @@ export class ServiceAssetsService {
    * csendben (lasd a `partner-scope.util.ts` jegyzetet).
    */
   async remove(id: string) {
-    await this.detail(id, { kind: "internal" });
+    // A TAROLOT KOZVETLENUL HIVJUK, mert a `detail` mostantol a HIVO
+    // felhasznalojat veszi -- itt pedig szandekosan NINCS hivo-hatokor (a
+    // vegpont a `SERVICE_ASSET_DELETE` jog alatt all, amit partner nem kap meg).
+    // A kimondott `internal` plusz ures egyseg-lista ugyanazt jelenti, mint
+    // eddig, csak most latszik is, hogy dontes.
+    const letezik = await this.repository.detail(id, { kind: "internal" }, []);
+    if (!letezik) throw new NotFoundException("Az eszköz nem található.");
     const blockers = await this.repository.deletionBlockers(id);
     const refusal = assetDeletionRefusal(blockers);
     if (refusal) throw new ConflictException(refusal);
@@ -156,8 +201,13 @@ export class ServiceAssetsService {
     return { ok: true as const };
   }
 
-  async scan(qrToken: string, scope: PartnerScope) {
-    const asset = await this.repository.detailByQrToken(qrToken, scope);
+  async scan(qrToken: string, user: AuthenticatedUser) {
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    const asset = await this.repository.detailByQrToken(
+      qrToken,
+      scope,
+      assignedUnitIds,
+    );
     if (!asset)
       throw new NotFoundException(
         "A QR-kódhoz nem tartozik érvényes eszközazonosító.",
@@ -221,11 +271,16 @@ export class ServiceAssetsService {
    * teszunk kulonbseget: a tarolo mindkettore `null`-t ad, es a kettot
    * megkulonbozteto valasz maga lenne a szivargas.
    */
-  async scanLabel(rawCode: string, scope: PartnerScope) {
+  async scanLabel(rawCode: string, user: AuthenticatedUser) {
     const code = normalizeAssetLabelCode(rawCode);
     if (code === null)
       throw new BadRequestException(ASSET_LABEL_CODE_SHAPE_MESSAGE);
-    const asset = await this.repository.detailByLabelCode(code, scope);
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    const asset = await this.repository.detailByLabelCode(
+      code,
+      scope,
+      assignedUnitIds,
+    );
     if (!asset)
       throw new NotFoundException(
         "Ehhez a matricakódhoz nem tartozik elérhető eszköz.",
@@ -288,7 +343,7 @@ export class ServiceAssetsService {
     id: string,
     input: UpdateAssetDto,
     actorUserId: string,
-    scope: PartnerScope,
+    user: AuthenticatedUser,
   ) {
     /*
       A HATOKOR AZ ELSO SOR, ES EZ A HELYE SZAMIT.
@@ -301,7 +356,7 @@ export class ServiceAssetsService {
       A kapu a MODOSITAS ELOTT all, nem a valasz osszeallitasakor: egy
       hatokor-ellenorzes az iras UTAN nem hatokor-ellenorzes, hanem elfedes.
     */
-    await this.requireAssetInScope(id, scope);
+    await this.requireAssetInScope(id, user);
     const existing = await this.repository.basic(id);
     if (!existing) throw new NotFoundException("Az eszköz nem található.");
     if ((input.ownerType === undefined) !== (input.ownerId === undefined))
@@ -359,7 +414,7 @@ export class ServiceAssetsService {
     }
   }
 
-  async rotateQr(id: string, actorUserId: string, scope: PartnerScope) {
+  async rotateQr(id: string, actorUserId: string, user: AuthenticatedUser) {
     /*
       A KOMMENT, AMI ITT ALLT, HAMIS VOLT, ES EZ NEM ELIRAS.
 
@@ -374,7 +429,7 @@ export class ServiceAssetsService {
       ervenytelenne teszi -- a helyszinen allo eszkozt onnantol nem lehet
       beolvasni.
     */
-    await this.requireAssetInScope(id, scope);
+    await this.requireAssetInScope(id, user);
     try {
       return await this.repository.rotateQr(id, actorUserId);
     } catch (error) {
@@ -382,8 +437,8 @@ export class ServiceAssetsService {
     }
   }
 
-  async qrCode(id: string, scope: PartnerScope): Promise<AssetQrCode> {
-    const asset = await this.detail(id, scope);
+  async qrCode(id: string, user: AuthenticatedUser): Promise<AssetQrCode> {
+    const asset = await this.detail(id, user);
     const base = (
       process.env.ASSET_QR_BASE_URL?.trim() || "acropora-os://assets/scan"
     ).replace(/\/+$/, "");
@@ -432,12 +487,12 @@ export class ServiceAssetsService {
     type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER",
     file: Express.Multer.File,
     actorUserId: string,
-    scope: PartnerScope,
+    user: AuthenticatedUser,
     caption?: string | null,
   ) {
     // A HIANY EGYFELE ALAKBAN ALL, es a szabaly KOZOS a harom gazdan.
     const felirat = normalizeDocumentCaption(caption);
-    await this.detail(id, scope);
+    await this.detail(id, user);
     // A BEJELENTETT TÍPUS ÉS A TARTALOM EGYÜTT DÖNT, és ez a szabály nem
     // lazult azzal, hogy a kép is bekerült: mindkettőnek egyeznie kell.
     // A lista és a szándékosan kihagyott formátumok indoka a
@@ -529,14 +584,16 @@ export class ServiceAssetsService {
     id: string,
     documentId: string,
     caption: string | null | undefined,
-    scope: PartnerScope,
+    user: AuthenticatedUser,
   ): Promise<{ ok: true }> {
-    await this.detail(id, scope);
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    await this.detail(id, user);
     const erintett = await this.repository.setDocumentCaption(
       id,
       documentId,
       normalizeDocumentCaption(caption),
       scope,
+      assignedUnitIds,
     );
     // A NULLA ERINTETT SOR NEM SIKER: a felulet a sajat begepelt szoveget
     // mutatna tovabb, mintha mentve lenne.
@@ -632,14 +689,20 @@ export class ServiceAssetsService {
    */
   async documents(
     id: string,
-    scope: PartnerScope,
+    user: AuthenticatedUser,
   ): Promise<{ items: AssetDocumentSummary[] }> {
-    const asset = await this.detail(id, scope);
+    const asset = await this.detail(id, user);
     return { items: asset.documents };
   }
 
-  async document(id: string, documentId: string, scope: PartnerScope) {
-    const document = await this.repository.document(id, documentId, scope);
+  async document(id: string, documentId: string, user: AuthenticatedUser) {
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    const document = await this.repository.document(
+      id,
+      documentId,
+      scope,
+      assignedUnitIds,
+    );
     if (!document) throw new NotFoundException("A dokumentum nem található.");
     return document;
   }
@@ -662,7 +725,7 @@ export class ServiceAssetsService {
   async documentBytes(
     id: string,
     documentId: string,
-    scope: PartnerScope,
+    user: AuthenticatedUser,
     variant?: string,
   ) {
     /*
@@ -678,15 +741,17 @@ export class ServiceAssetsService {
       eltorik olyan sorokon, amik ma hibatlanul mukodnek.
     */
     if (wantsThumbnail(variant)) {
+      const { scope, assignedUnitIds } = await this.latasiHatokor(user);
       const kicsi = await this.repository.documentThumbnail(
         id,
         documentId,
         scope,
+        assignedUnitIds,
       );
       if (kicsi) return thumbnailResponse(kicsi);
     }
 
-    const document = await this.document(id, documentId, scope);
+    const document = await this.document(id, documentId, user);
 
     if (document.storageKey === null) {
       if (document.content === null) {
@@ -734,8 +799,9 @@ export class ServiceAssetsService {
     id: string,
     documentId: string,
     actorUserId: string,
-    scope: PartnerScope,
+    user: AuthenticatedUser,
   ) {
+    const { scope } = await this.latasiHatokor(user);
     if (
       !(await this.repository.deleteDocument(
         id,

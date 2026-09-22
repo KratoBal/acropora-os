@@ -33,6 +33,15 @@ const CODE_A = "Z9001";
 const CODE_B = "Z9002";
 const CODE_C = "Z9003";
 /**
+ * A HATOKOR-MERES SAJAT KODJA, SZANDEKOSAN A KESZLETEN KIVUL.
+ *
+ * A `CODE_A`..`CODE_F` kodokra keszlet-allitasok epulnek (mi szabad, mi
+ * foglalt). Ha a hatokor-meres is azokbol venne egyet, minden ilyen allitas
+ * szamat mozditana -- es a kovetkezo olvaso nem tudna eldonteni, melyik
+ * valtozas okozta.
+ */
+const HATOKOR_KOD = "Z9100";
+/**
  * AZ UTOLAGOS FELVITELHEZ KET SAJAT KOD, es ez nem ovatoskodas: a fenti harom
  * allapota a suite-on BELUL valtozik (a `CODE_C` peldaul lefoglaltta valik, es
  * egy kesobbi allitas EPP arra epul, hogy nem szabad). Ha az utolagos felvitel
@@ -50,6 +59,18 @@ const CODE_E = "Z9005";
 const CODE_F = "Q7431";
 
 let customerId = "";
+/**
+ * A HATOKOR-MERESEK ESZKOZE SZALLITOI TULAJDONU, A VEVO HELYSZINEN -- ES EZ A
+ * VALOS ALAK, nem kenyelem.
+ *
+ * A `create` es az `update` is NULLARA kenyszeriti a `departmentId` mezot
+ * vevo-tulajdonu soron, tehat egy vevo-tulajdonu eszkoznek SOHA nincs
+ * helyszine. Eles adaton (2026-09-22, acrobot merese) 83 eszkozbol 0
+ * vevo-tulajdonu. Egy vevo-tulajdonu fixtura tehat olyan allapotot merne, ami
+ * a valosagban nem fordul elo -- es 2026-09-22 ota lathatatlan is lenne.
+ */
+let szallitoId = "";
+let helyszinId = "";
 let actorUserId = "";
 
 function createInput(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
@@ -87,7 +108,11 @@ async function removeLeftovers() {
    * a suite zold marad, es a sor orokre ott all.
    */
   const kotegek = await prisma.assetLabel.findMany({
-    where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F] } },
+    where: {
+      code: {
+        in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F, HATOKOR_KOD],
+      },
+    },
     select: { batchId: true },
   });
   const kotegIdk = [
@@ -99,7 +124,11 @@ async function removeLeftovers() {
   ];
 
   await prisma.assetLabel.deleteMany({
-    where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F] } },
+    where: {
+      code: {
+        in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F, HATOKOR_KOD],
+      },
+    },
   });
 
   // CSAK AZ ARVAKAT, es ez nem ovatoskodas: ha egy koteghez idegen cimke is
@@ -115,6 +144,20 @@ async function removeLeftovers() {
   await prisma.asset.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
   });
+  // A SZALLITOI TULAJDONU SOR SEM A VEVOT NEM VISELI: a HELYSZINEN at kell
+  // megtalalni, kulonben a helyszin torlese `Asset_departmentId_fkey` hibaval
+  // all meg -- es a takaritas bukasa a KOVETKEZO futast viszi el.
+  await prisma.asset.deleteMany({
+    where: {
+      department: { customer: { customerNumber: { startsWith: PREFIX } } },
+    },
+  });
+  // A HELYSZIN AZ ESZKOZOK UTAN ES A VEVO ELOTT (`Asset.departmentId` Restrict),
+  // a szallito szinten az eszkozok utan (`Asset.supplierId`).
+  await prisma.worksheetDepartment.deleteMany({
+    where: { customer: { customerNumber: { startsWith: PREFIX } } },
+  });
+  await prisma.supplier.deleteMany({ where: { code: { startsWith: PREFIX } } });
   await prisma.customer.deleteMany({
     where: { customerNumber: { startsWith: PREFIX } },
   });
@@ -161,6 +204,45 @@ describe(
         select: { id: true },
       });
       actorUserId = user.id;
+
+      const szallito = await prisma.supplier.create({
+        data: { code: `${PREFIX}S`.slice(0, 12), name: `${PREFIX} szállító` },
+        select: { id: true },
+      });
+      szallitoId = szallito.id;
+
+      const helyszin = await prisma.worksheetDepartment.create({
+        data: { customerId, code: "LBL", name: `${PREFIX} helyszín` },
+        select: { id: true },
+      });
+      helyszinId = helyszin.id;
+
+      /*
+        SAJAT SOR A KET HATOKOR-ALLITASHOZ, ES KULON A TOBBI TESZTTOL.
+
+        A hatokor-meresnek SZALLITOI tulajdonu, HELYSZINEN allo eszkoz kell:
+        vevo-tulajdonu sornak a kod nem enged helyszint adni, helyszin nelkul
+        pedig a partner 2026-09-22 ota nem latja. A tobbi teszt viszont a
+        vevo-tulajdonu alakra epul (szabad keszlet, darabszamok, szerkeszto ag),
+        ezert AZOKAT nem irom at: ez a sor KULON all, sajat koddal, a
+        CODE_A..CODE_F keszleten KIVUL.
+      */
+      const hatokorEszkoz = await prisma.asset.create({
+        data: {
+          assetNumber: `${PREFIX}-HATOKOR`,
+          name: `${PREFIX} hatókör-eszköz`,
+          supplierId: szallitoId,
+          departmentId: helyszinId,
+        },
+        select: { id: true },
+      });
+      await prisma.assetLabel.create({
+        data: {
+          code: HATOKOR_KOD,
+          assetId: hatokorEszkoz.id,
+          assignedAt: new Date(),
+        },
+      });
     });
 
     after(async () => {
@@ -281,15 +363,16 @@ describe(
     it("a saját partner MEGTALÁLJA az eszközét a matricakódról", async () => {
       // ISMERT POZITIV KONTROLL a lenti tagadashoz. Enelkul egy olyan
       // lekerdezes is atmenne, ami SENKINEK nem ad vissza semmit.
-      const found = await repository.detailByLabelCode(CODE_C, {
-        kind: "customer",
-        customerId,
-      });
+      const found = await repository.detailByLabelCode(
+        HATOKOR_KOD,
+        { kind: "customer", customerId },
+        [helyszinId],
+      );
       assert.ok(found, "a saját eszköz látszik a saját hatókörben");
       // A KOD ALAPJAN TALALT ESZKOZ TENYLEG AZ, AMIRE A MATRICA KERULT.
       // Enelkul az allitas beerne barmelyik eszkozzel, amit a lekerdezes ad.
       const label = await prisma.assetLabel.findUnique({
-        where: { code: CODE_C },
+        where: { code: HATOKOR_KOD },
         select: { assetId: true },
       });
       assert.equal(found.id, label?.assetId);
@@ -304,10 +387,17 @@ describe(
         },
         select: { id: true },
       });
-      const found = await repository.detailByLabelCode(CODE_C, {
-        kind: "customer",
-        customerId: masik.id,
-      });
+      /*
+        UGYANAZ A HELYSZIN-LISTA MEGY AT, MINT A POZITIV ESETBEN, es ez
+        szandekos: igy az EGYETLEN dolog, ami kizarhatja a sort, a TULAJDON.
+        Ures listaval ez az allitas akkor is zold lenne, ha a tulajdon-tengely
+        egyaltalan nem letezne.
+      */
+      const found = await repository.detailByLabelCode(
+        HATOKOR_KOD,
+        { kind: "customer", customerId: masik.id },
+        [helyszinId],
+      );
       assert.equal(found, null, "más partner eszköze nem érhető el a kódról");
     });
 
@@ -417,7 +507,7 @@ describe(
        * nemán. A szerkeszto urlap EBBOL tolti elo a mezot.
        */
       it("az adatlap visszaadja a felvitt kódot", async () => {
-        const lap = await repository.detail(eszkozId, { kind: "internal" });
+        const lap = await repository.detail(eszkozId, { kind: "internal" }, []);
         assert.equal(lap?.labelCode, CODE_D);
       });
 
@@ -426,7 +516,7 @@ describe(
         // atmenne a fenti alliteson. Ez mondja ki, hogy a hianyt is jol adja
         // vissza -- es hogy a lekerdezes nem hasal el matrica nelkul.
         const masik = await repository.create(createInput(), actorUserId);
-        const lap = await repository.detail(masik.id, { kind: "internal" });
+        const lap = await repository.detail(masik.id, { kind: "internal" }, []);
         assert.equal(lap?.labelCode, undefined);
       });
 
@@ -450,6 +540,8 @@ describe(
             status: "ALL" as const,
           }),
           { kind: "internal" },
+          // `internal` -> az egyseg-lista nem sul el
+          [],
         );
 
         const sor = lista.items.find((item) => item.id === eszkozId);
@@ -473,6 +565,8 @@ describe(
             status: "ALL" as const,
           }),
           { kind: "internal" },
+          // `internal` -> az egyseg-lista nem sul el
+          [],
         );
 
         const sor = lista.items.find((item) => item.id === masik.id);
@@ -582,6 +676,8 @@ describe(
           status: "ALL" as const,
         }),
         { kind: "internal" },
+        // `internal` -> az egyseg-lista nem sul el
+        [],
       );
       const nelkuliIdk = nelkul.items.map((item) => item.id);
       assert.ok(
@@ -600,6 +696,8 @@ describe(
           status: "ALL" as const,
         }),
         { kind: "internal" },
+        // `internal` -> az egyseg-lista nem sul el
+        [],
       );
       const vanIdk = vannak.items.map((item) => item.id);
       assert.ok(!vanIdk.includes(matrica_nelkul.id));
@@ -639,6 +737,8 @@ describe(
             ...over,
           }),
           { kind: "internal" },
+          // `internal` -> az egyseg-lista nem sul el
+          [],
         );
       }
 
@@ -781,6 +881,8 @@ describe(
           status: "ALL" as const,
         }),
         { kind: "internal" },
+        // `internal` -> az egyseg-lista nem sul el
+        [],
       );
 
       assert.ok(
@@ -806,6 +908,8 @@ describe(
           status: "ALL" as const,
         }),
         { kind: "internal" },
+        // `internal` -> az egyseg-lista nem sul el
+        [],
       );
 
       assert.deepEqual(talalat.items, []);

@@ -130,6 +130,50 @@ describe(
         }),
       ]);
 
+      /*
+        HELYSZIN MINDKET VEVONEK, 2026-09-22 OTA.
+
+        A vevo-hatokoru olvasas a HOZZARENDELT helyszinekre szur, es a NULL
+        `departmentId` azon nem megy at. Helyszin es hozzarendeles nelkul ez a
+        fixtura nem a TULAJDON hatarat merne, hanem egy ures listat -- es minden
+        lenti tiltas zold lenne, barmit is csinal a kod.
+      */
+      /*
+        SZALLITO IS KELL A FIXTURABA, ES EZ NEM DISZ.
+
+        Merve 2026-09-22 a kodbol: a `create` es az `update` is NULLARA
+        kenyszeriti a `departmentId` mezot vevo-tulajdonu eszkozon. Vagyis egy
+        partner a sajat helyszinen SZALLITOI tulajdonu eszkozt lat (a
+        lathatosag masodik aga) -- ugyanaz, amit acrobot eles merese mutat:
+        79 eszkozbol 79 szallitoi tulajdonu.
+      */
+      const szallito = await prisma.supplier.create({
+        data: {
+          code: `HTS${suffix}`.slice(0, 12),
+          name: `HTTP szállító ${suffix}`,
+        },
+        select: { id: true },
+      });
+
+      const [helyA, helyB] = await Promise.all([
+        prisma.worksheetDepartment.create({
+          data: {
+            customerId: customerA.id,
+            code: "HTA",
+            name: `hely A ${suffix}`,
+          },
+          select: { id: true },
+        }),
+        prisma.worksheetDepartment.create({
+          data: {
+            customerId: customerB.id,
+            code: "HTB",
+            name: `hely B ${suffix}`,
+          },
+          select: { id: true },
+        }),
+      ]);
+
       const passwordHash = await hashPassword(PASSWORD);
       await Promise.all([
         prisma.user.create({
@@ -141,6 +185,9 @@ describe(
             passwordHash,
             passwordUpdatedAt: new Date(),
             customerId: customerA.id,
+            // A KET FELHASZNALO KULONBOZO helyszint kap: e nelkul egy
+            // "mindent atengedo" es egy "helyesen szukito" szuro ugyanazt adna.
+            unitAssignments: { create: [{ departmentId: helyA.id }] },
           },
         }),
         prisma.user.create({
@@ -152,6 +199,7 @@ describe(
             passwordHash,
             passwordUpdatedAt: new Date(),
             customerId: customerB.id,
+            unitAssignments: { create: [{ departmentId: helyB.id }] },
           },
         }),
         prisma.user.create({
@@ -196,14 +244,16 @@ describe(
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-A`,
             name: `HTTP eszköz A ${suffix}`,
-            customerId: customerA.id,
+            supplierId: szallito.id,
+            departmentId: helyA.id,
           },
         }),
         prisma.asset.create({
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-B`,
             name: `HTTP eszköz B ${suffix}`,
-            customerId: customerB.id,
+            supplierId: szallito.id,
+            departmentId: helyB.id,
           },
         }),
       ]);
@@ -244,7 +294,8 @@ describe(
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-D`,
             name: `HTTP eszköz törléshez ${suffix}`,
-            customerId: customerA.id,
+            supplierId: szallito.id,
+            departmentId: helyA.id,
           },
         })
       ).id;
@@ -318,6 +369,20 @@ describe(
       }
       await prisma.user.deleteMany({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+      });
+      // A SZALLITO AZ ESZKOZOK UTAN: az `Asset.supplierId` ra mutat. Kulon
+      // sor, mert a suite 2026-09-22 ota szallitoi tulajdonu eszkozt hasznal,
+      // es egy takaritatlan szallito a KOVETKEZO futast buktatna el az egyedi
+      // kodon -- olyan hibaval, aminek semmi koze a mert viselkedeshez.
+      await prisma.supplier.deleteMany({
+        where: { code: { startsWith: "HTS" } },
+      });
+      // A HELYSZIN az eszkozok ES a felhasznalok UTAN megy: az `Asset` es a
+      // `UserWorksheetDepartment` is ra mutat. A masodik kaszkadol, az elso nem.
+      await prisma.worksheetDepartment.deleteMany({
+        where: {
+          customer: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+        },
       });
       await prisma.customer.deleteMany({
         where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },

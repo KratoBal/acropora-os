@@ -1,3 +1,4 @@
+import { belsosUser } from "../testing/scope-user.fixture.js";
 import assert from "node:assert/strict";
 import { collectDocumentKeys } from "./document-store/document-store.js";
 import { describe, it } from "node:test";
@@ -12,7 +13,6 @@ import {
 } from "./document-store/filesystem-document-store.js";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
-import type { PartnerScope } from "../auth/partner-scope.util.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 
 const ASSET = "asset-1";
@@ -22,7 +22,12 @@ const ASSET = "asset-1";
  * `asset-document-write-scope.spec.ts` es a partner-hatokor integracios suite
  * meri. A hatokor 2026-09-17 ota KOTELEZO parameter, tehat ki kell irni.
  */
-const BELSOS: PartnerScope = { kind: "internal" };
+/**
+ * A HATOKORT MOSTANTOL A SZOLGALTATAS OLDJA FEL A FELHASZNALOBOL (2026-09-22),
+ * mert a lathatosag mar nem csak a tulajdonrol szol, hanem a hozzarendelt
+ * helyszinekrol is. A spec ezert USERT ad at, nem kesz hatokort.
+ */
+const BELSOS = belsosUser();
 const PDF = Buffer.concat([Buffer.from("%PDF-"), Buffer.from([1, 2, 3])]);
 const JPEG = Buffer.concat([
   Buffer.from([0xff, 0xd8, 0xff, 0xe0]),

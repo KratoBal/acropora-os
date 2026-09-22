@@ -1,3 +1,8 @@
+import {
+  belsosUser,
+  szallitoUser,
+  vevoUser,
+} from "../testing/scope-user.fixture.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -71,6 +76,13 @@ function lathato(scope: PartnerScope): boolean {
 function tarolo(overrides: Record<string, unknown> = {}) {
   const irasok: string[] = [];
   const repo = {
+    /*
+      A HOZZARENDELT HELYSZINEK a dupla szamara allandok: ez a fajl a TULAJDON
+      tengelyet meri, nem a helyszinet. A helyszin-tengelyt a
+      `asset-visibility-scope.integration.spec.ts` meri, valodi sorokon -- egy
+      hamis tarolon a szures amugy sem lenne merheto.
+    */
+    assignedUnitIds: async () => ["dept-1"],
     detail: async (_id: string, scope: PartnerScope) =>
       lathato(scope) ? ESZKOZ : null,
     basic: async () => ({
@@ -111,10 +123,15 @@ function szolgaltatas(repo: ServiceAssetsRepository) {
   return new ServiceAssetsService(repo, new InMemoryDocumentStore());
 }
 
-const SAJAT: PartnerScope = { kind: "customer", customerId: "customer-1" };
-const IDEGEN: PartnerScope = { kind: "customer", customerId: "customer-2" };
-const SZALLITO: PartnerScope = { kind: "supplier", supplierId: "supplier-1" };
-const BELSOS: PartnerScope = { kind: "internal" };
+/*
+  A HIVO MOSTANTOL FELHASZNALO (2026-09-22): a szolgaltatas belole oldja fel a
+  hatokort ES a hozzarendelt helyszineket. A nevek valtozatlanok, hogy az
+  allitasok szovege ugyanazt mondja, mint eddig.
+*/
+const SAJAT = vevoUser("customer-1");
+const IDEGEN = vevoUser("customer-2");
+const SZALLITO = szallitoUser("supplier-1");
+const BELSOS = belsosUser();
 
 const MODOSITAS = { name: "Új név", expectedUpdatedAt: ESZKOZ.updatedAt };
 

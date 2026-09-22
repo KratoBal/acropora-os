@@ -89,9 +89,30 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
 /**
  * A DARABSZAM IS ALLITAS, A MERES DATUMAVAL -- nem `>=`, hanem PONTOS.
  *
- * MERVE 2026-09-22, a fo ag c64bdfd8 fejen: 13 hivasi hely
- * (service-assets 8, worksheets 4, suppliers 1). A definicios fajl harom
- * `export function` sora NEM szamit bele.
+ * UJRAMERVE 2026-09-22 (az egyseg-hatokor szelete): 14 hivasi hely
+ * (service-assets 9, worksheets 4, suppliers 1). A definicios sorok NEM
+ * szamitanak bele.
+ *
+ * MI JOTT AZ ELOZO MERES (13) OTA, ES MIERT -- nem elegendo a szamot atirni:
+ *
+ *   +1  `detailByQrToken`: a QR-ut 2026-09-22-ig NEM szurt sor-szinten. Balazs
+ *       irta felul ("ne lassa", 2026-09-22 08:55:25 UTC); a reszletek a vegpont
+ *       jegyzeteben allnak.
+ *
+ * ES AMI UGYANAZON A NAPON MOZGOTT, A SZAM VALTOZASA NELKUL -- ezert all itt,
+ * mert a szambol nem latszik:
+ *
+ *   a cimke-ut (`detailByLabelCode`)     a KOZOS szurorol a TELJES lathatosagi
+ *                                        fuggvenyre tert at
+ *   a felirat-atiras (`setDocumentCaption`)  ugyanaz a csere
+ *
+ * Mindketto EGY hivas maradt, csak MAS fuggvenyre -- a darabszam tehat
+ * valtozatlan, a JELENTES nem. A ket csere indoka a tarolo sajat jegyzeteiben
+ * all, meressel.
+ *
+ * EZZEL AZ ESZKOZ-TAROLOBAN MAR EGYETLEN `scopeWhereForAndBranch` HIVAS SINCS:
+ * minden eszkoz-ut UGYANAZT a lathatosagi fuggvenyt hasznalja. A kozos szuro a
+ * munkalapoknal, a hibajegyeknel es a partner-listanal marad.
  *
  * MIERT PONTOS ES NEM ALSO KORLAT: egy `>=` alak nem veszi eszre, ha egy
  * hatokor-hivas ELTUNIK, amig a tobbi megvan. Es egy UJ hivas eseten sem szol,
@@ -102,7 +123,7 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
  * es a datumot is frissitsd, kulonben a kovetkezo olvaso egy regi merESre
  * hivatkozik.
  */
-const VART_HIVASI_HELY = 13;
+const VART_HIVASI_HELY = 14;
 
 const SCOPE_HELPERS = [
   "scopeWhereForAndBranch",
