@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Header,
   Param,
@@ -56,9 +57,57 @@ export class ServiceAssetsController {
   /**
    * A DOKUMENTUM-TAROLO ALLAPOTA, a telepites ellenorzesehez.
    *
-   * A `SERVICE_MANAGE` jog alatt all, es NEM publikus: az utvonalat es a hiba
-   * okat mondja ki, ami a rendszer belso felepiteserol beszel. Egy nyilvanos
-   * valtozat ezt ingyen adna oda barkinek.
+   * === A KOMMENT KORABBAN A JOGRA HIVATKOZOTT, ES A JOG NEM VEDETT (e59a0608) ===
+   *
+   * Itt ez allt: "a `SERVICE_MANAGE` jog alatt all, es NEM publikus". A masodik
+   * fele HAMIS volt, es a lanc minden szeme merve, a mai fo agon (7cd51874):
+   *
+   *   1. `PARTNER_SERVICE` VISELI a `SERVICE_MANAGE` jogot
+   *      (`packages/types/src/auth.ts:388`)
+   *   2. a `PermissionGuard` JOGOT nez, hatokort nem
+   *   3. ez a handler a KEROT MEG SEM KAPTA, tehat szerkezetileg nem is tudott
+   *      hatokort szukiteni -- a harom kontroller harminc partner-jog alatti
+   *      utvonalabol EZ AZ EGY volt ilyen
+   *
+   * KONTROLL, hogy az ut nem elmeleti: ugyanezen a kontrolleren a `list`, a
+   * `detail` es a `scan` MAR `partnerScopeOf(user)`-rel megy -- vagyis
+   * partner-kerok bizonyitottan eljutnak ide.
+   *
+   * === MIT ADOTT VOLNA KI, ES MIERT IDO-FUGGO A SULYA ===
+   *
+   * A valasz `reason` mezoje a tarolo GYOKERENEK ABSZOLUT UTVONALAT viszi
+   * (`filesystem-document-store.ts`: "A tarolo gyokere nem letezik: ${root}",
+   * "A jelolo fajl hianyzik ... ${root}/${MARKER}", "nem irhato: ${root}").
+   *
+   * MA a tarolo KI van kapcsolva (`docs/DOCUMENT-STORE-DEPLOYMENT.md`: a
+   * `DOCUMENT_STORE_ROOT` sehol nincs beallitva, es a ket sablonban is uresen
+   * all), tehat a valasz a `not-enabled` agra esik, ami a VALTOZO NEVET mondja,
+   * nem utvonalat. AMELY NAPON a kotet bekapcsol, ugyanez a vegpont a konteneri
+   * utvonalakat es a csatolas allapotat adja ki.
+   *
+   * Vagyis ez a javitas MA olcso es kesobb kenyelmetlen -- a kotet elott van a
+   * helye. (Az eles kapcsolo allapota nem az en meresem: a doksi allitja, es
+   * azt a hoszton kell megnezni.)
+   *
+   * === MIERT ELUTASITAS, ES NEM HATOKOR-SZURES -- HOLOTT EZ OLVASO UT ===
+   *
+   * Az olvaso utakon rendszerint a szukites a helyes javitas: a partner a SAJAT
+   * hatokorebe eso jegyet es eszkozt JOGOSAN olvassa. ITT VISZONT NINCS
+   * partner-hatokoru valtozata annak, hogy a MI kotetunk csatolva van-e -- a
+   * valasz nem egy szurheto halmaz, hanem egy uzemeltetesi teny a szerverrol.
+   * Szurni tehat nincs mit; a kerdes csak az, hogy latja-e vagy nem.
+   *
+   * ES A B MA SEMMIT NEM VESZ EL: lemertem, hogy EGYETLEN kliens sem hivja
+   * (web, partner, mobil: nulla hivas; a mobil egyetlen talalata egy komment,
+   * ami a szerver fajlnevere hivatkozik). Az elutasitas kesobb barmikor
+   * tagithato; a szukites ma dontene el egy kerdest, amit senki nem tett fel.
+   *
+   * === MIERT NEM A `requireInternalWriter` ===
+   *
+   * A mechanizmusa ugyanez, de a NEVE irasi lepest mond, ez pedig olvaso ut --
+   * es a `worksheets` modulban all. Az atnevezese es athelyezese onallo lepes
+   * (nyolc hivohely), tehat kulon korbe tartozik, nem egy biztonsagi javitas
+   * kozepere. A szabaly forrasa igy is EGY: a `partnerScopeOf`.
    *
    * A VALASZ MINDIG 200, meg `broken` allapotnal is. Ez szandekos: aki ezt
    * hivja, epp azt akarja MEGTUDNI, mi az allapot -- egy 503 ugyanazt az
@@ -66,7 +115,11 @@ export class ServiceAssetsController {
    */
   @Get("document-store")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  documentStoreStatus() {
+  async documentStoreStatus(@CurrentUser() user: AuthenticatedUser) {
+    if (partnerScopeOf(user).kind !== "internal")
+      throw new ForbiddenException(
+        "A dokumentum-tároló állapotát csak belsős felhasználó nézheti meg.",
+      );
     return this.service.documentStoreStatus();
   }
 
