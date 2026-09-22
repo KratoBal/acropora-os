@@ -23,9 +23,19 @@ const KEPERNYO = "src/app/assets/new.tsx";
  * csak mar ket fajlra szol, mert a kod ket kepernyot szolgal ki.
  */
 const VALASZTO = "src/components/assets/unit-picker.tsx";
+/**
+ * A KATEGORIA-VALASZTO 2026-09-22 OTA UGYANIGY KOZOS KOMPONENS, ES UGYANAZERT.
+ *
+ * A szerkeszto kepernyon eddig EGYALTALAN nem volt kategoria-mezo; amikor
+ * bekerult, a felviteli urlap blokkjat le lehetett volna masolni. A
+ * helyszin-valaszto tortenete pontosan azt mondja meg, mi lett volna abbol:
+ * a ket blokk kulon romlott volna el, es honapokig senki nem veszi eszre.
+ */
+const KATEGORIA_VALASZTO = "src/components/assets/category-picker.tsx";
 const SZERKESZTO = "src/app/assets/edit/[id].tsx";
 const forras = () => readFileSync(KEPERNYO, "utf8");
 const valaszto = () => readFileSync(VALASZTO, "utf8");
+const kategoriaValaszto = () => readFileSync(KATEGORIA_VALASZTO, "utf8");
 const szerkeszto = () => readFileSync(SZERKESZTO, "utf8");
 
 describe("az új eszköz űrlapjának választói", () => {
@@ -51,8 +61,19 @@ describe("az új eszköz űrlapjának választói", () => {
     // A KETTORE EMELES 2026-09-22-en tortent, a kategoria-valasztoval -- es az
     // orzo PONTOSAN UGY mukodott, ahogy a fenti mondat igeri: pirosra ment, es
     // ki kellett mondani, hogy egy negyedik valaszto keletkezett.
-    assert.equal((s.match(/<CollapsedPicker/g) ?? []).length, 2);
+    //
+    // ES MEG UGYANAZNAP VISSZA EGYRE, amikor a kategoria KOZOS KOMPONENSBE
+    // kerult (a szerkeszto kepernyo is megkapta). Az orzo MASODSZOR is
+    // pirosra ment, es masodszor is jol: egy valaszto eltunese a kepernyorol
+    // ugyanugy szandekos dontes, mint egy uje. A szam tehat a kepernyon
+    // KOZVETLENUL allo valasztokat meri, nem az osszeset -- a tobbit a
+    // komponens-fajlokra szolo allitasok fogjak.
+    assert.equal((s.match(/<CollapsedPicker/g) ?? []).length, 1);
     assert.equal((s.match(/<UnitPicker/g) ?? []).length, 1);
+    assert.equal((s.match(/<CategoryPicker/g) ?? []).length, 1);
+    // ES A SZERKESZTO IS A KOZOS PELDANYT HASZNALJA. Enelkul a fenti allitasok
+    // akkor is zoldek lennenek, ha a szerkeszton egy MASOLT blokk allna.
+    assert.equal((szerkeszto().match(/<CategoryPicker/g) ?? []).length, 1);
 
     // A KET CIMKE A SAJAT ELEMEN BELUL ALLJON. A prop neve `label`, ami az
     // urlapon mashol is szerepel (`Field label=...`), tehat a puszta
@@ -72,10 +93,11 @@ describe("az új eszköz űrlapjának választói", () => {
       valaszto(),
       /<CollapsedPicker(?:(?!<\/?CollapsedPicker)[\s\S])*?label="Helyszín választása"/,
     );
-    // A KATEGORIA CIMKEJE IS A SAJAT ELEMEBEN ALL, ugyanazzal a tempered
-    // mintaval: enelkul egy MASIK elemre csuszo cimke is atmenne.
+    // A KATEGORIA CIMKEJE A KOZOS KOMPONENSBEN ALL, ugyanugy, mint a
+    // helyszine -- es ugyanazzal a tempered mintaval: enelkul egy MASIK
+    // elemre csuszo cimke is atmenne.
     assert.match(
-      s,
+      kategoriaValaszto(),
       /<CollapsedPicker(?:(?!<\/?CollapsedPicker)[\s\S])*?label="Kategória választása"/,
     );
     assert.match(s, /setOwnerPickerOpen\(\(open\) => !open\)/);
