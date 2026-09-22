@@ -187,6 +187,39 @@ describe("a lathatosag-shim", () => {
     expect(screen.getByTestId("reszponziv")).not.toBeVisible();
   });
 
+  /**
+   * AHOL A SHIM VALOJABAN SZAMIT: A SZEREP-LEKERDEZESEK.
+   *
+   * A webes speceken NULLA valodi `toBeVisible` hivas all (az egyetlen talalat
+   * egy komment). A `getByRole` viszont alapertelmezesben KIHAGYJA azt, ami a
+   * hozzaferhetosegi fabol rejtve van -- es a fan 447 szerep-lekerdezes all 56
+   * spec-fajlban. A shim nelkul mindegyik olyan elemet is megtalal, amit a
+   * hasznalo az adott szelessegen nem lat.
+   */
+  it("a szerep-lekerdezes sem talalja meg az osztallyal rejtett elemet", () => {
+    render(
+      <div className="lg:hidden">
+        <button type="button">Navigáció megnyitása</button>
+      </div>,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Navigáció megnyitása" }),
+    ).toBeNull();
+  });
+
+  it("KONTROLL: rejto osztaly nelkul a szerep-lekerdezes MEGTALALJA", () => {
+    render(
+      <div>
+        <button type="button">Navigáció megnyitása</button>
+      </div>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Navigáció megnyitása" }),
+    ).toBeVisible();
+  });
+
   it("KONTROLL: osztaly nelkuli elem tovabbra is LATHATO", () => {
     render(<div data-testid="lathato">x</div>);
 
