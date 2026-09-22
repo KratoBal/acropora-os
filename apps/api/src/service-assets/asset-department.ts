@@ -64,6 +64,43 @@ export function assetDepartmentRefusal(input: {
   return null;
 }
 
+/**
+ * KELL-E ALEGYSÉG EZEN A KÉRÉSEN -- FÜGGETLENÜL ATTÓL, HOGY A MEGADOTT ÉRTÉK
+ * ÉRVÉNYES-E.
+ *
+ * SZÁNDÉKOSAN KÜLÖN FÜGGVÉNY, NEM AZ `assetDepartmentRefusal` BŐVÍTÉSE. A
+ * kettő MÁS bekötést igényel: ez csak a JELENLÉTET nézi (a hívó DTO nyers
+ * `departmentId` mezőjét), a másik a MEGADOTT érték érvényességét egy
+ * lekérdezett `department` sor ellen -- és az a lekérdezés MA NEM ÁLL be a
+ * create/update útvonalon (66334aed kártya, holt validáció, KÜLÖN döntés).
+ * Ha ez a két kérdés egy függvénybe kerülne, a bekötése (a hívó oldalon a
+ * `validateReferences` -> `repository.validationContext` láncon át) A
+ * DEPARTMENT-LEKÉRDEZÉST IS AUTOMATIKUSAN AKTIVÁLNÁ -- szélesebb változást,
+ * mint amit ez a döntés fed.
+ *
+ * Balázs döntése (message_id 1552018256280162385, 2026-09-22, szó szerint:
+ * "1 legyen kotelezo") és a `20260922210000_department_required` migráció
+ * (NOT NULL) miatt: SUPPLIER-tulajdonosnál a `departmentId` LÉTREHOZÁSKOR
+ * mindig kell, MÓDOSÍTÁSKOR pedig nem törölhető -- de a mező ELHAGYÁSA
+ * módosításkor ÉRINTETLENÜL hagyja a meglévő értéket, ami NEM törlés.
+ */
+export function assetDepartmentPresenceRefusal(input: {
+  ownerType: "CUSTOMER" | "SUPPLIER";
+  operation: "create" | "update";
+  /** A hívó által küldött NYERS érték. `undefined` = a mező nincs a
+   * kérésben (create: hiányzik; update: érintetlen). `null` = explicit
+   * törlés. */
+  departmentId: string | null | undefined;
+}): boolean {
+  if (input.ownerType !== "SUPPLIER") return false;
+  if (input.operation === "create") return !input.departmentId;
+  return input.departmentId === null;
+}
+
+export const ASSET_DEPARTMENT_PRESENCE_REFUSAL_MESSAGE =
+  "Az eszköz alegysége kötelező szerviz partner tulajdonosnál -- a mező " +
+  "nem hagyható el létrehozáskor, és meglévő eszközön nem törölhető.";
+
 export const ASSET_DEPARTMENT_REFUSAL_MESSAGES: Record<
   AssetDepartmentRefusal,
   string

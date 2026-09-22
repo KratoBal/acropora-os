@@ -495,6 +495,10 @@ test("a belsős felhasználó megtudja, melyik eset áll fenn", async () => {
         {
           ownerType: "SUPPLIER",
           ownerId: "supplier-1",
+          // A jelenlét-ellenőrzés (assetDepartmentPresenceRefusal) miatt kell:
+          // enélkül ez az állítás a "kötelező alegység" hibát kapná, nem azt,
+          // amit tesztel.
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Szivattyú",
           labelCode: "V2196",
@@ -660,6 +664,10 @@ test("a partner az összevont üzenetet kapja", async () => {
         {
           ownerType: "SUPPLIER",
           ownerId: "supplier-1",
+          // A jelenlét-ellenőrzés (assetDepartmentPresenceRefusal) miatt kell:
+          // enélkül ez az állítás a "kötelező alegység" hibát kapná, nem azt,
+          // amit tesztel.
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Szivattyú",
           labelCode: "V2196",
@@ -718,6 +726,10 @@ test("a fél teljesítmény-pár 400-at ad, és megnevezi a hiányzó felet", as
         {
           ownerType: "SUPPLIER",
           ownerId: "supplier-1",
+          // A jelenlét-ellenőrzés (assetDepartmentPresenceRefusal) miatt kell:
+          // enélkül ez az állítás a "kötelező alegység" hibát kapná, nem azt,
+          // amit tesztel.
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Szivattyú",
           performance: "500",
@@ -770,6 +782,10 @@ test("a másik fél hiányára a MÁSIK mondat jön", async () => {
         {
           ownerType: "SUPPLIER",
           ownerId: "supplier-1",
+          // A jelenlét-ellenőrzés (assetDepartmentPresenceRefusal) miatt kell:
+          // enélkül ez az állítás a "kötelező alegység" hibát kapná, nem azt,
+          // amit tesztel.
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Szivattyú",
           performanceUnitId: "uom-1",
@@ -857,4 +873,123 @@ test("a rossz alakú fogyasztás 400-at ad", async () => {
       return true;
     },
   );
+});
+
+/**
+ * A SUPPLIER-OLDALI KÖTELEZŐSÉG, VISELKEDÉS SZINTEN. A mai felvitelen a
+ * departmentId OPCIONÁLIS SUPPLIER-tulajdonosnál is (mobil:
+ * asset-create.ts:342, web: asset-editor-page.tsx:476) -- ez a mai, éles
+ * felvitel alapértelmezett útja. Balázs döntése (message_id
+ * 1552018256280162385, "1 legyen kotelezo") és a NOT NULL migráció miatt ez
+ * mostantól megnevezett hibát ad, nem nyers adatbázis-hibát.
+ */
+test("rejects creating a supplier-owned asset without a department", async () => {
+  const service = new ServiceAssetsService(
+    repository(),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+        },
+        "user-1",
+        { kind: "internal" },
+      ),
+    (error: unknown) => {
+      assert.ok(
+        error instanceof BadRequestException,
+        `400-at vartam, ez jott: ${String(error)}`,
+      );
+      assert.match(String(error.message), /alegysége kötelező/);
+      return true;
+    },
+  );
+});
+
+/**
+ * UGYANEZ AZ UPDATE ÁGON, DE A HATÁRESET MÁS: az EXPLICIT `null` (törlési
+ * szándék) a hiba, nem a mező elhagyása -- azt a DTO ma érvényes
+ * "érintetlenül hagyás"-ként kezeli, és ennek MARADNIA kell.
+ */
+test("rejects deleting a supplier-owned asset's department on update", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      basic: async () => ({
+        id: "asset-1",
+        customerId: null,
+        supplierId: "supplier-1",
+        customerAddressId: null,
+        aquariumId: null,
+        parentAssetId: null,
+        productVariantId: null,
+        status: "ACTIVE",
+        updatedAt: new Date(asset.updatedAt),
+        _count: { childAssets: 0 },
+      }),
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.update(
+        "asset-1",
+        { departmentId: null, expectedUpdatedAt: asset.updatedAt },
+        "user-1",
+        belsosUser(),
+      ),
+    (error: unknown) => {
+      assert.ok(
+        error instanceof BadRequestException,
+        `400-at vartam, ez jott: ${String(error)}`,
+      );
+      assert.match(String(error.message), /alegysége kötelező/);
+      return true;
+    },
+  );
+});
+
+/**
+ * TESTVÉR-ÁLLÍTÁS: A MEZŐ ELHAGYÁSA UPDATE-NÉL ÁTMEGY. Enélkül a fenti
+ * állítás akkor is zöld lenne, ha a szabály MINDEN SUPPLIER-update-et
+ * elutasítana -- és akkor egy sima névváltoztatás is elbukna.
+ */
+test("allows updating a supplier-owned asset without mentioning the department", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      basic: async () => ({
+        id: "asset-1",
+        customerId: null,
+        supplierId: "supplier-1",
+        customerAddressId: null,
+        aquariumId: null,
+        parentAssetId: null,
+        productVariantId: null,
+        status: "ACTIVE",
+        updatedAt: new Date(asset.updatedAt),
+        _count: { childAssets: 0 },
+      }),
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
+      update: async () => asset,
+    }),
+    new InMemoryDocumentStore(),
+  );
+  const result = await service.update(
+    "asset-1",
+    { name: "Új név", expectedUpdatedAt: asset.updatedAt },
+    "user-1",
+    belsosUser(),
+  );
+  assert.equal(result.id, "asset-1");
 });
