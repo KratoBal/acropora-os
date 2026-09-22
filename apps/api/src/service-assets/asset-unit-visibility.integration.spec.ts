@@ -363,19 +363,40 @@ describe(
      *
      * === A BEVEZETES NAPJAN MERT SZAM, ES A NEVEZO TOBBET MOND, MINT A NULLA ===
      *
-     * Merte: acrobot, 2026-09-22 11:54:53 CEST, az ELES adatbazison
-     * (`acropora-prod-01`, kontener `iwm34jaqp9xmwb72qkrqkwhy`). Az azonossag
-     * ellenorizve: az utolso lefutott migracio a `20260922100000_sales_channel_medusa`,
-     * vagyis a MA DELELOTT telepitett. En nem tudtam lemerni: ehhez az agenshez
-     * nem tartozik `DATABASE_URL`, es az egyetlen elerheto adatbazis az eles --
-     * amin Balazs kikotese szerint semmit nem futtatunk.
+     * Merte: acrobot, 2026-09-22 15:2x, az ELES adatbazison -- azon, AMIRE AZ ELES
+     * API TENYLEGESEN MUTAT. A cimet az eles api kontener sajat `DATABASE_URL`
+     * valtozojabol olvasta ki (gazdagep `iwm34jaqp9xmwb72qkrqkwhy`), nem
+     * talalgatasbol, es a szamolas ELOTT kontrollt futtatott: a `departmentId`
+     * oszlop nev szerint all az Asset, ServiceJob, UserWorksheetDepartment es
+     * Worksheet tablan.
      *
-     *   Asset        83 sor, ebbol `departmentId IS NULL`:  0
+     * A KONTROLL NEM FORMASAG VOLT. A gepen TOBB postgres fut, es az elso, amit
+     * megkerdezett, SIKERESEN csatlakozott egy `acropora` nevu, 71 tablas
+     * adatbazishoz -- amiben `Worksheet` tabla NINCS, es `department` nevu oszlop
+     * EGYETLEN tablan sem. Onnan ugyanez a kerdes ugyanezt a NULLAT adta volna,
+     * MAS OKBOL: nem azert, mert nincs ilyen sor, hanem mert nincs ilyen oszlop.
+     * Megegyezo eredmeny, kulonbozo ok -- ezert all itt, hogy MIHEZ csatlakozott.
+     *
+     * En nem tudtam lemerni: ehhez az agenshez nem tartozik `DATABASE_URL`, es az
+     * egyetlen elerheto adatbazis az eles -- amin Balazs kikotese szerint semmit
+     * nem futtatunk.
+     *
+     *   Asset       108 sor, ebbol `departmentId IS NULL`:  0
      *   ServiceJob    6 sor, ebbol `departmentId IS NULL`:  0
-     *   Worksheet     4 sor -- a semaban NOT NULL, tehat nem is lehet
+     *   Worksheet     4 sor, ebbol `departmentId IS NULL`:  0
+     *
+     * A WORKSHEET NULLAJA MAST JELENT, MINT A MASIK KETTOE, es ezt EN mertem, a
+     * semaban: ott a mezo `String` (kotelezo), az Asseten es a ServiceJobon
+     * `String?`. Vagyis a munkalapon nem is LEHET helyszin nelkuli sor; a masik
+     * ket tablan lehetne, es ma nincs.
+     *
+     * ES EGY KORABBI SZAM, HOGY NE LATSZODJON ELLENTMONDASNAK: ugyanaznap delelott
+     * 83 allt ezen a helyen. Az MASIK KERDESRE valaszolt (hany eszkoz all az
+     * UGYFEL NEVEN), nem az Asset tabla sorainak szamara -- es azota is
+     * keletkezhettek sorok.
      *
      * ES A NULLA MAGABAN FELREVEZETNE, EZERT ALL ITT A NEVEZO IS. Nulla NULL
-     * NYOLCVANHAROM eszkoz kozott jelent valamit; nulla NULL HAT hibajegy kozott
+     * SZAZNYOLC eszkoz kozott jelent valamit; nulla NULL HAT hibajegy kozott
      * szinte semmit. A hat es a negy NEM ERDEMI MINTA.
      *
      * VAGYIS EZ AZ ALLITAS NEM AZERT KELL, MERT A MAI ADAT GYANUS -- hanem mert a
