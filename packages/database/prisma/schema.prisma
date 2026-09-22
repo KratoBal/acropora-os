@@ -84,6 +84,17 @@ enum UnasOrderSyncRunStatus {
   FAILED
 }
 
+/// A Medusa-rendelesatvetel egy korenek allapota. Ugyanaz a negy ertek, mint a
+/// UNAS-parjanal, es ez NEM masolas: a `PENDING` es a `RUNNING` kulonbsege az,
+/// ami egy FELIG lefutott kort megkulonboztet egy kesztol. Egy szarmaztatott
+/// vizjel (a legnagyobb atvett idopont) ezt a kettot egyformanak mutatna.
+enum MedusaOrderSyncRunStatus {
+  PENDING
+  RUNNING
+  APPLIED
+  FAILED
+}
+
 enum UnasCustomerSyncRunStatus {
   PENDING
   RUNNING
@@ -4500,6 +4511,50 @@ model UnasOrderSyncRun {
 
   @@index([status, createdAt])
 }
+
+/// EGY LEHIVASI KOR A MEDUSA BOLTBOL, NAPLOZVA.
+///
+/// Nem puszta vizjel, es ez szandekos. Egy szarmaztatott maximum (a legnagyobb
+/// mar atvett `createdAt`) olcsobb lenne, mert nem kell hozza tabla -- es ket
+/// dolgot elveszitene:
+///
+///  - A ZARAT. Az `activeKey` egyedi, tehat ket peldany nem futhat egyszerre
+///    ugyanarra az ablakra. A rendeles-azonositon allo idempotencia a
+///    HELYESSEGET vedi (ugyanaz a rendeles nem kerul be ketszer), a parhuzamos
+///    FUTAST nem: ket kor ugyanazt a munkat vegezne el, es csak a beszurasnal
+///    derulne ki.
+///  - A FELBEMARADT KORT. Ha egy futas a felenel all le, a szarmaztatott
+///    maximum ugyanugy nez ki, mintha vegigment volna. A `status` megmondja,
+///    hogy nem.
+model MedusaOrderSyncRun {
+  id        String                    @id @default(cuid())
+  /// A FUTO kor zarja. Egyedi, es a kor vegen felszabadul (null lesz), tehat
+  /// egyszerre legfeljebb egy kor viselheti. Nullazhato, mert a LEZART korok
+  /// egyutt maradnak a naploban, es azok kozott nincs egyediseg.
+  activeKey String?                   @unique
+  status    MedusaOrderSyncRunStatus  @default(PENDING)
+  /// A lekerdezett ablak also hatara: a legutobb atvett rendeles letrehozasi
+  /// ideje. Az ELSO koron null, mert akkor nincs mihez kepest.
+  windowStart DateTime?
+  /// A kor inditasanak ideje. Nem a felso hatar: a Medusa oldalan a rendezes
+  /// dont, es a `truncated` jelzi, ha a lap betelt.
+  windowEnd DateTime
+  startedAt DateTime?
+  completedAt DateTime?
+  /// Hany rendelest hozott vissza a lehivas, es ebbol hany volt UJ. A ketto
+  /// kulonbsege nem hiba: egy mar atvett rendeles ujra elojohet, ha a lap
+  /// szele ugyanarra az idobelyegre esett.
+  ordersSeen   Int                    @default(0)
+  createdCount Int                    @default(0)
+  /// Igaz, ha a lehivas elerte a felso hatart, tehat lehet TOBB rendeles is.
+  truncated    Boolean                @default(false)
+  errorCode String?
+  createdAt DateTime                  @default(now())
+  updatedAt DateTime                  @updatedAt
+
+  @@index([status, createdAt])
+}
+
 
 /// Egy webshop (UNAS) vásárló-szinkron futás: a getCustomer ModTimeStart
 /// kurzoron alapuló, új vagy módosult vásárlók feldolgozása. Az
