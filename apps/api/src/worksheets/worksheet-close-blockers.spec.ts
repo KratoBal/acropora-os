@@ -12,8 +12,12 @@ function closable(): WorksheetCloseState {
     status: "DRAFT",
     lineCount: 2,
     partnerCode: "BIO",
-    // Az alegység kódja legfeljebb három NAGYBETŰ lehet - az első
-    // fixture-öm "01" volt, és a teszt fogta meg, nem az olvasás.
+    // Az alegység kódja legfeljebb három nagybetű VAGY SZÁMJEGY lehet. Az
+    // első fixture-öm "01" volt, és akkor a teszt fogta meg, nem az olvasás
+    // -- 2026-09-22 óta viszont az "01" ÉRVÉNYES kód (Balázs kérte a
+    // számjegyet), tehát ez a megjegyzés ma már nem egy élő védelmet ír le,
+    // hanem azt, honnan jön ez a fixture. A "AKV" marad, mert nincs okunk
+    // cserélni; ha valaki mégis elírja, a hossz-szabály még mindig fogja.
     departmentCode: "AKV",
     hasNumber: false,
   };

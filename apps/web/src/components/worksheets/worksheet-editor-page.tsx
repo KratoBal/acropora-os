@@ -670,7 +670,7 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
             <Input
               aria-label="Új alegység kódja"
               value={newDepartment.code}
-              placeholder="Kód (BIO)"
+              placeholder="Kód (BIO vagy A1)"
               onChange={(event) =>
                 setNewDepartment((current) => ({
                   ...current,

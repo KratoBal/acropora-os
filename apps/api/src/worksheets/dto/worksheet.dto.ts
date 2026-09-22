@@ -399,8 +399,22 @@ export class CreateWorksheetDepartmentDto {
   @IsString({ message: "A szülő helyszín azonosítója hibás." })
   parentId?: string;
 
-  @Matches(/^[A-Za-z]{1,3}$/, {
-    message: "Az alegység kódja legfeljebb három betű lehet (pl. BIO).",
+  /**
+   * A BEMENET SZÁNDÉKOSAN MEGENGEDŐBB A TÁROLT ALAKNÁL, ÉS EZ NEM HANYAGSÁG.
+   *
+   * A tárolt alak nagybetűs (`WORKSHEET_DEPARTMENT_CODE_PATTERN`, és az
+   * adatbázis CHECK-je is), a normalizálás pedig a repositoryban történik
+   * (`worksheets.repository.ts`, `code.trim().toUpperCase()`). Ide azért
+   * kerül kisbetű is, mert a boltban gépelő kolléga kisbetűvel ír, és egy
+   * hálózati kör után visszadobni azért, amit egy `toUpperCase()` megold,
+   * csak bosszantás.
+   *
+   * A SZÁMJEGY 2026-09-22-én került be, Balázs kérésére. A számjegynek nincs
+   * kis- és nagybetűje, tehát a normalizálás változatlanul helyes marad rá.
+   */
+  @Matches(/^[A-Za-z0-9]{1,3}$/, {
+    message:
+      "Az alegység kódja legfeljebb három betű vagy szám lehet (pl. BIO vagy A1).",
   })
   code!: string;
   /**

@@ -571,7 +571,8 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
             <h2 className="font-semibold">Alegységek</h2>
             <p className="mt-1 text-sm text-dusk-500">
               Az alegység kódja a munkalapszám első tagja (például a BIO a
-              BIO-2026-001 számban).
+              BIO-2026-001 számban). Legfeljebb három betű vagy szám, a kettő
+              keverhető is.
             </p>
             {unitError ? (
               <Alert variant="danger" title="Hiba" description={unitError} />

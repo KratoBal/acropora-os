@@ -16,8 +16,28 @@ export type WorksheetSignatureDecision = "ACCEPTED" | "REJECTED";
  */
 export const WORKSHEET_PARTNER_CODE_PATTERN = /^[A-Z][A-Z0-9]{1,7}$/;
 
-/** A részleg kódja (`BIO`): legfeljebb három betű. */
-export const WORKSHEET_DEPARTMENT_CODE_PATTERN = /^[A-Z]{1,3}$/;
+/**
+ * A részleg kódja (`BIO`, `A1`, `12`): legfeljebb három nagybetű VAGY SZÁMJEGY.
+ *
+ * Balázs kérése, 2026-09-22: "csinald meg kerlek, hogy a partnernel a helyszin
+ * kodjaba ne csak betut, hanem szamot es betut is lehessen irni".
+ *
+ * A SZÁMJEGY NEM CSAK KIEGÉSZÍTÉS: tisztán számos kód is érvényes, mert egy
+ * "12" nevű csarnok életszerű, és a kérés nem zárja ki. Szándékosan NEM
+ * követeljük meg a kezdő betűt -- a partner-kódnál (fent) igen, de ott a saját
+ * indoka is ott áll: a rövidítés emberi jelölés, aminek partnernek kell
+ * látszania egy listában. Egy helyszín-kód nem áll magában sehol.
+ *
+ * ÉS AMIÉRT EZ BIZTONSÁGOS A MUNKALAPSZÁMBAN: a szám kötőjellel tagolt
+ * (`formatWorksheetNumber`), és a repóban SEHOL nem elemzi vissza senki --
+ * mérve 2026-09-22: a 34 `worksheetNumber` hivatkozásból nulla bontja fel.
+ * Egy "12" kódból "12-2026-001" lesz, ami egyértelmű. Szeparátor nélkül
+ * összefűzve ez a tágítás NEM lenne biztonságos.
+ *
+ * A HOSSZ VÁLTOZATLANUL HÁROM, azt Balázs nem kérte, és a `code` oszlop
+ * `@db.VarChar(3)`.
+ */
+export const WORKSHEET_DEPARTMENT_CODE_PATTERN = /^[A-Z0-9]{1,3}$/;
 
 /**
  * A sorszám alapesetben három jegyű. 999 fölött NEM fordul át, hanem bővül
