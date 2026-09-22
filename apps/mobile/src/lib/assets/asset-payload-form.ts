@@ -59,6 +59,12 @@ export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
     unitId: szoveg(row.departmentId),
     name,
     kind: kind as AssetCreateForm["kind"],
+    /*
+      A SORBAN ALLO FELVITEL IS VISZI A KATEGORIAT. Ha itt URES maradna, egy
+      offline felvitt eszkoz CSENDBEN elvesztene azt, amit a szerelo
+      kivalasztott -- es a kulonbseg csak hetekkel kesobb latszana.
+    */
+    categoryId: szoveg(row.categoryId),
     manufacturer: szoveg(row.manufacturer),
     model: szoveg(row.model),
     serialNumber: szoveg(row.serialNumber),

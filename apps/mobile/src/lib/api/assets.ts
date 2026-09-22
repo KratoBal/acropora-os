@@ -179,6 +179,8 @@ export interface CreateAssetInput {
   parentAssetId?: string;
   kind: AssetKind;
   name: string;
+  /** Az eszkoz kategoriaja, a torzsadatbol. Elhagyhato. */
+  categoryId?: string;
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
@@ -284,6 +286,18 @@ export function scanAssetByLabel(code: string) {
 
 export function listAssetOwners() {
   return apiRequest<{ items: AssetOwnerOption[] }>(`${BASE}/owners`);
+}
+
+/**
+ * AZ ESZKOZ-KATEGORIAK, A VALASZTOHOZ.
+ *
+ * CSAK AZ AKTIVAK: a kivezetett kategoria a felviteli urlapon pont azt hozna
+ * vissza, ami miatt kivezettuk.
+ */
+export function listAssetCategories() {
+  return apiRequest<{ items: { id: string; name: string }[] }>(
+    "/asset-categories",
+  );
 }
 
 export function createAsset(input: CreateAssetInput) {

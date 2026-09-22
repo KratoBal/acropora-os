@@ -186,6 +186,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         href: "/beallitasok/mertekegysegek",
         entryId: "units-of-measure",
       },
+      {
+        label: "Eszköz-kategóriák",
+        description:
+          "Az eszköz-felvitel legördülő listája. Kivezetni lehet, törölni nem: a már felvitt eszközök mellett olvasható marad.",
+        href: "/beallitasok/eszkoz-kategoriak",
+        entryId: "asset-categories",
+      },
     ],
   },
 ];

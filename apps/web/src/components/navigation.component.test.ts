@@ -395,6 +395,12 @@ describe("navigation", () => {
     // A mertekegyseg-torzsadat ugyanoda tartozik: a szerelo HASZNALJA a listat
     // (az eszkoz-szerkeszto legordulojet `service.view` olvassa), de nem IRJA.
     "/beallitasok/mertekegysegek": "settings.manage",
+    // AZ ESZKOZ-KATEGORIAK UGYANAZ A FAJTA TETEL, es ugyanaz a bontas: a
+    // szerelo HASZNALJA a listat (az eszkoz-szerkeszto legordulojet
+    // `service.view` olvassa), de nem IRJA. Ha az iras is `service.view`
+    // lenne, barmelyik felvivo felvehetne uj kategoriat -- es pont az allna
+    // vissza, ami miatt a lista letrejott.
+    "/beallitasok/eszkoz-kategoriak": "settings.manage",
   };
 
   it("reproduces, for every role, exactly what the hard-coded keys produced", () => {

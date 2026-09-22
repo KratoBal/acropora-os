@@ -254,7 +254,16 @@ export interface AssetDetail extends AssetListItem {
     code: string;
     name: string;
   };
+  /**
+   * A KATEGORIA NEVE -- A TORZSADATBOL, NEM SZABAD SZOVEGBOL.
+   *
+   * A mezo NEVE valtozatlan, tehat a megjelenito helyek nem mozdulnak. Ami
+   * valtozott: az ERTEK mostantol egy `AssetCategory` sorbol jon, es a
+   * `categoryId` mondja meg, melyikbol.
+   */
   category?: string;
+  /** A valasztott kategoria azonositoja; a szerkeszto ezt kuldi vissza. */
+  categoryId?: string;
   description?: string;
   installedAt?: string;
   purchasedAt?: string;
@@ -317,7 +326,14 @@ export interface CreateAssetInput {
   status?: AssetStatus;
   criticality?: AssetCriticality;
   name: string;
-  category?: string;
+  /**
+   * A FELVITEL MOSTANTOL AZONOSITOT KULD, NEM SZOVEGET.
+   *
+   * A szoveges alak 110 eszkozon tiz erteket szult, hat helyett. A mezo neve
+   * ezert is valtozik: egy `category?: string` mezo, ami valojaban azonositot
+   * var, pontosan az a fajta csendes felrevezetes, amit ez a munka megszuntet.
+   */
+  categoryId?: string | null;
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
@@ -365,7 +381,12 @@ export interface UpdateAssetInput {
   status?: AssetStatus;
   criticality?: AssetCriticality;
   name?: string;
-  category?: string | null;
+  /**
+   * A KATEGORIA HIVATKOZAS, NEM SZOVEG. `null` torli a kotest, a mezo
+   * elhagyasa erintetlenul hagyja -- ugyanaz az alak, mint a szomszedos
+   * koteseknel.
+   */
+  categoryId?: string | null;
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;

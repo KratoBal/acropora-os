@@ -564,3 +564,9 @@ export type {
   WorksheetDocumentSummary,
   WorksheetDocumentType,
 } from "./worksheet-management.js";
+
+export { normalizeAssetCategoryName } from "./asset-category.js";
+export type {
+  AssetCategory,
+  AssetCategoryListResponse,
+} from "./asset-category.js";
