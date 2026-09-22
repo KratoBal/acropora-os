@@ -2,6 +2,8 @@ import "reflect-metadata";
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { BadRequestException } from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
@@ -171,6 +173,65 @@ describe("a hibajegy dokumentum-feltoltes hatarai", () => {
       "a valasz tipusa nem fugghet a bemenettol",
     );
     assert.equal((eredmeny as unknown[]).length, 1);
+  });
+
+  /**
+   * A KOZOS MERET-HATAR, VISELKEDESBOL -- nem a forras szovegebol.
+   *
+   * A `FilesInterceptor` egy mixin osztalyt ad vissza; peldanyositva a
+   * `multer` beallitasa OLVASHATO, tehat a hatar nem "ott all a kodban",
+   * hanem TENYLEG ez megy a multerbe. Merve 2026-09-22 mind az ot feltoltesi
+   * vegponton: a harom dokumentum-uton 10 MB, a unas-importon es az
+   * inventoryn 25 MB plusz `files: 1` (azok sajat kerete).
+   */
+  it("a multerbe a KOZOS meret-hatar megy", async () => {
+    const interceptorok = Reflect.getMetadata(
+      "__interceptors__",
+      ServiceJobDocumentsController.prototype.uploadDocument,
+    ) as (new () => { multer?: { limits?: { fileSize?: number } } })[];
+
+    assert.equal(
+      interceptorok.length,
+      1,
+      "egy feltoltesi interceptor all rajta",
+    );
+    const Interceptor = interceptorok[0];
+    assert.ok(Interceptor, "az interceptor-osztaly megvan");
+    const limits = new Interceptor().multer?.limits;
+
+    assert.equal(limits?.fileSize, DOCUMENT_UPLOAD_LIMITS.fileSizeBytes);
+  });
+
+  /**
+   * ES A DARABSZAM KULON ALLITAS, MERT MAS TENY (acrobot kikotese, msg 21738).
+   *
+   *   a meret-hatar   azt mondja meg, MEKKORA fajlt fogadunk el
+   *   a `+ 1`         azt, hogy EGGYEL TOBBET OLVASUNK BE, hogy a hivo sajat
+   *                   400-as hibauzenetet kapjon a multer 500-asa helyett
+   *
+   * Ha egy allitas mind a kettore pirosodna, nem tudnank, melyik romlott el.
+   *
+   * ES AMIERT EZ FORRAS-OLVASO, A MASIK PEDIG NEM: a `FilesInterceptor`
+   * MASODIK argumentuma (a maxCount) a mixin closure-jeben marad -- a
+   * peldanyon nem latszik, csak a `limits`. Merve 2026-09-22: a peldany
+   * sajat mezoje egyedul a `multer`, es abban `storage`, `limits`,
+   * `preservePath`, `defParamCharset`, `fileFilter` all. Tehat ezt a tenyt
+   * MA csak a forrasbol lehet allitani, es ezt ki is mondom.
+   */
+  it("a multer EGGYEL tobbet olvas be, mint amennyit elfogadunk", () => {
+    // A SPEC A `test-dist`-BOL FUT, tehat az `import.meta.url` a LEFORDITOTT
+    // mappara mutat. A forrast a repo sajat alakjaval erjuk el (ugyanugy, mint
+    // a `document-upload-limits.spec.ts`): az api gyokeret szamoljuk vissza.
+    const API = join(new URL("../../", import.meta.url).pathname, "src");
+    const forras = readFileSync(
+      join(API, "service-jobs", "service-job-documents.controller.ts"),
+      "utf8",
+    );
+
+    assert.match(
+      forras,
+      /FilesInterceptor\("file", DOCUMENT_UPLOAD_LIMITS\.files \+ 1,/,
+    );
   });
 
   /** JOGOSULTSAG: a jegy kezelese, nem kulon dokumentum-jog. */
