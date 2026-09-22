@@ -1,0 +1,27 @@
+# A BELYEGKEP-AG HATOKORENEK KALIBRACIOJA.
+#
+# A RONTAS PONTOSAN A KARTYA TARGYA: a szukites NEM tunik el, csak HATASTALAN
+# lesz. Az `assetVisibilityForAndBranch(scope)` a helyen marad (tehat az import
+# hasznalt, a build zold), de egy `OR`-ba kerul egy ures feltetel melle, ami
+# MINDENRE illeszkedik:
+#
+#     asset: { AND: [{ OR: [assetVisibilityForAndBranch(scope), {}] }] }
+#
+# A HAROM VART NYOM, ES A HARMADIK A LENYEG:
+#
+#   1. az UJ, VISELKEDES-allitas ELSUL -- egy idegen vevo megkapja a belyegkepet
+#   2. a POZITIV KONTROLL ZOLD MARAD: a jogos kero tovabbra is a belyegkepet
+#      kapja, tehat nem attol piros a kor, hogy az ag osszeomlott
+#   3. A KET FORRAS-OLVASO ORZO ZOLD MARAD. Ez a kartya allitasanak a
+#      bizonyiteka: egy szoveg-allitas a TORLEST elkapja, a KIKAPCSOLAST nem.
+#      A `document-thumbnail-wiring` es az `asset-detail-scope` szovege
+#      valtozatlan, tehat egyik sem szolal meg.
+#
+# AMIRE NEM VAROK, ES MIERT: a forras-orzok TAP-soranak SORSZAMAT nem tudhatom
+# elore, a nevuk pedig elotagot visel (`documentThumbnail: ...`). Egy
+# varakozas, amiben nem vagyok biztos, ROSSZ OKBOL vinne pirosra a kaput --
+# ugyanaz a hiba forditva. A 3. nyomot ezert a NAPLOBOL olvasom vissza, nem a
+# kapuval kerem szamon.
+TAP version 13
+not ok - idegen vevő a bélyegképet sem éri el a variant=thumbnail kéréssel
+az eszköz láthatósága a lekérdezésben áll
