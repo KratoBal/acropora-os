@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
 import { prisma } from "@acropora/database";
+import { DOCUMENT_THUMBNAIL_VARIANT } from "@acropora/types";
 
 import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -114,6 +115,30 @@ async function csatolmany(
     contentType: "application/pdf",
     // PDF: belyegkep nem keszul hozza, es a lista nem is ker ilyet.
     thumbnail: null,
+    caption: null,
+    actorUserId,
+  });
+}
+
+/**
+ * KEPES CSATOLMANY, BELYEGKEPPEL -- a belyegkep-ag hatokorehez kell.
+ *
+ * A PDF-es valtozat `thumbnail: null`-t ad, es azon a `documentBytes` SOHA nem
+ * lepne be a belyegkep-agba: a `wantsThumbnail` utan a `documentThumbnail`
+ * ures kezzel ter vissza, es a hivas a VISSZAESESRE megy, ahol MASIK
+ * hatokor-ellenorzes all. Vagyis egy PDF-fel merve a lenti allitas akkor is
+ * zold lenne, ha a belyegkep-lekerdezesbol hianyozna a hatokor.
+ */
+async function kepesCsatolmany(assetId: string, fileName: string) {
+  return repository.addDocument({
+    assetId,
+    type: "OTHER",
+    fileName,
+    content: Buffer.from("eredeti-kep"),
+    sizeBytes: 11,
+    sha256: sha256(),
+    contentType: "image/png",
+    thumbnail: Buffer.from("belyegkep"),
     caption: null,
     actorUserId,
   });
@@ -246,6 +271,55 @@ describe(
       // egy üres eszközön is ugyanígy nézne ki.
       const { items } = await service.documents(eszkozBId, BELSOS);
       assert.equal(items.length, 1);
+    });
+
+    /**
+     * A BELYEGKEP-AG SAJAT LEKERDEZESSEL FUT, ES SAJAT HATOKORREL (2026-09-22).
+     *
+     * A `documentBytes` a `variant=thumbnail` keresre ELOSZOR a
+     * `repository.documentThumbnail`-t hivja, es CSAK ha az ures kezzel ter
+     * vissza, esik at a `this.document(...)` agra, ahol a masik
+     * hatokor-ellenorzes all. Vagyis a belyegkepet a SAJAT lekerdezesenek
+     * szukitese vedi -- ha abbol kiesne a hatokor, egy idegen partner a
+     * `variant=thumbnail` keressel megkerulne a lenti, mar mert tiltast.
+     *
+     * EDDIG EZT CSAK FORRAS-SZOVEG ORIZTE (`document-thumbnail-wiring.spec.ts`
+     * es `asset-detail-scope.spec.ts`). Egy forras-allitas a TORLEST elkapja,
+     * a KIKAPCSOLAST nem: ha a szukites a helyen marad, de mar nem hat, a
+     * szoveg valtozatlan, es mind a ketto zold marad.
+     *
+     * A KEPES CSATOLMANY NEM RESZLET: a suite tobbi sora PDF, `thumbnail:
+     * null`-lal, es azon a `documentThumbnail` amugy is ures kezzel ter
+     * vissza -- ez az allitas ott a VISSZAESEST merne, nem a belyegkep-agat.
+     */
+    it("idegen vevő a bélyegképet sem éri el a variant=thumbnail kéréssel", async () => {
+      const kep = await kepesCsatolmany(eszkozBId, "kep.png");
+
+      // ISMERT POZITIV KONTROLL: a belyegkep-ag LETEZIK es ad is vissza valamit
+      // a jogos kerőnek. Enelkul a lenti elutasitas egy sosem mukodo agon is
+      // ugyanigy nezne ki.
+      const sajat = await service.documentBytes(
+        eszkozBId,
+        kep.id,
+        { kind: "customer", customerId: vevoBId },
+        DOCUMENT_THUMBNAIL_VARIANT,
+      );
+      assert.deepEqual(
+        Buffer.from(sajat.bytes),
+        Buffer.from("belyegkep"),
+        "a jogos kérő nem a bélyegképet kapta -- az ág nem is futott le",
+      );
+
+      await assert.rejects(
+        () =>
+          service.documentBytes(
+            eszkozBId,
+            kep.id,
+            { kind: "customer", customerId: vevoAId },
+            DOCUMENT_THUMBNAIL_VARIANT,
+          ),
+        /Az eszköz nem található/,
+      );
     });
 
     /**
