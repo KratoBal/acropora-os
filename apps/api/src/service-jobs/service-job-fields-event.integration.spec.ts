@@ -92,12 +92,27 @@ describe(
     it("E1: a leírás írása FIELDS_EDITED fajtájú sort ír", async () => {
       const ok = await repository.updateFields({
         serviceJobId: jegyId,
-        description: "Új leírás",
+        fields: { title: "Javított cím", description: "Új leírás" },
+        note: "A hibajegy címe és leírása módosult.",
         actorUserId: null,
       });
 
       assert.equal(ok, true);
       assert.deepEqual(await fajtak(), ["FIELDS_EDITED"]);
+
+      /**
+       * ES A MEZOK TENYLEG ATIRODTAK. Enelkul az allitas csak a NAPLOSORT
+       * merne, es zold maradna egy olyan megvalositason, ami naplot ir, de a
+       * jegyhez nem nyul.
+       */
+      const jegy = await prisma.serviceJob.findUniqueOrThrow({
+        where: { id: jegyId },
+        select: { title: true, description: true },
+      });
+      assert.deepEqual(jegy, {
+        title: "Javított cím",
+        description: "Új leírás",
+      });
     });
 
     it("E2: a helyszín-átvezetés is FIELDS_EDITED fajtájú sort ír", async () => {
@@ -114,6 +129,45 @@ describe(
     });
 
     /**
+     * E3: A `NOTIFICATION_SENT` SOR IS KELETKEZHET -- EGY MEGLEVO RES ZARASA.
+     *
+     * A fajta 2026-09-02 ota all az enumban, es a kod IR ilyen sort
+     * (`ticket-mail.repository.ts`, `recordNotification`), a megkotes viszont
+     * SOHA nem kapott ra agat: minden ilyen iras a CHECK-en dobott. Merve
+     * 2026-09-22, ugyanabban a korben, mint a `FIELDS_EDITED` bukasa -- es
+     * ugyanaz az egy sor zarja mind a kettot.
+     *
+     * KOZVETLENUL A `prisma`-val ir, nem a tarolon at: a kerdes az ADATBAZIS
+     * megkoteserol szol, nem arrol, hogy a levelezo modul helyesen hivja-e.
+     */
+    it("E3: a NOTIFICATION_SENT sor is keletkezhet", async () => {
+      await prisma.serviceJobEvent.create({
+        data: {
+          serviceJobId: jegyId,
+          kind: "NOTIFICATION_SENT",
+          note: "Teszt értesítés",
+        },
+      });
+
+      assert.ok((await fajtak()).includes("NOTIFICATION_SENT"));
+    });
+
+    /**
+     * KONTROLL: A MEGKOTES TOVABBRA IS MEGKOT.
+     *
+     * A harom fenti allitas ZOLD LENNE akkor is, ha a migracio a megkotest
+     * ELDOBTA volna, ahelyett hogy bovitette. Ez a sor valasztja szet a kettot:
+     * egy `STATUS_CHANGE` `toStatus` NELKUL tovabbra is elutasitas.
+     */
+    it("KONTROLL: a STATUS_CHANGE cél-állapot nélkül továbbra is elutasítás", async () => {
+      await assert.rejects(() =>
+        prisma.serviceJobEvent.create({
+          data: { serviceJobId: jegyId, kind: "STATUS_CHANGE" },
+        }),
+      );
+    });
+
+    /**
      * KONTROLL: a fajta NEM az alapertelmezes. Enelkul a ket fenti allitas
      * ugyanugy zold lenne egy olyan megvalositason, ami a `kind` mezot
      * kihagyja -- csak akkor `STATUS_CHANGE` allna a sorokban.
@@ -121,7 +175,7 @@ describe(
     it("KONTROLL: egyetlen sor sem STATUS_CHANGE", async () => {
       const mind = await fajtak();
 
-      assert.equal(mind.length, 2, "a ket fenti allitas irta oket");
+      assert.equal(mind.length, 3, "a harom fenti allitas irta oket");
       assert.ok(!mind.includes("STATUS_CHANGE"));
     });
   },

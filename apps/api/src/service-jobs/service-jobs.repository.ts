@@ -512,13 +512,20 @@ export class ServiceJobsRepository {
    */
   async updateFields(input: {
     serviceJobId: string;
-    description: string | null;
+    /**
+     * CSAK AZ ERKEZETT MEZOK IRODNAK. A `title` es a `description` kulon
+     * elhagyhato: a hianyuk azt jelenti, hogy NE NYULJ hozzajuk. A
+     * `description` `null` erteke viszont ERVENYES -- az az urites.
+     */
+    fields: { title?: string; description?: string | null };
+    /** A naplosor szovegehez: MI valtozott. A hivo allitja ossze. */
+    note: string;
     actorUserId: string | null;
   }): Promise<boolean> {
     return this.database.$transaction(async (transaction) => {
       const frissitett = await transaction.serviceJob.updateMany({
         where: { id: input.serviceJobId },
-        data: { description: input.description },
+        data: input.fields,
       });
       if (frissitett.count !== 1) return false;
 
@@ -526,7 +533,7 @@ export class ServiceJobsRepository {
         data: {
           serviceJobId: input.serviceJobId,
           kind: "FIELDS_EDITED",
-          note: "A hibajegy leírása módosult.",
+          note: input.note,
           actorUserId: input.actorUserId,
         },
       });

@@ -612,12 +612,42 @@ export class ServiceJobsService {
      * hozza, a masodik azt, hogy URITSD KI. Ha semmi nem jott, nem irunk -- es
      * naplosort sem: egy "modosult" bejegyzes valtozas nelkul hazugsag lenne.
      */
-    if (input.description === undefined) return this.detail(id, user);
+    const mezok: { title?: string; description?: string | null } = {};
+    const valtozott: string[] = [];
+
+    if (input.title !== undefined) {
+      const cim = input.title.trim();
+      /**
+       * A `@MinLength(1)` A NYERS ERTEKET NEZI, tehat a csupa szokozt
+       * ATENGEDI -- es a `title` a semaban `String`, nem `String?`. Egy
+       * szokozokre irt cim ures cimet tarolna, es a jegy a listaban nevtelenul
+       * allna. A DTO-t ez nem tudja megfogni: a trim UTANI allapotrol szol.
+       */
+      if (cim.length === 0)
+        throw new BadRequestException(
+          "A hibajegy címét nem lehet üresen hagyni.",
+        );
+      mezok.title = cim;
+      valtozott.push("címe");
+    }
+
+    if (input.description !== undefined) {
+      mezok.description =
+        input.description === null ? null : input.description.trim() || null;
+      valtozott.push("leírása");
+    }
+
+    if (valtozott.length === 0) return this.detail(id, user);
 
     const ok = await this.repository.updateFields({
       serviceJobId: id,
-      description:
-        input.description === null ? null : input.description.trim() || null,
+      fields: mezok,
+      /**
+       * A NAPLOSOR MEGNEVEZI, MI VALTOZOTT. Egy allando "modosult" mondat
+       * ugyanazt mondana egy cim-javitasra es egy leiras-uritesre -- a naplo
+       * pont attol hasznalhato, hogy a kettot meg lehet kulonboztetni.
+       */
+      note: `A hibajegy ${valtozott.join(" és ")} módosult.`,
       actorUserId: user.id,
     });
     if (!ok) throw new NotFoundException("A hibajegy nem található.");

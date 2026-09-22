@@ -200,14 +200,32 @@ export class SetServiceJobAssigneesDto {
  * hogy NE NYULJ hozza; a `null` azt, hogy URITSD KI. A leiras a semaban
  * `String?`, tehat az urites ervenyes allapot.
  *
- * === A CIM MA NINCS ITT, ES EZ NYITOTT KERDES ===
+ * === A CIM IS ITT VAN, ES MAS SZABALYT VISEL, MINT A LEIRAS ===
  *
- * A sema `title` mezoje KULON all es KOTELEZO, tehat uresre nem irhato -- egy
- * plusz szabalyt viselne. Balazs a harom mezo kozott a LEIRAST nevezte meg, a
- * cimet csak elirta. A kerdes a kartyan all (764ea7a8); ha igen a valasz, egy
- * elhagyhato mezo es egy allitas a hozzaadas, ujratervezes nelkul.
+ * acrobot dontese, 2026-09-22, Balazs sajat peldaja alapjan, szo szerint:
+ * „Most is van egy eles hibajegy aminek elirta a cimet. En se tudom
+ * modositani". A „mindharom" valasza egy MASIK harmasra szolt (leiras,
+ * helyszin, eszkozok), a peldaja viszont a CIMROL -- ha a cim kimaradna, pont
+ * az a jegy maradna javithatatlan, ami miatt az egeszet kerte.
+ *
+ * A KULONBSEG: a cim `String` a semaban, NEM `String?`. Tehat elhagyhato
+ * (=ne nyulj hozza), de `null`-t NEM vesz fel, es uresre sem irhato. A
+ * `@MinLength(1)` a NYERS erteket nezi, tehat a csupa szokozt ATENGEDI -- a
+ * trim utani uresseget ezert a szolgaltatas zarja, sajat mondattal.
+ *
+ * A HATAROK UGYANAZOK, mint a leirasnal: ugyanaz a `descriptionEditBlocker`,
+ * ugyanaz a naplosor. Nem uj ut, egy mezovel tobb.
  */
 export class UpdateServiceJobFieldsDto {
+  /** A felvitel szabalyaval egyezoen (`CreateServiceJobDto`): 1..300. */
+  @IsOptional()
+  @IsString({ message: "A hibajegy címe szöveg legyen." })
+  @MinLength(1, { message: "A hibajegy címét nem lehet üresen hagyni." })
+  @MaxLength(300, {
+    message: "A hibajegy címe legfeljebb 300 karakter lehet.",
+  })
+  title?: string;
+
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsString({ message: "A hibajegy leírása szöveg legyen." })
