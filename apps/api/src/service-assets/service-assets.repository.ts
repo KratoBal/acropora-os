@@ -792,13 +792,27 @@ export class ServiceAssetsRepository extends Repository {
   }
 
   /**
-   * A TULAJDONOS KERDESE ITT SZANDEKOSAN NINCS ELLENORIZVE (spec 4.1): a
+   * A TULAJDONOS KERDESE 2026-09-22 OTA ITT IS ELLENORIZVE VAN.
+   *
+   * === AMI ITT ALLT, ES MIERT NEM ALL TOBBE ===
+   *
+   * "A TULAJDONOS KERDESE ITT SZANDEKOSAN NINCS ELLENORIZVE (spec 4.1): a
    * `qrToken` 128 bites veletlen uuid, tehat a birtoklasa maga a felhatalmazas
-   * az ESZKOZRE. A DOKUMENTUM-TIPUS kerdese viszont ettol fuggetlen, es ezert
-   * kell ide is a hatokor: a partner a sajat eszkoze tokenjet jogosan ismeri,
-   * tehat enelkul ezen az uton hozzajutna ahhoz a szamlahoz, amit az adatlapon
-   * es a letoltesen mar nem kap meg. Egy korlat, ami csak az utak egy reszen
-   * all, nem korlat.
+   * az ESZKOZRE."
+   *
+   * Balazs ezt felulirta 2026-09-22 08:55:25 UTC-kor, szo szerint: "ne lassa"
+   * -- arra a kerdesre, hogy a partner embere egy NEM hozza rendelt helyszinen
+   * beolvasva lassa-e az eszkozt. A sor-szintu szuro azota a metodus torzseben
+   * all, ugyanazzal a fuggvennyel, amit a lista es az adatlap hasznal.
+   *
+   * A JEGYZET AZERT MARAD ITT ATIRVA, ES NEM TOROLVE: a mondat egy LEIRT
+   * spec-pontra (4.1) hivatkozott, tehat aki csak a kodot latja, azt hinne,
+   * hogy valaki megkerulte a specet. Igy latszik, hogy felulirtak, es ki.
+   *
+   * A DOKUMENTUM-TIPUS KERDESE VALTOZATLAN, es fuggetlen a fentitol: a partner
+   * a sajat eszkoze tokenjet jogosan ismeri, tehat a tipus-szures nelkul ezen
+   * az uton hozzajutna ahhoz a szamlahoz, amit az adatlapon es a letoltesen mar
+   * nem kap meg. Egy korlat, ami csak az utak egy reszen all, nem korlat.
    */
   /**
    * A FELHASZNALOHOZ RENDELT HELYSZINEK, A KOZOS LEKERDEZESSEL.
@@ -1241,16 +1255,23 @@ export class ServiceAssetsRepository extends Repository {
   /**
    * ESZKOZ KERESESE A MATRICAKODROL -- ES ITT A TULAJDON ELLENORIZVE VAN.
    *
-   * EZ A LENYEGES KULONBSEG A `detailByQrToken`-HEZ KEPEST, es szandekos.
-   * Ott a tulajdon SZANDEKOSAN nincs nezve, mert a `qrToken` 128 bites veletlen
-   * uuid: a birtoklasa maga a felhatalmazas. A matricakod egy betu es negy
-   * szam, vagyis 260 ezer lehetoseg -- egy hitelesitett SERVICE_VIEW jogu
-   * PARTNER-felhasznalo vegig tudna probalni. Ha ez az ut orokolne a masik
-   * kivetelet, sorra kapna mas partnerek eszkozeit.
+   * === EZ 2026-09-22-IG A KET BEOLVASO UT LENYEGES KULONBSEGE VOLT. MA MAR NEM. ===
+   *
+   * Itt az allt, hogy a `detailByQrToken`-ben a tulajdon SZANDEKOSAN nincs
+   * nezve (a token birtoklasa a felhatalmazas), tehat a ket ut MAST lat. Balazs
+   * azt a kivetelt aznap felulirta, es azota MINDKET ut ugyanazt a lathatosagi
+   * fuggvenyt hasznalja. A mondat tehat nem pontatlan lett, hanem HAMIS --
+   * ezert all itt atirva.
+   *
+   * AMI A REGI INDOKBOL VALTOZATLANUL ALL, es ezert visel EZ az ut
+   * helyszin-tengelyt: a matricakod egy betu es negy szam, vagyis 260 ezer
+   * lehetoseg -- egy hitelesitett SERVICE_VIEW jogu PARTNER-felhasznalo vegig
+   * tudna probalni. A qrToken 128 bites veletlen, azt nem.
    *
    * A HATOKOR `AND` AGKENT ALL, nem kulcskent -- lasd a
-   * `scopeWhereForAndBranch` jegyzetet es a `partner-scope-and-branch.spec.ts`
-   * orzot, ami ezt a fajlt is nezi.
+   * `partner-scope-and-branch.spec.ts` orzot, ami ezt a fajlt is nezi. (A
+   * korabbi hivatkozas a `scopeWhereForAndBranch` jegyzetere szinten elavult:
+   * ez az ut 2026-09-22 ota nem azt a fuggvenyt hasznalja.)
    *
    * A NEM LATHATO ESZKOZ ES A NEM LETEZO KOD UGYANAZT ADJA (`null`), es ez sem
    * kenyelem: ha a ketto kulonbozne, a valaszokbol felterkepezheto lenne, mely
