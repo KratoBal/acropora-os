@@ -18,6 +18,35 @@ export type ServiceJobStatusValue =
   | "COMPLETED"
   | "CANCELLED";
 
+/**
+ * A LEZÁRT ÁLLAPOTOK, EGY HELYEN, A KÖZÖS CSOMAGBAN.
+ *
+ * KÉT ÉRTÉK, NEM EGY. Egy csak `COMPLETED`-re írt feltétel a `CANCELLED`
+ * jegyeket nyitottnak látná, és a különbség néma.
+ *
+ * === MIÉRT KÖLTÖZÖTT IDE (2026-09-22) ===
+ *
+ * Eddig az `apps/api` `service-job-list-scope.ts` fájljában állt, privátként, és
+ * ott két dolgot szolgált ki: a lista `closed` hatókörét és a leírás-szerkesztés
+ * belsős határát. Amikor a FELÜLETNEK is el kellett döntenie, hogy megjelenítse-e
+ * a szerkesztőt, két rossz lehetőség maradt volna: vagy a web írja le
+ * MÁSODSZOR ugyanazt a két értéket, vagy nem dönti el és a kezelő olyan
+ * szerkesztőt lát, ami a mentésnél hasal el.
+ *
+ * A repó saját szabálya dönt (`CONTRIBUTING`, „megosztott üzleti típus ->
+ * packages/types"): a fogalom közös, tehát ide tartozik, és MINDEN olvasó innen
+ * veszi. Az `apps/api` mostantól ezt importálja, nem tart saját másolatot.
+ */
+export const SERVICE_JOB_FINISHED_STATUSES: readonly ServiceJobStatusValue[] = [
+  "COMPLETED",
+  "CANCELLED",
+];
+
+/** Lezárt-e a jegy. A fenti listából, nem egy második felsorolásból. */
+export function isFinishedServiceJob(status: ServiceJobStatusValue): boolean {
+  return SERVICE_JOB_FINISHED_STATUSES.includes(status);
+}
+
 /** A négy állapot, amit a partner lát. A nyolc ennek a részletezése. */
 export type ServiceJobPartnerStatus =
   "NEW" | "IN_PROGRESS" | "COMPLETED" | "CLOSED";

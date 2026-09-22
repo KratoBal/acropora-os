@@ -483,6 +483,64 @@ export class ServiceJobsRepository {
    * A HIANYZO JEGY `false`-t ad, nem kivetelt: a hivo dolga eldonteni, mit mond
    * rola -- es a szolgaltatas ugyanazt a 404-et adja, mint a tobbi uton.
    */
+  /**
+   * VAN-E A JEGYEN MUNKALAP -- A PARTNER-HATARHOZ.
+   *
+   * REJTETT LAPOT IS SZAMOL, ES EZ SZANDEKOS. A fajl tobb helyen szur a
+   * `NOT_HIDDEN` feltetellel (a jegy alatti LISTA is), de az MAS kerdesre
+   * valaszol: hogy mit MUTATUNK. A hatar a lap LETEZESEROL szol -- egy rejtett
+   * lap is lap, es ha nem szamolna, a partner egy olyan jegy leirasat irhatna
+   * at, amin mar all munka.
+   *
+   * ES AZERT NEM A RESZLETLAPBOL JON: a `ServiceJobDetail` NEM visel
+   * `worksheets` mezot (merve 2026-09-22: a lapjai a `timeline`-ba olvadnak),
+   * tehat egy onnan vett darabszam nem is letezik.
+   */
+  async hasWorksheet(serviceJobId: string): Promise<boolean> {
+    const darab = await this.database.worksheet.count({
+      where: { serviceJobId },
+    });
+    return darab > 0;
+  }
+
+  /**
+   * A JEGY MEZOINEK IRASA, A NAPLOSORRAL EGY TRANZAKCIOBAN.
+   *
+   * A HATART NEM ITT DONTJUK EL: azt a `descriptionEditBlocker` mondja meg, a
+   * szolgaltatasban. Ez a metodus AZT irja, amit kapott -- egy masodik
+   * hatar-ellenorzes itt csak azt jelentene, hogy a szabaly ket helyen all.
+   */
+  async updateFields(input: {
+    serviceJobId: string;
+    /**
+     * CSAK AZ ERKEZETT MEZOK IRODNAK. A `title` es a `description` kulon
+     * elhagyhato: a hianyuk azt jelenti, hogy NE NYULJ hozzajuk. A
+     * `description` `null` erteke viszont ERVENYES -- az az urites.
+     */
+    fields: { title?: string; description?: string | null };
+    /** A naplosor szovegehez: MI valtozott. A hivo allitja ossze. */
+    note: string;
+    actorUserId: string | null;
+  }): Promise<boolean> {
+    return this.database.$transaction(async (transaction) => {
+      const frissitett = await transaction.serviceJob.updateMany({
+        where: { id: input.serviceJobId },
+        data: input.fields,
+      });
+      if (frissitett.count !== 1) return false;
+
+      await transaction.serviceJobEvent.create({
+        data: {
+          serviceJobId: input.serviceJobId,
+          kind: "FIELDS_EDITED",
+          note: input.note,
+          actorUserId: input.actorUserId,
+        },
+      });
+      return true;
+    });
+  }
+
   async setPlacement(input: {
     serviceJobId: string;
     departmentId: string;
@@ -496,6 +554,8 @@ export class ServiceJobsRepository {
      * lapja.
      */
     worksheetIds: readonly string[];
+    /** A naplosorhoz. Nullazhato: a naplo aktora `SetNull` a torlesnel. */
+    actorUserId: string | null;
   }): Promise<boolean> {
     return this.database.$transaction(async (transaction) => {
       const job = await transaction.serviceJob.findUnique({
@@ -507,6 +567,32 @@ export class ServiceJobsRepository {
       await transaction.serviceJob.update({
         where: { id: input.serviceJobId },
         data: { departmentId: input.departmentId },
+      });
+
+      /**
+       * A NAPLO EDDIG HALLGATOTT EROL, ES EZ RES VOLT.
+       *
+       * Merve 2026-09-22: a helyszin-atvezetes NULLA naplosort irt, pozitiv
+       * kontrollal (a `move` ag ugyanebben a fajlban ir esemenyt). Egy jegy
+       * helyszine es eszkozei tehat csendben atirhatoak voltak, es a lap azt
+       * allitotta, hogy mindig ez volt.
+       *
+       * UGYANABBAN A KORBEN KERULT BE, MINT A MEZO-SZERKESZTES naplosora, es
+       * ez nem kenyelem: egy naplo, ami a KISEBB valtozast rogziti es a
+       * NAGYOBBAT nem, rosszabb a naplo hianyanal -- teljesseget sugall.
+       *
+       * A `kind` KIIRVA ALL. Az alapertelmezese `STATUS_CHANGE`, tehat egy
+       * kihagyott mezo nem hianykent jelenne meg, hanem ALLAPOTVALTASKENT --
+       * es azt a `ServiceJobEvent_status_change_has_to_status` megkotes is
+       * elutasitana, mert `toStatus` nelkul allna.
+       */
+      await transaction.serviceJobEvent.create({
+        data: {
+          serviceJobId: input.serviceJobId,
+          kind: "FIELDS_EDITED",
+          note: "A helyszín és az érintett eszközök módosultak.",
+          actorUserId: input.actorUserId,
+        },
       });
 
       await transaction.serviceJobAsset.deleteMany({

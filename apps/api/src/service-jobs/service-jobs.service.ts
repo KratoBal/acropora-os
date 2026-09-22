@@ -14,6 +14,10 @@ import { hiddenRowsWhere } from "../common/hidden-rows.js";
 import { serviceJobVisibilityWhere } from "./service-job-visibility.js";
 import { ertesitendoDelegaltak } from "./ertesitendo-delegaltak.js";
 import { mayWriteServiceJob } from "./service-job-write-scope.js";
+import {
+  DESCRIPTION_EDIT_BLOCKER_MESSAGES,
+  descriptionEditBlocker,
+} from "./description-edit-boundary.js";
 import { mayAssignUnit } from "./visibility-assignment.js";
 
 import {
@@ -33,6 +37,7 @@ import type {
   ServiceJobListQueryDto,
   SetServiceJobAssigneesDto,
   SetServiceJobPlacementDto,
+  UpdateServiceJobFieldsDto,
 } from "./dto.js";
 import { normalizeAssetIds } from "../common/assets-in-department.js";
 import { normalizeAssigneeIds } from "../common/service-assignment.js";
@@ -551,6 +556,105 @@ export class ServiceJobsService {
    * A PARTNER NELKULI JEGY SAJAT AGAT KAP: nem "ismeretlen egyseg", hanem
    * ertelmetlen keres, es a teendo is mas (elobb partnert kell allitani).
    */
+  /**
+   * A JEGY MEZOINEK SZERKESZTESE (ma: a leiras).
+   *
+   * === NINCS `requireWriteScope`, ES EZ A LEGFONTOSABB SOR ITT ===
+   *
+   * A kezenfekvo valasztas az lenne: ott all az ot szomszed iro ut elso
+   * soraban. Csak epp BINARIS -- belsos vagy sem --, itt viszont a hatokor nem
+   * KIZAR, hanem MEGVALASZTJA a hatart. Ha itt allna, a partner 404-et kapna,
+   * MIELOTT a hatar-fuggveny szohoz jutna, es csendben kiesne pont az, amit
+   * Balazs kert.
+   *
+   * ELLENORZES EGY MONDATBAN: ha egy partner hivo 404-et kap egy munkalap
+   * nelkuli, NYITOTT jegyen, az orzo rossz helyen all -- akkor is, ha a belsos
+   * ag zold.
+   *
+   * A LATHATOSAGOT VISZONT AZ `internalDetail` ELINTEZI: a nem lathato jegy
+   * ugyanazt a 404-et adja, mint a nem letezo, es ez a meglevo viselkedes.
+   */
+  async updateFields(
+    id: string,
+    input: UpdateServiceJobFieldsDto,
+    user: AuthenticatedUser,
+  ): Promise<ServiceJobDetail | ServiceJobPartnerDetail> {
+    const jegy = await this.internalDetail(id, user);
+
+    /**
+     * A MUNKALAP-JELENLET KULON LEKERDEZES, ES A TELJES HALMAZT SZAMOLJA.
+     * Nem a reszletlapbol jon: a `ServiceJobDetail` NEM visel `worksheets`
+     * mezot (a lapjai a `timeline`-ba olvadnak). A szamlalo a REJTETT lapokat
+     * is beleveszi -- egy rejtett lap is LAP, es a hatar a letezeserol szol,
+     * nem a lathatosagarol.
+     */
+    const akadaly = descriptionEditBlocker(partnerScopeOf(user), {
+      status: jegy.status,
+      hasWorksheet: await this.repository.hasWorksheet(id),
+    });
+    if (akadaly !== null) {
+      const mondat = DESCRIPTION_EDIT_BLOCKER_MESSAGES[akadaly];
+      /**
+       * KET KULON HIBAKOD, MERT KET KULON DOLGOT MOND.
+       *
+       * A ket ALLAPOT-hatar (lezart jegy, mar van lapja) 409: a keres helyes,
+       * csak a jegy mai allapota nem engedi -- holnap vagy egy masik jegyen
+       * ugyanez a keres atmegy. A HATOKOR viszont 403: azon nem valtoztat sem
+       * ido, sem allapot.
+       */
+      throw akadaly === "OUT_OF_SCOPE"
+        ? new ForbiddenException(mondat)
+        : new ConflictException(mondat);
+    }
+
+    /**
+     * A HIANYZO MEZO ES A `null` MAST JELENT: az elso azt, hogy NE NYULJ
+     * hozza, a masodik azt, hogy URITSD KI. Ha semmi nem jott, nem irunk -- es
+     * naplosort sem: egy "modosult" bejegyzes valtozas nelkul hazugsag lenne.
+     */
+    const mezok: { title?: string; description?: string | null } = {};
+    const valtozott: string[] = [];
+
+    if (input.title !== undefined) {
+      const cim = input.title.trim();
+      /**
+       * A `@MinLength(1)` A NYERS ERTEKET NEZI, tehat a csupa szokozt
+       * ATENGEDI -- es a `title` a semaban `String`, nem `String?`. Egy
+       * szokozokre irt cim ures cimet tarolna, es a jegy a listaban nevtelenul
+       * allna. A DTO-t ez nem tudja megfogni: a trim UTANI allapotrol szol.
+       */
+      if (cim.length === 0)
+        throw new BadRequestException(
+          "A hibajegy címét nem lehet üresen hagyni.",
+        );
+      mezok.title = cim;
+      valtozott.push("címe");
+    }
+
+    if (input.description !== undefined) {
+      mezok.description =
+        input.description === null ? null : input.description.trim() || null;
+      valtozott.push("leírása");
+    }
+
+    if (valtozott.length === 0) return this.detail(id, user);
+
+    const ok = await this.repository.updateFields({
+      serviceJobId: id,
+      fields: mezok,
+      /**
+       * A NAPLOSOR MEGNEVEZI, MI VALTOZOTT. Egy allando "modosult" mondat
+       * ugyanazt mondana egy cim-javitasra es egy leiras-uritesre -- a naplo
+       * pont attol hasznalhato, hogy a kettot meg lehet kulonboztetni.
+       */
+      note: `A hibajegy ${valtozott.join(" és ")} módosult.`,
+      actorUserId: user.id,
+    });
+    if (!ok) throw new NotFoundException("A hibajegy nem található.");
+
+    return this.detail(id, user);
+  }
+
   async setPlacement(
     id: string,
     input: SetServiceJobPlacementDto,
@@ -619,6 +723,7 @@ export class ServiceJobsService {
       departmentId,
       assetIds,
       worksheetIds: movable.map((sheet) => sheet.id),
+      actorUserId: user.id,
     });
     if (!ok) throw new NotFoundException("A hibajegy nem található.");
 

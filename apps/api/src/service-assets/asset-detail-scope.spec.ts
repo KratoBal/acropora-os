@@ -20,6 +20,30 @@ import { assetDetailWhere } from "./service-assets.repository.js";
  *
  * Balazs 14:34:07-kor kimondta a szabalyt ("a partner azokat az eszkozoket
  * latja, aminek a helyszine hozza van rendelve"), tehat A LISTA A HELYES.
+ *
+ * === KET FUGGETLEN MERES UGYANARROL AZ ALAKROL, KET KULONBOZO NAPON ===
+ *
+ * A lenti `az ÜRES hozzárendelés semmit nem enged át` allitas es a hozza tartozo
+ * `AND`-tengely azt rogziti, hogy a kulso `customerId` ag ONMAGABAN nem enged at
+ * semmit. Ez MERESBOL nem dontheto el, mert az az ag MA NULLA SORT ad -- ezert
+ * all mellette a ket meres, ket kulonbozo napon:
+ *
+ *     2026-09-21 (acrobot)   79 eszkozbol 79 SZALLITOI tulajdonu, sajat
+ *                            `customerId`-je egyiknek sincs
+ *     2026-09-22 (acrobot)   83 eszkoz, 0 az ugyfel NEVEN, 0 sornak van
+ *                            `customerAddressId`-je
+ *
+ * KET NAP, KET SZAM, UGYANAZ AZ ALAK. Egy meres onmagaban lehetne pillanatkep;
+ * ketto, ket kulonbozo napon, mar nem esetlegesseg.
+ *
+ * ES AMIERT A NULLA NEM VELETLEN, HANEM SZERKEZETI: vevo-tulajdonu eszkoznek
+ * SOHA nincs helyszine -- a `create` es az `update` is nullara kenyszeriti
+ * (`ownerType === "SUPPLIER" ? input.departmentId : null`), mert a vevo-tulajdonu
+ * soron `customerAddressId` es `aquariumId` all helyette. A ket szam tehat nem
+ * egy ritka allapotot mer, hanem egy KATEGORIAT, ami ma ures.
+ *
+ * HA EZ A SZAM VALAHA NEM NULLA, a lenti allitas melletti dontes ujranyitando --
+ * a reszletek a `partner-scope.util.ts` where-epitojenek jegyzeteben.
  */
 describe("assetDetailWhere", () => {
   /**

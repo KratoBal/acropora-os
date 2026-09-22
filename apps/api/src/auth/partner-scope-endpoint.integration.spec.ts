@@ -1464,11 +1464,32 @@ describe(
       });
 
       /**
-       * A `scan` VEGPONT UGYANEZT A VALASZT ADJA VISSZA, es a spec 4.1 szerint
-       * SZANDEKOSAN nem ellenoriz tulajdonost: a token maga a kulcs. A
-       * TULAJDONOS kerdese ettol el van dontve, a DOKUMENTUM-TIPUSE viszont nem
-       * -- a partner a sajat eszkoze tokenjet jogosan ismeri, tehat ezen az uton
-       * ugyanugy hozzajutna a szamlahoz.
+       * A `scan` VEGPONT UGYANEZT A VALASZT ADJA VISSZA, es EZ AZ ALLITAS A
+       * DOKUMENTUM-TIPUSROL SZOL, NEM A TULAJDONOSROL.
+       *
+       * AMI ITT ALLT 2026-09-22-IG: "a spec 4.1 szerint SZANDEKOSAN nem ellenoriz
+       * tulajdonost: a token maga a kulcs. A TULAJDONOS kerdese ettol el van
+       * dontve." MA EGYIK FELE SEM ALL:
+       *
+       *   a TULAJDONOS kerdese    Balazs felulirta 2026-09-22 08:55:25 UTC-kor
+       *                           (Discord, uzenet 1551879584851431436), szo
+       *                           szerint: "ne lassa". A `detailByQrToken` azota
+       *                           a teljes lathatosagi fuggvenyt hasznalja.
+       *   "a token maga a kulcs"  SOSEM allt: a vegpont `SERVICE_VIEW` jog alatt
+       *                           all es `@CurrentUser`-t vesz, tehat a token a
+       *                           MASODIK tenyezo, nem az egyetlen. (acrobot
+       *                           merese, 2026-09-22 10:54.)
+       *
+       * AMI VALTOZATLANUL ALL, ES AMIERT EZ AZ ALLITAS LETEZIK: a dokumentum-tipus
+       * szurese KULON kerdes a tulajdonostol. A partner a sajat eszkoze tokenjet
+       * jogosan ismeri, tehat ezen az uton ugyanugy hozzajutna a szamlahoz, ha a
+       * fajta-szures nem allna.
+       *
+       * MIERT MARADT ITT A HAMIS MONDAT, HOLOTT UGYANAZNAP HAROM TARSAT MAR
+       * JAVITOTTAM: a #976-ban a metodus NEVERE es az UTVONALRA kerestem. Ez a
+       * jegyzet EGYIKET SEM emliti -- a `scan` vegpontrol beszel, nem a
+       * `detailByQrToken`-rol es nem a `scan/:qrToken` utrol. A kereses, ami
+       * megtalalta, magara az INDOKLASRA ment ("a token maga a kulcs").
        */
       it("a scan végpont sem adja ki a számlát partner-hatókörű kérőnek", async () => {
         const scanned = await assets.scan(qrTokenA, asCustomerA);

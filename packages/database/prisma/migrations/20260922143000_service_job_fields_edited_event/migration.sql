@@ -1,0 +1,14 @@
+-- A jegy MEZŐ-változásainak saját napló-fajtája.
+--
+-- Eddig négy fajta állt (`STATUS_CHANGE`, `WORKSHEET_ATTACHED`,
+-- `WORKSHEET_DETACHED`, `NOTIFICATION_SENT`), és egyik sem fedte azt, amikor a
+-- jegy egy MEZŐJE változik: a leírás szerkesztése és a helyszín-átvezetés.
+--
+-- MIÉRT NEM A `STATUS_CHANGE` ALÁ: attól a jegy állapota nem mozdul, és a
+-- `ServiceJobEvent_status_change_has_to_status` megkötés `toStatus` mezőt
+-- követelne olyan sorhoz, ahol nincs mit odaírni.
+--
+-- EGYETLEN MEGLÉVŐ SORT SEM ÉRINT: az `ALTER TYPE ... ADD VALUE` csak bővíti a
+-- lehetséges értékek halmazát, a tárolt értékek változatlanok. Ez tágítás, nem
+-- csere -- szűkítésnél itt előbb adatot kellene mérni.
+ALTER TYPE "ServiceJobEventKind" ADD VALUE 'FIELDS_EDITED';

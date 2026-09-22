@@ -119,6 +119,24 @@ export const partnerApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  /**
+   * A BEJELENTES JAVITASA (cim, leiras).
+   *
+   * UGYANAZ A VEGPONT, MINT A BELSOS FELULETEN -- a partner portal mar ma is
+   * ugyanoda kuld (`POST /service/jobs` a felvitelnel). A ket hatokor nem
+   * kulon UTVONALON valik szet, hanem a szolgaltatason BELUL: a partnere addig
+   * tart, amig a jegyen NINCS munkalap.
+   *
+   * A HATART A SZERVER MONDJA KI. Ha mar van lap, 409 jon, sajat mondattal.
+   */
+  updateTicket: (
+    id: string,
+    input: { title?: string; description?: string | null },
+  ) =>
+    request<{ id: string }>(`/service/jobs/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
   ticketDocuments: (id: string) =>
     request<{ items: ServiceJobDocumentSummary[] }>(
       `/service/jobs/${encodeURIComponent(id)}/documents`,
