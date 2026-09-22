@@ -42,13 +42,25 @@ import { JobAssetPicker } from "./job-asset-picker";
  * keresben -- a szerver tehat soha nem szed le olyat, amit a felhasznalo nem
  * latott.
  *
- * === A HELYSZIN NEM URITHETO ===
+ * === A HELYSZIN NEM URITHETO, ES A MIGRACIO OTA SOHA NEM IS URES ===
  *
  * Nincs "Nincs megadva" opcio a valasztoban, es ez elter a FELVITELTOL, ahol
  * van. Ott a helyszin meg nem letezik; itt egy urites az OSSZES eszkozt
- * leszedne a jegyrol, es erre nincs keres. Ami viszont van: a helyszin NELKULI
- * jegy -- azon ez a doboz az ELSO beallitast vegzi, es olyankor nincs leeso
- * eszkoz.
+ * leszedne a jegyrol, es erre nincs keres.
+ *
+ * 2026-09-22-IG A MASODIK OK EZ VOLT: "van helyszin nelkuli jegy -- azon ez a
+ * doboz az ELSO beallitast vegzi, es olyankor nincs leeso eszkoz." A
+ * `20260922210000_department_required` migracio ota ez MAR NEM IGAZ: a
+ * `ServiceJob.departmentId` KOTELEZO (Balazs dontese, message_id
+ * 1552018256280162385, szo szerint: "1 legyen kotelezo"), tehat minden
+ * jegynek MINDIG van helyszine -- ez a doboz mostantol KIZAROLAG modositast
+ * vegez, sosem elsot.
+ *
+ * A `unit === ""` agak (lasd lejjebb) ES a `departmentId ?? ""` tartalek
+ * EZERT maradnak a kodban, DEFENZIVAN: a `ServiceJobDetail.departmentId`
+ * TIPUSA (`@acropora/types`) meg nem koveti a sema szigoritasat -- az kulon
+ * lepes, ezen a fajlon kivul --, tehat a nullazhato eset a forditonak
+ * formalisan MEG ALL, futasidoben viszont MAR NEM allhat elo.
  */
 export interface ServiceJobPlacementEditorProps {
   jobId: string;
@@ -78,6 +90,8 @@ export function ServiceJobPlacementEditor({
     [],
   );
   const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
+  // A `?? ""` A SEMA SZIGORITASA OTA VEDEKEZO, NEM SZUKSEGES: lasd a fajl
+  // fejat. A tipus (`departmentId: string | null`) meg megengedi a nullat.
   const [unit, setUnit] = useState(departmentId ?? "");
   const [assetIds, setAssetIds] = useState<string[]>(
     assets.map((asset) => asset.assetId),
@@ -102,6 +116,7 @@ export function ServiceJobPlacementEditor({
    * kepernyon nem maradhat ott egy olyan kijeloles, ami sehol nem letezik.
    */
   useEffect(() => {
+    // UGYANAZ A VEDEKEZO `?? ""`, UGYANAZZAL AZ INDOKKAL, mint a kezdoertekben.
     setUnit(departmentId ?? "");
   }, [departmentId]);
   useEffect(() => {
@@ -154,8 +169,11 @@ export function ServiceJobPlacementEditor({
    * kivalasztva hagy, az bizonyitottan ott all. Ami a mai halmazbol kimaradt,
    * az esne le.
    *
-   * URES HELYSZINNEL (meg nincs valasztva) NEM allitunk semmit: ott nincs mihez
-   * kepest leesni.
+   * AZ `unit === ""` AG 2026-09-22 OTA VEDEKEZO, NEM AGAZAS: a migracio ota
+   * `unit` SOHA nem indul uresen (lasd a fajl feje), tehat ez a felteteles
+   * a gyakorlatban mindig hamis. Nem toroltuk: a tipus meg nullazhatonak
+   * mondja a bemenetet, es egy toroltt ag itt egy jovobeli, meg nem hozott
+   * tipus-szigoritas ellen nem vedene semmit.
    */
   const dropping = useMemo(
     () =>
@@ -335,6 +353,7 @@ export function ServiceJobPlacementEditor({
               <Button
                 type="button"
                 variant="secondary"
+                // a `unit === ""` masik elofordulasa: lasd a fajl feje
                 disabled={!changed || saving || unit === ""}
                 onClick={() => {
                   /*
