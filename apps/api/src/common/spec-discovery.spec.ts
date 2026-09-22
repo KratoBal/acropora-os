@@ -86,6 +86,83 @@ test("lát tesztfájlokat és látja a szkriptet, amivel összeveti", () => {
 });
 
 /**
+ * NEVESITETT SPECEK, AMIKNEK BENNE KELL LENNIUK A KOZOS FUTASBAN.
+ *
+ * === MIERT KELL EZ A FENTI KETTO MELLE (2026-09-22) ===
+ *
+ * A teszt-szkript annyit allit, hogy a spec-lista NEM URES, a fenti ket sor
+ * pedig azt, hogy a NEVEK illeszkednek a mintara. Egyik sem mondja meg, hogy
+ * EGY KONKRET spec benne van-e. Egy lista lehet nem ures, a nevek lehetnek
+ * szabalyosak, es kozben pont az a fajl eshet ki, amelyik a legtobbet ori.
+ *
+ * MERVE ugyanaznap: nevesitett specre NULLA allitas allt sehol a faban, es a
+ * nulla nem a keresesem tulajdonsaga volt (a medusa vetitesi specek leteznek,
+ * tiz fajl).
+ *
+ * === MIERT EPP EZ A NEGY ===
+ *
+ * Mind a negy egy MERT rest zar, es mindegyiknel a bekotes volt a vak pont --
+ * vagyis pont az a fajta allitas, aminek a hianya CSENDES. Ha egy ilyen fajl
+ * kiesik a felderitesbol, a kimaradasa semmilyen pirosat nem ad: a futas
+ * kevesebb tesztet visz, es nem szol rola.
+ */
+const NEVESITETT_SPECEK = [
+  // a vetitesi szuro itelete eljut-e a policyig (#956)
+  "src/integrations/medusa/medusa-projection.cli.spec.ts",
+  // a vonalkod-policy tiltott aga (#949)
+  "src/integrations/medusa/medusa-barcode.policy.spec.ts",
+  // a biometrikus kapu eredmenye megallitja-e az alairast (#954)
+  "src/mobile/worksheet-self-sign-wiring.spec.ts",
+  // minden hatokor-hivas AND agban all (#957)
+  "src/auth/partner-scope-and-branch.spec.ts",
+];
+
+/**
+ * A FELDERITETT HALMAZ UGYANAZOKKAL A SZABALYOKKAL, AMIKKEL A SZKRIPT DOLGOZIK:
+ * `*.spec.js`, a smoke es az integracios ag nevvel kizarva. A test-dist
+ * tartalmat SZANDEKOSAN nem olvasom: az a FORDITAS eredmenye, es ez az allitas
+ * a NEVEKROL szol -- ugyanarrol, amire a `find` illeszt.
+ */
+function felderitett(): Set<string> {
+  return new Set(
+    sourceFiles()
+      .filter(writesTests)
+      .filter(
+        (path) =>
+          path.endsWith(".spec.ts") &&
+          !path.endsWith(EXCLUDED_BY_NAME) &&
+          !path.endsWith(".integration.spec.ts"),
+      ),
+  );
+}
+
+test("a megnevezett specek BENNE vannak a közös futásban", () => {
+  const halmaz = felderitett();
+
+  for (const nev of NEVESITETT_SPECEK)
+    assert.ok(
+      halmaz.has(nev),
+      `${nev} kimaradt a közös futásból: a fájl nevével esik ki, és a kimaradása semmilyen pirosat nem ad.`,
+    );
+});
+
+/**
+ * ES A KONTROLL A NEVESITETT LISTARA MAGARA: ha egy bejegyzes elgepelodik vagy
+ * a fajl athelyezodik, a fenti sor PIROSAT ad -- de a "kimaradt a kozos
+ * futasbol" mondat akkor HAMIS lenne, mert a fajl nem kiesett, hanem nincs is
+ * ott. Ez a sor valasztja szet a ket esetet.
+ */
+test("KONTROLL: a megnevezett fájlok LÉTEZNEK", () => {
+  const forrasok = new Set(sourceFiles());
+
+  for (const nev of NEVESITETT_SPECEK)
+    assert.ok(
+      forrasok.has(nev),
+      `${nev} nincs a fában: a lista elavult, nem a felderítés romlott el.`,
+    );
+});
+
+/**
  * A LEZART HEZAG. A felderites `*.spec.js` alakot keres, tehat egy `foo.test.ts`
  * vagy `foo-tests.ts` nevu fajl lefordul, betolt, es SOSEM fut le.
  */
