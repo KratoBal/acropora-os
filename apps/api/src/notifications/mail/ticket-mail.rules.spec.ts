@@ -195,11 +195,10 @@ describe("a naplo-sor nem szivarogtat cimet", () => {
    * megkerdezni, szabad-e kiirni.
    */
   it("a sikeres kuldes sora sem cimet, sem nevet nem tartalmaz", () => {
-    const sor = mailAuditNote({
-      kind: "send",
-      to: "nyito@partner.hu",
-      name: "Nyitó Nóra",
-    });
+    const sor = mailAuditNote(
+      { kind: "send", to: "nyito@partner.hu", name: "Nyitó Nóra" },
+      { kind: "off" },
+    );
 
     assert.ok(!sor.includes("nyito@partner.hu"));
     assert.ok(!sor.includes("Nyitó Nóra"));
@@ -210,8 +209,52 @@ describe("a naplo-sor nem szivarogtat cimet", () => {
 
   it("a kihagyas sora megnevezi az OKOT", () => {
     assert.match(
-      mailAuditNote({ kind: "skip", reason: "opener-inactive" }),
+      mailAuditNote(
+        { kind: "skip", reason: "opener-inactive" },
+        { kind: "off" },
+      ),
       /opener-inactive/,
     );
+  });
+
+  /**
+   * AZ ATIRANYITAS NYOMA, ES MIERT A NAPLOBAN.
+   *
+   * acrobot kikotese (2026-09-22): "Ha egy level atiranyitva megy ki, azt a
+   * naplobol tudni kell, kulonben ket honap mulva valaki azt hiszi, a vevo
+   * megkapta."
+   *
+   * A CIM NEM KERUL BELE, es ez a felette allo ket allitas dontese: egy cim,
+   * ami egyszer bekerul egy naplo szovegebe, minden jovobeli feluletnel egyutt
+   * utazik. Az atiranyitas cime ugyanolyan cim.
+   */
+  it("az ATIRANYITOTT kiküldés sora kimondja, hogy a címzett NEM kapta meg", () => {
+    const sor = mailAuditNote(
+      { kind: "send", to: "nyito@partner.hu", name: "Nyitó Nóra" },
+      { kind: "on", to: "proba@acropora.hu" },
+    );
+
+    assert.match(sor, /ÁTIRÁNYÍTVA/);
+    assert.match(sor, /NEM kapta meg/);
+    // A PROBACIM SEM CIM: az atiranyitas cimet sem irjuk ki.
+    assert.doesNotMatch(sor, /@/);
+  });
+
+  /**
+   * ES A KIHAGYAS SORA NEM KAP ATIRANYITAS-NYOMOT, akkor sem, ha a kapcsolo all.
+   *
+   * MIERT KULON ALLITAS: ha a toldalek a `skip` agra is rakerulne, a naplo azt
+   * allitana, hogy egy ki sem ment level atiranyitva ment ki. Egy rontas, ami a
+   * toldalekot a fuggveny VEGERE teszi, pontosan ezt csinalna -- es a felette
+   * allo ket allitas zold maradna tole.
+   */
+  it("a kihagyás sora akkor sem beszél átirányításról, ha a kapcsoló áll", () => {
+    const sor = mailAuditNote(
+      { kind: "skip", reason: "opener-inactive" },
+      { kind: "on", to: "proba@acropora.hu" },
+    );
+
+    assert.doesNotMatch(sor, /ÁTIRÁNYÍTVA/);
+    assert.match(sor, /opener-inactive/);
   });
 });

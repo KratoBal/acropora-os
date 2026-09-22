@@ -269,8 +269,67 @@ export function ticketMailDecision(input: {
  * mert egy kijelento alaku komment datum nelkul masnap is ugyanolyan
  * magabiztosan nez ki -- pontosan ez tortent ezzel a bekezdessel.
  */
-export function mailAuditNote(decision: MailDecision): string {
-  return decision.kind === "send"
-    ? "Értesítő levél kiküldve a hibajegy nyitójának."
-    : `Értesítő levél nem ment ki (${decision.reason}).`;
+/**
+ * AZ ATIRANYITAS: MINDEN KIMENO LEVEL EGY MEGADOTT CIMRE MEGY A VALODI HELYETT.
+ *
+ * === MIERT EGY CIM, ES MIERT NEM MOD ===
+ *
+ * A masik negy kapcsolo `off`/`live` alaku, mert azoknal a KERDES eldontendo.
+ * Itt a valasz maga egy ADAT: HOVA menjen. Egy kulon `TICKET_MAIL_REDIRECT`
+ * mod + egy cim ket valtozo lenne, amik kozul az egyik hianyozhat -- es a
+ * hianyzo cim melletti bekapcsolt mod pontosan az az allapot, amit egyik
+ * agunk sem tudna ertelmesen kezelni.
+ *
+ * === A HIANYZO VALTOZO NEM IRANYIT AT, ES NEM IS NYIT ===
+ *
+ * acrobot kikotese (2026-09-22). A hianyzo ertek `off`-ot ad, ugyanugy, mint a
+ * masik negy kapcsolonal -- es ez itt AZT jelenti, hogy a level a VALODI
+ * cimzettnek megy. Onmagaban tehat nem nyit semmit: ahhoz a masik negy
+ * kapcsolo kell.
+ *
+ * ES AMIT EZ NEM OLD MEG, KIMONDVA: ha a harom ut `live`, es ez a valtozo
+ * HIANYZIK, a level a vevohoz megy. Ez nem hiba, hanem a vegallapot -- de
+ * addig, amig probalunk, a kettot EGYUTT kell beallitani, es a sorrend
+ * szamit: eloszor az atiranyitas, aztan a kapcsolok.
+ */
+export type MailRedirect =
+  { readonly kind: "off" } | { readonly kind: "on"; readonly to: string };
+
+export function mailRedirect(raw: string | undefined | null): MailRedirect {
+  const cim = raw?.trim() ?? "";
+  return cim.length > 0 ? { kind: "on", to: cim } : { kind: "off" };
+}
+
+/**
+ * A NAPLO-SOR VEGE, HA A LEVEL ATIRANYITVA MENT KI.
+ *
+ * A CIMET SZANDEKOSAN NEM IRJA KI, es ez nem ovatoskodas: a `handoverMailAuditNote`
+ * fejlece megmeri, hogy egy naplo-szovegbe kerult cim onnantol minden jovobeli
+ * feluletnel egyutt utazik. Az atiranyitas cime ugyanolyan cim.
+ *
+ * AMI VISZONT KELL: hogy a sorbol KIDERULJON, hogy a cimzett NEM kapta meg.
+ * acrobot kikotese (2026-09-22): "kulonben ket honap mulva valaki azt hiszi, a
+ * vevo megkapta".
+ */
+export function redirectAuditSuffix(redirect: MailRedirect): string {
+  return redirect.kind === "on"
+    ? " ÁTIRÁNYÍTVA egy próbacímre, a valódi címzett NEM kapta meg."
+    : "";
+}
+
+/**
+ * A MASODIK PARAMETER KOTELEZO, ES EZ A KAR IRANYABOL KOVETKEZIK.
+ *
+ * Elhagyhatokent egy hivo CSENDBEN kihagyhatna, es a naplo azt allitana, hogy a
+ * level kiment -- pontosan azt a hamis megnyugvast, ami ellen a sor letezik. A
+ * kotelezo mezo a forditot teszi a kapuva: egy uj kuldesi ut nem tud ugy
+ * naplozni, hogy elfelejti.
+ */
+export function mailAuditNote(
+  decision: MailDecision,
+  redirect: MailRedirect,
+): string {
+  if (decision.kind !== "send")
+    return `Értesítő levél nem ment ki (${decision.reason}).`;
+  return `Értesítő levél kiküldve a hibajegy nyitójának.${redirectAuditSuffix(redirect)}`;
 }
