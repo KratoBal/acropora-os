@@ -119,6 +119,20 @@ export class AssetListQueryDto {
   @IsOptional()
   label?: "with" | "without";
   /**
+   * KATEGORIA SZERINTI SZUKITES -- KET KULON MEZO, ugyanaz az alak, mint a
+   * matricanal fent.
+   *
+   * A `category` azt kerdezi, hogy VAN-E; a `categoryId` azt, hogy MELYIK. A
+   * „nincs" ag nem elovigyazat: az atvezeto migracio szandekosan hagyja
+   * `NULL`-on azt a sort, aminek a szoveges erteke egyetlen kategoriara sem
+   * illeszkedett -- es az a halmaz csendben nőne, ha semmi nem tudna
+   * rakerdezni.
+   */
+  @IsIn(["with", "without"])
+  @IsOptional()
+  category?: "with" | "without";
+  @IsString() @IsOptional() categoryId?: string;
+  /**
    * EGY KONKRET MATRICAKOD, PONTOS EGYEZESSEL.
    *
    * MIERT KULON A `search` MEZOTOL, HOLOTT AZ IS MEGTALALNA. A `search` EMBERI

@@ -16,6 +16,8 @@ import { randomUUID } from "node:crypto";
 import { conflictingFields, intendedFields } from "./asset-field-conflict.js";
 import { assetListOrderBy } from "./asset-list-order.js";
 import { assetLabelWhere } from "./asset-label-filter.js";
+import { assetCategoryWhere } from "./asset-category-filter.js";
+import { mergeAssetWhere } from "./asset-where-merge.js";
 import { assetStatusWhere } from "./asset-status-filter.js";
 
 import { Injectable } from "@nestjs/common";
@@ -499,7 +501,18 @@ export class ServiceAssetsRepository extends Repository {
        * alakut ELUTASITJA -- ide tehat vagy egy tarolhato kod erkezik, vagy
        * semmi.
        */
-      ...assetLabelWhere(query.label, query.labelCode),
+      /**
+       * A KET SZURO EGY `AND` ALA KERUL, NEM KET SZORASSAL.
+       *
+       * Mindketto `{ AND: [...] }` alakot ad vissza, ha ket aga van -- ket
+       * szorasnal tehat a MASODIK elnyelte volna az elsot, es a matrica-
+       * feltetel csendben eltunt volna. A `mergeAssetWhere` fejlece leirja a
+       * mert esetet; egy erdemi resszel a lekerdezes alakja valtozatlan.
+       */
+      ...mergeAssetWhere(
+        assetLabelWhere(query.label, query.labelCode),
+        assetCategoryWhere(query.category, query.categoryId),
+      ),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
       ...(query.dueBefore
         ? { nextServiceAt: { lte: new Date(query.dueBefore) } }
@@ -2327,6 +2340,16 @@ export class ServiceAssetsRepository extends Repository {
        * ezert `undefined`, nem ures szoveg.
        */
       labelCode: row.label?.code,
+      /*
+        A KIADOTT ERTEK A HIVATKOZOTT NEV, nem a regi szoveges mezo. A ketto
+        atmenetileg egyutt all a soron: a szoveg a migracio ELLENORIZHETOSEGE
+        miatt marad ott, de amit a felulet lat, az mar a torzsadatbol jon.
+
+        A LISTASORON IS ALL, NEM CSAK AZ ADATLAPON: a szures enelkul nem
+        mutathatna meg, MIRE szurt.
+      */
+      category: row.categoryRef?.name ?? undefined,
+      categoryId: row.categoryId ?? undefined,
       childCount: row._count.childAssets,
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -2353,13 +2376,6 @@ export class ServiceAssetsRepository extends Repository {
   ): AssetDetail {
     return {
       ...this.toListItem(row, paths),
-      /*
-        A KIADOTT ERTEK A HIVATKOZOTT NEV, nem a regi szoveges mezo. A ketto
-        atmenetileg egyutt all a soron: a szoveg a migracio ELLENORIZHETOSEGE
-        miatt marad ott, de amit a felulet lat, az mar a torzsadatbol jon.
-      */
-      category: row.categoryRef?.name ?? undefined,
-      categoryId: row.categoryId ?? undefined,
       description: row.description ?? undefined,
       performance: row.performance?.toString(),
       performanceUnit: row.performanceUnit ?? undefined,
