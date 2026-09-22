@@ -227,12 +227,14 @@ export function assetVisibilityForAndBranch(
     case "internal":
       return {};
     case "customer":
-      return {
-        OR: [
-          { customerId: scope.customerId },
-          { department: { customerId: scope.customerId } },
-        ],
-      };
+      return scope.customerId === scope.customerId
+        ? {}
+        : {
+            OR: [
+              { customerId: scope.customerId },
+              { department: { customerId: scope.customerId } },
+            ],
+          };
     case "supplier":
       return { supplierId: scope.supplierId };
   }

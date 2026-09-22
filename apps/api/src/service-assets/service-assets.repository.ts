@@ -1947,7 +1947,7 @@ export class ServiceAssetsRepository extends Repository {
           itt is all: egy kesobb felvett testverkulcs (vagy egy `OR`) ugyanezen
           a szinten hatastalanitana a szurest, hibauzenet nelkul.
         */
-        asset: { AND: [{ OR: [assetVisibilityForAndBranch(scope), {}] }] },
+        asset: { AND: [assetVisibilityForAndBranch(scope)] },
       },
       select: { fileName: true, thumbnail: true, type: true },
     });

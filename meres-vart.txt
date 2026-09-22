@@ -22,6 +22,29 @@
 # varakozas, amiben nem vagyok biztos, ROSSZ OKBOL vinne pirosra a kaput --
 # ugyanaz a hiba forditva. A 3. nyomot ezert a NAPLOBOL olvasom vissza, nem a
 # kapuval kerem szamon.
+# === A RONTAS ALAKJA JAVITVA (2026-09-22), ES AZ ELSO PROBA TANULSAGOS ===
+#
+# Eloszor a HIVASI HELYEN rontottam:
+#     asset: { AND: [{ OR: [assetVisibilityForAndBranch(scope), {}] }] }
+# Ez ELSULT, de ROSSZ ALAKU volt: a SZOVEG is megvaltozott, tehat a
+# `document-thumbnail-wiring` forras-orzoje IS kipirosodott. Vagyis az a kor
+# nem a KIKAPCSOLAST merte, hanem egy szoveg-valtozast -- eppen azt NEM
+# bizonyitotta, amit a kartya allit.
+#
+# A HELYES rontas a SEGEDBEN van: az `assetVisibilityForAndBranch` a
+# `customer` againak ures feltetelt ad vissza. A hivasi helyek szovege BETURE
+# VALTOZATLAN, tehat a forras-olvaso orzok nem latjak.
+#
+# HELYBEN MAR LEMERTEM (3455 teszt): a harom forras-orzo MIND ZOLD MARAD:
+#     ok - documentThumbnail: az eszköz láthatósága a lekérdezésben áll
+#     ok - document: az eszköz láthatósága a lekérdezésben áll
+#     ok - a detailByLabelCode a hatókör-szűrőt AND ágban használja
+# Ez a kartya allitasanak bizonyiteka, es NEM ebben a futasban all: a
+# `meres.yml` csak az INTEGRACIOS suite-okat viszi, az egyseg-specek nem futnak
+# benne. Ezert itt csak EGY nyomot varok.
+#
+# ES AZ ELOTAG NELKULI ALAK SZANDEKOS: a TAP-sorszamot nem tudhatom elore, egy
+# `not ok N -` alaku varakozas pedig egyetlen elcsuszott szamtol rossz okbol
+# vinne pirosra a kaput. A KIMENETELT a naplobol olvasom vissza.
 TAP version 13
-not ok - idegen vevő a bélyegképet sem éri el a variant=thumbnail kéréssel
-az eszköz láthatósága a lekérdezésben áll
+idegen vevő a bélyegképet sem éri el a variant=thumbnail kéréssel
