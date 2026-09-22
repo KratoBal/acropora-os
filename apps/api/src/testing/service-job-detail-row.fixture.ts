@@ -33,11 +33,26 @@ export function serviceJobDetailRow(
     completedAt: new Date("2026-09-04T08:00:00.000Z"),
     customerId: "cust-1",
     customer: { displayName: "Fővárosi Állat- És Növénykert" },
-    // A HELYSZIN ALAPBOL NINCS a fixture-on: a mezo 2026-09-14-en keletkezett,
-    // tehat minden korabbi jegyen `null`. Az az ALAPESET, nem a kivetel -- aki
-    // a helyszines agat meri, az `overrides`-szal allitja be.
-    departmentId: null,
-    department: null,
+    /**
+     * A HELYSZIN MOSTANTOL VALOS ERTEK, NEM `null` -- ES EZ A SOR ATIRODOTT,
+     * NEM CSAK A KOMMENT.
+     *
+     * Eddig itt `null` allt, azzal az indokkal, hogy a mezo 2026-09-14-en
+     * keletkezett, tehat a legtobb korabbi jegyen ures. A
+     * `20260922210000_department_required` migracio (Balazs dontese, "1
+     * legyen kotelezo") ota a `ServiceJob.departmentId` NOT NULL, tehat egy
+     * ilyen sor MA MAR FIZIKAILAG NEM ALLHAT ELO -- a `null` alapertek innentol
+     * nem "a gyakori eset", hanem egy olyan allapot, amit a tarolo tipusa
+     * (`ServiceJobDetailRow`, a valodi szerzodesbol `satisfies`-szel) mar nem
+     * fogad el.
+     *
+     * EGYETLEN HIVO SEM MERTE EXPLICITEN a helyszin ERTEKET vagy HIANYAT (lasd
+     * `service-jobs.detail.spec.ts`, `service-jobs.move.spec.ts`): mindegyik
+     * ezt az alapertelmezest OROKOLTE MELLESLEG. A valtoztatas tehat egyetlen
+     * tesztelt viselkedest sem mozdit, csak tipushelyesse teszi a fixture-t.
+     */
+    departmentId: "unit-1",
+    department: { name: "Biodóm", code: "BIO", parent: null },
     events: [
       {
         id: "event-1",
@@ -72,9 +87,15 @@ export function serviceJobDetailRow(
     // delegalatlan jegy reszletlapja TELJES valaszt ad -- nem `undefined`-et.
     assignees: [],
     /**
-     * A HELYSZIN UTJA ALAPBAN `null`, es ez nem kitolto ertek: a mai jegyek
-     * TOBBSEGENEK nincs helyszine (a mezo 2026-09-14-en keletkezett), tehat ez
-     * a gyakori eset. Ami az utat MERI, az a sajat esetenel allitja be.
+     * A HELYSZIN UTJA ALAPBAN `null` MARAD, DE MAR NEM A "GYAKORI ESET" -- A
+     * DEPARTMENTID KOTELEZOVE VALASA (fent) OTA CSAK EGY IGNORALT MEZO.
+     *
+     * A `departmentPath`-ot az `unitPathFor` szamolja a `departmentId`-bol
+     * kulon lekerdezessel (lasd `service-jobs.repository.ts`), es ezt a
+     * fixture nem hivja meg -- ide csak azert kerul, mert a tipus
+     * (`ServiceJobDetailRow`) elvarja a mezot. Egyetlen itt allo teszt sem
+     * meri az UTAT: ami az utat meri, az a sajat esetenel allitja be
+     * `overrides`-szal.
      */
     departmentPath: null,
     ...overrides,
