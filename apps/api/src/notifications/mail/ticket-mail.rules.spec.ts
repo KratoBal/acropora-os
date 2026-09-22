@@ -49,16 +49,22 @@ describe("kinek megy level, es mikor nem", () => {
     assert.deepEqual(
       ticketMailDecision({
         mode: "off",
+        pathMode: "live",
         openedById: "user-1",
         opener: AKTIV,
       }),
-      { kind: "skip", reason: "mode-off" },
+      { kind: "skip", reason: "mail-off" },
     );
   });
 
   it("nyito nelkuli jegynel sajat okkal hagyjuk ki", () => {
     assert.deepEqual(
-      ticketMailDecision({ mode: "live", openedById: null, opener: null }),
+      ticketMailDecision({
+        mode: "live",
+        pathMode: "live",
+        openedById: null,
+        opener: null,
+      }),
       { kind: "skip", reason: "no-opener" },
     );
   });
@@ -70,7 +76,12 @@ describe("kinek megy level, es mikor nem", () => {
    */
   it("torolt nyitonal MAS okkal hagyjuk ki, mint hianyzo nyitonal", () => {
     assert.deepEqual(
-      ticketMailDecision({ mode: "live", openedById: "user-9", opener: null }),
+      ticketMailDecision({
+        mode: "live",
+        pathMode: "live",
+        openedById: "user-9",
+        opener: null,
+      }),
       { kind: "skip", reason: "opener-missing" },
     );
   });
@@ -79,6 +90,7 @@ describe("kinek megy level, es mikor nem", () => {
     assert.deepEqual(
       ticketMailDecision({
         mode: "live",
+        pathMode: "live",
         openedById: "user-1",
         opener: { ...AKTIV, isActive: false },
       }),
@@ -88,7 +100,12 @@ describe("kinek megy level, es mikor nem", () => {
 
   it("ervenyes nyitonak megy, cimmel es nevvel", () => {
     assert.deepEqual(
-      ticketMailDecision({ mode: "live", openedById: "user-1", opener: AKTIV }),
+      ticketMailDecision({
+        mode: "live",
+        pathMode: "live",
+        openedById: "user-1",
+        opener: AKTIV,
+      }),
       { kind: "send", to: "nyito@partner.hu", name: "Nyitó Nóra" },
     );
   });
@@ -100,11 +117,27 @@ describe("kinek megy level, es mikor nem", () => {
    */
   it("a NEGY kimenet NEGY kulonbozo valasz, nem harom", () => {
     const valaszok = [
-      ticketMailDecision({ mode: "off", openedById: "u", opener: AKTIV }),
-      ticketMailDecision({ mode: "live", openedById: null, opener: null }),
-      ticketMailDecision({ mode: "live", openedById: "u", opener: null }),
+      ticketMailDecision({
+        mode: "off",
+        pathMode: "live",
+        openedById: "u",
+        opener: AKTIV,
+      }),
       ticketMailDecision({
         mode: "live",
+        pathMode: "live",
+        openedById: null,
+        opener: null,
+      }),
+      ticketMailDecision({
+        mode: "live",
+        pathMode: "live",
+        openedById: "u",
+        opener: null,
+      }),
+      ticketMailDecision({
+        mode: "live",
+        pathMode: "live",
         openedById: "u",
         opener: { ...AKTIV, isActive: false },
       }),

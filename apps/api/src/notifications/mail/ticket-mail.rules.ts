@@ -30,6 +30,86 @@ export function mailModeOf(raw: string | undefined | null): MailMode {
 }
 
 /**
+ * KET RETEG, ES A MASODIK UTANKENT KULON (Balazs kerese, 2026-09-22).
+ *
+ * A `TICKET_MAIL_MODE` marad a FO kapcsolo: ha az nem `live`, SEMMI nem megy
+ * ki. Fole ezen a jelentesen nem valtoztattunk -- egy mai beallitas ugyanazt
+ * jelenti, mint tegnap.
+ *
+ * A HAROM UT viszont sajat kulcsot kap, es MINDHAROM ALAPERTELMEZESBEN ZARVA:
+ *
+ *     TICKET_MAIL_WORKSHEET_SIGNED   a munkalap alairasarol szolo level
+ *     TICKET_MAIL_JOB_OPENED         az ugyfel-bejelentes ertesitoje
+ *     TICKET_MAIL_HANDOVER           a kezzel inditott atadasi level
+ *
+ * AZ ALAPERTELMEZES IRANYA NEM IZLES, ES AZ INDOKA A FELEJTES ALAKJA
+ * (acrobot dontese, ugyanaznap). A ket alak akkor ter el, amikor valaki
+ * ELFELEJT beallitani egy kulcsot:
+ *
+ *     nyitott alapertelmezesnel   a felejtes LEVELET KULD -- visszafordithatatlan,
+ *                                 mert a level a vevonel jelenik meg
+ *     zart alapertelmezesnel      a felejtes NEMA marad -- panasz, nem kar
+ *
+ * Ugyanaz az ervelés, mint a fenti kapunal: a megengedo irany visszavonhatatlan,
+ * a szigoru hangos.
+ *
+ * A FELISMERES FUGGVENYE UGYANAZ, ES EZ SZANDEKOS: a "csak a `live` nyit" szabaly
+ * EGY helyen all. Ha ket kulon fuggveny olvasna a ket reteget, a szabaly ket
+ * helyre kerulne -- es a ketto egyszer elcsuszna.
+ */
+export type MailPathKey =
+  | "TICKET_MAIL_WORKSHEET_SIGNED"
+  | "TICKET_MAIL_JOB_OPENED"
+  | "TICKET_MAIL_HANDOVER";
+
+/**
+ * A KET KAPU EGYUTT, SORRENDBEN -- ES A SORREND ADJA A KIHAGYAS OKAT.
+ *
+ * A FO kapcsolo all elol. Nem sorrendi izles: ha az UT kapcsolojat kerdeznenk
+ * eloszor, egy teljesen kikapcsolt kornyezetben `path-off` ok jonne, es az
+ * uzemeltetot ROSSZ kulcshoz kuldenenk.
+ *
+ *     mail-off   a FO kapcsolo zarva     -> a kornyezetet kell megnezni
+ *     path-off   az UT kapcsoloja zarva  -> EZT az egy kulcsot kell kinyitni
+ *
+ * Ket kulon teendo, ezert ket kulon szo. Egy kozos "ki van kapcsolva" mondat
+ * mind a kettot ugyanoda vezetne.
+ */
+export type MailGateSkipReason = "mail-off" | "path-off";
+
+/**
+ * A KAPU-OKOK HALMAZA, ES A `Record<..., true>` ALAK SZANDEKOS.
+ *
+ * A hivok ebbol dontik el, hogy a kihagyas a KORNYEZET allapota-e (akkor nem
+ * irunk naplot a jegyre), vagy a jegyen mulik-e (akkor igen).
+ *
+ * MIERT NEM EGY `||` LANC vagy egy `readonly T[]`: mind a ketto elfogadna egy
+ * HIANYOS felsorolast. Egy harmadik kapu-ok bevezetese utan a lanc csendben
+ * `false`-ot adna ra -- es akkor egy zart kapu melletti futas naplo-sort irna a
+ * jegyre, minden kornyezetben. A `Record<MailGateSkipReason, true>` TELJESSEGET
+ * kovetel: egy uj ertek FORDITASI HIBA, amig ide nem kerul.
+ */
+const KAPU_OKOK: Record<MailGateSkipReason, true> = {
+  "mail-off": true,
+  "path-off": true,
+};
+
+export function isMailGateReason(reason: string): reason is MailGateSkipReason {
+  return Object.hasOwn(KAPU_OKOK, reason);
+}
+
+export function mailGate(input: {
+  mode: MailMode;
+  pathMode: MailMode;
+}):
+  | { readonly kind: "open" }
+  | { readonly kind: "closed"; readonly reason: MailGateSkipReason } {
+  if (input.mode !== "live") return { kind: "closed", reason: "mail-off" };
+  if (input.pathMode !== "live") return { kind: "closed", reason: "path-off" };
+  return { kind: "open" };
+}
+
+/**
  * A NYITO, AKINEK A LEVEL SZOL.
  *
  * NEGY KIMENET VAN, NEM KETTO, es ezt merni kellett (nautilus, 2026-09-21):
@@ -59,7 +139,7 @@ export interface TicketOpener {
 }
 
 export type MailSkipReason =
-  "mode-off" | "no-opener" | "opener-missing" | "opener-inactive";
+  MailGateSkipReason | "no-opener" | "opener-missing" | "opener-inactive";
 
 export type MailDecision =
   | { readonly kind: "send"; readonly to: string; readonly name: string }
@@ -85,20 +165,25 @@ export type MailDecision =
  * ELOL all mind a kettonel -- ha a levelezes ki van kapcsolva, a cimzettek
  * lekerdezese is fölösleges munka lenne.
  *
- * AZ URES CIMZETT-LISTA SAJAT OK, nem „mode-off": a kulonbseg az, hogy az
+ * AZ URES CIMZETT-LISTA SAJAT OK, nem „mail-off": a kulonbseg az, hogy az
  * elsot a kornyezet okozza, a masodikat az, hogy SENKINEL nincs bejelolve a
  * szerep. A masodik a felhasznalonak szol es javithato a beallitasokban; az
  * elso nem.
  */
 export type ServiceJobOpenedMailDecision =
   | { readonly kind: "send"; readonly to: readonly string[] }
-  | { readonly kind: "skip"; readonly reason: "mode-off" | "no-recipient" };
+  | {
+      readonly kind: "skip";
+      readonly reason: MailGateSkipReason | "no-recipient";
+    };
 
 export function serviceJobOpenedMailDecision(input: {
   mode: MailMode;
+  pathMode: MailMode;
   recipients: readonly { readonly email: string }[];
 }): ServiceJobOpenedMailDecision {
-  if (input.mode !== "live") return { kind: "skip", reason: "mode-off" };
+  const kapu = mailGate(input);
+  if (kapu.kind === "closed") return { kind: "skip", reason: kapu.reason };
   const cimek = input.recipients
     .map((cimzett) => cimzett.email.trim())
     .filter((email) => email.length > 0);
@@ -108,10 +193,12 @@ export function serviceJobOpenedMailDecision(input: {
 
 export function ticketMailDecision(input: {
   mode: MailMode;
+  pathMode: MailMode;
   openedById: string | null;
   opener: TicketOpener | null;
 }): MailDecision {
-  if (input.mode !== "live") return { kind: "skip", reason: "mode-off" };
+  const kapu = mailGate(input);
+  if (kapu.kind === "closed") return { kind: "skip", reason: kapu.reason };
   if (input.openedById === null) return { kind: "skip", reason: "no-opener" };
   if (input.opener === null) return { kind: "skip", reason: "opener-missing" };
   if (!input.opener.isActive)

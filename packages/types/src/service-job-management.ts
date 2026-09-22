@@ -785,7 +785,9 @@ export function isPartnerServiceJobDetail(
  * Mindegyikhez MAS a teendo, es ezert nem lehet egy kozos "nem kuldheto"
  * allapot:
  *
- *     mode-off        a kapcsolo zarva          -> uzemeltetes
+ *     mail-off        a FO kapcsolo zarva       -> a kornyezetet kell megnezni
+ *     path-off        EZ az ut zarva            -> a TICKET_MAIL_HANDOVER
+ *                     kulcsot kell kinyitni, es semmi mast
  *     no-department   a jegyen nincs helyszin   -> a jegy adata hianyos
  *     no-customer     a helyszinnek nincs gazdaja -> torzsadat-hiba
  *     no-recipient    a gazdanak nincs AKTIV portal-fiokja -> a vevonel
@@ -794,7 +796,7 @@ export function isPartnerServiceJobDetail(
  * === MIERT ITT ALL, ES NEM CSAK A SZERVEREN ===
  *
  * A doentes maga a szerveren szuletik (`handoverMailDecision`), es a felulet
- * CSAK MEGJELENITI. Ha a negy ok a kliensen KULON lenne felsorolva, a ket
+ * CSAK MEGJELENITI. Ha az ot ok a kliensen KULON lenne felsorolva, a ket
  * lista elcsuszhatna -- egy uj ok a szerveren ugy jelenne meg a kezelonek,
  * hogy "ismeretlen", vagy ami rosszabb, egy regi mondat allna mellette.
  *
@@ -802,7 +804,7 @@ export function isPartnerServiceJobDetail(
  * az ALIASA (`handover-mail-recipients.ts`), nem masolata.
  */
 export type ServiceJobHandoverMailSkipReason =
-  "mode-off" | "no-department" | "no-customer" | "no-recipient";
+  "mail-off" | "path-off" | "no-department" | "no-customer" | "no-recipient";
 
 /**
  * EGY CIMZETT, AHOGY A KEZELO LATJA A KULDES ELOTT.
@@ -841,7 +843,7 @@ export type ServiceJobHandoverMailPreview =
 /**
  * A KULDES KIMENETELE.
  *
- * A `skipped` NEM hiba: a negy kihagyasi ok barmelyike eloallhat a ket
+ * A `skipped` NEM hiba: az ot kihagyasi ok barmelyike eloallhat a ket
  * lekerdezes KOZOTT is (a vevo portal-fiokjat kozben inaktivaljak). Ezert a
  * felulet nem feltetelezheti, hogy az elonezet `send` valasza utan a kuldes
  * is `sent` lesz.
