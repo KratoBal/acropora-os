@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import { NOT_HIDDEN } from "../common/hidden-rows.js";
-import { expandAssignedUnits } from "./assigned-units.js";
+import { assignedUnitIdsFor } from "./assigned-units.query.js";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { assignableUserWhere } from "../common/service-assignment.js";
@@ -585,26 +585,7 @@ export class ServiceJobsRepository {
    * kulon fel van keszitve.
    */
   async assignedUnitIds(userId: string): Promise<string[]> {
-    const assignments = await this.database.userWorksheetDepartment.findMany({
-      where: { userId },
-      select: { departmentId: true },
-    });
-    if (assignments.length === 0) return [];
-
-    const assignedIds = assignments.map((row) => row.departmentId);
-    const found = await this.database.worksheetDepartment.findMany({
-      where: { id: { in: assignedIds } },
-      select: { customerId: true },
-    });
-    const customerIds = [...new Set(found.map((row) => row.customerId))];
-    const units = customerIds.length
-      ? await this.database.worksheetDepartment.findMany({
-          where: { customerId: { in: customerIds } },
-          select: { id: true, name: true, parentId: true },
-        })
-      : [];
-
-    return expandAssignedUnits({ assignedIds, units });
+    return assignedUnitIdsFor(userId);
   }
 
   /**

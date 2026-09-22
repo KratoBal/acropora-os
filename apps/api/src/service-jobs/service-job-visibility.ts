@@ -81,6 +81,20 @@ export function serviceJobVisibilityWhere(input: {
   // folott all a semaban; roviden: a naplo aktora `SetNull` a felhasznalo
   // torlesekor, indexeletlen oszlopon szurtunk volna, es az aktor azt mondja
   // meg, ki IRTA BE az elso sort, nem azt, kie a jegy.
+  /**
+   * A NYITO-TENGELY MARAD, ES EZ KULON DONTES (acrobot, 2026-09-22, c654a5d4).
+   *
+   * Balazs aznap azt valaszolta a hozzarendeles nelkuli portal-felhasznalorol,
+   * hogy "akkor semmit se lasson". A KERDES viszont binaris volt: semmit, vagy
+   * az ugyfele mindenet -- es a nyito-tengely abban nem szerepelt.
+   *
+   * Ezert a valaszt NEM terjesztettuk ki ra. Ha elvennenk, egy ember bekuldene
+   * egy hibajegyet, es utana nem latna a SAJATJAT: az nem szigoritas, hanem
+   * hiba. "Amit te magad kuldtel be, azt latod" a lap alapmukodese.
+   *
+   * Aki ezt egyszer el akarja venni, lassa, hogy nem elmaradt ag, hanem
+   * megnevezett dontes -- es hogy a gazda szava egy MASIK kerdesre szolt.
+   */
   const nyitoTengely: Prisma.ServiceJobWhereInput = {
     openedById: input.userId,
   };
