@@ -149,6 +149,11 @@ describe("anyagigény felvitele (piszkozat)", () => {
   });
 
   it("sikeres felvitel DRAFT állapotú sort ad, tételekkel", async () => {
+    /*
+      A `create` AZ UJ SORT ADJA, NEM A TELJES LISTAT -- lasd a szerver
+      metodus fejlecet: a hivonak azonnal kell az azonosito a `submit`-hez,
+      es egy UJ sornal a "stale lista" veszely nem all fenn.
+    */
     const { service: s } = service({});
     const out = await s.create(
       "worksheet-1",
@@ -219,7 +224,7 @@ describe("anyagigény elküldése", () => {
       repo: { detail: async () => DRAFT_ROW },
     });
     const out = await s.submit("mr-1", belsos("kero-1"));
-    assert.equal(out.status, "OPEN");
+    assert.equal(out.items[0]?.status, "OPEN");
 
     /*
       A FIRE-AND-FORGET MIATT egy mikrofeladat-korre kell varni, mielott a
@@ -257,8 +262,8 @@ describe("anyagigény elküldése", () => {
       },
     });
     const out = await s.submit("mr-1", belsos("kero-1"));
-    assert.equal(out.id, "mr-1");
-    assert.equal(out.status, "OPEN");
+    assert.equal(out.items[0]?.id, "mr-1");
+    assert.equal(out.items[0]?.status, "OPEN");
   });
 });
 
@@ -274,7 +279,7 @@ describe("anyagigények listája munkalaponként", () => {
   it("belsős kolléga látja", async () => {
     const { service: s } = service({});
     const out = await s.listForWorksheet("worksheet-1", belsos("kero-1"));
-    assert.equal(out.length, 1);
+    assert.equal(out.items.length, 1);
   });
 });
 
@@ -297,8 +302,8 @@ describe("a beszerző saját listája", () => {
   it("a jogosult kolléga megkapja a listát, munkalap-kontextussal", async () => {
     const { service: s } = service({});
     const out = await s.listPending(belsos("beszerzo-1"));
-    assert.equal(out.length, 1);
-    assert.equal(out[0]?.customerDisplayName, "Kovács Kft.");
+    assert.equal(out.items.length, 1);
+    assert.equal(out.items[0]?.customerDisplayName, "Kovács Kft.");
   });
 });
 
@@ -343,10 +348,22 @@ describe("a beérkezés jelölése", () => {
     );
   });
 
-  it("sikeres jelölés után a kérő ÉS mind a két felelős kap értesítést", async () => {
-    const { service: s, push, mail } = service({});
+  it("sikeres jelölés után a friss, RÁ VÁRÓ listát adja -- a jelölt sor már nem rajta", async () => {
+    /*
+      A VALASZ A TELJES "RAM VARO" LISTA, NEM AZ EGY SOR. A beerkeztetett
+      igeny mar nem `OPEN`, tehat a `listPending` (ami csak `OPEN`-t ad) nem
+      tartalmazza -- a repository fake ures listat ad vissza, ugyanugy, mint
+      elesben tenne.
+    */
+    const {
+      service: s,
+      push,
+      mail,
+    } = service({
+      repo: { listPending: async () => [] },
+    });
     const out = await s.receive("mr-1", belsos("beszerzo-1"));
-    assert.equal(out.status, "RECEIVED");
+    assert.deepEqual(out.items, []);
 
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(push.length, 1);

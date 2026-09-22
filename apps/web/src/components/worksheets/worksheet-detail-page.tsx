@@ -35,6 +35,7 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { useReturnTo } from "@/components/navigation-history";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { WorksheetEntries } from "./worksheet-entries";
+import { WorksheetMaterialRequests } from "./worksheet-material-requests";
 import { WorksheetAssetEditor } from "./worksheet-asset-editor";
 import { WorksheetAssigneeEditor } from "./worksheet-assignee-editor";
 import { WorksheetDocuments } from "./worksheet-documents";
@@ -1061,6 +1062,15 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
               jegyzetet; az engedes LATSZIK, mert a bejegyzesen ott az idopont.
             */}
             <WorksheetEntries worksheetId={worksheet.id} canWrite={canManage} />
+            {/*
+              ANYAGIGENYLES. UGYANAZ A HELY, MINT A MUNKANAPLO -- Balazs
+              kerese (2026-09-22): a szervizes munka kozben, a munkalapon
+              felviszi, mire van szukege.
+            */}
+            <WorksheetMaterialRequests
+              worksheetId={worksheet.id}
+              canWrite={canManage}
+            />
             {versionRows}
           </>
         }

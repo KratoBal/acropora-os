@@ -285,6 +285,10 @@ describe("navigation", () => {
         "Hibajegyek",
         "Munkalapok",
         "Eszköznyilvántartás",
+        // A BESZERZO SAJAT LISTAJA (2026-09-23): a SERVICE szerep `service.manage`
+        // jogot kap, tehat latja a menupontot -- a lap tartalma kulon,
+        // per-felhasznalo kepessegen all (lasd `navigation.ts` jegyzetet).
+        "Anyagigények",
         "Partnerek",
         // AZ EGYETLEN TETEL, AMI NINCS BALAZS LISTAJAN. Nem feledekenyseg: az
         // akvarium a szerviz TARGYA, tehat lehet, hogy kell neki, es a kerdes
@@ -365,6 +369,13 @@ describe("navigation", () => {
     "/szerviz/hibajegyek": "service.view",
     "/szerviz/munkalapok": "service.view",
     "/szerviz/eszkozok": "service.view",
+    // A BESZERZO SAJAT LISTAJA (2026-09-23) -- `service.manage`, nem
+    // `service.view`: a lap tartalma a `MATERIAL_REQUEST_MARK_RECEIVED`
+    // kepessegen all (per-felhasznalo jelolo), de a MENUPONT lathatosaga a
+    // durvabb, jog-alapu szuron -- ugyanaz a ketreteg, mint az eszkoz-
+    // kategoriaknal: aki csak nez, azt nem kell terhelni egy olyan
+    // menuponttal, ami neki ugyis "nincs jogod" uzenetet adna.
+    "/szerviz/anyagigenyek": "service.manage",
     "/tartalom": "content.view",
     "/pos": "orders.view",
     "/webshop": "orders.view",

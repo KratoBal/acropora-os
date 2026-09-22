@@ -6,7 +6,12 @@ import {
   Logger,
   Optional,
 } from "@nestjs/common";
-import type { AuthenticatedUser } from "@acropora/types";
+import type {
+  AuthenticatedUser,
+  MaterialRequestDetail,
+  MaterialRequestListResponse,
+  PendingMaterialRequestListResponse,
+} from "@acropora/types";
 
 import { requireInternalWriter } from "../worksheets/worksheet-internal-write.js";
 import { WorksheetsService } from "../worksheets/worksheets.service.js";
@@ -21,32 +26,7 @@ import {
   type MaterialRequestRow,
 } from "./material-requests.repository.js";
 
-export interface MaterialRequestItemResponse {
-  id: string;
-  name: string;
-  quantity: string;
-  unit: string;
-}
-
-export interface MaterialRequestResponse {
-  id: string;
-  worksheetId: string;
-  status: "DRAFT" | "OPEN" | "RECEIVED";
-  requestedByName: string | null;
-  createdAt: string;
-  submittedAt: string | null;
-  receivedAt: string | null;
-  receivedByName: string | null;
-  items: MaterialRequestItemResponse[];
-}
-
-export interface PendingMaterialRequestResponse extends MaterialRequestResponse {
-  worksheetNumber: string | null;
-  customerDisplayName: string;
-  departmentName: string;
-}
-
-function toResponse(row: MaterialRequestRow): MaterialRequestResponse {
+function toResponse(row: MaterialRequestRow): MaterialRequestDetail {
   return {
     id: row.id,
     worksheetId: row.worksheetId,
@@ -88,14 +68,14 @@ export class MaterialRequestsService {
   async listForWorksheet(
     worksheetId: string,
     actor: AuthenticatedUser,
-  ): Promise<MaterialRequestResponse[]> {
+  ): Promise<MaterialRequestListResponse> {
     const scope = requireInternalWriter(actor, "Az anyagigények megtekintése");
     // A letezes- es hatokor-ellenorzes: 404, ha a lap nincs vagy nem az
     // actore -- ugyanaz a hiba mindket esetben, lasd a `WorksheetsService`
     // fejleceit.
     await this.worksheets.detail(worksheetId, scope);
     const rows = await this.repository.listForWorksheet(worksheetId, actor.id);
-    return rows.map(toResponse);
+    return { items: rows.map(toResponse) };
   }
 
   /**
@@ -106,12 +86,19 @@ export class MaterialRequestsService {
    * fedo alaknak). acrobot kikotese, 2026-09-22 22:52:23 UTC: a letrehozas es
    * a kuldes KET KULON muvelet, es ezt az API-retegnek kell tudnia, nem a
    * feluletnek kitalalnia -- lasd a `MaterialRequestStatus` sema-fejlecet.
+   *
+   * A VALASZ AZ UJ SOR, NEM A TELJES LISTA -- ES EZ SZANDEKOSAN MAS, MINT A
+   * `submit`/`receive`. Azoknal a "teljes lista" azert kell, mert egy MAR
+   * LATHATO sort valtoztatnak, es a felulet listaja addigra stale lenne. Egy
+   * UJ sor eseten ez a veszely nem all: semmilyen korabban renderelt lista
+   * nem allithatta rola, hogy MAS allapotban van. A hivonak viszont AZONNAL
+   * kell az UJ SOR AZONOSITOJA a kovetkezo lepeshez (`submit`).
    */
   async create(
     worksheetId: string,
     input: CreateMaterialRequestDto,
     actor: AuthenticatedUser,
-  ): Promise<MaterialRequestResponse> {
+  ): Promise<MaterialRequestDetail> {
     const scope = requireInternalWriter(actor, "Anyagigény felvitele");
     await this.worksheets.detail(worksheetId, scope);
 
@@ -139,7 +126,7 @@ export class MaterialRequestsService {
   async submit(
     id: string,
     actor: AuthenticatedUser,
-  ): Promise<MaterialRequestResponse> {
+  ): Promise<MaterialRequestListResponse> {
     const scope = requireInternalWriter(actor, "Anyagigény elküldése");
 
     const before = await this.repository.detail(id);
@@ -166,7 +153,7 @@ export class MaterialRequestsService {
       worksheet.customer.displayName,
       worksheet.number,
     );
-    return toResponse(updated);
+    return this.listForWorksheet(before.worksheetId, actor);
   }
 
   private async ertesitsLetrehozasrol(
@@ -220,7 +207,7 @@ export class MaterialRequestsService {
    */
   async listPending(
     actor: AuthenticatedUser,
-  ): Promise<PendingMaterialRequestResponse[]> {
+  ): Promise<PendingMaterialRequestListResponse> {
     requireInternalWriter(actor, "A beszerzésre váró anyagigények listája");
     const allowed = await this.repository.hasMarkReceivedCapability(actor.id);
     if (!allowed)
@@ -228,22 +215,30 @@ export class MaterialRequestsService {
         'A beszerzésre váró anyagigények listája: nincs bejelölve nálad az "anyag beérkezett" jelölés joga.',
       );
     const rows = await this.repository.listPending();
-    return rows.map((row) => ({
-      ...toResponse(row),
-      worksheetNumber: row.worksheetNumber,
-      customerDisplayName: row.customerDisplayName,
-      departmentName: row.departmentName,
-    }));
+    return {
+      items: rows.map((row) => ({
+        ...toResponse(row),
+        worksheetNumber: row.worksheetNumber,
+        customerDisplayName: row.customerDisplayName,
+        departmentName: row.departmentName,
+      })),
+    };
   }
 
   /**
    * A BEERKEZES JELOLESE. ATOMI: a repository csak akkor ir, ha az igeny MEG
    * `OPEN`, tehat ket egyidejű kattintas kozul csak az egyik ertesit.
    */
+  /**
+   * A VALASZ A TELJES, FRISS "RAM VARO" LISTA, NEM AZ EGY SOR -- ugyanaz a
+   * minta, mint a `create`/`submit`-nel: a beszerzo a listat nezi, es a
+   * frissen beerkeztetett sor mar nem all rajta (`listPending` csak `OPEN`
+   * allapotot ad).
+   */
   async receive(
     id: string,
     actor: AuthenticatedUser,
-  ): Promise<MaterialRequestResponse> {
+  ): Promise<PendingMaterialRequestListResponse> {
     const scope = requireInternalWriter(
       actor,
       "Az anyag beérkezésének jelölése",
@@ -276,7 +271,7 @@ export class MaterialRequestsService {
 
     const worksheet = await this.worksheets.detail(updated.worksheetId, scope);
     void this.ertesitsBeerkezesrol(updated, worksheet);
-    return toResponse(updated);
+    return this.listPending(actor);
   }
 
   private async ertesitsBeerkezesrol(

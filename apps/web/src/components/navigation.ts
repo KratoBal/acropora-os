@@ -97,6 +97,12 @@ export const serviceNavigation: AppNavigationItem[] = [
     icon: "box",
     entryId: "service-assets",
   },
+  {
+    href: "/szerviz/anyagigenyek",
+    label: "Anyagigények",
+    icon: "clipboard",
+    entryId: "material-requests-pending",
+  },
 ];
 
 /**
