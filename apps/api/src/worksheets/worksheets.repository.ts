@@ -417,11 +417,30 @@ export class WorksheetsRepository extends Repository {
 
   async departments(
     customerId: string,
+    scope: PartnerScope,
+    assignedUnitIds: readonly string[],
   ): Promise<WorksheetDepartmentListResponse> {
+    /**
+     * A HELYSZIN-LISTA IS A KIOSZTOTT HELYSZINEKRE SZUKUL (Balazs dontese,
+     * 2026-09-22): "idegen helyszinre nem is tud jegyet nyitni".
+     *
+     * A SZUKITES CSAK A VEVO-HATOKORRE SZOL, ugyanabban az alakban, ahogy a
+     * lista- es adatlap-szurok -- es ez nem stilus, hanem mukodes: a BELSOS
+     * felhasznalok NULLA hozzarendelessel dolgoznak (elesben merve: mind a hat
+     * belsos fioknak nulla, a ket partner-fioknak negy es harom). Ha ra is
+     * vonatkozna, a sajat szerelonk URES valasztot kapna.
+     *
+     * ES EGY KOVETKEZMENY, AMI A FELULETEN LATSZIK: a valaszto a `parentId`
+     * mezobol epit fat, a gyokertol lefele. Egy kiosztott helyszin szuloje
+     * ettol a szukitestol kimaradhat a valaszbol -- a felulet ezert az
+     * "arva" sorokat is felso szinten rajzolja (`orderedDepartments`).
+     */
+    const egysegSzukites =
+      scope.kind === "customer" ? { id: { in: [...assignedUnitIds] } } : {};
     // Laposan, a fat a hivo epiti a parentId mezobol -- ugyanaz az alak, mint a
     // partner menu oldalan (SuppliersRepository.units).
     const items = await this.database.worksheetDepartment.findMany({
-      where: { customerId },
+      where: { customerId, ...egysegSzukites },
       select: {
         id: true,
         parentId: true,

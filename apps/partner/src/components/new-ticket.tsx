@@ -11,27 +11,14 @@ import { useRouter } from "next/navigation";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 
 import { eszkozAzonosito } from "@/lib/eszkoz-azonosito";
+import { helyszinFa } from "@/lib/helyszin-fa";
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
 import { Message } from "./ticket-list";
 import { CIMKE, LAP_CIM, LAP_FEJLEC, LAP_LEIRAS, PANEL } from "./frame";
 
 function orderedDepartments(items: WorksheetDepartmentSummary[]) {
-  const byParent = new Map<string | null, WorksheetDepartmentSummary[]>();
-  for (const item of items.filter((item) => item.isActive)) {
-    const entries = byParent.get(item.parentId) ?? [];
-    entries.push(item);
-    byParent.set(item.parentId, entries);
-  }
-  const result: { item: WorksheetDepartmentSummary; depth: number }[] = [];
-  const visit = (parentId: string | null, depth: number) => {
-    for (const item of byParent.get(parentId) ?? []) {
-      result.push({ item, depth });
-      visit(item.id, depth + 1);
-    }
-  };
-  visit(null, 0);
-  return result;
+  return helyszinFa(items.filter((item) => item.isActive));
 }
 
 export function NewTicket() {

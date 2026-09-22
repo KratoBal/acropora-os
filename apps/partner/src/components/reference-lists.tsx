@@ -8,6 +8,7 @@ import {
 } from "@acropora/types";
 
 import { eszkozAzonosito } from "@/lib/eszkoz-azonosito";
+import { helyszinFa } from "@/lib/helyszin-fa";
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
 import { Empty, Message } from "./ticket-list";
@@ -22,21 +23,7 @@ import {
 } from "./frame";
 
 function locationRows(items: WorksheetDepartmentSummary[]) {
-  const children = new Map<string | null, WorksheetDepartmentSummary[]>();
-  for (const item of items) {
-    const rows = children.get(item.parentId) ?? [];
-    rows.push(item);
-    children.set(item.parentId, rows);
-  }
-  const rows: { item: WorksheetDepartmentSummary; depth: number }[] = [];
-  const add = (parentId: string | null, depth: number) => {
-    for (const item of children.get(parentId) ?? []) {
-      rows.push({ item, depth });
-      add(item.id, depth + 1);
-    }
-  };
-  add(null, 0);
-  return rows;
+  return helyszinFa(items);
 }
 
 export function Locations() {
