@@ -151,6 +151,12 @@ describe(
     let qrTokenB: string;
     let unitOfSupplierA: string;
     let unitOfSupplierB: string;
+    /**
+     * HARMADIK EGYSEG, UGYANAHHOZ A PARTNERHEZ (mirrorA), MERT A SEMA
+     * SZIGORITASA OTA (20260922210000_department_required) EGY ESZKOZNEK
+     * MINDIG VAN HELYSZINE -- lasd az `-SO` eszkoz jegyzetet lejjebb.
+     */
+    let unitOfSupplierAOther: string;
     let assetSupplierAOther: string;
     let assetSupplierB: string;
     /**
@@ -306,7 +312,7 @@ describe(
         select: { id: true },
       });
 
-      const [unitA, unitB] = await Promise.all([
+      const [unitA, unitB, unitAOther] = await Promise.all([
         prisma.worksheetDepartment.create({
           data: {
             customerId: mirrorA.id,
@@ -321,9 +327,17 @@ describe(
             name: `${shared} egység B`,
           },
         }),
+        prisma.worksheetDepartment.create({
+          data: {
+            customerId: mirrorA.id,
+            code: "UNC",
+            name: `${shared} egység A második`,
+          },
+        }),
       ]);
       unitOfSupplierA = unitA.id;
       unitOfSupplierB = unitB.id;
+      unitOfSupplierAOther = unitAOther.id;
 
       const [userA, userB, userSup, userInternal] = await Promise.all([
         prisma.user.create({
@@ -467,6 +481,18 @@ describe(
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-S`,
             name: `${shared} eszköz partner A`,
             supplierId: supplierA,
+            /*
+              KOZVETLENUL A HELYSZINNEL JON LETRE, NEM KULON UPDATE-tel.
+
+              2026-09-22-IG a sor helyszin nelkul szuletett, es egy KULON
+              `prisma.asset.update()` allitotta be a lentebbi `unitOfSupplierA`-t
+              -- a sema szigoritasa (20260922210000_department_required) ota
+              ez a create-hivas MAGABAN elbukna NOT NULL megsertessel, tehat a
+              ket lepest osszevontuk. Viselkedesi kulonbseg nincs: a ket lepes
+              UGYANABBAN a before() horogban futott, egyetlen teszt sem lathatta
+              a koztes, helyszin nelkuli allapotot.
+            */
+            departmentId: unitOfSupplierA,
           },
         }),
       ]);
@@ -485,20 +511,30 @@ describe(
        *    feltetel a kereses `OR` tombjebe kerulne, a reszfa sorai a keresestol
        *    FUGGETLENUL feljonnenek.
        *
-       * Ehhez kell: a partner A eszkoze egy alegysegben, egy MASIK eszkoze
-       * alegyseg nelkul (a metszet mereséhez), es a partner B-nek is egy eszkoze
-       * a sajat alegysegeben (az idegen azonosito mereséhez).
+       * Ehhez kell: a partner A eszkoze egy alegysegben, egy MASIK eszkoze EGY
+       * MASIK alegysegben (a metszet mereséhez), es a partner B-nek is egy
+       * eszkoze a sajat alegysegeben (az idegen azonosito mereséhez).
+       *
+       * === EZ 2026-09-22-IG "ALEGYSEG NELKUL" VOLT, ES A KULONBSEG NEM SZAMIT ===
+       *
+       * A metszet-allitas (lasd lejjebb, "az alegység-szűrő a kereséssel EGYÜTT
+       * szűkít") azt bizonyitja, hogy `departmentId=X ES search=Y` szukebb, mint
+       * barmelyik ONMAGABAN -- ehhez csak az kell, hogy a masodik eszkoz NE essen
+       * X ala. Hogy X HELYETT egy MASIK, VALODI alegysegben all, vagy egyaltalan
+       * nincs alegysege, a bizonyitasnak KOZOMBOS -- az elso mindket alakkal
+       * elbukna X-re, es a keresesre mindketto illeszkedik. A helyszin hianya
+       * tehat NEM VOLT A BIZONYITEK RESZE, csak a sor letezesenek egyik lehetseges
+       * modja -- ezert cserelheto le VALODI alegysegre a sema szigoritasa utan.
        */
-      await prisma.asset.update({
-        where: { id: assetSupplierA },
-        data: { departmentId: unitOfSupplierA },
-      });
       const [supplierAExtra, supplierBAsset] = await Promise.all([
         prisma.asset.create({
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-SO`,
             name: `${shared} eszköz partner A második ${otherOnly}`,
             supplierId: supplierA,
+            // EGY MASIK egysegben all, nem `unitOfSupplierA`-ban -- lasd a
+            // fenti jegyzetet arrol, miert csereltuk le a helyszin hianyat.
+            departmentId: unitOfSupplierAOther,
           },
         }),
         prisma.asset.create({
