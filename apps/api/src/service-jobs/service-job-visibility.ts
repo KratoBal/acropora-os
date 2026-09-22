@@ -90,10 +90,28 @@ export function serviceJobVisibilityWhere(input: {
       ? { AND: [{ customerId: input.scope.customerId }, nyitoTengely] }
       : nyitoTengely;
 
+  /**
+   * AZ EGYSEG-TENGELY A SORON ALL, NEM A PARTNEREN -- ES EZ EGY ELES HIBA
+   * JAVITASA (2026-09-22, c654a5d4).
+   *
+   * Az elso alak a JEGY UGYFELET szurte arra, hogy birtokol-e olyan egyseget,
+   * ami a keronek ki van osztva:
+   *
+   *     customer: { worksheetDepartments: { some: { id: { in: unitIds } } } }
+   *
+   * Ez az ugyfel MINDEN jegyere igaz, fuggetlenul attol, melyik egyseghez
+   * tartozik a jegy -- tehat a feltetel csendben osszeomlott arra, hogy
+   * `customerId = X`. Elesben egy negy helyszinhez rendelt portal-felhasznalo
+   * az ugyfel OSSZES jegyet latta.
+   *
+   * A `ServiceJob` visel sajat `departmentId` mezot, tehat van mire szurni.
+   *
+   * ES AMIERT A REGI ALAK NEM LATSZOTT HIBASNAK: relacios szuroben a `some`
+   * helyes es gyakori alak -- csak nem ezen az oldalon. A kerdes nem az, hogy
+   * a partnernek VAN-E ilyen egysege, hanem hogy EZ A SOR abban all-e.
+   */
   const egysegTengely: Prisma.ServiceJobWhereInput = {
-    customer: {
-      worksheetDepartments: { some: { id: { in: [...input.unitIds] } } },
-    },
+    departmentId: { in: [...input.unitIds] },
   };
 
   const visibleThroughUserOrUnit = { OR: [nyitoTengely, egysegTengely] };
