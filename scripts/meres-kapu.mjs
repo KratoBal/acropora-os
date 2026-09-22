@@ -113,10 +113,48 @@ try {
  */
 const naploSorok = naplo.split("\n").map((sor) => sor.trim());
 
+/**
+ * A TAP-SORSZAM KIVEVE, MERT NELKULE A KIMENETELT NEM LEHET MEGNEVEZNI.
+ *
+ * === A MERT HIANY (2026-09-22) ===
+ *
+ * A node:test minden allitas-sorba sorszamot tesz: `not ok 4 - <nev>`. Egy
+ * varakozas viszont ELORE irodik, amikor a sorszam meg nem tudhato. A ket alak
+ * ezert soha nem talalkozott:
+ *
+ *     "not ok 4 - X".includes("not ok - X")   ->  false
+ *     "ok 12 - Y".includes("ok - Y")          ->  false
+ *
+ * Vagyis a kimenetelt megnevezo varakozas MIND A KET iranyban nema volt. Aki
+ * egy bukast akart pinnelni -- es egy meres-agon ez a leggyakoribb szandek --,
+ * annak el kellett hagynia az elotagot, es ezzel LEMONDANI a kimenetelrol: egy
+ * elotag nelkuli toredek a sikeres es a bukott sorra egyarant illeszkedik.
+ *
+ * Ez pontosan a tukre annak a hibanak, amit ez a fajl mar javitott egyszer. Ott
+ * egy `ok N - X` varakozas nem tudott ELBUKNI (a `not ok` sor kielegitette);
+ * itt egy `not ok - X` varakozas nem tudott TELJESULNI. Mind a ketto a
+ * kimenetel megnevezeset tette hasznalhatatlanna, csak mas iranyban.
+ *
+ * A NORMALIZALAS EGY SORT ERINT, es CSAK a TAP-fejlecet: az `ok`/`not ok` utan
+ * allo szamot veszi ki. A sor tobbi resze -- a nev, a hibauzenet, a behuzas --
+ * valtozatlan, tehat a toredek-illesztes viselkedese nem mozdul.
+ *
+ * A SIKER-ORZO VALTOZATLAN, ES A NYERS SOROn all: egy `ok ` kezdetu varakozast
+ * tovabbra sem elegit ki egy `not ok` kezdetu sor. Ez a normalizalas UTAN is
+ * kell, sot jobban kell: a normalizalt `not ok - X` sor TARTALMAZZA az
+ * `ok - X` szoveget, tehat orzo nelkul a siker-varakozas most mar a sajat
+ * bukasara is illeszkedne.
+ */
+const TAP_SORSZAM = /^(not ok|ok)\s+\d+\s+-/;
+const naploSorokNorm = naploSorok.map((sor) =>
+  sor.replace(TAP_SORSZAM, "$1 -"),
+);
+
 function megjelent(varakozas) {
   const sikertVar = varakozas.startsWith("ok ");
-  return naploSorok.some((sor) => {
-    if (!sor.includes(varakozas)) return false;
+  return naploSorok.some((sor, i) => {
+    if (!sor.includes(varakozas) && !naploSorokNorm[i].includes(varakozas))
+      return false;
     if (sikertVar && sor.startsWith("not ok")) return false;
     return true;
   });
@@ -148,7 +186,10 @@ const hianyzo = vart.filter((sor) => !megjelent(sor));
 const csakBukotton = [];
 for (const varakozas of vart) {
   if (varakozas.startsWith("ok ") || varakozas.startsWith("not ok")) continue;
-  const illeszkedo = naploSorok.filter((sor) => sor.includes(varakozas));
+  const illeszkedo = naploSorok.filter(
+    (sor, i) =>
+      sor.includes(varakozas) || naploSorokNorm[i].includes(varakozas),
+  );
   if (illeszkedo.length && illeszkedo.every((sor) => sor.startsWith("not ok")))
     csakBukotton.push({ varakozas, sor: illeszkedo[0] });
 }
