@@ -79,15 +79,46 @@ export class ServiceAssetsController {
    * (`filesystem-document-store.ts`: "A tarolo gyokere nem letezik: ${root}",
    * "A jelolo fajl hianyzik ... ${root}/${MARKER}", "nem irhato: ${root}").
    *
-   * MA a tarolo KI van kapcsolva (`docs/DOCUMENT-STORE-DEPLOYMENT.md`: a
-   * `DOCUMENT_STORE_ROOT` sehol nincs beallitva, es a ket sablonban is uresen
-   * all), tehat a valasz a `not-enabled` agra esik, ami a VALTOZO NEVET mondja,
-   * nem utvonalat. AMELY NAPON a kotet bekapcsol, ugyanez a vegpont a konteneri
-   * utvonalakat es a csatolas allapotat adja ki.
+   * === ES ITT KORABBAN AZ ALLT, HOGY A TAROLO MA KI VAN KAPCSOLVA. NEM
+   * BIZONYITOTT (acrobot merese, 2026-09-22 03:5x, HELYESBITES) ===
    *
-   * Vagyis ez a javitas MA olcso es kesobb kenyelmetlen -- a kotet elott van a
-   * helye. (Az eles kapcsolo allapota nem az en meresem: a doksi allitja, es
-   * azt a hoszton kell megnezni.)
+   * Amit EN mertem, az KET REPO-OLDALI allitas volt: a
+   * `docs/DOCUMENT-STORE-DEPLOYMENT.md` kimondja, hogy a kapcsolo sehol nincs
+   * beallitva, es a ket env-sablonban tenyleg uresen all. Ebbol azt irtam ide,
+   * hogy a valasz MA a `not-enabled` agra esik.
+   *
+   * ACROBOT AZ ELES OLDALT MERTE, ES AZ MAST MOND: a `DOCUMENT_STORE_ROOT`
+   * kulcs MIND A KET GEPEN BE VAN JEGYEZVE --
+   *
+   *     ELES        `acropora-api`
+   *     AI/STAGING  `acropora-stage-api`
+   *
+   * -- gepenkent KET bejegyzessel (egy normal, egy preview), mindegyik
+   * 2026-09-02 09:48:39-kor letrehozva, `is_buildtime=true` ES
+   * `is_runtime=true`. Vagyis valaki szandekosan vette fel, es a FUTO
+   * konteneri kornyezetbe is beleszol.
+   *
+   * Az ERTEKET viszont sem a Coolify API, sem a repo nem mutatja meg -- es a
+   * `None` valasz NEM bizonyitek a hianyra: KONTROLL, hogy ugyanaz az API a
+   * `NODE_ENV`-re es a `PORT`-ra is `None`-t ad, pedig azok bizonyosan be
+   * vannak allitva. A masik ut sem jarhato: a `docker` parancs ebbol a
+   * kontenerbol nem letezik. Ez a meres HATARA, es igy all 2026-09-22-en.
+   *
+   * VAGYIS A `not-enabled` AG MA NEM BIZONYITOTT, csak a SABLON uressege az --
+   * es a ketto nem ugyanaz a kerdes. Egy repo-oldali sablon nem mondja meg, mi
+   * all a futo alkalmazas kornyezeteben; epp ez az a csapda, amiert a Prisma
+   * `DATABASE_URL`-je is a FOLYAMAT kornyezetebol jon, nem a repo `.env`-jebol.
+   *
+   * AMI EBBOL KOVETKEZIK, ES AZ IRANYT NEM VALTOZTATJA, CSAK A SULYAT: nem az
+   * all, hogy "ma olcso es kesobb kenyelmetlen", hanem hogy a szivargas LEHET,
+   * HOGY MAR MOST FENNALL. AMELY NAPON a kotet bekapcsol (vagy amely napon
+   * kiderul, hogy mar be van), ugyanez a vegpont a konteneri utvonalakat es a
+   * csatolas allapotat adja ki.
+   *
+   * ES AMIERT EZ A BEKEZDES AT VAN IRVA, NEM KIEGESZITVE: egy komment, ami egy
+   * NEM BIZONYITOTT allapotot tenykent mond ki, ugyanaz a fajta, mint amit ez
+   * a fejlec fentebb epp felro a jogra hivatkozo mondatnak. A hedge ("a doksi
+   * allitja") ott allt a zarojelben, a MONDAT viszont erosebb volt nala.
    *
    * === MIERT ELUTASITAS, ES NEM HATOKOR-SZURES -- HOLOTT EZ OLVASO UT ===
    *
