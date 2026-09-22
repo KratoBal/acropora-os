@@ -185,7 +185,13 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
      * ertelmezheto uzenetet kapnak). Lasd `MaterialRequestsService.listPending`.
      */
     id: "material-requests-pending",
-    surfaces: ["web"],
+    /**
+     * `mobile` HOZZAADVA 2026-09-23-AN, A MOBIL SZELETTEL EGYUTT. A menu-
+     * szintu durva kapu (SERVICE_MANAGE) es a lap-szintu finom kapu
+     * (MATERIAL_REQUEST_MARK_RECEIVED, per-felhasznalo) ugyanugy ket
+     * retegben all a telefonon, mint a weben -- lasd a lenti fejlecet.
+     */
+    surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.SERVICE_MANAGE),
   },
   {

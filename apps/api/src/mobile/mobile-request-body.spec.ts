@@ -181,6 +181,22 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 4,
     dtoMinimum: 5,
   },
+  {
+    /**
+     * ANYAGIGENYLES A MUNKALAPROL, MOBIL SZELET (2026-09-23). A torzs
+     * NEVESITETT tipussal megy (`CreateMaterialRequestInput`), tehat PAR lett
+     * belole itt, nem a hivohelyek kozott.
+     */
+    mit: "anyagigénylés felvitele",
+    mobil: "../mobile/src/lib/api/material-requests.ts",
+    mobilNev: "CreateMaterialRequestInput",
+    dto: "src/material-requests/dto/material-request.dto.ts",
+    dtoNev: "CreateMaterialRequestDto",
+    kontroll: ["items"],
+    /* EGY MEZOS TORZS mind a ket oldalon, ugyanugy, mint a felelosok atirasanal. */
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
 ];
 
 /**
@@ -257,7 +273,13 @@ const PAROK: readonly Par[] = [
  * olvaso hianynak veszi: a szomszed orzo a HIVOHELYEK kozott meri, kulcs
  * szerint, a `SendWorksheetForSignatureDto`-hoz -- oda fel is vettem.
  */
-const IRAS_HIVASOK_MA = 16;
+/**
+ * 2026-09-23: 16 -> 17. Az uj hivas az ANYAGIGENYLES FELVITELE
+ * (`createMaterialRequest`, `lib/api/material-requests.ts`). A guard sajat
+ * uzenete kerte a dontest, es a valasz IGEN: a torzs NEVESITETT tipussal megy
+ * (`CreateMaterialRequestInput`), tehat PAR lett belole fent.
+ */
+const IRAS_HIVASOK_MA = 17;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

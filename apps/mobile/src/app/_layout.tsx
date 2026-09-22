@@ -206,6 +206,20 @@ function RootNavigator() {
           presentation: "fullScreenModal",
         }}
       />
+      <Stack.Screen
+        name="material-requests/index"
+        options={{ title: "Anyagigények" }}
+      />
+      {/*
+        EZ A KEPERNYO SOSEM LATSZIK: azonnal tovabbiranyit a munkalapra (lasd
+        a fajl sajat fejleceit). A `headerShown: false` nem diszites, hanem
+        azt zarja ki, hogy a fejlec egy pillanatra felvillanjon a
+        tovabbiranyitas elott.
+      */}
+      <Stack.Screen
+        name="material-requests/[id]"
+        options={{ headerShown: false }}
+      />
       <Stack.Screen name="assets/index" options={{ title: "Eszközök" }} />
       <Stack.Screen name="assets/new" options={{ title: "Új eszköz" }} />
       <Stack.Screen

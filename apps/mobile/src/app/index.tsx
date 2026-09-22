@@ -256,9 +256,17 @@ export default function HomeScreen() {
 
               ÉS NEM SZEREPKÖRÖNKÉNT MÁS SORREND: a csempék RÖGZÍTETT sora
               változik meg úgy, hogy ez a négy ebben a rendben álljon, a többi
-              mögöttük. A szervizes úgyis csak ezt a négyet látja, tehát a kért
-              sorrendet megkapja -- egy szerepkörönként újrarendezett képernyő
-              viszont követhetetlen lenne annak, aki több szerepet lát.
+              mögöttük -- egy szerepkörönként újrarendezett képernyő
+              követhetetlen lenne annak, aki több szerepet lát.
+
+              AZ "AI" (Anyagigények) CSEMPE 2026-09-23-AN KERULT A Munkalapok
+              ES az Eszközök KOZE, es ez a NEGYES sorrendet NEM bontja meg: a
+              negy megnevezett csempe egymashoz kepesti sorrendje valtozatlan,
+              csak egy uj all kozejuk. A SERVICE szerep ma `SERVICE_MANAGE`
+              jogot visel, tehat OTT is latja -- a szervizes tehat MA OTOT lat
+              negy helyett, es ez szandekos: a kozos menu-forras dontott igy,
+              nem ez a lista (lasd `packages/types/src/navigation.ts`
+              `material-requests-pending` tetelet).
             */}
             <View style={styles.modules}>
               <ModuleCard
@@ -276,6 +284,20 @@ export default function HomeScreen() {
                 available={tileVisible("MU")}
                 enabled
                 onPress={() => router.push("/worksheets")}
+              />
+              {/*
+                A LATHATOSAG DURVA KAPUJA A `material-requests-pending` kozos
+                menu-tetel (SERVICE_MANAGE), UGYANAZ, mint a Munkalapok -- a
+                lista TARTALMANAK finom kapuja (per-felhasznalo kepesseg) a
+                kepernyon dol el, nem itt. Lasd a kepernyo sajat fejleceit.
+              */}
+              <ModuleCard
+                code="AI"
+                title="Anyagigények"
+                description="Rád váró anyagigények, beérkezés jelölése"
+                available={tileVisible("AI")}
+                enabled
+                onPress={() => router.push("/material-requests")}
               />
               <ModuleCard
                 code="ES"

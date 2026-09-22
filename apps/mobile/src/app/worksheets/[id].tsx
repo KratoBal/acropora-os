@@ -27,6 +27,12 @@ import {
   closeWorksheet,
   setWorksheetHandedOver,
 } from "@/lib/api/worksheets";
+import {
+  createMaterialRequest,
+  listMaterialRequestsForWorksheet,
+  submitMaterialRequest,
+  type MaterialRequestItemInput,
+} from "@/lib/api/material-requests";
 import { ApiError, ApiNetworkError } from "@/lib/api/client";
 import { describeUploadFailure } from "@/lib/api/network-failure";
 import { useIsOnline } from "@/lib/offline/connectivity";
@@ -51,6 +57,12 @@ import {
   describeEmptyEntries,
   worksheetEntryByline,
 } from "@/lib/worksheets/worksheet-entry";
+import {
+  buildMaterialRequestItems,
+  describeEmptyMaterialRequests,
+  materialRequestByline,
+  MATERIAL_REQUEST_STATUS_LABEL,
+} from "@/lib/worksheets/material-request-presentation";
 import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
 import {
   describeIssuedSheet,
@@ -168,6 +180,21 @@ export default function WorksheetDetailScreen() {
   const [entryError, setEntryError] = useState<string | null>(null);
 
   /**
+   * AZ ANYAGIGENYLES URLAPJA. Ugyanaz az alak, mint a bejegyzesnel: `false`,
+   * amig a szerelo ra nem koppint az "Anyagigénylés" gombra. A sorok NEM
+   * `useMutation`-be zart allapot, mert a felvitel HELYI: a szerverre csak a
+   * "Küldés" gomb kuldi el (lasd a webes `WorksheetMaterialRequests`
+   * fejleceit -- ugyanaz a minta).
+   */
+  const [materialRequestFormOpen, setMaterialRequestFormOpen] = useState(false);
+  const [materialRequestRows, setMaterialRequestRows] = useState<
+    MaterialRequestItemInput[]
+  >([{ name: "", quantity: "", unit: "" }]);
+  const [materialRequestError, setMaterialRequestError] = useState<
+    string | null
+  >(null);
+
+  /**
    * A FELELOS-SZERKESZTO ALLAPOTA.
    *
    * `null`, amig a szerelo ra nem koppint a gombra -- ugyanaz az alak, mint a
@@ -261,6 +288,20 @@ export default function WorksheetDetailScreen() {
   const entries = useQuery({
     queryKey: ["worksheet-entries", id],
     queryFn: () => listWorksheetEntries(id),
+    enabled: Boolean(
+      id && capabilities?.worksheetsView && status === "authenticated",
+    ),
+  });
+
+  /**
+   * AZ ANYAGIGENYEK. Kulon lekerdezes, ugyanabbol az okbol, mint a
+   * munkanaplo: a lista a laptol FUGGETLENUL valtozik (a beszerzo is irhat
+   * ra), es egy kozos lekerdezesben minden anyagigeny-mentes ujrahuzna a
+   * teljes lapot is.
+   */
+  const materialRequests = useQuery({
+    queryKey: ["worksheet-material-requests", id],
+    queryFn: () => listMaterialRequestsForWorksheet(id),
     enabled: Boolean(
       id && capabilities?.worksheetsView && status === "authenticated",
     ),
@@ -649,6 +690,54 @@ export default function WorksheetDetailScreen() {
       ),
   });
 
+  /**
+   * A FELVITEL ES A KULDES EGY KORBEN -- UGYANAZ A MINTA, MINT A WEBEN
+   * (`WorksheetMaterialRequests.sendNew`): a `create` az UJ SORT adja, a
+   * `submit` a TELJES listat, es ha a `create` lefutott de a `submit` nem, a
+   * piszkozat a szerveren MEGVAN -- ezert a hiba-agban is frissitunk, ne csak
+   * hibauzenetet mutassunk egy eltunt allapotra.
+   */
+  const sendNewMaterialRequest = useMutation({
+    mutationFn: async () => {
+      const built = buildMaterialRequestItems(materialRequestRows);
+      if (!built.ok)
+        throw new Error(built.message ?? "Az anyagigény nem küldhető el.");
+      const draft = await createMaterialRequest(id, { items: built.items });
+      return submitMaterialRequest(draft.id);
+    },
+    onSuccess: (response) => {
+      queryClient.setQueryData(["worksheet-material-requests", id], response);
+      setMaterialRequestRows([{ name: "", quantity: "", unit: "" }]);
+      setMaterialRequestFormOpen(false);
+      setMaterialRequestError(null);
+    },
+    onError: async (cause) => {
+      setMaterialRequestError(
+        cause instanceof Error
+          ? cause.message
+          : "Az anyagigény nem küldhető el.",
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["worksheet-material-requests", id],
+      });
+    },
+  });
+
+  /** A MEGMARADT PISZKOZAT UJRAKULDESE -- lasd a `sendNewMaterialRequest` fejlecet. */
+  const sendDraftMaterialRequest = useMutation({
+    mutationFn: (requestId: string) => submitMaterialRequest(requestId),
+    onSuccess: (response) => {
+      queryClient.setQueryData(["worksheet-material-requests", id], response);
+      setMaterialRequestError(null);
+    },
+    onError: (cause) =>
+      setMaterialRequestError(
+        cause instanceof Error
+          ? cause.message
+          : "Az anyagigény nem küldhető el.",
+      ),
+  });
+
   const removeLine = useMutation({
     mutationFn: (lineId: string) => removeWorksheetLine(id, lineId),
     onSuccess: async () => {
@@ -727,6 +816,23 @@ export default function WorksheetDetailScreen() {
         sentForSignatureToName: current.sentForSignatureToName,
       })
     : null;
+
+  /** Az anyagigény-felvitel sorainak szerkesztése -- lásd a web `updateRow`/`addRow`/`removeRow` mintáját. */
+  const addMaterialRequestRow = () =>
+    setMaterialRequestRows((sorok) => [
+      ...sorok,
+      { name: "", quantity: "", unit: "" },
+    ]);
+  const removeMaterialRequestRow = (index: number) =>
+    setMaterialRequestRows((sorok) => sorok.filter((_, i) => i !== index));
+  const updateMaterialRequestRow = (
+    index: number,
+    field: keyof MaterialRequestItemInput,
+    value: string,
+  ) =>
+    setMaterialRequestRows((sorok) =>
+      sorok.map((sor, i) => (i === index ? { ...sor, [field]: value } : sor)),
+    );
 
   const rows = data ? worksheetDetailRows(data) : [];
   const continuesFrom = data?.continues ?? null;
@@ -1688,6 +1794,195 @@ export default function WorksheetDetailScreen() {
               </Pressable>
             ))}
 
+            {/*
+              ANYAGIGENYLES. Balazs kerese, 2026-09-22 12:15:46 UTC: a
+              szervizes munka kozben veszi eszre, hogy kell valami, felviszi a
+              teteleket, kulon "Kuldes" gombbal kuldi el. Ugyanaz a szerkezeti
+              minta, mint a munkanaplonal: a felvitel gombra nyilik, nem all
+              allandoan a lapon.
+
+              A LAP ALLAPOTA NEM SZAMIT, ugyanugy, mint a bejegyzesnel: az
+              anyagigenyt akkor is fel lehet venni, ha a lap mar alairt.
+            */}
+            <Text style={styles.sectionTitle}>
+              Anyagigények ({materialRequests.data?.items.length ?? 0})
+            </Text>
+
+            {capabilities.worksheetsManage ? (
+              <View style={styles.card}>
+                {materialRequestFormOpen ? (
+                  <>
+                    {materialRequestRows.map((sor, index) => (
+                      <View
+                        key={index}
+                        style={
+                          index > 0
+                            ? styles.materialRequestRowDivider
+                            : styles.materialRequestRow
+                        }
+                      >
+                        <Text style={styles.label}>Tétel neve</Text>
+                        <TextInput
+                          value={sor.name}
+                          onChangeText={(value) =>
+                            updateMaterialRequestRow(index, "name", value)
+                          }
+                          placeholder="Például: 40mm PVC nyomócső"
+                          placeholderTextColor="#5b7d8f"
+                          style={styles.input}
+                        />
+                        <View style={styles.lineRow}>
+                          <View style={styles.lineCell}>
+                            <Text style={styles.label}>Mennyiség</Text>
+                            <TextInput
+                              value={sor.quantity}
+                              onChangeText={(value) =>
+                                updateMaterialRequestRow(
+                                  index,
+                                  "quantity",
+                                  value,
+                                )
+                              }
+                              placeholder="Például: 10 méter"
+                              placeholderTextColor="#5b7d8f"
+                              style={styles.input}
+                            />
+                          </View>
+                          <View style={styles.lineCell}>
+                            <Text style={styles.label}>Egység</Text>
+                            <TextInput
+                              value={sor.unit}
+                              onChangeText={(value) =>
+                                updateMaterialRequestRow(index, "unit", value)
+                              }
+                              placeholder="db"
+                              placeholderTextColor="#5b7d8f"
+                              style={styles.input}
+                            />
+                          </View>
+                        </View>
+                        {materialRequestRows.length > 1 ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => removeMaterialRequestRow(index)}
+                          >
+                            <Text style={styles.removeLine}>Tétel törlése</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    ))}
+
+                    {materialRequestError ? (
+                      <Text style={styles.lineError}>
+                        {materialRequestError}
+                      </Text>
+                    ) : null}
+
+                    <View style={styles.lineRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={addMaterialRequestRow}
+                        style={[styles.addLineButton, styles.lineCell]}
+                      >
+                        <Text style={styles.addLineText}>Új tétel</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={sendNewMaterialRequest.isPending}
+                        onPress={() => sendNewMaterialRequest.mutate()}
+                        style={[
+                          styles.addLineButton,
+                          styles.lineCell,
+                          sendNewMaterialRequest.isPending && styles.disabled,
+                        ]}
+                      >
+                        <Text style={styles.addLineText}>
+                          {sendNewMaterialRequest.isPending
+                            ? "Küldés…"
+                            : "Küldés"}
+                        </Text>
+                      </Pressable>
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={sendNewMaterialRequest.isPending}
+                      onPress={() => {
+                        setMaterialRequestFormOpen(false);
+                        setMaterialRequestRows([
+                          { name: "", quantity: "", unit: "" },
+                        ]);
+                        setMaterialRequestError(null);
+                      }}
+                    >
+                      <Text style={styles.removeLine}>Mégse</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setMaterialRequestFormOpen(true)}
+                    style={styles.addLineButton}
+                  >
+                    <Text style={styles.addLineText}>Anyagigénylés</Text>
+                  </Pressable>
+                )}
+              </View>
+            ) : null}
+
+            {materialRequests.data &&
+            materialRequests.data.items.length === 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.muted}>
+                  {describeEmptyMaterialRequests(capabilities.worksheetsManage)}
+                </Text>
+              </View>
+            ) : null}
+
+            {materialRequests.data?.items.map((request) => (
+              <View key={request.id} style={styles.card}>
+                <View style={styles.row}>
+                  <Text style={styles.muted}>
+                    {materialRequestByline(request, (iso) =>
+                      formatWorksheetDate(iso),
+                    )}
+                  </Text>
+                  <View style={styles.statusChip}>
+                    <Text style={styles.statusText}>
+                      {MATERIAL_REQUEST_STATUS_LABEL[request.status]}
+                    </Text>
+                  </View>
+                </View>
+                {request.items.map((item) => (
+                  <Text key={item.id} style={styles.materialRequestItem}>
+                    {item.name} — {item.quantity} {item.unit}
+                  </Text>
+                ))}
+                {request.status === "DRAFT" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={
+                      sendDraftMaterialRequest.isPending &&
+                      sendDraftMaterialRequest.variables === request.id
+                    }
+                    onPress={() => sendDraftMaterialRequest.mutate(request.id)}
+                    style={[
+                      styles.addLineButton,
+                      sendDraftMaterialRequest.isPending &&
+                        sendDraftMaterialRequest.variables === request.id &&
+                        styles.disabled,
+                    ]}
+                  >
+                    <Text style={styles.addLineText}>
+                      {sendDraftMaterialRequest.isPending &&
+                      sendDraftMaterialRequest.variables === request.id
+                        ? "Küldés…"
+                        : "Küldés"}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+
             {current.signature ? (
               <>
                 <Text style={styles.sectionTitle}>Aláírás</Text>
@@ -2039,6 +2334,15 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   nagyKep: { flex: 1, width: "100%", borderRadius: 12 },
+  materialRequestRow: { gap: 4 },
+  materialRequestRowDivider: {
+    gap: 4,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#17394f",
+  },
+  materialRequestItem: { color: "#f4fbff", fontSize: 14 },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.75 },
 });

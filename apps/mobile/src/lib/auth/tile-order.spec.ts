@@ -73,7 +73,14 @@ describe("a csempék sorrendje", () => {
     /**
      * A SZERVIZES MENÜJE, MÉRVE (nem feltételezve): a `service-jobs`,
      * `service-assets`, `worksheets` és `partners` tételek azok, amiket a
-     * SERVICE szerep mobil felületen lát.
+     * SERVICE szerep mobil felületen lát -- Balázs kérése, 2026-09-16, KIZÁRÓLAG
+     * erre a négyre szólt, tehát az állítás is csak ezt méri.
+     *
+     * A `material-requests-pending` NEM KERÜL EBBE A LISTÁBA, holott a
+     * SERVICE szerep 2026-09-23 óta AZT IS látja (a `SERVICE_MANAGE` jogon,
+     * lásd `packages/types/src/navigation.ts`). Ez a lista Balázs KIMONDOTT
+     * kérését méri, nem a szervizes TELJES menüjét -- azt a lenti "a teljes
+     * sorrend rögzített" állítás fedi, minden szerepre együtt.
      */
     const szervizesMenu = [
       "service-jobs",
@@ -97,14 +104,20 @@ describe("a csempék sorrendje", () => {
    * TESTVÉR-KONTROLL: A TÖBBI SZEREP KÉPERNYŐJE SEM ESIK SZÉT.
    *
    * A fenti állítás akkor is zöld maradna, ha valaki a négy szervizes csempét
-   * a lista elejére emelné, a többit pedig összekeverné. A tulajdonos nyolc
+   * a lista elejére emelné, a többit pedig összekeverné. A tulajdonos kilenc
    * csempét lát, és azok sorrendje is számít -- csak nem Balázs kérése köti,
    * hanem az, hogy ne mozduljon el szó nélkül.
+   *
+   * 2026-09-23: nyolcról kilencre nőtt a `material-requests-pending` mobil
+   * felülettel ("AI"), a Munkalapok és az Eszközök közé beszúrva. Ez az
+   * állítás ELSÜLT, és ez a helyes viselkedés -- ugyanaz a minta, mint a
+   * `HJ` felvételénél (lásd `tile-visibility.spec.ts`).
    */
   it("a teljes sorrend rögzített", () => {
     assert.deepEqual(kepernyoSorrend(), [
       "HJ",
       "MU",
+      "AI",
       "ES",
       "RE",
       "BE",

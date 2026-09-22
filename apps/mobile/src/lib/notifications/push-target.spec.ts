@@ -127,6 +127,19 @@ describe("a célpont a törzsből", () => {
       { type: "serviceJob", id: "job-1" },
     );
   });
+
+  it("az ANYAGIGÉNY ma ismert célpont, és a munkalap azonosítóját hordozza", () => {
+    /*
+      A `targetId` ITT A MUNKALAP AZONOSITOJA, NEM AZ IGENYE -- lasd a
+      `PUSH_TARGET_ROUTES.materialRequest` fejleceit, miert.
+
+      MI PIROSIT: a `materialRequest` kivetele a `PUSH_TARGET_TYPES` listabol.
+    */
+    assert.deepEqual(
+      pushTarget(valasz({ targetType: "materialRequest", targetId: "ws-1" })),
+      { type: "materialRequest", id: "ws-1" },
+    );
+  });
 });
 
 describe("melyik típus melyik képernyőt nyitja", () => {
@@ -162,6 +175,25 @@ describe("melyik típus melyik képernyőt nyitja", () => {
     assert.equal(PUSH_TARGET_ROUTES.serviceJob, "/service-jobs/[id]");
     assert.notEqual(
       PUSH_TARGET_ROUTES.worksheet,
+      PUSH_TARGET_ROUTES.serviceJob,
+    );
+  });
+
+  it("az anyagigény KÜLÖN képernyőre megy, mint a munkalap és a hibajegy", () => {
+    /*
+      MI PIROSIT: masolassal felvett sor, ami a `/worksheets/[id]` utat orokli.
+      Az uzenet ott szandekosan vekony: a kepernyo AZONNAL a munkalapra iranyit
+      (lasd `app/material-requests/[id].tsx`), de az utvonal-sztringnek magának
+      KULONBOZNIE kell, kulonben ez az orzo nem tudja megkulonboztetni a
+      szandekos tovabbiranyitast a masolasi hibatol.
+    */
+    assert.equal(PUSH_TARGET_ROUTES.materialRequest, "/material-requests/[id]");
+    assert.notEqual(
+      PUSH_TARGET_ROUTES.materialRequest,
+      PUSH_TARGET_ROUTES.worksheet,
+    );
+    assert.notEqual(
+      PUSH_TARGET_ROUTES.materialRequest,
       PUSH_TARGET_ROUTES.serviceJob,
     );
   });
