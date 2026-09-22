@@ -14,12 +14,36 @@
 --    kilenc egyforma bukással. Helyben nem lehetett volna elkapni: a
 --    kalibráció duplával ment, és egy dupla nem ismeri az adatbázis-megkötést.
 --
--- 2. `NOTIFICATION_SENT` (2026-09-02 óta létezik az enumban): a megkötés SOHA
---    nem kapott ágat hozzá, viszont a kód ÍR ilyen sort
---    (`apps/api/src/notifications/mail/ticket-mail.repository.ts:97`,
+-- 2. `NOTIFICATION_SENT`: a megkötés SOHA nem kapott ágat hozzá, viszont a kód
+--    ÍR ilyen sort (`apps/api/src/notifications/mail/ticket-mail.repository.ts`,
 --    `recordNotification`), és nincs körülötte `try/catch`. Az a sor tehát ma
---    nem keletkezhet: a hívás a megkötésen dobna. Mérve 2026-09-22: egyetlen
---    migráció érinti a megkötést, és abban ez a fajta nem szerepel.
+--    nem keletkezhet: a hívás a megkötésen dobna.
+--
+--    === MIÓTA ÁLL A LYUK: EGY NAPJA, NEM HÁROM HETE ===
+--
+--    Az első leírásomban 2026-09-02-t írtam ide, és az HAMIS volt. Visszamérve:
+--
+--      20260902170000  CREATE TYPE ... AS ENUM ('STATUS_CHANGE',
+--                      'WORKSHEET_ATTACHED','WORKSHEET_DETACHED')
+--                      -- a megkötés MIND A HÁRMAT lefedte, hiánytalanul
+--      20260921134600  ALTER TYPE ... ADD VALUE 'NOTIFICATION_SENT'
+--                      (commit 8ad505e4, a #891-ből)
+--
+--    A 2026-09-02-i migráció tehát NEM hagyott lyukat: teljes volt. A lyuk
+--    2026-09-21-én keletkezett, amikor az enum bővült és a megkötés nem.
+--
+--    ÉS A CSAPDA ALAKJA EZ, NEM A FIGYELMETLENSÉG: az enum-bővítés EGY SOR, és
+--    semmi nem kényszeríti ki, hogy az ember visszanézzen egy CHECK
+--    megkötésre, ami ugyanazokat az értékeket sorolja fel egy MÁSIK
+--    migrációban, három héttel korábbról. A két hely ugyanarról a
+--    felsorolásról beszél, és csak az egyik mozdul.
+--
+--    A HATÁSA MA NULLA, ÉS EZT IS MÉRÉS MONDJA: a levelezés módja
+--    `TICKET_MAIL_MODE` nélkül „off", és az éles környezetben ez a változó
+--    nincs beállítva -- tehát az az ág ma le sem fut. A hiba VALÓDI, de
+--    LAPPANGÓ: abban a percben sülne el, amikor valaki éles módba kapcsolja a
+--    levelezést. A javítás épp azt előzi meg, hogy a bekapcsolás pillanatában
+--    derüljön ki.
 --
 --    A JAVÍTÁS AZÉRT KERÜL IDE, ÉS NEM KÜLÖN PR-BA: ugyanaz a megkötés,
 --    ugyanaz a felsorolás, egy sor. Egy migráció, ami „rendbe teszi" a
