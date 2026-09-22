@@ -108,7 +108,7 @@ describe("a csempék sorrendje", () => {
    * csempét lát, és azok sorrendje is számít -- csak nem Balázs kérése köti,
    * hanem az, hogy ne mozduljon el szó nélkül.
    *
-   * 2026-09-23: hétről kilencre nőtt a `material-requests-pending` mobil
+   * 2026-09-23: nyolcról kilencre nőtt a `material-requests-pending` mobil
    * felülettel ("AI"), a Munkalapok és az Eszközök közé beszúrva. Ez az
    * állítás ELSÜLT, és ez a helyes viselkedés -- ugyanaz a minta, mint a
    * `HJ` felvételénél (lásd `tile-visibility.spec.ts`).
