@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Redirect, useRouter } from "expo-router";
+import { Redirect, useRouter, useLocalSearchParams } from "expo-router";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -122,7 +122,24 @@ export default function NewAssetScreen() {
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
   const [inventoryNumber, setInventoryNumber] = useState("");
-  const [labelCode, setLabelCode] = useState("");
+  /**
+   * A BEOLVASOTT SZABAD MATRICAKOD, HA A SZERELO ONNAN ERKEZETT.
+   *
+   * A FEL 2 elso aga kuldi ide: beolvasott egy szabad kodot, es uj eszkozt vesz
+   * fel vele. A mezo EBBOL indul, nem uresen -- kulonben a szerelonek kezzel
+   * kellene atgepelnie azt, amit az imént beolvasott, es az elgepeles pont azt
+   * a matricat tenne tonkre, ami a kezeben van.
+   *
+   * KEZDOERTEKKENT all be, nem hatasban: ez a kepernyo egy URES urlappal indul,
+   * tehat nincs mit felulirnia egy kesobbi betoltesnek. (A szerkeszton MAS a
+   * helyzet, es ott az elotoltes a visszatoltes agaban all -- lasd a
+   * `matricaElotoltes` fejlecet.)
+   */
+  const urlapParams = useLocalSearchParams<{ labelCode?: string | string[] }>();
+  const beolvasottKod = Array.isArray(urlapParams.labelCode)
+    ? urlapParams.labelCode[0]
+    : urlapParams.labelCode;
+  const [labelCode, setLabelCode] = useState(beolvasottKod ?? "");
   /**
    * A TELJESITMENY ES A MERTEKEGYSEGE -- KET MEZO, EGY ADAT.
    *

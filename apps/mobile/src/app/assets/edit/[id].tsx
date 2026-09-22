@@ -50,6 +50,7 @@ import { assetUpdateOperationId } from "@/lib/offline/sync-queue";
 import { enqueueAssetUpdate } from "@/lib/offline/queue-store";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { UnitPicker } from "@/components/assets/unit-picker";
+import { matricaElotoltes } from "@/lib/assets/matrica-elotoltes";
 import { CategoryPicker } from "@/components/assets/category-picker";
 import {
   LabelCodeField,
@@ -84,8 +85,21 @@ function editable(asset: AssetDetail): EditableAsset {
 }
 
 export default function AssetEditScreen() {
-  const params = useLocalSearchParams<{ id: string | string[] }>();
+  const params = useLocalSearchParams<{
+    id: string | string[];
+    labelCode?: string | string[];
+  }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  /**
+   * A BEOLVASOTT SZABAD MATRICAKOD, HA A SZERELO ONNAN ERKEZETT.
+   *
+   * A FEL 2 folyamat kuldi ide: a beolvasas utan a szerelo a „hozzaadas
+   * meglevo eszkozhoz" gombot valasztotta, kikereste az eszkozt, es a kod
+   * az utvonalon jon vele.
+   */
+  const utvonalKod = Array.isArray(params.labelCode)
+    ? params.labelCode[0]
+    : params.labelCode;
   const router = useRouter();
   const queryClient = useQueryClient();
   const { status, user } = useAuth();
@@ -136,6 +150,12 @@ export default function AssetEditScreen() {
   const [queued, setQueued] = useState<string | null>(null);
   const [lost, setLost] = useState<string | null>(null);
   const [loadedFrom, setLoadedFrom] = useState<string | null>(null);
+  /**
+   * A MONDAT A MATRICA-MEZO MELLETT, ha a beolvasott kod MAS, mint ami az
+   * eszkozon all. `null`, ha nincs mit mondani -- nem ures szoveg: az helyet
+   * foglalna a kepernyon.
+   */
+  const [matricaUzenet, setMatricaUzenet] = useState<string | null>(null);
   /**
    * A HELYSZIN-VALASZTO NYITVA VAN-E.
    *
@@ -250,9 +270,32 @@ export default function AssetEditScreen() {
   // Keyed on `updatedAt`, so once the form is filled, editing owns it. A
   // background refetch that returns the same version will not wipe out
   // what somebody is halfway through typing.
+  /**
+   * AZ ELOTOLTES UGYANEBBEN AZ AGBAN ALL, ES EZ NEM STILUS.
+   *
+   * MERVE (a c63638c9 kartya 4888-as kommentje): ez a sor a formot UJRAEPITI a
+   * szerverrol, valahanyszor a betoltott verzio valtozik. Ha a beolvasott kod
+   * elotoltese egy KULON helyen (peldaul sajat `useEffect`-ben) allna be, ez a
+   * sor CSENDBEN letorolne. Gyors halozaton a sorrend kedvezo lehet, es a hiba
+   * nem jelentkezik; lassun a szerelo beolvassa a kodot, megnyilik a
+   * szerkeszto, es a mezo URES.
+   *
+   * Ezert az elotoltes UGYANARRA A KULCSRA (`loadedFrom`) kotve tortenik: ami
+   * a szerverrol jon, es ami az utvonalrol, EGYSZERRE all ossze.
+   *
+   * A DONTES maga tiszta fuggvenyben all (`matricaElotoltes`), mert a mobilon
+   * nincs komponens-teszt -- es ott all a magyarazat is, hogy egy MAR ALLO
+   * matricat miert nem irunk felul csendben.
+   */
   if (betoltott && loadedFrom !== betoltott.updatedAt) {
     setLoadedFrom(betoltott.updatedAt);
-    setForm(assetEditFormFrom(editable(betoltott)));
+    const alap = assetEditFormFrom(editable(betoltott));
+    const elotoltes = matricaElotoltes({
+      eszkozKodja: betoltott.labelCode,
+      utvonalKod,
+    });
+    setForm({ ...alap, labelCode: elotoltes.mezoErteke });
+    setMatricaUzenet(elotoltes.uzenet ?? null);
   }
 
   const save = useMutation({
@@ -629,6 +672,15 @@ export default function AssetEditScreen() {
           scanner={scanner}
           editable={!save.isPending}
         >
+          {/*
+            A BEOLVASOTT KOD ES A MEGLEVO KOZOTTI KULONBSEG KIMONDVA.
+            Csak akkor all itt, ha TENYLEG mas a ketto -- a `matricaElotoltes`
+            dönti el, es a fuggveny fejlece leirja, miert nem irjuk felul
+            csendben a mar allo matricat.
+          */}
+          {matricaUzenet ? (
+            <Text style={styles.matricaFigyelmeztetes}>{matricaUzenet}</Text>
+          ) : null}
           <Text style={styles.hint}>
             A MI matricánk, nem a partneré. Ha már áll rajta kód, az itt
             látszik: másikat beírva a régi visszakerül a szabad készletbe. A
@@ -759,6 +811,16 @@ function Choice<T extends string>({
 }
 
 const styles = StyleSheet.create({
+  /*
+    A FIGYELMEZTETES SZINE ELTER A SIMA SUGOTOL: amit itt irunk, az nem
+    magyarazat, hanem egy KULONBSEG, amirol dontenie kell.
+  */
+  matricaFigyelmeztetes: {
+    color: "#ffd479",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 6,
+  },
   safeArea: { flex: 1, backgroundColor: "#071827" },
   container: { gap: 16, padding: 20, paddingBottom: 40 },
   hero: { gap: 4 },

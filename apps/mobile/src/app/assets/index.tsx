@@ -126,7 +126,25 @@ export default function AssetListScreen() {
     adat); a doboz a visszalepessel eltunt volna. A mondat ITT jelenik meg,
     egyszer, a lista tetejen.
   */
-  const params = useLocalSearchParams<{ varakozoUzenet?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    varakozoUzenet?: string | string[];
+    valasztKodhoz?: string | string[];
+  }>();
+  /**
+   * VALASZTO-MOD: EGY BEOLVASOTT SZABAD MATRICAHOZ KERESUNK ESZKOZT.
+   *
+   * A FEL 2 masodik aga kuldi ide a szerelot: beolvasott egy szabad kodot, es
+   * a „hozzaadas meglevo eszkozhoz" gombot valasztotta. Ilyenkor a sor
+   * koppintasa NEM az adatlapra visz, hanem a SZERKESZTORE, a koddal egyutt.
+   *
+   * A LISTA TOBBI RESZE VALTOZATLAN: ugyanaz a kereso, ugyanaz a lapozas.
+   * Egy kulon „valaszto kepernyo" ugyanezt a listat masolna le, es a masodik
+   * peldanyt semmi nem merne -- ugyanaz az indok, ami a helyszin-valaszto
+   * kiemelese folott all.
+   */
+  const valasztKodhoz = Array.isArray(params.valasztKodhoz)
+    ? params.valasztKodhoz[0]
+    : params.valasztKodhoz;
   const varakozoUzenet = Array.isArray(params.varakozoUzenet)
     ? params.varakozoUzenet[0]
     : params.varakozoUzenet;
@@ -187,6 +205,24 @@ export default function AssetListScreen() {
               <View style={styles.varakozoUzenet}>
                 <Text style={styles.varakozoCimke}>MENTVE A TELEFONRA</Text>
                 <Text style={styles.varakozoMeta}>{varakozoUzenet}</Text>
+              </View>
+            ) : null}
+            {/*
+              A VALASZTO-MOD KIMONDVA, A LISTA TETEJEN.
+              Enelkul a kepernyo UGYANUGY nez ki, mint a sima lista, es a
+              koppintas MASHOVA visz -- a szerelo az adatlapot varna, es a
+              szerkeszto nyilna meg. Egy nema mod-valtas rosszabb, mint egy
+              kulon kepernyo.
+            */}
+            {valasztKodhoz ? (
+              <View style={styles.valasztoSav}>
+                <Text style={styles.valasztoCimke}>
+                  SZABAD MATRICA: {valasztKodhoz}
+                </Text>
+                <Text style={styles.valasztoMeta}>
+                  Válaszd ki az eszközt, amire felragasztottad. A kód a
+                  szerkesztőben jelenik meg, mentés előtt ellenőrizheted.
+                </Text>
               </View>
             ) : null}
             <Text style={styles.eyebrow}>ASSET MANAGEMENT</Text>
@@ -349,10 +385,15 @@ export default function AssetListScreen() {
             <AssetCard
               asset={sor.tetel}
               onPress={() =>
-                router.push({
-                  pathname: "/assets/[id]",
-                  params: { id: sor.tetel.id },
-                })
+                valasztKodhoz
+                  ? router.replace({
+                      pathname: "/assets/edit/[id]",
+                      params: { id: sor.tetel.id, labelCode: valasztKodhoz },
+                    })
+                  : router.push({
+                      pathname: "/assets/[id]",
+                      params: { id: sor.tetel.id },
+                    })
               }
             />
           )
@@ -363,6 +404,21 @@ export default function AssetListScreen() {
 }
 
 const styles = StyleSheet.create({
+  valasztoSav: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#52d6c7",
+    backgroundColor: "#0d3a3a",
+  },
+  valasztoCimke: { color: "#52d6c7", fontWeight: "800", fontSize: 12 },
+  valasztoMeta: {
+    color: "#cfe9f2",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+  },
   safeArea: { flex: 1, backgroundColor: "#071827" },
   varakozoSor: {
     backgroundColor: "#3a2a12",
