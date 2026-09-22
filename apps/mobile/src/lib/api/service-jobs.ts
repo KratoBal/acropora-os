@@ -6,11 +6,13 @@ import type {
   ServiceJobDetail,
   ServiceJobDocumentSummary,
   ServiceJobListResponse,
+  ServiceJobPartnerDetail,
   ServiceJobStatusValue,
 } from "../service-jobs/types";
 
 export type {
   CreateServiceJobInput,
+  ServiceJobPartnerDetail,
   ServiceJobAssetLink,
   ServiceJobDetail,
   ServiceJobDocumentSummary,
@@ -98,7 +100,19 @@ export function createServiceJob(input: CreateServiceJobInput) {
 }
 
 export function getServiceJob(id: string) {
-  return apiRequest<ServiceJobDetail>(`${BASE}/${encodeURIComponent(id)}`);
+  /**
+   * A VALASZ KET ALAKBAN JOHET, ES A TIPUS EDDIG CSAK AZ EGYIKET ALLITOTTA.
+   *
+   * Partner-hatokoru hivonak a szerver `ServiceJobPartnerDetail`-t ad. Amig itt
+   * `ServiceJobDetail` allt, a fordito SOHA nem szolt a hianyzo mezokrol -- es
+   * a kepernyo egy `undefined.length` hivason omlott ossze (mert 2026-09-22).
+   *
+   * Az unio nem kenyelmetlenseg, hanem a kapu: minden olvasasi helyet
+   * MEGKULONBOZTETESRE kenyszerit (`partnerAlak`).
+   */
+  return apiRequest<ServiceJobDetail | ServiceJobPartnerDetail>(
+    `${BASE}/${encodeURIComponent(id)}`,
+  );
 }
 
 /**
