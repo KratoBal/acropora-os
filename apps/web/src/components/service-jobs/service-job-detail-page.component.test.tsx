@@ -1058,6 +1058,26 @@ describe("a lezárt hibajegy kiküldése", () => {
   });
 
   /*
+    OLVASO JOGKORNEL NINCS KIKULDES-GOMB -- ES A LETOLTES MARAD.
+
+    A KET ALLITAS EGYUTT MER: a "nincs gomb" onmagaban akkor is zold lenne, ha
+    az olvaso jogkoru kollega a CSOMAGOT sem tudna letolteni. Az viszont
+    OLVASAS, es epp ezert marad ott.
+  */
+  it("olvasó jogkörnél nincs kiküldés-gomb, a letöltés viszont marad", async () => {
+    auth.session = sessionAs("VIEWER");
+    elkeszult();
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByRole("button", { name: "Dokumentumcsomag letöltése" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Kiküldés e-mailben" }),
+    ).toBeNull();
+  });
+
+  /*
     A CIMZETTEK NEVE ES CIME EGYARANT LATSZIK. Ez a spec szo szerinti resze
     (Balazs, 2026-09-18 11:29 UTC), es epp ezert all a vegpont belsos
     hatokorre zarva.

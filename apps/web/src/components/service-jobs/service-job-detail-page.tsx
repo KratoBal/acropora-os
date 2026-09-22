@@ -702,13 +702,25 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   : "Dokumentumcsomag letöltése"}
               </Button>
               {/*
-                UGYANAZ A FELTETEL, MINT A LETOLTESNEL, es ez nem veletlen: a
-                kuldes a CSOMAGOT viszi, tehat pontosan akkor van ertelme,
-                amikor a csomag eloallithato.
+                KET FELTETEL, ES A KETTO MAST MOND.
+
+                Az ELKESZULT allapot ugyanaz, mint a letoltesnel, es nem
+                veletlen: a kuldes a CSOMAGOT viszi, tehat pontosan akkor van
+                ertelme, amikor a csomag eloallithato.
+
+                A `canManage` viszont a LETOLTESNEL NEM all, es ez sem
+                veletlen: a letoltes OLVASAS, a kikuldes IRAS -- egy olvaso
+                jogkoru kollega letoltheti a csomagot, de levelet nem kuldhet
+                a vevonek. A szerver ugyanezt koveteli
+                (`@RequirePermissions(SERVICE_MANAGE)`); ez a feltetel azt
+                akadalyozza meg, hogy egy gomb ott alljon, ami mindig hibara
+                fut.
               */}
-              <Button onClick={() => void openHandoverMail()}>
-                Kiküldés e-mailben
-              </Button>
+              {canManage ? (
+                <Button onClick={() => void openHandoverMail()}>
+                  Kiküldés e-mailben
+                </Button>
+              ) : null}
             </div>
           ) : null
         }
