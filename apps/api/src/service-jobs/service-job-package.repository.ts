@@ -3,6 +3,7 @@ import { prisma, type Prisma } from "@acropora/database";
 
 import { WORKSHEET_ISSUED_SHEET_TYPES } from "@acropora/types";
 import { unitPathFor } from "../common/unit-path-lookup.js";
+import { assignedUnitIdsFor } from "./assigned-units.query.js";
 
 @Injectable()
 export class ServiceJobPackageRepository {
@@ -102,9 +103,15 @@ export class ServiceJobPackageRepository {
     };
   }
 
+  /**
+   * UGYANAZ A FORRAS, MINT A JEGY-TAROLOBAN -- ES EZ JAVITAS, NEM ATRENDEZES.
+   *
+   * Ez a metodus korabban CSAK lekerdezett, reszfa-kibontas nelkul, mikozben a
+   * jegy-taroló azonos nevu metodusa kibontott -- es mind a ketto UGYANANNAK a
+   * `serviceJobVisibilityFor` fuggvenynek a bemenete. A reszletek az
+   * `assigned-units.query.ts` fejlecében allnak.
+   */
   assignedUnitIds(userId: string) {
-    return this.database.userWorksheetDepartment
-      .findMany({ where: { userId }, select: { departmentId: true } })
-      .then((rows) => rows.map((row) => row.departmentId));
+    return assignedUnitIdsFor(userId);
   }
 }
