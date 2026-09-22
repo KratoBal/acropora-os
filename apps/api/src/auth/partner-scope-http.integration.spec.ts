@@ -14,6 +14,10 @@ import { AppModule } from "../app.module.js";
 import { configureApp } from "../app.configuration.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { hashPassword } from "../users/password.util.js";
+import {
+  DOCUMENT_THUMBNAIL_VARIANT,
+  DOCUMENT_VARIANT_PARAM,
+} from "@acropora/types";
 
 /**
  * A PARTNER-HATOKOR VALODI HTTP-N, ES CSAK AZ.
@@ -84,6 +88,8 @@ describe(
      */
     let tokenManager: string;
     let deletableAsset: string;
+    /** Kepes csatolmany az A vevo eszkozen -- a `variant` parameter merESEhez. */
+    let kepDokumentumId: string;
 
     async function login(email: string): Promise<string> {
       const response = await fetch(`${base}/auth/mobile/login/password`, {
@@ -203,6 +209,30 @@ describe(
       ]);
       assetA = aA.id;
       assetB = aB.id;
+
+      /*
+        KEPES CSATOLMANY, KET KULONBOZO TARTALOMMAL.
+        A teljes tartalom es a belyegkep SZANDEKOSAN mas szoveg: igy a valasz
+        MAGA mondja meg, melyik agat jartuk be. Azonos bajtokkal a `variant`
+        parameter eltuneset semmi nem mutatna meg.
+        `MANUAL`, mert a vevo CSAK `WARRANTY` vagy `MANUAL` tipust lat -- mas
+        tipussal a jogos kero sem jutna el a belyegkep-agig.
+      */
+      kepDokumentumId = (
+        await prisma.assetDocument.create({
+          data: {
+            assetId: assetA,
+            type: "MANUAL",
+            fileName: `${TEST_ASSET_PREFIX}${suffix}-kep.png`,
+            contentType: "image/png",
+            sizeBytes: 16,
+            sha256: "0".repeat(64),
+            content: Buffer.from("eredeti-kep-http"),
+            thumbnail: Buffer.from("belyegkep-http"),
+          },
+          select: { id: true },
+        })
+      ).id;
       qrTokenB = aB.qrToken;
 
       /**
@@ -401,6 +431,51 @@ describe(
       const text = await response.text();
       assert.ok(qrTokenB.length > 0, "a mércéhez kell egy valódi token");
       assert.equal(text.includes(qrTokenB), false);
+    });
+
+    /**
+     * A `variant` PARAMETER ATVETELE, ES EZT CSAK ITT LEHET MERNI.
+     *
+     * A kontrolleren `@Query("variant") variant?: string` all, es a metodus
+     * tovabbadja a szolgaltatasnak. EGY EGYSEG-TESZT EZT NEM TUDNA MERNI: ha a
+     * metodust kozvetlenul hivjuk, azt kapja, amit atadunk -- a dekorator
+     * KIVETELE utan is. Vagyis egy olyan allitas lenne, ami NEM TUD ELBUKNI.
+     * A dekorator hatasa csak a HTTP-retegen at latszik, ezert all ez itt.
+     *
+     * A KET HIVAS EGYUTT ALLIT, es a sorrendjuk nem mindegy:
+     *   1. parameter NELKUL -> az EREDETI tartalom. Ez a kontroll: bizonyitja,
+     *      hogy a vegpont el, a jogosultsag rendben, es a bajtok jonnek.
+     *   2. `?variant=thumbnail` -> a BELYEGKEP. Ez az allitas.
+     * A ket tartalom SZANDEKOSAN kulonbozo szoveg: azonos bajtokkal a parameter
+     * eltunese lathatatlan maradna, mert mind a ket hivas ugyanazt adna.
+     *
+     * EDDIG EZT CSAK FORRAS-SZOVEG ORIZTE (`document-thumbnail-wiring.spec.ts`
+     * 119. sora). Az az allitas MARAD, horgonynak: a TORLEST tovabbra is az
+     * fogja meg, a HATASTALANSAGOT ez.
+     */
+    it("a letöltés a variant paramétert VALÓDI HTTP-n is átveszi", async () => {
+      const teljes = await get(
+        `/service/assets/${assetA}/documents/${kepDokumentumId}`,
+        tokenA,
+      );
+      assert.equal(teljes.status, 200, "a teljes letöltés nem 200-at adott");
+      assert.equal(
+        Buffer.from(await teljes.arrayBuffer()).toString(),
+        "eredeti-kep-http",
+        "paraméter nélkül nem az eredeti tartalom jött",
+      );
+
+      const csempe = await get(
+        `/service/assets/${assetA}/documents/${kepDokumentumId}` +
+          `?${DOCUMENT_VARIANT_PARAM}=${DOCUMENT_THUMBNAIL_VARIANT}`,
+        tokenA,
+      );
+      assert.equal(csempe.status, 200, "a bélyegkép-kérés nem 200-at adott");
+      assert.equal(
+        Buffer.from(await csempe.arrayBuffer()).toString(),
+        "belyegkep-http",
+        "a variant paraméter nem ért el a szolgáltatásig: az eredeti jött vissza",
+      );
     });
 
     it("az idegen eszköz adatlapja 404, a sajátja 200", async () => {
