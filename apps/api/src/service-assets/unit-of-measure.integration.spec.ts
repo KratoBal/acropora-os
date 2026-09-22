@@ -105,13 +105,25 @@ async function eszkozt(
   performanceUnitId: string | null,
 ) {
   const id = `${PREFIX}-${Math.random().toString(36).slice(2, 10)}`;
+  /**
+   * A `departmentId` A `department_required` MIGRACIO OTA KELL, MEG EBBEN A
+   * NYERS SORBAN IS. Ez a beszúrás szándékosan az ALKALMAZÁS MÖGÖTT megy (a
+   * `Asset_performance_pairing_check` CHECK-et méri, nem az üzleti
+   * validációt) -- a `customerId` és a `departmentId` együttes jelenléte itt
+   * NEM üzleti állítás (a CUSTOMER_OWNER szabály ezen az úton nincs jelen),
+   * csak annyi, hogy a NOT NULL oszlopot ki kell tölteni. Enélkül a CI-ben
+   * mért hiba (`23502`, `Failing row contains ...`) a pairing_check
+   * bukásának NÉZ KI, holott a beszúrás magától a departmentId hiánya miatt
+   * hasal el, mielőtt a CHECK egyáltalán eldőlne.
+   */
   await prisma.$executeRaw`
     INSERT INTO "Asset" ("id", "assetNumber", "name", "kind", "status",
-                         "criticality", "qrToken", "customerId", "createdById",
-                         "performance", "performanceUnitId", "updatedAt")
+                         "criticality", "qrToken", "customerId", "departmentId",
+                         "createdById", "performance", "performanceUnitId",
+                         "updatedAt")
     VALUES (${id}, ${`${PREFIX}-${id.slice(-6)}`}, ${`${PREFIX} eszköz`},
             'EQUIPMENT', 'ACTIVE', 'NORMAL', ${randomUUID()}::uuid,
-            ${customerId},
+            ${customerId}, ${helyszinId},
             ${actorUserId}, ${performance}::decimal, ${performanceUnitId},
             CURRENT_TIMESTAMP)`;
   return id;

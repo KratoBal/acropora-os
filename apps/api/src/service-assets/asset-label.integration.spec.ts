@@ -666,8 +666,8 @@ describe(
 
         const lista = await repository.list(
           Object.assign(new AssetListQueryDto(), {
-            ownerId: customerId,
-            ownerType: "CUSTOMER" as const,
+            ownerId: szallitoId,
+            ownerType: "SUPPLIER" as const,
             label: "without" as const,
             status: "ALL" as const,
           }),
@@ -778,8 +778,8 @@ describe(
       const nelkul = await repository.list(
         Object.assign(new AssetListQueryDto(), {
           label: "without" as const,
-          ownerId: customerId,
-          ownerType: "CUSTOMER" as const,
+          ownerId: szallitoId,
+          ownerType: "SUPPLIER" as const,
           status: "ALL" as const,
         }),
         { kind: "internal" },
@@ -798,8 +798,8 @@ describe(
       const vannak = await repository.list(
         Object.assign(new AssetListQueryDto(), {
           label: "with" as const,
-          ownerId: customerId,
-          ownerType: "CUSTOMER" as const,
+          ownerId: szallitoId,
+          ownerType: "SUPPLIER" as const,
           status: "ALL" as const,
         }),
         { kind: "internal" },
@@ -838,8 +838,8 @@ describe(
       function lekerdezes(over: Record<string, unknown>) {
         return repository.list(
           Object.assign(new AssetListQueryDto(), {
-            ownerId: customerId,
-            ownerType: "CUSTOMER" as const,
+            ownerId: szallitoId,
+            ownerType: "SUPPLIER" as const,
             status: "ALL" as const,
             ...over,
           }),
@@ -983,8 +983,8 @@ describe(
       const talalat = await repository.list(
         Object.assign(new AssetListQueryDto(), {
           search: resz,
-          ownerId: customerId,
-          ownerType: "CUSTOMER" as const,
+          ownerId: szallitoId,
+          ownerType: "SUPPLIER" as const,
           status: "ALL" as const,
         }),
         { kind: "internal" },
@@ -1010,8 +1010,8 @@ describe(
       const talalat = await repository.list(
         Object.assign(new AssetListQueryDto(), {
           search: "ZZZ999",
-          ownerId: customerId,
-          ownerType: "CUSTOMER" as const,
+          ownerId: szallitoId,
+          ownerType: "SUPPLIER" as const,
           status: "ALL" as const,
         }),
         { kind: "internal" },
