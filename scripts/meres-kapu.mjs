@@ -150,9 +150,23 @@ const naploSorokNorm = naploSorok.map((sor) =>
   sor.replace(TAP_SORSZAM, "$1 -"),
 );
 
-function megjelent(varakozas) {
+/**
+ * A TALALT SOROKAT ADJA VISSZA, NEM EGY IGAZ/HAMIS ERTEKET.
+ *
+ * === MIERT (a 1ab4a994 masodik fele) ===
+ *
+ * A `megjelent: 3` egy SZAM, es a szam nem bizonyitek: nem mondja meg, MIRE
+ * illeszkedett. Egy toredek-varakozas ket kulonbozo allitason is talalhat, es a
+ * hivo fejeben csak az egyik allt. A kapu eddig ezt CSAK akkor irta ki, ha a
+ * nyom kizarolag bukott allitason jelent meg -- vagyis epp a rendes uton
+ * hallgatott, ahol a legtobbszor jarunk.
+ *
+ * Ugyanaz a csalad, mint a kalibracional: ott sem eleg, hogy PIROS lett, hanem
+ * NEV SZERINT kell tudni, melyik sor. Itt a naplo sora az a nev.
+ */
+function illeszkedoSorok(varakozas) {
   const sikertVar = varakozas.startsWith("ok ");
-  return naploSorok.some((sor, i) => {
+  return naploSorok.filter((sor, i) => {
     if (!sor.includes(varakozas) && !naploSorokNorm[i].includes(varakozas))
       return false;
     if (sikertVar && sor.startsWith("not ok")) return false;
@@ -160,7 +174,13 @@ function megjelent(varakozas) {
   });
 }
 
-const hianyzo = vart.filter((sor) => !megjelent(sor));
+const talalatok = vart.map((varakozas) => ({
+  varakozas,
+  sorok: illeszkedoSorok(varakozas),
+}));
+const hianyzo = talalatok
+  .filter((t) => t.sorok.length === 0)
+  .map((t) => t.varakozas);
 
 /**
  * LATHATOSAG, NEM VERDIKT: melyik toredek-varakozas jelent meg KIZAROLAG
@@ -197,6 +217,20 @@ for (const varakozas of vart) {
 console.log(`MERES-KAPU  (${naploUt})`);
 console.log(`  vart nyom:      ${vart.length}`);
 console.log(`  megjelent:      ${vart.length - hianyzo.length}`);
+for (const { varakozas, sorok } of talalatok) {
+  if (sorok.length === 0) continue;
+  console.log(`  megjelent: ${JSON.stringify(varakozas)}`);
+  console.log(`        -> ${sorok[0]}`);
+  /*
+    A TOBBSZOROS TALALAT NEM HIBA, DE INFORMACIO: egy toredek tobb allitason is
+    illeszkedhet, es akkor a hivo nem tudja, melyikre gondolt. A szamot ezert
+    kiirjuk, a verdiktet viszont NEM valtoztatja -- a varakozas teljesult.
+  */
+  if (sorok.length > 1)
+    console.log(
+      `           (+${sorok.length - 1} tovabbi sorra is illeszkedik)`,
+    );
+}
 for (const { varakozas, sor } of csakBukotton) {
   console.log(
     `  FIGYELEM: ez a nyom CSAK bukott allitason jelent meg: ${JSON.stringify(varakozas)}`,

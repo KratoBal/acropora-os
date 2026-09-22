@@ -196,6 +196,56 @@ describe("meres-kapu", () => {
    * azt a rest nyitna vissza, amit 2026-09-21-en zartunk be -- csak most a
    * sorszam nelkuli alakon.
    */
+  /**
+   * A SZAM NEM BIZONYITEK: MUTASSA MEG, MIRE ILLESZKEDETT.
+   *
+   * A `megjelent: 3` nem mondja meg, MELYIK sorra. Egy toredek-varakozas ket
+   * kulonbozo allitason is talalhat, es a hivo fejeben csak az egyik allt --
+   * pontosan ez volt a 2026-09-21-i hamis zold gyokere. A kapu eddig a sort
+   * CSAK akkor irta ki, ha a nyom kizarolag bukott allitason jelent meg, tehat
+   * a RENDES uton hallgatott.
+   */
+  it("kiirja, MELYIK naplo-sorra illeszkedett a vart nyom", () => {
+    const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-sor-"));
+    const naplo = join(mappa, "naplo.txt");
+    writeFileSync(
+      naplo,
+      ["TAP version 13", "    not ok 4 - a torles-sor MEGJELENIK"].join("\n"),
+    );
+    assert.equal(futtat(naplo, ["a torles-sor MEGJELENIK"]), 0);
+    assert.match(
+      kimenet,
+      /-> not ok 4 - a torles-sor MEGJELENIK/,
+      "a kapu nem mutatta meg, melyik sorra illeszkedett",
+    );
+  });
+
+  /**
+   * ES A TOBBSZOROS TALALAT SZAMA IS INFORMACIO -- de NEM verdikt.
+   *
+   * Ha egy toredek tobb allitason is illeszkedik, a hivo nem tudja, melyikre
+   * gondolt. A kapu ezt kiirja, es a varakozas TOVABBRA IS teljesul: a hivo
+   * nem nyilatkozott arrol, hogy egyetlen helyen akarja latni.
+   */
+  it("tobbszoros talalatnal kiirja a tovabbi sorok szamat", () => {
+    const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-tobb-"));
+    const naplo = join(mappa, "naplo.txt");
+    writeFileSync(
+      naplo,
+      [
+        "TAP version 13",
+        "    not ok 1 - a torles-sor MEGJELENIK",
+        "    not ok 2 - a torles-sor MEGJELENIK egy masik suite-ban",
+      ].join("\n"),
+    );
+    assert.equal(futtat(naplo, ["a torles-sor MEGJELENIK"]), 0);
+    assert.match(
+      kimenet,
+      /\(\+1 tovabbi sorra is illeszkedik\)/,
+      "a kapu nem jelezte, hogy a nyom tobb sorra illeszkedik",
+    );
+  });
+
   it("sorszam nelkul sem elegit ki egy `ok ` varakozast a `not ok` sor", () => {
     const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-sorszam3-"));
     const naplo = join(mappa, "naplo.txt");
