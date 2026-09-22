@@ -486,10 +486,12 @@ export default function NewAssetScreen() {
 
     if (terv.type === "upload") {
       try {
+        // A SZAMLA ES A GARANCIALEVEL AZ IRODABOL KERUL FEL; a helyszini kepet
+        // a SZERVER sorolja be, a fajl bajtjaibol (2026-09-22 ota). Itt
+        // korabban `type: "OTHER"` allt, es epp az akadalyozta meg, hogy a
+        // helyszini fenykep PHOTO-t kapjon -- a partner pedig a PHOTO-t latja,
+        // az OTHER-t nem.
         const feltoltve = await uploadAssetDocuments(terv.ownerId, {
-          // A SZAMLA ES A GARANCIALEVEL AZ IRODABOL KERUL FEL; a helyszini kep
-          // OTHER, ugyanugy, mint az eszkoz lapjan (`assets/[id].tsx`).
-          type: "OTHER",
           files: terv.files,
         });
         return {

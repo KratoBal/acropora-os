@@ -1,0 +1,21 @@
+-- A FÉNYKÉPNEK SAJÁT FAJTÁJA LESZ: `AssetDocumentType.PHOTO`.
+--
+-- MIÉRT KELL KÜLÖN FAJTA, HOLOTT A MIME-TÍPUSBÓL IS LÁTSZIK, HOGY KÉP. Mert a
+-- kettő NEM ugyanaz az állítás: a MIME-típust a feltöltő gépe mondja, a fajtát
+-- ember választja. A partner-láthatóság emberi döntésen áll (Balázs, 2026-09-22:
+-- a partner lássa a fényképeket, a számlát ne), tehát a szűrés sem támaszkodhat
+-- arra, amit a böngésző küldött a `Content-Type` fejlécben.
+--
+-- EZ A MIGRÁCIÓ EGYETLEN MEGLÉVŐ SORT SEM ÍR ÁT. A már feltöltött képek
+-- átsorolása KÜLÖN migrációban áll (`..._asset_document_photo_backfill`), és a
+-- szétválasztás NEM rendrakás:
+--
+--   az `ALTER TYPE ... ADD VALUE` ugyanabban a tranzakcióban akkor biztonságos,
+--   ha a migráció az új értéket NEM használja DML-ben
+--
+-- Ugyanez az alak áll a repó eddigi MINDEN enum-bővítésében: tizenhat ilyen
+-- migráció van, és egyikben sem szerepel UPDATE. Nem szokás, hanem korlát -- az
+-- új felsorolás-érték a saját tranzakciójában még nem hivatkozható.
+
+-- AlterEnum
+ALTER TYPE "AssetDocumentType" ADD VALUE 'PHOTO';

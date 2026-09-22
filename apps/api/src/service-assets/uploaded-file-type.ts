@@ -106,6 +106,50 @@ export function canonicalMimetypeFor(kind: UploadedFileKind): string {
 }
 
 /**
+ * MELYIK DOKUMENTUM-FAJTA LEGYEN, HA A FELTOLTO NEM MONDTA MEG.
+ *
+ * === A SZABALY ===
+ *
+ *     kep (jpeg, png)   ->  PHOTO
+ *     minden mas        ->  OTHER
+ *
+ * === MIERT A BAJTOKBOL, ES NEM A BEJELENTETT TIPUSBOL ===
+ *
+ * Mert a `Content-Type` fejlecet a FELTOLTO GEPE mondja, a partner-lathatosag
+ * viszont EMBERI dontesen all (Balazs, 2026-09-22: a partner lassa a
+ * fenykepeket, a szamlat ne). Ha a fajtat a bejelentett tipus adna, a "PHOTO"
+ * nev valojaban azt jelentene, hogy "a kliens ezt irta a fejlecbe" -- es az a
+ * nev hazudni fogna, amint valaki mast ir bele.
+ *
+ * A `detectUploadedFileKind` a bejelentett tipust ES az elso bajtokat EGYUTT
+ * nezi, tehat az eredmenye nem a kliens allitasa.
+ *
+ * === ES AMI AKKOR TORTENIK, HA A KLIENS HAZUDIK ===
+ *
+ * Semmi, es ezt merni lehet, nem remelni: a kozos feltoltesi mag ugyanezzel a
+ * fuggvennyel ellenorzi a fajlt, es `null` eseten ELUTASITJA
+ * (`document-intake.ts`, `DocumentRejected`). Vagyis egy hamis fejleccel erkezo
+ * fajlbol SOR SEM KELETKEZIK -- tehat mindegy, milyen fajtat mondtunk ra. Az
+ * `OTHER` visszaeses igy nem "biztos, ami biztos", hanem a ZART alapertelmezes:
+ * amirol nincs allitasunk, azt a partner nem latja.
+ *
+ * === A PAR, AMI EZT A SZABALYT MASHOL IS VISELI ===
+ *
+ * Ugyanez a predikatum all a `20260922142100_asset_document_photo_backfill`
+ * migracioban, SQL alakban (`contentType LIKE 'image/%'`). A ketto NEM ket elo
+ * masolat: a migracio EGYSZER fut, es a mar tarolt sorokrol dont, ahol bajt
+ * nincs kezben, csak a kanonikus `contentType`. Ha ez a szabaly valaha
+ * valtozik, a migraciohoz NEM kell hozzanyulni -- az a multat rogzitette.
+ */
+export function assetDocumentKindForUpload(file: {
+  mimetype: string;
+  buffer: Buffer;
+}): "PHOTO" | "OTHER" {
+  const kind = detectUploadedFileKind(file.mimetype, file.buffer);
+  return kind === "jpeg" || kind === "png" ? "PHOTO" : "OTHER";
+}
+
+/**
  * A TAROLT TIPUSBOL VISSZA A FAJTAHOZ -- vagy `null`, ha nem a mienk.
  *
  * MIERT KELL: a MAR TAROLT sorokrol (visszamenoleges belyegkep-generalas,

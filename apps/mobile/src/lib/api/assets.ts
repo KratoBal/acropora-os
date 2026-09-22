@@ -324,11 +324,18 @@ export function getAssetQr(id: string) {
  * munkatér csomagjait (lásd `docs/MOBILE-DEVELOPMENT.md`). A nevek a
  * szerveréi, hogy a két oldal összevetése olvasásra is elvégezhető legyen.
  *
- * FÉNYKÉPNEK MA NINCS SAJÁT FAJTÁJA: az `OTHER` alá kerül. Hogy legyen-e külön
- * `PHOTO`, az termék-döntés, és séma-változást kíván - ez a felület úgy áll,
- * hogy bármelyik válasz mellett megmarad.
+ * A FÉNYKÉPNEK 2026-09-22 ÓTA SAJÁT FAJTÁJA VAN. Ez a megjegyzés korábban azt
+ * írta, hogy a fénykép az `OTHER` alá kerül, és hogy a külön `PHOTO` nyitott
+ * termék-döntés. A döntés megszületett (Balázs, 2026-09-22): a partner lássa a
+ * fényképeket, a számlát ne - és ezt csak külön fajtával lehet megadni, mert a
+ * MIME-típust a feltöltő gépe mondja, a fajtát viszont ember választja.
+ *
+ * A LISTA ITT MÁSOLAT, ÉS EZ SZÁNDÉKOS: a mobil a pnpm workspace-en KÍVÜL áll,
+ * tehát a közös csomagot nem tudja importálni. A fordító a két oldalt SOHA nem
+ * veti össze - ha a szerveren egy hatodik fajta keletkezik, itt semmi nem szól.
  */
-export type AssetDocumentType = "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER";
+export type AssetDocumentType =
+  "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER" | "PHOTO";
 
 /**
  * Egy feltöltött dokumentum sora, ahogy a végpont visszaadja.
@@ -410,7 +417,7 @@ export function setAssetDocumentCaption(
 
 export async function uploadAssetDocuments(
   id: string,
-  input: { type: AssetDocumentType; files: readonly PickedFile[] },
+  input: { type?: AssetDocumentType; files: readonly PickedFile[] },
 ): Promise<AssetDocumentSummary[]> {
   const built = buildDocumentUpload(input);
   if (!built.ok) throw new Error(built.reason);

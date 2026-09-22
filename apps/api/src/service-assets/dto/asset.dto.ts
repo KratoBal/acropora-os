@@ -1,3 +1,4 @@
+import { ASSET_DOCUMENT_TYPES } from "../../auth/partner-scope.util.js";
 import {
   ASSET_LABEL_BATCH_MAX,
   ASSET_LABEL_BATCH_MIN,
@@ -52,12 +53,24 @@ const ASSET_STATUSES = [
 ] as const;
 const ASSET_CRITICALITIES = ["LOW", "NORMAL", "HIGH", "CRITICAL"] as const;
 const ASSET_OWNER_TYPES = ["CUSTOMER", "SUPPLIER"] as const;
-export const ASSET_DOCUMENT_TYPES = [
-  "INVOICE",
-  "WARRANTY",
-  "MANUAL",
-  "OTHER",
-] as const;
+/**
+ * A FAJTAK LISTAJA EGY FORRASBOL JON, ES EZ 2026-09-22 OTA IGY VAN.
+ *
+ * Eddig itt EGY MASODIK, kezzel karbantartott masolat allt ugyanazzal a negy
+ * ertekkel. A kozos lista fejlece (`partner-scope.util.ts`) SZO SZERINT
+ * megnevezte, mi fog tortenni: "egy otodik fajta felvetelenel az egyik
+ * atvezetve marad, a masik nem -- es az elteres NEMA: a lemarado ag egyszeruen
+ * kihagyja az uj fajtat a szuresbol".
+ *
+ * Es pontosan ez az eset allt elo: a PHOTO fajta felvetelekor a ket lista kozul
+ * az egyik lemaradhatott volna. A ketto MA egyezett, de SEMMILYEN allitas nem
+ * kotote ossze oket -- tehat az egyezes szokas volt, nem garancia.
+ *
+ * Ezert a DTO mostantol a lathatosagi szabaly listajabol dolgozik: egy ertek
+ * felvetele EGY helyen tortenik, es a validacio meg a szures nem tud
+ * szetcsuszni.
+ */
+export { ASSET_DOCUMENT_TYPES } from "../../auth/partner-scope.util.js";
 
 /**
  * A query sztring nem hordoz tömböt: egy érték sztringként, több érték tömbként
@@ -446,8 +459,35 @@ export class UpdateAssetDto {
 }
 
 export class UploadAssetDocumentDto {
+  /**
+   * A FAJTA ELHAGYHATO, ES HA HIANYZIK, A FAJL DONTI EL.
+   *
+   * === KET DOLGOT OLD MEG EGYSZERRE, ES A MASODIK KULON LELET ===
+   *
+   * 1. A FENYKEP-FAJTA (a kert munka). A partner mostantol latja az eszkozerol
+   *    keszult kepeket; ehhez a kepnek `PHOTO` fajtat kell kapnia. Ha a
+   *    feltolto nem mond fajtat, a bajtokbol dol el: kep -> PHOTO, minden mas
+   *    -> OTHER (`assetDocumentKindForUpload`).
+   *
+   * 2. A PARTNER-FELTOLTES 400-AS HIBAJA. Ez a mezo eddig KOTELEZO volt, a
+   *    partner-feluleten viszont nincs fajta-valaszto: az onnan erkezo keres
+   *    `type` nelkul jott, es a validacio 400-zal elutasitotta. Ezt Balazs NEM
+   *    kerte, es kulon leletkent all a PR leirasaban -- ugyanaz a sor javitja,
+   *    de nem a fenykep-munka mellekhatasa.
+   *
+   * MIERT NEM ALLANDO AZ ALAPERTELMEZES (`OTHER` vagy `PHOTO`): mert akkor a
+   * fajta nem a fajlrol allitana valamit, hanem a KLIENSROL -- hogy olyan
+   * felulet kuldte, ami nem valaszt tipust. Az a nev hazudna, amint egy masik
+   * kliens is igy kuld. A teljes indoklas a fuggveny fejlecen all.
+   *
+   * ELTER A KET TESTVER-DTO ALAKJATOL, es ez tudatos: azok allando
+   * alapertelmezest visznek, ami egy FELTETELEZESEN all (hogy a telefonrol
+   * erkezo feltoltes mindig fenykep). A mienk a FAJL tulajdonsagan. A testverek
+   * kesobb atvehetik; ez a kartya nem nyul hozzajuk.
+   */
   @IsIn(ASSET_DOCUMENT_TYPES)
-  type!: (typeof ASSET_DOCUMENT_TYPES)[number];
+  @IsOptional()
+  type?: (typeof ASSET_DOCUMENT_TYPES)[number];
 
   /**
    * A FELIRAT MAR A FELTOLTESKOR MEGADHATO.

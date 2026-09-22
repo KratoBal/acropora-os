@@ -75,8 +75,50 @@ import type { UploadAssetDocumentDto } from "./dto/asset.dto.js";
  * kivulrol egyformanak latszik, es MAS szinten all.
  */
 describe("az eszkoz dokumentum-feltoltes hatarai", () => {
-  const fajl = (nev: string) =>
-    ({ originalname: nev, buffer: Buffer.from(nev) }) as Express.Multer.File;
+  /**
+   * A DUPLA VARRATA 2026-09-22-IG HIANYOS VOLT, ES EZ MERT ESET, NEM ELOVIGYAZAT.
+   *
+   * Eddig csak `originalname` es `buffer` allt benne. Amikor a feltoltes fajtaja
+   * a FAJLBOL kezdett eldolni, a hivo elkezdte olvasni a `mimetype` mezot -- es
+   * ez a NEGY meglevo allitas azonnal elhasalt (`Cannot read properties of
+   * undefined (reading 'trim')`).
+   *
+   * A FORDITO NEM SZOLT, es nem is szolhatott: a dupla `as Express.Multer.File`
+   * casttal all, tehat a hianyzo mezot a tipus elnyeli. A dupla azokra a
+   * mezokre keszult, amiket a SAJAT allitasai neznek; a hivo viszont azt
+   * hasznalja, amire NEKI van szuksege -- es a ketto pontosan ott ter el, ahol a
+   * teszt nem allit semmit.
+   */
+  const fajl = (nev: string, mimetype = "application/pdf", bajtok?: Buffer) =>
+    ({
+      originalname: nev,
+      mimetype,
+      buffer: bajtok ?? Buffer.from(nev),
+    }) as Express.Multer.File;
+
+  /*
+    VALODI ELSO BAJTOK, ES A PDF-E UGYANANNYIRA SZAMIT, MINT A KEPE.
+
+    A felismero a bejelentett tipust ES a tartalmat EGYUTT nezi, tehat egy
+    `application/pdf` fejleccel erkezo, nem-PDF puffer NEM "pdf", hanem `null`.
+
+    EZ EGY KALIBRACIOBOL DERULT KI, NEM OLVASASBOL. Az elso valtozatban a PDF
+    fixtura `Buffer.from(nev)` volt, es a "vegyesen erkezo fajlok" allitas
+    ZOLDEN ment -- csak epp a `null` agon, nem a `pdf`-en. Amikor a rontas a
+    `null` agat vitte PHOTO-ra, ez az allitas IS pirosodott, holott a nevében
+    PDF all. Ket allitas egy rontasra: a jel, hogy az egyik mast mer, mint amit
+    a neve iger.
+  */
+  const JPEG_BAJTOK = Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+    Buffer.from([1, 2, 3]),
+  ]);
+  const PDF_BAJTOK = Buffer.concat([
+    Buffer.from("%PDF-"),
+    Buffer.from([1, 2, 3]),
+  ]);
+  const kep = (nev: string) => fajl(nev, "image/jpeg", JPEG_BAJTOK);
+  const pdf = (nev: string) => fajl(nev, "application/pdf", PDF_BAJTOK);
 
   const hasznalo = {
     id: "user-1",
@@ -293,5 +335,84 @@ describe("az eszkoz dokumentum-feltoltes hatarai", () => {
       ),
       [PERMISSIONS.SERVICE_MANAGE],
     );
+  });
+  /*
+    ===================================================================
+    A FAJTA, HA A FELTOLTO NEM MONDTA MEG (2026-09-22)
+    ===================================================================
+
+    KET KULON KERDES, ES KULON IS ALLNAK:
+
+      1. ATMEGY-E a tipus nelkuli keres        <- ez volt a partner-oldal 400-asa
+      2. MILYEN fajtat kap a szolgaltatas      <- ez a fenykep-munka
+
+    Az elso onmagaban zold lenne egy allando alapertelmezessel is; a masodik
+    onmagaban nem mondana meg, hogy a keres egyaltalan eljut idaig.
+  */
+
+  it("típus NÉLKÜL is átmegy, és a kép PHOTO fajtát kap", async () => {
+    const kapott: string[] = [];
+    const controller = controllerrel((async (_id: string, type: string) => {
+      kapott.push(type);
+      return {} as never;
+    }) as unknown as ServiceAssetsService["addDocument"]);
+
+    await controller.uploadDocument(
+      "eszkoz-1",
+      ures,
+      [kep("kep.jpg")],
+      hasznalo,
+    );
+
+    assert.deepEqual(kapott, ["PHOTO"]);
+  });
+
+  /*
+    A FAJLONKENTI DONTES, ES EZ AZ ALLITAS OKA.
+
+    Egy keres tiz fajlt hozhat, vegyesen. Ha a fajta a cikluson KIVUL dolne el,
+    ez a ket fajl ugyanazt kapna -- es a PDF is megjelenne a partner elott.
+    A rontas, ami pirosra viszi: a dontes kiemelese a ciklus ele.
+  */
+  it("vegyes feltöltésnél FÁJLONKÉNT dől el a fajta", async () => {
+    const kapott: string[] = [];
+    const controller = controllerrel((async (_id: string, type: string) => {
+      kapott.push(type);
+      return {} as never;
+    }) as unknown as ServiceAssetsService["addDocument"]);
+
+    await controller.uploadDocument(
+      "eszkoz-1",
+      ures,
+      [kep("kep.jpg"), pdf("irat.pdf")],
+      hasznalo,
+    );
+
+    assert.deepEqual(kapott, ["PHOTO", "OTHER"]);
+  });
+
+  /*
+    ISMERT POZITIV KONTROLL: A MEGADOTT FAJTA EROSEBB.
+
+    Enelkul a ket fenti allitas egy olyan valtozat mellett is zold lenne, ami
+    MINDIG a fajlbol dont, es a feltolto valasztasat eldobja -- vagyis epp a
+    "szamlat nem" szabaly betujet nyitna ki (egy FENYKEPEZETT szamla PHOTO
+    lenne akkor is, ha a belsos kolleganak INVOICE-nak jeloli).
+  */
+  it("KONTROLL: a megadott fajta erősebb a fájlnál", async () => {
+    const kapott: string[] = [];
+    const controller = controllerrel((async (_id: string, type: string) => {
+      kapott.push(type);
+      return {} as never;
+    }) as unknown as ServiceAssetsService["addDocument"]);
+
+    await controller.uploadDocument(
+      "eszkoz-1",
+      { type: "INVOICE" } as UploadAssetDocumentDto,
+      [kep("szamla-fotoja.jpg")],
+      hasznalo,
+    );
+
+    assert.deepEqual(kapott, ["INVOICE"]);
   });
 });

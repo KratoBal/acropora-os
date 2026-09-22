@@ -16,7 +16,21 @@ export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
 
 export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
 
-export type AssetDocumentType = "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER";
+/**
+ * A DOKUMENTUM FAJTAJA, KLIENS-OLDALON.
+ *
+ * EZ A LISTA A NEGYEDIK PELDANY, ES A SZAM NEM RETORIKA -- merve 2026-09-22, a
+ * PHOTO fajta felvetelekor. Ugyanez a negy ertek allt a semaban, a szerver
+ * hatokor-szabalyaban, a tarolo DTO-jaban es itt. A PHOTO atvezetese soran a
+ * fordito ebbol KETTOT fogott meg (ezt es a webes feliratot), a mobil sajat
+ * masolata viszont NEMA maradt: az a csomag a pnpm workspace-en kivul all.
+ *
+ * AZ EGYEZEST MOSTANTOL ALLITAS ORZI, a testver-lista mintajara:
+ * `apps/api/src/service-assets/asset-document-type-egyezes.spec.ts`.
+ * A DTO masolata ugyanakkor MEGSZUNT: az a fajl mar ebbol a halmazbol dolgozik.
+ */
+export type AssetDocumentType =
+  "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER" | "PHOTO";
 
 export type AssetEventType =
   | "CREATED"
