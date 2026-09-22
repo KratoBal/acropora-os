@@ -82,6 +82,19 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    * megkulonboztetni, es nem is kell: a `<option value="">` ugyanazt jelenti.
    */
   const [categoryId, setCategoryId] = useState("");
+  /**
+   * AZ ESZKOZON MOST ALLO KATEGORIA NEVE -- KULON ALLAPOT, ES NEM PAZARLAS.
+   *
+   * A valaszto a torzsadat AKTIV sorait keri (a kivezetett ott pont azt hozna
+   * vissza, ami miatt kivezettuk). Egy eszkozon viszont ALLHAT kivezetett
+   * kategoria: a kivezetes a VALASZTOT szukiti, nem a mar rogzitett erteket
+   * tunteti el.
+   *
+   * Enelkul a `<select>` erteke olyan azonosito lenne, amihez nincs `<option>`,
+   * es a bongeszo URESET mutatna -- a kezelo azt hinne, nincs kategoria
+   * beallitva. Ugyanaz a hiba, amit a matricakodnal mar egyszer megfizettunk.
+   */
+  const [categoryName, setCategoryName] = useState("");
   const [categories, setCategories] = useState<AssetCategory[]>([]);
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
@@ -191,6 +204,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         setCriticality(asset.criticality);
         setName(asset.name);
         setCategoryId(asset.categoryId ?? "");
+        setCategoryName(asset.category ?? "");
         setManufacturer(asset.manufacturer ?? "");
         setModel(asset.model ?? "");
         setSerialNumber(asset.serialNumber ?? "");
@@ -668,6 +682,23 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 onChange={(event) => setCategoryId(event.target.value)}
               >
                 <option value="">Nincs megadva</option>
+                {/*
+                  A KIVEZETETT, DE MOST IS ERVENYES KATEGORIA SAJAT SORT KAP,
+                  MEGJELOLVE.
+                  A lista csak az aktivakat hozza, tehat enelkul a `value`
+                  olyan azonosito lenne, amihez nincs `option` -- a bongeszo
+                  ureset mutatna, es a kezelo azt hinne, nincs kategoria. A
+                  jeloles azert kell, hogy a kettot ne keverje ossze: ezt
+                  MEGTARTANI szabad, ujat valasztani belole nem.
+                */}
+                {categoryId &&
+                !categories.some((kategoria) => kategoria.id === categoryId) ? (
+                  <option value={categoryId}>
+                    {categoryName
+                      ? `${categoryName} (kivezetett)`
+                      : "Kivezetett kategória"}
+                  </option>
+                ) : null}
                 {categories.map((kategoria) => (
                   <option key={kategoria.id} value={kategoria.id}>
                     {kategoria.name}

@@ -12,7 +12,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getAsset, updateAsset, type AssetDetail } from "@/lib/api/assets";
+import {
+  getAsset,
+  listAssetCategories,
+  updateAsset,
+  type AssetDetail,
+} from "@/lib/api/assets";
 import { listPartnerUnits } from "@/lib/api/partners";
 import {
   listPerformanceUnits,
@@ -45,6 +50,7 @@ import { assetUpdateOperationId } from "@/lib/offline/sync-queue";
 import { enqueueAssetUpdate } from "@/lib/offline/queue-store";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { UnitPicker } from "@/components/assets/unit-picker";
+import { CategoryPicker } from "@/components/assets/category-picker";
 import {
   LabelCodeField,
   useLabelScanner,
@@ -139,6 +145,36 @@ export default function AssetEditScreen() {
    * csak ellenorizni akarta, azonnal latja.
    */
   const [unitPickerOpen, setUnitPickerOpen] = useState(false);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>(
+    [],
+  );
+  /**
+   * A KATEGORIA-LISTA BETOLTESE -- ES A HIBAJA NEM ALLITJA MEG A SZERKESZTEST.
+   *
+   * Ugyanaz a jegyzet all a felviteli kepernyon: ha a lista nem jon (terero
+   * nincs, a szerver nem valaszol), a valaszto URES marad, es minden mas mezo
+   * menthető.
+   *
+   * ES ITT VAN EGY TOBBLET, AMI A FELVITELEN NINCS: a MOSTANI kategoria neve a
+   * MENTETT LAPBOL jon (`asset.category`), nem ebbol a listabol. Terero nelkul
+   * tehat a szerelo akkor is LATJA, mi all az eszkozon -- csak masikat nem tud
+   * valasztani. A ket dolog kulon romlik el, es ez szandekos.
+   */
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    let elo = true;
+    void listAssetCategories()
+      .then((valasz) => {
+        if (elo) setCategories(valasz.items);
+      })
+      .catch(() => {
+        /* szandekosan nema: lasd a fenti jegyzetet */
+      });
+    return () => {
+      elo = false;
+    };
+  }, [status]);
   /**
    * A BEOLVASO UGYANAZ, MINT A FELVITELI KEPERNYON, es ez nem kenyelem: Balazs
    * kifejezetten a BEFOTOZAST kerte a telefonra (2026-09-16 10:42), a webre
@@ -478,6 +514,37 @@ export default function AssetEditScreen() {
           value={form.criticality}
           onChange={(value) => setForm({ ...form, criticality: value })}
         />
+
+        {/*
+          KATEGORIA. A telefonon eddig FELVINNI lehetett (a felviteli urlapon
+          van valaszto), MEGVALTOZTATNI nem -- egy mezo, amit felvinni lehet es
+          javitani nem, egy elgepeles utan zsakutca. Ugyanaz az indok, amiert a
+          helyszin 2026-08-27-en bekerult ide.
+
+          MINDEN TULAJDONOSNAL LATSZIK, ellentetben a helyszinnel: a kategoria
+          torzsadat, ami minden eszkozon ertelmes. A helyszint a szerver vevo
+          tulajdonosnal elutasitja, a kategoriat nem.
+
+          A MOSTANI ERTEK AKKOR IS KIIRODIK, HA KIVEZETTEK -- a valaszto ezt a
+          `currentName` mezoben kapja. Enelkul a csukott sor „Nincs megadva"
+          feliratot mutatna egy olyan eszkozon, aminek VAN kategoriaja, es a
+          szerelo vakon irna felul. Ezt a hibat a matricakodnal mar egyszer
+          megfizettuk.
+        */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Kategória</Text>
+          <CategoryPicker
+            options={categories}
+            value={form.categoryId}
+            currentName={asset.category}
+            open={categoryPickerOpen}
+            onChange={(categoryId) => {
+              setForm({ ...form, categoryId });
+              setCategoryPickerOpen(false);
+            }}
+            onToggle={() => setCategoryPickerOpen((nyitva) => !nyitva)}
+          />
+        </View>
 
         {/*
           HELYSZÍN. A felviteli űrlap ugyanezt kínálja; itt a javítás lehetősége

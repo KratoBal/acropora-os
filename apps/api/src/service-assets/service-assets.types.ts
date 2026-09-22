@@ -96,6 +96,22 @@ export const assetSummaryInclude = {
    * CSENDBEN vinne el a masik agat.
    */
   label: { select: { code: true } },
+  /*
+    A KATEGORIA A TORZSADATBOL JON. A soron ott all meg a regi szoveges mezo
+    is, de amit a felulet lat, az ez -- a ketto egyutt allasa szandekos, es a
+    migracio ELLENORIZHETOSEGET szolgalja.
+
+    ES AZ OSSZEFOGLALOBAN ALL, NEM A RESZLETESBEN (2026-09-22). Ugyanaz az
+    indok, mint a `label` felett: az adatlap SZORASSAL veszi at az
+    osszefoglalot, tehat egy helyen all, nem kettoben.
+
+    A VALODI OK VISZONT NEM A DUPLIKACIO, HANEM A SZURES. Amig a kategoria csak
+    az adatlapon all, a LISTA nem tud rendezni vagy szurni ra -- es Balazs
+    kerese (bc0bba3f) nem az elgepeles ellen szolt, hanem azert, hogy a
+    kategoria hasznalhato legyen. Egy legordulomenu, ami utan a lista tovabbra
+    sem tud szurni, a tunetet oldja meg, nem a kerest.
+  */
+  categoryRef: { select: { id: true, name: true } },
 } satisfies Prisma.AssetInclude;
 
 /**
@@ -147,12 +163,6 @@ export const assetDetailInclude = {
    * azt jelentene, hogy egy regi eszkoz teljesitmenye egy nap eltunik a lapjarol.
    */
   performanceUnit: { select: { id: true, code: true, name: true } },
-  /*
-    A KATEGORIA A TORZSADATBOL JON. A soron ott all meg a regi szoveges mezo
-    is, de amit a felulet lat, az ez -- a ketto egyutt allasa szandekos, es a
-    migracio ELLENORIZHETOSEGET szolgalja.
-  */
-  categoryRef: { select: { id: true, name: true } },
 } satisfies Prisma.AssetInclude;
 
 export type AssetSummaryRow = Prisma.AssetGetPayload<{

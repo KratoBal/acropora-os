@@ -61,6 +61,14 @@ export interface QueuedAssetUpdateBase {
   criticality?: string;
   /** A helyszin AZONOSITOJA, nem a neve. `null`, ha nem volt beallitva. */
   departmentId?: string | null;
+  /**
+   * A KATEGORIA AZONOSITOJA, ahogy a szerkesztes kezdetekor allt.
+   *
+   * AZONOSITO, NEM NEV, ugyanabbol az okbol, amiert a helyszinnel is az all
+   * itt: a torzsadaton a nev atirhato, es egy atnevezes kulonben ugy latszana,
+   * mintha mas is hozzanyult volna az eszkozhoz.
+   */
+  categoryId?: string | null;
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;
