@@ -46,6 +46,7 @@ function szolgaltatas(be: {
    */
   worksheetSigned?: string;
   jobOpened?: string;
+  redirect?: string;
   sender?: MailSender | null;
 }) {
   const kuldott: OutgoingMail[] = [];
@@ -79,6 +80,14 @@ function szolgaltatas(be: {
       TICKET_MAIL_MODE: be.mode,
       TICKET_MAIL_WORKSHEET_SIGNED: be.worksheetSigned ?? "live",
       TICKET_MAIL_JOB_OPENED: be.jobOpened ?? "live",
+      /*
+        AZ ATIRANYITAS KIMONDOTT `off`-ON ALL, NEM URESEN.
+        A hianyzo ertek 2026-09-22 ota BLOKKOL (`no-redirect`), tehat egy ures
+        mezo mellett EGYETLEN allitas sem jutna el a mert viselkedesig. A `off`
+        itt azt mondja ki, amit a fixtura amugy is felteteleZ: a level a VALODI
+        cimzettnek megy.
+      */
+      TICKET_MAIL_REDIRECT_TO: be.redirect ?? "off",
     } as NodeJS.ProcessEnv),
     kuldott,
     naplo,
@@ -340,6 +349,59 @@ describe("a nyito ertesitese levelben", () => {
    * ES A KET KAPCSOLO ITT SZANDEKOSAN NYITVA VAN: enelkul a kapu allna meg
    * elobb, es az allitas a kapurol szolna, nem a kuldorol.
    */
+  /**
+   * A HIANYZO ATIRANYITAS MEGALLITJA A KULDEST -- MIND A HAROM UTON.
+   *
+   * acrobot dontese (2026-09-22, msg 22022), Balazs keresebol: "nyissuk mind a
+   * harmat de nem menjen ki veletlenul se level senkinek". Az elso alakomban a
+   * vedelem KET ember-lepes helyes SORRENDJEN allt: ha a negy kapcsolot
+   * beallitja es az otodiket elfelejti, epp az tortenik, amit kizart.
+   *
+   * KET ALLITAS, UTANKENT, es ez nem ismetles: a ket ut KET KULON hivohelyen
+   * kerdezi a kaput. Egy kozos allitas csak az egyiket merne -- es epp azt a
+   * hibas megvalositast engedne at, amit acrobot elore megnevezett ("ha az
+   * atiranyitas csak az EGYIK uton hat").
+   */
+  it("nyitott kapcsolók mellett a HIÁNYZÓ átirányítás megállítja a munkalap-levelet", async () => {
+    const { service, kuldott, naplo } = szolgaltatas({
+      mode: "live",
+      worksheetSigned: "live",
+      redirect: "",
+    });
+
+    assert.deepEqual(
+      await service.deliverWorksheetSigned({
+        serviceJobId: "job-1",
+        actorUserId: "user-2",
+      }),
+      { kind: "skipped", reason: "no-redirect" },
+    );
+    assert.deepEqual(kuldott, [], "atiranyitas nelkul nem mehet ki level");
+    assert.deepEqual(
+      naplo,
+      [],
+      "a hianyzo atiranyitas a KORNYEZET allapota: nem a jegy naplojaba valo",
+    );
+  });
+
+  it("nyitott kapcsolók mellett a HIÁNYZÓ átirányítás megállítja az ügyfél-bejelentést is", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      jobOpened: "live",
+      redirect: "",
+    });
+
+    assert.deepEqual(
+      await service.deliverServiceJobOpened({
+        serviceJobId: "job-1",
+        actorUserId: null,
+        recipients: [{ email: "felelos@example.invalid" }],
+      }),
+      { kind: "skipped", reason: "no-redirect" },
+    );
+    assert.deepEqual(kuldott, []);
+  });
+
   it("hiányzó küldőnél az ok no-sender, nem mail-off", async () => {
     const { service, kuldott, naplo } = szolgaltatas({
       mode: "live",

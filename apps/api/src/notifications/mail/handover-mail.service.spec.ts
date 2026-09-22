@@ -27,6 +27,7 @@ function felallit(be?: {
   mode?: string;
   /** Az ATADASI ut sajat kulcsa (`TICKET_MAIL_HANDOVER`), a fo kapun BELUL. */
   utMode?: string;
+  redirect?: string;
   recipients?: (typeof AKTIV)[];
   departmentId?: string | null;
   customerId?: string | null;
@@ -89,6 +90,14 @@ function felallit(be?: {
   const service = new HandoverMailService(repository, ticketMail, sender, {
     TICKET_MAIL_MODE: be?.mode ?? "live",
     TICKET_MAIL_HANDOVER: be?.utMode ?? "live",
+    /*
+      AZ ATIRANYITAS KIMONDOTT `off`-ON ALL, NEM URESEN.
+      A hianyzo ertek 2026-09-22 ota BLOKKOL (`no-redirect`), tehat egy ures
+      mezo mellett EGYETLEN allitas sem jutna el a mert viselkedesig. A `off`
+      itt azt mondja ki, amit a fixtura amugy is felteteleZ: a level a VALODI
+      cimzettnek megy.
+    */
+    TICKET_MAIL_REDIRECT_TO: be?.redirect ?? "off",
   } as NodeJS.ProcessEnv);
 
   const csomag = {
@@ -176,6 +185,31 @@ describe("a lezárt hibajegy kiküldése", () => {
     });
 
     assert.deepEqual(eredmeny, { kind: "skipped", reason: "mail-off" });
+    assert.equal(t.kuldott.length, 0);
+    assert.equal(t.naplo.length, 0);
+  });
+
+  /**
+   * A HARMADIK UT: HIANYZO ATIRANYITAS MELLETT SEM MEGY KI.
+   *
+   * acrobot dontese (2026-09-22, msg 22022). Ez az ut a legdragabb tevedes
+   * helye: CSATOLMANNYAL megy, a VEVO portal-fiokjaiba, es a lezart hibajegy
+   * teljes csomagjat viszi. Egy elfelejtett kornyezeti valtozo itt nem
+   * "egy level", hanem a vevo eszkozeinek dokumentacioja.
+   *
+   * ES A NAPLO SEM KAP SORT: a hianyzo atiranyitas a KORNYEZET allapota, nem a
+   * jegye -- ugyanaz a hatar, ami a `mail-off` sornal all felette.
+   */
+  it("nyitott kapcsolók mellett a HIÁNYZÓ átirányítás megállítja az átadási levelet", async () => {
+    const t = felallit({ mode: "live", utMode: "live", redirect: "" });
+    const eredmeny = await t.service.send({
+      serviceJobId: "job-1",
+      message: "Köszönjük.",
+      actorUserId: "user-1",
+      package: t.csomag,
+    });
+
+    assert.deepEqual(eredmeny, { kind: "skipped", reason: "no-redirect" });
     assert.equal(t.kuldott.length, 0);
     assert.equal(t.naplo.length, 0);
   });

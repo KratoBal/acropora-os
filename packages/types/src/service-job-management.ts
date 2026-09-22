@@ -804,7 +804,12 @@ export function isPartnerServiceJobDetail(
  * az ALIASA (`handover-mail-recipients.ts`), nem masolata.
  */
 export type ServiceJobHandoverMailSkipReason =
-  "mail-off" | "path-off" | "no-department" | "no-customer" | "no-recipient";
+  | "mail-off"
+  | "path-off"
+  | "no-redirect"
+  | "no-department"
+  | "no-customer"
+  | "no-recipient";
 
 /**
  * EGY CIMZETT, AHOGY A KEZELO LATJA A KULDES ELOTT.

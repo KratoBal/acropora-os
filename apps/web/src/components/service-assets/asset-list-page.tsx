@@ -40,11 +40,23 @@ import {
 import { sv } from "@/components/service/service-theme";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { assetsApi } from "@/lib/api/assets";
+import { assetCategoriesApi } from "@/lib/api/asset-categories";
 import {
   assetKindLabel,
   assetStatusLabel,
   assetStatusTone,
 } from "./asset-labels";
+
+/**
+ * A „NINCS KATEGORIA" SOR ERTEKE A LENYILOBAN.
+ *
+ * NEM ures string (az a „Minden kategória"), es nem is egy valodi azonosito:
+ * egy sentinel, amit a `setCategoryFilter` fordit at a szerver sajat
+ * `category=without` parameterere. Azert all konstansban, mert KET helyen kell
+ * (a beallito es a visszaolvaso agban), es egy elgepelt masodik elofordulas
+ * csendben azt adna, hogy a valaszto „Minden kategória"-ra ugrik vissza.
+ */
+const NINCS_KATEGORIA = "__NINCS__";
 
 const TABS = [
   { key: "ALL", label: "Összes" },
@@ -268,6 +280,38 @@ export function AssetListPage() {
       });
     return () => controller.abort();
   }, [canView, token, unitsOwnerId]);
+  /**
+   * A KATEGORIA-VALASZTO A KIVEZETETTEKET IS KERI, ES EZ ELLENTETES A FELVITELI
+   * URLAPPAL -- SZANDEKOSAN.
+   *
+   * A felvitelen a kivezetett kategoria pont azt hozna vissza, ami miatt
+   * kivezettuk. A SZURES viszont nem rendel hozza semmit, csak olvas: ha egy
+   * kivezetett kategoria kimaradna innen, az azon allo eszkozokre NEM LEHETNE
+   * rakeresni, holott a listaban ott all a nevuk. Ugyanaz az indok, ami a
+   * teljesitmeny-egyseg behuzasa folott all: a kivezetes a VALASZTOT szukiti,
+   * nem a mar rogzitett erteket tunteti el.
+   */
+  const [categories, setCategories] = useState<
+    Awaited<ReturnType<typeof assetCategoriesApi.list>>["items"]
+  >([]);
+  useEffect(() => {
+    if (!canView) return;
+    const controller = new AbortController();
+    void assetCategoriesApi
+      .list(token, true, controller.signal)
+      .then((response) => setCategories(response.items))
+      /*
+        A KATEGORIAK HIANYA NEM TORI EL A LISTAT, ugyanugy, mint a
+        helyszineknel: a tobbi szuro mukodik tovabb, es a valaszto nem kinal
+        semmit. A kulonbseg a helyszinekhez kepest az, hogy itt NINCS kulon
+        hibauzenet -- a valaszto egyetlen, mindig jelen levo elemet
+        („Minden kategória") tovabbra is mutatja, tehat nem tunik el egy panel,
+        amibol a kezelo hianyra kovetkeztetne.
+      */
+      .catch(() => setCategories([]));
+    return () => controller.abort();
+  }, [canView, token]);
+
   const selectedUnits = useMemo(() => readUnitFilter(params), [params]);
   /**
    * A FA SORAI, MELYSEGGEL ES TELJES UTTAL EGYUTT.
@@ -296,6 +340,37 @@ export function AssetListPage() {
     next.set("page", "1");
     router.replace(`${pathname}?${next}`);
   };
+
+  /**
+   * EGY VALASZTO, KET SZERVER-PARAMETER -- ES EZERT NEM MEGY A `filter()`-en.
+   *
+   * A vegpont KET kulon kerdest ismer: a `category=with|without` azt, hogy VAN-E
+   * kategoria, a `categoryId` azt, hogy MELYIK. A kezelonek viszont egyetlen
+   * lenyilo a termeszetes alak, amiben a „Nincs kategória" egy sor a tobbi
+   * kozott.
+   *
+   * MIERT KELL A „NINCS" AG EGYALTALAN: az atvezeto migracio SZANDEKOSAN hagyja
+   * `NULL`-on azt az eszkozt, aminek a regi szoveges erteke egyetlen
+   * kategoriara sem illeszkedett. Az a halmaz csendben nőne, ha semmi nem tudna
+   * rakerdezni -- es pont az a halmaz az, amit at kell nezni.
+   *
+   * A KETTO EGYSZERRE ALL BE, EGY CIM-CSEREBEN. Ket egymas utani `filter()`
+   * hivas a MASODIK `params`-ot a legelso allapotbol epitene fel (a `router`
+   * frissulese nem szinkron), tehat az elso beallitas elveszne.
+   */
+  const setCategoryFilter = (value: string) => {
+    const next = new URLSearchParams(params.toString());
+    next.delete("category");
+    next.delete("categoryId");
+    if (value === NINCS_KATEGORIA) next.set("category", "without");
+    else if (value) next.set("categoryId", value);
+    next.set("page", "1");
+    router.replace(`${pathname}?${next}`);
+  };
+  const categoryFilterValue =
+    params.get("category") === "without"
+      ? NINCS_KATEGORIA
+      : (params.get("categoryId") ?? "");
 
   /**
    * A CSEMPE ES A FUL UGYANAZT IRJA. Az "ures" ITT NEM jo visszakapcsolt
@@ -392,6 +467,26 @@ export function AssetListPage() {
               ))}
             </select>
           </label>
+          <label>
+            <span className="sr-only">Kategória</span>
+            <select
+              className={sv.select}
+              value={categoryFilterValue}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+            >
+              <option value="">Minden kategória</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.isActive
+                    ? category.name
+                    : `${category.name} (kivezetett)`}
+                </option>
+              ))}
+              {/* A SOR ALUL ALL, ES A TOBBITOL ELKULONULVE OLVASODIK: nem egy
+                  kategoria, hanem a HIANYUK. Feliratban is ezt mondja. */}
+              <option value={NINCS_KATEGORIA}>Nincs kategória</option>
+            </select>
+          </label>
           {/* HANY ESZKOZ EGY OLDALON.
 
               A `filter()`-en megy at, ES EZ A LENYEGE: az a segéd a vegen
@@ -427,7 +522,7 @@ export function AssetListPage() {
       {data?.items.length ? (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] border-collapse text-left">
+            <table className="w-full min-w-[1080px] border-collapse text-left">
               <thead>
                 <tr>
                   <SortableHead sort="name" params={params} onSort={setSort}>
@@ -454,6 +549,12 @@ export function AssetListPage() {
                     senki nem tud elolvasni.
                   */}
                   <th className={sv.tableHead}>Hierarchia</th>
+                  {/* A KATEGORIA NEM RENDEZHETO FEJLEC, ES EZ NEM KIHAGYAS:
+                      a torzsadatnak sajat `sortOrder` mezoje van, tehat a
+                      „rendezes kategoria szerint" ket kulonbozo dolgot
+                      jelenthet (nev vagy a karbantartott sorrend). A kerdes
+                      Balazse, ugyanugy, mint a ket szomszedos oszlopnal. */}
+                  <th className={sv.tableHead}>Kategória</th>
                   <th className={sv.tableHead}>Műszaki azonosító</th>
                   <SortableHead sort="status" params={params} onSort={setSort}>
                     Státusz
@@ -540,6 +641,13 @@ export function AssetListPage() {
                         "Önálló eszköz"
                       )}
                     </td>
+                    {/* A KATEGORIA A SORON: a szures enelkul nem mutatna meg,
+                        MIRE szurt -- ugyanaz az indok, ami a leltari szam es a
+                        matricakod kiirasa folott all. A gondolatjel az URES
+                        ertek, nem hiba: az atvezetes szandekosan hagy `NULL`-on
+                        olyan sort, amit at kell nezni, es a „Nincs kategória"
+                        szuro pont ezeket hozza elo. */}
+                    <td className={sv.tableCell}>{asset.category ?? "—"}</td>
                     <td className={sv.tableCell}>
                       {[asset.manufacturer, asset.model, asset.serialNumber]
                         .filter(Boolean)

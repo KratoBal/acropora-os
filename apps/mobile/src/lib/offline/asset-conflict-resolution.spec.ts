@@ -5,6 +5,7 @@ import {
   compareQueuedUpdate,
   rebuildResolvedPatch,
   resolutionIsEmpty,
+  type ComparableField,
   type CurrentAssetLike,
 } from "./asset-conflict-resolution";
 import type { UpdateAssetInput } from "../assets/asset-fields";
@@ -260,6 +261,61 @@ describe("mi megy el a feloldás után", () => {
 
     assert.equal("manufacturer" in uj, true);
     assert.equal(uj.manufacturer, null);
+  });
+
+  /**
+   * MINDEN OSSZEVETHETO MEZO ATJUT A FELOLDASON -- NEM CSAK AZ, AMIT EDDIG
+   * MERTUNK.
+   *
+   * A MERT HIANY (2026-09-22): a masolo `switch` HAROM mezot nem ismert
+   * (`labelCode`, `performance`, `performanceUnitId`), holott a feloldo
+   * kepernyo MIND A HAROMRA sort rajzolt es valaszthatova tette oket. A
+   * szerelo dontese CSENDBEN kimaradt az ujrakuldott torzsbol.
+   *
+   * EGYETLEN TESZT SEM FOGTA MEG, mert mindegyik a `manufacturer` mezot
+   * tartotta meg -- azt, amelyik a lefedett agak kozott volt.
+   *
+   * EZERT MEGY A MEZOLISTA a `MEZO_NEVE` kulcsaibol, es nem kezzel irt
+   * felsorolasbol: egy uj mezo felvetele igy MAGATOL bekerul ebbe az
+   * allitasba. Egy kezzel irt lista ugyanazt a hibat ismetelne meg, amit ez a
+   * teszt megtalalt.
+   */
+  it("MINDEN összevethető mezőt átvisz, amit a szerelő megtart", () => {
+    const teljes: UpdateAssetInput = {
+      expectedUpdatedAt: "regi",
+      status: "IN_REPAIR",
+      criticality: "HIGH",
+      departmentId: "unit-1",
+      categoryId: "cat-1",
+      manufacturer: "Grundfos",
+      model: "UPS 25-40",
+      serialNumber: "SN-1",
+      inventoryNumber: "LT-1",
+      description: "leiras",
+      notes: "megjegyzes",
+      labelCode: "V2196",
+      performance: "500",
+      performanceUnitId: "uom-1",
+    };
+    const mezok = Object.keys(teljes).filter(
+      (kulcs) => kulcs !== "expectedUpdatedAt",
+    ) as ComparableField[];
+
+    const uj = rebuildResolvedPatch({
+      patch: teljes,
+      keepMine: mezok,
+      freshUpdatedAt: most.updatedAt,
+    });
+
+    for (const mezo of mezok)
+      assert.equal(
+        uj[mezo],
+        teljes[mezo],
+        `a feloldas elejtette ezt a mezot: ${mezo}`,
+      );
+    // ISMERT POZITIV: a fenti ciklus URES mezolistan is atmenne, tehat a
+    // darabszamot is ki kell mondani. Ma tizenharom osszevetheto mezo van.
+    assert.equal(mezok.length, 13);
   });
 
   it("ha MINDENT a másikénak hagy, a törzs ÜRES, és ezt ki lehet mondani", () => {
