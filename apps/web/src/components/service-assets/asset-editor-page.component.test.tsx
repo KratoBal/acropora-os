@@ -36,6 +36,7 @@ const api = vi.hoisted(() => ({
 }));
 const suppliers = vi.hoisted(() => ({ units: vi.fn() }));
 const unitsOfMeasure = vi.hoisted(() => ({ list: vi.fn() }));
+const categories = vi.hoisted(() => ({ list: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/szerviz/eszkozok/uj",
@@ -65,6 +66,15 @@ vi.mock("@/lib/api/assets", () => ({ assetsApi: api }));
 vi.mock("@/lib/api/suppliers", () => ({ suppliersApi: suppliers }));
 vi.mock("@/lib/api/units-of-measure", () => ({
   unitsOfMeasureApi: unitsOfMeasure,
+}));
+/*
+  A KATEGORIA-KLIENS IS MOCKOLVA, ugyanabbol az okbol, amit a fenti jegyzet
+  leir: enelkul VALODI hivas megy a `127.0.0.1:3000` cimre, es a zold nem
+  mondja meg -- egy ures kategoria-lista pontosan ugy nez ki, mint egy halott
+  hivas.
+*/
+vi.mock("@/lib/api/asset-categories", () => ({
+  assetCategoriesApi: categories,
 }));
 
 const session: Session = {
@@ -135,6 +145,7 @@ beforeEach(() => {
   });
   suppliers.units.mockResolvedValue({ items: [] });
   unitsOfMeasure.list.mockResolvedValue({ items: [WATT, KILOWATT] });
+  categories.list.mockResolvedValue({ items: [SZIVATTYU] });
 });
 
 /** A ket teljesitmeny-egyseg, amit a valaszto kinal. */
@@ -147,6 +158,113 @@ const WATT = {
   sortOrder: 0,
 };
 const KILOWATT = { ...WATT, id: "uom-kw", code: "kW", name: "kilowatt" };
+
+/** A valaszto EGYETLEN aktiv kategoriaja. A kivezetett szandekosan hianyzik. */
+const SZIVATTYU = {
+  id: "cat-szivattyu",
+  name: "Szivattyú",
+  isActive: true,
+  sortOrder: 0,
+};
+
+/**
+ * A KIVEZETETT KATEGORIA, AMI MAR OTT ALL AZ ESZKOZON.
+ *
+ * Ugyanaz az alak, mint a tulajdonosnal a fajl fejlecében: a VALASZTO listaja
+ * szukebb, mint ami egy MEGLEVO eszkozon allhat. A kivezetes a valasztot
+ * szukiti, nem a mar rogzitett erteket tunteti el.
+ *
+ * MI PIROSIT: ha a `select` csak az aktiv sorokat kapja. Akkor a `value` olyan
+ * azonosito, amihez nincs `option`, a bongeszo ureset mutat, es a kezelo azt
+ * hiszi, nincs kategoria beallitva -- majd valaszt egyet, es egy ervenyes
+ * erteket ir felul vakon. Ez a matricakod hibaja, masodszor.
+ */
+describe("AssetEditorPage kategória-választója", () => {
+  const kivezetettel = {
+    ...asset,
+    categoryId: "cat-regi",
+    category: "Régi világítás",
+  } as unknown as AssetDetail;
+
+  it("KONTROLL: az aktív kategória sima sorként jelenik meg", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      categoryId: "cat-szivattyu",
+      category: "Szivattyú",
+    } as unknown as AssetDetail);
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    expect(
+      await screen.findByRole("option", { name: "Szivattyú" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /kivezetett/ }),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Kategória")).toHaveProperty(
+        "value",
+        "cat-szivattyu",
+      ),
+    );
+  });
+
+  it("a kivezetett kategória saját sort kap, megjelölve", async () => {
+    api.detail.mockResolvedValue(kivezetettel);
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    expect(
+      await screen.findByRole("option", {
+        name: "Régi világítás (kivezetett)",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * ES A MEZO TENYLEGESEN EZT AZ ERTEKET VISELI, nem uresen all.
+   *
+   * KULON ALLITAS, es nem ismetles: az `option` LETEZHET ugy is, hogy a
+   * `select` erteke mellette ures marad (rossz `value`, rossz sorrend). A
+   * tulajdonos-mezonel ugyanez ket allitasban all, ugyanezert.
+   */
+  it("a mező a kivezetett kategóriát viseli, nem üres", async () => {
+    api.detail.mockResolvedValue(kivezetettel);
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Kategória")).toHaveProperty(
+        "value",
+        "cat-regi",
+      ),
+    );
+  });
+
+  /**
+   * NEV NELKUL IS SOR KELETKEZIK.
+   *
+   * Regi mentett lapon vagy egy meg le nem toltott valaszon a nev hianyozhat.
+   * Egy ures `option` ugyanolyan nema lenne, mint a hianyzo: a „Kivezetett
+   * kategória" legalabb megmondja, hogy VAN ertek.
+   */
+  it("név nélkül is sor keletkezik, általános felirattal", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      categoryId: "cat-regi",
+    } as unknown as AssetDetail);
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    expect(
+      await screen.findByRole("option", { name: "Kivezetett kategória" }),
+    ).toBeInTheDocument();
+  });
+});
 
 describe("AssetEditorPage tulajdonos-listája", () => {
   it("asks the server to keep the owner the asset already has", async () => {
