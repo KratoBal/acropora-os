@@ -195,6 +195,17 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
     });
     const ids = customers.map((customer) => customer.id);
     /**
+     * A MUNKALAP ELOSZOR, MERT A SORA (`WorksheetLine.assetId`) `Restrict`-tel
+     * mutat az ESZKOZRE. A `Worksheet` torlese kaszkadban viszi a verziot es
+     * a sort is -- enelkul a lentebbi `asset.deleteMany` a `withWorksheetLine`
+     * eszkozon `WorksheetLine_assetId_fkey` hibaval allna meg (merve a CI-ben,
+     * verify job 106975769353: a hookFailed pontosan ezt a megszoritast
+     * nevezte meg).
+     */
+    if (ids.length > 0) {
+      await prisma.worksheet.deleteMany({ where: { customerId: { in: ids } } });
+    }
+    /**
      * A HIBAJEGYEK ELOTAGRA SZURVE, ES A VEVO-BLOKKON KIVUL.
      *
      * ITT `customerId` SZERINT MENT, es az a `SetNull` miatt kevés: a vevo
@@ -226,9 +237,9 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
     });
     // A HELYSZIN (`WorksheetDepartment`) `Restrict`-tel mutat rá mind az
     // eszközre, mind a hibajegyre -- ezért csak MOST, a kettő törlése után
-    // szabad hozzányúlni, nem a vevő-blokk elején, ahol korábban állt.
+    // szabad hozzányúlni, nem a vevő-blokk elején, ahol korábban állt. A
+    // `Worksheet` törlése fentebb, MÉG AZ ESZKÖZÖK ELŐTT megtörtént.
     if (ids.length > 0) {
-      await prisma.worksheet.deleteMany({ where: { customerId: { in: ids } } });
       await prisma.worksheetDepartment.deleteMany({
         where: { customerId: { in: ids } },
       });

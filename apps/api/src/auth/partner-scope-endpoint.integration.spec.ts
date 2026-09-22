@@ -1843,10 +1843,18 @@ describe(
        * megjelenese bizonyitja, hogy ez az ut EGYALTALAN tud sort visszaadni.
        */
       it("a saját alegység látszik, az idegené nem", async () => {
+        /**
+         * A `units()` a TUKOR VEVO OSSZES helyszinet adja vissza (lasd
+         * `suppliers.repository.ts:units`), nem csak azt, amin eszkoz all --
+         * a `unitOfSupplierAOther` UGYANAHHOZ a tukorhoz tartozik, mint
+         * `unitOfSupplierA` (mindketto `mirrorA.id` alatt), tehat MINDKETTO
+         * a "sajat" listaban all. Ez a helyes viselkedes: a lista a partner
+         * helyszin-fajat adja, nem az eszkoz-erintettseget.
+         */
         const own = await suppliers.units(supplierA, asSupplierA);
         assert.deepEqual(
-          own.items.map((item) => item.id),
-          [unitOfSupplierA],
+          own.items.map((item) => item.id).sort(),
+          [unitOfSupplierA, unitOfSupplierAOther].sort(),
         );
 
         const foreign = await suppliers.units(supplierB, asSupplierA);

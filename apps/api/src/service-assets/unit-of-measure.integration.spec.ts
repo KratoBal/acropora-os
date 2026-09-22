@@ -35,6 +35,18 @@ let customerId = "";
 let actorUserId = "";
 let egysegId = "";
 let masikEgysegId = "";
+/**
+ * AZ „ALKALMAZASON AT” BLOKK ESZKOZE SZALLITOI TULAJDONU, VALOS HELYSZINNEL.
+ *
+ * A `felvitel()` korabban `ownerType: "CUSTOMER"`-t hasznalt departmentId
+ * nelkul, es `repository.create()`-et KOZVETLENUL hivja -- a
+ * `department_required` migracio ota ez `Invalid prisma.asset.create()
+ * invocation` hibaval hasal el (a CUSTOMER agon a repository
+ * `departmentId: undefined`-t ir, a mezo viszont NOT NULL). Ez a blokk a
+ * teljesitmeny-par mezoparjarol szol, nem a tulajdonos-tengelyrol.
+ */
+let szallitoId = "";
+let helyszinId = "";
 
 async function removeLeftovers() {
   await prisma.asset.deleteMany({
@@ -43,6 +55,18 @@ async function removeLeftovers() {
   await prisma.asset.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
   });
+  // A `felvitel()`-lel (repository.create) letrehozott sorok SEM vevot, SEM
+  // a teszt-elotagos assetNumber-t nem viselik -- a HELYSZINEN at kell oket
+  // megtalalni, a helyszin torlese elott (`Asset.departmentId` Restrict).
+  await prisma.asset.deleteMany({
+    where: {
+      department: { customer: { customerNumber: { startsWith: PREFIX } } },
+    },
+  });
+  await prisma.worksheetDepartment.deleteMany({
+    where: { customer: { customerNumber: { startsWith: PREFIX } } },
+  });
+  await prisma.supplier.deleteMany({ where: { code: { startsWith: PREFIX } } });
   await prisma.unitOfMeasure.deleteMany({
     where: { code: { startsWith: PREFIX } },
   });
@@ -136,6 +160,16 @@ describe("mértékegység törzsadat", { skip: gate.mode === "skip" }, () => {
       select: { id: true },
     });
     masikEgysegId = masik.id;
+    const helyszin = await prisma.worksheetDepartment.create({
+      data: { customerId, code: "UOM", name: `${PREFIX} helyszín` },
+      select: { id: true },
+    });
+    helyszinId = helyszin.id;
+    const szallito = await prisma.supplier.create({
+      data: { code: `${PREFIX}-S`, name: `${PREFIX} szállító` },
+      select: { id: true },
+    });
+    szallitoId = szallito.id;
   });
 
   after(async () => {
@@ -304,8 +338,9 @@ describe("mértékegység törzsadat", { skip: gate.mode === "skip" }, () => {
 
     function felvitel(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
       return {
-        ownerType: "CUSTOMER",
-        ownerId: customerId,
+        ownerType: "SUPPLIER",
+        ownerId: szallitoId,
+        departmentId: helyszinId,
         kind: "EQUIPMENT",
         name: `${PREFIX} teszteszköz`,
         ...over,

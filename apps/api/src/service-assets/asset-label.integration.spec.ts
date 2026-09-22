@@ -96,10 +96,25 @@ let helyszinId = "";
 let masikHelyszinId = "";
 let actorUserId = "";
 
+/**
+ * SZALLITOI TULAJDONU, VALOS HELYSZINNEL -- AT VAN IRVA, NEM CSAK KIEGESZITVE.
+ *
+ * Korabban `ownerType: "CUSTOMER"` allt itt, departmentId nelkul. A
+ * `repository.create()`-et ez a fajl KOZVETLENUL hivja (nem a szolgaltatason
+ * at), tehat a CUSTOMER_OWNER validacio itt nem fut le, es a `department_
+ * required` migracio ota az `Asset.departmentId` NOT NULL -- a CUSTOMER agon
+ * a repository `departmentId: undefined`-t irna, ami a valodi Postgresen
+ * (CI, verify job 106975769353) `Invalid prisma.asset.create() invocation`
+ * hibaval hasal el. A fajl EGYIK matricakod/keszlet-tesztje sem a
+ * tulajdonos-tengelyrol szol (lasd a HATOKOR-eszkoz kulon fixturajat feljebb
+ * a tulajdon/helyszin-tengely tesztjeihez), tehat SUPPLIER + valos helyszin
+ * a helyes alapertelmezes.
+ */
 function createInput(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
   return {
-    ownerType: "CUSTOMER",
-    ownerId: customerId,
+    ownerType: "SUPPLIER",
+    ownerId: szallitoId,
+    departmentId: helyszinId,
     kind: "EQUIPMENT",
     name: `${PREFIX} teszteszköz`,
     ...over,
