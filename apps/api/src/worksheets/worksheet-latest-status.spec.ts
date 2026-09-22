@@ -16,6 +16,33 @@ import test from "node:test";
  * bármelyik KORÁBBI verzióra illeszkedik, tehát egy háromszor átírt, ma már
  * aláírt lap is feljönne „piszkozat" szűrőre. A lista nem látszana hibásnak,
  * csak rossz sorokat tartalmazna -- és pontosan ezért nem szólna senki.
+ *
+ * === ÉS A FENTI MONDAT ("a viselkedést adatbázison bizonyítjuk") MOSTANTÓL
+ * === MÉRÉS, NEM ÁLLÍTÁS (2026-09-22, a 48e8c13e kártya)
+ *
+ * A fejléc eddig KIMONDTA, hogy a viselkedés fedett, de ezt senki nem mérte
+ * meg. Egy komment, ami lefedettséget állít, ugyanolyan állítás, mint bármi
+ * más: elavulhat, és épp azt nyugtatja meg, aki ellenőrizné.
+ *
+ * A mérés-kör (`meres/munkalap-legfrissebb`, 25f5656e) a `list` szűrésében
+ * fordította meg a rendezést (DESC -> ASC) a `worksheetIdsByLatestStatus`
+ * metódusban. A `DISTINCT ON` AZT a sort tartja meg, amelyik a rendezés
+ * szerint az első, tehát ASC-vel a LEGELSŐ verzió állapotára szűrnénk.
+ *
+ * A napló 405 állítás-sorából KETTŐ lett piros, és pontosan a szánt:
+ *
+ *     not ok 26 - filters on the status of the latest version, not on any earlier one
+ *     ok        - keeps the closed version and the number intact when a new version is made
+ *
+ * A második a POZITÍV KONTROLL, és zöld maradt: az a szomszéd teszt a
+ * verzió-készítést méri, nem a lista rendezését. Enélkül a piros jelenthetné
+ * azt is, hogy az egész suite összeomlott rossz SQL-en vagy elhalt
+ * kapcsolaton.
+ *
+ * AMI EBBŐL KÖVETKEZIK, ÉS AMI NEM. A viselkedés fedett, tehát ide NEM kell
+ * második állítás ugyanarra: az csak duplikáció lenne. A lenti két sor
+ * viszont MARAD, és az indoka változatlan -- az integrációs suite a
+ * `pnpm test` sorában nem fut, tehát a helyi kapu egyedül ezeket látja.
  */
 
 const REPOSITORY = "src/worksheets/worksheets.repository.ts";
