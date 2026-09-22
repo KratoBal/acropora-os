@@ -649,6 +649,7 @@ model User {
   sessions                   Session[]
   /// A LATHATOSAGI HOZZARENDELESEI: melyik alegysegeket latja (a reszfaval egyutt).
   unitAssignments            UserWorksheetDepartment[]
+  notificationRoles          UserNotificationRole[]   @relation("UserNotificationRole")
   auditLogs                  AuditLog[]
   domainEvents               DomainEvent[]
   stockMovements             StockMovement[]
@@ -3665,6 +3666,40 @@ model WorksheetDepartment {
 /// `Cascade` mindket iranyban, es ez KULONBOZIK a naplotol: egy hozzarendeles
 /// nem tortenelem, hanem AKTUALIS allapot. Ha a felhasznalo vagy az alegyseg
 /// megszunik, a hozzarendelesnek nincs mit jelentenie.
+/// ERTESITESI SZEREPEK -- MEGNEVEZETT KESZLET, NEM KULON LOGIKAI OSZLOPOK.
+///
+/// Balazs 2026-09-22-en MASODSZOR kert ertesitesi jelolonegyzetet a sajat
+/// felhasznaloinkra, es maga mondta, hogy tobb pont jon. Ket logikai mezo meg
+/// nem rendszer -- de a harmadik mar az, es akkor mar hat helyen kell
+/// karbantartani ugyanazt.
+///
+/// EZERT KESZLET: a kovetkezo pontok UJ ELEMKENT kerulnek ide, nem uj
+/// OSZLOPKENT a `User`-re. Egy elemmel indul, es nem epul ra adminisztracio,
+/// amit senki nem kert.
+enum NotificationRole {
+  /// Ugyfel hibajegyet nyitott a partnerportalon.
+  SERVICE_JOB_OPENED
+}
+
+/// KI KAP ERTESITEST, ES MIROL.
+///
+/// KAPCSOLOTABLA, NEM TOMB-OSZLOP a `User`-en, es ez a haz mintaja: a semaban
+/// EGYETLEN enum-tomb oszlop sincs, a tobbszoros hozzarendelesek mind sajat
+/// tablaban allnak (`ServiceJobAssignee`, `UserWorksheetDepartment`).
+///
+/// A `role` INDEXELT, es ez nem elorelatas: a kuldes pontosan erre az oszlopra
+/// kerdez ra ("kinek van meg ez a szerepe"), minden egyes ugyfel-bejelentesnel.
+model UserNotificationRole {
+  userId     String
+  role       NotificationRole
+  assignedAt DateTime         @default(now())
+
+  user User @relation("UserNotificationRole", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+  @@index([role])
+}
+
 model UserWorksheetDepartment {
   id           String   @id @default(cuid())
   userId       String

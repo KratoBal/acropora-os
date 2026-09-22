@@ -1,5 +1,9 @@
 import type { User } from "@acropora/database";
-import type { UserDetail, UserSummary } from "@acropora/types";
+import type {
+  NotificationRoleValue,
+  UserDetail,
+  UserSummary,
+} from "@acropora/types";
 
 /**
  * A FELHASZNALO SOR ATFORDITASA A KIADOTT ALAKRA.
@@ -32,9 +36,25 @@ export function toUserSummary(user: User): UserSummary {
   };
 }
 
-export function toUserDetail(user: User): UserDetail {
+/**
+ * AZ ERTESITESI SZEREPEK KULON PARAMETER, NEM A `User` SORON.
+ *
+ * Kapcsolotablaban allnak, tehat a sor maga nem hordozza oket. Elhagyhato
+ * parameterrel a MEGLEVO hivok valtozatlanul fordulnak -- de akkor URES
+ * tombot adnanak vissza, es a kepernyon a jelolonegyzet URESNEK latszana egy
+ * bejelolt felhasznalon.
+ *
+ * EZERT KOTELEZO. A fordito igy megallitja azt a hivot, aki elfelejti -- pont
+ * az a hibafajta, amit ennek a fajlnak a fejlece mar egyszer leir (a mezo
+ * kiesik, a fordito hallgat, a kepernyon ures hely latszik).
+ */
+export function toUserDetail(
+  user: User,
+  notificationRoles: readonly NotificationRoleValue[],
+): UserDetail {
   return {
     ...toUserSummary(user),
+    notificationRoles: [...notificationRoles],
     avatarUrl: user.avatarUrl ?? undefined,
     passwordUpdatedAt: user.passwordUpdatedAt?.toISOString(),
     /**

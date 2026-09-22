@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import {
+  IsArray,
   IsEmail,
   IsIn,
   IsInt,
@@ -9,7 +10,12 @@ import {
   Min,
   MinLength,
 } from "class-validator";
-import { USER_ROLES, type UserRole } from "@acropora/types";
+import {
+  NOTIFICATION_ROLE_VALUES,
+  USER_ROLES,
+  type NotificationRoleValue,
+  type UserRole,
+} from "@acropora/types";
 
 export class CreateUserDto {
   @IsString() @MinLength(1) firstName!: string;
@@ -43,6 +49,20 @@ export class UpdateUserDto {
    * user with no partner is internal and sees everything.
    */
   @IsString() @IsOptional() customerId?: string | null;
+  /**
+   * AZ ERTESITESI SZEREPEK, TELJES HALMAZKENT.
+   *
+   * Ugyanaz az alak, mint a delegaltaknal: aki nincs a listan, arrol lekerul.
+   * A HIANYZO mezo viszont azt jelenti, hogy NE NYULJ hozzajuk -- egy nev-
+   * vagy szerep-javitas igy nem szedi le a jelolonegyzeteket.
+   *
+   * Ures tomb ERVENYES: az a kimondott „egyiket sem".
+   */
+  @IsArray()
+  @IsIn(NOTIFICATION_ROLE_VALUES, { each: true })
+  @IsOptional()
+  notificationRoles?: NotificationRoleValue[];
+
   @IsString() expectedUpdatedAt!: string;
 }
 

@@ -27,6 +27,24 @@ vi.mock("@acropora/types", () => ({
   PERMISSIONS: { USERS_MANAGE: "users.manage" },
   hasPermission: () => true,
   isNavigationEntryVisible: () => false,
+  /*
+    A VALODI LISTA MEGY BE, NEM EGY KITALALT.
+
+    A dupla eddig harom nevet adott, es a negyedik hozzavetele NEM
+    valaszthatoseg kerdese: a lap `NOTIFICATION_ROLES`-t olvas, es a hianya
+    "No export is defined" hibat ad -- a teszt nem az allitason bukott volna,
+    hanem a betoltesen.
+
+    Ami a HIVO hasznal, de a teszt-dupla nem ad vissza, az a dupla biztos
+    hibaja: ezt a sajat lapom mondja ki, es ez az eset pontosan az.
+  */
+  NOTIFICATION_ROLES: [
+    {
+      value: "SERVICE_JOB_OPENED",
+      label: "Hibajegy-felelős",
+      description: "Push és e-mail értesítést kap.",
+    },
+  ],
 }));
 vi.mock("@/components/service-jobs/partner-picker", () => ({
   /**
@@ -86,6 +104,35 @@ describe("UserEditorPage partner szerepköre", () => {
   beforeEach(() => {
     auth.session = session;
     router.push.mockReset();
+  });
+
+  /**
+   * AZ ERTESITESI JELOLONEGYZET CSAK SAJAT KOLLEGANAL LATSZIK.
+   *
+   * Balazs kerese, 2026-09-22: „a sajat felhasznaloinkhoz kell egy checkbox".
+   *
+   * MI PIROSIT: ha a doboz feltetel NELKUL kerul a lapra. Akkor egy
+   * partner-fioknal is be lehetne jelolni, es a vevo ertesitest kapna MINDEN
+   * MASIK vevo bejelenteserol -- csendes adatszivargas, amit semmi nem jelez.
+   *
+   * A SORREND A LENYEG: eloszor MEGVAN (sajat kollega, vevo nelkul), aztan
+   * vevot valasztunk, es akkor ELTUNIK. Az elso fele nelkul a masodik egy
+   * olyan lapon is zold lenne, ahol a doboz SOHA nem jelenik meg.
+   */
+  it("az értesítési jelölőnégyzet csak saját kollégánál jelenik meg", async () => {
+    render(<UserEditorPage />);
+
+    expect(
+      screen.getByRole("checkbox", { name: /Hibajegy-felelős/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Vevő kiválasztása" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("checkbox", { name: /Hibajegy-felelős/ }),
+      ).toBeNull(),
+    );
   });
 
   it("vevő kiválasztásakor csak a Partner szerviz szerepet kínálja és megmagyarázza", async () => {
