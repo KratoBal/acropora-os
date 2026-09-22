@@ -10,6 +10,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 
+import { eszkozAzonosito } from "@/lib/eszkoz-azonosito";
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
 import { Message } from "./ticket-list";
@@ -232,7 +233,7 @@ export function NewTicket() {
                       )
                     }
                   />
-                  {asset.name} <span>{asset.assetNumber}</span>
+                  {asset.name} <span>{eszkozAzonosito(asset)}</span>
                 </label>
               ))}
             </div>

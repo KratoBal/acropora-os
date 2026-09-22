@@ -139,7 +139,27 @@ export function AssetDetail({ id }: { id: string }) {
               : "Nincs megadva"}
           </Sor>
           <Sor cim="Utolsó karbantartás">{datum(asset.lastServicedAt)}</Sor>
-          <Sor cim="QR-azonosító">{asset.qrToken}</Sor>
+          {/*
+            A MATRICA KÓDJA, ÉS A CÍMKE IS EZÉRT VÁLTOZOTT.
+
+            Itt eddig a `qrToken` állt, "QR-azonosító" néven. Az a mező egy
+            uuid, nem a matrica száma -- és épp a CÍMKE tette csábítóvá: a
+            felhasználó a matricát hívja így. Egy jó tartalom rossz cím alatt
+            ugyanaz a csapda marad, ezért a kettő együtt mozdult.
+
+            A `qrToken` NEM került mellé. Nem titok, de a partnernek nincs
+            jelentése, ÉS ez az a kulcs, amit a `scan/:qrToken` végpont
+            elfogad. Egy képernyőről leolvasható kulcs akkor is fölösleges
+            kockázat, ha ma nem tágít hatókört.
+
+            ÉS A TARTALÉK ITT MÁS, MINT A LISTÁKON -- szándékosan. A listasorban
+            a matrica hiányában az eszköz-szám marad, mert ott semmi más nem
+            azonosítja a sort. Ezen a lapon az eszköz-szám MÁR OTT ÁLL a
+            fejlécben, tehát ugyanaz a tartalék két helyen mutatná ugyanazt,
+            két különböző cím alatt. A lap saját szokása a hiányra a "Nincs
+            megadva", és minden testvér sor ezt használja.
+          */}
+          <Sor cim="Matricakód">{asset.labelCode ?? "Nincs megadva"}</Sor>
         </dl>
       </Card>
 

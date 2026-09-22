@@ -618,4 +618,91 @@ describe("a partner munkalap-adatlapja", () => {
     assert.match(s, /<Tetelek lines=\{current\.lines\} \/>/);
     assert.match(s, /<Verziok versions=\{worksheet\.versions\} \/>/);
   });
+
+  /**
+   * A MATRICA KÓDJA ÁLL A NÉV ALATT, NEM A BELSŐ ESZKÖZ-SZÁM.
+   *
+   * Balázs kérése (2026-09-22): a partner a polcon a matricát olvassa le, nem a
+   * mi nyilvántartási számunkat. Két helyet nevezett meg, és mind a kettő itt
+   * áll: az eszköz-lista és a hibajegy-létrehozás eszköz-csatolása.
+   *
+   * === MIÉRT A HÍVÁSRA ÁLLÍT, ÉS NEM A KIÍRT MEZŐRE ===
+   *
+   * A választás (`labelCode ?? assetNumber`) egy tiszta függvényben áll, és
+   * annak SAJÁT specje van, valódi viselkedés-állításokkal. Ez a két sor csak
+   * azt méri, hogy a felület azt a függvényt hívja -- vagyis a BEKÖTÉST, amit
+   * a függvény specje nem tud megmérni.
+   *
+   * === A HIÁNY-ÁLLÍTÁS IS ITT VAN, ÉS MÉRVE BIZTONSÁGOS ===
+   *
+   * A `assetNumber` MA egyik fájlban sem szerepel máshol (mérve 2026-09-22,
+   * mindkettőben nulla találat), tehát a hiányát állítani nem túl tág. Ha
+   * valaki visszaírná a nyers mezőt, ez pirosodik.
+   */
+  it("az eszköz-lista és a hibajegy-csatolás a MATRICA kódját írja ki", () => {
+    for (const ut of [ESZKOZ_LISTA, BEJELENTO]) {
+      assert.match(
+        kod(ut),
+        /eszkozAzonosito\(/,
+        `${ut}: nem a közös választó függvényt hívja`,
+      );
+      assert.doesNotMatch(
+        kod(ut),
+        /asset\.assetNumber/,
+        `${ut}: a nyers belső eszköz-szám került vissza`,
+      );
+    }
+  });
+
+  /**
+   * KONTROLL: A HIÁNY-ÁLLÍTÁS TUD-E EGYÁLTALÁN TALÁLNI.
+   *
+   * Egy `doesNotMatch` akkor is zöld, ha a minta soha semmire nem illeszkedik
+   * -- például elgépelt mezőnévre. Ez a sor megmutatja, hogy UGYANAZ a minta
+   * egy olyan fájlban, ahol a nyers mező MÉG ott áll, TALÁL is.
+   *
+   * Az eszköz adatlapja szándékosan maradt ki a körből (Balázs két helyet
+   * nevezett meg), tehát ott ma is a belső szám áll -- ez a kontroll
+   * természetes pozitív esete. Ha valaha azt is átállítjuk, ez a sor pirosodik,
+   * és akkor a kontrollnak új házigazdát kell keresni.
+   */
+  it("KONTROLL: ugyanaz a minta az eszköz-adatlapon TALÁL", () => {
+    assert.match(kod(ESZKOZ_RESZLET), /asset\.assetNumber/);
+  });
+
+  /**
+   * A HARMADIK HELY: AZ ESZKOZ ADATLAPJA.
+   *
+   * Itt eddig a `qrToken` allt "QR-azonosito" cim alatt -- egy uuid azon a
+   * neven, ahogy a felhasznalo a matricat hivja. Balazs dontese (2026-09-22):
+   * "Nekem a matrica kodja kell".
+   *
+   * A CIMKE IS VALTOZOTT, es ez nem kozmetika: egy jo tartalom rossz cim alatt
+   * ugyanaz a csapda marad.
+   */
+  it("az eszköz-adatlap a MATRICA kódját mutatja, nem a belső tokent", () => {
+    assert.match(kod(ESZKOZ_RESZLET), /labelCode/);
+    assert.doesNotMatch(
+      kod(ESZKOZ_RESZLET),
+      /qrToken/,
+      "a belso token visszakerult a partner-lapra",
+    );
+  });
+
+  /**
+   * KONTROLL A FENTI HIANY-ALLITASHOZ -- ES CSAK AZT MERI, AMIT A MASIK NEM.
+   *
+   * Egy `doesNotMatch` akkor is zold, ha a minta soha semmire nem illeszkedik
+   * (elgepelt mezonev). Ez a sor megmutatja, hogy a minta TALAL: a fajl NYERS
+   * szovegeben a `qrToken` ma is ott all, a sor melletti magyarazatban.
+   *
+   * ES AZ ELSO ALAKJA HIBAS VOLT, EZERT ALL ITT KIMONDVA. Eloszor ide irtam a
+   * `doesNotMatch(kod(...))` allitast is -- vagyis a fenti allitas MASODIK
+   * feleT. A kalibracio buktatta le: a kod-beli tokenre MIND A KETTO pirosra
+   * ment, holott a kontrollnak ZOLDNEK kell maradnia. Egy kontroll, ami
+   * ugyanattol bukik, mint amit igazolnia kell, nem tanu, hanem ismetles.
+   */
+  it("KONTROLL: a minta TALÁL a nyers fájlban", () => {
+    assert.match(olvas(ESZKOZ_RESZLET), /qrToken/);
+  });
 });
