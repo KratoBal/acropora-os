@@ -34,8 +34,16 @@ export const TICKET_MAIL_FETCH = Symbol("TICKET_MAIL_FETCH");
 export const TICKET_MAIL_ENV = Symbol("TICKET_MAIL_ENV");
 
 export class TicketMailError extends Error {
-  constructor(readonly code: string) {
-    super(code);
+  /*
+    A `cause` AZERT KELL, mert a bizonytalan agon a VALODI ok (idokorlat kontra
+    halozati szakadas) csak ott latszik -- a kod maga csak a CSOPORTOT nevezi meg.
+    Enelkul a diagnozis egy szinttel durvabb lenne, mint amit tudunk.
+  */
+  constructor(
+    readonly code: string,
+    options?: { cause?: unknown },
+  ) {
+    super(code, options);
     this.name = "TicketMailError";
   }
 }
@@ -102,17 +110,57 @@ export class GmailMailSender implements MailSender {
     const raw = base64Url(buildMimeMessage(mail, config.user));
     const token = await this.token(config);
 
-    const response = await this.request(
-      `${config.apiUrl}/users/me/messages/send`,
-      {
+    /*
+      A KULDES-KERES KULON BURKOT KAP, ES EZ A KARTYA LENYEGE (79649b43).
+
+      === A MERES: MELYIK KIVETELROL TUDJUK, HOGY A KERES EL SEM INDULT ===
+
+      A `send()` OT helyen dobhat, es HAROM csoportba esnek:
+
+        a keres EL SEM INDULT (tudjuk, hogy semmi nem ment ki)
+          TICKET_MAIL_NOT_CONFIGURED     a beallitas hianyzik
+          a `buildMimeMessage` dobasa    fejlec-injekcio, ures cimzett-lista
+          TICKET_MAIL_TOKEN_FAILED       a TOKEN-keres hasalt el
+          TICKET_MAIL_TOKEN_INVALID      a token-valasz ertelmezhetetlen
+          (es a TOKEN-keres megszakitasa is ide tartozik: ha az esik ki, a
+           kuldes-keres el sem indul)
+
+        a keres ELINDULT, es VALASZ JOTT (tudjuk, hogy NEM vettek at)
+          TICKET_MAIL_SEND_FAILED_<status>
+
+        a keres ELINDULT, es NEM JOTT VALASZ (NEM TUDJUK)   <- EZ AZ UJ AG
+          idokorlat (`AbortController`) vagy halozati szakadas a kuldesen
+
+      A harmadik csoportot eddig SEMMI nem kulonboztette meg: a szolgaltatas
+      egy csupasz `DOMException`-t latott, amirol nem tudta megmondani, a
+      TOKEN-keresen tortent-e (ott a bukas BIZTOS) vagy a KULDESEN (ott nem).
+
+      Ezert all a burok CSAK ITT, es nem a `request` belsejeben: a hely maga a
+      megkulonbozteto jel.
+    */
+    let response: Response;
+    try {
+      response = await this.request(`${config.apiUrl}/users/me/messages/send`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ raw }),
-      },
-    );
+      });
+    } catch (cause) {
+      /*
+        NEM "SIKERTELEN", HANEM "NEM TUDJUK". A megszakitas a MI oldalunkon
+        tortenik, es a tavoli feldolgozasrol semmit nem mond -- a Gmail MAR
+        atvehette a levelet.
+      */
+      this.logger.warn(
+        "A levél kiküldésének kimenetele BIZONYTALAN: válasz nem érkezett.",
+      );
+      throw new TicketMailError("TICKET_MAIL_SEND_INDETERMINATE", {
+        cause,
+      });
+    }
 
     if (!response.ok) {
       /*

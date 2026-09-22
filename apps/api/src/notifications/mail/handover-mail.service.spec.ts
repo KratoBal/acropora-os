@@ -5,6 +5,8 @@ import { HandoverMailService } from "./handover-mail.service.js";
 import type { HandoverMailRepository } from "./handover-mail.repository.js";
 import type { TicketMailRepository } from "./ticket-mail.repository.js";
 import type { MailSender, OutgoingMail } from "./mail.port.js";
+import { TicketMailError } from "./gmail-mail.sender.js";
+import { ServiceUnavailableException } from "@nestjs/common";
 
 const AKTIV = {
   email: "uzem@partner.hu",
@@ -28,6 +30,8 @@ function felallit(be?: {
   customerId?: string | null;
   csomagBajt?: number;
   kuldesDob?: boolean;
+  /** A KULDO EZT A HIBAT dobja -- igy a KET ag kulon merheto. */
+  kuldesHiba?: Error;
 }) {
   const kuldott: OutgoingMail[] = [];
   const nyomok: { outcome: string; recipients: unknown; bytes: number }[] = [];
@@ -67,6 +71,7 @@ function felallit(be?: {
 
   const sender: MailSender = {
     send: async (mail) => {
+      if (be?.kuldesHiba) throw be.kuldesHiba;
       if (be?.kuldesDob) throw new Error("a szolgáltató elutasította");
       kuldott.push(mail);
     },
@@ -331,5 +336,93 @@ describe("a kiküldés előnézete", () => {
 
     assert.deepEqual(t.kuldott[0]?.to, elonezettCimek);
     assert.deepEqual(elonezettCimek, ["uzem@partner.hu", "muszak@partner.hu"]);
+  });
+});
+
+/**
+ * A NYOM NEM MONDHAT TOBBET, MINT AMIT TUDUNK (79649b43).
+ *
+ * A `FAILED` szo azt allitja, hogy a level NEM ment ki. Ez akkor igaz, ha a
+ * keres el sem indult, vagy ha valaszt kaptunk es az nem-ok volt. Ha viszont a
+ * keres elindult es VALASZ NEM JOTT (idokorlat, halozati szakadas), akkor a
+ * Gmail MAR atvehette a levelet -- es errol semmit nem tudunk.
+ *
+ * A KET ESET TEENDOJE ELLENTETES, ezert all rajuk KET allitas:
+ *
+ *   FAILED          a level nem ment ki  -> ujra lehet kuldeni
+ *   INDETERMINATE   nem tudjuk           -> ELOBB a cimzettnel kell megnezni
+ *
+ * ES A MASODIK ALLITAS (a FAILED marad FAILED) NEM DISZ: nelkule egy tul szeles
+ * javitas MINDEN bukast bizonytalannak nevezne, es a keszlet ugyanugy zold
+ * lenne. Egy kalibracio, ami csak az uj agat meri, nem tudja megmondani, hogy a
+ * regi ag a helyen maradt-e.
+ */
+describe("a kiküldés bizonytalan kimenetele", () => {
+  it("VÁLASZ NÉLKÜL a nyom INDETERMINATE, és a hívó 503-at kap", async () => {
+    const t = felallit({
+      kuldesHiba: new TicketMailError("TICKET_MAIL_SEND_INDETERMINATE"),
+    });
+
+    await assert.rejects(
+      t.service.send({
+        serviceJobId: "job-1",
+        message: "Köszönjük.",
+        actorUserId: "user-1",
+        package: t.csomag,
+      }),
+      ServiceUnavailableException,
+    );
+
+    assert.equal(t.nyomok[0]?.outcome, "INDETERMINATE");
+    assert.equal(
+      t.naplo.length,
+      0,
+      "a jegy naplójára bizonytalan ágon sem írunk",
+    );
+  });
+
+  /*
+    A KEZELO MONDATA NE HIVJON UJRAKULDESRE -- ez a kartya (b) pontja, es
+    kulon allitas, mert a kimenetel-jeloles es a SZOVEG ket kulon dolog: az
+    elsot a tabla latja, a masodikat a kezelo.
+  */
+  it("a bizonytalan ág mondata MEGÁLLÍTJA az azonnali újraküldést", async () => {
+    const t = felallit({
+      kuldesHiba: new TicketMailError("TICKET_MAIL_SEND_INDETERMINATE"),
+    });
+
+    await assert.rejects(
+      t.service.send({
+        serviceJobId: "job-1",
+        message: "Köszönjük.",
+        actorUserId: "user-1",
+        package: t.csomag,
+      }),
+      (hiba: Error) =>
+        /NE küldd újra azonnal/.test(hiba.message) &&
+        /címzettnél/.test(hiba.message),
+    );
+  });
+
+  /*
+    A MASIK IRANY: egy VALODI, nem-ok valasz utan a nyom MARAD `FAILED`. Enelkul
+    nem tudnank, hogy a javitas nem huzta-e ra a bizonytalansagot mindenre.
+  */
+  it("a BIZTOS bukás továbbra is FAILED, és a hiba változatlanul továbbmegy", async () => {
+    const t = felallit({
+      kuldesHiba: new TicketMailError("TICKET_MAIL_SEND_FAILED_400"),
+    });
+
+    await assert.rejects(
+      t.service.send({
+        serviceJobId: "job-1",
+        message: "Köszönjük.",
+        actorUserId: "user-1",
+        package: t.csomag,
+      }),
+      TicketMailError,
+    );
+
+    assert.equal(t.nyomok[0]?.outcome, "FAILED");
   });
 });
