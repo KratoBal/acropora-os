@@ -134,8 +134,26 @@ describe(
       });
       ugyfelId = ugyfel.id;
 
-      kroId = await egyseg(`${PREFIX}KRO`, "Krokodilhaz");
-      akvId = await egyseg(`${PREFIX}AKV`, "Akvarium");
+      /**
+       * A KOD HAROM KARAKTER, ES EZT A SEMA SZABJA MEG, NEM IZLES:
+       * `WorksheetDepartment.code` tipusa `@db.VarChar(3)`.
+       *
+       * Az elso valtozatom a PREFIX-et is beleirta (`ITUNITVISKRO`, tizenket
+       * karakter), es a CI-ben a `before` horog hasalt el rajta. A harom
+       * allitasom NEM bukott el, hanem EL SEM INDULT (`cancelledByParent`,
+       * `duration_ms: 0`) -- es a ket eset mast jelent: ha az allitas bukik,
+       * a MERT dolog rossz; ha a horog, a meres meg sem tortent.
+       *
+       * A takaritas emiatt NEM serul: az egysegeket az UGYFEL szama szerint
+       * torlom, nem a kod szerint. Az egyediseg pedig osszetett
+       * (`[customerId, parentId, code]`), tehat a sajat ugyfelem alatt a
+       * valodi helyszin-kodok hasznalhatoak.
+       *
+       * ES EZZEL A FIXTURA HITELESEBB IS LETT: a valodi helyszinek pontosan
+       * ilyen harombetus kodok (AKV, KRO, VAR, MRG).
+       */
+      kroId = await egyseg("KRO", "Krokodilhaz");
+      akvId = await egyseg("AKV", "Akvarium");
 
       kroFelhasznaloId = await felhasznalo("kro", kroId);
       akvFelhasznaloId = await felhasznalo("akv", akvId);
