@@ -1339,6 +1339,107 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
    * `externalReference` oldja fel. Ha csak az egyiket allitod at, a dontes
    * `incomplete` lesz URES listaval, es a kulcs ugyanugy nem megy ki.
    */
+  /**
+   * A VETITESI SZURO BEKOTESE -- EDDIG SEMMI NEM MERTE (2ceec55c).
+   *
+   * === A MERT RES ===
+   *
+   * A szuro FUGGVENYEI fedettek (sajat spec, valodi hivasokkal), es a policy
+   * tiltott aga is az (#949). A KOZEPSO kapocs nem volt az: hogy a futtato
+   * atadja-e a szuro iteletet a policynek.
+   *
+   * Lemertem, nem kovetkeztettem: a futtatoban hatastalanitottam az iteletet
+   * (`tiltottKodBarmelyikValtozaton(...) && false`), es a 3480 tesztbol NULLA
+   * pirosodott. Ami ezt "vedte", az egy MASIK spec szoveg-allitasa volt
+   * (`forras.includes("tiltottKodBarmelyikValtozaton(")`) -- az a hivas
+   * JELENLETET mondja, nem azt, hogy az iteletevel barmi tortenik.
+   *
+   * === A PAR, ES MIERT EPP EZ ===
+   *
+   * A ket eset KULONBSEGE CSAK a cikkszam: ugyanaz a vonalkod megy be mind a
+   * kettobe. Igy az allitas a PARRA szol, amire a szuro kulcsol -- nem a
+   * vonalkod alakjara.
+   *
+   * Az erteket a tiltolistabol vettem (`medusa-vetitesi-szuro.data.ts`), es
+   * MEGMERTEM, hogy ervenyes EAN: `hasValidCheckDigit("7290100772959") === true`,
+   * es tiltas nelkul `ean` dontest ad. Ez nem formasag. A lista tobb erteke NEM
+   * vonalkod-alaku (`acant_lord`, `rhodact_indoL`), es egy olyannal a teszt
+   * ZOLD LENNE -- csak nem a tiltastol, hanem az alak-vizsgalattol, ami a
+   * lancban ELOBB all. Rossz okbol zold allitas.
+   */
+  function tiltottParosTermek(sku: string) {
+    return termek({
+      variants: [
+        {
+          sku,
+          // A futtato a vonalkodot a ELSO valtozat `manufacturerPartNumber`
+          // mezojebol veszi (medusa-projection.runner.ts:919).
+          manufacturerPartNumber: "7290100772959",
+          unit: null,
+          secondaryUnit: null,
+          secondaryUnitFactor: null,
+        },
+      ],
+    });
+  }
+
+  async function kikuldottTermek(sku: string) {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(tiltottParosTermek(sku));
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+      ),
+    );
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.ok(letrehozas, "a termek letrehozasa nem futott le");
+    /*
+      A VONALKOD A VALTOZATON UL, NEM A TERMEKEN, es MEZONEVKENT, nem
+      objektumkent: a vetites `...(product.barcode ? { [field]: value } : {})`
+      alakban szorja be. Tehat a tiltas jele a KULCS HIANYA, nem egy `null`.
+      (Merve: elso nekifutasra a termek `barcode` mezojere allitottam, es
+      `undefined` jott -- a mezo ott nem is letezik.)
+    */
+    const valtozat = (
+      letrehozas.body as { variants?: Record<string, unknown>[] }
+    ).variants?.[0];
+    assert.ok(valtozat, "a kikuldott torzsben nincs valtozat");
+    return valtozat;
+  }
+
+  it("KONTROLL: ugyanaz a vonalkod egy NEM tiltott cikkszamon KIMEGY", async () => {
+    /*
+      EZ TARTJA A LENTI ALLITAST. Nelkule a "nem megy ki" egy olyan uton is
+      igaz lenne, ahol a vonalkod SOHA nem megy ki -- es akkor nem a tiltasrol
+      szolna semmit.
+    */
+    const valtozat = await kikuldottTermek("SKU-KONTROLL");
+
+    assert.equal(valtozat.ean, "7290100772959");
+  });
+
+  it("tiltott kod-termek paron a vonalkod NEM megy ki a boltba", async () => {
+    const valtozat = await kikuldottTermek("4260246927295");
+
+    assert.equal(
+      "ean" in valtozat,
+      false,
+      "a tiltott par vonalkodja kiment a boltba: a szuro itelete elveszett a futtatoban",
+    );
+    assert.equal("upc" in valtozat, false, "a tiltott par UPC-kent ment ki");
+  });
+
   it("a gondozott kapcsolatok KIMENNEK a metaadatban, mindket kulcson", async () => {
     const { out, stdout, stderr } = collector();
     const { db } = adatbazis(termek(), {
