@@ -1,9 +1,18 @@
-import { Body, Controller, Param, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+} from "@nestjs/common";
 import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
+import { partnerScopeOf } from "../../auth/partner-scope.util.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { ServiceJobPackageService } from "../../service-jobs/service-job-package.service.js";
 import { HandoverMailService } from "./handover-mail.service.js";
@@ -51,6 +60,49 @@ export class HandoverMailController {
     private readonly packageService: ServiceJobPackageService,
     private readonly mail: HandoverMailService,
   ) {}
+
+  /**
+   * KI KAPNA MEG A LEVELET -- A DIALOGUS MEGNYITASAKOR.
+   *
+   * === BELSOS HATOKORRE ZARVA, ES EZ A LENYEGE ===
+   *
+   * A valasz E-MAIL CIMEKET szallit (Balazs specje: az ablakban "latszik a
+   * cimzett, cimzettek neve, email cime"). A `SERVICE_MANAGE` jog ONMAGABAN
+   * NEM SZUKIT: a `PARTNER_SERVICE` szerep VISELI (merve a jog-tablaban,
+   * `packages/types/src/auth.ts`). Egy partner-fiok tehat a puszta jog alapjan
+   * elerne egy olyan vegpontot, ami a vevo portal-fiokjainak cimet adja.
+   *
+   * A rendszer tobbi resze ugyanezt a hatart tartja, es nem veletlenul: a jegy
+   * naplo-sora SZANDEKOSAN cim nelkuli, a `customerContacts` valaszto-lista
+   * pedig `id` es `displayName` mezovel megy. Ha ez az egy vegpont tagabb
+   * lenne, az egesz dontes megkerulheto volna rajta keresztul.
+   *
+   * === A LATHATOSAGI SZURO EZERT NEM SZEREPEL KULON ===
+   *
+   * A `serviceJobVisibilityFor` BELSOS hivonal URES szurot ad (a fuggveny
+   * elso aga: `if (scope.kind === "internal") return {}`). Mivel ide csak
+   * belsos hivo jut el, a szuro itt azonossag lenne.
+   *
+   * HA EZ A VEGPONT VALAHA MEGNYILIK A PARTNER ELOTT, a szurot BE KELL
+   * EPITENI -- kulonben egy partner barmelyik jegy azonositojara megkapna a
+   * cimzetteket. A kapu meglete ezert nem stilus: egy nevesitett allitas
+   * meri, es a rontasa nev szerint pirosra valt.
+   */
+  @Get(":id/mail")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  async preview(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (partnerScopeOf(user).kind !== "internal")
+      throw new ForbiddenException(
+        "A kiküldés címzettjeit csak belsős felhasználó nézheti meg.",
+      );
+    const elonezet = await this.mail.preview(id);
+    if (elonezet === null)
+      throw new NotFoundException("A hibajegy nem található.");
+    return elonezet;
+  }
 
   @Post(":id/mail")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)

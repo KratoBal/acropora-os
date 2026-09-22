@@ -196,3 +196,114 @@ describe("a lezárt hibajegy kiküldése", () => {
     assert.equal(t.naplo.length, 0);
   });
 });
+
+/**
+ * AZ ELONEZET: KI KAPNA MEG, ES SEMMI TOBB.
+ *
+ * === AZ "ES SEMMI TOBB" AZ, AMIERT EZEK AZ ALLITASOK LETEZNEK ===
+ *
+ * Egy allitas, ami csak azt meri, hogy a cimzettek MEGJELENNEK, akkor is zold
+ * lenne, ha az elonezet KOZBEN levelet kuld, naplot ir, vagy `TicketMailDelivery`
+ * sort hoz letre. Epp azt nem merne, ami a kulonbseg a ket ut kozott.
+ */
+describe("a kiküldés előnézete", () => {
+  it("élő kapunál a címzetteket és az előtöltött tárgyat adja", async () => {
+    const t = felallit();
+    const elonezet = await t.service.preview("job-1");
+
+    assert.deepEqual(elonezet, {
+      kind: "send",
+      recipients: [{ name: "Üzemeltető Ubul", email: "uzem@partner.hu" }],
+      subject: "A HJ-2026-009 számú hibajegyet lezártuk.",
+    });
+  });
+
+  it("NEM küld levelet, és EGYIK nyomot sem írja", async () => {
+    const t = felallit();
+    await t.service.preview("job-1");
+
+    assert.equal(t.kuldott.length, 0, "az előnézet levelet küldött");
+    assert.equal(t.nyomok.length, 0, "az előnézet kiküldés-nyomot írt");
+    assert.equal(t.naplo.length, 0, "az előnézet naplóbejegyzést írt");
+  });
+
+  /**
+   * A NEGY OK KULON-KULON, NEV SZERINT.
+   *
+   * Nem egy darabszam: a felulet MINDEGYIKHEZ mas mondatot mutat, mert
+   * mindegyikhez mas a teendo. Ha egy kozos "nem kuldheto" allapot lenne, a
+   * kezelo ugyanazt latna egy zart kapcsolora es egy hianyos torzsadatra.
+   */
+  it("a kapu zárva: mode-off", async () => {
+    const t = felallit({ mode: "off" });
+    assert.deepEqual(await t.service.preview("job-1"), {
+      kind: "skip",
+      reason: "mode-off",
+    });
+  });
+
+  it("a jegyen nincs helyszín: no-department", async () => {
+    const t = felallit({ departmentId: null });
+    assert.deepEqual(await t.service.preview("job-1"), {
+      kind: "skip",
+      reason: "no-department",
+    });
+  });
+
+  it("a helyszínnek nincs gazdája: no-customer", async () => {
+    const t = felallit({ customerId: null });
+    assert.deepEqual(await t.service.preview("job-1"), {
+      kind: "skip",
+      reason: "no-customer",
+    });
+  });
+
+  it("nincs aktív portál-fiók: no-recipient", async () => {
+    const t = felallit({ recipients: [{ ...AKTIV, isActive: false }] });
+    assert.deepEqual(await t.service.preview("job-1"), {
+      kind: "skip",
+      reason: "no-recipient",
+    });
+  });
+
+  /**
+   * A KULDES ES AZ ELONEZET UGYANAZT A DONTEST LATJA.
+   *
+   * EZ AZ ALLITAS A KET UT KOZOTTI VARRATOT ORZI, nem egy harmadik esetet. Ha
+   * valaki a `preview` szamara kulon dontest epitene fel, ez pirosra valt --
+   * es addig NEM latszana semmi, amig egy kezelo el nem kuld egy levelet olyan
+   * cimzetteknek, akiket nem latott.
+   */
+  it("amit az előnézet mutat, pontosan az kapja meg a levelet", async () => {
+    const t = felallit({
+      recipients: [
+        AKTIV,
+        {
+          email: "muszak@partner.hu",
+          displayName: "Műszaki Manó",
+          isActive: true,
+        },
+        {
+          email: "regi@partner.hu",
+          displayName: "Régi Rezső",
+          isActive: false,
+        },
+      ],
+    });
+
+    const elonezet = await t.service.preview("job-1");
+    assert.equal(elonezet?.kind, "send");
+    const elonezettCimek =
+      elonezet?.kind === "send" ? elonezet.recipients.map((c) => c.email) : [];
+
+    await t.service.send({
+      serviceJobId: "job-1",
+      message: "Köszönjük.",
+      actorUserId: "user-1",
+      package: t.csomag,
+    });
+
+    assert.deepEqual(t.kuldott[0]?.to, elonezettCimek);
+    assert.deepEqual(elonezettCimek, ["uzem@partner.hu", "muszak@partner.hu"]);
+  });
+});

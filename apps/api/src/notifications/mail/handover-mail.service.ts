@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
+import type { ServiceJobHandoverMailPreview } from "@acropora/types";
+
 import { headerSafe } from "./mail-header.js";
 import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
@@ -80,6 +82,80 @@ export class HandoverMailService {
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
+  /**
+   * A JEGY ES A CIMZETT-DONTES -- EGY HELYEN, MERT KET HIVOJA VAN.
+   *
+   * A kuldes es az elonezet UGYANAZT a dontest kell hogy lassa. Ha a ket ut
+   * kulon epitene fel (ugyanazzal a harom lepessel), az a "egy szabaly ket
+   * helyen" alak lenne: a ket hely elcsuszhat, es a kezelo olyan cimzett-listat
+   * latna, ami nem az, ami vegul kimegy.
+   *
+   * `null`, ha a jegy nem letezik. A KET HIVO MASKENT kezeli, es ez szandekos:
+   * a kuldes `skipped` okot ad vissza (a hivas mar elindult, es nyoma kell
+   * legyen), az elonezet 404-et dob (a felulet meg nem kezdett semmit).
+   */
+  private async resolve(serviceJobId: string) {
+    const job = await this.repository.jobForMail(serviceJobId);
+    if (!job) return null;
+
+    const customerId = job.department?.customerId ?? null;
+    const recipients = customerId
+      ? await this.repository.recipients(customerId)
+      : [];
+
+    return {
+      job,
+      decision: handoverMailDecision({
+        mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+        departmentId: job.departmentId,
+        customerId,
+        recipients,
+      }),
+    };
+  }
+
+  /**
+   * KI KAPNA MEG A LEVELET -- ES SEMMI NEM TORTENIK.
+   *
+   * === EZ OLVASAS, ES SEMMI NYOMOT NEM HAGY ===
+   *
+   * Nincs naplo-sor es nincs `TicketMailDelivery` bejegyzes. A kuldesnek MIND
+   * A KETTO jar, mert ott TORTENT valami; itt a kezelo csak megnezi, kinek
+   * irna. Egy elonezet, ami nyomot hagy, a "kiment-e?" kerdest teszi
+   * megvalaszolhatatlanna.
+   *
+   * === ES A CSOMAGOT SEM ALLITJA ELO ===
+   *
+   * A kuldes utjan a csomag a VEGPONTON keszul (`download()`), es az PDF-eket
+   * general. Az elonezet a dialogus MEGNYITASAKOR fut le, tehat ott ez percek
+   * alatt ertelmetlen terhelest jelentene -- es a csomag semmit nem mond arrol,
+   * kinek megy a level.
+   *
+   * AMIT EZ NEM ELLENORIZ, ES KI VAN MONDVA: hogy a csomag eloallithato-e (a
+   * jegy elkeszult-e, van-e lezaro esemenye). Azt a kuldes vegpontja meri, es
+   * a sorrend ott szandekos. Az elonezet `send` valasza tehat NEM igeri, hogy
+   * a kuldes sikerulni fog.
+   */
+  async preview(
+    serviceJobId: string,
+  ): Promise<ServiceJobHandoverMailPreview | null> {
+    const feloldas = await this.resolve(serviceJobId);
+    if (feloldas === null) return null;
+    const { job, decision } = feloldas;
+
+    if (decision.kind === "skip")
+      return { kind: "skip", reason: decision.reason };
+
+    return {
+      kind: "send",
+      recipients: decision.to.map((cimzett) => ({
+        name: cimzett.name,
+        email: cimzett.email,
+      })),
+      subject: handoverMailDefaultSubject(job.jobNumber),
+    };
+  }
+
   async send(input: {
     serviceJobId: string;
     subject?: string;
@@ -87,20 +163,9 @@ export class HandoverMailService {
     actorUserId: string | null;
     package: { fileName: string; bytes: Buffer };
   }): Promise<HandoverMailResult> {
-    const job = await this.repository.jobForMail(input.serviceJobId);
-    if (!job) return { kind: "skipped", reason: "no-job" };
-
-    const customerId = job.department?.customerId ?? null;
-    const recipients = customerId
-      ? await this.repository.recipients(customerId)
-      : [];
-
-    const decision = handoverMailDecision({
-      mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
-      departmentId: job.departmentId,
-      customerId,
-      recipients,
-    });
+    const feloldas = await this.resolve(input.serviceJobId);
+    if (feloldas === null) return { kind: "skipped", reason: "no-job" };
+    const { job, decision } = feloldas;
 
     if (decision.kind === "skip") return this.skip(job, decision, input);
 

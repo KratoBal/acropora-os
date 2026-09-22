@@ -29,6 +29,8 @@
  * szabaly, es a lekerdezes is kulon: a ket felulet MAS adatot lat, szandekosan.
  */
 
+import type { ServiceJobHandoverMailSkipReason } from "@acropora/types";
+
 /** Egy jelolt cimzett, ugy, ahogy az adatbazisbol jon. */
 export interface HandoverRecipient {
   readonly email: string;
@@ -36,8 +38,15 @@ export interface HandoverRecipient {
   readonly isActive: boolean;
 }
 
-export type HandoverMailSkipReason =
-  "mode-off" | "no-department" | "no-customer" | "no-recipient";
+/**
+ * A NEGY KIHAGYASI OK -- A KOZOS CSOMAGBOL, NEM ITT FELSOROLVA.
+ *
+ * A felulet ugyanezt a negy okot jeleniti meg, kulon mondattal mindegyikhez.
+ * Ha a lista ITT is allna es ott is, egy uj ok felvetele utan a kezelo egy
+ * regi mondatot latna -- a szerver pedig helyesen mukodne. Ezert egy lista
+ * van (`@acropora/types`), es ez az ALIASA.
+ */
+export type HandoverMailSkipReason = ServiceJobHandoverMailSkipReason;
 
 export type HandoverMailDecision =
   | {

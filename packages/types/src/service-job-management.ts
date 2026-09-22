@@ -747,3 +747,77 @@ export function isPartnerServiceJobDetail(
 ): detail is ServiceJobPartnerDetail {
   return !("assignees" in detail);
 }
+
+/**
+ * A LEZART HIBAJEGY KIKULDESE: MIERT NEM MEGY KI.
+ *
+ * === A NEGY OK NEGY KULON SOR, ES EZ NEM RESZLETEZES ===
+ *
+ * Mindegyikhez MAS a teendo, es ezert nem lehet egy kozos "nem kuldheto"
+ * allapot:
+ *
+ *     mode-off        a kapcsolo zarva          -> uzemeltetes
+ *     no-department   a jegyen nincs helyszin   -> a jegy adata hianyos
+ *     no-customer     a helyszinnek nincs gazdaja -> torzsadat-hiba
+ *     no-recipient    a gazdanak nincs AKTIV portal-fiokja -> a vevonel
+ *                     nincs kinek kikuldeni, es ez NEM a mi hibank
+ *
+ * === MIERT ITT ALL, ES NEM CSAK A SZERVEREN ===
+ *
+ * A doentes maga a szerveren szuletik (`handoverMailDecision`), es a felulet
+ * CSAK MEGJELENITI. Ha a negy ok a kliensen KULON lenne felsorolva, a ket
+ * lista elcsuszhatna -- egy uj ok a szerveren ugy jelenne meg a kezelonek,
+ * hogy "ismeretlen", vagy ami rosszabb, egy regi mondat allna mellette.
+ *
+ * Ezert EGY lista van, itt, es a szerver oldali `HandoverMailSkipReason` ennek
+ * az ALIASA (`handover-mail-recipients.ts`), nem masolata.
+ */
+export type ServiceJobHandoverMailSkipReason =
+  "mode-off" | "no-department" | "no-customer" | "no-recipient";
+
+/**
+ * EGY CIMZETT, AHOGY A KEZELO LATJA A KULDES ELOTT.
+ *
+ * Balazs specje, 2026-09-18 11:29 UTC, szo szerint: az ablakban "latszik a
+ * cimzett, cimzettek neve, email cime". A CIM tehat SZANDEKOSAN benne van --
+ * es epp ezert all a hozza tartozo vegpont BELSOS hatokorre zarva: a jegy
+ * naploja es a partner-portal cimet nem lat, es ez a ketto nem keveredhet.
+ */
+export interface ServiceJobHandoverMailRecipient {
+  readonly name: string;
+  readonly email: string;
+}
+
+/**
+ * A KULDES ELONEZETE: KI KAPNA MEG, ES MI AZ ELOTOLTOTT TARGY.
+ *
+ * === MIERT KULON LEKERDEZES, ES NEM A KULDES VALASZA ===
+ *
+ * A specben a kezelo ELOSZOR latja a cimzetteket, es AZUTAN dont. Egy level,
+ * amit mar elkuldtunk, nem vonhato vissza -- tehat a cimzett-lista nem lehet
+ * a kuldes MELLEKTERMEKE, mert akkor a kezelo utolag tudna meg, kinek irt.
+ */
+export type ServiceJobHandoverMailPreview =
+  | {
+      readonly kind: "send";
+      readonly recipients: readonly ServiceJobHandoverMailRecipient[];
+      /** Az elotoltott targy. A kezelo atirhatja, es akkor az ove megy ki. */
+      readonly subject: string;
+    }
+  | {
+      readonly kind: "skip";
+      readonly reason: ServiceJobHandoverMailSkipReason;
+    };
+
+/**
+ * A KULDES KIMENETELE.
+ *
+ * A `skipped` NEM hiba: a negy kihagyasi ok barmelyike eloallhat a ket
+ * lekerdezes KOZOTT is (a vevo portal-fiokjat kozben inaktivaljak). Ezert a
+ * felulet nem feltetelezheti, hogy az elonezet `send` valasza utan a kuldes
+ * is `sent` lesz.
+ */
+export type ServiceJobHandoverMailResult =
+  | { readonly kind: "sent"; readonly recipients: number }
+  | { readonly kind: "skipped"; readonly reason: string }
+  | { readonly kind: "refused"; readonly message: string };
