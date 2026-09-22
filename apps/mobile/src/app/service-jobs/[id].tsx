@@ -38,6 +38,7 @@ import {
   isViewableImage,
 } from "@/lib/documents/document-view";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { belsosIrasEngedett } from "@/lib/auth/hatokor";
 import {
   jegyFejlec,
   menthetoMasolatkent,
@@ -445,19 +446,33 @@ export default function ServiceJobDetailScreen() {
             létre. A hiba nem hibázott: a lap felkerült, csak sehol nem
             hivatkozott a bejelentésre.
           */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Új munkalap ehhez a jegyhez"
-            onPress={() =>
-              router.push({
-                pathname: "/worksheets/new",
-                params: { serviceJobId: id },
-              })
-            }
-            style={styles.action}
-          >
-            <Text style={styles.actionText}>Új munkalap</Text>
-          </Pressable>
+          {/*
+            A MASODIK KAPU: a HATOKOR, nem a jog (2026-09-22).
+
+            A `PARTNER_SERVICE` szerep viseli a `worksheetsManage` jogot, a
+            szerver viszont a munkalap LETREHOZASAT a hatokorhoz koti
+            (`requireInternalWriter`), es partnernek `Forbidden`-t ad. A gomb
+            ezert a hatokortol fugg, es helyette egy mondat all.
+          */}
+          {user && belsosIrasEngedett(user) ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Új munkalap ehhez a jegyhez"
+              onPress={() =>
+                router.push({
+                  pathname: "/worksheets/new",
+                  params: { serviceJobId: id },
+                })
+              }
+              style={styles.action}
+            >
+              <Text style={styles.actionText}>Új munkalap</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.meta}>
+              A munkalapot a szerviz készíti ehhez a hibajegyhez.
+            </Text>
+          )}
         </View>
 
         {/*

@@ -42,6 +42,35 @@ export interface AuthenticatedUser {
    * servers, which is why the display helper falls back. */
   nickname?: string | null;
   role: UserRole;
+  /**
+   * MELYIK VEVO, ILLETVE MELYIK SZALLITO NEVEBEN LEP BE EZ A FIOK -- a kettobol
+   * legfeljebb az egyik all, es belso kolleganal MIND A KETTO `null`.
+   *
+   * MIERT KERULT BE (2026-09-22): a telefon a munkalap-gombot a HATOKORHOZ
+   * akarja kotni, nem a szerephez. A szerver ugyanezt a ket mezot hasznalja
+   * (`partnerScopeOf`), es a `/auth/me` valasza MAR MA IS hordozza oket --
+   * csak ez a tukor nem deklaralta. Ugyanaz a fajta, amit a fajl fejlece
+   * kimond: a szerzodes valtozasat kezzel kell atvezetni.
+   *
+   * ELHAGYHATO, ES EZ SZANDEKOS. Egy KOTELEZO mezo azt allitana, hogy MINDIG
+   * megerkezik -- pont az a hazugsag, ami 2026-09-22 este az osszeomlast
+   * okozta a hibajegy-lapon. Egy regebbi szerver nem kuldi, es akkor a mezo
+   * `undefined`, nem `null`. A KET ALLAPOT MAST JELENT:
+   *
+   *     null        a szerver AZT MONDTA, hogy nincs hatokor (belso kollega)
+   *     undefined   a mezo MEG NEM ERKEZETT MEG (regi szerver vagy elveszett)
+   *
+   * A kettot a `hatokorAValaszbol` kulonbozteti meg, es ott all a dontes is,
+   * mit csinalunk a masodik esetben.
+   *
+   * MERVE AZ ELES ADATBAZISON (acrobot, 2026-09-22 21:15): nyolc felhasznalo,
+   * a ket `PARTNER_SERVICE` fioknak VAN `customerId` erteke, a hat belsonek
+   * mind a ketto `null`. A `supplierId` MA minden soron `null` -- de ez
+   * ALLAPOT, nem szerkezet: az oszlop letezik es a szerver szamol vele, csak
+   * ma senki nem all rajta. Ezert olvassuk MIND A KETTOT.
+   */
+  customerId?: string | null;
+  supplierId?: string | null;
   avatarUrl?: string | null;
   /**
    * A menu, amit ez a felhasznalo lathat -- MAR SZURVE a szerveren.
