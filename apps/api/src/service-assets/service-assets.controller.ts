@@ -171,10 +171,24 @@ export class ServiceAssetsController {
   /**
    * ESZKOZ A BEOLVASOTT MATRICAKODROL.
    *
-   * SERVICE_VIEW eleg, mint a `scan/:qrToken` vegpontnal -- DE ITT a tarolo
-   * TULAJDONT IS ELLENORIZ. A ket ut jogosultsagi szintje azonos, a
-   * lathatosaguk nem, es a kulonbseg oka a kod EROSSEGE: a qrToken 128 bites
-   * veletlen, a matricakod ot karakter.
+   * SERVICE_VIEW eleg, mint a `scan/:qrToken` vegpontnal -- ES 2026-09-22 OTA A
+   * LATHATOSAGUK IS AZONOS: mindket ut ugyanazt az `assetVisibilityForAndBranch`
+   * fuggvenyt hasznalja, amit a lista es az adatlap.
+   *
+   * === AMI ITT ALLT, ES MIERT NEM ALL TOBBE ===
+   *
+   * "DE ITT a tarolo TULAJDONT IS ELLENORIZ. A ket ut jogosultsagi szintje
+   * azonos, a lathatosaguk nem, es a kulonbseg oka a kod EROSSEGE."
+   *
+   * A mondat a QR-ut akkori kivetelere epult (a token birtoklasa a
+   * felhatalmazas). Balazs azt 2026-09-22 08:55:25 UTC-kor felulirta ("ne
+   * lassa"), tehat a KULONBSEG MEGSZUNT -- es a mondat, ami megmaradt volna,
+   * azt allitana egy olvasonak, hogy a ket ut mast lat. Nem lat mast.
+   *
+   * A KOD EROSSEGENEK ERVE ATTOL MEG ALL, csak MAS a kovetkezmenye: a
+   * matricakod ot karakter, vagyis 260 ezer lehetoseg, tehat vegigprobalhato --
+   * ezert visel EZ az ut helyszin-tengelyt is. A reszletek a tarolo
+   * `detailByLabelCode` jegyzeteben, a meressel.
    */
   @Get("scan-label/:code")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
