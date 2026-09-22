@@ -488,6 +488,21 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       setError("A partner és az eszköz neve kötelező.");
       return;
     }
+    /**
+     * SZERVIZ PARTNER TULAJDONOSNÁL AZ ALEGYSÉG KÖTELEZŐ, VEVŐNÉL NEM
+     * VÁLASZTHATÓ (lásd a mező `disabled` feltételét lent).
+     *
+     * Balázs döntése (message_id 1552018256280162385, "1 legyen kotelezo") és
+     * a `department_required` migráció (NOT NULL) miatt: ugyanaz a szabály,
+     * mint a szerveren (`assetDepartmentPresenceRefusal`,
+     * `service-assets.service.ts`), csak itt a küldés ELŐTT jelezzük, hogy a
+     * szerelő ne a mentés pillanatában tudja meg. A szerver a végső őr --
+     * ez csak a gyorsabb visszajelzés.
+     */
+    if (owner.type === "SUPPLIER" && !departmentId) {
+      setError("Szerviz partner eszközéhez alegység megadása kötelező.");
+      return;
+    }
     const interval = serviceIntervalDays
       ? Number.parseInt(serviceIntervalDays, 10)
       : undefined;
@@ -755,8 +770,10 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               </Select>
             </FormField>
             <FormField
-              label="Alegység"
-              description="A partner alegysége, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Alegységek néven szerkesztesz."
+              label={
+                owner?.type === "SUPPLIER" ? "Alegység (kötelező)" : "Alegység"
+              }
+              description="A partner alegysége, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Alegységek néven szerkesztesz. Szerviz partner tulajdonosnál kötelező."
             >
               <Select
                 aria-label="Alegység"
@@ -765,6 +782,20 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 // PONTOSAN egy tulajdonosa van (adatbazis-megkotes), es az
                 // alegysegek ahhoz a partnerhez tartoznak.
                 disabled={!owner || owner.type !== "SUPPLIER"}
+                /**
+                 * SZÁNDÉKOSAN NINCS NATÍV `required`, A PARTNER ÉS A NÉV
+                 * MEZŐVEL ELLENTÉTBEN.
+                 *
+                 * Mérve: egy natív `required` a form natív validációját
+                 * futtatja a submit ESEMÉNY ELŐTT, ami JSDOM-ban (a komponens
+                 * tesztekben) CSENDBEN elnyeli a submit-ot -- a `submit`
+                 * handler, benne a saját hibaüzenetünkkel, EL SEM INDUL. Ez a
+                 * matricakód- és teljesítmény-ellenőrzést is elnyomná, mert
+                 * azok is ebben a mezőben hiányoznának a teszt-bemenetből. A
+                 * kötelezőséget a `submit` elején álló JS-ellenőrzés adja,
+                 * ugyanabban az alakban, mint a matricakód és a
+                 * teljesítmény-pár.
+                 */
                 onChange={(event) => setDepartmentId(event.target.value)}
               >
                 <option value="">Nincs pontosítva</option>
