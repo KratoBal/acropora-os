@@ -257,10 +257,14 @@ export function MailTemplatePage() {
         <h1 className="text-xl font-semibold text-dusk-900">Levélsablonok</h1>
         {/*
           A LAP KORABBAN AZT ALLITOTTA, hogy „ma ez az egyetlen automatikus
-          levél". 2026-09-22 ota nem igaz: az ugyfel-bejelentes levele
-          AUTOMATIKUSAN megy ki, a jegy felvitelekor -- ez az ELSO ilyen a
-          rendszerben. A mondat ezert a VALASZTOTT esemeny sajat leirasabol jon,
-          nem egy allando szovegbol, ami elavul.
+          levél". Ez MAR AKKOR SEM VOLT IGAZ, amikor leirtak: a munkalap
+          alairasa is automatikusan kuld, emberi lepes nelkul
+          (`worksheets.service.ts`, a `notifyWorksheetSigned` hivasa a
+          dontesnel). 2026-09-22 ota ketto van, nem egy.
+
+          A MONDAT EZERT A VALASZTOTT ESEMENY SAJAT LEIRASABOL JON, nem egy
+          allando szovegbol: egy „ma ez az egyetlen" alaku allitas a kovetkezo
+          esemennyel automatikusan elavul, es senki nem kap rola jelzest.
         */}
         <label className="mt-3 block max-w-md space-y-1">
           <span className="text-sm font-medium text-dusk-700">Esemény</span>
