@@ -9,6 +9,7 @@ import {
 
 import { hashPassword } from "../users/password.util.js";
 
+import type { TicketMailService } from "../notifications/mail/ticket-mail.service.js";
 import type { WorksheetsRepository } from "./worksheets.repository.js";
 import { WorksheetsService } from "./worksheets.service.js";
 
@@ -80,6 +81,73 @@ describe("a kikuldes alairasra", () => {
    * szolgaltatas eljutott a valasz osszeallitasaig -- tehat nem allt meg
    * kozben. A lekepezes maga mashol van merve.
    */
+  /**
+   * A KIKULDES ERTESITEST INDIT, ES A VARRAT A `WorksheetDetailRow`-BOL EPUL --
+   * NEM UJ LEKERDEZESBOL.
+   *
+   * A `ticketMail` OPCIONALIS PARAMETER (lasd a szolgaltatas konstruktoraban),
+   * es a TOBBI TESZT ezt a fajlban SOHA nem adja at -- ezert azok a tesztek
+   * NEM merik ezt a bekotest, csak azt bizonyitjak, hogy hianyaban nem
+   * hasal el (`this.ticketMail?.` opcionalis lanc). Ez az egy allitas a
+   * MASIK oldalt: hogy ha VAN ticketMail, a helyes ertekekkel hivja.
+   */
+  it("sikeres kikuldesnel a ticketMail-t a WORKSHEET adataival hivja", async () => {
+    const kapott: Record<string, unknown>[] = [];
+    let elsoHivas = true;
+    const fakeTicketMail = {
+      notifyWorksheetSendForSignature: (input: Record<string, unknown>) => {
+        kapott.push(input);
+      },
+    } as unknown as TicketMailService;
+
+    const worksheetsService = new WorksheetsService(
+      {
+        detail: async () => {
+          if (!elsoHivas) throw new Error("ELJUTOTT-A-VALASZIG");
+          elsoHivas = false;
+          return {
+            id: "worksheet-1",
+            customerId: "customer-1",
+            number: null,
+            customer: { displayName: "Fővárosi Állat- És Növénykert" },
+            serviceJob: { id: "job-1", jobNumber: "HJ-2026-042" },
+          };
+        },
+        sendForSignature: async () => ({
+          ok: true,
+          signerName: "Vevő Vilmos",
+          signerEmail: "vilmos@partner.invalid",
+        }),
+      } as unknown as WorksheetsRepository,
+      undefined,
+      undefined,
+      fakeTicketMail,
+    );
+
+    await assert.rejects(
+      () =>
+        worksheetsService.sendForSignature(
+          "worksheet-1",
+          "kontakt-2",
+          BELSOS as never,
+        ),
+      (error: unknown) =>
+        error instanceof Error && error.message === "ELJUTOTT-A-VALASZIG",
+    );
+
+    assert.equal(kapott.length, 1);
+    assert.deepEqual(kapott[0], {
+      worksheetId: "worksheet-1",
+      serviceJobId: "job-1",
+      worksheetNumber: null,
+      jobNumber: "HJ-2026-042",
+      partnerName: "Fővárosi Állat- És Növénykert",
+      signerName: "Vevő Vilmos",
+      signerEmail: "vilmos@partner.invalid",
+      actorUserId: "szerelo-1",
+    });
+  });
+
   it("belsos hatokorrel MEGY", async () => {
     const kapott: Record<string, unknown>[] = [];
     let elsoHivas = true;

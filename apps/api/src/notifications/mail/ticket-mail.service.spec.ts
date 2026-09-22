@@ -525,3 +525,197 @@ describe("a nyito ertesitese levelben", () => {
     assert.deepEqual(kuldott, []);
   });
 });
+
+/**
+ * A NEGYEDIK UT SAJAT SEGEDJE. A `szolgaltatas()` a masik harom utat MERI, es
+ * a `TicketMailRepository`-t alakitja; ez az ut nem er hozza a repository
+ * `context()`/`template()` parjahoz, csak a `recordNotification`-hoz (opcionalis,
+ * a `serviceJobId`-tol fuggoen), tehat kulon, egyszerubb szereloallvanyt kap.
+ */
+function alairasSzolgaltatas(be: {
+  mode?: string;
+  sendForSignature?: string;
+  redirect?: string;
+  sender?: MailSender | null;
+  partnerUrl?: string;
+}) {
+  const kuldott: OutgoingMail[] = [];
+  const naplo: { note: string }[] = [];
+  const repository: Pick<
+    TicketMailRepository,
+    "context" | "template" | "recordNotification" | "saveTemplate"
+  > = {
+    context: async () => null,
+    template: async () => null,
+    recordNotification: async (input) => {
+      naplo.push({ note: input.note });
+    },
+    saveTemplate: async () => undefined,
+  };
+  const sender: MailSender | null =
+    be.sender === undefined
+      ? {
+          send: async (mail) => {
+            kuldott.push(mail);
+          },
+        }
+      : be.sender;
+
+  return {
+    service: new TicketMailService(repository as TicketMailRepository, sender, {
+      TICKET_MAIL_MODE: be.mode,
+      TICKET_MAIL_WORKSHEET_SEND_FOR_SIGNATURE: be.sendForSignature ?? "live",
+      TICKET_MAIL_REDIRECT_TO: be.redirect ?? "off",
+      PARTNER_URL: be.partnerUrl,
+    } as NodeJS.ProcessEnv),
+    kuldott,
+    naplo,
+  };
+}
+
+const ALAIRAS_BEMENET = {
+  worksheetId: "worksheet-1",
+  serviceJobId: "job-1" as string | null,
+  worksheetNumber: null as string | null,
+  jobNumber: "HJ-2026-042" as string | null,
+  partnerName: "Fővárosi Állat- És Növénykert",
+  signerName: "Kiss Márta",
+  signerEmail: "kiss.marta@partner.invalid",
+  actorUserId: "user-2" as string | null,
+};
+
+describe("a munkalap kikuldese alairasra", () => {
+  it("BEALLITATLAN kornyezetben NEM kuld", async () => {
+    const { service, kuldott } = alairasSzolgaltatas({ mode: undefined });
+
+    assert.deepEqual(
+      await service.deliverWorksheetSendForSignature(ALAIRAS_BEMENET),
+      { kind: "skipped", reason: "mail-off" },
+    );
+    assert.deepEqual(kuldott, []);
+  });
+
+  it("zart UT-kapcsolonal path-off az ok, a fo kapu nyitva marad", async () => {
+    const { service, kuldott } = alairasSzolgaltatas({
+      mode: "live",
+      sendForSignature: "off",
+    });
+
+    assert.deepEqual(
+      await service.deliverWorksheetSendForSignature(ALAIRAS_BEMENET),
+      { kind: "skipped", reason: "path-off" },
+    );
+    assert.deepEqual(kuldott, []);
+  });
+
+  /**
+   * ACROBOT KIKOTESE (22170, 1. pont): a hianyzo PARTNER_URL NE tartsa fel a
+   * levelet. Ugyanaz a par, mint a `jegy_linkje`-nel: az elso allitas azt
+   * bizonyitja, hogy a kuldes vegigmegy URES linkkel, a masodik (lentebb),
+   * hogy BEALLITOTT PARTNER_URL mellett a link tenyleg megjelenik.
+   */
+  it("hianyzo PARTNER_URL mellett a level KIMEGY, a link helye URES", async () => {
+    const { service, kuldott } = alairasSzolgaltatas({ mode: "live" });
+
+    assert.deepEqual(
+      await service.deliverWorksheetSendForSignature(ALAIRAS_BEMENET),
+      { kind: "sent" },
+    );
+    assert.equal(kuldott.length, 1);
+    assert.deepEqual(kuldott[0]?.to, ["kiss.marta@partner.invalid"]);
+    assert.doesNotMatch(kuldott[0]?.text ?? "", /\{\{/);
+    assert.match(kuldott[0]?.text ?? "", /^Munkalap: $/m);
+  });
+
+  it("beallitott PARTNER_URL mellett a link a levelben all", async () => {
+    const { service, kuldott } = alairasSzolgaltatas({
+      mode: "live",
+      partnerUrl: "https://ticket.acropora.hu",
+    });
+
+    await service.deliverWorksheetSendForSignature(ALAIRAS_BEMENET);
+
+    assert.match(
+      kuldott[0]?.text ?? "",
+      /^Munkalap: https:\/\/ticket\.acropora\.hu\/munkalapok\/worksheet-1$/m,
+    );
+  });
+
+  /**
+   * A MUNKALAP SZAMA A KAPCSOLT HIBAJEGY SZAMAT ELONYBEN RESZESITI -- ES EZT
+   * CSAK AKKOR LEHET MERNI, HA MINDKET ERTEK VALODI.
+   *
+   * ELSO ALAKOM `ALAIRAS_BEMENET`-et hasznalta, aminek `worksheetNumber` mezoje
+   * `null` -- egy `A ?? B` prioritas-rontas (a ket forras felcserelese) ekkor
+   * UGYANAZT az eredmenyt adja barmelyik sorrendben, tehat semmit nem
+   * bizonyitott volna. Kalibracio kozben derult ki: a rontas nem pirositott
+   * semmit. Ez a fixtura MINDKET erteket kitolti, tehat a ket sorrend MAS
+   * eredmenyt ad.
+   */
+  it("a munkalap szama a KAPCSOLT HIBAJEGY szama, ha mindketto letezik", async () => {
+    const { service, kuldott } = alairasSzolgaltatas({ mode: "live" });
+
+    await service.deliverWorksheetSendForSignature({
+      ...ALAIRAS_BEMENET,
+      jobNumber: "HJ-2026-042",
+      worksheetNumber: "MU-2026-007",
+    });
+
+    assert.match(kuldott[0]?.subject ?? "", /HJ-2026-042/);
+    assert.doesNotMatch(kuldott[0]?.subject ?? "", /MU-2026-007/);
+  });
+
+  it("hibajegy nelkul a munkalap SAJAT szama all, es a level akkor is kimegy", async () => {
+    const { service, kuldott } = alairasSzolgaltatas({ mode: "live" });
+
+    await service.deliverWorksheetSendForSignature({
+      ...ALAIRAS_BEMENET,
+      serviceJobId: null,
+      jobNumber: null,
+      worksheetNumber: "MU-2026-007",
+    });
+
+    assert.equal(kuldott.length, 1);
+    assert.match(kuldott[0]?.subject ?? "", /MU-2026-007/);
+  });
+
+  /**
+   * A `serviceJobId: null` ESETEN NINCS NAPLOZAS -- NINCS HOVA IRNI A SORT --,
+   * ES EZ NEM HIBA. A masik allitas (lentebb) a forditottjat meri: HA VAN
+   * kapcsolt hibajegy, a naplo-sor MEGY.
+   */
+  it("hibajegy nelkuli munkalapnal nincs naplo-sor, de a level kimegy", async () => {
+    const { service, kuldott, naplo } = alairasSzolgaltatas({ mode: "live" });
+
+    const eredmeny = await service.deliverWorksheetSendForSignature({
+      ...ALAIRAS_BEMENET,
+      serviceJobId: null,
+    });
+
+    assert.deepEqual(eredmeny, { kind: "sent" });
+    assert.equal(kuldott.length, 1);
+    assert.deepEqual(naplo, []);
+  });
+
+  it("kapcsolt hibajegynel a naplo-sor megy, es nem szivarogtat cimet", async () => {
+    const { service, naplo } = alairasSzolgaltatas({ mode: "live" });
+
+    await service.deliverWorksheetSendForSignature(ALAIRAS_BEMENET);
+
+    assert.equal(naplo.length, 1);
+    assert.ok(!naplo[0]?.note.includes("@"));
+  });
+
+  it("hianyzo kuldonel az ok no-sender", async () => {
+    const { service, kuldott } = alairasSzolgaltatas({
+      mode: "live",
+      sender: null,
+    });
+
+    assert.deepEqual(
+      await service.deliverWorksheetSendForSignature(ALAIRAS_BEMENET),
+      { kind: "skipped", reason: "no-sender" },
+    );
+    assert.deepEqual(kuldott, []);
+  });
+});

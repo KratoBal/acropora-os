@@ -47,11 +47,18 @@ export interface MailTemplateVariable {
  * AMI A KULDES PILLANATABAN RENDELKEZESRE ALL -- ES NEM TOBB.
  *
  * acrobot kikotese: "merd le, mi all rendelkezesre a kuldes pillanataban, es
- * NE igerj tobbet". Ez a negy mezo a hibajegy sorabol es a nyito User sorabol
- * jon, mind a ketto a kezunkben van a kuldeskor. Amit NEM veszek fel: a
- * munkalap adatai (a jegy alatt tobb lap is allhat, tehat egy `{{munkalap}}`
- * valtozo nem lenne egyertelmu) es a partner kapcsolattartoja (ma nincs ilyen
- * mezo).
+ * NE igerj tobbet". Az elso het mezo a hibajegy sorabol es a nyito User
+ * sorabol jon, mind a ketto a kezunkben van a kuldeskor.
+ *
+ * === "A MUNKALAP ADATAI" MEGIS BEKERULT, ES EZ NEM ELLENTMOND A FENTINEK ===
+ *
+ * Az eredeti indok az volt, hogy "a jegy alatt tobb lap is allhat, tehat egy
+ * `{{munkalap}}` valtozo nem lenne egyertelmu" -- ez a KIKULDES-esemenyre nem
+ * all: a `WORKSHEET_SEND_FOR_SIGNATURE` level EGY KONKRET munkalaprol szol,
+ * ami a kuldes pillanataban egyertelmuen adott (a felhasznalo AZT a lapot
+ * kuldi ki, amelyiken all). Az egyertelmuseg tehat nem a mezotol fugg, hanem
+ * az esemenytol -- es ez pont az az erv, amiert a valtozo-lista majd
+ * esemenyenkent fog szurni.
  */
 export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
   /**
@@ -116,6 +123,32 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     description:
       "A hibajegy belső oldalának linkje. Üres, ha a rendszer nem ismeri a saját webcímét.",
   },
+  /**
+   * A KOVETKEZO NEGY VALTOZO A `WORKSHEET_SEND_FOR_SIGNATURE` ESEMENYHEZ
+   * TARTOZIK, es ez a lista MA MEG NEM ESEMENYENKENT SZUR -- lasd a
+   * `MAIL_TEMPLATE_VARIABLES` fejlecet. Vagyis ezek a mai WORKSHEET_SIGNED es
+   * SERVICE_JOB_OPENED_BY_CUSTOMER szerkesztoiben IS megjelennek, es ott
+   * mindig uresen renderelodnek (a hivo nem tolti ki oket). Ismert allapot,
+   * nem hiba -- a szetvalasztas kulon dontesre var.
+   */
+  {
+    name: "munkalap_szama",
+    description:
+      "A munkalaphoz tartozó hibajegy száma, vagy a munkalap saját száma, ha nincs hibajegy. Üres, ha egyik sincs (piszkozat állapotú lap).",
+  },
+  {
+    name: "partner_neve",
+    description: "A munkalap partnerének (ügyfelének) teljes neve.",
+  },
+  {
+    name: "alairo_neve",
+    description: "A kiküldés címzettjeként választott aláíró neve.",
+  },
+  {
+    name: "munkalap_linkje",
+    description:
+      "A munkalap linkje a PARTNER-PORTÁLON (nem a belső felületen). Üres, ha a rendszer nem ismeri a partner-portál webcímét.",
+  },
 ] as const;
 
 /** Egy levelezesi esemeny: a sablon kulcsa es az emberi neve. */
@@ -157,6 +190,12 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
     name: "Ügyfél hibajegyet rögzít",
     description:
       "Akkor megy ki, amikor egy ügyfél hibajegyet nyit a partnerportálon. Címzettje mindenki, akinél a hibajegy-felelős szerep be van jelölve.",
+  },
+  {
+    id: "WORKSHEET_SEND_FOR_SIGNATURE",
+    name: "Munkalap aláírásra kiküldve",
+    description:
+      "Akkor megy ki, amikor egy kolléga a munkalapot aláírásra kiküldi. Címzettje a kiválasztott aláíró, a partner munkatársa.",
   },
 ] as const;
 

@@ -5,6 +5,7 @@ import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
 import { headerSafe } from "./mail-header.js";
 import { internalTicketLink } from "./ticket-link.js";
+import { partnerWorksheetLink } from "./partner-portal-link.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import { ticketMailContent } from "./ticket-mail.content.js";
 import {
@@ -12,8 +13,10 @@ import {
   mailAuditNote,
   mailRedirect,
   mailModeOf,
+  redirectAuditSuffix,
   serviceJobOpenedMailDecision,
   ticketMailDecision,
+  worksheetSendForSignatureMailDecision,
   type MailSkipReason,
 } from "./ticket-mail.rules.js";
 
@@ -90,6 +93,34 @@ export const DEFAULT_SERVICE_JOB_OPENED_TEMPLATE = {
     "{{jegy_leirasa}}",
     "",
     "Hibajegy: {{jegy_linkje}}",
+  ].join("\n"),
+} as const;
+
+/**
+ * A NEGYEDIK LEVELEZESI ESEMENY: MUNKALAP KIKULDVE ALAIRASRA.
+ *
+ * Balazs kerese (Discord, Acropora OS szal, message_id 1552051849182453891),
+ * szo szerint: "Csinaljatok meg az a sablont mit akkor kuldunk ki, amikor
+ * alairasra megy az ugyfelnek egy munkalap".
+ */
+export const WORKSHEET_SEND_FOR_SIGNATURE = "WORKSHEET_SEND_FOR_SIGNATURE";
+
+/**
+ * A KEZDO SZOVEG. A `{{munkalap_linkje}}` A PARTNER-PORTALRA MUTAT, NEM A
+ * BELSO FELULETRE -- lasd `partner-portal-link.ts`. Ugyanaz a szabaly, mint a
+ * masik harom sablonnal: hianyzo webcim eseten a valtozo uresen renderelodik,
+ * a kuldes nem all meg.
+ */
+export const DEFAULT_WORKSHEET_SEND_FOR_SIGNATURE_TEMPLATE = {
+  subject: "Aláírásra vár: {{munkalap_szama}}",
+  body: [
+    "Kedves {{alairo_neve}}!",
+    "",
+    "A(z) {{munkalap_szama}} számú munkalap aláírásra készen áll.",
+    "",
+    "Partner: {{partner_neve}}",
+    "",
+    "Munkalap: {{munkalap_linkje}}",
   ].join("\n"),
 } as const;
 
@@ -361,6 +392,125 @@ export class TicketMailService {
       note: `Értesítő levél kiment ${decision.to.length} címzettnek: ügyfél hibajegyet rögzített.`,
       actorUserId: input.actorUserId,
     });
+    return { kind: "sent" };
+  }
+
+  /**
+   * Fire and forget, a haz mintaja szerint: a kikuldes valasza NEM fugghet
+   * attol, hogy a levelezo eppen elerheto-e.
+   */
+  notifyWorksheetSendForSignature(input: {
+    worksheetId: string;
+    serviceJobId: string | null;
+    worksheetNumber: string | null;
+    jobNumber: string | null;
+    partnerName: string;
+    signerName: string;
+    signerEmail: string;
+    actorUserId: string | null;
+  }): void {
+    void this.deliverWorksheetSendForSignature(input).catch(
+      (cause: unknown) => {
+        this.logger.warn(
+          `Az aláírási felkérő levél küldése nem sikerült (${input.worksheetId}): ${
+            cause instanceof Error ? cause.message : "ismeretlen hiba"
+          }`,
+        );
+      },
+    );
+  }
+
+  /**
+   * MINDEN ADATOT A HIVO AD, ES EZ SZANDEKOS -- MAS A VARRAT, MINT A MASIK
+   * KET UTON.
+   *
+   * A `deliverWorksheetSigned` es a `deliverServiceJobOpened` a SAJAT
+   * `this.repository`-javal (`TicketMailRepository`) tolti be a hibajegy
+   * sorat. Ez az ut NEM: a `WorksheetsService.sendForSignature` MAR betoltotte
+   * a munkalapot (`requireWorksheet`) ES lefuttatta a tarolo sajat
+   * `sendForSignature` hivasat (ami az alairo letezeset es aktivitasat is
+   * ellenorizte), mire idaig ér -- egy MASODIK, itteni lekerdezes ugyanazt a
+   * sort olvasna ujra, es a ketto kozott a lap allapota elmozdulhatna.
+   *
+   * A `serviceJobId` NULLAZHATO: a munkalap letezhet hibajegy nelkul (lasd a
+   * sema jegyzetet a `Worksheet.serviceJobId` mezon). Ha nincs, a naplozas
+   * (`recordNotification`) KIMARAD -- nincs hova irni a sort --, de a KULDES
+   * nem all meg emiatt: a cimzett fioknak a hibajegy letezese lenyegtelen.
+   */
+  async deliverWorksheetSendForSignature(input: {
+    worksheetId: string;
+    serviceJobId: string | null;
+    worksheetNumber: string | null;
+    jobNumber: string | null;
+    partnerName: string;
+    signerName: string;
+    signerEmail: string;
+    actorUserId: string | null;
+  }): Promise<TicketMailOutcome> {
+    const decision = worksheetSendForSignatureMailDecision({
+      mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+      pathMode: mailModeOf(
+        this.environment.TICKET_MAIL_WORKSHEET_SEND_FOR_SIGNATURE,
+      ),
+    });
+
+    if (decision.kind === "skip") {
+      this.logger.log(
+        `Aláírási felkérő levél kihagyva (${decision.reason}), munkalap ${input.worksheetId}.`,
+      );
+      return { kind: "skipped", reason: decision.reason };
+    }
+
+    if (!this.sender) return { kind: "skipped", reason: "no-sender" };
+
+    const tarolt = await this.repository.template(WORKSHEET_SEND_FOR_SIGNATURE);
+    const sablon = tarolt ?? DEFAULT_WORKSHEET_SEND_FOR_SIGNATURE_TEMPLATE;
+
+    const link = partnerWorksheetLink({
+      partnerUrl: this.environment.PARTNER_URL,
+      worksheetId: input.worksheetId,
+    });
+    if (!link)
+      this.logger.warn(
+        `A munkalap linkje kimaradt a levélből: PARTNER_URL nincs beállítva (munkalap ${input.worksheetId}).`,
+      );
+
+    const ertekek = {
+      alairo_neve: input.signerName,
+      munkalap_szama: input.jobNumber ?? input.worksheetNumber ?? "",
+      partner_neve: input.partnerName,
+      munkalap_linkje: link,
+    };
+
+    const targy = renderMailTemplate(sablon.subject, ertekek);
+    const torzs = renderMailTemplate(sablon.body, ertekek);
+    if (!targy.ok || !torzs.ok) {
+      const ismeretlen = [
+        ...(targy.ok ? [] : targy.unknown),
+        ...(torzs.ok ? [] : torzs.unknown),
+      ];
+      this.logger.warn(
+        `A levél sablonja ismeretlen változót tartalmaz: ${ismeretlen.join(", ")}.`,
+      );
+      return { kind: "failed", unknown: [...new Set(ismeretlen)] };
+    }
+
+    await this.sender.send({
+      to: [input.signerEmail],
+      subject: headerSafe(targy.text),
+      text: torzs.text,
+    });
+
+    if (input.serviceJobId)
+      await this.repository.recordNotification({
+        serviceJobId: input.serviceJobId,
+        note: `Aláírási felkérő levél kiment: ${input.signerName}.${redirectAuditSuffix(
+          mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+        )}`,
+        actorUserId: input.actorUserId,
+      });
+
     return { kind: "sent" };
   }
 }
