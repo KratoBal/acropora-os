@@ -83,14 +83,23 @@ export interface CategoryRow {
 }
 
 /** Amit a Medusa mar tud egy kategoriarol, amikor parositunk. */
-/** Egy webcim-frissites: MELYIK kategoria, MIROL MIRE. */
-export interface CategoryHandleUpdate {
+/**
+ * Egy frissites egy MAR LETEZO kategorian: MELYIK, MIROL MIRE.
+ *
+ * MIERT KET KULON MEZO, ES MIERT `| null` MINDKETTO: a nev es a webcim
+ * KULON valtozhat. Egy kategoria neve helyes lehet ugy, hogy a webcime nem
+ * (ez volt a 2026-09-10 elotti allapot), es forditva is.
+ *
+ * ES MIERT NEM `?`: egy hianyzo mezo a fixturaban SEHOL nem all, tehat a
+ * hivo nem latja. A `null` ott all, tehat aki a duplat irja, szembesul vele.
+ */
+export interface CategoryUpdate {
   ourId: string;
   medusaId: string;
-  /** A Medusaban MA tarolt webcim -- a csere utan mar sehol nem letezik. */
-  from: string;
-  /** Amit a mai szabaly ad. */
-  to: string;
+  /** null, ha a tarolt webcim mar azt adja, amit a mai szabaly. */
+  handle: { from: string; to: string } | null;
+  /** null, ha a tarolt nev mar azt adja, amit a mai szabaly. */
+  name: { from: string; to: string } | null;
 }
 
 export interface ExistingCategory {
@@ -98,6 +107,12 @@ export interface ExistingCategory {
   externalId: string | null;
   /** A Medusaban MA tarolt webcim. Enelkul a hatodik allapot nem eldontheto. */
   handle: string;
+  /**
+   * A Medusaban MA tarolt nev. KOTELEZO, nem elhagyhato: enelkul a terv nem
+   * tudja eldonteni, hogy a nev frissitendo-e, es a hianya CSENDES lenne --
+   * minden nev "helyesnek" latszana.
+   */
+  name: string;
 }
 
 /** Egy mar meglevo lekepezes-sor nalunk (`ExternalReference`, MEDUSA/Category). */
@@ -157,18 +172,24 @@ export interface CategoryImportPlan {
   conflict: CategoryMappingConflict[];
   /**
    * A HATODIK ALLAPOT: mar all a Medusaban, a lekepezes is helyes, DE a tarolt
-   * webcime elter attol, amit a mai szabaly adna.
+   * NEVE vagy WEBCIME elter attol, amit a mai szabaly adna.
    *
    * MIERT KELL KULON, ES MIERT NEM A `skip` RESZE: az ot korabbi allapot
    * mindegyike a LETEZESROL szolt (van-e ott, van-e sorunk ra). Ez az elso, ami
    * a TARTALMAROL -- es ezert az egyetlen, ami frissit, nem letrehoz.
    *
-   * A `from` MEZO NEM DISZ. A kisbetusites es a karakter-csere EGYIRANYU: a
+   * A `from` MEZOK NEM DISZEK. A kisbetusites es a karakter-csere EGYIRANYU: a
    * csere utan a regi cim SEHOL nem letezik tobbe. Ha valaha kiderul, hogy egy
    * regi cim kint van (kepernyokep, levelezes, megosztott hivatkozas), a
    * regi-uj par az EGYETLEN, amibol atiranyitas kesziheto.
+   *
+   * ES A NEV AZERT KERULT IDE 2026-09-22-EN, mert nelkule az ujra-vetites
+   * ROSSZABB allapotot hagyott volna, mint amit talalt: a mai teszt katalogus
+   * 213 kategoriaja viseli a szulot a neveben (77 helyett), es egy futas
+   * 216 webcimet irt volna at NULLA nev mellett. A nev es a webcim ma EGYUTT
+   * hibas; kulon frissitve SZETCSUSZTAK volna. (nautilus merese, 15a3141d)
    */
-  handleUpdate: CategoryHandleUpdate[];
+  update: CategoryUpdate[];
 }
 
 /** A fejlec utan minden sor egy kategoria. Tab-elvalasztott. */
@@ -379,13 +400,14 @@ export function planCategoryImport(
   const sorunk = new Map(mappings.map((m) => [m.ourId, m.medusaId]));
 
   const taroltHandle = new Map(existing.map((cat) => [cat.id, cat.handle]));
+  const taroltNevek = new Map(existing.map((cat) => [cat.id, cat.name]));
 
   const create: CategoryCreate[] = [];
   const skip: string[] = [];
   const mapOnly: CategoryMapping[] = [];
   const staleMapping: string[] = [];
   const conflict: CategoryMappingConflict[] = [];
-  const handleUpdate: CategoryHandleUpdate[] = [];
+  const update: CategoryUpdate[] = [];
 
   /*
    * EGYSZER SZAMOLJUK KI, es a TELJES sorhalmazon -- nem soronkent. Egy
@@ -400,11 +422,21 @@ export function planCategoryImport(
    * tudjuk, melyik sor a helyes.
    */
   const frissitendo = (ourId: string, medusaId: string, cim: string) => {
-    const tarolt = taroltHandle.get(medusaId);
-    if (tarolt === undefined) return;
-    const kell = categoryHandle(cim);
-    if (tarolt !== kell)
-      handleUpdate.push({ ourId, medusaId, from: tarolt, to: kell });
+    const taroltCim = taroltHandle.get(medusaId);
+    const taroltNev = taroltNevek.get(medusaId);
+    if (taroltCim === undefined || taroltNev === undefined) return;
+
+    const kellCim = categoryHandle(cim);
+    const handle =
+      taroltCim === kellCim ? null : { from: taroltCim, to: kellCim };
+    const name = taroltNev === cim ? null : { from: taroltNev, to: cim };
+
+    /*
+     * CSAK AKKOR KERUL BE, HA VAN MIT IRNI. Egy bejegyzes ket null mezovel
+     * egy URES kerest inditana el, es a jelentesben ugy latszana, mintha
+     * frissitettunk volna valamit.
+     */
+    if (handle || name) update.push({ ourId, medusaId, handle, name });
   };
 
   for (const sor of rows) {
@@ -443,5 +475,5 @@ export function planCategoryImport(
       parentOurId: sor.parentOurId,
     });
   }
-  return { create, skip, mapOnly, staleMapping, conflict, handleUpdate };
+  return { create, skip, mapOnly, staleMapping, conflict, update };
 }

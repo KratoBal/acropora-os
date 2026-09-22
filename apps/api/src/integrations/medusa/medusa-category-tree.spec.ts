@@ -240,7 +240,7 @@ describe("a betöltés terve", () => {
     // kategoria MAS azonositoval -- a tervnek MEGIS letre kell hoznia a mienket.
     const terv = planCategoryImport(
       rows,
-      [{ id: "pcat_masik", externalId: "999", handle: "reg" }],
+      [{ id: "pcat_masik", externalId: "999", handle: "reg", name: "Halak" }],
       [],
     );
     assert.deepEqual(
@@ -254,7 +254,7 @@ describe("a betöltés terve", () => {
     // mi azonositonk.
     const terv = planCategoryImport(
       rows,
-      [{ id: "pcat_gyari", externalId: null, handle: "reg" }],
+      [{ id: "pcat_gyari", externalId: null, handle: "reg", name: "Bemutató" }],
       [],
     );
     assert.deepEqual(
@@ -273,7 +273,7 @@ describe("a betöltés terve", () => {
   it("ami áll a Medusában ÉS van sorunk róla: nincs teendő", () => {
     const terv = planCategoryImport(
       rows,
-      [{ id: "pcat_1", externalId: "1", handle: "reg" }],
+      [{ id: "pcat_1", externalId: "1", handle: "reg", name: "Termékek" }],
       [{ ourId: "1", medusaId: "pcat_1" }],
     );
     assert.deepEqual(terv.skip, ["1"]);
@@ -292,7 +292,7 @@ describe("a betöltés terve", () => {
     // azonositonkat adni.
     const terv = planCategoryImport(
       rows,
-      [{ id: "pcat_1", externalId: "1", handle: "reg" }],
+      [{ id: "pcat_1", externalId: "1", handle: "reg", name: "Termékek" }],
       [],
     );
     assert.deepEqual(terv.mapOnly, [{ ourId: "1", medusaId: "pcat_1" }]);
@@ -327,7 +327,7 @@ describe("a betöltés terve", () => {
     // felulirassal a masodik esetben elvesznenek a termek-hozzarendelesek.
     const terv = planCategoryImport(
       rows,
-      [{ id: "pcat_uj", externalId: "1", handle: "reg" }],
+      [{ id: "pcat_uj", externalId: "1", handle: "reg", name: "Termékek" }],
       [{ ourId: "1", medusaId: "pcat_regi" }],
     );
     assert.deepEqual(terv.conflict, [
@@ -360,8 +360,13 @@ describe("a hatodik allapot: a tarolt webcim elter a szabalytol", () => {
     const terv = planCategoryImport(
       FA,
       [
-        { id: "pcat_1", externalId: "1", handle: "termékek" },
-        { id: "pcat_2", externalId: "2", handle: "eledelek---termékek" },
+        { id: "pcat_1", externalId: "1", handle: "termékek", name: "Termékek" },
+        {
+          id: "pcat_2",
+          externalId: "2",
+          handle: "eledelek---termékek",
+          name: "Eledelek",
+        },
       ],
       [
         { ourId: "1", medusaId: "pcat_1" },
@@ -371,7 +376,7 @@ describe("a hatodik allapot: a tarolt webcim elter a szabalytol", () => {
     // AZ "Eledelek" EGYEDI ebben a faban, tehat a mai szabaly szerint ROVID
     // cimet kap -- es a webcim is rovidul, nem csak az ekezetek esnek ki.
     assert.deepEqual(
-      terv.handleUpdate.map((u) => [u.ourId, u.from, u.to]),
+      terv.update.map((u) => [u.ourId, u.handle?.from, u.handle?.to]),
       [
         ["1", "termékek", "termekek"],
         ["2", "eledelek---termékek", "eledelek"],
@@ -383,15 +388,15 @@ describe("a hatodik allapot: a tarolt webcim elter a szabalytol", () => {
     const terv = planCategoryImport(
       FA,
       [
-        { id: "pcat_1", externalId: "1", handle: "termekek" },
-        { id: "pcat_2", externalId: "2", handle: "eledelek" },
+        { id: "pcat_1", externalId: "1", handle: "termekek", name: "Termékek" },
+        { id: "pcat_2", externalId: "2", handle: "eledelek", name: "Eledelek" },
       ],
       [
         { ourId: "1", medusaId: "pcat_1" },
         { ourId: "2", medusaId: "pcat_2" },
       ],
     );
-    assert.deepEqual(terv.handleUpdate, []);
+    assert.deepEqual(terv.update, []);
   });
 
   /**
@@ -402,11 +407,11 @@ describe("a hatodik allapot: a tarolt webcim elter a szabalytol", () => {
   it("UTKOZO kategoriara nem keletkezik webcim-frissites", () => {
     const terv = planCategoryImport(
       FA,
-      [{ id: "pcat_1", externalId: "1", handle: "regi-cim" }],
+      [{ id: "pcat_1", externalId: "1", handle: "regi-cim", name: "Termékek" }],
       [{ ourId: "1", medusaId: "pcat_MAS" }],
     );
     assert.equal(terv.conflict.length, 1);
-    assert.deepEqual(terv.handleUpdate, []);
+    assert.deepEqual(terv.update, []);
   });
 
   /**
@@ -418,13 +423,103 @@ describe("a hatodik allapot: a tarolt webcim elter a szabalytol", () => {
   it("a lekepezes nelkuli agon is keletkezik frissites", () => {
     const terv = planCategoryImport(
       FA,
-      [{ id: "pcat_1", externalId: "1", handle: "regi-cim" }],
+      [{ id: "pcat_1", externalId: "1", handle: "regi-cim", name: "Termékek" }],
       [],
     );
     assert.deepEqual(terv.mapOnly, [{ ourId: "1", medusaId: "pcat_1" }]);
     assert.deepEqual(
-      terv.handleUpdate.map((u) => u.to),
+      terv.update.map((u) => u.handle?.to),
       ["termekek"],
     );
+  });
+
+  /**
+   * A NEV AGA, ES EZ AZ, AMIERT A HATODIK ALLAPOT 2026-09-22-EN KIBOVULT.
+   *
+   * A teszt katalogus 213 kategoriaja viseli a szulot a neveben, holott a mai
+   * szabaly szerint csak 77-nek kellene. Nev-frissito ut nelkul egy futas
+   * 216 webcimet irt volna at es NULLA nevet -- vagyis `eledelek` webcim allt
+   * volna `Eledelek - Termékek` nev mellett. Ma a ketto EGYUTT hibas; a
+   * javitas nelkul SZETCSUSZTAK volna. (nautilus merese, 15a3141d kartya)
+   */
+  it("a tarolt NEV elterese onmagaban is frissitest ad, helyes webcim mellett", () => {
+    const terv = planCategoryImport(
+      FA,
+      [
+        {
+          id: "pcat_2",
+          externalId: "2",
+          handle: "eledelek",
+          name: "Eledelek - Termékek",
+        },
+      ],
+      [{ ourId: "2", medusaId: "pcat_2" }],
+    );
+    assert.deepEqual(
+      terv.update.map((u) => [u.ourId, u.name?.from, u.name?.to]),
+      [["2", "Eledelek - Termékek", "Eledelek"]],
+    );
+  });
+
+  it("a helyes webcim mellett a frissites handle mezoje null marad", () => {
+    // KULON ALLITAS, mert ez az, ami a KERES TORZSET donti el: ha ide is
+    // bekerulne a webcim, egy valtozatlan erteket irnank ki -- a jelentesben
+    // ugy latszana, mintha a cim is mozdult volna.
+    const terv = planCategoryImport(
+      FA,
+      [
+        {
+          id: "pcat_2",
+          externalId: "2",
+          handle: "eledelek",
+          name: "Eledelek - Termékek",
+        },
+      ],
+      [{ ourId: "2", medusaId: "pcat_2" }],
+    );
+    assert.equal(terv.update[0]?.handle, null);
+  });
+
+  it("ha MINDKETTO elter, EGY bejegyzes keletkezik, mindket mezovel", () => {
+    // EZ A LENYEG: egy bejegyzes egy keres. Ket bejegyzes ket kerest inditana,
+    // es kozottuk allna egy pillanat, amikor az egyik mezo mar atallt.
+    const terv = planCategoryImport(
+      FA,
+      [
+        {
+          id: "pcat_2",
+          externalId: "2",
+          handle: "eledelek---termékek",
+          name: "Eledelek - Termékek",
+        },
+      ],
+      [{ ourId: "2", medusaId: "pcat_2" }],
+    );
+    assert.deepEqual(terv.update, [
+      {
+        ourId: "2",
+        medusaId: "pcat_2",
+        handle: { from: "eledelek---termékek", to: "eledelek" },
+        name: { from: "Eledelek - Termékek", to: "Eledelek" },
+      },
+    ]);
+  });
+
+  it("ha a nev ES a webcim is helyes, NEM keletkezik bejegyzes", () => {
+    // A NEGATIV OLDAL, nev szerint. Enelkul a keszlet nem tudna kulonbseget
+    // tenni a helyes viselkedes es a MINDIG FRISSITO kozott.
+    const terv = planCategoryImport(
+      FA,
+      [
+        {
+          id: "pcat_2",
+          externalId: "2",
+          handle: "eledelek",
+          name: "Eledelek",
+        },
+      ],
+      [{ ourId: "2", medusaId: "pcat_2" }],
+    );
+    assert.deepEqual(terv.update, []);
   });
 });

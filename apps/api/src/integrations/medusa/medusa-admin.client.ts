@@ -284,6 +284,23 @@ export interface MedusaCategoryInput {
 }
 
 /**
+ * AMIT EGY MAR LETEZO kategorian atirhatunk.
+ *
+ * KET DOLOGBAN KULONBOZIK A `MedusaCategoryInput`-tol, es mindketto szandekos:
+ *
+ *   NINCS BENNE `external_id`, `parent_category_id` es `is_active`. Azok a
+ *   LETREHOZASKOR dolnek el; egy frissitesnek nem dolga atrendezni a fat vagy
+ *   ki-be kapcsolni egy kategoriat, es ha egyszer kellene, az kulon dontes.
+ *
+ *   UNIO, NEM `Partial`. Igy egy URES javitas FORDITASI HIBA, nem futasideju
+ *   nulla-muvelet. Egy ures keres ugyanis sikerrel ternе vissza, es a
+ *   jelentesben ugy latszana, mintha frissitettunk volna.
+ *   (Merve 2026-09-22: `updateProductCategory(id, {})` -> TS2345.)
+ */
+export type MedusaCategoryPatch =
+  { name: string; handle?: string } | { name?: string; handle: string };
+
+/**
  * AZ AKTIV JELOLOT KI KELL KULDENI, ES EZ EGY MERESEN MULT.
  *
  * Az elso valtozat opcionalisan hagyta, es a betoltes nem is kuldte: az ervelés
@@ -508,9 +525,17 @@ export interface MedusaAdminClient {
   listProductCategories(): Promise<MedusaCategoryListResult>;
   /** Egy kategoria letrehozasa. A valaszban jon a Medusa-azonosito. */
   createProductCategory(input: MedusaCategoryInput): Promise<MedusaCategoryRow>;
-  updateProductCategoryHandle(
+  /**
+   * EGY MAR LETEZO kategoria frissitese. A NEV ES A WEBCIM EGY KERESBEN megy.
+   *
+   * MIERT NEM KET HIVAS: ket keres kozott van egy pillanat, amikor az egyik
+   * mezo mar atallt, a masik nem -- es epp az az allapot a baj, amit ez az ut
+   * megszuntetni hivatott (rovid webcim hosszu nev mellett). Ugyanez az indok
+   * all a termek-vetites statusz plusz csatorna paranal.
+   */
+  updateProductCategory(
     id: string,
-    handle: string,
+    patch: MedusaCategoryPatch,
   ): Promise<MedusaCategoryRow>;
   /**
    * A GYUJTEMENYEK LISTAJA. NALUNK EZ A MARKA.
@@ -1142,13 +1167,13 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
    * all (`createProductCategories`, az upsert LETREHOZO aga, es a gyujtemeny),
    * egyik sem a frissitesen. Vagyis amit itt kuldunk, azt tarolja el.
    */
-  async updateProductCategoryHandle(
+  async updateProductCategory(
     id: string,
-    handle: string,
+    patch: MedusaCategoryPatch,
   ): Promise<MedusaCategoryRow> {
     const body = await this.request<{ product_category: MedusaCategoryRow }>(
       `/admin/product-categories/${encodeURIComponent(id)}`,
-      { method: "POST", body: JSON.stringify({ handle }) },
+      { method: "POST", body: JSON.stringify(patch) },
     );
     return body.product_category;
   }

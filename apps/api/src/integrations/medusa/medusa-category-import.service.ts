@@ -22,7 +22,7 @@ import {
   type CategoryMapping,
   type ExistingCategory,
   type OurCategoryNode,
-  type CategoryHandleUpdate,
+  type CategoryUpdate,
 } from "./medusa-category-tree.js";
 
 /**
@@ -47,7 +47,12 @@ import {
  * atnevezi a mezot, ez az egy sor pirosodik ki.
  */
 function tervAlak(row: MedusaCategoryRow): ExistingCategory {
-  return { id: row.id, externalId: row.external_id, handle: row.handle };
+  return {
+    id: row.id,
+    externalId: row.external_id,
+    handle: row.handle,
+    name: row.name,
+  };
 }
 
 /**
@@ -101,7 +106,7 @@ export interface CategoryImportReport {
    * regi cim kint van (kepernyokep, levelezes, megosztott hivatkozas), ez a par
    * az EGYETLEN, amibol atiranyitas keszitheto. Ezert TETELES, nem darabszam.
    */
-  handleUpdates: CategoryHandleUpdate[];
+  updates: CategoryUpdate[];
   /**
    * AZ ELLENORZES, AMIT KULONBEN EMLEKEZETBOL KELLENE ELVEGEZNI.
    *
@@ -194,7 +199,7 @@ export class MedusaCategoryImportService {
       conflicts: terv.conflict.map((c) => c.ourId),
       blockedByConflict: [],
       lostWords: [],
-      handleUpdates: [],
+      updates: [],
       verification: {
         carryingOurId: 0,
         activeAmongThem: 0,
@@ -281,21 +286,39 @@ export class MedusaCategoryImportService {
     }
 
     /**
-     * A HATODIK ALLAPOT VEGREHAJTASA: csak a webcimet irja at.
+     * A HATODIK ALLAPOT VEGREHAJTASA: a NEVET ES A WEBCIMET irja at, EGY
+     * KERESBEN, es csak azt a mezot, amelyik tenylegesen elter.
      *
-     * A NEVHEZ, A SZULOHOZ ES AZ AKTIV JELOLOHOZ NEM NYUL -- a kliens muvelete
-     * is csak a `handle` mezot kuldi. Igy a 4800 termek-kategoria hozzarendeles
-     * es a lekepezes-sorok erintetlenek maradnak: a Medusa-oldali azonosito nem
-     * valtozik, csak a cim.
+     * A SZULOHOZ ES AZ AKTIV JELOLOHOZ NEM NYUL. Igy a 4800 termek-kategoria
+     * hozzarendeles es a lekepezes-sorok erintetlenek maradnak: a Medusa-oldali
+     * azonosito nem valtozik, csak a tartalom.
      *
-     * ES A REGI CIM A RIPORTBA KERUL, MIELOTT ELVESZNE.
+     * MIERT EGY KERESBEN: ket keres kozott van egy pillanat, amikor a webcim
+     * mar az uj, a nev meg a regi -- es epp ez az az allapot, amit ez az ut
+     * megszuntetni hivatott. (Ugyanez az indok all a termek-vetites statusz
+     * plusz csatorna paranal.)
+     *
+     * ES A REGI ERTEKEK A RIPORTBA KERULNEK, MIELOTT ELVESZNENEK.
      */
-    for (const frissites of terv.handleUpdate) {
-      await client.updateProductCategoryHandle(
-        frissites.medusaId,
-        frissites.to,
-      );
-      report.handleUpdates.push(frissites);
+    for (const frissites of terv.update) {
+      /*
+       * A `patch` alakja UNIO (`MedusaCategoryPatch`), tehat az ures eset
+       * forditasi hiba lenne. A terv viszont csak akkor vesz fel bejegyzest,
+       * ha legalabb az egyik mezo elter -- ezert all itt egy osszeallitas es
+       * nem egy `as` allitas: ha a terv valaha ures bejegyzest adna, ez a sor
+       * pirosodik ki, nem a Medusa valaszol ertelmetlent.
+       */
+      const patch = frissites.name
+        ? frissites.handle
+          ? { name: frissites.name.to, handle: frissites.handle.to }
+          : { name: frissites.name.to }
+        : frissites.handle
+          ? { handle: frissites.handle.to }
+          : null;
+      if (!patch) continue;
+
+      await client.updateProductCategory(frissites.medusaId, patch);
+      report.updates.push(frissites);
     }
 
     /**

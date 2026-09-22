@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type {
   MedusaAdminClient,
   MedusaCategoryInput,
+  MedusaCategoryPatch,
   MedusaCategoryRow,
 } from "./medusa-admin.client.js";
 import { categoryHandle } from "./medusa-category-handle.js";
@@ -39,7 +40,7 @@ const FA: OurCategoryNode[] = [
 
 function medusaDupla(kezdo: MedusaCategoryRow[] = [], truncated = false) {
   const letrehozva: MedusaCategoryInput[] = [];
-  const frissitve: { id: string; handle: string }[] = [];
+  const frissitve: { id: string; patch: MedusaCategoryPatch }[] = [];
   const keletkezett: MedusaCategoryRow[] = [];
   let n = 0;
   const client = {
@@ -54,15 +55,20 @@ function medusaDupla(kezdo: MedusaCategoryRow[] = [], truncated = false) {
     },
     /**
      * A FRISSITES A DUPLABAN IS ELVEGZI, AMIT A VALODI: atirja a tarolt
-     * handle-t. Egy no-op dupla itt azt engedne at, hogy a szolgaltatas ki sem
+     * mezoket. Egy no-op dupla itt azt engedne at, hogy a szolgaltatas ki sem
      * kuldi -- es a hozza tartozo allitas nem tudna elbukni.
+     *
+     * ES A TELJES `patch`-ET JEGYZI FEL, nem csak a webcimet. A hivo egy
+     * KERESBEN kuldi a nevet es a cimet; ha a dupla csak az egyiket orizne, epp
+     * azt az allitast nem lehetne megirni, amiert ez az ut letezik.
      */
     // eslint-disable-next-line @typescript-eslint/require-await
-    async updateProductCategoryHandle(id: string, handle: string) {
-      frissitve.push({ id, handle });
+    async updateProductCategory(id: string, patch: MedusaCategoryPatch) {
+      frissitve.push({ id, patch });
       const sor = [...kezdo, ...keletkezett].find((x) => x.id === id);
       if (!sor) throw new Error(`nincs ilyen kategoria: ${id}`);
-      sor.handle = handle;
+      if (patch.handle !== undefined) sor.handle = patch.handle;
+      if (patch.name !== undefined) sor.name = patch.name;
       return sor;
     },
     // eslint-disable-next-line @typescript-eslint/require-await
@@ -362,7 +368,7 @@ describe("a kategóriafa betöltése", () => {
    * A VARRAT A FRISSITESI UTON: a terv megmondja, MIT kellene atirni, de hogy a
    * szolgaltatas ki is KULDI-e, azt csak az mutatja meg, amit a dupla KAPOTT.
    */
-  it("a webcim-frissitest KIKULDI, es a riport a REGI cimet is megorzi", async () => {
+  it("a frissitest EGY keresben kuldi ki, a nevvel es a cimmel egyutt", async () => {
     const { client, frissitve } = medusaDupla([
       {
         id: "pcat_regi",
@@ -381,13 +387,80 @@ describe("a kategóriafa betöltése", () => {
       },
     ]);
     const service = new MedusaCategoryImportService(links);
-    const report = await service.run(client, FA, MOST);
+    await service.run(client, FA, MOST);
 
-    assert.deepEqual(frissitve, [{ id: "pcat_regi", handle: "halak" }]);
-    assert.deepEqual(
-      report.handleUpdates.map((u) => [u.from, u.to]),
-      [["halak---termékek", "halak"]],
+    // EGY hivas, ket mezovel. Ket bejegyzes ket kerest jelentene, es kozottuk
+    // allna egy pillanat, amikor a cim mar az uj, a nev meg a regi.
+    assert.deepEqual(frissitve, [
+      { id: "pcat_regi", patch: { name: "Halak", handle: "halak" } },
+    ]);
+  });
+
+  it("a riport a REGI nevet ES a REGI cimet is megorzi", async () => {
+    // KULON ALLITAS: a kikuldes es a RIPORT ket kulon dolog. A csere
+    // EGYIRANYU, tehat a regi par az egyetlen, amibol atiranyitas keszitheto.
+    const { client } = medusaDupla([
+      {
+        id: "pcat_regi",
+        name: "Halak - Termékek",
+        external_id: "cat_hal",
+        parent_category_id: null,
+        is_active: true,
+        handle: "halak---termékek",
+      },
+    ]);
+    const { links } = taroloDupla([
+      {
+        categoryId: "cat_hal",
+        medusaCategoryId: "pcat_regi",
+        lastSyncedAt: MOST,
+      },
+    ]);
+    const report = await new MedusaCategoryImportService(links).run(
+      client,
+      FA,
+      MOST,
     );
+
+    assert.deepEqual(
+      report.updates.map((u) => [
+        u.name?.from,
+        u.name?.to,
+        u.handle?.from,
+        u.handle?.to,
+      ]),
+      [["Halak - Termékek", "Halak", "halak---termékek", "halak"]],
+    );
+  });
+
+  /**
+   * A HELYES WEBCIM MELLETT IS KIMEGY A NEV. Ez az az eset, ami a teszt
+   * katalogusban 136-szor all elo egy ujra-vetites UTAN: ott a webcim mar a
+   * mai szabalyt adna, a nev viszont meg a szulot viseli.
+   */
+  it("helyes webcim mellett CSAK a nevet kuldi ki", async () => {
+    const { client, frissitve } = medusaDupla([
+      {
+        id: "pcat_regi",
+        name: "Halak - Termékek",
+        external_id: "cat_hal",
+        parent_category_id: null,
+        is_active: true,
+        handle: "halak",
+      },
+    ]);
+    const { links } = taroloDupla([
+      {
+        categoryId: "cat_hal",
+        medusaCategoryId: "pcat_regi",
+        lastSyncedAt: MOST,
+      },
+    ]);
+    await new MedusaCategoryImportService(links).run(client, FA, MOST);
+
+    assert.deepEqual(frissitve, [
+      { id: "pcat_regi", patch: { name: "Halak" } },
+    ]);
   });
 
   /**
