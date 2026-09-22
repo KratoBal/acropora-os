@@ -8,6 +8,7 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from "class-validator";
 
 import { Transform } from "class-transformer";
@@ -179,6 +180,43 @@ export class SetServiceJobAssigneesDto {
  * a helyszin ELHAGYHATO, tehat letezik helyszin NELKULI jegy -- azon ez a
  * vegpont az ELSO beallitast vegzi, es ott nincs leeso eszkoz.
  */
+/**
+ * A JEGY SZERKESZTHETO MEZOI, A FELVITEL UTAN.
+ *
+ * Balazs kerese, 2026-09-22: a hibajegy legyen modosithato. A HATART nem ez a
+ * DTO hordozza, hanem a `descriptionEditBlocker` -- itt csak az ALAK all.
+ *
+ * === MIERT NEM A `SetServiceJobPlacementDto` BOVITESE ===
+ *
+ * Mert annak az `assetIds` mezoje KOTELEZO es TELJES HALMAZ (lasd ott, miert).
+ * Ha a leiras oda kerulne, egy szovegmezo javitasahoz is el kellene kuldeni a
+ * teljes eszkozlistat -- es ket kezelo eseten az, aki a leirast irja at,
+ * VISSZAALLITANA egy eszkoz-valtoztatast egy mezon, amihez hozza sem nyult.
+ * Ez nema adatvesztes, nem kenyelmetlenseg.
+ *
+ * === A MEZO ELHAGYHATO, ES `null`-T IS FELVESZ ===
+ *
+ * A ketto MAST jelent, es a kulonbseg szandekos: a hianyzo mezo azt mondja,
+ * hogy NE NYULJ hozza; a `null` azt, hogy URITSD KI. A leiras a semaban
+ * `String?`, tehat az urites ervenyes allapot.
+ *
+ * === A CIM MA NINCS ITT, ES EZ NYITOTT KERDES ===
+ *
+ * A sema `title` mezoje KULON all es KOTELEZO, tehat uresre nem irhato -- egy
+ * plusz szabalyt viselne. Balazs a harom mezo kozott a LEIRAST nevezte meg, a
+ * cimet csak elirta. A kerdes a kartyan all (764ea7a8); ha igen a valasz, egy
+ * elhagyhato mezo es egy allitas a hozzaadas, ujratervezes nelkul.
+ */
+export class UpdateServiceJobFieldsDto {
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString({ message: "A hibajegy leírása szöveg legyen." })
+  @MaxLength(4000, {
+    message: "A hibajegy leírása legfeljebb 4000 karakter lehet.",
+  })
+  description?: string | null;
+}
+
 export class SetServiceJobPlacementDto {
   @IsString() @MinLength(1) @MaxLength(64) departmentId!: string;
   /**

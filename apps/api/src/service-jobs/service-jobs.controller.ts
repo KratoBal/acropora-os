@@ -5,6 +5,7 @@ import {
   Get,
   Header,
   Param,
+  Patch,
   Post,
   Query,
   StreamableFile,
@@ -23,6 +24,7 @@ import {
   SetServiceJobHiddenDto,
   SetServiceJobPartnerDto,
   SetServiceJobPlacementDto,
+  UpdateServiceJobFieldsDto,
 } from "./dto.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
 import { ServiceJobPackageService } from "./service-job-package.service.js";
@@ -229,6 +231,28 @@ export class ServiceJobsController {
    * MEG egy lekerdezest inditana, es a ket valasz kozott a jegy mar
    * mozdulhatott.
    */
+  /**
+   * A JEGY MEZOINEK SZERKESZTESE (ma: a leiras).
+   *
+   * `PATCH`, es nem `POST`: RESZLEGES frissites. A szomszedos
+   * `:id/placement` azert `POST`, mert TELJES halmazt allit be.
+   *
+   * A `SERVICE_MANAGE` NEM zarja ki a partnert, es ezt lemertem, nem
+   * feltetelezem: a `PARTNER_SERVICE` szerep is viseli
+   * (`packages/types/src/auth.ts:388`), ezert tud ma is jegyet nyitni a
+   * `@Post()` vegponton, ami ugyanezt a jogot koveteli. A ket hatokor NEM itt
+   * valik szet, hanem a szolgaltatasban, a hatar-fuggvenyben.
+   */
+  @Patch(":id")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  updateFields(
+    @Param("id") id: string,
+    @Body() input: UpdateServiceJobFieldsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.updateFields(id, input, user);
+  }
+
   @Post(":id/placement")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   setPlacement(

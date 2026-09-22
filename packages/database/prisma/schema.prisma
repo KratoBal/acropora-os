@@ -340,6 +340,15 @@ enum ServiceJobEventKind {
   /// Kimenő értesítés ténye (ma: levél a jegy nyitójának). A jegy állapota
   /// NEM változik tőle, ezért nem fér a STATUS_CHANGE alá: az hazugság lenne.
   NOTIFICATION_SENT
+  /// A jegy egy MEZŐJE változott (ma: a leírás, és a helyszín-átvezetés).
+  ///
+  /// SAJÁT FAJTA, ÉS NEM A `STATUS_CHANGE` ALÁ: az állapot nem mozdul tőle.
+  ///
+  /// ÉS EZÉRT KELL FIGYELNI A KIHAGYÁSRA: a `kind` alapértelmezése
+  /// `STATUS_CHANGE`, tehát egy `kind` nélkül írt sor nem hiányosnak látszik,
+  /// hanem ÁLLAPOTVÁLTÁSNAK. Egy „van-e esemény" alakú állítás ezért a rossz
+  /// fajtára is zöld -- az állítás a `kind` ÉRTÉKÉRE menjen.
+  FIELDS_EDITED
 }
 
 enum ServiceJobStatus {
