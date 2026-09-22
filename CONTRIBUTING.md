@@ -11,11 +11,38 @@
 7. Beküldés előtt futtasd:
 
 ```bash
+pnpm gates
+```
+
+Ez a négyet futtatja (`format:check`, `typecheck`, `test`, `build`), mindet
+`--force` kapcsolóval, és **mellé kiírja, hány feladat futott le, meg hányat
+kellett volna**. A négy parancsot külön is futtathatod, de akkor a lenti néma
+esetet neked kell észrevenned:
+
+```bash
 pnpm format:check
 pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+**A `Tasks:` sor nevezője az első szám, amit megnézel, nem a kilépési kód.** Ha
+egy csomag `build` lépése elhasal, a rá épülő teszt-feladat **el sem indul** --
+tehát nulla hibasor keletkezik, és aki a kimenetet bukásra szűri, üres találatot
+kap. Az üres találat betűre ugyanúgy néz ki, mint egy tiszta futás.
+
+Mérve 2026-09-22, gyökér `.env` nélkül: a turbo kilépési kódja `1` (ez helyes és
+hangos), de a `Tasks:` sor `3 successful, 7 total` -- a nevező 12-ről esett 7-re,
+és nulla `# fail` sor jött. A `pnpm gates` ezt néven nevezi:
+`FELADAT ESETT KI: 7 futott, 12 a vart.`
+
+**A várt szám nincs kézzel beírva:** a `pnpm gates` minden futás előtt megkérdezi
+a turbót (`--dry-run=json`), és kiszűri azokat a feladatokat, amikhez a csomagnak
+nincs szkriptje (`command: "<NONEXISTENT>"`). Enélkül a `test` várt értéke 14
+lenne 12 helyett, és a kapu minden tiszta futáson pirosat adna.
+
+**Előfeltétel: gyökér `.env`.** A forrása a követett `.env.example`; az `API_URL`
+nélkül a `@acropora/partner` és a `@acropora/web` build lépése megáll.
 
 **A tesztek belépési pontja a gyökér parancs, nem a csomagé.** A `pnpm test` a
 turbón megy át, és a turbo `test` feladata már függ a buildtől (`dependsOn:
