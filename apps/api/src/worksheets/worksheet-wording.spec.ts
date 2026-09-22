@@ -41,7 +41,7 @@ describe("worksheet wording", () => {
     );
 
     assert.deepEqual(messages, [
-      "Az alegység kódja legfeljebb három betű lehet (pl. BIO).",
+      "Az alegység kódja legfeljebb három betű vagy szám lehet (pl. BIO vagy A1).",
     ]);
   });
 });

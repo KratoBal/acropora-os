@@ -38,12 +38,44 @@ describe("create worksheet department input", () => {
     }
   });
 
-  it("refuses a code that is not three letters, and says why", () => {
+  it("refuses a code that is too long, and says why", () => {
     const messages = messagesFor({ code: "BIOD", name: "Biodóm" });
 
     assert.deepEqual(messages, [
-      "Az alegység kódja legfeljebb három betű lehet (pl. BIO).",
+      "Az alegység kódja legfeljebb három betű vagy szám lehet (pl. BIO vagy A1).",
     ]);
+  });
+
+  /**
+   * A BEMENET MEGENGEDOBB A TAROLT ALAKNAL, ES EZ SZANDEKOS.
+   *
+   * A kisbetu ITT atmegy (a repository nagybetusiti), a kanonikus mintan
+   * viszont bukik -- lasd `worksheet-number.spec.ts`. A ket szint kulonbsege
+   * nem ellentmondas, hanem a normalizalas helye, es ezert all mind a ketto
+   * allitasban: ha valaki a normalizalast kiveszi, az egyik oldal elmozdul.
+   */
+  it("accepts digits, mixed or on their own", () => {
+    for (const code of ["A1", "12", "1A2", "bio", "a1"])
+      assert.deepEqual(
+        messagesFor({ code, name: "Biodóm" }),
+        [],
+        `a(z) "${code}" kodot el kellett volna fogadnia`,
+      );
+  });
+
+  /**
+   * ES AMI VALTOZATLANUL BUKIK. Enelkul a fenti allitas egy OLYAN
+   * megvalositason is zold lenne, amibol a `@Matches` hianyzik.
+   */
+  it("KONTROLL: a megkötés MEGMARADT -- nem minden kód megy át", () => {
+    for (const code of ["ABCD", "1234", "A-1", "Á1", "A 1", ""])
+      assert.deepEqual(
+        messagesFor({ code, name: "Biodóm" }),
+        [
+          "Az alegység kódja legfeljebb három betű vagy szám lehet (pl. BIO vagy A1).",
+        ],
+        `a(z) "${code}" kodot el kellett volna utasitania`,
+      );
   });
 });
 

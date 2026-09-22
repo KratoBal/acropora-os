@@ -58,7 +58,7 @@ export const WORKSHEET_NUMBER_ISSUE_MESSAGES: Record<
   DEPARTMENT_CODE_MISSING:
     "A munkalaphoz nincs alegység rendelve, ezért nem zárható le. Az alegység kódja a szám kötelező tagja.",
   DEPARTMENT_CODE_INVALID:
-    "Az alegység kódja érvénytelen: legfeljebb három nagybetű lehet (pl. BIO).",
+    "Az alegység kódja érvénytelen: legfeljebb három nagybetű vagy számjegy lehet (pl. BIO vagy A1).",
 };
 
 export function worksheetNumberIssue(input: {

@@ -96,6 +96,53 @@ describe("worksheet number", () => {
     );
   });
 
+  /**
+   * A HELYSZIN-KOD SZAMJEGYET IS TARTALMAZHAT (Balazs, 2026-09-22).
+   *
+   * A NEGYEDIK ES OTODIK ALLITAS A LENYEG, NEM AZ ELSO HAROM. Egy teszt, ami
+   * csak azt mondja, hogy "A1" es "12" atmegy, ZOLD LENNE AKKOR IS, ha valaki
+   * a mintat teljesen kivenne -- vagyis nem a tagitast merne, hanem a
+   * megkotes ELTUNESET. Az "ABCD" es a kisbetus alak MA IS bukik, es a
+   * tagitas utan is buknia kell: ez valasztja szet a kettot.
+   */
+  it("accepts digits in the department code, and still refuses what it refused", () => {
+    // a tagitas: szam es betu keverve, es tisztan szam is
+    assert.equal(
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "A1" }),
+      null,
+    );
+    assert.equal(
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "12" }),
+      null,
+    );
+    assert.equal(
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "1A2" }),
+      null,
+    );
+
+    // ES AMI VALTOZATLANUL BUKIK -- enelkul a fenti harom nem bizonyit semmit
+    assert.equal(
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "ABCD" }),
+      "DEPARTMENT_CODE_INVALID",
+      "negy karakter tovabbra sem fer bele: a hossz nem valtozott",
+    );
+    assert.equal(
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "1234" }),
+      "DEPARTMENT_CODE_INVALID",
+      "a hossz szamjegyre is all, nem csak beture",
+    );
+    assert.equal(
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "bio" }),
+      "DEPARTMENT_CODE_INVALID",
+      "ez a TAROLT alak mintaja, az pedig nagybetus; a bemenetet a DTO engedi meg es a repository normalizalja",
+    );
+    assert.equal(
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "A-1" }),
+      "DEPARTMENT_CODE_INVALID",
+      "a kotojel a munkalapszam tagolo jele: egy kodban allva ketertelmuve tenne a szamot",
+    );
+  });
+
   it("has a Hungarian message for every issue", () => {
     for (const issue of [
       "PARTNER_CODE_MISSING",
