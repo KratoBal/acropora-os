@@ -107,25 +107,39 @@ export function HandoverMailDialog({
     setSubject((elozo) => (elozo === "" ? preview.subject : elozo));
   }, [open, preview]);
 
+  /*
+    A BEGEPELT UZENET NEM VESZHET EL EGY FELREKATTINTASTOL.
+
+    A `ConfirmDialog` barhol zar (Escape es hatter-kattintas), es ott ez
+    helyes: ott nincs mit elveszteni. Itt a kezelo hosszu szoveget ir, es egy
+    melle-kattintas a hatterre ugyanugy nez ki, mint barhol mashol a lapon.
+
+    Ezert amint van begepelt szoveg, CSAK a Megsem gomb zar. Az ures ablak
+    tovabbra is barhol zarhato -- kulonben egy vegig elolvasott, de nem
+    hasznalt dialogust is gombbal kellene becsukni.
+  */
+  const vanSzoveg = message.trim().length > 0;
+  const zarhatoKivulrol = !busy && !vanSzoveg;
+
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onCancel();
+      if (event.key === "Escape" && zarhatoKivulrol) onCancel();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, busy, onCancel]);
+  }, [open, zarhatoKivulrol, onCancel]);
 
   if (!open) return null;
 
   const cimzettek = preview?.kind === "send" ? preview.recipients : [];
-  const kuldheto = preview?.kind === "send" && message.trim().length > 0;
+  const kuldheto = preview?.kind === "send" && vanSzoveg;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-dusk-900/40 p-4"
       onClick={() => {
-        if (!busy) onCancel();
+        if (zarhatoKivulrol) onCancel();
       }}
     >
       <div

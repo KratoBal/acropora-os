@@ -1155,6 +1155,48 @@ describe("a lezárt hibajegy kiküldése", () => {
   });
 
   /*
+    A BEGEPELT UZENET NEM VESZHET EL EGY FELREKATTINTASTOL.
+
+    A KET ALLITAS EGYUTT MER, KULON-KULON EGYIK SEM: a "nem zar" onmagaban
+    akkor is zold lenne, ha a dialogus SOHA nem zarna kivulrol -- es akkor egy
+    veletlenul megnyitott ablakbol csak gombbal lehetne kijonni.
+  */
+  it("begépelt üzenet mellett a háttérre kattintás NEM zárja be", async () => {
+    const ablak = await ablakotNyit();
+    await waitFor(() =>
+      expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy(),
+    );
+
+    fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+      target: { value: "Köszönjük a bizalmat." },
+    });
+    fireEvent.click(ablak.parentElement as HTMLElement);
+
+    expect(
+      screen.getByRole("dialog", {
+        name: "A HJ-2026-001 számú hibajegy kiküldése",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("üres üzenet mellett a háttérre kattintás bezárja", async () => {
+    const ablak = await ablakotNyit();
+    await waitFor(() =>
+      expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy(),
+    );
+
+    fireEvent.click(ablak.parentElement as HTMLElement);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: "A HJ-2026-001 számú hibajegy kiküldése",
+        }),
+      ).toBeNull(),
+    );
+  });
+
+  /*
     A `skipped` VALASZ NEM SIKER.
 
     A hivas 200-zal ter vissza, tehat egy naiv felulet "elkuldve" uzenetet
