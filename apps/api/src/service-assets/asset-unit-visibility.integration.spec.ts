@@ -4,6 +4,8 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
+import { assetListWheres } from "./service-assets.repository.js";
 
 /**
  * KET FELHASZNALO, UGYANAZ AZ UGYFEL, KULONBOZO EGYSEG -- FIXTURA ES KERET.
@@ -237,16 +239,113 @@ describe(
     });
 
     /**
-     * AMI MEG NINCS ITT, ES SZANDEKOSAN NINCS.
+     * === AMI ERRE VART, ES 2026-09-22-EN MEGERKEZETT ===
      *
-     * A ket lathatosagi allitas -- hogy a TERMELESI where-epito a ket
-     * felhasznalora KULONBOZO halmazt ad -- akkor kerul ide, amikor az
-     * `unitIds` kotelezo parameterre atallt alairas bent van a fo agon. Addig
-     * egy ilyen allitas vagy nem fordulna le, vagy a mai (hibas) viselkedest
-     * rogzitene helyesnek -- es epp ez utobbi az a hiba, ami miatt ez a fajl
-     * letezik.
+     * A fajl eredeti zaro jegyzete azt mondta ki, hogy a ket lathatosagi
+     * allitas akkor kerul ide, amikor az `unitIds` kotelezo parameterre atallt
+     * alairas bent van. Az alairas ezzel a valtozassal all at
+     * (`assetListWheres(scope, assignedUnitIds, ...)`), tehat az allitasok itt
+     * vannak -- ugyanazon a fixturan, nem egy masodikon.
      *
-     * A fixtura es a keret viszont az alairastol FUGGETLEN, ezert all itt mar ma.
+     * AMIERT NEM UJ FIXTURAT IRTAM: ket fixtura ugyanarra a tulajdonsagra nem
+     * ket meres, hanem egy meres es egy jovobeli elteres. Ha az egyik valtozik,
+     * a masik csendben tovabb allitja a regit.
      */
+    /**
+     * A TERMELESI WHERE-EPITO A KET FELHASZNALORA KULONBOZO HALMAZT AD.
+     *
+     * Ez az az allitas, amire a fajl fejlece vart: az `assetListWheres` alairasa
+     * 2026-09-22 ota KOTELEZO `assignedUnitIds` parametert visel, tehat egy
+     * kifelejtett hivohely forditasi hiba, nem csendes tagitas.
+     *
+     * A KET FELHASZNALO HOZZARENDELESET A TERMELESI LEKERDEZES OLDJA FEL
+     * (`assignedUnitIdsFor`), nem a spec irja be kezzel. Igy a meres a FELOLDAST
+     * es a SZUROT egyutt jarja be -- a ketto kulon tud elromlani, es egy kezzel
+     * beirt egyseg-lista epp a feloldast hagyna meretlenul.
+     */
+    it("a termelesi szuro: a KRO-felhasznalo csak a KRO eszkozeit latja", async () => {
+      const egysegek = await assignedUnitIdsFor(kroFelhasznaloId);
+      const { list } = assetListWheres(
+        { kind: "customer", customerId: ugyfelId },
+        egysegek,
+        {},
+        {},
+      );
+
+      assert.deepEqual(await latottEszkozok(list), [
+        `${PREFIX}-KRO-1`,
+        `${PREFIX}-KRO-2`,
+      ]);
+    });
+
+    /**
+     * ES A MASODIK POZITIV KONTROLL: UGYANAZ a lekerdezes, MASIK felhasznalo,
+     * MASIK halmaz.
+     *
+     * Enelkul a fenti allitas egy olyan szurotol is zold lenne, ami VELETLENUL
+     * epp a KRO-halmazt adja (beegetett azonosito, elso-egyseg-nyer, barmi).
+     * Ketto egyutt bizonyit: a kimenet a HIVOTOL fugg, nem a kodban all.
+     */
+    it("KONTROLL: az AKV-felhasznalo UGYANAZZAL a lekerdezessel MASIK halmazt lat", async () => {
+      const egysegek = await assignedUnitIdsFor(akvFelhasznaloId);
+      const { list } = assetListWheres(
+        { kind: "customer", customerId: ugyfelId },
+        egysegek,
+        {},
+        {},
+      );
+
+      assert.deepEqual(await latottEszkozok(list), [
+        `${PREFIX}-AKV-1`,
+        `${PREFIX}-AKV-2`,
+        `${PREFIX}-AKV-3`,
+      ]);
+    });
+
+    /**
+     * A HELYSZIN NELKULI ESZKOZ EGYIK FELHASZNALONAK SEM LATSZIK -- ES EZ DONTES.
+     *
+     * A sema megengedi a NULL `departmentId` erteket (`Asset.departmentId String?`),
+     * es a letrehozo DTO-ban a mezo elhagyhato, tehat ilyen sor MA IS keletkezhet.
+     * Egy `departmentId: { in: [...] }` feltetel a NULL-t nem engedi at.
+     *
+     * A KET TEVEDES ARA NEM EGYFORMA: ha lathato lenne, egy sor, ami semmilyen
+     * helyszinhez nem tartozik, atmenne a szuron, es a szabaly kivetelt kapna,
+     * amit kesobb senki nem ert. Igy viszont a partner SZOL, hogy hianyzik
+     * valami, es kiderul, hogy az adat hianyos -- a tevedes HANGOS, es a javitas
+     * a helyes helyen tortenik.
+     *
+     * HA EZ A DONTES VALAHA MEGFORDUL, EZ AZ ALLITAS PIROSODIK, es akkor a
+     * valtozast ki kell mondani, nem csendben atirni.
+     */
+    it("a helyszin NELKULI eszkoz egyik felhasznalonak sem latszik", async () => {
+      for (const userId of [kroFelhasznaloId, akvFelhasznaloId]) {
+        const { list } = assetListWheres(
+          { kind: "customer", customerId: ugyfelId },
+          await assignedUnitIdsFor(userId),
+          {},
+          {},
+        );
+
+        assert.ok(
+          !(await latottEszkozok(list)).includes(`${PREFIX}-NINCS-EGYSEG`),
+          `a helyszin nelkuli eszkoz atjott ${userId} szamara`,
+        );
+      }
+    });
+
+    /**
+     * ES A BELSOS HIVO MINDENT LAT -- ismert pozitiv kontroll a SZUROre magara.
+     *
+     * Enelkul mind a harom fenti allitas zold lenne egy olyan epitotol is, ami
+     * MINDENKINEK ures halmazt ad: a ket "latja" allitas bukna ugyan, de azokat
+     * konnyu a fixturara fogni. Ez a sor megmondja, hogy a szuro KEPES mindent
+     * atengedni, tehat a szukites tenyleg szukites.
+     */
+    it("KONTROLL: a belsos hivo mind a hat sort latja", async () => {
+      const { list } = assetListWheres({ kind: "internal" }, [], {}, {});
+
+      assert.equal((await latottEszkozok(list)).length, 6);
+    });
   },
 );
