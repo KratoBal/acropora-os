@@ -7,7 +7,6 @@ import {
   assetVisibilityForAndBranch,
   scopeOwnWhereForAndBranch,
   scopeVisibleDocumentTypes,
-  scopeWhereForAndBranch,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
 import { collectUnitSubtreeIds } from "./unit-subtree.js";
@@ -2121,6 +2120,24 @@ export class ServiceAssetsRepository extends Repository {
       });
       if (!document) return false;
       /*
+          === ES 2026-09-22 OTA EZ AZ EGYETLEN AG, AMI NEM ALLT AT ===
+
+          Aznap a felirat-atiras es a matricakod-kereses is a LISTA kapujara
+          tert at (`assetVisibilityForAndBranch`), mert harom uton harom
+          kulonbozo kapu allt ugyanarra a dologra. A TORLES SZANDEKOSAN KIMARADT
+          ebbol, es ezt ki kell mondani -- kulonben ugy nez ki, mintha
+          kifelejtettuk volna az osszehangolasbol.
+
+          AZ INDOK: a ket muvelet ara nem egyforma. Egy rossz felirat javithato,
+          egy torolt dokumentum nem. Egy visszafordithatatlan tagitasra KULON
+          engedely kell, es a gazda erre 2026-09-22-ig nem valaszolt -- tehat
+          nincs ra engedely. acrobot szavaval, ahogy neki irta: "a feliratozas
+          megnyilik, a torles zarva marad. Igy a partner javithat egy elgepelt
+          feliratot, de nem tuntethet el semmit."
+
+          HA EZ VALAHA MEGNYILIK, az kulon dontes, es ide kell irni, kitol es
+          mikor.
+
         KET FELTETEL: az eszkoz a keroe, ES a fajta lathato neki. Aki nem latja,
         ne is torolhesse -- egy torles kulonben a LETEZEST is elarulna arrol,
         amit meg sem lat.
@@ -2372,6 +2389,7 @@ export class ServiceAssetsRepository extends Repository {
     documentId: string,
     caption: string | null,
     scope: PartnerScope,
+    assignedUnitIds: readonly string[],
   ): Promise<number> {
     /**
      * A HATOKOR A FELTETELBEN ALL, ES KET AGON, ugyanaz a ketto, amit az
@@ -2391,7 +2409,31 @@ export class ServiceAssetsRepository extends Repository {
         id: documentId,
         assetId,
         type: { in: scopeVisibleDocumentTypes(scope) },
-        asset: { AND: [scopeWhereForAndBranch(scope)] },
+        /*
+          === A KAPU 2026-09-22-EN CSERELT, ES EZ NEM TAGITAS ===
+
+          Itt a KOZOS `scopeWhereForAndBranch` allt, ami vevo-hatokornel
+          PONTOSAN `{ customerId }`. Eles adaton (2026-09-22, acrobot merese)
+          83 eszkozbol 0 vevo-tulajdonu, tehat a partner EGYETLEN feliratot sem
+          tudott atirni -- holott feltolteskor O adja meg a feliratot.
+
+          HAROM UTON HAROM KULONBOZO KAPU ALLT ugyanarra a dologra: az
+          `addDocument` a `detail`-t hasznalta, ez a kozos szurot, a torles egy
+          harmadikat. Az nem hatar, hanem elteres -- ugyanaz a csalad, mint a
+          671f87f0 (a lista mutatta, az adatlap nemet mondott).
+
+          EZERT UGYANAZ A FUGGVENY ALL ITT, amit a lista es az adatlap hasznal:
+          nem uj kepesseg, hanem a mai allapot HELYREALLITASA.
+
+          A MASODIK FELTETEL (a fajta lathatosaga) VALTOZATLAN, es a fenti
+          jegyzet indoka ra valtozatlanul all.
+
+          A DONTES acroboté, 2026-09-22 12:53, es a TORLESRE KULON NEM SZOL --
+          lasd a `deleteDocument` jegyzetet.
+        */
+        asset: {
+          AND: [assetVisibilityForAndBranch(scope, assignedUnitIds)],
+        },
       },
       data: { caption },
     });

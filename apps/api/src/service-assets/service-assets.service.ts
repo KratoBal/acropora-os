@@ -586,13 +586,14 @@ export class ServiceAssetsService {
     caption: string | null | undefined,
     user: AuthenticatedUser,
   ): Promise<{ ok: true }> {
-    const { scope } = await this.latasiHatokor(user);
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
     await this.detail(id, user);
     const erintett = await this.repository.setDocumentCaption(
       id,
       documentId,
       normalizeDocumentCaption(caption),
       scope,
+      assignedUnitIds,
     );
     // A NULLA ERINTETT SOR NEM SIKER: a felulet a sajat begepelt szoveget
     // mutatna tovabb, mintha mentve lenne.

@@ -99,10 +99,20 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
  *       irta felul ("ne lassa", 2026-09-22 08:55:25 UTC); a reszletek a vegpont
  *       jegyzeteben allnak.
  *
- * ES AMI UGYANAZON A NAPON MEGJELENT, MAJD MERESRE ELTUNT: a cimke-ut egy
- * kulon helyszin-tengelyt kapott, aztan visszavettuk. Az indoka megdolt -- a
- * reszletek a tarolo `detailByLabelCode` jegyzeteben --, es vele egyutt a
- * `egysegTengelyAsset` seged is kikerult, mert nulla hivohelye maradt.
+ * ES AMI UGYANAZON A NAPON MOZGOTT, A SZAM VALTOZASA NELKUL -- ezert all itt,
+ * mert a szambol nem latszik:
+ *
+ *   a cimke-ut (`detailByLabelCode`)     a KOZOS szurorol a TELJES lathatosagi
+ *                                        fuggvenyre tert at
+ *   a felirat-atiras (`setDocumentCaption`)  ugyanaz a csere
+ *
+ * Mindketto EGY hivas maradt, csak MAS fuggvenyre -- a darabszam tehat
+ * valtozatlan, a JELENTES nem. A ket csere indoka a tarolo sajat jegyzeteiben
+ * all, meressel.
+ *
+ * EZZEL AZ ESZKOZ-TAROLOBAN MAR EGYETLEN `scopeWhereForAndBranch` HIVAS SINCS:
+ * minden eszkoz-ut UGYANAZT a lathatosagi fuggvenyt hasznalja. A kozos szuro a
+ * munkalapoknal, a hibajegyeknel es a partner-listanal marad.
  *
  * MIERT PONTOS ES NEM ALSO KORLAT: egy `>=` alak nem veszi eszre, ha egy
  * hatokor-hivas ELTUNIK, amig a tobbi megvan. Es egy UJ hivas eseten sem szol,

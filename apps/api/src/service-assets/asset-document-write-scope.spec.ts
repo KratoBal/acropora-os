@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { belsosUser, vevoUser } from "../testing/scope-user.fixture.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -203,5 +204,81 @@ describe("az eszköz-csatolmányok írása a hívó hatókörével megy", () => 
 
     assert.equal(kapott.feltoltve, 0);
     assert.deepEqual(kapott.setCaption, []);
+  });
+});
+
+/**
+ * A HAROM IRO UT KAPUJA, FORRASBOL -- ES A KETTO KULONBSEGE DONTES.
+ *
+ * MIERT KULON, ES MIERT FORRASBOL: a fenti keszlet azt meri, hogy a hivo
+ * hatokore ELJUT a tarolohoz. Azt NEM, hogy MELYIK kaput hasznalja ott. A ketto
+ * kulon romolhat el, es 2026-09-22-en ki is derult, hogy harom uton HAROM
+ * kulonbozo kapu allt ugyanarra a dologra.
+ *
+ * A kalibracio mutatta meg, hogy ez hianyzik: a felirat-kapu elveteleere
+ * EGYETLEN allitas sem pirosodott ki nev szerint -- csak a hivasi helyek
+ * szamlaloja, veletlenul.
+ */
+describe("a három író út kapuja, forrásból", () => {
+  const forras = readFileSync(
+    "src/service-assets/service-assets.repository.ts",
+    "utf8",
+  );
+
+  /**
+   * Egy metodus torzse a szignaturatol a KOVETKEZO TAG kezdeteig.
+   *
+   * A HATAR NEM `async`, ES EZ MERT ESET: a `setDocumentCaption` utan NEM all
+   * tovabbi `async` metodus, tehat egy `indexOf("\\n  async ")` alapu kereses
+   * `-1`-et ad, es az allitas a KIVAGASON bukik el, nem a mert tulajdonsagon.
+   * A ketto mast jelent: az elso a mereseszkoz hibaja.
+   */
+  const torzs = (nev: string) => {
+    const kezd = forras.indexOf(`async ${nev}(`);
+    assert.ok(kezd >= 0, `nincs ${nev} az eszkoz-repositoryban`);
+    const utana = forras.slice(kezd + 1);
+    // KET SZOKOZ BEHUZAS = osztaly-tag. Ha nincs tobb, a fajl vege a hatar.
+    const kovetkezo = utana.search(/\n {2}(?:private |public |async |\/\*\*)/);
+    const nyers = kovetkezo === -1 ? utana : utana.slice(0, kovetkezo);
+    // A MEGJEGYZESEKET KISZURJUK: a sajat indoklasaink IDEZIK a
+    // fuggvenyneveket, tehat a nyers forrason ezek az allitasok onmaguktol
+    // lennenek zoldek.
+    return nyers.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/.*$/gm, " ");
+  };
+
+  /**
+   * A FELIRAT-ATIRAS UGYANAZT A KAPUT HASZNALJA, MINT A LISTA (2026-09-22).
+   *
+   * Elotte a KOZOS `scopeWhereForAndBranch` allt itt, ami vevo-hatokornel csak
+   * vevo-tulajdonu sorra illeszkedik -- es elesben 83 eszkozbol 0 ilyen van.
+   * A partner tehat egyetlen feliratot sem tudott atirni, holott feltolteskor O
+   * adja meg. A csere nem uj kepesseg, hanem a mai allapot helyreallitasa.
+   */
+  it("a felirat-átírás a TELJES láthatósági szűrőt használja", () => {
+    assert.match(
+      torzs("setDocumentCaption"),
+      /assetVisibilityForAndBranch\(scope, assignedUnitIds\)/,
+    );
+  });
+
+  /**
+   * ES A TORLES SZANDEKOSAN NEM ALLT AT -- KULON ALLITAS, HOGY NE LATSSZON
+   * FELEDEKENYSEGNEK.
+   *
+   * A ket muvelet ara nem egyforma: egy rossz felirat javithato, egy torolt
+   * dokumentum nem. Egy visszafordithatatlan tagitasra kulon engedely kell, es
+   * a gazda erre 2026-09-22-ig nem valaszolt.
+   *
+   * HA EZ AZ ALLITAS PIROSODIK, a valtozas nem hiba -- de akkor a dontest ki
+   * kell mondani, es a metodus jegyzetebe beirni, kitol es mikor.
+   */
+  it("a törlés ágán a szűkebb szabály marad, és ez DÖNTÉS", () => {
+    const t = torzs("deleteDocument");
+    assert.match(t, /rowBelongsToScope\(document\.asset, scope\)/);
+    assert.equal(
+      /assetVisibilityForAndBranch\(/.test(t),
+      false,
+      "a törlés átállt a lista kapujára -- ez külön döntést igényel, lásd a metódus jegyzetét",
+    );
   });
 });
