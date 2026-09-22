@@ -36,8 +36,20 @@ const FORRAS_FAK = [
   join(process.cwd(), "..", "..", "packages", "ui", "src"),
 ];
 
-/** Rejto osztalyok, amiket a `toBeVisible` LATNA -- az `sr-only` NEM ilyen. */
-const REJTO_MINTA = /\b(?:(?:sm|md|lg|xl|2xl):)?!?(?:hidden|invisible)\b/g;
+/**
+ * Rejto osztalyok, amiket a `toBeVisible` LATNA -- az `sr-only` NEM ilyen.
+ *
+ * A BAL HATAR NEM `\b`, ES EZ NEM RESZLET. A `\b` a kotojel utan is illeszkedik,
+ * tehat az `overflow-hidden` es az `aria-hidden` alakokbol is a puszta
+ * `hidden`-t latja -- pedig egyik sem rejt. Merve 2026-09-22: a 76 talalatbol
+ * 34 volt ilyen, vagyis a szam 45 szazalekkal volt felfujva, a valos 42.
+ *
+ * Es a karosabb fele nem a szam: a POZITIV KONTROLLOMAT is kielegitette volna
+ * egyetlen `overflow-hidden`. Egy kontroll, amit egy nem-rejto alak elegit ki,
+ * nem bizonyitja, hogy a kereses valodi rejto osztalyt megtalal.
+ */
+const REJTO_MINTA =
+  /(?<![-\w:])(?:(?:sm|md|lg|xl|2xl):)?!?(?:hidden|invisible)(?![-\w])/g;
 
 /**
  * A MUTATO IRANY, ES EZ A KAROS FEL.
@@ -51,7 +63,7 @@ const REJTO_MINTA = /\b(?:(?:sm|md|lg|xl|2xl):)?!?(?:hidden|invisible)\b/g;
  * `(?![-a-z0-9])` pont ezt vagja ki. Nelkule 111 talalat jon 7 helyett.
  */
 const MUTATO_MINTA =
-  /\b(?:sm|md|lg|xl|2xl):!?(?:inline-flex|inline-block|inline|flex|block|grid|table|contents)(?![-a-z0-9])/g;
+  /(?<![-\w])(?:sm|md|lg|xl|2xl):!?(?:inline-flex|inline-block|inline|flex|block|grid|table|contents)(?![-\w])/g;
 
 function forrasFajlok(konyvtar: string): string[] {
   return readdirSync(konyvtar).flatMap((nev) => {
@@ -100,6 +112,27 @@ describe("a lathatosag-shim", () => {
 
     expect(talalt.size).toBeGreaterThan(0);
     expect(talalt.has("hidden")).toBe(true);
+  });
+
+  /**
+   * NEGATIV KONTROLL, MERT A POZITIV ONMAGABAN GYENGE.
+   *
+   * Az `overflow-hidden` es az `aria-hidden` a szoveg szintjen tartalmazza a
+   * `hidden` szot, de EGYIK SEM rejt. Ha a minta bal hatara `\b`, mindketto
+   * talalat lesz -- es akkor a fenti kontroll akkor is zold, ha a fan EGYETLEN
+   * valodi rejto osztaly sincs.
+   */
+  it("KONTROLL: a nem-rejto alakokat NEM szamolja rejtonek", () => {
+    const minta = new RegExp(REJTO_MINTA.source, "g");
+
+    expect("overflow-hidden".match(minta)).toBeNull();
+    expect("aria-hidden".match(new RegExp(REJTO_MINTA.source, "g"))).toBeNull();
+    expect(
+      "sm:overflow-hidden".match(new RegExp(REJTO_MINTA.source, "g")),
+    ).toBeNull();
+    expect(
+      'className="hidden"'.match(new RegExp(REJTO_MINTA.source, "g")),
+    ).toEqual(["hidden"]);
   });
 
   it("MINDEN hasznalt rejto osztalyt FED a shim", () => {
