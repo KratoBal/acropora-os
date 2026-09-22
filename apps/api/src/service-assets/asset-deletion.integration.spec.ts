@@ -75,13 +75,28 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
         displayName: `Törlés teszt ${suffix}`,
       },
     });
+    /**
+     * A HELYSZIN mindig egy VEVO fajahoz tartozik (WorksheetDepartment.customerId
+     * kotelezo), fuggetlenul attol, hogy az ESZKOZ vagy a HIBAJEGY kihez tartozik --
+     * ezert a department a customer alatt all, de az eszkozok mar SZALLITOI
+     * tulajdonban vannak: ez a suite a torles harom felteteret meri, nem a
+     * tulajdonos-tengelyt, es a `CUSTOMER_OWNER` szabaly (nincs helyszine) csak
+     * felesleges kerulot adna ide.
+     */
+    const department = await prisma.worksheetDepartment.create({
+      data: { customerId: customer.id, code: "DEL", name: "Törlés teszt" },
+    });
+    const supplier = await prisma.supplier.create({
+      data: { code: `${PREFIX}${suffix}`, name: `Törlés teszt szállító` },
+    });
     const asset = async (tag: string, parentAssetId?: string) =>
       (
         await prisma.asset.create({
           data: {
             assetNumber: `${PREFIX}${suffix}-${tag}`,
             name: `Törlés teszt ${tag}`,
-            customerId: customer.id,
+            supplierId: supplier.id,
+            departmentId: department.id,
             parentAssetId,
           },
         })
@@ -98,14 +113,11 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
         jobNumber: `${PREFIX}${suffix}`,
         title: "Törlés teszt hibajegy",
         customerId: customer.id,
+        departmentId: department.id,
       },
     });
     await prisma.serviceJobAsset.create({
       data: { serviceJobId: job.id, assetId: withServiceJob },
-    });
-
-    const department = await prisma.worksheetDepartment.create({
-      data: { customerId: customer.id, code: "DEL", name: "Törlés teszt" },
     });
     await prisma.worksheet.create({
       data: {
@@ -167,6 +179,12 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
           where: { customerNumber: { startsWith: PREFIX } },
         }),
       },
+      {
+        nev: "a suite szallitoja bent maradt a takaritas utan",
+        darab: await prisma.supplier.count({
+          where: { code: { startsWith: PREFIX } },
+        }),
+      },
     ]);
   });
 
@@ -176,12 +194,6 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
       select: { id: true },
     });
     const ids = customers.map((customer) => customer.id);
-    if (ids.length > 0) {
-      await prisma.worksheet.deleteMany({ where: { customerId: { in: ids } } });
-      await prisma.worksheetDepartment.deleteMany({
-        where: { customerId: { in: ids } },
-      });
-    }
     /**
      * A HIBAJEGYEK ELOTAGRA SZURVE, ES A VEVO-BLOKKON KIVUL.
      *
@@ -209,6 +221,18 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
     await prisma.asset.deleteMany({
       where: { assetNumber: { startsWith: PREFIX } },
     });
+    await prisma.supplier.deleteMany({
+      where: { code: { startsWith: PREFIX } },
+    });
+    // A HELYSZIN (`WorksheetDepartment`) `Restrict`-tel mutat rá mind az
+    // eszközre, mind a hibajegyre -- ezért csak MOST, a kettő törlése után
+    // szabad hozzányúlni, nem a vevő-blokk elején, ahol korábban állt.
+    if (ids.length > 0) {
+      await prisma.worksheet.deleteMany({ where: { customerId: { in: ids } } });
+      await prisma.worksheetDepartment.deleteMany({
+        where: { customerId: { in: ids } },
+      });
+    }
     await prisma.customer.deleteMany({
       where: { customerNumber: { startsWith: PREFIX } },
     });

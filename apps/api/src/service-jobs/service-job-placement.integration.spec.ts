@@ -82,6 +82,25 @@ describe(
 
     let actor: AuthenticatedUser;
     let customerId: string;
+    /**
+     * A JEGY SZULETESI HELYSZINE -- KULON A TOBBITOL, HOGY MINDEN
+     * `setPlacement` HIVAS TENYLEGES VALTOZAST IRJON, NE UGYANAZT AZ ERTEKET.
+     *
+     * A `department_required` migracio (2026-09-22) ota egy hibajegy soha nem
+     * jon letre helyszin nelkul: a mai `newJob()` MAR NEM tudja azt a
+     * "SZANDEKOSAN helyszin nelkuli" allapotot eloallitani, amit ez a fajl
+     * eredetileg mert. MEGNEZTEM a `setPlacement` forrasat
+     * (`service-jobs.service.ts:729`): nincs benne "elso beallitas kontra
+     * ujra-beallitas" ag -- minden hivas ugyanazt a tranzakciot futtatja,
+     * fuggetlenul a korabbi ertektol. A negy allitas (a-d) tehat nem VESZIT
+     * lefedettseget azzal, hogy a jegy mar SZULETESEKOR visel helyszint --
+     * csak a NARRATIVA valtozik "elso beallitasrol" "atallitasra". Enelkul a
+     * kulon kezdo helyszin nelkul az (a) teszt setPlacement(helyszin) hivasa
+     * NULL-rol helyszin-re valtana, es a `utana.departmentId === helyszin`
+     * allitas nem tudna elkulonulni attol az esettol, hogy a mezo MAR eleve
+     * helyszin volt -- ezert marad KULON ertek, nem `helyszin`.
+     */
+    let kezdoHelyszin: string;
     /** A jegy eredeti helyszine. */
     let helyszin: string;
     /** A helyszin ALATTI csomopont: a reszfa-bejaras mercéje. */
@@ -118,6 +137,12 @@ describe(
         select: { id: true },
       });
       customerId = customer.id;
+
+      const kezdo = await prisma.worksheetDepartment.create({
+        data: { customerId, code: "KEZ", name: "Kezdő egység" },
+        select: { id: true },
+      });
+      kezdoHelyszin = kezdo.id;
 
       const bio = await prisma.worksheetDepartment.create({
         data: { customerId, code: "BIO", name: "Biodóm" },
@@ -203,11 +228,15 @@ describe(
     }
 
     /**
-     * EGY JEGY, A PARTNERREL EGYUTT, DE HELYSZIN NELKUL.
+     * EGY JEGY, A PARTNERREL EGYUTT, `kezdoHelyszin`-en.
      *
-     * A helyszin nelkuli kiindulas SZANDEKOS: a felvitelen a mezo elhagyhato,
-     * tehat ez a rendes allapota egy mai jegynek -- es a `setPlacement` ezen
-     * vegzi az ELSO beallitast.
+     * EZ A SZAKASZ AT VAN IRVA, NEM CSAK KIEGESZITVE: eredetileg itt allt,
+     * hogy a helyszin nelkuli kiindulas SZANDEKOS, mert a felvitelen a mezo
+     * elhagyhato volt. A `department_required` migracio (2026-09-22) ota ez
+     * MAR NEM IGAZ: a `ServiceJob.departmentId` NOT NULL, tehat egy jegy
+     * fizikailag nem johet letre helyszin nelkul -- ez a fajta allapot innentol
+     * nem a kiindulopontja `setPlacement`-nek, hanem SOSEM allt elo. Lasd a
+     * `kezdoHelyszin` valtozo jegyzetet, miert nem `helyszin`-t hasznal.
      */
     async function newJob() {
       sorszam += 1;
@@ -216,6 +245,7 @@ describe(
           jobNumber: `${TEST_JOB_PREFIX}${suffix}-${sorszam}`,
           title: "Nem indul a szivattyú",
           customerId,
+          departmentId: kezdoHelyszin,
         },
         select: { id: true },
       });
