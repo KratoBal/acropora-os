@@ -665,7 +665,16 @@ describe("a mértékegységek hibája megkülönböztethető az ürestől", () =
 
     render(<AssetEditorPage assetId="asset-1" />);
 
-    await waitFor(() => expect(api.owners).toHaveBeenCalled());
+    /*
+      A RENDERRE VARUNK, NEM A HIVASRA (26162440).
+
+      A `waitFor(... api.owners called)` arra vart, hogy a LEHIVAS
+      megtortenjen. A tagado allitas viszont a KEPERNYOROL szol, es a render
+      elott MINDEN null -- tehat trivialisan atment volna akkor is, ha az
+      uzenet kesobb megjelenik. Itt semmilyen kontroll nem kovette, tehat a
+      teszt CSENDBEN maradt zold.
+    */
+    expect(await screen.findByLabelText("Partner")).toBeTruthy();
     expect(screen.queryByText(UZENET)).toBeNull();
   });
 
@@ -678,7 +687,8 @@ describe("a mértékegységek hibája megkülönböztethető az ürestől", () =
 
     render(<AssetEditorPage assetId="asset-1" />);
 
-    await waitFor(() => expect(api.owners).toHaveBeenCalled());
+    // UGYANAZ, MINT FENT: a renderre varunk, es csak azutan allitunk hianyt.
+    expect(await screen.findByLabelText("Partner")).toBeTruthy();
     expect(screen.queryByText(UZENET)).toBeNull();
   });
 });

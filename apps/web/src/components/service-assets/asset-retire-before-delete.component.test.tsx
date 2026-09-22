@@ -5,6 +5,40 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AssetDetailPage } from "./asset-detail-page";
 
 /**
+ * A TAGADO ALLITAS ELE POZITIV KELL, ES A SORREND NEM IZLES (26162440).
+ *
+ * === A MERT ESET ===
+ *
+ * A #941 CI-jeben (2026-09-22 02:35) ez a fajl elbukott azzal, hogy nem
+ * talalja az "Eszkoz kivezetese" gombot -- UGYANAZON a webes kodon, ami a fo
+ * agon zold. A #941 egyetlen fajlt erintett, es az az `apps/api` alatt van.
+ * Vagyis nem a kod valtozott, hanem a TERHELES.
+ *
+ * AZ OK: `await waitFor(() => expect(api.detail).toHaveBeenCalled())` arra var,
+ * hogy a LEHIVAS megtortenjen, NEM arra, hogy a valasz KIRENDEROLODJON.
+ *
+ * === ES AMI EBBOL A FONTOSABB, MERT A KARTYA CIME MAST SUGALL ===
+ *
+ * Ebben a fajlban a tagado allitas utan MINDIG all egy pozitiv kontroll, tehat
+ * a teszt NEM marad csendben zold: a kontroll dob. A baj az, hogy a HIBAUZENET
+ * a kontrollt nevezi meg, nem az okot -- a CI naploja is a gomb hianyat irta ki,
+ * nem azt, hogy a render nem tortent meg.
+ *
+ * Vagyis itt a kar HAMIS DIAGNOZIS, nem ures allitas. (A csendben ures valtozat
+ * ugyanennek a csaladnak a masik fele, es MAS fajlban all -- az ugyanebben a
+ * korben javult.)
+ *
+ * === A JAVITAS ALAKJA, ES HOGY MERVE VAN ===
+ *
+ * A POZITIV all elol, `findBy`-jal (az VAR a renderre), es a tagadas utana.
+ *
+ * KALIBRALVA, A VALODI OKKAL: ha a `detail` valasza egy tickkel kesobb erkezik
+ * (a HIVAS azonnal megtortenik, a RENDER kesik), akkor az EREDETI alak PONTOSAN
+ * a CI hibajat adja vissza -- egyetlen piros, "az adatlapon NINCS torles gomb".
+ * A javitott alak ugyanazon a rontason ZOLD.
+ */
+
+/**
  * A KIVEZETÉS A FŐ ÚT, ÉS A VISSZAFORDÍTHATÓSÁGA AZ ELSŐ ÁLLÍTÁS.
  *
  * Balázs döntése (2026-08-31): a törlési szabály marad, de a felület a
@@ -132,13 +166,13 @@ describe("kivezetés a fő út, törlés a második", () => {
   it("az adatlapon NINCS törlés gomb a kivezetés mellett", async () => {
     auth.session = session("OWNER");
     render(<AssetDetailPage assetId="asset-1" />);
-    await waitFor(() => expect(api.detail).toHaveBeenCalled());
+    // A POZITIV ELOL: `findBy` VAR a renderre, a `waitFor` csak a hivasra vart.
+    expect(
+      await screen.findByRole("button", { name: "Eszköz kivezetése" }),
+    ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: /Végleges törlés/ }),
     ).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Eszköz kivezetése" }),
-    ).toBeTruthy();
   });
 
   it("a törlés a kivezetés ablakából érhető el, egy lépéssel beljebb", async () => {
@@ -261,15 +295,15 @@ describe("kivezetés a fő út, törlés a második", () => {
   it("aktív eszközön ugyanez a közvetlen út NINCS ott", async () => {
     auth.session = session("OWNER");
     render(<AssetDetailPage assetId="asset-1" />);
-    await waitFor(() => expect(api.detail).toHaveBeenCalled());
+    // KONTROLL ELOL: a kivezetes utja ott van, tehat nem egy ures oldalt merek --
+    // es a `findBy` VAR a renderre, tehat a tagadas utana mar nem trivialis.
+    expect(
+      await screen.findByRole("button", { name: "Eszköz kivezetése" }),
+    ).toBeTruthy();
 
     expect(
       screen.queryByRole("button", { name: "Végleges törlés" }),
     ).toBeNull();
-    // KONTROLL: a kivezetes utja viszont ott van, tehat nem egy ures oldalt merek.
-    expect(
-      screen.getByRole("button", { name: "Eszköz kivezetése" }),
-    ).toBeTruthy();
   });
 
   /**
@@ -281,12 +315,12 @@ describe("kivezetés a fő út, törlés a második", () => {
     api.detail.mockResolvedValue({ ...asset, status: "RETIRED" });
     auth.session = session("MANAGER");
     render(<AssetDetailPage assetId="asset-1" />);
-    await waitFor(() => expect(api.detail).toHaveBeenCalled());
+    // KONTROLL ELOL: a lap betoltodott, csak ez az egy ut hianyzik -- es a
+    // `findBy` VAR a renderre, tehat a tagadas utana mar nem trivialis.
+    expect(await screen.findByText("Cápasuli kompresszor")).toBeTruthy();
 
     expect(
       screen.queryByRole("button", { name: "Végleges törlés" }),
     ).toBeNull();
-    // KONTROLL: a lap betoltodott, csak ez az egy ut hianyzik.
-    expect(screen.getByText("Cápasuli kompresszor")).toBeTruthy();
   });
 });
