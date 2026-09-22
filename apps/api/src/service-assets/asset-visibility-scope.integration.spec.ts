@@ -151,10 +151,17 @@ describe(
     });
 
     it("a partner LÁTJA a saját helyszínén álló, szállító-tulajdonú eszközt", async () => {
-      const { items } = await repository.list(query({ pageSize: 100 }), {
-        kind: "customer",
-        customerId: sajatCustomerId,
-      });
+      const { items } = await repository.list(
+        query({ pageSize: 100 }),
+        {
+          kind: "customer",
+          customerId: sajatCustomerId,
+        },
+        // A HOZZARENDELT HELYSZIN 2026-09-22 OTA KOTELEZO ARGUMENTUM. Ez a
+        // fajl az UGYFEL-hatart meri; a HELYSZIN-hatart a szomszed
+        // `asset-unit-visibility.integration.spec.ts` meri, ket felhasznaloval.
+        [sajatDepartmentId],
+      );
       const szamok = items.map((i) => i.assetNumber);
 
       assert.ok(
@@ -164,10 +171,17 @@ describe(
     });
 
     it("és NEM látja a MÁSIK partner helyszínén állót", async () => {
-      const { items } = await repository.list(query({ pageSize: 100 }), {
-        kind: "customer",
-        customerId: sajatCustomerId,
-      });
+      const { items } = await repository.list(
+        query({ pageSize: 100 }),
+        {
+          kind: "customer",
+          customerId: sajatCustomerId,
+        },
+        // A HOZZARENDELT HELYSZIN 2026-09-22 OTA KOTELEZO ARGUMENTUM. Ez a
+        // fajl az UGYFEL-hatart meri; a HELYSZIN-hatart a szomszed
+        // `asset-unit-visibility.integration.spec.ts` meri, ket felhasznaloval.
+        [sajatDepartmentId],
+      );
       const szamok = items.map((i) => i.assetNumber);
 
       assert.ok(

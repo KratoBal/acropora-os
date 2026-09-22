@@ -417,7 +417,7 @@ describe(
        * nemán. A szerkeszto urlap EBBOL tolti elo a mezot.
        */
       it("az adatlap visszaadja a felvitt kódot", async () => {
-        const lap = await repository.detail(eszkozId, { kind: "internal" });
+        const lap = await repository.detail(eszkozId, { kind: "internal" }, []);
         assert.equal(lap?.labelCode, CODE_D);
       });
 
@@ -426,7 +426,7 @@ describe(
         // atmenne a fenti alliteson. Ez mondja ki, hogy a hianyt is jol adja
         // vissza -- es hogy a lekerdezes nem hasal el matrica nelkul.
         const masik = await repository.create(createInput(), actorUserId);
-        const lap = await repository.detail(masik.id, { kind: "internal" });
+        const lap = await repository.detail(masik.id, { kind: "internal" }, []);
         assert.equal(lap?.labelCode, undefined);
       });
 
@@ -450,6 +450,8 @@ describe(
             status: "ALL" as const,
           }),
           { kind: "internal" },
+          // `internal` -> az egyseg-lista nem sul el
+          [],
         );
 
         const sor = lista.items.find((item) => item.id === eszkozId);
@@ -473,6 +475,8 @@ describe(
             status: "ALL" as const,
           }),
           { kind: "internal" },
+          // `internal` -> az egyseg-lista nem sul el
+          [],
         );
 
         const sor = lista.items.find((item) => item.id === masik.id);
@@ -582,6 +586,8 @@ describe(
           status: "ALL" as const,
         }),
         { kind: "internal" },
+        // `internal` -> az egyseg-lista nem sul el
+        [],
       );
       const nelkuliIdk = nelkul.items.map((item) => item.id);
       assert.ok(
@@ -600,6 +606,8 @@ describe(
           status: "ALL" as const,
         }),
         { kind: "internal" },
+        // `internal` -> az egyseg-lista nem sul el
+        [],
       );
       const vanIdk = vannak.items.map((item) => item.id);
       assert.ok(!vanIdk.includes(matrica_nelkul.id));
@@ -639,6 +647,8 @@ describe(
             ...over,
           }),
           { kind: "internal" },
+          // `internal` -> az egyseg-lista nem sul el
+          [],
         );
       }
 
@@ -781,6 +791,8 @@ describe(
           status: "ALL" as const,
         }),
         { kind: "internal" },
+        // `internal` -> az egyseg-lista nem sul el
+        [],
       );
 
       assert.ok(
@@ -806,6 +818,8 @@ describe(
           status: "ALL" as const,
         }),
         { kind: "internal" },
+        // `internal` -> az egyseg-lista nem sul el
+        [],
       );
 
       assert.deepEqual(talalat.items, []);

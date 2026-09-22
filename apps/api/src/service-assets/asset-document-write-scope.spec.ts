@@ -1,3 +1,4 @@
+import { belsosUser, vevoUser } from "../testing/scope-user.fixture.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -31,8 +32,26 @@ import { ServiceAssetsService } from "./service-assets.service.js";
  */
 
 const ASSET = "asset-1";
-const VEVO: PartnerScope = { kind: "customer", customerId: "customer-1" };
-const BELSOS: PartnerScope = { kind: "internal" };
+
+/**
+ * A HIVO MOSTANTOL FELHASZNALO, ES A HATOKOR BELOLE SZULETIK (2026-09-22).
+ *
+ * A ket alak KULON all, mert a specnek mind a kettore szuksege van: a
+ * FELHASZNALOT adja at, es a HATOKORT varja a tarolonal. Ha az allitas a
+ * bemenettel azonos alakot varna, a sajat bemenetet igazolna -- azt a hibat,
+ * amit a szolgaltatas elkovethet (belsosre cserel, vagy elhagyja), epp nem
+ * latna.
+ */
+const VEVO = vevoUser("customer-1");
+const VEVO_HATOKOR: PartnerScope = {
+  kind: "customer",
+  customerId: "customer-1",
+};
+const BELSOS = belsosUser();
+const BELSOS_HATOKOR: PartnerScope = { kind: "internal" };
+
+/** Amit a hamis tarolo a hozzarendelt helyszinekre ad. */
+const HOZZARENDELT = ["dept-1"];
 
 const PDF = Buffer.concat([Buffer.from("%PDF-"), Buffer.from([1, 2, 3])]);
 
@@ -48,14 +67,27 @@ function upload(): Express.Multer.File {
 function szolgaltatas(options: { lathatoE?: boolean } = {}) {
   const kapott: {
     detail: PartnerScope[];
+    detailEgysegek: string[][];
     setCaption: PartnerScope[];
     torles: PartnerScope[];
     feltoltve: number;
-  } = { detail: [], setCaption: [], torles: [], feltoltve: 0 };
+  } = {
+    detail: [],
+    detailEgysegek: [],
+    setCaption: [],
+    torles: [],
+    feltoltve: 0,
+  };
 
   const repository = {
-    detail: async (id: string, scope: PartnerScope) => {
+    assignedUnitIds: async () => HOZZARENDELT,
+    detail: async (
+      id: string,
+      scope: PartnerScope,
+      assignedUnitIds: readonly string[],
+    ) => {
       kapott.detail.push(scope);
+      kapott.detailEgysegek.push([...assignedUnitIds]);
       // A NEM LATHATO ESZKOZ `null`, pontosan ugy, ahogy a valodi tarolo adja:
       // a szolgaltatas ebbol csinal 404-et.
       return options.lathatoE === false ? null : { id };
@@ -96,7 +128,22 @@ describe("az eszköz-csatolmányok írása a hívó hatókörével megy", () => 
     const { service, kapott } = szolgaltatas();
     await service.addDocument(ASSET, "INVOICE", upload(), "user-1", VEVO);
 
-    assert.deepEqual(kapott.detail, [VEVO]);
+    assert.deepEqual(kapott.detail, [VEVO_HATOKOR]);
+  });
+
+  /**
+   * A MASODIK TENGELY, KULON ALLITASSAL: az ellenorzes a HOZZARENDELT
+   * HELYSZINEKET is megkapja.
+   *
+   * Egy iro ut, ami a hatokort viszi de az egyseg-listat nem, NEM hibazik: a
+   * partner olyan eszkozt tudna szerkeszteni, amit a sajat listajan nem lat.
+   * Ez a tevedes NEMA -- a masik iranyu (tul szigoru) hangos.
+   */
+  it("a feltöltés a hozzárendelt helyszíneket is átadja", async () => {
+    const { service, kapott } = szolgaltatas();
+    await service.addDocument(ASSET, "INVOICE", upload(), "user-1", VEVO);
+
+    assert.deepEqual(kapott.detailEgysegek, [HOZZARENDELT]);
   });
 
   it("a felirat átírása a hívó hatókörét adja tovább, mindkét lépésnek", async () => {
@@ -104,17 +151,17 @@ describe("az eszköz-csatolmányok írása a hívó hatókörével megy", () => 
     await service.setDocumentCaption(ASSET, "doc-1", "Szivattyú", VEVO);
 
     // AZ ESZKOZ-ELLENORZES...
-    assert.deepEqual(kapott.detail, [VEVO]);
+    assert.deepEqual(kapott.detail, [VEVO_HATOKOR]);
     // ...ES A SOR IRASA IS. Eleg lenne az egyik atvezetese ahhoz, hogy a hiba
     // "javitottnak" lassek, es a masik agon tovabb alljon.
-    assert.deepEqual(kapott.setCaption, [VEVO]);
+    assert.deepEqual(kapott.setCaption, [VEVO_HATOKOR]);
   });
 
   it("a törlés a hívó hatókörét adja tovább a tárolónak", async () => {
     const { service, kapott } = szolgaltatas();
     await service.deleteDocument(ASSET, "doc-1", "user-1", VEVO);
 
-    assert.deepEqual(kapott.torles, [VEVO]);
+    assert.deepEqual(kapott.torles, [VEVO_HATOKOR]);
   });
 
   /**
@@ -131,8 +178,8 @@ describe("az eszköz-csatolmányok írása a hívó hatókörével megy", () => 
     await service.deleteDocument(ASSET, "doc-1", "user-1", BELSOS);
 
     assert.equal(kapott.feltoltve, 1);
-    assert.deepEqual(kapott.setCaption, [BELSOS]);
-    assert.deepEqual(kapott.torles, [BELSOS]);
+    assert.deepEqual(kapott.setCaption, [BELSOS_HATOKOR]);
+    assert.deepEqual(kapott.torles, [BELSOS_HATOKOR]);
   });
 
   /**

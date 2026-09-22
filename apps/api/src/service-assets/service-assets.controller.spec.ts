@@ -200,8 +200,24 @@ describe("az eszkoz dokumentum-feltoltes hatarai", () => {
     assert.equal((eredmeny as unknown[]).length, 1);
   });
 
-  /** A HATOKOR ATMEGY. FED egy meglevo integracios allitast -- lasd a fejlecet. */
-  it("az aktor azonositojat ES a hatokorét adja at, kulon", async () => {
+  /**
+   * A HIVO ATMEGY. FED egy meglevo integracios allitast -- lasd a fejlecet.
+   *
+   * === EZ AZ ALLITAS 2026-09-22-EN MEGFORDULT, ES EZERT VAN ATIRVA ===
+   *
+   * Eddig azt orizte, hogy a kontroller KESZ HATOKORT ad at, ne a nyers
+   * felhasznalot -- az otodik argumentumnak NEM volt `id` mezoje. Ma pont
+   * forditva helyes: a lathatosag mar nem csak a tulajdonrol szol, hanem a
+   * HOZZARENDELT HELYSZINEKROL is, es azokat egy `PartnerScope` nem hordozza.
+   * A feloldas ezert a szolgaltatasba kerult (ugyanaz az alak, mint a
+   * `serviceJobVisibilityFor` a hibajegyeknel), es a kontroller a USERT adja at.
+   *
+   * NEM TOROLTEM AZ ALLITAST, HANEM MEGFORDITOTTAM. Egy torolt orzo helyen
+   * nem marad nyom; igy a kovetkezo olvaso latja, hogy a mai alak DONTES, nem
+   * feledekenyseg -- es ha valaki visszaallitana a kontrollerbe a feloldast,
+   * ez a sor pirosodik.
+   */
+  it("az aktor azonositojat ES a HIVOT adja at, kulon", async () => {
     let kapott: unknown[] = [];
     const controller = controllerrel((async (...args: unknown[]) => {
       kapott = args;
@@ -222,13 +238,20 @@ describe("az eszkoz dokumentum-feltoltes hatarai", () => {
     );
     assert.ok(
       kapott[4] && typeof kapott[4] === "object",
-      "az otodik a hatokor-objektum, nem a nyers felhasznalo",
+      "az otodik argumentum objektum",
     );
     assert.equal(
       (kapott[4] as { id?: string }).id,
-      undefined,
-      "a hatokor NEM a felhasznalo objektuma",
+      "user-1",
+      "az otodik a HIVO felhasznalo, mert a hatokort a szolgaltatas oldja fel",
     );
+    /*
+      ES A KONTROLL A MASIK IRANYRA: a negyedik argumentum NEM a felhasznalo
+      objektuma. E nelkul a fenti allitas akkor is zold lenne, ha a kontroller
+      MINDKET helyre ugyanazt adna -- es akkor az aktor es a hivo fogalma
+      csendben eggye olvadna.
+    */
+    assert.equal(typeof kapott[3], "string");
   });
 
   /** A KOZOS MERET-HATAR, VISELKEDESBOL. */

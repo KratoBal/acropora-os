@@ -51,7 +51,7 @@ export class ServiceAssetsController {
     @Query() query: AssetListQueryDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.list(query, partnerScopeOf(user));
+    return this.service.list(query, user);
   }
 
   /**
@@ -256,7 +256,7 @@ export class ServiceAssetsController {
   @Get(":id/qr")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   qrCode(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.qrCode(id, partnerScopeOf(user));
+    return this.service.qrCode(id, user);
   }
 
   /**
@@ -281,13 +281,13 @@ export class ServiceAssetsController {
   @Get(":id/documents")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   documents(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.documents(id, partnerScopeOf(user));
+    return this.service.documents(id, user);
   }
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.detail(id, partnerScopeOf(user));
+    return this.service.detail(id, user);
   }
 
   @Post()
@@ -306,13 +306,13 @@ export class ServiceAssetsController {
     @Body() input: UpdateAssetDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.update(id, input, user.id, partnerScopeOf(user));
+    return this.service.update(id, input, user.id, user);
   }
 
   @Post(":id/qr/rotate")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   rotateQr(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.service.rotateQr(id, user.id, partnerScopeOf(user));
+    return this.service.rotateQr(id, user.id, user);
   }
 
   /**
@@ -366,7 +366,7 @@ export class ServiceAssetsController {
           input.type,
           file,
           user.id,
-          partnerScopeOf(user),
+          user,
           input.caption,
         ),
       );
@@ -412,7 +412,7 @@ export class ServiceAssetsController {
     const document = await this.service.documentBytes(
       id,
       documentId,
-      partnerScopeOf(user),
+      user,
       variant,
     );
 
@@ -447,12 +447,7 @@ export class ServiceAssetsController {
     @Body() input: UpdateAssetDocumentCaptionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.setDocumentCaption(
-      id,
-      documentId,
-      input.caption,
-      partnerScopeOf(user),
-    );
+    return this.service.setDocumentCaption(id, documentId, input.caption, user);
   }
 
   @Delete(":id/documents/:documentId")
@@ -462,12 +457,7 @@ export class ServiceAssetsController {
     @Param("documentId") documentId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    await this.service.deleteDocument(
-      id,
-      documentId,
-      user.id,
-      partnerScopeOf(user),
-    );
+    await this.service.deleteDocument(id, documentId, user.id, user);
     return { ok: true as const };
   }
 }

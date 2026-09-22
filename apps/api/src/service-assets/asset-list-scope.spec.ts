@@ -29,7 +29,12 @@ describe("assetListWheres", () => {
 
     // EGY HIVAS ADJA MIND A KETTOT: a ket feltetel kulonbsege PONTOSAN az
     // allapot, es a lathatosagi ag ugyanabbol a valtozobol kerul mindkettobe.
-    const { list, counts } = assetListWheres(scope, {}, { status: "ACTIVE" });
+    const { list, counts } = assetListWheres(
+      scope,
+      ["dept-1", "dept-2"],
+      {},
+      { status: "ACTIVE" },
+    );
 
     /*
       A KET AG 2026-09-18 OTA: TULAJDON **VAGY** SAJAT HELYSZIN.
@@ -43,10 +48,23 @@ describe("assetListWheres", () => {
       egy ag, ami nincs a customerId-hez kotve) csendben szelesitene a
       lathatosagot, es egy lazabb allitas atengedne.
     */
+    /*
+      A HARMADIK TENGELY 2026-09-22 OTA: A HOZZARENDELT HELYSZIN.
+
+      Balazs, 07:46:59 UTC: egy partner-felhasznalo csak a hozza RENDELT
+      helyszinek dolgait lassa. A ket regi ag (tulajdon vagy reszleg) azt
+      mondja meg, KIE a sor; ez azt, HOL all -- es a ketto `AND`-del all
+      egymas mellett, mert MIND A KETTONEK teljesulnie kell.
+    */
     const vartLathatosag = {
-      OR: [
-        { customerId: "customer-1" },
-        { department: { customerId: "customer-1" } },
+      AND: [
+        {
+          OR: [
+            { customerId: "customer-1" },
+            { department: { customerId: "customer-1" } },
+          ],
+        },
+        { departmentId: { in: ["dept-1", "dept-2"] } },
       ],
     };
 
@@ -79,6 +97,7 @@ describe("assetListWheres", () => {
     */
     const { list } = assetListWheres(
       { kind: "customer", customerId: "customer-2" },
+      ["dept-9"],
       {},
       {},
     );
@@ -87,17 +106,48 @@ describe("assetListWheres", () => {
     // objektumkent -- egy egyelemu, nem-tomb alak a masik feltetelt kiutne.
     assert.ok(Array.isArray(list.AND), "a lathatosagi ag AND TOMBBEN all");
     assert.deepEqual(list.AND[0], {
-      OR: [
-        { customerId: "customer-2" },
-        { department: { customerId: "customer-2" } },
+      AND: [
+        {
+          OR: [
+            { customerId: "customer-2" },
+            { department: { customerId: "customer-2" } },
+          ],
+        },
+        { departmentId: { in: ["dept-9"] } },
       ],
     });
+  });
+
+  /**
+   * A HELYSZIN-TENGELY KULON ALLITAST KAP, ES EZ NEM ISMETLES.
+   *
+   * A fenti ket `deepEqual` a TELJES alakot nezi, tehat egy helyszin-rontast is
+   * pirosra dontene -- csak epp UGYANAZZAL a pirossal, mint egy tulajdon-rontast.
+   * A kalibracio kimenetebol nem lehetne megmondani, melyik tengely romlott el.
+   *
+   * Ez az allitas CSAK a helyszin-agrol szol, es a SZAMLALO oldalarol meri: az
+   * volt az a hely, ahol egy korabbi szeletnel a szures csendben kimaradt.
+   */
+  it("a hozzárendelt helyszínek a SZÁMLÁLÓ feltételébe is bekerülnek", () => {
+    const { counts } = assetListWheres(
+      { kind: "customer", customerId: "customer-1" },
+      ["dept-5"],
+      {},
+      {},
+    );
+    // A SZUKITES MAGA IS ALLITAS: a lathatosagi ag TOMBBEN all. Ha egyetlen
+    // objektumma laposodna, a masodik feltetel kiesne -- ezert kerdezzuk meg,
+    // mielott indexelnenk.
+    assert.ok(Array.isArray(counts.AND), "a szamlalo agai TOMBBEN allnak");
+    const lathatosag = counts.AND[0] as { AND: unknown[] };
+
+    assert.deepEqual(lathatosag.AND[1], { departmentId: { in: ["dept-5"] } });
   });
 
   it("a szállító-hatókör ugyanígy, és NEM vevőként", () => {
     const scope = { kind: "supplier", supplierId: "supplier-1" } as const;
 
-    assert.deepEqual(assetListWheres(scope, {}, {}).counts.AND, [
+    assert.deepEqual(assetListWheres(scope, ["dept-1"], {}, {}).counts.AND, [
       { supplierId: "supplier-1" },
       {},
     ]);
@@ -110,9 +160,9 @@ describe("assetListWheres", () => {
    * legyen ertelmezheto ugy, mintha barmilyen ures ag gyanus lenne.
    */
   it("belsős hatókörnél nincs szűkítés, és ez szándékos", () => {
-    assert.deepEqual(assetListWheres({ kind: "internal" }, {}, {}).counts.AND, [
-      {},
-      {},
-    ]);
+    assert.deepEqual(
+      assetListWheres({ kind: "internal" }, ["dept-1"], {}, {}).counts.AND,
+      [{}, {}],
+    );
   });
 });

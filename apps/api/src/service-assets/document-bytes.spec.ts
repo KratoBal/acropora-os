@@ -1,13 +1,18 @@
+import { belsosUser } from "../testing/scope-user.fixture.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 import { storageKeyFor } from "./document-store/document-storage-key.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 
-const INTERNAL: PartnerScope = { kind: "internal" };
+/**
+ * A HATOKORT MOSTANTOL A SZOLGALTATAS OLDJA FEL A FELHASZNALOBOL (2026-09-22),
+ * mert a lathatosag mar nem csak a tulajdonrol szol, hanem a hozzarendelt
+ * helyszinekrol is. A spec ezert USERT ad at, nem kesz hatokort.
+ */
+const INTERNAL = belsosUser();
 const ASSET = "asset-1";
 const DOCUMENT = "doc-1";
 

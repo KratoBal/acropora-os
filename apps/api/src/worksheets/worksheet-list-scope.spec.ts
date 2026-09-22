@@ -20,6 +20,14 @@ import { worksheetListWheres } from "./worksheets.repository.js";
  * MINDEN hivasi helyen -- erosebben, mint egy futasideju allitas. Ez a spec
  * azt meri, ami uj: hogy a SZAMLALO is megkapja.
  */
+/**
+ * A HOZZARENDELT HELYSZINEK ALLANDOK EBBEN A FAJLBAN.
+ *
+ * Ez a spec a REJTES es a HATOKOR tengelyet meri; a helyszin-tengelynek sajat
+ * allitasa van lentebb. Egy valtozo lista itt csak zajt vinne az alakokba.
+ */
+const EGYSEGEK = ["dept-1", "dept-2"];
+
 describe("worksheetListWheres", () => {
   it("a vevő-hatókör a lista ÉS a számláló feltételébe is bekerül", () => {
     const scope = { kind: "customer", customerId: "customer-1" } as const;
@@ -29,22 +37,26 @@ describe("worksheetListWheres", () => {
     // verzion all, nem a soron.
     const { list, counts } = worksheetListWheres(
       scope,
+      EGYSEGEK,
       { customerId: "customer-1" },
       { id: { in: ["ws-1", "ws-2"] } },
     );
 
     /*
-      A MASODIK AG 2026-09-18 OTA A REJTES SZUROJE. Az allitas a TELJES tombre
-      megy, nem csak a hatokor-agra: igy egy felcserelt sorrend is kipirosodik,
-      es a rejtes-ag sem tunhet el eszrevetlenul.
+      A MASODIK AG 2026-09-22 OTA A HOZZARENDELT HELYSZINEK SZUROJE, a harmadik
+      a rejtese. Az allitas a TELJES tombre megy, nem csak a hatokor-agra: igy
+      egy felcserelt sorrend is kipirosodik, es egyik ag sem tunhet el
+      eszrevetlenul.
     */
     assert.deepEqual(list.AND, [
       { customerId: "customer-1" },
+      { departmentId: { in: EGYSEGEK } },
       { hiddenAt: null },
       { customerId: "customer-1", id: { in: ["ws-1", "ws-2"] } },
     ]);
     assert.deepEqual(counts.AND, [
       { customerId: "customer-1" },
+      { departmentId: { in: EGYSEGEK } },
       { hiddenAt: null },
       { customerId: "customer-1" },
     ]);
@@ -66,13 +78,23 @@ describe("worksheetListWheres", () => {
     };
     const { list, counts } = worksheetListWheres(
       { kind: "internal" },
+      EGYSEGEK,
       felhasznaloiSzuro,
       { id: { in: ["ws-9"] } },
     );
 
-    // A FELHASZNALOI SZURO A HARMADIK AG: a masodik 2026-09-18 ota a rejtese.
-    const listaSzuro = (list.AND as Record<string, unknown>[])[2];
-    const szamlaloSzuro = (counts.AND as Record<string, unknown>[])[2];
+    /*
+      A FELHASZNALOI SZURO A NEGYEDIK AG.
+
+      A sorrend 2026-09-22-ig harom agbol allt (hatokor, rejtes, felhasznaloi
+      szuro), es a helyszin-tengely a MASODIK helyre kerult. Az index tehat 2-rol
+      3-ra valtozott -- es ezt a fordito NEM mondja meg: egy tombindex akkor is
+      lefordul, ha a szomszed agra mutat. Ezert all mellette a lenti allitas,
+      ami a helyszin-agat NEV SZERINT meri: ha valaki ujra atrendezi a sorrendet,
+      ott derul ki, nem itt.
+    */
+    const listaSzuro = (list.AND as Record<string, unknown>[])[3];
+    const szamlaloSzuro = (counts.AND as Record<string, unknown>[])[3];
 
     assert.deepEqual(szamlaloSzuro, felhasznaloiSzuro);
     assert.deepEqual(listaSzuro, {
@@ -81,11 +103,61 @@ describe("worksheetListWheres", () => {
     });
   });
 
+  /**
+   * A HELYSZIN-TENGELY KULON ALLITAST KAP, ES EZ NEM ISMETLES.
+   *
+   * Balazs, 2026-09-22 07:46:59 UTC: egy partner-felhasznalo CSAK a hozza
+   * rendelt helyszinek dolgait lassa. A fenti allitasok a TELJES agtombot
+   * nezik, tehat egy helyszin-rontast is pirosra dontenenek -- csak epp
+   * UGYANAZZAL a pirossal, mint barmelyik masik ag rontasat.
+   *
+   * Ez az allitas CSAK a helyszin-agrol szol, es MIND A KET oldalrol (lista es
+   * szamlalo): egy szures, ami csak a listara kerul, ures listat ad nem-nulla
+   * szam melle -- az a fajta elteres, amirol a felhasznalo nem tudja
+   * megmondani, melyik oldal hazudik.
+   */
+  it("a hozzárendelt helyszínek a listába ÉS a számlálóba is bekerülnek", () => {
+    const { list, counts } = worksheetListWheres(
+      { kind: "customer", customerId: "customer-1" },
+      EGYSEGEK,
+      {},
+      {},
+    );
+
+    const vart = { departmentId: { in: EGYSEGEK } };
+    assert.deepEqual((list.AND as unknown[])[1], vart);
+    assert.deepEqual((counts.AND as unknown[])[1], vart);
+  });
+
+  /**
+   * ES A BELSOS HIVO AGA URES MARAD -- kulon allitas, hogy a fenti ne legyen
+   * ertelmezheto ugy, mintha minden hivasra kerulne helyszin-szures.
+   */
+  it("belsős hívónál a helyszín-ág ÜRES, és ez szándékos", () => {
+    const { list } = worksheetListWheres(
+      { kind: "internal" },
+      EGYSEGEK,
+      {},
+      {},
+    );
+
+    assert.deepEqual((list.AND as unknown[])[1], {});
+  });
+
   it("a szállító-hatókör ugyanígy, és NEM vevőként", () => {
     assert.deepEqual(
-      worksheetListWheres({ kind: "supplier", supplierId: "s-1" }, {}, {})
-        .counts.AND,
-      [{ supplierId: "s-1" }, { hiddenAt: null }, {}],
+      worksheetListWheres(
+        { kind: "supplier", supplierId: "s-1" },
+        EGYSEGEK,
+        {},
+        {},
+      ).counts.AND,
+      [
+        { supplierId: "s-1" },
+        { departmentId: { in: EGYSEGEK } },
+        { hiddenAt: null },
+        {},
+      ],
     );
   });
 });
@@ -122,7 +194,7 @@ describe("a rejtett lapok a listából és a számlálóból is kimaradnak", () 
     );
 
   it("alapból MIND A KETTŐBEN ott a szűrő", () => {
-    const { list, counts } = worksheetListWheres(BELSO, {}, {});
+    const { list, counts } = worksheetListWheres(BELSO, EGYSEGEK, {}, {});
     assert.equal(rejtett(list), true, "a listából hiányzik");
     assert.equal(rejtett(counts), true, "a számlálóból hiányzik");
   });
@@ -133,7 +205,14 @@ describe("a rejtett lapok a listából és a számlálóból is kimaradnak", () 
       igaznak mondana, ez a ket allitas is zold lenne. Igy viszont a ket irany
       egyutt bizonyit: a szuro OTT VAN, amikor kell, es NINCS ott, amikor nem.
     */
-    const { list, counts } = worksheetListWheres(BELSO, {}, {}, true, true);
+    const { list, counts } = worksheetListWheres(
+      BELSO,
+      EGYSEGEK,
+      {},
+      {},
+      true,
+      true,
+    );
     assert.equal(rejtett(list), false);
     assert.equal(rejtett(counts), false);
   });
@@ -141,6 +220,7 @@ describe("a rejtett lapok a listából és a számlálóból is kimaradnak", () 
   it("PARTNER hatókörön a kapcsoló nem hat", () => {
     const { list, counts } = worksheetListWheres(
       { kind: "customer", customerId: "cust-1" },
+      EGYSEGEK,
       {},
       {},
       true,

@@ -424,7 +424,7 @@ describe("mértékegység törzsadat", { skip: gate.mode === "skip" }, () => {
         where: { id: masikEgysegId },
         data: { isActive: false },
       });
-      const lap = await repository.detail(eszkoz.id, { kind: "internal" });
+      const lap = await repository.detail(eszkoz.id, { kind: "internal" }, []);
       assert.equal(lap?.performanceUnit?.id, masikEgysegId);
       await prisma.unitOfMeasure.update({
         where: { id: masikEgysegId },

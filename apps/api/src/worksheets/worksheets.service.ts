@@ -336,8 +336,28 @@ export class WorksheetsService {
     return { ...document, bytes };
   }
 
-  list(query: WorksheetListQueryDto, scope: PartnerScope, mayHide = false) {
-    return this.repository.list(query, scope, mayHide);
+  /**
+   * A LISTA HIVOJA MOSTANTOL A FELHASZNALO, NEM A KESZ HATOKOR (2026-09-22).
+   *
+   * Balazs, 07:46:59 UTC: egy partner-felhasznalo CSAK a hozza rendelt
+   * helyszinek dolgait lassa. A szabaly KETTOBOL all (kie a sor, ES hol all),
+   * es mind a kettot ugyanabbol a felhasznalobol kell feloldani -- ugyanaz az
+   * alak, mint a `serviceJobVisibilityFor` a hibajegyeknel.
+   *
+   * A BELSOS AGON A MASODIK LEKERDEZEST EL SEM INDITJUK: ott a szuro ures,
+   * tehat a hozzarendelt helyszinek nem szamitanak.
+   */
+  async list(
+    query: WorksheetListQueryDto,
+    user: AuthenticatedUser,
+    mayHide = false,
+  ) {
+    const scope = partnerScopeOf(user);
+    const assignedUnitIds =
+      scope.kind === "internal"
+        ? []
+        : await this.repository.assignedUnitIds(user.id);
+    return this.repository.list(query, scope, assignedUnitIds, mayHide);
   }
 
   /**

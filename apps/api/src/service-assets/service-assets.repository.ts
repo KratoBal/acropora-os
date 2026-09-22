@@ -1,3 +1,4 @@
+import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import {
   ASSET_DOCUMENT_TYPES,
   rowBelongsToScope,
@@ -348,12 +349,16 @@ function jsonPayload(value: Record<string, unknown>): Prisma.InputJsonObject {
 export function assetDetailWhere(
   id: string,
   scope: PartnerScope,
+  assignedUnitIds: readonly string[],
 ): Prisma.AssetWhereInput {
-  return { AND: [{ id }, assetVisibilityForAndBranch(scope)] };
+  return {
+    AND: [{ id }, assetVisibilityForAndBranch(scope, assignedUnitIds)],
+  };
 }
 
 export function assetListWheres(
   scope: PartnerScope,
+  assignedUnitIds: readonly string[],
   userWhereWithoutStatus: Prisma.AssetWhereInput,
   statusWhere: Prisma.AssetWhereInput,
 ): { list: Prisma.AssetWhereInput; counts: Prisma.AssetWhereInput } {
@@ -374,12 +379,15 @@ export function assetListWheres(
   return {
     list: {
       AND: [
-        assetVisibilityForAndBranch(scope),
+        assetVisibilityForAndBranch(scope, assignedUnitIds),
         { ...userWhereWithoutStatus, ...statusWhere },
       ],
     },
     counts: {
-      AND: [assetVisibilityForAndBranch(scope), userWhereWithoutStatus],
+      AND: [
+        assetVisibilityForAndBranch(scope, assignedUnitIds),
+        userWhereWithoutStatus,
+      ],
     },
   };
 }
@@ -445,6 +453,7 @@ export class ServiceAssetsRepository extends Repository {
   async list(
     query: AssetListQueryDto,
     scope: PartnerScope,
+    assignedUnitIds: readonly string[],
   ): Promise<AssetListResponse> {
     // A KÉT MEZŐ EGYÜTT IS MEGADHATÓ, és a szűrő az uniójuk. A singularis alak
     // marad, hogy a meglévő hívások betűre változatlanok legyenek.
@@ -550,6 +559,7 @@ export class ServiceAssetsRepository extends Repository {
     };
     const { list: where, counts: countsWhere } = assetListWheres(
       scope,
+      assignedUnitIds,
       userWhereWithoutStatus,
       // A HAROM AG (egy allapot / minden / minden a kivezetetten kivul) egy
       // helyen all, tiszta fuggvenyben -- adatbazis nelkul merheto.
@@ -764,9 +774,13 @@ export class ServiceAssetsRepository extends Repository {
    * A `findUnique` ezert lett `findFirst`: egyedi kulcsra is az AND-elt
    * feltetel dont, nem egy utana futo ellenorzes.
    */
-  async detail(id: string, scope: PartnerScope): Promise<AssetDetail | null> {
+  async detail(
+    id: string,
+    scope: PartnerScope,
+    assignedUnitIds: readonly string[],
+  ): Promise<AssetDetail | null> {
     const row = await prisma.asset.findFirst({
-      where: assetDetailWhere(id, scope),
+      where: assetDetailWhere(id, scope, assignedUnitIds),
       include: assetDetailInclude,
     });
     if (!row) return null;
@@ -787,6 +801,22 @@ export class ServiceAssetsRepository extends Repository {
    * es a letoltesen mar nem kap meg. Egy korlat, ami csak az utak egy reszen
    * all, nem korlat.
    */
+  /**
+   * A FELHASZNALOHOZ RENDELT HELYSZINEK, A KOZOS LEKERDEZESSEL.
+   *
+   * Vekony atjaro: a valodi lekerdezes a `service-jobs/assigned-units.query.ts`
+   * fajlban all, es UGYANAZ a fuggveny szolgalja ki a hibajegyeket, a
+   * munkalapokat es az eszkozoket. Ha ez a harom kulon lekerdezessel menne, a
+   * "mit lathat" szabaly harom helyen allna -- es ket kulonbozo bejaras
+   * ugyanarra a fara ket kulonbozo valaszt tudna adni.
+   *
+   * URES HALMAZ ERVENYES VALASZ: akinek nincs hozzarendelese, nem lat eszkozt.
+   * Ez Balazs dontese (2026-09-22 07:46:59), nem mellekhatas.
+   */
+  async assignedUnitIds(userId: string): Promise<string[]> {
+    return assignedUnitIdsFor(userId);
+  }
+
   async detailByQrToken(
     qrToken: string,
     scope: PartnerScope,
@@ -1185,7 +1215,11 @@ export class ServiceAssetsRepository extends Repository {
    * vissza -- ket kulon visszaolvasas ket kulon hatokorre csuszhatna szet.
    */
   private async readBack(id: string): Promise<AssetDetail> {
-    const detail = await this.detail(id, { kind: "internal" });
+    // A HOZZARENDELT EGYSEGEK LISTAJA SZANDEKOSAN URES: `internal` hatokornel
+    // az `assetVisibilityForAndBranch` ures szurot ad, tehat ez az argumentum
+    // ezen az agon nem sul el. Ha valaki egyszer atallitja a hatokort partnerire,
+    // az ures lista MINDENT elzar -- vagyis a tevedes HANGOS lesz, nem nema.
+    const detail = await this.detail(id, { kind: "internal" }, []);
     if (!detail) throw new Error("ASSET_CREATE_READBACK_FAILED");
     return detail;
   }
@@ -1739,12 +1773,17 @@ export class ServiceAssetsRepository extends Repository {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-    const detail = await this.detail(updatedId, {
-      // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
-      // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
-      // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
-      kind: "internal",
-    });
+    const detail = await this.detail(
+      updatedId,
+      {
+        // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
+        // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
+        // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
+        kind: "internal",
+      },
+      // Az egyseg-lista ezen az agon nem sul el (`internal` -> ures szuro).
+      [],
+    );
     if (!detail) throw new Error("ASSET_UPDATE_READBACK_FAILED");
     return detail;
   }
@@ -1770,12 +1809,17 @@ export class ServiceAssetsRepository extends Repository {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-    const detail = await this.detail(updatedId, {
-      // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
-      // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
-      // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
-      kind: "internal",
-    });
+    const detail = await this.detail(
+      updatedId,
+      {
+        // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
+        // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
+        // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
+        kind: "internal",
+      },
+      // Az egyseg-lista ezen az agon nem sul el (`internal` -> ures szuro).
+      [],
+    );
     if (!detail) throw new Error("ASSET_QR_READBACK_FAILED");
     return detail;
   }
@@ -1930,6 +1974,7 @@ export class ServiceAssetsRepository extends Repository {
     assetId: string,
     documentId: string,
     scope: PartnerScope,
+    assignedUnitIds: readonly string[],
   ) {
     const row = await prisma.assetDocument.findFirst({
       /*
@@ -1947,7 +1992,7 @@ export class ServiceAssetsRepository extends Repository {
           itt is all: egy kesobb felvett testverkulcs (vagy egy `OR`) ugyanezen
           a szinten hatastalanitana a szurest, hibauzenet nelkul.
         */
-        asset: { AND: [assetVisibilityForAndBranch(scope)] },
+        asset: { AND: [assetVisibilityForAndBranch(scope, assignedUnitIds)] },
       },
       select: { fileName: true, thumbnail: true, type: true },
     });
@@ -1957,7 +2002,12 @@ export class ServiceAssetsRepository extends Repository {
     return { fileName: row.fileName, thumbnail: row.thumbnail };
   }
 
-  async document(assetId: string, documentId: string, scope: PartnerScope) {
+  async document(
+    assetId: string,
+    documentId: string,
+    scope: PartnerScope,
+    assignedUnitIds: readonly string[],
+  ) {
     const row = await prisma.assetDocument.findFirst({
       /*
         A HATOKOR A KAPCSOLT ESZKOZON -- ugyanaz a fuggveny, mint a listanal es
@@ -1973,7 +2023,7 @@ export class ServiceAssetsRepository extends Repository {
           itt is all: egy kesobb felvett testverkulcs (vagy egy `OR`) ugyanezen
           a szinten hatastalanitana a szurest, hibauzenet nelkul.
         */
-        asset: { AND: [assetVisibilityForAndBranch(scope)] },
+        asset: { AND: [assetVisibilityForAndBranch(scope, assignedUnitIds)] },
       },
       select: {
         fileName: true,

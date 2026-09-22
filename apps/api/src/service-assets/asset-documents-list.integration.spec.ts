@@ -1,3 +1,9 @@
+import type { AuthenticatedUser } from "@acropora/types";
+import {
+  belsosUser,
+  szallitoUser,
+  vevoUser,
+} from "../testing/scope-user.fixture.js";
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
@@ -7,7 +13,6 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 import { DOCUMENT_THUMBNAIL_VARIANT } from "@acropora/types";
 
-import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
@@ -43,7 +48,12 @@ const service = new ServiceAssetsService(
   new InMemoryDocumentStore(),
 );
 
-const BELSOS: PartnerScope = { kind: "internal" };
+/**
+ * A HATOKORT MOSTANTOL A SZOLGALTATAS OLDJA FEL A FELHASZNALOBOL (2026-09-22),
+ * mert a lathatosag mar nem csak a tulajdonrol szol, hanem a hozzarendelt
+ * helyszinekrol is. A spec ezert USERT ad at, nem kesz hatokort.
+ */
+const BELSOS = belsosUser();
 
 let vevoAId = "";
 let vevoBId = "";
@@ -53,6 +63,10 @@ let eszkozBId = "";
 let kepDokumentumId = "";
 let szamlaKepDokumentumId = "";
 let actorUserId = "";
+let helyszinAId = "";
+let helyszinBId = "";
+let vevoAUser: AuthenticatedUser;
+let vevoBUser: AuthenticatedUser;
 
 function sha256() {
   return randomUUID().replaceAll("-", "").padEnd(64, "0").slice(0, 64);
@@ -67,6 +81,17 @@ async function removeLeftovers() {
   });
   await prisma.asset.deleteMany({
     where: { assetNumber: { startsWith: PREFIX } },
+  });
+  // A HOZZARENDELESEK a felhasznaloval egyutt kaszkadolnak, a HELYSZIN viszont
+  // nem: azt kulon kell torolni, es az ESZKOZOK UTAN, mert a `departmentId`
+  // `Restrict`. Ugyanaz a sorrend, mint a szomszed lathatosagi meresben.
+  await prisma.userWorksheetDepartment.deleteMany({
+    where: {
+      department: { customer: { customerNumber: { startsWith: PREFIX } } },
+    },
+  });
+  await prisma.worksheetDepartment.deleteMany({
+    where: { customer: { customerNumber: { startsWith: PREFIX } } },
   });
   await prisma.customer.deleteMany({
     where: { customerNumber: { startsWith: PREFIX } },
@@ -88,13 +113,61 @@ async function vevo(sorszam: number) {
   return row.id;
 }
 
-async function eszkoz(customerId: string, sorszam: number) {
+async function helyszin(customerId: string, kod: string) {
+  const row = await prisma.worksheetDepartment.create({
+    data: { customerId, code: kod, name: `${PREFIX} ${kod}` },
+    select: { id: true },
+  });
+  return row.id;
+}
+
+/**
+ * PORTAL-FELHASZNALO A HOZZARENDELESEVEL EGYUTT.
+ *
+ * A hozzarendeles NEM dísz: a szolgaltatas a felhasznalo azonositojabol kerdezi
+ * le, mely helyszineket lathatja. Egy hozzarendeles nelkuli felhasznalo SEMMIT
+ * nem latna -- es akkor minden alabbi tiltas zold lenne, barmit is csinal a kod.
+ */
+async function portalUser(
+  customerId: string,
+  departmentId: string,
+  jel: string,
+): Promise<AuthenticatedUser> {
+  const row = await prisma.user.create({
+    data: {
+      email: `${PREFIX.toLowerCase()}-portal-${jel}@example.invalid`,
+      displayName: `${PREFIX} portál ${jel}`,
+      role: "PARTNER_SERVICE",
+      customerId,
+    },
+    select: { id: true, email: true, displayName: true },
+  });
+  await prisma.userWorksheetDepartment.create({
+    data: { userId: row.id, departmentId },
+  });
+  return vevoUser(customerId, {
+    id: row.id,
+    email: row.email,
+    displayName: row.displayName,
+  });
+}
+
+async function eszkoz(
+  customerId: string,
+  departmentId: string,
+  sorszam: number,
+) {
   const row = await prisma.asset.create({
     data: {
       assetNumber: `${PREFIX}-${sorszam}`,
       name: `${PREFIX} teszteszköz ${sorszam}`,
       kind: "EQUIPMENT",
       customerId,
+      // A HELYSZIN 2026-09-22 OTA KELL: a partner-hatokoru lathatosag a
+      // HOZZARENDELT helyszinekre szur, es a `departmentId` NULL erteke azon
+      // nem menne at. Helyszin nelkul ez a spec nem a tipus-szurest merne,
+      // hanem egy ures listat.
+      departmentId,
       createdById: actorUserId,
       qrToken: randomUUID(),
     },
@@ -188,8 +261,12 @@ describe(
 
       vevoAId = await vevo(1);
       vevoBId = await vevo(2);
-      eszkozAId = await eszkoz(vevoAId, 1);
-      eszkozBId = await eszkoz(vevoBId, 2);
+      helyszinAId = await helyszin(vevoAId, "HA");
+      helyszinBId = await helyszin(vevoBId, "HB");
+      vevoAUser = await portalUser(vevoAId, helyszinAId, "a");
+      vevoBUser = await portalUser(vevoBId, helyszinBId, "b");
+      eszkozAId = await eszkoz(vevoAId, helyszinAId, 1);
+      eszkozBId = await eszkoz(vevoBId, helyszinBId, 2);
 
       await csatolmany(eszkozAId, "MANUAL", `${PREFIX}-kezikonyv.pdf`);
       await csatolmany(eszkozAId, "INVOICE", `${PREFIX}-szamla.pdf`);
@@ -281,10 +358,7 @@ describe(
      * hogy a lista a második szűrést is örökli az adatlaptól.
      */
     it("a vevő a saját eszközén sem látja a számlát", async () => {
-      const { items } = await service.documents(eszkozAId, {
-        kind: "customer",
-        customerId: vevoAId,
-      });
+      const { items } = await service.documents(eszkozAId, vevoAUser);
       assert.deepEqual(
         items.map((sor) => sor.type),
         ["MANUAL"],
@@ -299,11 +373,7 @@ describe(
      */
     it("idegen vevő eszközének csatolmányai nem láthatók", async () => {
       await assert.rejects(
-        () =>
-          service.documents(eszkozBId, {
-            kind: "customer",
-            customerId: vevoAId,
-          }),
+        () => service.documents(eszkozBId, vevoAUser),
         /Az eszköz nem található/,
       );
 
@@ -340,7 +410,7 @@ describe(
       const sajat = await service.documentBytes(
         eszkozBId,
         kepDokumentumId,
-        { kind: "customer", customerId: vevoBId },
+        vevoBUser,
         DOCUMENT_THUMBNAIL_VARIANT,
       );
       assert.deepEqual(
@@ -354,7 +424,7 @@ describe(
           service.documentBytes(
             eszkozBId,
             kepDokumentumId,
-            { kind: "customer", customerId: vevoAId },
+            vevoAUser,
             DOCUMENT_THUMBNAIL_VARIANT,
           ),
         /*
@@ -406,7 +476,7 @@ describe(
       const engedett = await service.documentBytes(
         eszkozBId,
         kepDokumentumId,
-        { kind: "customer", customerId: vevoBId },
+        vevoBUser,
         DOCUMENT_THUMBNAIL_VARIANT,
       );
       assert.deepEqual(
@@ -420,7 +490,7 @@ describe(
           service.documentBytes(
             eszkozBId,
             szamlaKepDokumentumId,
-            { kind: "customer", customerId: vevoBId },
+            vevoBUser,
             DOCUMENT_THUMBNAIL_VARIANT,
           ),
         /A dokumentum nem található/,
@@ -434,10 +504,10 @@ describe(
     it("szállító-hatókörű hívó sem látja a vevő eszközét", async () => {
       await assert.rejects(
         () =>
-          service.documents(eszkozAId, {
-            kind: "supplier",
-            supplierId: vevoAId,
-          }),
+          // SZALLITO-hatokor UGYANARRA az azonositora: a ket oszlop kozul csak
+          // az egyik egyezik, tehat ha a szures csak a `customerId`-t
+          // nezne, ez a hivas atmenne.
+          service.documents(eszkozAId, szallitoUser(vevoAId)),
         /Az eszköz nem található/,
       );
     });
