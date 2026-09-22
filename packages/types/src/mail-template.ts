@@ -97,6 +97,25 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     description:
       "Az ügyfél rövidítése, például FANK. Üres, ha az ügyfélnek nincs.",
   },
+  /**
+   * Balazs kerese, 2026-09-22 19:49:22 UTC: "Lehet a valtozok koze berakni
+   * egy olyat amit ha belerakok a levelbe akkor link latszik a levelben ami
+   * a hibajegyre visz?"
+   *
+   * A BELSO FELULETRE MUTAT -- ez a valtozo a hibajegy-felelosoknek szolo ket
+   * ertesitesben (`WORKSHEET_SIGNED`, `SERVICE_JOB_OPENED_BY_CUSTOMER`) all
+   * rendelkezesre, mert mindketto BELSO cimzettnek megy. Egy PARTNERNEK szolo
+   * levelben (az atadasi level) ez a link nem ertelmes: a partner-portal nem
+   * ugyanaz az utvonal, es ott ma nincs sablon-behelyettesites sem.
+   *
+   * URES MARAD, ha a `WEB_URL` kornyezeti valtozo nincs beallitva -- lasd
+   * `ticket-link.ts`. Ez NEM tartja fel a kuldest.
+   */
+  {
+    name: "jegy_linkje",
+    description:
+      "A hibajegy belső oldalának linkje. Üres, ha a rendszer nem ismeri a saját webcímét.",
+  },
 ] as const;
 
 /** Egy levelezesi esemeny: a sablon kulcsa es az emberi neve. */

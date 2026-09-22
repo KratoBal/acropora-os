@@ -48,6 +48,7 @@ function szolgaltatas(be: {
   jobOpened?: string;
   redirect?: string;
   sender?: MailSender | null;
+  webUrl?: string;
 }) {
   const kuldott: OutgoingMail[] = [];
   const naplo: { note: string }[] = [];
@@ -88,6 +89,12 @@ function szolgaltatas(be: {
         cimzettnek megy.
       */
       TICKET_MAIL_REDIRECT_TO: be.redirect ?? "off",
+      /*
+        A `WEB_URL` NINCS ALAPERTELMEZVE -- ez a fixtura tobbsegenek a valodi
+        helyzete: a legtobb allitas nem a linkrol szol, tehat a hianya nem
+        szabad, hogy zajt okozzon.
+      */
+      WEB_URL: be.webUrl,
     } as NodeJS.ProcessEnv),
     kuldott,
     naplo,
@@ -135,6 +142,78 @@ describe("a nyito ertesitese levelben", () => {
     assert.deepEqual(kuldott[0]?.to, ["nyito@partner.hu"]);
     assert.equal(naplo.length, 1);
     assert.ok(!naplo[0]?.note.includes("@"));
+  });
+
+  /**
+   * ACROBOT ELSO KIKOTESE A LINK-VALTOZORA (2026-09-22): a hianyzo WEB_URL NE
+   * TARTSA FEL A LEVELET. A ket allitas EGYUTT bizonyitja: az elso azt, hogy a
+   * kuldes vegigmegy es a linkje URES marad, nem `{{jegy_linkje}}` nyersen es
+   * nem hiba; a masodik (lentebb) azt, hogy BEALLITOTT WEB_URL mellett a link
+   * TENYLEG megjelenik -- kulonben az elso allitas azt is fednenek, hogy a
+   * behelyettesites egyaltalan mukodik.
+   */
+  it("hianyzo WEB_URL mellett a level KIMEGY, a link helye URES", async () => {
+    const { service, kuldott } = szolgaltatas({ mode: "live" });
+
+    assert.deepEqual(
+      await service.deliverWorksheetSigned({
+        serviceJobId: "job-1",
+        actorUserId: "user-2",
+      }),
+      { kind: "sent" },
+    );
+    assert.equal(kuldott.length, 1);
+    assert.doesNotMatch(
+      kuldott[0]?.text ?? "",
+      /\{\{/,
+      "nyers valtozonev nem maradhat a levelben",
+    );
+    assert.match(
+      kuldott[0]?.text ?? "",
+      /^Hibajegy: $/m,
+      "a link helye ures sor vegen, a level tobbi resze all",
+    );
+  });
+
+  it("beallitott WEB_URL mellett a link a levelben all", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      webUrl: "https://os.acropora.hu",
+    });
+
+    await service.deliverWorksheetSigned({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+    });
+
+    assert.match(
+      kuldott[0]?.text ?? "",
+      /^Hibajegy: https:\/\/os\.acropora\.hu\/szerviz\/hibajegyek\/job-1$/m,
+    );
+  });
+
+  /**
+   * UGYANAZ A VALTOZO A MASIK UTON IS -- ES EZ NEM ISMETLES: a ket
+   * `ertekek` blokk a szolgaltatasban KULON all (lasd `deliverServiceJobOpened`),
+   * tehat a bekotes ott is elmaradhatott volna, ha csak az egyik utat mertem
+   * volna.
+   */
+  it("az ugyfel-bejelentes levele is tartalmazza a linket", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      webUrl: "https://os.acropora.hu",
+    });
+
+    await service.deliverServiceJobOpened({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+      recipients: [{ email: "felelos@example.invalid" }],
+    });
+
+    assert.match(
+      kuldott[0]?.text ?? "",
+      /^Hibajegy: https:\/\/os\.acropora\.hu\/szerviz\/hibajegyek\/job-1$/m,
+    );
   });
 
   /**
