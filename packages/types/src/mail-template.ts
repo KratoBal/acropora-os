@@ -54,14 +54,97 @@ export interface MailTemplateVariable {
  * mezo).
  */
 export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
-  { name: "cimzett", description: "A hibajegy nyitójának neve." },
+  /**
+   * A LEIRASA 2026-09-22-IG „A hibajegy nyitójának neve" VOLT, ES AZ MOSTANTOL
+   * FELREVEZET.
+   *
+   * A mezo mindig a CIMZETT nevet tette a helyere (`cimzett: decision.name`).
+   * Amig EGYETLEN esemeny letezett -- a munkalap alairasa --, a cimzett ES a
+   * bejelento UGYANAZ a szemely volt, tehat a ket leiras egybeesett.
+   *
+   * A masodik esemenynel szetvalnak: ott a cimzett a FELELOS, a bejelento az
+   * ugyfel. A regi mondat ott hamisat allitana, es ez a mondat a sablon-
+   * szerkeszto mellett jelenik meg -- vagyis pont azt vezetne felre, aki a
+   * sablont irja.
+   */
+  { name: "cimzett", description: "A levél címzettjének neve." },
   { name: "jegyszam", description: "A hibajegy száma, például HJ-2026-001." },
   { name: "jegy_targya", description: "A hibajegy címe." },
   {
     name: "jegy_leirasa",
     description: "A bejelentés szövege. Üres, ha nincs kitöltve.",
   },
+  /**
+   * Balazs kerese, 2026-09-22: „szeretnem ha meg belekerulne egy olyan
+   * valtozo, ami a bejelento nevet tartalmazza".
+   *
+   * KULON MEZO, ES NEM A `cimzett` UJRAHASZNALASA: a ketto csak az EGYIK
+   * esemenyen esik egybe (lasd fent).
+   */
+  { name: "bejelento", description: "A hibajegyet nyitó személy neve." },
+  /**
+   * KULON VALTOZO A `bejelento` MELLETT, es nem ugyanaz maskeppen: az egyik
+   * SZEMELY, a masik CEG. acrobot kikotese, 2026-09-22: ha a push megnevezi az
+   * ugyfelet, a level is logikusan teszi -- de a ketto MAS adat, es a nevuk
+   * mondja meg a kulonbseget.
+   *
+   * URES MARAD, ha az ugyfelnek nincs rovidítése, vagy a jegynek nincs
+   * ugyfele. Ez NEM hiba: a sablonban a korulotte allo mondat dontse el, mit
+   * kezd vele.
+   */
+  {
+    name: "ugyfelkod",
+    description:
+      "Az ügyfél rövidítése, például FANK. Üres, ha az ügyfélnek nincs.",
+  },
 ] as const;
+
+/** Egy levelezesi esemeny: a sablon kulcsa es az emberi neve. */
+export interface MailTemplateEvent {
+  /** A `TicketMailTemplate` sor azonositoja. */
+  readonly id: string;
+  /** Ez all a valasztoban es a lap tetejen. */
+  readonly name: string;
+  /** Mikor megy ki -- a szerkeszto melle. */
+  readonly description: string;
+}
+
+/**
+ * A LEVELEZESI ESEMENYEK, EGY HELYEN.
+ *
+ * Balazs kerese, 2026-09-22: „Sablon mar van valamire, de legyen tobb sablon.
+ * Ennek pl az legyen a neve, hogy Ugyfel hibajegyet rogzit."
+ *
+ * === MIERT ITT, ES MIERT NEM AZ ADATBAZISBAN ===
+ *
+ * A `TicketMailTemplate` SOR a szerkesztheto SZOVEGET tarolja. Hogy MILYEN
+ * esemenyek leteznek, az nem adat, hanem a kod tulajdonsaga: minden esemenyhez
+ * tartozik egy kuldesi ut, amit valaki megirt. Egy adatbazisban felvett uj
+ * nev nem kuldene semmit -- csak egy ures szerkesztot adna.
+ *
+ * ES AZERT A KOZOS CSOMAGBAN: a lista kell a szervernek (melyik azonositot
+ * fogadja el a vegpont) ES a feluletnek (mit ajanljon fel a valaszto). Ket
+ * masolat pontosan ott csuszna szet, ahol senki nem nezi.
+ */
+export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
+  {
+    id: "WORKSHEET_SIGNED",
+    name: "Munkalapot aláírtak",
+    description:
+      "A hibajegyhez tartozó munkalap aláírása után megy ki a jegy nyitójának.",
+  },
+  {
+    id: "SERVICE_JOB_OPENED_BY_CUSTOMER",
+    name: "Ügyfél hibajegyet rögzít",
+    description:
+      "Akkor megy ki, amikor egy ügyfél hibajegyet nyit a partnerportálon. Címzettje mindenki, akinél a hibajegy-felelős szerep be van jelölve.",
+  },
+] as const;
+
+/** Ismert esemeny-e. A vegpont ES a felulet ezt kerdezi, nem sajat listat. */
+export function isMailTemplateEvent(id: string): boolean {
+  return MAIL_TEMPLATE_EVENTS.some((esemeny) => esemeny.id === id);
+}
 
 export type MailTemplateValues = Readonly<Record<string, string>>;
 

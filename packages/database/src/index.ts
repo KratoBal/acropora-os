@@ -69,6 +69,7 @@ export type {
   Warehouse,
   WarehouseLocation,
   Worksheet,
+  NotificationRole,
   ServiceJobStatus,
   WorksheetDepartment,
   WorksheetLine,

@@ -39,14 +39,19 @@ describe("az új eszköz űrlapjának választói", () => {
     assert.match(s, /Section title="Eszközadatok"/);
   });
 
-  it("mind a három választó ugyanabban az alakban áll", () => {
+  it("mind a négy választó ugyanabban az alakban áll", () => {
     const s = forras();
 
-    // A partner sajat, korabbi alakja (ownerPickerOpen); a TIPUS a kozos
-    // `CollapsedPicker`-ben all, a HELYSZIN pedig a `UnitPicker`-ben, ami maga
-    // is azt hasznalja. A szam azert all itt, hogy egy NEGYEDIK valaszto
-    // felvetele ne csusszon at csendben a regi, mindig nyitott alakban.
-    assert.equal((s.match(/<CollapsedPicker/g) ?? []).length, 1);
+    // A partner sajat, korabbi alakja (ownerPickerOpen); a TIPUS es a
+    // KATEGORIA a kozos `CollapsedPicker`-ben all, a HELYSZIN pedig a
+    // `UnitPicker`-ben, ami maga is azt hasznalja. A szam azert all itt, hogy
+    // egy TOVABBI valaszto felvetele ne csusszon at csendben a regi, mindig
+    // nyitott alakban.
+    //
+    // A KETTORE EMELES 2026-09-22-en tortent, a kategoria-valasztoval -- es az
+    // orzo PONTOSAN UGY mukodott, ahogy a fenti mondat igeri: pirosra ment, es
+    // ki kellett mondani, hogy egy negyedik valaszto keletkezett.
+    assert.equal((s.match(/<CollapsedPicker/g) ?? []).length, 2);
     assert.equal((s.match(/<UnitPicker/g) ?? []).length, 1);
 
     // A KET CIMKE A SAJAT ELEMEN BELUL ALLJON. A prop neve `label`, ami az
@@ -66,6 +71,12 @@ describe("az új eszköz űrlapjának választói", () => {
     assert.match(
       valaszto(),
       /<CollapsedPicker(?:(?!<\/?CollapsedPicker)[\s\S])*?label="Helyszín választása"/,
+    );
+    // A KATEGORIA CIMKEJE IS A SAJAT ELEMEBEN ALL, ugyanazzal a tempered
+    // mintaval: enelkul egy MASIK elemre csuszo cimke is atmenne.
+    assert.match(
+      s,
+      /<CollapsedPicker(?:(?!<\/?CollapsedPicker)[\s\S])*?label="Kategória választása"/,
     );
     assert.match(s, /setOwnerPickerOpen\(\(open\) => !open\)/);
   });

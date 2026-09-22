@@ -333,6 +333,22 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
   },
+  {
+    /**
+     * AZ ESZKOZ-KATEGORIAK KARBANTARTASA.
+     *
+     * UGYANAZ A JOG, mint a mertekegysegnel, es ugyanabbol az okbol: ha barki
+     * felvihetne kategoriat, pont az allna vissza, ami miatt a lista
+     * letrejott -- 110 eszkozon tiz ertek hat helyett, negy elgepelessel.
+     *
+     * A MENUPONT ES A VEGPONT UGYANAZT A JOGOT KAPJA: kettevalva vagy latszik
+     * a gomb annak, aki nem hivhatja, vagy hivhatja az, aki nem latja -- es a
+     * ketto kozul csak az elso hangos.
+     */
+    id: "asset-categories",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
   NAV_TILE,
 ];
 

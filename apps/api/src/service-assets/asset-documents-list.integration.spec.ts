@@ -353,6 +353,45 @@ describe(
     });
 
     /**
+     * KONTROLL A FIXTURARA, ES MAST MER, MINT AZ ALATTA ALLO ISMERT POZITIV.
+     *
+     * Az alatta allo azt bizonyitja, hogy a lista MEG TUDJA talalni mind a
+     * kettot. Ez azt, hogy a ket portal-felhasznalo hozzarendelese
+     * KULONBOZIK -- mert 2026-09-22 ota a vevo-hatokoru olvasas a
+     * HOZZARENDELT helyszinekre szur.
+     *
+     * AMI NELKULE ELVESZNE, ES CSENDBEN: ha valaki a fixturat ugy "javitja",
+     * hogy mindket felhasznalonak MINDKET helyszint adja, az osszes lenti
+     * tiltas ZOLD MARAD egy MINDENT ATENGEDO szuro mellett is. A defektus
+     * maga elegiti ki a tobbi allitast.
+     *
+     * A `portalUser` fejleceben ez a feltetel MONDATKENT mar allt. Egy
+     * mondat, amit nem allit senki, a sajat vedelmet nem meri.
+     */
+    it("kontroll: mindkét portál-felhasználónak PONTOSAN EGY, és KÜLÖNBÖZŐ helyszíne van", async () => {
+      const [a, b] = await Promise.all([
+        prisma.userWorksheetDepartment.findMany({
+          where: { userId: vevoAUser.id },
+          select: { departmentId: true },
+        }),
+        prisma.userWorksheetDepartment.findMany({
+          where: { userId: vevoBUser.id },
+          select: { departmentId: true },
+        }),
+      ]);
+
+      assert.deepEqual(
+        a.map((sor) => sor.departmentId),
+        [helyszinAId],
+      );
+      assert.deepEqual(
+        b.map((sor) => sor.departmentId),
+        [helyszinBId],
+      );
+      assert.notEqual(helyszinAId, helyszinBId);
+    });
+
+    /**
      * ISMERT POZITÍV KONTROLL: a lista MEG TUDJA találni mind a kettőt, amikor
      * a hívó mindent láthat. Enélkül minden lenti tiltás egy olyan metódustól
      * is zöld lenne, ami sosem ad vissza semmit.

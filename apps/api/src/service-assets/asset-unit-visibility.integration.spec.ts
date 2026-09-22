@@ -361,16 +361,49 @@ describe(
      *
      * Ez az allitas MAGA az orzo: ha a dontes valaha megfordul, PIROSODIK.
      *
-     * AMI VISZONT HIANYZIK, ES INNEN NEM POTOLHATO: a bevezetes napjan HANY sor
-     * all helyszin nelkul a harom erintett tablan (Asset, ServiceJob, Worksheet).
-     * Az a szam adna meg, hogy ez a szabaly valaha HARAPOTT-e -- egy kesobbi
-     * olvaso csak akkor tudja megmondani, ha latja, mennyi volt a bevezeteskor.
+     * === A BEVEZETES NAPJAN MERT SZAM, ES A NEVEZO TOBBET MOND, MINT A NULLA ===
      *
-     * NEM EN MERTEM, ES NEM IS TUDOM: ehhez az agenshez nem tartozik
-     * `DATABASE_URL`, es az egyetlen elerheto adatbazis az ELES -- amin Balazs
-     * kikotese szerint semmit nem futtatunk. ACROBOT TUDJA LEMERNI (o merte a
-     * szomszedos 83/0 szamot is, 2026-09-22 09:5x). Amig a szam nem all itt,
-     * ez a bekezdes a HIANYT nevezi meg, nem a nullat allitja.
+     * Merte: acrobot, 2026-09-22 15:2x, az ELES adatbazison -- azon, AMIRE AZ ELES
+     * API TENYLEGESEN MUTAT. A cimet az eles api kontener sajat `DATABASE_URL`
+     * valtozojabol olvasta ki (gazdagep `iwm34jaqp9xmwb72qkrqkwhy`), nem
+     * talalgatasbol, es a szamolas ELOTT kontrollt futtatott: a `departmentId`
+     * oszlop nev szerint all az Asset, ServiceJob, UserWorksheetDepartment es
+     * Worksheet tablan.
+     *
+     * A KONTROLL NEM FORMASAG VOLT. A gepen TOBB postgres fut, es az elso, amit
+     * megkerdezett, SIKERESEN csatlakozott egy `acropora` nevu, 71 tablas
+     * adatbazishoz -- amiben `Worksheet` tabla NINCS, es `department` nevu oszlop
+     * EGYETLEN tablan sem. Onnan ugyanez a kerdes ugyanezt a NULLAT adta volna,
+     * MAS OKBOL: nem azert, mert nincs ilyen sor, hanem mert nincs ilyen oszlop.
+     * Megegyezo eredmeny, kulonbozo ok -- ezert all itt, hogy MIHEZ csatlakozott.
+     *
+     * En nem tudtam lemerni: ehhez az agenshez nem tartozik `DATABASE_URL`, es az
+     * egyetlen elerheto adatbazis az eles -- amin Balazs kikotese szerint semmit
+     * nem futtatunk.
+     *
+     *   Asset       108 sor, ebbol `departmentId IS NULL`:  0
+     *   ServiceJob    6 sor, ebbol `departmentId IS NULL`:  0
+     *   Worksheet     4 sor, ebbol `departmentId IS NULL`:  0
+     *
+     * A WORKSHEET NULLAJA MAST JELENT, MINT A MASIK KETTOE, es ezt EN mertem, a
+     * semaban: ott a mezo `String` (kotelezo), az Asseten es a ServiceJobon
+     * `String?`. Vagyis a munkalapon nem is LEHET helyszin nelkuli sor; a masik
+     * ket tablan lehetne, es ma nincs.
+     *
+     * ES EGY KORABBI SZAM, HOGY NE LATSZODJON ELLENTMONDASNAK: ugyanaznap delelott
+     * 83 allt ezen a helyen. Az MASIK KERDESRE valaszolt (hany eszkoz all az
+     * UGYFEL NEVEN), nem az Asset tabla sorainak szamara -- es azota is
+     * keletkezhettek sorok.
+     *
+     * ES A NULLA MAGABAN FELREVEZETNE, EZERT ALL ITT A NEVEZO IS. Nulla NULL
+     * SZAZNYOLC eszkoz kozott jelent valamit; nulla NULL HAT hibajegy kozott
+     * szinte semmit. A hat es a negy NEM ERDEMI MINTA.
+     *
+     * VAGYIS EZ AZ ALLITAS NEM AZERT KELL, MERT A MAI ADAT GYANUS -- hanem mert a
+     * mai adat MEG NEM TUD semmit mondani. Az eszkoz-letrehozo DTO-ban a mezo
+     * ELHAGYHATO, tehat az elso helyszin nelkuli sor barmikor keletkezhet, es
+     * akkor CSENDBEN lathatatlan lesz. A szam nem megnyugtat: megmondja, hogy a
+     * szabaly meg nem harapott, es hogy mikortol lehet ezt egyaltalan merni.
      *
      * HA EZ A DONTES VALAHA MEGFORDUL, EZ AZ ALLITAS PIROSODIK, es akkor a
      * valtozast ki kell mondani, nem csendben atirni.

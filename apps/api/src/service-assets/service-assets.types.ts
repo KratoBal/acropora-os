@@ -147,6 +147,12 @@ export const assetDetailInclude = {
    * azt jelentene, hogy egy regi eszkoz teljesitmenye egy nap eltunik a lapjarol.
    */
   performanceUnit: { select: { id: true, code: true, name: true } },
+  /*
+    A KATEGORIA A TORZSADATBOL JON. A soron ott all meg a regi szoveges mezo
+    is, de amit a felulet lat, az ez -- a ketto egyutt allasa szandekos, es a
+    migracio ELLENORIZHETOSEGET szolgalja.
+  */
+  categoryRef: { select: { id: true, name: true } },
 } satisfies Prisma.AssetInclude;
 
 export type AssetSummaryRow = Prisma.AssetGetPayload<{

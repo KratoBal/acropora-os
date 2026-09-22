@@ -21,6 +21,12 @@ const JEGY: TicketMailContext = {
   description: "Reggel óta hangos.",
   openedById: "user-1",
   opener: NYITO,
+  /*
+    A ROVIDITES A KONTEXTUS RESZE 2026-09-22 ota. A fixtura KIMONDJA, hogy ennek
+    a jegynek nincs -- egy hianyzo mezo es egy megnevezett `null` nem ugyanaz: a
+    masodik allitas, az elso feledekenyseg.
+  */
+  partnerCode: null,
 };
 
 function szolgaltatas(be: {

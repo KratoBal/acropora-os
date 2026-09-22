@@ -24,6 +24,12 @@ const form: AssetCreateForm = {
   unitId: "",
   name: "  Fóka felnyomó szivattyú  ",
   kind: "EQUIPMENT",
+  /*
+    A KATEGORIA URESEN ALL A KOZOS FIXTURABAN, es ez ALLITAS: a mezo
+    elhagyhato, tehat az „nincs valasztva" ervenyes vegallapot. A KITOLTOTT
+    esetre kulon allitas all, sajat formmal.
+  */
+  categoryId: "",
   manufacturer: " Eheim ",
   model: "",
   serialNumber: " SN-1 ",
@@ -356,5 +362,59 @@ describe("a teljesítmény és a mértékegysége", () => {
     const result = buildAssetCreatePayload({ ...form, performance: "ötszáz" });
     assert.equal(result.ok, false);
     assert.match(!result.ok ? result.message : "", /csak szám lehet/);
+  });
+});
+
+/**
+ * A KATEGORIA -- A TELEFONON EDDIG NEM LETEZETT.
+ *
+ * Balazs kerese, 2026-09-22: az eszkoz-felvitelen legyen legordulo. A webes
+ * urlapon szabad szoveg volt (tiz ertek hat helyett), a telefonon viszont
+ * EGYALTALAN nem volt mezo -- aki a helyszinen vitt fel eszkozt, annal a
+ * kategoria uresen maradt.
+ */
+describe("a kategória a payloadban", () => {
+  it("K1: a kiválasztott kategória azonosítója kimegy", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      labelCode: "V2196",
+      categoryId: "cat-1",
+    });
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.categoryId, "cat-1");
+  });
+
+  /**
+   * K2: AZ URES VALASZTAS KIMARAD, nem ures sztringkent megy.
+   *
+   * MI PIROSIT: ha a mezo feltetel nelkul kerul a payloadba. Akkor a szerver
+   * egy URES SZTRINGET kapna kategoria-azonositokent -- az nem letezo sorra
+   * mutat, es a felvitel a helyszinen hasalna el, miutan a szerelo mindent
+   * kitoltott.
+   */
+  it("K2: üres választásnál a mező KIMARAD a payloadból", () => {
+    const result = buildAssetCreatePayload({ ...form, labelCode: "V2196" });
+
+    assert.ok(result.ok);
+    assert.equal("categoryId" in result.payload, false);
+  });
+
+  /**
+   * K3: KONTROLL -- a csupa szokoz ugyanaz, mint az ures.
+   *
+   * E nelkul a K2 zold maradna egy olyan megvalositason is, ami csak az
+   * ures sztringet szuri: egy szokozokbol allo ertek ugyanugy nem letezo
+   * sorra mutatna.
+   */
+  it("K3: KONTROLL: a csupa szóköz is kimarad", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      labelCode: "V2196",
+      categoryId: "   ",
+    });
+
+    assert.ok(result.ok);
+    assert.equal("categoryId" in result.payload, false);
   });
 });

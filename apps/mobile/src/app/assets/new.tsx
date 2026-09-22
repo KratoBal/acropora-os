@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   createAsset,
+  listAssetCategories,
   type CreateAssetInput,
   listAssetOwners,
   uploadAssetDocuments,
@@ -111,6 +112,11 @@ export default function NewAssetScreen() {
   const [unitId, setUnitId] = useState("");
   const [name, setName] = useState("");
   const [kind, setKind] = useState<AssetKind>("EQUIPMENT");
+  const [categoryId, setCategoryId] = useState("");
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>(
+    [],
+  );
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
@@ -202,6 +208,28 @@ export default function NewAssetScreen() {
     const items = ownersQuery.data?.items;
     if (items) void rememberAssetOwners(items);
   }, [ownersQuery.data]);
+
+  /**
+   * A KATEGORIA-LISTA BETOLTESE -- ES A HIBAJA NEM ALLITJA MEG A FELVITELT.
+   *
+   * A kategoria ELHAGYHATO mezo. Ha a lista nem jon (terero nincs, a szerver
+   * nem valaszol), a valaszto URES marad, es a szerelo minden mast kitolthet.
+   * Egy hibauzenet a helyen tobbet venne el, mint amennyit ad: a helyszini
+   * felvitelnel az adat ott es akkor van.
+   */
+  useEffect(() => {
+    let elo = true;
+    void listAssetCategories()
+      .then((valasz) => {
+        if (elo) setCategories(valasz.items);
+      })
+      .catch(() => {
+        /* szandekosan nema: lasd a fenti jegyzetet */
+      });
+    return () => {
+      elo = false;
+    };
+  }, []);
 
   useEffect(() => {
     const items = unitsQuery.data?.items;
@@ -528,6 +556,7 @@ export default function NewAssetScreen() {
       unitId,
       name,
       kind,
+      categoryId,
       manufacturer,
       model,
       serialNumber,
@@ -769,6 +798,63 @@ export default function NewAssetScreen() {
                     ]}
                   >
                     <Text style={styles.kindText}>{item.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </CollapsedPicker>
+            {/*
+              A KATEGORIA A TELEFONON EDDIG NEM LETEZETT.
+
+              Balazs kerese, 2026-09-22: a webes urlapon legyen legordulo. A
+              telefonon viszont NEM VOLT ilyen mezo egyaltalan -- tehat aki a
+              helyszinen vitt fel eszkozt, annak a kategoriaja URES maradt, es
+              utolag valakinek pótolnia kellett.
+
+              UGYANAZ A VALASZTO-ALAK, mint a tipusnal: a lista egy
+              koppintasra nyilik, es nem tolja szet az urlapot.
+            */}
+            <CollapsedPicker
+              summary={
+                categories.find((k) => k.id === categoryId)?.name ??
+                "Nincs megadva"
+              }
+              hint="Koppints a listához"
+              label="Kategória választása"
+              open={categoryPickerOpen}
+              onToggle={() => setCategoryPickerOpen((open) => !open)}
+            >
+              <View style={styles.kindGrid}>
+                {/*
+                  AZ URES VALASZTAS IS GOMB. A kategoria elhagyhato, es aki
+                  tevedesbol valasztott, annak vissza kell tudnia venni -- egy
+                  lista, amibol csak befele vezet ut, pont a rossz erteket
+                  rogziti.
+                */}
+                <Pressable
+                  onPress={() => {
+                    setCategoryId("");
+                    setCategoryPickerOpen(false);
+                  }}
+                  style={[
+                    styles.kindButton,
+                    categoryId === "" && styles.kindSelected,
+                  ]}
+                >
+                  <Text style={styles.kindText}>Nincs megadva</Text>
+                </Pressable>
+                {categories.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => {
+                      setCategoryId(item.id);
+                      setCategoryPickerOpen(false);
+                    }}
+                    style={[
+                      styles.kindButton,
+                      categoryId === item.id && styles.kindSelected,
+                    ]}
+                  >
+                    <Text style={styles.kindText}>{item.name}</Text>
                   </Pressable>
                 ))}
               </View>

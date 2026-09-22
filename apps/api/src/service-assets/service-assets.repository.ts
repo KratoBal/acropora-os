@@ -1124,7 +1124,7 @@ export class ServiceAssetsRepository extends Repository {
                   status: input.status,
                   criticality: input.criticality,
                   name: input.name.trim(),
-                  category: optionalText(input.category),
+                  categoryId: input.categoryId || null,
                   manufacturer: optionalText(input.manufacturer),
                   model: optionalText(input.model),
                   serialNumber: optionalText(input.serialNumber),
@@ -1624,7 +1624,7 @@ export class ServiceAssetsRepository extends Repository {
           status: input.status,
           criticality: input.criticality,
           name: input.name?.trim(),
-          category: optionalText(input.category),
+          categoryId: input.categoryId || null,
           manufacturer: optionalText(input.manufacturer),
           model: optionalText(input.model),
           serialNumber: optionalText(input.serialNumber),
@@ -2354,7 +2354,13 @@ export class ServiceAssetsRepository extends Repository {
   ): AssetDetail {
     return {
       ...this.toListItem(row, paths),
-      category: row.category ?? undefined,
+      /*
+        A KIADOTT ERTEK A HIVATKOZOTT NEV, nem a regi szoveges mezo. A ketto
+        atmenetileg egyutt all a soron: a szoveg a migracio ELLENORIZHETOSEGE
+        miatt marad ott, de amit a felulet lat, az mar a torzsadatbol jon.
+      */
+      category: row.categoryRef?.name ?? undefined,
+      categoryId: row.categoryId ?? undefined,
       description: row.description ?? undefined,
       performance: row.performance?.toString(),
       performanceUnit: row.performanceUnit ?? undefined,

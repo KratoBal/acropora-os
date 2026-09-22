@@ -9,6 +9,7 @@ import { ticketMailContent } from "./ticket-mail.content.js";
 import {
   mailAuditNote,
   mailModeOf,
+  serviceJobOpenedMailDecision,
   ticketMailDecision,
   type MailSkipReason,
 } from "./ticket-mail.rules.js";
@@ -50,9 +51,53 @@ export const DEFAULT_WORKSHEET_SIGNED_TEMPLATE = {
   ].join("\n"),
 } as const;
 
+/**
+ * A MASODIK LEVELEZESI ESEMENY: UGYFEL HIBAJEGYET ROGZIT.
+ *
+ * Az azonosito a `MAIL_TEMPLATE_EVENTS` listajabol jon (kozos csomag), nem egy
+ * itt kitalalt sztringbol: ugyanazt a nevet a vegpont es a felulet valasztoja
+ * is hasznalja, es harom masolat harom helyen csuszna szet.
+ */
+export const SERVICE_JOB_OPENED = "SERVICE_JOB_OPENED_BY_CUSTOMER";
+
+/**
+ * A KEZDO SZOVEG, AMIG SENKI NEM IRT SAJATOT -- ugyanaz a szerep, mint a
+ * `DEFAULT_WORKSHEET_SIGNED_TEMPLATE`-nel.
+ *
+ * A `{{ugyfelkod}}` URES LEHET (nem minden ugyfelnek van rovidítése), ezert a
+ * mondat ugy all, hogy uresen is ep marad: „A bejelentő: Nagy Anna (FANK)"
+ * helyett kulon sorban all, sajat cimkevel. Egy zarojeles alak uresen
+ * „Nagy Anna ()" lenne.
+ */
+export const DEFAULT_SERVICE_JOB_OPENED_TEMPLATE = {
+  subject: "{{jegyszam}} {{jegy_targya}}",
+  body: [
+    "Kedves {{cimzett}}!",
+    "",
+    "Új hibajegyet rögzített egy ügyfél.",
+    "",
+    "Jegyszám: {{jegyszam}}",
+    "Tárgy: {{jegy_targya}}",
+    "Bejelentő: {{bejelento}}",
+    "Ügyfélkód: {{ugyfelkod}}",
+    "",
+    "A bejelentés szövege:",
+    "{{jegy_leirasa}}",
+  ].join("\n"),
+} as const;
+
 export type TicketMailOutcome =
   | { readonly kind: "sent" }
-  | { readonly kind: "skipped"; readonly reason: MailSkipReason | "no-ticket" }
+  | {
+      readonly kind: "skipped";
+      /**
+       * A `no-recipient` 2026-09-22-en kerult ide, es SAJAT ok, nem a meglevok
+       * egyike: azt mondja, hogy a levelezes MEGY, csak a hibajegy-felelos
+       * szerep egyetlen aktiv felhasznalonal sincs bejelolve. Ez a
+       * beallitasokban javithato -- a `mode-off` nem.
+       */
+      readonly reason: MailSkipReason | "no-ticket" | "no-recipient";
+    }
   | { readonly kind: "failed"; readonly unknown?: readonly string[] };
 
 @Injectable()
@@ -185,6 +230,99 @@ export class TicketMailService {
     await this.repository.recordNotification({
       serviceJobId: input.serviceJobId,
       note: mailAuditNote(decision),
+      actorUserId: input.actorUserId,
+    });
+    return { kind: "sent" };
+  }
+
+  /**
+   * UGYFEL NYITOTT HIBAJEGYET -- LEVEL A FELELOS-SZEREP BIRTOKOSAINAK.
+   *
+   * === A HAROM ELTERES A NYITO-ERTESITESHEZ KEPEST, MEGNEVEZVE ===
+   *
+   * 1. A CIMZETT A SZEREPBOL JON, nem a jegyrol. Tobb is lehet, es ha SENKINEL
+   *    nincs bejelolve, az sajat kihagyasi ok (`no-recipient`) -- nem ugyanaz,
+   *    mint a kikapcsolt levelezes, mert ezt a beallitasokban lehet javitani.
+   * 2. A `{{cimzett}}` ITT NEM A BEJELENTO. Ezen az uton a ketto szetvalik, es
+   *    epp ezert kellett a `{{bejelento}}` valtozo. Tobb cimzettnel a
+   *    megszolitas nem szemelyre szol, ezert a szerep nevet teszem a helyere.
+   * 3. EGY LEVEL MEGY, TOBB CIMZETTNEK, nem cimzettenkent egy. A kuldo `to`
+   *    mezoje tomb, es a tartalom mindenkinek ugyanaz.
+   */
+  async deliverServiceJobOpened(input: {
+    serviceJobId: string;
+    actorUserId: string | null;
+    /**
+     * A CIMZETTEK KIVULROL JONNEK, ES EZ SZANDEKOS.
+     *
+     * Ugyanaz a halmaz kell a PUSH-hoz is, es a hivo mar lekerdezte. Ha ez a
+     * metodus ujra lekerdezne, ugyanaz a szabaly KET helyen allna -- es a ket
+     * lekerdezes kozott a halmaz meg is valtozhatna: a push egy embernek menne
+     * ki, a level egy masiknak, ugyanarrol a jegyrol.
+     */
+    recipients: readonly { readonly email: string }[];
+  }): Promise<TicketMailOutcome> {
+    const context = await this.repository.context(input.serviceJobId);
+    if (!context) return { kind: "skipped", reason: "no-ticket" };
+
+    const decision = serviceJobOpenedMailDecision({
+      mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      recipients: input.recipients,
+    });
+
+    if (decision.kind === "skip") {
+      /*
+        A KIKAPCSOLT LEVELEZESROL NEM IRUNK NAPLOSORT, a hianyzo cimzettrol
+        IGEN. Ugyanaz a szabaly, mint a masik uton: a zart kapu a KORNYEZET
+        allapota, es minden teszt-kornyezetben odakerulne; a „senkinel nincs
+        bejelolve" viszont a JEGYROL szolo teny, es javithato.
+      */
+      if (decision.reason !== "mode-off")
+        await this.repository.recordNotification({
+          serviceJobId: input.serviceJobId,
+          note: "Értesítő levél kimaradt: a hibajegy-felelős szerep egyetlen aktív felhasználónál sincs bejelölve.",
+          actorUserId: input.actorUserId,
+        });
+      this.logger.log(
+        `Ügyfél-bejelentés levele kihagyva (${decision.reason}), hibajegy ${input.serviceJobId}.`,
+      );
+      return { kind: "skipped", reason: decision.reason };
+    }
+
+    const tarolt = await this.repository.template(SERVICE_JOB_OPENED);
+    const sablon = tarolt ?? DEFAULT_SERVICE_JOB_OPENED_TEMPLATE;
+    const ertekek = {
+      cimzett: "Kolléga",
+      jegyszam: context.jobNumber,
+      jegy_targya: context.title,
+      jegy_leirasa: context.description ?? "",
+      bejelento: context.opener?.displayName ?? "",
+      ugyfelkod: context.partnerCode ?? "",
+    };
+
+    const targy = renderMailTemplate(sablon.subject, ertekek);
+    const torzs = renderMailTemplate(sablon.body, ertekek);
+    if (!targy.ok || !torzs.ok) {
+      const ismeretlen = [
+        ...(targy.ok ? [] : targy.unknown),
+        ...(torzs.ok ? [] : torzs.unknown),
+      ];
+      this.logger.warn(
+        `A levél sablonja ismeretlen változót tartalmaz: ${ismeretlen.join(", ")}.`,
+      );
+      return { kind: "failed", unknown: [...new Set(ismeretlen)] };
+    }
+
+    if (!this.sender) return { kind: "skipped", reason: "mode-off" };
+    await this.sender.send({
+      to: [...decision.to],
+      subject: headerSafe(targy.text),
+      text: torzs.text,
+    });
+
+    await this.repository.recordNotification({
+      serviceJobId: input.serviceJobId,
+      note: `Értesítő levél kiment ${decision.to.length} címzettnek: ügyfél hibajegyet rögzített.`,
       actorUserId: input.actorUserId,
     });
     return { kind: "sent" };
