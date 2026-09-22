@@ -1,9 +1,15 @@
-import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 
 import type { ServiceJobHandoverMailPreview } from "@acropora/types";
 
 import { headerSafe } from "./mail-header.js";
-import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
+import { TICKET_MAIL_ENV, TicketMailError } from "./gmail-mail.sender.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
 import { mailModeOf } from "./ticket-mail.rules.js";
 import {
@@ -230,6 +236,36 @@ export class HandoverMailService {
         esemeny -- es enelkul csak annyit tudnank, hogy a vevo nem kapott
         levelet, azt nem, hogy megprobaltuk.
       */
+
+      /*
+        ES A NYOM NEM MONDHAT TOBBET, MINT AMIT TUDUNK (79649b43).
+
+        A `FAILED` szo azt allitja, hogy a level NEM ment ki. Ez a kuldo OT
+        dobasi pontjabol NEGYRE igaz (a keres el sem indult, vagy valaszt
+        kaptunk es az nem-ok volt) -- az OTODIKRE viszont NEM: ha a keres
+        elindult es valasz nem jott, a Gmail MAR atvehette a levelet.
+
+        A ket eset TEENDOJE ELLENTETES, es epp ezert nem szabad egy szoval
+        jelolni oket:
+
+          FAILED          a level nem ment ki  -> UJRA lehet kuldeni
+          INDETERMINATE   nem tudjuk           -> ELOBB a cimzettnel kell
+                                                  megnezni, es CSAK azutan
+
+        Egy `FAILED`, ami valojaban bizonytalan, epp az ujrakuldes fele tereli
+        a kezelot -- es idempotencia hijan (ea3f787c, Balazs dontese) abbol ket
+        egyforma level lesz a vevonel.
+
+        AZ `outcome` OSZLOP SZOVEG, NEM ENUM, es a sema kommentje szo szerint
+        ezert hagyta annak: "egy új kimenetel felvétele ne igényeljen migrációt
+        egy append-only naplóban". Tehat ez a harmadik ertek migracio NELKUL
+        fer be. A szo maga sem uj a hazban: az `UnasVerificationStatus` es a
+        `SzamlazzVerificationStatus` is visel `INDETERMINATE` erteket.
+      */
+      const bizonytalan =
+        cause instanceof TicketMailError &&
+        cause.code === "TICKET_MAIL_SEND_INDETERMINATE";
+
       await this.repository.recordDelivery({
         serviceJobId: job.id,
         jobNumber: job.jobNumber,
@@ -237,9 +273,24 @@ export class HandoverMailService {
         subject,
         recipients: decision.to,
         attachmentBytes: input.package.bytes.length,
-        outcome: "FAILED",
+        outcome: bizonytalan ? "INDETERMINATE" : "FAILED",
         error: cause instanceof Error ? cause.message : "ismeretlen hiba",
       });
+
+      /*
+        A KEZELO KET KULONBOZO MONDATOT KAP, ES A BIZONYTALAN AGON NEM
+        HIVJUK UJRAKULDESRE.
+
+        A biztos bukas tovabbdobodik ugy, ahogy eddig. A bizonytalan ag 503-at
+        ad, mert az az egyetlen allitas, ami igaz: a kimenetelt nem tudjuk.
+      */
+      if (bizonytalan)
+        throw new ServiceUnavailableException(
+          "A levél kiküldésének kimenetele bizonytalan: nem kaptunk választ, " +
+            "ezért nem tudjuk, megérkezett-e. NE küldd újra azonnal — előbb " +
+            "nézd meg a címzettnél, hogy megkapta-e. Az újraküldés így két " +
+            "egyforma levelet adhat neki.",
+        );
       throw cause;
     }
 
