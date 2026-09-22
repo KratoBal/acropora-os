@@ -97,6 +97,7 @@ let kroId = "";
 let akvId = "";
 let kroFelhasznaloId = "";
 let akvFelhasznaloId = "";
+let dokumentumId = "";
 
 /**
  * A KERET. Egyetlen dolgot csinal: atadja a kapott szurot a Prismanak, es
@@ -224,6 +225,37 @@ describe(
       // egyik egyseg-szukites sem hozza vissza, viszont egy puszta
       // ugyfel-szurore megjelenik.
       await eszkoz("NINCS-EGYSEG", null);
+
+      /*
+        EGY DOKUMENTUM A KRO ESZKOZON -- a harom dokumentum-uthoz.
+
+        A FAJTA `MANUAL`, es ez nem izles: a `scopeMaySeeDocumentType` szerint a
+        partner csak a WARRANTY, MANUAL es PHOTO fajtat latja. Egy `OTHER`
+        fajtaju sor mellett mind a hat alabbi allitas zold lenne a
+        helyszin-tengely NELKUL is -- a fajta-szuro zarna ki, nem a helyszin.
+
+        A `thumbnail` es a `content` azert all rajta, mert a ket olvaso ut a
+        HIANYUKRA is `null`-t ad: enelkul a POZITIV kontrollok nem tudnanak
+        atmenni, es akkor a tagadasok semmit nem bizonyitananak.
+      */
+      const kroSor = await prisma.asset.findFirstOrThrow({
+        where: { assetNumber: `${PREFIX}-KRO-1` },
+        select: { id: true },
+      });
+      const dok = await prisma.assetDocument.create({
+        data: {
+          assetId: kroSor.id,
+          type: "MANUAL",
+          fileName: `${PREFIX}-kezikonyv.pdf`,
+          contentType: "application/pdf",
+          sizeBytes: 3,
+          sha256: "a".repeat(64),
+          content: Buffer.from([1, 2, 3]),
+          thumbnail: Buffer.from([4, 5, 6]),
+        },
+        select: { id: true },
+      });
+      dokumentumId = dok.id;
     });
 
     after(takarit);
@@ -566,6 +598,111 @@ describe(
       );
 
       assert.equal(lap, null);
+    });
+
+    /**
+     * A HAROM DOKUMENTUM-UT, ES A HARMADIK IR.
+     *
+     * Ugyanaz a fuggveny all mogottuk (`assetVisibilityForAndBranch`), ugyanazon
+     * a ponton -- de a bekotesuk HAROM KULON hivohely, es egy kesobbi atalakitas
+     * egyetlen helyrol veheti le. Ezert kap mindegyik sajat allitast: ha egy
+     * kozos allitas allna itt, a hat ut kozul ot csendben elszakadhatna.
+     *
+     * A `setDocumentCaption` KULON is szamit: az IR. Egy hianyzo szures ott nem
+     * csak lathatova tesz valamit, hanem egy MASIK helyszin dokumentumat irja at.
+     */
+    it("a BELYEGKEP megjon a SAJAT helyszinen allo eszkoz dokumentumarol", async () => {
+      const eszkozId = await kroEszkozId();
+
+      const kep = await repository.documentThumbnail(
+        eszkozId,
+        dokumentumId,
+        { kind: "customer", customerId: ugyfelId },
+        await assignedUnitIdsFor(kroFelhasznaloId),
+      );
+
+      assert.ok(kep, "a sajat helyszin dokumentumanak belyegkepe hianyzik");
+    });
+
+    it("a BELYEGKEP NEM jon meg a kiosztott helyszineken kivulrol", async () => {
+      const eszkozId = await kroEszkozId();
+
+      const kep = await repository.documentThumbnail(
+        eszkozId,
+        dokumentumId,
+        { kind: "customer", customerId: ugyfelId },
+        await assignedUnitIdsFor(akvFelhasznaloId),
+      );
+
+      assert.equal(kep, null);
+    });
+
+    it("a LETOLTES megy a SAJAT helyszinen allo eszkoz dokumentumara", async () => {
+      const eszkozId = await kroEszkozId();
+
+      const sor = await repository.document(
+        eszkozId,
+        dokumentumId,
+        { kind: "customer", customerId: ugyfelId },
+        await assignedUnitIdsFor(kroFelhasznaloId),
+      );
+
+      assert.ok(sor, "a sajat helyszin dokumentuma nem tolthető le");
+    });
+
+    it("a LETOLTES NEM megy a kiosztott helyszineken kivulrol", async () => {
+      const eszkozId = await kroEszkozId();
+
+      const sor = await repository.document(
+        eszkozId,
+        dokumentumId,
+        { kind: "customer", customerId: ugyfelId },
+        await assignedUnitIdsFor(akvFelhasznaloId),
+      );
+
+      assert.equal(sor, null);
+    });
+
+    /**
+     * AZ IRO UT: A DARABSZAM MONDJA MEG, HOGY TORTENT-E VALAMI.
+     *
+     * A `setDocumentCaption` a MODOSITOTT SOROK szamat adja vissza, tehat itt a
+     * nulla nem "nem talaltam" alakban jelenik meg, hanem merheto ertekkent.
+     * Ez erosebb, mint egy `null`: megmondja, hogy az iras EL SEM INDULT.
+     */
+    it("a MEGJEGYZES-IRAS atmegy a SAJAT helyszinen allo eszkoz dokumentumara", async () => {
+      const eszkozId = await kroEszkozId();
+
+      const darab = await repository.setDocumentCaption(
+        eszkozId,
+        dokumentumId,
+        "sajat helyszin",
+        { kind: "customer", customerId: ugyfelId },
+        await assignedUnitIdsFor(kroFelhasznaloId),
+      );
+
+      assert.equal(darab, 1);
+    });
+
+    it("a MEGJEGYZES-IRAS NEM megy at a kiosztott helyszineken kivulrol", async () => {
+      const eszkozId = await kroEszkozId();
+
+      const darab = await repository.setDocumentCaption(
+        eszkozId,
+        dokumentumId,
+        "idegen helyszin",
+        { kind: "customer", customerId: ugyfelId },
+        await assignedUnitIdsFor(akvFelhasznaloId),
+      );
+      assert.equal(darab, 0);
+
+      // ES A SOR TENYLEG ERINTETLEN: a darabszam onmagaban nem bizonyitja, hogy
+      // nem irtunk. Egy alak, ami IR es 0-t ad vissza, a fenti sorra zold lenne.
+      const sor = await prisma.assetDocument.findUniqueOrThrow({
+        where: { id: dokumentumId },
+        select: { caption: true },
+      });
+      assert.notEqual(sor.caption, "idegen helyszin");
     });
   },
 );
