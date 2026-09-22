@@ -419,6 +419,13 @@ export const COLLECTION_LIST_LIMIT = 500;
  */
 export const CATEGORY_LIST_LIMIT = 500;
 
+/**
+ * Egy lehivas felso hatara. A bolt napi rendelesszama ma egy szamjegyu, tehat
+ * ez a hatar nem szoritas, hanem VEDELEM: ha valaha nagysagrenddel tobb jonne,
+ * a `truncated` jelzes szol, ahelyett hogy egy korbe probalnank behuzni.
+ */
+const ORDER_LIST_LIMIT = 200;
+
 export const EXTERNAL_ID_LOOKUP_LIMIT = 50;
 
 /**
@@ -487,6 +494,41 @@ export const VARIANT_INVENTORY_FIELDS = [
   "inventory_items.inventory.location_levels.reserved_quantity",
 ].join(",");
 
+/**
+ * EGY MEDUSA-RENDELES ANNYI MEZOJE, AMENNYIT AZ ATVETEL HASZNAL.
+ *
+ * A mezonevek NEM a UNAS-oldali parjukbol masolodtak at, hanem a telepitett
+ * `@medusajs/types` 2.19.0 csomag `BaseOrder` es `AdminOrder` tipusaibol.
+ * Ugyanaz az ok, amiert a repo minden Medusa-entitashoz sajat, szuk sort ir:
+ * a teljes valasz tobb szaz mezot hordoz, es amit nem hasznalunk, azt nem is
+ * akarjuk a szerzodesunkbe venni.
+ *
+ * A `display_id` es a `custom_display_id` a szerzodesben OPCIONALIS, tehat itt
+ * sem lehet kotelezo. Aki kotelezove teszi, az egy olyan allitast tesz a
+ * tipusba, amit a kulso rendszer nem garantal.
+ */
+export interface MedusaOrderRow {
+  id: string;
+  display_id?: number;
+  status: string;
+  email: string | null;
+  currency_code: string;
+  total: number;
+  created_at: string;
+  updated_at: string;
+  sales_channel_id: string | null;
+}
+
+export interface MedusaOrderListResult {
+  rows: MedusaOrderRow[];
+  /**
+   * Igaz, ha a valasz elerte a lekerdezesi hatart, tehat lehet TOBB rendeles is.
+   * A hivo ilyenkor szukebb idoablakkal kerdez ujra -- ugyanaz az alak, mint a
+   * kategoria- es gyujtemeny-listanal.
+   */
+  truncated: boolean;
+}
+
 export interface MedusaAdminClient {
   /**
    * Keresés külső azonosítóra, a TÖRÖLTEKKEL együtt.
@@ -523,6 +565,14 @@ export interface MedusaAdminClient {
    * tortenik, 219 sornal az olcso.
    */
   listProductCategories(): Promise<MedusaCategoryListResult>;
+
+  /**
+   * A BOLT RENDELESEI, NOVEKMENYESEN.
+   *
+   * A `sinceIso` a legutobb LATOTT rendeles letrehozasi ideje. Ha null, a hivo
+   * az elso futasban van, es a hatar szabja meg, mennyit kapunk.
+   */
+  listOrders(sinceIso: string | null): Promise<MedusaOrderListResult>;
   /** Egy kategoria letrehozasa. A valaszban jon a Medusa-azonosito. */
   createProductCategory(input: MedusaCategoryInput): Promise<MedusaCategoryRow>;
   /**
@@ -1103,6 +1153,37 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         return null;
       throw error;
     }
+  }
+
+  async listOrders(sinceIso: string | null): Promise<MedusaOrderListResult> {
+    const params = new URLSearchParams({
+      fields:
+        "id,display_id,status,email,currency_code,total,created_at,updated_at,sales_channel_id",
+      limit: String(ORDER_LIST_LIMIT),
+      order: "created_at",
+    });
+    /**
+     * A SZIGORU NAGYOBB (`$gt`) SZANDEKOS, ES NEM UGYANAZ, MINT A `$gte`.
+     *
+     * A hivo a legutobb MAR ATVETT rendeles idejet adja at. A `$gte` ugyanazt a
+     * rendelest minden korben visszahozna, tehat minden futas ujra feldolgozna
+     * legalabb egyet. Az atvetel ettol meg nem romlana el (az azonositora
+     * idempotens), de minden kor vegezne felesleges munkat, orokre.
+     *
+     * A cserebe vallalt kockazat KIMONDVA: ha ket rendeles letrehozasi ideje
+     * BETURE azonos, es a hatar pont koztuk vagja el a lapot, a masodik
+     * kimaradhat. Ezert a `truncated` jelzes nem diszites: ha igaz, a hivo
+     * ugyanazzal az idobelyeggel kerdez ujra, es a lap masodik feleert megy
+     * vissza. Az `order` parameter ezert kotelezo -- rendezes nelkul a
+     * "lap masodik fele" mondatnak nincs ertelme.
+     */
+    if (sinceIso) params.set("created_at[$gt]", sinceIso);
+
+    const body = await this.request<{ orders: MedusaOrderRow[] }>(
+      `/admin/orders?${params.toString()}`,
+    );
+    const rows = body.orders ?? [];
+    return { rows, truncated: rows.length >= ORDER_LIST_LIMIT };
   }
 
   async listProductCategories(): Promise<MedusaCategoryListResult> {
