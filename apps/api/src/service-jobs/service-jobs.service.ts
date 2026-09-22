@@ -253,6 +253,45 @@ export class ServiceJobsService {
           "A megadott helyszín nem ehhez a partnerhez tartozik.",
         );
       }
+      /**
+       * ES A KERO SAJAT HELYSZINEI IS SZAMITANAK (Balazs dontese, 2026-09-22:
+       * "idegen helyszinre nem is tud jegyet nyitni").
+       *
+       * A FENTI ELLENORZES CSAK AZ UGYFELET NEZTE, es enelkul a dontes FELE
+       * valosulna meg: a valaszto mar nem ajanlja fel az idegen helyszint, de
+       * egy kozvetlen hivas atmenne rajta.
+       *
+       * ES AMIERT EZ NEM CSAK ELMELETI: elesben MAR LETEZIK egy ilyen jegy
+       * (merve 2026-09-22) -- egy partner-fiok olyan helyszinre nyitotta, ami
+       * nincs nala. A kovetkezmenye nem a nyitas, hanem az, amit UTANA lat: a
+       * jegyet igen (a nyito-tengelyen), a munkalapjait viszont nem, mert ott
+       * nincs nyito-tengely. "Az en jegyem, es nem latom, mit csinaltak rajta."
+       *
+       * A SZUKITES CSAK A VEVO-HATOKORRE SZOL. A belsos felhasznalok NULLA
+       * hozzarendelessel dolgoznak (elesben mind a hat ilyen), tehat rajuk
+       * alkalmazva a sajat szerelonk EGYETLEN helyszinre sem nyithatna jegyet.
+       *
+       * A HIBAUZENET MEGNEVEZI AZ OKOT, es ez tudatos: a kero a sajat
+       * ugyfelenek a partnere, es a helyszin-lista amugy is csak a sajatjait
+       * adja -- egy "nem ehhez a partnerhez tartozik" alaku valasz itt nem
+       * vedene tobbet, csak felrevezetne.
+       */
+      if (partnerScope.kind === "customer") {
+        /**
+         * A TAROLON AT, NEM A MODUL-SZINTU LEKERDEZESSEL -- ES EZ NEM STILUS.
+         * Az `assignedUnitIdsFor` a `prisma` peldanyt kozvetlenul hasznalja,
+         * tehat egy duplaval dolgozo spec nem tudna megkerulni: a meres
+         * adatbazishoz kotodne. A tarolo metodusa ugyanazt hivja, de VARRAT --
+         * ezen a hatokor-szabaly egyseg-teszttel merheto.
+         */
+        const sajatHelyszinek =
+          await this.repository.assignedUnitIds(actorUserId);
+        if (!sajatHelyszinek.includes(departmentId)) {
+          throw new BadRequestException(
+            "Erre a helyszínre nem nyithatsz hibajegyet: nincs hozzád rendelve.",
+          );
+        }
+      }
     }
     /**
      * AZ ESZKOZOK A VALASZTOTT HELYSZINEN ALLJANAK, A RESZFAT IS BELEERTVE.

@@ -73,7 +73,7 @@ export class WorksheetsController {
     @Param("customerId") customerId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.departments(customerId, partnerScopeOf(user));
+    return this.service.departments(customerId, partnerScopeOf(user), user.id);
   }
 
   @Post("customers/:customerId/departments")

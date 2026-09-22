@@ -3,6 +3,7 @@ import {
   rowBelongsToScope,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
+import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { mayHideRows } from "../common/hidden-rows.js";
 import {
   canEditWorksheetEntry,
@@ -394,7 +395,11 @@ export class WorksheetsService {
     return toWorksheetDetail(await this.requireWorksheet(id, scope));
   }
 
-  async departments(customerId: string, scope: PartnerScope) {
+  async departments(
+    customerId: string,
+    scope: PartnerScope,
+    actorUserId: string,
+  ) {
     // AZ UTVONALBAN ALLO PARTNER EGYEZZEN A KEROEVEL. Itt nincs betoltott sor,
     // amin ellenorizni lehetne: maga az utvonal-parameter a tulajdonos. A nem
     // egyezo keres 404, nem 403 -- ugyanabbol az okbol, mint mashol.
@@ -402,7 +407,13 @@ export class WorksheetsService {
       throw new NotFoundException("A partner nem található.");
     }
     await this.requireCustomer(customerId);
-    return this.repository.departments(customerId);
+    /**
+     * A KIOSZTOTT HELYSZINEK A KERO SAJAT LISTAJA, NEM AZ UTVONALBOL JON.
+     * Az utvonalban csak az ugyfel all; hogy a keronek MELYIK helyszinei
+     * vannak, azt egyedul a munkamenet dontheti el.
+     */
+    const assignedUnitIds = await assignedUnitIdsFor(actorUserId);
+    return this.repository.departments(customerId, scope, assignedUnitIds);
   }
 
   async createDepartment(
