@@ -15,6 +15,8 @@ import {
   isNavigationEntryVisible,
   PERMISSIONS,
   type UserDetail,
+  NOTIFICATION_ROLES,
+  type NotificationRoleValue,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -48,6 +50,15 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   const router = useRouter();
   const backToList = useReturnTo("/admin/users");
   const [user, setUser] = useState<UserDetail | null>(null);
+  /**
+   * AZ ERTESITESI SZEREPEK, HALMAZKENT.
+   *
+   * A szerver TELJES halmazt var (aki nincs rajta, lekerul), tehat a lap is
+   * azt tartja: a jelolonegyzet be- es kikapcsolasa ugyanazt a tombot mozgatja.
+   */
+  const [notificationRoles, setNotificationRoles] = useState<
+    NotificationRoleValue[]
+  >([]);
   const [loading, setLoading] = useState(Boolean(userId));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +92,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
     try {
       const next = await usersApi.detail(token, userId);
       setUser(next);
+      setNotificationRoles(next.notificationRoles);
       setFirstName(next.firstName);
       setLastName(next.lastName);
       setNickname(next.nickname ?? "");
@@ -142,6 +154,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
              * valasztott vevot.
              */
             customerId: customerId || null,
+            notificationRoles,
             expectedUpdatedAt: user.updatedAt,
           }),
         );
@@ -348,6 +361,55 @@ export function UserEditorPage({ userId }: { userId?: string }) {
               lát. Egy fiók legfeljebb egy partnerhez tartozhat.
             </p>
           </div>
+          {/*
+            AZ ERTESITESI SZEREPEK -- CSAK SAJAT KOLLEGANAL.
+
+            Balazs kerese, 2026-09-22: „a sajat felhasznaloinkhoz kell egy
+            checkbox ezzel a szereppel".
+
+            A VEVOHOZ KOTOTT FIOKNAL EL SEM JELENIK MEG, es ez nem dísz: a
+            hibajegy-felelos a MI oldalunk szerepe. Egy partner-fioknal
+            bejelolve azt jelentene, hogy a vevo ertesitest kap MINDEN masik
+            vevo bejelenteserol.
+
+            A LISTA A KOZOS CSOMAGBOL JON (`NOTIFICATION_ROLES`), a felirattal
+            egyutt: ugyanaz a nev kell a jelolonegyzet melle es barmely kesobbi
+            olvasohoz.
+          */}
+          {customerId === "" ? (
+            <div className="mt-6">
+              <h2 className="text-sm font-semibold text-dusk-800">
+                Értesítések
+              </h2>
+              {NOTIFICATION_ROLES.map((szerep) => (
+                <label
+                  key={szerep.value}
+                  className="mt-3 flex items-start gap-3"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={notificationRoles.includes(szerep.value)}
+                    onChange={(event) =>
+                      setNotificationRoles((mostani) =>
+                        event.target.checked
+                          ? [...new Set([...mostani, szerep.value])]
+                          : mostani.filter((elem) => elem !== szerep.value),
+                      )
+                    }
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-dusk-800">
+                      {szerep.label}
+                    </span>
+                    <span className="block text-xs text-dusk-500">
+                      {szerep.description}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          ) : null}
           {!user ? (
             <div className="mt-4">
               <FormField label="Jelszó">

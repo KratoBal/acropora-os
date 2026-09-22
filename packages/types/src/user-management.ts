@@ -1,3 +1,4 @@
+import type { NotificationRoleValue } from "./notification-roles.js";
 import type { UserRole } from "./auth.js";
 
 export interface UserSummary {
@@ -18,6 +19,14 @@ export interface UserSummary {
 }
 
 export interface UserDetail extends UserSummary {
+  /**
+   * AZ ERTESITESI SZEREPEK, AMIK BE VANNAK JELOLVE.
+   *
+   * KOTELEZO MEZO, ures tombbel, nem elhagyhato: egy hianyzo mezo es egy ures
+   * tomb a kepernyon UGYANUGY nez ki (nincs bejelolve semmi), de mast jelent
+   * -- az elso azt, hogy nem tudjuk, a masodik azt, hogy tudjuk es nincs.
+   */
+  notificationRoles: NotificationRoleValue[];
   avatarUrl?: string;
   passwordUpdatedAt?: string;
   /**
@@ -86,6 +95,14 @@ export interface CreateUserInput {
 }
 
 export interface UpdateUserInput {
+  /**
+   * AZ ERTESITESI SZEREPEK, TELJES HALMAZKENT.
+   *
+   * A HIANYZO MEZO NEM NYUL HOZZAJUK (egy nev-javitas nem szedheti le a
+   * jelolonegyzeteket), a TOMB viszont a teljes halmaz: aki nincs rajta,
+   * lekerul. Az ures tomb a kimondott „egyiket sem".
+   */
+  notificationRoles?: NotificationRoleValue[];
   firstName?: string;
   lastName?: string;
   /** Empty string clears it, absent leaves it alone. */

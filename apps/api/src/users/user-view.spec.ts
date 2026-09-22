@@ -38,7 +38,7 @@ const row = (overrides: Partial<User> = {}): User => ({
 describe("toUserDetail", () => {
   it("carries the supplier of a partner user", () =>
     assert.equal(
-      toUserDetail(row({ supplierId: "supplier-1" })).supplierId,
+      toUserDetail(row({ supplierId: "supplier-1" }), []).supplierId,
       "supplier-1",
     ));
 
@@ -51,7 +51,7 @@ describe("toUserDetail", () => {
    * szerver regebbi valaszt adott.
    */
   it("gives an internal colleague null, and the field is present", () => {
-    const detail = toUserDetail(row());
+    const detail = toUserDetail(row(), []);
     assert.equal(detail.supplierId, null);
     assert.ok("supplierId" in detail);
   });
@@ -68,12 +68,12 @@ describe("toUserDetail", () => {
    */
   it("carries the customer of a customer-side user", () =>
     assert.equal(
-      toUserDetail(row({ customerId: "customer-1" })).customerId,
+      toUserDetail(row({ customerId: "customer-1" }), []).customerId,
       "customer-1",
     ));
 
   it("gives an internal colleague null for the customer too, field present", () => {
-    const detail = toUserDetail(row());
+    const detail = toUserDetail(row(), []);
     assert.equal(detail.customerId, null);
     assert.ok("customerId" in detail);
   });
@@ -84,7 +84,10 @@ describe("toUserDetail", () => {
    * akkor a keszlet nem harom allitas, hanem egy, haromszor leirva.
    */
   it("derives hasPassword from the hash, not from the supplier", () => {
-    assert.equal(toUserDetail(row({ passwordHash: null })).hasPassword, false);
-    assert.equal(toUserDetail(row()).hasPassword, true);
+    assert.equal(
+      toUserDetail(row({ passwordHash: null }), []).hasPassword,
+      false,
+    );
+    assert.equal(toUserDetail(row(), []).hasPassword, true);
   });
 });

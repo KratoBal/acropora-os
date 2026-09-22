@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 
+import { serviceJobOpenedPushTitle } from "./service-job-opened-title.js";
 import { APNS_SENDING, type ApnsSending } from "./apns.sender.js";
 import {
   DeviceTokenRepository,
@@ -48,6 +49,27 @@ export interface WorksheetAssignmentNotice {
  * kapjanak. Ugyanaz a ut, mint a munkalapnal -- nincs masodik kuldo, nincs
  * masodik sor -- csak masik CELPONT es masik cim.
  */
+/**
+ * UGYFEL NYITOTT HIBAJEGYET -- A FELELOS-SZEREP BIRTOKOSAINAK.
+ *
+ * KULON TIPUS A HOZZARENDELES MELLETT, es nem ugyanaz ket nevvel: a
+ * hozzarendelesnel valaki A CIMZETTHEZ RENDELTE a jegyet, itt viszont senki --
+ * a cimzett a SZEREPE miatt kap ertesitest. A ket mondat ezert kulonbozik, es
+ * a regi ("Új hibajegy került hozzád") itt HAMISAT allitana.
+ */
+export interface ServiceJobOpenedNotice {
+  serviceJobId: string;
+  /** A jegy targya -- ez all a zarolt kepernyon, a cim alatt. */
+  subject: string;
+  /**
+   * Az ugyfel rovidítése (`FANK`), ha van. NULLAZHATO, es ez nem elovigyazat:
+   * a `Customer.worksheetPartnerCode` a semaban is az.
+   */
+  partnerCode: string | null;
+  /** Akiknel a hibajegy-felelos szerep be van jelolve. */
+  userIds: readonly string[];
+}
+
 export interface ServiceJobAssignmentNotice {
   serviceJobId: string;
   /** What the ticket is about, as the technician will read it on the lock screen. */
@@ -200,6 +222,51 @@ export class NotificationsService {
         }),
       failureLine: (summary) =>
         `Hibajegy-értesítés: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.serviceJobId}).`,
+    });
+  }
+
+  /**
+   * UGYFEL NYITOTT JEGYET -- a felelos-szerep birtokosainak.
+   *
+   * UGYANAZ A TORZS, MAS CIM. A `deliver` harom szabalya (sor nelkuli kuldes,
+   * elavult token nyugdijazasa, naplozas bukas eseten is) itt valtozatlan.
+   *
+   * A CIM KULON FUGGVENYBOL JON (`serviceJobOpenedPushTitle`), mert KET AGA
+   * van, es a tiltott harmadik alak ("Új hibajegyet nyitott a ") csak ott
+   * zarhato ki egyetlen helyen.
+   *
+   * A NAPLO UGYANAZ A BEJEGYZES, mint a hozzarendelesnel: a `record` a
+   * KULDESROL szol (kinek ment, kinek nem), nem arrol, MIERT kuldtunk.
+   */
+  async deliverServiceJobOpened(
+    notice: ServiceJobOpenedNotice,
+  ): Promise<AssignmentSummary> {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: serviceJobOpenedPushTitle(notice.partnerCode),
+      body: notice.subject,
+      data: {
+        targetType: "serviceJob",
+        targetId: notice.serviceJobId,
+      },
+      record: (attempts) =>
+        this.log.recordServiceJobAssignment({
+          serviceJobId: notice.serviceJobId,
+          attempts,
+        }),
+      failureLine: (summary) =>
+        `Ügyfél-bejelentés értesítése: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.serviceJobId}).`,
+    });
+  }
+
+  /** A nem-varo alak, ugyanugy, mint a hozzarendelesnel. */
+  notifyServiceJobOpened(notice: ServiceJobOpenedNotice): void {
+    void this.deliverServiceJobOpened(notice).catch((cause: unknown) => {
+      this.logger.warn(
+        `Az ügyfél-bejelentés értesítése nem sikerült (${notice.serviceJobId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
     });
   }
 

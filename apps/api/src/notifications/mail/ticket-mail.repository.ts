@@ -9,6 +9,21 @@ export interface TicketMailContext {
   readonly description: string | null;
   readonly openedById: string | null;
   readonly opener: TicketOpener | null;
+  /**
+   * AZ UGYFEL ROVIDITESE (`FANK`), a push cimehez es a `{{ugyfelkod}}`
+   * valtozohoz. NULLAZHATO ket okbol is: a jegynek nem kell ugyfele
+   * (`customerId` nullazhato), es az ugyfelnek sem kell rovidítése
+   * (`worksheetPartnerCode String?`). A ket hiany ugyanazt jelenti a
+   * kuldesnek, ezert egy mezo.
+   */
+  readonly partnerCode: string | null;
+}
+
+/** Egy cimzett, akinel az ertesitesi szerep be van jelolve. */
+export interface NotificationRoleRecipient {
+  readonly id: string;
+  readonly email: string;
+  readonly displayName: string;
 }
 
 export interface StoredMailTemplate {
@@ -35,6 +50,7 @@ export class TicketMailRepository {
         title: true,
         description: true,
         openedById: true,
+        customer: { select: { worksheetPartnerCode: true } },
       },
     });
     if (!job) return null;
@@ -46,7 +62,12 @@ export class TicketMailRepository {
         })
       : null;
 
-    return { ...job, opener };
+    const { customer, ...mezok } = job;
+    return {
+      ...mezok,
+      opener,
+      partnerCode: customer?.worksheetPartnerCode ?? null,
+    };
   }
 
   async template(id: string): Promise<StoredMailTemplate | null> {

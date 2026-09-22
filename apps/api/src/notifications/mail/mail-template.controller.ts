@@ -10,6 +10,7 @@ import {
 import { IsString, MaxLength, MinLength } from "class-validator";
 import {
   MAIL_TEMPLATE_VARIABLES,
+  isMailTemplateEvent,
   PERMISSIONS,
   unknownTemplateVariables,
   type AuthenticatedUser,
@@ -19,13 +20,34 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
+  DEFAULT_SERVICE_JOB_OPENED_TEMPLATE,
   DEFAULT_WORKSHEET_SIGNED_TEMPLATE,
+  SERVICE_JOB_OPENED,
   WORKSHEET_SIGNED,
 } from "./ticket-mail.service.js";
 
 export class SaveMailTemplateDto {
   @IsString() @MinLength(1) @MaxLength(300) subject!: string;
   @IsString() @MinLength(1) @MaxLength(10_000) body!: string;
+}
+
+/**
+ * AZ ESEMENYHEZ TARTOZO KEZDO SZOVEG.
+ *
+ * NINCS `default` AG, es ez szandekos: egy uj esemeny felvetele a kozos
+ * listaba MEGALLITJA a forditot itt. Egy `default` mellett az uj esemeny
+ * csendben a MASIK esemeny sablonjat adna vissza -- es az a fajta hiba, ami
+ * csak akkor derul ki, amikor valaki mar at is irta.
+ */
+function alapertelmezes(id: string) {
+  switch (id) {
+    case WORKSHEET_SIGNED:
+      return DEFAULT_WORKSHEET_SIGNED_TEMPLATE;
+    case SERVICE_JOB_OPENED:
+      return DEFAULT_SERVICE_JOB_OPENED_TEMPLATE;
+    default:
+      throw new NotFoundException("Nincs ilyen levélsablon.");
+  }
 }
 
 /**
@@ -47,7 +69,17 @@ export class MailTemplateController {
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   async read(@Param("id") id: string) {
-    if (id !== WORKSHEET_SIGNED)
+    /*
+      AZ ISMERT ESEMENYEK LISTAJA A KOZOS CSOMAGBOL JON, NEM EGY ITTENI
+      SZTRINGBOL.
+
+      2026-09-22-ig pontosan EGY azonositot fogadott el ez a vegpont. Balazs
+      tobb sablont kert, es a lista attol tobb, hogy VAN kuldesi ut hozza --
+      ezert a vegpont ugyanazt a listat kerdezi, amit a felulet valasztoja
+      mutat. Ket masolat pontosan ott csuszna szet, ahol senki nem nezi: egy
+      felveheto nev, amire semmi nem kuld.
+    */
+    if (!isMailTemplateEvent(id))
       throw new NotFoundException("Nincs ilyen levélsablon.");
     const tarolt = await this.repository.template(id);
     return {
@@ -59,7 +91,7 @@ export class MailTemplateController {
         olvas, azt meg senki nem irta.
       */
       source: tarolt ? "stored" : "default",
-      ...(tarolt ?? DEFAULT_WORKSHEET_SIGNED_TEMPLATE),
+      ...(tarolt ?? alapertelmezes(id)),
       /*
         AZ ALAPERTELMEZES A TAROLT ERTEK MELLE MEGY, NEM HELYETTE.
 
@@ -77,7 +109,7 @@ export class MailTemplateController {
         marad: lathato, szerzos, visszakereseheto -- es a szerkeszto latja, mit
         ment, mielott megnyomja.
       */
-      defaultTemplate: DEFAULT_WORKSHEET_SIGNED_TEMPLATE,
+      defaultTemplate: alapertelmezes(id),
       variables: MAIL_TEMPLATE_VARIABLES,
     };
   }
@@ -89,7 +121,7 @@ export class MailTemplateController {
     @Body() input: SaveMailTemplateDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (id !== WORKSHEET_SIGNED)
+    if (!isMailTemplateEvent(id))
       throw new NotFoundException("Nincs ilyen levélsablon.");
 
     /*
