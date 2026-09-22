@@ -58,6 +58,19 @@ const CODE_E = "Z9005";
  */
 const CODE_F = "Q7431";
 
+/**
+ * A SZABAD-KESZLET PROBA SAJAT KODJAI, ES UGYANAZ AZ INDOK, AMI A TOBBI FELETT
+ * ALL: a `CODE_A`..`CODE_F` allapota a suite-on BELUL valtozik, ez a harom
+ * allitas viszont EPP az allapotra ker valaszt (szabad kontra foglalt kontra
+ * nem letezo). Kozos kodon a ket teszt-csoport egymas merceit irna at.
+ *
+ * A `PROBA_NEMLETEZO` SOHA nem kerul a keszletbe -- az a "nem letezik" ag
+ * bemenete, es a takaritas is ellenorzi, hogy nem keletkezett.
+ */
+const PROBA_SZABAD = "Z9201";
+const PROBA_FOGLALT = "Z9202";
+const PROBA_NEMLETEZO = "Z9203";
+
 let customerId = "";
 /**
  * A HATOKOR-MERESEK ESZKOZE SZALLITOI TULAJDONU, A VEVO HELYSZINEN -- ES EZ A
@@ -120,7 +133,17 @@ async function removeLeftovers() {
   const kotegek = await prisma.assetLabel.findMany({
     where: {
       code: {
-        in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F, HATOKOR_KOD],
+        in: [
+          CODE_A,
+          CODE_B,
+          CODE_C,
+          CODE_D,
+          CODE_E,
+          CODE_F,
+          HATOKOR_KOD,
+          PROBA_SZABAD,
+          PROBA_FOGLALT,
+        ],
       },
     },
     select: { batchId: true },
@@ -136,7 +159,17 @@ async function removeLeftovers() {
   await prisma.assetLabel.deleteMany({
     where: {
       code: {
-        in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F, HATOKOR_KOD],
+        in: [
+          CODE_A,
+          CODE_B,
+          CODE_C,
+          CODE_D,
+          CODE_E,
+          CODE_F,
+          HATOKOR_KOD,
+          PROBA_SZABAD,
+          PROBA_FOGLALT,
+        ],
       },
     },
   });
@@ -974,6 +1007,94 @@ describe(
       assert.deepEqual(talalat.items, []);
     });
 
+    /**
+     * A SZABAD-KESZLET PROBA, ADATBAZISON -- ES EZ A HIANY VOLT A #995-BEN.
+     *
+     * A `freeLabelExists` a `scan-label` valaszat dönti el: ettol fugg, hogy a
+     * szerelo azt olvassa, hogy a matrica SZABAD, vagy azt, hogy nem talalhato.
+     * A DONTES (`scanLabelOutcome`) tiszta fuggvenyben all es merve van; maga a
+     * LEKERDEZES a #995 beolvasztasakor meretlen volt, es ezt a PR torzsebe ki
+     * is irtam.
+     *
+     * MIERT INTEGRACIOS: a kerdes nem a kodrol szol, hanem arrol, hogy a
+     * `findFirst` feltetele (`code` ES `assetId: null`) a TABLAN ugyanazt a
+     * halmazt adja-e. Egy egysegteszt legfeljebb a sajat duplamat merne.
+     */
+    describe("a szabad matrica probaja", () => {
+      before(async () => {
+        const { batchId } = await repository.importBatch([
+          PROBA_SZABAD,
+          PROBA_FOGLALT,
+        ]);
+        if (batchId) letrehozottKotegek.push(batchId);
+        const eszkoz = await repository.create(createInput(), actorUserId);
+        /*
+          A HOZZARENDELES A SZERKESZTO AGON MEGY, nem nyers SQL-lel: azt akarom
+          merni, amit a rendszer TENYLEGESEN eloallit. A `mentes` segéd egy
+          MASIK describe blokkban all, tehat itt nincs hatokorben -- a hivas
+          ezert all ki irva, ugyanazzal a tartalommal.
+        */
+        const belyeg = await prisma.asset.findUniqueOrThrow({
+          where: { id: eszkoz.id },
+          select: { updatedAt: true },
+        });
+        await repository.update(
+          eszkoz.id,
+          {
+            labelCode: PROBA_FOGLALT,
+            expectedUpdatedAt: belyeg.updatedAt.toISOString(),
+          } as UpdateAssetDto,
+          actorUserId,
+        );
+
+        // POZITIV KONTROLL A KIINDULASRA: a ket kod TENYLEGESEN a szant
+        // allapotban all, mielott barmit allitanank rola. Enelkul a lenti
+        // harom allitas egy rosszul felallitott fixturan is teljesulhetne.
+        const szabad = await prisma.assetLabel.findUnique({
+          where: { code: PROBA_SZABAD },
+          select: { assetId: true },
+        });
+        const foglalt = await prisma.assetLabel.findUnique({
+          where: { code: PROBA_FOGLALT },
+          select: { assetId: true },
+        });
+        assert.ok(szabad, "a szabad proba-kod letezik a keszletben");
+        assert.equal(szabad.assetId, null, "es tenyleg szabad");
+        assert.ok(foglalt, "a foglalt proba-kod letezik a keszletben");
+        assert.equal(foglalt.assetId, eszkoz.id, "es tenyleg eszkozon all");
+      });
+
+      it("a KIADOTT, de eszkozhoz nem rendelt kodra IGAZ", async () => {
+        assert.equal(await repository.freeLabelExists(PROBA_SZABAD), true);
+      });
+
+      /**
+       * ES A NEM LETEZO KODRA HAMIS. A ket ag egyutt adja a `scan-label`
+       * ketfele valaszat: a szabadra kulon mondat megy, a nem letezore 404.
+       */
+      it("a keszletben NEM szereplo kodra HAMIS", async () => {
+        assert.equal(await repository.freeLabelExists(PROBA_NEMLETEZO), false);
+      });
+
+      /**
+       * A HARMADIK AG AZ, AMI A MASIK KETTOT ALLITASSA TESZI -- ES EZT NEM
+       * KERTEK, HANEM A KET AG GYENGESEGEBOL KOVETKEZIK.
+       *
+       * Ha a lekerdezes feltetelebol kiesne az `assetId: null` (tehat pusztan
+       * azt kerdezne, LETEZIK-E a kod), a fenti KET allitas VALTOZATLANUL zold
+       * maradna: a szabad kod letezik, a nem letezo nem. A kulonbseget csak egy
+       * FOGLALT kod mutatja meg.
+       *
+       * ES A KAR, AMIT EZ MEGFOG, NEM ELMELETI: a szerelo egy mas eszkozen
+       * MUKODO matricarol azt olvasna, hogy szabad, es felvinne vele egy uj
+       * eszkozt -- a mentes utan ket eszkoz hivatkozna ugyanarra a kodra, ha a
+       * tabla nem allna utjat.
+       */
+      it("a MAR ESZKOZON ALLO kodra HAMIS, nem csak a nem letezore", async () => {
+        assert.equal(await repository.freeLabelExists(PROBA_FOGLALT), false);
+      });
+    });
+
     it("a takarítás tényleg lefut: nem marad sor a teszt előtaggal", async () => {
       await removeLeftovers();
 
@@ -987,7 +1108,19 @@ describe(
       assert.equal(
         await prisma.assetLabel.count({
           where: {
-            code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F] },
+            code: {
+              in: [
+                CODE_A,
+                CODE_B,
+                CODE_C,
+                CODE_D,
+                CODE_E,
+                CODE_F,
+                PROBA_SZABAD,
+                PROBA_FOGLALT,
+                PROBA_NEMLETEZO,
+              ],
+            },
           },
         }),
         0,
