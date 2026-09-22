@@ -194,6 +194,64 @@ describe("decideMedusaBarcode", () => {
 
     assert.equal(dontes.kind, "ean");
   });
+
+  /**
+   * A TILTOTT AG, ES AMIERT KULON KELLETT MERNI: EDDIG SENKI NEM ERTE EL.
+   *
+   * A harmadik parameter `tiltott = false`, alapertelmezett ertekkel. Merve
+   * 2026-09-22: a spec MIND A TIZENHAT hivasa KET argumentummal ment, es a
+   * teljes fan az EGYETLEN haromargumentumos hivas az ELES kod
+   * (`medusa-projection.runner.ts`). Vagyis a `blocked` ag csak eles futasban
+   * fordult elo, tesztben soha.
+   *
+   * Amit eddig "vedelemnek" szamitottunk, az egy MASIK spec szoveg-allitasa
+   * volt (`forras.includes("tiltottKodBarmelyikValtozaton(")`) -- az a hivas
+   * JELENLETET mondja, nem azt, hogy az iteletevel barmi tortenik.
+   *
+   * ES EGY SAJAT FELTEVES, AMIT EZ ZAR LE: a `vonalkodSorKiirhato` tesztjei
+   * LITERALKENT adjak at a `kind: "blocked"` erteket. A fogyaszto tehat egy
+   * olyan alakra volt tesztelve, amirol semmi nem bizonyitotta, hogy az
+   * ELOALLITO valaha kiadja.
+   */
+  it("tiltott kod-termek paron a kimenet blocked", () => {
+    const dontes = decideMedusaBarcode("4006381333931", 1, true);
+
+    assert.equal(dontes.kind, "blocked");
+    assert.equal(dontes.field, null);
+    assert.equal(dontes.value, null);
+  });
+
+  /**
+   * A SORREND EGYIK FELE: A TILTAS AZ ISMETLODES ELOTT ALL.
+   *
+   * Ugyanez a kod ket termeken `skipped` lenne. A fuggveny kommentje kimondja,
+   * miert nem az: a `skipped` mondata azt allitja, hogy a tisztitas helye a
+   * forras -- ott dol el, MELYIK terméke a kod. Egy tiltott paron ez hamis, a
+   * valasz az, hogy egyiküke sem.
+   */
+  it("a tiltas ELOBBRE valo, mint az ismetlodes", () => {
+    const dontes = decideMedusaBarcode("4006381333931", 2, true);
+
+    assert.equal(dontes.kind, "blocked");
+    assert.equal(
+      dontes.duplicate,
+      null,
+      "a tiltott ag nem nevezhet meg ismetlodest: oda el sem jutottunk",
+    );
+  });
+
+  /**
+   * A SORREND MASIK FELE: AZ ALAK-VIZSGALAT A TILTAS ELOTT ALL.
+   *
+   * Egy nem-vonalkod ertekre a `none` a helyes valasz akkor is, ha a hivo
+   * tiltottnak jelolte: nincs mit megtiltani. Ez a ket allitas EGYUTT rogziti
+   * a tiltas helyet a lancban -- kulon-kulon egyik sem tenne.
+   */
+  it("nem vonalkod erteken a tiltas sem tesz blockedde", () => {
+    const dontes = decideMedusaBarcode("core7_otherm_bulk", 1, true);
+
+    assert.equal(dontes.kind, "none");
+  });
 });
 
 describe("describeSkippedBarcode", () => {
