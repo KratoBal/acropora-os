@@ -204,6 +204,28 @@ export interface AssetListItem extends AssetHierarchyItem {
   updatedAt: string;
 }
 
+/**
+ * MIT VALASZOL A MATRICAKOD BEOLVASASA.
+ *
+ * KET ESET KAP KULON VALASZT, A HARMADIK SZANDEKOSAN NEM LETEZIK ITT:
+ *
+ *     ASSET   a kod egy olyan eszkozon all, amit a hivo LATHAT
+ *     FREE    a kod kiadott, de meg nincs eszkozhoz rendelve
+ *
+ * A „nem letezik" es a „letezik, de nem lathatod" NEM ebben az uniobam all,
+ * hanem 404-kent erkezik, EGYETLEN alakban -- kulonben a matricakod
+ * letezes-teszt lenne idegen eszkozokre (egy betu es negy szam, 260 ezer
+ * lehetoseg, vegigprobalhato).
+ *
+ * ES A `FREE` VALASZ FELTETELES: csak belso hatokoru, IRASI joggal rendelkezo
+ * hivo kapja meg. Az indok a szerver oldali `scanLabelOutcome` fejleceben all,
+ * a meressel egyutt -- roviden: a szabad keszlet LISTAJA `SETTINGS_MANAGE`
+ * moge van zarva, es egy „ez szabad" valasz ugyanannak az adatnak az
+ * egyenkenti lekerdezese.
+ */
+export type AssetLabelScanResult =
+  { kind: "ASSET"; asset: AssetDetail } | { kind: "FREE"; code: string };
+
 export interface AssetDocumentSummary {
   id: string;
   type: AssetDocumentType;

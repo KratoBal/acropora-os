@@ -1279,6 +1279,26 @@ export class ServiceAssetsRepository extends Repository {
    * kodok vannak kiadva es kihez tartoznak. A hivonak amugy is ugyanaz a
    * teendoje mindket esetben.
    */
+  /**
+   * LETEZIK-E KIADOTT, DE ESZKOZHOZ NEM RENDELT MATRICA EZZEL A KODDAL.
+   *
+   * HATOKOR NELKUL, SZANDEKOSAN: a szabad matrica senkihez nem tartozik, tehat
+   * nincs mihez kepest szukiteni. A hatokori DONTES eggyel feljebb all
+   * (`scanLabelOutcome`), es ott latszik a KET feltetel egyutt -- itt egy
+   * rejtett szures csak elfedne.
+   *
+   * CSAK IGEN/NEM-ET ad vissza, nem a sort: a kiadas idopontja, a tetel es az
+   * azonosito a keszlet adata, es a hivonak egyik sem kell ahhoz, hogy egy
+   * matricat eszkozhoz rendeljen.
+   */
+  async freeLabelExists(code: string): Promise<boolean> {
+    const row = await prisma.assetLabel.findFirst({
+      where: { code, assetId: null },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+
   async detailByLabelCode(
     code: string,
     scope: PartnerScope,

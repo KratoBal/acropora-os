@@ -222,8 +222,26 @@ export function JobAssetPicker({
        * latjuk is -- csak mashol all, vagy ki van vezetve. A ket eset MAS
        * teendot ker attol, aki belefut, tehat kulon mondatot is kap.
        */
-      const asset = await assetsApi.scanLabel(token, stored);
-      setCodeState({ kind: "gond", text: miertNem(stored, asset) });
+      /*
+        A VALASZ 2026-09-22 OTA UNIO: a SZABAD kod (kiadott, de eszkozhoz nem
+        rendelt) kulon tagot kap. EZ A KEPERNYO A HIBAJEGYHEZ VALASZT ESZKOZT,
+        tehat egy szabad matricaval nincs mit kezdenie -- de a KEZELONEK VAN:
+        ez az egyetlen hely, ahol MEGTUDHATJA, hogy a kod letezik, csak meg
+        nincs eszkozhoz ragasztva.
+
+        Enelkul a ket eset ugyanazt a mondatot kapna („nem talaltam"), es a
+        kezelo a MATRICAT hinne rossznak, holott az ep -- csak meg nincs
+        felhasznalva.
+      */
+      const eredmeny = await assetsApi.scanLabel(token, stored);
+      setCodeState(
+        eredmeny.kind === "FREE"
+          ? {
+              kind: "gond",
+              text: `${stored}: ez a matrica még szabad, nincs eszközhöz rendelve. Előbb vidd fel az eszközt ezzel a kóddal.`,
+            }
+          : { kind: "gond", text: miertNem(stored, eredmeny.asset) },
+      );
     } catch (cause) {
       setCodeState({ kind: "gond", text: kodHiba(stored, cause) });
     } finally {

@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect } from "react";
 
 import { scanAsset, scanAssetByLabel } from "@/lib/api/assets";
+import { ApiError } from "@/lib/api/client";
 import { describeScanFailure } from "@/lib/assets/scan-failure";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
@@ -37,7 +38,32 @@ export default function AssetScanScreen() {
   const { status } = useAuth();
   const query = useQuery({
     queryKey: ["service-asset-scan", label ? "label" : "qr", token],
-    queryFn: () => (label ? scanAssetByLabel(token!) : scanAsset(token!)),
+    /**
+     * A MATRICA-VALASZ 2026-09-22 OTA UNIO, ES ITT MOST VISSZAALLITJUK A REGI
+     * VISELKEDESRE -- SZANDEKOSAN, ES EZ A SOR A FEL 2 BELEPESI PONTJA.
+     *
+     * A vegpont mostantol megkulonbozteti a SZABAD kodot attol, amit nem
+     * talalt. Ez a kepernyo azonban meg NEM tud mit kezdeni vele: a ket gombos
+     * ablak (uj eszkoz / hozzaadas meglevohoz) a FEL 2, es az meg nincs meg.
+     *
+     * AMIT NEM CSINALUNK: nem adunk vissza `null`-t. A kepernyo a hianyzo
+     * adatot TOLTESKENT olvasna, es orokke porgo jelzot mutatna -- rosszabbat,
+     * mint a mai hibakartya. A dobas azt a 404-et allitja helyre, amit a
+     * szerver eddig adott, tehat a viselkedes BETURE a mai marad.
+     *
+     * AMIKOR A FEL 2 MEGJON, EZ A DOBAS CSERELODIK LE a ket gombos ablakra --
+     * es addig sem allitunk semmi hamisat: a kepernyo ma sem tud szabad kodot
+     * kezelni, es ezt mondja is.
+     */
+    queryFn: async () => {
+      if (!label) return scanAsset(token!);
+      const eredmeny = await scanAssetByLabel(token!);
+      if (eredmeny.kind === "ASSET") return eredmeny.asset;
+      throw new ApiError(
+        "Ehhez a matricakódhoz nem tartozik elérhető eszköz.",
+        404,
+      );
+    },
     enabled: status === "authenticated" && Boolean(token),
     retry: false,
   });

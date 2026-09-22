@@ -5,6 +5,7 @@ import {
 import type { AssetLabelBatchSummary } from "@acropora/types";
 import type {
   AssetDetail,
+  AssetLabelScanResult,
   AssetListResponse,
   AssetDocumentSummary,
   AssetDocumentType,
@@ -147,8 +148,16 @@ export const assetsApi = {
    * valaszokbol felterkepezheto lenne, mely kodok vannak kiadva es kihez
    * tartoznak. A hivo tehat a ket esetet EGY mondattal mondja ki.
    */
+  /**
+   * A VALASZ 2026-09-22 OTA UNIO, NEM ESZKOZ.
+   *
+   * A vegpont megkulonbozteti a SZABAD kodot (kiadott, de eszkozhoz nem
+   * rendelt) attol, amit nem talalt. A regi alak (`AssetDetail`) ezt nem tudta
+   * kifejezni, es egy opcionalis mezo sem lenne eleg: a hivo CSENDBEN tovabb
+   * mukodne, es a szabad eset ugy nezne ki, mintha nem talalt volna semmit.
+   */
   scanLabel(token: string, code: string, signal?: AbortSignal) {
-    return apiRequest<AssetDetail>(
+    return apiRequest<AssetLabelScanResult>(
       `/service/assets/scan-label/${encodeURIComponent(code)}`,
       token,
       { signal },
