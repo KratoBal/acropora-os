@@ -669,4 +669,40 @@ describe("a partner munkalap-adatlapja", () => {
   it("KONTROLL: ugyanaz a minta az eszköz-adatlapon TALÁL", () => {
     assert.match(kod(ESZKOZ_RESZLET), /asset\.assetNumber/);
   });
+
+  /**
+   * A HARMADIK HELY: AZ ESZKOZ ADATLAPJA.
+   *
+   * Itt eddig a `qrToken` allt "QR-azonosito" cim alatt -- egy uuid azon a
+   * neven, ahogy a felhasznalo a matricat hivja. Balazs dontese (2026-09-22):
+   * "Nekem a matrica kodja kell".
+   *
+   * A CIMKE IS VALTOZOTT, es ez nem kozmetika: egy jo tartalom rossz cim alatt
+   * ugyanaz a csapda marad.
+   */
+  it("az eszköz-adatlap a MATRICA kódját mutatja, nem a belső tokent", () => {
+    assert.match(kod(ESZKOZ_RESZLET), /labelCode/);
+    assert.doesNotMatch(
+      kod(ESZKOZ_RESZLET),
+      /qrToken/,
+      "a belso token visszakerult a partner-lapra",
+    );
+  });
+
+  /**
+   * KONTROLL A FENTI HIANY-ALLITASHOZ -- ES CSAK AZT MERI, AMIT A MASIK NEM.
+   *
+   * Egy `doesNotMatch` akkor is zold, ha a minta soha semmire nem illeszkedik
+   * (elgepelt mezonev). Ez a sor megmutatja, hogy a minta TALAL: a fajl NYERS
+   * szovegeben a `qrToken` ma is ott all, a sor melletti magyarazatban.
+   *
+   * ES AZ ELSO ALAKJA HIBAS VOLT, EZERT ALL ITT KIMONDVA. Eloszor ide irtam a
+   * `doesNotMatch(kod(...))` allitast is -- vagyis a fenti allitas MASODIK
+   * feleT. A kalibracio buktatta le: a kod-beli tokenre MIND A KETTO pirosra
+   * ment, holott a kontrollnak ZOLDNEK kell maradnia. Egy kontroll, ami
+   * ugyanattol bukik, mint amit igazolnia kell, nem tanu, hanem ismetles.
+   */
+  it("KONTROLL: a minta TALÁL a nyers fájlban", () => {
+    assert.match(olvas(ESZKOZ_RESZLET), /qrToken/);
+  });
 });
