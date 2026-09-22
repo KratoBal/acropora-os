@@ -7,6 +7,7 @@ import {
   type WorksheetDepartmentSummary,
 } from "@acropora/types";
 
+import { eszkozAzonosito } from "@/lib/eszkoz-azonosito";
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
 import { Empty, Message } from "./ticket-list";
@@ -188,7 +189,7 @@ export function Assets() {
               <div>
                 <h2 className={PANEL_CIM}>{asset.name}</h2>
                 <p>
-                  {asset.assetNumber}
+                  {eszkozAzonosito(asset)}
                   {asset.inventoryNumber ? ` · ${asset.inventoryNumber}` : ""}
                 </p>
               </div>
