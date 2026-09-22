@@ -972,8 +972,31 @@ describe("ServiceJobDetailPage és a megtartott megjegyzés", () => {
     lepest megtagad -- vagyis a javitas hasznalhatatlanna tenne a lapot.
   */
   it("a bukás után UGYANAZT a lépést újra engedi", async () => {
+    /*
+      A KESLELTETES SZANDEKOS, ES EZ A JAVITAS MASIK FELE.
+
+      Egy azonnal elutasito igeret a mikrotaskban ul le, tehat a verseny
+      ELDOL a futo terhelesen: a fejlesztoi gepen atment, a CI-n bukott. Egy
+      makrotasknyi keses (`setTimeout 0`) ugyanazt a helyzetet MINDIG
+      eloallitja, tehat a teszt ettol determinisztikus lesz -- nem attol, hogy
+      szerencses-e a futas.
+
+      MERVE 2026-09-22, ezzel a kesleltetessel:
+        a regi varakozas (a HIVASRA)   1 failed | 45 passed
+                                       "expected vi.fn() to be called 2 times,
+                                        but got 1 times" -- beture a CI hibaja
+        a mostani varakozas            46 passed
+
+      Vagyis a javitast nem harom zold futas igazolja, hanem az, hogy a
+      versenyt eloallitva a REGI alak elbukik es az UJ nem.
+    */
     api.move
-      .mockRejectedValueOnce(new Error("A hálózat nem elérhető."))
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("A hálózat nem elérhető.")), 0),
+          ),
+      )
       .mockResolvedValue({ ok: true });
     render(<ServiceJobDetailPage jobId="job-1" />);
 
@@ -981,7 +1004,36 @@ describe("ServiceJobDetailPage és a megtartott megjegyzés", () => {
       target: { value: "Szivattyú rendelve" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Ütemezve" }));
-    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
+
+    /*
+      A HIVASRA VARNI KEVES, ES EBBOL LETT INGADOZO EZ A TESZT.
+
+      A `toHaveBeenCalledTimes(1)` akkor teljesul, amikor a hivas MEGTORTENT --
+      az elutasitasa viszont ekkor meg nem ult le, tehat a `stepping` MEG IGAZ,
+      es a gomb `disabled`. A masodik kattintas igy egy TILTOTT gombra megy, nem
+      tortenik semmi, es a zaro varakozas idotullepessel bukik EGY hivassal.
+
+      Helyben a ket utasitas kozott leul a mikrotask, ezert atment; terhelt
+      CI-futon nem. Merve 2026-09-22: ugyanazon a commiton (89842001) ket futas,
+      egyik zold, masik piros -- es az osszefesult fa AZONOS volt az aggal
+      (`git merge origin/main` -> "Already up to date"), tehat nem a fak
+      kulonbsege.
+
+      EZERT A VARAKOZAS A MEGFIGYELHETO VEGALLAPOTRA MEGY, ket lepesben:
+
+        a hibauzenet     ez az, amit a HASZNALO is lat -- a bukas feldolgozva
+        a gomb allapota  ez a masodik kattintas ELOFELTETELE
+
+      A ketto egyutt kell: a hibauzenet onmagaban nem mondja meg, hogy a
+      `finally` mar lefutott, a gomb allapota onmagaban pedig nem mondja meg,
+      hogy a bukast a kepernyo meg is mutatta.
+
+      AKI EZT VISSZAEGYSZERUSITI a hivas-szamlalasra, visszahozza az ingadozast.
+    */
+    expect(await screen.findByText("A hálózat nem elérhető.")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Ütemezve" })).toBeEnabled(),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Ütemezve" }));
 
