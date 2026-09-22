@@ -29,6 +29,17 @@ export type {
   UpdateAssetInput,
 };
 
+/**
+ * MIT TALALT A BEOLVASOTT MATRICAKOD -- KET VALASZ, HAROM VILAG-ALLAPOTRA.
+ *
+ * A „nem letezik" es a „letezik, de nem lathatod" NEM szerepel itt: az 404,
+ * egyetlen alakban. Kulonben a matricakod letezes-teszt lenne idegen
+ * eszkozokre. A `FREE` valasz csak belso hatokoru, irasi joggal rendelkezo
+ * hivonak megy ki -- az indok a szerver `scanLabelOutcome` fejleceben all.
+ */
+export type AssetLabelScanResult =
+  { kind: "ASSET"; asset: AssetDetail } | { kind: "FREE"; code: string };
+
 export interface AssetHierarchyItem {
   id: string;
   assetNumber: string;
@@ -279,7 +290,7 @@ export function scanAsset(qrToken: string) {
  * pont ezert kerul ra.
  */
 export function scanAssetByLabel(code: string) {
-  return apiRequest<AssetDetail>(
+  return apiRequest<AssetLabelScanResult>(
     `${BASE}/scan-label/${encodeURIComponent(code)}`,
   );
 }

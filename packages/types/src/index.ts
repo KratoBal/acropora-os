@@ -180,6 +180,7 @@ export type {
   AssetEventType,
   AssetHierarchyItem,
   AssetKind,
+  AssetLabelScanResult,
   AssetListItem,
   AssetListResponse,
   AssetOwnerListResponse,
