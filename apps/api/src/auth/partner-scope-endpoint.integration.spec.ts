@@ -981,7 +981,24 @@ describe(
        * tudna csatolmányt írni -- és akkor a javítás egy működő funkciót vett
        * volna el, csendben.
        */
-      it("a saját eszközén mind a három írás megy", async () => {
+      /**
+       * === A HAROMBOL KETTO MEGY, ES A HARMADIK SZANDEKOSAN NEM (2026-09-22) ===
+       *
+       * Ez az allitas 2026-09-22-ig mind a harmat egyben merte. Aznap a
+       * torles ELVALT a masik kettotol, es a kulonbseg DONTES:
+       *
+       *   feltoltes, felirat   a LISTA kapujan mennek (`detail`)
+       *   torles               a szukebb, tulajdon-alapu ellenorzesen marad
+       *
+       * AZ INDOK: a ket muvelet ara nem egyforma. Egy rossz felirat javithato,
+       * egy torolt dokumentum nem -- egy visszafordithatatlan tagitasra kulon
+       * engedely kell, es a gazda erre nem valaszolt.
+       *
+       * EZERT BONTOTTAM KET ALLITASRA, es nem irtam at egyet. Ha a harom egy
+       * tesztben maradna, a kalibracio kimenete nem mondana meg, MELYIK ut
+       * romlott el: harom kulonbozo rontas ugyanazt az egy pirosat adna.
+       */
+      it("a saját eszközén a feltöltés és a felirat MEGY", async () => {
         const feltoltve = await assets.uploadDocument(
           assetForWrites,
           Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
@@ -1000,11 +1017,54 @@ describe(
         );
         assert.deepEqual(felirat, { ok: true });
 
+        // A TAKARITAST BELSOS HIVOVAL VEGEZZUK, mert a partner nem torolhet --
+        // lasd a kovetkezo allitast. E nelkul a sor bennmaradna, es a kovetkezo
+        // futas mas szamokat latna.
+        await assets.deleteDocument(
+          assetForWrites,
+          feltoltve[0]!.id,
+          asInternal,
+        );
+      });
+
+      /**
+       * ES A TORLES A PARTNERNEK NEM MEGY -- KULON ALLITAS, NEV SZERINT.
+       *
+       * Nem hiany es nem feledekenyseg: a `deleteDocument` szandekosan a
+       * szukebb, tulajdon-alapu ellenorzesen maradt, mert a torles
+       * visszafordithatatlan, es a gazda a megnyitasara nem adott engedelyt
+       * (2026-09-22). A reszletek a tarolo `deleteDocument` jegyzeteben.
+       *
+       * HA EZ AZ ALLITAS PIROSODIK, a valtozas nem feltetlenul hiba -- de akkor
+       * a dontest ki kell mondani, nem csendben atirni.
+       */
+      it("a saját eszközén a TÖRLÉS viszont NEM megy", async () => {
+        const feltoltve = await assets.uploadDocument(
+          assetForWrites,
+          Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
+          [pdf(`${shared}-partner-torles-proba.pdf`)],
+          asCustomerA,
+        );
+        assert.equal(feltoltve.length, 1);
+
+        await assert.rejects(
+          () =>
+            assets.deleteDocument(
+              assetForWrites,
+              feltoltve[0]!.id,
+              asCustomerA,
+            ),
+          /A dokumentum nem található/,
+        );
+
+        // ISMERT POZITIV KONTROLL: a sor LETEZIK, es belsos hivoval torolheto.
+        // E nelkul a fenti elutasitas akkor is zold lenne, ha a feltoltes
+        // egyaltalan nem hozott volna letre semmit.
         assert.deepEqual(
           await assets.deleteDocument(
             assetForWrites,
             feltoltve[0]!.id,
-            asCustomerA,
+            asInternal,
           ),
           { ok: true },
         );
