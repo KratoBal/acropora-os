@@ -79,6 +79,46 @@ export interface ServiceJobAssignmentNotice {
 }
 
 /**
+ * SZERVIZES ANYAGIGENYT KULDOTT A MUNKALAPROL -- A "SZERVIZ ANYAGBESZERZES"
+ * ERTESULESI SZEREP BIRTOKOSAINAK.
+ *
+ * Balazs kerese, 2026-09-22 12:15:46 UTC. Ugyanaz a csalad, mint a
+ * `ServiceJobOpenedNotice`: a cimzett a SZEREPE miatt kap ertesitest, nem
+ * mert hozzarendeltek.
+ */
+export interface MaterialRequestCreatedNotice {
+  materialRequestId: string;
+  worksheetId: string;
+  /**
+   * A CIMZETT-KENT SZOLGALO SZOVEG, A ZAROLT KEPERNYON. Az ugyfel neve, NEM a
+   * munka targya: a `WorksheetDetail` (amit a hivo mar amugy is lekerdez a
+   * letezes-ellenorzeshez) a targyat NEM hordozza (az a verzio-reszleten all,
+   * kulon lekerdezessel) -- az ugyfelnev viszont kozvetlenul ott van, es egy
+   * beszerzonek TOBB anyagigeny kozott epp az ugyfel a legjobb tajekozodasi
+   * pont.
+   */
+  worksheetLabel: string;
+  /** Akiknel a `MATERIAL_REQUEST_CREATED` ertesulesi szerep be van jelolve. */
+  userIds: readonly string[];
+}
+
+/**
+ * A BESZERZO MEGJELOLTE, HOGY AZ ANYAG BEERKEZETT -- A KERO ES A MUNKALAP
+ * MINDEN FELELOSE (`WorksheetAssignee`) KAPJA.
+ *
+ * Balazs kifejezetten TAGABB cimzettkort kert erre, mint a letrehozasi
+ * ertesitesre: "aki kerte az anyagot, illetve mindenki akie a munkalap kap
+ * rola push es email ertesites" (12:15:46 UTC).
+ */
+export interface MaterialRequestReceivedNotice {
+  materialRequestId: string;
+  worksheetId: string;
+  worksheetLabel: string;
+  /** A kero PLUSZ a munkalap osszes `WorksheetAssignee`-je. */
+  userIds: readonly string[];
+}
+
+/**
  * Sends the notifications the worksheet assignment triggers.
  *
  * Two rules hold this together, and both come from the system as it is today.
@@ -264,6 +304,80 @@ export class NotificationsService {
     void this.deliverServiceJobOpened(notice).catch((cause: unknown) => {
       this.logger.warn(
         `Az ügyfél-bejelentés értesítése nem sikerült (${notice.serviceJobId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
+    });
+  }
+
+  /**
+   * ANYAGIGENY ERKEZETT -- a "szerviz anyagbeszerzes" ertesulesi szerep
+   * birtokosainak. UGYANAZ A TORZS, MAS CIM, ugyanugy, mint a masik harom.
+   *
+   * `data` SZANDEKOSAN URES -- NINCS `targetType`. A `push-targets.spec.ts`
+   * MEGALLITOTT: az a fajta hiba, amit maga az orzo dokumental a sajat
+   * fejleceben ("egy tipus alakja elobb keszul el, mint a kuldoje") --
+   * mobil kepernyo ehhez az esemenyhez MA nincs (a harmadik, mobil szelet
+   * hozza), tehat egy koppintas sehova nem vinne. A koppintheto celpont a
+   * mobil szelettel erkezik, egy uj `targetType` bevezetesevel EGYUTT.
+   */
+  async deliverMaterialRequestCreated(
+    notice: MaterialRequestCreatedNotice,
+  ): Promise<AssignmentSummary> {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: "Új anyagigény",
+      body: notice.worksheetLabel,
+      data: {},
+      record: (attempts) =>
+        this.log.recordMaterialRequestCreated({
+          materialRequestId: notice.materialRequestId,
+          attempts,
+        }),
+      failureLine: (summary) =>
+        `Anyagigény értesítése: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.materialRequestId}).`,
+    });
+  }
+
+  /** A nem-varo alak. */
+  notifyMaterialRequestCreated(notice: MaterialRequestCreatedNotice): void {
+    void this.deliverMaterialRequestCreated(notice).catch((cause: unknown) => {
+      this.logger.warn(
+        `Az anyagigény értesítése nem sikerült (${notice.materialRequestId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
+    });
+  }
+
+  /**
+   * AZ ANYAG BEERKEZETT -- a kero es a munkalap minden felelose. A cimzettkor
+   * TAGABB, mint a letrehozasnal, de a kuldesi torzs ugyanaz.
+   */
+  async deliverMaterialRequestReceived(
+    notice: MaterialRequestReceivedNotice,
+  ): Promise<AssignmentSummary> {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: "Anyag beérkezett",
+      body: notice.worksheetLabel,
+      // `data` szandekosan ures -- lasd `deliverMaterialRequestCreated` fejleceit.
+      data: {},
+      record: (attempts) =>
+        this.log.recordMaterialRequestReceived({
+          materialRequestId: notice.materialRequestId,
+          attempts,
+        }),
+      failureLine: (summary) =>
+        `Anyag beérkezett értesítés: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.materialRequestId}).`,
+    });
+  }
+
+  /** A nem-varo alak. */
+  notifyMaterialRequestReceived(notice: MaterialRequestReceivedNotice): void {
+    void this.deliverMaterialRequestReceived(notice).catch((cause: unknown) => {
+      this.logger.warn(
+        `Az "anyag beérkezett" értesítés nem sikerült (${notice.materialRequestId}): ${
           cause instanceof Error ? cause.message : "ismeretlen hiba"
         }`,
       );

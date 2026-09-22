@@ -20,9 +20,13 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
+  DEFAULT_MATERIAL_REQUEST_CREATED_TEMPLATE,
+  DEFAULT_MATERIAL_REQUEST_RECEIVED_TEMPLATE,
   DEFAULT_SERVICE_JOB_OPENED_TEMPLATE,
   DEFAULT_WORKSHEET_SEND_FOR_SIGNATURE_TEMPLATE,
   DEFAULT_WORKSHEET_SIGNED_TEMPLATE,
+  MATERIAL_REQUEST_CREATED,
+  MATERIAL_REQUEST_RECEIVED,
   SERVICE_JOB_OPENED,
   WORKSHEET_SEND_FOR_SIGNATURE,
   WORKSHEET_SIGNED,
@@ -49,6 +53,10 @@ function alapertelmezes(id: string) {
       return DEFAULT_SERVICE_JOB_OPENED_TEMPLATE;
     case WORKSHEET_SEND_FOR_SIGNATURE:
       return DEFAULT_WORKSHEET_SEND_FOR_SIGNATURE_TEMPLATE;
+    case MATERIAL_REQUEST_CREATED:
+      return DEFAULT_MATERIAL_REQUEST_CREATED_TEMPLATE;
+    case MATERIAL_REQUEST_RECEIVED:
+      return DEFAULT_MATERIAL_REQUEST_RECEIVED_TEMPLATE;
     default:
       throw new NotFoundException("Nincs ilyen levélsablon.");
   }

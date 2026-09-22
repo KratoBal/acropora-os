@@ -34,6 +34,7 @@ import { TasksModule } from "./tasks/tasks.module.js";
 import { UsersModule } from "./users/users.module.js";
 import { ServiceJobsModule } from "./service-jobs/service-jobs.module.js";
 import { WorksheetsModule } from "./worksheets/worksheets.module.js";
+import { MaterialRequestsModule } from "./material-requests/material-requests.module.js";
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { WorksheetsModule } from "./worksheets/worksheets.module.js";
     ServiceAssetsModule,
     ServiceJobsModule,
     WorksheetsModule,
+    MaterialRequestsModule,
     TasksModule,
     UsersModule,
     HealthModule,
