@@ -67,6 +67,12 @@
 #
 # EZERT A VARAKOZAS MOSTANTOL AZ OKRA MEGY, NEM A NEVRE. A teszt neve tovabbra
 # is ott all masodik nyomkent, de az onmagaban nem dontene el semmit.
+#
+# ES A NYOM SZARMAZASA, MERT EZ KULONBOZTET MEG KET PIROSAT: a
+# `Missing expected rejection.` a NODE:TEST szovege, nem a mienk. Ha a futtato
+# valaha atirja, ez a kapu PIROSRA megy -- ami a biztonsagos irany --, de az a
+# piros AZ ESZKOZ valtozasat jelenti, NEM a kodet. Aki ilyet lat, eloszor a
+# node verziojat nezze meg, ne a hatokor-szurest.
 TAP version 13
 Missing expected rejection.
 idegen vevő a bélyegképet sem éri el a variant=thumbnail kéréssel
