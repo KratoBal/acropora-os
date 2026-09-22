@@ -133,13 +133,37 @@ export function canonicalMimetypeFor(kind: UploadedFileKind): string {
  * `OTHER` visszaeses igy nem "biztos, ami biztos", hanem a ZART alapertelmezes:
  * amirol nincs allitasunk, azt a partner nem latja.
  *
- * === A PAR, AMI EZT A SZABALYT MASHOL IS VISELI ===
+ * === A PAR, AMI EZT A SZABALYT MASHOL IS VISELI -- ES NEM UGYANAZ ===
  *
- * Ugyanez a predikatum all a `20260922142100_asset_document_photo_backfill`
- * migracioban, SQL alakban (`contentType LIKE 'image/%'`). A ketto NEM ket elo
- * masolat: a migracio EGYSZER fut, es a mar tarolt sorokrol dont, ahol bajt
- * nincs kezben, csak a kanonikus `contentType`. Ha ez a szabaly valaha
- * valtozik, a migraciohoz NEM kell hozzanyulni -- az a multat rogzitette.
+ * A `20260922164700_asset_document_photo_backfill` migracio SQL alakban dont
+ * ugyanerrol a kerdesrol: `type = 'OTHER' AND contentType LIKE 'image/%'`.
+ *
+ * EZ A BEKEZDES 2026-09-22-EN AT LETT IRVA, ES KET DOLOG VOLT BENNE HAMIS.
+ * Egy REGI, atnevezes elotti migracio-nevre hivatkozott (`...142100_...`, ami
+ * ma nem letezik), es azt allitotta, hogy "ugyanez a predikatum" -- holott a
+ * ketto NEM azonos:
+ *
+ *     a MIGRACIO    csak a bejelentett (tarolt) tipust nezi
+ *     a FELTOLTES   a bejelentett tipust ES az elso bajtokat, EGYEZESSEL
+ *
+ * A KULONBSEG IRANYA A LENYEG, ES EGYIRANYU: amit EZ a fuggveny kepnek mond,
+ * azt a migracio is atengedte volna. FORDITVA NEM: egy `image/jpeg`-nek
+ * MONDOTT, de nem JPEG tartalmu sor a migracioban PHOTO-t kapott volna, itt
+ * viszont `OTHER`-t kap. A mai adatban ezert LEHET olyan PHOTO sor, amit a mai
+ * feltoltesi ut nem adott volna -- ez nem hiba, csak nem allithatjuk rola
+ * ugyanazt.
+ *
+ * === ES AMIERT EZ A KET FELTETEL NEM VONHATO OSSZE (acrobot kikotese,
+ * 2026-09-22 20:20) ===
+ *
+ * Az osszevonas a leheto legartatlanabb alakban fog erkezni: ket majdnem
+ * egyforma feltetel egy helyre huzva, "az egyseg kedveert". Ha a migracio
+ * tagabb alakja kerul ide, az TAGITAS -- a hamis fejleccel erkezo fajl PHOTO-t
+ * kapna, es a partner latna. A masik irany (ez a szabaly a migracioba) szinten
+ * ertelmetlen: az EGYSZER futott, a multat rogzitette, es nincs mit ujraszamolni.
+ *
+ * Vagyis a ket feltetel kulonallasa NEM mulasztas, es az orzo csak ITT allhat:
+ * a migracio mar alkalmazva van.
  */
 export function assetDocumentKindForUpload(file: {
   mimetype: string;

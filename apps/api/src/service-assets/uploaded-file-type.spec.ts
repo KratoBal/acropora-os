@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -131,4 +132,37 @@ describe("melyik dokumentum-fajta legyen, ha nincs megadva", () => {
     assert.equal(detectUploadedFileKind("image/png", PNG), "png");
     assert.equal(detectUploadedFileKind("application/pdf", PDF), "pdf");
   });
+});
+
+/**
+ * A JEGYZETBEN HIVATKOZOTT MIGRACIO LETEZIK-E -- ES EZ MERT HIBABOL SZULETETT.
+ *
+ * 2026-09-22-ig a fuggveny fejlece a `20260922142100_asset_document_photo_backfill`
+ * mappara hivatkozott. Az a nev az atnevezes ota NEM LETEZIK: a valodi
+ * `20260922164700_...`. A fajlt atneveztek, a ra hivatkozo jegyzet nem kovette --
+ * es egy komment elavulasat semmilyen teszt nem fogta meg.
+ *
+ * AMIT MER: hogy a fejlecben megnevezett mappa OTT VAN a lemezen.
+ * AMIT NEM: hogy a migracio TARTALMA meg mindig az, amit a jegyzet allit rola.
+ * Ehhez a SQL-t kellene ertelmezni, es egy formazasi valtozas hamis pirosat
+ * adna. A nev-hivatkozas viszont vagy letezik, vagy nem -- ez eldontheto.
+ */
+it("a fejlecben hivatkozott migracios mappa letezik", () => {
+  const forras = readFileSync(
+    "src/service-assets/uploaded-file-type.ts",
+    "utf8",
+  );
+  const talalat = forras.match(/`(\d{14}_[a-z_]+)`/);
+  assert.notEqual(
+    talalat,
+    null,
+    "kontroll: a fejlecnek hivatkoznia KELL egy migracios mappara",
+  );
+
+  const mappa = `../../packages/database/prisma/migrations/${talalat![1]}`;
+  assert.equal(
+    existsSync(mappa),
+    true,
+    `a jegyzet a ${talalat![1]} mappara hivatkozik, es az nincs a lemezen`,
+  );
 });
