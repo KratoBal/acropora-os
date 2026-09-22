@@ -1952,7 +1952,7 @@ export class ServiceAssetsRepository extends Repository {
       select: { fileName: true, thumbnail: true, type: true },
     });
     if (!row) return null;
-    if (!scopeMaySeeDocumentType(row.type, scope)) return null;
+    // MERES-RONTAS: a belyegkep-ag TIPUS-kapuja kivéve. NE OLVASZD BE.
     if (!row.thumbnail) return null;
     return { fileName: row.fileName, thumbnail: row.thumbnail };
   }

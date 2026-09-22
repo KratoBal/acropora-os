@@ -1,0 +1,33 @@
+# A BELYEGKEP-AG TIPUS-KAPUJANAK KALIBRACIOJA (d0fd9857, a #950-hez).
+#
+# A RONTAS: a `documentThumbnail`-bol kivéve az EGYETLEN tipus-ellenorzes:
+#     if (!scopeMaySeeDocumentType(row.type, scope)) return null;
+#
+# A hivas tobbi resze BETURE VALTOZATLAN, tehat a `document-thumbnail-wiring`
+# 200. sora (a hatokor-kapu) tovabbra is illeszkedik. Ami a 205. sorra illeszkedne,
+# az most nem all ott -- de az EGYSEG-specek a meres.yml-ben NEM futnak, tehat
+# arra itt nem varok nyomot. (Ezt a #941 korenel megmertem, es akkor irtam le.)
+#
+# A `scopeMaySeeDocumentType` a fajlban meg HET helyen all, tehat az import
+# hasznalt marad, es a rontas LEFORDUL. Ez feltetel, nem remeny: egy le nem
+# fordulo rontas nulla tesztet futtat, es a piros hianya semmit nem jelentene.
+#
+# === A KET VART NYOM, ES MIERT EPP EZ A KETTO ===
+#
+# 1. AZ OK. A `Missing expected rejection.` azt jelenti, hogy az `assert.rejects`
+#    NEM kapott kivetelt -- vagyis a vevo MEGKAPTA a szamla belyegkepet. Ez a
+#    megkulonbozteto jel: ha helyette a POZITIV KONTROLL bukna (a jogos kero nem
+#    kapja meg a sajat belyegkepet), az egy deepEqual-elteres lenne, MAS szoveggel.
+#    A #941 koreben pontosan ez a kulonbseg bukott meg egyszer, ezert all itt.
+#
+# 2. A NEV, SORSZAM NELKUL. Ez az ELSO kor, ahol a sorszam nelkuli `not ok -`
+#    alak egyaltalan illeszkedhet: a #945 elott a node:test sorszama (`not ok 4 -`)
+#    miatt ez a varakozas SOHA nem teljesulhetett volna. A sorszamot elore nem
+#    tudhatom, egy uj teszt a suite elejen mindet eltolja.
+#
+# AMIRE NEM VAROK: a tobbi teszt kimenetele. Ez a rontas csak a tipus-kaput
+# erinti, a hatokor-kapu all -- de ezt NEM allitom varakozaskent, mert nem
+# merESEre valo: a kapu azt nezi, megjelent-e a vart nyom, nem azt, hogy mi NEM
+# jelent meg.
+Missing expected rejection.
+not ok - a vevő a SAJÁT eszközén sem éri el a számla bélyegképét
