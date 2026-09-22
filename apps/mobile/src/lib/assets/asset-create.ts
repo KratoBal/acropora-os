@@ -178,6 +178,7 @@ export type AssetCreateResult =
 export type AssetCreateField =
   | "owner"
   | "name"
+  | "unitId"
   | "labelCode"
   | "performance"
   | "volume"
@@ -321,6 +322,25 @@ export function buildAssetCreatePayload(
   const installed = normalizeAssetDate(form.installedAt);
   if (!installed.ok)
     return { ok: false, field: "installedAt", message: installed.message };
+
+  /**
+   * SZERVIZ PARTNER TULAJDONOSNÁL AZ ALEGYSÉG KÖTELEZŐ -- UGYANAZ A SZABÁLY,
+   * MINT A SZERVEREN (`assetDepartmentPresenceRefusal`) ÉS A WEBEN.
+   *
+   * Balázs döntése (message_id 1552018256280162385, "1 legyen kotelezo") és
+   * a `department_required` migráció (NOT NULL) miatt: a mai felvitel (a
+   * mező kimarad a payloadból, ha a szerelő nem választ) ma opcionálisnak
+   * kezeli, és a migráció után nyers adatbázis-hibával végződne.
+   *
+   * A SORREND SZÁMÍT: a matrica- és teljesítmény-ellenőrzés ELŐTT áll, mert
+   * a tulajdonos-választás logikailag megelőzi őket az űrlapon.
+   */
+  if (form.owner.type === "SUPPLIER" && !form.unitId.trim())
+    return {
+      ok: false,
+      field: "unitId",
+      message: "Válassz alegységet szerviz partner eszközéhez.",
+    };
 
   /**
    * A MATRICA-SZABALY UGYANABBOL A FUGGVENYBOL JON, MINT A SZERVERE.

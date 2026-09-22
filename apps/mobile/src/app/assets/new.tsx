@@ -891,6 +891,7 @@ export default function NewAssetScreen() {
                 onToggle={() => setUnitPickerOpen((open) => !open)}
                 hiddenCount={units.hiddenCount}
               />
+              <FieldError error={error} field="unitId" />
             </Section>
           ) : null}
 
