@@ -88,6 +88,19 @@ describe("a dokumentum-fajtak listaja mind a negy helyen ugyanaz", () => {
   */
   const VART = ["INVOICE", "WARRANTY", "MANUAL", "OTHER", "PHOTO"];
 
+  /*
+    EZ AZ ALLITAS A MASODIK VEDVONAL, NEM AZ ELSO -- ES EZT MERTEM, NEM HISZEM.
+
+    Megprobaltam kalibralni: kivettem a PHOTO erteket a semabol, es a keszlet
+    NEM valtott pirosra. Az ok szerkezeti: a sema-valtozas ujragenerálja a
+    Prisma klienst, a kod (`type === "PHOTO"`) LE SEM FORDUL, tehat nulla teszt
+    fut. A sema es a KOD kozotti kotest tehat a FORDITO tartja.
+
+    AMI MEGIS MARAD ENNEK AZ ALLITASNAK: az az eset, amikor a sema ES a kod
+    EGYUTT mozdul (tehat a fordito elegedett), a masolatok viszont nem. Akkor a
+    tobbi harom ag szol. Ezert all itt, es ezert nem allitom rola, hogy a
+    kalibracio igazolta.
+  */
   it("a séma enumja pontosan ez az öt érték", () => {
     assert.deepEqual(semaErtekek(), VART);
   });

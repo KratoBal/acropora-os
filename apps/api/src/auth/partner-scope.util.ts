@@ -132,9 +132,16 @@ export function scopeMaySeeDocumentType(
 /**
  * AZ OT FAJTA, EGY HELYEN -- ES A "EGY HELYEN" 2026-09-22 OTA TENY, NEM SZANDEK.
  *
- * Ez a fejlec korabban FIGYELMEZTETESKENT allt itt: a lista KETSZER allt (itt es
- * a tarolo DTO-jaban), es a szoveg megjosolta, mi tortenik "egy otodik fajta
- * felvetelenel" -- az egyik atvezetve marad, a masik nem, es az elteres NEMA.
+ * Ez a fejlec korabban FIGYELMEZTETESKENT allt itt: a lista KETSZER allt EBBEN A
+ * CSOMAGBAN (itt es a tarolo DTO-jaban), es a szoveg megjosolta, mi tortenik
+ * "egy otodik fajta felvetelenel" -- az egyik atvezetve marad, a masik nem, es
+ * az elteres NEMA.
+ *
+ * ES A KETTO CSAK AZ API-N BELUL VOLT KETTO: a teljes kep NEGY hely (a sema
+ * enumja, ez a lista, a kliens-oldali tipus es a mobil masolata), plusz a
+ * DTO-e otodikkent. A ket API-oldali peldany egy forrasra hozasa tehat NEM
+ * zarja le a kerdest -- a maradek negyet allitas-keszlet koti ossze
+ * (`service-assets/asset-document-type-egyezes.spec.ts`).
  *
  * AZ OTODIK FAJTA MA MEGERKEZETT (PHOTO), ES A JOSLAT PONTOS VOLT. Merve a
  * felvetel elott: a ket lista bajtra egyezett, ES EGYETLEN ALLITAS SEM KOTOTTE

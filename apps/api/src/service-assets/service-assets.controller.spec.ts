@@ -96,12 +96,29 @@ describe("az eszkoz dokumentum-feltoltes hatarai", () => {
       buffer: bajtok ?? Buffer.from(nev),
     }) as Express.Multer.File;
 
-  /** Valodi elso bajtok: a felismero a bejelentett tipust ES a tartalmat nezi. */
+  /*
+    VALODI ELSO BAJTOK, ES A PDF-E UGYANANNYIRA SZAMIT, MINT A KEPE.
+
+    A felismero a bejelentett tipust ES a tartalmat EGYUTT nezi, tehat egy
+    `application/pdf` fejleccel erkezo, nem-PDF puffer NEM "pdf", hanem `null`.
+
+    EZ EGY KALIBRACIOBOL DERULT KI, NEM OLVASASBOL. Az elso valtozatban a PDF
+    fixtura `Buffer.from(nev)` volt, es a "vegyesen erkezo fajlok" allitas
+    ZOLDEN ment -- csak epp a `null` agon, nem a `pdf`-en. Amikor a rontas a
+    `null` agat vitte PHOTO-ra, ez az allitas IS pirosodott, holott a nevében
+    PDF all. Ket allitas egy rontasra: a jel, hogy az egyik mast mer, mint amit
+    a neve iger.
+  */
   const JPEG_BAJTOK = Buffer.concat([
     Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
     Buffer.from([1, 2, 3]),
   ]);
+  const PDF_BAJTOK = Buffer.concat([
+    Buffer.from("%PDF-"),
+    Buffer.from([1, 2, 3]),
+  ]);
   const kep = (nev: string) => fajl(nev, "image/jpeg", JPEG_BAJTOK);
+  const pdf = (nev: string) => fajl(nev, "application/pdf", PDF_BAJTOK);
 
   const hasznalo = {
     id: "user-1",
@@ -367,7 +384,7 @@ describe("az eszkoz dokumentum-feltoltes hatarai", () => {
     await controller.uploadDocument(
       "eszkoz-1",
       ures,
-      [kep("kep.jpg"), fajl("irat.pdf")],
+      [kep("kep.jpg"), pdf("irat.pdf")],
       hasznalo,
     );
 
