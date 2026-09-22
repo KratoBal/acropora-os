@@ -55,11 +55,19 @@ type PendingConfirm =
 const inputDate = (value?: string) => (value ? value.slice(0, 10) : "");
 const isoDate = (value: string) => (value ? `${value}T00:00:00.000Z` : null);
 
+/**
+ * A `Record<AssetDocumentType, ...>` alak ITT VALODI ORZO, es ezt merve tudom:
+ * amikor a PHOTO fajta bekerult a semaba, ez a sor pirosra valtotta a webes
+ * typecheck-et, mielott barki megnezte volna a kepernyot. Ne cserelje le senki
+ * `Partial`-ra vagy indexelt tipusra: egy uj fajta onnantol nyers enum-nevvel
+ * jelenne meg a felhasznalonak, hibauzenet nelkul.
+ */
 const documentTypeLabel: Record<AssetDocumentType, string> = {
   INVOICE: "Számla",
   WARRANTY: "Garanciajegy",
   MANUAL: "Használati utasítás",
   OTHER: "Egyéb",
+  PHOTO: "Fénykép",
 };
 
 export function AssetDetailPage({ assetId }: { assetId: string }) {

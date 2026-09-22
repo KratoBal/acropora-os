@@ -417,6 +417,7 @@ enum AssetDocumentType {
   WARRANTY
   MANUAL
   OTHER
+  PHOTO
 }
 
 /// Egy munkalap-verzió állapota. A verzió a DRAFT állapotban szerkeszthető,

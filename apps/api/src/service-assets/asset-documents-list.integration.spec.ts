@@ -1,4 +1,5 @@
 import type { AuthenticatedUser } from "@acropora/types";
+import type { AssetDocumentTypeValue } from "../auth/partner-scope.util.js";
 import {
   belsosUser,
   szallitoUser,
@@ -190,7 +191,7 @@ async function eszkoz(
 
 async function csatolmany(
   assetId: string,
-  type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER",
+  type: AssetDocumentTypeValue,
   fileName: string,
 ) {
   await repository.addDocument({
@@ -226,7 +227,7 @@ async function kepesCsatolmany(
     TILTOTT tipusu, DE BELYEGKEPES sor az egyetlen alak, amin a belyegkep-ag
     tipus-kapuja egyaltalan merheto.
   */
-  type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER" = "MANUAL",
+  type: AssetDocumentTypeValue = "MANUAL",
 ) {
   return repository.addDocument({
     assetId,

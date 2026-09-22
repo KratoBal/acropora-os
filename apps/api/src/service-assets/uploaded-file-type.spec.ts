@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   ACCEPTED_UPLOAD_MIMETYPES,
+  assetDocumentKindForUpload,
   detectUploadedFileKind,
 } from "./uploaded-file-type.js";
 
@@ -71,5 +72,63 @@ describe("amit a feltöltésről tudni lehet a tartalmából", () => {
       "image/jpg",
       "image/png",
     ]);
+  });
+});
+
+/**
+ * A FAJTA, HA A FELTOLTO NEM MONDTA MEG.
+ *
+ * A dontes a BAJTOKBOL jon, nem a bejelentett tipusbol -- az indok a fuggveny
+ * fejlecen all. Ez a keszlet azt meri, hogy a ket irany tenyleg szetvalik.
+ */
+describe("melyik dokumentum-fajta legyen, ha nincs megadva", () => {
+  const f = (mimetype: string, buffer: Buffer) => ({ mimetype, buffer });
+
+  it("a kép PHOTO, mindkét formátumban", () => {
+    assert.equal(assetDocumentKindForUpload(f("image/jpeg", JPEG)), "PHOTO");
+    assert.equal(assetDocumentKindForUpload(f("image/png", PNG)), "PHOTO");
+  });
+
+  /** Az `image/jpg` nem szabvanyos, de a regebbi kliensek kuldik. */
+  it("a nem szabványos image/jpg alak is PHOTO", () => {
+    assert.equal(assetDocumentKindForUpload(f("image/jpg", JPEG)), "PHOTO");
+  });
+
+  it("a PDF OTHER marad", () => {
+    assert.equal(
+      assetDocumentKindForUpload(f("application/pdf", PDF)),
+      "OTHER",
+    );
+  });
+
+  /*
+    EZ AZ ALLITAS AZ EGESZ FUGGVENY OKA, ES EZ A KULONBSEG A BEJELENTETT
+    TIPUSBOL VALO DONTESHEZ KEPEST.
+
+    A fajl KEPNEK MONDJA MAGAT, es nem az. Ha a fajta a `mimetype` fejlecbol
+    jonne, ez `PHOTO` lenne -- vagyis a "PHOTO = ez egy fenykep" allitas a
+    KLIENS jo viselkedesen allna, nem a fajlon.
+
+    MI TORTENIK ILYENKOR ELESBEN: a kozos feltoltesi mag ugyanezzel a
+    felismerovel elutasitja a kerest (`DocumentRejected`), tehat SOR SEM
+    KELETKEZIK. Az `OTHER` valasz igy nem tevedes-javitas, hanem a zart
+    alapertelmezes.
+  */
+  it("ami képnek mondja magát de nem az: OTHER", () => {
+    assert.equal(assetDocumentKindForUpload(f("image/png", PDF)), "OTHER");
+  });
+
+  /*
+    ISMERT POZITIV KONTROLL A FIXTURAKRA.
+
+    A fenti allitasok mind ezt a harom puffert hasznaljak. Ha valamelyik fixtura
+    elromlana (peldaul ures pufferre cserelnek), minden `OTHER` lenne, es a
+    "PDF OTHER marad" allitas ZOLDEN igazolna a romlast. Ez a sor azt meri, hogy
+    a fixturak tenyleg azok, aminek mondjuk oket.
+  */
+  it("KONTROLL: a fixtúrák valóban felismerhetők", () => {
+    assert.equal(detectUploadedFileKind("image/jpeg", JPEG), "jpeg");
+    assert.equal(detectUploadedFileKind("image/png", PNG), "png");
+    assert.equal(detectUploadedFileKind("application/pdf", PDF), "pdf");
   });
 });

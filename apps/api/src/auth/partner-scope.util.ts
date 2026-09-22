@@ -111,28 +111,43 @@ export function rowIsScopeOwner(
  *                      DEFINICIO SZERINT az, amit nem soroltak be: a
  *                      tartalmarol nincs allitasunk. Ha kell belole valami a
  *                      partnernek, az EGY KERDES lesz, nem csendes szivargas.
+ *    PHOTO     igen    BALAZS DONTESE, 2026-09-22. A kerdes az volt, lassa-e a
+ *                      partner az eszkozerol keszult fenykepeket; a valasz igen,
+ *                      es ugyanabban a mondatban a szamlara nem.
+ *
+ * ES AMIT A PHOTO FELVETELE NEM VALTOZTAT: az OTHER marad ZART. A ketto kozotti
+ * kulonbseg nem a tartalom, hanem hogy VAN-E ALLITASUNK rola. Egy fenykep, amit
+ * valaki PHOTO fajtaval tolt fel, megnevezett dolog; egy OTHER nem az -- akkor
+ * sem, ha kep van benne. Ezert nem a MIME-tipus donti el a lathatosagot, hanem
+ * a fajta: a MIME-tipus a feltolto gepe mondja, a fajtat ember valasztja.
  */
 export function scopeMaySeeDocumentType(
   type: AssetDocumentTypeValue,
   scope: PartnerScope,
 ): boolean {
   if (scope.kind === "internal") return true;
-  return type === "WARRANTY" || type === "MANUAL";
+  return type === "WARRANTY" || type === "MANUAL" || type === "PHOTO";
 }
 
 /**
- * A NEGY FAJTA, EGY HELYEN.
+ * AZ OT FAJTA, EGY HELYEN -- ES A "EGY HELYEN" 2026-09-22 OTA TENY, NEM SZANDEK.
  *
- * A lista eddig KETSZER allt (itt es a tarolo fajljaban), ugyanazzal a negy
- * ertekkel. Ket masolat eseten egy otodik fajta felvetelenel az egyik atvezetve
- * marad, a masik nem -- es az elteres NEMA: a lemarado ag egyszeruen kihagyja
- * az uj fajtat a szuresbol.
+ * Ez a fejlec korabban FIGYELMEZTETESKENT allt itt: a lista KETSZER allt (itt es
+ * a tarolo DTO-jaban), es a szoveg megjosolta, mi tortenik "egy otodik fajta
+ * felvetelenel" -- az egyik atvezetve marad, a masik nem, es az elteres NEMA.
+ *
+ * AZ OTODIK FAJTA MA MEGERKEZETT (PHOTO), ES A JOSLAT PONTOS VOLT. Merve a
+ * felvetel elott: a ket lista bajtra egyezett, ES EGYETLEN ALLITAS SEM KOTOTTE
+ * OSSZE OKET -- tehat az egyezes szokas volt, nem garancia. Ezert a DTO
+ * mostantol EBBOL a listabol dolgozik (`export { ASSET_DOCUMENT_TYPES } from`),
+ * es a szetcsuszas nem lehetoseg tobbe, hanem forditasi hiba.
  */
 export const ASSET_DOCUMENT_TYPES = [
   "INVOICE",
   "WARRANTY",
   "MANUAL",
   "OTHER",
+  "PHOTO",
 ] as const;
 
 export type AssetDocumentTypeValue = (typeof ASSET_DOCUMENT_TYPES)[number];

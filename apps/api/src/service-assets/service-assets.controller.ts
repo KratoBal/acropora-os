@@ -1,3 +1,4 @@
+import { assetDocumentKindForUpload } from "./uploaded-file-type.js";
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 import {
@@ -396,7 +397,12 @@ export class ServiceAssetsController {
       created.push(
         await this.service.addDocument(
           id,
-          input.type,
+          // A FAJTA FAJLONKENT DOL EL, ES EZ NEM RESZLETKERDES: egy keres tiz
+          // fajlt hozhat, vegyesen (ket kep es egy PDF). Ha a dontes a cikluson
+          // KIVUL allna, a PDF is `PHOTO` lenne -- es a partner elott
+          // megjelenne. A megadott fajta mindig eros: ha a feltolto kimondta,
+          // nem talalgatunk helyette.
+          input.type ?? assetDocumentKindForUpload(file),
           file,
           user.id,
           user,

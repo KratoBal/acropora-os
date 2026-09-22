@@ -4,10 +4,12 @@ import { describe, it } from "node:test";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import {
+  ASSET_DOCUMENT_TYPES,
   partnerScopeOf,
   rowBelongsToScope,
   rowIsScopeOwner,
   scopeMaySeeDocumentType,
+  scopeVisibleDocumentTypes,
   scopeWhereForAndBranch,
 } from "./partner-scope.util.js";
 
@@ -144,10 +146,30 @@ describe("rowIsScopeOwner", () => {
 describe("scopeMaySeeDocumentType", () => {
   const partner = { kind: "customer", customerId: "c1" } as const;
 
-  it("belsős kérő minden típust lát", () => {
-    for (const t of ["INVOICE", "WARRANTY", "MANUAL", "OTHER"] as const) {
+  /**
+   * A BEJÁRÁS A FORRÁSBÓL MEGY, A TARTALOM MEG KÜLÖN ÁLL -- ÉS A KETTŐ EGYÜTT KELL.
+   *
+   * Itt korábban KÉZZEL ÍRT lista állt (`["INVOICE","WARRANTY","MANUAL","OTHER"]`),
+   * és amikor a PHOTO fajta megszületett, ez az állítás CSENDBEN kihagyta -- pont
+   * az új esetet, amiért egy ilyen bejárás létezik.
+   *
+   * A puszta javítás (a konstansból járni be) viszont ÖNHIVATKOZÓVÁ tenné: azt
+   * állítaná, hogy ami a listában van, az működik, és egy KIESŐ értéket
+   * szerkezetileg nem tudna észrevenni. Ezért áll alatta külön állítás a lista
+   * TARTALMÁRA. A bejárás a hatodik fajtát fogja meg, a tartalom-állítás a
+   * csendben eltűnő ötödiket.
+   */
+  it("belsős kérő MINDEN létező típust lát", () => {
+    for (const t of ASSET_DOCUMENT_TYPES) {
       assert.equal(scopeMaySeeDocumentType(t, { kind: "internal" }), true);
     }
+  });
+
+  it("a fajták listája pontosan ez az öt", () => {
+    assert.deepEqual(
+      [...ASSET_DOCUMENT_TYPES],
+      ["INVOICE", "WARRANTY", "MANUAL", "OTHER", "PHOTO"],
+    );
   });
 
   /** Balázs döntése, szó szerint: „szamlat nem". */
@@ -163,6 +185,36 @@ describe("scopeMaySeeDocumentType", () => {
   /** Az OTHER definíció szerint az, amit nem soroltak be: nincs róla állításunk. */
   it("az OTHER alapból NEM látható", () => {
     assert.equal(scopeMaySeeDocumentType("OTHER", partner), false);
+  });
+
+  /**
+   * Balázs döntése, 2026-09-22: a partner lássa az eszközéről készült
+   * fényképeket -- és ugyanabban a mondatban, hogy a számlát ne.
+   */
+  it("a PHOTO látható a partnernek", () => {
+    assert.equal(scopeMaySeeDocumentType("PHOTO", partner), true);
+  });
+
+  /**
+   * A TELJES LÁTHATÓ HALMAZ, EGY ÁLLÍTÁSBAN -- ÉS AZ ÉRTÉKE A BŐVÜLÉS ELLEN VAN.
+   *
+   * A fenti négy állítás egyenként méri a négy fajtát. Egyik sem szól, ha valaki
+   * egy HATODIK fajtát vesz fel és rögtön láthatóra állítja: mind a négy
+   * változatlanul zöld marad, mert egyikük sem a halmazról állít.
+   *
+   * MI ELLEN VÉD: a látható halmaz bővülése ellen (új fajta csendben kinyitva),
+   * és a csere ellen is (ha a WARRANTY kiesne és a PHOTO lépne a helyére, a
+   * lista más lenne). MI ELLEN NEM: ha valaki EZT a sort írja át a kóddal együtt
+   * -- egy állítás sosem véd az ellen, aki szándékosan viszi arrébb. Attól, hogy
+   * a döntés forrása a fenti táblázatban NÉV SZERINT áll, ez legalább látható
+   * lépés lesz, nem csendes.
+   */
+  it("a partner számára látható fajták halmaza pontosan három", () => {
+    assert.deepEqual(scopeVisibleDocumentTypes(partner), [
+      "WARRANTY",
+      "MANUAL",
+      "PHOTO",
+    ]);
   });
 });
 

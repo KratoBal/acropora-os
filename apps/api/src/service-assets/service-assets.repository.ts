@@ -7,6 +7,7 @@ import {
   assetVisibilityForAndBranch,
   scopeOwnWhereForAndBranch,
   scopeVisibleDocumentTypes,
+  type AssetDocumentTypeValue,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
 import { collectUnitSubtreeIds } from "./unit-subtree.js";
@@ -1930,7 +1931,7 @@ export class ServiceAssetsRepository extends Repository {
   async addDocument(input: {
     id?: string;
     assetId: string;
-    type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER";
+    type: AssetDocumentTypeValue;
     fileName: string;
     /** A bajtok az adatbazisban. Kizarolagos a `storageKey`-jel. */
     content: Buffer | null;

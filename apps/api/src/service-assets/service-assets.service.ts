@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import type { PartnerScope } from "../auth/partner-scope.util.js";
+import type {
+  AssetDocumentTypeValue,
+  PartnerScope,
+} from "../auth/partner-scope.util.js";
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { assetDeletionRefusal } from "./asset-deletion.js";
 import { normalizeDocumentCaption } from "../documents/document-caption.js";
@@ -484,7 +487,15 @@ export class ServiceAssetsService {
    */
   async addDocument(
     id: string,
-    type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER",
+    /**
+     * A FAJTA A KOZOS LISTABOL SZARMAZIK, NEM KEZZEL IRT UNIOBOL.
+     *
+     * Itt 2026-09-22-ig a negy ertek BEEGETVE allt, es a PHOTO felvetelekor a
+     * fordito ezt MEGFOGTA (`TS2345` a hivo oldalan) -- de csak a MASODIK
+     * korben: az elso futasban a webes hiba megolte az api typecheck feladatat
+     * (turbo), tehat egy koron at ugy nezett ki, mintha nem lenne itt semmi.
+     */
+    type: AssetDocumentTypeValue,
     file: Express.Multer.File,
     actorUserId: string,
     user: AuthenticatedUser,
