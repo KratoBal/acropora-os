@@ -28,6 +28,31 @@ import { assetListWheres } from "./service-assets.repository.js";
  * (az `unitIds` kotelezo parameter lesz). Ezert a mai allitasok a FIXTURAT es a
  * KERETET meriK -- nem a termeles viselkedeset.
  *
+ * === HOL FUTNAK EZEK, ES HOL NEM (2026-09-22) ===
+ *
+ * CSAK A CI-BEN. A `RUN_DB_INTEGRATION=1` kapu mogott allnak, es a futtatojuk a
+ * verify job Postgres szolgaltatasa.
+ *
+ * HELYBEN NEM VOLTAK KALIBRALVA, es ezt kimondom, mert kulonben a lenti
+ * allitasok ugy neznenek ki, mint a szomszed egysegtesztek: ebbol a
+ * konteneerbol az EGYETLEN elerheto adatbazis a PRODUKCIOS, oda pedig nem
+ * futtatunk semmit. Egy rontas-alapu kalibracio tehat nem volt lehetseges ott,
+ * ahol a kodot irtam.
+ *
+ * AMI HELYETTE BIZONYIT, ES KULSO: ugyanez a szelet elso CI-futasakor
+ * TIZENNEGY MAS integracios allitas valt pirosra -- olyanok, amiket nem en
+ * irtam, es amik elozo nap zoldek voltak. Mind a tizennegy azert bukott, mert a
+ * fixturajuk partner-felhasznaloinak NEM VOLT helyszin-hozzarendelese, tehat az
+ * uj szabaly alatt semmit nem lattak. Ez kivulrol mutatja meg, hogy a tengely
+ * TENYLEG szukit -- erosebb bizonyitek, mint amit egy sajat rontas adna, mert
+ * nem az en kezembol jon.
+ *
+ * A fixturak javitasa utan ugyanaz a suite 0 pirossal fut (commit 9eaa4a0e).
+ *
+ * ES A KET SZAM KULONBSEGE A LENYEG: a 14 azt mondja meg, hogy a szukites
+ * harap; a 0 azt, hogy a fixturak mostantol a VALOS alakot merik. Egyik sem
+ * helyettesiti a masikat, es a masodikbol magaban semmi nem kovetkezne.
+ *
  * ES A KERET SAJAT CSAPDAJA, KIMONDVA: ha a keret SAJAT where-ertelmezot kapna
  * (kezzel megirva, hogy mit jelent egy `in` vagy egy `OR`), akkor ez a spec a
  * SAJAT ertelmezomet merne, nem a Prismat -- lefordulna, zold lenne, es pont
