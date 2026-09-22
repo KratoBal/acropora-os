@@ -361,16 +361,28 @@ describe(
      *
      * Ez az allitas MAGA az orzo: ha a dontes valaha megfordul, PIROSODIK.
      *
-     * AMI VISZONT HIANYZIK, ES INNEN NEM POTOLHATO: a bevezetes napjan HANY sor
-     * all helyszin nelkul a harom erintett tablan (Asset, ServiceJob, Worksheet).
-     * Az a szam adna meg, hogy ez a szabaly valaha HARAPOTT-e -- egy kesobbi
-     * olvaso csak akkor tudja megmondani, ha latja, mennyi volt a bevezeteskor.
+     * === A BEVEZETES NAPJAN MERT SZAM, ES A NEVEZO TOBBET MOND, MINT A NULLA ===
      *
-     * NEM EN MERTEM, ES NEM IS TUDOM: ehhez az agenshez nem tartozik
-     * `DATABASE_URL`, es az egyetlen elerheto adatbazis az ELES -- amin Balazs
-     * kikotese szerint semmit nem futtatunk. ACROBOT TUDJA LEMERNI (o merte a
-     * szomszedos 83/0 szamot is, 2026-09-22 09:5x). Amig a szam nem all itt,
-     * ez a bekezdes a HIANYT nevezi meg, nem a nullat allitja.
+     * Merte: acrobot, 2026-09-22 11:54:53 CEST, az ELES adatbazison
+     * (`acropora-prod-01`, kontener `iwm34jaqp9xmwb72qkrqkwhy`). Az azonossag
+     * ellenorizve: az utolso lefutott migracio a `20260922100000_sales_channel_medusa`,
+     * vagyis a MA DELELOTT telepitett. En nem tudtam lemerni: ehhez az agenshez
+     * nem tartozik `DATABASE_URL`, es az egyetlen elerheto adatbazis az eles --
+     * amin Balazs kikotese szerint semmit nem futtatunk.
+     *
+     *   Asset        83 sor, ebbol `departmentId IS NULL`:  0
+     *   ServiceJob    6 sor, ebbol `departmentId IS NULL`:  0
+     *   Worksheet     4 sor -- a semaban NOT NULL, tehat nem is lehet
+     *
+     * ES A NULLA MAGABAN FELREVEZETNE, EZERT ALL ITT A NEVEZO IS. Nulla NULL
+     * NYOLCVANHAROM eszkoz kozott jelent valamit; nulla NULL HAT hibajegy kozott
+     * szinte semmit. A hat es a negy NEM ERDEMI MINTA.
+     *
+     * VAGYIS EZ AZ ALLITAS NEM AZERT KELL, MERT A MAI ADAT GYANUS -- hanem mert a
+     * mai adat MEG NEM TUD semmit mondani. Az eszkoz-letrehozo DTO-ban a mezo
+     * ELHAGYHATO, tehat az elso helyszin nelkuli sor barmikor keletkezhet, es
+     * akkor CSENDBEN lathatatlan lesz. A szam nem megnyugtat: megmondja, hogy a
+     * szabaly meg nem harapott, es hogy mikortol lehet ezt egyaltalan merni.
      *
      * HA EZ A DONTES VALAHA MEGFORDUL, EZ AZ ALLITAS PIROSODIK, es akkor a
      * valtozast ki kell mondani, nem csendben atirni.
