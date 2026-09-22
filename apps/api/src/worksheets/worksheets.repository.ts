@@ -773,7 +773,7 @@ export class WorksheetsRepository extends Repository {
       FROM (
         SELECT DISTINCT ON ("worksheetId") "worksheetId", "status"
         FROM "WorksheetVersion"
-        ORDER BY "worksheetId", "version" DESC
+        ORDER BY "worksheetId", "version" ASC
       ) AS latest
       WHERE latest."status" = ${status}::"WorksheetVersionStatus"
     `;

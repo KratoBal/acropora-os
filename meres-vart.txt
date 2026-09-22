@@ -1,0 +1,35 @@
+# A MUNKALAP-LISTA LEGFRISSEBB VERZIOJANAK KALIBRACIOJA (48e8c13e masodik fele).
+#
+# A KERDES, AMIT EZ A KOR ELDONT: fedett-e VISELKEDESSEL az, amit ma ket
+# forras-allitas oriz (`worksheet-latest-status.spec.ts:89` es `:93`)?
+#
+# A RONTAS: a `list` metodus nyers SQL-jeben a rendezes DESC -> ASC (924. sor).
+# A `DISTINCT ON ("worksheetId")` AZT a sort tartja meg, amelyik a rendezes
+# szerint az ELSO -- ASC-vel tehat a LEGELSO verzio allapotara szurnenk.
+#
+# A HELY MERVE, ES ELSORE ROSSZUL VALASZTOTTAM. A fajlban KET egyforma
+# `ORDER BY "worksheetId", "version" DESC` sor all (776 es 924). A 924-es a
+# CSEMPE-DARABSZAMOKE (`GROUP BY latest."status"`), a listat viszont a 776-os
+# hajtja, a `worksheetIdsByLatestStatus` metodusban -- az adja a szurt
+# azonosito-halmazt, amibol az `items` lesz.
+#
+# Eloszor a 924-est rontottam el, mert egy sor-alapu hozzarendeles a LEGKOZELEBBI
+# elozo metodus-szeru sort talalta meg, es az mas volt. Ugyanaz a csalad, mint a
+# ketszer allo `const kod` sor: ket egyforma sor, ket kulonbozo hely.
+#
+# === A KET VART NYOM ===
+#
+# 1. A BUKO TESZT NEVE, SORSZAM NELKUL. A lap harom verziot jar be (piszkozat,
+#    lezaras utan alairasra varo, majd javitott piszkozat), es az elso allitas
+#    az, hogy a lap AWAITING_SIGNATURE-re feljon. ASC-vel a lekerdezes az elso
+#    verziot (DRAFT) tartja meg, tehat nem jon fel.
+#
+# 2. EGY POZITIV KONTROLL, AMINEK ZOLDNEK KELL MARADNIA. Enelkul a piros
+#    jelenthetne azt is, hogy az egesz suite osszeomlott (rossz SQL, elhalt
+#    kapcsolat). Ez a szomszed teszt a verzio-keszitest meri, nem a lista
+#    rendezeset, tehat a rontas NEM erintheti.
+#
+# HA A 2. IS PIROSODIK: a rontas tobbet vitt el, mint a szant hatokor, es a kor
+# eredmenye nem hasznalhato.
+not ok - filters on the status of the latest version, not on any earlier one
+ok - keeps the closed version and the number intact when a new version is made
