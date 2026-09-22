@@ -16,6 +16,7 @@ import {
   PERMISSIONS,
   type ServiceJobDetail,
   type ServiceJobDocumentSummary,
+  type ServiceJobHandoverMailPreview,
   type ServiceJobStatusValue,
   type ServiceJobTimelineEntry,
   type WorksheetAttachableItem,
@@ -28,6 +29,7 @@ import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { megjegyzesKuldheto } from "./megjegyzes-celja";
+import { HandoverMailDialog } from "./handover-mail-dialog";
 import { PartnerPicker } from "./partner-picker";
 import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
@@ -146,6 +148,13 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
     useState<ServiceJobDocumentSummary | null>(null);
   const [downloadingPackage, setDownloadingPackage] = useState(false);
   const [packageError, setPackageError] = useState<string | null>(null);
+  const [mailOpen, setMailOpen] = useState(false);
+  const [mailPreview, setMailPreview] =
+    useState<ServiceJobHandoverMailPreview | null>(null);
+  const [mailPreviewError, setMailPreviewError] = useState<string | null>(null);
+  const [mailSendError, setMailSendError] = useState<string | null>(null);
+  const [mailSending, setMailSending] = useState(false);
+  const [mailResult, setMailResult] = useState<string | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
@@ -459,6 +468,73 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
     }
   };
 
+  /**
+   * A DIALOGUS MEGNYITASA ES A CIMZETTEK BETOLTESE.
+   *
+   * A lista a NYITASKOR jon le, nem a lap betoltesekor. Ket ok: a kezelok
+   * tulnyomo tobbsege soha nem nyitja meg (a jegyek nagy resze nem megy ki
+   * levelben), es egy lap-betoltessel egyutt lekert cimzett-lista addigra
+   * elavulhatna, amig a gombig eljut.
+   */
+  const openHandoverMail = async () => {
+    setMailOpen(true);
+    setMailPreview(null);
+    setMailPreviewError(null);
+    setMailSendError(null);
+    setMailResult(null);
+    try {
+      setMailPreview(await serviceJobsApi.handoverMailPreview(token, jobId));
+    } catch (cause) {
+      setMailPreviewError(
+        cause instanceof Error
+          ? cause.message
+          : "A címzettek nem tölthetők be.",
+      );
+    }
+  };
+
+  /**
+   * A KULDES -- ES A HAROM KIMENETEL HAROM KULON MONDATA.
+   *
+   * A `skipped` es a `refused` NEM hiba: a hivas sikerult, csak level nem ment
+   * ki. Ha mindharom egy "elkuldve" uzenetet kapna, a kezelo azt hinne, hogy a
+   * vevo megkapta a csomagot -- es a hibajegyet lezartnak tekintene.
+   */
+  const sendHandoverMail = async (input: {
+    subject: string;
+    message: string;
+  }) => {
+    setMailSending(true);
+    setMailSendError(null);
+    try {
+      const eredmeny = await serviceJobsApi.sendHandoverMail(token, jobId, {
+        subject: input.subject.trim() || undefined,
+        message: input.message,
+      });
+      if (eredmeny.kind === "sent") {
+        setMailOpen(false);
+        setMailResult(`A hibajegy kiküldve ${eredmeny.recipients} címzettnek.`);
+        await load();
+        return;
+      }
+      /*
+        A KET NEM-KULDO KIMENETEL AZ ABLAKBAN MARAD, es ez szandekos: a
+        kezelo szovege ilyenkor MEGVAN, es egy bezarodo ablak elvenne tole.
+      */
+      setMailSendError(
+        eredmeny.kind === "refused"
+          ? eredmeny.message
+          : "A levél nem ment ki. Frissítsd az oldalt, és nézd meg újra a címzetteket.",
+      );
+    } catch (cause) {
+      setMailSendError(
+        cause instanceof Error ? cause.message : "A kiküldés nem sikerült.",
+      );
+    } finally {
+      setMailSending(false);
+    }
+  };
+
   const deleteDocument = async (documentId: string) => {
     setDocumentToDelete(null);
     setDocumentsError(null);
@@ -615,15 +691,25 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
         sub={job.departmentName ?? undefined}
         actions={
           job.partnerStatus === "COMPLETED" ? (
-            <Button
-              variant="secondary"
-              disabled={downloadingPackage}
-              onClick={() => void downloadPackage()}
-            >
-              {downloadingPackage
-                ? "Dokumentumcsomag letöltése…"
-                : "Dokumentumcsomag letöltése"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                disabled={downloadingPackage}
+                onClick={() => void downloadPackage()}
+              >
+                {downloadingPackage
+                  ? "Dokumentumcsomag letöltése…"
+                  : "Dokumentumcsomag letöltése"}
+              </Button>
+              {/*
+                UGYANAZ A FELTETEL, MINT A LETOLTESNEL, es ez nem veletlen: a
+                kuldes a CSOMAGOT viszi, tehat pontosan akkor van ertelme,
+                amikor a csomag eloallithato.
+              */}
+              <Button onClick={() => void openHandoverMail()}>
+                Kiküldés e-mailben
+              </Button>
+            </div>
           ) : null
         }
       />
@@ -637,6 +723,23 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           />
         </div>
       ) : null}
+
+      {mailResult ? (
+        <div className="mb-5">
+          <Alert variant="info" title="Kiküldés" description={mailResult} />
+        </div>
+      ) : null}
+
+      <HandoverMailDialog
+        open={mailOpen}
+        jobNumber={job.jobNumber}
+        preview={mailPreview}
+        previewError={mailPreviewError}
+        sendError={mailSendError}
+        busy={mailSending}
+        onSend={(input) => void sendHandoverMail(input)}
+        onCancel={() => setMailOpen(false)}
+      />
 
       {error ? (
         <div className="mb-5">
