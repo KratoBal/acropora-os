@@ -1175,6 +1175,43 @@ describe("a lezárt hibajegy kiküldése", () => {
   });
 
   /*
+    A `refused` VALASZ A SZERVER MONDATAT MUTATJA, NEM A MIENKET.
+
+    Ez az ag MA NEM TUD ELSULNI: a meret-kapu 4 MiB-nal all, a mai legnagyobb
+    csomag base64 utan ~97 kB. Epp ezert van ra allitas -- egy ag, ami sosem
+    fut, csendben elromlik, es akkor derul ki, amikor egy kezelo elott kellene
+    megmondania, mi tortent.
+
+    A szerver mondata azert megy at valtoztatas nelkul, mert az tudja a
+    SZAMOKAT (mekkora a csomag, hol a hatar); egy altalanos "tul nagy" mondat
+    ugyanoda vezetne, mint a tobbi osszemosott kimenetel.
+  */
+  it("a refused válasznál a szerver mondata jelenik meg", async () => {
+    api.sendHandoverMail.mockResolvedValue({
+      kind: "refused",
+      message: "A dokumentumcsomag 5,2 MB, a határ 4 MB.",
+    });
+    const ablak = await ablakotNyit();
+    await waitFor(() =>
+      expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy(),
+    );
+
+    fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+      target: { value: "Köszönjük." },
+    });
+    fireEvent.click(
+      within(ablak).getByRole("button", { name: "Elküldés 2 címzettnek" }),
+    );
+
+    expect(
+      await within(ablak).findByText(
+        "A dokumentumcsomag 5,2 MB, a határ 4 MB.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/A hibajegy kiküldve/)).toBeNull();
+  });
+
+  /*
     A BEGEPELT UZENET NEM VESZHET EL EGY FELREKATTINTASTOL.
 
     A KET ALLITAS EGYUTT MER, KULON-KULON EGYIK SEM: a "nem zar" onmagaban
