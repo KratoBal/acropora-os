@@ -18,6 +18,7 @@ const navigation = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({ list: vi.fn() }));
 const suppliers = vi.hoisted(() => ({ units: vi.fn() }));
+const categories = vi.hoisted(() => ({ list: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
 vi.mock("next/navigation", () => ({
@@ -38,6 +39,16 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 vi.mock("@/lib/api/assets", () => ({ assetsApi: api }));
 vi.mock("@/lib/api/suppliers", () => ({ suppliersApi: suppliers }));
+/*
+  A KATEGORIA-LEKERDEZES MOCKJA NEM KENYELEM: nelkule a lap a VALODI
+  klienst hivja, az pedig a `127.0.0.1:3000` cimre megy. A spec ettol nem
+  bukik el (a lap elnyeli a hibat), csak CSENDBEN halozatot hasznal -- es egy
+  futo fejlesztoi szerver mellett mar nem is elnyelne, hanem az OTT allo
+  adatot hozna be a teszt-futasba.
+*/
+vi.mock("@/lib/api/asset-categories", () => ({
+  assetCategoriesApi: categories,
+}));
 
 const session: Session = {
   id: "session-1",
@@ -123,6 +134,8 @@ describe("AssetListPage location cell", () => {
   beforeEach(() => {
     auth.session = session;
     api.list.mockReset();
+    categories.list.mockReset();
+    categories.list.mockResolvedValue({ items: [] });
   });
 
   /**

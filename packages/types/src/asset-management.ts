@@ -145,6 +145,24 @@ export interface AssetListItem extends AssetHierarchyItem {
   unit?: AssetUnitSummary;
   aquarium?: AssetAquariumSummary;
   parent?: AssetHierarchyItem;
+  /**
+   * A KATEGORIA NEVE -- A TORZSADATBOL, NEM SZABAD SZOVEGBOL.
+   *
+   * A mezo NEVE valtozatlan, tehat a megjelenito helyek nem mozdulnak. Ami
+   * valtozott: az ERTEK mostantol egy `AssetCategory` sorbol jon, es a
+   * `categoryId` mondja meg, melyikbol.
+   *
+   * A LISTASORON ALL, NEM CSAK AZ ADATLAPON (2026-09-22), es az indok NEM a
+   * kiiras, hanem a SZURES. Amig a lista nem hordozza, a felulet nem tud
+   * kategoria szerint szukiteni -- a legordulomenu megszunteti az elgepelest,
+   * es valtozatlanul hagyja azt, amiert Balazs kerte.
+   *
+   * `?: string` ES NEM `| null`: a hianyzo ertek azt jelenti, hogy NINCS
+   * kategoria, nem azt, hogy nem kertuk le.
+   */
+  category?: string;
+  /** A valasztott kategoria azonositoja; a szerkeszto ezt kuldi vissza. */
+  categoryId?: string;
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
@@ -290,16 +308,6 @@ export interface AssetDetail extends AssetListItem {
     code: string;
     name: string;
   };
-  /**
-   * A KATEGORIA NEVE -- A TORZSADATBOL, NEM SZABAD SZOVEGBOL.
-   *
-   * A mezo NEVE valtozatlan, tehat a megjelenito helyek nem mozdulnak. Ami
-   * valtozott: az ERTEK mostantol egy `AssetCategory` sorbol jon, es a
-   * `categoryId` mondja meg, melyikbol.
-   */
-  category?: string;
-  /** A valasztott kategoria azonositoja; a szerkeszto ezt kuldi vissza. */
-  categoryId?: string;
   description?: string;
   installedAt?: string;
   purchasedAt?: string;

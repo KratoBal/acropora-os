@@ -36,6 +36,114 @@ describe("assetEditFormFrom", () => {
   });
 });
 
+/**
+ * A KATEGORIA A TELEFONON: FELVINNI EDDIG LEHETETT, MEGVALTOZTATNI NEM.
+ *
+ * A felviteli urlapon 2026-09-22 ota van valaszto, a szerkeszton nem volt --
+ * vagyis egy elgepelt vagy hianyzo kategoriat a szerelo a terepen nem tudott
+ * javitani. Ugyanaz az indok, amiert a helyszin 2026-08-27-en bekerult ide.
+ */
+describe("kategória a szerkesztőben", () => {
+  const kategoriaval: EditableAsset = {
+    ...asset,
+    categoryId: "cat-szivattyu",
+    category: "Szivattyú",
+  };
+
+  it("az űrlap a MOSTANI kategóriából töltődik elő", () => {
+    assert.equal(assetEditFormFrom(kategoriaval).categoryId, "cat-szivattyu");
+  });
+
+  it("kategória nélküli eszközön üres, nem az `undefined` szó", () => {
+    assert.equal(assetEditFormFrom(asset).categoryId, "");
+  });
+
+  it("változatlan kategóriát NEM küld", () => {
+    const patch = buildAssetPatch(
+      kategoriaval,
+      assetEditFormFrom(kategoriaval),
+    );
+    assert.equal("categoryId" in patch, false);
+  });
+
+  it("a megváltoztatott kategóriát AZONOSÍTÓKÉNT küldi", () => {
+    const patch = buildAssetPatch(kategoriaval, {
+      ...assetEditFormFrom(kategoriaval),
+      categoryId: "cat-vilagitas",
+    });
+    assert.equal(patch.categoryId, "cat-vilagitas");
+  });
+
+  /**
+   * A KIURITES TORLES, ES EZ A MATRICAVAL ELLENTETES ALAK.
+   *
+   * A matricakodnal a kiurites NEM megy at (a szerver `string`-et var, a
+   * leszedesnek nincs neve az esemeny-naploban). A kategorianal a torles
+   * LETEZIK: az eszkoz allhat kategoria nelkul, es az atvezeto migracio
+   * szandekosan hagy ilyen sorokat. A ket ellentetes alak ugyanabbol a
+   * szabalybol jon, ezert all mind a ketto merve.
+   */
+  it("a kiürített kategória TÖRLÉS, nem elhagyás", () => {
+    const patch = buildAssetPatch(kategoriaval, {
+      ...assetEditFormFrom(kategoriaval),
+      categoryId: "",
+    });
+    assert.equal("categoryId" in patch, true);
+    assert.equal(patch.categoryId, null);
+  });
+
+  /**
+   * MINDEN TULAJDONOSNAL MEGY, ELLENTETBEN AZ ALEGYSEGGEL.
+   *
+   * Az alegyseget a `buildAssetPatch` a tulajdonos TIPUSAHOZ koti, mert vevonel
+   * a szerver elutasitana. A kategoria torzsadat: minden eszkozon ertelmes.
+   * Enelkul az allitas nelkul egy „masoljuk a szomszed feltetelt" alaku
+   * valtoztatas CSENDBEN elvenne a vevoi eszkozokrol.
+   */
+  it("vevő tulajdonosú eszközön IS elmegy", () => {
+    const vevoi: EditableAsset = { ...kategoriaval, ownerType: "CUSTOMER" };
+    const patch = buildAssetPatch(vevoi, {
+      ...assetEditFormFrom(vevoi),
+      categoryId: "cat-vilagitas",
+    });
+    assert.equal(patch.categoryId, "cat-vilagitas");
+  });
+
+  it("a sorba tett módosítás VISZI a látott kategóriát", () => {
+    const form = { ...assetEditFormFrom(kategoriaval), categoryId: "cat-uj" };
+    const patch = buildAssetPatch(kategoriaval, form);
+
+    assert.equal(
+      baseValuesFor(kategoriaval, patch).categoryId,
+      "cat-szivattyu",
+    );
+  });
+
+  /**
+   * KONTROLL: amihez a szerelo hozza sem nyult, arrol NINCS alapertek.
+   *
+   * Egy felesleges alapertek a feloldo kepernyot kerdezteti olyasmirol, amit
+   * senki nem irt at -- es a fenti allitas akkor is zold lenne, ha a sor
+   * MINDIG vinne a kategoriat.
+   */
+  it("KONTROLL: érintetlen kategóriáról nincs alapérték a sorban", () => {
+    const form = { ...assetEditFormFrom(kategoriaval), notes: "Más." };
+    const patch = buildAssetPatch(kategoriaval, form);
+
+    assert.equal("categoryId" in baseValuesFor(kategoriaval, patch), false);
+  });
+
+  it("a szerkesztés VÁLTOZÁSNAK számít, tehát a mentés gomb él", () => {
+    assert.equal(
+      hasAssetChanges(kategoriaval, {
+        ...assetEditFormFrom(kategoriaval),
+        categoryId: "cat-vilagitas",
+      }),
+      true,
+    );
+  });
+});
+
 describe("buildAssetPatch", () => {
   it("sends nothing but the guard when nothing changed", () => {
     const patch = buildAssetPatch(asset, assetEditFormFrom(asset));

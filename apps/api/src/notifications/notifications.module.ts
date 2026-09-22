@@ -11,6 +11,7 @@ import { HandoverMailRepository } from "./mail/handover-mail.repository.js";
 import { HandoverMailService } from "./mail/handover-mail.service.js";
 import { MailTemplateController } from "./mail/mail-template.controller.js";
 import { MAIL_SENDER } from "./mail/mail.port.js";
+import { RedirectingMailSender } from "./mail/redirecting-mail.sender.js";
 import { TicketMailRepository } from "./mail/ticket-mail.repository.js";
 import { TicketMailService } from "./mail/ticket-mail.service.js";
 
@@ -29,7 +30,18 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
       lecserelese EGY megnevezett sor atirasa lesz, nem egy konstruktor csendes
       valtozasa.
     */
-    { provide: MAIL_SENDER, useClass: GmailMailSender },
+    /*
+      A BUROK A JELZON, A GMAIL ALATTA. 2026-09-22 ota a hivok nem a Gmailt
+      kapjak, hanem a terito burkot -- es ez SZERKEZETI, nem szokas: mind a
+      harom kuldesi ut ezen az EGY jelzon at kapja a kuldot, tehat egyik sem
+      tudja megkerulni a teritest.
+
+      A `GmailMailSender` maga is szolgaltato marad, mert a burok konstruktora
+      kéri. Kozvetlenul NEM szabad injektalni -- erre kulon allitas all a
+      `mail-sender-wiring.spec.ts` fajlban.
+    */
+    GmailMailSender,
+    { provide: MAIL_SENDER, useClass: RedirectingMailSender },
     TicketMailRepository,
     TicketMailService,
     HandoverMailRepository,

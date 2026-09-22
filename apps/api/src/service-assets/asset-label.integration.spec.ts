@@ -71,6 +71,16 @@ let customerId = "";
  */
 let szallitoId = "";
 let helyszinId = "";
+/**
+ * MASODIK HELYSZIN, UGYANANNAL A VEVONEL -- CSAK A HELYSZIN-TENGELYHEZ.
+ *
+ * A tulajdon-tengelyt egy MASIK vevo meri (lentebb). Ez a sor azert kell,
+ * hogy a helyszin-tengelynek legyen olyan bemenete, ahol MINDEN MAS
+ * feltetel IGAZ: ugyanaz a vevo, ugyanaz az eszkoz, es KIZAROLAG a kiosztott
+ * helyszinek listaja ter el. Eszkoz nem all rajta, es nem is kell: a szuro
+ * a KERO listajan dol el, nem azon, mi van a helyszinen.
+ */
+let masikHelyszinId = "";
 let actorUserId = "";
 
 function createInput(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
@@ -216,6 +226,12 @@ describe(
         select: { id: true },
       });
       helyszinId = helyszin.id;
+
+      const masikHelyszin = await prisma.worksheetDepartment.create({
+        data: { customerId, code: "LB2", name: `${PREFIX} másik helyszín` },
+        select: { id: true },
+      });
+      masikHelyszinId = masikHelyszin.id;
 
       /*
         SAJAT SOR A KET HATOKOR-ALLITASHOZ, ES KULON A TOBBI TESZTTOL.
@@ -399,6 +415,49 @@ describe(
         [helyszinId],
       );
       assert.equal(found, null, "más partner eszköze nem érhető el a kódról");
+    });
+
+    /**
+     * A HELYSZIN-TENGELY, KULON ALLITASSAL -- ES MERT RESBOL, NEM ELOVIGYAZATBOL.
+     *
+     * MERVE 2026-09-22 (meres/matricakod-helyszin-tengely, futas 35749047465):
+     * ha a `detailByLabelCode` hivohelyen a vevo-agbol KIVESSZUK a
+     * helyszin-tengelyt es a tulajdont meghagyjuk, a teljes integracios
+     * keszletbol 362 allitas fut le es NULLA valt pirosra. Vagyis ezt a
+     * tengelyt ezen az uton EGYETLEN allitas sem merte.
+     *
+     * A TUKOR-MERES UGYANAZON A NAPON (futas 35745729290) a masik iranyt
+     * mutatta: a TULAJDON-tengely elvetele PONTOSAN EGY pirosat adott, nev
+     * szerint a felette allot. Ket azonos alaku rontas, ket ellentetes
+     * eredmeny -- a kulonbseg maga a lelet.
+     *
+     * MIERT NEM VETTE ESZRE A KET FENTI ALLITAS: mindketto UGYANAZT a
+     * helyszin-listat adja at, es abban benne van az eszkoz helyszine. A
+     * helyszin-tengely tehat mindkettonel IGAZ, akarmit csinal -- egy
+     * allitas, ami csak olyan bemenetet lat, ahol a feltetel amugy is
+     * teljesul, a feltetel LETEZESET meri, nem a hatasat.
+     *
+     * EZ A BEMENET AZ, AHOL MINDEN MAS FELTETEL IGAZ: ugyanaz a vevo (tehat a
+     * tulajdon-tengely atengedi), ugyanaz az eszkoz es ugyanaz a kod -- es
+     * KIZAROLAG a kiosztott helyszinek listaja mas. Ha ez pirosodik, a
+     * helyszin volt az egyetlen ok.
+     */
+    it("a saját partner sem találja meg, ha az eszköz helyszíne NINCS a kiosztott helyszínei között", async () => {
+      // ISMERT POZITIV KONTROLL A BEMENETRE: a ket helyszin tenyleg KET
+      // kulonbozo sor. Ha egybeesnenek, ez az allitas a felette allo pozitiv
+      // esetet ismetelne meg, es zold lenne a tengely nelkul is.
+      assert.notEqual(masikHelyszinId, helyszinId);
+
+      const found = await repository.detailByLabelCode(
+        HATOKOR_KOD,
+        { kind: "customer", customerId },
+        [masikHelyszinId],
+      );
+      assert.equal(
+        found,
+        null,
+        "a kiosztott helyszíneken kívül álló eszköz nem érhető el a kódról",
+      );
     });
 
     /**

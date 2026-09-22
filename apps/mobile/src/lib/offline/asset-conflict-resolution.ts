@@ -94,6 +94,17 @@ export interface CurrentAssetLike {
   performanceUnit?: { id: string; code: string } | null;
   /** A mostani helyszín, ha van. A NEVE kell, nem az azonosítója. */
   unit?: { id: string; name: string } | null;
+  /**
+   * A MOSTANI KATEGORIA -- AZ AZONOSITO ES A NEVE IS.
+   *
+   * KET MEZO, ES NEM PAZARLAS: az OSSZEVETES az azonositon megy (egy
+   * atnevezett kategoria kulonben valtozasnak latszana), a KIIRAS viszont a
+   * neven (`cat_01M...` alaku karakterlanc a kepernyon nem dontest segit).
+   * Ugyanaz a ketosseg, ami a helyszinnel es a mertekegyseggel all -- ott
+   * objektumban, itt ket mezoben, mert a szerver is igy adja (`AssetDetail`).
+   */
+  categoryId?: string | null;
+  category?: string | null;
 }
 
 /** A törzsből összevethető mezők. A `expectedUpdatedAt` nem tartozik ide. */
@@ -131,6 +142,7 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   status: "Státusz",
   criticality: "Kritikusság",
   departmentId: "Helyszín",
+  categoryId: "Kategória",
   manufacturer: "Gyártó",
   model: "Modell",
   serialNumber: "Sorozatszám",
@@ -163,6 +175,17 @@ export function compareQueuedUpdate(input: {
    * képernyőn nem döntést segít, hanem elbizonytalanít.
    */
   unitNames?: Record<string, string>;
+  /**
+   * A KATEGORIAK NEVE AZONOSITO SZERINT, ha a kepernyo be tudta tolteni.
+   *
+   * Ugyanaz az indok, ami a helyszineknel all felette: a torzsben AZONOSITO
+   * all, a szerelo viszont NEVET valasztott. Es ha a lista nem jott meg (a
+   * feloldas gyakran epp terero nelkul tortenik), a `helyszin`-hez hasonloan
+   * az azonosito kerul ki -- egy nema visszaeses a „nincs megadva" szovegre
+   * azt allitana, hogy a szerelo TOROLNI akarja a kategoriat, holott epp
+   * beallitott egyet.
+   */
+  categoryNames?: Record<string, string>;
   /** Amit a szerelő LÁTOTT. Hiányozhat: a mező előtt keletkezett sorokon nincs. */
   base?: QueuedAssetUpdateBase;
 }): ConflictFieldRow[] {
@@ -170,7 +193,12 @@ export function compareQueuedUpdate(input: {
 
   for (const field of Object.keys(MEZO_NEVE) as ComparableField[]) {
     if (!(field in input.patch)) continue;
-    const mine = enyem(field, input.patch, input.unitNames);
+    const mine = enyem(
+      field,
+      input.patch,
+      input.unitNames,
+      input.categoryNames,
+    );
     const theirs = ovek(field, input.current, input.unitNames);
     rows.push({
       field,
@@ -208,6 +236,10 @@ function nyersMost(
   if (field === "status") return current.status;
   if (field === "criticality") return current.criticality;
   if (field === "departmentId") return current.unit?.id ?? null;
+  // A KATEGORIANAL IS AZ AZONOSITO dont, nem a nev: a torzsadaton a nev
+  // atirhato, es egy atnevezes kulonben ugy latszana, mintha mas hozzanyult
+  // volna az eszkozhoz.
+  if (field === "categoryId") return uresNull(current.categoryId);
   // A PAR EGYSEG-FELE OBJEKTUMKENT all a valaszban, azonositokent a torzsben.
   if (field === "performanceUnitId") return current.performanceUnit?.id ?? null;
   return uresNull(current[field]);
@@ -316,18 +348,65 @@ function assignField(
     case "notes":
       target.notes = source.notes;
       return;
+    case "categoryId":
+      target.categoryId = source.categoryId;
+      return;
+    /**
+     * EZ A HAROM AG HIANYZOTT, ES A KIMERITO-ORZO HOZTA ELO (2026-09-22).
+     *
+     * A `MEZO_NEVE` mind a harmat felsorolja, tehat a feloldo kepernyon SOR
+     * KELETKEZETT rajuk, es a szerelo valaszthatta, hogy az OVE maradjon. A
+     * `keepMine` bele is tette a listaba -- csak itt nem tortent semmi.
+     *
+     * A KOVETKEZMENY NEM HIBA VOLT, HANEM CSEND: a szerelo beirt matricakodja
+     * vagy teljesitmenye egyszeruen kimaradt az ujrakuldott torzsbol, es a
+     * kepernyo ugy nezett ki, mintha a dontese atment volna. Ha ez volt az
+     * EGYETLEN megtartott mezo, a `resolutionIsEmpty` uresnek latta, es a
+     * kepernyo ELVETEST kinalt fel -- ott legalabb latszik valami.
+     *
+     * Egyetlen teszt sem fogta meg: a spec csak a `manufacturer` mezot tartja
+     * meg, ami a lefedett agak kozott van.
+     */
+    case "labelCode":
+      target.labelCode = source.labelCode;
+      return;
+    case "performance":
+      target.performance = source.performance;
+      return;
+    case "performanceUnitId":
+      target.performanceUnitId = source.performanceUnitId;
+      return;
+    default:
+      /**
+       * A SWITCH NEM KIMERITO-ELLENORZES ONMAGABAN, ES EZ A SOR TESZI AZZA.
+       *
+       * Enelkul egy UJ mezo felvetele a `UpdateAssetInput`-ba CSENDBEN
+       * kimaradna innen: a fordito nem szol, a feloldott torzs pedig nem
+       * vinne at a szerelo valasztasat -- vagyis a dontese eltunne, es a
+       * kepernyo ugy nezne ki, mintha minden rendben ment volna.
+       *
+       * A `never` hozzarendeles pontosan itt bukik el, forditaskor, es
+       * MEGNEVEZI a hianyzo mezot.
+       */
+      return kimaradtMezo(field);
   }
+}
+
+function kimaradtMezo(field: never): never {
+  throw new Error(`nem kezelt mezo a feloldasban: ${String(field)}`);
 }
 
 function enyem(
   field: ComparableField,
   patch: UpdateAssetInput,
   unitNames?: Record<string, string>,
+  categoryNames?: Record<string, string>,
 ): string {
   if (field === "status") return szoveg(ASSET_STATUS_LABELS, patch.status);
   if (field === "criticality")
     return szoveg(ASSET_CRITICALITY_LABELS, patch.criticality);
   if (field === "departmentId") return helyszin(patch.departmentId, unitNames);
+  if (field === "categoryId") return kategoria(patch.categoryId, categoryNames);
   return ures(patch[field] as string | null | undefined);
 }
 
@@ -353,6 +432,14 @@ function ovek(
    */
   if (field === "performanceUnitId")
     return current.performanceUnit ? current.performanceUnit.code : URES;
+  /**
+   * A KATEGORIANAL A NEV LATSZIK, ES A SZERVER MAR ADJA IS.
+   *
+   * Ha a nev valamiert hianyzik, az azonosito az utolso mentsvar -- egy ures
+   * cella azt allitana, hogy nincs kategoria, holott van.
+   */
+  if (field === "categoryId")
+    return current.category ?? (current.categoryId ? current.categoryId : URES);
   return ures(current[field]);
 }
 
@@ -374,6 +461,16 @@ function szoveg(
 function ures(value: string | null | undefined): string {
   if (value === null || value === undefined) return URES;
   return value.trim() === "" ? URES : value;
+}
+
+function kategoria(
+  value: string | null | undefined,
+  categoryNames?: Record<string, string>,
+): string {
+  if (value === null || value === undefined || value.trim() === "") return URES;
+  // UGYANAZ A VISSZAESES, mint a helyszinnel: az azonosito is kikerul, ha a
+  // nevet nem tudjuk. A nema „nincs megadva" torlesnek latszana.
+  return categoryNames?.[value] ?? value;
 }
 
 function helyszin(

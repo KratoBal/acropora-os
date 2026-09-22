@@ -11,7 +11,11 @@ import type { ServiceJobHandoverMailPreview } from "@acropora/types";
 import { headerSafe } from "./mail-header.js";
 import { TICKET_MAIL_ENV, TicketMailError } from "./gmail-mail.sender.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
-import { isMailEnvironmentReason, mailModeOf } from "./ticket-mail.rules.js";
+import {
+  isMailEnvironmentReason,
+  mailModeOf,
+  mailRedirect,
+} from "./ticket-mail.rules.js";
 import {
   handoverMailBody,
   handoverMailDefaultSubject,
@@ -113,6 +117,7 @@ export class HandoverMailService {
       job,
       decision: handoverMailDecision({
         mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+        redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
         pathMode: mailModeOf(this.environment.TICKET_MAIL_HANDOVER),
         departmentId: job.departmentId,
         customerId,
@@ -306,7 +311,10 @@ export class HandoverMailService {
     });
     await this.ticketMail.recordNotification({
       serviceJobId: job.id,
-      note: handoverMailAuditNote(decision),
+      note: handoverMailAuditNote(
+        decision,
+        mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+      ),
       actorUserId: input.actorUserId,
     });
     return { kind: "sent", recipients: decision.to.length };
@@ -340,7 +348,10 @@ export class HandoverMailService {
     if (!isMailEnvironmentReason(reason))
       await this.ticketMail.recordNotification({
         serviceJobId: job.id,
-        note: handoverMailAuditNote(decision),
+        note: handoverMailAuditNote(
+          decision,
+          mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+        ),
         actorUserId: input.actorUserId,
       });
     this.logger.log(`A lezárt hibajegy nem ment ki e-mailben (${reason}).`);

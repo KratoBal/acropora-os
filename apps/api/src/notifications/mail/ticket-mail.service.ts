@@ -9,6 +9,7 @@ import { ticketMailContent } from "./ticket-mail.content.js";
 import {
   isMailEnvironmentReason,
   mailAuditNote,
+  mailRedirect,
   mailModeOf,
   serviceJobOpenedMailDecision,
   ticketMailDecision,
@@ -146,6 +147,7 @@ export class TicketMailService {
 
     const decision = ticketMailDecision({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
       pathMode: mailModeOf(this.environment.TICKET_MAIL_WORKSHEET_SIGNED),
       openedById: context.openedById,
       opener: context.opener,
@@ -162,7 +164,10 @@ export class TicketMailService {
       if (!isMailEnvironmentReason(decision.reason))
         await this.repository.recordNotification({
           serviceJobId: input.serviceJobId,
-          note: mailAuditNote(decision),
+          note: mailAuditNote(
+            decision,
+            mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+          ),
           actorUserId: input.actorUserId,
         });
       this.logger.log(
@@ -232,7 +237,10 @@ export class TicketMailService {
 
     await this.repository.recordNotification({
       serviceJobId: input.serviceJobId,
-      note: mailAuditNote(decision),
+      note: mailAuditNote(
+        decision,
+        mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+      ),
       actorUserId: input.actorUserId,
     });
     return { kind: "sent" };
@@ -270,6 +278,7 @@ export class TicketMailService {
 
     const decision = serviceJobOpenedMailDecision({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
       pathMode: mailModeOf(this.environment.TICKET_MAIL_JOB_OPENED),
       recipients: input.recipients,
     });
