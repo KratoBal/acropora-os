@@ -89,17 +89,20 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
 /**
  * A DARABSZAM IS ALLITAS, A MERES DATUMAVAL -- nem `>=`, hanem PONTOS.
  *
- * UJRAMERVE 2026-09-22 (az egyseg-hatokor szelete): 15 hivasi hely
- * (service-assets 10, worksheets 4, suppliers 1). A definicios sorok NEM
+ * UJRAMERVE 2026-09-22 (az egyseg-hatokor szelete): 14 hivasi hely
+ * (service-assets 9, worksheets 4, suppliers 1). A definicios sorok NEM
  * szamitanak bele.
  *
  * MI JOTT AZ ELOZO MERES (13) OTA, ES MIERT -- nem elegendo a szamot atirni:
  *
  *   +1  `detailByQrToken`: a QR-ut 2026-09-22-ig NEM szurt sor-szinten. Balazs
- *       irta felul ("ne lassa", 08:55:25 UTC); a reszletek a vegpont jegyzeteben.
- *   +1  `detailByLabelCode`: a helyszin-tengely SAJAT agkent kerult melle
- *       (`egysegTengelyAsset`), mert a kozos `scopeWhereForAndBranch` a
- *       munkalapokkal es a hibajegyekkel osztozik.
+ *       irta felul ("ne lassa", 2026-09-22 08:55:25 UTC); a reszletek a vegpont
+ *       jegyzeteben allnak.
+ *
+ * ES AMI UGYANAZON A NAPON MEGJELENT, MAJD MERESRE ELTUNT: a cimke-ut egy
+ * kulon helyszin-tengelyt kapott, aztan visszavettuk. Az indoka megdolt -- a
+ * reszletek a tarolo `detailByLabelCode` jegyzeteben --, es vele egyutt a
+ * `egysegTengelyAsset` seged is kikerult, mert nulla hivohelye maradt.
  *
  * MIERT PONTOS ES NEM ALSO KORLAT: egy `>=` alak nem veszi eszre, ha egy
  * hatokor-hivas ELTUNIK, amig a tobbi megvan. Es egy UJ hivas eseten sem szol,
@@ -110,7 +113,7 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
  * es a datumot is frissitsd, kulonben a kovetkezo olvaso egy regi merESre
  * hivatkozik.
  */
-const VART_HIVASI_HELY = 15;
+const VART_HIVASI_HELY = 14;
 
 const SCOPE_HELPERS = [
   "scopeWhereForAndBranch",
@@ -119,11 +122,6 @@ const SCOPE_HELPERS = [
   // helyszin). EZ A LISTA KEZZEL IRT, tehat egy uj hatokor-seged CSENDBEN kikerulne
   // az orzo alol -- ezert kerul ide ugyanabban a korben, amiben megszuletett.
   "assetVisibilityForAndBranch",
-  // 2026-09-22: a helyszin-tengely onallo segedet kapott azoknak az utaknak,
-  // amik a KOZOS szurot hasznaljak a tulajdonra (ma egy ilyen van: a
-  // matricakod-kereses). A lista fenti sajat szabalya szerint ugyanabban a
-  // korben kerul ide, amiben megszuletett.
-  "egysegTengelyAsset",
 ];
 
 describe("a jogosultsági szűrő AND ágban áll, nem kulcsként", () => {

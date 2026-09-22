@@ -278,6 +278,24 @@ export function assetVisibilityForAndBranch(
        * allitja elo, tehat egy valos fixtura a feltetel mindket allasan
        * ugyanazt adna.
        */
+      /*
+        A VEVO-TULAJDONU ESZKOZ A HELYSZIN-TENGELYEN NEM TUD ATMENNI, mert a kod
+        MINDKET irasi uton nullara kenyszeriti a `departmentId` mezot
+        (`create` es `update`: `ownerType === "SUPPLIER" ? input.departmentId : null`).
+        A sajat jegyzetuk szerint a vevo-tulajdonu eszkozon `customerAddressId`
+        es `aquariumId` all helyette -- a ket mezo nem ugyanaz a fogalom.
+
+        EZ MA NEM VESZ EL SEMMIT, ES A NEVEZO TOBBET MOND, MINT A NULLA:
+        2026-09-22-en 83 eszkozbol 0 vevo-tulajdonu (acrobot merese az eles
+        adatbazison, acropora-prod-01; `customerAddressId` sem all egyetlen
+        soron sem). HA EZ A SZAM VALAHA NEM NULLA, EZ A DONTES UJRANYITANDO.
+
+        A MASIK ALAK, amit emiatt NEM valasztottunk: a helyszin-tengely csak ott
+        szurjon, ahol helyszin VAN. Az visszahozna az UGYFEL-SZINTU lathatosagot
+        erre a kategoriara -- egy vevo-tulajdonu eszkozt a vevo BARMELYIK embere
+        latna, helyszintol fuggetlenul --, vagyis pont azt, amit a gazda
+        2026-09-22 07:46:59 UTC-kor elutasitott.
+      */
       return {
         AND: [
           {

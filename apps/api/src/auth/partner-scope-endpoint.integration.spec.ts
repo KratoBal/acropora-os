@@ -395,11 +395,25 @@ describe(
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-A`,
             name: `${shared} eszköz A`,
-            customerId: customerA,
-            // A HELYSZIN 2026-09-22 OTA KELL: a vevo-hatokoru lathatosag a
-            // HOZZARENDELT helyszinekre szur, es a NULL azon nem megy at.
-            // Helyszin nelkul ez a fixtura nem a TULAJDON hatarat merne,
-            // hanem egy ures listat -- es minden lenti tiltas zold lenne.
+            /*
+              SZALLITOI TULAJDON A VEVO HELYSZINEN -- ES EZ A VALOS ALAK.
+
+              Merve 2026-09-22, a kodbol: a `create` ES az `update` is NULLARA
+              kenyszeriti a `departmentId` mezot, ha a tulajdonos VEVO
+              (`ownerType === "SUPPLIER" ? input.departmentId : null`). Vagyis
+              egy vevo-tulajdonu eszkoznek SOHA nincs helyszine -- a sajat
+              jegyzete szerint ott `customerAddressId` es `aquariumId` all.
+
+              A partner tehat a sajat helyszinen allo, SZALLITOI tulajdonu
+              eszkozt latja (a lathatosag masodik aga). Ugyanezt mutatja acrobot
+              2026-09-21-i eles merese is: 79 eszkozbol 79 szallitoi tulajdonu.
+
+              A KORABBI FIXTURA VEVO-TULAJDONT ADOTT HELYSZIN NELKUL, es 2026-09-22
+              elott az is lathato volt. A mai szabaly alatt az a sor nem letezhet
+              ugy, hogy latszik -- egy fixtura, ami lehetetlen allapotot mer,
+              semmit nem bizonyit.
+            */
+            supplierId: supplierA,
             departmentId: departmentA.id,
           },
         }),
@@ -407,7 +421,9 @@ describe(
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-B`,
             name: `${shared} eszköz B`,
-            customerId: customerB,
+            // Ugyanaz az alak, mint az A eszkoznel: szallitoi tulajdon a MASIK
+            // vevo helyszinen. A ket sor CSAK a helyszinben ter el.
+            supplierId: supplierB,
             departmentId: departmentB.id,
           },
         }),
@@ -530,7 +546,8 @@ describe(
           // Ezert a lista-allitasok SOROLJAK FEL ezt a sort is, ahelyett hogy
           // egy allapot-trukkel rejtenenk el.
           name: `${shared} eszköz A törléshez`,
-          customerId: customerA,
+          supplierId: supplierA,
+          departmentId: departmentOfA,
         },
       });
       assetForDeletes = forDeletes.id;
@@ -565,7 +582,8 @@ describe(
         data: {
           assetNumber: `${TEST_ASSET_PREFIX}${suffix}-W`,
           name: `${shared} eszköz A íráshoz`,
-          customerId: customerA,
+          supplierId: supplierA,
+          departmentId: departmentOfA,
         },
       });
       assetForWrites = forWrites.id;
@@ -1121,12 +1139,19 @@ describe(
       });
 
       /**
-       * EZ AZ AN ALLITAS, AMIERT A KET FELIDO EGYUTT TARTOZIK. A `scan/:qrToken`
-       * vegpont SZANDEKOSAN nem ellenoriz tulajdonost (a token 128 bites veletlen
-       * uuid), tehat a lista szurese az EGYETLEN dolog, ami miatt egy partner nem
-       * jut hozza egy idegen eszkoz tokenjehez. A tokent a valasz EGESZEBEN
-       * keressuk, nem csak a sor azonositojat nezve: egy szivargas nem feltetlenul
-       * kulon sorkent jelenik meg.
+       * A TOKEN A VALASZ EGESZEBEN NEM JELENHET MEG, nem csak kulon sorkent: egy
+       * szivargas nem feltetlenul uj sor alakjaban jon.
+       *
+       * === A JEGYZET INDOKA 2026-09-22-EN MEGVALTOZOTT ===
+       *
+       * Itt az allt, hogy a `scan/:qrToken` vegpont SZANDEKOSAN nem ellenoriz
+       * tulajdonost, tehat a lista szurese az EGYETLEN vedelem az idegen token
+       * ellen. Ez MA MAR NEM IGAZ: Balazs 2026-09-22 08:55:25 UTC-kor felulirta
+       * ("ne lassa"), es a beolvasas is a hivo lathatosagan belul marad.
+       *
+       * AZ ALLITAS ATTOL MEG ALL, es szandekosan maradt: a ket vedelem KULON tud
+       * elromlani. Ha a beolvasas szurese egyszer kiesne, ez a sor az EGYETLEN,
+       * ami meg megfogja, hogy a token egyaltalan a partner kezebe jut.
        */
       it("az idegen eszköz qrToken-je SEHOL nem jelenik meg a válaszban", async () => {
         const forA = await assets.list(

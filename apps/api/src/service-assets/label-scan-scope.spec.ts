@@ -28,6 +28,22 @@ function forras(): string {
   return readFileSync(REPO, "utf8");
 }
 
+/**
+ * A MEGJEGYZESEK NELKULI SZOVEG.
+ *
+ * MIERT KELL, ES EZ MERT ESET (2026-09-22): a "nem visel helyszin-tengelyt"
+ * allitas a `departmentId` szora nez. A metodus folott alló jegyzet MAGA is
+ * leirja ezt a szot -- a sajat indoklasunkban --, tehat a nyers forrason az
+ * allitas SAJAT MAGATOL pirosodott ki.
+ *
+ * Egy forras-olvaso allitas a KOMMENTEKET is latja, es ez mindket iranyban
+ * baj: egy magyarazo bekezdes HAMIS bukast tud okozni, egy masik esetben pedig
+ * HAMIS ZOLDET (ha epp a keresett alakot idezi).
+ */
+function kommentNelkul(szoveg: string): string {
+  return szoveg.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/.*$/gm, " ");
+}
+
 /** Egy metodus torzse a szignaturatol a kovetkezo metodus kezdeteig. */
 function metodusTorzs(source: string, nev: string): string {
   const start = source.indexOf(`async ${nev}(`);
@@ -45,20 +61,42 @@ describe("a matricakódos keresés hatóköre", () => {
   });
 
   /**
-   * A HELYSZIN-TENGELY KULON ALLITAST KAP, ES EZ NEM ISMETLES.
+   * A HELYSZIN-TENGELY EZEN AZ UTON MA NINCS -- ES EZ ALLITAS, NEM HIANY.
    *
-   * A fenti allitas a TULAJDON-szurot nezi. A ketto KULON tud eltunni: a
-   * matricakod 260 ezer lehetoseg, tehat vegigprobalhato, es a tulajdon-szuro
-   * MEGLETE mellett is a sajat ugyfel MASIK helyszinet adna vissza -- pontosan
-   * azt, amit a gazda kizart (2026-09-22 07:46:59 UTC).
+   * Az indok a tarolo jegyzetében all, meressel: a kozos tulajdon-szuro
+   * vevo-hatokornel CSAK vevo-tulajdonu sorra illeszkedik, vevo-tulajdonu
+   * sornak viszont SOHA nincs helyszine -- a ketto egyutt nullazna ezt az utat,
+   * nem szukitene.
    *
-   * A SAJAT AG, ES NEM A KOZOS FUGGVENY: a `scopeWhereForAndBranch` kozos a
-   * munkalapokkal, a hibajegyekkel es a partner-listaval. Egy szukites ott
-   * mindegyik hivojanak megvaltoztatna a jelenteset.
+   * HA VALAKI MEGIS BEIRJA, EZ AZ ALLITAS PIROSODIK, es akkor a tarolo
+   * jegyzetét kell elolvasnia, mielott atirja.
    */
-  it("a detailByLabelCode a HELYSZIN-tengelyt is AND ágban használja", () => {
-    const torzs = metodusTorzs(forras(), "detailByLabelCode");
-    assert.match(torzs, /egysegTengelyAsset\(scope, assignedUnitIds\)/);
+  it("a detailByLabelCode NEM visel helyszín-tengelyt, és ez mérésen áll", () => {
+    const torzs = kommentNelkul(metodusTorzs(forras(), "detailByLabelCode"));
+    /*
+      A `departmentId` SZORA nezunk, nem egy segedfuggveny NEVERE.
+
+      Az elso alakom a `egysegTengelyAsset(` hivast tagadta -- csakhogy azt a
+      segedet ugyanabban a korben ki is vezettuk, tehat az allitas egy NEM
+      LETEZO nevre szolt volna: nem tudott volna elbukni. A mezonevre nezve
+      barmelyik alak fennakad rajta (kozvetlen feltetel, masik seged, beirt
+      objektum).
+    */
+    assert.equal(
+      /departmentId/.test(torzs),
+      false,
+      "a címke-út helyszín-tengelyt kapott -- olvasd el a tároló jegyzetét, mielőtt bent hagyod",
+    );
+  });
+
+  /**
+   * ISMERT POZITIV KONTROLL A FENTI TAGADASHOZ: a mezonev MASHOL a fajlban OTT
+   * VAN. Enelkul a tagadas akkor is zold lenne, ha a kivagas ures sztringet ad.
+   */
+  it("KONTROLL: a departmentId szó a fájlban egyébként előfordul", () => {
+    // A KONTROLL IS KOMMENT NELKUL NEZ, kulonben a sajat jegyzeteink
+    // igazolnak egy olyan kivagast, ami a KODBOL semmit nem hozott.
+    assert.match(kommentNelkul(forras()), /departmentId/);
   });
 
   /**

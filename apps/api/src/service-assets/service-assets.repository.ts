@@ -356,28 +356,6 @@ export function assetDetailWhere(
   };
 }
 
-/**
- * A HELYSZIN-TENGELY ONALLOAN, AZOKNAK AZ UTAKNAK, AMIK NEM AZ
- * `assetVisibilityForAndBranch` EGESZET hasznaljak.
- *
- * Ma egyetlen ilyen ut van: a matricakod-kereses, ahol a tulajdon-tengelyt a
- * KOZOS `scopeWhereForAndBranch` adja. Azert kulon fuggveny es nem beirt alak,
- * mert igy a ket helyen allo szabaly EGY forrasbol jon -- ha a tengely
- * jelentese valtozik (peldaul a helyszin nelkuli sorra), egy helyen valtozik.
- *
- * A BELSOS HIVO URES AGAT KAP, ugyanugy, mint a teljes fuggvenyben.
- */
-export function egysegTengelyAsset(
-  scope: PartnerScope,
-  assignedUnitIds: readonly string[],
-): Prisma.AssetWhereInput {
-  // CSAK A VEVO-HATOKOR, ugyanaz a dontes es ugyanaz az indok, mint a teljes
-  // `assetVisibilityForAndBranch` fuggvenyben: ma nulla szallitoi hatokoru
-  // felhasznalo letezik, tehat ott nincs pozitiv kontroll.
-  if (scope.kind !== "customer") return {};
-  return { departmentId: { in: [...assignedUnitIds] } };
-}
-
 export function assetListWheres(
   scope: PartnerScope,
   assignedUnitIds: readonly string[],
@@ -1283,33 +1261,37 @@ export class ServiceAssetsRepository extends Repository {
   async detailByLabelCode(
     code: string,
     scope: PartnerScope,
-    assignedUnitIds: readonly string[],
   ): Promise<AssetDetail | null> {
     /*
-      A HELYSZIN-TENGELY SAJAT AG, ES A KOZOS SZURO ERINTETLEN MARAD.
+      A HELYSZIN-TENGELY EZEN AZ UTON MA NEM ALL, ES EZ MERESEN ALAPUL, NEM
+      FELEDEKENYSEGEN.
 
-      A fenti jegyzet indoka egy szinttel melyebben is all: a matricakod 260
-      ezer lehetoseg, tehat vegigprobalhato. A mai szabaly utan a vegigprobalas
-      mar nem MAS partner eszkozeit adna, hanem a SAJAT ugyfel masik helyszinet
-      -- pontosan azt, amit a gazda kizart (2026-09-22 07:46:59 UTC).
+      ELOSZOR BEKERULT, a kovetkezo ervvel: a matricakod 260 ezer lehetoseg,
+      tehat vegigprobalhato, es a vegigprobalas a sajat ugyfel MASIK helyszinet
+      adna vissza. Az erv HELYESNEK latszott, es MERESSEL dolt meg:
 
-      AMIT SZANDEKOSAN NEM VALTOZTATOK: a tulajdon-tengelyen ez az ut ma
-      szukebb, mint a lista (`scopeWhereForAndBranch` a sajat `customerId`-t
-      nezi, nem a reszlegen at lathato sort). Ez KORABBI elteres, nem ennek a
-      szeletnek a kerdese -- egy hozzaigazitas itt TAGITAS lenne.
+        1. ezen az uton a tulajdon-szuro a KOZOS `scopeWhereForAndBranch`, ami
+           vevo-hatokornel PONTOSAN `{ customerId }` -- tehat CSAK vevo-tulajdonu
+           sorra illeszkedik;
+        2. vevo-tulajdonu sornak SOHA nincs helyszine (a `create` es az `update`
+           is nullara kenyszeriti a `departmentId` mezot).
 
-      ES A JEGYZET AZERT ALL A HIVAS FOLOTT, NEM KOZOTTE: a
-      `partner-scope-and-branch.spec.ts` a hivast megelozo 120 karakterben
-      keresi az `AND: [` nyitast. Egy kozbeszurt bekezdes kitolja onnan, es az
-      orzo HAMIS bukast ad -- ez elso korben meg is tortent.
+      A ketto egyutt azt jelenti, hogy `{ customerId }` ES
+      `{ departmentId: { in: [...] } }` egyszerre SOHA nem teljesul: a tengely
+      nem SZUKITENE ezt az utat, hanem NULLAZNA. Es a vegigprobalas veszelye sem
+      all fenn ugy, ahogy gondoltuk -- ez az ut mas partner helyszinet eleve nem
+      adja vissza, mert a tulajdon-szuro nem engedi.
+
+      AMI EBBOL NYITOTT KERDES, ES NEM EN DONTOM EL: ez az ut a tulajdon
+      tengelyen SZUKEBB, mint a lista (`assetVisibilityForAndBranch`), tehat a
+      vevo helyszinen allo SZALLITOI eszkozt a kodrol nem talalja meg. Eles
+      adaton (2026-09-22, 83 eszkoz, MIND szallitoi) ez azt jelenti, hogy a
+      partner ma egyetlen eszkozt sem talal meg matricakodrol. A hozzaigazitas
+      TAGITAS lenne, ezert kulon dontest kiven -- felirva, nem elvegezve.
     */
     const row = await prisma.asset.findFirst({
       where: {
-        AND: [
-          { label: { code } },
-          scopeWhereForAndBranch(scope),
-          egysegTengelyAsset(scope, assignedUnitIds),
-        ],
+        AND: [{ label: { code } }, scopeWhereForAndBranch(scope)],
       },
       include: assetDetailInclude,
     });

@@ -50,13 +50,6 @@ const CODE_E = "Z9005";
 const CODE_F = "Q7431";
 
 let customerId = "";
-/**
- * A FIXTURA HELYSZINE. 2026-09-22 ota kell: a matricakod-kereses a HOZZARENDELT
- * helyszinekre is szur, tehat egy helyszin NELKULI eszkozt a partner-hatokoru
- * kereses nem adna vissza -- es akkor a lenti pozitiv kontroll nem a TULAJDONT
- * merne, hanem egy ures listat.
- */
-let helyszinId = "";
 let actorUserId = "";
 
 function createInput(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
@@ -65,7 +58,6 @@ function createInput(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
     ownerId: customerId,
     kind: "EQUIPMENT",
     name: `${PREFIX} teszteszköz`,
-    departmentId: helyszinId,
     ...over,
   } as CreateAssetDto;
 }
@@ -123,11 +115,6 @@ async function removeLeftovers() {
   await prisma.asset.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
   });
-  // A HELYSZIN AZ ESZKOZOK UTAN ES A VEVO ELOTT: az `Asset.departmentId`
-  // kapcsolatan `Restrict` all.
-  await prisma.worksheetDepartment.deleteMany({
-    where: { customer: { customerNumber: { startsWith: PREFIX } } },
-  });
   await prisma.customer.deleteMany({
     where: { customerNumber: { startsWith: PREFIX } },
   });
@@ -174,12 +161,6 @@ describe(
         select: { id: true },
       });
       actorUserId = user.id;
-
-      const helyszin = await prisma.worksheetDepartment.create({
-        data: { customerId, code: "LBL", name: `${PREFIX} helyszín` },
-        select: { id: true },
-      });
-      helyszinId = helyszin.id;
     });
 
     after(async () => {
@@ -300,11 +281,10 @@ describe(
     it("a saját partner MEGTALÁLJA az eszközét a matricakódról", async () => {
       // ISMERT POZITIV KONTROLL a lenti tagadashoz. Enelkul egy olyan
       // lekerdezes is atmenne, ami SENKINEK nem ad vissza semmit.
-      const found = await repository.detailByLabelCode(
-        CODE_C,
-        { kind: "customer", customerId },
-        [helyszinId],
-      );
+      const found = await repository.detailByLabelCode(CODE_C, {
+        kind: "customer",
+        customerId,
+      });
       assert.ok(found, "a saját eszköz látszik a saját hatókörben");
       // A KOD ALAPJAN TALALT ESZKOZ TENYLEG AZ, AMIRE A MATRICA KERULT.
       // Enelkul az allitas beerne barmelyik eszkozzel, amit a lekerdezes ad.
@@ -324,17 +304,10 @@ describe(
         },
         select: { id: true },
       });
-      /*
-        UGYANAZ A HELYSZIN-LISTA MEGY AT, MINT A POZITIV ESETBEN, es ez
-        szandekos: igy az EGYETLEN dolog, ami kizarhatja a sort, a TULAJDON.
-        Ures listaval ez az allitas akkor is zold lenne, ha a tulajdon-szuro
-        egyaltalan nem letezne.
-      */
-      const found = await repository.detailByLabelCode(
-        CODE_C,
-        { kind: "customer", customerId: masik.id },
-        [helyszinId],
-      );
+      const found = await repository.detailByLabelCode(CODE_C, {
+        kind: "customer",
+        customerId: masik.id,
+      });
       assert.equal(found, null, "más partner eszköze nem érhető el a kódról");
     });
 

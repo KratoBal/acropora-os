@@ -138,6 +138,23 @@ describe(
         fixtura nem a TULAJDON hatarat merne, hanem egy ures listat -- es minden
         lenti tiltas zold lenne, barmit is csinal a kod.
       */
+      /*
+        SZALLITO IS KELL A FIXTURABA, ES EZ NEM DISZ.
+
+        Merve 2026-09-22 a kodbol: a `create` es az `update` is NULLARA
+        kenyszeriti a `departmentId` mezot vevo-tulajdonu eszkozon. Vagyis egy
+        partner a sajat helyszinen SZALLITOI tulajdonu eszkozt lat (a
+        lathatosag masodik aga) -- ugyanaz, amit acrobot eles merese mutat:
+        79 eszkozbol 79 szallitoi tulajdonu.
+      */
+      const szallito = await prisma.supplier.create({
+        data: {
+          code: `HTS${suffix}`.slice(0, 12),
+          name: `HTTP szállító ${suffix}`,
+        },
+        select: { id: true },
+      });
+
       const [helyA, helyB] = await Promise.all([
         prisma.worksheetDepartment.create({
           data: {
@@ -227,7 +244,7 @@ describe(
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-A`,
             name: `HTTP eszköz A ${suffix}`,
-            customerId: customerA.id,
+            supplierId: szallito.id,
             departmentId: helyA.id,
           },
         }),
@@ -235,7 +252,7 @@ describe(
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-B`,
             name: `HTTP eszköz B ${suffix}`,
-            customerId: customerB.id,
+            supplierId: szallito.id,
             departmentId: helyB.id,
           },
         }),
@@ -277,7 +294,7 @@ describe(
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-D`,
             name: `HTTP eszköz törléshez ${suffix}`,
-            customerId: customerA.id,
+            supplierId: szallito.id,
             departmentId: helyA.id,
           },
         })
@@ -352,6 +369,13 @@ describe(
       }
       await prisma.user.deleteMany({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+      });
+      // A SZALLITO AZ ESZKOZOK UTAN: az `Asset.supplierId` ra mutat. Kulon
+      // sor, mert a suite 2026-09-22 ota szallitoi tulajdonu eszkozt hasznal,
+      // es egy takaritatlan szallito a KOVETKEZO futast buktatna el az egyedi
+      // kodon -- olyan hibaval, aminek semmi koze a mert viselkedeshez.
+      await prisma.supplier.deleteMany({
+        where: { code: { startsWith: "HTS" } },
       });
       // A HELYSZIN az eszkozok ES a felhasznalok UTAN megy: az `Asset` es a
       // `UserWorksheetDepartment` is ra mutat. A masodik kaszkadol, az elso nem.
