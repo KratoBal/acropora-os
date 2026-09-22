@@ -1,0 +1,24 @@
+# A `variant` PARAMETER ATVETELENEK KALIBRACIOJA (d0fd9857, a #951-hez).
+#
+# A RONTAS: a kontrolleren a lekerdezesi parameter NEVE csuszik el
+# (`@Query("variant")` -> `@Query("valtozat")`). A metodus torzse beture
+# valtozatlan, a parameter tovabbra is atadodik a szolgaltatasnak -- csak SOHA
+# nem telik meg, mert a kliens `variant` neven kuldi.
+#
+# MIERT EZ AZ ALAK: ez egy VALODI visszaeses, nem mesterseges. Es LEFORDUL: a
+# parameter deklaralva marad es hasznalva is van, tehat nincs TS6133. Egy le nem
+# fordulo rontas nulla tesztet futtat, es akkor a piros hianya semmit nem jelent.
+#
+# === A KET VART NYOM ===
+#
+# 1. A NEV, SORSZAM NELKUL. A sorszamot elore nem tudhatom; ez a suite nyolcadik
+#    tesztje lett, de egy uj teszt barhol eltolja. A sorszam nelkuli alak a #945
+#    ota illeszkedik.
+#
+# 2. AZ OK, A SAJAT UZENETEMMEL. Ez valasztja szet a harom lehetseges bukast:
+#    ha a VEGPONT halna el, a status-allitas bukna mas szoveggel; ha a KONTROLL
+#    bukna (parameter nelkul nem az eredeti jon), annak is sajat mondata van.
+#    Ez a szoveg CSAK akkor jelenik meg, ha a belyegkep-keres az EREDETIT adta
+#    vissza -- vagyis a parameter nem ert el a szolgaltatasig.
+not ok - a letöltés a variant paramétert VALÓDI HTTP-n is átveszi
+a variant paraméter nem ért el a szolgáltatásig: az eredeti jött vissza

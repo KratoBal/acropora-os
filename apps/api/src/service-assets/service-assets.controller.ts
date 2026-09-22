@@ -404,7 +404,9 @@ export class ServiceAssetsController {
      * A LETOLTES EZT SOHA NEM ADJA MEG, es ez megkotes: a letoltes, a PDF es a
      * hiteles peldany a teljes meretu fajlbol megy.
      */
-    @Query("variant") variant?: string,
+    // MERES-RONTAS: a lekerdezesi parameter NEVE elcsuszik, tehat a kliens
+    // altal kuldott `variant` soha nem er ide. NE OLVASZD BE.
+    @Query("valtozat") variant?: string,
   ) {
     // A KET FORRAS KOZTI DONTES A SZOLGALTATASE, nem a controlleré: az a
     // dolga, hogy a valaszt osszerakja, nem az, hogy tudja, hol allnak a
