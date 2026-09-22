@@ -122,14 +122,7 @@ describe("a jegy és a csatolmányai ugyanazt a láthatóságot használják", (
     // ES A KET TENGELY TENYLEG OTT VAN: enelkul a fenti sor ket URES
     // objektumot is osszevethetne, es zold maradna.
     assert.deepEqual(csatolmany, {
-      OR: [
-        { openedById: "user-2" },
-        {
-          customer: {
-            worksheetDepartments: { some: { id: { in: EGYSEGEK } } },
-          },
-        },
-      ],
+      OR: [{ openedById: "user-2" }, { departmentId: { in: EGYSEGEK } }],
     });
   });
 });

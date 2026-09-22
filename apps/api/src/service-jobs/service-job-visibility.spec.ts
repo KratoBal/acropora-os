@@ -49,15 +49,73 @@ describe("a hibajegy-láthatóság két tengelye", () => {
       unitIds: ["u1", "u2"],
     });
     assert.deepEqual(where, {
-      OR: [
-        { openedById: "user-1" },
+      OR: [{ openedById: "user-1" }, { departmentId: { in: ["u1", "u2"] } }],
+    });
+  });
+
+  /**
+   * AZ AZ ALLITAS, AMI AZ ELES HIBAT ELKAPTA VOLNA (2026-09-22, c654a5d4).
+   *
+   * A fenti `deepEqual` az ALAKOT meri: hogy ket tengely all OR-ban, es hogy a
+   * nyito az elso. Ez akkor is zold volt, amikor az egyseg-tengely a PARTNERT
+   * szurte a sajat egysegeire -- olyan feltetellel, ami az ugyfel minden
+   * jegyere igaz. A keszlet tehat egy maximalisan megengedo tengelyt rogzitett,
+   * es a `deepEqual` ezt szentesitette.
+   *
+   * EZ AZ ALLITAS A JELENTESRE KERDEZ, NEM AZ ALAKRA: az egyseg-tengely a SOR
+   * sajat mezojen alljon, ne egy relacion at a partner gyujtemenyere. A ketto
+   * kulonbsege nem stilus: az elso szukit, a masodik nem szur semmit.
+   */
+  /**
+   * A VEVO-HATOKOR EGYSEGEKKEL: EZT AZ AGAT MA SEMMI NEM MERTE.
+   *
+   * A fenti `deepEqual` a SZALLITO-hatokorre szol, es ott mindent rogzit --
+   * mellette egy kulcs-szintu allitas ugyanazon a bemeneten nem tudna egyedul
+   * elbukni. A vevo-hatokor egysegekkel viszont MASIK ag (`AND` burokkal), es
+   * arra eddig egyetlen allitas sem allt: az elso teszt URES egyseg-halmazzal
+   * meri ugyanezt a hatokort.
+   */
+  it("vevő-hatókörnél az egység-tengely a SOR mezőjén áll, nem a partner gyűjteményén", () => {
+    const where = serviceJobVisibilityWhere({
+      scope: { kind: "customer", customerId: "customer-a" },
+      userId: "user-a",
+      unitIds: ["u1", "u2"],
+    });
+
+    assert.deepEqual(where, {
+      AND: [
+        { customerId: "customer-a" },
         {
-          customer: {
-            worksheetDepartments: { some: { id: { in: ["u1", "u2"] } } },
-          },
+          OR: [
+            { openedById: "user-a" },
+            { departmentId: { in: ["u1", "u2"] } },
+          ],
         },
       ],
     });
+
+    /**
+     * ES A JELENTES KULON, MERT AZ ALAK-ALLITAS EZT NEM MONDJA KI.
+     *
+     * Az eles hiba (2026-09-22, c654a5d4) alatt a fenti `deepEqual` PARJA is
+     * zold volt -- csak epp egy olyan tengelyt rogzitett, ami a partner
+     * gyujtemenyet szurte, es ezert az ugyfel MINDEN jegyere igaz volt.
+     * Egy alak-allitas nem tudja megkulonboztetni a szukito es a mindent
+     * atengedo tengelyt: mindketto "ket ag OR-ban".
+     */
+    const es = (where as { AND: Record<string, unknown>[] }).AND;
+    const belso = es[1] as { OR: Record<string, unknown>[] };
+    const egyseg = belso.OR[1];
+    assert.ok(egyseg, "a második ág megvan");
+    assert.deepEqual(
+      Object.keys(egyseg),
+      ["departmentId"],
+      "az egység-tengely EGYETLEN kulcsa a sor saját mezője",
+    );
+    assert.ok(
+      !("customer" in egyseg),
+      "a tengely NEM megy át a partner relációján -- az minden sorára igaz lenne",
+    );
   });
 
   /**

@@ -125,14 +125,7 @@ describe("a láthatóság eljut a lekérdezésig", () => {
     assert.deepEqual(kapott.where, {
       AND: [
         {
-          OR: [
-            { openedById: "user-2" },
-            {
-              customer: {
-                worksheetDepartments: { some: { id: { in: ["u1"] } } },
-              },
-            },
-          ],
+          OR: [{ openedById: "user-2" }, { departmentId: { in: ["u1"] } }],
         },
         REJTETT_NELKUL,
       ],
