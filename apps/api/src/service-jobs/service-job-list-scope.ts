@@ -8,6 +8,20 @@ import type { Prisma, ServiceJobStatus } from "@acropora/database";
 const FINISHED: ServiceJobStatus[] = ["COMPLETED", "CANCELLED"];
 
 /**
+ * LEZART-E EGY JEGY -- UGYANABBOL A LISTABOL, NEM EGY MASODIKBOL.
+ *
+ * A leiras-szerkesztes belsos hatara ugyanaz a fogalom, mint a lista `closed`
+ * hatokore, es ezert NEM ir uj felsorolast: ket lista ugyanarra a fogalomra
+ * pontosan azt a nema elcsuszast szulne, amit a fenti jegyzet megnevez.
+ *
+ * KET ERTEKU, ES EZ A TESZTBEN IS SZAMIT: egy csak `COMPLETED`-re irt allitas
+ * zold maradna, ha valaki a `CANCELLED`-et kihagyja.
+ */
+export function isFinishedServiceJobStatus(status: ServiceJobStatus): boolean {
+  return FINISHED.includes(status);
+}
+
+/**
  * A LISTA NEGY HATOKORE.
  *
  * Balazs kerese (2026-09-17, Discord): "en szurni szeretnem: osszes, nyitott,
