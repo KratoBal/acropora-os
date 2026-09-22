@@ -31,7 +31,11 @@
 
 import type { ServiceJobHandoverMailSkipReason } from "@acropora/types";
 
-import { mailGate } from "./ticket-mail.rules.js";
+import {
+  mailGate,
+  redirectAuditSuffix,
+  type MailRedirect,
+} from "./ticket-mail.rules.js";
 
 /** Egy jelolt cimzett, ugy, ahogy az adatbazisbol jon. */
 export interface HandoverRecipient {
@@ -80,6 +84,7 @@ export type HandoverMailDecision =
 export function handoverMailDecision(input: {
   mode: "off" | "live";
   pathMode: "off" | "live";
+  redirect: MailRedirect;
   departmentId: string | null;
   customerId: string | null;
   recipients: readonly HandoverRecipient[];
@@ -141,8 +146,11 @@ export function handoverMailDecision(input: {
  * cimzettek CIMET ez a sor szandekosan nem viszi: az a kerdes nyitva all a
  * kartyan, mert egy masik, mar meghozott dontesbe utkozik.
  */
-export function handoverMailAuditNote(decision: HandoverMailDecision): string {
+export function handoverMailAuditNote(
+  decision: HandoverMailDecision,
+  redirect: MailRedirect,
+): string {
   if (decision.kind === "skip")
     return `A lezárt hibajegy nem ment ki e-mailben (${decision.reason}).`;
-  return `A lezárt hibajegy kiküldve e-mailben, ${decision.to.length} címzettnek.`;
+  return `A lezárt hibajegy kiküldve e-mailben, ${decision.to.length} címzettnek.${redirectAuditSuffix(redirect)}`;
 }
