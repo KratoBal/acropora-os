@@ -20,6 +20,7 @@ import {
   type WorksheetVersionStatus,
 } from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { belsosIrasEngedett } from "@/lib/auth/hatokor";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
   worksheetAssigneeLine,
@@ -154,11 +155,16 @@ export default function WorksheetsScreen() {
         </Text>
 
         {/*
-          ÚJ LAP A HELYSZÍNRŐL. Csak `worksheetsManage` joggal látszik, ugyanaz a
-          kapu, ami a szerveren az írást védi -- egy gomb, ami 403-mal tér
-          vissza, rosszabb, mint egy gomb, ami nincs ott.
+          ÚJ LAP A HELYSZÍNRŐL. Két kapu, és a MÁSODIK 2026-09-22-én került ide.
+
+          A `worksheetsManage` jog ÖNMAGÁBAN nem elég: a `PARTNER_SERVICE`
+          szerep VISELI ezt a jogot (a szerver tényleg megadja), a munkalap
+          LÉTREHOZÁSÁT viszont a szerver a HATÓKÖRHÖZ köti
+          (`requireInternalWriter`), és partnernek `Forbidden`-t ad. Egy gomb,
+          ami 403-mal tér vissza, rosszabb, mint egy gomb, ami nincs ott -- és
+          a mondat alatta megmondja, MIÉRT nincs.
         */}
-        {capabilities?.worksheetsManage ? (
+        {capabilities?.worksheetsManage && user && belsosIrasEngedett(user) ? (
           <Pressable
             accessibilityRole="button"
             onPress={() => router.push("/worksheets/new")}
@@ -169,6 +175,17 @@ export default function WorksheetsScreen() {
           >
             <Text style={styles.newButtonText}>Új munkalap</Text>
           </Pressable>
+        ) : capabilities?.worksheetsManage ? (
+          /*
+            A REJTES NEM ELEG: a szerver uzenete („belsos lepes") egy VALODI
+            szabalyt mond ki, es a partnernek meg kell tudnia, miert nincs ott
+            a gomb. Enelkul a hianyzo gomb ugyanugy nez ki, mint egy elromlott
+            kepernyo.
+          */
+          <Text style={styles.partnerMegjegyzes}>
+            A munkalapot a szerviz készíti. Itt a saját hibajegyeihez tartozó
+            lapok olvashatók.
+          </Text>
         ) : null}
 
         <Pressable
@@ -422,6 +439,12 @@ export default function WorksheetsScreen() {
 }
 
 const styles = StyleSheet.create({
+  partnerMegjegyzes: {
+    color: "#8fb3c4",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
   safeArea: { flex: 1, backgroundColor: "#071827" },
   container: { padding: 18, paddingBottom: 48, gap: 12 },
   centered: {

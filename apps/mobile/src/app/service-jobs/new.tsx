@@ -23,6 +23,7 @@ import {
   uploadServiceJobPhotos,
 } from "@/lib/api/service-jobs";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { belsosIrasEngedett } from "@/lib/auth/hatokor";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -787,7 +788,16 @@ export default function NewServiceJobScreen() {
           atlepett a jegy adatlapjara, es ott all ugyanez a gomb -- a szerver
           azonositojaval.
         */}
-        {sorbanAlloJegy ? (
+        {/*
+          A HARMADIK HIVOHELY, ES UGYANAZ A KET KAPU (2026-09-22).
+
+          Ez a gomb a SORBA TETT jegy utan kinalja a munkalapot. A hatokor itt
+          is dont: partnernek a szerver nem engedi a letrehozast, tehat a gomb
+          helyett mondat all. A harom hivohely KULON-KULON all, es az orzo
+          kulon-kulon is meri oket -- egy javitas, ami csak kettot fed,
+          csendben hagyna egy utat nyitva.
+        */}
+        {sorbanAlloJegy && user && belsosIrasEngedett(user) ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Munkalap nyitása ehhez a jegyhez"
@@ -803,6 +813,10 @@ export default function NewServiceJobScreen() {
               Munkalap nyitása ehhez a jegyhez
             </Text>
           </Pressable>
+        ) : sorbanAlloJegy ? (
+          <Text style={styles.hint}>
+            A munkalapot a szerviz készíti ehhez a hibajegyhez.
+          </Text>
         ) : null}
 
         <Pressable
@@ -831,6 +845,8 @@ export default function NewServiceJobScreen() {
 }
 
 const styles = StyleSheet.create({
+  /* A mondat, ami a gomb helyen all partner-hatokorben. */
+  hint: { color: "#8fb3c4", fontSize: 13, lineHeight: 19 },
   safeArea: { backgroundColor: "#06202e", flex: 1 },
   page: { gap: 12, padding: 16 },
   block: { backgroundColor: "#0d2a3a", borderRadius: 12, gap: 8, padding: 14 },

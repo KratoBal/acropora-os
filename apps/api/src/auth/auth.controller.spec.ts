@@ -125,6 +125,54 @@ describe("AuthController", () => {
     assert.ok(munkamenet.navigation.length > 0);
   });
 
+  /**
+   * A HATOKOR KET MEZOJE BENNE VAN A KIADOTT TORZSBEN -- PARTNER FIOKNAL IS.
+   *
+   * MIERT KELL EZ AZ ALLITAS (merve 2026-09-22): a telefon a munkalap-gombot a
+   * hatokorhoz akarja kotni, es ahhoz a `customerId` / `supplierId` mezot kell
+   * olvasnia a `/auth/me` valaszabol. Eddig HAROM forras tamasztotta ala, hogy
+   * a ket mezo "a droton van": a kozos TIPUS, a kezelo KODJA es a feloldo.
+   *
+   * MIND A HAROM A SZERVER OLDALA -- es pontosan ez a bizonyitek-fajta bukott
+   * meg ma este ketszer: a mobil `apiRequest<ServiceJobDetail>` alakot kert,
+   * es a tipus nyugtatta meg a forditot, mikozben a szerver mast adott.
+   *
+   * EZ AZ ALLITAS A TENYLEG ELOALLITOTT TORZSET nezi: meghivja a kezelot, es a
+   * VALASZ kulcsait allitja. Nem a tipusbol olvas.
+   *
+   * AMIT EZ MEG IGY SEM BIZONYIT, es ezert all itt kiirva: nem a dróton mert
+   * valasz. Kozbe eshetne egy valasz-szerializalo -- MERVE: nincs ilyen. Az
+   * `app.configuration.ts` EGYETLEN globalis eleme egy `ValidationPipe`
+   * (`transform`, `whitelist`), es az a BEJOVO torzset szuri, nem a kimenot.
+   * Global interceptor es `ClassSerializerInterceptor` sehol.
+   */
+  it("a /auth/me valasza VISZI a hatokor ket mezojet, partner fioknal is", () => {
+    const controller = new AuthController({} as never);
+    const partner: AuthenticatedUser = {
+      ...testUser,
+      id: "user-partner",
+      role: "PARTNER_SERVICE",
+      customerId: "customer-1",
+      supplierId: null,
+    };
+
+    const valasz = controller.getCurrentUser(partner);
+
+    // A KULCS LETEZESE es az ERTEKE kulon allitas: egy `undefined` ertek ugyanugy
+    // atmenne egy puszta "in" vizsgalaton, es a telefon ugyanugy nem tudna
+    // eldonteni a hatokort.
+    assert.equal("customerId" in valasz, true);
+    assert.equal("supplierId" in valasz, true);
+    assert.equal(valasz.customerId, "customer-1");
+    assert.equal(valasz.supplierId, null);
+
+    // KONTROLL: belso fioknal MIND A KETTO `null` -- tehat a mezok nem
+    // veletlenul allnak ott, hanem a hatokort kovetik.
+    const belso = controller.getCurrentUser(testUser);
+    assert.equal(belso.customerId, null);
+    assert.equal(belso.supplierId, null);
+  });
+
   it("logout invalidates a Bearer-authenticated session without touching any cookies", async () => {
     let loggedOutToken: string | undefined;
     const authService = {
