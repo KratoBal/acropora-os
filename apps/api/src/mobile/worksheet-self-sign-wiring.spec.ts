@@ -66,6 +66,74 @@ describe("a saját aláírás gombja be van kötve", () => {
     assert.match(kod, /unlockWithBiometrics\(/);
   });
 
+  /**
+   * A KAPU EREDMENYET SENKI NEM MERTE -- EZ A KET ALLITAS ZARJA BE.
+   *
+   * === A MERT RES (2026-09-22) ===
+   *
+   * A fenti harom allitas azt mondja, hogy a ket HIVAS ott van a fajlban. Ott is
+   * volt. Amit egyik sem mondott: hogy az iteletukkel TORTENIK-E VALAMI.
+   *
+   * Lemertem, nem kovetkeztettem: kivettem a kepernyorol az egyetlen sort, ami
+   * a kaput ervenyesiti (`if (!kapu.mayProceed) throw ...`), es lefuttattam
+   * mindent. Az api keszlet 3480 tesztje, a mobil 1266 tesztje, a mobil
+   * typecheck es lint MIND ZOLD maradt. Negyezer-hetszaznegyvenhat lefutott
+   * teszt, es egyik sem szolalt meg.
+   *
+   * Az a valtozas azt jelenti, hogy a telefon lefuttatja a biometrikus
+   * azonositast, ELDOBJA az iteletet, es alairja a munkalapot.
+   *
+   * === MIERT KET ALLITAS, ES MIERT NEM EGY ===
+   *
+   * Ket kulonbozo romlas van, es egy allitas osszemosna oket:
+   *   a SORREND     -- az ellenorzes az alairas UTANRA csuszik
+   *   a MEGALLITAS  -- az ellenorzes a helyen marad, de mar nem dob
+   * Igy mindegyikhez SAJAT rontas tartozik, es nev szerint valik szet, melyik
+   * romlott el.
+   *
+   * A torzset a `signSelf` mutaciora szukitem, mert a `signWorksheet` a fajlban
+   * HAROM helyen all: az importban es a MASIK mutacioban is. A teljes fajlra
+   * mert sorrend a rossz part hasonlitana ossze.
+   */
+  it("a kapu ellenőrzése MEGELŐZI az aláírást, ugyanabban a függvényben", () => {
+    const kezd = kod.indexOf("const signSelf = useMutation({");
+    assert.ok(kezd >= 0, "nem találom a signSelf mutációt a képernyőn");
+    const veg = kod.indexOf("\n  const ", kezd + 1);
+    assert.ok(veg > kezd, "nem találom a signSelf mutáció végét");
+    const torzs = kod.slice(kezd, veg);
+
+    const ellenorzes = torzs.indexOf("mayProceed");
+    const alairas = torzs.indexOf("signWorksheet(");
+    assert.ok(
+      ellenorzes >= 0,
+      "a signSelf nem olvassa a kapu mayProceed mezőjét",
+    );
+    assert.ok(alairas >= 0, "a signSelf nem hívja a signWorksheet-et");
+
+    assert.ok(
+      ellenorzes < alairas,
+      "a kapu ellenőrzése az ALÁÍRÁS UTÁN áll: a lap már elment, mire kiderül",
+    );
+  });
+
+  it("a kapu ellenőrzése MEG IS ÁLLÍT, nem csak lefut", () => {
+    /*
+      MI PIROSIT: ha az `if (!kapu.mayProceed)` a helyen marad, de a torzse mar
+      nem dob -- peldaul csak egy uzenetet ir ki. Az ellenorzes ekkor LEFUT, a
+      sorrend HELYES, es az alairas megis vegigmegy. A sorrend-allitas erre vak,
+      ezert all itt kulon.
+    */
+    const kezd = kod.indexOf("const signSelf = useMutation({");
+    const veg = kod.indexOf("\n  const ", kezd + 1);
+    const torzs = kod.slice(kezd, veg);
+
+    assert.match(
+      torzs,
+      /if\s*\(\s*!\s*\w+\.mayProceed\s*\)\s*throw\b/,
+      "a mayProceed ellenőrzése nem ÁLLÍT MEG semmit: az aláírás enélkül is végigmegy",
+    );
+  });
+
   it("`signSelf` megy a szervernek", () => {
     /*
       MI PIROSIT: ha a mezo kimarad. A szerver ekkor a nev nelkuli agra fut es
