@@ -172,6 +172,23 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
   },
   {
+    /**
+     * A BESZERZO SAJAT LISTAJA -- "RAM VARO ANYAGIGENYEK".
+     *
+     * A `SERVICE_MANAGE` csak azt engedi meg, hogy egyaltalan lassa a MENUPONTOT
+     * -- hogy a lista TARTALMAT is latja-e, azt a szerver donti el a
+     * `MATERIAL_REQUEST_MARK_RECEIVED` kepesseg alapjan (per-felhasznalo
+     * jelolo, nem szerep). Ez a rendszer ma csak `permission`/`roles` alapu
+     * lathatosagot ismer, egy per-felhasznalo kepesseget nem -- ezert a menu
+     * DURVAN szur (barki, aki munkalapra irhat, latja a menupontot), a lap
+     * viszont finoman (csak a kepesseggel rendelkezo lat adatot, masok
+     * ertelmezheto uzenetet kapnak). Lasd `MaterialRequestsService.listPending`.
+     */
+    id: "material-requests-pending",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SERVICE_MANAGE),
+  },
+  {
     id: "content",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.CONTENT_VIEW),

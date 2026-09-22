@@ -583,3 +583,13 @@ export type {
   AssetCategory,
   AssetCategoryListResponse,
 } from "./asset-category.js";
+export type {
+  CreateMaterialRequestInput,
+  MaterialRequestDetail,
+  MaterialRequestItem,
+  MaterialRequestItemInput,
+  MaterialRequestListResponse,
+  MaterialRequestStatusValue,
+  PendingMaterialRequest,
+  PendingMaterialRequestListResponse,
+} from "./material-request-management.js";
