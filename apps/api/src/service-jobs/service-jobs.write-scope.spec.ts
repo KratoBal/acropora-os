@@ -49,7 +49,8 @@ type DetailRow = Awaited<ReturnType<ServiceJobsRepository["detail"]>>;
  * epp az az egy ellenorzes, amit egy kenyelmi cast kikapcsolna.
  */
 const RESZLETLAP: DetailRow = {
-  // A helyszin utja: ennek a sornak nincs helyszine, tehat nincs ut sem.
+  // A helyszin UTJA tovabbra is `null` maradhat: ezt a mezot egyik allitas
+  // sem meri itt, a `departmentId` mostantol kotelezo (lasd lent).
   departmentPath: null,
   id: "job-1",
   jobNumber: "HJ-2026-001",
@@ -63,8 +64,14 @@ const RESZLETLAP: DetailRow = {
   completedAt: null,
   customerId: "vevo-1",
   customer: { displayName: "Fővárosi Állat- És Növénykert" },
-  departmentId: null,
-  department: null,
+  // MOSTANTOL VALOS ERTEK, NEM `null`: a `departmentId` a
+  // `20260922210000_department_required` migracio (Balazs dontese, "1
+  // legyen kotelezo") ota kotelezo. Ez a fajl az IRASI HATOKORT meri
+  // (move, attachWorksheet, setPartner stb.), egyetlen allitas sem a
+  // helyszinrol szol -- az ertek csak azert kell, hogy a `DetailRow`
+  // tipusnak megfelelo legyen.
+  departmentId: "unit-1",
+  department: { name: "Biodóm", code: "BIO", parent: null },
   events: [],
   worksheets: [],
   assets: [],

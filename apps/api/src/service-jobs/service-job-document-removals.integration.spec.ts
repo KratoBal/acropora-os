@@ -115,9 +115,24 @@ describe(
       await prisma.auditLog.deleteMany({
         where: { entityType: "ServiceJob", entityId: jobId ?? "nincs" },
       });
+      // A JEGY ELOSZOR: a `departmentId` `Restrict`, tehat a helyszin csak
+      // akkor torolheto, ha rajta mar nem all jegy.
       await prisma.serviceJob.deleteMany({
         where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
       });
+      const customers = await prisma.customer.findMany({
+        where: { customerNumber: { startsWith: TEST_JOB_PREFIX } },
+        select: { id: true },
+      });
+      const customerIds = customers.map((customer) => customer.id);
+      if (customerIds.length) {
+        await prisma.worksheetDepartment.deleteMany({
+          where: { customerId: { in: customerIds } },
+        });
+        await prisma.customer.deleteMany({
+          where: { id: { in: customerIds } },
+        });
+      }
       await prisma.user.deleteMany({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
       });
@@ -137,10 +152,31 @@ describe(
       });
       userId = user.id;
 
+      /**
+       * PARTNER ES HELYSZIN, MERT A `departmentId` MOSTANTOL KOTELEZO. Ez a
+       * suite a naplo-szuro logikajat meri, egyik allitas sem a partnerrol
+       * vagy a helyszinrol szol -- csak azert kell, hogy a hivas
+       * tipushelyes es futasidoben is ervenyes legyen.
+       */
+      const customer = await prisma.customer.create({
+        data: {
+          customerNumber: `${TEST_JOB_PREFIX}${suffix}`,
+          type: "COMPANY",
+          displayName: "Naplo-szuro teszt",
+        },
+        select: { id: true },
+      });
+      const department = await prisma.worksheetDepartment.create({
+        data: { customerId: customer.id, code: "NSZ", name: "Naplo-szuro" },
+        select: { id: true },
+      });
+
       const job = await prisma.serviceJob.create({
         data: {
           jobNumber: `${TEST_JOB_PREFIX}${suffix}`,
           title: "Naplo-szuro merese",
+          customerId: customer.id,
+          departmentId: department.id,
         },
         select: { id: true },
       });
@@ -191,6 +227,12 @@ describe(
           nev: "a suite naplo-sorai bent maradtak a takaritas utan",
           darab: await prisma.auditLog.count({
             where: { entityType: "ServiceJob", entityId: jobId },
+          }),
+        },
+        {
+          nev: "a suite vevoje bent maradt a takaritas utan",
+          darab: await prisma.customer.count({
+            where: { customerNumber: { startsWith: TEST_JOB_PREFIX } },
           }),
         },
       ]);

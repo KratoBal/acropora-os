@@ -99,6 +99,8 @@ describe(
 
     let customerA: string;
     let customerB: string;
+    let departmentA: string;
+    let departmentB: string;
     let belsos: AuthenticatedUser;
     let partner: AuthenticatedUser;
 
@@ -135,6 +137,20 @@ describe(
       ]);
       customerA = rowA.id;
       customerB = rowB.id;
+      // HELYSZIN MINDKET VEVONEK -- a `departmentId` mostantol kotelezo, es
+      // egyik itt allo allitas sem a helyszinrol szol.
+      const [deptRowA, deptRowB] = await Promise.all([
+        prisma.worksheetDepartment.create({
+          data: { customerId: customerA, code: "CSA", name: "A helyszín" },
+          select: { id: true },
+        }),
+        prisma.worksheetDepartment.create({
+          data: { customerId: customerB, code: "CSB", name: "B helyszín" },
+          select: { id: true },
+        }),
+      ]);
+      departmentA = deptRowA.id;
+      departmentB = deptRowB.id;
 
       const [belsosRow, partnerRow] = await Promise.all([
         prisma.user.create({
@@ -168,8 +184,8 @@ describe(
         resolver.resolveById(partnerRow.id),
       ]);
 
-      sajatJob = await newJob(customerA, partner.id);
-      idegenJob = await newJob(customerB, belsos.id);
+      sajatJob = await newJob(customerA, partner.id, departmentA);
+      idegenJob = await newJob(customerB, belsos.id, departmentB);
 
       sajatDoc = await newDocument(sajatJob, "sajat.pdf");
       idegenDoc = await newDocument(idegenJob, "idegen.pdf");
@@ -183,6 +199,7 @@ describe(
     async function newJob(
       customerId: string,
       openedById: string,
+      departmentId: string,
     ): Promise<string> {
       sorszam += 1;
       const job = await prisma.serviceJob.create({
@@ -190,6 +207,7 @@ describe(
           jobNumber: `${TEST_JOB_PREFIX}${suffix}-${sorszam}`,
           title: "Nem indul a szivattyú",
           customerId,
+          departmentId,
           openedById,
         },
         select: { id: true },
@@ -385,6 +403,15 @@ describe(
       await prisma.user.deleteMany({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
       });
+      const customers = await prisma.customer.findMany({
+        where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+        select: { id: true },
+      });
+      const customerIds = customers.map((customer) => customer.id);
+      if (customerIds.length)
+        await prisma.worksheetDepartment.deleteMany({
+          where: { customerId: { in: customerIds } },
+        });
       await prisma.customer.deleteMany({
         where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
       });

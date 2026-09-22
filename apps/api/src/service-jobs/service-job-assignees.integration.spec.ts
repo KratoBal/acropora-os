@@ -72,10 +72,40 @@ describe(
     let officeUserId: string;
     let technicianUserId: string;
     let secondTechnicianUserId: string;
+    /**
+     * A JEGYEK PARTNERE ÉS HELYSZÍNE -- MOSTANTÓL KÖTELEZŐ.
+     *
+     * A `20260922210000_department_required` migráció (Balázs döntése, "1
+     * legyen kotelezo") óta a `ServiceJob.departmentId` NOT NULL. Ez a suite
+     * a DELEGÁLÁS logikáját méri, nem a partnert/helyszínt -- egyik itt álló
+     * állítás sem a customerId/departmentId hiányáról vagy tartalmáról szól
+     * --, tehát egyetlen, közös érték elég mindenhova.
+     */
+    let defaultCustomerId: string;
+    let defaultDepartmentId: string;
 
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
+
+      const customer = await prisma.customer.create({
+        data: {
+          customerNumber: `${TEST_CUSTOMER_PREFIX}${suffix}`,
+          type: "COMPANY",
+          displayName: "Delegálás Teszt Kft.",
+        },
+        select: { id: true },
+      });
+      defaultCustomerId = customer.id;
+      const department = await prisma.worksheetDepartment.create({
+        data: {
+          customerId: defaultCustomerId,
+          code: "DEL",
+          name: "Delegálás helyszín",
+        },
+        select: { id: true },
+      });
+      defaultDepartmentId = department.id;
 
       const office = await prisma.user.create({
         data: {
@@ -146,6 +176,8 @@ describe(
           jobNumber: number,
           title: "Nem indul a szivattyú",
           openedById: officeUserId,
+          customerId: defaultCustomerId,
+          departmentId: defaultDepartmentId,
         },
         select: { id: true },
       });
@@ -350,6 +382,8 @@ describe(
               title: "Nyitott, rám kiosztva",
               openedById: officeUserId,
               status: "NEW",
+              customerId: defaultCustomerId,
+              departmentId: defaultDepartmentId,
             },
             select: { id: true },
           })
@@ -361,6 +395,8 @@ describe(
               title: "Lezárt, rám kiosztva",
               openedById: officeUserId,
               status: "COMPLETED",
+              customerId: defaultCustomerId,
+              departmentId: defaultDepartmentId,
             },
             select: { id: true },
           })
@@ -371,6 +407,8 @@ describe(
             title: "Nyitott, nincs kiosztva",
             openedById: officeUserId,
             status: "NEW",
+            customerId: defaultCustomerId,
+            departmentId: defaultDepartmentId,
           },
         });
         await prisma.serviceJobAssignee.createMany({

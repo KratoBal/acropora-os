@@ -165,6 +165,20 @@ describe(
           displayName: `Belyegkep teszt ${suffix}`,
         },
       });
+      /**
+       * VEVO-TULAJDONU ESZKOZ, TIPUSHIBAVAL -- ES EZ NEM CSAK TIPUSHIBA.
+       *
+       * A `department_required` migracio (Balazs dontese, "1 legyen
+       * kotelezo") ota az `Asset.departmentId` NOT NULL, es ez a hivas MOST
+       * departmentId nelkul ir. Ez NEM PUSZTA TIPUSHIBA: ha a migracio
+       * eles/CI adatbazison lefut, ez a `prisma.asset.create` hivas MAGA
+       * BUKNA EL (NOT NULL constraint), mert a `customerId` miatt
+       * vevo-tulajdonu, es a `CUSTOMER_OWNER` szabaly szerint helyszint nem
+       * kaphat -- zart kor. NEM javitottam most: a teszt celja a
+       * belyegkep-generalas, nem a tulajdonos tipusa, es a customer->supplier
+       * atalakitas tobb, nem-kapcsolodo helyet erintene ebben a suite-ban.
+       * Jelentve, kulon dontest ker (lasd a 15c9cd7a kartyat).
+       */
       const asset = await prisma.asset.create({
         data: {
           assetNumber: `${PREFIX}${suffix}`,

@@ -52,8 +52,13 @@ const RESZLETLAP: DetailRow = {
   completedAt: null,
   customerId: "vevo-1",
   customer: { displayName: "Fővárosi Állat- És Növénykert" },
-  departmentId: null,
-  department: null,
+  // MOSTANTOL VALOS ERTEK: a `departmentId` a `department_required` migracio
+  // ota kotelezo. Ez a fixture a `detail()` VALASZAT allitja (a happy-path
+  // teszteknel a valasz osszeallitasahoz kell), nem a `setPlacement` bemeno
+  // allapotat -- azt a `setup()` `jobAttachState` mockja adja kulon, es OTT
+  // marad `null` a "partner nelkuli jegy" esetre (lasd lent).
+  departmentId: "unit-1",
+  department: { name: "Biodóm", code: "BIO", parent: null },
   events: [],
   worksheets: [],
   assets: [],
