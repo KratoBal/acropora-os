@@ -60,7 +60,8 @@ export function mailModeOf(raw: string | undefined | null): MailMode {
 export type MailPathKey =
   | "TICKET_MAIL_WORKSHEET_SIGNED"
   | "TICKET_MAIL_JOB_OPENED"
-  | "TICKET_MAIL_HANDOVER";
+  | "TICKET_MAIL_HANDOVER"
+  | "TICKET_MAIL_WORKSHEET_SEND_FOR_SIGNATURE";
 
 /**
  * A KET KAPU EGYUTT, SORRENDBEN -- ES A SORREND ADJA A KIHAGYAS OKAT.
@@ -237,6 +238,30 @@ export function serviceJobOpenedMailDecision(input: {
     .filter((email) => email.length > 0);
   if (cimek.length === 0) return { kind: "skip", reason: "no-recipient" };
   return { kind: "send", to: cimek };
+}
+
+/**
+ * KIKULDES ALAIRASRA -- A NEGYEDIK UT, ES A LEGEGYSZERUBB DONTES A NEGYBOL.
+ *
+ * MIERT NINCS SAJAT "no-recipient" AGA, MINT A MASIK KETTONEK: a cimzettet
+ * NEM ez a fuggveny oldja fel. A `WorksheetsRepository.sendForSignature` MAR
+ * ELLENORIZTE, hogy a valasztott alairo letezik, aktiv, es a munkalap
+ * partnerenek munkatarsa (`SIGNER_NOT_IN_PARTNER` kulonben elutasitja a
+ * MUVELETET magat, meg a level elott). Mire ez a fuggveny fut, a cimzett MAR
+ * ERVENYES -- tehat itt csak a kapu szamit.
+ */
+export type WorksheetSendForSignatureMailDecision =
+  | { readonly kind: "send" }
+  | { readonly kind: "skip"; readonly reason: MailGateSkipReason };
+
+export function worksheetSendForSignatureMailDecision(input: {
+  mode: MailMode;
+  pathMode: MailMode;
+  redirect: MailRedirect;
+}): WorksheetSendForSignatureMailDecision {
+  const kapu = mailGate(input);
+  if (kapu.kind === "closed") return { kind: "skip", reason: kapu.reason };
+  return { kind: "send" };
 }
 
 export function ticketMailDecision(input: {

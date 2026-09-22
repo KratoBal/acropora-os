@@ -970,7 +970,14 @@ export class WorksheetsService {
       throw new ForbiddenException(
         "A munkalap kiküldése aláírásra belsős lépés: partnerként nem küldhető ki.",
       );
-    await this.requireWorksheet(id, scope);
+    /*
+      A `worksheet`-et MEGTARTJUK: a lenti ertesites a partner nevehez, a
+      kapcsolt hibajegy szamahoz es a lap sajat szamahoz ebbol az EGY,
+      valasz elotti lekerdezesbol jut hozza. Egy MASODIK, a `sendForSignature`
+      UTAN futo lekerdezes ugyanezt a sort olvasna ujra, es a ketto kozott a
+      lap allapota elmozdulhatna.
+    */
+    const worksheet = await this.requireWorksheet(id, scope);
 
     const result = await this.repository.sendForSignature({
       worksheetId: id,
@@ -989,6 +996,22 @@ export class WorksheetsService {
         "Csak kiállított munkalap küldhető ki aláírásra: ez még piszkozat, vagy már megszületett róla a döntés.",
       );
     }
+
+    /*
+      FIRE AND FORGET, a haz mintaja szerint: a kikuldes valasza NEM fugghet
+      attol, hogy a levelezo eppen elerheto-e.
+    */
+    this.ticketMail?.notifyWorksheetSendForSignature({
+      worksheetId: id,
+      serviceJobId: worksheet.serviceJob?.id ?? null,
+      worksheetNumber: worksheet.number,
+      jobNumber: worksheet.serviceJob?.jobNumber ?? null,
+      partnerName: worksheet.customer.displayName,
+      signerName: result.signerName,
+      signerEmail: result.signerEmail,
+      actorUserId: actor.id,
+    });
+
     return this.detailAfterWrite(id);
   }
 

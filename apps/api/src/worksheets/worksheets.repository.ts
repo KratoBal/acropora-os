@@ -107,7 +107,7 @@ export type WorksheetSignResult =
  * neve kerulne.
  */
 export type WorksheetSendForSignatureResult =
-  | { ok: true; signerName: string }
+  | { ok: true; signerName: string; signerEmail: string }
   | {
       ok: false;
       reason: "NOT_FOUND" | "NOT_AWAITING_SIGNATURE" | "SIGNER_NOT_IN_PARTNER";
@@ -1312,7 +1312,7 @@ export class WorksheetsRepository extends Repository {
           customerId: worksheet.customerId,
           isActive: true,
         },
-        select: { displayName: true },
+        select: { displayName: true, email: true },
       });
       if (!signer)
         return { ok: false, reason: "SIGNER_NOT_IN_PARTNER" } as const;
@@ -1339,7 +1339,11 @@ export class WorksheetsRepository extends Repository {
       if (claimed.count !== 1)
         return { ok: false, reason: "NOT_AWAITING_SIGNATURE" } as const;
 
-      return { ok: true, signerName: signer.displayName } as const;
+      return {
+        ok: true,
+        signerName: signer.displayName,
+        signerEmail: signer.email,
+      } as const;
     });
   }
 

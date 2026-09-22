@@ -21,8 +21,10 @@ import { RequirePermissions } from "../../auth/decorators/require-permissions.de
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
   DEFAULT_SERVICE_JOB_OPENED_TEMPLATE,
+  DEFAULT_WORKSHEET_SEND_FOR_SIGNATURE_TEMPLATE,
   DEFAULT_WORKSHEET_SIGNED_TEMPLATE,
   SERVICE_JOB_OPENED,
+  WORKSHEET_SEND_FOR_SIGNATURE,
   WORKSHEET_SIGNED,
 } from "./ticket-mail.service.js";
 
@@ -45,6 +47,8 @@ function alapertelmezes(id: string) {
       return DEFAULT_WORKSHEET_SIGNED_TEMPLATE;
     case SERVICE_JOB_OPENED:
       return DEFAULT_SERVICE_JOB_OPENED_TEMPLATE;
+    case WORKSHEET_SEND_FOR_SIGNATURE:
+      return DEFAULT_WORKSHEET_SEND_FOR_SIGNATURE_TEMPLATE;
     default:
       throw new NotFoundException("Nincs ilyen levélsablon.");
   }
