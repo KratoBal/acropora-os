@@ -81,6 +81,11 @@ describe(
           jobNumber: `${PREFIX}-0001`,
           title: "Teszt hibajegy",
           customerId: ugyfelId,
+          // A HELYSZIN 2026-09-22 ota KOTELEZO (Balazs dontese, message_id
+          // 1552018256280162385: "1 legyen kotelezo"). A fixtura eddig is
+          // letrehozta az egyseget, csak nem kototte a jegyhez -- az allitasok
+          // a mezo-esemenyeket merik, a helyszin nem resze egyiknek sem.
+          departmentId: egysegId,
         },
         select: { id: true },
       });

@@ -183,6 +183,10 @@ describe(
           jobNumber: `${PREFIX}${suffix}`,
           title: "Belyegkep teszt hibajegy",
           customerId: customer.id,
+          // A HELYSZIN 2026-09-22 ota kotelezo. A fixtura mar letrehozta a
+          // `department` sort a munkalaphoz; a jegy ugyanazt hasznalja. Az
+          // allitasok a belyegkep-eloallitast merik, a helyszin nem resze.
+          departmentId: department.id,
         },
       });
 
