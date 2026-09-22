@@ -197,12 +197,48 @@ export function NewTicket() {
             ))}
           </select>
         </label>
+        {/*
+          AZ URES VALASZTO MEGNEVEZI AZ OKOT, NEM CSAK URES.
+
+          A lista a HOZZARENDELESI tablabol tolt, nem a vevo osszes
+          alegysegebol: `worksheets.service.ts` a `assignedUnitIdsFor` hivason
+          at szur. Egy hozzarendeles nelkuli partner-fiok tehat URES valasztot
+          kap, es a mai lapon semmi nem mondja meg, miert.
+
+          ES A KETTO KIVULROL EGYFORMA: egy ures lista ugyanugy nez ki, mint egy
+          elromlott betoltes. Ugyanaz az alak, amit a mobil kepernyoknel mar
+          egyszer felirtunk -- egy nem mukodo urlap es egy hibas urlap kozott a
+          felhasznalo nem tud kulonbseget tenni, ha a lap hallgat.
+
+          A BETOLTES ALATT NEM SZOL: addig a lista joggal ures, es egy
+          villano figyelmeztetes epp a hibas allapotot utanozna.
+
+          A SZOVEG MA IS IGAZ: helyszin nelkul ma MEG lehet jegyet nyitni, csak
+          eszkozt nem lehet valasztani. Ha a helyszin egyszer kotelezove valik
+          (15c9cd7a), ez a mondat BOVUL, nem cserelodik.
+        */}
+        {!loading && locations.length === 0 ? (
+          <p className="leading-[1.5] text-[#666677]">
+            Önhöz még nincs helyszín rendelve. Amíg nincs, az eszközök listája
+            üres marad. A hozzárendelést az Acropora ügyfélszolgálatán kérheti.
+          </p>
+        ) : null}
         <fieldset disabled={!departmentId || submitting}>
           <legend>Érintett eszközök</legend>
           {!departmentId ? (
+            /*
+              KET ALLAPOT, KET MONDAT -- ES EDDIG EGY ALLT ITT.
+
+              Az "Előbb válasszon helyszínt" mondat annak szol, aki VALASZTHAT.
+              Egy hozzarendeles nelkuli partnernek ugyanez zsakutca: arra kerte,
+              hogy valasszon valamit, ami nincs a listajaban. A ket allapotot
+              ugyanaz a felteteles ag hozta elo, tehat a mondat a rosszabbik
+              esetben felrevezetett.
+            */
             <p className="leading-[1.5] text-[#666677]">
-              Előbb válasszon helyszínt; ezután csak az ott található eszközök
-              jelennek meg.
+              {locations.length === 0 && !loading
+                ? "Ehhez a bejelentéshez nem tud eszközt kiválasztani, mert nincs Önhöz rendelt helyszín."
+                : "Előbb válasszon helyszínt; ezután csak az ott található eszközök jelennek meg."}
             </p>
           ) : assets.length ? (
             <div className="checkbox-list">
