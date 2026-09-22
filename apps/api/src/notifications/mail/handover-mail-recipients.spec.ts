@@ -21,6 +21,8 @@ const INAKTIV: HandoverRecipient = {
 const ELO = {
   mode: "live" as const,
   pathMode: "live" as const,
+  /* A teritest a `mailGate` harmadik kapuja nezi; ez a fajl a TOBBI okot meri. */
+  redirect: { kind: "off" } as const,
   departmentId: "dep-1",
   customerId: "cus-1",
   recipients: [AKTIV],
@@ -57,6 +59,7 @@ describe("handoverMailDecision", () => {
     const d = handoverMailDecision({
       mode: "off",
       pathMode: "live",
+      redirect: { kind: "off" } as const,
       departmentId: null,
       customerId: null,
       recipients: [],
@@ -115,21 +118,48 @@ describe("handoverMailAuditNote", () => {
    * szovegebe, minden jovobeli feluletnel egyutt utazik.
    */
   it("a kiküldés sora nem tartalmaz címet", () => {
-    const sor = handoverMailAuditNote({
-      kind: "send",
-      to: [
-        { email: "uzem@partner.hu", name: "Üzemeltető Ubul" },
-        { email: "masik@partner.hu", name: "Másik Mária" },
-      ],
-    });
+    const sor = handoverMailAuditNote(
+      {
+        kind: "send",
+        to: [
+          { email: "uzem@partner.hu", name: "Üzemeltető Ubul" },
+          { email: "masik@partner.hu", name: "Másik Mária" },
+        ],
+      },
+      { kind: "off" },
+    );
     assert.doesNotMatch(sor, /@/);
     assert.match(sor, /2 címzettnek/);
   });
 
   it("a kihagyás sora megnevezi az okot", () => {
     assert.match(
-      handoverMailAuditNote({ kind: "skip", reason: "no-recipient" }),
+      handoverMailAuditNote(
+        { kind: "skip", reason: "no-recipient" },
+        { kind: "off" },
+      ),
       /no-recipient/,
     );
+  });
+
+  /**
+   * AZ ATADASI UT NAPLOJA IS KIMONDJA AZ ATIRANYITAST.
+   *
+   * MIERT KELL KULON ALLITAS A HAROM UT MINDEGYIKERE: a toldalek EGY fuggvenybol
+   * jon (`redirectAuditSuffix`), de KET naplo-fuggveny hivja. Ha csak az egyiket
+   * merjuk, egy elfelejtett hivas csendben marad -- es epp az az ut, amelyik a
+   * VEVONEK kuld csatolmannyal.
+   */
+  it("az ÁTIRÁNYÍTOTT kiküldés sora kimondja, hogy a címzettek NEM kapták meg", () => {
+    const sor = handoverMailAuditNote(
+      {
+        kind: "send",
+        to: [{ email: "uzem@partner.hu", name: "Üzemeltető Ubul" }],
+      },
+      { kind: "on", to: "proba@acropora.hu" },
+    );
+
+    assert.match(sor, /ÁTIRÁNYÍTVA/);
+    assert.doesNotMatch(sor, /@/);
   });
 });

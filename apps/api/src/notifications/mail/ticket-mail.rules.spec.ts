@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   mailAuditNote,
   mailGate,
+  mailRedirect,
   mailModeOf,
   ticketMailDecision,
   type TicketOpener,
@@ -55,22 +56,107 @@ describe("a ket reteg SORRENDJE", () => {
    * menne ki semmi.
    */
   it("MINDKÉT kapcsoló zárva: az ok a FŐ kapué, mert oda kell menni", () => {
-    assert.deepEqual(mailGate({ mode: "off", pathMode: "off" }), {
-      kind: "closed",
-      reason: "mail-off",
-    });
+    assert.deepEqual(
+      mailGate({ mode: "off", pathMode: "off", redirect: { kind: "off" } }),
+      {
+        kind: "closed",
+        reason: "mail-off",
+      },
+    );
   });
 
   it("csak az ÚT zárva: az ok path-off, és EGY kulcshoz vezet", () => {
-    assert.deepEqual(mailGate({ mode: "live", pathMode: "off" }), {
-      kind: "closed",
-      reason: "path-off",
-    });
+    assert.deepEqual(
+      mailGate({ mode: "live", pathMode: "off", redirect: { kind: "off" } }),
+      {
+        kind: "closed",
+        reason: "path-off",
+      },
+    );
   });
 
   it("mindkettő nyitva: a kapu NEM zár", () => {
-    assert.deepEqual(mailGate({ mode: "live", pathMode: "live" }), {
-      kind: "open",
+    assert.deepEqual(
+      mailGate({ mode: "live", pathMode: "live", redirect: { kind: "off" } }),
+      {
+        kind: "open",
+      },
+    );
+  });
+
+  /**
+   * A HARMADIK KAPU: HIANYZO ATIRANYITAS MELLETT NEM KULDUNK.
+   *
+   * acrobot dontese (2026-09-22, msg 22022), Balazs keresebol: "nyissuk mind a
+   * harmat de nem menjen ki veletlenul se level senkinek". Az elso alakomban a
+   * vedelem KET ember-lepes helyes SORRENDJEN allt -- ha a negy kapcsolot
+   * beallitja es az otodiket elfelejti, epp az tortenik, amit kizart.
+   *
+   * A SORREND ITT SZAMIT, es kulon allitas all ra lentebb: a `no-redirect` a ket
+   * kapcsolo-ok UTAN jon.
+   */
+  it("nyitott kapcsolók mellett a HIÁNYZÓ átirányítás megállítja a küldést", () => {
+    assert.deepEqual(
+      mailGate({ mode: "live", pathMode: "live", redirect: { kind: "block" } }),
+      { kind: "closed", reason: "no-redirect" },
+    );
+  });
+
+  /**
+   * ES A KIMONDOTT `off` NYIT -- EZ A VEGALLAPOT.
+   *
+   * Enelkul a fenti allitas egy olyan kaputol is zold lenne, ami SOHA nem nyit.
+   * A ketto egyutt mondja meg, hogy a kulonbseget a HIANY es a KIMONDOTT ERTEK
+   * kozott tesszuk, nem a kuldest zarjuk el.
+   */
+  it("KONTROLL: a kimondott `off` átirányítás mellett a kapu NYITVA van", () => {
+    assert.deepEqual(
+      mailGate({ mode: "live", pathMode: "live", redirect: { kind: "off" } }),
+      { kind: "open" },
+    );
+  });
+
+  /**
+   * A SORREND: TELJESEN KIKAPCSOLT KORNYEZETBEN A FO KAPCSOLOT NEVEZZUK MEG.
+   *
+   * Egy rontas, ami a `no-redirect` agat a ket kapcsolo-ok ELE teszi, ezt az
+   * allitast dontene pirosra -- es a naplo azt mondana, hogy egy cim beirasa
+   * eleg, holott meg ket kapcsolo is kell.
+   */
+  it("teljesen zárt környezetben a FŐ kapcsolót nevezi meg, nem a hiányzó címet", () => {
+    assert.deepEqual(
+      mailGate({ mode: "off", pathMode: "off", redirect: { kind: "block" } }),
+      { kind: "closed", reason: "mail-off" },
+    );
+  });
+
+  /**
+   * A HAROM ALLAPOTU FELISMERO, ES A HATARA A HIANY MEG A KIMONDOTT ERTEK KOZOTT.
+   *
+   * A masik negy kapcsolo felismeroje (`mailModeOf`) a hianyzo erteket `off`-nak
+   * veszi. EZ NEM: ott egy elfelejtett ertek csendben NEM KULD, itt csendben
+   * KIKULDENE. A ket irany ara nem egyforma.
+   */
+  it("a hiányzó és az ÜRES érték BLOKKOL, nem irányít át és nem is nyit", () => {
+    for (const ertek of [undefined, null, "", "   "]) {
+      assert.deepEqual(
+        mailRedirect(ertek),
+        { kind: "block" },
+        `érték: ${JSON.stringify(ertek)}`,
+      );
+    }
+  });
+
+  it("a kimondott `off` és `none` NYIT, bármilyen betűzéssel", () => {
+    for (const ertek of ["off", "OFF", " none ", "None"]) {
+      assert.deepEqual(mailRedirect(ertek), { kind: "off" }, `érték: ${ertek}`);
+    }
+  });
+
+  it("minden más értéket CÍMNEK vesz, a körülötte álló szóköz nélkül", () => {
+    assert.deepEqual(mailRedirect(" proba@acropora.hu "), {
+      kind: "on",
+      to: "proba@acropora.hu",
     });
   });
 });
@@ -86,6 +172,7 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "off",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "user-1",
         opener: AKTIV,
       }),
@@ -98,6 +185,7 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: null,
         opener: null,
       }),
@@ -115,6 +203,7 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "user-9",
         opener: null,
       }),
@@ -127,6 +216,7 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "user-1",
         opener: { ...AKTIV, isActive: false },
       }),
@@ -139,6 +229,7 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "user-1",
         opener: AKTIV,
       }),
@@ -156,24 +247,28 @@ describe("kinek megy level, es mikor nem", () => {
       ticketMailDecision({
         mode: "off",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "u",
         opener: AKTIV,
       }),
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: null,
         opener: null,
       }),
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "u",
         opener: null,
       }),
       ticketMailDecision({
         mode: "live",
         pathMode: "live",
+        redirect: { kind: "off" } as const,
         openedById: "u",
         opener: { ...AKTIV, isActive: false },
       }),
@@ -195,11 +290,10 @@ describe("a naplo-sor nem szivarogtat cimet", () => {
    * megkerdezni, szabad-e kiirni.
    */
   it("a sikeres kuldes sora sem cimet, sem nevet nem tartalmaz", () => {
-    const sor = mailAuditNote({
-      kind: "send",
-      to: "nyito@partner.hu",
-      name: "Nyitó Nóra",
-    });
+    const sor = mailAuditNote(
+      { kind: "send", to: "nyito@partner.hu", name: "Nyitó Nóra" },
+      { kind: "off" },
+    );
 
     assert.ok(!sor.includes("nyito@partner.hu"));
     assert.ok(!sor.includes("Nyitó Nóra"));
@@ -210,8 +304,52 @@ describe("a naplo-sor nem szivarogtat cimet", () => {
 
   it("a kihagyas sora megnevezi az OKOT", () => {
     assert.match(
-      mailAuditNote({ kind: "skip", reason: "opener-inactive" }),
+      mailAuditNote(
+        { kind: "skip", reason: "opener-inactive" },
+        { kind: "off" },
+      ),
       /opener-inactive/,
     );
+  });
+
+  /**
+   * AZ ATIRANYITAS NYOMA, ES MIERT A NAPLOBAN.
+   *
+   * acrobot kikotese (2026-09-22): "Ha egy level atiranyitva megy ki, azt a
+   * naplobol tudni kell, kulonben ket honap mulva valaki azt hiszi, a vevo
+   * megkapta."
+   *
+   * A CIM NEM KERUL BELE, es ez a felette allo ket allitas dontese: egy cim,
+   * ami egyszer bekerul egy naplo szovegebe, minden jovobeli feluletnel egyutt
+   * utazik. Az atiranyitas cime ugyanolyan cim.
+   */
+  it("az ATIRANYITOTT kiküldés sora kimondja, hogy a címzett NEM kapta meg", () => {
+    const sor = mailAuditNote(
+      { kind: "send", to: "nyito@partner.hu", name: "Nyitó Nóra" },
+      { kind: "on", to: "proba@acropora.hu" },
+    );
+
+    assert.match(sor, /ÁTIRÁNYÍTVA/);
+    assert.match(sor, /NEM kapta meg/);
+    // A PROBACIM SEM CIM: az atiranyitas cimet sem irjuk ki.
+    assert.doesNotMatch(sor, /@/);
+  });
+
+  /**
+   * ES A KIHAGYAS SORA NEM KAP ATIRANYITAS-NYOMOT, akkor sem, ha a kapcsolo all.
+   *
+   * MIERT KULON ALLITAS: ha a toldalek a `skip` agra is rakerulne, a naplo azt
+   * allitana, hogy egy ki sem ment level atiranyitva ment ki. Egy rontas, ami a
+   * toldalekot a fuggveny VEGERE teszi, pontosan ezt csinalna -- es a felette
+   * allo ket allitas zold maradna tole.
+   */
+  it("a kihagyás sora akkor sem beszél átirányításról, ha a kapcsoló áll", () => {
+    const sor = mailAuditNote(
+      { kind: "skip", reason: "opener-inactive" },
+      { kind: "on", to: "proba@acropora.hu" },
+    );
+
+    assert.doesNotMatch(sor, /ÁTIRÁNYÍTVA/);
+    assert.match(sor, /opener-inactive/);
   });
 });
