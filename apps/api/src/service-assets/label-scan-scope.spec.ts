@@ -54,49 +54,45 @@ function metodusTorzs(source: string, nev: string): string {
 }
 
 describe("a matricakódos keresés hatóköre", () => {
-  it("a detailByLabelCode a hatókör-szűrőt AND ágban használja", () => {
-    const torzs = metodusTorzs(forras(), "detailByLabelCode");
-    assert.match(torzs, /scopeWhereForAndBranch\(scope\)/);
+  /**
+   * A HELYSZIN-TENGELY IS ITT ALL -- ES A DONTES EGY NAPON BELUL KETSZER FORDULT,
+   * EZERT AZ INDOKA IS ITT ALL.
+   *
+   * ELOSZOR bekerult (a matricakod 260 ezer lehetoseg, tehat vegigprobalhato).
+   * AZTAN kivettem, mert a kozos tulajdon-szuro (`scopeWhereForAndBranch`)
+   * vevo-hatokornel csak vevo-tulajdonu sorra illeszkedik, vevo-tulajdonu
+   * sornak viszont SOHA nincs helyszine -- a ketto egyutt nullazta volna ezt az
+   * utat.
+   * VEGUL a TELJES lathatosagi fuggveny kerult ide a kozos szuro HELYETT
+   * (acrobot dontese, 2026-09-22 12:11), es ezzel a helyszin-tengely is
+   * ertelmet nyert: az ut mostantol pontosan annyit lat, amennyit a lista.
+   *
+   * AMI EZT NEM TAGITASSA TESZI: elesben 83 eszkozbol 0 vevo-tulajdonu, tehat
+   * ez az ut partnernek MA IS nullat ad. Nem elvettunk egy mukodo dolgot, hanem
+   * osszehangoltunk egy halottat a listaval.
+   */
+  it("a detailByLabelCode a TELJES láthatósági szűrőt használja, AND ágban", () => {
+    const torzs = kommentNelkul(metodusTorzs(forras(), "detailByLabelCode"));
+    assert.match(
+      torzs,
+      /assetVisibilityForAndBranch\(scope, assignedUnitIds\)/,
+    );
     assert.match(torzs, /AND:\s*\[/);
   });
 
   /**
-   * A HELYSZIN-TENGELY EZEN AZ UTON MA NINCS -- ES EZ ALLITAS, NEM HIANY.
-   *
-   * Az indok a tarolo jegyzetében all, meressel: a kozos tulajdon-szuro
-   * vevo-hatokornel CSAK vevo-tulajdonu sorra illeszkedik, vevo-tulajdonu
-   * sornak viszont SOHA nincs helyszine -- a ketto egyutt nullazna ezt az utat,
-   * nem szukitene.
-   *
-   * HA VALAKI MEGIS BEIRJA, EZ AZ ALLITAS PIROSODIK, es akkor a tarolo
-   * jegyzetét kell elolvasnia, mielott atirja.
+   * ES A KOZOS SZURO MAR NEM ALL ITT -- KULON ALLITAS, hogy a csere ne tudjon
+   * csendben visszafordulni. A ketto KULON romolhat el: valaki visszateheti a
+   * kozos szurot a teljes fuggveny MELLE, es akkor a fenti allitas zold marad,
+   * mikozben az ut ujra a szukebb tulajdon-feltetelen all.
    */
-  it("a detailByLabelCode NEM visel helyszín-tengelyt, és ez mérésen áll", () => {
+  it("a detailByLabelCode NEM használja a KÖZÖS szűrőt", () => {
     const torzs = kommentNelkul(metodusTorzs(forras(), "detailByLabelCode"));
-    /*
-      A `departmentId` SZORA nezunk, nem egy segedfuggveny NEVERE.
-
-      Az elso alakom a `egysegTengelyAsset(` hivast tagadta -- csakhogy azt a
-      segedet ugyanabban a korben ki is vezettuk, tehat az allitas egy NEM
-      LETEZO nevre szolt volna: nem tudott volna elbukni. A mezonevre nezve
-      barmelyik alak fennakad rajta (kozvetlen feltetel, masik seged, beirt
-      objektum).
-    */
     assert.equal(
-      /departmentId/.test(torzs),
+      /scopeWhereForAndBranch\(/.test(torzs),
       false,
-      "a címke-út helyszín-tengelyt kapott -- olvasd el a tároló jegyzetét, mielőtt bent hagyod",
+      "a címke-út visszakapta a közös szűrőt -- olvasd el a tároló jegyzetét",
     );
-  });
-
-  /**
-   * ISMERT POZITIV KONTROLL A FENTI TAGADASHOZ: a mezonev MASHOL a fajlban OTT
-   * VAN. Enelkul a tagadas akkor is zold lenne, ha a kivagas ures sztringet ad.
-   */
-  it("KONTROLL: a departmentId szó a fájlban egyébként előfordul", () => {
-    // A KONTROLL IS KOMMENT NELKUL NEZ, kulonben a sajat jegyzeteink
-    // igazolnak egy olyan kivagast, ami a KODBOL semmit nem hozott.
-    assert.match(kommentNelkul(forras()), /departmentId/);
   });
 
   /**
@@ -123,37 +119,41 @@ describe("a matricakódos keresés hatóköre", () => {
   });
 
   /**
-   * ISMERT POZITIV KONTROLL A METODUS-KIVAGASRA -- ES A PREMISSZAJA 2026-09-22-EN
-   * MEGVALTOZOTT, EZERT VAN ATIRVA.
+   * ISMERT POZITIV KONTROLL A METODUS-KIVAGASRA -- ES AZ ALAPJA MA MASODSZOR
+   * VALTOZOTT, EZERT MOST A LEGSZILARDABB JELRE TESZEM.
    *
-   * AMI ITT ALLT: a kontroll arra epult, hogy a `detailByQrToken` SZANDEKOSAN
-   * nem szur tulajdonra, tehat a kivagasnak hatokor-szuro nelkuli torzset kell
-   * adnia. Ez a premissza ma mar HAMIS -- a QR-ut szur.
+   * A fenti allitasok szoveg-darabokon allnak. Ha a kivagas az egesz fajlt adna
+   * vissza, minden metodus "hasznalja a hatokort" lenne, mert valahol a fajlban
+   * all helper-hivas.
    *
-   * AZ ALLITAS ATTOL MEG ZOLD MARADT VOLNA (a QR-ut a masik fuggvenyt hasznalja,
-   * nem a `scopeWhereForAndBranch`-et), es EPP EZ A VESZELYES: egy kontroll,
-   * aminek az INDOKA hamis, ugyanugy mukodik, csak senki nem tudja, mit meri.
+   * AMI KETSZER ELROMLOTT MA: a kontroll eloszor azon allt, hogy a QR-ut NEM
+   * szur (Balazs felulirta), aztan azon, hogy a ket ut KULONBOZO fuggvenyt
+   * hasznal (a cimke-ut megkapta ugyanazt). Mindket alap egy DONTESEN allt --
+   * es a dontes valtozott.
    *
-   * AZ UJ PREMISSZA MERT, NEM FELTETELEZES: a ket ut SZANDEKOSAN KULONBOZO
-   * fuggvenyt hasznal. A cimke-ut a KOZOS szurot plusz a sajat helyszin-agat, a
-   * QR-ut a TELJES lathatosagi fuggvenyt. Ha a kivagas az egesz fajlt adna
-   * vissza, MINDKET nev megjelenne MINDKET torzsben -- tehat a ket tagadas
-   * egyutt bizonyitja, hogy a kivagas metodusonkent vag.
+   * AMI NEM FOG VALTOZNI: a ket metodus a SAJAT KULCSARA keres. A cimke-ut a
+   * `label: { code }` alakra, a QR-ut a `qrToken` mezore -- es EGYIK SEM
+   * tartalmazza a masikét. Ez a kettéválasztás nem izles kerdese: a ket
+   * vegpont letezesenek OKA.
    */
   it("a metódus-kivágás tényleg egy metódust ad, nem az egész fájlt", () => {
+    const cimke = kommentNelkul(metodusTorzs(forras(), "detailByLabelCode"));
+    const qr = kommentNelkul(metodusTorzs(forras(), "detailByQrToken"));
+
+    // MINDEGYIK A SAJATJAT TARTALMAZZA (ismert pozitiv: a kivagas nem ures)
+    assert.match(cimke, /label: \{ code \}/);
+    assert.match(qr, /qrToken/);
+
+    // ES EGYIK SEM A MASIKET (ha a kivagas tul sokat adna, mindketto latszana)
     assert.equal(
-      /assetVisibilityForAndBranch\(/.test(
-        metodusTorzs(forras(), "detailByLabelCode"),
-      ),
+      /qrToken/.test(cimke),
       false,
-      "a címke-út a KÖZÖS szűrőt használja, nem a teljes láthatósági függvényt -- ha itt találat van, a kivágás túl sokat adott vissza",
+      "a címke-út törzsében qrToken látszik -- a kivágás túl sokat adott vissza",
     );
     assert.equal(
-      /scopeWhereForAndBranch\(/.test(
-        metodusTorzs(forras(), "detailByQrToken"),
-      ),
+      /label: \{ code \}/.test(qr),
       false,
-      "a QR-út a teljes láthatósági függvényt használja, nem a közöset -- ha itt találat van, a kivágás túl sokat adott vissza",
+      "a QR-út törzsében a címke-kulcs látszik -- a kivágás túl sokat adott vissza",
     );
   });
 });

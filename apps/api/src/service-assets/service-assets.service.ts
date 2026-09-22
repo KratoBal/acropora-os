@@ -275,13 +275,12 @@ export class ServiceAssetsService {
     const code = normalizeAssetLabelCode(rawCode);
     if (code === null)
       throw new BadRequestException(ASSET_LABEL_CODE_SHAPE_MESSAGE);
-    /*
-      CSAK A HATOKOR KELL, A HOZZARENDELT HELYSZINEK NEM: ezen az uton a
-      helyszin-tengely ma nem all. Az indok a tarolo `detailByLabelCode`
-      jegyzeteben, meressel.
-    */
-    const { scope } = await this.latasiHatokor(user);
-    const asset = await this.repository.detailByLabelCode(code, scope);
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    const asset = await this.repository.detailByLabelCode(
+      code,
+      scope,
+      assignedUnitIds,
+    );
     if (!asset)
       throw new NotFoundException(
         "Ehhez a matricakódhoz nem tartozik elérhető eszköz.",

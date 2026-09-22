@@ -271,6 +271,30 @@ describe(
           },
         }),
       ]);
+      /*
+        HARMADIK SZALLITO, AKIT EGYIK FIXTURA-FELHASZNALO SEM KEPVISEL.
+
+        A vevo-oldali eszkozok 2026-09-22 ota szallitoi tulajdonuak (a valos
+        alak: vevo-tulajdonu sornak nem lehet helyszine). Ha ezek a `supplierA`
+        nevehez kerulnenek, a SZALLITOI hatokoru allitas ("a sajat eszkozet
+        kapja, a vevoket nem") beleutkozne: az a kero a sajat sorait a vevo
+        helyszinen is latna.
+
+        EZ A SZALLITO TEHAT CSAK TULAJDONOS, NEM HIVO -- igy a ket tengely (ki a
+        tulajdonos, ki a kero) fuggetlenul merheto.
+      */
+      const szallitoC = await prisma.supplier.create({
+        data: {
+          // A KOD A KOZOS ELOTAGGAL MEGY: a takaritas arra szur, es egy
+          // sajat nevkonvencio itt azt jelentene, hogy ez az egy sor
+          // BENNMARAD -- a kovetkezo futast pedig az egyedi kodon buktatna el,
+          // olyan hibaval, aminek semmi koze a mert viselkedeshez.
+          code: `${TEST_SUPPLIER_PREFIX}${suffix}-C`,
+          name: `${shared} szállító C`,
+        },
+        select: { id: true },
+      });
+
       const [unitA, unitB] = await Promise.all([
         prisma.worksheetDepartment.create({
           data: {
@@ -413,7 +437,7 @@ describe(
               ugy, hogy latszik -- egy fixtura, ami lehetetlen allapotot mer,
               semmit nem bizonyit.
             */
-            supplierId: supplierA,
+            supplierId: szallitoC.id,
             departmentId: departmentA.id,
           },
         }),
@@ -423,7 +447,7 @@ describe(
             name: `${shared} eszköz B`,
             // Ugyanaz az alak, mint az A eszkoznel: szallitoi tulajdon a MASIK
             // vevo helyszinen. A ket sor CSAK a helyszinben ter el.
-            supplierId: supplierB,
+            supplierId: szallitoC.id,
             departmentId: departmentB.id,
           },
         }),
@@ -546,7 +570,7 @@ describe(
           // Ezert a lista-allitasok SOROLJAK FEL ezt a sort is, ahelyett hogy
           // egy allapot-trukkel rejtenenk el.
           name: `${shared} eszköz A törléshez`,
-          supplierId: supplierA,
+          supplierId: szallitoC.id,
           departmentId: departmentOfA,
         },
       });
@@ -582,7 +606,7 @@ describe(
         data: {
           assetNumber: `${TEST_ASSET_PREFIX}${suffix}-W`,
           name: `${shared} eszköz A íráshoz`,
-          supplierId: supplierA,
+          supplierId: szallitoC.id,
           departmentId: departmentOfA,
         },
       });

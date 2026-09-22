@@ -1261,37 +1261,40 @@ export class ServiceAssetsRepository extends Repository {
   async detailByLabelCode(
     code: string,
     scope: PartnerScope,
+    assignedUnitIds: readonly string[],
   ): Promise<AssetDetail | null> {
     /*
-      A HELYSZIN-TENGELY EZEN AZ UTON MA NEM ALL, ES EZ MERESEN ALAPUL, NEM
-      FELEDEKENYSEGEN.
+      UGYANAZ A LATHATOSAGI FUGGVENY, MINT A LISTAN ES AZ ADATLAPON -- ES EZ
+      2026-09-22-EN VALTOZOTT MEG, MERESRE.
 
-      ELOSZOR BEKERULT, a kovetkezo ervvel: a matricakod 260 ezer lehetoseg,
-      tehat vegigprobalhato, es a vegigprobalas a sajat ugyfel MASIK helyszinet
-      adna vissza. Az erv HELYESNEK latszott, es MERESSEL dolt meg:
+      AMI ITT ALLT: a KOZOS `scopeWhereForAndBranch`, ami vevo-hatokornel
+      PONTOSAN `{ customerId }`. Az csak vevo-tulajdonu sorra illeszkedik --
+      elesben viszont 83 eszkozbol 0 ilyen van (acrobot merese, 2026-09-22
+      12:07, acropora-prod-01), mert a `create` es az `update` is nullara
+      kenyszeriti a `departmentId` mezot vevo-tulajdonu soron.
 
-        1. ezen az uton a tulajdon-szuro a KOZOS `scopeWhereForAndBranch`, ami
-           vevo-hatokornel PONTOSAN `{ customerId }` -- tehat CSAK vevo-tulajdonu
-           sorra illeszkedik;
-        2. vevo-tulajdonu sornak SOHA nincs helyszine (a `create` es az `update`
-           is nullara kenyszeriti a `departmentId` mezot).
+      VAGYIS EZ AZ UT PARTNERNEK MAR A VALTOZAS ELOTT IS HALOTT VOLT: nem a
+      szukites olte meg, soha nem is elt. A felhasznaloi hatas ma nulla mindket
+      iranyban -- a partner-felulet ezt a vegpontot nem is hivja (nulla talalat
+      az `apps/partner` faban; a mobil es a web BELSOS hatokorrel hasznalja).
 
-      A ketto egyutt azt jelenti, hogy `{ customerId }` ES
-      `{ departmentId: { in: [...] } }` egyszerre SOHA nem teljesul: a tengely
-      nem SZUKITENE ezt az utat, hanem NULLAZNA. Es a vegigprobalas veszelye sem
-      all fenn ugy, ahogy gondoltuk -- ez az ut mas partner helyszinet eleve nem
-      adja vissza, mert a tulajdon-szuro nem engedi.
+      EZERT NEM TAGITAS: ma nullat ad, ezutan annyit fog, amennyit a lista. Egy
+      eszkoz, amit a partner a listan lat, legyen megtalalhato a matricajarol is
+      -- barmi mas ket kepernyo kozott ellentmondas, amit semmilyen teszt nem
+      fogna meg.
 
-      AMI EBBOL NYITOTT KERDES, ES NEM EN DONTOM EL: ez az ut a tulajdon
-      tengelyen SZUKEBB, mint a lista (`assetVisibilityForAndBranch`), tehat a
-      vevo helyszinen allo SZALLITOI eszkozt a kodrol nem talalja meg. Eles
-      adaton (2026-09-22, 83 eszkoz, MIND szallitoi) ez azt jelenti, hogy a
-      partner ma egyetlen eszkozt sem talal meg matricakodrol. A hozzaigazitas
-      TAGITAS lenne, ezert kulon dontest kiven -- felirva, nem elvegezve.
+      A DONTES acroboté, 2026-09-22 12:11.
+
+      A VEGIGPROBALHATOSAG ERVE VALTOZATLANUL ALL: a matricakod egy betu es
+      negy szam, tehat 260 ezer lehetoseg. A helyszin-tengely EPP ezert kell
+      bele -- kulonben a vegigprobalas a sajat ugyfel MASIK helyszinet adna.
     */
     const row = await prisma.asset.findFirst({
       where: {
-        AND: [{ label: { code } }, scopeWhereForAndBranch(scope)],
+        AND: [
+          { label: { code } },
+          assetVisibilityForAndBranch(scope, assignedUnitIds),
+        ],
       },
       include: assetDetailInclude,
     });

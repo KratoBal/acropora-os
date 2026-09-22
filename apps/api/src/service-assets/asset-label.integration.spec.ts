@@ -50,6 +50,18 @@ const CODE_E = "Z9005";
 const CODE_F = "Q7431";
 
 let customerId = "";
+/**
+ * A HATOKOR-MERESEK ESZKOZE SZALLITOI TULAJDONU, A VEVO HELYSZINEN -- ES EZ A
+ * VALOS ALAK, nem kenyelem.
+ *
+ * A `create` es az `update` is NULLARA kenyszeriti a `departmentId` mezot
+ * vevo-tulajdonu soron, tehat egy vevo-tulajdonu eszkoznek SOHA nincs
+ * helyszine. Eles adaton (2026-09-22, acrobot merese) 83 eszkozbol 0
+ * vevo-tulajdonu. Egy vevo-tulajdonu fixtura tehat olyan allapotot merne, ami
+ * a valosagban nem fordul elo -- es 2026-09-22 ota lathatatlan is lenne.
+ */
+let szallitoId = "";
+let helyszinId = "";
 let actorUserId = "";
 
 function createInput(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
@@ -115,6 +127,12 @@ async function removeLeftovers() {
   await prisma.asset.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
   });
+  // A HELYSZIN AZ ESZKOZOK UTAN ES A VEVO ELOTT (`Asset.departmentId` Restrict),
+  // a szallito szinten az eszkozok utan (`Asset.supplierId`).
+  await prisma.worksheetDepartment.deleteMany({
+    where: { customer: { customerNumber: { startsWith: PREFIX } } },
+  });
+  await prisma.supplier.deleteMany({ where: { code: { startsWith: PREFIX } } });
   await prisma.customer.deleteMany({
     where: { customerNumber: { startsWith: PREFIX } },
   });
@@ -161,6 +179,18 @@ describe(
         select: { id: true },
       });
       actorUserId = user.id;
+
+      const szallito = await prisma.supplier.create({
+        data: { code: `${PREFIX}S`.slice(0, 12), name: `${PREFIX} szállító` },
+        select: { id: true },
+      });
+      szallitoId = szallito.id;
+
+      const helyszin = await prisma.worksheetDepartment.create({
+        data: { customerId, code: "LBL", name: `${PREFIX} helyszín` },
+        select: { id: true },
+      });
+      helyszinId = helyszin.id;
     });
 
     after(async () => {
@@ -226,7 +256,19 @@ describe(
 
     it("egy kód nem kerülhet két eszközre", async () => {
       const first = await repository.create(
-        createInput({ labelCode: CODE_C }),
+        /*
+          SZALLITOI TULAJDON A VEVO HELYSZINEN.
+
+          A lenti ket hatokor-allitas EZEN a soron mer, es csak ez az alak
+          letezhet elesben: vevo-tulajdonu sornak a kod nem enged helyszint
+          adni, helyszin nelkul pedig 2026-09-22 ota nem is lathato.
+        */
+        createInput({
+          labelCode: CODE_C,
+          ownerType: "SUPPLIER",
+          ownerId: szallitoId,
+          departmentId: helyszinId,
+        }),
         actorUserId,
       );
       // POZITÍV KONTROLL: az elsőre TÉNYLEG rákerült. Enélkül a lenti elutasítás
@@ -281,10 +323,11 @@ describe(
     it("a saját partner MEGTALÁLJA az eszközét a matricakódról", async () => {
       // ISMERT POZITIV KONTROLL a lenti tagadashoz. Enelkul egy olyan
       // lekerdezes is atmenne, ami SENKINEK nem ad vissza semmit.
-      const found = await repository.detailByLabelCode(CODE_C, {
-        kind: "customer",
-        customerId,
-      });
+      const found = await repository.detailByLabelCode(
+        CODE_C,
+        { kind: "customer", customerId },
+        [helyszinId],
+      );
       assert.ok(found, "a saját eszköz látszik a saját hatókörben");
       // A KOD ALAPJAN TALALT ESZKOZ TENYLEG AZ, AMIRE A MATRICA KERULT.
       // Enelkul az allitas beerne barmelyik eszkozzel, amit a lekerdezes ad.
@@ -304,10 +347,17 @@ describe(
         },
         select: { id: true },
       });
-      const found = await repository.detailByLabelCode(CODE_C, {
-        kind: "customer",
-        customerId: masik.id,
-      });
+      /*
+        UGYANAZ A HELYSZIN-LISTA MEGY AT, MINT A POZITIV ESETBEN, es ez
+        szandekos: igy az EGYETLEN dolog, ami kizarhatja a sort, a TULAJDON.
+        Ures listaval ez az allitas akkor is zold lenne, ha a tulajdon-tengely
+        egyaltalan nem letezne.
+      */
+      const found = await repository.detailByLabelCode(
+        CODE_C,
+        { kind: "customer", customerId: masik.id },
+        [helyszinId],
+      );
       assert.equal(found, null, "más partner eszköze nem érhető el a kódról");
     });
 
