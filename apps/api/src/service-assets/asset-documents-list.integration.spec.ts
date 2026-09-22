@@ -93,11 +93,23 @@ async function removeLeftovers() {
   await prisma.worksheetDepartment.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
   });
-  await prisma.customer.deleteMany({
-    where: { customerNumber: { startsWith: PREFIX } },
-  });
+  /*
+    A FELHASZNALOK A VEVO ELOTT MENNEK, ES EZ 2026-09-22 OTA IGY VAN.
+
+    A portal-felhasznalo `customerId` mezoje idegen kulcs a vevore
+    (`User_customerId_fkey`), es NEM kaszkadol. A regi sorrend (vevo, aztan
+    felhasznalo) azert mukodott, mert ez a fixtura addig CSAK aktor-felhasznalot
+    hozott letre, vevo nelkul.
+
+    Merve a CI-ban ugyanezen a napon: a regi sorrend `hookFailed`-del allt meg,
+    es a suite HUSZONNEGY allitasa EL SEM INDULT. A kulonbseg szamit: ha az
+    allitas bukik, a mert dolog rossz; ha a horog, a meres meg sem tortent.
+  */
   await prisma.user.deleteMany({
     where: { email: { startsWith: PREFIX.toLowerCase() } },
+  });
+  await prisma.customer.deleteMany({
+    where: { customerNumber: { startsWith: PREFIX } },
   });
 }
 

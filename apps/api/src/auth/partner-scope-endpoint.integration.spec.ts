@@ -347,6 +347,26 @@ describe(
       departmentOfA = departmentA.id;
       departmentOfB = departmentB.id;
 
+      /*
+        A HOZZARENDELES A FIXTURA RESZE, NEM DISZ.
+
+        2026-09-22 ota a vevo-hatokoru olvasas a HOZZARENDELT helyszinekre szur.
+        Egy hozzarendeles nelkuli felhasznalo SEMMIT nem lat -- es akkor minden
+        "csak a sajatjat latja" allitas egy ures listan lenne zold, vagyis a
+        tulajdon hatarat nem merne semmi.
+
+        MINDEGYIK PONTOSAN EGY helyszint kap, es a ketto KULONBOZIK: e nelkul
+        egy "mindent atengedo" es egy "helyesen szukito" szuro ugyanazt adna.
+      */
+      await Promise.all([
+        prisma.userWorksheetDepartment.create({
+          data: { userId: userA.id, departmentId: departmentA.id },
+        }),
+        prisma.userWorksheetDepartment.create({
+          data: { userId: userB.id, departmentId: departmentB.id },
+        }),
+      ]);
+
       const [sheetA, sheetB] = await Promise.all([
         prisma.worksheet.create({
           data: {
@@ -376,6 +396,11 @@ describe(
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-A`,
             name: `${shared} eszköz A`,
             customerId: customerA,
+            // A HELYSZIN 2026-09-22 OTA KELL: a vevo-hatokoru lathatosag a
+            // HOZZARENDELT helyszinekre szur, es a NULL azon nem megy at.
+            // Helyszin nelkul ez a fixtura nem a TULAJDON hatarat merne,
+            // hanem egy ures listat -- es minden lenti tiltas zold lenne.
+            departmentId: departmentA.id,
           },
         }),
         prisma.asset.create({
@@ -383,6 +408,7 @@ describe(
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-B`,
             name: `${shared} eszköz B`,
             customerId: customerB,
+            departmentId: departmentB.id,
           },
         }),
         prisma.asset.create({

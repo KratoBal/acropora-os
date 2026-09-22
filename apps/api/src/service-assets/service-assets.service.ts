@@ -201,8 +201,13 @@ export class ServiceAssetsService {
     return { ok: true as const };
   }
 
-  async scan(qrToken: string, scope: PartnerScope) {
-    const asset = await this.repository.detailByQrToken(qrToken, scope);
+  async scan(qrToken: string, user: AuthenticatedUser) {
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    const asset = await this.repository.detailByQrToken(
+      qrToken,
+      scope,
+      assignedUnitIds,
+    );
     if (!asset)
       throw new NotFoundException(
         "A QR-kódhoz nem tartozik érvényes eszközazonosító.",
@@ -266,11 +271,16 @@ export class ServiceAssetsService {
    * teszunk kulonbseget: a tarolo mindkettore `null`-t ad, es a kettot
    * megkulonbozteto valasz maga lenne a szivargas.
    */
-  async scanLabel(rawCode: string, scope: PartnerScope) {
+  async scanLabel(rawCode: string, user: AuthenticatedUser) {
     const code = normalizeAssetLabelCode(rawCode);
     if (code === null)
       throw new BadRequestException(ASSET_LABEL_CODE_SHAPE_MESSAGE);
-    const asset = await this.repository.detailByLabelCode(code, scope);
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    const asset = await this.repository.detailByLabelCode(
+      code,
+      scope,
+      assignedUnitIds,
+    );
     if (!asset)
       throw new NotFoundException(
         "Ehhez a matricakódhoz nem tartozik elérhető eszköz.",

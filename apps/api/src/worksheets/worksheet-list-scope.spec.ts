@@ -152,12 +152,16 @@ describe("worksheetListWheres", () => {
         {},
         {},
       ).counts.AND,
-      [
-        { supplierId: "s-1" },
-        { departmentId: { in: EGYSEGEK } },
-        { hiddenAt: null },
-        {},
-      ],
+      /*
+        A SZALLITOI HATOKOR HELYSZIN-AGA URES, ES EZ SZANDEKOS.
+
+        Csak a VEVO-hatokor szukul: ma nulla szallitoi hatokoru felhasznalo
+        letezik (acrobot merese, 2026-09-22), tehat ott nincs pozitiv kontroll
+        -- egy szukites olyan allitast rogzitene helyesnek, amit senki nem tud
+        megcafolni. Ugyanez a dontes all az eszkoz oldalan is; ha a ketto
+        elternne, ugyanaz a felhasznalo ket felulet kozott mast latna.
+      */
+      [{ supplierId: "s-1" }, {}, { hiddenAt: null }, {}],
     );
   });
 });

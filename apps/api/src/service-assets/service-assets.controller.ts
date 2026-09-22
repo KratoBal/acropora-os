@@ -182,7 +182,7 @@ export class ServiceAssetsController {
     @Param("code") code: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.scanLabel(code, partnerScopeOf(user));
+    return this.service.scanLabel(code, user);
   }
 
   /**
@@ -240,9 +240,28 @@ export class ServiceAssetsController {
   }
 
   /**
-   * A TULAJDONOST SZANDEKOSAN NEM ELLENORIZZUK (spec 4.1): a token maga a
-   * kulcs. A hatokor MEGIS atmegy, mert a dokumentum-tipus szabalya nem a
-   * tulajdonosrol szol -- lasd a tarolo `detailByQrToken` jegyzetet.
+   * A BEOLVASAS A HIVO LATHATOSAGAN BELUL MARAD -- ES EZ FELULIR EGY KORABBI
+   * SPEC-DONTEST.
+   *
+   * AMI ITT ALLT 2026-09-22-IG: "A TULAJDONOST SZANDEKOSAN NEM ELLENORIZZUK
+   * (spec 4.1): a token maga a kulcs." Ez a mondat a PARTNER-hatokorre
+   * MOSTANTOL NEM all.
+   *
+   * AKI FELULIRTA, ES MIKOR: Balazs, 2026-09-22 08:55:25 UTC (Discord, uzenet
+   * 1551879584851431436), szo szerint: "ne lassa". A kerdes, amire valaszolt
+   * (uzenet 1551879397806448701): "Ha a partner embere odamegy egy olyan
+   * helyszinre, ami nincs hozza rendelve, es beolvassa a gepen a QR kodot,
+   * lassa az eszkozt vagy ne?"
+   *
+   * A valasz tehat PONTOSAN erre az utra szol, es nem tagabb annal.
+   *
+   * ES A REGI INDOK AMUGY IS PONTATLAN VOLT: a vegpont `SERVICE_VIEW` jog alatt
+   * all es `@CurrentUser`-t vesz, tehat a token sosem volt "a kulcs", csak a
+   * masodik tenyezo.
+   *
+   * A BELSOS HIVO VALTOZATLAN: ott a lathatosagi fuggveny ures szurot ad, tehat
+   * a szerelonk beolvasasa barmelyik ott allo eszkozt megnyitja -- a 2026-08-21-i
+   * dontes szerint. Ha ez valaha valtozik, ITT kell atirni, nem a taroloban.
    */
   @Get("scan/:qrToken")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
@@ -250,7 +269,7 @@ export class ServiceAssetsController {
     @Param("qrToken") qrToken: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.scan(qrToken, partnerScopeOf(user));
+    return this.service.scan(qrToken, user);
   }
 
   @Get(":id/qr")

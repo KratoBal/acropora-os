@@ -26,12 +26,21 @@ import { describe, it } from "node:test";
  *   1. HELPER a where-agban (`scopeWhereForAndBranch` es tarsai) -- 11 metodus
  *   2. KORAI VISSZATERES a `scope.kind` alapjan (`assignableUsers`: egy partner
  *      ures listat kap; ez SZIGORUBB, mint egy szuro, csak maskepp irva) -- 1
- *   3. DOKUMENTALT KIVETEL, NEV SZERINT -- ma 1 (`detailByQrToken`)
+ *   3. DOKUMENTALT KIVETEL, NEV SZERINT -- ma NULLA (2026-09-22 ota)
  *
  * A HARMADIK AZERT NEVES, es nem "valahogy megjelolt": egy nevtelen kivetel
  * CSENDBEN no. Egy nevesitettet ki kell irni ide, es aki kiirja, az abban a
- * pillanatban indokolja is. Ma egy nev all rajta; ha holnap ketto lesz, az
- * LATSZIK a diffen.
+ * pillanatban indokolja is. Ha holnap all rajta egy nev, az LATSZIK a diffen.
+ *
+ * === A LISTA 2026-09-22-EN KIURULT, ES EZ NEM TAKARITAS ===
+ *
+ * Egyetlen nev allt rajta, a `detailByQrToken`, azzal az indokkal, hogy a
+ * `qrToken` birtoklasa maga a felhatalmazas. Balazs ezt FELULIRTA ugyanaznap
+ * (08:55:25 UTC, "ne lassa"), tehat a metodus mostantol szur -- a kivetel nem
+ * "megszunt szuksegesnek lenni", hanem a dontes fordult meg.
+ *
+ * A URES LISTA ERVENYES ALLAPOT, ES ALLITAS IS: ha valaki uj kivetelt ir ide,
+ * azzal egy olyan sort nyit meg, ami ma nem letezik.
  */
 const FILES = [
   "src/service-assets/service-assets.repository.ts",
@@ -130,15 +139,17 @@ const HELPERS = [
 ];
 
 /**
- * A DOKUMENTALT KIVETELEK, NEV SZERINT.
+ * A DOKUMENTALT KIVETELEK, NEV SZERINT -- MA URES.
  *
- * `detailByQrToken`: a tulajdon SZANDEKOSAN nincs ellenorizve, mert a
- * `qrToken` 128 bites veletlen uuid -- a birtoklasa maga a felhatalmazas. A
- * teljes indoklas a metodus folott all. FIGYELEM: ez a kivetel a TOKEN
- * EROSSEGEN all, nem a metodus helyen. Egy gyengebb kod ugyanezen az uton NEM
- * orokolheti (lasd `detailByLabelCode`, ami ezert ellenoriz tulajdont).
+ * Amig egy nev allt rajta (`detailByQrToken`, 2026-09-22-ig), az indoka a TOKEN
+ * EROSSEGEN allt, nem a metodus helyen. Az az indok mar nem ervenyes: a gazda
+ * felulirta, es a metodus szur.
+ *
+ * HA IDE UJ NEV KERUL: az indok a metodus folott alljon, es nevezze meg, KI
+ * dontott igy es MIKOR. Egy kivetel, aminek nincs gazdaja, ugy viselkedik,
+ * mintha mar el lenne dontve.
  */
-const DOKUMENTALT_KIVETELEK = new Set(["detailByQrToken"]);
+const DOKUMENTALT_KIVETELEK = new Set<string>([]);
 
 /**
  * Metodus-kezdet: ket szokoz behuzas, opcionalis lathatosag-jelolo, opcionalis
@@ -233,17 +244,32 @@ describe("minden hatókört átvevő metódus használja is", () => {
     );
   });
 
+  /**
+   * A MASODIK IRANY, ES AZ ALANYA 2026-09-22-EN MEGVALTOZOTT.
+   *
+   * A fenti allitasok szoveg-darabokon allnak; ha a kivagas az egesz fajlt adna
+   * vissza, MINDEN metodus "hasznalja a hatokort" lenne, mert valahol a fajlban
+   * all helper-hivas. Ezt az egy sor zarja ki.
+   *
+   * AMI VALTOZOTT: a kontroll eddig a DOKUMENTALT KIVETELEN allt
+   * (`detailByQrToken`, aminek akkor nem volt helper-hivasa). Az a lista ma
+   * URES, tehat a kontrollnak uj alany kellett.
+   *
+   * AZ UJ ALANY A MASODIK ALAK: `assignableUsers` a `scope.kind` alapjan TER
+   * VISSZA korán, es epp ezert NINCS benne helper-hivas. Ez nem kivetel, hanem
+   * egy masik -- szigorubb -- megoldas ugyanarra, tehat a kontroll ugyanugy all,
+   * es kozben nem egy elavult dontesre hivatkozik.
+   */
   it("a metódus-kivágás egy metódust ad, nem az egész fájlt", () => {
-    // A MASODIK IRANY. A fenti allitasok szoveg-darabokon allnak; ha a kivagas
-    // az egesz fajlt adna vissza, MINDEN metodus "hasznalja a hatokort" lenne,
-    // mert valahol a fajlban all helper-hivas. Ezt az egy sor zarja ki: a
-    // dokumentalt kivetel torzsében NEM allhat helper-hivas.
-    const kivetel = metodusok.find((m) => m.nev === "detailByQrToken");
-    assert.ok(kivetel, "detailByQrToken nincs a talált metódusok között");
+    const koraiVisszateres = metodusok.find((m) => m.nev === "assignableUsers");
+    assert.ok(
+      koraiVisszateres,
+      "assignableUsers nincs a talált metódusok között",
+    );
     assert.equal(
-      HELPERS.some((h) => kivetel.torzs.includes(`${h}(`)),
+      HELPERS.some((h) => koraiVisszateres.torzs.includes(`${h}(`)),
       false,
-      "a kivágás túl sokat adott vissza: a kivételben helper-hívás látszik",
+      "a kivágás túl sokat adott vissza: a korai visszatéréses metódusban helper-hívás látszik",
     );
   });
 

@@ -356,6 +356,28 @@ export function assetDetailWhere(
   };
 }
 
+/**
+ * A HELYSZIN-TENGELY ONALLOAN, AZOKNAK AZ UTAKNAK, AMIK NEM AZ
+ * `assetVisibilityForAndBranch` EGESZET hasznaljak.
+ *
+ * Ma egyetlen ilyen ut van: a matricakod-kereses, ahol a tulajdon-tengelyt a
+ * KOZOS `scopeWhereForAndBranch` adja. Azert kulon fuggveny es nem beirt alak,
+ * mert igy a ket helyen allo szabaly EGY forrasbol jon -- ha a tengely
+ * jelentese valtozik (peldaul a helyszin nelkuli sorra), egy helyen valtozik.
+ *
+ * A BELSOS HIVO URES AGAT KAP, ugyanugy, mint a teljes fuggvenyben.
+ */
+export function egysegTengelyAsset(
+  scope: PartnerScope,
+  assignedUnitIds: readonly string[],
+): Prisma.AssetWhereInput {
+  // CSAK A VEVO-HATOKOR, ugyanaz a dontes es ugyanaz az indok, mint a teljes
+  // `assetVisibilityForAndBranch` fuggvenyben: ma nulla szallitoi hatokoru
+  // felhasznalo letezik, tehat ott nincs pozitiv kontroll.
+  if (scope.kind !== "customer") return {};
+  return { departmentId: { in: [...assignedUnitIds] } };
+}
+
 export function assetListWheres(
   scope: PartnerScope,
   assignedUnitIds: readonly string[],
@@ -820,9 +842,24 @@ export class ServiceAssetsRepository extends Repository {
   async detailByQrToken(
     qrToken: string,
     scope: PartnerScope,
+    assignedUnitIds: readonly string[],
   ): Promise<AssetDetail | null> {
-    const row = await prisma.asset.findUnique({
-      where: { qrToken },
+    /*
+      A SOR-SZINTU SZURO 2026-09-22 OTA ITT IS ALL, ES EZ EGY LEIRT
+      SPEC-DONTEST IR FELUL. A reszletek a vegpont jegyzeteben
+      (`service-assets.controller.ts`, a `scan` folott), a gazda idezetevel.
+
+      UGYANAZ A FUGGVENY, amit a lista es az adatlap hasznal: a beolvasott
+      eszkoz PONTOSAN annyira lathato, mint amennyire a listan lenne. Egy
+      kulon szabaly itt ugyanaz a szetcsuszas lenne, ami a 671f87f0-t okozta.
+
+      A BELSOS HIVO VALTOZATLAN: ott a fuggveny ures szurot ad, tehat a
+      szerelonk beolvasasa tovabbra is barmelyik ott allo eszkozt megnyitja.
+    */
+    const row = await prisma.asset.findFirst({
+      where: {
+        AND: [{ qrToken }, assetVisibilityForAndBranch(scope, assignedUnitIds)],
+      },
       include: assetDetailInclude,
     });
     return row
@@ -1246,9 +1283,34 @@ export class ServiceAssetsRepository extends Repository {
   async detailByLabelCode(
     code: string,
     scope: PartnerScope,
+    assignedUnitIds: readonly string[],
   ): Promise<AssetDetail | null> {
+    /*
+      A HELYSZIN-TENGELY SAJAT AG, ES A KOZOS SZURO ERINTETLEN MARAD.
+
+      A fenti jegyzet indoka egy szinttel melyebben is all: a matricakod 260
+      ezer lehetoseg, tehat vegigprobalhato. A mai szabaly utan a vegigprobalas
+      mar nem MAS partner eszkozeit adna, hanem a SAJAT ugyfel masik helyszinet
+      -- pontosan azt, amit a gazda kizart (2026-09-22 07:46:59 UTC).
+
+      AMIT SZANDEKOSAN NEM VALTOZTATOK: a tulajdon-tengelyen ez az ut ma
+      szukebb, mint a lista (`scopeWhereForAndBranch` a sajat `customerId`-t
+      nezi, nem a reszlegen at lathato sort). Ez KORABBI elteres, nem ennek a
+      szeletnek a kerdese -- egy hozzaigazitas itt TAGITAS lenne.
+
+      ES A JEGYZET AZERT ALL A HIVAS FOLOTT, NEM KOZOTTE: a
+      `partner-scope-and-branch.spec.ts` a hivast megelozo 120 karakterben
+      keresi az `AND: [` nyitast. Egy kozbeszurt bekezdes kitolja onnan, es az
+      orzo HAMIS bukast ad -- ez elso korben meg is tortent.
+    */
     const row = await prisma.asset.findFirst({
-      where: { AND: [{ label: { code } }, scopeWhereForAndBranch(scope)] },
+      where: {
+        AND: [
+          { label: { code } },
+          scopeWhereForAndBranch(scope),
+          egysegTengelyAsset(scope, assignedUnitIds),
+        ],
+      },
       include: assetDetailInclude,
     });
     return row

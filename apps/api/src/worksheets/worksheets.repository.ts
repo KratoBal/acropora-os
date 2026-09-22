@@ -294,10 +294,24 @@ export function worksheetListWheres(
    *
    * A BELSOS HIVO VALTOZATLAN: ott a hatokor `{}`, es ez az ag sem sul el.
    */
+  /*
+    CSAK A VEVO-HATOKOR SZUKUL, ES EZ SZANDEKOS -- UGYANAZ A DONTES, MINT AZ
+    ESZKOZ OLDALAN (`assetVisibilityForAndBranch`).
+
+    A szallitoi hatokort azert nem szukitem, mert MA NULLA ilyen felhasznalo
+    letezik (acrobot merese, 2026-09-22), tehat nincs hozza pozitiv kontroll:
+    egy szukites ott olyan allitast rogzitene helyesnek, amit senki nem tud
+    megcafolni. A nulla egy PILLANAT, nem allapot -- ha keletkezik ilyen fiok,
+    ez a dontes ujramerendo.
+
+    ES A KET OLDALNAK EGYEZNIE KELL: ha a munkalap szukitene a szallitot es az
+    eszkoz nem, ugyanaz a felhasznalo ket felulet kozott mast latna, es a
+    kulonbsegre semmilyen szabaly nem mutatna ra.
+  */
   const egysegTengely: Prisma.WorksheetWhereInput =
-    scope.kind === "internal"
-      ? {}
-      : { departmentId: { in: [...assignedUnitIds] } };
+    scope.kind === "customer"
+      ? { departmentId: { in: [...assignedUnitIds] } }
+      : {};
 
   return {
     list: {

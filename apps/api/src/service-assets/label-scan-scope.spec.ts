@@ -45,21 +45,77 @@ describe("a matricakódos keresés hatóköre", () => {
   });
 
   /**
-   * ISMERT POZITIV KONTROLL A METODUS-KIVAGASRA.
+   * A HELYSZIN-TENGELY KULON ALLITAST KAP, ES EZ NEM ISMETLES.
    *
-   * A fenti allitas egy SZOVEGDARABON all, amit egy sajat fuggveny vag ki. Ha a
-   * kivagas elromlana es URES sztringet adna, a `match` pirosodna -- de ha
-   * TULSAGOSAN sokat adna vissza (peldaul az egesz fajlt), a fenti allitas
-   * akkor is zold lenne, HOLOTT nem ezt a metodust meri. Ez a sor azt zarja ki:
-   * a `detailByQrToken` SZANDEKOSAN nem ellenorzi a tulajdont, tehat a
-   * kivagasnak azt a metodust hatokor-szuro NELKUL kell visszaadnia.
+   * A fenti allitas a TULAJDON-szurot nezi. A ketto KULON tud eltunni: a
+   * matricakod 260 ezer lehetoseg, tehat vegigprobalhato, es a tulajdon-szuro
+   * MEGLETE mellett is a sajat ugyfel MASIK helyszinet adna vissza -- pontosan
+   * azt, amit a gazda kizart (2026-09-22 07:46:59 UTC).
+   *
+   * A SAJAT AG, ES NEM A KOZOS FUGGVENY: a `scopeWhereForAndBranch` kozos a
+   * munkalapokkal, a hibajegyekkel es a partner-listaval. Egy szukites ott
+   * mindegyik hivojanak megvaltoztatna a jelenteset.
+   */
+  it("a detailByLabelCode a HELYSZIN-tengelyt is AND ágban használja", () => {
+    const torzs = metodusTorzs(forras(), "detailByLabelCode");
+    assert.match(torzs, /egysegTengelyAsset\(scope, assignedUnitIds\)/);
+  });
+
+  /**
+   * A QR-UT 2026-09-22 OTA SZUR, ES EZ EGY LEIRT SPEC-DONTEST IR FELUL.
+   *
+   * Amit felulir: "A TULAJDONOST SZANDEKOSAN NEM ELLENORIZZUK (spec 4.1): a
+   * token maga a kulcs." Aki felulirta: Balazs, 2026-09-22 08:55:25 UTC
+   * (Discord, uzenet 1551879584851431436), szo szerint "ne lassa" -- arra a
+   * kerdesre, hogy a partner embere egy NEM hozza rendelt helyszinen beolvasva
+   * lassa-e az eszkozt.
+   *
+   * A TELJES LATHATOSAGI FUGGVENY ALL ITT, nem csak a helyszin-tengely: igy a
+   * beolvasott eszkoz PONTOSAN annyira lathato, mint amennyire a listan lenne.
+   * Egy kulon szabaly ezen az uton ugyanaz a szetcsuszas lenne, ami a 671f87f0-t
+   * okozta (a lista mutatta, az adatlap nemet mondott).
+   */
+  it("a detailByQrToken a teljes láthatósági szűrőt AND ágban használja", () => {
+    const torzs = metodusTorzs(forras(), "detailByQrToken");
+    assert.match(
+      torzs,
+      /assetVisibilityForAndBranch\(scope, assignedUnitIds\)/,
+    );
+    assert.match(torzs, /AND:\s*\[/);
+  });
+
+  /**
+   * ISMERT POZITIV KONTROLL A METODUS-KIVAGASRA -- ES A PREMISSZAJA 2026-09-22-EN
+   * MEGVALTOZOTT, EZERT VAN ATIRVA.
+   *
+   * AMI ITT ALLT: a kontroll arra epult, hogy a `detailByQrToken` SZANDEKOSAN
+   * nem szur tulajdonra, tehat a kivagasnak hatokor-szuro nelkuli torzset kell
+   * adnia. Ez a premissza ma mar HAMIS -- a QR-ut szur.
+   *
+   * AZ ALLITAS ATTOL MEG ZOLD MARADT VOLNA (a QR-ut a masik fuggvenyt hasznalja,
+   * nem a `scopeWhereForAndBranch`-et), es EPP EZ A VESZELYES: egy kontroll,
+   * aminek az INDOKA hamis, ugyanugy mukodik, csak senki nem tudja, mit meri.
+   *
+   * AZ UJ PREMISSZA MERT, NEM FELTETELEZES: a ket ut SZANDEKOSAN KULONBOZO
+   * fuggvenyt hasznal. A cimke-ut a KOZOS szurot plusz a sajat helyszin-agat, a
+   * QR-ut a TELJES lathatosagi fuggvenyt. Ha a kivagas az egesz fajlt adna
+   * vissza, MINDKET nev megjelenne MINDKET torzsben -- tehat a ket tagadas
+   * egyutt bizonyitja, hogy a kivagas metodusonkent vag.
    */
   it("a metódus-kivágás tényleg egy metódust ad, nem az egész fájlt", () => {
-    const torzs = metodusTorzs(forras(), "detailByQrToken");
     assert.equal(
-      /scopeWhereForAndBranch\(scope\)/.test(torzs),
+      /assetVisibilityForAndBranch\(/.test(
+        metodusTorzs(forras(), "detailByLabelCode"),
+      ),
       false,
-      "a detailByQrToken szándékosan nem szűr tulajdonra -- ha itt találat van, a kivágás túl sokat adott vissza",
+      "a címke-út a KÖZÖS szűrőt használja, nem a teljes láthatósági függvényt -- ha itt találat van, a kivágás túl sokat adott vissza",
+    );
+    assert.equal(
+      /scopeWhereForAndBranch\(/.test(
+        metodusTorzs(forras(), "detailByQrToken"),
+      ),
+      false,
+      "a QR-út a teljes láthatósági függvényt használja, nem a közöset -- ha itt találat van, a kivágás túl sokat adott vissza",
     );
   });
 });
