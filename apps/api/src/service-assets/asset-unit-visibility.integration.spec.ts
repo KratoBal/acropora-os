@@ -5,7 +5,35 @@ import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
-import { assetListWheres } from "./service-assets.repository.js";
+import {
+  assetListWheres,
+  ServiceAssetsRepository,
+} from "./service-assets.repository.js";
+
+const repository = new ServiceAssetsRepository();
+
+/**
+ * A FIXTURA-SOR AZONOSITOJA, LEKERDEZVE -- NEM ELTETT VALTOZOBOL.
+ *
+ * A `findFirstOrThrow` itt MERES is: ha a fixtura-sor hianyozna, a negy alabbi
+ * allitas nem CSENDBEN lenne zold, hanem megallna. Egy eltett azonosito ezt nem
+ * adna meg, mert a `before` horog bukasa utan is a regi erteket hordozna.
+ */
+async function kroEszkozId(): Promise<string> {
+  const row = await prisma.asset.findFirstOrThrow({
+    where: { assetNumber: `${PREFIX}-KRO-1` },
+    select: { id: true },
+  });
+  return row.id;
+}
+
+async function kroEszkozToken(): Promise<string> {
+  const row = await prisma.asset.findFirstOrThrow({
+    where: { assetNumber: `${PREFIX}-KRO-1` },
+    select: { qrToken: true },
+  });
+  return row.qrToken;
+}
 
 /**
  * KET FELHASZNALO, UGYANAZ AZ UGYFEL, KULONBOZO EGYSEG -- FIXTURA ES KERET.
@@ -436,6 +464,108 @@ describe(
       const { list } = assetListWheres({ kind: "internal" }, [], {}, {});
 
       assert.equal((await latottEszkozok(list)).length, 6);
+    });
+
+    /**
+     * A KET BEOLVASO UT: ADATLAP AZONOSITO SZERINT, ES QR-KODROL.
+     *
+     * === MIERT KERULT IDE, ES MERT RESBOL ===
+     *
+     * Merve 2026-09-22 (meres/helyszin-tengely-terkep, futas 35752281226): ha a
+     * KOZOS lathatosagi fuggvenybol kivesszuk a helyszin-tengelyt -- tehat MINDEN
+     * vevo-hatokoru olvasast egyszerre erintve --, a teljes integracios
+     * keszletbol 362 allitas fut le es PONTOSAN HAROM valt pirosra. Mind a harom
+     * EBBEN a fajlban all, es mind a harom a LISTA-utat meri.
+     *
+     * A terkep tehat ez volt:
+     *
+     *     list                 MERVE     a fenti harom allitas
+     *     detail (id szerint)  NINCS     a meglevo allitasai a TULAJDONT merik
+     *     detailByQrToken      NINCS     csak FORRAS-olvaso allitas all rajta
+     *     detailByLabelCode    NINCS     -- kulon korben potolva (#990)
+     *
+     * ES A HAROM "NINCS" NEM A KERDES TULAJDONSAGA: a `detail` utat a
+     * partner-scope integracios spec TENYLEG hivja vevo-hatokorrel, csak az az
+     * allitas a MASIK VEVO eszkozet keri -- tehat a tulajdon-tengely is kizarja.
+     * Ugyanaz az alak, mint a matricakod-uton volt.
+     *
+     * === MIERT A REPOSITORY, ES NEM A WHERE-EPITO ===
+     *
+     * A fenti harom allitas a `where` objektumot adja at a Prismanak. Itt a
+     * REPOSITORY metodusat hivom, mert a `detailByQrToken` nem visel exportalt
+     * where-epitot -- es mert a kerdes az, hogy a HIVO mit kap, nem az, hogy a
+     * szuro hogy nez ki.
+     *
+     * === MIERT NEGY ALLITAS, ES NEM EGY CIKLUS ===
+     *
+     * Egy ciklusban futtatott keszlet egyetlen NEVET adna, es akkor egy
+     * kalibracio nem tudna megmondani, MELYIK olvaso romlott el. A ket ut
+     * ugyanazt a fuggvenyt hivja, de ket kulon hivohelyen -- es egy kesobbi
+     * szerkesztes az egyiket elviheti a masik nelkul.
+     */
+    /**
+     * NEGY ALLITAS, NEM KETTO -- ES A SZETVALASZTAS NEM RENDSZERETET.
+     *
+     * Mindegyik KULON rontassal elsuthato: egy olvaso, ami MINDENKINEK nullat
+     * ad, a ket POZITIV allitast dontene pirosra es a ket TAGADOT zolden
+     * hagyna. Ha a par egy `it`-ben allna, a futtato egyetlen nevet irna ki, es
+     * a kalibracio nem tudna megmondani, melyik fele romlott el.
+     *
+     * A SZOMSZED FAJL UGYANIGY ALL (`asset-label.integration.spec.ts` 8. es 9.
+     * allitasa): a pozitiv kontroll sajat nevet kap.
+     */
+    it("az ADATLAP megnyilik a SAJAT helyszinen allo eszkozre", async () => {
+      const eszkozId = await kroEszkozId();
+
+      const lap = await repository.detail(
+        eszkozId,
+        { kind: "customer", customerId: ugyfelId },
+        await assignedUnitIdsFor(kroFelhasznaloId),
+      );
+
+      assert.equal(lap?.id, eszkozId);
+    });
+
+    it("az ADATLAP NEM nyilik meg a kiosztott helyszineken kivul allo eszkozre", async () => {
+      const eszkozId = await kroEszkozId();
+
+      /*
+        A VALASZ `null`, NEM DOBAS: a tarolo `AssetDetail | null` tipust ad, es a
+        "nem talaltam" meg a "nincs jogod" kulonbseget SZANDEKOSAN nem teszi meg
+        -- az a hivo dolga. Egy `assert.rejects` itt akkor is zold lenne, ha a
+        metodus barmilyen MAS okbol dobna.
+      */
+      const lap = await repository.detail(
+        eszkozId,
+        { kind: "customer", customerId: ugyfelId },
+        await assignedUnitIdsFor(akvFelhasznaloId),
+      );
+
+      assert.equal(lap, null);
+    });
+
+    it("a QR-KOD megnyitja a SAJAT helyszinen allo eszkozt", async () => {
+      const token = await kroEszkozToken();
+
+      const lap = await repository.detailByQrToken(
+        token,
+        { kind: "customer", customerId: ugyfelId },
+        await assignedUnitIdsFor(kroFelhasznaloId),
+      );
+
+      assert.ok(lap, "a sajat helyszin eszkoze nem nyilt meg a QR-kodrol");
+    });
+
+    it("a QR-KOD NEM nyitja meg a kiosztott helyszineken kivul allo eszkozt", async () => {
+      const token = await kroEszkozToken();
+
+      const lap = await repository.detailByQrToken(
+        token,
+        { kind: "customer", customerId: ugyfelId },
+        await assignedUnitIdsFor(akvFelhasznaloId),
+      );
+
+      assert.equal(lap, null);
     });
   },
 );
