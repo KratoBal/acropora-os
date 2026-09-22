@@ -261,7 +261,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
       );
       setDocumentFile(null);
       await load();
-      setNotice("A PDF dokumentum feltöltve.");
+      setNotice("A dokumentum feltöltve.");
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -655,11 +655,34 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                         )}
                       </Select>
                     </FormField>
-                    <FormField label="PDF fájl">
+                    {/*
+                      KEPET IS LEHET FELTOLTENI, NEM CSAK PDF-ET (Balazs kerte,
+                      2026-09-22): "A webes feluleten szeretnem ha egy eszkoznel
+                      fel lehetne tolteni kepet".
+
+                      A MUNKA HAROM SZTRING VOLT, ES EZ NEM VELETLEN: a szerver
+                      a JPEG-et es a PNG-t MAR elfogadta (`uploaded-file-type.ts`,
+                      a bajtok alairasat is ellenorzi), a galeria pedig a kepet
+                      MAR csempeként rajzolja a `contentType` alapjan. Egyedul ez
+                      a mezo zarta ki oket.
+
+                      AZ ALAK A HAZE, NEM KITALALT: `image/jpeg,image/png,
+                      application/pdf` all a hibajegy-szerkesztoben, a
+                      hibajegy-adatlapon, a partner uj bejelentesen es a partner
+                      dokumentum-paneljen is. Ez a mezo volt az EGYETLEN kilogo a
+                      ketto kozott.
+
+                      AMI NEM SZINKRONBAN VAN, ES EZT KIMONDOM: a szerver listaja
+                      (`ACCEPTED_UPLOAD_MIMETYPES`) az `apps/api`-ban all, ide
+                      NINCS exportalva, tehat a ket oldal kezzel tartja egymast. Ma
+                      betűre egyezik, de semmi nem meri -- ha a szerver bovul, ez a
+                      sor csendben szukebb marad.
+                    */}
+                    <FormField label="Fénykép vagy PDF">
                       <Input
                         type="file"
-                        accept="application/pdf,.pdf"
-                        aria-label="PDF fájl"
+                        accept="image/jpeg,image/png,application/pdf"
+                        aria-label="Fénykép vagy PDF"
                         onChange={(event) =>
                           setDocumentFile(event.target.files?.[0] ?? null)
                         }

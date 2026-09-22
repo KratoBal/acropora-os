@@ -502,3 +502,57 @@ describe("az eszköz matricakódja az adatlapon", () => {
     expect(panel.textContent).not.toContain("V2196");
   });
 });
+
+/**
+ * KEPET IS FEL LEHET TOLTENI, NEM CSAK PDF-ET.
+ *
+ * Balazs kerese, 2026-09-22: "A webes feluleten szeretnem ha egy eszkoznel fel
+ * lehetne tolteni kepet".
+ *
+ * AMIT EZ MER, ES AMIT NEM. A szerver a JPEG-et es a PNG-t MAR elfogadta
+ * (`uploaded-file-type.ts`, a bajtok alairasat is nezi), a galeria pedig a kepet
+ * MAR csempekent rajzolja -- arra a fenti "a fenykep kepkent latszik" allitas all.
+ * Egyedul a FELTOLTO mezo zarta ki oket, es ez a harom allitas ott mer.
+ *
+ * A HARMADIK A KONTROLL, ES NEM DISZ: az elso ketto ZOLD LENNE akkor is, ha
+ * valaki a PDF-et KICSERELTE volna kepre, ahelyett hogy melle vette volna. A
+ * kerés bovites volt, nem csere.
+ */
+describe("AssetDetailPage csatolmány-feltöltés", () => {
+  it("a fájlmező a képeket is elfogadja", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    const mezo = await screen.findByLabelText("Fénykép vagy PDF");
+    const elfogadott = mezo.getAttribute("accept") ?? "";
+
+    expect(elfogadott).toContain("image/jpeg");
+    expect(elfogadott).toContain("image/png");
+  });
+
+  it("KONTROLL: a PDF-et továbbra is elfogadja", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    const mezo = await screen.findByLabelText("Fénykép vagy PDF");
+
+    expect(mezo.getAttribute("accept") ?? "").toContain("application/pdf");
+  });
+
+  /**
+   * ES AZ ATTRIBUTUM ONMAGABAN KEVES: az `accept` csak a BONGESZO valaszto
+   * ablakat szukiti, a beküldest nem. Ez az allitas a teljes utat jarja vegig,
+   * a mezotol a hivasig -- enelkul egy olyan urlap is atmenne, ami a kepet
+   * elfogadja, de a kuldesnel eldobja.
+   */
+  it("a kiválasztott képet tényleg feltölti", async () => {
+    api.uploadDocument.mockResolvedValue([]);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    const mezo = await screen.findByLabelText("Fénykép vagy PDF");
+    const kep = new File(["bajtok"], "medence.jpg", { type: "image/jpeg" });
+    fireEvent.change(mezo, { target: { files: [kep] } });
+    fireEvent.click(screen.getByRole("button", { name: "Feltöltés" }));
+
+    await waitFor(() => expect(api.uploadDocument).toHaveBeenCalledTimes(1));
+    expect(api.uploadDocument.mock.calls[0]?.[3]).toBe(kep);
+  });
+});
