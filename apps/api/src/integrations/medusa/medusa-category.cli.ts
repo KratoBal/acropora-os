@@ -49,7 +49,11 @@ export function describePlan(plan: {
   mapOnly: unknown[];
   staleMapping: string[];
   conflict: { ourId: string }[];
-  handleUpdate: { ourId: string; from: string; to: string }[];
+  update: {
+    ourId: string;
+    handle: { from: string; to: string } | null;
+    name: { from: string; to: string } | null;
+  }[];
 }): string {
   const sorok = [
     `Létrehozandó: ${plan.create.length}`,
@@ -57,17 +61,28 @@ export function describePlan(plan: {
     `Már áll, de a leképezés hiányzik: ${plan.mapOnly.length}`,
     `Elavult leképezés (újra létrehozandó): ${plan.staleMapping.length}`,
     `Ütközés (érintetlen marad): ${plan.conflict.length}`,
-    `Webcím-frissítés (a tárolt eltér a szabálytól): ${plan.handleUpdate.length}`,
+    `Frissítendő (a tárolt eltér a szabálytól): ${plan.update.length}`,
+    `  ebből név: ${plan.update.filter((u) => u.name).length}`,
+    `  ebből webcím: ${plan.update.filter((u) => u.handle).length}`,
   ];
   /**
-   * A REGI ES AZ UJ CIM EGYMAS MELLETT, TETELESEN -- nem darabszamkent.
+   * A REGI ES AZ UJ ERTEK EGYMAS MELLETT, TETELESEN -- nem darabszamkent.
    *
-   * A csere EGYIRANYU: utana a regi cim sehol nem letezik tobbe. Ha valaha
+   * A csere EGYIRANYU: utana a regi ertek sehol nem letezik tobbe. Ha valaha
    * kiderul, hogy egy regi cim kint van (kepernyokep, levelezes, megosztott
    * hivatkozas), ez a par az EGYETLEN, amibol atiranyitas keszitheto.
+   *
+   * A KET SZAM KULON ALL A DARABSZAM MELLETT, mert egy bejegyzes viheti CSAK a
+   * nevet, CSAK a webcimet, vagy MINDKETTOT -- es a puszta osszeg ezt a harom
+   * esetet egybemosna. A 2026-09-22-i mereskor epp ez a kulonbseg dontott:
+   * 216 webcim allt szemben 136 nevvel.
    */
-  for (const u of plan.handleUpdate)
-    sorok.push(`  ${u.ourId}: ${u.from}  ->  ${u.to}`);
+  for (const u of plan.update) {
+    if (u.name)
+      sorok.push(`  ${u.ourId} név:    ${u.name.from}  ->  ${u.name.to}`);
+    if (u.handle)
+      sorok.push(`  ${u.ourId} webcím: ${u.handle.from}  ->  ${u.handle.to}`);
+  }
   if (plan.conflict.length)
     sorok.push(
       `Az ütköző kategóriák: ${plan.conflict.map((c) => c.ourId).join(", ")}`,

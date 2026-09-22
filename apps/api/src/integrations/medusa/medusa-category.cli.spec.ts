@@ -40,7 +40,7 @@ const URES_TERV = {
    * az az alak, amit a lapunk gyujt: a hivo (`describePlan`) hasznalja, a
    * fixtura nem adja, es a hiba csak FUTASKOR jott elo.
    */
-  handleUpdate: [],
+  update: [],
 };
 
 function szolgaltatasDupla(
