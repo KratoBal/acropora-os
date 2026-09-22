@@ -153,6 +153,64 @@ describe("meres-kapu", () => {
   });
 
   /**
+   * A TAP-SORSZAM NELKULI ALAK, ES EZ NEM KENYELEM.
+   *
+   * A varakozas ELORE irodik, amikor a sorszam meg nem tudhato -- egy uj teszt
+   * a suite elejen mindet eltolja. Ezert a meres-agak eddig elhagytak az
+   * `ok`/`not ok` elotagot, es ezzel LEMONDTAK a kimenetelrol: egy elotag
+   * nelkuli toredek a sikeres es a bukott sorra egyarant illeszkedik.
+   *
+   * MERVE 2026-09-22, ket sorral:
+   *     "not ok 4 - X".includes("not ok - X")  ->  false
+   *     "ok 12 - Y".includes("ok - Y")         ->  false
+   *
+   * Vagyis a kimenetel megnevezese MIND A KET iranyban nema volt. Ez a tukre
+   * annak, amit a fenti ket teszt ved: ott egy siker-varakozas nem tudott
+   * ELBUKNI, itt egy bukas-varakozas nem tudott TELJESULNI.
+   */
+  it("sorszam NELKULI `not ok` varakozas illeszkedik a sorszamozott sorra", () => {
+    const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-sorszam-"));
+    const naplo = join(mappa, "naplo.txt");
+    writeFileSync(
+      naplo,
+      ["TAP version 13", "    not ok 4 - a torles-sor MEGJELENIK"].join("\n"),
+    );
+    assert.equal(futtat(naplo, ["not ok - a torles-sor MEGJELENIK"]), 0);
+  });
+
+  it("sorszam NELKULI `ok` varakozas is illeszkedik", () => {
+    const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-sorszam2-"));
+    const naplo = join(mappa, "naplo.txt");
+    writeFileSync(
+      naplo,
+      ["TAP version 13", "    ok 12 - a jogos kero megkapja"].join("\n"),
+    );
+    assert.equal(futtat(naplo, ["ok - a jogos kero megkapja"]), 0);
+  });
+
+  /**
+   * ES AZ ORZO A NORMALIZALAS UTAN JOBBAN KELL, NEM KEVESBE.
+   *
+   * A normalizalt bukott sor (`not ok - X`) SZOVEGRESZKENT TARTALMAZZA a
+   * siker-varakozast (`ok - X`). Orzo nelkul tehat a sorszam-kihagyas eppen
+   * azt a rest nyitna vissza, amit 2026-09-21-en zartunk be -- csak most a
+   * sorszam nelkuli alakon.
+   */
+  it("sorszam nelkul sem elegit ki egy `ok ` varakozast a `not ok` sor", () => {
+    const mappa = mkdtempSync(join(tmpdir(), "meres-kapu-sorszam3-"));
+    const naplo = join(mappa, "naplo.txt");
+    writeFileSync(
+      naplo,
+      ["TAP version 13", "    not ok 4 - a torles-sor MEGJELENIK"].join("\n"),
+    );
+    assert.equal(
+      futtat(naplo, ["ok - a torles-sor MEGJELENIK"]),
+      1,
+      "a normalizalt bukas-sor tartalmazza a siker-varakozast: az orzo tartja",
+    );
+  });
+
+  /**
    * A TOREDEK-VARAKOZAS VALTOZATLAN: aki nem ir `ok` vagy `not ok` elotagot,
    * NEM NYILATKOZIK a kimenetelrol, es mind a kettore illeszkedik. A meglevo
    * meres-agak tobbsege ilyen, tehat ezt elvenni csendben elvagna oket.
