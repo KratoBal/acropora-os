@@ -41,6 +41,7 @@ export type {
   ServiceJobHandoverMailPreview,
   ServiceJobHandoverMailRecipient,
   ServiceJobHandoverMailResult,
+  ServiceJobHandoverMailSendSkipReason,
   ServiceJobHandoverMailSkipReason,
   ServiceJobListItem,
   ServiceJobListResponse,

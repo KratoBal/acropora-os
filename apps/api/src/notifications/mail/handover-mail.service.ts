@@ -6,7 +6,10 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 
-import type { ServiceJobHandoverMailPreview } from "@acropora/types";
+import type {
+  ServiceJobHandoverMailPreview,
+  ServiceJobHandoverMailSendSkipReason,
+} from "@acropora/types";
 
 import { headerSafe } from "./mail-header.js";
 import { TICKET_MAIL_ENV, TicketMailError } from "./gmail-mail.sender.js";
@@ -34,7 +37,10 @@ import { TicketMailRepository } from "./ticket-mail.repository.js";
 
 export type HandoverMailResult =
   | { readonly kind: "sent"; readonly recipients: number }
-  | { readonly kind: "skipped"; readonly reason: string }
+  | {
+      readonly kind: "skipped";
+      readonly reason: ServiceJobHandoverMailSendSkipReason;
+    }
   | { readonly kind: "refused"; readonly message: string };
 
 /**
@@ -341,7 +347,15 @@ export class HandoverMailService {
     job: { id: string },
     decision: HandoverMailDecision,
     input: { actorUserId: string | null },
-    felulir?: string,
+    /*
+      A FELULIRAS EGYETLEN ERTEKET VEHET FEL, ES EZ SZANDEKOS.
+
+      Eddig `string` volt, es a lazasag INNEN terjedt tovabb: a visszateresi
+      tipus, a kozos tipus es a felulet is `string`-et latott. A `no-sender` az
+      EGYETLEN ok, ami nem a cimzett-dontesbol jon, hanem a kornyezetbol -- egy
+      masodik felulirasi ok tehat DONTEST igenyel, nem egy uj sztringet.
+    */
+    felulir?: "no-sender",
   ): Promise<HandoverMailResult> {
     const reason =
       felulir ?? (decision.kind === "skip" ? decision.reason : "mail-off");

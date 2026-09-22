@@ -853,7 +853,50 @@ export type ServiceJobHandoverMailPreview =
  * felulet nem feltetelezheti, hogy az elonezet `send` valasza utan a kuldes
  * is `sent` lesz.
  */
+/**
+ * A KULDES KIHAGYASI OKAI -- HETEN, EGGYEL TOBBEN, MINT AZ ELONEZETE.
+ *
+ * === MIERT NEM UGYANAZ A HALMAZ, ES MIERT NEM BOVITHETO A MASIK ===
+ *
+ * A `no-sender` a levelkuldo HIANYA. Az elonezet ezt SZERKEZETILEG nem tudja
+ * adni: a kuldot csak a kuldes utja nezi meg (`handover-mail.service.ts`, a
+ * `this.sender` ket elofordulasa), az elonezet a cimzett-dontest adja tovabb.
+ *
+ * Ezert nem szabad a `ServiceJobHandoverMailSkipReason`-t hetedik ertekkel
+ * bovíteni: az azt allitana, hogy az elonezet is adhat `no-sender`-t, es a
+ * felulet egy olyan agra irna szoveget, ami ott sosem all elo.
+ *
+ * === ES MIERT NEM MARAD `string` (2026-09-22) ===
+ *
+ * Eddig az volt. A felulet emiatt a `reason`-t EL SEM OLVASTA: minden kihagyott
+ * kuldesre ugyanazt mondta ("nezd meg ujra a cimzetteket") -- es `no-sender`
+ * eseten a cimzettekkel semmi baj nincs, tehat a mondat a rossz helyre kuldte a
+ * kezelot. Egy `string` mellett a `Record<..., string>` teljessegi orzo nem tud
+ * elsulni, mert nincs mire: egy uj ok csendben altalanos szoveget kapna.
+ */
+export type ServiceJobHandoverMailSendSkipReason =
+  | ServiceJobHandoverMailSkipReason
+  | "no-sender"
+  /**
+   * A NYOLCADIK OK, AMIT A SZUKITES TALALT MEG (2026-09-22).
+   *
+   * A felmeresem HETET mondott; a fordito megallt egy nyolcadikon, amit a
+   * `string` elrejtett. A `no-job` akkor all elo, ha a jegy feloldasa `null`-t
+   * ad a kuldes kozben -- a lap nyitva volt, tehat a jegy letezett, amikor a
+   * kezelo megnyomta a gombot.
+   *
+   * ES EGY ELTERES, AMIT EZ HOZOTT ELO, DE NEM EZ A PR ZAR LE: ugyanerre az
+   * esetre az ELONEZET 404-et dob (`handover-mail.controller.ts`, a preview
+   * `null` aga), a KULDES viszont `skipped`-et ad. Ket ut, ugyanaz az allapot,
+   * ket kulonbozo valasz. Az egysegesites DONTES, nem tipus-kerdes, ezert itt
+   * csak a mai viselkedes kap nevet es szoveget.
+   */
+  | "no-job";
+
 export type ServiceJobHandoverMailResult =
   | { readonly kind: "sent"; readonly recipients: number }
-  | { readonly kind: "skipped"; readonly reason: string }
+  | {
+      readonly kind: "skipped";
+      readonly reason: ServiceJobHandoverMailSendSkipReason;
+    }
   | { readonly kind: "refused"; readonly message: string };

@@ -3,10 +3,9 @@
 import { useEffect, useState } from "react";
 
 import { Alert, Button, FormField, Input, Textarea } from "@acropora/ui";
-import type {
-  ServiceJobHandoverMailPreview,
-  ServiceJobHandoverMailSkipReason,
-} from "@acropora/types";
+import type { ServiceJobHandoverMailPreview } from "@acropora/types";
+
+import { KIHAGYAS_OKA } from "./handover-mail-skip-reason";
 
 /**
  * A LEZART HIBAJEGY KIKULDESE -- A KEZELO ABLAKA.
@@ -28,45 +27,6 @@ import type {
  * ezert nevezi meg a cimzettek szamat, es a figyelmeztetes a gomb MELLETT
  * all, nem a fejlecben.
  */
-
-/**
- * A HAT KIHAGYASI OK HAT KULON MONDATA.
- *
- * `Record<...>`, NEM egy `switch` alapertelmezett aggal: ha a szerver egy
- * ujabb okot vezet be, ez FORDITASI HIBA lesz. Egy alapertelmezett ag csendben
- * "ismeretlen ok"-ot mutatna a kezelonek, es a felulet zolden allna tovabb.
- *
- * ES EZ A JOSLAT BEVALT, 2026-09-22-en. Amikor a levelezes harom utja kulon
- * kapcsolot kapott, a `mode-off` ketteesett (`mail-off` es `path-off`), es a
- * fordito PONTOSAN ITT allt meg -- nem a felhasznalonal, egy ures mondattal.
- * Ez a bekezdes ezert nem a szandekot irja le tovabb, hanem egy MERT esetet.
- *
- * Mindegyik mondat a TEENDOT nevezi meg, nem az allapotot: a hat ok hat
- * kulonbozo embert erint, es egy kozos "nem kuldheto" mondat mindegyiknel
- * ugyanoda vezetne -- hozzank. A harom kapcsolos ok kozott is VALODI a
- * kulonbseg: az elso az egesz kornyezetre szol, a masodik EGY levelfajtara, a
- * harmadik (`no-redirect`) pedig azt mondja meg, hogy a kuldes MINDEN mas
- * felteteltol keszen all, es CSAK a cel hianyzik.
- *
- * ES A HARMADIK MASODSZOR IGAZOLTA A JOSLATOT, 2026-09-22-en: amikor a hianyzo
- * atiranyitas sajat okot kapott, a fordito megint PONTOSAN ITT allt meg. Egy
- * alapertelmezett ag helyette azt mondta volna a kezelonek, hogy "ismeretlen
- * ok" -- epp abban az allapotban, ahol a level MAJDNEM kiment.
- */
-const KIHAGYAS_OKA: Record<ServiceJobHandoverMailSkipReason, string> = {
-  "mail-off":
-    "A levélküldés ki van kapcsolva ezen a környezeten, ezért most nem megy ki semmi. Ez üzemeltetési beállítás.",
-  "path-off":
-    "A levélküldés be van kapcsolva, de az átadási levél külön ki van kapcsolva. Ez is üzemeltetési beállítás, és a többi levéltípust nem érinti.",
-  "no-redirect":
-    "A levélküldés be van kapcsolva, de nincs megadva, hová menjenek a levelek. Amíg ez hiányzik, egyetlen levél sem megy ki senkinek. Ez üzemeltetési beállítás.",
-  "no-department":
-    "A hibajegyhez nincs helyszín rendelve, így nincs kinek kiküldeni. Előbb a hibajegy helyszínét kell megadni.",
-  "no-customer":
-    "A hibajegy helyszínéhez nem tartozik ügyfél, ezért a címzettek nem állapíthatók meg. Ez törzsadat-hiba.",
-  "no-recipient":
-    "Az ügyfélnek nincs aktív portál-felhasználója, ezért nincs kinek kiküldeni. A hozzáférést az ügyfélnél kell létrehozni.",
-};
 
 export interface HandoverMailDialogProps {
   open: boolean;
