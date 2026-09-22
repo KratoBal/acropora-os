@@ -6,6 +6,8 @@ import type {
   ServiceJobDetail,
   ServiceJobDocumentSummary,
   ServiceJobDocumentType,
+  ServiceJobHandoverMailPreview,
+  ServiceJobHandoverMailResult,
   ServiceJobListResponse,
   ServiceJobStatusValue,
 } from "@acropora/types";
@@ -334,6 +336,43 @@ export const serviceJobsApi = {
     if (!response.ok) throw new Error("A csatolmány nem tölthető le.");
     return response.blob();
   },
+  /**
+   * KI KAPNA MEG A KIKULDOTT LEVELET -- A DIALOGUS MEGNYITASAKOR.
+   *
+   * KULON LEKERDEZES, NEM A KULDES MELLEKTERMEKE. Balazs specje szerint a
+   * kezelo ELOSZOR latja a cimzetteket, es azutan dont; egy elkuldott level
+   * pedig nem vonhato vissza.
+   */
+  handoverMailPreview(token: string, id: string) {
+    return apiRequest<ServiceJobHandoverMailPreview>(
+      jobPath(id, "/mail"),
+      token,
+    );
+  },
+
+  /**
+   * A LEZART HIBAJEGY KIKULDESE.
+   *
+   * A `subject` ELHAGYHATO: ha a kezelo nem irja at, a szerver ugyanazt az
+   * elotoltott mondatot hasznalja, amit az elonezet adott. A kliens ezert NEM
+   * kuldi vissza valtozatlanul az elonezetbol kapott szoveget -- akkor egy
+   * kesobbi szerver-oldali valtozas eszrevetlenul a REGI targyat rogzitene.
+   */
+  sendHandoverMail(
+    token: string,
+    id: string,
+    input: { subject?: string; message: string },
+  ) {
+    return apiRequest<ServiceJobHandoverMailResult>(
+      jobPath(id, "/mail"),
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+  },
+
   async downloadPackage(token: string, id: string) {
     const response = await fetch(
       `${API_PREFIX}/service/jobs/${encodeURIComponent(id)}/download`,

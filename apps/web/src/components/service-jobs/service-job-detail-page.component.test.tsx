@@ -29,6 +29,8 @@ const api = vi.hoisted(() => ({
   uploadDocument: vi.fn(),
   downloadDocument: vi.fn(),
   downloadPackage: vi.fn(),
+  handoverMailPreview: vi.fn(),
+  sendHandoverMail: vi.fn(),
   setDocumentCaption: vi.fn(),
   deleteDocument: vi.fn(),
 }));
@@ -181,6 +183,17 @@ describe("ServiceJobDetailPage", () => {
     api.documents.mockReset().mockResolvedValue({ items: [csatolmany()] });
     api.uploadDocument.mockReset().mockResolvedValue([csatolmany()]);
     api.downloadDocument.mockReset().mockResolvedValue(new Blob(["x"]));
+    api.handoverMailPreview.mockReset().mockResolvedValue({
+      kind: "send",
+      recipients: [
+        { name: "Üzemeltető Ubul", email: "uzem@partner.hu" },
+        { name: "Műszaki Manó", email: "muszak@partner.hu" },
+      ],
+      subject: "A HJ-2026-001 számú hibajegyet lezártuk.",
+    });
+    api.sendHandoverMail
+      .mockReset()
+      .mockResolvedValue({ kind: "sent", recipients: 2 });
     api.deleteDocument.mockReset().mockResolvedValue({ removed: true });
     api.setDocumentCaption.mockReset().mockResolvedValue({ ok: true });
     api.setAssignees.mockReset();
@@ -973,5 +986,302 @@ describe("ServiceJobDetailPage és a megtartott megjegyzés", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ütemezve" }));
 
     await waitFor(() => expect(api.move).toHaveBeenCalledTimes(2));
+  });
+});
+
+/**
+ * A KIKULDES ABLAKA.
+ *
+ * === A DUPLAK ITT NEM BIZONYITJAK, HOGY A SZERVER IGY VALASZOL ===
+ *
+ * Ezek a valaszok kezzel irtak. Azt merik, hogy a LAP mit kezd egy ilyen
+ * valasszal -- nem azt, hogy a szerver ilyet ad. A masik oldalt a
+ * `handover-mail.service.spec.ts` es a `handover-mail.controller.spec.ts`
+ * meri, es a ketto egyutt fed.
+ */
+describe("a lezárt hibajegy kiküldése", () => {
+  beforeEach(() => {
+    auth.session = sessionAs("SERVICE");
+    api.detail.mockReset().mockResolvedValue(detail());
+    api.documents.mockReset().mockResolvedValue({ items: [] });
+    sheets.attachable.mockResolvedValue({ items: [] });
+    sheets.selectablePartners.mockResolvedValue({ items: [] });
+    sheets.assignableUsers.mockResolvedValue({ items: [] });
+    api.handoverMailPreview.mockReset().mockResolvedValue({
+      kind: "send",
+      recipients: [
+        { name: "Üzemeltető Ubul", email: "uzem@partner.hu" },
+        { name: "Műszaki Manó", email: "muszak@partner.hu" },
+      ],
+      subject: "A HJ-2026-001 számú hibajegyet lezártuk.",
+    });
+    api.sendHandoverMail
+      .mockReset()
+      .mockResolvedValue({ kind: "sent", recipients: 2 });
+  });
+
+  function elkeszult() {
+    api.detail.mockResolvedValue(
+      detail({
+        status: "COMPLETED",
+        partnerStatus: "COMPLETED",
+        partnerStatusLabel: "Elkészült",
+        allowedSteps: [],
+      }),
+    );
+  }
+
+  async function ablakotNyit() {
+    elkeszult();
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Kiküldés e-mailben" }),
+    );
+    return screen.findByRole("dialog", {
+      name: "A HJ-2026-001 számú hibajegy kiküldése",
+    });
+  }
+
+  /*
+    NEM ELKESZULT JEGYEN NINCS GOMB -- ES EZ AZ ISMERT NEGATIV KONTROLL.
+
+    Enelkul a tobbi allitas akkor is zold lenne, ha a gomb MINDEN jegyen ott
+    allna: egy fel ev mulva valaki egy nyitott jegyet kuldene ki csomag
+    nelkul, es semmi nem szolna.
+  */
+  it("nem elkészült hibajegyen nincs kiküldés-gomb", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("Cápasuli szivattyú leállt");
+    expect(
+      screen.queryByRole("button", { name: "Kiküldés e-mailben" }),
+    ).toBeNull();
+  });
+
+  /*
+    OLVASO JOGKORNEL NINCS KIKULDES-GOMB -- ES A LETOLTES MARAD.
+
+    A KET ALLITAS EGYUTT MER: a "nincs gomb" onmagaban akkor is zold lenne, ha
+    az olvaso jogkoru kollega a CSOMAGOT sem tudna letolteni. Az viszont
+    OLVASAS, es epp ezert marad ott.
+  */
+  it("olvasó jogkörnél nincs kiküldés-gomb, a letöltés viszont marad", async () => {
+    auth.session = sessionAs("VIEWER");
+    elkeszult();
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByRole("button", { name: "Dokumentumcsomag letöltése" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Kiküldés e-mailben" }),
+    ).toBeNull();
+  });
+
+  /*
+    A CIMZETTEK NEVE ES CIME EGYARANT LATSZIK. Ez a spec szo szerinti resze
+    (Balazs, 2026-09-18 11:29 UTC), es epp ezert all a vegpont belsos
+    hatokorre zarva.
+  */
+  it("a címzetteket névvel ÉS címmel mutatja, és a tárgyat előtölti", async () => {
+    const ablak = await ablakotNyit();
+
+    const lista = within(ablak).getByTestId("handover-mail-recipients");
+    expect(within(lista).getByText("Üzemeltető Ubul")).toBeTruthy();
+    expect(within(lista).getByText("(uzem@partner.hu)")).toBeTruthy();
+    expect(within(lista).getByText("Műszaki Manó")).toBeTruthy();
+    expect(within(lista).getByText("(muszak@partner.hu)")).toBeTruthy();
+
+    await waitFor(() =>
+      expect(
+        (within(ablak).getByLabelText("Tárgy") as HTMLInputElement).value,
+      ).toBe("A HJ-2026-001 számú hibajegyet lezártuk."),
+    );
+  });
+
+  /*
+    URES UZENETTEL NEM INDUL A KULDES.
+
+    A szerver is megkoveteli (`@MinLength(1)`), de a ket kapu NEM ugyanaz:
+    ez azt akadalyozza meg, hogy a kezelo egy ures levelet KULDJON EL, az meg
+    azt, hogy egy masik hivo megkerulje a feluletet.
+  */
+  it("üres üzenettel a küldés gombja tiltott", async () => {
+    const ablak = await ablakotNyit();
+    await waitFor(() =>
+      expect(within(ablak).getByLabelText("Tárgy")).toBeTruthy(),
+    );
+
+    const gomb = within(ablak).getByRole("button", {
+      name: "Elküldés 2 címzettnek",
+    }) as HTMLButtonElement;
+    expect(gomb.disabled).toBe(true);
+
+    fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+      target: { value: "Köszönjük a bizalmat." },
+    });
+    expect(gomb.disabled).toBe(false);
+  });
+
+  it("a kiküldés a kezelő tárgyát és üzenetét viszi", async () => {
+    const ablak = await ablakotNyit();
+    await waitFor(() =>
+      expect(within(ablak).getByLabelText("Tárgy")).toBeTruthy(),
+    );
+
+    fireEvent.change(within(ablak).getByLabelText("Tárgy"), {
+      target: { value: "Átírt tárgy" },
+    });
+    fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+      target: { value: "Köszönjük a bizalmat." },
+    });
+    fireEvent.click(
+      within(ablak).getByRole("button", { name: "Elküldés 2 címzettnek" }),
+    );
+
+    await waitFor(() =>
+      expect(api.sendHandoverMail).toHaveBeenCalledWith("token-1", "job-1", {
+        subject: "Átírt tárgy",
+        message: "Köszönjük a bizalmat.",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText("A hibajegy kiküldve 2 címzettnek."),
+      ).toBeTruthy(),
+    );
+  });
+
+  /*
+    A NEGY KIHAGYASI OK KULON MONDATOT KAP, ES A KULDES GOMBJA EL SEM
+    ERHETO.
+
+    Egy kozos "nem kuldheto" mondat ugyanoda vezetne mind a negy esetben --
+    hozzank --, holott harom kozuluk MAS embernel oldodik fel.
+  */
+  it("aktív portál-fiók nélkül megnevezi az okot, és nincs küldés", async () => {
+    api.handoverMailPreview.mockResolvedValue({
+      kind: "skip",
+      reason: "no-recipient",
+    });
+    const ablak = await ablakotNyit();
+
+    expect(
+      await within(ablak).findByText(
+        /Az ügyfélnek nincs aktív portál-felhasználója/,
+      ),
+    ).toBeTruthy();
+    expect(within(ablak).queryByLabelText("Üzenet")).toBeNull();
+    expect(api.sendHandoverMail).not.toHaveBeenCalled();
+  });
+
+  /*
+    A `refused` VALASZ A SZERVER MONDATAT MUTATJA, NEM A MIENKET.
+
+    Ez az ag MA NEM TUD ELSULNI: a meret-kapu 4 MiB-nal all, a mai legnagyobb
+    csomag base64 utan ~97 kB. Epp ezert van ra allitas -- egy ag, ami sosem
+    fut, csendben elromlik, es akkor derul ki, amikor egy kezelo elott kellene
+    megmondania, mi tortent.
+
+    A szerver mondata azert megy at valtoztatas nelkul, mert az tudja a
+    SZAMOKAT (mekkora a csomag, hol a hatar); egy altalanos "tul nagy" mondat
+    ugyanoda vezetne, mint a tobbi osszemosott kimenetel.
+  */
+  it("a refused válasznál a szerver mondata jelenik meg", async () => {
+    api.sendHandoverMail.mockResolvedValue({
+      kind: "refused",
+      message: "A dokumentumcsomag 5,2 MB, a határ 4 MB.",
+    });
+    const ablak = await ablakotNyit();
+    await waitFor(() =>
+      expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy(),
+    );
+
+    fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+      target: { value: "Köszönjük." },
+    });
+    fireEvent.click(
+      within(ablak).getByRole("button", { name: "Elküldés 2 címzettnek" }),
+    );
+
+    expect(
+      await within(ablak).findByText(
+        "A dokumentumcsomag 5,2 MB, a határ 4 MB.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/A hibajegy kiküldve/)).toBeNull();
+  });
+
+  /*
+    A BEGEPELT UZENET NEM VESZHET EL EGY FELREKATTINTASTOL.
+
+    A KET ALLITAS EGYUTT MER, KULON-KULON EGYIK SEM: a "nem zar" onmagaban
+    akkor is zold lenne, ha a dialogus SOHA nem zarna kivulrol -- es akkor egy
+    veletlenul megnyitott ablakbol csak gombbal lehetne kijonni.
+  */
+  it("begépelt üzenet mellett a háttérre kattintás NEM zárja be", async () => {
+    const ablak = await ablakotNyit();
+    await waitFor(() =>
+      expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy(),
+    );
+
+    fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+      target: { value: "Köszönjük a bizalmat." },
+    });
+    fireEvent.click(ablak.parentElement as HTMLElement);
+
+    expect(
+      screen.getByRole("dialog", {
+        name: "A HJ-2026-001 számú hibajegy kiküldése",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("üres üzenet mellett a háttérre kattintás bezárja", async () => {
+    const ablak = await ablakotNyit();
+    await waitFor(() =>
+      expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy(),
+    );
+
+    fireEvent.click(ablak.parentElement as HTMLElement);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: "A HJ-2026-001 számú hibajegy kiküldése",
+        }),
+      ).toBeNull(),
+    );
+  });
+
+  /*
+    A `skipped` VALASZ NEM SIKER.
+
+    A hivas 200-zal ter vissza, tehat egy naiv felulet "elkuldve" uzenetet
+    mutatna -- es a kezelo lezartnak tekintene a jegyet, holott a vevo nem
+    kapott semmit. A ket lekerdezes KOZOTT is eloallhat (a portal-fiokot
+    kozben inaktivaljak), ezert nem eleg az elonezetre hagyatkozni.
+  */
+  it("a skipped választ NEM sikerként mutatja, és az ablak nyitva marad", async () => {
+    api.sendHandoverMail.mockResolvedValue({
+      kind: "skipped",
+      reason: "no-recipient",
+    });
+    const ablak = await ablakotNyit();
+    await waitFor(() =>
+      expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy(),
+    );
+
+    fireEvent.change(within(ablak).getByLabelText("Üzenet"), {
+      target: { value: "Köszönjük." },
+    });
+    fireEvent.click(
+      within(ablak).getByRole("button", { name: "Elküldés 2 címzettnek" }),
+    );
+
+    expect(
+      await within(ablak).findByText("A kiküldés nem sikerült"),
+    ).toBeTruthy();
+    expect(screen.queryByText(/A hibajegy kiküldve/)).toBeNull();
+    expect(within(ablak).getByLabelText("Üzenet")).toBeTruthy();
   });
 });
