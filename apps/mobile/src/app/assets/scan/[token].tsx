@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Redirect, useLocalSearchParams } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Pressable,
@@ -12,7 +12,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect } from "react";
 
 import { scanAsset, scanAssetByLabel } from "@/lib/api/assets";
-import { ApiError } from "@/lib/api/client";
 import { describeScanFailure } from "@/lib/assets/scan-failure";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
@@ -39,30 +38,21 @@ export default function AssetScanScreen() {
   const query = useQuery({
     queryKey: ["service-asset-scan", label ? "label" : "qr", token],
     /**
-     * A MATRICA-VALASZ 2026-09-22 OTA UNIO, ES ITT MOST VISSZAALLITJUK A REGI
-     * VISELKEDESRE -- SZANDEKOSAN, ES EZ A SOR A FEL 2 BELEPESI PONTJA.
+     * A MATRICA-VALASZ UNIO, ES A KET AGA KET KULON KEPERNYOT JELENT.
      *
-     * A vegpont mostantol megkulonbozteti a SZABAD kodot attol, amit nem
-     * talalt. Ez a kepernyo azonban meg NEM tud mit kezdeni vele: a ket gombos
-     * ablak (uj eszkoz / hozzaadas meglevohoz) a FEL 2, es az meg nincs meg.
+     * A #995 ota a vegpont megkulonbozteti a SZABAD kodot attol, amit nem
+     * talalt. A FEL 1-ben ez a sor meg visszadobta a 404-et, mert a kepernyo
+     * nem tudott mit kezdeni vele -- most MAR TUD: a szabad kodra ket gomb
+     * jelenik meg (uj eszkoz / hozzaadas meglevohoz).
      *
-     * AMIT NEM CSINALUNK: nem adunk vissza `null`-t. A kepernyo a hianyzo
-     * adatot TOLTESKENT olvasna, es orokke porgo jelzot mutatna -- rosszabbat,
-     * mint a mai hibakartya. A dobas azt a 404-et allitja helyre, amit a
-     * szerver eddig adott, tehat a viselkedes BETURE a mai marad.
-     *
-     * AMIKOR A FEL 2 MEGJON, EZ A DOBAS CSERELODIK LE a ket gombos ablakra --
-     * es addig sem allitunk semmi hamisat: a kepernyo ma sem tud szabad kodot
-     * kezelni, es ezt mondja is.
+     * A `null` ITT IS KIZART: a kepernyo a hianyzo adatot TOLTESKENT olvasna,
+     * es orokke porgo jelzot mutatna. Ezert a szabad eset SAJAT ERTEKKEL ter
+     * vissza, nem a hianyaval.
      */
     queryFn: async () => {
-      if (!label) return scanAsset(token!);
-      const eredmeny = await scanAssetByLabel(token!);
-      if (eredmeny.kind === "ASSET") return eredmeny.asset;
-      throw new ApiError(
-        "Ehhez a matricakódhoz nem tartozik elérhető eszköz.",
-        404,
-      );
+      if (!label)
+        return { kind: "ASSET" as const, asset: await scanAsset(token!) };
+      return scanAssetByLabel(token!);
     },
     enabled: status === "authenticated" && Boolean(token),
     retry: false,
@@ -94,9 +84,10 @@ export default function AssetScanScreen() {
   });
 
   // Amit a matricáról nyitottak meg, az legyen meg a következő alkalomra is.
+  // A SZABAD kodhoz nincs mit elmenteni: nincs mogotte eszkoz.
   useEffect(() => {
-    if (!query.data) return;
-    void rememberAssetDetail(query.data);
+    if (query.data?.kind !== "ASSET") return;
+    void rememberAssetDetail(query.data.asset);
   }, [query.data]);
 
   const cachedId = cached.data?.detail?.id ?? cached.data?.summary?.id ?? null;
@@ -107,10 +98,10 @@ export default function AssetScanScreen() {
     ) : (
       <Redirect href="/login" />
     );
-  if (query.data)
+  if (query.data?.kind === "ASSET")
     return (
       <Redirect
-        href={{ pathname: "/assets/[id]", params: { id: query.data.id } }}
+        href={{ pathname: "/assets/[id]", params: { id: query.data.asset.id } }}
       />
     );
 
@@ -127,7 +118,9 @@ export default function AssetScanScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.card}>
-        {query.isError && !cached.isPending ? (
+        {query.data?.kind === "FREE" ? (
+          <SzabadMatricaKartya code={query.data.code} />
+        ) : query.isError && !cached.isPending ? (
           <ScanFailureCard
             error={query.error}
             searchedOfflineCopy={cached.isSuccess}
@@ -146,6 +139,66 @@ export default function AssetScanScreen() {
         )}
       </View>
     </SafeAreaView>
+  );
+}
+
+/**
+ * A SZABAD MATRICA KET UTJA -- EZ A FEL 2 BELEPESI PONTJA.
+ *
+ * A szerelo egy KINYOMTATOTT, de meg senkire nem ragasztott matricat olvasott
+ * be. Ketfele szandek all emogott, es a kettot NEM lehet kitalalni helyette:
+ *
+ *     uj eszkozt vesz fel, es ez lesz a matricaja
+ *     egy MAR MEGLEVO eszkozre ragasztja fel
+ *
+ * 2026-09-22-ig a kepernyo egyiket sem kinalta: a szabad kod ugyanazt a
+ * „nem talalhato" kartyat kapta, mint egy ismeretlen. A szerelo tehat egy ep
+ * matricarol azt olvasta, hogy baj van vele.
+ *
+ * A KOD MINDKET GOMBBAL UTAZIK, es ez a lenyeg: a kovetkezo kepernyo elotolti
+ * belole a mezot, tehat a szerelonek nem kell kezzel atgepelnie azt, amit az
+ * imént beolvasott.
+ */
+function SzabadMatricaKartya({ code }: { code: string }) {
+  const router = useRouter();
+  return (
+    <>
+      <Text style={styles.title}>Szabad matrica: {code}</Text>
+      <Text style={styles.text}>
+        Ez a kód ki van nyomtatva, de még nincs eszközhöz rendelve. Mit
+        szeretnél vele?
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Új eszköz felvitele ezzel a matricával"
+        onPress={() =>
+          router.replace({
+            pathname: "/assets/new",
+            params: { labelCode: code },
+          })
+        }
+        style={({ pressed }) => [styles.gomb, pressed && styles.gombNyomva]}
+      >
+        <Text style={styles.gombFelirat}>Új eszköz felvitele</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Hozzáadás meglévő eszközhöz"
+        onPress={() =>
+          router.replace({
+            pathname: "/assets",
+            params: { valasztKodhoz: code },
+          })
+        }
+        style={({ pressed }) => [
+          styles.gomb,
+          styles.gombMasodlagos,
+          pressed && styles.gombNyomva,
+        ]}
+      >
+        <Text style={styles.gombFelirat}>Hozzáadás meglévő eszközhöz</Text>
+      </Pressable>
+    </>
   );
 }
 
@@ -186,6 +239,21 @@ function ScanFailureCard({
 }
 
 const styles = StyleSheet.create({
+  gomb: {
+    marginTop: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    backgroundColor: "#52d6c7",
+    alignSelf: "stretch",
+  },
+  gombMasodlagos: { backgroundColor: "#21485e" },
+  gombNyomva: { opacity: 0.8 },
+  gombFelirat: {
+    color: "#041b28",
+    fontWeight: "800",
+    textAlign: "center",
+  },
   safeArea: {
     flex: 1,
     backgroundColor: "#071827",
