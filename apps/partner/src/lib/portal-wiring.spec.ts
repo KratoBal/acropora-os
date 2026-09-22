@@ -196,6 +196,52 @@ describe("a bejelentő űrlap fájl-melléklete", () => {
     */
     assert.match(olvas(BEJELENTO), /uploadTicketDocument\(\s*created\.id/);
   });
+
+  /**
+   * === MIERT ALL ITT EZ A KET ALLITAS ===
+   *
+   * A helyszin-lista a HOZZARENDELESI tablabol tolt (`worksheets.service.ts`,
+   * `assignedUnitIdsFor`), nem a vevo osszes alegysegebol. Egy hozzarendeles
+   * nelkuli partner-fiok tehat URES valasztot kap -- es egy ures lista
+   * kivulrol UGYANUGY NEZ KI, mint egy elromlott betoltes.
+   *
+   * MERVE (acrobot, eles adatbazis, 2026-09-22 20:5x): MA ket PARTNER_SERVICE
+   * felhasznalo letezik, es MINDKETTONEK van helyszine, tehat ma senki nem esik
+   * ebbe az allapotba. Ez ALLAPOT, nem garancia: egy uj partner-fiok
+   * hozzarendeles NELKUL szuletik.
+   *
+   * MINDKET ALLITAS A `kod()`-ON MER, nem a nyers forrason: a fenti bekezdes
+   * maga is tartalmazza a keresett szavakat, tehat a kommentek bent hagyasa
+   * zolden tartana oket. Ez a fajl sajat, mert tanulsaga.
+   */
+  it("hozzárendelés nélküli partnernél a helyszín-doboz MEGNEVEZI az okot", () => {
+    const s = kod(BEJELENTO);
+    /*
+      MI PIROSIT: ha a felirat felteteltol fuggetlenul all ott (akkor betoltes
+      kozben is villanna, es epp a hibas allapotot utanozna), vagy ha a
+      felteteles ag eltunik es a valaszto csendben ures marad.
+
+      A `!loading` RESZE AZ ALLITASNAK: betoltes alatt a lista joggal ures.
+    */
+    assert.match(s, /!loading && locations\.length === 0 \?/);
+    assert.match(s, /nincs helyszín rendelve/);
+  });
+
+  it("az eszköz-doboz KÜLÖN mondatot ad a hozzárendelés hiányára", () => {
+    const s = kod(BEJELENTO);
+    /*
+      A KET ALLAPOT KET MONDAT, ES EZ NEM STILUS. Az "Előbb válasszon
+      helyszínt" mondat annak szol, aki VALASZTHAT; hozzarendeles nelkul
+      ugyanez zsakutca, mert arra keri a partnert, hogy valasszon valamit, ami
+      nincs a listajaban.
+
+      MI PIROSIT: ha valaki a ket agat visszavonja egy mondatba. A darabszam
+      nem eleg hozza -- a KULONBSEGET kell allitani, tehat mind a ket mondat
+      kulon szerepel.
+    */
+    assert.match(s, /nincs Önhöz rendelt helyszín/);
+    assert.match(s, /Előbb válasszon helyszínt/);
+  });
 });
 
 describe("a dokumentumcsomag letöltése", () => {
