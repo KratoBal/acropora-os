@@ -173,6 +173,25 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    * es a mertekegyseg megvaltozik. Nemán.
    */
   const [currentUnit, setCurrentUnit] = useState<UnitOfMeasure | undefined>();
+  /**
+   * A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL, KULON MEZOK.
+   *
+   * Kanban 8c77cf3e, 2026-09-23: 136 eszkozon EGYSZERRE all teljesitmeny
+   * (m3/h) ES fogyasztas (kW), tehat a meglevo performance-part nem lehet
+   * ujrahasznositani. Mindket mezo MINDIG egy fix egysegben ertendo (m3,
+   * illetve kW), nincs kulon mertekegyseg-valaszto -- ellentetben a
+   * teljesitmennyel.
+   */
+  const [volume, setVolume] = useState("");
+  const [powerConsumption, setPowerConsumption] = useState("");
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE -- Balazs kerese (2026-09-23): a
+   * fogyasztast ossze akarja adni, tehat a `powerConsumption` szamma valt.
+   * A FANK-adatok tobb mint fele "P1/P2" alaku volt, es ez a mezo orzi az
+   * eredeti bejegyzest -- ha az import majd feldolgozza, ebbol ellenorizheto
+   * vissza, melyik szamot valasztottuk.
+   */
+  const [powerConsumptionRaw, setPowerConsumptionRaw] = useState("");
   const [installedAt, setInstalledAt] = useState("");
   const [warrantyExpiresAt, setWarrantyExpiresAt] = useState("");
   const [serviceIntervalDays, setServiceIntervalDays] = useState("");
@@ -249,6 +268,9 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               }
             : undefined,
         );
+        setVolume(asset.volume ?? "");
+        setPowerConsumption(asset.powerConsumption ?? "");
+        setPowerConsumptionRaw(asset.powerConsumptionRaw ?? "");
         setInstalledAt(inputDate(asset.installedAt));
         setWarrantyExpiresAt(inputDate(asset.warrantyExpiresAt));
         setServiceIntervalDays(asset.serviceIntervalDays?.toString() ?? "");
@@ -575,6 +597,12 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             // leszedi a teljesitmenyt, egy `null` elbukik.
             performance: normalizePerformanceValue(performance),
             performanceUnitId: performanceUnitId || null,
+            // FUGGETLEN A TELJESITMENYTOL: a `volume` es a `powerConsumption`
+            // ugyanazt a normalizalast kapja, mint a `performance`. A
+            // `powerConsumptionRaw` szabad szoveg, csak korulvagas.
+            volume: normalizePerformanceValue(volume),
+            powerConsumption: normalizePerformanceValue(powerConsumption),
+            powerConsumptionRaw: powerConsumptionRaw.trim() || null,
             expectedUpdatedAt: updatedAt,
           })
         : await assetsApi.create(token, {
@@ -602,6 +630,10 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             // ket kulcs EGYUTT marad el, kulonben a szerver fel part latna.
             performance: normalizePerformanceValue(performance) ?? undefined,
             performanceUnitId: performanceUnitId || undefined,
+            volume: normalizePerformanceValue(volume) ?? undefined,
+            powerConsumption:
+              normalizePerformanceValue(powerConsumption) ?? undefined,
+            powerConsumptionRaw: powerConsumptionRaw.trim() || undefined,
             installedAt: toIsoDate(installedAt),
             warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
             serviceIntervalDays: interval,
@@ -929,6 +961,54 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                   menthető.
                 </p>
               ) : null}
+            </FormField>
+            {/*
+              A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL.
+              Kanban 8c77cf3e, 2026-09-23: 136 eszkozon EGYSZERRE all
+              teljesitmeny (m3/h) ES fogyasztas (kW), tehat kulon mezok.
+              Mindketto MINDIG fix egysegben ertendo, nincs kulon
+              mertekegyseg-valaszto -- ezert a leiras mondja ki az egyseget,
+              nem egy legordulo.
+            */}
+            <FormField
+              label="Térfogat"
+              description="m³-ben. Tizedesvesszővel is írható (például 0,5)."
+            >
+              <Input
+                aria-label="Térfogat"
+                inputMode="decimal"
+                value={volume}
+                onChange={(event) => setVolume(event.target.value)}
+                placeholder="pl. 1.5"
+              />
+            </FormField>
+            {/*
+              A FOGYASZTAS SZAMMA VALT (Balazs kerese, 2026-09-23): ossze
+              akarja adni egy rendszerre, ami csak szamon mukodik. A "P1/P2"
+              alaku eredeti bejegyzeseket a masik mezo orzi valtozatlanul.
+            */}
+            <FormField
+              label="Fogyasztás"
+              description="kW-ban. Tizedesvesszővel is írható (például 0,5)."
+            >
+              <Input
+                aria-label="Fogyasztás"
+                inputMode="decimal"
+                value={powerConsumption}
+                onChange={(event) => setPowerConsumption(event.target.value)}
+                placeholder="pl. 0,75"
+              />
+            </FormField>
+            <FormField
+              label="Fogyasztás (eredeti bejegyzés)"
+              description="Ha a tábla cellája P1/P2 alakú volt (például 6,15/5,5), ide írd be változatlanul."
+            >
+              <Input
+                aria-label="Fogyasztás (eredeti bejegyzés)"
+                value={powerConsumptionRaw}
+                onChange={(event) => setPowerConsumptionRaw(event.target.value)}
+                placeholder="pl. 6,15/5,5"
+              />
             </FormField>
             {/*
               A MI MATRICANK, NEM A PARTNERE. A fenti mezo a partner sajat

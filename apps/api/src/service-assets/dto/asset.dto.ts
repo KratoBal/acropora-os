@@ -356,6 +356,22 @@ export class CreateAssetDto {
    * jelenti. Lasd a `UnitOfMeasure` sema-fejlecet.
    */
   @IsString() @IsOptional() performanceUnitId?: string;
+  /**
+   * A TERFOGAT, MINDIG m3-BEN. Az ALAKOT a szolgaltatas ellenorzi a kozos
+   * `normalizePerformanceValue` fuggvennyel, nem itt egy masodik mintaval --
+   * ugyanaz az indok, mint a `performance`-nel.
+   */
+  @IsString() @IsOptional() volume?: string;
+  /**
+   * A FOGYASZTAS, MINDIG kW-BAN. Az ALAKOT a szolgaltatas ellenorzi a kozos
+   * `normalizePerformanceValue` fuggvennyel, ugyanugy, mint a `volume`-nal.
+   */
+  @IsString() @IsOptional() powerConsumption?: string;
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES.
+   * Lasd az `AssetDetail.powerConsumptionRaw` fejleceit.
+   */
+  @IsString() @MaxLength(40) @IsOptional() powerConsumptionRaw?: string;
   @IsString() @IsOptional() description?: string;
   @IsISO8601() @IsOptional() installedAt?: string;
   @IsISO8601() @IsOptional() purchasedAt?: string;
@@ -473,6 +489,27 @@ export class UpdateAssetDto {
   @ValidateIf((_object, value) => value !== undefined && value !== null)
   @IsString()
   performanceUnitId?: string | null;
+  /**
+   * A TERFOGAT -- ugyanaz az alak, mint a `performance`-nel: `null` torol,
+   * az ALAKOT a szolgaltatas ellenorzi a kozos `normalizePerformanceValue`
+   * fuggvennyel.
+   */
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @IsString()
+  volume?: string | null;
+  /**
+   * A FOGYASZTAS -- ugyanaz az alak, mint a `volume`-nal.
+   */
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @IsString()
+  powerConsumption?: string | null;
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES.
+   */
+  @IsString()
+  @MaxLength(40)
+  @IsOptional()
+  powerConsumptionRaw?: string | null;
   @IsString() @IsOptional() description?: string | null;
   @IsISO8601() @IsOptional() installedAt?: string | null;
   @IsISO8601() @IsOptional() purchasedAt?: string | null;

@@ -1,0 +1,28 @@
+-- Az eszköz fogyasztása -- új, önálló mező.
+--
+-- Balázs kérése, 2026-09-23 (kanban 8c77cf3e), a FANK Excel `Fogyasztás
+-- (össz. kW vagy P1/P2)` oszlopa alapján. A migráció kizárólag HOZZÁAD: egy
+-- nullázható oszlopot az Asset táblán, meglévő sort nem érint.
+--
+-- === MIÉRT SZÁNDÉKOSAN KÜLÖN MIGRÁCIÓ A TÉRFOGATTÓL ===
+--
+-- A térfogat (20260923114700_asset_volume) tiszta szám, nem vitatott. A
+-- fogyasztás mezőjének ALAKJA (szöveg legyen-e vagy szám) egyeztetés alatt
+-- állt, amikor ez a migráció készült -- lásd alább. A szétválasztás azt
+-- jelenti, hogy ha a válasz mást kíván, EZ az egy migráció (és a rá épülő
+-- kód) vonható vissza, a térfogat érintése nélkül.
+--
+-- === MIÉRT SZÖVEG, NEM DECIMAL ===
+--
+-- LEMÉRVE (murena, 2026-09-23): a FANK-táblázat 276 kitöltött sorából 142
+-- (51%) KETTÉVÁLASZTOTT érték, "P1/P2" alakban (pl. "6,15/5,5") -- két
+-- motor-teljesítmény egy cellában, nem egy tizedes szám. A fejléc maga is
+-- kimondja: "Fogyasztás (össz. kW vagy P1/P2)". Egy `DECIMAL` oszlop ezt
+-- CSENDBEN elvenné: vagy elutasítaná a bevitelt, vagy valakinek ki kellene
+-- találnia, melyik felet írja be.
+--
+-- === NINCS KÜLÖN MÉRTÉKEGYSÉG-MEZŐ ===
+--
+-- A fogyasztás MINDIG kW-ban értendő -- ellentétben a `performance`-szel,
+-- ahol a szerelő több egység közül választ.
+ALTER TABLE "Asset" ADD COLUMN "powerConsumption" TEXT;

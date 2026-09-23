@@ -319,6 +319,36 @@ export interface AssetDetail extends AssetListItem {
     code: string;
     name: string;
   };
+  /**
+   * A BERENDEZES TERFOGATA, MINDIG m3-BEN -- SZOVEGKENT, ugyanazon okbol,
+   * mint a `performance`: a tarolt alak `decimal(19,6)`, es a szam
+   * `number`-re alakitva a JavaScript lebegopontos tipusan menne at.
+   *
+   * NINCS KULON MERTEKEGYSEG-MEZO: ez az ertek MINDIG m3, nincs mit
+   * valasztani -- ellentetben a `performance`-szel.
+   */
+  volume?: string;
+  /**
+   * A BERENDEZES FOGYASZTASA, MINDIG kW-BAN -- AZ OSSZEADHATO SZAM,
+   * SZOVEGKENT (ugyanazon okbol, mint a `volume`).
+   *
+   * Balazs kerese (2026-09-23, acrobot kerdesere): ossze akarja adni a
+   * fogyasztast egy rendszerre, tehat ennek SZAMNAK kell lennie -- lasd a
+   * `powerConsumptionRaw` fejleceit arrol, mi tortenik a "P1/P2" alaku
+   * forrasertekekkel.
+   */
+  powerConsumption?: string;
+  /**
+   * A FOGYASZTAS EREDETI, VALTOZATLAN SZOVEGE -- A FORRAS CELLAJA, BETURE.
+   *
+   * Lemerve (murena, 2026-09-23, kanban 8c77cf3e): a FANK-adatok tobb mint
+   * fele "P1/P2" alaku, ket motor-teljesitmeny egy cellaban (pl.
+   * "6,15/5,5"), nem egy tizedes szam. A `powerConsumption` csak EGY szamot
+   * tud tartani (ott, ahol az import majd eldonti, melyiket) -- ez a mezo
+   * azert van, hogy a masik ne veszjen el, es a valasztas barmikor
+   * visszaellenorizheto legyen.
+   */
+  powerConsumptionRaw?: string;
   description?: string;
   installedAt?: string;
   purchasedAt?: string;
@@ -426,6 +456,18 @@ export interface CreateAssetInput {
    */
   performance?: string;
   performanceUnitId?: string;
+  /**
+   * A TERFOGAT, MINDIG m3-BEN -- FUGGETLEN a teljesitmeny-partol, nincs
+   * kulon mertekegyseg-mezo (a FANK-adatokban ez az oszlop mindig m3).
+   */
+  volume?: string;
+  /**
+   * A FOGYASZTAS, MINDIG kW-BAN -- AZ OSSZEADHATO SZAM. Lasd az
+   * `AssetDetail.powerConsumption` fejleceit.
+   */
+  powerConsumption?: string;
+  /** A fogyasztas eredeti szovege, lasd az `AssetDetail.powerConsumptionRaw`-t. */
+  powerConsumptionRaw?: string;
 }
 
 export interface UpdateAssetInput {
@@ -488,6 +530,15 @@ export interface UpdateAssetInput {
    */
   performance?: string | null;
   performanceUnitId?: string | null;
+  /**
+   * A TERFOGAT -- FUGGETLEN a teljesitmeny-partol, `null` torli, a mezo
+   * elhagyasa erintetlenul hagyja.
+   */
+  volume?: string | null;
+  /** A FOGYASZTAS -- ugyanaz az alak, mint a `volume`-nal. */
+  powerConsumption?: string | null;
+  /** A fogyasztas eredeti szovege -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */
+  powerConsumptionRaw?: string | null;
 }
 
 export interface AssetQrCode {

@@ -444,6 +444,38 @@ export default function AssetDetailScreen() {
                     : undefined
                 }
               />
+              {/*
+                A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL.
+                Kanban 8c77cf3e, 2026-09-23: 136 eszkozon EGYSZERRE all
+                teljesitmeny (m3/h) ES fogyasztas (kW), tehat kulon adat,
+                kulon sor. Mindketto MINDIG fix egysegben ertendo (m3,
+                illetve kW), nincs kulon mertekegyseg.
+              */}
+              <Info
+                label="Térfogat"
+                value={asset.volume ? `${asset.volume} m³` : undefined}
+              />
+              <Info
+                label="Fogyasztás"
+                value={
+                  asset.powerConsumption
+                    ? `${asset.powerConsumption} kW`
+                    : undefined
+                }
+              />
+              {/*
+                AZ EREDETI FOGYASZTAS-SZOVEG, HA ELTER A KIIRT SZAMTOL.
+                Balazs kerese (2026-09-23): a fogyasztast ossze akarja adni,
+                tehat a `powerConsumption` szamma valt -- ez a mezo orzi, mi
+                allt eredetileg a cellaban (pl. "6,15/5,5").
+              */}
+              {asset.powerConsumptionRaw &&
+              asset.powerConsumptionRaw !== asset.powerConsumption ? (
+                <Info
+                  label="Fogyasztás (eredeti)"
+                  value={asset.powerConsumptionRaw}
+                />
+              ) : null}
               <Info label="Termék" value={asset.product?.name} />
               <Info label="Leírás" value={asset.description} />
             </Section>

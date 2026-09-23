@@ -132,6 +132,20 @@ export interface AssetDetail extends AssetListItem {
    */
   performance?: string;
   performanceUnit?: { id: string; code: string; name: string };
+  /**
+   * A TERFOGAT (m3) ES A FOGYASZTAS (kW) -- FUGGETLEN A TELJESITMENYTOL.
+   * Kanban 8c77cf3e, 2026-09-23: 136 eszkozon egyszerre all teljesitmeny
+   * ES fogyasztas, tehat kulon mezok. Mindketto mindig fix egysegben
+   * ertendo, nincs kulon mertekegyseg-hivatkozas.
+   */
+  volume?: string;
+  /**
+   * AZ OSSZEADHATO SZAM. Balazs kerese (2026-09-23): ossze akarja adni a
+   * fogyasztast, tehat ez SZAM, nem szabad szoveg.
+   */
+  powerConsumption?: string;
+  /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
+  powerConsumptionRaw?: string;
   description?: string;
   installedAt?: string;
   warrantyExpiresAt?: string;
@@ -219,6 +233,12 @@ export interface CreateAssetInput {
    * régi qr-t, csak majd az újat").
    */
   labelCode?: string;
+  /** A terfogat, mindig m3-ben. Elhagyhato. */
+  volume?: string;
+  /** A fogyasztas, mindig kW-ban -- az osszeadhato szam. Elhagyhato. */
+  powerConsumption?: string;
+  /** A fogyasztas eredeti szovege. Elhagyhato. */
+  powerConsumptionRaw?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }

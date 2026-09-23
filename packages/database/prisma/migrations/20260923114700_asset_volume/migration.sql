@@ -1,0 +1,25 @@
+-- Az eszköz térfogata -- új, önálló mező.
+--
+-- Balázs kérése, 2026-09-23 (kanban 8c77cf3e), a FANK Excel-táblázat alapján
+-- (Térfogat m3 oszlop). A migráció kizárólag HOZZÁAD: egy nullázható oszlopot
+-- az Asset táblán, meglévő sort nem érint.
+--
+-- === MIÉRT NEM A MEGLÉVŐ `performance`/`performanceUnitId` PÁR BŐVÜL ===
+--
+-- Lemérve (murena, 2026-09-23): a FANK-táblázat 136 során EGYSZERRE van
+-- kitöltve a "Teljesítmény (m3/h)" ÉS a "Fogyasztás" oszlop -- egy
+-- szivattyún 20 m3/h ÉS 1 kW egyszerre. A `performance` egy-érték-egy-
+-- mértékegység párja csak EGY adatot tud tartani, itt viszont kettő kell
+-- egyszerre. A Teljesítmény (m3/h) marad a meglévő `performance` mezőn; a
+-- `volume` ÚJ, önálló, mindkettőtől FÜGGETLEN mező.
+--
+-- === NINCS KÜLÖN MÉRTÉKEGYSÉG-MEZŐ ===
+--
+-- A térfogat MINDIG m3-ben értendő -- ellentétben a `performance`-szel, ahol
+-- a szerelő több egység közül választ. Ezért nincs `volumeUnitId`, csak az
+-- érték maga.
+--
+-- (A fogyasztás mezője, `powerConsumption`, külön migrációban következik --
+-- a kettőt szándékosan szétválasztottuk, hogy egymástól függetlenül legyenek
+-- visszavonhatók.)
+ALTER TABLE "Asset" ADD COLUMN "volume" DECIMAL(19,6);

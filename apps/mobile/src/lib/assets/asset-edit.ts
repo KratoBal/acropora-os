@@ -63,6 +63,15 @@ export interface EditableAsset {
   performance?: string;
   /** A teljesítmény mértékegysége. A pár másik fele. */
   performanceUnit?: { id: string };
+  /**
+   * A TÉRFOGAT ÉS A FOGYASZTÁS -- FÜGGETLEN A TELJESÍTMÉNYTŐL, nincs
+   * mértékegység-társuk (mindig m3, illetve kW). Kanban 8c77cf3e,
+   * 2026-09-23.
+   */
+  volume?: string;
+  powerConsumption?: string;
+  /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
+  powerConsumptionRaw?: string;
   status: AssetStatus;
   criticality: AssetCriticality;
   manufacturer?: string;
@@ -138,6 +147,13 @@ export interface AssetEditForm {
    */
   performance: string;
   performanceUnitId: string;
+  /**
+   * A TÉRFOGAT ÉS A FOGYASZTÁS -- FÜGGETLEN A TELJESÍTMÉNYTŐL, mindkettő
+   * mindig fix egységben értendő (m3, illetve kW), nincs mértékegység-mező.
+   */
+  volume: string;
+  powerConsumption: string;
+  powerConsumptionRaw: string;
 }
 
 const TEXT_FIELDS = [
@@ -147,6 +163,12 @@ const TEXT_FIELDS = [
   "inventoryNumber",
   "description",
   "notes",
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE IDE ILLIK, A `volume`/`powerConsumption`-nel
+   * ELLENTETBEN: szabad szoveg, nincs alak-ellenorzese, tehat a generikus
+   * mintaba tartozik.
+   */
+  "powerConsumptionRaw",
 ] as const;
 
 /** Fills the form from what the server last said about the asset. */
@@ -166,6 +188,9 @@ export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
     labelCode: asset.labelCode ?? "",
     performance: asset.performance ?? "",
     performanceUnitId: asset.performanceUnit?.id ?? "",
+    volume: asset.volume ?? "",
+    powerConsumption: asset.powerConsumption ?? "",
+    powerConsumptionRaw: asset.powerConsumptionRaw ?? "",
   };
 }
 
@@ -261,6 +286,25 @@ export function buildAssetPatch(
     patch.categoryId = kategoria === "" ? null : kategoria;
 
   /**
+   * A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL, NINCS PAR. Az alakot az
+   * `assetVolumeEditProblem` ellenorzi, a sorba tetel ELOTT -- ugyanaz a
+   * minta, mint a matricakodnal.
+   */
+  const terfogat = normalizePerformanceValue(form.volume);
+  const regiTerfogat = asset.volume ?? null;
+  if (terfogat !== regiTerfogat) patch.volume = terfogat;
+
+  /**
+   * A FOGYASZTAS -- AZ OSSZEADHATO SZAM, UGYANAZ A SZABALY, MINT A
+   * TERFOGATNAL. Balazs kerese (2026-09-23): ossze akarja adni a
+   * fogyasztast, tehat ez SZAM. A `powerConsumptionRaw` (lent, a
+   * `TEXT_FIELDS` hurokban) orzi az eredeti "P1/P2" alaku szoveget.
+   */
+  const fogyasztas = normalizePerformanceValue(form.powerConsumption);
+  const regiFogyasztas = asset.powerConsumption ?? null;
+  if (fogyasztas !== regiFogyasztas) patch.powerConsumption = fogyasztas;
+
+  /**
    * A FUNKCIO -- FUGGETLENUL A KATEGORIATOL, ugyanaz a szabaly, mint felette:
    * minden tulajdonosnal ertelmes torzsadat, a feltetel ide NEM jar.
    */
@@ -322,6 +366,37 @@ export function assetLabelEditProblem(form: AssetEditForm): "malformed" | null {
   const kod = form.labelCode.trim();
   if (kod === "") return null;
   return normalizeAssetLabelCode(kod) === null ? "malformed" : null;
+}
+
+/**
+ * A TERFOGAT ALAKJA, A MENTES ELOTT -- UGYANAZ A MINTA, MINT A MATRICAKODNAL,
+ * es szandekosan NEM a teljesitmeny-part masolja: a `volume`-nak nincs
+ * mertekegyseg-tarsa, tehat itt csak az ALAK szamit, nem egy hianyzo fel.
+ *
+ * KULON FUGGVENY KELL, mert a `buildAssetPatch` a `normalizePerformanceValue`
+ * ereden csendben `null`-t ad egy elgepelt szamra is -- ugyanugy, mint egy
+ * szandekosan kiuritett mezore. Enelkul egy "abc" beirasa TORLESKENT menne
+ * sorba, ahelyett hogy a szerelo hibauzenetet kapna.
+ */
+export function assetVolumeEditProblem(
+  form: AssetEditForm,
+): "malformed" | null {
+  const ertek = form.volume.trim();
+  if (ertek === "") return null;
+  return normalizePerformanceValue(ertek) === null ? "malformed" : null;
+}
+
+/**
+ * A FOGYASZTAS ALAKJA, A MENTES ELOTT -- SZO SZERINT A `assetVolumeEditProblem`
+ * SZERKEZETE. Balazs kerese (2026-09-23): a fogyasztast ossze akarja adni,
+ * tehat ez is SZAM lett, es ugyanugy alak-ellenorzest igenyel.
+ */
+export function assetPowerConsumptionEditProblem(
+  form: AssetEditForm,
+): "malformed" | null {
+  const ertek = form.powerConsumption.trim();
+  if (ertek === "") return null;
+  return normalizePerformanceValue(ertek) === null ? "malformed" : null;
 }
 
 /**
@@ -391,6 +466,13 @@ export function baseValuesFor(
   if ("performance" in patch) base.performance = asset.performance ?? null;
   if ("performanceUnitId" in patch)
     base.performanceUnitId = asset.performanceUnit?.id ?? null;
+  /**
+   * A TERFOGAT ES A FOGYASZTAS IS BEKERUL A SORBA, ugyanabbol az okbol, mint
+   * a teljesitmeny -- de kulon-kulon, mert nincs koztuk par-kenyszer.
+   */
+  if ("volume" in patch) base.volume = asset.volume ?? null;
+  if ("powerConsumption" in patch)
+    base.powerConsumption = asset.powerConsumption ?? null;
   for (const field of TEXT_FIELDS)
     if (field in patch) base[field] = asset[field] ?? null;
   /**

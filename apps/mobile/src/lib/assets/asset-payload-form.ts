@@ -76,6 +76,13 @@ export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
     labelCode: szoveg(row.labelCode),
     performance: szoveg(row.performance),
     performanceUnitId: szoveg(row.performanceUnitId),
+    /*
+      A TERFOGAT ES A FOGYASZTAS -- FUGGETLENUL A TELJESITMENYTOL, ugyanaz
+      az indok, mint felette: a sorban allo felvitel se veszitse el.
+    */
+    volume: szoveg(row.volume),
+    powerConsumption: szoveg(row.powerConsumption),
+    powerConsumptionRaw: szoveg(row.powerConsumptionRaw),
     installedAt: szoveg(row.installedAt),
     interval,
   };

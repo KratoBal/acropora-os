@@ -6,6 +6,7 @@ import {
   isPrismaErrorCode,
   isPrismaUniqueConstraintViolation,
 } from "../common/prisma-error.util.js";
+import { byHungarianName } from "../common/hungarian-name-sort.util.js";
 
 /** A nev mar szerepel a listaban. */
 export class AssetCategoryDuplicateError extends Error {}
@@ -22,16 +23,32 @@ export class AssetCategoryDuplicateCodeError extends Error {}
 
 @Injectable()
 export class AssetCategoriesRepository {
+  /**
+   * A SORREND MAGYAR ABC, A NEV SZERINT -- NEM A `sortOrder`.
+   *
+   * Balazs kerese, 2026-09-23 (kanban 8c77cf3e), szo szerint: "az eszkoz
+   * felvitelnel es egyebkent a kategoria listanal a beallitasokban legyen
+   * magyar ABC szerint sorrendben a lista". A `sortOrder` a FANK jelmagyarazat
+   * SORRENDJET hordozta (10, 20, 30 ...), nem abc-t -- a mezo a torzsadaton
+   * MARAD (nem torolt), csak a listazas tobbe nem rendez ra.
+   *
+   * NODE-OLDALI `localeCompare(..., "hu")`, NEM ADATBAZIS-OLDALI COLLATE.
+   * Merve (murena, 2026-09-23): ebben a fejlesztoi kornyezetben nincs `psql`,
+   * `createdb`/`dropdb`, es a nyers TCP kapcsolat is ECONNREFUSED-del utasitja
+   * el a 127.0.0.1:5432 portot -- tehat nem volt modom lekerdezni, fut-e
+   * magyar ICU kollacio (`hu-HU-x-icu`) az eles vagy akar egy szemet-
+   * adatbazison. Ez MERT hiany, nem jogosultsagi korlat.
+   *
+   * A `localeCompare(..., "hu")` viszont MAR HASZNALT MINTA ebben a
+   * repositoryban (`service-assets.repository.ts`, a tulajdonos-lista
+   * rendezese), tehat nem uj dontes, hanem a MEGLEVO szabaly kovetese -- es
+   * ez oldja fel a `db-oldali-e vagy node-oldali` kerdest: a kolláció
+   * MEGLETE nelkul is helyesen mukodik, mert a Node ICU-ja (mert `process.
+   * versions.icu`, ellenorizve) fuggetlen a Postgres peldany beallitasatol.
+   */
   async list(includeInactive: boolean): Promise<AssetCategory[]> {
-    return prisma.assetCategory.findMany({
+    const rows = await prisma.assetCategory.findMany({
       where: includeInactive ? {} : { isActive: true },
-      /**
-       * A SORREND DETERMINALT: a `sortOrder` dont, azonos ertek mellett a NEV,
-       * es vegul az azonosito. Ket szint nem eleg -- ket azonos nevu kategoria
-       * ugyan nem lehet (egyedi), de a `sortOrder` alapertelmezese NULLA, tehat
-       * a kezzel felvett elemek mind ugyanoda esnek.
-       */
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }, { id: "asc" }],
       select: {
         id: true,
         name: true,
@@ -40,6 +57,7 @@ export class AssetCategoriesRepository {
         code: true,
       },
     });
+    return byHungarianName(rows);
   }
 
   async create(input: {

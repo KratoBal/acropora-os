@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import type { AssetFunction } from "@acropora/types";
 
+import { byHungarianName } from "../common/hungarian-name-sort.util.js";
+
 /** A nev mar szerepel a listaban. */
 export class AssetFunctionDuplicateError extends Error {}
 
@@ -14,12 +16,20 @@ export class AssetFunctionDuplicateError extends Error {}
  */
 @Injectable()
 export class AssetFunctionsRepository {
+  /**
+   * A SORREND MAGYAR ABC, A NEV SZERINT -- SZO SZERINT AZ
+   * `AssetCategoriesRepository.list` FEJLECE, mas tablan. Kanban 8c77cf3e,
+   * 2026-09-23: itt eddig is `name: "asc"` volt a masodlagos rendezes, csak
+   * DB-oldali osszehasonlitassal, ami az ekezetes betuket a sor VEGERE tette
+   * -- ezert latszott ugy, hogy "mar abc-ben van, csak az ekezetek nincsenek
+   * a helyukon".
+   */
   async list(includeInactive: boolean): Promise<AssetFunction[]> {
-    return prisma.assetFunction.findMany({
+    const rows = await prisma.assetFunction.findMany({
       where: includeInactive ? {} : { isActive: true },
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }, { id: "asc" }],
       select: { id: true, name: true, isActive: true, sortOrder: true },
     });
+    return byHungarianName(rows);
   }
 
   async create(input: {

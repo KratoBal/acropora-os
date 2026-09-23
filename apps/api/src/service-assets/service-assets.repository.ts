@@ -36,7 +36,11 @@ import type {
   AssetOwnerType,
   AssetStatus,
 } from "@acropora/types";
-import { normalizeAssetLabelCode, randomAssetLabelCode } from "@acropora/types";
+import {
+  normalizeAssetLabelCode,
+  normalizePerformanceValue,
+  randomAssetLabelCode,
+} from "@acropora/types";
 import { teljesitmenyEredmenye } from "./asset-performance.js";
 
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
@@ -206,6 +210,33 @@ export class AssetPerformancePairError extends Error {
   }
 }
 
+/**
+ * A TERFOGAT ALAKJA -- UGYANAZ A SZABALY, MINT A TELJESITMENYNEL, DE PAR
+ * NELKUL: a `volume`-nak nincs mertekegyseg-tarsa (mindig m3), tehat itt
+ * csak az ALAK szamit, nem a par teljessege.
+ */
+export class AssetVolumeMalformedError extends Error {
+  constructor() {
+    super(
+      "A térfogat csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500).",
+    );
+  }
+}
+
+/**
+ * A FOGYASZTAS ALAKJA -- UGYANAZ A SZABALY, MINT A TERFOGATNAL. Balazs
+ * kerese (2026-09-23, kanban 8c77cf3e): ossze akarja adni a fogyasztast,
+ * tehat ennek SZAMNAK kell lennie -- a P1/P2 alaku eredeti szoveget a
+ * `powerConsumptionRaw` orzi, arra nincs alak-megkotes.
+ */
+export class AssetPowerConsumptionMalformedError extends Error {
+  constructor() {
+    super(
+      "A fogyasztás csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500). Az eredeti értéket a másik mezőbe írd.",
+    );
+  }
+}
+
 export function scopeMaySeeAssetEvent(
   event: { type: string; payload: unknown },
   scope: PartnerScope,
@@ -236,6 +267,43 @@ function optionalText(value: string | null | undefined) {
 function optionalDate(value: string | null | undefined) {
   if (value === undefined) return undefined;
   return value === null ? null : new Date(value);
+}
+
+/**
+ * A TERFOGAT NORMALIZALT ALAKJA, VAGY DOBAS -- A TRANZAKCION KIVUL, UGYANOTT,
+ * AHOL A MATRICAKOD ALAK-ELLENORZESE ALL: nem ir, tehat nincs keresnivaloja
+ * az ujraprobalt lezaron belul.
+ *
+ * URES SZOVEG TORLES (kivezetve a `null`-lal), NEM ALAK-HIBA -- ugyanaz a
+ * kulonbsegtetel, mint a teljesitmenynel: az uresen hagyott mezo es az
+ * elgepelt szam KET kulonbozo eset.
+ */
+function volumeValue(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  const normalized = normalizePerformanceValue(trimmed);
+  if (normalized === null) throw new AssetVolumeMalformedError();
+  return normalized;
+}
+
+/**
+ * A FOGYASZTAS NORMALIZALT ALAKJA, VAGY DOBAS -- SZO SZERINT A `volumeValue`
+ * SZERKEZETE, mas hibaosztallyal.
+ */
+function powerConsumptionValue(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  const normalized = normalizePerformanceValue(trimmed);
+  if (normalized === null) throw new AssetPowerConsumptionMalformedError();
+  return normalized;
 }
 
 function addDays(value: Date, days: number) {
@@ -1087,6 +1155,14 @@ export class ServiceAssetsRepository extends Repository {
       throw new AssetPerformancePairError(teljesitmeny.hiany);
 
     /**
+     * A TERFOGAT ALAKJA, UGYANITT ES UGYANEZERT -- de par nelkul, lasd a
+     * `volumeValue` fejleceit.
+     */
+    const volume = volumeValue(input.volume);
+    /** A FOGYASZTAS ALAKJA, UGYANITT -- lasd a `powerConsumptionValue` fejleceit. */
+    const powerConsumption = powerConsumptionValue(input.powerConsumption);
+
+    /**
      * A HELYSZINI ROGZITES IDEMPOTENCIA-KULCSA, A LETREHOZAS ELOTT.
      *
      * A telefon terero nelkul sorba teszi a felvitelt, es a sor a halozati
@@ -1187,6 +1263,9 @@ export class ServiceAssetsRepository extends Repository {
                   notes: optionalText(input.notes),
                   performance: teljesitmeny.performance,
                   performanceUnitId: teljesitmeny.unitId,
+                  volume,
+                  powerConsumption,
+                  powerConsumptionRaw: optionalText(input.powerConsumptionRaw),
                   clientOperationId: input.clientOperationId ?? null,
                   archivedAt:
                     input.status === "RETIRED" ? new Date() : undefined,
@@ -1657,6 +1736,12 @@ export class ServiceAssetsRepository extends Repository {
         );
         if (!teljesitmeny.rendben)
           throw new AssetPerformancePairError(teljesitmeny.hiany);
+        /**
+         * A TERFOGAT ALAKJA, UGYANITT ES UGYANEZERT -- de par nelkul.
+         */
+        const volume = volumeValue(input.volume);
+        /** A FOGYASZTAS ALAKJA, UGYANITT. */
+        const powerConsumption = powerConsumptionValue(input.powerConsumption);
         const data: Prisma.AssetUncheckedUpdateManyInput = {
           customerId:
             input.ownerType === undefined
@@ -1706,6 +1791,9 @@ export class ServiceAssetsRepository extends Repository {
           notes: optionalText(input.notes),
           performance: teljesitmeny.performance,
           performanceUnitId: teljesitmeny.unitId,
+          volume,
+          powerConsumption,
+          powerConsumptionRaw: optionalText(input.powerConsumptionRaw),
           archivedAt:
             input.status === "RETIRED"
               ? (existing.archivedAt ?? new Date())
@@ -2434,6 +2522,9 @@ export class ServiceAssetsRepository extends Repository {
       description: row.description ?? undefined,
       performance: row.performance?.toString(),
       performanceUnit: row.performanceUnit ?? undefined,
+      volume: row.volume?.toString(),
+      powerConsumption: row.powerConsumption?.toString(),
+      powerConsumptionRaw: row.powerConsumptionRaw ?? undefined,
       installedAt: row.installedAt?.toISOString(),
       purchasedAt: row.purchasedAt?.toISOString(),
       warrantyExpiresAt: row.warrantyExpiresAt?.toISOString(),
