@@ -53,7 +53,14 @@ export interface UpdateAssetInput {
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;
-  inventoryNumber?: string | null;
+  /**
+   * A MEZO NEVE 2026-09-23-IG "inventoryNumber" VOLT -- Balazs kerese: ez
+   * mindig a partner sajat kodja volt. Az IGAZI leltari szam uj, kulon mezo
+   * a szerveren, de a mobil ma nem tudja szerkeszteni (nincs felulete),
+   * ezert ez a tipus -- SZANDEKOSAN a mobil altal kuldhetokre szukitve --
+   * nem is hordozza.
+   */
+  partnerInternalCode?: string | null;
   description?: string | null;
   notes?: string | null;
   /**

@@ -68,8 +68,14 @@ export interface AssetCreateForm {
   manufacturer: string;
   model: string;
   serialNumber: string;
-  /** A partner saját azonosítója az eszközön (leltári szám). Üres is lehet. */
-  inventoryNumber: string;
+  /**
+   * A partner saját azonosítója az eszközön. Üres is lehet.
+   *
+   * A MEZO NEVE 2026-09-23-IG "inventoryNumber" VOLT -- Balazs kerese: ez
+   * mindig a partner sajat kodja volt. Az IGAZI leltari szam uj mezo, ma meg
+   * nincs mobil-felulete, ezert a felviteli urlapon sem all itt.
+   */
+  partnerInternalCode: string;
   /**
    * A MI előre nyomtatott matricánk kódja (egy betű és négy szám, pl. V2196).
    *
@@ -125,7 +131,7 @@ export interface AssetCreatePayload {
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
-  inventoryNumber?: string;
+  partnerInternalCode?: string;
   /**
    * AZ ESZKOZ KATEGORIAJA -- TORZSADAT-AZONOSITO, NEM SZOVEG.
    *
@@ -444,12 +450,12 @@ export function buildAssetCreatePayload(
       model: form.model.trim() || undefined,
       serialNumber: form.serialNumber.trim() || undefined,
       /**
-       * A LELTÁRI SZÁM A PARTNERÉ, nem a miénk, és pont ezért kell a
-       * felvitelkor: a gépen az ő matricája van rajta, és a szerelő akkor
-       * látja, amikor előtte áll. Utólag, az irodából ez már egy külön kör
-       * telefonálás -- a mező eddig csak a szerkesztő képernyőn létezett.
+       * A PARTNER BELSŐ KÓDJA, nem a miénk, és pont ezért kell a felvitelkor:
+       * a gépen az ő matricája van rajta, és a szerelő akkor látja, amikor
+       * előtte áll. Utólag, az irodából ez már egy külön kör telefonálás -- a
+       * mező eddig csak a szerkesztő képernyőn létezett.
        */
-      inventoryNumber: form.inventoryNumber.trim() || undefined,
+      partnerInternalCode: form.partnerInternalCode.trim() || undefined,
       /**
        * A MATRICAKOD NORMALIZALVA MEGY KI, nem nyersen. A tabla csak nagybetut
        * fogad (`AssetLabel_code_shape_check`), a leolvaso viszont adhat

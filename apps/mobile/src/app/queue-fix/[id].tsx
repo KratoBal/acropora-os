@@ -69,7 +69,7 @@ const MEZOK: { key: SzovegesMezo; label: string }[] = [
   { key: "manufacturer", label: "Gyártó" },
   { key: "model", label: "Modell" },
   { key: "serialNumber", label: "Sorozatszám" },
-  { key: "inventoryNumber", label: "Partner azonosítója" },
+  { key: "partnerInternalCode", label: "Partner azonosítója" },
 ];
 
 export default function QueueFixScreen() {

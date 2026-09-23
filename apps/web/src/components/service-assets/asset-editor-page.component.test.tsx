@@ -811,14 +811,14 @@ describe("AssetEditorPage teljesítmény-mezője", () => {
    * bekozekelese ezt pirosra viszi, a kepernyot pedig senki nem nezi meg
    * minden PR utan.
    */
-  it("a sorozatszám mellett a leltári szám áll, a teljesítmény mellett a mértékegység", async () => {
+  it("a sorozatszám mellett a partner belső kódja áll, a teljesítmény mellett a mértékegység", async () => {
     api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
     render(<AssetEditorPage assetId="asset-1" />);
     await screen.findByLabelText("Sorozatszám");
 
     const sorrend = [
       "Sorozatszám",
-      "Leltári szám",
+      "Partner belső kódja",
       "Teljesítmény",
       "Mértékegység",
     ].map((nev) => screen.getByLabelText(nev));

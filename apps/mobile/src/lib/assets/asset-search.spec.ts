@@ -24,7 +24,7 @@ const asset: SearchableAsset = {
   manufacturer: "Eheim",
   model: "P-2",
   serialNumber: "SN-4711",
-  inventoryNumber: "LT-8899",
+  partnerInternalCode: "LT-8899",
   owner: { displayName: "Fánk Kft." },
 };
 

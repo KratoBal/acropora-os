@@ -35,7 +35,7 @@ function sheetLine(
     description: line.description,
     detail: line.detail,
     assetNumber: line.assetNumber,
-    inventoryNumber: line.inventoryNumber,
+    partnerInternalCode: line.partnerInternalCode,
     quantity: line.quantity,
     unit: line.unit,
     kind: line.kind,

@@ -11,10 +11,10 @@
  * kliens oldali keresés nem hazudik.
  *
  * UGYANAZ A HAT MEZŐ, mint a szerveren (eszközszám, név, gyártó, modell,
- * sorozatszám, leltári szám), mert a szerelő nem tudja, melyik mezőben áll az,
- * amit a matricáról leolvas -- és nem is kellene tudnia. Ha a két lista eltérne,
- * ugyanaz a keresés más eredményt adna térerővel és anélkül, és a különbséget
- * senki nem tudná mire vélni.
+ * sorozatszám, partner belső kódja), mert a szerelő nem tudja, melyik mezőben
+ * áll az, amit a matricáról leolvas -- és nem is kellene tudnia. Ha a két lista
+ * eltérne, ugyanaz a keresés más eredményt adna térerővel és anélkül, és a
+ * különbséget senki nem tudná mire vélni.
  */
 
 export interface SearchableAsset {
@@ -23,7 +23,11 @@ export interface SearchableAsset {
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
-  inventoryNumber?: string;
+  /**
+   * A MEZO NEVE 2026-09-23-IG "inventoryNumber" VOLT -- Balazs kerese: ez
+   * mindig a partner sajat kodja volt.
+   */
+  partnerInternalCode?: string;
   owner?: { displayName: string };
 }
 
@@ -43,7 +47,7 @@ export function matchesAssetSearch(
     asset.manufacturer,
     asset.model,
     asset.serialNumber,
-    asset.inventoryNumber,
+    asset.partnerInternalCode,
     asset.owner?.displayName,
   ]
     .filter((field): field is string => Boolean(field))

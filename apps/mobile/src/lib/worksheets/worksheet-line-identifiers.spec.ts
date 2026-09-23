@@ -33,7 +33,7 @@ describe("a munkalap tételsora a két azonosítót külön kezeli", () => {
   it("writes the customer's own code with its label", () => {
     const source = readFileSync(SCREEN, "utf8");
 
-    assert.match(source, /Partner azonosítója: \{line\.inventoryNumber\}/);
+    assert.match(source, /Partner azonosítója: \{line\.partnerInternalCode\}/);
   });
 
   /**
@@ -44,6 +44,6 @@ describe("a munkalap tételsora a két azonosítót külön kezeli", () => {
   it("never writes the label without a value", () => {
     const source = readFileSync(SCREEN, "utf8");
 
-    assert.match(source, /\{line\.inventoryNumber \? \(/);
+    assert.match(source, /\{line\.partnerInternalCode \? \(/);
   });
 });

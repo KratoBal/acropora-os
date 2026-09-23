@@ -21,7 +21,7 @@ const asset: EditableAsset = {
   manufacturer: "Eheim",
   model: "2078",
   serialNumber: "SN-1",
-  inventoryNumber: undefined,
+  partnerInternalCode: undefined,
   description: undefined,
   notes: "Halk.",
 };
@@ -29,7 +29,7 @@ const asset: EditableAsset = {
 describe("assetEditFormFrom", () => {
   it("turns absent values into empty fields, not into the word undefined", () => {
     const form = assetEditFormFrom(asset);
-    assert.equal(form.inventoryNumber, "");
+    assert.equal(form.partnerInternalCode, "");
     assert.equal(form.description, "");
     assert.equal(form.manufacturer, "Eheim");
     assert.equal(form.status, "ACTIVE");

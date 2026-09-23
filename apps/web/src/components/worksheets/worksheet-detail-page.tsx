@@ -294,11 +294,16 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                   {/* AZ UGYFEL SAJAT KODJA, csak ha van, es FELIRATTAL. A
                       felette allo eszkozszam a MIENK, ez pedig az ugyfele:
                       ket csupasz kod egymas alatt pont azt a keveredest
-                      hozna, ami ellen a mezo kulon nevet kapott. */}
-                  {line.inventoryNumber ? (
+                      hozna, ami ellen a mezo kulon nevet kapott.
+
+                      A FELIRAT 2026-09-23-IG "Leltári szám" VOLT -- Balazs
+                      kerese: a mezo mindig a partner sajat kodja volt. */}
+                  {line.partnerInternalCode ? (
                     <div className={sv.rowMeta}>
-                      Leltári szám:{" "}
-                      <span className="font-mono">{line.inventoryNumber}</span>
+                      Partner belső kódja:{" "}
+                      <span className="font-mono">
+                        {line.partnerInternalCode}
+                      </span>
                     </div>
                   ) : null}
                 </td>

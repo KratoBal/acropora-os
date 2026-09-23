@@ -49,7 +49,7 @@ function bemenet(
         description: "Kompresszor bevizsgálás",
         detail: null,
         assetNumber: "ESZK-000123",
-        inventoryNumber: "UGYFEL-42",
+        partnerInternalCode: "UGYFEL-42",
         quantity: "2",
         unit: "óra",
         kind: "LABOR",

@@ -249,18 +249,18 @@ describe("AssetListPage es az ugyfel sajat kodja", () => {
    */
   it("shows the customer's own code on the row when there is one", async () => {
     const withCode = response(1);
-    withCode.items[0]!.inventoryNumber = "LT-4711";
+    withCode.items[0]!.partnerInternalCode = "LT-4711";
     api.list.mockResolvedValue(withCode);
 
     render(<AssetListPage />);
 
     expect(await screen.findByText("LT-4711")).toBeTruthy();
-    expect(screen.getByText(/Leltári szám/)).toBeTruthy();
+    expect(screen.getByText(/Partner belső kódja/)).toBeTruthy();
   });
 
   /**
-   * ES AMI NINCS, AZ NEM LESZ URES FELIRAT: egy "Leltári szám:" cimke ertek
-   * nelkul azt allitana, hogy tudunk rola valamit.
+   * ES AMI NINCS, AZ NEM LESZ URES FELIRAT: egy "Partner belső kódja:" cimke
+   * ertek nelkul azt allitana, hogy tudunk rola valamit.
    */
   it("writes no label at all when the asset has no such code", async () => {
     api.list.mockResolvedValue(response(1));
@@ -268,7 +268,7 @@ describe("AssetListPage es az ugyfel sajat kodja", () => {
     render(<AssetListPage />);
 
     expect(await screen.findByText("ESZ-0001")).toBeTruthy();
-    expect(screen.queryByText(/Leltári szám/)).toBeNull();
+    expect(screen.queryByText(/Partner belső kódja/)).toBeNull();
   });
 
   /**

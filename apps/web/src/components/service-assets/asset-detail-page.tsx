@@ -459,7 +459,16 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                   <Data label="Gyártó" value={asset.manufacturer} />
                   <Data label="Modell" value={asset.model} />
                   <Data label="Sorozatszám" value={asset.serialNumber} />
-                  <Data label="Leltári szám" value={asset.inventoryNumber} />
+                  {/*
+                    A FELIRAT 2026-09-23-IG "Leltári szám" VOLT -- Balázs
+                    kérése: a mező mindig a partner saját kódja volt. Az
+                    IGAZI leltári szám (asset.inventoryNumber) új mező, ma
+                    még nincs felülete, ezért itt sem jelenik meg.
+                  */}
+                  <Data
+                    label="Partner belső kódja"
+                    value={asset.partnerInternalCode}
+                  />
                   {/*
                     AZ ELORE NYOMTATOTT MATRICA KODJA -- A BEGEPELT AZONOSITOK
                     KOZOTT, NEM A QR-PANELBEN.

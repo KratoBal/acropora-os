@@ -173,6 +173,18 @@ export interface AssetListItem extends AssetHierarchyItem {
    * saját kódját, a találat feljött, és semmi nem árulta el, MIRE illeszkedett.
    * Egy találat, ami nem mutatja meg, mire talált, ugyanazt kérdezteti meg
    * másodszor.
+   *
+   * A MEZŐ NEVE 2026-09-23-IG "inventoryNumber" VOLT (Balázs kérése: a régi
+   * név "Leltári szám" feliratot sugallt, holott ez mindig a partner saját
+   * kódja volt). A jelentés nem változott, csak a név.
+   */
+  partnerInternalCode?: string;
+  /**
+   * A VALÓDI LELTÁRI SZÁM, ÚJ MEZŐKÉNT (Balázs kérése, 2026-09-23 11:55).
+   *
+   * ÜRESEN INDUL: ezt a partner tölti ki egy KÉSŐBB épülő felületen. Amíg az
+   * nincs kész, ez a mező a gyakorlatban mindig üres -- a séma és az API
+   * ugyanakkor kész rá.
    */
   inventoryNumber?: string;
   /**
@@ -189,7 +201,7 @@ export interface AssetListItem extends AssetHierarchyItem {
    * VALOSAG, nem egy ures hely.
    *
    * ES A LISTASORON IS, NEM CSAK AZ ADATLAPON (2026-09-18, Balazs kerese).
-   * Ugyanaz az indok, ami az `inventoryNumber`-nel all felette: a KERESES
+   * Ugyanaz az indok, ami a `partnerInternalCode`-nal all felette: a KERESES
    * eddig is nezte (a lista `search` aga a matricakodra is illeszkedik), a sor
    * viszont nem mutatta -- tehat a talalatrol nem latszott, MIRE illeszkedett.
    * Nem jar extra adatbazis-koltseggel: a `label` relacio egy mezoje, es a
@@ -427,6 +439,9 @@ export interface CreateAssetInput {
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
+  /** A PARTNER SAJÁT KÓDJA -- lásd az `AssetListItem` jegyzetét. */
+  partnerInternalCode?: string;
+  /** A VALÓDI LELTÁRI SZÁM -- lásd az `AssetListItem` jegyzetét. */
   inventoryNumber?: string;
   description?: string;
   installedAt?: string;
@@ -498,6 +513,9 @@ export interface UpdateAssetInput {
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;
+  /** A PARTNER SAJÁT KÓDJA -- lásd az `AssetListItem` jegyzetét. */
+  partnerInternalCode?: string | null;
+  /** A VALÓDI LELTÁRI SZÁM -- lásd az `AssetListItem` jegyzetét. */
   inventoryNumber?: string | null;
   description?: string | null;
   installedAt?: string | null;

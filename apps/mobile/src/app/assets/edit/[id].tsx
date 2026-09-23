@@ -76,7 +76,7 @@ const TEXT_FIELDS: {
   { key: "manufacturer", label: "Gyártó" },
   { key: "model", label: "Modell" },
   { key: "serialNumber", label: "Sorozatszám" },
-  { key: "inventoryNumber", label: "Partner azonosítója" },
+  { key: "partnerInternalCode", label: "Partner azonosítója" },
   /**
    * A FOGYASZTAS MOSTANTOL OSSZEADHATO SZAM, tehat NEM ide kerul: annak
    * decimalis billentyuzete es sajat alak-ellenorzese van, lasd lejjebb, a

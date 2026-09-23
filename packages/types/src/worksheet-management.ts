@@ -253,8 +253,12 @@ export interface WorksheetLineDetail {
    * A verzió `unitName` mezője ezzel szemben MÁSOLAT saját oszlopban, mert az
    * alegység neve változik. A határvonal a mező változékonysága, nem az, hogy
    * a lap le van-e zárva.
+   *
+   * A MEZŐ NEVE 2026-09-23-IG "inventoryNumber" VOLT, ugyanúgy, mint az
+   * `Asset`-en, amiről olvas -- lásd az `AssetListItem.partnerInternalCode`
+   * jegyzetét (asset-management.ts). A jelentés nem változott, csak a név.
    */
-  inventoryNumber: string | null;
+  partnerInternalCode: string | null;
   quantity: string;
   unit: string;
   /** A tétel fajtája. Ez dönti el, beleszámít-e az összesített munkaórába. */

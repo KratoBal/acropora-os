@@ -1478,9 +1478,9 @@ export default function WorksheetDetailScreen() {
                     egymas alatt pont azt a keveredest hozna, ami ellen a mezo
                     kulon nevet kapott.
                   */}
-                  {line.inventoryNumber ? (
+                  {line.partnerInternalCode ? (
                     <Text style={styles.muted}>
-                      Partner azonosítója: {line.inventoryNumber}
+                      Partner azonosítója: {line.partnerInternalCode}
                     </Text>
                   ) : null}
                   <Text style={styles.lineSummary}>
