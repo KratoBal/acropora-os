@@ -379,6 +379,16 @@ export class CreateAssetDto {
    * Lasd az `AssetDetail.powerConsumptionRaw` fejleceit.
    */
   @IsString() @MaxLength(40) @IsOptional() powerConsumptionRaw?: string;
+  /**
+   * A TÁBLÁZAT ELSŐ OSZLOPA ("MAT kód / Elektromos"), NYERS SZÖVEGKÉNT.
+   * Balázs kérése, 2026-09-23 (kanban 8c77cf3e): "kapjon saját mezőt", mert a
+   * keresés (lásd `service-assets.repository.ts`) nem nézi a `notes`-t, tehát
+   * egy oda írt kód gyakorlatilag megtalálhatatlan lenne.
+   *
+   * NINCS ALAK-ELLENŐRZÉS: a forrás vegyes ("10M", "30M/1-5", "13M"), sem
+   * tiszta szám, sem egységes hosszúságú.
+   */
+  @IsString() @IsOptional() electricalCode?: string;
   @IsString() @IsOptional() description?: string;
   @IsISO8601() @IsOptional() installedAt?: string;
   @IsISO8601() @IsOptional() purchasedAt?: string;
@@ -520,6 +530,11 @@ export class UpdateAssetDto {
   @MaxLength(40)
   @IsOptional()
   powerConsumptionRaw?: string | null;
+  /**
+   * A TÁBLÁZAT ELSŐ OSZLOPA -- lásd a `CreateAssetDto` jegyzetét. A `null` itt
+   * is TÖRLÉST jelent, a mező elhagyása érintetlenül hagyja.
+   */
+  @IsString() @IsOptional() electricalCode?: string | null;
   @IsString() @IsOptional() description?: string | null;
   @IsISO8601() @IsOptional() installedAt?: string | null;
   @IsISO8601() @IsOptional() purchasedAt?: string | null;

@@ -86,6 +86,12 @@ const TEXT_FIELDS: {
    * tehat AZ illik a generikus mintaba.
    */
   { key: "powerConsumptionRaw", label: "Fogyasztás (eredeti bejegyzés)" },
+  /**
+   * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"), SZABAD SZOVEG, NINCS
+   * ALAK-ELLENORZES -- ugyanabbol az okbol illik a generikus mintaba, mint a
+   * `powerConsumptionRaw`. Balazs kerese, 2026-09-23 (kanban 8c77cf3e).
+   */
+  { key: "electricalCode", label: "MAT kód (elektromos)" },
   { key: "description", label: "Leírás", multiline: true },
   { key: "notes", label: "Megjegyzés", multiline: true },
 ];

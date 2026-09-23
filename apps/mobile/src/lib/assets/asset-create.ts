@@ -115,6 +115,12 @@ export interface AssetCreateForm {
    */
   powerConsumption: string;
   powerConsumptionRaw: string;
+  /**
+   * A TÁBLÁZAT ELSŐ OSZLOPA ("MAT kód / Elektromos"). Balázs kérése,
+   * 2026-09-23 (kanban 8c77cf3e): "kapjon saját mezőt". Szabad szöveg, nincs
+   * alak-ellenőrzés.
+   */
+  electricalCode: string;
   /** Amit a felhasználó beírt vagy a választóból kapott. Üres is lehet. */
   installedAt: string;
   /** Karbantartási intervallum napban, szövegként. Üres is lehet. */
@@ -154,6 +160,8 @@ export interface AssetCreatePayload {
   powerConsumption?: string;
   /** A fogyasztás eredeti szövege, ha a kezelő megadta. */
   powerConsumptionRaw?: string;
+  /** A táblázat első oszlopa ("MAT kód / Elektromos"), ha a kezelő megadta. */
+  electricalCode?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }
@@ -473,6 +481,7 @@ export function buildAssetCreatePayload(
       volume: volumeValue ?? undefined,
       powerConsumption: powerConsumptionValue ?? undefined,
       powerConsumptionRaw: form.powerConsumptionRaw.trim() || undefined,
+      electricalCode: form.electricalCode.trim() || undefined,
       /**
        * A nap KEZDETE, UTC-ben. A telepítés dátuma nap-pontosságú adat: az
        * időpont-rész nem mérés, hanem a formátum ára, ezért nulla.

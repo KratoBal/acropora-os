@@ -72,6 +72,11 @@ export interface EditableAsset {
   powerConsumption?: string;
   /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
   powerConsumptionRaw?: string;
+  /**
+   * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs kerese,
+   * 2026-09-23 (kanban 8c77cf3e): "kapjon sajat mezot".
+   */
+  electricalCode?: string;
   status: AssetStatus;
   criticality: AssetCriticality;
   manufacturer?: string;
@@ -159,6 +164,7 @@ export interface AssetEditForm {
   volume: string;
   powerConsumption: string;
   powerConsumptionRaw: string;
+  electricalCode: string;
 }
 
 const TEXT_FIELDS = [
@@ -174,6 +180,11 @@ const TEXT_FIELDS = [
    * mintaba tartozik.
    */
   "powerConsumptionRaw",
+  /**
+   * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos") -- SZABAD SZOVEG, NINCS
+   * ALAK-ELLENORZES, ugyanabbol az okbol, mint a `powerConsumptionRaw`.
+   */
+  "electricalCode",
 ] as const;
 
 /** Fills the form from what the server last said about the asset. */
@@ -196,6 +207,7 @@ export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
     volume: asset.volume ?? "",
     powerConsumption: asset.powerConsumption ?? "",
     powerConsumptionRaw: asset.powerConsumptionRaw ?? "",
+    electricalCode: asset.electricalCode ?? "",
   };
 }
 

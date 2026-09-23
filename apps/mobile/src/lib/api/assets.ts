@@ -150,6 +150,13 @@ export interface AssetDetail extends AssetListItem {
   powerConsumption?: string;
   /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
   powerConsumptionRaw?: string;
+  /**
+   * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"), NYERS SZOVEGKENT.
+   * Balazs kerese, 2026-09-23 (kanban 8c77cf3e): "kapjon sajat mezot" -- aki
+   * a villanyszekrenynel a kodot latja, a keresobe irva meg kell talalnia
+   * az eszkozt.
+   */
+  electricalCode?: string;
   description?: string;
   installedAt?: string;
   warrantyExpiresAt?: string;
@@ -247,6 +254,8 @@ export interface CreateAssetInput {
   powerConsumption?: string;
   /** A fogyasztas eredeti szovege. Elhagyhato. */
   powerConsumptionRaw?: string;
+  /** A tablazat elso oszlopa ("MAT kod / Elektromos"). Elhagyhato. */
+  electricalCode?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }

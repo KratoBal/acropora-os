@@ -2988,6 +2988,21 @@ model Asset {
   /// FANK-ban egyetlen szam allt) ugyanazt az erteket hordozza, mint a
   /// `powerConsumption`, csak szovegkent.
   powerConsumptionRaw String?
+  /// A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"), SAJAT MEZOKENT.
+  ///
+  /// Balazs kerese, 2026-09-23 (kanban 8c77cf3e), szo szerint: "kapjon sajat
+  /// mezot". A felteteles: a keresonek meg kell talalnia az eszkozt a
+  /// nyomtatott kod alapjan (`service-assets.repository.ts` search aga) --
+  /// egy `notes`-ba irt ertek ezt nem tudna, csendben veszne el, mint ami be
+  /// sem kerult.
+  ///
+  /// SZOVEG, NEM SZAM: acrobot merese, 679 sorbol 351-nek van erteke, 282
+  /// kulonbozo, az alakja vegyes ("10M", "30M/1-5", "13M") -- sem tiszta
+  /// szam, sem egyseges hosszusagu. A NYERS erteket tarolja, valtoztatas
+  /// nelkul; a "30M/1-5" alak jelentese (talan homokszuro-kod plusz
+  /// szelep-tartomany) FELTEVES, NEM MERT -- ha a mezo a nyers erteket orzi,
+  /// ez a kerdes kesobb is eldontheto.
+  electricalCode      String?
   /// `Restrict`, ugyanugy, mint a mertekegysegnel: egy kategoria, amire eszkoz
   /// mutat, nem torolheto ki alola. A kivezetes `isActive`-kal megy.
   categoryRef         AssetCategory?   @relation("AssetCategory", fields: [categoryId], references: [id], onDelete: Restrict)
@@ -3036,6 +3051,7 @@ model Asset {
   @@index([serialNumber])
   @@index([partnerInternalCode])
   @@index([inventoryNumber])
+  @@index([electricalCode])
   @@index([functionId])
 }
 

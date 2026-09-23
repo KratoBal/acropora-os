@@ -100,6 +100,8 @@ export interface QueuedAssetUpdateBase {
   volume?: string | null;
   powerConsumption?: string | null;
   powerConsumptionRaw?: string | null;
+  /** A tablazat elso oszlopa ("MAT kod / Elektromos"), ahogy a szerkesztes kezdetekor allt. */
+  electricalCode?: string | null;
   /**
    * A MATRICAKOD, AHOGY A SZERKESZTES KEZDETEKOR ALLT.
    *

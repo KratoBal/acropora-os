@@ -91,4 +91,6 @@ export interface UpdateAssetInput {
   powerConsumption?: string | null;
   /** A fogyasztas eredeti szovege -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */
   powerConsumptionRaw?: string | null;
+  /** A tablazat elso oszlopa ("MAT kod / Elektromos") -- `null` torli. */
+  electricalCode?: string | null;
 }
