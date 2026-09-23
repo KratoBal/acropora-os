@@ -53,12 +53,32 @@ describe("mi megy fel egy új hibajegyből", () => {
     });
   });
 
-  it("gép nélkül, partner nélkül is felvihető: csak a cím kötelező", () => {
+  /**
+   * A PARTNER KOTELEZO GEP NELKUL (Balazs dontese, 2026-09-23). Ez a teszt a
+   * REGI viselkedes tukorkepe: eddig itt `ok: true` allt, "csak a cím
+   * kötelező" néven -- a döntés ezt az utat zárta le, nem szűkítette.
+   */
+  it("gép nélkül, partner nélkül a küldés előtt megáll", () => {
     const eredmeny = torzs();
 
-    assert.equal(eredmeny.ok, true);
-    if (!eredmeny.ok) return;
-    assert.deepEqual(eredmeny.payload, { title: "Szivattyú zúg" });
+    assert.deepEqual(eredmeny, {
+      ok: false,
+      hiba: "Partner kiválasztása kötelező.",
+    });
+  });
+
+  /**
+   * A HELYSZIN IS KOTELEZO GEP NELKUL, UGYANATTOL A DONTESTOL -- de csak
+   * AKKOR eldontheto ez a hianyzo mezo hibaja, ha a partner MAR megvan.
+   * Enelkul a teszt nem tudna megkulonboztetni a ket hianyt.
+   */
+  it("gép nélkül, helyszín nélkül a küldés előtt megáll, ha a partner megvan", () => {
+    const eredmeny = torzs({ customerId: "cust-1" });
+
+    assert.deepEqual(eredmeny, {
+      ok: false,
+      hiba: "Helyszín kiválasztása kötelező.",
+    });
   });
 
   it("üres cím esetén nem küldünk semmit", () => {
@@ -71,17 +91,31 @@ describe("mi megy fel egy új hibajegyből", () => {
   /**
    * A SZERVER UGYANEZT ŐRZI, ÉS UGYANEZZEL A MONDATTAL. Itt azért áll, hogy a
    * szerelő a helyszínen NE egy szerver-hibából tudja meg, mit hagyott ki.
+   *
+   * `originAssetId`-VEL, SZANDEKOSAN: gep nelkul ez az eset MA MAR a
+   * "Partner kiválasztása kötelező" agon allna meg elobb (lasd fent) -- ez
+   * az allitas azt a MASIK utat meri, ahol a hivo mar ADOTT egy gepet, es
+   * MELLETTE, tevesen, helyszint is kuldott volna partner nelkul.
    */
-  it("helyszín partner nélkül: a küldés előtt megáll", () => {
-    assert.deepEqual(torzs({ departmentId: "dept-1" }), {
-      ok: false,
-      hiba: "Helyszínt csak partnerrel együtt lehet megadni.",
-    });
+  it("helyszín partner nélkül, gép mellett: a küldés előtt megáll", () => {
+    assert.deepEqual(
+      torzs({ originAssetId: "asset-1", departmentId: "dept-1" }),
+      {
+        ok: false,
+        hiba: "Helyszínt csak partnerrel együtt lehet megadni.",
+      },
+    );
   });
 
   it("a leírás csak akkor kerül bele, ha van", () => {
-    const ures = torzs();
-    const teli = torzs({ leiras: "  hangos  " });
+    // PARTNER ES HELYSZIN KELL, MERT MOSTANTOL KOTELEZO: enelkul mindket
+    // hivas a partner-hiany agara esne, es az allitas nem a leirasrol szolna.
+    const ures = torzs({ customerId: "cust-1", departmentId: "dept-1" });
+    const teli = torzs({
+      customerId: "cust-1",
+      departmentId: "dept-1",
+      leiras: "  hangos  ",
+    });
 
     assert.equal(ures.ok && "description" in ures.payload, false);
     assert.equal(teli.ok && teli.payload.description, "hangos");
@@ -104,8 +138,16 @@ describe("mi megy fel egy új hibajegyből", () => {
   });
 
   it("két szerelő ugyanabban a pillanatban KÜLÖN kulcsot kap", () => {
-    const egyik = torzs({ userId: "user-1" });
-    const masik = torzs({ userId: "user-2" });
+    const egyik = torzs({
+      customerId: "cust-1",
+      departmentId: "dept-1",
+      userId: "user-1",
+    });
+    const masik = torzs({
+      customerId: "cust-1",
+      departmentId: "dept-1",
+      userId: "user-2",
+    });
 
     assert.equal(
       egyik.ok && masik.ok && egyik.operationId !== masik.operationId,
@@ -114,8 +156,8 @@ describe("mi megy fel egy új hibajegyből", () => {
   });
 
   it("ugyanaz a szerelő, ugyanaz a pillanat: UGYANAZ a kulcs", () => {
-    const egyszer = torzs();
-    const ketszer = torzs();
+    const egyszer = torzs({ customerId: "cust-1", departmentId: "dept-1" });
+    const ketszer = torzs({ customerId: "cust-1", departmentId: "dept-1" });
 
     assert.equal(
       egyszer.ok && ketszer.ok && egyszer.operationId === ketszer.operationId,
@@ -131,7 +173,7 @@ describe("mi megy fel egy új hibajegyből", () => {
   it("mindkét kulcs-alak megfelel a szerver mintájának", () => {
     const minta = /^[A-Za-z0-9_.:-]{8,128}$/;
     const gepes = torzs({ originAssetId: "asset-1" });
-    const gepNelkul = torzs();
+    const gepNelkul = torzs({ customerId: "cust-1", departmentId: "dept-1" });
 
     assert.match(gepes.ok ? gepes.operationId : "", minta);
     assert.match(gepNelkul.ok ? gepNelkul.operationId : "", minta);
@@ -165,9 +207,16 @@ describe("a gép nélküli úton megadott eszközök", () => {
    * A SZERVER HARMADIK ORZOJE, A KULDES ELOTT. Nem azert, hogy helyettesitse a
    * szervert, hanem hogy a szerelo a helyszinen ne egy szerver-hibauzenetbol
    * tudja meg, mit hagyott ki.
+   *
+   * GEP NELKUL EZ AZ AG MA MAR NEM ERHETO EL: a fentebb bevezetett "Helyszín
+   * kiválasztása kötelező" ellenorzes korabban lecsapja, meg mielott az
+   * eszkoz-specifikus szabalyhoz erne. Az `originAssetId` ezert KELL ide --
+   * enelkul ez a teszt a MASIK uzenetet kapna, es nem azt merne, amit a neve
+   * mond.
    */
-  it("helyszín nélkül a felvitel megáll, mielőtt elindulna", () => {
+  it("helyszín nélkül a felvitel megáll, mielőtt elindulna, gép mellett is", () => {
     const eredmeny = torzs({
+      originAssetId: "asset-1",
       customerId: "cust-1",
       assetIds: ["asset-1"],
     });

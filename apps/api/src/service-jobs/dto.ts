@@ -22,9 +22,27 @@ import {
 /**
  * A hibajegy felvitele.
  *
- * A CÍM AZ EGYETLEN KÖTELEZŐ MEZŐ, és ez tudatos: egy jegy attól jegy, hogy
- * megnevezi, mi a baj. A vevő elhagyható, mert a jegyet mi is nyithatjuk
- * olyasmire, ami még nem kötődik ügyfélhez.
+ * === A VEVŐ ÉS A HELYSZÍN KÖTELEZŐVÉ VÁLIK -- DE MÉG NEM ITT ===
+ *
+ * Balázs döntése, 2026-09-23 06:53 (Discord fő csatorna, üzenet
+ * 1552181062837346325, szó szerint: „Kötelező"). A kérdés, amire válaszolt: a
+ * helyszín kötelezővé tételéből következik, hogy a vevő is azzá válik, mert
+ * helyszíne csak partnernek van. A partner nélküli belső jegy lehetősége
+ * ezzel megszűnt.
+ *
+ * A `@IsOptional()` A `customerId`-N ÉS A `departmentId`-N MÉGIS ITT MARAD,
+ * SZÁNDÉKOSAN: Balázs sorrendje szerint az API-szintű kikényszerítés (és a
+ * `department_required` séma-migráció) a MOBIL KIADÁS UTÁN jön, nem előtte --
+ * a mobil kliens (`uj-jegy-torzs.ts`) ma még a régi, opcionális szerződést
+ * ismerő verzióban is kint van, és egy korábbi szigorítás pont azt a
+ * szerelőt zárná ki, aki még nem frissített. Az ÚJ mobil kliens
+ * (`uj-jegy-torzs.ts`, 2026-09-23-tól) már maga is megköveteli a partnert és
+ * a helyszínt a gép nélküli úton -- ez az API-oldali tükre még hátravan.
+ *
+ * A LEZÁRT, RÉGI SZÖVEG, EMLÉKEZTETŐÜL: „A vevő elhagyható, mert a jegyet mi
+ * is nyithatjuk olyasmire, ami még nem kötődik ügyfélhez." Ez a mondat innen
+ * indult, és a döntés ezt az utat zárja le -- amint az enforcement ide is
+ * megérkezik, ez a komment (és a két `@IsOptional()`) törlendő.
  */
 export class CreateServiceJobDto {
   @IsString() @MinLength(1) @MaxLength(300) title!: string;

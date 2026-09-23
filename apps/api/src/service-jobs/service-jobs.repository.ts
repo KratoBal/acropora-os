@@ -248,22 +248,27 @@ export class ServiceJobsRepository {
         description: input.description,
         customerId: input.customerId,
         /**
-         * `!` -- ISMERT, NYITOTT KOCKAZAT, NEM GARANCIA. A `department_required`
-         * migracio ota a `ServiceJob.departmentId` NOT NULL, DE ezen a
-         * hivason NINCS OLYAN VALIDACIO, MINT AZ ASSET-EN
-         * (`assetDepartmentPresenceRefusal`), ami kikenyszeritene, hogy
-         * `input.departmentId` sose legyen `null`. Kulonosen a "partner
-         * nelkuli jegy" eset (a `customerId` a DTO-ban opcionalis) SOHA nem
-         * tud helyszint kapni -- ez zart kor, hasonlo az Asset
-         * CUSTOMER_OWNER esetehez, de MEG NINCS FELOLDVA (jelentve, 15c9cd7a
-         * kartya, 4953-as komment).
+         * `!` -- MEG MINDIG ISMERT, NYITOTT KOCKAZAT, NEM GARANCIA -- DE A
+         * DONTES, AMITOL FUGGOTT, MAR MEGVAN.
          *
-         * A `!` ITT KIZAROLAG A TIPUSHIBAT (es vele a konteneres build
-         * hibajat) oldja fel -- NEM VALTOZTAT a futasideju viselkedesen:
-         * ha `input.departmentId` valoban `null`, ez a hivas MA IS, EZUTAN
-         * IS ugyanugy a NOT NULL megkotesbe futna. A `!` nem uj kockazatot
-         * vezet be, csak nem allitja meg a forditot ott, ahol a kockazat MAR
-         * MEGVAN es MASHOL van dokumentalva.
+         * A "partner nelkuli jegy" zart kor (a `customerId` SOHA nem tud
+         * helyszint kapni, mert helyszin csak partnernek van) 2026-09-23-ig
+         * NYITOTT kerdes volt: lehet-e egyaltalan partner nelkuli jegy. Balazs
+         * dontese (06:53, "Kotelezo") ezt lezarta: NEM lehet. Innentol minden
+         * jegynek lesz partnere, tehat a `departmentId` ELMELETBEN mindig
+         * levezethetove valik.
+         *
+         * A KIKENYSZERITES VISZONT MEG HATRAVAN, ES EZ SZANDEKOS SORREND:
+         * Balazs kerese szerint az API-szintu validacio (egy Asset-CUSTOMER_
+         * OWNER-hez hasonlo `assetDepartmentPresenceRefusal`-szeru orzo a
+         * ServiceJob-on) es a `department_required` migracio elettartama a
+         * MOBIL KIADAS UTAN kezdodik, nem elotte -- lasd a
+         * `CreateServiceJobDto` fejleceben.
+         *
+         * A `!` TEHAT MA IS CSAK A TIPUSHIBAT oldja fel, NEM VALTOZTAT a
+         * futasideju viselkedesen: ha `input.departmentId` valoban `null`, ez
+         * a hivas MA IS, EZUTAN IS a NOT NULL megkotesbe futna. Amint az
+         * emlitett orzo bekerul, ez a sor -- es ez a jegyzet -- torlendo.
          */
         departmentId: input.departmentId!,
         // A NYITO A JEGYEN, NEM CSAK A NAPLOBAN. Ugyanaz az aktor kerul mindket
