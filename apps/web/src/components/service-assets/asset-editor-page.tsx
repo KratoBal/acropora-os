@@ -381,10 +381,18 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    * Enélkül egy "mentsd mégis" utáni átírás a RÉGI névre kapott találatot
    * mutatná tovább -- vagy fordítva, egy megkerült figyelmeztetés némán
    * érvényben maradna egy már megváltozott névhez.
+   *
+   * RENDERELÉS KÖZBEN, NEM `useEffect`-BEN: ez a React saját ajánlott
+   * mintája arra, hogy egy állapot egy MÁSIK érték változásával nullázódjon
+   * (https://react.dev/learn/you-might-not-need-an-effect -- "Adjusting
+   * some state when a prop changes"). Egy effektusban hívott `setState`
+   * plusz render-kört nyit; ez a forma ugyanabban a körben old fel.
    */
-  useEffect(() => {
+  const [checkedName, setCheckedName] = useState(name);
+  if (checkedName !== name) {
+    setCheckedName(name);
     setNameDuplicates(null);
-  }, [name]);
+  }
 
   if (!canManage)
     return (

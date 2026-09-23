@@ -130,11 +130,20 @@ export default function NewAssetScreen() {
   /**
    * A NÉV ÁTÍRÁSA ELÉVÍTI A FIGYELMEZTETÉST -- egy időközben megváltozott
    * névhez a régi találat félrevezetne.
+   *
+   * RENDERELÉS KÖZBEN, NEM `useEffect`-BEN: ez a React saját ajánlott
+   * mintája arra, hogy egy állapot egy MÁSIK érték változásával nullázódjon
+   * (https://react.dev/learn/you-might-not-need-an-effect -- "Adjusting
+   * some state when a prop changes"). Egy effektusban hívott `setState`
+   * plusz render-kört nyit; ez a forma ugyanabban a körben old fel, és nem
+   * kell hozzá effektus, ami csak egy változás FIGYELÉSÉRE szolgálna.
    */
-  useEffect(() => {
+  const [checkedName, setCheckedName] = useState(name);
+  if (checkedName !== name) {
+    setCheckedName(name);
     setNameDuplicates(null);
     setPendingPayload(null);
-  }, [name]);
+  }
   const [kind, setKind] = useState<AssetKind>("EQUIPMENT");
   const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
