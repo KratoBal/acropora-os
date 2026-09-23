@@ -128,6 +128,20 @@ const ALAP_TSV = [
     manufacturer: "GRUNDFOS",
     performance: "75",
   }),
+  // Kerekitheto teljesitmeny -- a valodi ETB/RIV kerekitesi hiba mintajara.
+  sor({
+    sor: "30",
+    site: "LSS98",
+    deviceCode: "HSZ",
+    performance: "146.69999999999999",
+  }),
+  // NEM egyetlen szam -- a valodi LSS12 UVF mintajara.
+  sor({
+    sor: "40",
+    site: "LSS99",
+    deviceCode: "UVF",
+    performance: "175/210",
+  }),
 ].join("\n");
 
 const EGYSEGEK = {
@@ -151,6 +165,20 @@ const EGYSEGEK = {
       parentId: "unit-bio",
       code: "LSS01",
       name: "LSS01",
+      isActive: true,
+    },
+    {
+      id: "unit-lss98",
+      parentId: "unit-bio",
+      code: "LSS98",
+      name: "LSS98",
+      isActive: true,
+    },
+    {
+      id: "unit-lss99",
+      parentId: "unit-bio",
+      code: "LSS99",
+      name: "LSS99",
       isActive: true,
     },
   ],
@@ -325,6 +353,58 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
           !("performance" in p) && !("performanceUnitId" in p),
       ),
     );
+  });
+
+  it("a Teljesitmeny KEREKITHETO tobbtizedes ertek hat tizedesre kerekitve megy be, es jelzve van", () => {
+    /*
+      acrobot merese, 2026-09-23 22:01: a szolgaltatas sajat
+      normalizePerformanceValue mintaja legfeljebb hat tizedest enged
+      (^\d{1,13}(?:\.\d{1,6})?$). A valodi forrasban ez a pontos ertek
+      (146.69999999999999) hat sort erint, mind UGYANAZT a lebegopontos
+      kerekitesi hibat hordozza -- ez KEREKITHETO, nem "ne talalgass" eset.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS98",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.length, 1);
+    assert.equal(payload[0].performance, "146.7");
+    assert.equal(payload[0].performanceUnitId, "uom_perf_m3ph");
+    assert.match(stderr, /KEREKITVE/);
+    assert.match(stderr, /sor 30/);
+    assert.match(stderr, /146\.69999999999999/);
+    assert.match(stderr, /146\.7/);
+  });
+
+  it("a Teljesitmeny NEM EGYETLEN SZAM erteknel MEGALL, nem kerekit es nem talalgat", () => {
+    /*
+      acrobot merese, 2026-09-23 22:01: a valodi forrasban 16 sor nem
+      egyetlen szam (tartomany, tobb ertek, mas mertekegyseg) -- ezeket
+      NEM lehet kerekitessel feloldani, mert tobb informaciot hordoznak,
+      mint amennyi a mezobe fer.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS99",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(stdout, "");
+    assert.match(stderr, /sor 40/);
+    assert.match(stderr, /175\/210/);
   });
 
   it("a masik helyszin sorai NEM kerulnek bele", () => {

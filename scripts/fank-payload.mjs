@@ -61,18 +61,39 @@
  *                           MEGADASA UTAN viszont MAR NEM ez a viselkedes --
  *                           lasd a "STOP" listat lejjebb.
  *
- * === A performance/performanceUnitId MAR NEM HIANYZIK -- acrobot harmadik
- *     kore, 2026-09-23 21:45, mert a korabbi korlat (nincs VALODI
- *     UnitOfMeasure-azonositom) megszunt ===
+ * === A performance/performanceUnitId -- acrobot harmadik ES NEGYEDIK kore ===
  *
  *   A ketto egyutt mozog (Asset_performance_pairing_check adatbazis-megkotes,
- *   lasd a DTO jegyzetet), es korabban ezert maradt ki mindket mezo -- fel
- *   nem toltott performanceUnitId nelkul a betoltes elbukott volna. A TSV
- *   "M" oszlopa (Teljesitmeny) a SAJAT fejleceben MINDIG m3/h, tehat ez nem
- *   soronkenti feloldas, csak egyetlen ALLANDO (`PERFORMANCE_UNIT_M3PH`,
- *   forras: GET /units-of-measure?kind=PERFORMANCE, acrobot mert erteke).
+ *   lasd a DTO jegyzetet). A performanceUnitId `PERFORMANCE_UNIT_M3PH`
+ *   allando (forras: GET /units-of-measure?kind=PERFORMANCE, acrobot mert
+ *   erteke, 2026-09-23 21:45) -- DE EZ A DEFAULT NEM ELLENORZOTT SORONKENT:
+ *   a TSV "M" oszlop FEJLECE m3/h-t mond, a CELLAK kozott viszont acrobot
+ *   ket olyat talalt (2026-09-23 22:01), ami MAS mertekegyseget visel
+ *   ("50-160 l", "50-160l/min") -- a fejlec tehat NEM garancia minden
+ *   sorra, csak a tobbsegre. Ma ez azert nem okoz csendes hibat, mert
+ *   mindket sor amugy is elbukik az ALAK-ellenorzesen (lasd lent) -- de ha
+ *   valaha egy MAS mertekegysegu cella egyetlen tiszta szamot tartalmazna,
+ *   azt ez a szkript NEM venne eszre. Ez a lapon nyitva marad, nem
+ *   javitas.
  *
- * === AMIT A SZKRIPT SOSEM CSINAL, ES NEGY "ALLJON MEG" ESET ===
+ *   A performance ERTEKE NEM SZABAD SZOVEG: a szolgaltatas a kozos
+ *   `normalizePerformanceValue`-val ellenorzi (`^\d{1,13}(?:\.\d{1,6})?$` --
+ *   egy szam, legfeljebb hat tizedessel), es ami nem ilyen, arra 400-at ad.
+ *   Acrobot lemerte a teljes forras "M" oszlopat ezen a mintan: 136 kitoltott
+ *   cellabol 114 at megy, 22 nem. Ket kulon eset, ket kulon feloldassal:
+ *     KEREKITHETO (6 sor, "146.69999999999999" alaku): UGYANAZ a szam, csak
+ *       tobb, mint hat tizedesre irva -- `normalizePerformance()` hat
+ *       tizedesre kerekiti, es a szkript KULON kilistazza, melyik sorokon
+ *       tortent (lasd `buildSitePayload`), hogy ez LATHATO maradjon.
+ *     NEM EGYETLEN SZAM (16 sor, pl. "175/210", "31-29-26", "45 (40)",
+ *       "50-160 l"): tobb ertek, tartomany, vagy nem m3/h mertekegyseg --
+ *       ezeket NEM lehet kerekitessel vagy talalgatassal egyetlen szamma
+ *       alakitani. Ugyanaz a "ne talalgass" szabaly vonatkozik rajuk, mint
+ *       a hianyzo kategoriara: a szkript MEGALL, es megnevezi a sorokat --
+ *       acrobot dontse el helyszinenkent, melyik ertek menjen be es mi
+ *       keruljon a description-be.
+ *
+ * === AMIT A SZKRIPT SOSEM CSINAL, ES OT "ALLJON MEG" ESET ===
  *
  *   - nem kuld HTTP-hivast, nem ir semmilyen rendszerbe
  *   - nem sorszamoz: ha egy partnerInternalCode UTKOZIK (ket sor ugyanoda esne
@@ -84,6 +105,11 @@
  *     acrobot SZO SZERINTI egyezesre epitettek (nem nev-hasonlosagra), es
  *     egy par kodot (a mai peldaban: OCS/HSZ) SZANDEKOSAN nem oldottak fel
  *     talalgatassal -- ha egy sor ilyen kodra fut, a szkript sem talalgat.
+ *   - HA A TELJESITMENY (M oszlop) TOBB, MINT EGY SZAM -- tartomany, tobb
+ *     ertek vagy nem-m3/h mertekegyseg (acrobot harmadik kore, 2026-09-23
+ *     22:01) -- MEGALL, es megnevezi a sorokat. Amit KEREKITHET (ugyanaz a
+ *     szam, csak tul sok tizedessel), azt kerekiti ES kulon jelzi -- ez NEM
+ *     megallasi ok, csak lathato valtoztatas.
  *   - a payload eloallitasa UTAN, meg a kiiras ELOTT, ujra ellenorzi, hogy a
  *     generalt partnerInternalCode ertekek EGYEDIEK -- acrobot sajat szavaival:
  *     "nalam ez egy sor volt, es pont az LSS22-n sult el"
@@ -126,8 +152,11 @@ export const FANK_TSV_DEFAULT =
   "/home/marveen/marveen/exchange/FANK-teljes-lista-JAVITOTT-2026-09-23.tsv";
 export const FANK_PARTNER_DEFAULT = "cmt34n8s20009pg07pg8kwue1";
 export const ASSET_KIND_DEFAULT = "EQUIPMENT";
-// A TSV "M" oszlopa (Teljesitmeny) a SAJAT fejleceben mindig m3/h -- lasd a
-// buildAssetPayload jegyzetet arrol, honnan jott ez az azonosito.
+// A TSV "M" oszlopa (Teljesitmeny) a SAJAT fejleceben m3/h-t mond -- DE ez
+// FEJLEC-SZINTU allitas, nem soronkent ellenorzott. Lasd a fajl fejlecenek
+// "performance/performanceUnitId" szakaszat: acrobot ket olyan cellat
+// talalt, ami MAS mertekegyseget visel, es amit ma csak a szam-alak
+// ellenorzese fog meg, nem ez az allando maga.
 export const PERFORMANCE_UNIT_M3PH = "uom_perf_m3ph";
 
 export class FankPayloadError extends Error {}
@@ -226,6 +255,32 @@ export function toRoman(n) {
 
 function pad2(value) {
   return String(value).padStart(2, "0");
+}
+
+// UGYANAZ A MINTA, MINT A SZOLGALTATAS SAJAT `normalizePerformanceValue`
+// fuggvenyeben -- acrobot merese, 2026-09-23 22:01.
+const PERFORMANCE_VALUE_RE = /^\d{1,13}(?:\.\d{1,6})?$/;
+
+/**
+ * EGY NYERS "M" OSZLOP CELLA -> ERVENYES performance-ERTEK, VAGY `null`, HA
+ * NEM AZ. Ket kimenet lehetseges:
+ *   { value, rounded: false }  mar eleve megfelel a mintanak, valtozatlan
+ *   { value, rounded: true }   szam volt, de tobb mint hat tizedessel --
+ *                              hat tizedesre kerekitve (acrobot dontese,
+ *                              mert a hat a sema sajat pontossaga, nem egy
+ *                              itt valasztott szam)
+ *   null                       NEM egyetlen szam (tobb ertek, tartomany,
+ *                              mertekegyseg a szamban stb.) -- ezt a hivo
+ *                              NEM kerekitheti es NEM talalgathatja.
+ */
+export function normalizePerformance(raw) {
+  if (PERFORMANCE_VALUE_RE.test(raw)) return { value: raw, rounded: false };
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return null;
+  const kerekitve = Math.round(num * 1e6) / 1e6;
+  const asString = String(kerekitve);
+  if (!PERFORMANCE_VALUE_RE.test(asString)) return null;
+  return { value: asString, rounded: true };
 }
 
 const CATEGORY_LINE_RE = /^(\S+)\s{2,}(.*)$/;
@@ -380,11 +435,12 @@ export function findPartnerCodeCollisions(items) {
 }
 
 /**
- * EGY TSV-SOR -> `CreateAssetDto`-ALAKU OBJEKTUM. A `categoryId`-t a hivo
- * (`buildSitePayload`) mar feloldva adja at -- itt csak a mezo felvetele
- * tortenik, ha van ertek (nem `null`-lal, mert a DTO `@IsOptional()`-je a
- * hianyzo mezot es a `null`-t masodikent kezeli -- lasd a labelCode
- * jegyzetet asset.dto.ts-ben arrol, mi romlik el, ha ezt osszekeverjuk).
+ * EGY TSV-SOR -> `CreateAssetDto`-ALAKU OBJEKTUM. A `categoryId`-t ES a
+ * `performanceValue`-t a hivo (`buildSitePayload`) mar feloldva adja at --
+ * itt csak a mezo felvetele tortenik, ha van ertek (nem `null`-lal, mert a
+ * DTO `@IsOptional()`-je a hianyzo mezot es a `null`-t masodikent kezeli --
+ * lasd a labelCode jegyzetet asset.dto.ts-ben arrol, mi romlik el, ha ezt
+ * osszekeverjuk).
  */
 export function buildAssetPayload(row, ctx) {
   const {
@@ -396,6 +452,7 @@ export function buildAssetPayload(row, ctx) {
     kind,
     categoryMap,
     categoryId,
+    performanceValue,
   } = ctx;
   const partnerInternalCode = buildPartnerInternalCode(
     siteCode,
@@ -424,16 +481,8 @@ export function buildAssetPayload(row, ctx) {
   if (row.volume) payload.volume = row.volume;
   if (row.powerConsumptionRaw)
     payload.powerConsumptionRaw = row.powerConsumptionRaw;
-  /*
-    A "M" oszlop (Teljesitmeny) a forras SAJAT fejleceben MINDIG m3/h --
-    ezt nem kell soronkent feloldani, csak egyszer, a mertekegyseget adja a
-    fejlec maga. acrobot merese, 2026-09-23 21:45: GET
-    /units-of-measure?kind=PERFORMANCE (a `kind` kotelezo, nelkule 400), a
-    kobmeter/ora azonositoja `uom_perf_m3ph`. Korabban ez a mezo
-    SZANDEKOSAN kimaradt, mert nem volt ilyen azonositom -- most mar van.
-  */
-  if (row.performance) {
-    payload.performance = row.performance;
+  if (performanceValue) {
+    payload.performance = performanceValue;
     payload.performanceUnitId = PERFORMANCE_UNIT_M3PH;
   }
   if (categoryId) payload.categoryId = categoryId;
@@ -486,6 +535,17 @@ export function buildSitePayload({
                          harom "ne talalgass" eset.
   */
   const kategoriaHianyok = [];
+  /*
+    A TELJESITMENY (TSV "M" oszlop) EGYETLEN SZAM KELL LEGYEN -- acrobot
+    merese, 2026-09-23 22:01: a szolgaltatas sajat `normalizePerformanceValue`
+    mintaja (`^\d{1,13}(?:\.\d{1,6})?$`) a forras 136 kitoltott cellajabol
+    22-t utasitana el. Ket kulon eset, ket kulon kezeles: a KEREKITHETO
+    (tul sok tizedesjegy, ugyanaz a szam) csak jelzett, a NEM EGYETLEN SZAM
+    (tobb ertek, tartomany, mas mertekegyseg) megallasi ok, mint a hianyzo
+    kategoria.
+  */
+  const teljesitmenyHianyok = [];
+  const teljesitmenyKerekitve = [];
   const entries = siteRows.map((row) => {
     let categoryId;
     if (categoryMap) {
@@ -497,6 +557,21 @@ export function buildSitePayload({
         kategoriaHianyok.push({ sor: row.sor, kulcs });
       }
     }
+    let performanceValue;
+    if (row.performance) {
+      const normalizalt = normalizePerformance(row.performance);
+      if (normalizalt === null) {
+        teljesitmenyHianyok.push({ sor: row.sor, nyers: row.performance });
+      } else {
+        performanceValue = normalizalt.value;
+        if (normalizalt.rounded)
+          teljesitmenyKerekitve.push({
+            sor: row.sor,
+            nyers: row.performance,
+            kerekitve: normalizalt.value,
+          });
+      }
+    }
     return buildAssetPayload(row, {
       siteCode,
       parentCode,
@@ -506,6 +581,7 @@ export function buildSitePayload({
       kind,
       categoryMap,
       categoryId,
+      performanceValue,
     });
   });
 
@@ -515,6 +591,15 @@ export function buildSitePayload({
       .join("\n");
     throw new FankPayloadError(
       `A kategoria-terkep nem fedi az alabbi kodokat a(z) ${siteCode} helyszinen -- ez a szkript nem talalgat:\n${reszletek}`,
+    );
+  }
+
+  if (teljesitmenyHianyok.length > 0) {
+    const reszletek = teljesitmenyHianyok
+      .map((h) => `  sor ${h.sor}: "${h.nyers}"`)
+      .join("\n");
+    throw new FankPayloadError(
+      `A Teljesitmeny (M oszlop) az alabbi sorokon NEM egyetlen szam -- ez a szkript nem kerekit es nem talalgat, a dontes a hivoe:\n${reszletek}`,
     );
   }
 
@@ -535,6 +620,7 @@ export function buildSitePayload({
   return {
     payload: entries.map((e) => e.payload),
     hianyzoKategoriaSorok: hianyzoKategoria.map((e) => e.sor),
+    teljesitmenyKerekitve,
   };
 }
 
@@ -643,22 +729,31 @@ export function main(argv) {
       )
     : null;
 
-  const { payload, hianyzoKategoriaSorok } = buildSitePayload({
-    tsvText,
-    units,
-    siteCode: args.site,
-    skipSorok: args.skip,
-    partnerId: args.partner,
-    ownerType: args.ownerType,
-    kind: args.kind,
-    categoryMap,
-  });
+  const { payload, hianyzoKategoriaSorok, teljesitmenyKerekitve } =
+    buildSitePayload({
+      tsvText,
+      units,
+      siteCode: args.site,
+      skipSorok: args.skip,
+      partnerId: args.partner,
+      ownerType: args.ownerType,
+      kind: args.kind,
+      categoryMap,
+    });
 
   if (hianyzoKategoriaSorok.length > 0) {
     process.stderr.write(
       `FIGYELMEZTETES: ${hianyzoKategoriaSorok.length} sorhoz nincs categoryId (nincs --kategoria-terkep, vagy a kod nincs benne) -- sor: ${hianyzoKategoriaSorok.join(
         ", ",
       )}\n`,
+    );
+  }
+  if (teljesitmenyKerekitve.length > 0) {
+    const reszletek = teljesitmenyKerekitve
+      .map((k) => `  sor ${k.sor}: "${k.nyers}" -> "${k.kerekitve}"`)
+      .join("\n");
+    process.stderr.write(
+      `KEREKITVE (hat tizedesre, a sema sajat pontossagara): ${teljesitmenyKerekitve.length} sor\n${reszletek}\n`,
     );
   }
   process.stderr.write(
