@@ -16,22 +16,28 @@ import { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 
 /**
- * A `CUSTOMER_OWNER` ELUTASÍTÁS -- MÁR A #1013 (`cb3b562f`) IS BEKÖTÖTTE, ÉS EZ A
- * SPEC EZT MÉRI, NEM EGY ÚJ JAVÍTÁST.
+ * A `CUSTOMER_OWNER` ELUTASÍTÁS -- EZEN AZ ÁGON MÁR NEM `departmentId`-FÜGGŐ,
+ * HANEM FELTÉTEL NÉLKÜLI, MERT BALÁZS ELTÖRÖLTE A VEVŐ-TULAJDONÚ ESZKÖZT.
  *
- * A kártya (61c5fef7) ugyanazt a holt-kód mintát nevezte meg, mint a NOT_FOUND /
- * OTHER_PARTNER / INACTIVE ágaknál: a `create()`/`update()` sosem adta át a
- * `departmentId`-t a `validateReferences()`-nek, tehát a `requested` mindig
- * `false` volt, és a `CUSTOMER_OWNER` sem sülhetett el.
+ * === A FÁJL EREDETI TÖRTÉNETE, ÉS MIÉRT ÍRÓDOTT ÁT, NEM TÖRÖLVE ===
  *
- * A #1013 EZT A NÉGYET EGYSZERRE OLDOTTA MEG: a `departmentId: input.departmentId`
- * sor MINDKÉT hívásban FELTÉTEL NÉLKÜL kerül be (nem `ownerType === "SUPPLIER"`-hez
- * kötve, ahogy a `customerAddressId`/`aquariumId` van), tehát egy CUSTOMER-tulajdonú
- * kérésen is eljut a `departmentId` a szabályig -- és az `assetDepartmentRefusal()`
- * a `CUSTOMER_OWNER` ágat MÉG A `NOT_FOUND` ELLENŐRZÉSE ELŐTT kiértékeli.
+ * Ez a spec a #1013/#1014-gyel (`cb3b562f`, `948c69eb`, `main`) született, azt
+ * mérve, hogy a `CUSTOMER_OWNER` elutasítás CSAK akkor sül el, ha a hívó
+ * `departmentId`-t is küld (a `requested` ellenőrzés UTÁN futott). Az a
+ * mérés a MAI `main`-en igaz és helyes.
  *
- * EZÉRT EZ A SPEC NEM ÚJ BEKÖTÉS, HANEM MÉRÉS: bizonyítja, hogy az ág MA MÁR
- * elsül a valós HTTP úton, mielőtt bárki újra "megjavítaná" ugyanazt a sort.
+ * EZEN AZ ÁGON (`munka/helyszin-kotelezo`) VISZONT MÁR NEM AZ: Balázs döntése
+ * (2026-09-22 19:13:19 UTC, Discord, Acropora OS szál, üzenet
+ * 1552035084578586696, szó szerint: „nem lesz") kimondja, hogy vevő-tulajdonú
+ * eszköz TÖBBÉ NEM LÉTEZHET a rendszerben -- lásd `asset-department.ts`
+ * fejlécét. A `CUSTOMER_OWNER` ág ezért itt a `requested` ELLENŐRZÉSE ELŐTT
+ * fut, feltétel nélkül: `departmentId`-vel és nélküle EGYFORMÁN elutasít.
+ *
+ * A KÉT ÁG (main és ez a branch) EGYSZERRE HELYES A SAJÁT ÁLLAPOTÁBAN, és a
+ * merge után (git merge origin/main, 643bdb3d) EZ a fájl a main-ről érkezett,
+ * változatlanul -- ezért bukott piros itt: a régi feltevés (department nélkül
+ * a felvitel átmegy) erre az ágra már NEM igaz. Ez NEM az ág kódjának hibája:
+ * a `main` az, ami még nem tudja a „nem lesz" döntést.
  */
 const gate = integrationDatabaseGate(process.env);
 
@@ -45,6 +51,12 @@ async function removeLeftovers() {
   });
   await prisma.worksheetDepartment.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
+  });
+  // A SZALLITO ELOBB, MINT A VEVO: a `Supplier.customerId` a tukor-sorra
+  // mutat, es a megszoritas nem `SetNull` (lasd az asset-department-
+  // reference-validation.integration.spec.ts azonos jegyzetét).
+  await prisma.supplier.deleteMany({
+    where: { code: { startsWith: PREFIX } },
   });
   await prisma.customer.deleteMany({
     where: { customerNumber: { startsWith: PREFIX } },
@@ -66,6 +78,7 @@ describe(
     );
 
     let customerId = "";
+    let supplierId = "";
     let departmentId = "";
 
     before(async () => {
@@ -115,6 +128,22 @@ describe(
         select: { id: true },
       });
       departmentId = department.id;
+
+      /*
+        A SZALLITO A `customer`-t TUKROZI: az `update()` tesztnek egy VALÓS,
+        MA LÉTREHOZHATÓ (szállítói) eszközből kell indulnia, amit aztán vevő
+        tulajdonába próbálunk átváltani -- a `create()` ugyanis MA MÁR SOHA
+        nem ad vevő-tulajdonú sort, tehát a fixtúra nem építhető azon át.
+      */
+      const supplier = await prisma.supplier.create({
+        data: {
+          code: `${PREFIX}S`,
+          name: `${PREFIX} szállító`,
+          customerId,
+        },
+        select: { id: true },
+      });
+      supplierId = supplier.id;
     });
 
     after(async () => {
@@ -133,6 +162,12 @@ describe(
           }),
         },
         {
+          nev: "a suite szállítója bent maradt a takarítás után",
+          darab: await prisma.supplier.count({
+            where: { code: { startsWith: PREFIX } },
+          }),
+        },
+        {
           nev: "a suite aktora bent maradt a takarítás után",
           darab: await prisma.user.count({
             where: { email: { startsWith: PREFIX.toLowerCase() } },
@@ -142,7 +177,7 @@ describe(
       await prisma.$disconnect();
     });
 
-    it("create(): vevő-tulajdonú eszközön a departmentId elutasítja a felvitelt", async () => {
+    it("create(): vevő-tulajdonú eszköz departmentId-vel sem hozható létre", async () => {
       const name = `${PREFIX} create teszt`;
       await assert.rejects(
         () =>
@@ -160,7 +195,7 @@ describe(
           assert.ok(error instanceof BadRequestException);
           assert.match(
             (error as BadRequestException).message,
-            /Alegység csak szerviz partner eszközéhez rendelhető/,
+            /vevő tulajdonába eszköz nem hozható létre/,
           );
           return true;
         },
@@ -168,47 +203,71 @@ describe(
       assert.equal(await prisma.asset.count({ where: { name } }), 0);
     });
 
-    it("KONTROLL: departmentId nélkül a vevő-tulajdonú felvitel változatlanul átmegy", async () => {
+    it("create(): departmentId NÉLKÜL sem hozható létre -- a tiltás feltétel nélküli", async () => {
       /*
-        ENÉLKÜL A FENTI TESZT NEM BIZONYÍTANA SEMMIT: ha a CUSTOMER-tulajdonú
-        felvitel MAGÁTÓL is elutasítana bármi miatt, a fenti "elutasítja" teszt
-        hamis bizonyítékot adna. Ez a kontroll azt méri, hogy a KÉT ÁLLÁS
-        (departmentId van kontra nincs) TÉNYLEG más eredményt ad.
+        ENÉLKÜL A FENTI TESZT KEVESEBBET BIZONYÍTANA, MINT AMIT ÁLLÍT: ha a
+        `CUSTOMER_OWNER` ág CSAK a `departmentId` jelenlétéhez lenne kötve
+        (ahogy a mai `main`-en van), ez a hívás ÁTMENNE. Ez a teszt azt méri,
+        hogy a tiltás itt TÉNYLEG feltétel nélküli -- a „nem lesz" döntés
+        (2026-09-22 19:13) szerint egyetlen vevő-tulajdonú eszköz sem
+        keletkezhet, `departmentId`-től függetlenül.
       */
-      const name = `${PREFIX} kontroll teszt`;
-      const created = await assets.create(
-        {
-          ownerType: "CUSTOMER",
-          ownerId: customerId,
-          kind: "EQUIPMENT",
-          name,
-        } as never,
-        internalUser,
+      const name = `${PREFIX} department nelkul teszt`;
+      await assert.rejects(
+        () =>
+          assets.create(
+            {
+              ownerType: "CUSTOMER",
+              ownerId: customerId,
+              kind: "EQUIPMENT",
+              name,
+            } as never,
+            internalUser,
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof BadRequestException);
+          assert.match(
+            (error as BadRequestException).message,
+            /vevő tulajdonába eszköz nem hozható létre/,
+          );
+          return true;
+        },
       );
-      assert.ok((created as { id: string }).id);
-      assert.equal(await prisma.asset.count({ where: { name } }), 1);
+      assert.equal(await prisma.asset.count({ where: { name } }), 0);
     });
 
-    it("update(): vevő-tulajdonú eszközön a departmentId hozzáadása elutasítja a módosítást", async () => {
+    it("update(): meglévő (szállítói) eszköz nem váltható vevő tulajdonába", async () => {
+      /*
+        A KIINDULÓ ESZKÖZ SZÁLLÍTÓI TULAJDONÚ, MERT A `create()` MA MÁR
+        SOHA nem ad vevő-tulajdonú sort -- a fixtúrának ezért egy MÁR LÉTEZŐ,
+        érvényes (szállítói) eszközből kell indulnia, amit aztán át
+        próbálunk váltani.
+      */
       const name = `${PREFIX} update teszt`;
       const created = await assets.create(
         {
-          ownerType: "CUSTOMER",
-          ownerId: customerId,
+          ownerType: "SUPPLIER",
+          ownerId: supplierId,
           kind: "EQUIPMENT",
           name,
+          departmentId,
         } as never,
         internalUser,
       );
       const assetId = (created as { id: string }).id;
 
       await assert.rejects(
-        () => assets.update(assetId, { departmentId } as never, internalUser),
+        () =>
+          assets.update(
+            assetId,
+            { ownerType: "CUSTOMER", ownerId: customerId } as never,
+            internalUser,
+          ),
         (error: unknown) => {
           assert.ok(error instanceof BadRequestException);
           assert.match(
             (error as BadRequestException).message,
-            /Alegység csak szerviz partner eszközéhez rendelhető/,
+            /meglévő eszköz nem váltható vevő tulajdonába/,
           );
           return true;
         },
@@ -217,9 +276,10 @@ describe(
       // ÉS A MEGLÉVŐ SOR VÁLTOZATLAN MARADT: az elutasítás nem írt félbe semmit.
       const stored = await prisma.asset.findUnique({
         where: { id: assetId },
-        select: { departmentId: true },
+        select: { customerId: true, supplierId: true },
       });
-      assert.equal(stored?.departmentId, null);
+      assert.equal(stored?.supplierId, supplierId);
+      assert.equal(stored?.customerId, null);
     });
   },
 );
