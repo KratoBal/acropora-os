@@ -66,4 +66,15 @@ export class MaterialRequestsController {
   receive(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.service.receive(id, user);
   }
+
+  /**
+   * AZ ELOZMENYEK -- UGYANAZON A LAPON, MINT A "RAM VARO" LISTA, kulon
+   * utvonalon: a lehivo logika mas (`OPEN` ES `RECEIVED`, nem csak `OPEN`),
+   * es a valasz-alak is mas tipus (lasd `MaterialRequestsService.listHistory`).
+   */
+  @Get("material-requests/history")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  listHistory(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.listHistory(user);
+  }
 }

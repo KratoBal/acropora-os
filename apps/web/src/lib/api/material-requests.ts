@@ -1,6 +1,7 @@
 import type {
   CreateMaterialRequestInput,
   MaterialRequestDetail,
+  MaterialRequestHistoryListResponse,
   MaterialRequestListResponse,
   PendingMaterialRequestListResponse,
 } from "@acropora/types";
@@ -64,6 +65,14 @@ export const materialRequestsApi = {
       `${base}/material-requests/${encodeURIComponent(id)}/receive`,
       token,
       { method: "POST" },
+    );
+  },
+  /** Az elozmenyek -- OPEN es RECEIVED egyarant, ugyanazon a kepessegen. */
+  listHistory(token: string, signal?: AbortSignal) {
+    return apiRequest<MaterialRequestHistoryListResponse>(
+      `${base}/material-requests/history`,
+      token,
+      { signal },
     );
   },
 };

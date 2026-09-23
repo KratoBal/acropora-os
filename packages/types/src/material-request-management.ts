@@ -79,6 +79,25 @@ export interface PendingMaterialRequestListResponse {
   items: PendingMaterialRequest[];
 }
 
+/**
+ * AZ ELOZMENYEK SORA -- UGYANAZ AZ ALAK, MINT A `PendingMaterialRequest`, DE
+ * MAS A LEKERDEZES: `OPEN` ES `RECEIVED` allapotu sorokat egyarant hordoz, a
+ * `DRAFT`-ot nem (lasd `MaterialRequestsRepository.listHistory` fejlecet).
+ *
+ * Balazs szo szerinti kerese, 2026-09-23 20:08:57 UTC: "jo lenne ha
+ * valamilyen modon kepzodne valami lista, ahol azert vissza lehet nezni, mi
+ * volt az igeny, mikor erkezett, mikor ment ra a valasz stb".
+ */
+export interface MaterialRequestHistoryEntry extends MaterialRequestDetail {
+  worksheetNumber: string | null;
+  customerDisplayName: string;
+  departmentName: string;
+}
+
+export interface MaterialRequestHistoryListResponse {
+  items: MaterialRequestHistoryEntry[];
+}
+
 export interface CreateMaterialRequestInput {
   items: MaterialRequestItemInput[];
 }
