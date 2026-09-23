@@ -39,7 +39,7 @@ function version(
         detail: null,
         assetId: "asset-1",
         assetNumber: "ESZK-000123",
-        inventoryNumber: "UGYFEL-42",
+        partnerInternalCode: "UGYFEL-42",
         quantity: "2",
         unit: "óra",
         kind: "LABOR",
@@ -206,7 +206,7 @@ describe("a válaszból a lap bemenete", () => {
     assert.match(lap, /MUNKALAP {2}BIO-2026-001\/1/);
     assert.match(lap, /Partner: Fánk Kft\. \(VEVO-A\)/);
     assert.match(lap, /Eszköz: ESZK-000123/);
-    assert.match(lap, /Leltári szám: UGYFEL-42/);
+    assert.match(lap, /Partner belső kódja: UGYFEL-42/);
     assert.match(lap, /Dolgozott rajta: Kovács Anna/);
     assert.match(lap, /- Szivattyú zajos\./);
     assert.match(lap, /Összes munkaóra: 2/);

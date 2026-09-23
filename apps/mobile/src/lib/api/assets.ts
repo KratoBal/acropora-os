@@ -82,8 +82,12 @@ export interface AssetListItem extends AssetHierarchyItem {
    * Az ugyfel sajat eszkozkodja. A LISTAN is megjon, mert a kereses nezi: egy
    * talalat, ami nem mutatja meg, mire illeszkedett, ugyanazt kerdezteti meg
    * masodszor.
+   *
+   * A MEZO NEVE 2026-09-23-IG "inventoryNumber" VOLT -- Balazs kerese: ez
+   * mindig a partner sajat kodja volt. Az IGAZI leltari szam uj mezo, ma meg
+   * nincs mobil-felulete, ezert ide sem kerul.
    */
-  inventoryNumber?: string;
+  partnerInternalCode?: string;
   nextServiceAt?: string;
   /**
    * A QR-matricán lévő azonosító. A listán is megjön, mert a helyszíni
@@ -218,15 +222,19 @@ export interface CreateAssetInput {
   model?: string;
   serialNumber?: string;
   /**
-   * A partner SAJÁT azonosítója az eszközön (leltári szám). Nem a miénk: a
-   * gépen gyakran ez a matrica van rajta, és a helyszínen ezt olvassa le a
-   * szerelő. A szerver felvitelkor is fogadja.
+   * A partner SAJÁT azonosítója az eszközön. Nem a miénk: a gépen gyakran ez
+   * a matrica van rajta, és a helyszínen ezt olvassa le a szerelő. A szerver
+   * felvitelkor is fogadja.
+   *
+   * A MEZO NEVE 2026-09-23-IG "inventoryNumber" VOLT -- Balazs kerese: ez
+   * mindig a partner sajat kodja volt. Az IGAZI leltari szam uj mezo, ma meg
+   * nincs mobil-felulete, ezert ide sem kerul.
    */
-  inventoryNumber?: string;
+  partnerInternalCode?: string;
   /**
    * AZ ELŐRE NYOMTATOTT MATRICA KÓDJA (egy betű és négy szám, pl. V2196).
    *
-   * NEM UGYANAZ, MINT AZ `inventoryNumber`: az a PARTNERÉ, ez a MIÉNK. A
+   * NEM UGYANAZ, MINT AZ `partnerInternalCode`: az a PARTNERÉ, ez a MIÉNK. A
    * szerelő a helyszínen a mi matricánkat ragasztja fel, és ezt a kódot köti
    * az eszközhöz. A régi, generált QR-tokent NEM ez váltja ki: az továbbra is
    * a beolvasás kulcsa marad (Balázs, 2026-09-02 16:27: „nem tedd vissza a

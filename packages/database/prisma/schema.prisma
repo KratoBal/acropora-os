@@ -2917,6 +2917,19 @@ model Asset {
   manufacturer        String?
   model               String?
   serialNumber        String?
+  /// A PARTNER SAJÁT KÓDJA, MEGŐRZÖTT NÉVVEL 2026-09-23-IG.
+  ///
+  /// Ez a mező mindig ezt jelentette (lásd a régi `FIELD_LABELS` bejegyzést,
+  /// "partner azonosítója", és a munkalap-sor `inventoryNumber` jegyzetét,
+  /// "AZ ÜGYFÉL SAJÁT ESZKÖZKÓDJA") -- a felirat viszont "Leltári szám" volt,
+  /// és Balázs kérése (2026-09-23 11:55) szerint ez félrevezető. Az oszlop
+  /// átnevezve, az ADAT VÁLTOZATLAN (egy sorban állt: RIV_PUM).
+  partnerInternalCode String?
+  /// AZ IGAZI LELTÁRI SZÁM, ÚJ MEZŐKÉNT (Balázs kérése, 2026-09-23 11:55).
+  ///
+  /// ÜRESEN INDUL: ezt a partner tölti ki majd, egy KÉSŐBB épülő felületen.
+  /// Amíg az a felület nincs kész, ez a mező MA SENKI ÁLTAL nem írható a
+  /// gyakorlatban, csak a séma és az API kész rá.
   inventoryNumber     String?
   /// A BERENDEZES TELJESITMENYE, a `performanceUnit` mertekegysegeben.
   ///
@@ -3015,6 +3028,7 @@ model Asset {
   @@index([productVariantId])
   @@index([nextServiceAt, status])
   @@index([serialNumber])
+  @@index([partnerInternalCode])
   @@index([inventoryNumber])
   @@index([functionId])
 }

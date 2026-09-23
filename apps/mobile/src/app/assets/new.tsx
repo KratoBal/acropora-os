@@ -164,7 +164,7 @@ export default function NewAssetScreen() {
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
-  const [inventoryNumber, setInventoryNumber] = useState("");
+  const [partnerInternalCode, setPartnerInternalCode] = useState("");
   /**
    * A BEOLVASOTT SZABAD MATRICAKOD, HA A SZERELO ONNAN ERKEZETT.
    *
@@ -653,7 +653,7 @@ export default function NewAssetScreen() {
       manufacturer,
       model,
       serialNumber,
-      inventoryNumber,
+      partnerInternalCode,
       labelCode,
       performance,
       performanceUnitId,
@@ -981,8 +981,8 @@ export default function NewAssetScreen() {
             */}
             <Field
               label="Partner azonosítója"
-              value={inventoryNumber}
-              onChangeText={setInventoryNumber}
+              value={partnerInternalCode}
+              onChangeText={setPartnerInternalCode}
             />
             <PerformanceField
               value={performance}

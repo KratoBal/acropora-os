@@ -33,7 +33,7 @@ function sheet(
         description: "Kompresszor bevizsgálás",
         detail: null,
         assetNumber: null,
-        inventoryNumber: null,
+        partnerInternalCode: null,
         quantity: "2",
         unit: "óra",
         kind: "LABOR",
@@ -155,7 +155,7 @@ describe("a nyomtatott munkalap tartalma", () => {
             description: "Kompresszor bevizsgálás",
             detail: null,
             assetNumber: null,
-            inventoryNumber: null,
+            partnerInternalCode: null,
             quantity: "0,5",
             unit: "óra",
             kind: "LABOR",
@@ -277,7 +277,7 @@ describe("a nyomtatott munkalap tartalma", () => {
             description: "Kompresszor bevizsgálás",
             detail: null,
             assetNumber: null,
-            inventoryNumber: "UGYFEL-42",
+            partnerInternalCode: "UGYFEL-42",
             quantity: "2",
             unit: "óra",
             kind: "LABOR",
@@ -287,7 +287,7 @@ describe("a nyomtatott munkalap tartalma", () => {
         ],
       }),
     );
-    assert.match(lap, /Leltári szám: UGYFEL-42/);
+    assert.match(lap, /Partner belső kódja: UGYFEL-42/);
   });
 });
 
@@ -385,9 +385,9 @@ describe("a lap mezőhalmaza végiggondolt", () => {
       a MI eszközszámunk NINCS a típusban -- akkor nem volt rá döntés. Azóta van:
       a készüléken ott a matrica, tehát a helyszínen ez azonosítja a gépet.
 
-      A KÉT KÓD KÜLÖN MEZŐ MARAD, és ez a lényeg: a `assetNumber` a mienk, az
-      `inventoryNumber` az ügyfélé. Ha valaha egybeolvadnának, a lapon két
-      különböző dolog állna egy néven.
+      A KÉT KÓD KÜLÖN MEZŐ MARAD, és ez a lényeg: a `assetNumber` a mienk, a
+      `partnerInternalCode` (2026-09-23-ig "inventoryNumber") az ügyfélé. Ha
+      valaha egybeolvadnának, a lapon két különböző dolog állna egy néven.
     */
     const forras = readFileSync(
       "src/worksheets/worksheet-sheet-content.ts",
@@ -408,7 +408,7 @@ describe("a lap mezőhalmaza végiggondolt", () => {
       .replace(/\/\/[^\n]*/g, "");
 
     assert.match(kodOnly, /assetNumber/);
-    assert.match(kodOnly, /inventoryNumber/);
+    assert.match(kodOnly, /partnerInternalCode/);
   });
 
   it("a lapon a KÉT eszközkód külön címkét kap", () => {
@@ -425,7 +425,7 @@ describe("a lap mezőhalmaza végiggondolt", () => {
             description: "Kompresszor bevizsgálás",
             detail: null,
             assetNumber: "ESZK-000123",
-            inventoryNumber: "UGYFEL-42",
+            partnerInternalCode: "UGYFEL-42",
             quantity: "2",
             unit: "óra",
             kind: "LABOR",
@@ -437,6 +437,6 @@ describe("a lap mezőhalmaza végiggondolt", () => {
     );
 
     assert.match(lap, /Eszköz: ESZK-000123/);
-    assert.match(lap, /Leltári szám: UGYFEL-42/);
+    assert.match(lap, /Partner belső kódja: UGYFEL-42/);
   });
 });

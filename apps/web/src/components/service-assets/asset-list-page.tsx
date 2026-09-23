@@ -579,12 +579,17 @@ export function AssetListPage() {
                           sajat kodjat, a talalat feljott, es semmi nem arulta el,
                           MIRE illeszkedett. A felirat azert kell melle, hogy ne
                           legyen osszekeverheto a mi eszkozszamunkkal -- az all
-                          folotte, ugyanabban a betutipusban. */}
-                      {asset.inventoryNumber ? (
+                          folotte, ugyanabban a betutipusban.
+
+                          A MEZO NEVE ES FELIRATA 2026-09-23-IG "inventoryNumber" /
+                          "Leltári szám" volt -- Balazs kerese: ez mindig a partner
+                          sajat kodja volt, a nev felrevezeto. Az IGAZI leltari szam
+                          uj, ures mezo (asset.inventoryNumber), meg nincs felulete. */}
+                      {asset.partnerInternalCode ? (
                         <span className={`mt-1 block ${sv.rowMeta}`}>
-                          Leltári szám:{" "}
+                          Partner belső kódja:{" "}
                           <span className="font-mono">
-                            {asset.inventoryNumber}
+                            {asset.partnerInternalCode}
                           </span>
                         </span>
                       ) : null}

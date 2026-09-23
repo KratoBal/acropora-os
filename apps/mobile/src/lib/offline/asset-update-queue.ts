@@ -77,7 +77,7 @@ export interface QueuedAssetUpdateBase {
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;
-  inventoryNumber?: string | null;
+  partnerInternalCode?: string | null;
   description?: string | null;
   notes?: string | null;
   /**

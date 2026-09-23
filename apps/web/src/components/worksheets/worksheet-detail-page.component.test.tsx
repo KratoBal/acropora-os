@@ -69,7 +69,7 @@ const session: Session = {
   },
 };
 
-function detail(inventoryNumber: string | null): WorksheetDetail {
+function detail(partnerInternalCode: string | null): WorksheetDetail {
   return {
     id: "worksheet-1",
     number: "BIO-2026-001",
@@ -149,7 +149,7 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
           detail: null,
           assetId: "asset-1",
           assetNumber: "ESZK-000123",
-          inventoryNumber,
+          partnerInternalCode,
           quantity: "2",
           unit: "óra",
           // ÓRA-tétel, egy emberrel: 2 * 1 = 2 munkaóra. A fixtúra így a
@@ -191,14 +191,15 @@ describe("WorksheetDetailPage és az ügyfél saját kódja a tételsoron", () =
 
     expect(await screen.findByText("ESZK-000123")).toBeTruthy();
     expect(screen.getByText("LT-4711")).toBeTruthy();
-    expect(screen.getByText(/Leltári szám/)).toBeTruthy();
+    expect(screen.getByText(/Partner belső kódja/)).toBeTruthy();
   });
 
   /**
-   * ÉS AMI NINCS, AZ NEM LESZ ÜRES FELIRAT: egy érték nélküli "Leltári szám:"
-   * azt állítaná, hogy tudunk róla valamit. A felirat maga viszont kötelező
-   * ott, ahol van érték: fölötte a MI eszközszámunk áll, és két csupasz kód
-   * egymás alatt pont az a keveredés, ami ellen ez a mező külön nevet kapott.
+   * ÉS AMI NINCS, AZ NEM LESZ ÜRES FELIRAT: egy érték nélküli "Partner belső
+   * kódja:" azt állítaná, hogy tudunk róla valamit. A felirat maga viszont
+   * kötelező ott, ahol van érték: fölötte a MI eszközszámunk áll, és két
+   * csupasz kód egymás alatt pont az a keveredés, ami ellen ez a mező külön
+   * nevet kapott.
    */
   it("writes no label at all when the asset has no such code", async () => {
     api.detail.mockResolvedValue(detail(null));
@@ -206,7 +207,7 @@ describe("WorksheetDetailPage és az ügyfél saját kódja a tételsoron", () =
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
 
     expect(await screen.findByText("ESZK-000123")).toBeTruthy();
-    expect(screen.queryByText(/Leltári szám/)).toBeNull();
+    expect(screen.queryByText(/Partner belső kódja/)).toBeNull();
   });
 
   /**

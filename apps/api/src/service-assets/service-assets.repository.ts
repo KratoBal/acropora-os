@@ -595,6 +595,12 @@ export class ServiceAssetsRepository extends Repository {
               { model: { contains: query.search, mode: "insensitive" } },
               { serialNumber: { contains: query.search, mode: "insensitive" } },
               {
+                partnerInternalCode: {
+                  contains: query.search,
+                  mode: "insensitive",
+                },
+              },
+              {
                 inventoryNumber: {
                   contains: query.search,
                   mode: "insensitive",
@@ -1243,6 +1249,7 @@ export class ServiceAssetsRepository extends Repository {
                   manufacturer: optionalText(input.manufacturer),
                   model: optionalText(input.model),
                   serialNumber: optionalText(input.serialNumber),
+                  partnerInternalCode: optionalText(input.partnerInternalCode),
                   inventoryNumber: optionalText(input.inventoryNumber),
                   description: optionalText(input.description),
                   installedAt: optionalDate(input.installedAt),
@@ -1773,6 +1780,7 @@ export class ServiceAssetsRepository extends Repository {
           manufacturer: optionalText(input.manufacturer),
           model: optionalText(input.model),
           serialNumber: optionalText(input.serialNumber),
+          partnerInternalCode: optionalText(input.partnerInternalCode),
           inventoryNumber: optionalText(input.inventoryNumber),
           description: optionalText(input.description),
           installedAt: optionalDate(input.installedAt),
@@ -2467,7 +2475,12 @@ export class ServiceAssetsRepository extends Repository {
        * eddig is nézte, a sor viszont nem mutatta, tehát a találatról nem
        * látszott, MIRE illeszkedett. Nem jár extra adatbázis-költséggel, a mező
        * már benne van a betöltött sorban.
+       *
+       * A MEZŐ NEVE 2026-09-23-IG "inventoryNumber" VOLT -- lásd a séma
+       * jegyzetét: a jelentése nem változott, csak a neve, és mellé került
+       * egy VALÓDI "inventoryNumber", ami ma mindig üres.
        */
+      partnerInternalCode: row.partnerInternalCode ?? undefined,
       inventoryNumber: row.inventoryNumber ?? undefined,
       /**
        * A MATRICAKOD A LISTASORON is, ugyanabbol az okbol, mint felette az

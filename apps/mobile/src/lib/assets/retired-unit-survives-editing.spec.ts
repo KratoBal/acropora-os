@@ -69,7 +69,7 @@ const asset = {
   manufacturer: null,
   model: null,
   serialNumber: null,
-  inventoryNumber: null,
+  partnerInternalCode: null,
   description: null,
   notes: null,
 } as unknown as EditableAsset;

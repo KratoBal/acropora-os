@@ -42,7 +42,7 @@ describe("a tárolt törzsből űrlap lesz", () => {
     const urlap = assetFormFromPayload(torzs);
     assert.equal(urlap?.model, "");
     assert.equal(urlap?.serialNumber, "");
-    assert.equal(urlap?.inventoryNumber, "");
+    assert.equal(urlap?.partnerInternalCode, "");
     assert.equal(urlap?.installedAt, "");
   });
 

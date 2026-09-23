@@ -1203,7 +1203,7 @@ describe(
           customerId,
           assetNumber: `${TEST_ASSET_PREFIX}${suffix}`,
           name: "Cápasuli kompresszor",
-          inventoryNumber: "LT-4711",
+          partnerInternalCode: "LT-4711",
         },
       });
 
@@ -1244,12 +1244,15 @@ describe(
       assert.ok(beforeRow);
       const before = toWorksheetDetail(beforeRow);
       assert.equal(before.currentVersion.status, "SIGNED");
-      assert.equal(before.currentVersion.lines[0]?.inventoryNumber, "LT-4711");
+      assert.equal(
+        before.currentVersion.lines[0]?.partnerInternalCode,
+        "LT-4711",
+      );
 
       // A JAVÍTÁS AZ ESZKÖZÖN TÖRTÉNIK, a lapot senki nem nyitja meg.
       await prisma.asset.update({
         where: { id: asset.id },
-        data: { inventoryNumber: "LT-4712" },
+        data: { partnerInternalCode: "LT-4712" },
       });
 
       const afterRow = await repository.detail(worksheetId, {
@@ -1258,7 +1261,7 @@ describe(
       assert.ok(afterRow);
       const after = toWorksheetDetail(afterRow);
       assert.equal(
-        after.currentVersion.lines[0]?.inventoryNumber,
+        after.currentVersion.lines[0]?.partnerInternalCode,
         "LT-4712",
         "élő hivatkozás: a javított kód az aláírt lapon is meglátszik",
       );

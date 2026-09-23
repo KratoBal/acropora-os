@@ -48,8 +48,15 @@ export interface WorksheetSheetLine {
    * matrica, tehát a helyszínen ez azonosítja a gépet, nem csak nálunk.
    */
   assetNumber: string | null;
-  /** Az ÜGYFÉL saját eszközkódja. Külön mező, mert külön jelentés. */
-  inventoryNumber: string | null;
+  /**
+   * Az ÜGYFÉL saját eszközkódja. Külön mező, mert külön jelentés.
+   *
+   * A MEZŐ NEVE 2026-09-23-IG "inventoryNumber" VOLT, és a lapon is
+   * "Leltári szám" felirattal jelent meg -- Balázs kérése szerint ez
+   * félrevezető volt (lásd az `AssetListItem.partnerInternalCode`
+   * jegyzetét).
+   */
+  partnerInternalCode: string | null;
   quantity: string;
   unit: string;
   kind: "LABOR" | "OTHER";
@@ -276,8 +283,8 @@ export function worksheetSheetLines(
       */
       out.push(line.assetNumber ? `   Eszköz: ${line.assetNumber}` : null);
       out.push(
-        line.inventoryNumber
-          ? `   Leltári szám: ${line.inventoryNumber}`
+        line.partnerInternalCode
+          ? `   Partner belső kódja: ${line.partnerInternalCode}`
           : null,
       );
       out.push(`   ${lineAmount(line)}`);

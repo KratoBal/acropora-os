@@ -105,8 +105,11 @@ export interface WorksheetLineDetail {
   /**
    * Az ugyfel sajat eszkozkodja, elo hivatkozassal: a szerver olvasaskor huzza
    * az eszkozrol, a soron nincs masolata.
+   *
+   * A MEZO NEVE 2026-09-23-IG "inventoryNumber" VOLT -- Balazs kerese: ez
+   * mindig a partner sajat kodja volt.
    */
-  inventoryNumber: string | null;
+  partnerInternalCode: string | null;
   quantity: string;
   unit: string;
   /**

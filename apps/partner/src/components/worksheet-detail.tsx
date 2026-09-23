@@ -420,8 +420,10 @@ function Tetelek({ lines }: { lines: WorksheetLineDetail[] }) {
                       egymás alatt pont azt a keveredést hozná, ami ellen a
                       mező külön nevet kapott.
                     */}
-                    {line.inventoryNumber ? (
-                      <span>Leltári szám: {line.inventoryNumber}</span>
+                    {line.partnerInternalCode ? (
+                      <span>
+                        Partner belső kódja: {line.partnerInternalCode}
+                      </span>
                     ) : null}
                   </td>
                   <td className="numeric">{line.quantity}</td>

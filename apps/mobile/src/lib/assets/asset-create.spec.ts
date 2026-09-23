@@ -34,7 +34,7 @@ const form: AssetCreateForm = {
   manufacturer: " Eheim ",
   model: "",
   serialNumber: " SN-1 ",
-  inventoryNumber: "",
+  partnerInternalCode: "",
   labelCode: "",
   performance: "",
   performanceUnitId: "",
@@ -241,20 +241,20 @@ describe("buildAssetCreatePayload es az alegyseg", () => {
 
 describe("buildAssetCreatePayload es a leltari szam", () => {
   /**
-   * A LELTÁRI SZÁM A PARTNERÉ, nem a miénk. A gépen az ő matricája van rajta, és
+   * A PARTNER BELSŐ KÓDJA, nem a miénk. A gépen az ő matricája van rajta, és
    * a szerelő akkor látja, amikor előtte áll -- utólag, az irodából ez már egy
    * külön kör telefonálás. A mező eddig csak a SZERKESZTŐ képernyőn létezett,
    * pedig a szerver felvitelkor is fogadja.
    */
-  it("records the partner's own number while the sticker is in hand", () => {
+  it("records the partner's own code while the sticker is in hand", () => {
     const result = buildAssetCreatePayload({
       ...form,
-      inventoryNumber: "  LT-4711 ",
+      partnerInternalCode: "  LT-4711 ",
     });
 
     assert.equal(result.ok, true);
     assert.equal(
-      result.ok ? result.payload.inventoryNumber : undefined,
+      result.ok ? result.payload.partnerInternalCode : undefined,
       "LT-4711",
     );
   });
@@ -263,7 +263,7 @@ describe("buildAssetCreatePayload es a leltari szam", () => {
     const result = buildAssetCreatePayload(form);
 
     assert.equal(
-      result.ok ? result.payload.inventoryNumber : "not-undefined",
+      result.ok ? result.payload.partnerInternalCode : "not-undefined",
       undefined,
     );
   });
@@ -271,11 +271,11 @@ describe("buildAssetCreatePayload es a leltari szam", () => {
   it("treats whitespace as no number at all", () => {
     const result = buildAssetCreatePayload({
       ...form,
-      inventoryNumber: "   ",
+      partnerInternalCode: "   ",
     });
 
     assert.equal(
-      result.ok ? result.payload.inventoryNumber : "not-undefined",
+      result.ok ? result.payload.partnerInternalCode : "not-undefined",
       undefined,
     );
   });

@@ -19,13 +19,14 @@ import type { ComparableWorksheetVersion } from "./worksheet-diff.js";
 
 export const worksheetVersionInclude = {
   lines: {
-    // Az ügyfél saját kódja (`inventoryNumber`) ÉLŐ HIVATKOZÁS, akárcsak az
-    // eszközszám: a soron nincs másolata, olvasáskor jön az eszközről. A
-    // döntés indoka az, hogy ez a kód a funkciót azonosítja, nem a darabot,
-    // tehát nem változik. Ha mégis (elgépelés javítása), a javítás a már
-    // aláírt lapokon is megjelenik.
+    // Az ügyfél saját kódja (`partnerInternalCode`, 2026-09-23-ig
+    // "inventoryNumber" néven) ÉLŐ HIVATKOZÁS, akárcsak az eszközszám: a
+    // soron nincs másolata, olvasáskor jön az eszközről. A döntés indoka az,
+    // hogy ez a kód a funkciót azonosítja, nem a darabot, tehát nem
+    // változik. Ha mégis (elgépelés javítása), a javítás a már aláírt
+    // lapokon is megjelenik.
     include: {
-      asset: { select: { assetNumber: true, inventoryNumber: true } },
+      asset: { select: { assetNumber: true, partnerInternalCode: true } },
     },
     orderBy: { position: "asc" as const },
   },
@@ -303,7 +304,7 @@ export function toVersionDetail(
       detail: line.detail,
       assetId: line.assetId,
       assetNumber: line.asset?.assetNumber ?? null,
-      inventoryNumber: line.asset?.inventoryNumber ?? null,
+      partnerInternalCode: line.asset?.partnerInternalCode ?? null,
       quantity: line.quantity.toString(),
       unit: line.unit,
       kind: line.kind,

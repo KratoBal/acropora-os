@@ -307,6 +307,13 @@ export class CreateAssetDto {
   @IsString() @IsOptional() manufacturer?: string;
   @IsString() @IsOptional() model?: string;
   @IsString() @IsOptional() serialNumber?: string;
+  /**
+   * A PARTNER SAJÁT KÓDJA -- 2026-09-23-IG "inventoryNumber" NÉVEN ÁLLT.
+   * Lásd a séma jegyzetét: a mező mindig ezt jelentette, csak a felirata
+   * volt félrevezető ("Leltári szám").
+   */
+  @IsString() @IsOptional() partnerInternalCode?: string;
+  /** AZ IGAZI LELTÁRI SZÁM, ÚJ MEZŐKÉNT. Lásd a séma jegyzetét. */
   @IsString() @IsOptional() inventoryNumber?: string;
   /**
    * Előre nyomtatott matrica kódja (egy betű és négy szám, pl. V2196). Az
@@ -410,6 +417,9 @@ export class UpdateAssetDto {
   @IsString() @IsOptional() manufacturer?: string | null;
   @IsString() @IsOptional() model?: string | null;
   @IsString() @IsOptional() serialNumber?: string | null;
+  /** A PARTNER SAJÁT KÓDJA -- lásd a create DTO jegyzetét. */
+  @IsString() @IsOptional() partnerInternalCode?: string | null;
+  /** AZ IGAZI LELTÁRI SZÁM -- lásd a create DTO jegyzetét. */
   @IsString() @IsOptional() inventoryNumber?: string | null;
   /**
    * Előre nyomtatott matrica kódja, UTÓLAG is. Az ALAKOT a szolgáltatás

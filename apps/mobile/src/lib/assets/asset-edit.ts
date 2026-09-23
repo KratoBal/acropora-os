@@ -77,7 +77,12 @@ export interface EditableAsset {
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
-  inventoryNumber?: string;
+  /**
+   * A MEZO NEVE 2026-09-23-IG "inventoryNumber" VOLT -- Balazs kerese: ez
+   * mindig a partner sajat kodja volt. Az IGAZI leltari szam uj mezo, ma meg
+   * nincs mobil-felulete, ezert a szerkesztheto mezok kozott sem all itt.
+   */
+  partnerInternalCode?: string;
   description?: string;
   notes?: string;
 }
@@ -130,7 +135,7 @@ export interface AssetEditForm {
   manufacturer: string;
   model: string;
   serialNumber: string;
-  inventoryNumber: string;
+  partnerInternalCode: string;
   description: string;
   notes: string;
   /**
@@ -160,7 +165,7 @@ const TEXT_FIELDS = [
   "manufacturer",
   "model",
   "serialNumber",
-  "inventoryNumber",
+  "partnerInternalCode",
   "description",
   "notes",
   /**
@@ -182,7 +187,7 @@ export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
     manufacturer: asset.manufacturer ?? "",
     model: asset.model ?? "",
     serialNumber: asset.serialNumber ?? "",
-    inventoryNumber: asset.inventoryNumber ?? "",
+    partnerInternalCode: asset.partnerInternalCode ?? "",
     description: asset.description ?? "",
     notes: asset.notes ?? "",
     labelCode: asset.labelCode ?? "",

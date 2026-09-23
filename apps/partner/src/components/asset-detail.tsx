@@ -111,7 +111,7 @@ export function AssetDetail({ id }: { id: string }) {
           </h1>
           <p className="mt-1 text-[13px] text-muted">
             {asset.assetNumber}
-            {asset.inventoryNumber ? ` · ${asset.inventoryNumber}` : ""}
+            {asset.partnerInternalCode ? ` · ${asset.partnerInternalCode}` : ""}
           </p>
         </div>
         <Badge>{asset.status}</Badge>

@@ -57,7 +57,7 @@ export interface CurrentAssetLike {
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;
-  inventoryNumber?: string | null;
+  partnerInternalCode?: string | null;
   description?: string | null;
   notes?: string | null;
   /**
@@ -163,7 +163,7 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   manufacturer: "Gyártó",
   model: "Modell",
   serialNumber: "Sorozatszám",
-  inventoryNumber: "Partner azonosítója",
+  partnerInternalCode: "Partner azonosítója",
   description: "Leírás",
   notes: "Megjegyzés",
   labelCode: "Matrica kódja",
@@ -367,8 +367,8 @@ function assignField(
     case "serialNumber":
       target.serialNumber = source.serialNumber;
       return;
-    case "inventoryNumber":
-      target.inventoryNumber = source.inventoryNumber;
+    case "partnerInternalCode":
+      target.partnerInternalCode = source.partnerInternalCode;
       return;
     case "description":
       target.description = source.description;

@@ -122,7 +122,13 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
-  const [inventoryNumber, setInventoryNumber] = useState("");
+  /**
+   * A MEZŐ NEVE 2026-09-23-IG "inventoryNumber" VOLT, A FELIRATA "Leltári
+   * szám" -- Balázs kérése (11:55): ez a mező mindig a partner saját kódja
+   * volt, a felirat félrevezető. Az igazi leltári szám ÚJ, külön mező (ma
+   * még nincs felülete, lásd a séma jegyzetét).
+   */
+  const [partnerInternalCode, setPartnerInternalCode] = useState("");
   /**
    * AZ ELORE NYOMTATOTT MATRICA KODJA, CSAK FELVITELNEL.
    *
@@ -252,7 +258,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         setManufacturer(asset.manufacturer ?? "");
         setModel(asset.model ?? "");
         setSerialNumber(asset.serialNumber ?? "");
-        setInventoryNumber(asset.inventoryNumber ?? "");
+        setPartnerInternalCode(asset.partnerInternalCode ?? "");
         setLabelCode(asset.labelCode ?? "");
         setPerformance(asset.performance ?? "");
         setPerformanceUnitId(asset.performanceUnit?.id ?? "");
@@ -580,7 +586,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             manufacturer: manufacturer.trim() || null,
             model: model.trim() || null,
             serialNumber: serialNumber.trim() || null,
-            inventoryNumber: inventoryNumber.trim() || null,
+            partnerInternalCode: partnerInternalCode.trim() || null,
             installedAt: toIsoDate(installedAt) ?? null,
             warrantyExpiresAt: toIsoDate(warrantyExpiresAt) ?? null,
             serviceIntervalDays: interval ?? null,
@@ -620,7 +626,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             manufacturer: manufacturer.trim() || undefined,
             model: model.trim() || undefined,
             serialNumber: serialNumber.trim() || undefined,
-            inventoryNumber: inventoryNumber.trim() || undefined,
+            partnerInternalCode: partnerInternalCode.trim() || undefined,
             // A NORMALIZALT ALAK MEGY EL, nem a begepelt: a tabla megkotese
             // (`AssetLabel_code_shape_check`) csak nagybetut enged, a bemenet
             // viszont szandekosan megengedobb. Ures mezonel a kulcs EL SEM
@@ -902,15 +908,20 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             </FormField>
             {/*
               A KET SZAM, AMI UGYANARROL AZ ESZKOZROL SZOL, DE NEM A MIENK:
-              a gyarto sorozatszama es a partner leltari szama. Egymas mellett
+              a gyarto sorozatszama es a partner sajat kodja. Egymas mellett
               allnak, mert a kezelo rendszerint mind a kettot ugyanarrol a
               tablarol masolja le.
+
+              A FELIRAT 2026-09-23-IG "Leltári szám" VOLT -- Balazs kerese:
+              a mezo mindig a partner sajat kodja volt, a felirat felrevezeto.
+              Az IGAZI leltari szam uj, kulon mezo, MA MEG NINCS felulete
+              (a kitoltes felulete kesobb epul, lasd a sema jegyzetet).
             */}
-            <FormField label="Leltári szám">
+            <FormField label="Partner belső kódja">
               <Input
-                aria-label="Leltári szám"
-                value={inventoryNumber}
-                onChange={(event) => setInventoryNumber(event.target.value)}
+                aria-label="Partner belső kódja"
+                value={partnerInternalCode}
+                onChange={(event) => setPartnerInternalCode(event.target.value)}
               />
             </FormField>
             {/*

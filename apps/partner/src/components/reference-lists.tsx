@@ -124,7 +124,9 @@ export function Assets() {
                 <h2 className={PANEL_CIM}>{asset.name}</h2>
                 <p>
                   {eszkozAzonosito(asset)}
-                  {asset.inventoryNumber ? ` · ${asset.inventoryNumber}` : ""}
+                  {asset.partnerInternalCode
+                    ? ` · ${asset.partnerInternalCode}`
+                    : ""}
                 </p>
               </div>
               <div>

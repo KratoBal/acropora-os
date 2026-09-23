@@ -234,7 +234,7 @@ export default function AssetListScreen() {
             {/*
               KERESÉS. A szerelő egy matricát olvas le, és nem tudja, melyik
               mező az: lehet a mi eszközszámunk, a gyártó sorozatszáma vagy a
-              partner leltári száma. Ezért egy mező van, és az mind a hatot
+              partner belső kódja. Ezért egy mező van, és az mind a hatot
               nézi -- ugyanúgy, mint a weben.
             */}
             <TextInput
@@ -319,7 +319,7 @@ export default function AssetListScreen() {
               </Text>
               <Text style={styles.messageText}>
                 {search.trim()
-                  ? "Próbáld a leltári számmal, a sorozatszámmal vagy a nevének egy darabjával."
+                  ? "Próbáld a partner belső kódjával, a sorozatszámmal vagy a nevének egy darabjával."
                   : "Az adminfelületen rögzített partnereszközök itt jelennek meg."}
               </Text>
             </View>

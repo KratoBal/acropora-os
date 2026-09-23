@@ -403,7 +403,10 @@ export default function AssetDetailScreen() {
               <Info label="Gyártó" value={asset.manufacturer} />
               <Info label="Modell" value={asset.model} />
               <Info label="Sorozatszám" value={asset.serialNumber} />
-              <Info label="Partner azonosítója" value={asset.inventoryNumber} />
+              <Info
+                label="Partner azonosítója"
+                value={asset.partnerInternalCode}
+              />
               {/*
                 A MATRICAKOD A BEGEPELT AZONOSITOK KOZE VALO, NEM A QR MELLE.
 
