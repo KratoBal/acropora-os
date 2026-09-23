@@ -80,4 +80,6 @@ export interface UpdateAssetInput {
    * (mindig m3). Kanban 8c77cf3e, 2026-09-23.
    */
   volume?: string | null;
+  /** A FOGYASZTAS -- ugyanaz az alak, mint a `volume`-nal, mindig kW-ban. */
+  powerConsumption?: string | null;
 }

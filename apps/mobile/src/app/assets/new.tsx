@@ -193,11 +193,12 @@ export default function NewAssetScreen() {
   const [performance, setPerformance] = useState("");
   const [performanceUnitId, setPerformanceUnitId] = useState("");
   /**
-   * A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL. Kanban 8c77cf3e, 2026-09-23:
-   * 136 eszkozon egyszerre all teljesitmeny (m3/h) ES fogyasztas (kW),
-   * tehat kulon mezo, nincs mertekegyseg-parja.
+   * A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL. Kanban
+   * 8c77cf3e, 2026-09-23: 136 eszkozon egyszerre all teljesitmeny (m3/h)
+   * ES fogyasztas (kW), tehat kulon mezok, nincs mertekegyseg-parjuk.
    */
   const [volume, setVolume] = useState("");
+  const [powerConsumption, setPowerConsumption] = useState("");
   // A BEOLVASO A KOZOS ALLVANYBOL JON, ugyanabbol, amit a szerkeszto kepernyo
   // is hasznal. Az indoklas (miert ratet, es miert nem masik kepernyo) ott all.
   const scanner = useLabelScanner(setLabelCode);
@@ -651,6 +652,7 @@ export default function NewAssetScreen() {
       performance,
       performanceUnitId,
       volume,
+      powerConsumption,
       installedAt,
       interval,
     });
@@ -983,8 +985,9 @@ export default function NewAssetScreen() {
               onChangeUnit={setPerformanceUnitId}
             />
             {/*
-              A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL, SZO SZERINT UGYANAZ
-              A MINTA, DE PAR NELKUL. Kanban 8c77cf3e, 2026-09-23.
+              A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL, SZO
+              SZERINT UGYANAZ A MINTA, DE PAR NELKUL. Kanban 8c77cf3e,
+              2026-09-23.
             */}
             <Field
               label="Térfogat (m³)"
@@ -993,6 +996,11 @@ export default function NewAssetScreen() {
               keyboardType="decimal-pad"
             />
             <FieldError error={error} field="volume" />
+            <Field
+              label="Fogyasztás (kW)"
+              value={powerConsumption}
+              onChangeText={setPowerConsumption}
+            />
             <LabelCodeField
               value={labelCode}
               onChange={setLabelCode}

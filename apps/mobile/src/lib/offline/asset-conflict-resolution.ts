@@ -113,11 +113,12 @@ export interface CurrentAssetLike {
   functionId?: string | null;
   function?: string | null;
   /**
-   * A MOSTANI TERFOGAT -- FUGGETLEN A TELJESITMENYTOL, kanban 8c77cf3e,
-   * 2026-09-23. Ugyanaz az ok, ami a matricanal es a teljesitmenynel all: a
-   * `ComparableField` a `UpdateAssetInput` kulcsaibol szarmazik.
+   * A MOSTANI TERFOGAT ES FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL, kanban
+   * 8c77cf3e, 2026-09-23. Ugyanaz az ok, ami a matricanal es a teljesitmenynel
+   * all: a `ComparableField` a `UpdateAssetInput` kulcsaibol szarmazik.
    */
   volume?: string | null;
+  powerConsumption?: string | null;
 }
 
 /** A törzsből összevethető mezők. A `expectedUpdatedAt` nem tartozik ide. */
@@ -167,6 +168,7 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   performance: "Teljesítmény",
   performanceUnitId: "Teljesítmény mértékegysége",
   volume: "Térfogat",
+  powerConsumption: "Fogyasztás",
 };
 
 /** Az üres érték NEVE. Egy üres cella nem mondja meg, hogy törlésről van szó. */
@@ -404,6 +406,9 @@ function assignField(
       return;
     case "volume":
       target.volume = source.volume;
+      return;
+    case "powerConsumption":
+      target.powerConsumption = source.powerConsumption;
       return;
     default:
       /**

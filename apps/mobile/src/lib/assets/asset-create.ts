@@ -87,13 +87,19 @@ export interface AssetCreateForm {
   /** A választott mértékegység azonosítója, vagy üres. */
   performanceUnitId: string;
   /**
-   * A TÉRFOGAT -- FÜGGETLEN A TELJESÍTMÉNYTŐL.
+   * A TÉRFOGAT ÉS A FOGYASZTÁS -- FÜGGETLEN A TELJESÍTMÉNYTŐL.
    *
    * Kanban 8c77cf3e, 2026-09-23: 136 eszközön EGYSZERRE áll teljesítmény
    * (m3/h) ÉS fogyasztás (kW), tehát a meglévő teljesítmény-pár nem bővül,
-   * külön mező kell. MINDIG m3-ben értendő, nincs mértékegység-választó.
+   * két külön mező kell. Mindkettő MINDIG fix egységben értendő (m3,
+   * illetve kW), nincs mértékegység-választó.
    */
   volume: string;
+  /**
+   * SZÖVEG, NEM SZÁM -- a forrásadatok több mint fele "P1/P2" alakú
+   * (pl. "6,15/5,5"), nem egy tizedesjegyű érték.
+   */
+  powerConsumption: string;
   /** Amit a felhasználó beírt vagy a választóból kapott. Üres is lehet. */
   installedAt: string;
   /** Karbantartási intervallum napban, szövegként. Üres is lehet. */
@@ -129,6 +135,8 @@ export interface AssetCreatePayload {
   performanceUnitId?: string;
   /** A normalizált térfogat-érték, a teljesítménytől függetlenül. */
   volume?: string;
+  /** A fogyasztás, szabad szövegként (lehet "P1/P2" alakú). */
+  powerConsumption?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }
@@ -427,8 +435,9 @@ export function buildAssetCreatePayload(
       performanceUnitId: performanceValue
         ? form.performanceUnitId.trim()
         : undefined,
-      // A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL, nincs par.
+      // A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL, nincs par.
       volume: volumeValue ?? undefined,
+      powerConsumption: form.powerConsumption.trim() || undefined,
       /**
        * A nap KEZDETE, UTC-ben. A telepítés dátuma nap-pontosságú adat: az
        * időpont-rész nem mérés, hanem a formátum ára, ezért nulla.

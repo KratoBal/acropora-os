@@ -64,10 +64,12 @@ export interface EditableAsset {
   /** A teljesítmény mértékegysége. A pár másik fele. */
   performanceUnit?: { id: string };
   /**
-   * A TÉRFOGAT -- FÜGGETLEN A TELJESÍTMÉNYTŐL, nincs mértékegység-társa
-   * (mindig m3). Kanban 8c77cf3e, 2026-09-23.
+   * A TÉRFOGAT ÉS A FOGYASZTÁS -- FÜGGETLEN A TELJESÍTMÉNYTŐL, nincs
+   * mértékegység-társuk (mindig m3, illetve kW). Kanban 8c77cf3e,
+   * 2026-09-23.
    */
   volume?: string;
+  powerConsumption?: string;
   status: AssetStatus;
   criticality: AssetCriticality;
   manufacturer?: string;
@@ -144,10 +146,11 @@ export interface AssetEditForm {
   performance: string;
   performanceUnitId: string;
   /**
-   * A TÉRFOGAT -- FÜGGETLEN A TELJESÍTMÉNYTŐL, mindig m3-ben értendő,
-   * nincs mértékegység-mező.
+   * A TÉRFOGAT ÉS A FOGYASZTÁS -- FÜGGETLEN A TELJESÍTMÉNYTŐL, mindkettő
+   * mindig fix egységben értendő (m3, illetve kW), nincs mértékegység-mező.
    */
   volume: string;
+  powerConsumption: string;
 }
 
 const TEXT_FIELDS = [
@@ -177,6 +180,7 @@ export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
     performance: asset.performance ?? "",
     performanceUnitId: asset.performanceUnit?.id ?? "",
     volume: asset.volume ?? "",
+    powerConsumption: asset.powerConsumption ?? "",
   };
 }
 
@@ -279,6 +283,15 @@ export function buildAssetPatch(
   const terfogat = normalizePerformanceValue(form.volume);
   const regiTerfogat = asset.volume ?? null;
   if (terfogat !== regiTerfogat) patch.volume = terfogat;
+
+  /**
+   * A FOGYASZTAS -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES (lasd a
+   * `Asset.powerConsumption` sema-fejleceit: a forras adat tobb mint fele
+   * "P1/P2" alaku).
+   */
+  const fogyasztas = form.powerConsumption.trim();
+  if (fogyasztas !== (asset.powerConsumption ?? "").trim())
+    patch.powerConsumption = fogyasztas === "" ? null : fogyasztas;
 
   /**
    * A FUNKCIO -- FUGGETLENUL A KATEGORIATOL, ugyanaz a szabaly, mint felette:
@@ -430,10 +443,12 @@ export function baseValuesFor(
   if ("performanceUnitId" in patch)
     base.performanceUnitId = asset.performanceUnit?.id ?? null;
   /**
-   * A TERFOGAT IS BEKERUL A SORBA, ugyanabbol az okbol, mint a teljesitmeny
-   * -- de nincs par-kenyszer, tehat onallo sor.
+   * A TERFOGAT ES A FOGYASZTAS IS BEKERUL A SORBA, ugyanabbol az okbol, mint
+   * a teljesitmeny -- de kulon-kulon, mert nincs koztuk par-kenyszer.
    */
   if ("volume" in patch) base.volume = asset.volume ?? null;
+  if ("powerConsumption" in patch)
+    base.powerConsumption = asset.powerConsumption ?? null;
   for (const field of TEXT_FIELDS)
     if (field in patch) base[field] = asset[field] ?? null;
   /**

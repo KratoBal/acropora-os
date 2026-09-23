@@ -77,10 +77,11 @@ export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
     performance: szoveg(row.performance),
     performanceUnitId: szoveg(row.performanceUnitId),
     /*
-      A TERFOGAT -- FUGGETLENUL A TELJESITMENYTOL, ugyanaz az indok, mint
-      felette: a sorban allo felvitel se veszitse el.
+      A TERFOGAT ES A FOGYASZTAS -- FUGGETLENUL A TELJESITMENYTOL, ugyanaz
+      az indok, mint felette: a sorban allo felvitel se veszitse el.
     */
     volume: szoveg(row.volume),
+    powerConsumption: szoveg(row.powerConsumption),
     installedAt: szoveg(row.installedAt),
     interval,
   };

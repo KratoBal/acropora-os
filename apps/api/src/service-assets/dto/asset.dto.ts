@@ -362,6 +362,12 @@ export class CreateAssetDto {
    * ugyanaz az indok, mint a `performance`-nel.
    */
   @IsString() @IsOptional() volume?: string;
+  /**
+   * A FOGYASZTAS, MINDIG kW-BAN, SZABAD SZOVEGKENT -- lasd az
+   * `AssetDetail.powerConsumption` fejleceit: a forras adat tobb mint fele
+   * "P1/P2" alaku, nem egy tizedes szam, tehat itt NINCS alak-ellenorzes.
+   */
+  @IsString() @MaxLength(40) @IsOptional() powerConsumption?: string;
   @IsString() @IsOptional() description?: string;
   @IsISO8601() @IsOptional() installedAt?: string;
   @IsISO8601() @IsOptional() purchasedAt?: string;
@@ -487,6 +493,11 @@ export class UpdateAssetDto {
   @ValidateIf((_object, value) => value !== undefined && value !== null)
   @IsString()
   volume?: string | null;
+  /**
+   * A FOGYASZTAS -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES, lasd a
+   * `CreateAssetDto.powerConsumption` fejleceit.
+   */
+  @IsString() @MaxLength(40) @IsOptional() powerConsumption?: string | null;
   @IsString() @IsOptional() description?: string | null;
   @IsISO8601() @IsOptional() installedAt?: string | null;
   @IsISO8601() @IsOptional() purchasedAt?: string | null;

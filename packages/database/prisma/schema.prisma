@@ -2938,6 +2938,21 @@ model Asset {
   /// mertekegyseg-mezo, mert a FANK-ban ez az oszlop MINDIG m3 -- ellentetben
   /// a `performance`-szel, ahol a szerelo tobb egyseg kozul valaszt.
   volume              Decimal?         @db.Decimal(19, 6)
+  /// A BERENDEZES FOGYASZTASA, MINDIG kW-BAN -- ES SZANDEKOSAN SZOVEG, NEM SZAM.
+  ///
+  /// Balazs kerese, 2026-09-23 (kanban 8c77cf3e), a FANK Excel `Fogyasztas
+  /// (ossz. kW vagy P1/P2)` oszlopa alapjan. LEMERVE (murena, 2026-09-23): a
+  /// 276 kitoltott sorbol 142 (51%) KETTEVALASZTOTT ertek, "P1/P2" alakban
+  /// (pl. "6,15/5,5") -- ket motor-teljesitmeny egy cellaban, nem egy tizedes
+  /// szam. Egy `Decimal` mezo ezt CSENDBEN elvenne: vagy elutasitana a
+  /// bevitelt, vagy valakinek ki kellene talalnia, melyik felet irja be.
+  ///
+  /// NEM UGYANAZ, MINT A `performance`: 136 soron EGYSZERRE van kitoltve a
+  /// Teljesitmeny (m3/h, a `performance` mezot tolti) ES a Fogyasztas (kW) --
+  /// tehat a ket ertek FUGGETLEN, egy eszkoznek EGYSZERRE lehet mindket
+  /// adata, es a `performance` egy-ertek-egy-mertekegyseg parja nem tudna
+  /// mindkettot tartani.
+  powerConsumption    String?
   /// `Restrict`, ugyanugy, mint a mertekegysegnel: egy kategoria, amire eszkoz
   /// mutat, nem torolheto ki alola. A kivezetes `isActive`-kal megy.
   categoryRef         AssetCategory?   @relation("AssetCategory", fields: [categoryId], references: [id], onDelete: Restrict)

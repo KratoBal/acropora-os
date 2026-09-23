@@ -499,18 +499,22 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                     )}
                   />
                   {/*
-                    A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL. Kanban
-                    8c77cf3e, 2026-09-23: 136 eszkozon EGYSZERRE all
+                    A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL.
+                    Kanban 8c77cf3e, 2026-09-23: 136 eszkozon EGYSZERRE all
                     teljesitmeny (m3/h) ES fogyasztas (kW), tehat a ket
-                    ertek nem ugyanaz az adat.
+                    ertek nem ugyanaz az adat, ket kulon sort kapnak.
 
                     A MERTEKEGYSEG ITT FIX SZOVEG, NEM A `performanceUnit`-hoz
-                    hasonlo hivatkozas: a mezo mindig m3-ben ertendo, nincs
-                    mit valasztani.
+                    hasonlo hivatkozas: mindket mezo mindig egy egysegben
+                    ertendo (m3, illetve kW), nincs mit valasztani.
                   */}
                   <Data
                     label="Térfogat"
                     value={performanceText(asset.volume, "m³")}
+                  />
+                  <Data
+                    label="Fogyasztás"
+                    value={performanceText(asset.powerConsumption, "kW")}
                   />
                   <Data label="Terméktörzs" value={asset.product?.name} />
                   <Data

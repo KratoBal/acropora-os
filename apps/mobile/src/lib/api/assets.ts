@@ -133,12 +133,14 @@ export interface AssetDetail extends AssetListItem {
   performance?: string;
   performanceUnit?: { id: string; code: string; name: string };
   /**
-   * A TERFOGAT (m3) -- FUGGETLEN A TELJESITMENYTOL. Kanban 8c77cf3e,
-   * 2026-09-23: 136 eszkozon egyszerre all teljesitmeny ES fogyasztas,
-   * tehat kulon mezo. Mindig fix egysegben ertendo, nincs kulon
-   * mertekegyseg-hivatkozas.
+   * A TERFOGAT (m3) ES A FOGYASZTAS (kW) -- FUGGETLEN A TELJESITMENYTOL.
+   * Kanban 8c77cf3e, 2026-09-23: 136 eszkozon egyszerre all teljesitmeny
+   * ES fogyasztas, tehat kulon mezok. Mindketto mindig fix egysegben
+   * ertendo, nincs kulon mertekegyseg-hivatkozas.
    */
   volume?: string;
+  /** Szabad szoveg: a forras adatok tobb mint fele "P1/P2" alaku. */
+  powerConsumption?: string;
   description?: string;
   installedAt?: string;
   warrantyExpiresAt?: string;
@@ -228,6 +230,8 @@ export interface CreateAssetInput {
   labelCode?: string;
   /** A terfogat, mindig m3-ben. Elhagyhato. */
   volume?: string;
+  /** A fogyasztas, mindig kW-ban, szabad szoveg. Elhagyhato. */
+  powerConsumption?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }

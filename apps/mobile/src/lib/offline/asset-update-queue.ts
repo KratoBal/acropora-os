@@ -94,10 +94,11 @@ export interface QueuedAssetUpdateBase {
   performance?: string | null;
   performanceUnitId?: string | null;
   /**
-   * A TERFOGAT, AHOGY A SZERKESZTES KEZDETEKOR ALLT -- FUGGETLENUL A
-   * TELJESITMENYTOL. Kanban 8c77cf3e, 2026-09-23.
+   * A TERFOGAT ES A FOGYASZTAS, AHOGY A SZERKESZTES KEZDETEKOR ALLT --
+   * FUGGETLENUL A TELJESITMENYTOL. Kanban 8c77cf3e, 2026-09-23.
    */
   volume?: string | null;
+  powerConsumption?: string | null;
   /**
    * A MATRICAKOD, AHOGY A SZERKESZTES KEZDETEKOR ALLT.
    *

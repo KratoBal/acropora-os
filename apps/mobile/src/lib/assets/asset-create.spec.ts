@@ -39,6 +39,7 @@ const form: AssetCreateForm = {
   performance: "",
   performanceUnitId: "",
   volume: "",
+  powerConsumption: "",
   installedAt: "",
   interval: "",
 };
@@ -500,5 +501,48 @@ describe("a térfogat a payloadban", () => {
 
     assert.ok(result.ok);
     assert.equal(result.payload.volume, "1.5");
+  });
+});
+
+describe("a fogyasztás a payloadban", () => {
+  it("a sima szám átmegy, szövegként", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      powerConsumption: "0,75",
+    });
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.powerConsumption, "0,75");
+  });
+
+  /**
+   * EZ AZ AZ ÁLLÍTÁS, AMIÉRT A MEZŐ SZÖVEG, NEM DECIMAL: a valódi FANK-
+   * adatok több mint fele pontosan ilyen alakú.
+   */
+  it("a „P1/P2” alak is átmegy, VÁLTOZATLANUL", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      powerConsumption: "6,15/5,5",
+    });
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.powerConsumption, "6,15/5,5");
+  });
+
+  it("üres választásnál az érték `undefined`, tehát a kérésből kimarad", () => {
+    const result = buildAssetCreatePayload(form);
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.powerConsumption, undefined);
+  });
+
+  it("KONTROLL: a csupa szóköz is `undefined`-re esik", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      powerConsumption: "   ",
+    });
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.powerConsumption, undefined);
   });
 });

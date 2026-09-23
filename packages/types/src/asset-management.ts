@@ -328,6 +328,14 @@ export interface AssetDetail extends AssetListItem {
    * valasztani -- ellentetben a `performance`-szel.
    */
   volume?: string;
+  /**
+   * A BERENDEZES FOGYASZTASA, MINDIG kW-BAN -- ES SZANDEKOSAN SZOVEG.
+   *
+   * Lemerve (murena, 2026-09-23, kanban 8c77cf3e): a forras FANK-adatok
+   * tobb mint fele "P1/P2" alaku, ket motor-teljesitmeny egy mezoben (pl.
+   * "6,15/5,5"), nem egy tizedes szam. Szabad szoveg, kW-ban ertve.
+   */
+  powerConsumption?: string;
   description?: string;
   installedAt?: string;
   purchasedAt?: string;
@@ -440,6 +448,12 @@ export interface CreateAssetInput {
    * kulon mertekegyseg-mezo (a FANK-adatokban ez az oszlop mindig m3).
    */
   volume?: string;
+  /**
+   * A FOGYASZTAS, MINDIG kW-BAN, SZABAD SZOVEGKENT -- lasd az
+   * `AssetDetail.powerConsumption` fejleceit: a forras adat tobb mint fele
+   * "P1/P2" alaku, nem egy tizedes szam.
+   */
+  powerConsumption?: string;
 }
 
 export interface UpdateAssetInput {
@@ -507,6 +521,8 @@ export interface UpdateAssetInput {
    * elhagyasa erintetlenul hagyja.
    */
   volume?: string | null;
+  /** A FOGYASZTAS -- ugyanaz az alak, mint a `volume`-nal. */
+  powerConsumption?: string | null;
 }
 
 export interface AssetQrCode {

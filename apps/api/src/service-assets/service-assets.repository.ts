@@ -1232,6 +1232,7 @@ export class ServiceAssetsRepository extends Repository {
                   performance: teljesitmeny.performance,
                   performanceUnitId: teljesitmeny.unitId,
                   volume,
+                  powerConsumption: optionalText(input.powerConsumption),
                   clientOperationId: input.clientOperationId ?? null,
                   archivedAt:
                     input.status === "RETIRED" ? new Date() : undefined,
@@ -1756,6 +1757,7 @@ export class ServiceAssetsRepository extends Repository {
           performance: teljesitmeny.performance,
           performanceUnitId: teljesitmeny.unitId,
           volume,
+          powerConsumption: optionalText(input.powerConsumption),
           archivedAt:
             input.status === "RETIRED"
               ? (existing.archivedAt ?? new Date())
@@ -2485,6 +2487,7 @@ export class ServiceAssetsRepository extends Repository {
       performance: row.performance?.toString(),
       performanceUnit: row.performanceUnit ?? undefined,
       volume: row.volume?.toString(),
+      powerConsumption: row.powerConsumption ?? undefined,
       installedAt: row.installedAt?.toISOString(),
       purchasedAt: row.purchasedAt?.toISOString(),
       warrantyExpiresAt: row.warrantyExpiresAt?.toISOString(),

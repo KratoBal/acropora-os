@@ -174,14 +174,16 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    */
   const [currentUnit, setCurrentUnit] = useState<UnitOfMeasure | undefined>();
   /**
-   * A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL.
+   * A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL, KULON MEZOK.
    *
    * Kanban 8c77cf3e, 2026-09-23: 136 eszkozon EGYSZERRE all teljesitmeny
    * (m3/h) ES fogyasztas (kW), tehat a meglevo performance-part nem lehet
-   * ujrahasznositani. A mezo MINDIG m3-ben ertendo, nincs kulon
-   * mertekegyseg-valaszto -- ellentetben a teljesitmennyel.
+   * ujrahasznositani. Mindket mezo MINDIG egy fix egysegben ertendo (m3,
+   * illetve kW), nincs kulon mertekegyseg-valaszto -- ellentetben a
+   * teljesitmennyel.
    */
   const [volume, setVolume] = useState("");
+  const [powerConsumption, setPowerConsumption] = useState("");
   const [installedAt, setInstalledAt] = useState("");
   const [warrantyExpiresAt, setWarrantyExpiresAt] = useState("");
   const [serviceIntervalDays, setServiceIntervalDays] = useState("");
@@ -259,6 +261,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             : undefined,
         );
         setVolume(asset.volume ?? "");
+        setPowerConsumption(asset.powerConsumption ?? "");
         setInstalledAt(inputDate(asset.installedAt));
         setWarrantyExpiresAt(inputDate(asset.warrantyExpiresAt));
         setServiceIntervalDays(asset.serviceIntervalDays?.toString() ?? "");
@@ -586,8 +589,10 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             performance: normalizePerformanceValue(performance),
             performanceUnitId: performanceUnitId || null,
             // FUGGETLEN A TELJESITMENYTOL: a `volume` ugyanazt a normalizalast
-            // kapja, mint a `performance`.
+            // kapja, mint a `performance`, a `powerConsumption` viszont szabad
+            // szoveg (lehet "P1/P2" alaku), tehat csak korulvagas.
             volume: normalizePerformanceValue(volume),
+            powerConsumption: powerConsumption.trim() || null,
             expectedUpdatedAt: updatedAt,
           })
         : await assetsApi.create(token, {
@@ -616,6 +621,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             performance: normalizePerformanceValue(performance) ?? undefined,
             performanceUnitId: performanceUnitId || undefined,
             volume: normalizePerformanceValue(volume) ?? undefined,
+            powerConsumption: powerConsumption.trim() || undefined,
             installedAt: toIsoDate(installedAt),
             warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
             serviceIntervalDays: interval,
@@ -945,11 +951,12 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               ) : null}
             </FormField>
             {/*
-              A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL. Kanban 8c77cf3e,
-              2026-09-23: 136 eszkozon EGYSZERRE all teljesitmeny (m3/h) ES
-              fogyasztas (kW), tehat kulon mezo. MINDIG m3-ben ertendo,
-              nincs kulon mertekegyseg-valaszto -- ezert a leiras mondja ki
-              az egyseget, nem egy legordulo.
+              A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL.
+              Kanban 8c77cf3e, 2026-09-23: 136 eszkozon EGYSZERRE all
+              teljesitmeny (m3/h) ES fogyasztas (kW), tehat kulon mezok.
+              Mindketto MINDIG fix egysegben ertendo, nincs kulon
+              mertekegyseg-valaszto -- ezert a leiras mondja ki az egyseget,
+              nem egy legordulo.
             */}
             <FormField
               label="Térfogat"
@@ -961,6 +968,17 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 value={volume}
                 onChange={(event) => setVolume(event.target.value)}
                 placeholder="pl. 1.5"
+              />
+            </FormField>
+            <FormField
+              label="Fogyasztás"
+              description="kW-ban. Két motorértéknél P1/P2 alakban is írható (például 6,15/5,5)."
+            >
+              <Input
+                aria-label="Fogyasztás"
+                value={powerConsumption}
+                onChange={(event) => setPowerConsumption(event.target.value)}
+                placeholder="pl. 0,75 vagy 6,15/5,5"
               />
             </FormField>
             {/*

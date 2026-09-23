@@ -75,6 +75,12 @@ const TEXT_FIELDS: {
   { key: "model", label: "Modell" },
   { key: "serialNumber", label: "Sorozatszám" },
   { key: "inventoryNumber", label: "Partner azonosítója" },
+  /**
+   * A FOGYASZTAS SZABAD SZOVEG, tehat a generikus mintaba illik -- lasd az
+   * `Asset.powerConsumption` sema-fejleceit. A `volume` NEM ide kerul: annak
+   * decimalis billentyuzete es sajat alak-ellenorzese van.
+   */
+  { key: "powerConsumption", label: "Fogyasztás (kW)" },
   { key: "description", label: "Leírás", multiline: true },
   { key: "notes", label: "Megjegyzés", multiline: true },
 ];
