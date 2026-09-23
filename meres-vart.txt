@@ -1,0 +1,10 @@
+# Ez az ág a department_required előtti, MAI main állapotot viszi (a fix NÉLKÜL):
+# a service-assets.service.ts create()/update() nem adja át a departmentId-t a
+# validateReferences()-nek, tehát a NOT_FOUND/OTHER_PARTNER/INACTIVE elutasítás
+# a valós HTTP úton nem sülhet el. Az új integrációs spec ezt méri, és a fix
+# hiányában a három negatív állításnak PIROSNAK kell lennie -- ez a bizonyíték
+# arra, hogy a teszt tényleg érzékeny a hibára, nem díszlet.
+not ok - NOT_FOUND: nem létező departmentId elutasítja a felvitelt
+not ok - OTHER_PARTNER: másik partner alegysége elutasítja a felvitelt
+not ok - INACTIVE: inaktív alegység elutasítja a felvitelt
+not ok - update(): az OTHER_PARTNER ág a módosítás valós útján is elsül
