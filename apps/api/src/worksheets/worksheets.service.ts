@@ -378,10 +378,14 @@ export class WorksheetsService {
    * (`requireInternalWriter`): `updateDraft`, `setAssignees`, `setAssets`. Ott
    * ez a fuggveny bizonyitottan belsos kerot szolgal ki.
    *
-   * A TOBBI irasi uton NEM ellenorzott, es ezt ki kell mondani: a sor- es
-   * bejegyzes-vegpontok ugyanezen a mintan allnak, es a 4f1f92db kartya tartja
-   * szamon oket. Vagyis ez a fuggveny MA nem tudja magarol, hogy minden hivoja
-   * belsos -- csak azt, hogy harom biztosan az.
+   * EZ A BEKEZDES 2026-09-23-IG AZT ALLITOTTA, HOGY A SOR- ES BEJEGYZES-
+   * VEGPONTOK NEM ELLENORZOTTEK, ES A 4f1f92db KARTYA TARTJA SZAMON OKET.
+   * VISSZAMERVE MA MAR NEM IGAZ: a sor-vegpontok (`addLine`, `updateLine`,
+   * `removeLine`) a kozos `requireDraftVersionId`-n keresztul, a bejegyzes-
+   * vegpontok (`addEntry`, `updateEntry`) pedig kozvetlenul hivjak a
+   * `requireInternalWriter`-t. A 4f1f92db kartya ezt a resz-allitast lezarta;
+   * a tobbi irasi metodus vedelmet ez a bekezdes nem allitja, mert nem is azt
+   * merte.
    *
    * MIERT MARAD MEGIS BELSOS A VISSZAADAS: a FRISSEN IRT lapot adja vissza
    * annak, aki epp irta. Egy szukites itt azt jelentene, hogy a sikeres iras
