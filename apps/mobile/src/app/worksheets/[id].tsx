@@ -193,6 +193,14 @@ export default function WorksheetDetailScreen() {
   const [materialRequestError, setMaterialRequestError] = useState<
     string | null
   >(null);
+  /**
+   * A `submit()` VALASZANAK `warning` MEZOJE -- KULON A HIBATOL, ugyanaz az
+   * ok, mint a webes felulet parjaban: a kuldes SIKERES volt, csak arrol
+   * szol, hogy ma senki nem tudja jelolni a beerkezest.
+   */
+  const [materialRequestNotice, setMaterialRequestNotice] = useState<
+    string | null
+  >(null);
 
   /**
    * A FELELOS-SZERKESZTO ALLAPOTA.
@@ -710,6 +718,7 @@ export default function WorksheetDetailScreen() {
       setMaterialRequestRows([{ name: "", quantity: "", unit: "" }]);
       setMaterialRequestFormOpen(false);
       setMaterialRequestError(null);
+      setMaterialRequestNotice(response.warning ?? null);
     },
     onError: async (cause) => {
       setMaterialRequestError(
@@ -729,6 +738,7 @@ export default function WorksheetDetailScreen() {
     onSuccess: (response) => {
       queryClient.setQueryData(["worksheet-material-requests", id], response);
       setMaterialRequestError(null);
+      setMaterialRequestNotice(response.warning ?? null);
     },
     onError: (cause) =>
       setMaterialRequestError(
@@ -1920,12 +1930,29 @@ export default function WorksheetDetailScreen() {
                 ) : (
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => setMaterialRequestFormOpen(true)}
+                    onPress={() => {
+                      setMaterialRequestFormOpen(true);
+                      setMaterialRequestNotice(null);
+                    }}
                     style={styles.addLineButton}
                   >
                     <Text style={styles.addLineText}>Anyagigénylés</Text>
                   </Pressable>
                 )}
+              </View>
+            ) : null}
+
+            {/*
+              A `notice` A FORMA BEZARASA UTAN IS LATSZIK -- SZANDEKOSAN A
+              FORMA-BLOKKON KIVUL ALL. A kuldes sikeres agaban a forma
+              bezarodik (`setMaterialRequestFormOpen(false)`), tehat egy a
+              blokkon beluli figyelmeztetes soha nem lenne lathato.
+            */}
+            {materialRequestNotice ? (
+              <View style={styles.card}>
+                <Text style={styles.egysegFigyelmeztetes}>
+                  {materialRequestNotice}
+                </Text>
               </View>
             ) : null}
 

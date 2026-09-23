@@ -122,6 +122,27 @@ export class MaterialRequestsService {
    * ez tulajdon kerdese, nem altalanos irasi jog, ezert a
    * `requireInternalWriter` ONMAGABAN nem eleg ide (az csak a belsos
    * hatokort adja).
+   *
+   * === A `warning` MEZO, ES MIERT PONT ITT ALL ===
+   *
+   * Balazs kerese, 2026-09-22 20:28:56 UTC: a beerkezes-jelolo kepesseg
+   * (MATERIAL_REQUEST_MARK_RECEIVED) KULON jelolo, es senkinel sincs
+   * alapertelmezetten bejelolve. Ha a kuldes pillanataban SENKI nem viseli,
+   * az elkuldott igeny orokre nyitva maradna, es errol semmi nem szolna --
+   * acrobot kifejezett tiltasa: "ezt nem hallgatassal kezeljuk".
+   *
+   * MIERT A SUBMIT, ES NEM A `listPending` 403-AGA: a beszerzok listaja
+   * MAGA IS a kepessegen all (menupont szinten is), tehat aki nem birtokolja,
+   * annak MEG A MENUPONT SEM latszik -- egy ott elhelyezett figyelmeztetes
+   * olyan szobaba szolna, ahova senki nem lep be. A kuldo szervizes viszont
+   * BIZTOSAN ott van, epp akkor, amikor az allapot keletkezik.
+   *
+   * A LEKERDEZES (`anyActiveMarkReceivedCapabilityHolder`) EZERT KIZAROLAG
+   * ITT fut, nem minden listazasban -- `findFirst`, nem `count`, es csak a
+   * KULDES agaban, ahogy acrobot kerte.
+   *
+   * A FIGYELMEZTETES NEM AKADALYOZZA A KULDEST: az igeny akkor is letrejon,
+   * ha senki nem tudja majd jelolni. Ez tajekoztatas, nem kapu.
    */
   async submit(
     id: string,
@@ -153,7 +174,16 @@ export class MaterialRequestsService {
       worksheet.customer.displayName,
       worksheet.number,
     );
-    return this.listForWorksheet(before.worksheetId, actor);
+    const response = await this.listForWorksheet(before.worksheetId, actor);
+    const vanKiJelolje =
+      await this.repository.anyActiveMarkReceivedCapabilityHolder();
+    if (!vanKiJelolje)
+      return {
+        ...response,
+        warning:
+          "Az anyagigény elküldve, de ma senki nem tudja megjelölni, ha beérkezik: az „Anyag beérkezésének jelölése” jog senkinél nincs bejelölve. Szólj valakinek, aki a felhasználókat kezeli.",
+      };
+    return response;
   }
 
   private async ertesitsLetrehozasrol(

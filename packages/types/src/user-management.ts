@@ -1,4 +1,5 @@
 import type { NotificationRoleValue } from "./notification-roles.js";
+import type { ServiceCapabilityValue } from "./service-capabilities.js";
 import type { UserRole } from "./auth.js";
 
 export interface UserSummary {
@@ -27,6 +28,16 @@ export interface UserDetail extends UserSummary {
    * -- az elso azt, hogy nem tudjuk, a masodik azt, hogy tudjuk es nincs.
    */
   notificationRoles: NotificationRoleValue[];
+  /**
+   * A SZOLGALTATAS-KEPESSEGEK, AMIK BE VANNAK JELOLVE.
+   *
+   * UGYANAZ A MINTA, MINT A `notificationRoles`-nel, es SZANDEKOSAN KULON
+   * MEZO: mas tengely (ki VEGEZHETI el, nem ki ERTESUL), lasd
+   * `ServiceCapabilityValue` fejleceit. KOTELEZO MEZO, ures tombbel -- egy
+   * hianyzo mezo es egy ures tomb a kepernyon ugyanugy nezne ki, de mast
+   * jelentene.
+   */
+  serviceCapabilities: ServiceCapabilityValue[];
   avatarUrl?: string;
   passwordUpdatedAt?: string;
   /**
@@ -103,6 +114,8 @@ export interface UpdateUserInput {
    * lekerul. Az ures tomb a kimondott „egyiket sem".
    */
   notificationRoles?: NotificationRoleValue[];
+  /** A PARJA, UGYANAZZAL AZ ALAKKAL -- lasd a `notificationRoles` fejlecet. */
+  serviceCapabilities?: ServiceCapabilityValue[];
   firstName?: string;
   lastName?: string;
   /** Empty string clears it, absent leaves it alone. */

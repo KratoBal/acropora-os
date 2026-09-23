@@ -55,6 +55,17 @@ vi.mock("@acropora/types", () => ({
       description: "Push és e-mail értesítést kap.",
     },
   ],
+  /**
+   * A PARJA, UGYANAZZAL A FIGYELMEZTETESSEL, MINT A FENTI TOMB -- ez is
+   * KEZZEL KARBANTARTOTT MASOLAT, nem a valodi `service-capabilities.ts`.
+   */
+  SERVICE_CAPABILITIES: [
+    {
+      value: "MATERIAL_REQUEST_MARK_RECEIVED",
+      label: "Anyag beérkezésének jelölése",
+      description: "Megjelölheti, ha egy anyagigény beérkezett.",
+    },
+  ],
 }));
 vi.mock("@/components/service-jobs/partner-picker", () => ({
   /**
@@ -178,6 +189,61 @@ describe("UserEditorPage partner szerepköre", () => {
     fireEvent.click(hibajegy);
     expect(hibajegy.checked).toBe(false);
     expect(anyagigeny.checked).toBe(true);
+  });
+
+  /**
+   * A KEPESSEG JELOLONEGYZET UGYANAZT A HATART VISELI, MINT AZ ERTESITESEK --
+   * ugyanaz a `customerId === ""` ag, ugyanaz az ok (a szolgaltatas a MI
+   * oldalunk kepessege, egy partner-fioknal bejelolve MINDEN vevo
+   * anyagigenyet lathatova tenne).
+   */
+  it("a képesség jelölőnegyzet csak saját kollégánál jelenik meg", async () => {
+    render(<UserEditorPage />);
+
+    expect(
+      screen.getByRole("checkbox", { name: /Anyag beérkezésének jelölése/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Vevő kiválasztása" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("checkbox", {
+          name: /Anyag beérkezésének jelölése/,
+        }),
+      ).toBeNull(),
+    );
+  });
+
+  /**
+   * A KET KESZLET FUGGETLEN ALLAPOTBAN ALL -- Balazs kifejezett kerese
+   * (2026-09-22 20:28:56 UTC, "Nem. Ket kulon jelolo legyen").
+   *
+   * MI PIROSIT: ha a kepesseg es az ertesitesi szerep UGYANAZT a tombot
+   * mozgatna (pl. egy kozos allapotra lennenek kotve). Akkor az egyik
+   * bejelolese a masikat is bejelolne, vagy a levetele elvinne a masikat is.
+   */
+  it("a képesség jelölése nem hat az értesítési szerepekre, és fordítva", async () => {
+    render(<UserEditorPage />);
+
+    const anyagigenyErtesules = screen.getByRole("checkbox", {
+      name: /Anyagigény-felelős/,
+    }) as HTMLInputElement;
+    const beerkezesJelolese = screen.getByRole("checkbox", {
+      name: /Anyag beérkezésének jelölése/,
+    }) as HTMLInputElement;
+
+    fireEvent.click(beerkezesJelolese);
+    expect(beerkezesJelolese.checked).toBe(true);
+    expect(anyagigenyErtesules.checked).toBe(false);
+
+    fireEvent.click(anyagigenyErtesules);
+    expect(beerkezesJelolese.checked).toBe(true);
+    expect(anyagigenyErtesules.checked).toBe(true);
+
+    fireEvent.click(beerkezesJelolese);
+    expect(beerkezesJelolese.checked).toBe(false);
+    expect(anyagigenyErtesules.checked).toBe(true);
   });
 
   it("vevő kiválasztásakor csak a Partner szerviz szerepet kínálja és megmagyarázza", async () => {

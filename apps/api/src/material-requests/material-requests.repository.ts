@@ -246,6 +246,29 @@ export class MaterialRequestsRepository extends Repository {
   }
 
   /**
+   * VAN-E AKTIV FELHASZNALO, AKI JELOLHET BEERKEZEST -- BARKI, NEM EGY
+   * KONKRET SZEMELY.
+   *
+   * A `hasMarkReceivedCapability`-tol KULON metodus, mert mas a kerdes: az
+   * egy KONKRET felhasznalorol kerdez (a hivo maga), ez pedig arrol, hogy
+   * LETEZIK-E EGYALTALAN ilyen valaki -- lasd a `submit()` hivo helyet, miert
+   * kell ez a kulonbseg.
+   *
+   * `findFirst`, NEM `count`: a kerdesre az elso talalat is valaszol, a
+   * `@@index([capability])` pedig pontosan erre a mintara all.
+   */
+  async anyActiveMarkReceivedCapabilityHolder(): Promise<boolean> {
+    const row = await this.database.userServiceCapability.findFirst({
+      where: {
+        capability: "MATERIAL_REQUEST_MARK_RECEIVED",
+        user: { isActive: true },
+      },
+      select: { userId: true },
+    });
+    return row !== null;
+  }
+
+  /**
    * A CIMZETTEK AKTIV, LETEZO SORAI -- A KERO ES A FELELOSOK EMAIL-CIMEHEZ.
    *
    * CSAK AKTIV FELHASZNALO, ugyanaz a szabaly, mint a `notificationRecipients`-nel:

@@ -578,6 +578,14 @@ export type {
   NotificationRoleInfo,
   NotificationRoleValue,
 } from "./notification-roles.js";
+export {
+  SERVICE_CAPABILITIES,
+  SERVICE_CAPABILITY_VALUES,
+} from "./service-capabilities.js";
+export type {
+  ServiceCapabilityInfo,
+  ServiceCapabilityValue,
+} from "./service-capabilities.js";
 export { normalizeAssetCategoryName } from "./asset-category.js";
 export type {
   AssetCategory,

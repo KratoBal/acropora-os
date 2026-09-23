@@ -76,6 +76,15 @@ export function WorksheetMaterialRequests({
   const [busy, setBusy] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * A `submit()` VALASZANAK `warning` MEZOJE -- KULON A HIBATOL.
+   *
+   * Nem hiba: a kuldes SIKERES volt, csak arrol szol, hogy ma senki nem
+   * tudja jelolni a beerkezest (lasd a szerver `submit` fejleceit). Ha az
+   * `error` dobozba kerulne, a szervizes azt hinne, hogy a kuldes nem
+   * sikerult, es ujra probalna -- holott az igeny mar letrejott.
+   */
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Lasd a `WorksheetEntries` fejleceben: a kapu a munkamenetre es a jogra
   // megy, soha nem a kliens-oldalon olvashato tokenre.
@@ -143,12 +152,14 @@ export function WorksheetMaterialRequests({
 
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       const draft = await materialRequestsApi.create(token, worksheetId, {
         items: tisztitott,
       });
       const response = await materialRequestsApi.submit(token, draft.id);
       setRequests(response.items);
+      setNotice(response.warning ?? null);
       setRows([{ ...URES_SOR }]);
       setFormOpen(false);
     } catch (cause) {
@@ -172,9 +183,11 @@ export function WorksheetMaterialRequests({
   const sendDraft = async (id: string) => {
     setSendingId(id);
     setError(null);
+    setNotice(null);
     try {
       const response = await materialRequestsApi.submit(token, id);
       setRequests(response.items);
+      setNotice(response.warning ?? null);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -193,6 +206,7 @@ export function WorksheetMaterialRequests({
       </h2>
 
       {error ? <Alert variant="danger" title={error} /> : null}
+      {notice ? <Alert variant="info" title={notice} /> : null}
 
       {canWrite ? (
         formOpen ? (
