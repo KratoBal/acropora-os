@@ -479,6 +479,11 @@ test("a belsős felhasználó megtudja, melyik eset áll fenn", async () => {
         customer: null,
         supplier: { id: "supplier-1", isActive: true },
         address: null,
+        // A DEPARTMENT MOST MÁR FELOLDVA IS KELL, NEM CSAK JELENLÉTBEN
+        // (#1013 óta): a `customerId: null` a `supplier.customerId` hiányzó
+        // tükör-sorát tükrözi, hogy az OTHER_PARTNER ág is átmenjen. Enélkül
+        // ez az állítás a "nem található" hibát kapná, nem azt, amit tesztel.
+        department: { customerId: null, isActive: true },
         aquarium: null,
         parent: null,
         productVariant: null,
@@ -648,6 +653,9 @@ test("a partner az összevont üzenetet kapja", async () => {
         customer: null,
         supplier: { id: "supplier-1", isActive: true },
         address: null,
+        // LASD A FENTI ALLITAST: department nelkul ez a "nem talalhato"
+        // hibat kapna, nem azt, amit tesztel.
+        department: { customerId: null, isActive: true },
         aquarium: null,
         parent: null,
         productVariant: null,
@@ -710,6 +718,9 @@ test("a fél teljesítmény-pár 400-at ad, és megnevezi a hiányzó felet", as
         customer: null,
         supplier: { id: "supplier-1", isActive: true },
         address: null,
+        // LASD A FENTI ALLITASOKAT: department nelkul ez a "nem talalhato"
+        // hibat kapna, nem azt, amit tesztel.
+        department: { customerId: null, isActive: true },
         aquarium: null,
         parent: null,
         productVariant: null,
@@ -766,6 +777,9 @@ test("a másik fél hiányára a MÁSIK mondat jön", async () => {
         customer: null,
         supplier: { id: "supplier-1", isActive: true },
         address: null,
+        // LASD A FENTI ALLITASOKAT: department nelkul ez a "nem talalhato"
+        // hibat kapna, nem azt, amit tesztel.
+        department: { customerId: null, isActive: true },
         aquarium: null,
         parent: null,
         productVariant: null,
