@@ -69,6 +69,11 @@ export interface QueuedAssetUpdateBase {
    * mintha mas is hozzanyult volna az eszkozhoz.
    */
   categoryId?: string | null;
+  /**
+   * A FUNKCIO AZONOSITOJA -- FUGGETLEN A KATEGORIATOL, ugyanaz az indok, mint
+   * fent. Kanban 68add892, 2026-09-22.
+   */
+  functionId?: string | null;
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;

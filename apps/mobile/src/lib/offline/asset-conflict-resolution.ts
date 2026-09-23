@@ -105,6 +105,13 @@ export interface CurrentAssetLike {
    */
   categoryId?: string | null;
   category?: string | null;
+  /**
+   * A MOSTANI FUNKCIO -- AZ AZONOSITO ES A NEVE IS, FUGGETLENUL A
+   * KATEGORIATOL. Ugyanaz a ketosseg, mint felette. Kanban 68add892,
+   * 2026-09-22.
+   */
+  functionId?: string | null;
+  function?: string | null;
 }
 
 /** A törzsből összevethető mezők. A `expectedUpdatedAt` nem tartozik ide. */
@@ -143,6 +150,7 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   criticality: "Kritikusság",
   departmentId: "Helyszín",
   categoryId: "Kategória",
+  functionId: "Funkció",
   manufacturer: "Gyártó",
   model: "Modell",
   serialNumber: "Sorozatszám",
@@ -186,6 +194,11 @@ export function compareQueuedUpdate(input: {
    * beallitott egyet.
    */
   categoryNames?: Record<string, string>;
+  /**
+   * A FUNKCIOK NEVE AZONOSITO SZERINT -- FUGGETLENUL A KATEGORIAKTOL, ugyanaz
+   * az indok, mint felette.
+   */
+  functionNames?: Record<string, string>;
   /** Amit a szerelő LÁTOTT. Hiányozhat: a mező előtt keletkezett sorokon nincs. */
   base?: QueuedAssetUpdateBase;
 }): ConflictFieldRow[] {
@@ -198,6 +211,7 @@ export function compareQueuedUpdate(input: {
       input.patch,
       input.unitNames,
       input.categoryNames,
+      input.functionNames,
     );
     const theirs = ovek(field, input.current, input.unitNames);
     rows.push({
@@ -240,6 +254,8 @@ function nyersMost(
   // atirhato, es egy atnevezes kulonben ugy latszana, mintha mas hozzanyult
   // volna az eszkozhoz.
   if (field === "categoryId") return uresNull(current.categoryId);
+  // A FUNKCIONAL IS AZ AZONOSITO dont, ugyanabbol az okbol, mint a kategorianal.
+  if (field === "functionId") return uresNull(current.functionId);
   // A PAR EGYSEG-FELE OBJEKTUMKENT all a valaszban, azonositokent a torzsben.
   if (field === "performanceUnitId") return current.performanceUnit?.id ?? null;
   return uresNull(current[field]);
@@ -351,6 +367,9 @@ function assignField(
     case "categoryId":
       target.categoryId = source.categoryId;
       return;
+    case "functionId":
+      target.functionId = source.functionId;
+      return;
     /**
      * EZ A HAROM AG HIANYZOTT, ES A KIMERITO-ORZO HOZTA ELO (2026-09-22).
      *
@@ -401,12 +420,14 @@ function enyem(
   patch: UpdateAssetInput,
   unitNames?: Record<string, string>,
   categoryNames?: Record<string, string>,
+  functionNames?: Record<string, string>,
 ): string {
   if (field === "status") return szoveg(ASSET_STATUS_LABELS, patch.status);
   if (field === "criticality")
     return szoveg(ASSET_CRITICALITY_LABELS, patch.criticality);
   if (field === "departmentId") return helyszin(patch.departmentId, unitNames);
   if (field === "categoryId") return kategoria(patch.categoryId, categoryNames);
+  if (field === "functionId") return kategoria(patch.functionId, functionNames);
   return ures(patch[field] as string | null | undefined);
 }
 
@@ -440,6 +461,11 @@ function ovek(
    */
   if (field === "categoryId")
     return current.category ?? (current.categoryId ? current.categoryId : URES);
+  /**
+   * A FUNKCIONAL A NEV LATSZIK, UGYANAZ AZ INDOK, MINT A KATEGORIANAL.
+   */
+  if (field === "functionId")
+    return current.function ?? (current.functionId ? current.functionId : URES);
   return ures(current[field]);
 }
 
@@ -463,6 +489,11 @@ function ures(value: string | null | undefined): string {
   return value.trim() === "" ? URES : value;
 }
 
+/**
+ * A FUNKCIO-NEVFELOLDAS UGYANEZT A FUGGVENYT HASZNALJA (`enyem`), mert a
+ * logika azonositasfuggetlen: ertek plusz nev-terkep, nincs kategoria-specifikus
+ * resz benne.
+ */
 function kategoria(
   value: string | null | undefined,
   categoryNames?: Record<string, string>,

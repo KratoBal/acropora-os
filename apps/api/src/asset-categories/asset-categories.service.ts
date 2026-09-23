@@ -4,12 +4,14 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  normalizeAssetCategoryCode,
   normalizeAssetCategoryName,
   type AssetCategoryListResponse,
 } from "@acropora/types";
 
 import {
   AssetCategoriesRepository,
+  AssetCategoryDuplicateCodeError,
   AssetCategoryDuplicateError,
 } from "./asset-categories.repository.js";
 import type {
@@ -19,6 +21,8 @@ import type {
 
 const DUPLIKATUM =
   "Ez a kategória már szerepel a listában. Válassz másik nevet, vagy nézd meg a kivezetettek között.";
+const KOD_DUPLIKATUM =
+  "Ez a kód már foglalt egy másik kategóriánál. Válassz másik kódot, vagy nézd meg a kivezetettek között.";
 
 @Injectable()
 export class AssetCategoriesService {
@@ -39,6 +43,7 @@ export class AssetCategoriesService {
          */
         name: normalizeAssetCategoryName(input.name),
         sortOrder: input.sortOrder ?? 0,
+        code: normalizeAssetCategoryCode(input.code),
       });
     } catch (error) {
       this.map(error);
@@ -55,6 +60,9 @@ export class AssetCategoriesService {
         ...(input.sortOrder === undefined
           ? {}
           : { sortOrder: input.sortOrder }),
+        ...(input.code === undefined
+          ? {}
+          : { code: normalizeAssetCategoryCode(input.code) }),
       });
       if (!updated) throw new NotFoundException("A kategória nem található.");
       return updated;
@@ -78,6 +86,8 @@ export class AssetCategoriesService {
   }
 
   private map(error: unknown): never {
+    if (error instanceof AssetCategoryDuplicateCodeError)
+      throw new BadRequestException(KOD_DUPLIKATUM);
     if (error instanceof AssetCategoryDuplicateError)
       throw new BadRequestException(DUPLIKATUM);
     throw error;

@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   getAsset,
   listAssetCategories,
+  listAssetFunctions,
   updateAsset,
   type AssetDetail,
 } from "@/lib/api/assets";
@@ -52,6 +53,7 @@ import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { UnitPicker } from "@/components/assets/unit-picker";
 import { matricaElotoltes } from "@/lib/assets/matrica-elotoltes";
 import { CategoryPicker } from "@/components/assets/category-picker";
+import { FunctionPicker } from "@/components/assets/function-picker";
 import {
   LabelCodeField,
   useLabelScanner,
@@ -187,6 +189,28 @@ export default function AssetEditScreen() {
     void listAssetCategories()
       .then((valasz) => {
         if (elo) setCategories(valasz.items);
+      })
+      .catch(() => {
+        /* szandekosan nema: lasd a fenti jegyzetet */
+      });
+    return () => {
+      elo = false;
+    };
+  }, [status]);
+  const [functionPickerOpen, setFunctionPickerOpen] = useState(false);
+  const [functions, setFunctions] = useState<{ id: string; name: string }[]>(
+    [],
+  );
+  /**
+   * A FUNKCIO-LISTA UGYANUGY, ES FUGGETLENUL A KATEGORIATOL toltodik be --
+   * lasd a fenti jegyzetet. Kanban 68add892, 2026-09-22.
+   */
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    let elo = true;
+    void listAssetFunctions()
+      .then((valasz) => {
+        if (elo) setFunctions(valasz.items);
       })
       .catch(() => {
         /* szandekosan nema: lasd a fenti jegyzetet */
@@ -586,6 +610,25 @@ export default function AssetEditScreen() {
               setCategoryPickerOpen(false);
             }}
             onToggle={() => setCategoryPickerOpen((nyitva) => !nyitva)}
+          />
+        </View>
+
+        {/*
+          FUNKCIO -- FUGGETLEN A KATEGORIATOL, SZO SZERINT UGYANAZ A MINTA.
+          Kanban 68add892, 2026-09-22.
+        */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Funkció</Text>
+          <FunctionPicker
+            options={functions}
+            value={form.functionId}
+            currentName={asset.function}
+            open={functionPickerOpen}
+            onChange={(functionId) => {
+              setForm({ ...form, functionId });
+              setFunctionPickerOpen(false);
+            }}
+            onToggle={() => setFunctionPickerOpen((nyitva) => !nyitva)}
           />
         </View>
 

@@ -23,6 +23,7 @@ import {
   type AssetStatus,
   type UnitOfMeasure,
   type AssetCategory,
+  type AssetFunction,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -35,6 +36,7 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { useReturnTo } from "@/components/navigation-history";
 import { assetsApi } from "@/lib/api/assets";
 import { assetCategoriesApi } from "@/lib/api/asset-categories";
+import { assetFunctionsApi } from "@/lib/api/asset-functions";
 import { suppliersApi } from "@/lib/api/suppliers";
 import { unitsOfMeasureApi } from "@/lib/api/units-of-measure";
 import {
@@ -107,6 +109,16 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    */
   const [categoryName, setCategoryName] = useState("");
   const [categories, setCategories] = useState<AssetCategory[]>([]);
+  /**
+   * A FUNKCIO -- FUGGETLEN A KATEGORIATOL, UGYANAZ AZ ALAK.
+   *
+   * Balazs kerese, 2026-09-22 (kanban 68add892): „ugyanugy legordulo menube
+   * meg kellene jeleniteni". A `functionId`/`functionName` par szo szerint a
+   * `categoryId`/`categoryName` par -- lasd ott a teljes indoklast.
+   */
+  const [functionId, setFunctionId] = useState("");
+  const [functionName, setFunctionName] = useState("");
+  const [functions, setFunctions] = useState<AssetFunction[]>([]);
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
@@ -216,6 +228,8 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         setName(asset.name);
         setCategoryId(asset.categoryId ?? "");
         setCategoryName(asset.category ?? "");
+        setFunctionId(asset.functionId ?? "");
+        setFunctionName(asset.function ?? "");
         setManufacturer(asset.manufacturer ?? "");
         setModel(asset.model ?? "");
         setSerialNumber(asset.serialNumber ?? "");
@@ -278,6 +292,26 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             cause instanceof Error
               ? cause.message
               : "A kategóriák nem tölthetők be.",
+          );
+      });
+    return () => controller.abort();
+  }, [token]);
+
+  /**
+   * A FUNKCIO-LISTA UGYANUGY, ES FUGGETLENUL A KATEGORIATOL toltodik be --
+   * lasd a fenti kategoria-effektus fejleceit.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    void assetFunctionsApi
+      .list(token, false, controller.signal)
+      .then((result) => setFunctions(result.items))
+      .catch((cause) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "A funkciók nem tölthetők be.",
           );
       });
     return () => controller.abort();
@@ -520,6 +554,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             criticality,
             name: name.trim(),
             categoryId: categoryId || null,
+            functionId: functionId || null,
             manufacturer: manufacturer.trim() || null,
             model: model.trim() || null,
             serialNumber: serialNumber.trim() || null,
@@ -553,6 +588,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             criticality,
             name: name.trim(),
             categoryId: categoryId || undefined,
+            functionId: functionId || undefined,
             manufacturer: manufacturer.trim() || undefined,
             model: model.trim() || undefined,
             serialNumber: serialNumber.trim() || undefined,
@@ -780,6 +816,33 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 {categories.map((kategoria) => (
                   <option key={kategoria.id} value={kategoria.id}>
                     {kategoria.name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            {/*
+              A FUNKCIO -- FUGGETLEN A KATEGORIATOL, SZO SZERINT UGYANAZ A
+              MINTA, mert Balazs pontosan ezt kerte (kanban 68add892):
+              "ugyanugy legordulo menube meg kellene jeleniteni".
+            */}
+            <FormField label="Funkció">
+              <Select
+                aria-label="Funkció"
+                value={functionId}
+                onChange={(event) => setFunctionId(event.target.value)}
+              >
+                <option value="">Nincs megadva</option>
+                {functionId &&
+                !functions.some((funkcio) => funkcio.id === functionId) ? (
+                  <option value={functionId}>
+                    {functionName
+                      ? `${functionName} (kivezetett)`
+                      : "Kivezetett funkció"}
+                  </option>
+                ) : null}
+                {functions.map((funkcio) => (
+                  <option key={funkcio.id} value={funkcio.id}>
+                    {funkcio.name}
                   </option>
                 ))}
               </Select>

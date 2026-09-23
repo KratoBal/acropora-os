@@ -287,6 +287,17 @@ export interface AssetEventSummary {
 
 export interface AssetDetail extends AssetListItem {
   /**
+   * AZ ESZKOZ FUNKCIOJA -- FUGGETLEN A KATEGORIATOL, lasd az `AssetFunction`
+   * fejleceit. CSAK AZ ADATLAPON, NEM A LISTASORON: a listaszures ehhez ma nem
+   * keszul (nem is kertek), tehat a listasor nem hordozza feleslegesen.
+   *
+   * `?: string` ES NEM `| null`, ugyanazon okbol, mint a `category`-nal: a
+   * hianyzo ertek azt jelenti, hogy NINCS funkcio, nem azt, hogy nem kertuk le.
+   */
+  function?: string;
+  /** A valasztott funkcio azonositoja; a szerkeszto ezt kuldi vissza. */
+  functionId?: string;
+  /**
    * A TELJESÍTMÉNY, SZÖVEGKÉNT -- ÉS EZ NEM KÉNYELMETLENSÉG, HANEM A PONTOSSÁG.
    *
    * A tárolt alak `decimal(19,6)`. Ha ezt `number`-ré alakítanánk, a JavaScript
@@ -378,6 +389,11 @@ export interface CreateAssetInput {
    * var, pontosan az a fajta csendes felrevezetes, amit ez a munka megszuntet.
    */
   categoryId?: string | null;
+  /**
+   * A FUNKCIO HIVATKOZAS, FUGGETLEN A KATEGORIATOL -- lasd az `AssetFunction`
+   * fejleceit. NINCS KAPCSOLAT a `categoryId`-vel, szandekosan.
+   */
+  functionId?: string | null;
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
@@ -431,6 +447,12 @@ export interface UpdateAssetInput {
    * koteseknel.
    */
   categoryId?: string | null;
+  /**
+   * A FUNKCIO HIVATKOZAS, FUGGETLEN A KATEGORIATOL -- ugyanaz az alak, mint a
+   * `categoryId`-nel: `null` torli a kotest, a mezo elhagyasa erintetlenul
+   * hagyja.
+   */
+  functionId?: string | null;
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;

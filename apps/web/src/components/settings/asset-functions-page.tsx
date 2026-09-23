@@ -9,37 +9,33 @@ import {
   Input,
 } from "@acropora/ui";
 import {
-  normalizeAssetCategoryCode,
-  normalizeAssetCategoryName,
-  type AssetCategory,
+  normalizeAssetFunctionName,
+  type AssetFunction,
 } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { assetCategoriesApi } from "@/lib/api/asset-categories";
+import { assetFunctionsApi } from "@/lib/api/asset-functions";
 
 /**
- * AZ ESZKOZ-KATEGORIAK KARBANTARTASA.
+ * AZ ESZKOZ-FUNKCIOK KARBANTARTASA -- SZO SZERINT AZ `AssetCategoriesPage`
+ * SZERKEZETE, mas torzsadaton.
  *
- * Balazs kerese, 2026-09-22: az eszkoz-felvitelen a kategoria legyen
- * legordulo. Ez a lap az, ahol a lista TARTALMA keszul.
+ * Balazs kerese, 2026-09-22 (kanban 68add892): „szeretnek egy ugyanolyan
+ * menut a Beallitasok ala mint az Eszkoz kategoriak, csak Eszkoz-funkciok
+ * nevvel". A lista URESEN indul, Balazsek toltik fel.
  *
- * === A TORLES KIVEZETES, ES A LAP EZT KIMONDJA ===
- *
- * Eszkozok hivatkoznak a sorokra, tehat a torles vagy elhasalna, vagy egy nev
- * eltunne a mar felvitt eszkozok alol. A gomb ezert „Kivezetés", nem
- * „Törlés" -- es a kivezetett sor a listan MARAD, halvanyan, hogy
- * visszahozhato legyen.
+ * FUGGETLEN AZ ESZKOZ-KATEGORIAKTOL: ket kulon torzsadat, nincs kozottuk
+ * kapcsolat.
  */
-export function AssetCategoriesPage() {
+export function AssetFunctionsPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
 
-  const [items, setItems] = useState<AssetCategory[]>([]);
+  const [items, setItems] = useState<AssetFunction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ujNev, setUjNev] = useState("");
-  const [ujKod, setUjKod] = useState("");
   const [mentes, setMentes] = useState(false);
 
   const betolt = useCallback(
@@ -47,12 +43,7 @@ export function AssetCategoriesPage() {
       setLoading(true);
       setError(null);
       try {
-        /*
-          A KIVEZETETTEK IS JONNEK. Ez a karbantarto lap -- itt pont az a
-          kerdes, hogy mi all a listan, beleertve azt is, amit kivezettunk. A
-          VALASZTO keri csak az aktivakat.
-        */
-        const valasz = await assetCategoriesApi.list(token, true, signal);
+        const valasz = await assetFunctionsApi.list(token, true, signal);
         setItems(valasz.items);
       } catch (cause) {
         if (cause instanceof DOMException && cause.name === "AbortError")
@@ -60,7 +51,7 @@ export function AssetCategoriesPage() {
         setError(
           cause instanceof Error
             ? cause.message
-            : "A kategóriák nem tölthetők be.",
+            : "A funkciók nem tölthetők be.",
         );
       } finally {
         setLoading(false);
@@ -76,36 +67,31 @@ export function AssetCategoriesPage() {
   }, [betolt]);
 
   const felvesz = async () => {
-    const nev = normalizeAssetCategoryName(ujNev);
+    const nev = normalizeAssetFunctionName(ujNev);
     if (nev === "") return;
-    const kod = normalizeAssetCategoryCode(ujKod);
     setMentes(true);
     setError(null);
     try {
-      await assetCategoriesApi.create(token, {
-        name: nev,
-        ...(kod === null ? {} : { code: kod }),
-      });
+      await assetFunctionsApi.create(token, { name: nev });
       setUjNev("");
-      setUjKod("");
       await betolt();
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "A kategória nem vehető fel.",
+        cause instanceof Error ? cause.message : "A funkció nem vehető fel.",
       );
     } finally {
       setMentes(false);
     }
   };
 
-  const allit = async (kategoria: AssetCategory, aktiv: boolean) => {
+  const allit = async (funkcio: AssetFunction, aktiv: boolean) => {
     setError(null);
     try {
-      await assetCategoriesApi.update(token, kategoria.id, { isActive: aktiv });
+      await assetFunctionsApi.update(token, funkcio.id, { isActive: aktiv });
       await betolt();
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "A kategória nem módosítható.",
+        cause instanceof Error ? cause.message : "A funkció nem módosítható.",
       );
     }
   };
@@ -113,9 +99,7 @@ export function AssetCategoriesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-dusk-900">
-          Eszköz-kategóriák
-        </h1>
+        <h1 className="text-xl font-semibold text-dusk-900">Eszköz-funkciók</h1>
         <p className="mt-1 text-sm text-dusk-600">
           Ez a lista áll az eszköz-felvitel legördülő menüjében. Kivezetni
           lehet, törölni nem: a már felvitt eszközök mellett a név olvasható
@@ -129,40 +113,21 @@ export function AssetCategoriesPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-base font-semibold text-dusk-900">
-            Új kategória
-          </h2>
+          <h2 className="text-base font-semibold text-dusk-900">Új funkció</h2>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
           <label className="block space-y-1">
             <span className="text-sm font-medium text-dusk-700">Név</span>
             <Input
-              aria-label="Kategória neve"
+              aria-label="Funkció neve"
               value={ujNev}
               maxLength={80}
               onChange={(event) => setUjNev(event.target.value)}
-              placeholder="pl. Vízkezelés"
+              placeholder="pl. Automata adagolás"
             />
           </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium text-dusk-700">
-              Kód (opcionális)
-            </span>
-            <Input
-              aria-label="Kategória kódja"
-              value={ujKod}
-              maxLength={16}
-              onChange={(event) => setUjKod(event.target.value)}
-              placeholder="pl. AIP"
-            />
-          </label>
-          {/*
-            URES NEVVEL NEM INDUL: a nev kotelezo, tehat a hivas BIZTOSAN
-            elutasitas lenne. Egy halozati kor arra, amirol itt is tudjuk, hogy
-            nem mehet, csak varakozas.
-          */}
           <Button
-            disabled={mentes || normalizeAssetCategoryName(ujNev) === ""}
+            disabled={mentes || normalizeAssetFunctionName(ujNev) === ""}
             onClick={() => void felvesz()}
           >
             {mentes ? "Mentés…" : "Felvétel"}
@@ -179,34 +144,29 @@ export function AssetCategoriesPage() {
             <p className="text-sm text-dusk-500">Betöltés…</p>
           ) : items.length === 0 ? (
             <p className="text-sm text-dusk-500">
-              Még egyetlen kategória sincs felvéve.
+              Még egyetlen funkció sincs felvéve.
             </p>
           ) : (
             <ul className="divide-y">
-              {items.map((kategoria) => (
+              {items.map((funkcio) => (
                 <li
-                  key={kategoria.id}
+                  key={funkcio.id}
                   className="flex items-center justify-between gap-4 py-3"
                 >
                   <span
                     className={
-                      kategoria.isActive
+                      funkcio.isActive
                         ? "text-sm text-dusk-800"
                         : "text-sm text-dusk-400 line-through"
                     }
                   >
-                    {kategoria.name}
-                    {kategoria.code ? (
-                      <span className="ml-2 text-xs text-dusk-400">
-                        {kategoria.code}
-                      </span>
-                    ) : null}
+                    {funkcio.name}
                   </span>
                   <Button
                     variant="secondary"
-                    onClick={() => void allit(kategoria, !kategoria.isActive)}
+                    onClick={() => void allit(funkcio, !funkcio.isActive)}
                   >
-                    {kategoria.isActive ? "Kivezetés" : "Visszahozás"}
+                    {funkcio.isActive ? "Kivezetés" : "Visszahozás"}
                   </Button>
                 </li>
               ))}

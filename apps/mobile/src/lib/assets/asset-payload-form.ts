@@ -65,6 +65,10 @@ export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
       kivalasztott -- es a kulonbseg csak hetekkel kesobb latszana.
     */
     categoryId: szoveg(row.categoryId),
+    /*
+      A FUNKCIO -- FUGGETLENUL A KATEGORIATOL, ugyanaz az indok, mint felette.
+    */
+    functionId: szoveg(row.functionId),
     manufacturer: szoveg(row.manufacturer),
     model: szoveg(row.model),
     serialNumber: szoveg(row.serialNumber),

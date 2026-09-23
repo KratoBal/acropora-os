@@ -128,12 +128,14 @@ const categoryList: AssetCategoryListResponse = {
       name: "Szivattyú",
       isActive: true,
       sortOrder: 1,
+      code: null,
     },
     {
       id: "cat-regi",
       name: "Régi világítás",
       isActive: false,
       sortOrder: 2,
+      code: null,
     },
   ],
 };

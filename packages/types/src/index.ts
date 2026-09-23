@@ -586,11 +586,19 @@ export type {
   ServiceCapabilityInfo,
   ServiceCapabilityValue,
 } from "./service-capabilities.js";
-export { normalizeAssetCategoryName } from "./asset-category.js";
+export {
+  normalizeAssetCategoryName,
+  normalizeAssetCategoryCode,
+} from "./asset-category.js";
 export type {
   AssetCategory,
   AssetCategoryListResponse,
 } from "./asset-category.js";
+export { normalizeAssetFunctionName } from "./asset-function.js";
+export type {
+  AssetFunction,
+  AssetFunctionListResponse,
+} from "./asset-function.js";
 export type {
   CreateMaterialRequestInput,
   MaterialRequestDetail,

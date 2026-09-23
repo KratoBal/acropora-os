@@ -97,6 +97,12 @@ export interface AssetListItem extends AssetHierarchyItem {
 export interface AssetDetail extends AssetListItem {
   category?: string;
   /**
+   * A FUNKCIO -- FUGGETLEN A KATEGORIATOL, lasd az `AssetFunction` fejleceit
+   * a kozos `packages/types`-ban. Kanban 68add892, 2026-09-22.
+   */
+  function?: string;
+  functionId?: string;
+  /**
    * A CSATOLMANYOK -- ES EZ A MEZO MINDIG IS JOTT A SZERVERTOL.
    *
    * A kozos `packages/types` `AssetDetail`-je hordozza (`documents:
@@ -192,6 +198,8 @@ export interface CreateAssetInput {
   name: string;
   /** Az eszkoz kategoriaja, a torzsadatbol. Elhagyhato. */
   categoryId?: string;
+  /** Az eszkoz funkcioja, FUGGETLENUL a kategoriatol. Elhagyhato. */
+  functionId?: string;
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
@@ -308,6 +316,17 @@ export function listAssetOwners() {
 export function listAssetCategories() {
   return apiRequest<{ items: { id: string; name: string }[] }>(
     "/asset-categories",
+  );
+}
+
+/**
+ * AZ ESZKOZ-FUNKCIOK, A VALASZTOHOZ -- SZO SZERINT A FENTI
+ * `listAssetCategories`, mas vegponton. FUGGETLEN torzsadat, nincs kozottuk
+ * kapcsolat (kanban 68add892, 2026-09-22).
+ */
+export function listAssetFunctions() {
+  return apiRequest<{ items: { id: string; name: string }[] }>(
+    "/asset-functions",
   );
 }
 

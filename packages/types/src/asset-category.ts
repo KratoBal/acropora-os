@@ -20,6 +20,14 @@ export interface AssetCategory {
   isActive: boolean;
   /** A felkinalas sorrendje; a gyakoriak elore. */
   sortOrder: number;
+  /**
+   * ROVID, NAGYBETUS AZONOSITO A FANK JELMAGYARAZATABOL (pl. „AIP", „COM",
+   * „VAL_SUR"). Balazs kerese, 2026-09-22 (kanban 68add892). NEM harom
+   * karakterhez kotott, es alahuzast tartalmazhat -- ket meglevo kod is az
+   * (VAL_SUR, VAL_BOT). `null`, amig a kategorianak nincs kodja kiosztva: a
+   * hat meglevo kategoria migraciokor URESEN indul, Balazs tolti fel kulon.
+   */
+  code: string | null;
 }
 
 export interface AssetCategoryListResponse {
@@ -37,4 +45,20 @@ export interface AssetCategoryListResponse {
  */
 export function normalizeAssetCategoryName(raw: string): string {
   return raw.trim();
+}
+
+/**
+ * A KOD NORMALIZALASA -- KORULVAGAS ES NAGYBETUSITES, UGYANAZ A MINTA, MINT AZ
+ * ALEGYSEG-KODNAL (`worksheets.repository.ts`, `code.trim().toUpperCase()`).
+ *
+ * A BEMENET SZANDEKOSAN MEGENGEDOBB A TAROLT ALAKNAL: aki kisbetuvel gepeli be
+ * a „com"-ot, ne halozati kort kapjon azert, amit egy `toUpperCase()` megold.
+ * `null`/ures string -> `null`, mert a kod ELHAGYHATO.
+ */
+export function normalizeAssetCategoryCode(
+  raw: string | null | undefined,
+): string | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim().toUpperCase();
+  return trimmed === "" ? null : trimmed;
 }

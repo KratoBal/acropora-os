@@ -1163,6 +1163,7 @@ export class ServiceAssetsRepository extends Repository {
                   criticality: input.criticality,
                   name: input.name.trim(),
                   categoryId: input.categoryId || null,
+                  functionId: input.functionId || null,
                   manufacturer: optionalText(input.manufacturer),
                   model: optionalText(input.model),
                   serialNumber: optionalText(input.serialNumber),
@@ -1683,6 +1684,7 @@ export class ServiceAssetsRepository extends Repository {
           criticality: input.criticality,
           name: input.name?.trim(),
           categoryId: input.categoryId || null,
+          functionId: input.functionId || null,
           manufacturer: optionalText(input.manufacturer),
           model: optionalText(input.model),
           serialNumber: optionalText(input.serialNumber),
@@ -2422,6 +2424,13 @@ export class ServiceAssetsRepository extends Repository {
   ): AssetDetail {
     return {
       ...this.toListItem(row, paths),
+      /**
+       * A FUNKCIO CSAK ITT, NEM A LISTASOROS `toListItem`-BEN -- a
+       * `functionRef` csak a `assetDetailInclude`-ban all, lasd a
+       * `service-assets.types.ts` fejleceit: erre ma nincs listaszures.
+       */
+      function: row.functionRef?.name ?? undefined,
+      functionId: row.functionId ?? undefined,
       description: row.description ?? undefined,
       performance: row.performance?.toString(),
       performanceUnit: row.performanceUnit ?? undefined,

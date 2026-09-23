@@ -299,6 +299,11 @@ export class CreateAssetDto {
    * SEMABAN megmarad (a meglevo sorok miatt), de a felvitel mar NEM irja.
    */
   @IsString() @IsOptional() categoryId?: string | null;
+  /**
+   * A FUNKCIO -- FUGGETLEN A KATEGORIATOL, lasd az `AssetFunction` fejleceit.
+   * Ugyanaz az alak, mint a `categoryId`-nel: nincs kozottuk kapcsolat.
+   */
+  @IsString() @IsOptional() functionId?: string | null;
   @IsString() @IsOptional() manufacturer?: string;
   @IsString() @IsOptional() model?: string;
   @IsString() @IsOptional() serialNumber?: string;
@@ -384,6 +389,8 @@ export class UpdateAssetDto {
   criticality?: (typeof ASSET_CRITICALITIES)[number];
   @IsString() @MinLength(1) @IsOptional() name?: string;
   @IsString() @IsOptional() categoryId?: string | null;
+  /** A FUNKCIO -- FUGGETLEN A KATEGORIATOL, ugyanaz az alak, mint fent. */
+  @IsString() @IsOptional() functionId?: string | null;
   @IsString() @IsOptional() manufacturer?: string | null;
   @IsString() @IsOptional() model?: string | null;
   @IsString() @IsOptional() serialNumber?: string | null;

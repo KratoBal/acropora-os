@@ -412,6 +412,9 @@ describe("navigation", () => {
     // lenne, barmelyik felvivo felvehetne uj kategoriat -- es pont az allna
     // vissza, ami miatt a lista letrejott.
     "/beallitasok/eszkoz-kategoriak": "settings.manage",
+    // AZ ESZKOZ-FUNKCIOK UGYANAZ A FAJTA TETEL, ugyanaz a bontas -- kanban
+    // 68add892, 2026-09-22.
+    "/beallitasok/eszkoz-funkciok": "settings.manage",
   };
 
   it("reproduces, for every role, exactly what the hard-coded keys produced", () => {
