@@ -278,13 +278,25 @@ export class CreateAssetDto {
   clientOperationId?: string;
   @IsIn(ASSET_OWNER_TYPES) ownerType!: (typeof ASSET_OWNER_TYPES)[number];
   @IsString() @MinLength(1) ownerId!: string;
-  @IsString() @IsOptional() customerAddressId?: string;
+  /**
+   * MIND AZ ÖT KÜLSŐ KULCS `@MinLength(1)`-GYEL -- ugyanaz a minta, mint a
+   * `categoryId`/`functionId`-nél (acrobot mérése, 2026-09-23, kanban
+   * 66c161e0). Ezek IS valódi idegen kulcsok (schema.prisma:
+   * customerAddress/department/aquarium/parentAsset/productVariant, mind
+   * `@relation`-nel), és a `validateReferences()` (service-assets.service.ts)
+   * igazságérték szerint vizsgál (`if (input.x && ...)`), tehát egy `""`
+   * ugyanúgy „nincs megadva"-ként megy át rajta, mint az `undefined` -- a
+   * tárolóig VÉDELEM NÉLKÜL jutna, ahol egy valódi Postgres idegen kulcs áll.
+   * Az eredmény `P2003` lenne, amit a `map()` hibakezelő NEM nevesít, tehát
+   * 500-ként érne a hívóhoz, nem 400-ként.
+   */
+  @IsString() @MinLength(1) @IsOptional() customerAddressId?: string;
   /** A partner ALEGYSÉGE (a partner képernyőn ez a neve). Csak szerviz partner
    * tulajdonosnál értelmes; vevőnél a `customerAddressId` a pontosítás. */
-  @IsString() @IsOptional() departmentId?: string;
-  @IsString() @IsOptional() aquariumId?: string;
-  @IsString() @IsOptional() parentAssetId?: string;
-  @IsString() @IsOptional() productVariantId?: string;
+  @IsString() @MinLength(1) @IsOptional() departmentId?: string;
+  @IsString() @MinLength(1) @IsOptional() aquariumId?: string;
+  @IsString() @MinLength(1) @IsOptional() parentAssetId?: string;
+  @IsString() @MinLength(1) @IsOptional() productVariantId?: string;
   @IsIn(ASSET_KINDS) kind!: (typeof ASSET_KINDS)[number];
   @IsIn(ASSET_STATUSES) @IsOptional() status?: (typeof ASSET_STATUSES)[number];
   @IsIn(ASSET_CRITICALITIES)
@@ -409,12 +421,19 @@ export class UpdateAssetDto {
   @IsOptional()
   ownerType?: (typeof ASSET_OWNER_TYPES)[number];
   @IsString() @MinLength(1) @IsOptional() ownerId?: string;
-  @IsString() @IsOptional() customerAddressId?: string | null;
+  /**
+   * MIND AZ ÖT KÜLSŐ KULCS `@MinLength(1)`-GYEL -- lásd a `CreateAssetDto`
+   * jegyzetét, betűre ugyanaz az indok. A `null` TOVÁBBRA IS engedett (törli
+   * a kötést): az `@IsOptional()` a `null`-t és az `undefined`-et egyaránt
+   * ellenőrzés nélkül engedi át, tehát a `@MinLength(1)` csak a NEM üres, NEM
+   * null "" esetet bírálja el.
+   */
+  @IsString() @MinLength(1) @IsOptional() customerAddressId?: string | null;
   /** `null` törli a kötést, a mező elhagyása érintetlenül hagyja. */
-  @IsString() @IsOptional() departmentId?: string | null;
-  @IsString() @IsOptional() aquariumId?: string | null;
-  @IsString() @IsOptional() parentAssetId?: string | null;
-  @IsString() @IsOptional() productVariantId?: string | null;
+  @IsString() @MinLength(1) @IsOptional() departmentId?: string | null;
+  @IsString() @MinLength(1) @IsOptional() aquariumId?: string | null;
+  @IsString() @MinLength(1) @IsOptional() parentAssetId?: string | null;
+  @IsString() @MinLength(1) @IsOptional() productVariantId?: string | null;
   @IsIn(ASSET_KINDS) @IsOptional() kind?: (typeof ASSET_KINDS)[number];
   @IsIn(ASSET_STATUSES) @IsOptional() status?: (typeof ASSET_STATUSES)[number];
   @IsIn(ASSET_CRITICALITIES)

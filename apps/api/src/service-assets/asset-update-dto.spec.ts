@@ -187,3 +187,98 @@ describe("az eszköz-módosítás kategória és funkció mezője", () => {
     assert.ok(uzenet.some((m) => m.includes("functionId")));
   });
 });
+
+/**
+ * AZ ÖT IDEGEN KULCS (customerAddressId, departmentId, aquariumId,
+ * parentAssetId, productVariantId) -- UGYANAZ A CSAPDA, MÁS ALAKBAN, MINT A
+ * categoryId/functionId-NÉL, ÉS SOSEM VOLT RÁ VÉDELEM.
+ *
+ * === A MÉRT RÉS (murena, 2026-09-23, kanban 66c161e0) ===
+ *
+ * Mind az öt mező valódi idegen kulcs (schema.prisma: customerAddress /
+ * department / aquarium / parentAsset / productVariant, mind `@relation`-nel).
+ * A `validateReferences()` (service-assets.service.ts) IGAZSÁGÉRTÉK szerint
+ * vizsgál -- `if (input.customerAddressId && !context.address) throw ...` --,
+ * és az `""` JavaScript-ben falsy, tehát ez a feltétel UGY VISELKEDIK, mintha
+ * a mező hiányozna: az ellenőrzést NEM futtatja le, csendben átengedi. Innen
+ * a nyers `""` a Prisma elé jutna, ahol valódi Postgres idegen kulcs áll --
+ * az eredmény `P2003` lenne, amit a `map()` hibakezelő NEM nevesít (csak a
+ * P2025-öt és a P2002-t), tehát **500-ként érne a hívóhoz, nem 400-ként**.
+ *
+ * EZ ROSSZABB, MINT A categoryId/functionId ESETE VOLT: ott az adat csendben
+ * eltűnt, de a válasz sikeres maradt. Itt egy nyers hibakód érne vissza egy
+ * tömeges betöltés közepén, anélkül hogy megnevezné, MELYIK mező volt rossz.
+ *
+ * MA NEM ÉLES -- de ez ugyanaz volt igaz a categoryId/functionId-ra is,
+ * amíg egy gépi hívó (a FANK-betöltés) meg nem találta.
+ */
+describe("az eszköz-módosítás öt idegen kulcsa (hely, alegység, akvárium, szülő, termékváltozat)", () => {
+  it("a HIÁNYZÓ mező rendben van: azt jelenti, ne nyúlj hozzá", () => {
+    assert.deepEqual(uzenetek(ALAP), []);
+  });
+
+  it("a `null` ÁTMEGY: ez törli a kötést", () => {
+    assert.deepEqual(
+      uzenetek({
+        ...ALAP,
+        customerAddressId: null,
+        departmentId: null,
+        aquariumId: null,
+        parentAssetId: null,
+        productVariantId: null,
+      }),
+      [],
+    );
+  });
+
+  /**
+   * EZ AZ AZ ÁLLÍTÁS, AMIÉRT A LEÍRÁS ÁLL: mind az öt mezőt EGYSZERRE, EGY
+   * hívásban üresen küldve mind az öt elbukik, és mind az öt megnevezve.
+   * Egyenként is elbuknak -- ezt a kontroll-jellegű, egy-mezős esetek lentebb
+   * mutatják --, de az együttes állítás zárja ki, hogy valamelyik ág csak a
+   * VÉLETLEN miatt tűnik védettnek (pl. mert egy korábbi hiba miatt a
+   * validálás korábban megállt).
+   */
+  it("az ÜRES szöveg MIND AZ ÖTÖN elbukik, egyszerre küldve", () => {
+    const uzenet = uzenetek({
+      ...ALAP,
+      customerAddressId: "",
+      departmentId: "",
+      aquariumId: "",
+      parentAssetId: "",
+      productVariantId: "",
+    });
+    assert.ok(uzenet.length > 0, "egyik sem mehet át üresen");
+    for (const mezo of [
+      "customerAddressId",
+      "departmentId",
+      "aquariumId",
+      "parentAssetId",
+      "productVariantId",
+    ])
+      assert.ok(
+        uzenet.some((m) => m.includes(mezo)),
+        `a(z) ${mezo} hibaüzenete hiányzik, most ez jött: ${uzenet.join("; ")}`,
+      );
+  });
+
+  it("az érvényes azonosítók átmennek", () => {
+    assert.deepEqual(
+      uzenetek({
+        ...ALAP,
+        customerAddressId: "addr-1",
+        departmentId: "dept-1",
+        aquariumId: "aq-1",
+        parentAssetId: "asset-1",
+        productVariantId: "variant-1",
+      }),
+      [],
+    );
+  });
+
+  it("POZITÍV KONTROLL: egy szám elbukik, tehát a mérés tényleg fut", () => {
+    const uzenet = uzenetek({ ...ALAP, parentAssetId: 42 });
+    assert.ok(uzenet.length > 0, "a validáció nem fut: a mérés semmit nem ér");
+    assert.ok(uzenet.some((m) => m.includes("must be a string")));
+  });
+});
