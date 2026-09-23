@@ -7,8 +7,8 @@ name: Idozites - eszkoz tomeges letrehozas
 # mennyi ideig tart N eszkozt letrehozni -- soha nem elesben, lasd a szkript
 # sajat vedelmet (`apps/api/scripts/meres-eszkoz-tomeges-idozites.mjs`).
 #
-# CSAK egy dedikalt ag-eloтagon fut, hogy a rendes fejlesztoi forgalmat ne
-# terhelje. NEM a `meres/**` eloтagon: az a `meres.yml` sajat kapujahoz
+# CSAK egy dedikalt ag-elotagon fut, hogy a rendes fejlesztoi forgalmat ne
+# terhelje. NEM a `meres/**` elotagon: az a `meres.yml` sajat kapujahoz
 # tartozik (forditott verdikt, szandekos rontast var), ami ezen az agon
 # felreertheto piros levelet kuldene, holott itt nincs szandekos rontas.
 
