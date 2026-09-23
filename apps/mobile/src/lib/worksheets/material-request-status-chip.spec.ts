@@ -36,15 +36,28 @@ import { describe, it } from "node:test";
  *                                                     nem hianyzott semmi
  *   apps/mobile/src/app/worksheets/[id].tsx:1976     muted-nek NEM volt
  *                                                     flex-je -- EZ a hiba
+ *
+ * EZ A FAJL SZANDEKOSAN `src/lib/worksheets/` ALATT VAN, NEM `src/app/`
+ * ALATT -- ES EZ NEM STILUS-KERDES (acrobot merese, PR #1034 elso, piros
+ * CI-korebol, 2026-09-23 21:05). Az `src/app/**` az Expo Router SAJAT
+ * utvonal-faja: az `expo export --platform web` lepes MINDENT becsomagol,
+ * ami ott all, a tesztfajlt is -- egy `node:test` import viszont nem oldhato
+ * fel a bongeszo-csomagban ("Unable to resolve module node:test"), tehat egy
+ * itt felejtett spec nem a TESZTET, hanem magat az EXPORTOT torte volna el.
+ * Az egesz csomagban minden mas spec (134 fajl) mar `src/lib/**` alatt all,
+ * pont ezert -- lasd peldaul
+ * `src/lib/worksheets/worksheet-entry-screens.spec.ts`, ami UGYANEZT a
+ * mintat hasznalja a forras visszaolvasasara.
  */
 
 /*
-  A specek `test-dist/app/worksheets/` alatt futnak (lasd tsconfig.test.json),
+  A specek `test-dist/lib/worksheets/` alatt futnak (lasd tsconfig.test.json),
   a .tsx forrasok viszont NEM masolodnak at oda -- csak a .spec.ts fajlok
-  forditodnak. A `src/lib/auth/tile-order.spec.ts` ugyanezt a hatarat lepi at
-  ugyanigy: harom szinttel fel a `test-dist/app/worksheets`-bol
-  (`test-dist/app` -> `test-dist` -> `apps/mobile`), onnan vissza a
-  `src/app/worksheets`-be, ahol a `.tsx` meg a forras-alakjaban all.
+  forditodnak. Ugyanaz a hatar, mint a `src/lib/auth/tile-order.spec.ts`-nel
+  es a `src/lib/worksheets/worksheet-entry-screens.spec.ts`-nel: harom
+  szinttel fel a `test-dist/lib/worksheets`-bol (`test-dist/lib` ->
+  `test-dist` -> `apps/mobile`), onnan at a `src/app/worksheets`-be, ahol a
+  `.tsx` meg a forras-alakjaban all.
 */
 const WORKSHEETS_DIR = join(
   __dirname,
