@@ -1968,7 +1968,9 @@ export default function WorksheetDetailScreen() {
             {materialRequests.data?.items.map((request) => (
               <View key={request.id} style={styles.card}>
                 <View style={styles.row}>
-                  <Text style={styles.muted}>
+                  <Text
+                    style={[styles.muted, styles.materialRequestBylineText]}
+                  >
                     {materialRequestByline(request, (iso) =>
                       formatWorksheetDate(iso),
                     )}
@@ -2169,6 +2171,7 @@ const styles = StyleSheet.create({
   statusChip: {
     backgroundColor: "#123f3b",
     borderRadius: 999,
+    flexShrink: 0,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
@@ -2222,6 +2225,16 @@ const styles = StyleSheet.create({
   lineTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
   lineSummary: { color: "#6de0ce", fontSize: 13, fontWeight: "700" },
   muted: { color: "#789cad", fontSize: 12 },
+  /*
+    Balazs kepernyofotoja, 2026-09-23 20:52: az anyagigeny-sor allapot-cimkeje
+    kilogott a kartyabol, mert a mellette allo `muted` szoveg (a byline) nem
+    kapott flex-et, tehat a sajat termeszetes szelesseget vette fel egy
+    `justifyContent: "space-between"` sorban, es kitolta a cimket. A `muted`
+    KOZOS stilus, mashol is hasznaljak -- ezert nem oda kerult a javitas,
+    hanem ide, egy nevesitett kiegeszitobe, csak erre a sorra alkalmazva
+    (`style={[styles.muted, styles.materialRequestBylineText]}`).
+  */
+  materialRequestBylineText: { flex: 1 },
   egysegFigyelmeztetes: {
     color: "#ffd48a",
     fontSize: 13,
