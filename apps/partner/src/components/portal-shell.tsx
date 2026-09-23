@@ -7,10 +7,15 @@ import { type ReactNode, useEffect } from "react";
 import { useAuth } from "./auth";
 import { LAP_CIM } from "./frame";
 
+/*
+  A HELYSZINEK MENUPONT 2026-09-23-IG ITT ALLT. Balazs kerte a kivetelet
+  (2026-09-22 11:53:49 UTC, "a partnernek nem relevans a helyszin, ugyhogy
+  azt a menut... szedjuk ki hogy ne lassa") -- a jegynyitas helyszin-
+  valasztoja MARAD (`new-ticket.tsx`), csak a sajat, kulon oldala tunt el.
+*/
 const navigation = [
   { href: "/hibajegyek", label: "Hibajegyek" },
   { href: "/munkalapok", label: "Munkalapok" },
-  { href: "/helyszinek", label: "Helyszínek" },
   { href: "/eszkozok", label: "Eszközök" },
   { href: "/beallitasok", label: "Beállítások" },
 ];

@@ -1,14 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import {
-  worksheetStatusLabel,
-  type WorksheetDepartmentSummary,
-} from "@acropora/types";
+import { useEffect, useState } from "react";
+import { worksheetStatusLabel } from "@acropora/types";
 
 import { eszkozAzonosito } from "@/lib/eszkoz-azonosito";
-import { helyszinFa } from "@/lib/helyszin-fa";
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
 import { Empty, Message } from "./ticket-list";
@@ -18,66 +14,8 @@ import {
   LAP_CIM,
   LAP_FEJLEC,
   LAP_LEIRAS,
-  PANEL,
   PANEL_CIM,
 } from "./frame";
-
-function locationRows(items: WorksheetDepartmentSummary[]) {
-  return helyszinFa(items);
-}
-
-export function Locations() {
-  const { user } = useAuth();
-  const [items, setItems] = useState<WorksheetDepartmentSummary[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!user?.customerId) return;
-    void partnerApi
-      .departments(user.customerId)
-      .then((result) => setItems(result.items))
-      .catch((cause) =>
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "A helyszínek nem tölthetők be.",
-        ),
-      );
-  }, [user?.customerId]);
-  const rows = useMemo(() => locationRows(items), [items]);
-  return (
-    <section>
-      <header className={LAP_FEJLEC}>
-        <div>
-          <p className={CIMKE}>SAJÁT ADATOK</p>
-          <h1 className={LAP_CIM}>Helyszínek</h1>
-          <p className={LAP_LEIRAS}>
-            A cégéhez tartozó helyszínek csak olvasható nézetben.
-          </p>
-        </div>
-      </header>
-      {error ? <Message tone="error" text={error} /> : null}
-      {rows.length ? (
-        <div className={PANEL}>
-          <ul className="tree-list">
-            {rows.map(({ item, depth }) => (
-              <li key={item.id} style={{ paddingLeft: `${depth * 1.25}rem` }}>
-                <strong>{item.name}</strong>
-                <span>
-                  {item.code} · {item.isActive ? "Aktív" : "Archivált"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : (
-        <Empty
-          title="Nincs megjeleníthető helyszín"
-          text="A partneri fiókhoz jelenleg nincs helyszín rögzítve."
-        />
-      )}
-    </section>
-  );
-}
 
 export function Assets() {
   const { user } = useAuth();
@@ -92,8 +30,17 @@ export function Assets() {
   >([]);
 
   /*
-    A HELYSZINEK UGYANABBOL A FORRASBOL JONNEK, mint a `Helyszinek` lap. Egy
-    masodik forras ket kulonbozo listat adna ugyanarra a kerdesre.
+    A HELYSZINEK UGYANABBOL A FORRASBOL JONNEK, mint a jegynyito urlap
+    helyszin-valasztoja (`new-ticket.tsx`). Egy masodik forras ket kulonbozo
+    listat adna ugyanarra a kerdesre.
+
+    A KULON `Helyszinek` LAP 2026-09-23-IG LETEZETT, ES A SAJAT MENU-PONTJA
+    IS -- Balazs kerte a kivetelet (2026-09-22 11:53:49 UTC, "a partnernek nem
+    relevans a helyszin"), mert a partner-portalon KIVUL ez a szuro az
+    EGYETLEN hely, ahol a helyszin-lista megjelenik. A LEKERDEZES (a
+    hozzarendeles szerinti szukites) valtozatlan maradt: azt a jegynyito
+    urlap is hasznalja, es ha kivennenk, a partner ott ujra minden helyszinet
+    latna.
   */
   useEffect(() => {
     if (!user?.customerId) return;
