@@ -602,6 +602,8 @@ export type {
 export type {
   CreateMaterialRequestInput,
   MaterialRequestDetail,
+  MaterialRequestHistoryEntry,
+  MaterialRequestHistoryListResponse,
   MaterialRequestItem,
   MaterialRequestItemInput,
   MaterialRequestListResponse,

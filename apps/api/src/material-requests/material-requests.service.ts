@@ -9,6 +9,7 @@ import {
 import type {
   AuthenticatedUser,
   MaterialRequestDetail,
+  MaterialRequestHistoryListResponse,
   MaterialRequestListResponse,
   PendingMaterialRequestListResponse,
 } from "@acropora/types";
@@ -245,6 +246,34 @@ export class MaterialRequestsService {
         'A beszerzésre váró anyagigények listája: nincs bejelölve nálad az "anyag beérkezett" jelölés joga.',
       );
     const rows = await this.repository.listPending();
+    return {
+      items: rows.map((row) => ({
+        ...toResponse(row),
+        worksheetNumber: row.worksheetNumber,
+        customerDisplayName: row.customerDisplayName,
+        departmentName: row.departmentName,
+      })),
+    };
+  }
+
+  /**
+   * AZ ELOZMENYEK -- UGYANAZ A JOG, MINT A "RAM VARO" LISTANAL, mert
+   * ugyanazon a lapon, ugyanannak a kepessegnek a birtokosa latja (acrobot
+   * kerese, 2026-09-23 20:10:49 UTC: "ugyanott, ahol a pending oldal all,
+   * ne nyiss uj menupontot"). Ha ez valaha SZETVALIK a "ram varo" lap
+   * jogatol, ez a jelolo-kepesseg-ellenorzes az elso hely, amit at kell
+   * irni.
+   */
+  async listHistory(
+    actor: AuthenticatedUser,
+  ): Promise<MaterialRequestHistoryListResponse> {
+    requireInternalWriter(actor, "Az anyagigények előzményei");
+    const allowed = await this.repository.hasMarkReceivedCapability(actor.id);
+    if (!allowed)
+      throw new ForbiddenException(
+        'Az anyagigények előzményei: nincs bejelölve nálad az "anyag beérkezett" jelölés joga.',
+      );
+    const rows = await this.repository.listHistory();
     return {
       items: rows.map((row) => ({
         ...toResponse(row),

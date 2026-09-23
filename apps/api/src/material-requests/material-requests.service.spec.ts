@@ -63,6 +63,24 @@ function repository(overrides: Record<string, unknown> = {}) {
         departmentName: "Biodom",
       },
     ],
+    listHistory: async () => [
+      {
+        ...REQUEST_ROW,
+        worksheetNumber: "BIO-2026-001",
+        customerDisplayName: "Kovács Kft.",
+        departmentName: "Biodom",
+      },
+      {
+        ...REQUEST_ROW,
+        id: "mr-2",
+        status: "RECEIVED" as const,
+        receivedAt: CREATED,
+        receivedByName: "Beszerző Béla",
+        worksheetNumber: "BIO-2026-002",
+        customerDisplayName: "Nagy Bt.",
+        departmentName: "LSS",
+      },
+    ],
     markReceived: async () => ({
       ...REQUEST_ROW,
       status: "RECEIVED" as const,
@@ -365,6 +383,45 @@ describe("a beszerző saját listája", () => {
       },
     });
     await s.listPending(belsos("beszerzo-1"));
+  });
+});
+
+describe("az anyagigények előzményei", () => {
+  it("a jog nélküli belsős kolléga elutasítást kap, NEM üres listát", async () => {
+    const { service: s } = service({
+      repo: { hasMarkReceivedCapability: async () => false },
+    });
+    await assert.rejects(
+      s.listHistory(belsos("nem-beszerzo")),
+      ForbiddenException,
+    );
+  });
+
+  it("partner nem láthatja -- belsős kapu", async () => {
+    const { service: s } = service({});
+    await assert.rejects(s.listHistory(partner("kero-1")), ForbiddenException);
+  });
+
+  it("a jogosult kolléga OPEN és RECEIVED sort is kap, munkalap-kontextussal", async () => {
+    const { service: s } = service({});
+    const out = await s.listHistory(belsos("beszerzo-1"));
+    assert.equal(out.items.length, 2);
+    assert.equal(out.items[0]?.status, "OPEN");
+    assert.equal(out.items[0]?.customerDisplayName, "Kovács Kft.");
+    assert.equal(out.items[1]?.status, "RECEIVED");
+    assert.equal(out.items[1]?.receivedByName, "Beszerző Béla");
+  });
+
+  /** A PARJA, LASD A `listForWorksheet` MELLETTI TESZT FEJLECET. */
+  it("a beérkezés-jelölő számláló NEM fut az előzmények listázásakor sem", async () => {
+    const { service: s } = service({
+      repo: {
+        anyActiveMarkReceivedCapabilityHolder: async () => {
+          throw new Error("nem lett volna szabad meghívni");
+        },
+      },
+    });
+    await s.listHistory(belsos("beszerzo-1"));
   });
 });
 

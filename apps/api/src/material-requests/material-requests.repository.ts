@@ -200,6 +200,46 @@ export class MaterialRequestsRepository extends Repository {
   }
 
   /**
+   * AZ ELOZMENYEK -- `OPEN` ES `RECEIVED` EGYARANT, A `DRAFT` NEM. Balazs
+   * kerese, 2026-09-23 20:08:57 UTC: "vissza lehessen nezni, mi volt az
+   * igeny, mikor erkezett, mikor ment ra a valasz". A DRAFT nem elozmeny --
+   * meg nem tortent vele semmi, amit vissza lehetne nezni (lasd a
+   * `MaterialRequestStatus.DRAFT` sema-fejlecet).
+   *
+   * A LEGUJABB KULDES ELOL: forditott sorrend a `listPending`-hez kepest.
+   * Ott a legregebben varo all elol, mert a TEENDOT mutatjuk; itt a
+   * legutobb tortent esemeny erdekel, mert a MULTAT nezzuk vissza.
+   */
+  async listHistory(): Promise<
+    (MaterialRequestRow & {
+      worksheetNumber: string | null;
+      customerDisplayName: string;
+      departmentName: string;
+    })[]
+  > {
+    const rows = await this.database.materialRequest.findMany({
+      where: { status: { in: ["OPEN", "RECEIVED"] } },
+      include: {
+        ...rowInclude,
+        worksheet: {
+          select: {
+            number: true,
+            customer: { select: { displayName: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { submittedAt: "desc" },
+    });
+    return rows.map((row) => ({
+      ...toRow(row),
+      worksheetNumber: row.worksheet.number,
+      customerDisplayName: row.worksheet.customer.displayName,
+      departmentName: row.worksheet.department.name,
+    }));
+  }
+
+  /**
    * ATOMI, FELTETELES ATMENET: csak akkor ir, ha MEG `OPEN` -- ket egyidejű
    * kattintas kozul csak az egyik nyerhet, es a masik `null`-t kap, nem egy
    * masodik "beerkezett" ertesitest.
