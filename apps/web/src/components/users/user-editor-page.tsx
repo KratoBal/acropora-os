@@ -17,6 +17,8 @@ import {
   type UserDetail,
   NOTIFICATION_ROLES,
   type NotificationRoleValue,
+  SERVICE_CAPABILITIES,
+  type ServiceCapabilityValue,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -59,6 +61,15 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   const [notificationRoles, setNotificationRoles] = useState<
     NotificationRoleValue[]
   >([]);
+  /**
+   * A PARJA, KULON ALLAPOTBAN -- ugyanaz az alak, mint az ertesitesi
+   * szerepeknel, de SZANDEKOSAN KULON tomb: a szerver ket kulon
+   * kapcsolotablat visel (`ki ertesul` kontra `ki vegezheti el`), es Balazs
+   * kifejezetten fuggetlennek kerte oket (2026-09-22 20:28:56 UTC).
+   */
+  const [serviceCapabilities, setServiceCapabilities] = useState<
+    ServiceCapabilityValue[]
+  >([]);
   const [loading, setLoading] = useState(Boolean(userId));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +104,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
       const next = await usersApi.detail(token, userId);
       setUser(next);
       setNotificationRoles(next.notificationRoles);
+      setServiceCapabilities(next.serviceCapabilities);
       setFirstName(next.firstName);
       setLastName(next.lastName);
       setNickname(next.nickname ?? "");
@@ -155,6 +167,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
              */
             customerId: customerId || null,
             notificationRoles,
+            serviceCapabilities,
             expectedUpdatedAt: user.updatedAt,
           }),
         );
@@ -377,38 +390,83 @@ export function UserEditorPage({ userId }: { userId?: string }) {
             olvasohoz.
           */}
           {customerId === "" ? (
-            <div className="mt-6">
-              <h2 className="text-sm font-semibold text-dusk-800">
-                Értesítések
-              </h2>
-              {NOTIFICATION_ROLES.map((szerep) => (
-                <label
-                  key={szerep.value}
-                  className="mt-3 flex items-start gap-3"
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={notificationRoles.includes(szerep.value)}
-                    onChange={(event) =>
-                      setNotificationRoles((mostani) =>
-                        event.target.checked
-                          ? [...new Set([...mostani, szerep.value])]
-                          : mostani.filter((elem) => elem !== szerep.value),
-                      )
-                    }
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-dusk-800">
-                      {szerep.label}
+            <>
+              <div className="mt-6">
+                <h2 className="text-sm font-semibold text-dusk-800">
+                  Értesítések
+                </h2>
+                {NOTIFICATION_ROLES.map((szerep) => (
+                  <label
+                    key={szerep.value}
+                    className="mt-3 flex items-start gap-3"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={notificationRoles.includes(szerep.value)}
+                      onChange={(event) =>
+                        setNotificationRoles((mostani) =>
+                          event.target.checked
+                            ? [...new Set([...mostani, szerep.value])]
+                            : mostani.filter((elem) => elem !== szerep.value),
+                        )
+                      }
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-dusk-800">
+                        {szerep.label}
+                      </span>
+                      <span className="block text-xs text-dusk-500">
+                        {szerep.description}
+                      </span>
                     </span>
-                    <span className="block text-xs text-dusk-500">
-                      {szerep.description}
+                  </label>
+                ))}
+              </div>
+              {/*
+                A KEPESSEGEK -- KULON SZAKASZ, NEM AZ ERTESITESEK BOVITESE.
+
+                Balazs kifejezetten KET FUGGETLEN jelolot kert (2026-09-22
+                20:28:56 UTC, "Nem. Ket kulon jelolo legyen"): ugyanaz az
+                ember lehet mindkettő, csak egyik sem, vagy barmelyik egyedul.
+                Egy kozos lista ezt a fuggetlenseget nem tudna kifejezni.
+
+                UGYANAZ A HATAR, MINT AZ ERTESITESEKNEL: csak sajat
+                kollеganal, ugyanazert az okert (a `customerId === ""` ag).
+              */}
+              <div className="mt-6">
+                <h2 className="text-sm font-semibold text-dusk-800">
+                  Képességek
+                </h2>
+                {SERVICE_CAPABILITIES.map((kepesseg) => (
+                  <label
+                    key={kepesseg.value}
+                    className="mt-3 flex items-start gap-3"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={serviceCapabilities.includes(kepesseg.value)}
+                      onChange={(event) =>
+                        setServiceCapabilities((mostani) =>
+                          event.target.checked
+                            ? [...new Set([...mostani, kepesseg.value])]
+                            : mostani.filter((elem) => elem !== kepesseg.value),
+                        )
+                      }
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-dusk-800">
+                        {kepesseg.label}
+                      </span>
+                      <span className="block text-xs text-dusk-500">
+                        {kepesseg.description}
+                      </span>
                     </span>
-                  </span>
-                </label>
-              ))}
-            </div>
+                  </label>
+                ))}
+              </div>
+            </>
           ) : null}
           {!user ? (
             <div className="mt-4">

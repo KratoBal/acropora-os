@@ -12,8 +12,10 @@ import {
 } from "class-validator";
 import {
   NOTIFICATION_ROLE_VALUES,
+  SERVICE_CAPABILITY_VALUES,
   USER_ROLES,
   type NotificationRoleValue,
+  type ServiceCapabilityValue,
   type UserRole,
 } from "@acropora/types";
 
@@ -62,6 +64,11 @@ export class UpdateUserDto {
   @IsIn(NOTIFICATION_ROLE_VALUES, { each: true })
   @IsOptional()
   notificationRoles?: NotificationRoleValue[];
+  /** A PARJA, UGYANAZZAL AZ ALAKKAL -- lasd a fenti mezo fejlecet. */
+  @IsArray()
+  @IsIn(SERVICE_CAPABILITY_VALUES, { each: true })
+  @IsOptional()
+  serviceCapabilities?: ServiceCapabilityValue[];
 
   @IsString() expectedUpdatedAt!: string;
 }

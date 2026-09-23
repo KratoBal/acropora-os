@@ -4,6 +4,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
   NotificationRoleValue,
+  ServiceCapabilityValue,
   UserDetail,
   UserListResponse,
 } from "@acropora/types";
@@ -89,10 +90,31 @@ export class UsersRepository extends Repository {
     return sorok.map((sor) => sor.role as NotificationRoleValue);
   }
 
+  /**
+   * A PARJA, UGYANAZZAL AZ OKKAL ES UGYANAZZAL AZ ALAKKAL -- lasd a fenti
+   * fejlecet. Kulon kapcsolotabla (`UserServiceCapability`), tehat kulon
+   * olvaso, nem a `szerepekOlvasasa` bovitese.
+   */
+  private async kepessegekOlvasasa(
+    tx: Prisma.TransactionClient | typeof prisma,
+    userId: string,
+  ): Promise<ServiceCapabilityValue[]> {
+    const sorok = await tx.userServiceCapability.findMany({
+      where: { userId },
+      select: { capability: true },
+      orderBy: { capability: "asc" },
+    });
+    return sorok.map((sor) => sor.capability as ServiceCapabilityValue);
+  }
+
   async detail(id: string): Promise<UserDetail | null> {
     const user = await prisma.user.findUnique({ where: { id } });
     return user
-      ? toUserDetail(user, await this.szerepekOlvasasa(prisma, id))
+      ? toUserDetail(
+          user,
+          await this.szerepekOlvasasa(prisma, id),
+          await this.kepessegekOlvasasa(prisma, id),
+        )
       : null;
   }
 
@@ -212,7 +234,11 @@ export class UsersRepository extends Repository {
             } satisfies Prisma.JsonObject,
           },
         });
-        return toUserDetail(user, await this.szerepekOlvasasa(tx, user.id));
+        return toUserDetail(
+          user,
+          await this.szerepekOlvasasa(tx, user.id),
+          await this.kepessegekOlvasasa(tx, user.id),
+        );
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -293,6 +319,25 @@ export class UsersRepository extends Repository {
             });
         }
 
+        /**
+         * A PARJA, UGYANAZZAL A SZABALLYAL -- lasd a fenti jegyzetet. Kulon
+         * kapcsolotabla (`UserServiceCapability`), tehat kulon TELJES csere,
+         * nem a fenti blokk bovitese.
+         */
+        if (input.serviceCapabilities !== undefined) {
+          await tx.userServiceCapability.deleteMany({
+            where: { userId: id },
+          });
+          if (input.serviceCapabilities.length > 0)
+            await tx.userServiceCapability.createMany({
+              data: input.serviceCapabilities.map((capability) => ({
+                userId: id,
+                capability,
+              })),
+              skipDuplicates: true,
+            });
+        }
+
         const user = await tx.user.findUniqueOrThrow({ where: { id } });
         /**
          * A NAPLO ALAKJA A `user-audit.ts`-BEN DOL EL, mert ott MERHETO: ez a
@@ -314,7 +359,11 @@ export class UsersRepository extends Repository {
             metadata: metadata satisfies Prisma.JsonObject,
           },
         });
-        return toUserDetail(user, await this.szerepekOlvasasa(tx, user.id));
+        return toUserDetail(
+          user,
+          await this.szerepekOlvasasa(tx, user.id),
+          await this.kepessegekOlvasasa(tx, user.id),
+        );
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -342,7 +391,11 @@ export class UsersRepository extends Repository {
             } satisfies Prisma.JsonObject,
           },
         });
-        return toUserDetail(user, await this.szerepekOlvasasa(tx, user.id));
+        return toUserDetail(
+          user,
+          await this.szerepekOlvasasa(tx, user.id),
+          await this.kepessegekOlvasasa(tx, user.id),
+        );
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -366,7 +419,11 @@ export class UsersRepository extends Repository {
             metadata: { email: user.email } satisfies Prisma.JsonObject,
           },
         });
-        return toUserDetail(user, await this.szerepekOlvasasa(tx, user.id));
+        return toUserDetail(
+          user,
+          await this.szerepekOlvasasa(tx, user.id),
+          await this.kepessegekOlvasasa(tx, user.id),
+        );
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
