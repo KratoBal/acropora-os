@@ -26,6 +26,7 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import {
   AssetListQueryDto,
   AssetLabelBatchQueryDto,
+  AssetNameCheckQueryDto,
   AssetOwnersQueryDto,
   FreeAssetLabelsQueryDto,
   IssueAssetLabelBatchDto,
@@ -252,6 +253,33 @@ export class ServiceAssetsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.owners(query, partnerScopeOf(user));
+  }
+
+  /**
+   * A NÉV-ÜTKÖZÉS ELLENŐRZÉSE, A MENTÉS ELŐTT.
+   *
+   * Balázs, 2026-09-23 09:03:06 UTC (Discord, Szerviz és eszköznyilvántartás
+   * szál), szó szerint: "ha eszközt viszünk fel akkor ha véletlenül ugyanazt
+   * a nevet adjuk meg az eszköznek mint egy már létezőnek, akkor a mentéskor
+   * feldobjon egy figyelmeztetést... biztosak vagyunk-e a mentésben".
+   *
+   * A FIGYELMEZTETÉS A MENTÉS ELÉ KERÜL, EZÉRT KÜLÖN, OLVASÓ VÉGPONT: a web
+   * és a mobil élő létrehozása ezt hívja meg a küldés előtt, és ha van
+   * találat, megerősítő ablakot mutat. A LÉTREHOZÓ VÉGPONT (lent, `@Post()`)
+   * emiatt VÁLTOZATLAN marad -- nincs 409, nincs új kötelező mező, nincs
+   * szigorítás rajta. Egy ma futó, még nem frissített telefon ezért nem törik
+   * el: nem hívja ezt a végpontot, a létrehozás pedig betűre ugyanaz marad.
+   *
+   * SZÁNDÉKOSAN GLOBÁLIS, NEM VEVŐNKÉNT SZŰKÍTETT: az egyezés szabálya egy
+   * helyen lakik, hogy a web és a mobil ne csúszhasson szét. A találat
+   * MEGNEVEZI, hol áll a másik (tulajdonos és helyszín), hogy aki látja,
+   * egy pillantásból eldönthesse, valódi ütközés-e, vagy csak egy másik vevő
+   * ugyanolyan nevű eszköze.
+   */
+  @Get("name-check")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  nameCheck(@Query() query: AssetNameCheckQueryDto) {
+    return this.service.nameMatches(query.name);
   }
 
   /**

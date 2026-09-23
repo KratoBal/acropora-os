@@ -318,6 +318,19 @@ export function createAsset(input: CreateAssetInput) {
   });
 }
 
+/**
+ * A NÉV-ÜTKÖZÉS ELLENŐRZÉSE, A MENTÉS ELŐTT. Nem ír, csak megnevezi, ha már
+ * létezik ugyanilyen nevű eszköz -- lásd a szerver vezérlőjének jegyzetét. A
+ * `createAsset` fentebb emiatt VÁLTOZATLAN marad, és ezt a hívást a MA élesben
+ * futó telefon nem is ismeri, tehát nem is hívja -- a létrehozás betűre
+ * ugyanaz marad neki.
+ */
+export function checkAssetName(name: string) {
+  return apiRequest<AssetListItem[]>(
+    `${BASE}/name-check?${new URLSearchParams({ name })}`,
+  );
+}
+
 export function updateAsset(id: string, input: UpdateAssetInput) {
   return apiRequest<AssetDetail>(`${BASE}/${encodeURIComponent(id)}`, {
     method: "PATCH",

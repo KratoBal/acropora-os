@@ -6,6 +6,7 @@ import type { AssetLabelBatchSummary } from "@acropora/types";
 import type {
   AssetDetail,
   AssetLabelScanResult,
+  AssetListItem,
   AssetListResponse,
   AssetDocumentSummary,
   AssetDocumentType,
@@ -169,6 +170,18 @@ export const assetsApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
+  },
+  /**
+   * A NÉV-ÜTKÖZÉS ELLENŐRZÉSE, A MENTÉS ELŐTT. Nem ír, nem foglal, csak
+   * megnevezi, ha már létezik ugyanilyen nevű eszköz -- lásd a szerver
+   * vezérlőjének jegyzetét. A `create` fentebb emiatt VÁLTOZATLAN marad.
+   */
+  nameCheck(token: string, name: string, signal?: AbortSignal) {
+    return apiRequest<AssetListItem[]>(
+      `/service/assets/name-check?${new URLSearchParams({ name })}`,
+      token,
+      { signal },
+    );
   },
   update(token: string, id: string, input: UpdateAssetInput) {
     return apiRequest<AssetDetail>(
