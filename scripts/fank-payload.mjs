@@ -77,12 +77,12 @@
  *   javitas.
  *
  *   A performance ERTEKE NEM SZABAD SZOVEG: a szolgaltatas a kozos
- *   `normalizePerformanceValue`-val ellenorzi (`^\d{1,13}(?:\.\d{1,6})?$` --
+ *   `normalizeMeasurementValue`-val ellenorzi (`^\d{1,13}(?:\.\d{1,6})?$` --
  *   egy szam, legfeljebb hat tizedessel), es ami nem ilyen, arra 400-at ad.
  *   Acrobot lemerte a teljes forras "M" oszlopat ezen a mintan: 136 kitoltott
  *   cellabol 114 at megy, 22 nem. Ket kulon eset, ket kulon feloldassal:
  *     KEREKITHETO (6 sor, "146.69999999999999" alaku): UGYANAZ a szam, csak
- *       tobb, mint hat tizedesre irva -- `normalizePerformance()` hat
+ *       tobb, mint hat tizedesre irva -- `normalizeMeasurementValue()` hat
  *       tizedesre kerekiti, es a szkript KULON kilistazza, melyik sorokon
  *       tortent (lasd `buildSitePayload`), hogy ez LATHATO maradjon.
  *     NEM EGYETLEN SZAM (16 sor, pl. "175/210", "31-29-26", "45 (40)",
@@ -93,7 +93,27 @@
  *       acrobot dontse el helyszinenkent, melyik ertek menjen be es mi
  *       keruljon a description-be.
  *
- * === AMIT A SZKRIPT SOSEM CSINAL, ES OT "ALLJON MEG" ESET ===
+ * === A volume -- UGYANAZ A FUGGVENY, UGYANAZ A KET ESET, acrobot negyedik
+ *     kore, 2026-09-23 22:02 (ugyanabban a korben, mint a performance) ===
+ *
+ *   A DTO sajat jegyzete szo szerint kimondja: a volume-ot a kozos
+ *   `normalizeMeasurementValue` ellenorzi, ugyanugy, mint a performance-ot --
+ *   tehat ugyanaz a fuggveny, ugyanaz a ket kimenet. A teljes forras "L"
+ *   oszlopat (Terfogat) lemerve: 59 kitoltott cellabol 53 at megy, 6 nem --
+ *   3 KEREKITHETO (ugyanaz a lebegopontos csalad, mint a performance-nel),
+ *   1 NEM SZAM ("TRI" -- valaki harom betut irt a terfogat-oszlopba), es 2
+ *   MERTEKEGYSEG-GYANUS.
+ *
+ *   A LEGVESZELYESEBB SOR A TELJES SZKRIPTBEN: "940 liter" (LSS10). A
+ *   `volume` mezo MINDIG m3-ben ert (DTO jegyzet), a cella viszont literben
+ *   all -- ha valaki csak a "liter" szot vagna le a szamrol, 940 KOBMETER
+ *   menne be 0,94 helyett, EZERSZERES hiba, es a szam utana tokeletesen
+ *   hihetonek latszana. Ezert ez SEM automatikus atvaltas: a szkript ezt a
+ *   fajta sort is a "NEM egyetlen szam" agon MEGALLITJA (a "liter" szo
+ *   miatt a `normalizeMeasurementValue` amugy sem engedne at), es acrobot
+ *   donti el helyszinenkent, mi legyen az atvaltott ertek.
+ *
+ * === AMIT A SZKRIPT SOSEM CSINAL, ES HAT "ALLJON MEG" ESET ===
  *
  *   - nem kuld HTTP-hivast, nem ir semmilyen rendszerbe
  *   - nem sorszamoz: ha egy partnerInternalCode UTKOZIK (ket sor ugyanoda esne
@@ -105,11 +125,12 @@
  *     acrobot SZO SZERINTI egyezesre epitettek (nem nev-hasonlosagra), es
  *     egy par kodot (a mai peldaban: OCS/HSZ) SZANDEKOSAN nem oldottak fel
  *     talalgatassal -- ha egy sor ilyen kodra fut, a szkript sem talalgat.
- *   - HA A TELJESITMENY (M oszlop) TOBB, MINT EGY SZAM -- tartomany, tobb
- *     ertek vagy nem-m3/h mertekegyseg (acrobot harmadik kore, 2026-09-23
- *     22:01) -- MEGALL, es megnevezi a sorokat. Amit KEREKITHET (ugyanaz a
- *     szam, csak tul sok tizedessel), azt kerekiti ES kulon jelzi -- ez NEM
- *     megallasi ok, csak lathato valtoztatas.
+ *   - HA A TELJESITMENY (M oszlop) VAGY A TERFOGAT (L oszlop) TOBB, MINT EGY
+ *     SZAM -- tartomany, tobb ertek vagy nem a vart mertekegyseg (acrobot
+ *     harmadik es negyedik kore, 2026-09-23 22:01-22:02, EGY korben) --
+ *     MEGALL, es megnevezi a sorokat, mezonevvel egyutt. Amit KEREKITHET
+ *     (ugyanaz a szam, csak tul sok tizedessel), azt kerekiti ES kulon
+ *     jelzi -- ez NEM megallasi ok, csak lathato valtoztatas.
  *   - a payload eloallitasa UTAN, meg a kiiras ELOTT, ujra ellenorzi, hogy a
  *     generalt partnerInternalCode ertekek EGYEDIEK -- acrobot sajat szavaival:
  *     "nalam ez egy sor volt, es pont az LSS22-n sult el"
@@ -257,13 +278,18 @@ function pad2(value) {
   return String(value).padStart(2, "0");
 }
 
-// UGYANAZ A MINTA, MINT A SZOLGALTATAS SAJAT `normalizePerformanceValue`
-// fuggvenyeben -- acrobot merese, 2026-09-23 22:01.
-const PERFORMANCE_VALUE_RE = /^\d{1,13}(?:\.\d{1,6})?$/;
+// A SZOLGALTATAS SAJAT `normalizePerformanceValue` fuggvenyenek mintaja --
+// acrobot merese, 2026-09-23 22:01. UGYANEZ A FUGGVENY ellenorzi a `volume`
+// mezot IS a szerver oldalon (lasd a DTO sajat jegyzetet: "az ALAKOT a
+// szolgaltatas ellenorzi a kozos normalizePerformanceValue fuggvennyel,
+// ugyanugy, mint a volume-nal") -- acrobot masodik merese, 2026-09-23
+// 22:02, ugyanabban a korben, ezert EGY fuggveny szolgalja ki mindket
+// mezot, nem ket kulon masolat.
+const MEASUREMENT_VALUE_RE = /^\d{1,13}(?:\.\d{1,6})?$/;
 
 /**
- * EGY NYERS "M" OSZLOP CELLA -> ERVENYES performance-ERTEK, VAGY `null`, HA
- * NEM AZ. Ket kimenet lehetseges:
+ * EGY NYERS CELLA (M vagy L oszlop) -> ERVENYES ERTEK, VAGY `null`, HA NEM
+ * AZ. Ket kimenet lehetseges:
  *   { value, rounded: false }  mar eleve megfelel a mintanak, valtozatlan
  *   { value, rounded: true }   szam volt, de tobb mint hat tizedessel --
  *                              hat tizedesre kerekitve (acrobot dontese,
@@ -273,13 +299,13 @@ const PERFORMANCE_VALUE_RE = /^\d{1,13}(?:\.\d{1,6})?$/;
  *                              mertekegyseg a szamban stb.) -- ezt a hivo
  *                              NEM kerekitheti es NEM talalgathatja.
  */
-export function normalizePerformance(raw) {
-  if (PERFORMANCE_VALUE_RE.test(raw)) return { value: raw, rounded: false };
+export function normalizeMeasurementValue(raw) {
+  if (MEASUREMENT_VALUE_RE.test(raw)) return { value: raw, rounded: false };
   const num = Number(raw);
   if (!Number.isFinite(num)) return null;
   const kerekitve = Math.round(num * 1e6) / 1e6;
   const asString = String(kerekitve);
-  if (!PERFORMANCE_VALUE_RE.test(asString)) return null;
+  if (!MEASUREMENT_VALUE_RE.test(asString)) return null;
   return { value: asString, rounded: true };
 }
 
@@ -453,6 +479,7 @@ export function buildAssetPayload(row, ctx) {
     categoryMap,
     categoryId,
     performanceValue,
+    volumeValue,
   } = ctx;
   const partnerInternalCode = buildPartnerInternalCode(
     siteCode,
@@ -478,7 +505,7 @@ export function buildAssetPayload(row, ctx) {
   if (row.model) payload.model = row.model;
   if (row.uid) payload.serialNumber = row.uid;
   if (row.detail) payload.description = row.detail;
-  if (row.volume) payload.volume = row.volume;
+  if (volumeValue) payload.volume = volumeValue;
   if (row.powerConsumptionRaw)
     payload.powerConsumptionRaw = row.powerConsumptionRaw;
   if (performanceValue) {
@@ -536,16 +563,25 @@ export function buildSitePayload({
   */
   const kategoriaHianyok = [];
   /*
-    A TELJESITMENY (TSV "M" oszlop) EGYETLEN SZAM KELL LEGYEN -- acrobot
-    merese, 2026-09-23 22:01: a szolgaltatas sajat `normalizePerformanceValue`
-    mintaja (`^\d{1,13}(?:\.\d{1,6})?$`) a forras 136 kitoltott cellajabol
-    22-t utasitana el. Ket kulon eset, ket kulon kezeles: a KEREKITHETO
-    (tul sok tizedesjegy, ugyanaz a szam) csak jelzett, a NEM EGYETLEN SZAM
-    (tobb ertek, tartomany, mas mertekegyseg) megallasi ok, mint a hianyzo
-    kategoria.
+    A TELJESITMENY (M oszlop) ES A TERFOGAT (L oszlop) EGYARANT EGYETLEN
+    SZAM KELL LEGYEN -- acrobot merese, 2026-09-23 22:01-22:02, egy korben:
+    mindket mezot a szolgaltatas UGYANAZZAL a mintaval ellenorzi
+    (`normalizeMeasurementValue`, lasd sajat fejleceben). Ket kulon eset,
+    ket kulon kezeles, MINDKET mezore egyformán: a KEREKITHETO (tul sok
+    tizedesjegy, ugyanaz a szam) csak jelzett, a NEM EGYETLEN SZAM (tobb
+    ertek, tartomany, mas mertekegyseg -- pl. "940 liter" a volume-nal)
+    megallasi ok, mint a hianyzo kategoria.
   */
-  const teljesitmenyHianyok = [];
-  const teljesitmenyKerekitve = [];
+  const MEASUREMENT_FIELDS = [
+    {
+      mezo: "performance",
+      ctxKey: "performanceValue",
+      label: "Teljesitmeny (M oszlop)",
+    },
+    { mezo: "volume", ctxKey: "volumeValue", label: "Terfogat (L oszlop)" },
+  ];
+  const meresHianyok = [];
+  const meresKerekitve = [];
   const entries = siteRows.map((row) => {
     let categoryId;
     if (categoryMap) {
@@ -557,17 +593,20 @@ export function buildSitePayload({
         kategoriaHianyok.push({ sor: row.sor, kulcs });
       }
     }
-    let performanceValue;
-    if (row.performance) {
-      const normalizalt = normalizePerformance(row.performance);
+    const meresErtekek = {};
+    for (const { mezo, ctxKey, label } of MEASUREMENT_FIELDS) {
+      const nyers = row[mezo];
+      if (!nyers) continue;
+      const normalizalt = normalizeMeasurementValue(nyers);
       if (normalizalt === null) {
-        teljesitmenyHianyok.push({ sor: row.sor, nyers: row.performance });
+        meresHianyok.push({ sor: row.sor, label, nyers });
       } else {
-        performanceValue = normalizalt.value;
+        meresErtekek[ctxKey] = normalizalt.value;
         if (normalizalt.rounded)
-          teljesitmenyKerekitve.push({
+          meresKerekitve.push({
             sor: row.sor,
-            nyers: row.performance,
+            label,
+            nyers,
             kerekitve: normalizalt.value,
           });
       }
@@ -581,7 +620,7 @@ export function buildSitePayload({
       kind,
       categoryMap,
       categoryId,
-      performanceValue,
+      ...meresErtekek,
     });
   });
 
@@ -594,12 +633,12 @@ export function buildSitePayload({
     );
   }
 
-  if (teljesitmenyHianyok.length > 0) {
-    const reszletek = teljesitmenyHianyok
-      .map((h) => `  sor ${h.sor}: "${h.nyers}"`)
+  if (meresHianyok.length > 0) {
+    const reszletek = meresHianyok
+      .map((h) => `  sor ${h.sor} (${h.label}): "${h.nyers}"`)
       .join("\n");
     throw new FankPayloadError(
-      `A Teljesitmeny (M oszlop) az alabbi sorokon NEM egyetlen szam -- ez a szkript nem kerekit es nem talalgat, a dontes a hivoe:\n${reszletek}`,
+      `Az alabbi sorokon egy mert ertek NEM egyetlen szam -- ez a szkript nem kerekit es nem talalgat, a dontes a hivoe:\n${reszletek}`,
     );
   }
 
@@ -620,7 +659,7 @@ export function buildSitePayload({
   return {
     payload: entries.map((e) => e.payload),
     hianyzoKategoriaSorok: hianyzoKategoria.map((e) => e.sor),
-    teljesitmenyKerekitve,
+    meresKerekitve,
   };
 }
 
@@ -729,17 +768,16 @@ export function main(argv) {
       )
     : null;
 
-  const { payload, hianyzoKategoriaSorok, teljesitmenyKerekitve } =
-    buildSitePayload({
-      tsvText,
-      units,
-      siteCode: args.site,
-      skipSorok: args.skip,
-      partnerId: args.partner,
-      ownerType: args.ownerType,
-      kind: args.kind,
-      categoryMap,
-    });
+  const { payload, hianyzoKategoriaSorok, meresKerekitve } = buildSitePayload({
+    tsvText,
+    units,
+    siteCode: args.site,
+    skipSorok: args.skip,
+    partnerId: args.partner,
+    ownerType: args.ownerType,
+    kind: args.kind,
+    categoryMap,
+  });
 
   if (hianyzoKategoriaSorok.length > 0) {
     process.stderr.write(
@@ -748,12 +786,14 @@ export function main(argv) {
       )}\n`,
     );
   }
-  if (teljesitmenyKerekitve.length > 0) {
-    const reszletek = teljesitmenyKerekitve
-      .map((k) => `  sor ${k.sor}: "${k.nyers}" -> "${k.kerekitve}"`)
+  if (meresKerekitve.length > 0) {
+    const reszletek = meresKerekitve
+      .map(
+        (k) => `  sor ${k.sor} (${k.label}): "${k.nyers}" -> "${k.kerekitve}"`,
+      )
       .join("\n");
     process.stderr.write(
-      `KEREKITVE (hat tizedesre, a sema sajat pontossagara): ${teljesitmenyKerekitve.length} sor\n${reszletek}\n`,
+      `KEREKITVE (hat tizedesre, a sema sajat pontossagara): ${meresKerekitve.length} sor\n${reszletek}\n`,
     );
   }
   process.stderr.write(

@@ -142,6 +142,21 @@ const ALAP_TSV = [
     deviceCode: "UVF",
     performance: "175/210",
   }),
+  // Terfogat, kerekitheto -- a valodi LSS02/PUF mintajara.
+  sor({
+    sor: "50",
+    site: "LSS97",
+    deviceCode: "PUF",
+    volume: "9.1999999999999993",
+  }),
+  // Terfogat, VESZELYES eset -- a valodi LSS10/CPT mintajara: literben all,
+  // a mezo pedig mindig m3-ben ert.
+  sor({
+    sor: "60",
+    site: "LSS96",
+    deviceCode: "CPT",
+    volume: "940 liter",
+  }),
 ].join("\n");
 
 const EGYSEGEK = {
@@ -179,6 +194,20 @@ const EGYSEGEK = {
       parentId: "unit-bio",
       code: "LSS99",
       name: "LSS99",
+      isActive: true,
+    },
+    {
+      id: "unit-lss97",
+      parentId: "unit-bio",
+      code: "LSS97",
+      name: "LSS97",
+      isActive: true,
+    },
+    {
+      id: "unit-lss96",
+      parentId: "unit-bio",
+      code: "LSS96",
+      name: "LSS96",
       isActive: true,
     },
   ],
@@ -405,6 +434,56 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.equal(stdout, "");
     assert.match(stderr, /sor 40/);
     assert.match(stderr, /175\/210/);
+  });
+
+  it("a Terfogat (L oszlop) UGYANAZZAL a fuggvennyel kerekit, mint a Teljesitmeny", () => {
+    /*
+      acrobot masodik merese, 2026-09-23 22:02, ugyanabban a korben: a DTO
+      sajat jegyzete szerint a volume-ot a kozos normalizeMeasurementValue
+      ellenorzi, a performance-szal azonos mintaval -- a valodi LSS02/PUF
+      soron ugyanaz a lebegopontos csalad all, mint a performance-nel.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS97",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.length, 1);
+    assert.equal(payload[0].volume, "9.2");
+    assert.match(stderr, /KEREKITVE/);
+    assert.match(stderr, /sor 50/);
+    assert.match(stderr, /Terfogat/);
+  });
+
+  it("a Terfogat 'literben all, de m3-nek szant' sora MEGALL -- a legveszelyesebb eset", () => {
+    /*
+      acrobot sajat szavaival: "ha valaki a betoltes elott csak a 'liter'
+      szot vagja le rola, akkor 940 kobmeter menne be 0,94 helyett,
+      ezerszeres hiba, es a szam utana teljesen hihetonek latszik". A
+      valodi LSS10/CPT sor mintajara -- ez SOSEM automatikus atvaltas.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS96",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(stdout, "");
+    assert.match(stderr, /sor 60/);
+    assert.match(stderr, /940 liter/);
+    assert.match(stderr, /Terfogat/);
   });
 
   it("a masik helyszin sorai NEM kerulnek bele", () => {
