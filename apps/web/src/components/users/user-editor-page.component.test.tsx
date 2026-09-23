@@ -28,20 +28,30 @@ vi.mock("@acropora/types", () => ({
   hasPermission: () => true,
   isNavigationEntryVisible: () => false,
   /*
-    A VALODI LISTA MEGY BE, NEM EGY KITALALT.
+    KEZZEL IRT TUKOR, NEM A VALODI LISTA -- ES EZ SZANDEKOS.
 
-    A dupla eddig harom nevet adott, es a negyedik hozzavetele NEM
-    valaszthatoseg kerdese: a lap `NOTIFICATION_ROLES`-t olvas, es a hianya
-    "No export is defined" hibat ad -- a teszt nem az allitason bukott volna,
-    hanem a betoltesen.
+    A `vi.mock` teljesen lecseréli az `@acropora/types` modult, tehat ez a
+    tömb NEM a `packages/types/src/notification-roles.ts` tartalma, hanem
+    annak egy kézzel karbantartott másolata. Amíg a két oldal elemszáma és
+    tartalma egyezik, a lenti tesztek a valós viselkedést mérik; ha
+    elcsúsznak, a teszt NEM az igazi listát fedi, hanem a sajátját.
 
-    Ami a HIVO hasznal, de a teszt-dupla nem ad vissza, az a dupla biztos
-    hibaja: ezt a sajat lapom mondja ki, es ez az eset pontosan az.
+    MI TÖRIK EL, HA ELCSÚSZIK: ha egy elem KIMARAD innen, amit a lap
+    ténylegesen olvas, "No export is defined" hibát kapunk a betöltéskor --
+    ezt a negyedik elem hozzávétele találta meg elsőként. Ha viszont ELTÉR a
+    TARTALMA (rossz felirat, rossz leírás, más sorrend), a teszt CSENDBEN
+    fut le: a betöltés nem bukik, csak épp nem azt méri, amit a valódi
+    listáról hinnénk.
   */
   NOTIFICATION_ROLES: [
     {
       value: "SERVICE_JOB_OPENED",
       label: "Hibajegy-felelős",
+      description: "Push és e-mail értesítést kap.",
+    },
+    {
+      value: "MATERIAL_REQUEST_CREATED",
+      label: "Anyagigény-felelős",
       description: "Push és e-mail értesítést kap.",
     },
   ],
@@ -133,6 +143,41 @@ describe("UserEditorPage partner szerepköre", () => {
         screen.queryByRole("checkbox", { name: /Hibajegy-felelős/ }),
       ).toBeNull(),
     );
+  });
+
+  /**
+   * A KET SZEREP EGYMASTOL FUGGETLENUL JELOLHETO.
+   *
+   * MI PIROSIT: ha a `notificationRoles` allapot egyetlen erteket tartana
+   * tobb helyett (pl. felulirna a masikat), vagy ha a ket jelolonegyzet
+   * ugyanarra a mezore lenne kotve. Az elozo teszt csak azt merte, hogy A
+   * LAP BETOLTODIK a mai ketelemu listaval -- ez azt, hogy a ketto tenyleg
+   * KULON allapot.
+   */
+  it("a két értesítési szerep egymástól függetlenül kapcsolható", async () => {
+    render(<UserEditorPage />);
+
+    const hibajegy = screen.getByRole("checkbox", {
+      name: /Hibajegy-felelős/,
+    }) as HTMLInputElement;
+    const anyagigeny = screen.getByRole("checkbox", {
+      name: /Anyagigény-felelős/,
+    }) as HTMLInputElement;
+
+    expect(hibajegy.checked).toBe(false);
+    expect(anyagigeny.checked).toBe(false);
+
+    fireEvent.click(hibajegy);
+    expect(hibajegy.checked).toBe(true);
+    expect(anyagigeny.checked).toBe(false);
+
+    fireEvent.click(anyagigeny);
+    expect(hibajegy.checked).toBe(true);
+    expect(anyagigeny.checked).toBe(true);
+
+    fireEvent.click(hibajegy);
+    expect(hibajegy.checked).toBe(false);
+    expect(anyagigeny.checked).toBe(true);
   });
 
   it("vevő kiválasztásakor csak a Partner szerviz szerepet kínálja és megmagyarázza", async () => {
