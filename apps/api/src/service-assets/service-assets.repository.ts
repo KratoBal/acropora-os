@@ -18,6 +18,7 @@ import { conflictingFields, intendedFields } from "./asset-field-conflict.js";
 import { assetListOrderBy } from "./asset-list-order.js";
 import { assetLabelWhere } from "./asset-label-filter.js";
 import { assetCategoryWhere } from "./asset-category-filter.js";
+import { assetSearchWhere } from "./asset-search-filter.js";
 import { mergeAssetWhere } from "./asset-where-merge.js";
 import { assetStatusWhere } from "./asset-status-filter.js";
 
@@ -586,76 +587,13 @@ export class ServiceAssetsRepository extends Repository {
       ...(query.dueBefore
         ? { nextServiceAt: { lte: new Date(query.dueBefore) } }
         : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { assetNumber: { contains: query.search, mode: "insensitive" } },
-              { name: { contains: query.search, mode: "insensitive" } },
-              { manufacturer: { contains: query.search, mode: "insensitive" } },
-              { model: { contains: query.search, mode: "insensitive" } },
-              { serialNumber: { contains: query.search, mode: "insensitive" } },
-              {
-                partnerInternalCode: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-              {
-                inventoryNumber: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-              /**
-               * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos") IS KERESHETO.
-               * Balazs kerese, 2026-09-23 (kanban 8c77cf3e), szo szerint
-               * "kapjon sajat mezot" -- es EZ a mezo egesz ertelme: aki a
-               * villanyszekrenynel a "30M" kodot latja, annak a keresobe irva
-               * meg kell talalnia az eszkozt.
-               */
-              {
-                electricalCode: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-              {
-                customer: {
-                  displayName: { contains: query.search, mode: "insensitive" },
-                },
-              },
-              {
-                supplier: {
-                  name: { contains: query.search, mode: "insensitive" },
-                },
-              },
-              /**
-               * A MATRICAKOD IS KERESHETO -- ES EZ NEM UGYANAZ, MINT A
-               * `labelCode` SZURO.
-               *
-               * MIERT KELL: Balazs ma kezdi az eszkozoket elore nyomtatott
-               * matricakkal rogziteni. Ha a kodot beirja a KERESOBE, ma nulla
-               * talalatot kap, holott a kod a rendszerben ott all.
-               *
-               * MIERT NEM VONHATO OSSZE A `labelCode` PARAMETERREL (#739): az
-               * GEPI szuro, PONTOS egyezessel, a jegy eszkoz-valasztojanak.
-               * Ez EMBERI kereso, ami RESZLETRE keres -- aki a matrica felet
-               * latja a cimken, annak is talalnia kell. A ketto osszevonasa
-               * vagy a gepi utat tenne pontatlanna, vagy ezt hasznalhatatlanna.
-               *
-               * A HATOKORT EZ NEM TAGITJA: az `OR` a `where` objektum EGYIK
-               * kulcsa, a hatokor-feltetelek pedig a TESTVEREI -- a Prisma a
-               * testvér kulcsokat ES-sel koti. Vagyis a kereso legfeljebb
-               * SZUKIT azon belul, amit a nezo amugy is lathat.
-               */
-              {
-                label: {
-                  code: { contains: query.search, mode: "insensitive" },
-                },
-              },
-            ],
-          }
-        : {}),
+      /**
+       * A KERESO OSSZEALLITASA KULON FAJLBAN (`asset-search-filter.ts`),
+       * ugyanabbol az okbol, mint a matrica- es kategoria-szuro: Prisma-
+       * kliens nelkul is lemerheto, hogy az OR lista TARTALMAZZA-e egy adott
+       * mezot -- lasd az `asset-search-filter.spec.ts` allitasat.
+       */
+      ...assetSearchWhere(query.search),
     };
     const { list: where, counts: countsWhere } = assetListWheres(
       scope,
