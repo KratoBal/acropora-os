@@ -143,6 +143,14 @@ export class ServiceAssetsService {
   }
 
   /**
+   * A NÉV-ÜTKÖZÉS ELLENŐRZÉSE, A MENTÉS ELŐTT. Lásd a vezérlő jegyzetét: ez
+   * a MENTÉS ELÉ kerülő, olvasó lépés, nem a létrehozás egy ága.
+   */
+  nameMatches(name: string) {
+    return this.repository.matchesByName(name);
+  }
+
+  /**
    * AZ ESZKOZ LETEZIK-E, ES A KEROE-E -- A KET IRO UT KOZOS KAPUJA.
    *
    * === MIERT KELL, HOLOTT A VEGPONTON MAR ALL EGY JOG ===

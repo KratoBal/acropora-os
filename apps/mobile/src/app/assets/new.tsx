@@ -15,8 +15,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  checkAssetName,
   createAsset,
   listAssetCategories,
+  type AssetListItem,
   type CreateAssetInput,
   listAssetOwners,
   uploadAssetDocuments,
@@ -112,6 +114,36 @@ export default function NewAssetScreen() {
   const [owner, setOwner] = useState<AssetOwnerOption | null>(null);
   const [unitId, setUnitId] = useState("");
   const [name, setName] = useState("");
+  /**
+   * A NÉV-ÜTKÖZÉS FIGYELMEZTETÉSE, CSAK FELVITELNÉL.
+   *
+   * `null`: nincs megjelenítendő figyelmeztetés. A `pendingPayload` a
+   * "Mentsd mégis" gomb miatt kell -- az a lekérdezés MEGISMÉTLÉSE NÉLKÜL
+   * küldi el ugyanazt a törzset, amit a felhasználó épp jóváhagyott.
+   */
+  const [nameDuplicates, setNameDuplicates] = useState<AssetListItem[] | null>(
+    null,
+  );
+  const [pendingPayload, setPendingPayload] = useState<CreateAssetInput | null>(
+    null,
+  );
+  /**
+   * A NÉV ÁTÍRÁSA ELÉVÍTI A FIGYELMEZTETÉST -- egy időközben megváltozott
+   * névhez a régi találat félrevezetne.
+   *
+   * RENDERELÉS KÖZBEN, NEM `useEffect`-BEN: ez a React saját ajánlott
+   * mintája arra, hogy egy állapot egy MÁSIK érték változásával nullázódjon
+   * (https://react.dev/learn/you-might-not-need-an-effect -- "Adjusting
+   * some state when a prop changes"). Egy effektusban hívott `setState`
+   * plusz render-kört nyit; ez a forma ugyanabban a körben old fel, és nem
+   * kell hozzá effektus, ami csak egy változás FIGYELÉSÉRE szolgálna.
+   */
+  const [checkedName, setCheckedName] = useState(name);
+  if (checkedName !== name) {
+    setCheckedName(name);
+    setNameDuplicates(null);
+    setPendingPayload(null);
+  }
   const [kind, setKind] = useState<AssetKind>("EQUIPMENT");
   const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
@@ -562,7 +594,7 @@ export default function NewAssetScreen() {
    * masodik: a szerelo a helyszinen MOST keszit kepet, nem regit keres
    * (Balazs, 2026-09-02). Ugyanaz a sorrend, mint az eszkoz lapjan.
    */
-  const submit = () => {
+  const submit = async () => {
     setError(null);
     /**
      * A döntés a `lib/assets/asset-create.ts`-ben van, mert ott MÉRHETŐ: ebben
@@ -591,7 +623,35 @@ export default function NewAssetScreen() {
       return;
     }
 
+    /**
+     * A NÉV-ÜTKÖZÉS ELLENŐRZÉSE, A MENTÉS ELŐTT.
+     *
+     * `nameDuplicates === null`: még nem kérdeztük meg erre a névre (vagy a
+     * felhasználó időközben átírta, lásd a fenti `useEffect`-et). HIBÁRA
+     * ÁTENGEDI A MENTÉST -- terepen ez tér nélkül is előfordul, és ez
+     * FIGYELMEZTETÉS, nem kapu: egy elakadt hálózati hívás nem lehet ok arra,
+     * hogy a felvitel egyáltalán ne induljon el.
+     */
+    if (nameDuplicates === null) {
+      try {
+        const matches = await checkAssetName(name);
+        if (matches.length > 0) {
+          setNameDuplicates(matches);
+          setPendingPayload(result.payload);
+          return;
+        }
+      } catch {
+        // lásd a fenti jegyzetet: a mentés enélkül is folytatódik
+      }
+    }
+
     mutation.mutate(result.payload);
+  };
+
+  const confirmDespiteDuplicateName = () => {
+    if (!pendingPayload) return;
+    setNameDuplicates(null);
+    mutation.mutate(pendingPayload);
   };
 
   return (
@@ -991,9 +1051,47 @@ export default function NewAssetScreen() {
             dobozban a kollega elveszettnek hinne, es ujra felvinne.
           */}
 
+          {/*
+            A NÉV-ÜTKÖZÉS FIGYELMEZTETÉSE. Balázs kérése, 2026-09-23: a mentés
+            ELÉ kerül, nem utána -- ha utána szólnánk, a kérdés már nem
+            "biztos vagyok-e", hanem "töröljek ki egy már létrehozott eszközt".
+          */}
+          {nameDuplicates && nameDuplicates.length > 0 ? (
+            <View style={styles.duplicateNotice}>
+              <Text style={styles.duplicateNoticeTitle}>
+                Már létezik ilyen nevű eszköz
+              </Text>
+              {nameDuplicates.map((item) => (
+                <Text key={item.id} style={styles.duplicateNoticeBody}>
+                  {item.owner.displayName}
+                  {item.unit ? ` — ${item.unit.path.join(" / ")}` : ""}
+                </Text>
+              ))}
+              <View style={styles.duplicateNoticeActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setNameDuplicates(null);
+                    setPendingPayload(null);
+                  }}
+                  style={styles.scanButton}
+                >
+                  <Text style={styles.scanButtonText}>Mégsem</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={confirmDespiteDuplicateName}
+                  style={styles.saveButton}
+                >
+                  <Text style={styles.saveText}>Mentés mégis</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+
           <Pressable
             disabled={mutation.isPending}
-            onPress={submit}
+            onPress={() => void submit()}
             style={[styles.saveButton, mutation.isPending && styles.disabled]}
           >
             <Text style={styles.saveText}>
@@ -1163,6 +1261,19 @@ const styles = StyleSheet.create({
   },
   cacheNoticeTitle: { color: "#f4fbff", fontSize: 13, fontWeight: "900" },
   cacheNoticeBody: { color: "#a9c4d1", fontSize: 12, lineHeight: 17 },
+  duplicateNotice: {
+    backgroundColor: "#3f2e0b",
+    borderRadius: 10,
+    gap: 4,
+    padding: 12,
+  },
+  duplicateNoticeTitle: { color: "#f4fbff", fontSize: 13, fontWeight: "900" },
+  duplicateNoticeBody: { color: "#d8c4a0", fontSize: 12, lineHeight: 17 },
+  duplicateNoticeActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
   photoRow: {
     flexDirection: "row",
     alignItems: "center",

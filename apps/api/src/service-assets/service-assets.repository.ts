@@ -701,6 +701,31 @@ export class ServiceAssetsRepository extends Repository {
   }
 
   /**
+   * A NÉV-ÜTKÖZÉS, A MENTÉS ELŐTT -- lásd a vezérlő jegyzetét a döntésről.
+   *
+   * KIS- ÉS NAGYBETŰTŐL FÜGGETLEN, ÉS KÖRBEVÁGOTT: ugyanaz a párosítási
+   * szabály, amit a mérés (2026-09-23, éles adatbázis) a mai nevekre
+   * alkalmazott, mielőtt bevezettük volna. Nincs saját egyediségi index a
+   * `name` mezőn, és ez SZÁNDÉKOSAN marad így -- ez figyelmeztetés, nem
+   * megkötés, tehát az azonos név a mentés után is átmegy.
+   *
+   * SZÁNDÉKOSAN NEM SZŰKÍTETT VEVŐNKÉNT: a `assetSummaryInclude` és a
+   * `unitPaths`/`toListItem` pár ugyanazt az alakot adja vissza, mint a
+   * lista végpont, hogy a hívó lássa, KI és HOL a másik.
+   */
+  async matchesByName(name: string): Promise<AssetListItem[]> {
+    const trimmed = name.trim();
+    if (!trimmed) return [];
+    const rows = await prisma.asset.findMany({
+      where: { name: { equals: trimmed, mode: "insensitive" } },
+      include: assetSummaryInclude,
+      orderBy: { createdAt: "asc" },
+    });
+    const paths = await this.unitPaths(rows);
+    return rows.map((row) => this.toListItem(row, paths));
+  }
+
+  /**
    * Egy KONKRÉT tulajdonos, a szűrés megkerülésével, megjelölve.
    *
    * Az aktivitást sem nézi: egy inaktívvá tett partner is maradhat egy régi

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   AssetDetail,
@@ -33,6 +33,7 @@ const api = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  nameCheck: vi.fn(),
 }));
 const suppliers = vi.hoisted(() => ({ units: vi.fn() }));
 const unitsOfMeasure = vi.hoisted(() => ({ list: vi.fn() }));
@@ -146,6 +147,10 @@ beforeEach(() => {
   suppliers.units.mockResolvedValue({ items: [] });
   unitsOfMeasure.list.mockResolvedValue({ items: [WATT, KILOWATT] });
   categories.list.mockResolvedValue({ items: [SZIVATTYU] });
+  // ALAPÉRTELMEZÉSBEN NINCS ÜTKÖZÉS: a legtöbb teszt nem a név-ütközésről
+  // szól, tehát a normál, akadálytalan mentést kapja, nem a "hiba a
+  // lekérdezésben, mentés mégis" kerülőutat.
+  api.nameCheck.mockResolvedValue([]);
 });
 
 /** A ket teljesitmeny-egyseg, amit a valaszto kinal. */
@@ -586,6 +591,201 @@ describe("AssetEditorPage matricakód", () => {
       await screen.findByText(/^A matrica kódja egy betű és négy szám/),
     ).toBeTruthy();
     expect(api.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A NÉV-ÜTKÖZÉS FIGYELMEZTETÉSE, A MENTÉS ELŐTT (Balázs kérése, 2026-09-23).
+ *
+ * MI PIROSIT: ha a felvitel a lekérdezés nélkül, vagy a lekérdezés eredményét
+ * figyelmen kívül hagyva egyenesen `create`-et hívna -- ekkor az első teszt
+ * zöld maradna a `nameCheck` visszaadott találata ELLENÉRE is.
+ */
+describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
+  it("találat esetén megállítja a mentést, és nem hívja a create-et", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    api.nameCheck.mockResolvedValue([
+      {
+        id: "asset-masik",
+        owner: {
+          type: "SUPPLIER",
+          id: "supplier-2",
+          displayName: "Másik szállító",
+        },
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "SUPPLIER:supplier-1",
+    );
+    await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Már létezik ilyen nevű eszköz"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Másik szállító")).toBeInTheDocument();
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  it("„Mentés mégis”-re a lekérdezés megismétlése NÉLKÜL menti", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    api.nameCheck.mockResolvedValue([
+      {
+        id: "asset-masik",
+        owner: {
+          type: "SUPPLIER",
+          id: "supplier-2",
+          displayName: "Másik szállító",
+        },
+      },
+    ]);
+    api.create.mockResolvedValue({ ...asset, id: "asset-uj" });
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "SUPPLIER:supplier-1",
+    );
+    await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText("Már létezik ilyen nevű eszköz"),
+      ).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Mentés mégis" }));
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    // A LEKÉRDEZÉS NEM FUT LE ÚJRA: a felhasználó épp az imént válaszolt.
+    expect(api.nameCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it("„Mégsem”-re a panel eltűnik, és create-et sem hív", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    api.nameCheck.mockResolvedValue([
+      {
+        id: "asset-masik",
+        owner: {
+          type: "SUPPLIER",
+          id: "supplier-2",
+          displayName: "Másik szállító",
+        },
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "SUPPLIER:supplier-1",
+    );
+    await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText("Már létezik ilyen nevű eszköz"),
+      ).toBeInTheDocument(),
+    );
+
+    // A "MÉGSEM" NÉV NEM EGYEDI: az űrlap alján is áll egy, ami a
+    // listára visz vissza -- ez a panelen (az `Alert` `role="status"`
+    // eleme) belülit keresi, `within`-nel.
+    const panel = screen.getByRole("status");
+    await user.click(within(panel).getByRole("button", { name: "Mégsem" }));
+
+    expect(
+      screen.queryByText("Már létezik ilyen nevű eszköz"),
+    ).not.toBeInTheDocument();
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A NÉV ÁTÍRÁSA ELÉVÍTI A FIGYELMEZTETÉST -- lásd a komponens
+   * `useEffect`-jét. Enélkül egy megkerült figyelmeztetés csendben érvényben
+   * maradna egy már megváltozott névhez.
+   */
+  it("a név átírása után a gomb ismét lekérdezi az ütközést", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    api.nameCheck.mockResolvedValue([
+      {
+        id: "asset-masik",
+        owner: {
+          type: "SUPPLIER",
+          id: "supplier-2",
+          displayName: "Másik szállító",
+        },
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "SUPPLIER:supplier-1",
+    );
+    const nameField = screen.getByLabelText("Eszköz neve");
+    await user.type(nameField, "Homokszűrő");
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText("Már létezik ilyen nevű eszköz"),
+      ).toBeInTheDocument(),
+    );
+
+    await user.type(nameField, " 2");
+    expect(
+      screen.queryByText("Már létezik ilyen nevű eszköz"),
+    ).not.toBeInTheDocument();
+
+    api.nameCheck.mockResolvedValue([]);
+    api.create.mockResolvedValue({ ...asset, id: "asset-uj" });
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.nameCheck).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * A LEKÉRDEZÉS HIBÁJA NEM ÁLLÍTJA MEG A MENTÉST -- ez figyelmeztetés, nem
+   * kapu. Ha ez elbukna, a fenti négy teszt semmit nem bizonyítana a valódi
+   * hálózati hibák ellen: az összes eddigi eset a lekérdezés SIKERES
+   * válaszára épült.
+   */
+  it("ha a lekérdezés hibázik, a mentés változatlanul lefut", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    api.nameCheck.mockRejectedValue(new Error("hálózati hiba"));
+    api.create.mockResolvedValue({ ...asset, id: "asset-uj" });
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "SUPPLIER:supplier-1",
+    );
+    await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
   });
 });
 

@@ -247,6 +247,16 @@ export class AssetOwnersQueryDto {
   @IsString() @IsOptional() ownerId?: string;
 }
 
+/**
+ * A NÉV-ÜTKÖZÉS LEKÉRDEZÉSE, A MENTÉS ELŐTT (Balázs kérése, 2026-09-23 09:03).
+ *
+ * A `name` ugyanazt a mezőt kérdezi, amit a `CreateAssetDto.name` felvinne --
+ * ezért ugyanaz a megkötés (`@MinLength(1)`), semmivel sem szigorúbb.
+ */
+export class AssetNameCheckQueryDto {
+  @IsString() @MinLength(1) name!: string;
+}
+
 export class CreateAssetDto {
   /**
    * A KLIENS ALTAL ADOTT MUVELET-AZONOSITO, A HELYSZINI ROGZITES

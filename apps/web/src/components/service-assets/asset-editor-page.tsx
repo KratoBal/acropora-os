@@ -75,6 +75,17 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   const [criticality, setCriticality] = useState<AssetCriticality>("NORMAL");
   const [name, setName] = useState("");
   /**
+   * A NÉV-ÜTKÖZÉS FIGYELMEZTETÉSE, CSAK FELVITELNÉL.
+   *
+   * `null`: nincs megjelenítendő figyelmeztetés (még nem ellenőriztük, vagy
+   * nulla találat volt). A NÉV VÁLTOZÁSA MINDIG TÖRLI -- lásd a lenti
+   * `useEffect`-et --, mert a figyelmeztetés egy KONKRÉT névre szól, és egy
+   * időközben átírt mező mellett a régi találat félrevezetne.
+   */
+  const [nameDuplicates, setNameDuplicates] = useState<AssetListItem[] | null>(
+    null,
+  );
+  /**
    * A KATEGORIA MOSTANTOL AZONOSITO, NEM SZOVEG.
    *
    * Az ures sztring a „nincs megadva" allapot -- a `null`-t a mentes allitja
@@ -364,6 +375,25 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
     setNextServiceAt(base.toISOString().slice(0, 10));
   }, [assetId, installedAt, serviceIntervalDays]);
 
+  /**
+   * A NÉV-ÜTKÖZÉS FIGYELMEZTETÉSE A NÉV VÁLTOZÁSÁVAL ELÉVÜL.
+   *
+   * Enélkül egy "mentsd mégis" utáni átírás a RÉGI névre kapott találatot
+   * mutatná tovább -- vagy fordítva, egy megkerült figyelmeztetés némán
+   * érvényben maradna egy már megváltozott névhez.
+   *
+   * RENDERELÉS KÖZBEN, NEM `useEffect`-BEN: ez a React saját ajánlott
+   * mintája arra, hogy egy állapot egy MÁSIK érték változásával nullázódjon
+   * (https://react.dev/learn/you-might-not-need-an-effect -- "Adjusting
+   * some state when a prop changes"). Egy effektusban hívott `setState`
+   * plusz render-kört nyit; ez a forma ugyanabban a körben old fel.
+   */
+  const [checkedName, setCheckedName] = useState(name);
+  if (checkedName !== name) {
+    setCheckedName(name);
+    setNameDuplicates(null);
+  }
+
   if (!canManage)
     return (
       <Alert
@@ -432,6 +462,49 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       setError(PERFORMANCE_PROBLEM_MESSAGES[performanceProblem]);
       return;
     }
+    /**
+     * A NÉV-ÜTKÖZÉS ELLENŐRZÉSE, CSAK FELVITELNÉL, A MENTÉS ELŐTT.
+     *
+     * `nameDuplicates !== null` azt jelenti, hogy a figyelmeztetés MÁR
+     * megjelent erre a névre (lásd a `confirmDespiteDuplicateName`-t) -- ekkor
+     * nem kérdezünk újra, a felhasználó már döntött. A mező bármilyen
+     * változása törli ezt az állapotot (a fenti `useEffect`), tehát egy
+     * időközben átírt név mindig friss ellenőrzést kap.
+     *
+     * HIBÁRA ÁTENGEDI A MENTÉST: ez FIGYELMEZTETÉS, nem kapu -- ha maga a
+     * lekérdezés hibázik, az nem lehet ok arra, hogy az eszköz létrehozása
+     * elakadjon.
+     */
+    if (!assetId && nameDuplicates === null) {
+      try {
+        const matches = await assetsApi.nameCheck(token, name.trim());
+        if (matches.length > 0) {
+          setNameDuplicates(matches);
+          return;
+        }
+      } catch {
+        // lásd a fenti jegyzetet: a mentés enélkül is folytatódik
+      }
+    }
+    await performSave();
+  };
+
+  /**
+   * A TÉNYLEGES MENTÉS -- KÜLÖN FÜGGVÉNYBEN, mert a "Mentés mégis" gomb ezt
+   * hívja közvetlenül, a név-ütközés ellenőrzése NÉLKÜL: azt a kérdést a
+   * felhasználó épp az imént megválaszolta.
+   */
+  const performSave = async () => {
+    /*
+      MEGISMÉTELT ŐRZŐK, NEM ÚJ SZABÁLYOK: `submit()` ezeket már ellenőrizte,
+      mielőtt idáig eljutott -- ez a fordítónak kell, hogy `owner` innentől
+      NE lehessen `undefined`, és hogy `interval` egyáltalán létezzen ebben a
+      függvényben (a `submit()`-beli `const` a saját blokkjára szólt).
+    */
+    if (!owner) return;
+    const interval = serviceIntervalDays
+      ? Number.parseInt(serviceIntervalDays, 10)
+      : undefined;
     setBusy(true);
     setError(null);
     try {
@@ -508,6 +581,11 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const confirmDespiteDuplicateName = () => {
+    setNameDuplicates(null);
+    void performSave();
   };
 
   return (
@@ -906,6 +984,48 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             />
           </FormField>
         </Card>
+
+        {/*
+          A NÉV-ÜTKÖZÉS FIGYELMEZTETÉSE. Balázs kérése, 2026-09-23: a mentés
+          ELÉ kerül, nem utána -- ha utána szólnánk, a válasz már nem "biztos
+          vagyok-e", hanem "töröljek ki egy már létrehozott eszközt". A
+          `Alert` `action` mezője viszi a két gombot, a `children` pedig a
+          találatok felsorolását, mert azok több sorosak.
+        */}
+        {nameDuplicates && nameDuplicates.length > 0 ? (
+          <Alert
+            variant="info"
+            title="Már létezik ilyen nevű eszköz"
+            action={
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setNameDuplicates(null)}
+                  disabled={busy}
+                >
+                  Mégsem
+                </Button>
+                <Button
+                  type="button"
+                  onClick={confirmDespiteDuplicateName}
+                  disabled={busy}
+                >
+                  Mentés mégis
+                </Button>
+              </div>
+            }
+          >
+            <ul className="list-disc space-y-0.5 pl-4">
+              {nameDuplicates.map((item) => (
+                <li key={item.id}>
+                  {item.owner.displayName}
+                  {item.unit ? ` — ${item.unit.path.join(" / ")}` : ""}
+                </li>
+              ))}
+            </ul>
+          </Alert>
+        ) : null}
 
         {/* A "MEGSEM" A MENTES MELLE KERULT: a kilepes a cim folott is ott
             all, de az urlap vegen, a kitoltes utan ott keresik. Ugyanaz az ut,
