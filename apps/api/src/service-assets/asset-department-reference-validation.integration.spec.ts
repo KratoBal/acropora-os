@@ -56,11 +56,19 @@ async function removeLeftovers() {
   await prisma.worksheetDepartment.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
   });
-  await prisma.customer.deleteMany({
-    where: { customerNumber: { startsWith: PREFIX } },
-  });
+  /*
+    A SZALLITO ELOBB, MINT A VEVO: a `Supplier.customerId` a tukor-sorra mutat, es
+    a megszoritas nem `SetNull` (merve a CI-ban, 2026-09-23, `job-106993955064`):
+    a vevo torlese a szallito ELOTT `Supplier_customerId_fkey` megsertessel hasal
+    el az `after()` hookban -- ez NEM az uj allitasokat buktatta (mind az ot zold
+    volt), hanem a takaritast, es a `node --test` ettol meg 0-val lep ki
+    (`failureType: 'hookFailed'`), amit a CI kulon lepese fog meg.
+  */
   await prisma.supplier.deleteMany({
     where: { code: { startsWith: PREFIX } },
+  });
+  await prisma.customer.deleteMany({
+    where: { customerNumber: { startsWith: PREFIX } },
   });
   await prisma.user.deleteMany({
     where: { email: { startsWith: PREFIX.toLowerCase() } },
