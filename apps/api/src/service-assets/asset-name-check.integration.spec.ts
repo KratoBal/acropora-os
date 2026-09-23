@@ -106,21 +106,26 @@ describe(
       supplierBId = supplierB.id;
 
       /*
-        EGY VEVŐ ÉS EGY ALEGYSÉG, hogy a "melyik helyszínen" fele is mérve
-        legyen, nem csak a "melyik vevőnél". A tükör-vevő itt nem kell: a
-        harmadik eszköz vevő-tulajdonú lesz, közvetlenül.
+        A TÜKÖR VEVŐ, A `Customer.partner` KAPCSOLATON ÁT -- ez kell ahhoz,
+        hogy a `szállító B` eszközén departmentId állhasson: az
+        `assetDepartmentRefusal` az alegység `customerId`-ját a SZÁLLÍTÓ
+        tükör-vevőjéhez (`mirrorCustomerId`) hasonlítja, és egy másik,
+        kapcsolat nélküli vevő alegysége OTHER_PARTNER-rel elbukna -- ahogy
+        elsőre itt is elbukott (lásd a fájl jegyzetét, ha ez a bekezdés
+        valaha visszatérne egy kapcsolat nélküli vevőre).
       */
-      const customer = await prisma.customer.create({
+      const mirrorCustomer = await prisma.customer.create({
         data: {
           customerNumber: `${PREFIX}-C`,
           type: "COMPANY",
-          displayName: `${PREFIX} vevő`,
+          displayName: `${PREFIX} szállító B tükre`,
+          partner: { connect: { id: supplierBId } },
         },
         select: { id: true },
       });
       const department = await prisma.worksheetDepartment.create({
         data: {
-          customerId: customer.id,
+          customerId: mirrorCustomer.id,
           code: "HLY",
           name: `${PREFIX} helyszín`,
         },
