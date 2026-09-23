@@ -1,0 +1,128 @@
+name: Idozites - eszkoz tomeges letrehozas
+
+# EGYSZERI MERES, NEM ALLANDO KAPU. A FANK-import kb. 2663 eszkozt hozna letre,
+# egyenkent, a meglevo `POST /service/assets` vegponton keresztul (5b83142e
+# kartya, acrobot kerese 2026-09-23). Ez a workflow egy VALODI, futo API
+# peldanyt indit egy EFEMER (a job vegen megsemmisulo) Postgres-en, es lemeri,
+# mennyi ideig tart N eszkozt letrehozni -- soha nem elesben, lasd a szkript
+# sajat vedelmet (`apps/api/scripts/meres-eszkoz-tomeges-idozites.mjs`).
+#
+# CSAK egy dedikalt ag-elotagon fut, hogy a rendes fejlesztoi forgalmat ne
+# terhelje. NEM a `meres/**` elotagon: az a `meres.yml` sajat kapujahoz
+# tartozik (forditott verdikt, szandekos rontast var), ami ezen az agon
+# felreertheto piros levelet kuldene, holott itt nincs szandekos rontas.
+
+on:
+  push:
+    branches:
+      - "idozites/**"
+
+permissions:
+  contents: read
+
+env:
+  DATABASE_URL: postgresql://acropora:acropora@localhost:5432/acropora_ci?schema=public
+  REDIS_URL: redis://localhost:6379
+  API_URL: http://127.0.0.1:3001
+  NODE_ENV: development
+  AUTH_PROVIDER: development
+  PORT: 3001
+
+jobs:
+  meres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: acropora_ci
+          POSTGRES_USER: acropora
+          POSTGRES_PASSWORD: acropora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U acropora -d acropora_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm prisma:generate
+
+      - name: Deploy migrations to empty PostgreSQL
+        run: pnpm prisma:deploy
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      - name: Start the API in the background
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          nohup node dist/main.js > "$RUNNER_TEMP/api.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/api.pid"
+
+      - name: Wait for /health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 30); do
+            if curl -sf "$API_URL/health" > /dev/null; then
+              echo "Az API valaszol."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Az API nem valaszolt 30 masodperc alatt." >&2
+          cat "$RUNNER_TEMP/api.log" >&2 || true
+          exit 1
+
+      # A DARABSZAM 300: legalabb 100 (a kiugras elkerulesehez), es eleg nagy,
+      # hogy egy esetleges lassulasi trend lathato legyen a fel-teljes CI-idon
+      # belul. A cel 2663 a FANK-import merete (5b83142e kartya).
+      - name: Run the bulk-create timing measurement
+        working-directory: apps/api
+        env:
+          MERES_DARABSZAM: "300"
+          MERES_CEL_DARABSZAM: "2663"
+        run: node scripts/meres-eszkoz-tomeges-idozites.mjs
+
+      # ACROBOT KERESE (5b83142e, 2026-09-23 14:17): nem eleg azt allitani,
+      # hogy a clientOperationId ALKALMAS idempotencia-kulcsnak -- meg is kell
+      # mutatni, hogy egy MEGISMETELT, azonos kulcsu hivas tenyleg a meglevo
+      # sort adja vissza, nem hoz letre masodikat.
+      - name: Prove clientOperationId idempotency (repeat POST with the same key)
+        working-directory: apps/api
+        run: node scripts/meres-eszkoz-idempotencia-proba.mjs
+
+      - name: API log (mindig, diagnosztikanak)
+        if: always()
+        run: cat "$RUNNER_TEMP/api.log" || true
