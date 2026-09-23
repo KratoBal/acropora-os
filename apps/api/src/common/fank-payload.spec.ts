@@ -161,17 +161,26 @@ const UUID_CPT = "22222222-2222-4222-8222-222222222222";
 const UUID_CPT_TRI = "33333333-3333-4333-8333-333333333333";
 
 /**
- * A VALODI FAJL FORMATUMA, NEM JSON (acrobot, 2026-09-23 21:36): oszlopra
- * igazitott szoveg, "<KOD>  <magyar nev>  <categoryId-UUID>" soronkent. Az
- * utolso sor SZANDEKOSAN egyetlen szokozzel all a hosszu nev es az UUID
+ * A VALODI FAJL FORMATUMA, NEM JSON (acrobot, MASODSZOR ujraepitve
+ * 2026-09-23 21:51): oszlopra igazitott szoveg,
+ * "<KOD>  <magyar nev>  <categoryId-UUID>  <honnan>" soronkent. A
+ * fejlec-megjegyzesek `#`-tal kezdodnek, es ures sorok is allhatnak --
+ * mindkettot at kell ugrania a sorolonak. A parositott kod SZOKOZ NELKUL
+ * all a "/" korul ("CPT/TRI", NEM "CPT / TRI" -- az elso valtozat meg igy
+ * irta, a masodik mar nem).
+ *
+ * Az utolso sor SZANDEKOSAN egyetlen szokozzel all a hosszu nev es az UUID
  * kozott -- a valodi fajlban is elofordul ez az igazitas-osszecsuszas
  * (lasd `parseCategoryMap` sajat fejleceben), es a sorolonak EZT is
- * hibatlanul kell kezelnie, nem csak a szep, 2+ szokozos sorokat.
+ * hibatlanul kell kezelnie, a "honnan" oszlopot is helyesen levalasztva
+ * MOGULE, nem csak a szep, 2+ szokozos sorokat.
  */
 const KATEGORIA_TERKEP = [
-  `AIP              Légbefúfó, levegőztető szivattyú             ${UUID_AIP}`,
-  `CPT              (MAT) Kompakt szűrő                          ${UUID_CPT}`,
-  `CPT / TRI        Csepegtető bioszűrő egy hosszú, zárójeles (pillangó, golyós) leírással ${UUID_CPT_TRI}`,
+  "# FANK kod -> kategoria azonosito, szintetikus teszt-fixtura",
+  "",
+  `AIP              Légbefúfó, levegőztető szivattyú             ${UUID_AIP}     kategoria-lista (nincs eles eszkoz ezzel a koddal)`,
+  `CPT              (MAT) Kompakt szűrő                          ${UUID_CPT}     kategoria-lista, SZO SZERINTI nevegyezes`,
+  `CPT/TRI        Csepegtető bioszűrő egy hosszú, zárójeles (pillangó, golyós) leírással ${UUID_CPT_TRI} eles eszkozrol`,
 ].join("\n");
 
 function mappa(): string {

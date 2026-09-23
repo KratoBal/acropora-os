@@ -106,10 +106,12 @@
  *   --kategoria-terkep <ut> opcionalis, DE HA MEGADOD, MINDEN kodot fednie
  *                           kell -- lasd a "STOP" listat fent. Formatum:
  *                           oszlopra igazitott szoveg, egy sor egy kodra,
- *                           "<KOD>  <magyar nev>  <categoryId-UUID>" alakban
- *                           (pl. exchange/FANK-kod-kategoria-azonositok-
- *                           2026-09-23.txt). A KOD sima eszkoz-kod, vagy
- *                           "<SZULO> / <SAJAT>" par beepitett alkatreszre.
+ *                           "<KOD>  <magyar nev>  <categoryId-UUID>  <honnan>"
+ *                           alakban (pl. exchange/FANK-kod-kategoria-
+ *                           azonositok-2026-09-23.txt). A KOD sima
+ *                           eszkoz-kod, vagy "<SZULO>/<SAJAT>" par beepitett
+ *                           alkatreszre (SZOKOZ NELKUL a "/" korul). A `#`-tal
+ *                           kezdodo sorok fejlec-megjegyzesek.
  *   --kihagy <sor[,sor...]> a TSV "sor" oszlopanak ertekei, amiket ki kell
  *                           hagyni -- ismetelheto, vagy vesszovel elvalasztva.
  *   --partner <id>          alapertelmezes: cmt34n8s20009pg07pg8kwue1 (FANK).
@@ -183,12 +185,14 @@ export function toTsvRow(row) {
 
 /**
  * A KATEGORIA-TERKEP SAJAT KULCSA EGY SORHOZ. ONALLO sornal (nincs beepitett
- * alkatresz) a sima eszkoz-kod; BEEPITETT sornal a "<SZULO> / <SAJAT>" alak
- * -- pontosan az a kulcs-alak, amit a kategoria-terkep fajl maga hasznal
- * (pl. "CPT / TRI").
+ * alkatresz) a sima eszkoz-kod; BEEPITETT sornal a "<SZULO>/<SAJAT>" alak --
+ * SZOKOZ NELKUL a "/" korul, pontosan ahogy a kategoria-terkep MASODIK,
+ * javitott valtozata hasznalja (pl. "CPT/CAR"). Az ELSO valtozat meg
+ * szokozzel irta ("CPT / TRI") -- acrobot ujraepitese, 2026-09-23 21:51,
+ * ezt is megvaltoztatta.
  */
 export function categoryKeyFor(row) {
-  return row.builtin ? `${row.deviceCode} / ${row.builtin}` : row.deviceCode;
+  return row.builtin ? `${row.deviceCode}/${row.builtin}` : row.deviceCode;
 }
 
 const ROMAN_TABLE = [
@@ -224,28 +228,39 @@ function pad2(value) {
   return String(value).padStart(2, "0");
 }
 
-const CATEGORY_LINE_RE = /^(\S+(?: \/ \S+)?)\s{2,}(.*)$/;
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CATEGORY_LINE_RE = /^(\S+)\s{2,}(.*)$/;
+const UUID_SEARCH_RE =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 /**
  * A KATEGORIA-TERKEP FAJL SOROLASA -- NEM JSON, HANEM OSZLOPRA IGAZITOTT
- * SZOVEG (nautilus + acrobot kozos munkaja, 2026-09-23). Egy sor:
- * "<KOD>  <MAGYAR NEV>  <categoryId-UUID>". A KOD vagy sima eszkoz-kod, vagy
- * "<SZULO> / <SAJAT>" par.
+ * SZOVEG (nautilus + acrobot kozos munkaja, 2026-09-23, MASODSZOR
+ * ujraepitve 21:51-kor). Egy sor:
+ * "<KOD>  <MAGYAR NEV>  <categoryId-UUID>  <honnan>". A KOD vagy sima
+ * eszkoz-kod, vagy "<SZULO>/<SAJAT>" par -- SZOKOZ NELKUL a "/" korul (az
+ * elso valtozat meg szokozzel irta, lasd `categoryKeyFor`). `#`-tal kezdodo
+ * vagy ures sorok fejlec-megjegyzesek, at vannak ugorva.
  *
  * A POZICIONALIS OSZLOP-SZELESSEG NEM MEGBIZHATO: hosszabb magyar neveknel a
  * nev es az UUID kozotti tavolsag EGYETLEN szokozre eshet ossze (mert az
  * igazitas a rovidebb nevekhez van szabva), tehat egy "2+ szokoz" alapu
- * hasabolas a nev-UUID hataron elvagna a nevet. Ezert a sorolas a nev vegen
- * allo UUID-t a SAJAT ALAKJABOL ismeri fel (az utolso token, ha UUID-nek
- * latszik), nem a szokozok szamabol.
+ * hasabolas a nev-UUID hataron elvagna a nevet. Ezert a sorolas az UUID-t a
+ * SAJAT ALAKJABOL keresi meg a sorban (nem a vegen, mert a "honnan" oszlop
+ * MOGOTTE all), es minden, ami elotte/utana marad, nev/honnan.
+ *
+ * A "HONNAN" OSZLOPOT A SOROLAS MEGORZI (`entry.honnan`), de MA egyetlen
+ * hivo sem hasznalja -- a mezo a kesobbi diagnosztikahoz all keszen, nem
+ * ELVARAS. acrobot sajat hibaja (2026-09-23 21:51) eppen abbol jott, hogy
+ * a "honnan" erteket egy SZURESI ALLAPOTBOL (talalt-e azonositot) vezette
+ * le, nem egy VALODI forras-oszlopbol -- ez a mezo most mar NAUTILUS sajat
+ * oszlopabol jon, es ez a sorolo csak atveszi, nem szamolja ki.
  */
 export function parseCategoryMap(text) {
   const map = {};
   const lines = text.split(/\r?\n/);
   for (const raw of lines) {
-    if (!raw.trim()) continue;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
     const kodMatch = CATEGORY_LINE_RE.exec(raw.trimEnd());
     if (!kodMatch)
       throw new FankPayloadError(
@@ -255,16 +270,16 @@ export function parseCategoryMap(text) {
       );
     const kod = kodMatch[1];
     const rest = kodMatch[2].trim();
-    const tokenek = rest.split(/\s+/);
-    const uuid = tokenek[tokenek.length - 1];
-    if (!UUID_RE.test(uuid))
+    const uuidMatch = UUID_SEARCH_RE.exec(rest);
+    if (!uuidMatch)
       throw new FankPayloadError(
-        `A kategoria-terkep "${kod}" sora nem categoryId-UUID-ra vegzodik: ${JSON.stringify(
+        `A kategoria-terkep "${kod}" soraban nem talaltam categoryId-UUID-t: ${JSON.stringify(
           raw,
         )}`,
       );
-    const name = rest.slice(0, rest.length - uuid.length).trim();
-    map[kod] = { name, categoryId: uuid };
+    const name = rest.slice(0, uuidMatch.index).trim();
+    const honnan = rest.slice(uuidMatch.index + uuidMatch[0].length).trim();
+    map[kod] = { name, categoryId: uuidMatch[0], honnan: honnan || null };
   }
   return map;
 }
