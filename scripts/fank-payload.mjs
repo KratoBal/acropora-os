@@ -65,17 +65,22 @@
  *                                  ugyanaz az eredmeny.
  *
  *   A D (Eszkoz sorszam) EGY BEEPITETT SORON -- MEGOLDVA, acrobot masodik,
- *   fuggetlen visszameres kore, 2026-09-23 22:38. A valodi forrasban 130
- *   beepitett soron D IS ki van toltve; a sejtes, hogy ez NEM gyermek-
- *   sorszam, hanem azt mondja meg, MELYIK SZULO-PELDANY ala tartozik a
- *   gyermek, MEGERdeSITVE: 114/130 sornal a szulo-peldany TENYLEGESEN
- *   letezik a listaban ONALLO sorkent (108 sor egyetlen D-erteket visel,
- *   6 sor "01/02" alaku ketto D-erteket, es mindket resze talal onallo
- *   sort). A tobbi 16 sorhoz NINCS onallo sor ugyanazzal a C-vel a
- *   helyszinen -- ezt acrobot Balazs ele viszi. `buildSitePayload` a 108
- *   sort atengedi (a D bekerul `buildPartnerInternalCode` C-utani
- *   szegmensebe), a masik 22-t (6 osszetett + 16 szulo nelkuli) tovabbra
- *   is MEGALLASI OKKENT kezeli -- lasd ott a reszletes indoklast.
+ *   fuggetlen visszameres kore, 2026-09-23 22:38 (barracuda fuggetlenul,
+ *   a forras fejlecebol kiindulva, UGYANAZT a bontast merte -- ket
+ *   fuggetlen meresen all a szabaly). A valodi forrasban 130 beepitett
+ *   soron D IS ki van toltve; a sejtes, hogy ez NEM gyermek-sorszam, hanem
+ *   azt mondja meg, MELYIK SZULO-PELDANY(OK) ala tartozik a gyermek,
+ *   MEGERSITVE: 114/130 sornal a szulo-peldany(ok) TENYLEGESEN letezik
+ *   (letezenek) a listaban ONALLO sorkent (108 sor egyetlen D-erteket
+ *   visel, 6 sor "01/02" alaku ketto D-erteket -- ez utobbi egy gyermek,
+ *   ami EGYSZERRE ket fizikai szulohoz tartozik, acrobot dontese,
+ *   2026-09-23 22:54, a valodi LSS12/HSZ/PUM 318-323. sorara). A tobbi 16
+ *   sorhoz NINCS onallo sor (a D legalabb egyik reszehez) ugyanazzal a
+ *   C-vel a helyszinen -- ezt acrobot Balazs ele viszi. `buildSitePayload`
+ *   a 114 sort atengedi (a D MINDEN resze bekerul
+ *   `buildPartnerInternalCode` C-utani szegmensebe, a forras sajat
+ *   sorrendjeben, kotojellel osszekapcsolva), a masik 16-ot tovabbra is
+ *   MEGALLASI OKKENT kezeli -- lasd ott a reszletes indoklast.
  *
  * === AMI SZANDEKOSAN KIMARAD, MERT A FELOLDASAHOZ HIANYZIK A BEMENET ===
  *
@@ -143,11 +148,12 @@
  * === AMIT A SZKRIPT SOSEM CSINAL, ES HET "ALLJON MEG" ESET ===
  *
  *   - nem kuld HTTP-hivast, nem ir semmilyen rendszerbe
- *   - HA EGY BEEPITETT SORON D (Eszkoz sorszam) OSSZETETT ("01/02" alaku),
- *     VAGY NINCS hozza ugyanazzal a C-vel onallo szulo-sor a helyszinen,
- *     MEGALL -- lasd a fajl elejen "A SORSZAM FORRASA" szakaszat. Az
- *     EGYSZERU esetet (egyetlen D-ertek, letezo onallo szulo) a szkript mar
- *     feloldja: a D bekerul a partnerInternalCode-ba.
+ *   - HA EGY BEEPITETT SORON D (Eszkoz sorszam) LEGALABB EGY RESZEHEZ NINCS
+ *     ugyanazzal a C-vel onallo szulo-sor a helyszinen, MEGALL -- lasd a
+ *     fajl elejen "A SORSZAM FORRASA" szakaszat. Ahol MINDEN resz talal
+ *     szulot (egyetlen D-ertek, vagy "01/02" alaku ketto, mindket resz
+ *     letezo szulore mutatva), a szkript mar feloldja: a D MINDEN resze
+ *     bekerul a partnerInternalCode-ba, a forras sajat sorrendjeben.
  *   - nem sorszamoz: ha egy partnerInternalCode UTKOZIK (ket sor ugyanoda esne
  *     serial nelkul), MEGALL, es kiirja, melyik `sor` szamok utkoznek
  *   - nem valaszt helyszint, ha a kod TOBBSZOR fordul elo a partner
@@ -462,16 +468,31 @@ export function resolveUnit(units, siteCode) {
  * SZEGMENSEBE, acrobot masodik, fuggetlen visszameres kore, 2026-09-23
  * 22:38: a D itt nem gyermek-sorszam, hanem azt mondja meg, MELYIK
  * SZULO-PELDANY ala tartozik a gyermek. `buildSitePayload` mar csak azokat
- * a sorokat engedi ide, ahol a D egyertelmuen egy letezo ONALLO szulo-sorra
- * mutat (lasd ott a "beepitettD" ellenorzest) -- e nelkul egy helyszinen
- * tobb egyforma C-kodu szulo eseten a gyermek CSENDBEN a rossz szulo ala
- * kerulne (ugyanaz a C, ugyanaz az E/F, de mas fizikai szulo-peldany).
+ * a sorokat engedi ide, ahol a D minden resze (lasd lejjebb) egyertelmuen
+ * egy letezo ONALLO szulo-sorra mutat (lasd ott a "beepitettD" ellenorzest)
+ * -- e nelkul egy helyszinen tobb egyforma C-kodu szulo eseten a gyermek
+ * CSENDBEN a rossz szulo ala kerulne (ugyanaz a C, ugyanaz az E/F, de mas
+ * fizikai szulo-peldany).
+ *
+ * A D OSSZETETT ALAKJA ("01/02"): acrobot dontese, 2026-09-23 22:54,
+ * LSS12/HSZ/PUM valodi sorain lemerve (318-323. sor) -- egy gyermek
+ * EGYSZERRE tartozhat KET fizikai szulohoz (itt: egy szivattyu ket
+ * homokszuro kozott). A kod MINDKET szulot viseli, a FORRAS SAJAT
+ * SORRENDJEBEN, kotojellel osszekapcsolva (`LSS12-HSZ-01-02-PUM-01`) --
+ * NEM csak az elsot, mert a partnerInternalCode kereshetu mezo, es a
+ * masodik szulora keresve is elo kell jonnie a gyermeknek. Utkozes ebbol
+ * nem szarmazhat: a gyermek-szegmens (E) helyen mindig BETUS eszkozkod all
+ * (PUM, FIB, SKI...), szam soha, tehat a D-D-E hatar egyertelmu.
  */
 export function buildPartnerInternalCode(siteCode, row) {
   if (row.builtin) {
-    const szuloSzegmens = row.deviceSerial
-      ? `${row.deviceCode}-${row.deviceSerial}`
-      : row.deviceCode;
+    const szuloReszek = row.deviceSerial
+      ? row.deviceSerial
+          .split("/")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    const szuloSzegmens = [row.deviceCode, ...szuloReszek].join("-");
     const base = `${siteCode}-${szuloSzegmens}-${row.builtin}`;
     // pad2, UGYANUGY, mint a nev arab-szamos resze -- a valodi forras F
     // ertekei mar eleve ket jegyuek (01/02), de ne fugjon ettol.
@@ -632,19 +653,25 @@ export function buildSitePayload({
     a D itt NEM gyermek-sorszam, hanem azt mondja meg, MELYIK SZULO-PELDANY
     ala tartozik a gyermek (a sejtes, amit a szkript korabban csak
     megallaskent kezelt, ALLT: 114/130 sorban a szulo-peldany TENYLEGESEN
-    letezik a listaban ONALLO sorkent, ugyanazzal a C-D parral).
-    Harom alesetre bomlik, es a szkript csak a HARMADIKON all meg innentol:
-      108 sor   a D EGYETLEN erteket visel, ES van ugyanazon a helyszinen
-                ONALLO sor ugyanazzal a C-D parral -- a szulo azonosithato,
-                a D bekerul buildPartnerInternalCode C-utani szegmensebe.
-      6 sor     a D KET erteket visel ("01/02" alakban), es DARABOLVA MIND
-                a ket resz talal onallo sort -- a szulo letezik, DE nincs
-                mert szabaly arra, HOGYAN kodolja a szkript egy gyermeket,
-                aminek KET fizikai szuloje van egyszerre. Ez a szkript nem
-                talalgatja ki a kodolast, tehat MEGALL.
-      16 sor    a D-hez NINCS onallo sor ugyanazzal a C-vel a helyszinen
-                egyaltalan -- a szulo-peldany nem azonosithato. Acrobot ezt
-                kulon viszi Balazs ele, a szkript itt is MEGALL.
+    letezik a listaban ONALLO sorkent, ugyanazzal a C-D parral). Barracuda
+    fuggetlenul, a forras fejlecebol kiindulva, UGYANAZT a 108+6+16 bontast
+    merte -- ket fuggetlen meresen all a szabaly.
+    Ket alesetre bomlik, es a szkript csak a MASODIKON all meg:
+      114 sor   a D EGY VAGY KET erteket visel ("01", vagy "01/02" alakban),
+                ES a D MINDEN resze talal ugyanazon a helyszinen ONALLO sort
+                ugyanazzal a C-vel -- a szulo-peldany(ok) azonosithato(k), a
+                D MINDEN resze bekerul buildPartnerInternalCode C-utani
+                szegmensebe, a forras sajat sorrendjeben (acrobot dontese,
+                2026-09-23 22:54, a valodi LSS12/HSZ/PUM 318-323. sorara:
+                egy gyermek EGYSZERRE tartozhat KET fizikai szulohoz, es a
+                kod MINDKETTOT viseli, mert a partnerInternalCode kereshetu
+                mezo -- csak az elso szulo ala tenne a masodik szulora
+                keresest hasztalanna).
+      16 sor    a D-hez (vagy annak legalabb egy reszehez) NINCS onallo sor
+                ugyanazzal a C-vel a helyszinen -- a szulo-peldany nem
+                azonosithato. Acrobot ezt kulon viszi Balazs ele
+                (exchange/FANK-NYITOTT-KERDESEK-BALAZSNAK.md), a szkript itt
+                MEGALL.
   */
   const standaloneSzuloKulcsok = new Set(
     allSiteRows
@@ -660,18 +687,13 @@ export function buildSitePayload({
       .split("/")
       .map((s) => s.trim())
       .filter(Boolean);
-    if (reszek.length > 1) {
+    const hianyzoReszek = reszek.filter(
+      (resz) => !standaloneSzuloKulcsok.has(`${row.deviceCode}\u0000${resz}`),
+    );
+    if (hianyzoReszek.length > 0) {
       dMegoldhatatlan.push({
         row,
-        ok: "OSSZETETT D (tobb szulo-peldany egy beepitett soron) -- nincs mert kodolasi szabaly",
-      });
-      continue;
-    }
-    const kulcs = `${row.deviceCode}\u0000${row.deviceSerial}`;
-    if (!standaloneSzuloKulcsok.has(kulcs)) {
-      dMegoldhatatlan.push({
-        row,
-        ok: "NINCS onallo sor ugyanazzal a C es D parral -- a szulo-peldany nem azonosithato",
+        ok: `NINCS onallo sor a kovetkezo D-ertek(ek)hez: ${hianyzoReszek.join(", ")} -- a szulo-peldany nem azonosithato`,
       });
     }
   }
