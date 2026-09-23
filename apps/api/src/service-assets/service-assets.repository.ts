@@ -1727,8 +1727,20 @@ export class ServiceAssetsRepository extends Repository {
           status: input.status,
           criticality: input.criticality,
           name: input.name?.trim(),
-          categoryId: input.categoryId || null,
-          functionId: input.functionId || null,
+          /**
+           * A MEZO ELHAGYASA ERINTETLENUL HAGYJA, `null` TORLI -- ugyanaz a
+           * harom allapot, mint a `parentAssetId`/`productVariantId` par
+           * felett, es ugyanaz, amit a DTO fejleceje mindig is igert.
+           *
+           * ITT KORABBAN `input.categoryId || null` allt, ami az `undefined`-t
+           * IS `null`-ra vitte -- vagyis a mezo ELHAGYASA CSENDBEN TOROLTE a
+           * kategoriat/funkciot minden olyan PATCH-en, ami mast irt at. Eles
+           * hiba, 2026-09-23 (kanban d3facd28): 45 FANK szelepen tunt el
+           * ketszer a kategoria, majd a funkcio, ugyanezen a vegponton --
+           * mindannyiszor a masik mezo iraskor.
+           */
+          categoryId: input.categoryId,
+          functionId: input.functionId,
           manufacturer: optionalText(input.manufacturer),
           model: optionalText(input.model),
           serialNumber: optionalText(input.serialNumber),
