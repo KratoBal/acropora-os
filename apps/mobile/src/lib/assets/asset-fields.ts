@@ -75,4 +75,9 @@ export interface UpdateAssetInput {
    */
   performance?: string | null;
   performanceUnitId?: string | null;
+  /**
+   * A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL, nincs mertekegyseg-tarsa
+   * (mindig m3). Kanban 8c77cf3e, 2026-09-23.
+   */
+  volume?: string | null;
 }

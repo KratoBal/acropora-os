@@ -192,6 +192,12 @@ export default function NewAssetScreen() {
    */
   const [performance, setPerformance] = useState("");
   const [performanceUnitId, setPerformanceUnitId] = useState("");
+  /**
+   * A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL. Kanban 8c77cf3e, 2026-09-23:
+   * 136 eszkozon egyszerre all teljesitmeny (m3/h) ES fogyasztas (kW),
+   * tehat kulon mezo, nincs mertekegyseg-parja.
+   */
+  const [volume, setVolume] = useState("");
   // A BEOLVASO A KOZOS ALLVANYBOL JON, ugyanabbol, amit a szerkeszto kepernyo
   // is hasznal. Az indoklas (miert ratet, es miert nem masik kepernyo) ott all.
   const scanner = useLabelScanner(setLabelCode);
@@ -644,6 +650,7 @@ export default function NewAssetScreen() {
       labelCode,
       performance,
       performanceUnitId,
+      volume,
       installedAt,
       interval,
     });
@@ -975,6 +982,17 @@ export default function NewAssetScreen() {
               onChangeValue={setPerformance}
               onChangeUnit={setPerformanceUnitId}
             />
+            {/*
+              A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL, SZO SZERINT UGYANAZ
+              A MINTA, DE PAR NELKUL. Kanban 8c77cf3e, 2026-09-23.
+            */}
+            <Field
+              label="Térfogat (m³)"
+              value={volume}
+              onChangeText={setVolume}
+              keyboardType="decimal-pad"
+            />
+            <FieldError error={error} field="volume" />
             <LabelCodeField
               value={labelCode}
               onChange={setLabelCode}
@@ -1179,7 +1197,7 @@ function Field(props: {
   label: string;
   value: string;
   onChangeText(value: string): void;
-  keyboardType?: "default" | "number-pad";
+  keyboardType?: "default" | "number-pad" | "decimal-pad";
   /**
    * A MATRICAKOD NAGYBETUS. A tarolt alak csak nagybetut fogad, es a
    * normalizalas amugy is felfele alakit -- de ha a billentyuzet kisbetut

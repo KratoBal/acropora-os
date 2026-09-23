@@ -173,6 +173,15 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    * es a mertekegyseg megvaltozik. Nemán.
    */
   const [currentUnit, setCurrentUnit] = useState<UnitOfMeasure | undefined>();
+  /**
+   * A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL.
+   *
+   * Kanban 8c77cf3e, 2026-09-23: 136 eszkozon EGYSZERRE all teljesitmeny
+   * (m3/h) ES fogyasztas (kW), tehat a meglevo performance-part nem lehet
+   * ujrahasznositani. A mezo MINDIG m3-ben ertendo, nincs kulon
+   * mertekegyseg-valaszto -- ellentetben a teljesitmennyel.
+   */
+  const [volume, setVolume] = useState("");
   const [installedAt, setInstalledAt] = useState("");
   const [warrantyExpiresAt, setWarrantyExpiresAt] = useState("");
   const [serviceIntervalDays, setServiceIntervalDays] = useState("");
@@ -249,6 +258,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               }
             : undefined,
         );
+        setVolume(asset.volume ?? "");
         setInstalledAt(inputDate(asset.installedAt));
         setWarrantyExpiresAt(inputDate(asset.warrantyExpiresAt));
         setServiceIntervalDays(asset.serviceIntervalDays?.toString() ?? "");
@@ -575,6 +585,9 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             // leszedi a teljesitmenyt, egy `null` elbukik.
             performance: normalizePerformanceValue(performance),
             performanceUnitId: performanceUnitId || null,
+            // FUGGETLEN A TELJESITMENYTOL: a `volume` ugyanazt a normalizalast
+            // kapja, mint a `performance`.
+            volume: normalizePerformanceValue(volume),
             expectedUpdatedAt: updatedAt,
           })
         : await assetsApi.create(token, {
@@ -602,6 +615,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             // ket kulcs EGYUTT marad el, kulonben a szerver fel part latna.
             performance: normalizePerformanceValue(performance) ?? undefined,
             performanceUnitId: performanceUnitId || undefined,
+            volume: normalizePerformanceValue(volume) ?? undefined,
             installedAt: toIsoDate(installedAt),
             warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
             serviceIntervalDays: interval,
@@ -929,6 +943,25 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                   menthető.
                 </p>
               ) : null}
+            </FormField>
+            {/*
+              A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL. Kanban 8c77cf3e,
+              2026-09-23: 136 eszkozon EGYSZERRE all teljesitmeny (m3/h) ES
+              fogyasztas (kW), tehat kulon mezo. MINDIG m3-ben ertendo,
+              nincs kulon mertekegyseg-valaszto -- ezert a leiras mondja ki
+              az egyseget, nem egy legordulo.
+            */}
+            <FormField
+              label="Térfogat"
+              description="m³-ben. Tizedesvesszővel is írható (például 0,5)."
+            >
+              <Input
+                aria-label="Térfogat"
+                inputMode="decimal"
+                value={volume}
+                onChange={(event) => setVolume(event.target.value)}
+                placeholder="pl. 1.5"
+              />
             </FormField>
             {/*
               A MI MATRICANK, NEM A PARTNERE. A fenti mezo a partner sajat

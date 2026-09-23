@@ -31,6 +31,14 @@ import { normalizePerformanceValue } from "./performance-mirror";
 export const MATRICA_ALAK_UZENET =
   "A matrica kódja egy betű és négy szám, például V2196.";
 
+/**
+ * A TÉRFOGAT ROSSZ ALAKJÁNAK MONDATA, EGY HELYEN -- UGYANAZ AZ INDOK, MINT A
+ * MATRICÁNÁL: a felvitel és a szerkesztő képernyő is ugyanazt a kérdést teszi
+ * fel, tehát ugyanazt a mondatot kell mondaniuk.
+ */
+export const VOLUME_ALAK_UZENET =
+  "A térfogat csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500).";
+
 export interface AssetCreateForm {
   owner: { type: AssetOwnerType; id: string } | null;
   /**
@@ -78,6 +86,14 @@ export interface AssetCreateForm {
   performance: string;
   /** A választott mértékegység azonosítója, vagy üres. */
   performanceUnitId: string;
+  /**
+   * A TÉRFOGAT -- FÜGGETLEN A TELJESÍTMÉNYTŐL.
+   *
+   * Kanban 8c77cf3e, 2026-09-23: 136 eszközön EGYSZERRE áll teljesítmény
+   * (m3/h) ÉS fogyasztás (kW), tehát a meglévő teljesítmény-pár nem bővül,
+   * külön mező kell. MINDIG m3-ben értendő, nincs mértékegység-választó.
+   */
+  volume: string;
   /** Amit a felhasználó beírt vagy a választóból kapott. Üres is lehet. */
   installedAt: string;
   /** Karbantartási intervallum napban, szövegként. Üres is lehet. */
@@ -111,6 +127,8 @@ export interface AssetCreatePayload {
   /** A normalizált teljesítmény-érték (`0,5` -> `0.5`). A párjával együtt. */
   performance?: string;
   performanceUnitId?: string;
+  /** A normalizált térfogat-érték, a teljesítménytől függetlenül. */
+  volume?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }
@@ -121,7 +139,13 @@ export type AssetCreateResult =
   | { ok: false; field: AssetCreateField; message: string };
 
 export type AssetCreateField =
-  "owner" | "name" | "labelCode" | "performance" | "installedAt" | "interval";
+  | "owner"
+  | "name"
+  | "labelCode"
+  | "performance"
+  | "volume"
+  | "installedAt"
+  | "interval";
 
 const DATE_SEPARATORS = /[.\-/\s]+/;
 
@@ -313,6 +337,19 @@ export function buildAssetCreatePayload(
       message: "Írj teljesítmény-értéket a mértékegység mellé.",
     };
 
+  /**
+   * A TÉRFOGAT ALAKJA -- UGYANAZ A SZABÁLY, MINT A TELJESÍTMÉNYNÉL, DE PÁR
+   * NÉLKÜL: a `volume`-nak nincs mértékegység-társa (mindig m3).
+   */
+  const volumeText = form.volume.trim();
+  const volumeValue = normalizePerformanceValue(form.volume);
+  if (volumeText !== "" && volumeValue === null)
+    return {
+      ok: false,
+      field: "volume",
+      message: VOLUME_ALAK_UZENET,
+    };
+
   const intervalText = form.interval.trim();
   let serviceIntervalDays: number | undefined;
   if (intervalText) {
@@ -390,6 +427,8 @@ export function buildAssetCreatePayload(
       performanceUnitId: performanceValue
         ? form.performanceUnitId.trim()
         : undefined,
+      // A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL, nincs par.
+      volume: volumeValue ?? undefined,
       /**
        * A nap KEZDETE, UTC-ben. A telepítés dátuma nap-pontosságú adat: az
        * időpont-rész nem mérés, hanem a formátum ára, ezért nulla.

@@ -76,6 +76,11 @@ export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
     labelCode: szoveg(row.labelCode),
     performance: szoveg(row.performance),
     performanceUnitId: szoveg(row.performanceUnitId),
+    /*
+      A TERFOGAT -- FUGGETLENUL A TELJESITMENYTOL, ugyanaz az indok, mint
+      felette: a sorban allo felvitel se veszitse el.
+    */
+    volume: szoveg(row.volume),
     installedAt: szoveg(row.installedAt),
     interval,
   };

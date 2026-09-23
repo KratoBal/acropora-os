@@ -35,6 +35,7 @@ import {
   AssetLabelPoolExhaustedError,
   AssetLabelUnavailableError,
   AssetPerformancePairError,
+  AssetVolumeMalformedError,
 } from "./service-assets.repository.js";
 
 import {
@@ -1008,6 +1009,8 @@ export class ServiceAssetsService {
      * MELYIK fele hianyzik. Itt csak a valaszkod dol el.
      */
     if (error instanceof AssetPerformancePairError)
+      throw new BadRequestException(error.message);
+    if (error instanceof AssetVolumeMalformedError)
       throw new BadRequestException(error.message);
     if (error instanceof Error && error.message === "ASSET_HIERARCHY_CYCLE")
       throw new BadRequestException(

@@ -30,6 +30,7 @@ import {
   buildAssetPatch,
   assetLabelEditProblem,
   assetPerformanceEditProblem,
+  assetVolumeEditProblem,
   hasAssetChanges,
   PERFORMANCE_PROBLEM_MESSAGES,
   type AssetEditForm,
@@ -44,7 +45,10 @@ import { readCachedPartnerUnits } from "@/lib/offline/asset-form-cache";
 import { describeOfflineEditNotice } from "@/lib/offline/offline-notice";
 import { ASSET_CRITICALITY_OPTIONS } from "@/lib/assets/asset-criticality";
 import { ASSET_STATUS_OPTIONS } from "@/lib/assets/asset-status";
-import { MATRICA_ALAK_UZENET } from "@/lib/assets/asset-create";
+import {
+  MATRICA_ALAK_UZENET,
+  VOLUME_ALAK_UZENET,
+} from "@/lib/assets/asset-create";
 import { describeAssetUpdateWrite } from "@/lib/assets/offline-edit";
 import { ApiError } from "@/lib/api/client";
 import { assetUpdateOperationId } from "@/lib/offline/sync-queue";
@@ -353,6 +357,11 @@ export default function AssetEditScreen() {
       const teljesitmenyBaj = assetPerformanceEditProblem(form);
       if (teljesitmenyBaj)
         throw new Error(PERFORMANCE_PROBLEM_MESSAGES[teljesitmenyBaj]);
+      /**
+       * A TERFOGAT ALAKJA UGYANITT, ES UGYANAZERT -- de par nelkul, lasd az
+       * `assetVolumeEditProblem` fejleceit.
+       */
+      if (assetVolumeEditProblem(form)) throw new Error(VOLUME_ALAK_UZENET);
       const asset = betoltott;
       const patch = buildAssetPatch(editable(asset), form);
       /**
@@ -708,6 +717,25 @@ export default function AssetEditScreen() {
           }
           editable={!save.isPending}
         />
+
+        {/*
+          A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL, NINCS PAR. Kanban
+          8c77cf3e, 2026-09-23. A `TEXT_FIELDS` generikus mintaja nem
+          tamogat decimalis billentyuzetet, ezert ez bespoke mezo.
+        */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Térfogat (m³)</Text>
+          <TextInput
+            accessibilityLabel="Térfogat (m³)"
+            value={form.volume}
+            onChangeText={(value) => setForm({ ...form, volume: value })}
+            keyboardType="decimal-pad"
+            style={styles.input}
+            placeholderTextColor="#5c7e92"
+            placeholder="Nincs megadva"
+            editable={!save.isPending}
+          />
+        </View>
 
         <LabelCodeField
           value={form.labelCode}

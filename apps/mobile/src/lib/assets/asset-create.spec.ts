@@ -38,6 +38,7 @@ const form: AssetCreateForm = {
   labelCode: "",
   performance: "",
   performanceUnitId: "",
+  volume: "",
   installedAt: "",
   interval: "",
 };
@@ -452,5 +453,52 @@ describe("a funkció a payloadban", () => {
 
     assert.ok(result.ok);
     assert.equal("functionId" in result.payload, false);
+  });
+});
+
+/**
+ * A TÉRFOGAT ÉS A FOGYASZTÁS -- FÜGGETLEN A TELJESÍTMÉNYTŐL, kanban
+ * 8c77cf3e, 2026-09-23. A térfogat ugyanazt az alak-szabályt kapja, mint a
+ * teljesítmény (de pár nélkül); a fogyasztás szabad szöveg, mert a forrás
+ * adatok több mint fele "P1/P2" alakú.
+ */
+describe("a térfogat a payloadban", () => {
+  it("a vessző pontra fordul, ugyanúgy mint a teljesítménynél", () => {
+    const result = buildAssetCreatePayload({ ...form, volume: "0,5" });
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.volume, "0.5");
+  });
+
+  /**
+   * A `volume` UGYANAZT A `??` MINTAT KÖVETI, MINT A `performance`, NEM A
+   * KATEGÓRIA FELTÉTELES SPREAD-JÉT -- tehát a kulcs a JS-objektumban
+   * `undefined` értékkel MARAD, és a `JSON.stringify` dobja el a kérésből.
+   * A helyes állítás ezért az ÉRTÉKRE megy, nem a kulcs jelenlétére.
+   */
+  it("üres választásnál az érték `undefined`, tehát a kérésből kimarad", () => {
+    const result = buildAssetCreatePayload(form);
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.volume, undefined);
+  });
+
+  it("rossz alakra ELBUKIK, és a mezőre mutat", () => {
+    const result = buildAssetCreatePayload({ ...form, volume: "abc" });
+
+    assert.equal(result.ok, false);
+    assert.equal(!result.ok && result.field, "volume");
+    assert.match(!result.ok ? result.message : "", /A térfogat csak szám/);
+  });
+
+  /**
+   * KONTROLL: a teljesítménnyel ELLENTÉTBEN a térfogatnak NINCS
+   * mértékegység-társa -- egy önmagában álló érték itt NEM hiba.
+   */
+  it("KONTROLL: egyedül is átmegy, nincs mit hiányolni mellé", () => {
+    const result = buildAssetCreatePayload({ ...form, volume: "1.5" });
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.volume, "1.5");
   });
 });

@@ -444,6 +444,16 @@ export default function AssetDetailScreen() {
                     : undefined
                 }
               />
+              {/*
+                A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL. Kanban 8c77cf3e,
+                2026-09-23: 136 eszkozon EGYSZERRE all teljesitmeny (m3/h)
+                ES fogyasztas (kW), tehat kulon adat. MINDIG m3-ben ertendo,
+                nincs kulon mertekegyseg.
+              */}
+              <Info
+                label="Térfogat"
+                value={asset.volume ? `${asset.volume} m³` : undefined}
+              />
               <Info label="Termék" value={asset.product?.name} />
               <Info label="Leírás" value={asset.description} />
             </Section>

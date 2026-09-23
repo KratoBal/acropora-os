@@ -319,6 +319,15 @@ export interface AssetDetail extends AssetListItem {
     code: string;
     name: string;
   };
+  /**
+   * A BERENDEZES TERFOGATA, MINDIG m3-BEN -- SZOVEGKENT, ugyanazon okbol,
+   * mint a `performance`: a tarolt alak `decimal(19,6)`, es a szam
+   * `number`-re alakitva a JavaScript lebegopontos tipusan menne at.
+   *
+   * NINCS KULON MERTEKEGYSEG-MEZO: ez az ertek MINDIG m3, nincs mit
+   * valasztani -- ellentetben a `performance`-szel.
+   */
+  volume?: string;
   description?: string;
   installedAt?: string;
   purchasedAt?: string;
@@ -426,6 +435,11 @@ export interface CreateAssetInput {
    */
   performance?: string;
   performanceUnitId?: string;
+  /**
+   * A TERFOGAT, MINDIG m3-BEN -- FUGGETLEN a teljesitmeny-partol, nincs
+   * kulon mertekegyseg-mezo (a FANK-adatokban ez az oszlop mindig m3).
+   */
+  volume?: string;
 }
 
 export interface UpdateAssetInput {
@@ -488,6 +502,11 @@ export interface UpdateAssetInput {
    */
   performance?: string | null;
   performanceUnitId?: string | null;
+  /**
+   * A TERFOGAT -- FUGGETLEN a teljesitmeny-partol, `null` torli, a mezo
+   * elhagyasa erintetlenul hagyja.
+   */
+  volume?: string | null;
 }
 
 export interface AssetQrCode {
