@@ -195,6 +195,14 @@ export function InventoryCountListPage() {
 
       {data && data.items.length > 0 ? (
         <Card className="overflow-hidden">
+          <div className="flex justify-end px-5 py-3">
+            <Pagination
+              position="top"
+              page={data.pagination.page}
+              totalPages={data.pagination.totalPages}
+              onPageChange={setPage}
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[800px] border-collapse text-left">
               <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
@@ -260,13 +268,12 @@ export function InventoryCountListPage() {
             </table>
           </div>
 
-          <div className="flex justify-center border-t border-dusk-200 px-5 py-4 sm:justify-end">
-            <Pagination
-              page={data.pagination.page}
-              totalPages={data.pagination.totalPages}
-              onPageChange={setPage}
-            />
-          </div>
+          <Pagination
+            position="bottom"
+            page={data.pagination.page}
+            totalPages={data.pagination.totalPages}
+            onPageChange={setPage}
+          />
         </Card>
       ) : null}
     </div>

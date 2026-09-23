@@ -186,7 +186,11 @@ describe("SupplierListPage paging", () => {
     render(<SupplierListPage />);
     await screen.findByText("Aqua Kereskedés Kft.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Következő" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Következő" }),
+    );
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     const target = String(navigation.replace.mock.calls.at(-1)?.[0]);

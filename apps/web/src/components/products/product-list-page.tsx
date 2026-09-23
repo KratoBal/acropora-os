@@ -394,6 +394,16 @@ export function ProductListPage() {
                   </option>
                 ))}
               </Select>
+              <Pagination
+                position="top"
+                page={data.pagination.page}
+                totalPages={data.pagination.totalPages}
+                onPageChange={(page) =>
+                  replaceState(
+                    changeProductPage(state, page, data.pagination.totalPages),
+                  )
+                }
+              />
             </div>
           </div>
 
@@ -486,17 +496,16 @@ export function ProductListPage() {
             </table>
           </div>
 
-          <div className="flex justify-center border-t border-dusk-200 px-5 py-4 sm:justify-end">
-            <Pagination
-              page={data.pagination.page}
-              totalPages={data.pagination.totalPages}
-              onPageChange={(page) =>
-                replaceState(
-                  changeProductPage(state, page, data.pagination.totalPages),
-                )
-              }
-            />
-          </div>
+          <Pagination
+            position="bottom"
+            page={data.pagination.page}
+            totalPages={data.pagination.totalPages}
+            onPageChange={(page) =>
+              replaceState(
+                changeProductPage(state, page, data.pagination.totalPages),
+              )
+            }
+          />
         </Card>
       ) : null}
     </div>

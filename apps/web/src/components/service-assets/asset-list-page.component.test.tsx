@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { AssetListResponse, Session } from "@acropora/types";
 import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -190,7 +196,11 @@ describe("AssetListPage paging", () => {
     render(<AssetListPage />);
     await screen.findByText("Cápasuli kompresszor");
 
-    fireEvent.click(screen.getByRole("button", { name: "Következő" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Következő" }),
+    );
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     expect(lastTarget().get("page")).toBe("3");
@@ -200,7 +210,11 @@ describe("AssetListPage paging", () => {
     render(<AssetListPage />);
     await screen.findByText("Cápasuli kompresszor");
 
-    fireEvent.click(screen.getByRole("button", { name: "Előző" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Előző" }),
+    );
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     expect(lastTarget().get("page")).toBe("1");
@@ -210,7 +224,11 @@ describe("AssetListPage paging", () => {
     render(<AssetListPage />);
     await screen.findByText("Cápasuli kompresszor");
 
-    fireEvent.click(screen.getByRole("button", { name: "Következő" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Következő" }),
+    );
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     expect(lastTarget().get("status")).toBe("ACTIVE");

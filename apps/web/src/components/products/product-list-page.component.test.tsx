@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import type { ProductListResponse, Session } from "@acropora/types";
 import { createElement, useSyncExternalStore } from "react";
@@ -254,7 +255,11 @@ describe("ProductListPage", () => {
 
     render(createElement(ProductListPage));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Következő" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Következő" }),
+    );
     expect(navigation.replace).toHaveBeenCalledWith("/products?page=2", {
       scroll: false,
     });

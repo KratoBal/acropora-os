@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { NavIncomingInvoiceListResponse, Session } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -88,7 +88,11 @@ describe("NavIncomingInvoiceListPage", () => {
   it("a Következő gomb megtartja a kért oldalszámot", async () => {
     render(createElement(NavIncomingInvoiceListPage));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Következő" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Következő" }),
+    );
 
     expect(navigation.replace).toHaveBeenCalledWith(
       "/beszerzes/nav-szamlak?page=2",

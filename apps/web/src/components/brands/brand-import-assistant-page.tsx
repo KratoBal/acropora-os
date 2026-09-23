@@ -8,6 +8,7 @@ import {
   EmptyState,
   Input,
   PageHeader,
+  Pagination,
   Select,
   Skeleton,
   StatCard,
@@ -357,6 +358,14 @@ export function BrandImportAssistantPage() {
           ) : null}
           {data.items.length ? (
             <Card className="overflow-x-auto">
+              <div className="flex justify-end px-3 py-2">
+                <Pagination
+                  position="top"
+                  page={data.pagination.page}
+                  totalPages={data.pagination.totalPages}
+                  onPageChange={(page) => navigate({ page: String(page) })}
+                />
+              </div>
               <table className="w-full min-w-[1050px] text-left text-sm">
                 <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
@@ -490,29 +499,12 @@ export function BrandImportAssistantPage() {
               }
             />
           )}
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              disabled={data.pagination.page <= 1}
-              onClick={() =>
-                navigate({ page: String(data.pagination.page - 1) })
-              }
-            >
-              Előző
-            </Button>
-            <span className="self-center">
-              {data.pagination.page} / {Math.max(1, data.pagination.totalPages)}
-            </span>
-            <Button
-              variant="secondary"
-              disabled={data.pagination.page >= data.pagination.totalPages}
-              onClick={() =>
-                navigate({ page: String(data.pagination.page + 1) })
-              }
-            >
-              Következő
-            </Button>
-          </div>
+          <Pagination
+            position="bottom"
+            page={data.pagination.page}
+            totalPages={data.pagination.totalPages}
+            onPageChange={(page) => navigate({ page: String(page) })}
+          />
         </>
       ) : !loading ? (
         <EmptyState
