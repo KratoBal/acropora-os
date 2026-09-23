@@ -21,7 +21,12 @@ permissions:
   contents: read
 
 env:
-  DATABASE_URL: postgresql://acropora:acropora@localhost:5432/acropora_ci?schema=public
+  # A connection_limit/pool_timeout SZANDEKOSAN UGYANAZ, MINT A
+  # .env.staging.example-ben all (acrobot kerese, 2026-09-23 15:07): a szam
+  # csak akkor vihetot at a valodi betoltes kornyezetere, ha ugyanazon a
+  # kapcsolat-korlaton szuletett. A meres-szkript ki is irja ezt a ket erteket
+  # a jelenteseben, hogy ne kelljen ide visszalapozni.
+  DATABASE_URL: postgresql://acropora:acropora@localhost:5432/acropora_ci?schema=public&connection_limit=5&pool_timeout=10
   REDIS_URL: redis://localhost:6379
   API_URL: http://127.0.0.1:3001
   NODE_ENV: development
@@ -105,14 +110,17 @@ jobs:
           cat "$RUNNER_TEMP/api.log" >&2 || true
           exit 1
 
-      # A DARABSZAM 300: legalabb 100 (a kiugras elkerulesehez), es eleg nagy,
-      # hogy egy esetleges lassulasi trend lathato legyen a fel-teljes CI-idon
-      # belul. A cel 2663 a FANK-import merete (5b83142e kartya).
-      - name: Run the bulk-create timing measurement
+      # A VALODI CELSZAMOT FUTTATJUK (2663, a FANK-import merete), NEM EGY
+      # KISEBB MINTAT: egy extrapolalt szam nem meres. 2663 sorosan, kb.
+      # 17-30ms/hivassal szamolva fel percen belul lefut, tehat belefer a
+      # job idokorlatjaba (5b83142e / 42bb920f kartya, acrobot 2026-09-23
+      # 15:07-i kerese: mondjuk meg, MELYIK kornyezetben es MILYEN
+      # kapcsolat-korlattal fut).
+      - name: Run the bulk-create timing measurement (a valodi 2663 darab)
         working-directory: apps/api
         env:
-          MERES_DARABSZAM: "300"
           MERES_CEL_DARABSZAM: "2663"
+          MERES_KORNYEZET: "GitHub Actions CI, efemer job-szintu Postgres/Redis (NEM staging, NEM eles) -- lasd a workflow DATABASE_URL-jet a connection_limit/pool_timeout ertekekhez"
         run: node scripts/meres-eszkoz-tomeges-idozites.mjs
 
       # ACROBOT KERESE (5b83142e, 2026-09-23 14:17): nem eleg azt allitani,
