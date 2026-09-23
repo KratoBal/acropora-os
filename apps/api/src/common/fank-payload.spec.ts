@@ -730,11 +730,13 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.ok(kodok.includes("LSS22-CPT-VAL"));
   });
 
-  it("BEEPITETT soron D (Eszkoz sorszam) is kitoltve: MEGALL, mert erre nincs mert szabaly", () => {
+  it("BEEPITETT soron D kitoltve, de NINCS onallo szulo-sor a C-vel: MEGALL", () => {
     /*
-      A valodi forrasban 130 ilyen sor van (92-n D egyedul, 38-on D ES F
-      egyutt) -- egyik mintat sem oldottuk fel talalgatassal. A valodi ETB
-      615-617. es 621-623. sora pontosan ezt mutatta.
+      acrobot masodik, fuggetlen visszameres kore, 2026-09-23 22:38: a D egy
+      beepitett soron a SZULO-PELDANYT azonositja, nem gyermek-sorszam. A
+      valodi forrasban 16 ilyen sor van, ahol a hivatkozott D-hez EGYALTALAN
+      nincs onallo sor a helyszinen (pl. RIV/VPU D=01..03) -- ezt a
+      szkript tovabbra is megallitja, mert a szulo-peldany nem azonosithato.
     */
     const dir = mappa();
     const dBeepitett = [
@@ -762,6 +764,91 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.equal(stdout, "");
     assert.match(stderr, /sor 17/);
     assert.match(stderr, /D="01"/);
+    assert.match(stderr, /NINCS onallo sor/);
+  });
+
+  it("BEEPITETT soron D talal onallo szulot: NEM all meg, es a D bekerul a partnerInternalCode-ba", () => {
+    /*
+      A masik 114/130 sorra acrobot megerositette: a szulo-peldany
+      TENYLEGESEN letezik a listaban ONALLO sorkent, ugyanazzal a C-D
+      parral. A szkript ilyenkor NEM all meg -- a D bekerul a C utani
+      szegmensbe, hogy egy helyszinen tobb egyforma C-kodu szulo eseten a
+      gyermek NE csusszon csendben a rossz szulo ala.
+    */
+    const dir = mappa();
+    const dSzuloVan = [
+      ALAP_TSV,
+      sor({ sor: "18", site: "LSS22", deviceCode: "CPT", deviceSerial: "01" }),
+      sor({
+        sor: "19",
+        site: "LSS22",
+        deviceCode: "CPT",
+        deviceSerial: "01",
+        builtin: "VAL",
+        builtinSerial: "1",
+      }),
+    ].join("\n");
+    const tsv = iras(dir, "forras.tsv", dSzuloVan);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,10,11,15",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    const gyerek = payload.find((p: { partnerInternalCode: string }) =>
+      p.partnerInternalCode.startsWith("LSS22-CPT-01-VAL"),
+    );
+    assert.ok(gyerek, `nem talaltam a D-t hordozo builtin sort: ${stdout}`);
+    assert.equal(gyerek.partnerInternalCode, "LSS22-CPT-01-VAL-01");
+    const szulo = payload.find(
+      (p: { partnerInternalCode: string }) =>
+        p.partnerInternalCode === "LSS22-CPT-01",
+    );
+    assert.ok(szulo, `nem talaltam az onallo szulo-sort: ${stdout}`);
+  });
+
+  it("BEEPITETT soron OSSZETETT D ('01/02'): MEGALL, nincs mert kodolasi szabaly ket szulora", () => {
+    /*
+      A valodi forrasban 6 sor visel ket D-erteket egyszerre (pl. LSS12
+      HSZ alatt PUM, "01/02" alakban) -- acrobot megerositette, hogy
+      DARABOLVA mind a ket resz talal onallo sort, tehat a szulo-peldanyok
+      leteznek, csak nincs mert szabaly arra, HOGYAN kodolja a szkript egy
+      olyan gyermeket, aminek egyszerre KET fizikai szuloje van.
+    */
+    const dir = mappa();
+    const osszetettD = [
+      ALAP_TSV,
+      sor({ sor: "21", site: "LSS22", deviceCode: "CPT", deviceSerial: "01" }),
+      sor({ sor: "22", site: "LSS22", deviceCode: "CPT", deviceSerial: "02" }),
+      sor({
+        sor: "23",
+        site: "LSS22",
+        deviceCode: "CPT",
+        deviceSerial: "01/02",
+        builtin: "PUM",
+      }),
+    ].join("\n");
+    const tsv = iras(dir, "forras.tsv", osszetettD);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,10,11,15",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(stdout, "");
+    assert.match(stderr, /sor 23/);
+    assert.match(stderr, /OSSZETETT/);
   });
 
   it("kategoria-terkep MEGADVA, de egy kod HIANYZIK belole: MEGALL, megnevezi a sort es a kodot", () => {
