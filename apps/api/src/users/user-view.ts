@@ -1,6 +1,7 @@
 import type { User } from "@acropora/database";
 import type {
   NotificationRoleValue,
+  ServiceCapabilityValue,
   UserDetail,
   UserSummary,
 } from "@acropora/types";
@@ -51,10 +52,17 @@ export function toUserSummary(user: User): UserSummary {
 export function toUserDetail(
   user: User,
   notificationRoles: readonly NotificationRoleValue[],
+  /**
+   * A PARJA, UGYANAZZAL AZ OKKAL -- lasd a fenti fejlec. Kulon kapcsolotabla,
+   * kulon kotelezo parameter: a `notificationRoles`-nel leirt hiba (a mezo
+   * kiesik, a fordito hallgat) ugyanugy fenyegetne, ha ez elhagyhato lenne.
+   */
+  serviceCapabilities: readonly ServiceCapabilityValue[],
 ): UserDetail {
   return {
     ...toUserSummary(user),
     notificationRoles: [...notificationRoles],
+    serviceCapabilities: [...serviceCapabilities],
     avatarUrl: user.avatarUrl ?? undefined,
     passwordUpdatedAt: user.passwordUpdatedAt?.toISOString(),
     /**
