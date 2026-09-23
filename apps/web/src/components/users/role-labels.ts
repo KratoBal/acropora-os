@@ -16,6 +16,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
    */
   CONTENT_AGENT: "Tartalom-ágens (gépi)",
   PARTNER_SERVICE: "Partner szerviz",
+  ASSET_IMPORT_AGENT: "Eszköz-import ágens (gépi)",
 };
 
 export const ROLE_OPTIONS = USER_ROLES.map((role) => ({

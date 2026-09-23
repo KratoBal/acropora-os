@@ -4,6 +4,7 @@ import { describe, it, test } from "node:test";
 
 import ts from "typescript";
 import {
+  HUMAN_ROLES,
   NAVIGATION_ENTRIES,
   navigationIdsFor,
   PERMISSIONS,
@@ -84,7 +85,24 @@ async function loadMirror(): Promise<Mirror> {
   )) as unknown as Mirror;
 }
 
-/** Minden (szerep, kulcs) pár, ami jogot hordoz. */
+/**
+ * Minden (szerep, kulcs) pár, ami jogot hordoz.
+ *
+ * CSAK EMBERI SZEREPEKRE, NEM Object.keys(ROLE_PERMISSIONS)-re -- a szomszéd
+ * `mobile-capability-mirror.spec.ts` saját, explicit szabálya szerint a
+ * mobil UserRole unió KIZÁRÓLAG `HUMAN_ROLES`-t tartalmazhat, egyetlen gépi
+ * szerep sem kerülhet bele. Egy gépi szerepre hívni a mobil tükör
+ * függvényeit tehát nem egy hiányzó mezőt mér, hanem egy fogalmat, ami a
+ * mobil oldalon SOSEM létezhet -- a gépi fiók nem nyit telefont.
+ *
+ * MÉRVE, 2026-09-23: a `CONTENT_AGENT` idáig véletlenül nem bukott el ezen,
+ * mert a jogai (content.*) nem fedik egyik itt vizsgált kulcsot sem, tehát a
+ * tükör hiányzó (csendben `false`-ra eső) válasza épp egybeesett a szerver
+ * saját `false`-ával. Az `ASSET_IMPORT_AGENT` (`service.view`+
+ * `service.manage`) ezt a véletlen egybeesést törte meg: a szerver `true`-t
+ * mond, a tükör -- mert a szerepet nem is ismeri -- `false`-ot. Ez NEM a
+ * tükör hibája, hanem azé, hogy ezt a párost egyáltalán összevetettük.
+ */
 function comparisons(mirror: Mirror) {
   const rows: Array<{
     role: string;
@@ -94,7 +112,7 @@ function comparisons(mirror: Mirror) {
     permission: string;
   }> = [];
 
-  for (const role of Object.keys(ROLE_PERMISSIONS)) {
+  for (const role of HUMAN_ROLES) {
     const capabilities = {
       ...mirror.getWebshopCapabilities(role as UserRole),
       ...mirror.getServiceCapabilities(role as UserRole),
@@ -223,7 +241,10 @@ describe("a mobil csempek es a kozos menu-forras", () => {
     const eltero: string[] = [];
     let osszevetes = 0;
 
-    for (const role of Object.keys(ROLE_PERMISSIONS) as UserRole[]) {
+    // CSAK EMBERI SZEREPEKRE, ugyanazert, mint a `comparisons()`-ban fent:
+    // egy gepi szerepnek nincs "mobil" navigacioja, tehat a hozza tartozo
+    // csempe-osszevetes nem hianyt mer, hanem egy nem letezo fogalmat kerdez.
+    for (const role of HUMAN_ROLES as readonly UserRole[]) {
       const forras = new Set(navigationIdsFor(role, "mobile"));
       const webshop = mirror.getWebshopCapabilities(role);
       const service = mirror.getServiceCapabilities(role);
