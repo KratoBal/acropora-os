@@ -135,6 +135,17 @@
  *     generalt partnerInternalCode ertekek EGYEDIEK -- acrobot sajat szavaival:
  *     "nalam ez egy sor volt, es pont az LSS22-n sult el"
  *
+ * === A BEMENET/KIMENET SORSZAMA MINDIG OSSZE VAN VETVE -- acrobot kikotese,
+ *     2026-09-23 22:04, egy SAJAT masik hibaja utan (54 sorbol kevesebb jott
+ *     ki, es nem tunt fel) ===
+ *
+ *   Minden futas a stderr-re irja: "<helyszin>: N bemeneti sor - K kihagyva
+ *     = M kimeneti eszkoz". Ez NEM opcionalis reszlet, hanem a legrosszabb
+ *     fajta hibat fogja meg: amikor a szkript nem hibazik, csak CSENDBEN
+ *     kevesebbet ad ki. Ha valaha N-K != M, `buildSitePayload` MEGALL --
+ *     ez belso ellentmondas, sosem szabadna elofordulnia, de ha megis, a
+ *     hivo NE kuldje el a payloadot.
+ *
  * HASZNALAT:
  *   node scripts/fank-payload.mjs LSS22 --kihagy 563 \
  *     --units exchange/fank-units.json
@@ -535,9 +546,9 @@ export function buildSitePayload({
   const skip = new Set(skipSorok.map(String));
   const { unit, parentCode } = resolveUnit(units, siteCode);
 
-  const siteRows = rows
-    .map(toTsvRow)
-    .filter((row) => row.site === siteCode && !skip.has(row.sor));
+  const allSiteRows = rows.map(toTsvRow).filter((row) => row.site === siteCode);
+  const siteRows = allSiteRows.filter((row) => !skip.has(row.sor));
+  const kihagyottSorSzama = allSiteRows.length - siteRows.length;
 
   const hianyzoKod = siteRows.filter((row) => !row.deviceCode);
   if (hianyzoKod.length > 0)
@@ -656,10 +667,30 @@ export function buildSitePayload({
     ? []
     : entries.filter((e) => !e.payload.categoryId);
 
+  /*
+    A BEMENETI ES A KIMENETI SORSZAM OSSZEVETESE -- acrobot kikotese,
+    2026-09-23 22:04, egy sajat masik hibaja utan (54 sorbol kevesebb jott
+    ki, es ez akkor sem tunt fel): "a bemenet es a kimenet sorszamat
+    osszevetni... egy szamlalo, ami minden futas vegen ket szamot egymas
+    melle tesz, mind a ket esetet megfogja, es nem kell hozza emlekezni
+    ra." A varakozas: pontosan annyi eszkoz megy ki, ahany a helyszin
+    TSV-sora, minus a --kihagy-gyal kihagyottak. Ha ez NEM egyezik, valami
+    csendben elnyelt egy sort -- ez a legrosszabb fajta hiba, mert nem
+    hibazik, csak kevesebb lesz (acrobot sajat szavaival).
+  */
+  if (entries.length !== siteRows.length) {
+    throw new FankPayloadError(
+      `Belso ellentmondas: ${siteRows.length} bemeneti sorbol ${entries.length} kimeneti eszkoz lett a(z) ${siteCode} helyszinen -- ez a szamnak EGYEZNIE kellene. Ne kuldd el ezt a payloadot.`,
+    );
+  }
+
   return {
     payload: entries.map((e) => e.payload),
     hianyzoKategoriaSorok: hianyzoKategoria.map((e) => e.sor),
     meresKerekitve,
+    bemenetiSorSzam: allSiteRows.length,
+    kihagyottSorSzama,
+    kimenetiEszkozSzam: entries.length,
   };
 }
 
@@ -768,7 +799,14 @@ export function main(argv) {
       )
     : null;
 
-  const { payload, hianyzoKategoriaSorok, meresKerekitve } = buildSitePayload({
+  const {
+    payload,
+    hianyzoKategoriaSorok,
+    meresKerekitve,
+    bemenetiSorSzam,
+    kihagyottSorSzama,
+    kimenetiEszkozSzam,
+  } = buildSitePayload({
     tsvText,
     units,
     siteCode: args.site,
@@ -796,8 +834,14 @@ export function main(argv) {
       `KEREKITVE (hat tizedesre, a sema sajat pontossagara): ${meresKerekitve.length} sor\n${reszletek}\n`,
     );
   }
+  /*
+    A BEMENET/KIMENET OSSZEVETESE MINDIG KIIRODIK, ne csak hibas esetben --
+    acrobot kerese: ezt ne kelljen kulon kikerni, es ne lehessen elfelejteni
+    megnezni. A hivo sajat szamitasa (hany sort szant --kihagy-nak) itt
+    osszevethető a szkript sajat szamlalasaval.
+  */
   process.stderr.write(
-    `${payload.length} eszkoz a(z) ${args.site} helyszinre, ${args.tsv} forrasbol.\n`,
+    `${args.site}: ${bemenetiSorSzam} bemeneti sor - ${kihagyottSorSzama} kihagyva = ${kimenetiEszkozSzam} kimeneti eszkoz (${args.tsv}).\n`,
   );
   process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
   return 0;

@@ -294,6 +294,33 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.equal(payload.length, 2, `nem ket sort adott: ${stdout}`);
   });
 
+  it("a bemenet/kimenet sorszama MINDIG ki van irva, es a harom szam osszead", () => {
+    /*
+      acrobot kikotese, 2026-09-23 22:04, sajat masik hibaja utan (54
+      sorbol kevesebb jott ki, es nem tunt fel): a szkript MINDIG irja ki a
+      bemeneti/kihagyott/kimeneti szamot, es ezt nem kell kulon kerni. Az
+      ALAP_TSV-ben LSS22-nek 6 sora van (10,11,12,13,14,15); ebbol 4-et
+      hagyunk ki, tehat 6 - 4 = 2 kell maradjon.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,15",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0, stderr);
+    assert.match(
+      stderr,
+      /LSS22: 6 bemeneti sor - 4 kihagyva = 2 kimeneti eszkoz/,
+    );
+  });
+
   it("a nev elotagja a szulo egyseg kodja, es az electricalCode a TELJES nyers szoveg", () => {
     const dir = mappa();
     const tsv = iras(dir, "forras.tsv", ALAP_TSV);
