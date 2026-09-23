@@ -40,6 +40,7 @@ const form: AssetCreateForm = {
   performanceUnitId: "",
   volume: "",
   powerConsumption: "",
+  powerConsumptionRaw: "",
   installedAt: "",
   interval: "",
 };
@@ -504,29 +505,36 @@ describe("a térfogat a payloadban", () => {
   });
 });
 
+/**
+ * A FOGYASZTÁS ÁTALAKULT: Balázs 2026-09-23-i döntése ("igen, össze akarja
+ * adni") miatt a mező mostantól ÖSSZEADHATÓ SZÁM, ugyanazt az alak-szabályt
+ * kapja, mint a `volume`. A tábla EREDETI cellája (a "P1/P2" alak is) a
+ * KÜLÖN `powerConsumptionRaw` mezőbe kerül, változatlanul -- lásd lejjebb.
+ * Kanban 8c77cf3e.
+ */
 describe("a fogyasztás a payloadban", () => {
-  it("a sima szám átmegy, szövegként", () => {
+  it("a vessző pontra fordul, ugyanúgy mint a térfogatnál", () => {
     const result = buildAssetCreatePayload({
       ...form,
       powerConsumption: "0,75",
     });
 
     assert.ok(result.ok);
-    assert.equal(result.payload.powerConsumption, "0,75");
+    assert.equal(result.payload.powerConsumption, "0.75");
   });
 
-  /**
-   * EZ AZ AZ ÁLLÍTÁS, AMIÉRT A MEZŐ SZÖVEG, NEM DECIMAL: a valódi FANK-
-   * adatok több mint fele pontosan ilyen alakú.
-   */
-  it("a „P1/P2” alak is átmegy, VÁLTOZATLANUL", () => {
+  it("rossz alakra ELBUKIK, és a mezőre mutat", () => {
     const result = buildAssetCreatePayload({
       ...form,
       powerConsumption: "6,15/5,5",
     });
 
-    assert.ok(result.ok);
-    assert.equal(result.payload.powerConsumption, "6,15/5,5");
+    assert.equal(result.ok, false);
+    assert.equal(!result.ok && result.field, "powerConsumption");
+    assert.match(
+      !result.ok ? result.message : "",
+      /A fogyasztás csak szám lehet/,
+    );
   });
 
   it("üres választásnál az érték `undefined`, tehát a kérésből kimarad", () => {
@@ -544,5 +552,53 @@ describe("a fogyasztás a payloadban", () => {
 
     assert.ok(result.ok);
     assert.equal(result.payload.powerConsumption, undefined);
+  });
+
+  /**
+   * KONTROLL: a térfogattal EGYEZŐEN nincs pár-kényszer -- egy önmagában
+   * álló érték itt NEM hiba.
+   */
+  it("KONTROLL: egyedül is átmegy, nincs mit hiányolni mellé", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      powerConsumption: "5.5",
+    });
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.powerConsumption, "5.5");
+  });
+});
+
+/**
+ * A TÁBLA EREDETI CELLÁJA, VÁLTOZATLANUL -- szabad szöveg, mert a valódi
+ * FANK-adatok több mint fele "P1/P2" alakú, és az összeadható mező ezt nem
+ * fogadná el. Kanban 8c77cf3e, 2026-09-23.
+ */
+describe("a fogyasztás eredeti bejegyzése (powerConsumptionRaw) a payloadban", () => {
+  it("a „P1/P2” alak is átmegy, VÁLTOZATLANUL", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      powerConsumptionRaw: "6,15/5,5",
+    });
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.powerConsumptionRaw, "6,15/5,5");
+  });
+
+  it("üres választásnál az érték `undefined`, tehát a kérésből kimarad", () => {
+    const result = buildAssetCreatePayload(form);
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.powerConsumptionRaw, undefined);
+  });
+
+  it("KONTROLL: a csupa szóköz is `undefined`-re esik", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      powerConsumptionRaw: "   ",
+    });
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.powerConsumptionRaw, undefined);
   });
 });

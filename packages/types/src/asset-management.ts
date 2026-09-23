@@ -329,13 +329,26 @@ export interface AssetDetail extends AssetListItem {
    */
   volume?: string;
   /**
-   * A BERENDEZES FOGYASZTASA, MINDIG kW-BAN -- ES SZANDEKOSAN SZOVEG.
+   * A BERENDEZES FOGYASZTASA, MINDIG kW-BAN -- AZ OSSZEADHATO SZAM,
+   * SZOVEGKENT (ugyanazon okbol, mint a `volume`).
    *
-   * Lemerve (murena, 2026-09-23, kanban 8c77cf3e): a forras FANK-adatok
-   * tobb mint fele "P1/P2" alaku, ket motor-teljesitmeny egy mezoben (pl.
-   * "6,15/5,5"), nem egy tizedes szam. Szabad szoveg, kW-ban ertve.
+   * Balazs kerese (2026-09-23, acrobot kerdesere): ossze akarja adni a
+   * fogyasztast egy rendszerre, tehat ennek SZAMNAK kell lennie -- lasd a
+   * `powerConsumptionRaw` fejleceit arrol, mi tortenik a "P1/P2" alaku
+   * forrasertekekkel.
    */
   powerConsumption?: string;
+  /**
+   * A FOGYASZTAS EREDETI, VALTOZATLAN SZOVEGE -- A FORRAS CELLAJA, BETURE.
+   *
+   * Lemerve (murena, 2026-09-23, kanban 8c77cf3e): a FANK-adatok tobb mint
+   * fele "P1/P2" alaku, ket motor-teljesitmeny egy cellaban (pl.
+   * "6,15/5,5"), nem egy tizedes szam. A `powerConsumption` csak EGY szamot
+   * tud tartani (ott, ahol az import majd eldonti, melyiket) -- ez a mezo
+   * azert van, hogy a masik ne veszjen el, es a valasztas barmikor
+   * visszaellenorizheto legyen.
+   */
+  powerConsumptionRaw?: string;
   description?: string;
   installedAt?: string;
   purchasedAt?: string;
@@ -449,11 +462,12 @@ export interface CreateAssetInput {
    */
   volume?: string;
   /**
-   * A FOGYASZTAS, MINDIG kW-BAN, SZABAD SZOVEGKENT -- lasd az
-   * `AssetDetail.powerConsumption` fejleceit: a forras adat tobb mint fele
-   * "P1/P2" alaku, nem egy tizedes szam.
+   * A FOGYASZTAS, MINDIG kW-BAN -- AZ OSSZEADHATO SZAM. Lasd az
+   * `AssetDetail.powerConsumption` fejleceit.
    */
   powerConsumption?: string;
+  /** A fogyasztas eredeti szovege, lasd az `AssetDetail.powerConsumptionRaw`-t. */
+  powerConsumptionRaw?: string;
 }
 
 export interface UpdateAssetInput {
@@ -523,6 +537,8 @@ export interface UpdateAssetInput {
   volume?: string | null;
   /** A FOGYASZTAS -- ugyanaz az alak, mint a `volume`-nal. */
   powerConsumption?: string | null;
+  /** A fogyasztas eredeti szovege -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */
+  powerConsumptionRaw?: string | null;
 }
 
 export interface AssetQrCode {

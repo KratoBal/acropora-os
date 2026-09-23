@@ -82,6 +82,7 @@ export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
     */
     volume: szoveg(row.volume),
     powerConsumption: szoveg(row.powerConsumption),
+    powerConsumptionRaw: szoveg(row.powerConsumptionRaw),
     installedAt: szoveg(row.installedAt),
     interval,
   };

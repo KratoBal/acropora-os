@@ -363,11 +363,15 @@ export class CreateAssetDto {
    */
   @IsString() @IsOptional() volume?: string;
   /**
-   * A FOGYASZTAS, MINDIG kW-BAN, SZABAD SZOVEGKENT -- lasd az
-   * `AssetDetail.powerConsumption` fejleceit: a forras adat tobb mint fele
-   * "P1/P2" alaku, nem egy tizedes szam, tehat itt NINCS alak-ellenorzes.
+   * A FOGYASZTAS, MINDIG kW-BAN. Az ALAKOT a szolgaltatas ellenorzi a kozos
+   * `normalizePerformanceValue` fuggvennyel, ugyanugy, mint a `volume`-nal.
    */
-  @IsString() @MaxLength(40) @IsOptional() powerConsumption?: string;
+  @IsString() @IsOptional() powerConsumption?: string;
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES.
+   * Lasd az `AssetDetail.powerConsumptionRaw` fejleceit.
+   */
+  @IsString() @MaxLength(40) @IsOptional() powerConsumptionRaw?: string;
   @IsString() @IsOptional() description?: string;
   @IsISO8601() @IsOptional() installedAt?: string;
   @IsISO8601() @IsOptional() purchasedAt?: string;
@@ -494,10 +498,18 @@ export class UpdateAssetDto {
   @IsString()
   volume?: string | null;
   /**
-   * A FOGYASZTAS -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES, lasd a
-   * `CreateAssetDto.powerConsumption` fejleceit.
+   * A FOGYASZTAS -- ugyanaz az alak, mint a `volume`-nal.
    */
-  @IsString() @MaxLength(40) @IsOptional() powerConsumption?: string | null;
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @IsString()
+  powerConsumption?: string | null;
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES.
+   */
+  @IsString()
+  @MaxLength(40)
+  @IsOptional()
+  powerConsumptionRaw?: string | null;
   @IsString() @IsOptional() description?: string | null;
   @IsISO8601() @IsOptional() installedAt?: string | null;
   @IsISO8601() @IsOptional() purchasedAt?: string | null;

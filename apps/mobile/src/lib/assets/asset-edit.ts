@@ -70,6 +70,8 @@ export interface EditableAsset {
    */
   volume?: string;
   powerConsumption?: string;
+  /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
+  powerConsumptionRaw?: string;
   status: AssetStatus;
   criticality: AssetCriticality;
   manufacturer?: string;
@@ -151,6 +153,7 @@ export interface AssetEditForm {
    */
   volume: string;
   powerConsumption: string;
+  powerConsumptionRaw: string;
 }
 
 const TEXT_FIELDS = [
@@ -160,6 +163,12 @@ const TEXT_FIELDS = [
   "inventoryNumber",
   "description",
   "notes",
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE IDE ILLIK, A `volume`/`powerConsumption`-nel
+   * ELLENTETBEN: szabad szoveg, nincs alak-ellenorzese, tehat a generikus
+   * mintaba tartozik.
+   */
+  "powerConsumptionRaw",
 ] as const;
 
 /** Fills the form from what the server last said about the asset. */
@@ -181,6 +190,7 @@ export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
     performanceUnitId: asset.performanceUnit?.id ?? "",
     volume: asset.volume ?? "",
     powerConsumption: asset.powerConsumption ?? "",
+    powerConsumptionRaw: asset.powerConsumptionRaw ?? "",
   };
 }
 
@@ -285,13 +295,14 @@ export function buildAssetPatch(
   if (terfogat !== regiTerfogat) patch.volume = terfogat;
 
   /**
-   * A FOGYASZTAS -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES (lasd a
-   * `Asset.powerConsumption` sema-fejleceit: a forras adat tobb mint fele
-   * "P1/P2" alaku).
+   * A FOGYASZTAS -- AZ OSSZEADHATO SZAM, UGYANAZ A SZABALY, MINT A
+   * TERFOGATNAL. Balazs kerese (2026-09-23): ossze akarja adni a
+   * fogyasztast, tehat ez SZAM. A `powerConsumptionRaw` (lent, a
+   * `TEXT_FIELDS` hurokban) orzi az eredeti "P1/P2" alaku szoveget.
    */
-  const fogyasztas = form.powerConsumption.trim();
-  if (fogyasztas !== (asset.powerConsumption ?? "").trim())
-    patch.powerConsumption = fogyasztas === "" ? null : fogyasztas;
+  const fogyasztas = normalizePerformanceValue(form.powerConsumption);
+  const regiFogyasztas = asset.powerConsumption ?? null;
+  if (fogyasztas !== regiFogyasztas) patch.powerConsumption = fogyasztas;
 
   /**
    * A FUNKCIO -- FUGGETLENUL A KATEGORIATOL, ugyanaz a szabaly, mint felette:
@@ -371,6 +382,19 @@ export function assetVolumeEditProblem(
   form: AssetEditForm,
 ): "malformed" | null {
   const ertek = form.volume.trim();
+  if (ertek === "") return null;
+  return normalizePerformanceValue(ertek) === null ? "malformed" : null;
+}
+
+/**
+ * A FOGYASZTAS ALAKJA, A MENTES ELOTT -- SZO SZERINT A `assetVolumeEditProblem`
+ * SZERKEZETE. Balazs kerese (2026-09-23): a fogyasztast ossze akarja adni,
+ * tehat ez is SZAM lett, es ugyanugy alak-ellenorzest igenyel.
+ */
+export function assetPowerConsumptionEditProblem(
+  form: AssetEditForm,
+): "malformed" | null {
+  const ertek = form.powerConsumption.trim();
   if (ertek === "") return null;
   return normalizePerformanceValue(ertek) === null ? "malformed" : null;
 }

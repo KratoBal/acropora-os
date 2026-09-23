@@ -2938,21 +2938,37 @@ model Asset {
   /// mertekegyseg-mezo, mert a FANK-ban ez az oszlop MINDIG m3 -- ellentetben
   /// a `performance`-szel, ahol a szerelo tobb egyseg kozul valaszt.
   volume              Decimal?         @db.Decimal(19, 6)
-  /// A BERENDEZES FOGYASZTASA, MINDIG kW-BAN -- ES SZANDEKOSAN SZOVEG, NEM SZAM.
+  /// A BERENDEZES FOGYASZTASA, MINDIG kW-BAN -- AZ OSSZEADHATO SZAM.
   ///
   /// Balazs kerese, 2026-09-23 (kanban 8c77cf3e), a FANK Excel `Fogyasztas
-  /// (ossz. kW vagy P1/P2)` oszlopa alapjan. LEMERVE (murena, 2026-09-23): a
-  /// 276 kitoltott sorbol 142 (51%) KETTEVALASZTOTT ertek, "P1/P2" alakban
-  /// (pl. "6,15/5,5") -- ket motor-teljesitmeny egy cellaban, nem egy tizedes
-  /// szam. Egy `Decimal` mezo ezt CSENDBEN elvenne: vagy elutasitana a
-  /// bevitelt, vagy valakinek ki kellene talalnia, melyik felet irja be.
+  /// (ossz. kW vagy P1/P2)` oszlopa alapjan.
   ///
   /// NEM UGYANAZ, MINT A `performance`: 136 soron EGYSZERRE van kitoltve a
   /// Teljesitmeny (m3/h, a `performance` mezot tolti) ES a Fogyasztas (kW) --
   /// tehat a ket ertek FUGGETLEN, egy eszkoznek EGYSZERRE lehet mindket
   /// adata, es a `performance` egy-ertek-egy-mertekegyseg parja nem tudna
   /// mindkettot tartani.
-  powerConsumption    String?
+  ///
+  /// MIERT DECIMAL, NEM SZOVEG -- ES EZ VALTOZAS A KORABBI DONTESHEZ KEPEST.
+  /// Elsore szoveg volt (lasd `powerConsumptionRaw` lejjebb, miert): a FANK
+  /// 276 kitoltott soraiabol 142 (51%) "P1/P2" alaku, ket motor-teljesitmeny
+  /// egy cellaban (pl. "6,15/5,5"). Balazs viszont kimondta (2026-09-23,
+  /// acrobot kerdesere): OSSZE AKARJA ADNI a fogyasztast egy rendszerre --
+  /// ez csak szamon mukodik. A P1/P2 sorokon MELYIK szam kerul ide, azt az
+  /// IMPORT dolgozza fel (ma meg nem letezik); ez a mezo maga barmelyiket
+  /// befogadja, amit a bevitel ad.
+  powerConsumption    Decimal?         @db.Decimal(19, 6)
+  /// A FOGYASZTAS EREDETI, VALTOZATLAN SZOVEGE -- A TABLA CELLAJA, BETURE.
+  ///
+  /// Ketto mezo egy adat helyett, es ez szandekos (acrobot dontese,
+  /// 2026-09-23): ha csak a `powerConsumption` szamot tartanank meg, a
+  /// "6,15/5,5" alak MASODIK erteke eltunne, es soha tobbe nem tudnank meg,
+  /// mi allt ott -- a valasztott szam felteves, nem meres. Ez a mezo azert
+  /// van, hogy a felteves barmikor visszaellenorizheto es visszafejtheto
+  /// legyen. A tarolasi ara nulla: opcionalis, es a legtobb esetben (ahol a
+  /// FANK-ban egyetlen szam allt) ugyanazt az erteket hordozza, mint a
+  /// `powerConsumption`, csak szovegkent.
+  powerConsumptionRaw String?
   /// `Restrict`, ugyanugy, mint a mertekegysegnel: egy kategoria, amire eszkoz
   /// mutat, nem torolheto ki alola. A kivezetes `isActive`-kal megy.
   categoryRef         AssetCategory?   @relation("AssetCategory", fields: [categoryId], references: [id], onDelete: Restrict)

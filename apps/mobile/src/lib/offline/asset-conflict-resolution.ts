@@ -119,6 +119,8 @@ export interface CurrentAssetLike {
    */
   volume?: string | null;
   powerConsumption?: string | null;
+  /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
+  powerConsumptionRaw?: string | null;
 }
 
 /** A törzsből összevethető mezők. A `expectedUpdatedAt` nem tartozik ide. */
@@ -169,6 +171,7 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   performanceUnitId: "Teljesítmény mértékegysége",
   volume: "Térfogat",
   powerConsumption: "Fogyasztás",
+  powerConsumptionRaw: "Fogyasztás (eredeti bejegyzés)",
 };
 
 /** Az üres érték NEVE. Egy üres cella nem mondja meg, hogy törlésről van szó. */
@@ -409,6 +412,9 @@ function assignField(
       return;
     case "powerConsumption":
       target.powerConsumption = source.powerConsumption;
+      return;
+    case "powerConsumptionRaw":
+      target.powerConsumptionRaw = source.powerConsumptionRaw;
       return;
     default:
       /**

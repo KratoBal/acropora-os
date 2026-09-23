@@ -184,6 +184,14 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    */
   const [volume, setVolume] = useState("");
   const [powerConsumption, setPowerConsumption] = useState("");
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE -- Balazs kerese (2026-09-23): a
+   * fogyasztast ossze akarja adni, tehat a `powerConsumption` szamma valt.
+   * A FANK-adatok tobb mint fele "P1/P2" alaku volt, es ez a mezo orzi az
+   * eredeti bejegyzest -- ha az import majd feldolgozza, ebbol ellenorizheto
+   * vissza, melyik szamot valasztottuk.
+   */
+  const [powerConsumptionRaw, setPowerConsumptionRaw] = useState("");
   const [installedAt, setInstalledAt] = useState("");
   const [warrantyExpiresAt, setWarrantyExpiresAt] = useState("");
   const [serviceIntervalDays, setServiceIntervalDays] = useState("");
@@ -262,6 +270,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         );
         setVolume(asset.volume ?? "");
         setPowerConsumption(asset.powerConsumption ?? "");
+        setPowerConsumptionRaw(asset.powerConsumptionRaw ?? "");
         setInstalledAt(inputDate(asset.installedAt));
         setWarrantyExpiresAt(inputDate(asset.warrantyExpiresAt));
         setServiceIntervalDays(asset.serviceIntervalDays?.toString() ?? "");
@@ -588,11 +597,12 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             // leszedi a teljesitmenyt, egy `null` elbukik.
             performance: normalizePerformanceValue(performance),
             performanceUnitId: performanceUnitId || null,
-            // FUGGETLEN A TELJESITMENYTOL: a `volume` ugyanazt a normalizalast
-            // kapja, mint a `performance`, a `powerConsumption` viszont szabad
-            // szoveg (lehet "P1/P2" alaku), tehat csak korulvagas.
+            // FUGGETLEN A TELJESITMENYTOL: a `volume` es a `powerConsumption`
+            // ugyanazt a normalizalast kapja, mint a `performance`. A
+            // `powerConsumptionRaw` szabad szoveg, csak korulvagas.
             volume: normalizePerformanceValue(volume),
-            powerConsumption: powerConsumption.trim() || null,
+            powerConsumption: normalizePerformanceValue(powerConsumption),
+            powerConsumptionRaw: powerConsumptionRaw.trim() || null,
             expectedUpdatedAt: updatedAt,
           })
         : await assetsApi.create(token, {
@@ -621,7 +631,9 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             performance: normalizePerformanceValue(performance) ?? undefined,
             performanceUnitId: performanceUnitId || undefined,
             volume: normalizePerformanceValue(volume) ?? undefined,
-            powerConsumption: powerConsumption.trim() || undefined,
+            powerConsumption:
+              normalizePerformanceValue(powerConsumption) ?? undefined,
+            powerConsumptionRaw: powerConsumptionRaw.trim() || undefined,
             installedAt: toIsoDate(installedAt),
             warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
             serviceIntervalDays: interval,
@@ -970,15 +982,32 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 placeholder="pl. 1.5"
               />
             </FormField>
+            {/*
+              A FOGYASZTAS SZAMMA VALT (Balazs kerese, 2026-09-23): ossze
+              akarja adni egy rendszerre, ami csak szamon mukodik. A "P1/P2"
+              alaku eredeti bejegyzeseket a masik mezo orzi valtozatlanul.
+            */}
             <FormField
               label="Fogyasztás"
-              description="kW-ban. Két motorértéknél P1/P2 alakban is írható (például 6,15/5,5)."
+              description="kW-ban. Tizedesvesszővel is írható (például 0,5)."
             >
               <Input
                 aria-label="Fogyasztás"
+                inputMode="decimal"
                 value={powerConsumption}
                 onChange={(event) => setPowerConsumption(event.target.value)}
-                placeholder="pl. 0,75 vagy 6,15/5,5"
+                placeholder="pl. 0,75"
+              />
+            </FormField>
+            <FormField
+              label="Fogyasztás (eredeti bejegyzés)"
+              description="Ha a tábla cellája P1/P2 alakú volt (például 6,15/5,5), ide írd be változatlanul."
+            >
+              <Input
+                aria-label="Fogyasztás (eredeti bejegyzés)"
+                value={powerConsumptionRaw}
+                onChange={(event) => setPowerConsumptionRaw(event.target.value)}
+                placeholder="pl. 6,15/5,5"
               />
             </FormField>
             {/*

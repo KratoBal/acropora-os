@@ -99,6 +99,7 @@ export interface QueuedAssetUpdateBase {
    */
   volume?: string | null;
   powerConsumption?: string | null;
+  powerConsumptionRaw?: string | null;
   /**
    * A MATRICAKOD, AHOGY A SZERKESZTES KEZDETEKOR ALLT.
    *

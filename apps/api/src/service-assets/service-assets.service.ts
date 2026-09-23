@@ -36,6 +36,7 @@ import {
   AssetLabelUnavailableError,
   AssetPerformancePairError,
   AssetVolumeMalformedError,
+  AssetPowerConsumptionMalformedError,
 } from "./service-assets.repository.js";
 
 import {
@@ -1011,6 +1012,8 @@ export class ServiceAssetsService {
     if (error instanceof AssetPerformancePairError)
       throw new BadRequestException(error.message);
     if (error instanceof AssetVolumeMalformedError)
+      throw new BadRequestException(error.message);
+    if (error instanceof AssetPowerConsumptionMalformedError)
       throw new BadRequestException(error.message);
     if (error instanceof Error && error.message === "ASSET_HIERARCHY_CYCLE")
       throw new BadRequestException(

@@ -82,4 +82,6 @@ export interface UpdateAssetInput {
   volume?: string | null;
   /** A FOGYASZTAS -- ugyanaz az alak, mint a `volume`-nal, mindig kW-ban. */
   powerConsumption?: string | null;
+  /** A fogyasztas eredeti szovege -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */
+  powerConsumptionRaw?: string | null;
 }

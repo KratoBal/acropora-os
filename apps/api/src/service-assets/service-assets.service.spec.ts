@@ -11,6 +11,7 @@ import {
   AssetLabelUnavailableError,
   AssetPerformancePairError,
   AssetVolumeMalformedError,
+  AssetPowerConsumptionMalformedError,
 } from "./service-assets.repository.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
@@ -618,6 +619,43 @@ test("a rossz alakú térfogat 400-at ad", async () => {
         `400-at vartam, ez jott: ${String(error)}`,
       );
       assert.match(String(error.message), /A térfogat csak szám lehet/);
+      return true;
+    },
+  );
+});
+
+/**
+ * A FOGYASZTAS ROSSZ ALAKJA IS 400-AT AD, SZO SZERINT UGYANAZZAL A
+ * LEKEPEZESSEL, MINT A TERFOGAT.
+ */
+test("a rossz alakú fogyasztás 400-at ad", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      create: async () => {
+        throw new AssetPowerConsumptionMalformedError();
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          ownerType: "CUSTOMER",
+          ownerId: "customer-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+          powerConsumption: "6,15/5,5",
+        },
+        "user-1",
+        { kind: "internal" },
+      ),
+    (error: unknown) => {
+      assert.ok(
+        error instanceof BadRequestException,
+        `400-at vartam, ez jott: ${String(error)}`,
+      );
+      assert.match(String(error.message), /A fogyasztás csak szám lehet/);
       return true;
     },
   );

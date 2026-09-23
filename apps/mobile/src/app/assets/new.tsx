@@ -199,6 +199,12 @@ export default function NewAssetScreen() {
    */
   const [volume, setVolume] = useState("");
   const [powerConsumption, setPowerConsumption] = useState("");
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE -- Balazs kerese (2026-09-23): a
+   * fogyasztast ossze akarja adni, tehat a `powerConsumption` szamma valt.
+   * Ez a mezo orzi a "P1/P2" alaku eredeti bejegyzest.
+   */
+  const [powerConsumptionRaw, setPowerConsumptionRaw] = useState("");
   // A BEOLVASO A KOZOS ALLVANYBOL JON, ugyanabbol, amit a szerkeszto kepernyo
   // is hasznal. Az indoklas (miert ratet, es miert nem masik kepernyo) ott all.
   const scanner = useLabelScanner(setLabelCode);
@@ -653,6 +659,7 @@ export default function NewAssetScreen() {
       performanceUnitId,
       volume,
       powerConsumption,
+      powerConsumptionRaw,
       installedAt,
       interval,
     });
@@ -996,10 +1003,22 @@ export default function NewAssetScreen() {
               keyboardType="decimal-pad"
             />
             <FieldError error={error} field="volume" />
+            {/*
+              A FOGYASZTAS SZAMMA VALT (Balazs kerese, 2026-09-23): ossze
+              akarja adni egy rendszerre. A "P1/P2" alaku eredeti
+              bejegyzeseket a masik mezo orzi valtozatlanul.
+            */}
             <Field
               label="Fogyasztás (kW)"
               value={powerConsumption}
               onChangeText={setPowerConsumption}
+              keyboardType="decimal-pad"
+            />
+            <FieldError error={error} field="powerConsumption" />
+            <Field
+              label="Fogyasztás (eredeti bejegyzés)"
+              value={powerConsumptionRaw}
+              onChangeText={setPowerConsumptionRaw}
             />
             <LabelCodeField
               value={labelCode}

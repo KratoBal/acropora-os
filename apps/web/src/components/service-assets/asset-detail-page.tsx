@@ -516,6 +516,21 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                     label="Fogyasztás"
                     value={performanceText(asset.powerConsumption, "kW")}
                   />
+                  {/*
+                    AZ EREDETI FOGYASZTAS-SZOVEG, HA ELTER A KIIRT SZAMTOL.
+                    Balazs kerese (2026-09-23): a fogyasztast ossze akarja
+                    adni, tehat a `powerConsumption` szammma valt -- de a
+                    FANK-adatok tobb mint fele "P1/P2" alaku volt, es ez a
+                    mezo orzi, mi allt eredetileg a cellaban. Ha a ketto
+                    egyezik, nincs ertelme ketszer kiirni.
+                  */}
+                  {asset.powerConsumptionRaw &&
+                  asset.powerConsumptionRaw !== asset.powerConsumption ? (
+                    <Data
+                      label="Fogyasztás (eredeti)"
+                      value={asset.powerConsumptionRaw}
+                    />
+                  ) : null}
                   <Data label="Terméktörzs" value={asset.product?.name} />
                   <Data
                     label="Telepítés"

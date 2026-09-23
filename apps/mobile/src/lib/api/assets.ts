@@ -139,8 +139,13 @@ export interface AssetDetail extends AssetListItem {
    * ertendo, nincs kulon mertekegyseg-hivatkozas.
    */
   volume?: string;
-  /** Szabad szoveg: a forras adatok tobb mint fele "P1/P2" alaku. */
+  /**
+   * AZ OSSZEADHATO SZAM. Balazs kerese (2026-09-23): ossze akarja adni a
+   * fogyasztast, tehat ez SZAM, nem szabad szoveg.
+   */
   powerConsumption?: string;
+  /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
+  powerConsumptionRaw?: string;
   description?: string;
   installedAt?: string;
   warrantyExpiresAt?: string;
@@ -230,8 +235,10 @@ export interface CreateAssetInput {
   labelCode?: string;
   /** A terfogat, mindig m3-ben. Elhagyhato. */
   volume?: string;
-  /** A fogyasztas, mindig kW-ban, szabad szoveg. Elhagyhato. */
+  /** A fogyasztas, mindig kW-ban -- az osszeadhato szam. Elhagyhato. */
   powerConsumption?: string;
+  /** A fogyasztas eredeti szovege. Elhagyhato. */
+  powerConsumptionRaw?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }

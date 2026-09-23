@@ -39,6 +39,12 @@ export const MATRICA_ALAK_UZENET =
 export const VOLUME_ALAK_UZENET =
   "A térfogat csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500).";
 
+/**
+ * A FOGYASZTÁS ROSSZ ALAKJÁNAK MONDATA -- UGYANAZ AZ INDOK, MINT A TÉRFOGATNÁL.
+ */
+export const POWER_CONSUMPTION_ALAK_UZENET =
+  "A fogyasztás csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500). Az eredeti értéket a másik mezőbe írd.";
+
 export interface AssetCreateForm {
   owner: { type: AssetOwnerType; id: string } | null;
   /**
@@ -96,10 +102,13 @@ export interface AssetCreateForm {
    */
   volume: string;
   /**
-   * SZÖVEG, NEM SZÁM -- a forrásadatok több mint fele "P1/P2" alakú
-   * (pl. "6,15/5,5"), nem egy tizedesjegyű érték.
+   * AZ ÖSSZEADHATÓ SZÁM -- Balázs kérése (2026-09-23): össze akarja adni a
+   * fogyasztást, tehát ez SZÁM, ugyanazzal az alak-szabállyal, mint a
+   * `volume`. A "P1/P2" alakú eredeti bejegyzést a `powerConsumptionRaw`
+   * őrzi, arra nincs alak-megkötés.
    */
   powerConsumption: string;
+  powerConsumptionRaw: string;
   /** Amit a felhasználó beírt vagy a választóból kapott. Üres is lehet. */
   installedAt: string;
   /** Karbantartási intervallum napban, szövegként. Üres is lehet. */
@@ -135,8 +144,10 @@ export interface AssetCreatePayload {
   performanceUnitId?: string;
   /** A normalizált térfogat-érték, a teljesítménytől függetlenül. */
   volume?: string;
-  /** A fogyasztás, szabad szövegként (lehet "P1/P2" alakú). */
+  /** A normalizált fogyasztás-érték -- az összeadható szám. */
   powerConsumption?: string;
+  /** A fogyasztás eredeti szövege, ha a kezelő megadta. */
+  powerConsumptionRaw?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }
@@ -152,6 +163,7 @@ export type AssetCreateField =
   | "labelCode"
   | "performance"
   | "volume"
+  | "powerConsumption"
   | "installedAt"
   | "interval";
 
@@ -358,6 +370,22 @@ export function buildAssetCreatePayload(
       message: VOLUME_ALAK_UZENET,
     };
 
+  /**
+   * A FOGYASZTÁS ALAKJA -- SZÓ SZERINT A TÉRFOGATÉ, DE MÁS MEZŐVEL: az
+   * `AssetCreatePayload.powerConsumptionRaw` szabad szöveg, arra nincs
+   * alak-ellenőrzés.
+   */
+  const powerConsumptionText = form.powerConsumption.trim();
+  const powerConsumptionValue = normalizePerformanceValue(
+    form.powerConsumption,
+  );
+  if (powerConsumptionText !== "" && powerConsumptionValue === null)
+    return {
+      ok: false,
+      field: "powerConsumption",
+      message: POWER_CONSUMPTION_ALAK_UZENET,
+    };
+
   const intervalText = form.interval.trim();
   let serviceIntervalDays: number | undefined;
   if (intervalText) {
@@ -437,7 +465,8 @@ export function buildAssetCreatePayload(
         : undefined,
       // A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL, nincs par.
       volume: volumeValue ?? undefined,
-      powerConsumption: form.powerConsumption.trim() || undefined,
+      powerConsumption: powerConsumptionValue ?? undefined,
+      powerConsumptionRaw: form.powerConsumptionRaw.trim() || undefined,
       /**
        * A nap KEZDETE, UTC-ben. A telepítés dátuma nap-pontosságú adat: az
        * időpont-rész nem mérés, hanem a formátum ára, ezért nulla.
