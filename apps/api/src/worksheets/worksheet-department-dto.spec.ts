@@ -39,10 +39,12 @@ describe("create worksheet department input", () => {
   });
 
   it("refuses a code that is too long, and says why", () => {
-    const messages = messagesFor({ code: "BIOD", name: "Biodóm" });
+    // Hat karakter: a hatar 2026-09-23-tol ot, tehat egy negy karakteres
+    // kod ("BIOD") ma mar ervenyes lenne.
+    const messages = messagesFor({ code: "BIODOM", name: "Biodóm" });
 
     assert.deepEqual(messages, [
-      "Az alegység kódja legfeljebb három betű vagy szám lehet (pl. BIO vagy A1).",
+      "Az alegység kódja legfeljebb öt betű vagy szám lehet (pl. BIO vagy LSS01).",
     ]);
   });
 
@@ -64,15 +66,27 @@ describe("create worksheet department input", () => {
   });
 
   /**
+   * A FANK BIODOM RENDSZER-KODJAI, POZITIV KONTROLLKENT.
+   *
+   * Balazs dontese, 2026-09-23 11:39 ("b"): a hatar OT karakterre tagul,
+   * hogy az ot karakteres rendszer-kodok (LSS01 es tarsai) sajat alakjukban
+   * maradhassanak. Egy negativ allitas (hogy a regi hatar mar nem all) nem
+   * eleg -- ez pozitivan bizonyitja, hogy az UJ hatar tenyleg atenged.
+   */
+  it("elfogadja az öt karakteres rendszer-kódot (LSS01)", () => {
+    assert.deepEqual(messagesFor({ code: "LSS01", name: "Varánusz" }), []);
+  });
+
+  /**
    * ES AMI VALTOZATLANUL BUKIK. Enelkul a fenti allitas egy OLYAN
    * megvalositason is zold lenne, amibol a `@Matches` hianyzik.
    */
   it("KONTROLL: a megkötés MEGMARADT -- nem minden kód megy át", () => {
-    for (const code of ["ABCD", "1234", "A-1", "Á1", "A 1", ""])
+    for (const code of ["ABCDEF", "123456", "A-1", "Á1", "A 1", ""])
       assert.deepEqual(
         messagesFor({ code, name: "Biodóm" }),
         [
-          "Az alegység kódja legfeljebb három betű vagy szám lehet (pl. BIO vagy A1).",
+          "Az alegység kódja legfeljebb öt betű vagy szám lehet (pl. BIO vagy LSS01).",
         ],
         `a(z) "${code}" kodot el kellett volna utasitania`,
       );

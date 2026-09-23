@@ -32,8 +32,11 @@ describe("worksheet wording", () => {
   });
 
   it("says alegység in the code rule the unit form shows", () => {
+    // Hat karakter: a hatar 2026-09-23-tol ot, tehat a negy karakteres
+    // "BIOD" ma mar ERVENYES lenne -- ez a kod ket kulon dolgot bizonyitana
+    // egyszerre, ha a hatar valaha ujra eltolodna alatta.
     const dto = plainToInstance(CreateWorksheetDepartmentDto, {
-      code: "BIOD",
+      code: "BIODOM",
       name: "Biodóm",
     });
     const messages = validateSync(dto).flatMap((error) =>
@@ -41,7 +44,7 @@ describe("worksheet wording", () => {
     );
 
     assert.deepEqual(messages, [
-      "Az alegység kódja legfeljebb három betű vagy szám lehet (pl. BIO vagy A1).",
+      "Az alegység kódja legfeljebb öt betű vagy szám lehet (pl. BIO vagy LSS01).",
     ]);
   });
 });

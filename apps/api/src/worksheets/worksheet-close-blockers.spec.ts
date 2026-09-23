@@ -12,7 +12,8 @@ function closable(): WorksheetCloseState {
     status: "DRAFT",
     lineCount: 2,
     partnerCode: "BIO",
-    // Az alegység kódja legfeljebb három nagybetű VAGY SZÁMJEGY lehet. Az
+    // Az alegység kódja legfeljebb öt nagybetű VAGY SZÁMJEGY lehet (2026-09-23
+    // óta öt, három helyett). Az
     // első fixture-öm "01" volt, és akkor a teszt fogta meg, nem az olvasás
     // -- 2026-09-22 óta viszont az "01" ÉRVÉNYES kód (Balázs kérte a
     // számjegyet), tehát ez a megjegyzés ma már nem egy élő védelmet ír le,

@@ -191,8 +191,9 @@ describe(
       ugyfelId = ugyfel.id;
 
       /**
-       * A KOD HAROM KARAKTER, ES EZT A SEMA SZABJA MEG, NEM IZLES:
-       * `WorksheetDepartment.code` tipusa `@db.VarChar(3)`.
+       * A KOD ITT HAROM KARAKTER, DE EZ MA MAR CSAK A FIXTURE VALASZTASA:
+       * `WorksheetDepartment.code` tipusa 2026-09-23 ota `@db.VarChar(5)`,
+       * harom karakter csak beleferne, nem hatar.
        *
        * Az elso valtozatom a PREFIX-et is beleirta (`ITUNITVISKRO`, tizenket
        * karakter), es a CI-ben a `before` horog hasalt el rajta. A harom
