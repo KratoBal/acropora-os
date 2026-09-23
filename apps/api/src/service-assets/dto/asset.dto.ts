@@ -421,9 +421,26 @@ export class UpdateAssetDto {
   @IsOptional()
   criticality?: (typeof ASSET_CRITICALITIES)[number];
   @IsString() @MinLength(1) @IsOptional() name?: string;
-  @IsString() @IsOptional() categoryId?: string | null;
+  /**
+   * `@MinLength(1)`, UGYANAZ, MINT A `name`-EN -- egy üres szöveg itt sem
+   * "nincs kategória" jelentéssel bír, hanem érvénytelen bemenet.
+   *
+   * A `null` TOVÁBBRA IS ENGEDETT: az `@IsOptional()` a `null`-t és az
+   * `undefined`-et is átengedi ELLENŐRZÉS NÉLKÜL (lásd a `labelCode`
+   * fejlécét fentebb), tehát a `@MinLength(1)` csak a NEM üres, NEM null
+   * eseteket bírálja el -- pontosan a `""` az egyetlen új elutasítás.
+   *
+   * MIÉRT KELLETT (acrobot mérése, 2026-09-23, a #1030 átvételekor): a
+   * repository korábban `input.categoryId || null` alakban állt, ami az
+   * `""`-t is `null`-ra vitte -- CSENDBEN. A javítás után a repository a
+   * DTO-értéket közvetlenül adja tovább, tehát `""` nélküle a Prisma elé
+   * kerülne, és idegen kulcs -- nem érvényesítési -- hibát, 500-at adna.
+   * A határ a DTO dolga, nem a repository-é: itt utasítjuk el, mielőtt a
+   * kérdés egyáltalán eljutna odáig.
+   */
+  @IsString() @MinLength(1) @IsOptional() categoryId?: string | null;
   /** A FUNKCIO -- FUGGETLEN A KATEGORIATOL, ugyanaz az alak, mint fent. */
-  @IsString() @IsOptional() functionId?: string | null;
+  @IsString() @MinLength(1) @IsOptional() functionId?: string | null;
   @IsString() @IsOptional() manufacturer?: string | null;
   @IsString() @IsOptional() model?: string | null;
   @IsString() @IsOptional() serialNumber?: string | null;
