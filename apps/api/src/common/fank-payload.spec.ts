@@ -41,6 +41,8 @@ function sor(mezok: {
   site: string;
   deviceCode?: string;
   deviceSerial?: string;
+  builtin?: string;
+  builtinSerial?: string;
   manufacturer?: string;
   model?: string;
   detail?: string;
@@ -55,6 +57,8 @@ function sor(mezok: {
   oszlopok[2] = mezok.site;
   oszlopok[3] = mezok.deviceCode ?? "";
   oszlopok[4] = mezok.deviceSerial ?? "";
+  oszlopok[5] = mezok.builtin ?? "";
+  oszlopok[6] = mezok.builtinSerial ?? "";
   oszlopok[7] = mezok.manufacturer ?? "";
   oszlopok[8] = mezok.model ?? "";
   oszlopok[9] = mezok.detail ?? "";
@@ -108,6 +112,16 @@ const ALAP_TSV = [
   }),
   // Kihagyando sor: nincs eszkoz-kod (pl. "szerte a pinceben" tetel).
   sor({ sor: "14", site: "LSS22", detail: "Szerte a pincében, min." }),
+  // Beepitett alkatresz -- van szulo-kod (CPT) ES sajat kod (TRI), a valodi
+  // "CPT / TRI" par mintajara. A sorszam F-ben all (builtinSerial), NEM
+  // D-ben -- nautilus merese, a valodi LSS21 543/544. sora mintajara.
+  sor({
+    sor: "15",
+    site: "LSS22",
+    deviceCode: "CPT",
+    builtin: "TRI",
+    builtinSerial: "1",
+  }),
   // Masik helyszin, hogy a szures tenyleg szurjon.
   sor({
     sor: "20",
@@ -115,6 +129,36 @@ const ALAP_TSV = [
     site: "LSS01",
     deviceCode: "PUM",
     manufacturer: "GRUNDFOS",
+    performance: "75",
+  }),
+  // Kerekitheto teljesitmeny -- a valodi ETB/RIV kerekitesi hiba mintajara.
+  sor({
+    sor: "30",
+    site: "LSS98",
+    deviceCode: "HSZ",
+    performance: "146.69999999999999",
+  }),
+  // NEM egyetlen szam -- a valodi LSS12 UVF mintajara.
+  sor({
+    sor: "40",
+    site: "LSS99",
+    deviceCode: "UVF",
+    performance: "175/210",
+  }),
+  // Terfogat, kerekitheto -- a valodi LSS02/PUF mintajara.
+  sor({
+    sor: "50",
+    site: "LSS97",
+    deviceCode: "PUF",
+    volume: "9.1999999999999993",
+  }),
+  // Terfogat, VESZELYES eset -- a valodi LSS10/CPT mintajara: literben all,
+  // a mezo pedig mindig m3-ben ert.
+  sor({
+    sor: "60",
+    site: "LSS96",
+    deviceCode: "CPT",
+    volume: "940 liter",
   }),
 ].join("\n");
 
@@ -134,8 +178,70 @@ const EGYSEGEK = {
       name: "LSS22",
       isActive: true,
     },
+    {
+      id: "unit-lss01",
+      parentId: "unit-bio",
+      code: "LSS01",
+      name: "LSS01",
+      isActive: true,
+    },
+    {
+      id: "unit-lss98",
+      parentId: "unit-bio",
+      code: "LSS98",
+      name: "LSS98",
+      isActive: true,
+    },
+    {
+      id: "unit-lss99",
+      parentId: "unit-bio",
+      code: "LSS99",
+      name: "LSS99",
+      isActive: true,
+    },
+    {
+      id: "unit-lss97",
+      parentId: "unit-bio",
+      code: "LSS97",
+      name: "LSS97",
+      isActive: true,
+    },
+    {
+      id: "unit-lss96",
+      parentId: "unit-bio",
+      code: "LSS96",
+      name: "LSS96",
+      isActive: true,
+    },
   ],
 };
+
+const UUID_AIP = "11111111-1111-4111-8111-111111111111";
+const UUID_CPT = "22222222-2222-4222-8222-222222222222";
+const UUID_CPT_TRI = "33333333-3333-4333-8333-333333333333";
+
+/**
+ * A VALODI FAJL FORMATUMA, NEM JSON (acrobot, MASODSZOR ujraepitve
+ * 2026-09-23 21:51): oszlopra igazitott szoveg,
+ * "<KOD>  <magyar nev>  <categoryId-UUID>  <honnan>" soronkent. A
+ * fejlec-megjegyzesek `#`-tal kezdodnek, es ures sorok is allhatnak --
+ * mindkettot at kell ugrania a sorolonak. A parositott kod SZOKOZ NELKUL
+ * all a "/" korul ("CPT/TRI", NEM "CPT / TRI" -- az elso valtozat meg igy
+ * irta, a masodik mar nem).
+ *
+ * Az utolso sor SZANDEKOSAN egyetlen szokozzel all a hosszu nev es az UUID
+ * kozott -- a valodi fajlban is elofordul ez az igazitas-osszecsuszas
+ * (lasd `parseCategoryMap` sajat fejleceben), es a sorolonak EZT is
+ * hibatlanul kell kezelnie, a "honnan" oszlopot is helyesen levalasztva
+ * MOGULE, nem csak a szep, 2+ szokozos sorokat.
+ */
+const KATEGORIA_TERKEP = [
+  "# FANK kod -> kategoria azonosito, szintetikus teszt-fixtura",
+  "",
+  `AIP              Légbefúfó, levegőztető szivattyú             ${UUID_AIP}     kategoria-lista (nincs eles eszkoz ezzel a koddal)`,
+  `CPT              (MAT) Kompakt szűrő                          ${UUID_CPT}     kategoria-lista, SZO SZERINTI nevegyezes`,
+  `CPT/TRI        Csepegtető bioszűrő egy hosszú, zárójeles (pillangó, golyós) leírással ${UUID_CPT_TRI} eles eszkozrol`,
+].join("\n");
 
 function mappa(): string {
   return mkdtempSync(join(tmpdir(), "fank-payload-"));
@@ -180,7 +286,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const { kod, stdout, stderr } = futtat([
       "LSS22",
       "--kihagy",
-      "14,12,13",
+      "14,12,13,15",
       "--tsv",
       tsv,
       "--units",
@@ -191,6 +297,33 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.equal(payload.length, 2, `nem ket sort adott: ${stdout}`);
   });
 
+  it("a bemenet/kimenet sorszama MINDIG ki van irva, es a harom szam osszead", () => {
+    /*
+      acrobot kikotese, 2026-09-23 22:04, sajat masik hibaja utan (54
+      sorbol kevesebb jott ki, es nem tunt fel): a szkript MINDIG irja ki a
+      bemeneti/kihagyott/kimeneti szamot, es ezt nem kell kulon kerni. Az
+      ALAP_TSV-ben LSS22-nek 6 sora van (10,11,12,13,14,15); ebbol 4-et
+      hagyunk ki, tehat 6 - 4 = 2 kell maradjon.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,15",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0, stderr);
+    assert.match(
+      stderr,
+      /LSS22: 6 bemeneti sor - 4 kihagyva = 2 kimeneti eszkoz/,
+    );
+  });
+
   it("a nev elotagja a szulo egyseg kodja, es az electricalCode a TELJES nyers szoveg", () => {
     const dir = mappa();
     const tsv = iras(dir, "forras.tsv", ALAP_TSV);
@@ -198,7 +331,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const { kod, stdout } = futtat([
       "LSS22",
       "--kihagy",
-      "14,12,13",
+      "14,12,13,15",
       "--tsv",
       tsv,
       "--units",
@@ -215,6 +348,174 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.equal(elso.kind, "EQUIPMENT");
   });
 
+  it("a clientOperationId a MA ESTE MAR BEIMPORTALT nevteret hasznalja, nem a sajatjat", () => {
+    /*
+      acrobot merese, 2026-09-23 21:45: a ma esti kezi betoltes
+      "fank-import:<kisbetus helyszin>:<sor>" alakkal irta be a kilenc
+      eszkozt. Ha a szkript egy MASIK elotaggal (a korabbi
+      "fank-payload:LSS22:...") futna, egy ismetelt futas NEM ismerne fel a
+      mar bent levo sorokat, es duplikatumot hozna letre.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,15",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload[0].clientOperationId, "fank-import:lss22:10");
+    assert.equal(payload[1].clientOperationId, "fank-import:lss22:11");
+  });
+
+  it("a Teljesitmeny (M oszlop) performance + performanceUnitId parban erkezik, m3/h-ban", () => {
+    /*
+      acrobot merese, 2026-09-23 21:45: GET /units-of-measure?kind=PERFORMANCE,
+      a kobmeter/ora azonositoja uom_perf_m3ph. A TSV "M" oszlopa a sajat
+      fejleceben MINDIG m3/h, tehat ez nem soronkenti feloldas.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout } = futtat(["LSS01", "--tsv", tsv, "--units", units]);
+    assert.equal(kod, 0);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.length, 1);
+    assert.equal(payload[0].performance, "75");
+    assert.equal(payload[0].performanceUnitId, "uom_perf_m3ph");
+  });
+
+  it("performance NELKUL a sorban a mezopar KIMARAD, nem ures ertekkel megy", () => {
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,15",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0);
+    const payload = JSON.parse(stdout);
+    assert.ok(
+      payload.every(
+        (p: Record<string, unknown>) =>
+          !("performance" in p) && !("performanceUnitId" in p),
+      ),
+    );
+  });
+
+  it("a Teljesitmeny KEREKITHETO tobbtizedes ertek hat tizedesre kerekitve megy be, es jelzve van", () => {
+    /*
+      acrobot merese, 2026-09-23 22:01: a szolgaltatas sajat
+      normalizePerformanceValue mintaja legfeljebb hat tizedest enged
+      (^\d{1,13}(?:\.\d{1,6})?$). A valodi forrasban ez a pontos ertek
+      (146.69999999999999) hat sort erint, mind UGYANAZT a lebegopontos
+      kerekitesi hibat hordozza -- ez KEREKITHETO, nem "ne talalgass" eset.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS98",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.length, 1);
+    assert.equal(payload[0].performance, "146.7");
+    assert.equal(payload[0].performanceUnitId, "uom_perf_m3ph");
+    assert.match(stderr, /KEREKITVE/);
+    assert.match(stderr, /sor 30/);
+    assert.match(stderr, /146\.69999999999999/);
+    assert.match(stderr, /146\.7/);
+  });
+
+  it("a Teljesitmeny NEM EGYETLEN SZAM erteknel MEGALL, nem kerekit es nem talalgat", () => {
+    /*
+      acrobot merese, 2026-09-23 22:01: a valodi forrasban 16 sor nem
+      egyetlen szam (tartomany, tobb ertek, mas mertekegyseg) -- ezeket
+      NEM lehet kerekitessel feloldani, mert tobb informaciot hordoznak,
+      mint amennyi a mezobe fer.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS99",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(stdout, "");
+    assert.match(stderr, /sor 40/);
+    assert.match(stderr, /175\/210/);
+  });
+
+  it("a Terfogat (L oszlop) UGYANAZZAL a fuggvennyel kerekit, mint a Teljesitmeny", () => {
+    /*
+      acrobot masodik merese, 2026-09-23 22:02, ugyanabban a korben: a DTO
+      sajat jegyzete szerint a volume-ot a kozos normalizeMeasurementValue
+      ellenorzi, a performance-szal azonos mintaval -- a valodi LSS02/PUF
+      soron ugyanaz a lebegopontos csalad all, mint a performance-nel.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS97",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.length, 1);
+    assert.equal(payload[0].volume, "9.2");
+    assert.match(stderr, /KEREKITVE/);
+    assert.match(stderr, /sor 50/);
+    assert.match(stderr, /Terfogat/);
+  });
+
+  it("a Terfogat 'literben all, de m3-nek szant' sora MEGALL -- a legveszelyesebb eset", () => {
+    /*
+      acrobot sajat szavaival: "ha valaki a betoltes elott csak a 'liter'
+      szot vagja le rola, akkor 940 kobmeter menne be 0,94 helyett,
+      ezerszeres hiba, es a szam utana teljesen hihetonek latszik". A
+      valodi LSS10/CPT sor mintajara -- ez SOSEM automatikus atvaltas.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS96",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(stdout, "");
+    assert.match(stderr, /sor 60/);
+    assert.match(stderr, /940 liter/);
+    assert.match(stderr, /Terfogat/);
+  });
+
   it("a masik helyszin sorai NEM kerulnek bele", () => {
     const dir = mappa();
     const tsv = iras(dir, "forras.tsv", ALAP_TSV);
@@ -222,7 +523,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const { stdout } = futtat([
       "LSS22",
       "--kihagy",
-      "14,12,13",
+      "14,12,13,15",
       "--tsv",
       tsv,
       "--units",
@@ -294,7 +595,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const { kod, stdout, stderr } = futtat([
       "LSS22",
       "--kihagy",
-      "14,12,13",
+      "14,12,13,15",
       "--tsv",
       tsv,
       "--units",
@@ -312,7 +613,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const { kod, stdout, stderr } = futtat([
       "LSS22",
       "--kihagy",
-      "14,12,13",
+      "14,12,13,15",
       "--tsv",
       tsv,
       "--units",
@@ -327,19 +628,15 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     );
   });
 
-  it("kategoria-terkeppel: a categoryId a kodra illesztve jelenik meg", () => {
+  it("kategoria-terkeppel: ONALLO eszkoznel roman szam es a terkep magyar neve", () => {
     const dir = mappa();
     const tsv = iras(dir, "forras.tsv", ALAP_TSV);
     const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
-    const terkep = iras(
-      dir,
-      "kategoria.json",
-      JSON.stringify({ AIP: "cat-legkondi" }),
-    );
+    const terkep = iras(dir, "kategoria.txt", KATEGORIA_TERKEP);
     const { kod, stdout, stderr } = futtat([
       "LSS22",
       "--kihagy",
-      "14,12,13",
+      "14,12,13,15",
       "--tsv",
       tsv,
       "--units",
@@ -347,14 +644,148 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
       "--kategoria-terkep",
       terkep,
     ]);
-    assert.equal(kod, 0);
+    assert.equal(kod, 0, stderr);
     assert.doesNotMatch(stderr, /FIGYELMEZTETES/);
     const payload = JSON.parse(stdout);
-    assert.ok(
-      payload.every(
-        (p: { categoryId?: string }) => p.categoryId === "cat-legkondi",
-      ),
+    assert.equal(payload.length, 2);
+    assert.equal(
+      payload[0].name,
+      "BIO/LSS22 Légbefúfó, levegőztető szivattyú I",
     );
+    assert.equal(
+      payload[1].name,
+      "BIO/LSS22 Légbefúfó, levegőztető szivattyú II",
+    );
+    assert.ok(
+      payload.every((p: { categoryId?: string }) => p.categoryId === UUID_AIP),
+    );
+  });
+
+  it("kategoria-terkeppel: BEEPITETT eszkoznel szulo neve + sajat neve + arab szam, ket jeggyel", () => {
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const terkep = iras(dir, "kategoria.txt", KATEGORIA_TERKEP);
+    const { kod, stdout, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,10,11",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+      "--kategoria-terkep",
+      terkep,
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.length, 1);
+    assert.equal(
+      payload[0].name,
+      "BIO/LSS22 (MAT) Kompakt szűrő Csepegtető bioszűrő egy hosszú, zárójeles (pillangó, golyós) leírással 01",
+    );
+    assert.equal(payload[0].categoryId, UUID_CPT_TRI);
+    // A sajat kod (E, "TRI") RESZE a partnerInternalCode-nak -- nautilus
+    // merese: nelkule ket KULONBOZO gyermek (pl. egy TRI es egy VAL)
+    // ugyanazon szulo alatt UGYANAZT a kodot kapna.
+    assert.equal(payload[0].partnerInternalCode, "LSS22-CPT-TRI-01");
+  });
+
+  it("BEEPITETT sorokon a sajat kod (E) nelkul KET KULONBOZO gyermek NEM utkozne -- csak akkor utkozik, ha E ES F is egyezik", () => {
+    /*
+      A korabbi valtozat CSAK C-t es D-t hasznalta a partnerInternalCode-hoz,
+      tehat egy CPT/TRI es egy CPT/VAL sor (mindketto D nelkul) UGYANAZT a
+      "LSS22-CPT" kodot kapta volna -- hamis utkozes, vagy meg rosszabb,
+      csendes egybeolvadas. Ez a teszt azt allitja, hogy KULONBOZO E melett
+      NINCS utkozes.
+    */
+    const dir = mappa();
+    const masikBeepitett = [
+      ALAP_TSV,
+      sor({
+        sor: "16",
+        site: "LSS22",
+        deviceCode: "CPT",
+        builtin: "VAL",
+      }),
+    ].join("\n");
+    const tsv = iras(dir, "forras.tsv", masikBeepitett);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,10,11",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    const kodok = payload.map(
+      (p: { partnerInternalCode: string }) => p.partnerInternalCode,
+    );
+    assert.deepEqual([...new Set(kodok)], kodok);
+    assert.ok(kodok.includes("LSS22-CPT-TRI-01"));
+    assert.ok(kodok.includes("LSS22-CPT-VAL"));
+  });
+
+  it("BEEPITETT soron D (Eszkoz sorszam) is kitoltve: MEGALL, mert erre nincs mert szabaly", () => {
+    /*
+      A valodi forrasban 130 ilyen sor van (92-n D egyedul, 38-on D ES F
+      egyutt) -- egyik mintat sem oldottuk fel talalgatassal. A valodi ETB
+      615-617. es 621-623. sora pontosan ezt mutatta.
+    */
+    const dir = mappa();
+    const dBeepitett = [
+      ALAP_TSV,
+      sor({
+        sor: "17",
+        site: "LSS22",
+        deviceCode: "CPT",
+        deviceSerial: "01",
+        builtin: "VAL",
+      }),
+    ].join("\n");
+    const tsv = iras(dir, "forras.tsv", dBeepitett);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,10,11",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(stdout, "");
+    assert.match(stderr, /sor 17/);
+    assert.match(stderr, /D="01"/);
+  });
+
+  it("kategoria-terkep MEGADVA, de egy kod HIANYZIK belole: MEGALL, megnevezi a sort es a kodot", () => {
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    // A HEX kod NINCS a KATEGORIA_TERKEP-ben -- pontosan az OCS/HSZ-fele
+    // eset, amit acrobot szandekosan nem oldott meg talalgatassal.
+    const terkep = iras(dir, "kategoria.txt", KATEGORIA_TERKEP);
+    const { kod, stdout, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,15,13",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+      "--kategoria-terkep",
+      terkep,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(stdout, "");
+    assert.match(stderr, /sor 12/);
+    assert.match(stderr, /HEX/);
   });
 
   it("a sikeres payload partnerInternalCode ertekei EGYEDIEK -- ugyanaz a vegso ellenorzes, ami acrobotnal egy hibat elkapott", () => {
@@ -364,7 +795,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const { kod, stdout } = futtat([
       "LSS22",
       "--kihagy",
-      "14,12,13",
+      "14,12,13,15",
       "--tsv",
       tsv,
       "--units",
@@ -383,7 +814,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const { kod, stdout } = futtat([
       "LSS22",
       "--kihagy",
-      "14,12,13",
+      "14,12,13,15",
       "--tsv",
       tsv,
       "--units",

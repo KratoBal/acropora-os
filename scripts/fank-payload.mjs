@@ -33,41 +33,146 @@
  *                          (assets/new.tsx:149) felvitel is EBBOL indul.
  *                          Felulirhato --kind kapcsoloval.
  *
- * === AMI NEM MEREVE VAN, HANEM A LEGJOBB TALALATOM -- JELOLVE ===
+ * === A NEV -- ACROBOT MASODIK KOREBEN MEREVE, VALODI BETOLTESBOL (LSS07) ===
  *
- *   name szuffixe          acrobot csak az ELOTAGOT adta meg ("BIO/LSS22 ...").
- *                          Ami a "..." mogott all, azt NEM mondta ki. A
- *                          `buildName()` fuggveny epiti fel a
- *                          <KOD><-SORSZAM> <GYARTO> <TIPUS> alakot -- ez
- *                          egyetlen, jol nevesitett fuggvenyben all, hogy egy
- *                          eltero dontes egy helyen javithato legyen.
+ *   Ket kulon szabaly, a szam ket kulon alakjaval -- lasd `buildName()` sajat
+ *   fejleceben a teljes indoklast:
+ *     ONALLO eszkoz:    <szulo>/<helyszin> <magyar eszkoznev> <ROMAI szam>
+ *     BEEPITETT eszkoz: <szulo>/<helyszin> <szulo neve> <sajat neve> <ARAB, 2 jegy>
+ *   A magyar nevek a kategoria-terkepbol jonnek (`--kategoria-terkep`) --
+ *   terkep nelkul a nyers kod marad a nev helyen.
+ *
+ *   EGYETLEN NYITOTT PONT MARADT: a BEEPITETT ag konkret osszefuzesi alakjat
+ *   ("szulo neve" + "sajat neve" + szam, szokozzel elvalasztva) csak KET
+ *   PELDABOL vezettem le, es a masodik pelda ("Homokszűrő szivattyú 01")
+ *   Hungaria neve NEM szerepel szo szerint a mai kategoria-terkepben -- tehat
+ *   ez a resz VALSZINU, nem bizonyitott ugyanugy, mint a fenti tobbi. Ha egy
+ *   BEEPITETT eszkozos helyszinen a kiirt nev nem egyezik a valodi mintaval,
+ *   ezt a fuggvenyt kell ujra megnezni, nem a tobbit.
+ *
+ * === A SORSZAM FORRASA -- D (ONALLO) VAGY F (BEEPITETT), NAUTILUS MERESE
+ *     ES KETSZERES FUGGETLEN VISSZAMERES, 2026-09-23 21:xx-22:12 ===
+ *
+ *   D (Eszkoz sorszam)             ONALLO soron: partnerInternalCode +
+ *                                  name sorszama (roman).
+ *   F (Beepitett szerelveny        BEEPITETT soron: partnerInternalCode +
+ *     sorszama)                    name sorszama (2 jegyu arab). Nautilus
+ *                                  sajat merese: F nelkul a valodi LSS21
+ *                                  543/544. sora utkozott volna (ket VPU
+ *                                  egy CPT alatt). Murena fuggetlenul,
+ *                                  masik helyszinen (ETB 612-614) UGYANERRE
+ *                                  a hianyra futott -- ket kulon meres,
+ *                                  ugyanaz az eredmeny.
+ *
+ *   EGY UJ, MEG NEM MEGMERT MINTA: a valodi forrasban 130 beepitett soron
+ *   D IS ki van toltve, holott nautilus terkepe a D szerepet kifejezetten
+ *   az ONALLO sorokra korlatozza. 92 soron D EGYEDUL all (pl. LSS01/PMF-02
+ *   alatt HET KULONBOZO gyermek mind D="02"-vel -- ez inkabb "melyik
+ *   SZULO-PELDANY" jelentesre utal, nem gyermek-sorszamra), 38 soron D ES F
+ *   EGYUTT (pl. LSS12/HSZ "01/02" alaku D-vel, ami MAGA sem egyetlen szam).
+ *   EGYIK MINTAT SEM implementaltam felteveskent: egy beepitett soron allo
+ *   D-t a szkript MEGALLASI OKKENT kezeli (lasd `buildSitePayload`), mert
+ *   sem acrobot, sem nautilus meresei nem fedik ezt az esetet -- csak az F
+ *   NELKULI, D NELKULI (F EGYEDUL) mintat.
  *
  * === AMI SZANDEKOSAN KIMARAD, MERT A FELOLDASAHOZ HIANYZIK A BEMENET ===
  *
- *   categoryId              nautilus kod-kategoria terkepet keszit, MA MEG
- *                           NINCS KESZ (acrobot sajat szavaival). Ha a
- *                           --kategoria-terkep kapcsolo hianyzik, minden sor
- *                           categoryId NELKUL megy ki, es a szkript a stderr-re
- *                           figyelmezteto osszesitot ir -- NEM allit meg,
- *                           mert ez utolag, egy kulon korben potolhato.
- *   performance/            a ketto egyutt mozog (Asset_performance_pairing_check
- *   performanceUnitId       adatbazis-megkotes, lasd a DTO jegyzetet), es a
- *                           performanceUnitId egy VALODI UnitOfMeasure-azonosito
- *                           kell legyen. Ennek feloldasahoz nincs bemenetem,
- *                           tehat a TSV "M" oszlopat (Teljesitmeny, m3/h)
- *                           EZ A SZKRIPT NEM IRJA KI -- felteves helyett
- *                           kihagyja.
+ *   categoryId              A --kategoria-terkep NELKUL meg mindig kimarad
+ *                           minden sorbol (a kod-kategoria terkep egy masik
+ *                           helyszinen, egy masik korben keszult el -- ha
+ *                           MEGSEM adod at, ez a viselkedes az alapertelmezes,
+ *                           es a szkript csak FIGYELMEZTET, nem all meg,
+ *                           mert ez utolag potolhato). --kategoria-terkep
+ *                           MEGADASA UTAN viszont MAR NEM ez a viselkedes --
+ *                           lasd a "STOP" listat lejjebb.
  *
- * === AMIT A SZKRIPT SOSEM CSINAL ===
+ * === A performance/performanceUnitId -- acrobot harmadik ES NEGYEDIK kore ===
+ *
+ *   A ketto egyutt mozog (Asset_performance_pairing_check adatbazis-megkotes,
+ *   lasd a DTO jegyzetet). A performanceUnitId `PERFORMANCE_UNIT_M3PH`
+ *   allando (forras: GET /units-of-measure?kind=PERFORMANCE, acrobot mert
+ *   erteke, 2026-09-23 21:45) -- DE EZ A DEFAULT NEM ELLENORZOTT SORONKENT:
+ *   a TSV "M" oszlop FEJLECE m3/h-t mond, a CELLAK kozott viszont acrobot
+ *   ket olyat talalt (2026-09-23 22:01), ami MAS mertekegyseget visel
+ *   ("50-160 l", "50-160l/min") -- a fejlec tehat NEM garancia minden
+ *   sorra, csak a tobbsegre. Ma ez azert nem okoz csendes hibat, mert
+ *   mindket sor amugy is elbukik az ALAK-ellenorzesen (lasd lent) -- de ha
+ *   valaha egy MAS mertekegysegu cella egyetlen tiszta szamot tartalmazna,
+ *   azt ez a szkript NEM venne eszre. Ez a lapon nyitva marad, nem
+ *   javitas.
+ *
+ *   A performance ERTEKE NEM SZABAD SZOVEG: a szolgaltatas a kozos
+ *   `normalizeMeasurementValue`-val ellenorzi (`^\d{1,13}(?:\.\d{1,6})?$` --
+ *   egy szam, legfeljebb hat tizedessel), es ami nem ilyen, arra 400-at ad.
+ *   Acrobot lemerte a teljes forras "M" oszlopat ezen a mintan: 136 kitoltott
+ *   cellabol 114 at megy, 22 nem. Ket kulon eset, ket kulon feloldassal:
+ *     KEREKITHETO (6 sor, "146.69999999999999" alaku): UGYANAZ a szam, csak
+ *       tobb, mint hat tizedesre irva -- `normalizeMeasurementValue()` hat
+ *       tizedesre kerekiti, es a szkript KULON kilistazza, melyik sorokon
+ *       tortent (lasd `buildSitePayload`), hogy ez LATHATO maradjon.
+ *     NEM EGYETLEN SZAM (16 sor, pl. "175/210", "31-29-26", "45 (40)",
+ *       "50-160 l"): tobb ertek, tartomany, vagy nem m3/h mertekegyseg --
+ *       ezeket NEM lehet kerekitessel vagy talalgatassal egyetlen szamma
+ *       alakitani. Ugyanaz a "ne talalgass" szabaly vonatkozik rajuk, mint
+ *       a hianyzo kategoriara: a szkript MEGALL, es megnevezi a sorokat --
+ *       acrobot dontse el helyszinenkent, melyik ertek menjen be es mi
+ *       keruljon a description-be.
+ *
+ * === A volume -- UGYANAZ A FUGGVENY, UGYANAZ A KET ESET, acrobot negyedik
+ *     kore, 2026-09-23 22:02 (ugyanabban a korben, mint a performance) ===
+ *
+ *   A DTO sajat jegyzete szo szerint kimondja: a volume-ot a kozos
+ *   `normalizeMeasurementValue` ellenorzi, ugyanugy, mint a performance-ot --
+ *   tehat ugyanaz a fuggveny, ugyanaz a ket kimenet. A teljes forras "L"
+ *   oszlopat (Terfogat) lemerve: 59 kitoltott cellabol 53 at megy, 6 nem --
+ *   3 KEREKITHETO (ugyanaz a lebegopontos csalad, mint a performance-nel),
+ *   1 NEM SZAM ("TRI" -- valaki harom betut irt a terfogat-oszlopba), es 2
+ *   MERTEKEGYSEG-GYANUS.
+ *
+ *   A LEGVESZELYESEBB SOR A TELJES SZKRIPTBEN: "940 liter" (LSS10). A
+ *   `volume` mezo MINDIG m3-ben ert (DTO jegyzet), a cella viszont literben
+ *   all -- ha valaki csak a "liter" szot vagna le a szamrol, 940 KOBMETER
+ *   menne be 0,94 helyett, EZERSZERES hiba, es a szam utana tokeletesen
+ *   hihetonek latszana. Ezert ez SEM automatikus atvaltas: a szkript ezt a
+ *   fajta sort is a "NEM egyetlen szam" agon MEGALLITJA (a "liter" szo
+ *   miatt a `normalizeMeasurementValue` amugy sem engedne at), es acrobot
+ *   donti el helyszinenkent, mi legyen az atvaltott ertek.
+ *
+ * === AMIT A SZKRIPT SOSEM CSINAL, ES HET "ALLJON MEG" ESET ===
  *
  *   - nem kuld HTTP-hivast, nem ir semmilyen rendszerbe
+ *   - HA EGY BEEPITETT SORON D (Eszkoz sorszam) IS KI VAN TOLTVE, MEGALL --
+ *     lasd a fajl elejen "A SORSZAM FORRASA" szakaszat: erre nincs mert
+ *     szabaly, csak talalgatott mintak, es a szkript nem talalgat.
  *   - nem sorszamoz: ha egy partnerInternalCode UTKOZIK (ket sor ugyanoda esne
  *     serial nelkul), MEGALL, es kiirja, melyik `sor` szamok utkoznek
  *   - nem valaszt helyszint, ha a kod TOBBSZOR fordul elo a partner
  *     egysegei kozott -- ALLJON MEG, ne talalgasson
+ *   - HA --kategoria-terkep MEGVAN ADVA, egy abbol HIANYZO kod is megallasi
+ *     ok (acrobot masodik kore, 2026-09-23 21:36): a terkepet nautilus es
+ *     acrobot SZO SZERINTI egyezesre epitettek (nem nev-hasonlosagra), es
+ *     egy par kodot (a mai peldaban: OCS/HSZ) SZANDEKOSAN nem oldottak fel
+ *     talalgatassal -- ha egy sor ilyen kodra fut, a szkript sem talalgat.
+ *   - HA A TELJESITMENY (M oszlop) VAGY A TERFOGAT (L oszlop) TOBB, MINT EGY
+ *     SZAM -- tartomany, tobb ertek vagy nem a vart mertekegyseg (acrobot
+ *     harmadik es negyedik kore, 2026-09-23 22:01-22:02, EGY korben) --
+ *     MEGALL, es megnevezi a sorokat, mezonevvel egyutt. Amit KEREKITHET
+ *     (ugyanaz a szam, csak tul sok tizedessel), azt kerekiti ES kulon
+ *     jelzi -- ez NEM megallasi ok, csak lathato valtoztatas.
  *   - a payload eloallitasa UTAN, meg a kiiras ELOTT, ujra ellenorzi, hogy a
  *     generalt partnerInternalCode ertekek EGYEDIEK -- acrobot sajat szavaival:
  *     "nalam ez egy sor volt, es pont az LSS22-n sult el"
+ *
+ * === A BEMENET/KIMENET SORSZAMA MINDIG OSSZE VAN VETVE -- acrobot kikotese,
+ *     2026-09-23 22:04, egy SAJAT masik hibaja utan (54 sorbol kevesebb jott
+ *     ki, es nem tunt fel) ===
+ *
+ *   Minden futas a stderr-re irja: "<helyszin>: N bemeneti sor - K kihagyva
+ *     = M kimeneti eszkoz". Ez NEM opcionalis reszlet, hanem a legrosszabb
+ *     fajta hibat fogja meg: amikor a szkript nem hibazik, csak CSENDBEN
+ *     kevesebbet ad ki. Ha valaha N-K != M, `buildSitePayload` MEGALL --
+ *     ez belso ellentmondas, sosem szabadna elofordulnia, de ha megis, a
+ *     hivo NE kuldje el a payloadot.
  *
  * HASZNALAT:
  *   node scripts/fank-payload.mjs LSS22 --kihagy 563 \
@@ -84,7 +189,15 @@
  *                           JSON valasza ({"items":[{id,parentId,code,name,
  *                           isActive}, ...]}), fajlba mentve -- ez a szkript
  *                           nem er el elo API-t.
- *   --kategoria-terkep <ut> opcionalis JSON: {"<ESZKOZ_KOD>": "<categoryId>"}.
+ *   --kategoria-terkep <ut> opcionalis, DE HA MEGADOD, MINDEN kodot fednie
+ *                           kell -- lasd a "STOP" listat fent. Formatum:
+ *                           oszlopra igazitott szoveg, egy sor egy kodra,
+ *                           "<KOD>  <magyar nev>  <categoryId-UUID>  <honnan>"
+ *                           alakban (pl. exchange/FANK-kod-kategoria-
+ *                           azonositok-2026-09-23.txt). A KOD sima
+ *                           eszkoz-kod, vagy "<SZULO>/<SAJAT>" par beepitett
+ *                           alkatreszre (SZOKOZ NELKUL a "/" korul). A `#`-tal
+ *                           kezdodo sorok fejlec-megjegyzesek.
  *   --kihagy <sor[,sor...]> a TSV "sor" oszlopanak ertekei, amiket ki kell
  *                           hagyni -- ismetelheto, vagy vesszovel elvalasztva.
  *   --partner <id>          alapertelmezes: cmt34n8s20009pg07pg8kwue1 (FANK).
@@ -99,6 +212,12 @@ export const FANK_TSV_DEFAULT =
   "/home/marveen/marveen/exchange/FANK-teljes-lista-JAVITOTT-2026-09-23.tsv";
 export const FANK_PARTNER_DEFAULT = "cmt34n8s20009pg07pg8kwue1";
 export const ASSET_KIND_DEFAULT = "EQUIPMENT";
+// A TSV "M" oszlopa (Teljesitmeny) a SAJAT fejleceben m3/h-t mond -- DE ez
+// FEJLEC-SZINTU allitas, nem soronkent ellenorzott. Lasd a fajl fejlecenek
+// "performance/performanceUnitId" szakaszat: acrobot ket olyan cellat
+// talalt, ami MAS mertekegyseget visel, es amit ma csak a szam-alak
+// ellenorzese fog meg, nem ez az allando maga.
+export const PERFORMANCE_UNIT_M3PH = "uom_perf_m3ph";
 
 export class FankPayloadError extends Error {}
 
@@ -142,6 +261,8 @@ export function toTsvRow(row) {
     site: cell(row, COLUMN.site),
     deviceCode: cell(row, COLUMN.deviceCode),
     deviceSerial: cell(row, COLUMN.deviceSerial),
+    builtin: cell(row, COLUMN.builtin),
+    builtinSerial: cell(row, COLUMN.builtinSerial),
     manufacturer: cell(row, COLUMN.manufacturer),
     model: cell(row, COLUMN.model),
     detail: cell(row, COLUMN.detail),
@@ -150,6 +271,138 @@ export function toTsvRow(row) {
     performance: cell(row, COLUMN.performance),
     powerConsumptionRaw: cell(row, COLUMN.powerConsumptionRaw),
   };
+}
+
+/**
+ * A KATEGORIA-TERKEP SAJAT KULCSA EGY SORHOZ. ONALLO sornal (nincs beepitett
+ * alkatresz) a sima eszkoz-kod; BEEPITETT sornal a "<SZULO>/<SAJAT>" alak --
+ * SZOKOZ NELKUL a "/" korul, pontosan ahogy a kategoria-terkep MASODIK,
+ * javitott valtozata hasznalja (pl. "CPT/CAR"). Az ELSO valtozat meg
+ * szokozzel irta ("CPT / TRI") -- acrobot ujraepitese, 2026-09-23 21:51,
+ * ezt is megvaltoztatta.
+ */
+export function categoryKeyFor(row) {
+  return row.builtin ? `${row.deviceCode}/${row.builtin}` : row.deviceCode;
+}
+
+const ROMAN_TABLE = [
+  [1000, "M"],
+  [900, "CM"],
+  [500, "D"],
+  [400, "CD"],
+  [100, "C"],
+  [90, "XC"],
+  [50, "L"],
+  [40, "XL"],
+  [10, "X"],
+  [9, "IX"],
+  [5, "V"],
+  [4, "IV"],
+  [1, "I"],
+];
+
+/** Arab -> roman szamalak, csak pozitiv egeszekre. */
+export function toRoman(n) {
+  let num = n;
+  let out = "";
+  for (const [value, symbol] of ROMAN_TABLE) {
+    while (num >= value) {
+      out += symbol;
+      num -= value;
+    }
+  }
+  return out;
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+// A SZOLGALTATAS SAJAT `normalizePerformanceValue` fuggvenyenek mintaja --
+// acrobot merese, 2026-09-23 22:01. UGYANEZ A FUGGVENY ellenorzi a `volume`
+// mezot IS a szerver oldalon (lasd a DTO sajat jegyzetet: "az ALAKOT a
+// szolgaltatas ellenorzi a kozos normalizePerformanceValue fuggvennyel,
+// ugyanugy, mint a volume-nal") -- acrobot masodik merese, 2026-09-23
+// 22:02, ugyanabban a korben, ezert EGY fuggveny szolgalja ki mindket
+// mezot, nem ket kulon masolat.
+const MEASUREMENT_VALUE_RE = /^\d{1,13}(?:\.\d{1,6})?$/;
+
+/**
+ * EGY NYERS CELLA (M vagy L oszlop) -> ERVENYES ERTEK, VAGY `null`, HA NEM
+ * AZ. Ket kimenet lehetseges:
+ *   { value, rounded: false }  mar eleve megfelel a mintanak, valtozatlan
+ *   { value, rounded: true }   szam volt, de tobb mint hat tizedessel --
+ *                              hat tizedesre kerekitve (acrobot dontese,
+ *                              mert a hat a sema sajat pontossaga, nem egy
+ *                              itt valasztott szam)
+ *   null                       NEM egyetlen szam (tobb ertek, tartomany,
+ *                              mertekegyseg a szamban stb.) -- ezt a hivo
+ *                              NEM kerekitheti es NEM talalgathatja.
+ */
+export function normalizeMeasurementValue(raw) {
+  if (MEASUREMENT_VALUE_RE.test(raw)) return { value: raw, rounded: false };
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return null;
+  const kerekitve = Math.round(num * 1e6) / 1e6;
+  const asString = String(kerekitve);
+  if (!MEASUREMENT_VALUE_RE.test(asString)) return null;
+  return { value: asString, rounded: true };
+}
+
+const CATEGORY_LINE_RE = /^(\S+)\s{2,}(.*)$/;
+const UUID_SEARCH_RE =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/**
+ * A KATEGORIA-TERKEP FAJL SOROLASA -- NEM JSON, HANEM OSZLOPRA IGAZITOTT
+ * SZOVEG (nautilus + acrobot kozos munkaja, 2026-09-23, MASODSZOR
+ * ujraepitve 21:51-kor). Egy sor:
+ * "<KOD>  <MAGYAR NEV>  <categoryId-UUID>  <honnan>". A KOD vagy sima
+ * eszkoz-kod, vagy "<SZULO>/<SAJAT>" par -- SZOKOZ NELKUL a "/" korul (az
+ * elso valtozat meg szokozzel irta, lasd `categoryKeyFor`). `#`-tal kezdodo
+ * vagy ures sorok fejlec-megjegyzesek, at vannak ugorva.
+ *
+ * A POZICIONALIS OSZLOP-SZELESSEG NEM MEGBIZHATO: hosszabb magyar neveknel a
+ * nev es az UUID kozotti tavolsag EGYETLEN szokozre eshet ossze (mert az
+ * igazitas a rovidebb nevekhez van szabva), tehat egy "2+ szokoz" alapu
+ * hasabolas a nev-UUID hataron elvagna a nevet. Ezert a sorolas az UUID-t a
+ * SAJAT ALAKJABOL keresi meg a sorban (nem a vegen, mert a "honnan" oszlop
+ * MOGOTTE all), es minden, ami elotte/utana marad, nev/honnan.
+ *
+ * A "HONNAN" OSZLOPOT A SOROLAS MEGORZI (`entry.honnan`), de MA egyetlen
+ * hivo sem hasznalja -- a mezo a kesobbi diagnosztikahoz all keszen, nem
+ * ELVARAS. acrobot sajat hibaja (2026-09-23 21:51) eppen abbol jott, hogy
+ * a "honnan" erteket egy SZURESI ALLAPOTBOL (talalt-e azonositot) vezette
+ * le, nem egy VALODI forras-oszlopbol -- ez a mezo most mar NAUTILUS sajat
+ * oszlopabol jon, es ez a sorolo csak atveszi, nem szamolja ki.
+ */
+export function parseCategoryMap(text) {
+  const map = {};
+  const lines = text.split(/\r?\n/);
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const kodMatch = CATEGORY_LINE_RE.exec(raw.trimEnd());
+    if (!kodMatch)
+      throw new FankPayloadError(
+        `A kategoria-terkep egy sora nem ertelmezheto (kod, majd legalabb ket szokoz vart): ${JSON.stringify(
+          raw,
+        )}`,
+      );
+    const kod = kodMatch[1];
+    const rest = kodMatch[2].trim();
+    const uuidMatch = UUID_SEARCH_RE.exec(rest);
+    if (!uuidMatch)
+      throw new FankPayloadError(
+        `A kategoria-terkep "${kod}" soraban nem talaltam categoryId-UUID-t: ${JSON.stringify(
+          raw,
+        )}`,
+      );
+    const name = rest.slice(0, uuidMatch.index).trim();
+    const honnan = rest.slice(uuidMatch.index + uuidMatch[0].length).trim();
+    map[kod] = { name, categoryId: uuidMatch[0], honnan: honnan || null };
+  }
+  return map;
 }
 
 /**
@@ -183,24 +436,74 @@ export function resolveUnit(units, siteCode) {
   return { unit, parentCode: parent.code };
 }
 
-/** <HELYSZIN>-<KOD>-<SORSZAM>, vagy <HELYSZIN>-<KOD> ha nincs sorszam. */
-export function buildPartnerInternalCode(siteCode, deviceCode, serial) {
-  return serial
-    ? `${siteCode}-${deviceCode}-${serial}`
-    : `${siteCode}-${deviceCode}`;
+/**
+ * ONALLO SOR: <HELYSZIN>-<KOD>-<SORSZAM>, vagy <HELYSZIN>-<KOD> ha nincs
+ * sorszam (D oszlop).
+ *
+ * BEEPITETT SOR: <HELYSZIN>-<KOD>-<SAJAT KOD>-<SORSZAM>, vagy a sorszam
+ * nelkuli alak -- nautilus merese (agents/nautilus/fank-oszlop-terkep-
+ * 2026-09-23.md): "E ... szerepe: ... a partnerInternalCode gyermek-
+ * szegmense", es "F ... amikor egy szulo alatt TOBB azonos E-kodu gyermek
+ * all... ez kulonbozteti meg oket. A partnerInternalCode ... sorszam-
+ * reszebe megy." A sajat kod (E) NELKUL ket KULONBOZO gyermek (pl. egy TRI
+ * es egy VAL) ugyanazon szulo alatt UGYANAZT a kodot kapna -- ezt a
+ * korabbi valtozat helytelenul csinalta, csak C-t es D-t hasznalt.
+ *
+ * A SORSZAM FORRASA A BEEPITETT AGON F (`row.builtinSerial`), NEM D --
+ * nautilus lemerte, hogy F=01/02 kulonbozteti meg a ket azonos-kodu
+ * gyermeket (pl. ket VPU egy CPT alatt), es hogy F NELKUL a valodi LSS21
+ * 543/544. sora utkozott volna.
+ */
+export function buildPartnerInternalCode(siteCode, row) {
+  if (row.builtin) {
+    const base = `${siteCode}-${row.deviceCode}-${row.builtin}`;
+    // pad2, UGYANUGY, mint a nev arab-szamos resze -- a valodi forras F
+    // ertekei mar eleve ket jegyuek (01/02), de ne fugjon ettol.
+    return row.builtinSerial ? `${base}-${pad2(row.builtinSerial)}` : base;
+  }
+  return row.deviceSerial
+    ? `${siteCode}-${row.deviceCode}-${row.deviceSerial}`
+    : `${siteCode}-${row.deviceCode}`;
 }
 
 /**
- * A NEV -- AZ ELOTAG MEREVE VAN (acrobot), A SZUFFIX A LEGJOBB TALALATOM.
- * Lasd a fajl fejlecenek "AMI NEM MEREVE VAN" szakaszat.
+ * A NEV -- ACROBOT LEMERTE, VALODI BETOLTESBOL (LSS07, 2026-09-23 21:36).
+ * Ket kulon szabaly, es a kulonbseg NEM veletlen:
+ *
+ *   ONALLO eszkoz (nincs beepitett alkatresz -- row.builtin ures):
+ *     <SZULO>/<HELYSZIN> <magyar eszkoznev> <ROMAI szam>
+ *     pl. "BIO/LSS07 Hőcserélő I.", "BIO/LSS07 Szivattyú II."
+ *
+ *   BEEPITETT eszkoz (row.builtin nem ures):
+ *     <SZULO>/<HELYSZIN> <szulo magyar neve> <sajat magyar neve> <ARAB szam, 2 jeggyel>
+ *     pl. "BIO/LSS07 Csepegtető bioszűrő szivattyú 01"
+ *
+ * A szam MINDKET esetben ugyanabbol a forrasbol jon (TSV "D" oszlop,
+ * Eszköz sorszám), csak MAS szamalakban -- ha a sorban nincs sorszam, a
+ * szam egyszeruen kimarad (ugyanaz a mintak, mint a partnerInternalCode-nal:
+ * tobb egyforma kodu sor sorszam nelkul UTKOZESKENT all meg, nem itt).
+ *
+ * A MAGYAR NEVEK a kategoria-terkepbol jonnek (`categoryMap`,
+ * ld. `parseCategoryMap`): ONALLO sornal a sima kod bejegyzese, BEEPITETT
+ * sornal EGYSZERRE a szulo sima bejegyzese ES a "szulo / sajat" par
+ * bejegyzese. Terkep NELKUL (meg nincs kesz -- lasd a fajl fejlecet) a nyers
+ * kod marad a nev helyen, ugyanugy, mint korabban.
  */
-export function buildName(parentCode, siteCode, row) {
-  const kodResz = row.deviceSerial
-    ? `${row.deviceCode}-${row.deviceSerial}`
-    : row.deviceCode;
-  const reszletek = [row.manufacturer, row.model].filter(Boolean).join(" ");
-  const farok = [kodResz, reszletek].filter(Boolean).join(" ");
-  return `${parentCode}/${siteCode} ${farok}`.trim();
+export function buildName(parentCode, siteCode, row, categoryMap) {
+  const elotag = `${parentCode}/${siteCode}`;
+  if (row.builtin) {
+    const szuloNev = categoryMap?.[row.deviceCode]?.name ?? row.deviceCode;
+    const sajatNev = categoryMap?.[categoryKeyFor(row)]?.name ?? row.builtin;
+    // A szam forrasa F (builtinSerial), NEM D -- lasd buildPartnerInternalCode
+    // jegyzetet, nautilus merese ugyanerre a szabalyra.
+    const szam = row.builtinSerial ? pad2(row.builtinSerial) : "";
+    const farok = [szuloNev, sajatNev, szam].filter(Boolean).join(" ");
+    return `${elotag} ${farok}`.trim();
+  }
+  const eszkozNev = categoryMap?.[row.deviceCode]?.name ?? row.deviceCode;
+  const szam = row.deviceSerial ? toRoman(Number(row.deviceSerial)) : "";
+  const farok = [eszkozNev, szam].filter(Boolean).join(" ");
+  return `${elotag} ${farok}`.trim();
 }
 
 /**
@@ -223,11 +526,12 @@ export function findPartnerCodeCollisions(items) {
 }
 
 /**
- * EGY TSV-SOR -> `CreateAssetDto`-ALAKU OBJEKTUM. A `categoryMap` opcionalis:
- * ha a sor eszkoz-kodja nincs benne, a categoryId mezo KIMARAD (nem `null`
- * ertekkel megy, mert a DTO `@IsOptional()`-je a hianyzo mezot es a `null`-t
- * masodikent kezeli -- lasd a labelCode jegyzetet asset.dto.ts-ben arrol, mi
- * romlik el, ha ezt osszekeverjuk).
+ * EGY TSV-SOR -> `CreateAssetDto`-ALAKU OBJEKTUM. A `categoryId`-t ES a
+ * `performanceValue`-t a hivo (`buildSitePayload`) mar feloldva adja at --
+ * itt csak a mezo felvetele tortenik, ha van ertek (nem `null`-lal, mert a
+ * DTO `@IsOptional()`-je a hianyzo mezot es a `null`-t masodikent kezeli --
+ * lasd a labelCode jegyzetet asset.dto.ts-ben arrol, mi romlik el, ha ezt
+ * osszekeverjuk).
  */
 export function buildAssetPayload(row, ctx) {
   const {
@@ -238,19 +542,23 @@ export function buildAssetPayload(row, ctx) {
     ownerType,
     kind,
     categoryMap,
+    categoryId,
+    performanceValue,
+    volumeValue,
   } = ctx;
-  const partnerInternalCode = buildPartnerInternalCode(
-    siteCode,
-    row.deviceCode,
-    row.deviceSerial,
-  );
+  const partnerInternalCode = buildPartnerInternalCode(siteCode, row);
   const payload = {
-    clientOperationId: `fank-payload:${siteCode}:${row.sor}`,
+    // "fank-import", NEM "fank-payload" -- acrobot merese, 2026-09-23 21:45:
+    // a ma esti kezi betoltes MAR ezzel az elotaggal es KISBETUS
+    // helyszin-kodadal irta be a kilenc eszkozt. Ket kulonbozo elotag ket
+    // kulon idempotencia-nevteret jelentene: egy ismetelt futas nem ismerne
+    // fel, hogy a sor mar bent van, es duplikatumot hozna letre.
+    clientOperationId: `fank-import:${siteCode.toLowerCase()}:${row.sor}`,
     ownerType,
     ownerId: partnerId,
     departmentId: unit.id,
     kind,
-    name: buildName(parentCode, siteCode, row),
+    name: buildName(parentCode, siteCode, row, categoryMap),
     partnerInternalCode,
   };
   if (row.electricalCode) payload.electricalCode = row.electricalCode;
@@ -258,10 +566,13 @@ export function buildAssetPayload(row, ctx) {
   if (row.model) payload.model = row.model;
   if (row.uid) payload.serialNumber = row.uid;
   if (row.detail) payload.description = row.detail;
-  if (row.volume) payload.volume = row.volume;
+  if (volumeValue) payload.volume = volumeValue;
   if (row.powerConsumptionRaw)
     payload.powerConsumptionRaw = row.powerConsumptionRaw;
-  const categoryId = categoryMap?.[row.deviceCode];
+  if (performanceValue) {
+    payload.performance = performanceValue;
+    payload.performanceUnitId = PERFORMANCE_UNIT_M3PH;
+  }
   if (categoryId) payload.categoryId = categoryId;
   return { sor: row.sor, partnerInternalCode, payload };
 }
@@ -285,9 +596,9 @@ export function buildSitePayload({
   const skip = new Set(skipSorok.map(String));
   const { unit, parentCode } = resolveUnit(units, siteCode);
 
-  const siteRows = rows
-    .map(toTsvRow)
-    .filter((row) => row.site === siteCode && !skip.has(row.sor));
+  const allSiteRows = rows.map(toTsvRow).filter((row) => row.site === siteCode);
+  const siteRows = allSiteRows.filter((row) => !skip.has(row.sor));
+  const kihagyottSorSzama = allSiteRows.length - siteRows.length;
 
   const hianyzoKod = siteRows.filter((row) => !row.deviceCode);
   if (hianyzoKod.length > 0)
@@ -299,8 +610,100 @@ export function buildSitePayload({
         )}. Vagy add hozza --kihagy kapcsoloval, vagy ird be a hianyzo kodot a forrasba.`,
     );
 
-  const entries = siteRows.map((row) =>
-    buildAssetPayload(row, {
+  /*
+    D (Eszkoz sorszam) EGY BEEPITETT SORON -- MEG NINCS MEGMERT SZABALY RA.
+    Nautilus terkepe (agents/nautilus/fank-oszlop-terkep-2026-09-23.md) a
+    D szerepet SZOROSAN az ONALLO sorokra korlatozza ("amikor egy helyszinen
+    TOBB azonos C-kodu ONALLO eszkoz all"), es a beepitett soron csak F-et
+    nevezi meg. A valodi forrast atnezve VISZONT 130 beepitett sor van, ahol
+    D IS ki van toltve -- 92-n D EGYEDUL (F nelkul, pl. LSS01/PMF-02 alatt
+    het KULONBOZO gyermek mind D=02-vel, ami inkabb "melyik szulo-peldany"
+    jelentesre utal, nem gyermek-sorszamra), 38-on D ES F EGYUTT (pl.
+    LSS12/HSZ "01/02" alaku D-vel). EGYIK MINTAT SEM ERTELMEZTEM SAJAT
+    FELTEVESKENT -- acrobot kikotese, 2026-09-23 22:12: "ha talalsz olyan
+    helyszint, ahol az F es a D EGYSZERRE all egy soron, az uj eset, es
+    AZT mar ird le, ne dontsd el magad." Ugyanez a fegyelem vonatkozik a
+    "D egyedul beepitett soron" esetre is, mert az SEM szerepel a mert
+    szabalyban.
+  */
+  const dBeepitettSoron = siteRows.filter(
+    (row) => row.builtin && row.deviceSerial,
+  );
+  if (dBeepitettSoron.length > 0) {
+    const reszletek = dBeepitettSoron
+      .map(
+        (r) =>
+          `  sor ${r.sor}: D="${r.deviceSerial}", E="${r.builtin}", F="${r.builtinSerial || "(ures)"}"`,
+      )
+      .join("\n");
+    throw new FankPayloadError(
+      `A(z) ${siteCode} helyszin alabbi sorain a D (Eszkoz sorszam) egy BEEPITETT soron all -- ehhez nincs mert szabaly (lasd a szkript fejlecet), ez a szkript nem talalgat:\n${reszletek}`,
+    );
+  }
+
+  /*
+    A KATEGORIA-FELOLDAS KET, MEREVEN KULONBOZO VISELKEDESSEL JAR, es ez
+    SZANDEKOS (acrobot kikotese, 2026-09-23 21:36):
+      terkep NELKUL   -- meg nincs kesz (nautilus dolgozik rajta), a
+                         categoryId minden soron kimarad, es a hivo csak
+                         FIGYELMEZTETEST kap, NEM allunk meg.
+      terkep MEGADVA  -- ATTOL kezdve a terkep a tekintelyes forras, es egy
+                         benne HIANYZO kod (pl. a ma este megismert OCS/HSZ
+                         eset, amit acrobot SZANDEKOSAN nem oldott meg
+                         talalgatassal) MEGALLASI ok, ugyanugy, mint a masik
+                         harom "ne talalgass" eset.
+  */
+  const kategoriaHianyok = [];
+  /*
+    A TELJESITMENY (M oszlop) ES A TERFOGAT (L oszlop) EGYARANT EGYETLEN
+    SZAM KELL LEGYEN -- acrobot merese, 2026-09-23 22:01-22:02, egy korben:
+    mindket mezot a szolgaltatas UGYANAZZAL a mintaval ellenorzi
+    (`normalizeMeasurementValue`, lasd sajat fejleceben). Ket kulon eset,
+    ket kulon kezeles, MINDKET mezore egyformán: a KEREKITHETO (tul sok
+    tizedesjegy, ugyanaz a szam) csak jelzett, a NEM EGYETLEN SZAM (tobb
+    ertek, tartomany, mas mertekegyseg -- pl. "940 liter" a volume-nal)
+    megallasi ok, mint a hianyzo kategoria.
+  */
+  const MEASUREMENT_FIELDS = [
+    {
+      mezo: "performance",
+      ctxKey: "performanceValue",
+      label: "Teljesitmeny (M oszlop)",
+    },
+    { mezo: "volume", ctxKey: "volumeValue", label: "Terfogat (L oszlop)" },
+  ];
+  const meresHianyok = [];
+  const meresKerekitve = [];
+  const entries = siteRows.map((row) => {
+    let categoryId;
+    if (categoryMap) {
+      const kulcs = categoryKeyFor(row);
+      const bejegyzes = categoryMap[kulcs];
+      if (bejegyzes) {
+        categoryId = bejegyzes.categoryId;
+      } else {
+        kategoriaHianyok.push({ sor: row.sor, kulcs });
+      }
+    }
+    const meresErtekek = {};
+    for (const { mezo, ctxKey, label } of MEASUREMENT_FIELDS) {
+      const nyers = row[mezo];
+      if (!nyers) continue;
+      const normalizalt = normalizeMeasurementValue(nyers);
+      if (normalizalt === null) {
+        meresHianyok.push({ sor: row.sor, label, nyers });
+      } else {
+        meresErtekek[ctxKey] = normalizalt.value;
+        if (normalizalt.rounded)
+          meresKerekitve.push({
+            sor: row.sor,
+            label,
+            nyers,
+            kerekitve: normalizalt.value,
+          });
+      }
+    }
+    return buildAssetPayload(row, {
       siteCode,
       parentCode,
       unit,
@@ -308,8 +711,28 @@ export function buildSitePayload({
       ownerType,
       kind,
       categoryMap,
-    }),
-  );
+      categoryId,
+      ...meresErtekek,
+    });
+  });
+
+  if (categoryMap && kategoriaHianyok.length > 0) {
+    const reszletek = kategoriaHianyok
+      .map((h) => `  sor ${h.sor}: "${h.kulcs}"`)
+      .join("\n");
+    throw new FankPayloadError(
+      `A kategoria-terkep nem fedi az alabbi kodokat a(z) ${siteCode} helyszinen -- ez a szkript nem talalgat:\n${reszletek}`,
+    );
+  }
+
+  if (meresHianyok.length > 0) {
+    const reszletek = meresHianyok
+      .map((h) => `  sor ${h.sor} (${h.label}): "${h.nyers}"`)
+      .join("\n");
+    throw new FankPayloadError(
+      `Az alabbi sorokon egy mert ertek NEM egyetlen szam -- ez a szkript nem kerekit es nem talalgat, a dontes a hivoe:\n${reszletek}`,
+    );
+  }
 
   const collisions = findPartnerCodeCollisions(entries);
   if (collisions.length > 0) {
@@ -321,11 +744,34 @@ export function buildSitePayload({
     );
   }
 
-  const hianyzoKategoria = entries.filter((e) => !e.payload.categoryId);
+  const hianyzoKategoria = categoryMap
+    ? []
+    : entries.filter((e) => !e.payload.categoryId);
+
+  /*
+    A BEMENETI ES A KIMENETI SORSZAM OSSZEVETESE -- acrobot kikotese,
+    2026-09-23 22:04, egy sajat masik hibaja utan (54 sorbol kevesebb jott
+    ki, es ez akkor sem tunt fel): "a bemenet es a kimenet sorszamat
+    osszevetni... egy szamlalo, ami minden futas vegen ket szamot egymas
+    melle tesz, mind a ket esetet megfogja, es nem kell hozza emlekezni
+    ra." A varakozas: pontosan annyi eszkoz megy ki, ahany a helyszin
+    TSV-sora, minus a --kihagy-gyal kihagyottak. Ha ez NEM egyezik, valami
+    csendben elnyelt egy sort -- ez a legrosszabb fajta hiba, mert nem
+    hibazik, csak kevesebb lesz (acrobot sajat szavaival).
+  */
+  if (entries.length !== siteRows.length) {
+    throw new FankPayloadError(
+      `Belso ellentmondas: ${siteRows.length} bemeneti sorbol ${entries.length} kimeneti eszkoz lett a(z) ${siteCode} helyszinen -- ez a szamnak EGYEZNIE kellene. Ne kuldd el ezt a payloadot.`,
+    );
+  }
 
   return {
     payload: entries.map((e) => e.payload),
     hianyzoKategoriaSorok: hianyzoKategoria.map((e) => e.sor),
+    meresKerekitve,
+    bemenetiSorSzam: allSiteRows.length,
+    kihagyottSorSzama,
+    kimenetiEszkozSzam: entries.length,
   };
 }
 
@@ -419,10 +865,29 @@ export function main(argv) {
   const unitsJson = readJson(args.units, "--units");
   const units = Array.isArray(unitsJson.items) ? unitsJson.items : [];
   const categoryMap = args.categoryMap
-    ? readJson(args.categoryMap, "--kategoria-terkep")
+    ? parseCategoryMap(
+        (() => {
+          try {
+            return readFileSync(args.categoryMap, "utf8");
+          } catch (cause) {
+            throw new FankPayloadError(
+              `Nem tudtam beolvasni (--kategoria-terkep): ${args.categoryMap} -- ${
+                cause instanceof Error ? cause.message : String(cause)
+              }`,
+            );
+          }
+        })(),
+      )
     : null;
 
-  const { payload, hianyzoKategoriaSorok } = buildSitePayload({
+  const {
+    payload,
+    hianyzoKategoriaSorok,
+    meresKerekitve,
+    bemenetiSorSzam,
+    kihagyottSorSzama,
+    kimenetiEszkozSzam,
+  } = buildSitePayload({
     tsvText,
     units,
     siteCode: args.site,
@@ -440,8 +905,24 @@ export function main(argv) {
       )}\n`,
     );
   }
+  if (meresKerekitve.length > 0) {
+    const reszletek = meresKerekitve
+      .map(
+        (k) => `  sor ${k.sor} (${k.label}): "${k.nyers}" -> "${k.kerekitve}"`,
+      )
+      .join("\n");
+    process.stderr.write(
+      `KEREKITVE (hat tizedesre, a sema sajat pontossagara): ${meresKerekitve.length} sor\n${reszletek}\n`,
+    );
+  }
+  /*
+    A BEMENET/KIMENET OSSZEVETESE MINDIG KIIRODIK, ne csak hibas esetben --
+    acrobot kerese: ezt ne kelljen kulon kikerni, es ne lehessen elfelejteni
+    megnezni. A hivo sajat szamitasa (hany sort szant --kihagy-nak) itt
+    osszevethető a szkript sajat szamlalasaval.
+  */
   process.stderr.write(
-    `${payload.length} eszkoz a(z) ${args.site} helyszinre, ${args.tsv} forrasbol.\n`,
+    `${args.site}: ${bemenetiSorSzam} bemeneti sor - ${kihagyottSorSzama} kihagyva = ${kimenetiEszkozSzam} kimeneti eszkoz (${args.tsv}).\n`,
   );
   process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
   return 0;
