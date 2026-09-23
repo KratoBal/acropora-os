@@ -49,6 +49,19 @@ export interface MaterialRequestDetail {
 
 export interface MaterialRequestListResponse {
   items: MaterialRequestDetail[];
+  /**
+   * FIGYELMEZTETES, HOGY MA SENKI NEM TUDJA JELOLNI A BEERKEZEST.
+   *
+   * ELHAGYHATO, ES SZANDEKOSAN CSAK A KULDES (`submit`) VALASZABAN TOLTODIK
+   * KI -- lasd a szerver `MaterialRequestsService.submit` fejleceit, miert
+   * ott es csak ott. A `listForWorksheet`/`listPending` valasza is ezt a
+   * tipust hasznalja, de azokban ez a mezo mindig hianyzik: a figyelmeztetes
+   * a KULDES PILLANATARA szol, nem egy listazasra.
+   *
+   * A KULDEST NEM AKADALYOZZA -- az igeny akkor is letrejon, ha senki nem
+   * tudja majd jelolni. Ez tajekoztatas, nem kapu.
+   */
+  warning?: string;
 }
 
 /**

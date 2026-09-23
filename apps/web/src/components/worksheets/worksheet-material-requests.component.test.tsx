@@ -130,6 +130,45 @@ describe("anyagigénylés a munkalapon, a weben", () => {
     );
   });
 
+  /**
+   * A `submit` VALASZANAK `warning` MEZOJE MEGJELENIK, DE NEM HIBAKENT.
+   *
+   * Balazs kerese, acrobot dontese a helyerol (2026-09-23): ha a kuldes
+   * pillanataban senkinel nincs bejelolve a beerkezes-jelolo kepesseg, a
+   * szervizes lassa, hogy TOVABBRA IS sikeres volt a kuldes -- a figyelmeztetes
+   * NEM az `error` dobozban all, mert az a kuldes SIKERTELENSEGET jelentene.
+   */
+  it("a submit `warning` mezője figyelmeztetésként jelenik meg, nem hibaként", async () => {
+    api.create.mockResolvedValue(request({ id: "mr-uj", status: "DRAFT" }));
+    api.submit.mockResolvedValue({
+      items: [request({ id: "mr-uj", status: "OPEN" })],
+      warning:
+        "Az anyagigény elküldve, de ma senki nem tudja megjelölni, ha beérkezik.",
+    });
+
+    render(<WorksheetMaterialRequests worksheetId="w-1" canWrite />);
+    await waitFor(() => screen.getByText(/40mm könyök/));
+    fireEvent.click(screen.getByRole("button", { name: "Anyagigénylés" }));
+    fireEvent.change(screen.getByLabelText("Tétel neve"), {
+      target: { value: "PVC cső" },
+    });
+    fireEvent.change(screen.getByLabelText("Mennyiség"), {
+      target: { value: "10 méter" },
+    });
+    fireEvent.change(screen.getByLabelText("Egység"), {
+      target: { value: "db" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Küldés" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/ma senki nem tudja megjelölni/),
+      ).toBeInTheDocument(),
+    );
+    // NEM az `alert` szerepkorben all -- az a hiba-dobozt jelentene.
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("HA a submit elhasal a create UTÁN, a lista frissül -- a piszkozat LÁTHATÓ marad", async () => {
     /*
       acrobot kikotese: "ha egy DRAFT igeny sosem kerul elkuldesre, orokre
