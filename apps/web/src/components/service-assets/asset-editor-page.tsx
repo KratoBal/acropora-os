@@ -199,12 +199,19 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    */
   const [powerConsumptionRaw, setPowerConsumptionRaw] = useState("");
   /**
-   * A TÁBLÁZAT ELSŐ OSZLOPA ("MAT kód / Elektromos"), NYERS SZÖVEGKÉNT.
+   * A TÁBLÁZAT ELSŐ OSZLOPA, NYERS SZÖVEGKÉNT.
    *
    * Balázs kérése, 2026-09-23 (kanban 8c77cf3e), szó szerint: "kapjon saját
-   * mezőt". A felirat a partner saját szavát ("MAT kód") használja, mert ez
-   * az, amit a villanyszekrénynél a nyomtatott címkén lát -- a keresőbe
-   * beírva ennek a mezőnek kell megtalálnia az eszközt.
+   * mezőt" -- a keresőbe beírva ennek a mezőnek kell megtalálnia az
+   * eszközt.
+   *
+   * A FELIRAT MÁSODSZOR VÁLTOZOTT MEG UGYANAZON A NAPON. Eredetileg "MAT
+   * kód" állt itt, a forrás táblázat "Teljes lista" lapjának oszlopfejléce
+   * alapján -- ez viszont a lapon KÉT különböző helyszíni címke
+   * összemosása: az LSS-lapok "MAT kód"-ot, a Biodom lapjai "FP kód"-ot
+   * használnak. A mai 16 rögzített eszköz mind a Biodom területéről való,
+   * tehát mind FP. Balázs 18:59-kor az EGÉSZ mezőre az FP alakot
+   * választotta ("Legyen az FP/Elektromos"), nem csak a Biodomra.
    */
   const [electricalCode, setElectricalCode] = useState("");
   const [installedAt, setInstalledAt] = useState("");
@@ -937,15 +944,19 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               />
             </FormField>
             {/*
-              A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs kerese,
-              2026-09-23 (kanban 8c77cf3e): "kapjon sajat mezot". A felirat a
-              partner sajat szavat hasznalja ("MAT kod"), mert ez all a
-              nyomtatott cimken a villanyszekrenynel -- a keresobe beirva
-              ennek kell megtalalnia az eszkozt.
+              A TABLAZAT ELSO OSZLOPA. Balazs kerese, 2026-09-23 (kanban
+              8c77cf3e): "kapjon sajat mezot" -- a keresobe beirva ennek
+              kell megtalalnia az eszkozt.
+
+              A FELIRAT MASODSZOR VALTOZOTT MEG UGYANAZON A NAPON: "MAT kod"
+              csak az LSS-lapok cimkeje, a Biodom lapjai "FP kod"-ot
+              hasznalnak -- a mai 16 eszkoz mind Biodom, tehat mind FP.
+              Balazs 18:59-kor az EGESZ mezore az FP alakot valasztotta,
+              nem csak a Biodomra.
             */}
-            <FormField label="MAT kód (elektromos)">
+            <FormField label="FP / Elektromos">
               <Input
-                aria-label="MAT kód (elektromos)"
+                aria-label="FP / Elektromos"
                 value={electricalCode}
                 onChange={(event) => setElectricalCode(event.target.value)}
               />

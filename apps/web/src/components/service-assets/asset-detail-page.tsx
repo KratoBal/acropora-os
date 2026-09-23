@@ -470,14 +470,19 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                     value={asset.partnerInternalCode}
                   />
                   {/*
-                    A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs
-                    kerese, 2026-09-23 (kanban 8c77cf3e). A felirat a partner
-                    sajat szavat hasznalja, mert ez all a nyomtatott cimken.
+                    A TABLAZAT ELSO OSZLOPA. Balazs kerese, 2026-09-23
+                    (kanban 8c77cf3e). A FELIRAT MASODSZOR VALTOZOTT MEG
+                    UGYANAZON A NAPON: a forras tablazat "Teljes lista"
+                    lapja "MAT kod / Elektromos" fejlecet visel, DE ez ket
+                    kulonbozo helyszini cimke osszemosasa -- az LSS-lapok
+                    "MAT kod"-ot, a Biodom lapjai "FP kod"-ot hasznalnak. A
+                    ma rogzitett 16 eszkoz mind a Biodom teruleterol valo,
+                    tehat mind FP. Balazs 18:59-kor az EGESZ mezore az FP
+                    alakot valasztotta ("Legyen az FP/Elektromos"), nem csak
+                    a Biodomra -- a felirat tehat nem a forras-tablazatot
+                    masolja szoszerint, hanem az o dontesét.
                   */}
-                  <Data
-                    label="MAT kód (elektromos)"
-                    value={asset.electricalCode}
-                  />
+                  <Data label="FP / Elektromos" value={asset.electricalCode} />
                   {/*
                     AZ ELORE NYOMTATOTT MATRICA KODJA -- A BEGEPELT AZONOSITOK
                     KOZOTT, NEM A QR-PANELBEN.

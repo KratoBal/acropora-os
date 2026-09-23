@@ -480,10 +480,13 @@ export default function AssetDetailScreen() {
                 />
               ) : null}
               {/*
-                A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs
-                kerese, 2026-09-23 (kanban 8c77cf3e): "kapjon sajat mezot".
+                A TABLAZAT ELSO OSZLOPA. Balazs kerese, 2026-09-23 (kanban
+                8c77cf3e): "kapjon sajat mezot". A FELIRAT MASODSZOR
+                VALTOZOTT MEG UGYANAZON A NAPON: "MAT kod" csak az
+                LSS-lapok cimkeje, a Biodom lapjai "FP kod"-ot hasznalnak --
+                a mai 16 eszkoz mind Biodom, tehat mind FP.
               */}
-              <Info label="MAT kód (elektromos)" value={asset.electricalCode} />
+              <Info label="FP / Elektromos" value={asset.electricalCode} />
               <Info label="Termék" value={asset.product?.name} />
               <Info label="Leírás" value={asset.description} />
             </Section>

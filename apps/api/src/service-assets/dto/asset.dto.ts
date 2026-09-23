@@ -392,7 +392,10 @@ export class CreateAssetDto {
    */
   @IsString() @MaxLength(40) @IsOptional() powerConsumptionRaw?: string;
   /**
-   * A TÁBLÁZAT ELSŐ OSZLOPA ("MAT kód / Elektromos"), NYERS SZÖVEGKÉNT.
+   * A TÁBLÁZAT ELSŐ OSZLOPA, NYERS SZÖVEGKÉNT. A felület felirata "FP /
+   * Elektromos" (Balázs döntése, 2026-09-23 18:59) -- NEM "MAT kód": az a
+   * forrás "Teljes lista" lapjának fejléce, de csak az LSS-lapokra igaz, a
+   * Biodom lapjai "FP kód"-ot használnak.
    * Balázs kérése, 2026-09-23 (kanban 8c77cf3e): "kapjon saját mezőt", mert a
    * keresés (lásd `service-assets.repository.ts`) nem nézi a `notes`-t, tehát
    * egy oda írt kód gyakorlatilag megtalálhatatlan lenne.

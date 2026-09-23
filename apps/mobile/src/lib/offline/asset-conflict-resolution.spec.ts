@@ -338,3 +338,26 @@ describe("mi megy el a feloldás után", () => {
     );
   });
 });
+
+/**
+ * A "MAT KÓD" FELIRAT MÁSODSZOR VÁLTOZOTT MEG UGYANAZON A NAPON (2026-09-23).
+ *
+ * Balázs 18:59-kor eldöntötte, hogy az electricalCode mező felirata "FP /
+ * Elektromos" legyen -- "MAT kód" csak az LSS-lapok forrás-oszlopneve, a
+ * Biodom lapjai "FP kód"-ot használnak, és a mai rögzített eszközök mind a
+ * Biodom területéről valók. Az állítás NEM csak azt méri, hogy az új felirat
+ * ott van, hanem azt is, hogy a régi SEHOL nem maradt -- egy kimaradt
+ * előfordulás enélkül zölden menne át.
+ */
+describe("az electricalCode mező felirata", () => {
+  it("FP / Elektromos, nem MAT kód", () => {
+    const rows = compareQueuedUpdate({
+      patch: { expectedUpdatedAt: most.updatedAt, electricalCode: "30M" },
+      current: { ...most, electricalCode: null },
+    });
+    const sor = rows.find((r) => r.field === "electricalCode");
+
+    assert.equal(sor?.label, "FP / Elektromos");
+    assert.notEqual(sor?.label, "MAT kód (elektromos)");
+  });
+});
