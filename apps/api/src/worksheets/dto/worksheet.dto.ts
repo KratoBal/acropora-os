@@ -411,10 +411,15 @@ export class CreateWorksheetDepartmentDto {
    *
    * A SZÁMJEGY 2026-09-22-én került be, Balázs kérésére. A számjegynek nincs
    * kis- és nagybetűje, tehát a normalizálás változatlanul helyes marad rá.
+   *
+   * A HOSSZ 2026-09-23-TÓL ÖT, HÁROM HELYETT (Balázs döntése, 11:39, "b") --
+   * a FANK Biodóm rendszer-kódjai (`LSS01` és társai) öt karakteresek, és a
+   * kérés az volt, hogy ezek SAJÁT ALAKJUKBAN maradjanak. Lásd a mintát adó
+   * `WORKSHEET_DEPARTMENT_CODE_PATTERN` jegyzetét (`@acropora/types`).
    */
-  @Matches(/^[A-Za-z0-9]{1,3}$/, {
+  @Matches(/^[A-Za-z0-9]{1,5}$/, {
     message:
-      "Az alegység kódja legfeljebb három betű vagy szám lehet (pl. BIO vagy A1).",
+      "Az alegység kódja legfeljebb öt betű vagy szám lehet (pl. BIO vagy LSS01).",
   })
   code!: string;
   /**

@@ -42,7 +42,10 @@ async function takarit() {
   });
 }
 
-/** A kod HAROM karakter: `WorksheetDepartment.code` tipusa `@db.VarChar(3)`. */
+/**
+ * A kod harom karakter -- ez itt csak a fixture rovidsege, nem hatar: a
+ * `WorksheetDepartment.code` tipusa 2026-09-23 ota `@db.VarChar(5)`.
+ */
 async function egyseg(kod: string, nev: string) {
   const row = await prisma.worksheetDepartment.create({
     data: { customerId: ugyfelId, code: kod, name: nev, parentId: null },

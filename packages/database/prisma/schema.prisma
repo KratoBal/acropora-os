@@ -3663,7 +3663,9 @@ model WorksheetDepartment {
   /// meglevo sorok mind ilyenek maradnak, tehat a lapos lista a fa elso
   /// szintje lesz, adatvesztes es atszamozas nelkul.
   parentId   String?
-  code       String   @db.VarChar(3)
+  /// Öt karakterig tágítva 2026-09-23-tól (Balázs döntése, "b") -- lásd
+  /// WORKSHEET_DEPARTMENT_CODE_PATTERN jegyzetét (@acropora/types).
+  code       String   @db.VarChar(5)
   name       String
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())

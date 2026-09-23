@@ -17,7 +17,8 @@ export type WorksheetSignatureDecision = "ACCEPTED" | "REJECTED";
 export const WORKSHEET_PARTNER_CODE_PATTERN = /^[A-Z][A-Z0-9]{1,7}$/;
 
 /**
- * A részleg kódja (`BIO`, `A1`, `12`): legfeljebb három nagybetű VAGY SZÁMJEGY.
+ * A részleg kódja (`BIO`, `A1`, `12`, `LSS01`): legfeljebb ÖT nagybetű VAGY
+ * SZÁMJEGY.
  *
  * Balázs kérése, 2026-09-22: "csinald meg kerlek, hogy a partnernel a helyszin
  * kodjaba ne csak betut, hanem szamot es betut is lehessen irni".
@@ -34,10 +35,14 @@ export const WORKSHEET_PARTNER_CODE_PATTERN = /^[A-Z][A-Z0-9]{1,7}$/;
  * Egy "12" kódból "12-2026-001" lesz, ami egyértelmű. Szeparátor nélkül
  * összefűzve ez a tágítás NEM lenne biztonságos.
  *
- * A HOSSZ VÁLTOZATLANUL HÁROM, azt Balázs nem kérte, és a `code` oszlop
- * `@db.VarChar(3)`.
+ * A HOSSZ 2026-09-23-IG HÁROM VOLT. Balázs döntése (2026-09-23 11:39, "b"):
+ * a FANK Biodóm-import ötkarakteres rendszer-kódokat hoz (`LSS01` és társai),
+ * és ezeket SAJÁT ALAKJUKBAN kérte megtartani -- a kód TÁGÍTÁS, nem szűkítés,
+ * ezért a mai 88 éles helyszín-kód közül egy sem válik érvénytelenné (éles
+ * mérés: 2026-09-23, három karakternél hosszabb kód akkor nulla darab volt).
+ * A `code` oszlop ugyanígy tágult: `@db.VarChar(5)`.
  */
-export const WORKSHEET_DEPARTMENT_CODE_PATTERN = /^[A-Z0-9]{1,3}$/;
+export const WORKSHEET_DEPARTMENT_CODE_PATTERN = /^[A-Z0-9]{1,5}$/;
 
 /**
  * A sorszám alapesetben három jegyű. 999 fölött NEM fordul át, hanem bővül

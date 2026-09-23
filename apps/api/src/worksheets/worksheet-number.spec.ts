@@ -87,7 +87,7 @@ describe("worksheet number", () => {
       "PARTNER_CODE_INVALID",
     );
     assert.equal(
-      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "BIOD" }),
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "BIODOM" }),
       "DEPARTMENT_CODE_INVALID",
     );
     assert.equal(
@@ -102,7 +102,7 @@ describe("worksheet number", () => {
    * A NEGYEDIK ES OTODIK ALLITAS A LENYEG, NEM AZ ELSO HAROM. Egy teszt, ami
    * csak azt mondja, hogy "A1" es "12" atmegy, ZOLD LENNE AKKOR IS, ha valaki
    * a mintat teljesen kivenne -- vagyis nem a tagitast merne, hanem a
-   * megkotes ELTUNESET. Az "ABCD" es a kisbetus alak MA IS bukik, es a
+   * megkotes ELTUNESET. Az "ABCDEF" es a kisbetus alak MA IS bukik, es a
    * tagitas utan is buknia kell: ez valasztja szet a kettot.
    */
   it("accepts digits in the department code, and still refuses what it refused", () => {
@@ -122,12 +122,12 @@ describe("worksheet number", () => {
 
     // ES AMI VALTOZATLANUL BUKIK -- enelkul a fenti harom nem bizonyit semmit
     assert.equal(
-      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "ABCD" }),
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "ABCDEF" }),
       "DEPARTMENT_CODE_INVALID",
-      "negy karakter tovabbra sem fer bele: a hossz nem valtozott",
+      "hat karakter meg az uj, ot karakteres hataron tul is bukik",
     );
     assert.equal(
-      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "1234" }),
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "123456" }),
       "DEPARTMENT_CODE_INVALID",
       "a hossz szamjegyre is all, nem csak beture",
     );
@@ -140,6 +140,29 @@ describe("worksheet number", () => {
       worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "A-1" }),
       "DEPARTMENT_CODE_INVALID",
       "a kotojel a munkalapszam tagolo jele: egy kodban allva ketertelmuve tenne a szamot",
+    );
+  });
+
+  /**
+   * A FANK BIODOM RENDSZER-KODJAI (Balazs dontese, 2026-09-23 11:39, "b").
+   *
+   * Pozitiv kontrollkent: enelkul a fenti "es ami valtozatlanul bukik" ag
+   * ugy is zold lenne, ha valaki a hatart negyre vagy harmara vinne vissza
+   * -- azt csak egy ot karakteres, ELFOGADOTT eset zarja ki.
+   */
+  it("accepts the five-character FANK Biodóm system codes", () => {
+    assert.equal(
+      worksheetNumberIssue({ partnerCode: "FANK", departmentCode: "LSS01" }),
+      null,
+    );
+    assert.equal(
+      buildWorksheetNumber({
+        partnerCode: "FANK",
+        departmentCode: "LSS01",
+        year: 2026,
+        sequence: 1,
+      }).number,
+      "LSS01-2026-001",
     );
   });
 

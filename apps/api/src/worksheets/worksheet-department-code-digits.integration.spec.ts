@@ -85,8 +85,9 @@ describe(
      * a migracio a CHECK-et ELDOBTA volna. Egy kontroll, ami mas okbol bukik,
      * mint amit bizonyitani akar, nem kontroll.
      *
-     * Ezert mind a ketto HAROM karakteres: a hosszba belefernek, es kizarolag
-     * a CHECK utasithatja el oket.
+     * Ezert mind a ketto HAROM karakteres: a hosszba belefernek (2026-09-23
+     * ota is, az uj OT karakteres hataron belul), es kizarolag a CHECK
+     * utasithatja el oket.
      */
     it("KONTROLL: a kötőjeles kódot az adatbázis elutasítja (3 karakter, a hossz belefér)", async () => {
       await assert.rejects(() => felvisz("A-1"));
@@ -97,12 +98,29 @@ describe(
     });
 
     /**
-     * ES A HOSSZ IS ALL, kulon allitaskent -- Balazs a hosszt nem kerte, es a
-     * `code` oszlop valtozatlanul `VarChar(3)`.
+     * A FANK BIODOM RENDSZER-KODJAI, POZITIV KONTROLLKENT.
+     *
+     * Balazs dontese, 2026-09-23 11:39 ("b"): a hatar OT karakterre tagult,
+     * hogy az ot karakteres rendszer-kodok (LSS01 es tarsai) valtozatlanul
+     * tarolhatok legyenek -- ELES adatbazisig, nem csak a DTO-ig.
      */
-    it("a hossz változatlanul három karakter", async () => {
-      await assert.rejects(() => felvisz("ABCD"));
-      await assert.rejects(() => felvisz("1234"));
+    it("elfogadja és eltárolja az öt karakteres rendszer-kódot", async () => {
+      await felvisz("LSS01");
+
+      const sor = await prisma.worksheetDepartment.findFirst({
+        where: { customerId: ugyfelId, code: "LSS01" },
+        select: { code: true },
+      });
+      assert.equal(sor?.code, "LSS01");
+    });
+
+    /**
+     * ES A HOSSZ IS ALL, kulon allitaskent -- a `code` oszlop 2026-09-23-tol
+     * `VarChar(5)`, es a hatnal hosszabb kod meg mindig elbukik.
+     */
+    it("a hossz legfeljebb öt karakter", async () => {
+      await assert.rejects(() => felvisz("ABCDEF"));
+      await assert.rejects(() => felvisz("123456"));
     });
   },
 );

@@ -138,7 +138,7 @@ describe("apiRequest", () => {
       status: 400,
       json: async () => ({
         message: [
-          "Az alegység kódja legfeljebb három betű vagy szám lehet (pl. BIO vagy A1).",
+          "Az alegység kódja legfeljebb öt betű vagy szám lehet (pl. BIO vagy LSS01).",
           "Az alegység nevét meg kell adni.",
         ],
       }),
@@ -150,7 +150,7 @@ describe("apiRequest", () => {
         body: "{}",
       }),
     ).rejects.toThrow(
-      "Az alegység kódja legfeljebb három betű vagy szám lehet (pl. BIO vagy A1).\nAz alegység nevét meg kell adni.",
+      "Az alegység kódja legfeljebb öt betű vagy szám lehet (pl. BIO vagy LSS01).\nAz alegység nevét meg kell adni.",
     );
   });
 
