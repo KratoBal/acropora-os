@@ -121,7 +121,13 @@ export interface CurrentAssetLike {
   powerConsumption?: string | null;
   /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
   powerConsumptionRaw?: string | null;
-  /** A tablazat elso oszlopa ("MAT kod / Elektromos"). Kanban 8c77cf3e, 2026-09-23. */
+  /**
+   * A tablazat elso oszlopa, felulet-felirata "FP / Elektromos" (Balazs
+   * dontese, 2026-09-23 18:59). A FORRAS oszlop neve ket alakban all,
+   * lapfuggoen: a Biodom lapjain "FP kod / Elektromos", az LSS-lapokon es
+   * az osszevont Teljes listan "MAT kod / Elektromos" -- ugyanaz az
+   * oszlop, ket cimkevel. Kanban 8c77cf3e, 2026-09-23.
+   */
   electricalCode?: string | null;
 }
 
@@ -174,7 +180,7 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   volume: "Térfogat",
   powerConsumption: "Fogyasztás",
   powerConsumptionRaw: "Fogyasztás (eredeti bejegyzés)",
-  electricalCode: "MAT kód (elektromos)",
+  electricalCode: "FP / Elektromos",
 };
 
 /** Az üres érték NEVE. Egy üres cella nem mondja meg, hogy törlésről van szó. */

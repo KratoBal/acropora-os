@@ -1010,3 +1010,26 @@ describe("a mértékegységek hibája megkülönböztethető az ürestől", () =
     expect(screen.queryByText(UZENET)).toBeNull();
   });
 });
+
+/**
+ * A "MAT KÓD" FELIRAT MÁSODSZOR VÁLTOZOTT MEG UGYANAZON A NAPON (2026-09-23).
+ *
+ * Balázs 18:59-kor eldöntötte, hogy az electricalCode mező felirata "FP /
+ * Elektromos" legyen -- "MAT kód" csak az LSS-lapok forrás-oszlopneve, a
+ * Biodom lapjai "FP kód"-ot használnak, és a mai rögzített eszközök mind a
+ * Biodom területéről valók. Ez az állítás NEM csak azt méri, hogy az új
+ * felirat ott van, hanem azt is, hogy a régi SEHOL nem maradt -- egy
+ * kimaradt előfordulás enélkül zölden menne át.
+ */
+describe("AssetEditorPage electricalCode felirata", () => {
+  it("az új felirat (FP / Elektromos) látszik, a régi (MAT kód) sehol", async () => {
+    api.detail.mockResolvedValue(asset);
+    api.owners.mockResolvedValue(owners([servicePartner]));
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    expect(await screen.findByLabelText("FP / Elektromos")).toBeTruthy();
+    expect(screen.queryByLabelText("MAT kód (elektromos)")).toBeNull();
+    expect(screen.queryByText(/MAT kód/)).toBeNull();
+  });
+});

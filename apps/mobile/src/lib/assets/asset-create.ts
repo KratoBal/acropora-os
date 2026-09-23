@@ -116,9 +116,13 @@ export interface AssetCreateForm {
   powerConsumption: string;
   powerConsumptionRaw: string;
   /**
-   * A TÁBLÁZAT ELSŐ OSZLOPA ("MAT kód / Elektromos"). Balázs kérése,
-   * 2026-09-23 (kanban 8c77cf3e): "kapjon saját mezőt". Szabad szöveg, nincs
-   * alak-ellenőrzés.
+   * A TÁBLÁZAT ELSŐ OSZLOPA. Balázs kérése, 2026-09-23 (kanban 8c77cf3e):
+   * "kapjon saját mezőt". Szabad szöveg, nincs alak-ellenőrzés.
+   *
+   * A FELIRAT "FP / Elektromos" (Balázs döntése, 2026-09-23 18:59) -- NEM
+   * "MAT kód": az a forrás "Teljes lista" lapjának fejléce, de csak az
+   * LSS-lapokra igaz, a Biodom lapjai "FP kód"-ot használnak, és a mai
+   * rögzített eszközök mind a Biodom területéről valók.
    */
   electricalCode: string;
   /** Amit a felhasználó beírt vagy a választóból kapott. Üres is lehet. */
@@ -160,7 +164,7 @@ export interface AssetCreatePayload {
   powerConsumption?: string;
   /** A fogyasztás eredeti szövege, ha a kezelő megadta. */
   powerConsumptionRaw?: string;
-  /** A táblázat első oszlopa ("MAT kód / Elektromos"), ha a kezelő megadta. */
+  /** A táblázat első oszlopa ("FP / Elektromos"), ha a kezelő megadta. */
   electricalCode?: string;
   installedAt?: string;
   serviceIntervalDays?: number;

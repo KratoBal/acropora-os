@@ -206,8 +206,13 @@ export default function NewAssetScreen() {
    */
   const [powerConsumptionRaw, setPowerConsumptionRaw] = useState("");
   /**
-   * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs kerese,
-   * 2026-09-23 (kanban 8c77cf3e): "kapjon sajat mezot".
+   * A TABLAZAT ELSO OSZLOPA. Balazs kerese, 2026-09-23 (kanban 8c77cf3e):
+   * "kapjon sajat mezot".
+   *
+   * A FELIRAT MASODSZOR VALTOZOTT MEG UGYANAZON A NAPON: "MAT kod" csak az
+   * LSS-lapok cimkeje, a Biodom lapjai "FP kod"-ot hasznalnak -- a mai 16
+   * eszkoz mind Biodom, tehat mind FP. Balazs 18:59-kor az EGESZ mezore az
+   * FP alakot valasztotta, nem csak a Biodomra.
    */
   const [electricalCode, setElectricalCode] = useState("");
   // A BEOLVASO A KOZOS ALLVANYBOL JON, ugyanabbol, amit a szerkeszto kepernyo
@@ -1027,11 +1032,14 @@ export default function NewAssetScreen() {
               onChangeText={setPowerConsumptionRaw}
             />
             {/*
-              A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs kerese,
-              2026-09-23 (kanban 8c77cf3e): "kapjon sajat mezot".
+              A TABLAZAT ELSO OSZLOPA. Balazs kerese, 2026-09-23 (kanban
+              8c77cf3e): "kapjon sajat mezot". A FELIRAT MASODSZOR
+              VALTOZOTT MEG UGYANAZON A NAPON: "MAT kod" csak az LSS-lapok
+              cimkeje, a Biodom lapjai "FP kod"-ot hasznalnak -- a mai 16
+              eszkoz mind Biodom, tehat mind FP.
             */}
             <Field
-              label="MAT kód (elektromos)"
+              label="FP / Elektromos"
               value={electricalCode}
               onChangeText={setElectricalCode}
             />
