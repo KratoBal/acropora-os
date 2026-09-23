@@ -77,6 +77,7 @@ function repository(overrides: Record<string, unknown> = {}) {
       },
     ],
     hasMarkReceivedCapability: async () => true,
+    anyActiveMarkReceivedCapabilityHolder: async () => true,
     activeUsersByIds: async (ids: readonly string[]) =>
       ids.map((id) => ({
         id,
@@ -265,6 +266,37 @@ describe("anyagigény elküldése", () => {
     assert.equal(out.items[0]?.id, "mr-1");
     assert.equal(out.items[0]?.status, "OPEN");
   });
+
+  /**
+   * A `warning` MEZO -- Balazs kerese, 2026-09-22 20:28:56 UTC, acrobot
+   * dontese a helyerol (2026-09-23). KULON CSALAD az ertesitesi szereptol:
+   * az elozo ket teszt a PUSH/LEVEL utat meri (van-e cimzett), ez a mezo
+   * pedig a BEERKEZES-JELOLES kepesseget -- a ketto fuggetlen egymastol.
+   */
+  it("ha van, aki jelölheti a beérkezést, a válasz NEM hordoz figyelmeztetést", async () => {
+    const { service: s } = service({
+      repo: { detail: async () => DRAFT_ROW },
+    });
+    const out = await s.submit("mr-1", belsos("kero-1"));
+    assert.equal(out.warning, undefined);
+  });
+
+  it("ha SENKINÉL nincs bejelölve a beérkezés-jelölés joga, a válasz figyelmeztet -- de a küldés sikeres marad", async () => {
+    const { service: s } = service({
+      repo: {
+        detail: async () => DRAFT_ROW,
+        anyActiveMarkReceivedCapabilityHolder: async () => false,
+      },
+    });
+    const out = await s.submit("mr-1", belsos("kero-1"));
+    // A KULDES NEM AKADALYOZOTT: az igeny akkor is letrejott, elkuldve.
+    assert.equal(out.items[0]?.status, "OPEN");
+    assert.ok(
+      out.warning,
+      "a válasznak figyelmeztetést kellett volna hordoznia",
+    );
+    assert.match(out.warning ?? "", /senki nem tudja megjelölni/);
+  });
 });
 
 describe("anyagigények listája munkalaponként", () => {
@@ -280,6 +312,23 @@ describe("anyagigények listája munkalaponként", () => {
     const { service: s } = service({});
     const out = await s.listForWorksheet("worksheet-1", belsos("kero-1"));
     assert.equal(out.items.length, 1);
+  });
+
+  /**
+   * A SZAMLALO LEKERDEZES NE FUSSON FELESLEGESEN (acrobot kikotese,
+   * 2026-09-23): a `anyActiveMarkReceivedCapabilityHolder` KIZAROLAG a
+   * `submit()` agaban fusson. Ha ez a listazas is hivna, a dobo csonk itt
+   * pirosra vinne a tesztet.
+   */
+  it("a beérkezés-jelölő számláló NEM fut a listázásban", async () => {
+    const { service: s } = service({
+      repo: {
+        anyActiveMarkReceivedCapabilityHolder: async () => {
+          throw new Error("nem lett volna szabad meghívni");
+        },
+      },
+    });
+    await s.listForWorksheet("worksheet-1", belsos("kero-1"));
   });
 });
 
@@ -304,6 +353,18 @@ describe("a beszerző saját listája", () => {
     const out = await s.listPending(belsos("beszerzo-1"));
     assert.equal(out.items.length, 1);
     assert.equal(out.items[0]?.customerDisplayName, "Kovács Kft.");
+  });
+
+  /** A PARJA, LASD A `listForWorksheet` MELLETTI TESZT FEJLECET. */
+  it("a beérkezés-jelölő számláló NEM fut a beszerzői listában sem", async () => {
+    const { service: s } = service({
+      repo: {
+        anyActiveMarkReceivedCapabilityHolder: async () => {
+          throw new Error("nem lett volna szabad meghívni");
+        },
+      },
+    });
+    await s.listPending(belsos("beszerzo-1"));
   });
 });
 
@@ -400,5 +461,17 @@ describe("a beérkezés jelölése", () => {
     await new Promise((resolve) => setImmediate(resolve));
     const [, pushInput] = push[0] as [string, { userIds: string[] }];
     assert.deepEqual(pushInput.userIds, ["kero-1"]);
+  });
+
+  /** A PARJA, LASD A `listForWorksheet` MELLETTI TESZT FEJLECET. */
+  it("a beérkezés-jelölő számláló NEM fut a jelölés megadásakor sem", async () => {
+    const { service: s } = service({
+      repo: {
+        anyActiveMarkReceivedCapabilityHolder: async () => {
+          throw new Error("nem lett volna szabad meghívni");
+        },
+      },
+    });
+    await s.receive("mr-1", belsos("beszerzo-1"));
   });
 });

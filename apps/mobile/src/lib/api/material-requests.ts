@@ -47,6 +47,13 @@ export interface MaterialRequestDetail {
 
 export interface MaterialRequestListResponse {
   items: MaterialRequestDetail[];
+  /**
+   * FIGYELMEZTETES, HOGY MA SENKI NEM TUDJA JELOLNI A BEERKEZEST -- lasd a
+   * szerver `MaterialRequestsService.submit` fejleceit. ELHAGYHATO, ES
+   * KIZAROLAG a `submitMaterialRequest` valaszaban toltodik ki. A kuldest
+   * ez NEM akadalyozza -- tajekoztatas, nem kapu.
+   */
+  warning?: string;
 }
 
 /**
