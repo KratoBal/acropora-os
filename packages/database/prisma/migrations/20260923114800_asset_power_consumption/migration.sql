@@ -6,7 +6,7 @@
 --
 -- === MIÉRT SZÁNDÉKOSAN KÜLÖN MIGRÁCIÓ A TÉRFOGATTÓL ===
 --
--- A térfogat (20260923111900_asset_volume) tiszta szám, nem vitatott. A
+-- A térfogat (20260923114700_asset_volume) tiszta szám, nem vitatott. A
 -- fogyasztás mezőjének ALAKJA (szöveg legyen-e vagy szám) egyeztetés alatt
 -- állt, amikor ez a migráció készült -- lásd alább. A szétválasztás azt
 -- jelenti, hogy ha a válasz mást kíván, EZ az egy migráció (és a rá épülő

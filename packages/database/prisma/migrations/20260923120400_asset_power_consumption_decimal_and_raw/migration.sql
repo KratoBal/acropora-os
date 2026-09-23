@@ -1,7 +1,7 @@
 -- A fogyasztás mezője DECIMAL lesz, és megjelenik mellette az eredeti szöveg.
 --
 -- Balázs kérése, 2026-09-23 (kanban 8c77cf3e), Discord: "igen, össze akarja
--- adni". A korábbi migráció (20260923112500_asset_power_consumption) a
+-- adni". A korábbi migráció (20260923114800_asset_power_consumption) a
 -- `powerConsumption` mezőt SZÖVEGKÉNT hozta létre -- helyesen, a mérés
 -- alapján, amit akkor ismertünk (a FANK-adatok fele "P1/P2" alakú). Az
 -- azóta megjött válasz szerint viszont a fogyasztást ÖSSZE KELL ADNI egy
@@ -9,7 +9,7 @@
 --
 -- === MIÉRT ÚJ MIGRÁCIÓ, ÉS NEM A RÉGI SZERKESZTÉSE ===
 --
--- A 20260923112500 migráció ezen a nyitott PR-en (#1022) még NEM lett
+-- A 20260923114800 migráció ezen a nyitott PR-en (#1022) még NEM lett
 -- beolvasztva, tehát megosztott (dev/staging/éles) adatbázison sosem futott
 -- -- de a szabály, hogy egy migrációt nem szerkesztünk utólag, akkor is
 -- betartandó, ha valaki már lehúzta az ágat és lokálisan lefuttatta: egy
