@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, EmptyState, Skeleton } from "@acropora/ui";
+import { Alert, Button, EmptyState, Pagination, Skeleton } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -511,6 +511,14 @@ export function AssetListPage() {
               ))}
             </select>
           </label>
+          {data ? (
+            <Pagination
+              position="top"
+              page={data.pagination.page}
+              totalPages={data.pagination.totalPages}
+              onPageChange={goToPage}
+            />
+          ) : null}
         </div>
       </div>
       {loading && !data ? (
@@ -805,25 +813,13 @@ export function AssetListPage() {
         panel
       )}
       {data ? (
-        <div className="mt-6 flex justify-end gap-2">
-          <Button
-            variant="secondary"
-            disabled={data.pagination.page <= 1}
-            onClick={() => goToPage(data.pagination.page - 1)}
-          >
-            Előző
-          </Button>
-          <span className="self-center text-sm">
-            {data.pagination.page} / {Math.max(1, data.pagination.totalPages)}
-          </span>
-          <Button
-            variant="secondary"
-            disabled={data.pagination.page >= data.pagination.totalPages}
-            onClick={() => goToPage(data.pagination.page + 1)}
-          >
-            Következő
-          </Button>
-        </div>
+        <Pagination
+          position="bottom"
+          className="mt-6"
+          page={data.pagination.page}
+          totalPages={data.pagination.totalPages}
+          onPageChange={goToPage}
+        />
       ) : null}
     </div>
   );

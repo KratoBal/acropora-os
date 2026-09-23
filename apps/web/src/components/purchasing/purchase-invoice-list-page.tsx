@@ -7,6 +7,7 @@ import {
   EmptyState,
   Input,
   PageHeader,
+  Pagination,
   Skeleton,
 } from "@acropora/ui";
 import {
@@ -147,6 +148,14 @@ export function PurchaseInvoiceListPage() {
           </Card>
           {data.items.length ? (
             <Card className="overflow-x-auto">
+              <div className="flex justify-end px-3 py-2">
+                <Pagination
+                  position="top"
+                  page={data.pagination.page}
+                  totalPages={data.pagination.totalPages}
+                  onPageChange={goToPage}
+                />
+              </div>
               <table className="w-full min-w-[800px] text-left text-sm">
                 <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
@@ -211,25 +220,12 @@ export function PurchaseInvoiceListPage() {
               }
             />
           )}
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              disabled={data.pagination.page <= 1}
-              onClick={() => goToPage(data.pagination.page - 1)}
-            >
-              Előző
-            </Button>
-            <span className="self-center text-sm">
-              {data.pagination.page} / {Math.max(1, data.pagination.totalPages)}
-            </span>
-            <Button
-              variant="secondary"
-              disabled={data.pagination.page >= data.pagination.totalPages}
-              onClick={() => goToPage(data.pagination.page + 1)}
-            >
-              Következő
-            </Button>
-          </div>
+          <Pagination
+            position="bottom"
+            page={data.pagination.page}
+            totalPages={data.pagination.totalPages}
+            onPageChange={goToPage}
+          />
         </>
       ) : null}
     </div>
