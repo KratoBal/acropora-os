@@ -27,6 +27,7 @@ export const USER_ROLES = [
   "VIEWER",
   "CONTENT_AGENT",
   "PARTNER_SERVICE",
+  "ASSET_IMPORT_AGENT",
 ] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
@@ -46,6 +47,12 @@ export type UserRole = (typeof USER_ROLES)[number];
  */
 export const MACHINE_ROLES = [
   "CONTENT_AGENT",
+  /**
+   * Eszköz-törzsadat importnak, kanban 8c77cf3e, Balázs döntése
+   * 2026-09-23: legyen gépi felhasználó az importnak. A fiókot ő hozza
+   * létre a felületen; a szerep csak a jogkört adja.
+   */
+  "ASSET_IMPORT_AGENT",
 ] as const satisfies readonly UserRole[];
 
 export type MachineRole = (typeof MACHINE_ROLES)[number];
@@ -386,6 +393,34 @@ export const ROLE_PERMISSIONS: Readonly<
    * cegén kivuli partnerek olvasasa sem megengedett.
    */
   PARTNER_SERVICE: [PERMISSIONS.SERVICE_VIEW, PERMISSIONS.SERVICE_MANAGE],
+
+  /**
+   * GÉPI ÁGENS, AMI ESZKÖZ-TÖRZSADATOT IMPORTÁL.
+   *
+   * Kanban 8c77cf3e, Balázs döntése 2026-09-23: legyen gépi felhasználó az
+   * importnak, ne a meglévő `SERVICE` szerep. A MÉRT KÜLÖNBSÉG, amiért nem
+   * elég egy meglévő szerep: a `SERVICE` 7 jogot ad (dashboard, feladatok,
+   * partnerek, eszközök, akváriumok), a betöltőnek ebből KETTŐ kell. A másik
+   * öt (`DASHBOARD_VIEW`, `TASKS_VIEW`, `PARTNERS_VIEW`, `AQUARIUMS_VIEW`,
+   * `AQUARIUMS_MANAGE`) csendben átmenne egy gépi fiókra, amit soha senki
+   * nem venne észre -- ugyanaz a kockázat, amiért a `CONTENT_AGENT` sem a
+   * `MANAGER`-ből lett szűkítve, hanem a hívásokból levezetve.
+   *
+   * A KÉT JOG, ÉS MELYIK HÍVÁS MIATT KELL (mérve, nem feltételezve -- a
+   * betöltő négy hívását végigkövetve a saját kontrollereimben):
+   *   - `SERVICE_VIEW`: HÁROM olvasó hívás miatt kell -- a
+   *     GET /service/assets?search= (partnerkód-kihagyás és lánc-szülő
+   *     keresés), a GET /worksheets/customers/:id/departments
+   *     (helyszín-feloldás) és a GET /asset-categories (kategória-feloldás)
+   *     mindegyike ezt a jogot várja el a saját `@RequirePermissions`
+   *     dekorátorán.
+   *   - `SERVICE_MANAGE`: az ÍRÓ hívás miatt -- a POST /service/assets
+   *     (a tényleges létrehozás) ezt kéri.
+   *
+   * NINCS BENNE SEMMI MÁS: a betöltő nem olvas partnert, nem lát feladatot,
+   * nem nyúl akváriumhoz -- egyiket sem hívja, tehát egyiket sem kapja meg.
+   */
+  ASSET_IMPORT_AGENT: [PERMISSIONS.SERVICE_VIEW, PERMISSIONS.SERVICE_MANAGE],
 };
 
 export interface AuthenticatedUser {
