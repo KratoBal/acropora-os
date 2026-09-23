@@ -42,6 +42,7 @@ function sor(mezok: {
   deviceCode?: string;
   deviceSerial?: string;
   builtin?: string;
+  builtinSerial?: string;
   manufacturer?: string;
   model?: string;
   detail?: string;
@@ -57,6 +58,7 @@ function sor(mezok: {
   oszlopok[3] = mezok.deviceCode ?? "";
   oszlopok[4] = mezok.deviceSerial ?? "";
   oszlopok[5] = mezok.builtin ?? "";
+  oszlopok[6] = mezok.builtinSerial ?? "";
   oszlopok[7] = mezok.manufacturer ?? "";
   oszlopok[8] = mezok.model ?? "";
   oszlopok[9] = mezok.detail ?? "";
@@ -111,13 +113,14 @@ const ALAP_TSV = [
   // Kihagyando sor: nincs eszkoz-kod (pl. "szerte a pinceben" tetel).
   sor({ sor: "14", site: "LSS22", detail: "Szerte a pincében, min." }),
   // Beepitett alkatresz -- van szulo-kod (CPT) ES sajat kod (TRI), a valodi
-  // "CPT / TRI" par mintajara.
+  // "CPT / TRI" par mintajara. A sorszam F-ben all (builtinSerial), NEM
+  // D-ben -- nautilus merese, a valodi LSS21 543/544. sora mintajara.
   sor({
     sor: "15",
     site: "LSS22",
     deviceCode: "CPT",
-    deviceSerial: "1",
     builtin: "TRI",
+    builtinSerial: "1",
   }),
   // Masik helyszin, hogy a szures tenyleg szurjon.
   sor({
@@ -682,6 +685,83 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
       "BIO/LSS22 (MAT) Kompakt szűrő Csepegtető bioszűrő egy hosszú, zárójeles (pillangó, golyós) leírással 01",
     );
     assert.equal(payload[0].categoryId, UUID_CPT_TRI);
+    // A sajat kod (E, "TRI") RESZE a partnerInternalCode-nak -- nautilus
+    // merese: nelkule ket KULONBOZO gyermek (pl. egy TRI es egy VAL)
+    // ugyanazon szulo alatt UGYANAZT a kodot kapna.
+    assert.equal(payload[0].partnerInternalCode, "LSS22-CPT-TRI-01");
+  });
+
+  it("BEEPITETT sorokon a sajat kod (E) nelkul KET KULONBOZO gyermek NEM utkozne -- csak akkor utkozik, ha E ES F is egyezik", () => {
+    /*
+      A korabbi valtozat CSAK C-t es D-t hasznalta a partnerInternalCode-hoz,
+      tehat egy CPT/TRI es egy CPT/VAL sor (mindketto D nelkul) UGYANAZT a
+      "LSS22-CPT" kodot kapta volna -- hamis utkozes, vagy meg rosszabb,
+      csendes egybeolvadas. Ez a teszt azt allitja, hogy KULONBOZO E melett
+      NINCS utkozes.
+    */
+    const dir = mappa();
+    const masikBeepitett = [
+      ALAP_TSV,
+      sor({
+        sor: "16",
+        site: "LSS22",
+        deviceCode: "CPT",
+        builtin: "VAL",
+      }),
+    ].join("\n");
+    const tsv = iras(dir, "forras.tsv", masikBeepitett);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,10,11",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    const kodok = payload.map(
+      (p: { partnerInternalCode: string }) => p.partnerInternalCode,
+    );
+    assert.deepEqual([...new Set(kodok)], kodok);
+    assert.ok(kodok.includes("LSS22-CPT-TRI-01"));
+    assert.ok(kodok.includes("LSS22-CPT-VAL"));
+  });
+
+  it("BEEPITETT soron D (Eszkoz sorszam) is kitoltve: MEGALL, mert erre nincs mert szabaly", () => {
+    /*
+      A valodi forrasban 130 ilyen sor van (92-n D egyedul, 38-on D ES F
+      egyutt) -- egyik mintat sem oldottuk fel talalgatassal. A valodi ETB
+      615-617. es 621-623. sora pontosan ezt mutatta.
+    */
+    const dir = mappa();
+    const dBeepitett = [
+      ALAP_TSV,
+      sor({
+        sor: "17",
+        site: "LSS22",
+        deviceCode: "CPT",
+        deviceSerial: "01",
+        builtin: "VAL",
+      }),
+    ].join("\n");
+    const tsv = iras(dir, "forras.tsv", dBeepitett);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stdout, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,10,11",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(stdout, "");
+    assert.match(stderr, /sor 17/);
+    assert.match(stderr, /D="01"/);
   });
 
   it("kategoria-terkep MEGADVA, de egy kod HIANYZIK belole: MEGALL, megnevezi a sort es a kodot", () => {

@@ -50,6 +50,31 @@
  *   BEEPITETT eszkozos helyszinen a kiirt nev nem egyezik a valodi mintaval,
  *   ezt a fuggvenyt kell ujra megnezni, nem a tobbit.
  *
+ * === A SORSZAM FORRASA -- D (ONALLO) VAGY F (BEEPITETT), NAUTILUS MERESE
+ *     ES KETSZERES FUGGETLEN VISSZAMERES, 2026-09-23 21:xx-22:12 ===
+ *
+ *   D (Eszkoz sorszam)             ONALLO soron: partnerInternalCode +
+ *                                  name sorszama (roman).
+ *   F (Beepitett szerelveny        BEEPITETT soron: partnerInternalCode +
+ *     sorszama)                    name sorszama (2 jegyu arab). Nautilus
+ *                                  sajat merese: F nelkul a valodi LSS21
+ *                                  543/544. sora utkozott volna (ket VPU
+ *                                  egy CPT alatt). Murena fuggetlenul,
+ *                                  masik helyszinen (ETB 612-614) UGYANERRE
+ *                                  a hianyra futott -- ket kulon meres,
+ *                                  ugyanaz az eredmeny.
+ *
+ *   EGY UJ, MEG NEM MEGMERT MINTA: a valodi forrasban 130 beepitett soron
+ *   D IS ki van toltve, holott nautilus terkepe a D szerepet kifejezetten
+ *   az ONALLO sorokra korlatozza. 92 soron D EGYEDUL all (pl. LSS01/PMF-02
+ *   alatt HET KULONBOZO gyermek mind D="02"-vel -- ez inkabb "melyik
+ *   SZULO-PELDANY" jelentesre utal, nem gyermek-sorszamra), 38 soron D ES F
+ *   EGYUTT (pl. LSS12/HSZ "01/02" alaku D-vel, ami MAGA sem egyetlen szam).
+ *   EGYIK MINTAT SEM implementaltam felteveskent: egy beepitett soron allo
+ *   D-t a szkript MEGALLASI OKKENT kezeli (lasd `buildSitePayload`), mert
+ *   sem acrobot, sem nautilus meresei nem fedik ezt az esetet -- csak az F
+ *   NELKULI, D NELKULI (F EGYEDUL) mintat.
+ *
  * === AMI SZANDEKOSAN KIMARAD, MERT A FELOLDASAHOZ HIANYZIK A BEMENET ===
  *
  *   categoryId              A --kategoria-terkep NELKUL meg mindig kimarad
@@ -113,9 +138,12 @@
  *   miatt a `normalizeMeasurementValue` amugy sem engedne at), es acrobot
  *   donti el helyszinenkent, mi legyen az atvaltott ertek.
  *
- * === AMIT A SZKRIPT SOSEM CSINAL, ES HAT "ALLJON MEG" ESET ===
+ * === AMIT A SZKRIPT SOSEM CSINAL, ES HET "ALLJON MEG" ESET ===
  *
  *   - nem kuld HTTP-hivast, nem ir semmilyen rendszerbe
+ *   - HA EGY BEEPITETT SORON D (Eszkoz sorszam) IS KI VAN TOLTVE, MEGALL --
+ *     lasd a fajl elejen "A SORSZAM FORRASA" szakaszat: erre nincs mert
+ *     szabaly, csak talalgatott mintak, es a szkript nem talalgat.
  *   - nem sorszamoz: ha egy partnerInternalCode UTKOZIK (ket sor ugyanoda esne
  *     serial nelkul), MEGALL, es kiirja, melyik `sor` szamok utkoznek
  *   - nem valaszt helyszint, ha a kod TOBBSZOR fordul elo a partner
@@ -234,6 +262,7 @@ export function toTsvRow(row) {
     deviceCode: cell(row, COLUMN.deviceCode),
     deviceSerial: cell(row, COLUMN.deviceSerial),
     builtin: cell(row, COLUMN.builtin),
+    builtinSerial: cell(row, COLUMN.builtinSerial),
     manufacturer: cell(row, COLUMN.manufacturer),
     model: cell(row, COLUMN.model),
     detail: cell(row, COLUMN.detail),
@@ -407,11 +436,34 @@ export function resolveUnit(units, siteCode) {
   return { unit, parentCode: parent.code };
 }
 
-/** <HELYSZIN>-<KOD>-<SORSZAM>, vagy <HELYSZIN>-<KOD> ha nincs sorszam. */
-export function buildPartnerInternalCode(siteCode, deviceCode, serial) {
-  return serial
-    ? `${siteCode}-${deviceCode}-${serial}`
-    : `${siteCode}-${deviceCode}`;
+/**
+ * ONALLO SOR: <HELYSZIN>-<KOD>-<SORSZAM>, vagy <HELYSZIN>-<KOD> ha nincs
+ * sorszam (D oszlop).
+ *
+ * BEEPITETT SOR: <HELYSZIN>-<KOD>-<SAJAT KOD>-<SORSZAM>, vagy a sorszam
+ * nelkuli alak -- nautilus merese (agents/nautilus/fank-oszlop-terkep-
+ * 2026-09-23.md): "E ... szerepe: ... a partnerInternalCode gyermek-
+ * szegmense", es "F ... amikor egy szulo alatt TOBB azonos E-kodu gyermek
+ * all... ez kulonbozteti meg oket. A partnerInternalCode ... sorszam-
+ * reszebe megy." A sajat kod (E) NELKUL ket KULONBOZO gyermek (pl. egy TRI
+ * es egy VAL) ugyanazon szulo alatt UGYANAZT a kodot kapna -- ezt a
+ * korabbi valtozat helytelenul csinalta, csak C-t es D-t hasznalt.
+ *
+ * A SORSZAM FORRASA A BEEPITETT AGON F (`row.builtinSerial`), NEM D --
+ * nautilus lemerte, hogy F=01/02 kulonbozteti meg a ket azonos-kodu
+ * gyermeket (pl. ket VPU egy CPT alatt), es hogy F NELKUL a valodi LSS21
+ * 543/544. sora utkozott volna.
+ */
+export function buildPartnerInternalCode(siteCode, row) {
+  if (row.builtin) {
+    const base = `${siteCode}-${row.deviceCode}-${row.builtin}`;
+    // pad2, UGYANUGY, mint a nev arab-szamos resze -- a valodi forras F
+    // ertekei mar eleve ket jegyuek (01/02), de ne fugjon ettol.
+    return row.builtinSerial ? `${base}-${pad2(row.builtinSerial)}` : base;
+  }
+  return row.deviceSerial
+    ? `${siteCode}-${row.deviceCode}-${row.deviceSerial}`
+    : `${siteCode}-${row.deviceCode}`;
 }
 
 /**
@@ -442,7 +494,9 @@ export function buildName(parentCode, siteCode, row, categoryMap) {
   if (row.builtin) {
     const szuloNev = categoryMap?.[row.deviceCode]?.name ?? row.deviceCode;
     const sajatNev = categoryMap?.[categoryKeyFor(row)]?.name ?? row.builtin;
-    const szam = row.deviceSerial ? pad2(row.deviceSerial) : "";
+    // A szam forrasa F (builtinSerial), NEM D -- lasd buildPartnerInternalCode
+    // jegyzetet, nautilus merese ugyanerre a szabalyra.
+    const szam = row.builtinSerial ? pad2(row.builtinSerial) : "";
     const farok = [szuloNev, sajatNev, szam].filter(Boolean).join(" ");
     return `${elotag} ${farok}`.trim();
   }
@@ -492,11 +546,7 @@ export function buildAssetPayload(row, ctx) {
     performanceValue,
     volumeValue,
   } = ctx;
-  const partnerInternalCode = buildPartnerInternalCode(
-    siteCode,
-    row.deviceCode,
-    row.deviceSerial,
-  );
+  const partnerInternalCode = buildPartnerInternalCode(siteCode, row);
   const payload = {
     // "fank-import", NEM "fank-payload" -- acrobot merese, 2026-09-23 21:45:
     // a ma esti kezi betoltes MAR ezzel az elotaggal es KISBETUS
@@ -559,6 +609,37 @@ export function buildSitePayload({
           ", ",
         )}. Vagy add hozza --kihagy kapcsoloval, vagy ird be a hianyzo kodot a forrasba.`,
     );
+
+  /*
+    D (Eszkoz sorszam) EGY BEEPITETT SORON -- MEG NINCS MEGMERT SZABALY RA.
+    Nautilus terkepe (agents/nautilus/fank-oszlop-terkep-2026-09-23.md) a
+    D szerepet SZOROSAN az ONALLO sorokra korlatozza ("amikor egy helyszinen
+    TOBB azonos C-kodu ONALLO eszkoz all"), es a beepitett soron csak F-et
+    nevezi meg. A valodi forrast atnezve VISZONT 130 beepitett sor van, ahol
+    D IS ki van toltve -- 92-n D EGYEDUL (F nelkul, pl. LSS01/PMF-02 alatt
+    het KULONBOZO gyermek mind D=02-vel, ami inkabb "melyik szulo-peldany"
+    jelentesre utal, nem gyermek-sorszamra), 38-on D ES F EGYUTT (pl.
+    LSS12/HSZ "01/02" alaku D-vel). EGYIK MINTAT SEM ERTELMEZTEM SAJAT
+    FELTEVESKENT -- acrobot kikotese, 2026-09-23 22:12: "ha talalsz olyan
+    helyszint, ahol az F es a D EGYSZERRE all egy soron, az uj eset, es
+    AZT mar ird le, ne dontsd el magad." Ugyanez a fegyelem vonatkozik a
+    "D egyedul beepitett soron" esetre is, mert az SEM szerepel a mert
+    szabalyban.
+  */
+  const dBeepitettSoron = siteRows.filter(
+    (row) => row.builtin && row.deviceSerial,
+  );
+  if (dBeepitettSoron.length > 0) {
+    const reszletek = dBeepitettSoron
+      .map(
+        (r) =>
+          `  sor ${r.sor}: D="${r.deviceSerial}", E="${r.builtin}", F="${r.builtinSerial || "(ures)"}"`,
+      )
+      .join("\n");
+    throw new FankPayloadError(
+      `A(z) ${siteCode} helyszin alabbi sorain a D (Eszkoz sorszam) egy BEEPITETT soron all -- ehhez nincs mert szabaly (lasd a szkript fejlecet), ez a szkript nem talalgat:\n${reszletek}`,
+    );
+  }
 
   /*
     A KATEGORIA-FELOLDAS KET, MEREVEN KULONBOZO VISELKEDESSEL JAR, es ez
