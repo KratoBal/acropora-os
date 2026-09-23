@@ -115,6 +115,14 @@ jobs:
           MERES_CEL_DARABSZAM: "2663"
         run: node scripts/meres-eszkoz-tomeges-idozites.mjs
 
+      # ACROBOT KERESE (5b83142e, 2026-09-23 14:17): nem eleg azt allitani,
+      # hogy a clientOperationId ALKALMAS idempotencia-kulcsnak -- meg is kell
+      # mutatni, hogy egy MEGISMETELT, azonos kulcsu hivas tenyleg a meglevo
+      # sort adja vissza, nem hoz letre masodikat.
+      - name: Prove clientOperationId idempotency (repeat POST with the same key)
+        working-directory: apps/api
+        run: node scripts/meres-eszkoz-idempotencia-proba.mjs
+
       - name: API log (mindig, diagnosztikanak)
         if: always()
         run: cat "$RUNNER_TEMP/api.log" || true
