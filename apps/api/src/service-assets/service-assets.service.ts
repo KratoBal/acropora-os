@@ -258,7 +258,6 @@ export class ServiceAssetsService {
       ownerType: input.ownerType,
       ownerId: input.ownerId,
       customerAddressId: input.customerAddressId,
-      departmentId: input.departmentId,
       aquariumId: input.aquariumId,
       parentAssetId: input.parentAssetId,
       productVariantId: input.productVariantId,
@@ -438,7 +437,6 @@ export class ServiceAssetsService {
           : input.customerAddressId === undefined
             ? existing.customerAddressId
             : input.customerAddressId,
-      departmentId: input.departmentId,
       aquariumId:
         ownerType === "SUPPLIER"
           ? null

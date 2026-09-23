@@ -1,0 +1,8 @@
+# Ez az ág a #1013 (cb3b562f) departmentId-átadását VISSZAVONJA mindkét
+# validateReferences() hívásból, a mai main-en. Cél: bizonyítani, hogy a
+# CUSTOMER_OWNER elutasítás TÉNYLEG attól a két sortól függ, amit a #1013
+# vezetett be -- nem valami mástól. E nélkül a sor nélkül a create()/update()
+# nem juttatja el a departmentId-t a validateReferences()-nek, tehát a
+# requested mindig false, és a CUSTOMER_OWNER sem sülhet el.
+not ok - create(): vevő-tulajdonú eszközön a departmentId elutasítja a felvitelt
+not ok - update(): vevő-tulajdonú eszközön a departmentId hozzáadása elutasítja a módosítást
