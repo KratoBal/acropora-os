@@ -361,6 +361,18 @@ export interface AssetDetail extends AssetListItem {
    * visszaellenorizheto legyen.
    */
   powerConsumptionRaw?: string;
+  /**
+   * A TÁBLÁZAT ELSŐ OSZLOPA ("MAT kód / Elektromos"), NYERS SZÖVEGKÉNT.
+   *
+   * Balázs kérése, 2026-09-23 (kanban 8c77cf3e), szó szerint: "kapjon saját
+   * mezőt". A mező egész értelme: aki a villanyszekrénynél a kódot ("30M")
+   * látja, annak a keresőbe írva MEG KELL TALÁLNIA az eszközt -- a keresés
+   * (`service-assets.repository.ts`) ezt a mezőt is nézi.
+   *
+   * NINCS ALAK-ELLENŐRZÉS: a forrás vegyes ("10M", "30M/1-5", "13M"), sem
+   * tiszta szám, sem egységes hosszúságú.
+   */
+  electricalCode?: string;
   description?: string;
   installedAt?: string;
   purchasedAt?: string;
@@ -483,6 +495,8 @@ export interface CreateAssetInput {
   powerConsumption?: string;
   /** A fogyasztas eredeti szovege, lasd az `AssetDetail.powerConsumptionRaw`-t. */
   powerConsumptionRaw?: string;
+  /** Lásd az `AssetDetail.electricalCode` fejlécét. */
+  electricalCode?: string;
 }
 
 export interface UpdateAssetInput {
@@ -557,6 +571,8 @@ export interface UpdateAssetInput {
   powerConsumption?: string | null;
   /** A fogyasztas eredeti szovege -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */
   powerConsumptionRaw?: string | null;
+  /** Lásd az `AssetDetail.electricalCode` fejlécét. `null` törli. */
+  electricalCode?: string | null;
 }
 
 export interface AssetQrCode {

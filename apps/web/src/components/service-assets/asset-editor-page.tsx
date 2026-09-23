@@ -198,6 +198,15 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    * vissza, melyik szamot valasztottuk.
    */
   const [powerConsumptionRaw, setPowerConsumptionRaw] = useState("");
+  /**
+   * A TÁBLÁZAT ELSŐ OSZLOPA ("MAT kód / Elektromos"), NYERS SZÖVEGKÉNT.
+   *
+   * Balázs kérése, 2026-09-23 (kanban 8c77cf3e), szó szerint: "kapjon saját
+   * mezőt". A felirat a partner saját szavát ("MAT kód") használja, mert ez
+   * az, amit a villanyszekrénynél a nyomtatott címkén lát -- a keresőbe
+   * beírva ennek a mezőnek kell megtalálnia az eszközt.
+   */
+  const [electricalCode, setElectricalCode] = useState("");
   const [installedAt, setInstalledAt] = useState("");
   const [warrantyExpiresAt, setWarrantyExpiresAt] = useState("");
   const [serviceIntervalDays, setServiceIntervalDays] = useState("");
@@ -277,6 +286,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         setVolume(asset.volume ?? "");
         setPowerConsumption(asset.powerConsumption ?? "");
         setPowerConsumptionRaw(asset.powerConsumptionRaw ?? "");
+        setElectricalCode(asset.electricalCode ?? "");
         setInstalledAt(inputDate(asset.installedAt));
         setWarrantyExpiresAt(inputDate(asset.warrantyExpiresAt));
         setServiceIntervalDays(asset.serviceIntervalDays?.toString() ?? "");
@@ -587,6 +597,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             model: model.trim() || null,
             serialNumber: serialNumber.trim() || null,
             partnerInternalCode: partnerInternalCode.trim() || null,
+            electricalCode: electricalCode.trim() || null,
             installedAt: toIsoDate(installedAt) ?? null,
             warrantyExpiresAt: toIsoDate(warrantyExpiresAt) ?? null,
             serviceIntervalDays: interval ?? null,
@@ -627,6 +638,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             model: model.trim() || undefined,
             serialNumber: serialNumber.trim() || undefined,
             partnerInternalCode: partnerInternalCode.trim() || undefined,
+            electricalCode: electricalCode.trim() || undefined,
             // A NORMALIZALT ALAK MEGY EL, nem a begepelt: a tabla megkotese
             // (`AssetLabel_code_shape_check`) csak nagybetut enged, a bemenet
             // viszont szandekosan megengedobb. Ures mezonel a kulcs EL SEM
@@ -922,6 +934,20 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 aria-label="Partner belső kódja"
                 value={partnerInternalCode}
                 onChange={(event) => setPartnerInternalCode(event.target.value)}
+              />
+            </FormField>
+            {/*
+              A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs kerese,
+              2026-09-23 (kanban 8c77cf3e): "kapjon sajat mezot". A felirat a
+              partner sajat szavat hasznalja ("MAT kod"), mert ez all a
+              nyomtatott cimken a villanyszekrenynel -- a keresobe beirva
+              ennek kell megtalalnia az eszkozt.
+            */}
+            <FormField label="MAT kód (elektromos)">
+              <Input
+                aria-label="MAT kód (elektromos)"
+                value={electricalCode}
+                onChange={(event) => setElectricalCode(event.target.value)}
               />
             </FormField>
             {/*

@@ -41,6 +41,7 @@ const form: AssetCreateForm = {
   volume: "",
   powerConsumption: "",
   powerConsumptionRaw: "",
+  electricalCode: "",
   installedAt: "",
   interval: "",
 };

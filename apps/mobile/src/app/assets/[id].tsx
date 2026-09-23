@@ -479,6 +479,11 @@ export default function AssetDetailScreen() {
                   value={asset.powerConsumptionRaw}
                 />
               ) : null}
+              {/*
+                A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs
+                kerese, 2026-09-23 (kanban 8c77cf3e): "kapjon sajat mezot".
+              */}
+              <Info label="MAT kód (elektromos)" value={asset.electricalCode} />
               <Info label="Termék" value={asset.product?.name} />
               <Info label="Leírás" value={asset.description} />
             </Section>

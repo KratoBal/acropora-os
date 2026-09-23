@@ -121,6 +121,8 @@ export interface CurrentAssetLike {
   powerConsumption?: string | null;
   /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
   powerConsumptionRaw?: string | null;
+  /** A tablazat elso oszlopa ("MAT kod / Elektromos"). Kanban 8c77cf3e, 2026-09-23. */
+  electricalCode?: string | null;
 }
 
 /** A törzsből összevethető mezők. A `expectedUpdatedAt` nem tartozik ide. */
@@ -172,6 +174,7 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   volume: "Térfogat",
   powerConsumption: "Fogyasztás",
   powerConsumptionRaw: "Fogyasztás (eredeti bejegyzés)",
+  electricalCode: "MAT kód (elektromos)",
 };
 
 /** Az üres érték NEVE. Egy üres cella nem mondja meg, hogy törlésről van szó. */
@@ -415,6 +418,9 @@ function assignField(
       return;
     case "powerConsumptionRaw":
       target.powerConsumptionRaw = source.powerConsumptionRaw;
+      return;
+    case "electricalCode":
+      target.electricalCode = source.electricalCode;
       return;
     default:
       /**

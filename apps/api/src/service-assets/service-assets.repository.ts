@@ -606,6 +606,19 @@ export class ServiceAssetsRepository extends Repository {
                   mode: "insensitive",
                 },
               },
+              /**
+               * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos") IS KERESHETO.
+               * Balazs kerese, 2026-09-23 (kanban 8c77cf3e), szo szerint
+               * "kapjon sajat mezot" -- es EZ a mezo egesz ertelme: aki a
+               * villanyszekrenynel a "30M" kodot latja, annak a keresobe irva
+               * meg kell talalnia az eszkozt.
+               */
+              {
+                electricalCode: {
+                  contains: query.search,
+                  mode: "insensitive",
+                },
+              },
               {
                 customer: {
                   displayName: { contains: query.search, mode: "insensitive" },
@@ -1251,6 +1264,7 @@ export class ServiceAssetsRepository extends Repository {
                   serialNumber: optionalText(input.serialNumber),
                   partnerInternalCode: optionalText(input.partnerInternalCode),
                   inventoryNumber: optionalText(input.inventoryNumber),
+                  electricalCode: optionalText(input.electricalCode),
                   description: optionalText(input.description),
                   installedAt: optionalDate(input.installedAt),
                   purchasedAt: optionalDate(input.purchasedAt),
@@ -1782,6 +1796,7 @@ export class ServiceAssetsRepository extends Repository {
           serialNumber: optionalText(input.serialNumber),
           partnerInternalCode: optionalText(input.partnerInternalCode),
           inventoryNumber: optionalText(input.inventoryNumber),
+          electricalCode: optionalText(input.electricalCode),
           description: optionalText(input.description),
           installedAt: optionalDate(input.installedAt),
           purchasedAt: optionalDate(input.purchasedAt),
@@ -2538,6 +2553,7 @@ export class ServiceAssetsRepository extends Repository {
       volume: row.volume?.toString(),
       powerConsumption: row.powerConsumption?.toString(),
       powerConsumptionRaw: row.powerConsumptionRaw ?? undefined,
+      electricalCode: row.electricalCode ?? undefined,
       installedAt: row.installedAt?.toISOString(),
       purchasedAt: row.purchasedAt?.toISOString(),
       warrantyExpiresAt: row.warrantyExpiresAt?.toISOString(),

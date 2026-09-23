@@ -205,6 +205,11 @@ export default function NewAssetScreen() {
    * Ez a mezo orzi a "P1/P2" alaku eredeti bejegyzest.
    */
   const [powerConsumptionRaw, setPowerConsumptionRaw] = useState("");
+  /**
+   * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs kerese,
+   * 2026-09-23 (kanban 8c77cf3e): "kapjon sajat mezot".
+   */
+  const [electricalCode, setElectricalCode] = useState("");
   // A BEOLVASO A KOZOS ALLVANYBOL JON, ugyanabbol, amit a szerkeszto kepernyo
   // is hasznal. Az indoklas (miert ratet, es miert nem masik kepernyo) ott all.
   const scanner = useLabelScanner(setLabelCode);
@@ -660,6 +665,7 @@ export default function NewAssetScreen() {
       volume,
       powerConsumption,
       powerConsumptionRaw,
+      electricalCode,
       installedAt,
       interval,
     });
@@ -1019,6 +1025,15 @@ export default function NewAssetScreen() {
               label="Fogyasztás (eredeti bejegyzés)"
               value={powerConsumptionRaw}
               onChangeText={setPowerConsumptionRaw}
+            />
+            {/*
+              A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs kerese,
+              2026-09-23 (kanban 8c77cf3e): "kapjon sajat mezot".
+            */}
+            <Field
+              label="MAT kód (elektromos)"
+              value={electricalCode}
+              onChangeText={setElectricalCode}
             />
             <LabelCodeField
               value={labelCode}
