@@ -120,3 +120,63 @@ describe("az eszköz-felvitel matricakód mezője", () => {
     assert.ok(uzenet.some((m) => m.includes("must be a string")));
   });
 });
+
+/**
+ * AZ ÖT IDEGEN KULCS A FELVITELI ÁGON IS -- lásd a `asset-update-dto.spec.ts`
+ * azonos című leírását a teljes indokért (kanban 66c161e0, murena mérése,
+ * 2026-09-23). Itt nincs `null`-ág (felvitelnél nincs mit törölni), tehát a
+ * két állapot, amit szét kell választani, a HIÁNYZÓ mező (érvényes: „nem
+ * adták meg") és az ÜRES SZÖVEG (érvénytelen: idegen kulcs elé kerülne).
+ *
+ * acrobot kérte kifejezetten: a hiányzó mező is kapjon saját állítást, ne
+ * csak az üres szöveg -- különben a következő olvasó nem látja, hogy a kettő
+ * KÜLÖN eset.
+ */
+describe("az eszköz-felvitel öt idegen kulcsa (hely, alegység, akvárium, szülő, termékváltozat)", () => {
+  it("a HIÁNYZÓ mező rendben van: nincs megadva", () => {
+    assert.deepEqual(uzenetek(ALAP), []);
+  });
+
+  it("az ÜRES szöveg MIND AZ ÖTÖN elbukik, egyszerre küldve", () => {
+    const uzenet = uzenetek({
+      ...ALAP,
+      customerAddressId: "",
+      departmentId: "",
+      aquariumId: "",
+      parentAssetId: "",
+      productVariantId: "",
+    });
+    assert.ok(uzenet.length > 0, "egyik sem mehet át üresen");
+    for (const mezo of [
+      "customerAddressId",
+      "departmentId",
+      "aquariumId",
+      "parentAssetId",
+      "productVariantId",
+    ])
+      assert.ok(
+        uzenet.some((m) => m.includes(mezo)),
+        `a(z) ${mezo} hibaüzenete hiányzik, most ez jött: ${uzenet.join("; ")}`,
+      );
+  });
+
+  it("az érvényes azonosítók átmennek", () => {
+    assert.deepEqual(
+      uzenetek({
+        ...ALAP,
+        customerAddressId: "addr-1",
+        departmentId: "dept-1",
+        aquariumId: "aq-1",
+        parentAssetId: "asset-1",
+        productVariantId: "variant-1",
+      }),
+      [],
+    );
+  });
+
+  it("POZITÍV KONTROLL: egy szám elbukik, tehát a mérés tényleg fut", () => {
+    const uzenet = uzenetek({ ...ALAP, departmentId: 42 });
+    assert.ok(uzenet.length > 0, "a validáció nem fut: a mérés semmit nem ér");
+    assert.ok(uzenet.some((m) => m.includes("must be a string")));
+  });
+});
