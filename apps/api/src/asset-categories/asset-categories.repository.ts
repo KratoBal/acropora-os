@@ -1,9 +1,24 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma, prisma } from "@acropora/database";
+import { prisma } from "@acropora/database";
 import type { AssetCategory } from "@acropora/types";
+
+import {
+  isPrismaErrorCode,
+  isPrismaUniqueConstraintViolation,
+} from "../common/prisma-error.util.js";
 
 /** A nev mar szerepel a listaban. */
 export class AssetCategoryDuplicateError extends Error {}
+
+/**
+ * A KOD MAR SZEREPEL A LISTABAN -- KULON A NEV-DUPLIKATUMTOL.
+ *
+ * Kanban 68add892, 2026-09-22: a `code` masodik `@unique` mezo lett a tablan.
+ * A ket hiba MAS mondatot erdemel (a felhasznalo mast ir at: a nevet vagy a
+ * kodot), ezert nem elegendo egyetlen `AssetCategoryDuplicateError` tipus --
+ * a `meta.target`-bol kell tudni, MELYIK mezo utkozott.
+ */
+export class AssetCategoryDuplicateCodeError extends Error {}
 
 @Injectable()
 export class AssetCategoriesRepository {
@@ -17,18 +32,31 @@ export class AssetCategoriesRepository {
        * a kezzel felvett elemek mind ugyanoda esnek.
        */
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }, { id: "asc" }],
-      select: { id: true, name: true, isActive: true, sortOrder: true },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        sortOrder: true,
+        code: true,
+      },
     });
   }
 
   async create(input: {
     name: string;
     sortOrder: number;
+    code: string | null;
   }): Promise<AssetCategory> {
     try {
       return await prisma.assetCategory.create({
         data: input,
-        select: { id: true, name: true, isActive: true, sortOrder: true },
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+          sortOrder: true,
+          code: true,
+        },
       });
     } catch (error) {
       throw this.map(error);
@@ -37,20 +65,27 @@ export class AssetCategoriesRepository {
 
   async update(
     id: string,
-    input: { name?: string; isActive?: boolean; sortOrder?: number },
+    input: {
+      name?: string;
+      isActive?: boolean;
+      sortOrder?: number;
+      code?: string | null;
+    },
   ): Promise<AssetCategory | null> {
     try {
       return await prisma.assetCategory.update({
         where: { id },
         data: input,
-        select: { id: true, name: true, isActive: true, sortOrder: true },
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+          sortOrder: true,
+          code: true,
+        },
       });
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2025"
-      )
-        return null;
+      if (isPrismaErrorCode(error, "P2025")) return null;
       throw this.map(error);
     }
   }
@@ -72,10 +107,9 @@ export class AssetCategoriesRepository {
   }
 
   private map(error: unknown): unknown {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    )
+    if (isPrismaUniqueConstraintViolation(error, "code"))
+      return new AssetCategoryDuplicateCodeError();
+    if (isPrismaUniqueConstraintViolation(error, "name"))
       return new AssetCategoryDuplicateError();
     return error;
   }

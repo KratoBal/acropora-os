@@ -30,6 +30,7 @@ const form: AssetCreateForm = {
     esetre kulon allitas all, sajat formmal.
   */
   categoryId: "",
+  functionId: "",
   manufacturer: " Eheim ",
   model: "",
   serialNumber: " SN-1 ",
@@ -416,5 +417,40 @@ describe("a kategória a payloadban", () => {
 
     assert.ok(result.ok);
     assert.equal("categoryId" in result.payload, false);
+  });
+});
+
+/**
+ * A FUNKCIO -- SZO SZERINT A FENTI HAROM ALLITAS, mas mezon. Kanban 68add892,
+ * 2026-09-22: FUGGETLEN a kategoriatol, ugyanaz a viselkedes.
+ */
+describe("a funkció a payloadban", () => {
+  it("F1: a kiválasztott funkció azonosítója kimegy", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      labelCode: "V2196",
+      functionId: "fun-1",
+    });
+
+    assert.ok(result.ok);
+    assert.equal(result.payload.functionId, "fun-1");
+  });
+
+  it("F2: üres választásnál a mező KIMARAD a payloadból", () => {
+    const result = buildAssetCreatePayload({ ...form, labelCode: "V2196" });
+
+    assert.ok(result.ok);
+    assert.equal("functionId" in result.payload, false);
+  });
+
+  it("F3: KONTROLL: a csupa szóköz is kimarad", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      labelCode: "V2196",
+      functionId: "   ",
+    });
+
+    assert.ok(result.ok);
+    assert.equal("functionId" in result.payload, false);
   });
 });

@@ -449,6 +449,13 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                     „mi ez es kitol van" --, es a kategoria a tagabb.
                   */}
                   <Data label="Kategória" value={asset.category} />
+                  {/*
+                    A FUNKCIO -- FUGGETLEN A KATEGORIATOL, ugyanaz a mintat
+                    koveti (kanban 68add892). A `AssetDetail.function` a
+                    reszletes lekerdezesbol jon, lasd a szerver
+                    `service-assets.types.ts` fejleceit.
+                  */}
+                  <Data label="Funkció" value={asset.function} />
                   <Data label="Gyártó" value={asset.manufacturer} />
                   <Data label="Modell" value={asset.model} />
                   <Data label="Sorozatszám" value={asset.serialNumber} />

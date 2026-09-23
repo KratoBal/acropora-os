@@ -193,6 +193,13 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         href: "/beallitasok/eszkoz-kategoriak",
         entryId: "asset-categories",
       },
+      {
+        label: "Eszköz-funkciók",
+        description:
+          "Az eszköz-felvitel másik legördülő listája: mire való az eszköz, függetlenül a kategóriától.",
+        href: "/beallitasok/eszkoz-funkciok",
+        entryId: "asset-functions",
+      },
     ],
   },
 ];

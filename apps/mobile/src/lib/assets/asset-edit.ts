@@ -48,6 +48,12 @@ export interface EditableAsset {
   categoryId?: string;
   category?: string;
   /**
+   * A MOSTANI FUNKCIO AZONOSITOJA ES NEVE -- FUGGETLEN A KATEGORIATOL, ugyanaz
+   * a ketosseg, mint fent. Kanban 68add892, 2026-09-22.
+   */
+  functionId?: string;
+  function?: string;
+  /**
    * A TELJESÍTMÉNY, AHOGY A SZERVER ADJA -- SZÖVEGKÉNT.
    *
    * A tárolt alak `decimal(19,6)`. Számmá alakítva a lebegőpontos típuson
@@ -107,6 +113,11 @@ export interface AssetEditForm {
    * Ugyanaz a harmas jelentes, mint a helyszinnel.
    */
   categoryId: string;
+  /**
+   * A VALASZTOTT FUNKCIO AZONOSITOJA -- FUGGETLEN A KATEGORIATOL, ugyanaz a
+   * harmas jelentes. Kanban 68add892, 2026-09-22.
+   */
+  functionId: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
@@ -143,6 +154,7 @@ export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
   return {
     unitId: asset.unit?.id ?? "",
     categoryId: asset.categoryId ?? "",
+    functionId: asset.functionId ?? "",
     status: asset.status,
     criticality: asset.criticality,
     manufacturer: asset.manufacturer ?? "",
@@ -247,6 +259,14 @@ export function buildAssetPatch(
   const kategoria = form.categoryId.trim();
   if (kategoria !== (asset.categoryId ?? ""))
     patch.categoryId = kategoria === "" ? null : kategoria;
+
+  /**
+   * A FUNKCIO -- FUGGETLENUL A KATEGORIATOL, ugyanaz a szabaly, mint felette:
+   * minden tulajdonosnal ertelmes torzsadat, a feltetel ide NEM jar.
+   */
+  const funkcio = form.functionId.trim();
+  if (funkcio !== (asset.functionId ?? ""))
+    patch.functionId = funkcio === "" ? null : funkcio;
 
   if (asset.ownerType === "SUPPLIER") {
     const chosen = form.unitId.trim();
@@ -353,6 +373,10 @@ export function baseValuesFor(
    * es a szerelo nem latna, hogy kozben az iroda irt ra masikat.
    */
   if ("categoryId" in patch) base.categoryId = asset.categoryId ?? null;
+  /**
+   * A FUNKCIO IS BEKERUL A SORBA, ugyanabbol az okbol, mint a kategoria.
+   */
+  if ("functionId" in patch) base.functionId = asset.functionId ?? null;
   /**
    * A TELJESITMENY-PAR IS BEKERUL A SORBA, ES A KET FELE KULON.
    *

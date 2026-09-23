@@ -163,6 +163,15 @@ export const assetDetailInclude = {
    * azt jelentene, hogy egy regi eszkoz teljesitmenye egy nap eltunik a lapjarol.
    */
   performanceUnit: { select: { id: true, code: true, name: true } },
+  /**
+   * A FUNKCIO CSAK AZ ADATLAPON, NEM A LISTASORON -- MAS, MINT A KATEGORIA.
+   *
+   * A kategoria a `assetSummaryInclude`-ban all, mert a LISTA tud ra szurni
+   * es rendezni (lasd fent). A funkciora ma nincs ilyen keres -- Balazs csak
+   * a legordulomenut kerte az eszkoz adatlapjan --, tehat itt all, a
+   * reszletes lekerdezesben, nem a listasoron.
+   */
+  functionRef: { select: { id: true, name: true } },
 } satisfies Prisma.AssetInclude;
 
 export type AssetSummaryRow = Prisma.AssetGetPayload<{

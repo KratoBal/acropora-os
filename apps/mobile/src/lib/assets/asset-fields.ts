@@ -45,6 +45,11 @@ export interface UpdateAssetInput {
    * atnevezes kulonben valtozasnak latszana.
    */
   categoryId?: string | null;
+  /**
+   * A FUNKCIO AZONOSITOJA -- FUGGETLEN A KATEGORIATOL, ugyanaz az alak.
+   * Kanban 68add892, 2026-09-22.
+   */
+  functionId?: string | null;
   manufacturer?: string | null;
   model?: string | null;
   serialNumber?: string | null;

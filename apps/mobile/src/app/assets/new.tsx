@@ -18,6 +18,7 @@ import {
   checkAssetName,
   createAsset,
   listAssetCategories,
+  listAssetFunctions,
   type AssetListItem,
   type CreateAssetInput,
   listAssetOwners,
@@ -35,6 +36,7 @@ import { listPerformanceUnits } from "@/lib/api/units-of-measure";
 import { selectableUnitOptions } from "@/lib/partners/site-tree";
 import { CollapsedPicker, UnitPicker } from "@/components/assets/unit-picker";
 import { CategoryPicker } from "@/components/assets/category-picker";
+import { FunctionPicker } from "@/components/assets/function-picker";
 import {
   LabelCodeField,
   useLabelScanner,
@@ -150,6 +152,15 @@ export default function NewAssetScreen() {
     [],
   );
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  /**
+   * A FUNKCIO -- FUGGETLENUL A KATEGORIATOL, ugyanaz az alak. Kanban
+   * 68add892, 2026-09-22.
+   */
+  const [functionId, setFunctionId] = useState("");
+  const [functions, setFunctions] = useState<{ id: string; name: string }[]>(
+    [],
+  );
+  const [functionPickerOpen, setFunctionPickerOpen] = useState(false);
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
@@ -272,6 +283,24 @@ export default function NewAssetScreen() {
     void listAssetCategories()
       .then((valasz) => {
         if (elo) setCategories(valasz.items);
+      })
+      .catch(() => {
+        /* szandekosan nema: lasd a fenti jegyzetet */
+      });
+    return () => {
+      elo = false;
+    };
+  }, []);
+
+  /**
+   * A FUNKCIO-LISTA UGYANUGY, ES FUGGETLENUL A KATEGORIATOL toltodik be --
+   * lasd a fenti jegyzetet.
+   */
+  useEffect(() => {
+    let elo = true;
+    void listAssetFunctions()
+      .then((valasz) => {
+        if (elo) setFunctions(valasz.items);
       })
       .catch(() => {
         /* szandekosan nema: lasd a fenti jegyzetet */
@@ -607,6 +636,7 @@ export default function NewAssetScreen() {
       name,
       kind,
       categoryId,
+      functionId,
       manufacturer,
       model,
       serialNumber,
@@ -899,6 +929,21 @@ export default function NewAssetScreen() {
               onChange={(id) => {
                 setCategoryId(id);
                 setCategoryPickerOpen(false);
+              }}
+            />
+            {/*
+              A FUNKCIO -- FUGGETLEN A KATEGORIATOL, SZO SZERINT UGYANAZ A
+              MINTA. Kanban 68add892, 2026-09-22: Balazs kerese szerint
+              "ugyanugy legordulo menube" kerul, mint a kategoria.
+            */}
+            <FunctionPicker
+              options={functions}
+              value={functionId}
+              open={functionPickerOpen}
+              onToggle={() => setFunctionPickerOpen((open) => !open)}
+              onChange={(id) => {
+                setFunctionId(id);
+                setFunctionPickerOpen(false);
               }}
             />
             <Field

@@ -46,6 +46,11 @@ export interface AssetCreateForm {
    * mezo elhagyhato, tehat az ures allapot ervenyes vegallapot is.
    */
   categoryId: string;
+  /**
+   * A kivalasztott funkcio azonositoja -- FUGGETLEN a kategoriatol, ugyanaz
+   * az alak. Kanban 68add892, 2026-09-22.
+   */
+  functionId: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
@@ -99,6 +104,8 @@ export interface AssetCreatePayload {
    * megadhatja, es epp ezert nem szovegkent kapja meg.
    */
   categoryId?: string;
+  /** Az eszkoz funkcioja -- FUGGETLEN a kategoriatol, ugyanaz az alak. */
+  functionId?: string;
   /** A MI előre nyomtatott matricánk kódja, normalizálva (pl. `V2196`). */
   labelCode?: string;
   /** A normalizált teljesítmény-érték (`0,5` -> `0.5`). A párjával együtt. */
@@ -353,6 +360,12 @@ export function buildAssetCreatePayload(
       */
       ...(form.categoryId?.trim()
         ? { categoryId: form.categoryId.trim() }
+        : {}),
+      /*
+        A FUNKCIO UGYANOLYAN ELHAGYHATO, MINT A KATEGORIA -- FUGGETLENUL tole.
+      */
+      ...(form.functionId?.trim()
+        ? { functionId: form.functionId.trim() }
         : {}),
       manufacturer: form.manufacturer.trim() || undefined,
       model: form.model.trim() || undefined,

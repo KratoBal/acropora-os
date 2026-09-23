@@ -372,6 +372,22 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
   },
+  {
+    /**
+     * AZ ESZKOZ-FUNKCIOK KARBANTARTASA.
+     *
+     * Balazs kerese, 2026-09-22 (kanban 68add892): „ugyanolyan menut [...]
+     * mint az Eszkoz kategoriak, csak Eszkoz-funkciok nevvel". UGYANAZ A JOG
+     * es ugyanaz az okbol, mint a kategorianal: ha barki felvihetne funkciot
+     * a Beallitasok lapjan kivul, a lista ugyanugy szetesne.
+     *
+     * FUGGETLEN AZ ASSET-CATEGORIES-TOL: ket kulon torzsadat, nincs kozottuk
+     * kapcsolat.
+     */
+    id: "asset-functions",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
   NAV_TILE,
 ];
 

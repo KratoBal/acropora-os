@@ -2911,6 +2911,9 @@ model Asset {
   /// ELLENORIZHETO marad (a szoveg es a hivatkozott nev osszevetheto).
   category            String?
   categoryId          String?
+  /// A FUNKCIO -- KULON MEZO, KULON TABLA, lasd az `AssetFunction` fejlecet.
+  /// NEM a kategoria bovitese: a ketto egymastol fuggetlenul allithato.
+  functionId          String?
   manufacturer        String?
   model               String?
   serialNumber        String?
@@ -2931,6 +2934,9 @@ model Asset {
   /// `Restrict`, ugyanugy, mint a mertekegysegnel: egy kategoria, amire eszkoz
   /// mutat, nem torolheto ki alola. A kivezetes `isActive`-kal megy.
   categoryRef         AssetCategory?   @relation("AssetCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  /// `Restrict`, ugyanugy, mint a kategorianal: egy funkcio, amire eszkoz
+  /// mutat, nem torolheto ki alola. A kivezetes `isActive`-kal megy.
+  functionRef         AssetFunction?   @relation("AssetFunction", fields: [functionId], references: [id], onDelete: Restrict)
   description         String?
   installedAt         DateTime?
   purchasedAt         DateTime?
@@ -2972,6 +2978,7 @@ model Asset {
   @@index([nextServiceAt, status])
   @@index([serialNumber])
   @@index([inventoryNumber])
+  @@index([functionId])
 }
 
 /// ELŐRE NYOMTATOTT MATRICA KÓDJA. A matrica ELŐBB létezik, mint az eszköz.
@@ -3125,6 +3132,12 @@ model AssetCategory {
   /// kategoria pont azt a helyzetet allitana vissza, ami miatt ez a tabla
   /// letrejott.
   name      String   @unique
+  /// A FANK JELMAGYARAZATABOL JON, ROVID AZONOSITO (peldak: AIP, CAR, COM,
+  /// VAL_SUR, VAL_BOT). Balazs kerese, 2026-09-23. NULLAZHATO: a szerkezet
+  /// nem koti harom karakterhez, es nem tiltja az alahuzast -- ket meglevo
+  /// kod is tartalmaz. EGYEDI, ha ki van toltve; tobb `NULL` sor Postgres
+  /// alatt nem utkozik.
+  code      String?  @unique
   /// A kivezetett kategoria NEM torlodik: eszkozok hivatkoznak ra. A
   /// valasztobol esik ki, a MEGLEVO eszkozok mellett viszont olvashato marad.
   isActive  Boolean  @default(true)
@@ -3136,6 +3149,35 @@ model AssetCategory {
   updatedAt DateTime @updatedAt
 
   assets Asset[] @relation("AssetCategory")
+
+  /// A valaszto lekerdezese: aktivak, sorrendben.
+  @@index([isActive, sortOrder])
+}
+
+/// AZ ESZKOZ FUNKCIOJA -- KULON TORZSADAT, NEM A KATEGORIA BOVITESE.
+///
+/// Balazs kerese, 2026-09-23, szo szerint: "az eszkozoknel ezt a funkciok
+/// reszt ugyanugy legordulo menube meg kellene jeleniteni". A SZERKEZET
+/// (nev, kivezetes torles helyett, sorrend, vegpont-alak) az AssetCategory
+/// mintajat koveti -- de KULON TABLA, mert MAS TENGELY: a kategoria azt
+/// mondja meg, MI az eszkoz (kompakt szuro, ozon generator), a funkcio azt,
+/// MIRE valo. A ketto kozott SZANDEKOSAN nincs kapcsolat -- acrobot
+/// kikotese: "ne vezess be kozottuk kapcsolatot, amig nem kerik".
+///
+/// URESEN INDUL: Balazs sajat szavaval "ezt majd mi feltoltjuk" -- ez a
+/// migracio ezert NEM ir kezdo sorokat, csak a tablat hozza letre.
+model AssetFunction {
+  id        String   @id @default(cuid())
+  /// A nev, ahogy a valasztoban all. EGYEDI, ugyanazert, mint a kategorianal.
+  name      String   @unique
+  /// A kivezetett funkcio NEM torlodik: eszkozok hivatkoznak ra.
+  isActive  Boolean  @default(true)
+  /// A felkinalas sorrendje.
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assets Asset[] @relation("AssetFunction")
 
   /// A valaszto lekerdezese: aktivak, sorrendben.
   @@index([isActive, sortOrder])

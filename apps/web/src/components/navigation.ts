@@ -340,6 +340,16 @@ export const settingsNavigation: AppNavigationItem[] = [
     icon: "settings",
     entryId: "asset-categories",
   },
+  {
+    /*
+      UGYANAZ A FAJTA TETEL, MINT AZ ESZKOZ-KATEGORIAK: sajat, uzemeltetesi
+      torzsadat. Balazs kerese, 2026-09-22 (kanban 68add892).
+    */
+    href: "/beallitasok/eszkoz-funkciok",
+    label: "Eszköz-funkciók",
+    icon: "settings",
+    entryId: "asset-functions",
+  },
 ];
 
 export const allSettingsNavigation: AppNavigationItem[] = [
