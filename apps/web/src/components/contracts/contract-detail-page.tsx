@@ -74,11 +74,20 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
       );
     }
   };
+  /**
+   * NEM `if (token)` -- Balázs éles hibája (2026-09-24 17:39): a
+   * `Session.token` OPCIONÁLIS (`packages/types/src/auth.ts`), mert
+   * éles (jelszavas) bejelentkezésnél a böngésző httpOnly sütije
+   * hitelesít, a kliens oldalon nincs olvasható token. `session?.token ??
+   * ""` ilyenkor MINDIG üres string, tehát egy `if (token)` feltétel a
+   * `load()`-ot SOHA nem futtatná le -- az adatlap örökre "Szerződés
+   * betöltése…" marad. Az `apiRequest` üres token mellett is helyesen
+   * hagyatkozik a sütire (lásd `client.ts` fejlécét); a lista oldal
+   * (`contracts-page.tsx`) ezért működik: az nem feltételez tokent.
+   */
   useEffect(() => {
-    if (token) {
-      void load();
-      void loadOrders();
-    }
+    void load();
+    void loadOrders();
   }, [contractId, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
