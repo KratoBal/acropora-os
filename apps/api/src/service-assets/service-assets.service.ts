@@ -40,7 +40,9 @@ import {
 } from "./service-assets.repository.js";
 
 import {
+  ASSET_DEPARTMENT_PRESENCE_REFUSAL_MESSAGE,
   ASSET_DEPARTMENT_REFUSAL_MESSAGES,
+  assetDepartmentPresenceRefusal,
   assetDepartmentRefusal,
 } from "./asset-department.js";
 import type {
@@ -263,6 +265,20 @@ export class ServiceAssetsService {
       throw new BadRequestException(
         "A matricakód alakja egy betű és négy szám (például V2196).",
       );
+    /**
+     * SZÁNDÉKOSAN NEM RÉSZE A `validateReferences`/`assetDepartmentRefusal`
+     * LÁNCNAK -- lásd a fejlécét `asset-department.ts`-ben: az a lánc a
+     * `departmentId`-t a repository felé is továbbadná, ami a MA holtan álló
+     * lekérdezést (NOT_FOUND/OTHER_PARTNER/INACTIVE) is bekapcsolná.
+     */
+    if (
+      assetDepartmentPresenceRefusal({
+        ownerType: input.ownerType,
+        operation: "create",
+        departmentId: input.departmentId,
+      })
+    )
+      throw new BadRequestException(ASSET_DEPARTMENT_PRESENCE_REFUSAL_MESSAGE);
 
     await this.validateReferences({
       ownerType: input.ownerType,
@@ -439,6 +455,28 @@ export class ServiceAssetsService {
       throw new BadRequestException(
         "Az eszközhierarchia nem tartalmazhat önmagába visszatérő kapcsolatot.",
       );
+    /**
+     * UGYANAZ A FÜGGVÉNY, MINT A `create()`-BEN, DE MÁS A HATÁRESETE: itt a
+     * mező ELHAGYÁSA (`undefined`) NEM hiba -- a meglévő érték érintetlen
+     * marad --, csak az EXPLICIT `null` (törlési szándék) az.
+     *
+     * AMIT EZ NEM FED LE, SZÁNDÉKOSAN: ha a hívó CUSTOMER-ről SUPPLIER-re
+     * vált ÉS nem küld departmentId-t, a végső érték az `existing` sorból
+     * öröklődne -- de a `repository.basic()` ma nem adja vissza a meglévő
+     * departmentId-t, tehát ez innen nem eldönthető. Ma ez nem kockázat: a
+     * CUSTOMER_OWNER ág mindig elutasítja az ownerType: CUSTOMER-t, tehát
+     * nem is létezhet olyan meglévő sor, aminek CUSTOMER tulajdonosa van (a
+     * mérés szerint 0/124 éles eszköz ilyen).
+     */
+    if (
+      assetDepartmentPresenceRefusal({
+        ownerType,
+        operation: "update",
+        departmentId: input.departmentId,
+      })
+    )
+      throw new BadRequestException(ASSET_DEPARTMENT_PRESENCE_REFUSAL_MESSAGE);
+
     await this.validateReferences({
       ownerType,
       ownerId,

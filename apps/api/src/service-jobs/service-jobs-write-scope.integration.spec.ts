@@ -185,6 +185,10 @@ describe(
           title: "Nem indul a szivattyú",
           customerId,
           openedById: belsos.id,
+          // A HELYSZIN 2026-09-22 ota kotelezo. A fixtura mar letrehozta a
+          // `departmentA` egyseget; a hatokort mero allitasok a PARTNERRE es a
+          // nyitora szurnek, a helyszin egyikben sem szerepel.
+          departmentId: departmentA,
         },
         select: { id: true },
       });

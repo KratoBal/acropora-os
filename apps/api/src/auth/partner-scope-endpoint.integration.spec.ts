@@ -151,6 +151,15 @@ describe(
     let qrTokenB: string;
     let unitOfSupplierA: string;
     let unitOfSupplierB: string;
+    /**
+     * HARMADIK EGYSEG, UGYANAHHOZ A PARTNERHEZ (mirrorA), MERT BALAZS
+     * DONTESE OTA ("1 legyen kotelezo") EGY UJ ESZKOZNEK MINDIG VAN
+     * HELYSZINE -- lasd az `-SO` eszkoz jegyzetet lejjebb. A sema MA MEG
+     * nem kenyszeriti ki ezt (a NOT NULL migracio, 20260924101500_
+     * department_required, kulon DRAFT PR-ben van, a mobil kiadas utanra),
+     * de ez a fixture a MEGCELZOTT allapotot tukrozi, nem a mait.
+     */
+    let unitOfSupplierAOther: string;
     let assetSupplierAOther: string;
     let assetSupplierB: string;
     /**
@@ -306,7 +315,7 @@ describe(
         select: { id: true },
       });
 
-      const [unitA, unitB] = await Promise.all([
+      const [unitA, unitB, unitAOther] = await Promise.all([
         prisma.worksheetDepartment.create({
           data: {
             customerId: mirrorA.id,
@@ -321,9 +330,17 @@ describe(
             name: `${shared} egység B`,
           },
         }),
+        prisma.worksheetDepartment.create({
+          data: {
+            customerId: mirrorA.id,
+            code: "UNC",
+            name: `${shared} egység A második`,
+          },
+        }),
       ]);
       unitOfSupplierA = unitA.id;
       unitOfSupplierB = unitB.id;
+      unitOfSupplierAOther = unitAOther.id;
 
       const [userA, userB, userSup, userInternal] = await Promise.all([
         prisma.user.create({
@@ -467,6 +484,20 @@ describe(
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-S`,
             name: `${shared} eszköz partner A`,
             supplierId: supplierA,
+            /*
+              KOZVETLENUL A HELYSZINNEL JON LETRE, NEM KULON UPDATE-tel.
+
+              2026-09-22-IG a sor helyszin nelkul szuletett, es egy KULON
+              `prisma.asset.update()` allitotta be a lentebbi `unitOfSupplierA`-t
+              -- osszevontuk, hogy a fixture MA MAR a megcelzott, kotelezo
+              helyszinu vegallapotot tukrozze (a sema-szintu NOT NULL, a
+              `20260924101500_department_required` migracio, meg KULON, DRAFT
+              PR-ben var a mobil kiadasra, tehat ez a create MA MEG helyszin
+              nelkul is lefutna). Viselkedesi kulonbseg nincs: a ket lepes
+              UGYANABBAN a before() horogban futott, egyetlen teszt sem lathatta
+              a koztes, helyszin nelkuli allapotot.
+            */
+            departmentId: unitOfSupplierA,
           },
         }),
       ]);
@@ -485,20 +516,30 @@ describe(
        *    feltetel a kereses `OR` tombjebe kerulne, a reszfa sorai a keresestol
        *    FUGGETLENUL feljonnenek.
        *
-       * Ehhez kell: a partner A eszkoze egy alegysegben, egy MASIK eszkoze
-       * alegyseg nelkul (a metszet mereséhez), es a partner B-nek is egy eszkoze
-       * a sajat alegysegeben (az idegen azonosito mereséhez).
+       * Ehhez kell: a partner A eszkoze egy alegysegben, egy MASIK eszkoze EGY
+       * MASIK alegysegben (a metszet mereséhez), es a partner B-nek is egy
+       * eszkoze a sajat alegysegeben (az idegen azonosito mereséhez).
+       *
+       * === EZ 2026-09-22-IG "ALEGYSEG NELKUL" VOLT, ES A KULONBSEG NEM SZAMIT ===
+       *
+       * A metszet-allitas (lasd lejjebb, "az alegység-szűrő a kereséssel EGYÜTT
+       * szűkít") azt bizonyitja, hogy `departmentId=X ES search=Y` szukebb, mint
+       * barmelyik ONMAGABAN -- ehhez csak az kell, hogy a masodik eszkoz NE essen
+       * X ala. Hogy X HELYETT egy MASIK, VALODI alegysegben all, vagy egyaltalan
+       * nincs alegysege, a bizonyitasnak KOZOMBOS -- az elso mindket alakkal
+       * elbukna X-re, es a keresesre mindketto illeszkedik. A helyszin hianya
+       * tehat NEM VOLT A BIZONYITEK RESZE, csak a sor letezesenek egyik lehetseges
+       * modja -- ezert cserelheto le VALODI alegysegre a sema szigoritasa utan.
        */
-      await prisma.asset.update({
-        where: { id: assetSupplierA },
-        data: { departmentId: unitOfSupplierA },
-      });
       const [supplierAExtra, supplierBAsset] = await Promise.all([
         prisma.asset.create({
           data: {
             assetNumber: `${TEST_ASSET_PREFIX}${suffix}-SO`,
             name: `${shared} eszköz partner A második ${otherOnly}`,
             supplierId: supplierA,
+            // EGY MASIK egysegben all, nem `unitOfSupplierA`-ban -- lasd a
+            // fenti jegyzetet arrol, miert csereltuk le a helyszin hianyat.
+            departmentId: unitOfSupplierAOther,
           },
         }),
         prisma.asset.create({
@@ -1807,10 +1848,18 @@ describe(
        * megjelenese bizonyitja, hogy ez az ut EGYALTALAN tud sort visszaadni.
        */
       it("a saját alegység látszik, az idegené nem", async () => {
+        /**
+         * A `units()` a TUKOR VEVO OSSZES helyszinet adja vissza (lasd
+         * `suppliers.repository.ts:units`), nem csak azt, amin eszkoz all --
+         * a `unitOfSupplierAOther` UGYANAHHOZ a tukorhoz tartozik, mint
+         * `unitOfSupplierA` (mindketto `mirrorA.id` alatt), tehat MINDKETTO
+         * a "sajat" listaban all. Ez a helyes viselkedes: a lista a partner
+         * helyszin-fajat adja, nem az eszkoz-erintettseget.
+         */
         const own = await suppliers.units(supplierA, asSupplierA);
         assert.deepEqual(
-          own.items.map((item) => item.id),
-          [unitOfSupplierA],
+          own.items.map((item) => item.id).sort(),
+          [unitOfSupplierA, unitOfSupplierAOther].sort(),
         );
 
         const foreign = await suppliers.units(supplierB, asSupplierA);

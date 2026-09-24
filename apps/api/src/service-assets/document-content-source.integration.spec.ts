@@ -39,6 +39,12 @@ async function removeLeftovers() {
   await prisma.asset.deleteMany({
     where: { assetNumber: { startsWith: PREFIX } },
   });
+  await prisma.supplier.deleteMany({ where: { code: { startsWith: PREFIX } } });
+  // A HELYSZIN (`WorksheetDepartment`) `Restrict`-tel mutat az eszközre, tehát
+  // csak az eszköz törlése UTÁN szabad hozzányúlni.
+  await prisma.worksheetDepartment.deleteMany({
+    where: { customer: { customerNumber: { startsWith: PREFIX } } },
+  });
   await prisma.customer.deleteMany({
     where: { customerNumber: { startsWith: PREFIX } },
   });
@@ -97,11 +103,22 @@ describe(
         },
       });
       customerId = customer.id;
+      // A HELYSZIN a vevő fájához tartozik (WorksheetDepartment.customerId
+      // kötelező), az ESZKÖZ viszont SZÁLLÍTÓI tulajdonban áll -- ez a spec a
+      // tartalom-forrás megszorítását méri, nem a tulajdonos-tengelyt, és a
+      // `CUSTOMER_OWNER` szabály (nincs helyszíne) csak felesleges kerülőt adna.
+      const department = await prisma.worksheetDepartment.create({
+        data: { customerId, code: "DOC", name: "Tartalom-forrás teszt" },
+      });
+      const supplier = await prisma.supplier.create({
+        data: { code: `${PREFIX}-S1`, name: "Integration supplier" },
+      });
       const asset = await prisma.asset.create({
         data: {
           assetNumber: `${PREFIX}-A1`,
           name: "Integration asset",
-          customerId,
+          supplierId: supplier.id,
+          departmentId: department.id,
         },
       });
       assetId = asset.id;
@@ -130,6 +147,12 @@ describe(
           nev: "a suite vevoi bent maradtak a takaritas utan",
           darab: await prisma.customer.count({
             where: { customerNumber: { startsWith: PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite szallitoja bent maradt a takaritas utan",
+          darab: await prisma.supplier.count({
+            where: { code: { startsWith: PREFIX } },
           }),
         },
       ]);

@@ -128,11 +128,6 @@ describe("ServiceJobEditorPage", () => {
   });
 
   /**
-   * A PARTNER ELHAGYHATÓ, és ez a folyamat egyik rendes útja: a jegy egy már
-   * meglévő lapból születik, aminek van partnere. Ha itt kötelező lenne, épp
-   * azt az utat nehezítenénk, amit az owner leírt.
-   */
-  /**
    * A KÉT KIÚT KÜLÖN ÁLL, ÉS NEM HELYETTESÍTIK EGYMÁST.
    *
    * A láblécben álló „Mégsem" akkor kell, ha valaki végigolvasta az űrlapot; a
@@ -154,58 +149,24 @@ describe("ServiceJobEditorPage", () => {
     expect(fentre).not.toBe(megsem);
   });
 
-  it("partner nélkül is megnyitja a jegyet, és a friss lapjára visz", async () => {
+  /**
+   * A PARTNER ÉS A HELYSZÍN KÖTELEZŐ (Balázs döntése, 2026-09-23): a gomb
+   * TILTOTT marad, amíg mindkettő hiányzik, és a felvitel nem hívódik meg.
+   * Ez a TESZTVER-KONTROLLJA a lenti "a kiválasztott partner azonosítóját
+   * küldi el" esetnek: a kettő együtt mondja ki, hogy a gomb TÉNYLEG a
+   * kiválasztástól függ, nem mindig engedi át.
+   */
+  it("partner és helyszín nélkül a gomb tiltva marad, és nem hív felvitelt", async () => {
     render(<ServiceJobEditorPage />);
 
     fireEvent.change(screen.getByLabelText("Mi a baj?"), {
       target: { value: "A hármas medence szivattyúja nem indul" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Hibajegy megnyitása" }),
-    );
+    const gomb = screen.getByRole("button", { name: "Hibajegy megnyitása" });
+    expect((gomb as HTMLButtonElement).disabled).toBe(true);
 
-    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
-    expect(api.create.mock.calls[0]?.[1]).toEqual({
-      title: "A hármas medence szivattyúja nem indul",
-      description: null,
-      customerId: null,
-      // A HELYSZIN KIMONDVA `null`, nem elhagyva: partner nelkul nincs mibol
-      // valasztani, es a szerver a partner nelkuli helyszint amugy is
-      // elutasitja. Ha a mezo hianyozna a keresbol, a kulonbseg csendben
-      // eltunne -- egy elhagyott mezo es egy szandekosan ures mezo a
-      // halozati kepen ugyanugy nez ki.
-      departmentId: null,
-      // AZ ESZKOZ-LISTA KIMONDVA URES, nem elhagyva: helyszin nelkul nincs
-      // mibol valasztani, es a szerver a helyszin nelkuli eszkozt amugy is
-      // elutasitja.
-      assetIds: [],
-      // AZ UJ MEZO URESEN IS ELMEGY, es ez szandekos: a szerver DTO-ja
-      // elhagyhatonak veszi, de egy ures tomb KIMONDJA, hogy a felvivo nem
-      // delegalt -- egy hianyzo mezo ugyanugy nezne ki, mint egy elveszett.
-      assigneeIds: [],
-    });
-    // A LISTÁRA VISSZAVINNI ANNYI LENNE, mint a felhasználóra hagyni, hogy
-    // megkeresse, amit épp létrehozott.
-    await waitFor(() =>
-      expect(navigation.push).toHaveBeenCalledWith(
-        "/szerviz/hibajegyek/job-uj",
-      ),
-    );
-  });
-
-  /**
-   * A KÖVETKEZMÉNY OTT ÁLL A HIÁNY MELLETT. Egy "elhagyható" felirat önmagában
-   * elhallgatná, hogy a partner nélküli jegy MA nem tud munkalapot fogadni - és
-   * a felhasználó a csatolásnál futna bele, egy másik képernyőn.
-   */
-  it("kimondja, hogy partner nélkül nem lehet munkalapot csatolni", () => {
-    render(<ServiceJobEditorPage />);
-
-    expect(
-      screen.getByText(
-        /Partner nélkül a jegy megnyílik, de munkalapot csak azután lehet alá csatolni/,
-      ),
-    ).toBeTruthy();
+    fireEvent.click(gomb);
+    expect(api.create).not.toHaveBeenCalled();
   });
 
   /**
@@ -231,11 +192,23 @@ describe("ServiceJobEditorPage", () => {
   /**
    * A KIVALASZTOTT PARTNER AZONOSITOJA MEGY EL, NEM A NEVE.
    *
-   * A testver-kontroll a fenti "partner nelkul is megnyitja" allitas: az
-   * `customerId: null` erteket kuldi. A ketto egyutt mondja ki, hogy a mezo
-   * TENYLEG a valasztastol fugg, nem mindig ugyanazt kuldi.
+   * A testver-kontroll a fenti "gomb tiltva marad" allitas: az egyik SEMMIT
+   * nem kuld, mert a gomb tiltva van; ez a masik a valodi ertekeket kuldi,
+   * miutan partner ES helyszin is meg van adva. A ketto egyutt mondja ki,
+   * hogy a mezo TENYLEG a valasztastol fugg, nem mindig ugyanazt kuldi.
    */
   it("a kiválasztott partner azonosítóját küldi el", async () => {
+    sheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "unit-1",
+          parentId: null,
+          code: "NAG",
+          name: "Nagy fókamedence",
+          isActive: true,
+        },
+      ],
+    });
     render(<ServiceJobEditorPage />);
     await waitFor(() =>
       expect(sheets.selectablePartners).toHaveBeenCalledTimes(1),
@@ -247,6 +220,9 @@ describe("ServiceJobEditorPage", () => {
     fireEvent.change(await screen.findByLabelText("Partner"), {
       target: { value: "vevo-1" },
     });
+    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+      target: { value: "unit-1" },
+    });
     fireEvent.click(
       screen.getByRole("button", { name: "Hibajegy megnyitása" }),
     );
@@ -256,7 +232,7 @@ describe("ServiceJobEditorPage", () => {
       title: "A hármas medence szivattyúja nem indul",
       description: null,
       customerId: "vevo-1",
-      departmentId: null,
+      departmentId: "unit-1",
       assetIds: [],
       // AZ UJ MEZO URESEN IS ELMEGY, es ez szandekos: a szerver DTO-ja
       // elhagyhatonak veszi, de egy ures tomb KIMONDJA, hogy a felvivo nem
@@ -367,8 +343,13 @@ describe("ServiceJobEditorPage", () => {
    * A ket allapot teendoje kulonbozik: az egyiknel partnert kell valasztani, a
    * masiknal helyszint kell felvenni a partner torzsadatahoz.
    */
-  it("helyszin nelkuli partnernel kimondja, hogy a jegy enelkul is megnyithato", async () => {
+  it("helyszin nelkuli partnernel kimondja, hogy egyelore nem nyithato jegy ra", async () => {
     render(<ServiceJobEditorPage />);
+    // A CIM MEG VAN ADVA, hogy a gomb tiltasat KIZAROLAG a hianyzo helyszin
+    // okozza -- kulonben a tiltas a cim hianyat is bizonyithatna.
+    fireEvent.change(screen.getByLabelText("Mi a baj?"), {
+      target: { value: "A hármas medence szivattyúja nem indul" },
+    });
     fireEvent.change(await screen.findByLabelText("Partner"), {
       target: { value: "vevo-1" },
     });
@@ -376,6 +357,13 @@ describe("ServiceJobEditorPage", () => {
     expect(
       await screen.findByText(/Ehhez a partnerhez nincs felvéve helyszín/),
     ).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Hibajegy megnyitása",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
   });
 
   /**
@@ -536,9 +524,28 @@ describe("ServiceJobEditorPage", () => {
    * kapott azonositora megy, nem valami elore kitalalt ertekre.
    */
   async function urlapKitoltve(fajlok: File[]) {
+    // PARTNER ES HELYSZIN IS KELL, MERT MOSTANTOL KOTELEZO: enelkul a gomb
+    // tiltva maradna, es ez a segedfuggveny minden felviteli tesztet aluliroana.
+    sheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "unit-1",
+          parentId: null,
+          code: "NAG",
+          name: "Nagy fókamedence",
+          isActive: true,
+        },
+      ],
+    });
     render(<ServiceJobEditorPage />);
     fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
       target: { value: "Nem indul a szivattyú" },
+    });
+    fireEvent.change(await screen.findByLabelText("Partner"), {
+      target: { value: "vevo-1" },
+    });
+    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+      target: { value: "unit-1" },
     });
     fireEvent.change(screen.getByLabelText("Fényképek és fájlok"), {
       target: { files: fajlok },
@@ -634,9 +641,26 @@ describe("ServiceJobEditorPage", () => {
    * delegalatlan jegy NEM hibas allapot.
    */
   it("a kiválasztott kollégákat a felvitellel együtt küldi", async () => {
+    sheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "unit-1",
+          parentId: null,
+          code: "NAG",
+          name: "Nagy fókamedence",
+          isActive: true,
+        },
+      ],
+    });
     render(<ServiceJobEditorPage />);
     fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
       target: { value: "Nem indul a szivattyú" },
+    });
+    fireEvent.change(await screen.findByLabelText("Partner"), {
+      target: { value: "vevo-1" },
+    });
+    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+      target: { value: "unit-1" },
     });
     fireEvent.click(await screen.findByLabelText("Éva"));
     fireEvent.click(
@@ -650,24 +674,18 @@ describe("ServiceJobEditorPage", () => {
   });
 
   /**
-   * A DELEGALAS AZ EGYETLEN SZAKASZ AZ URLAPON, AMI PARTNER NELKUL IS MUKODIK.
+   * A DELEGALAS EGYETLEN SZAKASZ AZ URLAPON, AMI A KIVALASZTAS PILLANATABAN
+   * PARTNER NELKUL IS MUKODIK -- meg akkor is, ha a VEGSO felvitelhez ma mar
+   * partner es helyszin is kell (Balazs dontese, 2026-09-23).
    *
-   * A helyszin es az eszkoz a partnertol fugg; a kollega nem. Az iroda akkor is
-   * kiadhatja a munkat, ha a partner meg nincs meg -- es ez nem veletlen
-   * kovetkezmeny, hanem a szakasz letenek az oka.
-   *
-   * SAJAT ALLITAST KAP, PEDIG MA MAR IGAZ. A fenti "a kivalasztott kollegakat a
-   * felvitellel egyutt kuldi" eset partner nelkul fut, tehat a tulajdonsagot
-   * MELLESLEG bizonyitja -- de a NEVE mast mond, es ha valaki egyszer partnert
-   * tesz abba a fixturaba, a tulajdonsag csendben merhetetlenne valik. Merve
-   * (2026-09-15): ma egyetlen allitas neve sem mondja ki.
-   *
-   * ES A KET FELE EGYUTT ALL, EGY TESZTBEN: ugyanabban a pillanatban a
-   * helyszin-szakasz partnert KOVETEL, a kollega-valaszto pedig MUKODIK. Ket
-   * kulon tesztben ugyanez ket allapotrol szolna, es a szembeallitas -- ami
-   * maga a lelet -- elveszne.
+   * A helyszin es az eszkoz a partnertol fugg; a kollega-jeloloneget viszont
+   * meg lehet pipalni, mielott a tobbi mezot kitoltenenk -- ez a UI-sorrend
+   * szabadsaga, nem a KULDES szabalya. A fenti "a kivalasztott kollegakat a
+   * felvitellel egyutt kuldi" eset ma mar partnerrel es helyszinnel egyutt
+   * fut (a gomb kulonben tiltva lenne), ez az allitas pedig kulon mondja ki,
+   * hogy a jeloloneget MAR partner elott is el lehet erni.
    */
-  it("partner nélkül is lehet kollégát választani, miközben a helyszín partnert követel", async () => {
+  it("partner nélkül is lehet kollégát választani, mielőtt a partnert kiválasztanánk", async () => {
     render(<ServiceJobEditorPage />);
 
     expect(await screen.findByText(/Előbb válassz partnert/)).toBeTruthy();
@@ -678,9 +696,26 @@ describe("ServiceJobEditorPage", () => {
   });
 
   it("fájl nélkül nem hív feltöltést", async () => {
+    sheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "unit-1",
+          parentId: null,
+          code: "NAG",
+          name: "Nagy fókamedence",
+          isActive: true,
+        },
+      ],
+    });
     render(<ServiceJobEditorPage />);
     fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
       target: { value: "Nem indul a szivattyú" },
+    });
+    fireEvent.change(await screen.findByLabelText("Partner"), {
+      target: { value: "vevo-1" },
+    });
+    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+      target: { value: "unit-1" },
     });
     fireEvent.click(
       screen.getByRole("button", { name: "Hibajegy megnyitása" }),

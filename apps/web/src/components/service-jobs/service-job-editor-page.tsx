@@ -36,11 +36,23 @@ import {
  * bejelentkezett kollégaként - az ügyfél-oldali bejelentés külön munka, és az
  * ügyfélportál kérdése.
  *
- * A PARTNER NEM KÖTELEZŐ, és ez nem lazaság. A tipikus úton a jegy egy MÁR
- * MEGLÉVŐ lapból születik, a lapnak pedig van partnere - vagyis a partner
- * ADOTT, nem beírandó. Ha itt kötelezővé tennénk, épp azt az utat nehezítenénk,
- * amit a fenti döntés leír. A partner nélküli jegy ezért nem hiba, hanem
- * ÁTMENETI állapot, és a csatolás mai tiltása erre az átmenetre szól.
+ * A PARTNER ÉS A HELYSZÍN KÖTELEZŐ (Balázs döntése, 2026-09-23 06:53, Discord
+ * fő csatorna, üzenet 1552181062837346325, szó szerint: „Kötelező"). A kérdés,
+ * amire válaszolt: a helyszín kötelezővé tételéből következik, hogy a partner
+ * is azzá válik a hibajegyen, mert helyszíne csak partnernek van.
+ *
+ * === AMI ITT ÁLLT, ÉS MIÉRT NEM ÁLL TÖBBÉ ===
+ *
+ * „A PARTNER NEM KÖTELEZŐ, és ez nem lazaság. A tipikus úton a jegy egy MÁR
+ * MEGLÉVŐ lapból születik... A partner nélküli jegy ezért nem hiba, hanem
+ * ÁTMENETI állapot." Ez a lapon ELEVE nem állt: ezt az egy útvonalat
+ * (`/szerviz/hibajegyek/uj`) semmilyen munkalap nem tölti elő, a partner
+ * mindig kézzel választandó volt. A döntés ezt az utat zárja le, nem
+ * szűkíti: a partner nélküli belső jegy lehetősége megszűnt.
+ *
+ * A HELYSZÍN-VÁLASZTÓ NULLA OPCIÓS ÁLLAPOTA (a partnernek nincs felvéve
+ * alegysége) ugyanúgy BLOKKOL, mint a munkalap-szerkesztőn -- lásd
+ * `noSelectableUnits` ott, és `nincsValaszthatoHelyszin` itt.
  *
  * A VÁLASZTÓ KERES, NEM LISTÁZ. A vevő-lista lapozott, és egy oldal legfeljebb
  * százat ad: egy sima legördülő CSENDBEN levágná a többit, és a hiányzó partner
@@ -165,6 +177,23 @@ export function ServiceJobEditorPage() {
     () => buildSiteOptions(departments),
     [departments],
   );
+
+  /**
+   * NULLA VALASZTHATO HELYSZIN -- UGYANAZ A MINTA, MINT A MUNKALAP-SZERKESZTON
+   * (`noSelectableUnits`). Ha a partnernek egyaltalan nincs alegysege, a
+   * felvitel nem folytathato: a helyszin KOTELEZO, es nincs mibol valasztani.
+   */
+  const nincsValaszthatoHelyszin =
+    Boolean(customer) && departmentsLoaded && departmentOptions.length === 0;
+
+  /**
+   * A PARTNER ES A HELYSZIN KOTELEZO (Balazs dontese, 2026-09-23). A `created`
+   * ag a csatolmany-ujraprobalkozast fedi: ha a jegy mar letrejott, a gomb mar
+   * nem felvitel, tehat a mezok ervenyesseget nem kell ujra megkovetelni.
+   */
+  const canSubmit =
+    Boolean(created) ||
+    (Boolean(title.trim()) && Boolean(customer) && Boolean(departmentId));
 
   if (!canManage)
     return (
@@ -333,14 +362,8 @@ export function ServiceJobEditorPage() {
               ) : (
                 <>
                   <PartnerPicker id="hibajegy-partner" onPick={setCustomer} />
-                  {/*
-                A HIÁNY IS ÁLLÍTÁS: a partner elhagyható, és ezt ki kell mondani,
-                különben a felhasználó keresni fog valamit, ami nem hiányzik.
-                A következménye viszont ott áll mellette, mert az MA korlátoz.
-              */}
                   <p className="pt-1 text-xs text-dusk-500">
-                    Elhagyható. Partner nélkül a jegy megnyílik, de munkalapot
-                    csak azután lehet alá csatolni, hogy a partnere megvan.
+                    Kötelező: helyszín csak partnerhez rendelve létezik.
                   </p>
                 </>
               )}
@@ -368,10 +391,10 @@ export function ServiceJobEditorPage() {
                 </p>
               ) : !departmentsLoaded ? (
                 <p className="text-sm text-dusk-500">Helyszínek betöltése...</p>
-              ) : departmentOptions.length === 0 ? (
+              ) : nincsValaszthatoHelyszin ? (
                 <p className="text-sm text-dusk-500">
-                  Ehhez a partnerhez nincs felvéve helyszín. A jegy enélkül is
-                  megnyitható.
+                  Ehhez a partnerhez nincs felvéve helyszín, ezért egyelőre nem
+                  nyitható jegy rá. Vegyél fel egyet a partner lapján.
                 </p>
               ) : (
                 <select
@@ -380,7 +403,7 @@ export function ServiceJobEditorPage() {
                   value={departmentId}
                   onChange={(event) => setDepartmentId(event.target.value)}
                 >
-                  <option value="">Nincs megadva</option>
+                  <option value="">Válassz helyszínt</option>
                   {departmentOptions.map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.label}
@@ -521,14 +544,15 @@ export function ServiceJobEditorPage() {
           */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dusk-200/80 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
             <p className="text-xs text-dusk-500">
-              A „Mi a baj?” mező kötelező, a többi elhagyható.
+              A „Mi a baj?”, a partner és a helyszín megadása kötelező, a többi
+              elhagyható.
             </p>
             <div className="flex items-center gap-2">
               <Link href="/szerviz/hibajegyek">
                 <Button variant="secondary">Mégsem</Button>
               </Link>
               <Button
-                disabled={(!created && !title.trim()) || saving}
+                disabled={!canSubmit || saving}
                 onClick={() => void submit()}
               >
                 {created

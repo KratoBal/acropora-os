@@ -170,6 +170,113 @@ test("rejects a parent asset owned by a different customer", async () => {
   );
 });
 
+/**
+ * A `service-assets.repository.ts` VEVŐ-TULAJDONOSNÁL MINDIG `null`-t ír a
+ * `departmentId` mezőbe -- létrehozáskor is --, és a hívó SOSEM küld
+ * `departmentId`-t egy vevő-tulajdonú eszközhöz (a vevőknek sosem volt
+ * alegységük). A `requested` ezért `false` marad, és a régi kód -- amíg a
+ * `CUSTOMER_OWNER` ág a `requested` ellenőrzés MÖGÖTT állt -- ezt az esetet
+ * NEM fogta meg: a kérés átment a validáción, és a `NOT NULL` megkötés alatt
+ * (2026-09-22-től) nyers, megnevezetlen adatbázis-hibával végződött volna.
+ *
+ * Ez itt a VISELKEDÉST méri (a `service.create` hív-e `BadRequestException`-t
+ * megnevezett üzenettel), nem azt, hogy a validáció TÍPUSA létezik -- acrobot
+ * kikötése, msg 22200.
+ */
+test("rejects creating a customer-owned asset, even when the request never mentions a department", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      validationContext: async () => ({
+        customer: { id: "customer-1", isActive: true },
+        supplier: null,
+        address: null,
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          ownerType: "CUSTOMER",
+          ownerId: "customer-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+        },
+        "user-1",
+        { kind: "internal" },
+      ),
+    (error: unknown) => {
+      assert.ok(
+        error instanceof BadRequestException,
+        `400-at vartam, ez jott: ${String(error)}`,
+      );
+      assert.match(String(error.message), /alegysége kötelező/);
+      return true;
+    },
+  );
+});
+
+/**
+ * UGYANEZ A MÁSODIK ÍRÁSI ÚT: A SZÁLLÍTÓRÓL VEVŐRE VÁLTÁS.
+ *
+ * A `repository.ts` update-ágán (kb. 1652. sor) a `departmentId:
+ * input.ownerType === "CUSTOMER" ? null : input.departmentId` UGYANÚGY
+ * explicit `null`-t ír, amikor a hívó SUPPLIER-ről CUSTOMER-re vált -- és a
+ * váltás kérése SOSEM küld `departmentId`-t (a vevőnek nem lehet alegysége).
+ */
+test("rejects switching an asset from supplier to customer ownership, even without a department in the request", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      basic: async () => ({
+        id: "asset-1",
+        customerId: null,
+        supplierId: "supplier-1",
+        customerAddressId: null,
+        aquariumId: null,
+        parentAssetId: null,
+        productVariantId: null,
+        status: "ACTIVE",
+        updatedAt: new Date(asset.updatedAt),
+        _count: { childAssets: 0 },
+      }),
+      validationContext: async () => ({
+        customer: { id: "customer-1", isActive: true },
+        supplier: null,
+        address: null,
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.update(
+        "asset-1",
+        {
+          ownerType: "CUSTOMER",
+          ownerId: "customer-1",
+          expectedUpdatedAt: asset.updatedAt,
+        },
+        "user-1",
+        belsosUser(),
+      ),
+    (error: unknown) => {
+      assert.ok(
+        error instanceof BadRequestException,
+        `400-at vartam, ez jott: ${String(error)}`,
+      );
+      assert.match(String(error.message), /alegysége kötelező/);
+      return true;
+    },
+  );
+});
+
 test("rejects a cyclic parent update before writing", async () => {
   let updateCalled = false;
   const service = new ServiceAssetsService(
@@ -364,6 +471,23 @@ test("uses the same condition as the owner picker", () => {
 test("a belsős felhasználó megtudja, melyik eset áll fenn", async () => {
   const service = new ServiceAssetsService(
     repository({
+      // SUPPLIER, NEM CUSTOMER: ez az állítás a matricakód-üzenetről szól,
+      // nem a tulajdonos-alegység szabályról. CUSTOMER ownerType-tal a
+      // `validateReferences` MOST MÁR mindig elutasítana, mielőtt a
+      // `create()` egyáltalán meghívódna -- lásd asset-department.ts.
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        // A DEPARTMENT MOST MÁR FELOLDVA IS KELL, NEM CSAK JELENLÉTBEN
+        // (#1013 óta): a `customerId: null` a `supplier.customerId` hiányzó
+        // tükör-sorát tükrözi, hogy az OTHER_PARTNER ág is átmenjen. Enélkül
+        // ez az állítás a "nem található" hibát kapná, nem azt, amit tesztel.
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
       create: async () => {
         throw new AssetLabelUnavailableError("V2196");
       },
@@ -374,8 +498,12 @@ test("a belsős felhasználó megtudja, melyik eset áll fenn", async () => {
     () =>
       service.create(
         {
-          ownerType: "CUSTOMER",
-          ownerId: "customer-1",
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          // A jelenlét-ellenőrzés (assetDepartmentPresenceRefusal) miatt kell:
+          // enélkül ez az állítás a "kötelező alegység" hibát kapná, nem azt,
+          // amit tesztel.
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Szivattyú",
           labelCode: "V2196",
@@ -406,6 +534,30 @@ test("a belsős felhasználó megtudja, melyik eset áll fenn", async () => {
 test("a szerkesztő ág a BELSŐS üzenetet adja, nem a partnerét", async () => {
   const service = new ServiceAssetsService(
     repository({
+      // SUPPLIER: a meglévő eszköz a DEFAULT stub szerint CUSTOMER-tulajdonú
+      // (lásd `basic()` a fájl elején), és a `validateReferences` MOST MÁR
+      // mindig elutasítja a CUSTOMER esetet -- ez az állítás viszont a
+      // matricakód-üzenetről szól, nem a tulajdonos-alegység szabályról.
+      basic: async () => ({
+        id: "asset-1",
+        customerId: null,
+        supplierId: "supplier-1",
+        customerAddressId: null,
+        aquariumId: null,
+        parentAssetId: null,
+        productVariantId: null,
+        status: "ACTIVE",
+        updatedAt: new Date(asset.updatedAt),
+        _count: { childAssets: 0 },
+      }),
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
       update: async () => {
         throw new AssetLabelUnavailableError("V2196");
       },
@@ -441,6 +593,29 @@ test("a szerkesztő ág a BELSŐS üzenetet adja, nem a partnerét", async () =>
 test("a szerkesztő ágon a rossz ALAK 400-at ad, nem 409-et", async () => {
   const service = new ServiceAssetsService(
     repository({
+      // SUPPLIER, ugyanazért, mint a szomszéd állításban: a DEFAULT `basic()`
+      // CUSTOMER-tulajdonost adna, ami a mai szigorítás mellett elutasítást
+      // okozna, mielőtt az alak-hiba egyáltalán sülne.
+      basic: async () => ({
+        id: "asset-1",
+        customerId: null,
+        supplierId: "supplier-1",
+        customerAddressId: null,
+        aquariumId: null,
+        parentAssetId: null,
+        productVariantId: null,
+        status: "ACTIVE",
+        updatedAt: new Date(asset.updatedAt),
+        _count: { childAssets: 0 },
+      }),
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
       update: async () => {
         throw new AssetLabelUnavailableError("nem-jo-alak");
       },
@@ -470,6 +645,21 @@ test("a szerkesztő ágon a rossz ALAK 400-at ad, nem 409-et", async () => {
 test("a partner az összevont üzenetet kapja", async () => {
   const service = new ServiceAssetsService(
     repository({
+      // SUPPLIER: az eszköz tulajdonosa, nem a hívó -- a hívó továbbra is
+      // partner-scope-ú ("customer" lent), csak az eszköz nem vevő-tulajdonú,
+      // mert a mai szigorítás azt mindig elutasítaná a matricakód-üzenet
+      // előtt.
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        // LASD A FENTI ALLITAST: department nelkul ez a "nem talalhato"
+        // hibat kapna, nem azt, amit tesztel.
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
       create: async () => {
         throw new AssetLabelUnavailableError("V2196");
       },
@@ -480,8 +670,12 @@ test("a partner az összevont üzenetet kapja", async () => {
     () =>
       service.create(
         {
-          ownerType: "CUSTOMER",
-          ownerId: "customer-1",
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          // A jelenlét-ellenőrzés (assetDepartmentPresenceRefusal) miatt kell:
+          // enélkül ez az állítás a "kötelező alegység" hibát kapná, nem azt,
+          // amit tesztel.
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Szivattyú",
           labelCode: "V2196",
@@ -517,6 +711,20 @@ test("a partner az összevont üzenetet kapja", async () => {
 test("a fél teljesítmény-pár 400-at ad, és megnevezi a hiányzó felet", async () => {
   const service = new ServiceAssetsService(
     repository({
+      // SUPPLIER: ez az állítás a teljesítmény-pár üzenetről szól, nem a
+      // tulajdonos-alegység szabályról -- CUSTOMER-rel a mai szigorítás
+      // mindig elutasítaná, mielőtt a `create()` meghívódna.
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        // LASD A FENTI ALLITASOKAT: department nelkul ez a "nem talalhato"
+        // hibat kapna, nem azt, amit tesztel.
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
       create: async () => {
         throw new AssetPerformancePairError("unit");
       },
@@ -527,8 +735,12 @@ test("a fél teljesítmény-pár 400-at ad, és megnevezi a hiányzó felet", as
     () =>
       service.create(
         {
-          ownerType: "CUSTOMER",
-          ownerId: "customer-1",
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          // A jelenlét-ellenőrzés (assetDepartmentPresenceRefusal) miatt kell:
+          // enélkül ez az állítás a "kötelező alegység" hibát kapná, nem azt,
+          // amit tesztel.
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Szivattyú",
           performance: "500",
@@ -560,6 +772,18 @@ test("a fél teljesítmény-pár 400-at ad, és megnevezi a hiányzó felet", as
 test("a másik fél hiányára a MÁSIK mondat jön", async () => {
   const service = new ServiceAssetsService(
     repository({
+      // SUPPLIER, ugyanazért, mint a szomszéd állításban.
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        // LASD A FENTI ALLITASOKAT: department nelkul ez a "nem talalhato"
+        // hibat kapna, nem azt, amit tesztel.
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
       create: async () => {
         throw new AssetPerformancePairError("szam");
       },
@@ -570,8 +794,12 @@ test("a másik fél hiányára a MÁSIK mondat jön", async () => {
     () =>
       service.create(
         {
-          ownerType: "CUSTOMER",
-          ownerId: "customer-1",
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          // A jelenlét-ellenőrzés (assetDepartmentPresenceRefusal) miatt kell:
+          // enélkül ez az állítás a "kötelező alegység" hibát kapná, nem azt,
+          // amit tesztel.
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Szivattyú",
           performanceUnitId: "uom-1",
@@ -594,6 +822,19 @@ test("a másik fél hiányára a MÁSIK mondat jön", async () => {
 test("a rossz alakú térfogat 400-at ad", async () => {
   const service = new ServiceAssetsService(
     repository({
+      // SUPPLIER-tulajdonos + valós alegység: a CUSTOMER_OWNER ág
+      // `requested`-től függetlenül fut (2bdeb44e óta), tehát egy
+      // CUSTOMER-tulajdonú hívás itt sosem jutna el a repository create()
+      // hívásáig -- ez az állítás nem a tulajdonos-ágról szól.
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
       create: async () => {
         throw new AssetVolumeMalformedError();
       },
@@ -604,8 +845,9 @@ test("a rossz alakú térfogat 400-at ad", async () => {
     () =>
       service.create(
         {
-          ownerType: "CUSTOMER",
-          ownerId: "customer-1",
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Medence",
           volume: "abc",
@@ -631,6 +873,18 @@ test("a rossz alakú térfogat 400-at ad", async () => {
 test("a rossz alakú fogyasztás 400-at ad", async () => {
   const service = new ServiceAssetsService(
     repository({
+      // Ugyanaz az ok, mint a térfogat-tesztnél fentebb: SUPPLIER-tulajdonos
+      // + valós alegység kell, hogy egyáltalán a repository create()-jéig
+      // jusson a hívás.
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
       create: async () => {
         throw new AssetPowerConsumptionMalformedError();
       },
@@ -641,8 +895,9 @@ test("a rossz alakú fogyasztás 400-at ad", async () => {
     () =>
       service.create(
         {
-          ownerType: "CUSTOMER",
-          ownerId: "customer-1",
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Szivattyú",
           powerConsumption: "6,15/5,5",
@@ -659,4 +914,126 @@ test("a rossz alakú fogyasztás 400-at ad", async () => {
       return true;
     },
   );
+});
+
+/**
+ * A SUPPLIER-OLDALI KÖTELEZŐSÉG, VISELKEDÉS SZINTEN. A mai felvitelen a
+ * departmentId OPCIONÁLIS SUPPLIER-tulajdonosnál is (mobil:
+ * asset-create.ts:342, web: asset-editor-page.tsx:476) -- ez a mai, éles
+ * felvitel alapértelmezett útja. Balázs döntése (message_id
+ * 1552018256280162385, "1 legyen kotelezo") miatt ez a szolgáltatás-szintű
+ * ellenőrzés (`assetDepartmentPresenceRefusal`) mostantól megnevezett hibát
+ * ad. A séma-szintű NOT NULL (a `20260924101500_department_required`
+ * migráció) még KÜLÖN, DRAFT PR-ben van -- amíg az nem olvad be, EZ a
+ * teszt az egyetlen védelem: séma-szinten a mező ma is elhagyható lenne.
+ */
+test("rejects creating a supplier-owned asset without a department", async () => {
+  const service = new ServiceAssetsService(
+    repository(),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+        },
+        "user-1",
+        { kind: "internal" },
+      ),
+    (error: unknown) => {
+      assert.ok(
+        error instanceof BadRequestException,
+        `400-at vartam, ez jott: ${String(error)}`,
+      );
+      assert.match(String(error.message), /alegysége kötelező/);
+      return true;
+    },
+  );
+});
+
+/**
+ * UGYANEZ AZ UPDATE ÁGON, DE A HATÁRESET MÁS: az EXPLICIT `null` (törlési
+ * szándék) a hiba, nem a mező elhagyása -- azt a DTO ma érvényes
+ * "érintetlenül hagyás"-ként kezeli, és ennek MARADNIA kell.
+ */
+test("rejects deleting a supplier-owned asset's department on update", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      basic: async () => ({
+        id: "asset-1",
+        customerId: null,
+        supplierId: "supplier-1",
+        customerAddressId: null,
+        aquariumId: null,
+        parentAssetId: null,
+        productVariantId: null,
+        status: "ACTIVE",
+        updatedAt: new Date(asset.updatedAt),
+        _count: { childAssets: 0 },
+      }),
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.update(
+        "asset-1",
+        { departmentId: null, expectedUpdatedAt: asset.updatedAt },
+        "user-1",
+        belsosUser(),
+      ),
+    (error: unknown) => {
+      assert.ok(
+        error instanceof BadRequestException,
+        `400-at vartam, ez jott: ${String(error)}`,
+      );
+      assert.match(String(error.message), /alegysége kötelező/);
+      return true;
+    },
+  );
+});
+
+/**
+ * TESTVÉR-ÁLLÍTÁS: A MEZŐ ELHAGYÁSA UPDATE-NÉL ÁTMEGY. Enélkül a fenti
+ * állítás akkor is zöld lenne, ha a szabály MINDEN SUPPLIER-update-et
+ * elutasítana -- és akkor egy sima névváltoztatás is elbukna.
+ */
+test("allows updating a supplier-owned asset without mentioning the department", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      basic: async () => ({
+        id: "asset-1",
+        customerId: null,
+        supplierId: "supplier-1",
+        customerAddressId: null,
+        aquariumId: null,
+        parentAssetId: null,
+        productVariantId: null,
+        status: "ACTIVE",
+        updatedAt: new Date(asset.updatedAt),
+        _count: { childAssets: 0 },
+      }),
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
+      update: async () => asset,
+    }),
+    new InMemoryDocumentStore(),
+  );
+  const result = await service.update(
+    "asset-1",
+    { name: "Új név", expectedUpdatedAt: asset.updatedAt },
+    "user-1",
+    belsosUser(),
+  );
+  assert.equal(result.id, "asset-1");
 });

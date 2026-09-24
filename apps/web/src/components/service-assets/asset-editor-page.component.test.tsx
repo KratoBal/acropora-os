@@ -387,6 +387,14 @@ describe("AssetEditorPage matricakód", () => {
   beforeEach(() => {
     api.owners.mockResolvedValue(owners([servicePartner]));
     api.create.mockResolvedValue({ ...asset, id: "asset-uj" });
+    // Az alegység SUPPLIER-tulajdonosnál kötelező (lásd lent, külön describe
+    // blokk) -- enélkül ezek az állítások a "kötelező alegység" hibát
+    // kapnák, nem a matricakód-ét.
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
   });
 
   /** A TAROLT ALAK NAGYBETUS (`AssetLabel_code_shape_check`), a bemenet
@@ -401,6 +409,10 @@ describe("AssetEditorPage matricakód", () => {
       "SUPPLIER:supplier-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
+    );
     await user.type(screen.getByLabelText("Matrica kódja"), " v2196 ");
     await user.click(
       screen.getByRole("button", { name: "Eszköz létrehozása" }),
@@ -426,6 +438,10 @@ describe("AssetEditorPage matricakód", () => {
       "SUPPLIER:supplier-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
+    );
     await user.click(
       screen.getByRole("button", { name: "Eszköz létrehozása" }),
     );
@@ -447,6 +463,10 @@ describe("AssetEditorPage matricakód", () => {
       "SUPPLIER:supplier-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
+    );
     await user.type(screen.getByLabelText("Matrica kódja"), "ROSSZ");
     await user.click(
       screen.getByRole("button", { name: "Eszköz létrehozása" }),
@@ -604,6 +624,11 @@ describe("AssetEditorPage matricakód", () => {
 describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
   it("találat esetén megállítja a mentést, és nem hívja a create-et", async () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
     api.nameCheck.mockResolvedValue([
       {
         id: "asset-masik",
@@ -620,6 +645,10 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     await user.selectOptions(
       await screen.findByLabelText("Partner"),
       "SUPPLIER:supplier-1",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
     await user.click(
@@ -637,6 +666,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
 
   it("„Mentés mégis”-re a lekérdezés megismétlése NÉLKÜL menti", async () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
     api.nameCheck.mockResolvedValue([
       {
         id: "asset-masik",
@@ -654,6 +688,10 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     await user.selectOptions(
       await screen.findByLabelText("Partner"),
       "SUPPLIER:supplier-1",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
     await user.click(
@@ -674,6 +712,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
 
   it("„Mégsem”-re a panel eltűnik, és create-et sem hív", async () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
     api.nameCheck.mockResolvedValue([
       {
         id: "asset-masik",
@@ -690,6 +733,10 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     await user.selectOptions(
       await screen.findByLabelText("Partner"),
       "SUPPLIER:supplier-1",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
     await user.click(
@@ -720,6 +767,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
    */
   it("a név átírása után a gomb ismét lekérdezi az ütközést", async () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
     api.nameCheck.mockResolvedValue([
       {
         id: "asset-masik",
@@ -736,6 +788,10 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     await user.selectOptions(
       await screen.findByLabelText("Partner"),
       "SUPPLIER:supplier-1",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
     );
     const nameField = screen.getByLabelText("Eszköz neve");
     await user.type(nameField, "Homokszűrő");
@@ -771,6 +827,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
    */
   it("ha a lekérdezés hibázik, a mentés változatlanul lefut", async () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
     api.nameCheck.mockRejectedValue(new Error("hálózati hiba"));
     api.create.mockResolvedValue({ ...asset, id: "asset-uj" });
     const user = userEvent.setup();
@@ -779,6 +840,10 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     await user.selectOptions(
       await screen.findByLabelText("Partner"),
       "SUPPLIER:supplier-1",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
     await user.click(
@@ -1031,5 +1096,94 @@ describe("AssetEditorPage electricalCode felirata", () => {
     expect(await screen.findByLabelText("FP / Elektromos")).toBeTruthy();
     expect(screen.queryByLabelText("MAT kód (elektromos)")).toBeNull();
     expect(screen.queryByText(/MAT kód/)).toBeNull();
+  });
+});
+
+/**
+ * SZERVIZ PARTNER TULAJDONOSNÁL AZ ALEGYSÉG KÖTELEZŐ.
+ *
+ * A mai felvitel (a döntés előtt) opcionálisnak kezelte ezt a mezőt. Balázs
+ * döntése (message_id 1552018256280162385, "1 legyen kotelezo") után a lap
+ * a KÜLDÉS ELŐTT jelez, ugyanazzal a szabállyal, mint a szerver
+ * (`assetDepartmentPresenceRefusal`) -- ez ma az EGYETLEN védelem: a
+ * séma-szintű NOT NULL (a `department_required` migráció) még külön,
+ * be nem olvadt PR-ben van.
+ */
+describe("AssetEditorPage alegység kötelezősége", () => {
+  beforeEach(() => {
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    api.create.mockResolvedValue({ ...asset, id: "asset-uj" });
+  });
+
+  it("SUPPLIER tulajdonosnál alegység nélkül a mentés el sem megy", async () => {
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "SUPPLIER:supplier-1",
+    );
+    await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Szerviz partner eszközéhez alegység megadása kötelező.",
+      ),
+    ).toBeTruthy();
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  /**
+   * TESTVÉR-KONTROLL: a fenti állítás akkor is zöld lenne, ha a mentés
+   * SUPPLIER tulajdonosnál MINDIG el lenne utasítva -- ez bizonyítja, hogy a
+   * feltétel valóban az alegység HIÁNYÁN múlik, nem a tulajdonos típusán.
+   */
+  it("kontroll: alegység kiválasztva a mentés elmegy, a departmentId benne van", async () => {
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "SUPPLIER:supplier-1",
+    );
+    await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.create.mock.calls[0]?.[1]?.departmentId).toBe("department-1");
+  });
+
+  /** CUSTOMER-TULAJDONOSNÁL A MEZŐ EL SEM ÉRHETŐ, tehát a szabály rá nem
+   * vonatkozhat -- ezt a `CUSTOMER_OWNER` fedi (lásd a szerver oldalát). */
+  it("CUSTOMER tulajdonosnál a mentés alegység nélkül is elmegy", async () => {
+    api.owners.mockResolvedValue(owners([inheritedCustomer]));
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "CUSTOMER:customer-9",
+    );
+    await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.create.mock.calls[0]?.[1]?.departmentId).toBeUndefined();
   });
 });

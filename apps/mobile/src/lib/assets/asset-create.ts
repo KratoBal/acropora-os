@@ -178,6 +178,7 @@ export type AssetCreateResult =
 export type AssetCreateField =
   | "owner"
   | "name"
+  | "unitId"
   | "labelCode"
   | "performance"
   | "volume"
@@ -321,6 +322,28 @@ export function buildAssetCreatePayload(
   const installed = normalizeAssetDate(form.installedAt);
   if (!installed.ok)
     return { ok: false, field: "installedAt", message: installed.message };
+
+  /**
+   * SZERVIZ PARTNER TULAJDONOSNÁL AZ ALEGYSÉG KÖTELEZŐ -- UGYANAZ A SZABÁLY,
+   * MINT A SZERVEREN (`assetDepartmentPresenceRefusal`) ÉS A WEBEN.
+   *
+   * Balázs döntése (message_id 1552018256280162385, "1 legyen kotelezo")
+   * miatt: a mai felvitel (a mező kimarad a payloadból, ha a szerelő nem
+   * választ) eddig opcionálisnak kezelte. A séma-szintű NOT NULL (a
+   * `department_required` migráció) KÜLÖN, DRAFT PR-ben van -- amíg az
+   * nem olvad be, EZ az ellenőrzés az egyetlen védelem: a szerver a mai
+   * sémán department nélkül is elfogadná a kérést, ha ez a kliens-oldali
+   * és a szerver oldali (`assetDepartmentPresenceRefusal`) kapu nem állna.
+   *
+   * A SORREND SZÁMÍT: a matrica- és teljesítmény-ellenőrzés ELŐTT áll, mert
+   * a tulajdonos-választás logikailag megelőzi őket az űrlapon.
+   */
+  if (form.owner.type === "SUPPLIER" && !form.unitId.trim())
+    return {
+      ok: false,
+      field: "unitId",
+      message: "Válassz alegységet szerviz partner eszközéhez.",
+    };
 
   /**
    * A MATRICA-SZABALY UGYANABBOL A FUGGVENYBOL JON, MINT A SZERVERE.

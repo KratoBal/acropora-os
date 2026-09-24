@@ -1158,6 +1158,7 @@ describe(
           jobNumber: `${TEST_JOB_PREFIX}${suffix}`,
           title: "Cápasuli szivattyú",
           customerId,
+          departmentId: bioDepartmentId,
         },
         select: { id: true },
       });
@@ -1201,6 +1202,7 @@ describe(
       const asset = await prisma.asset.create({
         data: {
           customerId,
+          departmentId: bioDepartmentId,
           assetNumber: `${TEST_ASSET_PREFIX}${suffix}`,
           name: "Cápasuli kompresszor",
           partnerInternalCode: "LT-4711",

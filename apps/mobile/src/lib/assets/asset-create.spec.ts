@@ -21,7 +21,11 @@ import {
 
 const form: AssetCreateForm = {
   owner: { type: "SUPPLIER", id: "supplier-1" },
-  unitId: "",
+  // NEM ÜRES: SUPPLIER-tulajdonosnál az alegység kötelező (lásd a
+  // "buildAssetCreatePayload es az alegyseg" describe blokkot), és a legtöbb
+  // állítás itt NEM ezt a szabályt méri -- azoknak valós érték kell, hogy a
+  // "kötelező alegység" hiba ne fedje el a tesztelt viselkedést.
+  unitId: "unit-1",
   name: "  Fóka felnyomó szivattyú  ",
   kind: "EQUIPMENT",
   /*
@@ -209,11 +213,19 @@ describe("buildAssetCreatePayload es az alegyseg", () => {
     assert.equal(result.ok ? result.payload.departmentId : undefined, "unit-7");
   });
 
-  it("leaves it out when nothing was chosen", () => {
-    const result = buildAssetCreatePayload(form);
+  /**
+   * A MAI VAKSÁG HELYE, 2026-09-22-ig: ez az állítás azt mérte, hogy üres
+   * alegységnél a mező egyszerűen KIMARAD a payloadból (`ok: true`). Balázs
+   * döntése ("1 legyen kotelezo") óta ez a kérés a szerver alkalmazás-szintű
+   * ellenőrzésén (`assetDepartmentPresenceRefusal`) elakadna -- a telefon
+   * ezért MOST elutasítja, MIELŐTT elküldené. A séma-szintű NOT NULL
+   * (a `department_required` migráció) még külön, be nem olvadt PR-ben van.
+   */
+  it("refuses an empty unit for a service partner", () => {
+    const result = buildAssetCreatePayload({ ...form, unitId: "" });
 
-    assert.equal(result.ok, true);
-    assert.equal(result.ok ? "departmentId" in result.payload : true, false);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.field, "unitId");
   });
 
   /**
@@ -233,10 +245,13 @@ describe("buildAssetCreatePayload es az alegyseg", () => {
     assert.equal(result.ok ? "departmentId" in result.payload : true, false);
   });
 
-  it("treats a blank unit as no unit", () => {
+  /** UGYANAZ AZ ELUTASÍTÁS, MINT AZ ÜRES ESETNÉL: a `.trim()` a csupa
+   * szóközt is hiánynak veszi, tehát a kötelezőség ugyanúgy vonatkozik rá. */
+  it("treats a blank unit the same as an empty one", () => {
     const result = buildAssetCreatePayload({ ...form, unitId: "   " });
 
-    assert.equal(result.ok ? "departmentId" in result.payload : true, false);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.field, "unitId");
   });
 });
 
