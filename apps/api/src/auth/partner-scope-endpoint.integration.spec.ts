@@ -153,7 +153,7 @@ describe(
     let unitOfSupplierB: string;
     /**
      * HARMADIK EGYSEG, UGYANAHHOZ A PARTNERHEZ (mirrorA), MERT A SEMA
-     * SZIGORITASA OTA (20260922210000_department_required) EGY ESZKOZNEK
+     * SZIGORITASA OTA (20260924101500_department_required) EGY ESZKOZNEK
      * MINDIG VAN HELYSZINE -- lasd az `-SO` eszkoz jegyzetet lejjebb.
      */
     let unitOfSupplierAOther: string;
@@ -486,7 +486,7 @@ describe(
 
               2026-09-22-IG a sor helyszin nelkul szuletett, es egy KULON
               `prisma.asset.update()` allitotta be a lentebbi `unitOfSupplierA`-t
-              -- a sema szigoritasa (20260922210000_department_required) ota
+              -- a sema szigoritasa (20260924101500_department_required) ota
               ez a create-hivas MAGABAN elbukna NOT NULL megsertessel, tehat a
               ket lepest osszevontuk. Viselkedesi kulonbseg nincs: a ket lepes
               UGYANABBAN a before() horogban futott, egyetlen teszt sem lathatta

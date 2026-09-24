@@ -624,6 +624,11 @@ describe("AssetEditorPage matricakód", () => {
 describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
   it("találat esetén megállítja a mentést, és nem hívja a create-et", async () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
     api.nameCheck.mockResolvedValue([
       {
         id: "asset-masik",
@@ -640,6 +645,10 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     await user.selectOptions(
       await screen.findByLabelText("Partner"),
       "SUPPLIER:supplier-1",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
     await user.click(
@@ -657,6 +666,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
 
   it("„Mentés mégis”-re a lekérdezés megismétlése NÉLKÜL menti", async () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
     api.nameCheck.mockResolvedValue([
       {
         id: "asset-masik",
@@ -674,6 +688,10 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     await user.selectOptions(
       await screen.findByLabelText("Partner"),
       "SUPPLIER:supplier-1",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
     await user.click(
@@ -694,6 +712,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
 
   it("„Mégsem”-re a panel eltűnik, és create-et sem hív", async () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
     api.nameCheck.mockResolvedValue([
       {
         id: "asset-masik",
@@ -710,6 +733,10 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     await user.selectOptions(
       await screen.findByLabelText("Partner"),
       "SUPPLIER:supplier-1",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
     await user.click(
@@ -740,6 +767,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
    */
   it("a név átírása után a gomb ismét lekérdezi az ütközést", async () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
     api.nameCheck.mockResolvedValue([
       {
         id: "asset-masik",
@@ -756,6 +788,10 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     await user.selectOptions(
       await screen.findByLabelText("Partner"),
       "SUPPLIER:supplier-1",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
     );
     const nameField = screen.getByLabelText("Eszköz neve");
     await user.type(nameField, "Homokszűrő");
@@ -791,6 +827,11 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
    */
   it("ha a lekérdezés hibázik, a mentés változatlanul lefut", async () => {
     api.owners.mockResolvedValue(owners([servicePartner]));
+    suppliers.units.mockResolvedValue({
+      items: [
+        { id: "department-1", name: "Biodóm", parentId: null, code: "BIO" },
+      ],
+    });
     api.nameCheck.mockRejectedValue(new Error("hálózati hiba"));
     api.create.mockResolvedValue({ ...asset, id: "asset-uj" });
     const user = userEvent.setup();
@@ -799,6 +840,10 @@ describe("AssetEditorPage név-ütközés figyelmeztetése", () => {
     await user.selectOptions(
       await screen.findByLabelText("Partner"),
       "SUPPLIER:supplier-1",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
     );
     await user.type(screen.getByLabelText("Eszköz neve"), "Homokszűrő");
     await user.click(

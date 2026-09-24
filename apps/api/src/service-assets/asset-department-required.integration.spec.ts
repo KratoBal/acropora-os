@@ -14,7 +14,7 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
  *
  * === EZ AZ ALLITAS EGY TORLES HELYERE LEPETT ===
  *
- * A `20260922210000_department_required` migracio elott NEGY integracios
+ * A `20260924101500_department_required` migracio elott NEGY integracios
  * allitas azt bizonyitotta, hogy egy helyszin NELKULI eszkoz nem jon vissza a
  * lekerdezesekbol (`asset-unit-visibility.integration.spec.ts`,
  * `unit-subtree.integration.spec.ts`, es a partner-hatokoru olvasas ket
@@ -119,7 +119,7 @@ describe(
 
     /**
      * A BIZONYITEK: az adatbazis maga utasitja el a hianyzo helyszint --
-     * kalibralva: ha a `20260922210000_department_required` migracio `NOT
+     * kalibralva: ha a `20260924101500_department_required` migracio `NOT
      * NULL` resze kimaradna, ez az allitas nem dobna, es a kalibracio
      * megmutatja.
      */

@@ -162,7 +162,7 @@ describe(
         1. MIT BIZONYITOTT: hogy a `collectUnitSubtreeIds` altal epitett
            szuro nem enged at NULL helyszinu eszkozt.
         2. MELYIK MIGRACIO TETTE FOLOSLEGESSE:
-           `20260922210000_department_required` (Balazs dontese, message_id
+           `20260924101500_department_required` (Balazs dontese, message_id
            1552018256280162385). Egy ilyen sor ma mar nem johet letre --
            ezt a `prisma.asset.create({..., departmentId: null})` hivast a
            fordito is elutasitana, lasd az `asset()` fejenel allo jegyzetet.

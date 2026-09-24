@@ -65,7 +65,7 @@ const RESZLETLAP: DetailRow = {
   customerId: "vevo-1",
   customer: { displayName: "Fővárosi Állat- És Növénykert" },
   // MOSTANTOL VALOS ERTEK, NEM `null`: a `departmentId` a
-  // `20260922210000_department_required` migracio (Balazs dontese, "1
+  // `20260924101500_department_required` migracio (Balazs dontese, "1
   // legyen kotelezo") ota kotelezo. Ez a fajl az IRASI HATOKORT meri
   // (move, attachWorksheet, setPartner stb.), egyetlen allitas sem a
   // helyszinrol szol -- az ertek csak azert kell, hogy a `DetailRow`

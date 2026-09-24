@@ -822,6 +822,19 @@ test("a másik fél hiányára a MÁSIK mondat jön", async () => {
 test("a rossz alakú térfogat 400-at ad", async () => {
   const service = new ServiceAssetsService(
     repository({
+      // SUPPLIER-tulajdonos + valós alegység: a CUSTOMER_OWNER ág
+      // `requested`-től függetlenül fut (2bdeb44e óta), tehát egy
+      // CUSTOMER-tulajdonú hívás itt sosem jutna el a repository create()
+      // hívásáig -- ez az állítás nem a tulajdonos-ágról szól.
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
       create: async () => {
         throw new AssetVolumeMalformedError();
       },
@@ -832,8 +845,9 @@ test("a rossz alakú térfogat 400-at ad", async () => {
     () =>
       service.create(
         {
-          ownerType: "CUSTOMER",
-          ownerId: "customer-1",
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Medence",
           volume: "abc",
@@ -859,6 +873,18 @@ test("a rossz alakú térfogat 400-at ad", async () => {
 test("a rossz alakú fogyasztás 400-at ad", async () => {
   const service = new ServiceAssetsService(
     repository({
+      // Ugyanaz az ok, mint a térfogat-tesztnél fentebb: SUPPLIER-tulajdonos
+      // + valós alegység kell, hogy egyáltalán a repository create()-jéig
+      // jusson a hívás.
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
       create: async () => {
         throw new AssetPowerConsumptionMalformedError();
       },
@@ -869,8 +895,9 @@ test("a rossz alakú fogyasztás 400-at ad", async () => {
     () =>
       service.create(
         {
-          ownerType: "CUSTOMER",
-          ownerId: "customer-1",
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          departmentId: "department-1",
           kind: "COMPONENT",
           name: "Szivattyú",
           powerConsumption: "6,15/5,5",

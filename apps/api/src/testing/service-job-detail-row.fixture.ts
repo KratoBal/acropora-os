@@ -39,7 +39,7 @@ export function serviceJobDetailRow(
      *
      * Eddig itt `null` allt, azzal az indokkal, hogy a mezo 2026-09-14-en
      * keletkezett, tehat a legtobb korabbi jegyen ures. A
-     * `20260922210000_department_required` migracio (Balazs dontese, "1
+     * `20260924101500_department_required` migracio (Balazs dontese, "1
      * legyen kotelezo") ota a `ServiceJob.departmentId` NOT NULL, tehat egy
      * ilyen sor MA MAR FIZIKAILAG NEM ALLHAT ELO -- a `null` alapertek innentol
      * nem "a gyakori eset", hanem egy olyan allapot, amit a tarolo tipusa

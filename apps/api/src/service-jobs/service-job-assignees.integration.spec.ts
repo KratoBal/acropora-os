@@ -75,7 +75,7 @@ describe(
     /**
      * A JEGYEK PARTNERE ÉS HELYSZÍNE -- MOSTANTÓL KÖTELEZŐ.
      *
-     * A `20260922210000_department_required` migráció (Balázs döntése, "1
+     * A `20260924101500_department_required` migráció (Balázs döntése, "1
      * legyen kotelezo") óta a `ServiceJob.departmentId` NOT NULL. Ez a suite
      * a DELEGÁLÁS logikáját méri, nem a partnert/helyszínt -- egyik itt álló
      * állítás sem a customerId/departmentId hiányáról vagy tartalmáról szól

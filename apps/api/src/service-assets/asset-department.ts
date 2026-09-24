@@ -31,7 +31,7 @@ export function assetDepartmentRefusal(input: {
     1552035084578586696), szó szerint: „nem lesz" -- nem lesz olyan eszköz a
     rendszerben, ami a vevőé, nem a miénk vagy a partneré.
 
-    A `20260922210000_department_required` migráció óta az `Asset.departmentId`
+    A `20260924101500_department_required` migráció óta az `Asset.departmentId`
     `NOT NULL`, és a repository vevő-tulajdonosnál MINDIG `null`-t ír ebbe a
     mezőbe -- létrehozáskor is, tulajdonos-váltáskor is --, FÜGGETLENÜL attól,
     küldött-e a hívó `departmentId`-t. Egy vevő-tulajdonú eszköz létrehozása
@@ -79,7 +79,7 @@ export function assetDepartmentRefusal(input: {
  * mint amit ez a döntés fed.
  *
  * Balázs döntése (message_id 1552018256280162385, 2026-09-22, szó szerint:
- * "1 legyen kotelezo") és a `20260922210000_department_required` migráció
+ * "1 legyen kotelezo") és a `20260924101500_department_required` migráció
  * (NOT NULL) miatt: SUPPLIER-tulajdonosnál a `departmentId` LÉTREHOZÁSKOR
  * mindig kell, MÓDOSÍTÁSKOR pedig nem törölhető -- de a mező ELHAGYÁSA
  * módosításkor ÉRINTETLENÜL hagyja a meglévő értéket, ami NEM törlés.

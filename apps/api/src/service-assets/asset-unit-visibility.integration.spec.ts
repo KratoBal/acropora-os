@@ -231,7 +231,7 @@ describe(
       /*
         A `NINCS-EGYSEG` HELYSZIN NELKULI ESZKOZT 2026-09-22-IG ITT HOZTUK
         LETRE, es lejjebb ket allitas bizonyitotta, hogy egyik egyseg-hatokoru
-        felhasznalonak sem latszik. A `20260922210000_department_required`
+        felhasznalonak sem latszik. A `20260924101500_department_required`
         migracio ota egy ilyen sor MEG NEM IS JOHET LETRE -- lasd
         `asset-department-required.integration.spec.ts`, ami mostantol az
         ADATBAZISON meri ugyanezt a garanciat. A ket lentebbi, EGYIK MAI SZAM
@@ -442,7 +442,7 @@ describe(
      * 1. MIT BIZONYITOTT: hogy a `departmentId: { in: [...] }` szures nem
      *    engedi at a `NULL` helyszinu sort -- meg akkor sem, ha az adott
      *    ugyfelhez tartozik.
-     * 2. MELYIK MIGRACIO TETTE FOLOSLEGESSE: `20260922210000_department_required`
+     * 2. MELYIK MIGRACIO TETTE FOLOSLEGESSE: `20260924101500_department_required`
      *    (Balazs dontese, message_id 1552018256280162385: "1 legyen
      *    kotelezo"). A migracio ota egy helyszin nelkuli `Asset` sor
      *    FIZIKAILAG nem johet letre -- ezt a sort korabban IDE, egy
