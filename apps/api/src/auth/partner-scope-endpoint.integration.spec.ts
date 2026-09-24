@@ -152,9 +152,12 @@ describe(
     let unitOfSupplierA: string;
     let unitOfSupplierB: string;
     /**
-     * HARMADIK EGYSEG, UGYANAHHOZ A PARTNERHEZ (mirrorA), MERT A SEMA
-     * SZIGORITASA OTA (20260924101500_department_required) EGY ESZKOZNEK
-     * MINDIG VAN HELYSZINE -- lasd az `-SO` eszkoz jegyzetet lejjebb.
+     * HARMADIK EGYSEG, UGYANAHHOZ A PARTNERHEZ (mirrorA), MERT BALAZS
+     * DONTESE OTA ("1 legyen kotelezo") EGY UJ ESZKOZNEK MINDIG VAN
+     * HELYSZINE -- lasd az `-SO` eszkoz jegyzetet lejjebb. A sema MA MEG
+     * nem kenyszeriti ki ezt (a NOT NULL migracio, 20260924101500_
+     * department_required, kulon DRAFT PR-ben van, a mobil kiadas utanra),
+     * de ez a fixture a MEGCELZOTT allapotot tukrozi, nem a mait.
      */
     let unitOfSupplierAOther: string;
     let assetSupplierAOther: string;
@@ -486,9 +489,11 @@ describe(
 
               2026-09-22-IG a sor helyszin nelkul szuletett, es egy KULON
               `prisma.asset.update()` allitotta be a lentebbi `unitOfSupplierA`-t
-              -- a sema szigoritasa (20260924101500_department_required) ota
-              ez a create-hivas MAGABAN elbukna NOT NULL megsertessel, tehat a
-              ket lepest osszevontuk. Viselkedesi kulonbseg nincs: a ket lepes
+              -- osszevontuk, hogy a fixture MA MAR a megcelzott, kotelezo
+              helyszinu vegallapotot tukrozze (a sema-szintu NOT NULL, a
+              `20260924101500_department_required` migracio, meg KULON, DRAFT
+              PR-ben var a mobil kiadasra, tehat ez a create MA MEG helyszin
+              nelkul is lefutna). Viselkedesi kulonbseg nincs: a ket lepes
               UGYANABBAN a before() horogban futott, egyetlen teszt sem lathatta
               a koztes, helyszin nelkuli allapotot.
             */

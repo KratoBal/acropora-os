@@ -165,34 +165,15 @@ describe(
           displayName: `Belyegkep teszt ${suffix}`,
         },
       });
-      const department = await prisma.worksheetDepartment.create({
-        data: { customerId: customer.id, code: "THB", name: "Belyegkep teszt" },
-      });
-      /**
-       * SZALLITO-TULAJDONU ESZKOZ, NEM VEVOI -- ATIRVA, MERT A CI EZT
-       * MEGKOVETELI, NEM CSAK TIPUSHIBAT JELEZ.
-       *
-       * A `department_required` migracio ota az `Asset.departmentId` NOT
-       * NULL, es EGY VEVO-tulajdonu eszkoz a `CUSTOMER_OWNER` szabaly miatt
-       * SOHA nem kaphatna helyszint -- zart kor (jelentve, 15c9cd7a kartya).
-       * Ez a KOZVETLEN `prisma.asset.create` hivas viszont MEGKERULI a
-       * szolgaltatas-reteget (es vele a validaciot is), tehat a
-       * SEMA-KENYSZEREKET kell csak kielegiteni, nem az uzleti szabalyt --
-       * ezert eleg egy SZALLITO tulajdonos, a meglevo `department`-tel
-       * (a valos szabaly szerint a helyszinnek a szallito TUKOR-vevojehez
-       * kellene tartoznia, de az ADATBAZIS SEMA ezt nem kenyszeriti ki, es
-       * ez a teszt a belyegkep-generalast meri, nem a tulajdon-szabalyt).
-       */
-      const supplier = await prisma.supplier.create({
-        data: { code: `${PREFIX}${suffix}`, name: "Belyegkep teszt szallito" },
-      });
       const asset = await prisma.asset.create({
         data: {
           assetNumber: `${PREFIX}${suffix}`,
           name: "Belyegkep teszt eszkoz",
-          supplierId: supplier.id,
-          departmentId: department.id,
+          customerId: customer.id,
         },
+      });
+      const department = await prisma.worksheetDepartment.create({
+        data: { customerId: customer.id, code: "THB", name: "Belyegkep teszt" },
       });
       const worksheet = await prisma.worksheet.create({
         data: { customerId: customer.id, departmentId: department.id },
@@ -202,10 +183,6 @@ describe(
           jobNumber: `${PREFIX}${suffix}`,
           title: "Belyegkep teszt hibajegy",
           customerId: customer.id,
-          // A HELYSZIN 2026-09-22 ota kotelezo. A fixtura mar letrehozta a
-          // `department` sort a munkalaphoz; a jegy ugyanazt hasznalja. Az
-          // allitasok a belyegkep-eloallitast merik, a helyszin nem resze.
-          departmentId: department.id,
         },
       });
 
@@ -286,12 +263,6 @@ describe(
           nev: "a suite vevoi bent maradtak",
           darab: await prisma.customer.count({
             where: { customerNumber: { startsWith: PREFIX } },
-          }),
-        },
-        {
-          nev: "a suite szallitoja bent maradt",
-          darab: await prisma.supplier.count({
-            where: { code: { startsWith: PREFIX } },
           }),
         },
       ]);
@@ -470,35 +441,11 @@ describe(
           tabla as { deleteMany: (a: unknown) => Promise<unknown> }
         ).deleteMany({ where: { fileName: { startsWith: PREFIX } } });
 
-      // AZ ESZKOZ MOST SZALLITOI TULAJDONU (lasd a fixturat), a helyszine
-      // viszont tovabbra is a vevo alegyseg-fajahoz tartozik -- ezert az
-      // eszkozt SUPPLIERID alapjan kell megtalalni, es ELOBB kell torolni,
-      // mint a helyszint (`Asset.departmentId` `Restrict`).
-      const suppliers = await prisma.supplier.findMany({
-        where: { code: { startsWith: PREFIX } },
-        select: { id: true },
-      });
-      const supplierIds = suppliers.map((supplier) => supplier.id);
-      if (supplierIds.length > 0)
-        await prisma.asset.deleteMany({
-          where: { supplierId: { in: supplierIds } },
-        });
-      await prisma.supplier.deleteMany({
-        where: { code: { startsWith: PREFIX } },
-      });
-
       const customers = await prisma.customer.findMany({
         where: { customerNumber: { startsWith: PREFIX } },
         select: { id: true },
       });
       const ids = customers.map((customer) => customer.id);
-      // A HIBAJEGY TORLESE ELOBB, MINT A HELYSZINE: a `ServiceJob.departmentId`
-      // is `Restrict`, es ez a sorrend eddig azert nem szamitott, mert a mezo
-      // nullazhato volt -- most kotelezo, tehat a hibajegy MINDIG hivatkozik
-      // egy helyszinre a torles pillanataig.
-      await prisma.serviceJob.deleteMany({
-        where: { jobNumber: { startsWith: PREFIX } },
-      });
       if (ids.length > 0) {
         await prisma.worksheet.deleteMany({
           where: { customerId: { in: ids } },
@@ -506,7 +453,11 @@ describe(
         await prisma.worksheetDepartment.deleteMany({
           where: { customerId: { in: ids } },
         });
+        await prisma.asset.deleteMany({ where: { customerId: { in: ids } } });
       }
+      await prisma.serviceJob.deleteMany({
+        where: { jobNumber: { startsWith: PREFIX } },
+      });
       await prisma.customer.deleteMany({
         where: { customerNumber: { startsWith: PREFIX } },
       });

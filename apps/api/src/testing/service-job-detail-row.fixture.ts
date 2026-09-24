@@ -38,18 +38,19 @@ export function serviceJobDetailRow(
      * NEM CSAK A KOMMENT.
      *
      * Eddig itt `null` allt, azzal az indokkal, hogy a mezo 2026-09-14-en
-     * keletkezett, tehat a legtobb korabbi jegyen ures. A
-     * `20260924101500_department_required` migracio (Balazs dontese, "1
-     * legyen kotelezo") ota a `ServiceJob.departmentId` NOT NULL, tehat egy
-     * ilyen sor MA MAR FIZIKAILAG NEM ALLHAT ELO -- a `null` alapertek innentol
-     * nem "a gyakori eset", hanem egy olyan allapot, amit a tarolo tipusa
-     * (`ServiceJobDetailRow`, a valodi szerzodesbol `satisfies`-szel) mar nem
-     * fogad el.
+     * keletkezett, tehat a legtobb korabbi jegyen ures. Balazs dontese ("1
+     * legyen kotelezo") szerint a `ServiceJob.departmentId`-nak KOTELEZONEK
+     * KELL LENNIE, de ez MA MEG csak alkalmazas-szinten igaz: a sema-szintu
+     * NOT NULL (`20260924101500_department_required` migracio) KULON, DRAFT
+     * PR-ben van (acrobot kerese, 2026-09-24 10:25), csak a mobil kiadas
+     * utan olvasztjuk be. A `null` tehat MA MEG FIZIKAILAG ELOALLHATNA a
+     * sema szerint -- ez a fixture-sor csak azert visel valos erteket, mert
+     * a MEGCELZOTT vegallapotot tukrozi, nem mert a mai tipus kikenyszeritene.
      *
      * EGYETLEN HIVO SEM MERTE EXPLICITEN a helyszin ERTEKET vagy HIANYAT (lasd
      * `service-jobs.detail.spec.ts`, `service-jobs.move.spec.ts`): mindegyik
      * ezt az alapertelmezest OROKOLTE MELLESLEG. A valtoztatas tehat egyetlen
-     * tesztelt viselkedest sem mozdit, csak tipushelyesse teszi a fixture-t.
+     * tesztelt viselkedest sem mozdit.
      */
     departmentId: "unit-1",
     department: { name: "Biodóm", code: "BIO", parent: null },

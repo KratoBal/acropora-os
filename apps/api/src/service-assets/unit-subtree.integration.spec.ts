@@ -107,13 +107,11 @@ async function unit(
   return row.id;
 }
 
-/**
- * A `departmentId` MAR NEM `string | null` -- 2026-09-22 OTA MINDEN HIVAS
- * VALODI ERTEKKEL HIV. Korabban a "NONE" fixtura helyszin nelkul hivta; azt
- * a hivast a sema szigoritasa ota a fordito elutasitana. Lasd a `before()`
- * blokkban allo jegyzetet.
- */
-async function asset(suffix: string, departmentId: string, owner = customerId) {
+async function asset(
+  suffix: string,
+  departmentId: string | null,
+  owner = customerId,
+) {
   await prisma.asset.create({
     data: {
       assetNumber: `${PREFIX}-${suffix}`,
@@ -153,22 +151,7 @@ describe(
       await asset("CHILD", childId);
       await asset("GRAND", grandChildId);
       await asset("SIB", siblingId);
-      /*
-        A "NONE" HELYSZIN NELKULI ESZKOZT 2026-09-22-IG ITT HOZTUK LETRE --
-        implicit negativ kontrollkent: egyetlen lentebbi `deepEqual` sem
-        varta vissza, tehat a letezese bizonyitotta, hogy a reszfa-szures
-        nem hozza be a helyszin nelkuli sort.
-
-        1. MIT BIZONYITOTT: hogy a `collectUnitSubtreeIds` altal epitett
-           szuro nem enged at NULL helyszinu eszkozt.
-        2. MELYIK MIGRACIO TETTE FOLOSLEGESSE:
-           `20260924101500_department_required` (Balazs dontese, message_id
-           1552018256280162385). Egy ilyen sor ma mar nem johet letre --
-           ezt a `prisma.asset.create({..., departmentId: null})` hivast a
-           fordito is elutasitana, lasd az `asset()` fejenel allo jegyzetet.
-        3. MELYIK ALLITAS ORZI MOSTANTOL: az adatbazis maga, lasd
-           `asset-department-required.integration.spec.ts`.
-      */
+      await asset("NONE", null);
 
       // MÁSODIK PARTNER: az uniónak partnereken ÁT is helyesen kell működnie.
       const other = await prisma.customer.create({

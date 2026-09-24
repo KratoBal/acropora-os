@@ -96,25 +96,10 @@ let helyszinId = "";
 let masikHelyszinId = "";
 let actorUserId = "";
 
-/**
- * SZALLITOI TULAJDONU, VALOS HELYSZINNEL -- AT VAN IRVA, NEM CSAK KIEGESZITVE.
- *
- * Korabban `ownerType: "CUSTOMER"` allt itt, departmentId nelkul. A
- * `repository.create()`-et ez a fajl KOZVETLENUL hivja (nem a szolgaltatason
- * at), tehat a CUSTOMER_OWNER validacio itt nem fut le, es a `department_
- * required` migracio ota az `Asset.departmentId` NOT NULL -- a CUSTOMER agon
- * a repository `departmentId: undefined`-t irna, ami a valodi Postgresen
- * (CI, verify job 106975769353) `Invalid prisma.asset.create() invocation`
- * hibaval hasal el. A fajl EGYIK matricakod/keszlet-tesztje sem a
- * tulajdonos-tengelyrol szol (lasd a HATOKOR-eszkoz kulon fixturajat feljebb
- * a tulajdon/helyszin-tengely tesztjeihez), tehat SUPPLIER + valos helyszin
- * a helyes alapertelmezes.
- */
 function createInput(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
   return {
-    ownerType: "SUPPLIER",
-    ownerId: szallitoId,
-    departmentId: helyszinId,
+    ownerType: "CUSTOMER",
+    ownerId: customerId,
     kind: "EQUIPMENT",
     name: `${PREFIX} teszteszköz`,
     ...over,
@@ -666,8 +651,8 @@ describe(
 
         const lista = await repository.list(
           Object.assign(new AssetListQueryDto(), {
-            ownerId: szallitoId,
-            ownerType: "SUPPLIER" as const,
+            ownerId: customerId,
+            ownerType: "CUSTOMER" as const,
             label: "without" as const,
             status: "ALL" as const,
           }),
@@ -778,8 +763,8 @@ describe(
       const nelkul = await repository.list(
         Object.assign(new AssetListQueryDto(), {
           label: "without" as const,
-          ownerId: szallitoId,
-          ownerType: "SUPPLIER" as const,
+          ownerId: customerId,
+          ownerType: "CUSTOMER" as const,
           status: "ALL" as const,
         }),
         { kind: "internal" },
@@ -798,8 +783,8 @@ describe(
       const vannak = await repository.list(
         Object.assign(new AssetListQueryDto(), {
           label: "with" as const,
-          ownerId: szallitoId,
-          ownerType: "SUPPLIER" as const,
+          ownerId: customerId,
+          ownerType: "CUSTOMER" as const,
           status: "ALL" as const,
         }),
         { kind: "internal" },
@@ -838,8 +823,8 @@ describe(
       function lekerdezes(over: Record<string, unknown>) {
         return repository.list(
           Object.assign(new AssetListQueryDto(), {
-            ownerId: szallitoId,
-            ownerType: "SUPPLIER" as const,
+            ownerId: customerId,
+            ownerType: "CUSTOMER" as const,
             status: "ALL" as const,
             ...over,
           }),
@@ -983,8 +968,8 @@ describe(
       const talalat = await repository.list(
         Object.assign(new AssetListQueryDto(), {
           search: resz,
-          ownerId: szallitoId,
-          ownerType: "SUPPLIER" as const,
+          ownerId: customerId,
+          ownerType: "CUSTOMER" as const,
           status: "ALL" as const,
         }),
         { kind: "internal" },
@@ -1010,8 +995,8 @@ describe(
       const talalat = await repository.list(
         Object.assign(new AssetListQueryDto(), {
           search: "ZZZ999",
-          ownerId: szallitoId,
-          ownerType: "SUPPLIER" as const,
+          ownerId: customerId,
+          ownerType: "CUSTOMER" as const,
           status: "ALL" as const,
         }),
         { kind: "internal" },

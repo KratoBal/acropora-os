@@ -1102,11 +1102,12 @@ describe("AssetEditorPage electricalCode felirata", () => {
 /**
  * SZERVIZ PARTNER TULAJDONOSNÁL AZ ALEGYSÉG KÖTELEZŐ.
  *
- * A mai felvitel (a döntés előtt) opcionálisnak kezelte ezt a mezőt, és a
- * mentés a szerver `NOT NULL` megkötésébe futott volna nyers hibával. Balázs
+ * A mai felvitel (a döntés előtt) opcionálisnak kezelte ezt a mezőt. Balázs
  * döntése (message_id 1552018256280162385, "1 legyen kotelezo") után a lap
  * a KÜLDÉS ELŐTT jelez, ugyanazzal a szabállyal, mint a szerver
- * (`assetDepartmentPresenceRefusal`).
+ * (`assetDepartmentPresenceRefusal`) -- ez ma az EGYETLEN védelem: a
+ * séma-szintű NOT NULL (a `department_required` migráció) még külön,
+ * be nem olvadt PR-ben van.
  */
 describe("AssetEditorPage alegység kötelezősége", () => {
   beforeEach(() => {

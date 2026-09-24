@@ -32,25 +32,12 @@ const KULCS = "asset-create:Z9101:2026-09-03T10:00:00.000Z";
 const MASIK_KULCS = "asset-create:Z9102:2026-09-03T10:00:00.000Z";
 
 let customerId = "";
-let supplierId = "";
-let departmentId = "";
 let actorUserId = "";
 
-/**
- * AZ IDEMPOTENCIA-TESZT ESZKOZE SZALLITOI TULAJDONU, VALOS HELYSZINNEL.
- *
- * A `department_required` migracio ota az `Asset.departmentId` NOT NULL, es
- * `repository.create()` a CUSTOMER agon `departmentId: undefined`-t ir --
- * ez itt a hivo oldal FELELOSSEGE, mert ez a suite `repository.create()`-et
- * KOZVETLENUL hivja, megkerulve a szolgaltatas CUSTOMER_OWNER validaciojat.
- * A suite celja a kulcs (`clientOperationId`) idempotenciaja, nem a
- * tulajdonos-tengely, tehat SUPPLIER + valos helyszin a helyes alak.
- */
 function createInput(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
   return {
-    ownerType: "SUPPLIER",
-    ownerId: supplierId,
-    departmentId,
+    ownerType: "CUSTOMER",
+    ownerId: customerId,
     kind: "EQUIPMENT",
     name: `${PREFIX} teszteszköz`,
     ...over,
@@ -62,10 +49,6 @@ async function removeLeftovers() {
     where: { clientOperationId: { in: [KULCS, MASIK_KULCS] } },
   });
   await prisma.asset.deleteMany({
-    where: { name: { startsWith: PREFIX } },
-  });
-  await prisma.supplier.deleteMany({ where: { code: { startsWith: PREFIX } } });
-  await prisma.worksheetDepartment.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
   });
   await prisma.customer.deleteMany({
@@ -94,16 +77,6 @@ describe(
         select: { id: true },
       });
       customerId = customer.id;
-      const department = await prisma.worksheetDepartment.create({
-        data: { customerId, code: "IDM", name: `${PREFIX} helyszín` },
-        select: { id: true },
-      });
-      departmentId = department.id;
-      const supplier = await prisma.supplier.create({
-        data: { code: `${PREFIX}-1`, name: `${PREFIX} szállító` },
-        select: { id: true },
-      });
-      supplierId = supplier.id;
       const user = await prisma.user.create({
         data: {
           email: `${PREFIX.toLowerCase()}-actor@example.invalid`,
@@ -144,12 +117,6 @@ describe(
           nev: "a suite vevoje bent maradt a takaritas utan",
           darab: await prisma.customer.count({
             where: { customerNumber: { startsWith: PREFIX } },
-          }),
-        },
-        {
-          nev: "a suite szallitoja bent maradt a takaritas utan",
-          darab: await prisma.supplier.count({
-            where: { code: { startsWith: PREFIX } },
           }),
         },
         {

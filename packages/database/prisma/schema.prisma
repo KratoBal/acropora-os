@@ -2667,7 +2667,7 @@ model ServiceJob {
   /// A KAPCSOLAT `Restrict`, nem `SetNull`: egy helyszin, amire nyitott jegy
   /// mutat, nem torolheto ki alola. A fa amugy is archivalassal vezet ki
   /// (`isActive`), nem torlessel -- a `Restrict` ezt teszi kimondotta.
-  departmentId      String
+  departmentId      String?
   aquariumId        String?
   status            ServiceJobStatus @default(NEW)
   title             String
@@ -2750,7 +2750,7 @@ model ServiceJob {
   updatedAt         DateTime         @updatedAt
 
   customer   Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  department WorksheetDepartment @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  department WorksheetDepartment? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   aquarium   Aquarium?            @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
   assets     ServiceJobAsset[]
   /// Ami a jeggyel történt, időrendben. A részletlap ebből építi a naplót.
@@ -2898,7 +2898,7 @@ model Asset {
   /// egy eszköz helyét. A szomszédos `customerAddressId` azért `SetNull`, mert
   /// a cím a vevő adatlapjáról bármikor eltűnhet; alegység törlésére ma nincs
   /// is út, és ha lesz, előbb a rajta lógó eszközöket kell elmozdítani.
-  departmentId        String
+  departmentId        String?
   aquariumId          String?
   parentAssetId       String?
   productVariantId    String?
@@ -3026,7 +3026,7 @@ model Asset {
   customer        Customer?            @relation(fields: [customerId], references: [id], onDelete: Restrict)
   supplier        Supplier?            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   customerAddress CustomerAddress?     @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
-  department      WorksheetDepartment @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  department      WorksheetDepartment? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   aquarium        Aquarium?            @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
   parentAsset     Asset?               @relation("AssetHierarchy", fields: [parentAssetId], references: [id], onDelete: SetNull)
   childAssets     Asset[]              @relation("AssetHierarchy")
