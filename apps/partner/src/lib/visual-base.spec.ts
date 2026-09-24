@@ -131,6 +131,11 @@ describe("a portál vizuális alapja", () => {
       "eyebrow",
       "back-link",
       "muted",
+      // A `status` 2026-09-24-ig KIVÉTEL volt ezen a listán, mert saját
+      // dinamikus CSS-szabályai éltek (lásd lent) -- azóta ez a hat osztály
+      // egy csoportba tartozik, mind a `frame.tsx`/`ServiceStatusBadge`
+      // váltotta fel őket (murena mérése).
+      "status",
     ];
     const vetkesek: string[] = [];
     for (const ut of fajlok) {
@@ -155,25 +160,30 @@ describe("a portál vizuális alapja", () => {
   });
 
   /**
-   * ES A TUKRE: A DINAMIKUSAN EPULO OSZTALYOK NEM TUNHETNEK EL A STILUSLAPBOL.
+   * A `status-${...}` DINAMIKUS MINTA SOSEM LÉTEZETT A KÓDBAN -- ÚJRAMÉRVE
+   * (murena, 2026-09-24, barracuda korábbi mérése alapján).
    *
-   * A hibajegy allapot-cimkeje `status-${allapot.toLowerCase()}` alakban epul,
-   * tehat a `.status-new`, `.status-in_progress`, `.status-completed` es
-   * `.status-closed` osztalyok SEHOL nem allnak kiirva a forrasban. Egy
-   * "hasznalatlan osztaly" takaritas johiszemuen elvinne mind a negyet.
-   *
-   * EZ A KOR PONTOSAN EZT MERTE MEG: az elso meresem NULLA hivohelyet adott
-   * rajuk, es ha akkor megallok, a partner allapot-cimkéi szintelenne valtak
-   * volna -- eles feluleten, nema modon.
+   * Ez az állítás korábban PONT AZ ELLENKEZŐJÉT védte: hogy a hibajegy
+   * állapot-címkéje `status-${allapot.toLowerCase()}` alakban épül, tehát a
+   * `.status-new`, `.status-in_progress`, `.status-completed` és
+   * `.status-closed` CSS-szabályokat egy "használatlan osztály" takarítás
+   * jóhiszeműen elvinné. EZ A FELTEVÉS HAMIS VOLT: a mintát a TELJES
+   * monorepón (`apps/api`, `apps/mobile`, `apps/partner`, `apps/web`,
+   * `packages/ui`) sehol nem használja semmilyen forrás -- csak ez a teszt
+   * idézte és építette meg egy regexben. A hibajegy állapota ma a megosztott
+   * `ServiceStatusBadge`-en (`@acropora/ui`) át jelenik meg, saját
+   * `serviceToneClass` térképpel, és a `.status`/`.status-*`
+   * CSS-szabályokat a takarítás emiatt elvitte a `globals.css`-ből
+   * (2026-09-24, lásd a "keret régi osztályai" állítást fent, ami mostantól
+   * a `status`-t is védi).
    */
-  it("a dinamikusan épülő állapot-osztályok megvannak", () => {
-    const css = readFileSync(join(GYOKER, "app", "globals.css"), "utf8");
-    for (const allapot of ["new", "in_progress", "completed", "closed"])
-      assert.match(
-        css,
-        new RegExp(`\\.status-${allapot}\\b`),
-        `hiányzik a .status-${allapot} szabály`,
-      );
+  it("a status-${...} dinamikus minta valóban nem létezik sehol", () => {
+    const vetkesek: string[] = [];
+    for (const ut of fajlok) {
+      const kod = kodSzoveg(readFileSync(ut, "utf8"));
+      if (kod.includes("status-${")) vetkesek.push(ut);
+    }
+    assert.deepEqual(vetkesek, []);
   });
 
   /**
