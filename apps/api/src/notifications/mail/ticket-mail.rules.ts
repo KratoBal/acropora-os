@@ -61,7 +61,13 @@ export type MailPathKey =
   | "TICKET_MAIL_WORKSHEET_SIGNED"
   | "TICKET_MAIL_JOB_OPENED"
   | "TICKET_MAIL_HANDOVER"
-  | "TICKET_MAIL_WORKSHEET_SEND_FOR_SIGNATURE";
+  | "TICKET_MAIL_WORKSHEET_SEND_FOR_SIGNATURE"
+  /**
+   * A KARBANTARTÁSI LAP DOKUMENTUMCSOMAGJÁNAK KIKÜLDÉSE (2026-09-24,
+   * "3.5" szelet) -- ugyanaz a mintázat, mint a `TICKET_MAIL_HANDOVER`,
+   * saját kulccsal, mert a két út egymástól függetlenül kapcsolható.
+   */
+  | "TICKET_MAIL_MAINTENANCE_PACKAGE";
 
 /**
  * A KET KAPU EGYUTT, SORRENDBEN -- ES A SORREND ADJA A KIHAGYAS OKAT.

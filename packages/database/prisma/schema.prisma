@@ -3054,6 +3054,48 @@ model CompletionCertificateDocument {
   @@index([certificateId, createdAt])
 }
 
+/// A KARBANTARTÁSI LAP DOKUMENTUMCSOMAGJÁNAK KIKÜLDÉSE -- UGYANAZ AZ ALAK,
+/// MINT A `TicketMailDelivery`, mert a nyom szerepe azonos: KI kapta, NEM a
+/// jegy naplója (ott csak a TÉNY és a DARABSZÁM áll, cím nélkül -- lásd
+/// `TicketMailDelivery` fejlécét, ugyanaz az indok).
+///
+/// KÜLÖN TÁBLA, NEM A `TicketMailDelivery` ÚJRAHASZNÁLÁSA: bár mindkettő
+/// `ServiceJob`-ra mutat, a karbantartási csomag NÉGY eleme (megrendelőlap,
+/// munkalapok, teljesítési igazolás, számla) és a hozzá tartozó kapu
+/// (679d4c04, acrobot 2026-09-24) szerkezetileg más, mint a hibajegy
+/// egyszerű "lezárva -> kiküldve" útja -- egy közös tábla a két folyamat
+/// jövőbeli eltérését (pl. a számla-lépés külön mezői) visszamenőleg
+/// összemosná.
+model MaintenanceMailDelivery {
+  id String @id @default(cuid())
+
+  /// MELYIK KARBANTARTÁSI LAPRÓL van szó. Idegenkulcs nincs rajta, ugyanúgy,
+  /// ahogy a `TicketMailDelivery.serviceJobId`-n sincs.
+  serviceJobId String
+
+  /// A lap száma a küldés pillanatában.
+  jobNumber String
+
+  initiatedByUserId String?
+
+  subject String
+
+  /// A CÍMZETTEK, névvel és címmel.
+  recipients Json
+
+  attachmentBytes Int
+
+  /// `SENT`, `SENT_WITH_LINK`, `FAILED` vagy `INDETERMINATE`. Szövegként,
+  /// ugyanazért, amiért a `TicketMailDelivery.outcome` is az.
+  outcome String
+
+  error String?
+
+  createdAt DateTime @default(now())
+
+  @@index([serviceJobId, createdAt])
+}
+
 /// KI DOLGOZIK A HIBAJEGYEN. Kapcsolótábla, nem oszlop a jegyen.
 ///
 /// Balázs kérése (2026-09-14 18:10, Discord, Szerviz ticketing szál, szó

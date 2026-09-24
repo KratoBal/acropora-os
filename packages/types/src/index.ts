@@ -36,6 +36,11 @@ export {
   worksheetStatusTone,
 } from "./worksheet-management.js";
 export type {
+  MaintenancePackageMailPreview,
+  MaintenancePackageMailRecipient,
+  MaintenancePackageMailResult,
+  MaintenancePackageMailSendSkipReason,
+  MaintenancePackageMailSkipReason,
   ServiceJobAssetLink,
   ServiceJobAssignee,
   ServiceJobDetail,

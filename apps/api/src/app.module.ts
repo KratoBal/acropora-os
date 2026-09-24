@@ -40,6 +40,7 @@ import { MaterialRequestsModule } from "./material-requests/material-requests.mo
 import { ContractsModule } from "./contracts/contracts.module.js";
 import { MaintenanceOrdersModule } from "./maintenance-orders/maintenance-orders.module.js";
 import { CompletionCertificatesModule } from "./completion-certificates/completion-certificates.module.js";
+import { MaintenancePackageModule } from "./maintenance-package/maintenance-package.module.js";
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { CompletionCertificatesModule } from "./completion-certificates/completi
     ContractsModule,
     MaintenanceOrdersModule,
     CompletionCertificatesModule,
+    MaintenancePackageModule,
     WorksheetsModule,
     MaterialRequestsModule,
     TasksModule,
