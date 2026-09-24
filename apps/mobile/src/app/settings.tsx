@@ -23,25 +23,34 @@ import {
 } from "@/lib/notifications/push-device";
 import { describeRegistrationOutcome } from "@/lib/notifications/push-registration";
 import { usePushPreference } from "@/lib/notifications/usePushPreference";
+import type { ThemePreference } from "@/lib/theme/theme-preference";
+import { useThemePreference } from "@/lib/theme/useThemePreference";
 
 /**
- * BEÁLLÍTÁSOK, EGYETLEN KAPCSOLÓVAL.
+ * BEÁLLÍTÁSOK.
  *
- * A képernyő ma csak az értesítést kapcsolja. A Face ID zár kapcsolója
- * SZÁNDÉKOSAN nincs itt: az biztonsági védelmet venne le egy olyan
- * készülékről, amin partner-eszközök és munkalapok látszanak, és a gazda
- * döntésére vár. Ha itt állna kiszürkítve, az azt ígérné, hogy hamarosan jön.
+ * A Face ID zár kapcsolója SZÁNDÉKOSAN nincs itt: az biztonsági védelmet
+ * venne le egy olyan készülékről, amin partner-eszközök és munkalapok
+ * látszanak, és a gazda döntésére vár. Ha itt állna kiszürkítve, az azt
+ * ígérné, hogy hamarosan jön.
  *
  * A KAPCSOLÓ NEM CSAK A TELEFONON JEGYEZ FEL VALAMIT. Kikapcsoláskor a
  * készülék tokenje LEKERÜL a szerverről is: amíg a token a táblában van, a
  * küldő oda is küld, tehát egy pusztán helyi jelölő mellett az értesítés
  * tovább érkezne. Egy kapcsoló, ami hazudik, rosszabb, mint a hiányzó
  * kapcsoló.
+ *
+ * A MEGJELENÉS VÁLASZTÓ (Világos/Sötét/Rendszer szerint, 2026-09-24, Balázs
+ * döntése az emlék 1816 szerint) EZEN A KÉPERNYŐN SZÁNDÉKOSAN NEM VÁLT
+ * MEGJELENÉST: ez az egész app közös alapja, de MA CSAK az akvárium-
+ * képernyők épülnek rá (`useAppTheme`) -- a többi, köztük ez a képernyő is,
+ * a mai sötét, kézzel írt színeken marad, amíg át nem épül.
  */
 export default function SettingsScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
   const push = usePushPreference();
+  const theme = useThemePreference();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,6 +134,22 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        <View style={styles.card}>
+          <Text style={styles.rowTitle}>Megjelenés</Text>
+          <Text style={styles.rowHint}>
+            Ma csak az Akváriumok képernyői igazodnak ehhez. A többi képernyő
+            egyelőre változatlan marad.
+          </Text>
+          {theme.loading ? (
+            <ActivityIndicator color="#52d6c7" style={styles.themeLoading} />
+          ) : (
+            <ThemeChoice
+              value={theme.preference ?? "system"}
+              onChange={(value) => void theme.save(value)}
+            />
+          )}
+        </View>
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable
@@ -136,6 +161,44 @@ export default function SettingsScreen() {
         </Pressable>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: "light", label: "Világos" },
+  { value: "dark", label: "Sötét" },
+  { value: "system", label: "Rendszer szerint" },
+];
+
+function ThemeChoice({
+  value,
+  onChange,
+}: {
+  value: ThemePreference;
+  onChange: (value: ThemePreference) => void;
+}) {
+  return (
+    <View style={styles.themeRow}>
+      {THEME_OPTIONS.map((option) => (
+        <Pressable
+          key={option.value}
+          onPress={() => onChange(option.value)}
+          style={[
+            styles.themeChip,
+            value === option.value && styles.themeChipSelected,
+          ]}
+        >
+          <Text
+            style={[
+              styles.themeChipText,
+              value === option.value && styles.themeChipTextSelected,
+            ]}
+          >
+            {option.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 
@@ -181,4 +244,16 @@ const styles = StyleSheet.create({
   },
   backText: { color: "#9ab8ca", fontSize: 13, fontWeight: "700" },
   pressed: { opacity: 0.75 },
+  themeLoading: { marginTop: 10, alignSelf: "flex-start" },
+  themeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  themeChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#28536a",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  themeChipSelected: { backgroundColor: "#177b74", borderColor: "#177b74" },
+  themeChipText: { color: "#91afbe", fontSize: 13, fontWeight: "700" },
+  themeChipTextSelected: { color: "#fff" },
 });
