@@ -84,7 +84,7 @@ function itemToRow(input: {
   position: number;
   description: string;
   unitPricePerOccasion: MaintenanceOrderFormDecimalInput;
-  quantity: number;
+  quantity: MaintenanceOrderFormDecimalInput;
   occasionsPerYear: number;
   vatRatePercent: MaintenanceOrderFormDecimalInput;
 }): TableRow {
