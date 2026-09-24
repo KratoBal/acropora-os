@@ -16,6 +16,7 @@ import {
   serviceJobPackageZip,
   type ZipEntry,
 } from "../service-jobs/service-job-package-zip.js";
+import { MaintenanceInvoiceDraftService } from "../maintenance-invoice/maintenance-invoice-draft.service.js";
 
 import {
   maintenancePackageBlockers,
@@ -32,11 +33,17 @@ export interface MaintenancePackage {
 /**
  * A KARBANTARTÁSI LAP DOKUMENTUMCSOMAGJA -- A HIBAJEGYES MINTA ÁTVÉTELE
  * (`ServiceJobPackageService`), NÉGY ELEMMEL: megrendelőlap, munkalapok,
- * teljesítési igazolás, számla. A 4. szelet (`maintenance-invoice` modul)
- * mára tud PISZKOZATOT (DRAFT) létrehozni, de VALÓDI kiállítást (ISSUED)
- * még nem -- a `invoicePresent` ezért ma is mindig hamis marad, és
- * `assemble(..., "send")` mindig elutasít. Ez a helyes, várt állapot,
- * amíg a valódi kiállítás gombja/kapcsolója meg nem épül.
+ * teljesítési igazolás, számla.
+ *
+ * A NEGYEDIK ELEM MA A GYAKORLATBAN SOHA NEM KERÜL BELE: a `maintenance-
+ * invoice` modul (4. szelet) tud PISZKOZATOT (DRAFT) létrehozni, de VALÓDI
+ * kiállítást (ISSUED) még nem -- lásd `MAINTENANCE_INVOICE_ISSUE_ENABLED`
+ * a `maintenance-invoice-draft.service.ts` fejlécében. Az `invoicePresent`
+ * (`maintenance-package-gate.ts`) emiatt ma mindig hamisra fut ki, tehát
+ * `assemble(..., "send")` mindig elutasít -- ez a helyes, várt állapot,
+ * amíg a valódi kiállítás meg nem épül. Az alábbi kód ETTŐL FÜGGETLENÜL
+ * teljes: ha egyszer lesz ISSUED számla, a negyedik elem AZONNAL bekerül a
+ * csomagba, kód nélkül újra kellene nyúlni ehhez a függvényhez.
  *
  * A KAPU RÉSZLETEI A `maintenance-package-gate.ts`-BEN ÁLLNAK, mérhetően.
  */
@@ -44,6 +51,7 @@ export interface MaintenancePackage {
 export class MaintenancePackageService {
   constructor(
     private readonly repository: MaintenancePackageRepository,
+    private readonly invoices: MaintenanceInvoiceDraftService,
     @Optional()
     @Inject(DOCUMENT_STORE)
     private readonly documentStore?: DocumentStore,
@@ -104,6 +112,7 @@ export class MaintenancePackageService {
     if (!job) throw new NotFoundException("A karbantartási lap nem található.");
 
     const certificateDocument = job.completionCertificate?.documents[0] ?? null;
+    const issuedInvoice = job.completionCertificate?.invoices[0] ?? null;
 
     const blockers = maintenancePackageBlockers({
       worksheets: job.worksheets.map((worksheet) => ({
@@ -126,7 +135,7 @@ export class MaintenancePackageService {
         megfigyelhető viselkedés, mint a korábbi beégetett `false`-nál, de
         immár a SÉMÁBÓL következik, nem egy TODO-jegyzetből.
       */
-      invoicePresent: (job.completionCertificate?.invoices.length ?? 0) > 0,
+      invoicePresent: issuedInvoice != null,
       purpose,
     });
     if (maintenancePackageIsBlocked(blockers))
@@ -167,10 +176,25 @@ export class MaintenancePackageService {
     });
 
     /*
-      A SZÁMLÁNAK ITT VAN A HELYE A CSOMAGBAN -- egy negyedik `entries.push`,
-      amint a 4. szelet előállítja a bájtjait. `purpose === "send"` esetén a
-      fenti kapu ma mindig elutasít, mielőtt idáig érne a hívás.
+      A NEGYEDIK ELEM: A SZÁMLA. Ma a gyakorlatban SOHA nem fut le --
+      `issuedInvoice` csak akkor nem `null`, ha van ISSUED státuszú számla,
+      és a fenti kapu ilyenkor engedi csak tovább a hívást -- de amíg a
+      valódi kiállítás nincs megépítve (lásd a modul fejlécét), ISSUED
+      számla soha nem jöhet létre. A `pdfFor` UGYANAZT a bájtforrást adja,
+      amit a piszkozat-előnézet is használ (`maintenance-invoice-draft.
+      service.ts`): ha a valódi kiállítás egyszer a MEGLÉVŐ sor PDF-jét
+      cseréli le a végleges tartalomra, ez a hívás változtatás nélkül a
+      helyeset adja.
     */
+    if (issuedInvoice) {
+      const bytes = await this.invoices.pdfFor(issuedInvoice.id);
+      entries.push({
+        name: issuedInvoice.invoiceNumber
+          ? `szamla-${issuedInvoice.invoiceNumber}.pdf`
+          : "szamla.pdf",
+        bytes,
+      });
+    }
 
     return {
       fileName: maintenancePackageFileName(job.jobNumber),

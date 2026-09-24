@@ -21,5 +21,13 @@ import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.j
     MaintenanceInvoiceDraftService,
     documentStoreProvider,
   ],
+  /**
+   * A `MaintenancePackageModule`-nak KELL a piszkozat-szolgáltatás, hogy a
+   * csomag negyedik (számla) eleme a MEGLÉVŐ `pdfFor`-t hívja, ne másolja
+   * le a dokumentum-tároló kulcs-alakját. Csak a szolgáltatás export,
+   * a `documentStoreProvider` NEM -- annak a `MaintenancePackageModule`
+   * megvan a sajátja.
+   */
+  exports: [MaintenanceInvoiceDraftService],
 })
 export class MaintenanceInvoiceModule {}

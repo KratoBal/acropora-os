@@ -79,7 +79,7 @@ export class MaintenancePackageRepository {
             */
             invoices: {
               where: { status: "ISSUED" },
-              select: { id: true },
+              select: { id: true, invoiceNumber: true },
             },
           },
         },
