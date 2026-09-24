@@ -239,6 +239,23 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  {
+    /**
+     * VIZMERESI ALKALOM FELVITELE, VIZERTEKEK KOR (2026-09-24, murena #1055-os
+     * API-ja + a mobil felviteli kepernyo). A torzs NEVESITETT tipussal megy
+     * (`CreateAquariumMeasurementInput`), tehat PAR lett belole itt.
+     */
+    mit: "vízmérési alkalom felvitele",
+    mobil: "../mobile/src/lib/api/aquariums.ts",
+    mobilNev: "CreateAquariumMeasurementInput",
+    dto: "src/aquariums/dto/aquarium-measurement.dto.ts",
+    dtoNev: "CreateAquariumMeasurementDto",
+    kontroll: ["values"],
+    /* A KOZOS KOTELEZO MEZO A `values` -- a tobbi (measuredAt, source,
+       notes, clientOperationId) mindket oldalon opcionalis. */
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
 ];
 
 /**
@@ -333,7 +350,13 @@ const PAROK: readonly Par[] = [
  * torzs NEVESITETT tipussal megy (`CreateAquariumEquipmentInput`), tehat
  * PAR lett belole fent.
  */
-const IRAS_HIVASOK_MA = 19;
+/**
+ * 2026-09-24: 19 -> 20. Az uj hivas a VIZMERESI ALKALOM FELVITELE
+ * (`createAquariumMeasurement`, `lib/api/aquariums.ts`, vizertekek kor). A
+ * torzs NEVESITETT tipussal megy (`CreateAquariumMeasurementInput`), tehat
+ * PAR lett belole fent.
+ */
+const IRAS_HIVASOK_MA = 20;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {
