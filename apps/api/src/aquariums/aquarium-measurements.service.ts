@@ -1,0 +1,76 @@
+import { Injectable, NotFoundException } from "@nestjs/common";
+
+import { NotificationsService } from "../notifications/notifications.service.js";
+import { AquariumMeasurementsRepository } from "./aquarium-measurements.repository.js";
+import { AquariumsRepository } from "./aquariums.repository.js";
+import type { CreateAquariumMeasurementDto } from "./dto/aquarium-measurement.dto.js";
+
+@Injectable()
+export class AquariumMeasurementsService {
+  constructor(
+    private readonly repository: AquariumMeasurementsRepository,
+    private readonly aquariums: AquariumsRepository,
+    private readonly notifications: NotificationsService,
+  ) {}
+
+  async list(aquariumId: string) {
+    await this.requireAquarium(aquariumId);
+    return this.repository.list(aquariumId);
+  }
+
+  /**
+   * A PUSH-ÉRTESÍTÉS A MENTÉS UTÁN, DE A HÍVÓ VÁLASZÁT NEM VÁRAKOZTATJA --
+   * ugyanaz a szabály, mint minden más értesítésnél ebben a rendszerben
+   * (lásd `NotificationsService` fejlécét): nincs sor, tehát a küldés a
+   * mentés UTÁN, BEVÁRÁS NÉLKÜL indul (`notify...`, nem `deliver...`).
+   *
+   * A `created === false` ÁGON NEM KÜLDÜNK: ez a klienskulcs miatt
+   * VISSZAADOTT, MÁR LÉTEZŐ alkalom -- egy offline sorból megismételt
+   * kérés, aminek a válasza korábban elveszett. Balázs kérése kimondottan
+   * EGYSZERI értesítést kér erre az esetre is; lásd
+   * `aquarium-measurements.repository.ts` `AquariumMeasurementCreateResult`
+   * fejlécét, miért nem lehetne ezt itt, a `create` eredményéből kitalálni.
+   */
+  async create(
+    aquariumId: string,
+    input: CreateAquariumMeasurementDto,
+    actorUserId: string,
+  ) {
+    const aquarium = await this.requireAquarium(aquariumId);
+    const result = await this.repository.create(aquariumId, input, actorUserId);
+
+    if (result.created) {
+      /**
+       * A CÍMZETT-KÖR: A KARBANTARTÓK, AZ ÉRTESÍTŐ NÉLKÜL.
+       *
+       * Balázs kérése, szó szerint: "push üzenetet, hogy új vízmérés
+       * eredménye van" -- de aki épp MOST rögzítette, az tudja, hogy
+       * rögzítette. A `detail()`-ből kapott `maintainers` lista már a mai
+       * állapotot tükrözi, tehát nem kell külön lekérdezés.
+       */
+      const recipientIds = aquarium.maintainers
+        .map((maintainer) => maintainer.userId)
+        .filter((userId) => userId !== actorUserId);
+      this.notifications.notifyAquariumMeasurementRecorded({
+        aquariumId,
+        aquariumName: aquarium.name,
+        userIds: recipientIds,
+      });
+    }
+
+    return result.occasion;
+  }
+
+  async delete(aquariumId: string, occasionId: string): Promise<void> {
+    await this.requireAquarium(aquariumId);
+    const removed = await this.repository.delete(aquariumId, occasionId);
+    if (removed === 0)
+      throw new NotFoundException("A mérési alkalom nem található.");
+  }
+
+  private async requireAquarium(id: string) {
+    const aquarium = await this.aquariums.detail(id);
+    if (!aquarium) throw new NotFoundException("Az akvárium nem található.");
+    return aquarium;
+  }
+}

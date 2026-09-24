@@ -21,6 +21,10 @@ const detailInclude = {
     select: { id: true, displayName: true, phone: true, email: true },
   },
   equipment: { orderBy: { createdAt: "asc" as const } },
+  maintainers: {
+    orderBy: { createdAt: "asc" as const },
+    include: { user: { select: { id: true, displayName: true } } },
+  },
 } satisfies Prisma.AquariumInclude;
 
 type AquariumDetailRow = Prisma.AquariumGetPayload<{
@@ -97,6 +101,13 @@ function toDetail(row: AquariumDetailRow): AquariumDetail {
     startedAt: row.startedAt?.toISOString(),
     notes: row.notes ?? undefined,
     equipment: row.equipment.map(toEquipment),
+    maintainers: row.maintainers.map((m) => ({
+      userId: m.user.id,
+      displayName: m.user.displayName,
+    })),
+    // SZÁRMAZTATOTT, NEM A TÁROLT `maintainedByUs` OSZLOPBÓL -- lásd a
+    // séma `AquariumMaintainer` fejlécét.
+    maintainedByUs: row.maintainers.length > 0,
   };
 }
 

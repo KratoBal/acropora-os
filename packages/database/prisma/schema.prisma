@@ -697,6 +697,9 @@ model User {
   worksheetAssignmentsMade   WorksheetAssignee[]           @relation("WorksheetAssignedBy")
   /// A hibajegyek, amikre ezt a kollegat delegaltak.
   assignedServiceJobs        ServiceJobAssignee[]          @relation("ServiceJobAssignee")
+  /// Az akváriumok, amiket ez a kolléga tart karban. Lásd az
+  /// `AquariumMaintainer` fejlécét.
+  aquariumMaintainerships    AquariumMaintainer[]
   serviceJobAssignmentsMade  ServiceJobAssignee[]          @relation("ServiceJobAssignedBy")
   createdWorksheetVersions   WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
   closedWorksheetVersions    WorksheetVersion[]            @relation("WorksheetVersionClosedBy")
@@ -2913,8 +2916,41 @@ model Aquarium {
   /// nyilvántartás). Lásd az `AquariumEquipment` fejlécét, miért két
   /// különböző fogalom.
   equipment    AquariumEquipment[]
+  /// KI TARTJA KARBAN -- TÖBB BELSŐ KOLLÉGA IS LEHET. Lásd az
+  /// `AquariumMaintainer` fejlécét: ez a lista a valódi forrás, a fenti
+  /// `responsibleUserId`/`maintainedByUs` mezők a sémán maradnak, de a
+  /// felület már ezt a listát mutatja.
+  maintainers  AquariumMaintainer[]
 
   @@index([customerId, isActive])
+}
+
+/// KI TARTJA KARBAN AZ AKVÁRIUMOT -- TÖBB BELSŐ KOLLÉGA IS LEHET.
+///
+/// Balázs kérése (2026-09-24 14:41), szó szerint: "az ügyfél akváriumánál
+/// a belsős kollégák közül lehessen választani akár többet is, hogy ki
+/// tartja karban". A meglévő `Aquarium.responsibleUserId` (egyetlen
+/// felhasználó) és `maintainedByUs` mezők a sémán MARADNAK -- Balázs
+/// döntése szerint --, de a felület mostantól ezt a listát használja, és
+/// az API válaszában a `maintainedByUs` ebből a listából SZÁRMAZTATOTT
+/// (igaz, ha legalább egy sor van), nem a régi oszlopból olvasott.
+///
+/// PARTNER-FIÓK NEM KERÜLHET IDE: a karbantartó BELSŐ kolléga. Ezt a
+/// szerver oldala kényszeríti ki (a felhasználó-választó csak belső
+/// szerepkörű felhasználót ad vissza), nem séma-szintű megkötés -- a
+/// `User` táblán a partner-fiók és a belső kolléga ugyanabban a
+/// modellben él, csak a szereppel különböztethető meg.
+model AquariumMaintainer {
+  id         String   @id @default(cuid())
+  aquariumId String
+  userId     String
+  createdAt  DateTime @default(now())
+
+  aquarium Aquarium @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([aquariumId, userId])
+  @@index([userId])
 }
 
 /// AZ AKVÁRIUMON LÉVŐ BERENDEZÉS -- ÉS SZÁNDÉKOSAN NEM AZ `Asset` TÁBLA.
@@ -4627,18 +4663,34 @@ model WorksheetVersionSignature {
 }
 
 model AquariumMeasurement {
-  id            String   @id @default(cuid())
-  aquariumId    String
-  parameterCode String
-  value         Decimal  @db.Decimal(19, 6)
-  unit          String
-  measuredAt    DateTime
-  measuredById  String?
-  source        String?
-  notes         String?
-  createdAt     DateTime @default(now())
-  aquarium      Aquarium @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  aquariumId        String
+  parameterCode     String
+  value             Decimal  @db.Decimal(19, 6)
+  unit              String
+  measuredAt        DateTime
+  measuredById      String?
+  source            String?
+  notes             String?
+  createdAt         DateTime @default(now())
+  /// A MÉRÉSI ALKALOM IDEMPOTENCIA-KULCSA -- ugyanaz a minta, mint az
+  /// `Aquarium.clientOperationId`-nél, de EGY SZINTTEL FELJEBB: egy mérési
+  /// alkalom (Balázs kérése, 2026-09-24: "egy mérés = egy mérési alkalom,
+  /// több paraméterrel") TÖBB sort ír, paraméterenként egyet, és MINDEGYIK
+  /// UGYANAZT a kulcsot viseli -- tehát az egyediség nem önmagában ezen a
+  /// mezőn áll, hanem a hármason lent: egy alkalom paraméterenként
+  /// legfeljebb egy sort ír, tehát a hármas pontosan azt zárja ki, amit meg
+  /// kell -- két azonos alkalom kétszeri, teljes beírását --, és nem zárja
+  /// ki azt, aminek szabadnak kell maradnia: két KÜLÖNBÖZŐ alkalom ugyanarra
+  /// a paraméterre.
+  ///
+  /// A NULL nem egyenlő önmagával, tehát a webes felvitel (kulcs nélkül) és
+  /// egymás mellett is korlátlanul állhat.
+  clientOperationId String?
 
+  aquarium Aquarium @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+
+  @@unique([aquariumId, clientOperationId, parameterCode])
   @@index([aquariumId, parameterCode, measuredAt])
 }
 

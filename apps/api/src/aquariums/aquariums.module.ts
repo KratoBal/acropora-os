@@ -1,6 +1,11 @@
 import { Module } from "@nestjs/common";
 
 import { CustomersModule } from "../customers/customers.module.js";
+import { NotificationsModule } from "../notifications/notifications.module.js";
+import { AquariumMaintainersRepository } from "./aquarium-maintainers.repository.js";
+import { AquariumMaintainersService } from "./aquarium-maintainers.service.js";
+import { AquariumMeasurementsRepository } from "./aquarium-measurements.repository.js";
+import { AquariumMeasurementsService } from "./aquarium-measurements.service.js";
 import { AquariumsController } from "./aquariums.controller.js";
 import { AquariumsRepository } from "./aquariums.repository.js";
 import { AquariumsService } from "./aquariums.service.js";
@@ -15,8 +20,15 @@ import { AquariumsService } from "./aquariums.service.js";
  * repository-t, tehát nincs szükség duplikált providerre.
  */
 @Module({
-  imports: [CustomersModule],
+  imports: [CustomersModule, NotificationsModule],
   controllers: [AquariumsController],
-  providers: [AquariumsRepository, AquariumsService],
+  providers: [
+    AquariumsRepository,
+    AquariumsService,
+    AquariumMeasurementsRepository,
+    AquariumMeasurementsService,
+    AquariumMaintainersRepository,
+    AquariumMaintainersService,
+  ],
 })
 export class AquariumsModule {}
