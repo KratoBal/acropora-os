@@ -327,13 +327,10 @@ export function buildAssetCreatePayload(
    * SZERVIZ PARTNER TULAJDONOSNÁL AZ ALEGYSÉG KÖTELEZŐ -- UGYANAZ A SZABÁLY,
    * MINT A SZERVEREN (`assetDepartmentPresenceRefusal`) ÉS A WEBEN.
    *
-   * Balázs döntése (message_id 1552018256280162385, "1 legyen kotelezo")
-   * miatt: a mai felvitel (a mező kimarad a payloadból, ha a szerelő nem
-   * választ) eddig opcionálisnak kezelte. A séma-szintű NOT NULL (a
-   * `department_required` migráció) KÜLÖN, DRAFT PR-ben van -- amíg az
-   * nem olvad be, EZ az ellenőrzés az egyetlen védelem: a szerver a mai
-   * sémán department nélkül is elfogadná a kérést, ha ez a kliens-oldali
-   * és a szerver oldali (`assetDepartmentPresenceRefusal`) kapu nem állna.
+   * Balázs döntése (message_id 1552018256280162385, "1 legyen kotelezo") és
+   * a `department_required` migráció (NOT NULL) miatt: a mai felvitel (a
+   * mező kimarad a payloadból, ha a szerelő nem választ) ma opcionálisnak
+   * kezeli, és a migráció után nyers adatbázis-hibával végződne.
    *
    * A SORREND SZÁMÍT: a matrica- és teljesítmény-ellenőrzés ELŐTT áll, mert
    * a tulajdonos-választás logikailag megelőzi őket az űrlapon.

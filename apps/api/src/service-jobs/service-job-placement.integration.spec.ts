@@ -86,7 +86,10 @@ describe(
      * A JEGY SZULETESI HELYSZINE -- KULON A TOBBITOL, HOGY MINDEN
      * `setPlacement` HIVAS TENYLEGES VALTOZAST IRJON, NE UGYANAZT AZ ERTEKET.
      *
-     * MEGNEZTEM a `setPlacement` forrasat
+     * A `department_required` migracio (2026-09-24) ota egy hibajegy soha nem
+     * jon letre helyszin nelkul: a mai `newJob()` MAR NEM tudja azt a
+     * "SZANDEKOSAN helyszin nelkuli" allapotot eloallitani, amit ez a fajl
+     * eredetileg mert. MEGNEZTEM a `setPlacement` forrasat
      * (`service-jobs.service.ts:729`): nincs benne "elso beallitas kontra
      * ujra-beallitas" ag -- minden hivas ugyanazt a tranzakciot futtatja,
      * fuggetlenul a korabbi ertektol. A negy allitas (a-d) tehat nem VESZIT
@@ -229,13 +232,11 @@ describe(
      *
      * EZ A SZAKASZ AT VAN IRVA, NEM CSAK KIEGESZITVE: eredetileg itt allt,
      * hogy a helyszin nelkuli kiindulas SZANDEKOS, mert a felvitelen a mezo
-     * elhagyhato volt. A `kezdoHelyszin` valtozo jegyzete mar levezette: a
-     * `setPlacement` forrasaban nincs "elso beallitas kontra atallitas" ag,
-     * tehat a helyszin NELKULI kiindulas sosem volt a bizonyitas resze, csak
-     * a sor letrehozasanak egyik modja -- a valos, MASIK helyszinnel induló
-     * fixtura ugyanazt bizonyitja, es nem fugg attol, mikor olvad be a
-     * sema-szintu NOT NULL (`department_required` migracio, meg kulon,
-     * be nem olvadt PR-ben).
+     * elhagyhato volt. A `department_required` migracio (2026-09-24) ota ez
+     * MAR NEM IGAZ: a `ServiceJob.departmentId` NOT NULL, tehat egy jegy
+     * fizikailag nem johet letre helyszin nelkul -- ez a fajta allapot innentol
+     * nem a kiindulopontja `setPlacement`-nek, hanem SOSEM allt elo. Lasd a
+     * `kezdoHelyszin` valtozo jegyzetet, miert nem `helyszin`-t hasznal.
      */
     async function newJob() {
       sorszam += 1;

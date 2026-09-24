@@ -161,7 +161,13 @@ async function felhasznalo(utotag: string, egysegId: string) {
   return row.id;
 }
 
-async function eszkoz(utotag: string, egysegId: string | null) {
+/**
+ * AZ `egysegId` MAR NEM `string | null` -- 2026-09-22 OTA MINDEN HIVAS VALODI
+ * ERTEKKEL HIV. A helyszin nelkuli hivast a fordito ELUTASITANA: az
+ * `Asset.departmentId` a sema szigoritasa ota kotelezo, es a Prisma kliens
+ * tipusa ezt koveti.
+ */
+async function eszkoz(utotag: string, egysegId: string) {
   await prisma.asset.create({
     data: {
       assetNumber: `${PREFIX}-${utotag}`,
@@ -222,10 +228,15 @@ describe(
       await eszkoz("AKV-1", akvId);
       await eszkoz("AKV-2", akvId);
       await eszkoz("AKV-3", akvId);
-      // Es egy eszkoz, ami az UGYFELE, de EGYSEG NELKUL all. Ez a hatareset:
-      // egyik egyseg-szukites sem hozza vissza, viszont egy puszta
-      // ugyfel-szurore megjelenik.
-      await eszkoz("NINCS-EGYSEG", null);
+      /*
+        A `NINCS-EGYSEG` HELYSZIN NELKULI ESZKOZT 2026-09-22-IG ITT HOZTUK
+        LETRE, es lejjebb ket allitas bizonyitotta, hogy egyik egyseg-hatokoru
+        felhasznalonak sem latszik. A `20260924180000_department_required`
+        migracio ota egy ilyen sor MEG NEM IS JOHET LETRE -- lasd
+        `asset-department-required.integration.spec.ts`, ami mostantol az
+        ADATBAZISON meri ugyanezt a garanciat. A ket lentebbi, EGYIK MAI SZAM
+        (6) a maradek OT eszkozre valtozott.
+      */
 
       /*
         EGY DOKUMENTUM A KRO ESZKOZON -- a harom dokumentum-uthoz.
@@ -310,7 +321,9 @@ describe(
         AND: [{ customerId: ugyfelId }, { departmentId: { in: [akvId] } }],
       });
 
-      assert.equal(csakUgyfel.length, 6, "a puszta ugyfel-szuro MINDENT hoz");
+      // OT, nem hat: a `NINCS-EGYSEG` sor 2026-09-22 ota mar nem johet letre
+      // (lasd a fixtura fejenel allo jegyzetet).
+      assert.equal(csakUgyfel.length, 5, "a puszta ugyfel-szuro MINDENT hoz");
       assert.deepEqual(kroEgyseg, [`${PREFIX}-KRO-1`, `${PREFIX}-KRO-2`]);
       assert.deepEqual(akvEgyseg, [
         `${PREFIX}-AKV-1`,
@@ -418,85 +431,50 @@ describe(
      * menne at a szuron, ami semmilyen helyszinhez nem tartozik, es a szabaly
      * kivetelt kapna, amit kesobb senki nem ert.
      *
-     * === ES EPP EZERT KELL MELLE SZAMLALHATO ORZO, NEM A PARTNER FIGYELME ===
+     * === EZ AZ ALLITAS VOLT AZ ORZO -- ES A GARANCIA MASHOVA KOLTOZOTT ===
      *
-     * Ez az allitas MAGA az orzo: ha a dontes valaha megfordul, PIROSODIK.
+     * Az elozo szakaszok azt magyarazzak, MIERT fontos, hogy a helyszin
+     * nelkuli eszkoz ne szivarogjon at az egyseg-hatokoru olvasason. Az itt
+     * korabban allo allitas ezt EGY VALODI, LEKERDEZHETO sorral bizonyitotta:
+     * letrehozott egy helyszin nelkuli eszkozt, es megmerte, hogy egyik
+     * egyseg-hatokoru felhasznalonak sem jott vissza.
      *
-     * === A BEVEZETES NAPJAN MERT SZAM, ES A NEVEZO TOBBET MOND, MINT A NULLA ===
+     * 1. MIT BIZONYITOTT: hogy a `departmentId: { in: [...] }` szures nem
+     *    engedi at a `NULL` helyszinu sort -- meg akkor sem, ha az adott
+     *    ugyfelhez tartozik.
+     * 2. MELYIK MIGRACIO TETTE FOLOSLEGESSE: `20260924180000_department_required`
+     *    (Balazs dontese, message_id 1552018256280162385: "1 legyen
+     *    kotelezo"). A migracio ota egy helyszin nelkuli `Asset` sor
+     *    FIZIKAILAG nem johet letre -- ezt a sort korabban IDE, egy
+     *    `prisma.asset.create({..., departmentId: null})` hivassal hoztuk
+     *    letre, es az a hivas ma mar `NOT NULL` megsertessel utasitodna el.
+     * 3. MELYIK ALLITAS ORZI MOSTANTOL UGYANEZT: nem a lekerdezes, hanem a
+     *    tabla -- lasd `asset-department-required.integration.spec.ts`,
+     *    "egy helyszín NÉLKÜLI eszközt az adatbázis elutasít". Az a fajl a
+     *    garanciat egy szinttel MELYEBBEN meri: nem azt, hogy egy ilyen sor
+     *    rejtve marad, hanem hogy egy ilyen sor MEG SEM SZULETIK.
      *
-     * Merte: acrobot, 2026-09-22 15:2x, az ELES adatbazison -- azon, AMIRE AZ ELES
-     * API TENYLEGESEN MUTAT. A cimet az eles api kontener sajat `DATABASE_URL`
-     * valtozojabol olvasta ki (gazdagep `iwm34jaqp9xmwb72qkrqkwhy`), nem
-     * talalgatasbol, es a szamolas ELOTT kontrollt futtatott: a `departmentId`
-     * oszlop nev szerint all az Asset, ServiceJob, UserWorksheetDepartment es
-     * Worksheet tablan.
-     *
-     * A KONTROLL NEM FORMASAG VOLT. A gepen TOBB postgres fut, es az elso, amit
-     * megkerdezett, SIKERESEN csatlakozott egy `acropora` nevu, 71 tablas
-     * adatbazishoz -- amiben `Worksheet` tabla NINCS, es `department` nevu oszlop
-     * EGYETLEN tablan sem. Onnan ugyanez a kerdes ugyanezt a NULLAT adta volna,
-     * MAS OKBOL: nem azert, mert nincs ilyen sor, hanem mert nincs ilyen oszlop.
-     * Megegyezo eredmeny, kulonbozo ok -- ezert all itt, hogy MIHEZ csatlakozott.
-     *
-     * En nem tudtam lemerni: ehhez az agenshez nem tartozik `DATABASE_URL`, es az
-     * egyetlen elerheto adatbazis az eles -- amin Balazs kikotese szerint semmit
-     * nem futtatunk.
-     *
-     *   Asset       108 sor, ebbol `departmentId IS NULL`:  0
-     *   ServiceJob    6 sor, ebbol `departmentId IS NULL`:  0
-     *   Worksheet     4 sor, ebbol `departmentId IS NULL`:  0
-     *
-     * A WORKSHEET NULLAJA MAST JELENT, MINT A MASIK KETTOE, es ezt EN mertem, a
-     * semaban: ott a mezo `String` (kotelezo), az Asseten es a ServiceJobon
-     * `String?`. Vagyis a munkalapon nem is LEHET helyszin nelkuli sor; a masik
-     * ket tablan lehetne, es ma nincs.
-     *
-     * ES EGY KORABBI SZAM, HOGY NE LATSZODJON ELLENTMONDASNAK: ugyanaznap delelott
-     * 83 allt ezen a helyen. Az MASIK KERDESRE valaszolt (hany eszkoz all az
-     * UGYFEL NEVEN), nem az Asset tabla sorainak szamara -- es azota is
-     * keletkezhettek sorok.
-     *
-     * ES A NULLA MAGABAN FELREVEZETNE, EZERT ALL ITT A NEVEZO IS. Nulla NULL
-     * SZAZNYOLC eszkoz kozott jelent valamit; nulla NULL HAT hibajegy kozott
-     * szinte semmit. A hat es a negy NEM ERDEMI MINTA.
-     *
-     * VAGYIS EZ AZ ALLITAS NEM AZERT KELL, MERT A MAI ADAT GYANUS -- hanem mert a
-     * mai adat MEG NEM TUD semmit mondani. Az eszkoz-letrehozo DTO-ban a mezo
-     * ELHAGYHATO, tehat az elso helyszin nelkuli sor barmikor keletkezhet, es
-     * akkor CSENDBEN lathatatlan lesz. A szam nem megnyugtat: megmondja, hogy a
-     * szabaly meg nem harapott, es hogy mikortol lehet ezt egyaltalan merni.
-     *
-     * HA EZ A DONTES VALAHA MEGFORDUL, EZ AZ ALLITAS PIROSODIK, es akkor a
-     * valtozast ki kell mondani, nem csendben atirni.
+     * A FENTI SZAMOK (108 / 6 / 4, mindharom `departmentId IS NULL: 0`) EZERT
+     * NEM VESZTEK ERVENYUKET: azt bizonyitottak, hogy elesben MA sincs olyan
+     * sor, amit a regi allitas idezett volna -- es ez az allapot a migracio
+     * ota SZERKEZETILEG garantalt, nem csak MEGFIGYELT.
      */
-    it("a helyszin NELKULI eszkoz egyik felhasznalonak sem latszik", async () => {
-      for (const userId of [kroFelhasznaloId, akvFelhasznaloId]) {
-        const { list } = assetListWheres(
-          { kind: "customer", customerId: ugyfelId },
-          await assignedUnitIdsFor(userId),
-          {},
-          {},
-        );
-
-        assert.ok(
-          !(await latottEszkozok(list)).includes(`${PREFIX}-NINCS-EGYSEG`),
-          `a helyszin nelkuli eszkoz atjott ${userId} szamara`,
-        );
-      }
-    });
 
     /**
      * ES A BELSOS HIVO MINDENT LAT -- ismert pozitiv kontroll a SZUROre magara.
      *
-     * Enelkul mind a harom fenti allitas zold lenne egy olyan epitotol is, ami
-     * MINDENKINEK ures halmazt ad: a ket "latja" allitas bukna ugyan, de azokat
-     * konnyu a fixturara fogni. Ez a sor megmondja, hogy a szuro KEPES mindent
-     * atengedni, tehat a szukites tenyleg szukites.
+     * Enelkul mind a ket fenti allitas zold lenne egy olyan epitotol is, ami
+     * MINDENKINEK ures halmazt ad: a fenti "latja" allitasok bukna ugyan, de
+     * azokat konnyu a fixturara fogni. Ez a sor megmondja, hogy a szuro KEPES
+     * mindent atengedni, tehat a szukites tenyleg szukites.
+     *
+     * OT, nem hat: a hatodik (helyszin nelkuli) sor 2026-09-22 ota mar nem
+     * johet letre -- lasd a fajl elejen allo jegyzetet.
      */
-    it("KONTROLL: a belsos hivo mind a hat sort latja", async () => {
+    it("KONTROLL: a belsos hivo mind az öt sort latja", async () => {
       const { list } = assetListWheres({ kind: "internal" }, [], {}, {});
 
-      assert.equal((await latottEszkozok(list)).length, 6);
+      assert.equal((await latottEszkozok(list)).length, 5);
     });
 
     /**

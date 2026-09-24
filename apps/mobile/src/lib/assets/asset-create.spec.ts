@@ -215,11 +215,10 @@ describe("buildAssetCreatePayload es az alegyseg", () => {
 
   /**
    * A MAI VAKSÁG HELYE, 2026-09-22-ig: ez az állítás azt mérte, hogy üres
-   * alegységnél a mező egyszerűen KIMARAD a payloadból (`ok: true`). Balázs
-   * döntése ("1 legyen kotelezo") óta ez a kérés a szerver alkalmazás-szintű
-   * ellenőrzésén (`assetDepartmentPresenceRefusal`) elakadna -- a telefon
-   * ezért MOST elutasítja, MIELŐTT elküldené. A séma-szintű NOT NULL
-   * (a `department_required` migráció) még külön, be nem olvadt PR-ben van.
+   * alegységnél a mező egyszerűen KIMARAD a payloadból (`ok: true`). A séma
+   * NOT NULL szigorítása (Balázs döntése, "1 legyen kotelezo") óta ez a
+   * kérés a szerveren nyers adatbázis-hibával végződne -- a telefon ezért
+   * MOST elutasítja, MIELŐTT elküldené.
    */
   it("refuses an empty unit for a service partner", () => {
     const result = buildAssetCreatePayload({ ...form, unitId: "" });
