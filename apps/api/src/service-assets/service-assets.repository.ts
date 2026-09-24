@@ -1225,20 +1225,64 @@ export class ServiceAssetsRepository extends Repository {
                       isBuiltIn: true,
                       parentPartnerInternalCode:
                         parent?.partnerInternalCode ?? null,
-                      locationCode: null,
+                      rootLocationCode: null,
+                      ownLocationCode: null,
+                      ownIsRootLocation: false,
                       categoryCode: category.code,
                     });
                   } else {
-                    const department = input.departmentId
-                      ? await tx.worksheetDepartment.findUnique({
-                          where: { id: input.departmentId },
-                          select: { code: true },
-                        })
-                      : null;
+                    /**
+                     * A HELYSZÍN-FA GYÖKERÉIG VALÓ FELFELÉ SÉTA.
+                     *
+                     * Balázs jóváhagyása (2026-09-24 11:33): a gyökér eszköz
+                     * kódjának ELSŐ tagja a LEGFELSŐ helyszín kódja, nem a
+                     * saját (esetleg mélyebb szintű) helyszíné -- és a
+                     * KÖZBÜLSŐ szintek kimaradnak (FAN-A11, nem
+                     * FAN-AKV-A11). A séma mai mélysége legfeljebb négy
+                     * szint (acrobot mérése), a ciklus ennél tovább is
+                     * helyesen működik, csak nem gyorsabb egy extra
+                     * DB-körnél szintenként -- ez a generálás ritka, és a
+                     * zár amúgy is szerializálja.
+                     */
+                    let ownLocationCode: string | null = null;
+                    let rootLocationCode: string | null = null;
+                    let ownIsRootLocation = false;
+                    if (input.departmentId) {
+                      const own = await tx.worksheetDepartment.findUnique({
+                        where: { id: input.departmentId },
+                        select: { code: true, parentId: true },
+                      });
+                      if (own) {
+                        ownLocationCode = own.code;
+                        if (own.parentId === null) {
+                          rootLocationCode = own.code;
+                          ownIsRootLocation = true;
+                        } else {
+                          let currentParentId: string | null = own.parentId;
+                          while (currentParentId) {
+                            const node: {
+                              code: string;
+                              parentId: string | null;
+                            } | null = await tx.worksheetDepartment.findUnique({
+                              where: { id: currentParentId },
+                              select: { code: true, parentId: true },
+                            });
+                            if (!node) break;
+                            if (node.parentId === null) {
+                              rootLocationCode = node.code;
+                              break;
+                            }
+                            currentParentId = node.parentId;
+                          }
+                        }
+                      }
+                    }
                     prefix = partnerInternalCodePrefix({
                       isBuiltIn: false,
                       parentPartnerInternalCode: null,
-                      locationCode: department?.code ?? null,
+                      rootLocationCode,
+                      ownLocationCode,
+                      ownIsRootLocation,
                       categoryCode: category.code,
                     });
                   }

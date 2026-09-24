@@ -4,17 +4,28 @@
  * Balázs kérése (2026-09-24, Szerviz és eszköznyilvántartás szál): "amiket mi
  * viszünk fel eszközöket azoknál nem generálódik le automatikusan a partner
  * belső kódja". A séma és a minta acrobot mérése
- * (`exchange/partner-kod-auto-meres-2026-09-24.md`, éles adat, 2026-09-24):
+ * (`exchange/partner-kod-auto-meres-2026-09-24.md`, éles adat, 2026-09-24),
+ * a gyökér-alak PEDIG Balázs 2026-09-24 11:33-i JÓVÁHAGYÁSÁVAL, szó szerint:
+ * "ahogy a BIO alatti eszközöknél az első tag legyen BIO a FAN alattinál a
+ * FAN stb stb pl FAN-A11-HSZ-01":
  *
- *   gyökér eszköz:    <helyszín kódja>-<kategória kódja>-<NN>   (pl. A11-HSZ-01)
+ *   gyökér eszköz, a helyszín-fa MÉLYÉN:
+ *     <legfelső helyszín kódja>-<saját helyszín kódja>-<kategória kódja>-<NN>
+ *     (pl. FAN-A11-HSZ-01 -- a FAN/AKV/A11 fában, a KÖZBÜLSŐ AKV szint
+ *     KIMARAD: Balázs saját példája is ezt az alakot adta, nem
+ *     FAN-AKV-A11-HSZ-01-et)
+ *   gyökér eszköz, KÖZVETLENÜL a legfelső szinten:
+ *     <legfelső helyszín kódja>-<kategória kódja>-<NN>   (pl. CAP-HSZ-01 --
+ *     a legfelső kód nem ismétlődik kétszer)
  *   beépített eszköz: <szülő partnerInternalCode>-<kategória kódja>-<NN>
- *                     (pl. ETB-HSZ-05-VAL-05)
+ *                      (pl. FAN-A11-HSZ-01-VAL-05)
  *
  * Ez a fájl TISZTA FÜGGVÉNYEKET tart: az előtag összerakása és a legkisebb
  * szabad sorszám keresése adatbázis nélkül is mérhető. A DB-lekérdezés (a
- * kategória/helyszín/szülő kódjának lekérése, a meglévő kódok listája, a
- * versenyhelyzet elleni zár) a hívó oldalán, a tranzakción belül történik --
- * lásd `service-assets.repository.ts` `create()`-jét.
+ * kategória/helyszín/szülő kódjának lekérése, a helyszín-fa GYÖKERÉIG való
+ * felfelé séta, a meglévő kódok listája, a versenyhelyzet elleni zár) a hívó
+ * oldalán, a tranzakción belül történik -- lásd
+ * `service-assets.repository.ts` `create()`-jét.
  */
 
 /** A sorszám hossza, névvel, hogy ha Balázs mást mond, EGY helyen változzon. */
@@ -48,34 +59,47 @@ export function shouldGeneratePartnerInternalCode(input: {
 
 /**
  * AZ ELŐTAG: a szülő TELJES kódja, ha van (beépített eszköz), különben a
- * helyszín kódja (gyökér eszköz) -- mindkét esetben a kategória kódjával
+ * helyszín-fa gyökerének kódja PLUSZ a saját helyszín kódja, ha a kettő
+ * különbözik (gyökér eszköz) -- mindkét esetben a kategória kódjával
  * összefűzve.
  *
  * AZ `isBuiltIn` A DÖNTŐ, NEM A `parentPartnerInternalCode === null`
  * ÖNMAGÁBAN: ez a mező különbözteti meg a "nincs szülő" (gyökér, a
- * `locationCode` számít) esetet a "van szülő, de annak nincs kódja" (beépített,
- * NEM generálunk) esettől -- a két eset `parentPartnerInternalCode`-ra nézve
- * ugyanúgy `null`, de más a helyes viselkedés.
+ * helyszín-kódok számítanak) esetet a "van szülő, de annak nincs kódja"
+ * (beépített, NEM generálunk) esettől -- a két eset `parentPartnerInternalCode`-ra
+ * nézve ugyanúgy `null`, de más a helyes viselkedés.
+ *
+ * AZ `ownIsRootLocation` A DÖNTŐ A GYÖKÉR-ÁGON, NEM A KÉT KÓD ÉRTÉKÉNEK
+ * EGYEZÉSE: a helyszín-kód csak TESTVÉREK között egyedi (lásd a séma
+ * `WorksheetDepartment.@@unique([customerId, parentId, code])`-ját), tehát
+ * egy MÁSIK ágon lévő helyszín kódja VÉLETLENÜL megegyezhetne a fa
+ * gyökerének kódjával -- ha a döntés az érték-egyezésen múlna, ez hamis
+ * dedupot okozna. A hívó ezért egy KIFEJEZETT logikai jelzőt ad át, ami a
+ * `parentId IS NULL` tényből jön, nem a kódok összehasonlításából.
  *
  * `null`, HA NEM ÁLLÍTHATÓ ELŐ: beépített eszköznél, ha a szülőnek NINCS
  * kódja, NEM generálunk -- Balázs kifejezett kérése ("Ha a szülőnek nincs
  * kódja, NE generálj"), mert egy kód nélküli szülőre épülő gyermek-kód a
- * fát olvashatatlanná tenné. A `locationCode` ilyenkor NEM pótolja a szülő
+ * fát olvashatatlanná tenné. A helyszín kódja ilyenkor NEM pótolja a szülő
  * hiányzó kódját.
  */
 export function partnerInternalCodePrefix(input: {
   isBuiltIn: boolean;
   parentPartnerInternalCode: string | null;
-  locationCode: string | null;
+  rootLocationCode: string | null;
+  ownLocationCode: string | null;
+  ownIsRootLocation: boolean;
   categoryCode: string;
 }): string | null {
   if (input.isBuiltIn) {
     if (input.parentPartnerInternalCode === null) return null;
     return `${input.parentPartnerInternalCode}-${input.categoryCode}`;
   }
-  if (input.locationCode !== null)
-    return `${input.locationCode}-${input.categoryCode}`;
-  return null;
+  if (input.rootLocationCode === null) return null;
+  if (input.ownIsRootLocation)
+    return `${input.rootLocationCode}-${input.categoryCode}`;
+  if (input.ownLocationCode === null) return null;
+  return `${input.rootLocationCode}-${input.ownLocationCode}-${input.categoryCode}`;
 }
 
 /**

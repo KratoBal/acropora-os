@@ -7,15 +7,62 @@ import {
 } from "./partner-internal-code.js";
 
 describe("partnerInternalCodePrefix", () => {
-  it("gyökér eszköznél a helyszín kódját és a kategória kódját fűzi össze", () => {
+  /**
+   * BALÁZS JÓVÁHAGYÁSA, 2026-09-24 11:33, SZÓ SZERINT: "ahogy a BIO alatti
+   * eszközöknél az első tag legyen BIO a FAN alattinál a FAN stb stb pl
+   * FAN-A11-HSZ-01" -- a FAN/AKV/A11 fában a KÖZBÜLSŐ (AKV) szint KIMARAD.
+   */
+  it("gyökér eszköznél a fa GYÖKERÉNEK és a SAJÁT helyszínnek a kódját fűzi össze -- a közbülső szint kimarad", () => {
     assert.equal(
       partnerInternalCodePrefix({
         isBuiltIn: false,
         parentPartnerInternalCode: null,
-        locationCode: "A11",
+        rootLocationCode: "FAN",
+        ownLocationCode: "A11",
+        ownIsRootLocation: false,
         categoryCode: "HSZ",
       }),
-      "A11-HSZ",
+      "FAN-A11-HSZ",
+    );
+  });
+
+  /**
+   * HA AZ ESZKÖZ KÖZVETLENÜL A LEGFELSŐ SZINTEN ÁLL, a gyökér kódja NEM
+   * ismétlődik kétszer (nem "CAP-CAP-HSZ").
+   */
+  it("gyökér eszköznél, ha az eszköz KÖZVETLENÜL a legfelső szinten áll, a gyökér kódja nem ismétlődik", () => {
+    assert.equal(
+      partnerInternalCodePrefix({
+        isBuiltIn: false,
+        parentPartnerInternalCode: null,
+        rootLocationCode: "CAP",
+        ownLocationCode: "CAP",
+        ownIsRootLocation: true,
+        categoryCode: "HSZ",
+      }),
+      "CAP-HSZ",
+    );
+  });
+
+  /**
+   * A DÖNTÉS A `ownIsRootLocation` JELZŐN MÚLIK, NEM A KÉT KÓD ÉRTÉKÉNEK
+   * EGYEZÉSÉN. A helyszín kódja csak testvérek között egyedi, tehát egy
+   * MÁSIK ágon lévő helyszín kódja véletlenül megegyezhetne a gyökér
+   * kódjával -- ha a fenti teszt kódegyezésen dőlne el, ez az eset hamisan
+   * ugyanoda futna. Itt a kódok SZÁNDÉKOSAN egyeznek, DE `ownIsRootLocation`
+   * hamis, tehát a teljes háromtagú alaknak kell kijönnie.
+   */
+  it("TESTVÉR-KONTROLL: kódegyezés önmagában NEM dedupol, csak a ownIsRootLocation jelző", () => {
+    assert.equal(
+      partnerInternalCodePrefix({
+        isBuiltIn: false,
+        parentPartnerInternalCode: null,
+        rootLocationCode: "FAN",
+        ownLocationCode: "FAN",
+        ownIsRootLocation: false,
+        categoryCode: "HSZ",
+      }),
+      "FAN-FAN-HSZ",
     );
   });
 
@@ -23,30 +70,48 @@ describe("partnerInternalCodePrefix", () => {
     assert.equal(
       partnerInternalCodePrefix({
         isBuiltIn: true,
-        parentPartnerInternalCode: "ETB-HSZ-05",
-        locationCode: "ETB",
+        parentPartnerInternalCode: "FAN-A11-HSZ-05",
+        rootLocationCode: "FAN",
+        ownLocationCode: "A11",
+        ownIsRootLocation: false,
         categoryCode: "VAL",
       }),
-      "ETB-HSZ-05-VAL",
+      "FAN-A11-HSZ-05-VAL",
     );
   });
 
   /**
    * BALÁZS KIFEJEZETT KÉRÉSE: HA A SZÜLŐNEK NINCS KÓDJA, NE GENERÁLJUNK.
-   * A `locationCode` jelenléte itt NEM mentő körülmény -- a hívó ilyenkor
-   * `null`-t kap, és a repository nem ír kódot. Ez a teszt a JAVÍTOTT alakot
-   * méri: `isBuiltIn: true` és `parentPartnerInternalCode: null` EGYÜTT
-   * jelenti "van szülő, de annak nincs kódja" -- ezt kell megkülönböztetni a
-   * gyökér-esettől (fenti első teszt), ahol UGYANEZ a `parentPartnerInternalCode:
-   * null` a helyes eset, mert nincs is szülő.
+   * A helyszín-kódok jelenléte itt NEM mentő körülmény -- a hívó ilyenkor
+   * `null`-t kap, és a repository nem ír kódot. `isBuiltIn: true` és
+   * `parentPartnerInternalCode: null` EGYÜTT jelenti "van szülő, de annak
+   * nincs kódja" -- ezt kell megkülönböztetni a gyökér-esettől (fenti
+   * tesztek), ahol a `parentPartnerInternalCode` szintén `null`, de a helyes
+   * eset, mert nincs is szülő.
    */
   it("beépített eszköznél, szülő-kód nélkül, null-t ad -- a helyszín kódja nem pótolja", () => {
     assert.equal(
       partnerInternalCodePrefix({
         isBuiltIn: true,
         parentPartnerInternalCode: null,
-        locationCode: "ETB",
+        rootLocationCode: "FAN",
+        ownLocationCode: "A11",
+        ownIsRootLocation: false,
         categoryCode: "VAL",
+      }),
+      null,
+    );
+  });
+
+  it("gyökér eszköznél, ha a gyökér helyszínnek nincs kódja, null-t ad", () => {
+    assert.equal(
+      partnerInternalCodePrefix({
+        isBuiltIn: false,
+        parentPartnerInternalCode: null,
+        rootLocationCode: null,
+        ownLocationCode: "A11",
+        ownIsRootLocation: false,
+        categoryCode: "HSZ",
       }),
       null,
     );

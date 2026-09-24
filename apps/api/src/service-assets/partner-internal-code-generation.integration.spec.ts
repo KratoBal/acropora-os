@@ -20,8 +20,12 @@ import { ServiceAssetsService } from "./service-assets.service.js";
  * Balázs kérése (2026-09-24, Szerviz és eszköznyilvántartás szál): "amiket mi
  * viszünk fel eszközöket azoknál nem generálódik le automatikusan a partner
  * belső kódja". acrobot élő mérése
- * (`exchange/partner-kod-auto-meres-2026-09-24.md`, 2026-09-24) adta az
- * alakot: gyökér eszköz `<helyszín kódja>-<kategória kódja>-<NN>`, beépített
+ * (`exchange/partner-kod-auto-meres-2026-09-24.md`, 2026-09-24) adta a
+ * kategória/helyszín/sorszám tengelyt, a gyökér-alakot pedig Balázs
+ * 2026-09-24 11:33-i jóváhagyása pontosította: gyökér eszköz
+ * `<legfelső helyszín kódja>-<saját helyszín kódja>-<kategória kódja>-<NN>`
+ * (a közbülső szintek kimaradnak), vagy ha az eszköz KÖZVETLENÜL a legfelső
+ * szinten áll, `<legfelső helyszín kódja>-<kategória kódja>-<NN>`; beépített
  * eszköz `<szülő partnerInternalCode>-<kategória kódja>-<NN>`.
  *
  * MIÉRT NEM ELÉG A `partner-internal-code.spec.ts` (egységteszt). A tiszta
@@ -71,7 +75,11 @@ describe(
     );
 
     let supplierId = "";
+    /** A LEVÉL, a PCR (gyökér) / PCI (közbülső) / PCL (levél) fában. */
     let departmentId = "";
+    /** ÖNÁLLÓ, GYÖKÉR-SZINTŰ helyszín, gyermek nélkül -- a "közvetlenül a
+     * legfelső szinten áll" esethez. */
+    let rootOnlyDepartmentId = "";
     let categoryId = "";
     let secondCategoryId = "";
     let codelessCategoryId = "";
@@ -112,15 +120,49 @@ describe(
         },
         select: { id: true },
       });
-      const department = await prisma.worksheetDepartment.create({
+      /**
+       * A HÁROMSZINTES FA: PCR (gyökér) / PCI (közbülső) / PCL (levél) --
+       * Balázs 2026-09-24 11:33-i jóváhagyása szerint a gyökér kódja
+       * (PCR) plusz a SAJÁT (PCL) kódja adja az előtagot, a közbülső (PCI)
+       * szint KIMARAD.
+       */
+      const root = await prisma.worksheetDepartment.create({
         data: {
           customerId: mirrorCustomer.id,
-          code: "PCD01",
-          name: `${PREFIX} helyszín`,
+          code: "PCR",
+          name: `${PREFIX} gyökér helyszín`,
         },
         select: { id: true },
       });
-      departmentId = department.id;
+      const intermediate = await prisma.worksheetDepartment.create({
+        data: {
+          customerId: mirrorCustomer.id,
+          parentId: root.id,
+          code: "PCI",
+          name: `${PREFIX} közbülső helyszín`,
+        },
+        select: { id: true },
+      });
+      const leaf = await prisma.worksheetDepartment.create({
+        data: {
+          customerId: mirrorCustomer.id,
+          parentId: intermediate.id,
+          code: "PCL",
+          name: `${PREFIX} levél helyszín`,
+        },
+        select: { id: true },
+      });
+      departmentId = leaf.id;
+
+      const rootOnly = await prisma.worksheetDepartment.create({
+        data: {
+          customerId: mirrorCustomer.id,
+          code: "PCS",
+          name: `${PREFIX} önálló gyökér helyszín`,
+        },
+        select: { id: true },
+      });
+      rootOnlyDepartmentId = rootOnly.id;
 
       const category = await prisma.assetCategory.create({
         data: { name: `${PREFIX} kategória`, code: `${PREFIX}CAT` },
@@ -183,7 +225,7 @@ describe(
       await prisma.$disconnect();
     });
 
-    it("gyökér eszköznél a helyszín és a kategória kódjából generál, -01 sorszámmal", async () => {
+    it("gyökér eszköznél, mély fán, a LEGFELSŐ és a SAJÁT helyszín kódjából generál -- a közbülső szint kimarad", async () => {
       const created = (await assets.create(
         {
           ownerType: "SUPPLIER",
@@ -196,7 +238,7 @@ describe(
         internalUser,
       )) as { id: string; partnerInternalCode: string | null };
 
-      assert.equal(created.partnerInternalCode, `PCD01-${PREFIX}CAT-01`);
+      assert.equal(created.partnerInternalCode, `PCR-PCL-${PREFIX}CAT-01`);
     });
 
     it("egy MEGLÉVŐ, azonos előtagú kód mellett a KÖVETKEZŐ sorszámot adja", async () => {
@@ -214,7 +256,34 @@ describe(
         internalUser,
       )) as { id: string; partnerInternalCode: string | null };
 
-      assert.equal(created.partnerInternalCode, `PCD01-${PREFIX}CAT-02`);
+      assert.equal(created.partnerInternalCode, `PCR-PCL-${PREFIX}CAT-02`);
+    });
+
+    it("gyökér eszköznél, ha KÖZVETLENÜL a legfelső szinten áll, a gyökér kódja nem ismétlődik", async () => {
+      const category = await prisma.assetCategory.create({
+        data: {
+          name: `${PREFIX} önálló gyökér kategória`,
+          code: `${PREFIX}ROOT`,
+        },
+        select: { id: true },
+      });
+
+      const created = (await assets.create(
+        {
+          ownerType: "SUPPLIER",
+          ownerId: supplierId,
+          departmentId: rootOnlyDepartmentId,
+          kind: "EQUIPMENT",
+          name: `${PREFIX} önálló gyökéren álló eszköz`,
+          categoryId: category.id,
+        } as never,
+        internalUser,
+      )) as { id: string; partnerInternalCode: string | null };
+
+      // NEM "PCS-PCS-..." -- a gyökér kódja csak egyszer szerepel.
+      assert.equal(created.partnerInternalCode, `PCS-${PREFIX}ROOT-01`);
+
+      await prisma.assetCategory.delete({ where: { id: category.id } });
     });
 
     it("beépített eszköznél a SZÜLŐ TELJES kódjából generál, nem a helyszínből", async () => {
@@ -318,7 +387,7 @@ describe(
 
     it("egy LYUKAT a helyén tölt ki, nem a legmagasabb szám mögé ragaszt", async () => {
       // Kézzel beírt kódok, lyukkal: -01 és -03 megvan, a -02 szabad.
-      const manualPrefix = `PCD01-${PREFIX}LYUK`;
+      const manualPrefix = `PCR-PCL-${PREFIX}LYUK`;
       const category = await prisma.assetCategory.create({
         data: { name: `${PREFIX} lyuk kategória`, code: `${PREFIX}LYUK` },
         select: { id: true },
@@ -463,8 +532,8 @@ describe(
         masodik.partnerInternalCode,
       ].sort();
       assert.deepEqual(kettoAlakja, [
-        `PCD01-${PREFIX}VERS-01`,
-        `PCD01-${PREFIX}VERS-02`,
+        `PCR-PCL-${PREFIX}VERS-01`,
+        `PCR-PCL-${PREFIX}VERS-02`,
       ]);
 
       await prisma.assetCategory.delete({ where: { id: category.id } });
