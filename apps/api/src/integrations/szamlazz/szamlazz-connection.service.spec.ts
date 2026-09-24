@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { SzamlazzConnectionService } from "./szamlazz-connection.service.js";
-import { SzamlazzCredentialCryptoService } from "./szamlazz-credential-crypto.service.js";
 import type { SzamlazzConnectionRepository } from "./szamlazz-connection.repository.js";
+import type { SzamlazzCredentialCryptoService } from "./szamlazz-credential-crypto.service.js";
 import {
   SzamlazzConnectionError,
   type SzamlazzConnectionSettingRecord,
@@ -58,13 +58,22 @@ function service(options: {
     validateRecord: options.validate ?? (() => undefined),
   } as unknown as SzamlazzCredentialProvider;
 
+  // A titkosítás HELYESSÉGÉT a szamlazz-credential-crypto.service.spec.ts
+  // méri, saját, env-vezérelt mesterkulccsal. Itt csak a SERVICE saját
+  // logikáját (visszatartás, revízió-zár, nézet-összeállítás) mérjük,
+  // ezért a kriptó egy egyszerű, valódi hálózat/kulcs nélküli hamis.
+  const crypto = {
+    encrypt: (plaintext: string) => ({
+      encryptedAgentKey: Buffer.from(plaintext),
+      encryptionIv: Buffer.alloc(12),
+      authenticationTag: Buffer.alloc(16),
+      keyVersion: "1",
+    }),
+  } as unknown as SzamlazzCredentialCryptoService;
+
   return {
     written,
-    service: new SzamlazzConnectionService(
-      repository,
-      new SzamlazzCredentialCryptoService(),
-      credentials,
-    ),
+    service: new SzamlazzConnectionService(repository, crypto, credentials),
   };
 }
 
