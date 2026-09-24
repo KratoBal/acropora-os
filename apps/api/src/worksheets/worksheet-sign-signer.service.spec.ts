@@ -3,6 +3,7 @@ import { before, describe, it } from "node:test";
 
 import { BadRequestException } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
+import type { AuthenticatedUser } from "@acropora/types";
 
 import { hashPassword } from "../users/password.util.js";
 
@@ -18,6 +19,14 @@ import { WorksheetsService } from "./worksheets.service.js";
  */
 
 const CREATED_AT = new Date("2026-09-04T08:00:00.000Z");
+const INTERNAL_ACTOR: AuthenticatedUser = {
+  id: "szerelo-1",
+  email: "szerelo@acropora.hu",
+  displayName: "Szerelő Sándor",
+  role: "SERVICE",
+  customerId: null,
+  supplierId: null,
+};
 
 /**
  * A LAP SORA, AMIT A SZOLGALTATAS A SIKERES ALAIRAS UTAN VISSZAAD.
@@ -165,7 +174,7 @@ describe("az aláíró feloldása", () => {
         signatureCode: KOD,
         note: null,
       } as never,
-      "szerelo-1",
+      INTERNAL_ACTOR,
     );
     assert.equal(kapott[0]?.signerName, "Vevő Vera");
     assert.equal(kapott[0]?.signerUserId, "kontakt-2");
@@ -190,7 +199,7 @@ describe("az aláíró feloldása", () => {
             signatureCode: KOD,
             note: null,
           } as never,
-          "szerelo-1",
+          INTERNAL_ACTOR,
         ),
       (error: unknown) =>
         error instanceof BadRequestException &&
@@ -219,7 +228,7 @@ describe("az aláíró feloldása", () => {
         signerName: "  Kovács Kázmér  ",
         note: null,
       } as never,
-      "szerelo-1",
+      INTERNAL_ACTOR,
     );
     assert.equal(kapott[0]?.signerName, "Kovács Kázmér");
     assert.equal(kapott[0]?.signerUserId, null);
@@ -239,7 +248,7 @@ describe("az aláíró feloldása", () => {
         service().sign(
           "worksheet-1",
           { decision: "ACCEPTED", signerName: " ", note: null } as never,
-          "szerelo-1",
+          INTERNAL_ACTOR,
         ),
       (error: unknown) =>
         error instanceof BadRequestException &&
@@ -441,13 +450,21 @@ describe("a külsős partner aláírása", () => {
         signatureCode: KOD,
         note: null,
       } as never,
-      "szerelo-1",
+      INTERNAL_ACTOR,
     );
     assert.equal(kapott[0]?.signerUserId, "kontakt-2");
   });
 });
 
 describe("az aláírók listája", () => {
+  it("a signerCandidates hatókör nélkül nem fordul", () => {
+    if (false) {
+      // @ts-expect-error The scope is an explicit security boundary.
+      void service().signerCandidates("worksheet-1");
+    }
+    assert.ok(true);
+  });
+
   it("ÜRES listánál MEGMONDJA, melyik ok áll fenn", async () => {
     /*
       Ket kulonbozo ok van, es a teendojuk MAS: nincs hozzakotott munkatars,
@@ -458,17 +475,19 @@ describe("az aláírók listája", () => {
     */
     const nincsMunkatars = await service({
       customerContacts: async () => [],
-    }).signerCandidates("worksheet-1");
+    }).signerCandidates("worksheet-1", { kind: "internal" });
     const nincsTorzsadat = await service({
       customerContacts: async () => [],
       isSelectablePartner: async () => false,
-    }).signerCandidates("worksheet-1");
+    }).signerCandidates("worksheet-1", { kind: "internal" });
     assert.notEqual(nincsMunkatars.emptyReason, null);
     assert.notEqual(nincsMunkatars.emptyReason, nincsTorzsadat.emptyReason);
   });
 
   it("NEM üres listánál nincs mondat", async () => {
-    const out = await service().signerCandidates("worksheet-1");
+    const out = await service().signerCandidates("worksheet-1", {
+      kind: "internal",
+    });
     assert.equal(out.items.length, 2);
     assert.equal(out.emptyReason, null);
   });
@@ -557,7 +576,7 @@ describe("az aláírókód ellenőrzése", () => {
             signerUserId: "kontakt-1",
             note: null,
           } as never,
-          "szerelo-1",
+          INTERNAL_ACTOR,
         ),
       (error: unknown) =>
         error instanceof BadRequestException &&
@@ -576,7 +595,7 @@ describe("az aláírókód ellenőrzése", () => {
             signatureCode: "12",
             note: null,
           } as never,
-          "szerelo-1",
+          INTERNAL_ACTOR,
         ),
       BadRequestException,
     );
@@ -599,7 +618,7 @@ describe("az aláírókód ellenőrzése", () => {
             signatureCode: "9999",
             note: null,
           } as never,
-          "szerelo-1",
+          INTERNAL_ACTOR,
         ),
       (error: unknown) =>
         error instanceof BadRequestException &&
@@ -633,7 +652,7 @@ describe("az aláírókód ellenőrzése", () => {
             signatureCode: "0000",
             note: null,
           } as never,
-          "szerelo-1",
+          INTERNAL_ACTOR,
         ),
       (error: unknown) =>
         error instanceof BadRequestException &&
@@ -664,7 +683,7 @@ describe("az aláírókód ellenőrzése", () => {
         signerName: "Kovács Kázmér",
         note: null,
       } as never,
-      "szerelo-1",
+      INTERNAL_ACTOR,
     );
     assert.equal(kapott[0]?.signerSource, "TYPED");
   });
@@ -694,7 +713,7 @@ describe("a SAJÁT kollégánk aláírása (`signSelf`)", () => {
     }).sign(
       "worksheet-1",
       { decision: "ACCEPTED", signSelf: true, note: null } as never,
-      "szerelo-1",
+      INTERNAL_ACTOR,
     );
 
     assert.equal(kapott[0]?.signerUserId, "szerelo-1");
@@ -719,7 +738,7 @@ describe("a SAJÁT kollégánk aláírása (`signSelf`)", () => {
     }).sign(
       "worksheet-1",
       { decision: "ACCEPTED", signSelf: true, note: null } as never,
-      "szerelo-1",
+      INTERNAL_ACTOR,
     );
   });
 
@@ -743,7 +762,7 @@ describe("a SAJÁT kollégánk aláírása (`signSelf`)", () => {
               note: null,
               ...tobblet,
             } as never,
-            "szerelo-1",
+            INTERNAL_ACTOR,
           ),
         BadRequestException,
         `a többlet mező átment: ${JSON.stringify(tobblet)}`,
@@ -761,7 +780,7 @@ describe("a SAJÁT kollégánk aláírása (`signSelf`)", () => {
         service({ userLegalName: async () => null }).sign(
           "worksheet-1",
           { decision: "ACCEPTED", signSelf: true, note: null } as never,
-          "szerelo-1",
+          INTERNAL_ACTOR,
         ),
       BadRequestException,
     );

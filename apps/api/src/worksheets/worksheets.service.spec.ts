@@ -302,7 +302,7 @@ describe("WorksheetsService", () => {
       service.sign(
         "worksheet-1",
         { decision: "ACCEPTED", signerName: "Kovács Béla" },
-        "user-1",
+        BELSOS_KERO,
       ),
       ConflictException,
     );
@@ -478,7 +478,7 @@ describe("WorksheetsService", () => {
       service.sign(
         "worksheet-1",
         { decision: "REJECTED", signerName: "Kovács Béla" },
-        "user-1",
+        BELSOS_KERO,
       ),
       BadRequestException,
     );
@@ -492,7 +492,7 @@ describe("WorksheetsService", () => {
       service.sign(
         "worksheet-1",
         { decision: "REJECTED", signerName: "Kovács Béla", note: "   " },
-        "user-1",
+        BELSOS_KERO,
       ),
       BadRequestException,
     );
@@ -557,7 +557,7 @@ describe("WorksheetsService", () => {
       service.sign(
         "worksheet-1",
         { decision: "ACCEPTED", signerName: "Kovács Béla" },
-        "user-1",
+        BELSOS_KERO,
       ),
       (hiba: unknown) => {
         assert.ok(hiba instanceof BadRequestException);
