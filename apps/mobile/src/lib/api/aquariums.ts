@@ -1,46 +1,32 @@
 import { apiRequest } from "./client";
 
 /**
- * AKVÁRIUMOK, TELEFONON -- 1. KÖR (Balázs kérése, 2026-09-24, brief:
+ * AKVÁRIUMOK, TELEFONON -- 1. KÖR (brief:
  * exchange/akvariumok-1-kor-brief-2026-09-24.md).
  *
- * EZ A FÁJL EGYETLEN ADAPTER, SZÁNDÉKOSAN (acrobot kérése, 2026-09-24 13:30):
- * murena párhuzamosan építi a `packages/database` + `apps/api` + `apps/web`
- * részt, és amíg az ő típusai fel nem kerülnek, ez a fájl a brief mezőneveivel
- * dolgozik. A képernyők ELLEN a fenti modulok exportjait hívják -- ha a
- * végpont vagy egy mezőnév változik, EZ AZ EGY FÁJL módosul, a képernyők nem.
+ * A TÍPUSOK ÉS VÉGPONTOK MURENA #1051-ES ÁGÁRÓL (`munka/akvariumok-elso-kor`,
+ * `packages/types/src/aquarium-management.ts` és
+ * `apps/api/src/aquariums/aquariums.controller.ts`), 2026-09-24 13:35-től
+ * IGAZODVA -- ez már NEM találgatás. A TÍPUSOK SAJÁT MÁSOLATOK, NEM A
+ * `@acropora/types` CSOMAGBÓL: az Expo app szándékosan nem húzza be a pnpm
+ * munkatér csomagjait (lásd `partners.ts`, docs/MOBILE-DEVELOPMENT.md).
  *
- * A TÍPUSOK SAJÁT MÁSOLATOK, NEM A `@acropora/types` CSOMAGBÓL -- ugyanaz az
- * elv, mint a `partners.ts`-nél: az Expo app szándékosan nem húzza be a pnpm
- * munkatér csomagjait (docs/MOBILE-DEVELOPMENT.md).
- *
- * MI GROUNDOLT ÉS MI TALÁLGATÁS, KÜLÖN MEGJELÖLVE:
- * - `AquariumOwnershipType`, `WaterBodyType`, `AquariumEquipmentKind` és az
- *   eszköz-mezők (kind/manufacturer/model/quantity/channelCount/notes): SZÓ
- *   SZERINT a brief acrobot-féle döntéseiből (1., 4., 5. pont), nem találgatás.
- * - `NewCustomerInput` mezői: a MEGLÉVŐ `CreateCustomerDto`/
- *   `CreateCustomerAddressDto` (apps/api/src/customers/dto/customer.dto.ts)
- *   alakja, mert az akvárium ügyfele ugyanabba a `Customer` táblába kerül
- *   (brief 2. döntés) -- ez is grounded, nem találgatás.
- * - A VÉGPONT-UTAK és a `volumeLitersSource`/`waterType`/`startedAt` mezőnév:
- *   TALÁLGATÁS, murena tényleges API-jához igazítandó.
- * - A meglévő ügyfél KERESÉSE nem a `/customers` végpontra megy: a `SERVICE`
- *   szerepkör NEM viseli a `customers.view`/`customers.manage` jogot (mérve
- *   `packages/types/src/auth.ts` `ROLE_PERMISSIONS.SERVICE`), tehát a
- *   keresésnek egy AKVÁRIUM-SAJÁT, `aquariums.view` alatti végponton kell
- *   futnia -- ugyanaz a minta, mint az `assets.ts` `/assets/owners`
- *   (`listAssetOwners`) végpontja. Itt `${BASE}/customers` alakban áll,
- *   találgatásként jelölve.
+ * EGY VALÓDI HIÁNY, AMIT A VALÓDI API FELTÁRT ÉS AMIT EZ A FÁJL NEM OLD MEG:
+ * nincs olyan végpont, amivel a `SERVICE` szerepkör (a `customers.view`/
+ * `customers.manage` jog nélkül, mérve `packages/types/src/auth.ts`
+ * `ROLE_PERMISSIONS.SERVICE`) meglévő ügyfelet kereshetne -- a web a sima
+ * `/customers`-t hívja, amit a telefon szerepköre nem ér el, és a
+ * `POST /aquariums` maga csak `aquariums.manage` alatt fut, `newCustomer`
+ * mezővel LÉTREHOZ ügyfelet (ezt a szervizes teheti), de nem KERES. Ezért a
+ * mobil felvitel csak ÚJ ügyfél felvitelét kínálja -- ez a brief mobil-ágának
+ * (13:01, "ugyfel helyben felvetele") szó szerinti hatóköre is, a keresés a
+ * "meglévő ügyfél kereshető" döntés (2. pont) csak a webre valósult meg eddig.
  */
 const BASE = "/aquariums";
 
 export type AquariumOwnershipType = "OWN" | "CUSTOMER";
 export type WaterBodyType = "AKVARIUM" | "TO";
-/** TALÁLGATÁS: a brief 3. döntése csak a viselkedést írja le ("a mentett
- * rekord jelölje, hogy kézi vagy számolt"), mezőnevet nem ad. */
-export type VolumeLitersSource = "MANUAL" | "CALCULATED";
-/** TALÁLGATÁS, a brief 6. pontja ("víztípus: tengeri / édesvízi") alapján. */
-export type AquariumWaterType = "SALTWATER" | "FRESHWATER";
+export type WaterType = "EDESVIZI" | "TENGERI";
 
 export type AquariumEquipmentKind =
   | "VILAGITAS"
@@ -54,7 +40,8 @@ export type AquariumEquipmentKind =
   | "HUTES"
   | "EGYEB";
 
-export interface AquariumEquipmentInput {
+export interface AquariumEquipment {
+  id: string;
   kind: AquariumEquipmentKind;
   manufacturer?: string;
   model?: string;
@@ -64,101 +51,109 @@ export interface AquariumEquipmentInput {
   notes?: string;
 }
 
-export interface AquariumEquipmentRow extends AquariumEquipmentInput {
-  id: string;
+export interface CreateAquariumEquipmentInput {
+  kind: AquariumEquipmentKind;
+  manufacturer?: string;
+  model?: string;
+  /** Elhagyható, a szerver 1-re esik vissza. */
+  quantity?: number;
+  channelCount?: number;
+  notes?: string;
+}
+
+export type CustomerType = "PERSON" | "COMPANY";
+export type CustomerAddressType = "BILLING" | "SHIPPING" | "OTHER";
+
+export interface NewCustomerAddressInput {
+  type: CustomerAddressType;
+  name?: string;
+  country?: string;
+  postalCode: string;
+  city: string;
+  line1: string;
+  line2?: string;
+  isDefault?: boolean;
 }
 
 /**
- * ÚJ ÜGYFÉL, HELYBEN FELVÉVE -- a `CreateCustomerDto`/
- * `CreateCustomerAddressDto` valódi alakja (apps/api/src/customers/dto),
- * a mobilra szánt legszűkebb mezőkészletre szűkítve (brief: „név, cím,
- * telefonszám, e-mail").
+ * ÚJ ÜGYFÉL, HELYBEN FELVÉVE -- a MEGLÉVŐ `CreateCustomerInput`
+ * (`packages/types/src/customer-management.ts`) alakja, a mobilra szánt
+ * legszűkebb mezőkészletre szűkítve (brief: „név, cím, telefonszám, e-mail").
  */
 export interface NewCustomerInput {
+  type: CustomerType;
   displayName: string;
   phone?: string;
   email?: string;
-  address?: {
-    postalCode: string;
-    city: string;
-    line1: string;
-  };
+  addresses?: NewCustomerAddressInput[];
 }
 
 export interface CreateAquariumInput {
-  name: string;
   ownershipType: AquariumOwnershipType;
-  /** MEGLÉVŐ ügyfél, ha `ownershipType === "CUSTOMER"` és a felhasználó a
-   * keresőből választott. `newCustomer`-rel kölcsönösen kizárja egymást. */
+  /** MEGLÉVŐ ügyfél azonosítója. Lásd a fájl fejlécét: mobilon ma nincs
+   * kereső, tehát ez a mező innen (egyelőre) nem kap értéket. */
   customerId?: string;
-  /** ÚJ ügyfél helyben felvéve, ha nincs `customerId`. */
+  /** ÚJ ügyfél helyben felvéve. */
   newCustomer?: NewCustomerInput;
-  waterBodyType: WaterBodyType;
+  name: string;
+  waterBodyType?: WaterBodyType;
   lengthCm?: number;
   widthCm?: number;
   heightCm?: number;
   systemVolumeLiters?: number;
-  volumeLitersSource?: VolumeLitersSource;
-  waterType?: AquariumWaterType;
-  /** ISO 8601 dátum (`YYYY-MM-DD`). */
+  /** Igaz, ha a felhasználó írta át a számolt litert (brief 3. döntés). */
+  systemVolumeIsManual?: boolean;
+  waterType?: WaterType;
+  /** ISO 8601 dátum. */
   startedAt?: string;
   notes?: string;
-  equipment: AquariumEquipmentInput[];
+  equipment?: CreateAquariumEquipmentInput[];
 }
 
-export type UpdateAquariumInput = Partial<CreateAquariumInput> & {
+export type UpdateAquariumInput = Partial<
+  Omit<CreateAquariumInput, "customerId">
+> & {
+  customerId?: string | null;
+  isActive?: boolean;
   expectedUpdatedAt: string;
 };
 
-export interface AquariumListItem {
+export interface AquariumSummary {
   id: string;
   aquariumNumber: string;
   name: string;
   ownershipType: AquariumOwnershipType;
   waterBodyType: WaterBodyType;
-  customerName: string | null;
-  systemVolumeLiters: number | null;
+  customerId?: string;
+  customerName?: string;
+  systemVolumeLiters?: number;
   equipmentCount: number;
   isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AquariumDetail extends AquariumSummary {
+  customerPhone?: string;
+  customerEmail?: string;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  systemVolumeIsManual: boolean;
+  waterType?: WaterType;
+  startedAt?: string;
+  notes?: string;
+  equipment: AquariumEquipment[];
 }
 
 export interface AquariumListResponse {
-  items: AquariumListItem[];
+  items: AquariumSummary[];
   pagination: {
     page: number;
     pageSize: number;
     totalItems: number;
     totalPages: number;
   };
-}
-
-export interface AquariumDetail {
-  id: string;
-  aquariumNumber: string;
-  name: string;
-  ownershipType: AquariumOwnershipType;
-  customerId: string | null;
-  customerName: string | null;
-  waterBodyType: WaterBodyType;
-  lengthCm: number | null;
-  widthCm: number | null;
-  heightCm: number | null;
-  systemVolumeLiters: number | null;
-  volumeLitersSource: VolumeLitersSource | null;
-  waterType: AquariumWaterType | null;
-  startedAt: string | null;
-  notes: string | null;
-  isActive: boolean;
-  equipment: AquariumEquipmentRow[];
-  updatedAt: string;
-}
-
-/** A VÁLASZTÓ-LISTA MEGLÉVŐ ÜGYFELEKHEZ. Lásd a fájl fejlécét: ez SZÁNDÉKOSAN
- * nem a `/customers` végpont, mert a `SERVICE` szerepkör azt nem éri el. */
-export interface AquariumSelectableCustomer {
-  id: string;
-  name: string;
-  phone: string | null;
 }
 
 export function listAquariums(page = 1, pageSize = 25, search = "") {
@@ -188,30 +183,24 @@ export function updateAquarium(id: string, input: UpdateAquariumInput) {
   });
 }
 
+/** A TELJES, FRISSÍTETT AKVÁRIUMOT ADJA VISSZA, nem a felvett sort -- ugyanaz
+ * az alak, mint a web `aquariumsApi.addEquipment`-je. */
 export function addAquariumEquipment(
   aquariumId: string,
-  input: AquariumEquipmentInput,
+  input: CreateAquariumEquipmentInput,
 ) {
-  return apiRequest<AquariumEquipmentRow>(
+  return apiRequest<AquariumDetail>(
     `${BASE}/${encodeURIComponent(aquariumId)}/equipment`,
     { method: "POST", body: JSON.stringify(input) },
   );
 }
 
-export function deleteAquariumEquipment(
+export function removeAquariumEquipment(
   aquariumId: string,
   equipmentId: string,
 ) {
-  return apiRequest<void>(
+  return apiRequest<AquariumDetail>(
     `${BASE}/${encodeURIComponent(aquariumId)}/equipment/${encodeURIComponent(equipmentId)}`,
     { method: "DELETE" },
-  );
-}
-
-export function listSelectableAquariumCustomers(search = "") {
-  const query = new URLSearchParams();
-  if (search.trim()) query.set("search", search.trim());
-  return apiRequest<{ items: AquariumSelectableCustomer[] }>(
-    `${BASE}/customers?${query}`,
   );
 }

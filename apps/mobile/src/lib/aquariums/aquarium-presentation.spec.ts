@@ -65,8 +65,6 @@ describe("equipmentRequiresChannelCount", () => {
 function item(overrides: Partial<AquariumListLike> = {}): AquariumListLike {
   return {
     ownershipType: "OWN",
-    customerName: null,
-    systemVolumeLiters: null,
     equipmentCount: 0,
     ...overrides,
   };

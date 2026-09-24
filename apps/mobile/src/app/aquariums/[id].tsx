@@ -14,9 +14,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   addAquariumEquipment,
-  deleteAquariumEquipment,
   getAquarium,
-  type AquariumEquipmentInput,
+  removeAquariumEquipment,
+  type CreateAquariumEquipmentInput,
 } from "@/lib/api/aquariums";
 import {
   emptyEquipmentDraft,
@@ -84,7 +84,7 @@ export default function AquariumDetailScreen() {
     setEquipmentError(null);
     setSaving(true);
     try {
-      const input: AquariumEquipmentInput = {
+      const input: CreateAquariumEquipmentInput = {
         kind: draft.kind,
         quantity: Number(draft.quantity),
         ...(draft.manufacturer.trim()
@@ -112,7 +112,7 @@ export default function AquariumDetailScreen() {
     if (!data) return;
     setRemovingId(equipmentId);
     try {
-      await deleteAquariumEquipment(data.id, equipmentId);
+      await removeAquariumEquipment(data.id, equipmentId);
       await queryClient.invalidateQueries({ queryKey: ["aquarium", id] });
     } catch {
       // A HIBA A LISTÁN LÁTSZIK, KÜLÖN ÜZENET NÉLKÜL: a sor egyszerűen
@@ -155,26 +155,26 @@ export default function AquariumDetailScreen() {
               label="Víztest"
               value={WATER_BODY_LABELS[data.waterBodyType]}
             />
-            {data.lengthCm !== null &&
-            data.widthCm !== null &&
-            data.heightCm !== null ? (
+            {data.lengthCm !== undefined &&
+            data.widthCm !== undefined &&
+            data.heightCm !== undefined ? (
               <Row
                 label="Méretek"
                 value={`${data.lengthCm} × ${data.widthCm} × ${data.heightCm} cm`}
               />
             ) : null}
-            {data.systemVolumeLiters !== null ? (
+            {data.systemVolumeLiters !== undefined ? (
               <Row
                 label="Térfogat"
                 value={`${data.systemVolumeLiters} l${
-                  data.volumeLitersSource === "MANUAL" ? " (kézi)" : ""
+                  data.systemVolumeIsManual ? " (kézi)" : ""
                 }`}
               />
             ) : null}
             {data.waterType ? (
               <Row
                 label="Víztípus"
-                value={data.waterType === "SALTWATER" ? "Tengeri" : "Édesvízi"}
+                value={data.waterType === "TENGERI" ? "Tengeri" : "Édesvízi"}
               />
             ) : null}
             {data.startedAt ? (

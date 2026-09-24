@@ -76,7 +76,7 @@ export function emptyNewCustomerDraft(): NewCustomerDraft {
 
 /**
  * A CÍM VAGY TELJES, VAGY HIÁNYZIK -- rész-cím nem megy tovább, mert a
- * `CreateCustomerAddressDto` mindhárom mezőt kéri (`postalCode`, `city`,
+ * `CreateCustomerAddressInput` mindhárom mezőt kéri (`postalCode`, `city`,
  * `line1`), ha egyáltalán küldünk címet.
  */
 export function newCustomerDraftError(draft: NewCustomerDraft): string | null {

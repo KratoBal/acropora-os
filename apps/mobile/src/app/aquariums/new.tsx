@@ -1,8 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,12 +12,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   createAquarium,
-  listSelectableAquariumCustomers,
-  type AquariumEquipmentInput,
   type AquariumOwnershipType,
-  type AquariumWaterType,
+  type CreateAquariumEquipmentInput,
   type CreateAquariumInput,
   type WaterBodyType,
+  type WaterType,
 } from "@/lib/api/aquariums";
 import {
   aquariumFormError,
@@ -58,7 +55,7 @@ export default function NewAquariumScreen() {
   const [ownershipType, setOwnershipType] =
     useState<AquariumOwnershipType>("OWN");
   const [waterBodyType, setWaterBodyType] = useState<WaterBodyType>("AKVARIUM");
-  const [waterType, setWaterType] = useState<AquariumWaterType | null>(null);
+  const [waterType, setWaterType] = useState<WaterType | null>(null);
   const [startedAt, setStartedAt] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -68,19 +65,10 @@ export default function NewAquariumScreen() {
   const [litersInput, setLitersInput] = useState("");
   const [manualLiters, setManualLiters] = useState(false);
 
-  const [customerMode, setCustomerMode] = useState<"EXISTING" | "NEW">(
-    "EXISTING",
-  );
-  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
-  const [customerSearch, setCustomerSearch] = useState("");
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
-    null,
-  );
-  const [selectedCustomerName, setSelectedCustomerName] = useState("");
   const [newCustomer, setNewCustomer] = useState(emptyNewCustomerDraft());
 
   const [equipment, setEquipment] = useState<
-    { input: AquariumEquipmentInput; label: string }[]
+    { input: CreateAquariumEquipmentInput; label: string }[]
   >([]);
   const [draft, setDraft] = useState<EquipmentDraft>(
     emptyEquipmentDraft("VILAGITAS"),
@@ -89,12 +77,6 @@ export default function NewAquariumScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  const customers = useQuery({
-    queryKey: ["aquarium-selectable-customers", customerSearch],
-    queryFn: () => listSelectableAquariumCustomers(customerSearch),
-    enabled: customerPickerOpen && status === "authenticated",
-  });
 
   if (status !== "authenticated" || !user || !capabilities)
     return <Redirect href="/login" />;
@@ -125,7 +107,7 @@ export default function NewAquariumScreen() {
       return;
     }
     setEquipmentError(null);
-    const input: AquariumEquipmentInput = {
+    const input: CreateAquariumEquipmentInput = {
       kind: draft.kind,
       quantity: Number(draft.quantity),
       ...(draft.manufacturer.trim()
@@ -138,7 +120,7 @@ export default function NewAquariumScreen() {
       ...(draft.notes.trim() ? { notes: draft.notes.trim() } : {}),
     };
     const label = `${EQUIPMENT_KIND_LABELS[draft.kind]}${
-      input.quantity > 1 ? ` × ${input.quantity}` : ""
+      (input.quantity ?? 1) > 1 ? ` × ${input.quantity}` : ""
     }${input.channelCount ? ` (${input.channelCount} csatorna)` : ""}`;
     setEquipment((rows) => [...rows, { input, label }]);
     setDraft(emptyEquipmentDraft(draft.kind));
@@ -152,8 +134,11 @@ export default function NewAquariumScreen() {
     const formError = aquariumFormError({
       name,
       ownershipType,
-      customerMode,
-      selectedCustomerId,
+      // MEGLÉVŐ ÜGYFÉL KERESÉSE MOBILON NINCS (lásd a lenti panel jegyzetét
+      // és `lib/api/aquariums.ts` fejlécét) -- ez a képernyő mindig az ÚJ
+      // ügyfél ágat kéri, ha a tulajdon "Ügyfél".
+      customerMode: "NEW",
+      selectedCustomerId: null,
       newCustomer,
     });
     if (formError) {
@@ -181,7 +166,7 @@ export default function NewAquariumScreen() {
         ...(litersInput.trim()
           ? {
               systemVolumeLiters: toNumberOrNull(litersInput) ?? undefined,
-              volumeLitersSource: manualLiters ? "MANUAL" : "CALCULATED",
+              systemVolumeIsManual: manualLiters,
             }
           : {}),
         ...(waterType ? { waterType } : {}),
@@ -189,28 +174,29 @@ export default function NewAquariumScreen() {
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       };
       if (ownershipType === "CUSTOMER") {
-        if (customerMode === "EXISTING" && selectedCustomerId)
-          input.customerId = selectedCustomerId;
-        else if (customerMode === "NEW") {
-          input.newCustomer = {
-            displayName: newCustomer.displayName.trim(),
-            ...(newCustomer.phone.trim()
-              ? { phone: newCustomer.phone.trim() }
-              : {}),
-            ...(newCustomer.email.trim()
-              ? { email: newCustomer.email.trim() }
-              : {}),
-            ...(newCustomer.postalCode.trim()
-              ? {
-                  address: {
+        input.newCustomer = {
+          type: "PERSON",
+          displayName: newCustomer.displayName.trim(),
+          ...(newCustomer.phone.trim()
+            ? { phone: newCustomer.phone.trim() }
+            : {}),
+          ...(newCustomer.email.trim()
+            ? { email: newCustomer.email.trim() }
+            : {}),
+          ...(newCustomer.postalCode.trim()
+            ? {
+                addresses: [
+                  {
+                    type: "OTHER",
                     postalCode: newCustomer.postalCode.trim(),
                     city: newCustomer.city.trim(),
                     line1: newCustomer.line1.trim(),
+                    isDefault: true,
                   },
-                }
-              : {}),
-          };
-        }
+                ],
+              }
+            : {}),
+        };
       }
 
       const created = await createAquarium(input);
@@ -270,152 +256,83 @@ export default function NewAquariumScreen() {
         </View>
 
         {ownershipType === "CUSTOMER" ? (
+          /*
+            CSAK ÚJ ÜGYFÉL FELVITELE, MEGLÉVŐ KERESÉSE NÉLKÜL -- ez nem
+            leegyszerűsítés, hanem a valódi API határa: a `SERVICE` szerepkör
+            nem viseli a `customers.view`/`customers.manage` jogot, és az
+            akvárium-vezérlő ma nem ad ehhez saját, szűkebb keresőt (lásd
+            `lib/api/aquariums.ts` fejlécét). A brief mobil-ága is kimondottan
+            a helyben felvitelt kérte, nem a keresést.
+          */
           <View style={styles.section}>
-            <View style={styles.chipRow}>
-              <Chip
-                label="Meglévő ügyfél"
-                selected={customerMode === "EXISTING"}
-                onPress={() => setCustomerMode("EXISTING")}
-              />
-              <Chip
-                label="Új ügyfél"
-                selected={customerMode === "NEW"}
-                onPress={() => setCustomerMode("NEW")}
-              />
-            </View>
-
-            {customerMode === "EXISTING" ? (
-              <>
-                <Pressable
-                  onPress={() => setCustomerPickerOpen((open) => !open)}
-                  style={({ pressed }) => [
-                    styles.filterToggle,
-                    selectedCustomerId && styles.filterToggleOn,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.filterText,
-                      selectedCustomerId && styles.filterTextOn,
-                    ]}
-                  >
-                    {selectedCustomerId
-                      ? selectedCustomerName
-                      : "Válassz ügyfelet"}
-                  </Text>
-                </Pressable>
-                {customerPickerOpen ? (
-                  <View style={styles.pickerPanel}>
-                    <TextInput
-                      value={customerSearch}
-                      onChangeText={setCustomerSearch}
-                      placeholder="Keresés név szerint"
-                      placeholderTextColor="#668798"
-                      style={styles.input}
-                    />
-                    {customers.isPending ? (
-                      <ActivityIndicator color="#52d6c7" />
-                    ) : null}
-                    {customers.isError ? (
-                      <Text style={styles.error}>
-                        Az ügyféllista nem tölthető be.
-                      </Text>
-                    ) : null}
-                    {(customers.data?.items ?? []).map((item) => (
-                      <Pressable
-                        key={item.id}
-                        onPress={() => {
-                          setSelectedCustomerId(item.id);
-                          setSelectedCustomerName(item.name);
-                          setCustomerPickerOpen(false);
-                        }}
-                        style={({ pressed }) => [
-                          styles.pickerRow,
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <Text style={styles.pickerRowText}>{item.name}</Text>
-                        {item.phone ? (
-                          <Text style={styles.pickerRowMeta}>{item.phone}</Text>
-                        ) : null}
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : null}
-              </>
-            ) : (
-              <View style={styles.section}>
-                <Text style={styles.label}>Ügyfél neve</Text>
-                <TextInput
-                  value={newCustomer.displayName}
-                  onChangeText={(value) =>
-                    setNewCustomer((current) => ({
-                      ...current,
-                      displayName: value,
-                    }))
-                  }
-                  placeholder="Kovács János"
-                  placeholderTextColor="#668798"
-                  style={styles.input}
-                />
-                <Text style={styles.label}>Telefonszám</Text>
-                <TextInput
-                  value={newCustomer.phone}
-                  onChangeText={(value) =>
-                    setNewCustomer((current) => ({ ...current, phone: value }))
-                  }
-                  placeholder="+36 30 000 0000"
-                  placeholderTextColor="#668798"
-                  keyboardType="phone-pad"
-                  style={styles.input}
-                />
-                <Text style={styles.label}>E-mail cím</Text>
-                <TextInput
-                  value={newCustomer.email}
-                  onChangeText={(value) =>
-                    setNewCustomer((current) => ({ ...current, email: value }))
-                  }
-                  placeholder="nev@pelda.hu"
-                  placeholderTextColor="#668798"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  style={styles.input}
-                />
-                <Text style={styles.label}>Cím (opcionális)</Text>
-                <TextInput
-                  value={newCustomer.postalCode}
-                  onChangeText={(value) =>
-                    setNewCustomer((current) => ({
-                      ...current,
-                      postalCode: value,
-                    }))
-                  }
-                  placeholder="Irányítószám"
-                  placeholderTextColor="#668798"
-                  keyboardType="number-pad"
-                  style={styles.input}
-                />
-                <TextInput
-                  value={newCustomer.city}
-                  onChangeText={(value) =>
-                    setNewCustomer((current) => ({ ...current, city: value }))
-                  }
-                  placeholder="Település"
-                  placeholderTextColor="#668798"
-                  style={styles.input}
-                />
-                <TextInput
-                  value={newCustomer.line1}
-                  onChangeText={(value) =>
-                    setNewCustomer((current) => ({ ...current, line1: value }))
-                  }
-                  placeholder="Utca, házszám"
-                  placeholderTextColor="#668798"
-                  style={styles.input}
-                />
-              </View>
-            )}
+            <Text style={styles.label}>Ügyfél neve</Text>
+            <TextInput
+              value={newCustomer.displayName}
+              onChangeText={(value) =>
+                setNewCustomer((current) => ({
+                  ...current,
+                  displayName: value,
+                }))
+              }
+              placeholder="Kovács János"
+              placeholderTextColor="#668798"
+              style={styles.input}
+            />
+            <Text style={styles.label}>Telefonszám</Text>
+            <TextInput
+              value={newCustomer.phone}
+              onChangeText={(value) =>
+                setNewCustomer((current) => ({ ...current, phone: value }))
+              }
+              placeholder="+36 30 000 0000"
+              placeholderTextColor="#668798"
+              keyboardType="phone-pad"
+              style={styles.input}
+            />
+            <Text style={styles.label}>E-mail cím</Text>
+            <TextInput
+              value={newCustomer.email}
+              onChangeText={(value) =>
+                setNewCustomer((current) => ({ ...current, email: value }))
+              }
+              placeholder="nev@pelda.hu"
+              placeholderTextColor="#668798"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.input}
+            />
+            <Text style={styles.label}>Cím (opcionális)</Text>
+            <TextInput
+              value={newCustomer.postalCode}
+              onChangeText={(value) =>
+                setNewCustomer((current) => ({
+                  ...current,
+                  postalCode: value,
+                }))
+              }
+              placeholder="Irányítószám"
+              placeholderTextColor="#668798"
+              keyboardType="number-pad"
+              style={styles.input}
+            />
+            <TextInput
+              value={newCustomer.city}
+              onChangeText={(value) =>
+                setNewCustomer((current) => ({ ...current, city: value }))
+              }
+              placeholder="Település"
+              placeholderTextColor="#668798"
+              style={styles.input}
+            />
+            <TextInput
+              value={newCustomer.line1}
+              onChangeText={(value) =>
+                setNewCustomer((current) => ({ ...current, line1: value }))
+              }
+              placeholder="Utca, házszám"
+              placeholderTextColor="#668798"
+              style={styles.input}
+            />
           </View>
         ) : null}
 
@@ -572,13 +489,13 @@ export default function NewAquariumScreen() {
           />
           <Chip
             label="Édesvízi"
-            selected={waterType === "FRESHWATER"}
-            onPress={() => setWaterType("FRESHWATER")}
+            selected={waterType === "EDESVIZI"}
+            onPress={() => setWaterType("EDESVIZI")}
           />
           <Chip
             label="Tengeri"
-            selected={waterType === "SALTWATER"}
-            onPress={() => setWaterType("SALTWATER")}
+            selected={waterType === "TENGERI"}
+            onPress={() => setWaterType("TENGERI")}
           />
         </View>
         <TextInput
@@ -681,28 +598,6 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: "#177b74", borderColor: "#177b74" },
   chipText: { color: "#91afbe", fontSize: 12, fontWeight: "700" },
   chipTextSelected: { color: "#fff" },
-  filterToggle: {
-    marginTop: 8,
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-  filterToggleOn: { borderColor: "#52d6c7" },
-  filterText: { color: "#91afbe", fontWeight: "700" },
-  filterTextOn: { color: "#f4fbff" },
-  pickerPanel: { marginTop: 8, gap: 8 },
-  pickerRow: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-  },
-  pickerRowText: { color: "#f4fbff", fontWeight: "700" },
-  pickerRowMeta: { color: "#789cad", fontSize: 12, marginTop: 2 },
   linkText: {
     color: "#52d6c7",
     fontSize: 12,

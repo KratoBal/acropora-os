@@ -16,6 +16,7 @@
 
 export type AquariumOwnershipType = "OWN" | "CUSTOMER";
 export type WaterBodyType = "AKVARIUM" | "TO";
+export type WaterType = "EDESVIZI" | "TENGERI";
 export type AquariumEquipmentKind =
   | "VILAGITAS"
   | "ARAMOLTATAS"
@@ -31,8 +32,8 @@ export type AquariumEquipmentKind =
 /** Csak amit a `aquariumListSubtitle` ténylegesen használ. */
 export interface AquariumListLike {
   ownershipType: AquariumOwnershipType;
-  customerName: string | null;
-  systemVolumeLiters: number | null;
+  customerName?: string;
+  systemVolumeLiters?: number;
   equipmentCount: number;
 }
 
@@ -107,8 +108,8 @@ export function equipmentRequiresChannelCount(
   return kind === "NYOMELEM_ADAGOLO";
 }
 
-function formatLiters(value: number | null): string | null {
-  if (value === null) return null;
+function formatLiters(value: number | undefined): string | null {
+  if (value === undefined) return null;
   return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 3 })} l`;
 }
 
