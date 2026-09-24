@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Card, Input, Select } from "@acropora/ui";
+import { Alert, Button, Card, FormField, Input, Select } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -8,14 +8,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { contractsApi, type ContractSummary } from "@/lib/api/contracts";
 
-type DraftItem = {
+export type DraftItem = {
   description: string;
   unitNet: string;
   quantity: string;
   occasionsPerYear: string;
   vatRatePercent: string;
 };
-const emptyItem = (): DraftItem => ({
+export const emptyItem = (): DraftItem => ({
   description: "",
   unitNet: "",
   quantity: "1",
@@ -27,6 +27,49 @@ function money(value: string) {
   return new Intl.NumberFormat("hu-HU", { maximumFractionDigits: 2 }).format(
     Number(value),
   );
+}
+
+/**
+ * UGYANAZ A MINTA, MINT AZ API `ContractItemDto`-JÁBAN
+ * (`apps/api/src/contracts/dto.ts`) -- ha ott változik, itt is kell.
+ */
+const DECIMAL = /^\d+(?:\.\d+)?$/;
+
+/**
+ * A "validFrom must be a valid ISO 8601 date string" ANGOL API-HIBA OKA:
+ * a mező láthatatlan felirat mögött (csak `aria-label`) üresen maradt, a
+ * `Mentés` gomb pedig semmit nem akadályozott. A javítás nem az API-hibát
+ * fordítja le, hanem MEGELŐZI: a gomb addig tiltva, amíg ezek a mezők
+ * hiányoznak, és a hiányzó mezők neve magyarul, a gomb mellett látszik.
+ *
+ * A KÖTELEZŐ MEZŐK LISTÁJA A SZERVER `CreateContractDto`-JÁBÓL JÖN
+ * (customerId, number, title, validFrom, legalább egy érvényes tétel) --
+ * lásd ott a fejlécet arról, mi opcionális (validTo, notes).
+ */
+export function missingFields(draft: {
+  customerId: string;
+  number: string;
+  title: string;
+  validFrom: string;
+  items: DraftItem[];
+}): string[] {
+  const missing: string[] = [];
+  if (!draft.customerId) missing.push("Partner");
+  if (!draft.number.trim()) missing.push("Szerződésszám");
+  if (!draft.title.trim()) missing.push("Szerződés címe");
+  if (!draft.validFrom) missing.push("Érvényesség kezdete");
+  const hasValidItem = draft.items.some(
+    (item) =>
+      item.description.trim() !== "" &&
+      DECIMAL.test(item.unitNet) &&
+      DECIMAL.test(item.quantity) &&
+      DECIMAL.test(item.vatRatePercent) &&
+      Number.isInteger(Number(item.occasionsPerYear)) &&
+      Number(item.occasionsPerYear) >= 1 &&
+      Number(item.occasionsPerYear) <= 366,
+  );
+  if (!hasValidItem) missing.push("legalább egy kitöltött tétel");
+  return missing;
 }
 
 /**
@@ -95,6 +138,7 @@ export function ContractsPage() {
       ),
     [draft.items],
   );
+  const missing = useMemo(() => missingFields(draft), [draft]);
   if (!canManage)
     return (
       <Alert
@@ -202,129 +246,178 @@ export function ContractsPage() {
         <Card className="space-y-4 p-5">
           <h2 className="text-lg font-semibold">Új keretszerződés</h2>
           <div className="grid gap-4 md:grid-cols-2">
-            <Select
-              aria-label="Partner"
-              value={draft.customerId}
-              onChange={(event) =>
-                setDraft({ ...draft, customerId: event.target.value })
-              }
+            <FormField label="Partner *" htmlFor="contract-new-customer">
+              <Select
+                id="contract-new-customer"
+                aria-label="Partner"
+                value={draft.customerId}
+                onChange={(event) =>
+                  setDraft({ ...draft, customerId: event.target.value })
+                }
+              >
+                <option value="">Partner kiválasztása</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.displayName}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField label="Szerződésszám *" htmlFor="contract-new-number">
+              <Input
+                id="contract-new-number"
+                placeholder="pl. SZ2026/0000019"
+                value={draft.number}
+                onChange={(event) =>
+                  setDraft({ ...draft, number: event.target.value })
+                }
+              />
+            </FormField>
+            <FormField label="Szerződés címe *" htmlFor="contract-new-title">
+              <Input
+                id="contract-new-title"
+                value={draft.title}
+                onChange={(event) =>
+                  setDraft({ ...draft, title: event.target.value })
+                }
+              />
+            </FormField>
+            <FormField
+              label="Érvényesség kezdete *"
+              htmlFor="contract-new-valid-from"
             >
-              <option value="">Partner kiválasztása</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.displayName}
-                </option>
-              ))}
-            </Select>
-            <Input
-              placeholder="Szerződésszám (pl. SZ2026/0000019)"
-              value={draft.number}
-              onChange={(event) =>
-                setDraft({ ...draft, number: event.target.value })
-              }
-            />
-            <Input
-              placeholder="Szerződés címe"
-              value={draft.title}
-              onChange={(event) =>
-                setDraft({ ...draft, title: event.target.value })
-              }
-            />
-            <Input
-              type="date"
-              aria-label="Érvényes ettől"
-              value={draft.validFrom}
-              onChange={(event) =>
-                setDraft({ ...draft, validFrom: event.target.value })
-              }
-            />
-            <Input
-              type="date"
-              aria-label="Érvényes eddig"
-              value={draft.validTo}
-              onChange={(event) =>
-                setDraft({ ...draft, validTo: event.target.value })
-              }
-            />
+              <Input
+                id="contract-new-valid-from"
+                type="date"
+                value={draft.validFrom}
+                onChange={(event) =>
+                  setDraft({ ...draft, validFrom: event.target.value })
+                }
+              />
+            </FormField>
+            <FormField
+              label="Érvényesség vége"
+              htmlFor="contract-new-valid-to"
+              description="Opcionális -- üresen hagyva határozatlan idejű."
+            >
+              <Input
+                id="contract-new-valid-to"
+                type="date"
+                value={draft.validTo}
+                onChange={(event) =>
+                  setDraft({ ...draft, validTo: event.target.value })
+                }
+              />
+            </FormField>
           </div>
           <div className="space-y-3">
-            <h3 className="font-medium">Tételek</h3>
+            <h3 className="font-medium">Tételek *</h3>
             {draft.items.map((item, index) => (
               <div className="grid gap-2 md:grid-cols-5" key={index}>
-                <Input
-                  placeholder="Tétel leírása"
-                  value={item.description}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      items: draft.items.map((row, rowIndex) =>
-                        rowIndex === index
-                          ? { ...row, description: event.target.value }
-                          : row,
-                      ),
-                    })
-                  }
-                />
-                <Input
-                  inputMode="decimal"
-                  placeholder="Nettó egységár"
-                  value={item.unitNet}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      items: draft.items.map((row, rowIndex) =>
-                        rowIndex === index
-                          ? { ...row, unitNet: event.target.value }
-                          : row,
-                      ),
-                    })
-                  }
-                />
-                <Input
-                  inputMode="decimal"
-                  placeholder="db"
-                  value={item.quantity}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      items: draft.items.map((row, rowIndex) =>
-                        rowIndex === index
-                          ? { ...row, quantity: event.target.value }
-                          : row,
-                      ),
-                    })
-                  }
-                />
-                <Input
-                  inputMode="numeric"
-                  placeholder="alkalom / év"
-                  value={item.occasionsPerYear}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      items: draft.items.map((row, rowIndex) =>
-                        rowIndex === index
-                          ? { ...row, occasionsPerYear: event.target.value }
-                          : row,
-                      ),
-                    })
-                  }
-                />
-                <Input
-                  inputMode="decimal"
-                  placeholder="ÁFA %"
-                  value={item.vatRatePercent}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      items: draft.items.map((row, rowIndex) =>
-                        rowIndex === index
-                          ? { ...row, vatRatePercent: event.target.value }
-                          : row,
-                      ),
-                    })
-                  }
-                />
+                <FormField
+                  label={index === 0 ? "Tétel leírása" : ""}
+                  htmlFor={`contract-new-item-description-${index}`}
+                >
+                  <Input
+                    id={`contract-new-item-description-${index}`}
+                    placeholder="Tétel leírása"
+                    value={item.description}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        items: draft.items.map((row, rowIndex) =>
+                          rowIndex === index
+                            ? { ...row, description: event.target.value }
+                            : row,
+                        ),
+                      })
+                    }
+                  />
+                </FormField>
+                <FormField
+                  label={index === 0 ? "Nettó egységár" : ""}
+                  htmlFor={`contract-new-item-unit-${index}`}
+                >
+                  <Input
+                    id={`contract-new-item-unit-${index}`}
+                    inputMode="decimal"
+                    placeholder="Nettó egységár"
+                    value={item.unitNet}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        items: draft.items.map((row, rowIndex) =>
+                          rowIndex === index
+                            ? { ...row, unitNet: event.target.value }
+                            : row,
+                        ),
+                      })
+                    }
+                  />
+                </FormField>
+                <FormField
+                  label={index === 0 ? "Darabszám" : ""}
+                  htmlFor={`contract-new-item-qty-${index}`}
+                >
+                  <Input
+                    id={`contract-new-item-qty-${index}`}
+                    inputMode="decimal"
+                    placeholder="db"
+                    value={item.quantity}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        items: draft.items.map((row, rowIndex) =>
+                          rowIndex === index
+                            ? { ...row, quantity: event.target.value }
+                            : row,
+                        ),
+                      })
+                    }
+                  />
+                </FormField>
+                <FormField
+                  label={index === 0 ? "Alkalom / év" : ""}
+                  htmlFor={`contract-new-item-occasions-${index}`}
+                >
+                  <Input
+                    id={`contract-new-item-occasions-${index}`}
+                    inputMode="numeric"
+                    placeholder="alkalom / év"
+                    value={item.occasionsPerYear}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        items: draft.items.map((row, rowIndex) =>
+                          rowIndex === index
+                            ? { ...row, occasionsPerYear: event.target.value }
+                            : row,
+                        ),
+                      })
+                    }
+                  />
+                </FormField>
+                <FormField
+                  label={index === 0 ? "ÁFA %" : ""}
+                  htmlFor={`contract-new-item-vat-${index}`}
+                >
+                  <Input
+                    id={`contract-new-item-vat-${index}`}
+                    inputMode="decimal"
+                    placeholder="ÁFA %"
+                    value={item.vatRatePercent}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        items: draft.items.map((row, rowIndex) =>
+                          rowIndex === index
+                            ? { ...row, vatRatePercent: event.target.value }
+                            : row,
+                        ),
+                      })
+                    }
+                  />
+                </FormField>
               </div>
             ))}
             <Button
@@ -339,9 +432,19 @@ export function ContractsPage() {
               Éves nettó összesen: {money(String(yearly))} Ft
             </p>
           </div>
-          <Button disabled={saving} onClick={() => void create()}>
-            {saving ? "Mentés…" : "Szerződés mentése"}
-          </Button>
+          <div className="space-y-2">
+            <Button
+              disabled={saving || missing.length > 0}
+              onClick={() => void create()}
+            >
+              {saving ? "Mentés…" : "Szerződés mentése"}
+            </Button>
+            {missing.length > 0 ? (
+              <p className="text-xs font-medium text-rose-600">
+                Hiányzik: {missing.join(", ")}.
+              </p>
+            ) : null}
+          </div>
         </Card>
       ) : null}
       {loading ? (
