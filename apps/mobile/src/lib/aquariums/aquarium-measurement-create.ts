@@ -139,6 +139,29 @@ export function aquariumMeasurementParametersFor(
   );
 }
 
+const AQUARIUM_MEASUREMENT_PARAMETER_BY_CODE: Record<
+  AquariumMeasurementParameterCode,
+  AquariumMeasurementParameterDefinition
+> = Object.fromEntries(
+  AQUARIUM_MEASUREMENT_PARAMETERS.map((param) => [param.code, param]),
+) as Record<
+  AquariumMeasurementParameterCode,
+  AquariumMeasurementParameterDefinition
+>;
+
+/**
+ * EGY PARAMÉTER LEÍRÁSA A KÓDJÁBÓL -- A MEGJELENÍTÉSHEZ.
+ *
+ * Az adatlap egy MÁR MENTETT alkalom sorait mutatja, ahol nincs víztípus-
+ * szűrés: egy korábban, más víztípus mellett rögzített érték (pl. a víztípus
+ * utólag módosult) is megjelenjen a maga címkéjével és egységével.
+ */
+export function aquariumMeasurementParameter(
+  code: AquariumMeasurementParameterCode,
+): AquariumMeasurementParameterDefinition {
+  return AQUARIUM_MEASUREMENT_PARAMETER_BY_CODE[code];
+}
+
 export interface AquariumMeasurementValue {
   parameterCode: AquariumMeasurementParameterCode;
   value: number;

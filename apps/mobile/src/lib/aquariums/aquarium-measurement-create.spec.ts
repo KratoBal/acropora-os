@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   AQUARIUM_MEASUREMENT_PARAMETERS,
+  aquariumMeasurementParameter,
   aquariumMeasurementParametersFor,
   buildAquariumMeasurementPayload,
   emptyAquariumMeasurementForm,
@@ -162,5 +163,18 @@ describe("buildAquariumMeasurementPayload", () => {
     );
     assert.equal(kitoltott.ok, true);
     if (kitoltott.ok) assert.equal(kitoltott.payload.notes, "Vízcsere után");
+  });
+});
+
+describe("aquariumMeasurementParameter", () => {
+  it("minden katalógus-kódra megtalálja a saját definícióját", () => {
+    for (const param of AQUARIUM_MEASUREMENT_PARAMETERS)
+      assert.deepEqual(aquariumMeasurementParameter(param.code), param);
+  });
+
+  it("a pH címkéje és egysége helyes", () => {
+    const ph = aquariumMeasurementParameter("PH");
+    assert.equal(ph.label, "pH");
+    assert.equal(ph.unit, "pH");
   });
 });

@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect, useLocalSearchParams } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,7 +15,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   addAquariumEquipment,
+  deleteAquariumMeasurement,
   getAquarium,
+  listAquariumMeasurements,
   removeAquariumEquipment,
   type CreateAquariumEquipmentInput,
 } from "@/lib/api/aquariums";
@@ -30,6 +33,7 @@ import {
   OWNERSHIP_LABEL,
   WATER_BODY_LABEL,
 } from "@/lib/aquariums/aquarium-labels";
+import { aquariumMeasurementParameter } from "@/lib/aquariums/aquarium-measurement-create";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
@@ -45,9 +49,18 @@ import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
  * egyetlen ÍRÓ művelet ezen a lapon az eszközsor hozzáadása/törlése -- a
  * csatornaszám-ellenőrzés ugyanazt a `aquariumEquipmentProblem`-et hívja,
  * mint a felviteli képernyő, hogy a két hely ne mondhasson mást.
+ *
+ * A "VÍZÉRTÉKEK" SZEKCIÓ (murena #1055-ös API-ja) a brief 3. döntése szerint
+ * a telefonon CSAK LISTA -- a webes idősoros grafikon ide nem kerül. A
+ * felvitel külön képernyőn (`[id]/measurement.tsx`) történik, ugyanazzal az
+ * offline sorba-állítási mintával, mint az akvárium saját felvitele.
+ *
+ * A KARBANTARTÓK (brief 8. döntés) CSAK MEGJELENÍTÉS ebben a körben -- a
+ * választás webes.
  */
 export default function AquariumDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const queryClient = useQueryClient();
@@ -58,10 +71,21 @@ export default function AquariumDetailScreen() {
   const [equipmentError, setEquipmentError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removingMeasurementId, setRemovingMeasurementId] = useState<
+    string | null
+  >(null);
 
   const aquarium = useQuery({
     queryKey: ["aquarium", id],
     queryFn: () => getAquarium(id),
+    enabled: Boolean(
+      id && capabilities?.aquariumsView && status === "authenticated",
+    ),
+  });
+
+  const measurements = useQuery({
+    queryKey: ["aquarium-measurements", id],
+    queryFn: () => listAquariumMeasurements(id),
     enabled: Boolean(
       id && capabilities?.aquariumsView && status === "authenticated",
     ),
@@ -72,6 +96,49 @@ export default function AquariumDetailScreen() {
   if (!capabilities.aquariumsView) return <Redirect href="/" />;
 
   const data = aquarium.data;
+  /** A LEGUTÓBBI ELÖL: a szerver nem ígér sorrendet, a képernyő a
+   * `measuredAt` szerint csökkenőbe rendez, hogy a "legutóbbi mérés" fejléc
+   * és a lista első sora sose mondhasson mást. */
+  const occasions = [...(measurements.data?.occasions ?? [])].sort((a, b) =>
+    b.measuredAt.localeCompare(a.measuredAt),
+  );
+  const latestOccasion = occasions[0] ?? null;
+  const olderOccasions = occasions.slice(1);
+
+  function removeMeasurement(occasionId: string) {
+    if (!data) return;
+    Alert.alert(
+      "Törlöd ezt a mérési alkalmat?",
+      "A mérés minden paramétere véglegesen törlődik.",
+      [
+        { text: "Mégsem", style: "cancel" },
+        {
+          text: "Törlés",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setRemovingMeasurementId(occasionId);
+              try {
+                await deleteAquariumMeasurement(data.id, occasionId);
+                await queryClient.invalidateQueries({
+                  queryKey: ["aquarium-measurements", id],
+                });
+              } catch (cause) {
+                Alert.alert(
+                  "Nem sikerült törölni",
+                  cause instanceof Error
+                    ? cause.message
+                    : "A mérés törlése nem sikerült.",
+                );
+              } finally {
+                setRemovingMeasurementId(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }
 
   async function addEquipment() {
     if (!data) return;
@@ -185,6 +252,14 @@ export default function AquariumDetailScreen() {
               <Row label="Indítva" value={data.startedAt} />
             ) : null}
             {data.notes ? <Row label="Megjegyzés" value={data.notes} /> : null}
+            <Row
+              label="Karbantartók"
+              value={
+                data.maintainers.length > 0
+                  ? data.maintainers.map((m) => m.displayName).join(", ")
+                  : "Nincs megadva"
+              }
+            />
           </View>
         ) : null}
 
@@ -311,6 +386,86 @@ export default function AquariumDetailScreen() {
             </Pressable>
           </View>
         ) : null}
+
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Vízértékek</Text>
+          {capabilities.aquariumsManage && data ? (
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: "/aquariums/[id]/measurement",
+                  params: { id: data.id },
+                })
+              }
+            >
+              <Text style={styles.linkText}>Új mérés</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {measurements.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {measurements.isError ? (
+          <Text style={styles.error}>A vízértékek nem tölthetők be.</Text>
+        ) : null}
+        {!measurements.isPending && !measurements.isError && !latestOccasion ? (
+          <Text style={styles.empty}>Még nincs felvéve vízmérés.</Text>
+        ) : null}
+
+        {latestOccasion ? (
+          <View style={styles.card}>
+            <Row label="Legutóbbi mérés" value={latestOccasion.measuredAt} />
+            {latestOccasion.values.map((value) => {
+              const param = aquariumMeasurementParameter(value.parameterCode);
+              return (
+                <Row
+                  key={value.parameterCode}
+                  label={param.label}
+                  value={`${value.value} ${param.unit}`}
+                />
+              );
+            })}
+            {latestOccasion.notes ? (
+              <Row label="Megjegyzés" value={latestOccasion.notes} />
+            ) : null}
+          </View>
+        ) : null}
+
+        {olderOccasions.length > 0 ? (
+          <>
+            <Text style={styles.sectionTitle}>Korábbi mérések</Text>
+            {olderOccasions.map((occasion) => (
+              <View key={occasion.id} style={styles.equipmentRow}>
+                <View style={styles.equipmentInfo}>
+                  <Text style={styles.equipmentLabel}>
+                    {occasion.measuredAt}
+                  </Text>
+                  <Text style={styles.equipmentMeta}>
+                    {occasion.values
+                      .map((value) => {
+                        const param = aquariumMeasurementParameter(
+                          value.parameterCode,
+                        );
+                        return `${param.label}: ${value.value} ${param.unit}`;
+                      })
+                      .join(" · ")}
+                  </Text>
+                </View>
+                {capabilities.aquariumsManage ? (
+                  <Pressable
+                    disabled={removingMeasurementId === occasion.id}
+                    onPress={() => removeMeasurement(occasion.id)}
+                  >
+                    <Text style={styles.removeText}>
+                      {removingMeasurementId === occasion.id
+                        ? "Törlés…"
+                        : "Törlés"}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -352,6 +507,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     marginTop: 18,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  linkText: {
+    color: "#52d6c7",
+    fontSize: 13,
+    fontWeight: "700",
   },
   empty: { color: "#91afbe" },
   equipmentRow: {
