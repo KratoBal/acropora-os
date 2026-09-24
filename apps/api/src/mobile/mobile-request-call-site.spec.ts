@@ -296,7 +296,14 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
  * torzse NEVESITETT tipussal megy (`CreateAquariumEquipmentInput`), tehat a
  * szomszed orzo MAR LATJA: ez a hivas NEM kerul a HIVOHELYEK koze.
  */
-const IRAS_HIVASOK_A_FAN = 20;
+/**
+ * 2026-09-24: 20 -> 21. Az uj hivas a VIZMERESI ALKALOM FELVITELE
+ * (`createAquariumMeasurement`, `lib/api/aquariums.ts`, vizertekek kor). A
+ * hivas a parametert ADJA at valtozatlanul (`JSON.stringify(input)`), es a
+ * torzse NEVESITETT tipussal megy (`CreateAquariumMeasurementInput`), tehat
+ * a szomszed orzo MAR LATJA: ez a hivas NEM kerul a HIVOHELYEK koze.
+ */
+const IRAS_HIVASOK_A_FAN = 21;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

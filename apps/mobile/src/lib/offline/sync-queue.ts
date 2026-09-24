@@ -116,6 +116,7 @@ export const SYNC_ENTITY_TYPES = [
   "worksheet-line",
   "service-job",
   "aquarium",
+  "aquarium-measurement",
 ] as const;
 
 export type SyncEntityType = (typeof SYNC_ENTITY_TYPES)[number];
@@ -157,6 +158,11 @@ const FENYKEP_GAZDA: Record<SyncEntityType, boolean> = {
    * itt HANGOSAN álljon meg (422), ne csendben az eszköz-végpontra menjen.
    */
   aquarium: false,
+  /**
+   * NINCS VÍZÉRTÉK-FÉNYKÉP. A mérés maga egy táblázat, nem a méréshez tett
+   * dokumentáció -- ugyanaz az indok, mint az akváriumnál.
+   */
+  "aquarium-measurement": false,
 };
 
 export function canOwnPhotos(entityType: SyncEntityType): boolean {
@@ -385,4 +391,21 @@ export function aquariumOperationId(input: {
   startedAt: string;
 }): string {
   return `aquarium-create:${input.ownershipType}:${input.startedAt}`;
+}
+
+/**
+ * A VÍZMÉRÉS IDEMPOTENCIA-KULCSA -- EGY MÉRÉSI ALKALOMRA, NEM SORONKÉNT.
+ *
+ * Murena döntése (#1055): egy alkalom több paramétert visz, mind ugyanazzal
+ * a `measuredAt`-tel, és a szerver `CreateAquariumMeasurementDto` EGYETLEN
+ * `clientOperationId`-t kér a teljes alkalomhoz. Az akvárium azonosítója is
+ * a kulcs része: két KÜLÖNBÖZŐ akváriumon ugyanabban a pillanatban felvitt
+ * mérés más-más kulcsot kapjon, különben a második a szerveren az elsőnek
+ * tűnne (a `measuredAt` önmagában nem egyedi akváriumok között).
+ */
+export function aquariumMeasurementOperationId(input: {
+  aquariumId: string;
+  measuredAt: string;
+}): string {
+  return `aquarium-measurement:${input.aquariumId}:${input.measuredAt}`;
 }
