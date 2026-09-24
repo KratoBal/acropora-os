@@ -207,7 +207,7 @@ describe("a fénykép sora", () => {
     );
   });
 
-  it("MIND AZ ÖT FELVITEL idempotens beszúrással megy be", () => {
+  it("MIND A HAT FELVITEL idempotens beszúrással megy be", () => {
     /*
       MI PIROSIT: egyetlen sima `INSERT` barmelyik FELVITELI agban. Akkor a
       ketszer megnyomott gomb ket sort tenne a sorba, es ugyanaz a felvitel
@@ -230,11 +230,16 @@ describe("a fénykép sora", () => {
       kerese, offline sorba-allitas a helyszini felvitelhez). Az akvariumnal
       az UJ UGYFEL is EBBEN az egy sorban utazik (`newCustomer` a payloadban),
       tehat ez tovabbra is EGY beszurast jelent, nem kettot.
+
+      2026-09-24, MASODSZOR: HATROL HETRE valtozott a vizmeres felvitelevel
+      (murena API-ja, #1055). A gazda akvarium MAR LETEZIK a meres
+      felvitelekor, tehat az `entity_id` itt nem NULL, mint az akvarium sajat
+      felvitelenel -- ugyanaz az alak, mint a munkalap-tetelnel.
     */
     const beszurasok = [
       ...forras.matchAll(/INSERT OR IGNORE INTO sync_queue/g),
     ].map((m) => m[0]);
-    assert.equal(beszurasok.length, 6);
+    assert.equal(beszurasok.length, 7);
   });
 
   it("a MÓDOSÍTÁS nem ejti el a másodikat, hanem ÖSSZEFÉSÜLI", () => {

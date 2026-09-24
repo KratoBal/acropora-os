@@ -17,7 +17,12 @@ import {
   uploadServiceJobPhotos,
   type CreateServiceJobInput,
 } from "@/lib/api/service-jobs";
-import { createAquarium, type CreateAquariumInput } from "@/lib/api/aquariums";
+import {
+  createAquarium,
+  createAquariumMeasurement,
+  type CreateAquariumInput,
+  type CreateAquariumMeasurementInput,
+} from "@/lib/api/aquariums";
 import { readQueuedWorksheetLine } from "@/lib/worksheets/worksheet-line";
 import { ApiError } from "@/lib/api/client";
 
@@ -82,6 +87,8 @@ export function useQueueDrain(isOnline: boolean): string | null {
                 return jegyetKuld(row);
               case "aquarium":
                 return akvariumotKuld(row);
+              case "aquarium-measurement":
+                return meresKuld(row);
               case "asset":
                 break;
               default: {
@@ -233,6 +240,14 @@ async function kepetKuld(row: SyncQueueRow): Promise<{
           httpStatus: 422,
           error:
             "Az akvárium alá nem tehető fénykép, ezért ezt a sort nem küldjük el.",
+        };
+      case "aquarium-measurement":
+        /** UGYANAZ A SZUKITES, mint az akvarium sajat felvitelenel --
+         * `canOwnPhotos("aquarium-measurement")` is hamis. */
+        return {
+          httpStatus: 422,
+          error:
+            "A vízméréshez nem tehető fénykép, ezért ezt a sort nem küldjük el.",
         };
       default: {
         const soha: never = row.entityType;
@@ -402,6 +417,38 @@ async function akvariumotKuld(row: SyncQueueRow): Promise<{
       clientOperationId: row.id,
     });
     return { httpStatus: 201, error: null, entityId: letrejott.id };
+  } catch (cause) {
+    return {
+      httpStatus: cause instanceof ApiError ? cause.status : null,
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
+}
+
+/**
+ * EGY VÍZMÉRÉSI ALKALOM FELKÜLDÉSE A SORBÓL -- A GAZDA AKVÁRIUM MÁR LÉTEZIK.
+ *
+ * UGYANAZ AZ ALAK, MINT A MUNKALAP-TÉTELNÉL (`tetelKuld`): a `row.entityId`
+ * a gazda szerver-oldali azonosítója, mert az a felvitel pillanatában már
+ * megvolt -- nincs itt "a szerver azonosítója most lép át a varraton" eset,
+ * mert a mérési alkalomra semmi mást nem lehet ráépíteni ebben a körben.
+ */
+async function meresKuld(row: SyncQueueRow): Promise<{
+  httpStatus: number | null;
+  error: string | null;
+}> {
+  if (row.entityId === null) {
+    return {
+      httpStatus: 422,
+      error: "A méréshez nem tartozik akvárium, ezért nincs hova felküldeni.",
+    };
+  }
+  try {
+    await createAquariumMeasurement(row.entityId, {
+      ...(JSON.parse(row.payloadJson) as CreateAquariumMeasurementInput),
+      clientOperationId: row.id,
+    });
+    return { httpStatus: 201, error: null };
   } catch (cause) {
     return {
       httpStatus: cause instanceof ApiError ? cause.status : null,
