@@ -13,6 +13,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AquariumAvatar } from "@/components/aquariums/AquariumAvatar";
+import { AquariumBadge } from "@/components/aquariums/AquariumBadge";
+import { ConnectivityBanner } from "@/components/offline/ConnectivityBanner";
 import {
   addAquariumEquipment,
   deleteAquariumMeasurement,
@@ -36,6 +39,7 @@ import {
 import { aquariumMeasurementParameter } from "@/lib/aquariums/aquarium-measurement-create";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+import { useIsOnline } from "@/lib/offline/connectivity";
 
 /**
  * AKVÁRIUM ADATLAP.
@@ -57,12 +61,18 @@ import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
  *
  * A KARBANTARTÓK (brief 8. döntés) CSAK MEGJELENÍTÉS ebben a körben -- a
  * választás webes.
+ *
+ * A JELVÉNYEK, A KARBANTARTÓ-AVATAROK ÉS A VÍZÉRTÉK-CSEMPÉK (2026-09-24,
+ * acrobot kérése) a Figma-terv (`exchange/figma-akvariumok-make-2`) mobil
+ * szekciójából jönnek szerkezetileg, a mai sötét témával -- Balázs döntése,
+ * hogy a telefon egésze egyelőre sötét marad.
  */
 export default function AquariumDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const online = useIsOnline();
   const queryClient = useQueryClient();
 
   const [draft, setDraft] = useState<AquariumEquipmentForm>(
@@ -203,8 +213,27 @@ export default function AquariumDetailScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
+        {!online ? <ConnectivityBanner /> : null}
+
         <Text style={styles.eyebrow}>{data?.aquariumNumber ?? "AKVÁRIUM"}</Text>
         <Text style={styles.title}>{data?.name ?? "Akvárium"}</Text>
+        {data ? (
+          <View style={styles.badgeRow}>
+            <AquariumBadge
+              tone={data.ownershipType === "OWN" ? "teal" : "grey"}
+            >
+              {data.ownershipType === "OWN" ? "Saját" : "Ügyfél"}
+            </AquariumBadge>
+            <AquariumBadge>
+              {WATER_BODY_LABEL[data.waterBodyType]}
+            </AquariumBadge>
+            {data.waterType ? (
+              <AquariumBadge tone="teal">
+                {data.waterType === "TENGERI" ? "Tengeri" : "Édesvízi"}
+              </AquariumBadge>
+            ) : null}
+          </View>
+        ) : null}
 
         {aquarium.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
         {aquarium.isError ? (
@@ -225,7 +254,6 @@ export default function AquariumDetailScreen() {
                   : OWNERSHIP_LABEL[data.ownershipType]
               }
             />
-            <Row label="Víztest" value={WATER_BODY_LABEL[data.waterBodyType]} />
             {data.lengthCm !== undefined &&
             data.widthCm !== undefined &&
             data.heightCm !== undefined ? (
@@ -242,24 +270,26 @@ export default function AquariumDetailScreen() {
                 }`}
               />
             ) : null}
-            {data.waterType ? (
-              <Row
-                label="Víztípus"
-                value={data.waterType === "TENGERI" ? "Tengeri" : "Édesvízi"}
-              />
-            ) : null}
             {data.startedAt ? (
               <Row label="Indítva" value={data.startedAt} />
             ) : null}
             {data.notes ? <Row label="Megjegyzés" value={data.notes} /> : null}
-            <Row
-              label="Karbantartók"
-              value={
-                data.maintainers.length > 0
-                  ? data.maintainers.map((m) => m.displayName).join(", ")
-                  : "Nincs megadva"
-              }
-            />
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Karbantartók</Text>
+              {data.maintainers.length > 0 ? (
+                <View style={styles.avatarRow}>
+                  {data.maintainers.map((m) => (
+                    <AquariumAvatar
+                      key={m.userId}
+                      userId={m.userId}
+                      displayName={m.displayName}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.rowValue}>Nincs megadva</Text>
+              )}
+            </View>
           </View>
         ) : null}
 
@@ -413,17 +443,21 @@ export default function AquariumDetailScreen() {
 
         {latestOccasion ? (
           <View style={styles.card}>
-            <Row label="Legutóbbi mérés" value={latestOccasion.measuredAt} />
-            {latestOccasion.values.map((value) => {
-              const param = aquariumMeasurementParameter(value.parameterCode);
-              return (
-                <Row
-                  key={value.parameterCode}
-                  label={param.label}
-                  value={`${value.value} ${param.unit}`}
-                />
-              );
-            })}
+            <Text style={styles.latestMeasuredAt}>
+              Legutóbbi mérés: {latestOccasion.measuredAt}
+            </Text>
+            <View style={styles.paramGrid}>
+              {latestOccasion.values.map((value) => {
+                const param = aquariumMeasurementParameter(value.parameterCode);
+                return (
+                  <View key={value.parameterCode} style={styles.paramTile}>
+                    <Text style={styles.paramTileLabel}>{param.label}</Text>
+                    <Text style={styles.paramTileValue}>{value.value}</Text>
+                    <Text style={styles.paramTileUnit}>{param.unit}</Text>
+                  </View>
+                );
+              })}
+            </View>
             {latestOccasion.notes ? (
               <Row label="Megjegyzés" value={latestOccasion.notes} />
             ) : null}
@@ -490,6 +524,29 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   title: { color: "#f4fbff", fontSize: 28, fontWeight: "900" },
+  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  avatarRow: { flexDirection: "row", gap: 6, marginTop: 2 },
+  latestMeasuredAt: { color: "#789cad", fontSize: 12 },
+  paramGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  paramTile: {
+    width: "31%",
+    backgroundColor: "#071f31",
+    borderRadius: 10,
+    padding: 8,
+  },
+  paramTileLabel: { color: "#789cad", fontSize: 10, fontWeight: "700" },
+  paramTileValue: {
+    color: "#f4fbff",
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  paramTileUnit: { color: "#789cad", fontSize: 10 },
   card: {
     marginTop: 12,
     backgroundColor: "#0d2b40",

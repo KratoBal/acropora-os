@@ -13,10 +13,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AquariumBadge } from "@/components/aquariums/AquariumBadge";
+import { ConnectivityBanner } from "@/components/offline/ConnectivityBanner";
 import { listAquariums } from "@/lib/api/aquariums";
 import { aquariumListSubtitle } from "@/lib/aquariums/aquarium-list";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+import { useIsOnline } from "@/lib/offline/connectivity";
 
 const PAGE_SIZE = 25;
 
@@ -33,11 +36,17 @@ const PAGE_SIZE = 25;
  * átvétele itt korai absztrakció lenne. A FELVITEL maga már sorba áll térerő
  * nélkül (`saveOrQueue`, lásd `new.tsx`); ez a lista csak a MEGTEKINTÉST
  * fedi, ahhoz pedig kapcsolat kell.
+ *
+ * A KÁRTYA-SZERKEZET (2026-09-24, acrobot kérése) a Figma-terv
+ * (`exchange/figma-akvariumok-make-2`) mobil szekciójából jön: a sorrend és a
+ * jelvény onnan, a SZÍNEK viszont a mai sötét témából -- Balázs döntése, hogy
+ * a telefon egésze egyelőre sötét marad, ne csak ez a három képernyő.
  */
 export default function AquariumsScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const online = useIsOnline();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
@@ -82,6 +91,8 @@ export default function AquariumsScreen() {
           />
         }
       >
+        {!online ? <ConnectivityBanner /> : null}
+
         <Text style={styles.eyebrow}>SZERVIZ</Text>
         <Text style={styles.title}>Akváriumok</Text>
         <Text style={styles.subtitle}>
@@ -145,7 +156,14 @@ export default function AquariumsScreen() {
             }
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}
           >
-            <Text style={styles.rowTitle}>{item.name}</Text>
+            <View style={styles.rowHeader}>
+              <Text style={styles.rowTitle}>{item.name}</Text>
+              <AquariumBadge
+                tone={item.ownershipType === "OWN" ? "teal" : "grey"}
+              >
+                {item.ownershipType === "OWN" ? "Saját" : "Ügyfél"}
+              </AquariumBadge>
+            </View>
             <Text style={styles.rowMeta}>{aquariumListSubtitle(item)}</Text>
           </Pressable>
         ))}
@@ -223,7 +241,18 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   pressed: { opacity: 0.75 },
-  rowTitle: { color: "#f4fbff", fontSize: 16, fontWeight: "800" },
+  rowHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  rowTitle: {
+    color: "#f4fbff",
+    fontSize: 16,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
   rowMeta: { color: "#789cad", fontSize: 12, marginTop: 3 },
   empty: { color: "#91afbe" },
   error: {
