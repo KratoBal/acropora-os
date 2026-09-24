@@ -44,6 +44,13 @@ export interface MaterialRequestNotificationOutcome {
   attempts: NotificationAttempt[];
 }
 
+/** Ugyanaz a kimenetel, vizmeresre -- az aggregatum az AKVARIUM, nem a
+ * mereskent felvitt sorok, mert egy mereesi alkalom tobb sort ir. */
+export interface AquariumMeasurementNotificationOutcome {
+  aquariumId: string;
+  attempts: NotificationAttempt[];
+}
+
 /**
  * Writes down who was reached and who was not.
  *
@@ -87,6 +94,18 @@ export class NotificationLogRepository extends Repository {
       eventType: "serviceJob.assignment.notified",
       aggregateType: "ServiceJob",
       aggregateId: outcome.serviceJobId,
+      attempts: outcome.attempts,
+    });
+  }
+
+  /** Ugyanaz a kimenetel, vizmeresre -- az aggregatum az AKVARIUM. */
+  async recordAquariumMeasurement(
+    outcome: AquariumMeasurementNotificationOutcome,
+  ): Promise<void> {
+    await this.record({
+      eventType: "aquarium.measurement.notified",
+      aggregateType: "Aquarium",
+      aggregateId: outcome.aquariumId,
       attempts: outcome.attempts,
     });
   }
