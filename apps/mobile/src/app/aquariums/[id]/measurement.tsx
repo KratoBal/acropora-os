@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ConnectivityBanner } from "@/components/offline/ConnectivityBanner";
 import { ApiError } from "@/lib/api/client";
 import { createAquariumMeasurement, getAquarium } from "@/lib/api/aquariums";
 import {
@@ -24,6 +25,7 @@ import {
 } from "@/lib/aquariums/aquarium-measurement-create";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+import { useIsOnline } from "@/lib/offline/connectivity";
 import { enqueueAquariumMeasurement } from "@/lib/offline/queue-store";
 import { saveOrQueue } from "@/lib/offline/save-or-queue";
 import { aquariumMeasurementOperationId } from "@/lib/offline/sync-queue";
@@ -52,12 +54,23 @@ import { aquariumMeasurementOperationId } from "@/lib/offline/sync-queue";
  *
  * === CSAK A KITÖLTÖTT PARAMÉTEREK MENTŐDNEK -- lásd a döntést a
  * `lib/aquariums/aquarium-measurement-create.ts`-ben, mert ott MÉRHETŐ.
+ *
+ * === A FEJLÉC ÉS A PARAMÉTER-SOROK (2026-09-24, acrobot kérése) ===
+ *
+ * A Figma-terv (`exchange/figma-akvariumok-make-2`) "Új vízmérés" mobil
+ * képernyőjének szerkezetét követi (Mégse/cím/Mentés fejléc, egy kártyába
+ * rendezett paraméter-sorok), a mai sötét témával. A "Mérés ideje" mező
+ * SZÁNDÉKOSAN hiányzik onnan: a Figma azt szerkeszthetőnek szánja, itt viszont
+ * a `measuredAt` a MENTÉS PILLANATÁBAN keletkezik (lásd lent, a `mutationFn`
+ * elején) -- egy hosszan nyitva tartott űrlapon egy előre felvitt időpont
+ * elavulna, mire a mentés megtörténik.
  */
 export default function NewAquariumMeasurementScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const online = useIsOnline();
 
   const aquarium = useQuery({
     queryKey: ["aquarium", id],
@@ -189,32 +202,77 @@ export default function NewAquariumMeasurementScreen() {
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        <View style={styles.navBar}>
+          <Pressable
+            onPress={() => router.back()}
+            disabled={mutation.isPending}
+          >
+            <Text style={styles.navCancel}>Mégse</Text>
+          </Pressable>
+          <Text style={styles.navTitle}>Új vízmérés</Text>
+          <Pressable
+            onPress={submit}
+            disabled={mutation.isPending || aquarium.isPending}
+          >
+            {mutation.isPending ? (
+              <ActivityIndicator color="#52d6c7" />
+            ) : (
+              <Text style={styles.navSave}>Mentés</Text>
+            )}
+          </Pressable>
+        </View>
+
         <ScrollView
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.eyebrow}>VÍZÉRTÉKEK</Text>
-          <Text style={styles.title}>Új mérés</Text>
+          {!online ? <ConnectivityBanner /> : null}
 
           {aquarium.isPending ? (
             <ActivityIndicator color="#52d6c7" />
           ) : (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Paraméterek</Text>
-              {parameters.map((param, index) => (
-                <Field
-                  key={param.code}
-                  label={`${param.label} (${param.unit})`}
-                  value={form.values[index]?.text ?? ""}
-                  onChangeText={(text) => updateValue(index, text)}
-                  keyboardType="decimal-pad"
-                  error={
-                    error?.field === `values.${index}` ? error.message : null
-                  }
-                />
-              ))}
+            <View style={styles.paramCard}>
+              {parameters.map((param, index) => {
+                const rowError = error?.field === `values.${index}`;
+                const filled = (form.values[index]?.text ?? "").trim() !== "";
+                return (
+                  <View
+                    key={param.code}
+                    style={[
+                      styles.paramRow,
+                      index > 0 && styles.paramRowDivider,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.paramRowLabel,
+                        filled && styles.paramRowLabelFilled,
+                      ]}
+                    >
+                      {param.label}
+                    </Text>
+                    <View style={styles.paramRowInputWrap}>
+                      <TextInput
+                        value={form.values[index]?.text ?? ""}
+                        onChangeText={(text) => updateValue(index, text)}
+                        keyboardType="decimal-pad"
+                        placeholder="—"
+                        placeholderTextColor="#4a6a7d"
+                        style={[
+                          styles.paramRowInput,
+                          rowError && styles.paramRowInputError,
+                        ]}
+                      />
+                      <Text style={styles.paramRowUnit}>{param.unit}</Text>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
           )}
+          {error && error.field?.startsWith("values") ? (
+            <Text style={styles.error}>{error.message}</Text>
+          ) : null}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Megjegyzés</Text>
@@ -229,60 +287,12 @@ export default function NewAquariumMeasurementScreen() {
           </View>
 
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-
-          {error && error.field === "values" ? (
-            <Text style={styles.error}>{error.message}</Text>
-          ) : null}
           {error && error.field === null ? (
             <Text style={styles.error}>{error.message}</Text>
           ) : null}
-
-          <Pressable
-            onPress={submit}
-            disabled={mutation.isPending || aquarium.isPending}
-            style={({ pressed }) => [
-              styles.submit,
-              (pressed || mutation.isPending || aquarium.isPending) &&
-                styles.pressed,
-            ]}
-          >
-            {mutation.isPending ? (
-              <ActivityIndicator color="#071827" />
-            ) : (
-              <Text style={styles.submitText}>Mentés</Text>
-            )}
-          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChangeText,
-  keyboardType,
-  error,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  keyboardType?: "default" | "decimal-pad";
-  error?: string | null;
-}) {
-  return (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType ?? "default"}
-        placeholderTextColor="#668798"
-        style={styles.input}
-      />
-      {error ? <Text style={styles.fieldError}>{error}</Text> : null}
-    </View>
   );
 }
 
@@ -290,13 +300,53 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#071827" },
   flex: { flex: 1 },
   container: { padding: 18, paddingBottom: 48, gap: 14 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
+  navBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1c4963",
+    backgroundColor: "#0d2b40",
   },
-  title: { color: "#f4fbff", fontSize: 28, fontWeight: "900" },
+  navCancel: { color: "#52d6c7", fontSize: 14 },
+  navTitle: { color: "#f4fbff", fontSize: 16, fontWeight: "800" },
+  navSave: { color: "#52d6c7", fontSize: 14, fontWeight: "800" },
+  paramCard: {
+    backgroundColor: "#0d2b40",
+    borderColor: "#1c4963",
+    borderWidth: 1,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  paramRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  paramRowDivider: { borderTopWidth: 1, borderTopColor: "#132f42" },
+  paramRowLabel: { color: "#91afbe", fontSize: 14, flexShrink: 1 },
+  paramRowLabelFilled: { color: "#f4fbff", fontWeight: "700" },
+  paramRowInputWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
+  paramRowInput: {
+    color: "#f4fbff",
+    fontSize: 15,
+    textAlign: "right",
+    minWidth: 64,
+    borderWidth: 1,
+    borderColor: "#1c4963",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: "#071827",
+  },
+  paramRowInputError: { borderColor: "#fca5a5" },
+  paramRowUnit: { color: "#789cad", fontSize: 11, minWidth: 40 },
   section: {
     backgroundColor: "#0d2b40",
     borderColor: "#1c4963",
@@ -306,9 +356,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   sectionTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
-  field: { gap: 6 },
-  fieldLabel: { color: "#91afbe", fontSize: 12 },
-  fieldError: { color: "#fecaca", fontSize: 12 },
   input: {
     color: "#f4fbff",
     fontSize: 15,
@@ -322,12 +369,4 @@ const styles = StyleSheet.create({
   notesInput: { minHeight: 70, textAlignVertical: "top" },
   notice: { color: "#52d6c7", fontSize: 13 },
   error: { color: "#fecaca", fontSize: 13 },
-  submit: {
-    backgroundColor: "#52d6c7",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  pressed: { opacity: 0.85 },
-  submitText: { color: "#071827", fontSize: 15, fontWeight: "900" },
 });
