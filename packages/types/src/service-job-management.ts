@@ -962,3 +962,43 @@ export type ServiceJobHandoverMailResult =
       readonly reason: ServiceJobHandoverMailSendSkipReason;
     }
   | { readonly kind: "refused"; readonly message: string };
+
+/**
+ * A KARBANTARTÁSI CSOMAG KIKÜLDÉSE -- UGYANAZ A HÁROM ALAK, MINT A
+ * HIBAJEGYES HANDOVER-EN FENT, EGGYEL RÖVIDEBB KIHAGYÁSI LISTÁVAL: a
+ * karbantartási lap `customerId`-ja közvetlenül a szerződés vevőjére mutat,
+ * nincs `WorksheetDepartment` közbeeső lépés, tehát a `no-department` ok
+ * nem értelmezhető itt -- lásd `maintenance-mail-recipients.ts` fejlécét.
+ *
+ * EGY LISTA VAN, ITT, ugyanazért, amiért a hibajegyes okoknál: a szerver
+ * oldali `MaintenanceMailSkipReason` ennek az ALIASA, nem másolata.
+ */
+export type MaintenancePackageMailSkipReason =
+  "mail-off" | "path-off" | "no-redirect" | "no-customer" | "no-recipient";
+
+export interface MaintenancePackageMailRecipient {
+  readonly name: string;
+  readonly email: string;
+}
+
+export type MaintenancePackageMailPreview =
+  | {
+      readonly kind: "send";
+      readonly recipients: readonly MaintenancePackageMailRecipient[];
+      readonly subject: string;
+    }
+  | {
+      readonly kind: "skip";
+      readonly reason: MaintenancePackageMailSkipReason;
+    };
+
+export type MaintenancePackageMailSendSkipReason =
+  MaintenancePackageMailSkipReason | "no-sender" | "no-job";
+
+export type MaintenancePackageMailResult =
+  | { readonly kind: "sent"; readonly recipients: number }
+  | {
+      readonly kind: "skipped";
+      readonly reason: MaintenancePackageMailSendSkipReason;
+    }
+  | { readonly kind: "refused"; readonly message: string };
