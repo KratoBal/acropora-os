@@ -31,14 +31,19 @@ const DOKUMENTUMOK = "src/components/document-panel.tsx";
 const BEJELENTO = "src/components/new-ticket.tsx";
 const HIBAJEGY_RESZLET = "src/components/ticket-detail.tsx";
 /*
-  AZ ESZKOZ-LISTA 2026-09-24-EN SAJAT FAJLBA KOLTOZOTT (`asset-list.tsx`),
-  Balazs kerese miatt, hogy ugyanugy nezzen ki, mint az app.acropora.hu --
-  a `reference-lists.tsx`-ben csak a `Worksheets` maradt. A ket konstans
-  ezert kulon all: `ESZKOZ_LISTA` az UJ fajlra mutat, `MUNKALAP_LISTA` a
-  regi fajlra, a munkalap-listat viszo checkeknek.
+  A `reference-lists.tsx` 2026-09-24-EN MINDKET LISTAJATOL MEGVALT, ES TOROLVE
+  LETT: az eszkoz-lista `asset-list.tsx`-be koltozott (#1042), a munkalap-lista
+  pedig `worksheet-list.tsx`-be (ugyanaznap, kulon PR). Mindket koltozes
+  ugyanazert tortent: Balazs kerese, hogy a partner listak ugyanugy nezzenek
+  ki, mint az app.acropora.hu. A fajlban a koltozes utan mar semmi nem maradt,
+  csak ket magyarazo komment -- ezert torlodott, nem hagytuk ures hejnak.
+
+  MIERT KULON KONSTANS MINDKETTONEK: a `sheet`/`worksheet` valtozonev is
+  koltozott a mozgassal, tehat egy a regi fajlra maradt allitas a kodtol
+  fuggetlenul pirosodna vagy zoldulne.
 */
 const ESZKOZ_LISTA = "src/components/asset-list.tsx";
-const MUNKALAP_LISTA = "src/components/reference-lists.tsx";
+const MUNKALAP_LISTA = "src/components/worksheet-list.tsx";
 const ESZKOZ_RESZLET = "src/components/asset-detail.tsx";
 const ESZKOZ_UTVONAL = "src/app/(portal)/eszkozok/[id]/page.tsx";
 const NAPLO_SOR = "src/lib/naplo-sor.ts";
@@ -697,10 +702,10 @@ describe("a partner munkalap-adatlapja", () => {
     );
     assert.match(
       olvas(MUNKALAP_LISTA),
-      /worksheetStatusLabel\[sheet\.status\]/,
+      /worksheetStatusLabel\[worksheet\.status\]/,
     );
     /* ES A NYERS ERTEK SEHOL: egy bennmaradt alak a masik helyen allna. */
-    assert.doesNotMatch(olvas(MUNKALAP_LISTA), /\{sheet\.status\}/);
+    assert.doesNotMatch(olvas(MUNKALAP_LISTA), /\{worksheet\.status\}/);
   });
 
   /**

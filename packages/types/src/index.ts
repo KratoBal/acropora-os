@@ -31,7 +31,10 @@ export type {
   MailTemplateEvent,
   MailTemplateVariable,
 } from "./mail-template.js";
-export { worksheetStatusLabel } from "./worksheet-management.js";
+export {
+  worksheetStatusLabel,
+  worksheetStatusTone,
+} from "./worksheet-management.js";
 export type {
   ServiceJobAssetLink,
   ServiceJobAssignee,

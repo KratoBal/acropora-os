@@ -921,3 +921,29 @@ export const worksheetStatusLabel: Record<WorksheetVersionStatus, string> = {
   SIGNED: "Aláírva",
   REJECTED: "Elutasítva",
 };
+
+/**
+ * A MUNKALAP-ALLAPOT SZINE, ATKOLTOZOTT `apps/web`-bol (2026-09-24, a
+ * munkalap-lapok partneri paritasa, `assetStatusTone`/`partnerStatusTone`
+ * mintajara). A TIPUS SZO SZERINT KIIRVA, NEM `ServiceTone` IMPORTALVA:
+ * `packages/types` nem fugghet `packages/ui`-tol.
+ *
+ * A `WORKSHEET_STATUS_VARIANT` TABLAZAT, NEM FELTETEL-LANC -- egy uj allapot
+ * a forditasnal derulne ki, nem a felulten latszana szurken (`Record`
+ * kenyszeriti a teljesseget).
+ */
+const WORKSHEET_STATUS_TONE: Record<
+  WorksheetVersionStatus,
+  "neutral" | "purple" | "green" | "amber" | "red" | "blue"
+> = {
+  DRAFT: "neutral",
+  AWAITING_SIGNATURE: "amber",
+  SIGNED: "green",
+  REJECTED: "red",
+};
+
+export function worksheetStatusTone(
+  status: WorksheetVersionStatus,
+): "neutral" | "purple" | "green" | "amber" | "red" | "blue" {
+  return WORKSHEET_STATUS_TONE[status];
+}
