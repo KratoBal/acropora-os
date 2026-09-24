@@ -40,7 +40,7 @@ import {
   PilotCard,
   PilotCardHeader,
   PilotThemeRoot,
-} from "./pilot-ui";
+} from "@/components/pilot/pilot-ui";
 
 /**
  * A HARMADIK MAKE-KÖR ÁTÜLTETÉSE -- "MÉRÉSI ELŐZMÉNYEK" ÖNÁLLÓ OLDAL.

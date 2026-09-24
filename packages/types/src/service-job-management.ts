@@ -82,6 +82,24 @@ export interface ServiceJobListItem {
    * koveti. URES TOMB SOHA.
    */
   departmentPath: string[] | null;
+  /**
+   * A HELYSZIN SAJAT KODJA (a level, nem az ut eleje), pl. "AKV". Ugyanaz a
+   * korlat, mint a `departmentPath`-nal: `null`, ha nincs helyszin vagy nem
+   * epitheto. A ket mezo EGYUTT azonosit -- a kod onmagaban csak
+   * TESTVEREK kozott egyedi (lasd `WorksheetDepartmentSummary`).
+   *
+   * Felvéve a Szerviz / Hibajegyek Figma-kor listaoldalahoz (2026-09-24):
+   * a terv "AKV · Akvárium ház" alakban mutatja a helyszint, es ehhez a
+   * meglevo `departmentPath` neve nem eleg -- a kodra KULON mezo kell.
+   */
+  departmentCode: string | null;
+  /**
+   * A JEGYRE DELEGALT KOLLEGAK -- UGYANAZ A TIPUS, MINT A RESZLETLAPON
+   * (`ServiceJobDetail.assignees`). Felvéve a Figma-lista "Delegálva"
+   * oszlopahoz (2026-09-24): a mai adat MAR letezik a jegyen, a listaba
+   * eddig csak nem jutott el.
+   */
+  assignees: ServiceJobAssignee[];
   worksheetCount: number;
   createdAt: string;
   /**

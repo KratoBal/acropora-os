@@ -48,6 +48,8 @@ function response(
         partnerStatusLabel: "Feldolgozás alatt",
         customerName: "Fővárosi Állat- És Növénykert",
         departmentPath: ["Biodóm", "Fókamedence", "Fóka nagymedence"],
+        departmentCode: "FOK",
+        assignees: [],
         worksheetCount: 2,
         createdAt: "2026-09-01T08:00:00.000Z",
         hidden: false,

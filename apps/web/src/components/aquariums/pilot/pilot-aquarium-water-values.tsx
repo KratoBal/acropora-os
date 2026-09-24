@@ -18,7 +18,7 @@ import {
   PilotDrawer,
   PilotFormField,
   PilotInput,
-} from "./pilot-ui";
+} from "@/components/pilot/pilot-ui";
 
 /**
  * A FIGMA MAKE TERV "VÍZÉRTÉKEK" KÁRTYÁJA.
