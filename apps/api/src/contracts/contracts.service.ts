@@ -82,7 +82,31 @@ export class ContractsService {
           assetIds: item.assets.map((asset) => asset.assetId),
         })),
     });
-    return this.repository.update(id, data);
+    try {
+      return await this.repository.update(id, data);
+    } catch (error) {
+      /*
+        A REPOSITORY MINDEN MENTÉSKOR TÖRLI ÉS ÚJRAÉPÍTI A TÉTELEKET
+        (`contracts.repository.ts` `update()`: `deleteMany` majd `create`)
+        -- ez MÁR MA is így van, nem ez a szelet vezeti be. Ha egy tételhez
+        már készült megrendelőlap (`MaintenanceOrderItem.contractItemId`,
+        `onDelete: Restrict`), a törlés a Postgres-idegenkulcs-megkötésen
+        akad el (P2003), és eddig NYERSEN futott tovább a felhasználóig.
+        Ez a lelet a helyszín/eszköz-szerkesztő beépítésekor derült ki
+        (2026-09-24): a webes szerkesztő mostantól MINDIG küld `items`-t,
+        tehát ez az ág gyakrabban futna le, mint eddig -- de az ALAPHIBA
+        nem új, minden szerződés-mentés érintett volt, ami tételhez kötött
+        megrendelőlappal rendelkező szerződést mentett.
+      */
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2003"
+      )
+        throw new ConflictException(
+          "A tételek nem módosíthatók, mert ezekhez már készült megrendelőlap.",
+        );
+      throw error;
+    }
   }
 
   async addPdf(id: string, file: Express.Multer.File) {
