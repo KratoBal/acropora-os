@@ -107,7 +107,15 @@ export class GmailMailSender implements MailSender {
       A NYERS LEVEL ITT EPUL, ES ITT DOB, HA FEJLEC-INJEKCIOT TALAL. A
       `buildMimeMessage` a masodik reteg: az elso az osszeallitonal all.
     */
-    const raw = base64Url(buildMimeMessage(mail, config.user));
+    /*
+      A HIVO FELADOJA ELSOBBSEGET KAP, ES CSAK AKKOR, HA NEM URES.
+
+      A `mail.from` HIANYA A MAI VISELKEDES: a `config.user` (`GMAIL_TICKET_USER`,
+      alapertelmezesben `ticket@acropora.hu`) marad a feladó -- lasd `mail.port.ts`.
+    */
+    const raw = base64Url(
+      buildMimeMessage(mail, mail.from?.trim() || config.user),
+    );
     const token = await this.token(config);
 
     /*

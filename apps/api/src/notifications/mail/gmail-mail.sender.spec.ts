@@ -125,3 +125,76 @@ describe("a kuldes-burok HELYE", () => {
     assert.equal(hiba.code, "TICKET_MAIL_TOKEN_FAILED");
   });
 });
+
+/**
+ * A FELADO CIME -- Balazs kerese, 2026-09-24 (Akvariumok szal, message_id
+ * 1552727165714563153): a vizmeres-level `info@acropora.hu`-rol menjen, a
+ * tobbi tovabbra is a kornyezet feladojarol (`GMAIL_TICKET_USER`).
+ *
+ * A NYERS KIMENO LEVELET MERI, NEM EGY KOZBULSO MEZOT: a `request()` hivas
+ * torzse a Gmail API-nak kuldott `{ raw }`, base64url-kodolva. Ez a spec ezt
+ * dekodolja vissza, es a `From:` sort olvassa -- ugyanazt latja, amit a Gmail
+ * kapna.
+ */
+describe("a feladó címe", () => {
+  function kuldoFeladoMereshez(): {
+    sender: GmailMailSender;
+    nyersLevelek: () => string[];
+  } {
+    const nyersLevelek: string[] = [];
+    const fetchImpl = (async (
+      bemenet: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const url = String(bemenet);
+      if (url.startsWith(TOKEN_URL))
+        return Response.json({
+          access_token: "kitalalt-token",
+          expires_in: 3600,
+        });
+      if (url.startsWith(API_URL)) {
+        const torzs = JSON.parse(String(init?.body)) as { raw: string };
+        nyersLevelek.push(
+          Buffer.from(
+            torzs.raw.replace(/-/g, "+").replace(/_/g, "/"),
+            "base64",
+          ).toString("utf8"),
+        );
+        return Response.json({ id: "kitalalt-uzenet" });
+      }
+      throw new Error(`a dupla nem ismeri ezt a cimet: ${url}`);
+    }) as typeof fetch;
+
+    return {
+      sender: new GmailMailSender(fetchImpl, KORNYEZET),
+      nyersLevelek: () => nyersLevelek,
+    };
+  }
+
+  function fromSor(nyersLevel: string): string | undefined {
+    return nyersLevel.split("\r\n").find((sor) => sor.startsWith("From: "));
+  }
+
+  /*
+    NEGATIV KONTROLL: `mail.from` HIANYZIK. Ez a mai viselkedes, es MINDEN
+    olyan hivora vonatkozik, ami ezt a mezot nem tolti ki (a hibajegy- es az
+    atadasi levelek is -- lasd a `ticket-mail.service.spec.ts` es a
+    `handover-mail.service.spec.ts` egy-egy allitasat).
+  */
+  it("HIÁNYZÓ mail.from mellett a KÖRNYEZET feladója megy", async () => {
+    const { sender, nyersLevelek } = kuldoFeladoMereshez();
+
+    await sender.send(LEVEL);
+
+    assert.equal(fromSor(nyersLevelek()[0] ?? ""), "From: ticket@pelda.teszt");
+  });
+
+  /* POZITIV OLDAL: a hivo feladoja elsobbseget kap a kornyezetevel szemben. */
+  it("KITÖLTÖTT mail.from a saját címét viszi, a környezetét nem", async () => {
+    const { sender, nyersLevelek } = kuldoFeladoMereshez();
+
+    await sender.send({ ...LEVEL, from: "info@pelda.teszt" });
+
+    assert.equal(fromSor(nyersLevelek()[0] ?? ""), "From: info@pelda.teszt");
+  });
+});

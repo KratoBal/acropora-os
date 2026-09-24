@@ -47,6 +47,17 @@ export interface OutgoingMail {
   readonly to: readonly string[];
   readonly subject: string;
   readonly text: string;
+  /**
+   * A FELADO CIME, LEVELFAJTANKENT ELTERHET.
+   *
+   * Balazs kerese, 2026-09-24 (Akvariumok szal, message_id
+   * 1552727165714563153): a vizmeres-level `info@acropora.hu` cimrol menjen,
+   * a tobbi tovabbra is `ticket@acropora.hu`-rol. HIANYZO ERTEKNEL a kuldo a
+   * SAJAT alapertelmezett feladojat hasznalja (`GmailMailSender`-nel a
+   * `GMAIL_TICKET_USER` kornyezeti valtozo) -- ez a mai viselkedes,
+   * valtozatlanul, minden hivonal, aki ezt a mezot nem tolti ki.
+   */
+  readonly from?: string;
   /** Ures vagy hianyzo lista mellett a level EGYRESZES marad. */
   readonly attachments?: readonly MailAttachment[];
 }

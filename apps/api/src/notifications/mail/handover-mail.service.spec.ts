@@ -127,6 +127,12 @@ describe("a lezárt hibajegy kiküldése", () => {
     );
     assert.equal(t.nyomok[0]?.outcome, "SENT");
     assert.equal(t.naplo.length, 1);
+    /*
+      NEGATIV KONTROLL (2026-09-24): a vizmeres-level sajat FELADO-cimet kap
+      (`AQUARIUM_MEASUREMENT_MAIL_FROM`), az atadasi level nem -- lasd a
+      megjegyzest a `ticket-mail.service.spec.ts`-ben, ugyanaz az allitas.
+    */
+    assert.equal(t.kuldott[0]?.from, undefined);
   });
 
   /**

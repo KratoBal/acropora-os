@@ -18,6 +18,10 @@ import {
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
+import {
+  AQUARIUM_MEASUREMENT_RESULT,
+  DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE,
+} from "./aquarium-measurement-mail.service.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
   DEFAULT_MATERIAL_REQUEST_CREATED_TEMPLATE,
@@ -57,6 +61,8 @@ function alapertelmezes(id: string) {
       return DEFAULT_MATERIAL_REQUEST_CREATED_TEMPLATE;
     case MATERIAL_REQUEST_RECEIVED:
       return DEFAULT_MATERIAL_REQUEST_RECEIVED_TEMPLATE;
+    case AQUARIUM_MEASUREMENT_RESULT:
+      return DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE;
     default:
       throw new NotFoundException("Nincs ilyen levélsablon.");
   }

@@ -142,6 +142,13 @@ describe("a nyito ertesitese levelben", () => {
     assert.deepEqual(kuldott[0]?.to, ["nyito@partner.hu"]);
     assert.equal(naplo.length, 1);
     assert.ok(!naplo[0]?.note.includes("@"));
+    /*
+      NEGATIV KONTROLL (2026-09-24): a vizmeres-level sajat FELADO-cimet kap
+      (`AQUARIUM_MEASUREMENT_MAIL_FROM`), EZ az ut nem. Az `OutgoingMail.from`
+      mezo opcionalis, es ez az ut soha nem tolti ki -- tehat a Gmail-kuldo a
+      SAJAT alapertelmezett feladojat hasznalja, valtozatlanul.
+    */
+    assert.equal(kuldott[0]?.from, undefined);
   });
 
   /**
