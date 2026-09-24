@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 
+import { unitPathsFor } from "../common/unit-path-lookup.js";
+
 const orderInclude = {
   contract: {
     select: {
@@ -102,6 +104,11 @@ export class MaintenanceOrdersRepository {
         },
       },
     });
+  }
+
+  /** A helyszínek teljes útja, hibaüzenetbe -- ugyanaz a felbontás, mint a munkalapon. */
+  departmentPaths(departmentIds: readonly string[]) {
+    return unitPathsFor(this.database, [...departmentIds]);
   }
 
   defaultAddress(customerId: string) {

@@ -88,6 +88,8 @@ function fakeRepository(overrides: Partial<Record<string, unknown>> = {}) {
     lastNumberOfYear: async () => null,
     issue: async (input: unknown) => ({ id: "order-1", ...(input as object) }),
     detail: async () => null,
+    departmentPaths: async (ids: readonly string[]) =>
+      new Map(ids.map((id) => [id, [id]])),
     addSignedDocument: async () => ({ id: "document-1" }),
     markSigned: async () => ({ id: "order-1", status: "SIGNED" }),
     markRevoked: async () => ({ id: "order-1", status: "REVOKED" }),
@@ -173,6 +175,51 @@ describe("MaintenanceOrdersService.issue", () => {
     );
   });
 
+  /**
+   * MURENA LELETE, STAGING (79d793aa): a `uploadSignedDocument()` 500-at
+   * adott, mert a `ServiceJob.departmentId` NOT NULL, a kiállított
+   * rendelésből viszont nem lehet EGY helyszínt levezetni, ha a tételei
+   * KÜLÖNBÖZŐ helyszínen vannak. Ezt itt, KIÁLLÍTÁSKOR kérjük számon --
+   * ne az aláírás visszaérkezésekor, a legrosszabb pillanatban.
+   */
+  it("elutasítja, ha a kiválasztott tételek KÜLÖNBÖZŐ helyszínen vannak", async () => {
+    const { service } = makeService({
+      contractForIssuance: async () =>
+        contractRow({
+          items: [
+            {
+              id: "item-1",
+              position: 1,
+              description: "Cápasuli RO karbantartás",
+              unitNet: "410000",
+              quantity: "1",
+              occasionsPerYear: 4,
+              vatRatePercent: "27",
+              departmentId: "department-1",
+            },
+            {
+              id: "item-2",
+              position: 2,
+              description: "Fókamedence karbantartás",
+              unitNet: "300000",
+              quantity: "1",
+              occasionsPerYear: 4,
+              vatRatePercent: "27",
+              departmentId: "department-2",
+            },
+          ],
+        }),
+    });
+    await assert.rejects(
+      () =>
+        service.issue(
+          { contractId: "contract-1", itemIds: ["item-1", "item-2"] },
+          ACTOR,
+        ),
+      /különböző helyszínen/,
+    );
+  });
+
   it("ConflictException-t dob, ha egy tételnél elfogyott az évi alkalomkeret", async () => {
     /*
       A tétel évi 4 alkalmat enged; ha a számláló szerint MÁR 4 nem visszavont
@@ -216,7 +263,10 @@ describe("MaintenanceOrdersService.issue", () => {
 });
 
 describe("MaintenanceOrdersService: állapot-átmenetek", () => {
-  function orderRow(status: "ISSUED" | "SIGNED" | "REVOKED") {
+  function orderRow(
+    status: "ISSUED" | "SIGNED" | "REVOKED",
+    departmentIds: readonly (string | null)[] = ["department-1"],
+  ) {
     return {
       id: "order-1",
       number: "MR-2026-001",
@@ -226,13 +276,11 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
         title: "Vízgépészet karbantartása",
         customerId: "customer-1",
       },
-      items: [
-        {
-          description: "Cápasuli RO karbantartás",
-          quantity: new Prisma.Decimal("1"),
-          contractItem: { departmentId: "department-1" },
-        },
-      ],
+      items: departmentIds.map((departmentId, index) => ({
+        description: `Tétel ${index + 1}`,
+        quantity: new Prisma.Decimal("1"),
+        contractItem: { departmentId },
+      })),
     };
   }
 
@@ -276,6 +324,73 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
     const result = await wired.uploadSignedDocument("order-1", file, ACTOR);
     assert.equal((result as { status: string }).status, "SIGNED");
     assert.equal(workedsheetCalls, 1);
+  });
+
+  /**
+   * MURENA LELETE, STAGING (79d793aa): a `ServiceJobsService.create()`-nek
+   * eddig SEHOL nem küldött `departmentId`-t az `uploadSignedDocument()`,
+   * a `ServiceJob.departmentId` pedig NOT NULL (#1043 óta) -- ez adta a
+   * 500-at. Ez a teszt azt méri, hogy egy-helyszínes rendelésnél a
+   * levezetett helyszín TÉNYLEG eljut a karbantartási laphoz.
+   */
+  it("egy-helyszínes rendelés feltöltése a HELYES departmentId-vel hozza létre a karbantartási lapot", async () => {
+    let capturedDepartmentId: string | undefined;
+    const repository = fakeRepository({
+      detail: async () => orderRow("ISSUED", ["department-1", "department-1"]),
+    });
+    const serviceJobs = {
+      create: async (input: { departmentId?: string }) => {
+        capturedDepartmentId = input.departmentId;
+        return { id: "job-1" };
+      },
+    };
+    const worksheets = { create: async () => ({ id: "worksheet-1" }) };
+    const wired = new MaintenanceOrdersService(
+      repository as never,
+      serviceJobs as never,
+      worksheets as never,
+    );
+    const file = {
+      mimetype: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 ..."),
+      originalname: "alairt.pdf",
+      size: 10,
+    } as Express.Multer.File;
+    await wired.uploadSignedDocument("order-1", file, ACTOR);
+    assert.equal(capturedDepartmentId, "department-1");
+  });
+
+  /**
+   * A MÁSIK FELE: ha a tételek KÜLÖNBÖZŐ helyszínen vannak, 400-at ad, ÉS
+   * -- mivel az ellenőrzés a `addSignedDocument()` ELŐTT fut -- a
+   * dokumentum NEM mentődik el. Enélkül a korábbi hiba visszatérne más
+   * alakban: egy ismételt próbálkozás duplikált dokumentumot hozna létre.
+   */
+  it("VEGYES helyszínű rendelésnél 400-at ad, és NEM ment el dokumentumot", async () => {
+    let addSignedDocumentCalls = 0;
+    const repository = fakeRepository({
+      detail: async () => orderRow("ISSUED", ["department-1", "department-2"]),
+      addSignedDocument: async () => {
+        addSignedDocumentCalls += 1;
+        return { id: "document-1" };
+      },
+    });
+    const wired = new MaintenanceOrdersService(
+      repository as never,
+      { create: async () => ({ id: "job-1" }) } as never,
+      { create: async () => ({ id: "worksheet-1" }) } as never,
+    );
+    const file = {
+      mimetype: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 ..."),
+      originalname: "alairt.pdf",
+      size: 10,
+    } as Express.Multer.File;
+    await assert.rejects(
+      () => wired.uploadSignedDocument("order-1", file, ACTOR),
+      /különböző helyszínen/,
+    );
+    assert.equal(addSignedDocumentCalls, 0);
   });
 
   it("csak ISSUED rendelés vonható vissza", async () => {

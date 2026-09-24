@@ -87,6 +87,19 @@ export class MaintenanceOrdersService {
           .join(", ")}.`,
       );
 
+    /*
+      EGY KARBANTARTÁSI LAP EGY HELYSZÍNRE KÉSZÜL (Balázs éles hibája,
+      2026-09-24 21:48, staging, Állatkert) -- ha a kiállítás tételei
+      TÖBB helyszínen vannak, ez itt, KIÁLLÍTÁSKOR derül ki, nem csak az
+      aláírás visszaérkezésekor (`uploadSignedDocument`, ugyanez a
+      ellenőrzés). A vegyes-helyszínes eset modellje még nincs eldöntve
+      (Balázs elé megy), ezért egyelőre megállunk és megnevezzük a
+      helyszíneket.
+    */
+    await this.ensureSingleDepartment(
+      contract.items.map((item) => item.departmentId as string),
+    );
+
     const now = new Date();
     const occasionYear = maintenanceOrderOccasionYear(now);
     const counts = await this.repository.issuedOccasionCounts(
@@ -173,7 +186,14 @@ export class MaintenanceOrdersService {
   }
 
   /**
-   * AZ ALÁÍRT PÉLDÁNY VISSZAJÖTT -- TÁROLÁS, MAJD A KARBANTARTÁSI LAP.
+   * AZ ALÁÍRT PÉLDÁNY VISSZAJÖTT -- ELLENŐRZÉS, MAJD TÁROLÁS, MAJD A
+   * KARBANTARTÁSI LAP.
+   *
+   * MINDEN ELLENŐRZÉS A DOKUMENTUM MENTÉSE ELŐTT FUT (Balázs éles hibája,
+   * 2026-09-24 21:48, staging): korábban a hiányzó helyszín ellenőrzése a
+   * `addSignedDocument()` UTÁN állt, tehát egy sikertelen próbálkozás is
+   * elmentette az aláírt PDF-et -- egy újrapróbálkozás duplikált
+   * dokumentumot hozott volna létre, a rendelés pedig ISSUED maradt.
    *
    * A karbantartási lap (MAINTENANCE ServiceJob) és a tételenkénti
    * munkalapok a MEGLÉVŐ szolgáltatásokon keresztül jönnek létre
@@ -207,6 +227,25 @@ export class MaintenanceOrdersService {
       });
       if (quota.state === "reject") throw new ConflictException(quota.reason);
     }
+
+    /*
+      A KARBANTARTÁSI LAP HELYSZÍNE ITT DŐL EL, MÉG A MENTÉS ELŐTT.
+      NEM VÁRT ÁLLAPOT, ha egy tételnek időközben (a kiállítás ÓTA) nincs
+      helyszíne -- a kiállítás ezt már kizárta. Hangosan állunk meg: egy
+      csendben kihagyott tétel egy vevő által aláírt lapról néma hiány
+      lenne.
+    */
+    const helyszinNelkul = order.items.find(
+      (item) => !item.contractItem.departmentId,
+    );
+    if (helyszinNelkul)
+      throw new ConflictException(
+        `A(z) "${helyszinNelkul.description}" tételhez időközben megszűnt a helyszín-hozzárendelés, ezért nem hozható létre hozzá munkalap. A szerződés tételét előbb rendezni kell.`,
+      );
+    const departmentId = await this.ensureSingleDepartment(
+      order.items.map((item) => item.contractItem.departmentId as string),
+    );
+
     await this.repository.addSignedDocument(id, file);
 
     const serviceJob = await this.serviceJobs.create(
@@ -215,20 +254,12 @@ export class MaintenanceOrdersService {
         kind: "MAINTENANCE",
         contractId: order.contract.id,
         customerId: order.contract.customerId,
+        departmentId,
       },
       actor,
     );
 
     for (const item of order.items) {
-      const departmentId = item.contractItem.departmentId;
-      if (!departmentId)
-        // NEM VÁRT ÁLLAPOT: a kiállítás ezt már kizárta. Ha mégis előfordul
-        // (a szerződés tétele a kiállítás UTÁN vesztette el a helyszínét),
-        // hangosan állunk meg -- egy csendben kihagyott tétel egy vevő által
-        // aláírt lapról néma hiány lenne.
-        throw new ConflictException(
-          `A(z) "${item.description}" tételhez időközben megszűnt a helyszín-hozzárendelés, ezért nem hozható létre hozzá munkalap. A szerződés tételét előbb rendezni kell.`,
-        );
       await this.worksheets.create(
         {
           customerId: order.contract.customerId,
@@ -249,6 +280,25 @@ export class MaintenanceOrdersService {
     }
 
     return this.repository.markSigned(id, serviceJob.id);
+  }
+
+  /**
+   * EGY KARBANTARTÁSI LAP EGY HELYSZÍNRE KÉSZÜL. Ha a bemenet TÖBB
+   * különböző helyszínt hordoz, a modell erre még nincs eldöntve (Balázs
+   * elé megy) -- ezért megállunk, és a hibaüzenet MEGNEVEZI a helyszíneket
+   * (a teljes utat, nem csak a kódot, lásd `unit-path-lookup.ts` fejlécét),
+   * hogy ne kelljen találgatni, melyik tétel melyik ágon van.
+   */
+  private async ensureSingleDepartment(
+    departmentIds: readonly string[],
+  ): Promise<string> {
+    const distinct = [...new Set(departmentIds)];
+    if (distinct.length === 1) return distinct[0]!;
+    const paths = await this.repository.departmentPaths(distinct);
+    const names = distinct.map((id) => paths.get(id)?.join(" / ") ?? id);
+    throw new BadRequestException(
+      `A kiválasztott tételek különböző helyszínen vannak (${names.join(", ")}), ezért egyelőre nem készíthető belőlük egy karbantartási lap. Állíts ki külön megrendelőlapot helyszínenként.`,
+    );
   }
 
   async revoke(
