@@ -6,6 +6,7 @@ import {
 
 import { AquariumMeasurementMailService } from "../notifications/mail/aquarium-measurement-mail.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
+import { AquariumMeasurementXlsx } from "./aquarium-measurement-xlsx.js";
 import { AquariumMeasurementsRepository } from "./aquarium-measurements.repository.js";
 import { AquariumsRepository } from "./aquariums.repository.js";
 import type { CreateAquariumMeasurementDto } from "./dto/aquarium-measurement.dto.js";
@@ -17,6 +18,7 @@ export class AquariumMeasurementsService {
     private readonly aquariums: AquariumsRepository,
     private readonly notifications: NotificationsService,
     private readonly mail: AquariumMeasurementMailService,
+    private readonly xlsx: AquariumMeasurementXlsx,
   ) {}
 
   async list(aquariumId: string) {
@@ -105,6 +107,20 @@ export class AquariumMeasurementsService {
       customerName: aquarium.customerName ?? "Ügyfél",
       actorUserId,
     });
+  }
+
+  /** A "Letöltés Excelben" gomb kiszolgálója -- lásd `AquariumMeasurementXlsx` fejlécét. */
+  async exportXlsx(
+    aquariumId: string,
+  ): Promise<{ filename: string; buffer: Buffer }> {
+    const aquarium = await this.requireAquarium(aquariumId);
+    const measurements = await this.repository.list(aquariumId);
+    const buffer = await this.xlsx.build({
+      aquariumName: aquarium.name,
+      waterType: aquarium.waterType,
+      measurements,
+    });
+    return { filename: this.xlsx.filename(aquarium.name), buffer };
   }
 
   private async requireAquarium(id: string) {
