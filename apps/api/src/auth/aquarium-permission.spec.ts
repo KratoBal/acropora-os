@@ -15,7 +15,7 @@ import { describe, it } from "node:test";
 const NAV = "../../packages/types/src/navigation.ts";
 const CONTROLLER = "src/aquariums/aquariums.controller.ts";
 
-const READ_ROUTES = ["@Get()", '@Get(":id")'];
+const READ_ROUTES = ["@Get()", '@Get("customers")', '@Get(":id")'];
 const WRITE_ROUTES = [
   "@Post()",
   '@Patch(":id")',

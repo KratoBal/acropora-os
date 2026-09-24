@@ -4,6 +4,7 @@ import type {
   AquariumDetail,
   AquariumEquipment,
   AquariumListResponse,
+  AquariumSelectableCustomerListResponse,
   AquariumSummary,
 } from "@acropora/types";
 
@@ -157,6 +158,53 @@ export class AquariumsRepository {
       include: detailInclude,
     });
     return row ? toDetail(row) : null;
+  }
+
+  /**
+   * A MEGLÉVŐ ÜGYFÉL KERESÉSE, AZ AKVÁRIUM FELVITEL VÁLASZTÓJÁHOZ.
+   *
+   * Lásd `AquariumSelectableCustomer` fejlécét (`@acropora/types`): ez a
+   * lekérdezés `aquariums.view` alatt fut, mert a mobil `SERVICE` szerepkör
+   * nem éri el a `/customers`-t. Legfeljebb 20 találat, csak aktív, nem
+   * partner-tulajdonú ügyfél (ugyanaz a szűrés, mint a `customers.repository`
+   * `partner: null` során -- egy szerviz partner saját munkalap-vevő sora nem
+   * akvárium-tulajdonos).
+   *
+   * A VÁROS A LEGKÖZELEBBI ALAPÉRTELMEZETT CÍMBŐL jön (`isDefault` első,
+   * aztán a legrégebbi), egyetlen lekérdezésben -- nem a teljes cím-formázás
+   * (`customers.repository.ts` `formatAddress`), csak a megkülönböztetéshez
+   * elég egy mező.
+   */
+  async searchSelectableCustomers(
+    search?: string,
+  ): Promise<AquariumSelectableCustomerListResponse> {
+    const rows = await prisma.customer.findMany({
+      where: {
+        partner: null,
+        isActive: true,
+        ...(search
+          ? { displayName: { contains: search, mode: "insensitive" } }
+          : {}),
+      },
+      select: {
+        id: true,
+        displayName: true,
+        addresses: {
+          orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+          take: 1,
+          select: { city: true },
+        },
+      },
+      orderBy: { displayName: "asc" },
+      take: 20,
+    });
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        displayName: row.displayName,
+        city: row.addresses[0]?.city,
+      })),
+    };
   }
 
   /**

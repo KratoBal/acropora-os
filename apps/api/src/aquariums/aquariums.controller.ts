@@ -15,6 +15,7 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import { AquariumsService } from "./aquariums.service.js";
 import {
   AquariumListQueryDto,
+  AquariumSelectableCustomerQueryDto,
   CreateAquariumDto,
   CreateAquariumEquipmentDto,
   UpdateAquariumDto,
@@ -28,6 +29,19 @@ export class AquariumsController {
   @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
   list(@Query() query: AquariumListQueryDto) {
     return this.service.list(query);
+  }
+
+  /**
+   * A MEGLÉVŐ ÜGYFÉL KERESÉSE, AZ AKVÁRIUM FELVITEL VÁLASZTÓJÁHOZ.
+   *
+   * A FIX SZAKASZ A `:id` FÖLÖTT ÁLL, mint a `service-assets` `owners` vagy a
+   * `worksheets` `selectable-partners` végpontja -- különben a Nest a
+   * "customers" szót akvárium-azonosítónak olvasná.
+   */
+  @Get("customers")
+  @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
+  selectableCustomers(@Query() query: AquariumSelectableCustomerQueryDto) {
+    return this.service.searchSelectableCustomers(query.search);
   }
 
   @Get(":id")

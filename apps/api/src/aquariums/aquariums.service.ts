@@ -43,6 +43,10 @@ export class AquariumsService {
     return aquarium;
   }
 
+  searchSelectableCustomers(search?: string) {
+    return this.repository.searchSelectableCustomers(search);
+  }
+
   private checkEquipment(rows: CreateAquariumEquipmentDto[]) {
     for (const row of rows) {
       const problem = aquariumEquipmentProblem(row);

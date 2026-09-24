@@ -76,6 +76,26 @@ export interface AquariumListResponse {
   };
 }
 
+/**
+ * A MEGLÉVŐ ÜGYFÉL KERESÉSÉNEK EREDMÉNYE, AZ AKVÁRIUM FELVITEL VÁLASZTÓJÁHOZ.
+ *
+ * SAJÁT, SZŰKÍTETT ALAK, NEM `CustomerSummary`: a `SERVICE` szerepkör nem
+ * viseli a `customers.view`/`customers.manage` jogot (mérve
+ * `packages/types/src/auth.ts` `ROLE_PERMISSIONS.SERVICE`), tehát a mobil
+ * felvitel nem hívhatja a `/customers` végpontot -- ez a végpont
+ * (`GET /aquariums/customers`) `aquariums.view` alatt fut, és csak a
+ * megkülönböztetéshez elég mezőt ad, a `/assets/owners` mintájára.
+ */
+export interface AquariumSelectableCustomer {
+  id: string;
+  displayName: string;
+  city?: string;
+}
+
+export interface AquariumSelectableCustomerListResponse {
+  items: AquariumSelectableCustomer[];
+}
+
 export interface CreateAquariumEquipmentInput {
   kind: AquariumEquipmentKind;
   manufacturer?: string;
