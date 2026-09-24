@@ -56,6 +56,10 @@ const SERVER_PAIR: Record<string, string | null> = {
   // egyetlen jogosultság-párral védi, a telefonon viszont két csempe áll rajta.
   worksheetsView: PERMISSIONS.SERVICE_VIEW,
   worksheetsManage: PERMISSIONS.SERVICE_MANAGE,
+  // Az akvárium saját jogpárt kap a szerveren, nem a szerviz kettőjét
+  // (2026-09-24, murena).
+  aquariumsView: PERMISSIONS.AQUARIUMS_VIEW,
+  aquariumsManage: PERMISSIONS.AQUARIUMS_MANAGE,
 };
 
 interface Mirror {

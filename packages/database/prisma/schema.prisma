@@ -2854,6 +2854,24 @@ enum AquariumEquipmentKind {
 model Aquarium {
   id                   String                @id @default(cuid())
   aquariumNumber       String                @unique
+  /// A HELYSZÍNI FELVITEL IDEMPOTENCIA-KULCSA -- UGYANAZ A MINTA, MINT AZ
+  /// `Asset.clientOperationId`, A `Worksheet.clientOperationId` ÉS A
+  /// `ServiceJob.clientOperationId` MEZŐNÉL.
+  ///
+  /// A telefon térerő nélkül sorba teszi az akváriumot, és a sor a hálózati
+  /// hibát SZÁNDÉKOSAN újrapróbálja -- offline az a normális állapot. Épp ott
+  /// lehet viszont, hogy a létrehozás MÁR lefutott, és csak a válasz veszett
+  /// el. Kulcs nélkül az újraküldés MÁSODIK akváriumot hozna létre, és -- mert
+  /// a `newCustomer` is ugyanebben a hívásban megy -- egy MÁSODIK ügyfelet is.
+  ///
+  /// EGYEDI: ez maga a védelem. A létrehozás előtt a kulcsra keresünk, és
+  /// találat esetén a MEGLÉVŐ akváriumot adjuk vissza; az egyediség pedig azt
+  /// is elvágja, amit két párhuzamos kérés csúsztatna át a keresés és a
+  /// beszúrás között.
+  ///
+  /// A NULL nem egyenlő önmagával, tehát a kulcs nélküli sorok (minden mai
+  /// sor és minden webes felvitel) korlátlanul állhatnak egymás mellett.
+  clientOperationId    String?               @unique
   customerId           String?
   name                 String
   ownershipType        AquariumOwnershipType

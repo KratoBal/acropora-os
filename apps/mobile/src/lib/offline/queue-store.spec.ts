@@ -225,11 +225,16 @@ describe("a fénykép sora", () => {
       egy MASIK szabaly (lasd a kovetkezo allitast). Az allitas ezert nem
       "minden beszuras", hanem "minden FELVITEL" -- a szam addig ert valamit,
       amig a sorban egyfajta muvelet volt.
+
+      2026-09-24: OTROL HATRA valtozott az akvarium felvitelevel (Balazs
+      kerese, offline sorba-allitas a helyszini felvitelhez). Az akvariumnal
+      az UJ UGYFEL is EBBEN az egy sorban utazik (`newCustomer` a payloadban),
+      tehat ez tovabbra is EGY beszurast jelent, nem kettot.
     */
     const beszurasok = [
       ...forras.matchAll(/INSERT OR IGNORE INTO sync_queue/g),
     ].map((m) => m[0]);
-    assert.equal(beszurasok.length, 5);
+    assert.equal(beszurasok.length, 6);
   });
 
   it("a MÓDOSÍTÁS nem ejti el a másodikat, hanem ÖSSZEFÉSÜLI", () => {

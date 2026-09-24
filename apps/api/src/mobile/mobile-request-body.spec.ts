@@ -197,6 +197,26 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  {
+    /**
+     * AKVARIUM FELVITELE, MOBIL SZELET (2026-09-24, murena, Balazs 13:01-i
+     * dontese). A torzs NEVESITETT tipussal megy (`CreateAquariumInput`),
+     * tehat PAR lett belole itt, nem a hivohelyek kozott.
+     *
+     * A DTO OLDALON EGY MEZO MODOSULT EMIATT: a `systemVolumeIsManual`
+     * eredetileg tipusjeloles nelkul allt (`= false;`), es a `dtoMezok()`
+     * kiolvasasa KETTOSPONTOT var a mezonev utan -- tipusjeloles nelkul
+     * NEMAN kimaradt volna, es ez a par HAMIS pirosat adott volna ra ("a
+     * telefon olyan mezot kuld, amit a DTO nem ismer"), holott a mezo
+     * letezik. A javitas `: boolean` hozzaadasa, viselkedest nem valtoztat.
+     */
+    mit: "akvárium felvitele",
+    mobil: "../mobile/src/lib/api/aquariums.ts",
+    mobilNev: "CreateAquariumInput",
+    dto: "src/aquariums/dto/aquarium.dto.ts",
+    dtoNev: "CreateAquariumDto",
+    kontroll: ["ownershipType", "name"],
+  },
 ];
 
 /**
@@ -279,7 +299,13 @@ const PAROK: readonly Par[] = [
  * uzenete kerte a dontest, es a valasz IGEN: a torzs NEVESITETT tipussal megy
  * (`CreateMaterialRequestInput`), tehat PAR lett belole fent.
  */
-const IRAS_HIVASOK_MA = 17;
+/**
+ * 2026-09-24: 17 -> 18. Az uj hivas az AKVARIUM FELVITELE
+ * (`createAquarium`, `lib/api/aquariums.ts`). A guard sajat uzenete kerte a
+ * dontest, es a valasz IGEN: a torzs NEVESITETT tipussal megy
+ * (`CreateAquariumInput`), tehat PAR lett belole fent.
+ */
+const IRAS_HIVASOK_MA = 18;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

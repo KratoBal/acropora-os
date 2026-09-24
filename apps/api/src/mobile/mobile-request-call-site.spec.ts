@@ -281,7 +281,16 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
  * orzo -- ami nevesitett tipusokat par-ba allit -- MAR LATJA: ez a hivas NEM
  * kerul a HIVOHELYEK koze, csak ebbe a teljes-fa szamlalasba.
  */
-const IRAS_HIVASOK_A_FAN = 18;
+/**
+ * 2026-09-24: 18 -> 19. Az uj hivas az AKVARIUM FELVITELE
+ * (`createAquarium`, `lib/api/aquariums.ts`). A torzse NEVESITETT tipussal
+ * megy (`CreateAquariumInput`), es a hivas a parametert ADJA at valtozatlanul
+ * (`JSON.stringify(input)`, nem `{ ...input, ... }`), tehat nincs HELYBEN
+ * kiirt kulcs, amit itt merni kellene -- ugyanaz az eset, mint az
+ * anyagigenylesnel: a szomszed orzo MAR LATJA, ez a hivas NEM kerul a
+ * HIVOHELYEK koze.
+ */
+const IRAS_HIVASOK_A_FAN = 19;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

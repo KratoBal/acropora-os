@@ -76,9 +76,11 @@ describe("a csempék a kiadott menüt követik", () => {
     //
     // 2026-09-16: hetrol nyolcra nott a hibajegy-csempevel (`HJ`).
     // 2026-09-23: nyolcrol kilencre nott az anyagigenyles-csempevel (`AI`).
-    // Mindket alkalommal ez az allitas ELSULT, es ez a helyes viselkedes --
+    // 2026-09-24: kilencrol tizre nott az akvarium-csempevel (`AK`), Balazs
+    // 13:01-i dontese utan (mobil felvitel is kell).
+    // Mindharom alkalommal ez az allitas ELSULT, es ez a helyes viselkedes --
     // egy uj belepesi pont ne csusszon be szo nelkul.
-    assert.equal(kodok.length, 9);
+    assert.equal(kodok.length, 10);
     assert.deepEqual([...new Set(tetelek)].sort(), [...tetelek].sort());
   });
 });

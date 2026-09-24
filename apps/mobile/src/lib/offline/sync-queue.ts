@@ -87,6 +87,8 @@ export function backoffMs(attemptCount: number): number {
  *   worksheet       uj munkalap megnyitasa a helyszinen
  *   worksheet-line  tetel egy MAR LETEZO munkalap piszkozatara
  *   service-job     uj hibajegy, amit a szerelo a gepnel nyitott
+ *   aquarium        uj akvarium/to felvitele a helyszinen, az ugyfellel
+ *                   egyutt (2026-09-24, Balazs kerese)
  */
 /**
  * A SOR HAROM MUVELETET ISMER, ES UGYANAZERT LISTA, MINT A FAJTAKNAL.
@@ -113,6 +115,7 @@ export const SYNC_ENTITY_TYPES = [
   "worksheet",
   "worksheet-line",
   "service-job",
+  "aquarium",
 ] as const;
 
 export type SyncEntityType = (typeof SYNC_ENTITY_TYPES)[number];
@@ -146,6 +149,14 @@ const FENYKEP_GAZDA: Record<SyncEntityType, boolean> = {
    * nelkul azt a kepet mar semmi nem tudna megcimezni.
    */
   "service-job": true,
+  /**
+   * NINCS AKVÁRIUM-FÉNYKÉP EBBEN A KÖRBEN. A telefonos felvitel szándékosan
+   * szűkebb, mint a webé (lásd `apps/mobile/src/app/aquariums/new.tsx`
+   * fejlécét) -- fénykép-mellékletet ma semmi nem tesz sorba ehhez a
+   * fajtához. `false`, nem hiányzó kulcs, hogy egy jövőbeli fényképes sor
+   * itt HANGOSAN álljon meg (422), ne csendben az eszköz-végpontra menjen.
+   */
+  aquarium: false,
 };
 
 export function canOwnPhotos(entityType: SyncEntityType): boolean {
@@ -349,4 +360,29 @@ export function worksheetOperationId(input: {
   startedAt: string;
 }): string {
   return `worksheet-create:${input.customerId}:${input.startedAt}`;
+}
+
+/**
+ * AZ AKVÁRIUM MŰVELET-AZONOSÍTÓJA, UGYANABBÓL AZ OKBÓL A TARTALOMBÓL.
+ *
+ * NEM A NÉV ADJA -- az szabad, ékezetes magyar szöveg, a szerver
+ * `@Matches(/^[A-Za-z0-9_.:-]{8,128}$/)` mintája pedig elutasítaná
+ * (`CreateAquariumDto.clientOperationId`, lásd ott a fejlécet). A tulajdon
+ * és a felvitel IDŐPONTJA viszont biztonságos ábécéjű, és a `startedAt` a
+ * `mutationFn`-en BELÜL, EGYSZER keletkezik -- ugyanaz az alak, mint a
+ * munkalapnál és a hibajegynél: a KÉSŐBBI, automatikus újraküldések
+ * (`useQueueDrain`) a sorban álló sor SAJÁT `id` mezőjét viszik tovább,
+ * tehát ez a függvény csak az ELSŐ sorba tételkor fut.
+ *
+ * A SZERVER IS EZT KAPJA MEG (`clientOperationId`), tehát ha a válasz
+ * elveszik és a sor újraküld, a szerver a MEGLÉVŐ akváriumot adja vissza --
+ * és, mert az ügyfél-felvitel EBBEN az egy hívásban utazik
+ * (`newCustomer`), nem másodikat hoz létre sem az akváriumból, sem az
+ * ügyfélből.
+ */
+export function aquariumOperationId(input: {
+  ownershipType: "OWN" | "CUSTOMER";
+  startedAt: string;
+}): string {
+  return `aquarium-create:${input.ownershipType}:${input.startedAt}`;
 }

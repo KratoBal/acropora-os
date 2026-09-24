@@ -112,6 +112,9 @@ describe("a csempék sorrendje", () => {
    * felülettel ("AI"), a Munkalapok és az Eszközök közé beszúrva. Ez az
    * állítás ELSÜLT, és ez a helyes viselkedés -- ugyanaz a minta, mint a
    * `HJ` felvételénél (lásd `tile-visibility.spec.ts`).
+   *
+   * 2026-09-24: kilencről tízre nőtt az akvárium-csempével ("AK"), az
+   * Eszközök és a Rendelések közé beszúrva -- ugyanaz a minta, harmadszor.
    */
   it("a teljes sorrend rögzített", () => {
     assert.deepEqual(kepernyoSorrend(), [
@@ -119,6 +122,7 @@ describe("a csempék sorrendje", () => {
       "MU",
       "AI",
       "ES",
+      "AK",
       "RE",
       "BE",
       "TE",
