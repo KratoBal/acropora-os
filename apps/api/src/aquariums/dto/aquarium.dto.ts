@@ -67,7 +67,7 @@ export class CreateAquariumDto {
   @Type(() => Number) @IsOptional() systemVolumeLiters?: number;
   /** Lásd `aquarium-volume.ts` fejlécét: a kliens jelzi, EBBEN a mentésben
    * a felhasználó írta-e át a litert. */
-  @IsBoolean() @IsOptional() systemVolumeIsManual = false;
+  @IsBoolean() @IsOptional() systemVolumeIsManual: boolean = false;
 
   @IsIn(WATER_TYPES) @IsOptional() waterType?: (typeof WATER_TYPES)[number];
   @IsDateString() @IsOptional() startedAt?: string;

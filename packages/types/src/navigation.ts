@@ -268,7 +268,7 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     id: "aquariums",
-    surfaces: ["web"],
+    surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.AQUARIUMS_VIEW),
   },
   {

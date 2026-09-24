@@ -240,6 +240,7 @@ function RootNavigator() {
         name="partners/[id]"
         options={{ title: "Partner adatlap" }}
       />
+      <Stack.Screen name="aquariums/new" options={{ title: "Új akvárium" }} />
     </Stack>
   );
 }

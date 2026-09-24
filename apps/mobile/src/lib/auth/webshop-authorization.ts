@@ -41,6 +41,17 @@ export interface ServiceCapabilities {
    */
   serviceJobsView: boolean;
   serviceJobsManage: boolean;
+  /**
+   * AZ AKVÁRIUM SAJÁT JOGPÁRT KAP A SZERVEREN (`aquariums.view` /
+   * `aquariums.manage`), NEM a szerviz kettőjét -- ezért itt sem osztozhat a
+   * fenti négy kulcs canView/canManage számításán. A legnagyobb, kézzel
+   * mérendő eltérés: a PARTNER_SERVICE szerepnek a szerveren NINCS
+   * aquariums jogköre (csak `service.view`/`service.manage`), miközben a
+   * saját eszköz/munkalap/hibajegy párjait látja. Egy közös számítás itt
+   * csendben igent adna egy partner-fióknak, amit a szerver elutasítana.
+   */
+  aquariumsView: boolean;
+  aquariumsManage: boolean;
 }
 
 const FULL_ACCESS: WebshopCapabilities = {
@@ -174,6 +185,19 @@ export function getServiceCapabilities(role: UserRole): ServiceCapabilities {
     role === "MANAGER" ||
     role === "SERVICE" ||
     role === "PARTNER_SERVICE";
+  // Az akváriumnak NINCS PARTNER_SERVICE ága a szerveren (lásd a mezők
+  // dokumentációját), tehát ez a két érték a fentiektől függetlenül számol.
+  const canViewAquariums =
+    role === "OWNER" ||
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "SERVICE" ||
+    role === "VIEWER";
+  const canManageAquariums =
+    role === "OWNER" ||
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "SERVICE";
   return {
     workspace: canView,
     assetsView: canView,
@@ -182,6 +206,8 @@ export function getServiceCapabilities(role: UserRole): ServiceCapabilities {
     worksheetsManage: canManage,
     serviceJobsView: canView,
     serviceJobsManage: canManage,
+    aquariumsView: canViewAquariums,
+    aquariumsManage: canManageAquariums,
   };
 }
 

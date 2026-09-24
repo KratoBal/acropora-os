@@ -35,6 +35,12 @@ export const TILE_ENTRY = {
    * csempeje" allitasa ARRA figyelmeztetne, hogy EZ a par hianyzik.
    */
   AI: "material-requests-pending",
+  /**
+   * A `aquariums` tetel eddig CSAK web feluletu volt. Balázs 2026-09-24
+   * 13:01-i döntése bővítette mobilra (helyben felvihető appban is) --
+   * ugyanaz a minta, mint az `AI` kódnál fent.
+   */
+  AK: "aquariums",
 } as const;
 
 export type TileCode = keyof typeof TILE_ENTRY;

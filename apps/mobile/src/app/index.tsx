@@ -308,6 +308,14 @@ export default function HomeScreen() {
                 onPress={() => router.push("/assets")}
               />
               <ModuleCard
+                code="AK"
+                title="Akváriumok"
+                description="Akvárium és tó felvitele, méretek, eszközök"
+                available={tileVisible("AK")}
+                enabled
+                onPress={() => router.push("/aquariums/new")}
+              />
+              <ModuleCard
                 code="RE"
                 title="Rendelések"
                 description="UNAS rendelések, státuszok és tételek"
