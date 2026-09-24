@@ -18,6 +18,7 @@ import { AiProductSearchModule } from "./integrations/ai-product-search/ai-produ
 import { MedusaModule } from "./integrations/medusa/medusa.module.js";
 import { NavOnlineInvoiceModule } from "./integrations/nav/nav-online-invoice.module.js";
 import { PostalCodeModule } from "./integrations/postal-code/postal-code.module.js";
+import { SzamlazzModule } from "./integrations/szamlazz/szamlazz.module.js";
 import { ViesVatModule } from "./integrations/vies/vies-vat.module.js";
 import { FoxpostSettlementModule } from "./integrations/foxpost/foxpost-settlement.module.js";
 import { InventoryModule } from "./inventory/inventory.module.js";
@@ -63,6 +64,7 @@ import { MaintenancePackageModule } from "./maintenance-package/maintenance-pack
     AiChatModule,
     MedusaModule,
     NavOnlineInvoiceModule,
+    SzamlazzModule,
     PostalCodeModule,
     ViesVatModule,
     FoxpostSettlementModule,

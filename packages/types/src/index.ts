@@ -461,6 +461,10 @@ export type {
   NavConnectionView,
 } from "./integrations/nav-connection.js";
 export type {
+  SzamlazzConnectionCredentialInput,
+  SzamlazzConnectionView,
+} from "./integrations/szamlazz-connection.js";
+export type {
   NavIncomingInvoiceAddress,
   NavIncomingInvoiceDetail,
   NavIncomingInvoiceLine,
