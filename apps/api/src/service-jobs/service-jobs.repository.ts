@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import type { NamedPerson } from "@acropora/types";
 
 import { NOT_HIDDEN } from "../common/hidden-rows.js";
 import { assignedUnitIdsFor } from "./assigned-units.query.js";
@@ -63,10 +64,24 @@ export interface ServiceJobRow {
   customerName: string | null;
   /** A helyszin TELJES utja, a gyokertol lefele. `null`, ha nincs vagy nem epithető. */
   departmentPath: string[] | null;
+  /**
+   * A HELYSZIN SAJAT KODJA (a level, nem az ut eleje) -- a Figma-lista
+   * "AKV · Akvárium ház" alakjahoz kell (murena, 2026-09-24, a Szerviz /
+   * Hibajegyek Figma-kor). A kod es a nev csak TESTVEREK kozott egyedi
+   * (`unit-path-lookup.ts` fejlece), tehat onmagaban NEM azonosit -- a
+   * `departmentPath` MELLETT all, nem helyette.
+   */
+  departmentCode: string | null;
   createdAt: Date;
   worksheetCount: number;
   /** A rejtes idopontja, vagy `null`. A felulet ebbol csinal jelolot. */
   hiddenAt: Date | null;
+  /**
+   * A JEGYRE DELEGALT KOLLEGAK -- UGYANAZ A SOR-ALAK, MINT A RESZLETLAPON
+   * (`detail()` `assignees` valasztasa), hogy a NEV-fordítás (`personDisplayName`)
+   * egy helyen, a service retegben alljon, ne a repository ketszer.
+   */
+  assignees: { userId: string; assignedAt: Date; user: NamedPerson }[];
 }
 
 @Injectable()
@@ -982,6 +997,54 @@ export class ServiceJobsRepository {
       lap.map((row) => row.departmentId),
     );
 
+    /**
+     * A HELYSZIN KODJA ES A DELEGALTAK, SZINTEN KOTEGBEN -- a Figma-lista
+     * "AKV · Akvárium ház" oszlopahoz es a "Delegálva" avatar-oszlopahoz
+     * (murena, 2026-09-24, Szerviz / Hibajegyek Figma-kor). Ugyanaz az erv,
+     * mint az utaknal: N sor, ket lekerdezes, nem N+N.
+     */
+    const departmentIds = [
+      ...new Set(
+        lap.flatMap((row) => (row.departmentId ? [row.departmentId] : [])),
+      ),
+    ];
+    const kodok = departmentIds.length
+      ? await this.database.worksheetDepartment.findMany({
+          where: { id: { in: departmentIds } },
+          select: { id: true, code: true },
+        })
+      : [];
+    const kodTerkep = new Map(kodok.map((egyseg) => [egyseg.id, egyseg.code]));
+
+    const jobIds = lap.map((row) => row.id);
+    const delegaltSorok = jobIds.length
+      ? await this.database.serviceJobAssignee.findMany({
+          where: { serviceJobId: { in: jobIds } },
+          // UGYANAZ A SORREND, MINT A RESZLETLAPON: a kiosztas sorrendje, nem
+          // a legutobbi elol -- lasd a `detail()` `assignees` kommentjet.
+          orderBy: [{ assignedAt: "asc" }, { userId: "asc" }],
+          select: {
+            serviceJobId: true,
+            userId: true,
+            assignedAt: true,
+            user: { select: { displayName: true, nickname: true } },
+          },
+        })
+      : [];
+    const delegaltTerkep = new Map<
+      string,
+      { userId: string; assignedAt: Date; user: NamedPerson }[]
+    >();
+    for (const sor of delegaltSorok) {
+      const lista = delegaltTerkep.get(sor.serviceJobId) ?? [];
+      lista.push({
+        userId: sor.userId,
+        assignedAt: sor.assignedAt,
+        user: sor.user,
+      });
+      delegaltTerkep.set(sor.serviceJobId, lista);
+    }
+
     return {
       rows: lap.map((row) => ({
         id: row.id,
@@ -993,6 +1056,10 @@ export class ServiceJobsRepository {
         departmentPath: row.departmentId
           ? (utak.get(row.departmentId) ?? null)
           : null,
+        departmentCode: row.departmentId
+          ? (kodTerkep.get(row.departmentId) ?? null)
+          : null,
+        assignees: delegaltTerkep.get(row.id) ?? [],
         createdAt: row.createdAt,
         worksheetCount: row._count.worksheets,
         hiddenAt: row.hiddenAt,

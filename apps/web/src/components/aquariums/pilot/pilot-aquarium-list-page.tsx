@@ -19,7 +19,7 @@ import {
   PilotThemeRoot,
   pilotAvatarColor,
   pilotInitials,
-} from "./pilot-ui";
+} from "@/components/pilot/pilot-ui";
 
 const lastMeasuredFormatter = new Intl.DateTimeFormat("hu-HU", {
   year: "numeric",

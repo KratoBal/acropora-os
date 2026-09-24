@@ -41,6 +41,8 @@ describe("service job kind filtering", () => {
       status: "SCHEDULED" as const,
       customerName: "Acropora Kft.",
       departmentPath: ["Gépház"],
+      departmentCode: "GEP",
+      assignees: [],
       createdAt: new Date("2026-09-24T09:00:00.000Z"),
       worksheetCount: 0,
       hiddenAt: null,

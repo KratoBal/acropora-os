@@ -39,7 +39,7 @@ import {
   PilotThemeRoot,
   pilotAvatarColor,
   pilotInitials,
-} from "./pilot-ui";
+} from "@/components/pilot/pilot-ui";
 
 const EMPTY_NEW_EQUIPMENT: CreateAquariumEquipmentInput = {
   kind: "VILAGITAS",

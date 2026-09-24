@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Sans, Manrope } from "next/font/google";
+import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
 import { AuthProvider } from "@/components/auth";
@@ -10,17 +10,25 @@ import "./globals.css";
  * (2026-09-24) -- a `packages/ui/src/theme.css` `--font-sans`/`--font-display`
  * tokenjei ezekre a nevekre hivatkoznak (`var(--font-dm-sans)`,
  * `var(--font-manrope)`), tehat a betutipus-valtozokat MINDKET appnak
- * ugyanazzal a nevvel kell a `body`-ra tennie. A `latin-ext` reszhalmaz itt
- * is kotelezo, ugyanazon okbol, mint a webes oldalon: a magyar hosszu kettos
- * ekezetek ("ő", "ű") csak abban vannak benne.
+ * ugyanazzal a nevvel kell a `body`-ra tennie.
+ *
+ * HELYBEN TAROLT FAJLBOL, NEM `next/font/google`-BOL, 2026-09-24 OTA -- a
+ * teljes indoklas az `apps/web/src/app/layout.tsx` fejleceben all (a nem
+ * determinisztikus build-idejü halozati letoltes miatt). A ket fajl BETURE
+ * UGYANAZ, mint a webes appe (`../../../web/src/app/fonts/*.woff2` --
+ * SZANDEKOSAN KULON MASOLAT, nem megosztott import: a ket app kulon Next.js
+ * build-gyoker, es a `next/font/local` `src` utvonala a hivo fajlhoz
+ * kepest ertelmezodik).
  */
-const dmSans = DM_Sans({
-  subsets: ["latin", "latin-ext"],
+const dmSans = localFont({
+  src: "./fonts/dm-sans-variable.woff2",
+  weight: "100 1000",
   variable: "--font-dm-sans",
 });
 
-const manrope = Manrope({
-  subsets: ["latin", "latin-ext"],
+const manrope = localFont({
+  src: "./fonts/manrope-variable.woff2",
+  weight: "200 800",
   variable: "--font-manrope",
 });
 

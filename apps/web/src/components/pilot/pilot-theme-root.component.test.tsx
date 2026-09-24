@@ -12,15 +12,21 @@ vi.mock("@/lib/theme/use-theme-preference", () => ({
 }));
 
 /**
- * A `next/font/google` `Inter(...)` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA --
- * vitest/happy-dom alatt, Next build nélkül nem futtatható, `TypeError:
- * Inter is not a function`-nal bukik. Ez a modul csak a
- * `PilotThemeRoot`-on keresztül, TRANZITÍVEN kerül ide (`pilot-ui.tsx`
- * importálja `pilot-font.ts`-ből) -- a teszt nem a betűtípust méri, ezért
- * egy egyszerű stub elég, ami csak a használt `.className` mezőt adja.
+ * A `next/font/local` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA -- vitest/happy-dom
+ * alatt, Next build nélkül nem futtatható, `TypeError: localFont is not a
+ * function`-nal bukik. Ez a modul csak a `PilotThemeRoot`-on keresztül,
+ * TRANZITÍVEN kerül ide (`pilot-ui.tsx` importálja `pilot-font.ts`-ből) --
+ * a teszt nem a betűtípust méri, ezért egy egyszerű stub elég, ami csak a
+ * használt `.className` mezőt adja.
+ *
+ * 2026-09-24-TŐL `next/font/local`, NEM `next/font/google`: a
+ * `pilot-font.ts` a build-idejű, nem determinisztikus hálózati letöltés
+ * miatt helyi fájlra váltott -- lásd `apps/web/src/app/layout.tsx`
+ * fejlécét. A mock célja emiatt mozdult, az INDOKA (a fordítói makrót
+ * teszt alatt nem lehet lefuttatni) változatlan.
  */
-vi.mock("next/font/google", () => ({
-  Inter: () => ({ className: "pilot-inter-stub" }),
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
 }));
 
 /**
