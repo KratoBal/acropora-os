@@ -372,3 +372,85 @@ export interface CreateAquariumMeasurementInput {
   notes?: string;
   values: AquariumMeasurementValue[];
 }
+
+/**
+ * JAVASOLT CÉLTARTOMÁNY, PARAMÉTERENKÉNT -- NEM MÉRT ADAT, KÓDBAN ÁLLÓ
+ * ALAPÉRTELMEZÉS.
+ *
+ * A "Mérési előzmények" oldal Figma terve céltartomány-sávot kér a
+ * grafikonon (`exchange/figma-akvariumok-leiras-3-kor-meresi-elozmenyek-2026-09-24.md`,
+ * 3. pont). A rendszerben MA nincs tárolt céltartomány-adat -- acrobot
+ * kérésére (2026-09-24 17:11) egy kódban álló, paraméterenkénti
+ * alapértelmezés a megoldás, VÍZTÍPUS SZERINT külön kulccsal, és
+ * JELÖLVE, hogy javaslat, nem mérés.
+ *
+ * **CSAK TENGERI ÉRTÉKEK ÁLLNAK ITT, ÉS EZ SZÁNDÉKOS, NEM HIÁNYOSSÁG.** A
+ * Figma minta (`TENGERI_PARAM_META`) mind a 12 tengeri paraméterre ad
+ * tartományt -- ezeket vettük át betűre, mert a TERV MAGA adta forrásként.
+ * Édesvízi tartományt NEM találtunk ki: a tengeri és édesvízi vízkémia
+ * jelentősen eltér UGYANAZON paraméternél is (pl. a tengeri pH-cél 8,1-8,4,
+ * az édesvízi közösségi akváriumoké tipikusan 6,5-7,5) -- egy átvett
+ * tengeri szám itt nem hiányzó adatnak látszana, hanem TÉVES tanácsnak, és
+ * ez valódi kárt okozhatna (rossz adagolás). Ha az édesvízi tartomány
+ * kell, az Balázstól vagy egy szakmai forrásból kérendő, nem kitalálható.
+ */
+export const AQUARIUM_MEASUREMENT_TARGET_RANGE: Partial<
+  Record<AquariumMeasurementParameterCode, { min: number; max: number }>
+> = {
+  HOMERSEKLET: { min: 24, max: 27 },
+  SOTARTALOM: { min: 34, max: 36 },
+  PH: { min: 8.1, max: 8.4 },
+  KH: { min: 7, max: 9 },
+  KALCIUM: { min: 380, max: 450 },
+  MAGNEZIUM: { min: 1250, max: 1350 },
+  NITRAT: { min: 0, max: 10 },
+  FOSZFAT: { min: 0, max: 0.1 },
+  AMMONIA: { min: 0, max: 0.05 },
+  NITRIT: { min: 0, max: 0.05 },
+  SZILIKAT: { min: 0, max: 1 },
+  ORP: { min: 350, max: 400 },
+};
+
+/**
+ * A `AQUARIUM_MEASUREMENT_TARGET_RANGE` TENGERI ÉRTÉKEI, TEHÁT A
+ * VISSZAADOTT SÁV CSAK `TENGERI` VÍZTÍPUSNÁL JELENJEN MEG A FELÜLETEN.
+ * `EDESVIZI`-nél mindig `undefined`-et ad, lásd a konstans fejlécét.
+ */
+export function aquariumMeasurementTargetRange(
+  waterType: WaterType | null | undefined,
+  code: AquariumMeasurementParameterCode,
+): { min: number; max: number } | undefined {
+  if (waterType !== "TENGERI") return undefined;
+  return AQUARIUM_MEASUREMENT_TARGET_RANGE[code];
+}
+
+/**
+ * MEGKÜLÖNBÖZTETHETŐ SZÍN PARAMÉTERENKÉNT, A GRAFIKONHOZ -- TISZTÁN
+ * VIZUÁLIS VÁLASZTÁS, NEM VÍZKÉMIAI ÁLLÍTÁS (ezért a fenti céltartomány-
+ * fejléc óvatossága itt nem indokolt: egy szín félrevétele nem tanácsol
+ * senkinek semmi rosszat). A tengeri 12 szín a Figma tervből jön betűre;
+ * a négy csak-édesvízi paraméter (GH, VAS, REZ, VEZETOKEPESSEG) új,
+ * a meglévő skálától vizuálisan elütő szín.
+ */
+export const AQUARIUM_MEASUREMENT_PARAMETER_COLOR: Record<
+  AquariumMeasurementParameterCode,
+  string
+> = {
+  HOMERSEKLET: "#e85d3a",
+  SOTARTALOM: "#7c5c3a",
+  SURUSEG: "#0e7490",
+  PH: "#6366f1",
+  KH: "#0b7a6e",
+  GH: "#65a30d",
+  KALCIUM: "#0a6bbd",
+  MAGNEZIUM: "#7c3ab0",
+  NITRAT: "#d97706",
+  FOSZFAT: "#059669",
+  AMMONIA: "#dc2626",
+  NITRIT: "#db2777",
+  SZILIKAT: "#9ca3af",
+  ORP: "#374049",
+  VAS: "#b45309",
+  REZ: "#0d9488",
+  VEZETOKEPESSEG: "#4338ca",
+};

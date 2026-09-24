@@ -8,7 +8,8 @@ import type {
   CreateAquariumMeasurementInput,
   UpdateAquariumInput,
 } from "@acropora/types";
-import { apiRequest } from "./client";
+import { ApiError, apiAuthHeaders, apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
 
 export const aquariumsApi = {
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
@@ -118,5 +119,32 @@ export const aquariumsApi = {
         body: JSON.stringify({ userIds }),
       },
     );
+  },
+  /**
+   * FÁJL-LETÖLTÉS, NEM JSON -- ugyanaz a minta, mint
+   * `inventoryApi.downloadTemplate`: a válasz blob, a fájlnevet a szerver
+   * `Content-Disposition`-je adja, ezt a hívó (a komponens) írja ki.
+   */
+  async downloadMeasurementsXlsx(
+    token: string,
+    aquariumId: string,
+    filename: string,
+  ): Promise<void> {
+    const response = await fetch(
+      `${API_PREFIX}/aquariums/${encodeURIComponent(aquariumId)}/measurements/export.xlsx`,
+      { headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok) {
+      throw new ApiError("Az Excel export nem sikerült.", response.status);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   },
 };

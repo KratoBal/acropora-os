@@ -6,6 +6,7 @@ import {
   type AquariumMeasurementParameterCode,
   type WaterType,
 } from "@acropora/types";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { aquariumsApi } from "@/lib/api/aquariums";
@@ -180,10 +181,18 @@ export function PilotAquariumWaterValues({
       <PilotCardHeader
         title="Vízértékek"
         action={
-          <PilotButton variant="primary" onClick={() => setDrawerOpen(true)}>
-            <Icon name="plus" size={13} />
-            Új mérés
-          </PilotButton>
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/akvariumok/${aquariumId}/meresek`}
+              className="text-xs font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800"
+            >
+              Összes mérés és grafikon
+            </Link>
+            <PilotButton variant="primary" onClick={() => setDrawerOpen(true)}>
+              <Icon name="plus" size={13} />
+              Új mérés
+            </PilotButton>
+          </div>
         }
       />
 
@@ -475,7 +484,7 @@ function PilotSparkline({
  * küld -- ez a lépés ÚJ VISELKEDÉS, de a MEGLÉVŐ `sendMeasurementEmail`
  * hívásra épül, nem igényel API-változást.
  */
-function PilotEmailDialog({
+export function PilotEmailDialog({
   occasion,
   canSendEmail,
   busy,
