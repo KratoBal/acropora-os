@@ -21,22 +21,56 @@ describe("maintenance order form amounts", () => {
     assert.equal(amounts.grossAmount.toString(), "2413000");
   });
 
-  it("would round wrong on float: a case that only Decimal gets exact", () => {
-    // A NAIV lebegőpontos szorzás itt kerekítési hibát ad (mérve: a JS
-    // `1.005 * 100 * 1` eredménye "100.49999999999999", nem "100.5"). A
-    // Decimal-alapú számoló ugyanerre a bemenetre a PONTOS értéket adja --
-    // ez a lap az, amit az ügyfél alá is ír, tehát a kerekítési hiba itt nem
-    // "elhanyagolható eltérés", hanem egy rossz szám a szerződéses papíron.
-    const naivFloatEredmeny = (1.005 * 100 * 1).toString();
-    assert.equal(naivFloatEredmeny, "100.49999999999999");
+  /**
+   * KALIBRÁCIÓ: EGY BEMENET, AHOL A NATÍV LEBEGŐPONTOS SZORZÁS -- MÉG A 4
+   * TIZEDESJEGYES KEREKÍTÉST IS TÚLÉLVE -- ROSSZ SZÁMOT ADNA.
+   *
+   * ELSŐRE `1.005 * 100 * 1`-et PRÓBÁLTAM ("100.49999999999999" lebegőponton),
+   * ÉS AZ NEM VOLT VALÓDI KALIBRÁCIÓ (murena keresztellenőrzése vette észre,
+   * 2026-09-24): a `MAINTENANCE_ORDER_FORM_MONEY_SCALE` itt 4, és
+   * `(1.005*100*1).toFixed(4) === "100.5000"` -- UGYANAZ, amit a Decimal ad.
+   * Egy ilyen bemenettel ez az állítás sosem különböztetné meg a Decimal-t
+   * egy (hibás) `number`-alapú cserétől, mert a 4-tizedesjegyes kerekítés
+   * épp elnyeli a lebegőpontos hibát, ami a 16-17. jegyen áll.
+   *
+   * A VALÓDI KALIBRÁCIÓ OTT VAN, AHOL A PONTOS SZORZAT ÉPP EGY KEREKÍTÉSI
+   * HATÁRRA ESIK A 4. TIZEDESJEGYNÉL (X,XXXX5), és a lebegőpontos ábrázolás
+   * EZEN a határon a rossz oldalra csúszik -- ugyanaz a technika, mint
+   * murena `3 * 1.005`-e a #1045 2-tizedesjegyes skáláján, csak két
+   * tizedesjeggyel arrébb. Mérve (node):
+   *
+   *   3 * 2.00005 === 6.00015              (a pontos szorzat is 6.00015)
+   *   (3*2.00005).toFixed(4) === "6.0001"  (ROSSZ: a HALF_UP szabály 6.0002-t adna)
+   *
+   * A `console.log(3*2.00005)` "6.00015"-öt ír ki (a JS a legrövidebb
+   * kerekre-kerekíthető tizedes alakot mutatja), de a TÁROLT dupla valójában
+   * kicsivel KEVESEBB ennél -- a `toFixed()` a valódi bitmintát nézi, nem a
+   * kiírt alakot, és ezért kerekít lefelé.
+   *
+   * A `Prisma.Decimal`-lal számolt nettó pontosan `"6.0002"` -- ha valaha
+   * valaki ezt a függvényt `number`-alapúra cserélné, ez az állítás azonnal
+   * pirosra váltana. VISSZAMÉRVE: ideiglenesen number-alapúra írtam a
+   * `computeMaintenanceOrderFormItemAmounts`-ot, ez az egy állítás pirosra
+   * váltott (`"6.0001"` jött ki `"6.0002"` helyett), utána visszaállítottam.
+   */
+  it("Decimal-lal pontos egy kerekítési határon, ahol a natív number-szorzás nem az", () => {
+    assert.equal(
+      (3 * 2.00005).toFixed(4),
+      "6.0001",
+      "ha ez az állítás elbukik, a kalibrációs bemenet elavult: keress egy másikat",
+    );
 
     const amounts = computeMaintenanceOrderFormItemAmounts({
-      unitPricePerOccasion: "1.005",
-      quantity: 100,
+      unitPricePerOccasion: "2.00005",
+      quantity: 3,
       occasionsPerYear: 1,
       vatRatePercent: 27,
     });
-    assert.equal(amounts.netAmount.toString(), "100.5");
+    assert.equal(
+      amounts.netAmount.toString(),
+      "6.0002",
+      "a natív lebegőpontos szorzás 6.0001-et adna, nem 6.0002-t",
+    );
   });
 
   it("derives VAT from the rounded net amount, so the printed numbers add up", () => {
