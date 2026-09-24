@@ -8,7 +8,7 @@ import { API_PREFIX } from "./api-prefix";
 
 const base = "/partners/maintenance-package";
 
-function jobPath(id: string, suffix: string): string {
+function jobPath(id: string, suffix: string) {
   return `${base}/${encodeURIComponent(id)}${suffix}`;
 }
 
