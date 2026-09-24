@@ -36,7 +36,7 @@ export class CreateAquariumEquipmentDto {
   @IsIn(EQUIPMENT_KINDS) kind!: (typeof EQUIPMENT_KINDS)[number];
   @IsString() @IsOptional() manufacturer?: string;
   @IsString() @IsOptional() model?: string;
-  @Type(() => Number) @IsInt() @Min(1) @IsOptional() quantity = 1;
+  @Type(() => Number) @IsInt() @Min(1) @IsOptional() quantity: number = 1;
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() channelCount?: number;
   @IsString() @IsOptional() notes?: string;
 }

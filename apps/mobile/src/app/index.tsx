@@ -310,10 +310,10 @@ export default function HomeScreen() {
               <ModuleCard
                 code="AK"
                 title="Akváriumok"
-                description="Akvárium és tó felvitele, méretek, eszközök"
+                description="Saját és ügyfél akváriumai, méretek és eszközök"
                 available={tileVisible("AK")}
                 enabled
-                onPress={() => router.push("/aquariums/new")}
+                onPress={() => router.push("/aquariums")}
               />
               <ModuleCard
                 code="RE"

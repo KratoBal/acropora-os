@@ -7,17 +7,19 @@ import { apiRequest } from "./client";
 const BASE = "/aquariums";
 
 /**
- * AKVÁRIUMOK -- ELSŐ KÖR, CSAK FELVITEL.
+ * AKVÁRIUMOK.
  *
  * Balázs 2026-09-24 13:01-i döntése bővítette a telefonra: "az akvarium
  * felvitele, benne az ugyfel helyben felvetele (nev, cim, telefon, e-mail),
  * a meretek es a liter, az eszkozok". A típusok SAJÁT másolatok, nem a
  * `@acropora/types` csomagból jönnek -- lásd `docs/MOBILE-DEVELOPMENT.md`.
  *
- * EZ A MODUL SZÁNDÉKOSAN CSAK ÍR (`createAquarium`). A lista/részlet/
- * szerkesztés a web felületen működik; a telefonos képernyő ("felvitel")
- * ennél többet nem kért. Ha ez a kör bővül, ide kerül a `listAquariums` és a
- * `getAquarium` is, a `partners.ts` mintájára.
+ * EZ A MODUL EDDIG SZÁNDÉKOSAN CSAK ÍRT (`createAquarium`): a "felvitel"
+ * felül el is fért egyetlen hívással. Acrobot döntése (2026-09-24 14:13):
+ * felvitel lista nélkül nem adható ki a telefonra, ezért a `listAquariums`,
+ * `getAquarium`, `addAquariumEquipment` és `removeAquariumEquipment` most
+ * kerül ide, a `partners.ts` mintájára, a valódi vezérlő végpontjaihoz
+ * igazítva (`apps/api/src/aquariums/aquariums.controller.ts`).
  */
 
 export type AquariumOwnershipType = "OWN" | "CUSTOMER";
@@ -91,7 +93,17 @@ export interface CreateAquariumInput {
   equipment?: CreateAquariumEquipmentInput[];
 }
 
-export interface AquariumDetail {
+export interface AquariumEquipment {
+  id: string;
+  kind: AquariumEquipmentKind;
+  manufacturer?: string;
+  model?: string;
+  quantity: number;
+  channelCount?: number;
+  notes?: string;
+}
+
+export interface AquariumSummary {
   id: string;
   aquariumNumber: string;
   name: string;
@@ -106,9 +118,67 @@ export interface AquariumDetail {
   updatedAt: string;
 }
 
+export interface AquariumDetail extends AquariumSummary {
+  customerPhone?: string;
+  customerEmail?: string;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  systemVolumeIsManual: boolean;
+  waterType?: WaterType;
+  startedAt?: string;
+  notes?: string;
+  equipment: AquariumEquipment[];
+}
+
+export interface AquariumListResponse {
+  items: AquariumSummary[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+  };
+}
+
+export function listAquariums(page = 1, pageSize = 25, search = "") {
+  const query = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  if (search.trim()) query.set("search", search.trim());
+  return apiRequest<AquariumListResponse>(`${BASE}?${query}`);
+}
+
+export function getAquarium(id: string) {
+  return apiRequest<AquariumDetail>(`${BASE}/${encodeURIComponent(id)}`);
+}
+
 export function createAquarium(input: CreateAquariumInput) {
   return apiRequest<AquariumDetail>(BASE, {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/** A TELJES, FRISSÍTETT AKVÁRIUMOT ADJA VISSZA, nem a felvett sort -- ugyanaz
+ * az alak, mint a web `aquariumsApi.addEquipment`-je. */
+export function addAquariumEquipment(
+  aquariumId: string,
+  input: CreateAquariumEquipmentInput,
+) {
+  return apiRequest<AquariumDetail>(
+    `${BASE}/${encodeURIComponent(aquariumId)}/equipment`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function removeAquariumEquipment(
+  aquariumId: string,
+  equipmentId: string,
+) {
+  return apiRequest<AquariumDetail>(
+    `${BASE}/${encodeURIComponent(aquariumId)}/equipment/${encodeURIComponent(equipmentId)}`,
+    { method: "DELETE" },
+  );
 }
