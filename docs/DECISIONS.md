@@ -660,3 +660,106 @@ tükröt a `performance-mirror.spec.ts` veti össze a forrással.
 **AZ ELGÉPELT SZÁM NEM ESIK EGY ÁGRA AZ ÜRES MEZŐVEL,** holott a normalizálás
 mind a kettőre `null`-t ad. A kettő MÁST jelent (törlés kontra elgépelés), és
 egy ágon egy elgépelt szám CSENDBEN törölné a mezőt.
+
+## ADR-014 – Nem webshopos kimenő számlázás (karbantartási lap): a számla a mérvadó, gombbal indul, a csomaggal együtt megy
+
+**Dátum:** 2026-09-24
+
+**Kontextus.** Balázs karbantartási keretszerződés-folyamata (emlék 1804,
+2026-09-24 09:47, Discord "Partner karbantartás folyamat és rendszer" szál,
+Balázs leírása): keretszerződés -> esedékeskor előre kitöltött megrendelőlap
+PDF az ügyfélnek -> ügyfél aláírva visszaküldi -> karbantartási lap ->
+munkalapok -> karbantartás -> munkalapok aláírásra, visszajönnek ->
+teljesítési igazolás PDF -> aláírva vissza -> **számla** -> **teljes csomag**
+az ügyfélnek. Ez a folyamat négy szeletre bomlik (emlék 1805): 1. szerződés +
+menü (Codex, #1047), 2. megrendelőlap (nautilus), 3. teljesítési igazolás
+bekötése (nautilus, a PDF-renderelő magja #1045-ben, murena), 4. **számla +
+csomag** -- ez az ADR a 4. szelet első lépése.
+
+A `docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md` M8 fejezete ezt a munkát MÁR
+megnevezte, mielőtt ez a folyamat felmerült volna: **"C) Nem webshopos kimenő
+számlázás"**, "önálló jövőbeli mérföldkő, még nem specifikált", példák között
+kifejezetten "akvárium-karbantartás" és "végszámla". A terv saját szava
+szerint ehhez **"önálló specifikáció és ADR szükséges... mielőtt
+elkezdődik"** -- ez az ADR ezt a hiányt tölti ki.
+
+**Döntés (négy rész):**
+
+1. **A SZÁMLA a mérvadó a kerekítésnél, nem a teljesítési igazolás.** A
+   teljesítési igazolás PDF-jének összeg-modulja
+   (`completion-certificates/completion-certificate-amounts.ts`, #1045) MA
+   soronként 2 tizedesre kerekít, majd összegez -- ez eltér a Számlázz.hu
+   saját, soronkénti EGÉSZ forintos kerekítésétől, és 1 forintos eltérést
+   okozhat a két dokumentum között. A modult át kell állítani a Számlázz.hu
+   alakjára (soronként egész forintra kerekít, utána összegez), hogy a
+   teljesítési igazolás és a számla UGYANAZT a végösszeget mutassa. Ez a 3.
+   szelet bekötésekor történik (nautilus), nem ennek az ADR-nek a
+   hatóköre -- itt csak az irány áll.
+2. **A kiállítás GOMB-indított, az irodának, az aláírt teljesítési igazolás
+   után -- nem automatikus.** Ugyanaz a minta, mint a lezárt hibajegy
+   kiküldése (`HandoverMailService`, Balázs 2026-09-18-i specifikációja: "egy
+   elküld gomb"). Az ok itt még erősebb, mint a hibajegy-levélnél: egy
+   Számlázz.hu-n kiállított számla utólag NEM törölhető, csak sztornóval
+   javítható -- egy automatikus kiállítás egy elgépelt tételt egy valódi,
+   könyvelt bizonylattá tenne, mielőtt bárki ránézhetne.
+3. **A csomag a számlával EGYÜTT megy ki**, a folyamat legvégén (a
+   megrendelőlap, a munkalapok, a teljesítési igazolás és a számla egy
+   kézbesítésben), a lezárt hibajegy csomagjának mintájára
+   (`ServiceJobPackageService`,
+   `service-jobs/service-job-package.service.ts`): kapu a PDF-ek gyártása
+   ELŐTT, egy ZIP, egy gomb.
+4. **A duplikált számlázás ellen a teljesítési igazolás (a hozzá tartozó
+   rekord azonosítója) szolgál idempotencia-kulcsként.** Lásd lent, miért ez
+   a réteg és miért nem az ADR-006 mechanizmusa.
+
+**Miért NEM vonatkozik ide az ADR-006 tiltása.** Az ADR-006
+(2026-07-27) kimondta: "az Acropora OS soha nem hív `createInvoice`
+(vagy bármilyen Számlázz.hu Agent API) végpontot" -- DE ez a mondat
+kifejezetten a WEBSHOP-rendelésekről szól, és a tiltás saját maga zárja ki
+ezt az esetet, szó szerint: **"A nem-webshopos (munkalap/POS/kézi) kimenő
+számlázás -- ahol Acropora OS ténylegesen kezdeményezhet Számlázz.hu
+API-hívást -- külön, jövőbeli mérföldkő, ez a döntés nem vonatkozik rá."**
+
+A különbség nem formai, hanem a KOCKÁZAT forrásában áll. Az ADR-006 oka:
+"a UNAS Számlázz.hu-modulja már ki van fizetve és üzemel a webshopon -- egy
+párhuzamos, Acropora OS-oldali `createInvoice`-hívás dupla számlázás... nélkül
+nem építhető biztonságosan, mert nincs UNAS-oldali foglalás/zárolás a dupla
+kiállítás ellen." Karbantartási lapnál **nincs második rendszer, ami már
+kiállítaná a számlát** -- az Acropora OS az EGYETLEN kezdeményező. A
+webshop-eset kockázata (két különböző rendszer verseng ugyanazért a
+számláért) itt szerkezetileg nem áll fenn.
+
+**Mi véd a duplikált számlázás ellen ITT, ha nincs második rendszer.** Mivel
+az ADR-006 mechanizmusa (a másik oldal foglalása) nem alkalmazható, a
+védelmet az Acropora OS oldalán, egyetlen ponton kell megépíteni: **a
+teljesítési igazolás -- pontosabban a hozzá tartozó, egyedi rekord (a 3.
+szeletben bekötendő adatmodell azonosítója) -- az idempotencia-kulcs.** Egy
+adott teljesítési igazoláshoz LEGFELJEBB egy számla tartozhat; egy második
+kiállítási kísérlet ugyanarra a teljesítési igazolásra a MEGLÉVŐ számlát adja
+vissza, nem újat állít ki. Ez ugyanaz a minta, mint a séma már meglévő
+`Invoice.@@unique([source, szamlazzInvoiceId])` és
+`@@unique([source, invoiceNumber])` megkötése a UNAS-tükörnél (lásd ADR-006)
+-- csak itt a párosító kulcs nem a Számlázz.hu belső azonosítója (azt csak a
+sikeres hívás UTÁN kapjuk meg), hanem egy SAJÁT, a hívás ELŐTT is létező
+azonosító, amin egy adatbázis-szintű egyedi megszorítás áll. Az `InvoiceSource`
+enum már tartalmazza a `SZAMLAZZ` értéket (ma sehol nem használt) -- ez a
+forrás-jelölés erre az útra való, megkülönböztetve a `UNAS` (read-only
+tükör), `NAV`, `MANUAL` és `IMPORT` forrásoktól. A pontos mezőnév és a
+migráció a 4. szelet implementációjának feladata, nem ezé az ADR-é; itt a
+KÖVETELMÉNY rögzül: a kulcs a teljesítési igazolás, nem a Számlázz.hu válasza.
+
+**Előfeltétel, ami MA hiányzik, és nem ennek az ADR-nek a hatásköre
+megoldani.** A Számlázz.hu Agent kulcs élesben NINCS beállítva -- a
+`SzamlazzConnectionSetting` tábla (migráció
+`20260724130000_add_invoice_registry_and_szamlazz_connection`, 2026-07-24)
+üres, nulla sorral, és nulla alkalmazáskód hívja (lásd
+`exchange/karbantartas-4-szelet-szamlazas-terv-2026-09-24.md`). A kulcsot
+Balázs adja meg, és csak akkor van értelme kérni, amikor a 2. és 3. szelet
+(megrendelőlap, teljesítési igazolás) már készen áll -- előtte nincs mire
+használni.
+
+**Hatály.** Ez az ADR KIZÁRÓLAG a nem-webshopos, karbantartási-lap-alapú
+számlázásról szól. Nem érinti és nem módosítja: a webshop-rendelések
+read-only UNAS-tükrét (ADR-006, változatlan), a Számlázz.hu bejövő/pénzügyi
+adatkapcsolatot (M8.3, önálló, még nyitott, nem ehhez a munkához kell), és
+a NAV Online Számla egyeztetést (M9).
