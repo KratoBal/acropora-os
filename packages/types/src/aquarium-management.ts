@@ -49,6 +49,14 @@ export interface AquariumSummary {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  /**
+   * A LISTA-PILOT KÉRÉSÉRE (acrobot, 2026-09-24 16:19), hogy a Figma-lista
+   * "Karbantartók" és "Utolsó vízmérés" oszlopa valódi adatból menjen, ne
+   * maradjon el. Egy batch-elt (nem soronkénti) lekérdezéssel jön, lásd
+   * `AquariumsRepository.list` `listInclude`-ját.
+   */
+  maintainers: AquariumMaintainer[];
+  lastMeasuredAt?: string;
 }
 
 export interface AquariumDetail extends AquariumSummary {

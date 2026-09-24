@@ -9,3 +9,10 @@
   keresztul jon, egyetlen fajl modositasa mindket appot eleri.
 */
 @import "../../../../packages/ui/src/theme.css";
+
+/*
+  KISERLETI RETEG, CSAK AZ AKVARIUMOK OLDALAIHOZ -- lasd a fajl fejleceben
+  a teljes indoklast. Az apps/partner NEM importalja: a kiserlet nem erinti
+  a partner portalt.
+*/
+@import "../../../../packages/ui/src/aquarium-pilot-theme.css";

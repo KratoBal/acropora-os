@@ -135,6 +135,14 @@ export class AquariumListQueryDto {
   @IsIn(OWNERSHIP_TYPES)
   @IsOptional()
   ownershipType?: (typeof OWNERSHIP_TYPES)[number];
+  /**
+   * A FIGMA PILOT-LISTA "Típus" SZŰRŐJÉHEZ (2026-09-24) -- ugyanaz a mező,
+   * ami minden akváriumon már ma is áll, csak eddig nem volt rá szűrés a
+   * listán.
+   */
+  @IsIn(WATER_BODY_TYPES)
+  @IsOptional()
+  waterBodyType?: (typeof WATER_BODY_TYPES)[number];
 }
 
 /**
