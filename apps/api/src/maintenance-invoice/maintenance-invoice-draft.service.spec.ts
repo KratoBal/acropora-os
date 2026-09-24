@@ -217,8 +217,28 @@ describe("MaintenanceInvoiceDraftService.draftFor", () => {
     );
   });
 
-  it("throws ServiceUnavailableException when Számlázz.hu rejects the request", async () => {
-    const { service: subject } = service({
+  /**
+   * ACROBOT KÉRDÉSE (23160): egy nyers hálózati hiba (DNS, kapcsolat
+   * megszakadt) a `fetch`-ből SOHA nem `SzamlazzAgentHttpError` -- az csak
+   * akkor keletkezik, ha egyáltalán jött HTTP válasz. E nélkül a teszt
+   * nélkül ez az ág a nyers hibát dobta volna tovább, angol/technikai
+   * szöveggel a magyar felület helyett.
+   */
+  it("wraps a raw network failure (not a SzamlazzAgentHttpError) in a clean Hungarian message, without creating a row", async () => {
+    const { service: subject, created } = service({
+      clientError: new TypeError("fetch failed"),
+    });
+    await assert.rejects(
+      () => subject.draftFor("cert-1"),
+      (error: unknown) =>
+        error instanceof ServiceUnavailableException &&
+        (error as Error).message.includes("hálózati hiba"),
+    );
+    assert.equal(created.length, 0);
+  });
+
+  it("throws ServiceUnavailableException when Számlázz.hu rejects the request, and creates no row", async () => {
+    const { service: subject, created } = service({
       clientResponse: {
         successful: false,
         errorMessage: "Bejelentkezési hiba",
@@ -226,8 +246,11 @@ describe("MaintenanceInvoiceDraftService.draftFor", () => {
     });
     await assert.rejects(
       () => subject.draftFor("cert-1"),
-      ServiceUnavailableException,
+      (error: unknown) =>
+        error instanceof ServiceUnavailableException &&
+        (error as Error).message === "Bejelentkezési hiba",
     );
+    assert.equal(created.length, 0);
   });
 
   it("on success, stores the PDF and creates a DRAFT invoice with no invoiceNumber and no salesOrderId", async () => {

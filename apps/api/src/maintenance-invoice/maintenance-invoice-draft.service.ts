@@ -183,11 +183,26 @@ export class MaintenanceInvoiceDraftService {
     try {
       response = await this.client.generateInvoice(xml);
     } catch (error) {
+      /*
+        MINDEN HIBA IDE FUT, NEM CSAK A `SzamlazzAgentHttpError` -- acrobot
+        kérdése (23160): egy nyers hálózati hiba (DNS, kapcsolat megszakadt,
+        időtúllépés) a `fetch`-ből érkezik, SOHA nem `SzamlazzAgentHttpError`
+        (az csak akkor keletkezik, ha egyáltalán jött HTTP válasz). Egy
+        `SzamlazzAgentXmlError` (érvénytelen/váratlan válasz-alak) ugyanígy
+        idegen technikai szöveget adna a panelen. Mielőtt ez a javítás
+        megtörtént, mindkettő a NYERS hibát dobta tovább a hívóig -- a
+        felhasználó egy angol/technikai üzenetet látott volna a saját
+        magyar nyelvű felülete helyett. Egyik ág sem ír adatbázisba: ez a
+        hívás a piszkozat LÉTREHOZÁSA ELŐTT fut, tehát félkész DRAFT sor
+        egyik esetben sem keletkezhet.
+      */
       if (error instanceof SzamlazzAgentHttpError)
         throw new ServiceUnavailableException(
           `A Számlázz.hu nem érhető el vagy hibával válaszolt (HTTP ${error.status}).`,
         );
-      throw error;
+      throw new ServiceUnavailableException(
+        "A Számlázz.hu nem érhető el (hálózati hiba). Próbáld újra.",
+      );
     }
 
     if (!response.successful || !response.pdf)
