@@ -590,6 +590,53 @@ export function partnerStatusLabel(status: ServiceJobStatusValue): string {
 }
 
 /**
+ * A NEGY LATSZO ALLAPOT SZINE, A PARTNER-PORTAL JELVENYENEK.
+ *
+ * UJ, 2026-09-24 (a hibajegy-lista es -adatlap arculati parositasa a
+ * `service-job-list-page.tsx` mintaja szerint). A visszateresi ertek SZO
+ * SZERINT ugyanaz a hat-erteku unio, mint a `@acropora/ui`
+ * `ServiceTone`-ja -- a tipust itt NEM importaljuk onnan, mert az egy React-
+ * komponens-csomag, ez a fajl pedig keret- es UI-fuggetlen marad (lasd a
+ * `@acropora/ui` `service-detail-chrome.tsx` fejleceben a hasonlo dontest a
+ * `ServiceBackLink`-nel). A strukturalis egyezes eleg ahhoz, hogy a hivo
+ * kozvetlenul atadhassa a `ServiceStatusBadge`-nek.
+ *
+ * A NEGY SZIN NEM TALALGATAS: az internal `JOB_STATUS_TONE`
+ * (`apps/web/.../service-job-labels.ts`) nyolc allapotanak a tobbsegi
+ * hangulatat kovetik -- NEW=kek, a harom "aktivan dolgozunk rajta" allapot
+ * kozul ketto (TRIAGED, SCHEDULED, IN_PROGRESS) lila, COMPLETED=zold,
+ * CANCELLED=semleges. A partner IN_PROGRESS bucketje ket tovabbi belso
+ * allapotot is elnyel (WAITING_FOR_PARTS, WAITING_FOR_CUSTOMER, mindketto
+ * belul sargas/amber), ezert ITT a lila NEM azonos allitas, csak a
+ * legjellemzobb valasztas a bucket tobbsegere -- ha ez valaha ferehelyre
+ * vezetne, a bontas maga (nem a szin) az, amit ujra kell gondolni.
+ *
+ * A PARAMETER SZANDEKOSAN A NEGYERTEKU `ServiceJobPartnerStatus`, NEM A
+ * NYOLCERTEKU BELSO ALLAPOT. A hivo (partner-portal) oldalan MINDEN listaelem
+ * es reszletlap MAR hordozza a `partnerStatus` mezot -- ugyanugy, ahogy a
+ * `partnerStatusLabel`-t is a szerver szamolja ki elore -- tehat a belso
+ * `status` mezonek a kliens oldalon SOHA nincs ra szuksege. Ha a fuggveny a
+ * nyolcerteku bemenetet fogadna, egy jovobeli hivo konnyen atadhatna a
+ * `ticket.status`-t (a nyers belso allapotot) a kliens kodban, pontosan azt a
+ * mintat torve, amit a partner-portal tobbi fajlja tudatosan kerul.
+ */
+const PARTNER_STATUS_TONE: Record<
+  ServiceJobPartnerStatus,
+  "neutral" | "purple" | "green" | "amber" | "red" | "blue"
+> = {
+  NEW: "blue",
+  IN_PROGRESS: "purple",
+  COMPLETED: "green",
+  CLOSED: "neutral",
+};
+
+export function partnerStatusTone(
+  status: ServiceJobPartnerStatus,
+): "neutral" | "purple" | "green" | "amber" | "red" | "blue" {
+  return PARTNER_STATUS_TONE[status];
+}
+
+/**
  * A PARTNERNEK KULDOTT RESZLETLAP -- SAJAT TIPUS, NEM A BELSO MEGSZURVE.
  *
  * === A DONTES, ES AMIERT NEM SZURO-LISTA ===

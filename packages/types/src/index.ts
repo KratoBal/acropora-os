@@ -11,6 +11,7 @@ export {
   isFinishedServiceJob,
   PARTNER_STATUS_LABELS,
   partnerStatusLabel,
+  partnerStatusTone,
   isPartnerServiceJobDetail,
   partnerServiceJobDetail,
   partnerVisibleStatus,

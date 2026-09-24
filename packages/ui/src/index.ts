@@ -35,3 +35,28 @@ export { Topbar } from "./topbar";
 export type { TopbarProps } from "./topbar";
 export { Alert } from "./alert";
 export type { AlertProps } from "./alert";
+export { sv, serviceToneClass } from "./service-theme";
+export type { ServiceTone } from "./service-theme";
+export {
+  ServiceIcon,
+  ServiceStatusBadge,
+  ServiceListHeader,
+  ServiceListTabs,
+  ServiceListFooter,
+  ServiceSearchField,
+} from "./service-list-chrome";
+export type {
+  ServiceIconName,
+  ServiceListTab,
+  ServiceListTail,
+} from "./service-list-chrome";
+export {
+  ServiceDetailHeader,
+  ServicePanel,
+  ServicePanelHeading,
+  ServiceContextRow,
+  ServiceDataGrid,
+  ServiceDataItem,
+  ServiceNextAction,
+  ServiceDetailSplit,
+} from "./service-detail-chrome";
