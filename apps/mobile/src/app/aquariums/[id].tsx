@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -40,6 +40,8 @@ import { aquariumMeasurementParameter } from "@/lib/aquariums/aquarium-measureme
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { useIsOnline } from "@/lib/offline/connectivity";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * AKVÁRIUM ADATLAP.
@@ -62,10 +64,13 @@ import { useIsOnline } from "@/lib/offline/connectivity";
  * A KARBANTARTÓK (brief 8. döntés) CSAK MEGJELENÍTÉS ebben a körben -- a
  * választás webes.
  *
- * A JELVÉNYEK, A KARBANTARTÓ-AVATAROK ÉS A VÍZÉRTÉK-CSEMPÉK (2026-09-24,
- * acrobot kérése) a Figma-terv (`exchange/figma-akvariumok-make-2`) mobil
- * szekciójából jönnek szerkezetileg, a mai sötét témával -- Balázs döntése,
- * hogy a telefon egésze egyelőre sötét marad.
+ * A JELVÉNYEK, A KARBANTARTÓ-AVATAROK ÉS A VÍZÉRTÉK-CSEMPÉK a Figma-terv
+ * (`exchange/figma-akvariumok-make-2`) mobil szekciójából jönnek
+ * szerkezetileg.
+ *
+ * A SZÍNEK 2026-09-24-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK (Balázs
+ * döntése, emlék 1816): ez a lap az akvárium-képernyők egyike, tehát
+ * világos és sötét módban is helyesen jelenik meg.
  */
 export default function AquariumDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -73,6 +78,8 @@ export default function AquariumDetailScreen() {
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const online = useIsOnline();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const queryClient = useQueryClient();
 
   const [draft, setDraft] = useState<AquariumEquipmentForm>(
@@ -235,7 +242,9 @@ export default function AquariumDetailScreen() {
           </View>
         ) : null}
 
-        {aquarium.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {aquarium.isPending ? (
+          <ActivityIndicator color={tokens.accent} />
+        ) : null}
         {aquarium.isError ? (
           <Text style={styles.error}>
             {aquarium.error instanceof Error
@@ -247,6 +256,7 @@ export default function AquariumDetailScreen() {
         {data ? (
           <View style={styles.card}>
             <Row
+              styles={styles}
               label="Tulajdon"
               value={
                 data.ownershipType === "CUSTOMER" && data.customerName
@@ -258,12 +268,14 @@ export default function AquariumDetailScreen() {
             data.widthCm !== undefined &&
             data.heightCm !== undefined ? (
               <Row
+                styles={styles}
                 label="Méretek"
                 value={`${data.lengthCm} × ${data.widthCm} × ${data.heightCm} cm`}
               />
             ) : null}
             {data.systemVolumeLiters !== undefined ? (
               <Row
+                styles={styles}
                 label="Térfogat"
                 value={`${data.systemVolumeLiters} l${
                   data.systemVolumeIsManual ? " (kézi)" : ""
@@ -271,9 +283,11 @@ export default function AquariumDetailScreen() {
               />
             ) : null}
             {data.startedAt ? (
-              <Row label="Indítva" value={data.startedAt} />
+              <Row styles={styles} label="Indítva" value={data.startedAt} />
             ) : null}
-            {data.notes ? <Row label="Megjegyzés" value={data.notes} /> : null}
+            {data.notes ? (
+              <Row styles={styles} label="Megjegyzés" value={data.notes} />
+            ) : null}
             <View style={styles.row}>
               <Text style={styles.rowLabel}>Karbantartók</Text>
               {data.maintainers.length > 0 ? (
@@ -363,7 +377,7 @@ export default function AquariumDetailScreen() {
                   setDraft((current) => ({ ...current, manufacturer: value }))
                 }
                 placeholder="Gyártó"
-                placeholderTextColor="#668798"
+                placeholderTextColor={tokens.textMuted}
                 style={[styles.input, styles.dimensionInput]}
               />
               <TextInput
@@ -372,7 +386,7 @@ export default function AquariumDetailScreen() {
                   setDraft((current) => ({ ...current, model: value }))
                 }
                 placeholder="Típus"
-                placeholderTextColor="#668798"
+                placeholderTextColor={tokens.textMuted}
                 style={[styles.input, styles.dimensionInput]}
               />
               <TextInput
@@ -381,7 +395,7 @@ export default function AquariumDetailScreen() {
                   setDraft((current) => ({ ...current, quantity: value }))
                 }
                 placeholder="Db"
-                placeholderTextColor="#668798"
+                placeholderTextColor={tokens.textMuted}
                 keyboardType="number-pad"
                 style={[styles.input, styles.dimensionInput]}
               />
@@ -393,7 +407,7 @@ export default function AquariumDetailScreen() {
                   setDraft((current) => ({ ...current, channelCount: value }))
                 }
                 placeholder="Csatornaszám"
-                placeholderTextColor="#668798"
+                placeholderTextColor={tokens.textMuted}
                 keyboardType="number-pad"
                 style={styles.input}
               />
@@ -433,7 +447,9 @@ export default function AquariumDetailScreen() {
           ) : null}
         </View>
 
-        {measurements.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {measurements.isPending ? (
+          <ActivityIndicator color={tokens.accent} />
+        ) : null}
         {measurements.isError ? (
           <Text style={styles.error}>A vízértékek nem tölthetők be.</Text>
         ) : null}
@@ -459,7 +475,11 @@ export default function AquariumDetailScreen() {
               })}
             </View>
             {latestOccasion.notes ? (
-              <Row label="Megjegyzés" value={latestOccasion.notes} />
+              <Row
+                styles={styles}
+                label="Megjegyzés"
+                value={latestOccasion.notes}
+              />
             ) : null}
           </View>
         ) : null}
@@ -505,7 +525,15 @@ export default function AquariumDetailScreen() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({
+  label,
+  value,
+  styles,
+}: {
+  label: string;
+  value: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -514,122 +542,128 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 48, gap: 8 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  title: { color: "#f4fbff", fontSize: 28, fontWeight: "900" },
-  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
-  avatarRow: { flexDirection: "row", gap: 6, marginTop: 2 },
-  latestMeasuredAt: { color: "#789cad", fontSize: 12 },
-  paramGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 4,
-  },
-  paramTile: {
-    width: "31%",
-    backgroundColor: "#071f31",
-    borderRadius: 10,
-    padding: 8,
-  },
-  paramTileLabel: { color: "#789cad", fontSize: 10, fontWeight: "700" },
-  paramTileValue: {
-    color: "#f4fbff",
-    fontSize: 14,
-    fontWeight: "800",
-    marginTop: 2,
-  },
-  paramTileUnit: { color: "#789cad", fontSize: 10 },
-  card: {
-    marginTop: 12,
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    gap: 10,
-  },
-  row: { gap: 2 },
-  rowLabel: { color: "#789cad", fontSize: 11, textTransform: "uppercase" },
-  rowValue: { color: "#f4fbff", fontSize: 15, fontWeight: "700" },
-  sectionTitle: {
-    color: "#f4fbff",
-    fontSize: 16,
-    fontWeight: "800",
-    marginTop: 18,
-  },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  linkText: {
-    color: "#52d6c7",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  empty: { color: "#91afbe" },
-  equipmentRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 6,
-  },
-  equipmentInfo: { flexShrink: 1, gap: 2 },
-  equipmentLabel: { color: "#f4fbff", fontWeight: "700" },
-  equipmentMeta: { color: "#789cad", fontSize: 12 },
-  removeText: { color: "#fca5a5", fontWeight: "700" },
-  addPanel: { marginTop: 12, gap: 8 },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#28536a",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  chipSelected: { backgroundColor: "#177b74", borderColor: "#177b74" },
-  chipText: { color: "#91afbe", fontSize: 12, fontWeight: "700" },
-  chipTextSelected: { color: "#fff" },
-  dimensionRow: { flexDirection: "row", gap: 8 },
-  dimensionInput: { flex: 1 },
-  input: {
-    color: "#f4fbff",
-    backgroundColor: "#071f31",
-    borderColor: "#28536a",
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-  secondaryButton: {
-    borderRadius: 10,
-    backgroundColor: "#16495e",
-    borderWidth: 1,
-    borderColor: "#2b657d",
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    alignItems: "center",
-  },
-  buttonText: { color: "white", fontWeight: "800" },
-  pressed: { opacity: 0.75 },
-  disabled: { opacity: 0.5 },
-  error: {
-    color: "#fecaca",
-    backgroundColor: "#541b2b",
-    padding: 12,
-    borderRadius: 10,
-  },
-});
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 48, gap: 8 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
+    badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+    avatarRow: { flexDirection: "row", gap: 6, marginTop: 2 },
+    latestMeasuredAt: { color: t.textSecondary, fontSize: 12 },
+    paramGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 4,
+    },
+    paramTile: {
+      width: "31%",
+      backgroundColor: t.background,
+      borderRadius: 10,
+      padding: 8,
+    },
+    paramTileLabel: { color: t.textSecondary, fontSize: 10, fontWeight: "700" },
+    paramTileValue: {
+      color: t.textPrimary,
+      fontSize: 14,
+      fontWeight: "800",
+      marginTop: 2,
+    },
+    paramTileUnit: { color: t.textSecondary, fontSize: 10 },
+    card: {
+      marginTop: 12,
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 14,
+      padding: 14,
+      gap: 10,
+    },
+    row: { gap: 2 },
+    rowLabel: {
+      color: t.textSecondary,
+      fontSize: 11,
+      textTransform: "uppercase",
+    },
+    rowValue: { color: t.textPrimary, fontSize: 15, fontWeight: "700" },
+    sectionTitle: {
+      color: t.textPrimary,
+      fontSize: 16,
+      fontWeight: "800",
+      marginTop: 18,
+    },
+    sectionHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    linkText: {
+      color: t.accent,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    empty: { color: t.textSecondary },
+    equipmentRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 10,
+      marginTop: 6,
+    },
+    equipmentInfo: { flexShrink: 1, gap: 2 },
+    equipmentLabel: { color: t.textPrimary, fontWeight: "700" },
+    equipmentMeta: { color: t.textSecondary, fontSize: 12 },
+    removeText: { color: t.danger, fontWeight: "700" },
+    addPanel: { marginTop: 12, gap: 8 },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    chip: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    chipSelected: { backgroundColor: t.accent, borderColor: t.accent },
+    chipText: { color: t.textSecondary, fontSize: 12, fontWeight: "700" },
+    chipTextSelected: { color: t.textOnAccent },
+    dimensionRow: { flexDirection: "row", gap: 8 },
+    dimensionInput: { flex: 1 },
+    input: {
+      color: t.textPrimary,
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+    },
+    secondaryButton: {
+      borderRadius: 10,
+      backgroundColor: t.accent,
+      borderWidth: 1,
+      borderColor: t.accentPressed,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      alignItems: "center",
+    },
+    buttonText: { color: t.textOnAccent, fontWeight: "800" },
+    pressed: { opacity: 0.75 },
+    disabled: { opacity: 0.5 },
+    error: {
+      color: t.danger,
+      backgroundColor: t.dangerSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+  });
+}
