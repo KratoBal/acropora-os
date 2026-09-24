@@ -105,14 +105,20 @@ export const worksheetStatusLabel: Record<WorksheetStatus, string> = {
 };
 
 /**
- * UGYANAZ A SZÓHASZNÁLAT, MINT A WEBEN
- * (`apps/web/src/components/worksheets/worksheet-labels.ts`).
+ * UGYANAZ A SZÓHASZNÁLAT, MINT A KÖZÖS FORRÁSBAN
+ * (`packages/types/src/worksheet-management.ts`).
  *
  * Nem stílus: ugyanarról a lapról az irodában és a helyszínen ugyanazt a szót
  * kell hallani, különben egy telefonhívás fele arra megy el, hogy melyik
  * állapotról beszélünk. A két lista azért áll mégis két helyen, mert az Expo
- * app nem húzza be a munkatér csomagjait; az eltérésük néma volna, ezért ez a
- * fájl a webes szövegre hivatkozik, és a spec mind a négy állapotot rögzíti.
+ * app nem húzza be a munkatér csomagjait; az eltérésük néma volna, ezért a
+ * spec forrásszövegként olvassa be a `packages/types` táblát, és összeveti
+ * ezzel a mobil-példánnyal.
+ *
+ * A WEBES `apps/web/src/components/worksheets/worksheet-labels.ts` MÁR NEM
+ * KÜLÖN MÁSOLAT: 2026-09-21 óta pusztán újra-exportálja ugyanezt a közös
+ * forrást, tehát a hivatkozás helyesen a `packages/types` fájlra szól, nem a
+ * webes fájlra.
  */
 export function worksheetLabelOrDraft(label: string | null): string {
   return label ?? "Még nincs száma";
