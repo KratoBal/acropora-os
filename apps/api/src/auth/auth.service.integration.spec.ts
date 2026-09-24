@@ -75,7 +75,7 @@ describe(
 
       const otherService = newService();
       const resolved = await otherService.resolveToken(session.token!);
-      assert.equal(resolved.id, userId);
+      assert.equal(resolved.user.id, userId);
     });
 
     it("rejects an invalid token with UnauthorizedException", async () => {
@@ -137,8 +137,8 @@ describe(
         new AuthUserResolver(),
         new SessionRepository(),
       );
-      const user = await afterRestart.resolveToken(session.token!);
-      assert.equal(user.id, userId);
+      const resolved = await afterRestart.resolveToken(session.token!);
+      assert.equal(resolved.user.id, userId);
     });
   },
 );

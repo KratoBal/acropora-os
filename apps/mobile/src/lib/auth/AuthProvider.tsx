@@ -57,6 +57,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearSession: () => authSessionStore.clearSession(),
       getCurrentUser,
       unlock: unlockWithBiometrics,
+      // A csuszo munkamenet helyi tukre (2026-09-24, mobil szal) -- lasd
+      // `restoreSession` sajat jegyzeteben, MIERT kell a lemezre irni.
+      saveSession: (session) => authSessionStore.saveSession(session),
     });
 
     if (attemptId !== restoreAttemptId.current) return; // superseded

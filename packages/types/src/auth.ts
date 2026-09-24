@@ -503,16 +503,30 @@ export function partnerMembership(
 }
 
 /**
- * A `GET /auth/me` VALASZA: a felhasznalo, PLUSZ a menuje.
+ * A `GET /auth/me` VALASZA: a felhasznalo, PLUSZ a menuje, PLUSZ a
+ * munkamenet aktualis lejarata.
  *
  * KULON TIPUS, ES NEM AZ `AuthenticatedUser` BOVITESE. A menu nem a
  * felhasznalo tulajdonsaga, hanem azt irja le, mit LAT -- es az
  * `AuthenticatedUser` sok helyen all (munkamenet, kereshez csatolt kero, teszt-
  * fixturak). Ha a mezo oda kerulne, minden ilyen helyen ki kellene tolteni,
  * holott a legtobbnek semmi koze a menuhoz.
+ *
+ * `expiresAt` UGYANEZEN AZ ALAPON KULON MEZO, NEM AZ `AuthenticatedUser`
+ * RESZE -- Balazs kerese (2026-09-24 08:37, mobil szal): a csuszo
+ * munkamenet-lejarat (`AuthGuard`, `SessionRepository.findActive`) csak
+ * ott adhatja vissza a HOSSZABBITAS UTANI erteket, ahol a hivas a MEGLEVO
+ * sessiont oldja fel, es ez pontosan ez a vegpont -- a mobil kliens
+ * (`restoreSession`, hidegindulaskor) ezzel irja felul a helyben tarolt
+ * `expiresAt`-et, mert kulonben a szerver oldali csuszasnak semmi
+ * lathato hatasa nem lenne a telefonon (lasd docs/AUTHENTICATION.md).
+ * OPCIONALIS: egy regebbi API-telepites nem kuldi, es a hianya NEM azt
+ * jelenti, hogy a session lejart -- csak azt, hogy a hivo a MEGLEVO
+ * helyi erteket tartsa meg.
  */
 export interface CurrentUserResponse extends AuthenticatedUser {
   navigation: NavigationEntryView[];
+  expiresAt?: string;
 }
 
 export interface Session {

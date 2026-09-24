@@ -121,6 +121,62 @@ process memóriájában. Csak a token SHA-256 lenyomata kerül tárolásra
 session feloldásakor az `AuthGuard`/`AuthService` `401`-et ad, és a lejárt
 sort törli.
 
+### Munkamenet-lejárat és csúszás
+
+Balázs kérése és jóváhagyása (2026-09-24, mobil szál): a tünet, hogy a
+mobilalkalmazás napközben kiléptetett, mert a lejárat rövidebb volt, mint
+egy tipikus munkanap, és semmi nem hosszabbította.
+
+Két, egymástól független dolog:
+
+- **A hossz belépéskor dől el, kliensenként külön** (`AuthService.loginWithPassword`,
+  a `client` paraméter): web és a development login `SESSION_TTL_MS` (8 óra),
+  mobil `MOBILE_SESSION_TTL_MS` (30 nap). A mobil token saját, `mobile_`
+  előtagot kap (`MOBILE_TOKEN_PREFIX`) — ez NEM biztonsági határ (azt a
+  `Session.tokenHash` egyezése adja), hanem azonosítja, melyik hossz
+  csúszik egy már kiadott tokenre (`ttlMsForToken`).
+- **A lejárat MINDEN hitelesített kérésen csúszik** (`SessionRepository.findActive`):
+  ha az utolsó hosszabbítás óta eltelt legalább `SLIDING_EXTEND_DEBOUNCE_MS`
+  (5 perc), a lejárat `most + hossz`-ra tolódik, és a sor frissül. Az "utolsó
+  hosszabbítás" idejét NEM külön oszlop tárolja — a meglévő `expiresAt`-ból
+  és a hívó által átadott `ttlMs`-ből vezethető le (`expiresAt - ttlMs`,
+  lásd `shouldExtend`), mert egy frissen (ki)adott vagy hosszabbított
+  session pontosan `most + ttlMs` lejáratot kap. Az 5 perces debounce azért
+  kell, hogy ne írjunk adatbázist minden egyes kérésnél.
+
+A cookie-alapú (web) útvonalon a `acropora_session` és `acropora_csrf`
+süti `maxAge`-e is újra beállítódik (`AuthGuard`), de KIZÁRÓLAG akkor, ha
+ebben a körben ténylegesen történt hosszabbítás — különben minden kérés
+felesleges `Set-Cookie` fejlécet kapna. A CSRF süti ÉRTÉKE ilyenkor
+VÁLTOZATLAN marad (csak a `maxAge` nő): újragenerálás a kliens következő
+állapotváltoztató kérését CSRF-hibával buktatná, mert az addig kapott
+értéket küldené vissza.
+
+**A mobil kliens is látja a csúszást, két lépésben** (Balázs kiegészítése,
+2026-09-24 08:37 — az első kör után ez még nyitott korlát volt, azóta
+lezárva):
+
+1. A `GET /auth/me` válasza (`CurrentUserResponse.expiresAt`,
+   `@acropora/types`) az `AuthGuard` által beállított, a hosszabbítás UTÁNI
+   lejáratot hordozza — mindkét úton (Bearer és süti), mert
+   `AuthService.resolveToken` mindig visszaadja.
+2. A mobil `restoreSession` (hidegindítás) ezzel írja felül a helyben tárolt
+   `expiresAt`-et (`token-store.ts`, `saveSession`) — de CSAK ha a válasz
+   ténylegesen hordoz értéket, hogy egy régebbi API-telepítés ellen a
+   meglévő helyi érték maradjon meg.
+
+**A `resumeSession` (háttérből visszatéréskor) szándékosan VÁLTOZATLAN
+maradt** — Balázs 2026-08-18-i döntése szerint eleve nem hív szervert, csak a
+helyi lejáratot nézi. Mivel a `restoreSession` minden hidegindításkor
+frissíti ezt az értéket, egy 30 napos csúszó ablaknál ez bőven elég: a
+felhasználó tipikusan gyakrabban indítja újra az appot (vagy tér vissza a
+háttérből, amitől viszont nem törlődik a folyamat), mint 30 naponta egyszer.
+
+A mobil kliens frissítése OTA-val megy ki, és a sorrend számít: a szerver
+API telepítése előbb kell, mert egy régi API mellett a `/auth/me` válasza
+nem hordoz `expiresAt`-et, és a kliens ilyenkor a meglévő helyi értéket
+tartja meg (nem hibázik, csak nem frissül).
+
 ### Mobil auth
 
 `POST /auth/mobile/login/password` törzse:

@@ -39,17 +39,90 @@ describe("restoreSession", () => {
       token: "valid-token",
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     };
+    let saveSessionCalled = false;
     const outcome = await restoreSession({
       getSession: async () => session,
       clearSession: async () => {
         throw new Error("must not clear a valid session");
       },
       getCurrentUser: async () => testUser,
+      saveSession: async () => {
+        saveSessionCalled = true;
+      },
     });
     assert.deepEqual(outcome, {
       type: "authenticated",
       user: testUser,
       expiresAt: session.expiresAt,
+    });
+    // A CSUSZO LEJARAT MEZOJE -- Balazs kerese (2026-09-24 08:37): a
+    // `testUser` (mint a valodi `/auth/me` valasz) nem hordoz
+    // `expiresAt`-et (regebbi API-telepitest szimulal), tehat a helyi
+    // rekordot NEM szabad felulirni.
+    assert.equal(saveSessionCalled, false);
+  });
+
+  /**
+   * A CSUSZO MUNKAMENET HELYI TUKRE -- Balazs kerese (2026-09-24 08:37,
+   * mobil szal): a `/auth/me` valasza a szerver oldali hosszabbitas UTANI
+   * `expiresAt`-et hordozza, es ennek felul kell irnia a helyi, tarolt
+   * erteket -- kulonben a `resumeSession` (hatterbol visszatereskor,
+   * szandekosan szerver-hivas nelkul) az EREDETI, be nem jelentkezeskori
+   * lejaratot latna, es a szerver oldali csuszasnak semmi erzekelheto
+   * hatasa nem lenne a telefonon.
+   */
+  it("a friss expiresAt-tel erkezo /auth/me valasz FELULIRJA a helyi rekordot", async () => {
+    const session: StoredSession = {
+      token: "valid-token",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      lastVerifiedAt: "2026-09-01T00:00:00.000Z",
+    };
+    const frissExpiresAt = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    let mentettSession: StoredSession | undefined;
+    const outcome = await restoreSession({
+      getSession: async () => session,
+      clearSession: async () => {
+        throw new Error("must not clear a valid session");
+      },
+      getCurrentUser: async () => ({ ...testUser, expiresAt: frissExpiresAt }),
+      saveSession: async (s) => {
+        mentettSession = s;
+      },
+    });
+    assert.deepEqual(outcome, {
+      type: "authenticated",
+      user: testUser,
+      expiresAt: frissExpiresAt,
+    });
+    assert.ok(mentettSession, "a saveSession-nek meg kellett hivodnia");
+    assert.equal(mentettSession!.token, "valid-token");
+    assert.equal(mentettSession!.expiresAt, frissExpiresAt);
+    assert.deepEqual(mentettSession!.user, testUser);
+    // A LASTVERIFIEDAT VALTOZATLAN MARAD -- ez a mezo NEM ennek a
+    // valtoztatasnak a resze, csak megorizzuk, ami mar ott allt.
+    assert.equal(mentettSession!.lastVerifiedAt, "2026-09-01T00:00:00.000Z");
+  });
+
+  it("saveSession NELKUL (regi bekotes) sem hasal el -- a valasz akkor is helyes", async () => {
+    const session: StoredSession = {
+      token: "valid-token",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const frissExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const outcome = await restoreSession({
+      getSession: async () => session,
+      clearSession: async () => {
+        throw new Error("must not clear a valid session");
+      },
+      getCurrentUser: async () => ({ ...testUser, expiresAt: frissExpiresAt }),
+      // saveSession szandekosan nincs megadva.
+    });
+    assert.deepEqual(outcome, {
+      type: "authenticated",
+      user: testUser,
+      expiresAt: frissExpiresAt,
     });
   });
 

@@ -10,6 +10,8 @@ import { Reflector } from "@nestjs/core";
 import type { AuthenticatedRequest } from "../auth.types.js";
 import { AuthService } from "../auth.service.js";
 import {
+  cookieOptions,
+  type CookieResponse,
   CSRF_COOKIE_NAME,
   CSRF_HEADER_NAME,
   parseCookies,
@@ -42,8 +44,10 @@ export class AuthGuard implements CanActivate {
     const [scheme, bearerToken] = authorization?.split(" ") ?? [];
 
     if (scheme === "Bearer" && bearerToken) {
-      request.user = await this.authService.resolveToken(bearerToken);
+      const resolved = await this.authService.resolveToken(bearerToken);
+      request.user = resolved.user;
       request.authToken = bearerToken;
+      request.sessionExpiresAt = resolved.expiresAt;
       return true;
     }
 
@@ -59,9 +63,9 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException("Bejelentkezés szükséges.");
     }
 
+    const csrfCookie = cookies[CSRF_COOKIE_NAME];
     const method = request.method?.toUpperCase();
     if (!method || !CSRF_EXEMPT_METHODS.has(method)) {
-      const csrfCookie = cookies[CSRF_COOKIE_NAME];
       const csrfHeader = firstHeaderValue(
         request.headers[CSRF_HEADER_NAME] as string | string[] | undefined,
       );
@@ -70,9 +74,43 @@ export class AuthGuard implements CanActivate {
       }
     }
 
-    request.user = await this.authService.resolveToken(cookieToken);
+    const resolved = await this.authService.resolveToken(cookieToken);
+    request.user = resolved.user;
     request.authToken = cookieToken;
     request.authViaCookie = true;
+    request.sessionExpiresAt = resolved.expiresAt;
+
+    /**
+     * A SUTI MAXAGE-E IS CSUSZIK -- Balazs 2. pontja (2026-09-24 08:15):
+     * kulonben a bongeszo a SAJAT, be nem allitott orajaval dobja el a
+     * sutit, akarhogy is hosszabbitottuk a szerver oldali sessiont. CSAK
+     * akkor allitjuk ujra, ha `resolveToken` TENYLEG hosszabbitott
+     * (`resolved.extended`) -- kulonben minden egyes keres felesleges
+     * `Set-Cookie` fejlecet kapna.
+     */
+    if (resolved.extended && csrfCookie) {
+      const response = context.switchToHttp().getResponse<CookieResponse>();
+      const maxAgeMs = Math.max(
+        0,
+        new Date(resolved.expiresAt).getTime() - Date.now(),
+      );
+      // UGYANAZ a session-token ES ugyanaz a CSRF-ertek megy vissza, csak a
+      // maxAge no -- a CSRF erteket itt SOSEM generaljuk ujra: a kliens a
+      // bejelentkezeskor kapott erteket kuldi vissza a fejlecben, es ha ez
+      // itt masikra valtana, minden kovetkezo allapotvaltoztato keres CSRF-
+      // ellenorzese elbukna.
+      response.cookie(
+        SESSION_COOKIE_NAME,
+        cookieToken,
+        cookieOptions(maxAgeMs, { httpOnly: true }),
+      );
+      response.cookie(
+        CSRF_COOKIE_NAME,
+        csrfCookie,
+        cookieOptions(maxAgeMs, { httpOnly: false }),
+      );
+    }
+
     return true;
   }
 }

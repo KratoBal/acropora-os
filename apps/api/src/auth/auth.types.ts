@@ -14,6 +14,15 @@ export interface AuthenticatedRequest {
    * cookie rather than a Bearer header — used to decide whether the CSRF
    * double-submit check applies. */
   authViaCookie?: boolean;
+  /**
+   * A MUNKAMENET AKTUALIS (a csuszo hosszabbitas UTANI) lejarata -- az
+   * AuthGuard mindig beallitja, MINDKET uton (Bearer es suti), mert
+   * `AuthService.resolveToken` mindig visszaadja. `GET /auth/me`
+   * (`AuthController.getCurrentUser`) ezt teszi bele a valaszba, hogy a
+   * mobil kliens a helyi, tarolt `expiresAt`-et frissiteni tudja -- lasd
+   * `CurrentUserResponse.expiresAt` sajat jegyzeteben.
+   */
+  sessionExpiresAt?: string;
 }
 
 export interface DevelopmentLoginDto {
