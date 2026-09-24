@@ -33,13 +33,13 @@ import {
   WATER_BODY_LABEL,
   WATER_TYPE_LABEL,
 } from "../aquarium-labels";
-import { pilotInter } from "./pilot-font";
 import { PilotEmailDialog } from "./pilot-aquarium-water-values";
 import {
   PilotBadge,
   PilotButton,
   PilotCard,
   PilotCardHeader,
+  PilotThemeRoot,
 } from "./pilot-ui";
 
 /**
@@ -279,15 +279,11 @@ export function PilotMeasurementHistoryPage({
     );
   if (loading || !aquarium)
     return (
-      <div
-        className={`${pilotInter.className} -m-6 h-96 animate-pulse bg-pilot-grey-100`}
-      />
+      <PilotThemeRoot className="-m-6 h-96 animate-pulse bg-pilot-grey-100" />
     );
 
   return (
-    <div
-      className={`${pilotInter.className} -m-6 flex min-h-screen flex-col bg-pilot-grey-50`}
-    >
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <nav className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400">
           <Link
@@ -752,7 +748,7 @@ export function PilotMeasurementHistoryPage({
           if (emailFor) void sendEmail(emailFor);
         }}
       />
-    </div>
+    </PilotThemeRoot>
   );
 }
 
