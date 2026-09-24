@@ -28,6 +28,8 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { PilotDelegatedColleaguesCard } from "./pilot-delegated-colleagues-card";
 import { ServiceJobPlacementEditor } from "../service-job-placement-editor";
 import { ServiceJobFieldsEditor } from "../service-job-fields-editor";
+import { CompletionCertificatePanel } from "../completion-certificate-panel";
+import { MaintenancePackagePanel } from "../maintenance-package-panel";
 import {
   serviceJobNoteDescription,
   serviceJobStatusLabel,
@@ -110,6 +112,25 @@ import {
  * lásd `ServiceJobDocumentRemoval` fejlécét). "E-mail kiküldve" esemény
  * MA nincs a naplóban; a kiküldés ténye a "Lezárás és átadás" kártyán
  * látszik, nem az időrendben.
+ *
+ * === A ROUTE MAINTENANCE JEGYET IS KISZOLGÁL, NEM CSAK REPAIR-T ===
+ *
+ * TÉVES FELTEVÉS ÁLLT ITT KORÁBBAN, acrobot javította (msg 23174,
+ * 2026-09-24): a `/szerviz/hibajegyek/[id]` útvonal NEM csak hibajegyeket
+ * (REPAIR) szolgál ki. A karbantartás-lista (`service-job-list-page.tsx`,
+ * `kind="MAINTENANCE"`) MINDEN sorát erre az útvonalra viszi -- a
+ * `/szerviz/karbantartas/` alatt NINCS saját `[id]/page.tsx`, csak
+ * `page.tsx` (lista) és `uj/` (felvitel). A mai (nem-pilot)
+ * `service-job-detail-page.tsx` ezért `job.kind === "MAINTENANCE"`
+ * esetén megjeleníti a `CompletionCertificatePanel`-t (teljesítési
+ * igazolás kiállítása) és a `MaintenancePackagePanel`-t (karbantartási
+ * csomag összeállítás + kiküldés) -- ez a lap éles kiadás esetén
+ * LEVETTE VOLNA ezt a két panelt minden karbantartási jegyről, amíg ezt
+ * a hibát nem javítottuk. A két panel most a régi kinézetben, a jobb
+ * hasábban áll, "Az ügy adatai" alatt -- ugyanott, ahol a mai lapon --,
+ * mert mindkettő önálló, ma is működő alrendszer (saját `ServicePanel`,
+ * saját adatlekérés), tehát a varrat alá tartozik, nem a lap saját
+ * kártyái közé.
  */
 
 function timelineLine(entry: ServiceJobTimelineEntry): string {
@@ -1122,6 +1143,22 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
               </div>
             </div>
           </PilotCard>
+
+          {/*
+            A KARBANTARTÁS-PANELEK, MERT EZ A ROUTE MAINTENANCE JEGYET IS
+            KISZOLGÁL -- lásd a fejléc "A ROUTE MAINTENANCE JEGYET IS
+            KISZOLGÁL" szakaszát. Régi stílusban maradnak (mindkettő saját
+            `ServicePanel`-t rajzol), a varrat része.
+          */}
+          {job.kind === "MAINTENANCE" ? (
+            <CompletionCertificatePanel serviceJobId={job.id} />
+          ) : null}
+          {job.kind === "MAINTENANCE" ? (
+            <MaintenancePackagePanel
+              serviceJobId={job.id}
+              jobNumber={job.jobNumber}
+            />
+          ) : null}
 
           <PilotCard>
             <PilotCardHeader title="Előzmények" />
