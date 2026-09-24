@@ -420,18 +420,17 @@ export class NotificationsService {
    * meg, tehat ez ugyanazt adja, mint Balazs szo szerinti kerese ("Uj
    * vizmeres: <akvarium neve>") -- csak a megszokott ket mezore bontva.
    *
-   * A `data` MA SZANDEKOSAN URES -- NEM `targetType: "aquarium"`.
+   * `targetType: "aquarium"` 2026-09-24-TOL MEGY, A MOBIL SZELETTEL EGYUTT --
+   * addig itt `data: {}` allt, mert a koppintheto celpont (a mobil
+   * akvarium-adatlap) meg nem letezett, lasd a `push-targets.spec.ts`
+   * fejleceit. A mert hiba 2026-09-18-rol (`serviceJob` negy napig celzott
+   * egy nem letezo kepernyot) pontosan ez volt, csak eszrevetlen -- az orzo
+   * most eszrevette, mielott elment volna. Ugyanaz az atmeneti alak, mint az
+   * anyagigenylesnel.
    *
-   * A `push-targets.spec.ts` PONTOSAN EZT AZ ESETET ORZI: a szerver ELOBB
-   * ne kuldjon celpont-tipust, mint ahogy a telefonon letezik a hozza
-   * tartozo kepernyo (mert a szerver es a mobil kulon PR-ben keszul ebben a
-   * korben -- lasd a brief "munkamegosztas" szakaszat). A mert hiba
-   * 2026-09-18-rol (`serviceJob` negy napig celzott egy nem letezo
-   * kepernyot) pontosan ez volt, csak eszrevetlen -- most az orzo eszrevette.
-   * Ugyanaz az atmeneti alak, mint az anyagigenylesnel: `data: {}`, amig a
-   * celzott kepernyo el nem keszul, akkor egy `targetType: "aquarium"` sor
-   * kerul ide is, a telefon `PUSH_TARGET_TYPES`/`PUSH_TARGET_ROUTES`
-   * bovitesevel EGYUTT.
+   * A `targetId` AZ AKVARIUM AZONOSITOJA: a koppintas
+   * `apps/mobile/src/app/aquariums/[id].tsx`-re visz, lasd a
+   * `PUSH_TARGET_ROUTES` bejegyzeset.
    */
   async deliverAquariumMeasurementRecorded(
     notice: AquariumMeasurementRecordedNotice,
@@ -440,7 +439,10 @@ export class NotificationsService {
       userIds: notice.userIds,
       title: "Új vízmérés",
       body: notice.aquariumName,
-      data: {},
+      data: {
+        targetType: "aquarium",
+        targetId: notice.aquariumId,
+      },
       record: (attempts) =>
         this.log.recordAquariumMeasurement({
           aquariumId: notice.aquariumId,

@@ -60,11 +60,19 @@ export interface PushResponseLike {
  * (`deliverMaterialRequestCreated`, `deliverMaterialRequestReceived`), a
  * `targetId` mindkettonel a MUNKALAP azonositoja, nem az igenye -- lasd a
  * `PUSH_TARGET_ROUTES` fejleceit, miert.
+ *
+ * A NEGYEDIK ERTEK, `aquarium`, 2026-09-24-EN KERULT FEL, UGYANAZZAL A
+ * SZABALLYAL: a szerver `deliverAquariumMeasurementRecorded`-je a `data`
+ * mezot 2026-09-24-en (a #1055 PR-ben) meg SZANDEKOSAN URESEN kuldte,
+ * mert az akvarium-adatlap kepernyo akkor meg nem letezett. A #1054
+ * PR-ben elkeszult (`app/aquariums/[id].tsx`), tehat a feltetel most
+ * teljesult, es a ket oldal EGYUTT bovul, egy PR-ben.
  */
 export const PUSH_TARGET_TYPES = [
   "worksheet",
   "serviceJob",
   "materialRequest",
+  "aquarium",
 ] as const;
 
 export type PushTargetType = (typeof PUSH_TARGET_TYPES)[number];
@@ -123,6 +131,7 @@ export const PUSH_TARGET_ROUTES = {
   worksheet: "/worksheets/[id]",
   serviceJob: "/service-jobs/[id]",
   materialRequest: "/material-requests/[id]",
+  aquarium: "/aquariums/[id]",
 } as const satisfies Record<PushTargetType, string>;
 
 export interface PushTarget {
