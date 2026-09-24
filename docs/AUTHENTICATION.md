@@ -152,16 +152,30 @@ VÁLTOZATLAN marad (csak a `maxAge` nő): újragenerálás a kliens következő
 állapotváltoztató kérését CSRF-hibával buktatná, mert az addig kapott
 értéket küldené vissza.
 
-**Ismert korlát, amit a kód szándékosan nem old meg:** a mobil kliens saját,
-helyben tárolt `expiresAt`-je (`apps/mobile/src/lib/auth/token-store.ts`) csak
-belépéskor íródik. A szerver oldali csúszás nem jut vissza hozzá — sem a
-`resumeSession` (háttérből visszatéréskor, szándékosan nem hív szervert,
-lásd a saját jegyzetét), sem a `restoreSession` (`/auth/me`, aminek a válasza
-ma nem hordoz `expiresAt`-et) nem frissíti. Gyakorlatban ez azt jelenti, hogy
-a SZERVER oldali session rendszeres használat mellett ténylegesen nem jár
-le 30 nap alatt, de a telefon SAJÁT Face ID-kapuja a bejelentkezéskori
-lejárat közelében újra jelszót fog kérni, amíg ezt külön (mobil OTA-t
-igénylő) döntés nem oldja fel.
+**A mobil kliens is látja a csúszást, két lépésben** (Balázs kiegészítése,
+2026-09-24 08:37 — az első kör után ez még nyitott korlát volt, azóta
+lezárva):
+
+1. A `GET /auth/me` válasza (`CurrentUserResponse.expiresAt`,
+   `@acropora/types`) az `AuthGuard` által beállított, a hosszabbítás UTÁNI
+   lejáratot hordozza — mindkét úton (Bearer és süti), mert
+   `AuthService.resolveToken` mindig visszaadja.
+2. A mobil `restoreSession` (hidegindítás) ezzel írja felül a helyben tárolt
+   `expiresAt`-et (`token-store.ts`, `saveSession`) — de CSAK ha a válasz
+   ténylegesen hordoz értéket, hogy egy régebbi API-telepítés ellen a
+   meglévő helyi érték maradjon meg.
+
+**A `resumeSession` (háttérből visszatéréskor) szándékosan VÁLTOZATLAN
+maradt** — Balázs 2026-08-18-i döntése szerint eleve nem hív szervert, csak a
+helyi lejáratot nézi. Mivel a `restoreSession` minden hidegindításkor
+frissíti ezt az értéket, egy 30 napos csúszó ablaknál ez bőven elég: a
+felhasználó tipikusan gyakrabban indítja újra az appot (vagy tér vissza a
+háttérből, amitől viszont nem törlődik a folyamat), mint 30 naponta egyszer.
+
+A mobil kliens frissítése OTA-val megy ki, és a sorrend számít: a szerver
+API telepítése előbb kell, mert egy régi API mellett a `/auth/me` válasza
+nem hordoz `expiresAt`-et, és a kliens ilyenkor a meglévő helyi értéket
+tartja meg (nem hibázik, csak nem frissül).
 
 ### Mobil auth
 

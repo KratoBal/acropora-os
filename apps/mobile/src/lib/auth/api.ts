@@ -1,13 +1,13 @@
 import { apiRequest } from "@/lib/api/client";
 
-import type { AuthenticatedUser, LoginResult } from "./types";
+import type { CurrentUserResponse, LoginResult } from "./types";
 
 /**
  * Thin wrappers around the three auth endpoints this checkpoint needs,
  * matching the already-merged backend contract exactly (see
  * apps/api/src/auth/auth.controller.ts, docs/AUTHENTICATION.md):
  * - POST /auth/mobile/login/password -> { token, expiresAt, user }
- * - GET  /auth/me                    -> AuthenticatedUser
+ * - GET  /auth/me                    -> CurrentUserResponse (AuthenticatedUser + navigation + expiresAt)
  * - POST /auth/logout                -> { success: true }
  *
  * No new, competing HTTP client — everything goes through the shared
@@ -38,8 +38,8 @@ export async function loginWithPassword(
   });
 }
 
-export async function getCurrentUser(): Promise<AuthenticatedUser> {
-  return apiRequest<AuthenticatedUser>(`${BASE}/me`);
+export async function getCurrentUser(): Promise<CurrentUserResponse> {
+  return apiRequest<CurrentUserResponse>(`${BASE}/me`);
 }
 
 export async function logout(): Promise<void> {

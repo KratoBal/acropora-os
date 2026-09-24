@@ -47,6 +47,7 @@ export class AuthGuard implements CanActivate {
       const resolved = await this.authService.resolveToken(bearerToken);
       request.user = resolved.user;
       request.authToken = bearerToken;
+      request.sessionExpiresAt = resolved.expiresAt;
       return true;
     }
 
@@ -77,6 +78,7 @@ export class AuthGuard implements CanActivate {
     request.user = resolved.user;
     request.authToken = cookieToken;
     request.authViaCookie = true;
+    request.sessionExpiresAt = resolved.expiresAt;
 
     /**
      * A SUTI MAXAGE-E IS CSUSZIK -- Balazs 2. pontja (2026-09-24 08:15):

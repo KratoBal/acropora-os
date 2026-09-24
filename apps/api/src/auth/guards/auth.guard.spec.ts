@@ -113,11 +113,16 @@ describe("AuthGuard", () => {
       user?: AuthenticatedUser;
       authToken?: string;
       authViaCookie?: boolean;
+      sessionExpiresAt?: string;
     };
     assert.equal(await guard.canActivate(createContext(typedRequest)), true);
     assert.deepEqual(typedRequest.user, testUser);
     assert.equal(typedRequest.authToken, "valid-token");
     assert.equal(typedRequest.authViaCookie, undefined);
+    // A /auth/me VEGPONT EBBOL OLVASSA A FRISS LEJARATOT -- Balazs kerese
+    // (2026-09-24 08:37): a Bearer (mobil) utnak IS be kell allnia, nem
+    // csak a sutis utnak.
+    assert.ok(typedRequest.sessionExpiresAt);
   });
 
   it("authenticates a GET request via the session cookie without requiring CSRF", async () => {
@@ -131,10 +136,12 @@ describe("AuthGuard", () => {
       method: string;
       user?: AuthenticatedUser;
       authViaCookie?: boolean;
+      sessionExpiresAt?: string;
     };
     assert.equal(await guard.canActivate(createContext(typedRequest)), true);
     assert.deepEqual(typedRequest.user, testUser);
     assert.equal(typedRequest.authViaCookie, true);
+    assert.ok(typedRequest.sessionExpiresAt);
   });
 
   it("rejects a mutating cookie-authenticated request with no CSRF header", async () => {

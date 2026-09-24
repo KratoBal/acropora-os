@@ -43,10 +43,24 @@ export class AuthController {
    * ez a metodus ujra eldontene, ki mit lat, ket forras keletkezne -- ugyanaz a
    * hiba, amit a webes es a mobil tabla kettossege jelentett, csak egy szinttel
    * feljebb.
+   *
+   * `expiresAt` UGYANITT, UGYANEZERT -- Balazs kerese (2026-09-24 08:37,
+   * mobil szal): ez az EGYETLEN vegpont, amit a mobil kliens hidegindulaskor
+   * amugy is meghiv (`restoreSession`), tehat ez az egyetlen hely, ahol a
+   * csuszo hosszabbitas UTANI lejarat eljuthat hozza. Az `AuthGuard` MINDIG
+   * beallitja `request.sessionExpiresAt`-et (mindket uton), tehat itt nem
+   * kell kulon feloldani semmit.
    */
   @Get("me")
-  getCurrentUser(@CurrentUser() user: AuthenticatedUser): CurrentUserResponse {
-    return { ...user, navigation: visibleNavigationFor(user.role) };
+  getCurrentUser(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: AuthenticatedRequest,
+  ): CurrentUserResponse {
+    return {
+      ...user,
+      navigation: visibleNavigationFor(user.role),
+      expiresAt: request.sessionExpiresAt,
+    };
   }
 
   @Public()

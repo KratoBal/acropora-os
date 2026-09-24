@@ -122,3 +122,23 @@ export interface LoginResult {
   expiresAt: string;
   user: AuthenticatedUser;
 }
+
+/**
+ * Response shape of `GET /auth/me`, per
+ * apps/api/src/auth/auth.controller.ts `getCurrentUser` /
+ * `@acropora/types` `CurrentUserResponse`. `expiresAt` NOT folded into
+ * `AuthenticatedUser` on purpose (unlike `navigation`, which really is a
+ * per-user display fact): it describes the SESSION's current lifetime,
+ * not the user, and every other place `AuthenticatedUser` is used
+ * (auth-reducer, offline session state, ...) expects a clean user object.
+ *
+ * `expiresAt` UJONNAN, Balazs kerese (2026-09-24 08:37, mobil szal): a
+ * csuszo munkamenet-hosszabbitas (lasd `apps/api/.../session.repository.ts`)
+ * csak ITT jut vissza a mobil kliensre -- `restoreSession` ezzel irja
+ * felul a helyben tarolt `expiresAt`-et. OPCIONALIS, mert egy regebbi
+ * API-telepites nem kuldi; a hianya NEM azt jelenti, hogy a session
+ * lejart, csak azt, hogy a hivo tartsa meg a meglevo helyi erteket.
+ */
+export interface CurrentUserResponse extends AuthenticatedUser {
+  expiresAt?: string;
+}

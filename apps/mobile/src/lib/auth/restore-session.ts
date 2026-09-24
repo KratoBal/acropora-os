@@ -1,5 +1,9 @@
 import { canStartOffline } from "./offline-grace";
-import type { AuthenticatedUser, StoredSession } from "./types";
+import type {
+  AuthenticatedUser,
+  CurrentUserResponse,
+  StoredSession,
+} from "./types";
 
 /**
  * What a biometric unlock attempt concluded.
@@ -16,7 +20,7 @@ export type UnlockOutcome = "unlocked" | "unavailable" | "rejected";
 export interface RestoreSessionDeps {
   getSession(): Promise<StoredSession | null>;
   clearSession(): Promise<void>;
-  getCurrentUser(): Promise<AuthenticatedUser>;
+  getCurrentUser(): Promise<CurrentUserResponse>;
   /**
    * Biometric gate in front of the stored token. Optional: when absent,
    * the session restores exactly as it did before biometrics existed.
@@ -24,6 +28,15 @@ export interface RestoreSessionDeps {
    * imports the Expo runtime and stays testable with plain `node --test`.
    */
   unlock?(): Promise<UnlockOutcome>;
+  /**
+   * OPCIONALIS, HOGY A REGI TESZTEK VALTOZATLANUL FUSSANAK -- a valodi
+   * bekotes (`AuthProvider.tsx`) mindig atadja. Balazs kerese (2026-09-24
+   * 08:37, mobil szal): a szerver oldali csuszo munkamenet-hosszabbitasnak
+   * csak akkor van erzekelheto hatasa, ha a helyi, lemezen tarolt rekord
+   * is frissul -- `resumeSession` (hatterbol visszatereskor) EZT olvassa,
+   * sosem hiv szervert.
+   */
+  saveSession?(session: StoredSession): Promise<void>;
   /** Injectable for deterministic tests; defaults to `Date.now`. */
   now?: () => number;
 }
@@ -93,7 +106,14 @@ function isUnauthorized(error: unknown): boolean {
  *    network call, so the token never leaves the device until the person
  *    holding it has been confirmed;
  * 5. otherwise call `/auth/me` (`getCurrentUser`):
- *    - success -> authenticated, with the restored user;
+ *    - success -> authenticated, with the restored user, AND the locally
+ *      stored `expiresAt` overwritten with the response's own value
+ *      (`saveSession`, if the response carries one -- see its own note
+ *      below). This is what makes the server's sliding session extension
+ *      visible on the device at all: `resumeSession` (foreground return)
+ *      never calls the server, so without this write the phone would
+ *      keep prompting for a password near the ORIGINAL login-time expiry
+ *      no matter how long the server side kept extending it;
  *    - 401 -> the token is genuinely invalid server-side, discard it;
  *    - anything else (network failure, 5xx, timeout) -> treat as
  *      transient: do NOT discard an otherwise-valid token, report
@@ -128,8 +148,29 @@ export async function restoreSession(
   }
 
   try {
-    const user = await deps.getCurrentUser();
-    return { type: "authenticated", user, expiresAt: session.expiresAt };
+    const response = await deps.getCurrentUser();
+    // `expiresAt` KULON MEZO, NEM A `user` RESZE (lasd CurrentUserResponse
+    // sajat jegyzeteben) -- a `...user` a tobbi mezot (navigation is)
+    // valtozatlanul viszi tovabb.
+    const { expiresAt: freshExpiresAt, ...user } = response;
+    const expiresAt = freshExpiresAt ?? session.expiresAt;
+    /**
+     * A HELYI REKORD FELULIRASA -- CSAK HA TENYLEG JOTT UJ ERTEK. Balazs
+     * kerese (2026-09-24 08:37, mobil szal): egy regebbi API-telepites
+     * nem kuldi az `expiresAt` mezot, es akkor a `?? session.expiresAt`
+     * mar gondoskodott a helyes viselkedesrol -- itt csak azt kell
+     * elkerulni, hogy egy `undefined` ertekkel FELULIRJUK a meglevo,
+     * ERVENYES helyi rekordot.
+     */
+    if (freshExpiresAt && deps.saveSession) {
+      await deps.saveSession({
+        token: session.token,
+        expiresAt: freshExpiresAt,
+        user,
+        lastVerifiedAt: session.lastVerifiedAt,
+      });
+    }
+    return { type: "authenticated", user, expiresAt };
   } catch (error) {
     if (isUnauthorized(error)) {
       await deps.clearSession();

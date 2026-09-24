@@ -31,6 +31,17 @@ function fakeSession(token: string): Session {
   };
 }
 
+/**
+ * Minimal `AuthenticatedRequest`, csak a `getCurrentUser` masodik
+ * argumentumahoz -- a legtobb allitas nem a lejaratrol szol, tehat
+ * alapertelmezesben ures `sessionExpiresAt`-tel jon (a valasz mezoje
+ * `undefined` lesz, ami helyes: az `AuthGuard` a valosagban MINDIG
+ * beallitja, de ez a fake nem az AuthGuard-ot teszteli).
+ */
+function fakeRequest(sessionExpiresAt?: string): AuthenticatedRequest {
+  return { headers: {}, sessionExpiresAt } as unknown as AuthenticatedRequest;
+}
+
 function fakeCookieResponse(): CookieResponse & {
   cookies: Record<string, string>;
   cleared: string[];
@@ -165,11 +176,36 @@ describe("AuthController", () => {
       email: testUser.email,
       password: "secret",
     });
-    const munkamenet = controller.getCurrentUser(testUser);
+    const munkamenet = controller.getCurrentUser(testUser, fakeRequest());
 
     assert.deepEqual(bejelentkezes.user.navigation, munkamenet.navigation);
     // KONTROLL: nem ket ures listat vetunk ossze.
     assert.ok(munkamenet.navigation.length > 0);
+  });
+
+  /**
+   * A /AUTH/ME VALASZA HORDOZZA A CSUSZO HOSSZABBITAS UTANI LEJARATOT --
+   * Balazs kerese (2026-09-24 08:37, mobil szal): ez az egyetlen hely,
+   * ahonnan a mobil kliens hidegindulaskor a friss `expiresAt`-et
+   * megtudhatja, tehat az `AuthGuard` altal beallitott
+   * `request.sessionExpiresAt`-nek VALTOZATLANUL at kell jutnia a
+   * valaszba.
+   */
+  it("a /auth/me valasza az AuthGuard altal beallitott sessionExpiresAt-et adja vissza", () => {
+    const controller = new AuthController({} as never);
+    const friss = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const valasz = controller.getCurrentUser(testUser, fakeRequest(friss));
+
+    assert.equal(valasz.expiresAt, friss);
+  });
+
+  it("a /auth/me valasza undefined-et ad, ha az AuthGuard (elvileg sosem) nem allitotta be", () => {
+    const controller = new AuthController({} as never);
+
+    const valasz = controller.getCurrentUser(testUser, fakeRequest());
+
+    assert.equal(valasz.expiresAt, undefined);
   });
 
   /**
@@ -203,7 +239,7 @@ describe("AuthController", () => {
       supplierId: null,
     };
 
-    const valasz = controller.getCurrentUser(partner);
+    const valasz = controller.getCurrentUser(partner, fakeRequest());
 
     // A KULCS LETEZESE es az ERTEKE kulon allitas: egy `undefined` ertek ugyanugy
     // atmenne egy puszta "in" vizsgalaton, es a telefon ugyanugy nem tudna
@@ -215,7 +251,7 @@ describe("AuthController", () => {
 
     // KONTROLL: belso fioknal MIND A KETTO `null` -- tehat a mezok nem
     // veletlenul allnak ott, hanem a hatokort kovetik.
-    const belso = controller.getCurrentUser(testUser);
+    const belso = controller.getCurrentUser(testUser, fakeRequest());
     assert.equal(belso.customerId, null);
     assert.equal(belso.supplierId, null);
   });
@@ -291,7 +327,7 @@ describe("AuthController", () => {
 
     for (const role of USER_ROLES) {
       const user = { ...testUser, role };
-      const kiadott = controller.getCurrentUser(user).navigation;
+      const kiadott = controller.getCurrentUser(user, fakeRequest()).navigation;
       const kiadottIds = kiadott.map((entry) => entry.id);
 
       for (const entry of NAVIGATION_ENTRIES) {
@@ -357,7 +393,7 @@ describe("AuthController", () => {
     );
     const idsFor = (role: (typeof USER_ROLES)[number]) =>
       controller
-        .getCurrentUser({ ...testUser, role })
+        .getCurrentUser({ ...testUser, role }, fakeRequest())
         .navigation.map((entry) => entry.id);
 
     assert.equal(idsFor("ADMIN").includes("nav-integration-mobile"), true);
