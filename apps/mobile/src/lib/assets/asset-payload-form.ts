@@ -57,6 +57,14 @@ export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
   return {
     owner: { type: ownerType, id: ownerId },
     unitId: szoveg(row.departmentId),
+    /*
+      A SORBAN ALLO FELVITEL A SZULOESZKOZT IS VISZI. Ha itt kimaradna, egy
+      elakadt felvitel javitasa es ujrakuldese (`queue-fix/[id].tsx`, ami
+      `buildAssetCreatePayload`-ot ujra meghivja a teljes urlappal) CSENDBEN
+      elvesztene a korabban kivalasztott szulot -- ugyanaz a hiba-fajta, mint
+      amit a kategoria es a funkcio jegyzete fentebb mar megnevez.
+    */
+    parentAssetId: szoveg(row.parentAssetId),
     name,
     kind: kind as AssetCreateForm["kind"],
     /*
