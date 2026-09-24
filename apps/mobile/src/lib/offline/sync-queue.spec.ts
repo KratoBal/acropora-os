@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  aquariumOperationId,
   canOwnPhotos,
   canRetryState,
   classifyFailure,
@@ -155,8 +156,48 @@ describe("a munkalap művelet-azonosítója", () => {
   });
 });
 
+describe("az akvárium művelet-azonosítója", () => {
+  it("UGYANAZ a tulajdon és időpont UGYANAZT a kulcsot adja", () => {
+    const a = aquariumOperationId({
+      ownershipType: "CUSTOMER",
+      startedAt: "2026-09-24T14:30:00.000Z",
+    });
+    const b = aquariumOperationId({
+      ownershipType: "CUSTOMER",
+      startedAt: "2026-09-24T14:30:00.000Z",
+    });
+    assert.equal(a, b);
+  });
+
+  it("KÉT felvitel KÉT kulcsot kap, akkor is, ha a tulajdon egyezik", () => {
+    assert.notEqual(
+      aquariumOperationId({
+        ownershipType: "OWN",
+        startedAt: "2026-09-24T14:30:00.000Z",
+      }),
+      aquariumOperationId({
+        ownershipType: "OWN",
+        startedAt: "2026-09-24T14:35:00.000Z",
+      }),
+    );
+  });
+
+  it("csak biztonságos ábécéjű darabokból épül", () => {
+    /*
+      A SZERVER `@Matches(/^[A-Za-z0-9_.:-]{8,128}$/)` MINTÁJA elutasítaná a
+      szóközt vagy az ékezetet -- ezért a kulcs SOSEM tartalmazhatja a
+      (szabad, magyar) nevet, csak az enumot és az ISO időpontot.
+    */
+    const kulcs = aquariumOperationId({
+      ownershipType: "CUSTOMER",
+      startedAt: "2026-09-24T14:30:00.000Z",
+    });
+    assert.match(kulcs, /^[A-Za-z0-9_.:-]{8,128}$/);
+  });
+});
+
 describe("a sor entitás-fajtái", () => {
-  it("a lista a NÉGY ismert fajtát tartalmazza, ebben a sorrendben", () => {
+  it("a lista az ÖT ismert fajtát tartalmazza, ebben a sorrendben", () => {
     /*
       A SZAM MAGA IS ALLITAS, ugyanabbol az okbol, mint a tarolo beszurasainal:
       egy UJ fajta felvetele PIROSSA teszi ezt a sort, es akkor kell eldonteni,
@@ -169,10 +210,14 @@ describe("a sor entitás-fajtái", () => {
       mondatat, es a KULDESI elagazas is: az `if`-lanc alapertelmezese helyett
       most `switch` all ott, `never`-re futo aggal, mert enelkul az uj fajta
       CSENDBEN az eszkoz-vegpontra ment volna.
+
+      2026-09-24: negyrol OTRE nott az `aquarium`-mal, es a sor ELSULT --
+      ugyanugy, ahogy kell. A fenykep-gazda lekepezes `false`-t kapott (nincs
+      akvarium-fenykep ebben a korben), a KULDESI switch pedig uj agat.
     */
     assert.deepEqual(
       [...SYNC_ENTITY_TYPES],
-      ["asset", "worksheet", "worksheet-line", "service-job"],
+      ["asset", "worksheet", "worksheet-line", "service-job", "aquarium"],
     );
   });
 
@@ -216,5 +261,8 @@ describe("a sor entitás-fajtái", () => {
     assert.equal(canOwnPhotos("asset"), true);
     assert.equal(canOwnPhotos("worksheet"), true);
     assert.equal(canOwnPhotos("worksheet-line"), false);
+    // Az akvárium sem, ugyanazért, mint a tétel: ma semmi nem tesz
+    // fényképet a sorba ehhez a fajtához -- lásd az entitás-lista fejlécét.
+    assert.equal(canOwnPhotos("aquarium"), false);
   });
 });

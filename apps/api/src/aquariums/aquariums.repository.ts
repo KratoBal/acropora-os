@@ -9,6 +9,7 @@ import type {
 
 import { withUniqueCode } from "../common/unique-code.util.js";
 import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
+import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { resolveAquariumVolume } from "./aquarium-volume.js";
 import type {
   CreateAquariumDto,
@@ -159,6 +160,25 @@ export class AquariumsRepository {
   }
 
   /**
+   * A HELYSZÍNI FELVITEL MŰVELET-AZONOSÍTÓJÁHOZ TARTOZÓ AKVÁRIUM, HA MÁR
+   * LÉTEZIK.
+   *
+   * KÜLÖN METÓDUS, NEM CSAK A `create()` BELSEJÉBEN, mert a szolgáltatás
+   * (`AquariumsService.create()`) IS hívja, MÉGELŐTT az új ügyfelet
+   * létrehozná -- lásd ott a fejlécet, miért nem elég a `create()` saját,
+   * írás-időpontbeli védelme erre az esetre.
+   */
+  async byClientOperationId(
+    clientOperationId: string,
+  ): Promise<AquariumDetail | null> {
+    const row = await prisma.aquarium.findUnique({
+      where: { clientOperationId },
+      include: detailInclude,
+    });
+    return row ? toDetail(row) : null;
+  }
+
+  /**
    * A SZÁMOZÁS AZ ESZKÖZSZÁM/VEVŐSZÁM MINTÁJÁT KÖVETI: `withUniqueCode`
    * húzza a kódot, és a tranzakció ütközésekor ÚJ kóddal próbálkozik újra --
    * lásd a `customers.repository.ts` és a `service-assets.repository.ts`
@@ -168,6 +188,13 @@ export class AquariumsRepository {
    * (P2034) IS, ugyanazzal az indokkal és ugyanazzal a segéddel, mint a
    * `service-assets.repository.ts` `create()`-je.
    *
+   * A `clientOperationId` VÉDELME KÉT RÉTEGŰ, UGYANAZZAL AZ INDOKKAL, MINT A
+   * `worksheets.repository.ts` `createDraft()`-ja: a keresés a létrehozás
+   * ELŐTT fogja meg a rendes esetet (a kulcs már ismert), a `catch`-ben álló
+   * második keresés pedig a VERSENYHELYZETET (két párhuzamos kérés a
+   * keresés és a beszúrás között csúszik el) -- azt kizárólag az egyedi
+   * index tudja elvágni, a keresés önmagában nem.
+   *
    * AZ `_actorUserId` MA NEM ÍRÓDIK SEHOVA -- az `Aquarium` modellen nincs
    * `createdById` mező, és ehhez a körhöz nem tartozik saját eseménynapló
    * (`AquariumEvent`-féle tábla nincs). A paraméter azért marad a hívási
@@ -175,12 +202,17 @@ export class AquariumsRepository {
    * (`customers`, `service-assets`) ugyanígy adja tovább -- ha egyszer
    * auditnapló kerül ide, nem kell újra végigvinni az aláírást.
    */
-  create(
+  async create(
     input: Omit<CreateAquariumDto, "customerId" | "newCustomer"> & {
       customerId: string | null;
     },
     _actorUserId: string,
   ): Promise<AquariumDetail> {
+    if (input.clientOperationId) {
+      const meglevo = await this.byClientOperationId(input.clientOperationId);
+      if (meglevo) return meglevo;
+    }
+
     const volume = resolveAquariumVolume({
       lengthCm: input.lengthCm ?? null,
       widthCm: input.widthCm ?? null,
@@ -188,46 +220,65 @@ export class AquariumsRepository {
       volumeLiters: input.systemVolumeLiters ?? null,
       isManual: input.systemVolumeIsManual ?? false,
     });
-    return withUniqueCode(
-      { prefix: "AKV", field: "aquariumNumber" },
-      (aquariumNumber) =>
-        retryOnSerializationConflict(() =>
-          prisma.$transaction(
-            async (tx) => {
-              const row = await tx.aquarium.create({
-                data: {
-                  aquariumNumber,
-                  customerId: input.customerId,
-                  name: input.name.trim(),
-                  ownershipType: input.ownershipType,
-                  waterBodyType: input.waterBodyType,
-                  lengthCm: input.lengthCm ?? null,
-                  widthCm: input.widthCm ?? null,
-                  heightCm: input.heightCm ?? null,
-                  systemVolumeLiters: volume.systemVolumeLiters,
-                  systemVolumeIsManual: volume.systemVolumeIsManual,
-                  waterType: input.waterType ?? null,
-                  startedAt: input.startedAt ? new Date(input.startedAt) : null,
-                  notes: optionalText(input.notes),
-                  equipment: {
-                    create: input.equipment.map((eq) => ({
-                      kind: eq.kind,
-                      manufacturer: optionalText(eq.manufacturer),
-                      model: optionalText(eq.model),
-                      quantity: eq.quantity ?? 1,
-                      channelCount: eq.channelCount ?? null,
-                      notes: optionalText(eq.notes),
-                    })),
+    try {
+      return await withUniqueCode(
+        { prefix: "AKV", field: "aquariumNumber" },
+        (aquariumNumber) =>
+          retryOnSerializationConflict(() =>
+            prisma.$transaction(
+              async (tx) => {
+                const row = await tx.aquarium.create({
+                  data: {
+                    aquariumNumber,
+                    clientOperationId: input.clientOperationId ?? null,
+                    customerId: input.customerId,
+                    name: input.name.trim(),
+                    ownershipType: input.ownershipType,
+                    waterBodyType: input.waterBodyType,
+                    lengthCm: input.lengthCm ?? null,
+                    widthCm: input.widthCm ?? null,
+                    heightCm: input.heightCm ?? null,
+                    systemVolumeLiters: volume.systemVolumeLiters,
+                    systemVolumeIsManual: volume.systemVolumeIsManual,
+                    waterType: input.waterType ?? null,
+                    startedAt: input.startedAt
+                      ? new Date(input.startedAt)
+                      : null,
+                    notes: optionalText(input.notes),
+                    equipment: {
+                      create: input.equipment.map((eq) => ({
+                        kind: eq.kind,
+                        manufacturer: optionalText(eq.manufacturer),
+                        model: optionalText(eq.model),
+                        quantity: eq.quantity ?? 1,
+                        channelCount: eq.channelCount ?? null,
+                        notes: optionalText(eq.notes),
+                      })),
+                    },
                   },
-                },
-                include: detailInclude,
-              });
-              return toDetail(row);
-            },
-            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+                  include: detailInclude,
+                });
+                return toDetail(row);
+              },
+              { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+            ),
           ),
-        ),
-    );
+      );
+    } catch (error) {
+      /**
+       * A SZŰRÉS SZŰK: kizárólag a `clientOperationId` ütközése. Bármi más
+       * VALÓDI hiba, és hangosan kell elbuknia -- ugyanaz a szabály, mint a
+       * `worksheets.repository.ts`-ben.
+       */
+      if (
+        input.clientOperationId &&
+        isPrismaUniqueConstraintViolation(error, "clientOperationId")
+      ) {
+        const meglevo = await this.byClientOperationId(input.clientOperationId);
+        if (meglevo) return meglevo;
+      }
+      throw error;
+    }
   }
 
   async update(

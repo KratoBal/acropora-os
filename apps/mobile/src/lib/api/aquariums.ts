@@ -69,6 +69,12 @@ export interface CreateAquariumEquipmentInput {
 }
 
 export interface CreateAquariumInput {
+  /**
+   * A HELYSZÍNI FELVITEL IDEMPOTENCIA-KULCSA. Elhagyható -- a webes felvitel
+   * nem küld kulcsot, és ma működik. Lásd `sync-queue.ts`
+   * `aquariumOperationId`-jét: ugyanaz a kulcs megy a sorba ÉS a szervernek.
+   */
+  clientOperationId?: string;
   ownershipType: AquariumOwnershipType;
   customerId?: string;
   newCustomer?: NewAquariumCustomerInput;

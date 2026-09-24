@@ -341,6 +341,38 @@ export async function enqueueServiceJobCreate(input: {
   }
 }
 
+/**
+ * SORBA TESZ EGY AKVARIUMOT -- ES AZ UGYFELET IS EGYUTT.
+ *
+ * UGYANAZ AZ ALAK, MINT A HIBAJEGYNEL: `INSERT OR IGNORE`, a muvelet-
+ * azonosito a tartalombol, fuggoseg nelkul. Az UJ UGYFEL adatai a
+ * `payload.newCustomer` mezoben utaznak EBBEN az egy sorban -- nem kulon
+ * sorba tett muveletkent -- mert a szerver `POST /aquariums` egyetlen
+ * hivasban visel mindkettot. Ket kulon sorba tett lepes azt kockaztatna,
+ * hogy az akvarium sora a meg fel nem ment ugyfelre hivatkozna.
+ */
+export async function enqueueAquariumCreate(input: {
+  id: string;
+  payload: unknown;
+  createdAt: string;
+}): Promise<EnqueueResult> {
+  try {
+    const db = await initializeOfflineDatabase();
+    await db.runAsync(
+      `INSERT OR IGNORE INTO sync_queue
+         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
+       VALUES (?, 'create', 'aquarium', NULL, ?, ?, 0, NULL, 'pending')`,
+      [input.id, JSON.stringify(input.payload), input.createdAt],
+    );
+    return { ok: true, operationId: input.id };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function enqueueWorksheetLine(input: {
   /** A tetel azonositoja, egyben a sor kulcsa. */
   id: string;

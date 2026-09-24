@@ -35,6 +35,9 @@ import {
 } from "@/lib/aquariums/aquarium-labels";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+import { enqueueAquariumCreate } from "@/lib/offline/queue-store";
+import { saveOrQueue } from "@/lib/offline/save-or-queue";
+import { aquariumOperationId } from "@/lib/offline/sync-queue";
 
 /**
  * ÚJ AKVÁRIUM (VAGY TÓ) A HELYSZÍNRŐL.
@@ -51,16 +54,20 @@ import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
  *    kérés "az ugyfel HELYBEN FELVETELE"-t nevez meg, nem keresést; a szerver
  *    mindkét utat elfogadja (`customerId` VAGY `newCustomer`), tehát ez a
  *    szűkítés itt van, nem a szerverén -- egy keresés-mező később idekerülhet.
- * 2. NINCS OFFLINE SORBAÁLLÍTÁS. Minden más "új X" képernyő (eszköz, munkalap,
- *    hibajegy) a `saveOrQueue`+`queue-store` infrastruktúrát használja rossz
- *    térerő esetére -- ez a képernyő EGYELŐRE közvetlenül, online küld, és ez
- *    SZÁNDÉKOS, KÖRÖN KÍVÜLI DÖNTÉS: a sorba-állítás új művelet-fajtát kérne a
- *    megosztott végrehajtóba (`queue-store.ts`, 874 sor), ami a jelen kör
- *    méretét jelentősen megnövelné. Hálózati hiba esetén az űrlap NEM ürül ki
- *    (a mentés gomb újra nyomható), csak a telefon nem tartja meg a bezárás
- *    után -- ez a különbség Balázsnak/acrobotnak jelentve van.
- * 3. VÍZTÍPUS, KEZDÉS DÁTUMA, MEGJEGYZÉS NINCS AZ ŰRLAPON: a brief mobil
+ * 2. VÍZTÍPUS, KEZDÉS DÁTUMA, MEGJEGYZÉS NINCS AZ ŰRLAPON: a brief mobil
  *    kiegészítése ("meretek es a liter, az eszkozok") ezeket nem nevezte meg.
+ *
+ * === OFFLINE SORBAÁLLÍTÁS (2026-09-24, acrobot kérése) ===
+ *
+ * Ugyanaz a `saveOrQueue`+`queue-store` minta, mint az eszköz, a munkalap és
+ * a hibajegy felvitelénél: térerő nélkül a felvitel a helyi sorba kerül, és
+ * amint van hálózat, a `useQueueDrain` magától felküldi. Az ÚJ ügyfél
+ * (`newCustomer`) EGY hívásban utazik az akváriummal -- nem külön sorba
+ * tett lépésként --, mert a szerver `POST /aquariums` egyetlen kérésben
+ * kezeli mindkettőt: két sorba tett lépés azt kockáztatná, hogy az akvárium
+ * sora a még fel nem ment ügyfélre hivatkozna. A kétszeri küldés ellen a
+ * `clientOperationId` véd (lásd `aquariumOperationId` a `sync-queue.ts`-ben
+ * és a szerver oldali kettős védelmet az `aquariums.repository.ts`-ben).
  *
  * === A DÖNTÉS A `lib/aquariums/aquarium-create.ts`-BEN VAN ===
  *
@@ -76,14 +83,62 @@ export default function NewAquariumScreen() {
     field: AquariumCreateField | null;
     message: string;
   } | null>(null);
+  /**
+   * A SORBA TETT FELVITEL ÜZENETE, KÜLÖN AZ ERRORTÓL. Nem hiba: a felvitel
+   * megtörtént, csak még a telefonon vár -- ugyanaz a megkülönböztetés, mint
+   * a munkalap és a hibajegy felvitelén.
+   */
+  const [notice, setNotice] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: (payload: ReturnType<typeof buildAquariumCreatePayload>) => {
-      if (!payload.ok) throw new Error("unreachable");
-      return createAquarium(payload.payload);
+    mutationFn: async (
+      payload: Extract<
+        ReturnType<typeof buildAquariumCreatePayload>,
+        { ok: true }
+      >["payload"],
+    ) => {
+      const startedAt = new Date().toISOString();
+      const operationId = aquariumOperationId({
+        ownershipType: payload.ownershipType,
+        startedAt,
+      });
+      return saveOrQueue({
+        save: () =>
+          createAquarium({ ...payload, clientOperationId: operationId }),
+        enqueue: () =>
+          enqueueAquariumCreate({
+            id: operationId,
+            payload,
+            createdAt: startedAt,
+          }),
+        statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
+        describeWrite: (result) =>
+          result.ok
+            ? {
+                type: "queued",
+                operationId: result.operationId,
+                message:
+                  "Nincs kapcsolat, ezért az akvárium a feltöltésre várók közé került. Amint van térerő, magától felmegy.",
+              }
+            : {
+                type: "queue-failed",
+                message: `Az akváriumot nem sikerült elmenteni a készülékre: ${result.error}`,
+              },
+      });
     },
-    onSuccess: () => {
-      router.back();
+    onSuccess: (outcome) => {
+      if (outcome.type === "saved") {
+        router.back();
+        return;
+      }
+      if (outcome.type === "queued") {
+        setNotice(outcome.message);
+        setForm(emptyAquariumCreateForm());
+        return;
+      }
+      // "rejected" vagy "lost": az űrlap tartalma megmarad, a szerelő
+      // javíthat és újra próbálkozhat.
+      setError({ field: null, message: outcome.message });
     },
     onError: (cause: unknown) => {
       setError({
@@ -132,7 +187,8 @@ export default function NewAquariumScreen() {
       return;
     }
     setError(null);
-    mutation.mutate(result);
+    setNotice(null);
+    mutation.mutate(result.payload);
   }
 
   return (
@@ -374,6 +430,8 @@ export default function NewAquariumScreen() {
             ))}
           </View>
 
+          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+
           {error && error.field === null ? (
             <Text style={styles.error}>{error.message}</Text>
           ) : null}
@@ -572,6 +630,14 @@ const styles = StyleSheet.create({
   addButtonText: { color: "#fff", fontWeight: "800", fontSize: 12 },
   removeText: { color: "#fca5a5", fontWeight: "700", fontSize: 12 },
   empty: { color: "#91afbe" },
+  notice: {
+    color: "#f4d9a0",
+    backgroundColor: "#3a2a12",
+    borderColor: "#8a6a2a",
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 10,
+  },
   error: {
     color: "#fecaca",
     backgroundColor: "#541b2b",

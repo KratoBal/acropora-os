@@ -7,6 +7,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Min,
   MinLength,
   ValidateNested,
@@ -49,6 +50,23 @@ export class CreateAquariumEquipmentDto {
  * eshessen szét két külön validációra.
  */
 export class CreateAquariumDto {
+  /**
+   * A KLIENS ÁLTAL ADOTT MŰVELET-AZONOSÍTÓ, A HELYSZÍNI RÖGZÍTÉS
+   * IDEMPOTENCIA-KULCSA.
+   *
+   * ELHAGYHATÓ, ÉS EZ KIKÖTÉS: a webes felvitel nem küld kulcsot, és MA
+   * MŰKÖDIK. Kötelezővé téve az űrlapot is át kellene írni.
+   *
+   * UGYANAZ AZ ALAK, MINT A MUNKALAPNÁL (`CreateWorksheetDto`) és a
+   * hibajegynél (`CreateServiceJobDto`) -- lásd `aquariums.repository.ts`
+   * `create()`-jét a védelemért.
+   */
+  @Matches(/^[A-Za-z0-9_.:-]{8,128}$/, {
+    message:
+      "A művelet-azonosító 8-128 karakter lehet: betű, szám, kötőjel, aláhúzás, pont és kettőspont.",
+  })
+  @IsOptional()
+  clientOperationId?: string;
   @IsIn(OWNERSHIP_TYPES) ownershipType!: (typeof OWNERSHIP_TYPES)[number];
   @IsString() @IsOptional() customerId?: string;
   @ValidateNested()

@@ -17,6 +17,7 @@ import {
   uploadServiceJobPhotos,
   type CreateServiceJobInput,
 } from "@/lib/api/service-jobs";
+import { createAquarium, type CreateAquariumInput } from "@/lib/api/aquariums";
 import { readQueuedWorksheetLine } from "@/lib/worksheets/worksheet-line";
 import { ApiError } from "@/lib/api/client";
 
@@ -79,6 +80,8 @@ export function useQueueDrain(isOnline: boolean): string | null {
                 return tetelKuld(row);
               case "service-job":
                 return jegyetKuld(row);
+              case "aquarium":
+                return akvariumotKuld(row);
               case "asset":
                 break;
               default: {
@@ -218,6 +221,19 @@ async function kepetKuld(row: SyncQueueRow): Promise<{
           error:
             "A munkalap tétele alá nem tehető fénykép, ezért ezt a sort nem küldjük el.",
         };
+      case "aquarium":
+        /**
+         * NINCS AKVARIUM-FENYKEP EBBEN A KORBEN, UGYANAZERT, MINT A TETELNEL:
+         * a `canOwnPhotos("aquarium")` hamis (lasd `sync-queue.ts`), tehat a
+         * `queue-runner.ts` ma sosem enged ide fenykep-sort. Ha megis
+         * keletkezne, az hiba, es 422-kent EMBERRE var -- nem az eszkoz-
+         * vegpontra menne csendben.
+         */
+        return {
+          httpStatus: 422,
+          error:
+            "Az akvárium alá nem tehető fénykép, ezért ezt a sort nem küldjük el.",
+        };
       default: {
         const soha: never = row.entityType;
         throw new Error(`Ismeretlen kép-gazda: ${String(soha)}`);
@@ -353,6 +369,36 @@ async function jegyetKuld(row: SyncQueueRow): Promise<{
   try {
     const letrejott = await createServiceJob({
       ...(JSON.parse(row.payloadJson) as CreateServiceJobInput),
+      clientOperationId: row.id,
+    });
+    return { httpStatus: 201, error: null, entityId: letrejott.id };
+  } catch (cause) {
+    return {
+      httpStatus: cause instanceof ApiError ? cause.status : null,
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
+}
+
+/**
+ * EGY AKVARIUM FELKULDESE A SORBOL -- AZ UGYFELLEL EGYUTT.
+ *
+ * UGYANAZ AZ ALAK, MINT A MUNKALAPE ES A JEGYE: UJ entitast hoz letre, tehat
+ * a szerver azonositoja itt lep at a varraton. A `payload` mar hordozza a
+ * `newCustomer` mezot is (ha a felvitel ugyfel-tulajdonu es helyben vitte
+ * fel az ugyfelet) -- a szerver EGYETLEN hivasban kezeli mind a kettot, a
+ * `clientOperationId` pedig VISSZAADOTT MEGLEVO akvariumot ad egy
+ * megismetelt kuldesre, nem masodikat hoz letre sem az akvariumbol, sem az
+ * ugyfelbol.
+ */
+async function akvariumotKuld(row: SyncQueueRow): Promise<{
+  httpStatus: number | null;
+  error: string | null;
+  entityId?: string | null;
+}> {
+  try {
+    const letrejott = await createAquarium({
+      ...(JSON.parse(row.payloadJson) as CreateAquariumInput),
       clientOperationId: row.id,
     });
     return { httpStatus: 201, error: null, entityId: letrejott.id };

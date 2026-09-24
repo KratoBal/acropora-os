@@ -66,6 +66,27 @@ export class AquariumsService {
     this.checkEquipment(input.equipment);
 
     /*
+      AZ IDEMPOTENCIA-ELLENŐRZÉS ELŐBB ÁLL, MINT AZ ÚJ ÜGYFÉL LÉTREHOZÁSA --
+      ÉS EZ NEM UGYANAZ A VÉDELEM, AMIT A REPOSITORY SAJÁT `create()`-JE AD.
+
+      A telefon térerő nélkül sorba teszi a felvitelt, és a sor a hálózati
+      hibát SZÁNDÉKOSAN újrapróbálja. Ha csak a repository saját, ÍRÁSKORI
+      ellenőrzésére hagyatkoznánk, egy megszakadt válasz utáni újraküldés
+      ELŐBB futtatná le ÚJRA a lenti `customers.create()` hívást -- és mert
+      az ÖNMAGÁBAN nem idempotens (nincs saját `clientOperationId`-ja), EGY
+      ügyfél helyett KETTŐ keletkezne: a második soha semmilyen akváriumhoz
+      nem kötve. Az itteni előzetes keresés ezt előzi meg: ha a kulcs már
+      létező akváriumot azonosít, a hívás azt adja vissza, és az ügyfél-
+      létrehozás SOSEM fut le másodszor.
+    */
+    if (input.clientOperationId) {
+      const meglevo = await this.repository.byClientOperationId(
+        input.clientOperationId,
+      );
+      if (meglevo) return meglevo;
+    }
+
+    /*
       AZ ÚJ ÜGYFÉL KÜLÖN TRANZAKCIÓBAN KÉSZÜL, MIELŐTT AZ AKVÁRIUM SAJÁTJA
       ELINDULNA -- ez tudatos, nem mulasztás. A `CustomersRepository.create()`
       a saját (VEVO-előtagú) számozását és tranzakcióját viszi, és két
