@@ -49,8 +49,16 @@ async function removeLeftovers() {
   await prisma.assetFunction.deleteMany({
     where: { name: { startsWith: PREFIX } },
   });
+  await prisma.worksheetDepartment.deleteMany({
+    where: { customer: { customerNumber: { startsWith: PREFIX } } },
+  });
+  // A SZÁLLÍTÓ ELŐBB, MINT A VEVŐ -- a `Supplier.customerId` megszorítás nem
+  // `SetNull` (lásd `asset-name-check.integration.spec.ts` jegyzetét).
   await prisma.supplier.deleteMany({
     where: { name: { startsWith: PREFIX } },
+  });
+  await prisma.customer.deleteMany({
+    where: { customerNumber: { startsWith: PREFIX } },
   });
   await prisma.user.deleteMany({
     where: { email: { startsWith: PREFIX.toLowerCase() } },
@@ -69,6 +77,7 @@ describe(
     );
 
     let supplierId = "";
+    let departmentId = "";
     let categoryId = "";
     let functionId = "";
 
@@ -98,6 +107,31 @@ describe(
         select: { id: true },
       });
       supplierId = supplier.id;
+
+      /*
+        A TÜKÖR VEVŐ ÉS A HELYSZÍN -- szerviz partner tulajdonosnál az
+        alegység kötelező (`assetDepartmentPresenceRefusal`). Ez a suite a
+        categoryId/functionId PATCH-en való megőrzését méri, nem a
+        tulajdon/helyszín tengelyt, tehát egyetlen, közös helyszín elég.
+      */
+      const mirrorCustomer = await prisma.customer.create({
+        data: {
+          customerNumber: PREFIX,
+          type: "COMPANY",
+          displayName: `${PREFIX} tükör`,
+          partner: { connect: { id: supplierId } },
+        },
+        select: { id: true },
+      });
+      const department = await prisma.worksheetDepartment.create({
+        data: {
+          customerId: mirrorCustomer.id,
+          code: "HLY",
+          name: `${PREFIX} helyszín`,
+        },
+        select: { id: true },
+      });
+      departmentId = department.id;
 
       const category = await prisma.assetCategory.create({
         data: { name: `${PREFIX} kategória` },
@@ -139,6 +173,12 @@ describe(
             where: { name: { startsWith: PREFIX } },
           }),
         },
+        {
+          nev: "a suite vevő-tükre bent maradt a takarítás után",
+          darab: await prisma.customer.count({
+            where: { customerNumber: { startsWith: PREFIX } },
+          }),
+        },
       ]);
       await prisma.$disconnect();
     });
@@ -149,6 +189,7 @@ describe(
         {
           ownerType: "SUPPLIER",
           ownerId: supplierId,
+          departmentId,
           kind: "EQUIPMENT",
           name,
           categoryId,
@@ -189,6 +230,7 @@ describe(
         {
           ownerType: "SUPPLIER",
           ownerId: supplierId,
+          departmentId,
           kind: "EQUIPMENT",
           name,
           categoryId,

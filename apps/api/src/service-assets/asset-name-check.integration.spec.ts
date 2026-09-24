@@ -69,6 +69,7 @@ describe(
 
     let supplierAId = "";
     let supplierBId = "";
+    let departmentAId = "";
     let departmentId = "";
     const sharedName = `${PREFIX} Homokszűrő`;
 
@@ -107,13 +108,41 @@ describe(
 
       /*
         A TÜKÖR VEVŐ, A `Customer.partner` KAPCSOLATON ÁT -- ez kell ahhoz,
-        hogy a `szállító B` eszközén departmentId állhasson: az
+        hogy egy szállító eszközén departmentId állhasson: az
         `assetDepartmentRefusal` az alegység `customerId`-ját a SZÁLLÍTÓ
         tükör-vevőjéhez (`mirrorCustomerId`) hasonlítja, és egy másik,
         kapcsolat nélküli vevő alegysége OTHER_PARTNER-rel elbukna -- ahogy
         elsőre itt is elbukott (lásd a fájl jegyzetét, ha ez a bekezdés
         valaha visszatérne egy kapcsolat nélküli vevőre).
+
+        MINDKÉT SZÁLLÍTÓ KAP SAJÁT HELYSZÍNT (2026-09-24): a helyszín
+        `assetDepartmentPresenceRefusal` óta LÉTREHOZÁSKOR kötelező minden
+        SUPPLIER-tulajdonosnál, tehát a szállító A eszköze TÖBBÉ NEM
+        hozható létre helyszín nélkül -- a korábbi "van/nincs helyszín"
+        megkülönböztetés helyett a lenti "megnevezi, HOL áll" teszt most a
+        KÉT KÜLÖNBÖZŐ helyszínt bizonyítja, ugyanazzal az erővel: attól
+        VALÓS állítás, hogy a válasz a HELYES tulajdonoshoz a HELYES
+        helyszínt rendeli, nem attól, hogy az egyik hiányzik.
       */
+      const mirrorCustomerA = await prisma.customer.create({
+        data: {
+          customerNumber: `${PREFIX}-CA`,
+          type: "COMPANY",
+          displayName: `${PREFIX} szállító A tükre`,
+          partner: { connect: { id: supplierAId } },
+        },
+        select: { id: true },
+      });
+      const departmentA = await prisma.worksheetDepartment.create({
+        data: {
+          customerId: mirrorCustomerA.id,
+          code: "HLA",
+          name: `${PREFIX} A helyszín`,
+        },
+        select: { id: true },
+      });
+      departmentAId = departmentA.id;
+
       const mirrorCustomer = await prisma.customer.create({
         data: {
           customerNumber: `${PREFIX}-C`,
@@ -139,6 +168,7 @@ describe(
         {
           ownerType: "SUPPLIER",
           ownerId: supplierAId,
+          departmentId: departmentAId,
           kind: "EQUIPMENT",
           name: sharedName,
         } as never,
@@ -158,6 +188,7 @@ describe(
         {
           ownerType: "SUPPLIER",
           ownerId: supplierAId,
+          departmentId: departmentAId,
           kind: "EQUIPMENT",
           name: `${PREFIX} Másik eszköz`,
         } as never,
@@ -220,18 +251,30 @@ describe(
       assert.equal(result.length, 2);
     });
 
+    /**
+     * MEGNEVEZI, HOL ÁLL A MÁSIK: tulajdonos és helyszín, KÉT KÜLÖNBÖZŐ
+     * szállítónál. Eddig ez az állítás egy helyszín NÉLKÜLI esettel állt
+     * szemben (szállító A eszköze department nélkül) -- azt
+     * `assetDepartmentPresenceRefusal` óta nem lehet előállítani, mert a
+     * helyszín LÉTREHOZÁSKOR kötelező minden SUPPLIER-tulajdonosnál. A
+     * bizonyítás EGYENÉRTÉKŰEN erős két VALÓDI, KÜLÖNBÖZŐ helyszínnel: a
+     * válasz akkor is a helyes tulajdonoshoz a helyes helyszínt rendeli,
+     * ha egyik sem hiányzik.
+     */
     it("megnevezi, HOL áll a másik: tulajdonos és helyszín", async () => {
       const result = await assets.nameCheck({ name: sharedName } as never);
-      const withDepartment = result.find(
+      const ownerB = result.find(
         (item) => item.owner.displayName === `${PREFIX} szállító B`,
       );
-      assert.ok(withDepartment, "a departmentId-s eszköz hiányzik a válaszból");
-      assert.ok(withDepartment.unit, "a helyszín hiányzik a válaszból");
-      assert.equal(withDepartment.unit?.name, `${PREFIX} helyszín`);
-      const withoutDepartment = result.find(
+      assert.ok(ownerB, "a szállító B eszköze hiányzik a válaszból");
+      assert.ok(ownerB.unit, "a szállító B helyszíne hiányzik a válaszból");
+      assert.equal(ownerB.unit?.name, `${PREFIX} helyszín`);
+      const ownerA = result.find(
         (item) => item.owner.displayName === `${PREFIX} szállító A`,
       );
-      assert.equal(withoutDepartment?.unit, undefined);
+      assert.ok(ownerA, "a szállító A eszköze hiányzik a válaszból");
+      assert.ok(ownerA.unit, "a szállító A helyszíne hiányzik a válaszból");
+      assert.equal(ownerA.unit?.name, `${PREFIX} A helyszín`);
     });
 
     it("más nevű eszközt nem hoz vissza", async () => {
