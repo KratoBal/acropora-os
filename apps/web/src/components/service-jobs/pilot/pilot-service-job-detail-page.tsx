@@ -25,7 +25,7 @@ import { KULDES_KIHAGYAS_OKA } from "../handover-mail-skip-reason";
 import { PartnerPicker } from "../partner-picker";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
-import { ServiceJobAssigneeEditor } from "../service-job-assignee-editor";
+import { PilotDelegatedColleaguesCard } from "./pilot-delegated-colleagues-card";
 import { ServiceJobPlacementEditor } from "../service-job-placement-editor";
 import { ServiceJobFieldsEditor } from "../service-job-fields-editor";
 import {
@@ -49,30 +49,49 @@ import {
  * `exchange/figma-hibajegyek-make-6/src/HibajegyekScreen.tsx`
  * (`HibajegyDetail`, a delegálás-kártyával egyben, a 6. Make-export).
  *
- * === A VARRAT SZÁNDÉKOS, ÉS MÁR VOLT RÁ PRECEDENS ===
+ * === A VARRAT SZÁNDÉKOS, ÉS MÁR VOLT RÁ PRECEDENS -- EGY KIVÉTELLEL ===
  *
  * A lap SAJÁT kártyái (fejléc, "Mi a baj?", "Munkalapok", "Lezárás és
- * átadás", "Következő lépés", "Előzmények") Figma-stílust kapnak. Az
- * ÖSSZETETT, ma is működő beágyazott alrendszerek (delegálás-szerkesztő,
- * helyszín+eszköz-szerkesztő, fénykép-galéria, átadás e-mail dialógus,
- * partner-választó, törlés-megerősítő) VÁLTOZATLAN kinézettel maradnak --
- * ugyanaz a minta, mint a `pilot-aquarium-editor-page.tsx`-en (ott a
- * `ConfirmDialog` és a `CustomerPicker` is a régi `@acropora/ui`
- * stílusban marad) -- ez a precedens igazolta a döntést, nem egy külön
- * jóváhagyás. Bejelentve acrobotnak: murena, 2026-09-24 (msg 23166).
+ * átadás", "Következő lépés", "Előzmények") Figma-stílust kapnak. A
+ * legtöbb ÖSSZETETT, ma is működő beágyazott alrendszer (helyszín+eszköz-
+ * szerkesztő, fénykép-galéria, átadás e-mail dialógus, partner-választó,
+ * törlés-megerősítő) VÁLTOZATLAN kinézettel marad -- ugyanaz a minta, mint
+ * a `pilot-aquarium-editor-page.tsx`-en (ott a `ConfirmDialog` és a
+ * `CustomerPicker` is a régi `@acropora/ui` stílusban marad). Bejelentve
+ * acrobotnak: murena, 2026-09-24 (msg 23166).
+ *
+ * === A DELEGÁLÁS KÁRTYÁJA KIVÉTEL A VARRAT ALÓL ===
+ *
+ * A fenti seam-javaslatra acrobot válasza (msg 23168, Balázs kérése
+ * alapján): a "Delegált kollégák" kártya és a kollégaválasztó NEM
+ * maradhat régi kinézetben, mert ezt Balázs KÜLÖN kérte a Figmában (az 5b
+ * kiegészítés: kártya az adatlap tetején, avatar-lista, választó chipekkel
+ * -- lásd `exchange/figma-leiras-5b-hibajegy-delegalas-2026-09-24.md`). A
+ * régi `ServiceJobAssigneeEditor` helyett ezért a `PilotDelegatedColleaguesCard`
+ * fut, ami a Figma `DegalaltKollegakCard`/`DelegalasPicker` mintáját
+ * követi, a MEGLÉVŐ `serviceJobsApi.setAssignees` végpontra és
+ * `useAssignableUsers` jelölt-listára építve -- ez tehát a VARRAT
+ * kivétele, nem az általános szabály megszegése. A többi felsorolt
+ * alrendszer (helyszín+eszköz, galéria, átadás, partner, törlés) marad a
+ * varrat alatt, régi stílusban.
  *
  * === A DELEGÁLÁS ÁTKERÜLT A JOBB HASÁBBÓL A LAP TETEJÉRE ===
  *
- * A mai (nem-pilot) adatlapon a `ServiceJobAssigneeEditor` a jobb hasábban
- * áll, a "Következő lépés" alatt -- ez egy KIMONDOTT döntés volt (acrobot,
+ * A mai (nem-pilot) adatlapon a delegálás-szerkesztő a jobb hasábban áll,
+ * a "Következő lépés" alatt -- ez egy KIMONDOTT döntés volt (acrobot,
  * 2026-09-15, lásd a régi `service-job-detail-page.tsx` kommentjét). A
- * Figma-terv (és Balázs 5b kiegészítése,
- * `exchange/figma-leiras-5b-hibajegy-delegalas-2026-09-24.md`) viszont a
- * bal hasáb TETEJÉRE teszi, "Mi a baj?" fölé. Mivel ez a kör kifejezetten
- * a Figma-elrendezést viszi át, és a kiegészítést maga Balázs kérte
- * (acrobot közvetítésével, msg 23138/23139), az ÚJ helyet követjük -- ez
- * nem ellentmond a régi döntésnek, hanem Balázs frissebb, kimondott
- * elrendezése.
+ * Figma-terv (és Balázs 5b kiegészítése) viszont a bal hasáb TETEJÉRE
+ * teszi, "Mi a baj?" fölé. Mivel ez a kör kifejezetten a Figma-elrendezést
+ * viszi át, és a kiegészítést maga Balázs kérte (acrobot közvetítésével,
+ * msg 23138/23139/23168), az ÚJ helyet követjük -- ez nem ellentmond a
+ * régi döntésnek, hanem Balázs frissebb, kimondott elrendezése.
+ *
+ * === "DELEGÁLTA: X" -- ÚJ MEZŐ, MEGLÉVŐ ADATBÓL ===
+ *
+ * A teljes Figma-hűséghez a delegálás-kártya soronként kiírja, ki és
+ * mikor delegált. Ehhez a `ServiceJobAssignee.assignedByName` mező
+ * felvéve (2026-09-24), a részletlap lekérdezése kibővítve -- lásd
+ * `pilot-delegated-colleagues-card.tsx` fejlécét.
  *
  * === MUNKALAP-SOR: A FIGMA TÖBBET MUTAT, MINT AMIT MA TUDUNK ===
  *
@@ -659,10 +678,11 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
         <div className="flex flex-col gap-5">
           {/*
             A DELEGÁLÁS ITT, A TETEJÉN -- lásd a fejléc "A DELEGÁLÁS
-            ÁTKERÜLT" szakaszát. A komponens SAJÁT `ServicePanel`-t rajzol
-            (régi stílus), szándékosan -- ez a varrat helye.
+            ÁTKERÜLT" szakaszát. EZ A KÁRTYA FIGMA-STÍLUSÚ (nem a varrat
+            része) -- Balázs kifejezetten kérte, lásd a fejléc "A
+            DELEGÁLÁS KÁRTYÁJA KIVÉTEL A VARRAT ALÓL" szakaszát.
           */}
-          <ServiceJobAssigneeEditor
+          <PilotDelegatedColleaguesCard
             jobId={jobId}
             token={token}
             assignees={job.assignees}
