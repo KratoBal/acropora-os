@@ -237,6 +237,36 @@ describe("buildAquariumCreatePayload", () => {
     ]);
   });
 
+  it("EXISTING módban ügyfél nélkül elutasít, nem az ügyfél nevét kéri", () => {
+    const result = buildAquariumCreatePayload(
+      form({ ownershipType: "CUSTOMER", customerMode: "EXISTING" }),
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.field, "selectedCustomer");
+  });
+
+  /**
+   * KALIBRÁCIÓ: EXISTING módban a kiválasztott azonosító megy a törzsbe, a
+   * `customerName` mezőt (ami itt is ki van töltve, mert az űrlap mindkét
+   * mezőt megtartja módváltáskor) NEM veszi figyelembe -- ha a két ág
+   * összefolyna, ez az állítás `newCustomer`-t is találna a `customerId`
+   * mellett.
+   */
+  it("EXISTING módban a kiválasztott ügyfél azonosítója megy a törzsbe, newCustomer nélkül", () => {
+    const result = buildAquariumCreatePayload(
+      form({
+        ownershipType: "CUSTOMER",
+        customerMode: "EXISTING",
+        selectedCustomerId: "cust-42",
+        customerName: "Ez a mező itt figyelmen kívül marad",
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.payload.customerId, "cust-42");
+    assert.equal(result.payload.newCustomer, undefined);
+  });
+
   it("nem szám méretre elutasít", () => {
     const result = buildAquariumCreatePayload(form({ lengthCm: "nem szám" }));
     assert.equal(result.ok, false);
