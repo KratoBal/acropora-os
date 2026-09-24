@@ -6,7 +6,7 @@ import type {
   Session,
 } from "@acropora/types";
 
-import { AuthService } from "./auth.service.js";
+import { AuthService, MOBILE_SESSION_TTL_MS } from "./auth.service.js";
 import type {
   AuthenticatedRequest,
   DevelopmentLoginDto,
@@ -104,9 +104,17 @@ export class AuthController {
   async loginMobileWithPassword(
     @Body() body: ProductionLoginDto,
   ): Promise<{ token: string; expiresAt: string; user: CurrentUserResponse }> {
+    /**
+     * A MOBIL 30 NAPOS MUNKAMENETET KAP, A WEB VALTOZATLANUL 8 ORAT -- Balazs
+     * kerese es jovahagyasa (2026-09-24 08:10, mobil szal): a nap kozbeni
+     * kileptetes oka a fix, rovid lejarat volt, nem hiba a lejarat-
+     * ellenorzesben. Lasd `AuthService.loginWithPassword` sajat jegyzeteben,
+     * miert itt dol el, melyik hosszt kapja a hivo.
+     */
     const session = await this.authService.loginWithPassword(
       body.email,
       body.password,
+      MOBILE_SESSION_TTL_MS,
     );
     return {
       token: session.token ?? "",

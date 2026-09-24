@@ -5,6 +5,7 @@ import type { AuthenticatedUser, Session } from "@acropora/types";
 
 import { AuthController } from "./auth.controller.js";
 import type { AuthService } from "./auth.service.js";
+import { MOBILE_SESSION_TTL_MS, SESSION_TTL_MS } from "./auth.service.js";
 import type { AuthenticatedRequest } from "./auth.types.js";
 import {
   CSRF_COOKIE_NAME,
@@ -93,6 +94,56 @@ describe("AuthController", () => {
     const { navigation, ...identity } = body.user;
     assert.deepEqual(identity, testUser);
     assert.ok(Array.isArray(navigation) && navigation.length > 0);
+  });
+
+  /**
+   * A MOBIL 30 NAPOS MUNKAMENETET KAP, A WEB VALTOZATLANUL 8 ORAT -- Balazs
+   * kerese es jovahagyasa (2026-09-24 08:10, mobil szal). A ket vegpont
+   * UGYANAZT az `authService.loginWithPassword`-t hivja: a kulonbseg
+   * KIZAROLAG a harmadik, `ttlMs` argumentumban all, es EZ az allitas azt
+   * meri, hogy a hivo tenyleg at is adja a helyes erteket -- nem csak azt,
+   * hogy a valasz alakja jo (azt a ket korabbi teszt mar fedi).
+   */
+  it("mobile login passes MOBILE_SESSION_TTL_MS, web login passes the default web ttl", async () => {
+    let mobileReceivedTtl: number | undefined;
+    const mobileAuthService = {
+      loginWithPassword: async (
+        _email: string,
+        _password: string,
+        ttlMs?: number,
+      ) => {
+        mobileReceivedTtl = ttlMs;
+        return fakeSession("mobile-token-xyz");
+      },
+    } as unknown as AuthService;
+    await new AuthController(mobileAuthService).loginMobileWithPassword({
+      email: testUser.email,
+      password: "secret",
+    });
+    assert.equal(mobileReceivedTtl, MOBILE_SESSION_TTL_MS);
+
+    let webReceivedTtl: number | undefined = -1; // -1: "hivva sem lett"
+    const webAuthService = {
+      loginWithPassword: async (
+        _email: string,
+        _password: string,
+        ttlMs?: number,
+      ) => {
+        webReceivedTtl = ttlMs;
+        return fakeSession("web-token-abc");
+      },
+    } as unknown as AuthService;
+    await new AuthController(webAuthService).loginWithPassword(
+      { email: testUser.email, password: "secret" },
+      fakeCookieResponse(),
+    );
+    // A webes vegpont NEM ad at harmadik argumentumot -- a SESSION_TTL_MS
+    // alapertelmezes a szolgaltatas oldalan dol el, nem itt. `undefined`
+    // a helyes ertek, NEM a SESSION_TTL_MS szam maga.
+    assert.equal(webReceivedTtl, undefined);
+    // KONTROLL: a ket ttl kulonbozik, kulonben ez az allitas barmelyik
+    // ertekre atmenne.
+    assert.notEqual(MOBILE_SESSION_TTL_MS, SESSION_TTL_MS);
   });
 
   /**

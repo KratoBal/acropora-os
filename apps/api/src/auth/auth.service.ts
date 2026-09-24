@@ -13,7 +13,20 @@ import { AuthUserResolver } from "./auth-user-resolver.js";
 import { SessionRepository } from "./session.repository.js";
 import { generateSessionToken } from "./session-token.util.js";
 
-const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+/**
+ * WEB MARAD 8 ORA, A MOBIL 30 NAP -- Balazs kerese es jovahagyasa (2026-09-24
+ * 08:10, mobil szal), a tunet: a mobilalkalmazas napkozben kilepteti. Az OK
+ * NEM egy hiba, hanem hogy a session lejarata rovidebb, mint egy tipikus
+ * munkanap, es a mobil sosem hosszabbit -- a `Session.findActive` csak
+ * lejaratot nez, nincs csusztatas.
+ *
+ * MIERT EXPORTALT MOST: a webre es a mobilra KULON ertek kell, es a hivo
+ * (`AuthController`) donti el, melyiket adja at az `issueSession`-nek --
+ * lasd `loginWithPassword` sajat jegyzeteben, miert a hivo oldalan dol el,
+ * nem itt.
+ */
+export const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+export const MOBILE_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -73,13 +86,26 @@ export class AuthService {
    * (`AuthController.loginMobileWithPassword`) calls this same method but
    * returns the token directly in the JSON body instead, since mobile has
    * no shared browser cookie jar to rely on.
+   *
+   * `ttlMs` DEFAULTS TO THE WEB LENGTH (`SESSION_TTL_MS`), AND THE CALLER
+   * DECIDES, NOT THIS METHOD: the credential check is identical for both
+   * clients, only the session length differs, and the controller is the
+   * one place that already knows which endpoint it is (web vs mobile) —
+   * duplicating that knowledge here (e.g. a boolean `isMobile` flag) would
+   * just move the same decision one layer down for no benefit. See
+   * `AuthController.loginMobileWithPassword`, which passes
+   * `MOBILE_SESSION_TTL_MS` explicitly.
    */
-  async loginWithPassword(email: string, password: string): Promise<Session> {
+  async loginWithPassword(
+    email: string,
+    password: string,
+    ttlMs: number = SESSION_TTL_MS,
+  ): Promise<Session> {
     const internalUser = await this.users.resolveByEmailAndPassword(
       email,
       password,
     );
-    return this.issueSession(internalUser);
+    return this.issueSession(internalUser, "", ttlMs);
   }
 
   /**
@@ -105,9 +131,10 @@ export class AuthService {
   private async issueSession(
     user: AuthenticatedUser,
     tokenPrefix = "",
+    ttlMs: number = SESSION_TTL_MS,
   ): Promise<Session> {
     const token = generateSessionToken(tokenPrefix);
-    const stored = await this.sessions.create(user.id, token, SESSION_TTL_MS);
+    const stored = await this.sessions.create(user.id, token, ttlMs);
     return {
       id: stored.id,
       user,

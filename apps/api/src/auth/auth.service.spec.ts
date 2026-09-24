@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
 import type { AuthenticatedUser } from "@acropora/types";
-import { AuthService } from "./auth.service.js";
+import {
+  AuthService,
+  MOBILE_SESSION_TTL_MS,
+  SESSION_TTL_MS,
+} from "./auth.service.js";
 import { AuthUserResolver } from "./auth-user-resolver.js";
 import type { SessionRepository, StoredSession } from "./session.repository.js";
 import { hashSessionToken } from "./session-token.util.js";
@@ -140,6 +144,55 @@ describe("AuthService user resolution", () => {
     // contract — even though production storage is now the database
     // rather than a shared map.
     assert.deepEqual(await service.resolveToken(session.token!), internalOwner);
+  });
+
+  /**
+   * A MOBIL 30 NAPOS MUNKAMENETET KAP -- Balazs kerese es jovahagyasa
+   * (2026-09-24 08:10, mobil szal), a tunet: a mobilalkalmazas napkozben
+   * kilepteti, mert a rogzitett lejarat rovidebb egy munkanapnal, es a
+   * mobil sosem hosszabbit. Ez az allitas a HARMADIK, explicit `ttlMs`
+   * argumentumot meri -- azt, amit a hivo (AuthController) ad at, nem azt,
+   * amit a szolgaltatas maga valasztana.
+   */
+  it("loginWithPassword honors an explicit ttlMs (the mobile shape)", async () => {
+    const resolver = {
+      resolveByEmailAndPassword: async () => internalOwner,
+      resolveById: async () => internalOwner,
+    } as unknown as AuthUserResolver;
+    const service = new AuthService(resolver, createFakeSessionRepository());
+    const before = Date.now();
+    const session = await service.loginWithPassword(
+      internalOwner.email,
+      "correct horse battery staple",
+      MOBILE_SESSION_TTL_MS,
+    );
+    const expiresInMs = new Date(session.expiresAt).getTime() - before;
+    // Tolerancia a teszt sajat futasi idejere, nem a lejarat pontossagara.
+    assert.ok(
+      Math.abs(expiresInMs - MOBILE_SESSION_TTL_MS) < 5_000,
+      `vart kb. ${MOBILE_SESSION_TTL_MS}ms, kaptam ${expiresInMs}ms`,
+    );
+  });
+
+  it("loginWithPassword defaults to the web ttl (SESSION_TTL_MS) when the caller omits it", async () => {
+    const resolver = {
+      resolveByEmailAndPassword: async () => internalOwner,
+      resolveById: async () => internalOwner,
+    } as unknown as AuthUserResolver;
+    const service = new AuthService(resolver, createFakeSessionRepository());
+    const before = Date.now();
+    const session = await service.loginWithPassword(
+      internalOwner.email,
+      "correct horse battery staple",
+    );
+    const expiresInMs = new Date(session.expiresAt).getTime() - before;
+    assert.ok(
+      Math.abs(expiresInMs - SESSION_TTL_MS) < 5_000,
+      `vart kb. ${SESSION_TTL_MS}ms, kaptam ${expiresInMs}ms`,
+    );
+    // KONTROLL: a ket ertek nem egyezik, kulonben ez az allitas barmelyik
+    // hosszra atmenne, es semmit nem bizonyitana.
+    assert.notEqual(SESSION_TTL_MS, MOBILE_SESSION_TTL_MS);
   });
 
   it("propagates a bad-credentials rejection from the resolver without issuing a session", async () => {
