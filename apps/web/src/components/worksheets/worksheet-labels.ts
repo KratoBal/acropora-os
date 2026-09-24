@@ -1,7 +1,5 @@
 import type { WorksheetVersionStatus } from "@acropora/types";
 
-import type { ServiceTone } from "@/components/service/service-theme";
-
 /**
  * AZ ÁLLAPOT-FELIRATOK A `@acropora/types`-BÓL JÖNNEK, ÉS ITT CSAK ÁTMENNEK.
  *
@@ -108,25 +106,9 @@ export function formatDateTime(value: string | null): string {
 }
 
 /**
- * A MUNKALAP-ALLAPOT SZINE Balazs 2026-09-15-i szerviz-designjaban.
- *
- * A VALTOZATBOL SZARMAZIK, nem mellette all: a "melyik allapot szamit jonak,
- * rossznak, varakozonak" szabaly EGY helyen van (`worksheetStatusVariant`), es
- * ez a fuggveny csak leforditja az uj paletta nevere. Ket egymas mellett allo,
- * fuggetlen leiras eloszor egyezik, aztan az egyiket valaki modositja.
+ * A MUNKALAP-ALLAPOT SZINE ATKOLTOZOTT A `@acropora/types`-ba (2026-09-24,
+ * a munkalap-lapok partneri paritasa) -- lasd ott a teljes indoklast. A
+ * `worksheetStatusVariant` HELYBEN MARAD: csak ez a fuggveny hasznalja,
+ * apps/web-fuggese nincs, athelyezese semmit nem nyerne.
  */
-const VARIANT_TONE: Record<
-  ReturnType<typeof worksheetStatusVariant>,
-  ServiceTone
-> = {
-  success: "green",
-  warning: "amber",
-  danger: "red",
-  neutral: "neutral",
-};
-
-export function worksheetStatusTone(
-  status: WorksheetVersionStatus,
-): ServiceTone {
-  return VARIANT_TONE[worksheetStatusVariant(status)];
-}
+export { worksheetStatusTone } from "@acropora/types";

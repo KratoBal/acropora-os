@@ -1,4 +1,4 @@
-import { Worksheets } from "@/components/reference-lists";
+import { WorksheetList } from "@/components/worksheet-list";
 export default function WorksheetsPage() {
-  return <Worksheets />;
+  return <WorksheetList />;
 }

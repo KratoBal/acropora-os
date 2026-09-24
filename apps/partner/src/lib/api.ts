@@ -263,8 +263,26 @@ export const partnerApi = {
       method: "POST",
       body: documentForm(file, caption),
     }),
-  worksheets: () =>
-    request<WorksheetListResponse>("/service/worksheets?page=1&pageSize=100"),
+  /**
+   * A LAPOZAS, A STATUSZ-SZURO ES A KERESES 2026-09-24-TOL VALODI PARAMETER,
+   * NEM BEEGETETT ERTEK -- ugyanaz a minta, mint az `assets()`-nel. A vegpont
+   * ugyanaz, mint a belso feluleten (`apps/web/src/lib/api/worksheets.ts`),
+   * es a hatokort a szerver adja a hivo szerepe szerint.
+   */
+  worksheets: (input?: {
+    status?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const query = new URLSearchParams({
+      page: String(input?.page ?? 1),
+      pageSize: String(input?.pageSize ?? 25),
+    });
+    if (input?.status) query.set("status", input.status);
+    if (input?.search?.trim()) query.set("search", input.search.trim());
+    return request<WorksheetListResponse>(`/service/worksheets?${query}`);
+  },
   worksheet: (id: string) =>
     request<WorksheetDetail>(`/service/worksheets/${encodeURIComponent(id)}`),
   worksheetDocuments: (id: string) =>
