@@ -123,6 +123,12 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         href: "/admin/integrations/medusa/connection",
         entryId: "medusa-connection",
       },
+      {
+        label: "Számlázz.hu kapcsolat",
+        description: "A karbantartási piszkozat-számla Agent Key-je.",
+        href: "/admin/integrations/szamlazz/connection",
+        entryId: "szamlazz-connection",
+      },
     ],
   },
   {

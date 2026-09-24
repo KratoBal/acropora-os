@@ -305,6 +305,13 @@ export const settingsNavigation: AppNavigationItem[] = [
     entryId: "medusa-connection",
   },
   {
+    // A karbantartási piszkozat-számla Agent Key-je (ADR-014, 4. szelet).
+    href: "/admin/integrations/szamlazz/connection",
+    label: "Számlázz.hu kapcsolat",
+    icon: "finance",
+    entryId: "szamlazz-connection",
+  },
+  {
     href: "/admin/users",
     label: "Felhasználók",
     icon: "shield",
