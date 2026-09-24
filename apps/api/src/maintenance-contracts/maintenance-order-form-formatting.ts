@@ -39,13 +39,31 @@ function groupThousands(digits: string, separator: string): string {
 }
 
 /**
- * "kelt" DÁTUMA, YYYY-MM-DD ALAKBAN -- ugyanaz az alak, mint a munkalap
- * `sheetDate()`-je ad a csupasz napi mezőkre, hogy a generált dokumentumok
- * dátumformátuma egységes legyen a repóban.
+ * "kelt" DÁTUMA, YYYY-MM-DD ALAKBAN, BUDAPESTI NAPTÁR SZERINT.
+ *
+ * === MIÉRT NEM `toISOString().slice(0, 10)` ===
+ *
+ * Az korábban itt állt, és UTC szerint vágott -- egy `2026-07-28T22:30:00Z`
+ * bélyeg budapesti idő szerint (nyáron, CEST, UTC+2) MÁR MÁSNAP van, tehát a
+ * levágás rossz napot írt volna egy alá- és visszaküldött megrendelőlapra.
+ * Ugyanez a hiba állt a `worksheet-sheet-content.ts` saját `sheetDate()`-je
+ * előtt is -- ez a mérce most már itt is él, ugyanazzal a technikával
+ * (`Intl.DateTimeFormat` `Europe/Budapest` zónával), nem csak ott (nautilus
+ * mérése, 2026-09-24, acrobot jelezte).
+ *
+ * Ami NEM dátum, azt változatlanul adjuk vissza: a bemenet egy része már ma
+ * is csupasz nap (`2026-08-27`), és azon nincs mit átszámolni.
  */
+const HU_DATE = new Intl.DateTimeFormat("hu-HU", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "Europe/Budapest",
+});
+
 export function formatOrderFormDate(isoDate: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return isoDate;
   const date = new Date(isoDate);
   if (Number.isNaN(date.getTime())) return isoDate;
-  return date.toISOString().slice(0, 10);
+  return HU_DATE.format(date).replace(/\. /g, "-").replace(/\.$/, "");
 }

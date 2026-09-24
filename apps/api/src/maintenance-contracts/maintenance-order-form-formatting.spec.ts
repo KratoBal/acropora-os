@@ -53,4 +53,30 @@ describe("maintenance order form formatting", () => {
     assert.equal(formatOrderFormDate("2026-09-24"), "2026-09-24");
     assert.equal(formatOrderFormDate("2026-09-24T10:00:00.000Z"), "2026-09-24");
   });
+
+  it("a napot BUDAPESTI NAPTÁR szerint mondja ki, nem UTC szerint", () => {
+    /*
+      MI PIROSÍT: egy UTC-alapú levágás (`toISOString().slice(0, 10)` vagy
+      `getUTCFullYear/Month/Date`). Egy 22:30 UTC bélyeg NYÁRON (UTC+2)
+      Budapesten már 00:30, tehát MÁSNAP van -- egy alá- és visszaküldött
+      megrendelőlapon a "Kelt" sor a ROSSZ napot mutatná.
+
+      Ugyanez a hiba állt a `worksheet-sheet-content.ts` saját `sheetDate()`-je
+      elé, mielőtt Europe/Budapest zónával formázna -- ez a mérce most már
+      itt is él, nem csak ott.
+    */
+    assert.equal(
+      formatOrderFormDate("2026-07-28T22:30:00.000Z"),
+      "2026-07-29",
+      "nyáron (CEST, UTC+2) a 22:30 UTC már másnap van Budapesten",
+    );
+    // TÉLI KONTROLL (CET, UTC+1): 22:30 UTC ilyenkor MÉG aznap van
+    // Budapesten -- ha az őrző télen is másnapra ugorna, az órarendet nézné
+    // a zóna helyett.
+    assert.equal(
+      formatOrderFormDate("2026-01-15T22:30:00.000Z"),
+      "2026-01-15",
+      "télen (CET, UTC+1) a 22:30 UTC még aznap van Budapesten",
+    );
+  });
 });
