@@ -398,6 +398,14 @@ enum MaintenanceOrderDocumentType {
   SIGNED_FORM
 }
 
+/// Ugyanaz a két dokumentum-fajta, a teljesítési igazoláshoz -- külön enum,
+/// mert minden dokumentum-tábla saját típust visel ebben a sémában
+/// (ContractDocument a kivétel, annak nincs is `type` mezője).
+enum CompletionCertificateDocumentType {
+  GENERATED_FORM
+  SIGNED_FORM
+}
+
 enum AquariumOwnershipType {
   OWN
   STORE
@@ -2785,24 +2793,28 @@ model ServiceJob {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
-  customer         Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  contract         Contract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  department       WorksheetDepartment? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  aquarium         Aquarium?            @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
-  assets           ServiceJobAsset[]
+  customer              Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  contract              Contract?              @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  department            WorksheetDepartment?   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  aquarium              Aquarium?              @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
+  assets                ServiceJobAsset[]
   /// Ami a jeggyel történt, időrendben. A részletlap ebből építi a naplót.
-  events           ServiceJobEvent[]
+  events                ServiceJobEvent[]
   /// A hibajegy mögött álló munkalapok. Több is lehet, és van, amelyik
   /// hamarabb keletkezett, mint maga a hibajegy.
-  worksheets       Worksheet[]
+  worksheets            Worksheet[]
   /// A jegyre delegált szervizes kollégák.
-  assignees        ServiceJobAssignee[]
+  assignees             ServiceJobAssignee[]
   /// A jegyhez csatolt fénykép és egyéb fájl.
-  documents        ServiceJobDocument[]
+  documents             ServiceJobDocument[]
   /// A megrendelőlap, amiből ez a karbantartási lap létrejött -- csak
   /// MAINTENANCE fajtájú lapon van értéke. A visszahivatkozás a
   /// `MaintenanceOrder.serviceJobId`-n áll, itt csak az ellenoldal.
-  maintenanceOrder MaintenanceOrder?
+  maintenanceOrder      MaintenanceOrder?
+  /// A karbantartási lap teljesítési igazolása -- csak MAINTENANCE fajtájú
+  /// lapon van értéke. A visszahivatkozás a
+  /// `CompletionCertificate.serviceJobId`-n áll, itt csak az ellenoldal.
+  completionCertificate CompletionCertificate?
 
   /// A NYITO SZERINTI SZURES INDEXELT. A lathatosag minden partner-oldali
   /// lekerdezesnel ezen az oszlopon szur, tehat ez nem "hatha" index.
@@ -2976,6 +2988,64 @@ model MaintenanceOrderDocument {
   maintenanceOrder MaintenanceOrder @relation(fields: [maintenanceOrderId], references: [id], onDelete: Cascade)
 
   @@index([maintenanceOrderId, createdAt])
+}
+
+/// A KARBANTARTÁSI LAP (MAINTENANCE ServiceJob) TELJESÍTÉSI IGAZOLÁSA.
+///
+/// EGY LAPHOZ EGY IGAZOLÁS TARTOZIK (`serviceJobId` egyedi) -- a kártya
+/// (679d4c04) "gomb a karbantartási lapon" alakja is ezt sugallja: egy
+/// kiállítás gombja, nem egy lista. Ha egyszer újra kell állítani egy
+/// igazolást, az egy KÉSŐBBI döntés, nem ennek a körnek a kérdése.
+model CompletionCertificate {
+  id           String   @id @default(cuid())
+  serviceJobId String   @unique
+  number       String   @unique
+  issuedAt     DateTime @default(now())
+  issuedByName String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  serviceJob ServiceJob                      @relation(fields: [serviceJobId], references: [id], onDelete: Restrict)
+  items      CompletionCertificateLineItem[]
+  documents  CompletionCertificateDocument[]
+
+  @@index([serviceJobId])
+}
+
+/// EGY SOR AZ IGAZOLÁSON. A leíró mezők MÁSOLATOK a kiállítás pillanatából
+/// (a `MaintenanceOrderItem` saját másolatából, ami viszont a
+/// `ContractItem`-ét másolja) -- ugyanaz a lánc, ugyanazért, amiért a
+/// megrendelőlap tétele is másolat: egy később szerkesztett szerződéses ár
+/// nem írhatja át visszamenőleg egy már kiadott igazolást.
+model CompletionCertificateLineItem {
+  id             String  @id @default(cuid())
+  certificateId  String
+  description    String
+  quantity       Decimal @db.Decimal(19, 6)
+  unitNet        Decimal @db.Decimal(19, 4)
+  vatRatePercent Decimal @db.Decimal(5, 2)
+
+  certificate CompletionCertificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+
+  @@index([certificateId])
+}
+
+/// AZ IGAZOLÁS KÉT DOKUMENTUMA: a generált (kiadás előtti) és az aláírt
+/// (visszaküldött) PDF -- ugyanaz az alak, mint a `MaintenanceOrderDocument`.
+model CompletionCertificateDocument {
+  id            String                            @id @default(cuid())
+  certificateId String
+  type          CompletionCertificateDocumentType
+  fileName      String
+  contentType   String
+  sizeBytes     Int
+  content       Bytes?
+  storageKey    String?
+  createdAt     DateTime                          @default(now())
+
+  certificate CompletionCertificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+
+  @@index([certificateId, createdAt])
 }
 
 /// KI DOLGOZIK A HIBAJEGYEN. Kapcsolótábla, nem oszlop a jegyen.

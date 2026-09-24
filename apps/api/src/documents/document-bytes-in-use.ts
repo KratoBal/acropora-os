@@ -23,19 +23,23 @@ import { prisma } from "@acropora/database";
  * tobb: a ket kerdes kulon romolhat el.
  */
 export async function sumDocumentBytesInUse(): Promise<number> {
-  const [eszkoz, munkalap, hibajegy, szerzodes, megrendeloLap] =
+  const [eszkoz, munkalap, hibajegy, szerzodes, megrendeloLap, igazolas] =
     await Promise.all([
       prisma.assetDocument.aggregate({ _sum: { sizeBytes: true } }),
       prisma.worksheetDocument.aggregate({ _sum: { sizeBytes: true } }),
       prisma.serviceJobDocument.aggregate({ _sum: { sizeBytes: true } }),
       prisma.contractDocument.aggregate({ _sum: { sizeBytes: true } }),
       prisma.maintenanceOrderDocument.aggregate({ _sum: { sizeBytes: true } }),
+      prisma.completionCertificateDocument.aggregate({
+        _sum: { sizeBytes: true },
+      }),
     ]);
   return (
     (eszkoz._sum.sizeBytes ?? 0) +
     (munkalap._sum.sizeBytes ?? 0) +
     (hibajegy._sum.sizeBytes ?? 0) +
     (szerzodes._sum.sizeBytes ?? 0) +
-    (megrendeloLap._sum.sizeBytes ?? 0)
+    (megrendeloLap._sum.sizeBytes ?? 0) +
+    (igazolas._sum.sizeBytes ?? 0)
   );
 }

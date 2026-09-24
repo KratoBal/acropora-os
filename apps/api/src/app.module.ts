@@ -39,6 +39,7 @@ import { WorksheetsModule } from "./worksheets/worksheets.module.js";
 import { MaterialRequestsModule } from "./material-requests/material-requests.module.js";
 import { ContractsModule } from "./contracts/contracts.module.js";
 import { MaintenanceOrdersModule } from "./maintenance-orders/maintenance-orders.module.js";
+import { CompletionCertificatesModule } from "./completion-certificates/completion-certificates.module.js";
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { MaintenanceOrdersModule } from "./maintenance-orders/maintenance-orders
     ServiceJobsModule,
     ContractsModule,
     MaintenanceOrdersModule,
+    CompletionCertificatesModule,
     WorksheetsModule,
     MaterialRequestsModule,
     TasksModule,
