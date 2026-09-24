@@ -2,6 +2,25 @@ export type AssetKind =
   "SYSTEM" | "EQUIPMENT" | "COMPONENT" | "SENSOR" | "OTHER";
 
 /**
+ * A MAGYAR CIMKEK, EGY HELYEN -- ATKERULT `apps/web`-bol (2026-09-24), a
+ * `worksheetStatusLabel` mintajara: ez a negy szotar (`assetKindLabel`,
+ * `assetStatusLabel`, `assetCriticalityLabel`, `assetEventLabel` lentebb)
+ * TISZTA adat, semmilyen apps/web-fuggosege nincs (a `service-theme.ts`
+ * SZINE, `assetStatusTone`, ELTER: az `apps/web` sajat `ServiceTone`
+ * tipusatol fugg, tehat AZ NEM koltozott ide). A partner portal (`apps/partner`)
+ * ugyanezekre a cimkekre szorul (raw `ACTIVE`/`RETIRED`/`UPDATED` a
+ * felhasznalonak, Balazs 2026-09-24-i kepernyokepei szerint), es a portal
+ * SOSEM hivatkozhat `apps/web`-re -- lasd `apps/partner/src/lib/visual-base.spec.ts`.
+ */
+export const assetKindLabel: Record<AssetKind, string> = {
+  SYSTEM: "Rendszer",
+  EQUIPMENT: "Berendezés",
+  COMPONENT: "Részegység",
+  SENSOR: "Szenzor",
+  OTHER: "Egyéb",
+};
+
+/**
  * AZ ESZKÖZ ÁLLAPOTA. A sorrend a séma enum-sorrendjét követi, mert az a
  * LISTA RENDEZÉSE is (`assetListOrderBy`): csökkenő rendelkezésre állás.
  *
@@ -12,7 +31,22 @@ export type AssetKind =
 export type AssetStatus =
   "ACTIVE" | "WARM_STANDBY" | "COLD_STANDBY" | "IN_REPAIR" | "RETIRED";
 
+export const assetStatusLabel: Record<AssetStatus, string> = {
+  ACTIVE: "Aktív",
+  WARM_STANDBY: "Meleg tartalék",
+  COLD_STANDBY: "Hideg tartalék",
+  IN_REPAIR: "Javítás alatt",
+  RETIRED: "Kivezetett",
+};
+
 export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
+
+export const assetCriticalityLabel: Record<AssetCriticality, string> = {
+  LOW: "Alacsony",
+  NORMAL: "Normál",
+  HIGH: "Magas",
+  CRITICAL: "Kritikus",
+};
 
 export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
 
@@ -42,6 +76,18 @@ export type AssetEventType =
   | "LABEL_ASSIGNED"
   | "DOCUMENT_UPLOADED"
   | "DOCUMENT_DELETED";
+
+export const assetEventLabel: Record<AssetEventType, string> = {
+  CREATED: "Eszköz létrehozva",
+  UPDATED: "Adatok módosítva",
+  PLACEMENT_CHANGED: "Elhelyezés módosítva",
+  PARENT_CHANGED: "Hierarchia módosítva",
+  STATUS_CHANGED: "Státusz módosítva",
+  QR_ROTATED: "QR-kód lecserélve",
+  LABEL_ASSIGNED: "Matrica hozzárendelve",
+  DOCUMENT_UPLOADED: "Dokumentum feltöltve",
+  DOCUMENT_DELETED: "Dokumentum törölve",
+};
 
 export interface AssetCustomerSummary {
   id: string;

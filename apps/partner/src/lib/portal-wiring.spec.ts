@@ -30,7 +30,15 @@ const BEALLITASOK = "src/components/settings.tsx";
 const DOKUMENTUMOK = "src/components/document-panel.tsx";
 const BEJELENTO = "src/components/new-ticket.tsx";
 const HIBAJEGY_RESZLET = "src/components/ticket-detail.tsx";
-const ESZKOZ_LISTA = "src/components/reference-lists.tsx";
+/*
+  AZ ESZKOZ-LISTA 2026-09-24-EN SAJAT FAJLBA KOLTOZOTT (`asset-list.tsx`),
+  Balazs kerese miatt, hogy ugyanugy nezzen ki, mint az app.acropora.hu --
+  a `reference-lists.tsx`-ben csak a `Worksheets` maradt. A ket konstans
+  ezert kulon all: `ESZKOZ_LISTA` az UJ fajlra mutat, `MUNKALAP_LISTA` a
+  regi fajlra, a munkalap-listat viszo checkeknek.
+*/
+const ESZKOZ_LISTA = "src/components/asset-list.tsx";
+const MUNKALAP_LISTA = "src/components/reference-lists.tsx";
 const ESZKOZ_RESZLET = "src/components/asset-detail.tsx";
 const ESZKOZ_UTVONAL = "src/app/(portal)/eszkozok/[id]/page.tsx";
 const NAPLO_SOR = "src/lib/naplo-sor.ts";
@@ -347,6 +355,15 @@ describe("a partner eszköz-adatlapja és szűrői", () => {
     assert.match(olvas(KLIENS), /signWorksheet|worksheetSigners/);
     /* es az eszkoz-lapon a csatolas, amire a partnernek VAN joga */
     assert.match(olvas(ESZKOZ_RESZLET), /partnerApi\.uploadAssetDocument\(/);
+    /*
+      ES A QR MEGJELENITES+LETOLTES, 2026-09-24 OTA -- ez a `GET :id/qr`
+      vegpont, `SERVICE_VIEW`-t ker, nem `SERVICE_MANAGE`-et, tehat MINDEN
+      partner felhasznalonak jar. POZITIV KONTROLL, mert kulonben a fenti
+      negativ allitasok (nincs szerkesztes/csere/kivezetes/torles) akkor is
+      zoldek lennenek, ha ez a kartya sem all a lapon.
+    */
+    assert.match(olvas(ESZKOZ_RESZLET), /\.assetQr\(id\)/);
+    assert.match(olvas(KLIENS), /assetQr: \(id: string\) =>/);
   });
 
   /**
@@ -355,6 +372,28 @@ describe("a partner eszköz-adatlapja és szűrői", () => {
    */
   it("a lista kártyája az adatlapra visz", () => {
     assert.match(olvas(ESZKOZ_LISTA), /href=\{`\/eszkozok\/\$\{asset\.id\}`\}/);
+  });
+
+  /**
+   * A NÉGY KÉPERNYŐKÉP KÖZÖS HIBÁJA: NYERS ENUM A FELHASZNÁLÓNAK.
+   *
+   * Balázs 2026-09-24-i négy képernyőképe a listán `ACTIVE`/`RETIRED`
+   * pirulát mutatott, az adatlapon ugyanígy a fejlécen, az Előzményeken
+   * pedig `UPDATED`/`CREATED`-et. Mind a négy ugyanabból a `@acropora/types`
+   * szótárból oldódik fel most -- ugyanaz a szótár, amit a belső felület is
+   * használ.
+   */
+  it("a lista magyar státusz-cimkét mutat, nem a nyers enumot", () => {
+    assert.match(olvas(ESZKOZ_LISTA), /assetStatusLabel\[asset\.status\]/);
+    assert.doesNotMatch(kod(ESZKOZ_LISTA), /\{asset\.status\}/);
+  });
+
+  it("az adatlap magyar státusz- és esemény-cimkét mutat, nem a nyers enumot", () => {
+    const s = kod(ESZKOZ_RESZLET);
+    assert.match(s, /assetStatusLabel\[asset\.status\]/);
+    assert.match(s, /assetEventLabel\[esemeny\.type\]/);
+    assert.doesNotMatch(s, /\{asset\.status\}/);
+    assert.doesNotMatch(s, /\{esemeny\.type\}/);
   });
 });
 
@@ -644,9 +683,12 @@ describe("a partner munkalap-adatlapja", () => {
       olvas(MUNKALAP_RESZLET),
       /worksheetStatusLabel\[current\.status\]/,
     );
-    assert.match(olvas(ESZKOZ_LISTA), /worksheetStatusLabel\[sheet\.status\]/);
+    assert.match(
+      olvas(MUNKALAP_LISTA),
+      /worksheetStatusLabel\[sheet\.status\]/,
+    );
     /* ES A NYERS ERTEK SEHOL: egy bennmaradt alak a masik helyen allna. */
-    assert.doesNotMatch(olvas(ESZKOZ_LISTA), /\{sheet\.status\}/);
+    assert.doesNotMatch(olvas(MUNKALAP_LISTA), /\{sheet\.status\}/);
   });
 
   /**

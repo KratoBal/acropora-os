@@ -3,9 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { Badge, Card, EmptyState } from "@acropora/ui";
+import { Badge, Button, Card, EmptyState } from "@acropora/ui";
+import {
+  assetEventLabel,
+  assetStatusLabel,
+  type AssetQrCode,
+} from "@acropora/types";
 
 import { partnerApi } from "@/lib/api";
+import { assetStatusVariant } from "@/lib/asset-status";
 import { DocumentPanel } from "./document-panel";
 import { Message } from "./ticket-list";
 
@@ -58,6 +64,23 @@ import { Message } from "./ticket-list";
  * A dokumentum-feltöltés marad: a szerveren `SERVICE_MANAGE` alatt áll, a
  * partner viseli ezt a jogot, és a feladatlap kizárt-listáján NEM szerepel. A
  * partner a hibajegyéhez ma is csatol fájlt; ez ugyanaz a képesség, más lapon.
+ *
+ * === ÚJ 2026-09-24: A QR-KÁRTYA, MEGJELENÍTÉS ÉS LETÖLTÉS, CSERE NÉLKÜL ===
+ *
+ * A `GET :id/qr` végpont `SERVICE_VIEW`-t kér, nem `SERVICE_MANAGE`-et
+ * (`service-assets.controller.ts`) -- minden partner lekérheti, aki ma is
+ * látja az eszközt. A `POST :id/qr/rotate` (a csere) viszont a fent
+ * kifejtett, Balázs által kifejezetten kizárt négy művelet egyike, és AZ
+ * MARAD KIZÁRVA: ez a kártya csak a MÁR KIADOTT matricát mutatja és teszi
+ * letölthetővé, nem cserél.
+ *
+ * === ÚJ 2026-09-24: MAGYAR STÁTUSZ ÉS ESEMÉNY-CÍMKE, NEM NYERS ENUM ===
+ *
+ * A fejléc pirulája eddig `{asset.status}`-t írt ki nyersen (`ACTIVE`,
+ * `RETIRED`), az Előzmények pedig `{esemeny.type}`-ot (`UPDATED`,
+ * `CREATED`) -- Balázs négy képernyőképe pontosan ezt mutatta. A cimkék a
+ * `@acropora/types`-ból jönnek (`assetStatusLabel`, `assetEventLabel`),
+ * ugyanabból a szótárból, amit a belső adatlap is használ.
  */
 export function AssetDetail({ id }: { id: string }) {
   const [asset, setAsset] = useState<Awaited<
@@ -66,6 +89,7 @@ export function AssetDetail({ id }: { id: string }) {
   const [documents, setDocuments] = useState<
     Awaited<ReturnType<typeof partnerApi.assetDocuments>>["items"]
   >([]);
+  const [qr, setQr] = useState<AssetQrCode | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -77,6 +101,15 @@ export function AssetDetail({ id }: { id: string }) {
       ]);
       setAsset(detail);
       setDocuments(documentList.items);
+      /*
+        A QR KÜLÖN, SAJÁT HIBAÁGON: ha ez a hívás elhasal (pl. az eszköznek
+        még nincs matricája), az adatlap többi része akkor is megjelenjen --
+        egy hiányzó QR nem teszi az EGÉSZ adatlapot betölthetetlenné.
+      */
+      void partnerApi
+        .assetQr(id)
+        .then(setQr)
+        .catch(() => setQr(null));
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Az eszköz nem tölthető be.",
@@ -87,6 +120,17 @@ export function AssetDetail({ id }: { id: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const downloadQr = () => {
+    if (!qr) return;
+    const blob = new Blob([qr.svg], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${qr.assetNumber}.svg`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (error)
     return (
@@ -114,11 +158,18 @@ export function AssetDetail({ id }: { id: string }) {
             {asset.partnerInternalCode ? ` · ${asset.partnerInternalCode}` : ""}
           </p>
         </div>
-        <Badge>{asset.status}</Badge>
+        <Badge variant={assetStatusVariant[asset.status]}>
+          {assetStatusLabel[asset.status]}
+        </Badge>
       </header>
 
       <Card className="p-[22px]">
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/*
+          KÉT OSZLOP, NEM HÁROM (2026-09-24): a belső adatlap saját rácsa
+          `sm:grid-cols-2` (asset-detail-page.tsx), a harmadik oszlop itt
+          korábban nem volt indokolt, csak nagy képernyőn jelent meg.
+        */}
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
           <Sor cim="Helyszín">
             {asset.unit?.path.join(" / ") ?? "Nincs megadva"}
           </Sor>
@@ -164,6 +215,32 @@ export function AssetDetail({ id }: { id: string }) {
       </Card>
 
       {/*
+        A QR-KÁRTYA CSAK MEGJELENÍT ÉS LETÖLTHETŐVÉ TESZ, NEM CSERÉL -- lásd
+        a komponens fejlécében a "ÚJ 2026-09-24" szakaszt. Ha az eszköznek
+        nincs QR-kódja (a lekérdezés elhasalt vagy `null`-t adott), a kártya
+        nem jelenik meg -- egy üres QR-doboz rosszabb lenne a hiányánál.
+      */}
+      {qr ? (
+        <Card className="p-[22px]">
+          <h2 className="mt-0 mb-1 text-[15px] font-semibold text-ink">
+            QR-azonosító
+          </h2>
+          <p className="mt-1 mb-4 text-[13px] leading-[1.5] text-muted">
+            A matrica leolvasása az Acropora OS mobilalkalmazásban nyitja meg
+            ezt az eszközt.
+          </p>
+          <div
+            className="mx-auto aspect-square max-w-[220px] overflow-hidden rounded-xl border border-line bg-white p-3"
+            aria-label={`${asset.assetNumber} QR-kódja`}
+            dangerouslySetInnerHTML={{ __html: qr.svg }}
+          />
+          <div className="mt-4">
+            <Button onClick={downloadQr}>QR letöltése (SVG)</Button>
+          </div>
+        </Card>
+      ) : null}
+
+      {/*
         A DOKUMENTUMOK ES A FENYKEPEK UGYANAZON A PANELEN allnak, ugyanugy, mint
         a hibajegyen: a panel a kepeket csempekent rajzolja, a tobbit nevvel.
         A bajtokat a SAJAT hivasunk hozza (blob + object URL), mert a bongeszo
@@ -194,7 +271,7 @@ export function AssetDetail({ id }: { id: string }) {
                 className="flex flex-wrap items-baseline justify-between gap-2 border-b border-dusk-200 pb-2 last:border-0 last:pb-0"
               >
                 <strong className="text-[13px] font-semibold text-ink">
-                  {esemeny.type}
+                  {assetEventLabel[esemeny.type]}
                 </strong>
                 <span className="text-[12px] text-muted">
                   {new Date(esemeny.occurredAt).toLocaleString("hu-HU")}

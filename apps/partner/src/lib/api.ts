@@ -2,6 +2,7 @@ import type {
   AssetDetail,
   AssetDocumentSummary,
   AssetListResponse,
+  AssetQrCode,
   AuthenticatedUser,
   ServiceJobPartnerDetail,
   ServiceJobDocumentSummary,
@@ -179,8 +180,31 @@ export const partnerApi = {
    * `customerId`-je EGYIKNEK SINCS. A lista mind a 79-et megmutatta, az adatlap
    * mind a 79-re nemet mondott.
    */
-  assets: (input?: { departmentId?: string; search?: string }) => {
-    const query = new URLSearchParams({ status: "ALL", pageSize: "100" });
+  /**
+   * A LAPOZAS, A STATUSZ-SZURO ES A RENDEZES 2026-09-24-TOL VALODI PARAMETER,
+   * NEM BEEGETETT ERTEK. A vegpont ugyanaz, mint a belso feluleten
+   * (`apps/web/src/lib/api/assets.ts`), es a hatokort a szerver adja a
+   * hivo szerepe szerint -- ez a hivas csak azt a negy mezot kuldi tovabb,
+   * amit a belso lista is kuld.
+   *
+   * A KORABBI ALAPERTELMEZES (`status=ALL&pageSize=100`) MEGMARAD ALAPKENT,
+   * ha a hivo nem ad meg ertéket -- igy a MASIK hivohely (helyszin-valaszto
+   * betoltese elott mar nem volt ilyen) nem valtozik.
+   */
+  assets: (input?: {
+    departmentId?: string;
+    search?: string;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+    sort?: string;
+    direction?: string;
+  }) => {
+    const query = new URLSearchParams({
+      status: input?.status ?? "ALL",
+      pageSize: String(input?.pageSize ?? 100),
+      page: String(input?.page ?? 1),
+    });
     /*
       A KET SZURO A SZERVERNEK MEGY, NEM A BETOLTOTT LISTA FOLE. A lista
       lapozott (ma 100-as lap, elesen 79 eszkoz): egy bongeszo-oldali szures a
@@ -193,6 +217,8 @@ export const partnerApi = {
     */
     if (input?.departmentId) query.set("departmentId", input.departmentId);
     if (input?.search?.trim()) query.set("search", input.search.trim());
+    if (input?.sort) query.set("sort", input.sort);
+    if (input?.direction) query.set("direction", input.direction);
     return request<AssetListResponse>(`/service/assets?${query}`);
   },
   /**
@@ -216,6 +242,14 @@ export const partnerApi = {
    */
   asset: (id: string) =>
     request<AssetDetail>(`/service/assets/${encodeURIComponent(id)}`),
+  /**
+   * A QR-KOD LEKERDEZESE `SERVICE_VIEW`-T KER, NEM `SERVICE_MANAGE`-ET
+   * (`service-assets.controller.ts`, `:id/qr`) -- tehat minden partner
+   * felhasznalo lekerheti, aki mar most is latja az eszkozt. Ez a hivas nem
+   * ir semmit, csak megjeleniti es letoltheto teszi a mar kiadott matricat.
+   */
+  assetQr: (id: string) =>
+    request<AssetQrCode>(`/service/assets/${encodeURIComponent(id)}/qr`),
   assetDocuments: (id: string) =>
     request<{ items: AssetDocumentSummary[] }>(
       `/service/assets/${encodeURIComponent(id)}/documents`,

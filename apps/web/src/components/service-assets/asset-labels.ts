@@ -1,45 +1,18 @@
 import type { ServiceTone } from "@/components/service/service-theme";
-import type {
-  AssetCriticality,
-  AssetEventType,
-  AssetKind,
-  AssetStatus,
+import type { AssetStatus } from "@acropora/types";
+
+/**
+ * A NEGY CIMKE-SZOTAR ATKOLTOZOTT A `@acropora/types`-ba (2026-09-24), a
+ * `worksheetStatusLabel` mintajara -- lasd ott a teljes indoklast. Ez a
+ * fajl re-exportalja oket, hogy a meglevo `./asset-labels`-re hivatkozo
+ * webes importok valtozatlanul maradjanak.
+ */
+export {
+  assetKindLabel,
+  assetStatusLabel,
+  assetCriticalityLabel,
+  assetEventLabel,
 } from "@acropora/types";
-
-export const assetKindLabel: Record<AssetKind, string> = {
-  SYSTEM: "Rendszer",
-  EQUIPMENT: "Berendezés",
-  COMPONENT: "Részegység",
-  SENSOR: "Szenzor",
-  OTHER: "Egyéb",
-};
-
-export const assetStatusLabel: Record<AssetStatus, string> = {
-  ACTIVE: "Aktív",
-  WARM_STANDBY: "Meleg tartalék",
-  COLD_STANDBY: "Hideg tartalék",
-  IN_REPAIR: "Javítás alatt",
-  RETIRED: "Kivezetett",
-};
-
-export const assetCriticalityLabel: Record<AssetCriticality, string> = {
-  LOW: "Alacsony",
-  NORMAL: "Normál",
-  HIGH: "Magas",
-  CRITICAL: "Kritikus",
-};
-
-export const assetEventLabel: Record<AssetEventType, string> = {
-  CREATED: "Eszköz létrehozva",
-  UPDATED: "Adatok módosítva",
-  PLACEMENT_CHANGED: "Elhelyezés módosítva",
-  PARENT_CHANGED: "Hierarchia módosítva",
-  STATUS_CHANGED: "Státusz módosítva",
-  QR_ROTATED: "QR-kód lecserélve",
-  LABEL_ASSIGNED: "Matrica hozzárendelve",
-  DOCUMENT_UPLOADED: "Dokumentum feltöltve",
-  DOCUMENT_DELETED: "Dokumentum törölve",
-};
 
 /**
  * AZ ESZKOZALLAPOT SZINE Balazs 2026-09-15-i szerviz-designjaban.

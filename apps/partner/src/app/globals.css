@@ -11,30 +11,30 @@
   hasznalt osztalyok nem kerulnek bele a kimenetbe. A hiba ilyenkor NEM forditasi:
   a lap betoltodik, csak stilus nelkul -- vagyis nema.
 
-  AZ ALATTA ALLO 687 SOR SZANDEKOSAN MARAD, PARHUZAMOSAN. A portal tobbi lapja ma
+  AZ ALATTA ALLO SOROK SZANDEKOSAN MARADNAK, PARHUZAMOSAN. A portal tobbi lapja ma
   ezekbol az osztalyokbol epul; egy osztaly csak akkor mehet el, ha MAS lap nem
   hasznalja, es ezt merni kell, nem ranezni.
-*/
 
-:root {
-  color: #1e2030;
-  background: #f6f7fb;
-  font-family: Arial, Helvetica, sans-serif;
-}
-* {
-  box-sizing: border-box;
-}
-body {
-  margin: 0;
-  background: #f6f7fb;
-  color: #1e2030;
-}
-button,
-input,
+  A `@theme` BLOKK ES A SAJAT :root, *, body, betutipus-szabalyok INNEN ELKERULTEK
+  (2026-09-24) a `packages/ui/src/theme.css`-be -- lasd ott a teljes indoklast.
+  Idaig ez a fajl EGY MEGJEGYZESBEN igerte a "kozos vizualis alapot", de a
+  TENYLEGES tokeneket sosem hozta be: a @acropora/ui komponensei `brand-`,
+  `text-ink`, `bg-paper`, `border-line` osztalyokat hasznalnak, es ezek a
+  `@theme` blokk NELKUL semmit nem generaltak -- a lap betoltodott, csak
+  CSENDBEN stilus nelkul (Balazs negy kepernyokepe pontosan ezt mutatta).
+*/
+@import "../../../../packages/ui/src/theme.css";
+
+/*
+  A KOZOS TEMA CSAK `button, input`-ra allitja a `font: inherit`-et (ugyanugy,
+  mint a webes felulet) -- ez a ket sor a portal SAJAT, korabbi kiterjesztese
+  `textarea`/`select`-re, es itt marad, mert a webes oldalt nem erinti.
+*/
 textarea,
 select {
   font: inherit;
 }
+
 button,
 .primary-link {
   border: 0;
