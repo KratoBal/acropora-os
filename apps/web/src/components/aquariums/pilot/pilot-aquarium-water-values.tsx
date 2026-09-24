@@ -21,12 +21,14 @@ import {
 } from "./pilot-ui";
 
 /**
- * A FIGMA MAKE TERV "VÍZÉRTÉKEK" KÁRTYÁJA -- UGYANAZ AZ ADAT ÉS API-HÍVÁS,
- * MINT A MAI `AquariumWaterValues`-nál (`../aquarium-water-values.tsx`,
- * VÁLTOZATLAN marad). A második Make-kör (2026-09-24 15:55) két új elemet
- * hozott, amit itt vezetünk be: a felvitel DRAWER-ben történik (nem inline
- * rácsban), és a küldés egy MEGERŐSÍTŐ ablakon megy át (a mai felület
- * azonnal küld, gomb-lenyomásra) -- lásd a `PilotEmailDialog`-ot.
+ * A FIGMA MAKE TERV "VÍZÉRTÉKEK" KÁRTYÁJA.
+ *
+ * Balázs döntése (2026-09-24 18:14 UTC): a Figma lett a default, a régi
+ * (`AquariumWaterValues`, `../aquarium-water-values.tsx`) TÖRÖLVE -- ez a
+ * komponens az EGYETLEN, ami az akvárium adatlapon fut. A második Make-kör
+ * (2026-09-24 15:55) két elemet hozott, ami itt megjelenik: a felvitel
+ * DRAWER-ben történik (nem inline rácsban), és a küldés egy MEGERŐSÍTŐ
+ * ablakon megy át -- lásd a `PilotEmailDialog`-ot.
  */
 export function PilotAquariumWaterValues({
   token,
