@@ -39,6 +39,53 @@ export const assetStatusLabel: Record<AssetStatus, string> = {
   RETIRED: "Kivezetett",
 };
 
+/**
+ * AZ ESZKOZALLAPOT SZINE, ATKOLTOZOTT `apps/web`-bol (2026-09-24, a #1042
+ * masodik kore, a #1041 `partnerStatusTone`-jat kovetve). A torzs betűre
+ * valtozatlan, csak a hely es a tipus valtozott.
+ *
+ * A TIPUS SZO SZERINT KIIRVA, NEM `ServiceTone` IMPORTALVA: a `packages/types`
+ * nem fugghet a `packages/ui`-tol (forditott fuggosegi irany lenne) --
+ * ugyanaz a minta, amit a `service-job-management.ts` `partnerStatusTone`-ja
+ * is kovet, ugyanezzel az indoklassal a sajat fejleceben. Az ertek betűre
+ * ugyanaz, mint a `ServiceTone` unioja -- ha az valaha bovul, ezt a sort is
+ * at kell nezni.
+ *
+ * Balazs 2026-09-15-i szerviz-designjabol.
+ *
+ * EZ AZ EGYETLEN HELY: eddig ugyanez a szabaly KET fuggvenyben allt, beture
+ * azonos torzzsel (`asset-list-page.tsx` es `asset-detail-page.tsx`), es a
+ * ketto kozul barmelyiket at lehetett volna irni ugy, hogy a masik marad.
+ *
+ * EGY VALTOZAS A KORABBI ALAKHOZ KEPEST, ES SZANDEKOS: a "Nem uzemel" eddig
+ * amber volt (a `RETIRED`-en kivul minden nem-aktiv allapot az volt), a design
+ * szerint PIROS. Ez nem szinezes: a javitas alatt allo eszkoz VART allapot, a
+ * nem uzemelo pedig egy meg fel nem vett teendo, es a listan ma ugyanugy
+ * nezett ki a ketto.
+ *
+ * ES A KET TARTALEK EPP EZERT NEM PIROS (2026-09-16). A piros indoka a fenti
+ * bekezdesben all: a "nem uzemel" FEL NEM VETT TEENDO volt. A tartalek nem az
+ * -- SZANDEKOS allapot, es pontosan ezert kerte Balazs a szetvalasztast: a
+ * regi ertek egy kalapba tette azt, ami elromlott es senki nem foglalkozik
+ * vele, meg azt, amit keszakarva tartunk tartalekban. Ha a ket uj ertek is
+ * piros lenne, a szetvalasztas a LISTAN nem latszana.
+ *
+ * A KETTO UGYANAZT A SZINT KAPJA, es ez sem feledekenyseg: a kulonbseget a
+ * FELIRAT hordozza ("Meleg" / "Hideg"), es a paletta nem hordoz olyan
+ * megkulonboztetest, amit valaki eldontott volna. Egy kitalalt szin-kulonbseg
+ * egy nem letezo design-dontesre hivatkozna.
+ */
+export const assetStatusTone: Record<
+  AssetStatus,
+  "neutral" | "purple" | "green" | "amber" | "red" | "blue"
+> = {
+  ACTIVE: "green",
+  IN_REPAIR: "amber",
+  WARM_STANDBY: "blue",
+  COLD_STANDBY: "blue",
+  RETIRED: "neutral",
+};
+
 export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
 
 export const assetCriticalityLabel: Record<AssetCriticality, string> = {

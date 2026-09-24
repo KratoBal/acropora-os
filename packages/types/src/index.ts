@@ -198,6 +198,7 @@ export type {
 export {
   assetKindLabel,
   assetStatusLabel,
+  assetStatusTone,
   assetCriticalityLabel,
   assetEventLabel,
 } from "./asset-management.js";
