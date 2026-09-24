@@ -319,9 +319,14 @@ export class SetServiceJobPlacementDto {
  * elmozdulna, amirol senki nem kert semmit.
  */
 export class ServiceJobListQueryDto {
-  @IsIn(["REPAIR", "MAINTENANCE"])
+  /**
+   * Az `ALL` nem egy harmadik munkafajta, hanem a két valódi fajta együtt.
+   * A webes hibajegylista alapértelmezése továbbra is `REPAIR`; ezt csak azok
+   * a kliensek kérik, amelyeknek a teljes helyszíni munkahalmaz kell.
+   */
+  @IsIn(["REPAIR", "MAINTENANCE", "ALL"])
   @IsOptional()
-  kind?: "REPAIR" | "MAINTENANCE";
+  kind?: "REPAIR" | "MAINTENANCE" | "ALL";
 
   @IsIn(SERVICE_JOB_LIST_SCOPES)
   @IsOptional()

@@ -1072,6 +1072,7 @@ export class ServiceJobsService {
         id: row.id,
         jobNumber: row.jobNumber,
         title: row.title,
+        kind: row.kind,
         status: row.status,
         partnerStatus: partnerVisibleStatus(row.status),
         partnerStatusLabel: partnerStatusLabel(row.status),
@@ -1141,6 +1142,7 @@ export class ServiceJobsService {
       id: row.id,
       jobNumber: row.jobNumber,
       title: row.title,
+      kind: row.kind,
       description: row.description,
       /**
        * A RESZLETLAP REJTETT JEGYNEL IS ELERHETO, tehat itt mind a ket ertek

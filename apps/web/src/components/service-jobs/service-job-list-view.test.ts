@@ -36,6 +36,7 @@ function item(
     id,
     jobNumber: `HJ-2026-${id}`,
     title: `Jegy ${id}`,
+    kind: "REPAIR",
     status,
     partnerStatus: "IN_PROGRESS",
     partnerStatusLabel: "Feldolgozás alatt",

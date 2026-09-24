@@ -58,6 +58,7 @@ export interface ServiceJobRow {
   id: string;
   jobNumber: string;
   title: string;
+  kind: "REPAIR" | "MAINTENANCE";
   status: ServiceJobStatus;
   customerName: string | null;
   /** A helyszin TELJES utja, a gyokertol lefele. `null`, ha nincs vagy nem epithető. */
@@ -883,7 +884,7 @@ export class ServiceJobsRepository {
     scope: ServiceJobListScope,
     visibility: Prisma.ServiceJobWhereInput,
     search: string | undefined,
-    kind: "REPAIR" | "MAINTENANCE",
+    kind: "REPAIR" | "MAINTENANCE" | "ALL",
     /**
      * A NEZO AZONOSITOJA, ES KOTELEZO ARGUMENTUM, NEM ELHAGYHATO.
      *
@@ -907,7 +908,10 @@ export class ServiceJobsRepository {
     const where: Prisma.ServiceJobWhereInput = {
       AND: [
         visibility,
-        { kind },
+        // Az `ALL` nem Prisma-érték: ilyenkor nincs fajta-szűkítés. Az üres
+        // ág szándékosan az `AND` tömbben marad, hogy a jogosultsági és scope
+        // feltételek szerkezete mindkét kérésnél azonos legyen.
+        kind === "ALL" ? {} : { kind },
         serviceJobScopeWhere(scope, viewerUserId),
         searchWhere(search),
       ],
@@ -929,6 +933,7 @@ export class ServiceJobsRepository {
         id: true,
         jobNumber: true,
         title: true,
+        kind: true,
         status: true,
         createdAt: true,
         hiddenAt: true,
@@ -959,6 +964,7 @@ export class ServiceJobsRepository {
         id: row.id,
         jobNumber: row.jobNumber,
         title: row.title,
+        kind: row.kind,
         status: row.status,
         customerName: row.customer?.displayName ?? null,
         departmentPath: row.departmentId
@@ -986,7 +992,7 @@ export class ServiceJobsRepository {
   async countsByStatus(
     visibility: Prisma.ServiceJobWhereInput,
     search?: string,
-    kind: "REPAIR" | "MAINTENANCE" = "REPAIR",
+    kind: "REPAIR" | "MAINTENANCE" | "ALL" = "REPAIR",
   ): Promise<Record<ServiceJobStatus, number>> {
     /**
      * A KERESES BESZAMIT, A SCOPE NEM -- ES A KETTO KULONBSEGE SZANDEKOS.
@@ -999,7 +1005,9 @@ export class ServiceJobsRepository {
      */
     const rows = await this.database.serviceJob.groupBy({
       by: ["status"],
-      where: { AND: [visibility, { kind }, searchWhere(search)] },
+      where: {
+        AND: [visibility, kind === "ALL" ? {} : { kind }, searchWhere(search)],
+      },
       _count: { _all: true },
     });
 
@@ -1141,6 +1149,7 @@ export class ServiceJobsRepository {
         id: true,
         jobNumber: true,
         title: true,
+        kind: true,
         description: true,
         status: true,
         createdAt: true,

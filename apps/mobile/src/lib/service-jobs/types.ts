@@ -31,6 +31,7 @@ export interface ServiceJobListItem {
   id: string;
   jobNumber: string;
   title: string;
+  kind: "REPAIR" | "MAINTENANCE";
   status: ServiceJobStatusValue;
   partnerStatusLabel: string;
   customerName: string | null;

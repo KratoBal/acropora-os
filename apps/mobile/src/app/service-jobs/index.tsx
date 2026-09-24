@@ -80,10 +80,10 @@ export default function ServiceJobListScreen() {
   const query = useQuery({
     // A HATOKOR RESZE A KULCSNAK. Enelkul a valaszto atkapcsolasa a REGI
     // halmazt mutatna a masik felirat alatt, amig az uj lekerdezes befut.
-    queryKey: ["service-jobs", scope],
+    queryKey: ["service-jobs", scope, "ALL"],
     // A hívás akkor is elindul, ha a készülék offline-nak mondja magát: a
     // jelzése tévedhet, és egy működő lekérdezést nem tarthat vissza.
-    queryFn: () => listServiceJobs(scope),
+    queryFn: () => listServiceJobs(scope, "ALL"),
     enabled:
       status === "authenticated" && Boolean(capabilities?.serviceJobsView),
     placeholderData: keepPreviousData,
@@ -343,6 +343,9 @@ export default function ServiceJobListScreen() {
               </Text>
             </View>
             <Text style={styles.title}>{item.title}</Text>
+            {item.kind === "MAINTENANCE" ? (
+              <Text style={styles.maintenance}>Karbantartás</Text>
+            ) : null}
             {item.customerName ? (
               <Text style={styles.meta}>{item.customerName}</Text>
             ) : null}
@@ -415,5 +418,16 @@ const styles = StyleSheet.create({
   number: { color: "#eaf4fa", fontWeight: "600" },
   status: { color: "#9fc4d8", fontSize: 13 },
   title: { color: "#eaf4fa", fontSize: 16 },
+  maintenance: {
+    alignSelf: "flex-start",
+    backgroundColor: "#17465b",
+    borderRadius: 999,
+    color: "#bce5ef",
+    fontSize: 12,
+    fontWeight: "600",
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   meta: { color: "#9fc4d8", fontSize: 13 },
 });
