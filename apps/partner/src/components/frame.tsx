@@ -75,28 +75,29 @@ export const CIMKE =
 export const VISSZA_LINK =
   "mb-4 inline-block font-bold text-[#4c397f] no-underline";
 
-/**
- * AZ ÁLLAPOT-CÍMKE.
- *
- * A portál mind a három hívóhelyen `status neutral` alakot ír, és a
- * `.status.neutral` az EGYETLEN létező árnyalat a stíluslapban. Ezért ez egy
- * konstans, nem egy árnyalat-választó: egy nem létező változatot kínáló API
- * azt ígérné, hogy van mit választani.
- */
-export const ALLAPOT_CIMKE =
-  "inline-block rounded-full bg-[#eeeaf8] px-[0.58rem] py-[0.32rem] text-[0.76rem] font-bold text-[#58457e]";
+/*
+  AZ ALLAPOT-CIMKE KONSTANSA (`ALLAPOT_CIMKE`) INNEN ELKERULT (2026-09-24,
+  murena merese). A fenti JSDoc "harom hivohelyet" igert `status neutral`
+  alakban, de a konstanst maga SEHOL nem importalta senki -- a `status`
+  lapjai idokozben a megosztott `ServiceStatusBadge`-re alltak at
+  (`@acropora/ui`, sajat `serviceToneClass` terkeppel), es a `.status`/
+  `.status-*`/`.status.neutral` CSS-szabalyok is elkerultek a
+  `globals.css`-bol, ugyanezen a meresen. A konstans holt kod volt: a
+  felvaltott CSS-szabalyt semmi nem hasznalta.
+*/
 
 /*
-  A `.muted` NEM KAP KONSTANST, ES EZ IS MERESBOL KOVETKEZIK.
+  A `.muted` NEM KAPOTT KONSTANST, ES EZ MERESBOL KOVETKEZETT.
 
-  Tizennegy hivohelye van, es MIND azonos alaku: `<p className="muted">`. Ez
-  tiszta szoveg-tulajdonsag (szin es sormagassag), nem keret-elem.
+  Tizennegy hivohelye volt, es MIND azonos alaku: `<p className="muted">`. Ez
+  tiszta szoveg-tulajdonsag (szin es sormagassag), nem keret-elem -- a ket
+  tulajdonsag helyben all minden hivohelyen.
 
   ES EGY MEROHELY-HIBA, AMIT ERDEMES TUDNI: a `\bmuted\b` mintam eloszor
   HUSZAT adott, mert a `text-muted` Tailwind-tokenre is illeszkedett -- azt az
   elozo kor vitte be ugyanebbe a csomagba. A valodi szam tizennegy.
 
-  A CSS-SZABALY MARAD, mert `.muted, .notice` alakban all, es a `.notice`-nak
-  harom elo hivohelye van. Ez nem mulasztas: egy szabaly, aminek meg van elo
-  fogyasztoja, nem mehet el.
+  A `.notice` OSZTALY, AMI A `.muted` SZABALYAT EGYUTT VITTE, IS ELKERULT
+  (2026-09-24, murena merese): a sajat megjegyzese harom elo hivohelyet
+  igert, de egyetlen `className="notice"` sem all a forrasban tobbe.
 */

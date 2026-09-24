@@ -7,6 +7,7 @@ import {
   ServiceListHeader,
   ServiceListTabs,
   ServiceStatusBadge,
+  serviceToneClass,
   sv,
   type ServiceListTab,
 } from "@acropora/ui";
@@ -177,6 +178,21 @@ export function TicketList() {
   );
 }
 
+/**
+ * AZ "info" TONUS EDDIG SZIN NELKUL JELENT MEG (murena merese, 2026-09-24).
+ * A `.message.error` CSS-szabaly meg all a `globals.css`-ben, de `.message.info`
+ * SOHA nem letezett -- a `tone="info"` hivohelye (`settings.tsx`, sikeres
+ * jelszo-/alairokod-valtas utan) csak az alap `.message` keretet kapta,
+ * szoveges kiemeles nelkul. Itt NEM uj CSS-szabalyt kap, hanem a mar meglevo,
+ * megosztott `serviceToneClass.blue` Tailwind-tokent (`@acropora/ui`,
+ * ugyanaz, amit a `Badge` "info" valtozata is hasznal) -- igy a szin egy
+ * helyen valtoztathato a jovoben, nem egy ujabb, ide masolt hexaparral.
+ */
+const MESSAGE_TONE_CLASS: Record<"error" | "info", string> = {
+  error: "error",
+  info: serviceToneClass.blue,
+};
+
 export function Message({
   tone,
   text,
@@ -188,7 +204,7 @@ export function Message({
 }) {
   return (
     <div
-      className={`message ${tone}`}
+      className={`message ${MESSAGE_TONE_CLASS[tone]}`}
       role={tone === "error" ? "alert" : undefined}
     >
       <span>{text}</span>

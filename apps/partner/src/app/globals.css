@@ -112,102 +112,11 @@ button:disabled {
 }
 /* Az `.eyebrow` innen ELKERULT (2026-09-21): a keret atallt a megosztott
    vizualis alapra, es a kilenc hivohelye a `frame.ts` CIMKE konstansat
-   hasznalja. A `.ticket-number` MARAD, mert ket elo hivohelye van -- egy
-   szabaly, aminek meg van fogyasztoja, nem mehet el. */
-.ticket-number {
-  color: #67539c !important;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.11em;
-  margin: 0;
-  text-transform: uppercase;
-}
+   hasznalja. A `.ticket-number` IS ELKERULT (2026-09-24, murena merese): a
+   sajat megjegyzese ket elo hivohelyet igert, de egyetlen `.tsx` fajlban sem
+   fordul elo tobbe -- a hivohelyek idokozben a megosztott UI-ra alltak at. */
 .primary-link {
   white-space: nowrap;
-}
-.tabs {
-  border-bottom: 1px solid #dedee7;
-  display: flex;
-  gap: 0.35rem;
-  margin-bottom: 1.25rem;
-}
-.tabs button {
-  background: transparent;
-  border-radius: 0;
-  color: #555568;
-  padding: 0.7rem 0.9rem;
-}
-.tabs button.selected {
-  border-bottom: 3px solid #4c397f;
-  color: #251d3c;
-}
-.card-list {
-  display: grid;
-  gap: 0.75rem;
-}
-.ticket-card,
-.reference-card {
-  align-items: flex-start;
-  background: white;
-  border: 1px solid #e2e2ea;
-  border-radius: 0.85rem;
-  color: inherit;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-  padding: 1.2rem 1.25rem;
-  text-decoration: none;
-}
-.ticket-card:hover {
-  border-color: #9e8bc8;
-  box-shadow: 0 4px 18px #20163b12;
-}
-.ticket-card h2,
-.reference-card h2 {
-  font-size: 1.08rem;
-  margin: 0.3rem 0;
-}
-.ticket-card p:not(.ticket-number),
-.reference-card p {
-  color: #626273;
-  font-size: 0.9rem;
-  margin: 0;
-}
-.ticket-meta,
-.reference-card > div:last-child {
-  align-items: flex-end;
-  display: flex;
-  flex-direction: column;
-  font-size: 0.82rem;
-  gap: 0.55rem;
-  text-align: right;
-}
-.status {
-  border-radius: 999px;
-  display: inline-block;
-  font-size: 0.76rem;
-  font-weight: 700;
-  padding: 0.32rem 0.58rem;
-}
-.status-new {
-  background: #e9e4fa;
-  color: #4c397f;
-}
-.status-in_progress {
-  background: #fff0cf;
-  color: #825b09;
-}
-.status-completed {
-  background: #dbf2e4;
-  color: #17643b;
-}
-.status-closed {
-  background: #ececf0;
-  color: #5a5a68;
-}
-.status.neutral {
-  background: #eeeaf8;
-  color: #58457e;
 }
 .detail-grid {
   display: grid;
@@ -215,38 +124,6 @@ button:disabled {
   grid-template-columns: minmax(0, 1.6fr) minmax(16rem, 1fr);
   margin-bottom: 1rem;
 }
-.detail-header {
-  align-items: center;
-}
-.preline {
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-.plain-list,
-.tree-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.plain-list li {
-  border-top: 1px solid #eeeef2;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.75rem 0;
-}
-.plain-list span,
-.tree-list span {
-  color: #666677;
-  font-size: 0.85rem;
-}
-.timeline {
-  border-left: 2px solid #dfd8f3;
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 1rem;
-}
-
 .document-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
@@ -273,15 +150,6 @@ button:disabled {
   display: grid;
   gap: 0.3rem;
   font-weight: 600;
-}
-.timeline li {
-  display: grid;
-  gap: 0.25rem;
-  padding: 0.65rem 0 1rem;
-}
-.timeline time {
-  color: #686879;
-  font-size: 0.78rem;
 }
 .form {
   display: grid;
@@ -341,14 +209,6 @@ button:disabled {
   background: #eeeef4;
   color: #3e3e4d;
 }
-.tree-list li {
-  border-bottom: 1px solid #ededf2;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding-bottom: 0.8rem;
-  padding-top: 0.8rem;
-}
 .message {
   align-items: center;
   border-radius: 0.65rem;
@@ -380,19 +240,15 @@ button:disabled {
   font-size: 1.1rem;
   margin: 0 0 0.4rem;
 }
-.empty p,
 /* A `.muted` innen ELKERULT (2026-09-21): tizennegy hivohelye volt, mind
    azonos alaku (`<p className="muted">`), es mind a ket tulajdonsaga (szin,
-   sormagassag) helyben all most. A `.notice` MARAD, harom elo hivohellyel. */
-.notice {
+   sormagassag) helyben all most. A `.notice` IS ELKERULT (2026-09-24,
+   murena merese): a sajat megjegyzese harom elo hivohelyet igert, de a
+   teljes `apps/partner` forrason egyetlen `className="notice"` sem fordul
+   elo tobbe. */
+.empty p {
   color: #666677;
   line-height: 1.5;
-}
-.notice {
-  background: #fff7e7;
-  border-radius: 0.55rem;
-  margin-top: 1rem;
-  padding: 0.75rem;
 }
 .centered,
 .access-denied,
@@ -446,36 +302,8 @@ button:disabled {
   font-size: 0.9rem;
   margin: 0;
 }
-.download-package {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.8rem;
-  margin: -0.8rem 0 1.5rem;
-}
-.download-package button {
-  background: #28429c;
-  border: 0;
-  border-radius: 0.5rem;
-  color: #fff;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 700;
-  padding: 0.7rem 0.9rem;
-}
-.download-package button:disabled {
-  cursor: wait;
-  opacity: 0.65;
-}
-.error-message {
-  color: #a22222;
-  font-size: 0.9rem;
-  margin: 0;
-}
 @media (max-width: 680px) {
-  .topbar,
-  .ticket-card,
-  .reference-card {
+  .topbar {
     align-items: stretch;
     flex-direction: column;
   }
@@ -484,11 +312,6 @@ button:disabled {
   }
   .primary-link {
     text-align: center;
-  }
-  .ticket-meta,
-  .reference-card > div:last-child {
-    align-items: flex-start;
-    text-align: left;
   }
   .detail-grid {
     grid-template-columns: 1fr;
@@ -501,42 +324,15 @@ button:disabled {
   }
 }
 
-/* AZ ESZKOZ-LISTA SZUROI. Egy sorban allnak, es telefonon egymas ala esnek:
-   a portalt a partner gyakran telefonrol nyitja meg. */
-.filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-.filter-bar label {
-  display: grid;
-  gap: 0.3rem;
-  min-width: 12rem;
-}
-.filter-bar span {
-  color: #626273;
-  font-size: 0.82rem;
-}
-.filter-bar input,
-.filter-bar select {
-  border: 1px solid #d8d8e2;
-  border-radius: 0.6rem;
-  font: inherit;
-  padding: 0.55rem 0.7rem;
-}
-
 /* AZ `asset-facts` ES AZ `event-list` OSZTALY INNEN ELKERULT (2026-09-21).
-   Az eszkoz-adatlap atallt a kozos UI-ra, es MERVE egyik osztalyt sem hasznalja
-   mas lap -- a masik het osztaly, amit ugyanaz a lap elhagyott (`panel`,
-   `page-header`, `eyebrow`, `muted`, `back-link`, `status`), MARAD, mert hat,
-   het, illetve ket masik lap epul rajuk. */
-
-@media (max-width: 640px) {
-  .filter-bar label {
-    min-width: 100%;
-  }
-}
+   Az eszkoz-adatlap atallt a kozos UI-ra. A masik het osztaly, amit ugyanaz
+   a lap elhagyott (`panel`, `page-header`, `eyebrow`, `muted`, `back-link`,
+   `status`), AKKOR meg maradt, mert tobb masik lap epult rajuk -- ez a
+   megjegyzes 2026-09-24-ig (murena merese) igaz volt, de idokozben mind a
+   hat elfogyott: a `frame.tsx` Tailwind-konstansai valtottak fel oket, es a
+   `status`-t hasznalo lapok a megosztott `ServiceStatusBadge`-re alltak at
+   (`@acropora/ui`, sajat `serviceToneClass` terkeppel). Egyik osztalynak
+   sincs tobbe elo hivohelye. */
 
 /*
   A CSEMPE GOMB, NEM KÉP: a nagyítás billentyűzetről is elérhető. A gomb saját
@@ -582,41 +378,4 @@ button:disabled {
   cursor: pointer;
   font-weight: 700;
   padding: 0.55rem 1.4rem;
-}
-
-/*
-  A TÁBLÁZAT SAJÁT GÖRGETŐT KAP, NEM A LAP. Telefonon a tételsor öt oszlopa
-  nem fér ki, és egy vízszintesen csúszó LAP minden más szakaszt is elmozdít.
-*/
-.table-scroll {
-  margin-top: 1.1rem;
-  overflow-x: auto;
-}
-.data-table {
-  border-collapse: collapse;
-  min-width: 34rem;
-  width: 100%;
-}
-.data-table th {
-  border-bottom: 1px solid #e4e4ec;
-  color: #696979;
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 0 0.7rem 0.55rem 0;
-  text-align: left;
-  white-space: nowrap;
-}
-.data-table td {
-  border-bottom: 1px solid #f1f1f5;
-  padding: 0.7rem 0.7rem 0.7rem 0;
-  vertical-align: top;
-}
-.data-table td span {
-  color: #666677;
-  display: block;
-  font-size: 0.85rem;
-}
-.data-table .numeric {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
 }
