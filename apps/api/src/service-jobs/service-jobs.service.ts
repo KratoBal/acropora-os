@@ -167,7 +167,13 @@ export class ServiceJobsService {
         "A megadott eszköz nem található, ezért nem tudom, hova tartozik a jegy.",
       );
     }
-    let customerId = input.customerId?.trim() || eredet?.customerId || null;
+    /*
+      MEGKÜLÖNBÖZTETVE TÁROLVA, MERT A LENTI KAPUNAK KELL: ez a MEGADOTT
+      (nem az eszközből levezetett) partner, mielőtt a `|| eredet?.customerId`
+      elfedné, honnan jött a végleges érték.
+    */
+    const explicitCustomerId = input.customerId?.trim() || null;
+    let customerId = explicitCustomerId || eredet?.customerId || null;
     if (partnerScope.kind === "customer") {
       if (customerId !== null && customerId !== partnerScope.customerId)
         throw new BadRequestException(
@@ -198,10 +204,25 @@ export class ServiceJobsService {
      *   csak partner              nincs mit osszevetni             -- marad
      *   mind a ketto, ES ELTER    ELUTASITAS
      *
+     * === MIERT A HELYSZINHEZ VISZONYITUNK, NEM AZ ESZKOZ SAJAT customerId-JEHEZ ===
+     *
+     * Audit-lelet (2026-09-24, kanban f5e6f34d, ugyanaz a csapda, mint a
+     * szerzodes-tetel eszkozvalasztojanal, #1077): az `eredet.customerId` az
+     * ESZKOZ SAJAT, denormalizalt mezoje. Ha ugyanahhoz a valos partnerhez
+     * (pl. duplikalt Allatkert-rekord) KET `Customer` sor tartozik, ez a mezo
+     * es az eszkoz VALODI helyszine (`eredet.departmentId`) szetcsuszhat --
+     * es a regi `!==` osszevetes mindig a rossz oldalra dolt: elutasitotta
+     * azt is, amit a helyszin szerint helyesen kellett volna engednie.
+     *
+     * A megoldas ugyanaz az irany, mint a #1077-ben: a HELYSZIN alapjan
+     * dontunk (`departmentBelongsToCustomer`), nem az eszkoz sajat mezoje
+     * alapjan. Ha az eszkoznek (kivetelesen) nincs helyszine, a regi
+     * customerId-osszevetes marad a tartalek -- lasd lent.
+     *
      * === A NEGYEDIK ESET, AMI NEM ELLENTMONDAS: A GAZDATLAN ESZKOZ ===
      *
-     * Ha az eszkoznek NINCS tulajdonosa (`eredet.customerId === null`), akkor
-     * nincs ket ertek, amit ossze lehetne vetni -- egy HIANYT tolt ki a
+     * Ha az eszkoznek NINCS tulajdonosa (`eredet.customerId === null`) ES
+     * nincs helyszine sem, nincs mivel osszevetni -- egy HIANYT tolt ki a
      * megadott partner, es pontosan erre valo a potlas. Ezt a sort tehat
      * atengedjuk, es ez a legkozelebbi teveszes: egy `!=` osszevetes null
      * mellett elutasitana, es epp a POTLAST venne el.
@@ -213,32 +234,32 @@ export class ServiceJobsService {
      * es javithato; ha az eszkozt csendben hagynank el, a jegy letrejonne, es
      * senki nem tudna meg, hogy hianyzik rola a gep.
      *
-     * === A HELYE: A VEGLEGES ERTEKEN MER, DE MA NEM TEHERHORDO ===
+     * === A HELYE: A MEGADOTT ERTEKEN MER, NEM A LEVEZETETTEN ===
      *
-     * Ez a kapu a `partnerScope` KENYSZERITESE UTAN all, tehat a VEGLEGES
-     * `customerId`-t veti ossze. Elsore azt irtam ide, hogy enelkul egy
-     * partner-fiok idegen gepet vihetne fel -- A KALIBRACIO EZT MEGCAFOLTA:
-     * a kaput a kenyszerites FOLE mozgatva NULLA allitas pirosodott.
-     *
-     * AZ OK: a fenti ag mar elutasit minden olyan kerest, ahol a megadott
-     * `customerId` eltér a kero sajat cegetol. Mire ide erunk, a ket ertek
-     * (a kenyszerites elotti es utani) MINDIG egyezik -- tehat a ket elhelyezes
-     * ma EGYENERTEKU.
-     *
-     * AKKOR MIERT ITT: mert a VEGLEGES erteken mer. Ha a kenyszerites logikaja
-     * valaha valtozik (peldaul megengedobb lesz), egy feljebb allo kapu
-     * CSENDBEN a regi erteket vetne ossze. Ez elovigyazatossag, nem mert
-     * vedelem, es igy is kell olvasni.
+     * Ez a kapu csak akkor fut, ha a hivo (vagy a partner-hatokor
+     * kenyszeritese) TENYLEGESEN allitott valamit -- `explicitCustomerId`,
+     * ill. partner-fioknal a sajat `partnerScope.customerId`. Ha a partner
+     * kizarolag az ESZKOZBOL szarmazik (a "csak eszkoz" eset), nincs kivel
+     * osszevetni: az eszkoz sajat (esetleg mar amugy is elavult) mezojet a
+     * SAJAT helyszinehez hasonlitani korkoros vizsgalat lenne, nem
+     * ellentmondas-kereses.
      */
-    if (
-      eredet &&
-      eredet.customerId !== null &&
-      customerId !== null &&
-      eredet.customerId !== customerId
-    ) {
-      throw new BadRequestException(
-        "A megadott eszköz másik partnerhez tartozik, mint a hibajegy partnere. Vagy a partnert javítsd, vagy az eszközt.",
-      );
+    const assertedCustomerId =
+      partnerScope.kind === "customer"
+        ? partnerScope.customerId
+        : explicitCustomerId;
+    if (eredet && assertedCustomerId) {
+      const contradiction = eredet.departmentId
+        ? !(await this.repository.departmentBelongsToCustomer(
+            eredet.departmentId,
+            assertedCustomerId,
+          ))
+        : eredet.customerId !== null &&
+          eredet.customerId !== assertedCustomerId;
+      if (contradiction)
+        throw new BadRequestException(
+          "A megadott eszköz másik partnerhez tartozik, mint a hibajegy partnere. Vagy a partnert javítsd, vagy az eszközt.",
+        );
     }
     const departmentId =
       input.departmentId?.trim() || eredet?.departmentId || null;
