@@ -43,6 +43,10 @@ import {
   randomAssetLabelCode,
 } from "@acropora/types";
 import { teljesitmenyEredmenye } from "./asset-performance.js";
+import {
+  nextFreePartnerInternalCodeSerial,
+  partnerInternalCodePrefix,
+} from "./partner-internal-code.js";
 
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
@@ -1075,6 +1079,19 @@ export class ServiceAssetsRepository extends Repository {
   async create(
     input: CreateAssetDto,
     actorUserId: string,
+    /**
+     * A `generatePartnerInternalCode` KAPUJA A HÍVÓ OLDALÁN DŐL EL
+     * (`service-assets.service.ts`, `shouldGeneratePartnerInternalCode`),
+     * A GENERÁLÁS MAGA VISZONT ITT TÖRTÉNIK, A TRANZAKCIÓN BELÜL.
+     *
+     * Ez szándékos eltérés a kérés szó szerinti helyétől ("service.ts
+     * create(), a repository.create() előtt"): a versenyhelyzet elleni zár
+     * (`pg_advisory_xact_lock`) csak akkor véd, ha UGYANABBAN a tranzakcióban
+     * áll, mint a beszúrás -- egy service-oldali előzetes generálás és egy
+     * külön repository-tranzakció között két párhuzamos felvitel ugyanazt a
+     * szabad sorszámot olvashatná ki.
+     */
+    options: { generatePartnerInternalCode?: boolean } = {},
   ): Promise<AssetDetail> {
     /**
      * AZ ESZKOZSZAM UTKOZESE UJRAPROBALKOZAST KAP. Ket eszkoz akkor kap azonos
@@ -1172,6 +1189,79 @@ export class ServiceAssetsRepository extends Repository {
         (assetNumber) =>
           prisma.$transaction(
             async (tx) => {
+              /**
+               * A PARTNER BELSŐ KÓDJÁNAK AUTOMATIKUS KÉPZÉSE, ÚJ ESZKÖZNÉL.
+               *
+               * A KAPU (`shouldGeneratePartnerInternalCode`) a hívó oldalán
+               * (`service-assets.service.ts`) dőlt el: szerviz partner
+               * tulajdonos, üres mező, van kategória. Amit a kapu NEM tud
+               * eldönteni, mert adatbázis kell hozzá -- van-e a kategóriának
+               * kódja, van-e a szülőnek/helyszínnek kódja --, azt ITT, a
+               * beszúrással EGY tranzakcióban nézzük meg.
+               *
+               * A ZÁR (`pg_advisory_xact_lock`) A PARTNERRE SZŰKÍTETT, NEM
+               * GLOBÁLIS: két különböző partner egyidejű felvitele nem várja
+               * meg egymást, csak ugyanaz a partner szerializálódik --
+               * ugyanaz a minta, mint a fenti eszköz-hierarchia zárja, csak
+               * a kulcs a `ownerId`-vel egyedi. Enélkül két párhuzamos
+               * felvitel ugyanarra az előtagra ugyanazt a "legkisebb szabad"
+               * sorszámot olvashatná ki, és mindkettő ugyanazt a kódot írná.
+               */
+              let generatedPartnerInternalCode: string | null = null;
+              if (options.generatePartnerInternalCode && input.categoryId) {
+                await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('acropora:partner-internal-code:' || ${input.ownerId}))`;
+                const category = await tx.assetCategory.findUnique({
+                  where: { id: input.categoryId },
+                  select: { code: true },
+                });
+                if (category?.code) {
+                  let prefix: string | null;
+                  if (input.parentAssetId) {
+                    const parent = await tx.asset.findUnique({
+                      where: { id: input.parentAssetId },
+                      select: { partnerInternalCode: true },
+                    });
+                    prefix = partnerInternalCodePrefix({
+                      isBuiltIn: true,
+                      parentPartnerInternalCode:
+                        parent?.partnerInternalCode ?? null,
+                      locationCode: null,
+                      categoryCode: category.code,
+                    });
+                  } else {
+                    const department = input.departmentId
+                      ? await tx.worksheetDepartment.findUnique({
+                          where: { id: input.departmentId },
+                          select: { code: true },
+                        })
+                      : null;
+                    prefix = partnerInternalCodePrefix({
+                      isBuiltIn: false,
+                      parentPartnerInternalCode: null,
+                      locationCode: department?.code ?? null,
+                      categoryCode: category.code,
+                    });
+                  }
+                  if (prefix) {
+                    const existing = await tx.asset.findMany({
+                      where: {
+                        supplierId: input.ownerId,
+                        partnerInternalCode: { startsWith: `${prefix}-` },
+                      },
+                      select: { partnerInternalCode: true },
+                    });
+                    generatedPartnerInternalCode =
+                      nextFreePartnerInternalCodeSerial(
+                        prefix,
+                        existing.flatMap((existingRow) =>
+                          existingRow.partnerInternalCode
+                            ? [existingRow.partnerInternalCode]
+                            : [],
+                        ),
+                      );
+                  }
+                }
+              }
               const row = await tx.asset.create({
                 data: {
                   assetNumber,
@@ -1218,7 +1308,16 @@ export class ServiceAssetsRepository extends Repository {
                   manufacturer: optionalText(input.manufacturer),
                   model: optionalText(input.model),
                   serialNumber: optionalText(input.serialNumber),
-                  partnerInternalCode: optionalText(input.partnerInternalCode),
+                  /**
+                   * A GENERÁLT KÓD CSAK AKKOR ÍRÓDIK, HA A MEZŐ ÜRES VOLT --
+                   * a kézzel beírt érték soha nem íródik felül, mert a
+                   * `shouldGeneratePartnerInternalCode` kapuja ezt már a
+                   * bemenetnél kizárta (`generatedPartnerInternalCode` ilyenkor
+                   * `null` marad, a jobb oldal pedig a beírt értéket adja).
+                   */
+                  partnerInternalCode:
+                    generatedPartnerInternalCode ??
+                    optionalText(input.partnerInternalCode),
                   inventoryNumber: optionalText(input.inventoryNumber),
                   electricalCode: optionalText(input.electricalCode),
                   description: optionalText(input.description),
