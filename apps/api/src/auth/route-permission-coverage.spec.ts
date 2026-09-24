@@ -63,6 +63,16 @@ const CONTROLLERS = [
   */
   "src/service-jobs/service-jobs.controller.ts",
   "src/service-jobs/service-job-documents.controller.ts",
+  /*
+    AZ AKVARIUMOK-MODUL VEZERLOJE, 2026-09-24-tol (uj kontroller, murena).
+
+    Nem "meg nem javit semmit" -- ez egy MOST epult vezerlo, mind a hat
+    utvonala dekoratorral egyutt keszult (2 AQUARIUMS_VIEW, 4
+    AQUARIUMS_MANAGE). A felvetel celja ugyanaz, mint a tobbi bejegyzese:
+    hogy a KOVETKEZO ide kerulo utvonal ne csendben szulessen meg jog
+    nelkul.
+  */
+  "src/aquariums/aquariums.controller.ts",
 ];
 
 const ROUTE = new RegExp(

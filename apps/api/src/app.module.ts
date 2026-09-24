@@ -3,6 +3,7 @@ import { APP_GUARD } from "@nestjs/core";
 
 import { AppController } from "./app.controller.js";
 import { AppService } from "./app.service.js";
+import { AquariumsModule } from "./aquariums/aquariums.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { BrandsModule } from "./brands/brands.module.js";
 import { AuthGuard } from "./auth/guards/auth.guard.js";
@@ -42,6 +43,7 @@ import { MaterialRequestsModule } from "./material-requests/material-requests.mo
     AssetCategoriesModule,
     AssetFunctionsModule,
     UnitsModule,
+    AquariumsModule,
     AuthModule,
     BrandsModule,
     ProductModule,

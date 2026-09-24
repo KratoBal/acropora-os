@@ -243,6 +243,19 @@ export type {
   ContentWaitingOnMeResponse,
 } from "./content-management.js";
 export type {
+  AquariumDetail,
+  AquariumEquipment,
+  AquariumEquipmentKind,
+  AquariumListResponse,
+  AquariumOwnershipType,
+  AquariumSummary,
+  CreateAquariumEquipmentInput,
+  CreateAquariumInput,
+  UpdateAquariumInput,
+  WaterBodyType,
+  WaterType,
+} from "./aquarium-management.js";
+export type {
   CreateCustomerAddressInput,
   CreateCustomerInput,
   CustomerAddress,
