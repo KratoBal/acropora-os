@@ -43,10 +43,15 @@ import {
   randomAssetLabelCode,
 } from "@acropora/types";
 import { teljesitmenyEredmenye } from "./asset-performance.js";
+import {
+  nextFreePartnerInternalCodeSerial,
+  partnerInternalCodePrefix,
+} from "./partner-internal-code.js";
 
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { withUniqueCode } from "../common/unique-code.util.js";
+import { retryOnSerializationConflict } from "../common/transaction-retry.util.js";
 import { buildUnitPaths } from "./unit-path.js";
 import type {
   AssetListQueryDto,
@@ -1075,6 +1080,19 @@ export class ServiceAssetsRepository extends Repository {
   async create(
     input: CreateAssetDto,
     actorUserId: string,
+    /**
+     * A `generatePartnerInternalCode` KAPUJA A HÍVÓ OLDALÁN DŐL EL
+     * (`service-assets.service.ts`, `shouldGeneratePartnerInternalCode`),
+     * A GENERÁLÁS MAGA VISZONT ITT TÖRTÉNIK, A TRANZAKCIÓN BELÜL.
+     *
+     * Ez szándékos eltérés a kérés szó szerinti helyétől ("service.ts
+     * create(), a repository.create() előtt"): a versenyhelyzet elleni zár
+     * (`pg_advisory_xact_lock`) csak akkor véd, ha UGYANABBAN a tranzakcióban
+     * áll, mint a beszúrás -- egy service-oldali előzetes generálás és egy
+     * külön repository-tranzakció között két párhuzamos felvitel ugyanazt a
+     * szabad sorszámot olvashatná ki.
+     */
+    options: { generatePartnerInternalCode?: boolean } = {},
   ): Promise<AssetDetail> {
     /**
      * AZ ESZKOZSZAM UTKOZESE UJRAPROBALKOZAST KAP. Ket eszkoz akkor kap azonos
@@ -1170,136 +1188,280 @@ export class ServiceAssetsRepository extends Repository {
          */
         { prefix: "ESZK", field: "assetNumber", stamp: "local-marked" },
         (assetNumber) =>
-          prisma.$transaction(
-            async (tx) => {
-              const row = await tx.asset.create({
-                data: {
-                  assetNumber,
-                  customerId:
-                    input.ownerType === "CUSTOMER" ? input.ownerId : null,
-                  supplierId:
-                    input.ownerType === "SUPPLIER" ? input.ownerId : null,
-                  customerAddressId:
-                    input.ownerType === "CUSTOMER"
-                      ? input.customerAddressId
-                      : null,
-                  aquariumId:
-                    input.ownerType === "CUSTOMER" ? input.aquariumId : null,
-                  /**
-                   * Az alegyseg a masik iranyban all: SZERVIZ PARTNER
-                   * eszkozehez tartozik, vevoehez nem. A ket mezo nem
-                   * ugyanaz a fogalom.
-                   *
-                   * A `!` NEM VAKMEROSEG, HANEM A HIVO OLDAL GARANCIAJA.
-                   * Ez a `create` metodus KIZAROLAG a
-                   * `service-assets.service.ts` `create()`-jebol hivodik
-                   * (egyetlen hivohely), es AZ MAR ELUTASITOTTA MIELOTT
-                   * idaig eljutna: CUSTOMER eseten a `CUSTOMER_OWNER` ag
-                   * (asset-department.ts, `requested`-tol fuggetlenul fut),
-                   * SUPPLIER eseten pedig az `assetDepartmentPresenceRefusal`
-                   * (letrehozaskor kotelezo). A `departmentId` MEZO tehat
-                   * SOHA nem lehet `null`/`undefined` ezen a ponton -- ha
-                   * ez a garancia megszunik (uj hivo, a validacio
-                   * eltavolitasa), ez a sor a helyes hiba helye, nem a
-                   * csendes elnyeles.
-                   */
-                  departmentId:
-                    input.ownerType === "SUPPLIER"
-                      ? input.departmentId!
-                      : (undefined as unknown as string),
-                  parentAssetId: input.parentAssetId,
-                  productVariantId: input.productVariantId,
-                  kind: input.kind,
-                  status: input.status,
-                  criticality: input.criticality,
-                  name: input.name.trim(),
-                  categoryId: input.categoryId || null,
-                  functionId: input.functionId || null,
-                  manufacturer: optionalText(input.manufacturer),
-                  model: optionalText(input.model),
-                  serialNumber: optionalText(input.serialNumber),
-                  partnerInternalCode: optionalText(input.partnerInternalCode),
-                  inventoryNumber: optionalText(input.inventoryNumber),
-                  electricalCode: optionalText(input.electricalCode),
-                  description: optionalText(input.description),
-                  installedAt: optionalDate(input.installedAt),
-                  purchasedAt: optionalDate(input.purchasedAt),
-                  warrantyExpiresAt: optionalDate(input.warrantyExpiresAt),
-                  serviceIntervalDays: input.serviceIntervalDays,
-                  lastServicedAt: optionalDate(input.lastServicedAt),
-                  nextServiceAt:
-                    optionalDate(input.nextServiceAt) ??
-                    (input.serviceIntervalDays
-                      ? addDays(
-                          optionalDate(input.lastServicedAt) ??
-                            optionalDate(input.installedAt) ??
-                            new Date(),
-                          input.serviceIntervalDays,
-                        )
-                      : undefined),
-                  notes: optionalText(input.notes),
-                  performance: teljesitmeny.performance,
-                  performanceUnitId: teljesitmeny.unitId,
-                  volume,
-                  powerConsumption,
-                  powerConsumptionRaw: optionalText(input.powerConsumptionRaw),
-                  clientOperationId: input.clientOperationId ?? null,
-                  archivedAt:
-                    input.status === "RETIRED" ? new Date() : undefined,
-                  createdById: actorUserId,
-                  updatedById: actorUserId,
-                },
-                include: assetDetailInclude,
-              });
-              await tx.assetEvent.create({
-                data: {
-                  id: randomUUID(),
-                  assetId: row.id,
-                  type: "CREATED",
-                  actorUserId,
-                  payload: jsonPayload({
-                    assetNumber: row.assetNumber,
-                    customerId: row.customerId,
-                    supplierId: row.supplierId,
-                    parentAssetId: row.parentAssetId,
-                    status: row.status,
-                  }),
-                },
-              });
-              /**
-               * A MATRICA HOZZAKOTESE UGYANEBBEN A TRANZAKCIOBAN.
-               *
-               * MIERT ITT, ES NEM UTANA: ha kulon menne, keletkezhetne egy
-               * eszkoz matrica nelkul, es a szerelo azt latna, hogy a felvitel
-               * sikerult. A `42056ab0` kartya pont ezt az alakot zarja ki.
-               *
-               * A FELTETELES `updateMany` A VEDELEM, NEM AZ ELOZETES OLVASAS.
-               * Csak azt a sort irja at, ami LETEZIK es MEG SZABAD
-               * (`assetId: null`). Ket parhuzamos felvitel ugyanarra a kodra
-               * igy nem tud mindketto atmenni: a masodik nulla sort erint, es
-               * itt hasal el. Egy elozetes "szabad-e" lekerdezes ugyanezt csak
-               * HINNI tudna, a ket lepes kozott ugyanis eltelik ido.
-               */
-              if (labelCode) {
-                const claimed = await tx.assetLabel.updateMany({
-                  where: { code: labelCode, assetId: null },
-                  data: { assetId: row.id, assignedAt: new Date() },
+          /**
+           * A TELJES TRANZAKCIÓ ÚJRAPRÓBÁLKOZIK EGY VALÓDI POSTGRES
+           * SERIALIZABLE-ÜTKÖZÉSEN (Prisma P2034) -- lásd
+           * `transaction-retry.util.ts` saját fejlécét, miért ez a várt,
+           * szabványos viselkedés Serializable izolációnál, nem a
+           * `pg_advisory_xact_lock` hibája. A zár helyesen szerializálja a
+           * kódgenerálás kritikus szakaszát, de az SSI (serializable
+           * snapshot isolation) a tranzakció MÁS, a zár által nem védett
+           * részein (pl. két egyidejű `tx.asset.create()` ugyanabba a
+           * táblába) is jelezhet ütközést -- ugyanaz a minta, mint a
+           * `unas-order-sync.repository.ts` `apply()`/`refreshOrder()`-je.
+           */
+          retryOnSerializationConflict(() =>
+            prisma.$transaction(
+              async (tx) => {
+                /**
+                 * A PARTNER BELSŐ KÓDJÁNAK AUTOMATIKUS KÉPZÉSE, ÚJ ESZKÖZNÉL.
+                 *
+                 * A KAPU (`shouldGeneratePartnerInternalCode`) a hívó oldalán
+                 * (`service-assets.service.ts`) dőlt el: szerviz partner
+                 * tulajdonos, üres mező, van kategória. Amit a kapu NEM tud
+                 * eldönteni, mert adatbázis kell hozzá -- van-e a kategóriának
+                 * kódja, van-e a szülőnek/helyszínnek kódja --, azt ITT, a
+                 * beszúrással EGY tranzakcióban nézzük meg.
+                 *
+                 * A ZÁR (`pg_advisory_xact_lock`) A PARTNERRE SZŰKÍTETT, NEM
+                 * GLOBÁLIS: két különböző partner egyidejű felvitele nem várja
+                 * meg egymást, csak ugyanaz a partner szerializálódik --
+                 * ugyanaz a minta, mint a fenti eszköz-hierarchia zárja, csak
+                 * a kulcs a `ownerId`-vel egyedi. Enélkül két párhuzamos
+                 * felvitel ugyanarra az előtagra ugyanazt a "legkisebb szabad"
+                 * sorszámot olvashatná ki, és mindkettő ugyanazt a kódot írná.
+                 */
+                let generatedPartnerInternalCode: string | null = null;
+                if (options.generatePartnerInternalCode && input.categoryId) {
+                  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('acropora:partner-internal-code:' || ${input.ownerId}))`;
+                  const category = await tx.assetCategory.findUnique({
+                    where: { id: input.categoryId },
+                    select: { code: true },
+                  });
+                  if (category?.code) {
+                    let prefix: string | null;
+                    if (input.parentAssetId) {
+                      const parent = await tx.asset.findUnique({
+                        where: { id: input.parentAssetId },
+                        select: { partnerInternalCode: true },
+                      });
+                      prefix = partnerInternalCodePrefix({
+                        isBuiltIn: true,
+                        parentPartnerInternalCode:
+                          parent?.partnerInternalCode ?? null,
+                        rootLocationCode: null,
+                        ownLocationCode: null,
+                        ownIsRootLocation: false,
+                        categoryCode: category.code,
+                      });
+                    } else {
+                      /**
+                       * A HELYSZÍN-FA GYÖKERÉIG VALÓ FELFELÉ SÉTA.
+                       *
+                       * Balázs jóváhagyása (2026-09-24 11:33): a gyökér eszköz
+                       * kódjának ELSŐ tagja a LEGFELSŐ helyszín kódja, nem a
+                       * saját (esetleg mélyebb szintű) helyszíné -- és a
+                       * KÖZBÜLSŐ szintek kimaradnak (FAN-A11, nem
+                       * FAN-AKV-A11). A séma mai mélysége legfeljebb négy
+                       * szint (acrobot mérése), a ciklus ennél tovább is
+                       * helyesen működik, csak nem gyorsabb egy extra
+                       * DB-körnél szintenként -- ez a generálás ritka, és a
+                       * zár amúgy is szerializálja.
+                       */
+                      let ownLocationCode: string | null = null;
+                      let rootLocationCode: string | null = null;
+                      let ownIsRootLocation = false;
+                      if (input.departmentId) {
+                        const own = await tx.worksheetDepartment.findUnique({
+                          where: { id: input.departmentId },
+                          select: { code: true, parentId: true },
+                        });
+                        if (own) {
+                          ownLocationCode = own.code;
+                          if (own.parentId === null) {
+                            rootLocationCode = own.code;
+                            ownIsRootLocation = true;
+                          } else {
+                            let currentParentId: string | null = own.parentId;
+                            while (currentParentId) {
+                              const node: {
+                                code: string;
+                                parentId: string | null;
+                              } | null =
+                                await tx.worksheetDepartment.findUnique({
+                                  where: { id: currentParentId },
+                                  select: { code: true, parentId: true },
+                                });
+                              if (!node) break;
+                              if (node.parentId === null) {
+                                rootLocationCode = node.code;
+                                break;
+                              }
+                              currentParentId = node.parentId;
+                            }
+                          }
+                        }
+                      }
+                      prefix = partnerInternalCodePrefix({
+                        isBuiltIn: false,
+                        parentPartnerInternalCode: null,
+                        rootLocationCode,
+                        ownLocationCode,
+                        ownIsRootLocation,
+                        categoryCode: category.code,
+                      });
+                    }
+                    if (prefix) {
+                      const existing = await tx.asset.findMany({
+                        where: {
+                          supplierId: input.ownerId,
+                          partnerInternalCode: { startsWith: `${prefix}-` },
+                        },
+                        select: { partnerInternalCode: true },
+                      });
+                      generatedPartnerInternalCode =
+                        nextFreePartnerInternalCodeSerial(
+                          prefix,
+                          existing.flatMap((existingRow) =>
+                            existingRow.partnerInternalCode
+                              ? [existingRow.partnerInternalCode]
+                              : [],
+                          ),
+                          input.name,
+                        );
+                    }
+                  }
+                }
+                const row = await tx.asset.create({
+                  data: {
+                    assetNumber,
+                    customerId:
+                      input.ownerType === "CUSTOMER" ? input.ownerId : null,
+                    supplierId:
+                      input.ownerType === "SUPPLIER" ? input.ownerId : null,
+                    customerAddressId:
+                      input.ownerType === "CUSTOMER"
+                        ? input.customerAddressId
+                        : null,
+                    aquariumId:
+                      input.ownerType === "CUSTOMER" ? input.aquariumId : null,
+                    /**
+                     * Az alegyseg a masik iranyban all: SZERVIZ PARTNER
+                     * eszkozehez tartozik, vevoehez nem. A ket mezo nem
+                     * ugyanaz a fogalom.
+                     *
+                     * A `!` NEM VAKMEROSEG, HANEM A HIVO OLDAL GARANCIAJA.
+                     * Ez a `create` metodus KIZAROLAG a
+                     * `service-assets.service.ts` `create()`-jebol hivodik
+                     * (egyetlen hivohely), es AZ MAR ELUTASITOTTA MIELOTT
+                     * idaig eljutna: CUSTOMER eseten a `CUSTOMER_OWNER` ag
+                     * (asset-department.ts, `requested`-tol fuggetlenul fut),
+                     * SUPPLIER eseten pedig az `assetDepartmentPresenceRefusal`
+                     * (letrehozaskor kotelezo). A `departmentId` MEZO tehat
+                     * SOHA nem lehet `null`/`undefined` ezen a ponton -- ha
+                     * ez a garancia megszunik (uj hivo, a validacio
+                     * eltavolitasa), ez a sor a helyes hiba helye, nem a
+                     * csendes elnyeles.
+                     */
+                    departmentId:
+                      input.ownerType === "SUPPLIER"
+                        ? input.departmentId!
+                        : (undefined as unknown as string),
+                    parentAssetId: input.parentAssetId,
+                    productVariantId: input.productVariantId,
+                    kind: input.kind,
+                    status: input.status,
+                    criticality: input.criticality,
+                    name: input.name.trim(),
+                    categoryId: input.categoryId || null,
+                    functionId: input.functionId || null,
+                    manufacturer: optionalText(input.manufacturer),
+                    model: optionalText(input.model),
+                    serialNumber: optionalText(input.serialNumber),
+                    /**
+                     * A GENERÁLT KÓD CSAK AKKOR ÍRÓDIK, HA A MEZŐ ÜRES VOLT --
+                     * a kézzel beírt érték soha nem íródik felül, mert a
+                     * `shouldGeneratePartnerInternalCode` kapuja ezt már a
+                     * bemenetnél kizárta (`generatedPartnerInternalCode` ilyenkor
+                     * `null` marad, a jobb oldal pedig a beírt értéket adja).
+                     */
+                    partnerInternalCode:
+                      generatedPartnerInternalCode ??
+                      optionalText(input.partnerInternalCode),
+                    inventoryNumber: optionalText(input.inventoryNumber),
+                    electricalCode: optionalText(input.electricalCode),
+                    description: optionalText(input.description),
+                    installedAt: optionalDate(input.installedAt),
+                    purchasedAt: optionalDate(input.purchasedAt),
+                    warrantyExpiresAt: optionalDate(input.warrantyExpiresAt),
+                    serviceIntervalDays: input.serviceIntervalDays,
+                    lastServicedAt: optionalDate(input.lastServicedAt),
+                    nextServiceAt:
+                      optionalDate(input.nextServiceAt) ??
+                      (input.serviceIntervalDays
+                        ? addDays(
+                            optionalDate(input.lastServicedAt) ??
+                              optionalDate(input.installedAt) ??
+                              new Date(),
+                            input.serviceIntervalDays,
+                          )
+                        : undefined),
+                    notes: optionalText(input.notes),
+                    performance: teljesitmeny.performance,
+                    performanceUnitId: teljesitmeny.unitId,
+                    volume,
+                    powerConsumption,
+                    powerConsumptionRaw: optionalText(
+                      input.powerConsumptionRaw,
+                    ),
+                    clientOperationId: input.clientOperationId ?? null,
+                    archivedAt:
+                      input.status === "RETIRED" ? new Date() : undefined,
+                    createdById: actorUserId,
+                    updatedById: actorUserId,
+                  },
+                  include: assetDetailInclude,
                 });
-                if (claimed.count !== 1)
-                  throw new AssetLabelUnavailableError(labelCode);
                 await tx.assetEvent.create({
                   data: {
                     id: randomUUID(),
                     assetId: row.id,
-                    type: "LABEL_ASSIGNED",
+                    type: "CREATED",
                     actorUserId,
-                    payload: jsonPayload({ code: labelCode }),
+                    payload: jsonPayload({
+                      assetNumber: row.assetNumber,
+                      customerId: row.customerId,
+                      supplierId: row.supplierId,
+                      parentAssetId: row.parentAssetId,
+                      status: row.status,
+                    }),
                   },
                 });
-              }
-              return row.id;
-            },
-            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+                /**
+                 * A MATRICA HOZZAKOTESE UGYANEBBEN A TRANZAKCIOBAN.
+                 *
+                 * MIERT ITT, ES NEM UTANA: ha kulon menne, keletkezhetne egy
+                 * eszkoz matrica nelkul, es a szerelo azt latna, hogy a felvitel
+                 * sikerult. A `42056ab0` kartya pont ezt az alakot zarja ki.
+                 *
+                 * A FELTETELES `updateMany` A VEDELEM, NEM AZ ELOZETES OLVASAS.
+                 * Csak azt a sort irja at, ami LETEZIK es MEG SZABAD
+                 * (`assetId: null`). Ket parhuzamos felvitel ugyanarra a kodra
+                 * igy nem tud mindketto atmenni: a masodik nulla sort erint, es
+                 * itt hasal el. Egy elozetes "szabad-e" lekerdezes ugyanezt csak
+                 * HINNI tudna, a ket lepes kozott ugyanis eltelik ido.
+                 */
+                if (labelCode) {
+                  const claimed = await tx.assetLabel.updateMany({
+                    where: { code: labelCode, assetId: null },
+                    data: { assetId: row.id, assignedAt: new Date() },
+                  });
+                  if (claimed.count !== 1)
+                    throw new AssetLabelUnavailableError(labelCode);
+                  await tx.assetEvent.create({
+                    data: {
+                      id: randomUUID(),
+                      assetId: row.id,
+                      type: "LABEL_ASSIGNED",
+                      actorUserId,
+                      payload: jsonPayload({ code: labelCode }),
+                    },
+                  });
+                }
+                return row.id;
+              },
+              { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+            ),
           ),
       );
     } catch (error) {

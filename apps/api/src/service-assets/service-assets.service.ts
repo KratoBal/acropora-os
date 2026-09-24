@@ -45,6 +45,7 @@ import {
   assetDepartmentPresenceRefusal,
   assetDepartmentRefusal,
 } from "./asset-department.js";
+import { shouldGeneratePartnerInternalCode } from "./partner-internal-code.js";
 import type {
   AssetListQueryDto,
   AssetOwnersQueryDto,
@@ -290,7 +291,9 @@ export class ServiceAssetsService {
       productVariantId: input.productVariantId,
     });
     try {
-      return await this.repository.create(input, actorUserId);
+      return await this.repository.create(input, actorUserId, {
+        generatePartnerInternalCode: shouldGeneratePartnerInternalCode(input),
+      });
     } catch (error) {
       this.map(error, scope);
     }
