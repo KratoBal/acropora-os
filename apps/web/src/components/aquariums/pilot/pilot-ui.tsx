@@ -1,0 +1,331 @@
+"use client";
+import { Icon } from "@acropora/ui";
+import type { ReactNode } from "react";
+import { useEffect } from "react";
+
+/**
+ * KÍSÉRLETI, ÖNÁLLÓ MEGJELENÍTŐ ELEMEK -- CSAK AZ AKVÁRIUM OLDALAKNAK.
+ *
+ * Ezek NEM a `@acropora/ui` `Button`/`Card`/`Badge` cseréi: azok a mai közös
+ * arculatot (`brand-*`/`dusk-*`) viselik, ez a készlet a Figma Make terv
+ * `pilot-aqua-*`/`pilot-grey-*` tokenjeit. A két készlet szándékosan él
+ * egymás mellett -- lásd `aquarium-pilot-theme.css` fejlécét, miért.
+ *
+ * A FORMA A FIGMA `src/App.tsx` MIKRO-KOMPONENSEIT KÖVETI (Badge, Avatar,
+ * Btn, SegmentedControl, FormField, Input, Select, Card, CardHeader, Drawer,
+ * Dialog), csak Tailwind class-nevekben `teal`/`grey` helyett `pilot-aqua`/
+ * `pilot-grey`.
+ */
+
+export function PilotBadge({
+  children,
+  variant = "default",
+}: {
+  children: ReactNode;
+  variant?: "teal" | "grey" | "default";
+}) {
+  const styles = {
+    teal: "bg-pilot-aqua-50 text-pilot-aqua-700 ring-1 ring-pilot-aqua-200",
+    grey: "bg-pilot-grey-100 text-pilot-grey-600 ring-1 ring-pilot-grey-200",
+    default: "bg-pilot-grey-100 text-pilot-grey-600 ring-1 ring-pilot-grey-200",
+  };
+  return (
+    <span
+      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${styles[variant]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * A SZÍN A `userId`-BŐL SZÁRMAZTATOTT, NEM TÁROLT ADAT. A Figma demo-adata
+ * személyenként fix színt visel; nálunk a `AquariumMaintainer` típusnak
+ * nincs szín mezője (lásd `@acropora/types`), és ezt a brief 4. pontja
+ * szerint NEM kell kitalálni/hozzáadni -- ehelyett egy stabil, determinisztikus
+ * leképezést használunk egy rögzített palettára, hogy ugyanaz a kolléga
+ * mindig ugyanazt a színt kapja, adatbázis-mező nélkül.
+ */
+const AVATAR_PALETTE = [
+  "#0b7a6e",
+  "#374049",
+  "#6b7583",
+  "#7c5c3a",
+  "#6150bd",
+  "#a33145",
+];
+
+export function pilotAvatarColor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i += 1) {
+    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  }
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length]!;
+}
+
+export function pilotInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+}
+
+export function PilotAvatar({
+  initials,
+  color,
+  size = "sm",
+}: {
+  initials: string;
+  color: string;
+  size?: "sm" | "md";
+}) {
+  const sz = size === "sm" ? "h-6 w-6 text-[10px]" : "h-8 w-8 text-xs";
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-full font-semibold text-white ring-2 ring-white ${sz}`}
+      style={{ backgroundColor: color }}
+    >
+      {initials}
+    </span>
+  );
+}
+
+export function PilotButton({
+  children,
+  variant = "primary",
+  onClick,
+  type = "button",
+  disabled,
+}: {
+  children: ReactNode;
+  variant?: "primary" | "secondary" | "ghost" | "danger";
+  onClick?: () => void;
+  type?: "button" | "submit";
+  disabled?: boolean;
+}) {
+  const base =
+    "inline-flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-sm font-medium transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40";
+  const variants = {
+    primary:
+      "bg-pilot-aqua-600 text-white hover:bg-pilot-aqua-700 active:bg-pilot-aqua-800",
+    secondary:
+      "bg-white text-pilot-grey-700 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 active:bg-pilot-grey-100",
+    ghost:
+      "text-pilot-grey-500 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
+    danger: "bg-white text-red-600 ring-1 ring-red-200 hover:bg-red-50",
+  };
+  return (
+    <button
+      type={type}
+      className={`${base} ${variants[variant]}`}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function PilotSegmentedControl({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="inline-flex gap-0.5 rounded-md bg-pilot-grey-100 p-0.5">
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onChange(opt)}
+          className={`cursor-pointer rounded px-3 py-1 text-sm font-medium transition-all duration-100 ${
+            value === opt
+              ? "bg-white text-pilot-grey-900 shadow-sm"
+              : "text-pilot-grey-500 hover:text-pilot-grey-700"
+          }`}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function PilotFormField({
+  label,
+  help,
+  children,
+  className,
+}: {
+  label: string;
+  help?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-col gap-1 ${className ?? ""}`}>
+      <label className="text-sm font-medium text-pilot-grey-700">{label}</label>
+      {children}
+      {help ? <p className="text-xs text-pilot-grey-400">{help}</p> : null}
+    </div>
+  );
+}
+
+export function PilotInput({
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  readOnly,
+  className,
+}: {
+  value?: string;
+  onChange?: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+  readOnly?: boolean;
+  className?: string;
+}) {
+  return (
+    <input
+      type={type}
+      placeholder={placeholder}
+      value={value}
+      readOnly={readOnly}
+      onChange={(event) => onChange?.(event.target.value)}
+      className={`w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 ${
+        readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"
+      } ${className ?? ""}`}
+    />
+  );
+}
+
+export function PilotSelect({
+  children,
+  value,
+  onChange,
+}: {
+  children: ReactNode;
+  value?: string;
+  onChange?: (value: string) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange?.(event.target.value)}
+      className="w-full cursor-pointer appearance-none rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+    >
+      {children}
+    </select>
+  );
+}
+
+export function PilotCard({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`rounded-xl bg-white ring-1 ring-pilot-grey-200 ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function PilotCardHeader({
+  title,
+  action,
+}: {
+  title: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between border-b border-pilot-grey-100 px-5 py-4">
+      <h3 className="text-sm font-semibold text-pilot-grey-900">{title}</h3>
+      {action}
+    </div>
+  );
+}
+
+export function PilotDrawer({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-40 bg-pilot-grey-900/20 transition-opacity duration-200 ${
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={onClose}
+      />
+      <div
+        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col bg-white shadow-2xl transition-transform duration-250 ease-in-out ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-pilot-grey-100 px-6 py-4">
+          <h2 className="text-base font-semibold text-pilot-grey-900">
+            {title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-md p-1.5 text-pilot-grey-400 transition hover:bg-pilot-grey-100 hover:text-pilot-grey-700"
+          >
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </>
+  );
+}
+
+export function PilotDialog({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-pilot-grey-900/30 p-4 transition-opacity duration-150 ${
+        open ? "opacity-100" : "pointer-events-none opacity-0"
+      }`}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-xl bg-white shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}

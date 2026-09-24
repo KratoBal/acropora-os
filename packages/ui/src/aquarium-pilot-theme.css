@@ -1,0 +1,70 @@
+/**
+ * KÍSÉRLETI TÉMA-RÉTEG -- CSAK AZ AKVÁRIUMOK WEBES OLDALAIHOZ.
+ *
+ * Balázs a Figma Make kimenetét küldte (2026-09-24 15:44, majd a teljesebb
+ * második kör 15:55-kor), mert nem elégedett a mai arculattal, és az
+ * Akváriumok képernyőivel kezdünk -- egy felületen, egymás mellé téve a
+ * mait és az újat, és HA TETSZIK, onnan megy a többire (acrobot javaslata,
+ * Balázs elfogadta).
+ *
+ * A TOKENEK NEVE SZÁNDÉKOSAN `pilot-` ELŐTAGGAL ÁLL, NEM `teal`/`grey`
+ * NÉVEN, ÉS EZ NEM DÍSZ: a Tailwind saját beépített `teal-*` skálája MÁS
+ * ÉRTÉKEKET adna, mint a Figma terv, és egy `grey-*` néven felvett skála a
+ * TELJES alkalmazásban felülírná/kiegészítené a Tailwind-palettát --
+ * miközben a mai közös arculat (`theme.css`) már saját néven futó `brand-*`/
+ * `dusk-*` skálát használ. Ha ezek a tokenek a mai nevekre írnának, a
+ * változás nem volna elkülöníthető: egy Balázs által el nem fogadott
+ * kísérlet a teljes appot érintené. A `pilot-*` előtaggal a hatás pontosan
+ * arra a néhány komponensre szorítkozik, ami ténylegesen ezeket a
+ * class-neveket használja (lásd `apps/web/src/components/aquariums/pilot/`),
+ * és HA A KÍSÉRLET NEM TETSZIK, EZ AZ EGY FÁJL (plusz az importja) törlése
+ * mindent visszaad, a többi felület érintetlen marad.
+ *
+ * AZ ÉRTÉKEK BETŰRE A FIGMA `src/index.css`-ÉBŐL: mindkét Make-kör
+ * (2026-09-24 15:44 és 15:55) ugyanazt az `index.css`-t hozta -- a színskála
+ * és a betűtípus a második körben NEM változott, csak a képernyők bővültek.
+ *
+ * A FIGMA "teal" NEVE ITT "aqua"-RA VÁLTOZOTT (`pilot-aqua-*`), MÉG A
+ * `pilot-` ELŐTAG MELLETT IS: az `apps/web/src/app/removed-scale-names.test.ts`
+ * szóhatáron ellenőriz (`\bteal-\d{2,3}\b`), és egy kötőjel ELŐTT is
+ * szóhatárnak számít -- tehát a `pilot-teal-500` osztálynév ELBUKTATTA
+ * volna azt az őrzőt, holott a régi Tailwind-skálával semmi köze nem volt
+ * (mérve 2026-09-24, első build után). Az őrző indoka helytálló (a régi
+ * `teal`/`slate` visszaszivárgása néma lenne), csak a mintája nem
+ * különbözteti meg egy SZÁNDÉKOSAN más tokent egy visszaesett régitől --
+ * ezért nem az őrzőt módosítottuk, hanem a nevet.
+ */
+@theme {
+  --color-pilot-aqua-50: #f0faf8;
+  --color-pilot-aqua-100: #d0f0ea;
+  --color-pilot-aqua-200: #a3e0d6;
+  --color-pilot-aqua-300: #6acbbf;
+  --color-pilot-aqua-400: #34b0a4;
+  --color-pilot-aqua-500: #0b9487;
+  --color-pilot-aqua-600: #0b7a6e;
+  --color-pilot-aqua-700: #0a6359;
+  --color-pilot-aqua-800: #0a5148;
+  --color-pilot-aqua-900: #083e38;
+
+  --color-pilot-grey-50: #f7f8fa;
+  --color-pilot-grey-100: #eef0f3;
+  --color-pilot-grey-200: #e2e5e9;
+  --color-pilot-grey-300: #cdd1d7;
+  --color-pilot-grey-400: #9ba3ae;
+  --color-pilot-grey-500: #6b7583;
+  --color-pilot-grey-600: #4f5a68;
+  --color-pilot-grey-700: #374049;
+  --color-pilot-grey-800: #1e272f;
+  --color-pilot-grey-900: #0f1a1c;
+
+  /**
+   * AZ ÁLLAPOT-SZÍNEK, AMIKET A TERV VALÓBAN HASZNÁL: az "üres e-mail cím"
+   * figyelmeztetés sárga háttere/szövege. Nincs teljes rámpa felvéve -- csak
+   * a ténylegesen felhasznált fokozat, ugyanaz a fegyelem, mint a közös
+   * `theme.css` "csak a TÉNYLEG HASZNÁLT fokozatok állnak itt" elve.
+   */
+  --color-pilot-amber-50: #fffbeb;
+  --color-pilot-amber-100: #fef3c7;
+  --color-pilot-amber-500: #f59e0b;
+  --color-pilot-amber-700: #b45309;
+}
