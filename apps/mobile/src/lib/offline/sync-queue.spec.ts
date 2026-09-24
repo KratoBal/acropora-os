@@ -197,7 +197,7 @@ describe("az akvárium művelet-azonosítója", () => {
 });
 
 describe("a sor entitás-fajtái", () => {
-  it("a lista az ÖT ismert fajtát tartalmazza, ebben a sorrendben", () => {
+  it("a lista a HAT ismert fajtát tartalmazza, ebben a sorrendben", () => {
     /*
       A SZAM MAGA IS ALLITAS, ugyanabbol az okbol, mint a tarolo beszurasainal:
       egy UJ fajta felvetele PIROSSA teszi ezt a sort, es akkor kell eldonteni,
@@ -214,10 +214,23 @@ describe("a sor entitás-fajtái", () => {
       2026-09-24: negyrol OTRE nott az `aquarium`-mal, es a sor ELSULT --
       ugyanugy, ahogy kell. A fenykep-gazda lekepezes `false`-t kapott (nincs
       akvarium-fenykep ebben a korben), a KULDESI switch pedig uj agat.
+
+      2026-09-24, MASODSZOR: otrol HATRA nott az `aquarium-measurement`-tel
+      (vizertekek, murena API-ja #1055-re epitve). Ugyanugy ELSULT: a
+      fajta-nev, a javitas-elutasitas es a fenykep-gazda lekepezes is uj sort
+      kapott, a KULDESI switch (mind a ket helyen -- a felvitelnel ES a
+      fenykep-gazdanal) uj agat.
     */
     assert.deepEqual(
       [...SYNC_ENTITY_TYPES],
-      ["asset", "worksheet", "worksheet-line", "service-job", "aquarium"],
+      [
+        "asset",
+        "worksheet",
+        "worksheet-line",
+        "service-job",
+        "aquarium",
+        "aquarium-measurement",
+      ],
     );
   });
 

@@ -91,6 +91,18 @@ export interface CreateAquariumInput {
   equipment?: CreateAquariumEquipmentInput[];
 }
 
+/**
+ * EGY KARBANTARTÓ -- CSAK MEGJELENÍTÉS EBBEN A KÖRBEN.
+ *
+ * A brief (exchange/akvariumok-2-kor-vizertekek-brief-2026-09-24.md) 8.
+ * pontja szerint a szerkesztés webes, a telefonon egyelőre csak a lista
+ * jelenik meg az adatlapon.
+ */
+export interface AquariumMaintainer {
+  userId: string;
+  displayName: string;
+}
+
 export interface AquariumDetail {
   id: string;
   aquariumNumber: string;
@@ -104,6 +116,9 @@ export interface AquariumDetail {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  maintainers: AquariumMaintainer[];
+  /** SZÁRMAZTATOTT: igaz, ha legalább egy karbantartó van. */
+  maintainedByUs: boolean;
 }
 
 export function createAquarium(input: CreateAquariumInput) {
@@ -111,4 +126,93 @@ export function createAquarium(input: CreateAquariumInput) {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/**
+ * VÍZÉRTÉKEK -- MÁSODIK KÖR (murena API-ja, #1055, ág:
+ * munka/akvariumok-vizertekek).
+ *
+ * A típusok szerkezetileg a `packages/types/src/aquarium-management.ts`
+ * megosztott alakjait tükrözik, saját másolatban (lásd a fájl fejlécét,
+ * miért nem import).
+ */
+export type AquariumMeasurementParameterCode =
+  | "HOMERSEKLET"
+  | "SOTARTALOM"
+  | "SURUSEG"
+  | "PH"
+  | "KH"
+  | "GH"
+  | "KALCIUM"
+  | "MAGNEZIUM"
+  | "NITRAT"
+  | "FOSZFAT"
+  | "AMMONIA"
+  | "NITRIT"
+  | "SZILIKAT"
+  | "ORP"
+  | "VAS"
+  | "REZ"
+  | "VEZETOKEPESSEG";
+
+export interface AquariumMeasurementValue {
+  parameterCode: AquariumMeasurementParameterCode;
+  value: number;
+}
+
+export interface AquariumMeasurementOccasion {
+  id: string;
+  measuredAt: string;
+  measuredById?: string;
+  measuredByName?: string;
+  source?: string;
+  notes?: string;
+  values: AquariumMeasurementValue[];
+}
+
+export interface AquariumMeasurementListResponse {
+  occasions: AquariumMeasurementOccasion[];
+}
+
+export interface CreateAquariumMeasurementInput {
+  /** Ugyanaz az idempotencia-elv, mint az akvárium saját felvitelénél --
+   * lásd `aquariumMeasurementOperationId` a `sync-queue.ts`-ben. */
+  clientOperationId?: string;
+  measuredAt?: string;
+  source?: string;
+  notes?: string;
+  values: AquariumMeasurementValue[];
+}
+
+export function listAquariumMeasurements(aquariumId: string) {
+  return apiRequest<AquariumMeasurementListResponse>(
+    `${BASE}/${encodeURIComponent(aquariumId)}/measurements`,
+  );
+}
+
+/** EGY ALKALMAT AD VISSZA, NEM A TELJES LISTÁT -- ugyanaz az alak, mint a
+ * szerver `AquariumMeasurementsService.create()`-je. */
+export function createAquariumMeasurement(
+  aquariumId: string,
+  input: CreateAquariumMeasurementInput,
+) {
+  return apiRequest<AquariumMeasurementOccasion>(
+    `${BASE}/${encodeURIComponent(aquariumId)}/measurements`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+/**
+ * AZ `occasionId` A MÉRÉSI ALKALOM `measuredAt` ÉRTÉKÉNEK ISO-ALAKJA --
+ * lásd a szerver `aquarium-measurements.repository.ts` fejlécét, miért
+ * nincs külön azonosító.
+ */
+export function deleteAquariumMeasurement(
+  aquariumId: string,
+  occasionId: string,
+) {
+  return apiRequest<void>(
+    `${BASE}/${encodeURIComponent(aquariumId)}/measurements/${encodeURIComponent(occasionId)}`,
+    { method: "DELETE" },
+  );
 }

@@ -186,6 +186,7 @@ const FAJTA_NEVE: Record<SyncEntityType, string> = {
   "worksheet-line": "Munkalap-tétel",
   "service-job": "Hibajegy",
   aquarium: "Akvárium",
+  "aquarium-measurement": "Vízmérés",
 };
 
 /**

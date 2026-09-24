@@ -373,6 +373,44 @@ export async function enqueueAquariumCreate(input: {
   }
 }
 
+/**
+ * SORBA TESZ EGY VÍZMÉRÉSI ALKALMAT -- A GAZDA AKVÁRIUM MÁR LÉTEZIK.
+ *
+ * UGYANAZ AZ ALAK, MINT A MUNKALAP-TÉTELNÉL: az `entity_id` a GAZDA
+ * (akvárium) szerver-oldali azonosítója, mert az a felvitel pillanatában
+ * már megvan -- ellentétben az akvárium saját felvitelével, ahol az
+ * `entity_id` NULL, mert MAGA az akvárium még nem létezik.
+ */
+export async function enqueueAquariumMeasurement(input: {
+  /** A mérési alkalom művelet-azonosítója, egyben a sor kulcsa. */
+  id: string;
+  /** A GAZDA akvárium szerver-oldali azonosítója. Már létezik. */
+  aquariumId: string;
+  payload: unknown;
+  createdAt: string;
+}): Promise<EnqueueResult> {
+  try {
+    const db = await initializeOfflineDatabase();
+    await db.runAsync(
+      `INSERT OR IGNORE INTO sync_queue
+         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
+       VALUES (?, 'create', 'aquarium-measurement', ?, ?, ?, 0, NULL, 'pending')`,
+      [
+        input.id,
+        input.aquariumId,
+        JSON.stringify(input.payload),
+        input.createdAt,
+      ],
+    );
+    return { ok: true, operationId: input.id };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function enqueueWorksheetLine(input: {
   /** A tetel azonositoja, egyben a sor kulcsa. */
   id: string;
