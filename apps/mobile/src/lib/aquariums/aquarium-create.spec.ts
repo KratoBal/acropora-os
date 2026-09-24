@@ -82,6 +82,25 @@ describe("resolveAquariumVolume", () => {
     });
     assert.equal(result.systemVolumeLiters, 200);
   });
+
+  /**
+   * KALIBRÁCIÓ: 10 × 10,5 × 10,5 / 1000 = 1,1025, PONTOSAN a negyedik
+   * tizedesen áll -- a szerver `systemVolumeLiters` oszlopa `Decimal(12, 3)`
+   * (3 tizedes). Egy csonkítás (Math.trunc) 1,102-t adna, a helyes kerekítés
+   * 1,103-at. Mind a három bemenet legfeljebb 2 tizedesjegyű, tehát a
+   * felviteli mező mai mintája (`DECIMAL_PATTERN`) valóban elő tudja
+   * állítani ezt az esetet.
+   */
+  it("a méretekből számolt liter 3 tizedesre kerekít, nem csonkít", () => {
+    const result = resolveAquariumVolume({
+      lengthCm: 10,
+      widthCm: 10.5,
+      heightCm: 10.5,
+      volumeLiters: null,
+      isManual: false,
+    });
+    assert.equal(result.systemVolumeLiters, 1.103);
+  });
 });
 
 describe("normalizeDecimalText", () => {
