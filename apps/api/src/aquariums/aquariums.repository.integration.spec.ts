@@ -22,6 +22,7 @@ import { AquariumsRepository } from "./aquariums.repository.js";
  * `worksheets.repository.integration.spec.ts` saját fejlécében.
  */
 const gate = integrationDatabaseGate(process.env);
+const TEST_EMAIL_DOMAIN = "aquariums-integration.invalid";
 
 describe(
   "AquariumsRepository integration",
@@ -41,8 +42,17 @@ describe(
       await prisma.aquariumEquipment.deleteMany({
         where: { aquarium: { name: { startsWith: "AQ-INT-" } } },
       });
+      await prisma.aquariumMaintainer.deleteMany({
+        where: { aquarium: { name: { startsWith: "AQ-INT-" } } },
+      });
+      await prisma.aquariumMeasurement.deleteMany({
+        where: { aquarium: { name: { startsWith: "AQ-INT-" } } },
+      });
       await prisma.aquarium.deleteMany({
         where: { name: { startsWith: "AQ-INT-" } },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
       });
       const equipmentLeft = await prisma.aquariumEquipment.count({
         where: { aquarium: { name: { startsWith: "AQ-INT-" } } },
@@ -50,9 +60,13 @@ describe(
       const aquariumsLeft = await prisma.aquarium.count({
         where: { name: { startsWith: "AQ-INT-" } },
       });
+      const usersLeft = await prisma.user.count({
+        where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+      });
       nincsMaradek([
         { nev: "AquariumEquipment", darab: equipmentLeft },
         { nev: "Aquarium", darab: aquariumsLeft },
+        { nev: "User", darab: usersLeft },
       ]);
     }
 
@@ -143,6 +157,78 @@ describe(
           "aquarium-create:OWN:soha-nem-letezett",
         );
         assert.equal(nincs, null);
+      });
+    });
+
+    /**
+     * A LISTA-PILOT KÉRÉSÉRE (acrobot, 2026-09-24 16:19): a "Karbantartók"
+     * és "Utolsó vízmérés" mostantól a LISTA-végponton is megjelenik, két
+     * batch-elt (nem soronkénti) `include`-dal -- lásd a `listInclude`
+     * fejlécét a repository-ban. Ez a teszt ADATBÁZISON méri, hogy a kettő
+     * ténylegesen odaér a `list()` válaszába, nem csak a `detail()`-be.
+     */
+    describe("list -- karbantartók és utolsó vízmérés", () => {
+      it("a lista soronként adja a karbantartókat és a legutóbbi mérés dátumát", async () => {
+        const aquarium = await repository.create(
+          createInput({
+            clientOperationId: `aquarium-create:OWN:list-meres-${suffix}`,
+          }),
+          "no-actor",
+        );
+
+        const maintainer = await prisma.user.create({
+          data: {
+            email: `list-maintainer-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "Lista Karbantartó",
+            role: "SERVICE",
+            isActive: true,
+          },
+        });
+        await prisma.aquariumMaintainer.create({
+          data: { aquariumId: aquarium.id, userId: maintainer.id },
+        });
+
+        const regebbi = new Date(Date.UTC(2026, 8, 1, 10, 0, 0));
+        const legutobbi = new Date(Date.UTC(2026, 8, 20, 10, 0, 0));
+        await prisma.aquariumMeasurement.create({
+          data: {
+            aquariumId: aquarium.id,
+            parameterCode: "PH",
+            value: "7.8",
+            unit: "pH",
+            measuredAt: regebbi,
+          },
+        });
+        await prisma.aquariumMeasurement.create({
+          data: {
+            aquariumId: aquarium.id,
+            parameterCode: "PH",
+            value: "7.9",
+            unit: "pH",
+            measuredAt: legutobbi,
+          },
+        });
+
+        const lista = await repository.list({
+          page: 1,
+          pageSize: 25,
+          search: aquarium.name,
+        });
+        const talalt = lista.items.find((item) => item.id === aquarium.id);
+        assert.ok(
+          talalt,
+          "a listának tartalmaznia kell a létrehozott akváriumot",
+        );
+        assert.deepEqual(talalt!.maintainers.map((m) => m.userId).sort(), [
+          maintainer.id,
+        ]);
+        /*
+          A LEGUTOBBI, NEM A REGEBBI: ha a `listInclude` `orderBy`-ja hibás
+          (pl. `asc`), ez az állítás a régebbi dátumot kapná -- a két
+          létrehozott sor SZÁNDÉKOSAN két különböző napra esik, hogy a
+          sorrend ténylegesen megmérhető legyen.
+        */
+        assert.equal(talalt!.lastMeasuredAt, legutobbi.toISOString());
       });
     });
   },

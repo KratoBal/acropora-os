@@ -32,9 +32,29 @@ type AquariumDetailRow = Prisma.AquariumGetPayload<{
   include: typeof detailInclude;
 }>;
 
+/**
+ * A `measurements` ÉS A `maintainers` A LISTA-PILOT KÉRÉSÉRE KERÜLT IDE
+ * (acrobot, 2026-09-24 16:19): a Figma terv lista-oszlopai ("Karbantartók",
+ * "Utolsó vízmérés") ezt igényelték, és korábban csak a `detailInclude`
+ * ismerte őket.
+ *
+ * MINDKETTŐ EGY-EGY BATCH-ELT LEKÉRDEZÉS, NEM SORONKÉNTI: a Prisma egy
+ * `findMany`-hez tartozó `include`-ot -- take/orderBy-jal együtt is -- EGY
+ * kiegészítő lekérdezésként oldja fel (WHERE aquariumId IN (...) egy
+ * ROW_NUMBER()-ablakfüggvénnyel a `take: 1`-hez), a lapméret (25) nem a
+ * lekérdezések számát szorozza, csak az IN-lista hosszát.
+ */
 const listInclude = {
   customer: { select: { id: true, displayName: true } },
   _count: { select: { equipment: true } },
+  maintainers: {
+    include: { user: { select: { id: true, displayName: true } } },
+  },
+  measurements: {
+    take: 1,
+    orderBy: { measuredAt: "desc" as const },
+    select: { measuredAt: true },
+  },
 } satisfies Prisma.AquariumInclude;
 
 type AquariumListRow = Prisma.AquariumGetPayload<{
@@ -75,6 +95,11 @@ function toSummary(row: AquariumListRow): AquariumSummary {
     isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    maintainers: row.maintainers.map((m) => ({
+      userId: m.user.id,
+      displayName: m.user.displayName,
+    })),
+    lastMeasuredAt: row.measurements[0]?.measuredAt.toISOString(),
   };
 }
 

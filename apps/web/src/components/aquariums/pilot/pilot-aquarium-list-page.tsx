@@ -12,7 +12,20 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { aquariumsApi } from "@/lib/api/aquariums";
 import { OWNERSHIP_LABEL, WATER_BODY_LABEL } from "../aquarium-labels";
 import { pilotInter } from "./pilot-font";
-import { PilotBadge, PilotButton, PilotSegmentedControl } from "./pilot-ui";
+import {
+  PilotAvatar,
+  PilotBadge,
+  PilotButton,
+  PilotSegmentedControl,
+  pilotAvatarColor,
+  pilotInitials,
+} from "./pilot-ui";
+
+const lastMeasuredFormatter = new Intl.DateTimeFormat("hu-HU", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+});
 
 const litersFormatter = new Intl.NumberFormat("hu-HU", {
   maximumFractionDigits: 0,
@@ -28,12 +41,10 @@ const WATER_BODY_OPTIONS = ["Mind", "Akvárium", "Tó"] as const;
  * (`../aquarium-list-page.tsx`, VÁLTOZATLAN marad, ez egy KÜLÖN, PÁRHUZAMOS
  * komponens -- Balázs "egymás mellé tesszük" kérése szerint).
  *
- * KÉT OSZLOP HIÁNYZIK A FIGMA TERVHEZ KÉPEST: "Karbantartók" és "Utolsó
- * vízmérés". A mai lista-végpont (`AquariumSummary`) ezt az adatot NEM adja
- * vissza soronként -- csak a részletes lekérdezés (`AquariumDetail`) ismeri
- * a karbantartókat, és a vízmérés-előzmény külön végponton él. A brief 4.
- * pontja szerint amihez nincs adat, azt NEM találjuk ki, hanem elhagyjuk --
- * ez a két oszlop tehát ScopE-on kívül marad EBBEN a kísérleti körben.
+ * A "KARBANTARTÓK" ÉS "UTOLSÓ VÍZMÉRÉS" OSZLOP MÁR TELJES (acrobot kérése,
+ * 2026-09-24 16:19): a lista-végpont (`AquariumSummary`) mostantól
+ * soronként adja ezt is, két BATCH-ELT (nem soronkénti) lekérdezéssel --
+ * lásd `AquariumsRepository`-ban a `listInclude` fejlécét.
  *
  * A "TÍPUS" SZŰRŐ ÚJ: a mai lista csak tulajdon szerint szűr. A
  * `waterBodyType` viszont MEGLÉVŐ mező minden akváriumon, a szűrés hozzáadása
@@ -275,6 +286,8 @@ export function PilotAquariumListPage() {
                     "Típus",
                     "Liter",
                     "Berendezések",
+                    "Karbantartók",
+                    "Utolsó vízmérés",
                   ].map((col) => (
                     <th
                       key={col}
@@ -322,6 +335,29 @@ export function PilotAquariumListPage() {
                     </td>
                     <td className="px-4 py-3 text-center text-pilot-grey-500">
                       {item.equipmentCount}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex -space-x-1.5">
+                        {item.maintainers.map((maintainer) => (
+                          <PilotAvatar
+                            key={maintainer.userId}
+                            initials={pilotInitials(maintainer.displayName)}
+                            color={pilotAvatarColor(maintainer.userId)}
+                            size="sm"
+                          />
+                        ))}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-pilot-grey-500">
+                      {item.lastMeasuredAt ? (
+                        lastMeasuredFormatter.format(
+                          new Date(item.lastMeasuredAt),
+                        )
+                      ) : (
+                        <span className="italic text-pilot-grey-300">
+                          nincs
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
