@@ -184,7 +184,19 @@ export function resolveAquariumVolume(input: {
     input.widthCm != null &&
     input.heightCm != null
   ) {
-    const liters = (input.lengthCm * input.widthCm * input.heightCm) / 1000;
+    const raw = (input.lengthCm * input.widthCm * input.heightCm) / 1000;
+    /*
+      3 TIZEDESRE KEREKÍTVE, a szerver `systemVolumeLiters` oszlopának
+      `Decimal(12, 3)` skálájához igazítva (packages/database/prisma/
+      schema.prisma). Enélkül a méretekből számolt javaslat lebegőpontos
+      zajjal jelenhetne meg a mentés előtt (pl. 10 × 10,5 × 10,5 cm esetén a
+      nyers osztás 1.1025-öt ad, ami FELFELÉ kerekítve 1.103 -- egy csonkítás
+      vagy kerekítés nélküli kiírás 1.1024999999999998 alakban is
+      megjelenhetne a lebegőpontos ábrázolás miatt). A MENTETT érték emiatt
+      nem lenne hibás (a Decimal oszlop úgyis levágná), csak a képernyőn
+      látott javaslat volna zajos.
+    */
+    const liters = Math.round(raw * 1000) / 1000;
     return { systemVolumeLiters: liters, systemVolumeIsManual: false };
   }
   return {

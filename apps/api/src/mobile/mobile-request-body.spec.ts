@@ -217,6 +217,28 @@ const PAROK: readonly Par[] = [
     dtoNev: "CreateAquariumDto",
     kontroll: ["ownershipType", "name"],
   },
+  {
+    /**
+     * AKVARIUM ESZKOZ FELVITELE, LISTA+ADATLAP KOR (2026-09-24, acrobot
+     * 14:13-i dontese: "felvitel lista nelkul nem adhato ki"). Kulon vegpont
+     * (`POST /aquariums/:id/equipment`), kulon DTO -- nem az akvarium
+     * letrehozas DTO-ja.
+     *
+     * UGYANAZ A HIBA MEGISMETLODOTT VOLNA, MINT A `systemVolumeIsManual`-nal:
+     * a `quantity = 1;` tipusjeloles nelkul allt, a `dtoMezok()` kiolvasasa
+     * pedig kettospontot var a mezonev utan. Ugyanazzal a lepessel javitva
+     * (`: number` hozzaadasa), amit murena a szomszed parnal tett.
+     */
+    mit: "akvárium eszköz felvitele",
+    mobil: "../mobile/src/lib/api/aquariums.ts",
+    mobilNev: "CreateAquariumEquipmentInput",
+    dto: "src/aquariums/dto/aquarium.dto.ts",
+    dtoNev: "CreateAquariumEquipmentDto",
+    kontroll: ["kind"],
+    /* A KOZOS MEZO A `kind` -- a tobbi opcionalis mindket oldalon. */
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
 ];
 
 /**
@@ -305,7 +327,13 @@ const PAROK: readonly Par[] = [
  * dontest, es a valasz IGEN: a torzs NEVESITETT tipussal megy
  * (`CreateAquariumInput`), tehat PAR lett belole fent.
  */
-const IRAS_HIVASOK_MA = 18;
+/**
+ * 2026-09-24: 18 -> 19. Az uj hivas az AKVARIUM ESZKOZ FELVITELE
+ * (`addAquariumEquipment`, `lib/api/aquariums.ts`, lista+adatlap kor). A
+ * torzs NEVESITETT tipussal megy (`CreateAquariumEquipmentInput`), tehat
+ * PAR lett belole fent.
+ */
+const IRAS_HIVASOK_MA = 19;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {
