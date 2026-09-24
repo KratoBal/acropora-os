@@ -1,0 +1,290 @@
+"use client";
+
+import type { ReactNode } from "react";
+
+import { sv, serviceToneClass, type ServiceTone } from "./service-theme";
+
+/**
+ * A SZERVIZ LISTA-OLDALAK KOZOS DARABJAI, Balazs 2026-09-15-i designjabol.
+ *
+ * ATKOLTOZOTT IDE `apps/web/src/components/service/` alol, 2026-09-24
+ * (partner hibajegy-lapok arculati parositasa, lasd `service-theme.ts` fejleceben
+ * a reszletet). Az `apps/web` sajat fajlja innentol csak ujraexportal, a kod
+ * valtozatlan.
+ */
+
+/** A prototipus ikonjai, ugyanazokkal az utvonalakkal. */
+const iconPaths = {
+  search: (
+    <>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m16 16 5 5" />
+    </>
+  ),
+  plus: <path d="M12 5v14M5 12h14" />,
+  edit: <path d="m15 4 5 5M4 15 16 3a2 2 0 0 1 5 5L9 20l-6 1z" />,
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
+  checkCircle: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m7 12 3 3 7-7" />
+    </>
+  ),
+  box: <path d="m12 3 9 5v9l-9 5-9-5V8zM3 8l9 5 9-5M12 13v9M7 5l10 6" />,
+  wrench: (
+    <path d="M21 7a6 6 0 0 1-8 6L6 20a2 2 0 0 1-3-3l7-7a6 6 0 0 1 7-8l-4 4 4 4z" />
+  ),
+  building: (
+    <path d="M5 21V3h14v18M2 21h20M9 7h1m4 0h1M9 11h1m4 0h1m-6 4h1m4 0h1M10 21v-3h4v3" />
+  ),
+  location: (
+    <>
+      <path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 0 1 14 0Z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </>
+  ),
+  arrowLeft: <path d="M20 12H4m6-6-6 6 6 6" />,
+  /**
+   * `offline` -- athuzott wifi-iv. A prototipus `app.js`-ebol, beture.
+   * Az athuzas (`m3 3 18 18`) az elso alalak: az iveket onmagukban a gyenge
+   * jel ikonjanak is lehetne olvasni, es a sav epp az ellenkezojet allitja.
+   */
+  offline: (
+    <path d="m3 3 18 18M2 8a16 16 0 0 1 4-2m5-1a16 16 0 0 1 11 3M5 12a11 11 0 0 1 4-2m6 0a11 11 0 0 1 4 2m-11 4a6 6 0 0 1 8 0m-4 4h.01" />
+  ),
+  users: (
+    <>
+      <circle cx="9" cy="7" r="3" />
+      <path d="M3 21v-3a6 6 0 0 1 12 0v3M17 4a3 3 0 0 1 0 6m2 11v-3a6 6 0 0 0-2-4" />
+    </>
+  ),
+  ticket: (
+    <>
+      <path d="M3 5h18v5a2 2 0 0 0 0 4v5H3v-5a2 2 0 0 0 0-4z" />
+      <path d="M8 5v3m0 3v2m0 3v3" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v6m0-10h.01" />
+    </>
+  ),
+  sheet: (
+    <>
+      <path d="M14 3H5v18h14V8z" />
+      <path d="M14 3v5h5M8 12h8m-8 4h6" />
+    </>
+  ),
+} as const;
+
+export type ServiceIconName = keyof typeof iconPaths;
+
+export function ServiceIcon({
+  name,
+  className = "size-5",
+}: {
+  name: ServiceIconName;
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={`shrink-0 ${className}`}
+    >
+      {iconPaths[name]}
+    </svg>
+  );
+}
+
+/**
+ * A PROTOTIPUS ALLAPOT-PIRULAJA: szines hatter + egy pont a szoveg elott.
+ *
+ * A pont nem dekoracio: a hat arnyalatbol ketto (amber es red) hasonlo
+ * vilagossagu, es a pont adja a masodik jelet. A cimke szovege TOVABBRA is a
+ * meglevo `*-labels.ts` fajlokbol jon, ez a komponens csak megjelenit.
+ */
+export function ServiceStatusBadge({
+  tone,
+  children,
+}: {
+  tone: ServiceTone;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-[5px] text-[11px] font-semibold leading-tight ${serviceToneClass[tone]}`}
+    >
+      <span
+        aria-hidden="true"
+        className="size-[5px] shrink-0 rounded-full bg-current"
+      />
+      {children}
+    </span>
+  );
+}
+
+export function ServiceListHeader({
+  eyebrow,
+  title,
+  lead,
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  lead: string;
+  action?: ReactNode;
+}) {
+  return (
+    <header className="mb-6 flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-center">
+      <div>
+        <p className={sv.eyebrow}>{eyebrow}</p>
+        <h1 className={sv.pageTitle}>{title}</h1>
+        <p className={sv.pageLead}>{lead}</p>
+      </div>
+      {action ?? null}
+    </header>
+  );
+}
+
+export interface ServiceListTab {
+  key: string;
+  label: string;
+}
+
+export function ServiceListTabs({
+  tabs,
+  active,
+  onSelect,
+  label,
+}: {
+  tabs: ServiceListTab[];
+  active: string;
+  onSelect: (key: string) => void;
+  label: string;
+}) {
+  return (
+    <div className={sv.tabs} role="tablist" aria-label={label}>
+      {tabs.map((tab) => {
+        const on = tab.key === active;
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => onSelect(tab.key)}
+            className={`${sv.tab} ${on ? sv.tabActive : ""}`}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * MI ALL A LABLEC JOBB OLDALAN: LAPOZAS VAGY HATAR.
+ *
+ * KET KULONBOZO DOLOG, ES EZERT KET AG, NEM KET SZAM PLUSZ EGY FELULIRAS.
+ *
+ * A munkalap- es az eszkoz-lista LAPOZ: ott van ertelme lapszamnak, es az
+ * utolso lapon igaz, hogy a vegere ertel. A hibajegy-lista NEM lapoz: a
+ * szerver egy hataron belul ad sorokat, es kulon megmondja, ha tobb van.
+ *
+ * KORABBAN EZ EGY `page` + `totalPages` + elhagyhato `note` harmas volt. Az
+ * mukodott, de a nem lapozo hivonak KET ERTELMETLEN SZAMOT kellett atadnia
+ * (`page={1} totalPages={1}`), es utana felulirnia a kovetkezmenyuket. A
+ * kovetkezo ilyen hivo, aki elfelejti a felulirast, ezt kapja egy VAGOTT lista
+ * alja ala: "A lista vegere ertel" -- magabiztos, hamis, es epp az az egy
+ * mondat, amiert valaki odanez. A tipusrendszer ehhez meg segit is: az
+ * `1`/`1` teljesen szabalyos.
+ *
+ * IGY VISZONT A HAMIS ALLITAS NEM KIFEJEZHETO. Nem azert nem mondjuk ki, mert
+ * valaki emlekszik ra, hanem mert nincs hozza ag.
+ */
+export type ServiceListTail =
+  | { kind: "paged"; page: number; totalPages: number }
+  /**
+   * `truncated`: a szerver mondta meg, hogy van tobb. A HATAR SZAMA
+   * SZANDEKOSAN nem szerepel -- az a szerver lekerdezeseben all, es ha itt is
+   * allna, egyszer elcsuszna tole.
+   */
+  | { kind: "capped"; truncated: boolean };
+
+function tailText(tail: ServiceListTail): string {
+  if (tail.kind === "capped")
+    return tail.truncated
+      ? "A legfrissebbek látszanak, és van több"
+      : "A lista végére értél";
+  return tail.totalPages <= 1
+    ? "A lista végére értél"
+    : `${tail.page} / ${tail.totalPages}. lap`;
+}
+
+/**
+ * A LISTA LABLECE: hany talalat van, es mi all a lista vegen.
+ */
+export function ServiceListFooter({
+  shown,
+  totalItems,
+  tail,
+}: {
+  shown: number;
+  totalItems: number;
+  tail: ServiceListTail;
+}) {
+  return (
+    <div className={sv.tableFooter}>
+      <span>
+        {totalItems} találat
+        {totalItems > shown ? `, ebből ${shown} ezen a lapon` : ""}
+      </span>
+      <span data-testid="lablec-zaro">{tailText(tail)}</span>
+    </div>
+  );
+}
+
+export function ServiceSearchField({
+  label,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className={sv.search}>
+      <ServiceIcon name="search" className="size-[17px] text-muted" />
+      <span className="sr-only">{label}</span>
+      <input
+        type="search"
+        className={sv.searchInput}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
