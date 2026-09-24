@@ -20,6 +20,11 @@ const BASE = "/aquariums";
  * `getAquarium`, `addAquariumEquipment` és `removeAquariumEquipment` most
  * kerül ide, a `partners.ts` mintájára, a valódi vezérlő végpontjaihoz
  * igazítva (`apps/api/src/aquariums/aquariums.controller.ts`).
+ *
+ * 2026-09-24, MÁSODIK KÖR: `searchSelectableAquariumCustomers` -- eddig a
+ * felvitel csak ÚJ ügyfelet ismert, mert nem volt hogyan keresni a meglévők
+ * között (a `SERVICE` szerepkör nem éri el a `/customers`-t). Most van egy
+ * saját, akvárium-scope-olt végpont rá.
  */
 
 export type AquariumOwnershipType = "OWN" | "CUSTOMER";
@@ -180,5 +185,28 @@ export function removeAquariumEquipment(
   return apiRequest<AquariumDetail>(
     `${BASE}/${encodeURIComponent(aquariumId)}/equipment/${encodeURIComponent(equipmentId)}`,
     { method: "DELETE" },
+  );
+}
+
+/**
+ * A MEGLÉVŐ ÜGYFÉL KERESÉSE, AZ AKVÁRIUM FELVITEL VÁLASZTÓJÁHOZ.
+ *
+ * SZÁNDÉKOSAN NEM A `/customers` VÉGPONT: a `SERVICE` szerepkör nem viseli a
+ * `customers.view`/`customers.manage` jogot (mérve
+ * `packages/types/src/auth.ts` `ROLE_PERMISSIONS.SERVICE`), tehát a mobil
+ * felvitel ezt nem hívhatja. Ez a `GET /aquariums/customers` `aquariums.view`
+ * alatt fut, a `/assets/owners` mintájára.
+ */
+export interface AquariumSelectableCustomer {
+  id: string;
+  displayName: string;
+  city?: string;
+}
+
+export function searchSelectableAquariumCustomers(search = "") {
+  const query = new URLSearchParams();
+  if (search.trim()) query.set("search", search.trim());
+  return apiRequest<{ items: AquariumSelectableCustomer[] }>(
+    `${BASE}/customers?${query}`,
   );
 }

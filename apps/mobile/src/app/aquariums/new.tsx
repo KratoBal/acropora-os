@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -15,7 +15,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError } from "@/lib/api/client";
-import { createAquarium } from "@/lib/api/aquariums";
+import {
+  createAquarium,
+  searchSelectableAquariumCustomers,
+} from "@/lib/api/aquariums";
 import {
   buildAquariumCreatePayload,
   emptyAquariumCreateForm,
@@ -50,10 +53,11 @@ import { aquariumOperationId } from "@/lib/offline/sync-queue";
  *
  * === MI SZŰKEBB, MINT A WEBEN, ÉS MIÉRT ===
  *
- * 1. MEGLÉVŐ ÜGYFÉL KERESÉSE NINCS -- csak helyben felvitel. A szó szerinti
- *    kérés "az ugyfel HELYBEN FELVETELE"-t nevez meg, nem keresést; a szerver
- *    mindkét utat elfogadja (`customerId` VAGY `newCustomer`), tehát ez a
- *    szűkítés itt van, nem a szerverén -- egy keresés-mező később idekerülhet.
+ * 1. MEGLÉVŐ ÜGYFÉL KERESÉSE 2026-09-24-TŐL MEGY (acrobot 2. tétele): a
+ *    `GET /aquariums/customers` -- `aquariums.view` alatt, nem a `/customers`
+ *    (amit a `SERVICE` szerepkör nem érne el). A döntés a
+ *    `lib/aquariums/aquarium-create.ts`-ben áll (`customerMode`), itt csak a
+ *    választó jelenik meg.
  * 2. VÍZTÍPUS, KEZDÉS DÁTUMA, MEGJEGYZÉS NINCS AZ ŰRLAPON: a brief mobil
  *    kiegészítése ("meretek es a liter, az eszkozok") ezeket nem nevezte meg.
  *
@@ -215,56 +219,88 @@ export default function NewAquariumScreen() {
 
           {form.ownershipType === "CUSTOMER" ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Ügyfél (helyben felvéve)</Text>
-              <Field
-                label="Név"
-                value={form.customerName}
-                onChangeText={(customerName) =>
-                  setForm((prev) => ({ ...prev, customerName }))
+              <Text style={styles.sectionTitle}>Ügyfél</Text>
+              <Segmented<"EXISTING" | "NEW">
+                value={form.customerMode}
+                options={["EXISTING", "NEW"]}
+                label={(value) =>
+                  value === "EXISTING" ? "Meglévő ügyfél" : "Új ügyfél"
                 }
-                error={error?.field === "customerName" ? error.message : null}
-              />
-              <Field
-                label="Telefonszám"
-                value={form.customerPhone}
-                onChangeText={(customerPhone) =>
-                  setForm((prev) => ({ ...prev, customerPhone }))
-                }
-                keyboardType="phone-pad"
-              />
-              <Field
-                label="E-mail cím"
-                value={form.customerEmail}
-                onChangeText={(customerEmail) =>
-                  setForm((prev) => ({ ...prev, customerEmail }))
-                }
-                keyboardType="email-address"
-              />
-              <Field
-                label="Irányítószám"
-                value={form.customerPostalCode}
-                onChangeText={(customerPostalCode) =>
-                  setForm((prev) => ({ ...prev, customerPostalCode }))
-                }
-                keyboardType="number-pad"
-              />
-              <Field
-                label="Város"
-                value={form.customerCity}
-                onChangeText={(customerCity) =>
-                  setForm((prev) => ({ ...prev, customerCity }))
+                onChange={(customerMode) =>
+                  setForm((prev) => ({ ...prev, customerMode }))
                 }
               />
-              <Field
-                label="Utca, házszám"
-                value={form.customerAddressLine1}
-                onChangeText={(customerAddressLine1) =>
-                  setForm((prev) => ({ ...prev, customerAddressLine1 }))
-                }
-                error={
-                  error?.field === "customerAddress" ? error.message : null
-                }
-              />
+
+              {form.customerMode === "EXISTING" ? (
+                <CustomerPicker
+                  selectedId={form.selectedCustomerId}
+                  selectedLabel={form.selectedCustomerLabel}
+                  error={
+                    error?.field === "selectedCustomer" ? error.message : null
+                  }
+                  onSelect={(selectedCustomerId, selectedCustomerLabel) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      selectedCustomerId,
+                      selectedCustomerLabel,
+                    }))
+                  }
+                />
+              ) : (
+                <>
+                  <Field
+                    label="Név"
+                    value={form.customerName}
+                    onChangeText={(customerName) =>
+                      setForm((prev) => ({ ...prev, customerName }))
+                    }
+                    error={
+                      error?.field === "customerName" ? error.message : null
+                    }
+                  />
+                  <Field
+                    label="Telefonszám"
+                    value={form.customerPhone}
+                    onChangeText={(customerPhone) =>
+                      setForm((prev) => ({ ...prev, customerPhone }))
+                    }
+                    keyboardType="phone-pad"
+                  />
+                  <Field
+                    label="E-mail cím"
+                    value={form.customerEmail}
+                    onChangeText={(customerEmail) =>
+                      setForm((prev) => ({ ...prev, customerEmail }))
+                    }
+                    keyboardType="email-address"
+                  />
+                  <Field
+                    label="Irányítószám"
+                    value={form.customerPostalCode}
+                    onChangeText={(customerPostalCode) =>
+                      setForm((prev) => ({ ...prev, customerPostalCode }))
+                    }
+                    keyboardType="number-pad"
+                  />
+                  <Field
+                    label="Város"
+                    value={form.customerCity}
+                    onChangeText={(customerCity) =>
+                      setForm((prev) => ({ ...prev, customerCity }))
+                    }
+                  />
+                  <Field
+                    label="Utca, házszám"
+                    value={form.customerAddressLine1}
+                    onChangeText={(customerAddressLine1) =>
+                      setForm((prev) => ({ ...prev, customerAddressLine1 }))
+                    }
+                    error={
+                      error?.field === "customerAddress" ? error.message : null
+                    }
+                  />
+                </>
+              )}
             </View>
           ) : null}
 
@@ -523,6 +559,84 @@ function Segmented<T extends string>({
   );
 }
 
+/**
+ * A MEGLÉVŐ ÜGYFÉL VÁLASZTÓJA -- `GET /aquariums/customers`-re épít, NEM a
+ * `/customers`-re (lásd `lib/api/aquariums.ts` fejlécét: a `SERVICE`
+ * szerepkör azt nem éri el). Csak akkor tölt listát, amikor a panel
+ * kinyílik -- a szerelő nem mindig nyúl hozzá.
+ */
+function CustomerPicker({
+  selectedId,
+  selectedLabel,
+  error,
+  onSelect,
+}: {
+  selectedId: string | null;
+  selectedLabel: string;
+  error?: string | null;
+  onSelect: (id: string, label: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const results = useQuery({
+    queryKey: ["aquarium-selectable-customers", search],
+    queryFn: () => searchSelectableAquariumCustomers(search),
+    enabled: open,
+  });
+
+  return (
+    <View style={styles.field}>
+      <Pressable
+        onPress={() => setOpen((value) => !value)}
+        style={styles.pickerToggle}
+      >
+        <Text style={styles.pickerToggleText}>
+          {selectedId ? selectedLabel : "Válassz ügyfelet"}
+        </Text>
+      </Pressable>
+      {error ? <Text style={styles.fieldError}>{error}</Text> : null}
+      {open ? (
+        <View style={styles.pickerPanel}>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Keresés név szerint"
+            placeholderTextColor="#668798"
+            style={styles.input}
+          />
+          {results.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+          {results.isError ? (
+            <Text style={styles.fieldError}>
+              Az ügyféllista nem tölthető be.
+            </Text>
+          ) : null}
+          {(results.data?.items ?? []).map((item) => (
+            <Pressable
+              key={item.id}
+              onPress={() => {
+                onSelect(
+                  item.id,
+                  item.city
+                    ? `${item.displayName} (${item.city})`
+                    : item.displayName,
+                );
+                setOpen(false);
+              }}
+              style={styles.pickerRow}
+            >
+              <Text style={styles.pickerRowText}>{item.displayName}</Text>
+              {item.city ? (
+                <Text style={styles.pickerRowMeta}>{item.city}</Text>
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function EquipmentKindPicker({
   value,
   onChange,
@@ -603,6 +717,25 @@ const styles = StyleSheet.create({
   segmentedOptionActive: { backgroundColor: "#52d6c7", borderColor: "#52d6c7" },
   segmentedText: { color: "#91afbe", fontWeight: "700" },
   segmentedTextActive: { color: "#071827" },
+  pickerToggle: {
+    backgroundColor: "#071f31",
+    borderColor: "#28536a",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  pickerToggleText: { color: "#f4fbff", fontWeight: "700" },
+  pickerPanel: { marginTop: 8, gap: 8 },
+  pickerRow: {
+    backgroundColor: "#0d2b40",
+    borderColor: "#1c4963",
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+  },
+  pickerRowText: { color: "#f4fbff", fontWeight: "700" },
+  pickerRowMeta: { color: "#789cad", fontSize: 12, marginTop: 2 },
   kindWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   kindChip: {
     borderRadius: 20,

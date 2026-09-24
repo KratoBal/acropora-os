@@ -248,6 +248,8 @@ export type {
   AquariumEquipmentKind,
   AquariumListResponse,
   AquariumOwnershipType,
+  AquariumSelectableCustomer,
+  AquariumSelectableCustomerListResponse,
   AquariumSummary,
   CreateAquariumEquipmentInput,
   CreateAquariumInput,

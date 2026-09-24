@@ -136,3 +136,14 @@ export class AquariumListQueryDto {
   @IsOptional()
   ownershipType?: (typeof OWNERSHIP_TYPES)[number];
 }
+
+/**
+ * A MEGLÉVŐ ÜGYFÉL KERESÉSE, AZ AKVÁRIUM FELVITEL VÁLASZTÓJÁHOZ.
+ *
+ * Lásd `AquariumSelectableCustomer` fejlécét (`@acropora/types`): ez a
+ * végpont `aquariums.view` alatt fut, mert a mobil `SERVICE` szerepkör nem
+ * éri el a `/customers`-t.
+ */
+export class AquariumSelectableCustomerQueryDto {
+  @IsString() @IsOptional() search?: string;
+}

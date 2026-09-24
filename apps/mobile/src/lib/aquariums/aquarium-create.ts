@@ -5,12 +5,13 @@
  * telefonon lehet kipróbálni. A döntések (liter-számolás, kötelező mezők)
  * ide kerülnek, spec-cel.
  *
- * A TELEFONOS KÖR SZŰKÍTETT A WEBHEZ KÉPEST: nincs meglévő ügyfél keresése,
- * csak helyben felvitel -- Balázs szó szerinti kérése (msg 22949) "az ugyfel
- * helyben felvetele (nev, cim, telefon, e-mail)"-t nevez meg, nem keresést.
- * A szerver `POST /aquariums` mindkét utat elfogadja (`customerId` VAGY
- * `newCustomer`), tehát ez a szűkítés a telefon oldalán van, nem a szerverén
- * -- egy keresés-képernyő később ide, ebbe a modulba kerülhet.
+ * A MEGLÉVŐ ÜGYFÉL KERESÉSE 2026-09-24-TŐL ITT IS MEGY (acrobot 2. tétele,
+ * a lista/adatlap kör után): a `GET /aquariums/customers` -- `aquariums.view`
+ * alatt, mert a `SERVICE` szerepkör nem éri el a `/customers`-t -- adja a
+ * választható ügyfeleket. A `customerMode` dönt: `"EXISTING"`-nél a
+ * `selectedCustomerId` megy a törzsben, `"NEW"`-nál a régi, helyben felvitt
+ * `newCustomer`. A szerver `POST /aquariums` mindkét utat elfogadja
+ * (`customerId` VAGY `newCustomer`).
  *
  * A TÍPUSOK SAJÁT, SZERKEZETI MÁSOLATOK, NEM `../api/aquariums`-ból jönnek.
  * A teszt-fordító nem ismeri a `@/` aliast (lásd `tsconfig.test.json`
@@ -74,6 +75,15 @@ export interface CreateAquariumInput {
 export interface AquariumCreateForm {
   ownershipType: AquariumOwnershipType;
 
+  /** Csak `ownershipType === "CUSTOMER"`-nél számít. */
+  customerMode: "EXISTING" | "NEW";
+  /** A választóban kiválasztott ügyfél azonosítója, `customerMode ===
+   * "EXISTING"`-nél. */
+  selectedCustomerId: string | null;
+  /** A választó gomb feliratához -- a szerver nem kapja meg, csak a
+   * felületen jelenik meg, hogy KIT választott a felhasználó. */
+  selectedCustomerLabel: string;
+
   customerName: string;
   customerEmail: string;
   customerPhone: string;
@@ -122,6 +132,9 @@ export function emptyAquariumEquipmentForm(): AquariumEquipmentForm {
 export function emptyAquariumCreateForm(): AquariumCreateForm {
   return {
     ownershipType: "OWN",
+    customerMode: "NEW",
+    selectedCustomerId: null,
+    selectedCustomerLabel: "",
     customerName: "",
     customerEmail: "",
     customerPhone: "",
@@ -229,6 +242,7 @@ export function aquariumEquipmentProblem(input: {
 
 export type AquariumCreateField =
   | "name"
+  | "selectedCustomer"
   | "customerName"
   | "customerAddress"
   | "lengthCm"
@@ -255,8 +269,17 @@ export function buildAquariumCreatePayload(
   if (!name)
     return { ok: false, field: "name", message: "Az akvárium neve kötelező." };
 
+  let customerId: string | undefined;
   let newCustomer: NewAquariumCustomerInput | undefined;
-  if (form.ownershipType === "CUSTOMER") {
+  if (form.ownershipType === "CUSTOMER" && form.customerMode === "EXISTING") {
+    if (!form.selectedCustomerId)
+      return {
+        ok: false,
+        field: "selectedCustomer",
+        message: "Válassz ügyfelet, vagy válts az új ügyfél felvitelére.",
+      };
+    customerId = form.selectedCustomerId;
+  } else if (form.ownershipType === "CUSTOMER") {
     const customerName = form.customerName.trim();
     if (!customerName)
       return {
@@ -362,6 +385,7 @@ export function buildAquariumCreatePayload(
     ok: true,
     payload: {
       ownershipType: form.ownershipType,
+      customerId,
       newCustomer,
       name,
       waterBodyType: form.waterBodyType,
