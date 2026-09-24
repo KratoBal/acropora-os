@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Card, Input, Select } from "@acropora/ui";
+import { Alert, Button, Card, FormField, Input, Select } from "@acropora/ui";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -16,6 +16,24 @@ const ORDER_STATUS_LABEL: Record<MaintenanceOrderSummary["status"], string> = {
   SIGNED: "Aláírva",
   REVOKED: "Visszavonva",
 };
+
+/**
+ * A `save()` A `number`/`title`/`validFrom` MEZŐT MINDIG ELKÜLDI --
+ * ha a felhasználó kiüríti valamelyiket, az API `@MinLength`/`@IsDateString`
+ * hibája angolul jelenne meg (lásd `contracts-page.tsx` `missingFields`
+ * fejlécét, ugyanaz a hibaosztály). Ez a gomb-tiltást tápláló ellenőrzés.
+ */
+export function missingContractFields(contract: {
+  number: string;
+  title: string;
+  validFrom: string;
+}): string[] {
+  const list: string[] = [];
+  if (!contract.number.trim()) list.push("Szerződésszám");
+  if (!contract.title.trim()) list.push("Szerződés címe");
+  if (!contract.validFrom) list.push("Érvényesség kezdete");
+  return list;
+}
 
 export function ContractDetailPage({ contractId }: { contractId: string }) {
   const { session } = useAuth();
@@ -56,11 +74,20 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
       );
     }
   };
+  /**
+   * NEM `if (token)` -- Balázs éles hibája (2026-09-24 17:39): a
+   * `Session.token` OPCIONÁLIS (`packages/types/src/auth.ts`), mert
+   * éles (jelszavas) bejelentkezésnél a böngésző httpOnly sütije
+   * hitelesít, a kliens oldalon nincs olvasható token. `session?.token ??
+   * ""` ilyenkor MINDIG üres string, tehát egy `if (token)` feltétel a
+   * `load()`-ot SOHA nem futtatná le -- az adatlap örökre "Szerződés
+   * betöltése…" marad. Az `apiRequest` üres token mellett is helyesen
+   * hagyatkozik a sütire (lásd `client.ts` fejlécét); a lista oldal
+   * (`contracts-page.tsx`) ezért működik: az nem feltételez tokent.
+   */
   useEffect(() => {
-    if (token) {
-      void load();
-      void loadOrders();
-    }
+    void load();
+    void loadOrders();
   }, [contractId, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
@@ -172,6 +199,18 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
 
   const selectedCount = useMemo(() => selectedItemIds.size, [selectedItemIds]);
 
+  /**
+   * UGYANAZ A HIBAOSZTÁLY, MINT AZ ÚJ SZERZŐDÉS ŰRLAPON
+   * (`contracts-page.tsx` `missingFields`): a `number`/`title`/`validFrom`
+   * mezőket a `save()` MINDIG elküldi, tehát ha a felhasználó kiüríti
+   * őket, az API `@IsDateString`/`@MinLength` hibája angolul jelenne meg.
+   * Itt a gomb-tiltás előzi meg.
+   */
+  const missing = useMemo(
+    () => (contract ? missingContractFields(contract) : []),
+    [contract],
+  );
+
   if (error && !contract)
     return (
       <Alert variant="danger" title="Betöltési hiba" description={error} />
@@ -193,51 +232,71 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
       <Card className="space-y-4 p-5">
         <h2 className="text-lg font-semibold">Szerződés adatai</h2>
         <div className="grid gap-4 md:grid-cols-2">
-          <Input
-            aria-label="Szerződésszám"
-            value={contract.number}
-            onChange={(event) =>
-              setContract({ ...contract, number: event.target.value })
-            }
-          />
-          <Input
-            aria-label="Szerződés címe"
-            value={contract.title}
-            onChange={(event) =>
-              setContract({ ...contract, title: event.target.value })
-            }
-          />
-          <Input
-            type="date"
-            aria-label="Érvényes ettől"
-            value={contract.validFrom.slice(0, 10)}
-            onChange={(event) =>
-              setContract({ ...contract, validFrom: event.target.value })
-            }
-          />
-          <Input
-            type="date"
-            aria-label="Érvényes eddig"
-            value={contract.validTo?.slice(0, 10) ?? ""}
-            onChange={(event) =>
-              setContract({ ...contract, validTo: event.target.value || null })
-            }
-          />
-          <Select
-            aria-label="Állapot"
-            value={contract.status}
-            onChange={(event) =>
-              setContract({
-                ...contract,
-                status: event.target.value as ContractSummary["status"],
-              })
-            }
+          <FormField label="Szerződésszám *" htmlFor="contract-edit-number">
+            <Input
+              id="contract-edit-number"
+              value={contract.number}
+              onChange={(event) =>
+                setContract({ ...contract, number: event.target.value })
+              }
+            />
+          </FormField>
+          <FormField label="Szerződés címe *" htmlFor="contract-edit-title">
+            <Input
+              id="contract-edit-title"
+              value={contract.title}
+              onChange={(event) =>
+                setContract({ ...contract, title: event.target.value })
+              }
+            />
+          </FormField>
+          <FormField
+            label="Érvényesség kezdete *"
+            htmlFor="contract-edit-valid-from"
           >
-            <option value="DRAFT">Piszkozat</option>
-            <option value="ACTIVE">Aktív</option>
-            <option value="EXPIRED">Lejárt</option>
-            <option value="TERMINATED">Megszűnt</option>
-          </Select>
+            <Input
+              id="contract-edit-valid-from"
+              type="date"
+              value={contract.validFrom.slice(0, 10)}
+              onChange={(event) =>
+                setContract({ ...contract, validFrom: event.target.value })
+              }
+            />
+          </FormField>
+          <FormField
+            label="Érvényesség vége"
+            htmlFor="contract-edit-valid-to"
+            description="Opcionális -- üresen hagyva határozatlan idejű."
+          >
+            <Input
+              id="contract-edit-valid-to"
+              type="date"
+              value={contract.validTo?.slice(0, 10) ?? ""}
+              onChange={(event) =>
+                setContract({
+                  ...contract,
+                  validTo: event.target.value || null,
+                })
+              }
+            />
+          </FormField>
+          <FormField label="Állapot" htmlFor="contract-edit-status">
+            <Select
+              id="contract-edit-status"
+              value={contract.status}
+              onChange={(event) =>
+                setContract({
+                  ...contract,
+                  status: event.target.value as ContractSummary["status"],
+                })
+              }
+            >
+              <option value="DRAFT">Piszkozat</option>
+              <option value="ACTIVE">Aktív</option>
+              <option value="EXPIRED">Lejárt</option>
+              <option value="TERMINATED">Megszűnt</option>
+            </Select>
+          </FormField>
         </div>
         {/*
           A KÉT MEZŐ A MEGRENDELŐLAPRA MEGY, ÉS MI TÖLTJÜK KI -- Balázs
@@ -247,39 +306,61 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
           exchange/nautilus-megrendelolap-lekepezesi-terv-2026-09-24.md.
         */}
         <div className="grid gap-4 md:grid-cols-2">
-          <Input
-            aria-label="Vevő szervezeti egysége (megrendelőlapon)"
-            placeholder="Szervezeti egység megnevezése"
-            value={contract.organizationalUnitName ?? ""}
-            onChange={(event) =>
-              setContract({
-                ...contract,
-                organizationalUnitName: event.target.value || null,
-              })
-            }
-          />
-          <Input
-            aria-label="Vevő kapcsolattartója (megrendelőlapon)"
-            placeholder="Ügyintéző"
-            value={contract.contactPersonName ?? ""}
-            onChange={(event) =>
-              setContract({
-                ...contract,
-                contactPersonName: event.target.value || null,
-              })
-            }
-          />
+          <FormField
+            label="Vevő szervezeti egysége (megrendelőlapon)"
+            htmlFor="contract-edit-org-unit"
+          >
+            <Input
+              id="contract-edit-org-unit"
+              placeholder="Szervezeti egység megnevezése"
+              value={contract.organizationalUnitName ?? ""}
+              onChange={(event) =>
+                setContract({
+                  ...contract,
+                  organizationalUnitName: event.target.value || null,
+                })
+              }
+            />
+          </FormField>
+          <FormField
+            label="Vevő kapcsolattartója (megrendelőlapon)"
+            htmlFor="contract-edit-contact"
+          >
+            <Input
+              id="contract-edit-contact"
+              placeholder="Ügyintéző"
+              value={contract.contactPersonName ?? ""}
+              onChange={(event) =>
+                setContract({
+                  ...contract,
+                  contactPersonName: event.target.value || null,
+                })
+              }
+            />
+          </FormField>
         </div>
-        <Input
-          aria-label="Megjegyzés"
-          value={contract.notes ?? ""}
-          onChange={(event) =>
-            setContract({ ...contract, notes: event.target.value || null })
-          }
-        />
-        <Button disabled={saving} onClick={() => void save()}>
-          {saving ? "Mentés…" : "Módosítások mentése"}
-        </Button>
+        <FormField label="Megjegyzés" htmlFor="contract-edit-notes">
+          <Input
+            id="contract-edit-notes"
+            value={contract.notes ?? ""}
+            onChange={(event) =>
+              setContract({ ...contract, notes: event.target.value || null })
+            }
+          />
+        </FormField>
+        <div className="space-y-2">
+          <Button
+            disabled={saving || missing.length > 0}
+            onClick={() => void save()}
+          >
+            {saving ? "Mentés…" : "Módosítások mentése"}
+          </Button>
+          {missing.length > 0 ? (
+            <p className="text-xs font-medium text-rose-600">
+              Hiányzik: {missing.join(", ")}.
+            </p>
+          ) : null}
+        </div>
       </Card>
       <Card className="p-5">
         <h2 className="mb-3 text-lg font-semibold">Szerződéses tételek</h2>
