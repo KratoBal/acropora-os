@@ -53,6 +53,18 @@ export interface AssetCreateForm {
    * utasítaná, mert ott a cím a pontosítás.
    */
   unitId: string;
+  /**
+   * A SZÜLŐESZKÖZ, HA EZ A GÉP EGY MÁSIK RÉSZE (opcionális).
+   *
+   * A választható halmaz a KIVÁLASZTOTT alegység eszközeiből áll -- ugyanaz a
+   * szabály, mint a hibajegy "eredet-eszköz" választójánál
+   * (`service-jobs/new.tsx`): egy helyszín nélküli listából a szerelő nem
+   * tudna választani, a szerver pedig a szülőt is az alegység eszközei közül
+   * várja. A mező ezért csak akkor jelenik meg a képernyőn, ha `unitId` már
+   * ki van választva -- ez a modul viszont nem dönt erről, csak átveszi, amit
+   * kap.
+   */
+  parentAssetId?: string;
   name: string;
   kind: AssetKind;
   /**
@@ -136,6 +148,8 @@ export interface AssetCreatePayload {
   ownerId: string;
   /** Csak szerviz partner tulajdonosnál kerül bele, lásd `buildAssetCreatePayload`. */
   departmentId?: string;
+  /** A szülőeszköz azonosítója, ha ez a gép egy másik része. Elhagyható. */
+  parentAssetId?: string;
   kind: AssetKind;
   name: string;
   manufacturer?: string;
@@ -459,6 +473,14 @@ export function buildAssetCreatePayload(
        */
       ...(form.owner.type === "SUPPLIER" && form.unitId.trim()
         ? { departmentId: form.unitId.trim() }
+        : {}),
+      /*
+        A SZÜLŐESZKÖZ UGYANOLYAN ELHAGYHATÓ, MINT A KATEGÓRIA: üres
+        választásnál a mező KIMARAD, nem üres sztringként megy -- a szerver
+        `null`-t vagy hiányt vár.
+      */
+      ...(form.parentAssetId?.trim()
+        ? { parentAssetId: form.parentAssetId.trim() }
         : {}),
       kind: form.kind,
       name,

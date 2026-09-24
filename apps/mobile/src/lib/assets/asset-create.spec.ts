@@ -254,6 +254,58 @@ describe("buildAssetCreatePayload es az alegyseg", () => {
   });
 });
 
+/**
+ * A SZÜLŐESZKÖZ -- Balázs döntése, 2026-09-24 (kanban f5e6f34d nyomán mért
+ * mobil hiány pótlása): a felvitel eddig nem tudott szülőt megadni, tehát egy
+ * beépített alkatrészt a helyszínen fel lehetett venni, de a szülőhöz kötése
+ * utólagos, irodai lépést igényelt -- a szerver oldal (`parentAssetId`) már
+ * kész volt hozzá, a mobil form nem használta.
+ */
+describe("buildAssetCreatePayload es a szuloeszkoz", () => {
+  it("sends the chosen parent asset", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      parentAssetId: "parent-1",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(
+      result.ok ? result.payload.parentAssetId : undefined,
+      "parent-1",
+    );
+  });
+
+  /**
+   * ELHAGYHATÓ, UGYANÚGY, MINT A KATEGÓRIA: üres választásnál a mező KIMARAD
+   * a payloadból, nem üres sztringként megy -- a szerver `null`-t vagy
+   * hiányt vár, és az üres sztring egy nem létező eszköz azonosítója lenne.
+   */
+  it("leaves parentAssetId out when nothing was chosen", () => {
+    const result = buildAssetCreatePayload({ ...form, parentAssetId: "" });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ok ? "parentAssetId" in result.payload : true, false);
+  });
+
+  it("also leaves it out when the field is missing entirely", () => {
+    const { parentAssetId: _unused, ...withoutParent } = {
+      ...form,
+      parentAssetId: "parent-1",
+    };
+    const result = buildAssetCreatePayload(withoutParent);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ok ? "parentAssetId" in result.payload : true, false);
+  });
+
+  it("treats a blank parent the same as an empty one", () => {
+    const result = buildAssetCreatePayload({ ...form, parentAssetId: "   " });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ok ? "parentAssetId" in result.payload : true, false);
+  });
+});
+
 describe("buildAssetCreatePayload es a leltari szam", () => {
   /**
    * A PARTNER BELSŐ KÓDJA, nem a miénk. A gépen az ő matricája van rajta, és

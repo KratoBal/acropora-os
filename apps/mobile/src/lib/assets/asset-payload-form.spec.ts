@@ -50,6 +50,25 @@ describe("a tárolt törzsből űrlap lesz", () => {
     assert.equal(assetFormFromPayload(torzs)?.interval, "90");
   });
 
+  /**
+   * A SZÜLŐESZKÖZ IS VISSZAJÖN, UGYANAZÉRT, MINT A KATEGÓRIA ÉS A FUNKCIÓ:
+   * enélkül egy elakadt felvitel javítása és újraküldése
+   * (`queue-fix/[id].tsx`, ami `buildAssetCreatePayload`-ot újra meghívja a
+   * visszaolvasott űrlappal) CSENDBEN elvesztené a korábban kiválasztott
+   * szülőt.
+   */
+  it("a szülőeszközt is átveszi", () => {
+    const urlap = assetFormFromPayload({
+      ...torzs,
+      parentAssetId: "parent-1",
+    });
+    assert.equal(urlap?.parentAssetId, "parent-1");
+  });
+
+  it("szülőeszköz nélkül üres szöveg lesz, nem `undefined`", () => {
+    assert.equal(assetFormFromPayload(torzs)?.parentAssetId, "");
+  });
+
   it("ami nem véges szám, abból ÜRES mező lesz, nem „NaN”", () => {
     /*
       Egy "NaN" felirat a mezoben ugy NEZ KI, mint egy ertek: a szerelo
