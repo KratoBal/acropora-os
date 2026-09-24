@@ -35,6 +35,18 @@ let customerId = "";
 let actorUserId = "";
 let egysegId = "";
 let masikEgysegId = "";
+/**
+ * AZ „ALKALMAZASON AT” BLOKK ESZKOZE SZALLITOI TULAJDONU, VALOS HELYSZINNEL.
+ *
+ * A `felvitel()` korabban `ownerType: "CUSTOMER"`-t hasznalt departmentId
+ * nelkul, es `repository.create()`-et KOZVETLENUL hivja -- a
+ * `department_required` migracio ota ez `Invalid prisma.asset.create()
+ * invocation` hibaval hasal el (a CUSTOMER agon a repository
+ * `departmentId: undefined`-t ir, a mezo viszont NOT NULL). Ez a blokk a
+ * teljesitmeny-par mezoparjarol szol, nem a tulajdonos-tengelyrol.
+ */
+let szallitoId = "";
+let helyszinId = "";
 
 async function removeLeftovers() {
   await prisma.asset.deleteMany({
@@ -43,6 +55,18 @@ async function removeLeftovers() {
   await prisma.asset.deleteMany({
     where: { customer: { customerNumber: { startsWith: PREFIX } } },
   });
+  // A `felvitel()`-lel (repository.create) letrehozott sorok SEM vevot, SEM
+  // a teszt-elotagos assetNumber-t nem viselik -- a HELYSZINEN at kell oket
+  // megtalalni, a helyszin torlese elott (`Asset.departmentId` Restrict).
+  await prisma.asset.deleteMany({
+    where: {
+      department: { customer: { customerNumber: { startsWith: PREFIX } } },
+    },
+  });
+  await prisma.worksheetDepartment.deleteMany({
+    where: { customer: { customerNumber: { startsWith: PREFIX } } },
+  });
+  await prisma.supplier.deleteMany({ where: { code: { startsWith: PREFIX } } });
   await prisma.unitOfMeasure.deleteMany({
     where: { code: { startsWith: PREFIX } },
   });
@@ -81,13 +105,25 @@ async function eszkozt(
   performanceUnitId: string | null,
 ) {
   const id = `${PREFIX}-${Math.random().toString(36).slice(2, 10)}`;
+  /**
+   * A `departmentId` A `department_required` MIGRACIO OTA KELL, MEG EBBEN A
+   * NYERS SORBAN IS. Ez a beszúrás szándékosan az ALKALMAZÁS MÖGÖTT megy (a
+   * `Asset_performance_pairing_check` CHECK-et méri, nem az üzleti
+   * validációt) -- a `customerId` és a `departmentId` együttes jelenléte itt
+   * NEM üzleti állítás (a CUSTOMER_OWNER szabály ezen az úton nincs jelen),
+   * csak annyi, hogy a NOT NULL oszlopot ki kell tölteni. Enélkül a CI-ben
+   * mért hiba (`23502`, `Failing row contains ...`) a pairing_check
+   * bukásának NÉZ KI, holott a beszúrás magától a departmentId hiánya miatt
+   * hasal el, mielőtt a CHECK egyáltalán eldőlne.
+   */
   await prisma.$executeRaw`
     INSERT INTO "Asset" ("id", "assetNumber", "name", "kind", "status",
-                         "criticality", "qrToken", "customerId", "createdById",
-                         "performance", "performanceUnitId", "updatedAt")
+                         "criticality", "qrToken", "customerId", "departmentId",
+                         "createdById", "performance", "performanceUnitId",
+                         "updatedAt")
     VALUES (${id}, ${`${PREFIX}-${id.slice(-6)}`}, ${`${PREFIX} eszköz`},
             'EQUIPMENT', 'ACTIVE', 'NORMAL', ${randomUUID()}::uuid,
-            ${customerId},
+            ${customerId}, ${helyszinId},
             ${actorUserId}, ${performance}::decimal, ${performanceUnitId},
             CURRENT_TIMESTAMP)`;
   return id;
@@ -136,6 +172,16 @@ describe("mértékegység törzsadat", { skip: gate.mode === "skip" }, () => {
       select: { id: true },
     });
     masikEgysegId = masik.id;
+    const helyszin = await prisma.worksheetDepartment.create({
+      data: { customerId, code: "UOM", name: `${PREFIX} helyszín` },
+      select: { id: true },
+    });
+    helyszinId = helyszin.id;
+    const szallito = await prisma.supplier.create({
+      data: { code: `${PREFIX}-S`, name: `${PREFIX} szállító` },
+      select: { id: true },
+    });
+    szallitoId = szallito.id;
   });
 
   after(async () => {
@@ -304,8 +350,9 @@ describe("mértékegység törzsadat", { skip: gate.mode === "skip" }, () => {
 
     function felvitel(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
       return {
-        ownerType: "CUSTOMER",
-        ownerId: customerId,
+        ownerType: "SUPPLIER",
+        ownerId: szallitoId,
+        departmentId: helyszinId,
         kind: "EQUIPMENT",
         name: `${PREFIX} teszteszköz`,
         ...over,

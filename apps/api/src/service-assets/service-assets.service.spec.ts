@@ -921,11 +921,8 @@ test("a rossz alakú fogyasztás 400-at ad", async () => {
  * departmentId OPCIONÁLIS SUPPLIER-tulajdonosnál is (mobil:
  * asset-create.ts:342, web: asset-editor-page.tsx:476) -- ez a mai, éles
  * felvitel alapértelmezett útja. Balázs döntése (message_id
- * 1552018256280162385, "1 legyen kotelezo") miatt ez a szolgáltatás-szintű
- * ellenőrzés (`assetDepartmentPresenceRefusal`) mostantól megnevezett hibát
- * ad. A séma-szintű NOT NULL (a `20260924101500_department_required`
- * migráció) még KÜLÖN, DRAFT PR-ben van -- amíg az nem olvad be, EZ a
- * teszt az egyetlen védelem: séma-szinten a mező ma is elhagyható lenne.
+ * 1552018256280162385, "1 legyen kotelezo") és a NOT NULL migráció miatt ez
+ * mostantól megnevezett hibát ad, nem nyers adatbázis-hibát.
  */
 test("rejects creating a supplier-owned asset without a department", async () => {
   const service = new ServiceAssetsService(
