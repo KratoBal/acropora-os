@@ -31,6 +31,7 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { megjegyzesKuldheto } from "./megjegyzes-celja";
 import { CompletionCertificatePanel } from "./completion-certificate-panel";
+import { MaintenancePackagePanel } from "./maintenance-package-panel";
 import { HandoverMailDialog } from "./handover-mail-dialog";
 import { KULDES_KIHAGYAS_OKA } from "./handover-mail-skip-reason";
 import { PartnerPicker } from "./partner-picker";
@@ -1393,6 +1394,19 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             */}
             {job.kind === "MAINTENANCE" ? (
               <CompletionCertificatePanel serviceJobId={job.id} />
+            ) : null}
+            {/*
+              A CSOMAG-OSSZEALLITAS ES KIKULDES -- 679d4c04 utani "3.5" szelet.
+              Ugyanaz a hatokor-dontes, mint a teljesitesi igazolas panelnel:
+              a szerver PARTNERS_MANAGE-hez koti, a felteteles renderelest
+              itt mondjuk ki, hogy a gomb ne kinaljon fel olyat egy REPAIR
+              lapon, amit a szerver 404-gyel visszadobna.
+            */}
+            {job.kind === "MAINTENANCE" ? (
+              <MaintenancePackagePanel
+                serviceJobId={job.id}
+                jobNumber={job.jobNumber}
+              />
             ) : null}
             {/*
           A HIANY MELLE A KIUT. Egy partner nelkuli jegy ma nem tud lapot fogadni,

@@ -10,6 +10,8 @@ import { AquariumMeasurementMailService } from "./mail/aquarium-measurement-mail
 import { GmailMailSender } from "./mail/gmail-mail.sender.js";
 import { HandoverMailRepository } from "./mail/handover-mail.repository.js";
 import { HandoverMailService } from "./mail/handover-mail.service.js";
+import { MaintenanceMailRepository } from "./mail/maintenance-mail.repository.js";
+import { MaintenanceMailService } from "./mail/maintenance-mail.service.js";
 import { MailTemplateController } from "./mail/mail-template.controller.js";
 import { MAIL_SENDER } from "./mail/mail.port.js";
 import { RedirectingMailSender } from "./mail/redirecting-mail.sender.js";
@@ -47,6 +49,8 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
     TicketMailService,
     HandoverMailRepository,
     HandoverMailService,
+    MaintenanceMailRepository,
+    MaintenanceMailService,
     DeviceTokenRepository,
     NotificationLogRepository,
     NotificationsService,
@@ -56,6 +60,7 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
     NotificationsService,
     TicketMailService,
     HandoverMailService,
+    MaintenanceMailService,
     AquariumMeasurementMailService,
   ],
 })
