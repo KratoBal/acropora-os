@@ -90,8 +90,8 @@ function fakeRepository(overrides: Partial<Record<string, unknown>> = {}) {
     detail: async () => null,
     departmentPaths: async (ids: readonly string[]) =>
       new Map(ids.map((id) => [id, [id]])),
-    addSignedDocument: async () => ({ id: "document-1" }),
-    markSigned: async () => ({ id: "order-1", status: "SIGNED" }),
+    saveSignedDocumentAndMarkSigned: async () => undefined,
+    attachServiceJob: async () => ({ id: "order-1", status: "SIGNED" }),
     markRevoked: async () => ({ id: "order-1", status: "REVOKED" }),
     document: async () => null,
     list: async () => [],
@@ -271,6 +271,10 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
       id: "order-1",
       number: "MR-2026-001",
       status,
+      // A TELJESEN KÉSZ SIGNED-nek MINDIG van serviceJobId-je -- a
+      // "megszakadt próbálkozás" (SIGNED, serviceJobId NÉLKÜL) esetét a
+      // sajátos tesztje maga állítja be, felülírással.
+      serviceJobId: status === "SIGNED" ? "job-1" : null,
       contract: {
         id: "contract-1",
         title: "Vízgépészet karbantartása",
@@ -362,17 +366,17 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
 
   /**
    * A MÁSIK FELE: ha a tételek KÜLÖNBÖZŐ helyszínen vannak, 400-at ad, ÉS
-   * -- mivel az ellenőrzés a `addSignedDocument()` ELŐTT fut -- a
-   * dokumentum NEM mentődik el. Enélkül a korábbi hiba visszatérne más
-   * alakban: egy ismételt próbálkozás duplikált dokumentumot hozna létre.
+   * -- mivel az ellenőrzés a `saveSignedDocumentAndMarkSigned()` ELŐTT fut
+   * -- a dokumentum NEM mentődik el. Enélkül a korábbi hiba visszatérne
+   * más alakban: egy ismételt próbálkozás duplikált dokumentumot hozna
+   * létre.
    */
   it("VEGYES helyszínű rendelésnél 400-at ad, és NEM ment el dokumentumot", async () => {
-    let addSignedDocumentCalls = 0;
+    let saveCalls = 0;
     const repository = fakeRepository({
       detail: async () => orderRow("ISSUED", ["department-1", "department-2"]),
-      addSignedDocument: async () => {
-        addSignedDocumentCalls += 1;
-        return { id: "document-1" };
+      saveSignedDocumentAndMarkSigned: async () => {
+        saveCalls += 1;
       },
     });
     const wired = new MaintenanceOrdersService(
@@ -390,7 +394,72 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
       () => wired.uploadSignedDocument("order-1", file, ACTOR),
       /különböző helyszínen/,
     );
-    assert.equal(addSignedDocumentCalls, 0);
+    assert.equal(saveCalls, 0);
+  });
+
+  /**
+   * A HARMADIK, ÚJ ESET: A MEGSZAKADT PRÓBÁLKOZÁS FOLYTATÁSA.
+   *
+   * Acrobot kártyája 8b1fd497 (2026-09-24 22:29): a feltöltés ma este
+   * élesben megy, tehát egy megszakadt kérés (a dokumentum már mentve, az
+   * állapot már SIGNED, de a karbantartási lap még nem jött létre) UTÁN
+   * egy újrapróbálkozásnak BE KELL FEJEZNIE a munkát, nem elutasítania és
+   * nem újra elmentenie a dokumentumot.
+   */
+  it("MEGSZAKADT PRÓBÁLKOZÁS FOLYTATÁSA: SIGNED állapotban, serviceJobId nélkül folytatja, nem menti újra a dokumentumot", async () => {
+    let saveCalls = 0;
+    const repository = fakeRepository({
+      detail: async () => ({ ...orderRow("SIGNED"), serviceJobId: null }),
+      saveSignedDocumentAndMarkSigned: async () => {
+        saveCalls += 1;
+      },
+    });
+    let capturedClientOperationId: string | undefined;
+    const serviceJobs = {
+      create: async (input: { clientOperationId?: string }) => {
+        capturedClientOperationId = input.clientOperationId;
+        return { id: "job-1" };
+      },
+    };
+    let workedsheetCalls = 0;
+    const worksheets = {
+      create: async () => {
+        workedsheetCalls += 1;
+        return { id: "worksheet-1" };
+      },
+    };
+    const wired = new MaintenanceOrdersService(
+      repository as never,
+      serviceJobs as never,
+      worksheets as never,
+    );
+    const file = {
+      mimetype: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 ..."),
+      originalname: "alairt.pdf",
+      size: 10,
+    } as Express.Multer.File;
+    const result = await wired.uploadSignedDocument("order-1", file, ACTOR);
+    assert.equal(saveCalls, 0);
+    assert.equal(workedsheetCalls, 1);
+    assert.equal(capturedClientOperationId, "maintenance-order-order-1-signed");
+    assert.equal((result as { status: string }).status, "SIGNED");
+  });
+
+  it("TELJESEN KÉSZ rendelésre (SIGNED, van serviceJobId) nem tölthető fel újra aláírt példány", async () => {
+    const { service } = makeService({
+      detail: async () => ({ ...orderRow("SIGNED"), serviceJobId: "job-1" }),
+    });
+    const file = {
+      mimetype: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 ..."),
+      originalname: "alairt.pdf",
+      size: 10,
+    } as Express.Multer.File;
+    await assert.rejects(
+      () => service.uploadSignedDocument("order-1", file, ACTOR),
+      /már alá van írva/,
+    );
   });
 
   it("csak ISSUED rendelés vonható vissza", async () => {

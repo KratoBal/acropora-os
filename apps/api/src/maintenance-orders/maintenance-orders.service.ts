@@ -187,19 +187,37 @@ export class MaintenanceOrdersService {
 
   /**
    * AZ ALÁÍRT PÉLDÁNY VISSZAJÖTT -- ELLENŐRZÉS, MAJD TÁROLÁS, MAJD A
-   * KARBANTARTÁSI LAP.
+   * KARBANTARTÁSI LAP. IDEMPOTENS: EGY MEGSZAKADT PRÓBÁLKOZÁS
+   * ÚJRAINDÍTVA A FÉLBEMARADT ÁLLAPOTBÓL FEJEZŐDIK BE, NEM DUPLIKÁL.
    *
-   * MINDEN ELLENŐRZÉS A DOKUMENTUM MENTÉSE ELŐTT FUT (Balázs éles hibája,
-   * 2026-09-24 21:48, staging): korábban a hiányzó helyszín ellenőrzése a
-   * `addSignedDocument()` UTÁN állt, tehát egy sikertelen próbálkozás is
-   * elmentette az aláírt PDF-et -- egy újrapróbálkozás duplikált
-   * dokumentumot hozott volna létre, a rendelés pedig ISSUED maradt.
+   * Balázs éles hibája (2026-09-24 21:48, staging), acrobot kártyája
+   * 8b1fd497: ma este élesben fut, tehát a folyamat NEM állhat félbe úgy,
+   * hogy egy újrapróbálkozás kárt tesz. A négy lépés (dokumentum mentése,
+   * állapotváltás, karbantartási lap, munkalapok) HÁROM különböző
+   * szolgáltatáson (ez, `ServiceJobsService`, `WorksheetsService) megy át
+   * -- egyetlen közös DB-tranzakcióba fogni mindet szélesebb refaktor
+   * lenne, kockázatosabb, mint amit egy éles esti kiadás előtt vállalni
+   * érdemes. A választott irány ehelyett IDEMPOTENCIA, lépésenként:
    *
-   * A karbantartási lap (MAINTENANCE ServiceJob) és a tételenkénti
-   * munkalapok a MEGLÉVŐ szolgáltatásokon keresztül jönnek létre
-   * (`ServiceJobsService.create`, `WorksheetsService.create`), nem saját
-   * repository-hívással -- így minden ellenőrzésük (jegyszám-kiosztás,
-   * felelős-érvényesítés, értesítés) egyszer létezik, nem kétszer.
+   *   1. dokumentum + `SIGNED` állapot: EGY tranzakcióban
+   *      (`saveSignedDocumentAndMarkSigned`) -- vagy mindkettő megtörténik,
+   *      vagy egyik sem. Az `order.status` ezután MEGMONDJA, hogy ez a
+   *      lépés kell-e még: ha már `SIGNED`, egy retry NEM fut le újra.
+   *   2. karbantartási lap: `ServiceJobsService.create()`-nek MEGY egy
+   *      determinisztikus `clientOperationId` (`maintenance-order-<id>-signed`)
+   *      -- ez a mechanizmus MÁR LÉTEZIK (a helyszíni jegyfelvitel
+   *      idempotenciája), csak eddig nem volt ide bekötve. Egy retry
+   *      ugyanazt a sort kapja vissza, nem újat.
+   *   3. munkalapok tételenként: ugyanígy, `maintenance-order-<id>-worksheet-<contractItemId>`
+   *      kulccsal (`WorksheetsService.create()` ugyanezt a mintát ismeri).
+   *   4. a lap hozzárendelése a rendeléshez (`attachServiceJob`): egy sima
+   *      UPDATE, önmagában is ismételhető (ugyanazt az értéket írja be).
+   *
+   * A "MÁR TELJESEN KÉSZ" állapotot a `status === SIGNED && serviceJobId`
+   * együttes megléte jelzi -- CSAK EZ utasítja el az újbóli feltöltést.
+   * `SIGNED`, de `serviceJobId` NÉLKÜL azt jelenti, hogy egy KORÁBBI
+   * próbálkozás az 1. lépésig jutott, és ezt a hívást FOLYTATÁSKÉNT kell
+   * kezelni, nem elutasítani.
    */
   async uploadSignedDocument(
     id: string,
@@ -207,33 +225,20 @@ export class MaintenanceOrdersService {
     actor: AuthenticatedUser,
   ) {
     const order = await this.detail(id);
-    if (order.status !== "ISSUED")
+    if (order.status === "REVOKED")
       throw new BadRequestException(
-        order.status === "SIGNED"
-          ? "Ez a megrendelőlap már alá van írva."
-          : "Ez a megrendelőlap vissza lett vonva, aláírt példány nem tölthető fel hozzá.",
+        "Ez a megrendelőlap vissza lett vonva, aláírt példány nem tölthető fel hozzá.",
       );
-    if (
-      file.mimetype !== "application/pdf" ||
-      !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
-    )
-      throw new BadRequestException("Csak valódi PDF-fájl tölthető fel.");
-    const limitBytes = Number(process.env.DOCUMENT_STORE_LIMIT_BYTES ?? 0);
-    if (Number.isFinite(limitBytes) && limitBytes > 0) {
-      const quota = decideQuota({
-        usedBytes: await sumDocumentBytesInUse(),
-        incomingBytes: file.buffer.length,
-        limitBytes,
-      });
-      if (quota.state === "reject") throw new ConflictException(quota.reason);
-    }
+    if (order.status === "SIGNED" && order.serviceJobId)
+      throw new BadRequestException("Ez a megrendelőlap már alá van írva.");
 
     /*
-      A KARBANTARTÁSI LAP HELYSZÍNE ITT DŐL EL, MÉG A MENTÉS ELŐTT.
-      NEM VÁRT ÁLLAPOT, ha egy tételnek időközben (a kiállítás ÓTA) nincs
-      helyszíne -- a kiállítás ezt már kizárta. Hangosan állunk meg: egy
-      csendben kihagyott tétel egy vevő által aláírt lapról néma hiány
-      lenne.
+      A KARBANTARTÁSI LAP HELYSZÍNE MINDIG ELDŐL, MÉG A DOKUMENTUM MENTÉSE
+      ELŐTT -- akkor is, ha ez a hívás valójában egy megszakadt próbálkozás
+      folytatása. NEM VÁRT ÁLLAPOT, ha egy tételnek időközben (a kiállítás
+      ÓTA) nincs helyszíne -- a kiállítás ezt már kizárta. Hangosan állunk
+      meg: egy csendben kihagyott tétel egy vevő által aláírt lapról néma
+      hiány lenne.
     */
     const helyszinNelkul = order.items.find(
       (item) => !item.contractItem.departmentId,
@@ -246,7 +251,23 @@ export class MaintenanceOrdersService {
       order.items.map((item) => item.contractItem.departmentId as string),
     );
 
-    await this.repository.addSignedDocument(id, file);
+    if (order.status === "ISSUED") {
+      if (
+        file.mimetype !== "application/pdf" ||
+        !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
+      )
+        throw new BadRequestException("Csak valódi PDF-fájl tölthető fel.");
+      const limitBytes = Number(process.env.DOCUMENT_STORE_LIMIT_BYTES ?? 0);
+      if (Number.isFinite(limitBytes) && limitBytes > 0) {
+        const quota = decideQuota({
+          usedBytes: await sumDocumentBytesInUse(),
+          incomingBytes: file.buffer.length,
+          limitBytes,
+        });
+        if (quota.state === "reject") throw new ConflictException(quota.reason);
+      }
+      await this.repository.saveSignedDocumentAndMarkSigned(id, file);
+    }
 
     const serviceJob = await this.serviceJobs.create(
       {
@@ -255,6 +276,7 @@ export class MaintenanceOrdersService {
         contractId: order.contract.id,
         customerId: order.contract.customerId,
         departmentId,
+        clientOperationId: `maintenance-order-${order.id}-signed`,
       },
       actor,
     );
@@ -266,6 +288,7 @@ export class MaintenanceOrdersService {
           departmentId,
           serviceJobId: serviceJob.id,
           subject: item.description,
+          clientOperationId: `maintenance-order-${order.id}-worksheet-${item.contractItem.id}`,
           lines: [
             {
               description: item.description,
@@ -279,7 +302,7 @@ export class MaintenanceOrdersService {
       );
     }
 
-    return this.repository.markSigned(id, serviceJob.id);
+    return this.repository.attachServiceJob(id, serviceJob.id);
   }
 
   /**
