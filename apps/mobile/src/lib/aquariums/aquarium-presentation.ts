@@ -41,10 +41,10 @@ export const OWNERSHIP_LABELS: Record<AquariumOwnershipType, string> = {
   CUSTOMER: "Ügyfél",
 };
 
-export const OWNERSHIP_OPTIONS: Array<{
+export const OWNERSHIP_OPTIONS: {
   value: AquariumOwnershipType;
   label: string;
-}> = (["OWN", "CUSTOMER"] as const).map((value) => ({
+}[] = (["OWN", "CUSTOMER"] as const).map((value) => ({
   value,
   label: OWNERSHIP_LABELS[value],
 }));
@@ -54,10 +54,10 @@ export const WATER_BODY_LABELS: Record<WaterBodyType, string> = {
   TO: "Tó",
 };
 
-export const WATER_BODY_OPTIONS: Array<{
+export const WATER_BODY_OPTIONS: {
   value: WaterBodyType;
   label: string;
-}> = (["AKVARIUM", "TO"] as const).map((value) => ({
+}[] = (["AKVARIUM", "TO"] as const).map((value) => ({
   value,
   label: WATER_BODY_LABELS[value],
 }));
@@ -89,10 +89,10 @@ export const EQUIPMENT_KIND_LABELS: Record<AquariumEquipmentKind, string> = {
   EGYEB: "Egyéb",
 };
 
-export const EQUIPMENT_KIND_OPTIONS: Array<{
+export const EQUIPMENT_KIND_OPTIONS: {
   value: AquariumEquipmentKind;
   label: string;
-}> = EQUIPMENT_KIND_ORDER.map((value) => ({
+}[] = EQUIPMENT_KIND_ORDER.map((value) => ({
   value,
   label: EQUIPMENT_KIND_LABELS[value],
 }));
