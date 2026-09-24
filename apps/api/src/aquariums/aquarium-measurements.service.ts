@@ -1,5 +1,10 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 
+import { AquariumMeasurementMailService } from "../notifications/mail/aquarium-measurement-mail.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { AquariumMeasurementsRepository } from "./aquarium-measurements.repository.js";
 import { AquariumsRepository } from "./aquariums.repository.js";
@@ -11,6 +16,7 @@ export class AquariumMeasurementsService {
     private readonly repository: AquariumMeasurementsRepository,
     private readonly aquariums: AquariumsRepository,
     private readonly notifications: NotificationsService,
+    private readonly mail: AquariumMeasurementMailService,
   ) {}
 
   async list(aquariumId: string) {
@@ -66,6 +72,39 @@ export class AquariumMeasurementsService {
     const removed = await this.repository.delete(aquariumId, occasionId);
     if (removed === 0)
       throw new NotFoundException("A mérési alkalom nem található.");
+  }
+
+  /**
+   * "EREDMÉNY KÜLDÉSE E-MAILBEN" -- GOMBRA, NEM AUTOMATIKUS.
+   *
+   * Balázs kérése: csak akkor ajánljuk fel, ha az ügyfélnek van e-mail
+   * címe -- ez a web felületen a gomb feltétele, ITT pedig kikényszerítve
+   * is áll, mert a hívó (más kliens, script) nem hagyatkozhat a felület
+   * rejtésére.
+   */
+  async sendEmail(
+    aquariumId: string,
+    occasionId: string,
+    actorUserId: string,
+  ): Promise<void> {
+    const aquarium = await this.requireAquarium(aquariumId);
+    if (!aquarium.customerEmail)
+      throw new BadRequestException(
+        "Az ügyfélnek nincs e-mail címe, ezért nem küldhető el az eredmény.",
+      );
+    const occasions = await this.repository.list(aquariumId);
+    const occasion = occasions.occasions.find((o) => o.id === occasionId);
+    if (!occasion)
+      throw new NotFoundException("A mérési alkalom nem található.");
+
+    await this.mail.send({
+      aquariumId,
+      aquariumName: aquarium.name,
+      occasion,
+      customerEmail: aquarium.customerEmail,
+      customerName: aquarium.customerName ?? "Ügyfél",
+      actorUserId,
+    });
   }
 
   private async requireAquarium(id: string) {

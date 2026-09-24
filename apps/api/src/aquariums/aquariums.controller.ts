@@ -138,6 +138,16 @@ export class AquariumsController {
     return this.measurements.delete(id, occasionId);
   }
 
+  @Post(":id/measurements/:occasionId/send-email")
+  @RequirePermissions(PERMISSIONS.AQUARIUMS_MANAGE)
+  sendMeasurementEmail(
+    @Param("id") id: string,
+    @Param("occasionId") occasionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.measurements.sendEmail(id, occasionId, user.id);
+  }
+
   @Patch(":id/maintainers")
   @RequirePermissions(PERMISSIONS.AQUARIUMS_MANAGE)
   setMaintainers(
