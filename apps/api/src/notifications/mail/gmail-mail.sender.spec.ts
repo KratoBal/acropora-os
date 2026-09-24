@@ -131,13 +131,19 @@ describe("a kuldes-burok HELYE", () => {
  * 1552727165714563153): a vizmeres-level `info@acropora.hu`-rol menjen, a
  * tobbi tovabbra is a kornyezet feladojarol (`GMAIL_TICKET_USER`).
  *
+ * ES A FELADO NEVE, 2026-09-24 17:06 UTC (Balazs dontese, emlek 1827):
+ * "MINDEN ticket@acropora.hu-rol meno level: 'Acropora Hibajegy kezelő'
+ * <ticket@acropora.hu>". Ez a NEVET is a kimeno level reszeve teszi, akkor
+ * is, ha a hivo (a legtobb kuldesi ut) `mail.from`-ot nem tolti ki -- lasd
+ * `DEFAULT_GMAIL_TICKET_USER_NAME` a `gmail-mail.sender.ts`-ben.
+ *
  * A NYERS KIMENO LEVELET MERI, NEM EGY KOZBULSO MEZOT: a `request()` hivas
  * torzse a Gmail API-nak kuldott `{ raw }`, base64url-kodolva. Ez a spec ezt
  * dekodolja vissza, es a `From:` sort olvassa -- ugyanazt latja, amit a Gmail
  * kapna.
  */
 describe("a feladó címe", () => {
-  function kuldoFeladoMereshez(): {
+  function kuldoFeladoMereshez(kornyezet: NodeJS.ProcessEnv = KORNYEZET): {
     sender: GmailMailSender;
     nyersLevelek: () => string[];
   } {
@@ -166,7 +172,7 @@ describe("a feladó címe", () => {
     }) as typeof fetch;
 
     return {
-      sender: new GmailMailSender(fetchImpl, KORNYEZET),
+      sender: new GmailMailSender(fetchImpl, kornyezet),
       nyersLevelek: () => nyersLevelek,
     };
   }
@@ -175,18 +181,39 @@ describe("a feladó címe", () => {
     return nyersLevel.split("\r\n").find((sor) => sor.startsWith("From: "));
   }
 
+  /** RFC 2047 kodolt szo dekodolasa -- `=?UTF-8?B?<base64>?=` alak. */
+  function dekodoltNev(fromSor: string): string | undefined {
+    const talalat = fromSor.match(/=\?UTF-8\?B\?([^?]+)\?=/);
+    return talalat?.[1]
+      ? Buffer.from(talalat[1], "base64").toString("utf8")
+      : undefined;
+  }
+
   /*
-    NEGATIV KONTROLL: `mail.from` HIANYZIK. Ez a mai viselkedes, es MINDEN
-    olyan hivora vonatkozik, ami ezt a mezot nem tolti ki (a hibajegy- es az
-    atadasi levelek is -- lasd a `ticket-mail.service.spec.ts` es a
-    `handover-mail.service.spec.ts` egy-egy allitasat).
+    NEGATIV KONTROLL A CIMRE, POZITIV A NEVRE: `mail.from` HIANYZIK, tehat a
+    KORNYEZET cime megy -- ez minden olyan hivora igaz, ami ezt a mezot nem
+    tolti ki (a hibajegy- es az atadasi levelek is, lasd a
+    `ticket-mail.service.spec.ts` es a `handover-mail.service.spec.ts`
+    egy-egy allitasat, azok az `OutgoingMail.from` mezot merik, NEM a nyers
+    fejlecet). A NEV viszont MAR ITT is megjelenik, mert a `ticket@`
+    alapertelmezese 2026-09-24 ota nem nevtelen.
   */
-  it("HIÁNYZÓ mail.from mellett a KÖRNYEZET feladója megy", async () => {
+  it("HIÁNYZÓ mail.from mellett a KÖRNYEZET címe és alapértelmezett neve megy", async () => {
     const { sender, nyersLevelek } = kuldoFeladoMereshez();
 
     await sender.send(LEVEL);
 
-    assert.equal(fromSor(nyersLevelek()[0] ?? ""), "From: ticket@pelda.teszt");
+    const sor = fromSor(nyersLevelek()[0] ?? "") ?? "";
+    /*
+      A "Hibajegy kezelő" MAGA IS EKEZETES (ő), tehat az alapertelmezes
+      onmagaban RFC 2047 kodolt szokent megy -- ez a keszlet legkozelebbi
+      esete ahhoz, amit a hazban "az elso mert eset" elvnek hivunk: nem
+      kulon fixturaval bizonyitjuk az ekezetes kodolast, hanem a VALODI
+      alapertelmezessel.
+    */
+    assert.match(sor, /^From: =\?UTF-8\?B\?/);
+    assert.match(sor, / <ticket@pelda\.teszt>$/);
+    assert.equal(dekodoltNev(sor), "Acropora Hibajegy kezelő");
   });
 
   /* POZITIV OLDAL: a hivo feladoja elsobbseget kap a kornyezetevel szemben. */
@@ -196,5 +223,41 @@ describe("a feladó címe", () => {
     await sender.send({ ...LEVEL, from: "info@pelda.teszt" });
 
     assert.equal(fromSor(nyersLevelek()[0] ?? ""), "From: info@pelda.teszt");
+  });
+
+  /**
+   * EGYEDI, KONFIGURÁLT NÉV -- Balázs kérése: a nevek legyenek
+   * konfigurálhatók. ASCII névnél idézőjeles alak, nem kódolt szó.
+   */
+  it("egyedi GMAIL_TICKET_USER_NAME idézőjeles alakban megy, ASCII névnél", async () => {
+    const { sender, nyersLevelek } = kuldoFeladoMereshez({
+      ...KORNYEZET,
+      GMAIL_TICKET_USER_NAME: "Ugyfelszolgalat",
+    });
+
+    await sender.send(LEVEL);
+
+    assert.equal(
+      fromSor(nyersLevelek()[0] ?? ""),
+      'From: "Ugyfelszolgalat" <ticket@pelda.teszt>',
+    );
+  });
+
+  /**
+   * EGYEDI, ÉKEZETES NÉV -- külön eset az alapértelmezéstől, mert itt a
+   * KONFIGURÁLT érték kódolását mérjük, nem a kódba írt alapértelmezését.
+   */
+  it("egyedi GMAIL_TICKET_USER_NAME ékezetes alakja RFC 2047 kódolt szóként megy", async () => {
+    const { sender, nyersLevelek } = kuldoFeladoMereshez({
+      ...KORNYEZET,
+      GMAIL_TICKET_USER_NAME: "Ügyfélszolgálat",
+    });
+
+    await sender.send(LEVEL);
+
+    const sor = fromSor(nyersLevelek()[0] ?? "") ?? "";
+    assert.match(sor, /^From: =\?UTF-8\?B\?/);
+    assert.match(sor, / <ticket@pelda\.teszt>$/);
+    assert.equal(dekodoltNev(sor), "Ügyfélszolgálat");
   });
 });

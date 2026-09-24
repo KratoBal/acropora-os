@@ -145,8 +145,10 @@ describe("a nyito ertesitese levelben", () => {
     /*
       NEGATIV KONTROLL (2026-09-24): a vizmeres-level sajat FELADO-cimet kap
       (`AQUARIUM_MEASUREMENT_MAIL_FROM`), EZ az ut nem. Az `OutgoingMail.from`
-      mezo opcionalis, es ez az ut soha nem tolti ki -- tehat a Gmail-kuldo a
-      SAJAT alapertelmezett feladojat hasznalja, valtozatlanul.
+      mezo opcionalis, es ez az ut soha nem tolti ki -- a NEVEZETT feladot ITT
+      dol el, hogy `undefined` marad. Azt, hogy a `ticket@` VEGUL milyen From
+      fejlecet kap (2026-09-24 ota nevvel, `gmail-mail.sender.ts`), mar nem ez
+      a reteg donti el -- lasd `gmail-mail.sender.spec.ts` "a feladó címe".
     */
     assert.equal(kuldott[0]?.from, undefined);
   });

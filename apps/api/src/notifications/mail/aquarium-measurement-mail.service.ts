@@ -18,7 +18,11 @@ import { aquariumMeasurementDocument } from "../../aquariums/aquarium-measuremen
 import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { headerSafe } from "./mail-header.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
+import { formatMailFrom } from "./mime.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
+
+/** Üres/hiányzó AQUARIUM_MEASUREMENT_MAIL_FROM_NAME esetén ez a feladó neve. */
+const DEFAULT_AQUARIUM_MEASUREMENT_MAIL_FROM_NAME = "Acropora Kft.";
 
 /** Az esemeny neve EGYBEN a sablon kulcsa is -- lasd a `ticket-mail.service.ts` mintajat. */
 export const AQUARIUM_MEASUREMENT_RESULT = "AQUARIUM_MEASUREMENT_RESULT";
@@ -65,6 +69,21 @@ export const DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE = {
  * viselkedés marad: a `GmailMailSender` a saját alapértelmezett feladóját
  * használja (`GMAIL_TICKET_USER`) -- lásd `mail.port.ts`. Ez NEM új token:
  * ugyanaz a küldő port, csak egy plusz mező a levélen (`OutgoingMail.from`).
+ *
+ * A FELADÓ NEVE, 2026-09-24 19:05-19:06 között (Balázs kérdése: "és a feladó
+ * nevénél mi lesz?", majd a döntés, emlék 1827). Amíg NINCS beállítva a
+ * fenti cím, ez a mező üres marad (`from: undefined`), és a `GmailMailSender`
+ * a SAJÁT `ticket@` alapértelmezését adja NÉVVEL -- lásd
+ * `DEFAULT_GMAIL_TICKET_USER_NAME` a `gmail-mail.sender.ts`-ben. Ez a
+ * SZOLGÁLTATÁS tehát innentől soha nem küld névtelen fejlécet, csak azt nem ez
+ * a fájl dönti el, HOL veszi a nevet: itt az `AQUARIUM_MEASUREMENT_MAIL_FROM`
+ * cím esetén, a küldőben egyébként.
+ *
+ * Amikor a cím be van állítva, a névhez az `AQUARIUM_MEASUREMENT_MAIL_FROM_NAME`
+ * szól, alapértelmezésben "Acropora Kft." (üres vagy hiányzó értéknél is ez az
+ * alapértelmezés). A `From:` fejléc alakját a `formatMailFrom` állítja elő
+ * (`mime.ts`): ASCII névnél idézőjeles alak, ékezetes névnél RFC 2047 kódolt
+ * szó -- a cím maga SOHA nem kódolt, csak a név.
  *
  * A meglévő kapu (`TICKET_MAIL_MODE` és az úthoz tartozó kapcsoló) ehhez az
  * úthoz NEM tartozik ma -- ez az út a `RedirectingMailSender` terítő kapuján
@@ -140,14 +159,21 @@ export class AquariumMeasurementMailService {
     }
 
     /*
-      URES KORNYEZETI ERTEKNEL `from: undefined` MEGY -- es ez SZANDEKOS: az
-      `OutgoingMail.from` opcionalis, a `GmailMailSender` pedig ilyenkor a
-      SAJAT alapertelmezett feladojat hasznalja. Egy ures string ide kerulve
-      ugyanezt tenne (lasd `mail.port.ts` es `gmail-mail.sender.ts`), de a
-      `trim() || undefined` alak nem hagy ures stringet a mezon.
+      URES KORNYEZETI CIMNEL `from: undefined` MEGY -- ez SZANDEKOS, de NEM
+      jelent nevtelen levelet: a `GmailMailSender` ilyenkor a SAJAT
+      alapertelmezett feladojat adja, SAJAT nevevel parositva
+      (`DEFAULT_GMAIL_TICKET_USER_NAME`, `gmail-mail.sender.ts`) -- 2026-09-24
+      ota a `ticket@` sem nevtelen. Ez a fajl csak azt donti el, ITT parositson-e
+      SAJAT nevet a SAJAT cimehez; ha nincs sajat cim, a küldő nevet ad, nem ez.
     */
-    const from =
-      this.environment.AQUARIUM_MEASUREMENT_MAIL_FROM?.trim() || undefined;
+    const cim = this.environment.AQUARIUM_MEASUREMENT_MAIL_FROM?.trim();
+    const from = cim
+      ? formatMailFrom(
+          this.environment.AQUARIUM_MEASUREMENT_MAIL_FROM_NAME?.trim() ||
+            DEFAULT_AQUARIUM_MEASUREMENT_MAIL_FROM_NAME,
+          cim,
+        )
+      : undefined;
 
     await this.sender.send({
       to: [input.customerEmail],

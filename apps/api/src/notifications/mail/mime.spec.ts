@@ -5,6 +5,7 @@ import {
   base64Url,
   buildMimeMessage,
   encodeHeaderWord,
+  formatMailFrom,
   MailBuildError,
 } from "./mime.js";
 
@@ -33,6 +34,55 @@ describe("a fejlec kodolasa", () => {
     assert.equal(
       Buffer.from(kodolt.slice(10, -2), "base64").toString("utf8"),
       "Szivattyú zúg",
+    );
+  });
+});
+
+/**
+ * A FELADO FEJLEC NEVVEL -- Balazs kerdese, 2026-09-24 17:04 UTC: "es a
+ * felado nevenel mi lesz?"
+ */
+describe("formatMailFrom", () => {
+  it("ures nev mellett a CIM megy valtozatlanul, idezojel nelkul", () => {
+    assert.equal(formatMailFrom("", "info@acropora.hu"), "info@acropora.hu");
+    assert.equal(formatMailFrom("   ", "info@acropora.hu"), "info@acropora.hu");
+  });
+
+  it("ASCII nev idezojeles alakban all, a cim a szogletes zarojelben", () => {
+    assert.equal(
+      formatMailFrom("Acropora", "info@acropora.hu"),
+      '"Acropora" <info@acropora.hu>',
+    );
+  });
+
+  /**
+   * A BELSO IDEZOJEL ES BACKSLASH ESCAPE-ELVE MEGY -- kulonben a nev sajat
+   * idezojele zarna le a quoted-stringet, es a maradek szoveg a fejlecbe
+   * szivarogna, mint egy MASODIK mezo.
+   */
+  it("a nev belsejeben allo idezojelet escape-eli", () => {
+    assert.equal(
+      formatMailFrom('Acropora "Csapat"', "info@acropora.hu"),
+      '"Acropora \\"Csapat\\"" <info@acropora.hu>',
+    );
+  });
+
+  /**
+   * EKEZETES NEV RFC 2047 KODOLT SZOKENT MEGY, ES A CIM NEM KODOLT -- ha a
+   * teljes fejlecet kodolnank, a `<...>` resz is base64-be kerulne, es a
+   * fogado nem tudna addr-spec-kent ertelmezni.
+   */
+  it("ekezetes nevnel a NEV kodolt, a CIM soha", () => {
+    const fejlec = formatMailFrom(
+      "Acropora Ügyfélszolgálat",
+      "info@acropora.hu",
+    );
+    assert.match(fejlec, /^=\?UTF-8\?B\?/);
+    assert.match(fejlec, / <info@acropora\.hu>$/);
+    const [, kodoltNev] = fejlec.match(/^(.*) <info@acropora\.hu>$/) ?? [];
+    assert.equal(
+      Buffer.from((kodoltNev ?? "").slice(10, -2), "base64").toString("utf8"),
+      "Acropora Ügyfélszolgálat",
     );
   });
 });

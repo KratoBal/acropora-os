@@ -26,6 +26,7 @@ function szolgaltatas(be: {
   template?: StoredMailTemplate | null;
   sender?: MailSender | null;
   from?: string;
+  fromName?: string;
 }) {
   const kuldott: OutgoingMail[] = [];
   /*
@@ -50,7 +51,10 @@ function szolgaltatas(be: {
     service: new AquariumMeasurementMailService(
       sender,
       repository as TicketMailRepository,
-      { AQUARIUM_MEASUREMENT_MAIL_FROM: be.from } as NodeJS.ProcessEnv,
+      {
+        AQUARIUM_MEASUREMENT_MAIL_FROM: be.from,
+        AQUARIUM_MEASUREMENT_MAIL_FROM_NAME: be.fromName,
+      } as NodeJS.ProcessEnv,
     ),
     kuldott,
   };
@@ -99,7 +103,7 @@ describe("AquariumMeasurementMailService.send", () => {
       assert.equal(kuldott[0]?.from, undefined);
     }));
 
-  it("a KONFIGURÁLT feladó megy, ha az AQUARIUM_MEASUREMENT_MAIL_FROM be van állítva", () =>
+  it('a KONFIGURÁLT feladó megy, ALAPÉRTELMEZETT "Acropora Kft." névvel, ha az AQUARIUM_MEASUREMENT_MAIL_FROM be van állítva', () =>
     domainEventStub(async () => {
       const { service, kuldott } = szolgaltatas({
         from: "info@acropora.hu",
@@ -108,7 +112,31 @@ describe("AquariumMeasurementMailService.send", () => {
       await service.send(kuldesInput());
 
       assert.equal(kuldott.length, 1);
-      assert.equal(kuldott[0]?.from, "info@acropora.hu");
+      assert.equal(kuldott[0]?.from, '"Acropora Kft." <info@acropora.hu>');
+    }));
+
+  /**
+   * Balazs kerdese, 2026-09-24 17:04 UTC: "es a felado nevenel mi lesz?" --
+   * a NEV allithato az AQUARIUM_MEASUREMENT_MAIL_FROM_NAME-mel, ekezetesen
+   * is, es a `formatMailFrom` (mime.ts) RFC 2047 kodolt szokent teszi be.
+   */
+  it("EKEZETES, EGYEDI feladó-nevet is elfogad (AQUARIUM_MEASUREMENT_MAIL_FROM_NAME)", () =>
+    domainEventStub(async () => {
+      const { service, kuldott } = szolgaltatas({
+        from: "info@acropora.hu",
+        fromName: "Acropora Ügyfélszolgálat",
+      });
+
+      await service.send(kuldesInput());
+
+      const fejlec = kuldott[0]?.from ?? "";
+      assert.match(fejlec, /^=\?UTF-8\?B\?/);
+      assert.match(fejlec, / <info@acropora\.hu>$/);
+      const [, kodoltNev] = fejlec.match(/^(.*) <info@acropora\.hu>$/) ?? [];
+      assert.equal(
+        Buffer.from((kodoltNev ?? "").slice(10, -2), "base64").toString("utf8"),
+        "Acropora Ügyfélszolgálat",
+      );
     }));
 
   it("tárolt sablon nélkül a kódban álló alapértelmezés megy, behelyettesítve", () =>

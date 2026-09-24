@@ -130,7 +130,9 @@ describe("a lezárt hibajegy kiküldése", () => {
     /*
       NEGATIV KONTROLL (2026-09-24): a vizmeres-level sajat FELADO-cimet kap
       (`AQUARIUM_MEASUREMENT_MAIL_FROM`), az atadasi level nem -- lasd a
-      megjegyzest a `ticket-mail.service.spec.ts`-ben, ugyanaz az allitas.
+      megjegyzest a `ticket-mail.service.spec.ts`-ben, ugyanaz az allitas. A
+      `ticket@` VEGSO From fejleceben azert 2026-09-24 ota MAR van nev (lasd
+      `gmail-mail.sender.spec.ts`), csak azt nem ez a reteg allitja be.
     */
     assert.equal(t.kuldott[0]?.from, undefined);
   });

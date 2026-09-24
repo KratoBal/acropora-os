@@ -33,6 +33,34 @@ export function encodeHeaderWord(value: string): string {
 }
 
 /**
+ * A FELADÓ FEJLÉC NÉVVEL -- "display-name <addr-spec>" ALAK, RFC 5322.
+ *
+ * Balázs kérdése, 2026-09-24 17:04 UTC: "és a feladó nevénél mi lesz?" -- a
+ * `From:` fejléc ma PUSZTA cím, név nélkül (`config.user` egyenesen a
+ * `buildMimeMessage`-nek megy). Ez a függvény a NÉV+CÍM párt egy kész fejléc-
+ * értékké teszi.
+ *
+ * A KÓDOLÁS CSAK A NÉVRE VONATKOZIK, A CÍMRE SOHA: az RFC 2047 kódolt szó a
+ * `<...>` zárójelen KÍVÜL áll. Ha a teljes fejlécet kódolnánk, a cím is
+ * base64-be kerülne, és a fogadó nem tudná `addr-spec`-ként értelmezni.
+ *
+ * ASCII NÉVNÉL IDÉZŐJELES ALAK (RFC 5322 quoted-string, a `"` és a `\`
+ * escape-elve) -- nem az `encodeHeaderWord` sima passthrough-ja, mert a
+ * display-name-ben szóköz, vessző is állhat, és azok phrase-ként külön
+ * atom-ra törnék a nevet. NEM-ASCII névnél az `encodeHeaderWord` kódolt szava
+ * megy, idézőjel NÉLKÜL: az RFC 2047 encoded-word már önmagában behatárolt.
+ */
+export function formatMailFrom(name: string, address: string): string {
+  const nev = name.trim();
+  if (!nev) return address;
+  // eslint-disable-next-line no-control-regex
+  const cimke = /^[\x20-\x7E]*$/.test(nev)
+    ? `"${nev.replace(/(["\\])/g, "\\$1")}"`
+    : encodeHeaderWord(nev);
+  return `${cimke} <${address}>`;
+}
+
+/**
  * A MASODIK RETEG A FEJLEC-INJEKCIO ELLEN.
  *
  * Az elso reteg a `TicketMailService`-ben all: ott valik a renderelt targy
