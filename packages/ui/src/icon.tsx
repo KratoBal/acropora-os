@@ -10,14 +10,18 @@ export type IconName =
   | "briefcase"
   | "cart"
   | "chevron-down"
+  | "chevron-left"
   | "clipboard"
   | "credit-card"
   | "dashboard"
   | "download"
   | "finance"
+  | "info"
   | "key"
   | "menu"
   | "package"
+  | "pencil"
+  | "plus"
   | "search"
   | "service"
   | "settings"
@@ -25,7 +29,8 @@ export type IconName =
   | "store"
   | "truck"
   | "users"
-  | "warehouse";
+  | "warehouse"
+  | "x";
 
 export interface IconProps extends SVGProps<SVGSVGElement> {
   name: IconName;
@@ -157,6 +162,18 @@ export function Icon({ className, name, size = 18, ...props }: IconProps) {
         </>
       )}
       {name === "chevron-down" && <path d="m7 9 5 5 5-5" />}
+      {name === "chevron-left" && <path d="m15 5-7 7 7 7" />}
+      {name === "plus" && <path d="M12 5v14M5 12h14" />}
+      {name === "pencil" && (
+        <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+      )}
+      {name === "x" && <path d="M18 6 6 18M6 6l12 12" />}
+      {name === "info" && (
+        <>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11v6M12 7.5v.01" />
+        </>
+      )}
       {name === "menu" && <path d="M4 7h16M4 12h16M4 17h16" />}
       {name === "activity" && <path d="M3 12h4l2-7 4 14 2-7h6" />}
       {name === "download" && (

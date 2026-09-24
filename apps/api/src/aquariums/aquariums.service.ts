@@ -34,6 +34,7 @@ export class AquariumsService {
       pageSize: query.pageSize,
       search: query.search,
       ownershipType: query.ownershipType,
+      waterBodyType: query.waterBodyType,
     });
   }
 
