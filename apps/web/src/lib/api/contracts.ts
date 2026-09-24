@@ -4,6 +4,14 @@ import { API_PREFIX } from "./api-prefix";
 const base = "/partners/contracts";
 
 export type ContractItemInput = {
+  /**
+   * MEGLÉVŐ TÉTEL AZONOSÍTÓJA -- ha adott, a szerver UPDATE-eli a sort (az
+   * id állandó marad), ha hiányzik, ÚJ tétel jön létre. Balázs éles
+   * hibája (2026-09-24 21:48): e nélkül minden mentés törölte és
+   * újraépítette az összes tételt, új id-vel, és a kliens tétel-kulcsos
+   * állapota (kijelölt tételek, helyszín, eszközök) a régi id-n maradt.
+   */
+  id?: string;
   description: string;
   unitNet: string;
   quantity: string;

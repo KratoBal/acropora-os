@@ -87,6 +87,19 @@ export class MaintenanceOrdersService {
           .join(", ")}.`,
       );
 
+    /*
+      EGY KARBANTARTÁSI LAP EGY HELYSZÍNRE KÉSZÜL (Balázs éles hibája,
+      2026-09-24 21:48, staging, Állatkert) -- ha a kiállítás tételei
+      TÖBB helyszínen vannak, ez itt, KIÁLLÍTÁSKOR derül ki, nem csak az
+      aláírás visszaérkezésekor (`uploadSignedDocument`, ugyanez a
+      ellenőrzés). A vegyes-helyszínes eset modellje még nincs eldöntve
+      (Balázs elé megy), ezért egyelőre megállunk és megnevezzük a
+      helyszíneket.
+    */
+    await this.ensureSingleDepartment(
+      contract.items.map((item) => item.departmentId as string),
+    );
+
     const now = new Date();
     const occasionYear = maintenanceOrderOccasionYear(now);
     const counts = await this.repository.issuedOccasionCounts(
@@ -173,13 +186,38 @@ export class MaintenanceOrdersService {
   }
 
   /**
-   * AZ ALÁÍRT PÉLDÁNY VISSZAJÖTT -- TÁROLÁS, MAJD A KARBANTARTÁSI LAP.
+   * AZ ALÁÍRT PÉLDÁNY VISSZAJÖTT -- ELLENŐRZÉS, MAJD TÁROLÁS, MAJD A
+   * KARBANTARTÁSI LAP. IDEMPOTENS: EGY MEGSZAKADT PRÓBÁLKOZÁS
+   * ÚJRAINDÍTVA A FÉLBEMARADT ÁLLAPOTBÓL FEJEZŐDIK BE, NEM DUPLIKÁL.
    *
-   * A karbantartási lap (MAINTENANCE ServiceJob) és a tételenkénti
-   * munkalapok a MEGLÉVŐ szolgáltatásokon keresztül jönnek létre
-   * (`ServiceJobsService.create`, `WorksheetsService.create`), nem saját
-   * repository-hívással -- így minden ellenőrzésük (jegyszám-kiosztás,
-   * felelős-érvényesítés, értesítés) egyszer létezik, nem kétszer.
+   * Balázs éles hibája (2026-09-24 21:48, staging), acrobot kártyája
+   * 8b1fd497: ma este élesben fut, tehát a folyamat NEM állhat félbe úgy,
+   * hogy egy újrapróbálkozás kárt tesz. A négy lépés (dokumentum mentése,
+   * állapotváltás, karbantartási lap, munkalapok) HÁROM különböző
+   * szolgáltatáson (ez, `ServiceJobsService`, `WorksheetsService) megy át
+   * -- egyetlen közös DB-tranzakcióba fogni mindet szélesebb refaktor
+   * lenne, kockázatosabb, mint amit egy éles esti kiadás előtt vállalni
+   * érdemes. A választott irány ehelyett IDEMPOTENCIA, lépésenként:
+   *
+   *   1. dokumentum + `SIGNED` állapot: EGY tranzakcióban
+   *      (`saveSignedDocumentAndMarkSigned`) -- vagy mindkettő megtörténik,
+   *      vagy egyik sem. Az `order.status` ezután MEGMONDJA, hogy ez a
+   *      lépés kell-e még: ha már `SIGNED`, egy retry NEM fut le újra.
+   *   2. karbantartási lap: `ServiceJobsService.create()`-nek MEGY egy
+   *      determinisztikus `clientOperationId` (`maintenance-order-<id>-signed`)
+   *      -- ez a mechanizmus MÁR LÉTEZIK (a helyszíni jegyfelvitel
+   *      idempotenciája), csak eddig nem volt ide bekötve. Egy retry
+   *      ugyanazt a sort kapja vissza, nem újat.
+   *   3. munkalapok tételenként: ugyanígy, `maintenance-order-<id>-worksheet-<contractItemId>`
+   *      kulccsal (`WorksheetsService.create()` ugyanezt a mintát ismeri).
+   *   4. a lap hozzárendelése a rendeléshez (`attachServiceJob`): egy sima
+   *      UPDATE, önmagában is ismételhető (ugyanazt az értéket írja be).
+   *
+   * A "MÁR TELJESEN KÉSZ" állapotot a `status === SIGNED && serviceJobId`
+   * együttes megléte jelzi -- CSAK EZ utasítja el az újbóli feltöltést.
+   * `SIGNED`, de `serviceJobId` NÉLKÜL azt jelenti, hogy egy KORÁBBI
+   * próbálkozás az 1. lépésig jutott, és ezt a hívást FOLYTATÁSKÉNT kell
+   * kezelni, nem elutasítani.
    */
   async uploadSignedDocument(
     id: string,
@@ -187,27 +225,49 @@ export class MaintenanceOrdersService {
     actor: AuthenticatedUser,
   ) {
     const order = await this.detail(id);
-    if (order.status !== "ISSUED")
+    if (order.status === "REVOKED")
       throw new BadRequestException(
-        order.status === "SIGNED"
-          ? "Ez a megrendelőlap már alá van írva."
-          : "Ez a megrendelőlap vissza lett vonva, aláírt példány nem tölthető fel hozzá.",
+        "Ez a megrendelőlap vissza lett vonva, aláírt példány nem tölthető fel hozzá.",
       );
-    if (
-      file.mimetype !== "application/pdf" ||
-      !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
-    )
-      throw new BadRequestException("Csak valódi PDF-fájl tölthető fel.");
-    const limitBytes = Number(process.env.DOCUMENT_STORE_LIMIT_BYTES ?? 0);
-    if (Number.isFinite(limitBytes) && limitBytes > 0) {
-      const quota = decideQuota({
-        usedBytes: await sumDocumentBytesInUse(),
-        incomingBytes: file.buffer.length,
-        limitBytes,
-      });
-      if (quota.state === "reject") throw new ConflictException(quota.reason);
+    if (order.status === "SIGNED" && order.serviceJobId)
+      throw new BadRequestException("Ez a megrendelőlap már alá van írva.");
+
+    /*
+      A KARBANTARTÁSI LAP HELYSZÍNE MINDIG ELDŐL, MÉG A DOKUMENTUM MENTÉSE
+      ELŐTT -- akkor is, ha ez a hívás valójában egy megszakadt próbálkozás
+      folytatása. NEM VÁRT ÁLLAPOT, ha egy tételnek időközben (a kiállítás
+      ÓTA) nincs helyszíne -- a kiállítás ezt már kizárta. Hangosan állunk
+      meg: egy csendben kihagyott tétel egy vevő által aláírt lapról néma
+      hiány lenne.
+    */
+    const helyszinNelkul = order.items.find(
+      (item) => !item.contractItem.departmentId,
+    );
+    if (helyszinNelkul)
+      throw new ConflictException(
+        `A(z) "${helyszinNelkul.description}" tételhez időközben megszűnt a helyszín-hozzárendelés, ezért nem hozható létre hozzá munkalap. A szerződés tételét előbb rendezni kell.`,
+      );
+    const departmentId = await this.ensureSingleDepartment(
+      order.items.map((item) => item.contractItem.departmentId as string),
+    );
+
+    if (order.status === "ISSUED") {
+      if (
+        file.mimetype !== "application/pdf" ||
+        !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
+      )
+        throw new BadRequestException("Csak valódi PDF-fájl tölthető fel.");
+      const limitBytes = Number(process.env.DOCUMENT_STORE_LIMIT_BYTES ?? 0);
+      if (Number.isFinite(limitBytes) && limitBytes > 0) {
+        const quota = decideQuota({
+          usedBytes: await sumDocumentBytesInUse(),
+          incomingBytes: file.buffer.length,
+          limitBytes,
+        });
+        if (quota.state === "reject") throw new ConflictException(quota.reason);
+      }
+      await this.repository.saveSignedDocumentAndMarkSigned(id, file);
     }
-    await this.repository.addSignedDocument(id, file);
 
     const serviceJob = await this.serviceJobs.create(
       {
@@ -215,26 +275,20 @@ export class MaintenanceOrdersService {
         kind: "MAINTENANCE",
         contractId: order.contract.id,
         customerId: order.contract.customerId,
+        departmentId,
+        clientOperationId: `maintenance-order-${order.id}-signed`,
       },
       actor,
     );
 
     for (const item of order.items) {
-      const departmentId = item.contractItem.departmentId;
-      if (!departmentId)
-        // NEM VÁRT ÁLLAPOT: a kiállítás ezt már kizárta. Ha mégis előfordul
-        // (a szerződés tétele a kiállítás UTÁN vesztette el a helyszínét),
-        // hangosan állunk meg -- egy csendben kihagyott tétel egy vevő által
-        // aláírt lapról néma hiány lenne.
-        throw new ConflictException(
-          `A(z) "${item.description}" tételhez időközben megszűnt a helyszín-hozzárendelés, ezért nem hozható létre hozzá munkalap. A szerződés tételét előbb rendezni kell.`,
-        );
       await this.worksheets.create(
         {
           customerId: order.contract.customerId,
           departmentId,
           serviceJobId: serviceJob.id,
           subject: item.description,
+          clientOperationId: `maintenance-order-${order.id}-worksheet-${item.contractItem.id}`,
           lines: [
             {
               description: item.description,
@@ -248,7 +302,26 @@ export class MaintenanceOrdersService {
       );
     }
 
-    return this.repository.markSigned(id, serviceJob.id);
+    return this.repository.attachServiceJob(id, serviceJob.id);
+  }
+
+  /**
+   * EGY KARBANTARTÁSI LAP EGY HELYSZÍNRE KÉSZÜL. Ha a bemenet TÖBB
+   * különböző helyszínt hordoz, a modell erre még nincs eldöntve (Balázs
+   * elé megy) -- ezért megállunk, és a hibaüzenet MEGNEVEZI a helyszíneket
+   * (a teljes utat, nem csak a kódot, lásd `unit-path-lookup.ts` fejlécét),
+   * hogy ne kelljen találgatni, melyik tétel melyik ágon van.
+   */
+  private async ensureSingleDepartment(
+    departmentIds: readonly string[],
+  ): Promise<string> {
+    const distinct = [...new Set(departmentIds)];
+    if (distinct.length === 1) return distinct[0]!;
+    const paths = await this.repository.departmentPaths(distinct);
+    const names = distinct.map((id) => paths.get(id)?.join(" / ") ?? id);
+    throw new BadRequestException(
+      `A kiválasztott tételek különböző helyszínen vannak (${names.join(", ")}), ezért egyelőre nem készíthető belőlük egy karbantartási lap. Állíts ki külön megrendelőlapot helyszínenként.`,
+    );
   }
 
   async revoke(

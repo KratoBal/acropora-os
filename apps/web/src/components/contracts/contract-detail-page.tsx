@@ -77,27 +77,41 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
   );
   const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
 
+  /**
+   * A TÉTEL-KULCSOS ÁLLAPOT EGYETLEN FORRÁSBÓL, AKÁR BETÖLTÉSKOR, AKÁR
+   * MENTÉS UTÁN -- Balázs éles hibája (2026-09-24 21:48, Állatkert): a
+   * `save()` eddig csak a `contract` state-et frissítette a szerver
+   * válaszából, a `selectedItemIds`/`itemDepartmentId`/`itemAssetIds` a
+   * RÉGI tétel-id-ken maradt. A repository mostantól ugyan stabilan tartja
+   * a meglévő tételek id-jét (`contracts.repository.ts` `update()`), de a
+   * hívás mindkét helyen UGYANEBBŐL a válaszból induljon, hogy egy
+   * jövőbeli eltérés ne tudjon csendben visszatérni.
+   */
+  const applyContractDetail = (detail: ContractSummary) => {
+    setContract(detail);
+    // ALAPÉRTELMEZÉSBEN AZ ÖSSZES TÉTEL KI VAN VÁLASZTVA -- Balázs
+    // döntése (2026-09-24): egy kiállítás a szerződés összes tételéből
+    // visz egy-egy alkalmat, de tételenként kivehető.
+    setSelectedItemIds(new Set(detail.items.map((item) => item.id)));
+    setItemDepartmentId(
+      Object.fromEntries(
+        detail.items.map((item) => [item.id, item.departmentId ?? ""]),
+      ),
+    );
+    setItemAssetIds(
+      Object.fromEntries(
+        detail.items.map((item) => [
+          item.id,
+          item.assets.map((asset) => asset.assetId),
+        ]),
+      ),
+    );
+  };
+
   const load = async () => {
     try {
       const detail = await contractsApi.detail(token, contractId);
-      setContract(detail);
-      // ALAPÉRTELMEZÉSBEN AZ ÖSSZES TÉTEL KI VAN VÁLASZTVA -- Balázs
-      // döntése (2026-09-24): egy kiállítás a szerződés összes tételéből
-      // visz egy-egy alkalmat, de tételenként kivehető.
-      setSelectedItemIds(new Set(detail.items.map((item) => item.id)));
-      setItemDepartmentId(
-        Object.fromEntries(
-          detail.items.map((item) => [item.id, item.departmentId ?? ""]),
-        ),
-      );
-      setItemAssetIds(
-        Object.fromEntries(
-          detail.items.map((item) => [
-            item.id,
-            item.assets.map((asset) => asset.assetId),
-          ]),
-        ),
-      );
+      applyContractDetail(detail);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A szerződés nem tölthető be.",
@@ -184,6 +198,7 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
           mezőt pedig a szerkesztett állapotból.
         */
         items: contract.items.map((item) => ({
+          id: item.id,
           description: item.description,
           unitNet: item.unitNet,
           quantity: item.quantity,
@@ -193,7 +208,7 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
           assetIds: itemAssetIds[item.id] ?? [],
         })),
       });
-      setContract(next);
+      applyContractDetail(next);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A szerződés nem menthető.",

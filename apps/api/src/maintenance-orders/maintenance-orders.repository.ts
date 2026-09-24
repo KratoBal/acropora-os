@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 
+import { unitPathsFor } from "../common/unit-path-lookup.js";
+
 const orderInclude = {
   contract: {
     select: {
@@ -104,6 +106,11 @@ export class MaintenanceOrdersRepository {
     });
   }
 
+  /** A helyszínek teljes útja, hibaüzenetbe -- ugyanaz a felbontás, mint a munkalapon. */
+  departmentPaths(departmentIds: readonly string[]) {
+    return unitPathsFor(this.database, [...departmentIds]);
+  }
+
   defaultAddress(customerId: string) {
     return this.database.customerAddress.findFirst({
       where: { customerId, isDefault: true },
@@ -196,30 +203,53 @@ export class MaintenanceOrdersRepository {
     });
   }
 
-  addSignedDocument(orderId: string, file: Express.Multer.File) {
-    return this.database.maintenanceOrderDocument.create({
-      data: {
-        maintenanceOrderId: orderId,
-        type: "SIGNED_FORM",
-        fileName: file.originalname,
-        contentType: file.mimetype,
-        sizeBytes: file.size,
-        content: Uint8Array.from(file.buffer),
-      },
-      select: {
-        id: true,
-        fileName: true,
-        contentType: true,
-        sizeBytes: true,
-        createdAt: true,
-      },
+  /**
+   * A DOKUMENTUM MENTÉSE ÉS AZ ÁLLAPOTVÁLTÁS EGY TRANZAKCIÓBAN.
+   *
+   * Balázs éles hibája (2026-09-24 21:48, staging): korábban a dokumentum
+   * mentése és a `SIGNED` állapot két KÜLÖN hívás volt, a karbantartási lap
+   * (másik két szolgáltatás) létrehozása pedig közéjük ékelődött. Egy
+   * megszakadt kérés így elmenthette a dokumentumot úgy, hogy az állapot
+   * ISSUED maradt -- egy újrapróbálkozás ÚJRA elmentette volna a
+   * dokumentumot. Ez a két írás most EGYÜTT, egy tranzakcióban fut: vagy
+   * mindkettő megtörténik, vagy egyik sem. Az `uploadSignedDocument()`
+   * ezután az `order.status` értékéből tudja, hogy ezt a lépést kell-e
+   * még elvégezni, vagy a hívás egy MEGSZAKADT próbálkozás folytatása
+   * (lásd a szolgáltatás fejlécét).
+   */
+  async saveSignedDocumentAndMarkSigned(
+    orderId: string,
+    file: Express.Multer.File,
+  ) {
+    return this.database.$transaction(async (tx) => {
+      await tx.maintenanceOrderDocument.create({
+        data: {
+          maintenanceOrderId: orderId,
+          type: "SIGNED_FORM",
+          fileName: file.originalname,
+          contentType: file.mimetype,
+          sizeBytes: file.size,
+          content: Uint8Array.from(file.buffer),
+        },
+      });
+      await tx.maintenanceOrder.update({
+        where: { id: orderId },
+        data: { status: "SIGNED", signedAt: new Date() },
+      });
     });
   }
 
-  markSigned(orderId: string, serviceJobId: string) {
+  /**
+   * A KARBANTARTÁSI LAP HOZZÁRENDELÉSE -- KÜLÖN LÉPÉS, MERT A LAP MAGA
+   * MÁSIK KÉT SZOLGÁLTATÁSON (`ServiceJobsService`, `WorksheetsService`)
+   * ÁT JÖN LÉTRE, KÖZÖS TRANZAKCIÓ NÉLKÜL. Az idempotenciát emiatt NEM ez
+   * a hívás adja, hanem hogy azok a hívások MAGUK is `clientOperationId`
+   * alapján dolgoznak -- lásd `uploadSignedDocument()`.
+   */
+  attachServiceJob(orderId: string, serviceJobId: string) {
     return this.database.maintenanceOrder.update({
       where: { id: orderId },
-      data: { status: "SIGNED", signedAt: new Date(), serviceJobId },
+      data: { serviceJobId },
       include: orderInclude,
     });
   }
