@@ -896,8 +896,16 @@ Számlázz.hu Online Pénzügyi Adatkapcsolat → Acropora OS
 NAV Online Számla → ellenőrzés és egyeztetés (nem elsődleges forrás)
 ```
 
-**C) Nem webshopos kimenő számlázás** — **TERVEZETT, önálló jövőbeli
-mérföldkő, még nem specifikált**:
+**C) Nem webshopos kimenő számlázás** — **SPECIFIKÁLVA (2026-09-24, ADR-014),
+IMPLEMENTÁCIÓ MÉG NEM INDULT.** Az első konkrét felhasználási eset a
+karbantartási keretszerződés folyamata (aláírt teljesítési igazolás után
+számla, lásd `docs/DECISIONS.md` ADR-014): a számla a mérvadó dokumentum a
+kerekítésnél, a kiállítás gombbal indul az irodának, a csomag a számlával
+együtt megy, és a duplikált számlázás elleni védelem a teljesítési igazolás
+saját rekordján álló idempotencia-kulcs -- NEM az ADR-006-ban leírt
+UNAS-oldali foglalás, mert itt nincs második rendszer, ami már kiállítaná a
+számlát. Előfeltétel (a Számlázz.hu Agent kulcs élesítése) még nyitott, lásd
+ADR-014 "Előfeltétel" szakaszát.
 
 ```text
 Munkalap / projekt / POS / kézi számlatervezet → Acropora OS → Számlázz.hu API
