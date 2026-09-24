@@ -7,5 +7,9 @@ import { CompletionCertificatesService } from "./completion-certificates.service
 @Module({
   controllers: [CompletionCertificatesController],
   providers: [CompletionCertificatesRepository, CompletionCertificatesService],
+  // A repository exportálva: a karbantartási piszkozat-számla
+  // (maintenance-invoice) a MÁR meglévő, tesztelt `detail()` lekérdezést
+  // hasznja a vevő/tétel adatok gyűjtésére, nem másolja le a select-et.
+  exports: [CompletionCertificatesRepository],
 })
 export class CompletionCertificatesModule {}

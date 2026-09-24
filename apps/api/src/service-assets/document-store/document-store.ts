@@ -25,6 +25,7 @@ export const DOCUMENT_OWNERS = [
   "worksheet",
   "product",
   "service-job",
+  "invoice",
 ] as const;
 export type DocumentOwner = (typeof DOCUMENT_OWNERS)[number];
 
@@ -65,6 +66,7 @@ const OWNER_DIRECTORIES: Record<DocumentOwner, string> = {
   worksheet: "worksheets",
   product: "products",
   "service-job": "service-jobs",
+  invoice: "invoices",
 };
 
 export function ownerDirectory(owner: DocumentOwner): string {

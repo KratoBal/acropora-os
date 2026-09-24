@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { MaintenanceInvoiceModule } from "../maintenance-invoice/maintenance-invoice.module.js";
 import { NotificationsModule } from "../notifications/notifications.module.js";
 import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
 
@@ -23,7 +24,7 @@ import { MaintenancePackageService } from "./maintenance-package.service.js";
  * hiányzik. Ezt a `document-store-wiring.spec.ts` méri, a forrásból.
  */
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, MaintenanceInvoiceModule],
   controllers: [MaintenancePackageController],
   providers: [
     MaintenancePackageRepository,

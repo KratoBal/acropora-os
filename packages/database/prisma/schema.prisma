@@ -634,6 +634,17 @@ enum InvoiceSource {
   UNAS
 }
 
+/// A KARBANTARTÁSI SZÁMLA ÉLETCIKLUSA (ADR-014, 4. szelet). A meglévő
+/// UNAS/NAV tükör-sorok MÁR kiállított számlát jelentenek -- azok a
+/// migrációban `ISSUED` alapértéket kapnak. Az ÚJ, karbantartási piszkozat
+/// `DRAFT`-tal jön létre: a Számlázz.hu Agent API `előnézetpdf=true`
+/// hívásából származó valódi előnézet, de szám és `szamlazzInvoiceId`
+/// NÉLKÜL, mert az a valódi kiállításkor keletkezik.
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+}
+
 enum InvoiceSyncStatus {
   PENDING
   RECEIVED
@@ -2586,7 +2597,18 @@ model Invoice {
   /// forrásnál jellemzően null.
   szamlazzInvoiceId    String?
   /// A ténylegesen kiállított/kapott számla saját, emberi olvasható száma.
-  invoiceNumber        String
+  /// OPCIONÁLIS (2026-09-24 óta, ADR-014 4. szelet): egy DRAFT állapotú
+  /// karbantartási piszkozatnak MÉG NINCS száma -- azt csak a valódi
+  /// kiállítás adja. Postgres-ben több NULL nem ütközik a
+  /// @@unique([source, invoiceNumber]) megkötésben, tehát ez a bővítés a
+  /// meglévő UNAS/NAV tükör-sorokat nem érinti (lásd a git grep felmérést,
+  /// nautilus 2026-09-24: az egyetlen valódi olvasó, a
+  /// unas-order-sync.repository.ts syncInvoiceMirror, már null-ellenőriz
+  /// írás előtt).
+  invoiceNumber        String?
+  /// DRAFT | ISSUED, lásd InvoiceStatus doc-comment. A meglévő sorok
+  /// migrációs alapértéke ISSUED.
+  status               InvoiceStatus       @default(ISSUED)
   partnerName          String
   partnerTaxNumber     String?
   customerId           String?
@@ -2597,6 +2619,12 @@ model Invoice {
   /// jóváíró/sztornó számla is tartozhat; a duplikálás elleni védelem a
   /// @@unique([source, invoiceNumber]) megkötés, nem ez a mező.
   salesOrderId         String?
+  /// A KARBANTARTÁSI PISZKOZAT IDEMPOTENCIA-KULCSA (ADR-014): egy adott
+  /// teljesítési igazoláshoz legfeljebb egy Invoice sor tartozhat. Nem
+  /// `szamlazzInvoiceId` a kulcs, mert -- ellentétben a UNAS webshop-esettel
+  /// (ADR-006) -- itt nincs második rendszer, ami ugyanazt a számlát
+  /// versenyben próbálná kiállítani; a mi saját rekordunk a mérvadó.
+  completionCertificateId String?          @unique
   /// A UNAS getOrder API nem ad számla-kiállítási dátumot (az Invoice
   /// alobjektum csak Status/StatusText/Number/Url mezőt dokumentál - lásd
   /// unas.hu/tudastar/api/megrendelesek-adatszerkezet), ezért source=UNAS
@@ -2642,6 +2670,7 @@ model Invoice {
   correctionInvoices     Invoice[]               @relation("InvoiceCorrectionChain")
   lines                  InvoiceLine[]
   foxpostSettlementLines FoxpostSettlementLine[]
+  completionCertificate  CompletionCertificate?  @relation(fields: [completionCertificateId], references: [id], onDelete: SetNull)
 
   @@unique([source, szamlazzInvoiceId])
   /// Idempotencia-kulcs a UNAS read-only számlatükör upsertjéhez (és
@@ -3014,6 +3043,12 @@ model CompletionCertificate {
   serviceJob ServiceJob                      @relation(fields: [serviceJobId], references: [id], onDelete: Restrict)
   items      CompletionCertificateLineItem[]
   documents  CompletionCertificateDocument[]
+  /// A KARBANTARTÁSI PISZKOZAT-SZÁMLA (ADR-014, 4. szelet). Nem
+  /// egy-az-egyben mező, mert egy igazoláshoz technikailag TÖBB Invoice sor
+  /// is mutathatna (pl. egy sztornó-lánc); a "legfeljebb egy" szabályt az
+  /// `Invoice.completionCertificateId @unique` kényszeríti ki, nem ez az
+  /// oldal.
+  invoices   Invoice[]
 
   @@index([serviceJobId])
 }

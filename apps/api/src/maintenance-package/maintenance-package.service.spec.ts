@@ -5,6 +5,7 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 
 import { MaintenancePackageService } from "./maintenance-package.service.js";
 import type { MaintenancePackageRepository } from "./maintenance-package.repository.js";
+import type { MaintenanceInvoiceDraftService } from "../maintenance-invoice/maintenance-invoice-draft.service.js";
 
 const LEZARVA = new Date("2026-09-24T12:00:00Z");
 
@@ -56,16 +57,24 @@ function job(overrides: Record<string, unknown> = {}) {
           content: Buffer.from("%PDF-1.4\ncertificate"),
         },
       ],
+      invoices: [],
     },
     ...overrides,
   } as never;
 }
 
-function serviceWith(data: unknown) {
+function serviceWith(
+  data: unknown,
+  invoiceOverrides: Partial<Record<string, unknown>> = {},
+) {
   const repository = {
     packageData: async (_id: string) => data,
   } as unknown as MaintenancePackageRepository;
-  return new MaintenancePackageService(repository);
+  const invoices = {
+    pdfFor: async (_invoiceId: string) => Buffer.from("%PDF-1.4\ninvoice"),
+    ...invoiceOverrides,
+  } as unknown as MaintenanceInvoiceDraftService;
+  return new MaintenancePackageService(repository, invoices);
 }
 
 describe("a karbantartási lap dokumentumcsomagja", () => {
@@ -116,6 +125,35 @@ describe("a karbantartási lap dokumentumcsomagja", () => {
         return hiba instanceof BadRequestException;
       },
     );
+  });
+
+  it("egy ISSUED számlával a KIKÜLDÉS 'nincs kiállítva számla' hiba nélkül átmegy, ÉS a számla PDF-je bekerül a csomagba", async () => {
+    const adat = job({
+      completionCertificate: {
+        id: "cert-1",
+        number: "ALT-2026-001",
+        documents: [
+          {
+            fileName: "igazolas-alairt.pdf",
+            contentType: "application/pdf",
+            content: Buffer.from("%PDF-1.4\ncertificate"),
+          },
+        ],
+        invoices: [{ id: "invoice-1", invoiceNumber: "SZ2026-00042" }],
+      },
+    });
+    let requestedInvoiceId: string | undefined;
+    const packageFile = await serviceWith(adat, {
+      pdfFor: async (invoiceId: string) => {
+        requestedInvoiceId = invoiceId;
+        return Buffer.from("%PDF-1.4\ninvoice-bytes");
+      },
+    }).assemble("job-a", "send");
+    assert.equal(requestedInvoiceId, "invoice-1");
+    assert.ok(
+      packageFile.bytes.includes(Buffer.from("szamla-SZ2026-00042.pdf")),
+    );
+    assert.ok(packageFile.bytes.includes(Buffer.from("invoice-bytes")));
   });
 
   it("lezáratlan munkalap megállítja a letöltést is, névvel", async () => {

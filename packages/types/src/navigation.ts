@@ -324,6 +324,11 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
   },
   {
+    id: "szamlazz-connection",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
     id: "users",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.USERS_MANAGE),

@@ -115,6 +115,13 @@ const LEKERDEZESEK: Record<DocumentOwner, () => Promise<SorOsszegzes | null>> =
      * mit athelyezni.
      */
     product: async () => null,
+    /**
+     * A SZÁMLÁKNAK SINCS ILYEN TÁBLÁJUK -- ugyanaz az indok, mint a
+     * termékképeknél: az `Invoice` sor a `pdfStorageKey` mezőt hordozza,
+     * `content`/`sizeBytes` inline párja nincs, tehát a bent/tárolón kettősség
+     * nem értelmezhető rá.
+     */
+    invoice: async () => null,
   };
 
 export async function inlineDokumentumJelentes() {
