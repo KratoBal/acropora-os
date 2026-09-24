@@ -33,8 +33,10 @@ export const serviceJobsApi = {
     signal?: AbortSignal,
     search?: string,
     includeHidden?: boolean,
+    kind: "REPAIR" | "MAINTENANCE" = "REPAIR",
   ) {
     const query = new URLSearchParams({ scope });
+    query.set("kind", kind);
     const trimmed = search?.trim();
     if (trimmed) query.set("search", trimmed);
     /**
@@ -74,6 +76,8 @@ export const serviceJobsApi = {
        * hibas allapot.
        */
       assigneeIds?: string[];
+      kind?: "REPAIR" | "MAINTENANCE";
+      contractId?: string | null;
     },
   ) {
     return apiRequest<{ id: string; jobNumber: string }>(base, token, {

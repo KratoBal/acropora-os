@@ -52,7 +52,11 @@ import {
  * AMI ITT MARAD, MERT A HIBAJEGYÉ: hogy melyik fül mit kér a szervertől, és
  * hogy a számok honnan jönnek.
  */
-export function ServiceJobListPage() {
+export function ServiceJobListPage({
+  kind = "REPAIR",
+}: {
+  kind?: "REPAIR" | "MAINTENANCE";
+}) {
   const { session } = useAuth();
   const [tab, setTab] = useState<ServiceJobTab>("open");
   const [search, setSearch] = useState("");
@@ -111,6 +115,7 @@ export function ServiceJobListPage() {
             signal,
             appliedSearch,
             includeHidden,
+            kind,
           ),
         );
       } catch (cause) {
@@ -124,7 +129,7 @@ export function ServiceJobListPage() {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [appliedSearch, canView, includeHidden, scope, token],
+    [appliedSearch, canView, includeHidden, kind, scope, token],
   );
 
   useEffect(() => {
@@ -185,14 +190,26 @@ export function ServiceJobListPage() {
       />
       <ServiceListHeader
         eyebrow="Szerviz / Munkatér"
-        title="Hibajegyek"
-        lead="Minden bejelentésnek legyen következő lépése. A hibajegy a lánc első eleme: mögötte állnak a munkalapok."
+        title={kind === "MAINTENANCE" ? "Karbantartás" : "Hibajegyek"}
+        lead={
+          kind === "MAINTENANCE"
+            ? "A karbantartási lapok a szervizmunka életútját és a hozzájuk kapcsolt munkalapokat egy helyen tartják."
+            : "Minden bejelentésnek legyen következő lépése. A hibajegy a lánc első eleme: mögötte állnak a munkalapok."
+        }
         action={
           canManage ? (
-            <Link href="/szerviz/hibajegyek/uj">
+            <Link
+              href={
+                kind === "MAINTENANCE"
+                  ? "/szerviz/karbantartas/uj"
+                  : "/szerviz/hibajegyek/uj"
+              }
+            >
               <Button>
                 <ServiceIcon name="plus" className="mr-1.5 size-[17px]" />
-                Új hibajegy
+                {kind === "MAINTENANCE"
+                  ? "Új karbantartási lap"
+                  : "Új hibajegy"}
               </Button>
             </Link>
           ) : undefined
@@ -216,7 +233,11 @@ export function ServiceJobListPage() {
         tiles={tiles}
         active={tab}
         onSelect={(key) => setTab(key as ServiceJobTab)}
-        label="Hibajegyek állapot szerint"
+        label={
+          kind === "MAINTENANCE"
+            ? "Karbantartások állapot szerint"
+            : "Hibajegyek állapot szerint"
+        }
       />
       <div className={sv.panel}>
         <ServiceListTabs
@@ -226,12 +247,24 @@ export function ServiceJobListPage() {
           }))}
           active={tab}
           onSelect={(key) => setTab(key as ServiceJobTab)}
-          label="Hibajegyek szűrése"
+          label={
+            kind === "MAINTENANCE"
+              ? "Karbantartások szűrése"
+              : "Hibajegyek szűrése"
+          }
         />
         <div className={sv.toolbar}>
           <ServiceSearchField
-            label="Hibajegy keresése"
-            placeholder="Hibajegyszám, partner vagy hiba"
+            label={
+              kind === "MAINTENANCE"
+                ? "Karbantartás keresése"
+                : "Hibajegy keresése"
+            }
+            placeholder={
+              kind === "MAINTENANCE"
+                ? "Munkaszám, partner vagy cím"
+                : "Hibajegyszám, partner vagy hiba"
+            }
             value={search}
             onChange={setSearch}
           />

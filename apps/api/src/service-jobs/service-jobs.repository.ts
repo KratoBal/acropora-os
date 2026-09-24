@@ -112,6 +112,22 @@ export class ServiceJobsRepository {
   }
 
   /**
+   * A szerződés és a szervizmunka ugyanahhoz a `Customer` sorhoz kötődik.
+   * Nem a partner-felület `supplierId` útvonala a tulajdonosi tengely: az
+   * adatmodellben a munka és a szerződés is a vevőé.
+   */
+  async contractBelongsToCustomer(
+    contractId: string,
+    customerId: string,
+  ): Promise<boolean> {
+    const found = await this.database.contract.findFirst({
+      where: { id: contractId, customerId },
+      select: { id: true },
+    });
+    return found !== null;
+  }
+
+  /**
    * MELYIK MEGADOTT ESZKOZ NEM ALL A HELYSZIN RESZFAJABAN.
    *
    * A VALASZ A HIANYZOK LISTAJA, NEM EGY IGEN-NEM. Aki elutasitast kap, azt
@@ -197,6 +213,8 @@ export class ServiceJobsRepository {
     assetIds: readonly string[];
     actorUserId: string;
     assigneeIds: readonly string[];
+    kind: "REPAIR" | "MAINTENANCE";
+    contractId: string | null;
     /** A helyszini bejelentes idempotencia-kulcsa; a weben nincs ilyen. */
     clientOperationId?: string | null;
   }) {
@@ -238,6 +256,8 @@ export class ServiceJobsRepository {
     assetIds: readonly string[];
     actorUserId: string;
     assigneeIds: readonly string[];
+    kind: "REPAIR" | "MAINTENANCE";
+    contractId: string | null;
     clientOperationId?: string | null;
   }) {
     return this.database.serviceJob.create({
@@ -248,6 +268,8 @@ export class ServiceJobsRepository {
         description: input.description,
         customerId: input.customerId,
         departmentId: input.departmentId,
+        kind: input.kind,
+        contractId: input.contractId,
         // A NYITO A JEGYEN, NEM CSAK A NAPLOBAN. Ugyanaz az aktor kerul mindket
         // helyre, egy tranzakcioban -- de a naplo aktora `SetNull` egy kesobbi
         // felhasznalo-torlesnel, ez a mezo pedig megmarad. A ketto tehat nem
@@ -861,6 +883,7 @@ export class ServiceJobsRepository {
     scope: ServiceJobListScope,
     visibility: Prisma.ServiceJobWhereInput,
     search: string | undefined,
+    kind: "REPAIR" | "MAINTENANCE",
     /**
      * A NEZO AZONOSITOJA, ES KOTELEZO ARGUMENTUM, NEM ELHAGYHATO.
      *
@@ -884,6 +907,7 @@ export class ServiceJobsRepository {
     const where: Prisma.ServiceJobWhereInput = {
       AND: [
         visibility,
+        { kind },
         serviceJobScopeWhere(scope, viewerUserId),
         searchWhere(search),
       ],
@@ -962,6 +986,7 @@ export class ServiceJobsRepository {
   async countsByStatus(
     visibility: Prisma.ServiceJobWhereInput,
     search?: string,
+    kind: "REPAIR" | "MAINTENANCE" = "REPAIR",
   ): Promise<Record<ServiceJobStatus, number>> {
     /**
      * A KERESES BESZAMIT, A SCOPE NEM -- ES A KETTO KULONBSEGE SZANDEKOS.
@@ -974,7 +999,7 @@ export class ServiceJobsRepository {
      */
     const rows = await this.database.serviceJob.groupBy({
       by: ["status"],
-      where: { AND: [visibility, searchWhere(search)] },
+      where: { AND: [visibility, { kind }, searchWhere(search)] },
       _count: { _all: true },
     });
 

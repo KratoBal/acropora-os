@@ -283,6 +283,7 @@ describe("navigation", () => {
         "Feladataim",
         // A 12:33-as bovites, es a lanc elso eleme.
         "Hibajegyek",
+        "Karbantartás",
         "Munkalapok",
         "Eszköznyilvántartás",
         // A BESZERZO SAJAT LISTAJA (2026-09-23): a SERVICE szerep `service.manage`
@@ -367,6 +368,7 @@ describe("navigation", () => {
     // menut ugyanarra a halmazra koti: enelkul az uj oldal CSENDBEN kimaradna
     // az osszevetesbol, epp ott, ahol uj a kod.
     "/szerviz/hibajegyek": "service.view",
+    "/szerviz/karbantartas": "service.view",
     "/szerviz/munkalapok": "service.view",
     "/szerviz/eszkozok": "service.view",
     // A BESZERZO SAJAT LISTAJA (2026-09-23) -- `service.manage`, nem
@@ -383,6 +385,7 @@ describe("navigation", () => {
     "/webshop/termekek": "products.view",
     "/products": "products.view",
     "/partnerek": "partners.view",
+    "/partnerek/szerzodesek": "partners.manage",
     "/beszerzes": "purchasing.view",
     "/beszerzes/nav-szamlak": "purchasing.view",
     "/penzugy/foxpost": "finance.view",

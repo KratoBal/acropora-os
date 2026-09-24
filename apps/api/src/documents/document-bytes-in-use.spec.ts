@@ -67,7 +67,12 @@ describe("a keret minden kötetet foglaló táblát számol", () => {
     const tablak = kotetetFoglaloTablak();
     assert.deepEqual(
       tablak.slice().sort(),
-      ["AssetDocument", "ServiceJobDocument", "WorksheetDocument"],
+      [
+        "AssetDocument",
+        "ContractDocument",
+        "ServiceJobDocument",
+        "WorksheetDocument",
+      ],
       `A sémából ez jött: ${tablak.join(", ")}. Ha ÚJ tábla jelent meg, vedd fel az összegbe is; ha eltűnt valamelyik, a minta vagy az útvonal elavult.`,
     );
   });

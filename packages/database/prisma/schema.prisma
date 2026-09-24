@@ -368,6 +368,19 @@ enum ServiceJobStatus {
   CANCELLED
 }
 
+/// A szervizmunka üzleti eredete. A régi hibajegyek REPAIR-ek.
+enum ServiceJobKind {
+  REPAIR
+  MAINTENANCE
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
 enum AquariumOwnershipType {
   OWN
   STORE
@@ -2047,6 +2060,7 @@ model Customer {
   assets               Asset[]
   worksheetDepartments WorksheetDepartment[]
   worksheets           Worksheet[]
+  contracts            Contract[]
   /// Set when this row is a service partner's mirror rather than a buyer.
   /// The customer list uses its absence to tell the two apart.
   partner              Supplier?             @relation("PartnerWorksheetMirror")
@@ -2673,6 +2687,8 @@ model ServiceJob {
   departmentId      String?
   aquariumId        String?
   status            ServiceJobStatus @default(NEW)
+  kind              ServiceJobKind   @default(REPAIR)
+  contractId        String?
   title             String
   description       String?
   assignedUserId    String?
@@ -2753,6 +2769,7 @@ model ServiceJob {
   updatedAt         DateTime         @updatedAt
 
   customer   Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  contract   Contract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
   department WorksheetDepartment? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   aquarium   Aquarium?            @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
   assets     ServiceJobAsset[]
@@ -2771,12 +2788,82 @@ model ServiceJob {
   @@index([openedById])
   @@index([status, scheduledAt])
   @@index([customerId])
+  @@index([kind])
+  @@index([contractId])
   /// A HELYSZIN SZERINTI SZURES INDEXELT. Ugyanaz az ok, mint a `customerId`
   /// eseteben: a partner-oldali lista a sajat egysegeire szur, es a `Restrict`
   /// torles-ellenorzes is ezt az oszlopot olvassa.
   @@index([departmentId])
   /// MINDEN LISTA EZEN SZUR, ALAPBOL -- ugyanaz az ok, mint a munkalapnal.
   @@index([hiddenAt])
+}
+
+model Contract {
+  id        String         @id @default(cuid())
+  customerId String
+  number    String         @unique
+  title     String
+  validFrom DateTime
+  validTo   DateTime?
+  status    ContractStatus @default(DRAFT)
+  notes     String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  customer Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  items    ContractItem[]
+  documents ContractDocument[]
+  serviceJobs ServiceJob[]
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model ContractItem {
+  id                 String   @id @default(cuid())
+  contractId         String
+  position           Int
+  description        String
+  unitNet            Decimal  @db.Decimal(19, 4)
+  quantity           Decimal  @db.Decimal(19, 6)
+  occasionsPerYear   Int
+  vatRatePercent     Decimal  @db.Decimal(5, 2)
+  departmentId       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  department WorksheetDepartment? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  assets ContractItemAsset[]
+
+  @@unique([contractId, position])
+  @@index([departmentId])
+}
+
+model ContractItemAsset {
+  contractItemId String
+  assetId        String
+
+  contractItem ContractItem @relation(fields: [contractItemId], references: [id], onDelete: Cascade)
+  asset        Asset        @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([contractItemId, assetId])
+  @@index([assetId])
+}
+
+model ContractDocument {
+  id         String   @id @default(cuid())
+  contractId String
+  fileName   String
+  contentType String
+  sizeBytes  Int
+  content    Bytes?
+  storageKey String?
+  createdAt  DateTime @default(now())
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, createdAt])
 }
 
 /// KI DOLGOZIK A HIBAJEGYEN. Kapcsolótábla, nem oszlop a jegyen.
@@ -3181,6 +3268,7 @@ model Asset {
   serviceJobs     ServiceJobAsset[]
   worksheets      WorksheetAsset[]
   documents       AssetDocument[]
+  contractItems   ContractItemAsset[]
   worksheetLines  WorksheetLine[]
   label           AssetLabel?
 
@@ -3897,6 +3985,7 @@ model WorksheetDepartment {
   /// A helyszinre nyitott hibajegyek. A lanc ezzel lett teljes: eddig csak a
   /// munkalap es az eszkoz tudta, hol van, a BEJELENTES nem.
   serviceJobs ServiceJob[]
+  contractItems ContractItem[]
   /// Kik latjak ezt az alegyseget (es vele a reszfajat).
   assignees   UserWorksheetDepartment[]
 

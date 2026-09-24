@@ -162,6 +162,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
   },
   {
+    /** A karbantartás a szervizmunka külön listája, nem új technikusi jog. */
+    id: "maintenance",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SERVICE_VIEW),
+  },
+  {
     id: "worksheets",
     surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
@@ -228,6 +234,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     id: "partners",
     surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.PARTNERS_VIEW),
+  },
+  {
+    /** Az áras szerződés az irodai partnerszerkesztés része. */
+    id: "contracts",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.PARTNERS_MANAGE),
   },
   {
     id: "purchasing",

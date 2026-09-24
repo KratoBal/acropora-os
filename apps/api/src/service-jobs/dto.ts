@@ -47,6 +47,16 @@ import {
 export class CreateServiceJobDto {
   @IsString() @MinLength(1) @MaxLength(300) title!: string;
   @IsString() @MaxLength(4000) @IsOptional() description?: string | null;
+  /**
+   * A hibajegy a biztonságos alapértelmezés: a régi kliensek változatlanul
+   * javítási munkát nyitnak. Karbantartási lapot az iroda nevezi meg
+   * kifejezetten.
+   */
+  @IsIn(["REPAIR", "MAINTENANCE"])
+  @IsOptional()
+  kind?: "REPAIR" | "MAINTENANCE";
+  /** Csak karbantartási munkához köthető keretszerződés. */
+  @IsString() @IsOptional() contractId?: string | null;
   @IsString() @IsOptional() customerId?: string | null;
   /**
    * HONNAN NYITOTTAK A JEGYET -- ES EZ A TELEFON UTJA.
@@ -309,6 +319,10 @@ export class SetServiceJobPlacementDto {
  * elmozdulna, amirol senki nem kert semmit.
  */
 export class ServiceJobListQueryDto {
+  @IsIn(["REPAIR", "MAINTENANCE"])
+  @IsOptional()
+  kind?: "REPAIR" | "MAINTENANCE";
+
   @IsIn(SERVICE_JOB_LIST_SCOPES)
   @IsOptional()
   scope?: ServiceJobListScope;
