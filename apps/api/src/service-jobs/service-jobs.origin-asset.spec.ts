@@ -121,12 +121,14 @@ describe("a jegy az eredet-eszközből veszi az elhelyezését", () => {
   /**
    * EZ AZ AZ ALLITAS, AMI A LEGTOBBET ERI A HELYSZINEN.
    *
-   * Az `Asset.departmentId` OPCIONALIS, tehat a helyszin nelkuli eszkoz
-   * normalis allapot. A "valasztott" eszkozok szabalya szerint eszkozt csak
-   * helyszinnel egyutt lehet megadni -- de ott a VALASZTHATO HALMAZ all a
-   * helyszinbol. Itt nincs halmaz: a szerelo MEGNEVEZI azt az egyet, ami elott
-   * all. Ha elutasitanank, epp arrol a gepről nem tudna jegyet nyitni, aminek
-   * meg nincs rogzitve a helye.
+   * A `departmentId: null` ITT SZANDEKOSAN SZINTETIKUS FIXTURA, NEM VALODI
+   * ADAT-ALLAPOT: az `Asset.departmentId` a #1043 (department_required)
+   * migracio ota KOTELEZO a semaban (ez a komment korabban meg
+   * "OPCIONALIS"-nak irta, az avult el). Ez a teszt tehat a `placementOfAsset`
+   * TIPUSANAK vedelmi hatarat meri (`departmentId: string | null` a
+   * visszateresi tipusban), nem egy elofordulo valos esetet -- a szolgaltatas
+   * a hianyzo helyszint akkor is helyesen kell kezelje, ha a mai adatbazis
+   * ezt mar soha nem adna vissza.
    */
   it("helyszín NÉLKÜLI eszközről is nyílik jegy, és az eszköz FELKERÜL", async () => {
     const { service, created } = serviceWith({
@@ -297,5 +299,55 @@ describe("a jegy az eredet-eszközből veszi az elhelyezését", () => {
     const sor = created[0] as { customerId: string; assetIds: string[] };
     assert.equal(sor.customerId, "customer-9");
     assert.deepEqual(sor.assetIds, []);
+  });
+
+  /**
+   * A JAVITAS OKA (audit-lelet, kanban f5e6f34d, 2026-09-24): a REGI logika
+   * az eszkoz SAJAT (denormalizalt) `customerId` mezojet vetette ossze a
+   * megadott partnerrel. Ha ugyanahhoz a valos partnerhez (pl. duplikalt
+   * Allatkert-rekord) KET `Customer` sor tartozik, es az eszkoz customerId-je
+   * a MASIK sorra mutat, a regi logika mindig elutasitotta -- HOLOTT az
+   * eszkoz VALODI helyszine (`departmentId`) tenyleg a megadott partnerhez
+   * tartozik. Az uj logika a HELYSZINHEZ viszonyit, nem az eszkoz sajat
+   * mezojehez.
+   */
+  it("duplikált partner-rekord: a helyszín dönt, nem az eszköz saját customerId-je", async () => {
+    const { service, created } = serviceWith({
+      placement: { customerId: "customer-B-duplikatum", departmentId: "dep-1" },
+      belongs: true,
+    });
+
+    await service.create(
+      torzs({ originAssetId: "asset-8", customerId: "customer-A" }),
+      BELSOS.id,
+    );
+
+    const sor = created[0] as { customerId: string; assetIds: string[] };
+    assert.equal(sor.customerId, "customer-A");
+    assert.deepEqual(sor.assetIds, ["asset-8"]);
+  });
+
+  /**
+   * A FORDITOTTJA, ES EZ EGY VALODI RES, AMIT A REGI LOGIKA NEM FOGOTT MEG:
+   * az eszkoz SAJAT customerId-je EGYEZIK a megadottal, de a VALODI
+   * helyszine (departmentId) egy MASIK partnere tartozik. A regi `!==`
+   * osszevetes ezt csendben atengedte volna (nincs ellentmondas a KET
+   * mezo kozott); az uj logika a helyszin alapjan MEGIS elutasitja.
+   */
+  it("VALÓDI eltérésnél is elutasít, még ha az eszköz saját customerId-je egyezik is", async () => {
+    const { service, created } = serviceWith({
+      placement: { customerId: "customer-A", departmentId: "dep-idegen" },
+      belongs: false,
+    });
+
+    await assert.rejects(
+      () =>
+        service.create(
+          torzs({ originAssetId: "asset-9", customerId: "customer-A" }),
+          BELSOS.id,
+        ),
+      /másik partnerhez tartozik, mint a hibajegy partnere/,
+    );
+    assert.deepEqual(created, [], "a jegy nem jöhetett létre");
   });
 });
