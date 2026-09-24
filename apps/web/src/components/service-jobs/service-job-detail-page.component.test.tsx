@@ -69,6 +69,7 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
   return {
     id: "job-1",
     jobNumber: "HJ-2026-001",
+    kind: "REPAIR",
     title: "Cápasuli szivattyú leállt",
     kind: "REPAIR",
     description: "A hármas medence szivattyúja nem indul.",

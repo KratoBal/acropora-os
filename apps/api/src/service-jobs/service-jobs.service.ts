@@ -1141,6 +1141,7 @@ export class ServiceJobsService {
     const belso: ServiceJobDetail = {
       id: row.id,
       jobNumber: row.jobNumber,
+      kind: row.kind,
       title: row.title,
       kind: row.kind,
       description: row.description,

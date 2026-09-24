@@ -54,6 +54,7 @@ const RESZLETLAP: DetailRow = {
   departmentPath: null,
   id: "job-1",
   jobNumber: "HJ-2026-001",
+  kind: "REPAIR",
   title: "Szivattyú leállt",
   kind: "REPAIR",
   description: null,
