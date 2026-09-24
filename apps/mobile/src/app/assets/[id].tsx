@@ -400,6 +400,17 @@ export default function AssetDetailScreen() {
             </Section>
 
             <Section title="Műszaki adatok">
+              {/*
+                A KATEGORIA ES A FUNKCIO EDDIG NEM JELENT MEG AZ ADATLAPON,
+                holott a felvitel/szerkesztes urlap mar 2026-09-22 ota kerte
+                oket, es a valasz mindig hordozta a feloldott nevet
+                (`AssetDetail.category`/`.function`, lasd a tipus jegyzetet).
+                Nautilus osszevetese, 2026-09-24 (Figma 7. kor elozetes),
+                acrobot dontese: ez tiszta adat-megjelenites, nem var a
+                Figma-elrendezesre.
+              */}
+              <Info label="Kategória" value={asset.category} />
+              <Info label="Funkció" value={asset.function} />
               <Info label="Gyártó" value={asset.manufacturer} />
               <Info label="Modell" value={asset.model} />
               <Info label="Sorozatszám" value={asset.serialNumber} />
@@ -492,6 +503,20 @@ export default function AssetDetailScreen() {
             </Section>
 
             <Section title="Karbantartás">
+              <Info
+                label="Telepítés dátuma"
+                value={formatDate(asset.installedAt)}
+              />
+              {/*
+                A GARANCIA LEJARATA EDDIG NEM JELENT MEG AZ ADATLAPON, holott
+                az adatbazis mezoje (`Asset.warrantyExpiresAt`) mar regota
+                letezik, es a valasz mindig hordozta -- ugyanaz a lelet, mint
+                a Kategoria/Funkcio fentebb, ugyanazzal a dontessel.
+              */}
+              <Info
+                label="Garancia lejárata"
+                value={formatDate(asset.warrantyExpiresAt)}
+              />
               <Info
                 label="Következő karbantartás"
                 value={formatDate(asset.nextServiceAt)}
