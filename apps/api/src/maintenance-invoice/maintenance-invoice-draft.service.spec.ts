@@ -68,6 +68,8 @@ function service(options: {
   clientResponse?: unknown;
   clientError?: Error;
   credentialsError?: Error;
+  pdfLookup?: unknown;
+  storedPdfBytes?: Uint8Array | null;
 }) {
   const created: unknown[] = [];
   const stored: { key: unknown; bytes: Uint8Array }[] = [];
@@ -81,8 +83,20 @@ function service(options: {
     existingInvoice: async () => options.existingInvoice ?? null,
     createDraft: async (input: unknown) => {
       created.push(input);
-      return { id: "invoice-1", ...({} as Record<string, unknown>) };
+      return {
+        id: "invoice-1",
+        status: "DRAFT",
+        currency: "HUF",
+        netAmount: new Prisma.Decimal(100000),
+        vatAmount: new Prisma.Decimal(27000),
+        grossAmount: new Prisma.Decimal(127000),
+        createdAt: new Date("2026-09-24T18:00:00.000Z"),
+      };
     },
+    invoicePdfLookup: async () =>
+      options.pdfLookup === undefined
+        ? { id: "invoice-1", pdfStorageKey: "invoices/invoice-1/preview.pdf" }
+        : options.pdfLookup,
   } as unknown as MaintenanceInvoiceRepository;
 
   const credentials = {
@@ -100,6 +114,10 @@ function service(options: {
     put: async (key: unknown, bytes: Uint8Array) => {
       stored.push({ key, bytes });
     },
+    get: async () =>
+      options.storedPdfBytes === undefined
+        ? Buffer.from("stored-pdf-bytes")
+        : options.storedPdfBytes,
   } as unknown as DocumentStore;
 
   let clientCalls = 0;
@@ -128,11 +146,21 @@ function service(options: {
 describe("MaintenanceInvoiceDraftService.draftFor", () => {
   it("returns the existing draft without calling Számlázz.hu again", async () => {
     const { service: subject, clientCalls } = service({
-      existingInvoice: { id: "invoice-1", status: "DRAFT" },
+      existingInvoice: {
+        id: "invoice-1",
+        status: "DRAFT",
+        currency: "HUF",
+        netAmount: new Prisma.Decimal(100000),
+        vatAmount: new Prisma.Decimal(27000),
+        grossAmount: new Prisma.Decimal(127000),
+        createdAt: new Date("2026-09-24T18:00:00.000Z"),
+      },
     });
 
     const result = await subject.draftFor("cert-1");
-    assert.deepEqual(result, { id: "invoice-1", status: "DRAFT" });
+    assert.equal(result.id, "invoice-1");
+    assert.equal(result.status, "DRAFT");
+    assert.equal(result.netAmount, "100000");
     assert.equal(clientCalls(), 0);
   });
 
@@ -218,5 +246,67 @@ describe("MaintenanceInvoiceDraftService.draftFor", () => {
     assert.equal(input.completionCertificateId, "cert-1");
     assert.equal(input.customerId, "customer-1");
     assert.equal(input.totals.netAmount.toNumber(), 100000);
+  });
+});
+
+describe("MaintenanceInvoiceDraftService.byCertificate", () => {
+  it("returns null when no draft exists yet", async () => {
+    const { service: subject } = service({ existingInvoice: null });
+    assert.equal(await subject.byCertificate("cert-1"), null);
+  });
+
+  it("returns the summary, with Decimal amounts as strings", async () => {
+    const { service: subject } = service({
+      existingInvoice: {
+        id: "invoice-1",
+        status: "DRAFT",
+        currency: "HUF",
+        netAmount: new Prisma.Decimal(100000),
+        vatAmount: new Prisma.Decimal(27000),
+        grossAmount: new Prisma.Decimal(127000),
+        createdAt: new Date("2026-09-24T18:00:00.000Z"),
+      },
+    });
+    const summary = await subject.byCertificate("cert-1");
+    assert.deepEqual(summary, {
+      id: "invoice-1",
+      status: "DRAFT",
+      currency: "HUF",
+      netAmount: "100000",
+      vatAmount: "27000",
+      grossAmount: "127000",
+      createdAt: "2026-09-24T18:00:00.000Z",
+    });
+  });
+});
+
+describe("MaintenanceInvoiceDraftService.pdfFor", () => {
+  it("throws NotFoundException when the invoice doesn't exist", async () => {
+    const { service: subject } = service({ pdfLookup: null });
+    await assert.rejects(() => subject.pdfFor("invoice-1"), NotFoundException);
+  });
+
+  it("throws ServiceUnavailableException when there is no stored key", async () => {
+    const { service: subject } = service({
+      pdfLookup: { id: "invoice-1", pdfStorageKey: null },
+    });
+    await assert.rejects(
+      () => subject.pdfFor("invoice-1"),
+      ServiceUnavailableException,
+    );
+  });
+
+  it("throws ServiceUnavailableException when the store has no bytes for the key", async () => {
+    const { service: subject } = service({ storedPdfBytes: null });
+    await assert.rejects(
+      () => subject.pdfFor("invoice-1"),
+      ServiceUnavailableException,
+    );
+  });
+
+  it("returns the stored PDF bytes", async () => {
+    const { service: subject } = service({});
+    const bytes = await subject.pdfFor("invoice-1");
+    assert.equal(bytes.toString("utf8"), "stored-pdf-bytes");
   });
 });

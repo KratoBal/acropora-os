@@ -8,6 +8,8 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@acropora/database";
+import type { MaintenanceInvoiceSummary } from "@acropora/types";
 
 import { CompletionCertificatesRepository } from "../completion-certificates/completion-certificates.repository.js";
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
@@ -26,6 +28,31 @@ import {
   MaintenanceInvoiceInputError,
 } from "./maintenance-invoice-xml-input.js";
 import { MaintenanceInvoiceRepository } from "./maintenance-invoice.repository.js";
+
+/**
+ * A KLIENSNEK SZÁNT, SZŰK ALAK -- a UNAS-tükör `toInvoiceSummary` mintája
+ * (unas-order-sync.types.ts): a `Prisma.Decimal` mezők stringként mennek,
+ * és csak azok a mezők szerepelnek, amiket a panel ténylegesen kiír.
+ */
+function toSummary(invoice: {
+  id: string;
+  status: string;
+  currency: string;
+  netAmount: Prisma.Decimal | null;
+  vatAmount: Prisma.Decimal | null;
+  grossAmount: Prisma.Decimal | null;
+  createdAt: Date;
+}): MaintenanceInvoiceSummary {
+  return {
+    id: invoice.id,
+    status: invoice.status as MaintenanceInvoiceSummary["status"],
+    currency: invoice.currency,
+    netAmount: invoice.netAmount?.toString() ?? "0",
+    vatAmount: invoice.vatAmount?.toString() ?? "0",
+    grossAmount: invoice.grossAmount?.toString() ?? "0",
+    createdAt: invoice.createdAt.toISOString(),
+  };
+}
 
 /**
  * A KARBANTARTÁSI PISZKOZAT-SZÁMLA LÉTREHOZÁSA (ADR-014, 4. szelet).
@@ -61,9 +88,43 @@ export class MaintenanceInvoiceDraftService {
     private readonly client: SzamlazzAgentClient = new HttpSzamlazzAgentClient(),
   ) {}
 
-  async draftFor(certificateId: string) {
+  /**
+   * A MEGLÉVŐ PISZKOZAT, HA VAN -- CSAK OLVASÁS, Számlázz.hu-hívás nélkül.
+   * A panel ezt hívja betöltéskor, hogy tudja, kell-e még "Piszkozat
+   * készítése" gombot mutatnia.
+   */
+  async byCertificate(
+    certificateId: string,
+  ): Promise<MaintenanceInvoiceSummary | null> {
     const existing = await this.repository.existingInvoice(certificateId);
-    if (existing) return existing;
+    return existing ? toSummary(existing) : null;
+  }
+
+  /** A piszkozat előnézeti PDF-jének bájtjai, a dokumentum-tárolóból. */
+  async pdfFor(invoiceId: string): Promise<Buffer> {
+    const invoice = await this.repository.invoicePdfLookup(invoiceId);
+    if (!invoice)
+      throw new NotFoundException("A piszkozat-számla nem található.");
+    if (!invoice.pdfStorageKey)
+      throw new ServiceUnavailableException(
+        "A piszkozat-számla PDF-je nem érhető el.",
+      );
+    const key = {
+      owner: "invoice" as const,
+      ownerId: invoice.id,
+      documentId: "preview.pdf",
+    };
+    const bytes = await this.documentStore.get(key);
+    if (!bytes)
+      throw new ServiceUnavailableException(
+        "A piszkozat-számla PDF-je a dokumentum-tárolóban nem érhető el.",
+      );
+    return Buffer.from(bytes);
+  }
+
+  async draftFor(certificateId: string): Promise<MaintenanceInvoiceSummary> {
+    const existing = await this.repository.existingInvoice(certificateId);
+    if (existing) return toSummary(existing);
 
     const certificate = await this.certificates.detail(certificateId);
     if (!certificate)
@@ -143,7 +204,7 @@ export class MaintenanceInvoiceDraftService {
     };
     await this.documentStore.put(documentKey, response.pdf);
 
-    return this.repository.createDraft({
+    const created = await this.repository.createDraft({
       id: invoiceId,
       completionCertificateId: certificateId,
       customerId: customer.id,
@@ -165,5 +226,6 @@ export class MaintenanceInvoiceDraftService {
         };
       }),
     });
+    return toSummary(created);
   }
 }

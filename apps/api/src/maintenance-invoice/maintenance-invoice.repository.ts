@@ -21,6 +21,14 @@ export class MaintenanceInvoiceRepository {
     });
   }
 
+  /** A PDF letöltéséhez elég adat: az azonosító és a tárolt kulcs. */
+  invoicePdfLookup(invoiceId: string) {
+    return this.database.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, pdfStorageKey: true },
+    });
+  }
+
   /**
    * A PISZKOZAT LÉTREHOZÁSA -- MINDIG `status: DRAFT`, `invoiceNumber: null`,
    * `salesOrderId: null`.

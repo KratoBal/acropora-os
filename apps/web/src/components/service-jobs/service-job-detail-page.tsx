@@ -31,6 +31,7 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { megjegyzesKuldheto } from "./megjegyzes-celja";
 import { CompletionCertificatePanel } from "./completion-certificate-panel";
+import { MaintenanceInvoicePanel } from "./maintenance-invoice-panel";
 import { MaintenancePackagePanel } from "./maintenance-package-panel";
 import { HandoverMailDialog } from "./handover-mail-dialog";
 import { KULDES_KIHAGYAS_OKA } from "./handover-mail-skip-reason";
@@ -1394,6 +1395,14 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             */}
             {job.kind === "MAINTENANCE" ? (
               <CompletionCertificatePanel serviceJobId={job.id} />
+            ) : null}
+            {/*
+              A PISZKOZAT-SZAMLA -- ADR-014, 4. szelet, acrobot kerese
+              (2026-09-24, msg 23143). Ugyanaz a hatokor-dontes, mint a
+              testverpaneljei.
+            */}
+            {job.kind === "MAINTENANCE" ? (
+              <MaintenanceInvoicePanel serviceJobId={job.id} />
             ) : null}
             {/*
               A CSOMAG-OSSZEALLITAS ES KIKULDES -- 679d4c04 utani "3.5" szelet.
