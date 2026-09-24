@@ -56,6 +56,8 @@ const SERVER_PAIR: Record<string, string | null> = {
   // egyetlen jogosultság-párral védi, a telefonon viszont két csempe áll rajta.
   worksheetsView: PERMISSIONS.SERVICE_VIEW,
   worksheetsManage: PERMISSIONS.SERVICE_MANAGE,
+  aquariumsView: PERMISSIONS.AQUARIUMS_VIEW,
+  aquariumsManage: PERMISSIONS.AQUARIUMS_MANAGE,
 };
 
 interface Mirror {
@@ -193,9 +195,10 @@ describe("a mobil tükör ÉRTÉKEI", () => {
 });
 
 /**
- * A HALO A KOZOS FORRAS BEVEZETESEHEZ: A FORRAS UGYANAZT A HET CSEMPET ADJA,
- * MINT A TELEFON MAI TABLAI. Hat csempe a kepesseg-tablakbol jon, a hetedik
- * (NAV) a kepernyo sajat szerep-listajabol -- ezert all ket allitasban.
+ * A HALO A KOZOS FORRAS BEVEZETESEHEZ: A FORRAS UGYANAZT A NYOLC CSEMPET ADJA,
+ * MINT A TELEFON MAI TABLAI. Het csempe a kepesseg-tablakbol jon (2026-09-24
+ * ota az akvarium is koztuk), a nyolcadik (NAV) a kepernyo sajat
+ * szerep-listajabol -- ezert all ket allitasban.
  *
  * A `@acropora/types` NAVIGATION_ENTRIES 2026-09-02 ota egy helyen irja le,
  * mit lat egy szerep. A telefon MEG NEM olvassa: a sajat tablaibol dolgozik. Ez
@@ -217,6 +220,7 @@ const TILE_ENTRY: Record<string, string> = {
   purchasingView: "purchasing",
   productsView: "products",
   partnersView: "partners",
+  aquariumsView: "aquariums",
 };
 
 /**
@@ -236,7 +240,7 @@ const TILE_ENTRY: Record<string, string> = {
  */
 
 describe("a mobil csempek es a kozos menu-forras", () => {
-  it("ugyanazt a hat kepesseg-alapu csempet adjak minden szerepre", async () => {
+  it("ugyanazt a het kepesseg-alapu csempet adjak minden szerepre", async () => {
     const mirror = await loadMirror();
     const eltero: string[] = [];
     let osszevetes = 0;
@@ -261,10 +265,10 @@ describe("a mobil csempek es a kozos menu-forras", () => {
       }
     }
 
-    // KONTROLL: hat kulcs es het szerep negyvenket part ad. Egy elromlott
+    // KONTROLL: het kulcs es het szerep negyvenkilenc part ad. Egy elromlott
     // betoltes vagy egy ures kepzes nulla osszevetest adna, ami zold.
     assert.ok(
-      osszevetes >= 40,
+      osszevetes >= 45,
       `Csak ${osszevetes} párt tudtam összevetni. Ez a mérés hibája, nem a forrásé.`,
     );
     assert.deepEqual(

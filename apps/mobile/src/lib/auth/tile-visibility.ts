@@ -35,6 +35,13 @@ export const TILE_ENTRY = {
    * csempeje" allitasa ARRA figyelmeztetne, hogy EZ a par hianyzik.
    */
   AI: "material-requests-pending",
+  /**
+   * A `aquariums` tetel 2026-09-24-IG CSAK web feluletu volt
+   * (`packages/types/src/navigation.ts`). Balazs 13:01-es kiegeszitese
+   * ("helyben felveheto weben es appban is") adta hozza a `mobile` feluletet
+   * a kozos forrasban -- ugyanaz az alak, mint az `AI` tetelnel fentebb.
+   */
+  AQ: "aquariums",
 } as const;
 
 export type TileCode = keyof typeof TILE_ENTRY;

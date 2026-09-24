@@ -54,6 +54,11 @@ const SERVER_PAIR: Record<string, string | null> = {
   // egyszer szetvalasztja a modult, a valtozas ITT landol, egy helyen.
   serviceJobsView: PERMISSIONS.SERVICE_VIEW,
   serviceJobsManage: PERMISSIONS.SERVICE_MANAGE,
+  // AKVÁRIUM, SAJÁT JOGPÁRRAL (2026-09-24) -- nem a fenti `service.*` pár,
+  // ezért a mobil oldalon is külön `canView`/`canManage` számítja, nem a
+  // szerviz hármas közös változója.
+  aquariumsView: PERMISSIONS.AQUARIUMS_VIEW,
+  aquariumsManage: PERMISSIONS.AQUARIUMS_MANAGE,
 };
 
 const ROLE_MIRROR = "../mobile/src/lib/auth/types.ts";

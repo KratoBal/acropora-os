@@ -268,7 +268,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     id: "aquariums",
-    surfaces: ["web"],
+    // MOBIL FELULET 2026-09-24-TOL (Balazs kerese, brief:
+    // exchange/akvariumok-1-kor-brief-2026-09-24.md, 13:01-es kiegeszites:
+    // "helyben felveheto weben es appban is"). A web-only allapot csak
+    // annyiban maradt volna igaz, hogy a telefonos kepernyo meg nem letezett
+    // -- most letezik.
+    surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.AQUARIUMS_VIEW),
   },
   {

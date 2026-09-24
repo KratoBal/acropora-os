@@ -358,6 +358,14 @@ export default function HomeScreen() {
                 enabled
                 onPress={() => router.push("/partners")}
               />
+              <ModuleCard
+                code="AQ"
+                title="Akváriumok"
+                description="Saját és ügyfél akváriumai, méretek és eszközök"
+                available={tileVisible("AQ")}
+                enabled
+                onPress={() => router.push("/aquariums")}
+              />
             </View>
 
             {lathatoCsempek === 0 ? (

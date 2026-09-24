@@ -104,7 +104,7 @@ describe("a csempék sorrendje", () => {
    * TESTVÉR-KONTROLL: A TÖBBI SZEREP KÉPERNYŐJE SEM ESIK SZÉT.
    *
    * A fenti állítás akkor is zöld maradna, ha valaki a négy szervizes csempét
-   * a lista elejére emelné, a többit pedig összekeverné. A tulajdonos kilenc
+   * a lista elejére emelné, a többit pedig összekeverné. A tulajdonos tíz
    * csempét lát, és azok sorrendje is számít -- csak nem Balázs kérése köti,
    * hanem az, hogy ne mozduljon el szó nélkül.
    *
@@ -112,6 +112,9 @@ describe("a csempék sorrendje", () => {
    * felülettel ("AI"), a Munkalapok és az Eszközök közé beszúrva. Ez az
    * állítás ELSÜLT, és ez a helyes viselkedés -- ugyanaz a minta, mint a
    * `HJ` felvételénél (lásd `tile-visibility.spec.ts`).
+   *
+   * 2026-09-24: kilencről tízre nőtt az Akváriumok csempével ("AQ"), a
+   * Partnerek után beszúrva (brief: exchange/akvariumok-1-kor-brief-2026-09-24.md).
    */
   it("a teljes sorrend rögzített", () => {
     assert.deepEqual(kepernyoSorrend(), [
@@ -124,6 +127,7 @@ describe("a csempék sorrendje", () => {
       "TE",
       "NAV",
       "PA",
+      "AQ",
     ]);
   });
 });

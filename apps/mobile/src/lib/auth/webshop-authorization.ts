@@ -41,6 +41,18 @@ export interface ServiceCapabilities {
    */
   serviceJobsView: boolean;
   serviceJobsManage: boolean;
+  /**
+   * AZ AKVÁRIUM SAJÁT SZERVER-JOGPÁRT KAP (`aquariums.view`/
+   * `aquariums.manage`), NEM az eszköz/munkalap/hibajegy hármas
+   * `service.view`/`service.manage` párját -- ezért a lenti számítás sem
+   * ugyanaz a `canView`/`canManage` változó, mint azoknál. A különbség nem
+   * elméleti: a `PARTNER_SERVICE` szerep viseli a `service.*` párt, de az
+   * `aquariums.*` párt NEM (mérve `packages/types/src/auth.ts`
+   * `ROLE_PERMISSIONS.PARTNER_SERVICE`), tehát egy közös változóval a
+   * partner-fiók tévesen akváriumot látna.
+   */
+  aquariumsView: boolean;
+  aquariumsManage: boolean;
 }
 
 const FULL_ACCESS: WebshopCapabilities = {
@@ -174,6 +186,22 @@ export function getServiceCapabilities(role: UserRole): ServiceCapabilities {
     role === "MANAGER" ||
     role === "SERVICE" ||
     role === "PARTNER_SERVICE";
+  // `AQUARIUMS_VIEW` birtokosai: OWNER, ADMIN, MANAGER (mind `ALL_PERMISSIONS`),
+  // SERVICE (kimondottan felvéve) és VIEWER (`VIEW_PERMISSIONS` tagja).
+  // `PARTNER_SERVICE` NEM az -- lásd a mező fenti jegyzetét.
+  const canViewAquariums =
+    role === "OWNER" ||
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "SERVICE" ||
+    role === "VIEWER";
+  // `AQUARIUMS_MANAGE` birtokosai: OWNER, ADMIN, MANAGER, SERVICE. A VIEWER
+  // csak a `VIEW_PERMISSIONS` listáján áll, `*_MANAGE` egyiken sincs rajta.
+  const canManageAquariums =
+    role === "OWNER" ||
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "SERVICE";
   return {
     workspace: canView,
     assetsView: canView,
@@ -182,6 +210,8 @@ export function getServiceCapabilities(role: UserRole): ServiceCapabilities {
     worksheetsManage: canManage,
     serviceJobsView: canView,
     serviceJobsManage: canManage,
+    aquariumsView: canViewAquariums,
+    aquariumsManage: canManageAquariums,
   };
 }
 
