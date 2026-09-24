@@ -2817,28 +2817,118 @@ model ServiceJobAssignee {
   @@index([userId, assignedAt])
 }
 
+/// Akvárium VAGY tó -- Balázs kérése (2026-09-24), hogy a tó ne külön tábla
+/// legyen, csak egy megkülönböztető mező: a két dolog ugyanazokat az
+/// adatokat hordozza (méret, eszközök), és egy közös lista/kereső mindkettőt
+/// ugyanúgy kell hogy kezelje.
+enum WaterBodyType {
+  AKVARIUM
+  TO
+}
+
+/// Opcionális, Balázs kifejezett engedélyével bővítve (2026-09-24): a
+/// felület "tengeri"/"édesvízi" választót ad, de a mező kitöltése nem
+/// kötelező -- a régi (ma élesben 0 soros) rekordoknak sincs erről adata.
+enum WaterType {
+  EDESVIZI
+  TENGERI
+}
+
+/// Az akváriumon lévő berendezés FAJTÁJA. Balázs listája (2026-09-24):
+/// világítás, áramoltatás, lehabzó, felnyomó, biológiai szűrés,
+/// médiareaktor, nyomelem-adagoló, fűtés, hűtés -- plusz egy `EGYEB` kapu,
+/// mert egy zárt lista előbb-utóbb kihagy valamit.
+enum AquariumEquipmentKind {
+  VILAGITAS
+  ARAMOLTATAS
+  LEHABZO
+  FELNYOMO
+  BIO_SZURES
+  MEDIA_REAKTOR
+  NYOMELEM_ADAGOLO
+  FUTES
+  HUTES
+  EGYEB
+}
+
 model Aquarium {
-  id                 String                @id @default(cuid())
-  aquariumNumber     String                @unique
-  customerId         String?
-  name               String
-  ownershipType      AquariumOwnershipType
-  lengthCm           Decimal?              @db.Decimal(10, 2)
-  widthCm            Decimal?              @db.Decimal(10, 2)
-  heightCm           Decimal?              @db.Decimal(10, 2)
-  systemVolumeLiters Decimal?              @db.Decimal(12, 3)
-  maintainedByUs     Boolean               @default(false)
-  responsibleUserId  String?
-  isActive           Boolean               @default(true)
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
+  id                   String                @id @default(cuid())
+  aquariumNumber       String                @unique
+  customerId           String?
+  name                 String
+  ownershipType        AquariumOwnershipType
+  /// Akvárium vagy tó -- lásd a `WaterBodyType` fejlécét. Alapértelmezés
+  /// `AKVARIUM`, mert a mai (kizárólag akvárium-) sorok ide tartoznak.
+  waterBodyType        WaterBodyType         @default(AKVARIUM)
+  lengthCm             Decimal?              @db.Decimal(10, 2)
+  widthCm              Decimal?              @db.Decimal(10, 2)
+  heightCm             Decimal?              @db.Decimal(10, 2)
+  systemVolumeLiters   Decimal?              @db.Decimal(12, 3)
+  /// `true`, HA A FELHASZNÁLÓ ÍRTA ÁT A SZÁMOLT LITERT.
+  ///
+  /// Balázs kérése (2026-09-24): a liter a három méretből SZÁMOLÓDIK, de
+  /// kézzel is beírható. A jelző nélkül egy KÉSŐBBI méretmódosítás csendben
+  /// felülírná a kézzel beírt, valós (pl. belső falvastagság miatt kisebb)
+  /// literértéket -- ez a mező dönti el, hogy a `systemVolumeLiters`
+  /// ÚJRASZÁMOLHATÓ-e a méretekből, vagy a felhasználó szava a végső.
+  systemVolumeIsManual Boolean               @default(false)
+  /// Opcionális, Balázs kifejezett engedélyével (2026-09-24). Lásd a
+  /// `WaterType` fejlécét.
+  waterType            WaterType?
+  /// Az akvárium/tó indításának dátuma. Opcionális, Balázs kifejezett
+  /// engedélyével (2026-09-24).
+  startedAt            DateTime?
+  /// Szabad szöveges megjegyzés. Opcionális, Balázs kifejezett engedélyével
+  /// (2026-09-24).
+  notes                String?
+  maintainedByUs       Boolean               @default(false)
+  responsibleUserId    String?
+  isActive             Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
   customer     Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
   measurements AquariumMeasurement[]
   serviceJobs  ServiceJob[]
   assets       Asset[]
+  /// A FELSZERELT BERENDEZÉSEK, SAJÁT TÁBLÁBAN -- NEM az `Asset` (eszköz-
+  /// nyilvántartás). Lásd az `AquariumEquipment` fejlécét, miért két
+  /// különböző fogalom.
+  equipment    AquariumEquipment[]
 
   @@index([customerId, isActive])
+}
+
+/// AZ AKVÁRIUMON LÉVŐ BERENDEZÉS -- ÉS SZÁNDÉKOSAN NEM AZ `Asset` TÁBLA.
+///
+/// Balázs kérése (2026-09-24): "Eszközök rész: világítás, áramoltatás,
+/// lehabzó, felnyomó, biológiai szűrés, média reaktor, nyomelem adagoló
+/// típusa csatorna száma, fűtés, hűtés." Ez egy MÁSIK fogalom, mint az
+/// `Asset`: az `Asset` a szervizelt berendezések nyilvántartása (partner
+/// belső kódja, QR-matrica, kötelező helyszín) -- egy ügyfél otthoni
+/// akváriumának lámpája nem az, amíg szervizbe nem kerül. Ha egyszer
+/// szervizbe kerül, az `Asset.aquariumId` már ma is köti a kettőt.
+model AquariumEquipment {
+  id           String                @id @default(cuid())
+  aquariumId   String
+  kind         AquariumEquipmentKind
+  manufacturer String?
+  /// A "típus", Balázs szavával -- pl. a nyomelem-adagoló gyártói modellje.
+  model        String?
+  /// Egy akváriumhoz fajtánként több sor is felvehető (pl. két áramoltató),
+  /// ezért ez darabszám, nem jelző. Alapértelmezés 1.
+  quantity     Int                   @default(1)
+  /// CSAK a nyomelem-adagolónál kötelező (Balázs kérése), minden más
+  /// fajtánál értelmetlen -- az API-rétegben ellenőrzött, nem itt: egy
+  /// feltételes CHECK ugyanezt a `kind`-ág szerinti szabályt duplikálná.
+  channelCount Int?
+  notes        String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  aquarium Aquarium @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+
+  @@index([aquariumId])
 }
 
 /// A partnernél üzemelő, fizikailag azonosítható rendszer, berendezés vagy
