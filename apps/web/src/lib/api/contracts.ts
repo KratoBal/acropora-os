@@ -21,6 +21,12 @@ export type ContractInput = {
   validTo?: string | null;
   status?: "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
   notes?: string | null;
+  /**
+   * A vevő szervezeti egysége és kapcsolattartója a megrendelőlapon -- MI
+   * TÖLTJÜK KI, nem a vevő (Balázs döntése, 2026-09-24).
+   */
+  organizationalUnitName?: string | null;
+  contactPersonName?: string | null;
   items: ContractItemInput[];
 };
 

@@ -1141,8 +1141,8 @@ export class ServiceJobsService {
     const belso: ServiceJobDetail = {
       id: row.id,
       jobNumber: row.jobNumber,
-      title: row.title,
       kind: row.kind,
+      title: row.title,
       description: row.description,
       /**
        * A RESZLETLAP REJTETT JEGYNEL IS ELERHETO, tehat itt mind a ket ertek

@@ -12,8 +12,14 @@ import { Prisma } from "@acropora/database";
  * `WorksheetLine` mezőneveihez (`unitNet`) kötött, és ez a modul ÖNÁLLÓ marad
  * -- a bekötés, amikor megtörténik, dönthet úgy is, hogy a kettőt egyesíti,
  * de az egy külön döntés.
+ *
+ * A SKÁLA 2-RŐL 4-RE VÁLTOZOTT (nautilus, a karbantartás 3. szeletének
+ * bekötésekor, 2026-09-24, a 679d4c04 kanban-kártya jegyzete alapján): a
+ * tételek EZENTÚL a `ContractItem.unitNet` oszlopból jönnek, ami a sémán
+ * `Decimal(19, 4)` -- egy 2 tizedesjegyes belső kerekítés itt már a FORRÁS
+ * pontosságát vágná le, mielőtt bármi kiírásra kerülne.
  */
-export const CERTIFICATE_MONEY_SCALE = 2;
+export const CERTIFICATE_MONEY_SCALE = 4;
 
 export type DecimalInput = Prisma.Decimal | number | string;
 
@@ -48,6 +54,36 @@ export function computeCertificateLineAmounts(input: {
   const vatAmount = money(netAmount.mul(vatRatePercent).div(100));
 
   return { netAmount, vatAmount, grossAmount: netAmount.plus(vatAmount) };
+}
+
+/**
+ * TELJES FORINTRA KEREKÍTETT ÖSSZEGEK, TÉTELENKÉNT -- A SZÁMLÁVAL EGYEZŐ
+ * SZABÁLY (679d4c04 kártya, acrobot döntése, 2026-09-24: "a SZÁMLA a
+ * mérvadó").
+ *
+ * === MIÉRT KÜLÖN LÉPÉS, ÉS NEM ELÉG A KIJELZÉS KEREKÍTÉSE ===
+ *
+ * A Számlázz.hu TÉTELENKÉNT egész forintra kerekít, MAJD összead. Ha ez a
+ * modul a 4 tizedesjegyes pontos összegeket adná össze és csak a VÉGÖSSZEGET
+ * kerekítené 0 tizedesjegyre a kijelzéskor, a két módszer -- kerekítve
+ * összegezve kontra összegezve kerekítve -- 1 FORINTTAL eltérhet egymástól
+ * (a kártya jegyzete: "Több tételnél 1 Ft eltérés jöhet"). A teljesítési
+ * igazolás és a belőle kiállított számla ekkor két különböző számot mutatna
+ * ugyanarra a munkára.
+ *
+ * Ezért a nyomtatott és összegzett értékek EBBŐL a függvényből jönnek, a
+ * pontos `CertificateAmounts`-ból SOSEM közvetlenül.
+ */
+export function wholeForintCertificateAmounts(
+  amounts: CertificateAmounts,
+): CertificateAmounts {
+  const round = (value: Prisma.Decimal) =>
+    value.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
+  return {
+    netAmount: round(amounts.netAmount),
+    vatAmount: round(amounts.vatAmount),
+    grossAmount: round(amounts.grossAmount),
+  };
 }
 
 /**

@@ -19,6 +19,13 @@ export type ServiceJobStatusValue =
   | "CANCELLED";
 
 /**
+ * A SZERVIZMUNKA ÜZLETI EREDETE -- a `ServiceJobKind` Prisma-enum tükre,
+ * ugyanazért, amiért `ServiceJobStatusValue` sem importálja az enumot. A
+ * régi hibajegyek REPAIR-ek (a séma alapértelmezése is ez).
+ */
+export type ServiceJobKind = "REPAIR" | "MAINTENANCE";
+
+/**
  * A LEZÁRT ÁLLAPOTOK, EGY HELYEN, A KÖZÖS CSOMAGBAN.
  *
  * KÉT ÉRTÉK, NEM EGY. Egy csak `COMPLETED`-re írt feltétel a `CANCELLED`
@@ -244,9 +251,13 @@ export interface ServiceJobDetail {
    */
   hidden: boolean;
   jobNumber: string;
+  /**
+   * A LAP ÜZLETI EREDETE. Ez dönti el, jár-e hozzá "Teljesítési igazolás
+   * kiállítása" gomb (csak MAINTENANCE-hez) -- lásd a felület saját
+   * feltételét, nem itt.
+   */
+  kind: ServiceJobKind;
   title: string;
-  /** Javítás vagy szerződéses karbantartás; a részletlap is megnevezheti. */
-  kind: "REPAIR" | "MAINTENANCE";
   description: string | null;
   status: ServiceJobStatusValue;
   partnerStatus: ServiceJobPartnerStatus;

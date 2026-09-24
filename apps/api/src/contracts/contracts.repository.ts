@@ -34,6 +34,8 @@ export type ContractInput = {
   validTo: Date | null;
   status: "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
   notes: string | null;
+  organizationalUnitName: string | null;
+  contactPersonName: string | null;
   items: Array<{
     description: string;
     unitNet: Prisma.Decimal;
@@ -151,6 +153,8 @@ export class ContractsRepository {
       validTo: input.validTo,
       status: input.status,
       notes: input.notes,
+      organizationalUnitName: input.organizationalUnitName,
+      contactPersonName: input.contactPersonName,
       items: {
         create: input.items.map((item, index) => ({
           position: index + 1,

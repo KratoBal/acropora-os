@@ -61,8 +61,16 @@ export interface MaintenanceOrderFormItem {
   description: string;
   /** "Egységár 1db/alkalom". */
   unitPricePerOccasion: MaintenanceOrderFormDecimalInput;
-  /** "db". */
-  quantity: number;
+  /**
+   * "db". `MaintenanceOrderFormDecimalInput`, NEM sima `number` -- a
+   * `ContractItem.quantity` a sémán `Decimal(19,6)` (törtmennyiség is lehet),
+   * és egy `number`-re szűkített mező a bekötéskor `.toNumber()`-re
+   * kényszerítené a hívót, pontosan azon a ponton, ahol a többi pénz- és
+   * mennyiség-mező mindvégig Decimal marad (nautilus mérése, 2026-09-24,
+   * a bekötés közben javítva -- lásd
+   * exchange/nautilus-megrendelolap-lekepezesi-terv-2026-09-24.md, 1. pont).
+   */
+  quantity: MaintenanceOrderFormDecimalInput;
   /** "alk/év". */
   occasionsPerYear: number;
   /**

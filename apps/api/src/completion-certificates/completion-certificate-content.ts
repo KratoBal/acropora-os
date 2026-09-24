@@ -3,6 +3,7 @@ import { Prisma } from "@acropora/database";
 import {
   computeCertificateLineAmounts,
   sumCertificateAmounts,
+  wholeForintCertificateAmounts,
   type CertificateAmounts,
 } from "./completion-certificate-amounts.js";
 import type { CompletionCertificateInput } from "./completion-certificate-types.js";
@@ -37,20 +38,33 @@ export function isoDate(value: Date): string {
   return HU_DATE.format(value).replace(/\. /g, "-").replace(/\.$/, "");
 }
 
-const groupedNumber = new Intl.NumberFormat("hu-HU", {
-  maximumFractionDigits: 0,
-});
-
 /**
- * EZREDES TAGOLÁS, SZÓKÖZZEL -- de `Intl.NumberFormat("hu-HU")` NEM sima
- * ASCII szóközt (0x20) ad tagolónak, hanem törésmentes szóközt (U+00A0).
- * Mérve. Ez a PDF-ben és a visszaolvasó tesztben is meglepetést okozna
- * (a keresett `"2 100 000"` -- sima szóközzel -- SOSEM találná meg a
- * PDF szövegét, amiben a szám tagolója `\u00a0`, nem `0x20`), ezért itt
- * egységesen sima szóközre cseréljük.
+ * EZREDES TAGOLÁS, SZÓKÖZZEL -- KÉZZEL, DECIMAL-STRINGBŐL, NEM
+ * `Intl.NumberFormat`-tal.
+ *
+ * A korábbi alak `Intl.NumberFormat("hu-HU").format(amount.toNumber())`
+ * volt: `number`-re váltott, mielőtt formázott volna -- ez pontosan az a
+ * határátlépés, amit a modul többi része (a `CERTIFICATE_MONEY_SCALE`
+ * Decimal-lal számoló láncolata) végig elkerül. Mai forint nagyságrendekre
+ * ez nem okozott látható hibát, de az ELV (nautilus keresztellenőrzése,
+ * 2026-09-24, 679d4c04 kártya) az, hogy a pénz a bemenettől a nyomtatott
+ * karakterig Decimal marad.
+ *
+ * EZ EGYBEN A TÖRÉSMENTES SZÓKÖZ (U+00A0) PROBLÉMÁJÁT IS MEGSZÜNTETI: a
+ * korábbi alak az `Intl.NumberFormat` tagolóját utólag cserélte sima
+ * szóközre, mert a PDF-be és a visszaolvasó tesztbe annak kellett kerülnie.
+ * A kézzel írt tagolás eleve sima szóközt ad, nincs mit utólag cserélni.
  */
 export function formatHuf(amount: Prisma.Decimal): string {
-  return groupedNumber.format(amount.toNumber()).replace(/\u00a0/g, " ");
+  const digits = amount
+    .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP)
+    .toFixed(0);
+  const negative = digits.startsWith("-");
+  const grouped = (negative ? digits.slice(1) : digits).replace(
+    /\B(?=(\d{3})+(?!\d))/g,
+    " ",
+  );
+  return `${negative ? "-" : ""}${grouped}`;
 }
 
 export interface CompletionCertificateLine {
@@ -92,16 +106,27 @@ export interface CompletionCertificateContent {
  * import nélkül, ugyanúgy, ahogy a `service-job-sheet-content.ts` is elválik
  * a rajzolástól. Így a tartalom (számolás, formázás) a lap felrajzolása
  * nélkül is mérhető.
+ *
+ * === A NYOMTATOTT ÉS ÖSSZEGZETT ÉRTÉKEK TÉTELENKÉNT EGÉSZ FORINTRA
+ * KEREKÍTVE ÁLLNAK, NEM A PONTOS `CertificateAmounts`-BÓL ===
+ *
+ * 679d4c04 kártya, acrobot döntése (2026-09-24): "a SZÁMLA a mérvadó". A
+ * Számlázz.hu tételenként egész forintra kerekít, majd összead -- ha ez a
+ * modul a pontos (4 tizedesjegyes) összegeket adná össze és csak a
+ * VÉGÖSSZEGET kerekítené, a két módszer 1 forinttal eltérhetne (lásd
+ * `wholeForintCertificateAmounts` fejlécét). Ezért minden `line.amounts` és
+ * a `totals` is a TÉTELENKÉNT egész forintra kerekített értékből származik.
  */
 export function completionCertificateContent(
   input: CompletionCertificateInput,
 ): CompletionCertificateContent {
   const lines = input.items.map((item): CompletionCertificateLine => {
-    const amounts = computeCertificateLineAmounts({
+    const preciseAmounts = computeCertificateLineAmounts({
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       vatRatePercent: item.vatRatePercent,
     });
+    const amounts = wholeForintCertificateAmounts(preciseAmounts);
     const quantity = new Prisma.Decimal(item.quantity);
     const vatRatePercent = new Prisma.Decimal(item.vatRatePercent);
     return {

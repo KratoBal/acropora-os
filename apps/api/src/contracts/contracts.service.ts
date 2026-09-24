@@ -62,6 +62,14 @@ export class ContractsService {
           : patch.validTo,
       status: patch.status ?? existing.status,
       notes: patch.notes === undefined ? existing.notes : patch.notes,
+      organizationalUnitName:
+        patch.organizationalUnitName === undefined
+          ? existing.organizationalUnitName
+          : patch.organizationalUnitName,
+      contactPersonName:
+        patch.contactPersonName === undefined
+          ? existing.contactPersonName
+          : patch.contactPersonName,
       items:
         patch.items ??
         existing.items.map((item) => ({
@@ -111,6 +119,8 @@ export class ContractsService {
     validTo?: string | null;
     status?: "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
     notes?: string | null;
+    organizationalUnitName?: string | null;
+    contactPersonName?: string | null;
     items: ContractItemDto[];
   }): Promise<ContractInput> {
     const customerId = input.customerId.trim();
@@ -162,6 +172,8 @@ export class ContractsService {
       validTo,
       status: input.status ?? "DRAFT",
       notes: input.notes?.trim() || null,
+      organizationalUnitName: input.organizationalUnitName?.trim() || null,
+      contactPersonName: input.contactPersonName?.trim() || null,
       items,
     };
   }

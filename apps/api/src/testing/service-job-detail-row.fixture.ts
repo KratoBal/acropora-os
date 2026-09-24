@@ -23,8 +23,8 @@ export function serviceJobDetailRow(
   return {
     id: "job-1",
     jobNumber: "HJ-2026-001",
-    title: "Szivattyú leállt",
     kind: "REPAIR" as const,
+    title: "Szivattyú leállt",
     description: null,
     status: "TRIAGED" as const,
     createdAt: new Date("2026-09-01T08:00:00.000Z"),

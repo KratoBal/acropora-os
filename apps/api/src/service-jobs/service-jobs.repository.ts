@@ -1148,8 +1148,8 @@ export class ServiceJobsRepository {
       select: {
         id: true,
         jobNumber: true,
-        title: true,
         kind: true,
+        title: true,
         description: true,
         status: true,
         createdAt: true,

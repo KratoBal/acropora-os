@@ -30,6 +30,7 @@ import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { megjegyzesKuldheto } from "./megjegyzes-celja";
+import { CompletionCertificatePanel } from "./completion-certificate-panel";
 import { HandoverMailDialog } from "./handover-mail-dialog";
 import { KULDES_KIHAGYAS_OKA } from "./handover-mail-skip-reason";
 import { PartnerPicker } from "./partner-picker";
@@ -1384,6 +1385,15 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 </ServiceContextRow>
               </div>
             </ServicePanel>
+            {/*
+              A "GOMB A KARBANTARTASI LAPON" -- 679d4c04 kanban-kartya. A
+              felteteles renderelest ITT mondjuk ki, nem a panel belsejeben:
+              a szerver ugyis elutasitana egy nem-MAINTENANCE lapon, de a
+              gomb ne is kinaljon fel olyat, amit vissza fog dobni.
+            */}
+            {job.kind === "MAINTENANCE" ? (
+              <CompletionCertificatePanel serviceJobId={job.id} />
+            ) : null}
             {/*
           A HIANY MELLE A KIUT. Egy partner nelkuli jegy ma nem tud lapot fogadni,
           es enelkul a doboz nelkul ezt csak a csatolasnal tudna meg a felhasznalo

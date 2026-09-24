@@ -69,7 +69,9 @@ describe("a keret minden kötetet foglaló táblát számol", () => {
       tablak.slice().sort(),
       [
         "AssetDocument",
+        "CompletionCertificateDocument",
         "ContractDocument",
+        "MaintenanceOrderDocument",
         "ServiceJobDocument",
         "WorksheetDocument",
       ],
