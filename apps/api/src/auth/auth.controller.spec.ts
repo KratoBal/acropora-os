@@ -5,7 +5,6 @@ import type { AuthenticatedUser, Session } from "@acropora/types";
 
 import { AuthController } from "./auth.controller.js";
 import type { AuthService } from "./auth.service.js";
-import { MOBILE_SESSION_TTL_MS, SESSION_TTL_MS } from "./auth.service.js";
 import type { AuthenticatedRequest } from "./auth.types.js";
 import {
   CSRF_COOKIE_NAME,
@@ -104,15 +103,15 @@ describe("AuthController", () => {
    * meri, hogy a hivo tenyleg at is adja a helyes erteket -- nem csak azt,
    * hogy a valasz alakja jo (azt a ket korabbi teszt mar fedi).
    */
-  it("mobile login passes MOBILE_SESSION_TTL_MS, web login passes the default web ttl", async () => {
-    let mobileReceivedTtl: number | undefined;
+  it("mobile login passes client='mobile', web login passes no client at all", async () => {
+    let mobileReceivedClient: string | undefined;
     const mobileAuthService = {
       loginWithPassword: async (
         _email: string,
         _password: string,
-        ttlMs?: number,
+        client?: string,
       ) => {
-        mobileReceivedTtl = ttlMs;
+        mobileReceivedClient = client;
         return fakeSession("mobile-token-xyz");
       },
     } as unknown as AuthService;
@@ -120,16 +119,16 @@ describe("AuthController", () => {
       email: testUser.email,
       password: "secret",
     });
-    assert.equal(mobileReceivedTtl, MOBILE_SESSION_TTL_MS);
+    assert.equal(mobileReceivedClient, "mobile");
 
-    let webReceivedTtl: number | undefined = -1; // -1: "hivva sem lett"
+    let webReceivedClient: string | undefined = "not-called";
     const webAuthService = {
       loginWithPassword: async (
         _email: string,
         _password: string,
-        ttlMs?: number,
+        client?: string,
       ) => {
-        webReceivedTtl = ttlMs;
+        webReceivedClient = client;
         return fakeSession("web-token-abc");
       },
     } as unknown as AuthService;
@@ -137,13 +136,10 @@ describe("AuthController", () => {
       { email: testUser.email, password: "secret" },
       fakeCookieResponse(),
     );
-    // A webes vegpont NEM ad at harmadik argumentumot -- a SESSION_TTL_MS
+    // A webes vegpont NEM ad at harmadik argumentumot -- a "web"
     // alapertelmezes a szolgaltatas oldalan dol el, nem itt. `undefined`
-    // a helyes ertek, NEM a SESSION_TTL_MS szam maga.
-    assert.equal(webReceivedTtl, undefined);
-    // KONTROLL: a ket ttl kulonbozik, kulonben ez az allitas barmelyik
-    // ertekre atmenne.
-    assert.notEqual(MOBILE_SESSION_TTL_MS, SESSION_TTL_MS);
+    // a helyes ertek, NEM a "web" szoveg maga.
+    assert.equal(webReceivedClient, undefined);
   });
 
   /**

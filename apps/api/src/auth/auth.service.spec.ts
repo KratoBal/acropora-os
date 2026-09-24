@@ -5,7 +5,9 @@ import type { AuthenticatedUser } from "@acropora/types";
 import {
   AuthService,
   MOBILE_SESSION_TTL_MS,
+  MOBILE_TOKEN_PREFIX,
   SESSION_TTL_MS,
+  ttlMsForToken,
 } from "./auth.service.js";
 import { AuthUserResolver } from "./auth-user-resolver.js";
 import type { SessionRepository, StoredSession } from "./session.repository.js";
@@ -48,7 +50,13 @@ function createFakeSessionRepository(): SessionRepository & {
       store.set(hashSessionToken(token), stored);
       return stored;
     },
-    async findActive(token: string) {
+    // A csuszo hosszabbitast (debounce, tenyleges DB-iras) a valodi
+    // repository ellen mert integracios spec-ek fedik
+    // (session.repository.integration.spec.ts) -- ez a fake sosem
+    // hosszabbit, `extended: false` egyszeruen a legegyszerubb helyes
+    // valasz, es ettol ez a spec-fajl a HITELESITESI dontesre koncentral,
+    // nem a csuszas mechanikajara.
+    async findActive(token: string, _ttlMs: number) {
       const hashed = hashSessionToken(token);
       const stored = store.get(hashed);
       if (!stored) return null;
@@ -56,7 +64,7 @@ function createFakeSessionRepository(): SessionRepository & {
         store.delete(hashed);
         return null;
       }
-      return stored;
+      return { session: stored, extended: false };
     },
     async deleteByToken(token: string) {
       store.delete(hashSessionToken(token));
@@ -143,18 +151,21 @@ describe("AuthService user resolution", () => {
     // development session is — same underlying SessionRepository, same
     // contract — even though production storage is now the database
     // rather than a shared map.
-    assert.deepEqual(await service.resolveToken(session.token!), internalOwner);
+    assert.deepEqual(
+      (await service.resolveToken(session.token!)).user,
+      internalOwner,
+    );
   });
 
   /**
-   * A MOBIL 30 NAPOS MUNKAMENETET KAP -- Balazs kerese es jovahagyasa
-   * (2026-09-24 08:10, mobil szal), a tunet: a mobilalkalmazas napkozben
-   * kilepteti, mert a rogzitett lejarat rovidebb egy munkanapnal, es a
-   * mobil sosem hosszabbit. Ez az allitas a HARMADIK, explicit `ttlMs`
-   * argumentumot meri -- azt, amit a hivo (AuthController) ad at, nem azt,
-   * amit a szolgaltatas maga valasztana.
+   * A MOBIL 30 NAPOS MUNKAMENETET KAP, ES SAJAT ELOTAGOT -- Balazs kerese es
+   * jovahagyasa (2026-09-24 08:10 es 08:15, mobil szal), a tunet: a
+   * mobilalkalmazas napkozben kilepteti. Ez az allitas a HARMADIK, explicit
+   * `client` argumentumot meri -- azt, amit a hivo (AuthController) ad at --
+   * ES az elotagot, amitol `ttlMsForToken` kesobb felismeri a hosszat
+   * uj oszlop nelkul.
    */
-  it("loginWithPassword honors an explicit ttlMs (the mobile shape)", async () => {
+  it("loginWithPassword('mobile') gives a 30-day ttl AND the mobile_ token prefix", async () => {
     const resolver = {
       resolveByEmailAndPassword: async () => internalOwner,
       resolveById: async () => internalOwner,
@@ -164,7 +175,7 @@ describe("AuthService user resolution", () => {
     const session = await service.loginWithPassword(
       internalOwner.email,
       "correct horse battery staple",
-      MOBILE_SESSION_TTL_MS,
+      "mobile",
     );
     const expiresInMs = new Date(session.expiresAt).getTime() - before;
     // Tolerancia a teszt sajat futasi idejere, nem a lejarat pontossagara.
@@ -172,6 +183,16 @@ describe("AuthService user resolution", () => {
       Math.abs(expiresInMs - MOBILE_SESSION_TTL_MS) < 5_000,
       `vart kb. ${MOBILE_SESSION_TTL_MS}ms, kaptam ${expiresInMs}ms`,
     );
+    assert.equal(session.token?.startsWith(MOBILE_TOKEN_PREFIX), true);
+  });
+
+  it("ttlMsForToken derives the right length from the token's own prefix", () => {
+    assert.equal(
+      ttlMsForToken(`${MOBILE_TOKEN_PREFIX}anything`),
+      MOBILE_SESSION_TTL_MS,
+    );
+    assert.equal(ttlMsForToken("plain-web-token"), SESSION_TTL_MS);
+    assert.equal(ttlMsForToken("dev_something"), SESSION_TTL_MS);
   });
 
   it("loginWithPassword defaults to the web ttl (SESSION_TTL_MS) when the caller omits it", async () => {

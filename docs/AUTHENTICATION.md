@@ -121,6 +121,48 @@ process memóriájában. Csak a token SHA-256 lenyomata kerül tárolásra
 session feloldásakor az `AuthGuard`/`AuthService` `401`-et ad, és a lejárt
 sort törli.
 
+### Munkamenet-lejárat és csúszás
+
+Balázs kérése és jóváhagyása (2026-09-24, mobil szál): a tünet, hogy a
+mobilalkalmazás napközben kiléptetett, mert a lejárat rövidebb volt, mint
+egy tipikus munkanap, és semmi nem hosszabbította.
+
+Két, egymástól független dolog:
+
+- **A hossz belépéskor dől el, kliensenként külön** (`AuthService.loginWithPassword`,
+  a `client` paraméter): web és a development login `SESSION_TTL_MS` (8 óra),
+  mobil `MOBILE_SESSION_TTL_MS` (30 nap). A mobil token saját, `mobile_`
+  előtagot kap (`MOBILE_TOKEN_PREFIX`) — ez NEM biztonsági határ (azt a
+  `Session.tokenHash` egyezése adja), hanem azonosítja, melyik hossz
+  csúszik egy már kiadott tokenre (`ttlMsForToken`).
+- **A lejárat MINDEN hitelesített kérésen csúszik** (`SessionRepository.findActive`):
+  ha az utolsó hosszabbítás óta eltelt legalább `SLIDING_EXTEND_DEBOUNCE_MS`
+  (5 perc), a lejárat `most + hossz`-ra tolódik, és a sor frissül. Az "utolsó
+  hosszabbítás" idejét NEM külön oszlop tárolja — a meglévő `expiresAt`-ból
+  és a hívó által átadott `ttlMs`-ből vezethető le (`expiresAt - ttlMs`,
+  lásd `shouldExtend`), mert egy frissen (ki)adott vagy hosszabbított
+  session pontosan `most + ttlMs` lejáratot kap. Az 5 perces debounce azért
+  kell, hogy ne írjunk adatbázist minden egyes kérésnél.
+
+A cookie-alapú (web) útvonalon a `acropora_session` és `acropora_csrf`
+süti `maxAge`-e is újra beállítódik (`AuthGuard`), de KIZÁRÓLAG akkor, ha
+ebben a körben ténylegesen történt hosszabbítás — különben minden kérés
+felesleges `Set-Cookie` fejlécet kapna. A CSRF süti ÉRTÉKE ilyenkor
+VÁLTOZATLAN marad (csak a `maxAge` nő): újragenerálás a kliens következő
+állapotváltoztató kérését CSRF-hibával buktatná, mert az addig kapott
+értéket küldené vissza.
+
+**Ismert korlát, amit a kód szándékosan nem old meg:** a mobil kliens saját,
+helyben tárolt `expiresAt`-je (`apps/mobile/src/lib/auth/token-store.ts`) csak
+belépéskor íródik. A szerver oldali csúszás nem jut vissza hozzá — sem a
+`resumeSession` (háttérből visszatéréskor, szándékosan nem hív szervert,
+lásd a saját jegyzetét), sem a `restoreSession` (`/auth/me`, aminek a válasza
+ma nem hordoz `expiresAt`-et) nem frissíti. Gyakorlatban ez azt jelenti, hogy
+a SZERVER oldali session rendszeres használat mellett ténylegesen nem jár
+le 30 nap alatt, de a telefon SAJÁT Face ID-kapuja a bejelentkezéskori
+lejárat közelében újra jelszót fog kérni, amíg ezt külön (mobil OTA-t
+igénylő) döntés nem oldja fel.
+
 ### Mobil auth
 
 `POST /auth/mobile/login/password` törzse:
