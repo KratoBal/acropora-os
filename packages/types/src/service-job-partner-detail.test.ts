@@ -17,6 +17,7 @@ const BELSO: ServiceJobDetail = {
   hidden: false,
   jobNumber: "HJ-2026-001",
   title: "Szivattyú zúg",
+  kind: "REPAIR",
   description: "Reggel óta hangos.",
   status: "WAITING_FOR_PARTS",
   partnerStatus: "IN_PROGRESS",
@@ -70,6 +71,7 @@ const BELSO: ServiceJobDetail = {
 /** A tizenegy mezo, amit a portal MA SEM olvas (merve 2026-09-21, kontrollal). */
 const ELVETT = [
   "hidden",
+  "kind",
   "status",
   "customerName",
   "customerId",
