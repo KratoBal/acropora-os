@@ -56,6 +56,7 @@ function job(overrides: Record<string, unknown> = {}) {
           content: Buffer.from("%PDF-1.4\ncertificate"),
         },
       ],
+      invoices: [],
     },
     ...overrides,
   } as never;
@@ -116,6 +117,25 @@ describe("a karbantartási lap dokumentumcsomagja", () => {
         return hiba instanceof BadRequestException;
       },
     );
+  });
+
+  it("egy ISSUED számlával a KIKÜLDÉS 'nincs kiállítva számla' hiba nélkül átmegy", async () => {
+    const adat = job({
+      completionCertificate: {
+        id: "cert-1",
+        number: "ALT-2026-001",
+        documents: [
+          {
+            fileName: "igazolas-alairt.pdf",
+            contentType: "application/pdf",
+            content: Buffer.from("%PDF-1.4\ncertificate"),
+          },
+        ],
+        invoices: [{ id: "invoice-1" }],
+      },
+    });
+    const packageFile = await serviceWith(adat).assemble("job-a", "send");
+    assert.ok(packageFile.bytes.length > 0);
   });
 
   it("lezáratlan munkalap megállítja a letöltést is, névvel", async () => {

@@ -158,6 +158,24 @@ const OWNER_QUERIES: Record<DocumentOwner, () => Promise<RowWithSize[]>> = {
       },
       sizeBytes: null,
     })),
+  /**
+   * A SZÁMLA-ELŐNÉZET PDF-JE ugyanúgy csak a `pdfStorageKey`-t hordozza,
+   * méretet nem -- a `product` mintáját követi.
+   */
+  invoice: async () =>
+    (
+      await prisma.invoice.findMany({
+        where: { pdfStorageKey: { not: null } },
+        select: { id: true, pdfStorageKey: true },
+      })
+    ).map((sor) => ({
+      key: {
+        owner: "invoice" as const,
+        ownerId: sor.id,
+        documentId: sor.pdfStorageKey!.split("/").pop() ?? sor.pdfStorageKey!,
+      },
+      sizeBytes: null,
+    })),
 };
 
 const fetchFromPrisma: FetchRowsWithStorageKey = async () => {

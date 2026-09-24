@@ -32,9 +32,11 @@ export interface MaintenancePackage {
 /**
  * A KARBANTARTÁSI LAP DOKUMENTUMCSOMAGJA -- A HIBAJEGYES MINTA ÁTVÉTELE
  * (`ServiceJobPackageService`), NÉGY ELEMMEL: megrendelőlap, munkalapok,
- * teljesítési igazolás, számla. A SZÁMLA MA MINDIG HIÁNYZIK (nincs modell,
- * nincs kiállítás -- 4. szelet), ezért `assemble(..., "send")` MA MINDIG
- * elutasít: ez a helyes, várt állapot, amíg a Számlázz.hu-kulcs meg nem jön.
+ * teljesítési igazolás, számla. A 4. szelet (`maintenance-invoice` modul)
+ * mára tud PISZKOZATOT (DRAFT) létrehozni, de VALÓDI kiállítást (ISSUED)
+ * még nem -- a `invoicePresent` ezért ma is mindig hamis marad, és
+ * `assemble(..., "send")` mindig elutasít. Ez a helyes, várt állapot,
+ * amíg a valódi kiállítás gombja/kapcsolója meg nem épül.
  *
  * A KAPU RÉSZLETEI A `maintenance-package-gate.ts`-BEN ÁLLNAK, mérhetően.
  */
@@ -117,11 +119,14 @@ export class MaintenancePackageService {
       hasCertificate: job.completionCertificate != null,
       certificateSigned: certificateDocument != null,
       /*
-        A SZÁMLA MA SOHA NINCS JELEN -- lásd a modul fejlécét. Ez az EGYETLEN
-        hely, ami a 4. szelet érkezésekor módosul: egy valódi számla-lekérdezés
-        váltja fel a `false`-t.
+        CSAK A VALÓDI KIÁLLÍTÁS ELÉGÍTI KI -- a `maintenance-invoice` modul
+        (4. szelet) MA csak DRAFT (előnézeti) piszkozatot tud létrehozni, a
+        valódi kiállítás gomb/kapcsoló (`MAINTENANCE_INVOICE_ISSUE_ENABLED`)
+        még nem épült meg. Ezért a küldés MA IS mindig elutasít -- ugyanaz a
+        megfigyelhető viselkedés, mint a korábbi beégetett `false`-nál, de
+        immár a SÉMÁBÓL következik, nem egy TODO-jegyzetből.
       */
-      invoicePresent: false,
+      invoicePresent: (job.completionCertificate?.invoices.length ?? 0) > 0,
       purpose,
     });
     if (maintenancePackageIsBlocked(blockers))

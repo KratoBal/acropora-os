@@ -70,6 +70,17 @@ export class MaintenancePackageRepository {
               take: 1,
               select: { fileName: true, contentType: true, content: true },
             },
+            /*
+              CSAK A VALÓDI KIÁLLÍTÁS SZÁMÍT ITT -- egy DRAFT (előnézeti)
+              piszkozat NEM elégíti ki a küldés kapuját (ADR-014, 4. szelet):
+              a `completionCertificateId @unique` miatt legfeljebb egy sor
+              lehet, ezért a `where` egyben a "van-e valódi számla" kérdésre
+              is válaszol, nem csak szűr.
+            */
+            invoices: {
+              where: { status: "ISSUED" },
+              select: { id: true },
+            },
           },
         },
       },
