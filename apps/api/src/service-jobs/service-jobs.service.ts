@@ -1291,6 +1291,13 @@ export class ServiceJobsService {
         userId: assignee.userId,
         name: personDisplayName(assignee.user),
         assignedAt: assignee.assignedAt.toISOString(),
+        // `null`, HA A DELEGALO AZONOSITOJA HIANYZIK (`assignedById` opcionalis
+        // a semaban) VAGY A FELHASZNALO AZOTA TOROLVE LETT -- ugyanaz a
+        // szabaly, mint a tobbi "azota torolt szemely" mezonel ezen a lapon
+        // (pl. `ServiceJobStatusEvent.actorName`).
+        assignedByName: assignee.assignedBy
+          ? personDisplayName(assignee.assignedBy)
+          : null,
       })),
     };
 

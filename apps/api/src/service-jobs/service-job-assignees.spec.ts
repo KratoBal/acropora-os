@@ -23,6 +23,7 @@ type Assignee = {
   userId: string;
   assignedAt: Date;
   user: { displayName: string; nickname: string | null };
+  assignedBy?: { displayName: string; nickname: string | null } | null;
 };
 
 function detailRow(assignees: Assignee[] = []) {
@@ -303,11 +304,13 @@ describe("a delegáltak a részletlapon", () => {
             userId: "user-2",
             assignedAt: ASSIGNED_AT,
             user: { displayName: "Kovács István", nickname: "Pista" },
+            assignedBy: { displayName: "Tóth Gábor", nickname: null },
           },
           {
             userId: "user-3",
             assignedAt: ASSIGNED_AT,
             user: { displayName: "Nagy Éva", nickname: null },
+            assignedBy: null,
           },
         ]),
     });
@@ -319,11 +322,16 @@ describe("a delegáltak a részletlapon", () => {
         userId: "user-2",
         name: "Pista",
         assignedAt: "2026-09-14T09:30:00.000Z",
+        assignedByName: "Tóth Gábor",
       },
       {
         userId: "user-3",
         name: "Nagy Éva",
         assignedAt: "2026-09-14T09:30:00.000Z",
+        // NEGATÍV KONTROLL, UGYANABBAN A LISTÁBAN: `assignedBy` hiányzik
+        // (a delegáló azonosítója törölve/ismeretlen), a mező `null` --
+        // NEM esik ki csendben, és nem a másik sor nevét örökli.
+        assignedByName: null,
       },
     ]);
   });
