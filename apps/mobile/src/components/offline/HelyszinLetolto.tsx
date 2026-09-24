@@ -130,7 +130,10 @@ export function HelyszinLetolto() {
             */
             if (eredmeny.allapot === "hiba") throw new Error(eredmeny.uzenet);
           },
-          jegyLista: () => listServiceJobs("open"),
+          // A helyszín letöltése nem csak hibajegyeket ment: a szerelő itt
+          // találja meg a szerződéses karbantartást és az alatta levő
+          // munkalapokat is.
+          jegyLista: () => listServiceJobs("open", "ALL"),
           /*
             A LETOLTO A BELSO ALAKOT MENTI, tehat a partner-alakot NEM veheti
             at: a visszaolvaso belso alaknak feltetelezne, es a kovetkezo

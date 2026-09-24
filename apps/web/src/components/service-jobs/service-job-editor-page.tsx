@@ -58,7 +58,11 @@ import {
  * százat ad: egy sima legördülő CSENDBEN levágná a többit, és a hiányzó partner
  * úgy nézne ki, mintha nem is létezne.
  */
-export function ServiceJobEditorPage() {
+export function ServiceJobEditorPage({
+  kind = "REPAIR",
+}: {
+  kind?: "REPAIR" | "MAINTENANCE";
+}) {
   const { session } = useAuth();
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -248,6 +252,7 @@ export function ServiceJobEditorPage() {
           departmentId: departmentId || null,
           assetIds,
           assigneeIds,
+          ...(kind === "MAINTENANCE" ? { kind } : {}),
         })
         .catch((cause: unknown) => {
           setError(

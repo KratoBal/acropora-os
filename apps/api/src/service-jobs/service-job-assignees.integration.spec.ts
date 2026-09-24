@@ -369,6 +369,7 @@ describe(
           scope,
           csakEnyem,
           undefined,
+          "REPAIR",
           userId,
         );
         return rows.map((row) => row.jobNumber).sort();

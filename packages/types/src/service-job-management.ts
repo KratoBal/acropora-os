@@ -55,6 +55,8 @@ export interface ServiceJobListItem {
   id: string;
   jobNumber: string;
   title: string;
+  /** Javítás vagy szerződéses karbantartás; a kliens ebből nevezi meg a sort. */
+  kind: "REPAIR" | "MAINTENANCE";
   status: ServiceJobStatusValue;
   partnerStatus: ServiceJobPartnerStatus;
   partnerStatusLabel: string;
@@ -243,6 +245,8 @@ export interface ServiceJobDetail {
   hidden: boolean;
   jobNumber: string;
   title: string;
+  /** Javítás vagy szerződéses karbantartás; a részletlap is megnevezheti. */
+  kind: "REPAIR" | "MAINTENANCE";
   description: string | null;
   status: ServiceJobStatusValue;
   partnerStatus: ServiceJobPartnerStatus;

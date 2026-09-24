@@ -79,9 +79,12 @@ const BASE = "/service/jobs";
  * `= "open"` alapertek epp azt rejtette el, hogy a kepernyo szukitett -- es
  * abbol lett a bejelentes, hogy az elkeszult jegy "eltunik a listabol".
  */
-export function listServiceJobs(scope: ServiceJobScope) {
+export function listServiceJobs(
+  scope: ServiceJobScope,
+  kind: "REPAIR" | "MAINTENANCE" | "ALL" = "ALL",
+) {
   return apiRequest<ServiceJobListResponse>(
-    `${BASE}?${new URLSearchParams({ scope })}`,
+    `${BASE}?${new URLSearchParams({ scope, kind })}`,
   );
 }
 

@@ -18,6 +18,7 @@ function item(
     id: jobNumber,
     jobNumber,
     title: "Nem indul a szivattyú",
+    kind: "REPAIR",
     status,
     partnerStatusLabel: "Folyamatban",
     customerName: null,
@@ -133,8 +134,8 @@ describe("a hibajegy-lista szűrői a telefonon", () => {
     );
     assert.deepEqual(
       hivasok,
-      ["scope"],
-      `A képernyő ${hivasok.length} helyen hívja a listát, ezekkel: ${hivasok.join(", ")}. Egyetlen hívást várok, a kiválasztott szűrővel.`,
+      ['scope, "ALL"'],
+      `A képernyő ${hivasok.length} helyen hívja a listát, ezekkel: ${hivasok.join(", ")}. Egyetlen hívást várok, a kiválasztott szűrővel és a teljes munkafajta-halmazzal.`,
     );
   });
 });

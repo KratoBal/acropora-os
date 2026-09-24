@@ -101,7 +101,7 @@ export const partnerApi = {
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
   tickets: (scope: "all" | "open" | "closed") =>
     request<ServiceJobListResponse>(
-      `/service/jobs?${new URLSearchParams({ scope })}`,
+      `/service/jobs?${new URLSearchParams({ scope, kind: "ALL" })}`,
     ),
   ticket: (id: string) =>
     /*

@@ -85,6 +85,8 @@ describe("a jegy az eredet-eszközből veszi az elhelyezését", () => {
       assetIds: ["asset-1"],
       actorUserId: "user-1",
       assigneeIds: [],
+      kind: "REPAIR",
+      contractId: null,
       /*
         A HELYSZINI BEJELENTES KULCSA, ITT `null`: ez a fixture nem kuld ilyet
         (a webes felvitel sem kuld). A mezo MEGIS itt all, mert a teljes

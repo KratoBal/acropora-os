@@ -37,6 +37,7 @@ import { UsersModule } from "./users/users.module.js";
 import { ServiceJobsModule } from "./service-jobs/service-jobs.module.js";
 import { WorksheetsModule } from "./worksheets/worksheets.module.js";
 import { MaterialRequestsModule } from "./material-requests/material-requests.module.js";
+import { ContractsModule } from "./contracts/contracts.module.js";
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { MaterialRequestsModule } from "./material-requests/material-requests.mo
     ContentModule,
     ServiceAssetsModule,
     ServiceJobsModule,
+    ContractsModule,
     WorksheetsModule,
     MaterialRequestsModule,
     TasksModule,

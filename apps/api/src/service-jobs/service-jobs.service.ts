@@ -347,6 +347,27 @@ export class ServiceJobsService {
     const assetIds = honnan
       ? [...new Set([...valasztott, honnan])]
       : valasztott;
+    const kind = input.kind ?? "REPAIR";
+    const contractId = input.contractId?.trim() || null;
+    if (contractId) {
+      if (kind !== "MAINTENANCE")
+        throw new BadRequestException(
+          "Szerződés csak karbantartási laphoz kapcsolható.",
+        );
+      if (!customerId)
+        throw new BadRequestException(
+          "Szerződéshez partner megadása kötelező.",
+        );
+      if (
+        !(await this.repository.contractBelongsToCustomer(
+          contractId,
+          customerId,
+        ))
+      )
+        throw new BadRequestException(
+          "A megadott szerződés nem ehhez a partnerhez tartozik.",
+        );
+    }
     const title = input.title.trim();
     const created = await this.repository.create({
       jobNumber: nextServiceJobNumber({ year, lastNumber: last }),
@@ -357,6 +378,8 @@ export class ServiceJobsService {
       assetIds,
       actorUserId,
       assigneeIds,
+      kind,
+      contractId,
       clientOperationId: kulcs,
     });
 
@@ -1031,14 +1054,16 @@ export class ServiceJobsService {
         ),
       ],
     };
+    const kind = query.kind ?? "REPAIR";
     const [{ rows, truncated }, counts] = await Promise.all([
       this.repository.list(
         query.scope ?? "open",
         visibility,
         query.search,
+        kind,
         user.id,
       ),
-      this.repository.countsByStatus(visibility, query.search),
+      this.repository.countsByStatus(visibility, query.search, kind),
     ]);
     return {
       counts,
@@ -1047,6 +1072,7 @@ export class ServiceJobsService {
         id: row.id,
         jobNumber: row.jobNumber,
         title: row.title,
+        kind: row.kind,
         status: row.status,
         partnerStatus: partnerVisibleStatus(row.status),
         partnerStatusLabel: partnerStatusLabel(row.status),
@@ -1116,6 +1142,7 @@ export class ServiceJobsService {
       id: row.id,
       jobNumber: row.jobNumber,
       title: row.title,
+      kind: row.kind,
       description: row.description,
       /**
        * A RESZLETLAP REJTETT JEGYNEL IS ELERHETO, tehat itt mind a ket ertek

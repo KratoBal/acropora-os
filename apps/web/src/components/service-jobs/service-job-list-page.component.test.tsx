@@ -40,6 +40,7 @@ function response(
         id: "job-1",
         jobNumber: "HJ-2026-001",
         title: "Cápasuli szivattyú leállt",
+        kind: "REPAIR",
         // A BELSŐ és a LÁTSZÓ állapot szándékosan NEM ugyanaz ebben a
         // mintában: pont az a kérdés, hogy a lista mind a kettőt kiírja-e.
         status: "WAITING_FOR_PARTS",
