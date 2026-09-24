@@ -278,6 +278,18 @@ describe("a partner eszköz-adatlapja és szűrői", () => {
    *
    * A negatív állítás mellé a POZITÍV KONTROLL az 5. pont (a megmaradt
    * műveletek): enélkül ez a négy akkor is zöld lenne, ha az egész lap üres.
+   *
+   * === EZ A HELYES ALAK, NEM EGY JOGOSULTSÁG-FÜGGŐ VÁLTOZAT (acrobot, 2026-09-24 09:43) ===
+   *
+   * Balázs 2026-09-21-i két mondata ("ne tudjon szerkeszteni" + "csak ott
+   * ahol jogosultsága van") ELSŐ OLVASATRA jogosultság-alapú megjelenítést
+   * sugallhat -- DE a `PARTNER_SERVICE` szerepnek MA MEGVAN a
+   * `SERVICE_MANAGE` joga (`auth.ts`), tehát egy jogosultság-alapú
+   * megjelenítés MA szerkesztést, QR-cserét és kivezetést adna a
+   * partnernek, amit Balázs kifejezetten NEM kért. A helyes olvasat: ez a
+   * négy művelet AKKOR IS hiányzik, ha a hívó `SERVICE_MANAGE` joggal bír --
+   * ez a lenti négy állítás pontosan ezt méri, mert a kód FELTÉTEL NÉLKÜL
+   * nem hívja ezeket a végpontokat, nem egy jogosultság-ág mögé rejtve.
    */
   it("az adatlap nem kínálja a szerkesztést", () => {
     const s = kod(ESZKOZ_RESZLET);
