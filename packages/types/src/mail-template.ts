@@ -182,6 +182,17 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     description:
       "A munkalap belső oldalának linkje. Üres, ha a rendszer nem ismeri a saját webcímét.",
   },
+  /**
+   * AZ `AQUARIUM_MEASUREMENT_RESULT` ESEMENYHEZ TARTOZIK. Balazs kerese,
+   * 2026-09-24 17:03 UTC (Akvariumok szal, message_id 1552727165714563153).
+   *
+   * A `cimzett` UJRAHASZNALT: ez a level is a vevonek megy, es a cimzett neve
+   * ugyanaz a fogalom, mint a tobbi esemenynel (lasd a mezo leirasat fent).
+   */
+  {
+    name: "akvarium_neve",
+    description: "Az akvárium vagy tó neve, amelyre a mérés vonatkozik.",
+  },
 ] as const;
 
 /** Egy levelezesi esemeny: a sablon kulcsa es az emberi neve. */
@@ -241,6 +252,17 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
     name: "Anyag beérkezett",
     description:
       "Akkor megy ki, amikor a beszerző megjelöli, hogy az anyag megérkezett. Címzettje az igényt kérő kolléga és a munkalap minden felelőse.",
+  },
+  /**
+   * Balazs kerese, 2026-09-24 17:03 UTC (Akvariumok szal, message_id
+   * 1552727165714563153): a vizmeres-level "keszuljon hozza sablon, mint a
+   * tobbi levelhez". Kuldo oldalon: `aquarium-measurement-mail.service.ts`.
+   */
+  {
+    id: "AQUARIUM_MEASUREMENT_RESULT",
+    name: "Vízmérés eredménye",
+    description:
+      "Akkor megy ki, amikor egy kolléga elküldi egy akvárium vagy tó vízmérésének eredményét az ügyfélnek, gombnyomásra.",
   },
 ] as const;
 

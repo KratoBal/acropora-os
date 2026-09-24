@@ -1,7 +1,18 @@
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
-import { base64Url, buildMimeMessage } from "./mime.js";
+import { base64Url, buildMimeMessage, formatMailFrom } from "./mime.js";
 import type { MailSender, OutgoingMail } from "./mail.port.js";
+
+/**
+ * A `ticket@` FELADÓ ALAPÉRTELMEZETT NEVE.
+ *
+ * Balázs döntése, 2026-09-24 17:06 UTC (emlék 1827): "MINDEN
+ * ticket@acropora.hu-ról menő level: 'Acropora Hibajegy kezelő'
+ * <ticket@acropora.hu>". Ez BŐVÍTI a vízmérés-levélhez kért nevet: nem csak
+ * az info@ kap nevet, hanem a MEGLÉVŐ, ma is névtelen `ticket@` cím is --
+ * lásd `GMAIL_TICKET_USER_NAME` a `ticketMailConfig`-ban.
+ */
+const DEFAULT_GMAIL_TICKET_USER_NAME = "Acropora Hibajegy kezelő";
 
 /**
  * A GMAIL MOGOTT -- ES A HIVO NEM TUD ROLA.
@@ -53,6 +64,8 @@ export interface TicketMailConfig {
   clientSecret: string;
   refreshToken: string;
   user: string;
+  /** A `user` mellé kerülő megjelenített név -- lásd `DEFAULT_GMAIL_TICKET_USER_NAME`. */
+  userName: string;
   apiUrl: string;
   tokenUrl: string;
 }
@@ -77,6 +90,9 @@ export function ticketMailConfig(
     clientSecret,
     refreshToken,
     user: environment.GMAIL_TICKET_USER?.trim() || "ticket@acropora.hu",
+    userName:
+      environment.GMAIL_TICKET_USER_NAME?.trim() ||
+      DEFAULT_GMAIL_TICKET_USER_NAME,
     apiUrl: (environment.GMAIL_API_URL || DEFAULT_GMAIL_API_URL).replace(
       /\/+$/,
       "",
@@ -107,7 +123,21 @@ export class GmailMailSender implements MailSender {
       A NYERS LEVEL ITT EPUL, ES ITT DOB, HA FEJLEC-INJEKCIOT TALAL. A
       `buildMimeMessage` a masodik reteg: az elso az osszeallitonal all.
     */
-    const raw = base64Url(buildMimeMessage(mail, config.user));
+    /*
+      A HIVO FELADOJA ELSOBBSEGET KAP, ES CSAK AKKOR, HA NEM URES -- es MAR
+      KESZ FEJLEC-ERTEK, nem csupasz cim: a hivo (pl. `AquariumMeasurementMailService`)
+      MAGA hivja a `formatMailFrom`-ot, ha nevet is akar. Lasd `mail.port.ts`.
+
+      HIANYZO `mail.from`-nal a `config.user` + `config.userName` par megy,
+      SZINTEN NEVVEL -- 2026-09-24 ota ez sem csupasz cim (Balazs dontese,
+      emlek 1827): a `ticket@` mindig `formatMailFrom`-on at kerul a fejlecbe.
+    */
+    const raw = base64Url(
+      buildMimeMessage(
+        mail,
+        mail.from?.trim() || formatMailFrom(config.userName, config.user),
+      ),
+    );
     const token = await this.token(config);
 
     /*

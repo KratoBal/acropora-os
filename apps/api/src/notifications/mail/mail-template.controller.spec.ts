@@ -4,6 +4,10 @@ import { describe, it } from "node:test";
 import { NotFoundException } from "@nestjs/common";
 
 import type { TicketMailRepository } from "./ticket-mail.repository.js";
+import {
+  AQUARIUM_MEASUREMENT_RESULT,
+  DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE,
+} from "./aquarium-measurement-mail.service.js";
 import { MailTemplateController } from "./mail-template.controller.js";
 import {
   DEFAULT_WORKSHEET_SIGNED_TEMPLATE,
@@ -70,6 +74,26 @@ describe("MailTemplateController.read", () => {
     await assert.rejects(
       () => new MailTemplateController(tarolo(null)).read("NINCS_ILYEN"),
       NotFoundException,
+    );
+  });
+
+  /**
+   * AZ ÚJ ESEMÉNY (2026-09-24) SAJÁT ÁGA A `alapertelmezes` SWITCH-BEN.
+   *
+   * A `default` ág ott DOB, tehát ha valaki felveszi az azonosítót a
+   * `MAIL_TEMPLATE_EVENTS` listába, de elfelejti a saját `case`-ét, ez a
+   * teszt `NotFoundException`-t kapna a `DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE`
+   * helyett.
+   */
+  it("a vízmérés-esemény tárolt sor nélkül a saját alapértelmezését adja", async () => {
+    const valasz = await new MailTemplateController(tarolo(null)).read(
+      AQUARIUM_MEASUREMENT_RESULT,
+    );
+
+    assert.equal(valasz.source, "default");
+    assert.deepEqual(
+      valasz.defaultTemplate,
+      DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE,
     );
   });
 });
