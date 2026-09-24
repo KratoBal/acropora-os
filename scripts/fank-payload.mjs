@@ -145,7 +145,41 @@
  *   miatt a `normalizeMeasurementValue` amugy sem engedne at), es acrobot
  *   donti el helyszinenkent, mi legyen az atvaltott ertek.
  *
- * === AMIT A SZKRIPT SOSEM CSINAL, ES HET "ALLJON MEG" ESET ===
+ * === A KET KOR -- SZULO ELOSZOR, GYERMEK CSAK UTANA, PELDAVAL ===
+ *
+ * A `--meglevo-eszkozok` NEM valtja ki a valodi beküldest: a szkript
+ * SOSEM kuld HTTP-t, tehat a szulo VALODI `id`-jet valakinek TENYLEGESEN
+ * be kell kuldenie, es a VALASZBOL kell visszaolvasnia, mielott a gyermek
+ * futhat. Ket kulon futas, ket kulon lepesben (murena kerese, 2026-09-23
+ * 23:47, mert eddig csak a STOP uzenetebol derult ki, hogy ket kor kell):
+ *
+ *   1. KOR (a szulo):    node scripts/fank-payload.mjs RIV --kihagy <a
+ *                         gyermek sorai> --units egysegek.json > szulo.json
+ *                        -- ez MEG NEM tartalmazza a gyermeket (665-666.
+ *                        sor kimarad a --kihagy-gyal), es termeszetesen
+ *                        parentAssetId nelkul megy, mert ez maga a szulo,
+ *                        nem gyermek.
+ *   2. BEKULDES:          POST /service/assets a szulo.json minden elemere
+ *                         -- EZT A SZKRIPT NEM VEGZI EL. A valasz minden
+ *                         elemenel egy VALODI `id`-t ad vissza.
+ *   3. MEGLEVO-ESZKOZOK:  a hivo osszeallitja a
+ *                         `{"items":[{"partnerInternalCode":"RIV-VPU-04",
+ *                         "id":"<a 2. lepesben kapott valodi id>"}, ...]}`
+ *                         fajlt a VALASZBOL -- NEM talalja ki, es NEM a
+ *                         szulo.json-bol veszi (annak nincs `id`-je, csak
+ *                         a bekuldes utani API-valasznak).
+ *   4. KOR (a gyermek):   node scripts/fank-payload.mjs RIV --kihagy <a
+ *                         szulo sorai> --units egysegek.json
+ *                         --meglevo-eszkozok meglevo.json > gyermek.json
+ *                        -- MOST mar a gyermek `parentAssetId`-je a 3.
+ *                         lepesben kapott VALODI szulo-id-re mutat.
+ *
+ * Ha a 3. lepes elmarad (a szulo `id`-je nincs meg a `--meglevo-eszkozok`
+ * fajlban, mert meg nem is lett beküldve), a 4. kor MEGALL -- lasd a
+ * "ALLJON MEG" listat lent -- es ez a SZANDEKOS viselkedes, nem hiba: a
+ * szkript nem talalhat ki egy meg nem letezo eszkoz id-jet.
+ *
+ * === AMIT A SZKRIPT SOSEM CSINAL, ES KILENC "ALLJON MEG" ESET ===
  *
  *   - nem kuld HTTP-hivast, nem ir semmilyen rendszerbe
  *   - HA EGY BEEPITETT SORON D (Eszkoz sorszam) LEGALABB EGY RESZEHEZ NINCS
@@ -172,6 +206,19 @@
  *   - a payload eloallitasa UTAN, meg a kiiras ELOTT, ujra ellenorzi, hogy a
  *     generalt partnerInternalCode ertekek EGYEDIEK -- acrobot sajat szavaival:
  *     "nalam ez egy sor volt, es pont az LSS22-n sult el"
+ *   - HA --meglevo-eszkozok MEGVAN ADVA, es egy BEEPITETT sor EGYETLEN,
+ *     NEM osszetett D-erteku szuloje NINCS a fajlban MAR LETEZO eszkozkent,
+ *     MEGALL -- lasd `resolveParentAssetId` fejleceben (acrobot masodik
+ *     kore, 2026-09-23 23:31). A szkript itt sem talal ki azonositot.
+ *   - HA --meglevo-eszkozok MEGVAN ADVA, es egy BEEPITETT sor szuloje EGYALTALAN
+ *     nem oldhato fel egyertelmuen (D ures vagy osszetett), az
+ *     ALAPERTELMEZES MEGALLAS, ugyanugy, mint a fenti eset -- murena
+ *     atvetele, acrobot dontese, 2026-09-23 23:47: korabban ez CSENDBEN
+ *     ment at parentAssetId nelkul, ami ugyanaz a lapos betoltes, amit ez
+ *     a szkript javit, csak egy reszhalmazon. A `--szulo-nelkul-engedve`
+ *     kapcsolo szandekosan atengedi oket -- DE MEG AKKOR IS nevesitve a
+ *     stderr-en, es a kimeneti szamlalo mellett kulon sorban all, hany
+ *     sor ment be szulo nelkul.
  *
  * === A BEMENET/KIMENET SORSZAMA MINDIG OSSZE VAN VETVE -- acrobot kikotese,
  *     2026-09-23 22:04, egy SAJAT masik hibaja utan (54 sorbol kevesebb jott
@@ -210,6 +257,29 @@
  *                           kezdodo sorok fejlec-megjegyzesek.
  *   --kihagy <sor[,sor...]> a TSV "sor" oszlopanak ertekei, amiket ki kell
  *                           hagyni -- ismetelheto, vagy vesszovel elvalasztva.
+ *   --meglevo-eszkozok <ut> opcionalis. `{"items":[{"partnerInternalCode",
+ *                           "id"},...]}` alaku JSON -- MAR LETEZO, valodi
+ *                           eszkozok listaja (pl. egy korabbi futas mar
+ *                           elkuldott es visszaigazolt payloadjabol). HA
+ *                           MEGADOD, egy BEEPITETT sor (E kitoltve) EGYETLEN,
+ *                           NEM osszetett D-erteku szuloje ebbol oldodik fel
+ *                           `parentAssetId`-kent -- lasd `resolveParentAssetId`
+ *                           fejleceben, miert csak ez az egy eset probalkozik,
+ *                           es miert STOP, ha a szulo nincs a listaban. Ha egy
+ *                           BEEPITETT sor szuloje egyaltalan nem oldhato fel
+ *                           egyertelmuen (D ures vagy osszetett), az IS STOP,
+ *                           kiveve ha --szulo-nelkul-engedve is meg van adva --
+ *                           lasd ott. E NELKUL a viselkedes BETUre a regi:
+ *                           semmilyen sor sem kap `parentAssetId`-t, es az uj
+ *                           STOP sem all elo.
+ *   --szulo-nelkul-engedve  opcionalis, ertek nelkuli kapcsolo, csak
+ *                           --meglevo-eszkozok mellett van hatasa. Nelkule egy
+ *                           BEEPITETT sor, aminek a szuloje D ures/osszetett
+ *                           miatt egyaltalan nem oldhato fel, MEGALLASI ok.
+ *                           Ezzel a sor bekerul a payloadba `parentAssetId`
+ *                           NELKUL -- DE a stderr-en nevesitve, sorszammal es
+ *                           okkal, es a kimeneti szamlalo mellett kulon
+ *                           sorban all, hany sor ment be igy.
  *   --partner <id>          alapertelmezes: cmt34n8s20009pg07pg8kwue1 (FANK).
  *   --kind <ASSET_KIND>     alapertelmezes: EQUIPMENT.
  */
@@ -504,6 +574,81 @@ export function buildPartnerInternalCode(siteCode, row) {
 }
 
 /**
+ * A MEGLEVO-ESZKOZOK FAJL SOROLASA -- `{"items":[{"partnerInternalCode","id"},...]}`
+ * alaku JSON, UGYANOLYAN "lementett API-valasz" jellegu bemenet, mint a
+ * `--units`. A `GET /service/assets`-bol (vagy egy korabbi futas mar
+ * elkuldott es visszaigazolt payloadjabol) allithato ossze, es KIZAROLAG
+ * arra szolgal, hogy egy BEEPITETT sor `parentAssetId`-jet fel lehessen
+ * oldani egy MAR LETEZO, valodi eszkozre -- lasd `resolveParentAssetId`
+ * fejleceben, MIERT nem probalja a szkript kitalalni ezt az azonositot.
+ */
+export function parseExistingAssetsMap(json) {
+  const parsed = typeof json === "string" ? JSON.parse(json) : json;
+  const items = Array.isArray(parsed.items) ? parsed.items : [];
+  const map = new Map();
+  for (const item of items) {
+    if (!item.partnerInternalCode || !item.id) continue;
+    map.set(item.partnerInternalCode, item.id);
+  }
+  return map;
+}
+
+/**
+ * EGY BEEPITETT SOR SZULOJENEK `parentAssetId`-JE -- ACROBOT MASODIK KORE,
+ * 2026-09-23 23:31, A NAUTILUS MERESE UTAN: a szkript korabbi valtozata a
+ * gyermek-eszkozt SOSEM kototte ossze a szuloevel az `Asset` tablan (a
+ * `partnerInternalCode` csak SZOVEGKENT hordozza a szulo kodjat) -- ez
+ * lapos betoltest adott, es a MEGLEVO betoltesekben (ETB-hat, RIV-28) ezt
+ * csak KEZI, mar letezo eszkozre mutato `parentAssetId` potolta.
+ *
+ * A SZKRIPT TOVABBRA IS "NE TALALGASS": `parentAssetId`-t KIZAROLAG akkor
+ * ad, ha a szulo egy MAR LETEZO, valodi eszkozkent szerepel a hivo altal
+ * atadott `--meglevo-eszkozok` fajlban (lasd `parseExistingAssetsMap`). A
+ * szkript soha nem talalhat ki azonositot, es KET ESETBEN SZANDEKOSAN NEM
+ * IS PROBALKOZIK (nem STOP, egyszeruen `attempted: false`):
+ *
+ *   D URES (pl. "HSZ/VPU" a ma esti ETB/RIV meresen): a gyermek egyetlen
+ *     konkret szulo-peldanyhoz SEM koto egyertelmuen -- a helyszinen tobb
+ *     azonos-kodu szulo allhat, es ures D-vel nem donthetu el, melyikhez
+ *     tartozik.
+ *   D OSSZETETT ("01/02"): a gyermek EGYSZERRE ket fizikai szulohoz
+ *     tartozik (lasd `buildPartnerInternalCode` fejleceben, LSS12/HSZ/PUM
+ *     318-323. sora) -- egy valodi `Asset.parentAssetId` viszont EGYETLEN
+ *     idegen kulcs, tehat nem lehet mindket szulot beirni. Ez a szkript nem
+ *     valaszt a ketto kozul, es nem probal parentAssetId-t adni.
+ *
+ * HA `existingAssets` MAP NINCS ATADVA (a hivo nem adta meg
+ * `--meglevo-eszkozok`-ot), a fuggveny MINDIG `attempted: false`-szal,
+ * `reason: "no-lookup-file"`-lal ter vissza -- ez a visszafele-
+ * kompatibilitas ara: a kapcsolo nelkuli futas BETUre ugyanazt adja, mint
+ * korabban, es a meglevo 27 teszt egyike sem fugg ettol a viselkedestol.
+ *
+ * A `reason` MEZORE `buildSitePayload` epit: murena atvetele utan
+ * (2026-09-23 23:47) a "D URES"/"D OSSZETETT" eset -- HA `--meglevo-
+ * eszkozok` MEG VAN ADVA -- MAR NEM csendes attengedes, hanem alapertelmezes
+ * szerint MEGALLASI ok, lasd `buildSitePayload`. A `reason` mondja meg a
+ * hivonak, MELYIK csendes esetrol van szo (kulonbozik a "no-lookup-file"-tol,
+ * ami sosem STOP, mert ott a hivo eleve nem kert szulo-feloldast).
+ */
+export function resolveParentAssetId(siteCode, row, existingAssets) {
+  if (!row.builtin) return { attempted: false, reason: "not-builtin" };
+  if (!existingAssets) return { attempted: false, reason: "no-lookup-file" };
+  if (!row.deviceSerial) return { attempted: false, reason: "empty-d" };
+  const reszek = row.deviceSerial
+    .split("/")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (reszek.length !== 1) return { attempted: false, reason: "composite-d" };
+  const szuloKod = buildPartnerInternalCode(siteCode, {
+    deviceCode: row.deviceCode,
+    deviceSerial: reszek[0],
+    builtin: "",
+  });
+  const parentAssetId = existingAssets.get(szuloKod);
+  return { attempted: true, szuloKod, parentAssetId: parentAssetId ?? null };
+}
+
+/**
  * A NEV -- ACROBOT LEMERTE, VALODI BETOLTESBOL (LSS07, 2026-09-23 21:36).
  * Ket kulon szabaly, es a kulonbseg NEM veletlen:
  *
@@ -582,6 +727,7 @@ export function buildAssetPayload(row, ctx) {
     categoryId,
     performanceValue,
     volumeValue,
+    parentAssetId,
   } = ctx;
   const partnerInternalCode = buildPartnerInternalCode(siteCode, row);
   const payload = {
@@ -611,6 +757,7 @@ export function buildAssetPayload(row, ctx) {
     payload.performanceUnitId = PERFORMANCE_UNIT_M3PH;
   }
   if (categoryId) payload.categoryId = categoryId;
+  if (parentAssetId) payload.parentAssetId = parentAssetId;
   return { sor: row.sor, partnerInternalCode, payload };
 }
 
@@ -628,6 +775,8 @@ export function buildSitePayload({
   ownerType,
   kind,
   categoryMap,
+  existingAssets,
+  szuloNelkulEngedve,
 }) {
   const { rows } = parseTsv(tsvText);
   const skip = new Set(skipSorok.map(String));
@@ -742,6 +891,29 @@ export function buildSitePayload({
   ];
   const meresHianyok = [];
   const meresKerekitve = [];
+  /*
+    A GYERMEK-SOR `parentAssetId`-JE -- acrobot masodik kore, 2026-09-23
+    23:31, a nautilus-fele probafutas leletere ("nulla parentAssetId barhol
+    a generator kimeneteben"). Lasd `resolveParentAssetId` sajat fejleceben
+    a HARMAT: mikor probal a szkript feloldani, mikor hagyja szandekosan
+    kihagyva (ures vagy osszetett D), es mikor allitja meg a futast (a
+    szulo NEM szerepel a `--meglevo-eszkozok` fajlban).
+  */
+  const parentAssetIdHianyzik = [];
+  /*
+    A SZULO-NELKULI GYERMEK -- murena atvetele a #1038 PR-en, acrobot
+    dontese, 2026-09-23 23:47: a "D URES"/"D OSSZETETT" eset korabban
+    CSENDBEN engedte at a sort parentAssetId nelkul, amig `--meglevo-
+    eszkozok` egyebkent aktiv volt -- ez UGYANAZ a lapos betoltes, amit a
+    PR javit, csak egy reszhalmazon. Alapertelmezesben ez most MEGALLASI
+    ok, a tobbi STOP mintajara. A `--szulo-nelkul-engedve` kapcsolo
+    engedi at oket -- DE MEG AKKOR IS nevesitve, a `main()`-ben.
+  */
+  const SZULO_AMBIVALENS_OK = {
+    "empty-d": "D oszlop ures -- tobb azonos kodu szulo allhat a helyszinen",
+    "composite-d": "D osszetett -- a gyermek ket fizikai szulohoz tartozik",
+  };
+  const szuloAmbivalens = [];
   const entries = siteRows.map((row) => {
     let categoryId;
     if (categoryMap) {
@@ -752,6 +924,23 @@ export function buildSitePayload({
       } else {
         kategoriaHianyok.push({ sor: row.sor, kulcs });
       }
+    }
+    const szuloFeloldas = resolveParentAssetId(siteCode, row, existingAssets);
+    if (szuloFeloldas.attempted && !szuloFeloldas.parentAssetId) {
+      parentAssetIdHianyzik.push({
+        sor: row.sor,
+        szuloKod: szuloFeloldas.szuloKod,
+      });
+    } else if (
+      !szuloFeloldas.attempted &&
+      existingAssets &&
+      SZULO_AMBIVALENS_OK[szuloFeloldas.reason]
+    ) {
+      szuloAmbivalens.push({
+        sor: row.sor,
+        deviceSerial: row.deviceSerial,
+        ok: SZULO_AMBIVALENS_OK[szuloFeloldas.reason],
+      });
     }
     const meresErtekek = {};
     for (const { mezo, ctxKey, label } of MEASUREMENT_FIELDS) {
@@ -780,6 +969,7 @@ export function buildSitePayload({
       kind,
       categoryMap,
       categoryId,
+      parentAssetId: szuloFeloldas.parentAssetId,
       ...meresErtekek,
     });
   });
@@ -790,6 +980,29 @@ export function buildSitePayload({
       .join("\n");
     throw new FankPayloadError(
       `A kategoria-terkep nem fedi az alabbi kodokat a(z) ${siteCode} helyszinen -- ez a szkript nem talalgat:\n${reszletek}`,
+    );
+  }
+
+  if (existingAssets && parentAssetIdHianyzik.length > 0) {
+    const reszletek = parentAssetIdHianyzik
+      .map(
+        (h) =>
+          `  sor ${h.sor}: kerestem "${h.szuloKod}", nincs a --meglevo-eszkozok fajlban`,
+      )
+      .join("\n");
+    throw new FankPayloadError(
+      `A(z) ${siteCode} helyszin alabbi gyermek-sorai olyan szulore mutatnak, ami NEM szerepel MAR LETEZO eszkozkent a --meglevo-eszkozok fajlban -- ez a szkript nem talal ki azonositot:\n${reszletek}`,
+    );
+  }
+
+  if (existingAssets && szuloAmbivalens.length > 0 && !szuloNelkulEngedve) {
+    const reszletek = szuloAmbivalens
+      .map(
+        (h) => `  sor ${h.sor}: D="${h.deviceSerial || "(ures)"}" -- ${h.ok}`,
+      )
+      .join("\n");
+    throw new FankPayloadError(
+      `A(z) ${siteCode} helyszin alabbi gyermek-soranak szuloje nem oldhato fel egyertelmuen -- ez a szkript alapertelmezesben nem engedi at parentAssetId nelkul (add meg --szulo-nelkul-engedve-t, ha ez szandekos):\n${reszletek}`,
     );
   }
 
@@ -837,6 +1050,7 @@ export function buildSitePayload({
     payload: entries.map((e) => e.payload),
     hianyzoKategoriaSorok: hianyzoKategoria.map((e) => e.sor),
     meresKerekitve,
+    szuloNelkulSorok: szuloNelkulEngedve ? szuloAmbivalens : [],
     bemenetiSorSzam: allSiteRows.length,
     kihagyottSorSzama,
     kimenetiEszkozSzam: entries.length,
@@ -849,6 +1063,8 @@ function parseArgs(argv) {
     tsv: FANK_TSV_DEFAULT,
     units: null,
     categoryMap: null,
+    existingAssets: null,
+    szuloNelkulEngedve: false,
     skip: [],
     partner: FANK_PARTNER_DEFAULT,
     ownerType: "SUPPLIER",
@@ -866,6 +1082,12 @@ function parseArgs(argv) {
         break;
       case "--kategoria-terkep":
         args.categoryMap = rest.shift();
+        break;
+      case "--meglevo-eszkozok":
+        args.existingAssets = rest.shift();
+        break;
+      case "--szulo-nelkul-engedve":
+        args.szuloNelkulEngedve = true;
         break;
       case "--kihagy":
         args.skip.push(
@@ -947,11 +1169,17 @@ export function main(argv) {
         })(),
       )
     : null;
+  const existingAssets = args.existingAssets
+    ? parseExistingAssetsMap(
+        readJson(args.existingAssets, "--meglevo-eszkozok"),
+      )
+    : null;
 
   const {
     payload,
     hianyzoKategoriaSorok,
     meresKerekitve,
+    szuloNelkulSorok,
     bemenetiSorSzam,
     kihagyottSorSzama,
     kimenetiEszkozSzam,
@@ -964,6 +1192,8 @@ export function main(argv) {
     ownerType: args.ownerType,
     kind: args.kind,
     categoryMap,
+    existingAssets,
+    szuloNelkulEngedve: args.szuloNelkulEngedve,
   });
 
   if (hianyzoKategoriaSorok.length > 0) {
@@ -981,6 +1211,16 @@ export function main(argv) {
       .join("\n");
     process.stderr.write(
       `KEREKITVE (hat tizedesre, a sema sajat pontossagara): ${meresKerekitve.length} sor\n${reszletek}\n`,
+    );
+  }
+  if (szuloNelkulSorok.length > 0) {
+    const reszletek = szuloNelkulSorok
+      .map(
+        (h) => `  sor ${h.sor}: D="${h.deviceSerial || "(ures)"}" -- ${h.ok}`,
+      )
+      .join("\n");
+    process.stderr.write(
+      `SZULO NELKUL (--szulo-nelkul-engedve miatt atengedve, nem oldhato fel egyertelmuen): ${szuloNelkulSorok.length} sor\n${reszletek}\n`,
     );
   }
   /*

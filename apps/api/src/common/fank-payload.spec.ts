@@ -965,6 +965,301 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.match(stderr, /--units/);
   });
 
+  /*
+    A `--meglevo-eszkozok` TESZTJEI -- acrobot masodik kore, 2026-09-23
+    23:31, a nautilus-fele probafutas leletere ("nulla parentAssetId barhol
+    a generator kimeneteben"). Uj helyszin-kod (LSS95), hogy a fixtura ne
+    keveredjen a fenti tesztekkel, es sajat egyseg-listaval.
+  */
+  const EGYSEGEK_LSS95 = {
+    items: [
+      ...EGYSEGEK.items,
+      {
+        id: "unit-lss95",
+        parentId: "unit-bio",
+        code: "LSS95",
+        name: "LSS95",
+        isActive: true,
+      },
+    ],
+  };
+  const VPU_FIB_TSV = [
+    ALAP_TSV,
+    // Onallo szulo: LSS95-VPU-04.
+    sor({ sor: "70", site: "LSS95", deviceCode: "VPU", deviceSerial: "04" }),
+    // Gyermek: EGYETLEN, NEM osszetett D -- ez az az eset, amit
+    // resolveParentAssetId probal feloldani.
+    sor({
+      sor: "71",
+      site: "LSS95",
+      deviceCode: "VPU",
+      deviceSerial: "04",
+      builtin: "FIB",
+    }),
+    // Beepitett, URES D -- soha nem probalkozik (tobb azonos szulo lehetne).
+    sor({ sor: "72", site: "LSS95", deviceCode: "HSZ", builtin: "VPU" }),
+  ].join("\n");
+
+  it("--meglevo-eszkozok NELKUL: a viselkedes BETUre a regi, egyetlen sor sem kap parentAssetId-t", () => {
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", VPU_FIB_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK_LSS95));
+    const { kod, stdout, stderr } = futtat([
+      "LSS95",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.length, 3);
+    assert.ok(
+      payload.every((p: Record<string, unknown>) => !("parentAssetId" in p)),
+      `parentAssetId nem jelenhet meg a kapcsolo nelkul: ${stdout}`,
+    );
+  });
+
+  it("--meglevo-eszkozok-kal: EGYETLEN, NEM osszetett D-vel a gyermek megkapja a szulo VALODI id-jet", () => {
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", VPU_FIB_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK_LSS95));
+    const meglevo = iras(
+      dir,
+      "meglevo.json",
+      JSON.stringify({
+        items: [
+          { partnerInternalCode: "LSS95-VPU-04", id: "real-parent-id-1" },
+        ],
+      }),
+    );
+    const { kod, stdout, stderr } = futtat([
+      "LSS95",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+      "--meglevo-eszkozok",
+      meglevo,
+      // A VPU_FIB_TSV 72. sora URES D-vel all (HSZ/VPU) -- ez a teszt nem
+      // arrol szol, tehat atengedjuk, hogy a sikeres agat merje.
+      "--szulo-nelkul-engedve",
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    const gyerek = payload.find(
+      (p: { partnerInternalCode: string }) =>
+        p.partnerInternalCode === "LSS95-VPU-04-FIB",
+    );
+    assert.ok(gyerek, `nem talaltam a gyermeket: ${stdout}`);
+    assert.equal(gyerek.parentAssetId, "real-parent-id-1");
+    // A SZULO SAJAT sora (nem beepitett) NEM kaphat parentAssetId-t.
+    const szulo = payload.find(
+      (p: { partnerInternalCode: string }) =>
+        p.partnerInternalCode === "LSS95-VPU-04",
+    );
+    assert.ok(szulo);
+    assert.ok(!("parentAssetId" in szulo));
+  });
+
+  it("--meglevo-eszkozok-kal: a szulo NINCS a fajlban -- MEGALL, megnevezi a sort es a keresett kodot", () => {
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", VPU_FIB_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK_LSS95));
+    const meglevo = iras(dir, "meglevo.json", JSON.stringify({ items: [] }));
+    const { kod, stdout, stderr } = futtat([
+      "LSS95",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+      "--meglevo-eszkozok",
+      meglevo,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(
+      stdout,
+      "",
+      "meg nem talalt szulonel NEM szabad payloadot kiirnia",
+    );
+    assert.match(stderr, /sor 71/);
+    assert.match(stderr, /LSS95-VPU-04/);
+  });
+
+  it("--meglevo-eszkozok-kal, --szulo-nelkul-engedve NELKUL: URES D-vel a beepitett sor MEGALL", () => {
+    /*
+      A "HSZ/VPU" mintajara (ETB/RIV, 2026-09-23 este): D ures, tobb azonos
+      kodu szulo allhat a helyszinen -- murena atvetele, acrobot dontese,
+      2026-09-23 23:47: ez MAR NEM csendes attengedes, hanem alapertelmezes
+      szerint MEGALLASI ok, ugyanugy, mint a masik "ne talalgass" esetek.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", VPU_FIB_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK_LSS95));
+    const meglevo = iras(
+      dir,
+      "meglevo.json",
+      JSON.stringify({
+        items: [
+          { partnerInternalCode: "LSS95-VPU-04", id: "real-parent-id-1" },
+        ],
+      }),
+    );
+    const { kod, stdout, stderr } = futtat([
+      "LSS95",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+      "--meglevo-eszkozok",
+      meglevo,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(
+      stdout,
+      "",
+      "feloldhatatlan szulonel NEM szabad payloadot kiirnia",
+    );
+    assert.match(stderr, /sor 72/);
+    assert.match(stderr, /D oszlop ures/);
+    assert.match(stderr, /--szulo-nelkul-engedve/);
+  });
+
+  it("--meglevo-eszkozok ES --szulo-nelkul-engedve EGYUTT: URES D-vel a sor bemegy parentAssetId nelkul, nevesitve a stderr-en", () => {
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", VPU_FIB_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK_LSS95));
+    const meglevo = iras(
+      dir,
+      "meglevo.json",
+      JSON.stringify({
+        items: [
+          { partnerInternalCode: "LSS95-VPU-04", id: "real-parent-id-1" },
+        ],
+      }),
+    );
+    const { kod, stdout, stderr } = futtat([
+      "LSS95",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+      "--meglevo-eszkozok",
+      meglevo,
+      "--szulo-nelkul-engedve",
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    const uresD = payload.find(
+      (p: { partnerInternalCode: string }) =>
+        p.partnerInternalCode === "LSS95-HSZ-VPU",
+    );
+    assert.ok(uresD, `nem talaltam az ures D-vel allo sort: ${stdout}`);
+    assert.ok(!("parentAssetId" in uresD));
+    assert.match(stderr, /SZULO NELKUL/);
+    assert.match(stderr, /sor 72/);
+    assert.match(stderr, /: 1 sor/);
+  });
+
+  it("--meglevo-eszkozok-kal, --szulo-nelkul-engedve NELKUL: OSSZETETT D-vel ('01/02') a gyermek MEGALL", () => {
+    /*
+      Egy valodi FK egyetlen szulot hordozhat, a "01/02" viszont KETTOT --
+      ugyanaz az uj alapertelmezes, mint az ures D-nel.
+    */
+    const dir = mappa();
+    const osszetettLss95 = [
+      ALAP_TSV,
+      sor({ sor: "73", site: "LSS95", deviceCode: "CPT", deviceSerial: "01" }),
+      sor({ sor: "74", site: "LSS95", deviceCode: "CPT", deviceSerial: "02" }),
+      sor({
+        sor: "75",
+        site: "LSS95",
+        deviceCode: "CPT",
+        deviceSerial: "01/02",
+        builtin: "PUM",
+        builtinSerial: "1",
+      }),
+    ].join("\n");
+    const tsv = iras(dir, "forras.tsv", osszetettLss95);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK_LSS95));
+    const meglevo = iras(dir, "meglevo.json", JSON.stringify({ items: [] }));
+    const { kod, stdout, stderr } = futtat([
+      "LSS95",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+      "--meglevo-eszkozok",
+      meglevo,
+    ]);
+    assert.notEqual(kod, 0);
+    assert.equal(stdout, "");
+    assert.match(stderr, /sor 75/);
+    assert.match(stderr, /D osszetett/);
+  });
+
+  it("--meglevo-eszkozok ES --szulo-nelkul-engedve EGYUTT: OSSZETETT D-vel a gyermek bemegy parentAssetId nelkul", () => {
+    const dir = mappa();
+    const osszetettLss95 = [
+      ALAP_TSV,
+      sor({ sor: "73", site: "LSS95", deviceCode: "CPT", deviceSerial: "01" }),
+      sor({ sor: "74", site: "LSS95", deviceCode: "CPT", deviceSerial: "02" }),
+      sor({
+        sor: "75",
+        site: "LSS95",
+        deviceCode: "CPT",
+        deviceSerial: "01/02",
+        builtin: "PUM",
+        builtinSerial: "1",
+      }),
+    ].join("\n");
+    const tsv = iras(dir, "forras.tsv", osszetettLss95);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK_LSS95));
+    const meglevo = iras(dir, "meglevo.json", JSON.stringify({ items: [] }));
+    const { kod, stdout, stderr } = futtat([
+      "LSS95",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+      "--meglevo-eszkozok",
+      meglevo,
+      "--szulo-nelkul-engedve",
+    ]);
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    const gyerek = payload.find((p: { partnerInternalCode: string }) =>
+      p.partnerInternalCode.startsWith("LSS95-CPT-01-02-PUM"),
+    );
+    assert.ok(gyerek, `nem talaltam az osszetett D-t hordozo sort: ${stdout}`);
+    assert.ok(!("parentAssetId" in gyerek));
+    assert.match(stderr, /SZULO NELKUL/);
+    assert.match(stderr, /sor 75/);
+  });
+
+  it("--szulo-nelkul-engedve --meglevo-eszkozok NELKUL: nincs hatasa, a viselkedes BETUre a regi", () => {
+    /*
+      A kapcsolonak csak --meglevo-eszkozok MELLETT van ertelme (lasd a
+      szkript sajat fejleceben) -- onmagaban, a szulo-feloldas teljes
+      hianyaban, semmit nem valtoztat.
+    */
+    const dir = mappa();
+    const tsv = iras(dir, "forras.tsv", ALAP_TSV);
+    const units = iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK));
+    const { kod, stderr } = futtat([
+      "LSS22",
+      "--kihagy",
+      "14,12,13,15",
+      "--tsv",
+      tsv,
+      "--units",
+      units,
+      "--szulo-nelkul-engedve",
+    ]);
+    assert.equal(kod, 0, stderr);
+    assert.doesNotMatch(stderr, /SZULO NELKUL/);
+  });
+
   it("ismeretlen helyszin-kod: MEGALL, nem ad ures payloadot csendben", () => {
     const dir = mappa();
     const tsv = iras(dir, "forras.tsv", ALAP_TSV);
