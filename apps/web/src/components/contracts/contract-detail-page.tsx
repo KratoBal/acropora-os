@@ -1,15 +1,19 @@
 "use client";
 
 import { Alert, Button, Card, FormField, Input, Select } from "@acropora/ui";
+import type { WorksheetDepartmentSummary } from "@acropora/types";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
+import { buildSiteOptions } from "@/lib/partners/site-tree";
 import { contractsApi, type ContractSummary } from "@/lib/api/contracts";
 import {
   maintenanceOrdersApi,
   type MaintenanceOrderSummary,
 } from "@/lib/api/maintenance-orders";
+import { worksheetsApi } from "@/lib/api/worksheets";
 
 const ORDER_STATUS_LABEL: Record<MaintenanceOrderSummary["status"], string> = {
   ISSUED: "Kiállítva",
@@ -49,20 +53,101 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
   );
   const [issuing, setIssuing] = useState(false);
 
+  /**
+   * A TÉTELEK HELYSZÍNE ÉS ESZKÖZEI -- acrobot kérése (2026-09-24 20:36,
+   * élesben blokkoló): a szerver mindig is tudta a
+   * `ContractItem.departmentId`-t és az eszköz-hozzárendelést
+   * (`contracts.service.ts` `normalize()`, `dto.ts` `ContractItemDto`), de
+   * a webes felületen SEHOL nem volt mező hozzá -- csak egy figyelmeztetés
+   * a Megrendelőlapok kártyán ("nincs helyszín megadva").
+   *
+   * KÜLÖN ÁLLAPOT, NEM A `contract` OBJEKTUMBA ÍRVA: a `contract.items` a
+   * SZERVER válasza, és a mentés után onnan frissül -- ha közvetlenül azt
+   * módosítanánk szerkesztés közben, egy sikertelen mentés után nem
+   * lehetne visszaállni a betöltött állapotra.
+   */
+  const [itemDepartmentId, setItemDepartmentId] = useState<
+    Record<string, string>
+  >({});
+  const [itemAssetIds, setItemAssetIds] = useState<Record<string, string[]>>(
+    {},
+  );
+  const [departments, setDepartments] = useState<WorksheetDepartmentSummary[]>(
+    [],
+  );
+  const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
+
+  /**
+   * A TÉTEL-KULCSOS ÁLLAPOT EGYETLEN FORRÁSBÓL, AKÁR BETÖLTÉSKOR, AKÁR
+   * MENTÉS UTÁN -- Balázs éles hibája (2026-09-24 21:48, Állatkert): a
+   * `save()` eddig csak a `contract` state-et frissítette a szerver
+   * válaszából, a `selectedItemIds`/`itemDepartmentId`/`itemAssetIds` a
+   * RÉGI tétel-id-ken maradt. A repository mostantól ugyan stabilan tartja
+   * a meglévő tételek id-jét (`contracts.repository.ts` `update()`), de a
+   * hívás mindkét helyen UGYANEBBŐL a válaszból induljon, hogy egy
+   * jövőbeli eltérés ne tudjon csendben visszatérni.
+   */
+  const applyContractDetail = (detail: ContractSummary) => {
+    setContract(detail);
+    // ALAPÉRTELMEZÉSBEN AZ ÖSSZES TÉTEL KI VAN VÁLASZTVA -- Balázs
+    // döntése (2026-09-24): egy kiállítás a szerződés összes tételéből
+    // visz egy-egy alkalmat, de tételenként kivehető.
+    setSelectedItemIds(new Set(detail.items.map((item) => item.id)));
+    setItemDepartmentId(
+      Object.fromEntries(
+        detail.items.map((item) => [item.id, item.departmentId ?? ""]),
+      ),
+    );
+    setItemAssetIds(
+      Object.fromEntries(
+        detail.items.map((item) => [
+          item.id,
+          item.assets.map((asset) => asset.assetId),
+        ]),
+      ),
+    );
+  };
+
   const load = async () => {
     try {
       const detail = await contractsApi.detail(token, contractId);
-      setContract(detail);
-      // ALAPÉRTELMEZÉSBEN AZ ÖSSZES TÉTEL KI VAN VÁLASZTVA -- Balázs
-      // döntése (2026-09-24): egy kiállítás a szerződés összes tételéből
-      // visz egy-egy alkalmat, de tételenként kivehető.
-      setSelectedItemIds(new Set(detail.items.map((item) => item.id)));
+      applyContractDetail(detail);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A szerződés nem tölthető be.",
       );
     }
   };
+
+  const loadDepartments = useCallback(
+    async (customerId: string, signal?: AbortSignal) => {
+      try {
+        const response = await worksheetsApi.departments(
+          token,
+          customerId,
+          signal,
+        );
+        setDepartments(response.items.filter((item) => item.isActive));
+        setDepartmentsLoaded(true);
+      } catch (cause) {
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setError("A partner helyszínei nem tölthetők be.");
+      }
+    },
+    [token],
+  );
+  useEffect(() => {
+    if (!contract) return;
+    const controller = new AbortController();
+    void loadDepartments(contract.customerId, controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contract?.customerId, loadDepartments]);
+
+  const departmentOptions = useMemo(
+    () => buildSiteOptions(departments),
+    [departments],
+  );
   const loadOrders = async () => {
     try {
       setOrders(await maintenanceOrdersApi.list(token, contractId));
@@ -104,8 +189,26 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
         notes: contract.notes ?? null,
         organizationalUnitName: contract.organizationalUnitName ?? null,
         contactPersonName: contract.contactPersonName ?? null,
+        /*
+          A TELJES TÉTEL-LISTÁT KÜLDJÜK, MERT AZ `update()` A `items` MEZŐT
+          EGYBEN CSERÉLI (`contracts.service.ts`: `items: patch.items ??
+          existing...`) -- ha csak a helyszínt/eszközöket küldenénk, a
+          többi mező (leírás, ár, mennyiség) elveszne. Az itt küldött érték
+          ezért a betöltött tétel ADATAIT viszi tovább, a helyszín/eszköz
+          mezőt pedig a szerkesztett állapotból.
+        */
+        items: contract.items.map((item) => ({
+          id: item.id,
+          description: item.description,
+          unitNet: item.unitNet,
+          quantity: item.quantity,
+          occasionsPerYear: item.occasionsPerYear,
+          vatRatePercent: item.vatRatePercent,
+          departmentId: itemDepartmentId[item.id] || null,
+          assetIds: itemAssetIds[item.id] ?? [],
+        })),
       });
-      setContract(next);
+      applyContractDetail(next);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A szerződés nem menthető.",
@@ -362,14 +465,72 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
           ) : null}
         </div>
       </Card>
-      <Card className="p-5">
-        <h2 className="mb-3 text-lg font-semibold">Szerződéses tételek</h2>
-        <ul className="space-y-2 text-sm">
+      <Card className="space-y-4 p-5">
+        <h2 className="text-lg font-semibold">Szerződéses tételek</h2>
+        {/*
+          A HELYSZÍN ÉS AZ ESZKÖZ ITT SZERKESZTHETŐ -- acrobot kérése
+          (2026-09-24 20:36, élesben blokkoló): a szerver mindig is tudta
+          ezt a két mezőt (`ContractItem.departmentId`,
+          `ContractItemAsset`), de a webes felületen sehol nem volt hozzá
+          mező. A mentés a lap tetején lévő "Módosítások mentése" gombbal
+          megy, ugyanabban a körben, mint a többi mező.
+        */}
+        {!departmentsLoaded ? (
+          <p className="text-sm text-muted">Helyszínek betöltése…</p>
+        ) : departmentOptions.length === 0 ? (
+          <p className="text-sm text-muted">
+            Ehhez a partnerhez nincs felvéve helyszín.
+          </p>
+        ) : null}
+        <ul className="space-y-4 text-sm">
           {contract.items.map((item) => (
-            <li key={item.id}>
-              {item.position}. {item.description} — {item.unitNet} Ft ×{" "}
-              {item.quantity} db × {item.occasionsPerYear} alkalom / év,{" "}
-              {item.vatRatePercent}% ÁFA
+            <li key={item.id} className="space-y-2 border-b pb-3 last:border-0">
+              <p>
+                {item.position}. {item.description} — {item.unitNet} Ft ×{" "}
+                {item.quantity} db × {item.occasionsPerYear} alkalom / év,{" "}
+                {item.vatRatePercent}% ÁFA
+              </p>
+              {departmentOptions.length > 0 ? (
+                <div className="grid gap-2 md:grid-cols-2">
+                  <FormField
+                    label="Helyszín"
+                    htmlFor={`contract-item-department-${item.id}`}
+                  >
+                    <Select
+                      id={`contract-item-department-${item.id}`}
+                      value={itemDepartmentId[item.id] ?? ""}
+                      onChange={(event) =>
+                        setItemDepartmentId((current) => ({
+                          ...current,
+                          [item.id]: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Nincs megadva</option>
+                      {departmentOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                  <div className="space-y-1">
+                    <span className="text-sm font-semibold">
+                      Érintett eszközök
+                    </span>
+                    <JobAssetPicker
+                      departmentId={itemDepartmentId[item.id] ?? ""}
+                      selected={itemAssetIds[item.id] ?? []}
+                      onChange={(assetIds) =>
+                        setItemAssetIds((current) => ({
+                          ...current,
+                          [item.id]: assetIds,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

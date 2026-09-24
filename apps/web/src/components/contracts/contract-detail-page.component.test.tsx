@@ -1,12 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContractDetailPage } from "./contract-detail-page";
 import type { ContractSummary } from "@/lib/api/contracts";
 
-const api = vi.hoisted(() => ({ detail: vi.fn() }));
+const api = vi.hoisted(() => ({ detail: vi.fn(), update: vi.fn() }));
 const orderApi = vi.hoisted(() => ({ list: vi.fn() }));
+const worksheetsApi = vi.hoisted(() => ({ departments: vi.fn() }));
+const assetsApi = vi.hoisted(() => ({ list: vi.fn(), scanLabel: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
 vi.mock("@/components/auth/auth-provider", () => ({
@@ -16,6 +18,10 @@ vi.mock("@/lib/api/contracts", () => ({ contractsApi: api }));
 vi.mock("@/lib/api/maintenance-orders", () => ({
   maintenanceOrdersApi: orderApi,
 }));
+vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi }));
+// A JobAssetPicker sajat API-t hasznal (assetsApi) -- mockolva, hogy a
+// teszt ne induljon valodi halozati hivast.
+vi.mock("@/lib/api/assets", () => ({ assetsApi }));
 
 function session(token: string | undefined): Session {
   return {
@@ -65,7 +71,9 @@ function contract(): ContractSummary {
 describe("ContractDetailPage -- betöltés token nélkül (éles, süti-alapú bejelentkezés)", () => {
   beforeEach(() => {
     api.detail.mockReset();
+    api.update.mockReset();
     orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
   });
 
   it("üres (undefined) tokennel is elindítja a betöltést, nem marad örökre 'betöltés…' állapotban", async () => {
@@ -92,5 +100,139 @@ describe("ContractDetailPage -- betöltés token nélkül (éles, süti-alapú b
 
     await screen.findByText("SZ2026/0000019");
     expect(api.detail).toHaveBeenCalledWith("dev-token", "contract-1");
+  });
+});
+
+const DEPARTMENT: import("@acropora/types").WorksheetDepartmentSummary = {
+  id: "department-1",
+  parentId: null,
+  code: "CAP",
+  name: "Cápasuli",
+  isActive: true,
+};
+
+/**
+ * ACROBOT KÉRÉSE, 2026-09-24 20:36 (élesben blokkoló): a szerver mindig is
+ * tudta a tétel helyszínét és eszközeit, a webes felületen sehol nem volt
+ * hozzá mező. Ezek a tesztek a szerkesztő oldal ÚJ részét mérik.
+ */
+describe("ContractDetailPage -- tétel helyszíne és eszközei", () => {
+  beforeEach(() => {
+    auth.session = session("dev-token");
+    api.update.mockReset();
+    orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments
+      .mockReset()
+      .mockResolvedValue({ items: [DEPARTMENT] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  function contractWithItem(): ContractSummary {
+    return {
+      ...contract(),
+      items: [
+        {
+          id: "item-1",
+          position: 1,
+          description: "Cápasuli RO karbantartás",
+          unitNet: "410000",
+          quantity: "1",
+          occasionsPerYear: 4,
+          vatRatePercent: "27",
+          departmentId: null,
+          assets: [],
+        },
+      ],
+    };
+  }
+
+  it("felkínálja a partner helyszíneit a tétel alatt", async () => {
+    api.detail.mockResolvedValue(contractWithItem());
+
+    render(<ContractDetailPage contractId="contract-1" />);
+    // A "Cápasuli RO karbantartás" szöveg KÉT helyen is szerepel (a
+    // "Szerződéses tételek" kártyán ÉS a "Megrendelőlapok" kártya
+    // jelölőnégyzet-listáján), ezért az árat keressük, ami csak az elsőn.
+    await screen.findByText(/410000 Ft/);
+
+    expect(
+      await screen.findByRole("option", { name: "Cápasuli (CAP)" }),
+    ).toBeTruthy();
+  });
+
+  it("a kiválasztott helyszínt elküldi a mentéskor, a tétel többi adatával együtt", async () => {
+    api.detail.mockResolvedValue(contractWithItem());
+    api.update.mockResolvedValue(contractWithItem());
+
+    render(<ContractDetailPage contractId="contract-1" />);
+    await screen.findByText(/410000 Ft/);
+    // A helyszín-lista KÜLÖN, a tétel-lekéréstől független hívásból töltődik
+    // be (worksheetsApi.departments) -- teli csomagfutásnál lassabb is lehet
+    // az árnál, ezért a mezőt magát is meg kell várni, nem elég az árra.
+    const departmentField = await screen.findByLabelText("Helyszín");
+
+    fireEvent.change(departmentField, {
+      target: { value: "department-1" },
+    });
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        "dev-token",
+        "contract-1",
+        expect.objectContaining({
+          items: [
+            expect.objectContaining({
+              id: "item-1",
+              description: "Cápasuli RO karbantartás",
+              departmentId: "department-1",
+              assetIds: [],
+            }),
+          ],
+        }),
+      ),
+    );
+  });
+
+  /**
+   * Balázs éles hibája (2026-09-24 21:48, Állatkert): a mentés után a
+   * kijelölt tételek listája ("Megrendelőlap kiállítása (N tétel)") a
+   * RÉGI tétel-számot mutatta, mert a `save()` csak a `contract` state-et
+   * frissítette a szerver válaszából, a kijelölés-állapotot nem. Ez a
+   * teszt a `applyContractDetail` közös inicializálást méri: a mentés
+   * utáni válaszban egy ÚJ tétellel bővült listának a kijelölés-száma is
+   * ehhez igazodjon, ne a mentés előtti tétel-számhoz.
+   */
+  it("mentés után a kijelölt tételek száma a szerver ÚJ válaszához igazodik, nem a réginek", async () => {
+    api.detail.mockResolvedValue(contractWithItem());
+    api.update.mockResolvedValue({
+      ...contractWithItem(),
+      items: [
+        ...contractWithItem().items,
+        {
+          id: "item-2",
+          position: 2,
+          description: "Új tétel",
+          unitNet: "5000",
+          quantity: "1",
+          occasionsPerYear: 1,
+          vatRatePercent: "27",
+          departmentId: null,
+          assets: [],
+        },
+      ],
+    });
+
+    render(<ContractDetailPage contractId="contract-1" />);
+    await screen.findByText(/410000 Ft/);
+    expect(screen.getByText("Megrendelőlap kiállítása (1 tétel)")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Megrendelőlap kiállítása (2 tétel)"),
+      ).toBeTruthy(),
+    );
   });
 });

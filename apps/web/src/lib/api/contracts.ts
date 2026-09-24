@@ -4,6 +4,14 @@ import { API_PREFIX } from "./api-prefix";
 const base = "/partners/contracts";
 
 export type ContractItemInput = {
+  /**
+   * MEGLÉVŐ TÉTEL AZONOSÍTÓJA -- ha adott, a szerver UPDATE-eli a sort (az
+   * id állandó marad), ha hiányzik, ÚJ tétel jön létre. Balázs éles
+   * hibája (2026-09-24 21:48): e nélkül minden mentés törölte és
+   * újraépítette az összes tételt, új id-vel, és a kliens tétel-kulcsos
+   * állapota (kijelölt tételek, helyszín, eszközök) a régi id-n maradt.
+   */
+  id?: string;
   description: string;
   unitNet: string;
   quantity: string;
@@ -30,6 +38,30 @@ export type ContractInput = {
   items: ContractItemInput[];
 };
 
+/**
+ * EGY TÉTEL, AHOGY A SZERVER VISSZAADJA -- NEM AZONOS A `ContractItemInput`-tal.
+ *
+ * A `departmentId` SZKALÁR mező, tehát ugyanaz az alak íráson és olvasáson is
+ * (`contracts.repository.ts` `contractInclude`-ja nem szűkíti a scalar
+ * mezőket). Az `assetIds` viszont CSAK ÍRÁSKOR létezik: olvasáskor a szerver
+ * az `assets` kapcsolati tömböt adja (`{assetId, asset: {...}}[]`), nem egy
+ * lapos azonosító-listát. Eddig ez a típus a `ContractItemInput`-ot örökölte,
+ * és `assetIds`-t ígért olvasásra is -- ami a szervertől SOHA nem jött meg
+ * (lásd acrobot kártyáját, 2026-09-24 20:36: "a szerver tudja... de a webes
+ * felületen SEHOL nincs mező hozzá").
+ */
+export type ContractItemSummary = {
+  id: string;
+  position: number;
+  description: string;
+  unitNet: string;
+  quantity: string;
+  occasionsPerYear: number;
+  vatRatePercent: string;
+  departmentId: string | null;
+  assets: Array<{ assetId: string }>;
+};
+
 export type ContractSummary = Omit<ContractInput, "items"> & {
   id: string;
   customer: { id: string; displayName: string };
@@ -42,7 +74,7 @@ export type ContractSummary = Omit<ContractInput, "items"> & {
     sizeBytes: number;
     createdAt: string;
   }>;
-  items: Array<ContractItemInput & { id: string; position: number }>;
+  items: ContractItemSummary[];
 };
 
 export const contractsApi = {

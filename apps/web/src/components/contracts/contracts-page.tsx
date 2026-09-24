@@ -2,11 +2,15 @@
 
 import { Alert, Button, Card, FormField, Input, Select } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
+import type { WorksheetDepartmentSummary } from "@acropora/types";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
+import { buildSiteOptions } from "@/lib/partners/site-tree";
 import { contractsApi, type ContractSummary } from "@/lib/api/contracts";
+import { worksheetsApi } from "@/lib/api/worksheets";
 
 export type DraftItem = {
   description: string;
@@ -14,6 +18,14 @@ export type DraftItem = {
   quantity: string;
   occasionsPerYear: string;
   vatRatePercent: string;
+  /**
+   * A HELYSZÍN ÉS AZ ESZKÖZ MOSTANTÓL A FELVITELEN IS SZERKESZTHETŐ --
+   * acrobot kérése (2026-09-24 20:36, élesben blokkoló): a szerver mindig
+   * is elfogadta ezt a két mezőt (`ContractItemDto`), de a webes felvitelen
+   * sehol nem volt hozzá mező.
+   */
+  departmentId: string;
+  assetIds: string[];
 };
 export const emptyItem = (): DraftItem => ({
   description: "",
@@ -21,6 +33,8 @@ export const emptyItem = (): DraftItem => ({
   quantity: "1",
   occasionsPerYear: "1",
   vatRatePercent: "27",
+  departmentId: "",
+  assetIds: [],
 });
 
 function money(value: string) {
@@ -100,6 +114,10 @@ export function ContractsPage() {
     notes: "",
     items: [emptyItem()],
   });
+  const [departments, setDepartments] = useState<WorksheetDepartmentSummary[]>(
+    [],
+  );
+  const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
 
   const load = async () => {
     if (!canManage) return;
@@ -125,6 +143,39 @@ export function ContractsPage() {
   useEffect(() => {
     void load();
   }, [canManage, token]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadDepartments = useCallback(
+    async (customerId: string, signal?: AbortSignal) => {
+      if (!customerId) {
+        setDepartments([]);
+        setDepartmentsLoaded(false);
+        return;
+      }
+      try {
+        const response = await worksheetsApi.departments(
+          token,
+          customerId,
+          signal,
+        );
+        setDepartments(response.items.filter((item) => item.isActive));
+        setDepartmentsLoaded(true);
+      } catch (cause) {
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setError("A partner helyszínei nem tölthetők be.");
+      }
+    },
+    [token],
+  );
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadDepartments(draft.customerId, controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.customerId, loadDepartments]);
+  const departmentOptions = useMemo(
+    () => buildSiteOptions(departments),
+    [departments],
+  );
 
   const yearly = useMemo(
     () =>
@@ -313,111 +364,177 @@ export function ContractsPage() {
           <div className="space-y-3">
             <h3 className="font-medium">Tételek *</h3>
             {draft.items.map((item, index) => (
-              <div className="grid gap-2 md:grid-cols-5" key={index}>
-                <FormField
-                  label={index === 0 ? "Tétel leírása" : ""}
-                  htmlFor={`contract-new-item-description-${index}`}
-                >
-                  <Input
-                    id={`contract-new-item-description-${index}`}
-                    placeholder="Tétel leírása"
-                    value={item.description}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        items: draft.items.map((row, rowIndex) =>
-                          rowIndex === index
-                            ? { ...row, description: event.target.value }
-                            : row,
-                        ),
-                      })
-                    }
-                  />
-                </FormField>
-                <FormField
-                  label={index === 0 ? "Nettó egységár" : ""}
-                  htmlFor={`contract-new-item-unit-${index}`}
-                >
-                  <Input
-                    id={`contract-new-item-unit-${index}`}
-                    inputMode="decimal"
-                    placeholder="Nettó egységár"
-                    value={item.unitNet}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        items: draft.items.map((row, rowIndex) =>
-                          rowIndex === index
-                            ? { ...row, unitNet: event.target.value }
-                            : row,
-                        ),
-                      })
-                    }
-                  />
-                </FormField>
-                <FormField
-                  label={index === 0 ? "Darabszám" : ""}
-                  htmlFor={`contract-new-item-qty-${index}`}
-                >
-                  <Input
-                    id={`contract-new-item-qty-${index}`}
-                    inputMode="decimal"
-                    placeholder="db"
-                    value={item.quantity}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        items: draft.items.map((row, rowIndex) =>
-                          rowIndex === index
-                            ? { ...row, quantity: event.target.value }
-                            : row,
-                        ),
-                      })
-                    }
-                  />
-                </FormField>
-                <FormField
-                  label={index === 0 ? "Alkalom / év" : ""}
-                  htmlFor={`contract-new-item-occasions-${index}`}
-                >
-                  <Input
-                    id={`contract-new-item-occasions-${index}`}
-                    inputMode="numeric"
-                    placeholder="alkalom / év"
-                    value={item.occasionsPerYear}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        items: draft.items.map((row, rowIndex) =>
-                          rowIndex === index
-                            ? { ...row, occasionsPerYear: event.target.value }
-                            : row,
-                        ),
-                      })
-                    }
-                  />
-                </FormField>
-                <FormField
-                  label={index === 0 ? "ÁFA %" : ""}
-                  htmlFor={`contract-new-item-vat-${index}`}
-                >
-                  <Input
-                    id={`contract-new-item-vat-${index}`}
-                    inputMode="decimal"
-                    placeholder="ÁFA %"
-                    value={item.vatRatePercent}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        items: draft.items.map((row, rowIndex) =>
-                          rowIndex === index
-                            ? { ...row, vatRatePercent: event.target.value }
-                            : row,
-                        ),
-                      })
-                    }
-                  />
-                </FormField>
+              <div className="space-y-2" key={index}>
+                <div className="grid gap-2 md:grid-cols-5">
+                  <FormField
+                    label={index === 0 ? "Tétel leírása" : ""}
+                    htmlFor={`contract-new-item-description-${index}`}
+                  >
+                    <Input
+                      id={`contract-new-item-description-${index}`}
+                      placeholder="Tétel leírása"
+                      value={item.description}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          items: draft.items.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? { ...row, description: event.target.value }
+                              : row,
+                          ),
+                        })
+                      }
+                    />
+                  </FormField>
+                  <FormField
+                    label={index === 0 ? "Nettó egységár" : ""}
+                    htmlFor={`contract-new-item-unit-${index}`}
+                  >
+                    <Input
+                      id={`contract-new-item-unit-${index}`}
+                      inputMode="decimal"
+                      placeholder="Nettó egységár"
+                      value={item.unitNet}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          items: draft.items.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? { ...row, unitNet: event.target.value }
+                              : row,
+                          ),
+                        })
+                      }
+                    />
+                  </FormField>
+                  <FormField
+                    label={index === 0 ? "Darabszám" : ""}
+                    htmlFor={`contract-new-item-qty-${index}`}
+                  >
+                    <Input
+                      id={`contract-new-item-qty-${index}`}
+                      inputMode="decimal"
+                      placeholder="db"
+                      value={item.quantity}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          items: draft.items.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? { ...row, quantity: event.target.value }
+                              : row,
+                          ),
+                        })
+                      }
+                    />
+                  </FormField>
+                  <FormField
+                    label={index === 0 ? "Alkalom / év" : ""}
+                    htmlFor={`contract-new-item-occasions-${index}`}
+                  >
+                    <Input
+                      id={`contract-new-item-occasions-${index}`}
+                      inputMode="numeric"
+                      placeholder="alkalom / év"
+                      value={item.occasionsPerYear}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          items: draft.items.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? { ...row, occasionsPerYear: event.target.value }
+                              : row,
+                          ),
+                        })
+                      }
+                    />
+                  </FormField>
+                  <FormField
+                    label={index === 0 ? "ÁFA %" : ""}
+                    htmlFor={`contract-new-item-vat-${index}`}
+                  >
+                    <Input
+                      id={`contract-new-item-vat-${index}`}
+                      inputMode="decimal"
+                      placeholder="ÁFA %"
+                      value={item.vatRatePercent}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          items: draft.items.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? { ...row, vatRatePercent: event.target.value }
+                              : row,
+                          ),
+                        })
+                      }
+                    />
+                  </FormField>
+                </div>
+                {/*
+                A HELYSZÍN ÉS AZ ESZKÖZ ITT VÁLASZTHATÓ -- acrobot kérése
+                (2026-09-24 20:36, élesben blokkoló): a szerver mindig is
+                elfogadta ezt a két mezőt, a felvitelen sehol nem volt hozzá
+                mező. Csak akkor jelenik meg, ha van kiválasztott partner:
+                helyszín nélküle nincs.
+              */}
+                {draft.customerId ? (
+                  !departmentsLoaded ? (
+                    <p className="text-sm text-muted">Helyszínek betöltése…</p>
+                  ) : departmentOptions.length === 0 ? (
+                    <p className="text-sm text-muted">
+                      Ehhez a partnerhez nincs felvéve helyszín.
+                    </p>
+                  ) : (
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <FormField
+                        label={index === 0 ? "Helyszín" : ""}
+                        htmlFor={`contract-new-item-department-${index}`}
+                      >
+                        <Select
+                          id={`contract-new-item-department-${index}`}
+                          value={item.departmentId}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              items: draft.items.map((row, rowIndex) =>
+                                rowIndex === index
+                                  ? { ...row, departmentId: event.target.value }
+                                  : row,
+                              ),
+                            })
+                          }
+                        >
+                          <option value="">Nincs megadva</option>
+                          {departmentOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </FormField>
+                      <div className="space-y-1">
+                        {index === 0 ? (
+                          <span className="text-sm font-semibold">
+                            Érintett eszközök
+                          </span>
+                        ) : null}
+                        <JobAssetPicker
+                          departmentId={item.departmentId}
+                          selected={item.assetIds}
+                          onChange={(assetIds) =>
+                            setDraft({
+                              ...draft,
+                              items: draft.items.map((row, rowIndex) =>
+                                rowIndex === index ? { ...row, assetIds } : row,
+                              ),
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  )
+                ) : null}
               </div>
             ))}
             <Button

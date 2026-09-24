@@ -18,6 +18,17 @@ import { Type } from "class-transformer";
 const DECIMAL = /^\d+(?:\.\d+)?$/;
 
 export class ContractItemDto {
+  /**
+   * A MEGLÉVŐ TÉTEL AZONOSÍTÓJA -- ha hiányzik, ÚJ tétel. A repository ez
+   * alapján dönt update() (megmarad az azonosítója) vagy create() (újat
+   * kap) között (`contracts.repository.ts`). E nélkül minden mentés
+   * törölte és újraépítette az ÖSSZES tételt, új id-vel -- Balázs éles
+   * hibája (2026-09-24 21:48): a kliens tétel-kulcsos állapota (kijelölt
+   * tételek a megrendelőlaphoz, helyszín, eszközök) a RÉGI id-n maradt,
+   * és a megrendelőlap kiállítása "olyan tétel, ami nem is létezik"
+   * hibával hasalt el.
+   */
+  @IsString() @IsOptional() id?: string;
   @IsString() @MinLength(1) @MaxLength(1000) description!: string;
   @IsString() @Matches(DECIMAL) unitNet!: string;
   @IsString() @Matches(DECIMAL) quantity!: string;
