@@ -1,0 +1,210 @@
+/**
+ * A FIGMA TERV KÖZÖS TÉMA-RÉTEGE -- ALAP, NEM KÍSÉRLET.
+ *
+ * === A STÁTUSZ MEGVÁLTOZOTT, ÉS EZ NEM DÍSZ-ÁTNEVEZÉS ===
+ *
+ * Ez a fájl korábban `aquarium-pilot-theme.css` néven állt, "kísérleti,
+ * egy fájl törlésével teljesen visszavonható" jelöléssel. Balázs döntése
+ * (2026-09-24 15:59 UTC, emlék 1816) ezt felülírta: "a Figma-terv az EGÉSZ
+ * web és mobil ÚJ kinézete lesz, fokozatosan." A fájl tehát már nem egy
+ * elvethető próba, hanem az az ALAP, amire a felület fokozatosan átáll --
+ * csak épp MA MÉG kevés oldal használja. A régi "ha nem tetszik, töröld"
+ * mondat innentől hamis volna, ezért ez a fejléc lecserélve.
+ *
+ * === MI VÁLTOZOTT A NÉGYEDIK MAKE-KÖRBEN (2026-09-24 17:54, majd 18:00
+ * UTC-i pontosítás) ===
+ *
+ * A Figma negyedik köre (`exchange/figma-akvariumok-make-4/src/index.css`)
+ * világos ÉS sötét módot ad minden tokenre, `data-theme="dark"` attribútum
+ * alapján. Ez a fájl a világos oldalt betűre átvette a korábbi
+ * (első-harmadik köri) `pilot-aqua-*`/`pilot-grey-*` tokenjeiből -- azok
+ * már éltek, és pixelre egyeznek a negyedik kör `:root`-jával --, a sötét
+ * oldalt pedig innen, a negyedik kör `[data-theme="dark"]` blokkjából.
+ *
+ * A `pilot-` ELŐTAG MARAD, ÉS EZ MOST MÁR NEM CSAK A `removed-scale-names`
+ * ŐRZŐ ELLENI VÉDELEM (lásd lent): a névnek NEM KELL "figma"-ra vagy
+ * "common"-ra váltania ahhoz, hogy ez a réteg legyen az alap -- a fokozatos
+ * bevezetés szándéka szerint az ELSŐ kör tényleg csak néhány oldalt fed
+ * (Akváriumok, Mérési előzmények), tehát a "pilot" szó a MAI hatókört írja
+ * le pontosan, nem a fájl véglegességét.
+ *
+ * === HOGYAN MARAD A TÖBBI OLDAL ÉRINTETLEN ===
+ *
+ * A `data-theme` attribútum NEM a `<html>`-re kerül, hanem KIZÁRÓLAG az
+ * egyes Figma-szerű oldalak saját gyökér elemére (lásd
+ * `apps/web/src/lib/theme/use-theme-preference.ts` fejlécét). A lenti
+ * `[data-theme="dark"] .bg-white { ... }` és hasonló szabályok ezért
+ * SZERKEZETILEG nem tudnak lefutni egyetlen olyan oldalon sem, amelyik nem
+ * tesz `data-theme`-et a saját fájára -- ez nem "valószínűleg nem törik el
+ * a régi oldal", hanem a CSS-szelektor nem talál illeszkedő ősöt. A mai
+ * közös arculat (`theme.css`: `brand-*`, `dusk-*`, `--background`,
+ * `--foreground`, `color-scheme: light`) egyetlen sora sem változott ebben
+ * a fájlban -- ellenőrizhető: `git diff packages/ui/src/theme.css` üres.
+ *
+ * === MIÉRT `pilot-` ELŐTAG, NEM `teal`/`grey` NÉVEN ===
+ *
+ * A Tailwind saját beépített `teal-*` skálája MÁS ÉRTÉKEKET adna, mint a
+ * Figma terv, és a `grey-*` néven felvett skála a TELJES alkalmazásban
+ * felülírná/kiegészítené a Tailwind-palettát. A `pilot-teal-500` alak
+ * ráadásul korábban (2026-09-24, #1060) elbuktatta az
+ * `apps/web/src/app/removed-scale-names.test.ts` őrzőt, mert a szóhatár-
+ * ellenőrzés (`\bteal-\d{2,3}\b`) egy kötőjel előtt is szóhatárnak
+ * számít -- ezért `aqua`, nem `teal`.
+ */
+@theme {
+  --color-pilot-aqua-50: #f0faf8;
+  --color-pilot-aqua-100: #d0f0ea;
+  --color-pilot-aqua-200: #a3e0d6;
+  --color-pilot-aqua-300: #6acbbf;
+  --color-pilot-aqua-400: #34b0a4;
+  --color-pilot-aqua-500: #0b9487;
+  --color-pilot-aqua-600: #0b7a6e;
+  --color-pilot-aqua-700: #0a6359;
+  --color-pilot-aqua-800: #0a5148;
+  --color-pilot-aqua-900: #083e38;
+
+  --color-pilot-grey-50: #f7f8fa;
+  --color-pilot-grey-100: #eef0f3;
+  --color-pilot-grey-200: #e2e5e9;
+  --color-pilot-grey-300: #cdd1d7;
+  --color-pilot-grey-400: #9ba3ae;
+  --color-pilot-grey-500: #6b7583;
+  --color-pilot-grey-600: #4f5a68;
+  --color-pilot-grey-700: #374049;
+  --color-pilot-grey-800: #1e272f;
+  --color-pilot-grey-900: #0f1a1c;
+
+  /**
+   * AZ ÁLLAPOT-SZÍNEK, AMIKET A TERV VALÓBAN HASZNÁL: az "üres e-mail cím"
+   * figyelmeztetés sárga háttere/szövege. A negyedik Make-kör ehhez SAJÁT
+   * skálát nem ad (ott a nyers Tailwind `amber-*`-t céloz egy szelektorral,
+   * lásd lent) -- a mi `pilot-amber-*` négy fokozata marad, csak sötét
+   * párral bővül.
+   */
+  --color-pilot-amber-50: #fffbeb;
+  --color-pilot-amber-100: #fef3c7;
+  --color-pilot-amber-500: #f59e0b;
+  --color-pilot-amber-700: #b45309;
+}
+
+/**
+ * SÖTÉT MÓD -- CSAK OTT HAT, AHOL A `data-theme="dark"` TÉNYLEGESEN OTT
+ * ÁLL EGY ŐS ELEMEN. Lásd a fájl fejlécét: ez ma az egyes pilot oldalak
+ * gyökér elemén van, sosem a `<html>`-en.
+ */
+[data-theme="dark"] {
+  --color-pilot-aqua-50: #0b2e2a;
+  --color-pilot-aqua-100: #103d38;
+  --color-pilot-aqua-200: #175248;
+  /* A 300/400 fokozatot ma egyik pilot komponens sem használja (mérve
+     2026-09-24: grep a pilot mappára) -- a negyedik Make-kör sem ad hozzá
+     sötét értéket, ezért itt sem találtunk ki egyet. */
+  --color-pilot-aqua-500: #0cbeae;
+  --color-pilot-aqua-600: #0fb3a4;
+  --color-pilot-aqua-700: #3cc9bc;
+  --color-pilot-aqua-800: #6dddd5;
+  /* A 900 fokozatot sem használja ma egyik komponens sem, lásd fent. */
+
+  --color-pilot-grey-50: #0f1c20;
+  --color-pilot-grey-100: #162328;
+  --color-pilot-grey-200: #1e3038;
+  --color-pilot-grey-300: #2a4450;
+  --color-pilot-grey-400: #486070;
+  --color-pilot-grey-500: #6a8fa0;
+  --color-pilot-grey-600: #8db5c6;
+  --color-pilot-grey-700: #a8cad6;
+  --color-pilot-grey-800: #c8dfe7;
+  --color-pilot-grey-900: #e5f0f3;
+
+  /**
+   * A FIGYELMEZTETŐ SÁRGA SÖTÉT PÁRJA -- EZ TISZTÁN VIZUÁLIS VÁLASZTÁS, NEM
+   * VÍZKÉMIAI ÁLLÍTÁS (más a tétje, mint az
+   * `aquariumMeasurementTargetRange`-nél, lásd ott a fejlécet): egy szín
+   * félrevétele itt legfeljebb esztétikai hiba, nem tanácsol senkinek
+   * semmi rosszat. A negyedik Make-kör saját (nyers Tailwind `amber-*`-ra
+   * célzó) mintáját követi tónusban: tompított, sötét alapon olvasható
+   * sárga.
+   */
+  --color-pilot-amber-50: #2d1f04;
+  --color-pilot-amber-100: #3d2a06;
+  --color-pilot-amber-500: #d99a2b;
+  --color-pilot-amber-700: #f0b955;
+
+  /**
+   * SZEMANTIKUS FELÜLET -- A NEGYEDIK MAKE-KÖR `--surface`/`--surface-
+   * raised` PÁRJA, `pilot-` ELŐTAGGAL (lásd fent, miért nem nyers néven).
+   * A `.bg-white` HASZNÁLATOK (kártyák, fejlécek, táblázat, mezők -- lásd
+   * `pilot-ui.tsx` és a pilot oldalak) enélkül feketén-fehéren maradnának
+   * sötét módban is, olvashatatlanul.
+   */
+  --pilot-surface: #162028;
+  --pilot-surface-raised: #1e2c36;
+}
+
+/**
+ * A `.bg-white` FELÜLÍRÁSA SÖTÉT MÓDBAN -- EZ A SZABÁLY VISZI ÁT A PILOT
+ * KOMPONENSEKET SÖTÉTBE, KOMPONENS-MÓDOSÍTÁS NÉLKÜL. A pilot komponensek
+ * (`pilot-ui.tsx`, a három pilot oldal) ma mind `bg-white`-ot használnak
+ * kártyához, fejléchez, mezőhöz -- ugyanaz a minta, amit a negyedik
+ * Make-kör saját `index.css`-e is leír ("Cards, sidebar, header bars,
+ * table, inputs all use bg-white").
+ */
+[data-theme="dark"] .bg-white {
+  background-color: var(--pilot-surface);
+}
+[data-theme="dark"] [class*="bg-white\/"] {
+  background-color: color-mix(in srgb, var(--pilot-surface) 60%, transparent);
+}
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--pilot-surface) !important;
+  color: var(--color-pilot-grey-900) !important;
+}
+
+/**
+ * MÉRT TÖRÉS, ÉS A JAVÍTÁSA: A `@acropora/ui` `ConfirmDialog` ÉS A
+ * `Button` "secondary" VÁLTOZATA IS `bg-white`-OT VISEL, DE A SAJÁT
+ * (`text-dusk-900`/`700`/`500`) SZÖVEGSZÍNÜKET A FENTI SZABÁLY NEM
+ * ÉRINTI -- mert azok nem `bg-white`, hanem `text-dusk-*` osztályok.
+ *
+ * A pilot oldalak (`pilot-aquarium-editor-page.tsx` a berendezés-törlésnél,
+ * `pilot-aquarium-water-values.tsx` a mérés-törlésnél) MINDKETTŐ a MEGLÉVŐ
+ * `ConfirmDialog`-ot használják, nem sajátot -- lásd
+ * `attribucio-es-alhitelesites` szellemében: a "PR-torzsbe irt ismert lyuk
+ * nem orzo" mintát itt fordítva alkalmazzuk, tényleges méréssel zárva le.
+ * Sötét módban emiatt a dialógus doboza SÖTÉT háttért kapna (a fenti
+ * `.bg-white` szabálytól), a saját `dusk-900`/`700`/`500` szövege viszont
+ * VÁLTOZATLANUL sötét maradna -- sötét szöveg sötét alapon, gyakorlatilag
+ * olvashatatlan. Ugyanez áll a "Mégsem" gombra (`Button variant="secondary"`,
+ * `bg-white text-dusk-700`).
+ *
+ * A `text-dusk-600`-at a `Pagination` (`packages/ui/src/pagination.tsx`,
+ * az oldalszám-felirat) ADJA HOZZÁ -- azt is a pilot lista oldal ágyazza
+ * be, változatlanul, ugyanezzel a mintával. A `text-dusk-800`-at a
+ * `FormField` felirata (`packages/ui/src/form-field.tsx`) -- az akvárium
+ * felvitel `CustomerPicker`-je ezen keresztül, az `@acropora/ui`
+ * `Input`/`Card` mellett, szintén a pilot szerkesztő oldalba ágyazva.
+ *
+ * A JAVÍTÁS SZŰK: csak azokat a `dusk-*` szövegszíneket írja felül, amit a
+ * ténylegesen beágyazott `ConfirmDialog`/`Button`/`Pagination`/`FormField`
+ * használ, és csak `[data-theme="dark"]` ŐS ALATT -- tehát csak a pilot
+ * oldalakba ágyazott előfordulásokat éri, ugyanezek a komponensek bármely
+ * MÁSIK (nem pilot) oldalon változatlanok maradnak, mert ott sosem áll
+ * `[data-theme="dark"]` ős.
+ */
+[data-theme="dark"] .text-dusk-900 {
+  color: var(--color-pilot-grey-900);
+}
+[data-theme="dark"] .text-dusk-800 {
+  color: var(--color-pilot-grey-800);
+}
+[data-theme="dark"] .text-dusk-700 {
+  color: var(--color-pilot-grey-700);
+}
+[data-theme="dark"] .text-dusk-600 {
+  color: var(--color-pilot-grey-600);
+}
+[data-theme="dark"] .text-dusk-500 {
+  color: var(--color-pilot-grey-500);
+}

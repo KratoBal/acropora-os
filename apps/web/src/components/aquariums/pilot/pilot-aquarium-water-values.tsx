@@ -6,6 +6,7 @@ import {
   type AquariumMeasurementParameterCode,
   type WaterType,
 } from "@acropora/types";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { aquariumsApi } from "@/lib/api/aquariums";
@@ -20,12 +21,14 @@ import {
 } from "./pilot-ui";
 
 /**
- * A FIGMA MAKE TERV "VÍZÉRTÉKEK" KÁRTYÁJA -- UGYANAZ AZ ADAT ÉS API-HÍVÁS,
- * MINT A MAI `AquariumWaterValues`-nál (`../aquarium-water-values.tsx`,
- * VÁLTOZATLAN marad). A második Make-kör (2026-09-24 15:55) két új elemet
- * hozott, amit itt vezetünk be: a felvitel DRAWER-ben történik (nem inline
- * rácsban), és a küldés egy MEGERŐSÍTŐ ablakon megy át (a mai felület
- * azonnal küld, gomb-lenyomásra) -- lásd a `PilotEmailDialog`-ot.
+ * A FIGMA MAKE TERV "VÍZÉRTÉKEK" KÁRTYÁJA.
+ *
+ * Balázs döntése (2026-09-24 18:14 UTC): a Figma lett a default, a régi
+ * (`AquariumWaterValues`, `../aquarium-water-values.tsx`) TÖRÖLVE -- ez a
+ * komponens az EGYETLEN, ami az akvárium adatlapon fut. A második Make-kör
+ * (2026-09-24 15:55) két elemet hozott, ami itt megjelenik: a felvitel
+ * DRAWER-ben történik (nem inline rácsban), és a küldés egy MEGERŐSÍTŐ
+ * ablakon megy át -- lásd a `PilotEmailDialog`-ot.
  */
 export function PilotAquariumWaterValues({
   token,
@@ -180,10 +183,18 @@ export function PilotAquariumWaterValues({
       <PilotCardHeader
         title="Vízértékek"
         action={
-          <PilotButton variant="primary" onClick={() => setDrawerOpen(true)}>
-            <Icon name="plus" size={13} />
-            Új mérés
-          </PilotButton>
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/akvariumok/${aquariumId}/meresek`}
+              className="text-xs font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800"
+            >
+              Összes mérés és grafikon
+            </Link>
+            <PilotButton variant="primary" onClick={() => setDrawerOpen(true)}>
+              <Icon name="plus" size={13} />
+              Új mérés
+            </PilotButton>
+          </div>
         }
       />
 
@@ -475,7 +486,7 @@ function PilotSparkline({
  * küld -- ez a lépés ÚJ VISELKEDÉS, de a MEGLÉVŐ `sendMeasurementEmail`
  * hívásra épül, nem igényel API-változást.
  */
-function PilotEmailDialog({
+export function PilotEmailDialog({
   occasion,
   canSendEmail,
   busy,

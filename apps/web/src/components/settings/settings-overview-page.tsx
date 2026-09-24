@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { AppearanceSettingsCard } from "./appearance-settings-card";
 
 /**
  * A BEALLITASOK GYUJTOOLDALA -- EGY SZAKADAST ZAR BE, NEM UJ KEPESSEGET AD.
@@ -236,6 +237,8 @@ export function SettingsOverviewPage() {
           oldalra visz.
         </p>
       </div>
+
+      <AppearanceSettingsCard />
 
       {/*
         EGY LINK -> A KARTYA MAGA A LINK. TOBB -> CIM PLUSZ BELSO LISTA.

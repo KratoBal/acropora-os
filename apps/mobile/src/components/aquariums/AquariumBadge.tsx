@@ -1,10 +1,16 @@
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
+
 /**
- * KIS JELVÉNY (Tulajdon, Típus, Víztípus) -- A FIGMA-TERV (make-2) SZERKEZETE,
- * a meglévő sötét témával: a `teal` tónus a mai `#177b74` akcentusszínt, a
- * `grey` a mai másodlagos szöveg-tónust viszi tovább, nem a Figma világos
- * palettáját.
+ * KIS JELVÉNY (Tulajdon, Típus, Víztípus) -- A FIGMA-TERV (make-2) SZERKEZETE.
+ *
+ * A SZÍNEK 2026-09-24-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK (Balázs
+ * döntése, emlék 1816): ez a komponens az akvárium-képernyők része, tehát
+ * MÁR MOST világos/sötét módban is helyesen jelenik meg, a telefon
+ * beállítása vagy a rendszer szerint.
  */
 export function AquariumBadge({
   children,
@@ -13,6 +19,8 @@ export function AquariumBadge({
   children: string;
   tone?: "teal" | "grey";
 }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View style={[styles.badge, tone === "teal" && styles.teal]}>
       <Text style={[styles.text, tone === "teal" && styles.tealText]}>
@@ -22,17 +30,19 @@ export function AquariumBadge({
   );
 }
 
-const styles = StyleSheet.create({
-  badge: {
-    alignSelf: "flex-start",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#28536a",
-    backgroundColor: "#0d2b40",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  teal: { backgroundColor: "#0f3a35", borderColor: "#1f6b60" },
-  text: { color: "#91afbe", fontSize: 11, fontWeight: "700" },
-  tealText: { color: "#6fe0d1" },
-});
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    badge: {
+      alignSelf: "flex-start",
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    teal: { backgroundColor: t.accentSoft, borderColor: t.accentBorder },
+    text: { color: t.textSecondary, fontSize: 11, fontWeight: "700" },
+    tealText: { color: t.accentSoftText },
+  });
+}

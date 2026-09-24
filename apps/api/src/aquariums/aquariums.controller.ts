@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
 } from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
@@ -26,6 +27,10 @@ import {
   CreateAquariumMeasurementDto,
   SetAquariumMaintainersDto,
 } from "./dto/aquarium-measurement.dto.js";
+
+/** Ugyanaz a MIME, mint az `InventoryCountController` letöltésénél. */
+const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 @Controller("aquariums")
 export class AquariumsController {
@@ -112,6 +117,22 @@ export class AquariumsController {
   @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
   listMeasurements(@Param("id") id: string) {
     return this.measurements.list(id);
+  }
+
+  /**
+   * STATIKUS ÚTVONAL A `:id/measurements/:occasionId` ELŐTT -- ugyanaz a
+   * minta, mint a `maintainers/selectable`-nél: "export.xlsx" egyébként
+   * `occasionId`-ként esne be egy `DELETE`/`send-email` hívásba.
+   */
+  @Get(":id/measurements/export.xlsx")
+  @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
+  async exportMeasurementsXlsx(@Param("id") id: string) {
+    const { filename, buffer } = await this.measurements.exportXlsx(id);
+    return new StreamableFile(buffer, {
+      type: XLSX_MIME,
+      disposition: `attachment; filename="${filename}"`,
+      length: buffer.length,
+    });
   }
 
   @Post(":id/measurements")

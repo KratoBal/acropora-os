@@ -11,12 +11,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { aquariumsApi } from "@/lib/api/aquariums";
 import { OWNERSHIP_LABEL, WATER_BODY_LABEL } from "../aquarium-labels";
-import { pilotInter } from "./pilot-font";
 import {
   PilotAvatar,
   PilotBadge,
   PilotButton,
   PilotSegmentedControl,
+  PilotThemeRoot,
   pilotAvatarColor,
   pilotInitials,
 } from "./pilot-ui";
@@ -35,11 +35,14 @@ const OWNERSHIP_OPTIONS = ["Mind", "Saját", "Ügyfél"] as const;
 const WATER_BODY_OPTIONS = ["Mind", "Akvárium", "Tó"] as const;
 
 /**
- * A FIGMA MAKE TERV KÍSÉRLETI ÁTÜLTETÉSE -- LISTA KÉPERNYŐ.
+ * A FIGMA MAKE TERV ÁTÜLTETÉSE -- LISTA KÉPERNYŐ.
  *
- * Ugyanaz az adat és ugyanaz a viselkedés, mint a mai `AquariumListPage`-nél
- * (`../aquarium-list-page.tsx`, VÁLTOZATLAN marad, ez egy KÜLÖN, PÁRHUZAMOS
- * komponens -- Balázs "egymás mellé tesszük" kérése szerint).
+ * Balázs döntése (2026-09-24 18:14 UTC, Eldöntendő szál, message_id
+ * 1552714695515840575), szó szerint: "és a figma lesz a default, leveheted
+ * a Mai felület választót és használd a figmat." A korábbi, egymás melletti
+ * "mai"/"kísérleti" váltó (`PilotToggle`) és a régi `AquariumListPage`
+ * ezért TÖRÖLVE -- ez a komponens az EGYETLEN, ami az `/akvariumok`
+ * útvonalon fut.
  *
  * A "KARBANTARTÓK" ÉS "UTOLSÓ VÍZMÉRÉS" OSZLOP MÁR TELJES (acrobot kérése,
  * 2026-09-24 16:19): a lista-végpont (`AquariumSummary`) mostantól
@@ -142,9 +145,7 @@ export function PilotAquariumListPage() {
     );
 
   return (
-    <div
-      className={`${pilotInter.className} -m-6 flex min-h-screen flex-col bg-pilot-grey-50`}
-    >
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
       <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
         <div>
           <h1 className="text-xl font-semibold text-pilot-grey-900">
@@ -374,6 +375,6 @@ export function PilotAquariumListPage() {
           </div>
         </>
       ) : null}
-    </div>
+    </PilotThemeRoot>
   );
 }

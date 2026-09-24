@@ -26,7 +26,6 @@ import {
   WATER_TYPE_LABEL,
 } from "../aquarium-labels";
 import { PilotAquariumWaterValues } from "./pilot-aquarium-water-values";
-import { pilotInter } from "./pilot-font";
 import {
   PilotAvatar,
   PilotBadge,
@@ -37,6 +36,7 @@ import {
   PilotInput,
   PilotSegmentedControl,
   PilotSelect,
+  PilotThemeRoot,
   pilotAvatarColor,
   pilotInitials,
 } from "./pilot-ui";
@@ -47,20 +47,21 @@ const EMPTY_NEW_EQUIPMENT: CreateAquariumEquipmentInput = {
 };
 
 /**
- * A FIGMA MAKE TERV KÍSÉRLETI ÁTÜLTETÉSE -- ADATLAP/ÚJ FELVITEL.
+ * A FIGMA MAKE TERV ÁTÜLTETÉSE -- ADATLAP/ÚJ FELVITEL.
  *
- * UGYANAZ A HÁLÓZATI LOGIKA ÉS VISELKEDÉS, MINT A MAI
- * `AquariumEditorPage`-nél (`../aquarium-editor-page.tsx`, VÁLTOZATLAN
- * marad) -- a hookok, a mentés/berendezés/karbantartó-hívások betűre
- * ugyanazok, csak a JSX-réteg a Figma kártya-elrendezését követi.
+ * Balázs döntése (2026-09-24 18:14 UTC, Eldöntendő szál, message_id
+ * 1552714695515840575): "és a figma lesz a default, leveheted a Mai
+ * felület választót és használd a figmat." A korábbi váltó (`PilotToggle`)
+ * és a régi `AquariumEditorPage` ezért TÖRÖLVE -- ez a komponens az
+ * EGYETLEN, ami az `/akvariumok/uj` és az `/akvariumok/[aquariumId]`
+ * útvonalon fut.
  *
  * A FIGMA TERVBEN A DETAIL EGY KÜLÖN, CSAK-OLVASÓ KÉPERNYŐ, "Szerkesztés"
- * ceruza-gombbal. A MAI ALKALMAZÁSBAN NINCS ILYEN MÓD -- az adatlap MINDIG
- * szerkeszthető űrlap (lásd `[aquariumId]/page.tsx`). A brief "a mai
- * működéssel" kikötése szerint ezt NEM változtatjuk: a pilot verzió is
- * mindig szerkeszthető marad, csak a Figma Detail képernyő KÁRTYA-
- * ELRENDEZÉSÉT veszi át (Alapadatok / Berendezések balra, Vízértékek
- * jobbra) -- a "Szerkesztés" gomb tehát itt nincs.
+ * ceruza-gombbal. EBBEN A RENDSZERBEN NINCS ILYEN MÓD -- az adatlap MINDIG
+ * szerkeszthető űrlap (lásd `[aquariumId]/page.tsx`). A brief eredeti "a
+ * mai működéssel" kikötése szerint ezt NEM változtattuk: csak a Figma
+ * Detail képernyő KÁRTYA-ELRENDEZÉSÉT vettük át (Alapadatok / Berendezések
+ * balra, Vízértékek jobbra) -- a "Szerkesztés" gomb tehát itt nincs.
  */
 export function PilotAquariumEditorPage({
   aquariumId,
@@ -348,15 +349,11 @@ export function PilotAquariumEditorPage({
     );
   if (loading)
     return (
-      <div
-        className={`${pilotInter.className} h-96 animate-pulse rounded-xl bg-pilot-grey-100`}
-      />
+      <PilotThemeRoot className="h-96 animate-pulse rounded-xl bg-pilot-grey-100" />
     );
 
   return (
-    <div
-      className={`${pilotInter.className} -m-6 flex min-h-screen flex-col bg-pilot-grey-50`}
-    >
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <Link
           href={isEdit ? `/akvariumok/${aquariumId}` : "/akvariumok"}
@@ -686,14 +683,13 @@ export function PilotAquariumEditorPage({
         }}
         onCancel={() => setPendingRemoval(null)}
       />
-    </div>
+    </PilotThemeRoot>
   );
 }
 
 /**
- * A FIGMA `KarbantartokEditor` PILL-VÁLASZTÓJA. Ugyanaz a mentési logika,
- * mint a mai `aquarium-editor-page.tsx` `toggleMaintainer`-jénél -- ez a
- * komponens csak a megjelenítést adja.
+ * A FIGMA `KarbantartokEditor` PILL-VÁLASZTÓJA. A mentési logika a fenti
+ * `toggleMaintainer`-ben áll -- ez a komponens csak a megjelenítést adja.
  */
 function PilotMaintainersEditor({
   selected,

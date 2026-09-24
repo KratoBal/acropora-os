@@ -11,8 +11,10 @@
 @import "../../../../packages/ui/src/theme.css";
 
 /*
-  KISERLETI RETEG, CSAK AZ AKVARIUMOK OLDALAIHOZ -- lasd a fajl fejleceben
-  a teljes indoklast. Az apps/partner NEM importalja: a kiserlet nem erinti
-  a partner portalt.
+  A FIGMA TERV KOZOS TEMA-RETEGE (vilagos+sotet tokenek, data-theme
+  alapon) -- lasd a fajl fejleceben a teljes indoklast, kulonosen azt, hogy
+  a data-theme SOSEM kerul a html-re, csak az egyes pilot oldalak gyoker
+  elemere, tehat a tobbi oldalt szerkezetileg nem erinti. Az apps/partner
+  NEM importalja.
 */
-@import "../../../../packages/ui/src/aquarium-pilot-theme.css";
+@import "../../../../packages/ui/src/figma-theme.css";
