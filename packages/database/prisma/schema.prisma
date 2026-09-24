@@ -2701,15 +2701,21 @@ model ServiceJob {
   /// legkevesbe pontos, es a bejelentes utan mar senki nem tudta megmondani,
   /// melyik egysegrol szolt.
   ///
-  /// `String?` ES NEM KOTELEZO, ket okbol. Az egyik a meglevo sorok: a
-  /// migracio pillanataban egyetlen jegynek sincs helyszine, es egy kotelezo
-  /// mezo vagy hazudna, vagy elbukna. A masik a mai viselkedes: partner NELKUL
-  /// is lehet jegyet nyitni, es helyszine csak partnernek van.
+  /// A `20260924180000_department_required` MIGRACIO OTA `NOT NULL` --
+  /// KORABBAN `String?` ALLT ITT. Az akkori ket ok (meglevo helyszin
+  /// nelkuli sorok; partner nelkuli jegy nyithato) mara lezarult: a
+  /// migracio elott elesben mert allapot ZERO helyszin nelkuli sort
+  /// mutatott mindket erintett tablan (Asset, ServiceJob), es Balazs
+  /// dontese (2026-09-23 06:53, "Kotelezo") lezarta a partner nelkuli
+  /// jegy kerdeset -- innentol minden jegynek van partnere, tehat
+  /// helyszine is levezethetove valik. Az API-szintu kikenyszerites
+  /// (a `ServiceJobsRepository.insert`-ben allo `!` es jegyzete) meg
+  /// hatravan -- lasd ott.
   ///
   /// A KAPCSOLAT `Restrict`, nem `SetNull`: egy helyszin, amire nyitott jegy
   /// mutat, nem torolheto ki alola. A fa amugy is archivalassal vezet ki
   /// (`isActive`), nem torlessel -- a `Restrict` ezt teszi kimondotta.
-  departmentId      String?
+  departmentId      String
   aquariumId        String?
   status            ServiceJobStatus @default(NEW)
   kind              ServiceJobKind   @default(REPAIR)
@@ -2795,7 +2801,7 @@ model ServiceJob {
 
   customer              Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
   contract              Contract?              @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  department            WorksheetDepartment?   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  department            WorksheetDepartment    @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   aquarium              Aquarium?              @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
   assets                ServiceJobAsset[]
   /// Ami a jeggyel történt, időrendben. A részletlap ebből építi a naplót.
@@ -3353,7 +3359,7 @@ model Asset {
   /// egy eszköz helyét. A szomszédos `customerAddressId` azért `SetNull`, mert
   /// a cím a vevő adatlapjáról bármikor eltűnhet; alegység törlésére ma nincs
   /// is út, és ha lesz, előbb a rajta lógó eszközöket kell elmozdítani.
-  departmentId        String?
+  departmentId        String
   aquariumId          String?
   parentAssetId       String?
   productVariantId    String?
@@ -3478,16 +3484,16 @@ model Asset {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  customer        Customer?            @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  supplier        Supplier?            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  customerAddress CustomerAddress?     @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
-  department      WorksheetDepartment? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  aquarium        Aquarium?            @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
-  parentAsset     Asset?               @relation("AssetHierarchy", fields: [parentAssetId], references: [id], onDelete: SetNull)
-  childAssets     Asset[]              @relation("AssetHierarchy")
-  productVariant  ProductVariant?      @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
-  createdBy       User?                @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy       User?                @relation("AssetUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  customer        Customer?           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  supplier        Supplier?           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  customerAddress CustomerAddress?    @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  department      WorksheetDepartment @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  aquarium        Aquarium?           @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
+  parentAsset     Asset?              @relation("AssetHierarchy", fields: [parentAssetId], references: [id], onDelete: SetNull)
+  childAssets     Asset[]             @relation("AssetHierarchy")
+  productVariant  ProductVariant?     @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  createdBy       User?               @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy       User?               @relation("AssetUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   events          AssetEvent[]
   serviceJobs     ServiceJobAsset[]
   worksheets      WorksheetAsset[]

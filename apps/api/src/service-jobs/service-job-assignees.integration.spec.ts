@@ -73,17 +73,13 @@ describe(
     let technicianUserId: string;
     let secondTechnicianUserId: string;
     /**
-     * A JEGYEK PARTNERE ÉS HELYSZÍNE -- A VÉGCÉL KÖTELEZŐ, A SÉMA MA MÉG NEM.
+     * A JEGYEK PARTNERE ÉS HELYSZÍNE -- MOSTANTÓL KÖTELEZŐ.
      *
-     * Balázs döntése ("1 legyen kotelezo") szerint a `ServiceJob.departmentId`
-     * kötelező lesz, de a séma-szintű NOT NULL
-     * (`20260924101500_department_required` migráció) KÜLÖN, DRAFT PR-ben
-     * van (acrobot kérése, 2026-09-24 10:25), csak a mobil kiadás után
-     * olvasztható be. Ez a suite a DELEGÁLÁS logikáját méri, nem a
-     * partnert/helyszínt -- egyik itt álló állítás sem a
-     * customerId/departmentId hiányáról vagy tartalmáról szól --, tehát
-     * egyetlen, közös, valós érték elég mindenhova (a séma ma is elfogadná
-     * a hiányukat, de a fixture a megcélzott végállapotot tükrözi).
+     * A `20260924180000_department_required` migráció (Balázs döntése, "1
+     * legyen kotelezo") óta a `ServiceJob.departmentId` NOT NULL. Ez a suite
+     * a DELEGÁLÁS logikáját méri, nem a partnert/helyszínt -- egyik itt álló
+     * állítás sem a customerId/departmentId hiányáról vagy tartalmáról szól
+     * --, tehát egyetlen, közös érték elég mindenhova.
      */
     let defaultCustomerId: string;
     let defaultDepartmentId: string;

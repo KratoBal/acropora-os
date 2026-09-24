@@ -26,7 +26,6 @@ import {
   WATER_TYPE_LABEL,
 } from "../aquarium-labels";
 import { PilotAquariumWaterValues } from "./pilot-aquarium-water-values";
-import { pilotInter } from "./pilot-font";
 import {
   PilotAvatar,
   PilotBadge,
@@ -37,6 +36,7 @@ import {
   PilotInput,
   PilotSegmentedControl,
   PilotSelect,
+  PilotThemeRoot,
   pilotAvatarColor,
   pilotInitials,
 } from "./pilot-ui";
@@ -349,15 +349,11 @@ export function PilotAquariumEditorPage({
     );
   if (loading)
     return (
-      <div
-        className={`${pilotInter.className} h-96 animate-pulse rounded-xl bg-pilot-grey-100`}
-      />
+      <PilotThemeRoot className="h-96 animate-pulse rounded-xl bg-pilot-grey-100" />
     );
 
   return (
-    <div
-      className={`${pilotInter.className} -m-6 flex min-h-screen flex-col bg-pilot-grey-50`}
-    >
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <Link
           href={isEdit ? `/akvariumok/${aquariumId}` : "/akvariumok"}
@@ -687,7 +683,7 @@ export function PilotAquariumEditorPage({
         }}
         onCancel={() => setPendingRemoval(null)}
       />
-    </div>
+    </PilotThemeRoot>
   );
 }
 
