@@ -3,6 +3,7 @@ import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContractsPage } from "./contracts-page";
+import { ApiError } from "@/lib/api/client";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -139,5 +140,73 @@ describe("ContractsPage -- új szerződés tételének helyszíne", () => {
         }),
       ),
     );
+  });
+});
+
+/**
+ * BALÁZS ÉLES HIBÁJA, 2026-09-24 20:31 (acrobot kártyája 31f8c5b4): egy
+ * duplikált szerződésszámmal próbált menteni, és csak egy általános "A
+ * kérés feldolgozása nem sikerült" jelent meg. Ugyanaz a kalibráció, mint
+ * a `contract-detail-page.component.test.tsx`-en, itt a LÉTREHOZÁS
+ * oldalára.
+ */
+describe("ContractsPage -- új szerződés, duplikált szerződésszám (409)", () => {
+  beforeEach(() => {
+    auth.session = session();
+    api.list.mockReset().mockResolvedValue([]);
+    api.customers
+      .mockReset()
+      .mockResolvedValue([
+        { id: "customer-1", displayName: "Fővárosi Állatkert" },
+      ]);
+    api.create.mockReset();
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  function fillMinimalForm() {
+    fireEvent.click(screen.getByText("Új szerződés"));
+    fireEvent.change(screen.getByLabelText("Partner"), {
+      target: { value: "customer-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Szerződésszám *"), {
+      target: { value: "SZ2026/0000019" },
+    });
+    fireEvent.change(screen.getByLabelText("Szerződés címe *"), {
+      target: { value: "Éves karbantartás" },
+    });
+    fireEvent.change(screen.getByLabelText("Érvényesség kezdete *"), {
+      target: { value: "2026-01-01" },
+    });
+    fireEvent.change(screen.getByLabelText("Tétel leírása"), {
+      target: { value: "Vízcsere" },
+    });
+    fireEvent.change(screen.getByLabelText("Nettó egységár"), {
+      target: { value: "10000" },
+    });
+    fireEvent.change(screen.getByLabelText("Darabszám"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByLabelText("Alkalom / év"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByLabelText("ÁFA %"), {
+      target: { value: "27" },
+    });
+  }
+
+  it("a szerződésszám mező alatt mutatja a 409 üzenetét, nem egy általános dobozban", async () => {
+    api.create.mockRejectedValue(
+      new ApiError("Ez a szerződésszám már létezik (SZ2026/0000019).", 409),
+    );
+
+    render(<ContractsPage />);
+    await screen.findByText("Új szerződés");
+    fillMinimalForm();
+
+    fireEvent.click(screen.getByText("Szerződés mentése"));
+
+    await screen.findByText("Ez a szerződésszám már létezik (SZ2026/0000019).");
+    expect(screen.queryByText("Műveleti hiba")).toBeNull();
   });
 });

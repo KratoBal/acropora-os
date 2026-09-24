@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import type { AuthenticatedUser } from "@acropora/types";
+import { Prisma } from "@acropora/database";
 
 import { renderMaintenanceOrderFormPdf } from "../maintenance-contracts/maintenance-order-form-document.js";
 import type { MaintenanceOrderFormInput } from "../maintenance-contracts/maintenance-order-form.types.js";
@@ -164,25 +165,45 @@ export class MaintenanceOrdersService {
         "A generált megrendelőlap nem érvényes PDF. A rendelés nem jött létre, mert épp ezt neveznénk hitelesnek.",
       );
 
-    return this.repository.issue({
-      contractId: contract.id,
-      number,
-      occasionYear,
-      issuedByName: actor.displayName,
-      items: contract.items.map((item) => ({
-        contractItemId: item.id,
-        description: item.description,
-        unitNet: item.unitNet,
-        quantity: item.quantity,
-        vatRatePercent: item.vatRatePercent,
-      })),
-      document: {
-        fileName: `megrendelolap-${number}.pdf`,
-        contentType: canonicalMimetypeFor(kind),
-        sizeBytes: content.length,
-        content,
-      },
-    });
+    try {
+      return await this.repository.issue({
+        contractId: contract.id,
+        number,
+        occasionYear,
+        issuedByName: actor.displayName,
+        items: contract.items.map((item) => ({
+          contractItemId: item.id,
+          description: item.description,
+          unitNet: item.unitNet,
+          quantity: item.quantity,
+          vatRatePercent: item.vatRatePercent,
+        })),
+        document: {
+          fileName: `megrendelolap-${number}.pdf`,
+          contentType: canonicalMimetypeFor(kind),
+          sizeBytes: content.length,
+          content,
+        },
+      });
+    } catch (error) {
+      /*
+        A SZÁM ITT NEM FELHASZNÁLÓI BEVITEL, hanem a `nextMaintenanceOrderNumber`
+        által számolt, sorban következő érték -- egy P2002 itt VERSENYHELYZETET
+        jelent (két egyidejű kiállítás ugyanabból a "legutolsó szám"-ból
+        indult), nem elgépelést. Ugyanaz a hibaosztály, amit acrobot a
+        szerződésszámnál jelzett (31f8c5b4): a nyers P2002 helyett magyar,
+        409-es üzenet kell, ami a helyes teendőt (újrapróbálás) mondja, nem
+        azt, hogy "javítsd ki a mezőt" -- itt nincs mező, amit javítani lehetne.
+      */
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        throw new ConflictException(
+          `A(z) ${number} megrendelőlap-szám időközben már kiosztásra került. Próbáld újra.`,
+        );
+      throw error;
+    }
   }
 
   /**

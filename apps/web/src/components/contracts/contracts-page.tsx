@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
+import { ApiError } from "@/lib/api/client";
 import { contractsApi, type ContractSummary } from "@/lib/api/contracts";
 import { worksheetsApi } from "@/lib/api/worksheets";
 
@@ -101,6 +102,7 @@ export function ContractsPage() {
     Array<{ id: string; displayName: string }>
   >([]);
   const [error, setError] = useState<string | null>(null);
+  const [numberError, setNumberError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -202,6 +204,7 @@ export function ContractsPage() {
   const create = async () => {
     setSaving(true);
     setError(null);
+    setNumberError(null);
     try {
       await contractsApi.create(token, {
         customerId: draft.customerId,
@@ -227,6 +230,18 @@ export function ContractsPage() {
       setCreating(false);
       await load();
     } catch (cause) {
+      /*
+        A DUPLIKÁLT SZERZŐDÉSSZÁM A MEZŐ ALATT JELENIK MEG, NEM EGY ÁLTALÁNOS
+        DOBOZBAN -- Balázs éles hibája (2026-09-24 20:31): egy már létező
+        számmal próbált menteni, és a felületen csak "A kérés feldolgozása
+        nem sikerült" jelent meg, a mező mellett semmi. A `create()`-nek MA
+        egyetlen `ConflictException` (409) forrása van (a szerződésszám
+        egyedi megkötése), tehát a `409` egyértelműen ide tartozik.
+      */
+      if (cause instanceof ApiError && cause.status === 409) {
+        setNumberError(cause.message);
+        return;
+      }
       setError(
         cause instanceof Error ? cause.message : "A szerződés nem menthető.",
       );
@@ -314,14 +329,19 @@ export function ContractsPage() {
                 ))}
               </Select>
             </FormField>
-            <FormField label="Szerződésszám *" htmlFor="contract-new-number">
+            <FormField
+              label="Szerződésszám *"
+              htmlFor="contract-new-number"
+              error={numberError ?? undefined}
+            >
               <Input
                 id="contract-new-number"
                 placeholder="pl. SZ2026/0000019"
                 value={draft.number}
-                onChange={(event) =>
-                  setDraft({ ...draft, number: event.target.value })
-                }
+                onChange={(event) => {
+                  setDraft({ ...draft, number: event.target.value });
+                  setNumberError(null);
+                }}
               />
             </FormField>
             <FormField label="Szerződés címe *" htmlFor="contract-new-title">
