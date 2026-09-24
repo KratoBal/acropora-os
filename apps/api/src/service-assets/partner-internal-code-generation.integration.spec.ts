@@ -430,6 +430,74 @@ describe(
       await prisma.assetCategory.delete({ where: { id: category.id } });
     });
 
+    /**
+     * BALÁZS SZABÁLYA (2026-09-24 11:42), SZÓ SZERINT: "ha a név római
+     * szammal vegzodik (Lampa VI.) és az a sorszám szabad, azt kapja
+     * (LIG-06), különben a legkisebb szabadot." A saját 131 eszközös
+     * visszatöltésén alkalmazta ugyanígy.
+     */
+    it("ha a NÉV VÉGE szabad sorszámú római szám, azt kapja -- nem a legkisebb szabadot", async () => {
+      const category = await prisma.assetCategory.create({
+        data: { name: `${PREFIX} római kategória`, code: `${PREFIX}ROM` },
+        select: { id: true },
+      });
+
+      const created = (await assets.create(
+        {
+          ownerType: "SUPPLIER",
+          ownerId: supplierId,
+          departmentId,
+          kind: "EQUIPMENT",
+          name: `${PREFIX} Lámpa VI.`,
+          categoryId: category.id,
+        } as never,
+        internalUser,
+      )) as { id: string; partnerInternalCode: string | null };
+
+      assert.equal(created.partnerInternalCode, `PCR-PCL-${PREFIX}ROM-06`);
+
+      await prisma.assetCategory.delete({ where: { id: category.id } });
+    });
+
+    it("ha a névvégi római szám sorszáma MÁR FOGLALT, visszaesik a legkisebb szabadra", async () => {
+      const category = await prisma.assetCategory.create({
+        data: {
+          name: `${PREFIX} római foglalt kategória`,
+          code: `${PREFIX}ROMF`,
+        },
+        select: { id: true },
+      });
+      const prefix = `PCR-PCL-${PREFIX}ROMF`;
+      // A "VI." sorszáma (6) MÁR FOGLALT kézi kóddal.
+      await prisma.asset.create({
+        data: {
+          assetNumber: `${PREFIX}-ROMF-FOGLALT`,
+          supplierId,
+          departmentId,
+          kind: "EQUIPMENT",
+          name: `${PREFIX} római foglalt kézi`,
+          partnerInternalCode: `${prefix}-06`,
+        },
+      });
+
+      const created = (await assets.create(
+        {
+          ownerType: "SUPPLIER",
+          ownerId: supplierId,
+          departmentId,
+          kind: "EQUIPMENT",
+          name: `${PREFIX} Lámpa VI.`,
+          categoryId: category.id,
+        } as never,
+        internalUser,
+      )) as { id: string; partnerInternalCode: string | null };
+
+      // NEM "-06" (foglalt) -- a legkisebb szabad, ami "-01".
+      assert.equal(created.partnerInternalCode, `${prefix}-01`);
+
+      await prisma.assetCategory.delete({ where: { id: category.id } });
+    });
+
     it("a KÉZZEL BEÍRT értéket soha nem írja felül", async () => {
       const created = (await assets.create(
         {

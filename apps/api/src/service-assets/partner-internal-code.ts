@@ -114,10 +114,19 @@ export function partnerInternalCodePrefix(input: {
  * pontosan kettőt): egy kézzel beírt "A11-HSZ-1" ugyanazt a sorszámot
  * foglalja, mint a generált "A11-HSZ-01" -- ha csak a kétjegyű alakot
  * ismernénk fel, a két írásmód között csendben ütközés keletkezhetne.
+ *
+ * AZ OPCIONÁLIS `assetName` A RÓMAI SZÁMOS KIVÉTEL, Balázs szabálya, amit a
+ * saját 131 eszközös visszatöltésén alkalmazott (2026-09-24 11:42, szó
+ * szerint): "ha a név római szammal vegzodik (Lampa VI.) és az a sorszám
+ * szabad, azt kapja (LIG-06), különben a legkisebb szabadot." Tehát a
+ * névvégi római szám ELSŐBBSÉGET élvez a legkisebb-szabad kereséssel
+ * szemben, DE csak ha a neki megfelelő sorszám még szabad -- ha foglalt, a
+ * függvény visszaesik a szokásos legkisebb-szabad keresésre, nem hibázik.
  */
 export function nextFreePartnerInternalCodeSerial(
   prefix: string,
   existingCodesWithPrefix: readonly string[],
+  assetName?: string,
 ): string {
   const pattern = new RegExp(`^${escapeRegExp(prefix)}-(\\d+)$`);
   const used = new Set<number>();
@@ -125,9 +134,88 @@ export function nextFreePartnerInternalCodeSerial(
     const match = pattern.exec(code);
     if (match) used.add(Number(match[1]));
   }
+  if (assetName !== undefined) {
+    const romanSerial = trailingRomanNumeralValue(assetName);
+    if (romanSerial !== null && !used.has(romanSerial))
+      return `${prefix}-${String(romanSerial).padStart(PARTNER_INTERNAL_CODE_SERIAL_DIGITS, "0")}`;
+  }
   let serial = 1;
   while (used.has(serial)) serial += 1;
   return `${prefix}-${String(serial).padStart(PARTNER_INTERNAL_CODE_SERIAL_DIGITS, "0")}`;
+}
+
+/**
+ * A NÉV VÉGÉN, ÖNÁLLÓ SZÓKÉNT ÁLLÓ RÓMAI SZÁM ÉRTÉKE, VAGY `null`.
+ *
+ * SZIGORÚ FELISMERÉS, NEM TALÁLGATÁS: a bemenetet a kanonikus római alakra
+ * VISSZA IS ALAKÍTJUK, és csak akkor fogadjuk el, ha a kettő betűre
+ * egyezik -- ez veti ki az olyan hibás vagy nem-kanonikus alakokat, mint az
+ * "IIII" (helyesen "IV") vagy a "VX" (nem érvényes római szám). Egy rosszul
+ * felismert "szám" rossz sorszámot írna egy eszközre, ez pedig a névből
+ * egy pillantással ellenőrizhető kell legyen, nem találgatás.
+ *
+ * ÖNÁLLÓ SZÓ: a római számnak a név VÉGÉN, szóköz (vagy a név eleje) után
+ * kell állnia, opcionális záró ponttal ("Lampa VI." -> "VI") -- így egy
+ * összetett szó belseje (pl. egy "MIX" nevű termék közepén álló betűk) nem
+ * illeszkedik véletlenül.
+ */
+export function trailingRomanNumeralValue(name: string): number | null {
+  const match = /(?:^|\s)([IVXLCDM]+)\.?\s*$/.exec(name.trim());
+  if (!match) return null;
+  return romanNumeralValue(match[1]!);
+}
+
+const ROMAN_NUMERAL_VALUES: Record<string, number> = {
+  I: 1,
+  V: 5,
+  X: 10,
+  L: 50,
+  C: 100,
+  D: 500,
+  M: 1000,
+};
+
+function romanNumeralValue(roman: string): number | null {
+  let total = 0;
+  for (let index = 0; index < roman.length; index += 1) {
+    const current = ROMAN_NUMERAL_VALUES[roman[index]!];
+    const next =
+      index + 1 < roman.length
+        ? ROMAN_NUMERAL_VALUES[roman[index + 1]!]
+        : undefined;
+    if (current === undefined) return null;
+    total += next !== undefined && current < next ? -current : current;
+  }
+  if (total <= 0 || toRomanNumeral(total) !== roman) return null;
+  return total;
+}
+
+const ROMAN_NUMERAL_TABLE: readonly (readonly [number, string])[] = [
+  [1000, "M"],
+  [900, "CM"],
+  [500, "D"],
+  [400, "CD"],
+  [100, "C"],
+  [90, "XC"],
+  [50, "L"],
+  [40, "XL"],
+  [10, "X"],
+  [9, "IX"],
+  [5, "V"],
+  [4, "IV"],
+  [1, "I"],
+];
+
+function toRomanNumeral(value: number): string {
+  let remaining = value;
+  let result = "";
+  for (const [numeralValue, symbol] of ROMAN_NUMERAL_TABLE) {
+    while (remaining >= numeralValue) {
+      result += symbol;
+      remaining -= numeralValue;
+    }
+  }
+  return result;
 }
 
 function escapeRegExp(value: string): string {

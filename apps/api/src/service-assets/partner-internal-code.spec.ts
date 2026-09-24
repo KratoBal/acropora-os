@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   nextFreePartnerInternalCodeSerial,
   partnerInternalCodePrefix,
+  trailingRomanNumeralValue,
 } from "./partner-internal-code.js";
 
 describe("partnerInternalCodePrefix", () => {
@@ -189,5 +190,94 @@ describe("nextFreePartnerInternalCodeSerial", () => {
       ]),
       "EBB-FOS-01",
     );
+  });
+
+  /**
+   * BALÁZS SZABÁLYA (2026-09-24 11:42), SZÓ SZERINT: "ha a név római szammal
+   * vegzodik (Lampa VI.) és az a sorszám szabad, azt kapja (LIG-06),
+   * különben a legkisebb szabadot." -- a saját, 131 eszközös
+   * visszatöltésén alkalmazta ugyanígy.
+   */
+  it("ha a név végén szabad sorszámú római szám áll, azt kapja, nem a legkisebbet", () => {
+    assert.equal(
+      nextFreePartnerInternalCodeSerial(
+        "LIG",
+        ["LIG-01", "LIG-02"],
+        "Lámpa VI.",
+      ),
+      "LIG-06",
+    );
+  });
+
+  it("ha a névvégi római szám sorszáma MÁR FOGLALT, visszaesik a legkisebb szabadra", () => {
+    assert.equal(
+      nextFreePartnerInternalCodeSerial(
+        "LIG",
+        ["LIG-01", "LIG-06"],
+        "Lámpa VI.",
+      ),
+      "LIG-02",
+    );
+  });
+
+  it("ha a névnek nincs római szám vége, a szokásos legkisebb szabadot adja", () => {
+    assert.equal(
+      nextFreePartnerInternalCodeSerial("LIG", ["LIG-01"], "Lámpa"),
+      "LIG-02",
+    );
+  });
+
+  // TESTVÉR-KONTROLL: `assetName` teljesen elhagyva (nem csak üres) is a
+  // szokásos, római szám nélküli utat kell hogy adja -- a paraméter
+  // OPCIONÁLIS, a meglévő hívók name nélkül is működnek.
+  it("assetName elhagyásával a szokásos legkisebb szabadot adja", () => {
+    assert.equal(
+      nextFreePartnerInternalCodeSerial("LIG", ["LIG-01"]),
+      "LIG-02",
+    );
+  });
+});
+
+describe("trailingRomanNumeralValue", () => {
+  it("a név végén, szóköz után álló római számot ismeri fel", () => {
+    assert.equal(trailingRomanNumeralValue("Lámpa VI"), 6);
+  });
+
+  it("a záró pontot is elfogadja", () => {
+    assert.equal(trailingRomanNumeralValue("Lámpa VI."), 6);
+  });
+
+  it("kisebb és nagyobb értékeket is helyesen ismer fel (szubtraktív alak)", () => {
+    assert.equal(trailingRomanNumeralValue("Szelep IX"), 9);
+    assert.equal(trailingRomanNumeralValue("Szelep XL"), 40);
+    assert.equal(trailingRomanNumeralValue("Szelep MCMXCIV"), 1994);
+  });
+
+  it("ha a név nem végződik római számra, null-t ad", () => {
+    assert.equal(trailingRomanNumeralValue("Lámpa"), null);
+  });
+
+  /**
+   * SZIGORÚ, NEM TALÁLGATÓ FELISMERÉS: a nem-kanonikus alakokat elutasítja,
+   * mert a kanonikus visszaalakítással nem egyeznek -- "IIII" helyesen "IV"
+   * lenne, a "VX" pedig egyáltalán nem érvényes római szám.
+   */
+  it("nem-kanonikus vagy érvénytelen római alakot NEM ismer fel", () => {
+    assert.equal(trailingRomanNumeralValue("Lámpa IIII"), null);
+    assert.equal(trailingRomanNumeralValue("Lámpa VX"), null);
+  });
+
+  /**
+   * ÖNÁLLÓ SZÓ, NEM RÉSZSZÓ: egy összetett szó belsejében álló, véletlenül
+   * római-szám-alakú betűsor (itt: "MIX" a "REMIX" közepén/végén) NEM
+   * illeszkedik, mert nincs előtte szóköz vagy szóhatár.
+   */
+  it("TESTVÉR-KONTROLL: összetett szó részeként álló római alakot nem ismer fel", () => {
+    assert.equal(trailingRomanNumeralValue("Csap REMIX"), null);
+  });
+
+  it("üres vagy csak szóközből álló nevet null-lal kezel", () => {
+    assert.equal(trailingRomanNumeralValue(""), null);
+    assert.equal(trailingRomanNumeralValue("   "), null);
   });
 });

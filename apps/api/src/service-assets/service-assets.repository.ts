@@ -1302,6 +1302,7 @@ export class ServiceAssetsRepository extends Repository {
                             ? [existingRow.partnerInternalCode]
                             : [],
                         ),
+                        input.name,
                       );
                   }
                 }
