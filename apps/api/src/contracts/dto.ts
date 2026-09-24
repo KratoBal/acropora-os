@@ -41,6 +41,14 @@ export class CreateContractDto {
   @IsOptional()
   status?: "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
   @IsString() @MaxLength(8000) @IsOptional() notes?: string | null;
+  /**
+   * A vevő szervezeti egysége és kapcsolattartója a megrendelőlapon -- MI
+   * TÖLTJÜK KI, nem a vevő (Balázs döntése, 2026-09-24, lásd
+   * exchange/nautilus-megrendelolap-lekepezesi-terv-2026-09-24.md).
+   */
+  @IsString() @MaxLength(300) @IsOptional() organizationalUnitName?:
+    string | null;
+  @IsString() @MaxLength(200) @IsOptional() contactPersonName?: string | null;
   @IsArray()
   @ArrayMaxSize(200)
   @ValidateNested({ each: true })
@@ -57,6 +65,9 @@ export class UpdateContractDto {
   @IsOptional()
   status?: "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
   @IsString() @MaxLength(8000) @IsOptional() notes?: string | null;
+  @IsString() @MaxLength(300) @IsOptional() organizationalUnitName?:
+    string | null;
+  @IsString() @MaxLength(200) @IsOptional() contactPersonName?: string | null;
   @IsArray()
   @ArrayMaxSize(200)
   @ValidateNested({ each: true })

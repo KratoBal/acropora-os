@@ -70,6 +70,7 @@ describe("a keret minden kötetet foglaló táblát számol", () => {
       [
         "AssetDocument",
         "ContractDocument",
+        "MaintenanceOrderDocument",
         "ServiceJobDocument",
         "WorksheetDocument",
       ],
