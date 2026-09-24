@@ -42,6 +42,23 @@ const PREFIX = "PARTCODEGEN";
 
 let internalUser: AuthenticatedUser;
 
+/**
+ * A GENERÁLÁS NÉLKÜLI ESETBEN A VÁLASZ `undefined`-ET AD, NEM `null`-T --
+ * ez a `service-assets.repository.ts` MÁR MEGLÉVŐ, szándékos mintája
+ * (`partnerInternalCode: row.partnerInternalCode ?? undefined`, a
+ * `manufacturer`/`model`/`labelCode` mezőkkel egyező módon: "ha nincs,
+ * `undefined`, nem üres szöveg"). A TÁROLT érték viszont ténylegesen
+ * `null` -- ezt a válasz helyett innen olvassuk vissza, hogy azt mérjük,
+ * amit a `create()` valójában ÍRT, ne a DTO-réteg kozmetikai alakját.
+ */
+async function storedPartnerInternalCode(id: string): Promise<string | null> {
+  const row = await prisma.asset.findUnique({
+    where: { id },
+    select: { partnerInternalCode: true },
+  });
+  return row?.partnerInternalCode ?? null;
+}
+
 async function removeLeftovers() {
   await prisma.asset.deleteMany({ where: { name: { startsWith: PREFIX } } });
   await prisma.assetCategory.deleteMany({
@@ -283,7 +300,14 @@ describe(
       // NEM "PCS-PCS-..." -- a gyökér kódja csak egyszer szerepel.
       assert.equal(created.partnerInternalCode, `PCS-${PREFIX}ROOT-01`);
 
-      await prisma.assetCategory.delete({ where: { id: category.id } });
+      /**
+       * A TEMP KATEGÓRIÁT NEM TÖRÖLJÜK ITT: az imént létrehozott eszköz
+       * MÉG hivatkozik rá (`Asset.categoryId`), és a `removeLeftovers()`
+       * a szuit végén ELŐBB törli az eszközöket, csak UTÁNA a
+       * kategóriákat -- ha itt, a teszten belül törölnénk, az idegen
+       * kulcs megszorítás elbukna. A kategória neve `${PREFIX}`-fel kezdődik,
+       * tehát a végső söprés úgyis megtalálja.
+       */
     });
 
     it("beépített eszköznél a SZÜLŐ TELJES kódjából generál, nem a helyszínből", async () => {
@@ -332,7 +356,7 @@ describe(
         } as never,
         internalUser,
       )) as { id: string; partnerInternalCode: string | null };
-      assert.equal(codelessParent.partnerInternalCode, null);
+      assert.equal(await storedPartnerInternalCode(codelessParent.id), null);
 
       const child = (await assets.create(
         {
@@ -347,7 +371,7 @@ describe(
         internalUser,
       )) as { id: string; partnerInternalCode: string | null };
 
-      assert.equal(child.partnerInternalCode, null);
+      assert.equal(await storedPartnerInternalCode(child.id), null);
     });
 
     it("kategória nélkül NEM generál", async () => {
@@ -362,7 +386,7 @@ describe(
         internalUser,
       )) as { id: string; partnerInternalCode: string | null };
 
-      assert.equal(created.partnerInternalCode, null);
+      assert.equal(await storedPartnerInternalCode(created.id), null);
     });
 
     it("kód nélküli kategóriával NEM generál", async () => {
@@ -382,7 +406,7 @@ describe(
         internalUser,
       )) as { id: string; partnerInternalCode: string | null };
 
-      assert.equal(created.partnerInternalCode, null);
+      assert.equal(await storedPartnerInternalCode(created.id), null);
     });
 
     it("egy LYUKAT a helyén tölt ki, nem a legmagasabb szám mögé ragaszt", async () => {
@@ -427,7 +451,7 @@ describe(
 
       assert.equal(created.partnerInternalCode, `${manualPrefix}-02`);
 
-      await prisma.assetCategory.delete({ where: { id: category.id } });
+      // A temp kategóriát nem töröljük itt -- lásd a fenti jegyzetet.
     });
 
     /**
@@ -456,7 +480,7 @@ describe(
 
       assert.equal(created.partnerInternalCode, `PCR-PCL-${PREFIX}ROM-06`);
 
-      await prisma.assetCategory.delete({ where: { id: category.id } });
+      // A temp kategóriát nem töröljük itt -- lásd a fenti jegyzetet.
     });
 
     it("ha a névvégi római szám sorszáma MÁR FOGLALT, visszaesik a legkisebb szabadra", async () => {
@@ -495,7 +519,7 @@ describe(
       // NEM "-06" (foglalt) -- a legkisebb szabad, ami "-01".
       assert.equal(created.partnerInternalCode, `${prefix}-01`);
 
-      await prisma.assetCategory.delete({ where: { id: category.id } });
+      // A temp kategóriát nem töröljük itt -- lásd a fenti jegyzetet.
     });
 
     it("a KÉZZEL BEÍRT értéket soha nem írja felül", async () => {
@@ -531,7 +555,7 @@ describe(
         partnerInternalCode: string | null;
         updatedAt: string;
       };
-      assert.equal(created.partnerInternalCode, null);
+      assert.equal(await storedPartnerInternalCode(created.id), null);
 
       // A PATCH utólag kategóriát ad -- a kód generálása CSAK a `create()`-hez
       // kötött, a szerkesztéshez nem.
@@ -604,7 +628,7 @@ describe(
         `PCR-PCL-${PREFIX}VERS-02`,
       ]);
 
-      await prisma.assetCategory.delete({ where: { id: category.id } });
+      // A temp kategóriát nem töröljük itt -- lásd a fenti jegyzetet.
     });
   },
 );
