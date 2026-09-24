@@ -11,6 +11,12 @@ import type { CreateContractDto, UpdateContractDto } from "./dto.js";
  * A SZOLGÁLTATÁS SAJÁT (VALÓDI ADATBÁZIS NÉLKÜLI) TESZTJEI -- eddig nem
  * létezett ilyen fájl (lásd a `maintenance-orders.service.spec.ts` fejlécét,
  * ami ezt a hiányt kifejezetten megnevezi).
+ *
+ * A KAPU: Balázs éles hibája (2026-09-24 20:31, acrobot kártyája 31f8c5b4).
+ * Egy már létező szerződésszámmal próbált menteni, és a nyers P2002 helyett
+ * csak "A kérés feldolgozása nem sikerült" jelent meg -- a `create()`-en a
+ * hiba részben el volt kapva (a szám nem volt benne az üzenetben), az
+ * `update()`-en EGYÁLTALÁN NEM volt elkapva.
  */
 
 function prismaError(code: string): Prisma.PrismaClientKnownRequestError {
@@ -79,6 +85,20 @@ describe("ContractsService.create", () => {
     const result = await service.create(CREATE_INPUT);
     assert.equal((result as { id: string }).id, "contract-1");
   });
+
+  it("P2002-re 409-et dob, a szerződésszámmal az üzenetben", async () => {
+    const { service } = makeService({
+      create: async () => {
+        throw prismaError("P2002");
+      },
+    });
+    await assert.rejects(
+      () => service.create(CREATE_INPUT),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        (error as Error).message.includes("SZ2026/0000019"),
+    );
+  });
 });
 
 describe("ContractsService.update", () => {
@@ -113,6 +133,25 @@ describe("ContractsService.update", () => {
       (error: unknown) =>
         error instanceof ConflictException &&
         (error as Error).message.includes("már készült megrendelőlap"),
+    );
+  });
+
+  /**
+   * EZ AZ ÁG EDDIG HIÁNYZOTT: a `create()`-en már volt valamilyen P2002-
+   * kezelés, az `update()`-en semmi -- egy szerkesztéskor beütött duplikált
+   * szám nyers Prisma-hibaként futott volna tovább.
+   */
+  it("P2002-re 409-et dob, a szerződésszámmal az üzenetben", async () => {
+    const { service } = makeService({
+      update: async () => {
+        throw prismaError("P2002");
+      },
+    });
+    await assert.rejects(
+      () => service.update("contract-1", PATCH),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        (error as Error).message.includes("SZ2026/0000019"),
     );
   });
 

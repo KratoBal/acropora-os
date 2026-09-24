@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
+import { ApiError } from "@/lib/api/client";
 import { contractsApi, type ContractSummary } from "@/lib/api/contracts";
 import {
   maintenanceOrdersApi,
@@ -44,6 +45,7 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
   const token = session?.token ?? "";
   const [contract, setContract] = useState<ContractSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [numberError, setNumberError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [orders, setOrders] = useState<MaintenanceOrderSummary[] | null>(null);
@@ -179,6 +181,7 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
     if (!contract) return;
     setSaving(true);
     setError(null);
+    setNumberError(null);
     try {
       const next = await contractsApi.update(token, contract.id, {
         number: contract.number,
@@ -210,6 +213,27 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
       });
       applyContractDetail(next);
     } catch (cause) {
+      /*
+        UGYANAZ A MINTA, MINT A `contracts-page.tsx` `create()`-jén: a
+        duplikált szerződésszám a mező alatt jelenik meg, nem egy általános
+        dobozban -- Balázs éles hibája (2026-09-24 20:31).
+
+        A `save()`-nek (ellentétben a `create()`-tel) MA KÉT `ConflictException`
+        (409) forrása van: a szerződésszám egyedi megkötése, ÉS a tételek
+        törlés+újraépítése, ha valamelyikhez már készült megrendelőlap (P2003,
+        lásd `contracts.service.ts`). A második NEM a szerződésszámról szól,
+        tehát a mező alatti helyre tenni félrevezető lenne -- ezért csak a
+        szám-ütközés üzenetét irányítjuk a mezőhöz, a másikat az általános
+        hibadobozba.
+      */
+      if (
+        cause instanceof ApiError &&
+        cause.status === 409 &&
+        cause.message.startsWith("Ez a szerződésszám már létezik")
+      ) {
+        setNumberError(cause.message);
+        return;
+      }
       setError(
         cause instanceof Error ? cause.message : "A szerződés nem menthető.",
       );
@@ -335,13 +359,18 @@ export function ContractDetailPage({ contractId }: { contractId: string }) {
       <Card className="space-y-4 p-5">
         <h2 className="text-lg font-semibold">Szerződés adatai</h2>
         <div className="grid gap-4 md:grid-cols-2">
-          <FormField label="Szerződésszám *" htmlFor="contract-edit-number">
+          <FormField
+            label="Szerződésszám *"
+            htmlFor="contract-edit-number"
+            error={numberError ?? undefined}
+          >
             <Input
               id="contract-edit-number"
               value={contract.number}
-              onChange={(event) =>
-                setContract({ ...contract, number: event.target.value })
-              }
+              onChange={(event) => {
+                setContract({ ...contract, number: event.target.value });
+                setNumberError(null);
+              }}
             />
           </FormField>
           <FormField label="Szerződés címe *" htmlFor="contract-edit-title">

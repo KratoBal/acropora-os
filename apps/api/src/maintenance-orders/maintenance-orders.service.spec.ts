@@ -237,6 +237,33 @@ describe("MaintenanceOrdersService.issue", () => {
     );
   });
 
+  /**
+   * A SZÁM ITT NEM FELHASZNÁLÓI BEVITEL (`nextMaintenanceOrderNumber`
+   * generálja) -- egy P2002 versenyhelyzetet jelent, ezért az üzenet
+   * "próbáld újra"-t mond, nem mezőjavítást. Balázs éles hibája
+   * (2026-09-24 20:31, acrobot kártyája 31f8c5b4) a szerződésszámnál merült
+   * fel, de ugyanaz a hibaosztály (nyers P2002 -> generikus üzenet) itt is
+   * fennállt volna kezelés nélkül.
+   */
+  it("P2002-re 409-et dob magyarul, a generált szám említésével", async () => {
+    const { service } = makeService({
+      issue: async () => {
+        throw new Prisma.PrismaClientKnownRequestError("duplicate", {
+          code: "P2002",
+          clientVersion: "6.19.3",
+        });
+      },
+    });
+    await assert.rejects(
+      () =>
+        service.issue({ contractId: "contract-1", itemIds: ["item-1"] }, ACTOR),
+      (error: unknown) =>
+        error instanceof Error &&
+        /időközben már kiosztásra került/.test(error.message) &&
+        error.message.includes("MR-"),
+    );
+  });
+
   it("POZITÍV KONTROLL: érvényes bemenetre létrehozza a rendelést, egy alkalommal tételenként", async () => {
     /*
       Enélkül a fenti négy negatív állítás akkor is zöld lenne, ha a

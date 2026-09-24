@@ -41,12 +41,7 @@ export class ContractsService {
     try {
       return await this.repository.create(data);
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      )
-        throw new ConflictException("Ez a szerződésszám már létezik.");
-      throw error;
+      this.mapUniqueNumberConflict(error, data.number);
     }
   }
 
@@ -105,8 +100,26 @@ export class ContractsService {
         throw new ConflictException(
           "A tételek nem módosíthatók, mert ezekhez már készült megrendelőlap.",
         );
-      throw error;
+      this.mapUniqueNumberConflict(error, data.number);
     }
+  }
+
+  /**
+   * A DUPLIKÁLT SZERZŐDÉSSZÁM 409-ET AD, MAGYARUL, A SZÁMMAL EGYÜTT --
+   * Balázs éles hibája (2026-09-24 20:31): egy már létező számmal próbált
+   * menteni, a nyers P2002 pedig a `create()`-en volt csak elkapva (a
+   * `update()`-en EGYÁLTALÁN NEM), ezért a felületen "A kérés feldolgozása
+   * nem sikerült" jelent meg -- se a mező, se a szám nem látszott.
+   */
+  private mapUniqueNumberConflict(error: unknown, number: string): never {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    )
+      throw new ConflictException(
+        `Ez a szerződésszám már létezik (${number}).`,
+      );
+    throw error;
   }
 
   async addPdf(id: string, file: Express.Multer.File) {

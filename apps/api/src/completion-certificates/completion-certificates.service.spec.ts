@@ -157,6 +157,31 @@ describe("CompletionCertificatesService.issue", () => {
   });
 
   /**
+   * A SZÁM ITT SEM FELHASZNÁLÓI BEVITEL (`nextCompletionCertificateNumber`
+   * generálja) -- egy P2002 versenyhelyzetet jelent, ezért az üzenet
+   * "próbáld újra"-t mond. Ugyanaz a hibaosztály, mint amit acrobot a
+   * szerződésszámnál jelzett (kártya 31f8c5b4, Balázs éles hibája,
+   * 2026-09-24 20:31): nyers P2002 helyett magyar, 409-es üzenet.
+   */
+  it("P2002-re 409-et dob magyarul, a generált szám említésével", async () => {
+    const { service } = makeService({
+      issue: async () => {
+        throw new Prisma.PrismaClientKnownRequestError("duplicate", {
+          code: "P2002",
+          clientVersion: "6.19.3",
+        });
+      },
+    });
+    await assert.rejects(
+      () => service.issue({ serviceJobId: "job-1" }, ACTOR),
+      (error: unknown) =>
+        error instanceof Error &&
+        /időközben már kiosztásra került/.test(error.message) &&
+        error.message.includes("TI-"),
+    );
+  });
+
+  /**
    * POZITÍV KONTROLL: érvényes bemenetre valóban létrejön az igazolás, és a
    * tételek a megrendelőlap tételeiből jönnek, tételenként 1 alkalommal.
    * Enélkül a fenti öt negatív állítás akkor is zöld lenne, ha a

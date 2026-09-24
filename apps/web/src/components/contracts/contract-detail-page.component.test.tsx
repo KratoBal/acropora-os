@@ -3,6 +3,7 @@ import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContractDetailPage } from "./contract-detail-page";
+import { ApiError } from "@/lib/api/client";
 import type { ContractSummary } from "@/lib/api/contracts";
 
 const api = vi.hoisted(() => ({ detail: vi.fn(), update: vi.fn() }));
@@ -234,5 +235,69 @@ describe("ContractDetailPage -- tétel helyszíne és eszközei", () => {
         screen.getByText("Megrendelőlap kiállítása (2 tétel)"),
       ).toBeTruthy(),
     );
+  });
+});
+
+/**
+ * BALÁZS ÉLES HIBÁJA, 2026-09-24 20:31 (acrobot kártyája 31f8c5b4): egy
+ * duplikált szerződésszámmal mentett, és csak egy általános "A kérés
+ * feldolgozása nem sikerült" jelent meg -- a mező alatt semmi. A 409-es
+ * választ mostantól a MEZŐ alatt kell mutatni, nem egy általános dobozban.
+ */
+describe("ContractDetailPage -- duplikált szerződésszám (409)", () => {
+  beforeEach(() => {
+    api.detail.mockReset().mockResolvedValue(contract());
+    api.update.mockReset();
+    orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+    auth.session = session("dev-token");
+  });
+
+  it("a szerződésszám mező alatt mutatja a 409 üzenetét, nem egy általános dobozban", async () => {
+    api.update.mockRejectedValue(
+      new ApiError("Ez a szerződésszám már létezik (SZ2026/0000019).", 409),
+    );
+
+    render(<ContractDetailPage contractId="contract-1" />);
+    await screen.findByText("SZ2026/0000019");
+
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+
+    await screen.findByText("Ez a szerződésszám már létezik (SZ2026/0000019).");
+    expect(screen.queryByText("Mentési hiba")).toBeNull();
+  });
+
+  it("a mező szerkesztése törli a korábbi 409-hibát", async () => {
+    api.update.mockRejectedValue(
+      new ApiError("Ez a szerződésszám már létezik (SZ2026/0000019).", 409),
+    );
+
+    render(<ContractDetailPage contractId="contract-1" />);
+    await screen.findByText("SZ2026/0000019");
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+    await screen.findByText("Ez a szerződésszám már létezik (SZ2026/0000019).");
+
+    fireEvent.change(screen.getByLabelText("Szerződésszám *"), {
+      target: { value: "SZ2026/0000020" },
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Ez a szerződésszám már létezik (SZ2026/0000019)."),
+      ).toBeNull(),
+    );
+  });
+
+  it("egy nem-409 hibát a régi, általános dobozban mutatja", async () => {
+    api.update.mockRejectedValue(new Error("VALAMI MÁS HIBA"));
+
+    render(<ContractDetailPage contractId="contract-1" />);
+    await screen.findByText("SZ2026/0000019");
+
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+
+    await screen.findByText("Mentési hiba");
+    expect(screen.getByText("VALAMI MÁS HIBA")).toBeTruthy();
   });
 });

@@ -161,25 +161,45 @@ export class CompletionCertificatesService {
       if (quota.state === "reject") throw new ConflictException(quota.reason);
     }
 
-    return this.repository.issue({
-      serviceJobId: job.id,
-      number,
-      issuedByName: actor.displayName,
-      items: maintenanceOrder.items.map((item) => ({
-        description: item.description,
-        // EGY ALKALOM -- lásd a `CompletionCertificateInput` építésénél a
-        // magyarázatot ugyanerre a döntésre.
-        quantity: new Prisma.Decimal(1),
-        unitNet: item.unitNet,
-        vatRatePercent: item.vatRatePercent,
-      })),
-      document: {
-        fileName: `teljesitesi-igazolas-${number}.pdf`,
-        contentType: canonicalMimetypeFor(kind),
-        sizeBytes: content.length,
-        content,
-      },
-    });
+    try {
+      return await this.repository.issue({
+        serviceJobId: job.id,
+        number,
+        issuedByName: actor.displayName,
+        items: maintenanceOrder.items.map((item) => ({
+          description: item.description,
+          // EGY ALKALOM -- lásd a `CompletionCertificateInput` építésénél a
+          // magyarázatot ugyanerre a döntésre.
+          quantity: new Prisma.Decimal(1),
+          unitNet: item.unitNet,
+          vatRatePercent: item.vatRatePercent,
+        })),
+        document: {
+          fileName: `teljesitesi-igazolas-${number}.pdf`,
+          contentType: canonicalMimetypeFor(kind),
+          sizeBytes: content.length,
+          content,
+        },
+      });
+    } catch (error) {
+      /*
+        UGYANAZ A MINTA, MINT A MEGRENDELŐLAPNÁL (`maintenance-orders.service.ts`):
+        a szám itt sem felhasználói bevitel, hanem a
+        `nextCompletionCertificateNumber` által számolt sorban következő
+        érték -- a P2002 versenyhelyzetet jelent, nem elgépelést. Az
+        `serviceJobId @unique`-et fentebb, alkalmazás-szinten már
+        ellenőriztük (79. sor), tehát ide gyakorlatilag csak a szám-ütközés
+        juthat el; egy újrapróbálás akkor is a helyes hibát adná, ha mégsem.
+      */
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        throw new ConflictException(
+          `A(z) ${number} teljesítési igazolás száma időközben már kiosztásra került. Próbáld újra.`,
+        );
+      throw error;
+    }
   }
 
   async uploadSignedDocument(id: string, file: Express.Multer.File) {
