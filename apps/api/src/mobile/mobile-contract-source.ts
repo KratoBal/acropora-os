@@ -65,10 +65,19 @@ export function mezok(s: string, nev: string): Set<string> {
 /**
  * EGY DTO OSZTALY MEZONEVEI, az ososztalyokkal egyutt.
  *
- * KET ALAKBAN allhatnak, es mind a ketto kell: sajat soron
- * (`  assigneeIds?: string[];`), vagy a dekoratorok UTAN, ugyanabban a sorban
- * (`  @IsString() @IsOptional() customerId?: string | null;`). Csak az elsore
- * merve a jegy DTO-janak a FELE kimaradna.
+ * HAROM ALAKBAN allhatnak, es mind a harom kell: sajat soron
+ * (`  assigneeIds?: string[];`), a dekoratorok UTAN, ugyanabban a sorban
+ * (`  @IsString() @IsOptional() customerId?: string | null;`), VAGY
+ * dekoratorral es alapertekkel, TIPUS-JELOLES NELKUL
+ * (`  @IsBoolean() @IsOptional() systemVolumeIsManual = false;`) -- ez a
+ * harmadik alak a `class-validator` DTO-kban gyakori (a tipus az
+ * alapertekbol kovetkezik), es a `:`-ra varo minta CSENDBEN kihagyta.
+ *
+ * MERVE 2026-09-24: az akvarium-DTO ket mezoje (`systemVolumeIsManual`,
+ * `quantity = 1`) ezen a hianyon bukott -- a mobil oldal helyesen kuldte
+ * oket, a DTO is ismerte, csak EZ A KIOLVASAS nem latta. Ha csak a `:`-os
+ * alakot nezzuk, a jegy DTO-janak a fele is kimaradna -- ugyanez a hianyossag
+ * most a `=`-os alakra is fennallt.
  */
 export function dtoMezok(s: string, nev: string): Set<string> {
   const osszes = new Set<string>();
@@ -77,7 +86,7 @@ export function dtoMezok(s: string, nev: string): Set<string> {
   while (aktualis && !latott.has(aktualis)) {
     latott.add(aktualis);
     const t = torzs(s, "export class", aktualis);
-    for (const m of t.matchAll(/(?:^\s{2}|\)\s+)([A-Za-z_]\w*)[!?]?\s*:/gm))
+    for (const m of t.matchAll(/(?:^\s{2}|\)\s+)([A-Za-z_]\w*)[!?]?\s*[:=]/gm))
       osszes.add(m[1]!);
     aktualis = osNeve(s, aktualis);
   }

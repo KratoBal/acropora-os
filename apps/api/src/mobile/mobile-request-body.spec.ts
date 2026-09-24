@@ -197,6 +197,35 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  {
+    /**
+     * AKVARIUM FELVITELE, MOBIL SZELET (2026-09-24, #1051-re igazitva). A
+     * torzs NEVESITETT tipussal megy (`CreateAquariumInput`), tehat PAR lett
+     * belole itt, nem a hivohelyek kozott.
+     */
+    mit: "akvárium felvitele",
+    mobil: "../mobile/src/lib/api/aquariums.ts",
+    mobilNev: "CreateAquariumInput",
+    dto: "src/aquariums/dto/aquarium.dto.ts",
+    dtoNev: "CreateAquariumDto",
+    kontroll: ["ownershipType", "name"],
+  },
+  {
+    /**
+     * AKVARIUM ESZKOZ FELVITELE, UGYANAZ A SZELET. Kulon parba allitva, mert a
+     * kulon vegponton (`POST /aquariums/:id/equipment`) kulon DTO fut
+     * (`CreateAquariumEquipmentDto`), nem az akvarium-letrehozas DTO-ja.
+     */
+    mit: "akvárium eszköz felvitele",
+    mobil: "../mobile/src/lib/api/aquariums.ts",
+    mobilNev: "CreateAquariumEquipmentInput",
+    dto: "src/aquariums/dto/aquarium.dto.ts",
+    dtoNev: "CreateAquariumEquipmentDto",
+    kontroll: ["kind"],
+    /* A KOZOS MEZO A `kind` -- a tobbi opcionalis mindket oldalon. */
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
 ];
 
 /**
@@ -279,7 +308,14 @@ const PAROK: readonly Par[] = [
  * uzenete kerte a dontest, es a valasz IGEN: a torzs NEVESITETT tipussal megy
  * (`CreateMaterialRequestInput`), tehat PAR lett belole fent.
  */
-const IRAS_HIVASOK_MA = 17;
+/**
+ * 2026-09-24: 17 -> 19. Ket uj hivas, mind a ketto NEVESITETT tipussal
+ * (`lib/api/aquariums.ts`): `createAquarium` (`CreateAquariumInput`) es
+ * `addAquariumEquipment` (`CreateAquariumEquipmentInput`), mindketto PAR lett
+ * belole fent. A harmadik iras-hivas ugyanabban a fajlban
+ * (`removeAquariumEquipment`) torzs nelkuli DELETE, tehat nem szamit ide.
+ */
+const IRAS_HIVASOK_MA = 19;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

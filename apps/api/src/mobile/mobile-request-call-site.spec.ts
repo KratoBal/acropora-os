@@ -281,7 +281,14 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
  * orzo -- ami nevesitett tipusokat par-ba allit -- MAR LATJA: ez a hivas NEM
  * kerul a HIVOHELYEK koze, csak ebbe a teljes-fa szamlalasba.
  */
-const IRAS_HIVASOK_A_FAN = 18;
+/**
+ * 2026-09-24: 18 -> 20. Ket uj hivas az AKVARIUM FELVITELENEL
+ * (`createAquarium`, `addAquariumEquipment`, `lib/api/aquariums.ts`), mindket
+ * torzs NEVESITETT tipussal megy, tehat a szomszed orzo MAR LATJA oket: NEM
+ * kerulnek a HIVOHELYEK koze. A `removeAquariumEquipment` torzs nelkuli
+ * DELETE, tehat ide sem szamit.
+ */
+const IRAS_HIVASOK_A_FAN = 20;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

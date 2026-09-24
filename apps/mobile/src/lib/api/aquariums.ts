@@ -110,14 +110,6 @@ export interface CreateAquariumInput {
   equipment?: CreateAquariumEquipmentInput[];
 }
 
-export type UpdateAquariumInput = Partial<
-  Omit<CreateAquariumInput, "customerId">
-> & {
-  customerId?: string | null;
-  isActive?: boolean;
-  expectedUpdatedAt: string;
-};
-
 export interface AquariumSummary {
   id: string;
   aquariumNumber: string;
@@ -172,13 +164,6 @@ export function getAquarium(id: string) {
 export function createAquarium(input: CreateAquariumInput) {
   return apiRequest<AquariumDetail>(BASE, {
     method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-export function updateAquarium(id: string, input: UpdateAquariumInput) {
-  return apiRequest<AquariumDetail>(`${BASE}/${encodeURIComponent(id)}`, {
-    method: "PATCH",
     body: JSON.stringify(input),
   });
 }
