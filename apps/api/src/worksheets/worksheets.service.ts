@@ -1063,14 +1063,11 @@ export class WorksheetsService {
   async sign(
     id: string,
     input: SignWorksheetVersionDto,
-    actor: AuthenticatedUser | string,
+    actor: AuthenticatedUser,
     now: Date = new Date(),
   ): Promise<WorksheetDetail> {
-    const actorUserId = typeof actor === "string" ? actor : actor.id;
-    const scope =
-      typeof actor === "string"
-        ? { kind: "internal" as const }
-        : partnerScopeOf(actor);
+    const actorUserId = actor.id;
+    const scope = partnerScopeOf(actor);
     const worksheet = await this.requireWorksheet(id, scope);
 
     /**
@@ -1328,7 +1325,7 @@ export class WorksheetsService {
    */
   async signerCandidates(
     id: string,
-    scope: PartnerScope = { kind: "internal" },
+    scope: PartnerScope,
     actorUserId?: string,
   ) {
     const worksheet = await this.requireWorksheet(id, scope);
