@@ -44,7 +44,6 @@ const RESZLETLAP: DetailRow = {
   jobNumber: "HJ-2026-001",
   kind: "REPAIR",
   title: "Szivattyú leállt",
-  kind: "REPAIR",
   description: null,
   status: "NEW",
   createdAt: new Date("2026-09-16T08:00:00.000Z"),

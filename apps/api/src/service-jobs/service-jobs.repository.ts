@@ -1150,7 +1150,6 @@ export class ServiceJobsRepository {
         jobNumber: true,
         kind: true,
         title: true,
-        kind: true,
         description: true,
         status: true,
         createdAt: true,

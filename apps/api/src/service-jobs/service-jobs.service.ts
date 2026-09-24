@@ -1143,7 +1143,6 @@ export class ServiceJobsService {
       jobNumber: row.jobNumber,
       kind: row.kind,
       title: row.title,
-      kind: row.kind,
       description: row.description,
       /**
        * A RESZLETLAP REJTETT JEGYNEL IS ELERHETO, tehat itt mind a ket ertek

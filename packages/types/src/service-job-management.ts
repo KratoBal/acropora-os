@@ -258,8 +258,6 @@ export interface ServiceJobDetail {
    */
   kind: ServiceJobKind;
   title: string;
-  /** Javítás vagy szerződéses karbantartás; a részletlap is megnevezheti. */
-  kind: "REPAIR" | "MAINTENANCE";
   description: string | null;
   status: ServiceJobStatusValue;
   partnerStatus: ServiceJobPartnerStatus;
