@@ -7,12 +7,19 @@ import { useThemePreference } from "@/lib/theme/use-theme-preference";
 import { pilotInter } from "./pilot-font";
 
 /**
- * KÍSÉRLETI, ÖNÁLLÓ MEGJELENÍTŐ ELEMEK -- CSAK AZ AKVÁRIUM OLDALAKNAK.
+ * KÍSÉRLETI, ÖNÁLLÓ MEGJELENÍTŐ ELEMEK -- MINDEN FIGMA PILOT OLDALNAK.
  *
  * Ezek NEM a `@acropora/ui` `Button`/`Card`/`Badge` cseréi: azok a mai közös
  * arculatot (`brand-*`/`dusk-*`) viselik, ez a készlet a Figma Make terv
  * `pilot-aqua-*`/`pilot-grey-*` tokenjeit. A két készlet szándékosan él
  * egymás mellett -- lásd `figma-theme.css` fejlécét, miért.
+ *
+ * IDE KÖLTÖZÖTT 2026-09-24-én, A SZERVIZ / HIBAJEGYEK FIGMA-KÖRREL: eddig
+ * `components/aquariums/pilot/` alatt állt, kizárólag az Akváriumok
+ * oldalainak. A tokenkészlet mindig is domain-semleges volt (lásd fent), a
+ * FÁJL HELYE nem -- a CONTRIBUTING szabálya szerint ("ha egy komponenst
+ * második helyen is használnál, oda kerül") a második fogyasztó (a
+ * Hibajegyek pilot-oldalai) elmozdította ide.
  *
  * A FORMA A FIGMA `src/App.tsx` MIKRO-KOMPONENSEIT KÖVETI (Badge, Avatar,
  * Btn, SegmentedControl, FormField, Input, Select, Card, CardHeader, Drawer,
@@ -59,11 +66,21 @@ export function PilotBadge({
   variant = "default",
 }: {
   children: ReactNode;
-  variant?: "teal" | "grey" | "default";
+  variant?: "teal" | "grey" | "amber" | "default";
 }) {
   const styles = {
     teal: "bg-pilot-aqua-50 text-pilot-aqua-700 ring-1 ring-pilot-aqua-200",
     grey: "bg-pilot-grey-100 text-pilot-grey-600 ring-1 ring-pilot-grey-200",
+    /**
+     * AMBER -- EGYETLEN VÁLTOZAT A FIGMA HIBAJEGY-TERV KÉT SZÍNÉRE
+     * ("Válaszra vár" ÉS "Alkatrészre vár", az utóbbi eredetileg narancs).
+     * NARANCS TOKEN NINCS FELVÉVE: a brief szerint ("Use ONLY those
+     * tokens") csak a meglévő két készlet (`pilot-aqua-*`/`pilot-grey-*`)
+     * és a már létező `pilot-amber-*` használható -- lásd
+     * `figma-theme.css` fejlécét. A megkülönböztetés a CÍMKE SZÖVEGÉBEN
+     * marad (a nyolc belső állapot neve), nem a színben.
+     */
+    amber: "bg-pilot-amber-50 text-pilot-amber-700 ring-1 ring-pilot-amber-100",
     default: "bg-pilot-grey-100 text-pilot-grey-600 ring-1 ring-pilot-grey-200",
   };
   return (
@@ -72,6 +89,47 @@ export function PilotBadge({
     >
       {children}
     </span>
+  );
+}
+
+/**
+ * TÖBB DELEGÁLT EGYMÁST ÁTFEDŐ AVATÁRKÉNT, "+N"-NEL A HATÁR FÖLÖTT.
+ *
+ * A Figma Szerviz / Hibajegyek terv `DelegaltAvatarStack` komponensének
+ * átültetése (murena, 2026-09-24): legfeljebb `max` avatár látszik, a
+ * többi egy számban. Üres listánál egy halvány gondolatjel, NEM üres hely
+ * -- a hiány is állítás, lásd a ház szabályát.
+ */
+export function PilotAvatarStack({
+  people,
+  max = 3,
+}: {
+  people: readonly { userId: string; name: string }[];
+  max?: number;
+}) {
+  if (people.length === 0)
+    return <span className="text-pilot-grey-300">—</span>;
+  const shown = people.slice(0, max);
+  const extra = people.length - shown.length;
+  return (
+    <div className="flex items-center">
+      <div className="flex -space-x-1.5">
+        {shown.map((person) => (
+          <span key={person.userId} title={person.name}>
+            <PilotAvatar
+              initials={pilotInitials(person.name)}
+              color={pilotAvatarColor(person.userId)}
+              size="sm"
+            />
+          </span>
+        ))}
+      </div>
+      {extra > 0 ? (
+        <span className="ml-1 text-[10px] font-medium text-pilot-grey-400">
+          +{extra}
+        </span>
+      ) : null}
+    </div>
   );
 }
 

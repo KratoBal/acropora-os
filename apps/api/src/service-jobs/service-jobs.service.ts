@@ -1078,6 +1078,14 @@ export class ServiceJobsService {
         partnerStatusLabel: partnerStatusLabel(row.status),
         customerName: row.customerName,
         departmentPath: row.departmentPath,
+        departmentCode: row.departmentCode,
+        // UGYANAZ A NEV-FORDITAS, MINT A RESZLETLAPON (`detail()`): a
+        // becenev, ha van -- lasd `personDisplayName` fejleceet.
+        assignees: row.assignees.map((assignee) => ({
+          userId: assignee.userId,
+          name: personDisplayName(assignee.user),
+          assignedAt: assignee.assignedAt.toISOString(),
+        })),
         worksheetCount: row.worksheetCount,
         createdAt: row.createdAt.toISOString(),
         hidden: row.hiddenAt !== null,
