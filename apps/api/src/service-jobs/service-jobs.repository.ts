@@ -1328,6 +1328,12 @@ export class ServiceJobsRepository {
             userId: true,
             assignedAt: true,
             user: { select: { displayName: true, nickname: true } },
+            // A DELEGALO NEVE -- felveve a Figma-adatlap "Delegált kollégák"
+            // kartyajahoz (murena, 2026-09-24, Balazs kerese acrobot
+            // kozvetitesevel): a Figma-terv soronkent kiirja, ki es mikor
+            // delegalt. Az azonosito (`assignedById`) MAR a semaban allt,
+            // csak a valasz eddig nem hozta a nevet.
+            assignedBy: { select: { displayName: true, nickname: true } },
           },
         },
       },
