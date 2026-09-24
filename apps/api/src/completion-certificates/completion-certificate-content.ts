@@ -11,12 +11,30 @@ import type { CompletionCertificateInput } from "./completion-certificate-types.
  * A DÁTUM ALAKJA A MINTÁN "ÉÉÉÉ-HH-NN" (pl. "2026-07-28"), NEM a magyar
  * hosszú forma ("2026. július 28."), amit a hibajegy PDF-je használ máshol.
  * Ezt a mintáról mértem, nem találgattam.
+ *
+ * === A NAPTÁRI NAP BUDAPESTI IDŐ SZERINT ÁLL, NEM UTC SZERINT ===
+ *
+ * EZ A FÁJL KORÁBBAN `getUTCFullYear`/`getUTCMonth`/`getUTCDate`-tel olvasta
+ * ki a napot -- acrobot mérése (nautilus PR #1046-jának átnézésekor jött ki,
+ * és mindkettőnkre állt): egy `2026-07-28T22:30:00Z` bélyeg Budapesten MÁR
+ * 07-29, tehát az UTC-s olvasás egy éjfél körüli generáláson rossz napot írt
+ * volna egy aláírandó dokumentumra.
+ *
+ * A HELYES MINTA MÁR A KÓDBÁZISBAN ÁLLT:
+ * `worksheets/worksheet-sheet-content.ts` `sheetDate()`-je, ugyanazzal a
+ * zónás `Intl.DateTimeFormat` formázóval -- ezt a mintát követi ez a
+ * függvény is, csak nem importálja onnan (lásd a fájl fejlécében a döntést,
+ * hogy ez a szelet önálló marad).
  */
+const HU_DATE = new Intl.DateTimeFormat("hu-HU", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "Europe/Budapest",
+});
+
 export function isoDate(value: Date): string {
-  const year = value.getUTCFullYear();
-  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(value.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return HU_DATE.format(value).replace(/\. /g, "-").replace(/\.$/, "");
 }
 
 const groupedNumber = new Intl.NumberFormat("hu-HU", {
@@ -27,11 +45,12 @@ const groupedNumber = new Intl.NumberFormat("hu-HU", {
  * EZREDES TAGOLÁS, SZÓKÖZZEL -- de `Intl.NumberFormat("hu-HU")` NEM sima
  * ASCII szóközt (0x20) ad tagolónak, hanem törésmentes szóközt (U+00A0).
  * Mérve. Ez a PDF-ben és a visszaolvasó tesztben is meglepetést okozna
- * (a keresett `"2 100 000"` sosem találná meg a `"2 100 000"`
- * sort), ezért itt egységesen sima szóközre cseréljük.
+ * (a keresett `"2 100 000"` -- sima szóközzel -- SOSEM találná meg a
+ * PDF szövegét, amiben a szám tagolója `\u00a0`, nem `0x20`), ezért itt
+ * egységesen sima szóközre cseréljük.
  */
 export function formatHuf(amount: Prisma.Decimal): string {
-  return groupedNumber.format(amount.toNumber()).replace(/ /g, " ");
+  return groupedNumber.format(amount.toNumber()).replace(/\u00a0/g, " ");
 }
 
 export interface CompletionCertificateLine {
