@@ -1,4 +1,4 @@
-import { ServiceJobDetailPage } from "@/components/service-jobs/service-job-detail-page";
+import { PilotServiceJobDetailPage } from "@/components/service-jobs/pilot/pilot-service-job-detail-page";
 
 export default async function ServiceJobDetailRoute({
   params,
@@ -6,5 +6,5 @@ export default async function ServiceJobDetailRoute({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <ServiceJobDetailPage jobId={id} />;
+  return <PilotServiceJobDetailPage jobId={id} />;
 }

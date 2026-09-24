@@ -199,6 +199,18 @@ export interface ServiceJobAssignee {
   /** A felületre szánt név: a becenév, ha van (lásd `personDisplayName`). */
   name: string;
   assignedAt: string;
+  /**
+   * KI DELEGÁLTA -- ELHAGYHATÓ MEZŐ, ÉS EZ SZÁNDÉKOS.
+   *
+   * A `ServiceJobAssignee` a LISTA (`ServiceJobListItem.assignees`) ÉS a
+   * RÉSZLETLAP (`ServiceJobDetail.assignees`) válaszában is szerepel -- a
+   * lista "Delegálva" oszlopa csak avatarokat mutat, a delegáló nevét nem
+   * kéri le, tehát ott ez a mező hiányzik. A RÉSZLETLAP viszont kitölti
+   * (felvéve 2026-09-24-én, a Figma "Delegált kollégák" kártyájához, ami
+   * soronként kiírja: "delegálta: X, dátum"). `null`, ha a delegáló
+   * azonosítója hiányzik vagy a felhasználó azóta törölve lett.
+   */
+  assignedByName?: string | null;
 }
 
 /** Fénykép vagy egyéb fájl a jegyen. */
