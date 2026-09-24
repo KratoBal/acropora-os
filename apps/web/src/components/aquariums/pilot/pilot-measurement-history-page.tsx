@@ -48,9 +48,10 @@ import {
  * Brief: `exchange/figma-akvariumok-leiras-3-kor-meresi-elozmenyek-2026-09-24.md`,
  * forrás: `exchange/figma-akvariumok-make-3/src/MeresElozmenyek.tsx`.
  * Belépési pont: `pilot-aquarium-water-values.tsx` "Összes mérés és
- * grafikon" linkje. Ennek az oldalnak NINCS "mai" párja -- teljesen új --,
- * ezért nincs `PilotToggle` mögötte: maga a link csak a pilot Vízértékek
- * kártyán jelenik meg, a mai (`aquarium-water-values.tsx`) kártyán nem.
+ * grafikon" linkje. Ennek az oldalnak sosem volt "mai" párja -- teljesen
+ * új --, és 2026-09-24 18:14 óta (Balázs döntése, a Figma lett a default)
+ * a TÖBBI pilot oldalnak sincs már: a korábbi váltó (`PilotToggle`) és a
+ * régi komponensek törölve.
  *
  * HÁROM DÖNTÉS, AMIT ACROBOT KIFEJEZETTEN RÁM BÍZOTT (2026-09-24 17:11):
  *
