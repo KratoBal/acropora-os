@@ -4,9 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { worksheetStatusLabel } from "@acropora/types";
 
-import { eszkozAzonosito } from "@/lib/eszkoz-azonosito";
 import { partnerApi } from "@/lib/api";
-import { useAuth } from "./auth";
 import { Empty, Message } from "./ticket-list";
 import {
   ALLAPOT_CIMKE,
@@ -17,136 +15,13 @@ import {
   PANEL_CIM,
 } from "./frame";
 
-export function Assets() {
-  const { user } = useAuth();
-  const [data, setData] = useState<Awaited<
-    ReturnType<typeof partnerApi.assets>
-  > | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [kereses, setKereses] = useState("");
-  const [helyszin, setHelyszin] = useState("");
-  const [helyszinek, setHelyszinek] = useState<
-    { id: string; name: string; code: string }[]
-  >([]);
-
-  /*
-    A HELYSZINEK UGYANABBOL A FORRASBOL JONNEK, mint a jegynyito urlap
-    helyszin-valasztoja (`new-ticket.tsx`). Egy masodik forras ket kulonbozo
-    listat adna ugyanarra a kerdesre.
-
-    A KULON `Helyszinek` LAP 2026-09-23-IG LETEZETT, ES A SAJAT MENU-PONTJA
-    IS -- Balazs kerte a kivetelet (2026-09-22 11:53:49 UTC, "a partnernek nem
-    relevans a helyszin"), mert a partner-portalon KIVUL ez a szuro az
-    EGYETLEN hely, ahol a helyszin-lista megjelenik. A LEKERDEZES (a
-    hozzarendeles szerinti szukites) valtozatlan maradt: azt a jegynyito
-    urlap is hasznalja, es ha kivennenk, a partner ott ujra minden helyszinet
-    latna.
-  */
-  useEffect(() => {
-    if (!user?.customerId) return;
-    void partnerApi
-      .departments(user.customerId)
-      .then((valasz) => setHelyszinek(valasz.items))
-      .catch(() => setHelyszinek([]));
-  }, [user?.customerId]);
-
-  useEffect(() => {
-    if (!user?.customerId) return;
-    /*
-      A SZURES A SZERVEREN TORTENIK. A lista lapozott, tehat a betoltott
-      oldal folotti szures a lapozas elso napjan csendben hianyos lenne.
-    */
-    void partnerApi
-      .assets({
-        ...(helyszin ? { departmentId: helyszin } : {}),
-        ...(kereses.trim() ? { search: kereses } : {}),
-      })
-      .then(setData)
-      .catch((cause) =>
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Az eszközök nem tölthetők be.",
-        ),
-      );
-  }, [user?.customerId, helyszin, kereses]);
-  return (
-    <section>
-      <header className={LAP_FEJLEC}>
-        <div>
-          <p className={CIMKE}>SAJÁT ADATOK</p>
-          <h1 className={LAP_CIM}>Eszközök</h1>
-          <p className={LAP_LEIRAS}>
-            A cégéhez tartozó eszközök. Kattintson egy eszközre az adatlapjáért.
-          </p>
-        </div>
-      </header>
-      {/*
-        A KET SZURO EGYUTT MEGY FEL A SZERVERNEK. A helyszin-valasztasnal a
-        szerver a RESZFAT is beleveszi, tehat egy nagyobb helyszint valasztva
-        az alatta allo egysegek eszkozei is jonnek -- ez szandekos.
-      */}
-      <div className="filter-bar">
-        <label>
-          <span>Keresés</span>
-          <input
-            type="search"
-            value={kereses}
-            onChange={(esemeny) => setKereses(esemeny.target.value)}
-            placeholder="Név, eszközszám, gyártó"
-          />
-        </label>
-        <label>
-          <span>Helyszín</span>
-          <select
-            value={helyszin}
-            onChange={(esemeny) => setHelyszin(esemeny.target.value)}
-          >
-            <option value="">Mind</option>
-            {helyszinek.map((egyseg) => (
-              <option key={egyseg.id} value={egyseg.id}>
-                {egyseg.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {error ? <Message tone="error" text={error} /> : null}
-      {data?.items.length ? (
-        <div className="card-list">
-          {data.items.map((asset) => (
-            <Link
-              className="reference-card"
-              key={asset.id}
-              href={`/eszkozok/${asset.id}`}
-            >
-              <div>
-                <h2 className={PANEL_CIM}>{asset.name}</h2>
-                <p>
-                  {eszkozAzonosito(asset)}
-                  {asset.partnerInternalCode
-                    ? ` · ${asset.partnerInternalCode}`
-                    : ""}
-                </p>
-              </div>
-              <div>
-                <span>
-                  {asset.unit?.path.join(" / ") ?? "Helyszín nincs megadva"}
-                </span>
-                <span className={ALLAPOT_CIMKE}>{asset.status}</span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <Empty
-          title="Nincs megjeleníthető eszköz"
-          text="A partneri fiókhoz jelenleg nincs eszköz rögzítve."
-        />
-      )}
-    </section>
-  );
-}
+/*
+  AZ `Assets` KOMPONENS INNEN 2026-09-24-EN ATKOLTOZOTT AZ `asset-list.tsx`
+  SAJAT FAJLBA, es `AssetList` neven -- Balazs kerese, hogy az eszkozkezelo
+  UGYANUGY nezzen ki, mint az app.acropora.hu, tobb mint amit ez a keret
+  (kartya-lista, nyers allapot-enum) adni tudott. A `Worksheets` valtozatlan
+  marad: a munkalap-lapok ebben a korben nem erintettek.
+*/
 
 export function Worksheets() {
   const [data, setData] = useState<Awaited<

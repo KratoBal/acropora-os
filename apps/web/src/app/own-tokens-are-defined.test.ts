@@ -77,7 +77,16 @@ const HASZNALAT = new RegExp(
 
 describe("saját színtokenek", () => {
   const gyoker = join(__dirname, "..");
-  const css = readFileSync(join(gyoker, "app/globals.css"), "utf8");
+  /*
+    A `@theme` BLOKK 2026-09-24-TOL A `packages/ui/src/theme.css`-BEN EL,
+    NEM ITT -- lasd ott a teljes indoklast (a partner portal is importalja).
+    Ez a teszt tovabbra is az `apps/web/src` FAJLJAIT vizsgalja hasznalatra
+    (azok nem koltoztek), csak a BLOKK FORRASA valtozott.
+  */
+  const css = readFileSync(
+    join(gyoker, "..", "..", "..", "packages/ui/src/theme.css"),
+    "utf8",
+  );
   const blokk = themeBlokk(css);
 
   const fajlok = readdirSync(gyoker, { recursive: true, encoding: "utf8" })

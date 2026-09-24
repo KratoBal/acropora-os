@@ -1,4 +1,4 @@
-import { Assets } from "@/components/reference-lists";
+import { AssetList } from "@/components/asset-list";
 export default function AssetsPage() {
-  return <Assets />;
+  return <AssetList />;
 }

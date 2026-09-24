@@ -195,6 +195,13 @@ export type {
   CreateAssetInput,
   UpdateAssetInput,
 } from "./asset-management.js";
+export {
+  assetKindLabel,
+  assetStatusLabel,
+  assetStatusTone,
+  assetCriticalityLabel,
+  assetEventLabel,
+} from "./asset-management.js";
 export type { AssetLabel, AssetLabelIssueResult } from "./asset-label.js";
 export type {
   UnitOfMeasure,

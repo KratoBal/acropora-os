@@ -1,0 +1,300 @@
+/**
+ * A KOZOS VIZUALIS ALAP -- EGYETLEN HELY, KET FOGYASZTOVAL.
+ *
+ * Balazs kerese (2026-09-24 07:28 UTC, verbatim): "en orulnek neki, ha
+ * ugyanugy nezne ki a partner portalon pl az eszkozkezelo mint az
+ * app.acropora.hu-n". A partner portal (`apps/partner`) sajat globals.css-e
+ * a `packages/ui` komponenseit hasznalta (`brand-`, `text-ink`, `bg-paper`,
+ * `border-line`), DE a `@theme` blokk, ami ezeket a neveket DEFINIALJA,
+ * kizarolag `apps/web/src/app/globals.css`-ben allt -- a portalon ezek az
+ * osztalyok CSENDBEN nem generaltak semmit (a lap betoltodott, csak stilus
+ * nelkul). Ez a fajl a javitas: a tokenek EGY helyen allnak, es mindket app
+ * sajat globals.css-e `@import`-alja.
+ *
+ * KI NE MASOLD EZT A FAJLT: ha a partner sajat peldanyt kapna, a kovetkezo
+ * szinvaltoztatas csak az egyikre erne el, es a ket felulet szetdriftelne
+ * pontosan ugyanugy, ahogy most is szet volt csuszva.
+ *
+ * ===================================================================
+ * MIERT A KET MEGLEVO SKALA CELPONTJAT IRTUK AT, ES NEM A HIVASI HELYEKET
+ * ===================================================================
+ *
+ * EZ A SZAKASZ AZT IRJA LE, MIERT IGY KEZDODOTT -- es a "ma" azota elmult:
+ * 2026-09-15-en mind a ket skala megkapta az igaz nevet (`teal` -> `brand`,
+ * `slate` -> `dusk`), tehat a nevek MA MAR NEM hazudnak. A szakasz azert marad
+ * itt, mert a DONTES indoka tulel: ha legkozelebb egy egesz rampa cserel
+ * erteket, ugyanez a harom ut all majd, ugyanezekkel az arakkal.
+ *
+ * AKKOR, a kezdetkor: a felulet nevezett Tailwind-skalakkal szinezett, merve
+ * 875 `slate-*` es `teal-*` elofordulas az apps/web-ben, plusz 71 a
+ * packages/ui-ban es 24 a hejban -- kozel hetven fajlban, amibol a tobbseg
+ * egyetlen akkor futo munkahoz sem tartozott.
+ *
+ * Harom uton lehetne atallni, es a masodik ketto rosszabb:
+ *
+ *   a skalak CELPONTJAT irjuk at (ez)   egy fajl, egy sorral visszavonhato,
+ *                                       es EGYETLEN nyitott aggal sem utkozik
+ *   minden hivasi helyet atirunk        ~970 sor hetven fajlban, es minden
+ *                                       nyitott PR-rel konfliktusba kerul
+ *   parhuzamos osztalyneveket vezetunk  a ket keszlet egymas mellett el, es
+ *   be, es fokozatosan allunk at        az atmenet kozben kevert a felulet
+ *
+ * Balazs azt kerte, hogy a valtozas KULON legyen visszavonhato a rajta epulo
+ * munkatol. Ez az alak teszi azza: ha a lila nem tetszik, ez a blokk kikerul,
+ * es minden oldal visszaall, anelkul hogy barmi mas elveszne.
+ *
+ * AMIT EZ KOSTOLT, KIMONDVA: a nevek HAZUDTAK. Aki uj kodot irt, `teal-700`-t
+ * latva turkizre szamitott. Ezert allt melle a KET UJ, IGAZ NEVU keszlet
+ * (`brand-*`, `ink`, `nav`, `paper`, `line`, `coral`).
+ *
+ * A `teal-*` FELE 2026-09-15-EN LEZARULT: mind az 52 hivasi hely atallt
+ * `brand-*`-ra, es a `teal-*` masolat kikerult. Ez bizonyithatoan pixelre
+ * azonos volt, nem velemeny: a hasznalt tiz fokozat mindegyikenek letezett
+ * BETURE AZONOS erteku `brand-*` parja, a `teal-950`-nek pedig NULLA hivoja
+ * volt (az egyetlen talalat maga a definicio).
+ *
+ * A SEMLEGES RAMPA 2026-09-15-EN `dusk` LETT, es a nev MERESEN all, nem
+ * benyomason:
+ *
+ *     a rampa    248-260 fok arnyalat, 9-25 szazalek telitettseg  (mind a 11 fokozat)
+ *     a Tailwind sajat slate-je    210-229 fok
+ *
+ * A ket rampa tehat NEM cserelheto fel: a mienk IBOLYA fele huz, a Tailwinde
+ * KEK fele, 38-50 fok kulonbseggel a vilagos es a kozepso fokozatokon. Itt
+ * korabban az allt, hogy a skala "nem a Tailwind hideg szurkeje" -- az ALLITAS
+ * volt, amit senki nem mert le, es evekig igaznak latszott volna. A meres
+ * napja azert all itt, mert datum nelkul fel ev mulva ujra csak allitas lenne.
+ *
+ * MIERT `dusk` ES NEM `ash` (acrobot dontese, 2026-09-15): az `ash` nem
+ * hallgat az arnyalatrol, hanem azt allitja, hogy SEMLEGES szurke -- es a
+ * fenti meres szerint a rampa nem az. Ugyanabba az iranyba tevedne, mint a
+ * `slate`, csak halkabban, es a meglepetes okat nehezebb volna megtalalni.
+ *
+ * A FELTETEL, AMI A NEVHEZ TARTOZIK: ha a lila valaha kikerul az arculatbol,
+ * akkor a `dusk` ugyanugy hazudni fog. Olyankor a NEVCSERE UGYANABBA A
+ * VALTOZASBA MEGY, MINT AZ ERTEKEK -- kulon commitban nem. Az ara gepies
+ * (a fokozatszamok valtozatlanok, a feloldott ertekek hivasonkent azonosak,
+ * lasd a `teal` cseret), a rossz neve viszont MINDEN olvasot terhelne,
+ * folyamatosan.
+ */
+@theme {
+  /* ---- A SEMLEGES RAMPA. A prototipus szurkei lilaba hajlanak, nem kekbe:
+     a `--paper` (#f6f5f8) es az `--ink` (#26233b) kozott interpolalt sor. ---- */
+  --color-dusk-50: #f6f5f8;
+  --color-dusk-100: #eeecf3;
+  --color-dusk-200: #e5e2eb;
+  --color-dusk-300: #d3cfdd;
+  --color-dusk-400: #9a95a8;
+  --color-dusk-500: #686477;
+  --color-dusk-600: #565269;
+  --color-dusk-700: #454155;
+  --color-dusk-800: #373347;
+  --color-dusk-900: #2f2b40;
+  --color-dusk-950: #26233b;
+
+  /* ---- AZ ALLAPOT-SZINEK. A prototipus part ad mindegyikhez (hatter es
+     szoveg); a kozbenso fokozatok azokbol szarmaznak. Csak a TENYLEG
+     HASZNALT fokozatok allnak itt: egy kitalalt teljes rampa olyasmit
+     allitana, amit senki nem mert le. ---- */
+  --color-emerald-50: #e5f3eb;
+  --color-emerald-200: #cde4d7;
+  --color-emerald-600: #2f7a5c;
+  --color-emerald-700: #26664d;
+  --color-emerald-800: #1f5440;
+  --color-emerald-900: #194433;
+
+  --color-amber-50: #fff1db;
+  --color-amber-200: #f3ddba;
+  --color-amber-500: #a36522;
+  --color-amber-600: #955c1f;
+  --color-amber-700: #86521b;
+  --color-amber-800: #6d4216;
+
+  --color-rose-50: #fce9ec;
+  --color-rose-200: #f1ccd3;
+  --color-rose-500: #b93b51;
+  --color-rose-600: #ae364a;
+  --color-rose-700: #a33145;
+  --color-rose-900: #732231;
+
+  --color-sky-50: #e9f0ff;
+  --color-sky-100: #dbe6fb;
+  --color-sky-200: #c8d7f3;
+  --color-sky-600: #3c68ab;
+  --color-sky-700: #355e9a;
+  --color-sky-800: #2c4e80;
+  --color-sky-900: #233f67;
+
+  /* ---- A KIEMELO SZIN, IGAZ NEVEN. A prototipus `--purple`-je (#6150bd) a
+     700-as fokozaton all, mert a felulet azt hasznalja a legtobbet.
+
+     EZ A SKALA KORABBAN KETSZER ALLT ITT: egyszer `teal-*` neven (a
+     visszavonhatosag miatt, amig a hivasi helyek at nem alltak), egyszer
+     igy. A hivasi helyek 2026-09-15-en atalltak, tehat a `teal-*` masolat
+     kikerult -- nem azert, mert felesleges volt, hanem mert BETOLTOTTE a
+     szerepet. Egy ket helyen allo szinertek pontosan az, ami ellen ez a
+     fajl kulon figyelmeztet. ---- */
+  --color-brand-50: #f4f1fb;
+  --color-brand-100: #ede8ff;
+  --color-brand-200: #ded5fa;
+  --color-brand-300: #c3b5ee;
+  --color-brand-400: #9e80e8;
+  --color-brand-500: #7a68cc;
+  --color-brand-600: #6f5cc7;
+  --color-brand-700: #6150bd;
+  --color-brand-800: #4d3e9c;
+  --color-brand-900: #3f3280;
+
+  /**
+   * A szoveg legsotetebb arnyalata.
+   *
+   * EZ A MONDAT A TOKENRE IGAZ, DE AZ ERTEKRE NEM -- ES A KETTOT KONNYU
+   * OSSZEMOSNI. Merve 2026-09-15:
+   *
+   *     `text-ink`        44 hely, MIND szoveg
+   *     `bg-ink`           0 hely
+   *     ugyanez az ertek `dusk-950` neven:   9 szoveg + 8 HATTER
+   *
+   * Vagyis a token maga csak szoveget szinez, es a fenti mondat rola all. Az
+   * ERTEK viszont MASODIK szerepben is all, es az teljes egeszeben a MASIK
+   * neven fut -- tehat errol a sorrol nezve LATHATATLAN.
+   *
+   * A NYOLC HATTER-HELY. SORSZAM HELYETT KERESES, mert egy sorszam a kovetkezo
+   * szerkesztesnel elavul, es egy elavult hivatkozas rosszabb a hianyzonal:
+   *
+   *     grep -rn "bg-dusk-950" apps/web/src --include="*.tsx"
+   *
+   * ES EZ A MEGJEGYZES MAR EGYSZER ELAVULT, UGYANAZON A NAPON: eredetileg a
+   * `slate-950` nevet idezte, mert akkor az allt itt. Par oraval kesobb a
+   * skala `dusk` lett, es ettol a fenti kereses NULLAT adott, mikozben a
+   * megjegyzes NYOLCAT allitott. Nem utkozott semmivel -- ket kulon PR nyult
+   * ugyanehhez a fajlhoz, es a masodik a NEVET vitte el a nyolc hely alol.
+   *
+   * Amit ebbol tudni kell: egy megjegyzes, ami NEVEKET idez, ugyanolyan
+   * karbantartando, mint a kod, es a `removed-scale-names` orzo NEM fogja meg
+   * -- az szandekosan a KODRA mer, tehat a kommentben allo nevet atengedi.
+   * Ha ez a bekezdes megint elavul, a jele ugyanez lesz: a lenti kereses
+   * szama nem egyezik a fenti szammal.
+   *
+   * AZ `--include` NEM DISZ: e nelkul a kereses KILENCET ad, mert EZ A
+   * MEGJEGYZES is talalat lesz -- a sajat magyarazatunk beleszamol abba, amit
+   * magyaraz. Ugyanaz a csapda, ami miatt a `removed-scale-names` orzo a
+   * KODRA mer, nem a fajl szovegere.
+   *
+   * A fajlok: `app-shell` (a mobil menu fatyla), `brand-editor-page`,
+   * `brand-import-assistant-page` (ketszer), `unas-brand-review-page`
+   * (haromszor) es `user-editor-page`.
+   *
+   * HETTO KOZULUK FATYOL, egy tomor felulet. A fatyol nem is "egy felulet
+   * szine": sotetito reteg, aminek a LATSZO erteke a mogotte levotol fugg.
+   * Ezert nem ugyanaz a dontes, mint a szoveg szine -- csak ugyanaz a szam.
+   *
+   * AMI EBBOL KOVETKEZIK, ES AMI NEM:
+   * NEM kovetkezik, hogy ezt a tokent at kell nevezni -- a neve pontos arra,
+   * amit jelol. Az viszont igen, hogy a fatyol-szerepnek MA NINCS NEVE, es
+   * amikor a `slate` skala igaz nevet kap, az a nyolc hely az UJ skalanevet
+   * fogja viselni, tovabbra is megnevezetlen szerepben. A szetvalasztas
+   * kulon tetel, es latvany-kockazattal jar (a fatyol sotetsege lathato).
+   */
+  --color-ink: #26233b;
+  /** A halvany, masodlagos szoveg. */
+  --color-muted: #686477;
+  /** Az oldalsav hattere. */
+  --color-nav: #292346;
+  /** Az oldalsav halvany szovege -- sotet alapon a `muted` olvashatatlan. */
+  --color-nav-muted: #b8b1cf;
+  /**
+   * AZ AKTIV MENUSOR HATTERE.
+   *
+   * MASODSZOR IS KELLETT, EZERT LETT BELOLE NEV -- es ket KULON CSOMAGBAN
+   * allt ugyanaz az ertek: a `packages/ui` `NavItem`-jeben es a webes
+   * `app-shell` osszecsukhato csoport-gombjaban. A ket hely teljes
+   * osztalysora BETURE azonos volt, es az egyikben ott is allt a megjegyzes,
+   * hogy "ugyanaz a kezeles, mint a NavItem-nel".
+   *
+   * Egy megjegyzes viszont nem koti ossze oket: aki a menu kiemeleset
+   * hangolja, az egyiket atallitja, a masik CSENDBEN elter -- ket csomag
+   * hatarán at, ahol meg a diff sem mutatja egymas mellett.
+   *
+   * ES A SOR MASIK FELE MAR TOKENT HASZNALT (`text-nav-muted`), tehat a nyers
+   * ertek egyetlen soron belul volt kovetkezetlen.
+   */
+  --color-nav-active: #7462bd;
+  /** A lapok hattere a hej belsejeben. */
+  --color-paper: #f6f5f8;
+  /** A keretek es elvalasztok. */
+  --color-line: #e5e2eb;
+  /**
+   * SZOVEG A LEVENDULA HATTEREN, KET SULYBAN.
+   *
+   * Ugyanaz a par, mint az `ink` / `muted` a feher lapon, csak `brand-100`-on:
+   * az elso a cimke es a monogram, a masodik a kiemelt panel leiro szovege.
+   *
+   * MIERT TOKEN, ES MIERT MOST: mindketto MASODSZOR is kellett (a
+   * `serviceToneClass` es az avatar; illetve a `ServiceNextAction` es a
+   * hibajegy-adatlap lezart-mondata). A `service-theme.ts` sajat szabalya
+   * szerint "ha valamelyik masodszor is kell valahol, akkor lesz belole token
+   * -- akkor, es nem elore". Ez most tortent meg.
+   *
+   * ES AMI NEM KERUL IDE: a `sv.tag` pirula-szovege, ami BETURE ugyanaz az
+   * ertek, mint a `brand-muted` -- de MAS DOLOG (pirula `brand-50`-en, nem a
+   * kiemelt panel). Egy tokenbe huzva azt allitanank, hogy egyek, es a
+   * kovetkezo szin-valtoztatas mind a kettot vinne.
+   */
+  --color-brand-ink: #5b469e;
+  --color-brand-muted: #635578;
+  /** A masodlagos kiemelo szin: csak hangsulyra, nem allapotra. */
+  --color-coral: #f2a78d;
+  --color-coral-ink: #663525;
+
+  /* ---- A SAROK. A prototipus paneljei 16 pixelesek; a `Card` `rounded-xl`-t
+     hasznal, tehat a token atallitasa eleg. ---- */
+  --radius-xl: 16px;
+
+  --font-sans: var(--font-dm-sans), Arial, Helvetica, sans-serif;
+  /** A cimek betutipusa. A prototipusban a h1/h2/h3 Manrope. */
+  --font-display: var(--font-manrope), Arial, Helvetica, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  --background: #f6f5f8;
+  --foreground: #26233b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-dm-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/**
+ * A CIMEK MANROPE-PAL, ELEM-SZABALLYAL.
+ *
+ * A felulet cimei `text-2xl font-bold` alakban allnak, betutipus-osztaly
+ * nelkul -- egy `font-display` osztalyt 56 oldalon kellene elhelyezni, es a
+ * kimaradt helyek csendben a torzs betujevel maradnanak. Egy elem-szabaly
+ * mindet eltalalja, es aki mast akar, felulirja egy osztallyal.
+ */
+h1,
+h2,
+h3 {
+  font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+::selection {
+  background: #ede8ff;
+  color: #3f3280;
+}

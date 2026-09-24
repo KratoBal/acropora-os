@@ -189,4 +189,35 @@ describe("a portál vizuális alapja", () => {
     assert.match(css, /@import\s+"tailwindcss";/);
     assert.match(css, /@source\s+"\.\.\/\.\.\/\.\.\/\.\.\/packages\/ui\/src";/);
   });
+
+  /**
+   * A KÖZÖS TÉMA TÉNYLEG IDE JUT, ÉS A DEFINÍCIÓ VALÓDI, NEM CSAK ÍGÉRT.
+   *
+   * Balázs kérése, 2026-09-24 07:28 UTC: a partner portál eszközkezelője
+   * ugyanúgy nézzen ki, mint az app.acropora.hu. Idáig ez a fájl EGY
+   * MEGJEGYZÉSBEN ígérte a "közös vizuális alapot" (2026-09-21), de a
+   * TÉNYLEGES `@theme` tokenek sosem érkeztek meg -- ez az állítás pont ezt
+   * a különbséget zárja le: nem elég, hogy az import-sor ott áll, a
+   * hivatkozott fájlnak TÉNYLEG tartalmaznia kell a tokent, amire a
+   * `@acropora/ui` komponensei (pl. a `Badge` `bg-brand-*` osztályai)
+   * támaszkodnak.
+   *
+   * A WEBES OLDAL ELLENŐRZÉSE KÜLÖN FÁJLBAN ÁLL
+   * (`apps/web/src/app/globals-theme.test.ts`), NEM ITT: ez a csomag SOSEM
+   * hivatkozhat `apps/web`-re (lásd a fenti "egyetlen import sem lép ki a
+   * csomagból" állítást) -- egy ide írt, `apps/web`-et olvasó teszt pontosan
+   * azt a határt mosná el, amit ez a spec véd.
+   */
+  it("a közös témát importálja, és a téma valóban definiálja a brand-600 tokent", () => {
+    const css = readFileSync(join(GYOKER, "app", "globals.css"), "utf8");
+    assert.match(
+      css,
+      /@import\s+"\.\.\/\.\.\/\.\.\/\.\.\/packages\/ui\/src\/theme\.css";/,
+    );
+    const theme = readFileSync(
+      resolve(GYOKER, "..", "..", "..", "packages", "ui", "src", "theme.css"),
+      "utf8",
+    );
+    assert.match(theme, /--color-brand-600:/);
+  });
 });

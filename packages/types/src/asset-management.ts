@@ -2,6 +2,25 @@ export type AssetKind =
   "SYSTEM" | "EQUIPMENT" | "COMPONENT" | "SENSOR" | "OTHER";
 
 /**
+ * A MAGYAR CIMKEK, EGY HELYEN -- ATKERULT `apps/web`-bol (2026-09-24), a
+ * `worksheetStatusLabel` mintajara: ez a negy szotar (`assetKindLabel`,
+ * `assetStatusLabel`, `assetCriticalityLabel`, `assetEventLabel` lentebb)
+ * TISZTA adat, semmilyen apps/web-fuggosege nincs (a `service-theme.ts`
+ * SZINE, `assetStatusTone`, ELTER: az `apps/web` sajat `ServiceTone`
+ * tipusatol fugg, tehat AZ NEM koltozott ide). A partner portal (`apps/partner`)
+ * ugyanezekre a cimkekre szorul (raw `ACTIVE`/`RETIRED`/`UPDATED` a
+ * felhasznalonak, Balazs 2026-09-24-i kepernyokepei szerint), es a portal
+ * SOSEM hivatkozhat `apps/web`-re -- lasd `apps/partner/src/lib/visual-base.spec.ts`.
+ */
+export const assetKindLabel: Record<AssetKind, string> = {
+  SYSTEM: "Rendszer",
+  EQUIPMENT: "Berendezés",
+  COMPONENT: "Részegység",
+  SENSOR: "Szenzor",
+  OTHER: "Egyéb",
+};
+
+/**
  * AZ ESZKÖZ ÁLLAPOTA. A sorrend a séma enum-sorrendjét követi, mert az a
  * LISTA RENDEZÉSE is (`assetListOrderBy`): csökkenő rendelkezésre állás.
  *
@@ -12,7 +31,69 @@ export type AssetKind =
 export type AssetStatus =
   "ACTIVE" | "WARM_STANDBY" | "COLD_STANDBY" | "IN_REPAIR" | "RETIRED";
 
+export const assetStatusLabel: Record<AssetStatus, string> = {
+  ACTIVE: "Aktív",
+  WARM_STANDBY: "Meleg tartalék",
+  COLD_STANDBY: "Hideg tartalék",
+  IN_REPAIR: "Javítás alatt",
+  RETIRED: "Kivezetett",
+};
+
+/**
+ * AZ ESZKOZALLAPOT SZINE, ATKOLTOZOTT `apps/web`-bol (2026-09-24, a #1042
+ * masodik kore, a #1041 `partnerStatusTone`-jat kovetve). A torzs betűre
+ * valtozatlan, csak a hely es a tipus valtozott.
+ *
+ * A TIPUS SZO SZERINT KIIRVA, NEM `ServiceTone` IMPORTALVA: a `packages/types`
+ * nem fugghet a `packages/ui`-tol (forditott fuggosegi irany lenne) --
+ * ugyanaz a minta, amit a `service-job-management.ts` `partnerStatusTone`-ja
+ * is kovet, ugyanezzel az indoklassal a sajat fejleceben. Az ertek betűre
+ * ugyanaz, mint a `ServiceTone` unioja -- ha az valaha bovul, ezt a sort is
+ * at kell nezni.
+ *
+ * Balazs 2026-09-15-i szerviz-designjabol.
+ *
+ * EZ AZ EGYETLEN HELY: eddig ugyanez a szabaly KET fuggvenyben allt, beture
+ * azonos torzzsel (`asset-list-page.tsx` es `asset-detail-page.tsx`), es a
+ * ketto kozul barmelyiket at lehetett volna irni ugy, hogy a masik marad.
+ *
+ * EGY VALTOZAS A KORABBI ALAKHOZ KEPEST, ES SZANDEKOS: a "Nem uzemel" eddig
+ * amber volt (a `RETIRED`-en kivul minden nem-aktiv allapot az volt), a design
+ * szerint PIROS. Ez nem szinezes: a javitas alatt allo eszkoz VART allapot, a
+ * nem uzemelo pedig egy meg fel nem vett teendo, es a listan ma ugyanugy
+ * nezett ki a ketto.
+ *
+ * ES A KET TARTALEK EPP EZERT NEM PIROS (2026-09-16). A piros indoka a fenti
+ * bekezdesben all: a "nem uzemel" FEL NEM VETT TEENDO volt. A tartalek nem az
+ * -- SZANDEKOS allapot, es pontosan ezert kerte Balazs a szetvalasztast: a
+ * regi ertek egy kalapba tette azt, ami elromlott es senki nem foglalkozik
+ * vele, meg azt, amit keszakarva tartunk tartalekban. Ha a ket uj ertek is
+ * piros lenne, a szetvalasztas a LISTAN nem latszana.
+ *
+ * A KETTO UGYANAZT A SZINT KAPJA, es ez sem feledekenyseg: a kulonbseget a
+ * FELIRAT hordozza ("Meleg" / "Hideg"), es a paletta nem hordoz olyan
+ * megkulonboztetest, amit valaki eldontott volna. Egy kitalalt szin-kulonbseg
+ * egy nem letezo design-dontesre hivatkozna.
+ */
+export const assetStatusTone: Record<
+  AssetStatus,
+  "neutral" | "purple" | "green" | "amber" | "red" | "blue"
+> = {
+  ACTIVE: "green",
+  IN_REPAIR: "amber",
+  WARM_STANDBY: "blue",
+  COLD_STANDBY: "blue",
+  RETIRED: "neutral",
+};
+
 export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
+
+export const assetCriticalityLabel: Record<AssetCriticality, string> = {
+  LOW: "Alacsony",
+  NORMAL: "Normál",
+  HIGH: "Magas",
+  CRITICAL: "Kritikus",
+};
 
 export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
 
@@ -42,6 +123,18 @@ export type AssetEventType =
   | "LABEL_ASSIGNED"
   | "DOCUMENT_UPLOADED"
   | "DOCUMENT_DELETED";
+
+export const assetEventLabel: Record<AssetEventType, string> = {
+  CREATED: "Eszköz létrehozva",
+  UPDATED: "Adatok módosítva",
+  PLACEMENT_CHANGED: "Elhelyezés módosítva",
+  PARENT_CHANGED: "Hierarchia módosítva",
+  STATUS_CHANGED: "Státusz módosítva",
+  QR_ROTATED: "QR-kód lecserélve",
+  LABEL_ASSIGNED: "Matrica hozzárendelve",
+  DOCUMENT_UPLOADED: "Dokumentum feltöltve",
+  DOCUMENT_DELETED: "Dokumentum törölve",
+};
 
 export interface AssetCustomerSummary {
   id: string;
