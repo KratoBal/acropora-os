@@ -1,5 +1,5 @@
-import { ServiceJobEditorPage } from "@/components/service-jobs/service-job-editor-page";
+import { PilotServiceJobEditorPage } from "@/components/service-jobs/pilot/pilot-service-job-editor-page";
 
 export default function NewServiceJobRoute() {
-  return <ServiceJobEditorPage />;
+  return <PilotServiceJobEditorPage />;
 }
