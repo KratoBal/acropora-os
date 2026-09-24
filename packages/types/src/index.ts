@@ -247,15 +247,27 @@ export type {
   AquariumEquipment,
   AquariumEquipmentKind,
   AquariumListResponse,
+  AquariumMaintainer,
+  AquariumMeasurementListResponse,
+  AquariumMeasurementOccasion,
+  AquariumMeasurementParameterCode,
+  AquariumMeasurementParameterDefinition,
+  AquariumMeasurementValue,
   AquariumOwnershipType,
   AquariumSelectableCustomer,
   AquariumSelectableCustomerListResponse,
   AquariumSummary,
   CreateAquariumEquipmentInput,
   CreateAquariumInput,
+  CreateAquariumMeasurementInput,
   UpdateAquariumInput,
   WaterBodyType,
   WaterType,
+} from "./aquarium-management.js";
+export {
+  AQUARIUM_MEASUREMENT_PARAMETERS,
+  aquariumMeasurementParameter,
+  aquariumMeasurementParametersFor,
 } from "./aquarium-management.js";
 export type {
   CreateCustomerAddressInput,

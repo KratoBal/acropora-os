@@ -15,6 +15,7 @@ import {
   PERMISSIONS,
   type AquariumEquipment,
   type AquariumEquipmentKind,
+  type AquariumMaintainer,
   type AquariumOwnershipType,
   type CreateAquariumEquipmentInput,
   type WaterBodyType,
@@ -27,6 +28,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { ApiError } from "@/lib/api/client";
 import { aquariumsApi } from "@/lib/api/aquariums";
 import { CustomerPicker, type CustomerSelection } from "./customer-picker";
+import { AquariumWaterValues } from "./aquarium-water-values";
 import {
   EQUIPMENT_KIND_LABEL,
   EQUIPMENT_KIND_OPTIONS,
@@ -82,6 +84,14 @@ export function AquariumEditorPage({ aquariumId }: { aquariumId?: string }) {
    * fejlécét: egyetlen gombnyomás sem törölhet kérdés nélkül. */
   const [pendingRemoval, setPendingRemoval] =
     useState<AquariumEquipment | null>(null);
+  const [maintainers, setMaintainers] = useState<AquariumMaintainer[]>([]);
+  const [customerEmail, setCustomerEmail] = useState<string | undefined>(
+    undefined,
+  );
+  const [selectableMaintainers, setSelectableMaintainers] = useState<
+    AquariumMaintainer[]
+  >([]);
+  const [maintainersBusy, setMaintainersBusy] = useState(false);
 
   const token = session?.token ?? "";
   const canManage = Boolean(
@@ -119,6 +129,8 @@ export function AquariumEditorPage({ aquariumId }: { aquariumId?: string }) {
         setStartedAt(detail.startedAt ? detail.startedAt.slice(0, 10) : "");
         setNotes(detail.notes ?? "");
         setEquipment(detail.equipment);
+        setMaintainers(detail.maintainers);
+        setCustomerEmail(detail.customerEmail);
         setExpectedUpdatedAt(detail.updatedAt);
       })
       .catch((cause) =>
@@ -135,6 +147,29 @@ export function AquariumEditorPage({ aquariumId }: { aquariumId?: string }) {
       active = false;
     };
   }, [aquariumId, token]);
+
+  /**
+   * A VÁLASZTHATÓ KARBANTARTÓK LISTÁJA FÜGGETLEN AZ AKVÁRIUMTÓL -- ezért
+   * külön effektus, nem a fenti betöltés része: új akváriumnál is
+   * betöltődik (a választó akkor is megjelenhetne, ha egyszer a create-ág
+   * is megkapná -- lásd a komponens fejlécét, miért nem ma).
+   */
+  useEffect(() => {
+    if (!canManage) return;
+    let active = true;
+    aquariumsApi
+      .selectableMaintainers(token)
+      .then((list) => {
+        if (active) setSelectableMaintainers(list);
+      })
+      .catch(() => {
+        // Csendben marad: a választó listája üresen jelenik meg, a hiba a
+        // fő betöltési hibaüzenetet nem duplikálja.
+      });
+    return () => {
+      active = false;
+    };
+  }, [token, canManage]);
 
   /**
    * AUTOMATIKUS LITER-SZÁMOLÁS, AMÍG A FELHASZNÁLÓ ÁT NEM ÍRTA KÉZZEL.
@@ -283,6 +318,38 @@ export function AquariumEditorPage({ aquariumId }: { aquariumId?: string }) {
     } finally {
       setBusy(false);
       setPendingRemoval(null);
+    }
+  }
+
+  /**
+   * A KARBANTARTÓ-LISTA MINDEN VÁLTOZÁSNÁL AZONNAL MENT -- nem gyűjti a
+   * "Mentés" gombig, mert a szerver `PATCH .../maintainers` végpontja teljes
+   * cserét vár, és egy pipálás/lepipálás azonnali visszajelzést érdemel,
+   * ugyanúgy, mint a berendezés-sorok. CSAK MEGLÉVŐ akváriumnál elérhető
+   * (lásd a komponens fejlécét).
+   */
+  async function toggleMaintainer(userId: string) {
+    if (!aquariumId) return;
+    const next = maintainers.some((m) => m.userId === userId)
+      ? maintainers.filter((m) => m.userId !== userId)
+      : [...maintainers, { userId, displayName: "" }];
+    setMaintainersBusy(true);
+    setError(null);
+    try {
+      const updated = await aquariumsApi.setMaintainers(
+        token,
+        aquariumId,
+        next.map((m) => m.userId),
+      );
+      setMaintainers(updated.maintainers);
+    } catch (cause) {
+      setError(
+        cause instanceof ApiError
+          ? cause.message
+          : "A karbantartó-lista nem menthető.",
+      );
+    } finally {
+      setMaintainersBusy(false);
     }
   }
 
@@ -547,10 +614,58 @@ export function AquariumEditorPage({ aquariumId }: { aquariumId?: string }) {
           </Button>
         </Card>
 
+        {isEdit ? (
+          <Card className="space-y-3 p-4">
+            <h2 className="text-sm font-semibold text-dusk-800">
+              Karbantartók
+            </h2>
+            <p className="text-sm text-dusk-500">
+              Belsős kollégák, akik karban tartják ezt az akváriumot. Több is
+              választható.
+            </p>
+            {selectableMaintainers.length ? (
+              <div className="flex flex-wrap gap-2">
+                {selectableMaintainers.map((candidate) => {
+                  const checked = maintainers.some(
+                    (m) => m.userId === candidate.userId,
+                  );
+                  return (
+                    <label
+                      key={candidate.userId}
+                      className="flex items-center gap-2 rounded border px-2 py-1 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={maintainersBusy}
+                        onChange={() => void toggleMaintainer(candidate.userId)}
+                      />
+                      {candidate.displayName}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-dusk-500">
+                Nincs választható belső kolléga.
+              </p>
+            )}
+          </Card>
+        ) : null}
+
         <Button type="submit" disabled={busy}>
           {isEdit ? "Mentés" : "Létrehozás"}
         </Button>
       </form>
+
+      {isEdit && aquariumId ? (
+        <AquariumWaterValues
+          token={token}
+          aquariumId={aquariumId}
+          waterType={waterType || undefined}
+          canSendEmail={Boolean(customerEmail)}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={pendingRemoval != null}

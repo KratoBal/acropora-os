@@ -6,6 +6,7 @@ import { DeviceTokenController } from "./device-token.controller.js";
 import { DeviceTokenRepository } from "./device-token.repository.js";
 import { NotificationLogRepository } from "./notification-log.repository.js";
 import { NotificationsService } from "./notifications.service.js";
+import { AquariumMeasurementMailService } from "./mail/aquarium-measurement-mail.service.js";
 import { GmailMailSender } from "./mail/gmail-mail.sender.js";
 import { HandoverMailRepository } from "./mail/handover-mail.repository.js";
 import { HandoverMailService } from "./mail/handover-mail.service.js";
@@ -49,7 +50,13 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
     DeviceTokenRepository,
     NotificationLogRepository,
     NotificationsService,
+    AquariumMeasurementMailService,
   ],
-  exports: [NotificationsService, TicketMailService, HandoverMailService],
+  exports: [
+    NotificationsService,
+    TicketMailService,
+    HandoverMailService,
+    AquariumMeasurementMailService,
+  ],
 })
 export class NotificationsModule {}

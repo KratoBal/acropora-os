@@ -119,6 +119,23 @@ export interface MaterialRequestReceivedNotice {
 }
 
 /**
+ * UJ VIZMERES ERKEZETT -- a karbantartoknak, AZ ERTESITO KIVETELEVEL.
+ *
+ * Balazs kerese (2026-09-24 14:41), szo szerint: "ha mondjuk a boltban
+ * megmerik a vizet amit hozott a karbantartasbol, akkor kapjon push
+ * uzenetet". A CIMZETT-KOR SZUKITESET (az ertesito kimarad) a hivo szamitja
+ * ki, MIELOTT ide adja -- ugyanaz a felelossegi hatar, mint a tobbi
+ * ertesitesnel: ez az osztaly csak KULD, a "kinek" kerdest a hivo dontotte
+ * el.
+ */
+export interface AquariumMeasurementRecordedNotice {
+  aquariumId: string;
+  aquariumName: string;
+  /** A karbantartok, az ertesitot rogzito felhasznalo NELKUL. */
+  userIds: readonly string[];
+}
+
+/**
  * Sends the notifications the worksheet assignment triggers.
  *
  * Two rules hold this together, and both come from the system as it is today.
@@ -391,6 +408,62 @@ export class NotificationsService {
         }`,
       );
     });
+  }
+
+  /**
+   * UJ VIZMERES -- a karbantartoknak. UGYANAZ A TORZS, MINT A TOBBI
+   * ERTESITESNEL.
+   *
+   * A CIM KET RESZRE VALIK, UGYANUGY, MINT AZ ANYAGIGENYNEL
+   * (`deliverMaterialRequestCreated`): a `title` altalanos ("Uj vizmeres"),
+   * a `body` az akvarium neve. A zarolt kepernyon a ketto EGYUTT jelenik
+   * meg, tehat ez ugyanazt adja, mint Balazs szo szerinti kerese ("Uj
+   * vizmeres: <akvarium neve>") -- csak a megszokott ket mezore bontva.
+   *
+   * A `data` MA SZANDEKOSAN URES -- NEM `targetType: "aquarium"`.
+   *
+   * A `push-targets.spec.ts` PONTOSAN EZT AZ ESETET ORZI: a szerver ELOBB
+   * ne kuldjon celpont-tipust, mint ahogy a telefonon letezik a hozza
+   * tartozo kepernyo (mert a szerver es a mobil kulon PR-ben keszul ebben a
+   * korben -- lasd a brief "munkamegosztas" szakaszat). A mert hiba
+   * 2026-09-18-rol (`serviceJob` negy napig celzott egy nem letezo
+   * kepernyot) pontosan ez volt, csak eszrevetlen -- most az orzo eszrevette.
+   * Ugyanaz az atmeneti alak, mint az anyagigenylesnel: `data: {}`, amig a
+   * celzott kepernyo el nem keszul, akkor egy `targetType: "aquarium"` sor
+   * kerul ide is, a telefon `PUSH_TARGET_TYPES`/`PUSH_TARGET_ROUTES`
+   * bovitesevel EGYUTT.
+   */
+  async deliverAquariumMeasurementRecorded(
+    notice: AquariumMeasurementRecordedNotice,
+  ): Promise<AssignmentSummary> {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: "Új vízmérés",
+      body: notice.aquariumName,
+      data: {},
+      record: (attempts) =>
+        this.log.recordAquariumMeasurement({
+          aquariumId: notice.aquariumId,
+          attempts,
+        }),
+      failureLine: (summary) =>
+        `Vízmérés-értesítés: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.aquariumId}).`,
+    });
+  }
+
+  /** A nem-varo alak. */
+  notifyAquariumMeasurementRecorded(
+    notice: AquariumMeasurementRecordedNotice,
+  ): void {
+    void this.deliverAquariumMeasurementRecorded(notice).catch(
+      (cause: unknown) => {
+        this.logger.warn(
+          `A vízmérés-értesítés küldése nem sikerült (${notice.aquariumId}): ${
+            cause instanceof Error ? cause.message : "ismeretlen hiba"
+          }`,
+        );
+      },
+    );
   }
 
   /**
