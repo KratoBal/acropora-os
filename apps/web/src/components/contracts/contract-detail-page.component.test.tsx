@@ -183,6 +183,7 @@ describe("ContractDetailPage -- tétel helyszíne és eszközei", () => {
         expect.objectContaining({
           items: [
             expect.objectContaining({
+              id: "item-1",
               description: "Cápasuli RO karbantartás",
               departmentId: "department-1",
               assetIds: [],
@@ -190,6 +191,48 @@ describe("ContractDetailPage -- tétel helyszíne és eszközei", () => {
           ],
         }),
       ),
+    );
+  });
+
+  /**
+   * Balázs éles hibája (2026-09-24 21:48, Állatkert): a mentés után a
+   * kijelölt tételek listája ("Megrendelőlap kiállítása (N tétel)") a
+   * RÉGI tétel-számot mutatta, mert a `save()` csak a `contract` state-et
+   * frissítette a szerver válaszából, a kijelölés-állapotot nem. Ez a
+   * teszt a `applyContractDetail` közös inicializálást méri: a mentés
+   * utáni válaszban egy ÚJ tétellel bővült listának a kijelölés-száma is
+   * ehhez igazodjon, ne a mentés előtti tétel-számhoz.
+   */
+  it("mentés után a kijelölt tételek száma a szerver ÚJ válaszához igazodik, nem a réginek", async () => {
+    api.detail.mockResolvedValue(contractWithItem());
+    api.update.mockResolvedValue({
+      ...contractWithItem(),
+      items: [
+        ...contractWithItem().items,
+        {
+          id: "item-2",
+          position: 2,
+          description: "Új tétel",
+          unitNet: "5000",
+          quantity: "1",
+          occasionsPerYear: 1,
+          vatRatePercent: "27",
+          departmentId: null,
+          assets: [],
+        },
+      ],
+    });
+
+    render(<ContractDetailPage contractId="contract-1" />);
+    await screen.findByText(/410000 Ft/);
+    expect(screen.getByText("Megrendelőlap kiállítása (1 tétel)")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Megrendelőlap kiállítása (2 tétel)"),
+      ).toBeTruthy(),
     );
   });
 });
