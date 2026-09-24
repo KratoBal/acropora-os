@@ -3,19 +3,56 @@ import { Icon } from "@acropora/ui";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 
+import { useThemePreference } from "@/lib/theme/use-theme-preference";
+import { pilotInter } from "./pilot-font";
+
 /**
  * KÍSÉRLETI, ÖNÁLLÓ MEGJELENÍTŐ ELEMEK -- CSAK AZ AKVÁRIUM OLDALAKNAK.
  *
  * Ezek NEM a `@acropora/ui` `Button`/`Card`/`Badge` cseréi: azok a mai közös
  * arculatot (`brand-*`/`dusk-*`) viselik, ez a készlet a Figma Make terv
  * `pilot-aqua-*`/`pilot-grey-*` tokenjeit. A két készlet szándékosan él
- * egymás mellett -- lásd `aquarium-pilot-theme.css` fejlécét, miért.
+ * egymás mellett -- lásd `figma-theme.css` fejlécét, miért.
  *
  * A FORMA A FIGMA `src/App.tsx` MIKRO-KOMPONENSEIT KÖVETI (Badge, Avatar,
  * Btn, SegmentedControl, FormField, Input, Select, Card, CardHeader, Drawer,
  * Dialog), csak Tailwind class-nevekben `teal`/`grey` helyett `pilot-aqua`/
  * `pilot-grey`.
  */
+
+/**
+ * A PILOT OLDALAK GYÖKERE -- EZ TESZI RÁ A `data-theme`-ET, ÉS CSAK EZ.
+ *
+ * Balázs döntése (2026-09-24 18:00 UTC): a világos/sötét választó a
+ * Beállításokba kerül, a választás megmarad, és ELSŐ KÖRBEN csak a már
+ * Figma-szerű oldalak (Akváriumok, Mérési előzmények) kapják meg mindkét
+ * módban. A `data-theme` attribútum EZÉRT NEM a `<html>`-re kerül, hanem
+ * KIZÁRÓLAG erre a gyökér elemre -- lásd `figma-theme.css` fejlécét: a
+ * sötét-felülíró szabályok (`[data-theme="dark"] .bg-white` stb.) emiatt
+ * szerkezetileg nem tudnak lefutni egyetlen olyan oldalon sem, amelyik nem
+ * ezt a komponenst használja gyökérként.
+ *
+ * MINDEN PILOT OLDAL (a betöltési/skeleton ág IS) ezt használja gyökérként,
+ * ne nyers `<div>`-et -- egy kihagyott betöltési ág a téma-váltáskor egy
+ * pillanatra rossz módban villanna fel.
+ */
+export function PilotThemeRoot({
+  children,
+  className = "",
+}: {
+  children?: ReactNode;
+  className?: string;
+}) {
+  const { effectiveTheme } = useThemePreference();
+  return (
+    <div
+      data-theme={effectiveTheme}
+      className={`${pilotInter.className} ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
 
 export function PilotBadge({
   children,

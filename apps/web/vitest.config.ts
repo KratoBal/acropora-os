@@ -33,6 +33,7 @@ export default defineConfig({
       "src/app/**/*.test.ts",
       "src/lib/navigation/**/*.test.ts",
       "src/lib/partners/**/*.test.ts",
+      "src/lib/theme/**/*.test.ts",
     ],
     setupFiles: ["./src/test/setup.ts"],
   },
