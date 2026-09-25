@@ -22,6 +22,7 @@ import type {
   WorksheetListLike,
 } from "./worksheet-presentation";
 import type { UserRole } from "../auth/types";
+import { recordLiteralFromSource } from "../testing/record-literal-from-source";
 
 /**
  * A KIMONDOTT HIÁNY A TÉT.
@@ -102,19 +103,19 @@ describe("worksheetLabelOrDraft", () => {
 
 describe("worksheetStatusLabel", () => {
   /**
-   * MIND A NÉGY ÁLLAPOT SZEREPEL, és ugyanazokkal a szavakkal, mint a webes
-   * felületen (`apps/web/src/components/worksheets/worksheet-labels.ts`). A két
-   * lista két fájlban áll, mert az Expo app nem húzza be a munkatér csomagjait;
-   * az elcsúszásuk néma lenne, és a helyszínen derülne ki, hogy az iroda más
-   * szót mond ugyanarra a lapra.
+   * A KORÁBBI ALAK ÖNHIVATKOZÓ VOLT: ugyanazt a négy értéket írta be
+   * elvárásként, amit a modul maga is tartalmaz -- ez a modul BELSŐ
+   * konzisztenciáját mérte, a `packages/types` forrással való egyezést nem.
+   * Mostantól a KÖZÖS forrást (`packages/types/src/worksheet-management.ts`)
+   * olvassuk be szövegként, ugyanazzal a mintával, mint
+   * `asset-status.spec.ts`.
    */
-  it("names every status the server can return", () => {
-    assert.deepEqual(worksheetStatusLabel, {
-      DRAFT: "Piszkozat",
-      AWAITING_SIGNATURE: "Aláírásra vár",
-      SIGNED: "Aláírva",
-      REJECTED: "Elutasítva",
-    });
+  it("names every status the server can return, matching the common source", () => {
+    const kozos = recordLiteralFromSource(
+      "../../packages/types/src/worksheet-management.ts",
+      "worksheetStatusLabel",
+    );
+    assert.deepEqual(worksheetStatusLabel, kozos);
   });
 });
 

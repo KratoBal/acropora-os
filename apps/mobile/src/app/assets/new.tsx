@@ -81,14 +81,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
-
-const kinds: { value: AssetKind; label: string }[] = [
-  { value: "SYSTEM", label: "Rendszer" },
-  { value: "EQUIPMENT", label: "Berendezés" },
-  { value: "COMPONENT", label: "Részegység" },
-  { value: "SENSOR", label: "Szenzor" },
-  { value: "OTHER", label: "Egyéb" },
-];
+import { ASSET_KIND_OPTIONS as kinds } from "@/lib/assets/asset-kind";
 
 export default function NewAssetScreen() {
   const router = useRouter();

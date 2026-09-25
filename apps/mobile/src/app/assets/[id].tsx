@@ -37,6 +37,7 @@ import { describeUploadFailure } from "@/lib/api/network-failure";
 import { ApiNetworkError } from "@/lib/api/client";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import { ASSET_CRITICALITY_LABELS } from "@/lib/assets/asset-criticality";
+import { ASSET_KIND_LABELS } from "@/lib/assets/asset-kind";
 import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
@@ -49,14 +50,6 @@ import { useIsOnline } from "@/lib/offline/connectivity";
 import { describeOfflineDetailNotice } from "@/lib/offline/offline-notice";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
-
-const KIND_LABELS = {
-  SYSTEM: "Rendszer",
-  EQUIPMENT: "Berendezés",
-  COMPONENT: "Részegység",
-  SENSOR: "Szenzor",
-  OTHER: "Egyéb",
-} as const;
 
 export default function AssetDetailScreen() {
   const router = useRouter();
@@ -317,7 +310,7 @@ export default function AssetDetailScreen() {
               <Text style={styles.title}>{cachedSummary.name}</Text>
               <View style={styles.badges}>
                 <Text style={styles.badge}>
-                  {KIND_LABELS[cachedSummary.kind]}
+                  {ASSET_KIND_LABELS[cachedSummary.kind]}
                 </Text>
                 <Text style={styles.badge}>
                   {ASSET_STATUS_LABELS[cachedSummary.status]}
@@ -380,7 +373,9 @@ export default function AssetDetailScreen() {
               <Text style={styles.number}>{asset.assetNumber}</Text>
               <Text style={styles.title}>{asset.name}</Text>
               <View style={styles.badges}>
-                <Text style={styles.badge}>{KIND_LABELS[asset.kind]}</Text>
+                <Text style={styles.badge}>
+                  {ASSET_KIND_LABELS[asset.kind]}
+                </Text>
                 <Text style={styles.badge}>
                   {ASSET_STATUS_LABELS[asset.status]}
                 </Text>

@@ -8,6 +8,7 @@ import {
   ASSET_STATUS_OPTIONS,
   ASSET_STATUS_ORDER,
 } from "./asset-status";
+import { recordLiteralFromSource } from "../testing/record-literal-from-source";
 
 /**
  * EGY STATUSZNAK EGY NEVE VAN.
@@ -98,5 +99,21 @@ describe("az állapotnevek egy helyen állnak", () => {
       [],
       "Ezek a fájlok saját állapotnevet írnak le; a nevek gazdája az asset-status modul.",
     );
+  });
+});
+
+/**
+ * A MOBIL EZT A TÁBLÁT NEM IMPORTÁLHATJA A `packages/types`-BÓL (a mobil kívül
+ * áll a pnpm workspace-en, lásd `record-literal-from-source.ts`), tehát a
+ * betűre-egyezést csak FORRÁSSZÖVEG-OLVASÁSSAL lehet ellenőrizni -- ugyanaz a
+ * minta, mint `asset-document-type-egyezes.spec.ts`-ben.
+ */
+describe("az állapotnevek egyeznek a packages/types forrásával", () => {
+  it("a mobil tábla betűre ugyanaz, mint az assetStatusLabel", () => {
+    const kozos = recordLiteralFromSource(
+      "../../packages/types/src/asset-management.ts",
+      "assetStatusLabel",
+    );
+    assert.deepEqual(ASSET_STATUS_LABELS, kozos);
   });
 });
