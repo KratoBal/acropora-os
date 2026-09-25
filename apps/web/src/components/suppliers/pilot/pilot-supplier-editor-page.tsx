@@ -917,7 +917,20 @@ export function PilotSupplierEditorPage({
                 </PilotFormField>
               </div>
             </PilotCard>
+            {/*
+              "VISSZA" A MENTÉS-SORON IS, A TERV SZERINT (2026-09-25,
+              barracuda újramérése): a terv a mentés-sorban KÉT gombot ad
+              (`PartnerDetailPage`, 1180-1184. sor) -- "Vissza" másodlagos
+              és a mentés elsődleges gomb egymás mellett. Eddig csak a
+              fejlécben állt "Vissza"; ugyanoda navigál, mint az ottani
+              gomb (`backToList.href`).
+            */}
             <div className="flex justify-end gap-3 pb-8">
+              <Link href={backToList.href}>
+                <PilotButton type="button" variant="secondary">
+                  {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
+                </PilotButton>
+              </Link>
               <PilotButton type="submit" variant="primary" disabled={busy}>
                 {busy
                   ? "Mentés…"
