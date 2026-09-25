@@ -55,6 +55,13 @@ describe(
       await prisma.user.deleteMany({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
       });
+      // A HELYSZÍNEK AZ AKVÁRIUMOK UTÁN, DE A VEVŐK ELŐTT -- az
+      // `Aquarium.departmentId` és a `WorksheetDepartment.customerId` is
+      // `Restrict`, tehát amíg akvárium hivatkozik rá, vagy amíg a
+      // helyszín létezik, a szülő nem törölhető.
+      await prisma.worksheetDepartment.deleteMany({
+        where: { name: { startsWith: "AQ-INT-" } },
+      });
       // AZ AKVÁRIUMOK UTÁN, mert az Aquarium.customerId `onDelete: SetNull`
       // -- egy törölt vevőt a fenti sor már nem talál meg name szerint, a
       // sorrend mégis a biztonságosabb, hogy a takarítás önmagában is
@@ -71,6 +78,9 @@ describe(
       const usersLeft = await prisma.user.count({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
       });
+      const departmentsLeft = await prisma.worksheetDepartment.count({
+        where: { name: { startsWith: "AQ-INT-" } },
+      });
       const customersLeft = await prisma.customer.count({
         where: { customerNumber: { startsWith: CUSTOMER_PREFIX } },
       });
@@ -78,6 +88,7 @@ describe(
         { nev: "AquariumEquipment", darab: equipmentLeft },
         { nev: "Aquarium", darab: aquariumsLeft },
         { nev: "User", darab: usersLeft },
+        { nev: "WorksheetDepartment", darab: departmentsLeft },
         { nev: "Customer", darab: customersLeft },
       ]);
     }
@@ -87,6 +98,7 @@ describe(
         clientOperationId?: string;
         ownershipType?: "OWN" | "CUSTOMER";
         customerId?: string | null;
+        departmentId?: string;
         name?: string;
       } = {},
     ) {
@@ -309,6 +321,107 @@ describe(
           ids.some((id) => id !== aquariumA.id),
           false,
           "a másik vevő akváriuma NEM szerepelhet a szűrt listában",
+        );
+      });
+    });
+
+    /**
+     * A HATÓKÖR-SZŰRÉS, ÉLŐ ADATBÁZISON -- Balázs kifejezett kérése
+     * (2026-09-25, Partner Portál Akváriumok terv): "teszt mindkét irányra
+     * (saját látszik, másik ügyfélé 404)". Az `aquariumVisibilityWhere`
+     * saját (`aquarium-visibility.spec.ts`) tesztje a WHERE-ALAKOT
+     * bizonyítja, DB nélkül; ez a teszt azt, hogy a `detail()` a Prisma
+     * `findFirst`-tel TÉNYLEG ezt a viselkedést adja vissza -- ugyanaz a
+     * különbség, mint az `aquarium-visibility.ts` fejlécében: a szabály és
+     * a beépítése két külön kérdés.
+     */
+    describe("detail -- hatókör-szűrés (departmentId a soron)", () => {
+      it("a saját ügyfél, kiosztott helyszínéhez tartozó akvárium látszik, a másik ügyfélé nem", async () => {
+        const customerA = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}SCOPE-A-${suffix}`,
+            type: "COMPANY",
+            displayName: `Akvárium hatókör A ${suffix}`,
+          },
+        });
+        const customerB = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}SCOPE-B-${suffix}`,
+            type: "COMPANY",
+            displayName: `Akvárium hatókör B ${suffix}`,
+          },
+        });
+        const departmentA = await prisma.worksheetDepartment.create({
+          data: {
+            customerId: customerA.id,
+            code: "AQI01",
+            name: `AQ-INT-department-a-${suffix}`,
+          },
+        });
+
+        const aquariumA = await repository.create(
+          createInput({
+            clientOperationId: `aquarium-create:CUSTOMER:scope-a-${suffix}`,
+            ownershipType: "CUSTOMER",
+            customerId: customerA.id,
+            departmentId: departmentA.id,
+            name: `AQ-INT-scope-a-${suffix}`,
+          }),
+          "no-actor",
+        );
+        const aquariumB = await repository.create(
+          createInput({
+            clientOperationId: `aquarium-create:CUSTOMER:scope-b-${suffix}`,
+            ownershipType: "CUSTOMER",
+            customerId: customerB.id,
+            name: `AQ-INT-scope-b-${suffix}`,
+          }),
+          "no-actor",
+        );
+
+        const visibility = {
+          AND: [
+            { customerId: customerA.id },
+            { departmentId: { in: [departmentA.id] } },
+          ],
+        };
+
+        const own = await repository.detail(aquariumA.id, visibility);
+        assert.equal(
+          own?.id,
+          aquariumA.id,
+          "a saját ügyfél, kiosztott helyszínéhez tartozó akvárium látszania kell",
+        );
+
+        const other = await repository.detail(aquariumB.id, visibility);
+        assert.equal(
+          other,
+          null,
+          "a másik ügyfél akváriuma NEM kaphat találatot -- ez a 404 forrása a service rétegben",
+        );
+
+        /*
+          ÉS A HELYSZÍN NÉLKÜL KIOSZTOTT SAJÁT AKVÁRIUM SEM LÁTSZIK, ha a
+          kérő helyszín szerint szűkül -- lásd `aquarium-visibility.ts`
+          fejlécét: a `null` sosem eleme egy `in` listának.
+        */
+        const ownWithoutDepartment = await repository.create(
+          createInput({
+            clientOperationId: `aquarium-create:CUSTOMER:scope-a-no-dept-${suffix}`,
+            ownershipType: "CUSTOMER",
+            customerId: customerA.id,
+            name: `AQ-INT-scope-a-no-dept-${suffix}`,
+          }),
+          "no-actor",
+        );
+        const missingDepartment = await repository.detail(
+          ownWithoutDepartment.id,
+          visibility,
+        );
+        assert.equal(
+          missingDepartment,
+          null,
+          "helyszín nélküli saját akvárium sem látszik a helyszín szerint szűkített hívónak",
         );
       });
     });

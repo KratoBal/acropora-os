@@ -44,11 +44,16 @@ export interface ServiceCapabilities {
   /**
    * AZ AKVÁRIUM SAJÁT JOGPÁRT KAP A SZERVEREN (`aquariums.view` /
    * `aquariums.manage`), NEM a szerviz kettőjét -- ezért itt sem osztozhat a
-   * fenti négy kulcs canView/canManage számításán. A legnagyobb, kézzel
-   * mérendő eltérés: a PARTNER_SERVICE szerepnek a szerveren NINCS
-   * aquariums jogköre (csak `service.view`/`service.manage`), miközben a
-   * saját eszköz/munkalap/hibajegy párjait látja. Egy közös számítás itt
-   * csendben igent adna egy partner-fióknak, amit a szerver elutasítana.
+   * fenti négy kulcs canView/canManage számításán.
+   *
+   * A PARTNER_SERVICE 2026-09-25-TŐL MEGKAPJA (Balázs döntése, Partner
+   * Portál Akváriumok terv) -- korábban itt az állt, hogy a szerepnek
+   * NINCS aquariums jogköre; ez a mondat elavult, mert a szerver
+   * `ROLE_PERMISSIONS.PARTNER_SERVICE`-je mostantól viseli mindkettőt
+   * (`packages/types/src/auth.ts`). A szerver oldali hatókör-szűrés
+   * (`aquariums.service.ts` `visibilityFor`) ettől függetlenül szűkíti a
+   * listát/adatlapot a hívó saját ügyfelére és kiosztott helyszíneire --
+   * ez a mező csak a JOG meglétét tükrözi, nem a hatókört.
    */
   aquariumsView: boolean;
   aquariumsManage: boolean;
@@ -185,19 +190,23 @@ export function getServiceCapabilities(role: UserRole): ServiceCapabilities {
     role === "MANAGER" ||
     role === "SERVICE" ||
     role === "PARTNER_SERVICE";
-  // Az akváriumnak NINCS PARTNER_SERVICE ága a szerveren (lásd a mezők
-  // dokumentációját), tehát ez a két érték a fentiektől függetlenül számol.
+  // A PARTNER_SERVICE 2026-09-25-től ide is bekerült -- lásd a mezők
+  // dokumentációját. Ez a két érték a fenti négy kulcstól FÜGGETLENÜL
+  // számol, mert az akvárium a szerveren saját jogpárt visel, nem a
+  // szerviz kettőjét.
   const canViewAquariums =
     role === "OWNER" ||
     role === "ADMIN" ||
     role === "MANAGER" ||
     role === "SERVICE" ||
+    role === "PARTNER_SERVICE" ||
     role === "VIEWER";
   const canManageAquariums =
     role === "OWNER" ||
     role === "ADMIN" ||
     role === "MANAGER" ||
-    role === "SERVICE";
+    role === "SERVICE" ||
+    role === "PARTNER_SERVICE";
   return {
     workspace: canView,
     assetsView: canView,

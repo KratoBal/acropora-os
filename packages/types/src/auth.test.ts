@@ -67,7 +67,16 @@ describe("role permission mapping", () => {
     assert.ok(!ROLE_PERMISSIONS.SERVICE.includes(PERMISSIONS.PARTNERS_MANAGE));
   });
 
-  it("keeps the partner service role limited to the three service areas", () => {
+  /**
+   * AZ AQUARIUMS_VIEW/MANAGE SZÁNDÉKOSAN BEKERÜLT -- Balázs döntése,
+   * 2026-09-25 (Partner Portál Akváriumok terv, emlék 1839). A teszt
+   * korábban a HIÁNYÁT állította ugyanezzel az indoklással ("egy későbbi
+   * bővítés különben csendben megnyitná..."); most a bővítés maga a
+   * mérendő döntés, tehát az állítás megfordul, nem törlődik -- a
+   * hatókör-szűrés (`aquariums.service.ts` `visibilityFor`) és a
+   * belsős-only írási utak (`requireInternalWriter`) máshol tesztelve.
+   */
+  it("keeps the partner service role limited to the four service areas", () => {
     const permissions = ROLE_PERMISSIONS.PARTNER_SERVICE;
 
     // Ezek nem kovetkeztetett tiltások: nev szerint állnak itt, mert egy
@@ -87,12 +96,9 @@ describe("role permission mapping", () => {
       false,
       "PARTNER_SERVICE nem kaphat partners.view jogosultságot",
     );
-    assert.equal(
-      permissions.includes(PERMISSIONS.AQUARIUMS_VIEW),
-      false,
-      "PARTNER_SERVICE nem kaphat aquariums.view jogosultságot",
-    );
     assert.deepEqual([...permissions].sort(), [
+      PERMISSIONS.AQUARIUMS_MANAGE,
+      PERMISSIONS.AQUARIUMS_VIEW,
       PERMISSIONS.SERVICE_MANAGE,
       PERMISSIONS.SERVICE_VIEW,
     ]);

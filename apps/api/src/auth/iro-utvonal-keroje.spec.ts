@@ -59,7 +59,19 @@ const API_GYOKER = "src";
  * A PARTNER_SERVICE JOGAI. Ha ez a lista elavul, a halo hatokore csusszan el --
  * ezert egy allitas kulon meri, hogy a semaval egyezik.
  */
-const PARTNERI_JOGOK = ["SERVICE_VIEW", "SERVICE_MANAGE"] as const;
+/**
+ * BŐVÜLVE 2026-09-25: az `AQUARIUMS_VIEW`/`AQUARIUMS_MANAGE` bekerült a
+ * `PARTNER_SERVICE` jogai közé (Balázs döntése, Partner Portál Akváriumok
+ * terv). Ez a halmaz-bővülés SZÁNDÉKOS, és pontosan azt a védelmet
+ * futtatja végig az új kockázati halmazon, amit ez a fájl fejléce leír:
+ * minden `AQUARIUMS_MANAGE` alatt álló író útvonalnak kérőt kell kapnia.
+ */
+const PARTNERI_JOGOK = [
+  "SERVICE_VIEW",
+  "SERVICE_MANAGE",
+  "AQUARIUMS_VIEW",
+  "AQUARIUMS_MANAGE",
+] as const;
 
 /**
  * A NEVESITETT KIVETELEK -- ES EZ NYILVANTARTAS, NEM MENTSEG.
