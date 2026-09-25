@@ -166,7 +166,12 @@ export class AquariumsController {
     @Param("occasionId") occasionId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.measurements.sendEmail(id, occasionId, user.id);
+    return this.measurements.sendEmail(
+      id,
+      occasionId,
+      user.id,
+      user.displayName,
+    );
   }
 
   @Patch(":id/maintainers")

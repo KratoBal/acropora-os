@@ -41,6 +41,13 @@ export const DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE = {
 } as const;
 
 /**
+ * `{{kuldo_neve}}` HOZZÁADVA (2026-09-25, Balázs kérése, Akváriumok szál,
+ * 10:31): a küldő kolléga neve is bekerülhet a levélbe. SZÁNDÉKOSAN NEM
+ * KERÜL a fenti alapértelmezett sablonba -- Balázs maga rakja bele, ha
+ * akarja. Innen csak a VÁLTOZÓ létezik, a szöveg nem hivatkozik rá.
+ */
+
+/**
  * A VÍZMÉRÉS PDF-JÉNEK E-MAILBEN KÜLDÉSE -- GOMBRA, NEM AUTOMATIKUS.
  *
  * Balázs kérése (2026-09-24 14:41): "gomb... Eredmény küldése e-mailben...
@@ -109,6 +116,7 @@ export class AquariumMeasurementMailService {
     customerEmail: string;
     customerName: string;
     actorUserId: string;
+    actorName: string;
   }): Promise<void> {
     if (!this.sender)
       throw new BadRequestException(
@@ -139,6 +147,7 @@ export class AquariumMeasurementMailService {
     const ertekek = {
       cimzett: input.customerName,
       akvarium_neve: input.aquariumName,
+      kuldo_neve: input.actorName,
     };
     const targy = renderMailTemplate(sablon.subject, ertekek);
     const torzs = renderMailTemplate(sablon.body, ertekek);

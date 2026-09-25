@@ -89,6 +89,7 @@ export class AquariumMeasurementsService {
     aquariumId: string,
     occasionId: string,
     actorUserId: string,
+    actorName: string,
   ): Promise<void> {
     const aquarium = await this.requireAquarium(aquariumId);
     if (!aquarium.customerEmail)
@@ -107,6 +108,7 @@ export class AquariumMeasurementsService {
       customerEmail: aquarium.customerEmail,
       customerName: aquarium.customerName ?? "Ügyfél",
       actorUserId,
+      actorName,
     });
   }
 
