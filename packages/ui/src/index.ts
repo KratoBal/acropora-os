@@ -86,3 +86,7 @@ export {
   PilotDialog,
 } from "./pilot-ui";
 export type { PilotBadgeVariant } from "./pilot-ui";
+export {
+  pilotBadgeVariantForTone,
+  partnerStatusBadgeVariant,
+} from "./pilot-badge-tone";

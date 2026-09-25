@@ -17,6 +17,9 @@
   "peerDependencies": {
     "react": "^19.2.7"
   },
+  "dependencies": {
+    "@acropora/types": "workspace:*"
+  },
   "devDependencies": {
     "@acropora/config": "workspace:*",
     "@types/react": "^19.2.17",
