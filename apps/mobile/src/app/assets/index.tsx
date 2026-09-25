@@ -4,11 +4,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,8 +19,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AssetCard } from "@/components/assets/AssetCard";
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
-import { listAssets } from "@/lib/api/assets";
+import { listAssets, type AssetListStatusFilter } from "@/lib/api/assets";
 import { filterAssets } from "@/lib/assets/asset-search";
+import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { readCachedAssets, rememberAssets } from "@/lib/offline/asset-cache";
@@ -37,9 +39,35 @@ import {
   ASSET_NOTICE_SUBJECT,
   describeOfflineNotice,
 } from "@/lib/offline/offline-notice";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 const PAGE_SIZE = 50;
 const OFFLINE_CACHE_KEY = ["offline-assets"] as const;
+
+/**
+ * AZ ÁLLAPOT-FÜLSOR -- Figma 7. kör (`Eszköznyilvántartás`), telefon.
+ *
+ * A SORREND ÉS A KÉSZLET A WEBES `asset-list-page.tsx` SAJÁT `TABS`
+ * KONSTANSÁT KÖVETI, NEM A FIGMA-LEÍRÁS SZÖVEGÉT ÉS NEM A MOBIL MAKE-MOCK
+ * TÖMBJÉT -- mindhárom más sorrendet/készletet ad, és ez NEM elírás,
+ * hanem tudatos döntés: a webes sorrend egy KIMONDOTT Balázs-kérésre megy
+ * vissza ("Összes" az elején, nem a végén -- lásd a webes fájl saját
+ * kommentjét), a mobil Make-mock pedig KIHAGY két valódi állapotot
+ * (`COLD_STANDBY` és `IN_REPAIR`) -- ha ezt követném, az a két állapot a
+ * telefonon fülsorral EGYÁLTALÁN nem lenne elérhető. A web és a telefon között
+ * ELTÉRŐ sorrendet bevezetni pedig két helyen tanítaná meg ugyanazt a
+ * listát máshogy.
+ */
+const STATUS_TABS: { key: AssetListStatusFilter; label: string }[] = [
+  { key: "ALL", label: "Összes" },
+  { key: "IN_PLACE", label: "Beépített" },
+  { key: "ACTIVE", label: ASSET_STATUS_LABELS.ACTIVE },
+  { key: "IN_REPAIR", label: ASSET_STATUS_LABELS.IN_REPAIR },
+  { key: "WARM_STANDBY", label: ASSET_STATUS_LABELS.WARM_STANDBY },
+  { key: "COLD_STANDBY", label: ASSET_STATUS_LABELS.COLD_STANDBY },
+  { key: "RETIRED", label: ASSET_STATUS_LABELS.RETIRED },
+];
 
 export default function AssetListScreen() {
   const router = useRouter();
@@ -47,18 +75,30 @@ export default function AssetListScreen() {
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const online = useIsOnline();
   const queryClient = useQueryClient();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const [sync, setSync] = useState<OfflineSyncResult | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  /**
+   * A "BEÉPÍTETT" AZ ALAPÉRTELMEZETT, UGYANÚGY, MINT A WEBEN (Balázs kérése,
+   * 2026-09-18: "ha betoltom az eszkozok listat akkor a beepitett legyen
+   * alapbol kivalasztva") -- lásd `asset-list-page.tsx` ugyanezt a
+   * kommentet.
+   */
+  const [statusTab, setStatusTab] = useState<AssetListStatusFilter>("IN_PLACE");
   // Egy teljes lehúzás képernyő-megnyitásonként. A lista frissítése (lehúzás)
   // az ELSŐ oldalt hozza; a másolatot nem kell minden mozdulatra újraépíteni.
   const pulled = useRef(false);
 
   const query = useQuery({
-    queryKey: ["service-assets", { page, pageSize: PAGE_SIZE, search }],
+    queryKey: [
+      "service-assets",
+      { page, pageSize: PAGE_SIZE, search, statusTab },
+    ],
     // A hívás akkor is elindul, ha a készülék offline-nak mondja magát: a
     // jelzése tévedhet, és egy működő lekérdezést nem tarthat vissza.
-    queryFn: () => listAssets(page, PAGE_SIZE, search),
+    queryFn: () => listAssets(page, PAGE_SIZE, search, "", statusTab),
     enabled: status === "authenticated" && Boolean(capabilities?.assetsView),
     placeholderData: keepPreviousData,
   });
@@ -246,11 +286,43 @@ export default function AssetListScreen() {
                 setPage(1);
               }}
               placeholder="Keresés szám, név vagy sorozatszám szerint"
-              placeholderTextColor="#668798"
+              placeholderTextColor={tokens.textMuted}
               style={styles.search}
               autoCorrect={false}
               autoCapitalize="characters"
             />
+            {/*
+              ÁLLAPOT-FÜLSOR. A szerver a `status` paramétert kéri
+              (`asset-status-filter.ts`), tehát a szűrés a SZERVEREN
+              történik, nem a már lapozott halmazon -- ugyanaz a szabály,
+              ami a keresésre is áll.
+            */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.tabRow}
+              contentContainerStyle={styles.tabRowContent}
+            >
+              {STATUS_TABS.map((tab) => {
+                const active = tab.key === statusTab;
+                return (
+                  <Pressable
+                    key={tab.key}
+                    onPress={() => {
+                      setStatusTab(tab.key);
+                      setPage(1);
+                    }}
+                    style={[styles.tab, active && styles.tabActive]}
+                  >
+                    <Text
+                      style={[styles.tabLabel, active && styles.tabLabelActive]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
             {notice ? <OfflineNoticeCard notice={notice} /> : null}
             {/*
               MI VAN A KÉSZÜLÉKEN. Egy szám, a helyszínre indulás előtt: ebből
@@ -279,7 +351,7 @@ export default function AssetListScreen() {
                   onPress={() => router.push("/assets/new")}
                   style={styles.secondaryButton}
                 >
-                  <Text style={styles.buttonText}>Új eszköz</Text>
+                  <Text style={styles.buttonTextMuted}>Új eszköz</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -287,7 +359,7 @@ export default function AssetListScreen() {
         }
         ListEmptyComponent={
           query.isPending && cachedItems.length === 0 ? (
-            <ActivityIndicator color="#52d6c7" />
+            <ActivityIndicator color={tokens.accent} />
           ) : query.isError && !showingCache ? (
             <View style={styles.messageCard}>
               <Text style={styles.errorTitle}>
@@ -339,7 +411,7 @@ export default function AssetListScreen() {
                 onPress={() => setPage((value) => Math.max(1, value - 1))}
                 style={[styles.pagerButton, page <= 1 && styles.pagerDisabled]}
               >
-                <Text style={styles.buttonText}>Előző</Text>
+                <Text style={styles.buttonTextMuted}>Előző</Text>
               </Pressable>
               <Text style={styles.pagerLabel}>
                 {page} / {totalPages}
@@ -354,7 +426,7 @@ export default function AssetListScreen() {
                   page >= totalPages && styles.pagerDisabled,
                 ]}
               >
-                <Text style={styles.buttonText}>Következő</Text>
+                <Text style={styles.buttonTextMuted}>Következő</Text>
               </Pressable>
             </View>
           ) : null
@@ -403,125 +475,161 @@ export default function AssetListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  valasztoSav: {
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#52d6c7",
-    backgroundColor: "#0d3a3a",
-  },
-  valasztoCimke: { color: "#52d6c7", fontWeight: "800", fontSize: 12 },
-  valasztoMeta: {
-    color: "#cfe9f2",
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 4,
-  },
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  varakozoSor: {
-    backgroundColor: "#3a2a12",
-    borderColor: "#d9a441",
-    borderRadius: 12,
-    borderWidth: 2,
-    padding: 14,
-  },
-  varakozoCimke: {
-    color: "#ffd48a",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  varakozoNev: {
-    color: "#f4fbff",
-    fontSize: 16,
-    fontWeight: "800",
-    marginTop: 6,
-  },
-  varakozoMeta: { color: "#d8c3a0", fontSize: 13, marginTop: 4 },
-  varakozoUzenet: {
-    backgroundColor: "#3a2a12",
-    borderColor: "#d9a441",
-    borderRadius: 12,
-    borderWidth: 2,
-    marginBottom: 16,
-    padding: 14,
-  },
-  container: { padding: 18, paddingBottom: 36 },
-  header: { marginBottom: 20 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-  },
-  title: { color: "#f4fbff", fontSize: 28, fontWeight: "900", marginTop: 6 },
-  subtitle: { color: "#91afbe", fontSize: 14, lineHeight: 21, marginTop: 6 },
-  cacheLine: { color: "#789cad", fontSize: 12, marginTop: 10 },
-  search: {
-    backgroundColor: "#071f31",
-    borderColor: "#28536a",
-    borderRadius: 10,
-    borderWidth: 1,
-    color: "#f4fbff",
-    marginTop: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-  pager: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "center",
-    paddingTop: 18,
-  },
-  pagerButton: {
-    backgroundColor: "#164057",
-    borderRadius: 9,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  pagerDisabled: { opacity: 0.5 },
-  pagerLabel: { color: "#91afbe", fontSize: 12 },
-  separator: { height: 12 },
-  headerActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginTop: 16,
-  },
-  primaryButton: {
-    borderRadius: 10,
-    backgroundColor: "#177b74",
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-  secondaryButton: {
-    borderRadius: 10,
-    backgroundColor: "#16495e",
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderWidth: 1,
-    borderColor: "#2b657d",
-  },
-  messageCard: {
-    borderRadius: 18,
-    backgroundColor: "#0d2b40",
-    borderWidth: 1,
-    borderColor: "#1c4963",
-    padding: 18,
-    gap: 8,
-  },
-  errorTitle: { color: "#f4fbff", fontSize: 17, fontWeight: "800" },
-  messageText: { color: "#a9c4d1", lineHeight: 20 },
-  button: {
-    alignSelf: "flex-start",
-    borderRadius: 10,
-    backgroundColor: "#177b74",
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    marginTop: 5,
-  },
-  buttonText: { color: "white", fontWeight: "800" },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- ez a
+ * képernyő eddig saját, fix sötét hexekkel élt (`#071827` stb.), ugyanúgy,
+ * ahogy az `AssetCard` is állt a saját migrálása előtt (lásd ott a
+ * fejlécet). Az "Eszköznyilvántartás" Figma 7. kör része, ami világos ÉS
+ * sötét módot kér -- enélkül a világos mód nem is létezne ezen a
+ * képernyőn.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    valasztoSav: {
+      marginBottom: 12,
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: t.accentBorder,
+      backgroundColor: t.accentSoft,
+    },
+    valasztoCimke: { color: t.accentSoftText, fontWeight: "800", fontSize: 12 },
+    valasztoMeta: {
+      color: t.textSecondary,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 4,
+    },
+    safeArea: { flex: 1, backgroundColor: t.background },
+    varakozoSor: {
+      backgroundColor: t.warningSoft,
+      borderColor: t.warning,
+      borderRadius: 12,
+      borderWidth: 2,
+      padding: 14,
+    },
+    varakozoCimke: {
+      color: t.warning,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+    varakozoNev: {
+      color: t.textPrimary,
+      fontSize: 16,
+      fontWeight: "800",
+      marginTop: 6,
+    },
+    varakozoMeta: { color: t.textSecondary, fontSize: 13, marginTop: 4 },
+    varakozoUzenet: {
+      backgroundColor: t.warningSoft,
+      borderColor: t.warning,
+      borderRadius: 12,
+      borderWidth: 2,
+      marginBottom: 16,
+      padding: 14,
+    },
+    container: { padding: 18, paddingBottom: 36 },
+    header: { marginBottom: 20 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.5,
+    },
+    title: {
+      color: t.textPrimary,
+      fontSize: 28,
+      fontWeight: "900",
+      marginTop: 6,
+    },
+    subtitle: {
+      color: t.textSecondary,
+      fontSize: 14,
+      lineHeight: 21,
+      marginTop: 6,
+    },
+    cacheLine: { color: t.textMuted, fontSize: 12, marginTop: 10 },
+    search: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      color: t.textPrimary,
+      marginTop: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+    },
+    tabRow: { marginTop: 12 },
+    tabRowContent: { gap: 8, paddingRight: 4 },
+    tab: {
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      backgroundColor: t.surface,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    tabActive: { backgroundColor: t.accent, borderColor: t.accent },
+    tabLabel: { color: t.textSecondary, fontSize: 12, fontWeight: "700" },
+    tabLabelActive: { color: t.textOnAccent },
+    pager: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "center",
+      paddingTop: 18,
+    },
+    pagerButton: {
+      backgroundColor: t.surfaceRaised,
+      borderWidth: 1,
+      borderColor: t.border,
+      borderRadius: 9,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+    },
+    pagerDisabled: { opacity: 0.5 },
+    pagerLabel: { color: t.textSecondary, fontSize: 12 },
+    separator: { height: 12 },
+    headerActions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      marginTop: 16,
+    },
+    primaryButton: {
+      borderRadius: 10,
+      backgroundColor: t.accent,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+    },
+    secondaryButton: {
+      borderRadius: 10,
+      backgroundColor: t.surfaceRaised,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    messageCard: {
+      borderRadius: 18,
+      backgroundColor: t.surface,
+      borderWidth: 1,
+      borderColor: t.border,
+      padding: 18,
+      gap: 8,
+    },
+    errorTitle: { color: t.textPrimary, fontSize: 17, fontWeight: "800" },
+    messageText: { color: t.textSecondary, lineHeight: 20 },
+    button: {
+      alignSelf: "flex-start",
+      borderRadius: 10,
+      backgroundColor: t.accent,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      marginTop: 5,
+    },
+    buttonText: { color: t.textOnAccent, fontWeight: "800" },
+    buttonTextMuted: { color: t.textPrimary, fontWeight: "800" },
+  });
+}

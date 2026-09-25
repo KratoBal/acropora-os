@@ -65,6 +65,13 @@ export interface AssetUnit {
 
 export interface AssetListItem extends AssetHierarchyItem {
   criticality: AssetCriticality;
+  /**
+   * A KATEGÓRIA NEVE -- A LISTASORON IS MEGJÖN, NEM CSAK AZ ADATLAPON
+   * (`apps/api/src/service-assets/service-assets.repository.ts` mapper
+   * fejléce ezt kimondja), csak eddig ez a típus nem hordozta. A Figma 7.
+   * kör kártyája ezt kéri a listán ("Kategória" a másodlagos sorban).
+   */
+  category?: string;
   owner: {
     type: AssetOwnerType;
     id: string;
@@ -99,7 +106,6 @@ export interface AssetListItem extends AssetHierarchyItem {
 }
 
 export interface AssetDetail extends AssetListItem {
-  category?: string;
   /**
    * A FUNKCIO -- FUGGETLEN A KATEGORIATOL, lasd az `AssetFunction` fejleceit
    * a kozos `packages/types`-ban. Kanban 68add892, 2026-09-22.
@@ -295,16 +301,33 @@ export interface AssetListResponse {
  * ugyanaz, mint a parameter hianya: a szerver egy ures azonositot kapna, es a
  * reszfa-kibontast egy nem letezo egysegre futtatna.
  */
+/**
+ * A LISTA-VEGPONT ALLAPOT-SZUROJE -- a szerver sajat harom-fajta erteke
+ * (`asset-status-filter.ts`): `ALL` mindent ad, `IN_PLACE` ("Beépített")
+ * mindent a kivezetetteken kivul, egy konkret `AssetStatus` pedig pontosan
+ * azt az egyet.
+ */
+export type AssetListStatusFilter = "ALL" | "IN_PLACE" | AssetStatus;
+
+/**
+ * AZ ALAPERTELMEZES `ACTIVE`, NEM `IN_PLACE` -- ES EZ SZANDEKOS ELTERES A
+ * WEBTOL. A hivok tobbsege (szuloeszkoz-valaszto, hibajegy eredet-eszkoz,
+ * helyszini elotoltes) egy MUKODO eszkozt keres kivalasztasra, nem a teljes
+ * allomanyt -- egy kivezetett vagy javitas alatt allo eszkoz felajanlasa
+ * ott felrevezetne. Csak a SAJAT LISTA KEPERNYO (`app/assets/index.tsx`)
+ * ad at explicit erteket, a fulsor valasztasa szerint.
+ */
 export function listAssets(
   page = 1,
   pageSize = 50,
   search = "",
   departmentId = "",
+  status: AssetListStatusFilter = "ACTIVE",
 ) {
   const query = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
-    status: "ACTIVE",
+    status,
     ownerScope: "SERVICE_PARTNER",
   });
   if (search.trim()) query.set("search", search.trim());

@@ -1,8 +1,11 @@
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { AssetListItem } from "@/lib/api/assets";
 import { assetPlacementLine } from "@/lib/assets/asset-placement";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 export function AssetCard({
   asset,
@@ -11,6 +14,9 @@ export function AssetCard({
   asset: AssetListItem;
   onPress(): void;
 }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -24,6 +30,15 @@ export function AssetCard({
       </View>
       <Text style={styles.name}>{asset.name}</Text>
       <Text style={styles.customer}>{asset.owner.displayName}</Text>
+      {/*
+        A KATEGÓRIA A FIGMA 7. KÖR TÁBLA-OSZLOPÁT FEDI A KÁRTYÁN: a szerver a
+        listasoron is küldi (lásd az `AssetListItem.category` fejlécét), ez
+        eddig csak nem jelent meg. Csak akkor sor, ha van érték -- ugyanaz a
+        minta, mint a gyártó/modell/sorozatszám sornál lejjebb.
+      */}
+      {asset.category ? (
+        <Text style={styles.meta}>{asset.category}</Text>
+      ) : null}
       {/*
         HOL ÁLL, ÉS MIKOR NEM VÁLASZTÁS EREDMÉNYE, AMIT LÁTUNK. Szerviz
         partnernél a cím mindig a partner saját postai címe: alegység nélkül
@@ -69,35 +84,44 @@ export function AssetCard({
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#1c4963",
-    backgroundColor: "#0d2b40",
-    padding: 16,
-    gap: 4,
-  },
-  pressed: { opacity: 0.72 },
-  topline: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-  },
-  number: {
-    color: "#75e2d5",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-  },
-  status: {
-    color: "#b7d6e5",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  name: { color: "#f4fbff", fontSize: 18, fontWeight: "800" },
-  customer: { color: "#d7edf7", fontSize: 14, fontWeight: "600" },
-  meta: { color: "#91afbe", fontSize: 12, lineHeight: 18 },
-  technical: { color: "#c3d9e4", fontSize: 12, marginTop: 5 },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- korábban
+ * saját, fix sötét hexek voltak (`#0d2b40` stb.), ugyanúgy, ahogy a
+ * vízmérés képernyő is állt a saját migrálása előtt. Ez a kártya a
+ * "Eszköznyilvántartás" Figma 7. kör része, ami világos ÉS sötét módot kér
+ * -- a fix hexekkel ez nem lett volna elérhető.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    card: {
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+      padding: 16,
+      gap: 4,
+    },
+    pressed: { opacity: 0.72 },
+    topline: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+    },
+    number: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 0.6,
+    },
+    status: {
+      color: t.textSecondary,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    name: { color: t.textPrimary, fontSize: 18, fontWeight: "800" },
+    customer: { color: t.textPrimary, fontSize: 14, fontWeight: "600" },
+    meta: { color: t.textSecondary, fontSize: 12, lineHeight: 18 },
+    technical: { color: t.textSecondary, fontSize: 12, marginTop: 5 },
+  });
+}
