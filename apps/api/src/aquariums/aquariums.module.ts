@@ -32,5 +32,6 @@ import { AquariumsService } from "./aquariums.service.js";
     AquariumMaintainersRepository,
     AquariumMaintainersService,
   ],
+  exports: [AquariumsService],
 })
 export class AquariumsModule {}
