@@ -12,7 +12,6 @@ import type { WaterType, WorksheetDepartmentSummary } from "@acropora/types";
 import {
   Icon,
   PilotButton,
-  PilotCard,
   PilotFormField,
   PilotInput,
   PilotSelect,
@@ -148,67 +147,69 @@ export function NewAquarium() {
 
       {error ? <Message tone="error" text={error} /> : null}
 
-      <form onSubmit={submit} className="max-w-xl">
-        <PilotCard>
-          <div className="flex flex-col gap-4 p-5">
-            <PilotFormField label="Akvárium neve" required>
-              <PilotInput
-                value={name}
-                onChange={setName}
-                placeholder="Például: Trópusi korall, 1. medence"
-              />
-            </PilotFormField>
+      {/*
+        FLAT ELRENDEZES, KARTYA NELKUL -- ugyanaz a mintakoveto javitas, mint
+        a "Uj hibajegy" urlapon (`new-ticket.tsx`): a Figma terv erre a lapra
+        sem hasznal `Card`-ot (`PartnerPortalScreen.tsx:1582-1613`), csak
+        `FormField`-eket egymas alatt, `gap-6`-tal.
+      */}
+      <form onSubmit={submit} className="flex max-w-xl flex-col gap-6">
+        <PilotFormField label="Akvárium neve" required>
+          <PilotInput
+            value={name}
+            onChange={setName}
+            placeholder="Például: Trópusi korall, 1. medence"
+          />
+        </PilotFormField>
 
-            <PilotFormField label="Víztípus" required>
-              <PilotSelect
-                value={waterType}
-                onChange={(value) => setWaterType(value as WaterType)}
-              >
-                {WATER_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </PilotSelect>
-            </PilotFormField>
+        <PilotFormField label="Víztípus" required>
+          <PilotSelect
+            value={waterType}
+            onChange={(value) => setWaterType(value as WaterType)}
+          >
+            {WATER_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </PilotSelect>
+        </PilotFormField>
 
-            <PilotFormField label="Víztérfogat (liter)">
-              <PilotInput
-                type="number"
-                min={0}
-                value={volumeLiters}
-                onChange={setVolumeLiters}
-                placeholder="Nem kötelező"
-              />
-            </PilotFormField>
+        <PilotFormField label="Víztérfogat (liter)">
+          <PilotInput
+            type="number"
+            min={0}
+            value={volumeLiters}
+            onChange={setVolumeLiters}
+            placeholder="Nem kötelező"
+          />
+        </PilotFormField>
 
-            <PilotFormField
-              label="Helyszín"
-              required
-              help={
-                !departmentsLoading && locations.length === 0
-                  ? "Önhöz nincs helyszín rendelve, ezért akváriumot sem tud felvinni. A hozzárendelést az Acropora ügyfélszolgálatán kérheti."
-                  : undefined
-              }
-            >
-              <PilotSelect
-                value={departmentId}
-                onChange={setDepartmentId}
-                disabled={departmentsLoading}
-              >
-                <option value="">Válasszon helyszínt</option>
-                {locations.map(({ item, depth }) => (
-                  <option
-                    key={item.id}
-                    value={item.id}
-                  >{`${"— ".repeat(depth)}${item.name} (${item.code})`}</option>
-                ))}
-              </PilotSelect>
-            </PilotFormField>
-          </div>
-        </PilotCard>
+        <PilotFormField
+          label="Helyszín"
+          required
+          help={
+            !departmentsLoading && locations.length === 0
+              ? "Önhöz nincs helyszín rendelve, ezért akváriumot sem tud felvinni. A hozzárendelést az Acropora ügyfélszolgálatán kérheti."
+              : undefined
+          }
+        >
+          <PilotSelect
+            value={departmentId}
+            onChange={setDepartmentId}
+            disabled={departmentsLoading}
+          >
+            <option value="">Válasszon helyszínt</option>
+            {locations.map(({ item, depth }) => (
+              <option
+                key={item.id}
+                value={item.id}
+              >{`${"— ".repeat(depth)}${item.name} (${item.code})`}</option>
+            ))}
+          </PilotSelect>
+        </PilotFormField>
 
-        <div className="mt-4 flex items-center gap-2">
+        <div className="flex items-center gap-3 border-t border-pilot-grey-100 pt-4">
           <PilotButton
             type="button"
             variant="secondary"

@@ -11,8 +11,6 @@ import { useRouter } from "next/navigation";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 import {
   PilotButton,
-  PilotCard,
-  PilotCardHeader,
   PilotFormField,
   PilotInput,
   PilotSelect,
@@ -213,154 +211,151 @@ export function NewTicket() {
           </p>
         ) : null}
 
-        <form className="flex flex-col gap-5" onSubmit={submit}>
-          <PilotCard>
-            <div className="flex flex-col gap-4 px-5 py-5">
-              <PilotFormField label="Mi a probléma?" required>
-                <PilotInput
-                  value={title}
-                  onChange={(value) => setTitle(value.slice(0, 300))}
-                  placeholder="Például: A keringető szivattyú nem indul"
-                />
-              </PilotFormField>
-              <PilotFormField label="Részletes leírás">
-                <textarea
-                  value={description}
-                  onChange={(event) =>
-                    setDescription(event.target.value.slice(0, 4000))
-                  }
-                  placeholder="Kérjük, írja le, mit tapasztalt."
-                  rows={6}
-                  className="w-full rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-                />
-              </PilotFormField>
-              <PilotFormField label="Helyszín">
-                <PilotSelect
-                  value={departmentId}
-                  onChange={setDepartmentId}
-                  disabled={loading}
-                >
-                  <option value="">Nincs megadva</option>
-                  {locations.map(({ item, depth }) => (
-                    <option
-                      key={item.id}
-                      value={item.id}
-                    >{`${"— ".repeat(depth)}${item.name} (${item.code})`}</option>
-                  ))}
-                </PilotSelect>
-              </PilotFormField>
-              {/*
-                AZ URES VALASZTO MEGNEVEZI AZ OKOT, NEM CSAK URES.
+        {/*
+          FLAT ELRENDEZES, KARTYA NELKUL -- a Figma terv erre a lapra EGYETLEN
+          `Card`-ot sem hasznal (`PartnerPortalScreen.tsx:758-798`, csak
+          `FormField`-ek egymas alatt, `gap-6`-tal), ellentetben a listakkal
+          es adatlapokkal, ahol a tartalom mindig kartyaba kerul. A mezok
+          SORRENDJE es TARTALMA valtozatlan, csak a korettartas tunt el.
+        */}
+        <form className="flex flex-col gap-6" onSubmit={submit}>
+          <PilotFormField label="Mi a probléma?" required>
+            <PilotInput
+              value={title}
+              onChange={(value) => setTitle(value.slice(0, 300))}
+              placeholder="Például: A keringető szivattyú nem indul"
+            />
+          </PilotFormField>
+          <PilotFormField label="Részletes leírás">
+            <textarea
+              value={description}
+              onChange={(event) =>
+                setDescription(event.target.value.slice(0, 4000))
+              }
+              placeholder="Kérjük, írja le, mit tapasztalt."
+              rows={6}
+              className="w-full rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+            />
+          </PilotFormField>
+          <PilotFormField label="Helyszín">
+            <PilotSelect
+              value={departmentId}
+              onChange={setDepartmentId}
+              disabled={loading}
+            >
+              <option value="">Nincs megadva</option>
+              {locations.map(({ item, depth }) => (
+                <option
+                  key={item.id}
+                  value={item.id}
+                >{`${"— ".repeat(depth)}${item.name} (${item.code})`}</option>
+              ))}
+            </PilotSelect>
+            {/*
+              AZ URES VALASZTO MEGNEVEZI AZ OKOT, NEM CSAK URES.
 
-                A lista a HOZZARENDELESI tablabol tolt, nem a vevo osszes
-                alegysegebol: `worksheets.service.ts` a `assignedUnitIdsFor` hivason
-                at szur. Egy hozzarendeles nelkuli partner-fiok tehat URES valasztot
-                kap, es a mai lapon semmi nem mondja meg, miert.
+              A lista a HOZZARENDELESI tablabol tolt, nem a vevo osszes
+              alegysegebol: `worksheets.service.ts` a `assignedUnitIdsFor` hivason
+              at szur. Egy hozzarendeles nelkuli partner-fiok tehat URES valasztot
+              kap, es a mai lapon semmi nem mondja meg, miert.
 
-                ES A KETTO KIVULROL EGYFORMA: egy ures lista ugyanugy nez ki, mint egy
-                elromlott betoltes. Ugyanaz az alak, amit a mobil kepernyoknel mar
-                egyszer felirtunk -- egy nem mukodo urlap es egy hibas urlap kozott a
-                felhasznalo nem tud kulonbseget tenni, ha a lap hallgat.
+              ES A KETTO KIVULROL EGYFORMA: egy ures lista ugyanugy nez ki, mint egy
+              elromlott betoltes. Ugyanaz az alak, amit a mobil kepernyoknel mar
+              egyszer felirtunk -- egy nem mukodo urlap es egy hibas urlap kozott a
+              felhasznalo nem tud kulonbseget tenni, ha a lap hallgat.
 
-                A BETOLTES ALATT NEM SZOL: addig a lista joggal ures, es egy
-                villano figyelmeztetes epp a hibas allapotot utanozna.
+              A BETOLTES ALATT NEM SZOL: addig a lista joggal ures, es egy
+              villano figyelmeztetes epp a hibas allapotot utanozna.
 
-                A SZOVEG MA IS IGAZ: helyszin nelkul ma MEG lehet jegyet nyitni, csak
-                eszkozt nem lehet valasztani. Ha a helyszin egyszer kotelezove valik
-                (15c9cd7a), ez a mondat BOVUL, nem cserelodik.
-              */}
-              {!loading && locations.length === 0 ? (
-                <p className="text-xs leading-5 text-pilot-grey-400">
-                  Önhöz még nincs helyszín rendelve. Amíg nincs, az eszközök
-                  listája üres marad. A hozzárendelést az Acropora
-                  ügyfélszolgálatán kérheti.
-                </p>
-              ) : null}
-            </div>
-          </PilotCard>
-
-          <PilotCard>
-            <PilotCardHeader title="Érintett eszközök" />
-            <div className="px-5 py-4">
-              <fieldset
-                disabled={!departmentId || submitting}
-                className="m-0 flex flex-col gap-2 border-0 p-0"
-              >
-                {!departmentId ? (
-                  /*
-                    KET ALLAPOT, KET MONDAT -- ES EDDIG EGY ALLT ITT.
-
-                    Az "Előbb válasszon helyszínt" mondat annak szol, aki VALASZTHAT.
-                    Egy hozzarendeles nelkuli partnernek ugyanez zsakutca, mert arra
-                    kerte, hogy valasszon valamit, ami nincs a listajaban. A ket
-                    allapotot ugyanaz a felteteles ag hozta elo, tehat a mondat a
-                    rosszabbik esetben felrevezetett.
-                  */
-                  <p className="text-sm text-pilot-grey-400">
-                    {locations.length === 0 && !loading
-                      ? "Ehhez a bejelentéshez nem tud eszközt kiválasztani, mert nincs Önhöz rendelt helyszín."
-                      : "Előbb válasszon helyszínt; ezután csak az ott található eszközök jelennek meg."}
-                  </p>
-                ) : assets.length ? (
-                  assets.map((asset) => (
-                    <label
-                      key={asset.id}
-                      className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={assetIds.includes(asset.id)}
-                        onChange={(event) =>
-                          setAssetIds((current) =>
-                            event.target.checked
-                              ? [...current, asset.id]
-                              : current.filter((id) => id !== asset.id),
-                          )
-                        }
-                        className="size-4 rounded accent-pilot-aqua-600"
-                      />
-                      <span className="text-sm text-pilot-grey-900">
-                        {asset.name}
-                      </span>
-                      <span className="ml-auto font-mono text-xs text-pilot-grey-400">
-                        {eszkozAzonosito(asset)}
-                      </span>
-                    </label>
-                  ))
-                ) : (
-                  <p className="text-sm text-pilot-grey-400">
-                    Ezen a helyszínen nincs megjeleníthető eszköz.
-                  </p>
-                )}
-              </fieldset>
-            </div>
-          </PilotCard>
-
-          <PilotCard>
-            <PilotCardHeader title="Fénykép, dokumentum" />
-            <div className="flex flex-col gap-2 px-5 py-4">
-              {/*
-                A HIBAT A KEPPEL EGYUTT JELENTI BE AZ EMBER. 2026-09-18-ig ez a mezo
-                nem letezett: csatolni csak a MAR LETREJOTT jegy adatlapjan lehetett,
-                tehat a bejelentonek ket lepesben kellett elmondania ugyanazt.
-              */}
-              <input
-                type="file"
-                multiple
-                accept="image/jpeg,image/png,application/pdf"
-                onChange={(event) =>
-                  setFiles(Array.from(event.target.files ?? []))
-                }
-                className="cursor-pointer text-sm text-pilot-grey-600 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-pilot-aqua-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-pilot-aqua-700"
-              />
-              <p className="text-xs text-pilot-grey-400">
-                Nem kötelező. A kép a bejelentés elküldése után kerül fel, és
-                utólag az adatlapon is pótolható.
+              A SZOVEG MA IS IGAZ: helyszin nelkul ma MEG lehet jegyet nyitni, csak
+              eszkozt nem lehet valasztani. Ha a helyszin egyszer kotelezove valik
+              (15c9cd7a), ez a mondat BOVUL, nem cserelodik.
+            */}
+            {!loading && locations.length === 0 ? (
+              <p className="text-xs leading-5 text-pilot-grey-400">
+                Önhöz még nincs helyszín rendelve. Amíg nincs, az eszközök
+                listája üres marad. A hozzárendelést az Acropora
+                ügyfélszolgálatán kérheti.
               </p>
-            </div>
-          </PilotCard>
+            ) : null}
+          </PilotFormField>
 
-          <div className="flex justify-end gap-3">
+          <PilotFormField label="Érintett eszközök">
+            <fieldset
+              disabled={!departmentId || submitting}
+              className="m-0 flex flex-col gap-2 border-0 p-0"
+            >
+              {!departmentId ? (
+                /*
+                  KET ALLAPOT, KET MONDAT -- ES EDDIG EGY ALLT ITT.
+
+                  Az "Előbb válasszon helyszínt" mondat annak szol, aki VALASZTHAT.
+                  Egy hozzarendeles nelkuli partnernek ugyanez zsakutca, mert arra
+                  kerte, hogy valasszon valamit, ami nincs a listajaban. A ket
+                  allapotot ugyanaz a felteteles ag hozta elo, tehat a mondat a
+                  rosszabbik esetben felrevezetett.
+                */
+                <p className="text-sm text-pilot-grey-400">
+                  {locations.length === 0 && !loading
+                    ? "Ehhez a bejelentéshez nem tud eszközt kiválasztani, mert nincs Önhöz rendelt helyszín."
+                    : "Előbb válasszon helyszínt; ezután csak az ott található eszközök jelennek meg."}
+                </p>
+              ) : assets.length ? (
+                assets.map((asset) => (
+                  <label
+                    key={asset.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={assetIds.includes(asset.id)}
+                      onChange={(event) =>
+                        setAssetIds((current) =>
+                          event.target.checked
+                            ? [...current, asset.id]
+                            : current.filter((id) => id !== asset.id),
+                        )
+                      }
+                      className="size-4 rounded accent-pilot-aqua-600"
+                    />
+                    <span className="text-sm text-pilot-grey-900">
+                      {asset.name}
+                    </span>
+                    <span className="ml-auto font-mono text-xs text-pilot-grey-400">
+                      {eszkozAzonosito(asset)}
+                    </span>
+                  </label>
+                ))
+              ) : (
+                <p className="text-sm text-pilot-grey-400">
+                  Ezen a helyszínen nincs megjeleníthető eszköz.
+                </p>
+              )}
+            </fieldset>
+          </PilotFormField>
+
+          <PilotFormField label="Fénykép, dokumentum">
+            {/*
+              A HIBAT A KEPPEL EGYUTT JELENTI BE AZ EMBER. 2026-09-18-ig ez a mezo
+              nem letezett: csatolni csak a MAR LETREJOTT jegy adatlapjan lehetett,
+              tehat a bejelentonek ket lepesben kellett elmondania ugyanazt.
+            */}
+            <input
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,application/pdf"
+              onChange={(event) =>
+                setFiles(Array.from(event.target.files ?? []))
+              }
+              className="cursor-pointer text-sm text-pilot-grey-600 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-pilot-aqua-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-pilot-aqua-700"
+            />
+            <p className="text-xs text-pilot-grey-400">
+              Nem kötelező. A kép a bejelentés elküldése után kerül fel, és
+              utólag az adatlapon is pótolható.
+            </p>
+          </PilotFormField>
+
+          <div className="flex items-center gap-3 border-t border-pilot-grey-100 pt-4">
             <PilotButton
               variant="secondary"
               type="button"
