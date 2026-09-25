@@ -459,16 +459,39 @@ export function PilotCard({
   );
 }
 
+/**
+ * `icon` OPCIONÁLIS, ADDITÍV MEZŐ (2026-09-25, webes kezdőlap Figma-
+ * igazítás) -- a meglévő hívók (aquárium/hibajegy/eszköz/munkalap pilot
+ * lapok, sok tucat helyen) `icon` nélkül hívnak, és a hiányában a fejléc
+ * BETŰRE ugyanazt rajzolja, mint korábban: a prop csak akkor foglal helyet,
+ * ha meg van adva. A hívó adja át a kész `<Icon .../>`-t (méret, szín a
+ * hívóé), ugyanaz a minta, mint az `action`-nél -- ez a komponens nem dönt
+ * ikon-névről vagy színről, csak helyet ad neki a cím elé.
+ *
+ * AZ IKON A `<h3>`-ON BELÜL ÁLL, NEM EGY ÚJ KÜLSŐ `<div>`-BEN -- ez nem
+ * ízlés kérdése: több meglévő teszt (pl. `worksheet-documents.component.
+ * test.tsx` `szakasz()` segédje) a cím szövegétől KÉT SZINTET lép felfelé
+ * (`fejlec.parentElement.parentElement`) a kártya-panel eléréséhez. Egy
+ * köztes `<div>` az ikon és a `<h3>` köré ezt a feltevést törte volna (a két
+ * lépés akkor a fejléc-sorra, nem a kártyára ért volna) -- mérve, a teljes
+ * webes tesztsor futtatásával derült ki. Az ikon így NEM változtatja meg a
+ * `<h3>` mélységét a szülőhöz képest, csak a saját tartalmát bővíti.
+ */
 export function PilotCardHeader({
   title,
+  icon,
   action,
 }: {
   title: string;
+  icon?: ReactNode;
   action?: ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between border-b border-pilot-grey-100 px-5 py-4">
-      <h3 className="text-sm font-semibold text-pilot-grey-900">{title}</h3>
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-pilot-grey-900">
+        {icon}
+        {title}
+      </h3>
       {action}
     </div>
   );

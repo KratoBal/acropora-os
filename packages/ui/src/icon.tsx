@@ -4,10 +4,12 @@ import { cn } from "./utils";
 
 export type IconName =
   | "activity"
+  | "alert"
   | "aquarium"
   | "bell"
   | "box"
   | "briefcase"
+  | "calendar"
   | "cart"
   | "chevron-down"
   | "chevron-left"
@@ -15,6 +17,7 @@ export type IconName =
   | "credit-card"
   | "dashboard"
   | "download"
+  | "droplet"
   | "finance"
   | "info"
   | "key"
@@ -116,6 +119,21 @@ export function Icon({ className, name, size = 18, ...props }: IconProps) {
         <>
           <path d="M3 7h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7ZM3 11h18" />
           <path d="M8 15c2-2 4-2 6 0-2 2-4 2-6 0Zm6 0 2-2v4l-2-2Z" />
+        </>
+      )}
+      {name === "droplet" && (
+        <path d="M12 3c3.5 4 6 7.4 6 10.5a6 6 0 1 1-12 0C6 10.4 8.5 7 12 3Z" />
+      )}
+      {name === "calendar" && (
+        <>
+          <rect x="3.5" y="5" width="17" height="16" rx="2" />
+          <path d="M3.5 9.5h17M8 3v4M16 3v4" />
+        </>
+      )}
+      {name === "alert" && (
+        <>
+          <path d="M12 3 22 20H2L12 3Z" />
+          <path d="M12 10v4M12 16.8v.01" />
         </>
       )}
       {name === "briefcase" && (
