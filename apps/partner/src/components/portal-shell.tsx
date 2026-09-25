@@ -123,14 +123,15 @@ export function PortalShell({ children }: { children: ReactNode }) {
         `--color-pilot-*` ujradefinialas) -- tehat ez a sor semmi UJ CSS-t
         nem igenyel, csak az ATTRIBUTUMOT rakja fel.
         SZANDEKOSAN NEM a `<main>`-re vagy a korulotte allo `<div>`-re kerul:
-        a `{children}` alatt MEG all ot regi-stilusu lap (Beallitasok, Uj
-        hibajegy, Akvariumok lista, Akvariumok adatlap, Uj akvarium), amik
-        nativ `input`/`select` elemeket hasznalnak sajat, nyers CSS
+        a `{children}` alatt MEG all negy regi-stilusu lap (Beallitasok,
+        Akvariumok lista, Akvariumok adatlap, Uj akvarium -- az "Uj
+        hibajegy" 2026-09-25-tol mar pilot-aqua, lasd `new-ticket.tsx`),
+        amik nativ `input`/`select` elemeket hasznalnak sajat, nyers CSS
         szinekkel -- a
         `[data-theme="dark"] input/select/textarea { ... !important }`
         szabaly ezeket FUGGETLENUL a sajat osztalyuktol sotetitene, mikozben
         a korulottuk allo panel vilagos maradna: ugyanaz a "kevert" hiba,
-        amit ez a javitas felszamol, csak MASIK ot lapon. A hatokor tehat
+        amit ez a javitas felszamol, csak MASIK negy lapon. A hatokor tehat
         szandekosan az oldalsavra szukul.
       */}
       <aside
@@ -278,9 +279,10 @@ export function PortalShell({ children }: { children: ReactNode }) {
         errol a kozos hejrol, a pilot oldalak negativ margos semlegesitese
         pedig okafogyotta valt es szinten torolve lett (lasd azok sajat
         `PilotThemeRoot` hivasat). A `.content` osztaly MOST MAR csak azon
-        az ot meg regi-stilusu lapon all, ami tenylegesen igenyli
-        (Beallitasok, Uj hibajegy, Akvariumok lista, Akvariumok adatlap, Uj
-        akvarium) -- lasd azok sajat gyoker elemet.
+        a negy meg regi-stilusu lapon all, ami tenylegesen igenyli
+        (Beallitasok, Akvariumok lista, Akvariumok adatlap, Uj akvarium --
+        az "Uj hibajegy" 2026-09-25-tol mar pilot-aqua) -- lasd azok sajat
+        gyoker elemet.
       */}
       <div className="lg:pl-52">
         <main>{children}</main>
