@@ -43,25 +43,15 @@ import { CIMKE, LAP_CIM, LAP_FEJLEC, LAP_LEIRAS, PANEL } from "./frame";
  * hozzá a portálon (a láthatóság a `departmentId`-n áll, lásd
  * `aquarium-visibility.ts`).
  *
- * === NINCS "ÚJ AKVÁRIUM" GOMB A LISTÁN, EBBEN A KÖRBEN ===
+ * === EZ AZ ÁG A #1118/#1121 ELŐTT, ÖNÁLLÓAN ÉPÜLT ===
  *
- * Ez az ág a #1118/#1121 (lista+adatlap) beolvadása ELŐTT, önállóan épül
- * (acrobot kérése: ne stackeljek). Az `aquarium-list.tsx` "Új akvárium"
- * gombjának bekötése ezért KÜLÖN lépés, miután mindkét ág egy fán van --
- * ha ez a PR később kerül beolvasztásra, a gomb bekötése idekerül ebbe a
- * PR-be, rebase után; ha előbb, egy kis követő módosítás viszi be.
- *
- * === EZ A KÉPERNYŐ A #1121 KAPCSOLAT-VÉDELMÉRE TÁMASZKODIK, KÖZVETVE ===
- *
- * A `portal-shell.tsx` `/akvariumok`-tal kezdődő útvonalakat (tehát
- * `/akvariumok/uj`-t is) a `user.navigation` alapján engedi vagy tiltja --
- * lásd a `portal-shell.tsx` és `auth.tsx` fejlécét a #1121-en. EBBEN az
- * ágban ez a védelem MÉG NINCS BENNE (a shell itt még a régi, #1116 előtti
- * alak). Nyitás/beolvasztás ELŐTT ezt az ágat a #1121 (vagy az azt már
- * tartalmazó main) UTÁNRA kell rebase-elni -- utána a védelem automatikusan
- * vonatkozik erre a képernyőre is, mert a `pathname.startsWith("/akvariumok")`
- * feltétel eleve fedi. Amíg ez nem történt meg, ez az útvonal réselt: régi
- * élő API mellett is elérhető lenne.
+ * (acrobot kérése: ne stackeljek.) A lánc azóta beolvadt -- ez a fejezet
+ * a #1118/#1121 utáni post-merge mainre rebase-elve készült el: az "Új
+ * akvárium" gomb bekötve az `aquarium-list.tsx`-en, és a `portal-shell.tsx`
+ * `user.navigation`-alapú kapuja (lásd annak fejlécét) a
+ * `pathname.startsWith("/akvariumok")` feltételen át már ELEVE fedi ezt az
+ * útvonalat is (`/akvariumok/uj` is `/akvariumok`-kal kezdődik) -- nem
+ * kellett hozzá külön kód.
  */
 
 const WATER_TYPE_OPTIONS: { value: WaterType; label: string }[] = [

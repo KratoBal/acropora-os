@@ -6,6 +6,7 @@ import {
   Alert,
   Button,
   EmptyState,
+  Icon,
   Pagination,
   ServiceListFooter,
   ServiceListHeader,
@@ -45,23 +46,29 @@ import { useAuth } from "./auth";
  * szerint ez az oszlop most kimarad, nem találjuk ki -- ha a lista-válasz
  * valaha bővül `waterType`-tal, ez a kártya visszakerülhet.
  *
- * === NINCS "ÚJ AKVÁRIUM" GOMB EBBEN A KÖRBEN ===
+ * === AZ "ÚJ AKVÁRIUM" GOMB MOSTANTÓL ITT VAN ===
  *
- * Ugyanaz az indok, mint az `AssetList`-nél az "Új eszköz" gombra: a portál
- * ma nem ismer `/akvariumok/uj` útvonalat, és ennek megépítése önálló kör.
+ * Ugyanaz az indok/minta, mint a belső `asset-list-page.tsx` "Új eszköz"
+ * gombjánál: `Link` + `Button` + `Icon` a `ServiceListHeader` `action`
+ * prop-jában. FELTÉTEL NÉLKÜL jelenik meg (nem `hasPermission`-höz kötve,
+ * mint a belső lapon) -- a `PARTNER_SERVICE` szerep create()-hez nem kap
+ * `requireInternalWriter`-t (lásd `aquariums.service.ts`), tehát minden
+ * partner-fiók hívhatja a végpontot. Hozzárendelt helyszín nélkül a gomb
+ * a felvitel-űrlapra visz, ami a saját "nincs helyszíne, nem tud felvinni"
+ * üzenetét mutatja -- ugyanaz a minta, mint a `new-ticket.tsx` hibajegy-
+ * nyitásánál.
  *
- * EZ A BEKEZDÉS KORÁBBAN AZT ÁLLÍTOTTA, hogy emellett egy VÉGPONT is
- * hiányzik ("saját, hozzárendelt helyszín" választó), és a meglévő
- * `worksheetsApi.departments(customerId)` a vevő TELJES helyszínlistáját
- * adná. **Ez tévedés volt, és mérve javítva 2026-09-25:**
+ * EZ A BEKEZDÉS KORÁBBAN AZT ÁLLÍTOTTA, hogy a gomb hiányát egy VÉGPONT
+ * hiánya indokolja ("saját, hozzárendelt helyszín" választó), és hogy a
+ * meglévő `worksheetsApi.departments(customerId)` a vevő TELJES
+ * helyszínlistáját adná. **Ez tévedés volt, és mérve javítva 2026-09-25:**
  * `worksheets.repository.ts` `departments()`-e `scope.kind === "customer"`
- * hívónál MÁR MA is `id: { in: [...assignedUnitIds] }` szűrést alkalmaz
- * (`assignedUnitIdsFor(actorUserId)`-ból) -- ugyanaz a végpont, amit a
- * `new-ticket.tsx` helyszín-választója is hív, MÁR a hívó saját, kiosztott
- * helyszíneire szűkül, nem a vevő teljes fájára. A hiány tehát KIZÁRÓLAG a
- * képernyő/útvonal, nem a szerver oldal -- ha az "Új akvárium" képernyő
- * megépül, a `worksheetsApi.departments(customerId)` közvetlenül
- * felhasználható a helyszín-választóhoz, új végpont nélkül.
+ * hívónál MÁR AKKOR is `id: { in: [...assignedUnitIds] }` szűrést
+ * alkalmazott (`assignedUnitIdsFor(actorUserId)`-ból) -- ugyanaz a
+ * végpont, amit a `new-ticket.tsx` helyszín-választója is hív, MÁR a hívó
+ * saját, kiosztott helyszíneire szűkült, nem a vevő teljes fájára. A hiány
+ * tehát KIZÁRÓLAG a képernyő/útvonal volt, nem a szerver oldal -- ez a
+ * javítás pont ezt pótolja.
  */
 
 const PAGE_SIZE = 25;
@@ -117,6 +124,14 @@ export function AquariumList() {
         eyebrow="Saját adatok"
         title="Akváriumok"
         lead="A cégéhez tartozó, hozzárendelt helyszínek akváriumai. Kattintson egy akváriumra az adatlapjáért."
+        action={
+          <Link href="/akvariumok/uj">
+            <Button>
+              <Icon name="plus" className="mr-1.5 size-[17px]" />
+              Új akvárium
+            </Button>
+          </Link>
+        }
       />
 
       {error ? (
