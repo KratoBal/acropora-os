@@ -75,6 +75,10 @@ describe("role permission mapping", () => {
    * mérendő döntés, tehát az állítás megfordul, nem törlődik -- a
    * hatókör-szűrés (`aquariums.service.ts` `visibilityFor`) és a
    * belsős-only írási utak (`requireInternalWriter`) máshol tesztelve.
+   *
+   * AZ ESZKÖZ-AKVÁRIUM HOZZÁRENDELÉS (emlék 1843, 1847) SZÁNDÉKOSAN NINCS
+   * ITT -- az felhasználónkénti `ServiceCapability` jelölő, nem szerep-
+   * szintű jog, lásd `auth.ts` `PARTNER_SERVICE` fejlécét.
    */
   it("keeps the partner service role limited to the four service areas", () => {
     const permissions = ROLE_PERMISSIONS.PARTNER_SERVICE;

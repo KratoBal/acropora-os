@@ -2834,6 +2834,27 @@ export class ServiceAssetsRepository extends Repository {
       createdAt: document.createdAt.toISOString(),
     };
   }
+
+  /**
+   * VAN-E BEJELÖLVE A HÍVÓNÁL AZ ESZKÖZ-AKVÁRIUM HOZZÁRENDELÉS KÉPESSÉGE.
+   *
+   * Ugyanaz a minta, mint a `MaterialRequestsRepository`
+   * `hasMarkReceivedCapability()`-je: felhasználónkénti
+   * `UserServiceCapability` jelölő, nem szerep-szintű jog (emlék 1843,
+   * 1847) -- lásd `auth.ts` `PARTNER_SERVICE` fejlécét arról, miért NEM
+   * ez a jog-listán áll.
+   */
+  async hasAquariumAssetAssignCapability(userId: string): Promise<boolean> {
+    const row = await prisma.userServiceCapability.findUnique({
+      where: {
+        userId_capability: {
+          userId,
+          capability: "AQUARIUM_ASSET_ASSIGN",
+        },
+      },
+    });
+    return row !== null;
+  }
 }
 
 /** A letöltő/DTO csak a feltöltő által ténylegesen támogatott típusokat ismeri. */

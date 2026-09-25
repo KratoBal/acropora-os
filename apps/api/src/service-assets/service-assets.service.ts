@@ -11,6 +11,7 @@ import { describeFieldConflict } from "./asset-field-conflict.js";
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -49,6 +50,7 @@ import { shouldGeneratePartnerInternalCode } from "./partner-internal-code.js";
 import type {
   AssetListQueryDto,
   AssetOwnersQueryDto,
+  AssignAssetAquariumDto,
   CreateAssetDto,
   UpdateAssetDto,
 } from "./dto/asset.dto.js";
@@ -514,6 +516,50 @@ export class ServiceAssetsService {
        */
       this.map(error, { kind: "internal" });
     }
+  }
+
+  /**
+   * ESZKÖZ HOZZÁRENDELÉSE/LEVÉTELE EGY AKVÁRIUMRÓL -- FELHASZNÁLÓNKÉNTI
+   * KÉPESSÉGGEL VÉDVE, NEM SZEREP-SZINTŰ JOGGAL (emlék 1843, 1847).
+   *
+   * A VÉGPONT (`PATCH :id/aquarium`) `SERVICE_MANAGE` alatt áll -- UGYANAZ
+   * a jog, amit a `PARTNER_SERVICE` szerep is visel a napi munkához --,
+   * ezért ez a metódus egy MÁSODIK, finomabb réteget told elé: a hívónál
+   * be kell jelölve lennie az `AQUARIUM_ASSET_ASSIGN`
+   * `ServiceCapability`-nek. Ugyanaz a két-rétegű minta, mint a
+   * `MaterialRequestsService.listPending()`-nél
+   * (`requireInternalWriter` + `hasMarkReceivedCapability`) -- ott a
+   * második réteg SZŰKÍT egy már belsősre zárt kört, itt egy MINDENKI
+   * (staff és partner) által elérhető jogot szűkít tovább egyetlen
+   * fiókra.
+   *
+   * UTÁNA A MEGLÉVŐ `update()`-ot HÍVJA, VÁLTOZATLANUL -- innentől a
+   * hatókör- (`requireAssetInScope`) és ütközés-védelem
+   * (`asset-field-conflict.ts`) pontosan úgy fut, mint bármely más
+   * hívónál.
+   */
+  async assignAquarium(
+    id: string,
+    input: AssignAssetAquariumDto,
+    actorUserId: string,
+    user: AuthenticatedUser,
+  ) {
+    const allowed = await this.repository.hasAquariumAssetAssignCapability(
+      user.id,
+    );
+    if (!allowed)
+      throw new ForbiddenException(
+        "Nincs bejelölve nálad az eszköz akváriumhoz rendelésének joga.",
+      );
+    return this.update(
+      id,
+      {
+        aquariumId: input.aquariumId,
+        expectedUpdatedAt: input.expectedUpdatedAt,
+      },
+      actorUserId,
+      user,
+    );
   }
 
   async rotateQr(id: string, actorUserId: string, user: AuthenticatedUser) {

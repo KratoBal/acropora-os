@@ -949,3 +949,47 @@ describe("az Akváriumok menüpont és útvonal kapuja", () => {
     assert.match(kod(PORTAL_SHELL), /AKVARISZTIKA_MENU\.map\(\(item\) => \{/);
   });
 });
+
+/**
+ * ESZKÖZ AKVÁRIUMHOZ RENDELÉSE/LEVÉTELE -- A KLIENS-OLDALI HÍVÁS ALAKJA.
+ *
+ * A JOGOSULTSÁG-MECHANIZMUS 2026-09-25-ÖN MEGVÁLTOZOTT (emlék 1843, majd
+ * 1847): a végpont NEM dedikált `SERVICE_ASSET_AQUARIUM_ASSIGN` jog alatt
+ * áll, hanem `SERVICE_MANAGE`-en, egy felhasználónkénti `ServiceCapability`
+ * jelölővel szűkítve a SERVICE-rétegben (lásd `service-assets.service.ts`
+ * `assignAquarium()` fejlécét) -- ez a réteg a szerveren mérve az
+ * `asset-aquarium-assign-permission.spec.ts`-ben.
+ *
+ * A PORTÁL-OLDALI UI (a gomb/választó, ami ezt a hívást elsüti) EBBEN A
+ * KÖRBEN NINCS BENNE: az `aquarium-detail.tsx` a Portál Akváriumok terv
+ * 1. körében (emlék 1847) pilot-stílusra épül újra, ez a munka pedig a
+ * 3. kör -- lásd a fájl saját, aktuális fejlécét. Az UI-wiring tesztek
+ * (jog-ellenőrzés, gomb/választó feltétel, payload) a 3. körben kerülnek
+ * vissza, a NEW detail-page struktúrához igazítva. Ami MOST mérhető, és
+ * ami itt marad, az a KLIENS-FÜGGVÉNY alakja -- az a réteg, amit a
+ * jövőbeli UI, akárhogy is épül, ugyanígy fog hívni.
+ */
+describe("eszköz hozzárendelése/levétele egy akváriumról -- kliens hívás", () => {
+  it("POZITÍV KONTROLL: a kliens olvasható és nem üres", () => {
+    assert.ok(
+      olvas(KLIENS).length > 500,
+      `${KLIENS}: üres vagy gyanúsan rövid`,
+    );
+  });
+
+  /**
+   * A KLIENS DEDIKÁLT, SZŰK VÉGPONTRA MEGY -- nem az általános
+   * `PATCH /service/assets/:id`-re. MI PIROSÍT: ha valaki "egyszerűsítené"
+   * a hívást az általános adatlap-frissítő függvényre, ami a portál eddig
+   * SOHA nem hívott -- azzal minden más mező is írhatóvá válna.
+   */
+  it("a kliens a /aquarium al-útvonalra ír, nem az általános PATCH-re", () => {
+    const s = kod(KLIENS);
+    assert.match(
+      s,
+      /assignAssetAquarium: \(\s*assetId: string,\s*input: \{ aquariumId: string \| null; expectedUpdatedAt: string \},\s*\) =>/,
+    );
+    assert.match(s, /\$\{encodeURIComponent\(assetId\)\}\/aquarium/);
+    assert.match(s, /method: "PATCH"/);
+  });
+});
