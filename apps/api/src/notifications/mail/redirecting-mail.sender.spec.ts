@@ -129,13 +129,23 @@ describe("a levél-átirányító burok", () => {
     assert.ok(belso.kapott[0]?.text.startsWith("=== ÁTIRÁNYÍTOTT"));
   });
 
-  it("a tárgy megjelöli, hogy a levél átirányított", async () => {
+  /**
+   * A TARGY AZ EREDETI CIMZETTEKET MUTATJA, NEM CSAK EGY "ÁTIRÁNYÍTVA" SZOT.
+   *
+   * Balazs kerese (2026-09-25 21:03 UTC, emlek 1842): a targy ELEJEN legyen
+   * ott az eredeti cimzett -- egy levellistat pergetve ez az egyetlen sor,
+   * amit tenyleg elolvasnak.
+   */
+  it("a tárgy elején az EREDETI címzettek állnak", async () => {
     const { belso, sender } = kuldo({
       TICKET_MAIL_REDIRECT_TO: "proba@acropora.hu",
     });
     await sender.send(LEVEL);
 
-    assert.match(belso.kapott[0]?.subject ?? "", /^\[ÁTIRÁNYÍTVA\]/);
+    assert.match(
+      belso.kapott[0]?.subject ?? "",
+      /^\[eredeti: vevo@partner\.hu, masik@partner\.hu\]/,
+    );
     // ES AZ EREDETI TARGY IS MEGMARAD: enelkul a probalevelbol nem derulne ki,
     // MELYIK levelrol van szo.
     assert.ok(belso.kapott[0]?.subject.includes(LEVEL.subject));

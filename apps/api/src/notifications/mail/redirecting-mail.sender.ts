@@ -84,7 +84,16 @@ export class RedirectingMailSender implements MailSender {
     return this.inner.send({
       ...mail,
       to: [redirect.to],
-      subject: `[ÁTIRÁNYÍTVA] ${mail.subject}`,
+      /*
+        A VALODI CIMZETT A TARGY ELEJEN, NEM CSAK A TORZSBEN.
+
+        Balazs kerese (2026-09-25 21:03 UTC, emlek 1842): a teszt szerveren "a
+        targy elejen az eredeti cimzettel". A torzsbeli `redirectHeader` marad
+        (masodik, torzsbeli jelzes -- egy hosszu levelnel a targy egy sor,
+        konnyen atsiklik rajta), de aki csak a levellistat pergeti at, a
+        targybol lassa, kinek ment volna.
+      */
+      subject: `[eredeti: ${mail.to.join(", ")}] ${mail.subject}`,
       text: `${redirectHeader(mail.to)}\n\n${mail.text}`,
     });
   }

@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
 import { serviceJobOpenedPushTitle } from "./service-job-opened-title.js";
 import { APNS_SENDING, type ApnsSending } from "./apns.sender.js";
@@ -12,6 +12,7 @@ import {
   NotificationLogRepository,
   type NotificationAttempt,
 } from "./notification-log.repository.js";
+import { NOTIFICATIONS_ENV, pushRedirect } from "./push-redirect.js";
 
 /** Hany ertesites ment ki, hany eszkoz-token evult el, es hany bukott el. */
 /**
@@ -159,6 +160,14 @@ export class NotificationsService {
     @Inject(APNS_SENDING) private readonly sender: ApnsSending,
     private readonly log: NotificationLogRepository,
     @Inject(FCM_SENDING) private readonly fcm: FcmSending,
+    /*
+      UGYANAZ A MINTA, MINT A `TICKET_MAIL_ENV`-NEL: a token opcionalis, es
+      hianyaban `process.env` all -- a tesztnek viszont nem kell a valodi
+      kornyezetet allitania ahhoz, hogy az atiranyitast merje.
+    */
+    @Optional()
+    @Inject(NOTIFICATIONS_ENV)
+    private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
   /**
@@ -504,6 +513,30 @@ export class NotificationsService {
     if (input.userIds.length === 0) return empty;
 
     /**
+     * A PUSH-ATIRANYITAS -- LASD `push-redirect.ts`.
+     *
+     * A KAPU ELOL ALL, MINDEN UTVONAL-SZAMOLAS ELOTT: ha a valtozo be van
+     * allitva, a TOKEN-FELOLDAS mar csak a proba-felhasznalo(ka)t nezi, tehat
+     * a tobbi cimzett eszkoze SOHA nem kerul elo -- nem egy kesobbi szures
+     * dobja el a kuldest, hanem a lekerdezes maga nem is kerdez ra.
+     *
+     * A HIANYZO VALTOZO ITT IS "off"-OT AD, es ez a MAI viselkedes: elesben ez
+     * a valtozo SOHA nincs beallitva, tehat ott ez az ag sosem fut.
+     */
+    const redirect = pushRedirect(this.environment.PUSH_REDIRECT_TO_USER_IDS);
+    const targetUserIds =
+      redirect.kind === "on" ? redirect.userIds : input.userIds;
+    if (redirect.kind === "on") {
+      const kimaradt = input.userIds.filter(
+        (id) => !redirect.userIds.includes(id),
+      );
+      if (kimaradt.length > 0)
+        this.logger.warn(
+          `PUSH ÁTIRÁNYÍTVA: ${kimaradt.length} eredeti címzett kimaradt, csak a próba-felhasználó(k) eszközei kapják.`,
+        );
+    }
+
+    /**
      * A KET KULDO UT, MEGNEVEZVE -- ES A PLATFORM ITT ALL, NEM A TAROLOBAN.
      *
      * A `recipients` kerdese nem az, hogy „kit lehet elerni", hanem hogy „kit
@@ -559,7 +592,7 @@ export class NotificationsService {
       await Promise.all(
         routes.map(async (route) => {
           const recipients = await this.deviceTokens.recipients(
-            input.userIds,
+            targetUserIds,
             route.platform,
           );
           return Promise.all(

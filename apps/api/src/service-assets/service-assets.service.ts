@@ -54,7 +54,10 @@ import type {
   CreateAssetDto,
   UpdateAssetDto,
 } from "./dto/asset.dto.js";
-import type { DocumentStore } from "./document-store/document-store.js";
+import {
+  documentUnavailableMessage,
+  type DocumentStore,
+} from "./document-store/document-store.js";
 import { DOCUMENT_STORE } from "./document-store/document-store.provider.js";
 import { assertStorageKeyMatches } from "./document-store/document-storage-key.js";
 import { documentStoreEnabled } from "./document-store/document-store.provider.js";
@@ -933,9 +936,7 @@ export class ServiceAssetsService {
       documentId,
     });
     if (bytes === null) {
-      throw new ServiceUnavailableException(
-        "A dokumentum tartalma a tárolóban nem érhető el.",
-      );
+      throw new ServiceUnavailableException(documentUnavailableMessage());
     }
     return { ...document, bytes };
   }
