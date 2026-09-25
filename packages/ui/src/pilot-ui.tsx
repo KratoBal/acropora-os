@@ -497,3 +497,78 @@ export function PilotDialog({
     </div>
   );
 }
+
+/**
+ * EGY CÍMKE+ÉRTÉK SOR, A FIGMA PARTNER PORTÁL ADATLAPJAINAK OLDALSÁVJÁHOZ
+ * (`PartnerPortalScreen.tsx` `DataRow`, 308-315. sor). ELSŐ HASZNÁLAT: a
+ * hibajegy-adatlap "Az ügy adatai" panelje, MÁSODIK a tervezett eszköz- és
+ * munkalap-adatlap saját adatsora -- innentől közös, nem app-szintű.
+ *
+ * A HIÁNYZÓ ÉRTÉK MINDIG "Nincs megadva" SZÖVEG, SOSEM ÜRES CELLA -- ezt a
+ * komponens maga kényszeríti ki (`value || <span>Nincs megadva</span>`), a
+ * hívónak nem kell külön esetet írnia rá.
+ */
+export function PilotDataRow({
+  label,
+  value,
+  labelWidth,
+}: {
+  label: string;
+  value?: ReactNode;
+  labelWidth?: string;
+}) {
+  return (
+    <div
+      className="grid gap-4 border-b border-pilot-grey-50 py-2.5 last:border-0"
+      style={{ gridTemplateColumns: `${labelWidth ?? "180px"} 1fr` }}
+    >
+      <span className="text-xs font-medium text-pilot-grey-400">{label}</span>
+      <span className="text-sm text-pilot-grey-700">
+        {value || (
+          <span className="italic text-pilot-grey-300">Nincs megadva</span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * PÖTTYÖS-VONALAS IDŐVONAL, A FIGMA PARTNER PORTÁL ADATLAPJAINAK "MI
+ * TÖRTÉNT" PANELJÉHEZ (`PartnerPortalScreen.tsx` `Timeline`, 317-337. sor).
+ *
+ * PREZENTÁCIÓS KOMPONENS, NEM DOMAIN-SPECIFIKUS: a hívó alakítja át a saját
+ * (jegy-napló, munkalap-verzió stb.) adatát `text`/`meta` párrá -- a
+ * hibajegy naplója és egy jövőbeli eszköz-előzmény teljesen más alakú
+ * bemenetből épül, csak a MEGJELENÉS közös.
+ */
+export function PilotTimeline({
+  items,
+}: {
+  items: readonly { key: string; text: ReactNode; meta?: ReactNode }[];
+}) {
+  return (
+    <div className="flex flex-col">
+      {items.map((item, index) => (
+        <div
+          key={item.key}
+          className="flex gap-3 border-b border-pilot-grey-50 py-3 last:border-0"
+        >
+          <div className="flex flex-col items-center gap-1 pt-0.5">
+            <div className="h-2 w-2 shrink-0 rounded-full bg-pilot-aqua-500" />
+            {index < items.length - 1 ? (
+              <div className="min-h-[16px] w-px flex-1 bg-pilot-grey-100" />
+            ) : null}
+          </div>
+          <div className="min-w-0 flex-1 pb-1">
+            <p className="text-sm text-pilot-grey-700">{item.text}</p>
+            {item.meta ? (
+              <div className="mt-1 text-xs text-pilot-grey-400">
+                {item.meta}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

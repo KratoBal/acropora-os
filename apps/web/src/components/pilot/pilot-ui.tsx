@@ -39,6 +39,8 @@ export {
   PilotCardHeader,
   PilotDrawer,
   PilotDialog,
+  PilotDataRow,
+  PilotTimeline,
 } from "@acropora/ui";
 export type { PilotBadgeVariant };
 
