@@ -22,6 +22,14 @@ import { describe, it } from "node:test";
  * modul az 1. csoport (még nem beolvadt) ágán élne, és ez a fájl attól
  * függne. Egy tíz soros regex-függvény duplikálása olcsóbb, mint a
  * hat "friss mainról, egymásra nem építve" PR közötti láncolás.
+ *
+ * A SPEC ITT ÁLL, NEM A `src/app` ALATT (acrobot mérése, 2026-09-25 17:03):
+ * az Expo Router a `src/app` MINDEN fájlját útvonalként próbálja buildelni,
+ * és a `node:test` importot az `expo export` nem tudja feloldani -- a
+ * "Static verification" CI-lépés emiatt bukott. A LENTI `SRC` ÚT VÁLTOZATLAN
+ * MARADT: mind a régi (`src/app/service-jobs`), mind az új (`src/lib/theme`)
+ * hely ugyanolyan mélyen áll a `test-dist` alatt, tehát a felfelé lépések
+ * száma véletlenül egyezik.
  */
 function hexSzinLiteralok(forras: string): string[] {
   const kod = forras
