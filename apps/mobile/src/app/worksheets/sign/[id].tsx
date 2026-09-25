@@ -45,8 +45,14 @@ import {
  *
  * AZ ELUTASITAS UTJA MAS, ES SZANDEKOSAN NEM UGYANAZ A GOMB: ott az indok
  * KOTELEZO (Balazs dontese, 2026-08-26), tehat a szerelo ir. Egy indok plusz
- * megerosites. A ket utat osszevonni annyi lenne, mint az elfogadas ele is
- * odatenni egy mezot, amit senki nem tolt ki.
+ * megerosites.
+ *
+ * A MEGJEGYZES MEZO MOSTANTOL MINDKET UTON LATSZIK (Balazs dontese, Eldontendo
+ * szal, 2026-09-25 11:09): elfogadasnal opcionalis, elutasitasnal kotelezo --
+ * ugyanaz a mezo (`note`), csak a feliratozasa es a kotelezettsege maradt
+ * kulon. A webes felulet ugyanezt a dontest kapta, egy kulon PR-ben. A KET UT
+ * GOMBJA es a megerosito szovege tovabbra sem ugyanaz, csak a mezo lathatosaga
+ * lett kozos.
  *
  * A dontesek es a megerosito szovegek a
  * `lib/worksheets/worksheet-signature.ts` modulban allnak, mert ott MERHETOK.
@@ -467,35 +473,36 @@ export default function WorksheetSignScreen() {
                   <Text style={styles.error}>{formError}</Text>
                 ) : null}
 
+                {/*
+                  A MEGJEGYZES MOSTANTOL MINDKET UTON LATSZIK (Balazs dontese,
+                  2026-09-25): elfogadasnal opcionalis, elutasitasnal kotelezo
+                  -- ugyanaz a `note` mezo mindket iranyban, csak a
+                  kotelezettseget a `buildWorksheetSignaturePayload` donti el a
+                  `decision` alapjan, ez a kepernyo csak megjeleniti.
+                */}
+                <Text style={styles.sectionTitle}>Megjegyzés</Text>
+                <View style={styles.card}>
+                  <TextInput
+                    value={note}
+                    onChangeText={(next) => {
+                      setNote(next);
+                      setFormError(null);
+                    }}
+                    multiline
+                    numberOfLines={3}
+                    placeholder="Például: a szivattyú továbbra is zajos"
+                    placeholderTextColor="#5b7d8f"
+                    style={[styles.input, styles.noteInput]}
+                  />
+                  <Text style={styles.muted}>
+                    {rejecting
+                      ? "A megjegyzés kötelező: enélkül nem derül ki, mit kell javítani."
+                      : "Nem kötelező."}
+                  </Text>
+                </View>
+
                 {rejecting ? (
                   <>
-                    {/*
-                      AZ ELUTASITAS UTJA: INDOK PLUSZ MEGEROSITES. Az indok
-                      KOTELEZO (Balazs dontese, 2026-08-26), es ez az EGYETLEN
-                      hely a kepernyon, ahol a szerelo gepel.
-                    */}
-                    <Text style={styles.sectionTitle}>
-                      Miért nem fogadja el?
-                    </Text>
-                    <View style={styles.card}>
-                      <TextInput
-                        value={note}
-                        onChangeText={(next) => {
-                          setNote(next);
-                          setFormError(null);
-                        }}
-                        multiline
-                        numberOfLines={3}
-                        placeholder="Például: a szivattyú továbbra is zajos"
-                        placeholderTextColor="#5b7d8f"
-                        style={[styles.input, styles.noteInput]}
-                      />
-                      <Text style={styles.muted}>
-                        Az indoklás kötelező: enélkül nem derül ki, mit kell
-                        javítani.
-                      </Text>
-                    </View>
-
                     <Pressable
                       disabled={sign.isPending}
                       onPress={() => megerosit("REJECTED")}
