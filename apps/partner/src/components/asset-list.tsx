@@ -3,18 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  Button,
-  EmptyState,
+  Icon,
   Pagination,
-  ServiceListFooter,
-  ServiceListHeader,
-  ServiceListTabs,
-  ServiceSearchField,
-  ServiceStatusBadge,
-  Skeleton,
-  StatCard,
-  sv,
+  PilotBadge,
+  PilotThemeRoot,
+  pilotBadgeVariantForTone,
 } from "@acropora/ui";
 import {
   assetStatusLabel,
@@ -27,22 +20,37 @@ import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
 
 /**
- * AZ ESZKÖZLISTA A BELSŐ (`app.acropora.hu`) ELRENDEZÉSÉBEN.
+ * AZ ESZKÖZLISTA -- FIGMA 9. KÖR (Partner Portál), a Make-terv
+ * `PartnerPortalScreen.tsx:803-890` átültetése.
  *
- * Balázs kérése, 2026-09-24 07:28 UTC, verbatim: "en orulnek neki, ha
- * ugyanugy nezne ki a partner portalon pl az eszkozkezelo mint az
- * app.acropora.hu-n".
+ * VIZUÁLIS VÁLTÁS A KORÁBBI KÖRHÖZ KÉPEST: az előző kör a belső, violet
+ * `ServiceListHeader`/`ServiceListTabs`/`ServiceSearchField`/
+ * `ServiceStatusBadge`/`ServiceListFooter`/`StatCard` keretet vette át
+ * (Balázs 2026-09-24-i kérése, hogy a portál az app.acropora.hu-hoz
+ * hasonlítson) -- a mostani Figma-kör a portál egészét pilot-aqua design-
+ * rendszerre viszi, ez a lap a hibajegy-listával (#1117) egyező mintát
+ * követi.
  *
- * A KÖZÖS KERETRE ÁLLVA: murena #1041-e (`ticket-portal-visual-parity`)
- * átköltöztette a `sv`/`ServiceStatusBadge`/`ServiceListHeader`/
- * `ServiceListTabs`/`ServiceListFooter`/`ServiceSearchField` keretet
- * `apps/web`-ből `packages/ui`-ba a hibajegy-lapokhoz. Ez a lap ugyanazokat
- * a komponenseket használja, nem egy saját, párhuzamos Tailwind-közelítést.
+ * A SZŰRŐ-LOGIKA VÁLTOZATLAN: a "Beépített" alapértelmezett fül jelentése
+ * MINDEN státusz, KIVÉVE Kivezetett (nem hierarchia-fogalom, lásd a Make-terv
+ * saját `tab === 'Beépített' ? d.allapot !== 'Kivezetett'` sorát, 813. sor)
+ * -- a valódi szűrést a szerver végzi (`status` paraméter), ez a fájl csak a
+ * FÜL-ÉRTÉKET adja tovább, változatlanul.
  *
- * AMI NEM KÖLTÖZÖTT ÁT (`ServiceListStats`/`ServiceStatTile`,
- * `apps/web/src/components/service/service-list-stats.tsx`): a statisztika-
- * csempék ezért a MÁR KORÁBBAN IS közös `StatCard`-ot használják (nem
- * kattinthatók, szemben a belső lap csempéivel).
+ * A "HIERARCHIA" OSZLOP MIND A HÁROM ÁGA MEGMARAD (Része: X / N részegység /
+ * Önálló eszköz) -- a Make-terv demo-adata csak az egyiket mutatja be
+ * (876. sor, mindig "Önálló eszköz"), de ez a prototípus tömörsége, nem
+ * szándékos leegyszerűsítés.
+ *
+ * A FEJLÉC LEÍRÁS-MONDATA MEGMARAD ("A cégéhez tartozó eszközök.
+ * Kattintson egy eszközre az adatlapjáért.") -- a Make-terv fejléce ezt nem
+ * mutatja (824-829. sor: csak eyebrow + cím), de ez a prototípus tömörsége,
+ * nem szándékos elhagyás.
+ *
+ * A STATISZTIKA-CSEMPÉK IKONJAI KÖZELÍTÉSEK: a Make-terv `CubeIcon`/
+ * `WrenchIcon`/`CheckIcon`-t használ, a közös `Icon` készletben ("package",
+ * "service", "activity") nincs pontos megfelelőjük -- ez díszítő elem, nem
+ * adatot hordozó jelölés, ezért a közelítés nem "kitalált mező".
  */
 
 const TABS = [
@@ -53,7 +61,7 @@ const TABS = [
   { key: "WARM_STANDBY", label: "Meleg tartalék" },
   { key: "COLD_STANDBY", label: "Hideg tartalék" },
   { key: "RETIRED", label: "Kivezetett" },
-];
+] as const;
 
 const PAGE_SIZE = 25;
 
@@ -134,202 +142,264 @@ export function AssetList() {
     : null;
 
   const tiles = useMemo(
-    () => [
-      { key: "ALL", label: "Nyilvántartott eszköz", value: total },
-      {
-        key: "IN_REPAIR",
-        label: "Javítás alatt",
-        value: counts?.IN_REPAIR ?? null,
-      },
-      { key: "ACTIVE", label: "Aktívan üzemel", value: counts?.ACTIVE ?? null },
-    ],
+    () =>
+      [
+        {
+          key: "ALL",
+          label: "Nyilvántartott eszköz",
+          value: total,
+          icon: "package",
+        },
+        {
+          key: "IN_REPAIR",
+          label: "Javítás alatt",
+          value: counts?.IN_REPAIR ?? null,
+          icon: "service",
+        },
+        {
+          key: "ACTIVE",
+          label: "Aktívan üzemel",
+          value: counts?.ACTIVE ?? null,
+          icon: "activity",
+        },
+      ] as const,
     [counts, total],
   );
 
   return (
-    <section>
-      <ServiceListHeader
-        eyebrow="Saját adatok"
-        title="Eszközök"
-        lead="A cégéhez tartozó eszközök. Kattintson egy eszközre az adatlapjáért."
-      />
+    <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 flex min-h-screen max-w-none flex-col bg-pilot-grey-50">
+      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
+          Saját adatok
+        </p>
+        <h1 className="text-xl font-semibold text-pilot-grey-900">Eszközök</h1>
+        <p className="mt-0.5 text-sm text-pilot-grey-400">
+          A cégéhez tartozó eszközök. Kattintson egy eszközre az adatlapjáért.
+        </p>
+      </div>
 
       {error ? (
-        <Alert
-          className="mb-6"
-          variant="danger"
-          title="Betöltési hiba"
-          description={error}
-          action={
-            <Button variant="secondary" onClick={load}>
+        <div className="px-8 py-4">
+          <p
+            className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"
+            role="alert"
+          >
+            {error}{" "}
+            <button
+              type="button"
+              className="cursor-pointer font-medium underline"
+              onClick={load}
+            >
               Újrapróbálás
-            </Button>
-          }
-        />
+            </button>
+          </p>
+        </div>
       ) : null}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 border-b border-pilot-grey-100 bg-pilot-grey-50 px-8 py-5 sm:grid-cols-3">
         {tiles.map((tile) => (
-          <StatCard
+          <div
             key={tile.key}
-            label={tile.label}
-            value={tile.value === null ? "—" : String(tile.value)}
-          />
+            className="flex items-center gap-3 rounded-xl bg-white p-4 ring-1 ring-pilot-grey-200"
+          >
+            <div
+              className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                tile.key === "IN_REPAIR"
+                  ? "bg-pilot-amber-50 text-pilot-amber-600"
+                  : "bg-pilot-aqua-50 text-pilot-aqua-600"
+              }`}
+            >
+              <Icon name={tile.icon} size={16} />
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-pilot-grey-900">
+                {tile.value === null ? "—" : tile.value}
+              </p>
+              <p className="text-xs text-pilot-grey-400">{tile.label}</p>
+            </div>
+          </div>
         ))}
       </div>
 
-      <section className={sv.panel}>
-        <ServiceListTabs
-          tabs={TABS}
-          active={status}
-          onSelect={selectStatus}
-          label="Eszközök szűrése státusz szerint"
-        />
-        <div className={sv.toolbar}>
-          <ServiceSearchField
-            label="Eszköz keresése"
-            placeholder="Név, eszközszám, gyártó, modell, sorozatszám"
-            value={search}
-            onChange={selectSearch}
-          />
-          <div className="flex flex-wrap items-center gap-2.5">
-            <label>
-              <span className="sr-only">Helyszín</span>
-              <select
-                className={sv.select}
-                value={helyszin}
-                onChange={(event) => selectHelyszin(event.target.value)}
-              >
-                <option value="">Minden helyszín</option>
-                {helyszinek.map((egyseg) => (
-                  <option key={egyseg.id} value={egyseg.id}>
-                    {egyseg.name}
-                  </option>
+      <div className="flex flex-col gap-3 border-b border-pilot-grey-100 bg-white px-8 py-4">
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => selectStatus(tab.key)}
+              className={`cursor-pointer whitespace-nowrap rounded-md px-3.5 py-1.5 text-sm font-medium transition-all ${
+                status === tab.key
+                  ? "bg-pilot-aqua-50 text-pilot-aqua-700"
+                  : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative max-w-sm flex-1">
+            <Icon
+              name="search"
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-pilot-grey-300"
+            />
+            <input
+              type="text"
+              aria-label="Eszköz keresése"
+              placeholder="Név, eszközszám, gyártó, modell, sorozatszám"
+              value={search}
+              onChange={(event) => selectSearch(event.target.value)}
+              className="w-full rounded-md py-1.5 pl-8 pr-3 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+            />
+          </div>
+          <label>
+            <span className="sr-only">Helyszín</span>
+            <select
+              value={helyszin}
+              onChange={(event) => selectHelyszin(event.target.value)}
+              className="cursor-pointer rounded-md py-1.5 pl-3 pr-8 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+            >
+              <option value="">Minden helyszín</option>
+              {helyszinek.map((egyseg) => (
+                <option key={egyseg.id} value={egyseg.id}>
+                  {egyseg.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {data ? (
+            <Pagination
+              position="top"
+              page={data.pagination.page}
+              totalPages={data.pagination.totalPages}
+              onPageChange={setPage}
+            />
+          ) : null}
+        </div>
+      </div>
+
+      {!data && !error ? (
+        <p className="px-8 py-6 text-sm text-pilot-grey-400">
+          Eszközök betöltése…
+        </p>
+      ) : null}
+
+      {data?.items.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 py-24 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pilot-aqua-50">
+            <Icon name="package" size={24} className="text-pilot-aqua-600" />
+          </div>
+          <p className="text-base font-semibold text-pilot-grey-700">
+            Nincs megjeleníthető eszköz
+          </p>
+          <p className="max-w-xs text-sm text-pilot-grey-400">
+            A partneri fiókhoz jelenleg nincs eszköz rögzítve, vagy a szűrők nem
+            adnak találatot.
+          </p>
+        </div>
+      ) : null}
+
+      {data?.items.length ? (
+        <div className="flex-1 overflow-x-auto">
+          <table className="w-full min-w-[980px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-pilot-grey-100">
+                {[
+                  "Eszköz",
+                  "Elhelyezés",
+                  "Hierarchia",
+                  "Kategória",
+                  "Műszaki azonosító",
+                  "Státusz",
+                ].map((head) => (
+                  <th
+                    key={head}
+                    className="whitespace-nowrap bg-white px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-pilot-grey-400"
+                  >
+                    {head}
+                  </th>
                 ))}
-              </select>
-            </label>
-            {data ? (
-              <Pagination
-                position="top"
-                page={data.pagination.page}
-                totalPages={data.pagination.totalPages}
-                onPageChange={setPage}
-              />
-            ) : null}
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map((asset, index) => (
+                <tr
+                  key={asset.id}
+                  className={`border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 ${
+                    index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
+                  }`}
+                >
+                  <td className="px-5 py-3">
+                    <Link
+                      href={`/eszkozok/${asset.id}`}
+                      className="font-medium text-pilot-grey-900 hover:text-pilot-aqua-700"
+                    >
+                      {asset.name}
+                    </Link>
+                    <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
+                      {eszkozAzonosito(asset)}
+                    </p>
+                    {asset.partnerInternalCode ? (
+                      <p className="mt-0.5 text-xs text-pilot-grey-400">
+                        Partner belső kódja:{" "}
+                        <span className="font-mono">
+                          {asset.partnerInternalCode}
+                        </span>
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="px-5 py-3 text-pilot-grey-500">
+                    {asset.unit
+                      ? `${asset.unit.path.join(" / ")} (${asset.unit.code})`
+                      : (asset.address?.formatted ?? "Nincs pontosítva.")}
+                  </td>
+                  <td className="px-5 py-3 text-xs text-pilot-grey-600">
+                    {asset.parent ? (
+                      <span>
+                        Része: <strong>{asset.parent.name}</strong>
+                      </span>
+                    ) : asset.childCount ? (
+                      `${asset.childCount} részegység`
+                    ) : (
+                      "Önálló eszköz"
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-pilot-grey-600">
+                    {asset.category ?? "—"}
+                  </td>
+                  <td className="px-5 py-3 font-mono text-xs text-pilot-grey-500">
+                    {[asset.manufacturer, asset.model, asset.serialNumber]
+                      .filter(Boolean)
+                      .join(" · ") || "—"}
+                  </td>
+                  <td className="px-5 py-3">
+                    <PilotBadge
+                      variant={pilotBadgeVariantForTone(
+                        assetStatusTone[asset.status],
+                      )}
+                    >
+                      {assetStatusLabel[asset.status]}
+                    </PilotBadge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="border-t border-pilot-grey-100 bg-white px-5 py-3 text-xs text-pilot-grey-400">
+            {data.pagination.totalItems} eszköz összesen
+          </div>
+          <div className="flex justify-end border-t border-pilot-grey-100 bg-white px-4 py-2">
+            <Pagination
+              position="bottom"
+              page={data.pagination.page}
+              totalPages={data.pagination.totalPages}
+              onPageChange={setPage}
+            />
           </div>
         </div>
-
-        {!data && !error ? (
-          <div className="space-y-3 p-5" aria-label="Eszközök betöltése">
-            <Skeleton className="h-16" />
-            <Skeleton className="h-64" />
-          </div>
-        ) : null}
-
-        {data?.items.length ? (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] border-collapse text-left">
-                <thead>
-                  <tr>
-                    {[
-                      "Eszköz",
-                      "Elhelyezés",
-                      "Hierarchia",
-                      "Kategória",
-                      "Műszaki azonosító",
-                      "Státusz",
-                    ].map((head) => (
-                      <th key={head} className={sv.tableHead}>
-                        {head}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((asset) => (
-                    <tr key={asset.id} className={sv.tableRow}>
-                      <td className={sv.tableCell}>
-                        <Link
-                          href={`/eszkozok/${asset.id}`}
-                          className={sv.rowTitle}
-                        >
-                          {asset.name}
-                        </Link>
-                        <span className={`mt-1 block font-mono ${sv.rowMeta}`}>
-                          {eszkozAzonosito(asset)}
-                        </span>
-                        {asset.partnerInternalCode ? (
-                          <span className={`mt-1 block ${sv.rowMeta}`}>
-                            Partner belső kódja:{" "}
-                            <span className="font-mono">
-                              {asset.partnerInternalCode}
-                            </span>
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className={sv.tableCell}>
-                        {asset.unit
-                          ? `${asset.unit.path.join(" / ")} (${asset.unit.code})`
-                          : (asset.address?.formatted ?? "Nincs pontosítva.")}
-                      </td>
-                      <td className={`${sv.tableCell} text-xs text-ink`}>
-                        {asset.parent ? (
-                          <span>
-                            Része: <strong>{asset.parent.name}</strong>
-                          </span>
-                        ) : asset.childCount ? (
-                          `${asset.childCount} részegység`
-                        ) : (
-                          "Önálló eszköz"
-                        )}
-                      </td>
-                      <td className={sv.tableCell}>{asset.category ?? "—"}</td>
-                      <td className={sv.tableCell}>
-                        {[asset.manufacturer, asset.model, asset.serialNumber]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
-                      </td>
-                      <td className={sv.tableCell}>
-                        <ServiceStatusBadge
-                          tone={assetStatusTone[asset.status]}
-                        >
-                          {assetStatusLabel[asset.status]}
-                        </ServiceStatusBadge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <ServiceListFooter
-              shown={data.items.length}
-              totalItems={data.pagination.totalItems}
-              tail={{
-                kind: "paged",
-                page: data.pagination.page,
-                totalPages: data.pagination.totalPages,
-              }}
-            />
-          </>
-        ) : data ? (
-          <div className="p-5">
-            <EmptyState
-              title="Nincs megjeleníthető eszköz"
-              description="A partneri fiókhoz jelenleg nincs eszköz rögzítve, vagy a szűrők nem adnak találatot."
-            />
-          </div>
-        ) : null}
-      </section>
-      {data ? (
-        <Pagination
-          position="bottom"
-          className="mt-6"
-          page={data.pagination.page}
-          totalPages={data.pagination.totalPages}
-          onPageChange={setPage}
-        />
       ) : null}
-    </section>
+    </PilotThemeRoot>
   );
 }
