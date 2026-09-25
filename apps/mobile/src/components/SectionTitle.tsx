@@ -8,13 +8,21 @@ import type { ThemeTokens } from "@/lib/theme/tokens";
  * A KÁRTYA-CSOPORT CÍMKÉJE, EGY HELYEN, A TERV SZERINT.
  *
  * Balázs döntése (2026-09-25 19:02, mobil szál): a Figma terv kártya-
- * címkéje (`MobileLabel`, `exchange/figma-telefon-make-12/src/
- * MobileAppScreen.tsx` 54-60. sor: `text-xs font-semibold text-grey-400
- * uppercase tracking-widest`) MINDEN mobil adatlapon egyformán jelenjen
- * meg -- nem képernyőnként külön másolt stílusként, mert az idővel
- * szétcsúszik (pontosan ez történt: az öt érintett adatlap öt KÜLÖNBÖZŐ
+ * címkéje MINDEN mobil adatlapon egyformán jelenjen meg -- nem
+ * képernyőnként külön másolt stílusként, mert az idővel szétcsúszik
+ * (pontosan ez történt: az öt érintett adatlap öt KÜLÖNBÖZŐ
  * `sectionTitle`-t viselt: 16px/900, alapméret/600, 19px/800 stb., egyik
  * sem a terv szerint).
+ *
+ * A FORRÁS JAVÍTVA (2026-09-25, terv-összevetés): ez a komponens eredetileg
+ * a `MobileLabel`-t idézte (`MobileAppScreen.tsx` 54-60. sor, 12px/600
+ * `tracking-widest`) -- az a minta viszont a KEZDŐLAP saját címkéje
+ * (`index.tsx` `eyebrow`/`sectionTitle`-je használja), nem az entitás-
+ * adatlapoké. A pontosabb, közvetlenül analóg forrás az Eszköz és
+ * Munkalap képernyők SAJÁT, kártyán belüli címkéje (`EszközScreen.tsx`,
+ * `MunkalapokScreen.tsx`, pl. "Azonosítás", "Adatok", "Tételek" fölött):
+ * `text-[10px] font-semibold text-grey-400 uppercase tracking-wide` --
+ * 10px/600, nem 12px/700.
  *
  * EZÉRT KÖZÖS KOMPONENS, NEM CSAK KÖZÖS STÍLUS-KONSTANS: egy
  * `sectionTitle: {...}` bejegyzés minden képernyő saját `createStyles()`-
@@ -42,10 +50,10 @@ function createStyles(t: ThemeTokens) {
   return StyleSheet.create({
     sectionTitle: {
       color: t.textMuted,
-      fontSize: 12,
-      fontWeight: "700",
+      fontSize: 10,
+      fontWeight: "600",
       textTransform: "uppercase",
-      letterSpacing: 1,
+      letterSpacing: 0.25,
     },
   });
 }

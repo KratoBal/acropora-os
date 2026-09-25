@@ -31,11 +31,18 @@ describe("a SectionTitle a terv szerinti kártya-címkét adja", () => {
     assert.ok(forras.length > 300, "üres vagy gyanúsan rövid");
   });
 
-  it("a stílus a terv `MobileLabel`-jét adja: kicsi, nagybetűs, ritkított, szürke", () => {
+  /**
+   * A MÉRTÉK 2026-09-25-TŐL AZ ESZKÖZ/MUNKALAP KÉPERNYŐK SAJÁT, BEÁGYAZOTT
+   * CÍMKÉJE (10px/600/`tracking-wide`), NEM A `MobileLabel` (12px/600/
+   * `tracking-widest`) -- lásd a komponens fejlécét, miért ez a pontosabb
+   * forrás.
+   */
+  it("a stílus az entitás-adatlapok saját kártya-címkéjét adja: kicsi, nagybetűs, ritkított, szürke", () => {
     assert.match(forras, /textTransform:\s*"uppercase"/);
-    assert.match(forras, /letterSpacing:\s*1\b/);
+    assert.match(forras, /fontWeight:\s*"600"/);
+    assert.match(forras, /letterSpacing:\s*0\.25\b/);
     assert.match(forras, /color:\s*t\.textMuted/);
-    assert.match(forras, /fontSize:\s*12\b/);
+    assert.match(forras, /fontSize:\s*10\b/);
   });
 
   for (const lap of ERINTETT_ADATLAPOK) {
