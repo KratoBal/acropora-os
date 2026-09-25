@@ -431,6 +431,17 @@ export class NotificationsService {
    * A `targetId` AZ AKVARIUM AZONOSITOJA: a koppintas
    * `apps/mobile/src/app/aquariums/[id].tsx`-re visz, lasd a
    * `PUSH_TARGET_ROUTES` bejegyzeset.
+   *
+   * MIERT NEM A KONKRET MERESI ALKALOM (`AquariumMeasurementOccasion.id`),
+   * HOLOTT AZ IS RENDELKEZESRE ALLNA (2026-09-25, meregetve, Balazs a
+   * meresre szamitott, nem az akvariumra): a mobil `[id].tsx` a mereseket
+   * `measuredAt` szerint csokkeno sorrendben mutatja, tehat a LEGUTOBBI
+   * (`latestOccasion`) MINDIG az, amit epp most rogzitettek -- az akvarium-
+   * adatlap megnyitasa ezert MA IS a helyes meresen landol, kulon celpont
+   * es mobil-oldali "ugorj/emeld ki ezt az alkalmat" logika NELKUL. Egy
+   * konkret occasion-celpont epitese uj mobil route-parametert es
+   * gorgetes/kiemeles-UI-t igenyelne -- ez MAR nem "olcson bele" a mai
+   * push-hiba javitasaba, kulon feladat, ha valaha kell.
    */
   async deliverAquariumMeasurementRecorded(
     notice: AquariumMeasurementRecordedNotice,

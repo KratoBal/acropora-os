@@ -39,6 +39,45 @@ export type ApnsResult =
   | { ok: false; retired: true; reason: string }
   | { ok: false; retired: false; reason: string };
 
+/**
+ * A KULDOTT TORZS, KULON FUGGVENYBEN -- HOGY A HALOZAT NELKUL TESZTELHETO
+ * LEGYEN.
+ *
+ * === A MERT HIBA, AMIERT A `data` KETSZER SZEREPEL ===
+ *
+ * Merve 2026-09-25, a vizmeres-push vizsgalata soran: az `expo-notifications`
+ * telepitett iOS-kodja TAVOLI (push) ertesitesnel a sajat adatot a "body"
+ * kulcs ALATT keresi, NEM a payload gyokereben
+ * (`serializedNotificationData`, `NotificationRecords.swift:328-334`:
+ * `isRemote` agon `userInfo["body"] as? [String: Any]`, a gyoker `userInfo`-t
+ * csak a HELYI, nem-tavoli agon adja vissza).
+ *
+ * A korabbi alak a `data` mezoket KIZAROLAG a gyokerbe teritette (`aps`
+ * melle). Ennek kovetkezteben `request.content.data` MINDIG `undefined` volt
+ * minden TAVOLI push-nal iOS-en -- vagyis a `pushTarget()` mindig
+ * "no-target"-et adott, es a koppintas EGYETLEN tipusnal sem navigalt soha
+ * (worksheet, serviceJob, materialRequest, aquarium egyarant), csak Androidon
+ * (FCM, mas kliens-kod olvassa) mukodott. Ez NEM egy uj tipus (aquarium)
+ * hibaja volt, hanem szerkezeti, iOS-re szuk hiba az egesz push-navigacios
+ * uton -- csak eddig senki nem vette eszre, mert nem volt ra teszt, ami a
+ * TENYLEGES payload alakjat nezte volna a kliens-oldali elvarashoz kepest.
+ *
+ * A GYOKERBELI MASOLAT MARAD: olcso, es ha valaki a nyers payloadot nezi
+ * (pl. Apple sajat eszkozeivel), ott is lassa.
+ */
+export function buildApnsPayload(
+  message: Pick<ApnsMessage, "title" | "body" | "data">,
+): Record<string, unknown> {
+  return {
+    aps: {
+      alert: { title: message.title, body: message.body },
+      sound: "default",
+    },
+    body: message.data,
+    ...message.data,
+  };
+}
+
 function signedToken(config: ApnsConfig, issuedAt: number): string {
   const header = { alg: "ES256", kid: config.keyId };
   const payload = { iss: config.teamId, iat: Math.floor(issuedAt / 1000) };
@@ -88,13 +127,7 @@ export class ApnsClient {
   }
 
   async send(message: ApnsMessage): Promise<ApnsResult> {
-    const payload = JSON.stringify({
-      aps: {
-        alert: { title: message.title, body: message.body },
-        sound: "default",
-      },
-      ...message.data,
-    });
+    const payload = JSON.stringify(buildApnsPayload(message));
 
     return new Promise<ApnsResult>((resolve) => {
       let settled = false;
