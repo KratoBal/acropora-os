@@ -1,4 +1,4 @@
-import { WorksheetDetailPage } from "@/components/worksheets/worksheet-detail-page";
+import { PilotWorksheetDetailPage } from "@/components/worksheets/pilot/pilot-worksheet-detail-page";
 
 export default async function WorksheetDetailRoute({
   params,
@@ -6,5 +6,5 @@ export default async function WorksheetDetailRoute({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <WorksheetDetailPage worksheetId={id} />;
+  return <PilotWorksheetDetailPage worksheetId={id} />;
 }
