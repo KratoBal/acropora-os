@@ -136,6 +136,21 @@ describe("a portál vizuális alapja", () => {
       // egy csoportba tartozik, mind a `frame.tsx`/`ServiceStatusBadge`
       // váltotta fel őket (murena mérése).
       "status",
+      // A FELSO SAVAS KERET ES A REGI BEJELENTKEZO LAP OSZTALYAI (2026-09-25,
+      // Figma 9. kor): a `portal-shell.tsx` bal oldalsavra allt, a
+      // `login/page.tsx` a `pilot-aqua-*`/`pilot-grey-*` tokenekre. A bare
+      // "error" NEM tevesztendo ossze a `Message` komponens `className={\`message
+      // ${MESSAGE_TONE_CLASS[tone]}\`}` alakjaval: a `${...}` interpolacio a
+      // fenti `kodSzoveg`/csere lepesben kiürül, tehat onnan literalis "error"
+      // token sosem szarmazik -- csak a mostmar torolt, nyers
+      // `className="error"` login-hibaszoveg adott ilyet.
+      "topbar",
+      "brand",
+      "account",
+      "navigation",
+      "login-page",
+      "login-card",
+      "error",
     ];
     const vetkesek: string[] = [];
     for (const ut of fajlok) {
@@ -229,5 +244,34 @@ describe("a portál vizuális alapja", () => {
       "utf8",
     );
     assert.match(theme, /--color-brand-600:/);
+  });
+
+  /**
+   * A "PILOT" (FIGMA-TERV) TEMA-RETEG IS TENYLEG IDE JUT (2026-09-25, Figma
+   * 9. kor). Ugyanaz a szerkezet, mint a fenti `theme.css` allitasnal: nem
+   * eleg, hogy az import-sor ott all, a hivatkozott fajlnak TENYLEG
+   * tartalmaznia kell a tokent, amire a bal oldalsav es a bejelentkezes
+   * (`pilot-aqua-*`/`pilot-grey-*` osztalyok) tamaszkodnak.
+   */
+  it("a pilot témát importálja, és a téma valóban definiálja a pilot-aqua-600 tokent", () => {
+    const css = readFileSync(join(GYOKER, "app", "globals.css"), "utf8");
+    assert.match(
+      css,
+      /@import\s+"\.\.\/\.\.\/\.\.\/\.\.\/packages\/ui\/src\/figma-theme\.css";/,
+    );
+    const figmaTheme = readFileSync(
+      resolve(
+        GYOKER,
+        "..",
+        "..",
+        "..",
+        "packages",
+        "ui",
+        "src",
+        "figma-theme.css",
+      ),
+      "utf8",
+    );
+    assert.match(figmaTheme, /--color-pilot-aqua-600:/);
   });
 });
