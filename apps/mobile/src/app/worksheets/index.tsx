@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -22,6 +22,8 @@ import {
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { belsosIrasEngedett } from "@/lib/auth/hatokor";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import {
   worksheetAssigneeLine,
   worksheetFilterSummary,
@@ -57,11 +59,35 @@ const PAGE_SIZE = 25;
  * A SZŰRŐ ÁLLAPOTA LÁTSZIK, és ez nem díszítés: nem szabad, hogy a lista
  * CSENDBEN legyen szűkebb, mint amit a felirata ígér. Ezért a kapcsoló mindig
  * kiírja, épp melyik halmazt mutatja.
+ *
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 8. kör,
+ * telefonos átültetés (`exchange/figma-munkalapok-make-8/src/MunkalapokScreen.tsx`
+ * `MobileMunkalapokList`), az Eszköznyilvántartás mobil átültetésének
+ * (#1087) mintáját követve: ez a képernyő eddig saját, fix sötét hexekkel élt
+ * (`#071827` stb.), tehát világos mód eddig nem is létezett rajta.
+ *
+ * A KÁRTYA ELRENDEZÉSE A FIGMA-TERVET KÖVETI (cím + állapot-jelvény egy
+ * sorban, alatta a szám monospace-ban, alul a helyszín/partner és a felelős
+ * egy sorban) -- A TARTALOM ÉS A TÍZ SZÖVEG-DÖNTÉS VÁLTOZATLAN (acrobot
+ * döntése, 2026-09-25, Figma 8. kör szöveges köre): a cím a tárgy, a szám
+ * másodlagos, "Minden partner"/"Nincs munkalap"/"Nincs találat a keresési
+ * feltételekre" stb. mind marad.
+ *
+ * AZ ÁLLAPOT-JELVÉNY EGYETLEN, EGYSÉGES SZÍNT VISEL, NEM ÁLLAPOTONKÉNT
+ * KÜLÖNBÖZŐT -- ugyanígy volt a migráció ELŐTT is (`statusChip`/`statusText`
+ * mindig ugyanaz a fix teal volt), és az Eszköznyilvántartás mobil
+ * átültetése (`AssetCard`) sem vezetett be státusz-szerinti színezést a
+ * Figma terve ellenére. A per-státusz szín (ahogy a Figma `AllapotBadge`-e
+ * mutatja) egy ÚJ funkció lenne, nem re-skin -- ha ez másodszor is felmerül
+ * (pl. a munkalap-adatlap verzió-táblájánál), akkor éri meg megosztott
+ * függvénnyé tenni, nem előre.
  */
 export default function WorksheetsScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [mineOnly, setMineOnly] = useState(
@@ -142,7 +168,7 @@ export default function WorksheetsScreen() {
           <RefreshControl
             refreshing={worksheets.isRefetching && !worksheets.isPending}
             onRefresh={() => void worksheets.refetch()}
-            tintColor="#52d6c7"
+            tintColor={tokens.accent}
           />
         }
       >
@@ -245,7 +271,9 @@ export default function WorksheetsScreen() {
 
         {partnerPickerOpen ? (
           <View style={styles.partnerList}>
-            {partners.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+            {partners.isPending ? (
+              <ActivityIndicator color={tokens.accent} />
+            ) : null}
             {partners.isError ? (
               <Text style={styles.error}>
                 A partnerek listája nem tölthető be.
@@ -331,7 +359,7 @@ export default function WorksheetsScreen() {
             setPage(1);
           }}
           placeholder="Keresés szám, partner vagy tárgy szerint"
-          placeholderTextColor="#668798"
+          placeholderTextColor={tokens.textMuted}
           style={styles.input}
         />
 
@@ -350,7 +378,9 @@ export default function WorksheetsScreen() {
           })}
         </Text>
 
-        {worksheets.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {worksheets.isPending ? (
+          <ActivityIndicator color={tokens.accent} />
+        ) : null}
 
         {worksheets.isError ? (
           <Text style={styles.error}>
@@ -394,7 +424,8 @@ export default function WorksheetsScreen() {
               {/*
                 A CÍM A TÁRGY, A SZÁM ALATTA (acrobot döntése, 2026-09-25,
                 Figma 8. kör): a web és a Figma-terv is így csoportosít, a
-                mai mobil (szám a cím) ELLENTÉTES sorrendet mutatott.
+                mai mobil (szám a cím) ELLENTÉTES sorrendet mutatott. A cím és
+                a jelvény EGY sorban áll -- Figma 8. kör, telefonos átültetés.
               */}
               <View style={styles.rowHeader}>
                 <Text style={styles.rowTitle}>{item.subject}</Text>
@@ -407,8 +438,10 @@ export default function WorksheetsScreen() {
               <Text style={styles.rowNumber}>
                 {worksheetLabelOrDraft(item.label)}
               </Text>
-              <Text style={styles.rowMeta}>{worksheetListSubtitle(item)}</Text>
               <View style={styles.rowFooter}>
+                <Text style={styles.rowMeta} numberOfLines={1}>
+                  {worksheetListSubtitle(item)}
+                </Text>
                 <Text style={styles.rowAssignee}>
                   {worksheetAssigneeLine(item.assigneeNames)}
                 </Text>
@@ -453,142 +486,160 @@ export default function WorksheetsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  partnerMegjegyzes: {
-    color: "#8fb3c4",
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 4,
-  },
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 48, gap: 12 },
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  title: { color: "#f4fbff", fontSize: 28, fontWeight: "900" },
-  subtitle: { color: "#91afbe" },
-  filterToggle: {
-    alignSelf: "flex-start",
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  filterToggleOn: { backgroundColor: "#123f3b", borderColor: "#1f6b62" },
-  filterText: { color: "#91afbe", fontSize: 12, fontWeight: "800" },
-  partnerList: {
-    backgroundColor: "#071f31",
-    borderColor: "#28536a",
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 2,
-    padding: 6,
-  },
-  partnerRow: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9 },
-  partnerRowOn: { backgroundColor: "#123f3b" },
-  partnerName: { color: "#f4fbff", fontSize: 14 },
-  partnerMeta: { color: "#789cad", fontSize: 11, marginTop: 2 },
-  statusFilters: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  statusFilter: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-  },
-  statusFilterOn: { backgroundColor: "#123f3b", borderColor: "#1f6b62" },
-  statusFilterText: { color: "#91afbe", fontSize: 11, fontWeight: "800" },
-  statusFilterTextOn: { color: "#6de0ce" },
-  filterSummary: { color: "#6f93a8", fontSize: 12 },
-  filterTextOn: { color: "#6de0ce" },
-  input: {
-    color: "#f4fbff",
-    backgroundColor: "#071f31",
-    borderColor: "#28536a",
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-  row: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 14,
-    gap: 4,
-    padding: 14,
-  },
-  rowHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "space-between",
-  },
-  rowTitle: { color: "#f4fbff", flex: 1, fontSize: 16, fontWeight: "800" },
-  statusChip: {
-    backgroundColor: "#123f3b",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  statusText: { color: "#6de0ce", fontSize: 11, fontWeight: "800" },
-  rowMeta: { color: "#789cad", fontSize: 12 },
-  /**
-   * A SZÁM MOST A MÁSODLAGOS SOR (acrobot döntése, 2026-09-25): monospace,
-   * hogy egy szám-szerű azonosító megkülönböztesse magát a tárgy szövegétől.
-   */
-  rowNumber: { color: "#789cad", fontFamily: "monospace", fontSize: 12 },
-  rowFooter: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "space-between",
-    marginTop: 2,
-  },
-  rowAssignee: { color: "#91afbe", flex: 1, fontSize: 12 },
-  rowAmount: { color: "#f4fbff", fontSize: 13, fontWeight: "800" },
-  rowVersion: { color: "#e2b168", fontSize: 11, fontWeight: "700" },
-  empty: { color: "#91afbe" },
-  newButton: {
-    backgroundColor: "#177b74",
-    borderRadius: 12,
-    padding: 13,
-  },
-  newButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  error: {
-    color: "#fecaca",
-    backgroundColor: "#541b2b",
-    padding: 12,
-    borderRadius: 10,
-  },
-  errorTitle: { color: "#f4fbff", fontSize: 18, fontWeight: "900" },
-  errorText: { color: "#91afbe", marginTop: 6, textAlign: "center" },
-  pager: { flexDirection: "row", alignItems: "center", gap: 12 },
-  pagerButton: {
-    backgroundColor: "#164057",
-    borderRadius: 9,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  pagerText: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  pagerLabel: { color: "#91afbe", fontSize: 12 },
-  disabled: { opacity: 0.5 },
-  pressed: { opacity: 0.75 },
-});
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    partnerMegjegyzes: {
+      color: t.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 4,
+    },
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 48, gap: 12 },
+    centered: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 24,
+    },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
+    subtitle: { color: t.textSecondary },
+    filterToggle: {
+      alignSelf: "flex-start",
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+    },
+    filterToggleOn: {
+      backgroundColor: t.accentSoft,
+      borderColor: t.accentBorder,
+    },
+    filterText: { color: t.textSecondary, fontSize: 12, fontWeight: "800" },
+    partnerList: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 2,
+      padding: 6,
+    },
+    partnerRow: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9 },
+    partnerRowOn: { backgroundColor: t.accentSoft },
+    partnerName: { color: t.textPrimary, fontSize: 14 },
+    partnerMeta: { color: t.textMuted, fontSize: 11, marginTop: 2 },
+    statusFilters: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+    statusFilter: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 11,
+      paddingVertical: 7,
+    },
+    statusFilterOn: {
+      backgroundColor: t.accentSoft,
+      borderColor: t.accentBorder,
+    },
+    statusFilterText: {
+      color: t.textSecondary,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    statusFilterTextOn: { color: t.accentSoftText },
+    filterSummary: { color: t.textMuted, fontSize: 12 },
+    filterTextOn: { color: t.accentSoftText },
+    input: {
+      color: t.textPrimary,
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+    },
+    row: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 14,
+      gap: 4,
+      padding: 14,
+    },
+    rowHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "space-between",
+    },
+    rowTitle: {
+      color: t.textPrimary,
+      flex: 1,
+      fontSize: 16,
+      fontWeight: "800",
+    },
+    statusChip: {
+      backgroundColor: t.accentSoft,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
+    statusText: { color: t.accentSoftText, fontSize: 11, fontWeight: "800" },
+    rowMeta: { color: t.textSecondary, flex: 1, fontSize: 12 },
+    /**
+     * A SZÁM MOST A MÁSODLAGOS SOR (acrobot döntése, 2026-09-25): monospace,
+     * hogy egy szám-szerű azonosító megkülönböztesse magát a tárgy szövegétől.
+     */
+    rowNumber: { color: t.textMuted, fontFamily: "monospace", fontSize: 12 },
+    rowFooter: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "space-between",
+      marginTop: 2,
+    },
+    rowAssignee: { color: t.textSecondary, fontSize: 12 },
+    rowVersion: { color: t.warning, fontSize: 11, fontWeight: "700" },
+    empty: { color: t.textSecondary },
+    newButton: {
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      padding: 13,
+    },
+    newButtonText: {
+      color: t.textOnAccent,
+      fontSize: 14,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    error: {
+      color: t.danger,
+      backgroundColor: t.dangerSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+    errorTitle: { color: t.textPrimary, fontSize: 18, fontWeight: "900" },
+    errorText: { color: t.textSecondary, marginTop: 6, textAlign: "center" },
+    pager: { flexDirection: "row", alignItems: "center", gap: 12 },
+    pagerButton: {
+      backgroundColor: t.surfaceRaised,
+      borderWidth: 1,
+      borderColor: t.border,
+      borderRadius: 9,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+    },
+    pagerText: { color: t.textPrimary, fontWeight: "800", fontSize: 12 },
+    pagerLabel: { color: t.textSecondary, fontSize: 12 },
+    disabled: { opacity: 0.5 },
+    pressed: { opacity: 0.75 },
+  });
+}
