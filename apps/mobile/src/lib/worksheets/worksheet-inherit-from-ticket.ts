@@ -99,12 +99,20 @@ export function oroklendoFelelosok(bemenet: {
 /**
  * MIT MOND A KEPERNYO ARROL, AMIT ATVESZ.
  *
- * NEM DISZ: a szerelo a kuldes ELOTT lassa, mi kerul a lapra. A weben a ket
- * lista valaszthato, a telefonon (egyelore) nem -- tehat itt az EGYETLEN
- * visszajelzes ez a mondat.
+ * NEM DISZ: a szerelo a kuldes ELOTT lassa, mi kerul a lapra.
+ *
+ * EZ A MONDAT MAR NEM AZ EGYETLEN VISSZAJELZES AZ ESZKOZOKROL (surgos kor,
+ * 2026-09-25): a `new.tsx` az `oroklendoEszkozok()` eredmenyet mostantol a
+ * `WorksheetAssetPicker`-be adja elore kivalasztott allapotkent, es a
+ * szerelo ott at is irhatja -- ugyanaz a valaszto, ami a `[id].tsx`
+ * adatlapon mar allt. A FELELOSOK LISTAJA VISZONT MEG NEM VALASZTHATO a
+ * telefonon (csak az adatlapon, letrehozas utan), tehat arrol tovabbra is
+ * EZ a mondat az egyetlen visszajelzes.
  *
  * ES AZ URES ESET IS MONDAT, ha a jegynek VOLT eszkoze: az elmaradt orokles oka
- * (mas helyszint valasztott) kulonben lathatatlan marad.
+ * (mas helyszint valasztott) kulonben lathatatlan marad -- ez azert is fontos
+ * marad, mert megmagyarazza, miert indul URESEN a valaszto, nem csak azt,
+ * hogy indulhatna nem-uresen.
  */
 export function oroklesUzenete(bemenet: {
   jegyEszkozok: readonly JegyEszkoz[];
