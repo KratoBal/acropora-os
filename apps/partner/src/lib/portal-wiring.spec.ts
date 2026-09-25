@@ -1176,16 +1176,21 @@ describe("az Akváriumok pilot-kör 3 saját döntései", () => {
  * mezőkkel hívja, és hogy a márkás termékek NEM kerültek be sehova.
  */
 const KALKULATOROK_OLDAL = "src/components/calculators/calculators-page.tsx";
-const KALKULATOR_KARTYA = "src/components/calculators/calculator-card.tsx";
 const PORTAL_SHELL_KALKULATOROK = "src/components/portal-shell.tsx";
 
+/*
+  A `CalculatorCard` MAGA 2026-09-25-TŐL A `packages/ui`-BAN ÉL, NEM ITT --
+  Balázs kérése (a felület-független újrafelhasználhatóság), és a komponens
+  MÁR aznap egy MÁSODIK felületre (`apps/web`) is átkerült. A kártya saját
+  viselkedését (nincs-adagolás üzenet, nincs `useAuth`/felület-specifikus
+  API-hívás) mérő állítások ezért a `packages/ui/src/calculator-card.test.ts`-
+  be költöztek, a komponenssel együtt. Ami ITT marad, az a PORTÁL-SPECIFIKUS
+  OLDAL (`calculators-page.tsx`) és a `portal-shell.tsx` kötése -- azok
+  valóban ennek az appnak a részei.
+*/
 describe("a Kalkulátorok kötése", () => {
-  it("POZITÍV KONTROLL: mindhárom fájl olvasható és nem üres", () => {
-    for (const ut of [
-      KALKULATOROK_OLDAL,
-      KALKULATOR_KARTYA,
-      PORTAL_SHELL_KALKULATOROK,
-    ])
+  it("POZITÍV KONTROLL: mindkét fájl olvasható és nem üres", () => {
+    for (const ut of [KALKULATOROK_OLDAL, PORTAL_SHELL_KALKULATOROK])
       assert.ok(olvas(ut).length > 500, `${ut}: üres vagy gyanúsan rövid`);
   });
 
@@ -1216,9 +1221,8 @@ describe("a Kalkulátorok kötése", () => {
    * ide való. MI PIROSÍT: ha bárki egy márkanevet (akár csak
    * összehasonlításként, akár kikommentezve) visszaírna.
    */
-  it("egyetlen márkás termék neve sem szerepel a kalkulátor kódjában", () => {
+  it("egyetlen márkás termék neve sem szerepel a kalkulátor-oldal kódjában", () => {
     const oldalNyers = olvas(KALKULATOROK_OLDAL);
-    const kartyaNyers = olvas(KALKULATOR_KARTYA);
     for (const brandName of [
       "Kalkwasser",
       "B-Ionic",
@@ -1226,7 +1230,6 @@ describe("a Kalkulátorok kötése", () => {
       "Reef Builder",
     ]) {
       assert.doesNotMatch(oldalNyers, new RegExp(brandName));
-      assert.doesNotMatch(kartyaNyers, new RegExp(brandName));
     }
   });
 
@@ -1245,24 +1248,6 @@ describe("a Kalkulátorok kötése", () => {
       `csak ${resultUnitMatches.length} resultUnit található, 3 kellene`,
     );
     for (const unit of resultUnitMatches) assert.equal(unit, "g");
-  });
-
-  it("a nincs-adagolás állapot a szükséges-mennyiség panelen kimondott üzenetet ad, nem üres számot", () => {
-    const s = kod(KALKULATOR_KARTYA);
-    assert.match(s, /"no-dosing-needed"/);
-    assert.match(s, /nincs szükség\s+adagolásra/i);
-  });
-
-  /**
-   * A KÁRTYA NEM HÍV `useAuth`-OT ÉS NEM ISMERI A `partnerApi`-T -- Balázs
-   * kérése (2026-09-25): a kártya önmagában, jogosultság nélkül is
-   * telepíthető legyen egy jövőbeli nyilvános felületre. Az oldal
-   * (`calculators-page.tsx`) ISMERHETI mindkettőt, a kártya NEM.
-   */
-  it("a kalkulátor kártya nem hív useAuth-ot és nem importál partnerApi-t", () => {
-    const s = kod(KALKULATOR_KARTYA);
-    assert.doesNotMatch(s, /useAuth/);
-    assert.doesNotMatch(s, /partnerApi/);
   });
 
   it("az oldal ÚJRAFELHASZNÁLJA a meglévő partnerApi.aquariums/aquariumMeasurements hívást, nem ír újat", () => {

@@ -1,51 +1,39 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   alkalinityElevation,
   calciumElevation,
   magnesiumElevation,
 } from "@acropora/aquarium-calc";
 import {
+  Alert,
   CalculatorCard,
   PilotThemeRoot,
   type CalculatorAquariumOption,
   type CalculatorSuggestedCurrent,
 } from "@acropora/ui";
-
-import { partnerApi } from "@/lib/api";
+import { hasPermission, PERMISSIONS } from "@acropora/types";
+import { useAuth } from "@/components/auth/auth-provider";
+import { aquariumsApi } from "@/lib/api/aquariums";
 
 /**
- * A "KALKULÁTOROK" OLDAL -- EZ A PORTÁL-SPECIFIKUS, JOGOSULTSÁGHOZ KÖTÖTT
- * RÉTEG.
+ * A "KALKULÁTOROK" OLDAL -- A BELSŐ WEB (`apps/web`) SAJÁT RÉTEGE.
  *
- * A `CalculatorCard` maga (ld. a saját fejlécét) nem tud a portálról; EZ
- * az oldal az, ami `partnerApi`-t hív és a hívó saját, hozzá csatolt
- * akváriumaira szűkíti a választót -- a menüpont/útvonal-védelem a
- * `portal-shell.tsx` `canViewCalculators` ága, UGYANAZZAL a mintával, mint
- * az Akváriumok szekció.
+ * Ugyanaz a minta, mint `apps/partner/.../calculators-page.tsx`-nél, csak a
+ * LÁTHATÓSÁGI SZABÁLY és az API-KLIENS más:
  *
- * === AZ AKVÁRIUM-LISTA UJRAFELHASZNÁLT LEKÉRDEZÉS ===
+ * - a portál a "hozzá csatolt akváriumok" szűrést a `partnerApi.aquariums()`
+ *   szerver oldali hatóköréből kapja (a hívó identitása szab határt),
+ * - itt a `aquariumsApi.list(token, query)` a BELSŐ, `aquariums.view`
+ *   jogosultsághoz kötött lekérdezés -- ugyanaz, amit a Pilot Akvárium-lista
+ *   (`pilot-aquarium-list-page.tsx`) használ. Ez SZÁNDÉKOSAN nem szűkebb: a
+ *   belső felhasználó (aki látja az Akváriumok menüt) az összes akváriumot
+ *   láthatja itt is, ugyanúgy, mint a listán.
  *
- * `partnerApi.aquariums()` -- UGYANAZ a hívás, amit az Akváriumok lista
- * használ, tehát a szerver oldali hatókör (csak a hívóhoz csatolt
- * helyszínek akváriumai) itt is ugyanúgy érvényes, új végpont vagy
- * duplikált jogosultsági logika nélkül. A `systemVolumeLiters` már ebben a
- * válaszban benne van (`AquariumSummary`), a liter-mező kitöltéséhez nem
- * kell külön lekérdezés.
- *
- * === A "LEGUTÓBBI MÉRÉS" JAVASLAT -- BEKERÜLT, MERT OLCSÓ VOLT ===
- *
- * Balázs engedélyezte, hogy ha ez "túl sokat nyitna", az első kör csak a
- * liter-résszel menjen. ITT BEKERÜLT: a `partnerApi.aquariumMeasurements`
- * végpont MÁR LÉTEZIK és MÁR HASZNÁLJA a vízérték-kártya (`aquarium-water-
- * values.tsx`) -- ez az oldal ugyanezt hívja meg, akvárium-választáskor,
- * és a kapott alkalmak közül a legutóbbit keresi ki, ami a kalkulátorhoz
- * tartozó paramétert (KALCIUM/MAGNEZIUM/KH) tartalmazza. Nincs új végpont,
- * nincs új jogosultsági szabály -- csak egy plusz hívás egy már meglévő
- * úton, és egy "javasolt érték" gomb a kártyán, amit a felhasználó
- * felülírhat. Ha ez a lekérdezés hibázik, a kártya egyszerűen nem mutat
- * javaslatot -- a kalkulátor kézzel beírt értékkel továbbra is működik.
+ * A `CalculatorCard` maga (ld. a saját fejlécét, `packages/ui`) nem tud sem
+ * a portálról, sem a belső webről -- ez az oldal az, ami `useAuth`-ot és az
+ * `aquariumsApi`-t hívja.
  */
 
 const PRODUCT_OPTIONS = {
@@ -66,15 +54,30 @@ const MAGNESIUM_PRODUCT_OPTIONS = [
   PRODUCT_OPTIONS.magnesiumSulfate,
 ] as const;
 
-export function CalculatorsPage() {
+export function PilotCalculatorsPage() {
+  const { session } = useAuth();
+  const canView = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.AQUARIUMS_VIEW),
+  );
+  const token = session?.token ?? "";
+
   const [aquariums, setAquariums] = useState<CalculatorAquariumOption[]>([]);
   const [suggested, setSuggested] = useState<
     Record<"KALCIUM" | "MAGNEZIUM" | "KH", CalculatorSuggestedCurrent | null>
   >({ KALCIUM: null, MAGNEZIUM: null, KH: null });
 
+  const listQuery = useMemo(() => {
+    const q = new URLSearchParams();
+    q.set("page", "1");
+    q.set("pageSize", "200");
+    return q;
+  }, []);
+
   useEffect(() => {
-    void partnerApi
-      .aquariums({ pageSize: 200 })
+    if (!canView) return;
+    const controller = new AbortController();
+    void aquariumsApi
+      .list(token, listQuery, controller.signal)
       .then((response) =>
         setAquariums(
           response.items.map((item) => ({
@@ -85,46 +88,61 @@ export function CalculatorsPage() {
         ),
       )
       .catch(() => setAquariums([]));
-  }, []);
+    return () => controller.abort();
+  }, [canView, listQuery, token]);
 
-  const loadSuggestions = useCallback((aquariumId: string) => {
-    if (!aquariumId) {
-      setSuggested({ KALCIUM: null, MAGNEZIUM: null, KH: null });
-      return;
-    }
-    void partnerApi
-      .aquariumMeasurements(aquariumId)
-      .then((response) => {
-        const latestFor = (
-          parameterCode: "KALCIUM" | "MAGNEZIUM" | "KH",
-        ): CalculatorSuggestedCurrent | null => {
-          let latest: CalculatorSuggestedCurrent | null = null;
-          for (const occasion of response.occasions) {
-            const found = occasion.values.find(
-              (value) => value.parameterCode === parameterCode,
-            );
-            if (!found) continue;
-            if (!latest || occasion.measuredAt > latest.measuredAt) {
-              latest = { value: found.value, measuredAt: occasion.measuredAt };
+  const loadSuggestions = useCallback(
+    (aquariumId: string) => {
+      if (!aquariumId) {
+        setSuggested({ KALCIUM: null, MAGNEZIUM: null, KH: null });
+        return;
+      }
+      void aquariumsApi
+        .listMeasurements(token, aquariumId)
+        .then((response) => {
+          const latestFor = (
+            parameterCode: "KALCIUM" | "MAGNEZIUM" | "KH",
+          ): CalculatorSuggestedCurrent | null => {
+            let latest: CalculatorSuggestedCurrent | null = null;
+            for (const occasion of response.occasions) {
+              const found = occasion.values.find(
+                (value) => value.parameterCode === parameterCode,
+              );
+              if (!found) continue;
+              if (!latest || occasion.measuredAt > latest.measuredAt) {
+                latest = {
+                  value: found.value,
+                  measuredAt: occasion.measuredAt,
+                };
+              }
             }
-          }
-          return latest;
-        };
-        setSuggested({
-          KALCIUM: latestFor("KALCIUM"),
-          MAGNEZIUM: latestFor("MAGNEZIUM"),
-          KH: latestFor("KH"),
-        });
-      })
-      .catch(() => setSuggested({ KALCIUM: null, MAGNEZIUM: null, KH: null }));
-  }, []);
+            return latest;
+          };
+          setSuggested({
+            KALCIUM: latestFor("KALCIUM"),
+            MAGNEZIUM: latestFor("MAGNEZIUM"),
+            KH: latestFor("KH"),
+          });
+        })
+        .catch(() =>
+          setSuggested({ KALCIUM: null, MAGNEZIUM: null, KH: null }),
+        );
+    },
+    [token],
+  );
+
+  if (!canView)
+    return (
+      <Alert
+        variant="danger"
+        title="Nincs hozzáférésed a kalkulátorokhoz"
+        description="aquariums.view jogosultság szükséges."
+      />
+    );
 
   return (
-    <PilotThemeRoot className="bg-pilot-grey-50 px-8 py-6">
+    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 px-8 py-6">
       <div className="mb-5">
-        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
-          AKVARISZTIKA
-        </p>
         <h1 className="text-xl font-semibold text-pilot-grey-900">
           Kalkulátorok
         </h1>

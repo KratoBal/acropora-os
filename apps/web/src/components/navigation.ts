@@ -238,6 +238,12 @@ export const businessNavigation: AppNavigationEntry[] = [
     entryId: "aquariums",
   },
   {
+    href: "/kalkulatorok",
+    label: "Kalkulátorok",
+    icon: "droplet",
+    entryId: "calculators",
+  },
+  {
     href: "/icp",
     label: "ICP",
     icon: "briefcase",

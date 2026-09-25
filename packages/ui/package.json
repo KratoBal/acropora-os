@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "rm -rf test-dist && tsc -p tsconfig.test.json && tests=$(find test-dist -name '*.test.js') && { [ -n \"$tests\" ] || { echo 'Nem talaltam teszt fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $tests",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist"
   },
@@ -18,10 +19,12 @@
     "react": "^19.2.7"
   },
   "dependencies": {
+    "@acropora/aquarium-calc": "workspace:*",
     "@acropora/types": "workspace:*"
   },
   "devDependencies": {
     "@acropora/config": "workspace:*",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "react": "^19.2.7",
     "typescript": "^6.0.3"

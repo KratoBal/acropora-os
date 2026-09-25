@@ -156,6 +156,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@acropora/aquarium-calc':
+        specifier: workspace:*
+        version: link:../../packages/aquarium-calc
       '@acropora/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -281,6 +284,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@acropora/aquarium-calc':
+        specifier: workspace:*
+        version: link:../aquarium-calc
       '@acropora/types':
         specifier: workspace:*
         version: link:../types
@@ -288,6 +294,9 @@ importers:
       '@acropora/config':
         specifier: workspace:*
         version: link:../config
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
       '@types/react':
         specifier: ^19.2.17
         version: 19.2.17
