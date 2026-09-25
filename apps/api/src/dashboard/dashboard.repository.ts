@@ -13,15 +13,27 @@ import {
   type DashboardOpenTickets,
   type DashboardPurchasing,
   type DashboardTeamLoad,
+  type DashboardUpcomingMaintenance,
 } from "@acropora/types";
 
-import { type PartnerScope } from "../auth/partner-scope.util.js";
+import {
+  assetVisibilityForAndBranch,
+  type PartnerScope,
+} from "../auth/partner-scope.util.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { serviceJobVisibilityWhere } from "../service-jobs/service-job-visibility.js";
 import { worksheetListWheres } from "../worksheets/worksheets.repository.js";
 
 const DASHBOARD_LIST_LIMIT = 5;
 export const STALE_MEASUREMENT_AFTER_DAYS = 14;
+/**
+ * AZ "ESEDÉKES KARBANTARTÁSOK" ELŐRETEKINTÉSI ABLAKA -- a Figma-terv nem ad
+ * konkrét napszámot (csak azt, hogy 7 napon belül sárga a jelző, azon túl
+ * szürke), a `deadlines()` 3 napos munkalap-ablakánál viszont a karbantartás
+ * jellemzően előrébb tervezett, ezért egy hónapos, 30 napos ablakot
+ * választottam -- ez a PR-ben is szerepel, mint saját döntés.
+ */
+export const UPCOMING_MAINTENANCE_WINDOW_DAYS = 30;
 
 const openTicketStatus: Prisma.ServiceJobWhereInput = {
   status: { notIn: ["COMPLETED", "CANCELLED"] },
@@ -129,6 +141,66 @@ export class DashboardRepository extends Repository {
         title: row.title,
         status: row.status,
         createdAt: row.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * "ESEDÉKES KARBANTARTÁSOK" -- az `Asset.nextServiceAt` mezőből, UGYANAZZAL
+   * a helyszín-hatókörrel, mint a `openTickets()`: a szervizes csak a saját
+   * kiosztott helyszínein álló eszközöket lássa, ne az egész céget.
+   *
+   * NINCS KÜLÖN "ESEDÉKES" ÁLLAPOT -- a `nextServiceAt` egyetlen dátum, tehát
+   * ez a lekérdezés a mai naptól az `UPCOMING_MAINTENANCE_WINDOW_DAYS`
+   * ablakig eső (VAGY MÁR LEJÁRT) eszközöket adja, a legsürgősebb elöl --
+   * egy már lejárt szerviz-dátum legalább annyira releváns, mint egy
+   * közelgő, ezért nincs alsó határ.
+   */
+  async upcomingMaintenance(input: {
+    scope: PartnerScope;
+    assignedUnitIds: readonly string[];
+    now: Date;
+  }): Promise<DashboardUpcomingMaintenance> {
+    const until = new Date(
+      input.now.getTime() +
+        UPCOMING_MAINTENANCE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const rows = await this.database.asset.findMany({
+      where: {
+        // A HATÓKÖR-HÍVÁS SZÁNDÉKOSAN KÖZVETLENÜL AZ `AND` TÖMBBEN ÁLL, nem
+        // egy köztes változón át -- lásd `partner-scope-and-branch.spec.ts`
+        // fejlécét: egy külön változóba tett szűrő könnyen spreadelhetővé
+        // vagy kulccsá silányulna egy későbbi szerkesztésnél, és a statikus
+        // őrző csak az INLINE alakot ismeri el biztonságosnak.
+        AND: [
+          assetVisibilityForAndBranch(input.scope, input.assignedUnitIds),
+          {
+            status: "ACTIVE",
+            archivedAt: null,
+            nextServiceAt: { not: null, lte: until },
+          },
+        ],
+      },
+      orderBy: { nextServiceAt: "asc" },
+      take: DASHBOARD_LIST_LIMIT,
+      select: {
+        id: true,
+        name: true,
+        nextServiceAt: true,
+        customer: { select: { displayName: true } },
+        department: { select: { name: true } },
+      },
+    });
+    return {
+      items: rows.map((row) => ({
+        assetId: row.id,
+        assetName: row.name,
+        customerName: row.customer?.displayName ?? null,
+        departmentName: row.department.name,
+        // A `nextServiceAt` DateTime, de a lapon csak a nap számít (a Figma
+        // "napok" jelzője is egész napokban számol) -- ugyanaz a `dateOnly`
+        // segéd, amit a `deadlines()` is használ.
+        nextServiceAt: dateOnly(row.nextServiceAt!),
       })),
     };
   }

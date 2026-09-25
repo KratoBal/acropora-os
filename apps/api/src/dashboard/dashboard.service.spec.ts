@@ -43,6 +43,7 @@ const repository = (overrides: Record<string, unknown> = {}) =>
     assignedUnitIds: async () => ["department-own", "department-child"],
     myWorksheets: async () => ({ items: [] }),
     openTickets: async () => ({ count: 0, items: [] }),
+    upcomingMaintenance: async () => ({ items: [] }),
     aquariumAlerts: async () => ({ staleAfterDays: 14, items: [] }),
     managerTiles: async () => ({
       openTickets: 0,
@@ -78,6 +79,7 @@ const reconciliation = {
 const blockPermissions: readonly [string, Permission][] = [
   ["myWorksheets", PERMISSIONS.SERVICE_VIEW],
   ["openTickets", PERMISSIONS.SERVICE_VIEW],
+  ["upcomingMaintenance", PERMISSIONS.SERVICE_VIEW],
   ["aquariumAlerts", PERMISSIONS.AQUARIUMS_VIEW],
   ["managerTiles", PERMISSIONS.SERVICE_MANAGE],
   ["deadlines", PERMISSIONS.SERVICE_MANAGE],
@@ -115,6 +117,7 @@ describe("DashboardService", () => {
   it("a korlátozott szerelő csak a hozzá rendelt helyszínek halmazával kéri a hibajegyeket és munkalapokat", async () => {
     let worksheetInput: unknown;
     let ticketInput: unknown;
+    let maintenanceInput: unknown;
     const service = new DashboardService(
       repository({
         myWorksheets: async (input: unknown) => {
@@ -124,6 +127,10 @@ describe("DashboardService", () => {
         openTickets: async (input: unknown) => {
           ticketInput = input;
           return { count: 0, items: [] };
+        },
+        upcomingMaintenance: async (input: unknown) => {
+          maintenanceInput = input;
+          return { items: [] };
         },
       }),
       reconciliation,
@@ -142,7 +149,16 @@ describe("DashboardService", () => {
       expected,
       "a hibajegy-lekérdezés nem kaphat teljes helyszínkészletet",
     );
+    assert.deepEqual(
+      (maintenanceInput as { assignedUnitIds: string[] }).assignedUnitIds,
+      expected,
+      "az esedékes karbantartás lekérdezése nem kaphat teljes helyszínkészletet",
+    );
     assert.deepEqual((ticketInput as { scope: unknown }).scope, {
+      kind: "customer",
+      customerId: "customer-own",
+    });
+    assert.deepEqual((maintenanceInput as { scope: unknown }).scope, {
       kind: "customer",
       customerId: "customer-own",
     });
@@ -172,6 +188,7 @@ describe("DashboardService", () => {
         "openTickets",
         "purchasing",
         "teamLoad",
+        "upcomingMaintenance",
       ],
     ],
     [
@@ -186,6 +203,7 @@ describe("DashboardService", () => {
         "myWorksheets",
         "openTickets",
         "teamLoad",
+        "upcomingMaintenance",
       ],
     ],
     ["WAREHOUSE", ["inventoryDiscrepancies", "myTaskCount", "purchasing"]],

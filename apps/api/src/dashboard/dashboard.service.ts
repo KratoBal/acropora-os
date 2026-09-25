@@ -39,18 +39,24 @@ export class DashboardService {
         : [];
 
     if (serviceVisible) {
-      [result.myWorksheets, result.openTickets] = await Promise.all([
-        this.repository.myWorksheets({
-          userId: user.id,
-          scope,
-          assignedUnitIds,
-        }),
-        this.repository.openTickets({
-          userId: user.id,
-          scope,
-          assignedUnitIds,
-        }),
-      ]);
+      [result.myWorksheets, result.openTickets, result.upcomingMaintenance] =
+        await Promise.all([
+          this.repository.myWorksheets({
+            userId: user.id,
+            scope,
+            assignedUnitIds,
+          }),
+          this.repository.openTickets({
+            userId: user.id,
+            scope,
+            assignedUnitIds,
+          }),
+          this.repository.upcomingMaintenance({
+            scope,
+            assignedUnitIds,
+            now: new Date(),
+          }),
+        ]);
     }
     if (hasPermission(user, PERMISSIONS.AQUARIUMS_VIEW))
       result.aquariumAlerts = await this.repository.aquariumAlerts(new Date());

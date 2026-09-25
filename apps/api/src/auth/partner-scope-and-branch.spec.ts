@@ -89,9 +89,17 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
 /**
  * A DARABSZAM IS ALLITAS, A MERES DATUMAVAL -- nem `>=`, hanem PONTOS.
  *
- * UJRAMERVE 2026-09-22 (az egyseg-hatokor szelete): 14 hivasi hely
- * (service-assets 9, worksheets 4, suppliers 1). A definicios sorok NEM
- * szamitanak bele.
+ * UJRAMERVE 2026-09-25 (a webes kezdolap Figma-igazitasa): 15 hivasi hely
+ * (service-assets 9, worksheets 4, suppliers 1, dashboard 1). A definicios
+ * sorok NEM szamitanak bele.
+ *
+ * MI JOTT A LEGUTOBBI MERES (14) OTA, ES MIERT -- nem elegendo a szamot atirni:
+ *
+ *   +1  `dashboard.repository.ts` `upcomingMaintenance()`: az "Esedekes
+ *       karbantartasok" kezdolap-kartya `Asset.nextServiceAt` szerint szur,
+ *       ugyanazzal a helyszin-hatokorrel, mint a `myWorksheets`/`openTickets`
+ *       -- a szervizes csak a sajat kiosztott helyszinein allo eszkozoket
+ *       lassa.
  *
  * MI JOTT AZ ELOZO MERES (13) OTA, ES MIERT -- nem elegendo a szamot atirni:
  *
@@ -123,7 +131,7 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
  * es a datumot is frissitsd, kulonben a kovetkezo olvaso egy regi merESre
  * hivatkozik.
  */
-const VART_HIVASI_HELY = 14;
+const VART_HIVASI_HELY = 15;
 
 const SCOPE_HELPERS = [
   "scopeWhereForAndBranch",
