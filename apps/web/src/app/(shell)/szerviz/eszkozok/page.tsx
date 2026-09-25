@@ -1,5 +1,5 @@
-import { AssetListPage } from "@/components/service-assets/asset-list-page";
+import { PilotAssetListPage } from "@/components/service-assets/pilot/pilot-asset-list-page";
 
 export default function ServiceAssetsPage() {
-  return <AssetListPage />;
+  return <PilotAssetListPage />;
 }

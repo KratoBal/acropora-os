@@ -58,7 +58,12 @@ import {
  */
 const NINCS_KATEGORIA = "__NINCS__";
 
-const TABS = [
+/**
+ * EXPORTÁLVA, MERT A PILOT LISTA (2026-09-25) UGYANEZT HASZNÁLJA -- ne
+ * harmadik, kézzel másolt példány legyen (a webben és a partnerben már ma is
+ * két külön másolat áll, lásd barracuda mérését, 6431542b kartya).
+ */
+export const TABS = [
   { key: "ALL", label: "Összes" },
   /**
    * A BEEPITETT: minden, KIVEVE a kivezetetteket. Balazs kerese, 2026-09-16,
