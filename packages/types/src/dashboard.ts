@@ -16,6 +16,7 @@ export interface DashboardSummary {
   inventoryDiscrepancies?: DashboardInventoryDiscrepancies;
   activity?: DashboardActivity;
   myTaskCount?: number;
+  upcomingMaintenance?: DashboardUpcomingMaintenance;
 }
 
 export interface DashboardMyWorksheets {
@@ -130,4 +131,22 @@ export interface DashboardActivityItem {
   subject: string;
   actorName: string | null;
   occurredAt: string;
+}
+
+/**
+ * "Esedékes karbantartások" a kezdőlapon -- az `Asset.nextServiceAt` mezőből,
+ * nem egy külön karbantartás-ütemező táblából (ilyen ma nincs). Balázs
+ * kérése (2026-09-25, a webes kezdőlap Figma-igazítása): a szervizesnek
+ * lássa, mely eszközök szervize közeleg.
+ */
+export interface DashboardUpcomingMaintenance {
+  items: DashboardUpcomingMaintenanceItem[];
+}
+
+export interface DashboardUpcomingMaintenanceItem {
+  assetId: string;
+  assetName: string;
+  customerName: string | null;
+  departmentName: string;
+  nextServiceAt: string;
 }

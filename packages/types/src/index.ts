@@ -92,6 +92,8 @@ export type {
   DashboardSummary,
   DashboardTeamLoad,
   DashboardTicket,
+  DashboardUpcomingMaintenance,
+  DashboardUpcomingMaintenanceItem,
   DashboardWorksheet,
 } from "./dashboard.js";
 
