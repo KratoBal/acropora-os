@@ -268,11 +268,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     </nav>
   );
 
+  /*
+    SZELESSEG 224PX (`w-56`), A TERV SZERINT (`AppShell.tsx:530,575`) --
+    korabban `w-72` (288px). A `w-56` Tailwind-lepcso pontosan 224px
+    (14 * 16px), nem kell hozza nyers ertek.
+  */
   const sidebar = (mobile = false) => (
     <aside
       data-theme={effectiveTheme}
       className={[
-        "font-sans flex h-full w-72 flex-col border-r border-pilot-grey-200 bg-white px-4 py-5 text-pilot-grey-900",
+        "font-sans flex h-full w-56 flex-col border-r border-pilot-grey-200 bg-white px-4 py-5 text-pilot-grey-900",
         mobile
           ? "fixed inset-y-0 left-0 z-50 shadow-2xl lg:hidden"
           : "fixed inset-y-0 left-0 z-30 hidden lg:flex",
@@ -308,10 +313,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         </>
       ) : null}
 
-      <div className="lg:pl-72">
+      <div className="lg:pl-56">
+        {/*
+          MAGASSAG 48PX (`h-12`), A TERV SZERINT (`AppShell.tsx:502`) --
+          korabban `h-16` (64px).
+        */}
         <header
           data-theme={effectiveTheme}
-          className="sticky top-0 z-20 flex h-16 items-center border-b border-pilot-grey-200 bg-white/95 px-4 font-sans backdrop-blur sm:px-6 lg:px-8"
+          className="sticky top-0 z-20 flex h-12 items-center border-b border-pilot-grey-200 bg-white/95 px-4 font-sans backdrop-blur sm:px-6 lg:px-8"
         >
           <div className="flex items-center gap-3 lg:hidden">
             <Button

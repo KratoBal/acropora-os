@@ -123,6 +123,16 @@ export function GlobalSearch({ token }: { token: string }) {
 
   return (
     <div ref={root} className="relative w-full">
+      {/*
+        A TERV (`AppShell.tsx:341-343`) EGY LILA "ÚJ" JELVENYT TESZ A MEZO
+        MELLE -- EZ SZANDEKOSAN KIMARAD. Ugyanaz a jelzes all a "Megjelenes"
+        temavalto mellett is (`AppShell.tsx:460-464`, kodkommenttel: "—
+        NEW"), ami MA MAR EPULT ES ELES (`user-menu.tsx`), es azon a
+        badge nincs sem a tervben masutt, sem a mai kodban -- ez tehat a
+        Make eszkoz SAJAT "uj ebben a korben" jelolese, nem egy tervezett,
+        maradando UI-elem. Egy kereso mezo nem maradna orokre "Uj"
+        cimkevel.
+      */}
       <label className="block w-full">
         <span className="sr-only">Keresés</span>
         <span className="flex h-10 items-center gap-2 rounded-xl bg-pilot-grey-100 px-3 text-pilot-grey-500 ring-pilot-aqua-500 transition focus-within:ring-2">
