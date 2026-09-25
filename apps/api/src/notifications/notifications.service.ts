@@ -431,6 +431,17 @@ export class NotificationsService {
    * A `targetId` AZ AKVARIUM AZONOSITOJA: a koppintas
    * `apps/mobile/src/app/aquariums/[id].tsx`-re visz, lasd a
    * `PUSH_TARGET_ROUTES` bejegyzeset.
+   *
+   * MIERT NEM A KONKRET MERESI ALKALOM (`AquariumMeasurementOccasion.id`),
+   * HOLOTT AZ IS RENDELKEZESRE ALLNA (2026-09-25, meregetve, Balazs a
+   * meresre szamitott, nem az akvariumra): a mobil `[id].tsx` a mereseket
+   * `measuredAt` szerint csokkeno sorrendben mutatja, tehat a LEGUTOBBI
+   * (`latestOccasion`) MINDIG az, amit epp most rogzitettek -- az akvarium-
+   * adatlap megnyitasa ezert MA IS a helyes meresen landol, kulon celpont
+   * es mobil-oldali "ugorj/emeld ki ezt az alkalmat" logika NELKUL. Egy
+   * konkret occasion-celpont epitese uj mobil route-parametert es
+   * gorgetes/kiemeles-UI-t igenyelne -- ez MAR nem "olcson bele" a mai
+   * push-hiba javitasaba, kulon feladat, ha valaha kell.
    */
   async deliverAquariumMeasurementRecorded(
     notice: AquariumMeasurementRecordedNotice,
@@ -491,21 +502,6 @@ export class NotificationsService {
   }): Promise<AssignmentSummary> {
     const empty: AssignmentSummary = { sent: 0, retired: 0, failed: 0 };
     if (input.userIds.length === 0) return empty;
-
-    /**
-     * IDEIGLENES DIAGNOSZTIKAI SOR, 2026-09-25 -- A VIZMERES-PUSH VIZSGALATA
-     * MIATT. A `NotificationLogRepository` szandekosan nem tarolja a `data`
-     * mezot (lasd a fejleceit), es Balazs mind meleg, mind hideg allapotban
-     * ugyanoda (a fokepernyore) jutott a vizmeres-ertesitesbol -- a kod-oldali
-     * atnezes (API konstrukcio, mobil parse/dontes, celkepernyo kapu) nem
-     * talalt elterest a mukodo `serviceJob` uttol. Ez a sor a `log` szinten
-     * (nem `debug`, ami alapertelmezesben nem latszik) egyszer es
-     * visszakereshetoen rogziti, MIT kuldtunk ki ENNEL a hivasnal -- torlendo,
-     * ha a kovetkezo eles kuldes utan a kerdes eldol.
-     */
-    this.logger.log(
-      `Push data (${input.title}, ${input.userIds.length} címzett): ${JSON.stringify(input.data)}`,
-    );
 
     /**
      * A KET KULDO UT, MEGNEVEZVE -- ES A PLATFORM ITT ALL, NEM A TAROLOBAN.
