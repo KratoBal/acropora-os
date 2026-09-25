@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { personDisplayName, personLegalName } from "./person-name.js";
+import {
+  personDisplayName,
+  personGivenName,
+  personLegalName,
+} from "./person-name.js";
 
 describe("personDisplayName", () => {
   it("uses the nickname when there is one", () => {
@@ -46,6 +50,49 @@ describe("personDisplayName", () => {
     for (const nickname of [undefined, null, "", "  "]) {
       assert.notEqual(personDisplayName({ displayName: "N", nickname }), "");
     }
+  });
+});
+
+describe("personGivenName", () => {
+  it("takes the SECOND word of the full name, not the first", () => {
+    // displayName is built server-side as `${lastName} ${firstName}`
+    // (users.repository.ts displayNameOf) -- Hungarian order, family name
+    // first. The given name is the word after it, not the word before it.
+    assert.equal(personGivenName({ displayName: "Kovács Béla" }), "Béla");
+  });
+
+  it("uses the nickname AS-IS, without splitting it", () => {
+    assert.equal(
+      personGivenName({ displayName: "Kovács Béla", nickname: "Bébé" }),
+      "Bébé",
+    );
+  });
+
+  it("a two-word nickname is not treated as LastName FirstName", () => {
+    // The nickname is the person's own choice of what to be called, not a
+    // full name to parse.
+    assert.equal(
+      personGivenName({
+        displayName: "Kovács Béla",
+        nickname: "Öreg Béla",
+      }),
+      "Öreg Béla",
+    );
+  });
+
+  it("falls back to the whole name when there is no second word", () => {
+    assert.equal(personGivenName({ displayName: "Béla" }), "Béla");
+  });
+
+  it("treats an empty or whitespace nickname as none", () => {
+    assert.equal(
+      personGivenName({ displayName: "Kovács Béla", nickname: "" }),
+      "Béla",
+    );
+    assert.equal(
+      personGivenName({ displayName: "Kovács Béla", nickname: null }),
+      "Béla",
+    );
   });
 });
 

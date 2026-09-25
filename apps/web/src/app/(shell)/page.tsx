@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Icon, Skeleton } from "@acropora/ui";
+import { Alert, Icon, Skeleton, type IconName } from "@acropora/ui";
 import {
   worksheetStatusLabel,
   type DashboardActivity,
@@ -22,7 +22,7 @@ import {
 } from "@/components/pilot/pilot-ui";
 import { serviceJobStatusLabel } from "@/components/service-jobs/service-job-labels";
 import { dashboardApi } from "@/lib/api/dashboard";
-import { personDisplayName } from "@acropora/types";
+import { personGivenName } from "@acropora/types";
 
 function getGreeting(hour: number) {
   if (hour < 10) return "Jó reggelt";
@@ -106,24 +106,41 @@ function ticketStatusText(status: string) {
     : status;
 }
 
+/**
+ * A KARTYA-FEJLEC IKONJA KEREKITETT SZURKE HATTER-DOBOZBAN (a terv szerint,
+ * `DashboardScreen.tsx:76-92`, `w-7 h-7 rounded-lg bg-grey-50`). Ez a
+ * kezdolap SAJAT tervenek mintaja -- a portal `CardHeader`-je (`Partner
+ * PortalScreen.tsx:280-292`) nem ismer icon-propot egyaltalan, tehat ez
+ * NEM a megosztott `PilotCardHeader`-t erinti, csak a kezdolap sajat
+ * `DashboardCard`-jat: az ikon itt kap dobozt, a tobbi pilot-lap sajat
+ * ikon-elhelyezese valtozatlan marad.
+ */
 function DashboardCard({
   children,
   empty,
   href,
   title,
   icon,
+  iconClassName,
 }: {
   children: ReactNode;
   empty: boolean;
   href?: string;
   title: string;
-  icon?: ReactNode;
+  icon?: IconName;
+  iconClassName?: string;
 }) {
   return (
     <PilotCard>
       <PilotCardHeader
         title={title}
-        icon={icon}
+        icon={
+          icon ? (
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pilot-grey-50">
+              <Icon name={icon} size={14} className={iconClassName} />
+            </span>
+          ) : undefined
+        }
         action={
           href ? (
             <Link
@@ -252,310 +269,326 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
         <ManagerTiles data={summary.managerTiles} />
       ) : null}
 
-      <section className="grid gap-5 lg:grid-cols-2">
-        {summary.myWorksheets ? (
-          <DashboardCard
-            title="Saját munkalapjaim"
-            href="/szerviz/munkalapok"
-            icon={
-              <Icon
-                name="clipboard"
-                size={16}
-                className="text-pilot-grey-400"
-              />
-            }
-            empty={summary.myWorksheets.items.length === 0}
-          >
-            {summary.myWorksheets.items.length === 0 ? (
-              "Nincs nyitott munkalapod."
-            ) : (
-              <ul className="space-y-3">
-                {summary.myWorksheets.items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-start justify-between gap-3"
-                  >
-                    <Link
-                      href={`/szerviz/munkalapok/${item.id}`}
-                      className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
-                    >
-                      <span className="block truncate">{item.subject}</span>
-                      <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
-                        {item.number ?? "Munkalap azonosító nélkül"} ·{" "}
-                        {formatDate(item.deadline)}
-                      </span>
-                    </Link>
-                    <PilotBadge variant="grey">
-                      {worksheetStatusText(item.status)}
-                    </PilotBadge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashboardCard>
-        ) : null}
-
-        {summary.openTickets ? (
-          <DashboardCard
-            title="Nyitott hibajegyek a helyszíneimen"
-            href="/szerviz/hibajegyek"
-            icon={<Icon name="service" size={16} className="text-amber-600" />}
-            empty={summary.openTickets.items.length === 0}
-          >
-            {summary.openTickets.items.length === 0 ? (
-              "Nincs nyitott hibajegy a helyszíneiden."
-            ) : (
-              <>
-                <p className="mb-3 text-xs text-pilot-grey-500">
-                  {summary.openTickets.count} nyitott hibajegy
-                </p>
+      {/*
+        "LEGUTOBBI AKTIVITASOK" KULON, 340PX-ES OLDALSAVBAN (a terv szerint,
+        `DashboardScreen.tsx:319,387-399`) -- korabban ugyanabban a lapos
+        kartya-racsban allt, mint minden mas kartya. A tobbi kartya
+        elrendezese (ket oszlop `lg:`-tol) valtozatlan, csak az Activity
+        kartya kerult ki sajat oszlopba.
+      */}
+      <div className="grid gap-5 xl:grid-cols-[1fr_340px] xl:items-start">
+        <section className="grid gap-5 lg:grid-cols-2">
+          {summary.myWorksheets ? (
+            <DashboardCard
+              title="Saját munkalapjaim"
+              href="/szerviz/munkalapok"
+              icon="clipboard"
+              iconClassName="text-pilot-grey-400"
+              empty={summary.myWorksheets.items.length === 0}
+            >
+              {summary.myWorksheets.items.length === 0 ? (
+                "Nincs nyitott munkalapod."
+              ) : (
                 <ul className="space-y-3">
-                  {summary.openTickets.items.map((item) => (
+                  {summary.myWorksheets.items.map((item) => (
                     <li
                       key={item.id}
                       className="flex items-start justify-between gap-3"
                     >
                       <Link
-                        href={`/szerviz/hibajegyek/${item.id}`}
+                        href={`/szerviz/munkalapok/${item.id}`}
                         className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
                       >
-                        <span className="block truncate">{item.title}</span>
+                        <span className="block truncate">{item.subject}</span>
                         <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
-                          {item.number} ·{" "}
-                          {dateTimeFormatter.format(new Date(item.createdAt))}
+                          {item.number ?? "Munkalap azonosító nélkül"} ·{" "}
+                          {formatDate(item.deadline)}
                         </span>
                       </Link>
                       <PilotBadge variant="grey">
-                        {ticketStatusText(item.status)}
+                        {worksheetStatusText(item.status)}
                       </PilotBadge>
                     </li>
                   ))}
                 </ul>
-              </>
-            )}
-          </DashboardCard>
-        ) : null}
+              )}
+            </DashboardCard>
+          ) : null}
 
-        {/*
+          {summary.openTickets ? (
+            <DashboardCard
+              title="Nyitott hibajegyek a helyszíneimen"
+              href="/szerviz/hibajegyek"
+              icon="service"
+              iconClassName="text-amber-600"
+              empty={summary.openTickets.items.length === 0}
+            >
+              {summary.openTickets.items.length === 0 ? (
+                "Nincs nyitott hibajegy a helyszíneiden."
+              ) : (
+                <>
+                  <p className="mb-3 text-xs text-pilot-grey-500">
+                    {summary.openTickets.count} nyitott hibajegy
+                  </p>
+                  <ul className="space-y-3">
+                    {summary.openTickets.items.map((item) => (
+                      <li
+                        key={item.id}
+                        className="flex items-start justify-between gap-3"
+                      >
+                        <Link
+                          href={`/szerviz/hibajegyek/${item.id}`}
+                          className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                        >
+                          <span className="block truncate">{item.title}</span>
+                          <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                            {item.number} ·{" "}
+                            {dateTimeFormatter.format(new Date(item.createdAt))}
+                          </span>
+                        </Link>
+                        <PilotBadge variant="grey">
+                          {ticketStatusText(item.status)}
+                        </PilotBadge>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </DashboardCard>
+          ) : null}
+
+          {/*
           ÚJ KÁRTYA (2026-09-25, Figma-igazítás) -- `Asset.nextServiceAt`-ből,
           lásd a szerver oldali `upcomingMaintenance()` fejlécét a hatókörről
           és az időablakról.
         */}
-        {summary.upcomingMaintenance ? (
-          <DashboardCard
-            title="Esedékes karbantartások"
-            href="/szerviz/eszkozok"
-            icon={
-              <Icon name="calendar" size={16} className="text-pilot-grey-400" />
-            }
-            empty={summary.upcomingMaintenance.items.length === 0}
-          >
-            {summary.upcomingMaintenance.items.length === 0 ? (
-              "Nincs esedékes karbantartás."
-            ) : (
-              <ul className="space-y-3">
-                {summary.upcomingMaintenance.items.map((item) => (
-                  <li
-                    key={item.assetId}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <Link
-                      href={`/szerviz/eszkozok/${item.assetId}`}
-                      className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+          {summary.upcomingMaintenance ? (
+            <DashboardCard
+              title="Esedékes karbantartások"
+              href="/szerviz/eszkozok"
+              icon="calendar"
+              iconClassName="text-pilot-grey-400"
+              empty={summary.upcomingMaintenance.items.length === 0}
+            >
+              {summary.upcomingMaintenance.items.length === 0 ? (
+                "Nincs esedékes karbantartás."
+              ) : (
+                <ul className="space-y-3">
+                  {summary.upcomingMaintenance.items.map((item) => (
+                    <li
+                      key={item.assetId}
+                      className="flex items-center justify-between gap-3"
                     >
-                      <span className="block truncate">{item.assetName}</span>
-                      <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
-                        {item.customerName ? `${item.customerName} · ` : ""}
-                        {item.departmentName} · {formatDate(item.nextServiceAt)}
-                      </span>
-                    </Link>
-                    <DaysPill days={daysUntil(item.nextServiceAt)} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashboardCard>
-        ) : null}
+                      <Link
+                        href={`/szerviz/eszkozok/${item.assetId}`}
+                        className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                      >
+                        <span className="block truncate">{item.assetName}</span>
+                        <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                          {item.customerName ? `${item.customerName} · ` : ""}
+                          {item.departmentName} ·{" "}
+                          {formatDate(item.nextServiceAt)}
+                        </span>
+                      </Link>
+                      <DaysPill days={daysUntil(item.nextServiceAt)} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </DashboardCard>
+          ) : null}
 
-        {/*
+          {/*
           A "HJ"/"ML" CÍMKÉZETT SOROK A TERVBEN (mindkét típusú határidő)
           MA NEM ÉPÍTHETŐK: a `DashboardDeadline.kind` egyetlen értéket ismer
           (`"WORKSHEET"`), hibajegy-határidőt a lekérdezés sosem adott --
           lásd `dashboard.ts` típusát. Ez valódi, meglévő hiány, nem ennek a
           körnek az újítása; a PR törzsében szerepel.
         */}
-        {summary.deadlines ? (
-          <DashboardCard
-            title="Határidők"
-            href="/szerviz/munkalapok"
-            icon={<Icon name="calendar" size={16} className="text-amber-600" />}
-            empty={summary.deadlines.items.length === 0}
-          >
-            {summary.deadlines.items.length === 0 ? (
-              "Nincs közelgő határidő."
-            ) : (
-              <ul className="space-y-3">
-                {summary.deadlines.items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-start justify-between gap-3"
-                  >
-                    <Link
-                      href={`/szerviz/munkalapok/${item.id}`}
-                      className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
-                    >
-                      <span className="block truncate">{item.subject}</span>
-                      <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
-                        {item.number ?? "Munkalap azonosító nélkül"}
-                      </span>
-                    </Link>
-                    <PilotBadge variant="amber">
-                      {formatDate(item.deadline)}
-                    </PilotBadge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashboardCard>
-        ) : null}
-
-        {summary.teamLoad ? (
-          <DashboardCard
-            title="Csapat – nyitott munkalapok"
-            href="/szerviz/munkalapok"
-            icon={
-              <Icon name="users" size={16} className="text-pilot-grey-400" />
-            }
-            empty={summary.teamLoad.items.length === 0}
-          >
-            {summary.teamLoad.items.length === 0 ? (
-              "Nincs nyitott munkalap a csapatnál."
-            ) : (
-              <ul className="space-y-3">
-                {(() => {
-                  const maxOpen = Math.max(
-                    1,
-                    ...summary.teamLoad.items.map(
-                      (item) => item.openWorksheetCount,
-                    ),
-                  );
-                  return summary.teamLoad.items.map((item) => (
+          {summary.deadlines ? (
+            <DashboardCard
+              title="Határidők"
+              href="/szerviz/munkalapok"
+              icon="calendar"
+              iconClassName="text-amber-600"
+              empty={summary.deadlines.items.length === 0}
+            >
+              {summary.deadlines.items.length === 0 ? (
+                "Nincs közelgő határidő."
+              ) : (
+                <ul className="space-y-3">
+                  {summary.deadlines.items.map((item) => (
                     <li
-                      key={item.userId}
-                      className="flex items-center gap-3 text-sm"
+                      key={item.id}
+                      className="flex items-start justify-between gap-3"
                     >
-                      <PilotAvatar
-                        initials={pilotInitials(item.displayName)}
-                        color={pilotAvatarColor(item.userId)}
-                        size="sm"
-                      />
-                      <span className="flex-1 truncate font-medium text-pilot-grey-800">
-                        {item.displayName}
-                      </span>
-                      <div className="flex items-center gap-3">
-                        <div className="h-1.5 w-24 rounded-full bg-pilot-grey-100">
-                          <div
-                            className="h-1.5 rounded-full bg-pilot-aqua-500"
-                            style={{
-                              width: `${(item.openWorksheetCount / maxOpen) * 100}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="w-20 shrink-0 text-right font-mono text-xs text-pilot-grey-600">
-                          {item.openWorksheetCount} nyitott
+                      <Link
+                        href={`/szerviz/munkalapok/${item.id}`}
+                        className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                      >
+                        <span className="block truncate">{item.subject}</span>
+                        <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                          {item.number ?? "Munkalap azonosító nélkül"}
                         </span>
-                      </div>
+                      </Link>
+                      <PilotBadge variant="amber">
+                        {formatDate(item.deadline)}
+                      </PilotBadge>
                     </li>
-                  ));
-                })()}
-              </ul>
-            )}
-          </DashboardCard>
-        ) : null}
+                  ))}
+                </ul>
+              )}
+            </DashboardCard>
+          ) : null}
 
-        {summary.aquariumAlerts ? (
-          <DashboardCard
-            title="Akváriumok – figyelmeztetések"
-            href="/akvariumok"
-            icon={
-              <Icon name="droplet" size={16} className="text-pilot-grey-400" />
-            }
-            empty={summary.aquariumAlerts.items.length === 0}
-          >
-            {summary.aquariumAlerts.items.length === 0 ? (
-              "Nincs figyelmeztető akváriumjelzés."
-            ) : (
-              <ul className="space-y-3">
-                {summary.aquariumAlerts.items.map((item) => (
-                  <li
-                    key={`${item.aquariumId}-${item.reason}`}
-                    className="flex items-start justify-between gap-3"
-                  >
-                    <Link
-                      href={`/akvariumok/${item.aquariumId}/meresek`}
-                      className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+          {summary.teamLoad ? (
+            <DashboardCard
+              title="Csapat – nyitott munkalapok"
+              href="/szerviz/munkalapok"
+              icon="users"
+              iconClassName="text-pilot-grey-400"
+              empty={summary.teamLoad.items.length === 0}
+            >
+              {summary.teamLoad.items.length === 0 ? (
+                "Nincs nyitott munkalap a csapatnál."
+              ) : (
+                <ul className="space-y-3">
+                  {(() => {
+                    const maxOpen = Math.max(
+                      1,
+                      ...summary.teamLoad.items.map(
+                        (item) => item.openWorksheetCount,
+                      ),
+                    );
+                    return summary.teamLoad.items.map((item) => (
+                      <li
+                        key={item.userId}
+                        className="flex items-center gap-3 text-sm"
+                      >
+                        <PilotAvatar
+                          initials={pilotInitials(item.displayName)}
+                          color={pilotAvatarColor(item.userId)}
+                          size="sm"
+                        />
+                        <span className="flex-1 truncate font-medium text-pilot-grey-800">
+                          {item.displayName}
+                        </span>
+                        <div className="flex items-center gap-3">
+                          <div className="h-1.5 w-24 rounded-full bg-pilot-grey-100">
+                            <div
+                              className="h-1.5 rounded-full bg-pilot-aqua-500"
+                              style={{
+                                width: `${(item.openWorksheetCount / maxOpen) * 100}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="w-20 shrink-0 text-right font-mono text-xs text-pilot-grey-600">
+                            {item.openWorksheetCount} nyitott
+                          </span>
+                        </div>
+                      </li>
+                    ));
+                  })()}
+                </ul>
+              )}
+            </DashboardCard>
+          ) : null}
+
+          {summary.aquariumAlerts ? (
+            <DashboardCard
+              title="Akváriumok – figyelmeztetések"
+              href="/akvariumok"
+              icon="droplet"
+              iconClassName="text-pilot-grey-400"
+              empty={summary.aquariumAlerts.items.length === 0}
+            >
+              {summary.aquariumAlerts.items.length === 0 ? (
+                "Nincs figyelmeztető akváriumjelzés."
+              ) : (
+                <ul className="space-y-3">
+                  {summary.aquariumAlerts.items.map((item) => (
+                    <li
+                      key={`${item.aquariumId}-${item.reason}`}
+                      className="flex items-start justify-between gap-3"
                     >
-                      <span className="block truncate">
-                        {item.aquariumName}
-                      </span>
-                      <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                      <Link
+                        href={`/akvariumok/${item.aquariumId}/meresek`}
+                        className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                      >
+                        <span className="block truncate">
+                          {item.aquariumName}
+                        </span>
+                        <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                          {item.reason === "OUT_OF_RANGE"
+                            ? "Céltartományon kívüli érték"
+                            : "Vízmérés esedékes"}
+                        </span>
+                      </Link>
+                      <PilotBadge
+                        variant={
+                          item.reason === "OUT_OF_RANGE" ? "danger" : "amber"
+                        }
+                      >
                         {item.reason === "OUT_OF_RANGE"
-                          ? "Céltartományon kívüli érték"
-                          : "Vízmérés esedékes"}
-                      </span>
-                    </Link>
-                    <PilotBadge
-                      variant={
-                        item.reason === "OUT_OF_RANGE" ? "danger" : "amber"
-                      }
-                    >
-                      {item.reason === "OUT_OF_RANGE"
-                        ? "Figyelmeztetés"
-                        : "Esedékes"}
-                    </PilotBadge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashboardCard>
-        ) : null}
+                          ? "Figyelmeztetés"
+                          : "Esedékes"}
+                      </PilotBadge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </DashboardCard>
+          ) : null}
 
-        {summary.materialRequests ? (
-          <DashboardCard
-            title="Anyagigények – teljesítésre vár"
-            href="/szerviz/anyagigenyek"
-            icon={<Icon name="box" size={16} className="text-amber-600" />}
-            empty={summary.materialRequests.items.length === 0}
-          >
-            {summary.materialRequests.items.length === 0 ? (
-              "Nincs nyitott anyagigény."
-            ) : (
-              <ul className="space-y-3">
-                {summary.materialRequests.items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-start justify-between gap-3"
-                  >
-                    <Link
-                      href={`/szerviz/munkalapok/${item.worksheetId}`}
-                      className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+          {summary.materialRequests ? (
+            <DashboardCard
+              title="Anyagigények – teljesítésre vár"
+              href="/szerviz/anyagigenyek"
+              icon="box"
+              iconClassName="text-amber-600"
+              empty={summary.materialRequests.items.length === 0}
+            >
+              {summary.materialRequests.items.length === 0 ? (
+                "Nincs nyitott anyagigény."
+              ) : (
+                <ul className="space-y-3">
+                  {summary.materialRequests.items.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-start justify-between gap-3"
                     >
-                      <span className="block truncate">
-                        {item.customerName}
+                      <Link
+                        href={`/szerviz/munkalapok/${item.worksheetId}`}
+                        className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                      >
+                        <span className="block truncate">
+                          {item.customerName}
+                        </span>
+                        <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                          {item.worksheetNumber ?? "Munkalap azonosító nélkül"}{" "}
+                          ·{" "}
+                          {dateTimeFormatter.format(new Date(item.submittedAt))}
+                        </span>
+                      </Link>
+                      {/*
+                      A TERV EGYETLEN ANYAG+MENNYISEG PART MUTAT SORONKENT
+                      (`WH_ANYAGIGENYEK` demo), de a valodi anyagigeny tobb
+                      tetelt is hordozhat -- lasd a szerver oldali
+                      `materialRequests()` fejlecet. A darabszam ("N tétel")
+                      jobbra igazitva, monospace, ugyanaz a hely, ahol a
+                      terv a mennyiseget mutatja.
+                    */}
+                      <span className="shrink-0 whitespace-nowrap font-mono text-sm font-semibold text-pilot-grey-700">
+                        {item.itemCount} tétel
                       </span>
-                      <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
-                        {item.worksheetNumber ?? "Munkalap azonosító nélkül"} ·{" "}
-                        {dateTimeFormatter.format(new Date(item.submittedAt))}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashboardCard>
-        ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </DashboardCard>
+          ) : null}
 
-        {/*
+          {/*
           A TERV EGY VALÓDI TÁBLÁZATOT AD (Nyilvántartott/Tényleges/Eltérés
           OSZLOPOKKAL, konkrét darabszámokkal) -- ez a mai adatból NEM
           ÉPÍTHETŐ: a `DashboardInventoryDiscrepancy` típus csak `sku`-t,
@@ -564,42 +597,48 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
           marad a mai (SKU + raktárkód) -- ez a PR-ben is szerepel, nem
           hallgatva el.
         */}
-        {summary.inventoryDiscrepancies ? (
-          <DashboardCard
-            title="Leltár – eltérések"
-            href="/keszlet-egyeztetes"
-            icon={<Icon name="alert" size={16} className="text-red-600" />}
-            empty={summary.inventoryDiscrepancies.items.length === 0}
-          >
-            {summary.inventoryDiscrepancies.items.length === 0 ? (
-              "Nincs készleteltérés."
-            ) : (
-              <>
-                <p className="mb-3 text-xs text-pilot-grey-500">
-                  {summary.inventoryDiscrepancies.count} eltérés
-                </p>
-                <ul className="space-y-3">
-                  {summary.inventoryDiscrepancies.items.map((item) => (
-                    <li
-                      key={item.variantId}
-                      className="flex items-center justify-between gap-3 text-sm"
-                    >
-                      <span className="font-medium text-pilot-grey-800">
-                        {item.sku}
-                      </span>
-                      <span className="text-pilot-grey-500">
-                        {item.warehouseCode}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </DashboardCard>
-        ) : null}
+          {summary.inventoryDiscrepancies ? (
+            <DashboardCard
+              title="Leltár – eltérések"
+              href="/keszlet-egyeztetes"
+              icon="alert"
+              iconClassName="text-red-600"
+              empty={summary.inventoryDiscrepancies.items.length === 0}
+            >
+              {summary.inventoryDiscrepancies.items.length === 0 ? (
+                "Nincs készleteltérés."
+              ) : (
+                <>
+                  <p className="mb-3 text-xs text-pilot-grey-500">
+                    {summary.inventoryDiscrepancies.count} eltérés
+                  </p>
+                  <ul className="space-y-3">
+                    {summary.inventoryDiscrepancies.items.map((item) => (
+                      <li
+                        key={item.variantId}
+                        className="flex items-center justify-between gap-3 text-sm"
+                      >
+                        <span className="font-medium text-pilot-grey-800">
+                          {item.sku}
+                        </span>
+                        <span className="text-pilot-grey-500">
+                          {item.warehouseCode}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </DashboardCard>
+          ) : null}
+        </section>
 
-        {summary.activity ? <ActivityCard data={summary.activity} /> : null}
-      </section>
+        {summary.activity ? (
+          <div className="flex flex-col gap-5">
+            <ActivityCard data={summary.activity} />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -621,7 +660,8 @@ function ActivityCard({
   return (
     <DashboardCard
       title="Legutóbbi aktivitások"
-      icon={<Icon name="activity" size={16} className="text-pilot-grey-400" />}
+      icon="activity"
+      iconClassName="text-pilot-grey-400"
       empty={data.items.length === 0}
     >
       {data.items.length === 0 ? (
@@ -681,32 +721,41 @@ export default function DashboardPage() {
   }, [session]);
 
   const greetingName = session?.user
-    ? personDisplayName(session.user).split(" ")[0]
+    ? personGivenName(session.user)
     : undefined;
   const greeting = getGreeting(new Date().getHours());
 
   return (
     <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 p-6 lg:-m-8 lg:p-8">
-      <div className="mb-6">
-        <p className="text-sm text-pilot-grey-500">
-          {todayFormatter.format(new Date())}
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold text-pilot-grey-900">
-          {greetingName ? `${greeting}, ${greetingName}!` : `${greeting}!`}
-        </h1>
-      </div>
+      {/*
+        A TARTALOM KOZEPRE IGAZITVA, SZELESSEG-KORLATTAL, A TERV SZERINT
+        (`DashboardScreen.tsx:530`, `max-w-6xl mx-auto w-full`) -- korabban
+        a tartalom a keret teljes szelesseget kitoltotte. A szurke hatter
+        (fent, a `PilotThemeRoot`-on) tovabbra is teli szelessegu, csak a
+        BENNE allo doboz kap korlatot es kozepre-igazitast.
+      */}
+      <div className="mx-auto w-full max-w-6xl">
+        <div className="mb-6">
+          <p className="text-sm text-pilot-grey-500">
+            {todayFormatter.format(new Date())}
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold text-pilot-grey-900">
+            {greetingName ? `${greeting}, ${greetingName}!` : `${greeting}!`}
+          </h1>
+        </div>
 
-      {loading ? <DashboardLoading /> : null}
-      {error ? (
-        <Alert
-          variant="danger"
-          title="Az irányítópult nem tölthető be"
-          description={error}
-        />
-      ) : null}
-      {!loading && !error && summary ? (
-        <DashboardCards summary={summary} />
-      ) : null}
+        {loading ? <DashboardLoading /> : null}
+        {error ? (
+          <Alert
+            variant="danger"
+            title="Az irányítópult nem tölthető be"
+            description={error}
+          />
+        ) : null}
+        {!loading && !error && summary ? (
+          <DashboardCards summary={summary} />
+        ) : null}
+      </div>
     </PilotThemeRoot>
   );
 }

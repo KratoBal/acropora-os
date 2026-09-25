@@ -414,6 +414,17 @@ export class DashboardRepository extends Repository {
             customer: { select: { displayName: true } },
           },
         },
+        /*
+          A "MENNYISEG" OSZLOPHOZ (Figma-igazitas, 2026-09-25) -- a terv egy
+          EGYETLEN anyag+mennyiseg part mutat soronkent (WH_ANYAGIGENYEK
+          demo-adata), de a valodi `MaterialRequest` EGYNEL TOBB
+          `MaterialRequestItem`-et is hordozhat (nev/mennyiseg/mertekegyseg
+          tetelenkent), tehat egyetlen szammal nem irhato le pontosan. Csak a
+          DARABSZAMOT adjuk at ("N tetel"), nem talaljuk ki, melyik tetel
+          "a" mennyiseg -- ugyanaz a mintakoveto dontes, mint a Beszerzes
+          kartya "N tetel" osszesitese.
+        */
+        _count: { select: { items: true } },
       },
     });
     return {
@@ -426,6 +437,7 @@ export class DashboardRepository extends Repository {
                 worksheetNumber: row.worksheet.number,
                 customerName: row.worksheet.customer.displayName,
                 submittedAt: row.submittedAt.toISOString(),
+                itemCount: row._count.items,
               },
             ]
           : [],
