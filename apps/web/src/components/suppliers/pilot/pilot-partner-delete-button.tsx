@@ -95,14 +95,24 @@ export function PilotPartnerDeleteButton({
             description={error}
           />
         ) : null}
-        <PilotButton
+        {/*
+          KIS PIROS SZÖVEGLINK, A TERV SZERINT (2026-09-25, barracuda
+          előre-összevetése): a terv a kezdő "Partner törlése" elemet
+          `text-xs text-red-500` szöveglinkként adja, nem teli "secondary"
+          gombként -- a régi (nem pilot) kód is szöveglink volt
+          (`text-xs text-red-500 hover:text-red-700`), a pilot-portolás
+          tévedésből cserélte `PilotButton`-ra. A `role="button"` és a
+          kattintható viselkedés VÁLTOZATLAN (`<button>` elem marad),
+          csak a stílus tér vissza a linkre.
+        */}
+        <button
           type="button"
-          variant="secondary"
           onClick={() => void ask()}
           disabled={busy}
+          className="cursor-pointer text-xs text-red-500 transition hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Partner törlése
-        </PilotButton>
+        </button>
       </div>
     );
 
