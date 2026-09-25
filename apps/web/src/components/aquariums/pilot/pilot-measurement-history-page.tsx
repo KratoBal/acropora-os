@@ -1,8 +1,8 @@
 "use client";
 import { Alert, Icon } from "@acropora/ui";
 import {
+  aquariumEffectiveMeasurementTargetRange,
   aquariumMeasurementParametersFor,
-  aquariumMeasurementTargetRange,
   AQUARIUM_MEASUREMENT_PARAMETER_COLOR,
   hasPermission,
   PERMISSIONS,
@@ -10,6 +10,7 @@ import {
   type AquariumMeasurementOccasion,
   type AquariumMeasurementParameterCode,
   type AquariumMeasurementParameterDefinition,
+  type AquariumMeasurementTarget,
 } from "@acropora/types";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -63,9 +64,11 @@ import {
  *    chart-motor újraírása volna -- egy karbantartott könyvtár olcsóbb és
  *    biztonságosabb, mint ennyi egyedi rajzoló logika.
  *
- * 2. CÉLTARTOMÁNY-SÁV: lásd `aquariumMeasurementTargetRange` fejlécét
- *    (`@acropora/types`) -- csak TENGERI víztípusnál jelenik meg, mert
- *    édesvízi tartományt nem találtunk ki (vízkémiai tévedés kockázata).
+ * 2. CÉLTARTOMÁNY-SÁV: lásd `aquariumEffectiveMeasurementTargetRange`
+ *    fejlécét (`@acropora/types`) -- az akvárium SAJÁT, 2026-09-25 óta
+ *    beállítható tartománya jelenik meg, ha van; híján a kódban álló
+ *    alapértékre esik vissza (csak TENGERI víztípusnál), mert édesvízi
+ *    tartományt nem találtunk ki (vízkémiai tévedés kockázata).
  *
  * 3. SZŰRÉS/LAPOZÁS: KLIENSOLDALON megy, a MEGLÉVŐ
  *    `GET /aquariums/:id/measurements` teljes válaszából -- egy akvárium
@@ -482,12 +485,14 @@ export function PilotMeasurementHistoryPage({
                     data={chartRows}
                     params={activeParams}
                     waterType={aquarium.waterType}
+                    targets={aquarium.targets}
                   />
                 ) : (
                   <SmallMultiples
                     data={chartRows}
                     params={activeParams}
                     waterType={aquarium.waterType}
+                    targets={aquarium.targets}
                     hasData={(code) =>
                       filteredOccasions.some((o) =>
                         o.values.some((v) => v.parameterCode === code),
@@ -543,6 +548,7 @@ export function PilotMeasurementHistoryPage({
                         key={param.code}
                         param={param}
                         waterType={aquarium.waterType}
+                        targets={aquarium.targets}
                         from={compFromOccasion}
                         to={compToOccasion}
                       />
@@ -636,14 +642,17 @@ export function PilotMeasurementHistoryPage({
                           </td>
                           {activeParams.map((param) => {
                             const value = byCode.get(param.code);
-                            const range = aquariumMeasurementTargetRange(
-                              aquarium.waterType,
-                              param.code,
-                            );
+                            const range =
+                              aquariumEffectiveMeasurementTargetRange(
+                                aquarium.waterType,
+                                param.code,
+                                aquarium.targets,
+                              );
                             const out =
                               value !== undefined &&
                               range !== undefined &&
-                              (value < range.min || value > range.max);
+                              ((range.min !== undefined && value < range.min) ||
+                                (range.max !== undefined && value > range.max));
                             return (
                               <td
                                 key={param.code}
@@ -780,11 +789,13 @@ function HistoryEmptyState({ aquariumId }: { aquariumId: string }) {
 function ComparisonTile({
   param,
   waterType,
+  targets,
   from,
   to,
 }: {
   param: AquariumMeasurementParameterDefinition;
   waterType: AquariumDetail["waterType"];
+  targets: AquariumMeasurementTarget[];
   from: AquariumMeasurementOccasion | undefined;
   to: AquariumMeasurementOccasion | undefined;
 }) {
@@ -792,9 +803,16 @@ function ComparisonTile({
   const b = to?.values.find((v) => v.parameterCode === param.code)?.value;
   if (a === undefined || b === undefined) return null;
   const diff = b - a;
-  const range = aquariumMeasurementTargetRange(waterType, param.code);
+  const range = aquariumEffectiveMeasurementTargetRange(
+    waterType,
+    param.code,
+    targets,
+  );
   const outOfRange =
-    diff !== 0 && range !== undefined && (b < range.min || b > range.max);
+    diff !== 0 &&
+    range !== undefined &&
+    ((range.min !== undefined && b < range.min) ||
+      (range.max !== undefined && b > range.max));
 
   return (
     <div className="flex min-w-[140px] flex-col gap-1 rounded-xl px-4 py-3 ring-1 ring-pilot-grey-200">
@@ -887,10 +905,12 @@ function CombinedChart({
   data,
   params,
   waterType,
+  targets,
 }: {
   data: Record<string, number | string>[];
   params: AquariumMeasurementParameterDefinition[];
   waterType: AquariumDetail["waterType"];
+  targets: AquariumMeasurementTarget[];
 }) {
   return (
     <div style={{ height: 340 }}>
@@ -926,7 +946,11 @@ function CombinedChart({
             }}
           />
           {params.map((param) => {
-            const range = aquariumMeasurementTargetRange(waterType, param.code);
+            const range = aquariumEffectiveMeasurementTargetRange(
+              waterType,
+              param.code,
+              targets,
+            );
             const color = AQUARIUM_MEASUREMENT_PARAMETER_COLOR[param.code];
             return (
               <Line
@@ -943,7 +967,10 @@ function CombinedChart({
                   value?: number;
                 }) => {
                   const { cx = 0, cy = 0, value = 0 } = dotProps;
-                  const out = range && (value < range.min || value > range.max);
+                  const out =
+                    range &&
+                    ((range.min !== undefined && value < range.min) ||
+                      (range.max !== undefined && value > range.max));
                   return (
                     <circle
                       key={`${param.code}-${cx}-${cy}`}
@@ -961,9 +988,10 @@ function CombinedChart({
             );
           })}
           {(() => {
-            const range = aquariumMeasurementTargetRange(
+            const range = aquariumEffectiveMeasurementTargetRange(
               waterType,
               params[0]!.code,
+              targets,
             );
             return range ? (
               <ReferenceArea
@@ -985,18 +1013,24 @@ function SmallMultiples({
   data,
   params,
   waterType,
+  targets,
   hasData,
 }: {
   data: Record<string, number | string>[];
   params: AquariumMeasurementParameterDefinition[];
   waterType: AquariumDetail["waterType"];
+  targets: AquariumMeasurementTarget[];
   hasData: (code: AquariumMeasurementParameterCode) => boolean;
 }) {
   return (
     <div className="flex flex-col gap-4">
       {params.map((param) => {
         const color = AQUARIUM_MEASUREMENT_PARAMETER_COLOR[param.code];
-        const range = aquariumMeasurementTargetRange(waterType, param.code);
+        const range = aquariumEffectiveMeasurementTargetRange(
+          waterType,
+          param.code,
+          targets,
+        );
         const paramHasData = hasData(param.code);
         return (
           <div key={param.code}>
@@ -1059,7 +1093,9 @@ function SmallMultiples({
                       }) => {
                         const { cx = 0, cy = 0, value = 0 } = dotProps;
                         const out =
-                          range && (value < range.min || value > range.max);
+                          range &&
+                          ((range.min !== undefined && value < range.min) ||
+                            (range.max !== undefined && value > range.max));
                         return (
                           <circle
                             key={`${param.code}-${cx}-${cy}`}
@@ -1073,7 +1109,7 @@ function SmallMultiples({
                         );
                       }}
                     />
-                    {range ? (
+                    {range?.min !== undefined ? (
                       <ReferenceLine
                         y={range.min}
                         stroke={color}
@@ -1081,7 +1117,7 @@ function SmallMultiples({
                         strokeOpacity={0.4}
                       />
                     ) : null}
-                    {range ? (
+                    {range?.max !== undefined ? (
                       <ReferenceLine
                         y={range.max}
                         stroke={color}

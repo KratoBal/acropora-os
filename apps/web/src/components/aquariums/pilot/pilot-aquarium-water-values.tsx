@@ -1,12 +1,14 @@
 "use client";
 import { ConfirmDialog, Icon } from "@acropora/ui";
 import {
+  aquariumEffectiveMeasurementTargetRange,
   aquariumMeasurementParametersFor,
   type AquariumMeasurementOccasion,
   type AquariumMeasurementParameterCode,
+  type AquariumMeasurementTarget,
   type WaterType,
 } from "@acropora/types";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { aquariumsApi } from "@/lib/api/aquariums";
@@ -34,13 +36,18 @@ export function PilotAquariumWaterValues({
   token,
   aquariumId,
   waterType,
+  targets,
   canSendEmail,
 }: {
   token: string;
   aquariumId: string;
   waterType?: WaterType;
+  /** Lásd `aquariumEffectiveMeasurementTargetRange` fejlécét: a csempék
+   * eltérés-jelzése ebből (vagy híján a kódban álló alapértékből) számol. */
+  targets?: AquariumMeasurementTarget[];
   canSendEmail: boolean;
 }) {
+  const router = useRouter();
   const [occasions, setOccasions] = useState<AquariumMeasurementOccasion[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -183,18 +190,10 @@ export function PilotAquariumWaterValues({
       <PilotCardHeader
         title="Vízértékek"
         action={
-          <div className="flex items-center gap-3">
-            <Link
-              href={`/akvariumok/${aquariumId}/meresek`}
-              className="text-xs font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800"
-            >
-              Összes mérés és grafikon
-            </Link>
-            <PilotButton variant="primary" onClick={() => setDrawerOpen(true)}>
-              <Icon name="plus" size={13} />
-              Új mérés
-            </PilotButton>
-          </div>
+          <PilotButton variant="primary" onClick={() => setDrawerOpen(true)}>
+            <Icon name="plus" size={13} />
+            Új mérés
+          </PilotButton>
         }
       />
 
@@ -234,27 +233,50 @@ export function PilotAquariumWaterValues({
                 (p) => p.code === value.parameterCode,
               );
               const selected = activeParam === value.parameterCode;
+              const range = aquariumEffectiveMeasurementTargetRange(
+                waterType,
+                value.parameterCode,
+                targets,
+              );
+              const outOfRange =
+                range !== undefined &&
+                ((range.min !== undefined && value.value < range.min) ||
+                  (range.max !== undefined && value.value > range.max));
               return (
                 <button
                   key={value.parameterCode}
                   type="button"
                   onClick={() => setSelectedParam(value.parameterCode)}
-                  className={`cursor-pointer rounded-lg p-2.5 text-left transition-all ${
+                  title={
+                    outOfRange ? "A megadott céltartományon kívül" : undefined
+                  }
+                  className={`cursor-pointer rounded-lg p-2.5 text-left ring-1 transition-all ${
                     selected
-                      ? "bg-pilot-aqua-600 text-white"
-                      : "bg-pilot-grey-50 hover:bg-pilot-grey-100"
+                      ? "bg-pilot-aqua-600 text-white ring-transparent"
+                      : outOfRange
+                        ? "bg-amber-50 ring-amber-200 hover:bg-amber-100"
+                        : "bg-pilot-grey-50 ring-transparent hover:bg-pilot-grey-100"
                   }`}
                 >
                   <p
                     className={`mb-0.5 text-[10px] font-medium ${
-                      selected ? "text-pilot-aqua-100" : "text-pilot-grey-400"
+                      selected
+                        ? "text-pilot-aqua-100"
+                        : outOfRange
+                          ? "text-amber-600"
+                          : "text-pilot-grey-400"
                     }`}
                   >
                     {param?.label ?? value.parameterCode}
+                    {outOfRange && !selected ? " ⚠" : ""}
                   </p>
                   <p
                     className={`font-mono text-sm font-semibold tabular-nums ${
-                      selected ? "text-white" : "text-pilot-grey-900"
+                      selected
+                        ? "text-white"
+                        : outOfRange
+                          ? "text-amber-700"
+                          : "text-pilot-grey-900"
                     }`}
                   >
                     {value.value}
@@ -282,6 +304,20 @@ export function PilotAquariumWaterValues({
               <PilotSparkline points={activePoints} />
             </div>
           ) : null}
+          {/*
+            BALÁZS KÉRÉSE (2026-09-25 05:49 UTC, msg_id 1552919976975929355):
+            "az Összes mérés és grafikon most rossz helyen van és csúnya is
+            ott... kerüljön a grafikon alá ugyanolyan zöld gombként mint a
+            többi gomb". Korábban a fejlécben állt, sima linkként.
+          */}
+          <div className="px-4 pb-4">
+            <PilotButton
+              variant="primary"
+              onClick={() => router.push(`/akvariumok/${aquariumId}/meresek`)}
+            >
+              Összes mérés és grafikon
+            </PilotButton>
+          </div>
           <div className="border-t border-pilot-grey-100">
             {occasions.map((occasion) => (
               <div

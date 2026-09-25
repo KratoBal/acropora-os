@@ -3273,8 +3273,39 @@ model Aquarium {
   /// `responsibleUserId`/`maintainedByUs` mezők a sémán maradnak, de a
   /// felület már ezt a listát mutatja.
   maintainers  AquariumMaintainer[]
+  /// AZ AKVÁRIUM SAJÁT VÍZÉRTÉK-CÉLTARTOMÁNYAI. Lásd az
+  /// `AquariumMeasurementTarget` fejlécét.
+  targets      AquariumMeasurementTarget[]
 
   @@index([customerId, isActive])
+}
+
+/// AKVÁRIUMONKÉNTI, PARAMÉTERENKÉNTI CÉLTARTOMÁNY -- Balázs kérése,
+/// 2026-09-25 (Akváriumok szál, 05:47 UTC): "amikor rögzítjük az
+/// akváriumot... egy beállítási lehetőség a vízértékekre tól-ig, ami
+/// alapján számolja az eltérést."
+///
+/// A `min` ÉS A `max` EGYMÁSTÓL FÜGGETLENÜL OPCIONÁLIS -- csak alsó, csak
+/// felső vagy mindkét határ megadható, lásd a packages/types megfelelő
+/// `AquariumMeasurementTarget` interfészének fejlécét a kétszintű
+/// visszaesésért (saját sor -> kódban álló alapérték -> nincs jelzés).
+///
+/// A `parameterCode` SZABAD STRING, NEM POSTGRES ENUM -- ugyanaz a minta,
+/// mint az `AquariumMeasurement.parameterCode`-nál: az érvényes értékek
+/// listája a `packages/types` `AquariumMeasurementParameterCode`
+/// union-jában és az API DTO `@IsIn`-jében áll, nem itt.
+model AquariumMeasurementTarget {
+  id            String   @id @default(cuid())
+  aquariumId    String
+  parameterCode String
+  min           Decimal? @db.Decimal(19, 6)
+  max           Decimal? @db.Decimal(19, 6)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  aquarium Aquarium @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+
+  @@unique([aquariumId, parameterCode])
 }
 
 /// KI TARTJA KARBAN AZ AKVÁRIUMOT -- TÖBB BELSŐ KOLLÉGA IS LEHET.

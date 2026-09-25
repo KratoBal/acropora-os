@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   aquariumCustomerRequirementProblem,
   aquariumEquipmentProblem,
+  aquariumMeasurementTargetRangeInvalid,
 } from "./aquarium-validation.js";
 
 describe("aquariumCustomerRequirementProblem", () => {
@@ -97,5 +98,44 @@ describe("aquariumEquipmentProblem", () => {
       aquariumEquipmentProblem({ kind: "FUTES", channelCount: null }),
       null,
     );
+  });
+});
+
+describe("aquariumMeasurementTargetRangeInvalid", () => {
+  it("min > max esetén érvénytelen", () => {
+    assert.equal(
+      aquariumMeasurementTargetRangeInvalid({ min: 10, max: 5 }),
+      true,
+    );
+  });
+
+  it("min <= max esetén rendben van", () => {
+    assert.equal(
+      aquariumMeasurementTargetRangeInvalid({ min: 5, max: 10 }),
+      false,
+    );
+  });
+
+  // TESTVÉR-KONTROLL: egyenlő határ NEM hiba -- egy szűk, egypontos
+  // tartomány (min === max) érvényes bemenet, nem elírás.
+  it("min === max esetén rendben van", () => {
+    assert.equal(
+      aquariumMeasurementTargetRangeInvalid({ min: 8, max: 8 }),
+      false,
+    );
+  });
+
+  // A KÉT EGYOLDALÚ ESET -- csak alsó vagy csak felső határ önmagában
+  // sosem lehet "fordított", mert nincs mihez hasonlítani.
+  it("csak alsó határral rendben van", () => {
+    assert.equal(aquariumMeasurementTargetRangeInvalid({ min: 10 }), false);
+  });
+
+  it("csak felső határral rendben van", () => {
+    assert.equal(aquariumMeasurementTargetRangeInvalid({ max: 5 }), false);
+  });
+
+  it("mindkét határ hiányában rendben van", () => {
+    assert.equal(aquariumMeasurementTargetRangeInvalid({}), false);
   });
 });

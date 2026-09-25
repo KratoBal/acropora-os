@@ -31,6 +31,23 @@ export class CreateAquariumMeasurementValueDto {
 }
 
 /**
+ * EGY PARAMÉTER SAJÁT CÉLTARTOMÁNYA EGY AKVÁRIUMON -- lásd az
+ * `AquariumMeasurementTarget` (`@acropora/types`) fejlécét.
+ *
+ * MIND A `min`, MIND A `max` ELHAGYHATÓ, EGYMÁSTÓL FÜGGETLENÜL -- a
+ * kereszt-ellenőrzést (legalább az egyik megadva, `min <= max`) NEM ide
+ * tettük: a service-ben, a szerződés-tételek (`ContractsService.normalize`)
+ * mintájára, mert ott adható vissza a magyar hibaüzenet a PONTOS
+ * paraméterre, amelyik hibás -- egy class-validator dekorátor csak azt
+ * tudná mondani, hogy "az egyik elem rossz", nem hogy melyik.
+ */
+export class AquariumMeasurementTargetDto {
+  @IsIn(PARAMETER_CODES) parameterCode!: string;
+  @Type(() => Number) @IsNumber() @IsOptional() min?: number;
+  @Type(() => Number) @IsNumber() @IsOptional() max?: number;
+}
+
+/**
  * EGY MÉRÉSI ALKALOM FELVITELE, TÖBB PARAMÉTERREL.
  *
  * Balázs kérése (2026-09-24): "egy mérés = egy mérési alkalom, több

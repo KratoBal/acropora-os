@@ -14,6 +14,7 @@ import {
 } from "class-validator";
 
 import { CreateCustomerDto } from "../../customers/dto/customer.dto.js";
+import { AquariumMeasurementTargetDto } from "./aquarium-measurement.dto.js";
 
 const OWNERSHIP_TYPES = ["OWN", "CUSTOMER"] as const;
 const WATER_BODY_TYPES = ["AKVARIUM", "TO"] as const;
@@ -96,6 +97,12 @@ export class CreateAquariumDto {
   @Type(() => CreateAquariumEquipmentDto)
   @IsOptional()
   equipment: CreateAquariumEquipmentDto[] = [];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AquariumMeasurementTargetDto)
+  @IsOptional()
+  targets: AquariumMeasurementTargetDto[] = [];
 }
 
 export class UpdateAquariumDto {
@@ -124,6 +131,17 @@ export class UpdateAquariumDto {
   @IsDateString() @IsOptional() startedAt?: string | null;
   @IsString() @IsOptional() notes?: string | null;
   @IsBoolean() @IsOptional() isActive?: boolean;
+
+  /**
+   * HIÁNYZÓ MEZŐ (a kulcs sincs a törzsben) A MEGLÉVŐ TARTOMÁNYOKAT
+   * VÁLTOZATLANUL HAGYJA. Üres tömb az összeset törli. Lásd a
+   * `UpdateAquariumInput.targets` (`@acropora/types`) fejlécét.
+   */
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AquariumMeasurementTargetDto)
+  @IsOptional()
+  targets?: AquariumMeasurementTargetDto[];
 
   @IsString() expectedUpdatedAt!: string;
 }

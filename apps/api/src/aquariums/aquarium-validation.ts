@@ -65,3 +65,21 @@ export const AQUARIUM_EQUIPMENT_PROBLEM_MESSAGE: Record<
   CHANNEL_COUNT_NOT_ALLOWED:
     "Csatornaszám csak a nyomelem-adagolónál adható meg.",
 };
+
+/**
+ * A VÍZÉRTÉK-CÉLTARTOMÁNY ALSÓ HATÁRA NEM LEHET NAGYOBB A FELSŐNÉL.
+ *
+ * Balázs kérése (2026-09-25): "tól-ig, ami alapján számolja az eltérést" --
+ * egy fordított tartomány (pl. tól=10, ig=5) sosem lenne kielégíthető, és a
+ * hiba a PONTOS paraméterre nevesítve érkezzen, nem "valamelyik sor rossz"
+ * alakban -- ezért a hívó (a service) a paraméter LABEL-jét fűzi az
+ * üzenethez, ez a függvény csak a döntést adja.
+ */
+export function aquariumMeasurementTargetRangeInvalid(input: {
+  min?: number;
+  max?: number;
+}): boolean {
+  return (
+    input.min !== undefined && input.max !== undefined && input.min > input.max
+  );
+}

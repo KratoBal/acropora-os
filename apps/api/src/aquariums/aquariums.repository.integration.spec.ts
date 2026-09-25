@@ -78,6 +78,7 @@ describe(
         waterBodyType: "AKVARIUM" as const,
         systemVolumeIsManual: false,
         equipment: [],
+        targets: [],
         ...overrides,
       };
     }
