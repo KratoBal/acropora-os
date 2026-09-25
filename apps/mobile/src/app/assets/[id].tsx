@@ -27,6 +27,7 @@ import {
   isViewableImage,
 } from "@/lib/documents/document-view";
 import { DocumentImage } from "@/components/documents/DocumentImage";
+import { SectionTitle } from "@/components/SectionTitle";
 import { toPickedImages } from "@/lib/api/picked-image";
 import {
   pickPhotosFromLibrary,
@@ -880,7 +881,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <SectionTitle>{title}</SectionTitle>
       <View style={styles.sectionBody}>{children}</View>
     </View>
   );
@@ -936,7 +937,7 @@ function MessageCard({
   const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <SectionTitle>{title}</SectionTitle>
       <Text style={styles.message}>{message}</Text>
       <Pressable onPress={onRetry} style={styles.retryButton}>
         <Text style={styles.retryText}>Újrapróbálás</Text>
@@ -995,7 +996,6 @@ function createStyles(t: ThemeTokens) {
       backgroundColor: t.surface,
       padding: 17,
     },
-    sectionTitle: { color: t.textPrimary, fontSize: 16, fontWeight: "900" },
     sectionBody: { marginTop: 8 },
     infoRow: {
       paddingVertical: 8,

@@ -64,7 +64,14 @@ describe("a munkalap fényképe térerő nélkül is felvehető", () => {
    */
   it("a fénykép-gombok nem a mentett másolat állapotára vannak tiltva", () => {
     const s = olvas(KEPERNYO);
-    const elso = s.indexOf("<Text style={styles.sectionTitle}>Fénykép</Text>");
+    /*
+      A "SectionTitle" KÖZÖS KOMPONENSRE VÁLTÁS UTÁN (2026-09-25, Balázs
+      döntése a kártya-címkék egységesítéséről) a szakasz-határ már nem a
+      régi `<Text style={styles.sectionTitle}>Fénykép</Text>` alakra
+      illeszkedik -- lásd a `SectionTitle` komponens fejlécét. Az EGYEDI,
+      csak a Fénykép címkére illő rész a `>Fénykép</SectionTitle>` zárás.
+    */
+    const elso = s.indexOf(">Fénykép</SectionTitle>");
     const utolso = s.indexOf("{photoNotice ? (", elso);
     assert.ok(elso !== -1 && utolso > elso, "nem találom a fénykép-szakaszt");
     assert.doesNotMatch(
