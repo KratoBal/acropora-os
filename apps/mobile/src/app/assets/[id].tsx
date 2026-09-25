@@ -36,6 +36,7 @@ import {
 import { describeUploadFailure } from "@/lib/api/network-failure";
 import { ApiNetworkError } from "@/lib/api/client";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
+import { ASSET_CRITICALITY_LABELS } from "@/lib/assets/asset-criticality";
 import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
@@ -351,6 +352,10 @@ export default function AssetDetailScreen() {
               <Info label="Gyártó" value={cachedSummary.manufacturer} />
               <Info label="Modell" value={cachedSummary.model} />
               <Info label="Sorozatszám" value={cachedSummary.serialNumber} />
+              <Info
+                label="Kritikusság"
+                value={ASSET_CRITICALITY_LABELS[cachedSummary.criticality]}
+              />
             </Section>
 
             <Section title="Karbantartás">
@@ -415,6 +420,18 @@ export default function AssetDetailScreen() {
               */}
               <Info label="Kategória" value={asset.category} />
               <Info label="Funkció" value={asset.function} />
+              {/*
+                A KRITIKUSSAG EDDIG SEHOL NEM JELENT MEG A MOBILON, holott a
+                webes adatlap mar mutatja (`assetCriticalityLabel[asset.
+                criticality]`). Barracuda lefedettsegi listaja (2026-09-25,
+                exchange/figma-eszkozok-make-7-lefedettseg.md) es acrobot
+                dontese: a mai felulet altal ismert mezok maradnak akkor is,
+                ha a Figma-terv nem rajzolja oket -- ez a legkozelebbi kartya.
+              */}
+              <Info
+                label="Kritikusság"
+                value={ASSET_CRITICALITY_LABELS[asset.criticality]}
+              />
               <Info label="Gyártó" value={asset.manufacturer} />
               <Info label="Modell" value={asset.model} />
               <Info label="Sorozatszám" value={asset.serialNumber} />
