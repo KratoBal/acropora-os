@@ -1,6 +1,6 @@
 "use client";
 import { Icon } from "@acropora/ui";
-import type { ReactNode } from "react";
+import type { InputHTMLAttributes, ReactNode } from "react";
 import { useEffect } from "react";
 
 import { useThemePreference } from "@/lib/theme/use-theme-preference";
@@ -276,14 +276,24 @@ export function PilotInput({
   type = "text",
   placeholder,
   readOnly,
+  disabled,
   className,
+  "aria-label": ariaLabel,
+  inputMode,
+  min,
+  max,
 }: {
   value?: string;
   onChange?: (value: string) => void;
   type?: string;
   placeholder?: string;
   readOnly?: boolean;
+  disabled?: boolean;
   className?: string;
+  "aria-label"?: string;
+  inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
+  min?: number;
+  max?: number;
 }) {
   return (
     <input
@@ -291,8 +301,13 @@ export function PilotInput({
       placeholder={placeholder}
       value={value}
       readOnly={readOnly}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      inputMode={inputMode}
+      min={min}
+      max={max}
       onChange={(event) => onChange?.(event.target.value)}
-      className={`w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 ${
+      className={`w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
         readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"
       } ${className ?? ""}`}
     />
@@ -303,16 +318,22 @@ export function PilotSelect({
   children,
   value,
   onChange,
+  disabled,
+  "aria-label": ariaLabel,
 }: {
   children: ReactNode;
   value?: string;
   onChange?: (value: string) => void;
+  disabled?: boolean;
+  "aria-label"?: string;
 }) {
   return (
     <select
       value={value}
+      disabled={disabled}
+      aria-label={ariaLabel}
       onChange={(event) => onChange?.(event.target.value)}
-      className="w-full cursor-pointer appearance-none rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+      className="w-full cursor-pointer appearance-none rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400"
     >
       {children}
     </select>
