@@ -55,7 +55,7 @@ export function CompletionCertificatePanel({
   };
   /**
    * NEM `if (token)` -- ugyanaz a hibaosztály, mint a
-   * `contract-detail-page.tsx`-en (Balázs éles hibája, 2026-09-24 17:39):
+   * `pilot-contract-detail-page.tsx`-en (Balázs éles hibája, 2026-09-24 17:39):
    * éles (jelszavas) bejelentkezésnél a `Session.token` üres (a httpOnly
    * süti hitelesít), tehát a feltétel a `load()`-ot SOHA nem futtatná le.
    */

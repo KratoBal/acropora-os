@@ -1,7 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { emptyItem, missingFields } from "./contracts-page";
-import { missingContractFields } from "./contract-detail-page";
+import { emptyItem, missingFields } from "./pilot-contracts-page";
+import { missingContractFields } from "./pilot-contract-detail-page";
+
+/**
+ * A `next/font/local` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA -- vitest alatt,
+ * Next build nélkül nem futtatható. Ez a teszt nem renderel semmit, de a
+ * `./pilot-contracts-page` és a `./pilot-contract-detail-page` MODUL-
+ * SZINTEN importálja a `pilot-ui.tsx`-et (a `PilotThemeRoot` miatt), ami
+ * `pilot-font.ts`-en át `localFont()`-ot hív -- ezért ez a mock a pusztán
+ * logikai teszthez is kell.
+ */
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 
 /**
  * A "validFrom must be a valid ISO 8601 date string" ANGOL HIBA NE JUSSON
