@@ -66,6 +66,28 @@ export type {
   ServiceJobWorksheetLink,
 } from "./service-job-management.js";
 export type { NamedPerson } from "./person-name.js";
+export type {
+  DashboardActivity,
+  DashboardActivityItem,
+  DashboardAquariumAlert,
+  DashboardAquariumAlerts,
+  DashboardAssigneeLoad,
+  DashboardDeadline,
+  DashboardDeadlines,
+  DashboardInventoryDiscrepancies,
+  DashboardInventoryDiscrepancy,
+  DashboardManagerTiles,
+  DashboardMaterialRequest,
+  DashboardMaterialRequests,
+  DashboardMyWorksheets,
+  DashboardOpenTickets,
+  DashboardPurchaseOrder,
+  DashboardPurchasing,
+  DashboardSummary,
+  DashboardTeamLoad,
+  DashboardTicket,
+  DashboardWorksheet,
+} from "./dashboard.js";
 
 export type HealthStatus = "ok" | "unavailable";
 

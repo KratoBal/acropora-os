@@ -100,11 +100,17 @@ export default function DashboardPage() {
     ? personDisplayName(session.user).split(" ")[0]
     : undefined;
   const greeting = getGreeting(new Date().getHours());
+  const today = new Intl.DateTimeFormat("hu-HU", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(new Date());
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="2026. július 19., vasárnap"
+        eyebrow={today}
         title={greetingName ? `${greeting}, ${greetingName}!` : `${greeting}!`}
         description="Itt találod a vállalat mai legfontosabb történéseit és teendőit."
         actions={

@@ -43,6 +43,7 @@ import { MaintenanceOrdersModule } from "./maintenance-orders/maintenance-orders
 import { CompletionCertificatesModule } from "./completion-certificates/completion-certificates.module.js";
 import { MaintenancePackageModule } from "./maintenance-package/maintenance-package.module.js";
 import { MaintenanceInvoiceModule } from "./maintenance-invoice/maintenance-invoice.module.js";
+import { DashboardModule } from "./dashboard/dashboard.module.js";
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { MaintenanceInvoiceModule } from "./maintenance-invoice/maintenance-invo
     CompletionCertificatesModule,
     MaintenancePackageModule,
     MaintenanceInvoiceModule,
+    DashboardModule,
     WorksheetsModule,
     MaterialRequestsModule,
     TasksModule,
