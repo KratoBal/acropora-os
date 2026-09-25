@@ -2,7 +2,19 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SupplierEditorPage } from "./supplier-editor-page";
+import { PilotSupplierEditorPage } from "./pilot-supplier-editor-page";
+
+/**
+ * ÁTMÁSOLVA A RÉGI `supplier-editor-page.component.test.tsx`-BŐL
+ * (2026-09-25, Figma 13. kör) -- az állítások nem változtak, a kártya-
+ * sorrend (Alapadatok → Alegységek → Bankszámla → Cím → Ügyintéző) már a
+ * régi komponensben is a terv szerint állt. Csak a komponens neve és egy
+ * kötelező `next/font/local` mock került hozzá (a `PilotThemeRoot` ezen
+ * múlik, lásd a többi pilot-teszt fejlécét).
+ */
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 const suppliers = vi.hoisted(() => ({
@@ -41,7 +53,7 @@ const session: Session = {
   },
 };
 
-describe("SupplierEditorPage", () => {
+describe("PilotSupplierEditorPage", () => {
   beforeEach(() => {
     auth.session = session;
     suppliers.detail.mockReset();
@@ -60,7 +72,7 @@ describe("SupplierEditorPage", () => {
    * is asserted in its own spec: changing one of the two and leaving the other
    * is exactly the half-finished state this pair of assertions rules out. */
   it("names a new record without calling it a supplier", () => {
-    render(<SupplierEditorPage />);
+    render(<PilotSupplierEditorPage />);
 
     expect(screen.getByText("Új felvitele")).toBeTruthy();
     expect(screen.queryByText("Új beszállító")).toBeNull();
@@ -72,7 +84,7 @@ describe("SupplierEditorPage", () => {
   it("starts a new partner as a supplier and sends both kinds", async () => {
     suppliers.create.mockResolvedValue({ id: "supplier-9" });
 
-    render(<SupplierEditorPage />);
+    render(<PilotSupplierEditorPage />);
     fireEvent.change(screen.getByLabelText("Név"), {
       target: { value: "Szerviz Bt." },
     });
@@ -96,7 +108,7 @@ describe("SupplierEditorPage", () => {
    * wanted.
    */
   it("asks for the partner code only once the partner is a service partner", () => {
-    render(<SupplierEditorPage />);
+    render(<PilotSupplierEditorPage />);
     expect(screen.queryByLabelText("Partnerkód")).toBeNull();
 
     fireEvent.click(screen.getByLabelText("Szerviz"));
@@ -110,7 +122,7 @@ describe("SupplierEditorPage", () => {
   it("keeps the code in the shape the number needs", async () => {
     suppliers.create.mockResolvedValue({ id: "supplier-9" });
 
-    render(<SupplierEditorPage />);
+    render(<PilotSupplierEditorPage />);
     fireEvent.change(screen.getByLabelText("Név"), {
       target: { value: "Fankó Kft." },
     });
@@ -159,7 +171,7 @@ describe("SupplierEditorPage", () => {
     });
     suppliers.update.mockResolvedValue({ id: "supplier-1" });
 
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
     fireEvent.change(await screen.findByLabelText("Név"), {
       target: { value: "Fankó és Társa Kft." },
     });
@@ -191,7 +203,7 @@ describe("SupplierEditorPage", () => {
     });
     suppliers.update.mockResolvedValue({ id: "supplier-1" });
 
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
     fireEvent.change(await screen.findByLabelText("Partnerkód"), {
       target: { value: "BIOD" },
     });
@@ -209,7 +221,7 @@ describe("SupplierEditorPage", () => {
    * the card would take input that has nowhere to go.
    */
   it("does not offer units on a partner that does not exist yet", () => {
-    render(<SupplierEditorPage />);
+    render(<PilotSupplierEditorPage />);
     fireEvent.click(screen.getByLabelText("Szerviz"));
 
     expect(screen.queryByLabelText("Alegység kódja")).toBeNull();
@@ -236,7 +248,7 @@ describe("SupplierEditorPage", () => {
       items: [{ id: "unit-1", code: "BIO", name: "Bio labor", isActive: true }],
     });
 
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
 
     expect(await screen.findByText("Bio labor")).toBeTruthy();
     expect(screen.getByLabelText("Alegység kódja")).toBeTruthy();
@@ -289,7 +301,7 @@ describe("SupplierEditorPage", () => {
       isActive: true,
     });
 
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
 
     // Mindket szint latszik: a gyerek nem tunhet el attol, hogy melyebben van.
     expect(await screen.findByText("Biodóm")).toBeTruthy();
@@ -352,7 +364,7 @@ describe("SupplierEditorPage", () => {
     });
     suppliers.remove.mockResolvedValue({ action: "delete", alsoRemoved: [] });
 
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Partner törlése" }),
@@ -367,7 +379,7 @@ describe("SupplierEditorPage", () => {
   });
 
   it("hides the bank block for a partner we do not buy from", () => {
-    render(<SupplierEditorPage />);
+    render(<PilotSupplierEditorPage />);
     expect(screen.getByLabelText("Bankszámlaszám")).toBeTruthy();
 
     fireEvent.click(screen.getByLabelText("Beszállító"));
@@ -385,7 +397,7 @@ describe("SupplierEditorPage", () => {
  * es azt a szerver oldali allitas orzi (partner-unit-editing.spec.ts) -- itt a
  * FELULET viselkedese all.
  */
-describe("SupplierEditorPage: unit editing", () => {
+describe("PilotSupplierEditorPage: unit editing", () => {
   const serviceSupplier = {
     id: "supplier-1",
     code: "SZALL-1",
@@ -420,7 +432,7 @@ describe("SupplierEditorPage: unit editing", () => {
   it("sends only the new name when a unit is renamed", async () => {
     suppliers.updateUnit.mockResolvedValue({ ...biodom, name: "Biodóm 2" });
 
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
     fireEvent.click(await screen.findByLabelText("Biodóm átnevezése"));
     fireEvent.change(screen.getByLabelText("Alegység új neve"), {
       target: { value: "Biodóm 2" },
@@ -442,7 +454,7 @@ describe("SupplierEditorPage: unit editing", () => {
    * nem valt pirosra.
    */
   it("asks before archiving, and sends nothing until the answer", async () => {
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
     fireEvent.click(await screen.findByLabelText("Biodóm archiválása"));
 
     expect(suppliers.updateUnit).not.toHaveBeenCalled();
@@ -452,7 +464,7 @@ describe("SupplierEditorPage: unit editing", () => {
   it("archives only after the question is answered", async () => {
     suppliers.updateUnit.mockResolvedValue({ ...biodom, isActive: false });
 
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
     fireEvent.click(await screen.findByLabelText("Biodóm archiválása"));
     fireEvent.click(
       screen.getByRole("button", { name: "Alegység archiválása" }),
@@ -474,7 +486,7 @@ describe("SupplierEditorPage: unit editing", () => {
       items: [{ ...biodom, isActive: false }],
     });
 
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
 
     expect(await screen.findByText(/archivált/)).toBeTruthy();
     expect(screen.getByLabelText("Biodóm visszaállítása")).toBeTruthy();
@@ -488,7 +500,7 @@ describe("SupplierEditorPage: unit editing", () => {
     });
     suppliers.updateUnit.mockResolvedValue(biodom);
 
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
     fireEvent.click(await screen.findByLabelText("Biodóm visszaállítása"));
 
     await waitFor(() => expect(suppliers.updateUnit).toHaveBeenCalledTimes(1));
@@ -504,7 +516,7 @@ describe("SupplierEditorPage: unit editing", () => {
  * visszahozna egy archivalt agat a munkaba), a lista viszont a teljes fat
  * mutatja, kulonben a meglevo gyerekek szulo nelkul maradnanak a kepernyon.
  */
-describe("SupplierEditorPage: what the parent picker offers", () => {
+describe("PilotSupplierEditorPage: what the parent picker offers", () => {
   const serviceSupplier = {
     id: "supplier-1",
     code: "SZALL-1",
@@ -551,7 +563,7 @@ describe("SupplierEditorPage: what the parent picker offers", () => {
    * megjelenik -- hibauzenet nelkul.
    */
   it("offers only active units as a parent", async () => {
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
     const picker = await screen.findByLabelText("Szülő helyszín");
 
     const offered = Array.from(
@@ -569,7 +581,7 @@ describe("SupplierEditorPage: what the parent picker offers", () => {
    * es visszaallitani sem lehetne.
    */
   it("keeps the archived unit visible in the tree it filtered out of", async () => {
-    render(<SupplierEditorPage supplierId="supplier-1" />);
+    render(<PilotSupplierEditorPage supplierId="supplier-1" />);
 
     expect(await screen.findByText("Régi szárny")).toBeTruthy();
     expect(screen.getByLabelText("Régi szárny visszaállítása")).toBeTruthy();
