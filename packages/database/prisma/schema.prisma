@@ -4403,6 +4403,23 @@ enum ServiceCapability {
   /// MUVELETET mondja, nem a szemelyt mogotte -- acrobot javaslata,
   /// 2026-09-22 22:41.
   MATERIAL_REQUEST_MARK_RECEIVED
+  /// ESZKOZ HOZZARENDELESE/LEVETELE EGY AKVARIUMROL, A PARTNER PORTALON --
+  /// Balazs dontese (emlek 1843, 2026-09-25 14:24 UTC): "akinek megvan a
+  /// kulon jog, hozzarendel es levesz; akinek nincs, csak latja". Balazs
+  /// maga nevezte meg ezt a mintat masodik pelfakent (emlek 1847,
+  /// 2026-09-25 16:12): UGYANAZ a jelolo-alak, mint a
+  /// MATERIAL_REQUEST_MARK_RECEIVED-nel -- felhasznalonkenti jelolo, NEM
+  /// szerep-szintu jog. Szandekosan NEM `SERVICE_MANAGE`-fuggo bovites: a
+  /// `PARTNER_SERVICE` szerep MA MEGVAN a `service.manage` joggal (a
+  /// napi szerviz-munkahoz kell), tehat egy szerep-szintu jog itt AZONNAL
+  /// megnyitna a kepesseget minden partner-fioknak -- pontosan az, amit
+  /// Balazs a "kulon jog" kifejezessel elkerulni akart. Az ELLENORZES
+  /// ezert nem `@RequirePermissions`-en, hanem egy futasidejü
+  /// `UserServiceCapability` lekerdezesen all, a `service.manage` alatt,
+  /// masodik, finomabb retegkent -- ugyanugy, ahogy a
+  /// `MaterialRequestsService.listPending` is ket retegben dont
+  /// (`requireInternalWriter` + `hasMarkReceivedCapability`).
+  AQUARIUM_ASSET_ASSIGN
 }
 
 /// LASD `UserNotificationRole` FEJLECET -- BETURE UGYANAZ AZ ALAK, MAS

@@ -179,39 +179,6 @@ export const PERMISSIONS = {
   /// kerül, és megmarad. Ez a jog a téves felvitel visszavonására való.
   SERVICE_ASSET_DELETE: "service.asset.delete",
   /**
-   * ESZKÖZ HOZZÁRENDELÉSE VAGY LEVÉTELE EGY AKVÁRIUMRÓL -- SZÁNDÉKOSAN KÜLÖN
-   * A `SERVICE_MANAGE`-TŐL.
-   *
-   * Balázs döntése (emlék 1843, 2026-09-25 14:24 UTC), szó szerint: "az
-   * eszkoz akvariumhoz rendelese es levetele a portalon JOGOSULTSAGHOZ
-   * kotve. Akinek megvan a kulon jog, hozzarendel es levesz; akinek nincs,
-   * csak latja."
-   *
-   * === MIÉRT NEM A `SERVICE_MANAGE` ÚJRAHASZNÁLÁSA ===
-   *
-   * A `PARTNER_SERVICE` szerep MA MEGVAN a `SERVICE_MANAGE` joggal (napi
-   * szerviz-munka), de a portál Eszköz-adatlapja SZÁNDÉKOSAN nem kínál
-   * semmilyen szerkesztést ezzel a joggal (lásd `asset-detail.tsx` fejlécét
-   * a portál oldalán, "EZ NEM JOGOSULTSÁG-FÜGGŐ MEGJELENÍTÉS, LEZÁRT
-   * DÖNTÉS"). Ha az akvárium-hozzárendelés a `SERVICE_MANAGE`-re épülne, a
-   * végpont MINDEN partner-fióknak azonnal megnyílna, a kliens-oldali
-   * omission-nel megegyező, sose ellenőrzött védelemmel -- pontosan az a
-   * mintázat, amit a `service.asset.delete` és a `service.hide` fejléce is
-   * elutasít.
-   *
-   * === A HATÓKÖRT EZ NEM PÓTOLJA ===
-   *
-   * Ez a jog azt dönti el, KI PRÓBÁLHATJA MEG a hozzárendelést. Hogy MELYIK
-   * eszközön és MELYIK akváriumon, azt továbbra is a meglévő hatókör-
-   * ellenőrzés adja: `service-assets.service.ts` `update()`-je
-   * `requireAssetInScope()`-pal indul (2026-09-21 óta minden partner-hívóra
-   * vonatkozik), az akvárium-oldalt pedig `validateReferences()` köti az
-   * eszköz tulajdonosához. A két réteg együtt zár: a jog nélküli hívó a
-   * végpontig sem jut el, a joggal rendelkező hívó pedig a SAJÁT
-   * hatókörén túl nem léphet.
-   */
-  SERVICE_ASSET_AQUARIUM_ASSIGN: "service.asset.aquarium-assign",
-  /**
    * MUNKALAP VAGY HIBAJEGY ELREJTÉSE A LISTÁKBÓL -- ÉS A VISSZAÁLLÍTÁSA.
    *
    * Balázs kérése, 2026-09-18 11:09 UTC, szó szerint, MÁR ÉLES HASZNÁLAT
@@ -439,26 +406,29 @@ export const ROLE_PERMISSIONS: Readonly<
    * hívóktól, ugyanúgy, mint a munkalap-létrehozást -- a jog tehát tágabb,
    * mint amit a partner ténylegesen elér.
    *
-   * === A `SERVICE_ASSET_AQUARIUM_ASSIGN` FELVÉTELE -- JAVASLAT, NEM LEZÁRT
-   *     DÖNTÉS (emlék 1843, 2026-09-25 14:24 UTC) ===
+   * === AZ ESZKÖZ-AKVÁRIUM HOZZÁRENDELÉS SZÁNDÉKOSAN NINCS ITT (emlék 1843,
+   *     1847) ===
    *
    * Balázs szó szerint: "akinek megvan a kulon jog, hozzarendel es levesz;
-   * akinek nincs, csak latja". Ez a rendszer SZEREP-alapú, nem
-   * felhasználó-alapú jogosultságot ismer -- egy "csak néhány partner-fiók
-   * kapja meg" olvasat ide NEM fér bele a mai modellbe, az egy külön,
-   * nagyobb változtatás lenne (pl. új szerep vagy felhasználónkénti
-   * felülbírálás). A LENTI SOR EZÉRT A SZŰKEBB, MA MEGVALÓSÍTHATÓ olvasatot
-   * viszi: MINDEN `PARTNER_SERVICE` fiók megkapja, ugyanúgy, ahogy az
-   * `AQUARIUMS_VIEW`/`MANAGE` is a teljes szerepre került. HA Balázs
-   * ténylegesen egy SZŰKEBB, néhány fiókra szóló kört akart, ez a sor
-   * ROSSZ, és szólni kell, mielőtt beolvad.
+   * akinek nincs, csak latja" -- majd (1847, 2026-09-25 16:12 UTC) pontosan
+   * megnevezte a mintát: a `MATERIAL_REQUEST_MARK_RECEIVED`-hez hasonló,
+   * FELHASZNÁLÓNKÉNTI jelölő (`ServiceCapability`/`UserServiceCapability`,
+   * lásd a Prisma séma és a `service-capabilities.ts` fejlécét), NEM
+   * szerep-szintű jog. Ez a lista tehát SZÁNDÉKOSAN nem bővült
+   * `AQUARIUM_ASSET_ASSIGN`-nal -- egy ilyen sor itt AZONNAL minden
+   * `PARTNER_SERVICE` fióknak megnyitná a képességet, pontosan azt, amit
+   * Balázs a "külön jog" kéréssel el akart kerülni. Az ellenőrzés helye a
+   * `ServiceAssetsController`/`ServiceAssetsRepository`
+   * `hasAquariumAssetAssignCapability()`-ja, a `SERVICE_MANAGE` mögötti,
+   * MÁSODIK, finomabb rétegként -- ugyanaz a két-rétegű minta, mint a
+   * `MaterialRequestsService.listPending()`-nél
+   * (`requireInternalWriter` + `hasMarkReceivedCapability`).
    */
   PARTNER_SERVICE: [
     PERMISSIONS.SERVICE_VIEW,
     PERMISSIONS.SERVICE_MANAGE,
     PERMISSIONS.AQUARIUMS_VIEW,
     PERMISSIONS.AQUARIUMS_MANAGE,
-    PERMISSIONS.SERVICE_ASSET_AQUARIUM_ASSIGN,
   ],
 
   /**

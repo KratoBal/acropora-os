@@ -76,13 +76,11 @@ describe("role permission mapping", () => {
    * hatókör-szűrés (`aquariums.service.ts` `visibilityFor`) és a
    * belsős-only írási utak (`requireInternalWriter`) máshol tesztelve.
    *
-   * A `SERVICE_ASSET_AQUARIUM_ASSIGN` UGYANÍGY SZÁNDÉKOSAN BEKERÜLT --
-   * JAVASLAT, Balázs emlék 1843-as döntésére (2026-09-25 14:24 UTC), lásd a
-   * jog saját fejlécét `auth.ts`-ben a bizonytalanságról (szerep-szintű
-   * kontra felhasználónkénti jog). Ha Balázs egy szűkebb kört akart, ez az
-   * állítás is változik.
+   * AZ ESZKÖZ-AKVÁRIUM HOZZÁRENDELÉS (emlék 1843, 1847) SZÁNDÉKOSAN NINCS
+   * ITT -- az felhasználónkénti `ServiceCapability` jelölő, nem szerep-
+   * szintű jog, lásd `auth.ts` `PARTNER_SERVICE` fejlécét.
    */
-  it("keeps the partner service role limited to the five service areas", () => {
+  it("keeps the partner service role limited to the four service areas", () => {
     const permissions = ROLE_PERMISSIONS.PARTNER_SERVICE;
 
     // Ezek nem kovetkeztetett tiltások: nev szerint állnak itt, mert egy
@@ -105,7 +103,6 @@ describe("role permission mapping", () => {
     assert.deepEqual([...permissions].sort(), [
       PERMISSIONS.AQUARIUMS_MANAGE,
       PERMISSIONS.AQUARIUMS_VIEW,
-      PERMISSIONS.SERVICE_ASSET_AQUARIUM_ASSIGN,
       PERMISSIONS.SERVICE_MANAGE,
       PERMISSIONS.SERVICE_VIEW,
     ]);
@@ -390,12 +387,6 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         "products.view",
         "purchasing.manage",
         "purchasing.view",
-        // service.asset.aquarium-assign: MANAGER megkapja -- ez a jog a
-        // PARTNER-oldal szűkítésére való (lásd a saját fejlécét, emlék
-        // 1843), a belsős SERVICE_MANAGE-et nem szűkíti semmi, tehát a
-        // MANAGER (aki eddig is módosíthatta az aquariumId mezőt az
-        // általános PATCH-en) nem veszít el semmit, és nem is kap újat.
-        "service.asset.aquarium-assign",
         "service.manage",
         "service.view",
         "tasks.view",
