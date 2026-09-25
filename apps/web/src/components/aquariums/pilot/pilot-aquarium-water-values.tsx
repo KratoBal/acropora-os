@@ -1,9 +1,11 @@
 "use client";
 import { ConfirmDialog, Icon } from "@acropora/ui";
 import {
+  aquariumEffectiveMeasurementTargetRange,
   aquariumMeasurementParametersFor,
   type AquariumMeasurementOccasion,
   type AquariumMeasurementParameterCode,
+  type AquariumMeasurementTarget,
   type WaterType,
 } from "@acropora/types";
 import Link from "next/link";
@@ -34,11 +36,15 @@ export function PilotAquariumWaterValues({
   token,
   aquariumId,
   waterType,
+  targets,
   canSendEmail,
 }: {
   token: string;
   aquariumId: string;
   waterType?: WaterType;
+  /** Lásd `aquariumEffectiveMeasurementTargetRange` fejlécét: a csempék
+   * eltérés-jelzése ebből (vagy híján a kódban álló alapértékből) számol. */
+  targets?: AquariumMeasurementTarget[];
   canSendEmail: boolean;
 }) {
   const [occasions, setOccasions] = useState<AquariumMeasurementOccasion[]>([]);
@@ -234,27 +240,50 @@ export function PilotAquariumWaterValues({
                 (p) => p.code === value.parameterCode,
               );
               const selected = activeParam === value.parameterCode;
+              const range = aquariumEffectiveMeasurementTargetRange(
+                waterType,
+                value.parameterCode,
+                targets,
+              );
+              const outOfRange =
+                range !== undefined &&
+                ((range.min !== undefined && value.value < range.min) ||
+                  (range.max !== undefined && value.value > range.max));
               return (
                 <button
                   key={value.parameterCode}
                   type="button"
                   onClick={() => setSelectedParam(value.parameterCode)}
-                  className={`cursor-pointer rounded-lg p-2.5 text-left transition-all ${
+                  title={
+                    outOfRange ? "A megadott céltartományon kívül" : undefined
+                  }
+                  className={`cursor-pointer rounded-lg p-2.5 text-left ring-1 transition-all ${
                     selected
-                      ? "bg-pilot-aqua-600 text-white"
-                      : "bg-pilot-grey-50 hover:bg-pilot-grey-100"
+                      ? "bg-pilot-aqua-600 text-white ring-transparent"
+                      : outOfRange
+                        ? "bg-amber-50 ring-amber-200 hover:bg-amber-100"
+                        : "bg-pilot-grey-50 ring-transparent hover:bg-pilot-grey-100"
                   }`}
                 >
                   <p
                     className={`mb-0.5 text-[10px] font-medium ${
-                      selected ? "text-pilot-aqua-100" : "text-pilot-grey-400"
+                      selected
+                        ? "text-pilot-aqua-100"
+                        : outOfRange
+                          ? "text-amber-600"
+                          : "text-pilot-grey-400"
                     }`}
                   >
                     {param?.label ?? value.parameterCode}
+                    {outOfRange && !selected ? " ⚠" : ""}
                   </p>
                   <p
                     className={`font-mono text-sm font-semibold tabular-nums ${
-                      selected ? "text-white" : "text-pilot-grey-900"
+                      selected
+                        ? "text-white"
+                        : outOfRange
+                          ? "text-amber-700"
+                          : "text-pilot-grey-900"
                     }`}
                   >
                     {value.value}

@@ -77,6 +77,32 @@ export interface AquariumDetail extends AquariumSummary {
   /** SZÁRMAZTATOTT: igaz, ha legalább egy karbantartó van -- a régi
    * `Aquarium.maintainedByUs` oszlop helyett, lásd a séma fejlécét. */
   maintainedByUs: boolean;
+  /** Az akvárium SAJÁT céltartományai, paraméterenként. Lásd az
+   * `AquariumMeasurementTarget` és az `aquariumEffectiveMeasurementTargetRange`
+   * fejlécét. */
+  targets: AquariumMeasurementTarget[];
+}
+
+/**
+ * AKVÁRIUMONKÉNTI, PARAMÉTERENKÉNTI CÉLTARTOMÁNY -- A FELHASZNÁLÓ ÁLTAL
+ * MEGADOTT, TÁROLT ÉRTÉK, NEM A KÓDBAN ÁLLÓ ALAPÉRTELMEZÉS.
+ *
+ * Balázs kérése (2026-09-25, Akváriumok szál, 05:47 UTC): "amikor rögzítjük
+ * az akváriumot, akkor a jobb oldali oszlopban jó lenne egy beállítási
+ * lehetőség a vízértékekre tól-ig, ami alapján számolja az eltérést."
+ *
+ * MINDKÉT HATÁR OPCIONÁLIS, ÉS EGYMÁSTÓL FÜGGETLENÜL AZ: csak alsó, csak
+ * felső, vagy mindkét határ megadható. Ha egy paraméterhez nincs sor
+ * (`targets`-ben nincs elem az adott `parameterCode`-dal), az az
+ * `aquariumEffectiveMeasurementTargetRange` alapértelmezésre esik vissza,
+ * NEM egy "min/max mindkettő hiányzik" sorra -- a kettő között a különbség
+ * az, hogy KI ADTA MEG a tartományt, és ez befolyásolja, mi történik, ha a
+ * felhasználó törli az egyik mezőt (üres sor, nem null határú sor marad).
+ */
+export interface AquariumMeasurementTarget {
+  parameterCode: AquariumMeasurementParameterCode;
+  min?: number;
+  max?: number;
 }
 
 export interface AquariumListResponse {
@@ -141,6 +167,9 @@ export interface CreateAquariumInput {
   startedAt?: string;
   notes?: string;
   equipment?: CreateAquariumEquipmentInput[];
+  /** Lásd `AquariumMeasurementTarget` fejlécét. Elhagyható: egy sem
+   * mentődik, ha üres vagy hiányzik. */
+  targets?: AquariumMeasurementTarget[];
 }
 
 export interface UpdateAquariumInput {
@@ -158,6 +187,10 @@ export interface UpdateAquariumInput {
   startedAt?: string | null;
   notes?: string | null;
   isActive?: boolean;
+  /** Lásd `AquariumMeasurementTarget` fejlécét. HIÁNYZÓ mező (nem küldött
+   * kulcs) a meglévő tartományokat változatlanul hagyja -- ugyanaz az elv,
+   * mint a `ContractItemDto` `items`-énél. ÜRES TÖMB az összeset törli. */
+  targets?: AquariumMeasurementTarget[];
   expectedUpdatedAt: string;
 }
 
@@ -422,6 +455,37 @@ export function aquariumMeasurementTargetRange(
 ): { min: number; max: number } | undefined {
   if (waterType !== "TENGERI") return undefined;
   return AQUARIUM_MEASUREMENT_TARGET_RANGE[code];
+}
+
+/**
+ * A TÉNYLEGESEN ÉRVÉNYES CÉLTARTOMÁNY EGY ADOTT AKVÁRIUMRA -- EZT HASZNÁLJA
+ * MINDEN ELTÉRÉS-SZÁMÍTÁS (adatlap vízérték-csempék, mérési előzmények
+ * grafikonja), NEM közvetlenül az `aquariumMeasurementTargetRange`-et.
+ *
+ * KÉTSZINTŰ VISSZAESÉS, Balázs szavával (2026-09-25): "ha nincs megadva, az
+ * alapértékből; ha az sincs, nincs eltérés-jelzés."
+ *
+ *   1. Ha az akváriumnak VAN SAJÁT SORA erre a paraméterre (akár csak `min`,
+ *      akár csak `max`, akár mindkettő), AZT adja vissza EGÉSZBEN -- a
+ *      hiányzó oldalt NEM tölti ki a kódban álló alapértékből. Egy csak alsó
+ *      határt megadó sor tehát szándékosan csak alulra jelez eltérést.
+ *   2. Ha nincs saját sor erre a paraméterre, a kódban álló alapértelmezésre
+ *      esik vissza (`aquariumMeasurementTargetRange`, csak tengeri víznél).
+ *   3. Ha egyik sincs, `undefined` -- nincs mit kirajzolni.
+ *
+ * A MIN/MAX EZÉRT OPCIONÁLIS A VISSZAADOTT ÉRTÉKBEN IS: minden hívó helynek
+ * `range.min !== undefined`/`range.max !== undefined` őrzővel kell
+ * összehasonlítania, nem feltételezheti, hogy mindkettő megvan.
+ */
+export function aquariumEffectiveMeasurementTargetRange(
+  waterType: WaterType | null | undefined,
+  code: AquariumMeasurementParameterCode,
+  targets: readonly AquariumMeasurementTarget[] | undefined,
+): { min?: number; max?: number } | undefined {
+  const own = targets?.find((target) => target.parameterCode === code);
+  if (own && (own.min !== undefined || own.max !== undefined))
+    return { min: own.min, max: own.max };
+  return aquariumMeasurementTargetRange(waterType, code);
 }
 
 /**

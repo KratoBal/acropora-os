@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   AQUARIUM_MEASUREMENT_PARAMETER_COLOR,
   AQUARIUM_MEASUREMENT_PARAMETERS,
+  aquariumEffectiveMeasurementTargetRange,
   aquariumMeasurementParameter,
   aquariumMeasurementParametersFor,
   aquariumMeasurementTargetRange,
@@ -102,6 +103,71 @@ describe("aquariumMeasurementTargetRange", () => {
   it("víztípus nélkül undefined", () => {
     assert.equal(aquariumMeasurementTargetRange(null, "KH"), undefined);
     assert.equal(aquariumMeasurementTargetRange(undefined, "KH"), undefined);
+  });
+});
+
+describe("aquariumEffectiveMeasurementTargetRange", () => {
+  it("sajat tartomany eseten AZT adja, nem a kod-alapertelmezest", () => {
+    // A SAJAT ERTEK ELTER a kodban allo TENGERI alapertektol (KH 7-9) --
+    // ha a fuggveny tevedesbol az alapertelmezesre esne, ez az allitas
+    // elkapna.
+    assert.deepEqual(
+      aquariumEffectiveMeasurementTargetRange("TENGERI", "KH", [
+        { parameterCode: "KH", min: 6, max: 8 },
+      ]),
+      { min: 6, max: 8 },
+    );
+  });
+
+  it("csak also hatarral rendelkezo sajat sor a felsot NEM tolti ki az alapertekbol", () => {
+    /*
+      MI PIROSÍT: ha a fuggveny a hianyzo also/felso oldalt a kod-
+      alapertelmezesbol potolna, a `max` itt 9 lenne (a TENGERI KH
+      alapertelmezes felso hatara), nem undefined.
+    */
+    const range = aquariumEffectiveMeasurementTargetRange("TENGERI", "KH", [
+      { parameterCode: "KH", min: 6 },
+    ]);
+    assert.deepEqual(range, { min: 6, max: undefined });
+  });
+
+  it("sajat sor hianyaban a kod-alapertelmezesre esik vissza", () => {
+    assert.deepEqual(
+      aquariumEffectiveMeasurementTargetRange("TENGERI", "KH", []),
+      { min: 7, max: 9 },
+    );
+    assert.deepEqual(
+      aquariumEffectiveMeasurementTargetRange("TENGERI", "KH", undefined),
+      { min: 7, max: 9 },
+    );
+  });
+
+  it("sem sajat sor, sem alapertelmezes (edesvizi) -- undefined", () => {
+    assert.equal(
+      aquariumEffectiveMeasurementTargetRange("EDESVIZI", "KH", []),
+      undefined,
+    );
+  });
+
+  // TESTVÉR-KONTROLL: édesvízinél a SAJÁT tartomány AKKOR IS érvényesül,
+  // ha a kód-alapértelmezés nem ismeri a paramétert -- a kétszintű
+  // visszaesés első szintje nem a víztípustól függ, csak attól, van-e sor.
+  it("edesvizinel is ervenyesul a sajat tartomany, holott alapertelmezes nincs", () => {
+    assert.deepEqual(
+      aquariumEffectiveMeasurementTargetRange("EDESVIZI", "PH", [
+        { parameterCode: "PH", min: 6.5, max: 7.5 },
+      ]),
+      { min: 6.5, max: 7.5 },
+    );
+  });
+
+  it("egy mas parameterre szolo sajat sor nem szivarog at", () => {
+    assert.deepEqual(
+      aquariumEffectiveMeasurementTargetRange("TENGERI", "PH", [
+        { parameterCode: "KH", min: 6, max: 8 },
+      ]),
+      { min: 8.1, max: 8.4 },
+    );
   });
 });
 

@@ -4,6 +4,8 @@ import type {
   AquariumDetail,
   AquariumEquipment,
   AquariumListResponse,
+  AquariumMeasurementParameterCode,
+  AquariumMeasurementTarget,
   AquariumSelectableCustomerListResponse,
   AquariumSummary,
 } from "@acropora/types";
@@ -26,6 +28,7 @@ const detailInclude = {
     orderBy: { createdAt: "asc" as const },
     include: { user: { select: { id: true, displayName: true } } },
   },
+  targets: { orderBy: { parameterCode: "asc" as const } },
 } satisfies Prisma.AquariumInclude;
 
 type AquariumDetailRow = Prisma.AquariumGetPayload<{
@@ -103,6 +106,16 @@ function toSummary(row: AquariumListRow): AquariumSummary {
   };
 }
 
+function toTarget(
+  row: AquariumDetailRow["targets"][number],
+): AquariumMeasurementTarget {
+  return {
+    parameterCode: row.parameterCode as AquariumMeasurementParameterCode,
+    min: row.min?.toNumber(),
+    max: row.max?.toNumber(),
+  };
+}
+
 function toDetail(row: AquariumDetailRow): AquariumDetail {
   return {
     id: row.id,
@@ -134,6 +147,7 @@ function toDetail(row: AquariumDetailRow): AquariumDetail {
     // SZÁRMAZTATOTT, NEM A TÁROLT `maintainedByUs` OSZLOPBÓL -- lásd a
     // séma `AquariumMaintainer` fejlécét.
     maintainedByUs: row.maintainers.length > 0,
+    targets: row.targets.map(toTarget),
   };
 }
 
@@ -341,6 +355,17 @@ export class AquariumsRepository {
                         notes: optionalText(eq.notes),
                       })),
                     },
+                    targets: {
+                      create: input.targets
+                        .filter(
+                          (t) => t.min !== undefined || t.max !== undefined,
+                        )
+                        .map((t) => ({
+                          parameterCode: t.parameterCode,
+                          min: t.min ?? null,
+                          max: t.max ?? null,
+                        })),
+                    },
                   },
                   include: detailInclude,
                 });
@@ -434,6 +459,56 @@ export class AquariumsRepository {
         },
       });
       if (changed.count === 0) throw new Error("STALE_UPDATE");
+
+      /**
+       * A CÉLTARTOMÁNYOK KÜLÖN SZINKRONIZÁLÓDNAK, NEM A FENTI
+       * `updateMany`-BEN: relációs kapcsolat, saját kulccsal
+       * (`parameterCode`), tehát nem egyetlen oszlop-írás.
+       *
+       * HIÁNYZÓ `input.targets` (a mező sincs a törzsben) A MEGLÉVŐ SOROKAT
+       * VÁLTOZATLANUL HAGYJA -- ugyanaz az elv, mint a szerződés-tételeknél
+       * (`contracts.service.ts` `update()`), csak itt a kulcs a
+       * `parameterCode`, nem egy generált id, tehát nincs "9 tétel"-szerű
+       * id-csere kockázat: egy paraméter mindig UGYANAZT a sort találja meg.
+       *
+       * EGY, MINDKÉT OLDALÁN ÜRES SOR (min és max is hiányzik) TÖRLÉST
+       * JELENT -- a felület nem küld ilyet szándékosan, de a szerver nem
+       * bízik ebben: egy törölt bemenetnek nincs értelme tárolt sorként.
+       */
+      if (input.targets !== undefined) {
+        const keepCodes = input.targets
+          .filter((t) => t.min !== undefined || t.max !== undefined)
+          .map((t) => t.parameterCode);
+        await tx.aquariumMeasurementTarget.deleteMany({
+          where: {
+            aquariumId: id,
+            ...(keepCodes.length > 0
+              ? { parameterCode: { notIn: keepCodes } }
+              : {}),
+          },
+        });
+        for (const target of input.targets) {
+          if (target.min === undefined && target.max === undefined) continue;
+          await tx.aquariumMeasurementTarget.upsert({
+            where: {
+              aquariumId_parameterCode: {
+                aquariumId: id,
+                parameterCode: target.parameterCode,
+              },
+            },
+            create: {
+              aquariumId: id,
+              parameterCode: target.parameterCode,
+              min: target.min ?? null,
+              max: target.max ?? null,
+            },
+            update: {
+              min: target.min ?? null,
+              max: target.max ?? null,
+            },
+          });
+        }
+      }
 
       const row = await tx.aquarium.findUniqueOrThrow({
         where: { id },

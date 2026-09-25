@@ -1,6 +1,7 @@
 "use client";
 import { Alert, ConfirmDialog, Icon } from "@acropora/ui";
 import {
+  AQUARIUM_MEASUREMENT_TARGET_RANGE,
   hasPermission,
   PERMISSIONS,
   type AquariumEquipment,
@@ -26,6 +27,14 @@ import {
   WATER_TYPE_LABEL,
 } from "../aquarium-labels";
 import { PilotAquariumWaterValues } from "./pilot-aquarium-water-values";
+import {
+  draftFromDefaults,
+  draftFromTargets,
+  hasInvalidRow,
+  PilotAquariumTargetRanges,
+  targetsPayload,
+  type TargetRangeDraft,
+} from "./pilot-aquarium-target-ranges";
 import {
   PilotAvatar,
   PilotBadge,
@@ -104,6 +113,8 @@ export function PilotAquariumEditorPage({
     AquariumMaintainer[]
   >([]);
   const [maintainersBusy, setMaintainersBusy] = useState(false);
+  const [targetsDraft, setTargetsDraft] = useState<TargetRangeDraft>({});
+  const [targetsTouched, setTargetsTouched] = useState(false);
 
   const token = session?.token ?? "";
   const canManage = Boolean(
@@ -144,6 +155,7 @@ export function PilotAquariumEditorPage({
         setMaintainers(detail.maintainers);
         setCustomerEmail(detail.customerEmail);
         setExpectedUpdatedAt(detail.updatedAt);
+        setTargetsDraft(draftFromTargets(detail.targets));
       })
       .catch((cause) =>
         setError(
@@ -176,6 +188,23 @@ export function PilotAquariumEditorPage({
     };
   }, [token, canManage]);
 
+  /**
+   * ÚJ, TENGERI AKVÁRIUMNÁL A KÓDBAN ÁLLÓ ALAPÉRTÉKEKKEL ELŐTÖLTVE,
+   * ÉDESVÍZINÉL ÜRESEN -- Balázs kérése (2026-09-25), lásd
+   * `pilot-aquarium-target-ranges.tsx` fejlécét. CSAK ÚJ FELVITELNÉL fut
+   * (szerkesztésnél a mentett `detail.targets` a forrás), és CSAK addig,
+   * amíg a felhasználó hozzá nem nyúlt a kártyához -- egy már megkezdett
+   * saját beállítást a víztípus utólagos átváltása nem írhatja felül.
+   */
+  useEffect(() => {
+    if (isEdit || targetsTouched) return;
+    setTargetsDraft(
+      waterType === "TENGERI"
+        ? draftFromDefaults(AQUARIUM_MEASUREMENT_TARGET_RANGE)
+        : {},
+    );
+  }, [waterType, isEdit, targetsTouched]);
+
   useEffect(() => {
     if (volumeIsManual) return;
     if (lengthCm && widthCm && heightCm) {
@@ -189,6 +218,12 @@ export function PilotAquariumEditorPage({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (hasInvalidRow(targetsDraft)) {
+      setError(
+        "A vízérték céltartományoknál az alsó határ egyik paraméternél sem lehet nagyobb a felsőnél.",
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -212,6 +247,7 @@ export function PilotAquariumEditorPage({
         waterType: waterType || undefined,
         startedAt: startedAt || undefined,
         notes: notes || undefined,
+        targets: targetsPayload(targetsDraft),
       };
       if (isEdit) {
         const updated = await aquariumsApi.update(token, aquariumId!, {
@@ -392,13 +428,7 @@ export function PilotAquariumEditorPage({
       ) : null}
 
       <form onSubmit={handleSubmit} className="flex-1 px-8 py-6">
-        <div
-          className={
-            isEdit
-              ? "grid items-start gap-6 lg:grid-cols-[1fr_340px]"
-              : "flex max-w-2xl flex-col gap-6"
-          }
-        >
+        <div className="grid items-start gap-6 lg:grid-cols-[1fr_340px]">
           <div className="flex flex-col gap-5">
             <PilotCard>
               <PilotCardHeader title="Alapadatok" />
@@ -656,14 +686,25 @@ export function PilotAquariumEditorPage({
             </div>
           </div>
 
-          {isEdit && aquariumId ? (
-            <PilotAquariumWaterValues
-              token={token}
-              aquariumId={aquariumId}
+          <div className="flex flex-col gap-5">
+            <PilotAquariumTargetRanges
               waterType={waterType || undefined}
-              canSendEmail={Boolean(customerEmail)}
+              draft={targetsDraft}
+              onChange={(next) => {
+                setTargetsTouched(true);
+                setTargetsDraft(next);
+              }}
             />
-          ) : null}
+            {isEdit && aquariumId ? (
+              <PilotAquariumWaterValues
+                token={token}
+                aquariumId={aquariumId}
+                waterType={waterType || undefined}
+                targets={targetsPayload(targetsDraft)}
+                canSendEmail={Boolean(customerEmail)}
+              />
+            ) : null}
+          </div>
         </div>
       </form>
 

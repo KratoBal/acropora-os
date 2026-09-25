@@ -6,12 +6,15 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
+import { AQUARIUM_MEASUREMENT_PARAMETERS } from "@acropora/types";
+
 import { CustomersRepository } from "../customers/customers.repository.js";
 import {
   AQUARIUM_CUSTOMER_REQUIREMENT_MESSAGE,
   AQUARIUM_EQUIPMENT_PROBLEM_MESSAGE,
   aquariumCustomerRequirementProblem,
   aquariumEquipmentProblem,
+  aquariumMeasurementTargetRangeInvalid,
 } from "./aquarium-validation.js";
 import { AquariumsRepository } from "./aquariums.repository.js";
 import type {
@@ -20,6 +23,11 @@ import type {
   CreateAquariumEquipmentDto,
   UpdateAquariumDto,
 } from "./dto/aquarium.dto.js";
+import type { AquariumMeasurementTargetDto } from "./dto/aquarium-measurement.dto.js";
+
+const PARAMETER_LABEL: Record<string, string> = Object.fromEntries(
+  AQUARIUM_MEASUREMENT_PARAMETERS.map((param) => [param.code, param.label]),
+);
 
 @Injectable()
 export class AquariumsService {
@@ -58,6 +66,15 @@ export class AquariumsService {
     }
   }
 
+  private checkTargets(rows: AquariumMeasurementTargetDto[]) {
+    for (const row of rows) {
+      if (aquariumMeasurementTargetRangeInvalid(row))
+        throw new BadRequestException(
+          `A(z) "${PARAMETER_LABEL[row.parameterCode] ?? row.parameterCode}" céltartomány alsó határa nem lehet nagyobb a felsőnél.`,
+        );
+    }
+  }
+
   async create(input: CreateAquariumDto, actorUserId: string) {
     const customerProblem = aquariumCustomerRequirementProblem({
       ownershipType: input.ownershipType,
@@ -69,6 +86,7 @@ export class AquariumsService {
         AQUARIUM_CUSTOMER_REQUIREMENT_MESSAGE[customerProblem],
       );
     this.checkEquipment(input.equipment);
+    this.checkTargets(input.targets);
 
     /*
       AZ IDEMPOTENCIA-ELLENŐRZÉS ELŐBB ÁLL, MINT AZ ÚJ ÜGYFÉL LÉTREHOZÁSA --
@@ -127,6 +145,7 @@ export class AquariumsService {
 
   async update(id: string, input: UpdateAquariumDto, actorUserId: string) {
     await this.detail(id);
+    if (input.targets !== undefined) this.checkTargets(input.targets);
     if (input.ownershipType || input.customerId !== undefined) {
       const problem = aquariumCustomerRequirementProblem({
         ownershipType: input.ownershipType ?? "OWN",
