@@ -7,12 +7,8 @@ import {
 import type { AuthenticatedUser } from "@acropora/types";
 import { Prisma } from "@acropora/database";
 
-import { renderMaintenanceOrderFormPdf } from "../maintenance-contracts/maintenance-order-form-document.js";
+import { renderMaintenanceOrderFormDocx } from "../maintenance-contracts/maintenance-order-form-docx.js";
 import type { MaintenanceOrderFormInput } from "../maintenance-contracts/maintenance-order-form.types.js";
-import {
-  canonicalMimetypeFor,
-  detectUploadedFileKind,
-} from "../service-assets/uploaded-file-type.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import { decideQuota } from "../service-assets/document-store/document-quota.js";
 import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
@@ -118,7 +114,7 @@ export class MaintenanceOrdersService {
       );
 
     const address = await this.repository.defaultAddress(contract.customer.id);
-    const pdfInput: MaintenanceOrderFormInput = {
+    const orderFormInput: MaintenanceOrderFormInput = {
       customer: {
         name: contract.customer.displayName,
         address: address
@@ -156,13 +152,23 @@ export class MaintenanceOrdersService {
       year: occasionYear,
       lastNumber: last,
     });
-    pdfInput.sequenceNumber = number;
+    orderFormInput.sequenceNumber = number;
 
-    const content = await renderMaintenanceOrderFormPdf(pdfInput);
-    const kind = detectUploadedFileKind("application/pdf", content);
-    if (kind === null)
+    /*
+      AZ INTEGRITÁS-ELLENŐRZÉS ITT MÁR NEM `detectUploadedFileKind` --
+      az egy FELTÖLTÖTT fájlok bájt-jel alapú felismerésére épült (lásd a
+      saját fejlécét: "pdf" | "jpeg" | "png"), docx-et nem ismer, és ez a
+      fájl amúgy sem feltöltés, hanem a szerveren ÁLLÍTJUK elő. A valódi
+      integritás-kérdés itt az, amit Balázs is kért: a docx MEGNYÍLIK-e, és
+      a tételek száma EGYEZIK-e a bemenettel -- ezt a `renderMaintenanceOrderFormDocx`
+      saját `itemCount`-ja adja vissza (a `docxtemplater` maga dobna hibát,
+      ha a sablon vagy a kitöltés eltört volna, tehát a sikeres visszatérés
+      már önmagában bizonyítja, hogy a docx megnyitható).
+    */
+    const rendered = await renderMaintenanceOrderFormDocx(orderFormInput);
+    if (rendered.itemCount !== orderFormInput.items.length)
       throw new Error(
-        "A generált megrendelőlap nem érvényes PDF. A rendelés nem jött létre, mert épp ezt neveznénk hitelesnek.",
+        "A generált megrendelőlap tételszáma nem egyezik a bemenettel. A rendelés nem jött létre, mert épp ezt neveznénk hitelesnek.",
       );
 
     try {
@@ -179,10 +185,11 @@ export class MaintenanceOrdersService {
           vatRatePercent: item.vatRatePercent,
         })),
         document: {
-          fileName: `megrendelolap-${number}.pdf`,
-          contentType: canonicalMimetypeFor(kind),
-          sizeBytes: content.length,
-          content,
+          fileName: `megrendelolap-${number}.docx`,
+          contentType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          sizeBytes: rendered.content.length,
+          content: rendered.content,
         },
       });
     } catch (error) {
