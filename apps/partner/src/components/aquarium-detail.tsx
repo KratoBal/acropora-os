@@ -138,20 +138,24 @@ export function AquariumDetail({ id }: { id: string }) {
     }
   }
 
+  // A `content` osztaly indoka mindharom visszateresen: lasd
+  // `settings.tsx` azonos megjegyzeset.
   if (error)
     return (
-      <section className="flex flex-col gap-4">
+      <section className="content flex flex-col gap-4">
         <VisszaLink />
         <Message tone="error" text={error} retry={load} />
       </section>
     );
   if (!aquarium)
-    return <p className="text-[13px] text-muted">Akvárium betöltése…</p>;
+    return (
+      <p className="content text-[13px] text-muted">Akvárium betöltése…</p>
+    );
 
   const latest = occasions[0];
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="content flex flex-col gap-4">
       <VisszaLink />
       <ServiceDetailHeader
         eyebrow="AKVÁRIUM"

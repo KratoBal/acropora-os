@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
+import { useThemePreference } from "@acropora/ui";
 
 import { hasNavigationEntry, useAuth } from "./auth";
 import { LAP_CIM } from "./frame";
@@ -52,6 +53,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const { effectiveTheme } = useThemePreference();
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -109,7 +111,32 @@ export function PortalShell({ children }: { children: ReactNode }) {
         (`w-52`, `pilot-aqua-*`/`pilot-grey-*` token, NEM a portal regi,
         lila `theme.css` `brand-*` skalaja).
       */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-52 flex-col border-r border-pilot-grey-200 bg-white lg:flex">
+      {/*
+        DATA-THEME ITT, ES CSAK ITT (SURGOS JAVITAS, 2026-09-25, Balazs elo
+        hibajelentese, ticket.acropora.hu): korabban a `data-theme`-et
+        KIZAROLAG az egyes pilot oldalak sajat `PilotThemeRoot` gyokere
+        adta (lasd `pilot-ui.tsx` fejleceit) -- az oldalsav SOSEM kapta meg,
+        tehat sotet modban az oldalsav vilagos maradt a sotet tartalom
+        mellett. Az oldalsav `bg-white`/`text-pilot-grey-*`/`bg-pilot-aqua-*`
+        osztalyai MAR token-vezereltek, es a `figma-theme.css` mar tartalmazza
+        a sotet parjukat (`[data-theme="dark"] .bg-white` es a
+        `--color-pilot-*` ujradefinialas) -- tehat ez a sor semmi UJ CSS-t
+        nem igenyel, csak az ATTRIBUTUMOT rakja fel.
+        SZANDEKOSAN NEM a `<main>`-re vagy a korulotte allo `<div>`-re kerul:
+        a `{children}` alatt MEG all ot regi-stilusu lap (Beallitasok, Uj
+        hibajegy, Akvariumok lista, Akvariumok adatlap, Uj akvarium), amik
+        nativ `input`/`select` elemeket hasznalnak sajat, nyers CSS
+        szinekkel -- a
+        `[data-theme="dark"] input/select/textarea { ... !important }`
+        szabaly ezeket FUGGETLENUL a sajat osztalyuktol sotetitene, mikozben
+        a korulottuk allo panel vilagos maradna: ugyanaz a "kevert" hiba,
+        amit ez a javitas felszamol, csak MASIK ot lapon. A hatokor tehat
+        szandekosan az oldalsavra szukul.
+      */}
+      <aside
+        data-theme={effectiveTheme}
+        className="fixed inset-y-0 left-0 z-30 hidden w-52 flex-col border-r border-pilot-grey-200 bg-white lg:flex"
+      >
         <div className="border-b border-pilot-grey-100 px-5 py-4">
           <Link
             href="/hibajegyek"
@@ -238,8 +265,25 @@ export function PortalShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
+      {/*
+        A `.content` (max-szelesseg + kozepre-igazitas doboz) INNEN ELKERULT
+        (SURGOS JAVITAS, 2026-09-25, Balazs elo hibajelentese): korabban a
+        pilot-aqua oldalak `-mx-5 -mt-10 -mb-16 max-w-none` negativ margoval
+        probaltak kilepni ebbol a dobozbol, hogy teljes szelessegben
+        toltsenek ki -- ez HIBAS technika volt, mert egy GYERMEK negativ
+        margoja/`max-w-none`-ja nem tudja felulirni az OS sajat `max-width:
+        1160px; margin: 0 auto`-jat: a tartalom csak az os dobozaig ert, es
+        1160px felett vilagos res maradt a szelen (pontosan Balazs jelentett
+        tunete). A javitas a FORRASNAL tortent: a `.content` doboz lekerult
+        errol a kozos hejrol, a pilot oldalak negativ margos semlegesitese
+        pedig okafogyotta valt es szinten torolve lett (lasd azok sajat
+        `PilotThemeRoot` hivasat). A `.content` osztaly MOST MAR csak azon
+        az ot meg regi-stilusu lapon all, ami tenylegesen igenyli
+        (Beallitasok, Uj hibajegy, Akvariumok lista, Akvariumok adatlap, Uj
+        akvarium) -- lasd azok sajat gyoker elemet.
+      */}
       <div className="lg:pl-52">
-        <main className="content">{children}</main>
+        <main>{children}</main>
       </div>
     </div>
   );

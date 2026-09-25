@@ -152,14 +152,14 @@ export function WorksheetDetail({ id }: { id: string }) {
 
   if (error && !worksheet)
     return (
-      <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 max-w-none bg-pilot-grey-50 px-8 py-6">
+      <PilotThemeRoot className="bg-pilot-grey-50 px-8 py-6">
         <VisszaLink />
         <Message tone="error" text={error} retry={load} />
       </PilotThemeRoot>
     );
   if (!worksheet)
     return (
-      <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 max-w-none bg-pilot-grey-50 px-8 py-6">
+      <PilotThemeRoot className="bg-pilot-grey-50 px-8 py-6">
         <p className="text-sm text-pilot-grey-400">Munkalap betöltése…</p>
       </PilotThemeRoot>
     );
@@ -189,7 +189,7 @@ export function WorksheetDetail({ id }: { id: string }) {
     current.status === "AWAITING_SIGNATURE" &&
     current.sentForSignatureAt !== null;
   return (
-    <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 max-w-none bg-pilot-grey-50">
+    <PilotThemeRoot className="bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <VisszaLink />
         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">

@@ -53,7 +53,14 @@ export function Settings() {
   }
 
   return (
-    <section>
+    /*
+      A `content` OSZTALY IDE KOLTOZOTT (SURGOS JAVITAS, 2026-09-25):
+      korabban a kozos `portal-shell.tsx` `<main>`-je adta minden lapnak,
+      most mar csak azok a lapok kerik ki KULON-KULON, amik meg nem
+      pilot-aqua `PilotThemeRoot`-ot hasznalnak -- lasd `portal-shell.tsx`
+      megfelelo megjegyzeset.
+    */
+    <section className="content">
       <header className={LAP_FEJLEC}>
         <div>
           <p className={CIMKE}>FIÓK</p>

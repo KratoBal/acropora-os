@@ -134,7 +134,7 @@ export function WorksheetList() {
   );
 
   return (
-    <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 flex min-h-screen max-w-none flex-col bg-pilot-grey-50">
+    <PilotThemeRoot className="flex min-h-screen flex-col bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
           Szervizmunka

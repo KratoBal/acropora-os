@@ -46,20 +46,43 @@ select {
   font: inherit;
 }
 
-button,
-.primary-link {
-  border: 0;
-  border-radius: 0.6rem;
-  background: #4c397f;
-  color: white;
-  cursor: pointer;
-  font-weight: 700;
-  padding: 0.72rem 1rem;
-  text-decoration: none;
-}
-button:disabled {
-  cursor: wait;
-  opacity: 0.65;
+/*
+  `@layer base`-BE KOLTOZOTT (SURGOS JAVITAS, 2026-09-25, Balazs elo
+  hibajelentese, ticket.acropora.hu: "LILA, TULMERETEZETT GOMBOK"). Ez a
+  szabaly korabban REGI CSS-KENT, semmilyen Tailwind reteg (`@layer`)
+  NELKUL allt itt. A Tailwind v4 sajat retegsorrendje `theme, base,
+  components, utilities`, ES A REICS-SPECIFIKACIO SZERINT A RETEGEN KIVULI
+  SZABALY MINDIG MAGASABB PRIORITASU BARMELY RETEGBELINEL, FUGGETLENUL A
+  SZELEKTOR SPECIFICITASATOL. Vagyis ez a `button { background: #4c397f }`
+  MINDIG felulirta a Tailwind `utilities` retegeben elo osztalyokat
+  (`bg-pilot-aqua-50`, `bg-white`, stb.), akkor is, ha azok magasabb
+  specificitasu OSZTALY-szelektorral alltak -- ettol lett lila es
+  vastag/nagy MINDEN gomb, amit Tailwind-osztallyal probaltunk stilusra
+  fogni (a lapozo Elozo/Kovetkezo, a statusz-fulek, a Kijelentkezes),
+  akkor is, ha a hivo kod maga sosem hasznalta a `#4c397f` szint.
+  A `@layer base`-be helyezes AZ EGYETLEN valtoztatas: a Tailwind sajat
+  `utilities` retege (magasabb prioritasu, mint a `base`) ezutan
+  SZABALYOSAN felulirja ezt minden olyan gombon, aminek van sajat
+  Tailwind-osztalya -- a `settings.tsx`/`new-ticket.tsx` sima, osztaly
+  NELKULI gombjait viszont VALTOZATLANUL hagyja, mert azokon nincs
+  versengo `utilities`-szabaly, ami legyozne.
+*/
+@layer base {
+  button,
+  .primary-link {
+    border: 0;
+    border-radius: 0.6rem;
+    background: #4c397f;
+    color: white;
+    cursor: pointer;
+    font-weight: 700;
+    padding: 0.72rem 1rem;
+    text-decoration: none;
+  }
+  button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+  }
 }
 /*
   A `.portal`, `.topbar`, `.brand`, `.brand span`, `.account`, `.account

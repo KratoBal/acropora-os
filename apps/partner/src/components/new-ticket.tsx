@@ -137,7 +137,8 @@ export function NewTicket() {
   );
 
   return (
-    <section>
+    // A `content` osztaly indoka: lasd `settings.tsx` azonos megjegyzeset.
+    <section className="content">
       <header className={LAP_FEJLEC}>
         <div>
           <p className={CIMKE}>ÚJ BEJELENTÉS</p>
