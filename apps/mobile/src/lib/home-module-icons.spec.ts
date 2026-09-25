@@ -116,3 +116,54 @@ describe("a modul-csempék két oszlopban, függőleges elrendezésben állnak",
     assert.match(blokk!, /flex:\s*1/);
   });
 });
+
+/**
+ * BALÁZS MÁSODIK KÉPE, 2026-09-25 18:51 -- kilenc elemenkénti eltérés a
+ * kiment kezdőlap és a terv között (exchange/kezdolap-telefon-2026-09-25-1851.png
+ * kontra exchange/kezdolap-terv-2026-09-25.png). Ez a blokk azokat az
+ * állításokat méri, amik forrás-szövegből ellenőrizhetők: a doboz nélküli
+ * ikon, a jelvény külön sora, a szürke nyíl/címke színek.
+ */
+describe("a kezdőlap a második képernyőfotó-kör elemenkénti javításait viseli", () => {
+  const forras = kodSzoveg(readFileSync(HOME_SCREEN, "utf8"));
+
+  it("a modul-ikonnak nincs saját (moduleCode) doboza többé", () => {
+    assert.doesNotMatch(
+      forras,
+      /moduleCode:\s*\{/,
+      "a moduleCode stílus még mindig létezik: az ikon dobozban áll, a terv puszta emojit ad",
+    );
+  });
+
+  it("a szerepkör-jelvény saját sorban, balra igazítva áll", () => {
+    const blokk = forras.match(/roleBadge:\s*\{[^}]*\}/)?.[0];
+    assert.ok(blokk, "nem találom a `roleBadge` stílust");
+    assert.match(
+      blokk!,
+      /alignSelf:\s*"flex-start"/,
+      "a roleBadge nem flex-start, tehát nem saját tartalom-szélességű sorban áll",
+    );
+  });
+
+  it("a nyíl és a szerepkör-jelvény nem az akcent-színt viseli", () => {
+    const nyilBlokk = forras.match(/moduleArrow:\s*\{[^}]*\}/)?.[0];
+    assert.ok(nyilBlokk, "nem találom a `moduleArrow` stílust");
+    assert.doesNotMatch(nyilBlokk!, /t\.accent\b/);
+    const jelvenyBlokk = forras.match(/roleBadgeText:\s*\{[^}]*\}/)?.[0];
+    assert.ok(jelvenyBlokk, "nem találom a `roleBadgeText` stílust");
+    assert.doesNotMatch(jelvenyBlokk!, /t\.accentSoftText\b/);
+  });
+});
+
+describe("a kezdőlap fejléce balra igazított címet és beállítás-gombot visel", () => {
+  const forras = kodSzoveg(
+    readFileSync(join("src", "app", "_layout.tsx"), "utf8"),
+  );
+
+  it("az index képernyő fejléce balra igazított és headerRight-ot ad", () => {
+    const blokk = forras.match(/<Stack\.Screen\s+name="index"[\s\S]*?\/>/)?.[0];
+    assert.ok(blokk, "nem találom az index Stack.Screen-t");
+    assert.match(blokk!, /headerTitleAlign:\s*"left"/);
+    assert.match(blokk!, /headerRight:/);
+  });
+});
