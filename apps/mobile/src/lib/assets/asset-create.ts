@@ -139,6 +139,14 @@ export interface AssetCreateForm {
   electricalCode: string;
   /** Amit a felhasználó beírt vagy a választóból kapott. Üres is lehet. */
   installedAt: string;
+  /**
+   * A GARANCIA LEJÁRATA -- ugyanaz az alak és ugyanaz a választó, mint a
+   * `installedAt`-nél. A mobil ÚJ ESZKÖZ űrlapon eddig hiányzott, holott a
+   * webes űrlapon (`asset-editor-page.tsx`) és a mobil ADATLAPON is már
+   * megvan -- barracuda lefedettségi listája (2026-09-25,
+   * figma-eszkozok-make-7-lefedettseg.md) találta meg a hiányt.
+   */
+  warrantyExpiresAt: string;
   /** Karbantartási intervallum napban, szövegként. Üres is lehet. */
   interval: string;
 }
@@ -181,6 +189,7 @@ export interface AssetCreatePayload {
   /** A táblázat első oszlopa ("FP / Elektromos"), ha a kezelő megadta. */
   electricalCode?: string;
   installedAt?: string;
+  warrantyExpiresAt?: string;
   serviceIntervalDays?: number;
 }
 
@@ -198,6 +207,7 @@ export type AssetCreateField =
   | "volume"
   | "powerConsumption"
   | "installedAt"
+  | "warrantyExpiresAt"
   | "interval";
 
 const DATE_SEPARATORS = /[.\-/\s]+/;
@@ -336,6 +346,14 @@ export function buildAssetCreatePayload(
   const installed = normalizeAssetDate(form.installedAt);
   if (!installed.ok)
     return { ok: false, field: "installedAt", message: installed.message };
+
+  const warranty = normalizeAssetDate(form.warrantyExpiresAt);
+  if (!warranty.ok)
+    return {
+      ok: false,
+      field: "warrantyExpiresAt",
+      message: warranty.message,
+    };
 
   /**
    * SZERVIZ PARTNER TULAJDONOSNÁL AZ ALEGYSÉG KÖTELEZŐ -- UGYANAZ A SZABÁLY,
@@ -534,6 +552,10 @@ export function buildAssetCreatePayload(
        */
       installedAt: installed.value
         ? `${installed.value}T00:00:00.000Z`
+        : undefined,
+      /** A nap KEZDETE, UTC-ben -- ugyanaz az indok, mint az `installedAt`-nél. */
+      warrantyExpiresAt: warranty.value
+        ? `${warranty.value}T00:00:00.000Z`
         : undefined,
       serviceIntervalDays,
     },

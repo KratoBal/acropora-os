@@ -47,6 +47,7 @@ const form: AssetCreateForm = {
   powerConsumptionRaw: "",
   electricalCode: "",
   installedAt: "",
+  warrantyExpiresAt: "",
   interval: "",
 };
 
@@ -121,11 +122,31 @@ describe("buildAssetCreatePayload", () => {
     assert.equal(result.ok, true);
     if (result.ok) {
       assert.equal(result.payload.installedAt, undefined);
+      assert.equal(result.payload.warrantyExpiresAt, undefined);
       assert.equal(result.payload.name, "Fóka felnyomó szivattyú");
       assert.equal(result.payload.manufacturer, "Eheim");
       // Az üres mezőből NEM lesz üres string a kérésben.
       assert.equal(result.payload.model, undefined);
     }
+  });
+
+  /**
+   * A GARANCIA LEJÁRATA UGYANAZT AZ UTAT JÁRJA, MINT A TELEPÍTÉS DÁTUMA
+   * FELETTE -- ugyanaz a `normalizeAssetDate`, ugyanaz a `T00:00:00.000Z`
+   * végződés. Ez a mező eddig a mobil ÚJ ESZKÖZ űrlapon nem is létezett.
+   */
+  it("sends the warranty date in the one shape the server accepts", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      warrantyExpiresAt: "2027.03.01",
+    });
+
+    assert.equal(result.ok, true);
+    if (result.ok)
+      assert.equal(
+        result.payload.warrantyExpiresAt,
+        "2027-03-01T00:00:00.000Z",
+      );
   });
 
   /**
@@ -138,6 +159,10 @@ describe("buildAssetCreatePayload", () => {
       { form: { ...form, owner: null }, field: "owner" },
       { form: { ...form, name: "   " }, field: "name" },
       { form: { ...form, installedAt: "tegnap" }, field: "installedAt" },
+      {
+        form: { ...form, warrantyExpiresAt: "tegnap" },
+        field: "warrantyExpiresAt",
+      },
       { form: { ...form, interval: "két hét" }, field: "interval" },
       { form: { ...form, interval: "0" }, field: "interval" },
       { form: { ...form, interval: "4000" }, field: "interval" },

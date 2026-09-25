@@ -263,6 +263,8 @@ export interface CreateAssetInput {
   /** A tablazat elso oszlopa ("MAT kod / Elektromos"). Elhagyhato. */
   electricalCode?: string;
   installedAt?: string;
+  /** A garancia lejárata. Elhagyható. */
+  warrantyExpiresAt?: string;
   serviceIntervalDays?: number;
 }
 
