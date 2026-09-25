@@ -2,6 +2,7 @@ import type {
   AquariumDetail,
   AquariumListResponse,
   AquariumMeasurementListResponse,
+  AquariumMeasurementOccasion,
   AssetDetail,
   AssetDocumentSummary,
   AssetListResponse,
@@ -196,6 +197,14 @@ export const partnerApi = {
    */
   assets: (input?: {
     departmentId?: string;
+    /**
+     * MELYIK AKVÁRIUMHOZ VAN CSATOLVA -- az `Asset.aquariumId` szerinti
+     * szűrés (`service-assets.repository.ts:566`). Az Akváriumok adatlap
+     * "Eszközök a medencében" kártyája ezzel kéri le, mi van MÁR
+     * hozzárendelve -- lásd `aquarium-detail.tsx` fejlécét arról, amit ez a
+     * kártya (ma) NEM tud: hozzárendelni.
+     */
+    aquariumId?: string;
     search?: string;
     status?: string;
     page?: number;
@@ -219,6 +228,7 @@ export const partnerApi = {
       kapna, es a reszfa-kibontas azt egy nem letezo egysegre futtatna.
     */
     if (input?.departmentId) query.set("departmentId", input.departmentId);
+    if (input?.aquariumId) query.set("aquariumId", input.aquariumId);
     if (input?.search?.trim()) query.set("search", input.search.trim());
     if (input?.sort) query.set("sort", input.sort);
     if (input?.direction) query.set("direction", input.direction);
@@ -342,6 +352,27 @@ export const partnerApi = {
   aquariumMeasurements: (id: string) =>
     request<AquariumMeasurementListResponse>(
       `/aquariums/${encodeURIComponent(id)}/measurements`,
+    ),
+  /**
+   * ÚJ VÍZMÉRÉS RÖGZÍTÉSE -- Balázs döntése (2026-09-25): a portál "új
+   * mérés" képessége nyitott a hívó saját, látható akváriumaira. A szerver
+   * a hívó hatókörét a `requireAquarium` -> scoped `detail()` úton
+   * ellenőrzi (`aquarium-measurements.service.ts` `create()`), tehát idegen
+   * akváriumra 404-et ad, nem csendes elutasítást.
+   */
+  createAquariumMeasurement: (
+    id: string,
+    input: {
+      measuredAt?: string;
+      values: { parameterCode: string; value: number }[];
+    },
+  ) =>
+    request<AquariumMeasurementOccasion>(
+      `/aquariums/${encodeURIComponent(id)}/measurements`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
     ),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ updated: true }>("/account/password", {
