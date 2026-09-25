@@ -175,7 +175,7 @@ describe("apiRequest", () => {
    * mockot), hogy a `.text()`/`.json()` viselkedés a böngésző/Node fetch
    * tényleges szabályait kövesse, ne a saját feltevésemet arról.
    */
-  it("resolves cleanly when a void endpoint answers with a truly empty body", async () => {
+  it("resolves cleanly when a void endpoint answers with a truly empty 200 body", async () => {
     globalThis.fetch = vi
       .fn()
       .mockResolvedValue(new Response("", { status: 200 }));
@@ -184,6 +184,22 @@ describe("apiRequest", () => {
       apiRequest("/aquariums/a1/measurements/o1", "dev_abc123", {
         method: "DELETE",
       }),
+    ).resolves.toBeUndefined();
+  });
+
+  /**
+   * UGYANAZ 204-GYEL -- acrobot kérése (2026-09-25), aki külön kérte, hogy
+   * a 204-et is a `text().length` alapján kezeljük, ne a státuszkód szerint
+   * ágazva: egy státusz-alapú ág könnyen kimaradna arra a MÁSIK gyakori
+   * esetre, amikor egy `void` végpont 200-at ad, üres törzzsel (lásd fent).
+   */
+  it("resolves cleanly when a void endpoint answers with 204 No Content", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(
+      apiRequest("/units-of-measure/u1", "dev_abc123", { method: "DELETE" }),
     ).resolves.toBeUndefined();
   });
 });
