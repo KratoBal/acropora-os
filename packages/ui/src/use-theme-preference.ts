@@ -1,3 +1,4 @@
+"use client";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -11,6 +12,10 @@ import {
 
 /**
  * A PREFERENCIA ÉS A TÉNYLEGES SÖTÉT/VILÁGOS ÁLLAPOT, EGY HELYEN.
+ *
+ * IDE KÖLTÖZÖTT 2026-09-25-én, `theme-preference.ts`-szel együtt -- lásd
+ * annak fejlécét az indokért (a `pilot-ui.tsx` MÁSODIK fogyasztója lett,
+ * ezúttal `apps/partner`-ben).
  *
  * A Beállítások lap ezt hívja a választóhoz, egy pilot oldal gyökere ezt
  * hívja, hogy tudja, tegyen-e `data-theme`-et a saját fájára (lásd

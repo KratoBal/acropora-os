@@ -1,6 +1,14 @@
 /**
  * VILÁGOS / SÖTÉT / RENDSZER SZERINT -- MEGŐRZÖTT, SZEMÉLYES PREFERENCIA.
  *
+ * IDE KÖLTÖZÖTT 2026-09-25-én, A PARTNER PORTÁL FIGMA-KÖRÉVEL (acrobot
+ * döntése): a `pilot-ui.tsx` a MÁSODIK fogyasztója lett ennek a modulnak
+ * (`apps/web` mellett `apps/partner` is a pilot-aqua design-rendszerre áll
+ * át), és a repó saját szabálya szerint ("ha egy komponenst második helyen
+ * is használnál, oda kerül") ez a hely a `packages/ui`. Korábban
+ * `apps/web/src/lib/theme/theme-preference.ts` állt, a tartalom betűre
+ * változatlan.
+ *
  * Balázs döntése (2026-09-24 15:59 UTC, emlék 1816): a Figma-terv válik a
  * web és a mobil ÚJ kinézetévé, fokozatosan. A választó a Beállításokba
  * kerül (nem a felső sávba), és a választás megmarad.
