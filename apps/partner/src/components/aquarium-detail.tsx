@@ -15,10 +15,11 @@ import {
 
 import { partnerApi } from "@/lib/api";
 import { WATER_TYPE_LABEL } from "@/lib/aquarium-labels";
+import { AquariumWaterValues } from "./aquarium-water-values";
 import { Message } from "./ticket-list";
 
 /**
- * AZ AKVÁRIUM ADATLAPJA A PORTÁLON -- PILOT-STÍLUS, ALAPADATOK-CSAK
+ * AZ AKVÁRIUM ADATLAPJA A PORTÁLON -- PILOT-STÍLUS
  * (Balázs döntése, emlék 1847, 2026-09-25 16:04 UTC).
  *
  * === MI VÁLTOZOTT A KORÁBBI KÖRHÖZ KÉPEST ===
@@ -32,20 +33,23 @@ import { Message } from "./ticket-list";
  * ugyanaz a család, amit az `asset-detail.tsx`/`ticket-detail.tsx` már
  * használ.
  *
- * === IDEIGLENES SZŰKÍTÉS: A VÍZÉRTÉK-KÁRTYA ÉS AZ "ÚJ MÉRÉS" ŰRLAP EBBŐL A
- *     KÖRBŐL HIÁNYZIK, ÉS EZ SZÁNDÉKOS, DE ÁTMENETI ===
+ * === A VÍZÉRTÉK-KÁRTYA ÉS AZ "ÚJ MÉRÉS" ŰRLAP A 2. KÖRBEN VISSZAKERÜLT ===
  *
- * Acrobot sorrendje (msg_id 23638): "1) lista + adatlap + uj a pilot-
+ * Az 1. kör (fent, `247b8201`) ezt a kártyát szándékosan hagyta ki --
+ * acrobot sorrendje (msg_id 23638): "1) lista + adatlap + uj a pilot-
  * alakban, 2) meres + elozmeny grafikonnal, 3) eszkoz-hozzarendeles
- * joggal" -- az "új mérés" felvitele a 2. körbe tartozik, nem ebbe. Ez a
- * lap emiatt EGY VALÓS, ÉLESBEN HASZNÁLT KÉPESSÉGET IDEIGLENESEN ELVESZ: a
- * partner amíg a 2. kör nem olvad be, NEM tud a portálról mérést
- * rögzíteni (az korábban, #1121 óta működött). Ez tudatos kompromisszum,
- * nem mulasztás -- de FONTOS, hogy a 2. kör GYORSAN kövesse, hogy a
- * kiesés rövid legyen. Ugyanez áll az "Eszközök a medencében" kártyára is
- * (3. kör).
+ * joggal". Ez a kör (2.) pótolja: `AquariumWaterValues`
+ * (`./aquarium-water-values.tsx`) a belső `pilot-aquarium-water-values.tsx`
+ * másolata, PARTNER hatókörre szűkítve -- lásd a saját fejlécét arról,
+ * mi maradt ki (törlés, e-mail küldés, Excel-export -- mindhárom
+ * `requireInternalWriter`-rel zárt a szerveren) és mi nem (az "Új mérés"
+ * felvitel, mert a `POST /aquariums/:id/measurements` nyitott).
  *
- * === TOVÁBBRA IS CSAK-OLVASÓ, NEM ŰRLAP ===
+ * Az "Eszközök a medencében" kártya (eszköz-hozzárendelés, 3. kör) TOVÁBBRA
+ * IS HIÁNYZIK -- az külön jogosultsághoz kötött (emlék 1843), és a szerver
+ * oldala (`feat/portal-asset-aquarium-assign`) ekkor még külön ágon fut.
+ *
+ * === TOVÁBBRA IS CSAK-OLVASÓ, NEM ŰRLAP (AZ AKVÁRIUM SAJÁT MEZŐIRE) ===
  *
  * A belső `pilot-aquarium-editor-page.tsx` MINDIG szerkeszthető űrlap
  * (staff bármikor átírhatja az akvárium saját mezőit). A PARTNER viszont
@@ -141,6 +145,12 @@ export function AquariumDetail({ id }: { id: string }) {
               <PilotDataRow label="Megjegyzés" value={aquarium.notes} />
             </div>
           </PilotCard>
+
+          <AquariumWaterValues
+            aquariumId={aquarium.id}
+            waterType={aquarium.waterType}
+            targets={aquarium.targets}
+          />
         </div>
 
         <div className="flex flex-col gap-5">

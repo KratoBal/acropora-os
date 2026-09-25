@@ -413,11 +413,17 @@ export const partnerApi = {
    * a hívó hatókörét a `requireAquarium` -> scoped `detail()` úton
    * ellenőrzi (`aquarium-measurements.service.ts` `create()`), tehát idegen
    * akváriumra 404-et ad, nem csendes elutasítást.
+   *
+   * A `source`/`notes` mező a 2. körben bővült ide -- a `CreateAquariumMeasurementDto`
+   * (`apps/api/src/aquariums/dto/aquarium-measurement.dto.ts`) mindkettőt
+   * elfogadja, eddig csak a `measuredAt`/`values` ment át a portálról.
    */
   createAquariumMeasurement: (
     id: string,
     input: {
       measuredAt?: string;
+      source?: string;
+      notes?: string;
       values: { parameterCode: string; value: number }[];
     },
   ) =>
