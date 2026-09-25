@@ -23,6 +23,14 @@ const AQUARIUM = {
   maintainers: [],
 };
 
+/**
+ * BELSŐS ÁLLÍTÓLAGOS HÍVÓ -- a `detail`/`requireInternalWriter` itt
+ * fake-elt, tehát a mezők tartalma nem számít, csak a `customerId`/
+ * `supplierId` hiánya (ez adja a `partnerScopeOf` "internal" ágát, ha a
+ * valódi függvény valaha bekerülne ide).
+ */
+const ACTOR = { id: "actor-1" } as never;
+
 function fakeAquariums(overrides: Partial<Record<string, unknown>> = {}) {
   return { detail: async () => AQUARIUM, ...overrides };
 }
@@ -68,7 +76,7 @@ function input(
 describe("AquariumMeasurementsService.create -- a mérés ideje", () => {
   it("POZITÍV KONTROLL: measuredAt nélkül létrehozza a mérést", async () => {
     const { service } = makeService();
-    const result = await service.create("aq-1", input(), "actor-1");
+    const result = await service.create("aq-1", input(), "actor-1", ACTOR);
     assert.equal(result.id, "2026-09-25T08:00:00.000Z");
   });
 
@@ -78,6 +86,7 @@ describe("AquariumMeasurementsService.create -- a mérés ideje", () => {
       "aq-1",
       input({ measuredAt: "2020-01-01T08:00:00.000Z" }),
       "actor-1",
+      ACTOR,
     );
     assert.equal(result.id, "2026-09-25T08:00:00.000Z");
   });
@@ -98,7 +107,13 @@ describe("AquariumMeasurementsService.create -- a mérés ideje", () => {
     const futureIso = new Date(Date.now() + 60_000).toISOString();
 
     await assert.rejects(
-      () => service.create("aq-1", input({ measuredAt: futureIso }), "actor-1"),
+      () =>
+        service.create(
+          "aq-1",
+          input({ measuredAt: futureIso }),
+          "actor-1",
+          ACTOR,
+        ),
       (error: unknown) =>
         error instanceof BadRequestException &&
         (error as Error).message === "A mérés ideje nem lehet a jövőben.",

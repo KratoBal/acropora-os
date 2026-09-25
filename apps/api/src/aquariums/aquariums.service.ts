@@ -1,14 +1,21 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
-import { AQUARIUM_MEASUREMENT_PARAMETERS } from "@acropora/types";
+import {
+  AQUARIUM_MEASUREMENT_PARAMETERS,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { CustomersRepository } from "../customers/customers.repository.js";
+import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
+import { requireInternalWriter } from "../worksheets/worksheet-internal-write.js";
 import {
   AQUARIUM_CUSTOMER_REQUIREMENT_MESSAGE,
   AQUARIUM_EQUIPMENT_PROBLEM_MESSAGE,
@@ -16,6 +23,7 @@ import {
   aquariumEquipmentProblem,
   aquariumMeasurementTargetRangeInvalid,
 } from "./aquarium-validation.js";
+import { aquariumVisibilityWhere } from "./aquarium-visibility.js";
 import { AquariumsRepository } from "./aquariums.repository.js";
 import type {
   AquariumListQueryDto,
@@ -36,19 +44,40 @@ export class AquariumsService {
     private readonly customers: CustomersRepository,
   ) {}
 
-  list(query: AquariumListQueryDto) {
-    return this.repository.list({
-      page: query.page,
-      pageSize: query.pageSize,
-      search: query.search,
-      ownershipType: query.ownershipType,
-      waterBodyType: query.waterBodyType,
-      customerId: query.customerId,
-    });
+  /**
+   * A HATÓKÖR, LEKÉRDEZHETŐ ALAKBAN -- lásd `aquarium-visibility.ts`
+   * fejlécét. A belsős hívó üres szűrőt kap (mindent lát), a vevő-hatókörű
+   * a saját, kiosztott helyszíneire szűkül, a szállító-hatókörű és a
+   * hozzárendelés nélküli vevő-hatókörű pedig semmit nem lát.
+   */
+  private async visibilityFor(
+    user: AuthenticatedUser,
+  ): Promise<Prisma.AquariumWhereInput> {
+    const scope = partnerScopeOf(user);
+    if (scope.kind === "internal") return {};
+    const unitIds =
+      scope.kind === "customer" ? await assignedUnitIdsFor(user.id) : [];
+    return aquariumVisibilityWhere({ scope, unitIds });
   }
 
-  async detail(id: string) {
-    const aquarium = await this.repository.detail(id);
+  async list(query: AquariumListQueryDto, user: AuthenticatedUser) {
+    const visibility = await this.visibilityFor(user);
+    return this.repository.list(
+      {
+        page: query.page,
+        pageSize: query.pageSize,
+        search: query.search,
+        ownershipType: query.ownershipType,
+        waterBodyType: query.waterBodyType,
+        customerId: query.customerId,
+      },
+      visibility,
+    );
+  }
+
+  async detail(id: string, user: AuthenticatedUser) {
+    const visibility = await this.visibilityFor(user);
+    const aquarium = await this.repository.detail(id, visibility);
     if (!aquarium) throw new NotFoundException("Az akvárium nem található.");
     return aquarium;
   }
@@ -76,7 +105,92 @@ export class AquariumsService {
     }
   }
 
-  async create(input: CreateAquariumDto, actorUserId: string) {
+  /**
+   * A HELYSZÍN CSAK A SAJÁT ÜGYFÉLÉ LEHET.
+   *
+   * Lásd az `Aquarium.departmentId` séma-fejlécét: az idegen kulcs önmagában
+   * csak a LÉTEZÉST nézi, nem a tulajdonost -- enélkül a Partner Portál
+   * hatókör-szűrése (`departmentId` a soron) elcsúszhatna a `customerId`-től,
+   * és egy partner-fiók idegen ügyfél helyszínéhez rendelt akváriumot
+   * kapna vissza.
+   */
+  private async checkDepartment(
+    departmentId: string | null | undefined,
+    customerId: string | null | undefined,
+  ) {
+    if (!departmentId) return;
+    if (!customerId)
+      throw new BadRequestException(
+        "Helyszín csak ügyfélhez tartozó akváriumon adható meg.",
+      );
+    const belongs = await this.repository.departmentBelongsToCustomer(
+      departmentId,
+      customerId,
+    );
+    if (!belongs)
+      throw new BadRequestException(
+        "A megadott helyszín nem ehhez az ügyfélhez tartozik.",
+      );
+  }
+
+  /**
+   * A PARTNER-PORTÁL FELVITELÉNÉL A TULAJDONOST ÉS A HELYSZÍNT A KÉRŐ
+   * HATÓKÖRE ADJA, NEM A TÖRZS -- ugyanaz az elv, mint a munkalap-felvitel
+   * `requireCustomer`/`requireDepartment` párosánál (lásd
+   * `worksheets.service.ts` `create()` fejlécét: "a customerId a TORZSBOL
+   * jott, es a kero sehonnan" volt a mért rés máshol).
+   *
+   * Belsős hívónál a törzs változatlanul dönt (mai viselkedés). Vevő-
+   * hatókörű (partner) hívónál a `customerId`-t a hívó SAJÁT hatóköre adja
+   * -- egy eltérő, törzsben küldött érték elutasítás, nem csendes
+   * felülírás, mert egy csendes felülírás elrejtené a hívó saját hibáját.
+   * A `departmentId` a portálon KÖTELEZŐ (Balázs döntése, 2026-09-25: "a
+   * saját, hozzárendelt helyszínek közül, kötelezően"), és a hívó SAJÁT
+   * kiosztott helyszínei közül kell valónak lennie -- nem elég, hogy az
+   * ügyfélé, kifejezetten a kiosztottak közül.
+   *
+   * Szállító-hatókörű hívó teljesen elutasítva: az akvárium ügyfél-fogalom,
+   * szállítóhoz sosem tartozik.
+   */
+  private async resolvePartnerOwnership(
+    user: AuthenticatedUser,
+    input: { customerId?: string; departmentId?: string },
+  ): Promise<{ customerId?: string; departmentId?: string }> {
+    const scope = partnerScopeOf(user);
+    if (scope.kind === "internal") return input;
+    if (scope.kind === "supplier")
+      throw new ForbiddenException(
+        "Akvárium létrehozása szállító-fiókkal nem végezhető el.",
+      );
+    if (input.customerId && input.customerId !== scope.customerId)
+      throw new ForbiddenException(
+        "Csak a saját ügyfélhez hozhatsz létre akváriumot.",
+      );
+    if (!input.departmentId)
+      throw new BadRequestException("Helyszín megadása kötelező.");
+    const unitIds = await assignedUnitIdsFor(user.id);
+    if (!unitIds.includes(input.departmentId))
+      throw new ForbiddenException(
+        "Csak a saját, hozzárendelt helyszíneid egyikére hozhatsz létre akváriumot.",
+      );
+    return { customerId: scope.customerId, departmentId: input.departmentId };
+  }
+
+  async create(
+    input: CreateAquariumDto,
+    actorUserId: string,
+    user: AuthenticatedUser,
+  ) {
+    const owner = await this.resolvePartnerOwnership(user, {
+      customerId: input.customerId,
+      departmentId: input.departmentId,
+    });
+    input = {
+      ...input,
+      customerId: owner.customerId,
+      departmentId: owner.departmentId,
+    };
+
     const customerProblem = aquariumCustomerRequirementProblem({
       ownershipType: input.ownershipType,
       customerId: input.customerId,
@@ -134,6 +248,8 @@ export class AquariumsService {
       customerId = customer.id;
     }
 
+    await this.checkDepartment(input.departmentId, customerId);
+
     try {
       return await this.repository.create(
         { ...input, customerId },
@@ -144,8 +260,22 @@ export class AquariumsService {
     }
   }
 
-  async update(id: string, input: UpdateAquariumDto, actorUserId: string) {
-    await this.detail(id);
+  /**
+   * BELSŐS LÉPÉS, NEM PARTNER-KÉPESSÉG -- Balázs 2026-09-25-i döntése a
+   * listát nézés, mérés és új akvárium felvitelre adta, meglévő akvárium
+   * SZERKESZTÉSÉRE nem. Ugyanaz a minta, mint a `worksheets.service.ts`
+   * `create()`-jénél: elutasítás, nem szűkítés -- lásd
+   * `worksheet-internal-write.ts` fejlécét, miért ez a biztonságosabb
+   * irány, és miért tágítható később, ha valaha kérik.
+   */
+  async update(
+    id: string,
+    input: UpdateAquariumDto,
+    actorUserId: string,
+    user: AuthenticatedUser,
+  ) {
+    requireInternalWriter(user, "Akvárium szerkesztése");
+    const existing = await this.detail(id, user);
     if (input.targets !== undefined) this.checkTargets(input.targets);
     if (input.ownershipType || input.customerId !== undefined) {
       const problem = aquariumCustomerRequirementProblem({
@@ -176,6 +306,12 @@ export class AquariumsService {
       customerId = customer.id;
     }
 
+    if (input.departmentId !== undefined) {
+      const effectiveCustomerId =
+        customerId !== undefined ? customerId : existing.customerId;
+      await this.checkDepartment(input.departmentId, effectiveCustomerId);
+    }
+
     try {
       return await this.repository.update(
         id,
@@ -187,8 +323,14 @@ export class AquariumsService {
     }
   }
 
-  async addEquipment(aquariumId: string, input: CreateAquariumEquipmentDto) {
-    await this.detail(aquariumId);
+  /** Belsős lépés -- lásd `update()` fejlécét, ugyanaz az indok. */
+  async addEquipment(
+    aquariumId: string,
+    input: CreateAquariumEquipmentDto,
+    user: AuthenticatedUser,
+  ) {
+    requireInternalWriter(user, "Berendezés felvitele");
+    await this.detail(aquariumId, user);
     const problem = aquariumEquipmentProblem(input);
     if (problem)
       throw new BadRequestException(
@@ -197,8 +339,14 @@ export class AquariumsService {
     return this.repository.addEquipment(aquariumId, input);
   }
 
-  async removeEquipment(aquariumId: string, equipmentId: string) {
-    await this.detail(aquariumId);
+  /** Belsős lépés -- lásd `update()` fejlécét, ugyanaz az indok. */
+  async removeEquipment(
+    aquariumId: string,
+    equipmentId: string,
+    user: AuthenticatedUser,
+  ) {
+    requireInternalWriter(user, "Berendezés törlése");
+    await this.detail(aquariumId, user);
     try {
       return await this.repository.removeEquipment(aquariumId, equipmentId);
     } catch (error) {

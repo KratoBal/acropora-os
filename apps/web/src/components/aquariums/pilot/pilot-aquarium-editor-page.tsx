@@ -11,6 +11,7 @@ import {
   type CreateAquariumEquipmentInput,
   type WaterBodyType,
   type WaterType,
+  type WorksheetDepartmentSummary,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,6 +19,8 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ApiError } from "@/lib/api/client";
 import { aquariumsApi } from "@/lib/api/aquariums";
+import { worksheetsApi } from "@/lib/api/worksheets";
+import { buildSiteOptions } from "@/lib/partners/site-tree";
 import { CustomerPicker, type CustomerSelection } from "../customer-picker";
 import {
   EQUIPMENT_KIND_LABEL,
@@ -90,6 +93,17 @@ export function PilotAquariumEditorPage({
   const [customerSelection, setCustomerSelection] = useState<CustomerSelection>(
     {},
   );
+  /**
+   * A HELYSZÍN -- OPCIONÁLIS, csak akkor kérhető, ha az akvárium MEGLÉVŐ
+   * (nem éppen most felvett) ügyfélé. Lásd az `Aquarium.departmentId`
+   * séma-fejlécét: a Partner Portálon ez a mező kötelező lesz, a belső
+   * felvitelen/szerkesztésen viszont elhagyható marad -- Balázs döntése,
+   * 2026-09-25.
+   */
+  const [departmentId, setDepartmentId] = useState("");
+  const [departments, setDepartments] = useState<WorksheetDepartmentSummary[]>(
+    [],
+  );
   const [name, setName] = useState("");
   const [waterBodyType, setWaterBodyType] = useState<WaterBodyType>("AKVARIUM");
   const [lengthCm, setLengthCm] = useState("");
@@ -137,6 +151,7 @@ export function PilotAquariumEditorPage({
               }
             : {},
         );
+        setDepartmentId(detail.departmentId ?? "");
         setName(detail.name);
         setWaterBodyType(detail.waterBodyType);
         setLengthCm(detail.lengthCm != null ? String(detail.lengthCm) : "");
@@ -171,6 +186,38 @@ export function PilotAquariumEditorPage({
       active = false;
     };
   }, [aquariumId, token]);
+
+  /**
+   * A HELYSZÍN-LISTA UGYANAZ A VÉGPONT, AMIT A MUNKALAP ÉS AZ ESZKÖZ IS
+   * HASZNÁL (`worksheetsApi.departments`) -- ugyanaz a `WorksheetDepartment`
+   * tábla, lásd az `Aquarium.departmentId` séma-fejlécét, miért közös név.
+   *
+   * A `departmentId` TÖRLÉSE NEM ITT TÖRTÉNIK, hanem a `CustomerPicker`
+   * `onChange`-ében (lent) -- ha ide kerülne, a SZERKESZTÉS-BETÖLTÉS is
+   * lefuttatná (a `customerSelection.customerId` akkor is "változik", amikor
+   * a mentett akváriumot töltjük be), és a `detail.departmentId`-ből épp
+   * betöltött értéket törölné a saját maga alatt.
+   */
+  useEffect(() => {
+    const customerId =
+      ownershipType === "CUSTOMER" ? customerSelection.customerId : undefined;
+    if (!customerId) {
+      setDepartments([]);
+      return;
+    }
+    let active = true;
+    worksheetsApi
+      .departments(token, customerId)
+      .then((response) => {
+        if (active) setDepartments(response.items.filter((d) => d.isActive));
+      })
+      .catch(() => {
+        if (active) setDepartments([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token, ownershipType, customerSelection.customerId]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -236,6 +283,10 @@ export function PilotAquariumEditorPage({
         newCustomer:
           ownershipType === "CUSTOMER"
             ? customerSelection.newCustomer
+            : undefined,
+        departmentId:
+          ownershipType === "CUSTOMER" && departmentId
+            ? departmentId
             : undefined,
         name,
         waterBodyType,
@@ -452,11 +503,34 @@ export function PilotAquariumEditorPage({
                   </PilotButton>
                 </div>
                 {ownershipType === "CUSTOMER" ? (
-                  <CustomerPicker
-                    token={token}
-                    selection={customerSelection}
-                    onChange={setCustomerSelection}
-                  />
+                  <>
+                    <CustomerPicker
+                      token={token}
+                      selection={customerSelection}
+                      onChange={(selection) => {
+                        setCustomerSelection(selection);
+                        setDepartmentId("");
+                      }}
+                    />
+                    {customerSelection.customerId ? (
+                      <PilotFormField
+                        label="Helyszín"
+                        help="Elhagyható. A Partner Portálon a partner ezek közül a hozzárendelt helyszínek közül választ majd."
+                      >
+                        <PilotSelect
+                          value={departmentId}
+                          onChange={setDepartmentId}
+                        >
+                          <option value="">Nincs megadva</option>
+                          {buildSiteOptions(departments).map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </PilotSelect>
+                      </PilotFormField>
+                    ) : null}
+                  </>
                 ) : null}
                 <div className="grid gap-3 sm:grid-cols-2">
                   <PilotFormField label="Név">

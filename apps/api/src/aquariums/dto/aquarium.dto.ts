@@ -74,6 +74,8 @@ export class CreateAquariumDto {
   @Type(() => CreateCustomerDto)
   @IsOptional()
   newCustomer?: CreateCustomerDto;
+  /** Lásd `packages/types` `CreateAquariumInput.departmentId` fejlécét. */
+  @IsString() @IsOptional() departmentId?: string;
 
   @IsString() @MinLength(1) name!: string;
   @IsIn(WATER_BODY_TYPES)
@@ -114,6 +116,8 @@ export class UpdateAquariumDto {
   @Type(() => CreateCustomerDto)
   @IsOptional()
   newCustomer?: CreateCustomerDto;
+  /** Lásd `packages/types` `UpdateAquariumInput.departmentId` fejlécét. */
+  @IsString() @IsOptional() departmentId?: string | null;
 
   @IsString() @MinLength(1) @IsOptional() name?: string;
   @IsIn(WATER_BODY_TYPES)

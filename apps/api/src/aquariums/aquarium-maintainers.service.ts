@@ -3,7 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import type { AuthenticatedUser } from "@acropora/types";
 
+import { requireInternalWriter } from "../worksheets/worksheet-internal-write.js";
 import { AquariumMaintainersRepository } from "./aquarium-maintainers.repository.js";
 import { AquariumsRepository } from "./aquariums.repository.js";
 
@@ -23,8 +25,17 @@ export class AquariumMaintainersService {
    * felelős-választójánál (`requireAssignableUsers`): a hiányzó és a nem
    * jogosult kolléga ugyanazt a választ kapja, mert a hívó teendője
    * ugyanaz -- mást kell választani.
+   *
+   * BELSŐS LÉPÉS: a karbantartó BELSŐ kolléga (lásd az
+   * `AquariumMaintainer` séma-fejlécét, "PARTNER-FIÓK NEM KERÜLHET IDE"),
+   * tehát a kiosztás sem lehet partner-oldali.
    */
-  async set(aquariumId: string, userIds: readonly string[]) {
+  async set(
+    aquariumId: string,
+    userIds: readonly string[],
+    user: AuthenticatedUser,
+  ) {
+    requireInternalWriter(user, "Karbantartók kiosztása");
     const aquarium = await this.aquariums.detail(aquariumId);
     if (!aquarium) throw new NotFoundException("Az akvárium nem található.");
 

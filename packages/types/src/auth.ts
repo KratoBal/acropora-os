@@ -386,13 +386,32 @@ export const ROLE_PERMISSIONS: Readonly<
    * Ez nem a belso `SERVICE` szerep szukitese: azt a sajat kollegaink
    * hasznaljak, es a mukodesukhoz a dashboard, a feladatok, a partnerek es az
    * akvariumok is kellenek. A partner-fiók viszont csak a sajat hatokorbe eso
-   * hibajegyeket, munkalapokat es eszkozoket kezelheti. A hatar ezert itt, a
-   * jogoknal all; a menuk es a szerver ugyanebből a ket jogbol indulnak ki.
+   * hibajegyeket, munkalapokat, eszkozoket es (2026-09-25-tol) akvariumokat
+   * kezelheti. A hatar ezert itt, a jogoknal all; a menuk es a szerver
+   * ugyanebből a jogokbol indulnak ki.
    *
    * Kulonosen nincs benne `partners.view`: egy partner-fióknak a sajat
    * cegén kivuli partnerek olvasasa sem megengedett.
+   *
+   * === AZ AQUARIUMS_VIEW/MANAGE FELVETELE, ÉS AMIT EZ ÖNMAGÁBAN NEM OLD MEG
+   *     (Balázs döntése, 2026-09-25, Partner Portál Akváriumok terv) ===
+   *
+   * A jog megléte NEM elég a hatókörhöz -- az `aquariums.service.ts`
+   * `visibilityFor()`-ja szűkíti a listát/adatlapot a hívó saját
+   * ügyfelére és kiosztott helyszíneire (lásd `aquarium-visibility.ts`).
+   * ÉS EZ A JOG TÖBBET ENGEDNE, MINT AMIT BALÁZS KÉRT: az `AQUARIUMS_MANAGE`
+   * ugyanaz a jog gátolja az akvárium-szerkesztést, a berendezés- és a
+   * karbantartó-kezelést is, amiket a portál mai köre NEM kér. Ezeket a
+   * szolgáltatás-réteg `requireInternalWriter()`-rel zárja el partner-
+   * hívóktól, ugyanúgy, mint a munkalap-létrehozást -- a jog tehát tágabb,
+   * mint amit a partner ténylegesen elér.
    */
-  PARTNER_SERVICE: [PERMISSIONS.SERVICE_VIEW, PERMISSIONS.SERVICE_MANAGE],
+  PARTNER_SERVICE: [
+    PERMISSIONS.SERVICE_VIEW,
+    PERMISSIONS.SERVICE_MANAGE,
+    PERMISSIONS.AQUARIUMS_VIEW,
+    PERMISSIONS.AQUARIUMS_MANAGE,
+  ],
 
   /**
    * GÉPI ÁGENS, AMI ESZKÖZ-TÖRZSADATOT IMPORTÁL.

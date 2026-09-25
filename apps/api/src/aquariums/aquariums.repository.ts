@@ -23,6 +23,7 @@ const detailInclude = {
   customer: {
     select: { id: true, displayName: true, phone: true, email: true },
   },
+  department: { select: { id: true, name: true } },
   equipment: { orderBy: { createdAt: "asc" as const } },
   maintainers: {
     orderBy: { createdAt: "asc" as const },
@@ -49,6 +50,7 @@ type AquariumDetailRow = Prisma.AquariumGetPayload<{
  */
 const listInclude = {
   customer: { select: { id: true, displayName: true } },
+  department: { select: { id: true, name: true } },
   _count: { select: { equipment: true } },
   maintainers: {
     include: { user: { select: { id: true, displayName: true } } },
@@ -93,6 +95,8 @@ function toSummary(row: AquariumListRow): AquariumSummary {
     waterBodyType: row.waterBodyType,
     customerId: row.customer?.id,
     customerName: row.customer?.displayName,
+    departmentId: row.department?.id,
+    departmentName: row.department?.name,
     systemVolumeLiters: row.systemVolumeLiters?.toNumber(),
     equipmentCount: row._count.equipment,
     isActive: row.isActive,
@@ -125,6 +129,8 @@ function toDetail(row: AquariumDetailRow): AquariumDetail {
     waterBodyType: row.waterBodyType,
     customerId: row.customer?.id,
     customerName: row.customer?.displayName,
+    departmentId: row.department?.id,
+    departmentName: row.department?.name,
     customerPhone: row.customer?.phone ?? undefined,
     customerEmail: row.customer?.email ?? undefined,
     systemVolumeLiters: row.systemVolumeLiters?.toNumber(),
@@ -153,15 +159,25 @@ function toDetail(row: AquariumDetailRow): AquariumDetail {
 
 @Injectable()
 export class AquariumsRepository {
-  async list(query: {
-    page: number;
-    pageSize: number;
-    search?: string;
-    ownershipType?: "OWN" | "CUSTOMER";
-    waterBodyType?: "AKVARIUM" | "TO";
-    customerId?: string;
-  }): Promise<AquariumListResponse> {
-    const where: Prisma.AquariumWhereInput = {
+  /**
+   * A `visibility` KÜLÖN PARAMÉTER, NEM A `query` RÉSZE -- és ez a
+   * `partner-scope.util.ts` szabálya szerint kötelező alak: a hatókört
+   * `AND` ágként kötjük be, SOHA nem közös kulcsként a felhasználói
+   * szűrőkkel, különben egy később spreadelt felhasználói `customerId`
+   * csendben felülírhatná a jogosultságit. Lásd `aquarium-visibility.ts`.
+   */
+  async list(
+    query: {
+      page: number;
+      pageSize: number;
+      search?: string;
+      ownershipType?: "OWN" | "CUSTOMER";
+      waterBodyType?: "AKVARIUM" | "TO";
+      customerId?: string;
+    },
+    visibility: Prisma.AquariumWhereInput = {},
+  ): Promise<AquariumListResponse> {
+    const filters: Prisma.AquariumWhereInput = {
       isActive: true,
       ...(query.ownershipType ? { ownershipType: query.ownershipType } : {}),
       ...(query.waterBodyType ? { waterBodyType: query.waterBodyType } : {}),
@@ -185,6 +201,7 @@ export class AquariumsRepository {
           }
         : {}),
     };
+    const where: Prisma.AquariumWhereInput = { AND: [filters, visibility] };
     const [rows, totalItems] = await Promise.all([
       prisma.aquarium.findMany({
         where,
@@ -206,9 +223,20 @@ export class AquariumsRepository {
     };
   }
 
-  async detail(id: string): Promise<AquariumDetail | null> {
-    const row = await prisma.aquarium.findUnique({
-      where: { id },
+  /**
+   * `findFirst`, NEM `findUnique` -- A HATÓKÖR-SZŰRÉS MIATT.
+   *
+   * A `findUnique` csak egyedi mezőkből épített `where`-t fogad, egy
+   * `AND`-be csomagolt extra feltételt nem. `visibility` alapértéke `{}`
+   * (üres `AND`-ág), tehát a belsős hívók (nincs `visibility` átadva)
+   * viselkedése változatlan marad.
+   */
+  async detail(
+    id: string,
+    visibility: Prisma.AquariumWhereInput = {},
+  ): Promise<AquariumDetail | null> {
+    const row = await prisma.aquarium.findFirst({
+      where: { AND: [{ id }, visibility] },
       include: detailInclude,
     });
     return row ? toDetail(row) : null;
@@ -281,6 +309,27 @@ export class AquariumsRepository {
   }
 
   /**
+   * IGAZ, HA A HELYSZÍN UGYANAHHOZ AZ ÜGYFÉLHEZ TARTOZIK.
+   *
+   * Ugyanaz a minta, mint a `worksheets.repository.ts` szülő-ellenőrzése
+   * (`worksheetDepartment.findFirst({ where: { id, customerId } })`): az
+   * idegen kulcs csak a LÉTEZÉST nézi, a tulajdonost nem -- ezt a
+   * szolgáltatás-rétegnek kell ellenőriznie, mielőtt egy `departmentId`
+   * bekerül egy akvárium sorára. Lásd az `Aquarium.departmentId`
+   * séma-fejlécét, miért fontos, hogy a kettő sose csússzon el egymástól.
+   */
+  async departmentBelongsToCustomer(
+    departmentId: string,
+    customerId: string,
+  ): Promise<boolean> {
+    const row = await prisma.worksheetDepartment.findFirst({
+      where: { id: departmentId, customerId },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+
+  /**
    * A SZÁMOZÁS AZ ESZKÖZSZÁM/VEVŐSZÁM MINTÁJÁT KÖVETI: `withUniqueCode`
    * húzza a kódot, és a tranzakció ütközésekor ÚJ kóddal próbálkozik újra --
    * lásd a `customers.repository.ts` és a `service-assets.repository.ts`
@@ -334,6 +383,7 @@ export class AquariumsRepository {
                     aquariumNumber,
                     clientOperationId: input.clientOperationId ?? null,
                     customerId: input.customerId,
+                    departmentId: input.departmentId ?? null,
                     name: input.name.trim(),
                     ownershipType: input.ownershipType,
                     waterBodyType: input.waterBodyType,
@@ -438,6 +488,7 @@ export class AquariumsRepository {
         data: {
           ownershipType: input.ownershipType,
           customerId: input.customerId,
+          departmentId: input.departmentId,
           name: input.name?.trim(),
           waterBodyType: input.waterBodyType,
           lengthCm: input.lengthCm,

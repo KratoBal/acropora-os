@@ -3,26 +3,28 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import type { AuthenticatedUser } from "@acropora/types";
 
 import { AquariumMeasurementMailService } from "../notifications/mail/aquarium-measurement-mail.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
+import { requireInternalWriter } from "../worksheets/worksheet-internal-write.js";
 import { AquariumMeasurementXlsx } from "./aquarium-measurement-xlsx.js";
 import { AquariumMeasurementsRepository } from "./aquarium-measurements.repository.js";
-import { AquariumsRepository } from "./aquariums.repository.js";
+import { AquariumsService } from "./aquariums.service.js";
 import type { CreateAquariumMeasurementDto } from "./dto/aquarium-measurement.dto.js";
 
 @Injectable()
 export class AquariumMeasurementsService {
   constructor(
     private readonly repository: AquariumMeasurementsRepository,
-    private readonly aquariums: AquariumsRepository,
+    private readonly aquariums: AquariumsService,
     private readonly notifications: NotificationsService,
     private readonly mail: AquariumMeasurementMailService,
     private readonly xlsx: AquariumMeasurementXlsx,
   ) {}
 
-  async list(aquariumId: string) {
-    await this.requireAquarium(aquariumId);
+  async list(aquariumId: string, user: AuthenticatedUser) {
+    await this.requireAquarium(aquariumId, user);
     return this.repository.list(aquariumId);
   }
 
@@ -43,8 +45,9 @@ export class AquariumMeasurementsService {
     aquariumId: string,
     input: CreateAquariumMeasurementDto,
     actorUserId: string,
+    user: AuthenticatedUser,
   ) {
-    const aquarium = await this.requireAquarium(aquariumId);
+    const aquarium = await this.requireAquarium(aquariumId, user);
     this.rejectFutureMeasuredAt(input.measuredAt);
     const result = await this.repository.create(aquariumId, input, actorUserId);
 
@@ -70,8 +73,18 @@ export class AquariumMeasurementsService {
     return result.occasion;
   }
 
-  async delete(aquariumId: string, occasionId: string): Promise<void> {
-    await this.requireAquarium(aquariumId);
+  /**
+   * BELSŐS LÉPÉS -- Balázs 2026-09-25-i döntése a portálra a listát,
+   * adatlapot és ÚJ mérést engedte, törlést nem. Lásd
+   * `aquariums.service.ts` `update()` fejlécét, ugyanaz a minta.
+   */
+  async delete(
+    aquariumId: string,
+    occasionId: string,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    requireInternalWriter(user, "Vízmérés törlése");
+    await this.requireAquarium(aquariumId, user);
     const removed = await this.repository.delete(aquariumId, occasionId);
     if (removed === 0)
       throw new NotFoundException("A mérési alkalom nem található.");
@@ -90,8 +103,10 @@ export class AquariumMeasurementsService {
     occasionId: string,
     actorUserId: string,
     actorName: string,
+    user: AuthenticatedUser,
   ): Promise<void> {
-    const aquarium = await this.requireAquarium(aquariumId);
+    requireInternalWriter(user, "Mérési eredmény e-mailben küldése");
+    const aquarium = await this.requireAquarium(aquariumId, user);
     if (!aquarium.customerEmail)
       throw new BadRequestException(
         "Az ügyfélnek nincs e-mail címe, ezért nem küldhető el az eredmény.",
@@ -112,11 +127,17 @@ export class AquariumMeasurementsService {
     });
   }
 
-  /** A "Letöltés Excelben" gomb kiszolgálója -- lásd `AquariumMeasurementXlsx` fejlécét. */
+  /**
+   * A "Letöltés Excelben" gomb kiszolgálója -- lásd `AquariumMeasurementXlsx`
+   * fejlécét. Belsős lépés, ugyanazon okból, mint a törlés és az e-mail
+   * küldés: Balázs mai kérése ezt nem sorolta a portál képességei közé.
+   */
   async exportXlsx(
     aquariumId: string,
+    user: AuthenticatedUser,
   ): Promise<{ filename: string; buffer: Buffer }> {
-    const aquarium = await this.requireAquarium(aquariumId);
+    requireInternalWriter(user, "Mérések exportálása");
+    const aquarium = await this.requireAquarium(aquariumId, user);
     const measurements = await this.repository.list(aquariumId);
     const buffer = await this.xlsx.build({
       aquariumName: aquarium.name,
@@ -140,9 +161,7 @@ export class AquariumMeasurementsService {
       throw new BadRequestException("A mérés ideje nem lehet a jövőben.");
   }
 
-  private async requireAquarium(id: string) {
-    const aquarium = await this.aquariums.detail(id);
-    if (!aquarium) throw new NotFoundException("Az akvárium nem található.");
-    return aquarium;
+  private async requireAquarium(id: string, user: AuthenticatedUser) {
+    return this.aquariums.detail(id, user);
   }
 }

@@ -3228,6 +3228,23 @@ model Aquarium {
   /// sor és minden webes felvitel) korlátlanul állhatnak egymás mellett.
   clientOperationId    String?               @unique
   customerId           String?
+  /// A PARTNER ALEGYSÉGE, AHOL AZ AKVÁRIUM ÁLL -- OPCIONÁLIS, Balázs döntése
+  /// (2026-09-25, a Partner Portál Akváriumok tervéhez): a meglévő
+  /// akváriumok üres helyszínnel maradnak, a mezőt sem a belső felvitel, sem
+  /// a szerkesztés nem követeli meg. UGYANAZ A TÁBLA, MINT AZ `Asset`-nél
+  /// (`WorksheetDepartment`, a munkalapszám első tagját is ez adja) --
+  /// lásd az `Asset.departmentId` fejlécét, miért ez a közös név.
+  ///
+  /// `Restrict`, NEM `SetNull`: ugyanaz az indok, mint az `Asset`-nél --
+  /// egy alegység törlése nem veheti el csendben egy akvárium helyét, és
+  /// alegység törlésére ma amúgy sincs út.
+  ///
+  /// A CUSTOMERID-VEL VALÓ ÖSSZHANGOT A SZOLGÁLTATÁS-RÉTEG ELLENŐRZI
+  /// (`aquariums.service.ts`), nem a séma: egy `departmentId` csak olyan
+  /// alegységre mutathat, ami UGYANAHHOZ az ügyfélhez tartozik, mint az
+  /// akvárium saját `customerId`-je -- enélkül a Partner Portál hatókör-
+  /// szűrése (`departmentId` a soron) elcsúszhatna a `customerId`-től.
+  departmentId         String?
   name                 String
   ownershipType        AquariumOwnershipType
   /// Akvárium vagy tó -- lásd a `WaterBodyType` fejlécét. Alapértelmezés
@@ -3261,6 +3278,7 @@ model Aquarium {
   updatedAt            DateTime              @updatedAt
 
   customer     Customer?                   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  department   WorksheetDepartment?        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   measurements AquariumMeasurement[]
   serviceJobs  ServiceJob[]
   assets       Asset[]
@@ -3278,6 +3296,7 @@ model Aquarium {
   targets      AquariumMeasurementTarget[]
 
   @@index([customerId, isActive])
+  @@index([departmentId])
 }
 
 /// AKVÁRIUMONKÉNTI, PARAMÉTERENKÉNTI CÉLTARTOMÁNY -- Balázs kérése,
@@ -4281,6 +4300,9 @@ model WorksheetDepartment {
   /// A helyszinre nyitott hibajegyek. A lanc ezzel lett teljes: eddig csak a
   /// munkalap es az eszkoz tudta, hol van, a BEJELENTES nem.
   serviceJobs   ServiceJob[]
+  /// Az erre a helyszinre bejegyzett akvariumok -- opcionalis a soron
+  /// (`Aquarium.departmentId`), lasd annak fejleceet.
+  aquariums     Aquarium[]
   contractItems ContractItem[]
   /// Kik latjak ezt az alegyseget (es vele a reszfajat).
   assignees     UserWorksheetDepartment[]

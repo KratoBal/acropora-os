@@ -42,8 +42,11 @@ export class AquariumsController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
-  list(@Query() query: AquariumListQueryDto) {
-    return this.service.list(query);
+  list(
+    @Query() query: AquariumListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.list(query, user);
   }
 
   /**
@@ -72,8 +75,8 @@ export class AquariumsController {
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
-  detail(@Param("id") id: string) {
-    return this.service.detail(id);
+  detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.detail(id, user);
   }
 
   @Post()
@@ -82,7 +85,7 @@ export class AquariumsController {
     @Body() input: CreateAquariumDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.create(input, user.id);
+    return this.service.create(input, user.id, user);
   }
 
   @Patch(":id")
@@ -92,7 +95,7 @@ export class AquariumsController {
     @Body() input: UpdateAquariumDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.update(id, input, user.id);
+    return this.service.update(id, input, user.id, user);
   }
 
   @Post(":id/equipment")
@@ -100,8 +103,9 @@ export class AquariumsController {
   addEquipment(
     @Param("id") id: string,
     @Body() input: CreateAquariumEquipmentDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.addEquipment(id, input);
+    return this.service.addEquipment(id, input, user);
   }
 
   @Delete(":id/equipment/:equipmentId")
@@ -109,14 +113,18 @@ export class AquariumsController {
   removeEquipment(
     @Param("id") id: string,
     @Param("equipmentId") equipmentId: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.removeEquipment(id, equipmentId);
+    return this.service.removeEquipment(id, equipmentId, user);
   }
 
   @Get(":id/measurements")
   @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
-  listMeasurements(@Param("id") id: string) {
-    return this.measurements.list(id);
+  listMeasurements(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.measurements.list(id, user);
   }
 
   /**
@@ -126,8 +134,11 @@ export class AquariumsController {
    */
   @Get(":id/measurements/export.xlsx")
   @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
-  async exportMeasurementsXlsx(@Param("id") id: string) {
-    const { filename, buffer } = await this.measurements.exportXlsx(id);
+  async exportMeasurementsXlsx(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const { filename, buffer } = await this.measurements.exportXlsx(id, user);
     return new StreamableFile(buffer, {
       type: XLSX_MIME,
       disposition: `attachment; filename="${filename}"`,
@@ -142,7 +153,7 @@ export class AquariumsController {
     @Body() input: CreateAquariumMeasurementDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.measurements.create(id, input, user.id);
+    return this.measurements.create(id, input, user.id, user);
   }
 
   /**
@@ -155,8 +166,9 @@ export class AquariumsController {
   deleteMeasurement(
     @Param("id") id: string,
     @Param("occasionId") occasionId: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.measurements.delete(id, occasionId);
+    return this.measurements.delete(id, occasionId, user);
   }
 
   @Post(":id/measurements/:occasionId/send-email")
@@ -171,6 +183,7 @@ export class AquariumsController {
       occasionId,
       user.id,
       user.displayName,
+      user,
     );
   }
 
@@ -179,7 +192,8 @@ export class AquariumsController {
   setMaintainers(
     @Param("id") id: string,
     @Body() input: SetAquariumMaintainersDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.maintainers.set(id, input.userIds);
+    return this.maintainers.set(id, input.userIds, user);
   }
 }

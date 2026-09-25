@@ -44,6 +44,17 @@ export interface AquariumSummary {
   waterBodyType: WaterBodyType;
   customerId?: string;
   customerName?: string;
+  /**
+   * A PARTNER ALEGYSÉGE, AHOL AZ AKVÁRIUM ÁLL -- OPCIONÁLIS. Lásd az
+   * `Aquarium.departmentId` séma-fejlécét: a meglévő akváriumok üresen
+   * maradnak, és ez helyes, nem hiányzó adat.
+   *
+   * LAPOS PÁR, UGYANAZ A MINTA, MINT A `customerId`/`customerName`-NÉL --
+   * nem beágyazott `WorksheetDepartmentSummary`, mert ez a lista/adatlap nem
+   * a fát mutatja, csak a nevét.
+   */
+  departmentId?: string;
+  departmentName?: string;
   systemVolumeLiters?: number;
   equipmentCount: number;
   isActive: boolean;
@@ -156,6 +167,10 @@ export interface CreateAquariumInput {
   ownershipType: AquariumOwnershipType;
   customerId?: string;
   newCustomer?: CreateCustomerInput;
+  /** Lásd az `AquariumSummary.departmentId` fejlécét. Elhagyható. Ha meg van
+   * adva, a megjelölt alegységnek UGYANAHHOZ az ügyfélhez kell tartoznia,
+   * mint az akvárium `customerId`-je -- ezt a szolgáltatás-réteg ellenőrzi. */
+  departmentId?: string;
   name: string;
   waterBodyType?: WaterBodyType;
   lengthCm?: number;
@@ -176,6 +191,9 @@ export interface UpdateAquariumInput {
   ownershipType?: AquariumOwnershipType;
   customerId?: string | null;
   newCustomer?: CreateCustomerInput;
+  /** Lásd a `CreateAquariumInput.departmentId` fejlécét. `null` törli a
+   * helyszínt. */
+  departmentId?: string | null;
   name?: string;
   waterBodyType?: WaterBodyType;
   lengthCm?: number | null;
