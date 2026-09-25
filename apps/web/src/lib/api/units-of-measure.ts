@@ -86,9 +86,16 @@ export const unitsOfMeasureApi = {
    * Amire eszköz hivatkozik, azt az adatbázis utasítja el (409): a törlés
    * némán ürítené ki az eszközök mezőit. A kivezetés (`isActive = false`) az
    * az út, ami a múltat békén hagyja.
+   *
+   * A TÍPUS `{ ok: true }`, NEM `void` -- barracuda mérése, 2026-09-25: a
+   * szerver (`units.service.ts` `remove()`) ténylegesen `{ ok: true } as
+   * const`-ot ad vissza, nem üres törzset. Ez a hívás emiatt SOSEM
+   * szenvedett az `apiRequest` üres-törzs hibájától (lásd `client.ts`), de
+   * a korábbi `void` típus hazudott -- itt csak a deklaráció pontosítva,
+   * a hívó (`units-of-measure-page.tsx`) a visszatérést amúgy sem olvassa.
    */
   remove(token: string, id: string) {
-    return apiRequest<void>(`/units-of-measure/${id}`, token, {
+    return apiRequest<{ ok: true }>(`/units-of-measure/${id}`, token, {
       method: "DELETE",
     });
   },
