@@ -9,6 +9,18 @@ import {
 
 import { WorksheetDetailPage } from "./worksheet-detail-page";
 
+/**
+ * A `next/font/local` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA -- vitest alatt,
+ * Next build nélkül nem futtatható, `TypeError: default is not a
+ * function`-nal bukik. Ez a modul a beágyazott munkalap-widgeteken
+ * (`WorksheetEntries` stb.) keresztül, TRANZITÍVEN kerül ide (`pilot-ui.tsx`
+ * importálja `pilot-font.ts`-ből, mert a widgetek kerete `PilotCard`-ra
+ * váltott) -- lásd ugyanezt a mockot a `pilot-theme-root.component.test.tsx`-ben.
+ */
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
+
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 const api = vi.hoisted(() => ({
   detail: vi.fn(),

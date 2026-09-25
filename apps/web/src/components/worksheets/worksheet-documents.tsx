@@ -6,10 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
 import { splitWorksheetDocuments } from "./worksheet-issued-sheet";
-import {
-  ServicePanel,
-  ServicePanelHeading,
-} from "@/components/service/service-detail-chrome";
+import { PilotCard, PilotCardHeader } from "@/components/pilot/pilot-ui";
 
 /**
  * A MUNKALAP CSATOLMANYAI A WEBES LAPON.
@@ -139,28 +136,32 @@ export function WorksheetDocuments({
       {error ? (
         <p className="mb-3 text-sm font-medium text-rose-600">{error}</p>
       ) : null}
-      <ServicePanel>
-        <ServicePanelHeading title="A kiadott munkalap" />
-        {error ? null : loading ? (
-          <p className="text-sm text-dusk-500">A kiadott lap töltődik…</p>
-        ) : (
-          galeria(
-            issued,
-            "Ez a munkalap még nincs lezárva, ezért kiadott példány sem készült róla.",
-          )
-        )}
-      </ServicePanel>
-      <ServicePanel>
-        <ServicePanelHeading title="Csatolmányok" />
-        {error ? null : loading ? (
-          <p className="text-sm text-dusk-500">A csatolmányok töltődnek…</p>
-        ) : (
-          galeria(
-            attachments,
-            "Ehhez a munkalaphoz még nincs fénykép vagy fájl csatolva.",
-          )
-        )}
-      </ServicePanel>
+      <PilotCard>
+        <PilotCardHeader title="A kiadott munkalap" />
+        <div className="p-5">
+          {error ? null : loading ? (
+            <p className="text-sm text-dusk-500">A kiadott lap töltődik…</p>
+          ) : (
+            galeria(
+              issued,
+              "Ez a munkalap még nincs lezárva, ezért kiadott példány sem készült róla.",
+            )
+          )}
+        </div>
+      </PilotCard>
+      <PilotCard>
+        <PilotCardHeader title="Csatolmányok" />
+        <div className="p-5">
+          {error ? null : loading ? (
+            <p className="text-sm text-dusk-500">A csatolmányok töltődnek…</p>
+          ) : (
+            galeria(
+              attachments,
+              "Ehhez a munkalaphoz még nincs fénykép vagy fájl csatolva.",
+            )
+          )}
+        </div>
+      </PilotCard>
     </>
   );
 

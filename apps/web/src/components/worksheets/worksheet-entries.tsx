@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Alert,
-  Button,
-  Card,
-  EmptyState,
-  Skeleton,
-  Textarea,
-} from "@acropora/ui";
+import { Alert, Button, EmptyState, Skeleton, Textarea } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -18,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { worksheetsApi } from "@/lib/api/worksheets";
+import { PilotCard, PilotCardHeader } from "@/components/pilot/pilot-ui";
 
 import { worksheetEntryByline } from "./worksheet-entry-presentation";
 
@@ -118,69 +112,70 @@ export function WorksheetEntries({
   };
 
   return (
-    <Card className="space-y-3 p-4">
-      <h2 className="text-sm font-semibold text-dusk-800">
-        Bejegyzések{entries ? ` (${entries.length})` : ""}
-      </h2>
+    <PilotCard>
+      <PilotCardHeader
+        title={`Bejegyzések${entries ? ` (${entries.length})` : ""}`}
+      />
+      <div className="space-y-3 p-4">
+        {error ? <Alert variant="danger" title={error} /> : null}
 
-      {error ? <Alert variant="danger" title={error} /> : null}
-
-      {canWrite ? (
-        draft === null ? (
-          <Button variant="secondary" onClick={() => setDraft("")}>
-            Bejegyzés
-          </Button>
-        ) : (
-          <div className="space-y-2">
-            <Textarea
-              aria-label="Mit csináltál"
-              rows={4}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Például: szivattyú csere, a régi ment a szervizbe"
-            />
-            <Button disabled={busy} onClick={() => void save()}>
-              {busy ? "Mentés…" : "Rögzítés"}
+        {canWrite ? (
+          draft === null ? (
+            <Button variant="secondary" onClick={() => setDraft("")}>
+              Bejegyzés
             </Button>
-          </div>
-        )
-      ) : null}
+          ) : (
+            <div className="space-y-2">
+              <Textarea
+                aria-label="Mit csináltál"
+                rows={4}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="Például: szivattyú csere, a régi ment a szervizbe"
+              />
+              <Button disabled={busy} onClick={() => void save()}>
+                {busy ? "Mentés…" : "Rögzítés"}
+              </Button>
+            </div>
+          )
+        ) : null}
 
-      {entries === null ? <Skeleton className="h-16" /> : null}
+        {entries === null ? <Skeleton className="h-16" /> : null}
 
-      {entries && entries.length === 0 ? (
-        <EmptyState
-          title="Ezen a lapon még nincs bejegyzés"
-          description={
-            canWrite
-              ? "A Bejegyzés gombbal írhatod le, mi történt."
-              : "A bejegyzéseket a lapon dolgozó kollégák írják."
-          }
-        />
-      ) : null}
+        {entries && entries.length === 0 ? (
+          <EmptyState
+            title="Ezen a lapon még nincs bejegyzés"
+            description={
+              canWrite
+                ? "A Bejegyzés gombbal írhatod le, mi történt."
+                : "A bejegyzéseket a lapon dolgozó kollégák írják."
+            }
+          />
+        ) : null}
 
-      <ul className="space-y-2">
-        {entries?.map((entry) => (
-          <li key={entry.id} className="rounded border p-3">
-            <p className="text-xs text-dusk-500">
-              {worksheetEntryByline(entry)}
-            </p>
-            {/*
+        <ul className="space-y-2">
+          {entries?.map((entry) => (
+            <li key={entry.id} className="rounded border p-3">
+              <p className="text-xs text-dusk-500">
+                {worksheetEntryByline(entry)}
+              </p>
+              {/*
               A SOR EGY RESZLETET MUTAT, es a teljes szoveg a kulon lapon all --
               egy hosszu bejegyzes kulonben elnyomna a lap tobbi reszet.
             */}
-            <p className="line-clamp-3 whitespace-pre-wrap text-sm text-dusk-800">
-              {entry.body}
-            </p>
-            <Link
-              className="text-xs font-semibold text-brand-700 underline"
-              href={`/szerviz/munkalapok/${worksheetId}/bejegyzesek/${entry.id}`}
-            >
-              Megnyitom
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </Card>
+              <p className="line-clamp-3 whitespace-pre-wrap text-sm text-dusk-800">
+                {entry.body}
+              </p>
+              <Link
+                className="text-xs font-semibold text-brand-700 underline"
+                href={`/szerviz/munkalapok/${worksheetId}/bejegyzesek/${entry.id}`}
+              >
+                Megnyitom
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </PilotCard>
   );
 }

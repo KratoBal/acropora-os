@@ -4,12 +4,9 @@ import { Button } from "@acropora/ui";
 import type { WorksheetAssetLink, WorksheetDetail } from "@acropora/types";
 import { useEffect, useState } from "react";
 
-import {
-  ServicePanel,
-  ServicePanelHeading,
-} from "@/components/service/service-detail-chrome";
 import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
 import { worksheetsApi } from "@/lib/api/worksheets";
+import { PilotCard, PilotCardHeader } from "@/components/pilot/pilot-ui";
 
 /**
  * AZ ESZKOZOK, AMIKROL A LAP SZOL.
@@ -112,47 +109,49 @@ export function WorksheetAssetEditor({
     selected.some((assetId) => !current.includes(assetId));
 
   return (
-    <ServicePanel className="space-y-3">
-      <ServicePanelHeading title="Érintett eszközök" />
-      {assets.length ? (
-        <ul className="text-sm">
-          {assets.map((asset) => (
-            <li key={asset.id}>
-              {asset.assetName}
-              <span className="pl-2 text-xs text-dusk-500">
-                {asset.assetNumber}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        /* A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik, es a
+    <PilotCard>
+      <PilotCardHeader title="Érintett eszközök" />
+      <div className="space-y-3 p-5">
+        {assets.length ? (
+          <ul className="text-sm">
+            {assets.map((asset) => (
+              <li key={asset.id}>
+                {asset.assetName}
+                <span className="pl-2 text-xs text-dusk-500">
+                  {asset.assetNumber}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          /* A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik, es a
            kezelo megvarja. Ez a mondat kimondja, hogy nincs mire varni. */
-        <p className="text-sm text-dusk-500">
-          Ehhez a munkalaphoz nincs eszköz csatolva.
-        </p>
-      )}
+          <p className="text-sm text-dusk-500">
+            Ehhez a munkalaphoz nincs eszköz csatolva.
+          </p>
+        )}
 
-      {canManage ? (
-        <>
-          <JobAssetPicker
-            departmentId={departmentId}
-            selected={selected}
-            onChange={setSelected}
-          />
-          {error ? (
-            <p className="text-xs font-medium text-rose-600">{error}</p>
-          ) : null}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={!changed || saving}
-            onClick={() => void save()}
-          >
-            {saving ? "Mentés..." : "Eszközök mentése"}
-          </Button>
-        </>
-      ) : null}
-    </ServicePanel>
+        {canManage ? (
+          <>
+            <JobAssetPicker
+              departmentId={departmentId}
+              selected={selected}
+              onChange={setSelected}
+            />
+            {error ? (
+              <p className="text-xs font-medium text-rose-600">{error}</p>
+            ) : null}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!changed || saving}
+              onClick={() => void save()}
+            >
+              {saving ? "Mentés..." : "Eszközök mentése"}
+            </Button>
+          </>
+        ) : null}
+      </div>
+    </PilotCard>
   );
 }

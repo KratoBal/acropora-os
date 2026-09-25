@@ -4,6 +4,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WorksheetMaterialRequests } from "./worksheet-material-requests";
 
+/**
+ * A `next/font/local` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA -- vitest alatt,
+ * Next build nélkül nem futtatható, `TypeError: default is not a
+ * function`-nal bukik. Ez a modul csak a `PilotCard`/`PilotCardHeader`-en
+ * keresztül, TRANZITÍVEN kerül ide (`pilot-ui.tsx` importálja
+ * `pilot-font.ts`-ből) -- lásd ugyanezt a mockot a
+ * `pilot-theme-root.component.test.tsx`-ben.
+ */
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
+
 const api = vi.hoisted(() => ({
   listForWorksheet: vi.fn(),
   create: vi.fn(),
