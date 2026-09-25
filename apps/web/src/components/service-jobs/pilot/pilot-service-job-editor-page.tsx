@@ -19,12 +19,7 @@ import {
   useAssignableUsers,
   WorksheetAssigneePicker,
 } from "@/components/worksheets/worksheet-assignee-picker";
-import {
-  PilotButton,
-  PilotCard,
-  PilotCardHeader,
-  PilotThemeRoot,
-} from "@/components/pilot/pilot-ui";
+import { PilotButton, PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 
 /**
@@ -70,6 +65,18 @@ import { hasPermission, PERMISSIONS } from "@acropora/types";
  * mert nem veszít semmilyen mai képességet (a kattintásos választás is
  * megmarad, csak a terület fogadja a húzást is), és a Figma kifejezetten
  * ezt kéri.
+ *
+ * === FLAT SZAKASZOK, NEM KÁRTYÁK (javítva, 2026-09-25 este) ===
+ *
+ * A terv (`UjHibajegy`, HibajegyekScreen.tsx:1009-1113) erre a lapra
+ * EGYETLEN kártyát sem használ: a `FormSection` (1115-1117. sor) egy sima
+ * `flex flex-col gap-1` doboz, háttér/keret nélkül. Ez a fájl korábban
+ * öt `PilotCard`-ba tördelte ugyanezt -- ugyanaz a mintakoveto javítás,
+ * mint a partner portál "Új hibajegy"/"Új akvárium" űrlapjain, ugyanezen
+ * az estén. A Partner és a Helyszín is KÜLÖN szakasz a tervben (1025-1048.
+ * sor, két önálló `FormSection`), nem egy közös kártya két mezője -- ez is
+ * javítva. A "Delegált kollégák" szakasz nincs a tervben (lásd fent), de
+ * ugyanazt a flat mintát kapja, hogy ne üssön el a lap többi részétől.
  */
 export function PilotServiceJobEditorPage() {
   const { session } = useAuth();
@@ -242,237 +249,235 @@ export function PilotServiceJobEditorPage() {
       </div>
 
       <div className="flex-1 px-8 py-6">
-        <div className="flex max-w-2xl flex-col gap-5">
+        <div className="flex max-w-2xl flex-col gap-6">
           {error ? (
             <Alert variant="danger" title="Nem sikerült" description={error} />
           ) : null}
 
-          <PilotCard>
-            <PilotCardHeader title="Partner" />
-            <div className="space-y-3 px-5 py-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-pilot-grey-700">
-                  Partner <span className="text-pilot-aqua-600">*</span>
-                </label>
-                {customer ? (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="font-medium text-pilot-grey-900">
-                      {customer.name}
-                    </span>
-                    <button
-                      type="button"
-                      className="cursor-pointer text-xs text-pilot-grey-400 underline hover:text-pilot-aqua-700"
-                      onClick={() => setCustomer(null)}
-                    >
-                      Másik partner
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    {/*
-                      A `PartnerPicker` REGI STILUSBAN marad -- lasd a
-                      fejlec varrat-szakaszat.
-                    */}
-                    <PartnerPicker
-                      id="pilot-hibajegy-partner"
-                      onPick={setCustomer}
-                    />
-                    <p className="pt-1 text-xs text-pilot-grey-400">
-                      Kötelező: helyszín csak partnerhez rendelve létezik.
-                    </p>
-                  </>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <label
-                  className="text-sm font-medium text-pilot-grey-700"
-                  htmlFor="pilot-hibajegy-helyszin"
+          {/* Partner */}
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-pilot-grey-700">
+              Partner <span className="text-pilot-aqua-600">*</span>
+            </label>
+            {customer ? (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium text-pilot-grey-900">
+                  {customer.name}
+                </span>
+                <button
+                  type="button"
+                  className="cursor-pointer text-xs text-pilot-grey-400 underline hover:text-pilot-aqua-700"
+                  onClick={() => setCustomer(null)}
                 >
-                  Helyszín <span className="text-pilot-aqua-600">*</span>
-                </label>
-                {!customer ? (
-                  <p className="text-sm text-pilot-grey-400">
-                    Előbb válassz partnert. A helyszínek a partner saját fájából
-                    jönnek.
-                  </p>
-                ) : !departmentsLoaded ? (
-                  <p className="text-sm text-pilot-grey-400">
-                    Helyszínek betöltése…
-                  </p>
-                ) : nincsValaszthatoHelyszin ? (
-                  <p className="text-sm text-pilot-grey-400">
-                    Ehhez a partnerhez nincs felvéve helyszín, ezért egyelőre
-                    nem nyitható jegy rá. Vegyél fel egyet a partner lapján.
-                  </p>
-                ) : (
-                  <select
-                    id="pilot-hibajegy-helyszin"
-                    value={departmentId}
-                    onChange={(event) => setDepartmentId(event.target.value)}
-                    className="w-full cursor-pointer appearance-none rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-                  >
-                    <option value="">Válassz helyszínt…</option>
-                    {departmentOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                  Másik partner
+                </button>
               </div>
-            </div>
-          </PilotCard>
-
-          <PilotCard>
-            <PilotCardHeader title="Eszköz (opcionális)" />
-            <div className="px-5 py-4">
-              {/* A `JobAssetPicker` REGI STILUSBAN marad -- tobbszoros
-                  valasztast tud, a Figma egyetlen legordulojenel tobbet. */}
-              <JobAssetPicker
-                departmentId={departmentId}
-                selected={assetIds}
-                onChange={setAssetIds}
-              />
-            </div>
-          </PilotCard>
-
-          <PilotCard>
-            <PilotCardHeader title="Mi a baj?" />
-            <div className="space-y-3 px-5 py-4">
-              <div className="space-y-1">
-                <label
-                  className="text-sm font-medium text-pilot-grey-700"
-                  htmlFor="pilot-hibajegy-cim"
-                >
-                  Mi a baj? <span className="text-pilot-aqua-600">*</span>
-                </label>
-                <input
-                  id="pilot-hibajegy-cim"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="Például: a hármas medence szivattyúja nem indul"
-                  className="w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+            ) : (
+              <>
+                {/*
+                  A `PartnerPicker` REGI STILUSBAN marad -- lasd a
+                  fejlec varrat-szakaszat.
+                */}
+                <PartnerPicker
+                  id="pilot-hibajegy-partner"
+                  onPick={setCustomer}
                 />
-              </div>
-              <div className="space-y-1">
-                <label
-                  className="text-sm font-medium text-pilot-grey-700"
-                  htmlFor="pilot-hibajegy-leiras"
-                >
-                  Részletek
-                </label>
-                <textarea
-                  id="pilot-hibajegy-leiras"
-                  rows={5}
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder="Írd le a problémát részletesen…"
-                  className="w-full resize-y rounded-md px-3 py-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-                />
-              </div>
-            </div>
-          </PilotCard>
+                <p className="pt-1 text-xs text-pilot-grey-400">
+                  Kötelező: helyszín csak partnerhez rendelve létezik.
+                </p>
+              </>
+            )}
+          </div>
 
-          <PilotCard>
-            <PilotCardHeader title="Fotók" />
-            <div className="px-5 py-4">
-              <div
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setDragging(true);
-                }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setDragging(false);
-                  setFiles((current) => [
-                    ...current,
-                    ...Array.from(event.dataTransfer.files),
-                  ]);
-                }}
-                className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 transition-all ${
-                  dragging
-                    ? "border-pilot-aqua-500 bg-pilot-aqua-50"
-                    : "border-pilot-grey-200 hover:border-pilot-grey-300"
-                }`}
+          {/* Helyszín */}
+          <div className="flex flex-col gap-1">
+            <label
+              className="text-sm font-medium text-pilot-grey-700"
+              htmlFor="pilot-hibajegy-helyszin"
+            >
+              Helyszín <span className="text-pilot-aqua-600">*</span>
+            </label>
+            {!customer ? (
+              <p className="text-sm text-pilot-grey-400">
+                Előbb válassz partnert. A helyszínek a partner saját fájából
+                jönnek.
+              </p>
+            ) : !departmentsLoaded ? (
+              <p className="text-sm text-pilot-grey-400">
+                Helyszínek betöltése…
+              </p>
+            ) : nincsValaszthatoHelyszin ? (
+              <p className="text-sm text-pilot-grey-400">
+                Ehhez a partnerhez nincs felvéve helyszín, ezért egyelőre nem
+                nyitható jegy rá. Vegyél fel egyet a partner lapján.
+              </p>
+            ) : (
+              <select
+                id="pilot-hibajegy-helyszin"
+                value={departmentId}
+                onChange={(event) => setDepartmentId(event.target.value)}
+                className="w-full cursor-pointer appearance-none rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
               >
-                <svg
-                  width={28}
-                  height={28}
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="#9ba3ae"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                >
-                  <rect x="1" y="3" width="14" height="10" rx="1.5" />
-                  <circle cx="5" cy="6.5" r="1" />
-                  <path d="M1 10.5l3.5-3 3 3 2-2 4.5 4.5" />
-                </svg>
-                <p className="text-sm text-pilot-grey-500">
-                  Húzd ide a fotókat, vagy
-                </p>
-                <label className="cursor-pointer text-sm font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800">
-                  kattints a tallózáshoz
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/jpeg,image/png,application/pdf"
-                    className="hidden"
-                    onChange={(event) =>
-                      setFiles((current) => [
-                        ...current,
-                        ...Array.from(event.target.files ?? []),
-                      ])
-                    }
-                  />
-                </label>
-                {files.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {files.map((file, index) => (
-                      <span
-                        key={`${file.name}-${index}`}
-                        className="rounded bg-pilot-grey-100 px-2 py-0.5 text-xs text-pilot-grey-600 ring-1 ring-pilot-grey-200"
-                      >
-                        {file.name}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-              <p className="pt-2 text-xs text-pilot-grey-400">
-                {files.length
-                  ? `${files.length} fájl feltöltésre vár. A hibajegy megnyitása után töltjük fel.`
-                  : "Elhagyható. JPEG, PNG vagy PDF, fájlonként legfeljebb 10 MB."}
-              </p>
-            </div>
-          </PilotCard>
+                <option value="">Válassz helyszínt…</option>
+                {departmentOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
 
-          <PilotCard>
-            <PilotCardHeader title="Delegált kollégák" />
-            <div className="space-y-2 px-5 py-4">
-              {/* A `WorksheetAssigneePicker` REGI STILUSBAN marad -- lasd a
-                  fejlec varrat-szakaszat. A Figma-terv ezt a mezot nem
-                  mutatja, de a mai urlapon megvan, es Balazs kerte, hogy
-                  maradjon (msg 23156). */}
-              <WorksheetAssigneePicker
-                candidates={candidates}
-                selected={assigneeIds}
-                onToggle={(userId) =>
-                  setAssigneeIds((current) => toggleAssignee(current, userId))
-                }
+          {/* Eszköz (opcionális) */}
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-pilot-grey-700">
+              Eszköz (opcionális)
+            </label>
+            {/* A `JobAssetPicker` REGI STILUSBAN marad -- tobbszoros
+                valasztast tud, a Figma egyetlen legordulojenel tobbet. */}
+            <JobAssetPicker
+              departmentId={departmentId}
+              selected={assetIds}
+              onChange={setAssetIds}
+            />
+          </div>
+
+          {/* Mi a baj? */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <label
+                className="text-sm font-medium text-pilot-grey-700"
+                htmlFor="pilot-hibajegy-cim"
+              >
+                Mi a baj? <span className="text-pilot-aqua-600">*</span>
+              </label>
+              <input
+                id="pilot-hibajegy-cim"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Például: a hármas medence szivattyúja nem indul"
+                className="w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
               />
-              {candidatesError ? (
-                <p className="text-xs font-medium text-rose-600">
-                  {candidatesError}
-                </p>
-              ) : null}
-              <p className="pt-1 text-xs text-pilot-grey-400">
-                Elhagyható. A delegált kollégák értesítést kapnak a jegyről.
-              </p>
             </div>
-          </PilotCard>
+            <div className="flex flex-col gap-1">
+              <label
+                className="text-sm font-medium text-pilot-grey-700"
+                htmlFor="pilot-hibajegy-leiras"
+              >
+                Részletek
+              </label>
+              <textarea
+                id="pilot-hibajegy-leiras"
+                rows={5}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Írd le a problémát részletesen…"
+                className="w-full resize-y rounded-md px-3 py-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+              />
+            </div>
+          </div>
+
+          {/* Fotók */}
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-pilot-grey-700">
+              Fotók
+            </label>
+            <div
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragging(false);
+                setFiles((current) => [
+                  ...current,
+                  ...Array.from(event.dataTransfer.files),
+                ]);
+              }}
+              className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 transition-all ${
+                dragging
+                  ? "border-pilot-aqua-500 bg-pilot-aqua-50"
+                  : "border-pilot-grey-200 hover:border-pilot-grey-300"
+              }`}
+            >
+              <svg
+                width={28}
+                height={28}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="#9ba3ae"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+              >
+                <rect x="1" y="3" width="14" height="10" rx="1.5" />
+                <circle cx="5" cy="6.5" r="1" />
+                <path d="M1 10.5l3.5-3 3 3 2-2 4.5 4.5" />
+              </svg>
+              <p className="text-sm text-pilot-grey-500">
+                Húzd ide a fotókat, vagy
+              </p>
+              <label className="cursor-pointer text-sm font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800">
+                kattints a tallózáshoz
+                <input
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,application/pdf"
+                  className="hidden"
+                  onChange={(event) =>
+                    setFiles((current) => [
+                      ...current,
+                      ...Array.from(event.target.files ?? []),
+                    ])
+                  }
+                />
+              </label>
+              {files.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {files.map((file, index) => (
+                    <span
+                      key={`${file.name}-${index}`}
+                      className="rounded bg-pilot-grey-100 px-2 py-0.5 text-xs text-pilot-grey-600 ring-1 ring-pilot-grey-200"
+                    >
+                      {file.name}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <p className="pt-2 text-xs text-pilot-grey-400">
+              {files.length
+                ? `${files.length} fájl feltöltésre vár. A hibajegy megnyitása után töltjük fel.`
+                : "Elhagyható. JPEG, PNG vagy PDF, fájlonként legfeljebb 10 MB."}
+            </p>
+          </div>
+
+          {/*
+            Delegált kollégák -- NINCS A TERVBEN, de Balázs kérte, hogy
+            maradjon (msg 23156). A `WorksheetAssigneePicker` REGI
+            STILUSBAN marad -- lásd a fejléc varrat-szakaszát.
+          */}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-pilot-grey-700">
+              Delegált kollégák
+            </label>
+            <WorksheetAssigneePicker
+              candidates={candidates}
+              selected={assigneeIds}
+              onToggle={(userId) =>
+                setAssigneeIds((current) => toggleAssignee(current, userId))
+              }
+            />
+            {candidatesError ? (
+              <p className="text-xs font-medium text-rose-600">
+                {candidatesError}
+              </p>
+            ) : null}
+            <p className="pt-1 text-xs text-pilot-grey-400">
+              Elhagyható. A delegált kollégák értesítést kapnak a jegyről.
+            </p>
+          </div>
 
           <div className="flex items-center justify-between gap-3 border-t border-pilot-grey-200 pt-4">
             <div>
