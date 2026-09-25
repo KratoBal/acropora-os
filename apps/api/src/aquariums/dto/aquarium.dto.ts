@@ -161,6 +161,17 @@ export class AquariumListQueryDto {
   @IsIn(WATER_BODY_TYPES)
   @IsOptional()
   waterBodyType?: (typeof WATER_BODY_TYPES)[number];
+  /**
+   * AZ ESZKÖZ-FELVITEL "Akvárium" VÁLASZTÓJÁHOZ (2026-09-25, acrobot
+   * döntése): a kiválasztott Vevő SAJÁT akváriumaira kell szűkíteni a
+   * listát, hogy az `assetsApi.create` `aquariumId`-ellenőrzése
+   * (`service-assets.service.ts` `validateReferences`, csak ugyanahhoz a
+   * customerhez tartozó, aktív akvárium engedett) sose bukjon egy olyan
+   * választáson, amit a felület fel sem ajánlott volna.
+   */
+  @IsString()
+  @IsOptional()
+  customerId?: string;
 }
 
 /**

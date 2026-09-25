@@ -23,6 +23,7 @@ import { AquariumsRepository } from "./aquariums.repository.js";
  */
 const gate = integrationDatabaseGate(process.env);
 const TEST_EMAIL_DOMAIN = "aquariums-integration.invalid";
+const CUSTOMER_PREFIX = "AQ-INT-CUST-";
 
 describe(
   "AquariumsRepository integration",
@@ -54,6 +55,13 @@ describe(
       await prisma.user.deleteMany({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
       });
+      // AZ AKVÁRIUMOK UTÁN, mert az Aquarium.customerId `onDelete: SetNull`
+      // -- egy törölt vevőt a fenti sor már nem talál meg name szerint, a
+      // sorrend mégis a biztonságosabb, hogy a takarítás önmagában is
+      // értelmes maradjon, ha valaha külön futtatnák.
+      await prisma.customer.deleteMany({
+        where: { customerNumber: { startsWith: CUSTOMER_PREFIX } },
+      });
       const equipmentLeft = await prisma.aquariumEquipment.count({
         where: { aquarium: { name: { startsWith: "AQ-INT-" } } },
       });
@@ -63,14 +71,25 @@ describe(
       const usersLeft = await prisma.user.count({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
       });
+      const customersLeft = await prisma.customer.count({
+        where: { customerNumber: { startsWith: CUSTOMER_PREFIX } },
+      });
       nincsMaradek([
         { nev: "AquariumEquipment", darab: equipmentLeft },
         { nev: "Aquarium", darab: aquariumsLeft },
         { nev: "User", darab: usersLeft },
+        { nev: "Customer", darab: customersLeft },
       ]);
     }
 
-    function createInput(overrides: { clientOperationId?: string } = {}) {
+    function createInput(
+      overrides: {
+        clientOperationId?: string;
+        ownershipType?: "OWN" | "CUSTOMER";
+        customerId?: string | null;
+        name?: string;
+      } = {},
+    ) {
       return {
         ownershipType: "OWN" as const,
         customerId: null,
@@ -230,6 +249,67 @@ describe(
           sorrend ténylegesen megmérhető legyen.
         */
         assert.equal(talalt!.lastMeasuredAt, legutobbi.toISOString());
+      });
+    });
+
+    /**
+     * AZ ESZKÖZ-FELVITEL "Akvárium" VÁLASZTÓJÁHOZ (2026-09-25, acrobot
+     * döntése): a szűrő a KIVÁLASZTOTT vevő aktív akváriumaira szűkít --
+     * ez a teszt azt méri, hogy a szűrő TÉNYLEG szűkít, nem csak elfogad
+     * egy paramétert. Két külön vevő, két külön akvárium: ha a `where`
+     * ág hibás (pl. lemarad a spread), MINDKETTŐ visszajönne.
+     */
+    describe("list -- customerId szűrő", () => {
+      it("csak a kiválasztott vevő akváriumát adja vissza", async () => {
+        const customerA = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}A-${suffix}`,
+            type: "COMPANY",
+            displayName: `Akvárium szűrő A ${suffix}`,
+          },
+        });
+        const customerB = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}B-${suffix}`,
+            type: "COMPANY",
+            displayName: `Akvárium szűrő B ${suffix}`,
+          },
+        });
+
+        const aquariumA = await repository.create(
+          createInput({
+            clientOperationId: `aquarium-create:CUSTOMER:filter-a-${suffix}`,
+            ownershipType: "CUSTOMER",
+            customerId: customerA.id,
+            name: `AQ-INT-filter-a-${suffix}`,
+          }),
+          "no-actor",
+        );
+        await repository.create(
+          createInput({
+            clientOperationId: `aquarium-create:CUSTOMER:filter-b-${suffix}`,
+            ownershipType: "CUSTOMER",
+            customerId: customerB.id,
+            name: `AQ-INT-filter-b-${suffix}`,
+          }),
+          "no-actor",
+        );
+
+        const lista = await repository.list({
+          page: 1,
+          pageSize: 25,
+          customerId: customerA.id,
+        });
+        const ids = lista.items.map((item) => item.id);
+        assert.ok(
+          ids.includes(aquariumA.id),
+          "a szűrt vevő akváriumának szerepelnie kell",
+        );
+        assert.equal(
+          ids.some((id) => id !== aquariumA.id),
+          false,
+          "a másik vevő akváriuma NEM szerepelhet a szűrt listában",
+        );
       });
     });
   },
