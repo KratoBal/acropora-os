@@ -96,6 +96,13 @@ export interface DashboardMaterialRequest {
   worksheetNumber: string | null;
   customerName: string;
   submittedAt: string;
+  /**
+   * A tétel-sorok darabszáma (`MaterialRequestItem`), NEM egyetlen
+   * mennyiség -- egy anyagigény több tételt is hordozhat, mindegyiknek
+   * saját neve/mennyisége/mértékegysége van, tehát nincs egyetlen szám,
+   * ami "a" mennyiséget adná vissza. A kártya ezt "N tétel" alakban mutatja.
+   */
+  itemCount: number;
 }
 
 export interface DashboardPurchasing {

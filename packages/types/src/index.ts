@@ -6,7 +6,11 @@ export type {
   SearchResultItem,
 } from "./search.js";
 export { munkaoraEgysegFigyelmeztetes } from "./munkaora-egyseg.js";
-export { personDisplayName, personLegalName } from "./person-name.js";
+export {
+  personDisplayName,
+  personGivenName,
+  personLegalName,
+} from "./person-name.js";
 export {
   DOCUMENT_THUMBNAIL_VARIANT,
   DOCUMENT_VARIANT_PARAM,
