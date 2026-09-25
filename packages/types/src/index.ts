@@ -1,4 +1,10 @@
 export { magyarSzamErteke } from "./magyar-szam.js";
+export { SEARCH_GROUPS } from "./search.js";
+export type {
+  SearchGroup,
+  SearchResponse,
+  SearchResultItem,
+} from "./search.js";
 export { munkaoraEgysegFigyelmeztetes } from "./munkaora-egyseg.js";
 export { personDisplayName, personLegalName } from "./person-name.js";
 export {

@@ -44,6 +44,7 @@ import { CompletionCertificatesModule } from "./completion-certificates/completi
 import { MaintenancePackageModule } from "./maintenance-package/maintenance-package.module.js";
 import { MaintenanceInvoiceModule } from "./maintenance-invoice/maintenance-invoice.module.js";
 import { DashboardModule } from "./dashboard/dashboard.module.js";
+import { SearchModule } from "./search/search.module.js";
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { DashboardModule } from "./dashboard/dashboard.module.js";
     MaintenancePackageModule,
     MaintenanceInvoiceModule,
     DashboardModule,
+    SearchModule,
     WorksheetsModule,
     MaterialRequestsModule,
     TasksModule,
