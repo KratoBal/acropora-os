@@ -19,6 +19,11 @@ import { describe, it } from "node:test";
  * lásd a `service-jobs/figma12-group2-theme.spec.ts` azonos indoklását: hat
  * független, egymásra nem épülő PR-csoport nem oszthat meg egy be nem
  * olvadt modult.
+ *
+ * A SPEC ITT ÁLL, NEM A `src/app` ALATT (acrobot mérése, 2026-09-25 17:03):
+ * az Expo Router a `src/app` MINDEN fájlját útvonalként próbálja buildelni,
+ * és a `node:test` importot az `expo export` nem tudja feloldani -- a
+ * "Static verification" CI-lépés emiatt bukott.
  */
 function hexSzinLiteralok(forras: string): string[] {
   const kod = forras
@@ -29,7 +34,7 @@ function hexSzinLiteralok(forras: string): string[] {
   ].map((m) => m[0]);
 }
 
-const SRC = join(__dirname, "..", "..", "src", "app");
+const SRC = join(__dirname, "..", "..", "..", "src", "app");
 
 const KEPERNYOK = [
   { fajl: join("material-requests", "index.tsx"), nev: "Anyagigények" },
