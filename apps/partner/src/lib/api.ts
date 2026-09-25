@@ -388,6 +388,7 @@ export const partnerApi = {
    */
   aquariums: (input?: {
     search?: string;
+    waterBodyType?: "AKVARIUM" | "TO";
     page?: number;
     pageSize?: number;
   }) => {
@@ -396,6 +397,7 @@ export const partnerApi = {
       pageSize: String(input?.pageSize ?? 25),
     });
     if (input?.search?.trim()) query.set("search", input.search.trim());
+    if (input?.waterBodyType) query.set("waterBodyType", input.waterBodyType);
     return request<AquariumListResponse>(`/aquariums?${query}`);
   },
   /** Idegen akvariumra 404 jon -- ugyanaz a hatokor, mint a listan. */
@@ -411,11 +413,17 @@ export const partnerApi = {
    * a hívó hatókörét a `requireAquarium` -> scoped `detail()` úton
    * ellenőrzi (`aquarium-measurements.service.ts` `create()`), tehát idegen
    * akváriumra 404-et ad, nem csendes elutasítást.
+   *
+   * A `source`/`notes` mező a 2. körben bővült ide -- a `CreateAquariumMeasurementDto`
+   * (`apps/api/src/aquariums/dto/aquarium-measurement.dto.ts`) mindkettőt
+   * elfogadja, eddig csak a `measuredAt`/`values` ment át a portálról.
    */
   createAquariumMeasurement: (
     id: string,
     input: {
       measuredAt?: string;
+      source?: string;
+      notes?: string;
       values: { parameterCode: string; value: number }[];
     },
   ) =>
