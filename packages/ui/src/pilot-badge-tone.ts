@@ -61,7 +61,7 @@ export function pilotBadgeVariantForTone(tone: ServiceTone): PilotBadgeVariant {
  * a négy közül kettő ugyanazt a színt kapná, holott a rendszer mind a
  * négyet szándékosan megkülönbözteti.
  *
- * KIVÉTEL (acrobot döntése, msg 23529, PR #1114): az IN_PROGRESS a
+ * KIVÉTEL (acrobot döntése, msg 23529, PR #1115): az IN_PROGRESS a
  * `deviceBadge` "Javítás alatt" -> amber mintáját kapja a `purple` -> `blue`
  * alapszabály helyett -- ezzel mind a négy jegy-állapot külön pilot variánst
  * kap: NEW=blue, IN_PROGRESS=amber, COMPLETED=teal, CLOSED=default.

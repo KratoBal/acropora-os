@@ -7,7 +7,7 @@ import {
 /**
  * A KÖZÖS TONE -> PILOT VARIANS SZABÁLY, ÉS A JEGY-KIVÉTEL -- MÉRVE, NEM
  * OLVASVA. Lásd `packages/ui/src/pilot-badge-tone.ts` fejlécét az indokért
- * (acrobot döntése, msg 23529, PR #1114).
+ * (acrobot döntése, msg 23529, PR #1115).
  *
  * EZ A TESZT NEM `apps/partner`-BEN ÁLL, JÓLLEHET ANNAK A HIBAJEGY-LISTÁJA
  * AZ ELSŐ FOGYASZTÓ: a `pilot-badge-tone.ts` a `@acropora/ui` publikus
