@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
+import { SectionTitle } from "@/components/SectionTitle";
 import {
   addWorksheetEntry,
   addWorksheetLine,
@@ -979,7 +980,7 @@ export default function WorksheetDetailScreen() {
             */}
             {continuesFrom || data.continuedBy.length > 0 ? (
               <>
-                <Text style={styles.sectionTitle}>Folytatás</Text>
+                <SectionTitle style={{ marginTop: 6 }}>Folytatás</SectionTitle>
                 {continuesFrom ? (
                   <Pressable
                     onPress={() =>
@@ -1058,7 +1059,7 @@ export default function WorksheetDetailScreen() {
               ))}
             </View>
 
-            <Text style={styles.sectionTitle}>Felelősök</Text>
+            <SectionTitle style={{ marginTop: 6 }}>Felelősök</SectionTitle>
             <View style={styles.card}>
               <Text style={styles.assignees}>
                 {worksheetAssigneeLine(
@@ -1265,7 +1266,9 @@ export default function WorksheetDetailScreen() {
             */}
             {kiadottLapok.length > 0 ? (
               <>
-                <Text style={styles.sectionTitle}>A kiadott munkalap</Text>
+                <SectionTitle style={{ marginTop: 6 }}>
+                  A kiadott munkalap
+                </SectionTitle>
                 <View style={styles.card}>
                   {kiadottLapok.map((doc) => (
                     <Text key={doc.id} style={styles.muted}>
@@ -1275,9 +1278,9 @@ export default function WorksheetDetailScreen() {
                 </View>
               </>
             ) : null}
-            <Text style={styles.sectionTitle}>
+            <SectionTitle style={{ marginTop: 6 }}>
               Csatolmányok ({csatolmanyok.length})
-            </Text>
+            </SectionTitle>
             <View style={styles.card}>
               {csatolmanyNotice ? (
                 <Text style={styles.muted}>{csatolmanyNotice}</Text>
@@ -1339,7 +1342,7 @@ export default function WorksheetDetailScreen() {
 
             {capabilities.worksheetsManage ? (
               <>
-                <Text style={styles.sectionTitle}>Fénykép</Text>
+                <SectionTitle style={{ marginTop: 6 }}>Fénykép</SectionTitle>
                 <View style={styles.card}>
                   {fromCache ? (
                     <Text style={styles.muted}>
@@ -1427,16 +1430,16 @@ export default function WorksheetDetailScreen() {
 
             {current.description ? (
               <>
-                <Text style={styles.sectionTitle}>Leírás</Text>
+                <SectionTitle style={{ marginTop: 6 }}>Leírás</SectionTitle>
                 <View style={styles.card}>
                   <Text style={styles.value}>{current.description}</Text>
                 </View>
               </>
             ) : null}
 
-            <Text style={styles.sectionTitle}>
+            <SectionTitle style={{ marginTop: 6 }}>
               Tételek ({current.lines.length})
-            </Text>
+            </SectionTitle>
 
             {/*
               AMI MEG NEM MENT FEL, AZ NEM LATSZIK A LISTAN -- ES EZT KI KELL
@@ -1659,7 +1662,9 @@ export default function WorksheetDetailScreen() {
               Figma-terv az "Erintett eszkozok" kartyat sor-listakent mutatja
               (nev + monospace kod), ugyanezt kapja itt is.
             */}
-            <Text style={styles.sectionTitle}>Érintett eszközök</Text>
+            <SectionTitle style={{ marginTop: 6 }}>
+              Érintett eszközök
+            </SectionTitle>
             <View style={styles.card}>
               {data.assets.length === 0 ? (
                 <Text style={styles.muted}>Nincs érintett eszköz.</Text>
@@ -1957,9 +1962,9 @@ export default function WorksheetDetailScreen() {
               A naplo arrol szol, MI TORTENT, es a tiltas NEMAN veszitene el egy
               jegyzetet; az engedes LATSZIK, mert a bejegyzesen ott az idopont.
             */}
-            <Text style={styles.sectionTitle}>
+            <SectionTitle style={{ marginTop: 6 }}>
               Bejegyzések ({entries.data?.items.length ?? 0})
-            </Text>
+            </SectionTitle>
 
             {capabilities.worksheetsManage ? (
               <View style={styles.card}>
@@ -2049,9 +2054,9 @@ export default function WorksheetDetailScreen() {
               A LAP ALLAPOTA NEM SZAMIT, ugyanugy, mint a bejegyzesnel: az
               anyagigenyt akkor is fel lehet venni, ha a lap mar alairt.
             */}
-            <Text style={styles.sectionTitle}>
+            <SectionTitle style={{ marginTop: 6 }}>
               Anyagigények ({materialRequests.data?.items.length ?? 0})
-            </Text>
+            </SectionTitle>
 
             {capabilities.worksheetsManage ? (
               <View style={styles.card}>
@@ -2249,7 +2254,7 @@ export default function WorksheetDetailScreen() {
 
             {current.signature ? (
               <>
-                <Text style={styles.sectionTitle}>Aláírás</Text>
+                <SectionTitle style={{ marginTop: 6 }}>Aláírás</SectionTitle>
                 <View style={styles.card}>
                   <View style={styles.row}>
                     <Text style={styles.label}>Aláíró</Text>
@@ -2285,7 +2290,7 @@ export default function WorksheetDetailScreen() {
                   2026-09-25, Figma 8. kör): a leírás és a Figma-terv is ezt a
                   szót használja.
                 */}
-                <Text style={styles.sectionTitle}>Verziók</Text>
+                <SectionTitle style={{ marginTop: 6 }}>Verziók</SectionTitle>
                 {olderVersions.map((version) => (
                   <View key={version.id} style={styles.card}>
                     <View style={styles.row}>
@@ -2394,12 +2399,6 @@ function createStyles(t: ThemeTokens) {
       minHeight: 110,
       padding: 12,
       textAlignVertical: "top",
-    },
-    sectionTitle: {
-      color: t.textPrimary,
-      fontSize: 15,
-      fontWeight: "800",
-      marginTop: 6,
     },
     card: {
       backgroundColor: t.surface,

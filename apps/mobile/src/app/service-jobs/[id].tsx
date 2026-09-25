@@ -17,6 +17,7 @@ import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { DocumentImage } from "@/components/documents/DocumentImage";
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
+import { SectionTitle } from "@/components/SectionTitle";
 import { toPickedImages } from "@/lib/api/picked-image";
 import {
   pickPhotosFromLibrary,
@@ -398,7 +399,7 @@ export default function ServiceJobDetailScreen() {
 
         {detail.assets.length > 0 ? (
           <View style={styles.block}>
-            <Text style={styles.sectionTitle}>Érintett eszközök</Text>
+            <SectionTitle>Érintett eszközök</SectionTitle>
             {detail.assets.map((asset) => (
               <Pressable
                 key={asset.id}
@@ -418,7 +419,7 @@ export default function ServiceJobDetailScreen() {
         ) : null}
 
         <View style={styles.block}>
-          <Text style={styles.sectionTitle}>Munkalapok</Text>
+          <SectionTitle>Munkalapok</SectionTitle>
           {/*
             A MUNKALAPOK AZ IDOVONALBOL JONNEK, nem egy `worksheets` mezobol: a
             valaszban olyan kulcs NINCS. Az elso alakom azt olvasta, es a lap
@@ -484,9 +485,7 @@ export default function ServiceJobDetailScreen() {
           kommentjet. Aki a lapot latja, a hozza tartozo kepeket is lathatja.
         */}
         <View style={styles.block}>
-          <Text style={styles.sectionTitle}>
-            Csatolmányok ({csatolmanyok.length})
-          </Text>
+          <SectionTitle>Csatolmányok ({csatolmanyok.length})</SectionTitle>
           {csatolmanyNotice ? (
             <Text style={styles.meta}>{csatolmanyNotice}</Text>
           ) : null}
@@ -569,7 +568,7 @@ export default function ServiceJobDetailScreen() {
         */}
         {capabilities?.serviceJobsManage && !partnerAlak(detail) ? (
           <View style={styles.block}>
-            <Text style={styles.sectionTitle}>Állapot léptetése</Text>
+            <SectionTitle>Állapot léptetése</SectionTitle>
             {masolatbol ? (
               <Text style={styles.meta}>{OFFLINE_COPY_NOTICE.step}</Text>
             ) : lephet.length === 0 ? (
@@ -617,7 +616,7 @@ export default function ServiceJobDetailScreen() {
             a masodikra nem.
           */
           <View style={styles.block}>
-            <Text style={styles.sectionTitle}>Fénykép</Text>
+            <SectionTitle>Fénykép</SectionTitle>
             {masolatbol ? (
               <Text style={styles.meta}>{OFFLINE_COPY_NOTICE.photo}</Text>
             ) : null}
@@ -779,7 +778,6 @@ function createStyles(t: ThemeTokens) {
     status: { color: t.textSecondary },
     meta: { color: t.textSecondary, fontSize: 13 },
     description: { color: t.textPrimary, lineHeight: 20 },
-    sectionTitle: { color: t.textPrimary, fontWeight: "600" },
     row: { paddingVertical: 8 },
     rowText: { color: t.textPrimary },
     action: {

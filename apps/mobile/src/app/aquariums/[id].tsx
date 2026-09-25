@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AquariumAvatar } from "@/components/aquariums/AquariumAvatar";
 import { AquariumBadge } from "@/components/aquariums/AquariumBadge";
 import { ConnectivityBanner } from "@/components/offline/ConnectivityBanner";
+import { SectionTitle } from "@/components/SectionTitle";
 import {
   addAquariumEquipment,
   deleteAquariumMeasurement,
@@ -307,7 +308,7 @@ export default function AquariumDetailScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.sectionTitle}>Eszközök</Text>
+        <SectionTitle style={{ marginTop: 18 }}>Eszközök</SectionTitle>
         {data?.equipment.length === 0 ? (
           <Text style={styles.empty}>Nincs felvéve eszköz.</Text>
         ) : null}
@@ -432,7 +433,7 @@ export default function AquariumDetailScreen() {
         ) : null}
 
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Vízértékek</Text>
+          <SectionTitle style={{ marginTop: 18 }}>Vízértékek</SectionTitle>
           {capabilities.aquariumsManage && data ? (
             <Pressable
               onPress={() =>
@@ -486,7 +487,9 @@ export default function AquariumDetailScreen() {
 
         {olderOccasions.length > 0 ? (
           <>
-            <Text style={styles.sectionTitle}>Korábbi mérések</Text>
+            <SectionTitle style={{ marginTop: 18 }}>
+              Korábbi mérések
+            </SectionTitle>
             {olderOccasions.map((occasion) => (
               <View key={occasion.id} style={styles.equipmentRow}>
                 <View style={styles.equipmentInfo}>
@@ -592,12 +595,6 @@ function createStyles(t: ThemeTokens) {
       textTransform: "uppercase",
     },
     rowValue: { color: t.textPrimary, fontSize: 15, fontWeight: "700" },
-    sectionTitle: {
-      color: t.textPrimary,
-      fontSize: 16,
-      fontWeight: "800",
-      marginTop: 18,
-    },
     sectionHeaderRow: {
       flexDirection: "row",
       alignItems: "center",
