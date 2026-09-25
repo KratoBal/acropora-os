@@ -41,6 +41,7 @@ const naplo: ServiceJobTimelineEntry[] = [
       assetId: "asset-1",
       assetNumber: "ESZ-0007",
       assetName: "Szivattyú",
+      assetCategoryName: null,
       attachedAt: "2026-09-16T10:30:00.000Z",
     },
   },
