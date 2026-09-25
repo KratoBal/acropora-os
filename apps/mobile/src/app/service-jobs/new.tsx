@@ -5,7 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -17,6 +17,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getAsset, listAssets } from "@/lib/api/assets";
 import {
   createServiceJob,
@@ -78,6 +80,8 @@ export default function NewServiceJobScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { status, user } = useAuth();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const capabilities = user ? getServiceCapabilities(user.role) : null;
 
   const [title, setTitle] = useState("");
@@ -453,7 +457,7 @@ export default function NewServiceJobScreen() {
             {partnerValasztoNyitva ? (
               <View style={styles.pickerList}>
                 {partnerek.isPending ? (
-                  <ActivityIndicator color="#52d6c7" />
+                  <ActivityIndicator color={tokens.accent} />
                 ) : null}
                 <Pressable
                   onPress={() => {
@@ -521,7 +525,7 @@ export default function NewServiceJobScreen() {
                 {helyszinValasztoNyitva ? (
                   <View style={styles.pickerList}>
                     {helyszinek.isPending ? (
-                      <ActivityIndicator color="#52d6c7" />
+                      <ActivityIndicator color={tokens.accent} />
                     ) : null}
                     <Pressable
                       onPress={() => {
@@ -610,12 +614,12 @@ export default function NewServiceJobScreen() {
                           }}
                           style={styles.input}
                           placeholder="Keresés: azonosító, név, gyártó"
-                          placeholderTextColor="#5c7e92"
+                          placeholderTextColor={tokens.textMuted}
                           autoCorrect={false}
                           testID="eszkoz-kereso"
                         />
                         {eszkozok.isPending ? (
-                          <ActivityIndicator color="#52d6c7" />
+                          <ActivityIndicator color={tokens.accent} />
                         ) : null}
                         {!eszkozok.isPending && !eszkozLista.length ? (
                           <Text style={styles.meta}>
@@ -720,7 +724,7 @@ export default function NewServiceJobScreen() {
             onChangeText={setTitle}
             style={styles.input}
             placeholder="pl. Zúg a szivattyú"
-            placeholderTextColor="#5c7e92"
+            placeholderTextColor={tokens.textMuted}
             editable={!save.isPending}
           />
           <TextInput
@@ -729,7 +733,7 @@ export default function NewServiceJobScreen() {
             onChangeText={setDescription}
             style={[styles.input, styles.inputMultiline]}
             placeholder="Részletek (elhagyható)"
-            placeholderTextColor="#5c7e92"
+            placeholderTextColor={tokens.textMuted}
             multiline
             editable={!save.isPending}
           />
@@ -844,78 +848,100 @@ export default function NewServiceJobScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  /* A mondat, ami a gomb helyen all partner-hatokorben. */
-  hint: { color: "#8fb3c4", fontSize: 13, lineHeight: 19 },
-  safeArea: { backgroundColor: "#06202e", flex: 1 },
-  page: { gap: 12, padding: 16 },
-  block: { backgroundColor: "#0d2a3a", borderRadius: 12, gap: 8, padding: 14 },
-  sectionTitle: { color: "#eaf4fa", fontWeight: "600" },
-  rowText: { color: "#eaf4fa" },
-  /* A gep nelkuli felvitel valasztoi. Ugyanaz az alak, mint a
-     munkalap-listaban: ugyanaz a mozdulat, ugyanaz a kinezet. */
-  picker: {
-    backgroundColor: "#06202e",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  pickerList: { backgroundColor: "#06202e", borderRadius: 10, padding: 8 },
-  pickerRow: {
-    borderBottomColor: "#123b50",
-    borderBottomWidth: 1,
-    paddingVertical: 10,
-  },
-  /*
-    A LAPOZO A VALASZTO ALJAN. Ugyanaz az alak, mint az eszkoz-listan
-    (`app/assets/index.tsx`): ott mar bevalt, es ket kulonbozo lapozo ugyanabban
-    az alkalmazasban ket kulonbozo mozdulatot tanitana.
-  */
-  pager: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-    paddingTop: 10,
-  },
-  pagerButton: {
-    backgroundColor: "#164057",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  pagerDisabled: { opacity: 0.5 },
-  pressed: { opacity: 0.7 },
-  meta: { color: "#9fc4d8", fontSize: 13 },
-  warning: { color: "#f0c674", fontSize: 13, lineHeight: 18 },
-  input: {
-    backgroundColor: "#06202e",
-    borderRadius: 10,
-    color: "#eaf4fa",
-    padding: 12,
-  },
-  inputMultiline: { minHeight: 96, textAlignVertical: "top" },
-  action: {
-    backgroundColor: "#12384c",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-  },
-  actionText: { color: "#eaf4fa", textAlign: "center" },
-  notice: { color: "#eaf4fa", lineHeight: 20 },
-  secondary: {
-    backgroundColor: "#0b3247",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  secondaryText: { color: "#cfe8f4", textAlign: "center" },
-  photoRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  clear: { color: "#f0c674", fontSize: 13 },
-  loading: { marginTop: 32 },
-  empty: { color: "#9fc4d8", marginTop: 32, padding: 16, textAlign: "center" },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 12.
+ * kör, ugyanaz a minta, mint a `login.tsx`-en (lásd ott a teljes indokot).
+ *
+ * AZ `action` (VÉGSŐ SUBMIT GOMB) `t.accent`-ET KAP, NEM A RÉGI, SAJÁT
+ * TÓNUSÚ HEX-ET: a régi `#12384c` halványabb volt a `secondary` gombok
+ * `#0b3247`-jénél is, holott ez a lap legfontosabb gombja -- a többi
+ * képernyőn (`service-jobs/index.tsx`, `worksheets/new.tsx`) a végső submit
+ * mindenütt az akcent-színt kapja, ez a lap itt igazodik hozzájuk.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    /* A mondat, ami a gomb helyen all partner-hatokorben. */
+    hint: { color: t.textSecondary, fontSize: 13, lineHeight: 19 },
+    safeArea: { backgroundColor: t.background, flex: 1 },
+    page: { gap: 12, padding: 16 },
+    block: {
+      backgroundColor: t.surface,
+      borderRadius: 12,
+      gap: 8,
+      padding: 14,
+    },
+    sectionTitle: { color: t.textPrimary, fontWeight: "600" },
+    rowText: { color: t.textPrimary },
+    /* A gep nelkuli felvitel valasztoi. Ugyanaz az alak, mint a
+       munkalap-listaban: ugyanaz a mozdulat, ugyanaz a kinezet. */
+    picker: {
+      backgroundColor: t.background,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    pickerList: { backgroundColor: t.background, borderRadius: 10, padding: 8 },
+    pickerRow: {
+      borderBottomColor: t.border,
+      borderBottomWidth: 1,
+      paddingVertical: 10,
+    },
+    /*
+      A LAPOZO A VALASZTO ALJAN. Ugyanaz az alak, mint az eszkoz-listan
+      (`app/assets/index.tsx`): ott mar bevalt, es ket kulonbozo lapozo ugyanabban
+      az alkalmazasban ket kulonbozo mozdulatot tanitana.
+    */
+    pager: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      paddingTop: 10,
+    },
+    pagerButton: {
+      backgroundColor: t.surfaceRaised,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+    },
+    pagerDisabled: { opacity: 0.5 },
+    pressed: { opacity: 0.7 },
+    meta: { color: t.textSecondary, fontSize: 13 },
+    warning: { color: t.warning, fontSize: 13, lineHeight: 18 },
+    input: {
+      backgroundColor: t.background,
+      borderRadius: 10,
+      color: t.textPrimary,
+      padding: 12,
+    },
+    inputMultiline: { minHeight: 96, textAlignVertical: "top" },
+    action: {
+      backgroundColor: t.accent,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 14,
+    },
+    actionText: { color: t.textOnAccent, textAlign: "center" },
+    notice: { color: t.textPrimary, lineHeight: 20 },
+    secondary: {
+      backgroundColor: t.surfaceRaised,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+    },
+    secondaryText: { color: t.textPrimary, textAlign: "center" },
+    photoRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    clear: { color: t.warning, fontSize: 13 },
+    loading: { marginTop: 32 },
+    empty: {
+      color: t.textSecondary,
+      marginTop: 32,
+      padding: 16,
+      textAlign: "center",
+    },
+  });
+}
