@@ -342,7 +342,14 @@ export function PilotContractsPage() {
           ) : null}
           {creating ? (
             <PilotCard>
-              <PilotCardHeader title="Új keretszerződés" />
+              {/*
+                A CÍM "ÚJ SZERZŐDÉS RÖGZÍTÉSE", A TERV SZERINT (2026-09-25,
+                barracuda előre-összevetése): a régi (nem pilot) kód "Új
+                keretszerződés" címet viselt, ezt a portolás tévedésből
+                változatlanul hozta át -- nincs mögötte döntés, a terv
+                szava a mérvadó.
+              */}
+              <PilotCardHeader title="Új szerződés rögzítése" />
               <div className="flex flex-col gap-4 p-5">
                 <div className="grid gap-4 md:grid-cols-2">
                   <PilotFormField label="Partner" required>
