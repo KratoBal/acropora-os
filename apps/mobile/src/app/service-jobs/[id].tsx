@@ -775,7 +775,23 @@ function createStyles(t: ThemeTokens) {
     },
     number: { color: t.textSecondary, fontSize: 13 },
     title: { color: t.textPrimary, fontSize: 18, fontWeight: "600" },
-    status: { color: t.textSecondary },
+    /*
+      SZÍNES JELVÉNY, UGYANAZZAL A RECEPTTEL, MINT A LISTÁN
+      (service-jobs/index.tsx "status"/"maintenance" jelzője). acrobot
+      kérése, 2026-09-25, barracuda mérése alapján: a terv az állapotot
+      MobileBadge pill-ként adja, mind a listán, mind az adatlapon.
+    */
+    status: {
+      alignSelf: "flex-start",
+      backgroundColor: t.accentSoft,
+      borderRadius: 999,
+      color: t.accentSoftText,
+      fontSize: 12,
+      fontWeight: "600",
+      overflow: "hidden",
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
     meta: { color: t.textSecondary, fontSize: 13 },
     description: { color: t.textPrimary, lineHeight: 20 },
     row: { paddingVertical: 8 },

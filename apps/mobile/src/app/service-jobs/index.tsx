@@ -425,7 +425,23 @@ function createStyles(t: ThemeTokens) {
     card: { backgroundColor: t.surface, borderRadius: 12, gap: 4, padding: 14 },
     cardTop: { flexDirection: "row", justifyContent: "space-between" },
     number: { color: t.textPrimary, fontWeight: "600" },
-    status: { color: t.textSecondary, fontSize: 13 },
+    /*
+      SZÍNES JELVÉNY, A "KARBANTARTÁS" JELZŐ MINTÁJÁBÓL (acrobot kérése,
+      2026-09-25, barracuda mérése alapján: a terv az állapotot MobileBadge
+      pill-ként adja, a kód eddig sima szürke szöveget). Ugyanaz a
+      stílus-recept, ami lejjebb a `maintenance` jelzőn már áll.
+    */
+    status: {
+      alignSelf: "flex-start",
+      backgroundColor: t.accentSoft,
+      borderRadius: 999,
+      color: t.accentSoftText,
+      fontSize: 12,
+      fontWeight: "600",
+      overflow: "hidden",
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
     title: { color: t.textPrimary, fontSize: 16 },
     maintenance: {
       alignSelf: "flex-start",
