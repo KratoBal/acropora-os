@@ -1,10 +1,11 @@
 "use client";
 
-import { Button, Card } from "@acropora/ui";
+import { Button } from "@acropora/ui";
 import type { WorksheetAssignee, WorksheetDetail } from "@acropora/types";
 import { useEffect, useState } from "react";
 
 import { worksheetsApi } from "@/lib/api/worksheets";
+import { PilotCard, PilotCardHeader } from "@/components/pilot/pilot-ui";
 import {
   toggleAssignee,
   useAssignableUsers,
@@ -79,42 +80,44 @@ export function WorksheetAssigneeEditor({
     selected.some((userId) => !current.includes(userId));
 
   return (
-    <Card className="space-y-3 p-4">
-      <h2 className="text-sm font-semibold text-dusk-800">Felelősök</h2>
-      {assignees.length ? (
-        <ul className="text-sm text-dusk-700">
-          {assignees.map((assignee) => (
-            <li key={assignee.userId}>{assignee.name}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-dusk-500">
-          Erre a munkalapra még nincs kiosztva senki.
-        </p>
-      )}
+    <PilotCard>
+      <PilotCardHeader title="Felelősök" />
+      <div className="space-y-3 p-4">
+        {assignees.length ? (
+          <ul className="text-sm text-dusk-700">
+            {assignees.map((assignee) => (
+              <li key={assignee.userId}>{assignee.name}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-dusk-500">
+            Erre a munkalapra még nincs kiosztva senki.
+          </p>
+        )}
 
-      {canManage ? (
-        <>
-          <WorksheetAssigneePicker
-            candidates={candidates}
-            selected={selected}
-            onToggle={toggle}
-          />
-          {(error ?? candidatesError) ? (
-            <p className="text-xs font-medium text-rose-600">
-              {error ?? candidatesError}
-            </p>
-          ) : null}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={!changed || saving}
-            onClick={() => void save()}
-          >
-            {saving ? "Mentés..." : "Felelősök mentése"}
-          </Button>
-        </>
-      ) : null}
-    </Card>
+        {canManage ? (
+          <>
+            <WorksheetAssigneePicker
+              candidates={candidates}
+              selected={selected}
+              onToggle={toggle}
+            />
+            {(error ?? candidatesError) ? (
+              <p className="text-xs font-medium text-rose-600">
+                {error ?? candidatesError}
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!changed || saving}
+              onClick={() => void save()}
+            >
+              {saving ? "Mentés..." : "Felelősök mentése"}
+            </Button>
+          </>
+        ) : null}
+      </div>
+    </PilotCard>
   );
 }

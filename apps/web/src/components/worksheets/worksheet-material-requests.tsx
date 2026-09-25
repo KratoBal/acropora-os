@@ -4,7 +4,6 @@ import {
   Alert,
   Badge,
   Button,
-  Card,
   EmptyState,
   Input,
   Skeleton,
@@ -19,6 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { materialRequestsApi } from "@/lib/api/material-requests";
+import { PilotCard, PilotCardHeader } from "@/components/pilot/pilot-ui";
 
 import {
   MATERIAL_REQUEST_STATUS_BADGE_VARIANT,
@@ -200,129 +200,132 @@ export function WorksheetMaterialRequests({
   };
 
   return (
-    <Card className="space-y-3 p-4">
-      <h2 className="text-sm font-semibold text-dusk-800">
-        Anyagigények{requests ? ` (${requests.length})` : ""}
-      </h2>
+    <PilotCard>
+      <PilotCardHeader
+        title={`Anyagigények${requests ? ` (${requests.length})` : ""}`}
+      />
+      <div className="space-y-3 p-4">
+        {error ? <Alert variant="danger" title={error} /> : null}
+        {notice ? <Alert variant="info" title={notice} /> : null}
 
-      {error ? <Alert variant="danger" title={error} /> : null}
-      {notice ? <Alert variant="info" title={notice} /> : null}
-
-      {canWrite ? (
-        formOpen ? (
-          <div className="space-y-3 rounded border border-dusk-200 p-3">
-            {rows.map((sor, index) => (
-              <div key={index} className="flex items-end gap-2">
-                <Input
-                  aria-label="Tétel neve"
-                  placeholder="Pl. 40mm PVC nyomócső"
-                  value={sor.name}
-                  onChange={(event) =>
-                    updateRow(index, "name", event.target.value)
-                  }
-                  className="flex-1"
-                />
-                <Input
-                  aria-label="Mennyiség"
-                  placeholder="Pl. 10 méter"
-                  value={sor.quantity}
-                  onChange={(event) =>
-                    updateRow(index, "quantity", event.target.value)
-                  }
-                  className="w-28"
-                />
-                <Input
-                  aria-label="Egység"
-                  placeholder="Pl. db"
-                  value={sor.unit}
-                  onChange={(event) =>
-                    updateRow(index, "unit", event.target.value)
-                  }
-                  className="w-20"
-                />
-                {rows.length > 1 ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => removeRow(index)}
-                    aria-label="Tétel törlése"
-                  >
-                    Törlés
-                  </Button>
-                ) : null}
-              </div>
-            ))}
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" onClick={addRow}>
-                Új tétel
-              </Button>
-              <Button disabled={busy} onClick={() => void sendNew()}>
-                {busy ? "Küldés…" : "Küldés"}
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={busy}
-                onClick={() => {
-                  setFormOpen(false);
-                  setRows([{ ...URES_SOR }]);
-                  setError(null);
-                }}
-              >
-                Mégse
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button variant="secondary" onClick={() => setFormOpen(true)}>
-            Anyagigénylés
-          </Button>
-        )
-      ) : null}
-
-      {requests === null ? <Skeleton className="h-16" /> : null}
-
-      {requests && requests.length === 0 ? (
-        <EmptyState
-          title="Ezen a munkalapon még nincs anyagigény"
-          description={
-            canWrite
-              ? "Az Anyagigénylés gombbal viheted fel, mire van szükséged."
-              : "Az anyagigényeket a lapon dolgozó kollégák viszik fel."
-          }
-        />
-      ) : null}
-
-      <ul className="space-y-2">
-        {requests?.map((request) => (
-          <li key={request.id} className="rounded border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-dusk-500">
-                {materialRequestByline(request)}
-              </p>
-              <Badge
-                variant={MATERIAL_REQUEST_STATUS_BADGE_VARIANT[request.status]}
-              >
-                {MATERIAL_REQUEST_STATUS_LABEL[request.status]}
-              </Badge>
-            </div>
-            <ul className="mt-2 space-y-0.5 text-sm text-dusk-800">
-              {request.items.map((item) => (
-                <li key={item.id}>
-                  {item.name} — {item.quantity} {item.unit}
-                </li>
+        {canWrite ? (
+          formOpen ? (
+            <div className="space-y-3 rounded border border-dusk-200 p-3">
+              {rows.map((sor, index) => (
+                <div key={index} className="flex items-end gap-2">
+                  <Input
+                    aria-label="Tétel neve"
+                    placeholder="Pl. 40mm PVC nyomócső"
+                    value={sor.name}
+                    onChange={(event) =>
+                      updateRow(index, "name", event.target.value)
+                    }
+                    className="flex-1"
+                  />
+                  <Input
+                    aria-label="Mennyiség"
+                    placeholder="Pl. 10 méter"
+                    value={sor.quantity}
+                    onChange={(event) =>
+                      updateRow(index, "quantity", event.target.value)
+                    }
+                    className="w-28"
+                  />
+                  <Input
+                    aria-label="Egység"
+                    placeholder="Pl. db"
+                    value={sor.unit}
+                    onChange={(event) =>
+                      updateRow(index, "unit", event.target.value)
+                    }
+                    className="w-20"
+                  />
+                  {rows.length > 1 ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => removeRow(index)}
+                      aria-label="Tétel törlése"
+                    >
+                      Törlés
+                    </Button>
+                  ) : null}
+                </div>
               ))}
-            </ul>
-            {request.status === "DRAFT" ? (
-              <Button
-                className="mt-2"
-                disabled={sendingId === request.id}
-                onClick={() => void sendDraft(request.id)}
-              >
-                {sendingId === request.id ? "Küldés…" : "Küldés"}
-              </Button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </Card>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" onClick={addRow}>
+                  Új tétel
+                </Button>
+                <Button disabled={busy} onClick={() => void sendNew()}>
+                  {busy ? "Küldés…" : "Küldés"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    setFormOpen(false);
+                    setRows([{ ...URES_SOR }]);
+                    setError(null);
+                  }}
+                >
+                  Mégse
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="secondary" onClick={() => setFormOpen(true)}>
+              Anyagigénylés
+            </Button>
+          )
+        ) : null}
+
+        {requests === null ? <Skeleton className="h-16" /> : null}
+
+        {requests && requests.length === 0 ? (
+          <EmptyState
+            title="Ezen a munkalapon még nincs anyagigény"
+            description={
+              canWrite
+                ? "Az Anyagigénylés gombbal viheted fel, mire van szükséged."
+                : "Az anyagigényeket a lapon dolgozó kollégák viszik fel."
+            }
+          />
+        ) : null}
+
+        <ul className="space-y-2">
+          {requests?.map((request) => (
+            <li key={request.id} className="rounded border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-dusk-500">
+                  {materialRequestByline(request)}
+                </p>
+                <Badge
+                  variant={
+                    MATERIAL_REQUEST_STATUS_BADGE_VARIANT[request.status]
+                  }
+                >
+                  {MATERIAL_REQUEST_STATUS_LABEL[request.status]}
+                </Badge>
+              </div>
+              <ul className="mt-2 space-y-0.5 text-sm text-dusk-800">
+                {request.items.map((item) => (
+                  <li key={item.id}>
+                    {item.name} — {item.quantity} {item.unit}
+                  </li>
+                ))}
+              </ul>
+              {request.status === "DRAFT" ? (
+                <Button
+                  className="mt-2"
+                  disabled={sendingId === request.id}
+                  onClick={() => void sendDraft(request.id)}
+                >
+                  {sendingId === request.id ? "Küldés…" : "Küldés"}
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </PilotCard>
   );
 }
