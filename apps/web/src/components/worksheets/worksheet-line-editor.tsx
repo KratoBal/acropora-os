@@ -29,8 +29,8 @@ export interface WorksheetLineDraft {
    *
    * KOTELEZO MEZO, NEM ELHAGYHATO, es ez szandekos: igy a fordito kiirja
    * annak a helynek a nevet, ahol egy meglevo lap sorai draftta alakulnak
-   * (`worksheet-editor-page.tsx`). Egy elhagyhato mezo ott CSENDBEN hianyozna,
-   * es minden szerkesztes atallitana a sorok fajtajat.
+   * (`pilot-worksheet-editor-page.tsx`). Egy elhagyhato mezo ott CSENDBEN
+   * hianyozna, es minden szerkesztes atallitana a sorok fajtajat.
    */
   kind: WorksheetLineKindValue;
   /** Hanyan dolgoztak a tetelen. Ures mezo = a szerver alapertelmezese (1). */
@@ -136,16 +136,18 @@ export interface WorksheetLineEditorProps {
   onChange: (lines: WorksheetLineDraft[]) => void;
   disabled?: boolean;
   /**
-   * A widget MA KÉT HELYRŐL ÉL: a régi, nem-pilot szerkesztő oldalról
-   * (`worksheet-editor-page.tsx`, `/szerviz/munkalapok/[id]/szerkesztes`,
-   * élő útvonal) és az új, pilot-aqua "Új munkalap" oldalról
-   * (`pilot-worksheet-create-page.tsx`). A prop ezért NEM alapértelmezett
-   * (ugyanaz az indok, mint a `ServiceOfflineNotice` `pilot` propjánál):
-   * a régi hívó szándékosan `undefined`-ot hagy, a pilot hívó explicit
-   * `pilot`-ot ad át. Enélkül a régi szerkesztő oldal (dusk- és brand-színű a
-   * többi elemén) kapna egy pilot-aqua foltot ezen a widgeten, ugyanaz a
-   * "kevert téma" hiba, csak fordított irányban, mint amit ez a prop
-   * old meg az ÚJ oldalon.
+   * A widget KÉT PILOT HELYRŐL ÉL: a "Munkalap szerkesztése" oldalról
+   * (`pilot-worksheet-editor-page.tsx`, `/szerviz/munkalapok/[id]/szerkesztes`)
+   * és az "Új munkalap" oldalról (`pilot-worksheet-create-page.tsx`) -- mindkét
+   * hívó explicit `pilot`-ot ad át.
+   *
+   * FRISSÍTVE 2026-09-25: a HARMADIK, régi, nem-pilot hívó
+   * (`worksheet-editor-page.tsx`, `dusk`/`brand`-színű) TÖRÖLVE -- a prop
+   * eredetileg AZÉRT nem lett alapértelmezett, mert a régi hívó szándékosan
+   * `undefined`-ot hagyott, nehogy egy pilot-aqua folt kerüljön a nem-pilot
+   * oldalra. Ez az ok mára megszűnt, de a prop opcionális maradt: egy jövőbeli
+   * nem-pilot hívó ugyanerre a védelemre számíthatna, és az alapértelmezetté
+   * tétel önmagában nem tartozott ehhez a feladathoz.
    */
   pilot?: boolean;
 }
