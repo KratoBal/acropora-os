@@ -112,13 +112,29 @@ describe("DashboardCards", () => {
    * FIGMA-IGAZÍTÁS (2026-09-25): az "Esedékes karbantartások" kártya, a
    * `nextServiceAt`-ből számolt "X nap"/"X napja lejárt" jelzővel -- lásd a
    * `daysUntil`/`DaysPill` fejlécét ugyanebben a fájlban.
+   *
+   * JAVÍTVA, IDŐZÓNA-HIBA (2026-09-26 hajnal, éjfél körüli futás fedte fel):
+   * a `new Date(); .setDate(+N); .toISOString().slice(0, 10)` alak a HELYI
+   * óra/perc résszel együtt tolja el a napot, majd UTC-re vált -- Budapesten
+   * (UTC+2), éjfél utáni pár percben ez EGY TELJES NAPPAL VISSZAFELÉ csúsztatja
+   * az UTC dátumrészt a helyi naptári naphoz képest, miközben a `daysUntil()`
+   * (a valódi kódban) a HELYI naptári napot veti össze az UTC-re alakított
+   * cél-dátummal. A két oldal emiatt szétcsúszhat pontosan éjfél körül.
+   * A `localIsoDate()` a HELYI naptári mezőkből (`getFullYear`/`getMonth`/
+   * `getDate`) építi az ISO-stringet, UTC-konverzió nélkül -- ugyanazt a
+   * naptári napot adja, amit a `daysUntil()` a "ma" oldalon is a HELYI
+   * mezőkből olvas ki, tehát a teszt a nap bármely percében stabil.
    */
-  it("az esedékes karbantartások kártya a napok számát mutatja, közelgőt és lejártat is", () => {
-    const soon = new Date();
-    soon.setDate(soon.getDate() + 3);
-    const past = new Date();
-    past.setDate(past.getDate() - 2);
+  const localIsoDate = (daysFromToday: number): string => {
+    const date = new Date();
+    date.setDate(date.getDate() + daysFromToday);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
 
+  it("az esedékes karbantartások kártya a napok számát mutatja, közelgőt és lejártat is", () => {
     const summary: DashboardSummary = {
       upcomingMaintenance: {
         items: [
@@ -127,14 +143,14 @@ describe("DashboardCards", () => {
             assetName: "Szivattyú",
             customerName: "Fővárosi Állat- és Növénykert",
             departmentName: "Akvárium ház",
-            nextServiceAt: soon.toISOString().slice(0, 10),
+            nextServiceAt: localIsoDate(3),
           },
           {
             assetId: "asset-2",
             assetName: "UV-lámpa",
             customerName: null,
             departmentName: "Saját raktár",
-            nextServiceAt: past.toISOString().slice(0, 10),
+            nextServiceAt: localIsoDate(-2),
           },
         ],
       },
