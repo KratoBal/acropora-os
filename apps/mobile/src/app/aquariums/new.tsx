@@ -733,8 +733,13 @@ function createStyles(t: ThemeTokens) {
     safeArea: { flex: 1, backgroundColor: t.background },
     flex: { flex: 1 },
     container: { padding: 18, paddingBottom: 48, gap: 14 },
+    /*
+      A SZÍN A TERV SZÜRKÉJE (grey-400 -> t.textMuted), NEM AZ AKCENT --
+      ugyanaz a rendszerszintű minta, mint amit acrobot kérésére (2026-09-25,
+      msg 23917/23921) a többi telefon-listán már javítottunk.
+    */
     eyebrow: {
-      color: t.accent,
+      color: t.textMuted,
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 1.4,
