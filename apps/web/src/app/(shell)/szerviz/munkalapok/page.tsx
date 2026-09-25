@@ -1,5 +1,5 @@
-import { WorksheetListPage } from "@/components/worksheets/worksheet-list-page";
+import { PilotWorksheetListPage } from "@/components/worksheets/pilot/pilot-worksheet-list-page";
 
 export default function WorksheetsRoute() {
-  return <WorksheetListPage />;
+  return <PilotWorksheetListPage />;
 }
