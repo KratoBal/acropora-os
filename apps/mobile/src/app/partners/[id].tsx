@@ -86,14 +86,21 @@ export default function PartnerDetailScreen() {
            * hivatkozás vagy egy időközben levett jelölő idehozhat: jobb
            * kimondani, mint úgy tenni, mintha minden rendben lenne.
            */
-          <Text style={styles.notice}>
+          <Text style={styles.noticeAmber}>
             Ezen a partneren ma nincs szerviz jelölő. Az adatait látod, de a
             szerviz listákban nem szerepel.
           </Text>
         ) : null}
 
+        {/*
+          KÉT KÜLÖN SZÍN, A TERV SZERINT (2026-09-25, barracuda
+          előre-összevetése, `MobilePartnerDetailScreen`): a terv a
+          "nem szerviz típusú" sávot amber, az "inaktív" sávot semleges
+          szürke háttérrel adja -- eddig mindkettő ugyanazt a `t.warning`
+          stílust viselte.
+        */}
         {partner.data && !partner.data.isActive ? (
-          <Text style={styles.notice}>
+          <Text style={styles.noticeGrey}>
             Ez a partner inaktív: a törzsadata megmarad, új munkához viszont nem
             választható.
           </Text>
@@ -176,9 +183,25 @@ function createStyles(t: ThemeTokens) {
       paddingVertical: 2,
     },
     unitName: { color: t.textPrimary, fontSize: 14 },
-    notice: {
+    noticeAmber: {
       color: t.warning,
       backgroundColor: t.warningSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+    /**
+     * SEMLEGES SZÜRKE, NEM FIGYELMEZTETŐ SZÍN -- a terv az "inaktív"
+     * sávnak nem amber-t, hanem grey-t ad: az inaktív állapot ténymegállapítás,
+     * nem probléma. Nincs pontos "grey-100" háttér-token, ezért a
+     * `surfaceRaised`+`border` pár adja a legközelebbi, a kártyáktól még
+     * megkülönböztethető semleges felületet -- ugyanaz a minta, mint az
+     * `index.tsx` `roleBadge`-jén.
+     */
+    noticeGrey: {
+      color: t.textSecondary,
+      backgroundColor: t.surfaceRaised,
+      borderColor: t.border,
+      borderWidth: 1,
       padding: 12,
       borderRadius: 10,
     },
