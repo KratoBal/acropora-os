@@ -253,17 +253,24 @@ export function PilotSegmentedControl({
 export function PilotFormField({
   label,
   help,
+  required,
   children,
   className,
 }: {
   label: string;
   help?: string;
+  required?: boolean;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <div className={`flex flex-col gap-1 ${className ?? ""}`}>
-      <label className="text-sm font-medium text-pilot-grey-700">{label}</label>
+      <label className="text-sm font-medium text-pilot-grey-700">
+        {label}
+        {required ? (
+          <span className="ml-0.5 text-pilot-aqua-600">*</span>
+        ) : null}
+      </label>
       {children}
       {help ? <p className="text-xs text-pilot-grey-400">{help}</p> : null}
     </div>
