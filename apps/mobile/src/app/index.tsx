@@ -32,6 +32,7 @@ import {
   type TileCode,
 } from "@/lib/auth/tile-visibility";
 import { personDisplayName } from "@/lib/auth/person-name";
+import { initialsFor } from "@/lib/aquariums/aquarium-avatar";
 import { shouldRegisterPush } from "@/lib/notifications/push-preference";
 import { usePushPreference } from "@/lib/notifications/usePushPreference";
 import { usePushRegistration } from "@/lib/notifications/usePushRegistration";
@@ -510,18 +511,35 @@ export default function HomeScreen() {
             A NEVEDRE KOPPINTVA NYÍLNAK A BEÁLLÍTÁSOK. A gazda kérése szerint
             innen érhető el, és itt is van a helye: ez az egyetlen hely a
             nyitólapon, ami rólad szól, nem a munkáról.
+
+            A KEZDŐBETŰS KÖR ÉS A KÜLÖN KIJELENTKEZÉS-SOR A TERV SZERINT
+            (2026-09-25, terv-összevetés): a terv a fiók-sort egy "TG"-szerű
+            monogram-körrel kezdi, és a "Kijelentkezés" gombot NEM ebbe a
+            sorba teszi, hanem alá, önálló, teljes szélességű sorként. A
+            kezdőbetű-számítás közös az akvárium-karbantartók köreivel
+            (`initialsFor`), a szín viszont itt FIX akcent, nem az ottani
+            deterministikus paletta -- a terv is egyetlen, fix teal kört ad
+            a saját fiókodhoz, nem többfélét egy listában megkülönböztető
+            színt.
           */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Beállítások megnyitása"
             onPress={() => router.push("/settings")}
             style={({ pressed }) => [
-              styles.accountText,
+              styles.accountRow,
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.accountName}>{personDisplayName(user)}</Text>
-            <Text style={styles.accountEmail}>{user.email}</Text>
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarText}>
+                {initialsFor(personDisplayName(user))}
+              </Text>
+            </View>
+            <View style={styles.accountText}>
+              <Text style={styles.accountName}>{personDisplayName(user)}</Text>
+              <Text style={styles.accountEmail}>{user.email}</Text>
+            </View>
             <Text style={styles.accountHint}>Beállítások ›</Text>
           </Pressable>
           <Pressable
@@ -687,7 +705,7 @@ function createStyles(t: ThemeTokens) {
     eyebrow: {
       color: t.textMuted,
       fontSize: 12,
-      fontWeight: "700",
+      fontWeight: "600",
       textTransform: "uppercase",
       letterSpacing: 1.2,
     },
@@ -701,6 +719,9 @@ function createStyles(t: ThemeTokens) {
      * `alignSelf: "flex-start"`, mert a terv jelvénye tartalom-szélességű
      * (`inline-flex`), nem a sor teljes szélességét kitöltő -- egy sima
      * `View` a `hero` oszlopban alapértelmezésben nyúlna.
+     *
+     * A BELSŐ MARGÓ A TERV SZERINT (2026-09-25, terv-összevetés): `px-2
+     * py-0.5` = 8px/2px, nem 10px/4px -- ezt az első kör kerekítette fel.
      */
     roleBadge: {
       alignSelf: "flex-start",
@@ -708,8 +729,8 @@ function createStyles(t: ThemeTokens) {
       borderColor: t.border,
       borderRadius: 999,
       borderWidth: 1,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
     },
     roleBadgeText: { color: t.textSecondary, fontSize: 12, fontWeight: "600" },
     /**
@@ -723,7 +744,11 @@ function createStyles(t: ThemeTokens) {
       fontWeight: "700",
       lineHeight: 30,
     },
-    subtitle: { color: t.textSecondary, fontSize: 15, lineHeight: 22 },
+    /**
+     * MÉRET A TERVBŐL (2026-09-25, terv-összevetés): a terv `text-sm`-je
+     * 14px, nem 15px.
+     */
+    subtitle: { color: t.textSecondary, fontSize: 14, lineHeight: 22 },
     sectionHeader: {
       alignItems: "center",
       flexDirection: "row",
@@ -736,13 +761,18 @@ function createStyles(t: ThemeTokens) {
      * fekete, nem nagybetűs címsort adott helyette. Ugyanez a stílus adja a
      * "Legutóbbi rendelések" címét is: a terv ezt a szakaszt nem ismeri, de
      * ugyanaz a szerep (kártyacsoport fölötti címke), tehát ugyanaz a minta.
+     *
+     * A SÚLY ÉS A BETŰKÖZ JAVÍTVA (2026-09-25, terv-összevetés): a fenti
+     * komment már akkor is 600-at mondott, a stílus mégis 700-at adott -- a
+     * `tracking-widest` @12px pedig 1,2px, nem 1, ugyanaz az érték, mint az
+     * `eyebrow`-é fent.
      */
     sectionTitle: {
       color: t.textMuted,
       fontSize: 12,
-      fontWeight: "700",
+      fontWeight: "600",
       textTransform: "uppercase",
-      letterSpacing: 1,
+      letterSpacing: 1.2,
     },
     sectionHint: { color: t.textMuted, fontSize: 12 },
     sectionSubtext: { color: t.textMuted, fontSize: 12, marginTop: 3 },
@@ -860,15 +890,31 @@ function createStyles(t: ThemeTokens) {
     emptyCard: { backgroundColor: t.surface, borderRadius: 14, padding: 16 },
     emptyText: { color: t.textSecondary, fontSize: 13 },
     accountCard: {
-      alignItems: "center",
       borderTopColor: t.border,
       borderTopWidth: 1,
-      flexDirection: "row",
-      gap: 12,
-      justifyContent: "space-between",
+      gap: 14,
       marginTop: 8,
       paddingTop: 20,
     },
+    accountRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+    },
+    /**
+     * FIX AKCENT KÖR, A TERV `bg-teal-600` KÖRÉNEK MEGFELELŐEN (40×40, mint a
+     * terv `w-10 h-10`-je) -- nem az akvárium-karbantartók deterministikus
+     * palettája, mert ez mindig a SAJÁT fiókod, nem egy listányi más ember.
+     */
+    avatarCircle: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 20,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    avatarText: { color: t.textOnAccent, fontSize: 14, fontWeight: "700" },
     accountText: { flex: 1, gap: 3 },
     accountName: { color: t.textPrimary, fontSize: 14, fontWeight: "700" },
     accountEmail: { color: t.textSecondary, fontSize: 12 },
@@ -876,14 +922,19 @@ function createStyles(t: ThemeTokens) {
       color: t.accent,
       fontSize: 12,
       fontWeight: "700",
-      marginTop: 4,
     },
+    /**
+     * ÖNÁLLÓ, TELJES SZÉLESSÉGŰ SOR A FIÓK-SOR ALATT, A TERV SZERINT: a terv
+     * a "Kijelentkezés" gombot NEM a fiók-sorral egy sorban adja, hanem alá,
+     * külön, a kártya teljes szélességében.
+     */
     signOutButton: {
+      alignItems: "center",
       borderColor: t.danger,
       borderRadius: 10,
       borderWidth: 1,
-      minWidth: 108,
-      paddingHorizontal: 12,
+      justifyContent: "center",
+      minHeight: 44,
       paddingVertical: 10,
     },
     signOutText: {
@@ -893,9 +944,13 @@ function createStyles(t: ThemeTokens) {
       textAlign: "center",
     },
     pressed: { opacity: 0.7 },
+    /**
+     * MÉRET A TERVBŐL (2026-09-25, terv-összevetés): a terv `text-xs`-je
+     * 12px, nem 11px.
+     */
     versionLine: {
       color: t.textMuted,
-      fontSize: 11,
+      fontSize: 12,
       marginTop: 14,
       textAlign: "center",
     },

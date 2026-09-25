@@ -1526,7 +1526,21 @@ export default function WorksheetDetailScreen() {
                   </View>
                   <View style={styles.row}>
                     <Text style={styles.label}>Döntés</Text>
-                    <Text style={styles.value}>
+                    {/*
+                      SZÍNES JELVÉNY, A TERV SZERINT (2026-09-25,
+                      terv-összevetés): a terv az "Ügyfél döntése" kártyán
+                      egy teal/piros jelvényt ad a döntésnek, nem sima
+                      szöveget -- eddig ez a sor a `styles.value`-t
+                      használta, ami itt egy sima, ki nem emelt szöveg volt.
+                    */}
+                    <Text
+                      style={[
+                        styles.decisionBadge,
+                        current.signature.decision === "ACCEPTED"
+                          ? styles.decisionBadgeAccepted
+                          : styles.decisionBadgeRejected,
+                      ]}
+                    >
                       {current.signature.decision === "ACCEPTED"
                         ? "Elfogadva"
                         : "Elutasítva"}
@@ -2452,6 +2466,26 @@ function createStyles(t: ThemeTokens) {
       fontSize: 14,
       textAlign: "right",
       textDecorationLine: "underline",
+    },
+    /**
+     * A DÖNTÉS SZÍNES JELVÉNYE, A TERV SZERINT: nem `flex:1`/jobbra igazított
+     * folyószöveg, hanem egy kompakt pill, ugyanabban az alakban, mint az
+     * eszköz-adatlap `badge` stílusa (`assets/[id].tsx`).
+     */
+    decisionBadge: {
+      borderRadius: 8,
+      fontSize: 12,
+      fontWeight: "800",
+      paddingHorizontal: 9,
+      paddingVertical: 3,
+    },
+    decisionBadgeAccepted: {
+      backgroundColor: t.accentSoft,
+      color: t.accentSoftText,
+    },
+    decisionBadgeRejected: {
+      backgroundColor: t.dangerSoft,
+      color: t.danger,
     },
     total: {
       color: t.accentSoftText,
