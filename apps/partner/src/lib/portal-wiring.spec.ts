@@ -48,6 +48,8 @@ const ESZKOZ_RESZLET = "src/components/asset-detail.tsx";
 const ESZKOZ_UTVONAL = "src/app/(portal)/eszkozok/[id]/page.tsx";
 const NAPLO_SOR = "src/lib/naplo-sor.ts";
 const MUNKALAP_RESZLET = "src/components/worksheet-detail.tsx";
+const PORTAL_SHELL = "src/components/portal-shell.tsx";
+const AUTH = "src/components/auth.tsx";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
 
@@ -814,5 +816,136 @@ describe("a partner munkalap-adatlapja", () => {
    */
   it("KONTROLL: a minta TALÁL a nyers fájlban", () => {
     assert.match(olvas(ESZKOZ_RESZLET), /qrToken/);
+  });
+});
+
+/**
+ * AZ "AKVÁRIUMOK" MENÜPONT ÉS ÚTVONAL A SZERVER VÁLASZÁT NÉZI, NEM A
+ * FRONTEND SAJÁT, BEÉGETETT JOG-TÁBLÁJÁT (acrobot kérése, msg_id 23542,
+ * 2026-09-25).
+ *
+ * === MIÉRT NEM ELÉG A SZEREP-SZINTŰ JOG ===
+ *
+ * Az `apps/partner` MINDEN beolvasztáskor AZONNAL élesre települ
+ * (ticket.acropora.hu, az állatkert emberei használják), az `apps/api`
+ * viszont csak Balázs külön engedélyével. A `PARTNER_SERVICE` szerep MA
+ * (ezen a fejlesztői ágon) hordozza az `AQUARIUMS_VIEW` jogot
+ * (`packages/types` `auth.ts`), de ez a FRONTEND SAJÁT BUILDJÉNEK a
+ * tudása -- ha ez a képernyő előbb megy élesre, mint a #1116 (a jog maga)
+ * az API-n, egy `hasPermission()`-re épülő ellenőrzés a régi API mellett
+ * IS látszana, és az állatkert egy hibázó menüpontot kapna.
+ *
+ * A helyes jel a `/auth/me` válaszának `navigation` mezője
+ * (`CurrentUserResponse.navigation`, `visibleNavigationFor(role)`-lal
+ * SZERVER OLDALON számolva): az mindig azt tükrözi, amit az ÉPPEN FUTÓ
+ * API ismer, függetlenül attól, milyen `packages/types` van a frontend
+ * buildjébe zárva.
+ */
+describe("az Akváriumok menüpont és útvonal kapuja", () => {
+  it("POZITÍV KONTROLL: a shell és az auth fájl olvasható és nem üres", () => {
+    for (const ut of [PORTAL_SHELL, AUTH])
+      assert.ok(olvas(ut).length > 500, `${ut}: üres vagy gyanúsan rövid`);
+  });
+
+  /**
+   * A `partnerApi.me()` A `CurrentUserResponse`-t KÉRI, NEM A PUSZTA
+   * `AuthenticatedUser`-t.
+   *
+   * MI PIROSÍT: ha a típus visszakerülne `AuthenticatedUser`-re -- az a
+   * valódi JSON válaszban NEM változtatna semmin (a mező akkor is ott
+   * lenne a szerver oldalán), de a TypeScript innentől nem engedné
+   * `user.navigation`-t olvasni, tehát a lenti kapu típushibával halna
+   * el fordításkor, nem futásidőben.
+   */
+  it("a partnerApi.me() a CurrentUserResponse típusát kéri", () => {
+    assert.match(
+      kod(KLIENS),
+      /me: \(\) => request<CurrentUserResponse>\("\/auth\/me"\)/,
+    );
+  });
+
+  /**
+   * BEJELENTKEZÉS UTÁN IS A `/auth/me`-BŐL JÖN A FELHASZNÁLÓ, NEM A
+   * BEJELENTKEZÉS VÁLASZÁBÓL.
+   *
+   * MI PIROSÍT: `setUser(result.user)` vagy ehhez hasonló, ami a
+   * `/auth/login/password` válaszát tenné a state-be. Az a végpont NEM
+   * hordozza a `navigation` mezőt (`auth.controller.ts`
+   * `loginWithPassword`, visszatérési típusa `{ user: AuthenticatedUser }`),
+   * tehát belépés UTÁN, a következő teljes oldalbetöltésig a kapu hamis
+   * negatívot adna akkor is, ha a jog megvan.
+   */
+  it("bejelentkezés után külön lekéri a /auth/me választ", () => {
+    const s = kod(AUTH);
+    assert.match(s, /await partnerApi\.login\(email, password\)/);
+    assert.match(s, /setUser\(await partnerApi\.me\(\)\)/);
+    assert.doesNotMatch(s, /setUser\(result\.user\)/);
+  });
+
+  /**
+   * A `hasNavigationEntry` A SZERVER `navigation` TÖMBJÉT NÉZI, NEM A
+   * SZEREPET ÉS NEM A `hasPermission`-T.
+   *
+   * MI PIROSÍT: egy `user.role === "PARTNER_SERVICE"` vagy
+   * `hasPermission(user.role, ...)` alapú megvalósítás -- mindkettő a
+   * FRONTEND saját, beégetett tudását nézné, nem az élesben futó API-ét.
+   */
+  it("a hasNavigationEntry a user.navigation tömbön keres, nem a szerepen", () => {
+    const s = kod(AUTH);
+    assert.match(
+      s,
+      /user\?\.navigation\.some\(\(entry\) => entry\.id === entryId\)/,
+    );
+    assert.doesNotMatch(s, /hasPermission\(/);
+  });
+
+  /**
+   * AZ "AKVARISZTIKA" MENÜCSOPORT A `canViewAquariums` MÖGÖTT ÁLL, NEM
+   * FELTÉTEL NÉLKÜL.
+   *
+   * MI PIROSÍT: ha a `{canViewAquariums && (` feltétel eltűnne a
+   * menücsoport elől -- ez volt a tényleges hiba ezen az ágon, MIELŐTT ezt
+   * a kaput megírtuk (a csoport `user.role === "PARTNER_SERVICE"` mögött
+   * feltétel nélkül renderelt).
+   */
+  it("az Akvarisztika menücsoport a canViewAquariums mögött áll", () => {
+    const s = kod(PORTAL_SHELL);
+    assert.match(
+      s,
+      /canViewAquariums = hasNavigationEntry\(user, AQUARIUMS_NAV_ENTRY_ID\)/,
+    );
+    assert.match(s, /\{canViewAquariums && \(/);
+  });
+
+  /**
+   * AZ ÚTVONAL IS VÉDVE VAN, NEM CSAK A MENÜPONT.
+   *
+   * MI PIROSÍT: ha a kapu csak a menüsorban állna. Egy közvetlen URL-
+   * beírás (könyvjelző, korábbi lap) a menüpont hiánya ELLENÉRE elérné a
+   * komponenst, ami egy régi API mellett nem létező végpontot hívna.
+   */
+  it("az /akvariumok útvonal jog nélkül átirányít, nem csak rejtve van a menüben", () => {
+    const s = kod(PORTAL_SHELL);
+    assert.match(
+      s,
+      /onAquariumsRoute = pathname\.startsWith\(AKVARIUMOK_HREF\)/,
+    );
+    assert.match(
+      s,
+      /!loading && user && !canViewAquariums && onAquariumsRoute/,
+    );
+    assert.match(s, /router\.replace\("\/hibajegyek"\)/);
+  });
+
+  /**
+   * KONTROLL: A MENÜCSOPORT-MINTA TALÁL A RÉGI (feltétel nélküli) ALAKON
+   * IS, HA VISSZAKERÜLNE -- vagyis a `doesNotMatch` irányú kockázat itt
+   * nem a `canViewAquariums &&` mintára vonatkozik (az egy pozitív
+   * `match`), hanem arra, hogy a `AKVARISZTIKA_MENU.map` hívás továbbra is
+   * jelen van. Enélkül a fenti "mögötte áll" állítás azt is zölden hagyná,
+   * ha a teljes menücsoportot törölnénk.
+   */
+  it("KONTROLL: a menücsoport ténylegesen kirajzolja a tételeket", () => {
+    assert.match(kod(PORTAL_SHELL), /AKVARISZTIKA_MENU\.map\(\(item\) => \{/);
   });
 });

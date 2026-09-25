@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 
-import { useAuth } from "./auth";
+import { hasNavigationEntry, useAuth } from "./auth";
 import { LAP_CIM } from "./frame";
 
 /*
@@ -37,7 +37,16 @@ const MUSZAKI_MENU = [
  */
 const AKVARISZTIKA_MENU = [{ href: "/akvariumok", label: "Akváriumok" }];
 
+/**
+ * A `packages/types/src/navigation.ts` "aquariums" bejegyzésének
+ * azonosítója -- ugyanaz a string, amit a szerver `/auth/me`-je
+ * `user.navigation`-ben visszaad, ha a hívó szerepe rendelkezik az
+ * `AQUARIUMS_VIEW` joggal.
+ */
+const AQUARIUMS_NAV_ENTRY_ID = "aquariums";
+
 const BEALLITASOK_HREF = "/beallitasok";
+const AKVARIUMOK_HREF = "/akvariumok";
 
 export function PortalShell({ children }: { children: ReactNode }) {
   const { user, loading, logout } = useAuth();
@@ -47,6 +56,23 @@ export function PortalShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, router, user]);
+
+  const canViewAquariums = hasNavigationEntry(user, AQUARIUMS_NAV_ENTRY_ID);
+  const onAquariumsRoute = pathname.startsWith(AKVARIUMOK_HREF);
+
+  /*
+    UTVONAL-VEDELEM, NE CSAK MENUPONT-REJTES. A menupont eltuntetese
+    onmagaban nem allitja meg a kozvetlen URL-beirast -- egy regi API
+    (amig a #1116 nincs elesitve) mellett ide navigalva a lista/adatlap
+    komponens egy nem letezo vegpontot hivna. A `canViewAquariums` UGYANAZT
+    a szerver-valaszt nezi, amit a menu is, tehat a ket hely nem tud
+    szetcsuszni (acrobot kerese, msg_id 23542, 2026-09-25).
+  */
+  useEffect(() => {
+    if (!loading && user && !canViewAquariums && onAquariumsRoute) {
+      router.replace("/hibajegyek");
+    }
+  }, [loading, user, canViewAquariums, onAquariumsRoute, router]);
 
   if (loading) return <main className="centered">Munkamenet ellenőrzése…</main>;
   if (!user) {
@@ -67,6 +93,9 @@ export function PortalShell({ children }: { children: ReactNode }) {
         </button>
       </main>
     );
+  }
+  if (!canViewAquariums && onAquariumsRoute) {
+    return <main className="centered">Átirányítás…</main>;
   }
 
   const beallitasokActive = pathname.startsWith(BEALLITASOK_HREF);
@@ -134,41 +163,51 @@ export function PortalShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           {/*
-            AZ "AKVARISZTIKA" CSOPORT MOSTANTOL LATSZIK -- a partner-akvarium
-            kepesseg elkeszult (2026-09-25, sema+hatokor: Aquarium.departmentId,
-            AQUARIUMS_VIEW/MANAGE a PARTNER_SERVICE-en). Nincs kulon
-            jogosultsag-ellenorzes ITT, mert az AQUARIUMS_VIEW-t MINDEN
-            PARTNER_SERVICE fiok viseli (szerep-szintu jog, nem
-            felhasznalonkenti kapcsolo), es ez a komponens amugy is csak
-            `user.role === "PARTNER_SERVICE"` eseten fut le (lasd a fenti
-            korai visszaterest). A tenyleges szukites a SORON all: a
-            hozzarendeles nelkuli felhasznalo a listat betoltve latja, csak
-            ures allapottal.
+            AZ "AKVARISZTIKA" CSOPORT CSAK A SZERVER JELZESERE LATSZIK.
+
+            EZ A KOMMENT KORABBAN AZT ALLITOTTA, HOGY NINCS SZUKSEG KULON
+            ELLENORZESRE, MERT AZ AQUARIUMS_VIEW MINDEN PARTNER_SERVICE
+            FIOKE (szerep-szintu jog) -- EZ IGAZ, DE NEM ELEG. Az
+            `apps/partner` MINDEN beolvasztaskor AZONNAL elesre telepul
+            (ticket.acropora.hu), az `apps/api` viszont csak Balazs kulon
+            engedelyevel. Ha ez a menupont a frontend sajat, beegetett
+            jog-tablajara tamaszkodna (`hasPermission()`), egy regi API
+            mellett is latszana, es az allatkert egy hibazo menupontot
+            kapna. A `canViewAquariums` ezert a `/auth/me` VALASZANAK
+            `navigation` mezojet nezi -- azt, amit az ELESBEN FUTO API
+            tenylegesen ismer (lasd `./auth.tsx` `hasNavigationEntry`
+            fejleckommentjet). Ellenorizve 2026-09-25: a #1116 (a
+            AQUARIUMS_VIEW-t a PARTNER_SERVICE-re adja) meg nincs
+            beolvasztva, es ez a blokk emiatt ma helyesen REJTVE marad,
+            mert a live `/auth/me` navigation tombje meg nem tartalmazza
+            az "aquariums" bejegyzest.
           */}
-          <div>
-            <p className="mb-1 px-3 text-[9px] font-bold uppercase tracking-widest text-pilot-grey-400">
-              Akvarisztika
-            </p>
-            <div className="flex flex-col gap-0.5">
-              {AKVARISZTIKA_MENU.map((item) => {
-                const active = pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={active ? "page" : undefined}
-                    className={`flex h-9 w-full items-center rounded-lg px-3 text-sm font-medium no-underline transition-colors ${
-                      active
-                        ? "bg-pilot-aqua-50 text-pilot-aqua-700"
-                        : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
+          {canViewAquariums && (
+            <div>
+              <p className="mb-1 px-3 text-[9px] font-bold uppercase tracking-widest text-pilot-grey-400">
+                Akvarisztika
+              </p>
+              <div className="flex flex-col gap-0.5">
+                {AKVARISZTIKA_MENU.map((item) => {
+                  const active = pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex h-9 w-full items-center rounded-lg px-3 text-sm font-medium no-underline transition-colors ${
+                        active
+                          ? "bg-pilot-aqua-50 text-pilot-aqua-700"
+                          : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </nav>
 
         <div className="px-2 pb-2">

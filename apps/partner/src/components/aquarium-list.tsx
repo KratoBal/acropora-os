@@ -48,11 +48,20 @@ import { useAuth } from "./auth";
  * === NINCS "ÚJ AKVÁRIUM" GOMB EBBEN A KÖRBEN ===
  *
  * Ugyanaz az indok, mint az `AssetList`-nél az "Új eszköz" gombra: a portál
- * ma nem ismer `/akvariumok/uj` útvonalat. Külön kör, miután a "saját,
- * hozzárendelt helyszín" választó (`assignedUnitIdsFor`-ra épülő végpont)
- * elkészül -- ma ilyen végpont nincs, csak a teljes ügyfél-helyszínlista
- * (`departments()`), ami TÖBBET mutatna, mint amit Balázs a felvitelnél
- * engedett ("a saját, hozzárendelt helyszínek közül, kötelezően").
+ * ma nem ismer `/akvariumok/uj` útvonalat, és ennek megépítése önálló kör.
+ *
+ * EZ A BEKEZDÉS KORÁBBAN AZT ÁLLÍTOTTA, hogy emellett egy VÉGPONT is
+ * hiányzik ("saját, hozzárendelt helyszín" választó), és a meglévő
+ * `worksheetsApi.departments(customerId)` a vevő TELJES helyszínlistáját
+ * adná. **Ez tévedés volt, és mérve javítva 2026-09-25:**
+ * `worksheets.repository.ts` `departments()`-e `scope.kind === "customer"`
+ * hívónál MÁR MA is `id: { in: [...assignedUnitIds] }` szűrést alkalmaz
+ * (`assignedUnitIdsFor(actorUserId)`-ból) -- ugyanaz a végpont, amit a
+ * `new-ticket.tsx` helyszín-választója is hív, MÁR a hívó saját, kiosztott
+ * helyszíneire szűkül, nem a vevő teljes fájára. A hiány tehát KIZÁRÓLAG a
+ * képernyő/útvonal, nem a szerver oldal -- ha az "Új akvárium" képernyő
+ * megépül, a `worksheetsApi.departments(customerId)` közvetlenül
+ * felhasználható a helyszín-választóhoz, új végpont nélkül.
  */
 
 const PAGE_SIZE = 25;
