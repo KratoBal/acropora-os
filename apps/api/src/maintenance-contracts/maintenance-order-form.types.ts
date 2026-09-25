@@ -10,7 +10,7 @@ import type { MaintenanceOrderFormDecimalInput } from "./maintenance-order-form-
  * a tétel adatmodellje (Codexnél készül, `schema.prisma`, migráció) SEHOL nem
  * jelenik meg ebben a fájlban. A bekötés (a `Contract`/`ContractItem` sorból
  * ez a típus) egy KÉSŐBBI kör, amikor a modell megvan -- itt csak annyi áll,
- * amennyi a PDF-hez kell.
+ * amennyi a megrendelőlap (2026-09-25-től docx, korábban PDF) kitöltéséhez kell.
  *
  * === A MINTA: AZ ÜGYFÉL SAJÁT ŰRLAPJA, NEM A MI ARCULATUNK ===
  *
