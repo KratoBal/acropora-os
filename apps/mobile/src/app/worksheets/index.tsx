@@ -172,7 +172,17 @@ export default function WorksheetsScreen() {
           />
         }
       >
-        <Text style={styles.eyebrow}>SZERVIZ</Text>
+        {/*
+          A SAJÁT TERVKÖR SZERINT (2026-09-25, acrobot döntése az
+          app-szintű minták ügyében): a Munkalapok lista saját terve
+          (`MunkalapokScreen.tsx` 1108. sor, `MobileMunkalapokList`)
+          "Szerviz" feliratot ad, 10px, alap (nem félkövér) súllyal,
+          betűköz és nagybetűsítés nélkül, szürkével -- eddig ez a
+          képernyő is az app többi listáján élt, mindenhol egyforma
+          nagybetűs/félkövér mintát követte (11px/900, végig nagybetűs
+          "SZERVIZ").
+        */}
+        <Text style={styles.eyebrow}>Szerviz</Text>
         <Text style={styles.title}>Munkalapok</Text>
         <Text style={styles.subtitle}>
           {worksheets.data
@@ -503,10 +513,9 @@ function createStyles(t: ThemeTokens) {
       padding: 24,
     },
     eyebrow: {
-      color: t.accent,
-      fontSize: 11,
-      fontWeight: "900",
-      letterSpacing: 1.4,
+      color: t.textMuted,
+      fontSize: 10,
+      fontWeight: "400",
     },
     title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
     subtitle: { color: t.textSecondary },

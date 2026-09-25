@@ -149,6 +149,14 @@ export default function PartnersScreen() {
           </Pressable>
         ))}
 
+        {/*
+          NYÍL-GLYPH A LAPOZÓ FELIRATÁBAN, A SAJÁT TERVKÖR SZERINT
+          (2026-09-25, acrobot döntése): a Partnerek lista terve
+          (`figma-partnerek-make-13/PartnersScreen.tsx` 1805/1813. sor)
+          "‹ Előző" / "Következő ›" alakot ad -- ez az EGYETLEN mobil
+          lista a tervben, ahol lapozó egyáltalán szerepel, tehát ez a
+          minta csak erre a képernyőre vonatkozik, máshol nem.
+        */}
         {totalPages > 1 ? (
           <View style={styles.pager}>
             <Pressable
@@ -156,7 +164,7 @@ export default function PartnersScreen() {
               onPress={() => setPage((value) => Math.max(1, value - 1))}
               style={[styles.pagerButton, page <= 1 && styles.disabled]}
             >
-              <Text style={styles.pagerText}>Előző</Text>
+              <Text style={styles.pagerText}>‹ Előző</Text>
             </Pressable>
             <Text style={styles.pagerLabel}>
               {page} / {totalPages}
@@ -171,7 +179,7 @@ export default function PartnersScreen() {
                 page >= totalPages && styles.disabled,
               ]}
             >
-              <Text style={styles.pagerText}>Következő</Text>
+              <Text style={styles.pagerText}>Következő ›</Text>
             </Pressable>
           </View>
         ) : null}
@@ -194,11 +202,19 @@ function createStyles(t: ThemeTokens) {
       justifyContent: "center",
       padding: 24,
     },
+    /**
+     * A SAJÁT TERVKÖR SZERINT (2026-09-25, acrobot döntése az app-szintű
+     * minták ügyében): a Partnerek lista saját terve
+     * (`figma-partnerek-make-13/PartnersScreen.tsx` 1744. sor,
+     * `MobilePartnersListScreen`) 10px/600, `tracking-widest` (@10px =
+     * 1px), teal -- ez a képernyő MÁR ezt a kört követi, csak a méret és a
+     * súly volt még a régi, mindenhol egyforma app-mintán (11px/900).
+     */
     eyebrow: {
       color: t.accent,
-      fontSize: 11,
-      fontWeight: "900",
-      letterSpacing: 1.4,
+      fontSize: 10,
+      fontWeight: "600",
+      letterSpacing: 1,
     },
     titleRow: {
       alignItems: "baseline",
