@@ -449,7 +449,7 @@ export function PilotAssetCreatePage() {
           <PilotCard>
             <PilotCardHeader title="Azonosítás" />
             <div className="grid grid-cols-1 gap-x-6 gap-y-5 p-5 md:grid-cols-2">
-              <PilotFormField label="Eszköz neve *">
+              <PilotFormField label="Eszköz neve" required>
                 <PilotInput
                   value={name}
                   onChange={setName}
@@ -643,7 +643,7 @@ export function PilotAssetCreatePage() {
           <PilotCard>
             <PilotCardHeader title="Hozzárendelés" />
             <div className="grid grid-cols-1 gap-x-6 gap-y-5 p-5 md:grid-cols-2">
-              <PilotFormField label="Partner *">
+              <PilotFormField label="Partner" required>
                 <PilotSelect
                   value={selectedOwner}
                   disabled={loadingOptions}
@@ -688,9 +688,10 @@ export function PilotAssetCreatePage() {
               <PilotFormField
                 label={
                   owner?.type === "SUPPLIER"
-                    ? "Alegység (kötelező) *"
+                    ? "Alegység (kötelező)"
                     : "Alegység"
                 }
+                required={owner?.type === "SUPPLIER"}
                 help="A partner alegysége, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Alegységek néven szerkesztesz."
               >
                 <PilotSelect
