@@ -18,7 +18,10 @@ vi.mock("./auth/user-menu", () => ({
   UserMenu: () => <div>Felhasználói menü</div>,
 }));
 vi.mock("./global-search", () => ({
-  GlobalSearch: () => <div>Kereső</div>,
+  // The mock keeps the real control's role and name (type="search",
+  // aria-label="Keresés"), so tests that locate the top bar through its
+  // search box still find it.
+  GlobalSearch: () => <input type="search" aria-label="Keresés" />,
 }));
 
 const ownerSession: Session = {
