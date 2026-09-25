@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,10 +14,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, useLocalSearchParams } from "expo-router";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 export default function LoginScreen() {
   const { assetToken } = useLocalSearchParams<{ assetToken?: string }>();
   const { status, signInError, signIn } = useAuth();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -87,7 +91,7 @@ export default function LoginScreen() {
                 value={email}
                 onChangeText={setEmail}
                 placeholder="pl. nev@acropora.hu"
-                placeholderTextColor="#5b7c92"
+                placeholderTextColor={tokens.textMuted}
                 style={[styles.input, submitting && styles.inputDisabled]}
                 returnKeyType="next"
               />
@@ -108,7 +112,7 @@ export default function LoginScreen() {
                   value={password}
                   onChangeText={setPassword}
                   placeholder="Jelszó"
-                  placeholderTextColor="#5b7c92"
+                  placeholderTextColor={tokens.textMuted}
                   style={[
                     styles.input,
                     styles.passwordInput,
@@ -153,7 +157,7 @@ export default function LoginScreen() {
               ]}
             >
               {submitting ? (
-                <ActivityIndicator color="#ffffff" />
+                <ActivityIndicator color={tokens.textOnAccent} />
               ) : (
                 <Text style={styles.submitButtonText}>Bejelentkezés</Text>
               )}
@@ -165,98 +169,108 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#071827",
-  },
-  flex: {
-    flex: 1,
-  },
-  container: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 24,
-    gap: 32,
-  },
-  hero: {
-    gap: 8,
-  },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.6,
-  },
-  title: {
-    color: "#f4fbff",
-    fontSize: 28,
-    fontWeight: "800",
-  },
-  subtitle: {
-    color: "#b7cedd",
-    fontSize: 15,
-  },
-  form: {
-    gap: 18,
-  },
-  field: {
-    gap: 8,
-  },
-  label: {
-    color: "#7ea3b9",
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  input: {
-    backgroundColor: "#0b263d",
-    borderColor: "#164668",
-    borderRadius: 12,
-    borderWidth: 1,
-    color: "#f4fbff",
-    fontSize: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  inputDisabled: {
-    opacity: 0.6,
-  },
-  passwordRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-  },
-  passwordInput: {
-    flex: 1,
-  },
-  toggleButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-  },
-  toggleButtonText: {
-    color: "#52d6c7",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  errorText: {
-    color: "#ff9f92",
-    fontSize: 14,
-  },
-  submitButton: {
-    alignItems: "center",
-    backgroundColor: "#166a7a",
-    borderRadius: 12,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingVertical: 12,
-  },
-  submitButtonPressed: {
-    opacity: 0.75,
-  },
-  submitButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 12.
+ * kör, a maradék telefonos képernyők átültetése (az Eszközök #1087/#1089
+ * és a Munkalapok #1124-#1126 mintáját követve): ez a képernyő eddig saját,
+ * fix sötét hexekkel élt (`#071827`, `#0b263d` stb.), amiket a
+ * `_layout.tsx` fejléce is idézett -- lásd annak saját, ugyanebben a
+ * körben frissített fejlécszíneit.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    flex: {
+      flex: 1,
+    },
+    container: {
+      flexGrow: 1,
+      justifyContent: "center",
+      padding: 24,
+      gap: 32,
+    },
+    hero: {
+      gap: 8,
+    },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 1.6,
+    },
+    title: {
+      color: t.textPrimary,
+      fontSize: 28,
+      fontWeight: "800",
+    },
+    subtitle: {
+      color: t.textSecondary,
+      fontSize: 15,
+    },
+    form: {
+      gap: 18,
+    },
+    field: {
+      gap: 8,
+    },
+    label: {
+      color: t.textSecondary,
+      fontSize: 12,
+      fontWeight: "700",
+      textTransform: "uppercase",
+    },
+    input: {
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      color: t.textPrimary,
+      fontSize: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    inputDisabled: {
+      opacity: 0.6,
+    },
+    passwordRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+    },
+    passwordInput: {
+      flex: 1,
+    },
+    toggleButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+    },
+    toggleButtonText: {
+      color: t.accent,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    errorText: {
+      color: t.danger,
+      fontSize: 14,
+    },
+    submitButton: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      justifyContent: "center",
+      minHeight: 48,
+      paddingVertical: 12,
+    },
+    submitButtonPressed: {
+      opacity: 0.75,
+    },
+    submitButtonText: {
+      color: t.textOnAccent,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+  });
+}

@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
 import { foregroundNotificationBehavior } from "@/lib/notifications/push-foreground";
 import { usePushNavigation } from "@/lib/notifications/usePushNavigation";
 import { queryClient } from "@/lib/query-client";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
 
 /**
  * AZ ERTESITES AKKOR IS LATSZIK, HA AZ APP NYITVA VAN.
@@ -32,6 +33,18 @@ Notifications.setNotificationHandler({
 });
 
 export default function RootLayout() {
+  /**
+   * A `StatusBar` STÍLUSA A TÉMÁBÓL JÖN (Figma 12. kör, 2026-09-25): a
+   * `useAppTheme()` sehol nem igényel Providert (a `useThemePreference()`
+   * közvetlenül `expo-secure-store`-ot olvas), tehát itt, a
+   * `QueryClientProvider`/`AuthProvider` ELŐTT is biztonságosan hívható. A
+   * "light" stílus VILÁGOS ikonokat jelent (sötét háttérhez), a "dark"
+   * SÖTÉT ikonokat (világos háttérhez) -- fordítva a `scheme` nevéhez
+   * képest, ezért `scheme === "dark" ? "light" : "dark"`.
+   */
+  const { scheme } = useAppTheme();
+  const statusBarStyle = scheme === "dark" ? "light" : "dark";
+
   // Checked before anything else mounts. A missing or unreadable server
   // address used to throw while `config/env.ts` was being imported, which
   // killed the app on launch with nothing on screen to explain it. Now it
@@ -40,7 +53,7 @@ export default function RootLayout() {
   if (!environment.ok) {
     return (
       <>
-        <StatusBar style="light" />
+        <StatusBar style={statusBarStyle} />
         <RestoringScreen
           networkError={false}
           onRetry={() => undefined}
@@ -53,7 +66,7 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <StatusBar style="light" />
+        <StatusBar style={statusBarStyle} />
         <RootNavigator />
       </AuthProvider>
     </QueryClientProvider>
@@ -78,6 +91,7 @@ function RootNavigator() {
     unlock,
     signOut,
   } = useAuth();
+  const { tokens } = useAppTheme();
 
   /**
    * A KOPPINTAS AZ ERTESITESEN MEGNYITJA A MUNKALAPOT.
@@ -120,9 +134,9 @@ function RootNavigator() {
   return (
     <Stack
       screenOptions={{
-        contentStyle: { backgroundColor: "#071827" },
-        headerStyle: { backgroundColor: "#0b263d" },
-        headerTintColor: "#f4fbff",
+        contentStyle: { backgroundColor: tokens.background },
+        headerStyle: { backgroundColor: tokens.surface },
+        headerTintColor: tokens.textPrimary,
         headerShadowVisible: false,
       }}
     >
