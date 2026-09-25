@@ -204,6 +204,15 @@ export interface WorksheetChainLink {
   number: string | null;
 }
 
+/** Egy a laphoz rendelt eszközök közül -- lásd a `WorksheetDetail.assets` fejlécét. */
+export interface WorksheetAssetLink {
+  id: string;
+  assetId: string;
+  assetNumber: string;
+  assetName: string;
+  attachedAt: string;
+}
+
 export interface WorksheetDetail {
   id: string;
   number: string | null;
@@ -245,6 +254,18 @@ export interface WorksheetDetail {
   handedOverAt: string | null;
   handedOverByName: string | null;
   assignees: WorksheetAssignee[];
+  /**
+   * AZ ESZKOZOK, AMIKROL A LAP SZOL.
+   *
+   * UGYANOTT ALL, AHOL A FELELOSOK: a MUNKALAP azonossagahoz tartozik, nem a
+   * verziohoz, tehat lezart lapon is javithato. A szerver mar 2026-09-16 ota
+   * kuldi (`WorksheetDetail.assets`, `packages/types`), a telefon tipusabol
+   * eddig hianyzott -- ugyanaz a "megerkezett es eldobodott" mintazat, mint a
+   * hibajegy-hivatkozasnal (`serviceJob`) korabban.
+   *
+   * URES TOMB ERVENYES VALASZ: a lap keletkezhet eszkoz megnevezese nelkul.
+   */
+  assets: WorksheetAssetLink[];
   createdAt: string;
   updatedAt: string;
   continues: WorksheetChainLink | null;
@@ -366,6 +387,26 @@ export function setWorksheetAssignees(id: string, userIds: readonly string[]) {
   const torzs: SetWorksheetAssigneesInput = { userIds: [...userIds] };
   return apiRequest<WorksheetDetail>(
     `${BASE}/${encodeURIComponent(id)}/assignees`,
+    { method: "PUT", body: JSON.stringify(torzs) },
+  );
+}
+
+/**
+ * A LAP ERINTETT ESZKOZEI, TELJES ALLAPOTKENT -- ugyanaz az alak, mint a
+ * felelosoknel (lasd `setWorksheetAssignees` fejleceit): `PUT`, es a bekuldott
+ * lista a lap eszkozeinek TELJES allapota, nem hozzaadas.
+ *
+ * A KERES TORZSE NEVESITETT TIPUS, UGYANAZERT, mint a felelosoknel: a
+ * `mobile-request-body.spec.ts` halojaba csak nevesitett tipus kerulhet be.
+ */
+export interface SetWorksheetAssetsInput {
+  assetIds: string[];
+}
+
+export function setWorksheetAssets(id: string, assetIds: readonly string[]) {
+  const torzs: SetWorksheetAssetsInput = { assetIds: [...assetIds] };
+  return apiRequest<WorksheetDetail>(
+    `${BASE}/${encodeURIComponent(id)}/assets`,
     { method: "PUT", body: JSON.stringify(torzs) },
   );
 }
