@@ -53,7 +53,16 @@ describe("a munkalap csatolmány-szakasza", () => {
   it("a csatolmány-szakasz nem a szerkesztési jogra van kapuzva", () => {
     const s = olvas(KEPERNYO);
     const szakasz = s.indexOf("Csatolmányok (");
-    const kapu = s.indexOf("{capabilities.worksheetsManage ? (");
+    /*
+      A KAPUT A CSATOLMANYOK UTAN KERESSUK, NEM A FAJL ELEJETOL (2026-09-25,
+      a kartyak Figma-terv szerinti ujrarendezese utan mert javitas): a
+      `{capabilities.worksheetsManage ? (` alak TOBB helyen is all a
+      kepernyon (Bejegyzesek, Fenykep, Anyagigenyek), es az ujrarendezes
+      utan mar NEM a Fenykep-kapu az elso ilyen a fajlban. A `szakasz`
+      pozíciótól kereset a ket EGYMAS MELLETT allo szakaszt (Csatolmanyok,
+      utana kozvetlenul Fenykep) hasonlitja ossze, ugyanugy, mint eredetileg.
+    */
+    const kapu = s.indexOf("{capabilities.worksheetsManage ? (", szakasz);
     assert.ok(szakasz !== -1, "nem találom a csatolmány-szakaszt");
     assert.ok(kapu !== -1, "nem találom a szerkesztési kaput");
     assert.ok(

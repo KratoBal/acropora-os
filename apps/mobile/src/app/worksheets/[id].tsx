@@ -1023,6 +1023,36 @@ export default function WorksheetDetailScreen() {
               </>
             ) : null}
 
+            {/*
+              A SORREND A TERV SZERINT, 2026-09-25 -- acrobot döntése: az öt,
+              a tervben (MobileMunkalapDetail) is szereplő kártya (Adatok,
+              Tételek, Érintett eszközök, Bejegyzések, Ügyfél döntése -- itt
+              "Aláírás" címmel, lásd lent miért) a terv sorrendjében áll ELÖL.
+              A többi, amit a terv nem ismer (Felelősök, A kiadott munkalap,
+              Csatolmányok, Fénykép, Leírás, az akció-gombok blokkja,
+              Anyagigények, Verziók), UTÁNUK következik, a korábbi egymáshoz
+              viszonyított sorrendjében.
+
+              A FOLYTATÁS BANNER KIVÉTEL, ÉS SZÁNDÉKOSAN A FEJLÉC ALATT MARAD:
+              nem kártya, hanem lap-szintű állapotjelző (ugyanaz a szerep, mint
+              a Figma web tervének külön "Banners" szakaszáé, ami szintén a
+              fejléc és a kártyák KÖZÖTT áll, nem a kártyák sorában) -- és a
+              tetejére kerülése ma reggeli, névvel ellátott Balázs-döntés
+              (lásd a saját fejlécét), amit ez a javítás nem ír felül.
+
+              A CÍM "Aláírás" MARAD, NEM LETT "Ügyfél döntése": a terv adja az
+              ELRENDEZÉST, a feliratok a mai kódból jönnek (ugyanaz a szabály,
+              mint a webes Figma-portoknál) -- itt nincs mit "visszaállítani",
+              mert a mai felirat nem hibás, csak más szót választ, mint a terv.
+            */}
+            {/*
+              "ADATOK", A TERV SZERINT -- ez a kártya eddig cím nélkül állt,
+              holott minden más kártyának van címe ezen a lapon. A terv (Figma
+              12. kör, MobileMunkalapDetail) ezt a mezőrácsot "Adatok" címmel
+              látja el -- ÚJ cím, nem egy meglévő átnevezése, tehát nem sérti
+              a "feliratok a mai kódból jönnek" szabályt.
+            */}
+            <SectionTitle style={{ marginTop: 6 }}>Adatok</SectionTitle>
             <View style={styles.card}>
               {rows.map((row) => (
                 <View key={row.label} style={styles.row}>
@@ -1058,6 +1088,462 @@ export default function WorksheetDetailScreen() {
                 </View>
               ))}
             </View>
+
+            <SectionTitle style={{ marginTop: 6 }}>
+              Tételek ({current.lines.length})
+            </SectionTitle>
+
+            {/*
+              AMI MEG NEM MENT FEL, AZ NEM LATSZIK A LISTAN -- ES EZT KI KELL
+              MONDANI. A lista a szerver valaszabol jon, tehat a sorban allo
+              tetel ott NINCS ott. Enelkul a lap ugy nez ki, mintha a mentes meg
+              sem tortent volna, es a szerelo ujra beirna ugyanazt.
+            */}
+            {queuedLinesNotice ? (
+              <View style={styles.card}>
+                <Text style={styles.muted}>{queuedLinesNotice}</Text>
+              </View>
+            ) : null}
+
+            {/*
+              A FELVITEL CSAK PISZKOZATON, ES CSAK IRASI JOGGAL.
+              A szerver ugyanezt koveteli (a sor-vegpontok piszkozat-verziot
+              kernek), es ha a gomb ott allna egy lezart lapon, azt igerne,
+              hogy megoldodik -- holott a keres ugyanazt a hibat kapna.
+            */}
+            {capabilities.worksheetsManage && current.status === "DRAFT" ? (
+              <View style={styles.card}>
+                <Text style={styles.label}>Mit csináltál</Text>
+                <TextInput
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholder="Például: szivattyú csere"
+                  placeholderTextColor={tokens.textMuted}
+                  style={styles.input}
+                />
+                <View style={styles.lineRow}>
+                  <View style={styles.lineCell}>
+                    <Text style={styles.label}>Mennyi</Text>
+                    <TextInput
+                      value={quantity}
+                      onChangeText={setQuantity}
+                      placeholder="1,5"
+                      placeholderTextColor={tokens.textMuted}
+                      keyboardType="decimal-pad"
+                      style={styles.input}
+                    />
+                  </View>
+                  <View style={styles.lineCell}>
+                    <Text style={styles.label}>Egység</Text>
+                    <TextInput
+                      value={unit}
+                      onChangeText={setUnit}
+                      placeholder="óra"
+                      placeholderTextColor={tokens.textMuted}
+                      style={styles.input}
+                    />
+                  </View>
+                </View>
+                {/*
+                  A SOR ELLENTMONDASA KIMONDVA: munkaorakent szamit, de az
+                  egysege nem ora. NEM tiltja a mentest (Balazs dontese,
+                  2026-09-21): lehet valodi eset, amikor valaki munkaorat
+                  `db`-ben ir. Tereles, nem zar.
+
+                  A MEZOK ALATT ALL: a kis kijelzon az egyseg es a kapcsolo
+                  egymas alatt van, tehat az ellentmondas egyikhez sem tartozik
+                  kulon -- a ketto EGYUTT adja.
+                */}
+                {egysegFigyelmeztetes ? (
+                  <Text style={styles.egysegFigyelmeztetes}>
+                    {egysegFigyelmeztetes}
+                  </Text>
+                ) : null}
+                {/*
+                  A FAJTA KAPCSOLO, ES A LETSZAM CSAK MELLETTE LATSZIK.
+
+                  A LETSZAM MEZO ITT ELTUNIK a nem-munka tetelnel, a weben
+                  viszont csak TILTOTT -- es a ket dontes nem mond ellent
+                  egymasnak. A weben a sorok EGY RACSBAN allnak, tehat egy
+                  eltuno cella elcsusztatna az alatta levo sorokat; a telefonon
+                  a mezok egymas alatt vannak, ott nincs mit elcsusztatni, es a
+                  kis kijelzon minden fololeges sor szamit.
+                */}
+                <View style={styles.lineRow}>
+                  <View style={styles.lineCell}>
+                    <Text style={styles.label}>Munkaóra</Text>
+                    <View style={styles.switchRow}>
+                      <Switch
+                        value={isLabor}
+                        onValueChange={setIsLabor}
+                        accessibilityLabel="Munkaóra-tétel"
+                      />
+                      <Text style={styles.muted}>
+                        {isLabor ? "Beleszámít" : "Nem számít bele"}
+                      </Text>
+                    </View>
+                  </View>
+                  {isLabor ? (
+                    <View style={styles.lineCell}>
+                      <Text style={styles.label}>Hányan</Text>
+                      <TextInput
+                        value={workerCount}
+                        onChangeText={setWorkerCount}
+                        placeholder="1"
+                        placeholderTextColor={tokens.textMuted}
+                        keyboardType="number-pad"
+                        style={styles.input}
+                      />
+                    </View>
+                  ) : null}
+                </View>
+                {/*
+                  AZ AR NINCS ITT, ES EZ DONTES: az arat az iroda adja meg
+                  (Balazs, 2026-09-02).
+
+                  A KORABBI SZOVEG 2026-09-17 OTA HAMIS VOLT, ezert kikerult:
+                  azt allitotta a szerelonek, hogy "enelkul a lap nem zarhato
+                  le". Balazs aznap ugy dontott, hogy az ar-mezok sehol nem
+                  jelennek meg, es ezert a lezarasi feltetel is kikerult -- a
+                  lap ma ar nelkul is lezarhato.
+
+                  Egy felhasznaloi mondat, ami egy megszunt feltetelt ir le,
+                  rosszabb a semminel: a szerelo olyasmit keres, ami nem all.
+                */}
+                {lineError ? (
+                  <Text style={styles.lineError}>{lineError}</Text>
+                ) : null}
+                {/*
+                  A SORBA KERULES NEM HIBA, ezert nem is a piros dobozban all: a
+                  tetel megvan, csak meg a telefonon. Egy piros uzenet itt azt
+                  jelentene a szerelonek, hogy nem sikerult -- es ujra beirna.
+                */}
+                {queued ? <Text style={styles.muted}>{queued}</Text> : null}
+                <Pressable
+                  disabled={addLine.isPending}
+                  onPress={() => addLine.mutate()}
+                  style={[
+                    styles.addLineButton,
+                    addLine.isPending && styles.disabled,
+                  ]}
+                >
+                  <Text style={styles.addLineText}>
+                    {addLine.isPending ? "Mentés…" : "Tétel hozzáadása"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {current.lines.length === 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.muted}>Ezen a lapon még nincs tétel.</Text>
+              </View>
+            ) : (
+              current.lines.map((line) => (
+                <View key={line.id} style={styles.card}>
+                  <Text style={styles.lineTitle}>{line.description}</Text>
+                  {line.detail ? (
+                    <Text style={styles.muted}>{line.detail}</Text>
+                  ) : null}
+                  {line.assetNumber ? (
+                    <Text style={styles.muted}>{line.assetNumber}</Text>
+                  ) : null}
+                  {/*
+                    AZ UGYFEL SAJAT KODJA, csak ha van, es FELIRATTAL. A felette
+                    allo eszkozszam a MIENK, ez pedig az ugyfele: ket csupasz kod
+                    egymas alatt pont azt a keveredest hozna, ami ellen a mezo
+                    kulon nevet kapott.
+                  */}
+                  {line.partnerInternalCode ? (
+                    <Text style={styles.muted}>
+                      Partner azonosítója: {line.partnerInternalCode}
+                    </Text>
+                  ) : null}
+                  <Text style={styles.lineSummary}>
+                    {worksheetLineSummary(line, current.currency)}
+                  </Text>
+                  {/*
+                    A TORLES CSAK PISZKOZATON. Egy lezart lapon a gomb olyat
+                    igerne, amit a szerver elutasit.
+                  */}
+                  {capabilities.worksheetsManage &&
+                  current.status === "DRAFT" ? (
+                    <Pressable
+                      disabled={removeLine.isPending}
+                      onPress={() => removeLine.mutate(line.id)}
+                    >
+                      <Text style={styles.removeLine}>Tétel törlése</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))
+            )}
+
+            {/*
+              AZ OSSZESITES KARTYA (netto, afa, brutto) 2026-09-17-EN KIKERULT.
+
+              Balazs dontese ("B"): az ar-mezok sehol nem jelennek meg, sem a
+              weben, sem az appban -- es ezert a lezarasi ar-feltetel is kikerult
+              (#809, beolvadt). Az ADAT megmarad, ar tovabbra is rendelheto.
+
+              ES A HELYERE A MUNKAORA KERULT (ugyanaznap este, kulon PR-ben).
+              Balazs szo szerint: "a vegen legyen egy ossz munkaora ami
+              automatikusan szamol tetelenkent es az osszes tetel eseteben is".
+              A tetelenkenti szam a tetel sorabban all, ez itt az OSSZES.
+            */}
+
+            {/*
+              A SZAM A SZERVERTOL JON, NEM ITT ADODIK OSSZE. Ha a telefon
+              szamolna, ugyanaz a szabaly KET feluleten allna (itt es a weben),
+              es a ketto elcsuszasa NEMA lenne: ugyanarra a lapra ket kulonbozo
+              ora latszana ket kepernyon.
+
+              ES AKKOR IS KIIRJUK, HA NULLA. Egy elrejtett nulla ket allapotot
+              mosna ossze: hogy nincs munkaora-tetel a lapon, es hogy a kartya
+              elromlott. A "0 óra" allitas; a hianyzo kartya kerdes.
+            */}
+            <View style={styles.card}>
+              <Text style={styles.label}>Összes munkaóra</Text>
+              <Text style={styles.laborTotal}>{current.laborHours} óra</Text>
+            </View>
+
+            {/*
+              ERINTETT ESZKOZOK -- a lapra vezetett `WorksheetAsset` sorok,
+              UGYANOLYAN SZERKEZETBEN, mint a Felelosok kartya. A mezo a
+              szerveren mar 2026-09-16 ota all, es a fejlece kimondja: eddig
+              SEMMI nem olvasta vissza, se a telefon, se a web. A 8. koros
+              Figma-terv az "Erintett eszkozok" kartyat sor-listakent mutatja
+              (nev + monospace kod), ugyanezt kapja itt is.
+            */}
+            <SectionTitle style={{ marginTop: 6 }}>
+              Érintett eszközök
+            </SectionTitle>
+            <View style={styles.card}>
+              {data.assets.length === 0 ? (
+                <Text style={styles.muted}>Nincs érintett eszköz.</Text>
+              ) : (
+                data.assets.map((link) => (
+                  <View key={link.id} style={styles.row}>
+                    <View>
+                      <Text style={styles.value}>{link.assetName}</Text>
+                      <Text style={styles.assetCode}>{link.assetNumber}</Text>
+                    </View>
+                  </View>
+                ))
+              )}
+
+              {readOnlyAssetsNotice ? (
+                <Text style={styles.muted}>{readOnlyAssetsNotice}</Text>
+              ) : null}
+
+              {capabilities.worksheetsManage && assetDraft === null ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Érintett eszközök szerkesztése"
+                  accessibilityState={{ disabled: fromCache }}
+                  disabled={fromCache}
+                  onPress={() =>
+                    setAssetDraft(data.assets.map((link) => link.assetId))
+                  }
+                  style={({ pressed }) => [
+                    styles.assigneeEdit,
+                    fromCache && styles.disabled,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.assigneeEditText}>
+                    Érintett eszközök szerkesztése
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {capabilities.worksheetsManage && fromCache ? (
+                <Text style={styles.muted}>
+                  Mentett másolatot nézel, ezért az érintett eszközök most nem
+                  írhatók át. Térerőnél tudod átírni a listát.
+                </Text>
+              ) : null}
+
+              {assetDraft !== null ? (
+                <>
+                  <WorksheetAssetPicker
+                    departmentId={worksheet.data?.department.id ?? ""}
+                    selectedIds={assetDraft}
+                    onChange={setAssetDraft}
+                    enabled={assetPickerEnabled}
+                  />
+
+                  <Text style={styles.muted}>
+                    {assetDraft.length === 0
+                      ? "Mentés után a lapnak nem lesz érintett eszköze."
+                      : `Mentés után pontosan ez a ${assetDraft.length} eszköz lesz a lap érintett eszköze.`}
+                  </Text>
+
+                  {assetError ? (
+                    <Text style={styles.lineError}>{assetError}</Text>
+                  ) : null}
+
+                  <View style={styles.lineRow}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Érintett eszközök mentése"
+                      accessibilityState={{
+                        disabled: !assetsChanged || assetSaving,
+                      }}
+                      disabled={!assetsChanged || assetSaving}
+                      onPress={() => assetMutation.mutate(assetDraft)}
+                      style={({ pressed }) => [
+                        styles.addLineButton,
+                        styles.assigneeAction,
+                        (!assetsChanged || assetSaving) && styles.disabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.addLineText}>
+                        {assetSaving ? "Mentés..." : "Mentés"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Érintett eszközök szerkesztésének elvetése"
+                      disabled={assetSaving}
+                      onPress={() => {
+                        setAssetDraft(null);
+                        setAssetError(null);
+                      }}
+                      style={({ pressed }) => [
+                        styles.assigneeEdit,
+                        styles.assigneeAction,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.assigneeEditText}>Mégsem</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
+            </View>
+
+            {/*
+              A MUNKANAPLO. Balazs kerese, 2026-09-03: a "Bejegyzes" gombra
+              nyilik a mezo, es a "Rogzites" zarja -- a mezo NEM all ott
+              mindig, kulonben minden lapon egy ures szovegdoboz fogadna.
+
+              A LAP ALLAPOTA NEM SZAMIT: alairt lapra is lehet bejegyzest irni.
+              A naplo arrol szol, MI TORTENT, es a tiltas NEMAN veszitene el egy
+              jegyzetet; az engedes LATSZIK, mert a bejegyzesen ott az idopont.
+            */}
+            <SectionTitle style={{ marginTop: 6 }}>
+              Bejegyzések ({entries.data?.items.length ?? 0})
+            </SectionTitle>
+
+            {capabilities.worksheetsManage ? (
+              <View style={styles.card}>
+                {entryDraft === null ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setEntryDraft("")}
+                    style={styles.addLineButton}
+                  >
+                    <Text style={styles.addLineText}>Bejegyzés</Text>
+                  </Pressable>
+                ) : (
+                  <>
+                    <Text style={styles.label}>Mit csináltál</Text>
+                    <TextInput
+                      value={entryDraft}
+                      onChangeText={setEntryDraft}
+                      multiline
+                      placeholder="Például: szivattyú csere, a régi ment a szervizbe"
+                      placeholderTextColor={tokens.textMuted}
+                      style={styles.entryInput}
+                    />
+                    {entryError ? (
+                      <Text style={styles.lineError}>{entryError}</Text>
+                    ) : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={addEntry.isPending}
+                      onPress={() => addEntry.mutate()}
+                      style={[
+                        styles.addLineButton,
+                        addEntry.isPending && styles.disabled,
+                      ]}
+                    >
+                      <Text style={styles.addLineText}>
+                        {addEntry.isPending ? "Mentés…" : "Rögzítés"}
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
+              </View>
+            ) : null}
+
+            {entries.data && entries.data.items.length === 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.muted}>
+                  {describeEmptyEntries(capabilities.worksheetsManage)}
+                </Text>
+              </View>
+            ) : null}
+
+            {entries.data?.items.map((entry) => (
+              /*
+                A SORRA KOPPINTVA KULON LAP NYILIK (Balazs kerese). A lista
+                RESZLETET mutat, nem a teljes szoveget: egy hosszu bejegyzes
+                kulonben elnyomna a lap tobbi reszet.
+              */
+              <Pressable
+                key={entry.id}
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({
+                    pathname: "/worksheets/entries/[id]",
+                    params: { id, entryId: entry.id },
+                  })
+                }
+                style={styles.card}
+              >
+                <Text style={styles.muted}>
+                  {worksheetEntryByline(entry, (iso) =>
+                    formatWorksheetDate(iso),
+                  )}
+                </Text>
+                <Text style={styles.lineTitle} numberOfLines={3}>
+                  {entry.body}
+                </Text>
+              </Pressable>
+            ))}
+
+            {current.signature ? (
+              <>
+                <SectionTitle style={{ marginTop: 6 }}>Aláírás</SectionTitle>
+                <View style={styles.card}>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Aláíró</Text>
+                    <Text style={styles.value}>
+                      {current.signature.signerName}
+                    </Text>
+                  </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Döntés</Text>
+                    <Text style={styles.value}>
+                      {current.signature.decision === "ACCEPTED"
+                        ? "Elfogadva"
+                        : "Elutasítva"}
+                    </Text>
+                  </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Dátum</Text>
+                    <Text style={styles.value}>
+                      {formatWorksheetDate(current.signature.signedAt)}
+                    </Text>
+                  </View>
+                  {current.signature.note ? (
+                    <Text style={styles.muted}>{current.signature.note}</Text>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
 
             <SectionTitle style={{ marginTop: 6 }}>Felelősök</SectionTitle>
             <View style={styles.card}>
@@ -1437,340 +1923,6 @@ export default function WorksheetDetailScreen() {
               </>
             ) : null}
 
-            <SectionTitle style={{ marginTop: 6 }}>
-              Tételek ({current.lines.length})
-            </SectionTitle>
-
-            {/*
-              AMI MEG NEM MENT FEL, AZ NEM LATSZIK A LISTAN -- ES EZT KI KELL
-              MONDANI. A lista a szerver valaszabol jon, tehat a sorban allo
-              tetel ott NINCS ott. Enelkul a lap ugy nez ki, mintha a mentes meg
-              sem tortent volna, es a szerelo ujra beirna ugyanazt.
-            */}
-            {queuedLinesNotice ? (
-              <View style={styles.card}>
-                <Text style={styles.muted}>{queuedLinesNotice}</Text>
-              </View>
-            ) : null}
-
-            {/*
-              A FELVITEL CSAK PISZKOZATON, ES CSAK IRASI JOGGAL.
-              A szerver ugyanezt koveteli (a sor-vegpontok piszkozat-verziot
-              kernek), es ha a gomb ott allna egy lezart lapon, azt igerne,
-              hogy megoldodik -- holott a keres ugyanazt a hibat kapna.
-            */}
-            {capabilities.worksheetsManage && current.status === "DRAFT" ? (
-              <View style={styles.card}>
-                <Text style={styles.label}>Mit csináltál</Text>
-                <TextInput
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Például: szivattyú csere"
-                  placeholderTextColor={tokens.textMuted}
-                  style={styles.input}
-                />
-                <View style={styles.lineRow}>
-                  <View style={styles.lineCell}>
-                    <Text style={styles.label}>Mennyi</Text>
-                    <TextInput
-                      value={quantity}
-                      onChangeText={setQuantity}
-                      placeholder="1,5"
-                      placeholderTextColor={tokens.textMuted}
-                      keyboardType="decimal-pad"
-                      style={styles.input}
-                    />
-                  </View>
-                  <View style={styles.lineCell}>
-                    <Text style={styles.label}>Egység</Text>
-                    <TextInput
-                      value={unit}
-                      onChangeText={setUnit}
-                      placeholder="óra"
-                      placeholderTextColor={tokens.textMuted}
-                      style={styles.input}
-                    />
-                  </View>
-                </View>
-                {/*
-                  A SOR ELLENTMONDASA KIMONDVA: munkaorakent szamit, de az
-                  egysege nem ora. NEM tiltja a mentest (Balazs dontese,
-                  2026-09-21): lehet valodi eset, amikor valaki munkaorat
-                  `db`-ben ir. Tereles, nem zar.
-
-                  A MEZOK ALATT ALL: a kis kijelzon az egyseg es a kapcsolo
-                  egymas alatt van, tehat az ellentmondas egyikhez sem tartozik
-                  kulon -- a ketto EGYUTT adja.
-                */}
-                {egysegFigyelmeztetes ? (
-                  <Text style={styles.egysegFigyelmeztetes}>
-                    {egysegFigyelmeztetes}
-                  </Text>
-                ) : null}
-                {/*
-                  A FAJTA KAPCSOLO, ES A LETSZAM CSAK MELLETTE LATSZIK.
-
-                  A LETSZAM MEZO ITT ELTUNIK a nem-munka tetelnel, a weben
-                  viszont csak TILTOTT -- es a ket dontes nem mond ellent
-                  egymasnak. A weben a sorok EGY RACSBAN allnak, tehat egy
-                  eltuno cella elcsusztatna az alatta levo sorokat; a telefonon
-                  a mezok egymas alatt vannak, ott nincs mit elcsusztatni, es a
-                  kis kijelzon minden fololeges sor szamit.
-                */}
-                <View style={styles.lineRow}>
-                  <View style={styles.lineCell}>
-                    <Text style={styles.label}>Munkaóra</Text>
-                    <View style={styles.switchRow}>
-                      <Switch
-                        value={isLabor}
-                        onValueChange={setIsLabor}
-                        accessibilityLabel="Munkaóra-tétel"
-                      />
-                      <Text style={styles.muted}>
-                        {isLabor ? "Beleszámít" : "Nem számít bele"}
-                      </Text>
-                    </View>
-                  </View>
-                  {isLabor ? (
-                    <View style={styles.lineCell}>
-                      <Text style={styles.label}>Hányan</Text>
-                      <TextInput
-                        value={workerCount}
-                        onChangeText={setWorkerCount}
-                        placeholder="1"
-                        placeholderTextColor={tokens.textMuted}
-                        keyboardType="number-pad"
-                        style={styles.input}
-                      />
-                    </View>
-                  ) : null}
-                </View>
-                {/*
-                  AZ AR NINCS ITT, ES EZ DONTES: az arat az iroda adja meg
-                  (Balazs, 2026-09-02).
-
-                  A KORABBI SZOVEG 2026-09-17 OTA HAMIS VOLT, ezert kikerult:
-                  azt allitotta a szerelonek, hogy "enelkul a lap nem zarhato
-                  le". Balazs aznap ugy dontott, hogy az ar-mezok sehol nem
-                  jelennek meg, es ezert a lezarasi feltetel is kikerult -- a
-                  lap ma ar nelkul is lezarhato.
-
-                  Egy felhasznaloi mondat, ami egy megszunt feltetelt ir le,
-                  rosszabb a semminel: a szerelo olyasmit keres, ami nem all.
-                */}
-                {lineError ? (
-                  <Text style={styles.lineError}>{lineError}</Text>
-                ) : null}
-                {/*
-                  A SORBA KERULES NEM HIBA, ezert nem is a piros dobozban all: a
-                  tetel megvan, csak meg a telefonon. Egy piros uzenet itt azt
-                  jelentene a szerelonek, hogy nem sikerult -- es ujra beirna.
-                */}
-                {queued ? <Text style={styles.muted}>{queued}</Text> : null}
-                <Pressable
-                  disabled={addLine.isPending}
-                  onPress={() => addLine.mutate()}
-                  style={[
-                    styles.addLineButton,
-                    addLine.isPending && styles.disabled,
-                  ]}
-                >
-                  <Text style={styles.addLineText}>
-                    {addLine.isPending ? "Mentés…" : "Tétel hozzáadása"}
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
-            {current.lines.length === 0 ? (
-              <View style={styles.card}>
-                <Text style={styles.muted}>Ezen a lapon még nincs tétel.</Text>
-              </View>
-            ) : (
-              current.lines.map((line) => (
-                <View key={line.id} style={styles.card}>
-                  <Text style={styles.lineTitle}>{line.description}</Text>
-                  {line.detail ? (
-                    <Text style={styles.muted}>{line.detail}</Text>
-                  ) : null}
-                  {line.assetNumber ? (
-                    <Text style={styles.muted}>{line.assetNumber}</Text>
-                  ) : null}
-                  {/*
-                    AZ UGYFEL SAJAT KODJA, csak ha van, es FELIRATTAL. A felette
-                    allo eszkozszam a MIENK, ez pedig az ugyfele: ket csupasz kod
-                    egymas alatt pont azt a keveredest hozna, ami ellen a mezo
-                    kulon nevet kapott.
-                  */}
-                  {line.partnerInternalCode ? (
-                    <Text style={styles.muted}>
-                      Partner azonosítója: {line.partnerInternalCode}
-                    </Text>
-                  ) : null}
-                  <Text style={styles.lineSummary}>
-                    {worksheetLineSummary(line, current.currency)}
-                  </Text>
-                  {/*
-                    A TORLES CSAK PISZKOZATON. Egy lezart lapon a gomb olyat
-                    igerne, amit a szerver elutasit.
-                  */}
-                  {capabilities.worksheetsManage &&
-                  current.status === "DRAFT" ? (
-                    <Pressable
-                      disabled={removeLine.isPending}
-                      onPress={() => removeLine.mutate(line.id)}
-                    >
-                      <Text style={styles.removeLine}>Tétel törlése</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ))
-            )}
-
-            {/*
-              AZ OSSZESITES KARTYA (netto, afa, brutto) 2026-09-17-EN KIKERULT.
-
-              Balazs dontese ("B"): az ar-mezok sehol nem jelennek meg, sem a
-              weben, sem az appban -- es ezert a lezarasi ar-feltetel is kikerult
-              (#809, beolvadt). Az ADAT megmarad, ar tovabbra is rendelheto.
-
-              ES A HELYERE A MUNKAORA KERULT (ugyanaznap este, kulon PR-ben).
-              Balazs szo szerint: "a vegen legyen egy ossz munkaora ami
-              automatikusan szamol tetelenkent es az osszes tetel eseteben is".
-              A tetelenkenti szam a tetel sorabban all, ez itt az OSSZES.
-            */}
-
-            {/*
-              A SZAM A SZERVERTOL JON, NEM ITT ADODIK OSSZE. Ha a telefon
-              szamolna, ugyanaz a szabaly KET feluleten allna (itt es a weben),
-              es a ketto elcsuszasa NEMA lenne: ugyanarra a lapra ket kulonbozo
-              ora latszana ket kepernyon.
-
-              ES AKKOR IS KIIRJUK, HA NULLA. Egy elrejtett nulla ket allapotot
-              mosna ossze: hogy nincs munkaora-tetel a lapon, es hogy a kartya
-              elromlott. A "0 óra" allitas; a hianyzo kartya kerdes.
-            */}
-            <View style={styles.card}>
-              <Text style={styles.label}>Összes munkaóra</Text>
-              <Text style={styles.laborTotal}>{current.laborHours} óra</Text>
-            </View>
-
-            {/*
-              ERINTETT ESZKOZOK -- a lapra vezetett `WorksheetAsset` sorok,
-              UGYANOLYAN SZERKEZETBEN, mint a Felelosok kartya. A mezo a
-              szerveren mar 2026-09-16 ota all, es a fejlece kimondja: eddig
-              SEMMI nem olvasta vissza, se a telefon, se a web. A 8. koros
-              Figma-terv az "Erintett eszkozok" kartyat sor-listakent mutatja
-              (nev + monospace kod), ugyanezt kapja itt is.
-            */}
-            <SectionTitle style={{ marginTop: 6 }}>
-              Érintett eszközök
-            </SectionTitle>
-            <View style={styles.card}>
-              {data.assets.length === 0 ? (
-                <Text style={styles.muted}>Nincs érintett eszköz.</Text>
-              ) : (
-                data.assets.map((link) => (
-                  <View key={link.id} style={styles.row}>
-                    <View>
-                      <Text style={styles.value}>{link.assetName}</Text>
-                      <Text style={styles.assetCode}>{link.assetNumber}</Text>
-                    </View>
-                  </View>
-                ))
-              )}
-
-              {readOnlyAssetsNotice ? (
-                <Text style={styles.muted}>{readOnlyAssetsNotice}</Text>
-              ) : null}
-
-              {capabilities.worksheetsManage && assetDraft === null ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Érintett eszközök szerkesztése"
-                  accessibilityState={{ disabled: fromCache }}
-                  disabled={fromCache}
-                  onPress={() =>
-                    setAssetDraft(data.assets.map((link) => link.assetId))
-                  }
-                  style={({ pressed }) => [
-                    styles.assigneeEdit,
-                    fromCache && styles.disabled,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.assigneeEditText}>
-                    Érintett eszközök szerkesztése
-                  </Text>
-                </Pressable>
-              ) : null}
-
-              {capabilities.worksheetsManage && fromCache ? (
-                <Text style={styles.muted}>
-                  Mentett másolatot nézel, ezért az érintett eszközök most nem
-                  írhatók át. Térerőnél tudod átírni a listát.
-                </Text>
-              ) : null}
-
-              {assetDraft !== null ? (
-                <>
-                  <WorksheetAssetPicker
-                    departmentId={worksheet.data?.department.id ?? ""}
-                    selectedIds={assetDraft}
-                    onChange={setAssetDraft}
-                    enabled={assetPickerEnabled}
-                  />
-
-                  <Text style={styles.muted}>
-                    {assetDraft.length === 0
-                      ? "Mentés után a lapnak nem lesz érintett eszköze."
-                      : `Mentés után pontosan ez a ${assetDraft.length} eszköz lesz a lap érintett eszköze.`}
-                  </Text>
-
-                  {assetError ? (
-                    <Text style={styles.lineError}>{assetError}</Text>
-                  ) : null}
-
-                  <View style={styles.lineRow}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Érintett eszközök mentése"
-                      accessibilityState={{
-                        disabled: !assetsChanged || assetSaving,
-                      }}
-                      disabled={!assetsChanged || assetSaving}
-                      onPress={() => assetMutation.mutate(assetDraft)}
-                      style={({ pressed }) => [
-                        styles.addLineButton,
-                        styles.assigneeAction,
-                        (!assetsChanged || assetSaving) && styles.disabled,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <Text style={styles.addLineText}>
-                        {assetSaving ? "Mentés..." : "Mentés"}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Érintett eszközök szerkesztésének elvetése"
-                      disabled={assetSaving}
-                      onPress={() => {
-                        setAssetDraft(null);
-                        setAssetError(null);
-                      }}
-                      style={({ pressed }) => [
-                        styles.assigneeEdit,
-                        styles.assigneeAction,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <Text style={styles.assigneeEditText}>Mégsem</Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : null}
-            </View>
-
             {/*
               AZ ALAIRAS GOMBJA. UGYANAZ A KET FELTETEL, mint a szerveren
               (`AWAITING_SIGNATURE` allapot es `service.manage` jog), es a
@@ -1952,97 +2104,6 @@ export default function WorksheetDetailScreen() {
                 <Text style={styles.signButtonText}>Elküldöm aláírásra</Text>
               </Pressable>
             ) : null}
-
-            {/*
-              A MUNKANAPLO. Balazs kerese, 2026-09-03: a "Bejegyzes" gombra
-              nyilik a mezo, es a "Rogzites" zarja -- a mezo NEM all ott
-              mindig, kulonben minden lapon egy ures szovegdoboz fogadna.
-
-              A LAP ALLAPOTA NEM SZAMIT: alairt lapra is lehet bejegyzest irni.
-              A naplo arrol szol, MI TORTENT, es a tiltas NEMAN veszitene el egy
-              jegyzetet; az engedes LATSZIK, mert a bejegyzesen ott az idopont.
-            */}
-            <SectionTitle style={{ marginTop: 6 }}>
-              Bejegyzések ({entries.data?.items.length ?? 0})
-            </SectionTitle>
-
-            {capabilities.worksheetsManage ? (
-              <View style={styles.card}>
-                {entryDraft === null ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => setEntryDraft("")}
-                    style={styles.addLineButton}
-                  >
-                    <Text style={styles.addLineText}>Bejegyzés</Text>
-                  </Pressable>
-                ) : (
-                  <>
-                    <Text style={styles.label}>Mit csináltál</Text>
-                    <TextInput
-                      value={entryDraft}
-                      onChangeText={setEntryDraft}
-                      multiline
-                      placeholder="Például: szivattyú csere, a régi ment a szervizbe"
-                      placeholderTextColor={tokens.textMuted}
-                      style={styles.entryInput}
-                    />
-                    {entryError ? (
-                      <Text style={styles.lineError}>{entryError}</Text>
-                    ) : null}
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={addEntry.isPending}
-                      onPress={() => addEntry.mutate()}
-                      style={[
-                        styles.addLineButton,
-                        addEntry.isPending && styles.disabled,
-                      ]}
-                    >
-                      <Text style={styles.addLineText}>
-                        {addEntry.isPending ? "Mentés…" : "Rögzítés"}
-                      </Text>
-                    </Pressable>
-                  </>
-                )}
-              </View>
-            ) : null}
-
-            {entries.data && entries.data.items.length === 0 ? (
-              <View style={styles.card}>
-                <Text style={styles.muted}>
-                  {describeEmptyEntries(capabilities.worksheetsManage)}
-                </Text>
-              </View>
-            ) : null}
-
-            {entries.data?.items.map((entry) => (
-              /*
-                A SORRA KOPPINTVA KULON LAP NYILIK (Balazs kerese). A lista
-                RESZLETET mutat, nem a teljes szoveget: egy hosszu bejegyzes
-                kulonben elnyomna a lap tobbi reszet.
-              */
-              <Pressable
-                key={entry.id}
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push({
-                    pathname: "/worksheets/entries/[id]",
-                    params: { id, entryId: entry.id },
-                  })
-                }
-                style={styles.card}
-              >
-                <Text style={styles.muted}>
-                  {worksheetEntryByline(entry, (iso) =>
-                    formatWorksheetDate(iso),
-                  )}
-                </Text>
-                <Text style={styles.lineTitle} numberOfLines={3}>
-                  {entry.body}
-                </Text>
-              </Pressable>
-            ))}
 
             {/*
               ANYAGIGENYLES. Balazs kerese, 2026-09-22 12:15:46 UTC: a
@@ -2251,37 +2312,6 @@ export default function WorksheetDetailScreen() {
                 ) : null}
               </View>
             ))}
-
-            {current.signature ? (
-              <>
-                <SectionTitle style={{ marginTop: 6 }}>Aláírás</SectionTitle>
-                <View style={styles.card}>
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Aláíró</Text>
-                    <Text style={styles.value}>
-                      {current.signature.signerName}
-                    </Text>
-                  </View>
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Döntés</Text>
-                    <Text style={styles.value}>
-                      {current.signature.decision === "ACCEPTED"
-                        ? "Elfogadva"
-                        : "Elutasítva"}
-                    </Text>
-                  </View>
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Dátum</Text>
-                    <Text style={styles.value}>
-                      {formatWorksheetDate(current.signature.signedAt)}
-                    </Text>
-                  </View>
-                  {current.signature.note ? (
-                    <Text style={styles.muted}>{current.signature.note}</Text>
-                  ) : null}
-                </View>
-              </>
-            ) : null}
 
             {olderVersions && olderVersions.length > 0 ? (
               <>
