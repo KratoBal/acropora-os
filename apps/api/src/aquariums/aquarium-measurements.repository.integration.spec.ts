@@ -55,15 +55,41 @@ describe(
     after(removeLeftovers);
 
     /**
-     * A `DomainEvent.actorUserId`-t NEM KELL KÜLÖN TÖRÖLNI: az idegenkulcs
-     * `onDelete: SetNull`, tehát a felhasználó törlésekor a mező magától
-     * NULL-ra áll -- a domain-esemény sora megmarad, csak a hivatkozás tűnik
-     * el. Az `AquariumMeasurement` törlése az `Aquarium` felől CASCADE
-     * (`onDelete: Cascade`), tehát elég a szülőt törölni; a darabszám mégis
-     * KÜLÖN ELLENŐRZÖTT, mert egy hallgatólagos cascade-feltevés önmagában
-     * nem mérés.
+     * A `DomainEvent` SORÁT KÜLÖN KELL TÖRÖLNI -- ÉS EZ ELŐSZÖR TÉVEDÉS
+     * VOLT ITT (mérve, CI verify run 36106350535).
+     *
+     * Az `actorUserId` idegenkulcsa `onDelete: SetNull`, tehát a felhasználó
+     * törlésekor CSAK a hivatkozás áll NULL-ra -- maga a domain-esemény SORA
+     * megmarad, örökre, mert `DomainEvent.aggregateId` egy sima szöveg-mező,
+     * nincs idegenkulcsa az `Aquarium`-hoz, tehát az `Aquarium` törlése
+     * SEMMILYEN cascade-ot nem indít rajta. A `measurements.create()`
+     * viszont MINDEN sikeres híváskor ír egy `aquarium-measurement.recorded`
+     * eseményt (lásd a repository fejlécét) -- ez a suite tehát három
+     * takarítatlan sort hagyott globálisan a `DomainEvent` táblán minden
+     * futásnál.
+     *
+     * ÉS EZ NEM CSAK EZT A SUITE-OT SZENNYEZTE: az `unas-apply.integration.
+     * spec.ts` saját asszerciója a `DomainEvent` GLOBÁLIS darabszámára kérdez
+     * (`assert.equal(await prisma.domainEvent.count(), 3)`), mert a UNAS
+     * import a saját eseményeit `createdAt >= SUITE_KEZDET` ablakkal, nem
+     * elő-taggal azonosítja. A két suite ugyanazon a megosztott CI-
+     * adatbázison fut, tehát az itt maradt három sor ÉPP ANNYIT tolt el egy
+     * MÁSIK, teljesen független modul mérésén (6 lett a várt 3 helyett).
      */
     async function removeLeftovers() {
+      const aquariumIds = (
+        await prisma.aquarium.findMany({
+          where: { name: { startsWith: PREFIX } },
+          select: { id: true },
+        })
+      ).map((row) => row.id);
+      if (aquariumIds.length > 0)
+        await prisma.domainEvent.deleteMany({
+          where: {
+            aggregateType: "Aquarium",
+            aggregateId: { in: aquariumIds },
+          },
+        });
       await prisma.aquariumMeasurement.deleteMany({
         where: { aquarium: { name: { startsWith: PREFIX } } },
       });
@@ -73,6 +99,15 @@ describe(
       await prisma.user.deleteMany({
         where: { email: { startsWith: PREFIX.toLowerCase() } },
       });
+      const domainEventsLeft =
+        aquariumIds.length > 0
+          ? await prisma.domainEvent.count({
+              where: {
+                aggregateType: "Aquarium",
+                aggregateId: { in: aquariumIds },
+              },
+            })
+          : 0;
       const measurementsLeft = await prisma.aquariumMeasurement.count({
         where: { aquarium: { name: { startsWith: PREFIX } } },
       });
@@ -83,6 +118,7 @@ describe(
         where: { email: { startsWith: PREFIX.toLowerCase() } },
       });
       nincsMaradek([
+        { nev: "DomainEvent", darab: domainEventsLeft },
         { nev: "AquariumMeasurement", darab: measurementsLeft },
         { nev: "Aquarium", darab: aquariumsLeft },
         { nev: "User", darab: usersLeft },
