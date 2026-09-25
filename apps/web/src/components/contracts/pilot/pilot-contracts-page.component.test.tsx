@@ -2,8 +2,18 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ContractsPage } from "./contracts-page";
+import { PilotContractsPage } from "./pilot-contracts-page";
 import { ApiError } from "@/lib/api/client";
+
+/**
+ * ÁTMÁSOLVA A RÉGI `contracts-page.component.test.tsx`-BŐL (2026-09-25,
+ * Figma 13. kör) -- az állítások nem változtak, csak a komponens neve és
+ * egy kötelező `next/font/local` mock került hozzá (a `PilotThemeRoot`
+ * ezen múlik, lásd a többi pilot-teszt fejlécét).
+ */
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -50,7 +60,7 @@ const DEPARTMENT = {
  * elfogadta a tétel helyszínét és eszközeit, a webes FELVITELEN sehol nem
  * volt hozzá mező.
  */
-describe("ContractsPage -- új szerződés tételének helyszíne", () => {
+describe("PilotContractsPage -- új szerződés tételének helyszíne", () => {
   beforeEach(() => {
     auth.session = session();
     api.list.mockReset().mockResolvedValue([]);
@@ -74,7 +84,7 @@ describe("ContractsPage -- új szerződés tételének helyszíne", () => {
   }
 
   it("csak a partner kiválasztása után kínálja fel a helyszínt", async () => {
-    render(<ContractsPage />);
+    render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
     fireEvent.click(screen.getByText("Új szerződés"));
 
@@ -91,7 +101,7 @@ describe("ContractsPage -- új szerződés tételének helyszíne", () => {
   });
 
   it("a kiválasztott helyszín a tétel többi adatával együtt megy a mentéskor", async () => {
-    render(<ContractsPage />);
+    render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
     openFormAndPickCustomer();
     await screen.findByRole("option", { name: "Cápasuli (CAP)" });
@@ -150,7 +160,7 @@ describe("ContractsPage -- új szerződés tételének helyszíne", () => {
  * a `contract-detail-page.component.test.tsx`-en, itt a LÉTREHOZÁS
  * oldalára.
  */
-describe("ContractsPage -- új szerződés, duplikált szerződésszám (409)", () => {
+describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (409)", () => {
   beforeEach(() => {
     auth.session = session();
     api.list.mockReset().mockResolvedValue([]);
@@ -200,7 +210,7 @@ describe("ContractsPage -- új szerződés, duplikált szerződésszám (409)", 
       new ApiError("Ez a szerződésszám már létezik (SZ2026/0000019).", 409),
     );
 
-    render(<ContractsPage />);
+    render(<PilotContractsPage />);
     await screen.findByText("Új szerződés");
     fillMinimalForm();
 
