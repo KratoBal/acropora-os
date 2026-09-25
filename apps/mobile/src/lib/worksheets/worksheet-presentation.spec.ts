@@ -391,7 +391,7 @@ describe("worksheetDetailRows", () => {
 });
 
 describe("WORKSHEET_STATUS_FILTERS", () => {
-  it("offers every status the server knows, with Mind first", () => {
+  it("offers every status the server knows, with Összes first", () => {
     assert.deepEqual(
       WORKSHEET_STATUS_FILTERS.map((filter) => filter.value),
       [null, "DRAFT", "AWAITING_SIGNATURE", "SIGNED", "REJECTED"],
