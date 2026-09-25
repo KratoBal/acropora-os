@@ -3260,7 +3260,7 @@ model Aquarium {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
-  customer     Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customer     Customer?                   @relation(fields: [customerId], references: [id], onDelete: SetNull)
   measurements AquariumMeasurement[]
   serviceJobs  ServiceJob[]
   assets       Asset[]
