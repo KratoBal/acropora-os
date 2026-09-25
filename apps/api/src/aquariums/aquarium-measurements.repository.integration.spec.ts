@@ -63,6 +63,7 @@ describe(
           waterBodyType: "AKVARIUM",
           systemVolumeIsManual: false,
           equipment: [],
+          targets: [],
         },
         "no-actor",
       );
