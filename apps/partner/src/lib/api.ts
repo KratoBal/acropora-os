@@ -8,6 +8,7 @@ import type {
   AssetListResponse,
   AssetQrCode,
   AuthenticatedUser,
+  CurrentUserResponse,
   ServiceJobPartnerDetail,
   ServiceJobDocumentSummary,
   ServiceJobListResponse,
@@ -96,7 +97,7 @@ function documentForm(file: File, caption: string) {
 }
 
 export const partnerApi = {
-  me: () => request<AuthenticatedUser>("/auth/me"),
+  me: () => request<CurrentUserResponse>("/auth/me"),
   login: (email: string, password: string) =>
     request<{ user: AuthenticatedUser }>("/auth/login/password", {
       method: "POST",
