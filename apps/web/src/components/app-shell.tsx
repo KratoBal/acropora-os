@@ -1,19 +1,7 @@
 "use client";
 
-import {
-  Badge,
-  Button,
-  Icon,
-  Input,
-  NavItem,
-  Sidebar,
-  Topbar,
-} from "@acropora/ui";
-import {
-  hasPermission,
-  isNavigationEntryVisible,
-  PERMISSIONS,
-} from "@acropora/types";
+import { Badge, Button, Icon, useThemePreference } from "@acropora/ui";
+import { isNavigationEntryVisible } from "@acropora/types";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -61,26 +49,17 @@ function NavigationGroup({
       <button
         type="button"
         className={[
-          "group flex h-9 w-full items-center gap-3 rounded-lg text-sm font-medium transition-colors",
+          "group flex h-10 w-full items-center gap-3 rounded-xl text-sm font-medium transition-colors",
           level === 1 ? "px-2" : "px-3",
-          // UGYANAZ A KEZELES, MINT A `NavItem`-nel: a menu sotet savban all.
-          // A KIEMELES MAR NEM MASOLAT: a `nav-active` token koti ossze a
-          // kettot, tehat ez a mondat leiras, nem igeret. Korabban ugyanaz a
-          // nyers ertek allt itt es a `packages/ui` NavItem-jeben, es csak ez
-          // a megjegyzes szolt rola -- egy megjegyzes viszont nem allitja at
-          // a masik csomagot, ha valaki a menu szinet hangolja.
           active
-            ? "bg-nav-active text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
-            : "text-nav-muted hover:bg-white/5 hover:text-white",
+            ? "bg-pilot-aqua-50 text-pilot-aqua-800"
+            : "text-pilot-grey-600 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
         ].join(" ")}
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
         <span
-          className={[
-            "text-white/55 transition-colors group-hover:text-white/85",
-            active ? "text-white" : "",
-          ].join(" ")}
+          className={active ? "text-pilot-aqua-700" : "text-pilot-grey-500"}
         >
           {icon}
         </span>
@@ -89,7 +68,7 @@ function NavigationGroup({
           name="chevron-down"
           size={16}
           className={[
-            "text-white/55 transition-transform",
+            "text-pilot-grey-500 transition-transform",
             open ? "rotate-180" : "",
           ].join(" ")}
         />
@@ -99,22 +78,55 @@ function NavigationGroup({
   );
 }
 
-/**
- * Every destination in the menu, so that an entry can tell whether a more
- * specific one owns the path being read. Without the whole set,
- * `/beszerzes/nav-szamlak` would light up purchasing as well as the NAV
- * invoices, right next to each other in the same group.
- */
+function NavigationItem({
+  active,
+  badge,
+  item,
+  nested = false,
+  onChoose,
+}: {
+  active: boolean;
+  badge?: ReactNode;
+  item: AppNavigationItem;
+  nested?: boolean;
+  onChoose: () => void;
+}) {
+  return (
+    <a
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      onClick={onChoose}
+      className={[
+        "flex items-center gap-3 rounded-xl font-medium transition-colors",
+        nested ? "h-9 px-2 text-[13px]" : "h-10 px-3 text-sm",
+        active
+          ? "bg-pilot-aqua-50 text-pilot-aqua-800"
+          : "text-pilot-grey-600 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
+      ].join(" ")}
+    >
+      <Icon
+        name={item.icon}
+        size={nested ? 16 : 18}
+        className={active ? "text-pilot-aqua-700" : "text-pilot-grey-500"}
+      />
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {badge}
+    </a>
+  );
+}
+
+/** All destinations are needed to resolve overlapping active paths. */
 const ALL_NAVIGATION_ITEMS = allNavigationPages;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { session } = useAuth();
+  const { effectiveTheme, preference, setPreference } = useThemePreference();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!session || !hasPermission(session.user, PERMISSIONS.DASHBOARD_VIEW)) {
+    if (!session || !isNavigationEntryVisible("dashboard", session.user.role)) {
       setMyTaskCount(null);
       return;
     }
@@ -141,28 +153,22 @@ export function AppShell({ children }: { children: ReactNode }) {
     ...visibleSettingsNavigation,
   ].some((item) => isActive(item));
   const unasActive = visibleUnasNavigation.some((item) => isActive(item));
+  const closeMobileNavigation = () => setMobileNavigationOpen(false);
 
   const renderItem = (item: AppNavigationItem, nested = false) => (
-    <NavItem
+    <NavigationItem
       key={item.href}
-      href={item.href}
-      label={item.label}
-      icon={<Icon name={item.icon} />}
+      item={item}
       active={isActive(item)}
-      className={nested ? "h-8 text-[13px]" : undefined}
-      onClick={() => setMobileNavigationOpen(false)}
+      nested={nested}
+      onChoose={closeMobileNavigation}
     />
   );
 
-  /**
-   * A heading is only drawn when at least one page under it may be seen, and
-   * it counts as active when one of those pages is the one open. Both are
-   * asked of the visible children rather than of the whole group: a page the
-   * reader cannot open should neither put a heading on screen nor light it up.
-   */
   const renderEntry = (entry: AppNavigationEntry) => {
-    if (!isNavigationGroup(entry))
+    if (!isNavigationGroup(entry)) {
       return canAccess(entry) ? renderItem(entry) : null;
+    }
 
     const visibleChildren = entry.children.filter(canAccess);
     if (visibleChildren.length === 0) return null;
@@ -171,10 +177,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <NavigationGroup
         key={entry.label}
         label={entry.label}
-        icon={<Icon name={entry.icon} />}
+        icon={<Icon name={entry.icon} size={18} />}
         active={visibleChildren.some((item) => isActive(item))}
       >
-        <div className="ml-4 mt-1 space-y-1 border-l border-white/12 pl-2">
+        <div className="ml-5 mt-1 space-y-1 border-l border-pilot-grey-200 pl-2">
           {visibleChildren.map((item) => renderItem(item, true))}
         </div>
       </NavigationGroup>
@@ -182,15 +188,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   const navigation = (
-    <>
+    <nav aria-label="Fő navigáció" className="flex min-h-0 flex-1 flex-col">
       <div className="space-y-1">
         {primaryNavigation.filter(canAccess).map((item) => (
-          <NavItem
+          <NavigationItem
             key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={<Icon name={item.icon} />}
+            item={item}
             active={isActive(item)}
+            onChoose={closeMobileNavigation}
             badge={
               item.href === "/feladataim" ? (
                 <Badge className="px-1.5" variant="neutral">
@@ -198,221 +203,146 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Badge>
               ) : undefined
             }
-            onClick={() => setMobileNavigationOpen(false)}
           />
         ))}
       </div>
 
-      <p className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
+      <p className="mb-2 mt-7 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-pilot-grey-500">
         Működés
       </p>
       <div className="space-y-1">{businessNavigation.map(renderEntry)}</div>
 
-      {/*
-        A TARTALOM SAJÁT CSOPORT. Az „Működés" alá húzva egy hetedik sor lenne
-        a többi közt; a panasz viszont pont az volt, hogy nem látszik, mi vár
-        kire. Egy külön fejléc alatt egyetlen sor is megtalálható.
-      */}
       {contentNavigation.filter(canAccess).length > 0 ? (
         <>
-          <p className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
+          <p className="mb-2 mt-7 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-pilot-grey-500">
             Tartalom
           </p>
           <div className="space-y-1">
-            {contentNavigation.filter(canAccess).map((item) => (
-              <NavItem
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                icon={<Icon name={item.icon} />}
-                active={isActive(item)}
-                onClick={() => setMobileNavigationOpen(false)}
-              />
-            ))}
+            {contentNavigation
+              .filter(canAccess)
+              .map((item) => renderItem(item))}
           </div>
         </>
       ) : null}
 
-      <div className="mt-6 space-y-1 border-t border-white/12 pt-4">
-        {secondaryNavigation.filter(canAccess).map((item) => (
-          <NavItem
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={<Icon name={item.icon} />}
-            active={isActive(item)}
-            onClick={() => setMobileNavigationOpen(false)}
-          />
-        ))}
+      <div className="mt-7 space-y-1 border-t border-pilot-grey-200 pt-4">
+        {secondaryNavigation.filter(canAccess).map((item) => renderItem(item))}
         {visibleUnasNavigation.length > 0 ||
         visibleSettingsNavigation.length > 0 ? (
           <NavigationGroup
             label="Beállítások"
-            icon={<Icon name="settings" />}
+            icon={<Icon name="settings" size={18} />}
             active={settingsActive}
           >
-            <div className="ml-4 mt-1 space-y-1 border-l border-white/12 pl-2">
+            <div className="ml-5 mt-1 space-y-1 border-l border-pilot-grey-200 pl-2">
               {visibleSettingsNavigation
                 .filter((item) => item.href === "/beallitasok")
-                .map((item) => (
-                  <NavItem
-                    key={item.href}
-                    href={item.href}
-                    label={item.label}
-                    icon={<Icon name={item.icon} />}
-                    active={isActive(item)}
-                    onClick={() => setMobileNavigationOpen(false)}
-                  />
-                ))}
+                .map((item) => renderItem(item, true))}
 
               {visibleUnasNavigation.length > 0 ? (
                 <NavigationGroup
                   label="UNAS"
-                  icon={<Icon name="store" />}
+                  icon={<Icon name="store" size={16} />}
                   active={unasActive}
                   level={1}
                 >
-                  <div className="ml-4 mt-1 space-y-1 border-l border-white/12 pl-2">
-                    {visibleUnasNavigation.map((item) => (
-                      <NavItem
-                        key={item.href}
-                        href={item.href}
-                        label={item.label}
-                        icon={<Icon name={item.icon} />}
-                        active={isActive(item)}
-                        className="h-8 text-[13px]"
-                        onClick={() => setMobileNavigationOpen(false)}
-                      />
-                    ))}
+                  <div className="ml-4 mt-1 space-y-1 border-l border-pilot-grey-200 pl-2">
+                    {visibleUnasNavigation.map((item) =>
+                      renderItem(item, true),
+                    )}
                   </div>
                 </NavigationGroup>
               ) : null}
 
               {visibleSettingsNavigation
                 .filter((item) => item.href !== "/beallitasok")
-                .map((item) => (
-                  <NavItem
-                    key={item.href}
-                    href={item.href}
-                    label={item.label}
-                    icon={<Icon name={item.icon} />}
-                    active={isActive(item)}
-                    onClick={() => setMobileNavigationOpen(false)}
-                  />
-                ))}
+                .map((item) => renderItem(item, true))}
             </div>
           </NavigationGroup>
         ) : null}
       </div>
-    </>
+    </nav>
   );
 
-  const brand = (
-    <a href="/" className="flex items-center gap-2.5" aria-label="Acropora OS">
-      {/*
-        A VALODI JEL, SOTET HATTERRE SZANT VALTOZATBAN. Balazs kuldte
-        2026-09-15-en, es o hagyta jova a feher feliratot: a jel eredeti,
-        majdnem fekete felirata ezen a savon 1,38 : 1 kontrasztot adott, a
-        3 : 1 minimum alatt. A ket szines iv valtozatlan.
-
-        A MERET NEM DISZ: a jel szelesebb, mint magas (kb. 1,81 : 1), es a
-        felirat a magassaganak a 36 szazaleka. 40 pixel magasan a felirat
-        15 pixel korul van, tehat olvashato, es a 64 pixeles marka-sor
-        valtozatlan marad. A `width`/`height` kiirva all, hogy a betoltes
-        ne mozdítsa el a sort.
-
-        Az `alt` SZANDEKOSAN URES: a hivatkozas maga hordozza a nevet az
-        `aria-label`-jeben, es a ketto egyutt ketszer mondana ki.
-      */}
-      {/* eslint-disable-next-line @next/next/no-img-element -- statikus SVG, a next/image nem optimalizalja */}
-      <img
-        src="/acropora-logo-dark-bg.svg"
-        alt=""
-        width={72}
-        height={40}
-        className="h-10 w-auto"
-      />
-    </a>
-  );
-
-  const footer = (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-white">Rendszerállapot</p>
-        <Badge variant="success">Online</Badge>
-      </div>
-      <p className="mt-1 text-[11px] text-nav-muted">
-        Minden szolgáltatás elérhető
-      </p>
-    </div>
+  const sidebar = (mobile = false) => (
+    <aside
+      data-theme={effectiveTheme}
+      className={[
+        "font-sans flex h-full w-72 flex-col border-r border-pilot-grey-200 bg-pilot-white px-4 py-5 text-pilot-grey-900",
+        mobile
+          ? "fixed inset-y-0 left-0 z-50 shadow-2xl lg:hidden"
+          : "fixed inset-y-0 left-0 z-30 hidden lg:flex",
+      ].join(" ")}
+    >
+      <a href="/" className="mb-8 px-2" aria-label="Acropora OS">
+        {/* eslint-disable-next-line @next/next/no-img-element -- static SVG */}
+        <img
+          src="/acropora-logo.svg"
+          alt=""
+          width={112}
+          height={40}
+          className="h-10 w-auto"
+        />
+      </a>
+      {navigation}
+    </aside>
   );
 
   return (
     <div className="min-h-screen bg-paper">
-      <Sidebar brand={brand} footer={footer}>
-        {navigation}
-      </Sidebar>
+      {sidebar()}
 
       {mobileNavigationOpen ? (
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-dusk-950/30 backdrop-blur-[2px] lg:hidden"
+            className="fixed inset-0 z-40 bg-pilot-black/30 backdrop-blur-[2px] lg:hidden"
             aria-label="Navigáció bezárása"
-            onClick={() => setMobileNavigationOpen(false)}
+            onClick={closeMobileNavigation}
           />
-          <Sidebar
-            brand={brand}
-            footer={footer}
-            className="!z-50 !flex shadow-2xl lg:!hidden"
-          >
-            {navigation}
-          </Sidebar>
+          {sidebar(true)}
         </>
       ) : null}
 
-      <div className="lg:pl-64">
-        <Topbar
-          leading={
-            <div className="flex items-center gap-3 lg:hidden">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Navigáció megnyitása"
-                onClick={() => setMobileNavigationOpen(true)}
-              >
-                <Icon name="menu" size={20} />
-              </Button>
-              <span className="hidden text-sm font-bold text-dusk-900 sm:inline">
-                Acropora OS
-              </span>
-            </div>
-          }
-          search={
-            <div className="mx-auto max-w-xl">
-              <Input
-                leadingIcon={<Icon name="search" size={17} />}
-                placeholder="Keresés az Acropora OS-ben…"
+      <div className="lg:pl-72">
+        <header
+          data-theme={effectiveTheme}
+          className="sticky top-0 z-20 flex h-16 items-center border-b border-pilot-grey-200 bg-pilot-white/95 px-4 font-sans backdrop-blur sm:px-6 lg:px-8"
+        >
+          <div className="flex items-center gap-3 lg:hidden">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Navigáció megnyitása"
+              onClick={() => setMobileNavigationOpen(true)}
+            >
+              <Icon name="menu" size={20} />
+            </Button>
+            <span className="text-sm font-bold text-pilot-grey-900">
+              Acropora OS
+            </span>
+          </div>
+
+          <label className="mx-auto hidden w-full max-w-xl lg:block">
+            <span className="sr-only">Keresés</span>
+            <span className="flex h-10 items-center gap-2 rounded-xl bg-pilot-grey-100 px-3 text-pilot-grey-500">
+              <Icon name="search" size={17} />
+              <input
+                type="search"
                 aria-label="Keresés"
-                className="border-transparent bg-dusk-100 shadow-none focus:bg-white"
+                placeholder="Keresés az Acropora OS-ben…"
+                className="min-w-0 flex-1 bg-transparent text-sm text-pilot-grey-900 outline-none placeholder:text-pilot-grey-500"
               />
-            </div>
-          }
-          actions={
-            <>
-              {/*
-                NINCS ÉRTESÍTÉS-HARANG. A szerver ma csak munkalap-kiosztási
-                push-t küld a felelős szerelőnek; nincs Notification-modell,
-                lista vagy olvasottság, amely a felületnek jelzést írhatna.
-                Egy állandó piros pont azt állítaná, hogy van olvasatlan
-                értesítés, miközben ilyen fogalomnak nincs gazdája. A lista és
-                az olvasottság külön termékdöntés lesz; addig nem mutatunk
-                működés nélküli vezérlőt.
-              */}
-              <UserMenu />
-            </>
-          }
-        />
+            </span>
+          </label>
+
+          <div className="ml-auto">
+            <UserMenu
+              preference={preference}
+              onPreferenceChange={setPreference}
+            />
+          </div>
+        </header>
 
         <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           {children}

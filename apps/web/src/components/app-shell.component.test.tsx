@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import type { Session } from "@acropora/types";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { isNavigationEntryVisible, type Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "./app-shell";
+import { allNavigationPages } from "./navigation";
 
 const navigation = vi.hoisted(() => ({ pathname: "/" }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -236,5 +237,67 @@ describe("AppShell business navigation groups", () => {
     expect(
       screen.queryByRole("link", { name: "Webshop vásárlók" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("AppShell navigation source", () => {
+  beforeEach(() => {
+    navigation.pathname = "/";
+  });
+
+  function visibleSidebarHrefs() {
+    const sidebarNavigation = screen.getByRole("navigation", {
+      name: "Fő navigáció",
+    });
+
+    [
+      "Webshop",
+      "Partnerek",
+      "Pénzügy",
+      "Szerviz",
+      "Beállítások",
+      "UNAS",
+    ].forEach((label) => {
+      const group = within(sidebarNavigation).queryByRole("button", {
+        name: label,
+      });
+      if (group?.getAttribute("aria-expanded") === "false") {
+        fireEvent.click(group);
+      }
+    });
+
+    return within(sidebarNavigation)
+      .getAllByRole("link")
+      .map((link) => link.getAttribute("href"))
+      .sort();
+  }
+
+  it("OWNER oldalsávja pontosan a közös forrás engedélyezett elemeiből áll", () => {
+    auth.session = ownerSession;
+
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(visibleSidebarHrefs()).toEqual(
+      allNavigationPages
+        .filter((item) => isNavigationEntryVisible(item.entryId, "OWNER"))
+        .map((item) => item.href)
+        .sort(),
+    );
+  });
+
+  it("SERVICE oldalsávja pontosan a közös forrás engedélyezett elemeiből áll", () => {
+    auth.session = {
+      ...ownerSession,
+      user: { ...ownerSession.user, role: "SERVICE" },
+    };
+
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(visibleSidebarHrefs()).toEqual(
+      allNavigationPages
+        .filter((item) => isNavigationEntryVisible(item.entryId, "SERVICE"))
+        .map((item) => item.href)
+        .sort(),
+    );
   });
 });
