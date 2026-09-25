@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
-import { useThemePreference } from "@acropora/ui";
+import {
+  Icon,
+  type IconName,
+  PilotAvatar,
+  pilotAvatarColor,
+  pilotInitials,
+  useThemePreference,
+} from "@acropora/ui";
 
 import { hasNavigationEntry, useAuth } from "./auth";
 import { LAP_CIM } from "./frame";
@@ -24,10 +31,16 @@ import { LAP_CIM } from "./frame";
  * jogosultsagot igenyelnek, amirol Balazs meg nem dontott. NE kerulnenek be
  * ide, sem funkcioval, sem helykitolto "Uj" jelvennyel.
  */
-const MUSZAKI_MENU = [
-  { href: "/hibajegyek", label: "Hibajegyek" },
-  { href: "/munkalapok", label: "Munkalapok" },
-  { href: "/eszkozok", label: "Eszközök" },
+/**
+ * AZ IKONOK A BELSŐ WEB APP SAJÁT NAVIGÁCIÓJÁBÓL JÖNNEK
+ * (`apps/web/src/components/navigation.ts`), NEM ÚJ VÁLASZTÁS: Hibajegyek
+ * és Munkalapok ott is "clipboard", Eszköznyilvántartás "box" -- ugyanaz a
+ * minta, mint az Akváriumok/Kalkulátorok ikonjánál lent.
+ */
+const MUSZAKI_MENU: { href: string; label: string; icon: IconName }[] = [
+  { href: "/hibajegyek", label: "Hibajegyek", icon: "clipboard" },
+  { href: "/munkalapok", label: "Munkalapok", icon: "clipboard" },
+  { href: "/eszkozok", label: "Eszközök", icon: "box" },
 ];
 
 /**
@@ -41,9 +54,24 @@ const MUSZAKI_MENU = [
  * bejegyzesenek fejleceet arrol, miert nem osztja meg az "aquariums"
  * azonositot, holott ma ugyanazt a jogot hasznaljak.
  */
-const AKVARISZTIKA_MENU = [
-  { href: "/akvariumok", label: "Akváriumok", entryId: "aquariums" },
-  { href: "/kalkulatorok", label: "Kalkulátorok", entryId: "calculators" },
+const AKVARISZTIKA_MENU: {
+  href: string;
+  label: string;
+  entryId: string;
+  icon: IconName;
+}[] = [
+  {
+    href: "/akvariumok",
+    label: "Akváriumok",
+    entryId: "aquariums",
+    icon: "aquarium",
+  },
+  {
+    href: "/kalkulatorok",
+    label: "Kalkulátorok",
+    entryId: "calculators",
+    icon: "droplet",
+  },
 ];
 
 /**
@@ -171,8 +199,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
             href="/hibajegyek"
             className="flex items-center gap-2 no-underline"
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pilot-aqua-600 text-xs font-bold text-white">
-              A
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pilot-aqua-600 text-white">
+              <Icon name="droplet" size={14} />
             </span>
             {/*
               "ACROPORA" + KULON ALCIM "PARTNER PORTAL" (acrobot dontese,
@@ -206,12 +234,13 @@ export function PortalShell({ children }: { children: ReactNode }) {
                     key={item.href}
                     href={item.href}
                     aria-current={active ? "page" : undefined}
-                    className={`flex h-9 w-full items-center rounded-lg px-3 text-sm font-medium no-underline transition-colors ${
+                    className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-sm font-medium no-underline transition-colors ${
                       active
                         ? "bg-pilot-aqua-50 text-pilot-aqua-700"
                         : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
                     }`}
                   >
+                    <Icon name={item.icon} size={15} />
                     {item.label}
                   </Link>
                 );
@@ -262,12 +291,13 @@ export function PortalShell({ children }: { children: ReactNode }) {
                       key={item.href}
                       href={item.href}
                       aria-current={active ? "page" : undefined}
-                      className={`flex h-9 w-full items-center rounded-lg px-3 text-sm font-medium no-underline transition-colors ${
+                      className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-sm font-medium no-underline transition-colors ${
                         active
                           ? "bg-pilot-aqua-50 text-pilot-aqua-700"
                           : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
                       }`}
                     >
+                      <Icon name={item.icon} size={15} />
                       {item.label}
                     </Link>
                   );
@@ -281,20 +311,35 @@ export function PortalShell({ children }: { children: ReactNode }) {
           <Link
             href={BEALLITASOK_HREF}
             aria-current={beallitasokActive ? "page" : undefined}
-            className={`flex h-9 w-full items-center rounded-lg px-3 text-sm font-medium no-underline transition-colors ${
+            className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-sm font-medium no-underline transition-colors ${
               beallitasokActive
                 ? "bg-pilot-aqua-50 text-pilot-aqua-700"
                 : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
             }`}
           >
+            <Icon name="settings" size={15} />
             Beállítások
           </Link>
         </div>
 
         <div className="border-t border-pilot-grey-100 px-4 py-4">
-          <p className="mb-2 truncate text-xs font-medium text-pilot-grey-800">
-            {user.displayName}
-          </p>
+          {/*
+            AVATAR, A TERV SZERINT (`PartnerPortalScreen.tsx:477`). A terv
+            második sora (a cég neve, "PARTNER_NAME") itt NEM jelenik meg --
+            az `AuthenticatedUser` csak `customerId`-t hordoz, nevet nem
+            (`packages/types/src/auth.ts:463-483`), tehát ehhez egy
+            szerver-oldali mező kellene, amit nem találunk ki.
+          */}
+          <div className="mb-2 flex items-center gap-2.5">
+            <PilotAvatar
+              initials={pilotInitials(user.displayName)}
+              color={pilotAvatarColor(user.id)}
+              size="sm"
+            />
+            <p className="min-w-0 truncate text-xs font-medium text-pilot-grey-800">
+              {user.displayName}
+            </p>
+          </div>
           <button
             type="button"
             className="cursor-pointer border-0 bg-transparent p-0 text-[11px] font-normal text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
