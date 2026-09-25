@@ -333,7 +333,10 @@ export function PilotWorksheetDetailPage({
             ) : null}
             {canManage && isDraft ? (
               <Link href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}>
-                <PilotButton variant="secondary">Szerkesztés</PilotButton>
+                <PilotButton variant="primary">
+                  <Icon name="pencil" size={12} />
+                  Szerkesztés
+                </PilotButton>
               </Link>
             ) : null}
             {canManage && isDraft ? (
@@ -502,7 +505,8 @@ export function PilotWorksheetDetailPage({
                   <Link
                     href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}
                   >
-                    <PilotButton variant="secondary">
+                    <PilotButton variant="primary">
+                      <Icon name="pencil" size={12} />
                       Tételek szerkesztése
                     </PilotButton>
                   </Link>
