@@ -284,6 +284,21 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.AQUARIUMS_VIEW),
   },
   {
+    /**
+     * VÍZKEZELÉSI KALKULÁTOROK, A PARTNER PORTÁLON (2026-09-25, Balázs
+     * jóváhagyása). UGYANAZ A JOG, mint az "aquariums" tételé -- a Figma
+     * terv ezt is az "aquarium group" alá sorolja, és a `PARTNER_SERVICE`
+     * szerep már ma is hordozza az `AQUARIUMS_VIEW`-t, tehát külön jog
+     * felvétele itt nem indokolt. Saját azonosító mégis kell: a menüpont
+     * és az útvonal ma a portálon él, de a láthatósági szabálynak a
+     * jövőben (belső web, "Reef Club") a saját életét kell tudnia élni,
+     * anélkül hogy az "aquariums" tétel jelentését módosítaná.
+     */
+    id: "calculators",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.AQUARIUMS_VIEW),
+  },
+  {
     id: "icp",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.ICP_VIEW),

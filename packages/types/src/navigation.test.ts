@@ -119,6 +119,21 @@ describe("a menü közös forrása", () => {
     );
   });
 
+  /**
+   * A "calculators" TÉTEL UGYANAZT A JOGOT HASZNÁLJA, MINT AZ "aquariums" --
+   * szándékosan, ld. a `navigation.ts` "calculators" bejegyzésének
+   * fejlécét. Ez az állítás a mai egybeesést méri, nem azt garantálja,
+   * hogy a kettő örökre együtt marad.
+   */
+  it("a Kalkulátorok tétel ugyanazt a jogot nézi, mint az Akváriumok", () => {
+    assert.equal(isNavigationEntryVisible("calculators", "OWNER"), true);
+    assert.equal(isNavigationEntryVisible("calculators", "WAREHOUSE"), false);
+    assert.equal(
+      isNavigationEntryVisible("calculators", "OWNER"),
+      isNavigationEntryVisible("aquariums", "OWNER"),
+    );
+  });
+
   it("felületenként külön szűr", () => {
     const web = navigationIdsFor("OWNER", "web");
     const mobil = navigationIdsFor("OWNER", "mobile");
