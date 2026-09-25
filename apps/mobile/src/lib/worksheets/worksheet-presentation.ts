@@ -366,7 +366,11 @@ export const WORKSHEET_STATUS_FILTERS: readonly {
   value: WorksheetStatus | null;
   label: string;
 }[] = [
-  { value: null, label: "Mind" },
+  /**
+   * "ÖSSZES", NEM "MIND" (acrobot döntése, 2026-09-25, Figma 8. kör): a web
+   * és a Figma-terv is ezt a szót használja az összes-fülre.
+   */
+  { value: null, label: "Összes" },
   { value: "DRAFT", label: worksheetStatusLabel.DRAFT },
   {
     value: "AWAITING_SIGNATURE",

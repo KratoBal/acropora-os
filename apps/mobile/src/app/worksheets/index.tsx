@@ -218,12 +218,18 @@ export default function WorksheetsScreen() {
           a szerelőnek a lapjai kellenek, nem a partnertörzs, és a legtöbb
           megnyitásnál hozzá sem nyúl.
         */}
+        {/*
+          "MINDEN PARTNER", NEM "PARTNER: MIND" (acrobot döntése, 2026-09-25,
+          Figma 8. kör): a leírás és a terv is ezt a szót használja a
+          szűretlen állapotra. Kiválasztott partnernél a "Partner: {név}" alak
+          marad -- azt a döntés nem érintette.
+        */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
             partner
               ? `Partner szűrő: ${partner.name}. Koppints a módosításhoz.`
-              : "Partner szűrő: mind. Koppints a választáshoz."
+              : "Minden partner. Koppints a választáshoz."
           }
           onPress={() => setPartnerPickerOpen((open) => !open)}
           style={({ pressed }) => [
@@ -233,7 +239,7 @@ export default function WorksheetsScreen() {
           ]}
         >
           <Text style={[styles.filterText, partner && styles.filterTextOn]}>
-            {partner ? `Partner: ${partner.name}` : "Partner: mind"}
+            {partner ? `Partner: ${partner.name}` : "Minden partner"}
           </Text>
         </Pressable>
 
@@ -256,7 +262,7 @@ export default function WorksheetsScreen() {
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.partnerName}>Mind</Text>
+              <Text style={styles.partnerName}>Minden partner</Text>
             </Pressable>
             {(partners.data?.items ?? []).map((item) => (
               <Pressable
@@ -362,9 +368,13 @@ export default function WorksheetsScreen() {
            * fölötte álló összefoglaló megmondja, mire szűkítettünk.
            */
           <Text style={styles.empty}>
+            {/*
+              A LEÍRÁS ÉS A TERV SZAVAI (acrobot döntése, 2026-09-25, Figma 8.
+              kör), a mai mobil két mondata helyett.
+            */}
             {mineOnly || partner || statusFilter || search.trim()
-              ? "Erre a szűrésre nincs munkalap."
-              : "Még nincs munkalap."}
+              ? "Nincs találat a keresési feltételekre."
+              : "Nincs munkalap."}
           </Text>
         ) : null}
 
@@ -381,18 +391,23 @@ export default function WorksheetsScreen() {
               }
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
+              {/*
+                A CÍM A TÁRGY, A SZÁM ALATTA (acrobot döntése, 2026-09-25,
+                Figma 8. kör): a web és a Figma-terv is így csoportosít, a
+                mai mobil (szám a cím) ELLENTÉTES sorrendet mutatott.
+              */}
               <View style={styles.rowHeader}>
-                <Text style={styles.rowTitle}>
-                  {worksheetLabelOrDraft(item.label)}
-                </Text>
+                <Text style={styles.rowTitle}>{item.subject}</Text>
                 <View style={styles.statusChip}>
                   <Text style={styles.statusText}>
                     {worksheetStatusLabel[item.status]}
                   </Text>
                 </View>
               </View>
+              <Text style={styles.rowNumber}>
+                {worksheetLabelOrDraft(item.label)}
+              </Text>
               <Text style={styles.rowMeta}>{worksheetListSubtitle(item)}</Text>
-              <Text style={styles.rowSubject}>{item.subject}</Text>
               <View style={styles.rowFooter}>
                 <Text style={styles.rowAssignee}>
                   {worksheetAssigneeLine(item.assigneeNames)}
@@ -530,7 +545,11 @@ const styles = StyleSheet.create({
   },
   statusText: { color: "#6de0ce", fontSize: 11, fontWeight: "800" },
   rowMeta: { color: "#789cad", fontSize: 12 },
-  rowSubject: { color: "#d9edf7", fontSize: 14 },
+  /**
+   * A SZÁM MOST A MÁSODLAGOS SOR (acrobot döntése, 2026-09-25): monospace,
+   * hogy egy szám-szerű azonosító megkülönböztesse magát a tárgy szövegétől.
+   */
+  rowNumber: { color: "#789cad", fontFamily: "monospace", fontSize: 12 },
   rowFooter: {
     alignItems: "center",
     flexDirection: "row",
