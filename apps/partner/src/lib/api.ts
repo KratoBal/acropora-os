@@ -1,4 +1,7 @@
 import type {
+  AquariumDetail,
+  AquariumListResponse,
+  AquariumMeasurementListResponse,
   AssetDetail,
   AssetDocumentSummary,
   AssetListResponse,
@@ -313,6 +316,32 @@ export const partnerApi = {
           signatureCode,
         }),
       },
+    ),
+  /**
+   * A HATOKORT A SZERVER DONTI EL, NEM EZ A HIVAS -- ugyanaz a szabaly, mint
+   * az `assets()`-nel: nincs `customerId` parameter, mert egy bennhagyott
+   * azonosito azt sugallna, hogy a hivo szabalyozza a lathatosagot. Ma a
+   * `PartnerScope` (`aquarium-visibility.ts`) szabalyozza, a szerveren --
+   * a sajat ugyfel, kiosztott helyszinei szerint.
+   */
+  aquariums: (input?: {
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const query = new URLSearchParams({
+      page: String(input?.page ?? 1),
+      pageSize: String(input?.pageSize ?? 25),
+    });
+    if (input?.search?.trim()) query.set("search", input.search.trim());
+    return request<AquariumListResponse>(`/aquariums?${query}`);
+  },
+  /** Idegen akvariumra 404 jon -- ugyanaz a hatokor, mint a listan. */
+  aquarium: (id: string) =>
+    request<AquariumDetail>(`/aquariums/${encodeURIComponent(id)}`),
+  aquariumMeasurements: (id: string) =>
+    request<AquariumMeasurementListResponse>(
+      `/aquariums/${encodeURIComponent(id)}/measurements`,
     ),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ updated: true }>("/account/password", {

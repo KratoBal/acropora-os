@@ -29,6 +29,14 @@ const MUSZAKI_MENU = [
   { href: "/eszkozok", label: "Eszközök" },
 ];
 
+/**
+ * AZ "AKVARISZTIKA" CSOPORT ELSO TETELE -- Balazs dontese, 2026-09-25
+ * (Partner Portal Akvariumok terv, emlek 1839): a lista/adatlap/uj meres/
+ * uj akvarium sorozat elso resze. Csak a LISTA all itt ma; az adatlap
+ * (`/akvariumok/[id]`) es az uj akvarium urlap kulon korben johet.
+ */
+const AKVARISZTIKA_MENU = [{ href: "/akvariumok", label: "Akváriumok" }];
+
 const BEALLITASOK_HREF = "/beallitasok";
 
 export function PortalShell({ children }: { children: ReactNode }) {
@@ -126,13 +134,41 @@ export function PortalShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           {/*
-            AZ "AKVARISZTIKA" CSOPORT MA SENKINEK NEM LATSZIK, SZANDEKOSAN
-            (build brief, "A KET MENUCSOPORT ELOKESZITESE" szakasz, 3. pont):
-            ez a jogkor ma nem letezik a kodban, tehat a helyes alapallapot a
-            REJTVE, nem a latszik. Ha egyszer a partner-akvarisztika kepesseg
-            elkeszul, ide egy masodik, ugyanilyen felepitesu blokk kerul,
-            felteve a jogosult felhasznaloknak.
+            AZ "AKVARISZTIKA" CSOPORT MOSTANTOL LATSZIK -- a partner-akvarium
+            kepesseg elkeszult (2026-09-25, sema+hatokor: Aquarium.departmentId,
+            AQUARIUMS_VIEW/MANAGE a PARTNER_SERVICE-en). Nincs kulon
+            jogosultsag-ellenorzes ITT, mert az AQUARIUMS_VIEW-t MINDEN
+            PARTNER_SERVICE fiok viseli (szerep-szintu jog, nem
+            felhasznalonkenti kapcsolo), es ez a komponens amugy is csak
+            `user.role === "PARTNER_SERVICE"` eseten fut le (lasd a fenti
+            korai visszaterest). A tenyleges szukites a SORON all: a
+            hozzarendeles nelkuli felhasznalo a listat betoltve latja, csak
+            ures allapottal.
           */}
+          <div>
+            <p className="mb-1 px-3 text-[9px] font-bold uppercase tracking-widest text-pilot-grey-400">
+              Akvarisztika
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {AKVARISZTIKA_MENU.map((item) => {
+                const active = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex h-9 w-full items-center rounded-lg px-3 text-sm font-medium no-underline transition-colors ${
+                      active
+                        ? "bg-pilot-aqua-50 text-pilot-aqua-700"
+                        : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         </nav>
 
         <div className="px-2 pb-2">
