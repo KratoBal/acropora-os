@@ -91,7 +91,7 @@ const CONFIRM_COMPONENT = /ConfirmDialog/;
  * nem tudja; egy "egysegesites" tehat nem javitas lenne, hanem vesztes.
  */
 const OWN_QUESTION: Record<string, string> = {
-  "src/components/suppliers/partner-delete-button.tsx":
+  "src/components/suppliers/pilot/pilot-partner-delete-button.tsx":
     "Sajat, ketagú kerdes, a szervertol lekert tervvel.",
 };
 
