@@ -4,15 +4,15 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  Button,
-  ServiceDataGrid,
-  ServiceDataItem,
-  ServiceDetailHeader,
-  ServiceDetailSplit,
-  ServiceIcon,
-  ServicePanel,
-  ServicePanelHeading,
-  ServiceStatusBadge,
+  Icon,
+  PilotBadge,
+  PilotButton,
+  PilotCard,
+  PilotCardHeader,
+  PilotDataRow,
+  PilotThemeRoot,
+  PilotTimeline,
+  pilotBadgeVariantForTone,
 } from "@acropora/ui";
 import {
   assetEventLabel,
@@ -23,7 +23,7 @@ import {
 
 import { partnerApi } from "@/lib/api";
 import { DocumentPanel } from "./document-panel";
-import { Message, Empty } from "./ticket-list";
+import { Message } from "./ticket-list";
 
 /**
  * AZ ESZKÖZ ADATLAPJA A PARTNER PORTÁLON.
@@ -58,14 +58,15 @@ import { Message, Empty } from "./ticket-list";
  * mögé rejtve. A `portal-wiring.spec.ts` négy állítása pontosan ezt méri.
  * Belső megjegyzés emiatt semmilyen formában nem jelenik meg.
  *
- * === AZ ELRENDEZÉS A BELSŐ RENDSZERÉ, A KÖZÖS KERETRE ÁLLVA (2026-09-24) ===
+ * === AZ ELRENDEZÉS -- FIGMA 9. KÖR, PILOT-AQUA (2026-09-25) ===
  *
  * Balázs kérése, 2026-09-21 14:25:28 UTC: az ügyfél „ugyanolyan elrendezesben
- * es desigban lassa" a lapot, mint mi az app.acropora.hu oldalon. Murena
- * #1041-e (`ticket-portal-visual-parity`) átköltöztette a
- * `ServiceDetailHeader`/`ServicePanel`/`ServiceDataItem` keretet
- * `apps/web`-ből `packages/ui`-ba -- ez a lap ugyanazokat a komponenseket
- * használja, nem egy saját, párhuzamos Tailwind-közelítést.
+ * es desigban lassa" a lapot, mint mi az app.acropora.hu oldalon. Az előző
+ * kör a belső, violet `ServiceDetailHeader`/`ServicePanel`/`ServiceDataItem`
+ * keretet vette át -- ez a kör a portál egészét pilot-aqua design-
+ * rendszerre viszi, a hibajegy-adatlappal (#1127) egyező mintát követve:
+ * `PilotCard`/`PilotDataRow`/`PilotTimeline` (`packages/ui/src/pilot-ui.tsx`),
+ * a `PartnerPortalScreen.tsx:892-971` átültetése.
  *
  * A TARTALOM VÁLTOZATLAN. Ugyanaz a kilenc adatsor, ugyanabban a sorrendben,
  * ugyanazokkal a hívásokkal -- csak a KERET cserélt.
@@ -137,186 +138,196 @@ export function AssetDetail({ id }: { id: string }) {
 
   if (error)
     return (
-      <section className="flex flex-col gap-4">
+      <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 max-w-none bg-pilot-grey-50 px-8 py-6">
         <VisszaLink />
         <Message tone="error" text={error} retry={load} />
-      </section>
+      </PilotThemeRoot>
     );
   if (!asset)
-    return <p className="text-[13px] text-muted">Eszköz betöltése…</p>;
+    return (
+      <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 max-w-none bg-pilot-grey-50 px-8 py-6">
+        <p className="text-sm text-pilot-grey-400">Eszköz betöltése…</p>
+      </PilotThemeRoot>
+    );
 
   return (
-    <section className="flex flex-col gap-4">
-      <VisszaLink />
-      <ServiceDetailHeader
-        eyebrow="ESZKÖZ"
-        title={asset.name}
-        badge={
-          <ServiceStatusBadge tone={assetStatusTone[asset.status]}>
+    <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 max-w-none bg-pilot-grey-50">
+      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+        <VisszaLink />
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
+          ESZKÖZ
+        </p>
+        <h1 className="text-xl font-semibold text-pilot-grey-900">
+          {asset.name}
+        </h1>
+        <div className="mt-2 flex items-center gap-2">
+          <PilotBadge
+            variant={pilotBadgeVariantForTone(assetStatusTone[asset.status])}
+          >
             {assetStatusLabel[asset.status]}
-          </ServiceStatusBadge>
-        }
-        sub={
-          asset.partnerInternalCode
-            ? `${asset.assetNumber} · ${asset.partnerInternalCode}`
-            : asset.assetNumber
-        }
-      />
+          </PilotBadge>
+          <span className="font-mono text-xs text-pilot-grey-400">
+            {asset.partnerInternalCode
+              ? `${asset.assetNumber} · ${asset.partnerInternalCode}`
+              : asset.assetNumber}
+          </span>
+        </div>
+      </div>
 
-      <ServiceDetailSplit
-        main={
-          <>
-            <ServicePanel>
-              <ServiceDataGrid>
-                <ServiceDataItem label="Helyszín">
-                  {asset.unit?.path.join(" / ") ?? "Nincs megadva"}
-                </ServiceDataItem>
-                <ServiceDataItem label="Cím">
-                  {asset.address?.formatted ?? "Nincs megadva"}
-                </ServiceDataItem>
-                <ServiceDataItem label="Gyártó">
-                  {asset.manufacturer ?? "Nincs megadva"}
-                </ServiceDataItem>
-                <ServiceDataItem label="Teljesítmény">
-                  {asset.performance
+      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_280px]">
+        <div className="flex flex-col gap-5">
+          <PilotCard>
+            <PilotCardHeader title="Adatok" />
+            <div className="px-5 py-2">
+              <PilotDataRow
+                label="Helyszín"
+                value={asset.unit?.path.join(" / ")}
+              />
+              <PilotDataRow label="Cím" value={asset.address?.formatted} />
+              <PilotDataRow label="Gyártó" value={asset.manufacturer} />
+              <PilotDataRow
+                label="Teljesítmény"
+                value={
+                  asset.performance
                     ? `${asset.performance}${
                         asset.performanceUnit
                           ? ` ${asset.performanceUnit.code}`
                           : ""
                       }`
-                    : "Nincs megadva"}
-                </ServiceDataItem>
-                <ServiceDataItem label="Telepítés">
-                  {datum(asset.installedAt)}
-                </ServiceDataItem>
-                <ServiceDataItem label="Garancia lejárata">
-                  {datum(asset.warrantyExpiresAt)}
-                </ServiceDataItem>
-                <ServiceDataItem label="Karbantartási intervallum">
-                  {asset.serviceIntervalDays
+                    : undefined
+                }
+              />
+              <PilotDataRow
+                label="Telepítés"
+                value={datum(asset.installedAt)}
+              />
+              <PilotDataRow
+                label="Garancia lejárata"
+                value={datum(asset.warrantyExpiresAt)}
+              />
+              <PilotDataRow
+                label="Karbantartási intervallum"
+                value={
+                  asset.serviceIntervalDays
                     ? `${asset.serviceIntervalDays} nap`
-                    : "Nincs megadva"}
-                </ServiceDataItem>
-                <ServiceDataItem label="Utolsó karbantartás">
-                  {datum(asset.lastServicedAt)}
-                </ServiceDataItem>
-                {/*
-                  A MATRICA KÓDJA, ÉS A CÍMKE IS EZÉRT VÁLTOZOTT.
+                    : undefined
+                }
+              />
+              <PilotDataRow
+                label="Utolsó karbantartás"
+                value={datum(asset.lastServicedAt)}
+              />
+              {/*
+                A MATRICA KÓDJA, ÉS A CÍMKE IS EZÉRT VÁLTOZOTT.
 
-                  Itt eddig a `qrToken` állt, "QR-azonosító" néven. Az a mező
-                  egy uuid, nem a matrica száma -- és épp a CÍMKE tette
-                  csábítóvá: a felhasználó a matricát hívja így. Egy jó
-                  tartalom rossz cím alatt ugyanaz a csapda marad, ezért a
-                  kettő együtt mozdult.
+                Itt eddig a `qrToken` állt, "QR-azonosító" néven. Az a mező
+                egy uuid, nem a matrica száma -- és épp a CÍMKE tette
+                csábítóvá: a felhasználó a matricát hívja így. Egy jó
+                tartalom rossz cím alatt ugyanaz a csapda marad, ezért a
+                kettő együtt mozdult.
 
-                  A `qrToken` NEM került mellé. Nem titok, de a partnernek
-                  nincs jelentése, ÉS ez az a kulcs, amit a `scan/:qrToken`
-                  végpont elfogad. Egy képernyőről leolvasható kulcs akkor is
-                  fölösleges kockázat, ha ma nem tágít hatókört.
+                A `qrToken` NEM került mellé. Nem titok, de a partnernek
+                nincs jelentése, ÉS ez az a kulcs, amit a `scan/:qrToken`
+                végpont elfogad. Egy képernyőről leolvasható kulcs akkor is
+                fölösleges kockázat, ha ma nem tágít hatókört.
 
-                  ÉS A TARTALÉK ITT MÁS, MINT A LISTÁKON -- szándékosan. A
-                  listasorban a matrica hiányában az eszköz-szám marad, mert
-                  ott semmi más nem azonosítja a sort. Ezen a lapon az
-                  eszköz-szám MÁR OTT ÁLL a fejlécben, tehát ugyanaz a
-                  tartalék két helyen mutatná ugyanazt, két különböző cím
-                  alatt. A lap saját szokása a hiányra a "Nincs megadva", és
-                  minden testvér sor ezt használja.
-                */}
-                <ServiceDataItem label="Matricakód">
-                  {asset.labelCode ?? "Nincs megadva"}
-                </ServiceDataItem>
-              </ServiceDataGrid>
-            </ServicePanel>
+                ÉS A TARTALÉK ITT MÁS, MINT A LISTÁKON -- szándékosan. A
+                listasorban a matrica hiányában az eszköz-szám marad, mert
+                ott semmi más nem azonosítja a sort. Ezen a lapon az
+                eszköz-szám MÁR OTT ÁLL a fejlécben, tehát ugyanaz a
+                tartalék két helyen mutatná ugyanazt, két különböző cím
+                alatt. A lap saját szokása a hiányra a `PilotDataRow` beépített
+                "Nincs megadva" tartaléka, ugyanaz, mint minden testvér sor.
+              */}
+              <PilotDataRow label="Matricakód" value={asset.labelCode} />
+            </div>
+          </PilotCard>
 
-            {/*
-              A DOKUMENTUMOK ES A FENYKEPEK UGYANAZON A PANELEN allnak,
-              ugyanugy, mint a hibajegyen: a panel a kepeket csempekent
-              rajzolja, a tobbit nevvel. A bajtokat a SAJAT hivasunk hozza
-              (blob + object URL), mert a bongeszo `<img>` eleme nem kuld
-              Authorization fejlecet.
+          {/*
+            A DOKUMENTUMOK ES A FENYKEPEK UGYANAZON A PANELEN allnak,
+            ugyanugy, mint a hibajegyen: a panel a kepeket csempekent
+            rajzolja, a tobbit nevvel. A bajtokat a SAJAT hivasunk hozza
+            (blob + object URL), mert a bongeszo `<img>` eleme nem kuld
+            Authorization fejlecet.
 
-              A `DocumentPanel` KIVETEL, ES SZANDEKOSAN AZ: a
-              `worksheet-detail.tsx` es a `ticket-detail.tsx` is ugyanezt a
-              komponenst hivja, a sajat `PANEL`/`PANEL_CIM` osztalyaival. Ha
-              itt atalakitanam, mind a harom lap kulseje megvaltozna -- ez
-              tulmutat ezen a koron, amig a `DocumentPanel` maga nem kap
-              sajat kort (lasd `ticket-detail.tsx` fejleceben ugyanezt a
-              megjegyzest).
-            */}
-            <DocumentPanel
-              title="Dokumentumok és fényképek"
-              items={documents.map((item) => ({
-                ...item,
-                caption: item.caption ?? null,
-              }))}
-              loadBlob={(documentId) =>
-                partnerApi.assetDocumentBlob(id, documentId)
-              }
-              upload={(file, caption) =>
-                partnerApi.uploadAssetDocument(id, file, caption)
-              }
-              onUploaded={load}
-            />
+            A `DocumentPanel` EBBEN A KÖRBEN IS KIVETEL, ES SZANDEKOSAN AZ:
+            a `worksheet-detail.tsx` es a `ticket-detail.tsx` (#1127) is
+            ugyanezt a komponenst hivja, a sajat `PANEL`/`PANEL_CIM`
+            osztalyaival es a `globals.css` `document-*` szabalyaival. Ha itt
+            atalakitanam, mindharom lap kulseje megvaltozna, es ez a
+            beolvasztas AZONNAL elesre megy -- ugyanaz a dontes, amit a
+            `ticket-detail.tsx` fejleceben is kimondtam.
+          */}
+          <DocumentPanel
+            title="Dokumentumok és fényképek"
+            items={documents.map((item) => ({
+              ...item,
+              caption: item.caption ?? null,
+            }))}
+            loadBlob={(documentId) =>
+              partnerApi.assetDocumentBlob(id, documentId)
+            }
+            upload={(file, caption) =>
+              partnerApi.uploadAssetDocument(id, file, caption)
+            }
+            onUploaded={load}
+          />
 
-            <ServicePanel>
-              <ServicePanelHeading title="Előzmények" />
+          <PilotCard>
+            <PilotCardHeader title="Előzmények" />
+            <div className="px-5 py-4">
               {asset.events.length ? (
-                <ul className="m-0 flex list-none flex-col gap-2 p-0">
-                  {asset.events.map((esemeny) => (
-                    <li
-                      key={esemeny.id}
-                      className="flex flex-wrap items-baseline justify-between gap-2 border-b border-dusk-200 pb-2 last:border-0 last:pb-0"
-                    >
-                      <strong className="text-[13px] font-semibold text-ink">
-                        {assetEventLabel[esemeny.type]}
-                      </strong>
-                      <span className="text-[12px] text-muted">
-                        {new Date(esemeny.occurredAt).toLocaleString("hu-HU")}
-                        {esemeny.actor ? ` · ${esemeny.actor.displayName}` : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <Empty
-                  title="Nincs előzmény"
-                  text="Ehhez az eszközhöz még nem rögzítettünk eseményt."
+                <PilotTimeline
+                  items={asset.events.map((esemeny) => ({
+                    key: esemeny.id,
+                    text: assetEventLabel[esemeny.type],
+                    meta: `${new Date(esemeny.occurredAt).toLocaleString("hu-HU")}${
+                      esemeny.actor ? ` · ${esemeny.actor.displayName}` : ""
+                    }`,
+                  }))}
                 />
+              ) : (
+                <p className="py-2 text-sm italic text-pilot-grey-500">
+                  Ehhez az eszközhöz még nem rögzítettünk eseményt.
+                </p>
               )}
-            </ServicePanel>
-          </>
-        }
-        side={
-          /*
+            </div>
+          </PilotCard>
+        </div>
+
+        <div className="flex flex-col gap-5">
+          {/*
             A QR-KÁRTYA CSAK MEGJELENÍT ÉS LETÖLTHETŐVÉ TESZ, NEM CSERÉL --
             lásd a komponens fejlécében a vonatkozó szakaszt. Ha az eszköznek
             nincs QR-kódja (a lekérdezés elhasalt vagy `null`-t adott), a
             kártya nem jelenik meg -- egy üres QR-doboz rosszabb lenne a
             hiányánál.
-          */
-          qr ? (
-            <ServicePanel>
-              <ServicePanelHeading title="QR-azonosító" />
-              <p className="mt-1 mb-4 text-[13px] leading-[1.5] text-muted">
-                A matrica leolvasása az Acropora OS mobilalkalmazásban nyitja
-                meg ezt az eszközt.
-              </p>
-              <div
-                className="mx-auto aspect-square max-w-[220px] overflow-hidden rounded-xl border border-line bg-white p-3"
-                aria-label={`${asset.assetNumber} QR-kódja`}
-                dangerouslySetInnerHTML={{ __html: qr.svg }}
-              />
-              <div className="mt-4">
-                <Button onClick={downloadQr}>
-                  <ServiceIcon name="sheet" className="mr-1.5 size-4" />
-                  QR letöltése (SVG)
-                </Button>
+          */}
+          {qr ? (
+            <PilotCard>
+              <PilotCardHeader title="QR-azonosító" />
+              <div className="px-5 py-4">
+                <p className="mb-4 text-sm leading-6 text-pilot-grey-500">
+                  A matrica leolvasása az Acropora OS mobilalkalmazásban nyitja
+                  meg ezt az eszközt.
+                </p>
+                <div
+                  className="mx-auto aspect-square max-w-[220px] overflow-hidden rounded-xl bg-white p-3 ring-1 ring-pilot-grey-200"
+                  aria-label={`${asset.assetNumber} QR-kódja`}
+                  dangerouslySetInnerHTML={{ __html: qr.svg }}
+                />
+                <div className="mt-4">
+                  <PilotButton variant="secondary" onClick={downloadQr}>
+                    <Icon name="download" size={14} />
+                    QR letöltése (SVG)
+                  </PilotButton>
+                </div>
               </div>
-            </ServicePanel>
-          ) : null
-        }
-      />
-    </section>
+            </PilotCard>
+          ) : null}
+        </div>
+      </div>
+    </PilotThemeRoot>
   );
 }
 
@@ -331,10 +342,11 @@ export function AssetDetail({ id }: { id: string }) {
 function VisszaLink() {
   return (
     <Link
-      className="text-[13px] text-muted no-underline hover:text-ink"
       href="/eszkozok"
+      className="mb-3 inline-flex items-center gap-1.5 text-xs text-pilot-grey-400 hover:text-pilot-grey-700"
     >
-      ← Eszközök
+      <Icon name="chevron-left" size={12} />
+      Eszközök
     </Link>
   );
 }
