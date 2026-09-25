@@ -2,17 +2,17 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { partnerStatusTone, serviceJobWorksheetLabel } from "@acropora/types";
+import { serviceJobWorksheetLabel } from "@acropora/types";
 import {
-  Alert,
-  Button,
-  ServiceContextRow,
-  ServiceDetailHeader,
-  ServiceDetailSplit,
-  ServiceIcon,
-  ServicePanel,
-  ServicePanelHeading,
-  ServiceStatusBadge,
+  Icon,
+  PilotBadge,
+  PilotButton,
+  PilotCard,
+  PilotCardHeader,
+  PilotDataRow,
+  PilotThemeRoot,
+  PilotTimeline,
+  partnerStatusBadgeVariant,
 } from "@acropora/ui";
 
 import { TicketFieldsEditor } from "./ticket-fields-editor";
@@ -20,15 +20,21 @@ import { TicketFieldsEditor } from "./ticket-fields-editor";
 import { partnerApi } from "@/lib/api";
 import { naploSor } from "@/lib/naplo-sor";
 import { DocumentPanel } from "./document-panel";
-import { Empty, Message } from "./ticket-list";
+import { Message } from "./ticket-list";
 
 /**
- * A HIBAJEGY ADATLAPJA A PARTNER PORTÁLON, a `service-job-detail-page.tsx`
- * mintája szerint (Balázs kérése, 2026-09-21, megerősítve 2026-09-24 07:28
- * UTC). A KERET csere -- fejléc, kéthasábos elrendezés, panelek -- de a
- * TARTALOM-SZŰKÍTÉS, amit az alábbi két szakasz ír le, VÁLTOZATLAN marad.
+ * A HIBAJEGY ADATLAPJA A PARTNER PORTÁLON -- FIGMA 9. KÖR, a Make-terv
+ * `PartnerPortalScreen.tsx:626-738` átültetése.
  *
- * === MI KERÜL RÁ, ÉS MI NEM (Balázs kérése, 2026-09-21) ===
+ * VIZUÁLIS VÁLTÁS A KORÁBBI KÖRHÖZ KÉPEST: az előző kör a belső, violet
+ * `ServiceDetailHeader`/`ServiceDetailSplit`/`ServicePanel`/
+ * `ServiceStatusBadge` keretet vette át -- ez a kör a portál egészét
+ * pilot-aqua design-rendszerre viszi, a listákkal (#1117/#1119/#1120)
+ * egyező mintát követve. Két új, megosztott komponens született hozzá
+ * (`PilotDataRow`, `PilotTimeline`, `packages/ui/src/pilot-ui.tsx`) --
+ * mindkettőt a tervezett eszköz- és munkalap-adatlap is használni fogja.
+ *
+ * === MI KERÜL RÁ, ÉS MI NEM (Balázs kérése, 2026-09-21) -- VÁLTOZATLAN ===
  *
  * Szó szerint: „sot: ugyanaz legyen a hibajegy es a munkalap oldal is", és
  * „csak ott megtudja csinalni azt amihez jogosultsaga van". A tartalom tehát a
@@ -61,13 +67,18 @@ import { Empty, Message } from "./ticket-list";
  * KONTROLLJA: ha a szűkítés implementációja hibásan MINDENT elrejtene, ez a
  * `DocumentPanel` is eltűnne, és az alábbi teszt erre külön állítást tartalmaz.
  *
- * === A `DocumentPanel` KIVÉTEL, ÉS SZÁNDÉKOSAN AZ ===
+ * === A `DocumentPanel` EBBEN A KÖRBEN IS KIVÉTEL, ÉS SZÁNDÉKOSAN AZ ===
  *
- * Az `asset-detail.tsx` (nautilus) és a `worksheet-detail.tsx` is ugyanezt a
- * komponenst hívja, a saját `PANEL`/`PANEL_CIM` osztályaival (`frame.tsx`).
- * Ha itt átalakítanám, mind a három lap kinézete megváltozna -- ez túlmutat
- * a hibajegy-lapok körén. A dobozon belül ezért egy sorban marad a régi
- * keret, amíg a `DocumentPanel` maga nem kap saját kört.
+ * Az `asset-detail.tsx` és a `worksheet-detail.tsx` is ugyanezt a komponenst
+ * hívja, a saját `PANEL`/`PANEL_CIM` osztályaival (`frame.tsx`) és a
+ * `globals.css` `document-*` szabályaival. Ha itt átalakítanám, mind a három
+ * lap kinézete megváltozna, és a `globals.css` egy megosztott, sok helyen élő
+ * szabálycsoportja mozdulna -- ez túlmutat egyetlen adatlap körén, főleg úgy,
+ * hogy ez a beolvasztás AZONNAL élesre megy. A dobozon belül ezért egy
+ * sorban marad a régi keret, amíg a `DocumentPanel` maga nem kap saját kört
+ * -- ugyanaz a döntés, amit a korábbi kör is hozott, csak most a pilot-aqua
+ * lapon belül marad egy violet doboz, nem a violet lapon belül egy violet
+ * doboz. A vizuális törés emiatt LÁTHATÓ marad, de tudatosan.
  */
 export function TicketDetail({ id }: { id: string }) {
   const [ticket, setTicket] = useState<Awaited<
@@ -100,12 +111,17 @@ export function TicketDetail({ id }: { id: string }) {
 
   if (error)
     return (
-      <section>
+      <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 max-w-none bg-pilot-grey-50 px-8 py-6">
         <VisszaLink />
         <Message tone="error" text={error} retry={load} />
-      </section>
+      </PilotThemeRoot>
     );
-  if (!ticket) return <p className="text-xs text-muted">Hibajegy betöltése…</p>;
+  if (!ticket)
+    return (
+      <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 max-w-none bg-pilot-grey-50 px-8 py-6">
+        <p className="text-sm text-pilot-grey-400">Hibajegy betöltése…</p>
+      </PilotThemeRoot>
+    );
   const downloadPackage = async () => {
     setDownloading(true);
     setPackageError(null);
@@ -140,53 +156,65 @@ export function TicketDetail({ id }: { id: string }) {
     entry.kind === "worksheet" ? [entry.worksheet] : [],
   );
   return (
-    <section>
-      <VisszaLink />
-      <ServiceDetailHeader
-        eyebrow={ticket.jobNumber}
-        title={ticket.title}
-        badge={
-          <ServiceStatusBadge tone={partnerStatusTone(ticket.partnerStatus)}>
-            {ticket.partnerStatusLabel}
-          </ServiceStatusBadge>
-        }
-        sub={ticket.departmentPath?.join(" / ") ?? "Helyszín nincs megadva"}
-        actions={
-          ticket.partnerStatus === "COMPLETED" ? (
-            <Button
+    <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 max-w-none bg-pilot-grey-50">
+      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+        <VisszaLink />
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
+          {ticket.jobNumber}
+        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold text-pilot-grey-900">
+              {ticket.title}
+            </h1>
+            <div className="mt-2 flex items-center gap-2">
+              <PilotBadge
+                variant={partnerStatusBadgeVariant(ticket.partnerStatus)}
+              >
+                {ticket.partnerStatusLabel}
+              </PilotBadge>
+              <span className="text-xs text-pilot-grey-400">
+                {ticket.departmentPath?.join(" / ") ?? "Helyszín nincs megadva"}
+              </span>
+            </div>
+          </div>
+          {ticket.partnerStatus === "COMPLETED" ? (
+            <PilotButton
               variant="secondary"
               disabled={downloading}
               onClick={() => void downloadPackage()}
             >
+              <Icon name="download" size={14} />
               {downloading
                 ? "Dokumentumcsomag letöltése…"
                 : "Dokumentumcsomag letöltése"}
-            </Button>
-          ) : null
-        }
-      />
+            </PilotButton>
+          ) : null}
+        </div>
+      </div>
 
       {packageError ? (
-        <div className="mb-5">
-          <Alert
-            variant="danger"
-            title="Letöltési hiba"
-            description={packageError}
-          />
+        <div className="px-8 pt-4">
+          <p
+            className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"
+            role="alert"
+          >
+            {packageError}
+          </p>
         </div>
       ) : null}
 
-      <ServiceDetailSplit
-        main={
-          <>
-            <ServicePanel className="space-y-3">
-              <ServicePanelHeading title="Mi a probléma?" />
+      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_300px]">
+        <div className="flex flex-col gap-5">
+          <PilotCard>
+            <PilotCardHeader title="Mi a probléma?" />
+            <div className="space-y-3 px-5 py-4">
               {/*
                 AZ ÜRES LEÍRÁS KIMONDVA. Egy hiányzó bekezdés ugyanúgy néz ki,
                 mint egy betöltési hiba, és a különbséget csak az tudja, aki a
                 jegyet felvitte.
               */}
-              <p className="whitespace-pre-wrap text-sm leading-6 text-dusk-700">
+              <p className="whitespace-pre-wrap text-sm leading-6 text-pilot-grey-700">
                 {ticket.description ||
                   "A hibajegyhez nem rögzítettek részletes leírást."}
               </p>
@@ -204,138 +232,146 @@ export function TicketDetail({ id }: { id: string }) {
                   onSaved={() => load()}
                 />
               ) : null}
-            </ServicePanel>
+            </div>
+          </PilotCard>
 
-            <ServicePanel className="space-y-3">
-              <ServicePanelHeading title="Mi történt a hibajeggyel?" />
+          <PilotCard>
+            <PilotCardHeader title="Mi történt a hibajeggyel?" />
+            <div className="px-5 py-4">
               {ticket.timeline.length ? (
-                <ol className="space-y-2" aria-label="A hibajegy naplója">
-                  {ticket.timeline.map((entry) => (
-                    <li
-                      key={`${entry.kind}-${entry.sortKey}`}
-                      className="border-b pb-2 text-sm last:border-0"
-                    >
-                      <div>{naploSor(entry)}</div>
-                      <div className="mt-0.5 text-xs text-dusk-500">
+                <PilotTimeline
+                  items={ticket.timeline.map((entry) => ({
+                    key: `${entry.kind}-${entry.sortKey}`,
+                    text: naploSor(entry),
+                    /*
+                      A BELSŐ MEGJEGYZÉS NEM MEGY A PARTNER ELÉ (Balázs
+                      döntése, 2026-09-21 10:5x UTC, Discord, szó szerint:
+                      „a megjegyzes nem kell a nev igen"). A KOLLÉGA NEVE
+                      MARAD, az időpont mellett.
+                    */
+                    meta: (
+                      <>
                         {date.format(new Date(entry.at))}
                         {entry.kind === "status" && entry.event.actorName
                           ? ` · ${entry.event.actorName}`
                           : ""}
-                      </div>
-                      {/*
-                        A TÖRÖLT CSATOLMÁNY SORA ALATT AZ ÁLL, AMIT A TÖRLÉS
-                        ELVITT VOLNA: ki töltötte fel, és mikor. A fájl sora
-                        addigra nincs meg, tehát ez az egyetlen hely, ahol ez
-                        látszik. Régebbi bejegyzésnél `null`, és olyankor nem
-                        írunk semmit: a „nem tudjuk" nem ugyanaz, mint a
-                        „nem volt".
-                      */}
-                      {entry.kind === "document" &&
-                      entry.removal.uploadedAt !== null ? (
-                        <div className="mt-0.5 text-xs text-dusk-500">
-                          Feltöltve:{" "}
-                          {date.format(new Date(entry.removal.uploadedAt))}
-                          {entry.removal.uploadedByName
-                            ? ` · ${entry.removal.uploadedByName}`
-                            : ""}
-                        </div>
-                      ) : null}
-                      {/*
-                        A BELSŐ MEGJEGYZÉS NEM MEGY A PARTNER ELÉ (Balázs
-                        döntése, 2026-09-21 10:5x UTC, Discord, szó szerint:
-                        „a megjegyzes nem kell a nev igen"). A KOLLÉGA NEVE
-                        MARAD, a sor fölött, az időpont mellett.
-                      */}
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <Empty
-                  title="Még nincs esemény"
-                  text="A hibajegyhez még nem rögzítettek további eseményt."
+                        {/*
+                          A TÖRÖLT CSATOLMÁNY SORA ALATT AZ ÁLL, AMIT A
+                          TÖRLÉS ELVITT VOLNA: ki töltötte fel, és mikor. A
+                          fájl sora addigra nincs meg, tehát ez az egyetlen
+                          hely, ahol ez látszik. Régebbi bejegyzésnél `null`,
+                          és olyankor nem írunk semmit: a „nem tudjuk" nem
+                          ugyanaz, mint a „nem volt".
+                        */}
+                        {entry.kind === "document" &&
+                        entry.removal.uploadedAt !== null ? (
+                          <span className="mt-0.5 block">
+                            Feltöltve:{" "}
+                            {date.format(new Date(entry.removal.uploadedAt))}
+                            {entry.removal.uploadedByName
+                              ? ` · ${entry.removal.uploadedByName}`
+                              : ""}
+                          </span>
+                        ) : null}
+                      </>
+                    ),
+                  }))}
                 />
+              ) : (
+                <p className="py-2 text-sm italic text-pilot-grey-500">
+                  A hibajegyhez még nem rögzítettek további eseményt.
+                </p>
               )}
-            </ServicePanel>
+            </div>
+          </PilotCard>
 
-            <DocumentPanel
-              title="Fényképek és fájlok"
-              items={documents}
-              loadBlob={(documentId) =>
-                partnerApi.ticketDocumentBlob(id, documentId)
-              }
-              upload={(file, caption) =>
-                partnerApi.uploadTicketDocument(id, file, caption)
-              }
-              onUploaded={load}
-            />
+          <DocumentPanel
+            title="Fényképek és fájlok"
+            items={documents}
+            loadBlob={(documentId) =>
+              partnerApi.ticketDocumentBlob(id, documentId)
+            }
+            upload={(file, caption) =>
+              partnerApi.uploadTicketDocument(id, file, caption)
+            }
+            onUploaded={load}
+          />
 
-            {/*
-              A MUNKALAPOK A CSATOLMÁNYOK UTÁN ÁLLNAK, ugyanabban a
-              sorrendben, mint a belső lapon. Nem ízlés: a fénykép a
-              BEJELENTETT hibáról szól, a munkalap arról, amit TETTÜNK vele.
-            */}
-            <ServicePanel className="space-y-3">
-              <ServicePanelHeading title="Munkalapok a jegy mögött" />
+          {/*
+            A MUNKALAPOK A CSATOLMÁNYOK UTÁN ÁLLNAK, ugyanabban a
+            sorrendben, mint a belső lapon. Nem ízlés: a fénykép a
+            BEJELENTETT hibáról szól, a munkalap arról, amit TETTÜNK vele.
+          */}
+          <PilotCard>
+            <PilotCardHeader title="Munkalapok a jegy mögött" />
+            <div className="px-5 py-3">
               {worksheets.length ? (
-                <ul className="space-y-2">
+                <ul className="divide-y divide-pilot-grey-50">
                   {worksheets.map((worksheet) => (
                     <li
                       key={worksheet.id}
-                      className="flex items-center justify-between gap-3 border-b pb-2 text-sm last:border-0"
+                      className="flex items-center justify-between gap-3 py-2 text-sm"
                     >
                       <Link
-                        className="font-medium text-ink hover:text-brand-700"
+                        className="font-medium text-pilot-grey-900 hover:text-pilot-aqua-700"
                         href={`/munkalapok/${worksheet.id}`}
                       >
                         {serviceJobWorksheetLabel(worksheet)}
                       </Link>
-                      <span className="text-xs text-dusk-500">
+                      <span className="text-xs text-pilot-grey-400">
                         {date.format(new Date(worksheet.createdAt))}
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-dusk-500">
-                  Ehhez a jegyhez még nem tartozik munkalap.
+                <p className="py-2 text-sm italic text-pilot-grey-500">
+                  Még nincs csatolt munkalap.
                 </p>
               )}
-            </ServicePanel>
-          </>
-        }
-        side={
-          <>
-            {/*
-              AZ ÜGY ADATAI: AMI A JEGYET AZONOSÍTJA A HELYSZÍNEN. A belső
-              lapon ez külön doboz a jobb hasábban, ugyanezzel a három sorral
-              -- a „Partner" sor kivételével, ami itt maga a bejelentkezett
-              cég, tehát egy üres ismétlés lenne.
-            */}
-            <ServicePanel>
-              <ServicePanelHeading title="Az ügy adatai" />
-              <ServiceContextRow icon="clock" label="Bejelentés ideje">
-                {date.format(new Date(ticket.createdAt))}
-              </ServiceContextRow>
-              <ServiceContextRow icon="location" label="Helyszín">
-                {ticket.departmentPath?.join(" / ") ?? "Nincs megadva"}
-              </ServiceContextRow>
-              <ServiceContextRow icon="eye" label="Az ügy állapota">
-                {ticket.partnerStatusLabel}
-              </ServiceContextRow>
-            </ServicePanel>
+            </div>
+          </PilotCard>
+        </div>
 
-            <ServicePanel>
-              <ServicePanelHeading title="Érintett eszközök" />
+        <div className="flex flex-col gap-5">
+          {/*
+            AZ ÜGY ADATAI: AMI A JEGYET AZONOSÍTJA A HELYSZÍNEN. A belső
+            lapon ez külön doboz a jobb hasábban, ugyanezzel a három sorral
+            -- a „Partner" sor kivételével, ami itt maga a bejelentkezett
+            cég, tehát egy üres ismétlés lenne.
+          */}
+          <PilotCard>
+            <PilotCardHeader title="Az ügy adatai" />
+            <div className="px-5 py-4">
+              <PilotDataRow
+                label="Bejelentés ideje"
+                value={date.format(new Date(ticket.createdAt))}
+              />
+              <PilotDataRow
+                label="Helyszín"
+                value={ticket.departmentPath?.join(" / ")}
+              />
+              <PilotDataRow
+                label="Az ügy állapota"
+                value={ticket.partnerStatusLabel}
+              />
+            </div>
+          </PilotCard>
+
+          <PilotCard>
+            <PilotCardHeader title="Érintett eszközök" />
+            <div className="px-5 py-4">
               {ticket.assets.length ? (
-                <ul className="space-y-2">
+                <ul className="divide-y divide-pilot-grey-50">
                   {ticket.assets.map((asset) => (
                     <li
                       key={asset.id}
-                      className="flex items-center gap-2 border-b pb-2 text-sm last:border-0"
+                      className="flex items-center gap-2 py-2 text-sm"
                     >
-                      <ServiceIcon
+                      <Icon
                         name="box"
-                        className="size-4 shrink-0 text-[#8679aa]"
+                        size={16}
+                        className="shrink-0 text-pilot-grey-300"
                       />
                       <div className="min-w-0 flex-1">
                         {/*
@@ -345,12 +381,12 @@ export function TicketDetail({ id }: { id: string }) {
                           vinne.
                         */}
                         <Link
-                          className="block truncate font-medium text-ink hover:text-brand-700"
+                          className="block truncate font-medium text-pilot-grey-900 hover:text-pilot-aqua-700"
                           href={`/eszkozok/${asset.assetId}`}
                         >
                           {asset.assetName}
                         </Link>
-                        <span className="block text-xs text-dusk-500">
+                        <span className="block text-xs text-pilot-grey-400">
                           {asset.assetNumber}
                         </span>
                       </div>
@@ -358,15 +394,15 @@ export function TicketDetail({ id }: { id: string }) {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-dusk-500">
-                  A hibajegyhez nincs eszköz megjelölve.
+                <p className="py-2 text-sm italic text-pilot-grey-500">
+                  Nincs megadva érintett eszköz.
                 </p>
               )}
-            </ServicePanel>
-          </>
-        }
-      />
-    </section>
+            </div>
+          </PilotCard>
+        </div>
+      </div>
+    </PilotThemeRoot>
   );
 }
 
@@ -383,9 +419,9 @@ function VisszaLink() {
   return (
     <Link
       href="/hibajegyek"
-      className="mb-[18px] inline-flex items-center gap-[7px] text-xs text-muted hover:text-brand-700"
+      className="mb-3 inline-flex items-center gap-1.5 text-xs text-pilot-grey-400 hover:text-pilot-grey-700"
     >
-      <ServiceIcon name="arrowLeft" className="size-4" />
+      <Icon name="chevron-left" size={12} />
       Hibajegyek
     </Link>
   );

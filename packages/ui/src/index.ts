@@ -84,6 +84,8 @@ export {
   PilotCardHeader,
   PilotDrawer,
   PilotDialog,
+  PilotDataRow,
+  PilotTimeline,
 } from "./pilot-ui";
 export type { PilotBadgeVariant } from "./pilot-ui";
 export {

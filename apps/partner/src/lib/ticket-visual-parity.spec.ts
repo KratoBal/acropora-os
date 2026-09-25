@@ -46,12 +46,17 @@ describe("hibajegy-lapok arculati parítása", () => {
     assert.match(s, /partnerStatusBadgeVariant/);
   });
 
-  it("az adatlap a közös @acropora/ui ADATLAP-keretét hívja", () => {
+  /*
+    2026-09-25-TŐL AZ ADATLAP IS A PILOT KERETET HÍVJA, NEM A VIOLET
+    `Service*`-t -- ugyanaz a valtas, mint fent a listanal.
+  */
+  it("az adatlap a közös @acropora/ui PILOT-keretét hívja", () => {
     const s = kod(RESZLET);
     assert.match(s, /from "@acropora\/ui"/);
-    assert.match(s, /ServiceDetailHeader/);
-    assert.match(s, /ServiceDetailSplit/);
-    assert.match(s, /ServicePanel/);
+    assert.match(s, /PilotThemeRoot/);
+    assert.match(s, /PilotCard/);
+    assert.match(s, /PilotTimeline/);
+    assert.match(s, /PilotDataRow/);
   });
 
   /*
