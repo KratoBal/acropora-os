@@ -130,5 +130,30 @@ export async function apiRequest<T>(
     );
   }
 
-  return (await response.json()) as T;
+  /**
+   * A VÁLASZ TESTE LEHET ÜRES -- EGY `void`-OT VISSZAADÓ VÉGPONTNÁL EZ A
+   * NORMÁLIS ESET, NEM HIBA.
+   *
+   * Mérve 2026-09-25 (Balázs jelzése az akvárium vízmérés-törlésnél,
+   * eredetileg a #1100 alá könyvelve, valójában ITT lakott): a NestJS
+   * Express-adapter `void`-ot visszaadó handlernél (`RouterResponseController.
+   * reply` -> `isNil(body)` ág, `@nestjs/platform-express`
+   * `express-adapter.js`) `response.send()`-et hív ARGUMENTUM NÉLKÜL --
+   * ez 200-as státusszal, TELJESEN ÜRES törzset küld. A régi
+   * `(await response.json()) as T` erre `SyntaxError: Unexpected end of
+   * JSON input`-ot dobott, amit a hívó nem `ApiError`-ként fogott el, tehát
+   * a törlés utáni sikeres ág (nálunk a `load()` újratöltés) SOSE futott le
+   * -- a szerver oldali törlés MEGTÖRTÉNT, a felület mégis hibát mutatott,
+   * és a lista addig maradt a régi állapotban, amíg valaki oldalt nem
+   * frissített. Ugyanez a hiba érinti MINDEN `apiRequest<void>` hívót
+   * (aquariums.ts equipment- és measurement-törlés, service-jobs.ts
+   * hidden-váltás, units-of-measure.ts törlés) -- a javítás ezért a KÖZÖS
+   * függvényben áll, nem egy hívóban.
+   *
+   * A JAVÍTÁS: a törzset SZÖVEGKÉNT olvassuk, és csak akkor értelmezzük
+   * JSON-ként, ha van benne bármi. Üres törzsnél `undefined`-ot adunk vissza
+   * -- ez pontosan az, amit egy `void` visszatérésű hívó vár.
+   */
+  const text = await response.text();
+  return (text ? (JSON.parse(text) as T) : undefined) as T;
 }
