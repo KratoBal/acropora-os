@@ -1,4 +1,4 @@
-import { WorksheetEditorPage } from "@/components/worksheets/worksheet-editor-page";
+import { PilotWorksheetEditorPage } from "@/components/worksheets/pilot/pilot-worksheet-editor-page";
 
 export default async function EditWorksheetRoute({
   params,
@@ -6,5 +6,5 @@ export default async function EditWorksheetRoute({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <WorksheetEditorPage worksheetId={id} />;
+  return <PilotWorksheetEditorPage worksheetId={id} />;
 }
