@@ -1,5 +1,5 @@
-import { WorksheetEditorPage } from "@/components/worksheets/worksheet-editor-page";
+import { PilotWorksheetCreatePage } from "@/components/worksheets/pilot/pilot-worksheet-create-page";
 
 export default function NewWorksheetRoute() {
-  return <WorksheetEditorPage />;
+  return <PilotWorksheetCreatePage />;
 }
