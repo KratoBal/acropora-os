@@ -1,4 +1,4 @@
-import { PosSaleDetailPage } from "@/components/pos/pos-sale-detail-page";
+import { PilotPosSaleDetailPage } from "@/components/pos/pilot/pilot-pos-sale-detail-page";
 
 export default async function PosSalePage({
   params,
@@ -6,5 +6,5 @@ export default async function PosSalePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <PosSaleDetailPage saleId={id} />;
+  return <PilotPosSaleDetailPage saleId={id} />;
 }

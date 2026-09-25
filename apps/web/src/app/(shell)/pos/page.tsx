@@ -1,5 +1,5 @@
-import { PosTerminalPage } from "@/components/pos/pos-terminal-page";
+import { PilotPosTerminalPage } from "@/components/pos/pilot/pilot-pos-terminal-page";
 
 export default function PosPage() {
-  return <PosTerminalPage />;
+  return <PilotPosTerminalPage />;
 }
