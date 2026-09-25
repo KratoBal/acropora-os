@@ -81,9 +81,17 @@ export function PortalShell({ children }: { children: ReactNode }) {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pilot-aqua-600 text-xs font-bold text-white">
               A
             </span>
+            {/*
+              "ACROPORA" + KULON ALCIM "PARTNER PORTAL" (acrobot dontese,
+              2026-09-25): a "Szerviz" szo mar szuk a markara, mert a portal
+              tobbre keszul a szerviznel (Akvarisztika resz, meg epul).
+            */}
             <span className="min-w-0">
               <span className="block truncate text-xs font-bold leading-none text-pilot-grey-900">
-                Acropora <span className="font-medium">Szerviz</span>
+                Acropora
+              </span>
+              <span className="mt-0.5 block truncate text-[10px] leading-tight text-pilot-grey-400">
+                Partner portál
               </span>
             </span>
           </Link>

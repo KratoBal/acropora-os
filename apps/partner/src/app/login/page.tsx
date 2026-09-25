@@ -42,14 +42,12 @@ export default function LoginPage() {
             <span className="text-lg font-bold text-white">A</span>
           </div>
           {/*
-            "ACROPORA SZERVIZ" MARAD (acrobot dontese fugg tole, meg nem
-            erkezett meg): a Figma-terv itt csak "ACROPORA"-t mutat, mert a
-            terv 13. sora ("today the top bar says 'Acropora Szerviz'... the
-            grouped menu below is a proposal") szerint ez szandekos valtas
-            lenne -- amig nincs megerositve, a mai szoveg marad.
+            "ACROPORA", NEM "ACROPORA SZERVIZ" (acrobot dontese, 2026-09-25,
+            ugyanaz az indok, mint a shell marka-szoveganel): a portal
+            tobbre keszul a szerviznel.
           */}
           <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
-            ACROPORA SZERVIZ
+            ACROPORA
           </p>
           <h1 className="text-2xl font-semibold text-pilot-grey-900">
             Partneri bejelentkezés
@@ -110,8 +108,8 @@ export default function LoginPage() {
 
         {/*
           UJ MONDAT A KARTYA ALATT, A TERV SZERINT (PartnerPortalScreen.tsx:553-555).
-          A CIM ALATTI MONDAT IS MARAD: a build brief ket kulon dontendo
-          kerdeskent kezelte oket, es amig nincs valasz, egyik sem torlodik.
+          acrobot dontese (2026-09-25): MINDKET mondat marad -- ez itt, ES a
+          cim alatti mai mondat is (lasd fent) -- egyik sem torlodik.
         */}
         <p className="mt-4 text-center text-xs text-pilot-grey-400">
           Hozzáférési problémánál lépjen kapcsolatba az Acropora
