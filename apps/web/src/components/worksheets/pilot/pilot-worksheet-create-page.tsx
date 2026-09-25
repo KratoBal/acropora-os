@@ -52,14 +52,16 @@ import {
  * A validáció, a mentés (`worksheetsApi.create`), a partner/alegység
  * függősége, az új alegység felvitele, a hibajegyből előtöltés
  * (partner/helyszín/eszközök, archivált helyszín kezelése), a felelős- és
- * eszköz-választó SZÓ SZERINT a mai `worksheet-editor-page.tsx` CREATE
- * ágából jön (`worksheetId` nélküli eset) -- ez háromszorosan tesztelt
- * (szerver, a régi űrlap saját teszt-sora, a mai éles használat), egy
- * negyedik, saját másolat csak elszakadási kockázatot vinne.
+ * eszköz-választó SZÓ SZERINT a régi `worksheet-editor-page.tsx` CREATE
+ * ágából jött (`worksheetId` nélküli eset).
  *
- * A régi `WorksheetEditorPage` MEGMARAD, útvonal nélkül: azt használja a
- * `/szerviz/munkalapok/[id]/szerkesztes` (piszkozat-szerkesztés), ahol a
- * Figma-terv nem ad külön képernyőt.
+ * FRISSÍTVE 2026-09-25: a régi `WorksheetEditorPage` (és a teljes teszt-sora,
+ * `worksheet-editor-page.component.test.tsx`) TÖRÖLVE -- a `/szerkesztes`
+ * útvonal azóta a `pilot-worksheet-editor-page.tsx`-re mutat, tehát a régi
+ * fájl felvitel-ága volt az EGYETLEN élő logikája, és az itt fut tovább. A
+ * régi teszt CREATE-ágának minden állítása átköltözött ide
+ * (`pilot-worksheet-create-page.component.test.tsx`), a leképezés a PR
+ * törzsében áll.
  *
  * === A TÉTEL-SZERKESZTŐ ÉS A FELELŐS-VÁLASZTÓ VÁLTOZATLAN ("VARRAT") ===
  *

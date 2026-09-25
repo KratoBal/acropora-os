@@ -42,15 +42,18 @@ import {
  * ELSŐRE KÉZENFEKVŐNEK TŰNT a régi fájlból egyszerűen KIVENNI a felvitel-ágat
  * -- DE: `worksheet-editor-page.component.test.tsx` (1102 sor) tesztjeinek
  * TÖBBSÉGE (partner-választó, felelős-választó, helyszín-fa, archivált
- * egységek szabályai) éppen a FELVITEL-ágat méri, `worksheetId` NÉLKÜL
+ * egységek szabályai) éppen a FELVITEL-ágat mérte, `worksheetId` NÉLKÜL
  * hívva a komponenst -- és a `pilot-worksheet-create-page.tsx`-nek (ami ma
- * ÉLESBEN ezt a logikát futtatja) NINCS SAJÁT tesztje. Ha a régi fájlból
- * kivenném a felvitel-ágat, ez az ~1000 sornyi, ma is élő logikát fedő
- * teszt ELVESZNE, pótlás nélkül -- ez messze túlmutat egy vizuális
- * igazításon. Ezért a régi fájl és a teljes tesztsora ÉRINTETLEN marad
- * (holt kód, de nem törölve), és ez a fájl egy ÚJ, KIZÁRÓLAG szerkesztésre
- * szolgáló, pilot-stílusú lapot ad -- a mezők és a mentési logika a régi
- * fájl `worksheetId`-s ágából, SZÓ SZERINT átvéve.
+ * ÉLESBEN ezt a logikát futtatja) akkor még NEM VOLT SAJÁT tesztje. Ezért
+ * ekkor a régi fájl és a teljes tesztsora ÉRINTETLEN maradt (holt kód, de
+ * nem törölve), és ez a fájl egy ÚJ, KIZÁRÓLAG szerkesztésre szolgáló,
+ * pilot-stílusú lapot adott -- a mezők és a mentési logika a régi fájl
+ * `worksheetId`-s ágából, SZÓ SZERINT átvéve.
+ *
+ * FRISSÍTVE 2026-09-25 (acrobot msg 23809): a felvitel-ág CREATE-tesztjei
+ * átköltöztek `pilot-worksheet-create-page.component.test.tsx`-be, a régi
+ * fájl (és a teljes régi tesztsora) ETTŐL KEZDVE TÖRÖLVE -- nincs több
+ * fedetlen logika, amit a régi fájl életben tartana.
  *
  * === A MEZŐK -- MIND A MAI KÓDBÓL, EGY SEM ÚJ ===
  *
