@@ -21,6 +21,7 @@ import {
 } from "./navigation";
 import { useAuth } from "./auth/auth-provider";
 import { UserMenu } from "./auth/user-menu";
+import { GlobalSearch } from "./global-search";
 import { dashboardApi } from "@/lib/api/dashboard";
 
 interface NavigationGroupProps {
@@ -323,18 +324,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
           </div>
 
-          <label className="mx-auto hidden w-full max-w-xl lg:block">
-            <span className="sr-only">Keresés</span>
-            <span className="flex h-10 items-center gap-2 rounded-xl bg-pilot-grey-100 px-3 text-pilot-grey-500">
-              <Icon name="search" size={17} />
-              <input
-                type="search"
-                aria-label="Keresés"
-                placeholder="Keresés az Acropora OS-ben…"
-                className="min-w-0 flex-1 bg-transparent text-sm text-pilot-grey-900 outline-none placeholder:text-pilot-grey-500"
-              />
-            </span>
-          </label>
+          <div className="mx-3 min-w-0 flex-1 lg:mx-auto lg:max-w-xl">
+            {session?.token ? <GlobalSearch token={session.token} /> : null}
+          </div>
 
           <div className="ml-auto">
             <UserMenu
