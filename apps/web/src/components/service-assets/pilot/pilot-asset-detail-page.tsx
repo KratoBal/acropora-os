@@ -419,6 +419,9 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                   </p>
                   <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
                     {asset.assetNumber}
+                    {asset.partnerInternalCode
+                      ? ` · ${asset.partnerInternalCode}`
+                      : ""}
                   </p>
                 </div>
               </div>
