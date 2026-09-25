@@ -140,6 +140,7 @@ describe("navigation", () => {
       "Partnerek",
       "Pénzügy",
       "Akváriumok",
+      "Kalkulátorok",
       "ICP",
       "Szerviz",
     ]);
@@ -297,6 +298,11 @@ describe("navigation", () => {
         // valaszol, EZ AZ EGY SOR valtozik, a `ROLE_PERMISSIONS.SERVICE`
         // akvarium-jogaival egyutt.
         "Akváriumok",
+        // UGYANAZ A JOG ADJA, MINT AZ AKVARIUMOKAT (2026-09-25): a
+        // "Kalkulatorok" a kozos `NAVIGATION_ENTRIES`-ben `AQUARIUMS_VIEW`-t
+        // ker, tehat aki latja az Akvariumokat, ezt is latja -- nem kulon
+        // dontes, hanem ugyanannak a sornak a kovetkezmenye.
+        "Kalkulátorok",
       ].sort(),
     );
   });
@@ -393,6 +399,10 @@ describe("navigation", () => {
     "/keszlet-egyeztetes": "inventory.view",
     "/keszlet-kimenosor": "inventory.view",
     "/akvariumok": "aquariums.view",
+    // A "KALKULATOROK" KOR (2026-09-25): a belso web sajat oldala, ugyanazzal
+    // a joggal, mint az Akvariumok -- ld. a kozos `NAVIGATION_ENTRIES`
+    // "calculators" tetelenek fejlecet (`packages/types/src/navigation.ts`).
+    "/kalkulatorok": "aquariums.view",
     "/icp": "icp.view",
     "/admin/integrations/unas/connection": "settings.manage",
     "/admin/integrations/unas": "products.view",

@@ -156,6 +156,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@acropora/aquarium-calc':
+        specifier: workspace:*
+        version: link:../../packages/aquarium-calc
       '@acropora/types':
         specifier: workspace:*
         version: link:../../packages/types
