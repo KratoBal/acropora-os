@@ -112,3 +112,31 @@ export function formatDateTime(value: string | null): string {
  * apps/web-fuggese nincs, athelyezese semmit nem nyerne.
  */
 export { worksheetStatusTone } from "@acropora/types";
+
+import { worksheetStatusTone } from "@acropora/types";
+import type { PilotBadgeVariant } from "@/components/pilot/pilot-ui";
+
+/**
+ * A KANONIKUS `worksheetStatusTone` LEKÉPEZÉSE A PILOT BADGE PALETTÁJÁRA.
+ *
+ * Ugyanaz a minta, mint `assetStatusPilotVariant`
+ * (`apps/web/src/components/service-assets/asset-labels.ts`) -- lásd ott a
+ * teljes indoklást a `red`/`purple` ágak biztonságos visszaesésére.
+ */
+const TONE_TO_PILOT_VARIANT: Record<
+  "neutral" | "purple" | "green" | "amber" | "red" | "blue",
+  PilotBadgeVariant
+> = {
+  green: "teal",
+  amber: "amber",
+  blue: "blue",
+  red: "danger",
+  neutral: "grey",
+  purple: "default",
+};
+
+export function worksheetStatusPilotVariant(
+  status: WorksheetVersionStatus,
+): PilotBadgeVariant {
+  return TONE_TO_PILOT_VARIANT[worksheetStatusTone(status)];
+}

@@ -61,7 +61,8 @@ export function PilotThemeRoot({
   );
 }
 
-export type PilotBadgeVariant = "teal" | "grey" | "amber" | "blue" | "default";
+export type PilotBadgeVariant =
+  "teal" | "grey" | "amber" | "blue" | "danger" | "default";
 
 export function PilotBadge({
   children,
@@ -92,6 +93,16 @@ export function PilotBadge({
      * ehhez kellett, nem díszítés.
      */
     blue: "bg-pilot-blue-50 text-pilot-blue-700 ring-1 ring-pilot-blue-100",
+    /**
+     * DANGER -- A MUNKALAP KANONIKUS `worksheetStatusTone`-JÁHOZ
+     * (packages/types/src/worksheet-management.ts), a `REJECTED` állapot
+     * színe. A Figma Munkalapok terv is pirosat rajzol ide (`bg-red-50
+     * text-red-600 ring-red-200`), tehát ez nem újítás -- a kanonikus tone
+     * és a terv itt egyetért. `pilot-red-*` tokent kap, nem nyers
+     * `red-*`-t, hogy sötét módban is olvasható maradjon -- lásd
+     * `figma-theme.css`.
+     */
+    danger: "bg-pilot-red-50 text-pilot-red-700 ring-1 ring-pilot-red-100",
     default: "bg-pilot-grey-100 text-pilot-grey-600 ring-1 ring-pilot-grey-200",
   };
   return (

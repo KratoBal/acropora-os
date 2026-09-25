@@ -102,6 +102,21 @@
   --color-pilot-blue-100: #dbeafe;
   --color-pilot-blue-500: #3b82f6;
   --color-pilot-blue-700: #1d4ed8;
+
+  /**
+   * AZ ÖTÖDIK SZÍN, A MUNKALAPOK FIGMA-KÖR (8. kör) SAJÁT KANONIKUS
+   * `worksheetStatusTone`-JÁHOZ (`packages/types/src/worksheet-management.ts`):
+   * a `REJECTED` állapot pirosa. A `PilotBadge` "danger" variánsa eddig
+   * nyers `red-*` Tailwind osztályt viselt volna (mint a `PilotButton`
+   * "danger" változata) -- ahhoz viszont NINCS sötét felülírás, tehát
+   * sötét módban egy világos jelvény maradt volna egy sötét lapon. Ezt a
+   * hibát nem viszem tovább egy második helyre: a "danger" a többi
+   * pilot-színhez hasonlóan `pilot-red-*` tokent kap.
+   */
+  --color-pilot-red-50: #fef2f2;
+  --color-pilot-red-100: #fee2e2;
+  --color-pilot-red-500: #ef4444;
+  --color-pilot-red-700: #b91c1c;
 }
 
 /**
@@ -155,6 +170,14 @@
   --color-pilot-blue-100: #12294a;
   --color-pilot-blue-500: #5b9bf0;
   --color-pilot-blue-700: #a8cdfb;
+
+  /**
+   * A PIROS SÖTÉT PÁRJA -- ugyanaz a tónus-logika, mint az amberé/kéké fent.
+   */
+  --color-pilot-red-50: #2d0b0b;
+  --color-pilot-red-100: #3d1010;
+  --color-pilot-red-500: #e05a5a;
+  --color-pilot-red-700: #f4a3a3;
 
   /**
    * SZEMANTIKUS FELÜLET -- A NEGYEDIK MAKE-KÖR `--surface`/`--surface-
