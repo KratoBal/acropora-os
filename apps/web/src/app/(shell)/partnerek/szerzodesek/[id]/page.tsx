@@ -1,4 +1,4 @@
-import { ContractDetailPage } from "@/components/contracts/contract-detail-page";
+import { PilotContractDetailPage } from "@/components/contracts/pilot/pilot-contract-detail-page";
 
 export default async function ContractDetailRoute({
   params,
@@ -6,5 +6,5 @@ export default async function ContractDetailRoute({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <ContractDetailPage contractId={id} />;
+  return <PilotContractDetailPage contractId={id} />;
 }

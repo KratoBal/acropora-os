@@ -1,5 +1,5 @@
-import { ContractsPage } from "@/components/contracts/contracts-page";
+import { PilotContractsPage } from "@/components/contracts/pilot/pilot-contracts-page";
 
 export default function ContractsRoute() {
-  return <ContractsPage />;
+  return <PilotContractsPage />;
 }

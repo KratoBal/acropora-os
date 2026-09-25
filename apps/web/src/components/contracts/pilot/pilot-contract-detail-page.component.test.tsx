@@ -2,9 +2,19 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ContractDetailPage } from "./contract-detail-page";
+import { PilotContractDetailPage } from "./pilot-contract-detail-page";
 import { ApiError } from "@/lib/api/client";
 import type { ContractSummary } from "@/lib/api/contracts";
+
+/**
+ * ÁTMÁSOLVA A RÉGI `contract-detail-page.component.test.tsx`-BŐL
+ * (2026-09-25, Figma 13. kör) -- az állítások nem változtak, csak a
+ * komponens neve és egy kötelező `next/font/local` mock került hozzá (a
+ * `PilotThemeRoot` ezen múlik, lásd a többi pilot-teszt fejlécét).
+ */
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 
 const api = vi.hoisted(() => ({ detail: vi.fn(), update: vi.fn() }));
 const orderApi = vi.hoisted(() => ({ list: vi.fn() }));
@@ -69,7 +79,7 @@ function contract(): ContractSummary {
  * kalibrációt méri: üres tokennel renderelve is le kell futnia a
  * betöltésnek.
  */
-describe("ContractDetailPage -- betöltés token nélkül (éles, süti-alapú bejelentkezés)", () => {
+describe("PilotContractDetailPage -- betöltés token nélkül (éles, süti-alapú bejelentkezés)", () => {
   beforeEach(() => {
     api.detail.mockReset();
     api.update.mockReset();
@@ -81,7 +91,7 @@ describe("ContractDetailPage -- betöltés token nélkül (éles, süti-alapú b
     auth.session = session(undefined);
     api.detail.mockResolvedValue(contract());
 
-    render(<ContractDetailPage contractId="contract-1" />);
+    render(<PilotContractDetailPage contractId="contract-1" />);
 
     await screen.findByText("SZ2026/0000019");
     expect(api.detail).toHaveBeenCalledWith("", "contract-1");
@@ -97,7 +107,7 @@ describe("ContractDetailPage -- betöltés token nélkül (éles, süti-alapú b
     auth.session = session("dev-token");
     api.detail.mockResolvedValue(contract());
 
-    render(<ContractDetailPage contractId="contract-1" />);
+    render(<PilotContractDetailPage contractId="contract-1" />);
 
     await screen.findByText("SZ2026/0000019");
     expect(api.detail).toHaveBeenCalledWith("dev-token", "contract-1");
@@ -117,7 +127,7 @@ const DEPARTMENT: import("@acropora/types").WorksheetDepartmentSummary = {
  * tudta a tétel helyszínét és eszközeit, a webes felületen sehol nem volt
  * hozzá mező. Ezek a tesztek a szerkesztő oldal ÚJ részét mérik.
  */
-describe("ContractDetailPage -- tétel helyszíne és eszközei", () => {
+describe("PilotContractDetailPage -- tétel helyszíne és eszközei", () => {
   beforeEach(() => {
     auth.session = session("dev-token");
     api.update.mockReset();
@@ -150,7 +160,7 @@ describe("ContractDetailPage -- tétel helyszíne és eszközei", () => {
   it("felkínálja a partner helyszíneit a tétel alatt", async () => {
     api.detail.mockResolvedValue(contractWithItem());
 
-    render(<ContractDetailPage contractId="contract-1" />);
+    render(<PilotContractDetailPage contractId="contract-1" />);
     // A "Cápasuli RO karbantartás" szöveg KÉT helyen is szerepel (a
     // "Szerződéses tételek" kártyán ÉS a "Megrendelőlapok" kártya
     // jelölőnégyzet-listáján), ezért az árat keressük, ami csak az elsőn.
@@ -165,7 +175,7 @@ describe("ContractDetailPage -- tétel helyszíne és eszközei", () => {
     api.detail.mockResolvedValue(contractWithItem());
     api.update.mockResolvedValue(contractWithItem());
 
-    render(<ContractDetailPage contractId="contract-1" />);
+    render(<PilotContractDetailPage contractId="contract-1" />);
     await screen.findByText(/410000 Ft/);
     // A helyszín-lista KÜLÖN, a tétel-lekéréstől független hívásból töltődik
     // be (worksheetsApi.departments) -- teli csomagfutásnál lassabb is lehet
@@ -224,7 +234,7 @@ describe("ContractDetailPage -- tétel helyszíne és eszközei", () => {
       ],
     });
 
-    render(<ContractDetailPage contractId="contract-1" />);
+    render(<PilotContractDetailPage contractId="contract-1" />);
     await screen.findByText(/410000 Ft/);
     expect(screen.getByText("Megrendelőlap kiállítása (1 tétel)")).toBeTruthy();
 
@@ -244,7 +254,7 @@ describe("ContractDetailPage -- tétel helyszíne és eszközei", () => {
  * feldolgozása nem sikerült" jelent meg -- a mező alatt semmi. A 409-es
  * választ mostantól a MEZŐ alatt kell mutatni, nem egy általános dobozban.
  */
-describe("ContractDetailPage -- duplikált szerződésszám (409)", () => {
+describe("PilotContractDetailPage -- duplikált szerződésszám (409)", () => {
   beforeEach(() => {
     api.detail.mockReset().mockResolvedValue(contract());
     api.update.mockReset();
@@ -259,7 +269,7 @@ describe("ContractDetailPage -- duplikált szerződésszám (409)", () => {
       new ApiError("Ez a szerződésszám már létezik (SZ2026/0000019).", 409),
     );
 
-    render(<ContractDetailPage contractId="contract-1" />);
+    render(<PilotContractDetailPage contractId="contract-1" />);
     await screen.findByText("SZ2026/0000019");
 
     fireEvent.click(screen.getByText("Módosítások mentése"));
@@ -273,7 +283,7 @@ describe("ContractDetailPage -- duplikált szerződésszám (409)", () => {
       new ApiError("Ez a szerződésszám már létezik (SZ2026/0000019).", 409),
     );
 
-    render(<ContractDetailPage contractId="contract-1" />);
+    render(<PilotContractDetailPage contractId="contract-1" />);
     await screen.findByText("SZ2026/0000019");
     fireEvent.click(screen.getByText("Módosítások mentése"));
     await screen.findByText("Ez a szerződésszám már létezik (SZ2026/0000019).");
@@ -292,7 +302,7 @@ describe("ContractDetailPage -- duplikált szerződésszám (409)", () => {
   it("egy nem-409 hibát a régi, általános dobozban mutatja", async () => {
     api.update.mockRejectedValue(new Error("VALAMI MÁS HIBA"));
 
-    render(<ContractDetailPage contractId="contract-1" />);
+    render(<PilotContractDetailPage contractId="contract-1" />);
     await screen.findByText("SZ2026/0000019");
 
     fireEvent.click(screen.getByText("Módosítások mentése"));

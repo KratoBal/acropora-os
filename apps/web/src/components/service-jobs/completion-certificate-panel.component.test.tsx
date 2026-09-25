@@ -31,7 +31,7 @@ function session(token: string | undefined): Session {
 }
 
 /**
- * UGYANAZ A HIBAOSZTÁLY, MINT A `contract-detail-page.tsx`-en (Balázs
+ * UGYANAZ A HIBAOSZTÁLY, MINT A `pilot-contract-detail-page.tsx`-en (Balázs
  * éles hibája, 2026-09-24 17:39, ugyanabban a percben mérve ezen a
  * fájlon is): `if (token)` a `useEffect`-ben SOHA nem futna éles, süti-
  * alapú bejelentkezésnél, mert a `Session.token` ott mindig `undefined`.
