@@ -590,6 +590,32 @@ export class UpdateAssetDto {
   @IsISO8601() expectedUpdatedAt!: string;
 }
 
+/**
+ * ESZKÖZ HOZZÁRENDELÉSE/LEVÉTELE EGY AKVÁRIUMRÓL -- KÜLÖN, SZŰK DTO,
+ * NEM AZ `UpdateAssetDto` ÚJRAHASZNÁLÁSA.
+ *
+ * Ez a végpont a portál `service.asset.aquarium-assign` joga alatt áll
+ * (lásd `packages/types` `auth.ts` fejlécét) -- ha a hívó a TELJES
+ * `UpdateAssetDto`-t küldhetné be, a mező-szintű szűkítés látszat lenne: a
+ * kliens ALAKJA korlátozná a felületet, nem a szerver. Ez a DTO ezért
+ * KIZÁRÓLAG az `aquariumId`-t és a kötelező `expectedUpdatedAt` mező-szintű
+ * ütközés-védelmet ismeri (lásd `asset-field-conflict.ts`).
+ *
+ * A `@ValidateIf`, NEM `@IsOptional()` -- UGYANAZ A MINTA, ÉS UGYANAZÉRT,
+ * MINT AZ `UpdateAssetDto` `labelCode` MEZŐJÉNÉL (lásd ott a fejlécet): az
+ * `@IsOptional()` a `null`-t ÉS az `undefined`-et is egyformán átengedné,
+ * itt viszont a `null` ÉRVÉNYES ÉRTÉK ("vedd le az akváriumról"), az
+ * `undefined` (a mező elhagyása) pedig HIBA -- ennek a végpontnak nincs
+ * "ne változtass semmit" ága, mint a teljes PATCH-nek.
+ */
+export class AssignAssetAquariumDto {
+  @ValidateIf((_object, value) => value !== null)
+  @IsString()
+  @MinLength(1)
+  aquariumId!: string | null;
+  @IsISO8601() expectedUpdatedAt!: string;
+}
+
 export class UploadAssetDocumentDto {
   /**
    * A FAJTA ELHAGYHATO, ES HA HIANYZIK, A FAJL DONTI EL.

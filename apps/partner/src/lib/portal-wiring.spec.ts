@@ -50,6 +50,7 @@ const NAPLO_SOR = "src/lib/naplo-sor.ts";
 const MUNKALAP_RESZLET = "src/components/worksheet-detail.tsx";
 const PORTAL_SHELL = "src/components/portal-shell.tsx";
 const AUTH = "src/components/auth.tsx";
+const AQUARIUM_RESZLET = "src/components/aquarium-detail.tsx";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
 
@@ -947,5 +948,98 @@ describe("az Akváriumok menüpont és útvonal kapuja", () => {
    */
   it("KONTROLL: a menücsoport ténylegesen kirajzolja a tételeket", () => {
     assert.match(kod(PORTAL_SHELL), /AKVARISZTIKA_MENU\.map\(\(item\) => \{/);
+  });
+});
+
+/**
+ * ESZKÖZ AKVÁRIUMHOZ RENDELÉSE/LEVÉTELE -- KÜLÖN JOGGAL, NEM
+ * `SERVICE_MANAGE`-DZSEL (emlék 1843, 2026-09-25 14:24 UTC).
+ *
+ * === MI PIROSÍT, ÁLTALÁNOSAN ===
+ *
+ * Ha a gomb/választó feltétel NÉLKÜL jelenne meg (minden `PARTNER_SERVICE`
+ * fiók MA amúgy is viseli a `SERVICE_MANAGE`-et), vagy ha a kliens a
+ * `hasPermission`/`SERVICE_ASSET_AQUARIUM_ASSIGN` helyett bármi mást
+ * (szerepnevet, `SERVICE_MANAGE`-et) nézne -- akkor ez a felület
+ * ugyanabba a hibába futna, amit az `AssetDetail` fejléce már egyszer
+ * leírt: egy jog megléte NEM ugyanaz, mint hogy a portál kínálja-e.
+ */
+describe("eszköz hozzárendelése/levétele egy akváriumról", () => {
+  it("POZITÍV KONTROLL: az adatlap és a kliens olvasható és nem üres", () => {
+    for (const ut of [AQUARIUM_RESZLET, KLIENS])
+      assert.ok(olvas(ut).length > 500, `${ut}: üres vagy gyanúsan rövid`);
+  });
+
+  /**
+   * A KLIENS DEDIKÁLT, SZŰK VÉGPONTRA MEGY -- nem az általános
+   * `PATCH /service/assets/:id`-re. MI PIROSÍT: ha valaki "egyszerűsítené"
+   * a hívást az általános adatlap-frissítő függvényre, ami a portál eddig
+   * SOHA nem hívott -- azzal minden más mező is írhatóvá válna.
+   */
+  it("a kliens a /aquarium al-útvonalra ír, nem az általános PATCH-re", () => {
+    const s = kod(KLIENS);
+    assert.match(
+      s,
+      /assignAssetAquarium: \(\s*assetId: string,\s*input: \{ aquariumId: string \| null; expectedUpdatedAt: string \},\s*\) =>/,
+    );
+    assert.match(s, /\$\{encodeURIComponent\(assetId\)\}\/aquarium/);
+    assert.match(s, /method: "PATCH"/);
+  });
+
+  /**
+   * A JOG-ELLENŐRZÉS A VALÓDI, SZŰK JOGRA MEGY -- ÉS NEM A SZEREPRE VAGY A
+   * `SERVICE_MANAGE`-RE.
+   *
+   * MI PIROSÍT: ha a `canAssign` `user.role === "PARTNER_SERVICE"`-t vagy
+   * `hasPermission(user, PERMISSIONS.SERVICE_MANAGE)`-et nézne -- mindkettő
+   * IGAZ minden mai partner-fiókra, tehát a "külön jog" döntés csendben
+   * elveszne, és a felület ugyanoda jutna, mint amit Balázs kifejezetten
+   * NEM akart az `AssetDetail`-en.
+   */
+  it("a hozzárendelő felület a SERVICE_ASSET_AQUARIUM_ASSIGN jogot nézi, nem a szerepet", () => {
+    const s = kod(AQUARIUM_RESZLET);
+    assert.match(
+      s,
+      /canAssign = Boolean\(\s*user && hasPermission\(user, PERMISSIONS\.SERVICE_ASSET_AQUARIUM_ASSIGN\),\s*\)/,
+    );
+    assert.doesNotMatch(s, /PERMISSIONS\.SERVICE_MANAGE/);
+    assert.doesNotMatch(s, /user\.role === "PARTNER_SERVICE"/);
+  });
+
+  /**
+   * MIND A KÉT IRÁNY A `canAssign` MÖGÖTT ÁLL -- a levétel-gomb ÉS a
+   * hozzárendelő választó. Egy állítás, ami csak az egyiket mérné, a
+   * másikat feltétel nélkül hagyhatná anélkül, hogy pirosodna.
+   */
+  it("a levétel gomb és a hozzárendelő választó is canAssign mögött áll", () => {
+    const s = kod(AQUARIUM_RESZLET);
+    assert.match(s, /\{canAssign \? \(\s*<button/);
+    assert.match(s, /\{canAssign \? \(\s*<div className="mt-3/);
+  });
+
+  /**
+   * A LEVÉTEL `aquariumId: null`-t küld, a HOZZÁRENDELÉS a jelen akvárium
+   * `id`-jét -- mindkettő `expectedUpdatedAt`-tal, az ÉPPEN kiválasztott
+   * sor saját mezőjéből, NEM egy elavult vagy kitalált értékből.
+   */
+  it("a levétel null-t küld, a hozzárendelés az akvárium id-jét, mindkettő a sor saját updatedAt-jával", () => {
+    const s = kod(AQUARIUM_RESZLET);
+    assert.match(s, /aquariumId: null,\s*expectedUpdatedAt: asset\.updatedAt,/);
+    assert.match(
+      s,
+      /aquariumId: id,\s*expectedUpdatedAt: candidate\.updatedAt,/,
+    );
+  });
+
+  /**
+   * A JELÖLT-LISTA A MÁR CSATOLT ESZKÖZÖKET KISZŰRI -- enélkül egy másik
+   * akváriumhoz kötött eszköz is választható lenne, és a hozzárendelés
+   * csendben "ellopná" egy másik akvárium eszközét.
+   */
+  it("a jelölt-lista kiszűri a már valahova csatolt eszközöket", () => {
+    assert.match(
+      kod(AQUARIUM_RESZLET),
+      /result\.items\.filter\(\(item\) => !item\.aquarium\)/,
+    );
   });
 });

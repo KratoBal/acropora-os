@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   Button,
   FormField,
   Input,
+  Select,
   ServiceDataGrid,
   ServiceDataItem,
   ServiceDetailHeader,
@@ -15,12 +17,15 @@ import {
 } from "@acropora/ui";
 import {
   aquariumMeasurementParametersFor,
+  hasPermission,
+  PERMISSIONS,
   type AquariumMeasurementOccasion,
   type AssetListResponse,
 } from "@acropora/types";
 
 import { partnerApi } from "@/lib/api";
 import { WATER_TYPE_LABEL } from "@/lib/aquarium-labels";
+import { useAuth } from "./auth";
 import { Message } from "./ticket-list";
 
 /**
@@ -44,22 +49,37 @@ import { Message } from "./ticket-list";
  * Ugyanaz a minta, mint az `AssetDetail`-nél: a kliens nem szűr, a
  * `partnerApi.aquarium(id)` egyenesen a szerver válaszát adja vissza.
  *
- * === "ESZKÖZÖK A MEDENCÉBEN": CSAK OLVASÁS, A HOZZÁRENDELÉS NEM EBBEN A
- *     KÖRBEN ===
+ * === "ESZKÖZÖK A MEDENCÉBEN": HOZZÁRENDELÉS KÜLÖN JOGGAL (emlék 1843,
+ *     2026-09-25 14:24 UTC) ===
  *
- * Balázs döntése (2026-09-25): "a portálon az akváriumhoz rendelt Assetek
- * látszanak és rendelhetők hozzá, a helyszín eszközei közül." A LÁTÁS
- * ehhez a körhöz kész (`assets({aquariumId})`, a szerver már ismeri ezt a
- * szűrőt). A HOZZÁRENDELÉS (`PATCH /service/assets/:id` `aquariumId`
- * mezővel) VISZONT ÜTKÖZIK egy KORÁBBI, kifejezett Balázs-döntéssel: az
- * `AssetDetail` fejléce szerint a portál SZÁNDÉKOSAN nem ad szerkesztést
- * az eszközökön, még úgy is, hogy a `PARTNER_SERVICE` szerep MA MEGKAPJA a
- * `SERVICE_MANAGE` jogot (lásd ott, "EZ NEM JOGOSULTSÁG-FÜGGŐ
- * MEGJELENÍTÉS, LEZÁRT DÖNTÉS"). Az akvárium-döntés újabb és
- * konkrétabb, DE mielőtt egy ÍRÁSI utat nyitnék az Asset-en a portálról,
- * ez a kettő ütközés megér egy külön visszakérdezést -- ezért ez a kör
- * CSAK a listát adja, a hozzárendelő felület egy KÖVETKEZŐ, jóváhagyott
- * kör.
+ * Balázs első döntése (2026-09-25 korábban): "a portálon az akváriumhoz
+ * rendelt Assetek látszanak és rendelhetők hozzá, a helyszín eszközei
+ * közül." A LÁTÁS attól a körtől kész volt. A HOZZÁRENDELÉS
+ * (`PATCH /service/assets/:id` `aquariumId` mezővel) VISZONT ÜTKÖZÖTT egy
+ * KORÁBBI döntéssel: az `AssetDetail` fejléce szerint a portál
+ * szándékosan nem ad szerkesztést az eszközökön, még úgy is, hogy a
+ * `PARTNER_SERVICE` szerep megkapja a `SERVICE_MANAGE` jogot. Ezt az
+ * ütközést Balázs 14:24-kor feloldotta: az akvárium-hozzárendelés/levétel
+ * KÜLÖN jogosultsághoz kötött (`SERVICE_ASSET_AQUARIUM_ASSIGN`), és ez a
+ * jog SZÁNDÉKOSAN NEM azonos a `SERVICE_MANAGE`-dzsel -- az eszköz többi
+ * mezője a portálon TOVÁBBRA IS csak olvasható, csak ez az egy kapcsolat
+ * nyílt meg, egy DEDIKÁLT, szűk végponton (`PATCH :id/aquarium`,
+ * `AssignAssetAquariumDto`, csak `aquariumId` + `expectedUpdatedAt`).
+ *
+ * A JOGOT MA MINDEN `PARTNER_SERVICE` FIÓK MEGKAPJA (javaslat, lásd
+ * `auth.ts` `SERVICE_ASSET_AQUARIUM_ASSIGN`/`PARTNER_SERVICE` fejlécét a
+ * bizonytalanságról) -- ezért a lenti `canAssign` egyszerű jog-ellenőrzés,
+ * nem `user.navigation`-alapú kapu: ez NEM egy egész menüpont/útvonal
+ * láthatóságáról dönt (ahol egy régi élő API mellett egy törött útvonal
+ * lenne a kockázat), hanem egy MEGLÉVŐ, már elérhető lapon egy gomb
+ * megjelenítéséről -- ha a hívó mégis rákattintana egy régi API mellett,
+ * a szerver egyszerűen 403-at ad, biztonságos, várt bukás, ugyanúgy, ahogy
+ * minden más lapbeli jog-ellenőrzés ebben az alkalmazásban.
+ *
+ * A HOZZÁRENDELHETŐ JELÖLTEK az akvárium SAJÁT helyszínének (`departmentId`)
+ * MÉG NEM CSATOLT eszközei -- `assets({departmentId})`, kiszűrve azokat,
+ * amiknek már van `aquarium` mezőjük. Ha az akváriumnak nincs helyszíne
+ * (`departmentId` hiányzik), nincs jelölt-forrás, a felület ezt kimondja.
  *
  * === "ÚJ MÉRÉS": NYITOTT, A SZERVER SAJÁT HATÓKÖRÉVEL ===
  *
@@ -71,6 +91,11 @@ import { Message } from "./ticket-list";
  * listája -- ugyanaz a szabály, mint a belső "Vízértékek" kártyánál.
  */
 export function AquariumDetail({ id }: { id: string }) {
+  const { user } = useAuth();
+  const canAssign = Boolean(
+    user && hasPermission(user, PERMISSIONS.SERVICE_ASSET_AQUARIUM_ASSIGN),
+  );
+
   const [aquarium, setAquarium] = useState<Awaited<
     ReturnType<typeof partnerApi.aquarium>
   > | null>(null);
@@ -82,6 +107,11 @@ export function AquariumDetail({ id }: { id: string }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [candidates, setCandidates] = useState<AssetListResponse["items"]>([]);
+  const [selectedCandidateId, setSelectedCandidateId] = useState("");
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -104,6 +134,82 @@ export function AquariumDetail({ id }: { id: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const departmentId = aquarium?.departmentId;
+
+  const loadCandidates = useCallback(async () => {
+    if (!canAssign || !departmentId) {
+      setCandidates([]);
+      return;
+    }
+    try {
+      const result = await partnerApi.assets({
+        departmentId,
+        status: "ALL",
+        pageSize: 100,
+      });
+      // CSAK A MÉG SEHOVA NEM CSATOLT ESZKÖZÖK -- egy már más akváriumhoz
+      // kötött eszköz nem jelenik meg jelöltként; a levétel a MÁSIK
+      // akvárium adatlapjáról megy, nem innen "lopjuk el".
+      setCandidates(result.items.filter((item) => !item.aquarium));
+    } catch {
+      // A JELÖLT-LISTA HIBÁJA NEM TÖRLI AZ OLDALT -- a "Eszközök a
+      // medencében" kártya a MÁR csatolt eszközöket enélkül is mutatja, a
+      // hozzárendelő rész marad üres választóval.
+      setCandidates([]);
+    }
+  }, [canAssign, departmentId]);
+
+  useEffect(() => {
+    void loadCandidates();
+  }, [loadCandidates]);
+
+  async function removeAsset(asset: AssetListResponse["items"][number]) {
+    setAssignBusy(true);
+    setAssignError(null);
+    try {
+      await partnerApi.assignAssetAquarium(asset.id, {
+        aquariumId: null,
+        expectedUpdatedAt: asset.updatedAt,
+      });
+      await load();
+      await loadCandidates();
+    } catch (cause) {
+      setAssignError(
+        cause instanceof Error
+          ? cause.message
+          : "Az eszköz nem vehető le az akváriumról.",
+      );
+    } finally {
+      setAssignBusy(false);
+    }
+  }
+
+  async function assignSelected() {
+    const candidate = candidates.find(
+      (item) => item.id === selectedCandidateId,
+    );
+    if (!candidate) return;
+    setAssignBusy(true);
+    setAssignError(null);
+    try {
+      await partnerApi.assignAssetAquarium(candidate.id, {
+        aquariumId: id,
+        expectedUpdatedAt: candidate.updatedAt,
+      });
+      setSelectedCandidateId("");
+      await load();
+      await loadCandidates();
+    } catch (cause) {
+      setAssignError(
+        cause instanceof Error
+          ? cause.message
+          : "Az eszköz nem rendelhető hozzá.",
+      );
+    } finally {
+      setAssignBusy(false);
+    }
+  }
 
   const parameters = aquariumMeasurementParametersFor(
     aquarium?.waterType ?? undefined,
@@ -298,6 +404,14 @@ export function AquariumDetail({ id }: { id: string }) {
         side={
           <ServicePanel>
             <ServicePanelHeading title="Eszközök a medencében" />
+            {assignError ? (
+              <Alert
+                className="mb-3"
+                variant="danger"
+                title="Hiba történt"
+                description={assignError}
+              />
+            ) : null}
             {assets.length === 0 ? (
               <p className="text-[13px] text-muted">
                 Nincs ehhez az akváriumhoz csatolt eszköz.
@@ -307,7 +421,7 @@ export function AquariumDetail({ id }: { id: string }) {
                 {assets.map((asset) => (
                   <li
                     key={asset.id}
-                    className="border-b border-dusk-100 pb-2 last:border-0 last:pb-0"
+                    className="flex items-center justify-between gap-2 border-b border-dusk-100 pb-2 last:border-0 last:pb-0"
                   >
                     <Link
                       href={`/eszkozok/${asset.id}`}
@@ -315,10 +429,67 @@ export function AquariumDetail({ id }: { id: string }) {
                     >
                       {asset.name}
                     </Link>
+                    {canAssign ? (
+                      <button
+                        type="button"
+                        disabled={assignBusy}
+                        onClick={() => void removeAsset(asset)}
+                        className="shrink-0 text-xs text-rose-600 hover:underline disabled:opacity-50"
+                      >
+                        Eltávolítás
+                      </button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
             )}
+            {/*
+              A HOZZÁRENDELŐ RÉSZ CSAK A JOGOSULT HÍVÓNAK LÁTSZIK -- lásd a
+              fájl fejlécét: ez lapbeli gomb-láthatóság, nem útvonal-kapu,
+              tehát a kliens-oldali `canAssign` biztonságos (a szerver 403-at
+              ad, ha mégis rákattintana valaki, akinek régi API mellett a
+              joga nincs meg).
+            */}
+            {canAssign ? (
+              <div className="mt-3 border-t border-dusk-100 pt-3">
+                {!departmentId ? (
+                  <p className="text-[13px] text-muted">
+                    Az akváriumnak nincs megadva helyszíne, ezért nem lehet
+                    eszközt hozzárendelni.
+                  </p>
+                ) : candidates.length === 0 ? (
+                  <p className="text-[13px] text-muted">
+                    A helyszínen nincs hozzárendelhető (még sehova nem csatolt)
+                    eszköz.
+                  </p>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={selectedCandidateId}
+                      onChange={(event) =>
+                        setSelectedCandidateId(event.target.value)
+                      }
+                      aria-label="Hozzárendelhető eszköz"
+                      disabled={assignBusy}
+                    >
+                      <option value="">Válasszon eszközt</option>
+                      {candidates.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>
+                          {candidate.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <Button
+                      variant="secondary"
+                      disabled={!selectedCandidateId || assignBusy}
+                      onClick={() => void assignSelected()}
+                    >
+                      Hozzárendelés
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </ServicePanel>
         }
       />

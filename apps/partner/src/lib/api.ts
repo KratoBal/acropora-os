@@ -228,8 +228,9 @@ export const partnerApi = {
      * MELYIK AKVÁRIUMHOZ VAN CSATOLVA -- az `Asset.aquariumId` szerinti
      * szűrés (`service-assets.repository.ts:566`). Az Akváriumok adatlap
      * "Eszközök a medencében" kártyája ezzel kéri le, mi van MÁR
-     * hozzárendelve -- lásd `aquarium-detail.tsx` fejlécét arról, amit ez a
-     * kártya (ma) NEM tud: hozzárendelni.
+     * hozzárendelve, és (2026-09-25-től) ugyanezt a hívást, `departmentId`-
+     * val szűrve, a hozzárendelhető jelöltek listájához is -- lásd
+     * `assignAssetAquarium` fejlécét.
      */
     aquariumId?: string;
     search?: string;
@@ -282,6 +283,30 @@ export const partnerApi = {
    */
   asset: (id: string) =>
     request<AssetDetail>(`/service/assets/${encodeURIComponent(id)}`),
+  /**
+   * ESZKÖZ HOZZÁRENDELÉSE/LEVÉTELE EGY AKVÁRIUMRÓL.
+   *
+   * KÜLÖN VÉGPONT (`PATCH /service/assets/:id/aquarium`), NEM az `asset()`
+   * adatlapon is elérhető általános `PATCH /:id` -- lásd a szerver oldali
+   * `AssignAssetAquariumDto` és a `service.asset.aquarium-assign` jog
+   * fejlécét (`packages/types` `auth.ts`, emlék 1843). Ez a szűk DTO
+   * garantálja, hogy a portál NEM tud más mezőt küldeni az eszközön, még ha
+   * a hívó megpróbálná is.
+   *
+   * `aquariumId: null` VESZI LE az eszközt az akváriumról. Az
+   * `expectedUpdatedAt` KÖTELEZŐ -- a hívó félnek a legutóbb betöltött
+   * eszköz-sor `updatedAt` mezőjét kell visszaküldenie, mert a szerver
+   * mező-szintű ütközés-védelme (`asset-field-conflict.ts`) ez alapján dönt
+   * el, nyúlt-e valaki más közben ugyanahhoz a mezőhöz.
+   */
+  assignAssetAquarium: (
+    assetId: string,
+    input: { aquariumId: string | null; expectedUpdatedAt: string },
+  ) =>
+    request<AssetDetail>(
+      `/service/assets/${encodeURIComponent(assetId)}/aquarium`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
   /**
    * A QR-KOD LEKERDEZESE `SERVICE_VIEW`-T KER, NEM `SERVICE_MANAGE`-ET
    * (`service-assets.controller.ts`, `:id/qr`) -- tehat minden partner

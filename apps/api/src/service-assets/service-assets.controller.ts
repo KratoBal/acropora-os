@@ -28,6 +28,7 @@ import {
   AssetLabelBatchQueryDto,
   AssetNameCheckQueryDto,
   AssetOwnersQueryDto,
+  AssignAssetAquariumDto,
   FreeAssetLabelsQueryDto,
   IssueAssetLabelBatchDto,
   IssueAssetLabelsDto,
@@ -369,6 +370,39 @@ export class ServiceAssetsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.update(id, input, user.id, user);
+  }
+
+  /**
+   * ESZKÖZ HOZZÁRENDELÉSE/LEVÉTELE EGY AKVÁRIUMRÓL -- KÜLÖN JOG, NEM A
+   * `SERVICE_MANAGE`.
+   *
+   * Lásd `AssignAssetAquariumDto` és a `SERVICE_ASSET_AQUARIUM_ASSIGN` jog
+   * fejlécét (`packages/types` `auth.ts`): a `PARTNER_SERVICE` szerep MA
+   * megvan a `SERVICE_MANAGE` joggal, de a portál szándékosan nem kínál
+   * ezzel semmilyen eszköz-szerkesztést. Ez a végpont a MEGLÉVŐ,
+   * `service.update()`-ot hívja -- SEMMI ÚJ VALIDÁCIÓS ÚT nem készült,
+   * mert az a hatókör- (`requireAssetInScope`) és akvárium-tulajdonos-
+   * ellenőrzést (`validateReferences`) már ismeri, és a mező-szintű
+   * ütközés-védelem (`asset-field-conflict.ts`) is ugyanaz -- csak a DTO
+   * alakja szűkebb, tehát a kliens NEM tud más mezőt küldeni, még akkor
+   * sem, ha megpróbálná.
+   */
+  @Patch(":id/aquarium")
+  @RequirePermissions(PERMISSIONS.SERVICE_ASSET_AQUARIUM_ASSIGN)
+  assignAquarium(
+    @Param("id") id: string,
+    @Body() input: AssignAssetAquariumDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.update(
+      id,
+      {
+        aquariumId: input.aquariumId,
+        expectedUpdatedAt: input.expectedUpdatedAt,
+      },
+      user.id,
+      user,
+    );
   }
 
   @Post(":id/qr/rotate")
