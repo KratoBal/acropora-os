@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -34,6 +34,8 @@ import {
 import { rememberWorksheet } from "@/lib/offline/worksheet-cache";
 import { menthetoMasolatkent } from "@/lib/service-jobs/jegy-alak";
 import type { ServiceJobDetail } from "@/lib/service-jobs/types";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * "LETOLTOM A HELYSZINT" -- GOMB, NEM VALTOKAPCSOLO.
@@ -72,6 +74,8 @@ export function HelyszinLetolto() {
   const [customerId, setCustomerId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [nyitva, setNyitva] = useState(false);
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   const partnerek = useQuery({
     queryKey: ["helyszin-letolto-partnerek"],
@@ -294,7 +298,7 @@ export function HelyszinLetolto() {
       {nyitva ? (
         <View style={styles.list}>
           {partnerek.isPending || helyszinek.isPending ? (
-            <ActivityIndicator color="#52d6c7" />
+            <ActivityIndicator color={tokens.accent} />
           ) : null}
           {!customerId
             ? (partnerek.data?.items ?? []).map((item) => (
@@ -450,57 +454,75 @@ export function helyszinUtja(
   return ut;
 }
 
-const styles = StyleSheet.create({
-  button: {
-    alignItems: "center",
-    backgroundColor: "#52d6c7",
-    borderRadius: 12,
-    marginTop: 12,
-    paddingVertical: 12,
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: "#04222d", fontSize: 15, fontWeight: "800" },
-  card: {
-    backgroundColor: "#06202e",
-    borderRadius: 14,
-    marginTop: 18,
-    padding: 16,
-  },
-  hianyos: {
-    backgroundColor: "#3a2a12",
-    borderRadius: 10,
-    marginTop: 12,
-    padding: 12,
-  },
-  hiba: { color: "#ffb4a2", fontSize: 13, marginTop: 10 },
-  hint: { color: "#91afbe", fontSize: 13, marginTop: 6 },
-  kesz: {
-    backgroundColor: "#0d3a33",
-    borderRadius: 10,
-    marginTop: 12,
-    padding: 12,
-  },
-  list: {
-    backgroundColor: "#04202c",
-    borderRadius: 10,
-    marginTop: 8,
-    padding: 8,
-  },
-  osszegzesCim: { color: "#f4fbff", fontSize: 14, fontWeight: "800" },
-  osszegzesSor: { color: "#cfe3ec", fontSize: 13, marginTop: 4 },
-  picker: {
-    backgroundColor: "#04202c",
-    borderRadius: 10,
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  pressed: { opacity: 0.7 },
-  row: {
-    borderBottomColor: "#123b50",
-    borderBottomWidth: 1,
-    paddingVertical: 10,
-  },
-  rowText: { color: "#e8f4fa", fontSize: 14 },
-  title: { color: "#f4fbff", fontSize: 16, fontWeight: "800" },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- lásd
+ * `apps/mobile/src/app/assets/edit/[id].tsx` fejlécét ugyanerről a
+ * jelentésről (Balázs, 2026-09-25 14:48, telefonos fényképek).
+ *
+ * `card`/`list`/`picker` KERETET IS KAPOTT, ami eddig nem volt: háttér
+ * nélküli keret nélkül `t.surface` világos módban fehér, tehát a lap
+ * fehér hátterén láthatatlan lenne -- ugyanaz a hiba, amit a
+ * `performance-field.tsx`-nél már megelőztünk.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    button: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      marginTop: 12,
+      paddingVertical: 12,
+    },
+    buttonDisabled: { opacity: 0.5 },
+    buttonText: { color: t.textOnAccent, fontSize: 15, fontWeight: "800" },
+    card: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 14,
+      marginTop: 18,
+      padding: 16,
+    },
+    hianyos: {
+      backgroundColor: t.warningSoft,
+      borderRadius: 10,
+      marginTop: 12,
+      padding: 12,
+    },
+    hiba: { color: t.danger, fontSize: 13, marginTop: 10 },
+    hint: { color: t.textSecondary, fontSize: 13, marginTop: 6 },
+    kesz: {
+      backgroundColor: t.accentSoft,
+      borderRadius: 10,
+      marginTop: 12,
+      padding: 12,
+    },
+    list: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      marginTop: 8,
+      padding: 8,
+    },
+    osszegzesCim: { color: t.textPrimary, fontSize: 14, fontWeight: "800" },
+    osszegzesSor: { color: t.textSecondary, fontSize: 13, marginTop: 4 },
+    picker: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      marginTop: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    pressed: { opacity: 0.7 },
+    row: {
+      borderBottomColor: t.border,
+      borderBottomWidth: 1,
+      paddingVertical: 10,
+    },
+    rowText: { color: t.textPrimary, fontSize: 14 },
+    title: { color: t.textPrimary, fontSize: 16, fontWeight: "800" },
+  });
+}

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -6,6 +7,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * Shown while `AuthProvider` is checking SecureStore + `/auth/me` at app
@@ -30,6 +34,8 @@ export function RestoringScreen({
    */
   configProblems?: string[];
 }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -70,7 +76,7 @@ export function RestoringScreen({
           </View>
         ) : (
           <View style={styles.statusBlock}>
-            <ActivityIndicator color="#52d6c7" />
+            <ActivityIndicator color={tokens.accent} />
             <Text style={styles.statusText}>Munkamenet ellenőrzése…</Text>
           </View>
         )}
@@ -79,62 +85,69 @@ export function RestoringScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#071827",
-  },
-  container: {
-    alignItems: "center",
-    flex: 1,
-    gap: 16,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.6,
-  },
-  title: {
-    color: "#f4fbff",
-    fontSize: 24,
-    fontWeight: "800",
-  },
-  statusBlock: {
-    alignItems: "center",
-    gap: 12,
-    marginTop: 24,
-  },
-  statusText: {
-    color: "#b7cedd",
-    fontSize: 14,
-  },
-  errorText: {
-    color: "#ff9f92",
-    fontSize: 14,
-    textAlign: "center",
-  },
-  problemText: {
-    color: "#ffd0ca",
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: "center",
-  },
-  button: {
-    alignItems: "center",
-    backgroundColor: "#166a7a",
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  buttonText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- lásd
+ * `apps/mobile/src/app/assets/edit/[id].tsx` fejlécét ugyanerről a
+ * jelentésről (Balázs, 2026-09-25 14:48, telefonos fényképek).
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    container: {
+      alignItems: "center",
+      flex: 1,
+      gap: 16,
+      justifyContent: "center",
+      paddingHorizontal: 24,
+    },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 1.6,
+    },
+    title: {
+      color: t.textPrimary,
+      fontSize: 24,
+      fontWeight: "800",
+    },
+    statusBlock: {
+      alignItems: "center",
+      gap: 12,
+      marginTop: 24,
+    },
+    statusText: {
+      color: t.textSecondary,
+      fontSize: 14,
+    },
+    errorText: {
+      color: t.danger,
+      fontSize: 14,
+      textAlign: "center",
+    },
+    problemText: {
+      color: t.danger,
+      fontSize: 13,
+      lineHeight: 19,
+      textAlign: "center",
+    },
+    button: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+    },
+    buttonPressed: {
+      opacity: 0.75,
+    },
+    buttonText: {
+      color: t.textOnAccent,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+  });
+}

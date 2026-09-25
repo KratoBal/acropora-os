@@ -1,6 +1,9 @@
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { OfflineNotice } from "@/lib/offline/offline-notice";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * A MENTETT MÁSOLAT SÁVJA.
@@ -13,6 +16,8 @@ import type { OfflineNotice } from "@/lib/offline/offline-notice";
  * készülék nélkül is mérhető. Ez a komponens csak megjeleníti őket.
  */
 export function OfflineNoticeCard({ notice }: { notice: OfflineNotice }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View
       accessibilityRole="alert"
@@ -44,22 +49,33 @@ export function OfflineNoticeCard({ notice }: { notice: OfflineNotice }) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#3a2f1c",
-    borderColor: "#6b5326",
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 5,
-    marginTop: 12,
-    padding: 13,
-  },
-  offline: { backgroundColor: "#1f3348", borderColor: "#2f5b7d" },
-  empty: { backgroundColor: "#3b2b2d", borderColor: "#664047" },
-  title: { color: "#ffe6b8", fontSize: 14, fontWeight: "800" },
-  message: { color: "#d7c7a6", fontSize: 12, lineHeight: 18 },
-  offlineTitle: { color: "#d9edf7" },
-  offlineMessage: { color: "#9ab8ca" },
-  emptyTitle: { color: "#ffd0ca" },
-  emptyMessage: { color: "#dbaea9" },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- lásd
+ * `apps/mobile/src/app/assets/edit/[id].tsx` fejlécét ugyanerről a
+ * jelentésről (Balázs, 2026-09-25 14:48, telefonos fényképek).
+ *
+ * NINCS KÜLÖN "INFO" TOKEN AZ "offline" HANGNEMHEZ, ezért az `accentSoft`
+ * családra esik -- ugyanaz a döntés, mint a munkalap-űrlap "notice"/
+ * "queued" dobozainál.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: t.warningSoft,
+      borderColor: t.warning,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 5,
+      marginTop: 12,
+      padding: 13,
+    },
+    offline: { backgroundColor: t.accentSoft, borderColor: t.accentBorder },
+    empty: { backgroundColor: t.dangerSoft, borderColor: t.danger },
+    title: { color: t.warning, fontSize: 14, fontWeight: "800" },
+    message: { color: t.textSecondary, fontSize: 12, lineHeight: 18 },
+    offlineTitle: { color: t.accentSoftText },
+    offlineMessage: { color: t.textSecondary },
+    emptyTitle: { color: t.danger },
+    emptyMessage: { color: t.textSecondary },
+  });
+}
