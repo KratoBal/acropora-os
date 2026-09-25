@@ -182,6 +182,13 @@ export interface ServiceJobAssetLink {
   assetId: string;
   assetNumber: string;
   assetName: string;
+  /**
+   * A TÖRZSADAT KATEGÓRIÁJÁNAK NEVE -- olvasó mező, a "Eszköz" kártya
+   * (Figma-igazítás, 2026-09-25) harmadik sorához. `null`, ha az eszköznek
+   * nincs kategóriája (`Asset.categoryId` nullázható), nem azt jelenti,
+   * hogy nem kértük le.
+   */
+  assetCategoryName: string | null;
   attachedAt: string;
 }
 

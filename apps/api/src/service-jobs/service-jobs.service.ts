@@ -1247,6 +1247,7 @@ export class ServiceJobsService {
           assetId: link.assetId,
           assetNumber: link.asset.assetNumber,
           assetName: link.asset.name,
+          assetCategoryName: link.asset.categoryRef?.name ?? null,
           attachedAt: link.createdAt.toISOString(),
         })),
         /**
@@ -1303,6 +1304,7 @@ export class ServiceJobsService {
         assetId: link.assetId,
         assetNumber: link.asset.assetNumber,
         assetName: link.asset.name,
+        assetCategoryName: link.asset.categoryRef?.name ?? null,
         attachedAt: link.createdAt.toISOString(),
       })),
       // A DELEGALT A BECENEVEN SZEREPEL, nem a hivatalos neven: a delegalas

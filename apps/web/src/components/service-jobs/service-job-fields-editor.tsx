@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Input, Textarea } from "@acropora/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   ServicePanel,
@@ -27,6 +27,17 @@ import { serviceJobsApi } from "@/lib/api/service-jobs";
  * 2. A partner-hatar (van-e munkalap) ezen a feluleten nem is ertelmezheto --
  *    ha valaha ide kerulne, egy sajat mondat MASKEPP hataroznA meg a szabalyt,
  *    mint a szerver.
+ *
+ * === IRANYITOTT NYITVA-ALLAPOT, OPCIONALISAN (2026-09-25, Figma-igazitas) ===
+ *
+ * A `pilot-service-job-detail-page.tsx` a "Mi a baj?" kartya FEJLECEBEN akar
+ * egy "Szerkesztés"/"Bezárás" hivatkozast, nem ezt a sajat, doboz-szeles
+ * gombot a kartya torzseben. Az `open`/`onOpenChange` pár ADDITIV: ha MINDKETTO
+ * meg van adva, a komponens a szulo allapotat hasznalja es NEM rajzolja ki a
+ * sajat inditó gombjat (a szulo fejlec-hivatkozasa az egyetlen inditó). Ha
+ * barmelyik hianyzik, a komponens a RÉGI, sajat allapotu viselkedeset adja --
+ * ez tartja meg valtozatlanul a regi, nem-pilot `service-job-detail-page.tsx`
+ * hivasat, ami se `open`-t, se `onOpenChange`-et nem ad at.
  */
 export function ServiceJobFieldsEditor({
   jobId,
@@ -34,30 +45,40 @@ export function ServiceJobFieldsEditor({
   title,
   description,
   onSaved,
+  open,
+  onOpenChange,
 }: {
   jobId: string;
   token: string;
   title: string;
   description: string | null;
   onSaved: () => void | Promise<void>;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [nyitva, setNyitva] = useState(false);
+  const iranyitott = open !== undefined && onOpenChange !== undefined;
+  const [nyitvaBelso, setNyitvaBelso] = useState(false);
+  const nyitva = iranyitott ? open : nyitvaBelso;
+  const setNyitva = iranyitott ? onOpenChange : setNyitvaBelso;
   const [cim, setCim] = useState(title);
   const [leiras, setLeiras] = useState(description ?? "");
   const [ment, setMent] = useState(false);
   const [hiba, setHiba] = useState<string | null>(null);
 
-  const kezdes = () => {
-    /*
-      A MEZOK A MAI ERTEKROL INDULNAK, nem az elso betoltesrol: a lap kozben
-      frissulhetett (mas kezelo irta at), es egy regi ertekrol indulo szerkeszto
-      CSENDBEN visszairna azt.
-    */
+  /*
+    A MEZOK A MAI ERTEKROL INDULNAK, nem az elso betoltesrol: a lap kozben
+    frissulhetett (mas kezelo irta at), es egy regi ertekrol indulo szerkeszto
+    CSENDBEN visszairna azt. Ez korabban a (most torolt) `kezdes()` indito
+    fuggvenyben allt -- iranyitott modban viszont a nyitas a SZULOBEN
+    tortenik, tehat itt, a `nyitva` valtozasat figyelve kell ugyanezt tennie.
+  */
+  useEffect(() => {
+    if (!nyitva) return;
     setCim(title);
     setLeiras(description ?? "");
     setHiba(null);
-    setNyitva(true);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nyitva]);
 
   const mentes = async () => {
     setMent(true);
@@ -90,8 +111,8 @@ export function ServiceJobFieldsEditor({
   };
 
   if (!nyitva)
-    return (
-      <Button variant="secondary" onClick={kezdes}>
+    return iranyitott ? null : (
+      <Button variant="secondary" onClick={() => setNyitva(true)}>
         Bejelentés szerkesztése
       </Button>
     );

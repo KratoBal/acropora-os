@@ -80,7 +80,11 @@ export function serviceJobDetailRow(
         id: "link-1",
         assetId: "asset-1",
         createdAt: new Date("2026-09-02T09:00:00.000Z"),
-        asset: { assetNumber: "ESZ-0007", name: "Szivattyú" },
+        asset: {
+          assetNumber: "ESZ-0007",
+          name: "Szivattyú",
+          categoryRef: null,
+        },
       },
     ],
     // ALAPBAN URES, es ezt a delegalas sajat specje tolti fel

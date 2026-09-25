@@ -63,6 +63,7 @@ function eszkoz(assetId: string, name: string, num: string) {
     assetId,
     assetNumber: num,
     assetName: name,
+    assetCategoryName: null,
     attachedAt: "2026-09-15T08:00:00.000Z",
   } satisfies ServiceJobAssetLink;
 }
