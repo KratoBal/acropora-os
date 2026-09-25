@@ -123,3 +123,59 @@ describe("a bejelentés szerkesztője", () => {
     expect(api.updateFields).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * IRANYITOTT MOD (Figma-igazitas, 2026-09-25): a `pilot-service-job-detail-
+ * page.tsx` a sajat allapotaval nyitja/zarja a szerkesztot, a fejlec-
+ * hivatkozason keresztul -- ez a blokk EZT a modot meri, kulon a fenti,
+ * uncontrolled esetektol (amik tovabbra is a regi, nem-pilot
+ * `service-job-detail-page.tsx` hasznalatat vedik).
+ */
+describe("a bejelentés szerkesztője -- irányított nyitva-állapot", () => {
+  function nyitIranyitva(open: boolean, onOpenChange: (open: boolean) => void) {
+    return render(
+      <ServiceJobFieldsEditor
+        jobId="job-1"
+        token="token-1"
+        title="Cím"
+        description="Leírás"
+        onSaved={() => {}}
+        open={open}
+        onOpenChange={onOpenChange}
+      />,
+    );
+  }
+
+  it("W6: irányított módban NEM rajzolja ki a saját indító gombját", () => {
+    nyitIranyitva(false, () => {});
+    expect(
+      screen.queryByRole("button", { name: "Bejelentés szerkesztése" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("W7: open=true esetén a panel nyitva jelenik meg, a mai értékekkel", () => {
+    nyitIranyitva(true, () => {});
+    expect(screen.getByLabelText("A hibajegy címe")).toHaveValue("Cím");
+    expect(screen.getByLabelText("A hibajegy leírása")).toHaveValue("Leírás");
+  });
+
+  it("W8: a Mégsem az onOpenChange(false)-t hívja, nem saját állapotot vált", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    nyitIranyitva(true, onOpenChange);
+
+    await user.click(screen.getByRole("button", { name: "Mégsem" }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("W9: sikeres mentés is az onOpenChange(false)-t hívja", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    nyitIranyitva(true, onOpenChange);
+
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+});

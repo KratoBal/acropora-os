@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, ConfirmDialog, EmptyState, Skeleton } from "@acropora/ui";
+import { Alert, ConfirmDialog, EmptyState, Icon, Skeleton } from "@acropora/ui";
 import {
   hasPermission,
   isFinishedServiceJob,
@@ -207,6 +207,15 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<ServiceJobDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /*
+    A KET SZERKESZTO-VALTO (Figma-igazitas, 2026-09-25): a "Mi a baj?" es az
+    "Eszköz" kartya fejleceben all egy "Szerkesztés"/"Bezárás" hivatkozas,
+    nem a kartya torzseben egy sajat gomb -- lasd a `ServiceJobFieldsEditor`
+    `open`/`onOpenChange` fejlecet a masodikhoz, es az uj, olvaso "Eszköz"
+    osszefoglalot a harmadikhoz.
+  */
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [editingPlacement, setEditingPlacement] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
   const [stepping, setStepping] = useState(false);
   const [note, setNote] = useState("");
@@ -221,8 +230,6 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
   const [partnerError, setPartnerError] = useState<string | null>(null);
   const [documents, setDocuments] = useState<ServiceJobDocumentSummary[]>([]);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
-  const [documentFiles, setDocumentFiles] = useState<File[]>([]);
-  const [documentCaption, setDocumentCaption] = useState("");
   const [uploading, setUploading] = useState(false);
   const [documentToDelete, setDocumentToDelete] =
     useState<ServiceJobDocumentSummary | null>(null);
@@ -362,35 +369,26 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
     return () => controller.abort();
   }, [loadDocuments]);
 
-  const uploadDocuments = async () => {
-    if (documentFiles.length === 0 || uploading) return;
+  /*
+    A FELIRAT MEZO ELTUNT INNEN (Figma-igazitas, 2026-09-25): a feltoltes a
+    "+ fotó" csempere kerul, felirat nelkul -- Balazs kerese szerint a
+    felirat a feltoltes UTANI lepesbe kerult, ami mar MEGVAN es MUKODIK (lasd
+    a `ServiceDocumentGallery` `onSaveCaption`/"Felirat" gombjat lejjebb). A
+    hivas ezert innentol kozvetlenul a kivalasztott fajlokat kapja, nem egy
+    kozbenso `documentFiles` allapotot -- a valasztas es a feltoltes EGY
+    lepes, a felhasznalo nem kattint kulon "Feltöltés" gombra.
+  */
+  const uploadDocuments = async (files: File[]) => {
+    if (files.length === 0 || uploading) return;
     setUploading(true);
     setDocumentsError(null);
     try {
-      const kepek = documentFiles.filter((file) =>
-        file.type.startsWith("image/"),
-      );
-      const egyeb = documentFiles.filter(
-        (file) => !file.type.startsWith("image/"),
-      );
+      const kepek = files.filter((file) => file.type.startsWith("image/"));
+      const egyeb = files.filter((file) => !file.type.startsWith("image/"));
       if (kepek.length)
-        await serviceJobsApi.uploadDocument(
-          token,
-          jobId,
-          "PHOTO",
-          kepek,
-          documentCaption,
-        );
+        await serviceJobsApi.uploadDocument(token, jobId, "PHOTO", kepek);
       if (egyeb.length)
-        await serviceJobsApi.uploadDocument(
-          token,
-          jobId,
-          "OTHER",
-          egyeb,
-          documentCaption,
-        );
-      setDocumentFiles([]);
-      setDocumentCaption("");
+        await serviceJobsApi.uploadDocument(token, jobId, "OTHER", egyeb);
       await loadDocuments();
     } catch (cause) {
       setDocumentsError(
@@ -720,6 +718,14 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                   <span className="text-xs italic text-pilot-grey-400">
                     Lezárt hibajegy nem szerkeszthető
                   </span>
+                ) : canManage ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditingDescription((v) => !v)}
+                    className="cursor-pointer text-xs font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800"
+                  >
+                    {editingDescription ? "Bezárás" : "Szerkesztés"}
+                  </button>
                 ) : undefined
               }
             />
@@ -734,10 +740,9 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                 </p>
               )}
               {/*
-                A SZERKESZTŐ ÖNÁLLÓ WIDGET (saját "Bejelentés szerkesztése"
-                gombbal és saját panellel) -- ide nem kell külön
-                szerkesztés-mód, a komponens ezt maga tudja. Régi stílusban,
-                lásd a fejléc varrat-szakaszát.
+                A SZERKESZTŐ MOST IRANYITOTT: a sajat inditó gombja helyett a
+                fenti fejlec-hivatkozas nyitja/zarja -- lasd a komponens sajat
+                "IRANYITOTT NYITVA-ALLAPOT" fejlecet.
               */}
               {canManage && !finished ? (
                 <ServiceJobFieldsEditor
@@ -746,6 +751,8 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                   title={job.title}
                   description={job.description}
                   onSaved={() => load()}
+                  open={editingDescription}
+                  onOpenChange={setEditingDescription}
                 />
               ) : null}
             </div>
@@ -792,74 +799,128 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                 }
                 emptyText="Ehhez a jegyhez még nincs fénykép vagy fájl csatolva."
               />
+              {/*
+                A "+ FOTÓ" CSEMPE A FELTÖLTÉS TRIGGERE (Figma-igazítás,
+                2026-09-25, Balázs kérése) -- a raw fájlválasztó+felirat+gomb
+                sor helyett. Kattintásra AZONNAL feltölt, felirat nélkül: a
+                felirat a feltöltés UTÁNI lépés, a galéria már meglévő,
+                soronkénti "Felirat"/"Felirat átírása" gombjával
+                (`onSaveCaption` fent) -- ezt nem kellett újraépíteni, csak
+                idekapcsolni. A galéria saját rácsát (`service-document-
+                gallery.tsx`) szándékosan nem bántottuk: öt hívóhelye van,
+                ez a kör csak erre az oldalra szól.
+
+                A MERET, A KERET ES A SZOVEG-MERET A FIGMA FORRAS SZO SZERINTI
+                MASOLATA (`w-20 h-20 rounded-lg border-2 border-dashed
+                border-grey-200 ... text-xs`, HibajegyekScreen.tsx, a "+ fotó"
+                gomb) -- csak a szincsalad valt `grey`->`pilot-grey`,
+                `teal`->`pilot-aqua`-ra. Balazs kifejezett kerese (2026-09-25
+                18:47): a meret, a keret-vastagsag es a betumeret NE
+                kozelitsen, hanem pontosan egyezzen.
+              */}
               {canManage ? (
-                <div className="flex flex-wrap items-end gap-3 border-t border-pilot-grey-100 pt-3">
-                  <div className="space-y-1">
-                    <label
-                      className="block text-xs font-medium text-pilot-grey-700"
-                      htmlFor="pilot-hibajegy-csatolmany"
-                    >
-                      Új csatolmány
-                    </label>
-                    <input
-                      id="pilot-hibajegy-csatolmany"
-                      type="file"
-                      multiple
-                      accept="image/jpeg,image/png,application/pdf"
-                      className="text-sm"
-                      onChange={(event) =>
-                        setDocumentFiles(Array.from(event.target.files ?? []))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label
-                      className="block text-xs font-medium text-pilot-grey-700"
-                      htmlFor="pilot-hibajegy-csatolmany-felirat"
-                    >
-                      Felirat (elhagyható)
-                    </label>
-                    <input
-                      id="pilot-hibajegy-csatolmany-felirat"
-                      value={documentCaption}
-                      maxLength={500}
-                      onChange={(event) =>
-                        setDocumentCaption(event.target.value)
-                      }
-                      placeholder="Mit látunk a képeken?"
-                      className="rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-                    />
-                  </div>
-                  <PilotButton
-                    variant="secondary"
-                    disabled={documentFiles.length === 0 || uploading}
-                    onClick={() => void uploadDocuments()}
-                  >
-                    {documentFiles.length > 1
-                      ? `Feltöltés (${documentFiles.length} fájl)`
-                      : "Feltöltés"}
-                  </PilotButton>
-                </div>
+                <label
+                  className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-pilot-grey-200 text-xs text-pilot-grey-300 transition-all hover:border-pilot-aqua-400 hover:text-pilot-aqua-500"
+                  aria-disabled={uploading}
+                >
+                  {uploading ? "Feltöltés…" : "+ fotó"}
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,application/pdf"
+                    className="sr-only"
+                    disabled={uploading}
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files ?? []);
+                      event.target.value = "";
+                      if (files.length) void uploadDocuments(files);
+                    }}
+                  />
+                </label>
               ) : null}
             </div>
           </PilotCard>
 
-          {/*
-            HELYSZÍN ÉS ESZKÖZÖK -- a Figma "Eszköz" kártyájának helyén, de
-            a valódi (több eszközt, szerkeszthető helyszínt kezelő)
-            komponenssel, régi stílusban (lásd a fejléc varrat-szakaszát).
-          */}
-          <ServiceJobPlacementEditor
-            jobId={jobId}
-            token={token}
-            customerId={job.customerId}
-            departmentId={job.departmentId}
-            departmentPath={job.departmentPath}
-            assets={job.assets}
-            worksheets={worksheets}
-            canManage={canManage}
-            onSaved={setJob}
-          />
+          <PilotCard>
+            <PilotCardHeader
+              title="Eszköz"
+              action={
+                canManage ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditingPlacement((v) => !v)}
+                    className="cursor-pointer text-xs font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800"
+                  >
+                    {editingPlacement ? "Bezárás" : "Szerkesztés"}
+                  </button>
+                ) : undefined
+              }
+            />
+            {editingPlacement ? (
+              /*
+                A VALODI (helyszin+eszkoz) SZERKESZTO VALTOZATLANUL -- lasd a
+                sajat fejleceet arrol, miert egy doboz a kettore, es hogyan
+                vedi a helyszin-valtaskor leeso eszkozoket. A "Szerkesztés"
+                hivatkozas csak MEGJELENITI, a belseje nem valtozott.
+              */
+              <div className="px-5 py-4">
+                <ServiceJobPlacementEditor
+                  jobId={jobId}
+                  token={token}
+                  customerId={job.customerId}
+                  departmentId={job.departmentId}
+                  departmentPath={job.departmentPath}
+                  assets={job.assets}
+                  worksheets={worksheets}
+                  canManage={canManage}
+                  onSaved={(updated) => {
+                    setJob(updated);
+                    setEditingPlacement(false);
+                  }}
+                />
+              </div>
+            ) : job.assets.length === 0 ? (
+              <p className="px-5 py-4 text-sm italic text-pilot-grey-400">
+                Ehhez a jegyhez nincs eszköz rendelve.
+              </p>
+            ) : (
+              <div className="divide-y divide-pilot-grey-50">
+                {job.assets.map((asset) => (
+                  <div
+                    key={asset.id}
+                    className="flex items-center gap-4 px-5 py-4"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pilot-grey-100">
+                      <Icon
+                        name="box"
+                        size={18}
+                        className="text-pilot-grey-500"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-pilot-grey-800">
+                        {asset.assetName}
+                      </p>
+                      <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
+                        {asset.assetNumber}
+                      </p>
+                      {/*
+                        A KATEGÓRIA-SOR CSAK AKKOR JELENIK MEG, HA VAN ÉRTÉKE
+                        -- lásd a `ServiceJobAssetLink.assetCategoryName`
+                        fejlécét: `null`, ha az eszköznek nincs kategóriája,
+                        nem azt, hogy nem kértük le.
+                      */}
+                      {asset.assetCategoryName ? (
+                        <p className="text-xs text-pilot-grey-400">
+                          {asset.assetCategoryName}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </PilotCard>
 
           <PilotCard>
             <PilotCardHeader

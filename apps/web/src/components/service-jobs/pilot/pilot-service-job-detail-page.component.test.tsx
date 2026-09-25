@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ServiceJobDetail, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -58,9 +59,24 @@ vi.mock("../maintenance-package-panel", () => ({
   ),
 }));
 
+/**
+ * A `ServiceJobPlacementEditor` STUBOLVA VAN, UGYANAZZAL AZ OKKAL, MINT A
+ * KARBANTARTAS-PANELEK: sajat API-hivasokat indit (helyszin-fa, stb.), es
+ * a sajat viselkedese mar meg van merve a sajat specjeben
+ * (`service-job-placement-editor.component.test.tsx`, 26 teszt). Ez a
+ * spec a "Szerkesztés" hivatkozas MEGJELENITO/ELREJTO mechanizmusat meri,
+ * nem az editor belsejet.
+ */
+vi.mock("../service-job-placement-editor", () => ({
+  ServiceJobPlacementEditor: () => (
+    <div data-testid="placement-editor-stub">helyszín+eszköz szerkesztő</div>
+  ),
+}));
+
 const api = vi.hoisted(() => ({
   detail: vi.fn(),
   documents: vi.fn(),
+  uploadDocument: vi.fn(),
 }));
 const sheets = vi.hoisted(() => ({
   attachable: vi.fn(),
@@ -125,6 +141,7 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     auth.session = sessionAs("SERVICE");
     api.detail.mockReset();
     api.documents.mockReset().mockResolvedValue({ items: [] });
+    api.uploadDocument.mockReset().mockResolvedValue([]);
     sheets.attachable.mockReset().mockResolvedValue({ items: [] });
     sheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
     sheets.departments.mockReset().mockResolvedValue({ items: [] });
@@ -163,6 +180,165 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("maintenance-package-panel-stub"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * FIGMA-IGAZÍTÁS, 2026-09-25 -- a "Mi a baj?" és az "Eszköz" kártya
+ * fejléc-hivatkozása, a "+ fotó" feltöltő csempe, és az olvasó Eszköz-
+ * összefoglaló. A `ServiceJobFieldsEditor`/`ServiceJobPlacementEditor`
+ * saját viselkedését a saját specjeik mérik (lásd a fenti stub
+ * fejlécét) -- ez a blokk csak azt méri, amit EZ a lap ad hozzá: a
+ * fejléc-hivatkozás nyit/zár, és mi látszik nyitva/zárva állapotban.
+ */
+describe("PilotServiceJobDetailPage -- Figma-igazítás (Mi a baj?, Eszköz)", () => {
+  beforeEach(() => {
+    auth.session = sessionAs("SERVICE");
+    api.detail.mockReset();
+    api.documents.mockReset().mockResolvedValue({ items: [] });
+    api.uploadDocument.mockReset().mockResolvedValue([]);
+    sheets.attachable.mockReset().mockResolvedValue({ items: [] });
+    sheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
+    sheets.departments.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("a Szerkesztés hivatkozás megnyitja, majd Bezárás elrejti a bejelentés-szerkesztőt", async () => {
+    const user = userEvent.setup();
+    api.detail.mockResolvedValue(detail());
+
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    await waitFor(() =>
+      expect(screen.getByText("Ütemezett karbantartás.")).toBeInTheDocument(),
+    );
+
+    expect(screen.queryByLabelText("A hibajegy címe")).not.toBeInTheDocument();
+
+    // KETTO VAN A LAPON ("Mi a baj?" es "Eszköz" fejleceben egyarant) --
+    // az ELSO a "Mi a baj?"-e, mert az a korabbi kartya a lapon.
+    const szerkesztesGombok = screen.getAllByRole("button", {
+      name: "Szerkesztés",
+    });
+    await user.click(szerkesztesGombok[0]!);
+    expect(screen.getByLabelText("A hibajegy címe")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Bezárás" }));
+    expect(screen.queryByLabelText("A hibajegy címe")).not.toBeInTheDocument();
+  });
+
+  it("a + fotó csempe felirat nélkül, azonnal feltölt", async () => {
+    api.detail.mockResolvedValue(detail());
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    await waitFor(() =>
+      expect(screen.getByText("Ütemezett karbantartás.")).toBeInTheDocument(),
+    );
+
+    // NINCS TÖBBÉ KÜLÖN FELIRAT-MEZŐ A FELTÖLTÉS TRIGGERÉN -- lásd a lap
+    // saját "A FELIRAT MEZO ELTUNT INNEN" fejlécét.
+    expect(
+      screen.queryByLabelText("Felirat (elhagyható)"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Feltöltés/ }),
+    ).not.toBeInTheDocument();
+
+    const file = new File(["kep"], "hiba.jpg", { type: "image/jpeg" });
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    expect(input).toBeTruthy();
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() =>
+      expect(api.uploadDocument).toHaveBeenCalledWith(
+        "token-1",
+        "job-1",
+        "PHOTO",
+        [file],
+      ),
+    );
+  });
+
+  it("KONTROLL: eszköz nélküli jegyen a megszokott üres-szöveg jelenik meg", async () => {
+    api.detail.mockResolvedValue(detail({ assets: [] }));
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByText("Ehhez a jegyhez nincs eszköz rendelve."),
+    ).toBeInTheDocument();
+  });
+
+  it("eszközzel rendelkező jegyen név, kód és -- ha van -- kategória is látszik", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        assets: [
+          {
+            id: "link-1",
+            assetId: "asset-1",
+            assetNumber: "AKV-NMD-SKM-01",
+            assetName: "Royal Exclusiv Dreambox 200",
+            assetCategoryName: "Lehabzó",
+            attachedAt: "2026-09-20T08:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByText("Royal Exclusiv Dreambox 200"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("AKV-NMD-SKM-01")).toBeInTheDocument();
+    expect(screen.getByText("Lehabzó")).toBeInTheDocument();
+  });
+
+  /**
+   * A KATEGÓRIA-SOR NEM JELENIK MEG, HA `assetCategoryName` `null` -- lásd
+   * a `ServiceJobAssetLink.assetCategoryName` fejlécét: az eszköznek nem
+   * mindig van kategóriája. Kontroll nélkül egy `null`-t szövegként kiíró
+   * hiba (pl. "null" a képernyőn) észrevétlen maradna.
+   */
+  it("KONTROLL: kategória nélküli eszköznél nincs harmadik sor", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        assets: [
+          {
+            id: "link-1",
+            assetId: "asset-1",
+            assetNumber: "AKV-NMD-SKM-01",
+            assetName: "Royal Exclusiv Dreambox 200",
+            assetCategoryName: null,
+            attachedAt: "2026-09-20T08:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+
+    await screen.findByText("Royal Exclusiv Dreambox 200");
+    expect(screen.queryByText("null")).not.toBeInTheDocument();
+  });
+
+  it("az Eszköz kártya Szerkesztés hivatkozása megjeleníti a helyszín+eszköz szerkesztőt", async () => {
+    const user = userEvent.setup();
+    api.detail.mockResolvedValue(detail({ assets: [] }));
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("Ehhez a jegyhez nincs eszköz rendelve.");
+
+    expect(
+      screen.queryByTestId("placement-editor-stub"),
+    ).not.toBeInTheDocument();
+
+    const szerkesztesGombok = screen.getAllByRole("button", {
+      name: "Szerkesztés",
+    });
+    // KETTO VAN: "Mi a baj?" es "Eszköz" fejleceben egyarant -- az UTOLSO
+    // az Eszkozé, mert az a kesobbi kartya a lapon.
+    await user.click(szerkesztesGombok[szerkesztesGombok.length - 1]!);
+
+    expect(screen.getByTestId("placement-editor-stub")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Ehhez a jegyhez nincs eszköz rendelve."),
     ).not.toBeInTheDocument();
   });
 });
