@@ -241,6 +241,7 @@ export function PilotButton({
   disabled,
   fullWidth = false,
   size = "md",
+  "aria-label": ariaLabel,
 }: {
   children: ReactNode;
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -249,6 +250,12 @@ export function PilotButton({
   disabled?: boolean;
   fullWidth?: boolean;
   size?: "md" | "lg";
+  /**
+   * ISMETLODO GOMBOKHOZ (pl. soronkenti "Torles"), ahol a lathato felirat
+   * onmagaban nem mondja meg, MELYIK sorra vonatkozik -- ugyanaz az igeny,
+   * ami a `PilotInput` sajat `aria-label` propjat is indokolta.
+   */
+  "aria-label"?: string;
 }) {
   const base = `inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${fullWidth ? "w-full" : ""}`;
   const sizes = {
@@ -281,6 +288,7 @@ export function PilotButton({
       className={`${base} ${sizes[size]} ${variants[variant]}`}
       onClick={onClick}
       disabled={disabled}
+      aria-label={ariaLabel}
     >
       {children}
     </button>
@@ -362,6 +370,7 @@ export function PilotInput({
   disabled,
   className,
   "aria-label": ariaLabel,
+  title,
   inputMode,
   min,
   max,
@@ -374,6 +383,9 @@ export function PilotInput({
   disabled?: boolean;
   className?: string;
   "aria-label"?: string;
+  /** NATÍV TOOLTIP, pl. miért tiltott épp ez a mező -- ugyanaz az igény,
+   * ami a `worksheet-line-editor.tsx` "Hányan" mezőjét indokolta. */
+  title?: string;
   inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
   /**
    * `min`/`max` A NATÍV RANGE-KORLÁTOZOTT INPUT-TÍPUSOKHOZ (`date`, `time`,
@@ -393,6 +405,7 @@ export function PilotInput({
       readOnly={readOnly}
       disabled={disabled}
       aria-label={ariaLabel}
+      title={title}
       inputMode={inputMode}
       min={min}
       max={max}

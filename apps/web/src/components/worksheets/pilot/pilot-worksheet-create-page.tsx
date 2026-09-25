@@ -575,6 +575,7 @@ export function PilotWorksheetCreatePage() {
             >
               <div className="space-y-1">
                 <WorksheetAssigneePicker
+                  pilot
                   candidates={candidates}
                   selected={assigneeIds}
                   onToggle={(userId) =>
@@ -606,6 +607,7 @@ export function PilotWorksheetCreatePage() {
         </PilotCard>
 
         <WorksheetLineEditor
+          pilot
           lines={lines}
           onChange={setLines}
           disabled={saving}

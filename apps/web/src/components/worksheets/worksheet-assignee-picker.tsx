@@ -44,12 +44,21 @@ export interface WorksheetAssigneePickerProps {
   candidates: WorksheetAssignableUser[];
   selected: string[];
   onToggle: (userId: string) => void;
+  /**
+   * A widget MA KÉT HELYRŐL ÉL, UGYANAZ AZ OK, MINT A SZOMSZÉD
+   * `worksheet-line-editor.tsx`-ben: a régi, nem-pilot adatlapról
+   * (`worksheet-detail-page.tsx`) és az új, pilot-aqua "Új munkalap"
+   * oldalról. A prop ezért nem alapértelmezett -- a régi hívó szándékosan
+   * `undefined`-ot hagy.
+   */
+  pilot?: boolean;
 }
 
 export function WorksheetAssigneePicker({
   candidates,
   selected,
   onToggle,
+  pilot,
 }: WorksheetAssigneePickerProps) {
   /*
    * AZ ÜRES LISTA KI VAN MONDVA. Egy üres doboz a "Felelősök" felirat alatt úgy
@@ -58,7 +67,9 @@ export function WorksheetAssigneePicker({
    */
   if (candidates.length === 0)
     return (
-      <p className="text-sm text-dusk-500">
+      <p
+        className={`text-sm ${pilot ? "text-pilot-grey-400" : "text-dusk-500"}`}
+      >
         Nincs olyan kolléga, akire a lap kiosztható lenne.
       </p>
     );
@@ -66,7 +77,10 @@ export function WorksheetAssigneePicker({
   return (
     <div className="space-y-1">
       {candidates.map((candidate) => (
-        <label key={candidate.id} className="flex items-center gap-2 text-sm">
+        <label
+          key={candidate.id}
+          className={`flex items-center gap-2 text-sm ${pilot ? "text-pilot-grey-800" : ""}`}
+        >
           <input
             type="checkbox"
             checked={selected.includes(candidate.id)}
