@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Skeleton } from "@acropora/ui";
+import { Alert, Icon, Skeleton } from "@acropora/ui";
 import {
   worksheetStatusLabel,
   type DashboardActivity,
@@ -12,10 +12,13 @@ import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import {
+  PilotAvatar,
   PilotBadge,
   PilotCard,
   PilotCardHeader,
   PilotThemeRoot,
+  pilotAvatarColor,
+  pilotInitials,
 } from "@/components/pilot/pilot-ui";
 import { serviceJobStatusLabel } from "@/components/service-jobs/service-job-labels";
 import { dashboardApi } from "@/lib/api/dashboard";
@@ -50,6 +53,47 @@ function formatDate(value: string | null) {
   return value ? dateFormatter.format(new Date(value)) : "Nincs határidő";
 }
 
+/**
+ * HÁNY NAP VAN HÁTRA EGY DÁTUMIG -- csak a NAP számít, az óra nem (a
+ * `dateOnly` a szerveren is csak a napot adja). Negatív, ha már elmúlt.
+ */
+function daysUntil(dateOnly: string): number {
+  const today = new Date();
+  const target = new Date(dateOnly);
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const todayUtc = Date.UTC(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+  const targetUtc = Date.UTC(
+    target.getUTCFullYear(),
+    target.getUTCMonth(),
+    target.getUTCDate(),
+  );
+  return Math.round((targetUtc - todayUtc) / msPerDay);
+}
+
+/**
+ * A "X nap" JELZŐ -- a terv szerint sárga, ha 7 napon belül van, egyébként
+ * szürke (`DashboardScreen.tsx` `SERVICE_KARBANTARTASOK` sora). Ugyanezt a
+ * küszöböt használja az "Esedékes karbantartások" kártya.
+ */
+function DaysPill({ days }: { days: number }) {
+  const urgent = days <= 7;
+  return (
+    <span
+      className={`shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-xs font-semibold ${
+        urgent
+          ? "bg-amber-50 text-amber-700"
+          : "bg-pilot-grey-100 text-pilot-grey-600"
+      }`}
+    >
+      {days < 0 ? `${Math.abs(days)} napja lejárt` : `${days} nap`}
+    </span>
+  );
+}
+
 function worksheetStatusText(status: string) {
   return Object.hasOwn(worksheetStatusLabel, status)
     ? worksheetStatusLabel[status as keyof typeof worksheetStatusLabel]
@@ -67,16 +111,19 @@ function DashboardCard({
   empty,
   href,
   title,
+  icon,
 }: {
   children: ReactNode;
   empty: boolean;
   href?: string;
   title: string;
+  icon?: ReactNode;
 }) {
   return (
     <PilotCard>
       <PilotCardHeader
         title={title}
+        icon={icon}
         action={
           href ? (
             <Link
@@ -116,6 +163,21 @@ function DashboardLoading() {
   );
 }
 
+/*
+  A NÉGY CSEMPE FELIRATA A TERV RÖVID ALAKJÁRA VÁLTOTT ("Nyitott hibajegy",
+  nem "Nyitott hibajegyek") -- a `DashboardScreen.tsx` `OWNER_TILES` tömbje
+  szerint, ugyanabban a sorrendben és ugyanazzal a szín/ikon-párral
+  (`iconColorMap`/`colorMap`), a `teal`/`grey` szócsalád `pilot-*`-ra
+  fordítva, a többi (amber/blue/red) változatlanul, ahogy a repó más pilot
+  lapjain is (lásd `pilot-aquarium-water-values.tsx` `text-amber-600`-ját).
+*/
+const MANAGER_TILE_STYLE = {
+  amber: { bg: "bg-amber-50", icon: "text-amber-600" },
+  blue: { bg: "bg-blue-50", icon: "text-blue-700" },
+  grey: { bg: "bg-pilot-grey-100", icon: "text-pilot-grey-500" },
+  red: { bg: "bg-red-50", icon: "text-red-600" },
+} as const;
+
 function ManagerTiles({
   data,
 }: {
@@ -124,45 +186,61 @@ function ManagerTiles({
   const tiles = [
     {
       href: "/szerviz/hibajegyek",
-      label: "Nyitott hibajegyek",
+      label: "Nyitott hibajegy",
       value: data.openTickets,
+      icon: "service",
+      color: "amber",
     },
     {
       href: "/szerviz/munkalapok",
-      label: "Aláírásra váró munkalapok",
+      label: "Aláírásra vár",
       value: data.worksheetsWaitingForSignature,
+      icon: "clipboard",
+      color: "blue",
     },
     {
       href: "/szerviz/anyagigenyek",
-      label: "Nyitott anyagigények",
+      label: "Anyagigény",
       value: data.materialRequestsWaiting,
+      icon: "box",
+      color: "grey",
     },
     {
       href: "/szerviz/karbantartas",
-      label: "Aláírásra váró karbantartási megrendelők",
+      label: "Megrendelőlap",
       value: data.maintenanceOrderFormsWaitingForSignature,
+      icon: "calendar",
+      color: "red",
     },
-  ];
+  ] as const;
 
   return (
     <section
       className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
       aria-label="Szerviz áttekintés"
     >
-      {tiles.map((tile) => (
-        <Link
-          key={tile.label}
-          href={tile.href}
-          className="rounded-xl bg-white p-4 ring-1 ring-pilot-grey-200 transition-colors hover:bg-pilot-grey-50"
-        >
-          <p className="text-xs font-medium text-pilot-grey-500">
-            {tile.label}
-          </p>
-          <p className="mt-3 text-2xl font-semibold text-pilot-grey-900">
-            {tile.value}
-          </p>
-        </Link>
-      ))}
+      {tiles.map((tile) => {
+        const style = MANAGER_TILE_STYLE[tile.color];
+        return (
+          <Link
+            key={tile.label}
+            href={tile.href}
+            className="flex items-center gap-4 rounded-xl bg-white p-4 ring-1 ring-pilot-grey-200 transition-colors hover:bg-pilot-grey-50"
+          >
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${style.bg}`}
+            >
+              <Icon name={tile.icon} size={18} className={style.icon} />
+            </div>
+            <div>
+              <p className="font-mono text-2xl font-semibold tabular-nums text-pilot-grey-900">
+                {tile.value}
+              </p>
+              <p className="mt-0.5 text-xs text-pilot-grey-500">{tile.label}</p>
+            </div>
+          </Link>
+        );
+      })}
     </section>
   );
 }
@@ -179,6 +257,13 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
           <DashboardCard
             title="Saját munkalapjaim"
             href="/szerviz/munkalapok"
+            icon={
+              <Icon
+                name="clipboard"
+                size={16}
+                className="text-pilot-grey-400"
+              />
+            }
             empty={summary.myWorksheets.items.length === 0}
           >
             {summary.myWorksheets.items.length === 0 ? (
@@ -214,6 +299,7 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
           <DashboardCard
             title="Nyitott hibajegyek a helyszíneimen"
             href="/szerviz/hibajegyek"
+            icon={<Icon name="service" size={16} className="text-amber-600" />}
             empty={summary.openTickets.items.length === 0}
           >
             {summary.openTickets.items.length === 0 ? (
@@ -250,10 +336,59 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
           </DashboardCard>
         ) : null}
 
+        {/*
+          ÚJ KÁRTYA (2026-09-25, Figma-igazítás) -- `Asset.nextServiceAt`-ből,
+          lásd a szerver oldali `upcomingMaintenance()` fejlécét a hatókörről
+          és az időablakról.
+        */}
+        {summary.upcomingMaintenance ? (
+          <DashboardCard
+            title="Esedékes karbantartások"
+            href="/szerviz/eszkozok"
+            icon={
+              <Icon name="calendar" size={16} className="text-pilot-grey-400" />
+            }
+            empty={summary.upcomingMaintenance.items.length === 0}
+          >
+            {summary.upcomingMaintenance.items.length === 0 ? (
+              "Nincs esedékes karbantartás."
+            ) : (
+              <ul className="space-y-3">
+                {summary.upcomingMaintenance.items.map((item) => (
+                  <li
+                    key={item.assetId}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <Link
+                      href={`/szerviz/eszkozok/${item.assetId}`}
+                      className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                    >
+                      <span className="block truncate">{item.assetName}</span>
+                      <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                        {item.customerName ? `${item.customerName} · ` : ""}
+                        {item.departmentName} · {formatDate(item.nextServiceAt)}
+                      </span>
+                    </Link>
+                    <DaysPill days={daysUntil(item.nextServiceAt)} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashboardCard>
+        ) : null}
+
+        {/*
+          A "HJ"/"ML" CÍMKÉZETT SOROK A TERVBEN (mindkét típusú határidő)
+          MA NEM ÉPÍTHETŐK: a `DashboardDeadline.kind` egyetlen értéket ismer
+          (`"WORKSHEET"`), hibajegy-határidőt a lekérdezés sosem adott --
+          lásd `dashboard.ts` típusát. Ez valódi, meglévő hiány, nem ennek a
+          körnek az újítása; a PR törzsében szerepel.
+        */}
         {summary.deadlines ? (
           <DashboardCard
             title="Határidők"
             href="/szerviz/munkalapok"
+            icon={<Icon name="calendar" size={16} className="text-amber-600" />}
             empty={summary.deadlines.items.length === 0}
           >
             {summary.deadlines.items.length === 0 ? (
@@ -286,27 +421,53 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
 
         {summary.teamLoad ? (
           <DashboardCard
-            title="Csapat"
+            title="Csapat – nyitott munkalapok"
             href="/szerviz/munkalapok"
+            icon={
+              <Icon name="users" size={16} className="text-pilot-grey-400" />
+            }
             empty={summary.teamLoad.items.length === 0}
           >
             {summary.teamLoad.items.length === 0 ? (
               "Nincs nyitott munkalap a csapatnál."
             ) : (
               <ul className="space-y-3">
-                {summary.teamLoad.items.map((item) => (
-                  <li
-                    key={item.userId}
-                    className="flex items-center justify-between gap-3 text-sm"
-                  >
-                    <span className="font-medium text-pilot-grey-800">
-                      {item.displayName}
-                    </span>
-                    <span className="text-pilot-grey-500">
-                      {item.openWorksheetCount} nyitott munkalap
-                    </span>
-                  </li>
-                ))}
+                {(() => {
+                  const maxOpen = Math.max(
+                    1,
+                    ...summary.teamLoad.items.map(
+                      (item) => item.openWorksheetCount,
+                    ),
+                  );
+                  return summary.teamLoad.items.map((item) => (
+                    <li
+                      key={item.userId}
+                      className="flex items-center gap-3 text-sm"
+                    >
+                      <PilotAvatar
+                        initials={pilotInitials(item.displayName)}
+                        color={pilotAvatarColor(item.userId)}
+                        size="sm"
+                      />
+                      <span className="flex-1 truncate font-medium text-pilot-grey-800">
+                        {item.displayName}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <div className="h-1.5 w-24 rounded-full bg-pilot-grey-100">
+                          <div
+                            className="h-1.5 rounded-full bg-pilot-aqua-500"
+                            style={{
+                              width: `${(item.openWorksheetCount / maxOpen) * 100}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="w-20 shrink-0 text-right font-mono text-xs text-pilot-grey-600">
+                          {item.openWorksheetCount} nyitott
+                        </span>
+                      </div>
+                    </li>
+                  ));
+                })()}
               </ul>
             )}
           </DashboardCard>
@@ -314,8 +475,11 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
 
         {summary.aquariumAlerts ? (
           <DashboardCard
-            title="Akváriumok"
+            title="Akváriumok – figyelmeztetések"
             href="/akvariumok"
+            icon={
+              <Icon name="droplet" size={16} className="text-pilot-grey-400" />
+            }
             empty={summary.aquariumAlerts.items.length === 0}
           >
             {summary.aquariumAlerts.items.length === 0 ? (
@@ -358,8 +522,9 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
 
         {summary.materialRequests ? (
           <DashboardCard
-            title="Anyagigények"
+            title="Anyagigények – teljesítésre vár"
             href="/szerviz/anyagigenyek"
+            icon={<Icon name="box" size={16} className="text-amber-600" />}
             empty={summary.materialRequests.items.length === 0}
           >
             {summary.materialRequests.items.length === 0 ? (
@@ -390,10 +555,20 @@ export function DashboardCards({ summary }: { summary: DashboardSummary }) {
           </DashboardCard>
         ) : null}
 
+        {/*
+          A TERV EGY VALÓDI TÁBLÁZATOT AD (Nyilvántartott/Tényleges/Eltérés
+          OSZLOPOKKAL, konkrét darabszámokkal) -- ez a mai adatból NEM
+          ÉPÍTHETŐ: a `DashboardInventoryDiscrepancy` típus csak `sku`-t,
+          `warehouseCode`-ot és `status`-t hordoz, tényleges/nyilvántartott
+          SZÁMOT nem. A cím és az ikon a tervhez igazodik, a sor-tartalom
+          marad a mai (SKU + raktárkód) -- ez a PR-ben is szerepel, nem
+          hallgatva el.
+        */}
         {summary.inventoryDiscrepancies ? (
           <DashboardCard
-            title="Leltár"
+            title="Leltár – eltérések"
             href="/keszlet-egyeztetes"
+            icon={<Icon name="alert" size={16} className="text-red-600" />}
             empty={summary.inventoryDiscrepancies.items.length === 0}
           >
             {summary.inventoryDiscrepancies.items.length === 0 ? (
@@ -446,6 +621,7 @@ function ActivityCard({
   return (
     <DashboardCard
       title="Legutóbbi aktivitások"
+      icon={<Icon name="activity" size={16} className="text-pilot-grey-400" />}
       empty={data.items.length === 0}
     >
       {data.items.length === 0 ? (
