@@ -1,6 +1,7 @@
 // RELATÍV ÚT, NEM `@/`: a teszt-fordító nem ismeri az aliast
 // (`tsconfig.test.json`-ban szándékosan nincs `paths`).
 import type { UserRole } from "../auth/types";
+import type { StatusTone } from "../theme/label-styles";
 import { atadasAllapota, ATADAS_NINCS_ROGZITVE } from "./worksheet-handover";
 import type { WorksheetLineKind } from "./worksheet-line-kind";
 
@@ -103,6 +104,32 @@ export const worksheetStatusLabel: Record<WorksheetStatus, string> = {
   SIGNED: "Aláírva",
   REJECTED: "Elutasítva",
 };
+
+/**
+ * A MUNKALAP-ÁLLAPOT SZÍNE, A MOBIL NÉGY TOKENJÉRE SZABVA.
+ *
+ * acrobot döntése, 2026-09-26: a terv (`MunkalapokScreen.tsx`
+ * `AllapotBadge`) állapotonként színez, és a mai mobil témakészlet
+ * (`t.accent`/`t.warning`/`t.danger` + a semleges szürke) PONTOSAN NÉGY
+ * hangot ad -- épp annyit, ahány munkalap-állapot van.
+ *
+ * SZÁNDÉKOSAN NEM A `packages/types` `worksheetStatusTone`-JA: az a
+ * kanonikus, hattónusú `ServiceTone`-t adja (SIGNED -> "green"), amit a
+ * mobil témakészlet nem ismer. Ez a táblázat a MOBIL palettához igazított,
+ * ÖNÁLLÓ döntés (SIGNED -> "accent", a legközelebbi "pozitív" hang a mobil
+ * készletben), nem a kanonikus tábla másolata -- ezért nincs rajta
+ * forrás-egyeztető őrző, ellentétben a `worksheetStatusLabel`-lel.
+ */
+const WORKSHEET_STATUS_TONE: Record<WorksheetStatus, StatusTone> = {
+  DRAFT: "neutral",
+  AWAITING_SIGNATURE: "warning",
+  SIGNED: "accent",
+  REJECTED: "danger",
+};
+
+export function worksheetStatusTone(status: WorksheetStatus): StatusTone {
+  return WORKSHEET_STATUS_TONE[status];
+}
 
 /**
  * UGYANAZ A SZÓHASZNÁLAT, MINT A KÖZÖS FORRÁSBAN

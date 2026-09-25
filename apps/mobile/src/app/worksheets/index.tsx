@@ -22,6 +22,7 @@ import {
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { belsosIrasEngedett } from "@/lib/auth/hatokor";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+import { statusToneColors } from "@/lib/theme/label-styles";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import {
@@ -31,6 +32,7 @@ import {
   worksheetListStartsMineOnly,
   worksheetListSubtitle,
   worksheetStatusLabel,
+  worksheetStatusTone,
   worksheetVersionNote,
   WORKSHEET_STATUS_FILTERS,
 } from "@/lib/worksheets/worksheet-presentation";
@@ -73,14 +75,24 @@ const PAGE_SIZE = 25;
  * másodlagos, "Minden partner"/"Nincs munkalap"/"Nincs találat a keresési
  * feltételekre" stb. mind marad.
  *
- * AZ ÁLLAPOT-JELVÉNY EGYETLEN, EGYSÉGES SZÍNT VISEL, NEM ÁLLAPOTONKÉNT
- * KÜLÖNBÖZŐT -- ugyanígy volt a migráció ELŐTT is (`statusChip`/`statusText`
- * mindig ugyanaz a fix teal volt), és az Eszköznyilvántartás mobil
- * átültetése (`AssetCard`) sem vezetett be státusz-szerinti színezést a
- * Figma terve ellenére. A per-státusz szín (ahogy a Figma `AllapotBadge`-e
- * mutatja) egy ÚJ funkció lenne, nem re-skin -- ha ez másodszor is felmerül
- * (pl. a munkalap-adatlap verzió-táblájánál), akkor éri meg megosztott
- * függvénnyé tenni, nem előre.
+ * AZ ÁLLAPOT-JELVÉNY 2026-09-26-TÓL ÁLLAPOTONKÉNT SZÍNEZETT -- EZ A
+ * BEKEZDÉS FELÜLÍRVA, MERT A FELTÉTELE, AMIT MAGA IRT LE, TELJESÜLT.
+ *
+ * Korábban itt az állt, hogy a jelvény egyetlen, egységes színt visel, és
+ * hogy a per-státusz szín (a Figma `AllapotBadge`-e szerint) új funkció
+ * lenne, amit csak akkor érdemes megosztott függvénnyé tenni, ha ez
+ * MÁSODSZOR is felmerül. Ugyanezen az estén (2026-09-25/26) másodszor is
+ * felmerült -- a hibajegy-státusz és a szkenner "Szabad matrica" címkéje is
+ * jelvényt kapott --, és acrobot ekkor eldöntötte: a munkalap NÉGY állapota
+ * pontosan ráillik a mobil témakészlet négy tónusára
+ * (`neutral`/`warning`/`accent`/`danger`), tehát itt megéri a per-státusz
+ * szín. A közös függvény: `statusToneColors` (`lib/theme/label-styles.ts`),
+ * a leképezés: `worksheetStatusTone` (`lib/worksheets/worksheet-presentation.ts`).
+ *
+ * A HIBAJEGY STÁTUSZA EZZEL EGYÜTT SEM KAPOTT PER-STÁTUSZ SZÍNT: annak
+ * nyolc állapota a kanonikus (`serviceJobStatusTone`) szerint ÖT hangot
+ * igényelne, a mobil készlet pedig csak négyet ismer -- a feltétel náluk
+ * NEM teljesül, ott marad az egységes `statusBadgeStyle`.
  */
 export default function WorksheetsScreen() {
   const router = useRouter();
@@ -420,6 +432,10 @@ export default function WorksheetsScreen() {
 
         {items.map((item) => {
           const versionNote = worksheetVersionNote(item);
+          const statusTone = statusToneColors(
+            tokens,
+            worksheetStatusTone(item.status),
+          );
           return (
             <Pressable
               key={item.id}
@@ -439,8 +455,13 @@ export default function WorksheetsScreen() {
               */}
               <View style={styles.rowHeader}>
                 <Text style={styles.rowTitle}>{item.subject}</Text>
-                <View style={styles.statusChip}>
-                  <Text style={styles.statusText}>
+                <View
+                  style={[
+                    styles.statusChip,
+                    { backgroundColor: statusTone.background },
+                  ]}
+                >
+                  <Text style={[styles.statusText, { color: statusTone.text }]}>
                     {worksheetStatusLabel[item.status]}
                   </Text>
                 </View>

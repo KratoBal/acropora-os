@@ -115,6 +115,7 @@ import {
 } from "@/lib/worksheets/worksheet-send-for-signature";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+import { statusToneColors } from "@/lib/theme/label-styles";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import {
@@ -124,6 +125,7 @@ import {
   worksheetLabelOrDraft,
   worksheetLineSummary,
   worksheetStatusLabel,
+  worksheetStatusTone,
 } from "@/lib/worksheets/worksheet-presentation";
 
 /**
@@ -927,13 +929,26 @@ export default function WorksheetDetailScreen() {
           <Text style={styles.title}>
             {worksheetLabelOrDraft(current?.label ?? null)}
           </Text>
-          {current ? (
-            <View style={styles.statusChip}>
-              <Text style={styles.statusText}>
-                {worksheetStatusLabel[current.status]}
-              </Text>
-            </View>
-          ) : null}
+          {current
+            ? (() => {
+                const tone = statusToneColors(
+                  tokens,
+                  worksheetStatusTone(current.status),
+                );
+                return (
+                  <View
+                    style={[
+                      styles.statusChip,
+                      { backgroundColor: tone.background },
+                    ]}
+                  >
+                    <Text style={[styles.statusText, { color: tone.text }]}>
+                      {worksheetStatusLabel[current.status]}
+                    </Text>
+                  </View>
+                );
+              })()
+            : null}
         </View>
 
         {cacheNotice ? <OfflineNoticeCard notice={cacheNotice} /> : null}
