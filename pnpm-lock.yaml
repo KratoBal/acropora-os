@@ -107,6 +107,9 @@ importers:
 
   apps/partner:
     dependencies:
+      '@acropora/aquarium-calc':
+        specifier: workspace:*
+        version: link:../../packages/aquarium-calc
       '@acropora/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -223,6 +226,18 @@ importers:
       vitest:
         specifier: 4.1.10
         version: 4.1.10(@types/node@26.1.1)(happy-dom@20.11.0)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.1.5(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.1))
+
+  packages/aquarium-calc:
+    devDependencies:
+      '@acropora/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   packages/config:
     devDependencies:

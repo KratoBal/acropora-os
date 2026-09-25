@@ -31,12 +31,20 @@ const MUSZAKI_MENU = [
 ];
 
 /**
- * AZ "AKVARISZTIKA" CSOPORT ELSO TETELE -- Balazs dontese, 2026-09-25
- * (Partner Portal Akvariumok terv, emlek 1839): a lista/adatlap/uj meres/
- * uj akvarium sorozat elso resze. Csak a LISTA all itt ma; az adatlap
+ * AZ "AKVARISZTIKA" CSOPORT -- Balazs dontese, 2026-09-25 (Partner Portal
+ * Akvariumok terv, emlek 1839): a lista/adatlap/uj meres/uj akvarium
+ * sorozat elso resze. Csak a LISTA all itt ma; az adatlap
  * (`/akvariumok/[id]`) es az uj akvarium urlap kulon korben johet.
+ *
+ * A "Kalkulatorok" tetel 2026-09-25-tol bovult ide (Balazs jovahagyasa),
+ * SAJAT `entryId`-vel -- ld. `packages/types/src/navigation.ts` "calculators"
+ * bejegyzesenek fejleceet arrol, miert nem osztja meg az "aquariums"
+ * azonositot, holott ma ugyanazt a jogot hasznaljak.
  */
-const AKVARISZTIKA_MENU = [{ href: "/akvariumok", label: "Akváriumok" }];
+const AKVARISZTIKA_MENU = [
+  { href: "/akvariumok", label: "Akváriumok", entryId: "aquariums" },
+  { href: "/kalkulatorok", label: "Kalkulátorok", entryId: "calculators" },
+];
 
 /**
  * A `packages/types/src/navigation.ts` "aquariums" bejegyzésének
@@ -46,8 +54,12 @@ const AKVARISZTIKA_MENU = [{ href: "/akvariumok", label: "Akváriumok" }];
  */
 const AQUARIUMS_NAV_ENTRY_ID = "aquariums";
 
+/** Ugyanaz a minta, a "calculators" bejegyzésre. */
+const CALCULATORS_NAV_ENTRY_ID = "calculators";
+
 const BEALLITASOK_HREF = "/beallitasok";
 const AKVARIUMOK_HREF = "/akvariumok";
+const KALKULATOROK_HREF = "/kalkulatorok";
 
 export function PortalShell({ children }: { children: ReactNode }) {
   const { user, loading, logout } = useAuth();
@@ -62,6 +74,9 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const canViewAquariums = hasNavigationEntry(user, AQUARIUMS_NAV_ENTRY_ID);
   const onAquariumsRoute = pathname.startsWith(AKVARIUMOK_HREF);
 
+  const canViewCalculators = hasNavigationEntry(user, CALCULATORS_NAV_ENTRY_ID);
+  const onCalculatorsRoute = pathname.startsWith(KALKULATOROK_HREF);
+
   /*
     UTVONAL-VEDELEM, NE CSAK MENUPONT-REJTES. A menupont eltuntetese
     onmagaban nem allitja meg a kozvetlen URL-beirast -- egy regi API
@@ -75,6 +90,13 @@ export function PortalShell({ children }: { children: ReactNode }) {
       router.replace("/hibajegyek");
     }
   }, [loading, user, canViewAquariums, onAquariumsRoute, router]);
+
+  /** Ugyanaz a minta, a Kalkulátorok útvonalára. */
+  useEffect(() => {
+    if (!loading && user && !canViewCalculators && onCalculatorsRoute) {
+      router.replace("/hibajegyek");
+    }
+  }, [loading, user, canViewCalculators, onCalculatorsRoute, router]);
 
   if (loading) return <main className="centered">Munkamenet ellenőrzése…</main>;
   if (!user) {
@@ -97,6 +119,9 @@ export function PortalShell({ children }: { children: ReactNode }) {
     );
   }
   if (!canViewAquariums && onAquariumsRoute) {
+    return <main className="centered">Átirányítás…</main>;
+  }
+  if (!canViewCalculators && onCalculatorsRoute) {
     return <main className="centered">Átirányítás…</main>;
   }
 
@@ -212,14 +237,25 @@ export function PortalShell({ children }: { children: ReactNode }) {
             beolvasztva, es ez a blokk emiatt ma helyesen REJTVE marad,
             mert a live `/auth/me` navigation tombje meg nem tartalmazza
             az "aquariums" bejegyzest.
+
+            A "Kalkulatorok" tetel UGYANEZT a mintat koveti, sajat
+            "calculators" bejegyzessel (`canViewCalculators`) -- ma
+            ugyanazt az AQUARIUMS_VIEW jogot nezi, mint az akvariumok,
+            de a ketto KULON van merve, tehat a jovoben szet is
+            valhatnak anelkul, hogy barmelyik masikat modositani kellene.
+            A csoport-fejlec akkor latszik, ha a KET tetel BARMELYIKE
+            lathato -- egy tetel per-tetel szures dontheti el, melyik sor
+            jelenik meg alatta.
           */}
-          {canViewAquariums && (
+          {(canViewAquariums || canViewCalculators) && (
             <div>
               <p className="mb-1 px-3 text-[9px] font-bold uppercase tracking-widest text-pilot-grey-400">
                 Akvarisztika
               </p>
               <div className="flex flex-col gap-0.5">
-                {AKVARISZTIKA_MENU.map((item) => {
+                {AKVARISZTIKA_MENU.filter((item) =>
+                  hasNavigationEntry(user, item.entryId),
+                ).map((item) => {
                   const active = pathname.startsWith(item.href);
                   return (
                     <Link

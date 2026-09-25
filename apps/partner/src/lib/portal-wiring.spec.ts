@@ -914,21 +914,31 @@ describe("az Akváriumok menüpont és útvonal kapuja", () => {
   });
 
   /**
-   * AZ "AKVARISZTIKA" MENÜCSOPORT A `canViewAquariums` MÖGÖTT ÁLL, NEM
-   * FELTÉTEL NÉLKÜL.
+   * AZ "AKVARISZTIKA" MENÜCSOPORT A `canViewAquariums` VAGY A
+   * `canViewCalculators` MÖGÖTT ÁLL, NEM FELTÉTEL NÉLKÜL.
    *
-   * MI PIROSÍT: ha a `{canViewAquariums && (` feltétel eltűnne a
-   * menücsoport elől -- ez volt a tényleges hiba ezen az ágon, MIELŐTT ezt
-   * a kaput megírtuk (a csoport `user.role === "PARTNER_SERVICE"` mögött
-   * feltétel nélkül renderelt).
+   * A csoport-fejléc 2026-09-25-től KÉT tételt fed (Akváriumok,
+   * Kalkulátorok) -- a csoport akkor is látszik, ha a kettő közül csak az
+   * egyikhez van jog, ezért a feltétel VAGY-kapcsolat, nem a régi
+   * egyszemélyes `canViewAquariums`. A SOROK szűrése (melyik TÉTEL
+   * látszik a csoporton belül) külön áll, a következő teszt méri.
+   *
+   * MI PIROSÍT: ha bármelyik jog-változó eltűnne a feltétel elől -- ez
+   * volt a tényleges hiba ezen az ágon, MIELŐTT ezt a kaput megírtuk (a
+   * csoport `user.role === "PARTNER_SERVICE"` mögött feltétel nélkül
+   * renderelt).
    */
-  it("az Akvarisztika menücsoport a canViewAquariums mögött áll", () => {
+  it("az Akvarisztika menücsoport a canViewAquariums VAGY a canViewCalculators mögött áll", () => {
     const s = kod(PORTAL_SHELL);
     assert.match(
       s,
       /canViewAquariums = hasNavigationEntry\(user, AQUARIUMS_NAV_ENTRY_ID\)/,
     );
-    assert.match(s, /\{canViewAquariums && \(/);
+    assert.match(
+      s,
+      /canViewCalculators = hasNavigationEntry\(user, CALCULATORS_NAV_ENTRY_ID\)/,
+    );
+    assert.match(s, /\{\(canViewAquariums \|\| canViewCalculators\) && \(/);
   });
 
   /**
@@ -952,15 +962,22 @@ describe("az Akváriumok menüpont és útvonal kapuja", () => {
   });
 
   /**
-   * KONTROLL: A MENÜCSOPORT-MINTA TALÁL A RÉGI (feltétel nélküli) ALAKON
-   * IS, HA VISSZAKERÜLNE -- vagyis a `doesNotMatch` irányú kockázat itt
-   * nem a `canViewAquariums &&` mintára vonatkozik (az egy pozitív
-   * `match`), hanem arra, hogy a `AKVARISZTIKA_MENU.map` hívás továbbra is
-   * jelen van. Enélkül a fenti "mögötte áll" állítás azt is zölden hagyná,
-   * ha a teljes menücsoportot törölnénk.
+   * KONTROLL: A MENÜCSOPORT-MINTA TALÁL A TÉNYLEGES KIRAJZOLÁSI ALAKON --
+   * vagyis a fenti "mögötte áll" állítás nem lenne zöld akkor is, ha a
+   * teljes menücsoportot törölnénk.
+   *
+   * A `.filter(...).map(...)` alak SZÁNDÉKOS, 2026-09-25 óta: a csoport
+   * MOST két tételt tart (Akváriumok, Kalkulátorok), és a köztük lévő
+   * választás SORONKÉNT, `item.entryId` szerint dől el -- nem a teljes
+   * csoport egyetlen kapuján. Ha a `.filter` eltűnne, mindkét tétel
+   * megjelenne annak is, akinek csak az egyikhez van joga.
    */
-  it("KONTROLL: a menücsoport ténylegesen kirajzolja a tételeket", () => {
-    assert.match(kod(PORTAL_SHELL), /AKVARISZTIKA_MENU\.map\(\(item\) => \{/);
+  it("KONTROLL: a menücsoport ténylegesen kirajzolja, és soronként szűri a tételeket", () => {
+    const s = kod(PORTAL_SHELL);
+    assert.match(
+      s,
+      /AKVARISZTIKA_MENU\.filter\(\(item\) =>\s*\n\s*hasNavigationEntry\(user, item\.entryId\),?\s*\n\s*\)\.map\(\(item\) => \{/,
+    );
   });
 });
 
@@ -1145,5 +1162,124 @@ describe("az Akváriumok pilot-kör 3 saját döntései", () => {
       s,
       /aquariumId,\s*\n\s*expectedUpdatedAt: candidate\.updatedAt,/,
     );
+  });
+});
+
+/**
+ * A "KALKULÁTOROK" BEKÖTÉSE -- FORRÁS-SZÖVEG ALAPÚ, UGYANAZZAL A HATÁRRAL,
+ * MINT A FÁJL TÖBBI RÉSZE (ld. a `kod()` fejlécét).
+ *
+ * A KÉPLETEK SAJÁT, VALÓDI, VISELKEDÉS-ALAPÚ TESZTJE a
+ * `packages/aquarium-calc/src/reef-chemistry.test.ts`-ben áll -- ott a
+ * SZÁMÍTÁS helyessége van mérve, kézzel számolt referenciaértékekkel. Ez a
+ * blokk csak azt méri, hogy a portál oldala a HELYES függvényt, a HELYES
+ * mezőkkel hívja, és hogy a márkás termékek NEM kerültek be sehova.
+ */
+const KALKULATOROK_OLDAL = "src/components/calculators/calculators-page.tsx";
+const KALKULATOR_KARTYA = "src/components/calculators/calculator-card.tsx";
+const PORTAL_SHELL_KALKULATOROK = "src/components/portal-shell.tsx";
+
+describe("a Kalkulátorok kötése", () => {
+  it("POZITÍV KONTROLL: mindhárom fájl olvasható és nem üres", () => {
+    for (const ut of [
+      KALKULATOROK_OLDAL,
+      KALKULATOR_KARTYA,
+      PORTAL_SHELL_KALKULATOROK,
+    ])
+      assert.ok(olvas(ut).length > 500, `${ut}: üres vagy gyanúsan rövid`);
+  });
+
+  it("mindhárom kalkulátor a megfelelő @acropora/aquarium-calc függvényt hívja", () => {
+    const s = kod(KALKULATOROK_OLDAL);
+    assert.match(
+      s,
+      /import\s*\{\s*\n?\s*alkalinityElevation,\s*\n?\s*calciumElevation,\s*\n?\s*magnesiumElevation,?\s*\n?\s*\}\s*from\s*"@acropora\/aquarium-calc"/,
+    );
+    assert.match(s, /calciumElevation\(\{/);
+    assert.match(s, /magnesiumElevation\(\{/);
+    assert.match(s, /alkalinityElevation\(\{/);
+  });
+
+  /**
+   * A MAGNÉZIUM SÓ-VÁLASZTÁS TÉNYLEG A KÉT TISZTA SÓ KÖZÖTT DÖNT, NEM
+   * EGY HARMADIK, MÁRKÁS OPCIÓT VÁLASZT KI CSENDBEN.
+   */
+  it("a magnézium kártya a választott só szerint MGCL2 vagy MGSO4 sót küld", () => {
+    const s = kod(KALKULATOROK_OLDAL);
+    assert.match(s, /"MGSO4_HEPTAHYDRATE"/);
+    assert.match(s, /"MGCL2_HEXAHYDRATE"/);
+  });
+
+  /**
+   * A MÁRKÁS TERMÉKEK VÉGLEGESEN KIMARADNAK -- Balázs 2026-09-25-i
+   * pontosítása szerint ez NEM "egyelőre hiányzó" adat, hanem soha nem
+   * ide való. MI PIROSÍT: ha bárki egy márkanevet (akár csak
+   * összehasonlításként, akár kikommentezve) visszaírna.
+   */
+  it("egyetlen márkás termék neve sem szerepel a kalkulátor kódjában", () => {
+    const oldalNyers = olvas(KALKULATOROK_OLDAL);
+    const kartyaNyers = olvas(KALKULATOR_KARTYA);
+    for (const brandName of [
+      "Kalkwasser",
+      "B-Ionic",
+      "Seachem",
+      "Reef Builder",
+    ]) {
+      assert.doesNotMatch(oldalNyers, new RegExp(brandName));
+      assert.doesNotMatch(kartyaNyers, new RegExp(brandName));
+    }
+  });
+
+  /**
+   * A KIMENET GRAMM, NEM MILLILITER -- eltérés a Figma tervtől, szándékosan
+   * (ld. a `reef-chemistry.ts` fejlécét). MI PIROSÍT: ha valaki a Kalcium
+   * kártyát visszaállítaná "ml"-re.
+   */
+  it("mindhárom kalkulátor grammban ad eredményt", () => {
+    const s = kod(KALKULATOROK_OLDAL);
+    const resultUnitMatches = [...s.matchAll(/resultUnit="([^"]*)"/g)].map(
+      (m) => m[1],
+    );
+    assert.ok(
+      resultUnitMatches.length >= 3,
+      `csak ${resultUnitMatches.length} resultUnit található, 3 kellene`,
+    );
+    for (const unit of resultUnitMatches) assert.equal(unit, "g");
+  });
+
+  it("a nincs-adagolás állapot a szükséges-mennyiség panelen kimondott üzenetet ad, nem üres számot", () => {
+    const s = kod(KALKULATOR_KARTYA);
+    assert.match(s, /"no-dosing-needed"/);
+    assert.match(s, /nincs szükség\s+adagolásra/i);
+  });
+
+  /**
+   * A KÁRTYA NEM HÍV `useAuth`-OT ÉS NEM ISMERI A `partnerApi`-T -- Balázs
+   * kérése (2026-09-25): a kártya önmagában, jogosultság nélkül is
+   * telepíthető legyen egy jövőbeli nyilvános felületre. Az oldal
+   * (`calculators-page.tsx`) ISMERHETI mindkettőt, a kártya NEM.
+   */
+  it("a kalkulátor kártya nem hív useAuth-ot és nem importál partnerApi-t", () => {
+    const s = kod(KALKULATOR_KARTYA);
+    assert.doesNotMatch(s, /useAuth/);
+    assert.doesNotMatch(s, /partnerApi/);
+  });
+
+  it("az oldal ÚJRAFELHASZNÁLJA a meglévő partnerApi.aquariums/aquariumMeasurements hívást, nem ír újat", () => {
+    const s = kod(KALKULATOROK_OLDAL);
+    assert.match(s, /partnerApi\s*\n?\s*\.aquariums\(/);
+    assert.match(s, /partnerApi\s*\n?\s*\.aquariumMeasurements\(/);
+  });
+
+  /**
+   * A MENÜPONT ÉS AZ ÚTVONAL-VÉDELEM UGYANAZT A MINTÁT KÖVETI, MINT AZ
+   * AKVÁRIUMOKÉ -- ld. `portal-shell.tsx` "calculators" ágának fejlécét.
+   */
+  it("a portál héja saját nav-bejegyzéssel véd a Kalkulátorok útvonalon, az Akváriumokéval azonos mintán", () => {
+    const s = kod(PORTAL_SHELL_KALKULATOROK);
+    assert.match(s, /CALCULATORS_NAV_ENTRY_ID\s*=\s*"calculators"/);
+    assert.match(s, /canViewCalculators\s*=\s*hasNavigationEntry/);
+    assert.match(s, /KALKULATOROK_HREF\s*=\s*"\/kalkulatorok"/);
+    assert.match(s, /!canViewCalculators\s*&&\s*onCalculatorsRoute/);
   });
 });
