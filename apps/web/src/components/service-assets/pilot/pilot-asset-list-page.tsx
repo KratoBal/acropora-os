@@ -381,15 +381,10 @@ export function PilotAssetListPage() {
                       </p>
                       <p className="mt-0.5 font-mono text-[11px] text-pilot-grey-400">
                         {asset.assetNumber}
+                        {asset.partnerInternalCode
+                          ? ` · ${asset.partnerInternalCode}`
+                          : ""}
                       </p>
-                      {asset.partnerInternalCode ? (
-                        <p className="mt-0.5 text-[11px] text-pilot-grey-400">
-                          Partner belső kódja:{" "}
-                          <span className="font-mono">
-                            {asset.partnerInternalCode}
-                          </span>
-                        </p>
-                      ) : null}
                       {asset.labelCode ? (
                         <p className="mt-0.5 text-[11px] text-pilot-grey-400">
                           Matricakód:{" "}
