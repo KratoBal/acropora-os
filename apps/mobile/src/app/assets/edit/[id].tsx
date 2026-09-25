@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -67,6 +67,8 @@ import {
 import { PerformanceField } from "@/components/assets/performance-field";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 const TEXT_FIELDS: {
   key: keyof AssetEditForm & string;
@@ -466,6 +468,9 @@ export default function AssetEditScreen() {
     },
   });
 
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
+
   if (status !== "authenticated") return <Redirect href="/login" />;
   if (capabilities && !capabilities.assetsManage) {
     return (
@@ -485,7 +490,7 @@ export default function AssetEditScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.card}>
-          <ActivityIndicator color="#52d6c7" />
+          <ActivityIndicator color={tokens.accent} />
           <Text style={styles.cardText}>Eszköz betöltése…</Text>
         </View>
       </SafeAreaView>
@@ -680,7 +685,7 @@ export default function AssetEditScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Helyszín</Text>
             {unitsQuery.isPending ? (
-              <ActivityIndicator color="#52d6c7" />
+              <ActivityIndicator color={tokens.accent} />
             ) : null}
             {unitsQuery.isError ? (
               <Text style={styles.cardText}>
@@ -719,7 +724,7 @@ export default function AssetEditScreen() {
               onChangeText={(value) => setForm({ ...form, [field.key]: value })}
               multiline={field.multiline}
               style={[styles.input, field.multiline && styles.inputMultiline]}
-              placeholderTextColor="#5c7e92"
+              placeholderTextColor={tokens.textMuted}
               placeholder="Nincs megadva"
               editable={!save.isPending}
             />
@@ -760,7 +765,7 @@ export default function AssetEditScreen() {
             onChangeText={(value) => setForm({ ...form, volume: value })}
             keyboardType="decimal-pad"
             style={styles.input}
-            placeholderTextColor="#5c7e92"
+            placeholderTextColor={tokens.textMuted}
             placeholder="Nincs megadva"
             editable={!save.isPending}
           />
@@ -782,7 +787,7 @@ export default function AssetEditScreen() {
             }
             keyboardType="decimal-pad"
             style={styles.input}
-            placeholderTextColor="#5c7e92"
+            placeholderTextColor={tokens.textMuted}
             placeholder="Nincs megadva"
             editable={!save.isPending}
           />
@@ -828,7 +833,7 @@ export default function AssetEditScreen() {
           ]}
         >
           {save.isPending ? (
-            <ActivityIndicator color="#ffffff" />
+            <ActivityIndicator color={tokens.textOnAccent} />
           ) : (
             <Text style={styles.primaryButtonText}>Mentés</Text>
           )}
@@ -878,6 +883,8 @@ function Choice<T extends string>({
 }) {
   const [open, setOpen] = useState(false);
   const current = options.find((option) => option.value === value);
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -932,123 +939,142 @@ function Choice<T extends string>({
   );
 }
 
-const styles = StyleSheet.create({
-  /*
-    A FIGYELMEZTETES SZINE ELTER A SIMA SUGOTOL: amit itt irunk, az nem
-    magyarazat, hanem egy KULONBSEG, amirol dontenie kell.
-  */
-  matricaFigyelmeztetes: {
-    color: "#ffd479",
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 6,
-  },
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { gap: 16, padding: 20, paddingBottom: 40 },
-  hero: { gap: 4 },
-  assetNumber: {
-    color: "#52d6c7",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  assetName: { color: "#f4fbff", fontSize: 22, fontWeight: "900" },
-  field: { gap: 8 },
-  unitRow: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  unitLevel: { gap: 6, marginBottom: 8 },
-  unitOff: { opacity: 0.5 },
-  unitRowOn: { backgroundColor: "#123f3b", borderColor: "#1f6b62" },
-  unitText: { color: "#f4fbff", fontSize: 14 },
-  label: { color: "#9ab8ca", fontSize: 13, fontWeight: "700" },
-  input: {
-    backgroundColor: "#0b263d",
-    borderColor: "#164668",
-    borderRadius: 12,
-    borderWidth: 1,
-    color: "#f4fbff",
-    fontSize: 15,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  inputMultiline: { minHeight: 84, textAlignVertical: "top" },
-  choices: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  choice: {
-    backgroundColor: "#0b263d",
-    borderColor: "#164668",
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  choiceSelected: { backgroundColor: "#166a7a", borderColor: "#52d6c7" },
-  choiceText: { color: "#a9c4d1", fontSize: 13, fontWeight: "700" },
-  choiceTextSelected: { color: "#ffffff" },
-  hint: { color: "#6f93a8", fontSize: 12, lineHeight: 18 },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: "#177b74",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-  },
-  saveButton: { marginTop: 4 },
-  primaryButtonText: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
-  buttonDisabled: { opacity: 0.45 },
-  pressed: { opacity: 0.75 },
-  card: {
-    alignItems: "center",
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderRadius: 18,
-    borderWidth: 1,
-    gap: 12,
-    margin: 24,
-    padding: 24,
-  },
-  cardTitle: { color: "#f4fbff", fontSize: 17, fontWeight: "800" },
-  cardText: {
-    color: "#a9c4d1",
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: "center",
-  },
-  errorCard: {
-    backgroundColor: "#3b2b2d",
-    borderRadius: 14,
-    gap: 10,
-    padding: 16,
-  },
-  /*
-    A VARAKOZO MODOSITAS NEM PIROS. A javitas elmentodott, csak nem a
-    szerveren -- egy hibaszinu doboz azt mondana, hogy elveszett, es a szerelo
-    ujra beirna mindent.
-  */
-  queuedCard: {
-    backgroundColor: "#23383a",
-    borderColor: "#2f6f6a",
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 10,
-    padding: 16,
-  },
-  conflictCard: {
-    backgroundColor: "#3a3324",
-    borderColor: "#7a6321",
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 10,
-    padding: 16,
-  },
-  errorTitle: { color: "#ffd0ca", fontSize: 15, fontWeight: "800" },
-  errorText: { color: "#dbaea9", fontSize: 13, lineHeight: 20 },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Balázs
+ * jelentése (2026-09-25 14:48, telefonos fényképek): ez a képernyő is
+ * a sötét-doboz hibát mutatta, ugyanúgy, ahogy a rajta hívott öt megosztott
+ * mező (#1131). Ez a fájl eddig saját, fix sötét hexekkel élt.
+ *
+ * A `errorTitle`/`errorText` HÁROM KÜLÖNBÖZŐ SZÍNŰ DOBOZON OSZTOZIK
+ * (`queuedCard`=accent, `errorCard`=danger, `conflictCard`=warning) --
+ * ezért NEM a `t.danger`-re esnek, ami csak az egyikre illene: a
+ * `t.textPrimary`/`t.textSecondary` semleges, mindhárom lágy hátteren
+ * olvasható, ugyanaz a minta, mint a munkalap-adatlap "Aláírva" dobozának
+ * szövege az `accentSoft` háttéren.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    /*
+      A FIGYELMEZTETES SZINE ELTER A SIMA SUGOTOL: amit itt irunk, az nem
+      magyarazat, hanem egy KULONBSEG, amirol dontenie kell.
+    */
+    matricaFigyelmeztetes: {
+      color: t.warning,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 6,
+    },
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { gap: 16, padding: 20, paddingBottom: 40 },
+    hero: { gap: 4 },
+    assetNumber: {
+      color: t.accent,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+    assetName: { color: t.textPrimary, fontSize: 22, fontWeight: "900" },
+    field: { gap: 8 },
+    unitRow: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    unitLevel: { gap: 6, marginBottom: 8 },
+    unitOff: { opacity: 0.5 },
+    unitRowOn: { backgroundColor: t.accentSoft, borderColor: t.accent },
+    unitText: { color: t.textPrimary, fontSize: 14 },
+    label: { color: t.textSecondary, fontSize: 13, fontWeight: "700" },
+    input: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      color: t.textPrimary,
+      fontSize: 15,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    inputMultiline: { minHeight: 84, textAlignVertical: "top" },
+    choices: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    choice: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+    },
+    choiceSelected: { backgroundColor: t.accent, borderColor: t.accent },
+    choiceText: { color: t.textSecondary, fontSize: 13, fontWeight: "700" },
+    choiceTextSelected: { color: t.textOnAccent },
+    hint: { color: t.textMuted, fontSize: 12, lineHeight: 18 },
+    primaryButton: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 13,
+    },
+    saveButton: { marginTop: 4 },
+    primaryButtonText: {
+      color: t.textOnAccent,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    buttonDisabled: { opacity: 0.45 },
+    pressed: { opacity: 0.75 },
+    card: {
+      alignItems: "center",
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 18,
+      borderWidth: 1,
+      gap: 12,
+      margin: 24,
+      padding: 24,
+    },
+    cardTitle: { color: t.textPrimary, fontSize: 17, fontWeight: "800" },
+    cardText: {
+      color: t.textSecondary,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign: "center",
+    },
+    errorCard: {
+      backgroundColor: t.dangerSoft,
+      borderRadius: 14,
+      gap: 10,
+      padding: 16,
+    },
+    /*
+      A VARAKOZO MODOSITAS NEM PIROS. A javitas elmentodott, csak nem a
+      szerveren -- egy hibaszinu doboz azt mondana, hogy elveszett, es a szerelo
+      ujra beirna mindent.
+    */
+    queuedCard: {
+      backgroundColor: t.accentSoft,
+      borderColor: t.accentBorder,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 10,
+      padding: 16,
+    },
+    conflictCard: {
+      backgroundColor: t.warningSoft,
+      borderColor: t.warning,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 10,
+      padding: 16,
+    },
+    errorTitle: { color: t.textPrimary, fontSize: 15, fontWeight: "800" },
+    errorText: { color: t.textSecondary, fontSize: 13, lineHeight: 20 },
+  });
+}
 
 /**
  * A VALASZTHATO EGYSEGEK: AZ AKTIVAK, PLUSZ AMI MAR AZ ESZKOZON ALL.

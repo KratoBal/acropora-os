@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -9,6 +9,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { LockReason } from "@/lib/auth/restore-session";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * Shown when a usable session is on the device but the owner has not been
@@ -37,6 +39,8 @@ export function LockedScreen({
 }) {
   const [attempting, setAttempting] = useState(false);
   const askedOnArrival = useRef(false);
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   const canTryBiometrics = reason !== "unavailable";
 
@@ -80,7 +84,7 @@ export function LockedScreen({
             ]}
           >
             {attempting ? (
-              <ActivityIndicator color="#ffffff" />
+              <ActivityIndicator color={tokens.textOnAccent} />
             ) : (
               <Text style={styles.primaryButtonText}>Feloldás</Text>
             )}
@@ -108,46 +112,61 @@ export function LockedScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: {
-    alignItems: "center",
-    flex: 1,
-    gap: 14,
-    justifyContent: "center",
-    paddingHorizontal: 28,
-  },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.6,
-  },
-  title: { color: "#f4fbff", fontSize: 24, fontWeight: "800" },
-  text: {
-    color: "#a9c4d1",
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: "center",
-  },
-  note: {
-    color: "#9ab8ca",
-    fontSize: 13,
-    lineHeight: 20,
-    textAlign: "center",
-  },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: "#177b74",
-    borderRadius: 12,
-    marginTop: 6,
-    minWidth: 180,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-  },
-  primaryButtonText: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
-  buttonDisabled: { opacity: 0.6 },
-  textButton: { paddingHorizontal: 12, paddingVertical: 10 },
-  textButtonLabel: { color: "#6de0ce", fontSize: 14, fontWeight: "700" },
-  pressed: { opacity: 0.75 },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- lásd
+ * `apps/mobile/src/app/assets/edit/[id].tsx` fejlécét ugyanerről a
+ * jelentésről (Balázs, 2026-09-25 14:48, telefonos fényképek).
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: {
+      alignItems: "center",
+      flex: 1,
+      gap: 14,
+      justifyContent: "center",
+      paddingHorizontal: 28,
+    },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 1.6,
+    },
+    title: { color: t.textPrimary, fontSize: 24, fontWeight: "800" },
+    text: {
+      color: t.textSecondary,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign: "center",
+    },
+    note: {
+      color: t.textSecondary,
+      fontSize: 13,
+      lineHeight: 20,
+      textAlign: "center",
+    },
+    primaryButton: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      marginTop: 6,
+      minWidth: 180,
+      paddingHorizontal: 18,
+      paddingVertical: 13,
+    },
+    primaryButtonText: {
+      color: t.textOnAccent,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    textButton: { paddingHorizontal: 12, paddingVertical: 10 },
+    textButtonLabel: {
+      color: t.accentSoftText,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    pressed: { opacity: 0.75 },
+  });
+}
