@@ -310,8 +310,15 @@ export function PilotInput({
   className?: string;
   "aria-label"?: string;
   inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
-  min?: number;
-  max?: number;
+  /**
+   * `min`/`max` A NATÍV RANGE-KORLÁTOZOTT INPUT-TÍPUSOKHOZ (`date`, `time`,
+   * `datetime-local`, `number`) -- nem stílus, hanem a böngésző saját
+   * korlátozása, ezért külön propok, nem a `className`-en keresztül.
+   * `number | string`, mert a `type="number"` mezők számot, a
+   * `type="datetime-local"` mezők ISO-szerű szöveget várnak ide.
+   */
+  min?: number | string;
+  max?: number | string;
 }) {
   return (
     <input

@@ -450,15 +450,14 @@ export function PilotAquariumWaterValues({
             </div>
           </div>
           <PilotFormField label="Mérés ideje">
-            <input
+            <PilotInput
               type="datetime-local"
               value={measuredAtValue}
               max={toDatetimeLocalValue(new Date())}
-              onChange={(event) => {
-                setMeasuredAtValue(event.target.value);
+              onChange={(value) => {
+                setMeasuredAtValue(value);
                 setMeasuredAtTouched(true);
               }}
-              className="w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
             />
           </PilotFormField>
           <div className="grid grid-cols-2 gap-3">
