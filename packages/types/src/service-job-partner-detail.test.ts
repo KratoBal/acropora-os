@@ -60,6 +60,7 @@ const BELSO: ServiceJobDetail = {
       assetId: "a1",
       assetNumber: "BIO-001",
       assetName: "Szivattyú",
+      assetCategoryName: null,
       attachedAt: "2026-09-20T08:00:00.000Z",
     },
   ],

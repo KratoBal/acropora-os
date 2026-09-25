@@ -44,6 +44,7 @@ function asset(id: string, attachedAt: string): ServiceJobAssetLink {
     assetId: `asset-${id}`,
     assetNumber: "ESZ-1",
     assetName: "Szivattyú",
+    assetCategoryName: null,
     attachedAt,
   };
 }

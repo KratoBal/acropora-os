@@ -1314,7 +1314,21 @@ export class ServiceJobsRepository {
             id: true,
             assetId: true,
             createdAt: true,
-            asset: { select: { assetNumber: true, name: true } },
+            /*
+              A KATEGORIA-NEV A RESZLETLAP "Eszköz" kártyájának olvasó
+              nézetéhez kell (Figma-igazítás, 2026-09-25) -- csak olvasás,
+              egy plusz relációs ugrás a mar futó lekérdezésen, nem új
+              végpont. Az eszköznek NEM MINDIG van kategóriája
+              (`Asset.categoryId` nullázható), ezért `categoryRef` is
+              lehet `null`.
+            */
+            asset: {
+              select: {
+                assetNumber: true,
+                name: true,
+                categoryRef: { select: { name: true } },
+              },
+            },
           },
         },
         // A DELEGALTAK A KIOSZTAS SORRENDJEBEN, a regebbi elol -- forditva,

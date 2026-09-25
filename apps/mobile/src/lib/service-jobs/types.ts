@@ -89,6 +89,10 @@ export interface ServiceJobAssetLink {
   assetId: string;
   assetNumber: string;
   assetName: string;
+  /** Lásd a szerver `ServiceJobAssetLink` fejlécét: `null`, ha az eszköznek
+   * nincs kategóriája. A telefon ma nem jeleníti meg, de a mezőnév-tükör
+   * (mobile-response-mirror.spec.ts) pontos egyezést kér. */
+  assetCategoryName: string | null;
   attachedAt: string;
 }
 

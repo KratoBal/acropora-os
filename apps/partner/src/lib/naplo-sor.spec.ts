@@ -193,6 +193,7 @@ describe("a partner naplósora", () => {
         assetId: "asset1",
         assetNumber: "ESZ-0042",
         assetName: "Fő szivattyú",
+        assetCategoryName: null,
         attachedAt: "2026-09-20T10:00:00.000Z",
       },
     };
