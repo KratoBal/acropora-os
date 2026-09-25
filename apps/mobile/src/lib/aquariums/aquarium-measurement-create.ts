@@ -183,19 +183,31 @@ export interface AquariumMeasurementValueForm {
 export interface AquariumMeasurementForm {
   notes: string;
   values: AquariumMeasurementValueForm[];
+  /**
+   * A MÉRÉS IDEJE -- MOSTANTÓL SZERKESZTHETŐ (Balázs kérése, 2026-09-25:
+   * "elofordulhat, hogy nem akkor mertuk, amikor rogzitjuk"). Ez a mező
+   * ETTŐL FÜGGETLENÜL MINDIG tart egy értéket (a form megnyitásakor "most"),
+   * mert a képernyőnek meg kell jelenítenie valamit -- a `measuredAtTouched`
+   * dönti el, hogy ezt KÜLDJÜK-e, vagy a TÉNYLEGES MENTÉS PILLANATÁT (lásd
+   * `buildAquariumMeasurementPayload` fejlécét). Amíg a felhasználó nem
+   * nyúl a mezőhöz, a megjelenített "most" a hosszan nyitva tartott
+   * oldalon mire a mentés megtörténik, már elavult lenne -- ugyanaz a
+   * csapda, amit ez a mező korábban a teljes hiányával kerülgetett.
+   */
+  measuredAtDate: Date;
+  measuredAtTouched: boolean;
 }
 
 /**
  * ÜRES ŰRLAP, A VÍZTÍPUSHOZ TARTOZÓ PARAMÉTER-SORRENDDEL.
  *
- * A `measuredAt`-et SZÁNDÉKOSAN nem az űrlap tartja: a képernyő a mentés
- * PILLANATÁBAN olvassa ki (`new Date().toISOString()`), ugyanúgy, ahogy az
- * akvárium felvitele is a `startedAt`-et -- egy űrlap-mezőben tartott
- * időpont a felhasználó által hosszan kitöltött oldalon már elavult lenne
- * mire a mentés gomb megnyomásra kerül.
+ * A `now` PARAMÉTER TESZTELHETŐSÉG MIATT KÜLÖN: a `measuredAtDate` kezdő-
+ * értéke enélkül minden híváskor más lenne, és egy teszt nem tudná
+ * rögzíteni, mit várt.
  */
 export function emptyAquariumMeasurementForm(
   waterType: WaterType | null | undefined,
+  now: Date = new Date(),
 ): AquariumMeasurementForm {
   return {
     notes: "",
@@ -203,7 +215,35 @@ export function emptyAquariumMeasurementForm(
       parameterCode: param.code,
       text: "",
     })),
+    measuredAtDate: now,
+    measuredAtTouched: false,
   };
+}
+
+/**
+ * A DÁTUM- ÉS AZ IDŐ-VÁLASZTÓ KÜLÖN NATÍV VEZÉRLŐ, MERT AZ ANDROID NEM TUD
+ * EGYETLEN "datetime" MÓDOT (`@react-native-community/datetimepicker`
+ * README: `"datetime"` csak iOS-en él). Ez a függvény a két választó
+ * eredményét egyesíti egyetlen `Date`-té: az egyik hívás a NAP részét adja
+ * (év/hónap/nap), a másik az ÓRA részét (óra/perc), a nem-érintett rész a
+ * MEGLÉVŐ értékből marad.
+ */
+export function combineDateAndTime(
+  base: Date,
+  changed: Date,
+  part: "date" | "time",
+): Date {
+  const result = new Date(base);
+  if (part === "date") {
+    result.setFullYear(
+      changed.getFullYear(),
+      changed.getMonth(),
+      changed.getDate(),
+    );
+  } else {
+    result.setHours(changed.getHours(), changed.getMinutes(), 0, 0);
+  }
+  return result;
 }
 
 /** A bemenet: szám, tizedesponttal vagy -vesszővel, előjel nélkül -- a
@@ -219,7 +259,8 @@ export function normalizeMeasurementValueText(raw: string): number | null {
   return Number(trimmed);
 }
 
-export type AquariumMeasurementCreateField = "values" | `values.${number}`;
+export type AquariumMeasurementCreateField =
+  "values" | `values.${number}` | "measuredAt";
 
 export type AquariumMeasurementCreateResult =
   | { ok: true; payload: CreateAquariumMeasurementInput }
@@ -232,10 +273,29 @@ export type AquariumMeasurementCreateResult =
  * kimaradnak a törzsből, nem hibáznak. LEGALÁBB EGY érték kell (a szerver
  * `@ArrayMinSize(1)`-je is ezt kéri): egy teljesen üres alkalom nem
  * mérés, hanem semmi.
+ *
+ * A `measuredAt` A TÖRZSBEN CSAK AKKOR SZEREPEL, HA A FELHASZNÁLÓ TÉNYLEG
+ * HOZZÁNYÚLT (`measuredAtTouched`). Ha nem, `undefined` megy -- a hívó
+ * (a képernyő `mutationFn`-je) ilyenkor a TÉNYLEGES MENTÉS PILLANATÁT írja
+ * be, nem ezt a formot. Ez ugyanaz a szabály, amit a mező korábban a
+ * teljes hiányával tartott be; a szerkeszthetőség ezt nem törli el, csak
+ * feltételessé teszi.
+ *
+ * A JÖVŐBELI IDŐPONT ITT IS ELUTASÍTVA, UGYANAZZAL A SZÖVEGGEL, MINT A
+ * SZERVEREN (`aquarium-measurements.service.ts` `rejectFutureMeasuredAt`):
+ * az akvárium ma nem tud olyan mérést, amit még nem végeztek el, és a
+ * kliens-oldali elutasítás egy hálózati kör nélkül adja ugyanezt a választ.
  */
 export function buildAquariumMeasurementPayload(
   form: AquariumMeasurementForm,
 ): AquariumMeasurementCreateResult {
+  if (form.measuredAtTouched && form.measuredAtDate.getTime() > Date.now())
+    return {
+      ok: false,
+      field: "measuredAt",
+      message: "A mérés ideje nem lehet a jövőben.",
+    };
+
   const values: AquariumMeasurementValue[] = [];
   for (const [index, row] of form.values.entries()) {
     if (row.text.trim() === "") continue;
@@ -259,6 +319,9 @@ export function buildAquariumMeasurementPayload(
   return {
     ok: true,
     payload: {
+      measuredAt: form.measuredAtTouched
+        ? form.measuredAtDate.toISOString()
+        : undefined,
       notes: form.notes.trim() || undefined,
       values,
     },

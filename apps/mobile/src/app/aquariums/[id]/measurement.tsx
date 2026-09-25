@@ -14,12 +14,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
+
 import { ConnectivityBanner } from "@/components/offline/ConnectivityBanner";
 import { ApiError } from "@/lib/api/client";
 import { createAquariumMeasurement, getAquarium } from "@/lib/api/aquariums";
 import {
   aquariumMeasurementParametersFor,
   buildAquariumMeasurementPayload,
+  combineDateAndTime,
   emptyAquariumMeasurementForm,
   type AquariumMeasurementForm,
 } from "@/lib/aquariums/aquarium-measurement-create";
@@ -61,11 +66,28 @@ import type { ThemeTokens } from "@/lib/theme/tokens";
  *
  * A Figma-terv (`exchange/figma-akvariumok-make-2`) "Új vízmérés" mobil
  * képernyőjének szerkezetét követi (Mégse/cím/Mentés fejléc, egy kártyába
- * rendezett paraméter-sorok). A "Mérés ideje" mező SZÁNDÉKOSAN hiányzik
- * onnan: a Figma azt szerkeszthetőnek szánja, itt viszont a `measuredAt` a
- * MENTÉS PILLANATÁBAN keletkezik (lásd lent, a `mutationFn` elején) -- egy
- * hosszan nyitva tartott űrlapon egy előre felvitt időpont elavulna, mire a
- * mentés megtörténik.
+ * rendezett paraméter-sorok).
+ *
+ * === "MÉRÉS IDEJE": SZERKESZTHETŐ, DE ALAPÉRTELMEZÉSBEN A MENTÉS PILLANATA
+ * (Balázs kérése, 2026-09-25: "elofordulhat, hogy nem akkor mertuk, amikor
+ * rogzitjuk") ===
+ *
+ * A mező alapértéke "most", de amíg a felhasználó NEM nyúl hozzá, a küldött
+ * `measuredAt` a TÉNYLEGES MENTÉS PILLANATA (lásd lent, a `mutationFn`
+ * elején) -- ugyanaz a szabály, ami korábban a mező teljes hiányát
+ * indokolta: egy hosszan nyitva tartott űrlapon egy előre felvitt "most"
+ * elavulna, mire a mentés megtörténik. Ha a felhasználó módosítja, az Ő
+ * értéke megy, változatlanul.
+ *
+ * KÉT KÜLÖN NATÍV VÁLASZTÓ, EGY DÁTUMRA ÉS EGY IDŐRE -- lásd
+ * `combineDateAndTime` fejlécét a `lib/aquariums/aquarium-measurement-
+ * create.ts`-ben: Androidon nincs egyetlen "datetime" mód.
+ *
+ * A JÖVŐBELI IDŐPONT NEM VÁLASZTHATÓ: a dátum-választó `maximumDate`-je a
+ * mai napra korlátoz, ÉS a mentés előtti ellenőrzés
+ * (`buildAquariumMeasurementPayload`) is elutasítja, ha a választott nap
+ * MAI, de az óra a jelenleginél későbbi -- a natív időválasztó ezt
+ * önmagában nem tudja megakadályozni.
  *
  * A SZÍNEK 2026-09-24-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK (Balázs
  * döntése, emlék 1816): ez a képernyő az akvárium-képernyők egyike, tehát
@@ -96,6 +118,9 @@ export default function NewAquariumMeasurementScreen() {
     message: string;
   } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [measuredAtPickerOpen, setMeasuredAtPickerOpen] = useState<
+    "date" | "time" | null
+  >(null);
 
   /**
    * EGYSZERI ÚJRAÉPÍTÉS, AMINT AZ AKVÁRIUM VÍZTÍPUSA MEGÉRKEZIK -- a `ref`
@@ -118,7 +143,13 @@ export default function NewAquariumMeasurementScreen() {
         { ok: true }
       >["payload"],
     ) => {
-      const measuredAt = new Date().toISOString();
+      /**
+       * ÉRINTETLENÜL A MENTÉS PILLANATA MEGY (`payload.measuredAt` ekkor
+       * `undefined`, lásd `buildAquariumMeasurementPayload` fejlécét) --
+       * ez a régi viselkedés, csak feltételessé téve. Hozzányúlás esetén
+       * a `payload` már hordozza a felhasználó választását.
+       */
+      const measuredAt = payload.measuredAt ?? new Date().toISOString();
       const operationId = aquariumMeasurementOperationId({
         aquariumId: id,
         measuredAt,
@@ -235,6 +266,65 @@ export default function NewAquariumMeasurementScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {!online ? <ConnectivityBanner /> : null}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Mérés ideje</Text>
+            <View style={styles.measuredAtRow}>
+              <Pressable
+                onPress={() => setMeasuredAtPickerOpen("date")}
+                style={styles.measuredAtButton}
+              >
+                <Text style={styles.measuredAtValue}>
+                  {form.measuredAtDate.toLocaleDateString("hu-HU", {
+                    dateStyle: "medium",
+                  })}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setMeasuredAtPickerOpen("time")}
+                style={styles.measuredAtButton}
+              >
+                <Text style={styles.measuredAtValue}>
+                  {form.measuredAtDate.toLocaleTimeString("hu-HU", {
+                    timeStyle: "short",
+                  })}
+                </Text>
+              </Pressable>
+            </View>
+            {measuredAtPickerOpen ? (
+              <DateTimePicker
+                value={form.measuredAtDate}
+                mode={measuredAtPickerOpen}
+                maximumDate={
+                  measuredAtPickerOpen === "date" ? new Date() : undefined
+                }
+                onChange={(event: DateTimePickerEvent, picked?: Date) => {
+                  // Androidon a választó magától bezárul, iOS-en a
+                  // felhasználó a "Kész" gombbal zárja -- ugyanaz a minta,
+                  // mint az eszköz-felvitel dátumválasztójánál.
+                  if (Platform.OS !== "ios") setMeasuredAtPickerOpen(null);
+                  if (event.type === "dismissed" || !picked) return;
+                  setForm((prev) => ({
+                    ...prev,
+                    measuredAtDate: combineDateAndTime(
+                      prev.measuredAtDate,
+                      picked,
+                      measuredAtPickerOpen,
+                    ),
+                    measuredAtTouched: true,
+                  }));
+                }}
+              />
+            ) : null}
+            {measuredAtPickerOpen && Platform.OS === "ios" ? (
+              <Pressable onPress={() => setMeasuredAtPickerOpen(null)}>
+                <Text style={styles.clearDate}>Kész</Text>
+              </Pressable>
+            ) : null}
+            {error && error.field === "measuredAt" ? (
+              <Text style={styles.error}>{error.message}</Text>
+            ) : null}
+          </View>
 
           {aquarium.isPending ? (
             <ActivityIndicator color={tokens.accent} />
@@ -378,5 +468,18 @@ function createStyles(t: ThemeTokens) {
     notesInput: { minHeight: 70, textAlignVertical: "top" },
     notice: { color: t.accent, fontSize: 13 },
     error: { color: t.danger, fontSize: 13 },
+    measuredAtRow: { flexDirection: "row", gap: 10 },
+    measuredAtButton: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: t.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: t.background,
+      alignItems: "center",
+    },
+    measuredAtValue: { color: t.textPrimary, fontSize: 15 },
+    clearDate: { color: t.accent, fontSize: 13, fontWeight: "700" },
   });
 }

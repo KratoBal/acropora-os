@@ -2588,14 +2588,14 @@ model NavInvoiceSyncRun {
 /// összekapcsolásuk (pl. közös supplierInvoiceNumber alapján) még nem
 /// implementált - lásd a docs/DECISIONS.md ADR-005 nyitott kérdését erről.
 model Invoice {
-  id                   String              @id @default(cuid())
-  direction            InvoiceDirection
-  documentType         InvoiceDocumentType @default(INVOICE)
-  source               InvoiceSource
+  id                      String              @id @default(cuid())
+  direction               InvoiceDirection
+  documentType            InvoiceDocumentType @default(INVOICE)
+  source                  InvoiceSource
   /// A Számlázz.hu belső <alap><id> azonosítója - ez az idempotens upsert
   /// kulcsa a bejövő/kimenő push fogadásakor (M8.3). NAV/MANUAL/IMPORT
   /// forrásnál jellemzően null.
-  szamlazzInvoiceId    String?
+  szamlazzInvoiceId       String?
   /// A ténylegesen kiállított/kapott számla saját, emberi olvasható száma.
   /// OPCIONÁLIS (2026-09-24 óta, ADR-014 4. szelet): egy DRAFT állapotú
   /// karbantartási piszkozatnak MÉG NINCS száma -- azt csak a valódi
@@ -2605,63 +2605,63 @@ model Invoice {
   /// nautilus 2026-09-24: az egyetlen valódi olvasó, a
   /// unas-order-sync.repository.ts syncInvoiceMirror, már null-ellenőriz
   /// írás előtt).
-  invoiceNumber        String?
+  invoiceNumber           String?
   /// DRAFT | ISSUED, lásd InvoiceStatus doc-comment. A meglévő sorok
   /// migrációs alapértéke ISSUED.
-  status               InvoiceStatus       @default(ISSUED)
-  partnerName          String
-  partnerTaxNumber     String?
-  customerId           String?
-  supplierId           String?
+  status                  InvoiceStatus       @default(ISSUED)
+  partnerName             String
+  partnerTaxNumber        String?
+  customerId              String?
+  supplierId              String?
   /// A kapcsolódó webshop (UNAS) rendelés, ha van - elsősorban a
   /// source=UNAS read-only számlatükörnél töltött (lásd Invoice.source
   /// doc-comment). Szándékosan nem unique - egy rendeléshez később
   /// jóváíró/sztornó számla is tartozhat; a duplikálás elleni védelem a
   /// @@unique([source, invoiceNumber]) megkötés, nem ez a mező.
-  salesOrderId         String?
+  salesOrderId            String?
   /// A KARBANTARTÁSI PISZKOZAT IDEMPOTENCIA-KULCSA (ADR-014): egy adott
   /// teljesítési igazoláshoz legfeljebb egy Invoice sor tartozhat. Nem
   /// `szamlazzInvoiceId` a kulcs, mert -- ellentétben a UNAS webshop-esettel
   /// (ADR-006) -- itt nincs második rendszer, ami ugyanazt a számlát
   /// versenyben próbálná kiállítani; a mi saját rekordunk a mérvadó.
-  completionCertificateId String?          @unique
+  completionCertificateId String?             @unique
   /// A UNAS getOrder API nem ad számla-kiállítási dátumot (az Invoice
   /// alobjektum csak Status/StatusText/Number/Url mezőt dokumentál - lásd
   /// unas.hu/tudastar/api/megrendelesek-adatszerkezet), ezért source=UNAS
   /// soroknál ez null: nem találgatjuk a szinkron időpontjából.
-  issueDate            DateTime?
-  fulfillmentDate      DateTime?
-  dueDate              DateTime?
+  issueDate               DateTime?
+  fulfillmentDate         DateTime?
+  dueDate                 DateTime?
   /// ISO 4217 pénznemkód.
-  currency             String              @default("HUF") @db.VarChar(3)
-  exchangeRate         Decimal?            @db.Decimal(19, 6)
+  currency                String              @default("HUF") @db.VarChar(3)
+  exchangeRate            Decimal?            @db.Decimal(19, 6)
   /// A UNAS getOrder API nem ad összeget a rendelés Invoice alobjektumában
   /// (csak Status/Number/Url) - source=UNAS soroknál ez a három összeg-mező
   /// null, NEM 0, amíg egy valódi számlaösszeg-forrás (pl. Számlázz.hu
   /// Online Pénzügyi Adatkapcsolat) nincs bekötve.
-  netAmount            Decimal?            @db.Decimal(19, 4)
-  vatAmount            Decimal?            @db.Decimal(19, 4)
-  grossAmount          Decimal?            @db.Decimal(19, 4)
-  isPaid               Boolean             @default(false)
-  paidAt               DateTime?
+  netAmount               Decimal?            @db.Decimal(19, 4)
+  vatAmount               Decimal?            @db.Decimal(19, 4)
+  grossAmount             Decimal?            @db.Decimal(19, 4)
+  isPaid                  Boolean             @default(false)
+  paidAt                  DateTime?
   /// Sztornó/helyesbítő bizonylatnál az eredeti számlára mutat.
-  referencedInvoiceId  String?
-  syncStatus           InvoiceSyncStatus   @default(PENDING)
-  syncError            String?
+  referencedInvoiceId     String?
+  syncStatus              InvoiceSyncStatus   @default(PENDING)
+  syncError               String?
   /// Nyers XML megőrzése objektumtár-kulcsként, nem DB-blobként (7.5).
-  rawPayloadStorageKey String?
-  pdfStorageKey        String?
+  rawPayloadStorageKey    String?
+  pdfStorageKey           String?
   /// Egy külső rendszer (pl. UNAS Invoice.Url, ami valójában a Számlázz.hu
   /// által hosztolt PDF linkje) által adott, közvetlenül elérhető
   /// számla-URL - NEM object-storage kulcs (lásd pdfStorageKey fent), csak
   /// akkor töltött, ha a forrás API ténylegesen adott ilyet; üres/hiányzó
   /// válasz esetén marad null, sosem generált/kitalált érték.
-  externalUrl          String?
-  bookkeepingStatus    String?
-  tags                 String[]
-  note                 String?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  externalUrl             String?
+  bookkeepingStatus       String?
+  tags                    String[]
+  note                    String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
 
   customer               Customer?               @relation(fields: [customerId], references: [id])
   supplier               Supplier?               @relation(fields: [supplierId], references: [id])
@@ -5076,6 +5076,17 @@ model AquariumMeasurement {
   aquarium Aquarium @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
 
   @@unique([aquariumId, clientOperationId, parameterCode])
+  /// EGY ALKALOM EGY PARAMÉTERT LEGFELJEBB EGYSZER VISEL. Ez korábban
+  /// egyáltalán nem volt kikényszerítve: sem egy KÉRÉSEN belüli (a `values`
+  /// tömbben kétszer szereplő `parameterCode`), sem KÉT alkalom között, ha
+  /// azok -- tévedésből vagy versenyhelyzetből -- pontosan ugyanazt a
+  /// `measuredAt`-et kapják. Az alkalom-azonosító (lásd a modell fejlécét)
+  /// a `measuredAt`, tehát két ilyen alkalom a listázásnál ÉSZREVÉTLENÜL
+  /// EGGYÉ OLVADNA. A szolgáltatás-réteg (`aquarium-measurements.service.ts`)
+  /// erre a normál esetben egy beszúrás előtti kereséssel véd, ez a
+  /// megszorítás pedig a versenyhelyzetre -- ugyanaz a kétrétegű minta, mint
+  /// a `clientOperationId`-nél.
+  @@unique([aquariumId, measuredAt, parameterCode])
   @@index([aquariumId, parameterCode, measuredAt])
 }
 

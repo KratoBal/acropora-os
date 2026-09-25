@@ -45,6 +45,7 @@ export class AquariumMeasurementsService {
     actorUserId: string,
   ) {
     const aquarium = await this.requireAquarium(aquariumId);
+    this.rejectFutureMeasuredAt(input.measuredAt);
     const result = await this.repository.create(aquariumId, input, actorUserId);
 
     if (result.created) {
@@ -121,6 +122,20 @@ export class AquariumMeasurementsService {
       measurements,
     });
     return { filename: this.xlsx.filename(aquarium.name), buffer };
+  }
+
+  /**
+   * A "MÉRÉS IDEJE" MEZŐ MOSTANTÓL SZERKESZTHETŐ (Balázs kérése,
+   * 2026-09-25: "elofordulhat, hogy nem akkor mertuk, amikor rogzitjuk"),
+   * DE A JÖVŐBE NEM MUTATHAT: az akvárium ma nem tud olyan mérést, amit
+   * még nem végeztek el. Csak akkor ellenőrizzük, ha a hívó egyáltalán
+   * küldött `measuredAt`-et -- a mező hiányában a repository a mentés
+   * pillanatát írja, ami definíció szerint nem lehet jövőbeli.
+   */
+  private rejectFutureMeasuredAt(measuredAt: string | undefined): void {
+    if (!measuredAt) return;
+    if (new Date(measuredAt).getTime() > Date.now())
+      throw new BadRequestException("A mérés ideje nem lehet a jövőben.");
   }
 
   private async requireAquarium(id: string) {

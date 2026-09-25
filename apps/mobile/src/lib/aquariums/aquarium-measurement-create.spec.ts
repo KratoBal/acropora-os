@@ -6,6 +6,7 @@ import {
   aquariumMeasurementParameter,
   aquariumMeasurementParametersFor,
   buildAquariumMeasurementPayload,
+  combineDateAndTime,
   emptyAquariumMeasurementForm,
   normalizeMeasurementValueText,
   type AquariumMeasurementForm,
@@ -66,6 +67,37 @@ describe("emptyAquariumMeasurementForm", () => {
     );
     assert.ok(form.values.every((v) => v.text === ""));
   });
+
+  it("a mérés ideje a kapott 'most'-ra áll, érintetlenül", () => {
+    const most = new Date(2026, 8, 25, 8, 0, 0);
+    const form = emptyAquariumMeasurementForm("EDESVIZI", most);
+    assert.equal(form.measuredAtDate.getTime(), most.getTime());
+    assert.equal(form.measuredAtTouched, false);
+  });
+});
+
+describe("combineDateAndTime", () => {
+  const alap = new Date(2026, 8, 20, 14, 30, 0);
+
+  it("a 'date' rész csak a napot cseréli, az órát megtartja", () => {
+    const ujNap = new Date(2026, 8, 24, 9, 0, 0);
+    const eredmeny = combineDateAndTime(alap, ujNap, "date");
+    assert.equal(eredmeny.getFullYear(), 2026);
+    assert.equal(eredmeny.getMonth(), 8);
+    assert.equal(eredmeny.getDate(), 24);
+    assert.equal(eredmeny.getHours(), 14);
+    assert.equal(eredmeny.getMinutes(), 30);
+  });
+
+  it("a 'time' rész csak az órát cseréli, a napot megtartja", () => {
+    const ujIdo = new Date(2020, 0, 1, 7, 15, 0);
+    const eredmeny = combineDateAndTime(alap, ujIdo, "time");
+    assert.equal(eredmeny.getFullYear(), 2026);
+    assert.equal(eredmeny.getMonth(), 8);
+    assert.equal(eredmeny.getDate(), 20);
+    assert.equal(eredmeny.getHours(), 7);
+    assert.equal(eredmeny.getMinutes(), 15);
+  });
 });
 
 describe("normalizeMeasurementValueText", () => {
@@ -101,6 +133,8 @@ describe("buildAquariumMeasurementPayload", () => {
         { parameterCode: "PH", text: "" },
         { parameterCode: "KH", text: "" },
       ],
+      measuredAtDate: new Date(2026, 8, 25, 8, 0, 0),
+      measuredAtTouched: false,
       ...overrides,
     };
   }
@@ -163,6 +197,61 @@ describe("buildAquariumMeasurementPayload", () => {
     );
     assert.equal(kitoltott.ok, true);
     if (kitoltott.ok) assert.equal(kitoltott.payload.notes, "Vízcsere után");
+  });
+
+  describe("a mérés ideje", () => {
+    it("érintetlenül a törzs measuredAt-je undefined -- a hívó a mentés pillanatát írja", () => {
+      const result = buildAquariumMeasurementPayload(
+        form({ values: [{ parameterCode: "PH", text: "7" }] }),
+      );
+      assert.equal(result.ok, true);
+      if (result.ok) assert.equal(result.payload.measuredAt, undefined);
+    });
+
+    it("hozzányúlva a törzs a választott időt viszi, ISO alakban", () => {
+      const valasztott = new Date(2020, 0, 1, 9, 30, 0);
+      const result = buildAquariumMeasurementPayload(
+        form({
+          measuredAtDate: valasztott,
+          measuredAtTouched: true,
+          values: [{ parameterCode: "PH", text: "7" }],
+        }),
+      );
+      assert.equal(result.ok, true);
+      if (result.ok)
+        assert.equal(result.payload.measuredAt, valasztott.toISOString());
+    });
+
+    /**
+     * KALIBRÁCIÓ: a `measuredAtTouched: false` ág FUT LE elsőnek egy jövőbeli
+     * `measuredAtDate` mellett is -- ha a jövő-ellenőrzés a `touched`
+     * feltétel nélkül állna, ez az állítás pirosodna, mert az alap `form()`
+     * dátuma önmagában is lehet a jövőben egy másik gépi órán.
+     */
+    it("érintetlen jövőbeli measuredAtDate nem utasít el semmit", () => {
+      const result = buildAquariumMeasurementPayload(
+        form({
+          measuredAtDate: new Date(Date.now() + 60_000),
+          values: [{ parameterCode: "PH", text: "7" }],
+        }),
+      );
+      assert.equal(result.ok, true);
+    });
+
+    it("hozzányúlva jövőbeli időpontra elutasít, a mezőt megnevezve", () => {
+      const result = buildAquariumMeasurementPayload(
+        form({
+          measuredAtDate: new Date(Date.now() + 60_000),
+          measuredAtTouched: true,
+          values: [{ parameterCode: "PH", text: "7" }],
+        }),
+      );
+      assert.equal(result.ok, false);
+      if (!result.ok) {
+        assert.equal(result.field, "measuredAt");
+        assert.equal(result.message, "A mérés ideje nem lehet a jövőben.");
+      }
+    });
   });
 });
 

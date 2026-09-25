@@ -13,6 +13,10 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { aquariumsApi } from "@/lib/api/aquariums";
 import {
+  fromDatetimeLocalValue,
+  toDatetimeLocalValue,
+} from "@/lib/aquariums/measurement-time";
+import {
   PilotButton,
   PilotCard,
   PilotCardHeader,
@@ -31,6 +35,11 @@ import {
  * (2026-09-24 15:55) két elemet hozott, ami itt megjelenik: a felvitel
  * DRAWER-ben történik (nem inline rácsban), és a küldés egy MEGERŐSÍTŐ
  * ablakon megy át -- lásd a `PilotEmailDialog`-ot.
+ *
+ * A "MÉRÉS IDEJE" MEZŐ (2026-09-25, Balázs kérése: "elofordulhat, hogy nem
+ * akkor mertuk, amikor rogzitjuk") SZERKESZTHETŐ, DE ÉRINTETLENÜL NEM
+ * KÜLD SEMMIT -- a szerver ilyenkor a mentés pillanatát írja, ugyanúgy,
+ * mint a mező bevezetése előtt. Lásd `submit()` fejlécét.
  */
 export function PilotAquariumWaterValues({
   token,
@@ -59,6 +68,10 @@ export function PilotAquariumWaterValues({
   >({});
   const [source, setSource] = useState("");
   const [notes, setNotes] = useState("");
+  const [measuredAtValue, setMeasuredAtValue] = useState(() =>
+    toDatetimeLocalValue(new Date()),
+  );
+  const [measuredAtTouched, setMeasuredAtTouched] = useState(false);
   const [pendingDelete, setPendingDelete] =
     useState<AquariumMeasurementOccasion | null>(null);
   const [emailFor, setEmailFor] = useState<AquariumMeasurementOccasion | null>(
@@ -100,10 +113,35 @@ export function PilotAquariumWaterValues({
       setError("Adj meg legalább egy paramétert.");
       return;
     }
+
+    /**
+     * ÉRINTETLENÜL NEM KÜLDÜNK `measuredAt`-et -- a szerver a MENTÉS
+     * PILLANATÁT írja (ugyanez volt a viselkedés a mező bevezetése előtt
+     * is). Hozzányúlva a mezőnek ÉRVÉNYES időpontnak kell lennie, és nem
+     * mutathat a jövőbe -- ugyanaz az ellenőrzés és ugyanaz a szöveg, mint
+     * a szerveren (`aquarium-measurements.service.ts`
+     * `rejectFutureMeasuredAt`) és a mobilon
+     * (`buildAquariumMeasurementPayload`).
+     */
+    let measuredAt: string | undefined;
+    if (measuredAtTouched) {
+      const parsed = fromDatetimeLocalValue(measuredAtValue);
+      if (!parsed) {
+        setError("A mérés ideje érvénytelen.");
+        return;
+      }
+      if (parsed.getTime() > Date.now()) {
+        setError("A mérés ideje nem lehet a jövőben.");
+        return;
+      }
+      measuredAt = parsed.toISOString();
+    }
+
     setBusy(true);
     setError(null);
     try {
       await aquariumsApi.createMeasurement(token, aquariumId, {
+        measuredAt,
         source: source || undefined,
         notes: notes || undefined,
         values: entries.map(([parameterCode, raw]) => ({
@@ -114,6 +152,8 @@ export function PilotAquariumWaterValues({
       setValues({});
       setSource("");
       setNotes("");
+      setMeasuredAtValue(toDatetimeLocalValue(new Date()));
+      setMeasuredAtTouched(false);
       setDrawerOpen(false);
       load();
     } catch (cause) {
@@ -409,6 +449,18 @@ export function PilotAquariumWaterValues({
               ))}
             </div>
           </div>
+          <PilotFormField label="Mérés ideje">
+            <input
+              type="datetime-local"
+              value={measuredAtValue}
+              max={toDatetimeLocalValue(new Date())}
+              onChange={(event) => {
+                setMeasuredAtValue(event.target.value);
+                setMeasuredAtTouched(true);
+              }}
+              className="w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+            />
+          </PilotFormField>
           <div className="grid grid-cols-2 gap-3">
             <PilotFormField label="Forrás (opcionális)">
               <PilotInput value={source} onChange={setSource} />
