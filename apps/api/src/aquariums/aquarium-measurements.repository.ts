@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import {
   aquariumMeasurementParameter,
@@ -93,6 +93,15 @@ export interface AquariumMeasurementCreateResult {
   created: boolean;
 }
 
+/**
+ * A `measuredAt` A NEVEZŐ, ÉS EZ A HÁROM HELYEN VISSZATÉRŐ ÜZENET, hogy egy
+ * kliens ne kapjon két különböző szöveget ugyanarra az ütközésre attól
+ * függően, hogy a normál előzetes keresés vagy a versenyhelyzeti egyedi
+ * index-hiba fogta meg.
+ */
+const OCCASION_CONFLICT_MESSAGE =
+  "Erre az időpontra már van rögzített mérés ennél az akváriumnál. Válassz másik időpontot.";
+
 @Injectable()
 export class AquariumMeasurementsRepository {
   async list(aquariumId: string): Promise<AquariumMeasurementListResponse> {
@@ -162,6 +171,21 @@ export class AquariumMeasurementsRepository {
     const source = input.source?.trim() || null;
     const notes = input.notes?.trim() || null;
 
+    /**
+     * AZ ELŐZETES KERESÉS -- A RENDES ESET. Az alkalom azonosítója a
+     * `measuredAt` (lásd a fájl fejlécét), tehát ha ezen az akváriumon már
+     * áll sor pontosan ugyanazzal az időponttal, egy újabb beszúrás nem egy
+     * ÚJ alkalmat hozna létre, hanem ÉSZREVÉTLENÜL beleolvadna a meglévőbe a
+     * listázásnál. Ezt a `clientOperationId`-s keresés fentebb NEM fogja
+     * meg: az csak a SAJÁT kulcsú ismétlést szűri, ez pedig egy MÁSIK
+     * alkalommal való ütközést.
+     */
+    const collision = await prisma.aquariumMeasurement.findFirst({
+      where: { aquariumId, measuredAt },
+      select: { id: true },
+    });
+    if (collision) throw new ConflictException(OCCASION_CONFLICT_MESSAGE);
+
     try {
       const created = await prisma.$transaction(async (tx) => {
         const rows = [];
@@ -230,6 +254,14 @@ export class AquariumMeasurementsRepository {
         );
         if (existing) return { occasion: existing, created: false };
       }
+      /**
+       * A VERSENYHELYZET -- KÉT PÁRHUZAMOS KÉRÉS, EGYIK SEM LÁTTA MÉG A
+       * MÁSIKAT a fenti előzetes keresésnél. Az `@@unique([aquariumId,
+       * measuredAt, parameterCode])` (séma) ilyenkor a beszúrásnál bukik el,
+       * és ugyanazt az üzenetet adjuk, mint a normál esetben.
+       */
+      if (isPrismaUniqueConstraintViolation(error, "measuredAt"))
+        throw new ConflictException(OCCASION_CONFLICT_MESSAGE);
       throw error;
     }
   }
