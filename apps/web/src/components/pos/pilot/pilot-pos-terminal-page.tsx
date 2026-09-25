@@ -20,7 +20,6 @@ import {
   PilotButton,
   PilotCard,
   PilotCardHeader,
-  PilotSegmentedControl,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 
@@ -50,13 +49,28 @@ import {
  *    `action`) -- a "Kosár" tételszáma ezért az `action` foglalóban áll,
  *    JOBB oldalon, nem a cím mellett balra, ahogy a terv rajzolja. Kis
  *    eltérés, a meglévő komponens megtartása mellett.
- * 4. A fizetési mód VÁLASZTÓJA a terv szerint épült (három nagy gomb,
- *    `PilotSegmentedControl`-lal) -- a régi lap dropdownja NEM marad meg
- *    ezen az oldalon, mert a leírás 3. pontja kifejezetten engedi ezt a
- *    cserét, ugyanazzal az értékkészlettel (CASH/CARD/TRANSFER).
+ * 4. A fizetési mód VÁLASZTÓJA a terv szerint épült: három gomb egy
+ *    `grid-cols-3` rácsban, kiválasztva teli aqua háttérrel, egyébként
+ *    fehér+szegély -- a régi lap dropdownja NEM marad meg ezen az oldalon,
+ *    mert a leírás 3. pontja kifejezetten engedi ezt a cserét, ugyanazzal
+ *    az értékkészlettel (CASH/CARD/TRANSFER). JAVÍTVA 2026-09-25 (kártya
+ *    5bf263a2, Balázs képe): az ELSŐ verzió tévedésből a `PilotSegmentedControl`-t
+ *    használta (kis, tömör pill-váltó), holott a terv három NAGY gombot ad
+ *    -- ez a fejléc korábban is "három nagy gombot" állított, de a kód
+ *    mást csinált. Most a kettő fedi egymást.
  * 5. Blokknyomtatás, vevőválasztó, vonalkód-kamera: NINCS a mai kódban,
  *    NEM épült meg -- a terv egyik képernyőjén sem szerepelnek ezek, ez a
  *    pont csak a brief 4. pontjának megfelelését dokumentálja.
+ * 6. A kosár-sor "Egységár (Ft, bruttó)" felirata a terv EGYENLŐ
+ *    harmadolású rácsán (és az eredeti 380px kosár-szélességen) két
+ *    sorba tört, és emiatt a mezője lejjebb csúszott a másik kettőhöz
+ *    képest -- ez MAGÁBAN A TERVBEN is megvan (`exchange/figma-penztar-
+ *    make-11/src/PosScreen.tsx`, azonos felirat, azonos harmadolás),
+ *    tehát nem az átültetés hibája, hanem a terv rá nem ért figyelni.
+ *    JAVÍTVA 2026-09-25: a kosár 380px helyett 440px, és a három mező
+ *    aránya `0.85fr 1.3fr 0.85fr` (nem egyenlő harmadok) -- az Egységár
+ *    oszlopa kap több helyet, a Mennyiség és a Kedvezmény felirata
+ *    változatlanul elfér a szűkebb hányadban is.
  */
 
 interface CartLine {
@@ -369,7 +383,7 @@ export function PilotPosTerminalPage() {
         </div>
       ) : null}
 
-      <div className="grid flex-1 grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_380px]">
+      <div className="grid flex-1 grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_440px]">
         {/* Left column */}
         <div className="flex flex-col gap-5">
           <div className="relative">
@@ -533,7 +547,7 @@ export function PilotPosTerminalPage() {
                         Eltávolítás
                       </button>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-[0.85fr_1.3fr_0.85fr] gap-2">
                       <NumberInput
                         label={`Mennyiség (${line.unit})`}
                         value={line.quantity}
@@ -599,13 +613,30 @@ export function PilotPosTerminalPage() {
                 <p className="mb-2 text-[11px] font-medium text-pilot-grey-400">
                   Fizetési mód
                 </p>
-                <PilotSegmentedControl
-                  options={PAYMENT_METHOD_OPTIONS}
-                  value={PAYMENT_METHOD_LABEL[paymentMethod]}
-                  onChange={(label) =>
-                    setPaymentMethod(LABEL_TO_PAYMENT_METHOD[label] ?? "CASH")
-                  }
-                />
+                <div className="grid grid-cols-3 gap-2">
+                  {PAYMENT_METHOD_OPTIONS.map((label) => {
+                    const selected =
+                      LABEL_TO_PAYMENT_METHOD[label] === paymentMethod;
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() =>
+                          setPaymentMethod(
+                            LABEL_TO_PAYMENT_METHOD[label] ?? "CASH",
+                          )
+                        }
+                        className={`cursor-pointer rounded-lg py-2.5 text-sm font-medium ring-1 transition-all duration-100 ${
+                          selected
+                            ? "bg-pilot-aqua-600 text-white shadow-sm ring-pilot-aqua-600"
+                            : "bg-white text-pilot-grey-600 ring-pilot-grey-200 hover:bg-pilot-grey-50 hover:ring-pilot-grey-300"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {canManage ? (
