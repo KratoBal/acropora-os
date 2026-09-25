@@ -358,7 +358,7 @@ describe("worksheetDetailRows", () => {
   it("leaves out the dates nobody filled in", () => {
     const labels = worksheetDetailRows(worksheet).map((row) => row.label);
 
-    assert.equal(labels.includes("Kiállítva"), true);
+    assert.equal(labels.includes("Keltezés"), true);
     assert.equal(labels.includes("Teljesítve"), false);
     assert.equal(labels.includes("Fizetési határidő"), false);
   });

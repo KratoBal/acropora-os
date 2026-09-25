@@ -23,10 +23,12 @@ import {
   listWorksheetEntries,
   removeWorksheetLine,
   setWorksheetAssignees,
+  setWorksheetAssets,
   uploadWorksheetDocuments,
   closeWorksheet,
   setWorksheetHandedOver,
 } from "@/lib/api/worksheets";
+import { listAssets } from "@/lib/api/assets";
 import {
   createMaterialRequest,
   listMaterialRequestsForWorksheet,
@@ -83,6 +85,12 @@ import {
   toggleWorksheetAssignee,
   worksheetAssigneesChanged,
 } from "@/lib/worksheets/worksheet-assignees";
+import {
+  describeSelectableAssets,
+  describeWorksheetAssetsReadOnly,
+  toggleWorksheetAsset,
+  worksheetAssetsChanged,
+} from "@/lib/worksheets/worksheet-assets";
 import {
   buildWorksheetLinePayload,
   describeQueuedWorksheetLines,
@@ -214,6 +222,14 @@ export default function WorksheetDetailScreen() {
   const [assigneeDraft, setAssigneeDraft] = useState<string[] | null>(null);
   const [assigneeError, setAssigneeError] = useState<string | null>(null);
   const [assigneeSaving, setAssigneeSaving] = useState(false);
+
+  /**
+   * AZ ERINTETT ESZKOZOK SZERKESZTOJENEK ALLAPOTA -- ugyanaz az alak, mint a
+   * felelos-szerkesztoe, ugyanazert: `null`, amig a szerelo ra nem koppint.
+   */
+  const [assetDraft, setAssetDraft] = useState<string[] | null>(null);
+  const [assetError, setAssetError] = useState<string | null>(null);
+  const [assetSaving, setAssetSaving] = useState(false);
 
   /**
    * A FENYKEP ALLAPOTA.
@@ -476,6 +492,55 @@ export default function WorksheetDetailScreen() {
           : "A felelősök mentése nem sikerült.",
       ),
     onSettled: () => setAssigneeSaving(false),
+  });
+
+  /**
+   * MELYIK ESZKOZ VALASZTHATO -- CSAK AKKOR TOLT, AMIKOR A SZERKESZTO KINYILIK,
+   * UGYANAZERT, MINT A FELELOSOKNEL.
+   *
+   * A HATOKOR A LAP HELYSZINEBOL JON: a szerver a `setAssets`-nel a lap
+   * `departmentId`-jehez tartozo eszkozoket fogadja el
+   * (`requireAssetsInDepartment`), tehat a valaszto ugyanezt a szukitest
+   * kapja -- egy tagabb lista olyat kinalna fel, amit a mentes ugyis
+   * visszautasitana.
+   */
+  const candidateAssets = useQuery({
+    queryKey: ["worksheet-candidate-assets", worksheet.data?.department.id],
+    queryFn: () =>
+      listAssets(1, 100, "", worksheet.data?.department.id ?? "", "ACTIVE"),
+    enabled:
+      assetDraft !== null &&
+      status === "authenticated" &&
+      Boolean(capabilities?.worksheetsManage) &&
+      Boolean(worksheet.data?.department.id),
+  });
+
+  /**
+   * AZ ERINTETT ESZKOZOK MENTESE -- UGYANAZ AZ ALAK, MINT A FELELOSOKE.
+   *
+   * A TELJES LISTA MEGY, NEM A KULONBSEG: lasd `assigneeMutation` fejleceit,
+   * ugyanaz az ok.
+   */
+  const assetMutation = useMutation({
+    mutationFn: async (assetIds: string[]) => {
+      if (!id) throw new Error("A munkalap azonosítója hiányzik.");
+      return setWorksheetAssets(id, assetIds);
+    },
+    onMutate: () => {
+      setAssetError(null);
+      setAssetSaving(true);
+    },
+    onSuccess: async () => {
+      setAssetDraft(null);
+      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+    },
+    onError: (cause) =>
+      setAssetError(
+        cause instanceof Error
+          ? cause.message
+          : "Az érintett eszközök mentése nem sikerült.",
+      ),
+    onSettled: () => setAssetSaving(false),
   });
 
   /**
@@ -817,6 +882,23 @@ export default function WorksheetDetailScreen() {
       assigneeDraft,
       (data?.assignees ?? []).map((assignee) => assignee.userId),
     );
+  const readOnlyAssetsNotice = describeWorksheetAssetsReadOnly(
+    capabilities.worksheetsManage,
+  );
+  const selectableAssetsNotice =
+    assetDraft === null
+      ? null
+      : describeSelectableAssets({
+          loading: candidateAssets.isPending,
+          error: candidateAssets.isError,
+          count: candidateAssets.data?.items.length ?? 0,
+        });
+  const assetsChanged =
+    assetDraft !== null &&
+    worksheetAssetsChanged(
+      assetDraft,
+      (data?.assets ?? []).map((link) => link.assetId),
+    );
   /**
    * A KIKULDES ALLAPOT-SORA, EGYSZER kiszamolva. `null`, amig nem kuldtuk ki.
    */
@@ -900,6 +982,58 @@ export default function WorksheetDetailScreen() {
             */}
             {kikuldesSora ? (
               <Text style={styles.subject}>{kikuldesSora}</Text>
+            ) : null}
+
+            {/*
+              A LÁNC MINDKÉT IRÁNYA, A FEJLÉC ALATT, A LAP TETEJÉN -- Balázs
+              döntése és a Figma 8. köros terv szerint (2026-09-25, korábban a
+              lap alján állt): egy aláírt lap végleges, a munka folytatása új
+              lap -- aki a régit nyitja meg, ugyanúgy tudni akarja, hol
+              folytatódott, mint fordítva, és ez nem várhat a lap aljáig.
+            */}
+            {continuesFrom || data.continuedBy.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>Folytatás</Text>
+                {continuesFrom ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: "/worksheets/[id]",
+                        params: { id: continuesFrom.id },
+                      })
+                    }
+                    style={({ pressed }) => [
+                      styles.card,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.label}>Ennek a folytatása</Text>
+                    <Text style={styles.value}>
+                      {worksheetLabelOrDraft(continuesFrom.number)}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {data.continuedBy.map((link) => (
+                  <Pressable
+                    key={link.id}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/worksheets/[id]",
+                        params: { id: link.id },
+                      })
+                    }
+                    style={({ pressed }) => [
+                      styles.card,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.label}>Itt folytatódott</Text>
+                    <Text style={styles.value}>
+                      {worksheetLabelOrDraft(link.number)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </>
             ) : null}
 
             <View style={styles.card}>
@@ -1532,6 +1666,152 @@ export default function WorksheetDetailScreen() {
             </View>
 
             {/*
+              ERINTETT ESZKOZOK -- a lapra vezetett `WorksheetAsset` sorok,
+              UGYANOLYAN SZERKEZETBEN, mint a Felelosok kartya. A mezo a
+              szerveren mar 2026-09-16 ota all, es a fejlece kimondja: eddig
+              SEMMI nem olvasta vissza, se a telefon, se a web. A 8. koros
+              Figma-terv az "Erintett eszkozok" kartyat sor-listakent mutatja
+              (nev + monospace kod), ugyanezt kapja itt is.
+            */}
+            <Text style={styles.sectionTitle}>Érintett eszközök</Text>
+            <View style={styles.card}>
+              {data.assets.length === 0 ? (
+                <Text style={styles.muted}>Nincs érintett eszköz.</Text>
+              ) : (
+                data.assets.map((link) => (
+                  <View key={link.id} style={styles.row}>
+                    <View>
+                      <Text style={styles.value}>{link.assetName}</Text>
+                      <Text style={styles.assetCode}>{link.assetNumber}</Text>
+                    </View>
+                  </View>
+                ))
+              )}
+
+              {readOnlyAssetsNotice ? (
+                <Text style={styles.muted}>{readOnlyAssetsNotice}</Text>
+              ) : null}
+
+              {capabilities.worksheetsManage && assetDraft === null ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Érintett eszközök szerkesztése"
+                  accessibilityState={{ disabled: fromCache }}
+                  disabled={fromCache}
+                  onPress={() =>
+                    setAssetDraft(data.assets.map((link) => link.assetId))
+                  }
+                  style={({ pressed }) => [
+                    styles.assigneeEdit,
+                    fromCache && styles.disabled,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.assigneeEditText}>
+                    Érintett eszközök szerkesztése
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {capabilities.worksheetsManage && fromCache ? (
+                <Text style={styles.muted}>
+                  Mentett másolatot nézel, ezért az érintett eszközök most nem
+                  írhatók át. Térerőnél tudod átírni a listát.
+                </Text>
+              ) : null}
+
+              {assetDraft !== null ? (
+                <>
+                  {selectableAssetsNotice ? (
+                    <Text style={styles.muted}>{selectableAssetsNotice}</Text>
+                  ) : null}
+
+                  {(candidateAssets.data?.items ?? []).map((jelolt) => {
+                    const kivalasztva = assetDraft.includes(jelolt.id);
+                    return (
+                      <Pressable
+                        key={jelolt.id}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: kivalasztva }}
+                        accessibilityLabel={jelolt.name}
+                        onPress={() =>
+                          setAssetDraft((elozo) =>
+                            elozo === null
+                              ? elozo
+                              : toggleWorksheetAsset(elozo, jelolt.id),
+                          )
+                        }
+                        style={({ pressed }) => [
+                          styles.assigneeRow,
+                          kivalasztva && styles.assigneeRowOn,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <View>
+                          <Text style={styles.assigneeName}>{jelolt.name}</Text>
+                          <Text style={styles.assetCode}>
+                            {jelolt.assetNumber}
+                          </Text>
+                        </View>
+                        {kivalasztva ? (
+                          <Text style={styles.assigneeCheck}>kiválasztva</Text>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+
+                  <Text style={styles.muted}>
+                    {assetDraft.length === 0
+                      ? "Mentés után a lapnak nem lesz érintett eszköze."
+                      : `Mentés után pontosan ez a ${assetDraft.length} eszköz lesz a lap érintett eszköze.`}
+                  </Text>
+
+                  {assetError ? (
+                    <Text style={styles.lineError}>{assetError}</Text>
+                  ) : null}
+
+                  <View style={styles.lineRow}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Érintett eszközök mentése"
+                      accessibilityState={{
+                        disabled: !assetsChanged || assetSaving,
+                      }}
+                      disabled={!assetsChanged || assetSaving}
+                      onPress={() => assetMutation.mutate(assetDraft)}
+                      style={({ pressed }) => [
+                        styles.addLineButton,
+                        styles.assigneeAction,
+                        (!assetsChanged || assetSaving) && styles.disabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.addLineText}>
+                        {assetSaving ? "Mentés..." : "Mentés"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Érintett eszközök szerkesztésének elvetése"
+                      disabled={assetSaving}
+                      onPress={() => {
+                        setAssetDraft(null);
+                        setAssetError(null);
+                      }}
+                      style={({ pressed }) => [
+                        styles.assigneeEdit,
+                        styles.assigneeAction,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.assigneeEditText}>Mégsem</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
+            </View>
+
+            {/*
               AZ ALAIRAS GOMBJA. UGYANAZ A KET FELTETEL, mint a szerveren
               (`AWAITING_SIGNATURE` allapot es `service.manage` jog), es a
               dontes a `worksheet-signature.ts`-ben all -- ott merheto.
@@ -2043,59 +2323,14 @@ export default function WorksheetDetailScreen() {
               </>
             ) : null}
 
-            {/*
-              A LÁNC MINDKÉT IRÁNYA. Egy aláírt lap végleges, a munka
-              folytatása új lap -- aki a régit nyitja meg, ugyanúgy tudni
-              akarja, hol folytatódott, mint fordítva.
-            */}
-            {continuesFrom || data.continuedBy.length > 0 ? (
-              <>
-                <Text style={styles.sectionTitle}>Folytatás</Text>
-                {continuesFrom ? (
-                  <Pressable
-                    onPress={() =>
-                      router.push({
-                        pathname: "/worksheets/[id]",
-                        params: { id: continuesFrom.id },
-                      })
-                    }
-                    style={({ pressed }) => [
-                      styles.card,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={styles.label}>Ennek a folytatása</Text>
-                    <Text style={styles.value}>
-                      {worksheetLabelOrDraft(continuesFrom.number)}
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {data.continuedBy.map((link) => (
-                  <Pressable
-                    key={link.id}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/worksheets/[id]",
-                        params: { id: link.id },
-                      })
-                    }
-                    style={({ pressed }) => [
-                      styles.card,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={styles.label}>Itt folytatódott</Text>
-                    <Text style={styles.value}>
-                      {worksheetLabelOrDraft(link.number)}
-                    </Text>
-                  </Pressable>
-                ))}
-              </>
-            ) : null}
-
             {olderVersions && olderVersions.length > 0 ? (
               <>
-                <Text style={styles.sectionTitle}>Korábbi változatok</Text>
+                {/*
+                  "VERZIÓK", NEM "KORÁBBI VÁLTOZATOK" (acrobot döntése,
+                  2026-09-25, Figma 8. kör): a leírás és a Figma-terv is ezt a
+                  szót használja.
+                */}
+                <Text style={styles.sectionTitle}>Verziók</Text>
                 {olderVersions.map((version) => (
                   <View key={version.id} style={styles.card}>
                     <View style={styles.row}>
@@ -2222,6 +2457,16 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   assignees: { color: "#f4fbff", fontSize: 14 },
+  /**
+   * AZ ESZKOZ-SZAM MONOSPACE, A FIGMA 8. KOR TERVE SZERINT ("Erintett
+   * eszkozok" kartya): egy szam-szeru azonosito monospace betuvel jobban
+   * megkulonbozteti magat a nevtol, mint azonos betutipusban.
+   */
+  assetCode: {
+    color: "#789cad",
+    fontFamily: "monospace",
+    fontSize: 12,
+  },
   lineTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
   lineSummary: { color: "#6de0ce", fontSize: 13, fontWeight: "700" },
   muted: { color: "#789cad", fontSize: 12 },

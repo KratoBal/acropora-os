@@ -159,6 +159,20 @@ const PAROK: readonly Par[] = [
   },
   {
     /**
+     * UGYANAZ A CSALAD, MINT A FELELOSOK ATIRASA -- kulon par, mert kulon
+     * vegpont es kulon DTO (`worksheets.controller.ts` `PUT :id/assets`).
+     */
+    mit: "érintett eszközök átírása",
+    mobil: "../mobile/src/lib/api/worksheets.ts",
+    mobilNev: "SetWorksheetAssetsInput",
+    dto: "src/worksheets/dto/worksheet.dto.ts",
+    dtoNev: "SetWorksheetAssetsDto",
+    kontroll: ["assetIds"],
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
+  {
+    /**
      * A MUNKALAP ALAIRASA -- ES EZ A PAR EGY KET-PR-ES SZETVALASZTAS MIATT KELL.
      *
      * A belsos alairas SZERVER-oldala (852) es a TELEFON gombja (854) ket kulon
@@ -356,7 +370,7 @@ const PAROK: readonly Par[] = [
  * torzs NEVESITETT tipussal megy (`CreateAquariumMeasurementInput`), tehat
  * PAR lett belole fent.
  */
-const IRAS_HIVASOK_MA = 20;
+const IRAS_HIVASOK_MA = 21;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

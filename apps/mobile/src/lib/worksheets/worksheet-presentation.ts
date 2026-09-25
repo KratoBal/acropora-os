@@ -232,8 +232,13 @@ export function worksheetDetailRows(
     .join(" · ");
   if (unit) rows.push({ label: "Helyszín", value: unit });
 
+  /**
+   * "KELTEZÉS", NEM "KIÁLLÍTVA" (acrobot döntése, 2026-09-25, Figma 8. kör):
+   * a web és a Figma-terv is ezt a szót használja a lap kiállítási
+   * dátumára -- ugyanarra az adatra a két platform ne mondjon mást.
+   */
   const issued = formatWorksheetDate(worksheet.currentVersion.issueDate);
-  if (issued) rows.push({ label: "Kiállítva", value: issued });
+  if (issued) rows.push({ label: "Keltezés", value: issued });
 
   const fulfilled = formatWorksheetDate(
     worksheet.currentVersion.fulfillmentDate,
