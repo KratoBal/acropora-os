@@ -43,6 +43,7 @@ export class AquariumsService {
       search: query.search,
       ownershipType: query.ownershipType,
       waterBodyType: query.waterBodyType,
+      customerId: query.customerId,
     });
   }
 

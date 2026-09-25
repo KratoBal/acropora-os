@@ -16,6 +16,7 @@ import {
   type UnitOfMeasure,
   type AssetCategory,
   type AssetFunction,
+  type AquariumSummary,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +28,7 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { assetsApi } from "@/lib/api/assets";
 import { assetCategoriesApi } from "@/lib/api/asset-categories";
 import { assetFunctionsApi } from "@/lib/api/asset-functions";
+import { aquariumsApi } from "@/lib/api/aquariums";
 import { suppliersApi } from "@/lib/api/suppliers";
 import { unitsOfMeasureApi } from "@/lib/api/units-of-measure";
 import {
@@ -134,6 +136,8 @@ export function PilotAssetCreatePage() {
   const [selectedOwner, setSelectedOwner] = useState("");
   const [customerAddressId, setCustomerAddressId] = useState("");
   const [parentAssetId, setParentAssetId] = useState("");
+  const [aquariumId, setAquariumId] = useState("");
+  const [aquariums, setAquariums] = useState<AquariumSummary[]>([]);
   const [kind, setKind] = useState<AssetKind>("EQUIPMENT");
   const [status, setStatus] = useState<AssetStatus>("ACTIVE");
   const [criticality, setCriticality] = useState<AssetCriticality>("NORMAL");
@@ -279,6 +283,35 @@ export function PilotAssetCreatePage() {
     return () => controller.abort();
   }, [owner, token]);
 
+  /**
+   * AZ AKVÁRIUM CSAK VEVŐ TULAJDONOSNÁL ÉRTELMEZETT (a szerver
+   * `validateReferences`-e szerviz partnernél elutasítja) -- a lista ezért
+   * csak akkor tölt, és csak AHHOZ a vevőhöz szűkítve, hogy a választó ne
+   * ajánlhasson fel olyat, amit a mentés úgyis visszadobna.
+   */
+  useEffect(() => {
+    setAquariums([]);
+    if (!owner || owner.type !== "CUSTOMER") return;
+    const controller = new AbortController();
+    const aquariumQuery = new URLSearchParams({
+      page: "1",
+      pageSize: "100",
+      customerId: owner.id,
+    });
+    void aquariumsApi
+      .list(token, aquariumQuery, controller.signal)
+      .then((result) => setAquariums(result.items))
+      .catch((cause) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "A vevő akváriumai nem tölthetők be.",
+          );
+      });
+    return () => controller.abort();
+  }, [owner, token]);
+
   useEffect(() => {
     const interval = Number.parseInt(serviceIntervalDays, 10);
     if (!Number.isInteger(interval) || interval < 1) return;
@@ -379,6 +412,7 @@ export function PilotAssetCreatePage() {
         customerAddressId: customerAddressId || undefined,
         departmentId: departmentId || undefined,
         parentAssetId: parentAssetId || undefined,
+        aquariumId: aquariumId || undefined,
         kind,
         status,
         criticality,
@@ -651,6 +685,7 @@ export function PilotAssetCreatePage() {
                     setSelectedOwner(value);
                     setCustomerAddressId("");
                     setParentAssetId("");
+                    setAquariumId("");
                   }}
                   aria-label="Partner"
                 >
@@ -685,6 +720,28 @@ export function PilotAssetCreatePage() {
                   ))}
                 </PilotSelect>
               </PilotFormField>
+              {/*
+                CSAK VEVŐ TULAJDONOSNÁL LÁTSZIK, NEM CSAK LETILTVA -- a
+                szerver szerviz partnernél egyáltalán nem fogadja el az
+                akváriumot (`validateReferences`), tehát egy letiltott, de
+                látható mező itt félrevezetne.
+              */}
+              {owner?.type === "CUSTOMER" ? (
+                <PilotFormField label="Akvárium (opcionális)">
+                  <PilotSelect
+                    value={aquariumId}
+                    onChange={setAquariumId}
+                    aria-label="Akvárium"
+                  >
+                    <option value="">Nincs akváriumhoz kötve</option>
+                    {aquariums.map((aquarium) => (
+                      <option key={aquarium.id} value={aquarium.id}>
+                        {aquarium.name} ({aquarium.aquariumNumber})
+                      </option>
+                    ))}
+                  </PilotSelect>
+                </PilotFormField>
+              ) : null}
               <PilotFormField
                 label={
                   owner?.type === "SUPPLIER"

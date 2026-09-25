@@ -159,11 +159,13 @@ export class AquariumsRepository {
     search?: string;
     ownershipType?: "OWN" | "CUSTOMER";
     waterBodyType?: "AKVARIUM" | "TO";
+    customerId?: string;
   }): Promise<AquariumListResponse> {
     const where: Prisma.AquariumWhereInput = {
       isActive: true,
       ...(query.ownershipType ? { ownershipType: query.ownershipType } : {}),
       ...(query.waterBodyType ? { waterBodyType: query.waterBodyType } : {}),
+      ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.search
         ? {
             OR: [
