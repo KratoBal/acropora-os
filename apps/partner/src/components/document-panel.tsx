@@ -1,9 +1,37 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  PilotButton,
+  PilotCard,
+  PilotCardHeader,
+  PilotFormField,
+  PilotInput,
+} from "@acropora/ui";
 
 import { Message } from "./ticket-list";
-import { PANEL, PANEL_CIM } from "./frame";
+
+/**
+ * FIGMA 9. KÖR, PILOT-AQUA (2026-09-25).
+ *
+ * A `DocumentPanel` a hibajegy- (#1127), eszköz- (#1128) és munkalap-
+ * adatlap (#1129) egyetlen közös, akkor még violet komponense volt --
+ * mindhárom PR fejlécében kimondva maradt, mert egy három hívóhelyű,
+ * akkor még csak részben érintett komponens átalakítása túlmutatott volna
+ * az adott lapon. Most, hogy mind a három hívó már pilot-aqua, ez a kör
+ * zárja le a törést: a `document-panel`/`document-grid`/`document-card`/
+ * `document-thumb`/`document-upload`/`image-overlay` `globals.css`
+ * szabályok és a `frame.tsx` `PANEL`/`PANEL_CIM` helyett `PilotCard`/
+ * `PilotFormField`/`PilotInput`/`PilotButton` és Tailwind-osztályok.
+ *
+ * A VISELKEDÉS VÁLTOZATLAN: ugyanaz a kép-előnézet (saját `blob`+object URL
+ * hívás, mert a böngésző `<img>` eleme nem küld Authorization fejlécet),
+ * ugyanaz a nagyítható-csempe minta, ugyanaz a feltöltési űrlap. EGYETLEN
+ * KOMPENZÁLÓ VÁLTOZÁS: a felirat mező natív `maxLength={1000}`-je a
+ * `PilotInput`-nak nincs ilyen propja, ezért a korlátot az `onChange`
+ * maga kényszeríti ki (`value.slice(0, 1000)`) -- ugyanaz a minta, mint a
+ * munkalap-adatlap aláírókód-mezőjénél (#1129).
+ */
 
 type DocumentItem = {
   id: string;
@@ -91,80 +119,103 @@ export function DocumentPanel<T extends DocumentItem>({
   }
 
   return (
-    <section className={`document-panel ${PANEL}`}>
-      <h2 className={PANEL_CIM}>{title}</h2>
-      {items.length ? (
-        <div className="document-grid">
-          {items.map((item) => (
-            <article key={item.id} className="document-card">
-              {urls[item.id] ? (
-                /*
-                  A CSEMPE GOMB, NEM PUSZTA KÉP. A nagyítás így billentyűzetről
-                  is elérhető, és a képernyőolvasó is műveletnek mondja -- egy
-                  `onClick` a `<img>`-en mindkettőt elvenné.
-                */
-                <button
-                  type="button"
-                  className="document-thumb"
-                  onClick={() => setNagyitott(item.id)}
-                  aria-label={`${item.fileName} megnyitása nagyban`}
-                >
-                  <img
-                    src={urls[item.id]}
-                    alt={item.caption ?? item.fileName}
-                  />
-                </button>
-              ) : (
-                <p>{item.fileName}</p>
-              )}
-              <strong>{item.fileName}</strong>
-              {item.caption ? <span>{item.caption}</span> : null}
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p className="leading-[1.5] text-[#666677]">
-          Még nincs feltöltött fénykép vagy fájl.
-        </p>
-      )}
-      <form className="document-upload" onSubmit={submit}>
-        <label>
-          Fájl
-          <input
-            type="file"
-            accept="image/jpeg,image/png,application/pdf"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          />
-        </label>
-        <label>
-          Felirat
-          <input
-            value={caption}
-            maxLength={1000}
-            onChange={(event) => setCaption(event.target.value)}
-            placeholder="Mit láthatunk a képen?"
-          />
-        </label>
-        <button type="submit" disabled={!file || uploading}>
-          {uploading ? "Feltöltés…" : "Fájl feltöltése"}
-        </button>
-      </form>
-      {error ? <Message tone="error" text={error} /> : null}
+    <PilotCard>
+      <PilotCardHeader title={title} />
+      <div className="px-5 py-4">
+        {items.length ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-4">
+            {items.map((item) => (
+              <article key={item.id} className="flex flex-col gap-1.5">
+                {urls[item.id] ? (
+                  /*
+                    A CSEMPE GOMB, NEM PUSZTA KÉP. A nagyítás így
+                    billentyűzetről is elérhető, és a képernyőolvasó is
+                    műveletnek mondja -- egy `onClick` a `<img>`-en
+                    mindkettőt elvenné.
+                  */
+                  <button
+                    type="button"
+                    onClick={() => setNagyitott(item.id)}
+                    aria-label={`${item.fileName} megnyitása nagyban`}
+                    className="block cursor-zoom-in rounded-lg p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pilot-aqua-500 focus-visible:ring-offset-2"
+                  >
+                    <img
+                      src={urls[item.id]}
+                      alt={item.caption ?? item.fileName}
+                      className="aspect-[4/3] w-full rounded-lg bg-pilot-grey-100 object-cover"
+                    />
+                  </button>
+                ) : (
+                  <p className="text-sm text-pilot-grey-500">{item.fileName}</p>
+                )}
+                <strong className="text-sm text-pilot-grey-700">
+                  {item.fileName}
+                </strong>
+                {item.caption ? (
+                  <span className="text-xs text-pilot-grey-400">
+                    {item.caption}
+                  </span>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm leading-6 text-pilot-grey-500">
+            Még nincs feltöltött fénykép vagy fájl.
+          </p>
+        )}
+        <form className="mt-4 flex flex-col gap-3" onSubmit={submit}>
+          <label className="flex flex-col gap-1 text-sm font-medium text-pilot-grey-700">
+            Fájl
+            <input
+              type="file"
+              accept="image/jpeg,image/png,application/pdf"
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              className="cursor-pointer text-sm text-pilot-grey-600 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-pilot-aqua-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-pilot-aqua-700"
+            />
+          </label>
+          <PilotFormField label="Felirat">
+            <PilotInput
+              value={caption}
+              onChange={(value) => setCaption(value.slice(0, 1000))}
+              placeholder="Mit láthatunk a képen?"
+            />
+          </PilotFormField>
+          <div>
+            <PilotButton type="submit" disabled={!file || uploading}>
+              {uploading ? "Feltöltés…" : "Fájl feltöltése"}
+            </PilotButton>
+          </div>
+        </form>
+        {error ? (
+          <div className="mt-3">
+            <Message tone="error" text={error} />
+          </div>
+        ) : null}
+      </div>
       {nagyitott && urls[nagyitott] ? (
         <div
-          className="image-overlay"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-pilot-grey-900/80 p-6"
           role="dialog"
           aria-modal="true"
           aria-label="Nagyított kép"
           onClick={() => setNagyitott(null)}
         >
-          <img src={urls[nagyitott]} alt={nagyitottNeve(items, nagyitott)} />
-          <button type="button" onClick={() => setNagyitott(null)}>
+          <img
+            src={urls[nagyitott]}
+            alt={nagyitottNeve(items, nagyitott)}
+            className="max-h-[80vh] max-w-full rounded-lg object-contain sm:max-w-3xl"
+          />
+          <button
+            type="button"
+            onClick={() => setNagyitott(null)}
+            className="cursor-pointer rounded-full bg-white px-5 py-2 text-sm font-bold text-pilot-grey-900"
+          >
             Bezárás
           </button>
         </div>
       ) : null}
-    </section>
+    </PilotCard>
   );
 }
 
