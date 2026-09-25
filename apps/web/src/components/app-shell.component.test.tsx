@@ -17,6 +17,9 @@ vi.mock("./auth/auth-provider", () => ({
 vi.mock("./auth/user-menu", () => ({
   UserMenu: () => <div>Felhasználói menü</div>,
 }));
+vi.mock("./global-search", () => ({
+  GlobalSearch: () => <div>Kereső</div>,
+}));
 
 const ownerSession: Session = {
   id: "owner-session",
