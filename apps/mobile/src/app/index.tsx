@@ -72,6 +72,7 @@ function nativeBuildNumber(): string | null {
 
 interface ModuleCardProps {
   code: string;
+  icon: string;
   title: string;
   description: string;
   available: boolean;
@@ -277,6 +278,7 @@ export default function HomeScreen() {
             <View style={styles.modules}>
               <ModuleCard
                 code="HJ"
+                icon="🎫"
                 title="Hibajegyek"
                 description="Nyitott jegyek, léptetés és fénykép a helyszínen"
                 available={tileVisible("HJ")}
@@ -285,6 +287,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="MU"
+                icon="📋"
                 title="Munkalapok"
                 description="Kiosztott lapok, tételek és felelősök"
                 available={tileVisible("MU")}
@@ -299,6 +302,7 @@ export default function HomeScreen() {
               */}
               <ModuleCard
                 code="AI"
+                icon="📦"
                 title="Anyagigények"
                 description="Rád váró anyagigények, beérkezés jelölése"
                 available={tileVisible("AI")}
@@ -307,6 +311,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="ES"
+                icon="🔧"
                 title="Eszközök"
                 description="Partnereszközök, QR-azonosítás és hierarchia"
                 available={tileVisible("ES")}
@@ -315,6 +320,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="AK"
+                icon="🐟"
                 title="Akváriumok"
                 description="Saját és ügyfél akváriumai, méretek és eszközök"
                 available={tileVisible("AK")}
@@ -323,6 +329,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="RE"
+                icon="🛒"
                 title="Rendelések"
                 description="UNAS rendelések, státuszok és tételek"
                 available={tileVisible("RE")}
@@ -331,6 +338,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="BE"
+                icon="🧾"
                 title="Beszerzés"
                 description="Szállítói számlák és bevételezés"
                 available={tileVisible("BE")}
@@ -338,6 +346,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="TE"
+                icon="🏷️"
                 title="Termékek"
                 description="Terméktörzs és készletállapot"
                 available={tileVisible("TE")}
@@ -359,6 +368,7 @@ export default function HomeScreen() {
               */}
               <ModuleCard
                 code="NAV"
+                icon="🔄"
                 title="NAV-szinkron"
                 description="Bejövő számlák és párosítások"
                 available={tileVisible("NAV")}
@@ -366,6 +376,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="PA"
+                icon="🤝"
                 title="Partnerek"
                 description="Szerviz partnerek és kapcsolattartók"
                 available={tileVisible("PA")}
@@ -553,7 +564,7 @@ export default function HomeScreen() {
  * mint a `worksheets/new.tsx` `Section`/`FieldError` segédkomponensei.
  */
 function ModuleCard({
-  code,
+  icon,
   title,
   description,
   available,
@@ -576,15 +587,18 @@ function ModuleCard({
         pressed && styles.pressed,
       ]}
     >
+      {/*
+        A BETŰKÓD HELYETT A TERV SZERINTI IKON (Balázs kérése, 2026-09-25
+        18:23, exchange/figma-telefon-make-12/src/MobileAppScreen.tsx
+        264-269. sor): a hat megnevezett modul emojija onnan jön betűre
+        egyezően. A négy, a tervben NEM szereplő modul (Rendelések,
+        Beszerzés, Termékek, NAV-szinkron) saját, a témájukhoz illő emojit
+        kapott, ugyanabban a stílusban. A DOBOZ ÉS A HALVÁNYÍTÁS
+        VÁLTOZATLAN: a `moduleCardDisabled` `opacity`-je a teljes csempét
+        (az ikont is) halványítja, ugyanúgy, ahogy eddig a betűkódot.
+      */}
       <View style={[styles.moduleCode, !enabled && styles.moduleCodeDisabled]}>
-        <Text
-          style={[
-            styles.moduleCodeText,
-            !enabled && styles.moduleCodeTextDisabled,
-          ]}
-        >
-          {code}
-        </Text>
+        <Text style={styles.moduleIconText}>{icon}</Text>
       </View>
       <View style={styles.moduleText}>
         <Text style={styles.moduleTitle}>{title}</Text>
@@ -692,17 +706,45 @@ function createStyles(t: ThemeTokens) {
     sectionTitle: { color: t.textPrimary, fontSize: 19, fontWeight: "800" },
     sectionHint: { color: t.textMuted, fontSize: 12 },
     sectionSubtext: { color: t.textMuted, fontSize: 12, marginTop: 3 },
-    modules: { gap: 10 },
+    /**
+     * KÉT OSZLOP, A TERV SZERINT (Balázs kérdése, 2026-09-25 18:25, ugyanaz
+     * a képernyőfotó-kör, mint az ikonoké): a `justifyContent: "space-
+     * between"` osztja el a sor két csempéjét, NEM egy vízszintes `gap` --
+     * a `gap` és a százalékos `width` együtt Yoga alatt könnyen túlcsordul
+     * (48% + 48% + gap > 100%), és a második csempét lelöki a következő
+     * sorba. A `rowGap` (a SOROK közti függőleges tér) ezt a kockázatot nem
+     * hordozza, mert nem a szélesség-számításba megy bele.
+     *
+     * PÁRATLAN CSEMPESZÁMNÁL AZ UTOLSÓ FÉL SZÉLESSÉGŰ MARAD, NEM NYÚLIK KI:
+     * a csempe SAJÁT `width: "48%"`-a rögzített, nem `flex: 1`, tehát egy
+     * pár nélkül maradt utolsó csempe a `space-between` mellett egyszerűen
+     * a sor elején áll, üres hellyel mellette -- nem tölti ki a sort.
+     */
+    modules: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      rowGap: 10,
+    },
+    /**
+     * FÜGGŐLEGES CSEMPE, A TERV SZERINT: felül az ikon, alatta a cím és a
+     * leírás, legalul a nyíl (vagy a "Következő ütem" felirat). Az
+     * `alignItems: "stretch"` (a React Native alapértelmezése, itt
+     * KIMONDVA, mert erre épül a lenti `moduleText: { flex: 1 }`) teszi,
+     * hogy a szöveg-blokk és a nyíl a TELJES kártyaszélességet kapja, az
+     * ikon-doboz sajátmagasságát/szélességét pedig a rögzített `width`/
+     * `height` védi a nyújtástól.
+     */
     moduleCard: {
-      alignItems: "center",
+      alignItems: "stretch",
       backgroundColor: t.surface,
       borderColor: t.border,
       borderRadius: 16,
       borderWidth: 1,
-      flexDirection: "row",
-      gap: 13,
-      minHeight: 78,
+      flexDirection: "column",
+      gap: 8,
       padding: 14,
+      width: "48%",
     },
     moduleCardDisabled: { opacity: 0.68 },
     moduleCode: {
@@ -714,19 +756,19 @@ function createStyles(t: ThemeTokens) {
       width: 46,
     },
     moduleCodeDisabled: { backgroundColor: t.border },
-    moduleCodeText: { color: t.textOnAccent, fontSize: 13, fontWeight: "900" },
-    moduleCodeTextDisabled: { color: t.textMuted },
+    moduleIconText: { fontSize: 22, textAlign: "center" },
+    /**
+     * A `flex: 1` TOLJA A NYILAT/FELIRATOT A KÁRTYA ALJÁRA: ha egy sor
+     * másik csempéje magasabb (hosszabb leírás miatt), a sor mindkét
+     * csempéje ugyanolyan magasra nyúlik (RN alapértelmezett `stretch`), és
+     * ez a blokk issza fel a többletmagasságot -- a nyíl emiatt marad
+     * mindig legalul, nem a leírás alján lebegve.
+     */
     moduleText: { flex: 1, gap: 4 },
     moduleTitle: { color: t.textPrimary, fontSize: 16, fontWeight: "800" },
     moduleDescription: { color: t.textSecondary, fontSize: 12, lineHeight: 17 },
-    moduleArrow: { color: t.accent, fontSize: 30, fontWeight: "300" },
-    comingSoon: {
-      color: t.textMuted,
-      fontSize: 10,
-      fontWeight: "800",
-      maxWidth: 62,
-      textAlign: "right",
-    },
+    moduleArrow: { color: t.accent, fontSize: 22, fontWeight: "300" },
+    comingSoon: { color: t.textMuted, fontSize: 10, fontWeight: "800" },
     ordersSection: { gap: 12, paddingTop: 6 },
     textButton: {
       backgroundColor: t.accentSoft,
