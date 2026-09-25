@@ -61,12 +61,14 @@ export function PilotThemeRoot({
   );
 }
 
+export type PilotBadgeVariant = "teal" | "grey" | "amber" | "blue" | "default";
+
 export function PilotBadge({
   children,
   variant = "default",
 }: {
   children: ReactNode;
-  variant?: "teal" | "grey" | "amber" | "default";
+  variant?: PilotBadgeVariant;
 }) {
   const styles = {
     teal: "bg-pilot-aqua-50 text-pilot-aqua-700 ring-1 ring-pilot-aqua-200",
@@ -81,6 +83,15 @@ export function PilotBadge({
      * marad (a nyolc belső állapot neve), nem a színben.
      */
     amber: "bg-pilot-amber-50 text-pilot-amber-700 ring-1 ring-pilot-amber-100",
+    /**
+     * BLUE -- AZ ESZKÖZ-ÁLLAPOT KANONIKUS `assetStatusTone`-JÁHOZ
+     * (packages/types/src/asset-management.ts), a két tartalék-állapot
+     * (`WARM_STANDBY`/`COLD_STANDBY`) színe. Balázs 2026-09-15/16-i
+     * döntése kifejezetten arról szólt, hogy ez a kettő LÁSSON MÁSKÉNT
+     * ki, mint a javítás alatt álló (`amber`) -- egy harmadik szín
+     * ehhez kellett, nem díszítés.
+     */
+    blue: "bg-pilot-blue-50 text-pilot-blue-700 ring-1 ring-pilot-blue-100",
     default: "bg-pilot-grey-100 text-pilot-grey-600 ring-1 ring-pilot-grey-200",
   };
   return (

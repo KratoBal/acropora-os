@@ -29,7 +29,11 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceIcon } from "@/components/service/service-list-chrome";
 import { assetsApi } from "@/lib/api/assets";
 import { assetCategoriesApi } from "@/lib/api/asset-categories";
-import { assetKindLabel, assetStatusLabel } from "../asset-labels";
+import {
+  assetKindLabel,
+  assetStatusLabel,
+  assetStatusPilotVariant,
+} from "../asset-labels";
 import { TABS } from "../asset-list-page";
 import {
   PilotBadge,
@@ -432,13 +436,7 @@ export function PilotAssetListPage() {
                     </td>
                     <td className="px-4 py-3">
                       <PilotBadge
-                        variant={
-                          asset.status === "ACTIVE"
-                            ? "teal"
-                            : asset.status === "RETIRED"
-                              ? "grey"
-                              : "amber"
-                        }
+                        variant={assetStatusPilotVariant(asset.status)}
                       >
                         {assetStatusLabel[asset.status]}
                       </PilotBadge>

@@ -537,6 +537,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
   const offlineSav = (
     <ServiceOfflineNotice
       state={job ? { kind: "loaded" } : { kind: "empty" }}
+      pilot
     />
   );
 

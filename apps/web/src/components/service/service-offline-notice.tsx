@@ -102,8 +102,20 @@ export const SZOVEG: Record<ServiceOfflineState["kind"], string> = {
 
 export function ServiceOfflineNotice({
   state,
+  pilot,
 }: {
   state: ServiceOfflineState;
+  /**
+   * A LAP TÖBBSÉGE (11 hívó) a régi `@acropora/ui` `dusk-*`/`brand-*`
+   * arculatot viseli, ÉS csak KÉT pilot-oldal (Eszközök új eszköz űrlap,
+   * Hibajegy adatlap) ágyazza be egy `PilotThemeRoot` alá -- ott a nyers
+   * `amber-*` osztály sötét módban világos sávként maradna (nincs hozzá
+   * `[data-theme="dark"]` felülírás, mert azt csak a `pilot-*` tokenek
+   * kapják). A propnak EZÉRT nincs alapértéke: a nem-pilot hívók
+   * szándékosan `undefined`-ot hagynak, a két pilot hívó explicit
+   * `pilot`-ot ad át.
+   */
+  pilot?: boolean;
 }) {
   /**
    * A KIINDULAS MINDIG "ONLINE", ES EZ NEM OVATOSSAG, HANEM KENYSZER: a
@@ -129,7 +141,11 @@ export function ServiceOfflineNotice({
   return (
     <div
       role="status"
-      className="mb-5 flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700"
+      className={`mb-5 flex items-center gap-2.5 rounded-xl border px-4 py-3 text-xs ${
+        pilot
+          ? "border-pilot-amber-100 bg-pilot-amber-50 text-pilot-amber-700"
+          : "border-amber-200 bg-amber-50 text-amber-700"
+      }`}
     >
       <ServiceIcon name="offline" className="size-4 shrink-0" />
       <span>{SZOVEG[state.kind]}</span>

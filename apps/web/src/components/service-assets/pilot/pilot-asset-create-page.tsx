@@ -436,7 +436,7 @@ export function PilotAssetCreatePage() {
       </div>
 
       <div className="flex max-w-3xl flex-col gap-5 px-8 py-6">
-        <ServiceOfflineNotice state={{ kind: "form" }} />
+        <ServiceOfflineNotice state={{ kind: "form" }} pilot />
         {error ? (
           <Alert
             variant="danger"
