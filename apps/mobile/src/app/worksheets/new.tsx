@@ -1109,8 +1109,13 @@ function createStyles(t: ThemeTokens) {
     safeArea: { flex: 1, backgroundColor: t.background },
     flex: { flex: 1 },
     container: { padding: 18, paddingBottom: 48, gap: 16 },
+    /*
+      A SZÍN A TERV SZÜRKÉJE (grey-400 -> t.textMuted), NEM AZ AKCENT --
+      ugyanaz a rendszerszintű minta, mint amit acrobot kérésére (2026-09-25,
+      msg 23917/23921) a többi telefon-listán már javítottunk.
+    */
     eyebrow: {
-      color: t.accent,
+      color: t.textMuted,
       fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1.2,
@@ -1122,7 +1127,21 @@ function createStyles(t: ThemeTokens) {
       borderRadius: 14,
       padding: 14,
     },
-    sectionTitle: { color: t.textPrimary, fontSize: 17, fontWeight: "900" },
+    /*
+      NAGYBETŰS, RITKÍTOTT, HALVÁNY -- A TERV MINTÁJA (`MunkalapokScreen.tsx`
+      `MobileUjMunkalap`, 1302. és 1320. sor: "Hozzárendelés"/"Munkalap
+      adatai" `text-[10px] font-semibold text-grey-400 uppercase
+      tracking-wide"). A kód eddig sötét, nagy, nem nagybetűs szöveget adott.
+      A szöveg maga NEM lett nagybetűs átírva, a `textTransform` végzi
+      ugyanazt, amit a terv `uppercase` osztálya.
+    */
+    sectionTitle: {
+      color: t.textMuted,
+      fontSize: 10,
+      fontWeight: "600",
+      letterSpacing: 1,
+      textTransform: "uppercase",
+    },
     sectionBody: { marginTop: 12, gap: 10 },
     field: { gap: 5 },
     label: { color: t.textSecondary, fontSize: 12, fontWeight: "800" },

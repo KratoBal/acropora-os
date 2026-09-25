@@ -114,10 +114,24 @@ function createStyles(t: ThemeTokens) {
       fontWeight: "800",
       letterSpacing: 0.6,
     },
+    /*
+      SZÍNES JELVÉNY, UGYANAZZAL A RECEPTTEL, MINT AZ ADATLAP SAJÁT
+      "badge" STÍLUSA (`assets/[id].tsx`) -- acrobot kérése, 2026-09-25: a
+      terv (`EszközScreen.tsx` `StatuszBadge`) a listán ÉS az adatlapon is
+      pill-ként adja az állapotot, a lista eddig sima szürke szöveget adott.
+      A hibajegy-lista eltérő alakú jelvénye helyett a SAJÁT (eszköz-)
+      adatlap már meglévő mintáját követi, hogy a lista és az adatlap
+      egyformán nézzen ki ugyanazon az entitáson.
+    */
     status: {
-      color: t.textSecondary,
+      alignSelf: "flex-start",
+      backgroundColor: t.accentSoft,
+      borderRadius: 8,
+      color: t.accentSoftText,
       fontSize: 11,
-      fontWeight: "700",
+      fontWeight: "800",
+      paddingHorizontal: 9,
+      paddingVertical: 5,
     },
     name: { color: t.textPrimary, fontSize: 18, fontWeight: "800" },
     customer: { color: t.textPrimary, fontSize: 14, fontWeight: "600" },
