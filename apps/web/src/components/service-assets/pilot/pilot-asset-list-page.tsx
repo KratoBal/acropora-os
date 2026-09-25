@@ -445,8 +445,16 @@ export function PilotAssetListPage() {
             <p className="text-xs text-pilot-grey-400">
               {data.items.length} / {data.pagination.totalItems} eszköz
             </p>
+            {/*
+              SZÁMOZOTT GOMBOK, NYÍL NÉLKÜL, A SAJÁT TERVKÖR SZERINT
+              (2026-09-25, acrobot döntése): a web Eszköz lista terve
+              (`EszközScreen.tsx` 439-447. sor) így adja, sötét (aktív)
+              gombbal -- ez a lista saját mintája, nem a "prevNext"
+              alapértelmezés.
+            */}
             <Pagination
               position="bottom"
+              variant="numberedGrey"
               page={data.pagination.page}
               totalPages={data.pagination.totalPages}
               onPageChange={goToPage}

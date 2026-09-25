@@ -333,7 +333,15 @@ export function PilotSupplierListPage() {
                     ).toLocaleString("hu-HU")}{" "}
                     látható
                   </p>
+                  {/*
+                    "‹ ELŐZŐ" / SZÁMOZOTT GOMBOK / "KÖVETKEZŐ ›", A SAJÁT
+                    TERVKÖR SZERINT (2026-09-25, acrobot döntése): a web
+                    Partner lista terve (`PartnersScreen.tsx` 653-663.
+                    sor) így adja, teal (aktív) gombbal -- ez a lista
+                    saját mintája, nem a "prevNext" alapértelmezés.
+                  */}
                   <Pagination
+                    variant="numberedTeal"
                     page={data.pagination.page}
                     totalPages={data.pagination.totalPages}
                     onPageChange={goToPage}

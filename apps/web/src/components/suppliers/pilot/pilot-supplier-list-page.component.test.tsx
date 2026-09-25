@@ -200,6 +200,11 @@ describe("PilotSupplierListPage paging", () => {
     expect(sent.get("page")).toBe("1");
   });
 
+  /**
+   * A GOMB SZÖVEGE "Következő ›" (NYÍLLAL), A SAJÁT TERVKÖR SZERINT
+   * (2026-09-25, acrobot döntése): a Partner lista `numberedTeal`
+   * lapozó-változatot kapott, ami a plusz nyíl-glyphet is hordozza.
+   */
   it("moves to the next page instead of returning to the first", async () => {
     render(<PilotSupplierListPage />);
     await screen.findByText("Aqua Kereskedés Kft.");
@@ -207,7 +212,7 @@ describe("PilotSupplierListPage paging", () => {
     fireEvent.click(
       within(
         screen.getByRole("navigation", { name: "Lapozás, alul" }),
-      ).getByRole("button", { name: "Következő" }),
+      ).getByRole("button", { name: "Következő ›" }),
     );
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
