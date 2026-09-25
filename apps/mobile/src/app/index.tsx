@@ -72,6 +72,7 @@ function nativeBuildNumber(): string | null {
 
 interface ModuleCardProps {
   code: string;
+  icon: string;
   title: string;
   description: string;
   available: boolean;
@@ -277,6 +278,7 @@ export default function HomeScreen() {
             <View style={styles.modules}>
               <ModuleCard
                 code="HJ"
+                icon="🎫"
                 title="Hibajegyek"
                 description="Nyitott jegyek, léptetés és fénykép a helyszínen"
                 available={tileVisible("HJ")}
@@ -285,6 +287,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="MU"
+                icon="📋"
                 title="Munkalapok"
                 description="Kiosztott lapok, tételek és felelősök"
                 available={tileVisible("MU")}
@@ -299,6 +302,7 @@ export default function HomeScreen() {
               */}
               <ModuleCard
                 code="AI"
+                icon="📦"
                 title="Anyagigények"
                 description="Rád váró anyagigények, beérkezés jelölése"
                 available={tileVisible("AI")}
@@ -307,6 +311,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="ES"
+                icon="🔧"
                 title="Eszközök"
                 description="Partnereszközök, QR-azonosítás és hierarchia"
                 available={tileVisible("ES")}
@@ -315,6 +320,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="AK"
+                icon="🐟"
                 title="Akváriumok"
                 description="Saját és ügyfél akváriumai, méretek és eszközök"
                 available={tileVisible("AK")}
@@ -323,6 +329,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="RE"
+                icon="🛒"
                 title="Rendelések"
                 description="UNAS rendelések, státuszok és tételek"
                 available={tileVisible("RE")}
@@ -331,6 +338,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="BE"
+                icon="🧾"
                 title="Beszerzés"
                 description="Szállítói számlák és bevételezés"
                 available={tileVisible("BE")}
@@ -338,6 +346,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="TE"
+                icon="🏷️"
                 title="Termékek"
                 description="Terméktörzs és készletállapot"
                 available={tileVisible("TE")}
@@ -359,6 +368,7 @@ export default function HomeScreen() {
               */}
               <ModuleCard
                 code="NAV"
+                icon="🔄"
                 title="NAV-szinkron"
                 description="Bejövő számlák és párosítások"
                 available={tileVisible("NAV")}
@@ -366,6 +376,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="PA"
+                icon="🤝"
                 title="Partnerek"
                 description="Szerviz partnerek és kapcsolattartók"
                 available={tileVisible("PA")}
@@ -553,7 +564,7 @@ export default function HomeScreen() {
  * mint a `worksheets/new.tsx` `Section`/`FieldError` segédkomponensei.
  */
 function ModuleCard({
-  code,
+  icon,
   title,
   description,
   available,
@@ -576,15 +587,18 @@ function ModuleCard({
         pressed && styles.pressed,
       ]}
     >
+      {/*
+        A BETŰKÓD HELYETT A TERV SZERINTI IKON (Balázs kérése, 2026-09-25
+        18:23, exchange/figma-telefon-make-12/src/MobileAppScreen.tsx
+        264-269. sor): a hat megnevezett modul emojija onnan jön betűre
+        egyezően. A négy, a tervben NEM szereplő modul (Rendelések,
+        Beszerzés, Termékek, NAV-szinkron) saját, a témájukhoz illő emojit
+        kapott, ugyanabban a stílusban. A DOBOZ ÉS A HALVÁNYÍTÁS
+        VÁLTOZATLAN: a `moduleCardDisabled` `opacity`-je a teljes csempét
+        (az ikont is) halványítja, ugyanúgy, ahogy eddig a betűkódot.
+      */}
       <View style={[styles.moduleCode, !enabled && styles.moduleCodeDisabled]}>
-        <Text
-          style={[
-            styles.moduleCodeText,
-            !enabled && styles.moduleCodeTextDisabled,
-          ]}
-        >
-          {code}
-        </Text>
+        <Text style={styles.moduleIconText}>{icon}</Text>
       </View>
       <View style={styles.moduleText}>
         <Text style={styles.moduleTitle}>{title}</Text>
@@ -714,8 +728,7 @@ function createStyles(t: ThemeTokens) {
       width: 46,
     },
     moduleCodeDisabled: { backgroundColor: t.border },
-    moduleCodeText: { color: t.textOnAccent, fontSize: 13, fontWeight: "900" },
-    moduleCodeTextDisabled: { color: t.textMuted },
+    moduleIconText: { fontSize: 22, textAlign: "center" },
     moduleText: { flex: 1, gap: 4 },
     moduleTitle: { color: t.textPrimary, fontSize: 16, fontWeight: "800" },
     moduleDescription: { color: t.textSecondary, fontSize: 12, lineHeight: 17 },
