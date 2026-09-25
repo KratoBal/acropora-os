@@ -193,6 +193,16 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     name: "akvarium_neve",
     description: "Az akvárium vagy tó neve, amelyre a mérés vonatkozik.",
   },
+  /**
+   * Balazs kerese, 2026-09-25 10:31 UTC (Akvariumok szal): a level tartalmazza
+   * annak a kollegának a nevet is, aki kikuldte. `AuthenticatedUser.displayName`
+   * a forras -- KOTELEZO mezo a tipuson es a semaban is (`User.displayName`,
+   * `NOT NULL`), tehat nincs "nincs teljes neve" eset, amire tartalek kellene.
+   */
+  {
+    name: "kuldo_neve",
+    description: "A vízmérés eredményét kiküldő kolléga neve.",
+  },
 ] as const;
 
 /** Egy levelezesi esemeny: a sablon kulcsa es az emberi neve. */

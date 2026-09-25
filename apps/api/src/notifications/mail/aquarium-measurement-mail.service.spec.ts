@@ -68,6 +68,7 @@ function kuldesInput(): Parameters<AquariumMeasurementMailService["send"]>[0] {
     customerEmail: "vevo@pelda.teszt",
     customerName: "Kiss Márta",
     actorUserId: "user-1",
+    actorName: "Tóth Gábor",
   };
 }
 
@@ -169,6 +170,24 @@ describe("AquariumMeasurementMailService.send", () => {
 
       assert.equal(kuldott[0]?.subject, "Friss vízmérés: Nappali medence");
       assert.equal(kuldott[0]?.text, "Szia Kiss Márta, a mérés kész.");
+    }));
+
+  /**
+   * Balazs kerese, 2026-09-25 10:31 UTC: a kuldo kollega neve is
+   * behelyettesitheto legyen -- `{{kuldo_neve}}`, az `actorName` mezobol.
+   */
+  it("a {{kuldo_neve}} a küldő kolléga nevét helyettesíti be", () =>
+    domainEventStub(async () => {
+      const { service, kuldott } = szolgaltatas({
+        template: {
+          subject: "Vízmérés -- {{akvarium_neve}}",
+          body: "Küldte: {{kuldo_neve}}",
+        },
+      });
+
+      await service.send(kuldesInput());
+
+      assert.equal(kuldott[0]?.text, "Küldte: Tóth Gábor");
     }));
 
   /*
