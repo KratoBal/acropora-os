@@ -220,15 +220,18 @@ export default function HomeScreen() {
           </View>
         ) : null}
         <View style={styles.hero}>
-          <View style={styles.heroTopline}>
-            <Text style={styles.eyebrow}>
-              {capabilities.workspace ? "ACROPORA OS" : "FIELD SERVICE"}
-            </Text>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>
-                {userRoleLabel(user.role)}
-              </Text>
-            </View>
+          {/*
+            KÜLÖN SOR, BAL OLDALT (Balázs második képe, 18:51): a terv az
+            "ACROPORA OS" felirat ALÁ teszi a szerepkör-jelvényt, saját
+            sorban, balra igazítva -- nem egy közös, `space-between` sorban
+            a felirattal. Az első kör tévedésből egy sorba tette a kettőt,
+            jobbra igazítva a jelvényt.
+          */}
+          <Text style={styles.eyebrow}>
+            {capabilities.workspace ? "ACROPORA OS" : "FIELD SERVICE"}
+          </Text>
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleBadgeText}>{userRoleLabel(user.role)}</Text>
           </View>
           <Text style={styles.title}>Szia, {personDisplayName(user)}!</Text>
           <Text style={styles.subtitle}>
@@ -593,13 +596,15 @@ function ModuleCard({
         264-269. sor): a hat megnevezett modul emojija onnan jön betűre
         egyezően. A négy, a tervben NEM szereplő modul (Rendelések,
         Beszerzés, Termékek, NAV-szinkron) saját, a témájukhoz illő emojit
-        kapott, ugyanabban a stílusban. A DOBOZ ÉS A HALVÁNYÍTÁS
-        VÁLTOZATLAN: a `moduleCardDisabled` `opacity`-je a teljes csempét
-        (az ikont is) halványítja, ugyanúgy, ahogy eddig a betűkódot.
+        kapott, ugyanabban a stílusban.
+
+        NINCS SAJÁT DOBOZ AZ IKON MÖGÖTT (Balázs második képe, 18:51): a
+        terv csak a puszta emojit rajzolja (`<span className="text-2xl">`),
+        semmilyen háttér-négyzet nélkül -- az első kör tévedésből egy
+        akcent-színű dobozt tett mögé. A halványítás emiatt MOST MÁR
+        kizárólag a `moduleCardDisabled` kártya-szintű `opacity`-jéből jön.
       */}
-      <View style={[styles.moduleCode, !enabled && styles.moduleCodeDisabled]}>
-        <Text style={styles.moduleIconText}>{icon}</Text>
-      </View>
+      <Text style={styles.moduleIconText}>{icon}</Text>
       <View style={styles.moduleText}>
         <Text style={styles.moduleTitle}>{title}</Text>
         <Text style={styles.moduleDescription}>{description}</Text>
@@ -673,29 +678,50 @@ function createStyles(t: ThemeTokens) {
     },
     container: { gap: 18, padding: 20, paddingBottom: 36 },
     hero: { gap: 10, paddingBottom: 8, paddingTop: 18 },
-    heroTopline: {
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "space-between",
-    },
+    /**
+     * A TERV SZERINTI SZÍN ÉS SÚLY (Balázs második képe, 18:51): a
+     * `MobileLabel` a tervben `text-grey-400`, nem az akcent szín -- az
+     * első kör tévedésből az akcentet vitte át ide (a többi képernyő
+     * eyebrow-jával összekeverve, ott az VALÓBAN akcent-színű).
+     */
     eyebrow: {
-      color: t.accent,
+      color: t.textMuted,
       fontSize: 12,
-      fontWeight: "900",
-      letterSpacing: 1.5,
+      fontWeight: "700",
+      textTransform: "uppercase",
+      letterSpacing: 1.2,
     },
+    /**
+     * SEMLEGES, NEM AKCENT-SZÍNŰ JELVÉNY (Balázs második képe, 18:51): a
+     * terv `MobileBadge`-e "grey" változatban jelenik meg
+     * ("Szerviz technikus"), nem az akcent-alapú "teal" változatban -- az
+     * első kör tévedésből ezt is akcent-színűre vitte át. Nincs pontos
+     * "grey-100" token, ezért a `surfaceRaised`+`border` pár adja a
+     * legközelebbi, a kártyáktól még megkülönböztethető semleges felületet.
+     * `alignSelf: "flex-start"`, mert a terv jelvénye tartalom-szélességű
+     * (`inline-flex`), nem a sor teljes szélességét kitöltő -- egy sima
+     * `View` a `hero` oszlopban alapértelmezésben nyúlna.
+     */
     roleBadge: {
-      backgroundColor: t.accentSoft,
+      alignSelf: "flex-start",
+      backgroundColor: t.surfaceRaised,
+      borderColor: t.border,
       borderRadius: 999,
+      borderWidth: 1,
       paddingHorizontal: 10,
-      paddingVertical: 5,
+      paddingVertical: 4,
     },
-    roleBadgeText: { color: t.accentSoftText, fontSize: 11, fontWeight: "800" },
+    roleBadgeText: { color: t.textSecondary, fontSize: 12, fontWeight: "600" },
+    /**
+     * MÉRET ÉS SÚLY A FORRÁSBÓL (Balázs második képe, 18:51): a terv `h1`-je
+     * `text-2xl font-bold` (24px/700) -- az első kör 30px/900-at adott,
+     * jóval nagyobbat és vastagabbat, mint a terv.
+     */
     title: {
       color: t.textPrimary,
-      fontSize: 30,
-      fontWeight: "900",
-      lineHeight: 36,
+      fontSize: 24,
+      fontWeight: "700",
+      lineHeight: 30,
     },
     subtitle: { color: t.textSecondary, fontSize: 15, lineHeight: 22 },
     sectionHeader: {
@@ -703,7 +729,21 @@ function createStyles(t: ThemeTokens) {
       flexDirection: "row",
       justifyContent: "space-between",
     },
-    sectionTitle: { color: t.textPrimary, fontSize: 19, fontWeight: "800" },
+    /**
+     * KIS, SZÜRKE, NAGYBETŰS CÍMKE, A TERV SZERINT (Balázs második képe,
+     * 18:51, "MODULOK"): a terv `MobileLabel`-je 12px/600, `uppercase`,
+     * `tracking-widest`, `text-grey-400` -- az első kör egy nagy (19px),
+     * fekete, nem nagybetűs címsort adott helyette. Ugyanez a stílus adja a
+     * "Legutóbbi rendelések" címét is: a terv ezt a szakaszt nem ismeri, de
+     * ugyanaz a szerep (kártyacsoport fölötti címke), tehát ugyanaz a minta.
+     */
+    sectionTitle: {
+      color: t.textMuted,
+      fontSize: 12,
+      fontWeight: "700",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+    },
     sectionHint: { color: t.textMuted, fontSize: 12 },
     sectionSubtext: { color: t.textMuted, fontSize: 12, marginTop: 3 },
     /**
@@ -747,16 +787,13 @@ function createStyles(t: ThemeTokens) {
       width: "48%",
     },
     moduleCardDisabled: { opacity: 0.68 },
-    moduleCode: {
-      alignItems: "center",
-      backgroundColor: t.accent,
-      borderRadius: 12,
-      height: 46,
-      justifyContent: "center",
-      width: 46,
-    },
-    moduleCodeDisabled: { backgroundColor: t.border },
-    moduleIconText: { fontSize: 22, textAlign: "center" },
+    /**
+     * PUSZTA EMOJI, DOBOZ NÉLKÜL (Balázs második képe, 18:51): a terv
+     * `text-2xl`-je (24px) egy sima `<span>`-en áll, semmilyen háttér-
+     * négyzet nélkül -- az első kör tévedésből egy akcent-színű dobozt
+     * (`moduleCode`) tett mögé, ami itt megszűnt.
+     */
+    moduleIconText: { fontSize: 24 },
     /**
      * A `flex: 1` TOLJA A NYILAT/FELIRATOT A KÁRTYA ALJÁRA: ha egy sor
      * másik csempéje magasabb (hosszabb leírás miatt), a sor mindkét
@@ -765,9 +802,19 @@ function createStyles(t: ThemeTokens) {
      * mindig legalul, nem a leírás alján lebegve.
      */
     moduleText: { flex: 1, gap: 4 },
-    moduleTitle: { color: t.textPrimary, fontSize: 16, fontWeight: "800" },
+    /**
+     * SÚLY ÉS MÉRET A FORRÁSBÓL (Balázs második képe, 18:51): a terv
+     * `font-semibold text-sm`-je 14px/600 -- az első kör 16px/800-at adott,
+     * észrevehetően vastagabbat.
+     */
+    moduleTitle: { color: t.textPrimary, fontSize: 14, fontWeight: "600" },
     moduleDescription: { color: t.textSecondary, fontSize: 12, lineHeight: 17 },
-    moduleArrow: { color: t.accent, fontSize: 22, fontWeight: "300" },
+    /**
+     * SZÜRKE NYÍL, NEM AKCENT (Balázs második képe, 18:51): a terv
+     * `text-grey-300`-at ad a nyílnak, nem a márka-teált -- az első kör
+     * tévedésből az akcentet vitte át ide is.
+     */
+    moduleArrow: { color: t.textMuted, fontSize: 22, fontWeight: "300" },
     comingSoon: { color: t.textMuted, fontSize: 10, fontWeight: "800" },
     ordersSection: { gap: 12, paddingTop: 6 },
     textButton: {
