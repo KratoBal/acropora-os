@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
@@ -194,6 +194,145 @@ describe("a gombok színe (sürgős javítás, 2026-09-25)", () => {
       kivul,
       /background:\s*#4c397f/,
       "a lila alapszín a @layer base blokkon kívül is előfordul, tehát rétegezetlenül is hat",
+    );
+  });
+});
+
+/**
+ * MÁSODIK KÖR, 2026-09-25 -- Balázs második hibajelentése: a fenti
+ * `@layer base` javítás után a lapozó és a Kijelentkezés helyesen
+ * elszíntelenedett, DE az inaktív státusz-fülek (Hibajegyek/Eszközök/
+ * Munkalapok listák) TOVÁBBRA IS lila hátterűek maradtak, csak az AKTÍV fül
+ * lett zöld.
+ *
+ * MÉRVE AZ ÉLES, LEFORDÍTOTT CSS-EN (2026-09-25 16:2x, ticket.acropora.hu):
+ * a `@layer base` fix maga helyesen ott áll és helyesen alacsonyabb
+ * prioritású, mint a `utilities` réteg -- a hiányzó darab nem a réteg,
+ * hanem az, hogy az inaktív fülnek EGYÁLTALÁN NINCS `background-color`-t adó
+ * Tailwind-osztálya NYUGALMI állapotban (csak `hover:bg-*`, ami kizárólag
+ * `:hover`-en hat). A `@layer base` réteg csak akkor veszíthet, ha van VELE
+ * VERSENGŐ, magasabb rétegbeli szabály -- ha nincs, marad az egyetlen forrás,
+ * és a lila átlátszik. Ez az állítás ezt a hiányt fogja meg: minden
+ * `<button>` minden feltételes className-ágának kell legyen egy NYUGALMI
+ * (nem `hover:`/`focus:`/`active:` előtagú) `bg-*` osztálya.
+ */
+describe("az inaktív gomb-állapotoknak is van nyugalmi háttér-osztálya (2026-09-25)", () => {
+  const GYOKER2 = join(process.cwd(), "src");
+
+  /**
+   * A KOMPONENSEK GYŰJTÉSE UGYANAZZAL A BEJÁRÁSSAL, MINT A
+   * `visual-base.spec.ts`-BEN: minden `.tsx` a `components/` alatt.
+   */
+  function komponensFajlok(konyvtar: string, gyujto: string[] = []): string[] {
+    for (const b of readdirSync(konyvtar, { withFileTypes: true })) {
+      const ut = join(konyvtar, b.name);
+      if (b.isDirectory()) komponensFajlok(ut, gyujto);
+      else if (b.name.endsWith(".tsx")) gyujto.push(ut);
+    }
+    return gyujto;
+  }
+
+  /** EGY OSZTÁLY-TOKEN NYUGALMI HÁTTÉR, HA `bg-`-vel kezdődik, ÉS NEM
+   * pszeudo-állapot előtaggal (`hover:`/`focus:`/`active:`/`disabled:`). */
+  function vanNyugalmiHatter(osztalyLista: string): boolean {
+    return osztalyLista.split(/\s+/).some((token) => /^bg-/.test(token));
+  }
+
+  /**
+   * MINDEN `<button` FELTÉTELES (`cond ? "A" : "B"`) CLASSNAME-ÁGÁT
+   * MEGKERESI, ÉS VISSZAADJA AZOKAT, AMELYIKBŐL HIÁNYZIK A NYUGALMI
+   * HÁTTÉR-OSZTÁLY.
+   *
+   * A MINTA SZŰK, ÉS EZ SZÁNDÉKOS: csak az egyszerű, egyetlen ternáris ágú
+   * `className={\`... ${cond ? "A" : "B"}\`}` alakra illeszkedik -- ez a
+   * három vétkes fájl (és a `PilotButton`/`PilotSegmentedControl`) ALAKJA.
+   * Egy összetettebb (több feltételes, beágyazott) className-t ez a minta
+   * kihagyna, de azt eddig egyik pilot-aqua gomb sem használja.
+   */
+  function hianyzoNyugalmiHatterek(kod: string): string[] {
+    const talalatok: string[] = [];
+    for (const m of kod.matchAll(
+      /<button[\s\S]{0,400}?className=\{`[\s\S]*?\$\{[\s\S]*?\?\s*"([^"]*)"\s*:\s*"([^"]*)"[\s\S]*?\}`\}/g,
+    )) {
+      for (const ag of [m[1]!, m[2]!]) {
+        if (!vanNyugalmiHatter(ag)) talalatok.push(ag);
+      }
+    }
+    return talalatok;
+  }
+
+  /**
+   * ISMERT POZITÍV KONTROLL: a felismerő függvény TÉNYLEG talál hiányt egy
+   * olyan mintán, amilyen a hiba ELŐTT állt (mérve: ez pontosan az a sztring,
+   * ami a `ticket-list.tsx`-ben a javítás előtt élt). Ha ez a kontroll zöld
+   * lenne akkor is, ha a minta soha semmit nem fogna meg, a lenti
+   * hiány-állítások értelmüket vesztenék.
+   */
+  it("ISMERT POZITÍV KONTROLL: a felismerő fogja a régi, javítatlan alakot", () => {
+    const regiMinta =
+      '<button type="button" className={`x ${a ? "bg-pilot-aqua-50 text-pilot-aqua-700" : "text-pilot-grey-500 hover:bg-pilot-grey-50"}`}>';
+    assert.deepEqual(hianyzoNyugalmiHatterek(regiMinta), [
+      "text-pilot-grey-500 hover:bg-pilot-grey-50",
+    ]);
+  });
+
+  const fajlok = komponensFajlok(join(GYOKER2, "components"));
+
+  it("a bejárás lát komponens-fájlokat", () => {
+    assert.ok(fajlok.length >= 10, `gyanúsan kevés fájl: ${fajlok.length}`);
+  });
+
+  for (const ut of fajlok) {
+    it(`${ut.slice(GYOKER2.length + 1)}: minden feltételes gomb-állapotnak van nyugalmi háttere`, () => {
+      const kod = readFileSync(ut, "utf8");
+      assert.deepEqual(
+        hianyzoNyugalmiHatterek(kod),
+        [],
+        "egy <button> feltételes ága csak hover:-re ad bg-*-ot, nyugalmi állapotban a régi lila @layer base szabály marad az egyetlen forrás",
+      );
+    });
+  }
+});
+
+describe("a megosztott Pilot-gombok is nyugalmi hátteret visznek (2026-09-25)", () => {
+  /*
+    A KOMMENTEK NELKUL, UGYANAZ AZ OK, MINT MASHOL EBBEN A FAJLBAN: a lenti
+    allitasok sajat magyarazo szovege (peldaul a "ghost" szo idezojelben)
+    talalatnak nezne ki egy nyers regex szamara.
+  */
+  const kod = kodSzoveg(
+    readFileSync(
+      join(process.cwd(), "..", "..", "packages", "ui", "src", "pilot-ui.tsx"),
+      "utf8",
+    ),
+  );
+
+  /**
+   * A `ghost` VÁLTOZAT ÉS A `PilotSegmentedControl` INAKTÍV ÁGA MA MÉG
+   * SEHOL NEM FUT A PARTNER PORTÁLON (mérve: nulla hívóhely) -- ez a két
+   * állítás MEGELŐZŐ javítás, nem élő hiba. A `packages/ui` megosztott,
+   * tehát ugyanez a hiány bármelyik jövőbeli hívóhelyen (partner portál)
+   * ugyanígy átlátszó lilát adna, ha valaki használná.
+   */
+  it("a PilotButton `ghost` változata nyugalmi háttérrel indul", () => {
+    const ghostSor = kod.match(/ghost:\s*\n?\s*"([^"]*)"/)?.[1];
+    assert.ok(ghostSor, "nem találom a PilotButton ghost változatát");
+    assert.match(
+      ghostSor!,
+      /(^|\s)bg-transparent(\s|$)/,
+      `a ghost változatnak nincs nyugalmi bg- osztálya: ${ghostSor}`,
+    );
+  });
+
+  it("a PilotSegmentedControl inaktív állapota nyugalmi háttérrel indul", () => {
+    const inaktivAg = kod.match(
+      /value === opt\s*\n\s*\?\s*"[^"]*"\s*\n\s*:[\s\S]*?"([^"]*)"/,
+    )?.[1];
+    assert.ok(inaktivAg, "nem találom a PilotSegmentedControl inaktív ágát");
+    assert.match(
+      inaktivAg!,
+      /(^|\s)bg-transparent(\s|$)/,
+      `az inaktív állapotnak nincs nyugalmi bg- osztálya: ${inaktivAg}`,
     );
   });
 });

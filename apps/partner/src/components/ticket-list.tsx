@@ -107,6 +107,21 @@ export function TicketList() {
         </Link>
       </div>
 
+      {/*
+        AZ INAKTIV FUL `bg-transparent`-JE NEM DISZ (SURGOS JAVITAS,
+        2026-09-25, Balazs masodik hibajelentese ugyanerrol): a #1136
+        `@layer base`-be tette a regi `button { background: #4c397f }`
+        szabalyt, hogy a Tailwind `utilities` retege felulirhassa -- de ez
+        csak akkor mukodik, ha VAN versengo `background-color`-t ado
+        Tailwind-osztaly ugyanazon az elemen. Az inaktiv fulnek korabban
+        CSAK `hover:bg-pilot-grey-50` allt, ami kizarolag `:hover`-en hat --
+        NYUGALMI allapotban semmilyen osztaly nem adott `background-color`-t,
+        tehat a `@layer base` szabaly maradt az EGYETLEN forras, es a lila
+        tovabbra is atlatszott. Az aktiv ful ezert lett zold (sajat,
+        felteten-nelkuli `bg-pilot-aqua-50`-je van), az inaktiv nem.
+        Ellenorizve az eles CSS-en (2026-09-25 16:2x): a `@layer base`
+        maga helyesen all, a hianyzo darab ez az egy sor volt.
+      */}
       <div className="flex items-center gap-1 border-b border-pilot-grey-100 bg-white px-8 py-4">
         {SCOPE_TABS.map((tab) => (
           <button
@@ -116,7 +131,7 @@ export function TicketList() {
             className={`cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-all ${
               scope === tab.key
                 ? "bg-pilot-aqua-50 text-pilot-aqua-700"
-                : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+                : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
             }`}
           >
             {tab.label}

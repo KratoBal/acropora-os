@@ -260,8 +260,19 @@ export function PilotButton({
       "bg-pilot-aqua-600 text-white hover:bg-pilot-aqua-700 active:bg-pilot-aqua-800",
     secondary:
       "bg-white text-pilot-grey-700 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 active:bg-pilot-grey-100",
+    /*
+      A `bg-transparent` NEM DISZ (megelozo javitas, 2026-09-25, lasd
+      `apps/partner/src/components/ticket-list.tsx` azonos komment
+      fejleceet): a `hover:`-only osztaly nyugalmi allapotban nem ad
+      `background-color`-t, es a partner portal `globals.css`-eben egy
+      regi, `@layer base`-be tett szabaly (`button { background: #4c397f
+      }`) MARADNA az egyetlen forras, ha nem lenne versengo osztaly. Ma
+      egyik hivohely sem hasznalja a `ghost` valtozatot a partner
+      portalon (mert nem hasznalna, meg nem hibazna) -- ez megelozo
+      javitas, mielott valaki hasznalna.
+    */
     ghost:
-      "text-pilot-grey-500 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
+      "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
     danger: "bg-white text-red-600 ring-1 ring-red-200 hover:bg-red-50",
   };
   return (
@@ -295,7 +306,17 @@ export function PilotSegmentedControl({
           className={`cursor-pointer rounded px-3 py-1 text-sm font-medium transition-all duration-100 ${
             value === opt
               ? "bg-white text-pilot-grey-900 shadow-sm"
-              : "text-pilot-grey-500 hover:text-pilot-grey-700"
+              : /*
+                  MEGELOZO JAVITAS, 2026-09-25 -- lasd a `PilotButton`
+                  "ghost" valtozatanak azonos megjegyzeset: `bg-transparent`
+                  kell, kulonben a partner portal regi, `@layer base`-be
+                  tett `button { background: #4c397f }` szabalya maradna
+                  az egyetlen forras. Ma csak az `apps/web` hasznalja ezt a
+                  komponenst, ahol ez a szabaly nem letezik -- de a
+                  komponens megosztott, tehat a partner portal barmely
+                  jovobeli hivohelye ebbe futna bele elore nem lathato modon.
+                */
+                "bg-transparent text-pilot-grey-500 hover:text-pilot-grey-700"
           }`}
         >
           {opt}

@@ -222,6 +222,13 @@ export function AssetList() {
       </div>
 
       <div className="flex flex-col gap-3 border-b border-pilot-grey-100 bg-white px-8 py-4">
+        {/*
+          AZ INAKTIV FUL `bg-transparent`-JE NEM DISZ -- lasd a `ticket-list.tsx`
+          azonos komment fejleceet (surgos javitas, 2026-09-25): a `@layer base`
+          csak akkor engedi at a Tailwind-osztalyt, ha VAN versengo
+          `background-color`, es a `hover:`-only osztaly ezt nyugalmi
+          allapotban nem adja meg.
+        */}
         <div className="flex items-center gap-1 overflow-x-auto">
           {TABS.map((tab) => (
             <button
@@ -231,7 +238,7 @@ export function AssetList() {
               className={`cursor-pointer whitespace-nowrap rounded-md px-3.5 py-1.5 text-sm font-medium transition-all ${
                 status === tab.key
                   ? "bg-pilot-aqua-50 text-pilot-aqua-700"
-                  : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+                  : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
               }`}
             >
               {tab.label}
