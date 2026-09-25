@@ -1,5 +1,5 @@
-import { AssetEditorPage } from "@/components/service-assets/asset-editor-page";
+import { PilotAssetCreatePage } from "@/components/service-assets/pilot/pilot-asset-create-page";
 
 export default function NewServiceAssetPage() {
-  return <AssetEditorPage />;
+  return <PilotAssetCreatePage />;
 }
