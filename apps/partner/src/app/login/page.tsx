@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Icon } from "@acropora/ui";
 
 import { useAuth } from "@/components/auth";
 
@@ -38,8 +39,8 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-pilot-grey-50 px-5">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-pilot-aqua-600">
-            <span className="text-lg font-bold text-white">A</span>
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-pilot-aqua-600 text-white">
+            <Icon name="droplet" size={22} />
           </div>
           {/*
             "ACROPORA", NEM "ACROPORA SZERVIZ" (acrobot dontese, 2026-09-25,

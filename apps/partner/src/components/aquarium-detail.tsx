@@ -125,7 +125,29 @@ export function AquariumDetail({ id }: { id: string }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_280px]">
+      {/*
+        OSZLOP-ELRENDEZES A TERV SZERINT (`PartnerPortalScreen.tsx:1455-1513`):
+        a FŐ (1fr) oszlopban EGYEDÜL a Vízértékek kártya áll, az Alapadatok
+        és az Eszközök a medencében a 340px-es OLDALSÁVBA kerül. Korábban ez
+        fordítva állt (Alapadatok a fő oszlopban, a Vízértékek alatta) --
+        Balázs mércéje (2026-09-25 18:47) a kártya-szerkezetet és a
+        sorrendet is nézi, nem csak a színeket.
+
+        A "KARBANTARTÓK" KÁRTYA NINCS A TERVBEN, DE MARAD: valódi, szerver-
+        szolgáltatott adat (`aquarium.maintainers`), nem kitaláció -- a mérce
+        szerint a működő többlet marad. Helye az oldalsávban, az Alapadatok
+        és az Eszközök a medencében KÖZÖTT, mert tartalmilag ("ki felel
+        érte") közelebb áll az alapadathoz, mint a felszerelés-listához.
+      */}
+      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_340px]">
+        <div className="flex flex-col gap-5">
+          <AquariumWaterValues
+            aquariumId={aquarium.id}
+            waterType={aquarium.waterType}
+            targets={aquarium.targets}
+          />
+        </div>
+
         <div className="flex flex-col gap-5">
           <PilotCard>
             <PilotCardHeader title="Alapadatok" />
@@ -155,14 +177,6 @@ export function AquariumDetail({ id }: { id: string }) {
             </div>
           </PilotCard>
 
-          <AquariumWaterValues
-            aquariumId={aquarium.id}
-            waterType={aquarium.waterType}
-            targets={aquarium.targets}
-          />
-        </div>
-
-        <div className="flex flex-col gap-5">
           <PilotCard>
             <PilotCardHeader title="Karbantartók" />
             <div className="px-5 py-3">
