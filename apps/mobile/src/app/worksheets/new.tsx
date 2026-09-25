@@ -961,6 +961,7 @@ export default function NewWorksheetScreen() {
                   </Text>
                 ) : null}
                 <WorksheetAssetPicker
+                  key={departmentIdHatasos}
                   departmentId={departmentIdHatasos}
                   selectedIds={assetIdsHatasos}
                   onChange={setAssetIds}
