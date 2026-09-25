@@ -4,7 +4,16 @@ import {
   readThemePreference,
   resolveEffectiveTheme,
   writeThemePreference,
-} from "./theme-preference";
+} from "@acropora/ui";
+
+/**
+ * ÁTKÖLTÖZÖTT A `@acropora/ui`-ba, 2026-09-25 (Partner Portál Figma-kör,
+ * a `pilot-ui.tsx` második fogyasztója). A `packages/ui`-nak nincs saját
+ * teszt-infrastruktúrája (`package.json` scriptjei csak `build`/
+ * `typecheck`/`clean`-t ismernek), tehát ez a fájl -- a `service-theme.ts`
+ * korábbi költöztetésénél kialakult mintát követve -- itt marad, és a
+ * csomag PUBLIKUS felületén keresztül méri a tiszta függvényeket.
+ */
 
 describe("resolveEffectiveTheme", () => {
   it("light/dark preferencia független a rendszertől", () => {

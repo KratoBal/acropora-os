@@ -7,7 +7,19 @@ const theme = vi.hoisted(() => ({
   effectiveTheme: "light" as "light" | "dark",
 }));
 
-vi.mock("@/lib/theme/use-theme-preference", () => ({
+/**
+ * A `useThemePreference` HÍVÁSA 2026-09-25-TŐL A `packages/ui/src/pilot-ui.tsx`
+ * BELSEJÉBEN TÖRTÉNIK, EGY BELSŐ, RELATÍV IMPORTTAL (`./use-theme-preference`)
+ * -- ez a fájl itt csak egy VÉKONY WRAPPER (lásd `./pilot-ui.tsx` fejlécét),
+ * ami a megosztott `PilotThemeRoot`-ot hívja. A Vitest a `vi.mock`-ot a
+ * FELOLDOTT modul-azonosító alapján fogja el, nem az importáló fájlban
+ * szereplő specifikátor SZÖVEGE alapján -- egy `vi.mock("@acropora/ui", ...)`
+ * itt TÉVEDNE: a csomag publikus belépőjét cserélné le, a
+ * `pilot-ui.tsx`-en BELÜLI relatív hívás azonban nem azon keresztül megy.
+ * A helyes cél ezért a TÉNYLEGESEN importált fájl feloldott útvonala, innen
+ * számolva (`node -e "path.relative(...)"`-tal ellenőrizve).
+ */
+vi.mock("../../../../../packages/ui/src/use-theme-preference", () => ({
   useThemePreference: () => ({ effectiveTheme: theme.effectiveTheme }),
 }));
 

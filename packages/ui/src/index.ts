@@ -60,3 +60,29 @@ export {
   ServiceNextAction,
   ServiceDetailSplit,
 } from "./service-detail-chrome";
+export {
+  readThemePreference,
+  writeThemePreference,
+  systemPrefersDark,
+  resolveEffectiveTheme,
+} from "./theme-preference";
+export type { ThemePreference, EffectiveTheme } from "./theme-preference";
+export { useThemePreference } from "./use-theme-preference";
+export {
+  PilotThemeRoot,
+  PilotBadge,
+  PilotAvatarStack,
+  pilotAvatarColor,
+  pilotInitials,
+  PilotAvatar,
+  PilotButton,
+  PilotSegmentedControl,
+  PilotFormField,
+  PilotInput,
+  PilotSelect,
+  PilotCard,
+  PilotCardHeader,
+  PilotDrawer,
+  PilotDialog,
+} from "./pilot-ui";
+export type { PilotBadgeVariant } from "./pilot-ui";

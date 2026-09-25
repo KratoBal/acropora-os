@@ -8,7 +8,14 @@ const theme = vi.hoisted(() => ({
   setPreference: vi.fn(),
 }));
 
-vi.mock("@/lib/theme/use-theme-preference", () => ({
+/**
+ * A `useThemePreference` 2026-09-25-től a `@acropora/ui`-ból jön (lásd
+ * `pilot-ui.tsx` fejlécét) -- a komponens ezt a specifikátort importálja,
+ * tehát a mock is ezen a néven fogja el, a csomag többi exportját
+ * (`Card`/`CardContent`/`CardHeader`) érintetlenül hagyva.
+ */
+vi.mock("@acropora/ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@acropora/ui")>()),
   useThemePreference: () => ({
     preference: theme.preference,
     setPreference: theme.setPreference,

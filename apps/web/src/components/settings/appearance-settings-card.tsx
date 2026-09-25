@@ -1,9 +1,12 @@
 "use client";
 
-import { Card, CardContent, CardHeader } from "@acropora/ui";
-
-import { useThemePreference } from "@/lib/theme/use-theme-preference";
-import type { ThemePreference } from "@/lib/theme/theme-preference";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  useThemePreference,
+  type ThemePreference,
+} from "@acropora/ui";
 
 const OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "light", label: "Világos" },
