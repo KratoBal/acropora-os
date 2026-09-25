@@ -512,11 +512,16 @@ describe("a partner hibajegy-adatlapja", () => {
    * (jegy, munkalap, eszköz) csatolmányait rajzolja, tehát ez egy helyen
    * javít hármat.
    */
+  /*
+    2026-09-25-TŐL A GOMBNAK NINCS "document-thumb" OSZTÁLYA (Figma 9. kör,
+    a `DocumentPanel` pilot-aqua átállása) -- a `cursor-zoom-in` Tailwind-
+    osztály a mérvadó jel, ugyanúgy, ahogy korábban a saját osztálynév volt.
+  */
   it("a nagyított kép gombról nyílik, és az Escape zárja", () => {
     const s = olvas(DOKUMENTUMOK);
     assert.match(
       s,
-      /className="document-thumb"[\s\S]{0,200}?onClick=\{\(\) => setNagyitott\(item\.id\)\}/,
+      /onClick=\{\(\) => setNagyitott\(item\.id\)\}[\s\S]{0,200}?cursor-zoom-in/,
     );
     assert.match(s, /esemeny\.key === "Escape"/);
   });

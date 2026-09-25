@@ -151,6 +151,16 @@ describe("a portál vizuális alapja", () => {
       "login-page",
       "login-card",
       "error",
+      // A `DocumentPanel` OSZTÁLYAI (2026-09-25, Figma 9. kör): a
+      // hibajegy-, eszköz- és munkalap-adatlap (mind pilot-aqua) után ez
+      // volt az utolsó violet hívóhely -- `PilotCard`/`PilotFormField`/
+      // `PilotInput`/`PilotButton` és Tailwind-osztályok váltották fel.
+      "document-panel",
+      "document-grid",
+      "document-card",
+      "document-thumb",
+      "document-upload",
+      "image-overlay",
     ];
     const vetkesek: string[] = [];
     for (const ut of fajlok) {

@@ -89,33 +89,6 @@ button:disabled {
   grid-template-columns: minmax(0, 1.6fr) minmax(16rem, 1fr);
   margin-bottom: 1rem;
 }
-.document-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-  gap: 1rem;
-}
-.document-card {
-  display: grid;
-  gap: 0.45rem;
-  color: var(--ink);
-}
-.document-card img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border-radius: 0.6rem;
-  background: #edf1ee;
-}
-.document-upload {
-  display: grid;
-  gap: 0.8rem;
-  margin-top: 1.25rem;
-}
-.document-upload label {
-  display: grid;
-  gap: 0.3rem;
-  font-weight: 600;
-}
 .form {
   display: grid;
   gap: 1.15rem;
@@ -261,49 +234,3 @@ button:disabled {
    `status`-t hasznalo lapok a megosztott `ServiceStatusBadge`-re alltak at
    (`@acropora/ui`, sajat `serviceToneClass` terkeppel). Egyik osztalynak
    sincs tobbe elo hivohelye. */
-
-/*
-  A CSEMPE GOMB, NEM KÉP: a nagyítás billentyűzetről is elérhető. A gomb saját
-  külseje nulla, hogy a rács ugyanúgy nézzen ki, mint korábban -- egyedül a
-  fókusz-gyűrű jelenik meg, és az kell.
-*/
-.document-thumb {
-  background: none;
-  border: 0;
-  border-radius: 0.6rem;
-  cursor: zoom-in;
-  display: block;
-  padding: 0;
-  width: 100%;
-}
-.document-thumb:focus-visible {
-  outline: 3px solid #4c397f;
-  outline-offset: 2px;
-}
-.image-overlay {
-  align-items: center;
-  background: rgba(17, 17, 24, 0.86);
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  inset: 0;
-  justify-content: center;
-  padding: 1.5rem;
-  position: fixed;
-  z-index: 50;
-}
-.image-overlay img {
-  border-radius: 0.6rem;
-  max-height: 80vh;
-  max-width: min(100%, 60rem);
-  object-fit: contain;
-}
-.image-overlay button {
-  background: #ffffff;
-  border: 0;
-  border-radius: 999px;
-  color: #2b2b38;
-  cursor: pointer;
-  font-weight: 700;
-  padding: 0.55rem 1.4rem;
-}
