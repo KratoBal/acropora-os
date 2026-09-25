@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,6 +12,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import {
   listPendingMaterialRequests,
   receiveMaterialRequest,
@@ -46,6 +49,8 @@ export default function MaterialRequestsPendingScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { status, user } = useAuth();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const capabilities = user ? getServiceCapabilities(user.role) : null;
 
   const pending = useQuery({
@@ -81,7 +86,7 @@ export default function MaterialRequestsPendingScreen() {
           <RefreshControl
             refreshing={pending.isRefetching && !pending.isPending}
             onRefresh={() => void pending.refetch()}
-            tintColor="#52d6c7"
+            tintColor={tokens.accent}
           />
         }
       >
@@ -91,7 +96,7 @@ export default function MaterialRequestsPendingScreen() {
           A rád váró, beszerzésre elküldött anyagigények.
         </Text>
 
-        {pending.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {pending.isPending ? <ActivityIndicator color={tokens.accent} /> : null}
 
         {forbidden ? (
           <View style={styles.card}>
@@ -186,58 +191,68 @@ export default function MaterialRequestsPendingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 48, gap: 12 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  title: { color: "#f4fbff", fontSize: 28, fontWeight: "900" },
-  subtitle: { color: "#91afbe" },
-  card: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 16,
-    gap: 8,
-    padding: 14,
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  headerText: { flex: 1, gap: 2 },
-  rowTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
-  link: {
-    color: "#6de0ce",
-    fontSize: 12,
-    fontWeight: "800",
-    textDecorationLine: "underline",
-  },
-  muted: { color: "#789cad", fontSize: 12 },
-  itemLine: { color: "#f4fbff", fontSize: 14 },
-  forbiddenTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
-  error: {
-    color: "#fecaca",
-    backgroundColor: "#541b2b",
-    padding: 12,
-    borderRadius: 10,
-  },
-  receiveButton: {
-    backgroundColor: "#177b74",
-    borderRadius: 10,
-    marginTop: 4,
-    padding: 12,
-  },
-  receiveButtonText: {
-    color: "#fff",
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  disabled: { opacity: 0.55 },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 12.
+ * kör, ugyanaz a minta, mint a `login.tsx`-en (lásd ott a teljes indokot).
+ * Az `error` doboz régi hexei (`#fecaca`/`#541b2b`) NEM VÉLETLENÜL egyeznek
+ * a `t.danger`/`t.dangerSoft` tokenekkel -- a `tokens.ts` saját fejléce
+ * kimondja, hogy épp ennek a képernyőnek a piros hibaszíneiből lettek
+ * mintázva.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 48, gap: 12 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
+    subtitle: { color: t.textSecondary },
+    card: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 16,
+      gap: 8,
+      padding: 14,
+    },
+    headerRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 10,
+    },
+    headerText: { flex: 1, gap: 2 },
+    rowTitle: { color: t.textPrimary, fontSize: 15, fontWeight: "800" },
+    link: {
+      color: t.accentSoftText,
+      fontSize: 12,
+      fontWeight: "800",
+      textDecorationLine: "underline",
+    },
+    muted: { color: t.textMuted, fontSize: 12 },
+    itemLine: { color: t.textPrimary, fontSize: 14 },
+    forbiddenTitle: { color: t.textPrimary, fontSize: 15, fontWeight: "800" },
+    error: {
+      color: t.danger,
+      backgroundColor: t.dangerSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+    receiveButton: {
+      backgroundColor: t.accent,
+      borderRadius: 10,
+      marginTop: 4,
+      padding: 12,
+    },
+    receiveButtonText: {
+      color: t.textOnAccent,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    disabled: { opacity: 0.55 },
+  });
+}
