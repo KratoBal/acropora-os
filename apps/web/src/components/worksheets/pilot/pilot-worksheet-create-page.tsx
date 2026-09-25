@@ -91,7 +91,8 @@ import {
  * A Figma "Alegység" egyetlen legördülő, statikus `ALEGYSÉGEK` térképpel.
  * A valóságban az alegység-választás archiválást, új alegység felvitelét és
  * a jegyből örökölt, esetleg archivált helyszín különleges esetét is hordja
- * -- mindez a mai `worksheet-editor-page.tsx`-ből jön szó szerint.
+ * -- mindez a (2026-09-25-ig élt, azóta törölt) `worksheet-editor-page.tsx`-ből
+ * jött át szó szerint, és ezen a lapon fut tovább.
  *
  * === A KÉT (C) HIÁNY, MOST PÓTOLVA ===
  *
@@ -99,10 +100,10 @@ import {
  * felvitelről HIÁNYZOTT.
  *
  * 1) HIBAJEGY-SOR, ha a lap egy hibajegyből nyílik (`?hibajegy=<id>` a
- *    címben): "Hibajegy: HJ-2026-014", a jegy saját számával. A mai
- *    `worksheet-editor-page.tsx` ELTÖLTI a partnert/helyszínt/eszközöket a
- *    jegyből, de sehol nem írja ki, MELYIK jegyből -- csak a HIBA ágon
- *    (`ticketError`) látszik, hogy egyáltalán van jegy a háttérben.
+ *    címben): "Hibajegy: HJ-2026-014", a jegy saját számával. A régi
+ *    `worksheet-editor-page.tsx` ELTÖLTÖTTE a partnert/helyszínt/eszközöket
+ *    a jegyből, de sehol nem írta ki, MELYIK jegyből -- csak a HIBA ágon
+ *    (`ticketError`) látszott, hogy egyáltalán van jegy a háttérben.
  * 2) "KÖTELEZŐ: X, Y" MONDAT a Mentés gomb alatt, inaktív állapotban -- a
  *    mai űrlapon a gomb csak szürkén áll, ok nélkül. A minta a
  *    `pilot-asset-create-page.tsx`-ből jön (`missing` tömb).
