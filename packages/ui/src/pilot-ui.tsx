@@ -223,21 +223,38 @@ export function PilotAvatar({
   );
 }
 
+/**
+ * `fullWidth`/`size` -- A PÉNZTÁR (POS) FIGMA-KÖR ELSŐ HÍVÓJA (11. kör,
+ * 2026-09-25), NEM DÍSZ. A Figma terv `Btn` micro-komponense `fullWidth`
+ * és `size="lg"` propot kap a "Fizetés" gombra -- tablet-en, nagy
+ * érintési felület, a leírás kifejezett kérése ("large touch targets").
+ * Eddig egyik pilot oldal sem kért ezt, ezért a komponens nem hordozta;
+ * mindkét prop OPCIONÁLIS és alapértelmezettje a régi viselkedés
+ * (`inline-flex`, `px-3.5 py-1.5`), tehát a meglévő 20+ hívóhely
+ * változatlanul fordul és fest.
+ */
 export function PilotButton({
   children,
   variant = "primary",
   onClick,
   type = "button",
   disabled,
+  fullWidth = false,
+  size = "md",
 }: {
   children: ReactNode;
   variant?: "primary" | "secondary" | "ghost" | "danger";
   onClick?: () => void;
   type?: "button" | "submit";
   disabled?: boolean;
+  fullWidth?: boolean;
+  size?: "md" | "lg";
 }) {
-  const base =
-    "inline-flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-sm font-medium transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40";
+  const base = `inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${fullWidth ? "w-full" : ""}`;
+  const sizes = {
+    md: "px-3.5 py-1.5 text-sm",
+    lg: "px-5 py-3.5 text-base",
+  };
   const variants = {
     primary:
       "bg-pilot-aqua-600 text-white hover:bg-pilot-aqua-700 active:bg-pilot-aqua-800",
@@ -250,7 +267,7 @@ export function PilotButton({
   return (
     <button
       type={type}
-      className={`${base} ${variants[variant]}`}
+      className={`${base} ${sizes[size]} ${variants[variant]}`}
       onClick={onClick}
       disabled={disabled}
     >
