@@ -65,7 +65,7 @@ export function UserMenu({
       </Button>
 
       {open ? (
-        <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-pilot-grey-200 bg-pilot-white p-3 shadow-xl">
+        <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-pilot-grey-200 bg-white p-3 shadow-xl">
           <div className="flex items-start gap-3 border-b border-pilot-grey-200 px-1 pb-3">
             <Avatar
               name={personDisplayName(user)}
