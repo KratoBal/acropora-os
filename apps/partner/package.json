@@ -12,6 +12,7 @@
     "clean": "rm -rf .next"
   },
   "dependencies": {
+    "@acropora/aquarium-calc": "workspace:*",
     "@acropora/types": "workspace:*",
     "@acropora/ui": "workspace:*",
     "next": "^16.3.3",
