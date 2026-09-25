@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -17,6 +17,8 @@ import {
   sendWorksheetForSignature,
 } from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { kikuldhetoAlairasra } from "@/lib/worksheets/worksheet-send-for-signature";
 import { worksheetLabelOrDraft } from "@/lib/worksheets/worksheet-presentation";
@@ -48,6 +50,8 @@ export default function SendWorksheetForSignatureScreen() {
   const queryClient = useQueryClient();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   const [signerUserId, setSignerUserId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -114,7 +118,9 @@ export default function SendWorksheetForSignatureScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.container}>
-        {worksheet.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {worksheet.isPending ? (
+          <ActivityIndicator color={tokens.accent} />
+        ) : null}
 
         {worksheet.data && current ? (
           <>
@@ -130,7 +136,7 @@ export default function SendWorksheetForSignatureScreen() {
                 <Text style={styles.sectionTitle}>Kinek küldjük ki</Text>
                 <View style={styles.card}>
                   {signers.isPending ? (
-                    <ActivityIndicator color="#52d6c7" />
+                    <ActivityIndicator color={tokens.accent} />
                   ) : null}
 
                   {signers.data?.items.map((jelolt) => (
@@ -203,41 +209,50 @@ export default function SendWorksheetForSignatureScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#04141b" },
-  container: { padding: 20, gap: 12 },
-  title: { color: "#e9fbff", fontSize: 20, fontWeight: "700" },
-  muted: { color: "#7fa9b8", fontSize: 13 },
-  sectionTitle: {
-    color: "#e9fbff",
-    fontSize: 15,
-    fontWeight: "700",
-    marginTop: 12,
-  },
-  card: {
-    backgroundColor: "#082b36",
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-  },
-  signerOption: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#123c4a",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  signerOptionPicked: { borderColor: "#52d6c7", backgroundColor: "#0c3b47" },
-  signer: { color: "#e9fbff", fontSize: 15 },
-  primaryButton: {
-    backgroundColor: "#52d6c7",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 12,
-  },
-  primaryButtonText: { color: "#04141b", fontSize: 16, fontWeight: "700" },
-  disabled: { opacity: 0.5 },
-  pressed: { opacity: 0.8 },
-  error: { color: "#ff9d9d", fontSize: 13, marginTop: 8 },
-});
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: t.background },
+    container: { padding: 20, gap: 12 },
+    title: { color: t.textPrimary, fontSize: 20, fontWeight: "700" },
+    muted: { color: t.textSecondary, fontSize: 13 },
+    sectionTitle: {
+      color: t.textPrimary,
+      fontSize: 15,
+      fontWeight: "700",
+      marginTop: 12,
+    },
+    card: {
+      backgroundColor: t.surface,
+      borderRadius: 12,
+      padding: 12,
+      gap: 8,
+    },
+    signerOption: {
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    signerOptionPicked: {
+      borderColor: t.accent,
+      backgroundColor: t.surfaceRaised,
+    },
+    signer: { color: t.textPrimary, fontSize: 15 },
+    primaryButton: {
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      paddingVertical: 14,
+      alignItems: "center",
+      marginTop: 12,
+    },
+    primaryButtonText: {
+      color: t.textOnAccent,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    disabled: { opacity: 0.5 },
+    pressed: { opacity: 0.8 },
+    error: { color: t.danger, fontSize: 13, marginTop: 8 },
+  });
+}

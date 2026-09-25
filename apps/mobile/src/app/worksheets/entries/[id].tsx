@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -17,6 +17,8 @@ import {
   updateWorksheetEntry,
 } from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { describeCacheAge } from "@/lib/offline/offline-notice";
 import {
@@ -51,6 +53,8 @@ export default function WorksheetEntryScreen() {
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const queryClient = useQueryClient();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,7 +110,7 @@ export default function WorksheetEntryScreen() {
         </Pressable>
         <Text style={styles.eyebrow}>BEJEGYZÉS</Text>
 
-        {entries.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {entries.isPending ? <ActivityIndicator color={tokens.accent} /> : null}
 
         {/*
           A HIANYZO BEJEGYZES KIMONDVA. Ha a lista betoltodott es a sor nincs
@@ -188,40 +192,42 @@ export default function WorksheetEntryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 48, gap: 14 },
-  back: { color: "#52d6c7", fontSize: 15, fontWeight: "700" },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-  },
-  card: {
-    backgroundColor: "#0d2438",
-    borderRadius: 14,
-    padding: 16,
-    gap: 10,
-  },
-  byline: { color: "#91afbe", fontSize: 13 },
-  body: { color: "#f4fbff", fontSize: 16, lineHeight: 23 },
-  muted: { color: "#91afbe", fontSize: 14, lineHeight: 20 },
-  error: { color: "#ffb4ab", fontSize: 14 },
-  input: {
-    backgroundColor: "#071827",
-    borderRadius: 10,
-    color: "#f4fbff",
-    minHeight: 120,
-    padding: 12,
-    textAlignVertical: "top",
-  },
-  button: {
-    alignItems: "center",
-    backgroundColor: "#52d6c7",
-    borderRadius: 12,
-    padding: 14,
-  },
-  buttonText: { color: "#04212c", fontSize: 15, fontWeight: "800" },
-  disabled: { opacity: 0.6 },
-});
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 48, gap: 14 },
+    back: { color: t.accent, fontSize: 15, fontWeight: "700" },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 1.2,
+    },
+    card: {
+      backgroundColor: t.surface,
+      borderRadius: 14,
+      padding: 16,
+      gap: 10,
+    },
+    byline: { color: t.textSecondary, fontSize: 13 },
+    body: { color: t.textPrimary, fontSize: 16, lineHeight: 23 },
+    muted: { color: t.textSecondary, fontSize: 14, lineHeight: 20 },
+    error: { color: t.danger, fontSize: 14 },
+    input: {
+      backgroundColor: t.background,
+      borderRadius: 10,
+      color: t.textPrimary,
+      minHeight: 120,
+      padding: 12,
+      textAlignVertical: "top",
+    },
+    button: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      padding: 14,
+    },
+    buttonText: { color: t.textOnAccent, fontSize: 15, fontWeight: "800" },
+    disabled: { opacity: 0.6 },
+  });
+}

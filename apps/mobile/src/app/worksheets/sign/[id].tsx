@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,8 @@ import {
   signWorksheet,
 } from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
   worksheetLabelOrDraft,
@@ -90,6 +92,8 @@ export default function WorksheetSignScreen() {
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const queryClient = useQueryClient();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   const worksheet = useQuery({
     queryKey: ["worksheet", id],
@@ -275,7 +279,9 @@ export default function WorksheetSignScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.eyebrow}>ALÁÍRÁS</Text>
 
-        {worksheet.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {worksheet.isPending ? (
+          <ActivityIndicator color={tokens.accent} />
+        ) : null}
 
         {worksheet.isError ? (
           <Text style={styles.error}>
@@ -380,7 +386,7 @@ export default function WorksheetSignScreen() {
                 <Text style={styles.sectionTitle}>Aláíró</Text>
                 <View style={styles.card}>
                   {signers.isPending ? (
-                    <ActivityIndicator color="#52d6c7" />
+                    <ActivityIndicator color={tokens.accent} />
                   ) : null}
 
                   {signers.data?.items.map((jelolt) => (
@@ -438,7 +444,7 @@ export default function WorksheetSignScreen() {
                         value={signatureCode}
                         onChangeText={setSignatureCode}
                         placeholder="Négy számjegy"
-                        placeholderTextColor="#5b7d8f"
+                        placeholderTextColor={tokens.textMuted}
                         keyboardType="number-pad"
                         maxLength={4}
                         secureTextEntry
@@ -457,7 +463,7 @@ export default function WorksheetSignScreen() {
                         value={typedName}
                         onChangeText={setTypedName}
                         placeholder="Az aláíró neve"
-                        placeholderTextColor="#5b7d8f"
+                        placeholderTextColor={tokens.textMuted}
                         style={styles.input}
                         accessibilityLabel="Az aláíró neve"
                       />
@@ -491,7 +497,7 @@ export default function WorksheetSignScreen() {
                     multiline
                     numberOfLines={3}
                     placeholder="Például: a szivattyú továbbra is zajos"
-                    placeholderTextColor="#5b7d8f"
+                    placeholderTextColor={tokens.textMuted}
                     style={[styles.input, styles.noteInput]}
                   />
                   <Text style={styles.muted}>
@@ -565,7 +571,7 @@ export default function WorksheetSignScreen() {
                           styles.disabled,
                       ]}
                     >
-                      <Text style={styles.submitText}>
+                      <Text style={[styles.submitText, styles.selfSignText]}>
                         {signSelf.isPending ? "Azonosítás…" : "Aláírom"}
                       </Text>
                     </Pressable>
@@ -606,112 +612,123 @@ export default function WorksheetSignScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 48, gap: 12 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  title: { color: "#f4fbff", fontSize: 24, fontWeight: "900" },
-  subject: { color: "#d9edf7", fontSize: 16, fontWeight: "700" },
-  sectionTitle: {
-    color: "#f4fbff",
-    fontSize: 15,
-    fontWeight: "800",
-    marginTop: 6,
-  },
-  card: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 16,
-    gap: 8,
-    padding: 14,
-  },
-  row: { flexDirection: "row", gap: 12, justifyContent: "space-between" },
-  label: { color: "#789cad", fontSize: 12, fontWeight: "700" },
-  value: { color: "#f4fbff", flex: 1, fontSize: 14, textAlign: "right" },
-  total: {
-    color: "#6de0ce",
-    flex: 1,
-    fontSize: 18,
-    fontWeight: "900",
-    textAlign: "right",
-  },
-  muted: { color: "#789cad", fontSize: 12 },
-  blockedTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
-  signerOption: {
-    backgroundColor: "#071827",
-    borderColor: "#123449",
-    borderRadius: 10,
-    borderWidth: 2,
-    marginBottom: 8,
-    padding: 12,
-  },
-  signerOptionPicked: { borderColor: "#52d6c7" },
-  signer: { color: "#f4fbff", fontSize: 18, fontWeight: "800" },
-  rejectButton: {
-    backgroundColor: "#8c2f3f",
-    borderRadius: 12,
-    marginTop: 4,
-    padding: 16,
-  },
-  secondaryLink: {
-    color: "#789cad",
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 14,
-    textAlign: "center",
-    textDecorationLine: "underline",
-  },
-  input: {
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderRadius: 10,
-    borderWidth: 1,
-    color: "#f4fbff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  noteInput: { minHeight: 80, textAlignVertical: "top" },
-  error: {
-    color: "#fecaca",
-    backgroundColor: "#541b2b",
-    padding: 12,
-    borderRadius: 10,
-  },
-  submitButton: {
-    backgroundColor: "#177b74",
-    borderRadius: 12,
-    marginTop: 4,
-    padding: 16,
-  },
-  /**
-   * A SAJAT ALAIRAS GOMBJA MASIK SZINU, es ez nem diszites: a ket gomb
-   * kozvetlenul egymas alatt all, es a KETTO KOZTI TEVEDES a draga -- az egyik
-   * az ugyfel neveben ir ala, a masik a mienkben.
-   */
-  selfSignButton: {
-    backgroundColor: "#0e4f6e",
-    marginTop: 12,
-  },
-  submitText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  secondaryButton: {
-    borderColor: "#1c4963",
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 4,
-    padding: 12,
-  },
-  secondaryText: { color: "#f4fbff", fontWeight: "800", textAlign: "center" },
-  disabled: { opacity: 0.55 },
-  pressed: { opacity: 0.75 },
-});
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 48, gap: 12 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    title: { color: t.textPrimary, fontSize: 24, fontWeight: "900" },
+    subject: { color: t.textPrimary, fontSize: 16, fontWeight: "700" },
+    sectionTitle: {
+      color: t.textPrimary,
+      fontSize: 15,
+      fontWeight: "800",
+      marginTop: 6,
+    },
+    card: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 16,
+      gap: 8,
+      padding: 14,
+    },
+    row: { flexDirection: "row", gap: 12, justifyContent: "space-between" },
+    label: { color: t.textSecondary, fontSize: 12, fontWeight: "700" },
+    value: { color: t.textPrimary, flex: 1, fontSize: 14, textAlign: "right" },
+    total: {
+      color: t.accent,
+      flex: 1,
+      fontSize: 18,
+      fontWeight: "900",
+      textAlign: "right",
+    },
+    muted: { color: t.textSecondary, fontSize: 12 },
+    blockedTitle: { color: t.textPrimary, fontSize: 15, fontWeight: "800" },
+    signerOption: {
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 2,
+      marginBottom: 8,
+      padding: 12,
+    },
+    signerOptionPicked: { borderColor: t.accent },
+    signer: { color: t.textPrimary, fontSize: 18, fontWeight: "800" },
+    rejectButton: {
+      backgroundColor: t.danger,
+      borderRadius: 12,
+      marginTop: 4,
+      padding: 16,
+    },
+    secondaryLink: {
+      color: t.textSecondary,
+      fontSize: 13,
+      fontWeight: "700",
+      marginTop: 14,
+      textAlign: "center",
+      textDecorationLine: "underline",
+    },
+    input: {
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      color: t.textPrimary,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    noteInput: { minHeight: 80, textAlignVertical: "top" },
+    error: {
+      color: t.danger,
+      backgroundColor: t.dangerSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+    submitButton: {
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      marginTop: 4,
+      padding: 16,
+    },
+    /**
+     * A SAJAT ALAIRAS GOMBJA MASIK SZINU, es ez nem diszites: a ket gomb
+     * kozvetlenul egymas alatt all, es a KETTO KOZTI TEVEDES a draga -- az
+     * egyik az ugyfel neveben ir ala, a masik a mienkben. UGYANAZ A
+     * "MASODLAGOS GOMB" MINTA, MINT A `service-jobs/new.tsx` `secondary`
+     * gombja: `surfaceRaised` háttér + `textPrimary` szöveg, NEM
+     * `textOnAccent` -- világos módban a `surfaceRaised` fehér, tehát fehér
+     * szöveg rajta olvashatatlan lenne.
+     */
+    selfSignButton: {
+      backgroundColor: t.surfaceRaised,
+      marginTop: 12,
+    },
+    selfSignText: { color: t.textPrimary },
+    submitText: {
+      color: t.textOnAccent,
+      fontSize: 16,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    secondaryButton: {
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      marginTop: 4,
+      padding: 12,
+    },
+    secondaryText: {
+      color: t.textPrimary,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    disabled: { opacity: 0.55 },
+    pressed: { opacity: 0.75 },
+  });
+}
