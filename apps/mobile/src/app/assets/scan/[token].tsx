@@ -18,6 +18,7 @@ import {
   readCachedAssetByToken,
   rememberAssetDetail,
 } from "@/lib/offline/asset-cache";
+import { statusBadgeStyle } from "@/lib/theme/label-styles";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 
@@ -185,7 +186,14 @@ function SzabadMatricaKartya({
   const router = useRouter();
   return (
     <>
-      <Text style={styles.title}>Szabad matrica: {code}</Text>
+      {/*
+        KÉT KÜLÖN ELEM, A TERV SZERINT (MobileAppScreen.tsx :1410-1411): egy
+        színes jelvény ("Szabad matrica") ÉS alatta külön a nagy, félkövér
+        kód. A kód eddig egy sorban, jelvény nélkül adta mindkettőt --
+        acrobot kérése, 2026-09-25 (msg 23921), barracuda mérése alapján.
+      */}
+      <Text style={styles.badge}>Szabad matrica</Text>
+      <Text style={styles.title}>{code}</Text>
       <Text style={styles.text}>
         Ez a kód ki van nyomtatva, de még nincs eszközhöz rendelve. Mit
         szeretnél vele?
@@ -317,6 +325,11 @@ function createStyles(t: ThemeTokens) {
       fontWeight: "900",
       textAlign: "center",
     },
+    /*
+      NINCS `alignSelf` FELÜLBÍRÁLVA: a szülő `card` `alignItems: "center"`,
+      tehát a jelvény középre kerül, ugyanúgy, mint a kód alatta.
+    */
+    badge: statusBadgeStyle(t),
     text: {
       color: t.textSecondary,
       fontSize: 14,
