@@ -27,6 +27,20 @@ function szoveg(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+/**
+ * A DÁTUM-MEZŐK A TÖRZSBEN TELJES ISO ALAKBAN ÁLLNAK
+ * (`buildAssetCreatePayload` `${installed.value}T00:00:00.000Z`-t ír), az
+ * ŰRLAP MEZŐJE VISZONT `ÉÉÉÉ-HH-NN`-t VÁR (lásd `dateFromInput`/
+ * `normalizeAssetDate`). Ha ide a nyers ISO-t adnánk, a visszaolvasott
+ * dátum a "T"-nél NÉGY részre esne szét `normalizeAssetDate`
+ * elválasztóin, az ELUTASÍTANÁ, és a választó CSENDBEN a mai napra esne
+ * vissza -- a szerelő az elakadt felvitel javításakor egy MÁSIK dátumot
+ * látna, mint amit eredetileg beírt.
+ */
+function datumSzoveg(value: unknown): string {
+  return szoveg(value).slice(0, 10);
+}
+
 export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
   if (typeof payload !== "object" || payload === null) return null;
   const row = payload as Partial<AssetCreatePayload> & Record<string, unknown>;
@@ -92,7 +106,12 @@ export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
     powerConsumption: szoveg(row.powerConsumption),
     powerConsumptionRaw: szoveg(row.powerConsumptionRaw),
     electricalCode: szoveg(row.electricalCode),
-    installedAt: szoveg(row.installedAt),
+    installedAt: datumSzoveg(row.installedAt),
+    /*
+      A GARANCIA LEJARATA -- UGYANAZ AZ ISO-VS-URLAP ALAK-KULONBSEG, MINT A
+      TELEPITES DATUMANAL FELETTE, ezert ugyanaz a `datumSzoveg` oldja fel.
+    */
+    warrantyExpiresAt: datumSzoveg(row.warrantyExpiresAt),
     interval,
   };
 }

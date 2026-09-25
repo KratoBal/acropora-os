@@ -51,6 +51,28 @@ describe("a tárolt törzsből űrlap lesz", () => {
   });
 
   /**
+   * A DÁTUM-MEZŐK A TÖRZSBEN TELJES ISO ALAKBAN ÁLLNAK
+   * (`buildAssetCreatePayload` így írja őket), az ŰRLAP MEZŐJE VISZONT
+   * `ÉÉÉÉ-HH-NN`-t VÁR. MI PIROSÍT: a nyers törzs-érték visszaadása
+   * vágás nélkül -- akkor a választó a "T"-nél elakadna
+   * (`normalizeAssetDate` négy részre esne szét), és CSENDBEN a mai napra
+   * esne vissza, ahelyett hogy az eredeti dátumot mutatná.
+   */
+  it("a telepítés dátuma és a garancia lejárata a napra vágva jön vissza", () => {
+    const urlap = assetFormFromPayload({
+      ...torzs,
+      installedAt: "2026-08-25T00:00:00.000Z",
+      warrantyExpiresAt: "2027-03-01T00:00:00.000Z",
+    });
+    assert.equal(urlap?.installedAt, "2026-08-25");
+    assert.equal(urlap?.warrantyExpiresAt, "2027-03-01");
+  });
+
+  it("garancia lejárata nélkül üres szöveg lesz, nem `undefined`", () => {
+    assert.equal(assetFormFromPayload(torzs)?.warrantyExpiresAt, "");
+  });
+
+  /**
    * A SZÜLŐESZKÖZ IS VISSZAJÖN, UGYANAZÉRT, MINT A KATEGÓRIA ÉS A FUNKCIÓ:
    * enélkül egy elakadt felvitel javítása és újraküldése
    * (`queue-fix/[id].tsx`, ami `buildAssetCreatePayload`-ot újra meghívja a

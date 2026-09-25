@@ -261,8 +261,16 @@ export default function NewAssetScreen() {
   // is hasznal. Az indoklas (miert ratet, es miert nem masik kepernyo) ott all.
   const scanner = useLabelScanner(setLabelCode);
   const [installedAt, setInstalledAt] = useState("");
+  const [warrantyExpiresAt, setWarrantyExpiresAt] = useState("");
   const [interval, setInterval] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  /**
+   * SAJÁT NYITOTT-ÁLLAPOT, NEM A `datePickerOpen` ÚJRAHASZNÁLATA -- a
+   * Telepítés dátuma és a Garancia lejárata KÉT FÜGGETLEN választó, egy
+   * megosztott jelző mellett az egyik megnyitása bezárná (vagy tévesen
+   * nyitva tartaná) a másikat.
+   */
+  const [warrantyPickerOpen, setWarrantyPickerOpen] = useState(false);
   const [kindPickerOpen, setKindPickerOpen] = useState(false);
   const [unitPickerOpen, setUnitPickerOpen] = useState(false);
   /**
@@ -734,6 +742,7 @@ export default function NewAssetScreen() {
       powerConsumptionRaw,
       electricalCode,
       installedAt,
+      warrantyExpiresAt,
       interval,
     });
 
@@ -1280,13 +1289,12 @@ export default function NewAssetScreen() {
             rajzolja őket. Ugyanaz a két mező, ugyanaz a logika, csak saját
             kártyán.
 
-            A "GARANCIA LEJÁRATA" MEZŐ HIÁNYZIK -- ezt a terv a Karbantartás
-            kártya harmadik meződzeként kéri, de a mobil ÚJ ESZKÖZ űrlapon ma
-            nem létezik (a mobil ADATLAPON már megjelenik, lásd
-            asset-detail #1089, de a felviteli űrlap sosem kérte be). Ez NEM
-            e kör hatásköre volt ("ugyanazokkal a mezőkkel" -- acrobot),
-            ezért nem toldottam be csendben: a hiány itt áll, PR-ben
-            felsorolva, nem eldöntve.
+            A "GARANCIA LEJÁRATA" MEZŐ EBBEN A KÖRBEN MÉG HIÁNYZOTT innen
+            (a Karbantartás kártya harmadik mezője a tervben), mert a mobil
+            ÚJ ESZKÖZ űrlap sosem kérte be, holott a webes űrlapon
+            (asset-editor-page.tsx) és a mobil ADATLAPON (#1089) már megvolt.
+            Balázs "ugyanazokkal a mezőkkel" kérése miatt akkor nem toldottam
+            be csendben -- most, külön körben, pótolva.
           */}
           <Section title="Karbantartás">
             {/*
@@ -1335,6 +1343,49 @@ export default function NewAssetScreen() {
               </Pressable>
             ) : null}
             <FieldError error={error} field="installedAt" />
+            {/*
+              A GARANCIA LEJÁRATA -- UGYANAZ A VÁLASZTÓ-MINTA, MINT A
+              TELEPÍTÉS DÁTUMÁNÁL FELETTE, saját nyitott-állapottal
+              (`warrantyPickerOpen`), hogy a két választó függetlenül
+              nyíljon/záródjon.
+            */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Garancia lejárata</Text>
+              <Pressable
+                onPress={() => setWarrantyPickerOpen(true)}
+                style={styles.input}
+              >
+                <Text
+                  style={
+                    warrantyExpiresAt ? styles.dateValue : styles.datePrompt
+                  }
+                >
+                  {warrantyExpiresAt || "Válassz dátumot"}
+                </Text>
+              </Pressable>
+              {warrantyExpiresAt ? (
+                <Pressable onPress={() => setWarrantyExpiresAt("")}>
+                  <Text style={styles.clearDate}>Dátum törlése</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {warrantyPickerOpen ? (
+              <DateTimePicker
+                value={dateFromInput(warrantyExpiresAt)}
+                mode="date"
+                onChange={(event: DateTimePickerEvent, picked?: Date) => {
+                  if (Platform.OS !== "ios") setWarrantyPickerOpen(false);
+                  if (event.type === "dismissed" || !picked) return;
+                  setWarrantyExpiresAt(dateInputValue(picked));
+                }}
+              />
+            ) : null}
+            {warrantyPickerOpen && Platform.OS === "ios" ? (
+              <Pressable onPress={() => setWarrantyPickerOpen(false)}>
+                <Text style={styles.clearDate}>Kész</Text>
+              </Pressable>
+            ) : null}
+            <FieldError error={error} field="warrantyExpiresAt" />
             <Field
               label="Karbantartási intervallum (nap)"
               value={interval}
