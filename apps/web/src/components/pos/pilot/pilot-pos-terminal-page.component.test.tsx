@@ -252,7 +252,7 @@ describe("PilotPosTerminalPage", () => {
     );
   });
 
-  it("a fizetési mód szegmentált gombjai a helyes CASH/CARD/TRANSFER értéket küldik", async () => {
+  it("a fizetési mód nagy gombjai a helyes CASH/CARD/TRANSFER értéket küldik", async () => {
     api.searchProducts.mockResolvedValue([searchResult]);
     api.createSale.mockResolvedValue(saleResult());
 
@@ -274,5 +274,73 @@ describe("PilotPosTerminalPage", () => {
         expect.objectContaining({ paymentMethod: "TRANSFER" }),
       ),
     );
+  });
+
+  /**
+   * KALIBRÁCIÓ (kártya 5bf263a2, Balázs képe, 2026-09-25 16:21): az ELSŐ
+   * verzió `PilotSegmentedControl`-t használt (kis, tömör pill-váltó,
+   * `bg-pilot-grey-100 p-0.5` burok, `px-3 py-1` gombok) a terv három NAGY
+   * gombja helyett. Ez az állítás a JAVÍTOTT alakra megy: három önálló
+   * gomb egy `grid-cols-3` rácsban, `py-2.5` (nem `py-1`) magassággal, a
+   * kiválasztott aqua háttérrel. Visszaállítva a régi kódra (git stash) ez
+   * az assertion PIROSRA VÁLT: a burok-osztály jelen van, a gomb-osztály
+   * `py-1`.
+   */
+  it("a fizetési mód VÁLASZTÓJA három nagy gomb, nem a kis szegmentált pill-váltó", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+
+    const { container } = render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+
+    expect(
+      container.querySelector(".bg-pilot-grey-100.p-0\\.5"),
+    ).not.toBeInTheDocument();
+
+    const cashButton = screen.getByRole("button", { name: "Készpénz" });
+    expect(cashButton.className).toContain("py-2.5");
+    expect(cashButton.className).toContain("bg-pilot-aqua-600");
+
+    const cardButton = screen.getByRole("button", { name: "Kártya" });
+    expect(cardButton.className).toContain("py-2.5");
+    expect(cardButton.className).not.toContain("bg-pilot-aqua-600");
+
+    const paymentGrid = cashButton.parentElement;
+    expect(paymentGrid?.className).toContain("grid-cols-3");
+  });
+
+  /**
+   * KALIBRÁCIÓ (ugyanaz a kártya): az ELSŐ verzió `380px` kosarat és
+   * egyenlő harmadolású (`grid-cols-3`) kosár-sort adott, amiben az
+   * "Egységár (Ft, bruttó)" felirat két sorba tört, ezért a mezője lejjebb
+   * csúszott a másik kettőhöz képest. Visszaállítva a régi kódra (git
+   * stash) ez az assertion PIROSRA VÁLT: a `440px` helyett `380px`, az
+   * egyenlőtlen harmadolás helyett `grid-cols-3` áll.
+   */
+  it("a kosár szélesebb, és az Egységár oszlopa nagyobb hányadot kap a rácsban", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+
+    const { container } = render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+
+    expect(
+      container.querySelector('[class*="lg:grid-cols-\\[1fr_440px\\]"]'),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector(
+        '[class*="grid-cols-\\[0\\.85fr_1\\.3fr_0\\.85fr\\]"]',
+      ),
+    ).toBeInTheDocument();
   });
 });
