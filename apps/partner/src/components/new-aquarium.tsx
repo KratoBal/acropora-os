@@ -9,49 +9,47 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import type { WaterType, WorksheetDepartmentSummary } from "@acropora/types";
+import {
+  Icon,
+  PilotButton,
+  PilotCard,
+  PilotFormField,
+  PilotInput,
+  PilotSelect,
+  PilotThemeRoot,
+} from "@acropora/ui";
 
 import { helyszinFa } from "@/lib/helyszin-fa";
 import { partnerApi } from "@/lib/api";
 import { useAuth } from "./auth";
 import { Message } from "./ticket-list";
-import { CIMKE, LAP_CIM, LAP_FEJLEC, LAP_LEIRAS, PANEL } from "./frame";
 
 /**
- * ÚJ AKVÁRIUM FELVITELE A PORTÁLON.
+ * ÚJ AKVÁRIUM FELVITELE A PORTÁLON -- PILOT-STÍLUS (Balázs döntése, emlék
+ * 1847, 2026-09-25 16:04 UTC).
  *
- * A Partner Portál Akváriumok terv harmadik UI-köre
- * (`agents/murena/partner-portal-akvariumok-terv-2026-09-25.md`), Balázs
- * 2026-09-25-i döntése szerint: a mezők Akvárium neve*, Víztípus*, Víztérfogat,
- * Helyszín* (kötelezőként jelölve a Figmában is).
+ * A MEZŐK ÉS A LOGIKA VÁLTOZATLANOK a korábbi körhöz képest (Akvárium
+ * neve*, Víztípus*, Víztérfogat, Helyszín* -- a szerver oldali kötelező
+ * `departmentId` és a `resolvePartnerOwnership` ugyanúgy érvényes, lásd
+ * `aquariums.service.ts`). CSAK A KERET cserélt: a régi `frame.tsx`
+ * (`LAP_FEJLEC`/`LAP_CIM`/`PANEL`) helyett `PilotCard`/`PilotFormField`/
+ * `PilotInput`/`PilotSelect`/`PilotButton` (`packages/ui/src/pilot-ui.tsx`),
+ * a belső web `pilot-aquarium-editor-page.tsx` felviteli mezőinek
+ * elrendezését követve.
  *
- * === "ESZKÖZÖK A MEDENCÉBEN" NINCS EBBEN A KÖRBEN ===
+ * === MIÉRT NINCS HOSSZ/SZÉLESSÉG/MAGASSÁG MEZŐ ===
  *
- * A Figma terv az új akvárium felviteléhez helyszín szerint szűrt eszköz-
- * választót is rajzol. Balázs döntése (emlék 1843, 2026-09-25 14:24): az
- * eszköz akváriumhoz rendelése/levétele a portálon KÜLÖN JOGOSULTSÁGHOZ
- * kötött, és ez a jog ma még nem létezik (külön PR jön rá). Amíg nincs
- * meg, ez az űrlap sem kínál hozzárendelést -- ugyanaz a döntés, ami az
- * adatlapon (`aquarium-detail.tsx`) is olvasásra korlátozza az "Eszközök a
- * medencében" kártyát.
+ * A belső űrlap ezekből számolja a litert (`resolveAquariumVolume`). A
+ * portál MINDIG közvetlen liter-értéket kér -- Balázs kifejezett kérése
+ * erre a körre (emlék 1847): "FIZIKAI MERETEK NINCSENEK (hossz/szel/mag),
+ * csak a liter". A `systemVolumeIsManual: true` innen mindig igaz, hiszen
+ * a partner sosem méretekből, hanem közvetlenül adja meg -- ugyanígy volt
+ * a korábbi körben is, ez nem új döntés.
  *
- * === A HELYSZÍN ITT KÖTELEZŐ, A HIBAJEGY-NYITÁSNÁL NEM ===
+ * === "ESZKÖZÖK A MEDENCÉBEN" TOVÁBBRA SINCS EBBEN A KÖRBEN ===
  *
- * A `new-ticket.tsx`-en a helyszín elhagyható. Itt a szerver
- * (`aquariums.service.ts` `resolvePartnerOwnership`) 400-at ad
- * `departmentId` nélkül -- ez NEM UI-döntés, hanem a szerver kényszeríti,
- * mert egy helyszín nélküli akvárium nem tudná, KI adta ki a hozzáférést
- * hozzá a portálon (a láthatóság a `departmentId`-n áll, lásd
- * `aquarium-visibility.ts`).
- *
- * === EZ AZ ÁG A #1118/#1121 ELŐTT, ÖNÁLLÓAN ÉPÜLT ===
- *
- * (acrobot kérése: ne stackeljek.) A lánc azóta beolvadt -- ez a fejezet
- * a #1118/#1121 utáni post-merge mainre rebase-elve készült el: az "Új
- * akvárium" gomb bekötve az `aquarium-list.tsx`-en, és a `portal-shell.tsx`
- * `user.navigation`-alapú kapuja (lásd annak fejlécét) a
- * `pathname.startsWith("/akvariumok")` feltételen át már ELEVE fedi ezt az
- * útvonalat is (`/akvariumok/uj` is `/akvariumok`-kal kezdődik) -- nem
- * kellett hozzá külön kód.
+ * Az eszköz-hozzárendelés a 3. kör (emlék 1843, külön jog), erre az
+ * űrlapra nem vonatkozik ebben a körben sem.
  */
 
 const WATER_TYPE_OPTIONS: { value: WaterType; label: string }[] = [
@@ -134,98 +132,105 @@ export function NewAquarium() {
   );
 
   return (
-    // A `content` osztaly indoka: lasd `settings.tsx` azonos megjegyzeset.
-    <section className="content">
-      <header className={LAP_FEJLEC}>
-        <div>
-          <p className={CIMKE}>ÚJ AKVÁRIUM</p>
-          <h1 className={LAP_CIM}>Akvárium felvitele</h1>
-          <p className={LAP_LEIRAS}>
-            Az itt felvitt akvárium a saját cégéhez, az Ön hozzárendelt
-            helyszínei közül a megadotthoz kerül.
-          </p>
-        </div>
-      </header>
+    <PilotThemeRoot className="bg-pilot-grey-50 px-8 py-6">
+      <div className="mb-5">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
+          ÚJ AKVÁRIUM
+        </p>
+        <h1 className="text-xl font-semibold text-pilot-grey-900">
+          Akvárium felvitele
+        </h1>
+        <p className="mt-0.5 text-sm text-pilot-grey-400">
+          Az itt felvitt akvárium a saját cégéhez, az Ön hozzárendelt helyszínei
+          közül a megadotthoz kerül.
+        </p>
+      </div>
+
       {error ? <Message tone="error" text={error} /> : null}
-      <form className={`form ${PANEL}`} onSubmit={submit}>
-        <label>
-          Akvárium neve
-          <input
-            required
-            maxLength={200}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Például: Trópusi korall, 1. medence"
-          />
-        </label>
-        <label>
-          Víztípus
-          <select
-            required
-            value={waterType}
-            onChange={(event) => setWaterType(event.target.value as WaterType)}
-          >
-            {WATER_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Víztérfogat (liter)
-          <input
-            type="number"
-            min={0}
-            step="1"
-            value={volumeLiters}
-            onChange={(event) => setVolumeLiters(event.target.value)}
-            placeholder="Nem kötelező"
-          />
-        </label>
-        <label>
-          Helyszín
-          <select
-            required
-            value={departmentId}
-            onChange={(event) => setDepartmentId(event.target.value)}
-            disabled={departmentsLoading}
-          >
-            <option value="">Válasszon helyszínt</option>
-            {locations.map(({ item, depth }) => (
-              <option
-                key={item.id}
-                value={item.id}
-              >{`${"— ".repeat(depth)}${item.name} (${item.code})`}</option>
-            ))}
-          </select>
-        </label>
-        {/*
-          UGYANAZ A MINTA, MINT A `new-ticket.tsx`-EN: a hozzárendelés
-          nélküli fiók üres választót kap, és ez nem hibának, hanem a
-          helyzet okának néz ki -- lásd annak fejlécét a teljes indoklásért.
-          Itt a helyzet SÚLYOSABB, mert a helyszín itt kötelező: a hozzá-
-          rendelés nélküli partner egyáltalán nem tud akváriumot felvinni.
-        */}
-        {!departmentsLoading && locations.length === 0 ? (
-          <p className="leading-[1.5] text-[#666677]">
-            Önhöz nincs helyszín rendelve, ezért akváriumot sem tud felvinni. A
-            hozzárendelést az Acropora ügyfélszolgálatán kérheti.
-          </p>
-        ) : null}
-        <div className="form-actions">
-          <button
+
+      <form onSubmit={submit} className="max-w-xl">
+        <PilotCard>
+          <div className="flex flex-col gap-4 p-5">
+            <PilotFormField label="Akvárium neve" required>
+              <PilotInput
+                value={name}
+                onChange={setName}
+                placeholder="Például: Trópusi korall, 1. medence"
+              />
+            </PilotFormField>
+
+            <PilotFormField label="Víztípus" required>
+              <PilotSelect
+                value={waterType}
+                onChange={(value) => setWaterType(value as WaterType)}
+              >
+                {WATER_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </PilotSelect>
+            </PilotFormField>
+
+            <PilotFormField label="Víztérfogat (liter)">
+              <PilotInput
+                type="number"
+                min={0}
+                value={volumeLiters}
+                onChange={setVolumeLiters}
+                placeholder="Nem kötelező"
+              />
+            </PilotFormField>
+
+            <PilotFormField
+              label="Helyszín"
+              required
+              help={
+                !departmentsLoading && locations.length === 0
+                  ? "Önhöz nincs helyszín rendelve, ezért akváriumot sem tud felvinni. A hozzárendelést az Acropora ügyfélszolgálatán kérheti."
+                  : undefined
+              }
+            >
+              <PilotSelect
+                value={departmentId}
+                onChange={setDepartmentId}
+                disabled={departmentsLoading}
+              >
+                <option value="">Válasszon helyszínt</option>
+                {locations.map(({ item, depth }) => (
+                  <option
+                    key={item.id}
+                    value={item.id}
+                  >{`${"— ".repeat(depth)}${item.name} (${item.code})`}</option>
+                ))}
+              </PilotSelect>
+            </PilotFormField>
+          </div>
+        </PilotCard>
+
+        <div className="mt-4 flex items-center gap-2">
+          <PilotButton
             type="button"
-            className="secondary"
+            variant="secondary"
             onClick={() => router.back()}
           >
             Mégsem
-          </button>
-          <button type="submit" disabled={submitting || locations.length === 0}>
-            {submitting ? "Létrehozás…" : "Akvárium létrehozása"}
-          </button>
+          </PilotButton>
+          <PilotButton
+            type="submit"
+            disabled={submitting || locations.length === 0}
+          >
+            {submitting ? (
+              "Létrehozás…"
+            ) : (
+              <>
+                <Icon name="plus" size={14} />
+                Akvárium létrehozása
+              </>
+            )}
+          </PilotButton>
         </div>
       </form>
-    </section>
+    </PilotThemeRoot>
   );
 }

@@ -388,6 +388,7 @@ export const partnerApi = {
    */
   aquariums: (input?: {
     search?: string;
+    waterBodyType?: "AKVARIUM" | "TO";
     page?: number;
     pageSize?: number;
   }) => {
@@ -396,6 +397,7 @@ export const partnerApi = {
       pageSize: String(input?.pageSize ?? 25),
     });
     if (input?.search?.trim()) query.set("search", input.search.trim());
+    if (input?.waterBodyType) query.set("waterBodyType", input.waterBodyType);
     return request<AquariumListResponse>(`/aquariums?${query}`);
   },
   /** Idegen akvariumra 404 jon -- ugyanaz a hatokor, mint a listan. */

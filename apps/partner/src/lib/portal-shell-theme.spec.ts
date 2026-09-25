@@ -78,15 +78,21 @@ describe("a portal héja és a tartalom doboza (sürgős javítás, 2026-09-25)"
    * lenne, minden hiany-allitas zold lenne, es epp a hiany-allitasok adjak
    * ennek a specnek az ertelmet (lasd `visual-base.spec.ts` azonos mintajat).
    */
+  /**
+   * A HÁROM AKVÁRIUM-LAP 2026-09-25-TŐL KIKERÜLT ERRŐL A LISTÁRÓL -- pilot-
+   * stílusú lett (emlék 1847, `feat/portal-aquarium-pilot-round-1`), és
+   * MOST a lenti `pilotLapok` listában szerepel, ugyanúgy, ahogy a
+   * `ticket-list.tsx`/`asset-detail.tsx` is ott áll, amióta pilot-stílusú.
+   * UGYANEZ A NAP UGYANEZT TETTE A `new-ticket.tsx`-szel (#1140, main) --
+   * REBASE UTÁN (2026-09-25) a két változás UNIÓJA marad itt: már csak a
+   * `settings.tsx` régi stílusú.
+   */
   const regiStilusuLapok: { fajl: string; leiras: string }[] = [
     { fajl: "settings.tsx", leiras: "Beállítások" },
-    { fajl: "aquarium-list.tsx", leiras: "Akváriumok lista" },
-    { fajl: "aquarium-detail.tsx", leiras: "Akváriumok adatlap" },
-    { fajl: "new-aquarium.tsx", leiras: "Új akvárium" },
   ];
 
   it("a kontroll-lista tényleg nem üres", () => {
-    assert.ok(regiStilusuLapok.length >= 4);
+    assert.ok(regiStilusuLapok.length >= 1);
   });
 
   for (const { fajl, leiras } of regiStilusuLapok) {
@@ -129,6 +135,10 @@ describe("a portal héja és a tartalom doboza (sürgős javítás, 2026-09-25)"
       lásd a saját fejlécét): a `regiStilusuLapok` listából ide költözött.
     */
     "new-ticket.tsx",
+    // A HÁROM AKVÁRIUM-LAP, PILOT-STÍLUSRA VÁLTVA 2026-09-25-TŐL (emlék 1847).
+    "aquarium-list.tsx",
+    "aquarium-detail.tsx",
+    "new-aquarium.tsx",
   ];
 
   for (const fajl of pilotLapok) {

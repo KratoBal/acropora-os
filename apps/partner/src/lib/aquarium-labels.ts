@@ -1,4 +1,4 @@
-import type { WaterType } from "@acropora/types";
+import type { WaterBodyType, WaterType } from "@acropora/types";
 
 /**
  * KIS, ÖNÁLLÓ CÍMKE-FÁJL -- UGYANAZ A MINTA, MINT AZ `eszkoz-azonosito.ts`.
@@ -11,4 +11,13 @@ import type { WaterType } from "@acropora/types";
 export const WATER_TYPE_LABEL: Record<WaterType, string> = {
   EDESVIZI: "Édesvízi",
   TENGERI: "Tengeri",
+};
+
+/**
+ * A LISTA "TÍPUS" SZŰRŐJÉHEZ/OSZLOPÁHOZ, a pilot-kör (2026-09-25, emlék
+ * 1847) óta -- a portál előtte nem mutatta ezt a mezőt.
+ */
+export const WATER_BODY_LABEL: Record<WaterBodyType, string> = {
+  AKVARIUM: "Akvárium",
+  TO: "Tó",
 };

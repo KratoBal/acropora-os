@@ -50,6 +50,9 @@ const NAPLO_SOR = "src/lib/naplo-sor.ts";
 const MUNKALAP_RESZLET = "src/components/worksheet-detail.tsx";
 const PORTAL_SHELL = "src/components/portal-shell.tsx";
 const AUTH = "src/components/auth.tsx";
+const AQUARIUM_LISTA = "src/components/aquarium-list.tsx";
+const AQUARIUM_RESZLET = "src/components/aquarium-detail.tsx";
+const AQUARIUM_UJ = "src/components/new-aquarium.tsx";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
 
@@ -991,5 +994,72 @@ describe("eszköz hozzárendelése/levétele egy akváriumról -- kliens hívás
     );
     assert.match(s, /\$\{encodeURIComponent\(assetId\)\}\/aquarium/);
     assert.match(s, /method: "PATCH"/);
+  });
+});
+
+/**
+ * AZ AKVÁRIUM LISTA/ADATLAP/ÚJ PILOT-STÍLUSRA VÁLTOTT (emlék 1847,
+ * 2026-09-25 16:04 UTC) -- ez a szakasz a kör három saját döntését méri,
+ * amik NEM olvashatók le egyszerűen a belső web pilot-lapjainak
+ * másolásából.
+ */
+describe("az Akváriumok pilot-kör 1 saját döntései", () => {
+  it("POZITÍV KONTROLL: mind a három fájl olvasható és nem üres", () => {
+    for (const ut of [AQUARIUM_LISTA, AQUARIUM_RESZLET, AQUARIUM_UJ])
+      assert.ok(olvas(ut).length > 500, `${ut}: üres vagy gyanúsan rövid`);
+  });
+
+  /**
+   * AZ ADATLAP CSAK-OLVASÓ: NINCS `PilotFormField`/`PilotInput` az
+   * akvárium SAJÁT mezőin, és nincs `PATCH` hívás. MI PIROSÍT: ha valaki
+   * a belső `pilot-aquarium-editor-page.tsx`-t szó szerint másolná be
+   * (az MINDIG szerkeszthető űrlap) -- az a szerveren `requireInternalWriter`
+   * miatt minden partner-mentésnél 403-at adna.
+   */
+  it("az adatlap PilotDataRow-okkal olvas, nem PilotFormField-del szerkeszt", () => {
+    const s = kod(AQUARIUM_RESZLET);
+    assert.match(s, /PilotDataRow/);
+    assert.doesNotMatch(s, /PilotFormField/);
+    assert.doesNotMatch(s, /PilotInput/);
+    assert.doesNotMatch(s, /method: "PATCH"/);
+  });
+
+  /**
+   * AZ ÚJ AKVÁRIUM ŰRLAPON NINCS FIZIKAI MÉRET -- Balázs kifejezett kérése
+   * erre a körre (emlék 1847): "FIZIKAI MERETEK NINCSENEK". MI PIROSÍT: ha
+   * a belső szerkesztő hossz/szélesség/magasság mezői visszakerülnének.
+   */
+  it("az új akvárium űrlapon nincs hossz/szélesség/magasság mező", () => {
+    const s = kod(AQUARIUM_UJ);
+    assert.doesNotMatch(s, /lengthCm/);
+    assert.doesNotMatch(s, /widthCm/);
+    assert.doesNotMatch(s, /heightCm/);
+    // POZITÍV KONTROLL: a liter mező viszont MEGVAN.
+    assert.match(s, /systemVolumeLiters/);
+  });
+
+  /**
+   * A LISTÁN NINCS TULAJDON-SZŰRŐ/OSZLOP (Saját/Ügyfél) -- a portálon
+   * minden akvárium a hívó SAJÁT ügyfeléé, egy ilyen szűrő semmit nem
+   * szűkítene. MI PIROSÍT: ha a belső lista `ownershipType` szűrője
+   * (`OWNERSHIP_OPTIONS`/`PilotSegmentedControl` "Tulajdon"-nal) szó
+   * szerint bekerülne.
+   */
+  it("a listán nincs tulajdon szerinti szűrő", () => {
+    assert.doesNotMatch(kod(AQUARIUM_LISTA), /ownershipType/);
+  });
+
+  /**
+   * A LISTA "ÚJ AKVÁRIUM" GOMBJA FELTÉTEL NÉLKÜL JELENIK MEG -- nem
+   * `hasPermission`/`AQUARIUMS_MANAGE` mögött, mint a belső lapon. MI
+   * PIROSÍT: ha egy jog-ellenőrzés kerülne a gomb elé, ami a `create()`
+   * szolgáltatás-réteg tényleges (jog nélküli) engedékenységét hamisan
+   * szűkebbnek mutatná.
+   */
+  it("az Új akvárium gomb feltétel nélkül jelenik meg a listán", () => {
+    const s = kod(AQUARIUM_LISTA);
+    assert.doesNotMatch(s, /hasPermission/);
+    assert.doesNotMatch(s, /AQUARIUMS_MANAGE/);
+    assert.match(s, /href="\/akvariumok\/uj"/);
   });
 });
