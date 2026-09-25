@@ -11,6 +11,7 @@ import {
   worksheetLineSummary,
   worksheetListSubtitle,
   worksheetStatusLabel,
+  worksheetStatusTone,
   worksheetFilterSummary,
   worksheetListStartsMineOnly,
   worksheetVersionNote,
@@ -116,6 +117,31 @@ describe("worksheetStatusLabel", () => {
       "worksheetStatusLabel",
     );
     assert.deepEqual(worksheetStatusLabel, kozos);
+  });
+});
+
+/**
+ * SZÁNDÉKOSAN NINCS FORRÁS-EGYEZTETŐ ŐRZŐ, MINT A CÍMKÉN: ez a táblázat NEM
+ * a `packages/types` kanonikus `worksheetStatusTone`-jának másolata (az
+ * `SIGNED`-re "green"-t adna, amit a mobil témakészlet nem ismer), hanem a
+ * mobil négy tokenjéhez SZÁNDÉKOSAN igazított, önálló döntés (acrobot,
+ * 2026-09-26). Az állítás ezért a NÉGY ÁLLAPOT-NÉGY TOKEN megfeleltetést
+ * méri, nem egy külső forrással való egyezést.
+ */
+describe("worksheetStatusTone", () => {
+  it("minden állapothoz pontosan egy, megkülönböztethető tónust rendel", () => {
+    assert.equal(worksheetStatusTone("DRAFT"), "neutral");
+    assert.equal(worksheetStatusTone("AWAITING_SIGNATURE"), "warning");
+    assert.equal(worksheetStatusTone("SIGNED"), "accent");
+    assert.equal(worksheetStatusTone("REJECTED"), "danger");
+  });
+
+  it("nincs két állapot, ami ugyanazt a tónust kapná", () => {
+    const statuses = Object.keys(
+      worksheetStatusLabel,
+    ) as (keyof typeof worksheetStatusLabel)[];
+    const tones = statuses.map((status) => worksheetStatusTone(status));
+    assert.equal(new Set(tones).size, statuses.length);
   });
 });
 

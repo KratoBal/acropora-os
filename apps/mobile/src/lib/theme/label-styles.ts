@@ -96,3 +96,39 @@ export function statusBadgeStyle(t: ThemeTokens): BadgeStyle {
     paddingVertical: 3,
   };
 }
+
+/**
+ * A NÉGY HANG, AMIT A MOBIL TÉMAKÉSZLET MEG TUD KÜLÖNBÖZTETNI.
+ *
+ * acrobot döntése, 2026-09-26: a munkalap-állapot négy értéke pontosan
+ * ráillik a meglévő négy tokenre (`neutral`/`warning`/`accent`/`danger`) --
+ * ez a KIVÉTEL a `statusBadgeStyle` egyszínű szabálya alól, mert itt a
+ * darabszám (négy állapot, négy elérhető hang) egyezik, nem csak
+ * hasonlít. A hibajegy nyolc állapota (öt szükséges hanggal, lásd
+ * `service-job-labels.ts` `serviceJobStatusTone`) ide NEM fér be -- annak
+ * marad az egyszínű `statusBadgeStyle`.
+ *
+ * KÜLÖN FÜGGVÉNY A SZÍNPÁRRA, NEM TELJES `BadgeStyle`: a hívó helyeken
+ * (`worksheets/index.tsx`, `worksheets/[id].tsx`) a jelvény ALAKJA (rádiusz,
+ * padding, betűméret) MÁR ÁLL egy `View`+`Text` párosban -- csak a
+ * háttér/szöveg SZÍNE változik állapotonként. Egy teljes `BadgeStyle`
+ * visszaadása itt vagy duplázná ezeket az értékeket, vagy felülírná a hívó
+ * saját, esetleg eltérő alakját.
+ */
+export type StatusTone = "neutral" | "warning" | "accent" | "danger";
+
+export function statusToneColors(
+  t: ThemeTokens,
+  tone: StatusTone,
+): { background: string; text: string } {
+  switch (tone) {
+    case "neutral":
+      return { background: t.border, text: t.textSecondary };
+    case "warning":
+      return { background: t.warningSoft, text: t.warning };
+    case "accent":
+      return { background: t.accentSoft, text: t.accentSoftText };
+    case "danger":
+      return { background: t.dangerSoft, text: t.danger };
+  }
+}

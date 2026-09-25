@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { eyebrowStyle, statusBadgeStyle } from "./label-styles";
+import {
+  eyebrowStyle,
+  statusBadgeStyle,
+  statusToneColors,
+} from "./label-styles";
 import { LIGHT_THEME } from "./tokens";
 
 describe("eyebrowStyle", () => {
@@ -38,5 +42,37 @@ describe("statusBadgeStyle", () => {
   it("nem állít alignSelf-et -- ezt a hívó dönti el a saját elrendezésében", () => {
     const style = statusBadgeStyle(LIGHT_THEME);
     assert.equal("alignSelf" in style, false);
+  });
+});
+
+describe("statusToneColors", () => {
+  it("mind a négy tónus a saját, megkülönböztethető színpárját adja", () => {
+    const neutral = statusToneColors(LIGHT_THEME, "neutral");
+    const warning = statusToneColors(LIGHT_THEME, "warning");
+    const accent = statusToneColors(LIGHT_THEME, "accent");
+    const danger = statusToneColors(LIGHT_THEME, "danger");
+
+    assert.deepEqual(neutral, {
+      background: LIGHT_THEME.border,
+      text: LIGHT_THEME.textSecondary,
+    });
+    assert.deepEqual(warning, {
+      background: LIGHT_THEME.warningSoft,
+      text: LIGHT_THEME.warning,
+    });
+    assert.deepEqual(accent, {
+      background: LIGHT_THEME.accentSoft,
+      text: LIGHT_THEME.accentSoftText,
+    });
+    assert.deepEqual(danger, {
+      background: LIGHT_THEME.dangerSoft,
+      text: LIGHT_THEME.danger,
+    });
+
+    // NÉGY KÜLÖNBÖZŐ HÁTTÉR: ha kettő egybeesne, két állapot ugyanúgy nézne ki.
+    const backgrounds = [neutral, warning, accent, danger].map(
+      (tone) => tone.background,
+    );
+    assert.equal(new Set(backgrounds).size, 4);
   });
 });
