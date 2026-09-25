@@ -30,13 +30,20 @@ const kod = (ut: string) =>
     .replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 describe("hibajegy-lapok arculati parítása", () => {
-  it("a lista a közös @acropora/ui LISTA-keretét hívja", () => {
+  /*
+    2026-09-25-TŐL A LISTA A PILOT KERETET HÍVJA, NEM A VIOLET `Service*`-t.
+    A Figma 9. kör (Partner Portál) a `portal-shell.tsx`/`login/page.tsx`
+    után a tartalom-képernyőket is a pilot-aqua design-rendszerre viszi --
+    ez az állítás lecserélve, hogy a MOSTANI keretet mérje, nem a
+    korábbit. Az adatlap (`RESZLET`) egy KÉSŐBBI PR-ben kapja ugyanezt a
+    váltást, ezért a lenti masik allitas addig valtozatlan marad.
+  */
+  it("a lista a közös @acropora/ui PILOT-keretét hívja", () => {
     const s = kod(LISTA);
     assert.match(s, /from "@acropora\/ui"/);
-    assert.match(s, /ServiceListHeader/);
-    assert.match(s, /ServiceListTabs/);
-    assert.match(s, /ServiceStatusBadge/);
-    assert.match(s, /ServiceListFooter/);
+    assert.match(s, /PilotThemeRoot/);
+    assert.match(s, /PilotBadge/);
+    assert.match(s, /partnerStatusBadgeVariant/);
   });
 
   it("az adatlap a közös @acropora/ui ADATLAP-keretét hívja", () => {
