@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type * as ImagePicker from "expo-image-picker";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -13,6 +13,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { DocumentImage } from "@/components/documents/DocumentImage";
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
 import { toPickedImages } from "@/lib/api/picked-image";
@@ -80,6 +82,8 @@ export default function ServiceJobDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { status, user } = useAuth();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const online = useIsOnline();
 
@@ -580,7 +584,7 @@ export default function ServiceJobDetailScreen() {
                   onChangeText={setNote}
                   style={styles.input}
                   placeholder="Megjegyzés (elhagyható)"
-                  placeholderTextColor="#5c7e92"
+                  placeholderTextColor={tokens.textMuted}
                   multiline
                   editable={!step.isPending}
                 />
@@ -694,7 +698,7 @@ export default function ServiceJobDetailScreen() {
                   onChangeText={setFelirat}
                   style={styles.input}
                   placeholder="Mit látunk a képen?"
-                  placeholderTextColor="#5c7e92"
+                  placeholderTextColor={tokens.textMuted}
                   maxLength={500}
                   editable={!feliratMentes.isPending}
                 />
@@ -749,76 +753,99 @@ export default function ServiceJobDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { backgroundColor: "#06202e", flex: 1 },
-  page: { gap: 12, padding: 16 },
-  block: { backgroundColor: "#0d2a3a", borderRadius: 12, gap: 8, padding: 14 },
-  number: { color: "#9fc4d8", fontSize: 13 },
-  title: { color: "#eaf4fa", fontSize: 18, fontWeight: "600" },
-  status: { color: "#9fc4d8" },
-  meta: { color: "#9fc4d8", fontSize: 13 },
-  description: { color: "#eaf4fa", lineHeight: 20 },
-  sectionTitle: { color: "#eaf4fa", fontWeight: "600" },
-  row: { paddingVertical: 8 },
-  rowText: { color: "#eaf4fa" },
-  action: {
-    backgroundColor: "#12384c",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  actionText: { color: "#eaf4fa", textAlign: "center" },
-  /** A tiltott gomb LATSZIK, csak halvanyabb: a hianyzo gomb nem magyaraz. */
-  actionDisabled: { opacity: 0.45 },
-  input: {
-    backgroundColor: "#06202e",
-    borderRadius: 10,
-    color: "#eaf4fa",
-    minHeight: 64,
-    padding: 12,
-  },
-  galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
-  csempe: { gap: 4, width: 104 },
-  csempeKep: {
-    width: 104,
-    height: 104,
-    borderRadius: 10,
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  /*
-    A MERES DOBOZA. A csempe 104 pont szeles, tehat a natív hibauzenet nem fer
-    ki egeszben -- ezert GORGETHETO helyett egyszeruen kicsi betuvel all, es a
-    TELJES szoveg a nagy nezetben olvashato, ahol van hely. Aki a csempen csak
-    annyit lat, hogy MERES, az rakoppint.
-  */
-  csempeHiba: { padding: 4 },
-  nagyKepHiba: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-  },
-  csempeFelirat: { color: "#eaf4fa", fontSize: 12, textAlign: "center" },
-  csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
-  nagyFelirat: { color: "#eaf4fa", fontSize: 15, textAlign: "center" },
-  nagyRatet: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#03101acc",
-    justifyContent: "center",
-    gap: 16,
-    padding: 20,
-  },
-  nagyKep: { flex: 1, width: "100%", borderRadius: 12 },
-  pressed: { opacity: 0.75 },
-  loading: { marginTop: 32 },
-  empty: { color: "#9fc4d8", marginTop: 32, padding: 16, textAlign: "center" },
-  notice: { color: "#eaf4fa", lineHeight: 20 },
-  hint: { color: "#9fc4d8", fontSize: 13, lineHeight: 18 },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 12.
+ * kör, ugyanaz a minta, mint a `login.tsx`-en (lásd ott a teljes indokot).
+ *
+ * A `nagyRatet` (a teljes képernyős fénykép-nézet fekete alapja) ÉS A RAJTA
+ * ÁLLÓ `nagyFelirat` SZÁNDÉKOSAN MARAD FIX SÖTÉT SZÍNŰ -- ugyanaz az indok,
+ * mint a `document-panel.tsx` és az `assets/[id].tsx` saját fénykép-
+ * nézőjénél: egy élő fénykép fölé kerülő sötétítő réteg nem a téma része,
+ * és világos módban `t.textPrimary` (majdnem fekete) olvashatatlan lenne
+ * ezen a mindig sötét alapon.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { backgroundColor: t.background, flex: 1 },
+    page: { gap: 12, padding: 16 },
+    block: {
+      backgroundColor: t.surface,
+      borderRadius: 12,
+      gap: 8,
+      padding: 14,
+    },
+    number: { color: t.textSecondary, fontSize: 13 },
+    title: { color: t.textPrimary, fontSize: 18, fontWeight: "600" },
+    status: { color: t.textSecondary },
+    meta: { color: t.textSecondary, fontSize: 13 },
+    description: { color: t.textPrimary, lineHeight: 20 },
+    sectionTitle: { color: t.textPrimary, fontWeight: "600" },
+    row: { paddingVertical: 8 },
+    rowText: { color: t.textPrimary },
+    action: {
+      backgroundColor: t.accent,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+    },
+    actionText: { color: t.textOnAccent, textAlign: "center" },
+    /** A tiltott gomb LATSZIK, csak halvanyabb: a hianyzo gomb nem magyaraz. */
+    actionDisabled: { opacity: 0.45 },
+    input: {
+      backgroundColor: t.background,
+      borderRadius: 10,
+      color: t.textPrimary,
+      minHeight: 64,
+      padding: 12,
+    },
+    galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
+    csempe: { gap: 4, width: 104 },
+    csempeKep: {
+      width: 104,
+      height: 104,
+      borderRadius: 10,
+      backgroundColor: t.surfaceRaised,
+      borderColor: t.border,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    /*
+      A MERES DOBOZA. A csempe 104 pont szeles, tehat a natív hibauzenet nem fer
+      ki egeszben -- ezert GORGETHETO helyett egyszeruen kicsi betuvel all, es a
+      TELJES szoveg a nagy nezetben olvashato, ahol van hely. Aki a csempen csak
+      annyit lat, hogy MERES, az rakoppint.
+    */
+    csempeHiba: { padding: 4 },
+    nagyKepHiba: {
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 16,
+    },
+    csempeFelirat: { color: t.textPrimary, fontSize: 12, textAlign: "center" },
+    csempeMeret: { color: t.textMuted, fontSize: 11, textAlign: "center" },
+    nagyFelirat: { color: "#eaf4fa", fontSize: 15, textAlign: "center" },
+    nagyRatet: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "#03101acc",
+      justifyContent: "center",
+      gap: 16,
+      padding: 20,
+    },
+    nagyKep: { flex: 1, width: "100%", borderRadius: 12 },
+    pressed: { opacity: 0.75 },
+    loading: { marginTop: 32 },
+    empty: {
+      color: t.textSecondary,
+      marginTop: 32,
+      padding: 16,
+      textAlign: "center",
+    },
+    notice: { color: t.textPrimary, lineHeight: 20 },
+    hint: { color: t.textSecondary, fontSize: 13, lineHeight: 18 },
+  });
+}

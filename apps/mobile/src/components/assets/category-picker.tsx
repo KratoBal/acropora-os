@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { CollapsedPicker } from "./unit-picker";
@@ -5,6 +6,8 @@ import {
   categoryPickerPlan,
   type CategoryOption,
 } from "@/lib/assets/category-picker-rows";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * A KATEGORIA-VALASZTO, EGY PELDANYBAN, MINDKET URLAPNAK.
@@ -54,6 +57,8 @@ export function CategoryPicker({
     szabaly, aminek merese van.
   */
   const terv = categoryPickerPlan({ options, value, currentName });
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   return (
     <CollapsedPicker
@@ -90,16 +95,25 @@ export function CategoryPicker({
   );
 }
 
-const styles = StyleSheet.create({
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  button: {
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#21485e",
-    backgroundColor: "#0a2335",
-  },
-  selected: { borderColor: "#52d6c7", backgroundColor: "#12443f" },
-  text: { color: "#f4fbff", fontWeight: "700" },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Balázs
+ * jelentése (2026-09-25 14:48, telefonos fényképek): a felviteli/szerkesztő
+ * eszköz-űrlap ezen a komponensen keresztül SÖTÉT NAVY dobozokat mutatott
+ * VILÁGOS módban, mert ez a fájl saját, fix sötét hexekkel élt, miközben az
+ * őt hívó képernyő már `useAppTheme()`-re állt.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    grid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+    button: {
+      paddingVertical: 9,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+    },
+    selected: { borderColor: t.accent, backgroundColor: t.accentSoft },
+    text: { color: t.textPrimary, fontWeight: "700" },
+  });
+}

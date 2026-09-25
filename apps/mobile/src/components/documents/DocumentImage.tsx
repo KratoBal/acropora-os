@@ -12,6 +12,7 @@ import {
 import { kepHibaSzovege } from "@/lib/documents/kep-hiba";
 import type { DocumentImageVariant } from "@/lib/documents/document-view";
 import { useDocumentImageFile } from "@/lib/documents/use-document-image-file";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
 
 /**
  * EGY CSATOLMÁNY-KÉP, A MI KÉRÉSÜNKKEL LEHÍVVA.
@@ -67,11 +68,12 @@ export function DocumentImage({
     variant,
     enabled,
   });
+  const { tokens } = useAppTheme();
 
   if (letoltes.isPending)
     return (
       <View style={[style, hibaStyle]}>
-        <ActivityIndicator color="#52d6c7" />
+        <ActivityIndicator color={tokens.accent} />
       </View>
     );
 
@@ -83,7 +85,7 @@ export function DocumentImage({
   if (letoltes.isError)
     return (
       <View style={[style, hibaStyle]}>
-        <Text style={{ color: "#f5b78a", fontSize: 11 }} selectable>
+        <Text style={{ color: tokens.danger, fontSize: 11 }} selectable>
           MÉRÉS: a letöltés el sem indult (
           {letoltes.error instanceof Error
             ? letoltes.error.message
@@ -98,7 +100,7 @@ export function DocumentImage({
   if (!eredmeny || eredmeny.allapot === "hiba")
     return (
       <View style={[style, hibaStyle]}>
-        <Text style={{ color: "#f5b78a", fontSize: 11 }} selectable>
+        <Text style={{ color: tokens.danger, fontSize: 11 }} selectable>
           {eredmeny?.uzenet ?? "MÉRÉS: a letöltés nem adott eredményt."}
         </Text>
       </View>
@@ -107,7 +109,7 @@ export function DocumentImage({
   if (hiba)
     return (
       <View style={[style, hibaStyle]}>
-        <Text style={{ color: "#f5b78a", fontSize: 11 }} selectable>
+        <Text style={{ color: tokens.danger, fontSize: 11 }} selectable>
           {hiba}
         </Text>
       </View>

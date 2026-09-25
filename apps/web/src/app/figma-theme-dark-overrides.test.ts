@@ -70,3 +70,66 @@ describe("figma-theme.css -- beágyazott közös komponensek sötét szövegszí
     expect(css).toMatch(/\[data-theme="dark"\]\s*\.bg-white\s*\{/);
   });
 });
+
+/**
+ * A `data-theme` ÉS A `.bg-white` LEHET UGYANAZON AZ ELEMEN, NEM CSAK
+ * ŐS-LESZÁRMAZOTT VISZONYBAN.
+ *
+ * === A MÉRT TÖRÉS ===
+ *
+ * `app-shell.tsx` `<aside>`-je és `<header>`-je MINDKETTŐ saját magán
+ * viseli a `data-theme={effectiveTheme}` attribútumot ÉS a `bg-white`
+ * (illetve `bg-white/95`) osztályt. A leszármazott-szelektor
+ * (`[data-theme="dark"] .bg-white`, szóközzel) ilyenkor NEM illeszkedik:
+ * a CSS leszármazott-kombinátor két KÜLÖNBÖZŐ elemet követel, egy elem,
+ * ami mindkettőt viseli, nem elégíti ki. Élesben ezért az oldalsáv és a
+ * fejléc FEHÉR maradt sötét preferencia mellett, miközben a bennük álló
+ * `<input>` (nyers cimke-szelektor, MÁR MŰKÖDÖTT) és a beágyazott
+ * `UserMenu` lenyílója (VALÓDI leszármazott, MÁR MŰKÖDÖTT) helyesen
+ * sötétedett -- Balázs 2026-09-25-i képernyőfotója pontosan ezt a
+ * részleges képet mutatta.
+ *
+ * EZ A TESZT NEM SZÍNHELYESSÉGET MÉR (lásd a fájl fejlécét, ugyanaz a
+ * happy-dom-határ) -- azt méri, hogy az ÖSSZETETT (szóköz NÉLKÜLI)
+ * szelektor-alak IS jelen van a fájlban, a leszármazott-alak MELLETT, nem
+ * helyette.
+ */
+describe("figma-theme.css -- a data-theme és a bg-white ugyanazon az elemen is", () => {
+  const css = readFileSync(
+    join(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "..",
+      "packages",
+      "ui",
+      "src",
+      "figma-theme.css",
+    ),
+    "utf8",
+  );
+
+  it("van ÖSSZETETT (szóköz nélküli) felülírás a .bg-white osztályra", () => {
+    expect(css).toMatch(/\[data-theme="dark"\]\.bg-white\s*\{/);
+  });
+
+  it("van ÖSSZETETT (szóköz nélküli) felülírás a bg-white/NN osztályokra", () => {
+    expect(css).toMatch(/\[data-theme="dark"\]\[class\*="bg-white\\\/"\]\s*\{/);
+  });
+
+  /*
+    KONTROLL: A LESZÁRMAZOTT-ALAK IS MEGMARAD -- enélkül ez a két állítás
+    zölden maradna akkor is, ha valaki a leszármazott-szabályt tévedésből
+    kicserélné az összetettre, ahelyett hogy MELLÉ tenné. A leszármazott
+    forma a `pilot-ui.tsx`/pilot oldalak (data-theme egy KÜLÖN gyökér
+    div-en, bg-white a TARTALOM elemein) esetére kell, ezt nem szabad
+    elveszíteni.
+  */
+  it("KONTROLL: a leszármazott (szóközös) alak is megmarad mindkettőn", () => {
+    expect(css).toMatch(/\[data-theme="dark"\]\s+\.bg-white\s*\{/);
+    expect(css).toMatch(
+      /\[data-theme="dark"\]\s+\[class\*="bg-white\\\/"\]\s*\{/,
+    );
+  });
+});

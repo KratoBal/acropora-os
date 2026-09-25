@@ -120,7 +120,17 @@ function toTarget(
   };
 }
 
-function toDetail(row: AquariumDetailRow): AquariumDetail {
+/**
+ * A `canAssignAssets` MEZŐ EBBŐL A FÜGGVÉNYBŐL SZÁNDÉKOSAN HIÁNYZIK -- ez a
+ * függvény egy Prisma-sorból épít adatlapot, a felhasználó-specifikus
+ * képesség-jelölő viszont NEM a soron áll, hanem a hívó azonosítóján.
+ * A hívó (`AquariumsService`) minden végpont-visszatérésen KÖTELEZŐEN ráteszi
+ * (lásd `withCanAssignAssets` fejlécét ott) -- enélkül a mező NÉMÁN hiányozna
+ * a válaszból, a kliens típusa pedig kötelezőnek hazudná.
+ */
+function toDetail(
+  row: AquariumDetailRow,
+): Omit<AquariumDetail, "canAssignAssets"> {
   return {
     id: row.id,
     aquariumNumber: row.aquariumNumber,
@@ -234,7 +244,7 @@ export class AquariumsRepository {
   async detail(
     id: string,
     visibility: Prisma.AquariumWhereInput = {},
-  ): Promise<AquariumDetail | null> {
+  ): Promise<Omit<AquariumDetail, "canAssignAssets"> | null> {
     const row = await prisma.aquarium.findFirst({
       where: { AND: [{ id }, visibility] },
       include: detailInclude,
@@ -300,7 +310,7 @@ export class AquariumsRepository {
    */
   async byClientOperationId(
     clientOperationId: string,
-  ): Promise<AquariumDetail | null> {
+  ): Promise<Omit<AquariumDetail, "canAssignAssets"> | null> {
     const row = await prisma.aquarium.findUnique({
       where: { clientOperationId },
       include: detailInclude,
@@ -358,7 +368,7 @@ export class AquariumsRepository {
       customerId: string | null;
     },
     _actorUserId: string,
-  ): Promise<AquariumDetail> {
+  ): Promise<Omit<AquariumDetail, "canAssignAssets">> {
     if (input.clientOperationId) {
       const meglevo = await this.byClientOperationId(input.clientOperationId);
       if (meglevo) return meglevo;
@@ -448,7 +458,7 @@ export class AquariumsRepository {
     id: string,
     input: UpdateAquariumDto,
     _actorUserId: string,
-  ): Promise<AquariumDetail> {
+  ): Promise<Omit<AquariumDetail, "canAssignAssets">> {
     return prisma.$transaction(async (tx) => {
       const existing = await tx.aquarium.findUniqueOrThrow({ where: { id } });
 
@@ -581,7 +591,7 @@ export class AquariumsRepository {
       channelCount?: number;
       notes?: string;
     },
-  ): Promise<AquariumDetail> {
+  ): Promise<Omit<AquariumDetail, "canAssignAssets">> {
     await prisma.aquariumEquipment.create({
       data: {
         aquariumId,
@@ -603,7 +613,7 @@ export class AquariumsRepository {
   async removeEquipment(
     aquariumId: string,
     equipmentId: string,
-  ): Promise<AquariumDetail> {
+  ): Promise<Omit<AquariumDetail, "canAssignAssets">> {
     await prisma.aquariumEquipment.delete({
       where: { id: equipmentId, aquariumId },
     });
@@ -612,5 +622,28 @@ export class AquariumsRepository {
       include: detailInclude,
     });
     return toDetail(row);
+  }
+
+  /**
+   * VAN-E BEJELÖLVE A HÍVÓNÁL AZ ESZKÖZ-AKVÁRIUM HOZZÁRENDELÉS KÉPESSÉGE.
+   *
+   * SZÁNDÉKOSAN DUPLIKÁLT, NEM A `ServiceAssetsRepository` AZONOS NEVŰ
+   * METÓDUSÁNAK ÚJRAFELHASZNÁLÁSA -- lásd ott a fejlécet a mintáról
+   * (`MaterialRequestsRepository.hasMarkReceivedCapability`). Egy
+   * cross-module import (aquariums -> service-assets) egy generikus,
+   * felhasználó+képesség lekérdezésért túl szoros csatolás lenne; ez a
+   * repó máshol is inkább az apró, ismétlődő lekérdezést választja a
+   * megosztott absztrakció helyett.
+   */
+  async hasAquariumAssetAssignCapability(userId: string): Promise<boolean> {
+    const row = await prisma.userServiceCapability.findUnique({
+      where: {
+        userId_capability: {
+          userId,
+          capability: "AQUARIUM_ASSET_ASSIGN",
+        },
+      },
+    });
+    return row !== null;
   }
 }

@@ -1,9 +1,15 @@
 import type {
+  AquariumDetail,
+  AquariumListResponse,
+  AquariumMeasurementListResponse,
+  AquariumMeasurementOccasion,
   AssetDetail,
   AssetDocumentSummary,
   AssetListResponse,
   AssetQrCode,
   AuthenticatedUser,
+  CreateAquariumInput,
+  CurrentUserResponse,
   ServiceJobPartnerDetail,
   ServiceJobDocumentSummary,
   ServiceJobListResponse,
@@ -92,7 +98,7 @@ function documentForm(file: File, caption: string) {
 }
 
 export const partnerApi = {
-  me: () => request<AuthenticatedUser>("/auth/me"),
+  me: () => request<CurrentUserResponse>("/auth/me"),
   login: (email: string, password: string) =>
     request<{ user: AuthenticatedUser }>("/auth/login/password", {
       method: "POST",
@@ -158,6 +164,31 @@ export const partnerApi = {
       `/service/worksheets/customers/${encodeURIComponent(customerId)}/departments`,
     ),
   /**
+   * ÚJ AKVÁRIUM FELVITELE A PORTÁLRÓL.
+   *
+   * A HÍVÓ NEM KÜLD `ownershipType`-OT, `customerId`-t VAGY `newCustomer`-t --
+   * ez a hívás mindig a hívó SAJÁT ügyfelére hoz létre akváriumot
+   * (`aquariums.service.ts` `resolvePartnerOwnership`, szerver oldalon
+   * kényszerítve `ownershipType: "CUSTOMER"`-re és a hívó `customerId`-jére;
+   * egy innen küldött eltérő érték elutasítást kapna, nem csendes
+   * felülírást). A `departmentId` a hívó SAJÁT, kiosztott helyszínei közül
+   * KÖTELEZŐ -- ezt a szerver `assignedUnitIdsFor`-ral ellenőrzi.
+   */
+  createAquarium: (
+    input: Pick<
+      CreateAquariumInput,
+      | "departmentId"
+      | "name"
+      | "waterType"
+      | "systemVolumeLiters"
+      | "systemVolumeIsManual"
+    >,
+  ) =>
+    request<AquariumDetail>("/aquariums", {
+      method: "POST",
+      body: JSON.stringify({ ownershipType: "CUSTOMER", ...input }),
+    }),
+  /**
    * A LATHATOSAGOT A SZERVER DONTI EL, NEM EZ A HIVAS.
    *
    * 2026-09-18-ig itt `ownerType=CUSTOMER` + `ownerId` allt, es EZ URITETTE KI a
@@ -193,6 +224,15 @@ export const partnerApi = {
    */
   assets: (input?: {
     departmentId?: string;
+    /**
+     * MELYIK AKVÁRIUMHOZ VAN CSATOLVA -- az `Asset.aquariumId` szerinti
+     * szűrés (`service-assets.repository.ts:566`). Az Akváriumok adatlap
+     * "Eszközök a medencében" kártyája ezzel kéri le, mi van MÁR
+     * hozzárendelve, és (2026-09-25-től) ugyanezt a hívást, `departmentId`-
+     * val szűrve, a hozzárendelhető jelöltek listájához is -- lásd
+     * `assignAssetAquarium` fejlécét.
+     */
+    aquariumId?: string;
     search?: string;
     status?: string;
     page?: number;
@@ -216,6 +256,7 @@ export const partnerApi = {
       kapna, es a reszfa-kibontas azt egy nem letezo egysegre futtatna.
     */
     if (input?.departmentId) query.set("departmentId", input.departmentId);
+    if (input?.aquariumId) query.set("aquariumId", input.aquariumId);
     if (input?.search?.trim()) query.set("search", input.search.trim());
     if (input?.sort) query.set("sort", input.sort);
     if (input?.direction) query.set("direction", input.direction);
@@ -242,6 +283,30 @@ export const partnerApi = {
    */
   asset: (id: string) =>
     request<AssetDetail>(`/service/assets/${encodeURIComponent(id)}`),
+  /**
+   * ESZKÖZ HOZZÁRENDELÉSE/LEVÉTELE EGY AKVÁRIUMRÓL.
+   *
+   * KÜLÖN VÉGPONT (`PATCH /service/assets/:id/aquarium`), NEM az `asset()`
+   * adatlapon is elérhető általános `PATCH /:id` -- lásd a szerver oldali
+   * `AssignAssetAquariumDto` és a `service.asset.aquarium-assign` jog
+   * fejlécét (`packages/types` `auth.ts`, emlék 1843). Ez a szűk DTO
+   * garantálja, hogy a portál NEM tud más mezőt küldeni az eszközön, még ha
+   * a hívó megpróbálná is.
+   *
+   * `aquariumId: null` VESZI LE az eszközt az akváriumról. Az
+   * `expectedUpdatedAt` KÖTELEZŐ -- a hívó félnek a legutóbb betöltött
+   * eszköz-sor `updatedAt` mezőjét kell visszaküldenie, mert a szerver
+   * mező-szintű ütközés-védelme (`asset-field-conflict.ts`) ez alapján dönt
+   * el, nyúlt-e valaki más közben ugyanahhoz a mezőhöz.
+   */
+  assignAssetAquarium: (
+    assetId: string,
+    input: { aquariumId: string | null; expectedUpdatedAt: string },
+  ) =>
+    request<AssetDetail>(
+      `/service/assets/${encodeURIComponent(assetId)}/aquarium`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
   /**
    * A QR-KOD LEKERDEZESE `SERVICE_VIEW`-T KER, NEM `SERVICE_MANAGE`-ET
    * (`service-assets.controller.ts`, `:id/qr`) -- tehat minden partner
@@ -312,6 +377,61 @@ export const partnerApi = {
           signerUserId,
           signatureCode,
         }),
+      },
+    ),
+  /**
+   * A HATOKORT A SZERVER DONTI EL, NEM EZ A HIVAS -- ugyanaz a szabaly, mint
+   * az `assets()`-nel: nincs `customerId` parameter, mert egy bennhagyott
+   * azonosito azt sugallna, hogy a hivo szabalyozza a lathatosagot. Ma a
+   * `PartnerScope` (`aquarium-visibility.ts`) szabalyozza, a szerveren --
+   * a sajat ugyfel, kiosztott helyszinei szerint.
+   */
+  aquariums: (input?: {
+    search?: string;
+    waterBodyType?: "AKVARIUM" | "TO";
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const query = new URLSearchParams({
+      page: String(input?.page ?? 1),
+      pageSize: String(input?.pageSize ?? 25),
+    });
+    if (input?.search?.trim()) query.set("search", input.search.trim());
+    if (input?.waterBodyType) query.set("waterBodyType", input.waterBodyType);
+    return request<AquariumListResponse>(`/aquariums?${query}`);
+  },
+  /** Idegen akvariumra 404 jon -- ugyanaz a hatokor, mint a listan. */
+  aquarium: (id: string) =>
+    request<AquariumDetail>(`/aquariums/${encodeURIComponent(id)}`),
+  aquariumMeasurements: (id: string) =>
+    request<AquariumMeasurementListResponse>(
+      `/aquariums/${encodeURIComponent(id)}/measurements`,
+    ),
+  /**
+   * ÚJ VÍZMÉRÉS RÖGZÍTÉSE -- Balázs döntése (2026-09-25): a portál "új
+   * mérés" képessége nyitott a hívó saját, látható akváriumaira. A szerver
+   * a hívó hatókörét a `requireAquarium` -> scoped `detail()` úton
+   * ellenőrzi (`aquarium-measurements.service.ts` `create()`), tehát idegen
+   * akváriumra 404-et ad, nem csendes elutasítást.
+   *
+   * A `source`/`notes` mező a 2. körben bővült ide -- a `CreateAquariumMeasurementDto`
+   * (`apps/api/src/aquariums/dto/aquarium-measurement.dto.ts`) mindkettőt
+   * elfogadja, eddig csak a `measuredAt`/`values` ment át a portálról.
+   */
+  createAquariumMeasurement: (
+    id: string,
+    input: {
+      measuredAt?: string;
+      source?: string;
+      notes?: string;
+      values: { parameterCode: string; value: number }[];
+    },
+  ) =>
+    request<AquariumMeasurementOccasion>(
+      `/aquariums/${encodeURIComponent(id)}/measurements`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
       },
     ),
   changePassword: (currentPassword: string, newPassword: string) =>

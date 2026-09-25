@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { Redirect, useRouter } from "expo-router";
 import * as Updates from "expo-updates";
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,6 +12,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 import { OrderListCard } from "@/components/orders/OrderListCard";
 import { runningVersionLine } from "@/lib/app-version";
@@ -68,6 +72,7 @@ function nativeBuildNumber(): string | null {
 
 interface ModuleCardProps {
   code: string;
+  icon: string;
   title: string;
   description: string;
   available: boolean;
@@ -79,6 +84,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const { status, user, signOut, retryRestore, offline, lastVerifiedAt } =
     useAuth();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const isOnline = useIsOnline();
   /**
    * A SOR KIURITESE ITT INDUL, mert ez az elso kepernyo, amit a kollega lat.
@@ -271,6 +278,7 @@ export default function HomeScreen() {
             <View style={styles.modules}>
               <ModuleCard
                 code="HJ"
+                icon="🎫"
                 title="Hibajegyek"
                 description="Nyitott jegyek, léptetés és fénykép a helyszínen"
                 available={tileVisible("HJ")}
@@ -279,6 +287,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="MU"
+                icon="📋"
                 title="Munkalapok"
                 description="Kiosztott lapok, tételek és felelősök"
                 available={tileVisible("MU")}
@@ -293,6 +302,7 @@ export default function HomeScreen() {
               */}
               <ModuleCard
                 code="AI"
+                icon="📦"
                 title="Anyagigények"
                 description="Rád váró anyagigények, beérkezés jelölése"
                 available={tileVisible("AI")}
@@ -301,6 +311,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="ES"
+                icon="🔧"
                 title="Eszközök"
                 description="Partnereszközök, QR-azonosítás és hierarchia"
                 available={tileVisible("ES")}
@@ -309,6 +320,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="AK"
+                icon="🐟"
                 title="Akváriumok"
                 description="Saját és ügyfél akváriumai, méretek és eszközök"
                 available={tileVisible("AK")}
@@ -317,6 +329,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="RE"
+                icon="🛒"
                 title="Rendelések"
                 description="UNAS rendelések, státuszok és tételek"
                 available={tileVisible("RE")}
@@ -325,6 +338,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="BE"
+                icon="🧾"
                 title="Beszerzés"
                 description="Szállítói számlák és bevételezés"
                 available={tileVisible("BE")}
@@ -332,6 +346,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="TE"
+                icon="🏷️"
                 title="Termékek"
                 description="Terméktörzs és készletállapot"
                 available={tileVisible("TE")}
@@ -353,6 +368,7 @@ export default function HomeScreen() {
               */}
               <ModuleCard
                 code="NAV"
+                icon="🔄"
                 title="NAV-szinkron"
                 description="Bejövő számlák és párosítások"
                 available={tileVisible("NAV")}
@@ -360,6 +376,7 @@ export default function HomeScreen() {
               />
               <ModuleCard
                 code="PA"
+                icon="🤝"
                 title="Partnerek"
                 description="Szerviz partnerek és kapcsolattartók"
                 available={tileVisible("PA")}
@@ -449,7 +466,7 @@ export default function HomeScreen() {
                 </View>
 
                 {orders.isPending ? (
-                  <ActivityIndicator color="#52d6c7" />
+                  <ActivityIndicator color={tokens.accent} />
                 ) : null}
                 {orders.isError ? (
                   <ErrorCard
@@ -516,7 +533,7 @@ export default function HomeScreen() {
             ]}
           >
             {signingOut ? (
-              <ActivityIndicator color="#ff9f92" />
+              <ActivityIndicator color={tokens.danger} />
             ) : (
               <Text style={styles.signOutText}>Kijelentkezés</Text>
             )}
@@ -541,14 +558,21 @@ export default function HomeScreen() {
   );
 }
 
+/**
+ * SAJÁT `useAppTheme()`-HÍVÁS: ez a segédkomponens a fő függvényen KÍVÜL áll,
+ * tehát nem éri el annak per-render `styles` állandóját -- ugyanaz a minta,
+ * mint a `worksheets/new.tsx` `Section`/`FieldError` segédkomponensei.
+ */
 function ModuleCard({
-  code,
+  icon,
   title,
   description,
   available,
   enabled,
   onPress,
 }: ModuleCardProps) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   if (!available) return null;
   return (
     <Pressable
@@ -563,15 +587,18 @@ function ModuleCard({
         pressed && styles.pressed,
       ]}
     >
+      {/*
+        A BETŰKÓD HELYETT A TERV SZERINTI IKON (Balázs kérése, 2026-09-25
+        18:23, exchange/figma-telefon-make-12/src/MobileAppScreen.tsx
+        264-269. sor): a hat megnevezett modul emojija onnan jön betűre
+        egyezően. A négy, a tervben NEM szereplő modul (Rendelések,
+        Beszerzés, Termékek, NAV-szinkron) saját, a témájukhoz illő emojit
+        kapott, ugyanabban a stílusban. A DOBOZ ÉS A HALVÁNYÍTÁS
+        VÁLTOZATLAN: a `moduleCardDisabled` `opacity`-je a teljes csempét
+        (az ikont is) halványítja, ugyanúgy, ahogy eddig a betűkódot.
+      */}
       <View style={[styles.moduleCode, !enabled && styles.moduleCodeDisabled]}>
-        <Text
-          style={[
-            styles.moduleCodeText,
-            !enabled && styles.moduleCodeTextDisabled,
-          ]}
-        >
-          {code}
-        </Text>
+        <Text style={styles.moduleIconText}>{icon}</Text>
       </View>
       <View style={styles.moduleText}>
         <Text style={styles.moduleTitle}>{title}</Text>
@@ -585,6 +612,8 @@ function ModuleCard({
 }
 
 function ErrorCard({ message, onRetry }: { message: string; onRetry(): void }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View style={styles.errorCard}>
       <Text style={styles.errorText}>{message}</Text>
@@ -599,171 +628,229 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry(): void }) {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  offlineBanner: {
-    backgroundColor: "#3a2a12",
-    borderColor: "#8a6a2a",
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-  },
-  offlineBannerTitle: {
-    color: "#f5c96b",
-    fontSize: 15,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  offlineBannerBody: { color: "#e6d5b0", fontSize: 13, lineHeight: 19 },
-  offlineBannerLink: {
-    color: "#6de0ce",
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 6,
-  },
-  container: { gap: 18, padding: 20, paddingBottom: 36 },
-  hero: { gap: 10, paddingBottom: 8, paddingTop: 18 },
-  heroTopline: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-  },
-  roleBadge: {
-    backgroundColor: "#123f3b",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  roleBadgeText: { color: "#6de0ce", fontSize: 11, fontWeight: "800" },
-  title: { color: "#f4fbff", fontSize: 30, fontWeight: "900", lineHeight: 36 },
-  subtitle: { color: "#9ab8ca", fontSize: 15, lineHeight: 22 },
-  sectionHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  sectionTitle: { color: "#f4fbff", fontSize: 19, fontWeight: "800" },
-  sectionHint: { color: "#6f93a8", fontSize: 12 },
-  sectionSubtext: { color: "#6f93a8", fontSize: 12, marginTop: 3 },
-  modules: { gap: 10 },
-  moduleCard: {
-    alignItems: "center",
-    backgroundColor: "#0b263d",
-    borderColor: "#164668",
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 13,
-    minHeight: 78,
-    padding: 14,
-  },
-  moduleCardDisabled: { opacity: 0.68 },
-  moduleCode: {
-    alignItems: "center",
-    backgroundColor: "#166a7a",
-    borderRadius: 12,
-    height: 46,
-    justifyContent: "center",
-    width: 46,
-  },
-  moduleCodeDisabled: { backgroundColor: "#173b55" },
-  moduleCodeText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
-  moduleCodeTextDisabled: { color: "#91adbd" },
-  moduleText: { flex: 1, gap: 4 },
-  moduleTitle: { color: "#f4fbff", fontSize: 16, fontWeight: "800" },
-  moduleDescription: { color: "#86a7ba", fontSize: 12, lineHeight: 17 },
-  moduleArrow: { color: "#52d6c7", fontSize: 30, fontWeight: "300" },
-  comingSoon: {
-    color: "#7798ab",
-    fontSize: 10,
-    fontWeight: "800",
-    maxWidth: 62,
-    textAlign: "right",
-  },
-  ordersSection: { gap: 12, paddingTop: 6 },
-  textButton: {
-    backgroundColor: "#123f3b",
-    borderRadius: 10,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-  },
-  textButtonLabel: { color: "#6de0ce", fontSize: 12, fontWeight: "800" },
-  accessCard: {
-    backgroundColor: "#3b2b2d",
-    borderColor: "#664047",
-    borderRadius: 18,
-    borderWidth: 1,
-    gap: 9,
-    padding: 18,
-  },
-  accessTitle: { color: "#ffd0ca", fontSize: 17, fontWeight: "800" },
-  accessText: { color: "#dbaea9", fontSize: 13, lineHeight: 20 },
-  errorCard: {
-    alignItems: "flex-start",
-    backgroundColor: "#3b2b2d",
-    borderRadius: 14,
-    gap: 10,
-    padding: 14,
-  },
-  errorText: { color: "#ffb4ab", fontSize: 13, lineHeight: 19 },
-  retryButton: {
-    borderColor: "#8c5552",
-    borderRadius: 9,
-    borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-  },
-  retryText: { color: "#ffd0ca", fontSize: 12, fontWeight: "800" },
-  // A gomb a kartyan BELUL all, ezert kap sajat felso margot -- a stilust magat
-  // a rendeles-hiba kartyaval OSZTJA, hogy a ket ujraprobalas ugyanugy nezzen ki.
-  retryInCard: { alignSelf: "flex-start", marginTop: 12 },
-  emptyCard: { backgroundColor: "#0b263d", borderRadius: 14, padding: 16 },
-  emptyText: { color: "#86a7ba", fontSize: 13 },
-  accountCard: {
-    alignItems: "center",
-    borderTopColor: "#143a55",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-    marginTop: 8,
-    paddingTop: 20,
-  },
-  accountText: { flex: 1, gap: 3 },
-  accountName: { color: "#d9edf7", fontSize: 14, fontWeight: "700" },
-  accountEmail: { color: "#6f93a8", fontSize: 12 },
-  accountHint: {
-    color: "#52d6c7",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  signOutButton: {
-    borderColor: "#5c2b28",
-    borderRadius: 10,
-    borderWidth: 1,
-    minWidth: 108,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  signOutText: {
-    color: "#ff9f92",
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  pressed: { opacity: 0.7 },
-  versionLine: {
-    color: "#4d6b7e",
-    fontSize: 11,
-    marginTop: 14,
-    textAlign: "center",
-  },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 12.
+ * kör, a maradék telefonos képernyők átültetése (az Eszközök #1087/#1089
+ * és a Munkalapok #1124-#1126 mintáját követve): ez a képernyő eddig saját,
+ * fix sötét hexekkel élt.
+ *
+ * A "BANNER"/"HIBA" DOBOZOK (`offlineBanner`, `accessCard`, `errorCard`) A
+ * MEGFELELŐ `*Soft`+SZEMANTIKUS PÁRT KAPJÁK, ugyanaz a minta, mint a
+ * `components/offline/OfflineNoticeCard.tsx`-ben: `warningSoft`+`warning` a
+ * figyelmeztető sávnak, `dangerSoft`+`danger` a jogosultsági/hiba-
+ * kártyáknak.
+ *
+ * A RENDELÉSEK SZAKASZ (`ordersSection` és az alatta állók) STÍLUSA IS
+ * TÉMÁSÍTVA VAN, DE A TARTALMA/MŰKÖDÉSE NEM VÁLTOZOTT: a Figma 12. kör
+ * brief-je szerint "a webshop rendelései NEM része a körnek" -- ez a
+ * `/orders/*` KÜLÖN képernyőire vonatkozik, nem erre a kezdőlapba ágyazott,
+ * apró előnézetre, aminek muszáj témát kapnia, különben világos módban a
+ * kezdőlap egy sötét foltot mutatna.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    offlineBanner: {
+      backgroundColor: t.warningSoft,
+      borderColor: t.warning,
+      borderWidth: 1,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 16,
+    },
+    offlineBannerTitle: {
+      color: t.warning,
+      fontSize: 15,
+      fontWeight: "700",
+      marginBottom: 4,
+    },
+    offlineBannerBody: { color: t.textSecondary, fontSize: 13, lineHeight: 19 },
+    offlineBannerLink: {
+      color: t.accent,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 6,
+    },
+    container: { gap: 18, padding: 20, paddingBottom: 36 },
+    hero: { gap: 10, paddingBottom: 8, paddingTop: 18 },
+    heroTopline: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 1.5,
+    },
+    roleBadge: {
+      backgroundColor: t.accentSoft,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    roleBadgeText: { color: t.accentSoftText, fontSize: 11, fontWeight: "800" },
+    title: {
+      color: t.textPrimary,
+      fontSize: 30,
+      fontWeight: "900",
+      lineHeight: 36,
+    },
+    subtitle: { color: t.textSecondary, fontSize: 15, lineHeight: 22 },
+    sectionHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    sectionTitle: { color: t.textPrimary, fontSize: 19, fontWeight: "800" },
+    sectionHint: { color: t.textMuted, fontSize: 12 },
+    sectionSubtext: { color: t.textMuted, fontSize: 12, marginTop: 3 },
+    /**
+     * KÉT OSZLOP, A TERV SZERINT (Balázs kérdése, 2026-09-25 18:25, ugyanaz
+     * a képernyőfotó-kör, mint az ikonoké): a `justifyContent: "space-
+     * between"` osztja el a sor két csempéjét, NEM egy vízszintes `gap` --
+     * a `gap` és a százalékos `width` együtt Yoga alatt könnyen túlcsordul
+     * (48% + 48% + gap > 100%), és a második csempét lelöki a következő
+     * sorba. A `rowGap` (a SOROK közti függőleges tér) ezt a kockázatot nem
+     * hordozza, mert nem a szélesség-számításba megy bele.
+     *
+     * PÁRATLAN CSEMPESZÁMNÁL AZ UTOLSÓ FÉL SZÉLESSÉGŰ MARAD, NEM NYÚLIK KI:
+     * a csempe SAJÁT `width: "48%"`-a rögzített, nem `flex: 1`, tehát egy
+     * pár nélkül maradt utolsó csempe a `space-between` mellett egyszerűen
+     * a sor elején áll, üres hellyel mellette -- nem tölti ki a sort.
+     */
+    modules: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      rowGap: 10,
+    },
+    /**
+     * FÜGGŐLEGES CSEMPE, A TERV SZERINT: felül az ikon, alatta a cím és a
+     * leírás, legalul a nyíl (vagy a "Következő ütem" felirat). Az
+     * `alignItems: "stretch"` (a React Native alapértelmezése, itt
+     * KIMONDVA, mert erre épül a lenti `moduleText: { flex: 1 }`) teszi,
+     * hogy a szöveg-blokk és a nyíl a TELJES kártyaszélességet kapja, az
+     * ikon-doboz sajátmagasságát/szélességét pedig a rögzített `width`/
+     * `height` védi a nyújtástól.
+     */
+    moduleCard: {
+      alignItems: "stretch",
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "column",
+      gap: 8,
+      padding: 14,
+      width: "48%",
+    },
+    moduleCardDisabled: { opacity: 0.68 },
+    moduleCode: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      height: 46,
+      justifyContent: "center",
+      width: 46,
+    },
+    moduleCodeDisabled: { backgroundColor: t.border },
+    moduleIconText: { fontSize: 22, textAlign: "center" },
+    /**
+     * A `flex: 1` TOLJA A NYILAT/FELIRATOT A KÁRTYA ALJÁRA: ha egy sor
+     * másik csempéje magasabb (hosszabb leírás miatt), a sor mindkét
+     * csempéje ugyanolyan magasra nyúlik (RN alapértelmezett `stretch`), és
+     * ez a blokk issza fel a többletmagasságot -- a nyíl emiatt marad
+     * mindig legalul, nem a leírás alján lebegve.
+     */
+    moduleText: { flex: 1, gap: 4 },
+    moduleTitle: { color: t.textPrimary, fontSize: 16, fontWeight: "800" },
+    moduleDescription: { color: t.textSecondary, fontSize: 12, lineHeight: 17 },
+    moduleArrow: { color: t.accent, fontSize: 22, fontWeight: "300" },
+    comingSoon: { color: t.textMuted, fontSize: 10, fontWeight: "800" },
+    ordersSection: { gap: 12, paddingTop: 6 },
+    textButton: {
+      backgroundColor: t.accentSoft,
+      borderRadius: 10,
+      paddingHorizontal: 13,
+      paddingVertical: 8,
+    },
+    textButtonLabel: {
+      color: t.accentSoftText,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    accessCard: {
+      backgroundColor: t.dangerSoft,
+      borderColor: t.danger,
+      borderRadius: 18,
+      borderWidth: 1,
+      gap: 9,
+      padding: 18,
+    },
+    accessTitle: { color: t.danger, fontSize: 17, fontWeight: "800" },
+    accessText: { color: t.textSecondary, fontSize: 13, lineHeight: 20 },
+    errorCard: {
+      alignItems: "flex-start",
+      backgroundColor: t.dangerSoft,
+      borderRadius: 14,
+      gap: 10,
+      padding: 14,
+    },
+    errorText: { color: t.danger, fontSize: 13, lineHeight: 19 },
+    retryButton: {
+      borderColor: t.danger,
+      borderRadius: 9,
+      borderWidth: 1,
+      paddingHorizontal: 11,
+      paddingVertical: 7,
+    },
+    retryText: { color: t.danger, fontSize: 12, fontWeight: "800" },
+    // A gomb a kartyan BELUL all, ezert kap sajat felso margot -- a stilust magat
+    // a rendeles-hiba kartyaval OSZTJA, hogy a ket ujraprobalas ugyanugy nezzen ki.
+    retryInCard: { alignSelf: "flex-start", marginTop: 12 },
+    emptyCard: { backgroundColor: t.surface, borderRadius: 14, padding: 16 },
+    emptyText: { color: t.textSecondary, fontSize: 13 },
+    accountCard: {
+      alignItems: "center",
+      borderTopColor: t.border,
+      borderTopWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      marginTop: 8,
+      paddingTop: 20,
+    },
+    accountText: { flex: 1, gap: 3 },
+    accountName: { color: t.textPrimary, fontSize: 14, fontWeight: "700" },
+    accountEmail: { color: t.textSecondary, fontSize: 12 },
+    accountHint: {
+      color: t.accent,
+      fontSize: 12,
+      fontWeight: "700",
+      marginTop: 4,
+    },
+    signOutButton: {
+      borderColor: t.danger,
+      borderRadius: 10,
+      borderWidth: 1,
+      minWidth: 108,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    signOutText: {
+      color: t.danger,
+      fontSize: 12,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    pressed: { opacity: 0.7 },
+    versionLine: {
+      color: t.textMuted,
+      fontSize: 11,
+      marginTop: 14,
+      textAlign: "center",
+    },
+  });
+}

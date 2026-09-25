@@ -35,14 +35,20 @@ import { PANEL_CIM } from "./frame";
  * nyelvet beszéli), a lent exportált két függvény a másik hat hivóhelynek
  * változatlanul elérhető marad.
  *
- * A `-mx-5 -mt-10 -mb-16 max-w-none` A `globals.css` `.content` dobozát
- * (`margin: 0 auto; max-width: 1160px; padding: 2.5rem 1.25rem 4rem;`)
- * semlegesíti, hogy a fejléc-sáv és a táblázat a Figma-terv szerint
- * SZÉLÉIG érjen, ne egy keskeny, középre igazított oszlopban álljon --
- * ugyanaz a minta, mint az `apps/web` pilot-oldalainak `-m-6`-ja a saját
- * `AppShell`-jük paddingjára. Közelítés, nem képpontos minden töréspontnál
- * (`.content` 680px alatt `padding-top: 1.7rem`-re vált) -- a web-oldali
- * előzmény is csak egyetlen, nem reszponzív értékkel semlegesít.
+ * A `-mx-5 -mt-10 -mb-16 max-w-none` OSZTÁLYOK INNEN ELKERÜLTEK (SÜRGŐS
+ * JAVÍTÁS, 2026-09-25, Balázs éles hibajelentése): korábban a `globals.css`
+ * `.content` dobozát (`margin: 0 auto; max-width: 1160px; padding: 2.5rem
+ * 1.25rem 4rem;`) semlegesítették negatív margóval, hogy a fejléc-sáv és a
+ * táblázat a Figma-terv szerint SZÉLÉIG érjen. Ez a technika HIBÁS volt: egy
+ * GYERMEK negatív margója/`max-w-none`-ja nem tudja rávenni az ŐS saját
+ * dobozát, hogy szélesebb legyen a SAJÁT `max-width`-jánál -- a tartalom
+ * csak az ős (1160px-es, középre igazított) dobozáig ért, 1160px felett
+ * világos rés maradt a képernyő szélén (pontosan ez volt a jelentett hiba).
+ * A javítás a forrásnál történt: a `.content` osztály lekerült a közös
+ * `portal-shell.tsx` `<main>`-jéről, és csak azok a lapok kérik ki
+ * KÜLÖN-KÜLÖN, amik ma is igénylik (lásd `portal-shell.tsx` megjegyzését) --
+ * ez a lap ezek után eleve a teljes rendelkezésre álló szélességet kapja, a
+ * negatív margós semlegesítés feleslegessé (és HELYTELENNÉ) vált.
  *
  * KIHAGYVA EBBEN A KÖRBEN IS: a belső lista statisztika-csempéi. A Make-terv
  * SEM mutat csempét ezen a képernyőn (588-621. sor: csak fülek + tábla +
@@ -83,7 +89,7 @@ export function TicketList() {
   }, [load]);
 
   return (
-    <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 flex min-h-screen max-w-none flex-col bg-pilot-grey-50">
+    <PilotThemeRoot className="flex min-h-screen flex-col bg-pilot-grey-50">
       <div className="flex items-center justify-between border-b border-pilot-grey-100 bg-white px-8 py-5">
         <div>
           <h1 className="text-xl font-semibold text-pilot-grey-900">
@@ -101,6 +107,21 @@ export function TicketList() {
         </Link>
       </div>
 
+      {/*
+        AZ INAKTIV FUL `bg-transparent`-JE NEM DISZ (SURGOS JAVITAS,
+        2026-09-25, Balazs masodik hibajelentese ugyanerrol): a #1136
+        `@layer base`-be tette a regi `button { background: #4c397f }`
+        szabalyt, hogy a Tailwind `utilities` retege felulirhassa -- de ez
+        csak akkor mukodik, ha VAN versengo `background-color`-t ado
+        Tailwind-osztaly ugyanazon az elemen. Az inaktiv fulnek korabban
+        CSAK `hover:bg-pilot-grey-50` allt, ami kizarolag `:hover`-en hat --
+        NYUGALMI allapotban semmilyen osztaly nem adott `background-color`-t,
+        tehat a `@layer base` szabaly maradt az EGYETLEN forras, es a lila
+        tovabbra is atlatszott. Az aktiv ful ezert lett zold (sajat,
+        felteten-nelkuli `bg-pilot-aqua-50`-je van), az inaktiv nem.
+        Ellenorizve az eles CSS-en (2026-09-25 16:2x): a `@layer base`
+        maga helyesen all, a hianyzo darab ez az egy sor volt.
+      */}
       <div className="flex items-center gap-1 border-b border-pilot-grey-100 bg-white px-8 py-4">
         {SCOPE_TABS.map((tab) => (
           <button
@@ -110,7 +131,7 @@ export function TicketList() {
             className={`cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-all ${
               scope === tab.key
                 ? "bg-pilot-aqua-50 text-pilot-aqua-700"
-                : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+                : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
             }`}
           >
             {tab.label}

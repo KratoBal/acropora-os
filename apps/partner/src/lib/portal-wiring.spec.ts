@@ -48,6 +48,12 @@ const ESZKOZ_RESZLET = "src/components/asset-detail.tsx";
 const ESZKOZ_UTVONAL = "src/app/(portal)/eszkozok/[id]/page.tsx";
 const NAPLO_SOR = "src/lib/naplo-sor.ts";
 const MUNKALAP_RESZLET = "src/components/worksheet-detail.tsx";
+const PORTAL_SHELL = "src/components/portal-shell.tsx";
+const AUTH = "src/components/auth.tsx";
+const AQUARIUM_LISTA = "src/components/aquarium-list.tsx";
+const AQUARIUM_RESZLET = "src/components/aquarium-detail.tsx";
+const AQUARIUM_UJ = "src/components/new-aquarium.tsx";
+const AQUARIUM_ESZKOZOK = "src/components/aquarium-assets.tsx";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
 
@@ -130,8 +136,18 @@ describe("a partner portál bekötése", () => {
    */
   it("az aláírókód mező négy számjegyet fogad el, és ez ki is van írva", () => {
     const s = olvas(BEALLITASOK);
-    assert.match(s, /pattern="\[0-9\]\{4\}"/);
-    assert.match(s, /maxLength=\{4\}/);
+    /*
+      A NATÍV `pattern`/`maxLength` A `PilotInput`-RA VÁLTÁSKOR MEGSZŰNT
+      (2026-09-25, pilot-aqua átültetés): a komponensnek nincs ilyen propja.
+      A HELYETTESÍTŐ VÉDELEM KETTŐS, és mindkettő a SZÁMOT kényszeríti ki,
+      nem csak a mező jelenlétét: az `onChange` maga szűri a nem-számjegy
+      karaktereket és négyre vágja (`replace(/\D/g, "").slice(0, 4)`), a
+      submit gomb pedig letiltva marad, amíg a kód pontosan négy jegyű
+      (`signing.code.length === 4`) -- ugyanaz a mérce, mint korábban.
+    */
+    assert.match(s, /\.replace\(\/\\D\/g, ""\)/);
+    assert.match(s, /\.slice\(0, 4\)/);
+    assert.match(s, /signing\.code\.length === 4/);
     /**
      * A SZÁM, ÉS NEM A PUSZTA JELENLÉT -- ÉS EZT A SAJÁT MÉRŐHELYEM FOGTA MEG,
      * MIELŐTT A KALIBRÁCIÓ ELBUKOTT VOLNA.
@@ -512,11 +528,16 @@ describe("a partner hibajegy-adatlapja", () => {
    * (jegy, munkalap, eszköz) csatolmányait rajzolja, tehát ez egy helyen
    * javít hármat.
    */
+  /*
+    2026-09-25-TŐL A GOMBNAK NINCS "document-thumb" OSZTÁLYA (Figma 9. kör,
+    a `DocumentPanel` pilot-aqua átállása) -- a `cursor-zoom-in` Tailwind-
+    osztály a mérvadó jel, ugyanúgy, ahogy korábban a saját osztálynév volt.
+  */
   it("a nagyított kép gombról nyílik, és az Escape zárja", () => {
     const s = olvas(DOKUMENTUMOK);
     assert.match(
       s,
-      /className="document-thumb"[\s\S]{0,200}?onClick=\{\(\) => setNagyitott\(item\.id\)\}/,
+      /onClick=\{\(\) => setNagyitott\(item\.id\)\}[\s\S]{0,200}?cursor-zoom-in/,
     );
     assert.match(s, /esemeny\.key === "Escape"/);
   });
@@ -809,5 +830,320 @@ describe("a partner munkalap-adatlapja", () => {
    */
   it("KONTROLL: a minta TALÁL a nyers fájlban", () => {
     assert.match(olvas(ESZKOZ_RESZLET), /qrToken/);
+  });
+});
+
+/**
+ * AZ "AKVÁRIUMOK" MENÜPONT ÉS ÚTVONAL A SZERVER VÁLASZÁT NÉZI, NEM A
+ * FRONTEND SAJÁT, BEÉGETETT JOG-TÁBLÁJÁT (acrobot kérése, msg_id 23542,
+ * 2026-09-25).
+ *
+ * === MIÉRT NEM ELÉG A SZEREP-SZINTŰ JOG ===
+ *
+ * Az `apps/partner` MINDEN beolvasztáskor AZONNAL élesre települ
+ * (ticket.acropora.hu, az állatkert emberei használják), az `apps/api`
+ * viszont csak Balázs külön engedélyével. A `PARTNER_SERVICE` szerep MA
+ * (ezen a fejlesztői ágon) hordozza az `AQUARIUMS_VIEW` jogot
+ * (`packages/types` `auth.ts`), de ez a FRONTEND SAJÁT BUILDJÉNEK a
+ * tudása -- ha ez a képernyő előbb megy élesre, mint a #1116 (a jog maga)
+ * az API-n, egy `hasPermission()`-re épülő ellenőrzés a régi API mellett
+ * IS látszana, és az állatkert egy hibázó menüpontot kapna.
+ *
+ * A helyes jel a `/auth/me` válaszának `navigation` mezője
+ * (`CurrentUserResponse.navigation`, `visibleNavigationFor(role)`-lal
+ * SZERVER OLDALON számolva): az mindig azt tükrözi, amit az ÉPPEN FUTÓ
+ * API ismer, függetlenül attól, milyen `packages/types` van a frontend
+ * buildjébe zárva.
+ */
+describe("az Akváriumok menüpont és útvonal kapuja", () => {
+  it("POZITÍV KONTROLL: a shell és az auth fájl olvasható és nem üres", () => {
+    for (const ut of [PORTAL_SHELL, AUTH])
+      assert.ok(olvas(ut).length > 500, `${ut}: üres vagy gyanúsan rövid`);
+  });
+
+  /**
+   * A `partnerApi.me()` A `CurrentUserResponse`-t KÉRI, NEM A PUSZTA
+   * `AuthenticatedUser`-t.
+   *
+   * MI PIROSÍT: ha a típus visszakerülne `AuthenticatedUser`-re -- az a
+   * valódi JSON válaszban NEM változtatna semmin (a mező akkor is ott
+   * lenne a szerver oldalán), de a TypeScript innentől nem engedné
+   * `user.navigation`-t olvasni, tehát a lenti kapu típushibával halna
+   * el fordításkor, nem futásidőben.
+   */
+  it("a partnerApi.me() a CurrentUserResponse típusát kéri", () => {
+    assert.match(
+      kod(KLIENS),
+      /me: \(\) => request<CurrentUserResponse>\("\/auth\/me"\)/,
+    );
+  });
+
+  /**
+   * BEJELENTKEZÉS UTÁN IS A `/auth/me`-BŐL JÖN A FELHASZNÁLÓ, NEM A
+   * BEJELENTKEZÉS VÁLASZÁBÓL.
+   *
+   * MI PIROSÍT: `setUser(result.user)` vagy ehhez hasonló, ami a
+   * `/auth/login/password` válaszát tenné a state-be. Az a végpont NEM
+   * hordozza a `navigation` mezőt (`auth.controller.ts`
+   * `loginWithPassword`, visszatérési típusa `{ user: AuthenticatedUser }`),
+   * tehát belépés UTÁN, a következő teljes oldalbetöltésig a kapu hamis
+   * negatívot adna akkor is, ha a jog megvan.
+   */
+  it("bejelentkezés után külön lekéri a /auth/me választ", () => {
+    const s = kod(AUTH);
+    assert.match(s, /await partnerApi\.login\(email, password\)/);
+    assert.match(s, /setUser\(await partnerApi\.me\(\)\)/);
+    assert.doesNotMatch(s, /setUser\(result\.user\)/);
+  });
+
+  /**
+   * A `hasNavigationEntry` A SZERVER `navigation` TÖMBJÉT NÉZI, NEM A
+   * SZEREPET ÉS NEM A `hasPermission`-T.
+   *
+   * MI PIROSÍT: egy `user.role === "PARTNER_SERVICE"` vagy
+   * `hasPermission(user.role, ...)` alapú megvalósítás -- mindkettő a
+   * FRONTEND saját, beégetett tudását nézné, nem az élesben futó API-ét.
+   */
+  it("a hasNavigationEntry a user.navigation tömbön keres, nem a szerepen", () => {
+    const s = kod(AUTH);
+    assert.match(
+      s,
+      /user\?\.navigation\.some\(\(entry\) => entry\.id === entryId\)/,
+    );
+    assert.doesNotMatch(s, /hasPermission\(/);
+  });
+
+  /**
+   * AZ "AKVARISZTIKA" MENÜCSOPORT A `canViewAquariums` MÖGÖTT ÁLL, NEM
+   * FELTÉTEL NÉLKÜL.
+   *
+   * MI PIROSÍT: ha a `{canViewAquariums && (` feltétel eltűnne a
+   * menücsoport elől -- ez volt a tényleges hiba ezen az ágon, MIELŐTT ezt
+   * a kaput megírtuk (a csoport `user.role === "PARTNER_SERVICE"` mögött
+   * feltétel nélkül renderelt).
+   */
+  it("az Akvarisztika menücsoport a canViewAquariums mögött áll", () => {
+    const s = kod(PORTAL_SHELL);
+    assert.match(
+      s,
+      /canViewAquariums = hasNavigationEntry\(user, AQUARIUMS_NAV_ENTRY_ID\)/,
+    );
+    assert.match(s, /\{canViewAquariums && \(/);
+  });
+
+  /**
+   * AZ ÚTVONAL IS VÉDVE VAN, NEM CSAK A MENÜPONT.
+   *
+   * MI PIROSÍT: ha a kapu csak a menüsorban állna. Egy közvetlen URL-
+   * beírás (könyvjelző, korábbi lap) a menüpont hiánya ELLENÉRE elérné a
+   * komponenst, ami egy régi API mellett nem létező végpontot hívna.
+   */
+  it("az /akvariumok útvonal jog nélkül átirányít, nem csak rejtve van a menüben", () => {
+    const s = kod(PORTAL_SHELL);
+    assert.match(
+      s,
+      /onAquariumsRoute = pathname\.startsWith\(AKVARIUMOK_HREF\)/,
+    );
+    assert.match(
+      s,
+      /!loading && user && !canViewAquariums && onAquariumsRoute/,
+    );
+    assert.match(s, /router\.replace\("\/hibajegyek"\)/);
+  });
+
+  /**
+   * KONTROLL: A MENÜCSOPORT-MINTA TALÁL A RÉGI (feltétel nélküli) ALAKON
+   * IS, HA VISSZAKERÜLNE -- vagyis a `doesNotMatch` irányú kockázat itt
+   * nem a `canViewAquariums &&` mintára vonatkozik (az egy pozitív
+   * `match`), hanem arra, hogy a `AKVARISZTIKA_MENU.map` hívás továbbra is
+   * jelen van. Enélkül a fenti "mögötte áll" állítás azt is zölden hagyná,
+   * ha a teljes menücsoportot törölnénk.
+   */
+  it("KONTROLL: a menücsoport ténylegesen kirajzolja a tételeket", () => {
+    assert.match(kod(PORTAL_SHELL), /AKVARISZTIKA_MENU\.map\(\(item\) => \{/);
+  });
+});
+
+/**
+ * ESZKÖZ AKVÁRIUMHOZ RENDELÉSE/LEVÉTELE -- A KLIENS-OLDALI HÍVÁS ALAKJA.
+ *
+ * A JOGOSULTSÁG-MECHANIZMUS 2026-09-25-ÖN MEGVÁLTOZOTT (emlék 1843, majd
+ * 1847): a végpont NEM dedikált `SERVICE_ASSET_AQUARIUM_ASSIGN` jog alatt
+ * áll, hanem `SERVICE_MANAGE`-en, egy felhasználónkénti `ServiceCapability`
+ * jelölővel szűkítve a SERVICE-rétegben (lásd `service-assets.service.ts`
+ * `assignAquarium()` fejlécét) -- ez a réteg a szerveren mérve az
+ * `asset-aquarium-assign-permission.spec.ts`-ben.
+ *
+ * A PORTÁL-OLDALI UI (a gomb/választó, ami ezt a hívást elsüti) EBBEN A
+ * KÖRBEN NINCS BENNE: az `aquarium-detail.tsx` a Portál Akváriumok terv
+ * 1. körében (emlék 1847) pilot-stílusra épül újra, ez a munka pedig a
+ * 3. kör -- lásd a fájl saját, aktuális fejlécét. Az UI-wiring tesztek
+ * (jog-ellenőrzés, gomb/választó feltétel, payload) a 3. körben kerülnek
+ * vissza, a NEW detail-page struktúrához igazítva. Ami MOST mérhető, és
+ * ami itt marad, az a KLIENS-FÜGGVÉNY alakja -- az a réteg, amit a
+ * jövőbeli UI, akárhogy is épül, ugyanígy fog hívni.
+ */
+describe("eszköz hozzárendelése/levétele egy akváriumról -- kliens hívás", () => {
+  it("POZITÍV KONTROLL: a kliens olvasható és nem üres", () => {
+    assert.ok(
+      olvas(KLIENS).length > 500,
+      `${KLIENS}: üres vagy gyanúsan rövid`,
+    );
+  });
+
+  /**
+   * A KLIENS DEDIKÁLT, SZŰK VÉGPONTRA MEGY -- nem az általános
+   * `PATCH /service/assets/:id`-re. MI PIROSÍT: ha valaki "egyszerűsítené"
+   * a hívást az általános adatlap-frissítő függvényre, ami a portál eddig
+   * SOHA nem hívott -- azzal minden más mező is írhatóvá válna.
+   */
+  it("a kliens a /aquarium al-útvonalra ír, nem az általános PATCH-re", () => {
+    const s = kod(KLIENS);
+    assert.match(
+      s,
+      /assignAssetAquarium: \(\s*assetId: string,\s*input: \{ aquariumId: string \| null; expectedUpdatedAt: string \},\s*\) =>/,
+    );
+    assert.match(s, /\$\{encodeURIComponent\(assetId\)\}\/aquarium/);
+    assert.match(s, /method: "PATCH"/);
+  });
+});
+
+/**
+ * AZ AKVÁRIUM LISTA/ADATLAP/ÚJ PILOT-STÍLUSRA VÁLTOTT (emlék 1847,
+ * 2026-09-25 16:04 UTC) -- ez a szakasz a kör három saját döntését méri,
+ * amik NEM olvashatók le egyszerűen a belső web pilot-lapjainak
+ * másolásából.
+ */
+describe("az Akváriumok pilot-kör 1 saját döntései", () => {
+  it("POZITÍV KONTROLL: mind a három fájl olvasható és nem üres", () => {
+    for (const ut of [AQUARIUM_LISTA, AQUARIUM_RESZLET, AQUARIUM_UJ])
+      assert.ok(olvas(ut).length > 500, `${ut}: üres vagy gyanúsan rövid`);
+  });
+
+  /**
+   * AZ ADATLAP CSAK-OLVASÓ: NINCS `PilotFormField`/`PilotInput` az
+   * akvárium SAJÁT mezőin, és nincs `PATCH` hívás. MI PIROSÍT: ha valaki
+   * a belső `pilot-aquarium-editor-page.tsx`-t szó szerint másolná be
+   * (az MINDIG szerkeszthető űrlap) -- az a szerveren `requireInternalWriter`
+   * miatt minden partner-mentésnél 403-at adna.
+   */
+  it("az adatlap PilotDataRow-okkal olvas, nem PilotFormField-del szerkeszt", () => {
+    const s = kod(AQUARIUM_RESZLET);
+    assert.match(s, /PilotDataRow/);
+    assert.doesNotMatch(s, /PilotFormField/);
+    assert.doesNotMatch(s, /PilotInput/);
+    assert.doesNotMatch(s, /method: "PATCH"/);
+  });
+
+  /**
+   * AZ ÚJ AKVÁRIUM ŰRLAPON NINCS FIZIKAI MÉRET -- Balázs kifejezett kérése
+   * erre a körre (emlék 1847): "FIZIKAI MERETEK NINCSENEK". MI PIROSÍT: ha
+   * a belső szerkesztő hossz/szélesség/magasság mezői visszakerülnének.
+   */
+  it("az új akvárium űrlapon nincs hossz/szélesség/magasság mező", () => {
+    const s = kod(AQUARIUM_UJ);
+    assert.doesNotMatch(s, /lengthCm/);
+    assert.doesNotMatch(s, /widthCm/);
+    assert.doesNotMatch(s, /heightCm/);
+    // POZITÍV KONTROLL: a liter mező viszont MEGVAN.
+    assert.match(s, /systemVolumeLiters/);
+  });
+
+  /**
+   * A LISTÁN NINCS TULAJDON-SZŰRŐ/OSZLOP (Saját/Ügyfél) -- a portálon
+   * minden akvárium a hívó SAJÁT ügyfeléé, egy ilyen szűrő semmit nem
+   * szűkítene. MI PIROSÍT: ha a belső lista `ownershipType` szűrője
+   * (`OWNERSHIP_OPTIONS`/`PilotSegmentedControl` "Tulajdon"-nal) szó
+   * szerint bekerülne.
+   */
+  it("a listán nincs tulajdon szerinti szűrő", () => {
+    assert.doesNotMatch(kod(AQUARIUM_LISTA), /ownershipType/);
+  });
+
+  /**
+   * A LISTA "ÚJ AKVÁRIUM" GOMBJA FELTÉTEL NÉLKÜL JELENIK MEG -- nem
+   * `hasPermission`/`AQUARIUMS_MANAGE` mögött, mint a belső lapon. MI
+   * PIROSÍT: ha egy jog-ellenőrzés kerülne a gomb elé, ami a `create()`
+   * szolgáltatás-réteg tényleges (jog nélküli) engedékenységét hamisan
+   * szűkebbnek mutatná.
+   */
+  it("az Új akvárium gomb feltétel nélkül jelenik meg a listán", () => {
+    const s = kod(AQUARIUM_LISTA);
+    assert.doesNotMatch(s, /hasPermission/);
+    assert.doesNotMatch(s, /AQUARIUMS_MANAGE/);
+    assert.match(s, /href="\/akvariumok\/uj"/);
+  });
+});
+
+/**
+ * AZ AKVÁRIUMOK PILOT-KÖR 3: "ESZKÖZÖK A MEDENCÉBEN", HOZZÁRENDELÉSSEL
+ * (emlék 1843, 1847, acrobot msg_id 23638/23673/23679).
+ *
+ * === A GATE A SZERVER SZÁMOLT MEZŐJÉN ÁLL, NEM KLIENS-OLDALI JOGON ===
+ *
+ * A visszavont korábbi kör (lásd `git show f32acca0` a repóban) még
+ * `hasPermission(user, PERMISSIONS.SERVICE_ASSET_AQUARIUM_ASSIGN)`-nal
+ * döntött, mert akkor a jog szerep-szintű volt. Balázs pontosítása óta a
+ * jog FELHASZNÁLÓNKÉNTI, a session-ben nem érhető el -- a szerver teszi a
+ * kiszámolt `canAssignAssets` mezőt az akvárium-adatlap válaszába. MI
+ * PIROSÍT: ha a kártya visszatérne a kliens-oldali jog-ellenőrzésre.
+ */
+describe("az Akváriumok pilot-kör 3 saját döntései", () => {
+  it("POZITÍV KONTROLL: a kártya olvasható és nem üres", () => {
+    assert.ok(
+      olvas(AQUARIUM_ESZKOZOK).length > 500,
+      `${AQUARIUM_ESZKOZOK}: üres vagy gyanúsan rövid`,
+    );
+  });
+
+  it("az adatlap a szerver canAssignAssets mezőjét adja tovább a kártyának", () => {
+    const s = kod(AQUARIUM_RESZLET);
+    assert.match(s, /<AquariumAssets/);
+    assert.match(s, /canAssignAssets=\{aquarium\.canAssignAssets\}/);
+  });
+
+  it("a kártya NEM kliens-oldali jog-ellenőrzéssel dönt a hozzárendelésről", () => {
+    const s = kod(AQUARIUM_ESZKOZOK);
+    assert.doesNotMatch(s, /hasPermission/);
+    assert.doesNotMatch(s, /PERMISSIONS\./);
+    assert.doesNotMatch(s, /useAuth/);
+  });
+
+  /**
+   * A HOZZÁRENDELŐ RÉSZ A DOM-BÓL HIÁNYZIK, NEM CSAK CSS-SEL REJTETT -- a
+   * `canAssignAssets ?` feltétel MAGÁT A `mt-3 border-t` dobozt zárja körbe.
+   *
+   * A MINTA A KÖVETKEZŐ JSX-ELEMRE IS NÉZ, NEM CSAK A FELTÉTELRE -- a fájlban
+   * a `canAssignAssets ? (` szöveg KÉTSZER fordul elő (az "Eltávolítás" gomb
+   * saját, soronkénti ága is ugyanígy kezdődik), egy puszta
+   * `/canAssignAssets \? \(/` állítás tehát AZ ELTÁVOLÍTÁS GOMBRA is zölden
+   * futna akkor is, ha a hozzárendelő rész feltétel NÉLKÜL renderelődne --
+   * kalibrálva: `true ? (` a hozzárendelő ágon a puszta minta mellett is
+   * zöld maradt.
+   */
+  it("a hozzárendelő rész feltételesen renderelődik, nem csak CSS-sel rejtett", () => {
+    const s = kod(AQUARIUM_ESZKOZOK);
+    assert.match(s, /canAssignAssets \? \(\s*<div className="mt-3 border-t/);
+  });
+
+  it("a jelöltek közül kiszűri a már valahova csatolt eszközöket", () => {
+    const s = kod(AQUARIUM_ESZKOZOK);
+    assert.match(s, /filter\(\(item\) => !item\.aquarium\)/);
+  });
+
+  it("a levétel aquariumId: null-t küld", () => {
+    const s = kod(AQUARIUM_ESZKOZOK);
+    assert.match(
+      s,
+      /aquariumId: null,\s*\n\s*expectedUpdatedAt: asset\.updatedAt,/,
+    );
+  });
+
+  it("a hozzárendelés a jelenlegi akvárium id-jét küldi, a jelölt updatedAt-jával", () => {
+    const s = kod(AQUARIUM_ESZKOZOK);
+    assert.match(
+      s,
+      /aquariumId,\s*\n\s*expectedUpdatedAt: candidate\.updatedAt,/,
+    );
   });
 });

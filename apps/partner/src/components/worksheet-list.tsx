@@ -134,7 +134,7 @@ export function WorksheetList() {
   );
 
   return (
-    <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 flex min-h-screen max-w-none flex-col bg-pilot-grey-50">
+    <PilotThemeRoot className="flex min-h-screen flex-col bg-pilot-grey-50">
       <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
         <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
           Szervizmunka
@@ -191,6 +191,13 @@ export function WorksheetList() {
         ))}
       </div>
 
+      {/*
+        AZ INAKTIV FUL `bg-transparent`-JE NEM DISZ -- lasd a `ticket-list.tsx`
+        azonos komment fejleceet (surgos javitas, 2026-09-25): a `@layer base`
+        csak akkor engedi at a Tailwind-osztalyt, ha VAN versengo
+        `background-color`, es a `hover:`-only osztaly ezt nyugalmi
+        allapotban nem adja meg.
+      */}
       <div className="flex flex-wrap items-center gap-4 border-b border-pilot-grey-100 bg-white px-8 py-4">
         <div className="flex items-center gap-1">
           {TABS.map((tab) => (
@@ -201,7 +208,7 @@ export function WorksheetList() {
               className={`cursor-pointer rounded-md px-3.5 py-1.5 text-sm font-medium transition-all ${
                 status === tab.key
                   ? "bg-pilot-aqua-50 text-pilot-aqua-700"
-                  : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+                  : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
               }`}
             >
               {tab.label}

@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { listAssets } from "@/lib/api/assets";
 import {
   listServiceJobs,
@@ -71,6 +73,8 @@ const CACHE_KEY = ["offline-service-jobs"] as const;
 export default function ServiceJobListScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const online = useIsOnline();
   const [scope, setScope] = useState<ServiceJobScope>(
@@ -262,13 +266,13 @@ export default function ServiceJobListScreen() {
                       value={eszkozKereses}
                       onChangeText={setEszkozKereses}
                       placeholder="Keresés: azonosító, név, gyártó"
-                      placeholderTextColor="#7b8a97"
+                      placeholderTextColor={tokens.textMuted}
                       style={styles.search}
                       autoCorrect={false}
                       testID="uj-jegy-kereso"
                     />
                     {eszkozok.isPending && ujJegyNyitva ? (
-                      <ActivityIndicator color="#52d6c7" />
+                      <ActivityIndicator color={tokens.accent} />
                     ) : null}
                     {valaszthato.length === 0 && !eszkozok.isPending ? (
                       <Text style={styles.hint}>
@@ -364,70 +368,76 @@ export default function ServiceJobListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { backgroundColor: "#06202e", flex: 1 },
-  list: { gap: 12, padding: 16 },
-  header: { gap: 12 },
-  scopes: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  scope: {
-    backgroundColor: "#0d2a3a",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  scopeSelected: { backgroundColor: "#1f6f97" },
-  scopeLabel: { color: "#9fc4d8", fontSize: 13 },
-  scopeLabelSelected: { color: "#eaf4fa", fontWeight: "600" },
-  hint: { color: "#9fc4d8", fontSize: 13, lineHeight: 18 },
-  /* Az "Új hibajegy" gomb es a hozza tartozo gep-valaszto. A szinek a
-     munkalap-lista partner-valasztojabol jonnek: ugyanaz a mozdulat, ugyanaz
-     a kinezet. */
-  newJob: {
-    alignItems: "center",
-    backgroundColor: "#1f6f97",
-    borderRadius: 12,
-    paddingVertical: 12,
-  },
-  newJobText: { color: "#eaf4fa", fontSize: 15, fontWeight: "600" },
-  pressed: { opacity: 0.7 },
-  assetPicker: {
-    backgroundColor: "#0d2a3a",
-    borderRadius: 12,
-    gap: 8,
-    padding: 12,
-  },
-  search: {
-    backgroundColor: "#06202e",
-    borderRadius: 10,
-    color: "#eaf4fa",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  assetRow: {
-    borderBottomColor: "#123b50",
-    borderBottomWidth: 1,
-    gap: 2,
-    paddingVertical: 10,
-  },
-  assetName: { color: "#eaf4fa", fontSize: 15 },
-  assetMeta: { color: "#9fc4d8", fontSize: 13 },
-  loading: { marginTop: 32 },
-  empty: { color: "#9fc4d8", marginTop: 32, textAlign: "center" },
-  card: { backgroundColor: "#0d2a3a", borderRadius: 12, gap: 4, padding: 14 },
-  cardTop: { flexDirection: "row", justifyContent: "space-between" },
-  number: { color: "#eaf4fa", fontWeight: "600" },
-  status: { color: "#9fc4d8", fontSize: 13 },
-  title: { color: "#eaf4fa", fontSize: 16 },
-  maintenance: {
-    alignSelf: "flex-start",
-    backgroundColor: "#17465b",
-    borderRadius: 999,
-    color: "#bce5ef",
-    fontSize: 12,
-    fontWeight: "600",
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  meta: { color: "#9fc4d8", fontSize: 13 },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 12.
+ * kör, ugyanaz a minta, mint a `login.tsx`-en (lásd ott a teljes indokot).
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { backgroundColor: t.background, flex: 1 },
+    list: { gap: 12, padding: 16 },
+    header: { gap: 12 },
+    scopes: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    scope: {
+      backgroundColor: t.surface,
+      borderRadius: 999,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+    },
+    scopeSelected: { backgroundColor: t.accent },
+    scopeLabel: { color: t.textSecondary, fontSize: 13 },
+    scopeLabelSelected: { color: t.textOnAccent, fontWeight: "600" },
+    hint: { color: t.textSecondary, fontSize: 13, lineHeight: 18 },
+    /* Az "Új hibajegy" gomb es a hozza tartozo gep-valaszto. A szinek a
+       munkalap-lista partner-valasztojabol jonnek: ugyanaz a mozdulat, ugyanaz
+       a kinezet. */
+    newJob: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      paddingVertical: 12,
+    },
+    newJobText: { color: t.textOnAccent, fontSize: 15, fontWeight: "600" },
+    pressed: { opacity: 0.7 },
+    assetPicker: {
+      backgroundColor: t.surface,
+      borderRadius: 12,
+      gap: 8,
+      padding: 12,
+    },
+    search: {
+      backgroundColor: t.background,
+      borderRadius: 10,
+      color: t.textPrimary,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    assetRow: {
+      borderBottomColor: t.border,
+      borderBottomWidth: 1,
+      gap: 2,
+      paddingVertical: 10,
+    },
+    assetName: { color: t.textPrimary, fontSize: 15 },
+    assetMeta: { color: t.textSecondary, fontSize: 13 },
+    loading: { marginTop: 32 },
+    empty: { color: t.textSecondary, marginTop: 32, textAlign: "center" },
+    card: { backgroundColor: t.surface, borderRadius: 12, gap: 4, padding: 14 },
+    cardTop: { flexDirection: "row", justifyContent: "space-between" },
+    number: { color: t.textPrimary, fontWeight: "600" },
+    status: { color: t.textSecondary, fontSize: 13 },
+    title: { color: t.textPrimary, fontSize: 16 },
+    maintenance: {
+      alignSelf: "flex-start",
+      backgroundColor: t.accentSoft,
+      borderRadius: 999,
+      color: t.accentSoftText,
+      fontSize: 12,
+      fontWeight: "600",
+      overflow: "hidden",
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    meta: { color: t.textSecondary, fontSize: 13 },
+  });
+}

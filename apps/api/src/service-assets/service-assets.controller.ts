@@ -28,6 +28,7 @@ import {
   AssetLabelBatchQueryDto,
   AssetNameCheckQueryDto,
   AssetOwnersQueryDto,
+  AssignAssetAquariumDto,
   FreeAssetLabelsQueryDto,
   IssueAssetLabelBatchDto,
   IssueAssetLabelsDto,
@@ -369,6 +370,34 @@ export class ServiceAssetsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.update(id, input, user.id, user);
+  }
+
+  /**
+   * ESZKÖZ HOZZÁRENDELÉSE/LEVÉTELE EGY AKVÁRIUMRÓL -- `SERVICE_MANAGE`
+   * ALATT, DE EGY MÁSODIK, FELHASZNÁLÓNKÉNTI KÉPESSÉGGEL SZŰKÍTVE.
+   *
+   * Lásd `AssignAssetAquariumDto` fejlécét a DTO alakjáért, és
+   * `ServiceAssetsService.assignAquarium()` fejlécét a KÉT RÉTEGES
+   * védelemért (emlék 1843, 1847): a `SERVICE_MANAGE` jogot MA a
+   * `PARTNER_SERVICE` szerep is viseli, de a portál szándékosan nem kínál
+   * ezzel semmilyen eszköz-szerkesztést -- ezért a tényleges kapu a
+   * `AQUARIUM_ASSET_ASSIGN` `ServiceCapability`, felhasználónkénti
+   * jelölő, nem szerep-szintű jog. A service-metódus a MEGLÉVŐ,
+   * `update()`-ot hívja a kapacitás-ellenőrzés után -- SEMMI ÚJ
+   * VALIDÁCIÓS ÚT nem készült, mert az a hatókör- (`requireAssetInScope`)
+   * és akvárium-tulajdonos-ellenőrzést (`validateReferences`) már ismeri,
+   * és a mező-szintű ütközés-védelem (`asset-field-conflict.ts`) is
+   * ugyanaz -- csak a DTO alakja szűkebb, tehát a kliens NEM tud más
+   * mezőt küldeni, még akkor sem, ha megpróbálná.
+   */
+  @Patch(":id/aquarium")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  assignAquarium(
+    @Param("id") id: string,
+    @Body() input: AssignAssetAquariumDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.assignAquarium(id, input, user.id, user);
   }
 
   @Post(":id/qr/rotate")

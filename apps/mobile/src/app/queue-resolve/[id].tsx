@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -14,6 +14,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { getAsset } from "@/lib/api/assets";
 import { listPartnerUnits } from "@/lib/api/partners";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
   compareQueuedUpdate,
@@ -68,6 +70,8 @@ export default function QueueResolveScreen() {
   const queryClient = useQueryClient();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   const [dontes, setDontes] = useState<
     Partial<Record<ComparableField, "mine" | "theirs">>
@@ -201,7 +205,7 @@ export default function QueueResolveScreen() {
         <Text style={styles.eyebrow}>ELAKADT MÓDOSÍTÁS</Text>
 
         {sor.isPending || eszkoz.isPending ? (
-          <ActivityIndicator color="#52d6c7" />
+          <ActivityIndicator color={tokens.accent} />
         ) : null}
 
         {sor.data === null && !sor.isPending ? (
@@ -331,43 +335,51 @@ export default function QueueResolveScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { backgroundColor: "#071827", flex: 1 },
-  container: { gap: 12, padding: 16 },
-  eyebrow: {
-    color: "#7fb2d4",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1,
-  },
-  card: {
-    backgroundColor: "#0b263d",
-    borderRadius: 14,
-    gap: 8,
-    padding: 16,
-  },
-  cardMuted: { opacity: 0.6 },
-  label: { color: "#f4fbff", fontSize: 15, fontWeight: "700" },
-  value: { color: "#c6e2f5", fontSize: 13, lineHeight: 20 },
-  muted: { color: "#9fc3dc", fontSize: 13, lineHeight: 20 },
-  choice: {
-    backgroundColor: "#0f3350",
-    borderColor: "#1d4a70",
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 4,
-    padding: 12,
-  },
-  choiceOn: { borderColor: "#52d6c7", borderWidth: 2 },
-  choiceTitle: { color: "#9fc3dc", fontSize: 12, fontWeight: "700" },
-  choiceValue: { color: "#f4fbff", fontSize: 15 },
-  primary: {
-    alignItems: "center",
-    backgroundColor: "#52d6c7",
-    borderRadius: 12,
-    padding: 14,
-  },
-  primaryOff: { opacity: 0.4 },
-  primaryText: { color: "#04212b", fontSize: 15, fontWeight: "800" },
-  error: { color: "#ffb4ab", fontSize: 13, lineHeight: 20 },
-});
+/**
+ * AZ EYEBROW EREDETILEG KEK (#7fb2d4), NEM A SZOKASOS TEAL AKCENT: a tobbi
+ * "elakadt X" kepernyon (queue.tsx, queue-fix) az eyebrow pontosan az akcent
+ * szinevel egyezett, itt viszont MAS arnyalat allt -- tehat nem az akcentet
+ * kapja, hanem a `textSecondary`-t, ami hue szerint a legkozelebbi token.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { backgroundColor: t.background, flex: 1 },
+    container: { gap: 12, padding: 16 },
+    eyebrow: {
+      color: t.textSecondary,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 1,
+    },
+    card: {
+      backgroundColor: t.surface,
+      borderRadius: 14,
+      gap: 8,
+      padding: 16,
+    },
+    cardMuted: { opacity: 0.6 },
+    label: { color: t.textPrimary, fontSize: 15, fontWeight: "700" },
+    value: { color: t.textSecondary, fontSize: 13, lineHeight: 20 },
+    muted: { color: t.textMuted, fontSize: 13, lineHeight: 20 },
+    choice: {
+      backgroundColor: t.surfaceRaised,
+      borderColor: t.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 4,
+      padding: 12,
+    },
+    choiceOn: { borderColor: t.accent, borderWidth: 2 },
+    choiceTitle: { color: t.textMuted, fontSize: 12, fontWeight: "700" },
+    choiceValue: { color: t.textPrimary, fontSize: 15 },
+    primary: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      padding: 14,
+    },
+    primaryOff: { opacity: 0.4 },
+    primaryText: { color: t.textOnAccent, fontSize: 15, fontWeight: "800" },
+    error: { color: t.danger, fontSize: 13, lineHeight: 20 },
+  });
+}

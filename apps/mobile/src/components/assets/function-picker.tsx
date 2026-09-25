@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { CollapsedPicker } from "./unit-picker";
@@ -5,6 +6,8 @@ import {
   functionPickerPlan,
   type FunctionOption,
 } from "@/lib/assets/function-picker-rows";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * A FUNKCIO-VALASZTO, EGY PELDANYBAN, MINDKET URLAPNAK -- SZO SZERINT A
@@ -38,6 +41,8 @@ export function FunctionPicker({
   onToggle(): void;
 }) {
   const terv = functionPickerPlan({ options, value, currentName });
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   return (
     <CollapsedPicker
@@ -70,16 +75,23 @@ export function FunctionPicker({
   );
 }
 
-const styles = StyleSheet.create({
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  button: {
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#21485e",
-    backgroundColor: "#0a2335",
-  },
-  selected: { borderColor: "#52d6c7", backgroundColor: "#12443f" },
-  text: { color: "#f4fbff", fontWeight: "700" },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- lásd
+ * `category-picker.tsx` fejlécét ugyanerről a jelentésről (Balázs, 2026-09-25
+ * 14:48, telefonos fényképek).
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    grid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+    button: {
+      paddingVertical: 9,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+    },
+    selected: { borderColor: t.accent, backgroundColor: t.accentSoft },
+    text: { color: t.textPrimary, fontWeight: "700" },
+  });
+}

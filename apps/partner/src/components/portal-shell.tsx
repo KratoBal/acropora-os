@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
+import { useThemePreference } from "@acropora/ui";
 
-import { useAuth } from "./auth";
+import { hasNavigationEntry, useAuth } from "./auth";
 import { LAP_CIM } from "./frame";
 
 /*
@@ -29,16 +30,51 @@ const MUSZAKI_MENU = [
   { href: "/eszkozok", label: "Eszközök" },
 ];
 
+/**
+ * AZ "AKVARISZTIKA" CSOPORT ELSO TETELE -- Balazs dontese, 2026-09-25
+ * (Partner Portal Akvariumok terv, emlek 1839): a lista/adatlap/uj meres/
+ * uj akvarium sorozat elso resze. Csak a LISTA all itt ma; az adatlap
+ * (`/akvariumok/[id]`) es az uj akvarium urlap kulon korben johet.
+ */
+const AKVARISZTIKA_MENU = [{ href: "/akvariumok", label: "Akváriumok" }];
+
+/**
+ * A `packages/types/src/navigation.ts` "aquariums" bejegyzésének
+ * azonosítója -- ugyanaz a string, amit a szerver `/auth/me`-je
+ * `user.navigation`-ben visszaad, ha a hívó szerepe rendelkezik az
+ * `AQUARIUMS_VIEW` joggal.
+ */
+const AQUARIUMS_NAV_ENTRY_ID = "aquariums";
+
 const BEALLITASOK_HREF = "/beallitasok";
+const AKVARIUMOK_HREF = "/akvariumok";
 
 export function PortalShell({ children }: { children: ReactNode }) {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const { effectiveTheme } = useThemePreference();
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, router, user]);
+
+  const canViewAquariums = hasNavigationEntry(user, AQUARIUMS_NAV_ENTRY_ID);
+  const onAquariumsRoute = pathname.startsWith(AKVARIUMOK_HREF);
+
+  /*
+    UTVONAL-VEDELEM, NE CSAK MENUPONT-REJTES. A menupont eltuntetese
+    onmagaban nem allitja meg a kozvetlen URL-beirast -- egy regi API
+    (amig a #1116 nincs elesitve) mellett ide navigalva a lista/adatlap
+    komponens egy nem letezo vegpontot hivna. A `canViewAquariums` UGYANAZT
+    a szerver-valaszt nezi, amit a menu is, tehat a ket hely nem tud
+    szetcsuszni (acrobot kerese, msg_id 23542, 2026-09-25).
+  */
+  useEffect(() => {
+    if (!loading && user && !canViewAquariums && onAquariumsRoute) {
+      router.replace("/hibajegyek");
+    }
+  }, [loading, user, canViewAquariums, onAquariumsRoute, router]);
 
   if (loading) return <main className="centered">Munkamenet ellenőrzése…</main>;
   if (!user) {
@@ -60,6 +96,9 @@ export function PortalShell({ children }: { children: ReactNode }) {
       </main>
     );
   }
+  if (!canViewAquariums && onAquariumsRoute) {
+    return <main className="centered">Átirányítás…</main>;
+  }
 
   const beallitasokActive = pathname.startsWith(BEALLITASOK_HREF);
 
@@ -72,7 +111,36 @@ export function PortalShell({ children }: { children: ReactNode }) {
         (`w-52`, `pilot-aqua-*`/`pilot-grey-*` token, NEM a portal regi,
         lila `theme.css` `brand-*` skalaja).
       */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-52 flex-col border-r border-pilot-grey-200 bg-white lg:flex">
+      {/*
+        DATA-THEME ITT, ES CSAK ITT (SURGOS JAVITAS, 2026-09-25, Balazs elo
+        hibajelentese, ticket.acropora.hu): korabban a `data-theme`-et
+        KIZAROLAG az egyes pilot oldalak sajat `PilotThemeRoot` gyokere
+        adta (lasd `pilot-ui.tsx` fejleceit) -- az oldalsav SOSEM kapta meg,
+        tehat sotet modban az oldalsav vilagos maradt a sotet tartalom
+        mellett. Az oldalsav `bg-white`/`text-pilot-grey-*`/`bg-pilot-aqua-*`
+        osztalyai MAR token-vezereltek, es a `figma-theme.css` mar tartalmazza
+        a sotet parjukat (`[data-theme="dark"] .bg-white` es a
+        `--color-pilot-*` ujradefinialas) -- tehat ez a sor semmi UJ CSS-t
+        nem igenyel, csak az ATTRIBUTUMOT rakja fel.
+        SZANDEKOSAN NEM a `<main>`-re vagy a korulotte allo `<div>`-re kerul:
+        a `{children}` alatt MEG all KET lap, amelyik nativ `input`/`select`
+        elemet hasznal sajat, nyers CSS szinekkel: az Akvariumok lista
+        (sajat kereso mezeje, `aquarium-list.tsx`) es az Akvariumok adatlap
+        (a beagyazott `AquariumWaterValues` meresszamlalo mezoi,
+        `aquarium-water-values.tsx`). Az Uj akvarium, az "Uj hibajegy" es a
+        "Beallitasok" MAR `PilotInput`/`PilotSelect`-et hasznal (lasd
+        `new-aquarium.tsx`, `new-ticket.tsx`, `settings.tsx`), tehat oket ez
+        a korlat nem erinti. A `[data-theme="dark"]
+        input/select/textarea { ... !important }` szabaly a maradek ket
+        lapot FUGGETLENUL a sajat osztalyuktol sotetitene, mikozben a
+        korulottuk allo panel vilagos maradna: ugyanaz a "kevert" hiba,
+        amit ez a javitas felszamol, csak MASIK ket lapon. A hatokor tehat
+        szandekosan az oldalsavra szukul.
+      */}
+      <aside
+        data-theme={effectiveTheme}
+        className="fixed inset-y-0 left-0 z-30 hidden w-52 flex-col border-r border-pilot-grey-200 bg-white lg:flex"
+      >
         <div className="border-b border-pilot-grey-100 px-5 py-4">
           <Link
             href="/hibajegyek"
@@ -126,13 +194,51 @@ export function PortalShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           {/*
-            AZ "AKVARISZTIKA" CSOPORT MA SENKINEK NEM LATSZIK, SZANDEKOSAN
-            (build brief, "A KET MENUCSOPORT ELOKESZITESE" szakasz, 3. pont):
-            ez a jogkor ma nem letezik a kodban, tehat a helyes alapallapot a
-            REJTVE, nem a latszik. Ha egyszer a partner-akvarisztika kepesseg
-            elkeszul, ide egy masodik, ugyanilyen felepitesu blokk kerul,
-            felteve a jogosult felhasznaloknak.
+            AZ "AKVARISZTIKA" CSOPORT CSAK A SZERVER JELZESERE LATSZIK.
+
+            EZ A KOMMENT KORABBAN AZT ALLITOTTA, HOGY NINCS SZUKSEG KULON
+            ELLENORZESRE, MERT AZ AQUARIUMS_VIEW MINDEN PARTNER_SERVICE
+            FIOKE (szerep-szintu jog) -- EZ IGAZ, DE NEM ELEG. Az
+            `apps/partner` MINDEN beolvasztaskor AZONNAL elesre telepul
+            (ticket.acropora.hu), az `apps/api` viszont csak Balazs kulon
+            engedelyevel. Ha ez a menupont a frontend sajat, beegetett
+            jog-tablajara tamaszkodna (`hasPermission()`), egy regi API
+            mellett is latszana, es az allatkert egy hibazo menupontot
+            kapna. A `canViewAquariums` ezert a `/auth/me` VALASZANAK
+            `navigation` mezojet nezi -- azt, amit az ELESBEN FUTO API
+            tenylegesen ismer (lasd `./auth.tsx` `hasNavigationEntry`
+            fejleckommentjet). Ellenorizve 2026-09-25: a #1116 (a
+            AQUARIUMS_VIEW-t a PARTNER_SERVICE-re adja) meg nincs
+            beolvasztva, es ez a blokk emiatt ma helyesen REJTVE marad,
+            mert a live `/auth/me` navigation tombje meg nem tartalmazza
+            az "aquariums" bejegyzest.
           */}
+          {canViewAquariums && (
+            <div>
+              <p className="mb-1 px-3 text-[9px] font-bold uppercase tracking-widest text-pilot-grey-400">
+                Akvarisztika
+              </p>
+              <div className="flex flex-col gap-0.5">
+                {AKVARISZTIKA_MENU.map((item) => {
+                  const active = pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex h-9 w-full items-center rounded-lg px-3 text-sm font-medium no-underline transition-colors ${
+                        active
+                          ? "bg-pilot-aqua-50 text-pilot-aqua-700"
+                          : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </nav>
 
         <div className="px-2 pb-2">
@@ -163,8 +269,55 @@ export function PortalShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
+      {/*
+        A `.content` (max-szelesseg + kozepre-igazitas doboz) INNEN ELKERULT
+        (SURGOS JAVITAS, 2026-09-25, Balazs elo hibajelentese): korabban a
+        pilot-aqua oldalak `-mx-5 -mt-10 -mb-16 max-w-none` negativ margoval
+        probaltak kilepni ebbol a dobozbol, hogy teljes szelessegben
+        toltsenek ki -- ez HIBAS technika volt, mert egy GYERMEK negativ
+        margoja/`max-w-none`-ja nem tudja felulirni az OS sajat `max-width:
+        1160px; margin: 0 auto`-jat: a tartalom csak az os dobozaig ert, es
+        1160px felett vilagos res maradt a szelen (pontosan Balazs jelentett
+        tunete). A javitas a FORRASNAL tortent: a `.content` doboz lekerult
+        errol a kozos hejrol, a pilot oldalak negativ margos semlegesitese
+        pedig okafogyotta valt es szinten torolve lett (lasd azok sajat
+        `PilotThemeRoot` hivasat). A `.content` osztaly MOST MAR EGYETLEN
+        lapon SEM all: mind a tizenegy portal-lap pilot-aqua, az utolso
+        harom (Akvariumok lista, Akvariumok adatlap, Uj akvarium) 2026-09-25-
+        tol (murena, #1145), a "Beallitasok" ugyanaznap, ezzel a javitassal
+        -- lasd azok sajat `PilotThemeRoot` gyoker elemet.
+      */}
+      {/*
+        MASODIK KOR, 2026-09-25 (Balazs 16:50-es kepei): a `<main>`-nek
+        eddig NEM volt sajat hattere, tehat az ALATTA allo, data-theme
+        nelkuli oldalsav-nelkuli SHELL (a legkulso `<div>` fent,
+        `bg-pilot-grey-50`, mindig VILAGOS) latszott at ott, ahol egy
+        RESZLETLAP sajat `PilotThemeRoot`-ja NEM visel `min-h-screen`-t
+        (`ticket-detail.tsx`, `asset-detail.tsx`, `worksheet-detail.tsx`,
+        `aquarium-detail.tsx`, `new-aquarium.tsx` -- mind csak `px-8 py-6`
+        vagy semmi magassagot nem kenyszerit). Rovid tartalomnal a sotet
+        doboz alatt ezert vilagos csik maradt.
+
+        A JAVITAS ITT KOZPONTI, NEM MIND AZ OT RESZLETLAPON KULON-KULON:
+        a `<main>` maga kapja meg a `data-theme`-et es a `min-h-screen
+        bg-pilot-grey-50`-t, ugyanazt a mintat, mint az `<aside>`. EZ NEM
+        UJ KOCKAZAT a nativ `input`/`select` sotetito szabalynak (lasd
+        fent az oldalsav-korlatozas indoklasat): minden portal-lap MAR
+        MOST is a SAJAT `PilotThemeRoot` gyokeren visel `data-theme`-et
+        (mind a 11 lap, lasd `portal-shell-theme.spec.ts` `pilotLapok`
+        listajat), tehat az Akvariumok lista sajat keresoje es az
+        Akvariumok adatlap `AquariumWaterValues` mezoi MA IS a SAJAT
+        lapjuk data-theme-e alatt allnak -- a `<main>` sajat attributuma
+        csak azt a RESET tolti ki, ami egy rovid lap ALATT marad, nem
+        valtoztat semmit a lapok SAJAT tartalman.
+      */}
       <div className="lg:pl-52">
-        <main className="content">{children}</main>
+        <main
+          data-theme={effectiveTheme}
+          className="min-h-screen bg-pilot-grey-50"
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

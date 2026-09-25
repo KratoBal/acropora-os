@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -13,6 +13,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { listServicePartners } from "@/lib/api/partners";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getWebshopCapabilities } from "@/lib/auth/webshop-authorization";
@@ -35,6 +37,8 @@ const PAGE_SIZE = 25;
 export default function PartnersScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const capabilities = user ? getWebshopCapabilities(user.role) : null;
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -76,7 +80,7 @@ export default function PartnersScreen() {
           <RefreshControl
             refreshing={partners.isRefetching && !partners.isPending}
             onRefresh={() => void partners.refetch()}
-            tintColor="#52d6c7"
+            tintColor={tokens.accent}
           />
         }
       >
@@ -97,11 +101,13 @@ export default function PartnersScreen() {
             setPage(1);
           }}
           placeholder="Keresés név vagy kód szerint"
-          placeholderTextColor="#668798"
+          placeholderTextColor={tokens.textMuted}
           style={styles.input}
         />
 
-        {partners.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {partners.isPending ? (
+          <ActivityIndicator color={tokens.accent} />
+        ) : null}
 
         {partners.isError ? (
           <Text style={styles.error}>
@@ -166,59 +172,65 @@ export default function PartnersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 48, gap: 12 },
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  title: { color: "#f4fbff", fontSize: 28, fontWeight: "900" },
-  subtitle: { color: "#91afbe" },
-  input: {
-    color: "#f4fbff",
-    backgroundColor: "#071f31",
-    borderColor: "#28536a",
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-  row: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-  },
-  pressed: { opacity: 0.75 },
-  rowTitle: { color: "#f4fbff", fontSize: 16, fontWeight: "800" },
-  rowMeta: { color: "#789cad", fontSize: 12, marginTop: 3 },
-  empty: { color: "#91afbe" },
-  error: {
-    color: "#fecaca",
-    backgroundColor: "#541b2b",
-    padding: 12,
-    borderRadius: 10,
-  },
-  errorTitle: { color: "#f4fbff", fontSize: 18, fontWeight: "900" },
-  errorText: { color: "#91afbe", marginTop: 6, textAlign: "center" },
-  pager: { flexDirection: "row", alignItems: "center", gap: 12 },
-  pagerButton: {
-    backgroundColor: "#164057",
-    borderRadius: 9,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  pagerText: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  pagerLabel: { color: "#91afbe", fontSize: 12 },
-  disabled: { opacity: 0.5 },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 12.
+ * kör, ugyanaz a minta, mint a `login.tsx`-en (lásd ott a teljes indokot).
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 48, gap: 12 },
+    centered: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 24,
+    },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
+    subtitle: { color: t.textSecondary },
+    input: {
+      color: t.textPrimary,
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+    },
+    row: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 14,
+      padding: 14,
+    },
+    pressed: { opacity: 0.75 },
+    rowTitle: { color: t.textPrimary, fontSize: 16, fontWeight: "800" },
+    rowMeta: { color: t.textMuted, fontSize: 12, marginTop: 3 },
+    empty: { color: t.textSecondary },
+    error: {
+      color: t.danger,
+      backgroundColor: t.dangerSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+    errorTitle: { color: t.textPrimary, fontSize: 18, fontWeight: "900" },
+    errorText: { color: t.textSecondary, marginTop: 6, textAlign: "center" },
+    pager: { flexDirection: "row", alignItems: "center", gap: 12 },
+    pagerButton: {
+      backgroundColor: t.surfaceRaised,
+      borderRadius: 9,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+    },
+    pagerText: { color: t.textPrimary, fontWeight: "800", fontSize: 12 },
+    pagerLabel: { color: t.textSecondary, fontSize: 12 },
+    disabled: { opacity: 0.5 },
+  });
+}

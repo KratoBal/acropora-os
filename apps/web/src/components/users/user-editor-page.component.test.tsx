@@ -58,12 +58,25 @@ vi.mock("@acropora/types", () => ({
   /**
    * A PARJA, UGYANAZZAL A FIGYELMEZTETESSEL, MINT A FENTI TOMB -- ez is
    * KEZZEL KARBANTARTOTT MASOLAT, nem a valodi `service-capabilities.ts`.
+   *
+   * AZ `audience` MEZO 2026-09-25-TOL KOTELEZO A MOCKBAN IS: a komponens
+   * ez alapjan szuri, melyik kepesseget mutassa. Ha ez a mock elmaradna
+   * tole, egyik ag sem mutatna SEMMIT (az `undefined === "internal"` es
+   * az `undefined === "partner"` egyarant hamis), es a lenti, MEGLEVO
+   * tesztek csendben hamis eredmenyt adnanak.
    */
   SERVICE_CAPABILITIES: [
     {
       value: "MATERIAL_REQUEST_MARK_RECEIVED",
       label: "Anyag beérkezésének jelölése",
       description: "Megjelölheti, ha egy anyagigény beérkezett.",
+      audience: "internal",
+    },
+    {
+      value: "AQUARIUM_ASSET_ASSIGN",
+      label: "Eszköz hozzárendelése akváriumhoz (partner portál)",
+      description: "A partner portálon hozzárendelheti az eszközöket.",
+      audience: "partner",
     },
   ],
 }));
@@ -192,12 +205,18 @@ describe("UserEditorPage partner szerepköre", () => {
   });
 
   /**
-   * A KEPESSEG JELOLONEGYZET UGYANAZT A HATART VISELI, MINT AZ ERTESITESEK --
-   * ugyanaz a `customerId === ""` ag, ugyanaz az ok (a szolgaltatas a MI
-   * oldalunk kepessege, egy partner-fioknal bejelolve MINDEN vevo
-   * anyagigenyet lathatova tenne).
+   * A "BELSŐS" KÉPESSÉG (`audience: "internal"`) CSAK SAJÁT KOLLÉGÁNÁL
+   * JELENIK MEG -- ugyanaz az ok, mint az értesítéseknél (a szolgáltatás a
+   * MI oldalunk munkája, egy partner-fióknál bejelölve MINDEN vevő
+   * anyagigényét láthatóvá tenné).
+   *
+   * EZ A TESZT KORÁBBAN "a képesség jelölőnegyzet" ÁLTALÁNOS ALAKBAN ÁLLT
+   * -- 2026-09-25-től a "Képességek" szakasz MÁR NEM EGYETLEN határt visel
+   * (lásd `service-capabilities.ts` `audience` mezőjét): az állítást ezért
+   * az `audience: "internal"` ELEMRE szűkítve mondjuk ki, a lenti, partner-
+   * ágú kontrollal együtt.
    */
-  it("a képesség jelölőnegyzet csak saját kollégánál jelenik meg", async () => {
+  it("a belsős képesség (audience: internal) csak saját kollégánál jelenik meg", async () => {
     render(<UserEditorPage />);
 
     expect(
@@ -212,6 +231,39 @@ describe("UserEditorPage partner szerepköre", () => {
           name: /Anyag beérkezésének jelölése/,
         }),
       ).toBeNull(),
+    );
+  });
+
+  /**
+   * A FORDÍTOTT IRÁNY, ÚJ 2026-09-25-TŐL (emlék 1843, 1847): a
+   * `AQUARIUM_ASSET_ASSIGN` (`audience: "partner"`) csak PARTNER-FIÓKNÁL
+   * jelenik meg, sosem saját kollégánál -- ott a kockázat fordított, mint
+   * az anyagigény-jelölésnél: egy internal kollégának bejelölve semmit nem
+   * jelentene (ő úgyis `SERVICE_MANAGE`-en át mindent elér), de a jelenléte
+   * félrevezetné a szerkesztőt.
+   *
+   * MI PIROSÍT: ha a "Képességek" szakasz visszatérne az EGYETLEN
+   * `customerId === ""` ágra (a régi, most javított hiba), ez az állítás
+   * SOSEM látná a jelölőnégyzetet, mert a teszt kezdetben belsős nézetben
+   * indul.
+   */
+  it("a partner-képesség (audience: partner) csak partner-fióknál jelenik meg", async () => {
+    render(<UserEditorPage />);
+
+    expect(
+      screen.queryByRole("checkbox", {
+        name: /Eszköz hozzárendelése akváriumhoz/,
+      }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Vevő kiválasztása" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("checkbox", {
+          name: /Eszköz hozzárendelése akváriumhoz/,
+        }),
+      ).toBeInTheDocument(),
     );
   });
 

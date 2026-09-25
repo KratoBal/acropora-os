@@ -405,6 +405,24 @@ export const ROLE_PERMISSIONS: Readonly<
    * szolgáltatás-réteg `requireInternalWriter()`-rel zárja el partner-
    * hívóktól, ugyanúgy, mint a munkalap-létrehozást -- a jog tehát tágabb,
    * mint amit a partner ténylegesen elér.
+   *
+   * === AZ ESZKÖZ-AKVÁRIUM HOZZÁRENDELÉS SZÁNDÉKOSAN NINCS ITT (emlék 1843,
+   *     1847) ===
+   *
+   * Balázs szó szerint: "akinek megvan a kulon jog, hozzarendel es levesz;
+   * akinek nincs, csak latja" -- majd (1847, 2026-09-25 16:12 UTC) pontosan
+   * megnevezte a mintát: a `MATERIAL_REQUEST_MARK_RECEIVED`-hez hasonló,
+   * FELHASZNÁLÓNKÉNTI jelölő (`ServiceCapability`/`UserServiceCapability`,
+   * lásd a Prisma séma és a `service-capabilities.ts` fejlécét), NEM
+   * szerep-szintű jog. Ez a lista tehát SZÁNDÉKOSAN nem bővült
+   * `AQUARIUM_ASSET_ASSIGN`-nal -- egy ilyen sor itt AZONNAL minden
+   * `PARTNER_SERVICE` fióknak megnyitná a képességet, pontosan azt, amit
+   * Balázs a "külön jog" kéréssel el akart kerülni. Az ellenőrzés helye a
+   * `ServiceAssetsController`/`ServiceAssetsRepository`
+   * `hasAquariumAssetAssignCapability()`-ja, a `SERVICE_MANAGE` mögötti,
+   * MÁSODIK, finomabb rétegként -- ugyanaz a két-rétegű minta, mint a
+   * `MaterialRequestsService.listPending()`-nél
+   * (`requireInternalWriter` + `hasMarkReceivedCapability`).
    */
   PARTNER_SERVICE: [
     PERMISSIONS.SERVICE_VIEW,

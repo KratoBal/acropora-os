@@ -28,7 +28,6 @@ import {
   closeWorksheet,
   setWorksheetHandedOver,
 } from "@/lib/api/worksheets";
-import { listAssets } from "@/lib/api/assets";
 import {
   createMaterialRequest,
   listMaterialRequestsForWorksheet,
@@ -86,11 +85,10 @@ import {
   worksheetAssigneesChanged,
 } from "@/lib/worksheets/worksheet-assignees";
 import {
-  describeSelectableAssets,
   describeWorksheetAssetsReadOnly,
-  toggleWorksheetAsset,
   worksheetAssetsChanged,
 } from "@/lib/worksheets/worksheet-assets";
+import { WorksheetAssetPicker } from "@/components/worksheets/WorksheetAssetPicker";
 import {
   buildWorksheetLinePayload,
   describeQueuedWorksheetLines,
@@ -497,25 +495,16 @@ export default function WorksheetDetailScreen() {
   });
 
   /**
-   * MELYIK ESZKOZ VALASZTHATO -- CSAK AKKOR TOLT, AMIKOR A SZERKESZTO KINYILIK,
-   * UGYANAZERT, MINT A FELELOSOKNEL.
-   *
-   * A HATOKOR A LAP HELYSZINEBOL JON: a szerver a `setAssets`-nel a lap
-   * `departmentId`-jehez tartozo eszkozoket fogadja el
-   * (`requireAssetsInDepartment`), tehat a valaszto ugyanezt a szukitest
-   * kapja -- egy tagabb lista olyat kinalna fel, amit a mentes ugyis
-   * visszautasitana.
+   * MELYIK ESZKOZ VALASZTHATO -- A LEKERDEZES MAGABAN A MEGOSZTOTT
+   * `WorksheetAssetPicker`-BEN ALL (2026-09-25, surgos kor: ugyanez a
+   * valaszto az uj munkalap urlapra is kellett, kozos komponenst kapott).
+   * Ami itt marad, a SAJAT engedelyezesi felteteleink: mikor nyisson meg a
+   * lekerdezes ebben a keretben.
    */
-  const candidateAssets = useQuery({
-    queryKey: ["worksheet-candidate-assets", worksheet.data?.department.id],
-    queryFn: () =>
-      listAssets(1, 100, "", worksheet.data?.department.id ?? "", "ACTIVE"),
-    enabled:
-      assetDraft !== null &&
-      status === "authenticated" &&
-      Boolean(capabilities?.worksheetsManage) &&
-      Boolean(worksheet.data?.department.id),
-  });
+  const assetPickerEnabled =
+    assetDraft !== null &&
+    status === "authenticated" &&
+    Boolean(capabilities?.worksheetsManage);
 
   /**
    * AZ ERINTETT ESZKOZOK MENTESE -- UGYANAZ AZ ALAK, MINT A FELELOSOKE.
@@ -890,14 +879,6 @@ export default function WorksheetDetailScreen() {
   const readOnlyAssetsNotice = describeWorksheetAssetsReadOnly(
     capabilities.worksheetsManage,
   );
-  const selectableAssetsNotice =
-    assetDraft === null
-      ? null
-      : describeSelectableAssets({
-          loading: candidateAssets.isPending,
-          error: candidateAssets.isError,
-          count: candidateAssets.data?.items.length ?? 0,
-        });
   const assetsChanged =
     assetDraft !== null &&
     worksheetAssetsChanged(
@@ -1727,43 +1708,12 @@ export default function WorksheetDetailScreen() {
 
               {assetDraft !== null ? (
                 <>
-                  {selectableAssetsNotice ? (
-                    <Text style={styles.muted}>{selectableAssetsNotice}</Text>
-                  ) : null}
-
-                  {(candidateAssets.data?.items ?? []).map((jelolt) => {
-                    const kivalasztva = assetDraft.includes(jelolt.id);
-                    return (
-                      <Pressable
-                        key={jelolt.id}
-                        accessibilityRole="checkbox"
-                        accessibilityState={{ checked: kivalasztva }}
-                        accessibilityLabel={jelolt.name}
-                        onPress={() =>
-                          setAssetDraft((elozo) =>
-                            elozo === null
-                              ? elozo
-                              : toggleWorksheetAsset(elozo, jelolt.id),
-                          )
-                        }
-                        style={({ pressed }) => [
-                          styles.assigneeRow,
-                          kivalasztva && styles.assigneeRowOn,
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <View>
-                          <Text style={styles.assigneeName}>{jelolt.name}</Text>
-                          <Text style={styles.assetCode}>
-                            {jelolt.assetNumber}
-                          </Text>
-                        </View>
-                        {kivalasztva ? (
-                          <Text style={styles.assigneeCheck}>kiválasztva</Text>
-                        ) : null}
-                      </Pressable>
-                    );
-                  })}
+                  <WorksheetAssetPicker
+                    departmentId={worksheet.data?.department.id ?? ""}
+                    selectedIds={assetDraft}
+                    onChange={setAssetDraft}
+                    enabled={assetPickerEnabled}
+                  />
 
                   <Text style={styles.muted}>
                     {assetDraft.length === 0

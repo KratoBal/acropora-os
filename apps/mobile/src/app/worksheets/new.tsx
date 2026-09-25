@@ -79,6 +79,7 @@ import {
 } from "@/lib/worksheets/worksheet-create";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
+import { WorksheetAssetPicker } from "@/components/worksheets/WorksheetAssetPicker";
 
 /**
  * ÚJ MUNKALAP A HELYSZÍNRŐL.
@@ -133,6 +134,14 @@ export default function NewWorksheetScreen() {
   const [nyitottValaszto, setNyitottValaszto] =
     useState<NyitottValaszto>(kezdoValaszto());
   const [departmentId, setDepartmentId] = useState("");
+  /**
+   * AZ ERINTETT ESZKOZOK -- `null`, AMIG A SZERELO HOZZA NEM NYUL. Ugyanaz a
+   * "szarmaztatott ertek, nem masolt allapot" alak, mint a partner/helyszin
+   * elotoltesnel fent: amig `null`, a hatasos lista a jegybol OROKLOTT
+   * eszkozoket adja (lasd `assetIdsHatasos` lent); az elso keziallitas utan
+   * a szerelo valasztasa nyer.
+   */
+  const [assetIds, setAssetIds] = useState<string[] | null>(null);
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<{
@@ -276,6 +285,13 @@ export default function NewWorksheetScreen() {
     jegyFelelosok: jegyAdatai?.assignees ?? [],
     kioszthatok: kioszthatokQuery.data?.items ?? [],
   });
+  /**
+   * AZ ERINTETT ESZKOZOK HATASOS LISTAJA -- ugyanaz a szarmaztatasi minta,
+   * mint a `partnerHatasos`/`departmentIdHatasos` fent: amig a szerelo nem
+   * nyult hozza (`assetIds === null`), a jegybol orokolt lista er, utana a
+   * sajat valasztasa.
+   */
+  const assetIdsHatasos = assetIds !== null ? assetIds : oroklendoEszkozIdk;
   const oroklesSzoveg = oroklesUzenete({
     jegyEszkozok,
     oroklendoEszkozok: oroklendoEszkozIdk,
@@ -379,6 +395,7 @@ export default function NewWorksheetScreen() {
        * lassa.
        */
       setDepartmentId(uj.id);
+      setAssetIds(null);
       setUjAlegysegNyitva(false);
       setUjAlegysegSzuloId("");
       setUjAlegysegKod("");
@@ -555,7 +572,7 @@ export default function NewWorksheetScreen() {
       departmentId: departmentIdHatasos,
       subject,
       description,
-      assetIds: oroklendoEszkozIdk,
+      assetIds: assetIdsHatasos,
       assigneeIds: oroklendoFelelosIdk,
     });
     if (!result.ok) {
@@ -681,6 +698,14 @@ export default function NewWorksheetScreen() {
                        * értené, mit ír el.
                        */
                       setDepartmentId("");
+                      /**
+                       * ÉS UGYANEZÉRT AZ ÉRINTETT ESZKÖZÖK IS: azok a
+                       * HELYSZÍNHEZ tartoznak, tehát partnerváltásnál a
+                       * korábbi kiválasztás is érvénytelen -- a `null`
+                       * visszaadja az irányítást az (ekkor még üres) jegy-
+                       * öröklésnek.
+                       */
+                      setAssetIds(null);
                     }}
                     style={[
                       styles.listRow,
@@ -753,6 +778,12 @@ export default function NewWorksheetScreen() {
                     key={unit.id}
                     onPress={() => {
                       setDepartmentId(unit.id);
+                      /**
+                       * LASD A PARTNER-VALASZTO AZONOS MEGJEGYZESET FENT:
+                       * helyszin-valtasnal a korabbi eszkoz-kivalasztas is
+                       * ervenytelen.
+                       */
+                      setAssetIds(null);
                       setNyitottValaszto(valasztasUtan());
                     }}
                     style={[
@@ -900,6 +931,43 @@ export default function NewWorksheetScreen() {
               />
             </View>
             <FieldError error={error} field="subject" />
+          </Section>
+
+          {/*
+            ÉRINTETT ESZKÖZÖK -- KÖZÖS KOMPONENS AZ ADATLAPPAL
+            (`WorksheetAssetPicker`, surgos kor, 2026-09-25). Balázs
+            jelentése: ide eddig nem lehetett eszközt hozzáadni, csak a
+            hibajegyről öröklődő lista ment fel, láthatatlanul.
+
+            A HATOKOR A HELYSZINBOL JON, UGYANUGY, MINT AZ ADATLAPON: helyszín
+            nélkül nincs mit kérdezni, ezért itt is a "válassz előbb" mondat
+            áll a választó helyén, ugyanaz a minta, mint a Helyszín szekció
+            saját "Előbb válassz partnert" ágán.
+          */}
+          <Section title="Érintett eszközök">
+            {!departmentIdHatasos ? (
+              <Text style={styles.hint}>
+                Előbb válassz helyszínt: az eszközök hozzá tartoznak.
+              </Text>
+            ) : (
+              <>
+                {oroklendoEszkozIdk.length > 0 && assetIds === null ? (
+                  <Text style={styles.hint}>
+                    A hibajegyről örökölt{" "}
+                    {oroklendoEszkozIdk.length === 1
+                      ? "eszköz"
+                      : `${oroklendoEszkozIdk.length} eszköz`}{" "}
+                    előre ki van választva, lent módosítható.
+                  </Text>
+                ) : null}
+                <WorksheetAssetPicker
+                  key={departmentIdHatasos}
+                  departmentId={departmentIdHatasos}
+                  selectedIds={assetIdsHatasos}
+                  onChange={setAssetIds}
+                />
+              </>
+            )}
           </Section>
 
           <Section title="Fénykép">

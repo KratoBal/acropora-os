@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Redirect, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -10,6 +10,8 @@ import {
 } from "@/lib/assets/scanned-payload";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * ESZKOZ MEGNYITASA BEOLVASASSAL -- KET AZONOSITOVAL, NEM EGGYEL.
@@ -36,6 +38,18 @@ import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
  * Balazs harmadik mondata ("ha kezzel beirom a szamat") azt mutatta, hogy
  * KERESTE a kezi utat. Ha a kamera nem lat ra a matricara egy gephazban, a
  * kezi mezo az EGYETLEN ut.
+ *
+ * === SZÍNEK: FIGMA TELEFON 12. KÖR, 6. CSOPORT (2026-09-25) ===
+ *
+ * A "Kameraengedély szükséges" kártya (nincs kamera-nézet ilyenkor)
+ * `useAppTheme()`-ből él, ugyanaz a minta, mint az `aquariums/[id].tsx`
+ * adatlapon. A KAMERA-NÉZET RÁTÉTE (`cameraStyles` lent) VISZONT MARAD
+ * SÖTÉT, FÜGGETLENÜL A TÉMÁTÓL -- a brief kifejezetten kéri ("a kamera-
+ * rátét ... marad sötét"), és élő kameraképen egy világos-módbeli fehér
+ * hátterű felirat olvashatatlan lenne a kép fölött. A `no-fixed-hex`
+ * teszt (`apps/mobile/src/lib/mobile-figma-round-12/no-fixed-hex.spec.ts`)
+ * ezt a kivételt EXPLICIT módon kezeli: csak a `cameraStyles` blokkot
+ * hagyja ki a vizsgálatból, a `createStyles`-en belüli fix hexet elkapja.
  */
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -56,6 +70,8 @@ export default function AssetScannerScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [manual, setManual] = useState("");
@@ -101,39 +117,41 @@ export default function AssetScannerScreen() {
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
   if (!capabilities?.assetsView) return <Redirect href="/" />;
 
-  if (!permission) return <View style={styles.page} />;
+  if (!permission) return <View style={styles.permissionPage} />;
   if (!permission.granted)
     return (
-      <SafeAreaView style={styles.page}>
+      <SafeAreaView style={styles.permissionPage}>
         <View style={styles.permissionCard}>
-          <Text style={styles.title}>Kameraengedély szükséges</Text>
+          <Text style={styles.permissionTitle}>Kameraengedély szükséges</Text>
           <Text style={styles.copy}>
             Az eszköz QR-kódjának beolvasásához engedélyezd a kamera
             használatát.
           </Text>
           <Pressable
-            style={styles.button}
+            style={styles.permissionButton}
             onPress={() => void requestPermission()}
           >
-            <Text style={styles.buttonText}>Kamera engedélyezése</Text>
+            <Text style={styles.permissionButtonText}>
+              Kamera engedélyezése
+            </Text>
           </Pressable>
         </View>
       </SafeAreaView>
     );
 
   return (
-    <View style={styles.page}>
+    <View style={cameraStyles.page}>
       <CameraView
         style={StyleSheet.absoluteFill}
         facing="back"
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         onBarcodeScanned={scanned ? undefined : ({ data }) => feldolgoz(data)}
       />
-      <SafeAreaView style={styles.overlay}>
-        <Text style={styles.title}>QR-kód beolvasása</Text>
-        <View style={styles.frame} />
-        <View style={styles.bottom}>
-          <Text style={styles.message}>{message}</Text>
+      <SafeAreaView style={cameraStyles.overlay}>
+        <Text style={cameraStyles.title}>QR-kód beolvasása</Text>
+        <View style={cameraStyles.frame} />
+        <View style={cameraStyles.bottom}>
+          <Text style={cameraStyles.message}>{message}</Text>
 
           {/*
             A KEZI BEVITEL MINDIG OTT ALL, nem csak bukas utan. Ha a kamera nem
@@ -141,32 +159,35 @@ export default function AssetScannerScreen() {
             ami csak hiba utan jelenik meg, akkor kerul elo, amikor a szerelo
             mar feladta.
           */}
-          <View style={styles.manualRow}>
+          <View style={cameraStyles.manualRow}>
             <TextInput
               accessibilityLabel="Matrica kódja kézzel"
               value={manual}
               onChangeText={setManual}
               placeholder="vagy írd be: D4204"
-              placeholderTextColor="#89a9bb"
+              placeholderTextColor={CAMERA_MANUAL_PLACEHOLDER}
               autoCapitalize="characters"
               autoCorrect={false}
-              style={styles.manualInput}
+              style={cameraStyles.manualInput}
             />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Kézzel beírt kód megnyitása"
               accessibilityState={{ disabled: manual.trim() === "" }}
               disabled={manual.trim() === ""}
-              style={[styles.button, manual.trim() === "" && styles.disabled]}
+              style={[
+                cameraStyles.button,
+                manual.trim() === "" && cameraStyles.disabled,
+              ]}
               onPress={() => feldolgoz(manual)}
             >
-              <Text style={styles.buttonText}>Megnyitás</Text>
+              <Text style={cameraStyles.buttonText}>Megnyitás</Text>
             </Pressable>
           </View>
 
           {scanned ? (
             <Pressable
-              style={styles.button}
+              style={cameraStyles.button}
               onPress={() => {
                 setMessage(
                   "Tartsd a QR-kódot vagy a matricát a kereten belül.",
@@ -174,7 +195,7 @@ export default function AssetScannerScreen() {
                 setScanned(false);
               }}
             >
-              <Text style={styles.buttonText}>Újraolvasás</Text>
+              <Text style={cameraStyles.buttonText}>Újraolvasás</Text>
             </Pressable>
           ) : null}
         </View>
@@ -183,7 +204,18 @@ export default function AssetScannerScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+/**
+ * A KAMERA-RÁTÉT RÖGZÍTETT, SÖTÉT SZÍNKÉSZLETE -- SZÁNDÉKOSAN NEM
+ * `useAppTheme()`-ből jön, lásd a fájl fejlécét. Ez a blokk (a lenti
+ * `CAMERA_MANUAL_PLACEHOLDER`-től a `cameraStyles` végéig) az EGYETLEN
+ * rész ebben a fájlban, amit a `no-fixed-hex` teszt kihagy a
+ * vizsgálatból -- a kivétel a NÉVRE szűr, nem "engedd át az egészet":
+ * lásd a teszt saját fejlécét (`src/lib/mobile-figma-round-12/
+ * no-fixed-hex.spec.ts`).
+ */
+const CAMERA_MANUAL_PLACEHOLDER = "#89a9bb";
+
+const cameraStyles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#071827" },
   overlay: {
     flex: 1,
@@ -211,15 +243,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     textAlign: "center",
   },
-  permissionCard: {
-    margin: 22,
-    marginTop: 80,
-    borderRadius: 18,
-    padding: 20,
-    backgroundColor: "#0d2b40",
-    gap: 14,
-  },
-  copy: { color: "#a9c4d1", lineHeight: 21 },
   button: {
     backgroundColor: "#177b74",
     borderRadius: 11,
@@ -241,3 +264,42 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.5 },
 });
+
+/**
+ * A KAMERA NÉLKÜLI ÁLLAPOT (nincs engedély) -- EZ VISZONT PLAIN OLDAL,
+ * NEM KAMERA-RÁTÉT, tehát `useAppTheme()`-ből él, ugyanúgy, mint a
+ * `new.tsx`/`[id].tsx` akvárium-képernyők.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    permissionPage: { flex: 1, backgroundColor: t.background },
+    permissionCard: {
+      margin: 22,
+      marginTop: 80,
+      borderRadius: 18,
+      padding: 20,
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      gap: 14,
+    },
+    permissionTitle: {
+      color: t.textPrimary,
+      fontSize: 23,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    copy: { color: t.textSecondary, lineHeight: 21 },
+    permissionButton: {
+      backgroundColor: t.accent,
+      borderRadius: 11,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+    },
+    permissionButtonText: {
+      color: t.textOnAccent,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+  });
+}

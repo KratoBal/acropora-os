@@ -1,5 +1,5 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -7,6 +7,8 @@ import {
   describeLabelScanFailure,
   extractAssetLabelCode,
 } from "@/lib/assets/scanned-payload";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * A MATRICAKOD MEZO ES A BEOLVASOJA, EGY PELDANYBAN, MINDKET URLAPNAK.
@@ -81,7 +83,7 @@ export function useLabelScanner(onCode: (code: string) => void): LabelScanner {
   }, [permission?.granted, requestPermission]);
 
   const overlay = open ? (
-    <View style={styles.overlay}>
+    <View style={overlayStyles.overlay}>
       <CameraView
         style={StyleSheet.absoluteFill}
         facing="back"
@@ -118,12 +120,15 @@ export function useLabelScanner(onCode: (code: string) => void): LabelScanner {
           setOpen(false);
         }}
       />
-      <SafeAreaView style={styles.panel}>
-        <Text style={styles.panelText}>
+      <SafeAreaView style={overlayStyles.panel}>
+        <Text style={overlayStyles.panelText}>
           Tartsd a matrica kódját a kamera elé.
         </Text>
-        <Pressable style={styles.button} onPress={() => setOpen(false)}>
-          <Text style={styles.buttonText}>Mégsem</Text>
+        <Pressable
+          style={overlayStyles.cancelButton}
+          onPress={() => setOpen(false)}
+        >
+          <Text style={overlayStyles.cancelButtonText}>Mégsem</Text>
         </Pressable>
       </SafeAreaView>
     </View>
@@ -152,6 +157,8 @@ export function LabelCodeField({
   editable = true,
   children,
 }: LabelCodeFieldProps) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>Matrica kódja</Text>
@@ -169,7 +176,7 @@ export function LabelCodeField({
          */
         autoCapitalize="characters"
         placeholder="Nincs megadva"
-        placeholderTextColor="#668798"
+        placeholderTextColor={tokens.textMuted}
         style={styles.input}
       />
       <Pressable
@@ -188,27 +195,46 @@ export function LabelCodeField({
   );
 }
 
-const styles = StyleSheet.create({
-  field: { gap: 8 },
-  label: { color: "#9ab8ca", fontSize: 13, fontWeight: "700" },
-  input: {
-    backgroundColor: "#0b263d",
-    borderColor: "#164668",
-    borderRadius: 12,
-    borderWidth: 1,
-    color: "#f4fbff",
-    fontSize: 15,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  button: {
-    backgroundColor: "#0f3346",
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  buttonText: { color: "#d7f0ff", fontWeight: "700" },
-  message: { color: "#ffb4a2", fontSize: 12 },
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- lásd
+ * `category-picker.tsx` fejlécét ugyanerről a jelentésről (Balázs, 2026-09-25
+ * 14:48, telefonos fényképek). CSAK A MEZŐ SAJÁT MEGJELENÉSE TOKENIZÁLT: a
+ * kamera-ratét (`overlayStyles`, lejjebb) SZÁNDÉKOSAN NEM -- az mindig élő
+ * kameraképre kerül, tehát a világos/sötét váltás rá nem értelmezhető,
+ * ugyanaz az indok, mint a `DocumentPanel` nagyított-kép takarásánál.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    field: { gap: 8 },
+    label: { color: t.textSecondary, fontSize: 13, fontWeight: "700" },
+    input: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      color: t.textPrimary,
+      fontSize: 15,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    button: {
+      backgroundColor: t.accent,
+      borderRadius: 10,
+      paddingVertical: 12,
+      alignItems: "center",
+    },
+    buttonText: { color: t.textOnAccent, fontWeight: "700" },
+    message: { color: t.danger, fontSize: 12 },
+  });
+}
+
+/**
+ * A KAMERA-RATÉT FIX, SÖTÉT MEGJELENÉSE -- SZÁNDÉKOSAN NEM TÉMA-FÜGGŐ.
+ * Mindig élő kameraképre kerül, tehát a hátterének és a rajta lévő
+ * feliratnak/gombnak a kontrasztja a KAMERAKÉPHEZ kell igazodjon, nem az
+ * app aktuális világos/sötét állapotához.
+ */
+const overlayStyles = StyleSheet.create({
   overlay: {
     position: "absolute",
     top: 0,
@@ -219,4 +245,11 @@ const styles = StyleSheet.create({
   },
   panel: { flex: 1, justifyContent: "flex-end", padding: 24, gap: 12 },
   panelText: { color: "#f4fbff", fontWeight: "700", textAlign: "center" },
+  cancelButton: {
+    backgroundColor: "#0f3346",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  cancelButtonText: { color: "#d7f0ff", fontWeight: "700" },
 });

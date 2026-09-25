@@ -223,34 +223,62 @@ export function PilotAvatar({
   );
 }
 
+/**
+ * `fullWidth`/`size` -- A PÉNZTÁR (POS) FIGMA-KÖR ELSŐ HÍVÓJA (11. kör,
+ * 2026-09-25), NEM DÍSZ. A Figma terv `Btn` micro-komponense `fullWidth`
+ * és `size="lg"` propot kap a "Fizetés" gombra -- tablet-en, nagy
+ * érintési felület, a leírás kifejezett kérése ("large touch targets").
+ * Eddig egyik pilot oldal sem kért ezt, ezért a komponens nem hordozta;
+ * mindkét prop OPCIONÁLIS és alapértelmezettje a régi viselkedés
+ * (`inline-flex`, `px-3.5 py-1.5`), tehát a meglévő 20+ hívóhely
+ * változatlanul fordul és fest.
+ */
 export function PilotButton({
   children,
   variant = "primary",
   onClick,
   type = "button",
   disabled,
+  fullWidth = false,
+  size = "md",
 }: {
   children: ReactNode;
   variant?: "primary" | "secondary" | "ghost" | "danger";
   onClick?: () => void;
   type?: "button" | "submit";
   disabled?: boolean;
+  fullWidth?: boolean;
+  size?: "md" | "lg";
 }) {
-  const base =
-    "inline-flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-sm font-medium transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40";
+  const base = `inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${fullWidth ? "w-full" : ""}`;
+  const sizes = {
+    md: "px-3.5 py-1.5 text-sm",
+    lg: "px-5 py-3.5 text-base",
+  };
   const variants = {
     primary:
       "bg-pilot-aqua-600 text-white hover:bg-pilot-aqua-700 active:bg-pilot-aqua-800",
     secondary:
       "bg-white text-pilot-grey-700 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 active:bg-pilot-grey-100",
+    /*
+      A `bg-transparent` NEM DISZ (megelozo javitas, 2026-09-25, lasd
+      `apps/partner/src/components/ticket-list.tsx` azonos komment
+      fejleceet): a `hover:`-only osztaly nyugalmi allapotban nem ad
+      `background-color`-t, es a partner portal `globals.css`-eben egy
+      regi, `@layer base`-be tett szabaly (`button { background: #4c397f
+      }`) MARADNA az egyetlen forras, ha nem lenne versengo osztaly. Ma
+      egyik hivohely sem hasznalja a `ghost` valtozatot a partner
+      portalon (mert nem hasznalna, meg nem hibazna) -- ez megelozo
+      javitas, mielott valaki hasznalna.
+    */
     ghost:
-      "text-pilot-grey-500 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
+      "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
     danger: "bg-white text-red-600 ring-1 ring-red-200 hover:bg-red-50",
   };
   return (
     <button
       type={type}
-      className={`${base} ${variants[variant]}`}
+      className={`${base} ${sizes[size]} ${variants[variant]}`}
       onClick={onClick}
       disabled={disabled}
     >
@@ -278,7 +306,17 @@ export function PilotSegmentedControl({
           className={`cursor-pointer rounded px-3 py-1 text-sm font-medium transition-all duration-100 ${
             value === opt
               ? "bg-white text-pilot-grey-900 shadow-sm"
-              : "text-pilot-grey-500 hover:text-pilot-grey-700"
+              : /*
+                  MEGELOZO JAVITAS, 2026-09-25 -- lasd a `PilotButton`
+                  "ghost" valtozatanak azonos megjegyzeset: `bg-transparent`
+                  kell, kulonben a partner portal regi, `@layer base`-be
+                  tett `button { background: #4c397f }` szabalya maradna
+                  az egyetlen forras. Ma csak az `apps/web` hasznalja ezt a
+                  komponenst, ahol ez a szabaly nem letezik -- de a
+                  komponens megosztott, tehat a partner portal barmely
+                  jovobeli hivohelye ebbe futna bele elore nem lathato modon.
+                */
+                "bg-transparent text-pilot-grey-500 hover:text-pilot-grey-700"
           }`}
         >
           {opt}

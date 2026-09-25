@@ -46,20 +46,43 @@ select {
   font: inherit;
 }
 
-button,
-.primary-link {
-  border: 0;
-  border-radius: 0.6rem;
-  background: #4c397f;
-  color: white;
-  cursor: pointer;
-  font-weight: 700;
-  padding: 0.72rem 1rem;
-  text-decoration: none;
-}
-button:disabled {
-  cursor: wait;
-  opacity: 0.65;
+/*
+  `@layer base`-BE KOLTOZOTT (SURGOS JAVITAS, 2026-09-25, Balazs elo
+  hibajelentese, ticket.acropora.hu: "LILA, TULMERETEZETT GOMBOK"). Ez a
+  szabaly korabban REGI CSS-KENT, semmilyen Tailwind reteg (`@layer`)
+  NELKUL allt itt. A Tailwind v4 sajat retegsorrendje `theme, base,
+  components, utilities`, ES A REICS-SPECIFIKACIO SZERINT A RETEGEN KIVULI
+  SZABALY MINDIG MAGASABB PRIORITASU BARMELY RETEGBELINEL, FUGGETLENUL A
+  SZELEKTOR SPECIFICITASATOL. Vagyis ez a `button { background: #4c397f }`
+  MINDIG felulirta a Tailwind `utilities` retegeben elo osztalyokat
+  (`bg-pilot-aqua-50`, `bg-white`, stb.), akkor is, ha azok magasabb
+  specificitasu OSZTALY-szelektorral alltak -- ettol lett lila es
+  vastag/nagy MINDEN gomb, amit Tailwind-osztallyal probaltunk stilusra
+  fogni (a lapozo Elozo/Kovetkezo, a statusz-fulek, a Kijelentkezes),
+  akkor is, ha a hivo kod maga sosem hasznalta a `#4c397f` szint.
+  A `@layer base`-be helyezes AZ EGYETLEN valtoztatas: a Tailwind sajat
+  `utilities` retege (magasabb prioritasu, mint a `base`) ezutan
+  SZABALYOSAN felulirja ezt minden olyan gombon, aminek van sajat
+  Tailwind-osztalya -- a `settings.tsx`/`new-ticket.tsx` sima, osztaly
+  NELKULI gombjait viszont VALTOZATLANUL hagyja, mert azokon nincs
+  versengo `utilities`-szabaly, ami legyozne.
+*/
+@layer base {
+  button,
+  .primary-link {
+    border: 0;
+    border-radius: 0.6rem;
+    background: #4c397f;
+    color: white;
+    cursor: pointer;
+    font-weight: 700;
+    padding: 0.72rem 1rem;
+    text-decoration: none;
+  }
+  button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+  }
 }
 /*
   A `.portal`, `.topbar`, `.brand`, `.brand span`, `.account`, `.account
@@ -88,33 +111,6 @@ button:disabled {
   gap: 1rem;
   grid-template-columns: minmax(0, 1.6fr) minmax(16rem, 1fr);
   margin-bottom: 1rem;
-}
-.document-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-  gap: 1rem;
-}
-.document-card {
-  display: grid;
-  gap: 0.45rem;
-  color: var(--ink);
-}
-.document-card img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border-radius: 0.6rem;
-  background: #edf1ee;
-}
-.document-upload {
-  display: grid;
-  gap: 0.8rem;
-  margin-top: 1.25rem;
-}
-.document-upload label {
-  display: grid;
-  gap: 0.3rem;
-  font-weight: 600;
 }
 .form {
   display: grid;
@@ -261,49 +257,3 @@ button:disabled {
    `status`-t hasznalo lapok a megosztott `ServiceStatusBadge`-re alltak at
    (`@acropora/ui`, sajat `serviceToneClass` terkeppel). Egyik osztalynak
    sincs tobbe elo hivohelye. */
-
-/*
-  A CSEMPE GOMB, NEM KÉP: a nagyítás billentyűzetről is elérhető. A gomb saját
-  külseje nulla, hogy a rács ugyanúgy nézzen ki, mint korábban -- egyedül a
-  fókusz-gyűrű jelenik meg, és az kell.
-*/
-.document-thumb {
-  background: none;
-  border: 0;
-  border-radius: 0.6rem;
-  cursor: zoom-in;
-  display: block;
-  padding: 0;
-  width: 100%;
-}
-.document-thumb:focus-visible {
-  outline: 3px solid #4c397f;
-  outline-offset: 2px;
-}
-.image-overlay {
-  align-items: center;
-  background: rgba(17, 17, 24, 0.86);
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  inset: 0;
-  justify-content: center;
-  padding: 1.5rem;
-  position: fixed;
-  z-index: 50;
-}
-.image-overlay img {
-  border-radius: 0.6rem;
-  max-height: 80vh;
-  max-width: min(100%, 60rem);
-  object-fit: contain;
-}
-.image-overlay button {
-  background: #ffffff;
-  border: 0;
-  border-radius: 999px;
-  color: #2b2b38;
-  cursor: pointer;
-  font-weight: 700;
-  padding: 0.55rem 1.4rem;
-}

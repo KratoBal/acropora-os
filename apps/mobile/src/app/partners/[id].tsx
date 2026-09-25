@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams } from "expo-router";
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -9,6 +10,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getServicePartner } from "@/lib/api/partners";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getWebshopCapabilities } from "@/lib/auth/webshop-authorization";
@@ -27,6 +30,8 @@ import { partnerDetailRows } from "@/lib/partners/partner-presentation";
 export default function PartnerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { status, user } = useAuth();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const capabilities = user ? getWebshopCapabilities(user.role) : null;
 
   const partner = useQuery({
@@ -49,7 +54,7 @@ export default function PartnerDetailScreen() {
         <Text style={styles.eyebrow}>SZERVIZ PARTNER</Text>
         <Text style={styles.title}>{partner.data?.name ?? "Partner"}</Text>
 
-        {partner.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {partner.isPending ? <ActivityIndicator color={tokens.accent} /> : null}
 
         {partner.isError ? (
           <Text style={styles.error}>
@@ -93,37 +98,43 @@ export default function PartnerDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 48, gap: 12 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  title: { color: "#f4fbff", fontSize: 26, fontWeight: "900" },
-  card: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
-  },
-  row: { gap: 3 },
-  label: { color: "#a9c4d1", fontSize: 12, fontWeight: "800" },
-  value: { color: "#f4fbff", fontSize: 15 },
-  notice: {
-    color: "#fde68a",
-    backgroundColor: "#3f3115",
-    padding: 12,
-    borderRadius: 10,
-  },
-  error: {
-    color: "#fecaca",
-    backgroundColor: "#541b2b",
-    padding: 12,
-    borderRadius: 10,
-  },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 12.
+ * kör, ugyanaz a minta, mint a `login.tsx`-en (lásd ott a teljes indokot).
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 48, gap: 12 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    title: { color: t.textPrimary, fontSize: 26, fontWeight: "900" },
+    card: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 16,
+      padding: 16,
+      gap: 12,
+    },
+    row: { gap: 3 },
+    label: { color: t.textSecondary, fontSize: 12, fontWeight: "800" },
+    value: { color: t.textPrimary, fontSize: 15 },
+    notice: {
+      color: t.warning,
+      backgroundColor: t.warningSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+    error: {
+      color: t.danger,
+      backgroundColor: t.dangerSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+  });
+}

@@ -3,14 +3,17 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ServiceDataGrid,
-  ServiceDataItem,
-  ServiceDetailHeader,
-  ServiceDetailSplit,
-  ServiceIcon,
-  ServicePanel,
-  ServicePanelHeading,
-  ServiceStatusBadge,
+  Icon,
+  PilotBadge,
+  PilotButton,
+  PilotCard,
+  PilotCardHeader,
+  PilotDataRow,
+  PilotFormField,
+  PilotInput,
+  PilotSelect,
+  PilotThemeRoot,
+  pilotBadgeVariantForTone,
 } from "@acropora/ui";
 import {
   worksheetStatusLabel,
@@ -25,9 +28,10 @@ import { DocumentPanel } from "./document-panel";
 import { Message } from "./ticket-list";
 
 /**
- * A MUNKALAP ADATLAPJA A PARTNER PORTÁLON.
+ * A MUNKALAP ADATLAPJA A PARTNER PORTÁLON -- FIGMA 9. KÖR, a Make-terv
+ * `PartnerPortalScreen.tsx:1057-1201` átültetése.
  *
- * === MI KERÜL RÁ, ÉS MI NEM (Balázs kérése, 2026-09-21) ===
+ * === MI KERÜL RÁ, ÉS MI NEM (Balázs kérése, 2026-09-21) -- VÁLTOZATLAN ===
  *
  * Szó szerint: „sot: ugyanaz legyen a hibajegy es a munkalap oldal is", és
  * „csak ott megtudja csinalni azt amihez jogosultsaga van". A tartalom tehát a
@@ -62,14 +66,24 @@ import { Message } from "./ticket-list";
  * Az aláírás (ha a partner az aláíró) és a fájl-csatolás. Mind a kettő a
  * korábbi köreinkben épült meg.
  *
- * === AZ ELRENDEZÉS A BELSŐ RENDSZERÉ, A KÖZÖS KERETRE ÁLLVA (2026-09-24) ===
+ * === AZ ELRENDEZÉS -- PILOT-AQUA (2026-09-25) ===
  *
- * Murena #1041-e (`ticket-portal-visual-parity`) átköltöztette a
- * `ServiceDetailHeader`/`ServicePanel`/`ServiceDataItem`/`ServiceDetailSplit`
- * keretet `apps/web`-ből `packages/ui`-ba. Ez a lap ugyanazokat a
- * komponenseket használja, mint az `asset-detail.tsx` és a
- * `ticket-detail.tsx` -- nem egy saját, párhuzamos Tailwind-közelítést.
- * A TARTALOM VÁLTOZATLAN: ugyanazok az adatsorok, ugyanabban a sorrendben.
+ * Az előző kör a belső, violet `ServiceDetailHeader`/`ServicePanel`/
+ * `ServiceDataItem`/`ServiceDetailSplit` keretet vette át -- ez a kör a
+ * portál egészét pilot-aqua design-rendszerre viszi, a hibajegy- (#1127) és
+ * eszköz-adatlappal (#1128) egyező mintát követve. A TARTALOM VÁLTOZATLAN:
+ * ugyanazok az adatsorok, ugyanabban a sorrendben.
+ *
+ * === A LÁNC-SÁVOK FORMÁJA A BELSŐ ADATLAP (#1106) MINTÁJÁT KÖVETI ===
+ *
+ * Acrobot döntése (2026-09-25): a két lánc-figyelmeztető sáv (`continues`/
+ * `continuedBy`) ne kapjon kitalált formát, hanem a belső
+ * `pilot-worksheet-detail-page.tsx` már beolvadt mintáját kövesse --
+ * amber sáv az előzményre, aqua sáv a folytatásra, `PilotButton` a
+ * hivatkozással. EGY ELTÉRÉS SZÁNDÉKOS: a belső lap a `continuedBy` listából
+ * csak az ELSŐ elemre linkel, a portál viszont MINDET felsorolta eddig is --
+ * ez tartalmi képesség, nem vizuális döntés, ezért itt megmarad (a sáv
+ * szövegében soroljuk fel az összes folytatást, nem csak az elsőt).
  */
 export function WorksheetDetail({ id }: { id: string }) {
   const [worksheet, setWorksheet] = useState<Munkalap | null>(null);
@@ -138,13 +152,17 @@ export function WorksheetDetail({ id }: { id: string }) {
 
   if (error && !worksheet)
     return (
-      <section>
+      <PilotThemeRoot className="bg-pilot-grey-50 px-8 py-6">
         <VisszaLink />
         <Message tone="error" text={error} retry={load} />
-      </section>
+      </PilotThemeRoot>
     );
   if (!worksheet)
-    return <p className="text-xs text-muted">Munkalap betöltése…</p>;
+    return (
+      <PilotThemeRoot className="bg-pilot-grey-50 px-8 py-6">
+        <p className="text-sm text-pilot-grey-400">Munkalap betöltése…</p>
+      </PilotThemeRoot>
+    );
   const current = worksheet.currentVersion;
   const signature = current.signature;
   /**
@@ -171,117 +189,147 @@ export function WorksheetDetail({ id }: { id: string }) {
     current.status === "AWAITING_SIGNATURE" &&
     current.sentForSignatureAt !== null;
   return (
-    <section>
-      <VisszaLink />
-      <ServiceDetailHeader
-        eyebrow={worksheet.number ?? "PISZKOZAT"}
-        title={current.subject}
-        badge={
-          <ServiceStatusBadge tone={worksheetStatusTone(current.status)}>
-            {worksheetStatusLabel[current.status]}
-          </ServiceStatusBadge>
-        }
-        sub={
-          worksheet.department.path?.join(" / ") ?? worksheet.department.name
-        }
-      />
-      {error ? (
-        <div className="mb-5">
-          <Message tone="error" text={error} />
-        </div>
-      ) : null}
-
-      {/*
-        A LÁNC MIND A KÉT VÉGE, ÉS AZ ELŐRE MUTATÓ AZ INDOK: aki a régi lapot
-        nyitja meg, meg kell találja, hova ment a munka -- nem csak fordítva.
-      */}
-      {worksheet.continues ? (
-        <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          Ez a lap egy korábbi munkalap folytatása:{" "}
-          <Link
-            className="font-medium underline"
-            href={`/munkalapok/${worksheet.continues.id}`}
+    <PilotThemeRoot className="bg-pilot-grey-50">
+      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+        <VisszaLink />
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
+          {worksheet.number ?? "PISZKOZAT"}
+        </p>
+        <div className="flex items-start gap-3">
+          <h1 className="flex-1 text-xl font-semibold text-pilot-grey-900">
+            {current.subject}
+          </h1>
+          <PilotBadge
+            variant={pilotBadgeVariantForTone(
+              worksheetStatusTone(current.status),
+            )}
           >
-            {worksheet.continues.number ?? "a korábbi lap még piszkozat"}
-          </Link>
+            {worksheetStatusLabel[current.status]}
+          </PilotBadge>
+        </div>
+        <p className="mt-1 text-sm text-pilot-grey-400">
+          {worksheet.department.path?.join(" / ") ?? worksheet.department.name}
         </p>
-      ) : null}
-      {worksheet.continuedBy.length ? (
-        <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          Ennek a lapnak van folytatása:{" "}
-          {worksheet.continuedBy.map((lanc, index) => (
-            <span key={lanc.id}>
-              {index > 0 ? ", " : ""}
-              <Link
-                className="font-medium underline"
-                href={`/munkalapok/${lanc.id}`}
-              >
-                {lanc.number ?? "piszkozat"}
-              </Link>
-            </span>
-          ))}
-        </p>
-      ) : null}
 
-      <ServiceDetailSplit
-        main={
-          <>
-            <ServicePanel>
-              <ServicePanelHeading title="A munka leírása" />
-              <p className="whitespace-pre-line text-sm leading-[1.7] text-dusk-700">
+        {error ? (
+          <p
+            className="mt-3 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"
+            role="alert"
+          >
+            {error}
+          </p>
+        ) : null}
+
+        {/*
+          A LÁNC MIND A KÉT VÉGE, ÉS AZ ELŐRE MUTATÓ AZ INDOK: aki a régi lapot
+          nyitja meg, meg kell találja, hova ment a munka -- nem csak fordítva.
+          A FORMA A BELSŐ ADATLAP (#1106) MINTÁJA: amber az előzményre, aqua a
+          folytatásra -- lásd a fájl fejlécét.
+        */}
+        {worksheet.continues ? (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-pilot-amber-50 px-4 py-3 text-sm ring-1 ring-pilot-amber-100">
+            <span className="text-pilot-amber-700">
+              Ez a lap egy korábbi munkalap folytatása:{" "}
+              {worksheet.continues.number ?? "a korábbi lap még piszkozat"}
+            </span>
+            <Link href={`/munkalapok/${worksheet.continues.id}`}>
+              <PilotButton variant="secondary">
+                Előzmény megnyitása →
+              </PilotButton>
+            </Link>
+          </div>
+        ) : null}
+        {worksheet.continuedBy.length ? (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-pilot-aqua-50 px-4 py-3 text-sm ring-1 ring-pilot-aqua-200">
+            {/*
+              A BELSŐ SÁV CSAK AZ ELSŐ FOLYTATÁSRA LINKEL -- a portál viszont
+              eddig is MINDET felsorolta, ez tartalmi képesség, nem vizuális
+              döntés, ezért itt marad (lásd a fájl fejlécét).
+            */}
+            <span className="text-pilot-aqua-700">
+              Ennek a lapnak van folytatása:{" "}
+              {worksheet.continuedBy.map((lanc, index) => (
+                <span key={lanc.id}>
+                  {index > 0 ? ", " : ""}
+                  {lanc.number ?? "piszkozat"}
+                </span>
+              ))}
+            </span>
+            <Link href={`/munkalapok/${worksheet.continuedBy[0]!.id}`}>
+              <PilotButton variant="secondary">
+                Folytatás megnyitása →
+              </PilotButton>
+            </Link>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_280px]">
+        <div className="flex flex-col gap-5">
+          <PilotCard>
+            <PilotCardHeader title="A munka leírása" />
+            <div className="px-5 py-4">
+              <p className="whitespace-pre-line text-sm leading-6 text-pilot-grey-600">
                 {current.description ?? "Nem rögzítettek részletes leírást."}
               </p>
-            </ServicePanel>
+            </div>
+          </PilotCard>
 
-            <Tetelek lines={current.lines} />
+          <Tetelek lines={current.lines} />
 
-            {signature ? (
-              <ServicePanel>
-                <ServicePanelHeading title="Aláírva" />
-                <p className="text-sm text-ink">
-                  {signature.signerName} · {idopont(signature.signedAt)}
-                </p>
-                {signature.signerNotice ? (
-                  <p className="mt-1 text-sm text-muted">
-                    {signature.signerNotice}
-                  </p>
-                ) : null}
-                {signature.note ? (
-                  <p className="mt-1 whitespace-pre-line text-sm text-ink">
-                    {signature.note}
-                  </p>
-                ) : null}
-              </ServicePanel>
-            ) : !alairhato ? (
-              /*
-                ES NEM CSAK ELREJTJUK: MEGMONDJUK, MIERT. Egy eltuno urlap
-                ugyanugy nez ki, mint egy elromlott lap -- a partner nem tudja,
-                ra var-e valami. A ket eset KET KULON mondatot kap, mert MAS a
-                teendo: a piszkozatnal nincs mit tennie, a kiallitott lapnal
-                pedig MINK tartozunk egy lepessel.
-              */
-              <ServicePanel>
-                <p className="text-sm text-muted">
+          <PilotCard>
+            <PilotCardHeader title="Aláírás" />
+            <div className="px-5 py-4">
+              {signature ? (
+                <div className="flex items-start gap-3 rounded-lg bg-pilot-aqua-50 px-4 py-3">
+                  <Icon
+                    name="shield"
+                    size={16}
+                    className="mt-0.5 shrink-0 text-pilot-aqua-700"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-pilot-aqua-700">
+                      Aláírva: {signature.signerName}
+                    </p>
+                    <p className="mt-0.5 text-xs text-pilot-aqua-600">
+                      {idopont(signature.signedAt)}
+                    </p>
+                    {signature.signerNotice ? (
+                      <p className="mt-1 text-sm text-pilot-grey-500">
+                        {signature.signerNotice}
+                      </p>
+                    ) : null}
+                    {signature.note ? (
+                      <p className="mt-1 whitespace-pre-line text-sm text-pilot-grey-700">
+                        {signature.note}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : !alairhato ? (
+                /*
+                  ES NEM CSAK ELREJTJUK: MEGMONDJUK, MIERT. Egy eltuno urlap
+                  ugyanugy nez ki, mint egy elromlott lap -- a partner nem tudja,
+                  ra var-e valami. A ket eset KET KULON mondatot kap, mert MAS a
+                  teendo: a piszkozatnal nincs mit tennie, a kiallitott lapnal
+                  pedig MINK tartozunk egy lepessel.
+                */
+                <p className="text-sm italic text-pilot-grey-500">
                   {current.status === "AWAITING_SIGNATURE"
                     ? "Ez a munkalap még nem érkezett meg aláírásra. Amint kiküldjük, itt tudja aláírni."
                     : `Ez a munkalap most nem írható alá (${worksheetStatusLabel[current.status].toLowerCase()}).`}
                 </p>
-              </ServicePanel>
-            ) : (
-              <ServicePanel>
-                <ServicePanelHeading title="Munkalap aláírása" />
-                <form className="space-y-3" onSubmit={sign}>
-                  <p className="text-sm text-muted">
+              ) : (
+                <form className="flex flex-col gap-3" onSubmit={sign}>
+                  <p className="text-sm text-pilot-grey-500">
                     Válassza ki az aláírót, majd adja meg a négyjegyű
                     aláírókódját.
                   </p>
-                  <label className="block text-sm font-medium text-ink">
-                    Aláíró
-                    <select
-                      required
+                  <PilotFormField label="Aláíró" required>
+                    <PilotSelect
                       value={signerUserId}
-                      onChange={(event) => setSignerUserId(event.target.value)}
-                      className="mt-1 h-10 w-full rounded-lg border border-dusk-200 bg-white px-3 text-sm text-dusk-900"
+                      onChange={setSignerUserId}
+                      aria-label="Aláíró"
                     >
                       <option value="">Válasszon aláírót</option>
                       {signers?.items.map((signer) => (
@@ -289,117 +337,131 @@ export function WorksheetDetail({ id }: { id: string }) {
                           {signer.name}
                         </option>
                       ))}
-                    </select>
-                  </label>
-                  <label className="block text-sm font-medium text-ink">
-                    Aláírókód
-                    <input
-                      required
+                    </PilotSelect>
+                  </PilotFormField>
+                  <PilotFormField label="Aláírókód" required>
+                    <PilotInput
+                      type="text"
                       inputMode="numeric"
-                      pattern="[0-9]{4}"
-                      maxLength={4}
                       value={signatureCode}
-                      onChange={(event) => setSignatureCode(event.target.value)}
-                      className="mt-1 h-10 w-full rounded-lg border border-dusk-200 bg-white px-3 text-sm text-dusk-900"
+                      onChange={(value) =>
+                        setSignatureCode(value.replace(/\D/g, "").slice(0, 4))
+                      }
+                      placeholder="••••"
                     />
-                  </label>
+                  </PilotFormField>
                   {signers?.emptyReason ? (
-                    <p className="text-sm text-muted">{signers.emptyReason}</p>
+                    <p className="text-sm text-pilot-grey-500">
+                      {signers.emptyReason}
+                    </p>
                   ) : null}
-                  <button
-                    type="submit"
-                    disabled={signing || !signers?.items.length}
-                    className="inline-flex h-9 items-center rounded-lg bg-dusk-900 px-4 text-sm font-semibold text-white disabled:pointer-events-none disabled:opacity-50"
-                  >
-                    {signing ? "Aláírás rögzítése…" : "Aláírás rögzítése"}
-                  </button>
+                  <div>
+                    <PilotButton
+                      type="submit"
+                      disabled={
+                        signing ||
+                        !signers?.items.length ||
+                        !signerUserId ||
+                        signatureCode.length !== 4
+                      }
+                    >
+                      {signing ? "Aláírás rögzítése…" : "Aláírás rögzítése"}
+                    </PilotButton>
+                  </div>
                 </form>
-              </ServicePanel>
-            )}
+              )}
+            </div>
+          </PilotCard>
 
-            {/*
-              A `DocumentPanel` KIVETEL, ES SZANDEKOSAN AZ: az `asset-detail.tsx`
-              es a `ticket-detail.tsx` is ugyanezt a komponenst hivja, a sajat
-              `PANEL`/`PANEL_CIM` osztalyaival. Ha itt atalakitanam, mind a
-              harom lap kulseje megvaltozna -- lasd `ticket-detail.tsx`
-              fejleceben ugyanezt a megjegyzest.
-            */}
-            <DocumentPanel
-              title="Munkalap fényképei és fájljai"
-              items={documents}
-              loadBlob={(documentId) =>
-                partnerApi.worksheetDocumentBlob(id, documentId)
-              }
-              upload={(file, caption) =>
-                partnerApi.uploadWorksheetDocument(id, file, caption)
-              }
-              onUploaded={load}
-            />
+          {/*
+            A `DocumentPanel` EBBEN A KÖRBEN IS KIVETEL, ES SZANDEKOSAN AZ: az
+            `asset-detail.tsx` (#1128) es a `ticket-detail.tsx` (#1127) is
+            ugyanezt a komponenst hivja, a sajat `PANEL`/`PANEL_CIM`
+            osztalyaival es a `globals.css` `document-*` szabalyaival. Ha itt
+            atalakitanam, mindharom lap kulseje megvaltozna, es ez a
+            beolvasztas AZONNAL elesre megy -- lasd `ticket-detail.tsx`
+            fejleceben ugyanezt a megjegyzest.
+          */}
+          <DocumentPanel
+            title="Munkalap fényképei és fájljai"
+            items={documents}
+            loadBlob={(documentId) =>
+              partnerApi.worksheetDocumentBlob(id, documentId)
+            }
+            upload={(file, caption) =>
+              partnerApi.uploadWorksheetDocument(id, file, caption)
+            }
+            onUploaded={load}
+          />
 
-            <Verziok versions={worksheet.versions} />
-          </>
-        }
-        side={
-          <>
-            <ServicePanel>
-              <ServicePanelHeading title="Munkalap adatai" />
-              <ServiceDataGrid>
-                <ServiceDataItem label="Hibajegy">
-                  {/*
-                    A HIÁNY IS ÁLLÍTÁS, ezért nem gondolatjel áll itt: a lap
-                    keletkezhet hibajegy nélkül, és az nem hiányzó ADAT, hanem
-                    a folyamat egyik rendes állapota.
-                  */}
-                  {worksheet.serviceJob ? (
+          <Verziok versions={worksheet.versions} />
+        </div>
+
+        <div className="flex flex-col gap-5">
+          <PilotCard>
+            <PilotCardHeader title="Munkalap adatai" />
+            <div className="px-5 py-2">
+              <PilotDataRow
+                label="Hibajegy"
+                /*
+                  A HIÁNY IS ÁLLÍTÁS, ezért nem gondolatjel áll itt: a lap
+                  keletkezhet hibajegy nélkül, és az nem hiányzó ADAT, hanem
+                  a folyamat egyik rendes állapota. Ezért nem hagyjuk a
+                  `PilotDataRow` "Nincs megadva" tartalékára, hanem saját
+                  szöveget adunk.
+                */
+                value={
+                  worksheet.serviceJob ? (
                     <Link
-                      className="text-brand-700 hover:underline"
+                      className="text-pilot-aqua-700 hover:underline"
                       href={`/hibajegyek/${worksheet.serviceJob.id}`}
                     >
                       {worksheet.serviceJob.jobNumber}
                     </Link>
                   ) : (
                     "Nincs mögötte hibajegy"
-                  )}
-                </ServiceDataItem>
-                {/*
-                  ÉS AKKOR IS KIÍRJUK, HA NULLA. Egy elrejtett nulla két
-                  különböző állapotot mosna össze: hogy nincs munkaóra-tétel a
-                  lapon, és hogy a mező elromlott. A „0 óra" állítás; a
-                  hiányzó sor kérdés.
-                */}
-                <ServiceDataItem label="Összes munkaóra">
-                  {current.laborHours} óra
-                </ServiceDataItem>
-                <ServiceDataItem label="Keltezés">
-                  {datum(current.issueDate)}
-                </ServiceDataItem>
-                <ServiceDataItem label="Teljesítés">
-                  {datum(current.fulfillmentDate)}
-                </ServiceDataItem>
-                <ServiceDataItem label="Határidő">
-                  {datum(current.dueDate)}
-                </ServiceDataItem>
-                <ServiceDataItem label="Felvette">
-                  {worksheet.createdByName ?? "Nincs megadva"}
-                </ServiceDataItem>
-                <ServiceDataItem label="Verzió">
-                  {`${current.version}. verzió`}
-                </ServiceDataItem>
-              </ServiceDataGrid>
-            </ServicePanel>
+                  )
+                }
+              />
+              {/*
+                ÉS AKKOR IS KIÍRJUK, HA NULLA. Egy elrejtett nulla két
+                különböző állapotot mosna össze: hogy nincs munkaóra-tétel a
+                lapon, és hogy a mező elromlott. A „0 óra" állítás; a
+                hiányzó sor kérdés. Ezért nem a `PilotDataRow` tartalékára
+                bízzuk (az a `0`-t is hiányként kezelné).
+              */}
+              <PilotDataRow
+                label="Összes munkaóra"
+                value={`${current.laborHours} óra`}
+              />
+              <PilotDataRow label="Keltezés" value={datum(current.issueDate)} />
+              <PilotDataRow
+                label="Teljesítés"
+                value={datum(current.fulfillmentDate)}
+              />
+              <PilotDataRow label="Határidő" value={datum(current.dueDate)} />
+              <PilotDataRow label="Felvette" value={worksheet.createdByName} />
+              <PilotDataRow
+                label="Verzió"
+                value={`${current.version}. verzió`}
+              />
+            </div>
+          </PilotCard>
 
-            <ServicePanel>
-              <ServicePanelHeading title="Érintett eszközök" />
+          <PilotCard>
+            <PilotCardHeader title="Érintett eszközök" />
+            <div className="px-5 py-4">
               {worksheet.assets.length ? (
-                <ul className="space-y-2">
+                <ul className="divide-y divide-pilot-grey-50">
                   {worksheet.assets.map((asset) => (
                     <li
                       key={asset.id}
-                      className="flex items-center gap-2 border-b pb-2 text-sm last:border-0"
+                      className="flex items-center gap-2 py-2 text-sm"
                     >
-                      <ServiceIcon
+                      <Icon
                         name="box"
-                        className="size-4 shrink-0 text-[#8679aa]"
+                        size={16}
+                        className="shrink-0 text-pilot-grey-300"
                       />
                       <div className="min-w-0 flex-1">
                         {/*
@@ -410,12 +472,12 @@ export function WorksheetDetail({ id }: { id: string }) {
                           található" hibát adna.
                         */}
                         <Link
-                          className="block truncate font-medium text-ink hover:text-brand-700"
+                          className="block truncate font-medium text-pilot-grey-900 hover:text-pilot-aqua-700"
                           href={`/eszkozok/${asset.assetId}`}
                         >
                           {asset.assetName}
                         </Link>
-                        <span className="block text-xs text-dusk-500">
+                        <span className="block text-xs text-pilot-grey-400">
                           {asset.assetNumber}
                         </span>
                       </div>
@@ -423,15 +485,15 @@ export function WorksheetDetail({ id }: { id: string }) {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-dusk-500">
+                <p className="py-2 text-sm italic text-pilot-grey-500">
                   A munkalaphoz nincs eszköz megjelölve.
                 </p>
               )}
-            </ServicePanel>
-          </>
-        }
-      />
-    </section>
+            </div>
+          </PilotCard>
+        </div>
+      </div>
+    </PilotThemeRoot>
   );
 }
 
@@ -444,18 +506,18 @@ export function WorksheetDetail({ id }: { id: string }) {
  */
 function Tetelek({ lines }: { lines: WorksheetLineDetail[] }) {
   return (
-    <ServicePanel>
-      <ServicePanelHeading title="Elvégzett munka és anyagok" />
+    <PilotCard>
+      <PilotCardHeader title="Elvégzett munka és anyagok" />
       {lines.length ? (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[520px] border-collapse text-left text-sm">
             <thead>
-              <tr>
+              <tr className="border-b border-pilot-grey-100">
                 {["#", "Megnevezés", "Mennyiség", "Egység", "Munkaóra"].map(
                   (head) => (
                     <th
                       key={head}
-                      className="border-b border-line pb-2 pr-3 text-xs font-semibold uppercase tracking-wide text-muted"
+                      className="px-5 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-pilot-grey-400"
                     >
                       {head}
                     </th>
@@ -465,22 +527,21 @@ function Tetelek({ lines }: { lines: WorksheetLineDetail[] }) {
             </thead>
             <tbody>
               {lines.map((line) => (
-                <tr
-                  key={line.id}
-                  className="border-b border-line last:border-0"
-                >
-                  <td className="py-2 pr-3 align-top">{line.position}</td>
-                  <td className="py-2 pr-3 align-top">
-                    <strong className="block text-ink">
+                <tr key={line.id} className="border-b border-pilot-grey-50">
+                  <td className="px-5 py-3 font-mono text-xs text-pilot-grey-400">
+                    {line.position}
+                  </td>
+                  <td className="px-5 py-3">
+                    <strong className="block text-pilot-grey-700">
                       {line.description}
                     </strong>
                     {line.detail ? (
-                      <span className="block text-xs text-muted">
+                      <span className="block text-xs text-pilot-grey-400">
                         {line.detail}
                       </span>
                     ) : null}
                     {line.assetNumber ? (
-                      <span className="block text-xs text-muted">
+                      <span className="block text-xs text-pilot-grey-400">
                         {line.assetNumber}
                       </span>
                     ) : null}
@@ -491,13 +552,15 @@ function Tetelek({ lines }: { lines: WorksheetLineDetail[] }) {
                       mező külön nevet kapott.
                     */}
                     {line.partnerInternalCode ? (
-                      <span className="block text-xs text-muted">
+                      <span className="block text-xs text-pilot-grey-400">
                         Partner belső kódja: {line.partnerInternalCode}
                       </span>
                     ) : null}
                   </td>
-                  <td className="py-2 pr-3 align-top">{line.quantity}</td>
-                  <td className="py-2 pr-3 align-top">{line.unit}</td>
+                  <td className="px-5 py-3 font-mono text-pilot-grey-600">
+                    {line.quantity}
+                  </td>
+                  <td className="px-5 py-3 text-pilot-grey-600">{line.unit}</td>
                   {/*
                     A NEM-MUNKA TÉTEL GONDOLATJELET KAP, NEM NULLÁT. A szerver
                     „0"-t küld (a hiány és a nulla így nem keveredik a
@@ -505,8 +568,8 @@ function Tetelek({ lines }: { lines: WorksheetLineDetail[] }) {
                     látszana: úgy nézne ki, mintha valaki nulla órát dolgozott
                     volna rajta.
                   */}
-                  <td className="py-2 pr-3 align-top">
-                    {line.kind === "LABOR" ? line.laborHours : "–"}
+                  <td className="px-5 py-3 font-mono text-pilot-grey-600">
+                    {line.kind === "LABOR" ? `${line.laborHours} h` : "–"}
                   </td>
                 </tr>
               ))}
@@ -514,9 +577,11 @@ function Tetelek({ lines }: { lines: WorksheetLineDetail[] }) {
           </table>
         </div>
       ) : (
-        <p className="text-sm text-muted">A munkalapon még nincs tétel.</p>
+        <p className="px-5 py-4 text-sm italic text-pilot-grey-500">
+          A munkalapon még nincs tétel.
+        </p>
       )}
-    </ServicePanel>
+    </PilotCard>
   );
 }
 
@@ -530,12 +595,12 @@ function Tetelek({ lines }: { lines: WorksheetLineDetail[] }) {
  */
 function Verziok({ versions }: { versions: WorksheetVersionSummary[] }) {
   return (
-    <ServicePanel>
-      <ServicePanelHeading title="Verziók" />
+    <PilotCard>
+      <PilotCardHeader title="Verziók" />
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-left text-sm">
           <thead>
-            <tr>
+            <tr className="border-b border-pilot-grey-100">
               {[
                 "Verzió",
                 "Állapot",
@@ -546,7 +611,7 @@ function Verziok({ versions }: { versions: WorksheetVersionSummary[] }) {
               ].map((head) => (
                 <th
                   key={head}
-                  className="border-b border-line pb-2 pr-3 text-xs font-semibold uppercase tracking-wide text-muted"
+                  className="px-5 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-pilot-grey-400"
                 >
                   {head}
                 </th>
@@ -555,36 +620,39 @@ function Verziok({ versions }: { versions: WorksheetVersionSummary[] }) {
           </thead>
           <tbody>
             {versions.map((version) => (
-              <tr
-                key={version.id}
-                className="border-b border-line last:border-0"
-              >
-                <td className="py-2 pr-3 align-top">
+              <tr key={version.id} className="border-b border-pilot-grey-50">
+                <td className="px-5 py-3 font-mono text-xs text-pilot-grey-600">
                   {version.label ?? `${version.version}. verzió`}
                 </td>
-                <td className="py-2 pr-3 align-top">
-                  {worksheetStatusLabel[version.status]}
+                <td className="px-5 py-3">
+                  <PilotBadge
+                    variant={pilotBadgeVariantForTone(
+                      worksheetStatusTone(version.status),
+                    )}
+                  >
+                    {worksheetStatusLabel[version.status]}
+                  </PilotBadge>
                 </td>
-                <td className="py-2 pr-3 align-top">
+                <td className="px-5 py-3 text-pilot-grey-600">
                   {version.createdByName ?? "—"}
-                  <span className="block text-xs text-muted">
+                  <span className="block text-xs text-pilot-grey-400">
                     {idopont(version.createdAt)}
                   </span>
                 </td>
-                <td className="py-2 pr-3 align-top">
+                <td className="px-5 py-3 text-pilot-grey-600">
                   {version.closedByName ?? "—"}
-                  <span className="block text-xs text-muted">
+                  <span className="block text-xs text-pilot-grey-400">
                     {idopont(version.closedAt)}
                   </span>
                 </td>
-                <td className="py-2 pr-3 align-top whitespace-pre-line">
+                <td className="px-5 py-3 whitespace-pre-line text-pilot-grey-500">
                   {version.changeReason ?? "—"}
                 </td>
-                <td className="py-2 pr-3 align-top">
+                <td className="px-5 py-3 text-pilot-grey-500">
                   {version.signature ? (
                     <>
                       {version.signature.signerName}
-                      <span className="block text-xs text-muted">
+                      <span className="block text-xs text-pilot-grey-400">
                         {version.signature.decision === "ACCEPTED"
                           ? "elfogadta"
                           : "elutasította"}
@@ -594,7 +662,7 @@ function Verziok({ versions }: { versions: WorksheetVersionSummary[] }) {
                         abból, hogy a név „úgy néz ki", mintha ügyfélé lenne.
                       */}
                       {version.signature.signerNotice ? (
-                        <span className="block text-xs text-muted">
+                        <span className="block text-xs text-pilot-grey-400">
                           {version.signature.signerNotice}
                         </span>
                       ) : null}
@@ -608,7 +676,7 @@ function Verziok({ versions }: { versions: WorksheetVersionSummary[] }) {
           </tbody>
         </table>
       </div>
-    </ServicePanel>
+    </PilotCard>
   );
 }
 
@@ -625,9 +693,9 @@ function VisszaLink() {
   return (
     <Link
       href="/munkalapok"
-      className="mb-[18px] inline-flex items-center gap-[7px] text-xs text-muted hover:text-brand-700"
+      className="mb-3 inline-flex items-center gap-1.5 text-xs text-pilot-grey-400 hover:text-pilot-grey-700"
     >
-      <ServiceIcon name="arrowLeft" className="size-4" />
+      <Icon name="chevron-left" size={12} />
       Munkalapok
     </Link>
   );

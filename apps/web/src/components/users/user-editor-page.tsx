@@ -390,55 +390,69 @@ export function UserEditorPage({ userId }: { userId?: string }) {
             olvasohoz.
           */}
           {customerId === "" ? (
-            <>
-              <div className="mt-6">
-                <h2 className="text-sm font-semibold text-dusk-800">
-                  Értesítések
-                </h2>
-                {NOTIFICATION_ROLES.map((szerep) => (
-                  <label
-                    key={szerep.value}
-                    className="mt-3 flex items-start gap-3"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={notificationRoles.includes(szerep.value)}
-                      onChange={(event) =>
-                        setNotificationRoles((mostani) =>
-                          event.target.checked
-                            ? [...new Set([...mostani, szerep.value])]
-                            : mostani.filter((elem) => elem !== szerep.value),
-                        )
-                      }
-                    />
-                    <span>
-                      <span className="block text-sm font-medium text-dusk-800">
-                        {szerep.label}
-                      </span>
-                      <span className="block text-xs text-dusk-500">
-                        {szerep.description}
-                      </span>
+            <div className="mt-6">
+              <h2 className="text-sm font-semibold text-dusk-800">
+                Értesítések
+              </h2>
+              {NOTIFICATION_ROLES.map((szerep) => (
+                <label
+                  key={szerep.value}
+                  className="mt-3 flex items-start gap-3"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={notificationRoles.includes(szerep.value)}
+                    onChange={(event) =>
+                      setNotificationRoles((mostani) =>
+                        event.target.checked
+                          ? [...new Set([...mostani, szerep.value])]
+                          : mostani.filter((elem) => elem !== szerep.value),
+                      )
+                    }
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-dusk-800">
+                      {szerep.label}
                     </span>
-                  </label>
-                ))}
-              </div>
-              {/*
-                A KEPESSEGEK -- KULON SZAKASZ, NEM AZ ERTESITESEK BOVITESE.
+                    <span className="block text-xs text-dusk-500">
+                      {szerep.description}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          ) : null}
+          {/*
+            A KEPESSEGEK -- KULON SZAKASZ, NEM AZ ERTESITESEK BOVITESE, ES
+            (2026-09-25-TOL) MAR NEM UGYANAZON A HATARON.
 
-                Balazs kifejezetten KET FUGGETLEN jelolot kert (2026-09-22
-                20:28:56 UTC, "Nem. Ket kulon jelolo legyen"): ugyanaz az
-                ember lehet mindkettő, csak egyik sem, vagy barmelyik egyedul.
-                Egy kozos lista ezt a fuggetlenseget nem tudna kifejezni.
+            Balazs kifejezetten KET FUGGETLEN jelolot kert (2026-09-22
+            20:28:56 UTC, "Nem. Ket kulon jelolo legyen"): ugyanaz az
+            ember lehet mindkettő, csak egyik sem, vagy barmelyik egyedul.
+            Egy kozos lista ezt a fuggetlenseget nem tudna kifejezni.
 
-                UGYANAZ A HATAR, MINT AZ ERTESITESEKNEL: csak sajat
-                kollеganal, ugyanazert az okert (a `customerId === ""` ag).
-              */}
+            A HATAR EDDIG UGYANAZ VOLT, MINT AZ ERTESITESEKNEL (csak sajat
+            kollеganal), MERT EDDIG EGYETLEN kepesseg letezett, es az a MI
+            oldalunk munkaja volt. Az AQUARIUM_ASSET_ASSIGN (emlek 1843,
+            1847) VISZONT KIFEJEZETTEN partner-fiokra valo -- lasd
+            `service-capabilities.ts` `audience` mezojenek fejlecet. A
+            szakasz ezert MOSTANTOL a fiok-fajtahoz illo kepessegeket
+            szuri, nem a teljes listat rejti el partnernel.
+          */}
+          {(() => {
+            const kepessegek = SERVICE_CAPABILITIES.filter(
+              (kepesseg) =>
+                kepesseg.audience ===
+                (customerId === "" ? "internal" : "partner"),
+            );
+            if (kepessegek.length === 0) return null;
+            return (
               <div className="mt-6">
                 <h2 className="text-sm font-semibold text-dusk-800">
                   Képességek
                 </h2>
-                {SERVICE_CAPABILITIES.map((kepesseg) => (
+                {kepessegek.map((kepesseg) => (
                   <label
                     key={kepesseg.value}
                     className="mt-3 flex items-start gap-3"
@@ -466,8 +480,8 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                   </label>
                 ))}
               </div>
-            </>
-          ) : null}
+            );
+          })()}
           {!user ? (
             <div className="mt-4">
               <FormField label="Jelszó">

@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import type { UnitOfMeasureRow } from "@/lib/api/units-of-measure";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * A TELJESÍTMÉNY ÉS A MÉRTÉKEGYSÉGE, EGY PÉLDÁNYBAN -- MINDKÉT KÉPERNYŐRE.
@@ -41,6 +43,8 @@ export function PerformanceField({
 }: PerformanceFieldProps) {
   const [open, setOpen] = useState(false);
   const selected = units.find((unit) => unit.id === unitId);
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   return (
     <View style={styles.field}>
@@ -53,7 +57,7 @@ export function PerformanceField({
         // pontra. A billentyuzet ezert decimalis, nem sima szam.
         keyboardType="decimal-pad"
         style={styles.input}
-        placeholderTextColor="#5c7e92"
+        placeholderTextColor={tokens.textMuted}
         placeholder="Nincs megadva"
         editable={editable}
       />
@@ -114,28 +118,50 @@ export function PerformanceField({
   );
 }
 
-const styles = StyleSheet.create({
-  field: { gap: 6 },
-  label: { color: "#9fc4d8", fontSize: 13 },
-  input: {
-    backgroundColor: "#0d2a3a",
-    borderRadius: 10,
-    color: "#eaf4fa",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  picker: {
-    backgroundColor: "#0d2a3a",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  pickerText: { color: "#eaf4fa" },
-  options: {
-    backgroundColor: "#0d2a3a",
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  option: { paddingHorizontal: 12, paddingVertical: 12 },
-  optionText: { color: "#eaf4fa" },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- lásd
+ * `category-picker.tsx` fejlécét ugyanerről a jelentésről (Balázs, 2026-09-25
+ * 14:48, telefonos fényképek).
+ *
+ * AZ EREDETI ALAK NEM VISELT KERETET (`borderWidth`/`borderColor`) az
+ * `input`/`picker`/`options` dobozokon, csak hátteret -- sötét módban ez nem
+ * tűnt fel, mert a háttér és a doboz szándékosan két közeli sötét árnyalat
+ * volt. Világos módban a `t.surface` fehér, tehát KERET NÉLKÜL a doboz
+ * láthatatlanná válna a fehér lap hátterén -- ez lett volna a KÖVETKEZŐ
+ * jelentett hiba, ha csak a hátteret tokenizálom. Ezért itt `t.border`
+ * keretet is kapnak, ugyanazt a mintát követve, mint a többi mobil-űrlap
+ * mezője (pl. `worksheets/new.tsx` `input` stílusa).
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    field: { gap: 6 },
+    label: { color: t.textSecondary, fontSize: 13 },
+    input: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      color: t.textPrimary,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    picker: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+    },
+    pickerText: { color: t.textPrimary },
+    options: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      overflow: "hidden",
+    },
+    option: { paddingHorizontal: 12, paddingVertical: 12 },
+    optionText: { color: t.textPrimary },
+  });
+}
