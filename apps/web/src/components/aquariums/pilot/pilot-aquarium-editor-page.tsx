@@ -687,14 +687,6 @@ export function PilotAquariumEditorPage({
           </div>
 
           <div className="flex flex-col gap-5">
-            <PilotAquariumTargetRanges
-              waterType={waterType || undefined}
-              draft={targetsDraft}
-              onChange={(next) => {
-                setTargetsTouched(true);
-                setTargetsDraft(next);
-              }}
-            />
             {isEdit && aquariumId ? (
               <PilotAquariumWaterValues
                 token={token}
@@ -704,6 +696,14 @@ export function PilotAquariumEditorPage({
                 canSendEmail={Boolean(customerEmail)}
               />
             ) : null}
+            <PilotAquariumTargetRanges
+              waterType={waterType || undefined}
+              draft={targetsDraft}
+              onChange={(next) => {
+                setTargetsTouched(true);
+                setTargetsDraft(next);
+              }}
+            />
           </div>
         </div>
       </form>
