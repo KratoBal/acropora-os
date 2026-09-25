@@ -6,7 +6,11 @@ import {
   type WaterType,
 } from "@acropora/types";
 
-import { PilotCard, PilotCardHeader } from "@/components/pilot/pilot-ui";
+import {
+  PilotCard,
+  PilotCardHeader,
+  PilotInput,
+} from "@/components/pilot/pilot-ui";
 
 /** A szerkesztő belső állapota: két SZÖVEGMEZŐ paraméterenként, üres string
  * "nincs megadva". Számmá csak beküldéskor alakul (`targetsPayload`),
@@ -64,7 +68,9 @@ export function PilotAquariumTargetRanges({
           return (
             <div
               key={param.code}
-              className="flex items-center gap-2 py-2 text-sm"
+              className={`flex items-center gap-2 py-2 text-sm ${
+                invalid ? "rounded-md bg-red-50" : ""
+              }`}
             >
               <span className="flex-1 text-pilot-grey-600">
                 {param.label}
@@ -72,36 +78,20 @@ export function PilotAquariumTargetRanges({
                   ({param.unit})
                 </span>
               </span>
-              <input
+              <PilotInput
                 type="number"
-                step="any"
                 placeholder="Tól"
-                aria-label={`${param.label} alsó határa`}
                 value={row.min}
-                onChange={(event) =>
-                  setBound(param.code, "min", event.target.value)
-                }
-                className={`w-20 rounded-md py-1 px-2 text-right text-xs ring-1 focus:outline-none focus:ring-2 ${
-                  invalid
-                    ? "ring-red-400 focus:ring-red-500"
-                    : "ring-pilot-grey-200 focus:ring-pilot-aqua-500"
-                }`}
+                onChange={(value) => setBound(param.code, "min", value)}
+                className="w-20 text-right text-xs"
               />
               <span className="text-pilot-grey-300">–</span>
-              <input
+              <PilotInput
                 type="number"
-                step="any"
                 placeholder="Ig"
-                aria-label={`${param.label} felső határa`}
                 value={row.max}
-                onChange={(event) =>
-                  setBound(param.code, "max", event.target.value)
-                }
-                className={`w-20 rounded-md py-1 px-2 text-right text-xs ring-1 focus:outline-none focus:ring-2 ${
-                  invalid
-                    ? "ring-red-400 focus:ring-red-500"
-                    : "ring-pilot-grey-200 focus:ring-pilot-aqua-500"
-                }`}
+                onChange={(value) => setBound(param.code, "max", value)}
+                className="w-20 text-right text-xs"
               />
             </div>
           );

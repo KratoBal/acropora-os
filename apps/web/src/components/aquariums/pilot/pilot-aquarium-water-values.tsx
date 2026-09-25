@@ -8,7 +8,7 @@ import {
   type AquariumMeasurementTarget,
   type WaterType,
 } from "@acropora/types";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { aquariumsApi } from "@/lib/api/aquariums";
@@ -47,6 +47,7 @@ export function PilotAquariumWaterValues({
   targets?: AquariumMeasurementTarget[];
   canSendEmail: boolean;
 }) {
+  const router = useRouter();
   const [occasions, setOccasions] = useState<AquariumMeasurementOccasion[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -189,18 +190,10 @@ export function PilotAquariumWaterValues({
       <PilotCardHeader
         title="Vízértékek"
         action={
-          <div className="flex items-center gap-3">
-            <Link
-              href={`/akvariumok/${aquariumId}/meresek`}
-              className="text-xs font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800"
-            >
-              Összes mérés és grafikon
-            </Link>
-            <PilotButton variant="primary" onClick={() => setDrawerOpen(true)}>
-              <Icon name="plus" size={13} />
-              Új mérés
-            </PilotButton>
-          </div>
+          <PilotButton variant="primary" onClick={() => setDrawerOpen(true)}>
+            <Icon name="plus" size={13} />
+            Új mérés
+          </PilotButton>
         }
       />
 
@@ -311,6 +304,20 @@ export function PilotAquariumWaterValues({
               <PilotSparkline points={activePoints} />
             </div>
           ) : null}
+          {/*
+            BALÁZS KÉRÉSE (2026-09-25 05:49 UTC, msg_id 1552919976975929355):
+            "az Összes mérés és grafikon most rossz helyen van és csúnya is
+            ott... kerüljön a grafikon alá ugyanolyan zöld gombként mint a
+            többi gomb". Korábban a fejlécben állt, sima linkként.
+          */}
+          <div className="px-4 pb-4">
+            <PilotButton
+              variant="primary"
+              onClick={() => router.push(`/akvariumok/${aquariumId}/meresek`)}
+            >
+              Összes mérés és grafikon
+            </PilotButton>
+          </div>
           <div className="border-t border-pilot-grey-100">
             {occasions.map((occasion) => (
               <div
