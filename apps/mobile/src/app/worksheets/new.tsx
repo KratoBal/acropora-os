@@ -636,7 +636,18 @@ export default function NewWorksheetScreen() {
             </View>
           ) : null}
 
-          <Section title="Partner">
+          {/*
+            PARTNER ÉS HELYSZÍN EGY KÖZÖS "HOZZÁRENDELÉS" KÁRTYÁBAN, A TERV
+            SZERINT (acrobot döntése, 2026-09-25, MobileUjMunkalap): a terv
+            ezt a két mezőt egyetlen kártyaként mutatja. A "Hozzárendelés"
+            ÚJ cím, nem egy meglévő átnevezése -- eddig két külön kártyának
+            nem volt közös neve. A mezők belső felirata ("Partner",
+            "Helyszín") és minden mögöttes logika (választó nyitása/zárása,
+            alegység-létrehozás, gyorsítótár-jelzés) változatlan, csak a
+            kártya-keret lett egy a kettőből.
+          */}
+          <Section title="Hozzárendelés">
+            <Text style={styles.label}>Partner</Text>
             <Pressable
               accessibilityRole="button"
               disabled={partnerLezarva(elotoltes)}
@@ -719,16 +730,16 @@ export default function NewWorksheetScreen() {
                 ))}
               </View>
             )}
-          </Section>
 
-          <Section title="Helyszín">
             {/*
-              A HELYSZIN IS FEJSORT KAP, ES EZ A JELENTES MASIK FELE. Eddig ez a
-              szekcio nem ismert nyitott/zart allapotot: a teljes listat MINDIG
-              kiirta, valasztas utan is. A partner utan igy rogton a helyszinek
-              teljes listaja nyilt ki alatta -- kivulrol ugyanaz a kep, mintha a
+              A HELYSZÍN NYITOTT/ZÁRT ÁLLAPOTA VÉDETT MARADT az összevonás
+              után is: eddig ez a rész nem ismert nyitott/zárt állapotot, a
+              teljes listát MINDIG kiírta, választás után is. A partner
+              utáni választó így rögtön a helyszínek teljes listáját
+              nyitotta ki alatta -- kívülről ugyanaz a kép, mintha a
               partner-lista maradt volna ott.
             */}
+            <Text style={styles.label}>Helyszín</Text>
             {partnerHatasos ? (
               <Pressable
                 accessibilityRole="button"
