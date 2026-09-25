@@ -88,11 +88,17 @@ function tokens(
   /**
    * A KERT PLATFORMOT IS ROGZITJUK, mert ez az egyetlen hely, ahol egyseg
    * szinten merheto: a valodi szures az adatbazisban tortenik.
+   *
+   * A KERT FELHASZNALO-AZONOSITOKAT IS, a push-atiranyitas merese miatt: az
+   * allitja, hogy a `recipients()` MAR a redirectalt listat kapja, nem az
+   * eredetit -- nem azt, hogy a VALASZ szukult, hanem hogy a KERDES maga.
    */
   const kertPlatformok: string[] = [];
+  const kertUserIdk: (readonly string[])[] = [];
   const value = {
-    recipients: async (_userIds: readonly string[], platform: string) => {
+    recipients: async (userIds: readonly string[], platform: string) => {
       kertPlatformok.push(platform);
+      kertUserIdk.push(userIds);
       return rows;
     },
     retire: async (token: string) => {
@@ -100,8 +106,12 @@ function tokens(
       return { count: 1 };
     },
   } as unknown as DeviceTokenRepository;
-  return Object.assign(value, { kertPlatformok }) as DeviceTokenRepository & {
+  return Object.assign(value, {
+    kertPlatformok,
+    kertUserIdk,
+  }) as DeviceTokenRepository & {
     kertPlatformok: string[];
+    kertUserIdk: (readonly string[])[];
   };
 }
 
@@ -660,5 +670,87 @@ describe("az anyagigény-értesítések célpontja", () => {
     await service.deliverMaterialRequestCreated(createdNotice);
 
     assert.notEqual(sent[0]?.data?.targetId, "request-1");
+  });
+});
+
+/**
+ * A PUSH-ATIRANYITAS -- LASD `push-redirect.ts`.
+ *
+ * A MERES A `recipients()`-nek atadott userId-listan all, NEM a kuldott
+ * uzeneten: az allitas azt bizonyitja, hogy a KERDES iranyult at, nem csak a
+ * valasz szurodott meg valahol kesobb.
+ */
+describe("push redirect (staging)", () => {
+  it("változó NÉLKÜL a MAI viselkedés: a valódi userId-k mennek a lekérdezésbe", async () => {
+    const { sender: apns } = sender();
+    const tok = tokens([]);
+    const service = new NotificationsService(
+      tok,
+      apns,
+      log().log,
+      fcmSender().sender,
+      {},
+    );
+
+    await service.deliverWorksheetAssignment(notice);
+
+    assert.deepEqual(tok.kertUserIdk[0], ["user-2"]);
+  });
+
+  it("beállított változó mellett CSAK a próba-felhasználó(k) userId-je megy a lekérdezésbe", async () => {
+    const { sender: apns } = sender();
+    const tok = tokens([]);
+    const service = new NotificationsService(
+      tok,
+      apns,
+      log().log,
+      fcmSender().sender,
+      { PUSH_REDIRECT_TO_USER_IDS: "user-9" },
+    );
+
+    await service.deliverWorksheetAssignment(notice);
+
+    // A VALODI CIMZETT ("user-2") SEHOL nem jelenik meg a lekérdezésben.
+    assert.deepEqual(tok.kertUserIdk[0], ["user-9"]);
+  });
+
+  it("több próba-felhasználó is megadható, vesszővel tagolva", async () => {
+    const { sender: apns } = sender();
+    const tok = tokens([]);
+    const service = new NotificationsService(
+      tok,
+      apns,
+      log().log,
+      fcmSender().sender,
+      { PUSH_REDIRECT_TO_USER_IDS: "user-9, user-10" },
+    );
+
+    await service.deliverWorksheetAssignment(notice);
+
+    assert.deepEqual(tok.kertUserIdk[0], ["user-9", "user-10"]);
+  });
+
+  /**
+   * ÜRES EREDETI CIMZETT-LISTANAL AZ ATIRANYITAS SEM TALAL KI ERTESITEST: ha
+   * nem lett volna semmi, akkor a proba-felhasznalonak sem kell mennie.
+   */
+  it("üres eredeti címzett-lista mellett nem küld a próba-felhasználónak sem", async () => {
+    const { sender: apns } = sender();
+    const tok = tokens([]);
+    const service = new NotificationsService(
+      tok,
+      apns,
+      log().log,
+      fcmSender().sender,
+      { PUSH_REDIRECT_TO_USER_IDS: "user-9" },
+    );
+
+    const summary = await service.deliverWorksheetAssignment({
+      ...notice,
+      userIds: [],
+    });
+
+    assert.equal(summary.sent, 0);
+    assert.equal(tok.kertUserIdk.length, 0);
   });
 });

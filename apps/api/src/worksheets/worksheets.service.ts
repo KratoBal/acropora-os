@@ -40,7 +40,10 @@ import {
   prepareDocument,
 } from "../documents/document-intake.js";
 import { assertStorageKeyMatches } from "../service-assets/document-store/document-storage-key.js";
-import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import {
+  documentUnavailableMessage,
+  type DocumentStore,
+} from "../service-assets/document-store/document-store.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import type {
@@ -331,9 +334,7 @@ export class WorksheetsService {
     assertStorageKeyMatches(document.storageKey, key);
     const bytes = await this.documentStore.get(key);
     if (!bytes)
-      throw new ServiceUnavailableException(
-        "A csatolmány tartalma a tárolóban nem érhető el.",
-      );
+      throw new ServiceUnavailableException(documentUnavailableMessage());
     return { ...document, bytes };
   }
 

@@ -141,6 +141,36 @@ export interface DocumentStore {
 }
 
 /**
+ * A HIANYZO FAJL UZENETE -- ES EZ MAS A TESZT SZERVEREN, MINT ELESBEN.
+ *
+ * Balazs kerese, 2026-09-25 21:03 UTC (emlek 1842): a `store.get(key)` NULL
+ * valaszara (a sor letezik, a `storageKey` is megvan, de a lemezen a fajl
+ * hianyzik) a teszt szerveren "csak elesben erheto el" jelzes kell, MERT ott
+ * ez az allapot a VART allapot -- az eles adatbazis-mentesbol a sorok
+ * atkerulnek, a lemezen allo fajlok viszont SZANDEKOSAN nem (lasd a
+ * staging-adat-betoltes-terv-2026-09-25.md 3. pontjat).
+ *
+ * ELESBEN EZ AZ ALLAPOT MAS: ott a sor es a fajl EGYUTT kene alljon, tehat a
+ * hianyzo fajl OTT valodi adatveszteset vagy tarolo-hibat jelent, es a MAI
+ * (riasztobb hangzasu) uzenet marad -- egy "csak elesben erheto el" mondat
+ * elesben HAMIS lenne, hiszen epp elesben vagyunk.
+ *
+ * A KAPCSOLO EZERT KULON VALTOZO, NEM AZ ATIRANYITASOK VALAMELYIKE: a
+ * level- es a push-atiranyitas azt donti el, KI kapja meg az ertesitest -- ez
+ * a valtozo azt, hogy EGY HIBAUZENET SZOVEGE minek mondja magat. Ket kulon
+ * kerdes, ket kulon kapcsolo.
+ */
+export function documentUnavailableMessage(
+  environment: NodeJS.ProcessEnv = process.env,
+): string {
+  const stagingJelzes =
+    environment.DOCUMENT_STORE_STAGING_HINT?.trim().toLowerCase() === "live";
+  return stagingJelzes
+    ? "A fájl csak az éles rendszerben érhető el."
+    : "A csatolmány tartalma a tárolóban nem érhető el.";
+}
+
+/**
  * A FOLYAM EGYBE SZEDVE, ha a hívónak tényleg az egész halmaz kell.
  *
  * KÜLÖN FÜGGVÉNY ÉS NEM ALAPÉRTELMEZÉS, mert a neve mondja meg, mi történik:
