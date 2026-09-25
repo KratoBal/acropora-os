@@ -1,5 +1,5 @@
 import { Redirect, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -24,7 +24,8 @@ import {
 import { describeRegistrationOutcome } from "@/lib/notifications/push-registration";
 import { usePushPreference } from "@/lib/notifications/usePushPreference";
 import type { ThemePreference } from "@/lib/theme/theme-preference";
-import { useThemePreference } from "@/lib/theme/useThemePreference";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * BEÁLLÍTÁSOK.
@@ -41,16 +42,18 @@ import { useThemePreference } from "@/lib/theme/useThemePreference";
  * kapcsoló.
  *
  * A MEGJELENÉS VÁLASZTÓ (Világos/Sötét/Rendszer szerint, 2026-09-24, Balázs
- * döntése az emlék 1816 szerint) EZEN A KÉPERNYŐN SZÁNDÉKOSAN NEM VÁLT
- * MEGJELENÉST: ez az egész app közös alapja, de MA CSAK az akvárium-
- * képernyők épülnek rá (`useAppTheme`) -- a többi, köztük ez a képernyő is,
- * a mai sötét, kézzel írt színeken marad, amíg át nem épül.
+ * döntése az emlék 1816 szerint) EZEN A KÉPERNYŐN 2026-09-24-IG SZÁNDÉKOSAN
+ * NEM VÁLTOTT MEGJELENÉST MÁSHOL: ekkor MÉG csak az akvárium-képernyők
+ * épültek rá (`useAppTheme`). A Figma 12. kör (2026-09-25) ezt a lapot IS
+ * ráépíti, és a lenti magyarázó szöveg innentől azt mondja, ami igaz: a
+ * választás az EGÉSZ appra hat.
  */
 export default function SettingsScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
   const push = usePushPreference();
-  const theme = useThemePreference();
+  const theme = useAppTheme();
+  const styles = useMemo(() => createStyles(theme.tokens), [theme.tokens]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,13 +125,16 @@ export default function SettingsScreen() {
               </Text>
             </View>
             {push.loading || busy ? (
-              <ActivityIndicator color="#52d6c7" />
+              <ActivityIndicator color={theme.tokens.accent} />
             ) : (
               <Switch
                 value={enabled}
                 onValueChange={(next) => void toggle(next)}
-                trackColor={{ false: "#1c4963", true: "#166a7a" }}
-                thumbColor="#f4fbff"
+                trackColor={{
+                  false: theme.tokens.border,
+                  true: theme.tokens.accent,
+                }}
+                thumbColor={theme.tokens.textOnAccent}
               />
             )}
           </View>
@@ -137,11 +143,13 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <Text style={styles.rowTitle}>Megjelenés</Text>
           <Text style={styles.rowHint}>
-            Ma csak az Akváriumok képernyői igazodnak ehhez. A többi képernyő
-            egyelőre változatlan marad.
+            Ezután az egész app ezt a beállítást követi.
           </Text>
           {theme.loading ? (
-            <ActivityIndicator color="#52d6c7" style={styles.themeLoading} />
+            <ActivityIndicator
+              color={theme.tokens.accent}
+              style={styles.themeLoading}
+            />
           ) : (
             <ThemeChoice
               value={theme.preference ?? "system"}
@@ -170,6 +178,11 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "system", label: "Rendszer szerint" },
 ];
 
+/**
+ * SAJÁT `useAppTheme()`-HÍVÁS: ez a segédkomponens a fő függvényen KÍVÜL áll,
+ * tehát nem éri el annak per-render `styles` állandóját -- ugyanaz a minta,
+ * mint a `worksheets/new.tsx` `Section`/`FieldError` segédkomponensei.
+ */
 function ThemeChoice({
   value,
   onChange,
@@ -177,6 +190,8 @@ function ThemeChoice({
   value: ThemePreference;
   onChange: (value: ThemePreference) => void;
 }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View style={styles.themeRow}>
       {THEME_OPTIONS.map((option) => (
@@ -202,58 +217,64 @@ function ThemeChoice({
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { gap: 12, padding: 18, paddingBottom: 48 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  title: { color: "#f4fbff", fontSize: 26, fontWeight: "900" },
-  subtitle: { color: "#91afbe", fontSize: 13 },
-  card: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderRadius: 16,
-    borderWidth: 1,
-    marginTop: 8,
-    padding: 16,
-  },
-  row: { alignItems: "center", flexDirection: "row", gap: 14 },
-  rowText: { flex: 1, gap: 5 },
-  rowTitle: { color: "#f4fbff", fontSize: 16, fontWeight: "800" },
-  rowHint: { color: "#86a7ba", fontSize: 12, lineHeight: 18 },
-  error: {
-    backgroundColor: "#3b2b2d",
-    borderRadius: 10,
-    color: "#ffd0ca",
-    fontSize: 12,
-    lineHeight: 18,
-    padding: 12,
-  },
-  back: {
-    alignSelf: "flex-start",
-    borderColor: "#28536a",
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  backText: { color: "#9ab8ca", fontSize: 13, fontWeight: "700" },
-  pressed: { opacity: 0.75 },
-  themeLoading: { marginTop: 10, alignSelf: "flex-start" },
-  themeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  themeChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#28536a",
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  themeChipSelected: { backgroundColor: "#177b74", borderColor: "#177b74" },
-  themeChipText: { color: "#91afbe", fontSize: 13, fontWeight: "700" },
-  themeChipTextSelected: { color: "#fff" },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 12.
+ * kör, ugyanaz a minta, mint a `login.tsx`-en (lásd ott a teljes indokot).
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { gap: 12, padding: 18, paddingBottom: 48 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    title: { color: t.textPrimary, fontSize: 26, fontWeight: "900" },
+    subtitle: { color: t.textSecondary, fontSize: 13 },
+    card: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      marginTop: 8,
+      padding: 16,
+    },
+    row: { alignItems: "center", flexDirection: "row", gap: 14 },
+    rowText: { flex: 1, gap: 5 },
+    rowTitle: { color: t.textPrimary, fontSize: 16, fontWeight: "800" },
+    rowHint: { color: t.textSecondary, fontSize: 12, lineHeight: 18 },
+    error: {
+      backgroundColor: t.dangerSoft,
+      borderRadius: 10,
+      color: t.danger,
+      fontSize: 12,
+      lineHeight: 18,
+      padding: 12,
+    },
+    back: {
+      alignSelf: "flex-start",
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      marginTop: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    backText: { color: t.textSecondary, fontSize: 13, fontWeight: "700" },
+    pressed: { opacity: 0.75 },
+    themeLoading: { marginTop: 10, alignSelf: "flex-start" },
+    themeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+    themeChip: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+    },
+    themeChipSelected: { backgroundColor: t.accent, borderColor: t.accent },
+    themeChipText: { color: t.textSecondary, fontSize: 13, fontWeight: "700" },
+    themeChipTextSelected: { color: t.textOnAccent },
+  });
+}
