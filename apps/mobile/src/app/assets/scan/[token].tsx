@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import { scanAsset, scanAssetByLabel } from "@/lib/api/assets";
 import { describeScanFailure } from "@/lib/assets/scan-failure";
@@ -18,6 +18,19 @@ import {
   readCachedAssetByToken,
   rememberAssetDetail,
 } from "@/lib/offline/asset-cache";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
+
+/**
+ * SZÍNEK: FIGMA TELEFON 12. KÖR, 6. CSOPORT (2026-09-25).
+ *
+ * Ez a képernyő NEM kamera-rátét (a beolvasás maga a `scanner.tsx`-en
+ * történik, ez csak a feldolgozás/eredmény, jellemzően azonnal tovább-
+ * irányít) -- tehát a `useAppTheme()` a teljes felületre vonatkozik,
+ * kivétel nélkül. A tartalom (három kártya-állapot: töltés, szabad
+ * matrica, sikertelen keresés) a mai kódból változatlan, lásd a lenti
+ * komponens-fejléceket.
+ */
 
 export default function AssetScanScreen() {
   const params = useLocalSearchParams<{
@@ -35,6 +48,8 @@ export default function AssetScanScreen() {
   const kindParam = Array.isArray(params.kind) ? params.kind[0] : params.kind;
   const label = kindParam === "label";
   const { status } = useAuth();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const query = useQuery({
     queryKey: ["service-asset-scan", label ? "label" : "qr", token],
     /**
@@ -119,16 +134,17 @@ export default function AssetScanScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.card}>
         {query.data?.kind === "FREE" ? (
-          <SzabadMatricaKartya code={query.data.code} />
+          <SzabadMatricaKartya styles={styles} code={query.data.code} />
         ) : query.isError && !cached.isPending ? (
           <ScanFailureCard
+            styles={styles}
             error={query.error}
             searchedOfflineCopy={cached.isSuccess}
             onRetry={() => void query.refetch()}
           />
         ) : (
           <>
-            <ActivityIndicator color="#52d6c7" size="large" />
+            <ActivityIndicator color={tokens.accent} size="large" />
             <Text style={styles.title}>Eszköz azonosítása…</Text>
             <Text style={styles.text}>
               {label
@@ -159,7 +175,13 @@ export default function AssetScanScreen() {
  * belole a mezot, tehat a szerelonek nem kell kezzel atgepelnie azt, amit az
  * imént beolvasott.
  */
-function SzabadMatricaKartya({ code }: { code: string }) {
+function SzabadMatricaKartya({
+  styles,
+  code,
+}: {
+  styles: ReturnType<typeof createStyles>;
+  code: string;
+}) {
   const router = useRouter();
   return (
     <>
@@ -196,7 +218,9 @@ function SzabadMatricaKartya({ code }: { code: string }) {
           pressed && styles.gombNyomva,
         ]}
       >
-        <Text style={styles.gombFelirat}>Hozzáadás meglévő eszközhöz</Text>
+        <Text style={styles.gombFeliratMasodlagos}>
+          Hozzáadás meglévő eszközhöz
+        </Text>
       </Pressable>
     </>
   );
@@ -208,10 +232,12 @@ function SzabadMatricaKartya({ code }: { code: string }) {
  * a basement would go and replace a QR code that was never broken.
  */
 function ScanFailureCard({
+  styles,
   error,
   searchedOfflineCopy,
   onRetry,
 }: {
+  styles: ReturnType<typeof createStyles>;
   error: unknown;
   searchedOfflineCopy: boolean;
   onRetry(): void;
@@ -238,51 +264,73 @@ function ScanFailureCard({
   );
 }
 
-const styles = StyleSheet.create({
-  gomb: {
-    marginTop: 12,
-    paddingVertical: 13,
-    paddingHorizontal: 18,
-    borderRadius: 12,
-    backgroundColor: "#52d6c7",
-    alignSelf: "stretch",
-  },
-  gombMasodlagos: { backgroundColor: "#21485e" },
-  gombNyomva: { opacity: 0.8 },
-  gombFelirat: {
-    color: "#041b28",
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#071827",
-    justifyContent: "center",
-    padding: 24,
-  },
-  card: {
-    alignItems: "center",
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#1c4963",
-    backgroundColor: "#0d2b40",
-    padding: 28,
-    gap: 12,
-  },
-  title: {
-    color: "#f4fbff",
-    fontSize: 21,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  text: { color: "#a9c4d1", fontSize: 14, lineHeight: 21, textAlign: "center" },
-  retryButton: {
-    backgroundColor: "#177b74",
-    borderRadius: 10,
-    marginTop: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  retryText: { color: "#fff", fontWeight: "800" },
-  pressed: { opacity: 0.7 },
-});
+/**
+ * A `gombFelirat` A REGI KODBAN MINDKET GOMBVALTOZATON (elsodleges es
+ * masodlagos) UGYANAZT A SOTET SZINT HASZNALTA -- ez a masodlagos gombon
+ * (regen `#21485e` hatteren `#041b28` szoveg) mar eddig is gyenge
+ * kontrasztu volt, es sotet temaban (t.surfaceRaised meg sotetebb) meg
+ * rosszabb lenne. Mivel ugyis token-parra kellett bontani a ket hatteret,
+ * a szoveg szinet is szetvalasztottam: `t.textOnAccent` az elsodlegesen
+ * (accent hatteren, ez volt a helyes eredetileg is), `t.textPrimary` a
+ * masodlagoson (surfaceRaised hatteren) -- mindket temaban olvashato.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    gomb: {
+      marginTop: 12,
+      paddingVertical: 13,
+      paddingHorizontal: 18,
+      borderRadius: 12,
+      backgroundColor: t.accent,
+      alignSelf: "stretch",
+    },
+    gombMasodlagos: { backgroundColor: t.surfaceRaised },
+    gombNyomva: { opacity: 0.8 },
+    gombFelirat: {
+      color: t.textOnAccent,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    gombFeliratMasodlagos: {
+      color: t.textPrimary,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    safeArea: {
+      flex: 1,
+      backgroundColor: t.background,
+      justifyContent: "center",
+      padding: 24,
+    },
+    card: {
+      alignItems: "center",
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+      padding: 28,
+      gap: 12,
+    },
+    title: {
+      color: t.textPrimary,
+      fontSize: 21,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    text: {
+      color: t.textSecondary,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign: "center",
+    },
+    retryButton: {
+      backgroundColor: t.accent,
+      borderRadius: 10,
+      marginTop: 4,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+    },
+    retryText: { color: t.textOnAccent, fontWeight: "800" },
+    pressed: { opacity: 0.7 },
+  });
+}

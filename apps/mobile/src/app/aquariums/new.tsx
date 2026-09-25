@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -41,6 +41,8 @@ import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { enqueueAquariumCreate } from "@/lib/offline/queue-store";
 import { saveOrQueue } from "@/lib/offline/save-or-queue";
 import { aquariumOperationId } from "@/lib/offline/sync-queue";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * ÚJ AKVÁRIUM (VAGY TÓ) A HELYSZÍNRŐL.
@@ -76,11 +78,23 @@ import { aquariumOperationId } from "@/lib/offline/sync-queue";
  * === A DÖNTÉS A `lib/aquariums/aquarium-create.ts`-BEN VAN ===
  *
  * Mert ott MÉRHETŐ: ebben a fájlban nincs, ami tesztelné.
+ *
+ * === SZÍNEK: FIGMA TELEFON 12. KÖR, 6. CSOPORT (2026-09-25) ===
+ *
+ * A korábbi, kézzel írt sötét-kék hexek (`#071827`, `#0d2b40`, `#52d6c7`
+ * stb.) helyett `useAppTheme()` -- ugyanaz a minta, mint az `[id].tsx`
+ * adatlapon (Balázs döntése, emlék 1816). A tartalom, a mezők, a
+ * feltételek és a működés VÁLTOZATLAN -- lásd a fájl fenti fejléceit --,
+ * csak a megjelenítő réteg vált tokenre. A terv (`exchange/figma-telefon-
+ * make-12/src/MobileAppScreen.tsx`, `UjAkvariumScreen`) ehhez a
+ * képernyőhöz nem ad új tartalmat, csak vizuális nyelvet.
  */
 export default function NewAquariumScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   const [form, setForm] = useState<AquariumCreateForm>(emptyAquariumCreateForm);
   const [error, setError] = useState<{
@@ -209,6 +223,7 @@ export default function NewAquariumScreen() {
           <Text style={styles.title}>Új akvárium</Text>
 
           <Segmented<AquariumOwnershipType>
+            styles={styles}
             value={form.ownershipType}
             options={["OWN", "CUSTOMER"]}
             label={(value) => OWNERSHIP_LABEL[value]}
@@ -221,6 +236,7 @@ export default function NewAquariumScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Ügyfél</Text>
               <Segmented<"EXISTING" | "NEW">
+                styles={styles}
                 value={form.customerMode}
                 options={["EXISTING", "NEW"]}
                 label={(value) =>
@@ -233,6 +249,8 @@ export default function NewAquariumScreen() {
 
               {form.customerMode === "EXISTING" ? (
                 <CustomerPicker
+                  styles={styles}
+                  tokens={tokens}
                   selectedId={form.selectedCustomerId}
                   selectedLabel={form.selectedCustomerLabel}
                   error={
@@ -249,6 +267,8 @@ export default function NewAquariumScreen() {
               ) : (
                 <>
                   <Field
+                    styles={styles}
+                    tokens={tokens}
                     label="Név"
                     value={form.customerName}
                     onChangeText={(customerName) =>
@@ -259,6 +279,8 @@ export default function NewAquariumScreen() {
                     }
                   />
                   <Field
+                    styles={styles}
+                    tokens={tokens}
                     label="Telefonszám"
                     value={form.customerPhone}
                     onChangeText={(customerPhone) =>
@@ -267,6 +289,8 @@ export default function NewAquariumScreen() {
                     keyboardType="phone-pad"
                   />
                   <Field
+                    styles={styles}
+                    tokens={tokens}
                     label="E-mail cím"
                     value={form.customerEmail}
                     onChangeText={(customerEmail) =>
@@ -275,6 +299,8 @@ export default function NewAquariumScreen() {
                     keyboardType="email-address"
                   />
                   <Field
+                    styles={styles}
+                    tokens={tokens}
                     label="Irányítószám"
                     value={form.customerPostalCode}
                     onChangeText={(customerPostalCode) =>
@@ -283,6 +309,8 @@ export default function NewAquariumScreen() {
                     keyboardType="number-pad"
                   />
                   <Field
+                    styles={styles}
+                    tokens={tokens}
                     label="Város"
                     value={form.customerCity}
                     onChangeText={(customerCity) =>
@@ -290,6 +318,8 @@ export default function NewAquariumScreen() {
                     }
                   />
                   <Field
+                    styles={styles}
+                    tokens={tokens}
                     label="Utca, házszám"
                     value={form.customerAddressLine1}
                     onChangeText={(customerAddressLine1) =>
@@ -307,12 +337,15 @@ export default function NewAquariumScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Az akvárium</Text>
             <Field
+              styles={styles}
+              tokens={tokens}
               label="Neve"
               value={form.name}
               onChangeText={(name) => setForm((prev) => ({ ...prev, name }))}
               error={error?.field === "name" ? error.message : null}
             />
             <Segmented<WaterBodyType>
+              styles={styles}
               value={form.waterBodyType}
               options={["AKVARIUM", "TO"]}
               label={(value) => WATER_BODY_LABEL[value]}
@@ -326,6 +359,8 @@ export default function NewAquariumScreen() {
             <Text style={styles.sectionTitle}>Méretek és liter</Text>
             <View style={styles.row}>
               <Field
+                styles={styles}
+                tokens={tokens}
                 label="Hossz (cm)"
                 value={form.lengthCm}
                 onChangeText={(value) => updateDimension("lengthCm", value)}
@@ -334,6 +369,8 @@ export default function NewAquariumScreen() {
                 error={error?.field === "lengthCm" ? error.message : null}
               />
               <Field
+                styles={styles}
+                tokens={tokens}
                 label="Szélesség (cm)"
                 value={form.widthCm}
                 onChangeText={(value) => updateDimension("widthCm", value)}
@@ -342,6 +379,8 @@ export default function NewAquariumScreen() {
                 error={error?.field === "widthCm" ? error.message : null}
               />
               <Field
+                styles={styles}
+                tokens={tokens}
                 label="Magasság (cm)"
                 value={form.heightCm}
                 onChangeText={(value) => updateDimension("heightCm", value)}
@@ -351,6 +390,8 @@ export default function NewAquariumScreen() {
               />
             </View>
             <Field
+              styles={styles}
+              tokens={tokens}
               label="Liter (számolva, vagy írd át kézzel)"
               value={form.volumeLiters}
               onChangeText={(volumeLiters) =>
@@ -404,6 +445,7 @@ export default function NewAquariumScreen() {
                   </Pressable>
                 </View>
                 <EquipmentKindPicker
+                  styles={styles}
                   value={row.kind}
                   onChange={(kind) =>
                     setForm((prev) => ({
@@ -416,6 +458,8 @@ export default function NewAquariumScreen() {
                 />
                 <View style={styles.row}>
                   <Field
+                    styles={styles}
+                    tokens={tokens}
                     label="Gyártó"
                     value={row.manufacturer}
                     onChangeText={(manufacturer) =>
@@ -429,6 +473,8 @@ export default function NewAquariumScreen() {
                     style={styles.rowField}
                   />
                   <Field
+                    styles={styles}
+                    tokens={tokens}
                     label="Típus"
                     value={row.model}
                     onChangeText={(model) =>
@@ -444,6 +490,8 @@ export default function NewAquariumScreen() {
                 </View>
                 {row.kind === "NYOMELEM_ADAGOLO" ? (
                   <Field
+                    styles={styles}
+                    tokens={tokens}
                     label="Csatornaszám"
                     value={row.channelCount}
                     onChangeText={(channelCount) =>
@@ -481,7 +529,7 @@ export default function NewAquariumScreen() {
             ]}
           >
             {mutation.isPending ? (
-              <ActivityIndicator color="#071827" />
+              <ActivityIndicator color={tokens.textOnAccent} />
             ) : (
               <Text style={styles.submitText}>Mentés</Text>
             )}
@@ -493,6 +541,8 @@ export default function NewAquariumScreen() {
 }
 
 function Field({
+  styles,
+  tokens,
   label,
   value,
   onChangeText,
@@ -500,6 +550,8 @@ function Field({
   style,
   error,
 }: {
+  styles: ReturnType<typeof createStyles>;
+  tokens: ThemeTokens;
   label: string;
   value: string;
   onChangeText: (value: string) => void;
@@ -515,7 +567,7 @@ function Field({
         value={value}
         onChangeText={onChangeText}
         keyboardType={keyboardType ?? "default"}
-        placeholderTextColor="#668798"
+        placeholderTextColor={tokens.textMuted}
         style={styles.input}
       />
       {error ? <Text style={styles.fieldError}>{error}</Text> : null}
@@ -524,11 +576,13 @@ function Field({
 }
 
 function Segmented<T extends string>({
+  styles,
   value,
   options,
   label,
   onChange,
 }: {
+  styles: ReturnType<typeof createStyles>;
   value: T;
   options: readonly T[];
   label: (value: T) => string;
@@ -566,11 +620,15 @@ function Segmented<T extends string>({
  * kinyílik -- a szerelő nem mindig nyúl hozzá.
  */
 function CustomerPicker({
+  styles,
+  tokens,
   selectedId,
   selectedLabel,
   error,
   onSelect,
 }: {
+  styles: ReturnType<typeof createStyles>;
+  tokens: ThemeTokens;
   selectedId: string | null;
   selectedLabel: string;
   error?: string | null;
@@ -602,10 +660,12 @@ function CustomerPicker({
             value={search}
             onChangeText={setSearch}
             placeholder="Keresés név szerint"
-            placeholderTextColor="#668798"
+            placeholderTextColor={tokens.textMuted}
             style={styles.input}
           />
-          {results.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+          {results.isPending ? (
+            <ActivityIndicator color={tokens.accent} />
+          ) : null}
           {results.isError ? (
             <Text style={styles.fieldError}>
               Az ügyféllista nem tölthető be.
@@ -638,9 +698,11 @@ function CustomerPicker({
 }
 
 function EquipmentKindPicker({
+  styles,
   value,
   onChange,
 }: {
+  styles: ReturnType<typeof createStyles>;
   value: AquariumEquipmentKind;
   onChange: (value: AquariumEquipmentKind) => void;
 }) {
@@ -666,123 +728,132 @@ function EquipmentKindPicker({
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  flex: { flex: 1 },
-  container: { padding: 18, paddingBottom: 48, gap: 14 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  title: { color: "#f4fbff", fontSize: 28, fontWeight: "900" },
-  section: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    gap: 10,
-  },
-  sectionTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  row: { flexDirection: "row", gap: 10 },
-  rowField: { flex: 1 },
-  field: { gap: 6 },
-  fieldLabel: { color: "#91afbe", fontSize: 12 },
-  fieldError: { color: "#fecaca", fontSize: 12 },
-  input: {
-    color: "#f4fbff",
-    backgroundColor: "#071f31",
-    borderColor: "#28536a",
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-  segmented: { flexDirection: "row", gap: 8 },
-  segmentedOption: {
-    flex: 1,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#28536a",
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  segmentedOptionActive: { backgroundColor: "#52d6c7", borderColor: "#52d6c7" },
-  segmentedText: { color: "#91afbe", fontWeight: "700" },
-  segmentedTextActive: { color: "#071827" },
-  pickerToggle: {
-    backgroundColor: "#071f31",
-    borderColor: "#28536a",
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-  pickerToggleText: { color: "#f4fbff", fontWeight: "700" },
-  pickerPanel: { marginTop: 8, gap: 8 },
-  pickerRow: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-  },
-  pickerRowText: { color: "#f4fbff", fontWeight: "700" },
-  pickerRowMeta: { color: "#789cad", fontSize: 12, marginTop: 2 },
-  kindWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  kindChip: {
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#28536a",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  kindChipActive: { backgroundColor: "#52d6c7", borderColor: "#52d6c7" },
-  kindChipText: { color: "#91afbe", fontSize: 12, fontWeight: "700" },
-  kindChipTextActive: { color: "#071827" },
-  equipmentRow: {
-    borderTopWidth: 1,
-    borderTopColor: "#1c4963",
-    paddingTop: 10,
-    gap: 10,
-  },
-  equipmentIndex: { color: "#91afbe", fontWeight: "800" },
-  addButton: {
-    backgroundColor: "#164057",
-    borderRadius: 9,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  addButtonText: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  removeText: { color: "#fca5a5", fontWeight: "700", fontSize: 12 },
-  empty: { color: "#91afbe" },
-  notice: {
-    color: "#f4d9a0",
-    backgroundColor: "#3a2a12",
-    borderColor: "#8a6a2a",
-    borderWidth: 1,
-    padding: 12,
-    borderRadius: 10,
-  },
-  error: {
-    color: "#fecaca",
-    backgroundColor: "#541b2b",
-    padding: 12,
-    borderRadius: 10,
-  },
-  submit: {
-    backgroundColor: "#52d6c7",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  pressed: { opacity: 0.75 },
-  submitText: { color: "#071827", fontWeight: "900", fontSize: 15 },
-});
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    flex: { flex: 1 },
+    container: { padding: 18, paddingBottom: 48, gap: 14 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
+    section: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 14,
+      padding: 14,
+      gap: 10,
+    },
+    sectionTitle: { color: t.textPrimary, fontSize: 15, fontWeight: "800" },
+    sectionHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    row: { flexDirection: "row", gap: 10 },
+    rowField: { flex: 1 },
+    field: { gap: 6 },
+    fieldLabel: { color: t.textSecondary, fontSize: 12 },
+    fieldError: { color: t.danger, fontSize: 12 },
+    input: {
+      color: t.textPrimary,
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+    },
+    segmented: { flexDirection: "row", gap: 8 },
+    segmentedOption: {
+      flex: 1,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingVertical: 10,
+      alignItems: "center",
+    },
+    segmentedOptionActive: {
+      backgroundColor: t.accent,
+      borderColor: t.accent,
+    },
+    segmentedText: { color: t.textSecondary, fontWeight: "700" },
+    segmentedTextActive: { color: t.textOnAccent },
+    pickerToggle: {
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+    },
+    pickerToggleText: { color: t.textPrimary, fontWeight: "700" },
+    pickerPanel: { marginTop: 8, gap: 8 },
+    pickerRow: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 10,
+    },
+    pickerRowText: { color: t.textPrimary, fontWeight: "700" },
+    pickerRowMeta: { color: t.textSecondary, fontSize: 12, marginTop: 2 },
+    kindWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    kindChip: {
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    kindChipActive: { backgroundColor: t.accent, borderColor: t.accent },
+    kindChipText: { color: t.textSecondary, fontSize: 12, fontWeight: "700" },
+    kindChipTextActive: { color: t.textOnAccent },
+    equipmentRow: {
+      borderTopWidth: 1,
+      borderTopColor: t.border,
+      paddingTop: 10,
+      gap: 10,
+    },
+    equipmentIndex: { color: t.textSecondary, fontWeight: "800" },
+    addButton: {
+      backgroundColor: t.accent,
+      borderRadius: 9,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    addButtonText: {
+      color: t.textOnAccent,
+      fontWeight: "800",
+      fontSize: 12,
+    },
+    removeText: { color: t.danger, fontWeight: "700", fontSize: 12 },
+    empty: { color: t.textSecondary },
+    notice: {
+      color: t.warning,
+      backgroundColor: t.warningSoft,
+      borderColor: t.warning,
+      borderWidth: 1,
+      padding: 12,
+      borderRadius: 10,
+    },
+    error: {
+      color: t.danger,
+      backgroundColor: t.dangerSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+    submit: {
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    pressed: { opacity: 0.75 },
+    submitText: { color: t.textOnAccent, fontWeight: "900", fontSize: 15 },
+  });
+}
