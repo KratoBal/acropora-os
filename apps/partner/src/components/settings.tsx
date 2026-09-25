@@ -7,11 +7,40 @@ import {
   PilotCardHeader,
   PilotFormField,
   PilotInput,
+  PilotSegmentedControl,
   PilotThemeRoot,
+  useThemePreference,
+  type ThemePreference,
 } from "@acropora/ui";
 
 import { partnerApi } from "@/lib/api";
 import { Message } from "./ticket-list";
+
+/**
+ * VILÁGOS / SÖTÉT / RENDSZER SZERINT -- ugyanaz a preferencia-hook
+ * (`useThemePreference`, `packages/ui/src/theme-preference.ts`), mint a
+ * belső web `AppearanceSettingsCard`-ja, amire ez a kártya épül (acrobot
+ * kérése, Balázs 2026-09-25 16:50-es képei). A `PilotSegmentedControl`
+ * `options`/`value`/`onChange`-a NYERS STRING-eken dolgozik (lásd
+ * `pilot-ui.tsx`), nem `ThemePreference`-en, ezért a magyar felirat és az
+ * angol preferencia-érték közötti fordítás itt, a hívóhelyen áll -- ugyanaz
+ * a minta, mint a `pilot-aquarium-list-page.tsx` szűrőinél
+ * (`OWNERSHIP_OPTIONS`/`WATER_BODY_OPTIONS`).
+ */
+const MEGJELENES_OPCIOK = ["Világos", "Sötét", "Rendszer szerint"] as const;
+const MEGJELENES_CIMKE: Record<
+  ThemePreference,
+  (typeof MEGJELENES_OPCIOK)[number]
+> = {
+  light: "Világos",
+  dark: "Sötét",
+  system: "Rendszer szerint",
+};
+const MEGJELENES_ERTEK: Record<string, ThemePreference> = {
+  Világos: "light",
+  Sötét: "dark",
+  "Rendszer szerint": "system",
+};
 
 /**
  * BEÁLLÍTÁSOK -- FIGMA 9. KÖR, PILOT-AQUA (surgos kor, 2026-09-25, acrobot
@@ -38,6 +67,7 @@ import { Message } from "./ticket-list";
  *     `PilotInput`-nak nincs `pattern`-je sem.
  */
 export function Settings() {
+  const { preference, setPreference } = useThemePreference();
   const [password, setPassword] = useState({ current: "", next: "" });
   const [signing, setSigning] = useState({ current: "", code: "" });
   const [message, setMessage] = useState<string | null>(null);
@@ -105,6 +135,24 @@ export function Settings() {
             <Message tone="error" text={error} />
           </div>
         ) : null}
+
+        <PilotCard className="mb-5">
+          <PilotCardHeader title="Megjelenés" />
+          <div className="flex flex-col gap-3 px-5 py-5">
+            <p className="text-sm text-pilot-grey-500">
+              Egyelőre csak az új, Figma-alapú felületeket érinti (ahol a
+              képernyő már a friss tervet követi) -- a többi felület a mai
+              kinézeten marad, amíg át nem kerül.
+            </p>
+            <PilotSegmentedControl
+              options={MEGJELENES_OPCIOK}
+              value={MEGJELENES_CIMKE[preference]}
+              onChange={(label) =>
+                setPreference(MEGJELENES_ERTEK[label] ?? "system")
+              }
+            />
+          </div>
+        </PilotCard>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <PilotCard>

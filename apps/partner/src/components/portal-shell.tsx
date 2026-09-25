@@ -287,8 +287,37 @@ export function PortalShell({ children }: { children: ReactNode }) {
         tol (murena, #1145), a "Beallitasok" ugyanaznap, ezzel a javitassal
         -- lasd azok sajat `PilotThemeRoot` gyoker elemet.
       */}
+      {/*
+        MASODIK KOR, 2026-09-25 (Balazs 16:50-es kepei): a `<main>`-nek
+        eddig NEM volt sajat hattere, tehat az ALATTA allo, data-theme
+        nelkuli oldalsav-nelkuli SHELL (a legkulso `<div>` fent,
+        `bg-pilot-grey-50`, mindig VILAGOS) latszott at ott, ahol egy
+        RESZLETLAP sajat `PilotThemeRoot`-ja NEM visel `min-h-screen`-t
+        (`ticket-detail.tsx`, `asset-detail.tsx`, `worksheet-detail.tsx`,
+        `aquarium-detail.tsx`, `new-aquarium.tsx` -- mind csak `px-8 py-6`
+        vagy semmi magassagot nem kenyszerit). Rovid tartalomnal a sotet
+        doboz alatt ezert vilagos csik maradt.
+
+        A JAVITAS ITT KOZPONTI, NEM MIND AZ OT RESZLETLAPON KULON-KULON:
+        a `<main>` maga kapja meg a `data-theme`-et es a `min-h-screen
+        bg-pilot-grey-50`-t, ugyanazt a mintat, mint az `<aside>`. EZ NEM
+        UJ KOCKAZAT a nativ `input`/`select` sotetito szabalynak (lasd
+        fent az oldalsav-korlatozas indoklasat): minden portal-lap MAR
+        MOST is a SAJAT `PilotThemeRoot` gyokeren visel `data-theme`-et
+        (mind a 11 lap, lasd `portal-shell-theme.spec.ts` `pilotLapok`
+        listajat), tehat az Akvariumok lista sajat keresoje es az
+        Akvariumok adatlap `AquariumWaterValues` mezoi MA IS a SAJAT
+        lapjuk data-theme-e alatt allnak -- a `<main>` sajat attributuma
+        csak azt a RESET tolti ki, ami egy rovid lap ALATT marad, nem
+        valtoztat semmit a lapok SAJAT tartalman.
+      */}
       <div className="lg:pl-52">
-        <main>{children}</main>
+        <main
+          data-theme={effectiveTheme}
+          className="min-h-screen bg-pilot-grey-50"
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

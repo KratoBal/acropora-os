@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { PilotButton, PilotFormField, PilotInput } from "@acropora/ui";
 
 import { partnerApi } from "@/lib/api";
-import { PANEL, PANEL_CIM } from "./frame";
 
 /**
  * A BEJELENTO JAVITHATJA A SAJAT BEJELENTESET.
@@ -73,60 +73,79 @@ export function TicketFieldsEditor({
 
   if (!nyitva)
     return (
-      <button type="button" className="secondary" onClick={kezdes}>
+      <PilotButton variant="secondary" onClick={kezdes}>
         Bejelentés javítása
-      </button>
+      </PilotButton>
     );
 
   return (
-    <article className={PANEL}>
-      <h2 className={PANEL_CIM}>A bejelentés javítása</h2>
+    /*
+      NINCS SAJAT KULSO PANEL/KERET: ez a komponens MINDIG egy MAR pilot-aqua
+      `PilotCard` tartalmaban all (lasd `ticket-detail.tsx`), tehat egy sajat
+      `PANEL` (regi, feher/`bg-white` keret) csak beagyazott, feleslegesen
+      duplazott dobozt adna -- es a `PANEL` sajat `border-[#e2e2ea]` szine
+      raw hex, sotet modban nem valtana.
+    */
+    <div className="flex flex-col gap-3">
+      <h3 className="text-sm font-semibold text-pilot-grey-900">
+        A bejelentés javítása
+      </h3>
       {hiba ? (
-        <p role="alert" className="leading-[1.5] text-[#b3261e]">
+        <p role="alert" className="text-sm leading-relaxed text-pilot-red-700">
           {hiba}
         </p>
       ) : null}
-      <label>
-        Mi a probléma?
-        <input
+      <PilotFormField label="Mi a probléma?">
+        {/*
+          A `PilotInput`-nak NINCS `maxLength` propja (lasd `pilot-ui.tsx`),
+          ugyanaz a hianyossag, mint a `settings.tsx` alairokod-mezojenel --
+          a 300 karakteres korlatot ezert az `onChange` kenyszeriti ki, nem
+          a natv attributum.
+        */}
+        <PilotInput
           aria-label="A bejelentés címe"
           value={cim}
-          maxLength={300}
-          onChange={(event) => setCim(event.target.value)}
+          onChange={(value) => setCim(value.slice(0, 300))}
         />
-      </label>
-      <label>
-        Részletes leírás
+      </PilotFormField>
+      <PilotFormField label="Részletes leírás">
+        {/*
+          NINCS `PilotTextarea`: a keszlet ma csak `PilotInput`-ot ad
+          (lasd `pilot-ui.tsx`), tobbsoros mezot senki nem kert meg eddig.
+          A sotet szin/hatter ITT IS a globalis
+          `[data-theme="dark"] textarea { ... !important }` szabalybol jon
+          (lasd `figma-theme.css`), a `PilotInput`-eval megegyezo keret- es
+          teravlaszto osztalyok csak a VILAGOS modot es a fokuszt adjak.
+        */}
         <textarea
           aria-label="A bejelentés leírása"
           value={leiras}
           rows={6}
           maxLength={4000}
           onChange={(event) => setLeiras(event.target.value)}
+          className="w-full rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
         />
-      </label>
-      <div className="form-actions">
-        <button
-          type="button"
-          className="secondary"
+      </PilotFormField>
+      <div className="flex justify-end gap-2">
+        <PilotButton
+          variant="secondary"
           disabled={ment}
           onClick={() => setNyitva(false)}
         >
           Mégsem
-        </button>
+        </PilotButton>
         {/*
           URES CIMMEL NEM INDUL: a cim a semaban KOTELEZO, tehat biztos
           elutasitas. Egy halozati kor arra, amirol itt is tudjuk, hogy nem
           mehet, csak varakozas a bejelentonek.
         */}
-        <button
-          type="button"
+        <PilotButton
           disabled={ment || cim.trim() === ""}
           onClick={() => void mentes()}
         >
           {ment ? "Mentés…" : "Mentés"}
-        </button>
+        </PilotButton>
       </div>
-    </article>
+    </div>
   );
 }

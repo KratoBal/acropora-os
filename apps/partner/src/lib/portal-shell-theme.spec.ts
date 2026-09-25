@@ -53,11 +53,18 @@ describe("a portal héja és a tartalom doboza (sürgős javítás, 2026-09-25)"
    * lapokat adja tovabb. Ezert a celzott alakra illesztunk, nem BARMELYIK
    * `<main>`-re.
    */
-  it("a `.content` doboz lekerült a közös, a lapokat átadó `<main>`-ről", () => {
-    assert.match(
-      kodSzoveg(shell),
-      /<main>\{children\}<\/main>/,
-      "a gyermek-tartalmat átadó <main> osztályt visel, ami újra ráhúzza a keskeny dobozt",
+  it("a `.content` doboz nem tért vissza a lapokat átadó `<main>`-re", () => {
+    const mainSor = kodSzoveg(shell).match(
+      /<main\b[\s\S]*?>\s*\{children\}/,
+    )?.[0];
+    assert.ok(
+      mainSor,
+      "nem találom a {children}-t átadó <main> elemet portal-shell.tsx-ben",
+    );
+    assert.doesNotMatch(
+      mainSor!,
+      /className="[^"]*\bcontent\b[^"]*"/,
+      "a gyermek-tartalmat átadó <main> a régi .content osztályt viseli, ami újra ráhúzza a keskeny dobozt",
     );
   });
 
@@ -70,6 +77,33 @@ describe("a portal héja és a tartalom doboza (sürgős javítás, 2026-09-25)"
       asideSor!,
       /data-theme=\{effectiveTheme\}/,
       "az oldalsav gyökere nem viseli a data-theme attribútumot",
+    );
+  });
+
+  /**
+   * MASODIK KOR, 2026-09-25 (Balazs 16:50-es kepei): a lapokat atado
+   * `<main>` MOST MAR sajat magan is viseli a `data-theme`-et es egy
+   * temakoveto hatteret, ugyanugy, mint az `<aside>` -- ez zarja be azt a
+   * rest, ami egy roved (nincs `min-h-screen`) reszletlap ALATT vilagosan
+   * maradt sotet modban.
+   */
+  it("a `<main>` is a `data-theme`-et és a téma-hátteret viseli, mint az `<aside>`", () => {
+    const mainSor = kodSzoveg(shell).match(
+      /<main\b[\s\S]*?>\s*\{children\}/,
+    )?.[0];
+    assert.ok(
+      mainSor,
+      "nem találom a {children}-t átadó <main> elemet portal-shell.tsx-ben",
+    );
+    assert.match(
+      mainSor!,
+      /data-theme=\{effectiveTheme\}/,
+      "a <main> nem viseli a data-theme attribútumot",
+    );
+    assert.match(
+      mainSor!,
+      /className="[^"]*\bbg-pilot-grey-50\b[^"]*"/,
+      "a <main> nem visel téma-vezérelt (bg-pilot-grey-50) hátteret",
     );
   });
 
