@@ -77,6 +77,8 @@ import {
   type WorksheetCreateField,
   type WorksheetCreatePayload,
 } from "@/lib/worksheets/worksheet-create";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * ÚJ MUNKALAP A HELYSZÍNRŐL.
@@ -540,6 +542,9 @@ export default function NewWorksheetScreen() {
       }),
   });
 
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
+
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
   if (!capabilities?.worksheetsManage) return <Redirect href="/worksheets" />;
 
@@ -654,7 +659,7 @@ export default function NewWorksheetScreen() {
             <FieldError error={error} field="customer" />
             {partnerLezarva(elotoltes) ||
             nyitottValaszto !== "partner" ? null : partnersQuery.isPending ? (
-              <ActivityIndicator color="#52d6c7" />
+              <ActivityIndicator color={tokens.accent} />
             ) : partnersQuery.isError ? (
               <Text style={styles.hint}>
                 A partnerlista nem töltődött be. Húzd le a listát a
@@ -728,7 +733,7 @@ export default function NewWorksheetScreen() {
               </Text>
             ) : nyitottValaszto !==
               "helyszin" ? null : departmentsQuery.isPending ? (
-              <ActivityIndicator color="#52d6c7" />
+              <ActivityIndicator color={tokens.accent} />
             ) : departments.length === 0 ? (
               /**
                * AZ ÜRES LISTA OKÁT KIMONDJUK. Egy néma üres doboz mellett a
@@ -819,7 +824,7 @@ export default function NewWorksheetScreen() {
                         value={ujAlegysegKod}
                         onChangeText={setUjAlegysegKod}
                         placeholder="pl. CAP-UJ"
-                        placeholderTextColor="#5b7d8f"
+                        placeholderTextColor={tokens.textMuted}
                         autoCapitalize="characters"
                         style={styles.input}
                       />
@@ -830,7 +835,7 @@ export default function NewWorksheetScreen() {
                         value={ujAlegysegNev}
                         onChangeText={setUjAlegysegNev}
                         placeholder="pl. Hátsó medence"
-                        placeholderTextColor="#5b7d8f"
+                        placeholderTextColor={tokens.textMuted}
                         style={styles.input}
                       />
                     </View>
@@ -873,7 +878,7 @@ export default function NewWorksheetScreen() {
                 value={subject}
                 onChangeText={setSubject}
                 placeholder="Mi a munka (például: szivattyú csere)"
-                placeholderTextColor="#5b7d8f"
+                placeholderTextColor={tokens.textMuted}
                 style={styles.input}
               />
             </View>
@@ -889,7 +894,7 @@ export default function NewWorksheetScreen() {
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Amit a helyszínen érdemes rögzíteni"
-                placeholderTextColor="#5b7d8f"
+                placeholderTextColor={tokens.textMuted}
                 multiline
                 style={[styles.input, styles.multiline]}
               />
@@ -982,6 +987,8 @@ function Section({
   title: string;
   children: React.ReactNode;
 }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -997,111 +1004,134 @@ function FieldError({
   error: { field: WorksheetCreateField | null; message: string } | null;
   field: WorksheetCreateField;
 }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   if (!error || error.field !== field) return null;
   return <Text style={styles.fieldError}>{error.message}</Text>;
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  flex: { flex: 1 },
-  container: { padding: 18, paddingBottom: 48, gap: 16 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-  },
-  title: { color: "#f4fbff", fontSize: 28, fontWeight: "900" },
-  subtitle: { color: "#91afbe", lineHeight: 21 },
-  section: {
-    backgroundColor: "#0d2233",
-    borderRadius: 14,
-    padding: 14,
-  },
-  sectionTitle: { color: "#f4fbff", fontSize: 17, fontWeight: "900" },
-  sectionBody: { marginTop: 12, gap: 10 },
-  field: { gap: 5 },
-  label: { color: "#a9c4d1", fontSize: 12, fontWeight: "800" },
-  input: {
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderRadius: 10,
-    borderWidth: 1,
-    color: "#f4fbff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  multiline: { minHeight: 90, textAlignVertical: "top" },
-  pickerRow: {
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 12,
-  },
-  pickerSelected: { borderColor: "#52d6c7", backgroundColor: "#12443f" },
-  pickerName: { color: "#f4fbff", fontWeight: "800" },
-  pickerMeta: { color: "#789cad", fontSize: 11, marginTop: 2 },
-  list: {
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 6,
-    gap: 2,
-  },
-  listRow: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9 },
-  listRowOn: { backgroundColor: "#123f3b" },
-  listName: { color: "#f4fbff", fontSize: 14 },
-  listMeta: { color: "#789cad", fontSize: 11, marginTop: 2 },
-  hint: { color: "#789cad", fontSize: 12, lineHeight: 17 },
-  toggleLink: {
-    color: "#52d6c7",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  subForm: {
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderRadius: 10,
-    borderWidth: 1,
-    gap: 10,
-    padding: 12,
-  },
-  photoRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  clearPhotos: { color: "#52d6c7", fontSize: 12, fontWeight: "800" },
-  notice: {
-    backgroundColor: "#0b2f3f",
-    borderRadius: 10,
-    gap: 4,
-    padding: 12,
-  },
-  noticeTitle: { color: "#f4fbff", fontSize: 13, fontWeight: "900" },
-  noticeBody: { color: "#a9c4d1", fontSize: 12, lineHeight: 17 },
-  fieldError: { color: "#fecaca", fontSize: 12, fontWeight: "700" },
-  error: {
-    backgroundColor: "#3a1a1a",
-    borderRadius: 10,
-    color: "#ffb4ab",
-    padding: 12,
-  },
-  queued: {
-    backgroundColor: "#0b2f3f",
-    borderRadius: 10,
-    color: "#a9e7dd",
-    padding: 12,
-  },
-  missingFields: { color: "#789cad", fontSize: 12, textAlign: "center" },
-  saveButton: { backgroundColor: "#177b74", borderRadius: 12, padding: 15 },
-  saveText: {
-    color: "#fff",
-    fontWeight: "900",
-    textAlign: "center",
-    fontSize: 15,
-  },
-  disabled: { opacity: 0.55 },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 8. kör,
+ * telefonos átültetés, a lista (#1124) és az adatlap (#1125) mintáját
+ * követve: ez a képernyő eddig saját, fix sötét hexekkel élt.
+ *
+ * A "BEÁGYAZOTT" MEZŐK (`input`/`pickerRow`/`list`/`subForm`, eredetileg
+ * `#08192a`) A `background`-RA ESNEK, NEM A `surface`-RE -- ugyanaz az
+ * egyszerűsítés, mint az adatlapon (#1125): az eredeti paletta három
+ * sötétségi szintet különböztetett meg, a közös token-készlet csak kettőt ad.
+ *
+ * A "NOTICE"/"QUEUED" INFORMÁCIÓS DOBOZ (eredetileg `#0b2f3f`) AZ
+ * `accentSoft`-RA ESIK: mindkettő jóindulatú, nem hiba/figyelmeztetés
+ * jellegű üzenet (offline másolat kora, szinkronizálásra váró mentés) --
+ * nincs külön "info" token, az `accentSoft` a legközelebbi jelentés.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    flex: { flex: 1 },
+    container: { padding: 18, paddingBottom: 48, gap: 16 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 1.2,
+    },
+    title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
+    subtitle: { color: t.textSecondary, lineHeight: 21 },
+    section: {
+      backgroundColor: t.surface,
+      borderRadius: 14,
+      padding: 14,
+    },
+    sectionTitle: { color: t.textPrimary, fontSize: 17, fontWeight: "900" },
+    sectionBody: { marginTop: 12, gap: 10 },
+    field: { gap: 5 },
+    label: { color: t.textSecondary, fontSize: 12, fontWeight: "800" },
+    input: {
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      color: t.textPrimary,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    multiline: { minHeight: 90, textAlignVertical: "top" },
+    pickerRow: {
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      padding: 12,
+    },
+    pickerSelected: { borderColor: t.accent, backgroundColor: t.accentSoft },
+    pickerName: { color: t.textPrimary, fontWeight: "800" },
+    pickerMeta: { color: t.textSecondary, fontSize: 11, marginTop: 2 },
+    list: {
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      padding: 6,
+      gap: 2,
+    },
+    listRow: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9 },
+    listRowOn: { backgroundColor: t.accentSoft },
+    listName: { color: t.textPrimary, fontSize: 14 },
+    listMeta: { color: t.textSecondary, fontSize: 11, marginTop: 2 },
+    hint: { color: t.textSecondary, fontSize: 12, lineHeight: 17 },
+    toggleLink: {
+      color: t.accent,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    subForm: {
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      gap: 10,
+      padding: 12,
+    },
+    photoRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    clearPhotos: { color: t.accent, fontSize: 12, fontWeight: "800" },
+    notice: {
+      backgroundColor: t.accentSoft,
+      borderRadius: 10,
+      gap: 4,
+      padding: 12,
+    },
+    noticeTitle: { color: t.textPrimary, fontSize: 13, fontWeight: "900" },
+    noticeBody: { color: t.textSecondary, fontSize: 12, lineHeight: 17 },
+    fieldError: { color: t.danger, fontSize: 12, fontWeight: "700" },
+    error: {
+      backgroundColor: t.dangerSoft,
+      borderRadius: 10,
+      color: t.danger,
+      padding: 12,
+    },
+    queued: {
+      backgroundColor: t.accentSoft,
+      borderRadius: 10,
+      color: t.accentSoftText,
+      padding: 12,
+    },
+    missingFields: {
+      color: t.textSecondary,
+      fontSize: 12,
+      textAlign: "center",
+    },
+    saveButton: { backgroundColor: t.accent, borderRadius: 12, padding: 15 },
+    saveText: {
+      color: t.textOnAccent,
+      fontWeight: "900",
+      textAlign: "center",
+      fontSize: 15,
+    },
+    disabled: { opacity: 0.55 },
+  });
+}
