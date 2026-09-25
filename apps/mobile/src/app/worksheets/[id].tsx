@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -116,6 +116,8 @@ import {
 } from "@/lib/worksheets/worksheet-send-for-signature";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import {
   formatWorksheetDate,
   worksheetAssigneeLine,
@@ -824,6 +826,9 @@ export default function WorksheetDetailScreen() {
       ),
   });
 
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
+
   if (status !== "authenticated" || !user || !capabilities)
     return <Redirect href="/login" />;
   if (!capabilities.worksheetsView) return <Redirect href="/" />;
@@ -952,7 +957,7 @@ export default function WorksheetDetailScreen() {
         {cacheNotice ? <OfflineNoticeCard notice={cacheNotice} /> : null}
 
         {worksheet.isPending && !fromCache ? (
-          <ActivityIndicator color="#52d6c7" />
+          <ActivityIndicator color={tokens.accent} />
         ) : null}
 
         {worksheet.isError && !fromCache ? (
@@ -1477,7 +1482,7 @@ export default function WorksheetDetailScreen() {
                   value={description}
                   onChangeText={setDescription}
                   placeholder="Például: szivattyú csere"
-                  placeholderTextColor="#5b7d8f"
+                  placeholderTextColor={tokens.textMuted}
                   style={styles.input}
                 />
                 <View style={styles.lineRow}>
@@ -1487,7 +1492,7 @@ export default function WorksheetDetailScreen() {
                       value={quantity}
                       onChangeText={setQuantity}
                       placeholder="1,5"
-                      placeholderTextColor="#5b7d8f"
+                      placeholderTextColor={tokens.textMuted}
                       keyboardType="decimal-pad"
                       style={styles.input}
                     />
@@ -1498,7 +1503,7 @@ export default function WorksheetDetailScreen() {
                       value={unit}
                       onChangeText={setUnit}
                       placeholder="óra"
-                      placeholderTextColor="#5b7d8f"
+                      placeholderTextColor={tokens.textMuted}
                       style={styles.input}
                     />
                   </View>
@@ -1549,7 +1554,7 @@ export default function WorksheetDetailScreen() {
                         value={workerCount}
                         onChangeText={setWorkerCount}
                         placeholder="1"
-                        placeholderTextColor="#5b7d8f"
+                        placeholderTextColor={tokens.textMuted}
                         keyboardType="number-pad"
                         style={styles.input}
                       />
@@ -2024,7 +2029,7 @@ export default function WorksheetDetailScreen() {
                       onChangeText={setEntryDraft}
                       multiline
                       placeholder="Például: szivattyú csere, a régi ment a szervizbe"
-                      placeholderTextColor="#5b7d8f"
+                      placeholderTextColor={tokens.textMuted}
                       style={styles.entryInput}
                     />
                     {entryError ? (
@@ -2118,7 +2123,7 @@ export default function WorksheetDetailScreen() {
                             updateMaterialRequestRow(index, "name", value)
                           }
                           placeholder="Például: 40mm PVC nyomócső"
-                          placeholderTextColor="#5b7d8f"
+                          placeholderTextColor={tokens.textMuted}
                           style={styles.input}
                         />
                         <View style={styles.lineRow}>
@@ -2134,7 +2139,7 @@ export default function WorksheetDetailScreen() {
                                 )
                               }
                               placeholder="Például: 10 méter"
-                              placeholderTextColor="#5b7d8f"
+                              placeholderTextColor={tokens.textMuted}
                               style={styles.input}
                             />
                           </View>
@@ -2146,7 +2151,7 @@ export default function WorksheetDetailScreen() {
                                 updateMaterialRequestRow(index, "unit", value)
                               }
                               placeholder="db"
-                              placeholderTextColor="#5b7d8f"
+                              placeholderTextColor={tokens.textMuted}
                               style={styles.input}
                             />
                           </View>
@@ -2387,247 +2392,275 @@ export default function WorksheetDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 48, gap: 12 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  titleRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "space-between",
-  },
-  title: { color: "#f4fbff", flex: 1, fontSize: 24, fontWeight: "900" },
-  statusChip: {
-    backgroundColor: "#123f3b",
-    borderRadius: 999,
-    flexShrink: 0,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  statusText: { color: "#6de0ce", fontSize: 11, fontWeight: "800" },
-  subject: { color: "#d9edf7", fontSize: 16, fontWeight: "700" },
-  entryInput: {
-    backgroundColor: "#071827",
-    borderRadius: 10,
-    color: "#f4fbff",
-    minHeight: 110,
-    padding: 12,
-    textAlignVertical: "top",
-  },
-  sectionTitle: {
-    color: "#f4fbff",
-    fontSize: 15,
-    fontWeight: "800",
-    marginTop: 6,
-  },
-  card: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 16,
-    gap: 8,
-    padding: 14,
-  },
-  row: {
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-  },
-  label: { color: "#789cad", fontSize: 12, fontWeight: "700" },
-  value: { color: "#f4fbff", flex: 1, fontSize: 14, textAlign: "right" },
-  /* A HIVATKOZAS LATSZIK ANNAK: sajat szin, hogy a sima ertektol elvaljon. */
-  valueLink: { flex: 1 },
-  valueLinkText: {
-    color: "#6de0ce",
-    fontSize: 14,
-    textAlign: "right",
-    textDecorationLine: "underline",
-  },
-  total: {
-    color: "#6de0ce",
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "900",
-    textAlign: "right",
-  },
-  assignees: { color: "#f4fbff", fontSize: 14 },
-  /**
-   * AZ ESZKOZ-SZAM MONOSPACE, A FIGMA 8. KOR TERVE SZERINT ("Erintett
-   * eszkozok" kartya): egy szam-szeru azonosito monospace betuvel jobban
-   * megkulonbozteti magat a nevtol, mint azonos betutipusban.
-   */
-  assetCode: {
-    color: "#789cad",
-    fontFamily: "monospace",
-    fontSize: 12,
-  },
-  lineTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
-  lineSummary: { color: "#6de0ce", fontSize: 13, fontWeight: "700" },
-  muted: { color: "#789cad", fontSize: 12 },
-  /*
-    Balazs kepernyofotoja, 2026-09-23 20:52: az anyagigeny-sor allapot-cimkeje
-    kilogott a kartyabol, mert a mellette allo `muted` szoveg (a byline) nem
-    kapott flex-et, tehat a sajat termeszetes szelesseget vette fel egy
-    `justifyContent: "space-between"` sorban, es kitolta a cimket. A `muted`
-    KOZOS stilus, mashol is hasznaljak -- ezert nem oda kerult a javitas,
-    hanem ide, egy nevesitett kiegeszitobe, csak erre a sorra alkalmazva
-    (`style={[styles.muted, styles.materialRequestBylineText]}`).
-  */
-  materialRequestBylineText: { flex: 1 },
-  egysegFigyelmeztetes: {
-    color: "#ffd48a",
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 8,
-  },
-  error: {
-    color: "#fecaca",
-    backgroundColor: "#541b2b",
-    padding: 12,
-    borderRadius: 10,
-  },
-  input: {
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderRadius: 10,
-    borderWidth: 1,
-    color: "#f4fbff",
-    marginTop: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  lineRow: { flexDirection: "row", gap: 10, marginTop: 8 },
-  laborTotal: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#e8f4f8",
-  },
-  switchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    height: 44,
-  },
-  lineCell: { flex: 1 },
-  lineError: { color: "#ffb4ab", fontSize: 12, marginTop: 8 },
-  addLineButton: {
-    backgroundColor: "#177b74",
-    borderRadius: 10,
-    marginTop: 10,
-    padding: 12,
-  },
-  addLineText: { color: "#fff", fontWeight: "900", textAlign: "center" },
-  removeLine: {
-    color: "#ffb4ab",
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 8,
-  },
-  signButton: {
-    backgroundColor: "#177b74",
-    borderRadius: 12,
-    marginTop: 6,
-    padding: 16,
-  },
-  signButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  assigneeEdit: {
-    backgroundColor: "#12415c",
-    borderColor: "#1c4963",
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 8,
-    padding: 12,
-  },
-  assigneeEditText: {
-    color: "#f4fbff",
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  assigneeAction: { flex: 1, marginTop: 0 },
-  assigneeRow: {
-    alignItems: "center",
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 6,
-    padding: 12,
-  },
-  assigneeRowOn: { borderColor: "#52d6c7" },
-  assigneeName: { color: "#f4fbff", fontSize: 14 },
-  assigneeCheck: { color: "#6de0ce", fontSize: 12, fontWeight: "800" },
-  photoButton: {
-    backgroundColor: "#12415c",
-    borderColor: "#1c4963",
-    borderRadius: 10,
-    borderWidth: 1,
-    flex: 1,
-    padding: 12,
-  },
-  photoButtonText: {
-    color: "#f4fbff",
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
-  csempe: { gap: 4, width: 104 },
-  csempeKep: {
-    width: 104,
-    height: 104,
-    borderRadius: 10,
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  /*
-    A HIBA-DOBOZ KERETE A CSEMPEN ES NAGYBAN MAS MERET.
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 8. kör,
+ * telefonos átültetés, a lista képernyő (`worksheets/index.tsx`) és az
+ * Eszköznyilvántartás mobil átültetésének (#1087/#1089) mintáját követve: ez
+ * a képernyő eddig saját, fix sötét hexekkel élt.
+ *
+ * KÉT EGYSZERŰSÍTÉS, MINDKETTŐ SZÁNDÉKOS ÉS A TESTVÉR KÉPERNYŐVEL (`assets/[id].tsx`)
+ * EGYEZŐ DÖNTÉS:
+ * - Az eredeti paletta HÁROM sötétségi szintet különböztetett meg (oldal-
+ *   háttér, kártya, "beágyazott" mező/csempe) -- a közös token-készlet csak
+ *   kettőt ad (`background`/`surface`). A beágyazott elemek (`input`,
+ *   `assigneeRow`, `csempeKep`) ezért a `background`-ra esnek, nem egy
+ *   harmadik, ide másolt hexre.
+ * - A nagyítható fénykép sötét, félig átlátszó hátterét (`nagyRatet`,
+ *   `#03101acc`) NEM tokenizáltam: az `assets/[id].tsx` saját fényképnézője
+ *   ugyanezt az értéket viseli, változatlanul, migráció után is -- egy
+ *   teljes képernyős fekete-ish takarás szándékosan nem követi a világos/
+ *   sötét váltást, a fotó nézete mindkét módban ugyanaz.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 48, gap: 12 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    titleRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "space-between",
+    },
+    title: { color: t.textPrimary, flex: 1, fontSize: 24, fontWeight: "900" },
+    statusChip: {
+      backgroundColor: t.accentSoft,
+      borderRadius: 999,
+      flexShrink: 0,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    statusText: { color: t.accentSoftText, fontSize: 11, fontWeight: "800" },
+    subject: { color: t.textPrimary, fontSize: 16, fontWeight: "700" },
+    entryInput: {
+      backgroundColor: t.background,
+      borderRadius: 10,
+      color: t.textPrimary,
+      minHeight: 110,
+      padding: 12,
+      textAlignVertical: "top",
+    },
+    sectionTitle: {
+      color: t.textPrimary,
+      fontSize: 15,
+      fontWeight: "800",
+      marginTop: 6,
+    },
+    card: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 16,
+      gap: 8,
+      padding: 14,
+    },
+    row: {
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+    },
+    label: { color: t.textSecondary, fontSize: 12, fontWeight: "700" },
+    value: { color: t.textPrimary, flex: 1, fontSize: 14, textAlign: "right" },
+    /* A HIVATKOZAS LATSZIK ANNAK: sajat szin, hogy a sima ertektol elvaljon. */
+    valueLink: { flex: 1 },
+    valueLinkText: {
+      color: t.accentSoftText,
+      fontSize: 14,
+      textAlign: "right",
+      textDecorationLine: "underline",
+    },
+    total: {
+      color: t.accentSoftText,
+      flex: 1,
+      fontSize: 16,
+      fontWeight: "900",
+      textAlign: "right",
+    },
+    assignees: { color: t.textPrimary, fontSize: 14 },
+    /**
+     * AZ ESZKOZ-SZAM MONOSPACE, A FIGMA 8. KOR TERVE SZERINT ("Erintett
+     * eszkozok" kartya): egy szam-szeru azonosito monospace betuvel jobban
+     * megkulonbozteti magat a nevtol, mint azonos betutipusban.
+     */
+    assetCode: {
+      color: t.textSecondary,
+      fontFamily: "monospace",
+      fontSize: 12,
+    },
+    lineTitle: { color: t.textPrimary, fontSize: 15, fontWeight: "800" },
+    lineSummary: { color: t.accentSoftText, fontSize: 13, fontWeight: "700" },
+    muted: { color: t.textSecondary, fontSize: 12 },
+    /*
+      Balazs kepernyofotoja, 2026-09-23 20:52: az anyagigeny-sor allapot-cimkeje
+      kilogott a kartyabol, mert a mellette allo `muted` szoveg (a byline) nem
+      kapott flex-et, tehat a sajat termeszetes szelesseget vette fel egy
+      `justifyContent: "space-between"` sorban, es kitolta a cimket. A `muted`
+      KOZOS stilus, mashol is hasznaljak -- ezert nem oda kerult a javitas,
+      hanem ide, egy nevesitett kiegeszitobe, csak erre a sorra alkalmazva
+      (`style={[styles.muted, styles.materialRequestBylineText]}`).
+    */
+    materialRequestBylineText: { flex: 1 },
+    egysegFigyelmeztetes: {
+      color: t.warning,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 8,
+    },
+    error: {
+      color: t.danger,
+      backgroundColor: t.dangerSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+    input: {
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      color: t.textPrimary,
+      marginTop: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    lineRow: { flexDirection: "row", gap: 10, marginTop: 8 },
+    laborTotal: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: t.textPrimary,
+    },
+    switchRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      height: 44,
+    },
+    lineCell: { flex: 1 },
+    lineError: { color: t.danger, fontSize: 12, marginTop: 8 },
+    addLineButton: {
+      backgroundColor: t.accent,
+      borderRadius: 10,
+      marginTop: 10,
+      padding: 12,
+    },
+    addLineText: {
+      color: t.textOnAccent,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    removeLine: {
+      color: t.danger,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 8,
+    },
+    signButton: {
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      marginTop: 6,
+      padding: 16,
+    },
+    signButtonText: {
+      color: t.textOnAccent,
+      fontSize: 16,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    assigneeEdit: {
+      backgroundColor: t.surfaceRaised,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      marginTop: 8,
+      padding: 12,
+    },
+    assigneeEditText: {
+      color: t.textPrimary,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    assigneeAction: { flex: 1, marginTop: 0 },
+    assigneeRow: {
+      alignItems: "center",
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 6,
+      padding: 12,
+    },
+    assigneeRowOn: { borderColor: t.accent },
+    assigneeName: { color: t.textPrimary, fontSize: 14 },
+    assigneeCheck: { color: t.accentSoftText, fontSize: 12, fontWeight: "800" },
+    photoButton: {
+      backgroundColor: t.surfaceRaised,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      flex: 1,
+      padding: 12,
+    },
+    photoButtonText: {
+      color: t.textPrimary,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
+    csempe: { gap: 4, width: 104 },
+    csempeKep: {
+      width: 104,
+      height: 104,
+      borderRadius: 10,
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    /*
+      A HIBA-DOBOZ KERETE A CSEMPEN ES NAGYBAN MAS MERET.
 
-    A csempe 104 pont szeles: ott csak annyi fer ki, hogy MERES, es aki azt
-    latja, rakoppint. A TELJES szoveg a nagy nezetben olvashato, ahol van hely.
-  */
-  csempeHiba: { padding: 4 },
-  nagyKepHiba: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-  },
-  csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
-  nagyRatet: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#03101acc",
-    justifyContent: "center",
-    gap: 16,
-    padding: 20,
-  },
-  nagyKep: { flex: 1, width: "100%", borderRadius: 12 },
-  materialRequestRow: { gap: 4 },
-  materialRequestRowDivider: {
-    gap: 4,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#17394f",
-  },
-  materialRequestItem: { color: "#f4fbff", fontSize: 14 },
-  disabled: { opacity: 0.55 },
-  pressed: { opacity: 0.75 },
-});
+      A csempe 104 pont szeles: ott csak annyi fer ki, hogy MERES, es aki azt
+      latja, rakoppint. A TELJES szoveg a nagy nezetben olvashato, ahol van hely.
+    */
+    csempeHiba: { padding: 4 },
+    nagyKepHiba: {
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 16,
+    },
+    csempeMeret: { color: t.textSecondary, fontSize: 11, textAlign: "center" },
+    /*
+      A HATTER SZANDEKOSAN NEM TOKEN -- lasd a fuggveny fejleceet.
+    */
+    nagyRatet: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "#03101acc",
+      justifyContent: "center",
+      gap: 16,
+      padding: 20,
+    },
+    nagyKep: { flex: 1, width: "100%", borderRadius: 12 },
+    materialRequestRow: { gap: 4 },
+    materialRequestRowDivider: {
+      gap: 4,
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: t.border,
+    },
+    materialRequestItem: { color: t.textPrimary, fontSize: 14 },
+    disabled: { opacity: 0.55 },
+    pressed: { opacity: 0.75 },
+  });
+}
