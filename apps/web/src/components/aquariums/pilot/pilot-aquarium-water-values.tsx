@@ -170,7 +170,18 @@ export function PilotAquariumWaterValues({
     setError(null);
     try {
       await aquariumsApi.deleteMeasurement(token, aquariumId, occasion.id);
-      setOccasions((current) => current.filter((o) => o.id !== occasion.id));
+      /*
+        BALAZS MERESE (2026-09-25 11:16): torles utan a sor a listan marad,
+        csak oldalfrissitesre tunik el -- vagyis a szerver oldali torles
+        MUKODIK (egy ujratoltes utan mar nem all ott), csak ez a helyi
+        allapot nem kovette. A korabbi alak egyetlen `setOccasions` szurest
+        vegzett, ami a `latest`/`activeParam`/`activePoints` derivalt
+        ertekeket is ujraszamolta -- statikus olvasassal nem talaltam benne
+        hibat, de a `load()` UJRATOLTES pontosan azt csinalja automatikusan,
+        amit a kezi frissites: a szerver valaszabol epiti fel az allapotot,
+        tehat barmi is az ok, ez zarja a rest.
+      */
+      load();
     } catch (cause) {
       setError(
         cause instanceof ApiError
