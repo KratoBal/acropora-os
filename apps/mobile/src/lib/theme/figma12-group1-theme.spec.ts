@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-import { hexSzinLiteralok } from "../lib/theme/no-fixed-hex";
+import { hexSzinLiteralok } from "./no-fixed-hex";
 
 /**
  * FIGMA 12. KÖR, 1. CSOPORT (kezdőlap, bejelentkezés, Beállítások, `_layout`) --
@@ -12,11 +12,17 @@ import { hexSzinLiteralok } from "../lib/theme/no-fixed-hex";
  * "Ellenőrzés" szakasz). Ebben a négy fájlban nincs kamera-rátét, tehát a
  * mérce egyszerű: NULLA hex-literál.
  *
+ * A SPEC ITT ÁLL, NEM A `src/app` ALATT (acrobot mérése, 2026-09-25 17:03):
+ * az Expo Router a `src/app` MINDEN fájlját útvonalként próbálja buildelni,
+ * és a `node:test` importot az `expo export` nem tudja feloldani -- a
+ * "Static verification" CI-lépés emiatt bukott. A `no-fixed-hex.ts` is már
+ * itt állt, tehát a spec csak követi a saját segédjét.
+ *
  * A `__dirname` A `test-dist`-BEN A LEFORDÍTOTT FÁJL MELLETT ÁLL, DE A
  * FORRÁSFÁT OLVASSUK -- ugyanaz a minta, mint a `worksheet-assets.spec.ts`
  * `KEPERNYO` állandójánál: a `.tsx` fájl a `test-dist`-ben nincs is meg.
  */
-const SRC = join(__dirname, "..", "..", "src", "app");
+const SRC = join(__dirname, "..", "..", "..", "src", "app");
 
 const KEPERNYOK = [
   { fajl: "index.tsx", nev: "Kezdőlap" },
