@@ -204,6 +204,38 @@
 [data-theme="dark"] [class*="bg-white\/"] {
   background-color: color-mix(in srgb, var(--pilot-surface) 60%, transparent);
 }
+
+/**
+ * A FENTI KÉT SZABÁLY LESZÁRMAZOTT-SZELEKTOR (SZÓKÖZ A KÉT RÉSZ KÖZÖTT) --
+ * EZ NEM ILLESZKEDIK, HA A `data-theme` ÉS A `.bg-white` UGYANAZON AZ
+ * ELEMEN ÁLL.
+ *
+ * MÉRT HIBA (2026-09-25, Balázs képernyőfotója, `#1134` után élesben):
+ * `app-shell.tsx` `<aside data-theme={effectiveTheme} className="...
+ * bg-white ...">` és a `<header data-theme={effectiveTheme}
+ * className="... bg-white/95 ...">` MINDKÉT osztályt ÉS az attribútumot
+ * IS a SAJÁT magán viseli. A CSS-ben a leszármazott-szelektor csak akkor
+ * illeszkedik, ha a `[data-theme="dark"]` egy ŐS elemen áll, a `.bg-white`
+ * pedig egy MÁSIK, alárendelt elemen -- egyetlen elem, ami mindkettőt
+ * viseli, nem elégíti ki. Ezért sötét preferencia mellett az oldalsáv és
+ * a fejléc FEHÉR maradt, miközben a bennük álló `<input>` (raw tag-
+ * szelektor, lásd lent) és a beágyazott `UserMenu` lenyílója (VALÓDI
+ * leszármazott, saját `bg-white` osztállyal) helyesen sötétedett -- ez a
+ * részleges kép adta az első, téves gyanút, hogy a keret csak bizonyos
+ * oldalakon sötétedik.
+ *
+ * A JAVÍTÁS: ÖSSZETETT szelektor (szóköz NÉLKÜL) a leszármazott-szabály
+ * MELLÉ, nem helyette -- mindkét eset (ugyanaz az elem, ÉS egy
+ * leszármazott) lefedve marad, bármelyik komponens bármelyik alakban
+ * használja.
+ */
+[data-theme="dark"].bg-white {
+  background-color: var(--pilot-surface);
+}
+[data-theme="dark"][class*="bg-white\/"] {
+  background-color: color-mix(in srgb, var(--pilot-surface) 60%, transparent);
+}
+
 [data-theme="dark"] input,
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
