@@ -1,18 +1,24 @@
 "use client";
 
+import { Alert, Skeleton } from "@acropora/ui";
 import {
-  Avatar,
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  Icon,
-  PageHeader,
-  StatCard,
-} from "@acropora/ui";
+  worksheetStatusLabel,
+  type DashboardActivity,
+  type DashboardSummary,
+} from "@acropora/types";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  PilotBadge,
+  PilotCard,
+  PilotCardHeader,
+  PilotThemeRoot,
+} from "@/components/pilot/pilot-ui";
+import { serviceJobStatusLabel } from "@/components/service-jobs/service-job-labels";
+import { dashboardApi } from "@/lib/api/dashboard";
 import { personDisplayName } from "@acropora/types";
 
 function getGreeting(hour: number) {
@@ -21,254 +27,510 @@ function getGreeting(hour: number) {
   return "Jó estét";
 }
 
-const tasks = [
-  {
-    title: "UNAS rendelések ellenőrzése",
-    meta: "09:30 · Webshop",
-    urgent: true,
-  },
-  {
-    title: "AquaLine szállítmány bevételezése",
-    meta: "11:00 · Raktár",
-    urgent: false,
-  },
-  {
-    title: "Heti pénztárzárás jóváhagyása",
-    meta: "14:00 · Pénzügy",
-    urgent: false,
-  },
-  {
-    title: "Szerviz munkalapok kiosztása",
-    meta: "Ma · Szerviz",
-    urgent: false,
-  },
-];
+const todayFormatter = new Intl.DateTimeFormat("hu-HU", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  weekday: "long",
+});
 
-const activities = [
-  {
-    initials: "KM",
-    name: "Kovács Márk",
-    action: "lezárta a #BEV-1048 bevételezést",
-    time: "8 perce",
-  },
-  {
-    initials: "NL",
-    name: "Nagy Lilla",
-    action: "új vevőt rögzített: Blue Reef Kft.",
-    time: "24 perce",
-  },
-  {
-    initials: "TA",
-    name: "Tóth Ádám",
-    action: "frissítette 18 termék készletét",
-    time: "1 órája",
-  },
-  {
-    initials: "SZ",
-    name: "Rendszer",
-    action: "befejezte az UNAS szinkronizációt",
-    time: "2 órája",
-  },
-];
+const dateFormatter = new Intl.DateTimeFormat("hu-HU", {
+  month: "short",
+  day: "numeric",
+});
 
-const inventoryAlerts = [
-  {
-    product: "Red Sea ReefMat 500",
-    sku: "RS-RM500",
-    stock: 2,
-    level: "Kritikus",
-  },
-  {
-    product: "Tropic Marin Pro Reef 25 kg",
-    sku: "TM-PR25",
-    stock: 4,
-    level: "Alacsony",
-  },
-  {
-    product: "Aqua Medic DC Runner 3.3",
-    sku: "AM-DC33",
-    stock: 5,
-    level: "Alacsony",
-  },
-];
+const dateTimeFormatter = new Intl.DateTimeFormat("hu-HU", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function formatDate(value: string | null) {
+  return value ? dateFormatter.format(new Date(value)) : "Nincs határidő";
+}
+
+function worksheetStatusText(status: string) {
+  return Object.hasOwn(worksheetStatusLabel, status)
+    ? worksheetStatusLabel[status as keyof typeof worksheetStatusLabel]
+    : status;
+}
+
+function ticketStatusText(status: string) {
+  return Object.hasOwn(serviceJobStatusLabel, status)
+    ? serviceJobStatusLabel[status as keyof typeof serviceJobStatusLabel]
+    : status;
+}
+
+function DashboardCard({
+  children,
+  empty,
+  href,
+  title,
+}: {
+  children: ReactNode;
+  empty: boolean;
+  href?: string;
+  title: string;
+}) {
+  return (
+    <PilotCard>
+      <PilotCardHeader
+        title={title}
+        action={
+          href ? (
+            <Link
+              href={href}
+              className="text-xs font-medium text-pilot-aqua-700 hover:text-pilot-aqua-800"
+            >
+              Lista megnyitása
+            </Link>
+          ) : undefined
+        }
+      />
+      <div className="p-5">
+        {empty ? (
+          <p className="text-sm text-pilot-grey-500">{children}</p>
+        ) : (
+          children
+        )}
+      </div>
+    </PilotCard>
+  );
+}
+
+function DashboardLoading() {
+  return (
+    <div
+      className="grid gap-5 lg:grid-cols-2"
+      aria-label="Irányítópult betöltése"
+    >
+      {["one", "two", "three", "four"].map((key) => (
+        <PilotCard key={key} className="p-5">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="mt-5 h-4 w-full" />
+          <Skeleton className="mt-3 h-4 w-4/5" />
+        </PilotCard>
+      ))}
+    </div>
+  );
+}
+
+function ManagerTiles({
+  data,
+}: {
+  data: NonNullable<DashboardSummary["managerTiles"]>;
+}) {
+  const tiles = [
+    {
+      href: "/szerviz/hibajegyek",
+      label: "Nyitott hibajegyek",
+      value: data.openTickets,
+    },
+    {
+      href: "/szerviz/munkalapok",
+      label: "Aláírásra váró munkalapok",
+      value: data.worksheetsWaitingForSignature,
+    },
+    {
+      href: "/szerviz/anyagigenyek",
+      label: "Nyitott anyagigények",
+      value: data.materialRequestsWaiting,
+    },
+    {
+      href: "/szerviz/karbantartas",
+      label: "Aláírásra váró karbantartási megrendelők",
+      value: data.maintenanceOrderFormsWaitingForSignature,
+    },
+  ];
+
+  return (
+    <section
+      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      aria-label="Szerviz áttekintés"
+    >
+      {tiles.map((tile) => (
+        <Link
+          key={tile.label}
+          href={tile.href}
+          className="rounded-xl bg-white p-4 ring-1 ring-pilot-grey-200 transition-colors hover:bg-pilot-grey-50"
+        >
+          <p className="text-xs font-medium text-pilot-grey-500">
+            {tile.label}
+          </p>
+          <p className="mt-3 text-2xl font-semibold text-pilot-grey-900">
+            {tile.value}
+          </p>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
+export function DashboardCards({ summary }: { summary: DashboardSummary }) {
+  return (
+    <div className="space-y-5">
+      {summary.managerTiles ? (
+        <ManagerTiles data={summary.managerTiles} />
+      ) : null}
+
+      <section className="grid gap-5 lg:grid-cols-2">
+        {summary.myWorksheets ? (
+          <DashboardCard
+            title="Saját munkalapjaim"
+            href="/szerviz/munkalapok"
+            empty={summary.myWorksheets.items.length === 0}
+          >
+            {summary.myWorksheets.items.length === 0 ? (
+              "Nincs nyitott munkalapod."
+            ) : (
+              <ul className="space-y-3">
+                {summary.myWorksheets.items.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-start justify-between gap-3"
+                  >
+                    <Link
+                      href={`/szerviz/munkalapok/${item.id}`}
+                      className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                    >
+                      <span className="block truncate">{item.subject}</span>
+                      <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                        {item.number ?? "Munkalap azonosító nélkül"} ·{" "}
+                        {formatDate(item.deadline)}
+                      </span>
+                    </Link>
+                    <PilotBadge variant="grey">
+                      {worksheetStatusText(item.status)}
+                    </PilotBadge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashboardCard>
+        ) : null}
+
+        {summary.openTickets ? (
+          <DashboardCard
+            title="Nyitott hibajegyek a helyszíneimen"
+            href="/szerviz/hibajegyek"
+            empty={summary.openTickets.items.length === 0}
+          >
+            {summary.openTickets.items.length === 0 ? (
+              "Nincs nyitott hibajegy a helyszíneiden."
+            ) : (
+              <>
+                <p className="mb-3 text-xs text-pilot-grey-500">
+                  {summary.openTickets.count} nyitott hibajegy
+                </p>
+                <ul className="space-y-3">
+                  {summary.openTickets.items.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-start justify-between gap-3"
+                    >
+                      <Link
+                        href={`/szerviz/hibajegyek/${item.id}`}
+                        className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                      >
+                        <span className="block truncate">{item.title}</span>
+                        <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                          {item.number} ·{" "}
+                          {dateTimeFormatter.format(new Date(item.createdAt))}
+                        </span>
+                      </Link>
+                      <PilotBadge variant="grey">
+                        {ticketStatusText(item.status)}
+                      </PilotBadge>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </DashboardCard>
+        ) : null}
+
+        {summary.deadlines ? (
+          <DashboardCard
+            title="Határidők"
+            href="/szerviz/munkalapok"
+            empty={summary.deadlines.items.length === 0}
+          >
+            {summary.deadlines.items.length === 0 ? (
+              "Nincs közelgő határidő."
+            ) : (
+              <ul className="space-y-3">
+                {summary.deadlines.items.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-start justify-between gap-3"
+                  >
+                    <Link
+                      href={`/szerviz/munkalapok/${item.id}`}
+                      className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                    >
+                      <span className="block truncate">{item.subject}</span>
+                      <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                        {item.number ?? "Munkalap azonosító nélkül"}
+                      </span>
+                    </Link>
+                    <PilotBadge variant="amber">
+                      {formatDate(item.deadline)}
+                    </PilotBadge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashboardCard>
+        ) : null}
+
+        {summary.teamLoad ? (
+          <DashboardCard
+            title="Csapat"
+            href="/szerviz/munkalapok"
+            empty={summary.teamLoad.items.length === 0}
+          >
+            {summary.teamLoad.items.length === 0 ? (
+              "Nincs nyitott munkalap a csapatnál."
+            ) : (
+              <ul className="space-y-3">
+                {summary.teamLoad.items.map((item) => (
+                  <li
+                    key={item.userId}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="font-medium text-pilot-grey-800">
+                      {item.displayName}
+                    </span>
+                    <span className="text-pilot-grey-500">
+                      {item.openWorksheetCount} nyitott munkalap
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashboardCard>
+        ) : null}
+
+        {summary.aquariumAlerts ? (
+          <DashboardCard
+            title="Akváriumok"
+            href="/akvariumok"
+            empty={summary.aquariumAlerts.items.length === 0}
+          >
+            {summary.aquariumAlerts.items.length === 0 ? (
+              "Nincs figyelmeztető akváriumjelzés."
+            ) : (
+              <ul className="space-y-3">
+                {summary.aquariumAlerts.items.map((item) => (
+                  <li
+                    key={`${item.aquariumId}-${item.reason}`}
+                    className="flex items-start justify-between gap-3"
+                  >
+                    <Link
+                      href={`/akvariumok/${item.aquariumId}/meresek`}
+                      className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                    >
+                      <span className="block truncate">
+                        {item.aquariumName}
+                      </span>
+                      <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                        {item.reason === "OUT_OF_RANGE"
+                          ? "Céltartományon kívüli érték"
+                          : "Vízmérés esedékes"}
+                      </span>
+                    </Link>
+                    <PilotBadge
+                      variant={
+                        item.reason === "OUT_OF_RANGE" ? "danger" : "amber"
+                      }
+                    >
+                      {item.reason === "OUT_OF_RANGE"
+                        ? "Figyelmeztetés"
+                        : "Esedékes"}
+                    </PilotBadge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashboardCard>
+        ) : null}
+
+        {summary.materialRequests ? (
+          <DashboardCard
+            title="Anyagigények"
+            href="/szerviz/anyagigenyek"
+            empty={summary.materialRequests.items.length === 0}
+          >
+            {summary.materialRequests.items.length === 0 ? (
+              "Nincs nyitott anyagigény."
+            ) : (
+              <ul className="space-y-3">
+                {summary.materialRequests.items.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-start justify-between gap-3"
+                  >
+                    <Link
+                      href={`/szerviz/munkalapok/${item.worksheetId}`}
+                      className="min-w-0 text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                    >
+                      <span className="block truncate">
+                        {item.customerName}
+                      </span>
+                      <span className="mt-1 block text-xs font-normal text-pilot-grey-500">
+                        {item.worksheetNumber ?? "Munkalap azonosító nélkül"} ·{" "}
+                        {dateTimeFormatter.format(new Date(item.submittedAt))}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashboardCard>
+        ) : null}
+
+        {summary.inventoryDiscrepancies ? (
+          <DashboardCard
+            title="Leltár"
+            href="/keszlet-egyeztetes"
+            empty={summary.inventoryDiscrepancies.items.length === 0}
+          >
+            {summary.inventoryDiscrepancies.items.length === 0 ? (
+              "Nincs készleteltérés."
+            ) : (
+              <>
+                <p className="mb-3 text-xs text-pilot-grey-500">
+                  {summary.inventoryDiscrepancies.count} eltérés
+                </p>
+                <ul className="space-y-3">
+                  {summary.inventoryDiscrepancies.items.map((item) => (
+                    <li
+                      key={item.variantId}
+                      className="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span className="font-medium text-pilot-grey-800">
+                        {item.sku}
+                      </span>
+                      <span className="text-pilot-grey-500">
+                        {item.warehouseCode}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </DashboardCard>
+        ) : null}
+
+        {summary.activity ? <ActivityCard data={summary.activity} /> : null}
+      </section>
+    </div>
+  );
+}
+
+function ActivityCard({
+  data,
+}: {
+  data: NonNullable<DashboardSummary["activity"]>;
+}) {
+  const actionLabel: Record<
+    DashboardActivity["items"][number]["kind"],
+    string
+  > = {
+    TICKET_OPENED: "új hibajegyet nyitott",
+    WORKSHEET_CLOSED: "munkalapot zárt le",
+    MEASUREMENT_RECORDED: "vízmérést rögzített",
+  };
+
+  return (
+    <DashboardCard
+      title="Legutóbbi aktivitások"
+      empty={data.items.length === 0}
+    >
+      {data.items.length === 0 ? (
+        "Nincs megjeleníthető aktivitás."
+      ) : (
+        <ul className="space-y-3">
+          {data.items.map((item) => (
+            <li
+              key={`${item.kind}-${item.subject}-${item.occurredAt}`}
+              className="text-sm text-pilot-grey-600"
+            >
+              <span className="font-medium text-pilot-grey-800">
+                {item.actorName ?? "Rendszer"}
+              </span>{" "}
+              {actionLabel[item.kind]}: {item.subject}
+              <span className="mt-1 block text-xs text-pilot-grey-500">
+                {dateTimeFormatter.format(new Date(item.occurredAt))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </DashboardCard>
+  );
+}
 
 export default function DashboardPage() {
   const { session } = useAuth();
-  // A nickname is already the short form somebody goes by, so it is used
-  // whole; only a full name gets cut down to its first word.
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!session) {
+      setLoading(false);
+      return () => controller.abort();
+    }
+
+    setLoading(true);
+    setError(null);
+    void dashboardApi
+      .summary(session.token ?? "", controller.signal)
+      .then((next) => setSummary(next))
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Az irányítópult nem tölthető be.",
+          );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [session]);
+
   const greetingName = session?.user
     ? personDisplayName(session.user).split(" ")[0]
     : undefined;
   const greeting = getGreeting(new Date().getHours());
-  const today = new Intl.DateTimeFormat("hu-HU", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "long",
-  }).format(new Date());
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow={today}
-        title={greetingName ? `${greeting}, ${greetingName}!` : `${greeting}!`}
-        description="Itt találod a vállalat mai legfontosabb történéseit és teendőit."
-        actions={
-          <Button variant="secondary">
-            <Icon name="activity" size={16} />
-            Riport megnyitása
-          </Button>
-        }
-      />
+    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50 p-6 lg:-m-8 lg:p-8">
+      <div className="mb-6">
+        <p className="text-sm text-pilot-grey-500">
+          {todayFormatter.format(new Date())}
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold text-pilot-grey-900">
+          {greetingName ? `${greeting}, ${greetingName}!` : `${greeting}!`}
+        </h1>
+      </div>
 
-      <section
-        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-        aria-label="Fő mutatók"
-      >
-        <StatCard
-          label="Mai nettó árbevétel"
-          value="1 284 500 Ft"
-          change="+12,4%"
-          changeLabel="tegnaphoz képest"
-          trend="up"
-          icon={<Icon name="finance" size={17} />}
+      {loading ? <DashboardLoading /> : null}
+      {error ? (
+        <Alert
+          variant="danger"
+          title="Az irányítópult nem tölthető be"
+          description={error}
         />
-        <StatCard
-          label="Nyitott rendelések"
-          value="38"
-          change="6 új"
-          changeLabel="az elmúlt órában"
-          trend="neutral"
-          icon={<Icon name="cart" size={17} />}
-        />
-        <StatCard
-          label="Készlethiányos termékek"
-          value="12"
-          change="−3"
-          changeLabel="a tegnapi állapothoz képest"
-          trend="up"
-          icon={<Icon name="package" size={17} />}
-        />
-        <StatCard
-          label="Nyitott szervizlapok"
-          value="7"
-          change="2 sürgős"
-          changeLabel="mai határidővel"
-          trend="down"
-          icon={<Icon name="service" size={17} />}
-        />
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card>
-          <CardHeader>
-            <div>
-              <h2 className="text-sm font-semibold text-dusk-900">
-                Mai feladatok
-              </h2>
-              <p className="mt-0.5 text-xs text-dusk-400">
-                4 feladat vár rád ma
-              </p>
-            </div>
-            <Button variant="ghost" size="sm">
-              Összes megnyitása
-            </Button>
-          </CardHeader>
-          <div className="divide-y divide-dusk-100">
-            {tasks.map((task) => (
-              <div
-                key={task.title}
-                className="flex items-center gap-3 px-5 py-3.5"
-              >
-                <span className="size-4 shrink-0 rounded-full border-2 border-dusk-300" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-dusk-800">
-                    {task.title}
-                  </p>
-                  <p className="mt-0.5 text-xs text-dusk-400">{task.meta}</p>
-                </div>
-                {task.urgent ? <Badge variant="danger">Sürgős</Badge> : null}
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div>
-              <h2 className="text-sm font-semibold text-dusk-900">
-                Készletfigyelő
-              </h2>
-              <p className="mt-0.5 text-xs text-dusk-400">
-                Minimumszint alatti tételek
-              </p>
-            </div>
-            <Button variant="ghost" size="sm">
-              Készlet megnyitása
-            </Button>
-          </CardHeader>
-          <div className="divide-y divide-dusk-100">
-            {inventoryAlerts.map((item) => (
-              <div
-                key={item.sku}
-                className="flex items-center gap-3 px-5 py-3.5"
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                  <Icon name="box" size={17} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-dusk-800">
-                    {item.product}
-                  </p>
-                  <p className="mt-0.5 text-xs text-dusk-400">
-                    {item.sku} · {item.stock} db
-                  </p>
-                </div>
-                <Badge
-                  variant={item.level === "Kritikus" ? "danger" : "warning"}
-                >
-                  {item.level}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </section>
-
-      <Card>
-        <CardHeader>
-          <div>
-            <h2 className="text-sm font-semibold text-dusk-900">
-              Legutóbbi aktivitások
-            </h2>
-            <p className="mt-0.5 text-xs text-dusk-400">
-              A csapat és a rendszer legfrissebb műveletei
-            </p>
-          </div>
-          <Button variant="ghost" size="sm">
-            Aktivitási napló
-          </Button>
-        </CardHeader>
-        <CardContent className="grid gap-x-8 gap-y-5 md:grid-cols-2">
-          {activities.map((activity) => (
-            <div
-              key={`${activity.name}-${activity.time}`}
-              className="flex items-start gap-3"
-            >
-              <Avatar name={activity.initials} size="sm" />
-              <div className="min-w-0">
-                <p className="text-sm leading-5 text-dusk-600">
-                  <span className="font-semibold text-dusk-800">
-                    {activity.name}
-                  </span>{" "}
-                  {activity.action}
-                </p>
-                <p className="mt-0.5 text-xs text-dusk-400">{activity.time}</p>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
+      ) : null}
+      {!loading && !error && summary ? (
+        <DashboardCards summary={summary} />
+      ) : null}
+    </PilotThemeRoot>
   );
 }
