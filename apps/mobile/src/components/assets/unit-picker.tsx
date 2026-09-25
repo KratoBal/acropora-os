@@ -1,8 +1,10 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { unitLevels, unitPickerPlan } from "@/lib/partners/site-tree";
 import type { PartnerUnitLike } from "@/lib/partners/site-tree";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /**
  * A HELYSZIN-VALASZTO, EGY PELDANYBAN, MINDKET URLAPNAK.
@@ -55,6 +57,8 @@ export function UnitPicker({
     a fejlec mas utat mutathatna, mint amit a lepcso epp kinal.
   */
   const plan = unitPickerPlan(unitLevels(rows, value || null));
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   return (
     <CollapsedPicker
@@ -139,6 +143,8 @@ export function CollapsedPicker({
   onToggle(): void;
   children: ReactNode;
 }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <>
       <Pressable
@@ -155,19 +161,28 @@ export function CollapsedPicker({
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    padding: 11,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#21485e",
-    backgroundColor: "#0a2335",
-  },
-  rowSelected: { borderColor: "#52d6c7", backgroundColor: "#12443f" },
-  rowOff: { opacity: 0.5 },
-  // Egy szint egy sor: a szintek kozotti tavolsag mutatja, hogy lejjebb leptunk.
-  level: { gap: 6, marginBottom: 8 },
-  name: { color: "#f4fbff", fontWeight: "800" },
-  meta: { color: "#789cad", fontSize: 11, marginTop: 2 },
-  hint: { color: "#789cad", fontSize: 12, lineHeight: 17 },
-});
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- lásd
+ * `category-picker.tsx` fejlécét ugyanerről a jelentésről (Balázs, 2026-09-25
+ * 14:48, telefonos fényképek). Két hívó van (`UnitPicker`, `CollapsedPicker`),
+ * mindkettő saját `useAppTheme()`-et hív, mert a `styles` a hívó saját
+ * render-körén belül számított `useMemo`.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    row: {
+      padding: 11,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+    },
+    rowSelected: { borderColor: t.accent, backgroundColor: t.accentSoft },
+    rowOff: { opacity: 0.5 },
+    // Egy szint egy sor: a szintek kozotti tavolsag mutatja, hogy lejjebb leptunk.
+    level: { gap: 6, marginBottom: 8 },
+    name: { color: t.textPrimary, fontWeight: "800" },
+    meta: { color: t.textSecondary, fontSize: 11, marginTop: 2 },
+    hint: { color: t.textSecondary, fontSize: 12, lineHeight: 17 },
+  });
+}
