@@ -80,14 +80,13 @@ describe("a portal héja és a tartalom doboza (sürgős javítás, 2026-09-25)"
    */
   const regiStilusuLapok: { fajl: string; leiras: string }[] = [
     { fajl: "settings.tsx", leiras: "Beállítások" },
-    { fajl: "new-ticket.tsx", leiras: "Új hibajegy" },
     { fajl: "aquarium-list.tsx", leiras: "Akváriumok lista" },
     { fajl: "aquarium-detail.tsx", leiras: "Akváriumok adatlap" },
     { fajl: "new-aquarium.tsx", leiras: "Új akvárium" },
   ];
 
   it("a kontroll-lista tényleg nem üres", () => {
-    assert.ok(regiStilusuLapok.length >= 5);
+    assert.ok(regiStilusuLapok.length >= 4);
   });
 
   for (const { fajl, leiras } of regiStilusuLapok) {
@@ -125,6 +124,11 @@ describe("a portal héja és a tartalom doboza (sürgős javítás, 2026-09-25)"
     "asset-detail.tsx",
     "worksheet-list.tsx",
     "worksheet-detail.tsx",
+    /*
+      NEW-TICKET.TSX 2026-09-25-TŐL EZ A CSOPORT TAGJA (pilot-aqua átültetés,
+      lásd a saját fejlécét): a `regiStilusuLapok` listából ide költözött.
+    */
+    "new-ticket.tsx",
   ];
 
   for (const fajl of pilotLapok) {
