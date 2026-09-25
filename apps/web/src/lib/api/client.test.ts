@@ -24,7 +24,7 @@ describe("apiRequest", () => {
   it("attaches a Bearer header when a real token is given (development login)", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify({ ok: true }),
     });
 
     await apiRequest("/auth/me", "dev_abc123");
@@ -42,7 +42,7 @@ describe("apiRequest", () => {
   it("omits the Authorization header entirely when there is no token (cookie-based production session)", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify({ ok: true }),
     });
 
     await apiRequest("/auth/me", "");
@@ -56,7 +56,7 @@ describe("apiRequest", () => {
     document.cookie = "acropora_csrf=csrf-token-value";
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify({ ok: true }),
     });
 
     await apiRequest("/products", "");
@@ -70,7 +70,7 @@ describe("apiRequest", () => {
     document.cookie = "acropora_csrf=csrf-token-value";
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify({ ok: true }),
     });
 
     await apiRequest("/products", "", { method: "POST", body: "{}" });
@@ -83,7 +83,7 @@ describe("apiRequest", () => {
   it("labels a JSON string body as JSON, so the API does not receive an empty body", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify({ ok: true }),
     });
 
     await apiRequest("/suppliers/abc/units", "dev_abc123", {
@@ -99,7 +99,7 @@ describe("apiRequest", () => {
   it("leaves a FormData body unlabelled, so the browser can write its own boundary", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify({ ok: true }),
     });
 
     const body = new FormData();
@@ -118,7 +118,7 @@ describe("apiRequest", () => {
   it("keeps an explicit Content-Type from the caller", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify({ ok: true }),
     });
 
     await apiRequest("/imports/csv", "dev_abc123", {
@@ -157,7 +157,7 @@ describe("apiRequest", () => {
   it("sends no CSRF header on a mutating request when there is no CSRF cookie (development mode)", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true }),
+      text: async () => JSON.stringify({ ok: true }),
     });
 
     await apiRequest("/products", "dev_abc123", { method: "POST" });
@@ -165,5 +165,41 @@ describe("apiRequest", () => {
     const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
       .calls[0] as [string, RequestInit];
     expect(init.headers).not.toHaveProperty("X-CSRF-Token");
+  });
+
+  /**
+   * EGY VOID VÉGPONT VÁLASZA VALÓBAN ÜRES, NEM `{}`. Mérve 2026-09-25: a
+   * NestJS Express-adapter `void`-ot visszaadó handlernél argumentum
+   * nélküli `response.send()`-et hív -- 200-as státusszal, TELJESEN üres
+   * törzzsel. Ez a teszt VALÓDI `Response` példányt ad (nem kézzel írt
+   * mockot), hogy a `.text()`/`.json()` viselkedés a böngésző/Node fetch
+   * tényleges szabályait kövesse, ne a saját feltevésemet arról.
+   */
+  it("resolves cleanly when a void endpoint answers with a truly empty 200 body", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response("", { status: 200 }));
+
+    await expect(
+      apiRequest("/aquariums/a1/measurements/o1", "dev_abc123", {
+        method: "DELETE",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  /**
+   * UGYANAZ 204-GYEL -- acrobot kérése (2026-09-25), aki külön kérte, hogy
+   * a 204-et is a `text().length` alapján kezeljük, ne a státuszkód szerint
+   * ágazva: egy státusz-alapú ág könnyen kimaradna arra a MÁSIK gyakori
+   * esetre, amikor egy `void` végpont 200-at ad, üres törzzsel (lásd fent).
+   */
+  it("resolves cleanly when a void endpoint answers with 204 No Content", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(
+      apiRequest("/units-of-measure/u1", "dev_abc123", { method: "DELETE" }),
+    ).resolves.toBeUndefined();
   });
 });
