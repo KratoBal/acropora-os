@@ -2,7 +2,24 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { PartnerDeletionPlan } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PartnerDeleteButton } from "./partner-delete-button";
+import { PilotPartnerDeleteButton } from "./pilot-partner-delete-button";
+
+/**
+ * ÁTMÁSOLVA A RÉGI `partner-delete-button.component.test.tsx`-BŐL
+ * (2026-09-25, Figma 13. kör), ugyanazokkal az állításokkal -- a törlési
+ * logika és szövegek nem változtak, csak a komponens `@acropora/ui`
+ * `Card`/`Button` helyett pilot komponensekkel épül.
+ *
+ * A `next/font/local` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA -- vitest alatt,
+ * Next build nélkül nem futtatható, `TypeError: default is not a
+ * function`-nal bukik. A helyi `pilot-ui.tsx` wrapper MODUL-SZINTEN
+ * importálja a `pilot-font.ts`-t (a `PilotThemeRoot` miatt), tehát ez a
+ * mock akkor is kell, ha ez a komponens maga csak `PilotButton`/`PilotCard`-ot
+ * használ, nem `PilotThemeRoot`-ot.
+ */
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 
 const api = vi.hoisted(() => ({ deletionPlan: vi.fn(), remove: vi.fn() }));
 
@@ -23,7 +40,7 @@ const removable: PartnerDeletionPlan = {
 
 function renderButton(onDeleted = vi.fn()) {
   render(
-    <PartnerDeleteButton
+    <PilotPartnerDeleteButton
       token="token-1"
       partnerId="supplier-1"
       partnerName="Fankó Kft."
