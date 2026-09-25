@@ -85,12 +85,20 @@ export default function PartnersScreen() {
         }
       >
         <Text style={styles.eyebrow}>SZERVIZ</Text>
-        <Text style={styles.title}>Partnerek</Text>
-        <Text style={styles.subtitle}>
-          {partners.data
-            ? `${total.toLocaleString("hu-HU")} szerviz partner`
-            : "Szerviz jelölővel rendelkező partnerek"}
-        </Text>
+        {/*
+          A CÍM ÉS A DARABSZÁM EGY SORBAN, A TERV SZERINT (2026-09-25,
+          Figma 13. kör, `MobilePartnersListScreen`): a terv a címet és a
+          darabszámot egy alapvonalra igazított sorban adja (`items-
+          baseline justify-between`), nem egymás alatt külön sorban.
+        */}
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Partnerek</Text>
+          <Text style={styles.subtitle}>
+            {partners.data
+              ? `${total.toLocaleString("hu-HU")} szerviz partner`
+              : "Szerviz jelölővel rendelkező partnerek"}
+          </Text>
+        </View>
 
         <TextInput
           value={search}
@@ -191,6 +199,11 @@ function createStyles(t: ThemeTokens) {
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 1.4,
+    },
+    titleRow: {
+      alignItems: "baseline",
+      flexDirection: "row",
+      justifyContent: "space-between",
     },
     title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
     subtitle: { color: t.textSecondary },
