@@ -119,7 +119,8 @@ export function AquariumList() {
   };
 
   return (
-    <section>
+    // A `content` osztaly indoka: lasd `settings.tsx` azonos megjegyzeset.
+    <section className="content">
       <ServiceListHeader
         eyebrow="Saját adatok"
         title="Akváriumok"
