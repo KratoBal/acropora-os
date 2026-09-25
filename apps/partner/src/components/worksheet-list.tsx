@@ -3,19 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  Avatar,
-  Button,
-  EmptyState,
+  Icon,
   Pagination,
-  ServiceListFooter,
-  ServiceListHeader,
-  ServiceListTabs,
-  ServiceSearchField,
-  ServiceStatusBadge,
-  Skeleton,
-  StatCard,
-  sv,
+  PilotAvatar,
+  PilotBadge,
+  PilotThemeRoot,
+  pilotBadgeVariantForTone,
+  pilotInitials,
 } from "@acropora/ui";
 import {
   worksheetStatusLabel,
@@ -26,14 +20,15 @@ import {
 import { partnerApi } from "@/lib/api";
 
 /**
- * A MUNKALAP-LISTA A BELSŐ (`app.acropora.hu`) ELRENDEZÉSÉBEN.
+ * A MUNKALAP-LISTA -- FIGMA 9. KÖR (Partner Portál), a Make-terv
+ * `PartnerPortalScreen.tsx:973-1050` átültetése.
  *
- * Balázs kérése, 2026-09-21, megerősítve 2026-09-24 07:28 UTC: "ugyanaz
- * legyen a hibajegy es a munkalap oldal is". Az `asset-list.tsx` és a
- * `ticket-list.tsx` (murena #1041) mintáját követi: a közös
- * `sv`/`ServiceListHeader`/`ServiceListTabs`/`ServiceListFooter`/
- * `ServiceSearchField`/`ServiceStatusBadge` komponenseket használja
- * (`packages/ui`), nem egy saját Tailwind-közelítést.
+ * VIZUÁLIS VÁLTÁS A KORÁBBI KÖRHÖZ KÉPEST: az előző kör a belső, violet
+ * `ServiceListHeader`/`ServiceListTabs`/`ServiceSearchField`/
+ * `ServiceStatusBadge`/`ServiceListFooter`/`StatCard`/`Avatar` keretet vette
+ * át -- a mostani Figma-kör a portál egészét pilot-aqua design-rendszerre
+ * viszi, ez a lap a hibajegy- (#1117) és eszköz-listával (#1119) egyező
+ * mintát követi.
  *
  * A "PARTNER" OSZLOP KIMARAD, ÉS EZ NEM CSONKÍTÁS. A belső lista "Partner"
  * oszlopa a `customerName`-et mutatja -- a partner-portálon ez MINDIG a
@@ -45,6 +40,15 @@ import { partnerApi } from "@/lib/api";
  * A "FELELŐS" OSZLOP MARAD: a `assigneeNames` a MI kollégáink neve, nem
  * belső megjegyzés -- ugyanaz a döntés, mint a `ticket-detail.tsx` naplóján
  * a kolléga nevének megtartása ("a megjegyzes nem kell a nev igen").
+ *
+ * AZ AVATAR EGY SZÍNT VISEL, NEM SZEMÉLYENKÉNT KÜLÖNBÖZŐT -- EZ MEGEGYEZIK
+ * A KORÁBBI KÓDDAL ÉS A MAKE-TERVVEL IS. A `WorksheetListItem.assigneeNames`
+ * csak nevek tömbje, nincs rajta `userId` -- az aquárium-lista
+ * `pilotAvatarColor(userId)`-je itt nem alkalmazható (a korábbi kód is
+ * egyetlen, fix `bg-brand-100` háttért adott mindenkinek, a Make-terv pedig
+ * egyetlen, fix `#0b7a6e`-t). A pilot-verzió ugyanezt teszi, csak a
+ * `--color-pilot-aqua-600` TOKENJÉRE hivatkozva (nem egy ide másolt hexával),
+ * hogy sötét módban is a helyes árnyalatot adja.
  *
  * AMI KIMARAD, ÉS MIÉRT: a partner-választó (nincs értelme, egy partner
  * mindig saját magát látja), a "Csak amit rám osztottak" és a "Rejtettek
@@ -60,7 +64,7 @@ const TABS = [
   { key: "AWAITING_SIGNATURE", label: "Aláírásra vár" },
   { key: "SIGNED", label: "Aláírva" },
   { key: "REJECTED", label: "Elutasítva" },
-];
+] as const;
 
 const PAGE_SIZE = 25;
 
@@ -105,194 +109,248 @@ export function WorksheetList() {
 
   const counts = data?.counts ?? null;
   const tiles = useMemo(
-    () => [
-      {
-        key: "DRAFT",
-        label: "Szerkesztés alatt",
-        value: counts?.DRAFT ?? null,
-      },
-      {
-        key: "AWAITING_SIGNATURE",
-        label: "Aláírásra vár",
-        value: counts?.AWAITING_SIGNATURE ?? null,
-      },
-      {
-        key: "SIGNED",
-        label: "Aláírt munkalap",
-        value: counts?.SIGNED ?? null,
-      },
-    ],
+    () =>
+      [
+        {
+          key: "DRAFT",
+          label: "Szerkesztés alatt",
+          value: counts?.DRAFT ?? null,
+          icon: "clipboard",
+        },
+        {
+          key: "AWAITING_SIGNATURE",
+          label: "Aláírásra vár",
+          value: counts?.AWAITING_SIGNATURE ?? null,
+          icon: "pencil",
+        },
+        {
+          key: "SIGNED",
+          label: "Aláírt munkalap",
+          value: counts?.SIGNED ?? null,
+          icon: "pencil",
+        },
+      ] as const,
     [counts],
   );
 
   return (
-    <section>
-      <ServiceListHeader
-        eyebrow="Szervizmunka"
-        title="Munkalapok"
-        lead="A helyszíni munkától az aláírásig. A sorszám a lezáráskor keletkezik, piszkozatnak nincs száma."
-      />
+    <PilotThemeRoot className="-mx-5 -mt-10 -mb-16 flex min-h-screen max-w-none flex-col bg-pilot-grey-50">
+      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
+          Szervizmunka
+        </p>
+        <h1 className="text-xl font-semibold text-pilot-grey-900">
+          Munkalapok
+        </h1>
+        <p className="mt-0.5 text-sm text-pilot-grey-400">
+          A helyszíni munkától az aláírásig. A sorszám a lezáráskor keletkezik,
+          piszkozatnak nincs száma.
+        </p>
+      </div>
 
       {error ? (
-        <Alert
-          className="mb-6"
-          variant="danger"
-          title="Betöltési hiba"
-          description={error}
-          action={
-            <Button variant="secondary" onClick={load}>
+        <div className="px-8 py-4">
+          <p
+            className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700"
+            role="alert"
+          >
+            {error}{" "}
+            <button
+              type="button"
+              className="cursor-pointer font-medium underline"
+              onClick={load}
+            >
               Újrapróbálás
-            </Button>
-          }
-        />
+            </button>
+          </p>
+        </div>
       ) : null}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 border-b border-pilot-grey-100 bg-pilot-grey-50 px-8 py-5 sm:grid-cols-3">
         {tiles.map((tile) => (
-          <StatCard
+          <div
             key={tile.key}
-            label={tile.label}
-            value={tile.value === null ? "—" : String(tile.value)}
-          />
+            className="flex items-center gap-3 rounded-xl bg-white p-4 ring-1 ring-pilot-grey-200"
+          >
+            <div
+              className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                tile.key === "AWAITING_SIGNATURE"
+                  ? "bg-pilot-amber-50 text-pilot-amber-600"
+                  : "bg-pilot-aqua-50 text-pilot-aqua-600"
+              }`}
+            >
+              <Icon name={tile.icon} size={16} />
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-pilot-grey-900">
+                {tile.value === null ? "—" : tile.value}
+              </p>
+              <p className="text-xs text-pilot-grey-400">{tile.label}</p>
+            </div>
+          </div>
         ))}
       </div>
 
-      <section className={sv.panel}>
-        <ServiceListTabs
-          tabs={TABS}
-          active={status}
-          onSelect={selectStatus}
-          label="Munkalapok szűrése állapot szerint"
-        />
-        <div className={sv.toolbar}>
-          <ServiceSearchField
-            label="Munkalap keresése"
+      <div className="flex flex-wrap items-center gap-4 border-b border-pilot-grey-100 bg-white px-8 py-4">
+        <div className="flex items-center gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => selectStatus(tab.key)}
+              className={`cursor-pointer rounded-md px-3.5 py-1.5 text-sm font-medium transition-all ${
+                status === tab.key
+                  ? "bg-pilot-aqua-50 text-pilot-aqua-700"
+                  : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="relative">
+          <Icon
+            name="search"
+            size={14}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-pilot-grey-300"
+          />
+          <input
+            type="text"
+            aria-label="Munkalap keresése"
             placeholder="Munkalapszám vagy tárgy"
             value={search}
-            onChange={selectSearch}
+            onChange={(event) => selectSearch(event.target.value)}
+            className="w-56 rounded-md py-1.5 pl-8 pr-3 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
           />
-          {data ? (
+        </div>
+        {data ? (
+          <Pagination
+            position="top"
+            page={data.pagination.page}
+            totalPages={data.pagination.totalPages}
+            onPageChange={setPage}
+          />
+        ) : null}
+      </div>
+
+      {!data && !error ? (
+        <p className="px-8 py-6 text-sm text-pilot-grey-400">
+          Munkalapok betöltése…
+        </p>
+      ) : null}
+
+      {data?.items.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 py-24 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pilot-aqua-50">
+            <Icon name="clipboard" size={24} className="text-pilot-aqua-600" />
+          </div>
+          <p className="text-base font-semibold text-pilot-grey-700">
+            Nincs munkalap
+          </p>
+          <p className="max-w-xs text-sm text-pilot-grey-400">
+            Módosítsd a keresést vagy a szűrőt.
+          </p>
+        </div>
+      ) : null}
+
+      {data?.items.length ? (
+        <div className="flex-1 overflow-x-auto">
+          <table className="w-full min-w-[820px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-pilot-grey-100">
+                {[
+                  "Munkalap",
+                  "Helyszín",
+                  "Felelős",
+                  "Állapot",
+                  "Módosítva",
+                ].map((head) => (
+                  <th
+                    key={head}
+                    className="whitespace-nowrap bg-white px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-pilot-grey-400"
+                  >
+                    {head}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map((worksheet, index) => (
+                <tr
+                  key={worksheet.id}
+                  className={`border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 ${
+                    index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
+                  }`}
+                >
+                  <td className="px-5 py-3">
+                    <Link
+                      href={`/munkalapok/${worksheet.id}`}
+                      className="font-medium text-pilot-grey-900 hover:text-pilot-aqua-700"
+                    >
+                      {worksheet.subject}
+                    </Link>
+                    <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
+                      {worksheet.number ?? "Még nincs száma"}
+                      {worksheet.versionCount > 1
+                        ? ` · ${worksheet.versionCount} verzió`
+                        : ""}
+                    </p>
+                  </td>
+                  <td className="px-5 py-3 text-pilot-grey-500">
+                    {worksheet.departmentPath?.length
+                      ? worksheet.departmentPath.join(" / ")
+                      : worksheet.departmentCode}
+                  </td>
+                  <td className="px-5 py-3">
+                    {worksheet.assigneeNames[0] ? (
+                      <span className="flex items-center gap-2">
+                        <PilotAvatar
+                          initials={pilotInitials(worksheet.assigneeNames[0])}
+                          color="var(--color-pilot-aqua-600)"
+                          size="sm"
+                        />
+                        <span className="text-pilot-grey-700">
+                          {worksheet.assigneeNames.join(", ")}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="italic text-pilot-grey-400">
+                        Nincs kiosztva
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3">
+                    <PilotBadge
+                      variant={pilotBadgeVariantForTone(
+                        worksheetStatusTone(worksheet.status),
+                      )}
+                    >
+                      {worksheetStatusLabel[worksheet.status]}
+                    </PilotBadge>
+                  </td>
+                  <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-500">
+                    {new Intl.DateTimeFormat("hu-HU", {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    }).format(new Date(worksheet.updatedAt))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="border-t border-pilot-grey-100 bg-white px-5 py-3 text-xs text-pilot-grey-400">
+            {data.pagination.totalItems} munkalap összesen
+          </div>
+          <div className="flex justify-end border-t border-pilot-grey-100 bg-white px-4 py-2">
             <Pagination
-              position="top"
+              position="bottom"
               page={data.pagination.page}
               totalPages={data.pagination.totalPages}
               onPageChange={setPage}
             />
-          ) : null}
+          </div>
         </div>
-
-        {!data && !error ? (
-          <div className="space-y-3 p-5" aria-label="Munkalapok betöltése">
-            <Skeleton className="h-16" />
-            <Skeleton className="h-64" />
-          </div>
-        ) : null}
-
-        {data?.items.length ? (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] border-collapse text-left">
-                <thead>
-                  <tr>
-                    {[
-                      "Munkalap",
-                      "Helyszín",
-                      "Felelős",
-                      "Állapot",
-                      "Módosítva",
-                    ].map((head) => (
-                      <th key={head} className={sv.tableHead}>
-                        {head}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((worksheet) => (
-                    <tr key={worksheet.id} className={sv.tableRow}>
-                      <td className={sv.tableCell}>
-                        <Link
-                          href={`/munkalapok/${worksheet.id}`}
-                          className={sv.rowTitle}
-                        >
-                          {worksheet.subject}
-                        </Link>
-                        <span className={`mt-1 block ${sv.rowMeta}`}>
-                          {worksheet.number ?? "Még nincs száma"}
-                          {worksheet.versionCount > 1
-                            ? ` · ${worksheet.versionCount} verzió`
-                            : ""}
-                        </span>
-                      </td>
-                      <td className={sv.tableCell}>
-                        <div className={sv.rowMeta}>
-                          {worksheet.departmentPath?.length
-                            ? worksheet.departmentPath.join(" / ")
-                            : worksheet.departmentCode}
-                        </div>
-                      </td>
-                      <td className={sv.tableCell}>
-                        {worksheet.assigneeNames[0] ? (
-                          <span className="flex items-center gap-2">
-                            <Avatar
-                              size="sm"
-                              name={worksheet.assigneeNames[0]}
-                              className="bg-brand-100 text-brand-ink ring-0"
-                            />
-                            <span className="text-xs text-ink">
-                              {worksheet.assigneeNames.join(", ")}
-                            </span>
-                          </span>
-                        ) : (
-                          <span className={sv.rowMeta}>Nincs kiosztva</span>
-                        )}
-                      </td>
-                      <td className={sv.tableCell}>
-                        <ServiceStatusBadge
-                          tone={worksheetStatusTone(worksheet.status)}
-                        >
-                          {worksheetStatusLabel[worksheet.status]}
-                        </ServiceStatusBadge>
-                      </td>
-                      <td className={`${sv.tableCell} ${sv.rowMeta}`}>
-                        {new Intl.DateTimeFormat("hu-HU", {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        }).format(new Date(worksheet.updatedAt))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <ServiceListFooter
-              shown={data.items.length}
-              totalItems={data.pagination.totalItems}
-              tail={{
-                kind: "paged",
-                page: data.pagination.page,
-                totalPages: data.pagination.totalPages,
-              }}
-            />
-          </>
-        ) : data ? (
-          <div className="p-5">
-            <EmptyState
-              title="Nincs munkalap"
-              description="Módosítsd a keresést vagy a szűrőt."
-            />
-          </div>
-        ) : null}
-      </section>
-      {data ? (
-        <Pagination
-          position="bottom"
-          className="mt-6"
-          page={data.pagination.page}
-          totalPages={data.pagination.totalPages}
-          onPageChange={setPage}
-        />
       ) : null}
-    </section>
+    </PilotThemeRoot>
   );
 }
