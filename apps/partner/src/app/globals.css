@@ -26,6 +26,17 @@
 @import "../../../../packages/ui/src/theme.css";
 
 /*
+  A "PILOT" REG (Figma-terv) SZINTOKENEK, UGYANONNAN, AHOL AZ apps/web MAR
+  BEHUZZA OKET (`packages/ui/src/figma-theme.css`, sajat fejleceben a teljes
+  indoklas). A partner portal 9. Figma-kore ("Partner portal") ezt hasznalja
+  a bal oldalsavhoz es a bejelentkezeshez: `pilot-aqua-*` az akcent-szin
+  (aktiv nav, elsodleges gomb), `pilot-grey-*` a semleges rampa -- NEM a fenti
+  `theme.css` `brand-*` (lila) es `dusk-*` skalaja, ami a portal REGI,
+  lecserelendo szine.
+*/
+@import "../../../../packages/ui/src/figma-theme.css";
+
+/*
   A KOZOS TEMA CSAK `button, input`-ra allitja a `font: inherit`-et (ugyanugy,
   mint a webes felulet) -- ez a ket sor a portal SAJAT, korabbi kiterjesztese
   `textarea`/`select`-re, es itt marad, mert a webes oldalt nem erinti.
@@ -50,61 +61,15 @@ button:disabled {
   cursor: wait;
   opacity: 0.65;
 }
-.portal {
-  min-height: 100vh;
-}
-.topbar {
-  align-items: center;
-  background: #251d3c;
-  color: white;
-  display: flex;
-  justify-content: space-between;
-  min-height: 4.4rem;
-  padding: 0 max(1.25rem, calc((100vw - 1160px) / 2));
-}
-.brand {
-  color: white;
-  font-size: 1.2rem;
-  font-weight: 800;
-  text-decoration: none;
-}
-.brand span {
-  color: #cbb8ff;
-  font-weight: 500;
-}
-.account {
-  align-items: center;
-  display: flex;
-  gap: 1rem;
-  font-size: 0.9rem;
-}
-.account button {
-  background: transparent;
-  border: 1px solid #8f83b7;
-  font-size: 0.8rem;
-  padding: 0.45rem 0.65rem;
-}
-.navigation {
-  background: white;
-  border-bottom: 1px solid #e1e1e9;
-  display: flex;
-  gap: 0.3rem;
-  overflow-x: auto;
-  padding: 0 max(1rem, calc((100vw - 1160px) / 2));
-}
-.navigation a {
-  border-bottom: 3px solid transparent;
-  color: #5d5d6e;
-  font-size: 0.92rem;
-  padding: 1rem 0.85rem 0.8rem;
-  text-decoration: none;
-  white-space: nowrap;
-}
-.navigation a.active {
-  border-bottom-color: #4c397f;
-  color: #251d3c;
-  font-weight: 700;
-}
+/*
+  A `.portal`, `.topbar`, `.brand`, `.brand span`, `.account`, `.account
+  button`, `.navigation`, `.navigation a`, `.navigation a.active` OSZTALYOK
+  INNEN ELKERULTEK (2026-09-25, Figma 9. kor): a felso savas keret helyere
+  bal oldali oldalsav kerult (`portal-shell.tsx`), `pilot-aqua-*`/
+  `pilot-grey-*` Tailwind-osztalyokkal, nem sajat CSS-szaballyal. Az egyetlen
+  hivohely (`portal-shell.tsx`) at is allt -- mert az oldalsav is szemantikus
+  elem (`<aside>`), a keret-elv (lasd `frame.tsx` fejleceit) itt nem sertve.
+*/
 .content {
   margin: 0 auto;
   max-width: 1160px;
@@ -251,8 +216,7 @@ button:disabled {
   line-height: 1.5;
 }
 .centered,
-.access-denied,
-.login-page {
+.access-denied {
   align-items: center;
   display: flex;
   justify-content: center;
@@ -265,51 +229,15 @@ button:disabled {
   margin: auto;
   max-width: 42rem;
 }
-.login-page {
-  background: linear-gradient(135deg, #f3f0fb, #faf9fc);
-}
-.login-card {
-  background: white;
-  border: 1px solid #e2e2ea;
-  border-radius: 1rem;
-  display: grid;
-  gap: 1rem;
-  max-width: 26rem;
-  padding: 2rem;
-  width: 100%;
-}
-.login-card h1 {
-  margin: 0;
-}
-/* A `.login-card p:not(.eyebrow)` SZABALY ELKERULT (2026-09-21), es ez NEM
-   mellektermek volt. A `.eyebrow` megszunesevel a `:not()` mar nem zarta volna
-   ki a lap kis cimkejet, a szabaly specifikussaga (0,3,1) pedig VERI a
-   Tailwind-osztalyt (0,1,0) -- vagyis a cimke csendben szurke lett volna, also
-   margoval. A ket megmaradt bekezdes helyben kapta meg ugyanazt a harom
-   tulajdonsagot. */
-.login-card label {
-  display: grid;
-  font-weight: 700;
-  gap: 0.4rem;
-}
-.login-card input {
-  border: 1px solid #cfcfdb;
-  border-radius: 0.55rem;
-  padding: 0.7rem;
-}
-.error {
-  color: #a22222;
-  font-size: 0.9rem;
-  margin: 0;
-}
+/*
+  A `.login-page`, `.login-card` (ES ALSZABALYAI), VALAMINT A BARE `.error`
+  OSZTALY INNEN ELKERULT (2026-09-25, Figma 9. kor): az egyetlen hivohely
+  (`app/login/page.tsx`) a `pilot-aqua-*`/`pilot-grey-*` tokenekre allt at.
+  A `.error` NEM TEVESZTENDO ossze a `.message.error` osszetett szelektorral
+  (`ticket-list.tsx` `Message` komponense) -- az VALTOZATLAN marad, tovabbra
+  is elo hivohelye van.
+*/
 @media (max-width: 680px) {
-  .topbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .account {
-    justify-content: space-between;
-  }
   .primary-link {
     text-align: center;
   }
