@@ -88,6 +88,14 @@ export {
   PilotTimeline,
 } from "./pilot-ui";
 export type { PilotBadgeVariant } from "./pilot-ui";
+export { CalculatorCard } from "./calculator-card";
+export type {
+  CalculatorAquariumOption,
+  CalculatorProductOption,
+  CalculatorComputeInput,
+  CalculatorSuggestedCurrent,
+  CalculatorCardProps,
+} from "./calculator-card";
 export {
   pilotBadgeVariantForTone,
   partnerStatusBadgeVariant,

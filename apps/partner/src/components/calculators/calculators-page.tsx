@@ -6,14 +6,14 @@ import {
   calciumElevation,
   magnesiumElevation,
 } from "@acropora/aquarium-calc";
-import { PilotThemeRoot } from "@acropora/ui";
-
-import { partnerApi } from "@/lib/api";
 import {
   CalculatorCard,
+  PilotThemeRoot,
   type CalculatorAquariumOption,
   type CalculatorSuggestedCurrent,
-} from "./calculator-card";
+} from "@acropora/ui";
+
+import { partnerApi } from "@/lib/api";
 
 /**
  * A "KALKULÁTOROK" OLDAL -- EZ A PORTÁL-SPECIFIKUS, JOGOSULTSÁGHOZ KÖTÖTT

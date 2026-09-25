@@ -2,14 +2,14 @@
 
 import { useMemo, useState } from "react";
 import type { ReefChemistryElevationResult } from "@acropora/aquarium-calc";
+import { Icon } from "./icon";
 import {
-  Icon,
   PilotCard,
   PilotCardHeader,
   PilotFormField,
   PilotInput,
   PilotSelect,
-} from "@acropora/ui";
+} from "./pilot-ui";
 
 /**
  * EGY VÍZKEZELÉSI KALKULÁTOR KÁRTYA -- ÖNÁLLÓ, JOGOSULTSÁGTÓL FÜGGETLEN.
@@ -19,14 +19,24 @@ import {
  * nyilvánosság elé is kerülhet" -- a Partner Portál egyszer ügyfeleknek
  * közvetlenül is megnyílhat, és egy hasonló kalkulátor a "Reef Club"
  * nevű, tervezett felületre is kell majd. EZÉRT ez a komponens NEM hív
- * `useAuth()`-t, NEM ellenőriz jogosultságot, és NEM tud semmit a Partner
- * Portálról -- csak a `@acropora/aquarium-calc` (nulla futásidejű
- * függőségű, megosztott csomag) képletét hívja, amit a hívó ad át
- * `compute` propként. Az OLDAL (ami MÁR portál-specifikus és MÁR
- * jogosultsághoz kötött, ld. `calculators-page.tsx`) rakja össze ezt a
- * kártyát a saját, portál-hatókörű akvárium-listájával -- a kártya ezt
- * a listát is csak kész, egyszerű objektum-tömbként kapja, nem saját maga
- * kérdezi le.
+ * `useAuth()`-t, NEM ellenőriz jogosultságot, és NEM tud semmit ARRÓL A
+ * FELÜLETRŐL, AHONNAN HÍVJÁK -- csak a `@acropora/aquarium-calc` (nulla
+ * futásidejű függőségű, megosztott csomag) képletét hívja, amit a hívó ad
+ * át `compute` propként. Az OLDAL (ami MÁR felület-specifikus és MÁR
+ * jogosultsághoz kötött, ld. `apps/partner/.../calculators-page.tsx` és
+ * az `apps/web` párja) rakja össze ezt a kártyát a saját, hatókörű
+ * akvárium-listájával -- a kártya ezt a listát is csak kész, egyszerű
+ * objektum-tömbként kapja, nem saját maga kérdezi le.
+ *
+ * === EZÉRT ÁLL EBBEN A CSOMAGBAN, NEM AZ APPS/PARTNER ALATT ===
+ *
+ * Eredetileg `apps/partner` alatt épült (a Kalkulátorok kör első fele), de
+ * még ugyanazon a napon `apps/web` is átvette -- pontosan az a fajta
+ * duplikáció, amit Balázs fenti kérése el akar kerülni. Mivel a komponens
+ * MÁR csak `@acropora/aquarium-calc`-ot és a csomag saját pilot-családját
+ * hívta (soha nem ismerte a portál API-ját), az áthelyezés a
+ * `packages/ui`-ba nem igényelt szétszálazást -- csak az import-utak
+ * lettek relatívak.
  *
  * === AZ AKVÁRIUM-VÁLASZTÓ OPCIONÁLIS, ÉS A LITER-MEZŐ MINDIG FELÜLÍRHATÓ ===
  *
