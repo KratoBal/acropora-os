@@ -93,6 +93,7 @@ function toSummary(row: AquariumListRow): AquariumSummary {
     name: row.name,
     ownershipType: row.ownershipType === "STORE" ? "OWN" : row.ownershipType,
     waterBodyType: row.waterBodyType,
+    waterType: row.waterType ?? undefined,
     customerId: row.customer?.id,
     customerName: row.customer?.displayName,
     departmentId: row.department?.id,

@@ -10,7 +10,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { aquariumsApi } from "@/lib/api/aquariums";
-import { OWNERSHIP_LABEL, WATER_BODY_LABEL } from "../aquarium-labels";
+import {
+  OWNERSHIP_LABEL,
+  WATER_BODY_LABEL,
+  WATER_TYPE_LABEL,
+} from "../aquarium-labels";
 import {
   PilotAvatar,
   PilotBadge,
@@ -276,6 +280,12 @@ export function PilotAquariumListPage() {
 
       {data && data.items.length > 0 ? (
         <>
+          {/*
+            A "VÍZ" OSZLOP (2026-09-25, terv-összevetés): a terv a "Típus"
+            (akvárium/tó) mellett egy külön oszlopot ad a víztípusnak
+            (tengeri/édesvízi) is -- ez az adat eddig csak az adatlapon volt
+            elérhető (`AquariumDetail.waterType`), a listaválasz nem hozta.
+          */}
           <div className="flex-1 overflow-x-auto">
             <table className="w-full min-w-[720px] border-collapse text-sm">
               <thead>
@@ -285,6 +295,7 @@ export function PilotAquariumListPage() {
                     "Tulajdon",
                     "Ügyfél",
                     "Típus",
+                    "Víz",
                     "Liter",
                     "Berendezések",
                     "Karbantartók",
@@ -328,6 +339,13 @@ export function PilotAquariumListPage() {
                     </td>
                     <td className="px-4 py-3 text-pilot-grey-600">
                       {WATER_BODY_LABEL[item.waterBodyType]}
+                    </td>
+                    <td className="px-4 py-3 text-pilot-grey-600">
+                      {item.waterType ? (
+                        WATER_TYPE_LABEL[item.waterType]
+                      ) : (
+                        <span className="text-pilot-grey-300">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-pilot-grey-700">
                       {item.systemVolumeLiters != null

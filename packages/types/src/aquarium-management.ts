@@ -42,6 +42,13 @@ export interface AquariumSummary {
   name: string;
   ownershipType: AquariumOwnershipType;
   waterBodyType: WaterBodyType;
+  /**
+   * A FIGMA LISTA "VÍZ" OSZLOPA (2026-09-25, terv-összevetés): eddig csak az
+   * adatlapon (`AquariumDetail`) állt, a lista-válaszban nem -- ezért a
+   * listát rajzoló képernyő nem tudta kiírni, holott a terv a `waterBodyType`
+   * ("Típus") melletti külön oszlopként mutatja.
+   */
+  waterType?: WaterType;
   customerId?: string;
   customerName?: string;
   /**
@@ -79,7 +86,6 @@ export interface AquariumDetail extends AquariumSummary {
   /** Lásd `apps/api/src/aquariums/aquarium-volume.ts` fejlécét: `true`, ha a
    * felhasználó írta át a számolt litert. */
   systemVolumeIsManual: boolean;
-  waterType?: WaterType;
   startedAt?: string;
   notes?: string;
   equipment: AquariumEquipment[];

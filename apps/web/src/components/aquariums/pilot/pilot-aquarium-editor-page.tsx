@@ -481,8 +481,20 @@ export function PilotAquariumEditorPage({
       <form onSubmit={handleSubmit} className="flex-1 px-8 py-6">
         <div className="grid items-start gap-6 lg:grid-cols-[1fr_340px]">
           <div className="flex flex-col gap-5">
+            {/*
+              NÉGY KÜLÖN KÁRTYA, A TERV SZAKASZOLÁSA SZERINT (2026-09-25,
+              terv-összevetés): a terv (`NewAquarium`, App.tsx 861-982. sor)
+              öt szakaszt ad (Tulajdon, Akvárium, Méretek, Karbantartók,
+              Berendezések), itt eddig az első négy egyetlen "Alapadatok"
+              kártyába volt összevonva. A mezők és a mögöttes logika
+              VÁLTOZATLAN, csak a kártya-határok igazodtak a tervhez. A
+              "Megjegyzés" mező a tervben NEM szerepel az Új akvárium
+              űrlapon (csak az adatlapon) -- mivel a mai kódban már létezik
+              és törlése nem ennek a körnek a tárgya, az "Akvárium" kártya
+              végén maradt, a terv nem ismeri sorban.
+            */}
             <PilotCard>
-              <PilotCardHeader title="Alapadatok" />
+              <PilotCardHeader title="Tulajdon" />
               <div className="flex flex-col gap-4 p-5">
                 <div className="flex gap-2">
                   <PilotButton
@@ -532,6 +544,12 @@ export function PilotAquariumEditorPage({
                     ) : null}
                   </>
                 ) : null}
+              </div>
+            </PilotCard>
+
+            <PilotCard>
+              <PilotCardHeader title="Akvárium" />
+              <div className="flex flex-col gap-4 p-5">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <PilotFormField label="Név">
                     <PilotInput value={name} onChange={setName} />
@@ -546,6 +564,40 @@ export function PilotAquariumEditorPage({
                     />
                   </PilotFormField>
                 </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <PilotFormField label="Víztípus">
+                    <PilotSelect
+                      value={waterType || undefined}
+                      onChange={(value) =>
+                        setWaterType(value as WaterType | "")
+                      }
+                    >
+                      <option value="">—</option>
+                      <option value="EDESVIZI">
+                        {WATER_TYPE_LABEL.EDESVIZI}
+                      </option>
+                      <option value="TENGERI">
+                        {WATER_TYPE_LABEL.TENGERI}
+                      </option>
+                    </PilotSelect>
+                  </PilotFormField>
+                  <PilotFormField label="Indítás dátuma">
+                    <PilotInput
+                      type="date"
+                      value={startedAt}
+                      onChange={setStartedAt}
+                    />
+                  </PilotFormField>
+                </div>
+                <PilotFormField label="Megjegyzés">
+                  <PilotInput value={notes} onChange={setNotes} />
+                </PilotFormField>
+              </div>
+            </PilotCard>
+
+            <PilotCard>
+              <PilotCardHeader title="Méretek" />
+              <div className="flex flex-col gap-4 p-5">
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <PilotFormField label="Hossz (cm)">
                     <PilotInput
@@ -595,44 +647,22 @@ export function PilotAquariumEditorPage({
                     Visszaállítás számolt literre
                   </PilotButton>
                 ) : null}
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <PilotFormField label="Víztípus">
-                    <PilotSelect
-                      value={waterType || undefined}
-                      onChange={(value) =>
-                        setWaterType(value as WaterType | "")
-                      }
-                    >
-                      <option value="">—</option>
-                      <option value="EDESVIZI">
-                        {WATER_TYPE_LABEL.EDESVIZI}
-                      </option>
-                      <option value="TENGERI">
-                        {WATER_TYPE_LABEL.TENGERI}
-                      </option>
-                    </PilotSelect>
-                  </PilotFormField>
-                  <PilotFormField label="Indítás dátuma">
-                    <PilotInput
-                      type="date"
-                      value={startedAt}
-                      onChange={setStartedAt}
-                    />
-                  </PilotFormField>
-                </div>
-                {isEdit ? (
+              </div>
+            </PilotCard>
+
+            {isEdit ? (
+              <PilotCard>
+                <PilotCardHeader title="Karbantartók" />
+                <div className="flex flex-col gap-4 p-5">
                   <PilotMaintainersEditor
                     selected={maintainers}
                     selectable={selectableMaintainers}
                     busy={maintainersBusy}
                     onToggle={(userId) => void toggleMaintainer(userId)}
                   />
-                ) : null}
-                <PilotFormField label="Megjegyzés">
-                  <PilotInput value={notes} onChange={setNotes} />
-                </PilotFormField>
-              </div>
-            </PilotCard>
+                </div>
+              </PilotCard>
+            ) : null}
 
             <PilotCard>
               <PilotCardHeader title="Berendezések" />
