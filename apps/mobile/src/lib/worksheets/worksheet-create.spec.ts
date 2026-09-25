@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   buildWorksheetCreatePayload,
   describeWorksheetQueueWrite,
+  missingWorksheetFields,
   type WorksheetCreateForm,
 } from "./worksheet-create";
 
@@ -174,5 +175,50 @@ describe("a munkalap sorba tételének üzenete", () => {
     assert.match(out.message, /NEM sikerült/);
     assert.match(out.message, /megtelt a tároló/);
     assert.doesNotMatch(out.message, /vár feltöltésre/);
+  });
+});
+
+describe("missingWorksheetFields", () => {
+  it("üres űrlapnál mind a három nevet adja, ebben a sorrendben", () => {
+    assert.deepEqual(missingWorksheetFields(ures), [
+      "Partner",
+      "Helyszín",
+      "Tárgy",
+    ]);
+  });
+
+  it("teljes űrlapnál üres listát ad", () => {
+    assert.deepEqual(missingWorksheetFields(teljes), []);
+  });
+
+  it("csak azt nevezi meg, ami TÉNYLEG hiányzik", () => {
+    assert.deepEqual(missingWorksheetFields({ ...teljes, subject: "" }), [
+      "Tárgy",
+    ]);
+    assert.deepEqual(missingWorksheetFields({ ...teljes, departmentId: "" }), [
+      "Helyszín",
+    ]);
+  });
+
+  /**
+   * A CSUPA SZOKOZ UGYANANNYIT ER, MINT AZ URES -- ugyanaz a szabaly, mint a
+   * `buildWorksheetCreatePayload`-ban: egy csupa szokozbol allo targy
+   * ugyanannyit mond, mint a hianyzo.
+   */
+  it("csupa szóköz mezőt is hiányzónak lát", () => {
+    assert.deepEqual(missingWorksheetFields({ ...teljes, subject: "   " }), [
+      "Tárgy",
+    ]);
+  });
+
+  /**
+   * A HOSSZKORLAT NEM "HIANYZO MEZO" -- azt a `buildWorksheetCreatePayload`
+   * inline hibaja fedi, ez a lista csak a HAROM KOTELEZO mezot nezi.
+   */
+  it("egy túl hosszú tárgyat NEM nevez hiányzónak", () => {
+    assert.deepEqual(
+      missingWorksheetFields({ ...teljes, subject: "x".repeat(501) }),
+      [],
+    );
   });
 });

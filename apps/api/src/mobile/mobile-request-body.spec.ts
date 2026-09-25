@@ -105,6 +105,19 @@ const PAROK: readonly Par[] = [
   },
   {
     /**
+     * UJ ALEGYSEG FELVITELE HELYSZINEN (2026-09-25, Figma 8. kor, acrobot
+     * dontese). A torzs NEVESITETT tipussal megy (`CreateWorksheetDepartmentInput`),
+     * tehat PAR lett belole itt, nem a hivohelyek kozott.
+     */
+    mit: "alegység felvitele",
+    mobil: "../mobile/src/lib/api/worksheets.ts",
+    mobilNev: "CreateWorksheetDepartmentInput",
+    dto: "src/worksheets/dto/worksheet.dto.ts",
+    dtoNev: "CreateWorksheetDepartmentDto",
+    kontroll: ["code", "name"],
+  },
+  {
+    /**
      * A FELELŐSÖK ÁTÍRÁSA. 2026-09-17-én került ide, amikor a telefonra
      * megjött a kiosztás-szerkesztő: a lenti darabszám elmozdult, és a guard
      * saját üzenete kérte a döntést. A válasz IGEN, mert a törzs NEVESÍTETT
@@ -370,7 +383,13 @@ const PAROK: readonly Par[] = [
  * torzs NEVESITETT tipussal megy (`CreateAquariumMeasurementInput`), tehat
  * PAR lett belole fent.
  */
-const IRAS_HIVASOK_MA = 21;
+/**
+ * 2026-09-25: 21 -> 22. KET UJ HIVAS EGYSZERRE, KET KULON PR-BOL, EGY
+ * REBASE-BEN TALALKOZVA: `setWorksheetAssets` (Erintett eszkozok kartya) es
+ * `createWorksheetDepartment` (Uj alegyseg inline urlap). Mindketto
+ * nevesitett tipussal megy, mindketto PAR fent.
+ */
+const IRAS_HIVASOK_MA = 22;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

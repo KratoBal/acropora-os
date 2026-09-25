@@ -459,6 +459,34 @@ export function listWorksheetDepartments(customerId: string) {
   );
 }
 
+/**
+ * UJ ALEGYSEG FELVITELE, HELYSZINEN -- a Figma 8. kor terve keri (acrobot
+ * dontese, 2026-09-25), a "Szulo helyszin" / "Uj alegyseg kodja" / "Uj
+ * alegyseg neve" harom mezovel, INLINE az Alegyseg mezo alatt.
+ *
+ * A KERES TORZSE NEVESITETT TIPUS, ugyanazert, mint a tobbi irasnal: a
+ * `mobile-request-body.spec.ts` halojaba csak nevesitett tipus kerulhet be.
+ *
+ * A `code`/`name` SZABALYAI A SZERVEREN allnak (`CreateWorksheetDepartmentDto`,
+ * `worksheet.dto.ts`), es itt nem masoljuk ujra -- a szerver valasza a
+ * hitelesito.
+ */
+export interface CreateWorksheetDepartmentInput {
+  parentId?: string;
+  code: string;
+  name: string;
+}
+
+export function createWorksheetDepartment(
+  customerId: string,
+  input: CreateWorksheetDepartmentInput,
+) {
+  return apiRequest<WorksheetDepartment>(
+    `${BASE}/customers/${encodeURIComponent(customerId)}/departments`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
 export interface CreateWorksheetInput {
   customerId: string;
   departmentId: string;
