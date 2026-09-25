@@ -74,3 +74,45 @@ describe("a kezdőlap modul-csempéi a terv szerinti ikont viselik", () => {
     );
   });
 });
+
+/**
+ * KÉT OSZLOP, A TERV SZERINT (Balázs kérdése, 2026-09-25 18:25, ugyanaz a
+ * kör, mint az ikonoké): a modul-csempék rácsa két oszlopban álljon, a
+ * csempe maga függőleges elrendezésű (ikon felül, alatta cím/leírás,
+ * legalul a nyíl), és páratlan darabszámnál az utolsó csempe fél
+ * szélességű marad, nem nyúlik ki.
+ *
+ * A FORRÁS-OLVASÓ ÁLLÍTÁS HATÁRA (lásd `forras-olvaso-allitas-hatara`
+ * emlék): ez a spec a STÍLUS-SZÖVEGET méri, nem a renderelt képernyőt --
+ * renderelő ehhez a csomaghoz ma nincs. Amit méri: a `modules` konténer
+ * `flexWrap: "wrap"`-ot visel (két oszlop, nem egy), a `moduleCard`
+ * `width: "48%"`-ot (rögzített fél szélesség, nem `flex: 1`, ami az
+ * utolsó, pár nélküli csempét kinyújtaná), és a `moduleText` `flex: 1`-et
+ * (ez tolja a nyilat a kártya aljára).
+ */
+describe("a modul-csempék két oszlopban, függőleges elrendezésben állnak", () => {
+  const forras = kodSzoveg(readFileSync(HOME_SCREEN, "utf8"));
+
+  it("a modulok konténere sortörő rácsot ad, nem egy oszlopot", () => {
+    const blokk = forras.match(/modules:\s*\{[^}]*\}/)?.[0];
+    assert.ok(blokk, "nem találom a `modules` stílust");
+    assert.match(blokk!, /flexWrap:\s*"wrap"/);
+  });
+
+  it("a csempe rögzített fél szélességű, nem `flex: 1`", () => {
+    const blokk = forras.match(/moduleCard:\s*\{[^}]*\}/)?.[0];
+    assert.ok(blokk, "nem találom a `moduleCard` stílust");
+    assert.match(blokk!, /width:\s*"48%"/);
+    assert.doesNotMatch(
+      blokk!,
+      /flex:\s*1/,
+      "a moduleCard flex: 1-et visel, ami az utolsó, pár nélküli csempét kinyújtaná",
+    );
+  });
+
+  it("a szöveg-blokk `flex: 1`-et visel, ami a nyilat a kártya aljára tolja", () => {
+    const blokk = forras.match(/moduleText:\s*\{[^}]*\}/)?.[0];
+    assert.ok(blokk, "nem találom a `moduleText` stílust");
+    assert.match(blokk!, /flex:\s*1/);
+  });
+});

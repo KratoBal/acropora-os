@@ -706,17 +706,45 @@ function createStyles(t: ThemeTokens) {
     sectionTitle: { color: t.textPrimary, fontSize: 19, fontWeight: "800" },
     sectionHint: { color: t.textMuted, fontSize: 12 },
     sectionSubtext: { color: t.textMuted, fontSize: 12, marginTop: 3 },
-    modules: { gap: 10 },
+    /**
+     * KÉT OSZLOP, A TERV SZERINT (Balázs kérdése, 2026-09-25 18:25, ugyanaz
+     * a képernyőfotó-kör, mint az ikonoké): a `justifyContent: "space-
+     * between"` osztja el a sor két csempéjét, NEM egy vízszintes `gap` --
+     * a `gap` és a százalékos `width` együtt Yoga alatt könnyen túlcsordul
+     * (48% + 48% + gap > 100%), és a második csempét lelöki a következő
+     * sorba. A `rowGap` (a SOROK közti függőleges tér) ezt a kockázatot nem
+     * hordozza, mert nem a szélesség-számításba megy bele.
+     *
+     * PÁRATLAN CSEMPESZÁMNÁL AZ UTOLSÓ FÉL SZÉLESSÉGŰ MARAD, NEM NYÚLIK KI:
+     * a csempe SAJÁT `width: "48%"`-a rögzített, nem `flex: 1`, tehát egy
+     * pár nélkül maradt utolsó csempe a `space-between` mellett egyszerűen
+     * a sor elején áll, üres hellyel mellette -- nem tölti ki a sort.
+     */
+    modules: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      rowGap: 10,
+    },
+    /**
+     * FÜGGŐLEGES CSEMPE, A TERV SZERINT: felül az ikon, alatta a cím és a
+     * leírás, legalul a nyíl (vagy a "Következő ütem" felirat). Az
+     * `alignItems: "stretch"` (a React Native alapértelmezése, itt
+     * KIMONDVA, mert erre épül a lenti `moduleText: { flex: 1 }`) teszi,
+     * hogy a szöveg-blokk és a nyíl a TELJES kártyaszélességet kapja, az
+     * ikon-doboz sajátmagasságát/szélességét pedig a rögzített `width`/
+     * `height` védi a nyújtástól.
+     */
     moduleCard: {
-      alignItems: "center",
+      alignItems: "stretch",
       backgroundColor: t.surface,
       borderColor: t.border,
       borderRadius: 16,
       borderWidth: 1,
-      flexDirection: "row",
-      gap: 13,
-      minHeight: 78,
+      flexDirection: "column",
+      gap: 8,
       padding: 14,
+      width: "48%",
     },
     moduleCardDisabled: { opacity: 0.68 },
     moduleCode: {
@@ -729,17 +757,18 @@ function createStyles(t: ThemeTokens) {
     },
     moduleCodeDisabled: { backgroundColor: t.border },
     moduleIconText: { fontSize: 22, textAlign: "center" },
+    /**
+     * A `flex: 1` TOLJA A NYILAT/FELIRATOT A KÁRTYA ALJÁRA: ha egy sor
+     * másik csempéje magasabb (hosszabb leírás miatt), a sor mindkét
+     * csempéje ugyanolyan magasra nyúlik (RN alapértelmezett `stretch`), és
+     * ez a blokk issza fel a többletmagasságot -- a nyíl emiatt marad
+     * mindig legalul, nem a leírás alján lebegve.
+     */
     moduleText: { flex: 1, gap: 4 },
     moduleTitle: { color: t.textPrimary, fontSize: 16, fontWeight: "800" },
     moduleDescription: { color: t.textSecondary, fontSize: 12, lineHeight: 17 },
-    moduleArrow: { color: t.accent, fontSize: 30, fontWeight: "300" },
-    comingSoon: {
-      color: t.textMuted,
-      fontSize: 10,
-      fontWeight: "800",
-      maxWidth: 62,
-      textAlign: "right",
-    },
+    moduleArrow: { color: t.accent, fontSize: 22, fontWeight: "300" },
+    comingSoon: { color: t.textMuted, fontSize: 10, fontWeight: "800" },
     ordersSection: { gap: 12, paddingTop: 6 },
     textButton: {
       backgroundColor: t.accentSoft,
