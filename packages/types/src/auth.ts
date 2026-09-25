@@ -423,6 +423,22 @@ export const ROLE_PERMISSIONS: Readonly<
    * MÁSODIK, finomabb rétegként -- ugyanaz a két-rétegű minta, mint a
    * `MaterialRequestsService.listPending()`-nél
    * (`requireInternalWriter` + `hasMarkReceivedCapability`).
+   *
+   * === A MEGRENDELŐLAP ÉS A TELJESÍTÉSI IGAZOLÁS OLVASÁSA/FELTÖLTÉSE
+   *     UGYANEZT A KÉT JOGOT ÚJRAHASZNÁLJA (acrobot, msg_id 23868,
+   *     2026-09-25 22:17 UTC) ===
+   *
+   * A portál olvasó végpontjai (`GET /service/maintenance-orders`,
+   * `GET /service/completion-certificates`) `SERVICE_VIEW` alatt állnak, az
+   * aláírt példány feltöltése `SERVICE_MANAGE` alatt -- UGYANAZ a két jog,
+   * amit ez a szerep már hordoz a hibajegynél/munkalapnál/eszköznél. A
+   * KIÁLLÍTÁS és a VISSZAVONÁS ITT SEM kerül a listára: azok a `partners/
+   * maintenance-orders` és `partners/completion-certificates` `PARTNERS_
+   * MANAGE`-es, belső végpontok maradnak, a portál felé nem nyílnak meg.
+   * Az aláírt példány feltöltésének FINOM kapuja a `MAINTENANCE_ORDER_
+   * UPLOAD_SIGNED`/`COMPLETION_CERTIFICATE_UPLOAD_SIGNED` felhasználónkénti
+   * `ServiceCapability`, ugyanabban a két-rétegű mintában, mint az
+   * `AQUARIUM_ASSET_ASSIGN`-nál.
    */
   PARTNER_SERVICE: [
     PERMISSIONS.SERVICE_VIEW,

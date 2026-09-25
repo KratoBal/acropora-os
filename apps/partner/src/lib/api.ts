@@ -8,8 +8,12 @@ import type {
   AssetListResponse,
   AssetQrCode,
   AuthenticatedUser,
+  CompletionCertificatePartnerDetail,
+  CompletionCertificatePartnerListResponse,
   CreateAquariumInput,
   CurrentUserResponse,
+  MaintenanceOrderPartnerDetail,
+  MaintenanceOrderPartnerListResponse,
   ServiceJobPartnerDetail,
   ServiceJobDocumentSummary,
   ServiceJobListResponse,
@@ -434,6 +438,60 @@ export const partnerApi = {
         body: JSON.stringify(input),
       },
     ),
+  /**
+   * A HATÓKÖRT A SZERVER DÖNTI EL -- ugyanaz a szabály, mint az `assets()`-
+   * nél és az `aquariums()`-nál: nincs `customerId` paraméter, a `/service/
+   * maintenance-orders` a hívó saját, kiosztott helyszínei szerint szűr
+   * (lásd `maintenance-order-visibility.ts` a szerveren).
+   */
+  maintenanceOrders: () =>
+    request<MaintenanceOrderPartnerListResponse>("/service/maintenance-orders"),
+  maintenanceOrder: (id: string) =>
+    request<MaintenanceOrderPartnerDetail>(
+      `/service/maintenance-orders/${encodeURIComponent(id)}`,
+    ),
+  maintenanceOrderDocumentBlob: (orderId: string, documentId: string) =>
+    requestBlob(
+      `/service/maintenance-orders/${encodeURIComponent(orderId)}/documents/${encodeURIComponent(documentId)}`,
+    ),
+  /**
+   * AZ ALÁÍRT MEGRENDELŐLAP FELTÖLTÉSE -- CSAK PDF, felirat nélkül (a
+   * `DocumentPanel`-lel ellentétben ez nem galéria-feltöltés, hanem egyetlen
+   * kötelező fájl). A jogosultságot (`MAINTENANCE_ORDER_UPLOAD_SIGNED`
+   * képesség) a szerver dönti el -- a `canUploadSigned` mező csak a
+   * MEGJELENÍTÉST vezérli, a tényleges kaput a végpont ellenőrzi.
+   */
+  uploadSignedMaintenanceOrder: (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request(
+      `/service/maintenance-orders/${encodeURIComponent(id)}/signed-document`,
+      { method: "POST", body: form },
+    );
+  },
+  completionCertificates: () =>
+    request<CompletionCertificatePartnerListResponse>(
+      "/service/completion-certificates",
+    ),
+  completionCertificate: (id: string) =>
+    request<CompletionCertificatePartnerDetail>(
+      `/service/completion-certificates/${encodeURIComponent(id)}`,
+    ),
+  completionCertificateDocumentBlob: (
+    certificateId: string,
+    documentId: string,
+  ) =>
+    requestBlob(
+      `/service/completion-certificates/${encodeURIComponent(certificateId)}/documents/${encodeURIComponent(documentId)}`,
+    ),
+  uploadSignedCompletionCertificate: (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request(
+      `/service/completion-certificates/${encodeURIComponent(id)}/signed-document`,
+      { method: "POST", body: form },
+    );
+  },
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ updated: true }>("/account/password", {
       method: "POST",

@@ -1268,3 +1268,155 @@ describe("a Kalkulátorok kötése", () => {
     assert.match(s, /!canViewCalculators\s*&&\s*onCalculatorsRoute/);
   });
 });
+
+/**
+ * A "MEGRENDELÉSEK" ÉS A "TELJESÍTÉSI IGAZOLÁSOK" -- Balázs sorrendjének
+ * (emlék 1840) 5. része, acrobot jóváhagyása (msg_id 23868, 2026-09-25
+ * 22:17 UTC), a `portal-megrendelesek-terv-2026-09-25.md` terv alapján.
+ *
+ * A HATÁR UGYANAZ, MINT A FÁJL TÖBBI RÉSZÉBEN (ld. a fejlécet): forrás-
+ * szöveget mér, nem renderelt képernyőt.
+ */
+const MEGRENDELES_LISTA = "src/components/maintenance-order-list.tsx";
+const MEGRENDELES_RESZLET = "src/components/maintenance-order-detail.tsx";
+const IGAZOLAS_LISTA = "src/components/completion-certificate-list.tsx";
+const IGAZOLAS_RESZLET = "src/components/completion-certificate-detail.tsx";
+const PORTAL_SHELL_MEGRENDELES = "src/components/portal-shell.tsx";
+
+describe("a Megrendelések és Teljesítési igazolások kötése", () => {
+  it("POZITÍV KONTROLL: mind a négy fájl olvasható és nem üres", () => {
+    for (const ut of [
+      MEGRENDELES_LISTA,
+      MEGRENDELES_RESZLET,
+      IGAZOLAS_LISTA,
+      IGAZOLAS_RESZLET,
+    ])
+      assert.ok(olvas(ut).length > 500, `${ut}: üres vagy gyanúsan rövid`);
+  });
+
+  /**
+   * ÁR SEHOL. A szerver válasza (`MaintenanceOrderPartnerItem`/
+   * `CompletionCertificatePartnerItem`) strukturálisan nem hordoz ár-mezőt,
+   * de ez az állítás a FELÜLETET méri: egy jóhiszemű bővítés (pl. a belső
+   * lapról átmásolt oszlop) itt buktatná le magát, mielőtt élesedne.
+   */
+  it("egyik lap sem ír ki árat, áfát vagy nettó/bruttó összeget", () => {
+    for (const ut of [
+      MEGRENDELES_LISTA,
+      MEGRENDELES_RESZLET,
+      IGAZOLAS_LISTA,
+      IGAZOLAS_RESZLET,
+    ]) {
+      const s = kod(ut);
+      for (const mezo of [
+        "unitNet",
+        "vatRatePercent",
+        "netAmount",
+        "vatAmount",
+        "grossAmount",
+      ])
+        assert.ok(!s.includes(mezo), `${ut}: kiírja a(z) ${mezo} mezőt`);
+    }
+  });
+
+  /**
+   * A KIÁLLÍTÁS ÉS A VISSZAVONÁS NINCS A PORTÁLON -- ezek belső,
+   * `PARTNERS_MANAGE`-es műveletek maradnak (lásd a szolgáltatás-réteg
+   * fejlécét). MI PIROSÍT: ha bármelyik lap kiállító/visszavonó gombot vagy
+   * hívást kapna.
+   */
+  it("a megrendelőlap adatlapja nem kínálja a kiállítást vagy a visszavonást", () => {
+    const s = kod(MEGRENDELES_RESZLET);
+    assert.ok(
+      !/\/revoke|issueMaintenanceOrder|method: "POST".*maintenance-orders"/.test(
+        s,
+      ),
+    );
+  });
+
+  /**
+   * A LETÖLTÉS A VALÓDI TÁROLT FÁJLTÍPUST KÖVETI, NEM FELTÉTELEZ PDF-ET
+   * ELŐRE -- a Figma terv `.pdf` fájlnév-feltevése (`{o.id}-megrendelolap.pdf`)
+   * MA HAMIS a generált megrendelőlapra (docx). MI PIROSÍT: ha a lap egy
+   * kitalált, `.pdf`-re végződő fájlnevet írna ki a szerver `fileName`
+   * mezője helyett.
+   */
+  it("a megrendelőlap letöltése a szerver fileName/contentType mezőit használja, nem kitalált nevet", () => {
+    const s = kod(MEGRENDELES_RESZLET);
+    assert.match(s, /generated\.fileName/);
+    assert.doesNotMatch(s, /-megrendelolap\.pdf/);
+  });
+
+  /**
+   * A FELTÖLTŐ KÁRTYA KÉT FELTÉTELHEZ KÖTŐDIK, mindkettő a szervertől jön:
+   * az állapot ÉS a `canUploadSigned` képesség-jelző. MI PIROSÍT: ha a
+   * kártya feltétel nélkül, vagy csak az egyik feltétellel jelenne meg --
+   * az utóbbi minden `SERVICE_MANAGE`-es partner-fióknak megnyitná a
+   * feltöltést, holott a kapu felhasználónkénti.
+   */
+  it("a megrendelőlap feltöltő kártyája az állapot ÉS a canUploadSigned mögött áll", () => {
+    const s = kod(MEGRENDELES_RESZLET);
+    assert.match(s, /order\.status === "ISSUED" && order\.canUploadSigned/);
+  });
+
+  it("a teljesítési igazolás feltöltő kártyája a hiány ÉS a canUploadSigned mögött áll", () => {
+    const s = kod(IGAZOLAS_RESZLET);
+    assert.match(s, /!hasSignedDocument && certificate\.canUploadSigned/);
+  });
+
+  /**
+   * AZ IGAZOLÁS LISTÁJA SZÖVEGET ÍR AZ ALÁÍRT PÉLDÁNY OSZLOPBA, NEM
+   * JELVÉNYT -- az igazolásnak nincs állapota (lásd a séma fejlécét).
+   */
+  it("a teljesítési igazolás listája nem jelvénnyel jelzi az aláírt példányt", () => {
+    const s = kod(IGAZOLAS_LISTA);
+    assert.match(s, /feltöltve/);
+    assert.match(s, /még nincs/);
+    assert.doesNotMatch(s, /PilotBadge/);
+  });
+
+  /**
+   * A MENÜPONT ÉS AZ ÚTVONAL-VÉDELEM UGYANAZT A MINTÁT KÖVETI, MINT AZ
+   * AKVÁRIUMOKÉ/KALKULÁTOROKÉ -- két KÜLÖN nav-bejegyzés, két KÜLÖN kapu.
+   */
+  it("a portál héja saját nav-bejegyzéssel véd mindkét útvonalon", () => {
+    const s = kod(PORTAL_SHELL_MEGRENDELES);
+    assert.match(
+      s,
+      /MAINTENANCE_ORDERS_NAV_ENTRY_ID\s*=\s*"maintenance-orders"/,
+    );
+    assert.match(
+      s,
+      /COMPLETION_CERTIFICATES_NAV_ENTRY_ID\s*=\s*"completion-certificates"/,
+    );
+    assert.match(s, /canViewMaintenanceOrders\s*=\s*hasNavigationEntry/);
+    assert.match(s, /canViewCompletionCertificates\s*=\s*hasNavigationEntry/);
+    assert.match(s, /MEGRENDELESEK_HREF\s*=\s*"\/megrendelesek"/);
+    assert.match(
+      s,
+      /TELJESITESI_IGAZOLASOK_HREF\s*=\s*"\/teljesitesi-igazolasok"/,
+    );
+    assert.match(
+      s,
+      /!canViewMaintenanceOrders\s*&&\s*onMaintenanceOrdersRoute/,
+    );
+    assert.match(
+      s,
+      /!canViewCompletionCertificates\s*&&\s*onCompletionCertificatesRoute/,
+    );
+  });
+
+  /**
+   * A KÉT ÚJ MENÜTÉTEL SORONKÉNT SZŰRVE JELENIK MEG, A HÁROM RÉGI
+   * FELTÉTEL NÉLKÜL -- ugyanaz a minta, mint az Akvarisztika csoportnál.
+   */
+  it("a Műszaki menü a két új tételt entryId szerint szűri", () => {
+    const s = kod(PORTAL_SHELL_MEGRENDELES);
+    assert.match(
+      s,
+      /MUSZAKI_MENU\.filter\(\s*\(item\) =>\s*!item\.entryId \|\| hasNavigationEntry\(user, item\.entryId\),\s*\)\.map\(\(item\) => \{/,
+    );
+    assert.match(s, /entryId:\s*"maintenance-orders"/);
+    assert.match(s, /entryId:\s*"completion-certificates"/);
+  });
+});

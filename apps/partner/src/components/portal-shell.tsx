@@ -22,14 +22,16 @@ import { LAP_CIM } from "./frame";
   valasztoja MARAD (`new-ticket.tsx`), csak a sajat, kulon oldala tunt el.
 */
 /**
- * A "MUSZAKI" CSOPORT, CSAK A MA VALODI, ELES ADATTAL MUKODO HAROM TETELLEL.
+ * A "MUSZAKI" CSOPORT -- OT TETELLEL, 2026-09-25-TOL.
  *
- * A Figma 9. koros terv (`PartnerPortalScreen.tsx:397-403`) ide meg ket
- * tovabbi tetelt tesz ("Megrendelesek", "Teljesitesi igazolasok", mindkettot
- * `isNew` jelzessel) -- ezek MA sehol nem leteznek a portal kodjaban
- * (barracuda leltara, "AMI A PORTALON MA NINCS" szakasz), es adatmodellt,
- * jogosultsagot igenyelnek, amirol Balazs meg nem dontott. NE kerulnenek be
- * ide, sem funkcioval, sem helykitolto "Uj" jelvennyel.
+ * A Figma 9. koros terv (`PartnerPortalScreen.tsx:397-403`) ket tovabbi
+ * tetelt is mutatott ("Megrendelesek", "Teljesitesi igazolasok"), amik
+ * addig sehol nem leteztek a portal kodjaban (barracuda leltara, "AMI A
+ * PORTALON MA NINCS" szakasz) -- adatmodellt es jogosultsagot igenyeltek,
+ * amirol Balazs meg nem dontott. AZ 5. RESZ EZT LEZARTA (emlek 1840,
+ * acrobot jovahagyasa msg_id 23868, 2026-09-25 22:17 UTC): mindket tetel
+ * mostantol valodi, ar nelkuli adattal mukodik (lasd `maintenance-order-
+ * list.tsx`/`completion-certificate-list.tsx`), tehat ide is bekerult.
  */
 /**
  * AZ IKONOK A BELSŐ WEB APP SAJÁT NAVIGÁCIÓJÁBÓL JÖNNEK
@@ -37,10 +39,27 @@ import { LAP_CIM } from "./frame";
  * és Munkalapok ott is "clipboard", Eszköznyilvántartás "box" -- ugyanaz a
  * minta, mint az Akváriumok/Kalkulátorok ikonjánál lent.
  */
-const MUSZAKI_MENU: { href: string; label: string; icon: IconName }[] = [
+const MUSZAKI_MENU: {
+  href: string;
+  label: string;
+  icon: IconName;
+  entryId?: string;
+}[] = [
   { href: "/hibajegyek", label: "Hibajegyek", icon: "clipboard" },
   { href: "/munkalapok", label: "Munkalapok", icon: "clipboard" },
   { href: "/eszkozok", label: "Eszközök", icon: "box" },
+  {
+    href: "/megrendelesek",
+    label: "Megrendelések",
+    icon: "clipboard",
+    entryId: "maintenance-orders",
+  },
+  {
+    href: "/teljesitesi-igazolasok",
+    label: "Teljesítési igazolások",
+    icon: "clipboard",
+    entryId: "completion-certificates",
+  },
 ];
 
 /**
@@ -85,9 +104,15 @@ const AQUARIUMS_NAV_ENTRY_ID = "aquariums";
 /** Ugyanaz a minta, a "calculators" bejegyzésre. */
 const CALCULATORS_NAV_ENTRY_ID = "calculators";
 
+/** Ugyanaz a minta, a "maintenance-orders"/"completion-certificates" bejegyzésekre. */
+const MAINTENANCE_ORDERS_NAV_ENTRY_ID = "maintenance-orders";
+const COMPLETION_CERTIFICATES_NAV_ENTRY_ID = "completion-certificates";
+
 const BEALLITASOK_HREF = "/beallitasok";
 const AKVARIUMOK_HREF = "/akvariumok";
 const KALKULATOROK_HREF = "/kalkulatorok";
+const MEGRENDELESEK_HREF = "/megrendelesek";
+const TELJESITESI_IGAZOLASOK_HREF = "/teljesitesi-igazolasok";
 
 export function PortalShell({ children }: { children: ReactNode }) {
   const { user, loading, logout } = useAuth();
@@ -104,6 +129,20 @@ export function PortalShell({ children }: { children: ReactNode }) {
 
   const canViewCalculators = hasNavigationEntry(user, CALCULATORS_NAV_ENTRY_ID);
   const onCalculatorsRoute = pathname.startsWith(KALKULATOROK_HREF);
+
+  const canViewMaintenanceOrders = hasNavigationEntry(
+    user,
+    MAINTENANCE_ORDERS_NAV_ENTRY_ID,
+  );
+  const onMaintenanceOrdersRoute = pathname.startsWith(MEGRENDELESEK_HREF);
+
+  const canViewCompletionCertificates = hasNavigationEntry(
+    user,
+    COMPLETION_CERTIFICATES_NAV_ENTRY_ID,
+  );
+  const onCompletionCertificatesRoute = pathname.startsWith(
+    TELJESITESI_IGAZOLASOK_HREF,
+  );
 
   /*
     UTVONAL-VEDELEM, NE CSAK MENUPONT-REJTES. A menupont eltuntetese
@@ -125,6 +164,42 @@ export function PortalShell({ children }: { children: ReactNode }) {
       router.replace("/hibajegyek");
     }
   }, [loading, user, canViewCalculators, onCalculatorsRoute, router]);
+
+  /** Ugyanaz a minta, a Megrendelések útvonalára. */
+  useEffect(() => {
+    if (
+      !loading &&
+      user &&
+      !canViewMaintenanceOrders &&
+      onMaintenanceOrdersRoute
+    ) {
+      router.replace("/hibajegyek");
+    }
+  }, [
+    loading,
+    user,
+    canViewMaintenanceOrders,
+    onMaintenanceOrdersRoute,
+    router,
+  ]);
+
+  /** Ugyanaz a minta, a Teljesítési igazolások útvonalára. */
+  useEffect(() => {
+    if (
+      !loading &&
+      user &&
+      !canViewCompletionCertificates &&
+      onCompletionCertificatesRoute
+    ) {
+      router.replace("/hibajegyek");
+    }
+  }, [
+    loading,
+    user,
+    canViewCompletionCertificates,
+    onCompletionCertificatesRoute,
+    router,
+  ]);
 
   if (loading) return <main className="centered">Munkamenet ellenőrzése…</main>;
   if (!user) {
@@ -150,6 +225,12 @@ export function PortalShell({ children }: { children: ReactNode }) {
     return <main className="centered">Átirányítás…</main>;
   }
   if (!canViewCalculators && onCalculatorsRoute) {
+    return <main className="centered">Átirányítás…</main>;
+  }
+  if (!canViewMaintenanceOrders && onMaintenanceOrdersRoute) {
+    return <main className="centered">Átirányítás…</main>;
+  }
+  if (!canViewCompletionCertificates && onCompletionCertificatesRoute) {
     return <main className="centered">Átirányítás…</main>;
   }
 
@@ -227,7 +308,20 @@ export function PortalShell({ children }: { children: ReactNode }) {
               Műszaki
             </p>
             <div className="flex flex-col gap-0.5">
-              {MUSZAKI_MENU.map((item) => {
+              {/*
+                A KÉT ÚJ TÉTEL (`entryId`-vel) A SZERVER `navigation`
+                VÁLASZÁT NÉZI, A HÁROM RÉGI NEM -- ugyanaz a döntés, mint az
+                Akvarisztika csoportnál: a hibajegy/munkalap/eszköz mindig
+                látszik (a `PARTNER_SERVICE` szerep MINDIG hordozza a
+                `SERVICE_VIEW`-t, a route guard fent ezt már kikényszeríti),
+                a Megrendelések/Teljesítési igazolások viszont az ÉLESBEN
+                FUTÓ API tényleges tudását tükrözi -- lásd a fájl fejlécét a
+                deploy-csúszás kockázatáról.
+              */}
+              {MUSZAKI_MENU.filter(
+                (item) =>
+                  !item.entryId || hasNavigationEntry(user, item.entryId),
+              ).map((item) => {
                 const active = pathname.startsWith(item.href);
                 return (
                   <Link

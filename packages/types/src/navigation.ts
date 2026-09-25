@@ -179,6 +179,34 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * MEGRENDELÉSEK (KARBANTARTÁSI MEGRENDELŐLAPOK), A PARTNER PORTÁLON --
+     * acrobot jóváhagyása, msg_id 23868, 2026-09-25 22:17 UTC, Balázs
+     * sorrendjének (emlék 1840) 5. része.
+     *
+     * `SERVICE_VIEW`, UGYANAZ A JOG, mint a hibajegynél/munkalapnál -- a
+     * `PARTNER_SERVICE` szerep már ma is hordozza, tehát külön jog felvétele
+     * itt nem indokolt. A LÁTHATÓSÁG finomítását (melyik helyszín melyik
+     * megrendelőlapját) a szerver a hívó saját, kiosztott helyszínei szerint
+     * szűri, nem ez a bejegyzés -- lásd `maintenance-order-visibility.ts`.
+     *
+     * A BELSŐ, `PARTNERS_MANAGE`-es kiállítás/visszavonás NEM ide tartozik:
+     * ez a menüpont KIZÁRÓLAG a portál olvasó és feltöltő útvonalára nyit.
+     */
+    id: "maintenance-orders",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SERVICE_VIEW),
+  },
+  {
+    /**
+     * TELJESÍTÉSI IGAZOLÁSOK, A PARTNER PORTÁLON -- ugyanaz a jóváhagyás és
+     * ugyanaz az indok, mint a "maintenance-orders" bejegyzésnél.
+     */
+    id: "completion-certificates",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SERVICE_VIEW),
+  },
+  {
+    /**
      * A BESZERZO SAJAT LISTAJA -- "RAM VARO ANYAGIGENYEK".
      *
      * A `SERVICE_MANAGE` csak azt engedi meg, hogy egyaltalan lassa a MENUPONTOT

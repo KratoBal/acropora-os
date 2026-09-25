@@ -13,7 +13,11 @@
  */
 export interface ServiceCapabilityInfo {
   /** Az adatbazis enum erteke. */
-  readonly value: "MATERIAL_REQUEST_MARK_RECEIVED" | "AQUARIUM_ASSET_ASSIGN";
+  readonly value:
+    | "MATERIAL_REQUEST_MARK_RECEIVED"
+    | "AQUARIUM_ASSET_ASSIGN"
+    | "MAINTENANCE_ORDER_UPLOAD_SIGNED"
+    | "COMPLETION_CERTIFICATE_UPLOAD_SIGNED";
   /** A jelolonegyzet felirata. */
   readonly label: string;
   /** Mit jelent, ha be van jelolve -- a felirat ala. */
@@ -55,6 +59,30 @@ export const SERVICE_CAPABILITIES: readonly ServiceCapabilityInfo[] = [
     label: "Eszköz hozzárendelése akváriumhoz (partner portál)",
     description:
       "A partner portálon hozzárendelheti vagy leveheti a saját helyszínének eszközeit egy akváriumról. Az akvárium többi mezője (név, víztípus, víztérfogat) enélkül is, ezzel is csak olvasható marad a portálon.",
+    audience: "partner",
+  },
+  /**
+   * PARTNER-FIÓKOKON JELÖLENDŐ, ugyanúgy mint az `AQUARIUM_ASSET_ASSIGN`
+   * (acrobot jóváhagyása, msg_id 23868, 2026-09-25 22:17 UTC).
+   */
+  {
+    value: "MAINTENANCE_ORDER_UPLOAD_SIGNED",
+    label: "Aláírt megrendelőlap feltöltése (partner portál)",
+    description:
+      "A partner portálon feltöltheti egy megrendelőlap aláírt, visszaküldött példányát. A megrendelőlap adatait és a letöltést enélkül is látja mindenki, akinek a helyszíne a hatókörébe esik.",
+    audience: "partner",
+  },
+  /**
+   * KÜLÖN JELÖLŐ, NEM A MEGRENDELŐLAPÉ -- ugyanaz az indok, amit Balázs a
+   * `MATERIAL_REQUEST_MARK_RECEIVED`-nél is kimondott: két különböző
+   * felelősség, két külön jelölő, mert más ember kaphatja meg az egyiket,
+   * mint a másikat.
+   */
+  {
+    value: "COMPLETION_CERTIFICATE_UPLOAD_SIGNED",
+    label: "Aláírt teljesítési igazolás feltöltése (partner portál)",
+    description:
+      "A partner portálon feltöltheti egy teljesítési igazolás aláírt, visszaküldött példányát. Az igazolás adatait és a letöltést enélkül is látja mindenki, akinek a helyszíne a hatókörébe esik.",
     audience: "partner",
   },
 ] as const;

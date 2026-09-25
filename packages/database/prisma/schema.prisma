@@ -4420,6 +4420,20 @@ enum ServiceCapability {
   /// `MaterialRequestsService.listPending` is ket retegben dont
   /// (`requireInternalWriter` + `hasMarkReceivedCapability`).
   AQUARIUM_ASSET_ASSIGN
+  /// AZ ALAIRT MEGRENDELOLAP FELTOLTESE, A PARTNER PORTALON -- acrobot
+  /// jovahagyasa (msg_id 23868, 2026-09-25 22:17 UTC), a terv 3.2/3.3
+  /// pontja szerint. UGYANAZ A MINTA, mint az AQUARIUM_ASSET_ASSIGN-nal:
+  /// felhasznalonkenti jelolo, NEM szerep-szintu jog, mert a
+  /// `PARTNER_SERVICE` szerep MA MEGVAN a `service.manage` joggal (lasd
+  /// azt a fejlecet). Az ELLENORZES a `service.manage` alatt, masodik,
+  /// finomabb retegkent all.
+  MAINTENANCE_ORDER_UPLOAD_SIGNED
+  /// AZ ALAIRT TELJESITESI IGAZOLAS FELTOLTESE, A PARTNER PORTALON --
+  /// UGYANAZ A DONTES, KULON JELOLOVEL (acrobot, ugyanaz az uzenet):
+  /// „ket kulon jelolo legyen" -- mas ember kaphatja meg a megrendelolap
+  /// alairasat, mint a teljesites visszaigazolasat (pl. egy telephely-
+  /// vezeto csak az elsot irja ala).
+  COMPLETION_CERTIFICATE_UPLOAD_SIGNED
 }
 
 /// LASD `UserNotificationRole` FEJLECET -- BETURE UGYANAZ AZ ALAK, MAS
