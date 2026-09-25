@@ -8,6 +8,7 @@ import type {
   AssetListResponse,
   AssetQrCode,
   AuthenticatedUser,
+  CreateAquariumInput,
   CurrentUserResponse,
   ServiceJobPartnerDetail,
   ServiceJobDocumentSummary,
@@ -162,6 +163,31 @@ export const partnerApi = {
     request<WorksheetDepartmentListResponse>(
       `/service/worksheets/customers/${encodeURIComponent(customerId)}/departments`,
     ),
+  /**
+   * ÚJ AKVÁRIUM FELVITELE A PORTÁLRÓL.
+   *
+   * A HÍVÓ NEM KÜLD `ownershipType`-OT, `customerId`-t VAGY `newCustomer`-t --
+   * ez a hívás mindig a hívó SAJÁT ügyfelére hoz létre akváriumot
+   * (`aquariums.service.ts` `resolvePartnerOwnership`, szerver oldalon
+   * kényszerítve `ownershipType: "CUSTOMER"`-re és a hívó `customerId`-jére;
+   * egy innen küldött eltérő érték elutasítást kapna, nem csendes
+   * felülírást). A `departmentId` a hívó SAJÁT, kiosztott helyszínei közül
+   * KÖTELEZŐ -- ezt a szerver `assignedUnitIdsFor`-ral ellenőrzi.
+   */
+  createAquarium: (
+    input: Pick<
+      CreateAquariumInput,
+      | "departmentId"
+      | "name"
+      | "waterType"
+      | "systemVolumeLiters"
+      | "systemVolumeIsManual"
+    >,
+  ) =>
+    request<AquariumDetail>("/aquariums", {
+      method: "POST",
+      body: JSON.stringify({ ownershipType: "CUSTOMER", ...input }),
+    }),
   /**
    * A LATHATOSAGOT A SZERVER DONTI EL, NEM EZ A HIVAS.
    *
