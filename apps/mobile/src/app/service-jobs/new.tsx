@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { eyebrowStyle } from "@/lib/theme/label-styles";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getAsset, listAssets } from "@/lib/api/assets";
@@ -871,19 +872,15 @@ function createStyles(t: ThemeTokens) {
       padding: 14,
     },
     /*
-      NAGYBETŰS, RITKÍTOTT, HALVÁNY -- A TERV `MobileLabel` MINTÁJA (acrobot
-      kérése, 2026-09-25, barracuda mérése alapján: a szakaszcímek eddig sötét
-      színűek és normál esetűek voltak, a terv halvány, csupa nagybetűs
-      "eyebrow" stílusa helyett). A szöveg maga NEM lett nagybetűs átírva --
-      a `textTransform` végzi ugyanazt, amit a terv `uppercase` osztálya.
+      A SZÖVEG MAGA NEM LETT NAGYBETŰS ÁTÍRVA -- a `textTransform` végzi
+      ugyanazt, amit a terv `uppercase` osztálya.
     */
-    sectionTitle: {
-      color: t.textMuted,
+    sectionTitle: eyebrowStyle(t, {
       fontSize: 12,
       fontWeight: "600",
       letterSpacing: 1.2,
       textTransform: "uppercase",
-    },
+    }),
     rowText: { color: t.textPrimary },
     /* A gep nelkuli felvitel valasztoi. Ugyanaz az alak, mint a
        munkalap-listaban: ugyanaz a mozdulat, ugyanaz a kinezet. */

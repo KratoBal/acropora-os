@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { eyebrowStyle } from "@/lib/theme/label-styles";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import {
@@ -203,17 +204,11 @@ function createStyles(t: ThemeTokens) {
   return StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: t.background },
     container: { padding: 18, paddingBottom: 48, gap: 12 },
-    /*
-      A SZÍN A TERV SZÜRKÉJE (grey-400 -> t.textMuted), NEM AZ AKCENT. acrobot
-      kérése, 2026-09-25, barracuda mérése alapján: a méret/vastagság/betűköz
-      már egyezett a tervvel (`MobileLabel`), csak a szín tért el.
-    */
-    eyebrow: {
-      color: t.textMuted,
+    eyebrow: eyebrowStyle(t, {
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 1.4,
-    },
+    }),
     title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
     subtitle: { color: t.textSecondary },
     card: {
