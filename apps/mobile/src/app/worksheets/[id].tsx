@@ -2325,7 +2325,12 @@ export default function WorksheetDetailScreen() {
 
             {olderVersions && olderVersions.length > 0 ? (
               <>
-                <Text style={styles.sectionTitle}>Korábbi változatok</Text>
+                {/*
+                  "VERZIÓK", NEM "KORÁBBI VÁLTOZATOK" (acrobot döntése,
+                  2026-09-25, Figma 8. kör): a leírás és a Figma-terv is ezt a
+                  szót használja.
+                */}
+                <Text style={styles.sectionTitle}>Verziók</Text>
                 {olderVersions.map((version) => (
                   <View key={version.id} style={styles.card}>
                     <View style={styles.row}>
