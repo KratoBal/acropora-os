@@ -114,14 +114,15 @@ const HIVOHELYEK: readonly Hivohely[] = [
      * A vegpont 2026-09-21 ota all a szerveren, es eddig CSAK a web hivta: a
      * telefonrol most lett bekotve.
      *
-     * A SORSZAM 4-ROL 5-RE MOZDULT (2026-09-25), ES NEM AZERT, MERT EZ A HIVAS
-     * VALTOZOTT: az uj `setWorksheetAssets` (nevesitett tipussal,
-     * `mobile-request-body.spec.ts` PAROK listaja fedi) a fajlban FELETTE
-     * all, tehat eggyel hatrebb tolta. Ugyanaz az alak, amit ez a fajl mar
-     * ketszer leirt.
+     * A SORSZAM MOST HARMADSZOR MOZDULT (2026-09-25, 4 -> 6, KET UJ HIVAS
+     * EGYSZERRE): az uj `setWorksheetAssets` ES az uj `createWorksheetDepartment`
+     * (mindketto nevesitett tipussal, `mobile-request-body.spec.ts` PAROK
+     * listaja fedi mindkettot) egy koron belul, ket kulon PR-bol kerult a
+     * fajlba, mindketto FELETTE all ennek a harom bejegyzesnek -- egyutt
+     * ketto helyet toltak, nem egyet.
      */
     fajl: "lib/api/worksheets.ts",
-    sorszam: 5,
+    sorszam: 6,
     dto: "src/worksheets/dto/worksheet.dto.ts",
     dtoNev: "SendWorksheetForSignatureDto",
     kontroll: ["signerUserId"],
@@ -132,26 +133,24 @@ const HIVOHELYEK: readonly Hivohely[] = [
      * (`{ handedOver }`), tehat nincs nevesitett tipusa -- ez a fajta
      * KIZAROLAG itt merheto.
      *
-     * A SORSZAM MOST MASODSZOR MOZDULT (2026-09-25, 5 -> 6), ugyanazert, mint
-     * a fenti bejegyzes: az uj `setWorksheetAssets` hivas a fajlban FELETTE
-     * all.
+     * UGYANAZ A KETTOS ELTOLODAS, MINT A FENTI BEJEGYZESNEL (4 -> 6).
      */
     fajl: "lib/api/worksheets.ts",
-    sorszam: 6,
+    sorszam: 7,
     dto: "src/worksheets/dto/worksheet.dto.ts",
     dtoNev: "SetWorksheetHandedOverDto",
     kontroll: ["handedOver"],
   },
   {
     /**
-     * A SORSZAM MOST MASODSZOR MOZDULT (2026-09-25, 6 -> 7), ugyanazert, mint
-     * a fenti ket bejegyzes: az uj `setWorksheetAssets` hivas a fajlban
-     * FELETTE all. A sorszam a fajlon beluli SORRENDET jelenti, nem
+     * UGYANAZ A KETTOS ELTOLODAS (4 -> 6), mint a fenti ket bejegyzesnel: a
+     * `setWorksheetAssets` ES a `createWorksheetDepartment` hivas is FELETTE
+     * all a fajlban. A sorszam a fajlon beluli SORRENDET jelenti, nem
      * azonositot -- aki uj irast tesz egy fajl kozepere, itt minden alatta
      * allot atszamoz.
      */
     fajl: "lib/api/worksheets.ts",
-    sorszam: 7,
+    sorszam: 8,
     dto: "src/worksheets/dto/worksheet.dto.ts",
     dtoNev: "CreateWorksheetEntryDto",
     kontroll: ["body"],
@@ -305,7 +304,13 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
  * torzse NEVESITETT tipussal megy (`CreateAquariumMeasurementInput`), tehat
  * a szomszed orzo MAR LATJA: ez a hivas NEM kerul a HIVOHELYEK koze.
  */
-const IRAS_HIVASOK_A_FAN = 22;
+/**
+ * 2026-09-25: 22 -> 23, ugyanaz a ket egyszerre erkezo hivas, mint a
+ * szomszed `mobile-request-body.spec.ts`-ben (`setWorksheetAssets` es
+ * `createWorksheetDepartment`) -- mindketto nevesitett tipussal megy, tehat
+ * egyik sem kerul a HIVOHELYEK koze.
+ */
+const IRAS_HIVASOK_A_FAN = 23;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

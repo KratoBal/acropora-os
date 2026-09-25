@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   createWorksheet,
+  createWorksheetDepartment,
   listSelectableWorksheetPartners,
   listWorksheetDepartments,
   uploadWorksheetDocuments,
@@ -72,6 +73,7 @@ import {
 import {
   buildWorksheetCreatePayload,
   describeWorksheetQueueWrite,
+  missingWorksheetFields,
   type WorksheetCreateField,
   type WorksheetCreatePayload,
 } from "@/lib/worksheets/worksheet-create";
@@ -97,6 +99,7 @@ import {
  */
 export default function NewWorksheetScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   /**
    * A HIBAJEGY, AMI ALA A LAP KERUL -- KET ALAKBAN JOHET, ES A KETTO NEM
    * CSEREHETO FEL. A dontes a `lib/worksheets/worksheet-under-ticket.ts`-ben
@@ -140,6 +143,14 @@ export default function NewWorksheetScreen() {
    * kollega elveszettnek hinne, es ujra felvinne.
    */
   const [queued, setQueued] = useState<string | null>(null);
+  /**
+   * A HIANYZO KOTELEZO MEZOK NEVE, KULDESKOR (acrobot dontese, 2026-09-25,
+   * Figma 8. kor): a gomb marad mindig aktiv (a mai mobil mintaja), de egy
+   * sikertelen kuldes utan a gomb FELETT megjelenik, MELYIK mezo(k)
+   * hianyoznak -- ugyanazzal a "Kötelező: X, Y" szoveggel, mint a weben. Nem
+   * folyamatosan szamolt: csak a kuldes PILLANATABAN, a `submit()`-ben.
+   */
+  const [missingFields, setMissingFields] = useState<string[]>([]);
   /**
    * A HELYSZINEN KESZULT KEPEK, MEG A MENTES ELOTT.
    *
@@ -335,6 +346,55 @@ export default function NewWorksheetScreen() {
     : null;
 
   /**
+   * UJ ALEGYSEG FELVITELE, INLINE (acrobot dontese, 2026-09-25, Figma 8.
+   * kor): "harom mezo, nem er meg egy kulon kepernyot". A "Szulo helyszin"
+   * a MAR BETOLTOTT `departments` listabol valaszthato -- nincs kulon
+   * lekerdezes hozza, es a valasztas garantaltan ugyanahhoz a partnerhez
+   * tartozik, mint amit a szerver ugyis ellenoriz.
+   */
+  const [ujAlegysegNyitva, setUjAlegysegNyitva] = useState(false);
+  const [ujAlegysegSzuloId, setUjAlegysegSzuloId] = useState("");
+  const [ujAlegysegKod, setUjAlegysegKod] = useState("");
+  const [ujAlegysegNev, setUjAlegysegNev] = useState("");
+  const [ujAlegysegHiba, setUjAlegysegHiba] = useState<string | null>(null);
+
+  const createDepartmentMutation = useMutation({
+    mutationFn: async () => {
+      if (!partnerHatasos)
+        throw new Error("Előbb válassz partnert az alegység felvitele előtt.");
+      return createWorksheetDepartment(partnerHatasos.customerId, {
+        parentId: ujAlegysegSzuloId || undefined,
+        code: ujAlegysegKod.trim(),
+        name: ujAlegysegNev.trim(),
+      });
+    },
+    onMutate: () => setUjAlegysegHiba(null),
+    onSuccess: async (uj) => {
+      /**
+       * A FRISS ALEGYSEG AZONNAL KIVALASZTODIK, es a lista UJRA lekerdezodik
+       * -- kulonben a szerelo felvitte volna, de az urlap tovabbra is a
+       * regi listat mutatna, es ujra kellene nyitnia a valasztot, hogy
+       * lassa.
+       */
+      setDepartmentId(uj.id);
+      setUjAlegysegNyitva(false);
+      setUjAlegysegSzuloId("");
+      setUjAlegysegKod("");
+      setUjAlegysegNev("");
+      if (partnerHatasos)
+        await queryClient.invalidateQueries({
+          queryKey: ["worksheet-departments", partnerHatasos.customerId],
+        });
+    },
+    onError: (cause) =>
+      setUjAlegysegHiba(
+        cause instanceof Error
+          ? cause.message
+          : "Az alegység nem hozható létre.",
+      ),
+  });
+
+  /**
    * MENTES: A SZERVERNEK, ES CSAK HALOZATI HIBANAL A SORBA.
    *
    * A dontes a `lib/offline/save-or-queue.ts`-ben van, mert ott MERHETO --
@@ -495,8 +555,16 @@ export default function NewWorksheetScreen() {
     });
     if (!result.ok) {
       setError({ field: result.field, message: result.message });
+      setMissingFields(
+        missingWorksheetFields({
+          customerId: partnerHatasos?.customerId ?? "",
+          departmentId: departmentIdHatasos,
+          subject,
+        }),
+      );
       return;
     }
+    setMissingFields([]);
     mutation.mutate(result.payload);
   };
 
@@ -693,6 +761,102 @@ export default function NewWorksheetScreen() {
                 ))}
               </View>
             )}
+
+            {/*
+              "+ UJ ALEGYSEG HOZZAADASA", INLINE (acrobot dontese,
+              2026-09-25, Figma 8. kor). Csak akkor van ertelme, ha mar van
+              partner: az alegyseg a partner ala kerul, es a szerver ezt is
+              ellenorzi (`customerId` az utvonalban).
+            */}
+            {partnerHatasos && !fromCache ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setUjAlegysegNyitva((nyitva) => !nyitva);
+                    setUjAlegysegHiba(null);
+                  }}
+                >
+                  <Text style={styles.toggleLink}>
+                    {ujAlegysegNyitva ? "− Mégsem" : "+ Új alegység hozzáadása"}
+                  </Text>
+                </Pressable>
+
+                {ujAlegysegNyitva ? (
+                  <View style={styles.subForm}>
+                    <View style={styles.field}>
+                      <Text style={styles.label}>Szülő helyszín</Text>
+                      <View style={styles.list}>
+                        <Pressable
+                          onPress={() => setUjAlegysegSzuloId("")}
+                          style={[
+                            styles.listRow,
+                            ujAlegysegSzuloId === "" && styles.listRowOn,
+                          ]}
+                        >
+                          <Text style={styles.listName}>
+                            Nincs (legfelső szint)
+                          </Text>
+                        </Pressable>
+                        {departments.map((unit) => (
+                          <Pressable
+                            key={unit.id}
+                            onPress={() => setUjAlegysegSzuloId(unit.id)}
+                            style={[
+                              styles.listRow,
+                              ujAlegysegSzuloId === unit.id && styles.listRowOn,
+                            ]}
+                          >
+                            <Text style={styles.listName}>{unit.name}</Text>
+                            <Text style={styles.listMeta}>{unit.code}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={styles.field}>
+                      <Text style={styles.label}>Új alegység kódja</Text>
+                      <TextInput
+                        value={ujAlegysegKod}
+                        onChangeText={setUjAlegysegKod}
+                        placeholder="pl. CAP-UJ"
+                        placeholderTextColor="#5b7d8f"
+                        autoCapitalize="characters"
+                        style={styles.input}
+                      />
+                    </View>
+                    <View style={styles.field}>
+                      <Text style={styles.label}>Új alegység neve</Text>
+                      <TextInput
+                        value={ujAlegysegNev}
+                        onChangeText={setUjAlegysegNev}
+                        placeholder="pl. Hátsó medence"
+                        placeholderTextColor="#5b7d8f"
+                        style={styles.input}
+                      />
+                    </View>
+                    {ujAlegysegHiba ? (
+                      <Text style={styles.fieldError}>{ujAlegysegHiba}</Text>
+                    ) : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={createDepartmentMutation.isPending}
+                      onPress={() => createDepartmentMutation.mutate()}
+                      style={[
+                        styles.pickerRow,
+                        createDepartmentMutation.isPending && styles.disabled,
+                      ]}
+                    >
+                      <Text style={styles.pickerName}>
+                        {createDepartmentMutation.isPending
+                          ? "Létrehozás…"
+                          : "Alegység létrehozása"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+
             {cacheNotice ? (
               <View style={styles.notice}>
                 <Text style={styles.noticeTitle}>{cacheNotice.title}</Text>
@@ -714,7 +878,13 @@ export default function NewWorksheetScreen() {
               />
             </View>
             <View style={styles.field}>
-              <Text style={styles.label}>Leírás (elhagyható)</Text>
+              {/*
+                "MEGJEGYZÉS", NEM "LEÍRÁS (ELHAGYHATÓ)" (acrobot döntése,
+                2026-09-25, Figma 8. kör): a leírás és a terv is ezt a szót
+                használja -- ugyanaz a mező, ami a részletes lapon is
+                megjelenik.
+              */}
+              <Text style={styles.label}>Megjegyzés</Text>
               <TextInput
                 value={description}
                 onChangeText={setDescription}
@@ -776,6 +946,19 @@ export default function NewWorksheetScreen() {
           */}
           {error ? <Text style={styles.error}>{error.message}</Text> : null}
           {queued ? <Text style={styles.queued}>{queued}</Text> : null}
+
+          {/*
+            "KÖTELEZŐ: X, Y" A GOMB FELETT, KÜLDÉSKOR (acrobot döntése,
+            2026-09-25, Figma 8. kör) -- ugyanaz a szöveg-alak, mint a webes
+            eszköz-felvitelen (pilot-asset-create-page.tsx). A gomb NEM
+            tiltott: a mai mobil mintája marad, ez csak egy sikertelen küldés
+            UTÁN mondja meg, melyik kötelező mező hiányzik.
+          */}
+          {missingFields.length > 0 ? (
+            <Text style={styles.missingFields}>
+              Kötelező: {missingFields.join(", ")}
+            </Text>
+          ) : null}
 
           <Pressable
             disabled={mutation.isPending}
@@ -872,6 +1055,19 @@ const styles = StyleSheet.create({
   listName: { color: "#f4fbff", fontSize: 14 },
   listMeta: { color: "#789cad", fontSize: 11, marginTop: 2 },
   hint: { color: "#789cad", fontSize: 12, lineHeight: 17 },
+  toggleLink: {
+    color: "#52d6c7",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  subForm: {
+    backgroundColor: "#08192a",
+    borderColor: "#17394f",
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 10,
+    padding: 12,
+  },
   photoRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -899,6 +1095,7 @@ const styles = StyleSheet.create({
     color: "#a9e7dd",
     padding: 12,
   },
+  missingFields: { color: "#789cad", fontSize: 12, textAlign: "center" },
   saveButton: { backgroundColor: "#177b74", borderRadius: 12, padding: 15 },
   saveText: {
     color: "#fff",

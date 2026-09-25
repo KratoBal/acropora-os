@@ -151,6 +151,31 @@ export function buildWorksheetCreatePayload(
 }
 
 /**
+ * A HIANYZO KOTELEZO MEZOK NEVE, EGYSZERRE -- nem csak az elso.
+ *
+ * `buildWorksheetCreatePayload` az ELSO hibanal all meg, mert ott a hiba a
+ * MEZONEL jelenik meg, es a sorrend szandekos (lasd a fejleceit). Ez a
+ * fuggveny mas kerdesre valaszol: a webes "Kötelező: X, Y" osszegzo sorhoz
+ * (acrobot dontese, 2026-09-25, Figma 8. kor) az OSSZES hianyzo mezo kell
+ * egyszerre, nem csak a legelso.
+ *
+ * SZANDEKOSAN CSAK A HAROM KOTELEZO MEZOT NEZI (partner, helyszin, targy) --
+ * a hosszkorlatok (targy/leiras) ITT NEM "hianyzo mezo", azokat a
+ * `buildWorksheetCreatePayload` inline hibaja fedi.
+ */
+export function missingWorksheetFields(form: {
+  customerId: string;
+  departmentId: string;
+  subject: string;
+}): string[] {
+  const hianyzik: string[] = [];
+  if (!form.customerId.trim()) hianyzik.push("Partner");
+  if (!form.departmentId.trim()) hianyzik.push("Helyszín");
+  if (!form.subject.trim()) hianyzik.push("Tárgy");
+  return hianyzik;
+}
+
+/**
  * A SORBA TETEL EREDMENYE, EMBERI ALAKBAN -- A MUNKALAPRA SZABVA.
  *
  * A dontes kozos (`offline/save-or-queue.ts`), a SZOVEG viszont nem lehet az:
