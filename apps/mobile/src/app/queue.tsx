@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,6 +13,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { describeCacheAge } from "@/lib/offline/offline-notice";
 import {
@@ -52,6 +55,8 @@ import {
  */
 export default function QueueScreen() {
   const { status } = useAuth();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const queryClient = useQueryClient();
   const router = useRouter();
 
@@ -73,7 +78,7 @@ export default function QueueScreen() {
           <RefreshControl
             refreshing={rows.isFetching}
             onRefresh={() => void rows.refetch()}
-            tintColor="#52d6c7"
+            tintColor={tokens.accent}
           />
         }
       >
@@ -81,7 +86,7 @@ export default function QueueScreen() {
         <Text style={styles.title}>Feltöltésre váró felvitelek</Text>
 
         {rows.isPending ? (
-          <ActivityIndicator color="#52d6c7" />
+          <ActivityIndicator color={tokens.accent} />
         ) : entries.length === 0 ? (
           <Text style={styles.hint}>
             Nincs várakozó felvitel: minden felment a szerverre.
@@ -176,6 +181,11 @@ export default function QueueScreen() {
   );
 }
 
+/**
+ * SAJÁT `useAppTheme()`-HÍVÁS: ez a segédkomponens a fő függvényen KÍVÜL áll,
+ * tehát nem éri el annak per-render `styles` állandóját -- ugyanaz a minta,
+ * mint a `worksheets/new.tsx` `Section`/`FieldError` segédkomponensei.
+ */
 function Entry({
   entry,
   onRetry,
@@ -189,6 +199,8 @@ function Entry({
   onResolve: () => void;
   onDiscard: () => void;
 }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   /**
    * A HATART A SZAMOLOTOL KERJUK EL, NEM IRJUK BE UJRA. Ha valaha harom
    * helyett negy lesz, ez a sor magatol koveti -- egy masolt hármas nem.
@@ -282,51 +294,62 @@ function Entry({
   );
 }
 
-const styles = StyleSheet.create({
-  rowHint: { color: "#91afbe", fontSize: 13, lineHeight: 19, marginTop: 8 },
-  discardText: {
-    color: "#ffb4ab",
-    fontSize: 13,
-    fontWeight: "800",
-    marginTop: 12,
-    textAlign: "center",
-    textDecorationLine: "underline",
-  },
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 48, gap: 16 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-  },
-  title: { color: "#f4fbff", fontSize: 28, fontWeight: "900" },
-  hint: { color: "#91afbe", lineHeight: 21 },
-  section: {
-    backgroundColor: "#0d2233",
-    borderRadius: 14,
-    padding: 14,
-    gap: 10,
-  },
-  sectionTitle: { color: "#f4fbff", fontSize: 17, fontWeight: "900" },
-  sectionHint: { color: "#91afbe", fontSize: 12, lineHeight: 17 },
-  row: {
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderRadius: 10,
-    borderWidth: 1,
-    gap: 4,
-    padding: 12,
-  },
-  rowTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
-  rowMeta: { color: "#789cad", fontSize: 12 },
-  rowError: { color: "#ffd9a8", fontSize: 13, lineHeight: 18 },
-  rowRaw: { color: "#5f7f92", fontSize: 11 },
-  retryButton: {
-    backgroundColor: "#177b74",
-    borderRadius: 10,
-    marginTop: 6,
-    padding: 11,
-  },
-  retryText: { color: "#fff", fontWeight: "900", textAlign: "center" },
-});
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    rowHint: {
+      color: t.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 8,
+    },
+    discardText: {
+      color: t.danger,
+      fontSize: 13,
+      fontWeight: "800",
+      marginTop: 12,
+      textAlign: "center",
+      textDecorationLine: "underline",
+    },
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 48, gap: 16 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 1.2,
+    },
+    title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
+    hint: { color: t.textSecondary, lineHeight: 21 },
+    section: {
+      backgroundColor: t.surface,
+      borderRadius: 14,
+      padding: 14,
+      gap: 10,
+    },
+    sectionTitle: { color: t.textPrimary, fontSize: 17, fontWeight: "900" },
+    sectionHint: { color: t.textSecondary, fontSize: 12, lineHeight: 17 },
+    row: {
+      backgroundColor: t.surfaceRaised,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      gap: 4,
+      padding: 12,
+    },
+    rowTitle: { color: t.textPrimary, fontSize: 15, fontWeight: "800" },
+    rowMeta: { color: t.textSecondary, fontSize: 12 },
+    rowError: { color: t.warning, fontSize: 13, lineHeight: 18 },
+    rowRaw: { color: t.textMuted, fontSize: 11 },
+    retryButton: {
+      backgroundColor: t.accent,
+      borderRadius: 10,
+      marginTop: 6,
+      padding: 11,
+    },
+    retryText: {
+      color: t.textOnAccent,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+  });
+}

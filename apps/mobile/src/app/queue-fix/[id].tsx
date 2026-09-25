@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -16,6 +16,8 @@ import { assetFormFromPayloadJson } from "@/lib/assets/asset-payload-form";
 import { buildAssetCreatePayload } from "@/lib/assets/asset-create";
 import type { AssetCreateForm } from "@/lib/assets/asset-create";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { allQueueRows, applyQueueResend } from "@/lib/offline/queue-store";
 import { describeQueueError } from "@/lib/offline/queue-inspection";
@@ -79,6 +81,8 @@ export default function QueueFixScreen() {
   const queryClient = useQueryClient();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
 
   const [draft, setDraft] = useState<AssetCreateForm | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -154,7 +158,7 @@ export default function QueueFixScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.eyebrow}>ELAKADT FELVITEL</Text>
 
-        {sor.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {sor.isPending ? <ActivityIndicator color={tokens.accent} /> : null}
 
         {sor.data === null && !sor.isPending ? (
           <Text style={styles.error}>
@@ -199,7 +203,7 @@ export default function QueueFixScreen() {
                         setDraft({ ...form, [mezo.key]: next });
                         setError(null);
                       }}
-                      placeholderTextColor="#5b7d8f"
+                      placeholderTextColor={tokens.textMuted}
                       style={styles.input}
                     />
                   </View>
@@ -237,52 +241,54 @@ export default function QueueFixScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 48, gap: 12 },
-  eyebrow: {
-    color: "#52d6c7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  card: {
-    backgroundColor: "#0d2b40",
-    borderColor: "#1c4963",
-    borderWidth: 1,
-    borderRadius: 16,
-    gap: 6,
-    padding: 14,
-  },
-  label: { color: "#789cad", fontSize: 12, fontWeight: "700" },
-  value: { color: "#f4fbff", fontSize: 14 },
-  muted: { color: "#789cad", fontSize: 12 },
-  input: {
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderRadius: 10,
-    borderWidth: 1,
-    color: "#f4fbff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  error: {
-    color: "#fecaca",
-    backgroundColor: "#541b2b",
-    padding: 12,
-    borderRadius: 10,
-  },
-  submitButton: {
-    backgroundColor: "#177b74",
-    borderRadius: 12,
-    marginTop: 4,
-    padding: 16,
-  },
-  submitText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  disabled: { opacity: 0.55 },
-});
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 48, gap: 12 },
+    eyebrow: {
+      color: t.accent,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+    },
+    card: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: 1,
+      borderRadius: 16,
+      gap: 6,
+      padding: 14,
+    },
+    label: { color: t.textSecondary, fontSize: 12, fontWeight: "700" },
+    value: { color: t.textPrimary, fontSize: 14 },
+    muted: { color: t.textSecondary, fontSize: 12 },
+    input: {
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      color: t.textPrimary,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    error: {
+      color: t.danger,
+      backgroundColor: t.dangerSoft,
+      padding: 12,
+      borderRadius: 10,
+    },
+    submitButton: {
+      backgroundColor: t.accent,
+      borderRadius: 12,
+      marginTop: 4,
+      padding: 16,
+    },
+    submitText: {
+      color: t.textOnAccent,
+      fontSize: 16,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    disabled: { opacity: 0.55 },
+  });
+}
