@@ -1,18 +1,42 @@
 "use client";
 
 import { useState } from "react";
+import {
+  PilotButton,
+  PilotCard,
+  PilotCardHeader,
+  PilotFormField,
+  PilotInput,
+  PilotThemeRoot,
+} from "@acropora/ui";
 
 import { partnerApi } from "@/lib/api";
 import { Message } from "./ticket-list";
-import {
-  CIMKE,
-  LAP_CIM,
-  LAP_FEJLEC,
-  LAP_LEIRAS,
-  PANEL,
-  PANEL_CIM,
-} from "./frame";
 
+/**
+ * BEÁLLÍTÁSOK -- FIGMA 9. KÖR, PILOT-AQUA (surgos kor, 2026-09-25, acrobot
+ * kérése: "a Beallitasok, a pilot-aqua keretben, egy PR = egy kepernyo a
+ * friss mainrol"). Ez az UTOLSÓ még régi-stílusú lap a portálon a
+ * `new-ticket.tsx` (#1140) és az Akváriumok-sorozat előtt -- lásd
+ * `portal-shell.tsx` frissített megjegyzését, ami ettől a körtől három
+ * régi-stílusú lapra csökken.
+ *
+ * A VISELKEDÉS VÁLTOZATLAN: két önálló forma (jelszó, aláírókód), ugyanaz a
+ * submit-folyamat, ugyanazok a hibaüzenetek. A `frame.tsx` `PANEL`/`LAP_*`
+ * konstansai és a `globals.css` `.form`/`.detail-grid` szabályai helyett
+ * `PilotCard`/`PilotFormField`/`PilotButton` és Tailwind-osztályok.
+ *
+ * KÉT KOMPENZÁLÓ VÁLTOZÁS, UGYANAZ A MINTA, MINT A MUNKALAP-ADATLAP
+ * ALÁÍRÓKÓD-MEZŐJÉNÉL (#1129, `worksheet-detail.tsx`): a `PilotInput`-nak
+ * nincs `required`/`minLength`/`pattern`/`maxLength` propja, ezért a natív
+ * validáció helyett a submit gomb marad letiltva, amíg a feltétel nem
+ * teljesül -- ez véd a "néma no-op" ellen (a gomb megnyomható, de a
+ * kérés soha nem menne át a szerver saját ellenőrzésén sem):
+ *   - az új jelszó legalább 8 karakter (`password.next.length < 8`),
+ *   - az aláírókód pontosan 4 számjegy, és az `onChange` maga szűri a
+ *     nem-számjegy karaktereket (`replace(/\D/g, "")`), ugyanúgy, ahogy a
+ *     `PilotInput`-nak nincs `pattern`-je sem.
+ */
 export function Settings() {
   const [password, setPassword] = useState({ current: "", next: "" });
   const [signing, setSigning] = useState({ current: "", code: "" });
@@ -52,84 +76,116 @@ export function Settings() {
     }
   }
 
+  const passwordValid =
+    password.current.length > 0 && password.next.length >= 8;
+  const signingValid = signing.current.length > 0 && signing.code.length === 4;
+
   return (
-    /*
-      A `content` OSZTALY IDE KOLTOZOTT (SURGOS JAVITAS, 2026-09-25):
-      korabban a kozos `portal-shell.tsx` `<main>`-je adta minden lapnak,
-      most mar csak azok a lapok kerik ki KULON-KULON, amik meg nem
-      pilot-aqua `PilotThemeRoot`-ot hasznalnak -- lasd `portal-shell.tsx`
-      megfelelo megjegyzeset.
-    */
-    <section className="content">
-      <header className={LAP_FEJLEC}>
-        <div>
-          <p className={CIMKE}>FIÓK</p>
-          <h1 className={LAP_CIM}>Beállítások</h1>
-          <p className={LAP_LEIRAS}>
-            Itt kizárólag a saját fiókjának adatait módosíthatja.
-          </p>
-        </div>
-      </header>
-      {message ? <Message tone="info" text={message} /> : null}
-      {error ? <Message tone="error" text={error} /> : null}
-      <div className="detail-grid">
-        <form className={`form ${PANEL}`} onSubmit={changePassword}>
-          <h2 className={PANEL_CIM}>Jelszó módosítása</h2>
-          <label>
-            Jelenlegi jelszó
-            <input
-              required
-              type="password"
-              value={password.current}
-              onChange={(event) =>
-                setPassword({ ...password, current: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Új jelszó
-            <input
-              required
-              minLength={8}
-              type="password"
-              value={password.next}
-              onChange={(event) =>
-                setPassword({ ...password, next: event.target.value })
-              }
-            />
-          </label>
-          <button type="submit">Jelszó módosítása</button>
-        </form>
-        <form className={`form ${PANEL}`} onSubmit={changeSigningCode}>
-          <h2 className={PANEL_CIM}>Aláírókód módosítása</h2>
-          <p>A négyjegyű kód módosításához a jelenlegi jelszava szükséges.</p>
-          <label>
-            Jelenlegi jelszó
-            <input
-              required
-              type="password"
-              value={signing.current}
-              onChange={(event) =>
-                setSigning({ ...signing, current: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Új, négyjegyű aláírókód
-            <input
-              required
-              inputMode="numeric"
-              pattern="[0-9]{4}"
-              maxLength={4}
-              value={signing.code}
-              onChange={(event) =>
-                setSigning({ ...signing, code: event.target.value })
-              }
-            />
-          </label>
-          <button type="submit">Aláírókód módosítása</button>
-        </form>
+    <PilotThemeRoot className="flex min-h-screen flex-col bg-pilot-grey-50">
+      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-pilot-grey-400">
+          FIÓK
+        </p>
+        <h1 className="text-xl font-semibold text-pilot-grey-900">
+          Beállítások
+        </h1>
+        <p className="mt-1 text-sm text-pilot-grey-400">
+          Itt kizárólag a saját fiókjának adatait módosíthatja.
+        </p>
       </div>
-    </section>
+
+      <div className="flex-1 px-8 py-6">
+        {message ? (
+          <div className="mb-4">
+            <Message tone="info" text={message} />
+          </div>
+        ) : null}
+        {error ? (
+          <div className="mb-4">
+            <Message tone="error" text={error} />
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <PilotCard>
+            <PilotCardHeader title="Jelszó módosítása" />
+            <form
+              className="flex flex-col gap-4 px-5 py-5"
+              onSubmit={changePassword}
+            >
+              <PilotFormField label="Jelenlegi jelszó" required>
+                <PilotInput
+                  type="password"
+                  value={password.current}
+                  onChange={(value) =>
+                    setPassword({ ...password, current: value })
+                  }
+                />
+              </PilotFormField>
+              <PilotFormField
+                label="Új jelszó"
+                required
+                help="Legalább 8 karakter."
+              >
+                <PilotInput
+                  type="password"
+                  value={password.next}
+                  onChange={(value) =>
+                    setPassword({ ...password, next: value })
+                  }
+                />
+              </PilotFormField>
+              <div>
+                <PilotButton type="submit" disabled={!passwordValid}>
+                  Jelszó módosítása
+                </PilotButton>
+              </div>
+            </form>
+          </PilotCard>
+
+          <PilotCard>
+            <PilotCardHeader title="Aláírókód módosítása" />
+            <form
+              className="flex flex-col gap-4 px-5 py-5"
+              onSubmit={changeSigningCode}
+            >
+              <p className="text-sm text-pilot-grey-500">
+                A négyjegyű kód módosításához a jelenlegi jelszava szükséges.
+              </p>
+              <PilotFormField label="Jelenlegi jelszó" required>
+                <PilotInput
+                  type="password"
+                  value={signing.current}
+                  onChange={(value) =>
+                    setSigning({ ...signing, current: value })
+                  }
+                />
+              </PilotFormField>
+              <PilotFormField
+                label="Új, négyjegyű aláírókód"
+                required
+                help="Pontosan 4 számjegy."
+              >
+                <PilotInput
+                  inputMode="numeric"
+                  value={signing.code}
+                  onChange={(value) =>
+                    setSigning({
+                      ...signing,
+                      code: value.replace(/\D/g, "").slice(0, 4),
+                    })
+                  }
+                />
+              </PilotFormField>
+              <div>
+                <PilotButton type="submit" disabled={!signingValid}>
+                  Aláírókód módosítása
+                </PilotButton>
+              </div>
+            </form>
+          </PilotCard>
+        </div>
+      </div>
+    </PilotThemeRoot>
   );
 }

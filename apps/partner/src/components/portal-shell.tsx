@@ -123,15 +123,18 @@ export function PortalShell({ children }: { children: ReactNode }) {
         `--color-pilot-*` ujradefinialas) -- tehat ez a sor semmi UJ CSS-t
         nem igenyel, csak az ATTRIBUTUMOT rakja fel.
         SZANDEKOSAN NEM a `<main>`-re vagy a korulotte allo `<div>`-re kerul:
-        a `{children}` alatt MEG all negy regi-stilusu lap (Beallitasok,
-        Akvariumok lista, Akvariumok adatlap, Uj akvarium -- az "Uj
-        hibajegy" 2026-09-25-tol mar pilot-aqua, lasd `new-ticket.tsx`),
-        amik nativ `input`/`select` elemeket hasznalnak sajat, nyers CSS
-        szinekkel -- a
-        `[data-theme="dark"] input/select/textarea { ... !important }`
-        szabaly ezeket FUGGETLENUL a sajat osztalyuktol sotetitene, mikozben
-        a korulottuk allo panel vilagos maradna: ugyanaz a "kevert" hiba,
-        amit ez a javitas felszamol, csak MASIK negy lapon. A hatokor tehat
+        a `{children}` alatt MEG all KET lap, amelyik nativ `input`/`select`
+        elemet hasznal sajat, nyers CSS szinekkel: az Akvariumok lista
+        (sajat kereso mezeje, `aquarium-list.tsx`) es az Akvariumok adatlap
+        (a beagyazott `AquariumWaterValues` meresszamlalo mezoi,
+        `aquarium-water-values.tsx`). Az Uj akvarium, az "Uj hibajegy" es a
+        "Beallitasok" MAR `PilotInput`/`PilotSelect`-et hasznal (lasd
+        `new-aquarium.tsx`, `new-ticket.tsx`, `settings.tsx`), tehat oket ez
+        a korlat nem erinti. A `[data-theme="dark"]
+        input/select/textarea { ... !important }` szabaly a maradek ket
+        lapot FUGGETLENUL a sajat osztalyuktol sotetitene, mikozben a
+        korulottuk allo panel vilagos maradna: ugyanaz a "kevert" hiba,
+        amit ez a javitas felszamol, csak MASIK ket lapon. A hatokor tehat
         szandekosan az oldalsavra szukul.
       */}
       <aside
@@ -278,11 +281,11 @@ export function PortalShell({ children }: { children: ReactNode }) {
         tunete). A javitas a FORRASNAL tortent: a `.content` doboz lekerult
         errol a kozos hejrol, a pilot oldalak negativ margos semlegesitese
         pedig okafogyotta valt es szinten torolve lett (lasd azok sajat
-        `PilotThemeRoot` hivasat). A `.content` osztaly MOST MAR csak azon
-        a negy meg regi-stilusu lapon all, ami tenylegesen igenyli
-        (Beallitasok, Akvariumok lista, Akvariumok adatlap, Uj akvarium --
-        az "Uj hibajegy" 2026-09-25-tol mar pilot-aqua) -- lasd azok sajat
-        gyoker elemet.
+        `PilotThemeRoot` hivasat). A `.content` osztaly MOST MAR EGYETLEN
+        lapon SEM all: mind a tizenegy portal-lap pilot-aqua, az utolso
+        harom (Akvariumok lista, Akvariumok adatlap, Uj akvarium) 2026-09-25-
+        tol (murena, #1145), a "Beallitasok" ugyanaznap, ezzel a javitassal
+        -- lasd azok sajat `PilotThemeRoot` gyoker elemet.
       */}
       <div className="lg:pl-52">
         <main>{children}</main>

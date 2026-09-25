@@ -83,16 +83,21 @@ describe("a portal héja és a tartalom doboza (sürgős javítás, 2026-09-25)"
    * stílusú lett (emlék 1847, `feat/portal-aquarium-pilot-round-1`), és
    * MOST a lenti `pilotLapok` listában szerepel, ugyanúgy, ahogy a
    * `ticket-list.tsx`/`asset-detail.tsx` is ott áll, amióta pilot-stílusú.
-   * UGYANEZ A NAP UGYANEZT TETTE A `new-ticket.tsx`-szel (#1140, main) --
-   * REBASE UTÁN (2026-09-25) a két változás UNIÓJA marad itt: már csak a
-   * `settings.tsx` régi stílusú.
+   * UGYANEZ A NAP UGYANEZT TETTE A `new-ticket.tsx`-szel (#1140, main), MAJD
+   * A `settings.tsx`-szel is (ez a PR) -- REBASE UTÁN (2026-09-25) a két
+   * változás UNIÓJA azt jelenti, hogy EZ A LISTA MOST ÜRES: az összes
+   * portál-lap (11 db) pilot-aqua stílusú.
    */
-  const regiStilusuLapok: { fajl: string; leiras: string }[] = [
-    { fajl: "settings.tsx", leiras: "Beállítások" },
-  ];
+  const regiStilusuLapok: { fajl: string; leiras: string }[] = [];
 
-  it("a kontroll-lista tényleg nem üres", () => {
-    assert.ok(regiStilusuLapok.length >= 1);
+  /**
+   * NEM "ISMERT POZITÍV KONTROLL" TÖBBÉ, HANEM A MIGRÁCIÓ LEZÁRÁSÁNAK
+   * ÁLLÍTÁSA: a lista NEM azért üres, mert a felismerés nem működik, hanem
+   * mert nincs több migrálandó lap. Ha valaha ÚJ, régi-stílusú lap kerülne
+   * be, ez az állítás pirosra vált -- ez a szerepe, nem a "nem üres" mérce.
+   */
+  it("a régi-stílusú lapok listája szándékosan üres: minden lap pilot-aqua", () => {
+    assert.deepEqual(regiStilusuLapok, []);
   });
 
   for (const { fajl, leiras } of regiStilusuLapok) {
@@ -131,10 +136,12 @@ describe("a portal héja és a tartalom doboza (sürgős javítás, 2026-09-25)"
     "worksheet-list.tsx",
     "worksheet-detail.tsx",
     /*
-      NEW-TICKET.TSX 2026-09-25-TŐL EZ A CSOPORT TAGJA (pilot-aqua átültetés,
-      lásd a saját fejlécét): a `regiStilusuLapok` listából ide költözött.
+      NEW-TICKET.TSX ÉS SETTINGS.TSX 2026-09-25-TŐL EBBE A CSOPORTBA
+      TARTOZNAK (pilot-aqua átültetés, lásd a saját fejlécüket): a
+      `regiStilusuLapok` listából ide költöztek.
     */
     "new-ticket.tsx",
+    "settings.tsx",
     // A HÁROM AKVÁRIUM-LAP, PILOT-STÍLUSRA VÁLTVA 2026-09-25-TŐL (emlék 1847).
     "aquarium-list.tsx",
     "aquarium-detail.tsx",

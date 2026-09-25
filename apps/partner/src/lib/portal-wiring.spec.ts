@@ -135,8 +135,18 @@ describe("a partner portál bekötése", () => {
    */
   it("az aláírókód mező négy számjegyet fogad el, és ez ki is van írva", () => {
     const s = olvas(BEALLITASOK);
-    assert.match(s, /pattern="\[0-9\]\{4\}"/);
-    assert.match(s, /maxLength=\{4\}/);
+    /*
+      A NATÍV `pattern`/`maxLength` A `PilotInput`-RA VÁLTÁSKOR MEGSZŰNT
+      (2026-09-25, pilot-aqua átültetés): a komponensnek nincs ilyen propja.
+      A HELYETTESÍTŐ VÉDELEM KETTŐS, és mindkettő a SZÁMOT kényszeríti ki,
+      nem csak a mező jelenlétét: az `onChange` maga szűri a nem-számjegy
+      karaktereket és négyre vágja (`replace(/\D/g, "").slice(0, 4)`), a
+      submit gomb pedig letiltva marad, amíg a kód pontosan négy jegyű
+      (`signing.code.length === 4`) -- ugyanaz a mérce, mint korábban.
+    */
+    assert.match(s, /\.replace\(\/\\D\/g, ""\)/);
+    assert.match(s, /\.slice\(0, 4\)/);
+    assert.match(s, /signing\.code\.length === 4/);
     /**
      * A SZÁM, ÉS NEM A PUSZTA JELENLÉT -- ÉS EZT A SAJÁT MÉRŐHELYEM FOGTA MEG,
      * MIELŐTT A KALIBRÁCIÓ ELBUKOTT VOLNA.
