@@ -265,7 +265,16 @@ export default function AssetListScreen() {
                 </Text>
               </View>
             ) : null}
-            <Text style={styles.eyebrow}>ASSET MANAGEMENT</Text>
+            {/*
+              A SAJÁT TERVKÖR SZERINT (2026-09-25, acrobot döntése az
+              app-szintű minták ügyében): az Eszközök lista saját terve
+              (`EszközScreen.tsx` 934. sor, `MobileEszközList`) "Szerviz"
+              feliratot ad, 10px, alap (nem félkövér) súllyal, betűköz és
+              nagybetűsítés nélkül, szürkével -- nem az app többi listáján
+              élt, mindenhol egyforma nagybetűs/félkövér mintát ("ASSET
+              MANAGEMENT" 11px/900).
+            */}
+            <Text style={styles.eyebrow}>Szerviz</Text>
             <Text style={styles.title}>Partnereszközök</Text>
             <Text style={styles.subtitle}>
               Húzd le a listát a frissítéshez, vagy olvasd le a matricán lévő
@@ -532,10 +541,9 @@ function createStyles(t: ThemeTokens) {
     container: { padding: 18, paddingBottom: 36 },
     header: { marginBottom: 20 },
     eyebrow: {
-      color: t.accent,
-      fontSize: 11,
-      fontWeight: "900",
-      letterSpacing: 1.5,
+      color: t.textMuted,
+      fontSize: 10,
+      fontWeight: "400",
     },
     title: {
       color: t.textPrimary,
