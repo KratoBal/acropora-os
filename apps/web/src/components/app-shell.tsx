@@ -188,7 +188,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   const navigation = (
-    <nav aria-label="Fő navigáció" className="flex min-h-0 flex-1 flex-col">
+    <nav
+      aria-label="Fő navigáció"
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+    >
       <div className="space-y-1">
         {primaryNavigation.filter(canAccess).map((item) => (
           <NavigationItem
@@ -268,7 +271,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <aside
       data-theme={effectiveTheme}
       className={[
-        "font-sans flex h-full w-72 flex-col border-r border-pilot-grey-200 bg-pilot-white px-4 py-5 text-pilot-grey-900",
+        "font-sans flex h-full w-72 flex-col border-r border-pilot-grey-200 bg-white px-4 py-5 text-pilot-grey-900",
         mobile
           ? "fixed inset-y-0 left-0 z-50 shadow-2xl lg:hidden"
           : "fixed inset-y-0 left-0 z-30 hidden lg:flex",
@@ -307,7 +310,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="lg:pl-72">
         <header
           data-theme={effectiveTheme}
-          className="sticky top-0 z-20 flex h-16 items-center border-b border-pilot-grey-200 bg-pilot-white/95 px-4 font-sans backdrop-blur sm:px-6 lg:px-8"
+          className="sticky top-0 z-20 flex h-16 items-center border-b border-pilot-grey-200 bg-white/95 px-4 font-sans backdrop-blur sm:px-6 lg:px-8"
         >
           <div className="flex items-center gap-3 lg:hidden">
             <Button

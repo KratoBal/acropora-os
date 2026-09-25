@@ -240,6 +240,87 @@ describe("AppShell business navigation groups", () => {
   });
 });
 
+/**
+ * HÁROM ÉLES REGRESSZIÓ A #1122 (Codex ÚJ WEB-KERET) UTÁN, BALÁZS
+ * KÉPERNYŐFOTÓI ALAPJÁN (acrobot, msg_id 23608, 2026-09-25).
+ *
+ * === 1. A NAV NEM GÖRGETHETŐ, KIBONTOTT BEÁLLÍTÁSOKKAL ELÉRHETETLEN SOROK ===
+ *
+ * Az `<aside>` `flex h-full flex-col`, a `<nav>` `flex-1 min-h-0` volt, DE
+ * `overflow-y-auto` NÉLKÜL -- a standard flexbox-görgetés mintájából épp az
+ * egy osztály hiányzott, ami ténylegesen görgethetővé teszi. A `logó` fölötte
+ * marad (nem flex-1), tehát a görgetés csak a nav TARTALMÁT mozgatja.
+ *
+ * === 2/3. `bg-pilot-white` NEM LÉTEZŐ TAILWIND-OSZTÁLY ===
+ *
+ * A `packages/ui/src/figma-theme.css` `@theme` blokkja SOHA nem definiált
+ * `--color-pilot-white`-ot (mérve: a fájlban és a repó egészében nulla
+ * találat erre a tokenre). A `bg-pilot-white` ezért nem generál CSS-t
+ * EGYÁLTALÁN -- az elem háttere emiatt átlátszó (2. hiba), ÉS a sötét
+ * módú felülírás (`[data-theme="dark"] .bg-white { ... }`) sem tud
+ * lefutni, mert a szelektor `.bg-white`-ra illeszkedik, `.bg-pilot-white`-
+ * ra nem (3. hiba). A javítás a MEGLÉVŐ, helyes osztályra állítja át
+ * (`bg-white`), amit a téma-réteg már ismer.
+ *
+ * === A HATÁR, KIMONDVA ===
+ *
+ * A `happy-dom` teszt-környezet NEM tölt be CSS-t (lásd `test/setup.ts`
+ * fejlécét), tehát a tényleges SZÁMÍTOTT háttérszínt itt nem lehet mérni.
+ * Ami mérhető, és amit ez a szakasz mér: (a) a görgetéshez szükséges
+ * osztály jelen van a nav-on, (b) a háttér-osztály a VALÓDI, a téma-réteg
+ * által ismert `bg-white`, nem a sosem létezett `bg-pilot-white`, és (c)
+ * a sötét felülírás szelektorának másik fele -- a `data-theme` attribútum
+ * -- ténylegesen az `<aside>`-en áll. E három együtt a CSS-szelektor
+ * illeszkedésének STRUKTURÁLIS előfeltétele, nem maga a színe.
+ */
+describe("AppShell #1122 utáni regressziók", () => {
+  beforeEach(() => {
+    auth.session = ownerSession;
+    navigation.pathname = "/";
+    window.localStorage.clear();
+  });
+
+  it("a navigáció saját függőleges görgetést kap", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    const nav = screen.getByRole("navigation", { name: "Fő navigáció" });
+    expect(nav).toHaveClass("overflow-y-auto");
+    expect(nav).toHaveClass("min-h-0");
+    expect(nav).toHaveClass("flex-1");
+  });
+
+  it("az oldalsáv és a felső sáv a valódi bg-white osztályt viseli, nem a sosem létezett bg-pilot-white-ot", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    const nav = screen.getByRole("navigation", { name: "Fő navigáció" });
+    const sidebar = nav.closest("aside");
+    expect(sidebar).not.toBeNull();
+    expect(sidebar).toHaveClass("bg-white");
+    expect(sidebar?.className).not.toMatch(/\bbg-pilot-white\b/);
+
+    const header = screen
+      .getByRole("searchbox", { name: "Keresés" })
+      .closest("header");
+    expect(header).not.toBeNull();
+    expect(header?.className).toMatch(/\bbg-white\/95\b/);
+    expect(header?.className).not.toMatch(/\bbg-pilot-white\b/);
+  });
+
+  it('sötét preferenciánál az oldalsáv data-theme="dark"-ot visel, ami a téma-réteg .bg-white felülírását illesztené', () => {
+    window.localStorage.setItem("acropora-theme-preference", "dark");
+
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    const nav = screen.getByRole("navigation", { name: "Fő navigáció" });
+    const sidebar = nav.closest("aside");
+    expect(sidebar).toHaveAttribute("data-theme", "dark");
+    // A tényleges háttérszínt happy-dom nem tudja megmérni (nincs CSS
+    // betöltve) -- ez az állítás a szelektor MÁSIK felét, az osztálynevet
+    // ellenőrzi, ami a fenti teszttel együtt a teljes illeszkedést fedi.
+    expect(sidebar).toHaveClass("bg-white");
+  });
+});
+
 describe("AppShell navigation source", () => {
   beforeEach(() => {
     navigation.pathname = "/";
