@@ -85,6 +85,23 @@
   --color-pilot-amber-100: #fef3c7;
   --color-pilot-amber-500: #f59e0b;
   --color-pilot-amber-700: #b45309;
+
+  /**
+   * A NEGYEDIK SZÍN, ÉS EZ NEM A FIGMA TERVBŐL JÖN. A kanonikus
+   * `assetStatusTone` (`packages/types/src/asset-management.ts`, Balázs
+   * 2026-09-15/16-i döntése) négy különböző tónust ad az eszköz-
+   * állapotokra (`green`/`amber`/`blue`/`neutral`), pont azért, hogy a
+   * két tartalék-állapot (`blue`) LÁTHATÓAN elváljon a javítás alatt
+   * állótól (`amber`) -- ez volt a kérés lényege. A pilot rétegnek eddig
+   * csak három színcsaládja volt (aqua/grey/amber), ez a negyedik a
+   * `PilotBadge` "blue" variánsához kell, hogy ez a szétválasztás a
+   * pilot Eszköz-oldalakon is látsszon, ne csendben tűnjön el egy
+   * hármas kompromisszumban.
+   */
+  --color-pilot-blue-50: #eff6ff;
+  --color-pilot-blue-100: #dbeafe;
+  --color-pilot-blue-500: #3b82f6;
+  --color-pilot-blue-700: #1d4ed8;
 }
 
 /**
@@ -129,6 +146,15 @@
   --color-pilot-amber-100: #3d2a06;
   --color-pilot-amber-500: #d99a2b;
   --color-pilot-amber-700: #f0b955;
+
+  /**
+   * A KÉK SÖTÉT PÁRJA -- ugyanaz a tónus-logika, mint az amberé fent:
+   * tompított, sötét alapon olvasható kék.
+   */
+  --color-pilot-blue-50: #0d1f36;
+  --color-pilot-blue-100: #12294a;
+  --color-pilot-blue-500: #5b9bf0;
+  --color-pilot-blue-700: #a8cdfb;
 
   /**
    * SZEMANTIKUS FELÜLET -- A NEGYEDIK MAKE-KÖR `--surface`/`--surface-

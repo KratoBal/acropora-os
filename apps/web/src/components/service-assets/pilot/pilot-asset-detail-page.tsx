@@ -25,7 +25,11 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
 import { assetsApi } from "@/lib/api/assets";
-import { assetEventLabel, assetStatusLabel } from "../asset-labels";
+import {
+  assetEventLabel,
+  assetStatusLabel,
+  assetStatusPilotVariant,
+} from "../asset-labels";
 import {
   PilotBadge,
   PilotButton,
@@ -405,15 +409,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                     <h1 className="text-xl font-semibold text-pilot-grey-900">
                       {asset.name}
                     </h1>
-                    <PilotBadge
-                      variant={
-                        asset.status === "ACTIVE"
-                          ? "teal"
-                          : asset.status === "RETIRED"
-                            ? "grey"
-                            : "amber"
-                      }
-                    >
+                    <PilotBadge variant={assetStatusPilotVariant(asset.status)}>
                       {assetStatusLabel[asset.status]}
                     </PilotBadge>
                   </div>
