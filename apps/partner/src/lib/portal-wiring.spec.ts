@@ -53,6 +53,7 @@ const AUTH = "src/components/auth.tsx";
 const AQUARIUM_LISTA = "src/components/aquarium-list.tsx";
 const AQUARIUM_RESZLET = "src/components/aquarium-detail.tsx";
 const AQUARIUM_UJ = "src/components/new-aquarium.tsx";
+const AQUARIUM_ESZKOZOK = "src/components/aquarium-assets.tsx";
 
 const olvas = (ut: string) => readFileSync(ut, "utf8");
 
@@ -1061,5 +1062,78 @@ describe("az Akváriumok pilot-kör 1 saját döntései", () => {
     assert.doesNotMatch(s, /hasPermission/);
     assert.doesNotMatch(s, /AQUARIUMS_MANAGE/);
     assert.match(s, /href="\/akvariumok\/uj"/);
+  });
+});
+
+/**
+ * AZ AKVÁRIUMOK PILOT-KÖR 3: "ESZKÖZÖK A MEDENCÉBEN", HOZZÁRENDELÉSSEL
+ * (emlék 1843, 1847, acrobot msg_id 23638/23673/23679).
+ *
+ * === A GATE A SZERVER SZÁMOLT MEZŐJÉN ÁLL, NEM KLIENS-OLDALI JOGON ===
+ *
+ * A visszavont korábbi kör (lásd `git show f32acca0` a repóban) még
+ * `hasPermission(user, PERMISSIONS.SERVICE_ASSET_AQUARIUM_ASSIGN)`-nal
+ * döntött, mert akkor a jog szerep-szintű volt. Balázs pontosítása óta a
+ * jog FELHASZNÁLÓNKÉNTI, a session-ben nem érhető el -- a szerver teszi a
+ * kiszámolt `canAssignAssets` mezőt az akvárium-adatlap válaszába. MI
+ * PIROSÍT: ha a kártya visszatérne a kliens-oldali jog-ellenőrzésre.
+ */
+describe("az Akváriumok pilot-kör 3 saját döntései", () => {
+  it("POZITÍV KONTROLL: a kártya olvasható és nem üres", () => {
+    assert.ok(
+      olvas(AQUARIUM_ESZKOZOK).length > 500,
+      `${AQUARIUM_ESZKOZOK}: üres vagy gyanúsan rövid`,
+    );
+  });
+
+  it("az adatlap a szerver canAssignAssets mezőjét adja tovább a kártyának", () => {
+    const s = kod(AQUARIUM_RESZLET);
+    assert.match(s, /<AquariumAssets/);
+    assert.match(s, /canAssignAssets=\{aquarium\.canAssignAssets\}/);
+  });
+
+  it("a kártya NEM kliens-oldali jog-ellenőrzéssel dönt a hozzárendelésről", () => {
+    const s = kod(AQUARIUM_ESZKOZOK);
+    assert.doesNotMatch(s, /hasPermission/);
+    assert.doesNotMatch(s, /PERMISSIONS\./);
+    assert.doesNotMatch(s, /useAuth/);
+  });
+
+  /**
+   * A HOZZÁRENDELŐ RÉSZ A DOM-BÓL HIÁNYZIK, NEM CSAK CSS-SEL REJTETT -- a
+   * `canAssignAssets ?` feltétel MAGÁT A `mt-3 border-t` dobozt zárja körbe.
+   *
+   * A MINTA A KÖVETKEZŐ JSX-ELEMRE IS NÉZ, NEM CSAK A FELTÉTELRE -- a fájlban
+   * a `canAssignAssets ? (` szöveg KÉTSZER fordul elő (az "Eltávolítás" gomb
+   * saját, soronkénti ága is ugyanígy kezdődik), egy puszta
+   * `/canAssignAssets \? \(/` állítás tehát AZ ELTÁVOLÍTÁS GOMBRA is zölden
+   * futna akkor is, ha a hozzárendelő rész feltétel NÉLKÜL renderelődne --
+   * kalibrálva: `true ? (` a hozzárendelő ágon a puszta minta mellett is
+   * zöld maradt.
+   */
+  it("a hozzárendelő rész feltételesen renderelődik, nem csak CSS-sel rejtett", () => {
+    const s = kod(AQUARIUM_ESZKOZOK);
+    assert.match(s, /canAssignAssets \? \(\s*<div className="mt-3 border-t/);
+  });
+
+  it("a jelöltek közül kiszűri a már valahova csatolt eszközöket", () => {
+    const s = kod(AQUARIUM_ESZKOZOK);
+    assert.match(s, /filter\(\(item\) => !item\.aquarium\)/);
+  });
+
+  it("a levétel aquariumId: null-t küld", () => {
+    const s = kod(AQUARIUM_ESZKOZOK);
+    assert.match(
+      s,
+      /aquariumId: null,\s*\n\s*expectedUpdatedAt: asset\.updatedAt,/,
+    );
+  });
+
+  it("a hozzárendelés a jelenlegi akvárium id-jét küldi, a jelölt updatedAt-jával", () => {
+    const s = kod(AQUARIUM_ESZKOZOK);
+    assert.match(
+      s,
+      /aquariumId,\s*\n\s*expectedUpdatedAt: candidate\.updatedAt,/,
+    );
   });
 });

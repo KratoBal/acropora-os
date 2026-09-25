@@ -15,6 +15,7 @@ import {
 
 import { partnerApi } from "@/lib/api";
 import { WATER_TYPE_LABEL } from "@/lib/aquarium-labels";
+import { AquariumAssets } from "./aquarium-assets";
 import { AquariumWaterValues } from "./aquarium-water-values";
 import { Message } from "./ticket-list";
 
@@ -45,9 +46,17 @@ import { Message } from "./ticket-list";
  * `requireInternalWriter`-rel zárt a szerveren) és mi nem (az "Új mérés"
  * felvitel, mert a `POST /aquariums/:id/measurements` nyitott).
  *
- * Az "Eszközök a medencében" kártya (eszköz-hozzárendelés, 3. kör) TOVÁBBRA
- * IS HIÁNYZIK -- az külön jogosultsághoz kötött (emlék 1843), és a szerver
- * oldala (`feat/portal-asset-aquarium-assign`) ekkor még külön ágon fut.
+ * === AZ "ESZKÖZÖK A MEDENCÉBEN" KÁRTYA A 3. KÖRBEN VISSZAKERÜLT ===
+ *
+ * `AquariumAssets` (`./aquarium-assets.tsx`) a helyszín eszközeiből
+ * hozzárendel/levesz -- a szerver `feat/portal-asset-aquarium-assign` ága
+ * (#1143) már beolvadt mainbe. A hozzárendelő gomb/választó CSAK annak
+ * látszik, akinél be van jelölve az `AQUARIUM_ASSET_ASSIGN` felhasználó-
+ * kénti képesség -- ezt a `aquarium.canAssignAssets` mező mondja meg,
+ * amit a SZERVER számol ki (lásd `AquariumsService.withCanAssignAssets`
+ * fejlécét), NEM a kliens session-je. Lásd `aquarium-assets.tsx` saját
+ * fejlécét, miért nem a `MATERIAL_REQUEST_MARK_RECEIVED` "próbáld meg,
+ * 403-ra mutass üzenetet" mintáját követi ez a kártya.
  *
  * === TOVÁBBRA IS CSAK-OLVASÓ, NEM ŰRLAP (AZ AKVÁRIUM SAJÁT MEZŐIRE) ===
  *
@@ -182,6 +191,12 @@ export function AquariumDetail({ id }: { id: string }) {
               )}
             </div>
           </PilotCard>
+
+          <AquariumAssets
+            aquariumId={aquarium.id}
+            departmentId={aquarium.departmentId}
+            canAssignAssets={aquarium.canAssignAssets}
+          />
         </div>
       </div>
     </PilotThemeRoot>

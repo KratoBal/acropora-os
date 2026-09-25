@@ -92,6 +92,19 @@ export interface AquariumDetail extends AquariumSummary {
    * `AquariumMeasurementTarget` és az `aquariumEffectiveMeasurementTargetRange`
    * fejlécét. */
   targets: AquariumMeasurementTarget[];
+  /**
+   * LÁTJA-E A HÍVÓ AZ "ESZKÖZÖK A MEDENCÉBEN" HOZZÁRENDELŐ FELÜLETÉT.
+   *
+   * FELHASZNÁLÓNKÉNTI, `AQUARIUM_ASSET_ASSIGN` `ServiceCapability`-jelölő
+   * (emlék 1843, 1847), NEM szerep-szintű jog -- lásd
+   * `AquariumsRepository.hasAquariumAssetAssignCapability` fejlécét. A
+   * SZERVER számolja ki és adja a válaszban, mert ez egy GOMB
+   * megjelenítéséről dönt egy egyébként mindenkinek látható adatlapon --
+   * a kliens nem "próbálkozik és kap 403-at" (mint a
+   * `MATERIAL_REQUEST_MARK_RECEIVED` egész-listás mintája), mert egy
+   * hozzárendelés/levétel valódi mellékhatással jár, azt nem próbálgatjuk.
+   */
+  canAssignAssets: boolean;
 }
 
 /**
