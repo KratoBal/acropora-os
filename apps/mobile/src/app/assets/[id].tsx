@@ -733,39 +733,58 @@ export default function AssetDetailScreen() {
               </Section>
             ) : null}
 
-            {asset.ancestors.length > 0 ? (
-              <Section title="Rendszerútvonal">
-                {asset.ancestors.map((ancestor) => (
-                  <AssetLink
-                    key={ancestor.id}
-                    label={ancestor.name}
-                    meta={ancestor.assetNumber}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/assets/[id]",
-                        params: { id: ancestor.id },
-                      })
-                    }
-                  />
-                ))}
-              </Section>
-            ) : null}
+            {/*
+              EGY KÖZÖS "ESZKÖZHIERARCHIA" KÁRTYA, FŐEGYSÉG/RÉSZEGYSÉGEK
+              ALCÍMEKKEL -- eddig ez a mobilon KÉT külön kártya volt
+              ("Rendszerútvonal", "Részegységek"), funkcionálisan lefedte a
+              Figma "Eszközhierarchia" kártyáját, csak nem egy közös
+              kártyaként. Acrobot kérése, 2026-09-25 (Balázs aznap reggeli
+              design-kérése nyomán): vonjuk össze, a Figma elrendezését
+              követve.
 
-            {asset.children.length > 0 ? (
-              <Section title="Részegységek">
-                {asset.children.map((child) => (
-                  <AssetLink
-                    key={child.id}
-                    label={child.name}
-                    meta={child.assetNumber}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/assets/[id]",
-                        params: { id: child.id },
-                      })
-                    }
-                  />
-                ))}
+              A "FŐEGYSÉG" NÁLUNK TÖBB ELEMŰ LEHET (`ancestors`, a teljes
+              lánc a gyökérig), a Figma mock csak EGY közvetlen szülőt
+              rajzol -- ez a mai adat GAZDAGABB, tehát megmarad, csak az
+              alcím alá kerül.
+            */}
+            {asset.ancestors.length > 0 || asset.children.length > 0 ? (
+              <Section title="Eszközhierarchia">
+                {asset.ancestors.length > 0 ? (
+                  <>
+                    <Text style={styles.hierarchySubheading}>Főegység</Text>
+                    {asset.ancestors.map((ancestor) => (
+                      <AssetLink
+                        key={ancestor.id}
+                        label={ancestor.name}
+                        meta={ancestor.assetNumber}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/assets/[id]",
+                            params: { id: ancestor.id },
+                          })
+                        }
+                      />
+                    ))}
+                  </>
+                ) : null}
+                {asset.children.length > 0 ? (
+                  <>
+                    <Text style={styles.hierarchySubheading}>Részegységek</Text>
+                    {asset.children.map((child) => (
+                      <AssetLink
+                        key={child.id}
+                        label={child.name}
+                        meta={child.assetNumber}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/assets/[id]",
+                            params: { id: child.id },
+                          })
+                        }
+                      />
+                    ))}
+                  </>
+                ) : null}
               </Section>
             ) : null}
           </>
@@ -999,6 +1018,15 @@ function createStyles(t: ThemeTokens) {
       fontSize: 14,
       lineHeight: 20,
       marginTop: 3,
+    },
+    /** Az "Eszközhierarchia" kártya "Főegység"/"Részegységek" alcíme. */
+    hierarchySubheading: {
+      color: t.textSecondary,
+      fontSize: 11,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      marginTop: 4,
+      marginBottom: 2,
     },
     assetLink: {
       flexDirection: "row",
