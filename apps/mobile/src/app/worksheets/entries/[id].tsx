@@ -17,6 +17,7 @@ import {
   updateWorksheetEntry,
 } from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { eyebrowStyle } from "@/lib/theme/label-styles";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
@@ -197,17 +198,11 @@ function createStyles(t: ThemeTokens) {
     safeArea: { flex: 1, backgroundColor: t.background },
     container: { padding: 18, paddingBottom: 48, gap: 14 },
     back: { color: t.accent, fontSize: 15, fontWeight: "700" },
-    /*
-      A SZÍN A TERV SZÜRKÉJE (grey-400 -> t.textMuted), NEM AZ AKCENT. acrobot
-      kérése, 2026-09-25, barracuda mérése alapján: a méret/vastagság/betűköz
-      már egyezett a tervvel (`MobileLabel`), csak a szín tért el.
-    */
-    eyebrow: {
-      color: t.textMuted,
+    eyebrow: eyebrowStyle(t, {
       fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1.2,
-    },
+    }),
     card: {
       backgroundColor: t.surface,
       borderRadius: 14,

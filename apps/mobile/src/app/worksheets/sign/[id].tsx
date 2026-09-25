@@ -19,6 +19,7 @@ import {
   signWorksheet,
 } from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { eyebrowStyle } from "@/lib/theme/label-styles";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
@@ -616,18 +617,34 @@ function createStyles(t: ThemeTokens) {
   return StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: t.background },
     container: { padding: 18, paddingBottom: 48, gap: 12 },
-    eyebrow: {
-      color: t.accent,
+    /*
+      A SZÍN A TERV SZÜRKÉJE (grey-400 -> t.textMuted), NEM AZ AKCENT. acrobot
+      kérése, 2026-09-25 (msg 23917/23921), barracuda mérése alapján: a
+      méret/vastagság/betűköz már egyezett a tervvel, csak a szín tért el.
+    */
+    eyebrow: eyebrowStyle(t, {
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 1.4,
-    },
+    }),
     title: { color: t.textPrimary, fontSize: 24, fontWeight: "900" },
     subject: { color: t.textPrimary, fontSize: 16, fontWeight: "700" },
+    /*
+      A TERV FORRÁSÁBAN "Aláíró" ÉS "Megjegyzés" UGYANAZT A CSS-OSZTÁLYT
+      HORDOZZA, MINT A FELSŐ EYEBROW ("ALÁÍRÁS") -- lásd
+      `MobileAppScreen.tsx` (figma-telefon-make-12) 1090. és 1125. sora körül:
+      mindhárom `text-xs font-semibold text-grey-400 uppercase
+      tracking-widest`. A kód eddig sötét, nem nagybetűs, nem ritkított
+      szöveget adott -- ezt igazítja a terv szerinti alakra, a `marginTop`
+      elrendezési tulajdonságát megtartva.
+    */
     sectionTitle: {
-      color: t.textPrimary,
-      fontSize: 15,
-      fontWeight: "800",
+      ...eyebrowStyle(t, {
+        fontSize: 12,
+        fontWeight: "600",
+        letterSpacing: 1.2,
+        textTransform: "uppercase",
+      }),
       marginTop: 6,
     },
     card: {

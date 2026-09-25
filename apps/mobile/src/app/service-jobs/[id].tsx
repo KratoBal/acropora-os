@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { statusBadgeStyle } from "@/lib/theme/label-styles";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { DocumentImage } from "@/components/documents/DocumentImage";
@@ -775,23 +776,7 @@ function createStyles(t: ThemeTokens) {
     },
     number: { color: t.textSecondary, fontSize: 13 },
     title: { color: t.textPrimary, fontSize: 18, fontWeight: "600" },
-    /*
-      SZÍNES JELVÉNY, UGYANAZZAL A RECEPTTEL, MINT A LISTÁN
-      (service-jobs/index.tsx "status"/"maintenance" jelzője). acrobot
-      kérése, 2026-09-25, barracuda mérése alapján: a terv az állapotot
-      MobileBadge pill-ként adja, mind a listán, mind az adatlapon.
-    */
-    status: {
-      alignSelf: "flex-start",
-      backgroundColor: t.accentSoft,
-      borderRadius: 999,
-      color: t.accentSoftText,
-      fontSize: 12,
-      fontWeight: "600",
-      overflow: "hidden",
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-    },
+    status: { ...statusBadgeStyle(t), alignSelf: "flex-start" },
     meta: { color: t.textSecondary, fontSize: 13 },
     description: { color: t.textPrimary, lineHeight: 20 },
     row: { paddingVertical: 8 },
