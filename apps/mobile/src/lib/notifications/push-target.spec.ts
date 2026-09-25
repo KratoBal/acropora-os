@@ -140,6 +140,19 @@ describe("a célpont a törzsből", () => {
       { type: "materialRequest", id: "ws-1" },
     );
   });
+
+  it("a VÍZMÉRÉS ma ismert célpont, és az akvárium azonosítóját hordozza", () => {
+    /*
+      EZ A NEGYEDIK ERTEK (2026-09-24, #1057), ES EDDIG NEM VOLT SAJAT TESZTJE
+      -- csak a tablaban allt. MI PIROSIT: az `aquarium` kivetele a
+      `PUSH_TARGET_TYPES` listabol, vagy a `targetId` felcserelese valami
+      massal (pl. a meresi alkalom azonositojaval).
+    */
+    assert.deepEqual(
+      pushTarget(valasz({ targetType: "aquarium", targetId: "aq-1" })),
+      { type: "aquarium", id: "aq-1" },
+    );
+  });
 });
 
 describe("melyik típus melyik képernyőt nyitja", () => {

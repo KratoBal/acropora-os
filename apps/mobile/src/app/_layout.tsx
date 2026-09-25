@@ -240,7 +240,24 @@ function RootNavigator() {
         name="partners/[id]"
         options={{ title: "Partner adatlap" }}
       />
+      <Stack.Screen name="aquariums/index" options={{ title: "Akváriumok" }} />
       <Stack.Screen name="aquariums/new" options={{ title: "Új akvárium" }} />
+      {/*
+        HIANYZOTT, A `[id]` ES A `[id]/measurement` KEPERNYOVEL EGYUTT
+        (2026-09-25, a vizmeres-push utvonal vizsgalata kozben talalva). A
+        hianyuk NEM zarta el a navigaciot -- az expo-router fajl-alapu
+        utvonalai a Stack.Screen bejegyzes NELKUL is elerhetok, csak a
+        fejlec a fajlnevre esett vissza -- de a `PUSH_TARGET_ROUTES.aquarium`
+        pontosan ide mutat, tehat a cimsor itt tartozik a tobbi celponthoz.
+      */}
+      <Stack.Screen
+        name="aquariums/[id]"
+        options={{ title: "Akvárium adatlap" }}
+      />
+      <Stack.Screen
+        name="aquariums/[id]/measurement"
+        options={{ title: "Vízmérés rögzítése" }}
+      />
     </Stack>
   );
 }
