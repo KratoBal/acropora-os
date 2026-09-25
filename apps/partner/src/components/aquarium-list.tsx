@@ -173,7 +173,7 @@ export function AquariumList() {
               className={`cursor-pointer whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-colors ${
                 waterBodyFilterValue === option
                   ? "bg-pilot-aqua-50 text-pilot-aqua-700"
-                  : "text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
+                  : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-50 hover:text-pilot-grey-800"
               }`}
             >
               {option}

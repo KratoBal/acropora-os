@@ -376,7 +376,7 @@ export function AquariumMeasurementHistory({
                         className={`cursor-pointer rounded px-3 py-1 text-xs font-medium transition-all ${
                           scale === value
                             ? "bg-white text-pilot-grey-900 shadow-sm"
-                            : "text-pilot-grey-500 hover:text-pilot-grey-700"
+                            : "bg-transparent text-pilot-grey-500 hover:text-pilot-grey-700"
                         }`}
                       >
                         {label}
@@ -626,7 +626,7 @@ export function AquariumMeasurementHistory({
                         className={`h-7 w-7 cursor-pointer rounded-md text-xs font-medium transition ${
                           i === page
                             ? "bg-pilot-grey-900 text-white"
-                            : "text-pilot-grey-500 hover:bg-pilot-grey-100"
+                            : "bg-transparent text-pilot-grey-500 hover:bg-pilot-grey-100"
                         }`}
                       >
                         {i + 1}
