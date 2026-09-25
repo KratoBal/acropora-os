@@ -9,7 +9,11 @@ import {
   Sidebar,
   Topbar,
 } from "@acropora/ui";
-import { isNavigationEntryVisible } from "@acropora/types";
+import {
+  hasPermission,
+  isNavigationEntryVisible,
+  PERMISSIONS,
+} from "@acropora/types";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -29,6 +33,7 @@ import {
 } from "./navigation";
 import { useAuth } from "./auth/auth-provider";
 import { UserMenu } from "./auth/user-menu";
+import { dashboardApi } from "@/lib/api/dashboard";
 
 interface NavigationGroupProps {
   active: boolean;
@@ -106,6 +111,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { session } = useAuth();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!session || !hasPermission(session.user, PERMISSIONS.DASHBOARD_VIEW)) {
+      setMyTaskCount(null);
+      return;
+    }
+    const controller = new AbortController();
+    void dashboardApi
+      .summary(session.token ?? "", controller.signal)
+      .then((summary) => setMyTaskCount(summary.myTaskCount ?? null))
+      .catch(() => {
+        if (!controller.signal.aborted) setMyTaskCount(null);
+      });
+    return () => controller.abort();
+  }, [session]);
 
   const canAccess = (item: AppNavigationItem) =>
     Boolean(
@@ -173,7 +194,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             badge={
               item.href === "/feladataim" ? (
                 <Badge className="px-1.5" variant="neutral">
-                  5
+                  {myTaskCount ?? "–"}
                 </Badge>
               ) : undefined
             }
