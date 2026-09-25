@@ -312,8 +312,13 @@ function createStyles(t: ThemeTokens) {
     },
     safeArea: { flex: 1, backgroundColor: t.background },
     container: { padding: 18, paddingBottom: 48, gap: 16 },
+    /*
+      A SZÍN A TERV SZÜRKÉJE (grey-400 -> t.textMuted), NEM AZ AKCENT. acrobot
+      kérése, 2026-09-25, barracuda mérése alapján: a méret/vastagság/betűköz
+      már egyezett a tervvel (`MobileLabel`), csak a szín tért el.
+    */
     eyebrow: {
-      color: t.accent,
+      color: t.textMuted,
       fontSize: 12,
       fontWeight: "800",
       letterSpacing: 1.2,

@@ -870,7 +870,20 @@ function createStyles(t: ThemeTokens) {
       gap: 8,
       padding: 14,
     },
-    sectionTitle: { color: t.textPrimary, fontWeight: "600" },
+    /*
+      NAGYBETŰS, RITKÍTOTT, HALVÁNY -- A TERV `MobileLabel` MINTÁJA (acrobot
+      kérése, 2026-09-25, barracuda mérése alapján: a szakaszcímek eddig sötét
+      színűek és normál esetűek voltak, a terv halvány, csupa nagybetűs
+      "eyebrow" stílusa helyett). A szöveg maga NEM lett nagybetűs átírva --
+      a `textTransform` végzi ugyanazt, amit a terv `uppercase` osztálya.
+    */
+    sectionTitle: {
+      color: t.textMuted,
+      fontSize: 12,
+      fontWeight: "600",
+      letterSpacing: 1.2,
+      textTransform: "uppercase",
+    },
     rowText: { color: t.textPrimary },
     /* A gep nelkuli felvitel valasztoi. Ugyanaz az alak, mint a
        munkalap-listaban: ugyanaz a mozdulat, ugyanaz a kinezet. */
