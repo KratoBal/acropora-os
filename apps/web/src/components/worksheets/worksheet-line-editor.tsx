@@ -4,7 +4,14 @@ import {
   magyarSzamErteke,
   munkaoraEgysegFigyelmeztetes,
 } from "@acropora/types";
-import { Button, Card, Input } from "@acropora/ui";
+import {
+  Button,
+  Card,
+  Input,
+  PilotButton,
+  PilotCard,
+  PilotInput,
+} from "@acropora/ui";
 
 import type {
   WorksheetLineInput,
@@ -128,6 +135,19 @@ export interface WorksheetLineEditorProps {
   lines: WorksheetLineDraft[];
   onChange: (lines: WorksheetLineDraft[]) => void;
   disabled?: boolean;
+  /**
+   * A widget MA KÉT HELYRŐL ÉL: a régi, nem-pilot szerkesztő oldalról
+   * (`worksheet-editor-page.tsx`, `/szerviz/munkalapok/[id]/szerkesztes`,
+   * élő útvonal) és az új, pilot-aqua "Új munkalap" oldalról
+   * (`pilot-worksheet-create-page.tsx`). A prop ezért NEM alapértelmezett
+   * (ugyanaz az indok, mint a `ServiceOfflineNotice` `pilot` propjánál):
+   * a régi hívó szándékosan `undefined`-ot hagy, a pilot hívó explicit
+   * `pilot`-ot ad át. Enélkül a régi szerkesztő oldal (dusk- és brand-színű a
+   * többi elemén) kapna egy pilot-aqua foltot ezen a widgeten, ugyanaz a
+   * "kevert téma" hiba, csak fordított irányban, mint amit ez a prop
+   * old meg az ÚJ oldalon.
+   */
+  pilot?: boolean;
 }
 
 /**
@@ -195,6 +215,7 @@ export function WorksheetLineEditor({
   lines,
   onChange,
   disabled,
+  pilot,
 }: WorksheetLineEditorProps) {
   const update = (index: number, patch: Partial<WorksheetLineDraft>) => {
     onChange(
@@ -203,6 +224,152 @@ export function WorksheetLineEditor({
       ),
     );
   };
+
+  /**
+   * A KET AG TELJES DUPLIKACIO, NEM KOZOS RENDER + FELTETELES OSZTALYNEV.
+   *
+   * A `PilotInput.onChange` mar a SZÖVEGET adja at, az `Input.onChange` a
+   * nyers DOM esemenyt -- egy kozos JSX-fa ezt a ket alakot csak egy
+   * adapter-retegen at tudna elrejteni, ami tobb kockazatot vinne, mint
+   * amennyit a duplikacio elkerulese er egy stabil, ritkan valtozo
+   * widgetnel.
+   */
+  if (pilot) {
+    return (
+      <PilotCard className="space-y-3 p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-pilot-grey-900">Tételek</h2>
+          <PilotButton
+            type="button"
+            variant="secondary"
+            disabled={disabled}
+            onClick={() => onChange([...lines, emptyLine()])}
+          >
+            Új tétel
+          </PilotButton>
+        </div>
+        {lines.length === 0 ? (
+          <p className="text-sm text-pilot-grey-400">
+            Még nincs tétel. Tétel nélküli munkalap nem zárható le.
+          </p>
+        ) : null}
+        {lines.length ? (
+          <div
+            className={`hidden gap-2 text-xs font-medium text-pilot-grey-400 md:grid ${COLUMNS}`}
+            aria-hidden="true"
+          >
+            {MEZO_FEJLECEK.map((fejlec) => (
+              <span key={fejlec}>{fejlec}</span>
+            ))}
+            <span />
+          </div>
+        ) : null}
+        <div className="space-y-3">
+          {lines.map((line, index) => {
+            const egysegFigyelmeztetes = munkaoraEgysegFigyelmeztetes({
+              kind: line.kind,
+              unit: line.unit,
+            });
+            return (
+              <div
+                key={index}
+                className={`grid gap-2 border-b border-pilot-grey-100 pb-3 last:border-0 last:pb-0 ${COLUMNS}`}
+              >
+                <div className="space-y-2">
+                  <PilotInput
+                    aria-label={`${index + 1}. tétel megnevezése`}
+                    value={line.description}
+                    disabled={disabled}
+                    placeholder="Megnevezés"
+                    onChange={(value) => update(index, { description: value })}
+                  />
+                  <PilotInput
+                    aria-label={`${index + 1}. tétel kiegészítő sora`}
+                    value={line.detail}
+                    disabled={disabled}
+                    placeholder="Kiegészítő sor (pl. gépazonosító)"
+                    onChange={(value) => update(index, { detail: value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <NarrowLabel>Mennyiség</NarrowLabel>
+                  <PilotInput
+                    aria-label={`${index + 1}. tétel mennyisége`}
+                    value={line.quantity}
+                    disabled={disabled}
+                    inputMode="decimal"
+                    onChange={(value) => update(index, { quantity: value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <NarrowLabel>Mértékegység</NarrowLabel>
+                  <PilotInput
+                    aria-label={`${index + 1}. tétel mértékegysége`}
+                    value={line.unit}
+                    disabled={disabled}
+                    onChange={(value) => update(index, { unit: value })}
+                  />
+                  {egysegFigyelmeztetes ? (
+                    <p
+                      role="status"
+                      className="text-xs leading-5 text-pilot-amber-700"
+                      data-testid={`tetel-${index + 1}-egyseg-figyelmeztetes`}
+                    >
+                      {egysegFigyelmeztetes}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="space-y-1">
+                  <NarrowLabel>Munkaóra</NarrowLabel>
+                  <label className="flex h-10 items-center gap-2 text-sm text-pilot-grey-700">
+                    <input
+                      type="checkbox"
+                      aria-label={`${index + 1}. tétel munkaóra`}
+                      checked={line.kind === "LABOR"}
+                      disabled={disabled}
+                      className="size-4 rounded border-pilot-grey-300"
+                      onChange={(event) =>
+                        update(index, {
+                          kind: event.target.checked ? "LABOR" : "OTHER",
+                        })
+                      }
+                    />
+                    <span className="md:hidden">Munkaóra</span>
+                  </label>
+                </div>
+                <div className="space-y-1">
+                  <NarrowLabel>Hányan</NarrowLabel>
+                  <PilotInput
+                    aria-label={`${index + 1}. tételen hányan dolgoztak`}
+                    value={line.workerCount}
+                    disabled={disabled || line.kind !== "LABOR"}
+                    inputMode="numeric"
+                    title={
+                      line.kind === "LABOR"
+                        ? "Hányan dolgoztak ezen a tételen"
+                        : "Csak munkaóra-tételnél adható meg"
+                    }
+                    onChange={(value) => update(index, { workerCount: value })}
+                  />
+                </div>
+                <PilotButton
+                  type="button"
+                  variant="ghost"
+                  disabled={disabled}
+                  aria-label={`${index + 1}. tétel törlése`}
+                  onClick={() =>
+                    onChange(lines.filter((_, position) => position !== index))
+                  }
+                >
+                  Törlés
+                </PilotButton>
+              </div>
+            );
+          })}
+        </div>
+      </PilotCard>
+    );
+  }
 
   return (
     <Card className="space-y-3 p-4">
