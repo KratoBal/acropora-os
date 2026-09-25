@@ -9,7 +9,18 @@ import type { SupplierListResponse, Session } from "@acropora/types";
 import { useSyncExternalStore } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SupplierListPage } from "./supplier-list-page";
+import { PilotSupplierListPage } from "./pilot-supplier-list-page";
+
+/**
+ * A `next/font/local` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA -- vitest alatt,
+ * Next build nélkül nem futtatható, `TypeError: default is not a
+ * function`-nal bukik. Ugyanaz a mock, mint a `worksheet-detail-page.
+ * component.test.tsx`-ben és a `pilot-theme-root.component.test.tsx`-ben:
+ * a `PilotThemeRoot` tranzitíven importálja a `pilot-ui.tsx`-en át.
+ */
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 
 const navigation = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -73,11 +84,18 @@ function response(page: number): SupplierListResponse {
 }
 
 /**
+ * ÁTMÁSOLVA A RÉGI `supplier-list-page.component.test.tsx`-BŐL (2026-09-25,
+ * Figma 13. kör, `PilotSupplierListPage`), ugyanazokkal az állításokkal --
+ * a szűrés/lapozás/jogosultság logika a régi, nem-pilot komponensből
+ * VÁLTOZATLANUL jött át, csak a kártya-szerkezet és a stílus a tervé.
+ * A régi teszt-fájl és a régi komponens (`supplier-list-page.tsx`) ezzel
+ * együtt törölve.
+ *
  * Ugyanaz a mérés, mint az eszközlistán: a lapozás nem mehet a szűrő-ágon,
  * mert az a végén mindig `page=1`-et ír. A javítás előtti alakkal ez az
  * eset bukik - a "Következő" a 2. oldalról az elsőre visz vissza.
  */
-describe("SupplierListPage paging", () => {
+describe("PilotSupplierListPage paging", () => {
   beforeEach(() => {
     auth.session = session;
     navigation.params = new URLSearchParams("page=2");
@@ -90,7 +108,7 @@ describe("SupplierListPage paging", () => {
    * button that starts a new record must not name one of the two kinds. The
    * editor screen carries the same label and is asserted in its own spec. */
   it("offers a neutral label for a new record", async () => {
-    render(<SupplierListPage />);
+    render(<PilotSupplierListPage />);
     await screen.findByText("Aqua Kereskedés Kft.");
 
     expect(screen.getByRole("button", { name: "Új felvitele" })).toBeTruthy();
@@ -113,7 +131,7 @@ describe("SupplierListPage paging", () => {
       pagination: { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 },
     });
 
-    render(<SupplierListPage />);
+    render(<PilotSupplierListPage />);
     await screen.findByText("Kettős Kft.");
 
     // Scoped to the row on purpose: the filter above the table offers the same
@@ -153,7 +171,7 @@ describe("SupplierListPage paging", () => {
       pagination: { page: 1, pageSize: 25, totalItems: 2, totalPages: 1 },
     });
 
-    render(<SupplierListPage />);
+    render(<PilotSupplierListPage />);
     await screen.findByText("Kódtalan Kft.");
 
     const withCode = within(screen.getByRole("row", { name: /Kódos Kft\./ }));
@@ -168,7 +186,7 @@ describe("SupplierListPage paging", () => {
    * result would leave the page count describing a different list than the one
    * on screen. */
   it("asks the endpoint for one kind instead of narrowing the page", async () => {
-    render(<SupplierListPage />);
+    render(<PilotSupplierListPage />);
     await screen.findByText("Aqua Kereskedés Kft.");
 
     fireEvent.change(screen.getByLabelText("Partner típusa"), {
@@ -183,7 +201,7 @@ describe("SupplierListPage paging", () => {
   });
 
   it("moves to the next page instead of returning to the first", async () => {
-    render(<SupplierListPage />);
+    render(<PilotSupplierListPage />);
     await screen.findByText("Aqua Kereskedés Kft.");
 
     fireEvent.click(

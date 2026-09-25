@@ -12,10 +12,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
-import { getServicePartner } from "@/lib/api/partners";
+import { getServicePartner, listPartnerUnits } from "@/lib/api/partners";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getWebshopCapabilities } from "@/lib/auth/webshop-authorization";
 import { partnerDetailRows } from "@/lib/partners/partner-presentation";
+import { SectionTitle } from "@/components/SectionTitle";
 
 /**
  * PARTNER ADATLAP, OLVASÁSRA.
@@ -37,6 +38,21 @@ export default function PartnerDetailScreen() {
   const partner = useQuery({
     queryKey: ["service-partner", id],
     queryFn: () => getServicePartner(id),
+    enabled: Boolean(
+      id && capabilities?.partnersView && status === "authenticated",
+    ),
+  });
+
+  /**
+   * ALEGYSÉGEK, A TERV SZERINT (2026-09-25, Figma 13. kör,
+   * `MobilePartnerDetailScreen`): a képesség (`listPartnerUnits`) már
+   * megvolt, csak ez a képernyő nem hívta -- az eszköz-felvitel
+   * helyszín-fájához készült. Csak az AKTÍV alegységek látszanak, ugyanaz
+   * a szűrés, mint a munkalap-felvitelen (`departments.filter(isActive)`).
+   */
+  const units = useQuery({
+    queryKey: ["partner-units", id],
+    queryFn: () => listPartnerUnits(id),
     enabled: Boolean(
       id && capabilities?.partnersView && status === "authenticated",
     ),
@@ -93,6 +109,31 @@ export default function PartnerDetailScreen() {
             ))}
           </View>
         ) : null}
+
+        {/*
+          ALEGYSÉGEK KÁRTYA, A TERV SZERINT: csak akkor jelenik meg, ha van
+          legalább egy AKTÍV alegység -- a terv is elhagyja a kártyát, ha a
+          partnernek nincs alegysége (`partner.alegysegek.length > 0`).
+        */}
+        {(() => {
+          const aktivEgysegek = (units.data?.items ?? []).filter(
+            (unit) => unit.isActive,
+          );
+          if (aktivEgysegek.length === 0) return null;
+          return (
+            <>
+              <SectionTitle>Alegységek</SectionTitle>
+              <View style={styles.card}>
+                {aktivEgysegek.map((unit) => (
+                  <View key={unit.id} style={styles.unitRow}>
+                    <Text style={styles.unitCode}>{unit.code}</Text>
+                    <Text style={styles.unitName}>{unit.name}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          );
+        })()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -124,6 +165,17 @@ function createStyles(t: ThemeTokens) {
     row: { gap: 3 },
     label: { color: t.textSecondary, fontSize: 12, fontWeight: "800" },
     value: { color: t.textPrimary, fontSize: 15 },
+    unitRow: { alignItems: "center", flexDirection: "row", gap: 10 },
+    unitCode: {
+      backgroundColor: t.surfaceRaised,
+      borderRadius: 6,
+      color: t.textSecondary,
+      fontFamily: "monospace",
+      fontSize: 12,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    unitName: { color: t.textPrimary, fontSize: 14 },
     notice: {
       color: t.warning,
       backgroundColor: t.warningSoft,

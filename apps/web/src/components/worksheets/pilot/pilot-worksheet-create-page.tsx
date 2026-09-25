@@ -52,14 +52,16 @@ import {
  * A validáció, a mentés (`worksheetsApi.create`), a partner/alegység
  * függősége, az új alegység felvitele, a hibajegyből előtöltés
  * (partner/helyszín/eszközök, archivált helyszín kezelése), a felelős- és
- * eszköz-választó SZÓ SZERINT a mai `worksheet-editor-page.tsx` CREATE
- * ágából jön (`worksheetId` nélküli eset) -- ez háromszorosan tesztelt
- * (szerver, a régi űrlap saját teszt-sora, a mai éles használat), egy
- * negyedik, saját másolat csak elszakadási kockázatot vinne.
+ * eszköz-választó SZÓ SZERINT a régi `worksheet-editor-page.tsx` CREATE
+ * ágából jött (`worksheetId` nélküli eset).
  *
- * A régi `WorksheetEditorPage` MEGMARAD, útvonal nélkül: azt használja a
- * `/szerviz/munkalapok/[id]/szerkesztes` (piszkozat-szerkesztés), ahol a
- * Figma-terv nem ad külön képernyőt.
+ * FRISSÍTVE 2026-09-25: a régi `WorksheetEditorPage` (és a teljes teszt-sora,
+ * `worksheet-editor-page.component.test.tsx`) TÖRÖLVE -- a `/szerkesztes`
+ * útvonal azóta a `pilot-worksheet-editor-page.tsx`-re mutat, tehát a régi
+ * fájl felvitel-ága volt az EGYETLEN élő logikája, és az itt fut tovább. A
+ * régi teszt CREATE-ágának minden állítása átköltözött ide
+ * (`pilot-worksheet-create-page.component.test.tsx`), a leképezés a PR
+ * törzsében áll.
  *
  * === A TÉTEL-SZERKESZTŐ ÉS A FELELŐS-VÁLASZTÓ VÁLTOZATLAN ("VARRAT") ===
  *
@@ -89,7 +91,8 @@ import {
  * A Figma "Alegység" egyetlen legördülő, statikus `ALEGYSÉGEK` térképpel.
  * A valóságban az alegység-választás archiválást, új alegység felvitelét és
  * a jegyből örökölt, esetleg archivált helyszín különleges esetét is hordja
- * -- mindez a mai `worksheet-editor-page.tsx`-ből jön szó szerint.
+ * -- mindez a (2026-09-25-ig élt, azóta törölt) `worksheet-editor-page.tsx`-ből
+ * jött át szó szerint, és ezen a lapon fut tovább.
  *
  * === A KÉT (C) HIÁNY, MOST PÓTOLVA ===
  *
@@ -97,10 +100,10 @@ import {
  * felvitelről HIÁNYZOTT.
  *
  * 1) HIBAJEGY-SOR, ha a lap egy hibajegyből nyílik (`?hibajegy=<id>` a
- *    címben): "Hibajegy: HJ-2026-014", a jegy saját számával. A mai
- *    `worksheet-editor-page.tsx` ELTÖLTI a partnert/helyszínt/eszközöket a
- *    jegyből, de sehol nem írja ki, MELYIK jegyből -- csak a HIBA ágon
- *    (`ticketError`) látszik, hogy egyáltalán van jegy a háttérben.
+ *    címben): "Hibajegy: HJ-2026-014", a jegy saját számával. A régi
+ *    `worksheet-editor-page.tsx` ELTÖLTÖTTE a partnert/helyszínt/eszközöket
+ *    a jegyből, de sehol nem írta ki, MELYIK jegyből -- csak a HIBA ágon
+ *    (`ticketError`) látszott, hogy egyáltalán van jegy a háttérben.
  * 2) "KÖTELEZŐ: X, Y" MONDAT a Mentés gomb alatt, inaktív állapotban -- a
  *    mai űrlapon a gomb csak szürkén áll, ok nélkül. A minta a
  *    `pilot-asset-create-page.tsx`-ből jön (`missing` tömb).

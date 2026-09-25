@@ -10,10 +10,11 @@ import { describe, it } from "node:test";
  * `sectionTitle` stílusa helyett -- lásd a komponens fejlécét arról, miért
  * lett ez KÜLÖN KOMPONENS, nem csak közös stílus-konstans.
  *
- * A PARTNER ADATLAPON (`partners/[id].tsx`) NINCS kártya-csoport címke: a
- * lap egyetlen, cím nélküli adat-kártyát mutat. Ez a spec ezért NEM várja
- * el ott a `SectionTitle` importját -- egy ilyen elvárás egy nem létező
- * hiányt jelentene be.
+ * A PARTNER ADATLAPON (`partners/[id].tsx`) A FŐ ADAT-KÁRTYA CÍM NÉLKÜLI
+ * MARAD, DE AZ ALEGYSÉGEK KÁRTYA (2026-09-25, Figma 13. kör) MÁR A KÖZÖS
+ * `SectionTitle`-t HASZNÁLJA -- a lap ezért mostantól bekerült az alábbi
+ * listába, ugyanazzal az elvárással, mint a többi adatlap: importálja a
+ * komponenst, és nincs saját `sectionTitle` stílusa.
  */
 const COMPONENT = join("src", "components", "SectionTitle.tsx");
 
@@ -22,6 +23,7 @@ const ERINTETT_ADATLAPOK = [
   join("src", "app", "assets", "[id].tsx"),
   join("src", "app", "worksheets", "[id].tsx"),
   join("src", "app", "aquariums", "[id].tsx"),
+  join("src", "app", "partners", "[id].tsx"),
 ];
 
 describe("a SectionTitle a terv szerinti kártya-címkét adja", () => {
