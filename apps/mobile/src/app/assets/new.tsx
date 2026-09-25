@@ -798,305 +798,7 @@ export default function NewAssetScreen() {
             QR-címke.
           </Text>
 
-          <Section title="Partner">
-            {/*
-              LEGORDULO, NEM MINDIG NYITOTT LISTA. A partnerek szama nem
-              korlatos, es egy allandoan kinyitott lista a telefonon lenyomja a
-              tobbi mezot a kepernyo alja ala -- a felviteli urlapon a partner
-              EGY dontes, nem bongeszes. Ugyanaz az alak, mint a munkalap-lista
-              partner-szurojenel (`app/worksheets/index.tsx`).
-
-              A VALASZTAS UTAN BECSUKODIK: enelkul a lista tovabbra is eltakarna
-              a tobbi mezot, es semmi nem jelezne, hogy a valasztas megtortent.
-            */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                owner
-                  ? `Partner: ${owner.displayName}. Koppints a módosításhoz.`
-                  : "Partner választása."
-              }
-              onPress={() => setOwnerPickerOpen((open) => !open)}
-              style={[styles.ownerRow, owner && styles.ownerSelected]}
-            >
-              <Text style={styles.ownerName}>
-                {owner ? owner.displayName : "Válassz partnert"}
-              </Text>
-              <Text style={styles.ownerMeta}>
-                {owner
-                  ? `${owner.type === "CUSTOMER" ? "Vevő" : "Partner"} · ${owner.code}`
-                  : "Koppints a listához"}
-              </Text>
-            </Pressable>
-            <FieldError error={error} field="owner" />
-            {!ownerPickerOpen ? null : (
-              <>
-                <TextInput
-                  value={ownerSearch}
-                  onChangeText={setOwnerSearch}
-                  placeholder="Szerviz partner keresése"
-                  placeholderTextColor={tokens.textMuted}
-                  style={styles.input}
-                />
-                {ownersQuery.isPending ? (
-                  <ActivityIndicator color={tokens.accent} />
-                ) : null}
-                {/*
-                  A MENTETT LISTA KIMONDVA. A valasztas itt IRASSA valik: egy
-                  idokozben megszunt partner a masolatban meg ott all, es a
-                  felvitel a szerveren bukna el, jóval kesobb.
-                */}
-                {ownersNotice ? (
-                  <View style={styles.cacheNotice}>
-                    <Text style={styles.cacheNoticeTitle}>
-                      {ownersNotice.title}
-                    </Text>
-                    <Text style={styles.cacheNoticeBody}>
-                      {ownersNotice.message}
-                    </Text>
-                  </View>
-                ) : null}
-                {filteredOwners.map((item) => {
-                  const selected =
-                    owner?.type === item.type && owner.id === item.id;
-                  return (
-                    <Pressable
-                      key={`${item.type}:${item.id}`}
-                      onPress={() => {
-                        setOwner(item);
-                        // A helyszín a partnerhez tartozik: partnerváltásnál a
-                        // korábbi választás egy MÁSIK partner fájából való lenne, és
-                        // a szerver azt el is utasítaná a mentés végén.
-                        setUnitId("");
-                        setOwnerPickerOpen(false);
-                      }}
-                      style={[
-                        styles.ownerRow,
-                        selected && styles.ownerSelected,
-                      ]}
-                    >
-                      <Text style={styles.ownerName}>{item.displayName}</Text>
-                      <Text style={styles.ownerMeta}>
-                        {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
-                        {item.code}
-                        {item.outsideServiceScope
-                          ? " · nem szerviz partner"
-                          : ""}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </>
-            )}
-          </Section>
-
-          {/*
-            A HELYSZÍN CSAK SZERVIZ PARTNERNÉL JELENIK MEG. Vevő tulajdonosnál
-            nem választható: ott a cím a pontosítás, és a szerver az alegységet
-            el is utasítja. Egy mező, amit ki lehet tölteni, de a mentés
-            visszadob, rosszabb, mint a hiányzó mező.
-          */}
-          {owner?.type === "SUPPLIER" ? (
-            <Section title="Helyszín">
-              <Text style={styles.hint}>
-                Melyik egységnél áll az eszköz. Elhagyható, de a szerelő ebből
-                találja meg a helyszínen.
-              </Text>
-              {unitsQuery.isPending ? (
-                <ActivityIndicator color={tokens.accent} />
-              ) : null}
-              {/*
-                A MENTETT HELYSZINEK KIMONDVA. A regi szoveg ("nem tolthetok
-                be") 2026-09-03-ig IGAZ volt, mert nem volt masolat -- most van,
-                tehat a mondat is mast mond: ha van mentett lista, abbol lehet
-                valasztani, es a sav megmondja, milyen regi.
-              */}
-              {unitsNotice ? (
-                <View style={styles.cacheNotice}>
-                  <Text style={styles.cacheNoticeTitle}>
-                    {unitsNotice.title}
-                  </Text>
-                  <Text style={styles.cacheNoticeBody}>
-                    {unitsNotice.message}
-                  </Text>
-                </View>
-              ) : null}
-              {!unitsQuery.isPending && units.options.length === 0 ? (
-                <Text style={styles.hint}>
-                  Ehhez a partnerhez még nincs felvéve helyszín.
-                </Text>
-              ) : null}
-              {/*
-                LEPCSOS VALASZTO: egy szint egy sor. A teljes utas lista a
-                telefonon hosszu, es valasztas kozben nem latszik, hol tart az
-                ember -- itt minden szinten csak nehany testver all.
-
-                A KIVEZETETT HELYSZIN LATSZIK, DE NEM VALASZTHATO. Ha egy meglevo
-                eszkoz epp ilyenen all, a lanc akkor is felepul rajta: kulonben a
-                beallitott helyszin nemán eltunne. Uj eszkoznel ez nem all elo,
-                de a ket urlap ugyanazt a szabalyt kovesse.
-              */}
-              {/*
-                LEPCSOS VALASZTO: egy szint egy sor. A teljes utas lista a
-                telefonon hosszu, es valasztas kozben nem latszik, hol tart az
-                ember -- itt minden szinten csak nehany testver all.
-
-                KOZOS PELDANY A SZERKESZTO KEPERNYOVEL (2026-09-16). Korabban
-                ez a blokk CSAK itt allt, es a szerkeszton a regi, mindent
-                egyszerre kiterito alak maradt.
-              */}
-              <UnitPicker
-                rows={unitRows}
-                value={unitId}
-                onChange={setUnitId}
-                open={unitPickerOpen}
-                onToggle={() => setUnitPickerOpen((open) => !open)}
-                hiddenCount={units.hiddenCount}
-              />
-              <FieldError error={error} field="unitId" />
-              {/*
-                A SZÜLŐESZKÖZ CSAK HELYSZÍNNEL EGYÜTT JELENIK MEG -- ugyanaz a
-                sorrend, mint a hibajegy eredet-eszköz választójánál: a
-                választható halmaz maga a helyszín eszközeiből áll, helyszín
-                nélkül nincs mit felkínálni.
-              */}
-              {unitId ? (
-                <View style={styles.field}>
-                  <Text style={styles.label}>Szülőeszköz (opcionális)</Text>
-                  <Text style={styles.hint}>
-                    Ha ez a gép egy másik eszköz része, válaszd ki itt a
-                    főegységet.
-                  </Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      parentAssetId
-                        ? `Szülőeszköz: ${parentAssetLabel}. Koppints a módosításhoz.`
-                        : "Szülőeszköz választása."
-                    }
-                    onPress={() => setParentPickerOpen((open) => !open)}
-                    style={[
-                      styles.ownerRow,
-                      parentAssetId && styles.ownerSelected,
-                    ]}
-                  >
-                    <Text style={styles.ownerName}>
-                      {parentAssetId
-                        ? parentAssetLabel
-                        : "Nincs szülőeszköz kiválasztva"}
-                    </Text>
-                    <Text style={styles.ownerMeta}>Koppints a listához</Text>
-                  </Pressable>
-                  {parentAssetId ? (
-                    <Pressable
-                      onPress={() => {
-                        setParentAssetId("");
-                        setParentAssetLabel("");
-                      }}
-                    >
-                      <Text style={styles.clearDate}>
-                        Szülőeszköz eltávolítása
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  {!parentPickerOpen ? null : (
-                    <>
-                      <TextInput
-                        value={parentSearch}
-                        onChangeText={(value) => {
-                          setParentSearch(value);
-                          // ÚJ KÉRDÉS, ELSŐ LAP -- ugyanaz a szabály, mint a
-                          // hibajegy eredet-eszköz keresőjénél: egy szűkebb
-                          // keresésnél a harmadik lapon állnánk, ami üresként
-                          // jelenne meg, mintha nem lenne találat.
-                          setParentPage(1);
-                        }}
-                        placeholder="Keresés: azonosító, név, gyártó"
-                        placeholderTextColor={tokens.textMuted}
-                        style={styles.input}
-                        autoCorrect={false}
-                      />
-                      {parentAssetsQuery.isPending ? (
-                        <ActivityIndicator color={tokens.accent} />
-                      ) : null}
-                      {!parentAssetsQuery.isPending &&
-                      !(parentAssetsQuery.data?.items.length ?? 0) ? (
-                        <Text style={styles.hint}>
-                          Ezen a helyszínen ebben a keresésben nincs eszköz.
-                        </Text>
-                      ) : null}
-                      {(parentAssetsQuery.data?.items ?? []).map((item) => (
-                        <Pressable
-                          key={item.id}
-                          onPress={() => {
-                            setParentAssetId(item.id);
-                            setParentAssetLabel(
-                              `${item.assetNumber} -- ${item.name}`,
-                            );
-                            setParentPickerOpen(false);
-                          }}
-                          style={[
-                            styles.ownerRow,
-                            parentAssetId === item.id && styles.ownerSelected,
-                          ]}
-                        >
-                          <Text style={styles.ownerName}>
-                            {item.assetNumber} -- {item.name}
-                          </Text>
-                        </Pressable>
-                      ))}
-                      {/*
-                        A LAPOZÓ AKKOR IS OTT ÁLL, HA MA EGY LAP VAN --
-                        ugyanaz az indok, mint a hibajegy választójánál: egy
-                        "1 / 2" felirat láthatóvá teszi, hogy van tovább,
-                        mielőtt bárki hiányt keresne.
-                      */}
-                      <View style={styles.photoRow}>
-                        <Pressable
-                          disabled={parentPage <= 1}
-                          onPress={() =>
-                            setParentPage((page) => Math.max(1, page - 1))
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.clearDate,
-                              parentPage <= 1 && styles.disabled,
-                            ]}
-                          >
-                            Előző
-                          </Text>
-                        </Pressable>
-                        <Text style={styles.hint}>
-                          {parentPage} / {parentAssetPageCount}
-                        </Text>
-                        <Pressable
-                          disabled={parentPage >= parentAssetPageCount}
-                          onPress={() =>
-                            setParentPage((page) =>
-                              Math.min(parentAssetPageCount, page + 1),
-                            )
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.clearDate,
-                              parentPage >= parentAssetPageCount &&
-                                styles.disabled,
-                            ]}
-                          >
-                            Következő
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </>
-                  )}
-                </View>
-              ) : null}
-            </Section>
-          ) : null}
-
-          <Section title="Eszközadatok">
+          <Section title="Azonosítás">
             <Field label="Eszköz neve *" value={name} onChangeText={setName} />
             <FieldError error={error} field="name" />
             <Text style={styles.label}>Típus</Text>
@@ -1263,6 +965,330 @@ export default function NewAssetScreen() {
               </Text>
             </LabelCodeField>
             <FieldError error={error} field="labelCode" />
+          </Section>
+
+          {/*
+            "HOZZÁRENDELÉS" -- Figma 7. kör (Eszköznyilvántartás), acrobot
+            kérése 2026-09-25: a Partner ÉS a Helyszín (Alegység +
+            Szülőeszköz) eddig KÉT külön kártya volt, a terv EGY "Hozzárendelés"
+            kártyaként rajzolja őket. Ugyanazok a mezők, ugyanazok a feltételek
+            (a Helyszín rész csak SUPPLIER tulajdonosnál jelenik meg) -- csak a
+            kártya-határ tűnt el.
+          */}
+          <Section title="Hozzárendelés">
+            {/*
+              LEGORDULO, NEM MINDIG NYITOTT LISTA. A partnerek szama nem
+              korlatos, es egy allandoan kinyitott lista a telefonon lenyomja a
+              tobbi mezot a kepernyo alja ala -- a felviteli urlapon a partner
+              EGY dontes, nem bongeszes. Ugyanaz az alak, mint a munkalap-lista
+              partner-szurojenel (`app/worksheets/index.tsx`).
+
+              A VALASZTAS UTAN BECSUKODIK: enelkul a lista tovabbra is eltakarna
+              a tobbi mezot, es semmi nem jelezne, hogy a valasztas megtortent.
+            */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                owner
+                  ? `Partner: ${owner.displayName}. Koppints a módosításhoz.`
+                  : "Partner választása."
+              }
+              onPress={() => setOwnerPickerOpen((open) => !open)}
+              style={[styles.ownerRow, owner && styles.ownerSelected]}
+            >
+              <Text style={styles.ownerName}>
+                {owner ? owner.displayName : "Válassz partnert"}
+              </Text>
+              <Text style={styles.ownerMeta}>
+                {owner
+                  ? `${owner.type === "CUSTOMER" ? "Vevő" : "Partner"} · ${owner.code}`
+                  : "Koppints a listához"}
+              </Text>
+            </Pressable>
+            <FieldError error={error} field="owner" />
+            {!ownerPickerOpen ? null : (
+              <>
+                <TextInput
+                  value={ownerSearch}
+                  onChangeText={setOwnerSearch}
+                  placeholder="Szerviz partner keresése"
+                  placeholderTextColor={tokens.textMuted}
+                  style={styles.input}
+                />
+                {ownersQuery.isPending ? (
+                  <ActivityIndicator color={tokens.accent} />
+                ) : null}
+                {/*
+                  A MENTETT LISTA KIMONDVA. A valasztas itt IRASSA valik: egy
+                  idokozben megszunt partner a masolatban meg ott all, es a
+                  felvitel a szerveren bukna el, jóval kesobb.
+                */}
+                {ownersNotice ? (
+                  <View style={styles.cacheNotice}>
+                    <Text style={styles.cacheNoticeTitle}>
+                      {ownersNotice.title}
+                    </Text>
+                    <Text style={styles.cacheNoticeBody}>
+                      {ownersNotice.message}
+                    </Text>
+                  </View>
+                ) : null}
+                {filteredOwners.map((item) => {
+                  const selected =
+                    owner?.type === item.type && owner.id === item.id;
+                  return (
+                    <Pressable
+                      key={`${item.type}:${item.id}`}
+                      onPress={() => {
+                        setOwner(item);
+                        // A helyszín a partnerhez tartozik: partnerváltásnál a
+                        // korábbi választás egy MÁSIK partner fájából való lenne, és
+                        // a szerver azt el is utasítaná a mentés végén.
+                        setUnitId("");
+                        setOwnerPickerOpen(false);
+                      }}
+                      style={[
+                        styles.ownerRow,
+                        selected && styles.ownerSelected,
+                      ]}
+                    >
+                      <Text style={styles.ownerName}>{item.displayName}</Text>
+                      <Text style={styles.ownerMeta}>
+                        {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
+                        {item.code}
+                        {item.outsideServiceScope
+                          ? " · nem szerviz partner"
+                          : ""}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </>
+            )}
+
+            {/*
+              A HELYSZÍN CSAK SZERVIZ PARTNERNÉL JELENIK MEG. Vevő
+              tulajdonosnál nem választható: ott a cím a pontosítás, és a
+              szerver az alegységet el is utasítja. Egy mező, amit ki lehet
+              tölteni, de a mentés visszadob, rosszabb, mint a hiányzó mező.
+            */}
+            {owner?.type === "SUPPLIER" ? (
+              <>
+                <Text style={styles.hint}>
+                  Melyik egységnél áll az eszköz. Elhagyható, de a szerelő ebből
+                  találja meg a helyszínen.
+                </Text>
+                {unitsQuery.isPending ? (
+                  <ActivityIndicator color={tokens.accent} />
+                ) : null}
+                {/*
+                A MENTETT HELYSZINEK KIMONDVA. A regi szoveg ("nem tolthetok
+                be") 2026-09-03-ig IGAZ volt, mert nem volt masolat -- most van,
+                tehat a mondat is mast mond: ha van mentett lista, abbol lehet
+                valasztani, es a sav megmondja, milyen regi.
+              */}
+                {unitsNotice ? (
+                  <View style={styles.cacheNotice}>
+                    <Text style={styles.cacheNoticeTitle}>
+                      {unitsNotice.title}
+                    </Text>
+                    <Text style={styles.cacheNoticeBody}>
+                      {unitsNotice.message}
+                    </Text>
+                  </View>
+                ) : null}
+                {!unitsQuery.isPending && units.options.length === 0 ? (
+                  <Text style={styles.hint}>
+                    Ehhez a partnerhez még nincs felvéve helyszín.
+                  </Text>
+                ) : null}
+                {/*
+                LEPCSOS VALASZTO: egy szint egy sor. A teljes utas lista a
+                telefonon hosszu, es valasztas kozben nem latszik, hol tart az
+                ember -- itt minden szinten csak nehany testver all.
+
+                A KIVEZETETT HELYSZIN LATSZIK, DE NEM VALASZTHATO. Ha egy meglevo
+                eszkoz epp ilyenen all, a lanc akkor is felepul rajta: kulonben a
+                beallitott helyszin nemán eltunne. Uj eszkoznel ez nem all elo,
+                de a ket urlap ugyanazt a szabalyt kovesse.
+              */}
+                {/*
+                LEPCSOS VALASZTO: egy szint egy sor. A teljes utas lista a
+                telefonon hosszu, es valasztas kozben nem latszik, hol tart az
+                ember -- itt minden szinten csak nehany testver all.
+
+                KOZOS PELDANY A SZERKESZTO KEPERNYOVEL (2026-09-16). Korabban
+                ez a blokk CSAK itt allt, es a szerkeszton a regi, mindent
+                egyszerre kiterito alak maradt.
+              */}
+                <UnitPicker
+                  rows={unitRows}
+                  value={unitId}
+                  onChange={setUnitId}
+                  open={unitPickerOpen}
+                  onToggle={() => setUnitPickerOpen((open) => !open)}
+                  hiddenCount={units.hiddenCount}
+                />
+                <FieldError error={error} field="unitId" />
+                {/*
+                A SZÜLŐESZKÖZ CSAK HELYSZÍNNEL EGYÜTT JELENIK MEG -- ugyanaz a
+                sorrend, mint a hibajegy eredet-eszköz választójánál: a
+                választható halmaz maga a helyszín eszközeiből áll, helyszín
+                nélkül nincs mit felkínálni.
+              */}
+                {unitId ? (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>Szülőeszköz (opcionális)</Text>
+                    <Text style={styles.hint}>
+                      Ha ez a gép egy másik eszköz része, válaszd ki itt a
+                      főegységet.
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        parentAssetId
+                          ? `Szülőeszköz: ${parentAssetLabel}. Koppints a módosításhoz.`
+                          : "Szülőeszköz választása."
+                      }
+                      onPress={() => setParentPickerOpen((open) => !open)}
+                      style={[
+                        styles.ownerRow,
+                        parentAssetId && styles.ownerSelected,
+                      ]}
+                    >
+                      <Text style={styles.ownerName}>
+                        {parentAssetId
+                          ? parentAssetLabel
+                          : "Nincs szülőeszköz kiválasztva"}
+                      </Text>
+                      <Text style={styles.ownerMeta}>Koppints a listához</Text>
+                    </Pressable>
+                    {parentAssetId ? (
+                      <Pressable
+                        onPress={() => {
+                          setParentAssetId("");
+                          setParentAssetLabel("");
+                        }}
+                      >
+                        <Text style={styles.clearDate}>
+                          Szülőeszköz eltávolítása
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    {!parentPickerOpen ? null : (
+                      <>
+                        <TextInput
+                          value={parentSearch}
+                          onChangeText={(value) => {
+                            setParentSearch(value);
+                            // ÚJ KÉRDÉS, ELSŐ LAP -- ugyanaz a szabály, mint a
+                            // hibajegy eredet-eszköz keresőjénél: egy szűkebb
+                            // keresésnél a harmadik lapon állnánk, ami üresként
+                            // jelenne meg, mintha nem lenne találat.
+                            setParentPage(1);
+                          }}
+                          placeholder="Keresés: azonosító, név, gyártó"
+                          placeholderTextColor={tokens.textMuted}
+                          style={styles.input}
+                          autoCorrect={false}
+                        />
+                        {parentAssetsQuery.isPending ? (
+                          <ActivityIndicator color={tokens.accent} />
+                        ) : null}
+                        {!parentAssetsQuery.isPending &&
+                        !(parentAssetsQuery.data?.items.length ?? 0) ? (
+                          <Text style={styles.hint}>
+                            Ezen a helyszínen ebben a keresésben nincs eszköz.
+                          </Text>
+                        ) : null}
+                        {(parentAssetsQuery.data?.items ?? []).map((item) => (
+                          <Pressable
+                            key={item.id}
+                            onPress={() => {
+                              setParentAssetId(item.id);
+                              setParentAssetLabel(
+                                `${item.assetNumber} -- ${item.name}`,
+                              );
+                              setParentPickerOpen(false);
+                            }}
+                            style={[
+                              styles.ownerRow,
+                              parentAssetId === item.id && styles.ownerSelected,
+                            ]}
+                          >
+                            <Text style={styles.ownerName}>
+                              {item.assetNumber} -- {item.name}
+                            </Text>
+                          </Pressable>
+                        ))}
+                        {/*
+                        A LAPOZÓ AKKOR IS OTT ÁLL, HA MA EGY LAP VAN --
+                        ugyanaz az indok, mint a hibajegy választójánál: egy
+                        "1 / 2" felirat láthatóvá teszi, hogy van tovább,
+                        mielőtt bárki hiányt keresne.
+                      */}
+                        <View style={styles.photoRow}>
+                          <Pressable
+                            disabled={parentPage <= 1}
+                            onPress={() =>
+                              setParentPage((page) => Math.max(1, page - 1))
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.clearDate,
+                                parentPage <= 1 && styles.disabled,
+                              ]}
+                            >
+                              Előző
+                            </Text>
+                          </Pressable>
+                          <Text style={styles.hint}>
+                            {parentPage} / {parentAssetPageCount}
+                          </Text>
+                          <Pressable
+                            disabled={parentPage >= parentAssetPageCount}
+                            onPress={() =>
+                              setParentPage((page) =>
+                                Math.min(parentAssetPageCount, page + 1),
+                              )
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.clearDate,
+                                parentPage >= parentAssetPageCount &&
+                                  styles.disabled,
+                              ]}
+                            >
+                              Következő
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+          </Section>
+
+          {/*
+            "KARBANTARTÁS" -- Figma 7. kör, acrobot kérése 2026-09-25: a
+            Telepítés dátuma és az Intervallum eddig az "Eszközadatok"
+            (most "Azonosítás") kártya alján állt, a terv külön kártyaként
+            rajzolja őket. Ugyanaz a két mező, ugyanaz a logika, csak saját
+            kártyán.
+
+            A "GARANCIA LEJÁRATA" MEZŐ HIÁNYZIK -- ezt a terv a Karbantartás
+            kártya harmadik meződzeként kéri, de a mobil ÚJ ESZKÖZ űrlapon ma
+            nem létezik (a mobil ADATLAPON már megjelenik, lásd
+            asset-detail #1089, de a felviteli űrlap sosem kérte be). Ez NEM
+            e kör hatásköre volt ("ugyanazokkal a mezőkkel" -- acrobot),
+            ezért nem toldottam be csendben: a hiány itt áll, PR-ben
+            felsorolva, nem eldöntve.
+          */}
+          <Section title="Karbantartás">
             {/*
               A RENDSZER SAJÁT DÁTUMVÁLASZTÓJA (Balázs döntése, 2026-08-25).
               A mező mögött ugyanaz az `ÉÉÉÉ-HH-NN` szöveg marad, amit a kérés

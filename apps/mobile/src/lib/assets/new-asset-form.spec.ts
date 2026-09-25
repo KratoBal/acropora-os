@@ -45,8 +45,15 @@ describe("az új eszköz űrlapjának választói", () => {
     const s = forras();
 
     assert.ok(s.length > 1000);
-    assert.match(s, /Section title="Partner"/);
-    assert.match(s, /Section title="Eszközadatok"/);
+    /*
+      A KÉT CÍM 2026-09-25-TŐL "Hozzárendelés"/"Azonosítás" -- a Figma 7. kör
+      (Eszköznyilvántartás) kérésére a "Partner" a "Helyszín" tartalmával
+      összevonva "Hozzárendelés" lett, az "Eszközadatok" pedig "Azonosítás"
+      névre és elé került (lásd new.tsx saját fejléceit a két kártyánál). A
+      SZERKEZET, amit ez a kontroll ellenőriz, nem változott -- csak a cím.
+    */
+    assert.match(s, /Section title="Hozzárendelés"/);
+    assert.match(s, /Section title="Azonosítás"/);
   });
 
   it("mind a négy választó ugyanabban az alakban áll", () => {
