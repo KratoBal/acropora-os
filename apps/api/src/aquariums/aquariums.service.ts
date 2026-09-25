@@ -9,6 +9,7 @@ import { Prisma } from "@acropora/database";
 
 import {
   AQUARIUM_MEASUREMENT_PARAMETERS,
+  type AquariumDetail,
   type AuthenticatedUser,
 } from "@acropora/types";
 
@@ -75,11 +76,29 @@ export class AquariumsService {
     );
   }
 
+  /**
+   * A `canAssignAssets` MEZŐT MINDEN, ÜGYFÉLNEK VISSZAADOTT AKVÁRIUM-
+   * ADATLAPON RÁTESSZÜK, NE CSAK A `detail()`-en -- a `create()`/`update()`/
+   * `addEquipment()`/`removeEquipment()` is `AquariumDetail`-t ad vissza a
+   * kliensnek, és a típus kötelezővé teszi a mezőt: ha csak `detail()`
+   * töltené ki, a többi válasz vagy fordítási hibával állna (a
+   * `repository` visszatérése `Omit<AquariumDetail, "canAssignAssets">`),
+   * vagy -- rosszabb esetben -- valaki `as AquariumDetail`-lel elnémítaná
+   * a hiányt, és a mező NÉMÁN `undefined` maradna éles válaszban.
+   */
+  private async withCanAssignAssets<
+    T extends Omit<AquariumDetail, "canAssignAssets">,
+  >(aquarium: T, user: AuthenticatedUser): Promise<T & AquariumDetail> {
+    const canAssignAssets =
+      await this.repository.hasAquariumAssetAssignCapability(user.id);
+    return { ...aquarium, canAssignAssets };
+  }
+
   async detail(id: string, user: AuthenticatedUser) {
     const visibility = await this.visibilityFor(user);
     const aquarium = await this.repository.detail(id, visibility);
     if (!aquarium) throw new NotFoundException("Az akvárium nem található.");
-    return aquarium;
+    return this.withCanAssignAssets(aquarium, user);
   }
 
   searchSelectableCustomers(search?: string) {
@@ -221,7 +240,7 @@ export class AquariumsService {
       const meglevo = await this.repository.byClientOperationId(
         input.clientOperationId,
       );
-      if (meglevo) return meglevo;
+      if (meglevo) return this.withCanAssignAssets(meglevo, user);
     }
 
     /*
@@ -251,10 +270,11 @@ export class AquariumsService {
     await this.checkDepartment(input.departmentId, customerId);
 
     try {
-      return await this.repository.create(
+      const created = await this.repository.create(
         { ...input, customerId },
         actorUserId,
       );
+      return await this.withCanAssignAssets(created, user);
     } catch (error) {
       this.map(error);
     }
@@ -313,11 +333,12 @@ export class AquariumsService {
     }
 
     try {
-      return await this.repository.update(
+      const updated = await this.repository.update(
         id,
         { ...input, customerId },
         actorUserId,
       );
+      return await this.withCanAssignAssets(updated, user);
     } catch (error) {
       this.map(error);
     }
@@ -336,7 +357,8 @@ export class AquariumsService {
       throw new BadRequestException(
         AQUARIUM_EQUIPMENT_PROBLEM_MESSAGE[problem],
       );
-    return this.repository.addEquipment(aquariumId, input);
+    const added = await this.repository.addEquipment(aquariumId, input);
+    return this.withCanAssignAssets(added, user);
   }
 
   /** Belsős lépés -- lásd `update()` fejlécét, ugyanaz az indok. */
@@ -348,7 +370,11 @@ export class AquariumsService {
     requireInternalWriter(user, "Berendezés törlése");
     await this.detail(aquariumId, user);
     try {
-      return await this.repository.removeEquipment(aquariumId, equipmentId);
+      const removed = await this.repository.removeEquipment(
+        aquariumId,
+        equipmentId,
+      );
+      return await this.withCanAssignAssets(removed, user);
     } catch (error) {
       this.map(error);
     }
