@@ -157,7 +157,14 @@ describe("az eszkoz-adatlap csatolmany-szakasza", () => {
   it("a nagy kép rátét, nem Modal", () => {
     const s = olvas(KEPERNYO);
     assert.doesNotMatch(s, /<Modal/);
-    assert.match(s, /styles\.nagyRatet/);
+    /*
+      A STÍLUS-OBJEKTUM NEVÉRE NEM KÖTÜNK KI, CSAK A KULCSRA: 2026-09-25-től
+      a rátét saját, téma-független `overlayStyles`-ből él (lásd a fájl
+      fejlécét, miért), a témás `styles`-től külön -- a minta ezért bármelyik
+      objektumnéven illeszkedik, amíg a `nagyRatet` kulcs létezik és
+      alkalmazva van.
+    */
+    assert.match(s, /\.nagyRatet\b/);
   });
 
   it("a nem megnézhető csatolmány neve kiíródik", () => {

@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -36,6 +36,7 @@ import {
 import { describeUploadFailure } from "@/lib/api/network-failure";
 import { ApiNetworkError } from "@/lib/api/client";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
+import { ASSET_CRITICALITY_LABELS } from "@/lib/assets/asset-criticality";
 import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
@@ -46,6 +47,8 @@ import {
 } from "@/lib/offline/asset-cache";
 import { useIsOnline } from "@/lib/offline/connectivity";
 import { describeOfflineDetailNotice } from "@/lib/offline/offline-notice";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
+import type { ThemeTokens } from "@/lib/theme/tokens";
 
 const KIND_LABELS = {
   SYSTEM: "Rendszer",
@@ -62,6 +65,8 @@ export default function AssetDetailScreen() {
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const online = useIsOnline();
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   const query = useQuery({
     queryKey: ["service-asset", id],
     queryFn: () => getAsset(id!),
@@ -286,7 +291,7 @@ export default function AssetDetailScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         {notice ? <OfflineNoticeCard notice={notice} /> : null}
         {query.isPending && !fromCache ? (
-          <ActivityIndicator color="#52d6c7" />
+          <ActivityIndicator color={tokens.accent} />
         ) : null}
         {query.isError && !fromCache ? (
           <MessageCard
@@ -347,6 +352,10 @@ export default function AssetDetailScreen() {
               <Info label="Gyártó" value={cachedSummary.manufacturer} />
               <Info label="Modell" value={cachedSummary.model} />
               <Info label="Sorozatszám" value={cachedSummary.serialNumber} />
+              <Info
+                label="Kritikusság"
+                value={ASSET_CRITICALITY_LABELS[cachedSummary.criticality]}
+              />
             </Section>
 
             <Section title="Karbantartás">
@@ -411,6 +420,18 @@ export default function AssetDetailScreen() {
               */}
               <Info label="Kategória" value={asset.category} />
               <Info label="Funkció" value={asset.function} />
+              {/*
+                A KRITIKUSSAG EDDIG SEHOL NEM JELENT MEG A MOBILON, holott a
+                webes adatlap mar mutatja (`assetCriticalityLabel[asset.
+                criticality]`). Barracuda lefedettsegi listaja (2026-09-25,
+                exchange/figma-eszkozok-make-7-lefedettseg.md) es acrobot
+                dontese: a mai felulet altal ismert mezok maradnak akkor is,
+                ha a Figma-terv nem rajzolja oket -- ez a legkozelebbi kartya.
+              */}
+              <Info
+                label="Kritikusság"
+                value={ASSET_CRITICALITY_LABELS[asset.criticality]}
+              />
               <Info label="Gyártó" value={asset.manufacturer} />
               <Info label="Modell" value={asset.model} />
               <Info label="Sorozatszám" value={asset.serialNumber} />
@@ -712,39 +733,58 @@ export default function AssetDetailScreen() {
               </Section>
             ) : null}
 
-            {asset.ancestors.length > 0 ? (
-              <Section title="Rendszerútvonal">
-                {asset.ancestors.map((ancestor) => (
-                  <AssetLink
-                    key={ancestor.id}
-                    label={ancestor.name}
-                    meta={ancestor.assetNumber}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/assets/[id]",
-                        params: { id: ancestor.id },
-                      })
-                    }
-                  />
-                ))}
-              </Section>
-            ) : null}
+            {/*
+              EGY KÖZÖS "ESZKÖZHIERARCHIA" KÁRTYA, FŐEGYSÉG/RÉSZEGYSÉGEK
+              ALCÍMEKKEL -- eddig ez a mobilon KÉT külön kártya volt
+              ("Rendszerútvonal", "Részegységek"), funkcionálisan lefedte a
+              Figma "Eszközhierarchia" kártyáját, csak nem egy közös
+              kártyaként. Acrobot kérése, 2026-09-25 (Balázs aznap reggeli
+              design-kérése nyomán): vonjuk össze, a Figma elrendezését
+              követve.
 
-            {asset.children.length > 0 ? (
-              <Section title="Részegységek">
-                {asset.children.map((child) => (
-                  <AssetLink
-                    key={child.id}
-                    label={child.name}
-                    meta={child.assetNumber}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/assets/[id]",
-                        params: { id: child.id },
-                      })
-                    }
-                  />
-                ))}
+              A "FŐEGYSÉG" NÁLUNK TÖBB ELEMŰ LEHET (`ancestors`, a teljes
+              lánc a gyökérig), a Figma mock csak EGY közvetlen szülőt
+              rajzol -- ez a mai adat GAZDAGABB, tehát megmarad, csak az
+              alcím alá kerül.
+            */}
+            {asset.ancestors.length > 0 || asset.children.length > 0 ? (
+              <Section title="Eszközhierarchia">
+                {asset.ancestors.length > 0 ? (
+                  <>
+                    <Text style={styles.hierarchySubheading}>Főegység</Text>
+                    {asset.ancestors.map((ancestor) => (
+                      <AssetLink
+                        key={ancestor.id}
+                        label={ancestor.name}
+                        meta={ancestor.assetNumber}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/assets/[id]",
+                            params: { id: ancestor.id },
+                          })
+                        }
+                      />
+                    ))}
+                  </>
+                ) : null}
+                {asset.children.length > 0 ? (
+                  <>
+                    <Text style={styles.hierarchySubheading}>Részegységek</Text>
+                    {asset.children.map((child) => (
+                      <AssetLink
+                        key={child.id}
+                        label={child.name}
+                        meta={child.assetNumber}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/assets/[id]",
+                            params: { id: child.id },
+                          })
+                        }
+                      />
+                    ))}
+                  </>
+                ) : null}
               </Section>
             ) : null}
           </>
@@ -752,13 +792,13 @@ export default function AssetDetailScreen() {
       </ScrollView>
 
       {nagyKep ? (
-        <View style={styles.nagyRatet}>
+        <View style={overlayStyles.nagyRatet}>
           <DocumentImage
             ownerPath={gazdaUtvonal}
             documentId={nagyKep}
             variant="original"
-            style={styles.nagyKep}
-            hibaStyle={styles.nagyKepHiba}
+            style={overlayStyles.nagyKep}
+            hibaStyle={overlayStyles.nagyKepHiba}
             resizeMode="contain"
             accessibilityLabel="A csatolmány nagyban"
           />
@@ -770,7 +810,7 @@ export default function AssetDetailScreen() {
             van a szerelo elott, amit meg akar nevezni.
           */}
           {nagyKepSor?.caption ? (
-            <Text style={styles.nagyFelirat}>{nagyKepSor.caption}</Text>
+            <Text style={overlayStyles.nagyFelirat}>{nagyKepSor.caption}</Text>
           ) : null}
 
           {/*
@@ -785,7 +825,7 @@ export default function AssetDetailScreen() {
                 accessibilityLabel="A kép felirata"
                 value={felirat}
                 onChangeText={setFelirat}
-                style={styles.feliratMezo}
+                style={overlayStyles.feliratMezo}
                 placeholder="Mit látunk a képen?"
                 placeholderTextColor="#5c7e92"
                 maxLength={500}
@@ -797,16 +837,16 @@ export default function AssetDetailScreen() {
                 disabled={feliratMentes}
                 onPress={() => void feliratMentese(nagyKepSor.id)}
                 style={({ pressed }) => [
-                  styles.bezaro,
+                  overlayStyles.bezaro,
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={styles.bezaroText}>
+                <Text style={overlayStyles.bezaroText}>
                   {feliratMentes ? "Mentés folyamatban…" : "Felirat mentése"}
                 </Text>
               </Pressable>
               {feliratHiba ? (
-                <Text style={styles.uploadNotice}>{feliratHiba}</Text>
+                <Text style={overlayStyles.error}>{feliratHiba}</Text>
               ) : null}
             </>
           ) : null}
@@ -818,9 +858,12 @@ export default function AssetDetailScreen() {
               setNagyKep(null);
               setFeliratHiba(null);
             }}
-            style={({ pressed }) => [styles.bezaro, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              overlayStyles.bezaro,
+              pressed && styles.pressed,
+            ]}
           >
-            <Text style={styles.bezaroText}>Bezárás</Text>
+            <Text style={overlayStyles.bezaroText}>Bezárás</Text>
           </Pressable>
         </View>
       ) : null}
@@ -828,7 +871,18 @@ export default function AssetDetailScreen() {
   );
 }
 
+/**
+ * `Section`/`Info`/`AssetLink`/`MessageCard` MODUL-SZINTEN ÁLLNAK, NEM A
+ * FŐ KOMPONENSBEN -- ezért nem tudnak a fő komponens `styles`
+ * változójából zárványként dolgozni. Mindegyik ÖNÁLLÓAN hívja a
+ * `useAppTheme()`-et és a KÖZÖS `createStyles()`-t: ez több apró,
+ * egyformán olcsó számítást jelent render soronként (egy adatlapon
+ * néhány tucat sor), cserébe egyetlen stílus-forrás marad, és egyetlen
+ * hívóhelyet sem kell `styles` propon átvezetni.
+ */
 function Section({ title, children }: { title: string; children: ReactNode }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -838,6 +892,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function Info({ label, value }: { label: string; value?: string }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   if (!value) return null;
   return (
     <View style={styles.infoRow}>
@@ -856,6 +912,8 @@ function AssetLink({
   meta: string;
   onPress(): void;
 }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <Pressable
       onPress={onPress}
@@ -879,6 +937,8 @@ function MessageCard({
   message: string;
   onRetry(): void;
 }) {
+  const { tokens } = useAppTheme();
+  const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -898,85 +958,142 @@ function formatDate(value?: string) {
     : undefined;
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#071827" },
-  container: { padding: 18, paddingBottom: 40, gap: 14 },
-  hero: {
-    borderRadius: 22,
-    padding: 20,
-    backgroundColor: "#0d3146",
-    borderWidth: 1,
-    borderColor: "#1d536b",
-  },
-  number: { color: "#52d6c7", fontSize: 11, fontWeight: "900" },
-  title: { color: "#f4fbff", fontSize: 27, fontWeight: "900", marginTop: 7 },
-  badges: { flexDirection: "row", gap: 8, marginTop: 12 },
-  badge: {
-    color: "#d3eef4",
-    backgroundColor: "#16495e",
-    borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  section: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#1c4963",
-    backgroundColor: "#0d2b40",
-    padding: 17,
-  },
-  sectionTitle: { color: "#f4fbff", fontSize: 16, fontWeight: "900" },
-  sectionBody: { marginTop: 8 },
-  infoRow: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#153c52",
-  },
-  infoLabel: {
-    color: "#789cad",
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  infoValue: { color: "#e4f3f8", fontSize: 14, lineHeight: 20, marginTop: 3 },
-  assetLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-  },
-  assetLinkLabel: { color: "#e4f3f8", fontSize: 15, fontWeight: "700" },
-  assetLinkMeta: { color: "#75a0b2", fontSize: 11, marginTop: 2 },
-  chevron: { color: "#52d6c7", fontSize: 26 },
-  pressed: { opacity: 0.68 },
-  message: { color: "#a9c4d1", lineHeight: 20, marginTop: 8 },
-  galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
-  csempe: { gap: 4, width: 104 },
-  csempeKep: {
-    width: 104,
-    height: 104,
-    borderRadius: 10,
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  csempeFelirat: { color: "#d7e7ef", fontSize: 11, textAlign: "center" },
-  /*
-    A HIBA-DOBOZ KERETE A CSEMPEN ES NAGYBAN MAS MERET. A csempe 104 pont
-    szeles: ott csak annyi fer ki, hogy MERES, es aki azt latja, rakoppint. A
-    teljes szoveg a nagy nezetben olvashato, ahol van hely.
-  */
-  csempeHiba: { padding: 4 },
+/**
+ * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- ez a
+ * képernyő is saját, fix sötét hexekkel élt eddig (`#071827` stb.),
+ * ugyanúgy, ahogy a lista (`assets/index.tsx`) is állt a saját
+ * migrálása előtt. Az "Eszköznyilvántartás" Figma 7. kör része, ami
+ * világos ÉS sötét módot kér.
+ */
+function createStyles(t: ThemeTokens) {
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.background },
+    container: { padding: 18, paddingBottom: 40, gap: 14 },
+    hero: {
+      borderRadius: 22,
+      padding: 20,
+      backgroundColor: t.surface,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    number: { color: t.accent, fontSize: 11, fontWeight: "900" },
+    title: {
+      color: t.textPrimary,
+      fontSize: 27,
+      fontWeight: "900",
+      marginTop: 7,
+    },
+    badges: { flexDirection: "row", gap: 8, marginTop: 12 },
+    badge: {
+      color: t.accentSoftText,
+      backgroundColor: t.accentSoft,
+      borderRadius: 8,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    section: {
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surface,
+      padding: 17,
+    },
+    sectionTitle: { color: t.textPrimary, fontSize: 16, fontWeight: "900" },
+    sectionBody: { marginTop: 8 },
+    infoRow: {
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: t.border,
+    },
+    infoLabel: {
+      color: t.textSecondary,
+      fontSize: 11,
+      fontWeight: "800",
+      textTransform: "uppercase",
+    },
+    infoValue: {
+      color: t.textPrimary,
+      fontSize: 14,
+      lineHeight: 20,
+      marginTop: 3,
+    },
+    /** Az "Eszközhierarchia" kártya "Főegység"/"Részegységek" alcíme. */
+    hierarchySubheading: {
+      color: t.textSecondary,
+      fontSize: 11,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      marginTop: 4,
+      marginBottom: 2,
+    },
+    assetLink: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 10,
+    },
+    assetLinkLabel: { color: t.textPrimary, fontSize: 15, fontWeight: "700" },
+    assetLinkMeta: { color: t.textSecondary, fontSize: 11, marginTop: 2 },
+    chevron: { color: t.accent, fontSize: 26 },
+    pressed: { opacity: 0.68 },
+    message: { color: t.textSecondary, lineHeight: 20, marginTop: 8 },
+    galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
+    csempe: { gap: 4, width: 104 },
+    csempeKep: {
+      width: 104,
+      height: 104,
+      borderRadius: 10,
+      backgroundColor: t.background,
+      borderColor: t.border,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    csempeFelirat: { color: t.textPrimary, fontSize: 11, textAlign: "center" },
+    /*
+      A HIBA-DOBOZ KERETE A CSEMPEN ES NAGYBAN MAS MERET. A csempe 104 pont
+      szeles: ott csak annyi fer ki, hogy MERES, es aki azt latja, rakoppint. A
+      teljes szoveg a nagy nezetben olvashato, ahol van hely.
+    */
+    csempeHiba: { padding: 4 },
+    csempeMeret: { color: t.textSecondary, fontSize: 11, textAlign: "center" },
+    uploadNotice: {
+      color: t.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+      paddingHorizontal: 4,
+      paddingTop: 8,
+    },
+    retryButton: {
+      alignSelf: "flex-start",
+      backgroundColor: t.accent,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      marginTop: 14,
+    },
+    retryText: { color: t.textOnAccent, fontWeight: "800" },
+  });
+}
+
+/**
+ * A NAGYBAN NYITOTT KÉP RÁTÉTJE SZÁNDÉKOSAN NEM TÉMA-FÜGGŐ.
+ *
+ * Ez egy fényképnéző, ami a kép fölé sötét háttérként ül -- ugyanúgy,
+ * ahogy egy fotógaléria világos módban is sötét hátteret ad a képnek a
+ * kontraszt miatt. Ha ez a réteg a világos módban is fehér hátterű lenne,
+ * a kép kontrasztja romlana, és a rátéten álló "Bezárás"/"Felirat
+ * mentése" gombok is a világos módú tokenekkel olvashatatlanná válnának
+ * a mögöttük álló, változatlanul sötét képen.
+ */
+const overlayStyles = StyleSheet.create({
   nagyKepHiba: {
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
   },
-  csempeMeret: { color: "#789cad", fontSize: 11, textAlign: "center" },
   nagyFelirat: { color: "#d7e7ef", fontSize: 15, textAlign: "center" },
   feliratMezo: {
     backgroundColor: "#0d2430",
@@ -1007,20 +1124,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   bezaroText: { color: "#eaf4fa", textAlign: "center" },
-  uploadNotice: {
-    color: "#475569",
+  error: {
+    color: "#fca5a5",
     fontSize: 13,
     lineHeight: 18,
-    paddingHorizontal: 4,
-    paddingTop: 8,
+    textAlign: "center",
   },
-  retryButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#177b74",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    marginTop: 14,
-  },
-  retryText: { color: "#fff", fontWeight: "800" },
 });
