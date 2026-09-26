@@ -71,6 +71,22 @@ import {
  *    aránya `0.85fr 1.3fr 0.85fr` (nem egyenlő harmadok) -- az Egységár
  *    oszlopa kap több helyet, a Mennyiség és a Kedvezmény felirata
  *    változatlanul elfér a szűkebb hányadban is.
+ * 7. JAVÍTVA 2026-09-26 (audit, frissen mérve): két hiány, amit ez a
+ *    lista eddig nem nevezett meg.
+ *    (a) A terv `Banner`-je (163-207. sor) minden állapotban ikont AD a
+ *    szöveg elé, és egy záró (X) gombot a jobb szélen, ami eltünteti a
+ *    sávot -- a mai kód se ikont, se bezárás-gombot nem adott, és a sáv
+ *    a KÖVETKEZŐ fizetésig NEM volt eltüntethető. A bezárás-gomb most
+ *    megvan (`setLastResult(null)`/`setError(null)`); az ikon szándékosan
+ *    NEM pótolt -- a terv kerek pipa/kereszt ikonjának (`CheckCircleIcon`/
+ *    `XCircleIcon`) nincs megfelelője a megosztott `Icon`-készletben
+ *    (`packages/ui/src/icon.tsx`), és egy nem-pontos ikon rosszabb lenne,
+ *    mint a hiánya.
+ *    (b) A terv `NumberInput`-ja (92-112. sor) egy "suffix" propot ad,
+ *    ami a mező jobb szélén mutatja a mértékegységet (itt: "%") -- a
+ *    kedvezmény-mezők (soronkénti és végösszeg) ezt eddig nem kapták meg.
+ *    Pótolva, a terv `suffix` mintáját követve (abszolút pozicionált
+ *    span, jobbra).
  */
 
 interface CartLine {
@@ -126,27 +142,38 @@ function NumberInput({
   onChange,
   min,
   ariaLabel,
+  suffix,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
   min?: number;
   ariaLabel?: string;
+  suffix?: string;
 }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="text-[11px] font-medium text-pilot-grey-400">
         {label}
       </span>
-      <input
-        type="number"
-        min={min}
-        step="any"
-        value={value}
-        aria-label={ariaLabel}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full rounded-md px-3 py-2 text-right text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-      />
+      <div className="relative">
+        <input
+          type="number"
+          min={min}
+          step="any"
+          value={value}
+          aria-label={ariaLabel}
+          onChange={(event) => onChange(Number(event.target.value))}
+          className={`w-full rounded-md px-3 py-2 text-right text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 ${
+            suffix ? "pr-7" : ""
+          }`}
+        />
+        {suffix ? (
+          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-pilot-grey-300">
+            {suffix}
+          </span>
+        ) : null}
+      </div>
     </label>
   );
 }
@@ -347,37 +374,71 @@ export function PilotPosTerminalPage() {
 
       {error ? (
         <div className="mx-8 mt-5">
-          <Alert variant="danger" title="Hiba történt" description={error} />
+          <Alert
+            variant="danger"
+            title="Hiba történt"
+            description={error}
+            action={
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                aria-label="Bezárás"
+                className="shrink-0 text-rose-400 transition hover:text-rose-700"
+              >
+                <Icon name="x" size={14} />
+              </button>
+            }
+          />
         </div>
       ) : null}
 
       {lastResult ? (
         <div className="mx-8 mt-5">
           {lastResult.stockWarnings.length > 0 ? (
-            <div className="rounded-xl bg-pilot-amber-50 px-5 py-4 ring-1 ring-pilot-amber-100">
-              <p className="text-sm font-semibold text-pilot-grey-900">
-                Eladás rögzítve: {lastResult.detail.orderNumber}
-              </p>
-              <p className="mt-0.5 text-xs text-pilot-grey-600">
-                Figyelem, negatívba fordult a nyilvántartott készlet:{" "}
-                {lastResult.stockWarnings
-                  .map(
-                    (warning) =>
-                      `${warning.productName} (${warning.resultingQty})`,
-                  )
-                  .join(", ")}
-                . Ez nem akadályozta meg az eladás rögzítését.
-              </p>
+            <div className="flex items-start justify-between gap-4 rounded-xl bg-pilot-amber-50 px-5 py-4 ring-1 ring-pilot-amber-100">
+              <div>
+                <p className="text-sm font-semibold text-pilot-grey-900">
+                  Eladás rögzítve: {lastResult.detail.orderNumber}
+                </p>
+                <p className="mt-0.5 text-xs text-pilot-grey-600">
+                  Figyelem, negatívba fordult a nyilvántartott készlet:{" "}
+                  {lastResult.stockWarnings
+                    .map(
+                      (warning) =>
+                        `${warning.productName} (${warning.resultingQty})`,
+                    )
+                    .join(", ")}
+                  . Ez nem akadályozta meg az eladás rögzítését.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLastResult(null)}
+                aria-label="Bezárás"
+                className="shrink-0 text-pilot-amber-400 transition hover:text-pilot-amber-700"
+              >
+                <Icon name="x" size={14} />
+              </button>
             </div>
           ) : (
-            <div className="rounded-xl bg-pilot-aqua-50 px-5 py-4 ring-1 ring-pilot-aqua-200">
-              <p className="text-sm font-semibold text-pilot-aqua-800">
-                Eladás rögzítve: {lastResult.detail.orderNumber}
-              </p>
-              <p className="mt-0.5 text-xs text-pilot-aqua-600">
-                A készlet helyileg lekönyvelve. A UNAS-szinkron a háttérben,
-                ettől függetlenül fut.
-              </p>
+            <div className="flex items-start justify-between gap-4 rounded-xl bg-pilot-aqua-50 px-5 py-4 ring-1 ring-pilot-aqua-200">
+              <div>
+                <p className="text-sm font-semibold text-pilot-aqua-800">
+                  Eladás rögzítve: {lastResult.detail.orderNumber}
+                </p>
+                <p className="mt-0.5 text-xs text-pilot-aqua-600">
+                  A készlet helyileg lekönyvelve. A UNAS-szinkron a háttérben,
+                  ettől függetlenül fut.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLastResult(null)}
+                aria-label="Bezárás"
+                className="shrink-0 text-pilot-aqua-400 transition hover:text-pilot-aqua-700"
+              >
+                <Icon name="x" size={14} />
+              </button>
             </div>
           )}
         </div>
@@ -568,6 +629,7 @@ export function PilotPosTerminalPage() {
                         label="Kedvezmény (%)"
                         value={line.discountPercent}
                         min={0}
+                        suffix="%"
                         ariaLabel={`${line.productName} kedvezmény`}
                         onChange={(value) =>
                           updateLineDiscount(line.variantId, value)
@@ -593,6 +655,7 @@ export function PilotPosTerminalPage() {
                     label="Végösszeg kedvezmény (%)"
                     value={discountPercent}
                     min={0}
+                    suffix="%"
                     ariaLabel="Végösszeg kedvezmény"
                     onChange={(value) =>
                       setDiscountPercent(clampDiscount(value))
