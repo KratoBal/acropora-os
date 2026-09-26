@@ -29,6 +29,8 @@ export interface NotificationRoleRecipient {
 export interface StoredMailTemplate {
   readonly subject: string;
   readonly body: string;
+  /** `null`: szoveges sablon, a mai alakban. Lasd a sema `bodyHtml` mezojet. */
+  readonly bodyHtml: string | null;
 }
 
 /**
@@ -73,7 +75,7 @@ export class TicketMailRepository {
   async template(id: string): Promise<StoredMailTemplate | null> {
     return prisma.ticketMailTemplate.findUnique({
       where: { id },
-      select: { subject: true, body: true },
+      select: { subject: true, body: true, bodyHtml: true },
     });
   }
 
@@ -81,6 +83,12 @@ export class TicketMailRepository {
     id: string;
     subject: string;
     body: string;
+    /**
+     * `null` KIFEJEZETTEN TOROL: aki szoveges sablont ment, az a HTML-t is
+     * visszavonja. Hianyzo ertek helyett `null` kell, kulonben egy regi HTML
+     * a szoveges mentes utan is kimenne.
+     */
+    bodyHtml: string | null;
     updatedByUserId: string | null;
   }): Promise<void> {
     const { id, ...mezok } = input;

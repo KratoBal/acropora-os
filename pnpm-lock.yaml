@@ -34,6 +34,9 @@ importers:
       '@acropora/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@acropora/rich-text':
+        specifier: workspace:*
+        version: link:../../packages/rich-text
       '@acropora/types':
         specifier: workspace:*
         version: link:../../packages/types

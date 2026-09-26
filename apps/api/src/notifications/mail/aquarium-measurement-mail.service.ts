@@ -17,6 +17,7 @@ import {
 import { aquariumMeasurementDocument } from "../../aquariums/aquarium-measurement-document.js";
 import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { headerSafe } from "./mail-header.js";
+import { mailBodyFields, renderMailBody } from "./mail-body.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
 import { formatMailFrom } from "./mime.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
@@ -150,7 +151,7 @@ export class AquariumMeasurementMailService {
       kuldo_neve: input.actorName,
     };
     const targy = renderMailTemplate(sablon.subject, ertekek);
-    const torzs = renderMailTemplate(sablon.body, ertekek);
+    const torzs = renderMailBody(sablon, ertekek);
     if (!targy.ok || !torzs.ok) {
       /*
         ISMERETLEN VALTOZONAL NEM KULDUNK -- ugyanaz a szabaly, mint a
@@ -188,7 +189,7 @@ export class AquariumMeasurementMailService {
       to: [input.customerEmail],
       from,
       subject: headerSafe(targy.text),
-      text: torzs.text,
+      ...mailBodyFields(torzs),
       attachments: [
         {
           filename: "vizmeres.pdf",

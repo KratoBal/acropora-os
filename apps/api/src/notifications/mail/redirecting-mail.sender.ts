@@ -1,3 +1,4 @@
+import { escapeHtml } from "@acropora/rich-text";
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
 import { GmailMailSender, TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
@@ -95,6 +96,16 @@ export class RedirectingMailSender implements MailSender {
       */
       subject: `[eredeti: ${mail.to.join(", ")}] ${mail.subject}`,
       text: `${redirectHeader(mail.to)}\n\n${mail.text}`,
+      /*
+        A HTML TORZS ELE IS KERUL, NEM CSAK A SZOVEGES ELE. A levelezo a HTML
+        alternativat mutatja; ha a blokk csak a `text`-ben allna, a probalevel
+        olvasoja pont azt nem latna, kinek ment volna.
+      */
+      ...(mail.html === undefined
+        ? {}
+        : {
+            html: `<p>${escapeHtml(redirectHeader(mail.to)).replace(/\n/g, "<br>")}</p><hr>${mail.html}`,
+          }),
     });
   }
 }

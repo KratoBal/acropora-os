@@ -48,6 +48,24 @@ export interface OutgoingMail {
   readonly subject: string;
   readonly text: string;
   /**
+   * A FORMAZOTT TORZS, TOREDEKKENT -- `<p>...</p>`, nem teljes dokumentum.
+   *
+   * Balazs kerese, 2026-09-26 14:10. HIANYZO ERTEKNEL a level EGYRESZES
+   * `text/plain` marad, bajtra a mai alakban; ez minden hivora all, aki nem
+   * tolti ki.
+   *
+   * TOREDEK, ES NEM DOKUMENTUM: a keretet (`<html>`, betutipus) a
+   * `buildMimeMessage` adja. Igy egy burok (az atiranyito) a torzs ELE tud
+   * tenni egy blokkot anelkul, hogy egy kesz dokumentumot kellene szetszednie.
+   *
+   * TISZTITOTT kell legyen (`sanitizeRichHtml`). Az epito nem tisztit, hanem
+   * DOB, ha nem az -- ugyanaz a ket-reteg, mint a fejleceknel.
+   *
+   * A `text` ilyenkor a HTML szoveges vetulete (`richHtmlToText`), nem egy
+   * kulon irt szoveg: a ket alternativa nem mondhat mast.
+   */
+  readonly html?: string;
+  /**
    * A FELADO CIME, LEVELFAJTANKENT ELTERHET.
    *
    * Balazs kerese, 2026-09-24 (Akvariumok szal, message_id

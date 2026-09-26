@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { richHtmlToText, sanitizeRichHtml } from "@acropora/rich-text";
+
 import { ticketMailContent } from "./ticket-mail.content.js";
 
 const ALAP = {
@@ -58,5 +60,54 @@ describe("a level szovege", () => {
     assert.ok(!text.includes("A bejelentés szövege"));
     // ES A TOBBI RESZ MEGMARAD: a hiany nem viheti el a jegyszamot.
     assert.match(text, /HJ-2026-001/);
+  });
+});
+
+/**
+ * A KERET HTML-IKRE (2026-09-26): a szoveges vetulete PONTOSAN a szoveges
+ * level. Ha a ketto elcsuszna, a levelezo a HTML-t mutatja, a masik
+ * alternativa pedig mast mondana -- es egyik sem hibazna.
+ */
+describe("a keret HTML-ikre", () => {
+  const ALAP = {
+    recipientName: "Nyitó <Nóra> & Tsa",
+    jobNumber: "HJ-2026-001",
+    title: "Szivattyú zúg",
+    event: "Aláírták a lapot.",
+    eventHtml: "<p><strong>Aláírták</strong> a lapot.</p>",
+  };
+
+  for (const [nev, bemenet] of [
+    ["leiras es szabad szoveg nelkul", { ...ALAP, description: null }],
+    [
+      "leirassal es tobbsoros szabad szoveggel",
+      {
+        ...ALAP,
+        description: "Reggel óta\nhangos.",
+        freeText: "Holnap megyünk.\nÜdv",
+      },
+    ],
+  ] as const)
+    it(`a HTML szoveges vetulete a szoveges level (${nev})`, () => {
+      const level = ticketMailContent(bemenet);
+      assert.ok(level.html);
+      assert.equal(richHtmlToText(level.html), level.text);
+    });
+
+  it("a kodbol jovo nev escape-elve all, a HTML tiszta", () => {
+    const level = ticketMailContent({ ...ALAP, description: null });
+    assert.ok(
+      level.html?.startsWith("<p>Kedves Nyitó &lt;Nóra&gt; &amp; Tsa!</p>"),
+    );
+    assert.equal(sanitizeRichHtml(level.html ?? ""), level.html);
+  });
+
+  it("eventHtml nelkul nincs html kulcs", () => {
+    const { eventHtml: _nincs, ...szoveges } = ALAP;
+    void _nincs;
+    assert.equal(
+      "html" in ticketMailContent({ ...szoveges, description: null }),
+      false,
+    );
   });
 });

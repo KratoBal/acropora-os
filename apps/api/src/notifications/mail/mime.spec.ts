@@ -7,6 +7,7 @@ import {
   encodeHeaderWord,
   formatMailFrom,
   MailBuildError,
+  mailHtmlDocument,
 } from "./mime.js";
 
 const FELADO = "ticket@acropora.hu";
@@ -336,5 +337,160 @@ describe("buildMimeMessage: csatolmány és több címzett", () => {
       (hiba: unknown) =>
         hiba instanceof MailBuildError && hiba.code === "MAIL_NO_RECIPIENT",
     );
+  });
+});
+
+/**
+ * A FORMAZOTT LEVEL SZERKEZETE (2026-09-26, Balazs kerese).
+ *
+ * A HATARJELEK ROGZITETTEK, tehat a TELJES kimenet karakterre allithato -- ugyanaz
+ * az ok, mint a fenti "BETURE ugyanaz" allitasnal: egy atrendezett resz vagy egy
+ * felcserelt sorrend egy `match`-en atmenne.
+ */
+describe("buildMimeMessage: HTML és szöveg együtt", () => {
+  const CRLF = `${CR}${LF}`;
+  const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
+  const HTML = "<p>Kedves <strong>Nóra</strong>!</p>";
+  const FEJLEC = [
+    "From: ticket@acropora.hu",
+    "To: nyito@partner.hu",
+    "Subject: [HJ-2026-001] Szivattyu zug",
+    "MIME-Version: 1.0",
+  ];
+  const ALTERNATIVA = [
+    "--ALT",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64("Kedves Nóra!"),
+    "--ALT",
+    'Content-Type: text/html; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64(mailHtmlDocument(HTML)),
+    "--ALT--",
+  ];
+
+  /**
+   * A SZOVEG ELOL, A HTML UTOLSOKENT. Az RFC 2046 szerint az utolso a
+   * preferalt; forditott sorrendben a HTML-t erto levelezo is a szoveget mutatna.
+   */
+  it("csatolmány nélkül: multipart/alternative, szöveg elöl, HTML utoljára", () => {
+    assert.equal(
+      buildMimeMessage({ ...LEVEL, html: HTML }, FELADO, "KULSO", "ALT"),
+      [
+        ...FEJLEC,
+        'Content-Type: multipart/alternative; boundary="ALT"',
+        "",
+        ...ALTERNATIVA,
+      ].join(CRLF),
+    );
+  });
+
+  it("csatolmánnyal: a két alternatíva a mixed első része, utána a csatolmány", () => {
+    const bajtok = new Uint8Array([1, 2, 3]);
+    assert.equal(
+      buildMimeMessage(
+        {
+          ...LEVEL,
+          html: HTML,
+          attachments: [
+            {
+              filename: "a.pdf",
+              contentType: "application/pdf",
+              bytes: bajtok,
+            },
+          ],
+        },
+        FELADO,
+        "KULSO",
+        "ALT",
+      ),
+      [
+        ...FEJLEC,
+        'Content-Type: multipart/mixed; boundary="KULSO"',
+        "",
+        "--KULSO",
+        'Content-Type: multipart/alternative; boundary="ALT"',
+        "",
+        ...ALTERNATIVA,
+        "--KULSO",
+        "Content-Type: application/pdf",
+        "Content-Transfer-Encoding: base64",
+        'Content-Disposition: attachment; filename="a.pdf"',
+        "",
+        Buffer.from(bajtok).toString("base64"),
+        "--KULSO--",
+      ].join(CRLF),
+    );
+  });
+
+  /**
+   * A MAI CSATOLMANYOS LEVEL (vizmeres, hibajegy-csomag) HTML NELKUL BETURE
+   * UGYANAZ MARAD. A fenti keszlet ezt csak mintakkal allitotta; a HTML-ag
+   * atrendezte a torzs-reszt, tehat itt a teljes szoveg all.
+   */
+  it("csatolmánnyal, HTML nélkül a levél BETŰRE a régi alakban marad", () => {
+    const bajtok = new Uint8Array([1, 2, 3]);
+    assert.equal(
+      buildMimeMessage(
+        {
+          ...LEVEL,
+          attachments: [
+            {
+              filename: "a.pdf",
+              contentType: "application/pdf",
+              bytes: bajtok,
+            },
+          ],
+        },
+        FELADO,
+        "KULSO",
+        "ALT",
+      ),
+      [
+        ...FEJLEC,
+        'Content-Type: multipart/mixed; boundary="KULSO"',
+        "",
+        "--KULSO",
+        'Content-Type: text/plain; charset="UTF-8"',
+        "Content-Transfer-Encoding: base64",
+        "",
+        b64("Kedves Nóra!"),
+        "--KULSO",
+        "Content-Type: application/pdf",
+        "Content-Transfer-Encoding: base64",
+        'Content-Disposition: attachment; filename="a.pdf"',
+        "",
+        Buffer.from(bajtok).toString("base64"),
+        "--KULSO--",
+      ].join(CRLF),
+    );
+  });
+
+  /**
+   * A MASODIK RETEG: nyers HTML-re NEM tisztit, hanem DOB. Egy csendben
+   * megtisztitott torzs elrejtene, hogy egy hivo kihagyta a tisztitast.
+   */
+  it("tisztítatlan HTML-re nem épül levél", () => {
+    for (const html of [
+      "<p>a<script>alert(1)</script></p>",
+      '<p onclick="x()">a</p>',
+      '<a href="javascript:alert(1)">a</a>',
+    ])
+      assert.throws(
+        () => buildMimeMessage({ ...LEVEL, html }, FELADO),
+        (hiba: unknown) =>
+          hiba instanceof MailBuildError &&
+          hiba.code === "MAIL_HTML_UNSANITIZED",
+        html,
+      );
+  });
+
+  it("a keret betűtípust ad, és a töredéket változatlanul tartalmazza", () => {
+    const dok = mailHtmlDocument(HTML);
+    assert.ok(dok.startsWith("<!DOCTYPE html>"));
+    assert.ok(dok.includes(`\n${HTML}\n`));
+    assert.doesNotMatch(dok, /<style/);
   });
 });

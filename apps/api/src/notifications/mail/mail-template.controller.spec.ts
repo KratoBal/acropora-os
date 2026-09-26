@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
+import type { AuthenticatedUser } from "@acropora/types";
 
 import type { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
@@ -95,5 +96,150 @@ describe("MailTemplateController.read", () => {
       valasz.defaultTemplate,
       DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE,
     );
+  });
+});
+
+/**
+ * A FORMAZOTT SABLON MENTESE (2026-09-26). A tarolo ROGZITI, mit kapott: a
+ * kerdes nem az, hogy a vegpont `ok`-t mond, hanem hogy MI kerul az adatbazisba.
+ */
+function rogzitoTarolo() {
+  const mentett: Parameters<TicketMailRepository["saveTemplate"]>[0][] = [];
+  const tarolo = {
+    template: async () => null,
+    saveTemplate: async (
+      input: Parameters<TicketMailRepository["saveTemplate"]>[0],
+    ) => {
+      mentett.push(input);
+    },
+  } as unknown as TicketMailRepository;
+  return { mentett, controller: new MailTemplateController(tarolo) };
+}
+
+const SZERKESZTO = { id: "user-1" } as AuthenticatedUser;
+
+describe("MailTemplateController.save, formázott törzzsel", () => {
+  it("a HTML tisztítva kerül tárolásra, a szöveges változat A HTML-BŐL készül", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await controller.save(
+      WORKSHEET_SIGNED,
+      {
+        subject: "{{jegyszam}}",
+        body: "ezt a szerver felülírja",
+        bodyHtml:
+          '<p onclick="x()">Kedves <strong><span data-variable="cimzett">{{cimzett}}</span></strong>!</p><p><a href="{{jegy_linkje}}">A hibajegy</a><script>bad()</script></p>',
+      },
+      SZERKESZTO,
+    );
+    assert.deepEqual(mentett, [
+      {
+        id: WORKSHEET_SIGNED,
+        subject: "{{jegyszam}}",
+        bodyHtml:
+          '<p>Kedves <strong><span data-variable="cimzett">{{cimzett}}</span></strong>!</p><p><a href="{{jegy_linkje}}">A hibajegy</a></p>',
+        body: "Kedves {{cimzett}}!\n\nA hibajegy ({{jegy_linkje}})",
+        updatedByUserId: "user-1",
+      },
+    ]);
+  });
+
+  /**
+   * A NEM LINK FAJTAJU VALTOZO NEM LEHET LINK CELJA. A `{{jegyszam}}` egy
+   * `href`-ben relativ cimkent mukodne a vevo levelezojeben.
+   */
+  it("nem link fajtájú változó href-ként kiesik", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await controller.save(
+      WORKSHEET_SIGNED,
+      {
+        subject: "x",
+        body: "x",
+        bodyHtml: '<p><a href="{{jegyszam}}">szám</a></p>',
+      },
+      SZERKESZTO,
+    );
+    assert.equal(mentett[0]?.bodyHtml, "<p><a>szám</a></p>");
+  });
+
+  it("a formázás által kettévágott változót 400-zal, néven nevezve utasítja el", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await assert.rejects(
+      () =>
+        controller.save(
+          WORKSHEET_SIGNED,
+          {
+            subject: "x",
+            body: "x",
+            bodyHtml: "<p>{{jegy<strong>szam</strong>}}</p>",
+          },
+          SZERKESZTO,
+        ),
+      (hiba: unknown) =>
+        hiba instanceof BadRequestException &&
+        /\{\{jegyszam\}\}/.test(hiba.message),
+    );
+    assert.deepEqual(mentett, []);
+  });
+
+  it("ismeretlen változó a HTML-ben: 400, és a szöveges body nem menti meg", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await assert.rejects(
+      () =>
+        controller.save(
+          WORKSHEET_SIGNED,
+          { subject: "x", body: "rendben", bodyHtml: "<p>{{cimzet}}</p>" },
+          SZERKESZTO,
+        ),
+      (hiba: unknown) =>
+        hiba instanceof BadRequestException && /cimzet/.test(hiba.message),
+    );
+    assert.deepEqual(mentett, []);
+  });
+
+  it("a tisztítás után üres HTML-t nem ment", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await assert.rejects(
+      () =>
+        controller.save(
+          WORKSHEET_SIGNED,
+          { subject: "x", body: "x", bodyHtml: "<script>bad()</script>" },
+          SZERKESZTO,
+        ),
+      BadRequestException,
+    );
+    assert.deepEqual(mentett, []);
+  });
+
+  /**
+   * A SZOVEGES MENTES A HTML-T IS VISSZAVONJA. Ha a `bodyHtml` itt hianyozna
+   * (nem `null`), egy korabbi HTML a szoveges mentes utan is kimenne.
+   */
+  it("szöveges mentésnél a bodyHtml KIFEJEZETTEN null", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await controller.save(
+      WORKSHEET_SIGNED,
+      { subject: "x", body: "Kedves {{cimzett}}!" },
+      SZERKESZTO,
+    );
+    assert.deepEqual(mentett, [
+      {
+        id: WORKSHEET_SIGNED,
+        subject: "x",
+        body: "Kedves {{cimzett}}!",
+        bodyHtml: null,
+        updatedByUserId: "user-1",
+      },
+    ]);
+  });
+
+  it("olvasáskor az alapértelmezés bodyHtml-je null, a tárolté a tárolt", async () => {
+    const alap = await new MailTemplateController(tarolo(null)).read(
+      WORKSHEET_SIGNED,
+    );
+    assert.equal(alap.bodyHtml, null);
+    const tarolt = await new MailTemplateController({
+      template: async () => ({ subject: "s", body: "b", bodyHtml: "<p>b</p>" }),
+    } as unknown as TicketMailRepository).read(WORKSHEET_SIGNED);
+    assert.equal(tarolt.bodyHtml, "<p>b</p>");
   });
 });

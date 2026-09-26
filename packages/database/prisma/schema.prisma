@@ -6307,7 +6307,23 @@ model TicketMailTemplate {
   subject String
 
   /// A levél törzse, `{{valtozo}}` alakú helyekkel.
+  ///
+  /// Ha `bodyHtml` ki van töltve, ez a mező a HTML-ből GENERÁLT szöveges
+  /// változat (a mentés állítja elő): a levél `text/plain` része akkor is a
+  /// behelyettesített HTML-ből készül, nem ebből. Azért tárolt mégis, hogy egy
+  /// kód-visszaállítás után is értelmes szöveges levél menjen ki.
   body String
+
+  /// A formázott törzs (Balázs kérése, 2026-09-26 14:10, Acropora OS szál).
+  /// A `@acropora/rich-text` tisztítóján átment HTML, ugyanazokkal a
+  /// `{{valtozo}}` helyekkel.
+  ///
+  /// NULLÁZHATÓ, ÉS A NULL A MAI VISELKEDÉS: ilyenkor a levél bájtra
+  /// ugyanaz, egyrészes `text/plain`. Kitöltve a levél
+  /// `multipart/alternative` lesz. A meglévő sorok NULL-t kapnak, tehát a
+  /// kimenő levelük a migrációtól nem változik -- az átállás sablononként,
+  /// az új szerkesztőben való mentéssel történik.
+  bodyHtml String?
 
   updatedByUserId String?
   createdAt       DateTime @default(now())
