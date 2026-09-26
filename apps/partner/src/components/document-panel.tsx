@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  Icon,
   PilotButton,
   PilotCard,
   PilotCardHeader,
@@ -9,6 +10,7 @@ import {
   PilotInput,
 } from "@acropora/ui";
 
+import { saveBlob, showBlob, type FileSurface } from "@/lib/file-download";
 import { Message } from "./ticket-list";
 
 /**
@@ -31,6 +33,17 @@ import { Message } from "./ticket-list";
  * `PilotInput`-nak nincs ilyen propja, ezért a korlátot az `onChange`
  * maga kényszeríti ki (`value.slice(0, 1000)`) -- ugyanaz a minta, mint a
  * munkalap-adatlap aláírókód-mezőjénél (#1129).
+ *
+ * === LETÖLTÉS ÉS MEGNYITÁS (2026-09-26, Balázs kérése) ===
+ *
+ * Eddig CSAK a képek töltődtek be; minden más tételnél (a munkalap PDF-je is)
+ * a fájlnév állt sima szövegként, se link, se gomb. Mostantól minden tétel,
+ * aminek nincs előnézete (nem kép, vagy a kép nem töltődött be), „Letöltés"
+ * és „Megnyitás" gombot kap. A fájlt ugyanaz a `loadBlob` hozza, mint a
+ * képet, tehát a hitelesítés ugyanúgy megy, és a panel mind a három lapon
+ * (hibajegy, munkalap, eszköz) egyszerre kapja meg.
+ *
+ * A nem-kép tételeket a panel NEM tölti le előre: csak kattintásra.
  */
 
 type DocumentItem = {
@@ -64,6 +77,9 @@ export function DocumentPanel<T extends DocumentItem>({
     mutatna. Az azonosító a `urls` térképet is ugyanúgy feloldja.
   */
   const [nagyitott, setNagyitott] = useState<string | null>(null);
+  /** Képek, amelyek előnézete nem töltődött be: ezek is gombot kapnak. */
+  const [failed, setFailed] = useState<Record<string, true>>({});
+  const [busy, setBusy] = useState<string | null>(null);
   const loader = useRef(loadBlob);
   loader.current = loadBlob;
 
@@ -79,7 +95,9 @@ export function DocumentPanel<T extends DocumentItem>({
             created.push(url);
             if (active) setUrls((current) => ({ ...current, [item.id]: url }));
           } catch {
-            // A failed image remains downloadable through the browser's file flow.
+            // A failed preview falls back to the download buttons.
+            if (active)
+              setFailed((current) => ({ ...current, [item.id]: true }));
           }
         }),
     );
@@ -98,6 +116,31 @@ export function DocumentPanel<T extends DocumentItem>({
     window.addEventListener("keydown", kezelo);
     return () => window.removeEventListener("keydown", kezelo);
   }, [nagyitott]);
+
+  /*
+    A MEGNYITÁS LAPJA A KATTINTÁSKOR NYÍLIK, A LETÖLTÉS ELŐTT: egy `await`
+    utáni `window.open` már nem a felhasználó mozdulata, és a felugró-ablak
+    tiltó elnyelné. Ha így is `null` jön, a `showBlob` letöltésre vált.
+  */
+  async function fetchFile(item: T, mode: "save" | "open") {
+    const tab = mode === "open" ? window.open("", "_blank") : null;
+    if (tab) tab.opener = null;
+    setBusy(item.id);
+    setError(null);
+    try {
+      const blob = await loader.current(item.id);
+      if (mode === "open")
+        showBlob(tab, blob, item.contentType, item.fileName, browserSurface);
+      else saveBlob(blob, item.fileName, browserSurface);
+    } catch (cause) {
+      tab?.close();
+      setError(
+        cause instanceof Error ? cause.message : "A fájl nem tölthető le.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -145,8 +188,36 @@ export function DocumentPanel<T extends DocumentItem>({
                       className="aspect-[4/3] w-full rounded-lg bg-pilot-grey-100 object-cover"
                     />
                   </button>
+                ) : !item.contentType.startsWith("image/") ||
+                  failed[item.id] ? (
+                  <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-3 rounded-lg bg-pilot-grey-100 p-3">
+                    <Icon
+                      name="file-text"
+                      size={28}
+                      className="text-pilot-grey-400"
+                    />
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <PilotButton
+                        variant="secondary"
+                        disabled={busy === item.id}
+                        onClick={() => void fetchFile(item, "save")}
+                        aria-label={`${item.fileName} letöltése`}
+                      >
+                        <Icon name="download" size={13} />
+                        Letöltés
+                      </PilotButton>
+                      <PilotButton
+                        variant="ghost"
+                        disabled={busy === item.id}
+                        onClick={() => void fetchFile(item, "open")}
+                        aria-label={`${item.fileName} megnyitása új lapon`}
+                      >
+                        Megnyitás
+                      </PilotButton>
+                    </div>
+                  </div>
                 ) : (
-                  <p className="text-sm text-pilot-grey-500">{item.fileName}</p>
+                  <div className="aspect-[4/3] w-full rounded-lg bg-pilot-grey-100" />
                 )}
                 <strong className="text-sm text-pilot-grey-700">
                   {item.fileName}
@@ -218,6 +289,16 @@ export function DocumentPanel<T extends DocumentItem>({
     </PilotCard>
   );
 }
+
+/** The real browser behind `saveBlob`/`showBlob`; the helpers take it injected. */
+const browserSurface: FileSurface = {
+  createObjectURL: (blob) => URL.createObjectURL(blob),
+  revokeObjectURL: (url) => URL.revokeObjectURL(url),
+  createAnchor: () => document.createElement("a"),
+  later: (run, ms) => {
+    window.setTimeout(run, ms);
+  },
+};
 
 /*
   A NAGYÍTOTT KÉP SZÖVEGES NEVE. Külön függvény, mert a `null` azonosítót a
