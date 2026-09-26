@@ -33,6 +33,8 @@ export {
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
   renderMailTemplate,
+  renderMailTemplateHtml,
+  splitTemplateVariables,
   unknownTemplateVariables,
 } from "./mail-template.js";
 export type {

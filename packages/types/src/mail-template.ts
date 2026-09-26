@@ -41,6 +41,13 @@ export interface MailTemplateVariable {
   readonly name: string;
   /** Mit tesz a helyere, emberi szoval -- ez megy ki a szerkeszto melle. */
   readonly description: string;
+  /**
+   * `"link"`: az ertek egy webcim, tehat a formazott szerkesztoben link
+   * CELJAKENT is beilleszheto (`<a href="{{jegy_linkje}}">`). Hianyzo ertek:
+   * sima szoveg. A mezo a listan all, nem a feluleten, hogy a tisztito es a
+   * szerkeszto ugyanabbol tudja, melyik nev lehet `href`.
+   */
+  readonly kind?: "link";
 }
 
 /**
@@ -120,6 +127,7 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
    */
   {
     name: "jegy_linkje",
+    kind: "link",
     description:
       "A hibajegy belső oldalának linkje. Üres, ha a rendszer nem ismeri a saját webcímét.",
   },
@@ -153,6 +161,7 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
   },
   {
     name: "munkalap_linkje",
+    kind: "link",
     description:
       "A munkalap linkje a PARTNER-PORTÁLON (nem a belső felületen). Üres, ha a rendszer nem ismeri a partner-portál webcímét.",
   },
@@ -179,6 +188,7 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
    */
   {
     name: "munkalap_belso_linkje",
+    kind: "link",
     description:
       "A munkalap belső oldalának linkje. Üres, ha a rendszer nem ismeri a saját webcímét.",
   },
@@ -308,17 +318,116 @@ export function renderMailTemplate(
   template: string,
   values: MailTemplateValues,
 ): MailTemplateRender {
+  return behelyettesit(template, values, (ertek) => ertek);
+}
+
+/**
+ * A KOZOS MAG: EGY MINTA, EGY ISMERETLEN-NEV SZABALY. A ket nyilvanos fuggveny
+ * csak abban ter el, mit tesz az ertekkel, mielott beirja -- ha ket kulon
+ * `replace` allna itt, a szoveges es a HTML level mast tartana ismeretlennek.
+ */
+function behelyettesit(
+  template: string,
+  values: MailTemplateValues,
+  alakit: (ertek: string, helyzet: { tagon: boolean }) => string,
+): MailTemplateRender {
   const ismeretlen: string[] = [];
-  const text = template.replace(HELY, (_egesz, nev: string) => {
-    if (!Object.prototype.hasOwnProperty.call(values, nev)) {
-      ismeretlen.push(nev);
-      return "";
-    }
-    return values[nev] ?? "";
-  });
+  const text = template.replace(
+    HELY,
+    (_egesz, nev: string, hely: number, egesz: string) => {
+      if (!Object.prototype.hasOwnProperty.call(values, nev)) {
+        ismeretlen.push(nev);
+        return "";
+      }
+      return alakit(values[nev] ?? "", { tagon: tagonBelul(egesz, hely) });
+    },
+  );
   return ismeretlen.length
     ? { ok: false, unknown: [...new Set(ismeretlen)] }
     : { ok: true, text };
+}
+
+/**
+ * A HELY EGY TAG BELSEJEBEN ALL-E (`<a href="{{...}}">`), VAGY SZOVEGBEN.
+ *
+ * Tisztitott HTML-en megbizhato: ott a szovegben allo `<` es `>` mar
+ * `&lt;`/`&gt;`, tehat a legutolso nyers `<` es `>` sorrendje eldonti.
+ */
+function tagonBelul(html: string, hely: number): boolean {
+  return html.lastIndexOf("<", hely) > html.lastIndexOf(">", hely);
+}
+
+function escapeHtml(ertek: string): string {
+  return ertek
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * A FORMAZOTT (HTML) SABLON BEHELYETTESITESE.
+ *
+ * Balazs kerese, 2026-09-26 14:10: HTML szerkeszto a levelsablonokhoz.
+ *
+ * AZ ERTEK SZOVEG, NEM HTML. Egy hibajegy cime (`Szuro <b> & tsa`) vagy egy
+ * `"` a bejelentesben kulonben HTML-kent futna, illetve egy `href` attributumot
+ * torne el. Ezert minden ertek escape-elve kerul be.
+ *
+ * A TOBBSOROS ERTEK (`tetelek`, `jegy_leirasa`) SZOVEGBEN `<br>`-t kap, kulonben
+ * a HTML egy sorba vonna. TAGON BELUL (a link cime) a sortores szokoz lesz: egy
+ * `<br>` egy attributumban nem sortores, hanem sertett jeloles.
+ *
+ * A KIMENET NEM TISZTITOTT. A hivo (a kuldes) utana a `sanitizeRichHtml`-t
+ * futtatja, ES AZ DOBJA KI a nem `http(s)`/`mailto` linket, ami egy ertekbol
+ * jott. Ez a fuggveny tiszta, fuggoseg nelkuli csomagban all, a tisztito nem.
+ */
+export function renderMailTemplateHtml(
+  template: string,
+  values: MailTemplateValues,
+): MailTemplateRender {
+  return behelyettesit(template, values, (ertek, { tagon }) => {
+    const biztos = escapeHtml(ertek);
+    return tagon
+      ? biztos.replace(/\r?\n/g, " ")
+      : biztos.replace(/\r?\n/g, "<br>");
+  });
+}
+
+/**
+ * A FORMAZAS ALTAL KETTEVAGOTT VALTOZOK.
+ *
+ * Ha egy helyorzo belsejere formazas kerul (`{{jegy<strong>szam</strong>}}`),
+ * a `HELY` minta a HTML-en NEM illeszkedik: a level a nevet NYERSEN kuldene ki,
+ * es az `unknownTemplateVariables` sem szolna, mert nem lat valtozot. Ez a
+ * behelyettesites legrosszabb alakja -- nema modositas --, csak uj uton.
+ *
+ * A szerkeszto a valtozot atomkent kezeli, tehat onnan ilyen nem jon. De a
+ * vegpont kozvetlenul is hivhato, es a kliens nem kontroll: ezt a SZERVER
+ * kerdezi menteskor.
+ *
+ * A MERES: a tagok nelkuli szovegben talalt helyorzok kozul melyik NINCS meg
+ * ugyanannyiszor a HTML szoveg-reszeiben (tagon kivul). A tagon belulieket
+ * (`href`) szandekosan nem szamoljuk: azok a szovegbol eltunnek, nem
+ * keletkeznek.
+ */
+export function splitTemplateVariables(html: string): readonly string[] {
+  const szamol = (nevek: string[]) => {
+    const db = new Map<string, number>();
+    for (const n of nevek) db.set(n, (db.get(n) ?? 0) + 1);
+    return db;
+  };
+  const epek = szamol(
+    [...html.matchAll(HELY)]
+      .filter((m) => !tagonBelul(html, m.index))
+      .map((m) => m[1] as string),
+  );
+  const szoveg = html.replace(/<[^>]*>/g, "");
+  const latszo = szamol([...szoveg.matchAll(HELY)].map((m) => m[1] as string));
+  return [...latszo]
+    .filter(([nev, db]) => db > (epek.get(nev) ?? 0))
+    .map(([nev]) => nev);
 }
 
 /**
