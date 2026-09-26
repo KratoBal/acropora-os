@@ -4,7 +4,11 @@ export {
   RICH_TEXT_VARIABLE_NAME,
   type RichTextTag,
 } from "./schema.js";
-export { sanitizeRichHtml, type SanitizeRichHtmlOptions } from "./sanitize.js";
+export {
+  isAllowedRichHref,
+  sanitizeRichHtml,
+  type SanitizeRichHtmlOptions,
+} from "./sanitize.js";
 export { richHtmlToText } from "./to-text.js";
 export {
   escapeHtml,

@@ -28,6 +28,12 @@ export interface MailTemplateResponse {
   subject: string;
   body: string;
   /**
+   * A FORMAZOTT TORZS, vagy `null`, ha a sablon (meg) szoveges. `null` eseten a
+   * szerkeszto a `body`-t alakitja at -- a szerver nem tarol atalakitott
+   * valtozatot, amig senki nem ment.
+   */
+  bodyHtml: string | null;
+  /**
    * AZ ALAPÉRTELMEZÉS MINDIG ITT VAN, AKKOR IS, HA MÁR MENTETTEK.
    *
    * A `subject` és a `body` a HATÁLYOS szöveget hordozza (tárolt vagy
@@ -65,7 +71,7 @@ export const mailTemplatesApi = {
   save(
     token: string,
     id: string,
-    input: { subject: string; body: string },
+    input: { subject: string; body: string; bodyHtml?: string | null },
   ): Promise<{ ok: true }> {
     return apiRequest<{ ok: true }>(
       `/notifications/mail-templates/${encodeURIComponent(id)}`,
