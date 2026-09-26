@@ -537,3 +537,31 @@ describe("HttpMedusaAdminClient.listOrders", () => {
     assert.equal(eredmeny.truncated, false);
   });
 });
+
+describe("HttpMedusaAdminClient.listOrders tetelsorai", () => {
+  /**
+   * A `*items` NELKUL A VALASZ TETELEK NELKUL JON, es a fogyasztas csendben
+   * nullat vonna le. Ezt a kerés alakja donti el, nem a valasz -- ezert itt
+   * merjuk, es nem a szolgaltatasban.
+   */
+  it("a keres KERI a tetelsorokat", async () => {
+    const { client, urls } = orderClientReturning([]);
+
+    await client.listOrders(null);
+
+    /**
+     * A MINTA MIND A KET KODOLAST ENGEDI, ES EZ MERESBOL JON, NEM OVATOSSAGBOL.
+     *
+     * Az elso alakom `/%2A?items/` volt, amiben a `?` CSAK az `A`-ra vonatkozik,
+     * tehat a `%2` kotelezo maradt. Merve: az `URLSearchParams` a csillagot NEM
+     * kodolja (`fields=id%2Cstatus%2C*items`), tehat az allitasom a helyes kod
+     * mellett bukott el. Ugyanaz a csalad, mint a tul szuk szohatar: a minta
+     * vadolta a kodot a sajat hibaja helyett.
+     */
+    assert.match(
+      urls[0]!,
+      /(\*|%2A)items/,
+      "a tetel-relaciot kifejezetten kerni kell",
+    );
+  });
+});

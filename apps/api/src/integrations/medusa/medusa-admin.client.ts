@@ -507,6 +507,29 @@ export const VARIANT_INVENTORY_FIELDS = [
  * sem lehet kotelezo. Aki kotelezove teszi, az egy olyan allitast tesz a
  * tipusba, amit a kulso rendszer nem garantal.
  */
+/**
+ * EGY TETELSOR A RENDELESBOL, ANNYI MEZOVEL, AMENNYIT A FOGYASZTAS HASZNAL.
+ *
+ * A `variant_sku` a JOIN KULCS a mi valtozatunkhoz -- es a szerzodesben
+ * NULLAZHATO, tehat itt sem lehet kotelezo. A ket eset, ami mogotte all, KULON
+ * teendot ad, es a `variant_id` valasztja szet oket:
+ *
+ *   variant_id null   egyedi, kezzel felvett tetel: nincs mibol fogyasztani,
+ *                     es ez NEM hiba
+ *   variant_id megvan, sku null
+ *                     van valtozat, de nincs mihez kotni nalunk: EZ hiba, es
+ *                     nem szabad csendben atlepni
+ *
+ * A megkulonboztetes azert all itt a tipusban, mert e nelkul a ket eset
+ * ugyanugy nez ki (hianyzo cikkszam), es a masodik orokre lathatatlan maradna.
+ */
+export interface MedusaOrderLineRow {
+  id: string;
+  variant_id: string | null;
+  variant_sku: string | null;
+  quantity: number;
+}
+
 export interface MedusaOrderRow {
   id: string;
   display_id?: number;
@@ -517,6 +540,13 @@ export interface MedusaOrderRow {
   created_at: string;
   updated_at: string;
   sales_channel_id: string | null;
+  /**
+   * A tetelsorok. A Medusa a relaciot csak akkor adja vissza, ha a `fields`
+   * kifejezetten keri -- ezert a hianya NEM azt jelenti, hogy a rendelesnek
+   * nincs tetele, hanem hogy rosszul kerdeztunk. A hivo ezt nem tudja
+   * megkulonboztetni, ezert a lekerdezes MINDIG keri.
+   */
+  items?: MedusaOrderLineRow[];
 }
 
 export interface MedusaOrderListResult {
@@ -1157,8 +1187,13 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
 
   async listOrders(sinceIso: string | null): Promise<MedusaOrderListResult> {
     const params = new URLSearchParams({
+      /**
+       * A `*items` a RELACIOT keri be, nem egy mezot: a Medusa a kapcsolodo
+       * sorokat csak kifejezett keresre adja vissza. Nelkule a valasz
+       * teteleket NEM tartalmazna, es a fogyasztas csendben nullat vonna le.
+       */
       fields:
-        "id,display_id,status,email,currency_code,total,created_at,updated_at,sales_channel_id",
+        "id,display_id,status,email,currency_code,total,created_at,updated_at,sales_channel_id,*items",
       limit: String(ORDER_LIST_LIMIT),
       order: "created_at",
     });
