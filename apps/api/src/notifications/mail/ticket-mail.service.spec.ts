@@ -5,7 +5,6 @@ import type { MailSender, OutgoingMail } from "./mail.port.js";
 import type {
   TicketMailContext,
   TicketMailRepository,
-  StoredMailTemplate,
 } from "./ticket-mail.repository.js";
 import { TicketMailService } from "./ticket-mail.service.js";
 
@@ -31,7 +30,8 @@ const JEGY: TicketMailContext = {
 
 function szolgaltatas(be: {
   context?: TicketMailContext | null;
-  template?: StoredMailTemplate | null;
+  /** A `bodyHtml` elhagyhato: hianyaban szoveges sablon, mint a valodi `null`. */
+  template?: { subject: string; body: string; bodyHtml?: string | null } | null;
   mode?: string;
   /**
    * A KET UT KULCSA KULON, ES A SPEC ALAPERTELMEZESE `live` -- A TERMELESE NEM.
@@ -61,7 +61,8 @@ function szolgaltatas(be: {
     "context" | "template" | "recordNotification" | "saveTemplate"
   > = {
     context: async () => (be.context === undefined ? JEGY : be.context),
-    template: async () => be.template ?? null,
+    template: async () =>
+      be.template ? { bodyHtml: null, ...be.template } : null,
     recordNotification: async (input) => {
       naplo.push({ note: input.note });
     },
@@ -542,6 +543,8 @@ describe("a nyito ertesitese levelben", () => {
  * a `serviceJobId`-tol fuggoen), tehat kulon, egyszerubb szereloallvanyt kap.
  */
 function alairasSzolgaltatas(be: {
+  /** 2026-09-26 ota: a HTML-ag allitasaihoz. Hianyaban `null`, mint eddig. */
+  template?: { subject: string; body: string; bodyHtml?: string | null } | null;
   mode?: string;
   sendForSignature?: string;
   redirect?: string;
@@ -555,7 +558,8 @@ function alairasSzolgaltatas(be: {
     "context" | "template" | "recordNotification" | "saveTemplate"
   > = {
     context: async () => null,
-    template: async () => null,
+    template: async () =>
+      be.template ? { bodyHtml: null, ...be.template } : null,
     recordNotification: async (input) => {
       naplo.push({ note: input.note });
     },
@@ -738,7 +742,7 @@ describe("a munkalap kikuldese alairasra", () => {
  * fejlecet). Egy kozos helyettes csak zajt vinne be.
  */
 function anyagigenySzolgaltatas(be: {
-  template?: { subject: string; body: string } | null;
+  template?: { subject: string; body: string; bodyHtml?: string | null } | null;
   mode?: string;
   created?: string;
   received?: string;
@@ -747,7 +751,8 @@ function anyagigenySzolgaltatas(be: {
 }) {
   const kuldott: OutgoingMail[] = [];
   const repository: Pick<TicketMailRepository, "template"> = {
-    template: async () => be.template ?? null,
+    template: async () =>
+      be.template ? { bodyHtml: null, ...be.template } : null,
   };
   const sender: MailSender | null =
     be.sender === undefined
@@ -909,6 +914,173 @@ describe("az anyagigény levele -- beérkezéskor", () => {
       recipients: [{ email: "kero@example.invalid" }],
     });
     assert.deepEqual(eredmeny, { kind: "skipped", reason: "path-off" });
+    assert.deepEqual(kuldott, []);
+  });
+});
+
+/**
+ * A FORMAZOTT (HTML) SABLON A NEGY HIBAJEGY-UTON (Balazs kerese, 2026-09-26).
+ *
+ * MIND A NEGY UTAT KULON MERI, nem egyet: a `renderMailBody` egy fuggveny, de
+ * a HIVASA negy helyen all, es az a hely, amelyik kimarad, csendben szoveges
+ * levelet kuldene -- semmi nem hibazna tole.
+ */
+describe("formazott sablon a hibajegy-leveleknel", () => {
+  it("szoveges sablonnal a levelnek NINCS html kulcsa (nem undefined, hanem hianyzik)", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      template: { subject: "{{jegyszam}}", body: "Kedves {{cimzett}}!" },
+    });
+    await service.deliverServiceJobOpened({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+      recipients: [{ email: "felelos@example.invalid" }],
+    });
+    assert.equal(kuldott.length, 1);
+    assert.equal("html" in (kuldott[0] ?? {}), false);
+  });
+
+  it("WORKSHEET_SIGNED: a HTML a kodbol jovo keretben all, a szoveg a regi alakban", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      webUrl: "https://os.acropora.hu",
+      template: {
+        subject: "{{jegyszam}}",
+        body: "generalt",
+        bodyHtml:
+          '<p><strong>Aláírták</strong> a <span data-variable="jegyszam">{{jegyszam}}</span> lapját. <a href="{{jegy_linkje}}">Megnyitás</a></p>',
+      },
+    });
+    await service.deliverWorksheetSigned({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+    });
+    const level = kuldott[0];
+    assert.ok(level?.html, "a levelnek HTML resze kell legyen");
+    assert.equal(
+      level.html,
+      '<p>Kedves Nyitó Nóra!</p><p><strong>Aláírták</strong> a <span data-variable="jegyszam">HJ-2026-001</span> lapját. <a href="https://os.acropora.hu/szerviz/hibajegyek/job-1">Megnyitás</a></p><p>Hibajegy száma: HJ-2026-001<br>Tárgya: Szivattyú zúg</p><p>A bejelentés szövege:<br>Reggel óta hangos.</p><p>Üdvözlettel:<br>Acropora Kft.</p>',
+    );
+    assert.equal(
+      level.text,
+      [
+        "Kedves Nyitó Nóra!",
+        "",
+        "Aláírták a HJ-2026-001 lapját. Megnyitás (https://os.acropora.hu/szerviz/hibajegyek/job-1)",
+        "",
+        "Hibajegy száma: HJ-2026-001",
+        "Tárgya: Szivattyú zúg",
+        "",
+        "A bejelentés szövege:",
+        "Reggel óta hangos.",
+        "",
+        "Üdvözlettel:",
+        "Acropora Kft.",
+      ].join("\n"),
+    );
+  });
+
+  /**
+   * A JEGY CIME KULSO ADAT, ES A HTML-BE ESCAPE-ELVE KERUL. Enelkul egy
+   * `<img onerror>` a cimben a felelos levelezojeben jelolesnek futna.
+   */
+  it("SERVICE_JOB_OPENED: a jegy cime escape-elve all a HTML-ben", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      context: { ...JEGY, title: '<img src=x onerror="alert(1)"> & zúg' },
+      template: {
+        subject: "{{jegyszam}}",
+        body: "generalt",
+        bodyHtml: "<p>Tárgy: {{jegy_targya}}</p>",
+      },
+    });
+    await service.deliverServiceJobOpened({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+      recipients: [{ email: "felelos@example.invalid" }],
+    });
+    assert.equal(
+      kuldott[0]?.html,
+      "<p>Tárgy: &lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; zúg</p>",
+    );
+    assert.equal(
+      kuldott[0]?.text,
+      'Tárgy: <img src=x onerror="alert(1)"> & zúg',
+    );
+  });
+
+  it("WORKSHEET_SEND_FOR_SIGNATURE: a link-valtozo href-kent kap erteket", async () => {
+    const { service, kuldott } = alairasSzolgaltatas({
+      mode: "live",
+      partnerUrl: "https://ticket.acropora.hu",
+      template: {
+        subject: "{{munkalap_szama}}",
+        body: "generalt",
+        bodyHtml: '<p><a href="{{munkalap_linkje}}">Aláírás</a></p>',
+      },
+    });
+    await service.deliverWorksheetSendForSignature(ALAIRAS_BEMENET);
+    assert.match(
+      kuldott[0]?.html ?? "",
+      /^<p><a href="https:\/\/ticket\.acropora\.hu\/[^"]+">Aláírás<\/a><\/p>$/,
+    );
+  });
+
+  /**
+   * URES LINKNEL (nincs PARTNER_URL) a `href` KIESIK, a felirat marad. Egy
+   * `href=""` a levelezoben a SAJAT oldalra mutatna, ami rosszabb a semminel.
+   */
+  it("ures link-ertekkel a href kiesik, a felirat sima szoveg", async () => {
+    const { service, kuldott } = alairasSzolgaltatas({
+      mode: "live",
+      template: {
+        subject: "{{munkalap_szama}}",
+        body: "generalt",
+        bodyHtml: '<p><a href="{{munkalap_linkje}}">Aláírás</a></p>',
+      },
+    });
+    await service.deliverWorksheetSendForSignature(ALAIRAS_BEMENET);
+    assert.equal(kuldott[0]?.html, "<p><a>Aláírás</a></p>");
+    assert.equal(kuldott[0]?.text, "Aláírás");
+  });
+
+  it("MATERIAL_REQUEST_CREATED: a tobbsoros tetel-lista <br>-rel all", async () => {
+    const { service, kuldott } = anyagigenySzolgaltatas({
+      template: {
+        subject: "{{munkalap_szama}}",
+        body: "generalt",
+        bodyHtml: "<p>Tételek:<br>{{tetelek}}</p>",
+      },
+    });
+    await service.deliverMaterialRequestCreated({
+      materialRequestId: "mr-1",
+      worksheetNumber: "BIO-2026-001",
+      worksheetLink: "",
+      requesterName: "Szerelő Sándor",
+      itemsText: "- könyök: 2 db\n- cső: 1 m",
+      recipients: [{ email: "beszerzo@example.invalid" }],
+    });
+    assert.equal(
+      kuldott[0]?.html,
+      "<p>Tételek:<br>- könyök: 2 db<br>- cső: 1 m</p>",
+    );
+    assert.equal(kuldott[0]?.text, "Tételek:\n- könyök: 2 db\n- cső: 1 m");
+  });
+
+  it("ismeretlen valtozo a HTML-ben: nem kuld, es megnevezi", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      template: {
+        subject: "{{jegyszam}}",
+        body: "Kedves {{cimzett}}!",
+        bodyHtml: "<p>{{cimzet}}</p>",
+      },
+    });
+    const eredmeny = await service.deliverWorksheetSigned({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+    });
+    assert.deepEqual(eredmeny, { kind: "failed", unknown: ["cimzet"] });
     assert.deepEqual(kuldott, []);
   });
 });

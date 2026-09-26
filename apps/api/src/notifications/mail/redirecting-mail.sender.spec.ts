@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { sanitizeRichHtml } from "@acropora/rich-text";
+
 import type { MailSender, OutgoingMail } from "./mail.port.js";
 import {
   RedirectingMailSender,
@@ -178,5 +180,42 @@ describe("a levél-átirányító burok", () => {
   it("a fejléc-blokk megmondja a valódi címzettek DARABSZÁMÁT is", () => {
     const blokk = redirectHeader(["a@b.hu", "c@d.hu"]);
     assert.match(blokk, /\(2\)/);
+  });
+});
+
+/**
+ * A FORMAZOTT LEVEL IS ATIRANYITHATO (2026-09-26). A levelezo a HTML
+ * alternativat mutatja, tehat ha a figyelmezteto blokk csak a szovegben allna,
+ * a probalevel olvasoja nem latna, kinek ment volna.
+ */
+describe("a levél-átirányító burok, formázott levéllel", () => {
+  it("a figyelmeztető blokk a HTML ELEJÉRE is kerül, és a HTML tiszta marad", async () => {
+    const { belso, sender } = kuldo({
+      TICKET_MAIL_REDIRECT_TO: "proba@acropora.hu",
+    });
+    await sender.send({
+      ...LEVEL,
+      html: "<p>A hibajegy <strong>lezárult</strong>.</p>",
+    });
+
+    const html = belso.kapott[0]?.html ?? "";
+    assert.ok(html.startsWith("<p>=== ÁTIRÁNYÍTOTT PRÓBALEVÉL ===<br>"), html);
+    assert.ok(html.includes("vevo@partner.hu"));
+    assert.ok(
+      html.endsWith("<hr><p>A hibajegy <strong>lezárult</strong>.</p>"),
+    );
+    /*
+      A MIME-EPITO A NEM TISZTA HTML-RE DOB. Ha a burok blokkja nem menne at a
+      tisztiton valtozatlanul, minden atiranyitott formazott level elhasalna.
+    */
+    assert.equal(sanitizeRichHtml(html), html);
+  });
+
+  it("szöveges levélnél a burok NEM tesz hozzá html kulcsot", async () => {
+    const { belso, sender } = kuldo({
+      TICKET_MAIL_REDIRECT_TO: "proba@acropora.hu",
+    });
+    await sender.send(LEVEL);
+    assert.equal("html" in (belso.kapott[0] ?? {}), false);
   });
 });

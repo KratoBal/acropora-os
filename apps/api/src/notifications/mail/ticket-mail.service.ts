@@ -2,6 +2,7 @@ import { renderMailTemplate } from "@acropora/types";
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
 import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
+import { mailBodyFields, renderMailBody } from "./mail-body.js";
 import { MAIL_SENDER, type MailSender } from "./mail.port.js";
 import { headerSafe } from "./mail-header.js";
 import { internalTicketLink } from "./ticket-link.js";
@@ -282,7 +283,7 @@ export class TicketMailService {
     };
 
     const targy = renderMailTemplate(sablon.subject, ertekek);
-    const torzs = renderMailTemplate(sablon.body, ertekek);
+    const torzs = renderMailBody(sablon, ertekek);
     if (!targy.ok || !torzs.ok) {
       /*
         ISMERETLEN VALTOZONAL NEM KULDUNK. Se ures stringgel, se nyers
@@ -305,6 +306,7 @@ export class TicketMailService {
       title: context.title,
       description: context.description,
       event: torzs.text,
+      ...(torzs.html === undefined ? {} : { eventHtml: torzs.html }),
       freeText: input.freeText ?? null,
     });
 
@@ -328,7 +330,7 @@ export class TicketMailService {
       */
       to: [decision.to],
       subject: headerSafe(targy.text),
-      text: level.text,
+      ...mailBodyFields(level),
     });
 
     await this.repository.recordNotification({
@@ -419,7 +421,7 @@ export class TicketMailService {
     };
 
     const targy = renderMailTemplate(sablon.subject, ertekek);
-    const torzs = renderMailTemplate(sablon.body, ertekek);
+    const torzs = renderMailBody(sablon, ertekek);
     if (!targy.ok || !torzs.ok) {
       const ismeretlen = [
         ...(targy.ok ? [] : targy.unknown),
@@ -435,7 +437,7 @@ export class TicketMailService {
     await this.sender.send({
       to: [...decision.to],
       subject: headerSafe(targy.text),
-      text: torzs.text,
+      ...mailBodyFields(torzs),
     });
 
     await this.repository.recordNotification({
@@ -535,7 +537,7 @@ export class TicketMailService {
     };
 
     const targy = renderMailTemplate(sablon.subject, ertekek);
-    const torzs = renderMailTemplate(sablon.body, ertekek);
+    const torzs = renderMailBody(sablon, ertekek);
     if (!targy.ok || !torzs.ok) {
       const ismeretlen = [
         ...(targy.ok ? [] : targy.unknown),
@@ -550,7 +552,7 @@ export class TicketMailService {
     await this.sender.send({
       to: [input.signerEmail],
       subject: headerSafe(targy.text),
-      text: torzs.text,
+      ...mailBodyFields(torzs),
     });
 
     if (input.serviceJobId)
@@ -599,7 +601,7 @@ export class TicketMailService {
     const tarolt = await this.repository.template(input.eventId);
     const sablon = tarolt ?? input.defaultTemplate;
     const targy = renderMailTemplate(sablon.subject, input.values);
-    const torzs = renderMailTemplate(sablon.body, input.values);
+    const torzs = renderMailBody(sablon, input.values);
     if (!targy.ok || !torzs.ok) {
       const ismeretlen = [
         ...(targy.ok ? [] : targy.unknown),
@@ -615,7 +617,7 @@ export class TicketMailService {
     await this.sender.send({
       to: [...decision.to],
       subject: headerSafe(targy.text),
-      text: torzs.text,
+      ...mailBodyFields(torzs),
     });
     return { kind: "sent" };
   }

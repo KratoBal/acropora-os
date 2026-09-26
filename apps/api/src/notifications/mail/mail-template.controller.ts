@@ -7,11 +7,19 @@ import {
   Put,
   BadRequestException,
 } from "@nestjs/common";
-import { IsString, MaxLength, MinLength } from "class-validator";
+import {
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from "class-validator";
+import { richHtmlToText, sanitizeRichHtml } from "@acropora/rich-text";
 import {
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
   PERMISSIONS,
+  splitTemplateVariables,
   unknownTemplateVariables,
   type AuthenticatedUser,
 } from "@acropora/types";
@@ -36,10 +44,36 @@ import {
   WORKSHEET_SIGNED,
 } from "./ticket-mail.service.js";
 
+/** A szoveges torzs felso hatara -- a HTML-bol generalt valtozatra is all. */
+const BODY_MAX = 10_000;
+
 export class SaveMailTemplateDto {
   @IsString() @MinLength(1) @MaxLength(300) subject!: string;
-  @IsString() @MinLength(1) @MaxLength(10_000) body!: string;
+  /**
+   * HTML MENTESENEL FIGYELMEN KIVUL MARAD: a szerver a HTML-bol generalja. A
+   * mezo ettol meg kotelezo, hogy a mai, szoveges hivok valtozatlanul
+   * mukodjenek -- nekik ez az egyetlen torzs.
+   */
+  @IsString() @MinLength(1) @MaxLength(BODY_MAX) body!: string;
+  /**
+   * A FORMAZOTT TORZS. Hianyzo vagy `null`: szoveges sablon, es a korabbi HTML
+   * TORLODIK -- lasd `TicketMailRepository.saveTemplate`.
+   *
+   * 50 000, A SZOVEGES HATAR OTSZOROSE: a HTML jeloles a szovegnel
+   * bobeszedubb (`<p>`, `<span data-variable="...">`). A valodi korlat a
+   * generalt szovegen all (`BODY_MAX`), es azt a mentes kulon meri.
+   */
+  @IsOptional()
+  @ValidateIf((_objektum, ertek) => ertek !== null)
+  @IsString()
+  @MaxLength(50_000)
+  bodyHtml?: string | null;
 }
+
+/** A link fajtaju valtozok: csak ezek allhatnak `href`-ben. */
+const LINK_VALTOZOK = MAIL_TEMPLATE_VARIABLES.filter(
+  (v) => v.kind === "link",
+).map((v) => v.name);
 
 /**
  * AZ ESEMENYHEZ TARTOZO KEZDO SZOVEG.
@@ -111,6 +145,12 @@ export class MailTemplateController {
       source: tarolt ? "stored" : "default",
       ...(tarolt ?? alapertelmezes(id)),
       /*
+        KIFEJEZETTEN `null`, HA NINCS. Az alapertelmezesnek nincs HTML-je, es a
+        szerkesztonek tudnia kell, hogy a `body`-t kell-e atalakitania -- egy
+        hianyzo kulcs es egy `null` itt ugyanazt jelenti, de a `null` kiirva all.
+      */
+      bodyHtml: tarolt?.bodyHtml ?? null,
+      /*
         AZ ALAPERTELMEZES A TAROLT ERTEK MELLE MEGY, NEM HELYETTE.
 
         2026-09-21-ig a valasz a kettot EGYMAST KIZAROAN adta: vagy a tarolt
@@ -149,9 +189,13 @@ export class MailTemplateController {
       tud elcsuszni. Enelkul egy elgepelt nev csak a kovetkezo valodi kuldeskor
       bukna ki, amikor mar senki nem emlekszik ra, hogy a sablont atirtak.
     */
+    const torzs = input.bodyHtml
+      ? formazottTorzs(input.bodyHtml)
+      : { body: input.body, bodyHtml: null };
+
     const ismeretlen = [
       ...unknownTemplateVariables(input.subject),
-      ...unknownTemplateVariables(input.body),
+      ...unknownTemplateVariables(torzs.bodyHtml ?? torzs.body),
     ];
     if (ismeretlen.length)
       throw new BadRequestException(
@@ -161,9 +205,44 @@ export class MailTemplateController {
     await this.repository.saveTemplate({
       id,
       subject: input.subject,
-      body: input.body,
+      ...torzs,
       updatedByUserId: user.id,
     });
     return { ok: true };
   }
+}
+
+/**
+ * A FORMAZOTT TORZS MENTESE: TISZTITAS, KET ELLENORZES, ES A SZOVEGES VALTOZAT.
+ *
+ * A TISZTITAS ITT IS FUT, NEM CSAK KULDESKOR. A szerkeszto semaja nem kontroll
+ * (a vegpont kozvetlenul is hivhato), es a tarolt HTML-t a felulet vissza is
+ * tolti -- egy tisztitatlan sor a szerkesztoben is megjelenne.
+ *
+ * A LINK-VALTOZO MENTESKOR MEG HELYORZO (`href="{{jegy_linkje}}"`), tehat a
+ * tisztito nevesitve engedi at a link fajtajuakat. Kuldeskor mar nem: ott a
+ * helyorzo ki van cserelve.
+ */
+function formazottTorzs(nyers: string): { body: string; bodyHtml: string } {
+  const bodyHtml = sanitizeRichHtml(nyers, { hrefPlaceholders: LINK_VALTOZOK });
+
+  /*
+    A FORMAZAS ALTAL KETTEVAGOTT VALTOZO NEM MEHET AT. A HTML-en a minta nem
+    illeszkedik ra, tehat kuldeskor NYERSEN menne ki, es az ismeretlen-nev
+    ellenorzes sem latna -- a nevet ezert itt nevezzuk meg, nem a vevo
+    levelebol derul ki.
+  */
+  const kettevagott = splitTemplateVariables(bodyHtml);
+  if (kettevagott.length)
+    throw new BadRequestException(
+      `A formázás kettévágta ezt a változót: ${kettevagott.map((n) => `{{${n}}}`).join(", ")}. Töröld és illeszd be újra a változót.`,
+    );
+
+  const body = richHtmlToText(bodyHtml, { hrefPlaceholders: LINK_VALTOZOK });
+  if (!body.trim()) throw new BadRequestException("A levél törzse üres.");
+  if (body.length > BODY_MAX)
+    throw new BadRequestException(
+      `A levél szövege túl hosszú: ${body.length} karakter, a határ ${BODY_MAX}.`,
+    );
+  return { body, bodyHtml };
 }

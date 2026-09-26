@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@acropora/database": "workspace:*",
+    "@acropora/rich-text": "workspace:*",
     "@acropora/types": "workspace:*",
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",

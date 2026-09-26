@@ -16,9 +16,15 @@
  * bizalommal") pont azt a szemelyes erintettseget hamisitana meg, amiert a
  * mezo letezik.
  */
+import { escapeHtml } from "@acropora/rich-text";
 
 export interface TicketMailContent {
   readonly text: string;
+  /**
+   * A KERET HTML-IKRE, csak ha az esemeny-resz is HTML (`eventHtml`). Tisztitott
+   * toredek: a kodbol jovo reszek escape-elve, a sablon resze mar tisztan erkezik.
+   */
+  readonly html?: string;
 }
 
 /**
@@ -39,6 +45,11 @@ export function ticketMailContent(input: {
    * all. EGY mezo, nem keretrendszer.
    */
   event: string;
+  /**
+   * UGYANAZ AZ ESEMENY, FORMAZOTTAN -- ha a sablon HTML. Tisztitott toredek
+   * (`renderMailBody` kimenete). Hianyaban a level szoveges marad, a mai alakban.
+   */
+  eventHtml?: string;
   /**
    * AZ EMBER SZAVAI. ELHAGYHATO, es a hianya NEM hiba.
    *
@@ -71,5 +82,23 @@ export function ticketMailContent(input: {
 
   sorok.push("", "Üdvözlettel:", "Acropora Kft.");
 
-  return { text: sorok.join("\n") };
+  const text = sorok.join("\n");
+  if (input.eventHtml === undefined) return { text };
+
+  /*
+    A HTML KERET UGYANAZT A SORRENDET KOVETI, MINT A SZOVEGES -- es erre allitas
+    all: a HTML szoveges vetulete a fenti `text`. Ha a ketto elcsuszna, a
+    levelezo a HTML-t mutatja, a masik alternativa pedig mast mondana.
+  */
+  const bekezdes = (szoveg: string) =>
+    `<p>${escapeHtml(szoveg).replace(/\n/g, "<br>")}</p>`;
+  const html = [
+    bekezdes(`Kedves ${input.recipientName}!`),
+    input.eventHtml,
+    bekezdes(`Hibajegy száma: ${input.jobNumber}\nTárgya: ${input.title}`),
+    leiras ? bekezdes(`A bejelentés szövege:\n${leiras}`) : "",
+    szabad ? bekezdes(szabad) : "",
+    bekezdes("Üdvözlettel:\nAcropora Kft."),
+  ].join("");
+  return { text, html };
 }

@@ -5,6 +5,8 @@
  * (fejlec-injekcio, kodolas) egyseg-szinten merhetok. A Gmail-adapter ennyit
  * tesz hozza: elkuldi.
  */
+import { sanitizeRichHtml } from "@acropora/rich-text";
+
 import { hasHeaderInjection } from "./mail-header.js";
 import type { OutgoingMail } from "./mail.port.js";
 
@@ -94,10 +96,29 @@ function hatarjel(): string {
  * benne ugyanugy uj fejlecet nyitna. Ez a reteg NEM tisztit, hanem DOB,
  * ugyanabbol az okbol, ami a fajl tetejen all.
  */
+/**
+ * A FORMAZOTT TORZS KERETE. A torzs TOREDEK (`OutgoingMail.html`), a
+ * dokumentumot itt kapja meg.
+ *
+ * INLINE STILUS, `<style>` BLOKK NELKUL: tobb levelezo a `<head>` stilusait
+ * eldobja, az inline `style` attributumot megtartja. A keret csak betutipust
+ * es sorkozt ad; minden mas a tartalome.
+ */
+export function mailHtmlDocument(fragment: string): string {
+  return [
+    "<!DOCTYPE html>",
+    '<html><head><meta charset="utf-8"></head>',
+    '<body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1f2937;">',
+    fragment,
+    "</body></html>",
+  ].join("\n");
+}
+
 export function buildMimeMessage(
   mail: OutgoingMail,
   from: string,
   boundary: string = hatarjel(),
+  alternativeBoundary: string = hatarjel(),
 ): string {
   for (const cim of mail.to)
     if (hasHeaderInjection(cim))
@@ -141,10 +162,29 @@ export function buildMimeMessage(
   if (mail.to.length === 0) throw new MailBuildError("MAIL_NO_RECIPIENT");
 
   /*
+    A HTML TORZS TISZTITOTT KELL LEGYEN -- ES ITT NEM TISZTITUNK, HANEM DOBUNK.
+
+    Ugyanaz a ket-reteg, mint a fejleceknel: az ELSO reteg a kuldesi ut
+    (`renderMailBody`), ami a behelyettesites UTAN tisztit. Ez a reteg akkor
+    all, ha egy MASIK hivo nyers HTML-t ad at. Egy itt csendben megtisztitott
+    torzs elrejtene, hogy valaki kihagyta a tisztitast.
+
+    A MERES: a tisztito a sajat kimenetén nem valtoztat (allitas all ra a
+    `@acropora/rich-text` csomagban), tehat ami tiszta, az atmegy valtozatlanul.
+  */
+  if (mail.html !== undefined && sanitizeRichHtml(mail.html) !== mail.html)
+    throw new MailBuildError("MAIL_HTML_UNSANITIZED");
+
+  /*
     A TORZS BASE64-BEN MEGY. Ket okbol: az ekezetes szoveg igy nem serul a
-    kozbenso szervereken, es a hosszu sorok sem torik el. A `text/plain` pedig
-    nem izles: HTML-t NEM kuldunk, tehat nincs olyan ertek, amit escape-elni
-    kellene -- a felulet hianya erosebb vedelem, mint a helyes escape-eles.
+    kozbenso szervereken, es a hosszu sorok sem torik el.
+
+    2026-09-26-IG ITT AZ ALLT, HOGY "HTML-t NEM kuldunk ... a felulet hianya
+    erosebb vedelem, mint a helyes escape-eles". Balazs formazott levelet kert,
+    tehat a felulet mostantol letezik, ha a hivo `html`-t ad. A vedelem helye:
+    az ertekek escape-elese (`renderMailTemplateHtml`), a tisztitas a
+    behelyettesites utan (`renderMailBody`), es a fenti dobas. `html` NELKUL a
+    level tovabbra is kizarolag `text/plain`, bajtra a regi alakban.
   */
   const fejlec = [
     `From: ${from}`,
@@ -155,6 +195,36 @@ export function buildMimeMessage(
   const torzsBase64 = Buffer.from(mail.text, "utf8").toString("base64");
 
   /*
+    A SZOVEGES RESZ, VAGY -- HA VAN HTML -- A KET ALTERNATIVA EGYUTT.
+
+    A `text/plain` ELOL, a `text/html` UTOLSOKENT: az RFC 2046 szerint az
+    utolso alternativa a preferalt, tehat a HTML-t ertő levelezo azt mutatja,
+    a tobbi a szoveget. A belso hatarjel KULON veletlen ertek: egy kozos
+    elotagu jel nehany elemzonel a kulso resz vegenek latszana.
+  */
+  const szovegResz = [
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    torzsBase64,
+  ];
+  const torzsResz =
+    mail.html === undefined
+      ? szovegResz
+      : [
+          `Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`,
+          "",
+          `--${alternativeBoundary}`,
+          ...szovegResz,
+          `--${alternativeBoundary}`,
+          'Content-Type: text/html; charset="UTF-8"',
+          "Content-Transfer-Encoding: base64",
+          "",
+          Buffer.from(mailHtmlDocument(mail.html), "utf8").toString("base64"),
+          `--${alternativeBoundary}--`,
+        ];
+
+  /*
     CSATOLMANY NELKUL A LEVEL ALAKJA VALTOZATLAN.
 
     Ez nem takarekossag: a mai, mukodo ut (`WORKSHEET_SIGNED`) ezen megy, es egy
@@ -162,22 +232,9 @@ export function buildMimeMessage(
     levelnel, aminek semmi koze ehhez a valtozashoz. Allitas is all ra.
   */
   const csatolmanyok = mail.attachments ?? [];
-  if (csatolmanyok.length === 0)
-    return [
-      ...fejlec,
-      'Content-Type: text/plain; charset="UTF-8"',
-      "Content-Transfer-Encoding: base64",
-      "",
-      torzsBase64,
-    ].join("\r\n");
+  if (csatolmanyok.length === 0) return [...fejlec, ...torzsResz].join("\r\n");
 
-  const reszek = [
-    `--${boundary}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: base64",
-    "",
-    torzsBase64,
-  ];
+  const reszek = [`--${boundary}`, ...torzsResz];
   for (const csatolmany of csatolmanyok) {
     reszek.push(
       `--${boundary}`,

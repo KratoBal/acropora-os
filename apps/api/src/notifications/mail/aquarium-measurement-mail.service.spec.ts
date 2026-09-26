@@ -6,10 +6,7 @@ import { prisma } from "@acropora/database";
 import type { AquariumMeasurementOccasion } from "@acropora/types";
 
 import type { MailSender, OutgoingMail } from "./mail.port.js";
-import type {
-  StoredMailTemplate,
-  TicketMailRepository,
-} from "./ticket-mail.repository.js";
+import type { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
   AQUARIUM_MEASUREMENT_RESULT,
   AquariumMeasurementMailService,
@@ -23,7 +20,8 @@ const ALKALOM: AquariumMeasurementOccasion = {
 };
 
 function szolgaltatas(be: {
-  template?: StoredMailTemplate | null;
+  /** A `bodyHtml` elhagyhato: hianyaban szoveges sablon, mint a valodi `null`. */
+  template?: { subject: string; body: string; bodyHtml?: string | null } | null;
   sender?: MailSender | null;
   from?: string;
   fromName?: string;
@@ -35,7 +33,8 @@ function szolgaltatas(be: {
     szignaturaja elmozdul, a fordito szoljon, ne a felhasznalo.
   */
   const repository: Pick<TicketMailRepository, "template" | "saveTemplate"> = {
-    template: async () => be.template ?? null,
+    template: async () =>
+      be.template ? { bodyHtml: null, ...be.template } : null,
     saveTemplate: async () => undefined,
   };
   const sender: MailSender | null =
@@ -170,6 +169,31 @@ describe("AquariumMeasurementMailService.send", () => {
 
       assert.equal(kuldott[0]?.subject, "Friss vízmérés: Nappali medence");
       assert.equal(kuldott[0]?.text, "Szia Kiss Márta, a mérés kész.");
+    }));
+
+  /**
+   * AZ OTODIK HIVOHELY: a formazott sablon itt is HTML reszt ad, es a csatolmany
+   * mellette marad (a level ettol `multipart/mixed` + `alternative` lesz).
+   */
+  it("formázott sablonnál HTML és szöveg is megy, a csatolmány marad", () =>
+    domainEventStub(async () => {
+      const { service, kuldott } = szolgaltatas({
+        template: {
+          subject: "{{akvarium_neve}}",
+          body: "generalt",
+          bodyHtml:
+            '<p>Kedves <strong><span data-variable="cimzett">{{cimzett}}</span></strong>!</p>',
+        },
+      });
+
+      await service.send(kuldesInput());
+
+      assert.equal(
+        kuldott[0]?.html,
+        '<p>Kedves <strong><span data-variable="cimzett">Kiss Márta</span></strong>!</p>',
+      );
+      assert.equal(kuldott[0]?.text, "Kedves Kiss Márta!");
+      assert.equal(kuldott[0]?.attachments?.length, 1);
     }));
 
   /**
