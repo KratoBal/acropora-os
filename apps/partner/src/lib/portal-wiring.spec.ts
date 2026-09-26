@@ -197,6 +197,47 @@ describe("a partner portál bekötése", () => {
     assert.match(s, /src=\{urls\[nagyitott\]\}/);
     assert.doesNotMatch(s, /src=\{`/);
   });
+
+  /**
+   * A NEM-KÉP TÉTEL LETÖLTHETŐ ÉS MEGNYITHATÓ (Balázs kérése, 2026-09-26).
+   *
+   * A munkalap PDF-je eddig csak fájlnévként állt a panelen. A panelt a
+   * hibajegy, a munkalap és az eszköz lapja is hívja, tehát ez egy helyen
+   * javít hármat.
+   *
+   * MI PIROSÍT:
+   * - ha a gombok ága nem a nem-kép (vagy be nem töltött kép) tételre szól;
+   * - ha a két gomb nem a `saveBlob`/`showBlob` segédet hívja, hanem például
+   *   egy közvetlen `href`-et (az hitelesítés nélkül menne ki, 401);
+   * - ha a lap az `await` UTÁN nyílik: az már nem a felhasználó mozdulata,
+   *   és a felugró-ablak tiltó elnyeli.
+   *
+   * A KONTROLL: a betöltő továbbra is CSAK a képeket kéri le előre. Enélkül egy
+   * olyan változat is zöld lenne, ami minden PDF-et megnyitáskor letölt.
+   */
+  it("a nem-kép tétel Letöltés és Megnyitás gombot kap, a segédekkel", () => {
+    const s = kod(DOKUMENTUMOK);
+    assert.match(
+      s,
+      /!item\.contentType\.startsWith\("image\/"\) \|\|\s*failed\[item\.id\]/,
+    );
+    assert.match(s, /fetchFile\(item, "save"\)[\s\S]{0,200}?Letöltés/);
+    assert.match(s, /fetchFile\(item, "open"\)[\s\S]{0,200}?Megnyitás/);
+    assert.match(s, /saveBlob\(blob, item\.fileName, browserSurface\)/);
+    assert.match(
+      s,
+      /showBlob\(tab, blob, item\.contentType, item\.fileName, browserSurface\)/,
+    );
+    assert.match(
+      s,
+      /window\.open\("", "_blank"\)[\s\S]*?await loader\.current\(item\.id\)/,
+    );
+    assert.doesNotMatch(s, /await[^;]*;[^}]*window\.open/);
+    assert.match(
+      s,
+      /\.filter\(\(item\) => item\.contentType\.startsWith\("image\/"\)\)/,
+    );
+  });
 });
 
 describe("a bejelentő űrlap fájl-melléklete", () => {
