@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   Icon,
@@ -30,8 +30,20 @@ import { Message } from "./ticket-list";
  * A HELYSZÍN ÉS AZ IDŐSZAK OSZLOP A SZERVERTŐL SZÁRMAZTATOTT ÉRTÉK, nem
  * kliens-oldali számítás -- lásd `MaintenanceOrderPartnerSummary` fejlécét
  * (`@acropora/types`).
+ *
+ * === A TELJES SOR KATTINTHATÓ (javítva, barracuda #1179-átnézése,
+ *     2026-09-26) ===
+ *
+ * A terv a teljes `<tr>`-en visel `onClick`-et és hover-effektet
+ * (`PartnerPortalScreen.tsx:1224-1225`) -- korábban csak a szám-cella
+ * `<Link>`-je volt kattintható. Ugyanaz a minta, mint a belső web
+ * `pilot-service-job-list-page.tsx` sorainál: `onClick={() =>
+ * router.push(...)}` a `<tr>`-en, `group cursor-pointer hover:bg-*`, a
+ * korábbi `<Link>` helyett sima szöveg (a `group-hover` viszi a szín-
+ * visszajelzést).
  */
 export function MaintenanceOrderList() {
+  const router = useRouter();
   const [data, setData] = useState<Awaited<
     ReturnType<typeof partnerApi.maintenanceOrders>
   > | null>(null);
@@ -110,17 +122,15 @@ export function MaintenanceOrderList() {
               {data.items.map((order, index) => (
                 <tr
                   key={order.id}
-                  className={`border-b border-pilot-grey-100 last:border-0 ${
+                  onClick={() => router.push(`/megrendelesek/${order.id}`)}
+                  className={`group cursor-pointer border-b border-pilot-grey-100 transition-colors last:border-0 hover:bg-pilot-aqua-50/40 ${
                     index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
                   }`}
                 >
                   <td className="px-5 py-3">
-                    <Link
-                      href={`/megrendelesek/${order.id}`}
-                      className="font-mono text-pilot-grey-900 hover:text-pilot-aqua-700"
-                    >
+                    <span className="font-mono text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
                       {order.number}
-                    </Link>
+                    </span>
                   </td>
                   <td className="px-5 py-3 text-pilot-grey-500">
                     {order.contractNumber}

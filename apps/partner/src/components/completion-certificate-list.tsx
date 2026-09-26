@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Icon, PilotThemeRoot } from "@acropora/ui";
 
@@ -15,8 +15,12 @@ import { Message } from "./ticket-list";
  * mutatja (`c.alairvaPeldany ? 'feltöltve' : 'még nincs'`), és ez nem
  * díszítés: az igazolásnak NINCS állapota (lásd a séma `CompletionCertificate`
  * fejlécét), tehát nincs mit jelvénnyel jelezni.
+ *
+ * A TELJES SOR KATTINTHATÓ -- lásd `maintenance-order-list.tsx` fejlécét,
+ * ugyanaz a javítás, ugyanaz a minta.
  */
 export function CompletionCertificateList() {
+  const router = useRouter();
   const [data, setData] = useState<Awaited<
     ReturnType<typeof partnerApi.completionCertificates>
   > | null>(null);
@@ -97,17 +101,17 @@ export function CompletionCertificateList() {
               {data.items.map((certificate, index) => (
                 <tr
                   key={certificate.id}
-                  className={`border-b border-pilot-grey-100 last:border-0 ${
+                  onClick={() =>
+                    router.push(`/teljesitesi-igazolasok/${certificate.id}`)
+                  }
+                  className={`group cursor-pointer border-b border-pilot-grey-100 transition-colors last:border-0 hover:bg-pilot-aqua-50/40 ${
                     index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
                   }`}
                 >
                   <td className="px-5 py-3">
-                    <Link
-                      href={`/teljesitesi-igazolasok/${certificate.id}`}
-                      className="font-mono text-pilot-grey-900 hover:text-pilot-aqua-700"
-                    >
+                    <span className="font-mono text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
                       {certificate.number}
-                    </Link>
+                    </span>
                   </td>
                   <td className="px-5 py-3 text-pilot-grey-600">
                     {certificate.departmentName}

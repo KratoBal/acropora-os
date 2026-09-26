@@ -25,6 +25,10 @@ import { Message } from "./ticket-list";
  * igazolásnak nincs állapota), hanem "MÉG NINCS ALÁÍRT PÉLDÁNY" ÉS
  * `canUploadSigned` esetén -- pontosan a Figma terv szabálya
  * (`!c.alairvaPeldany`).
+ *
+ * A DOKUMENTUM-IKON ÉS A FELTÖLTŐ FELÜLET -- lásd `maintenance-order-
+ * detail.tsx` fejlécét, ugyanaz a javítás (barracuda #1179-átnézése,
+ * 2026-09-26), ugyanaz a minta.
  */
 export function CompletionCertificateDetail({ id }: { id: string }) {
   const [certificate, setCertificate] =
@@ -32,6 +36,7 @@ export function CompletionCertificateDetail({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -151,7 +156,7 @@ export function CompletionCertificateDetail({ id }: { id: string }) {
               <>
                 <div className="flex flex-1 items-center gap-3 rounded-lg bg-pilot-grey-50 px-4 py-3 ring-1 ring-pilot-grey-200">
                   <Icon
-                    name="clipboard"
+                    name="file-text"
                     size={16}
                     className="text-pilot-grey-400"
                   />
@@ -179,15 +184,52 @@ export function CompletionCertificateDetail({ id }: { id: string }) {
           <PilotCard>
             <PilotCardHeader title="Aláírt példány feltöltése" />
             <form className="flex flex-col gap-3 px-5 py-4" onSubmit={submit}>
-              <label className="flex flex-col gap-1 text-sm font-medium text-pilot-grey-700">
+              <span className="text-sm font-medium text-pilot-grey-700">
                 Aláírt teljesítési igazolás (PDF)
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                  className="cursor-pointer text-sm text-pilot-grey-600 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-pilot-aqua-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-pilot-aqua-700"
+              </span>
+              <div
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragging(false);
+                  const dropped = event.dataTransfer.files[0];
+                  if (dropped) setFile(dropped);
+                }}
+                className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 transition-all ${
+                  dragging
+                    ? "border-pilot-aqua-500 bg-pilot-aqua-50"
+                    : "border-pilot-grey-200 hover:border-pilot-grey-300"
+                }`}
+              >
+                <Icon
+                  name="file-text"
+                  size={22}
+                  className="text-pilot-grey-300"
                 />
-              </label>
+                <p className="text-sm text-pilot-grey-500">
+                  Húzd ide a fájlt, vagy
+                </p>
+                <label className="cursor-pointer text-sm font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800">
+                  kattints a tallózáshoz
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={(event) =>
+                      setFile(event.target.files?.[0] ?? null)
+                    }
+                  />
+                </label>
+                {file ? (
+                  <span className="rounded bg-pilot-grey-100 px-2 py-0.5 text-xs text-pilot-grey-600 ring-1 ring-pilot-grey-200">
+                    {file.name}
+                  </span>
+                ) : null}
+              </div>
               <div>
                 <PilotButton type="submit" disabled={!file || uploading}>
                   {uploading ? "Feltöltés…" : "Feltöltés"}
