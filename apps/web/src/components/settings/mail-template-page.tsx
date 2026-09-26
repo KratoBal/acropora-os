@@ -9,11 +9,22 @@ import {
   Select,
 } from "@acropora/ui";
 import {
+  plainTextToRichHtml,
+  richHtmlToText,
+  sanitizeRichHtml,
+} from "@acropora/rich-text";
+import {
   MAIL_TEMPLATE_EVENTS,
   renderMailTemplate,
+  renderMailTemplateHtml,
+  splitTemplateVariables,
   unknownTemplateVariables,
   type MailTemplateVariable,
 } from "@acropora/types";
+import {
+  RichTextEditor,
+  type RichTextEditorHandle,
+} from "@acropora/ui/rich-text-editor";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -67,6 +78,36 @@ function mintaErtekek(
   );
 }
 
+/**
+ * A SZOVEGES SABLON FORMAZOTT ALAKJA -- CSAK A SZERKESZTOBEN.
+ *
+ * 2026-09-26 ota a torzs formazott (Balazs kerese). A mar tarolt sablonok
+ * szovegesek, es adat-migracio NINCS: itt alakulnak at, betolteskor. A level
+ * akkor lesz HTML, amikor valaki ezen a lapon MENT; addig a szerver a regi
+ * szoveges levelet kuldi, bajtra valtozatlanul.
+ */
+function formazott(
+  szoveg: string,
+  variables: readonly MailTemplateVariable[],
+): string {
+  return plainTextToRichHtml(szoveg, {
+    variables: variables.map((v) => v.name),
+  });
+}
+
+function linkNevek(variables: readonly MailTemplateVariable[]): string[] {
+  return variables.filter((v) => v.kind === "link").map((v) => v.name);
+}
+
+/**
+ * AZ ELONEZET KERETE. Az iframe `sandbox` attributuma URES: semmi nem futhat
+ * benne, akkor sem, ha a tisztito egyszer atengedne valamit. A keret betutipusa
+ * a kuldes kereteevel (`mailHtmlDocument`, API) azonos ertekeket hasznal.
+ */
+function elonezetDokumentum(html: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1f2937;margin:12px;">${html}</body></html>`;
+}
+
 export function MailTemplatePage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -90,7 +131,8 @@ export function MailTemplatePage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const [elonezetFul, setElonezetFul] = useState<"html" | "szoveg">("html");
+  const szerkesztoRef = useRef<RichTextEditorHandle | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -102,7 +144,9 @@ export function MailTemplatePage() {
         });
         setTemplate(response);
         setSubject(response.subject);
-        setBody(response.body);
+        setBody(
+          response.bodyHtml ?? formazott(response.body, response.variables),
+        );
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError")
           return;
@@ -146,6 +190,19 @@ export function MailTemplatePage() {
   );
 
   /**
+   * A FORMAZAS ALTAL KETTEVAGOTT VALTOZO. A szerkeszto a valtozot atomkent
+   * kezeli, tehat onnan ritkan jon ilyen -- de egy beillesztett, reszben
+   * formazott szoveg hozhat. A szerver menteskor ugyanezt kerdezi, es 400-at ad.
+   */
+  const kettevagott = useMemo(() => splitTemplateVariables(body), [body]);
+
+  /** A szoveges valtozat: ez megy a HTML melle `text/plain`-kent. */
+  const szovegesTorzs = useMemo(
+    () => richHtmlToText(body, { hrefPlaceholders: linkNevek(variables) }),
+    [body, variables],
+  );
+
+  /**
    * AZ ELŐNÉZET UGYANAZT A MOTORT HASZNÁLJA, AMIT A KÜLDÉS (2. kikötés).
    *
    * Nem hasonlót: a `renderMailTemplate` UGYANAZ a függvény, amit a szerver hív
@@ -159,31 +216,25 @@ export function MailTemplatePage() {
    */
   const elonezet = useMemo(() => {
     const ertekek = mintaErtekek(variables);
+    /*
+      A FORMAZOTT ELONEZET PONTOSAN A KULDES LEPESEIT JARJA BE (`renderMailBody`,
+      API): escape-elt behelyettesites, UTANA tisztitas, a szoveg a tiszta
+      HTML-bol. A tisztito itt link-helyorzot NEM enged -- kuldeskor sem enged.
+    */
+    const html = renderMailTemplateHtml(body, ertekek);
+    const tiszta = html.ok ? sanitizeRichHtml(html.text) : null;
     return {
       targy: renderMailTemplate(subject, ertekek),
-      torzs: renderMailTemplate(body, ertekek),
+      torzs:
+        tiszta === null ? null : { html: tiszta, text: richHtmlToText(tiszta) },
     };
   }, [subject, body, variables]);
 
-  const beszur = (nev: string) => {
-    const mezo = bodyRef.current;
-    const jel = `{{${nev}}}`;
-    if (!mezo) {
-      setBody((elozo) => elozo + jel);
-      return;
-    }
-    const start = mezo.selectionStart ?? body.length;
-    const end = mezo.selectionEnd ?? start;
-    setBody(body.slice(0, start) + jel + body.slice(end));
-    /*
-      A KURZOR A BESZÚRT JEL UTÁN ÁLL MEG. Enélkül a következő beszúrás
-      ugyanoda kerülne, és a szerkesztő két változót kapna egymásba írva.
-    */
-    queueMicrotask(() => {
-      mezo.focus();
-      mezo.setSelectionRange(start + jel.length, start + jel.length);
-    });
-  };
+  /*
+    A VALTOZO A SZERKESZTO KURZORAHOZ KERUL, ATOMKENT. A kurzor utana marad, a
+    kovetkezo beszuras tehat mogeje kerul, nem bele.
+  */
+  const beszur = (nev: string) => szerkesztoRef.current?.insertVariable(nev);
 
   /**
    * AZ ALAPERTELMEZES VISSZATOLTESE -- A SZERKESZTOBE, NEM A SZERVERRE.
@@ -205,7 +256,7 @@ export function MailTemplatePage() {
   const alapertelmezesVisszatoltese = () => {
     if (!template) return;
     setSubject(template.defaultTemplate.subject);
-    setBody(template.defaultTemplate.body);
+    setBody(formazott(template.defaultTemplate.body, variables));
     setSaved(false);
   };
 
@@ -214,9 +265,15 @@ export function MailTemplatePage() {
     setSaveError(null);
     setSaved(false);
     try {
+      /*
+        A HTML ES A SZOVEGES VETULETE EGYUTT MEGY. A szerver a `body`-t a
+        HTML-bol UJRA eloallitja (az a donto); itt azert kell, mert a mezo
+        kotelezo, es egy regi szerver a szoveget tarolna.
+      */
       await mailTemplatesApi.save(token, esemenyId, {
         subject,
-        body,
+        body: szovegesTorzs,
+        bodyHtml: body,
       });
       setSaved(true);
       /*
@@ -300,6 +357,14 @@ export function MailTemplatePage() {
         />
       ) : null}
 
+      {kettevagott.length ? (
+        <Alert
+          variant="danger"
+          title="Kettévágott változó a sablonban"
+          description={`${kettevagott.map((n) => `{{${n}}}`).join(", ")} — egy formázás a változó közepére került, ezért a levélben nyersen menne ki. Töröld, és illeszd be újra a jobb oldali listából.`}
+        />
+      ) : null}
+
       {ismeretlen.length ? (
         <Alert
           variant="danger"
@@ -323,17 +388,16 @@ export function MailTemplatePage() {
                 className="w-full rounded-lg border border-dusk-200 bg-white px-3 py-2 text-sm text-dusk-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
               />
             </label>
-            <label className="block space-y-1">
+            <div className="space-y-1">
               <span className="text-xs font-medium text-dusk-700">Törzs</span>
-              <textarea
+              <RichTextEditor
+                ref={szerkesztoRef}
                 aria-label="Törzs"
-                ref={bodyRef}
-                rows={12}
                 value={body}
-                onChange={(event) => setBody(event.target.value)}
-                className="w-full rounded-lg border border-dusk-200 bg-white px-3 py-2 font-mono text-sm text-dusk-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+                onChange={setBody}
+                variables={variables}
               />
-            </label>
+            </div>
 
             {saveError ? (
               <p role="alert" className="text-xs text-rose-600">
@@ -354,7 +418,8 @@ export function MailTemplatePage() {
               */}
               {template &&
               (subject !== template.defaultTemplate.subject ||
-                body !== template.defaultTemplate.body) ? (
+                body !==
+                  formazott(template.defaultTemplate.body, variables)) ? (
                 <Button
                   variant="secondary"
                   onClick={alapertelmezesVisszatoltese}
@@ -365,7 +430,12 @@ export function MailTemplatePage() {
               ) : null}
               <Button
                 onClick={() => void mentes()}
-                disabled={saving || ismeretlen.length > 0}
+                disabled={
+                  saving ||
+                  ismeretlen.length > 0 ||
+                  kettevagott.length > 0 ||
+                  !szovegesTorzs.trim()
+                }
               >
                 {saving ? "Mentés…" : "Mentés"}
               </Button>
@@ -426,14 +496,55 @@ export function MailTemplatePage() {
                 Minta-adatokkal, ugyanazzal a behelyettesítéssel, amit a küldés
                 használ.
               </p>
-              {elonezet.targy.ok && elonezet.torzs.ok ? (
+              {elonezet.targy.ok && elonezet.torzs ? (
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-dusk-900">
                     {elonezet.targy.text}
                   </p>
-                  <pre className="whitespace-pre-wrap text-xs text-dusk-700">
-                    {elonezet.torzs.text}
-                  </pre>
+                  {/*
+                    A LEVEL KET ALTERNATIVAT VISZ, ES MINDKETTO LATHATO. A
+                    levelezok tobbsege a formazottat mutatja, de amelyik nem
+                    tud HTML-t, az a szovegeset -- es az is a vevohoz megy.
+                  */}
+                  <div
+                    role="tablist"
+                    aria-label="Előnézet fajtája"
+                    className="flex gap-1"
+                  >
+                    {(
+                      [
+                        ["html", "Formázott"],
+                        ["szoveg", "Szöveges"],
+                      ] as const
+                    ).map(([kulcs, cimke]) => (
+                      <button
+                        key={kulcs}
+                        type="button"
+                        role="tab"
+                        aria-selected={elonezetFul === kulcs}
+                        onClick={() => setElonezetFul(kulcs)}
+                        className={
+                          elonezetFul === kulcs
+                            ? "rounded-md bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700"
+                            : "rounded-md px-2 py-1 text-xs text-dusk-600 hover:bg-dusk-100"
+                        }
+                      >
+                        {cimke}
+                      </button>
+                    ))}
+                  </div>
+                  {elonezetFul === "html" ? (
+                    <iframe
+                      title="A levél formázott előnézete"
+                      sandbox=""
+                      srcDoc={elonezetDokumentum(elonezet.torzs.html)}
+                      className="h-72 w-full rounded-md border border-dusk-100 bg-white"
+                    />
+                  ) : (
+                    <pre className="whitespace-pre-wrap text-xs text-dusk-700">
+                      {elonezet.torzs.text}
+                    </pre>
+                  )}
                 </div>
               ) : (
                 <p className="text-xs text-rose-600">

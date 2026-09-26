@@ -65,6 +65,21 @@ function engedettHref(
     : null;
 }
 
+/**
+ * ATMENNE-E EZ A LINK-CEL A TISZTITON -- A SZERKESZTO EZT KERDEZI.
+ *
+ * A TipTap link-bovitmenye sajat szaballyal dont a `href`-rol, es az
+ * alapszabalya a `{{jegy_linkje}}` alakot ELUTASITJA (nincs semaja). Ha a
+ * szerkeszto sajat listat tartana, a ket szabaly szetcsuszna: a szerkeszto
+ * elfogadna valamit, amit a szerver menteskor csendben kidob, vagy forditva.
+ */
+export function isAllowedRichHref(
+  href: string,
+  options: SanitizeRichHtmlOptions = {},
+): boolean {
+  return engedettHref(href, new Set(options.hrefPlaceholders ?? [])) !== null;
+}
+
 function attrEscape(ertek: string): string {
   return ertek
     .replace(/&(?![a-zA-Z]+;|#[0-9]+;|#x[0-9a-fA-F]+;)/g, "&amp;")

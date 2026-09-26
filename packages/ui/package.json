@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./rich-text-editor": {
+      "types": "./src/rich-text-editor.tsx",
+      "default": "./src/rich-text-editor.tsx"
     }
   },
   "scripts": {
@@ -16,17 +20,42 @@
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "react": "^19.2.7"
+    "react": "^19.2.7",
+    "@tiptap/core": "3.31.3",
+    "@tiptap/pm": "3.31.3",
+    "@tiptap/react": "3.31.3",
+    "@tiptap/starter-kit": "3.31.3"
+  },
+  "peerDependenciesMeta": {
+    "@tiptap/core": {
+      "optional": true
+    },
+    "@tiptap/pm": {
+      "optional": true
+    },
+    "@tiptap/react": {
+      "optional": true
+    },
+    "@tiptap/starter-kit": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@acropora/aquarium-calc": "workspace:*",
+    "@acropora/rich-text": "workspace:*",
     "@acropora/types": "workspace:*"
   },
   "devDependencies": {
     "@acropora/config": "workspace:*",
+    "@tiptap/core": "3.31.3",
+    "@tiptap/pm": "3.31.3",
+    "@tiptap/react": "3.31.3",
+    "@tiptap/starter-kit": "3.31.3",
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "typescript": "^6.0.3"
   }
 }

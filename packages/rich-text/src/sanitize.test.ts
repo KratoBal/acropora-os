@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { RICH_TEXT_ALLOWED_TAGS } from "./schema.js";
-import { sanitizeRichHtml } from "./sanitize.js";
+import { isAllowedRichHref, sanitizeRichHtml } from "./sanitize.js";
 
 describe("a tisztito: ami kiesik", () => {
   it("a script es a style TARTALMAVAL egyutt eltunik", () => {
@@ -121,5 +121,24 @@ describe("a tisztito: ami megmarad", () => {
       '<p onclick="x">a <strong>b</strong><a href="https://x">c</a><script>d</script></p><ul><li><p>e</p></li></ul>';
     const egyszer = sanitizeRichHtml(nyers);
     assert.equal(sanitizeRichHtml(egyszer), egyszer);
+  });
+});
+
+describe("isAllowedRichHref", () => {
+  it("ugyanazt mondja, mint a tisztito", () => {
+    const opciok = { hrefPlaceholders: ["jegy_linkje"] };
+    for (const href of [
+      "https://x.hu",
+      "mailto:a@b.hu",
+      "{{jegy_linkje}}",
+      "{{jegyszam}}",
+      "javascript:x",
+      "java\tscript:x",
+      "/relativ",
+    ]) {
+      const html = `<a href="${href}">a</a>`;
+      const megmaradt = sanitizeRichHtml(html, opciok) !== "<a>a</a>";
+      assert.equal(isAllowedRichHref(href, opciok), megmaradt, href);
+    }
   });
 });
