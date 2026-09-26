@@ -315,6 +315,28 @@ export {
   aquariumMeasurementTargetRange,
 } from "./aquarium-management.js";
 export type {
+  MaintenanceOrderDocumentContentType,
+  MaintenanceOrderDocumentSummary,
+  MaintenanceOrderPartnerDetail,
+  MaintenanceOrderPartnerItem,
+  MaintenanceOrderPartnerListResponse,
+  MaintenanceOrderPartnerSummary,
+  MaintenanceOrderStatusTone,
+  MaintenanceOrderStatusValue,
+} from "./maintenance-order-management.js";
+export {
+  maintenanceOrderStatusLabel,
+  maintenanceOrderStatusTone,
+} from "./maintenance-order-management.js";
+export type {
+  CompletionCertificateDocumentContentType,
+  CompletionCertificateDocumentSummary,
+  CompletionCertificatePartnerDetail,
+  CompletionCertificatePartnerItem,
+  CompletionCertificatePartnerListResponse,
+  CompletionCertificatePartnerSummary,
+} from "./completion-certificate-management.js";
+export type {
   CreateCustomerAddressInput,
   CreateCustomerInput,
   CustomerAddress,

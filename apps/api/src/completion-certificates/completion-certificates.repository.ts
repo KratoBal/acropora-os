@@ -62,6 +62,37 @@ export type CompletionCertificateGeneratedDocument = {
   content: Buffer;
 };
 
+/**
+ * A PORTÁL SELECTJE -- STRUKTURÁLISAN ÁR NÉLKÜL, ugyanaz az indok, mint a
+ * `MaintenanceOrdersRepository` `portalOrderSelect`-jénél: egy `select`,
+ * ami a mezőt le sem kérdezi, nem tud visszakerülni a válaszba egy
+ * jóhiszemű bővítésnél.
+ */
+const portalCertificateSelect = {
+  id: true,
+  number: true,
+  issuedAt: true,
+  issuedByName: true,
+  serviceJob: { select: { departmentId: true } },
+  items: { select: { id: true, description: true, quantity: true } },
+  documents: {
+    orderBy: { createdAt: "desc" as const },
+    select: {
+      id: true,
+      type: true,
+      fileName: true,
+      contentType: true,
+      sizeBytes: true,
+      createdAt: true,
+    },
+  },
+} satisfies Prisma.CompletionCertificateSelect;
+
+export type PortalCompletionCertificateRow =
+  Prisma.CompletionCertificateGetPayload<{
+    select: typeof portalCertificateSelect;
+  }>;
+
 @Injectable()
 export class CompletionCertificatesRepository {
   private readonly database = prisma;
@@ -213,5 +244,68 @@ export class CompletionCertificatesRepository {
         createdAt: true,
       },
     });
+  }
+
+  /**
+   * A PORTÁL LISTÁJA -- A HÍVÓ LÁTHATÓSÁGA A KAPCSOLT `ServiceJob`-ON ÁLL.
+   *
+   * `visibility` a `serviceJobVisibilityWhere(...)` KÉSZ EREDMÉNYE, a
+   * szolgáltatás-rétegből -- ugyanaz a réteg-rend, mint az
+   * `AquariumsRepository.list(query, visibility)`-nél: a tároló nem tudja,
+   * mi a `scope` vagy a `userId`, csak egy már kész `where`-ágat kap.
+   *
+   * A NESTELT `serviceJob: visibility` EGY-EGY (to-one) RELÁCIÓRA SZŰKÍT,
+   * NEM `some`-mal egy listára -- tehát ez NEM ugyanaz az alattomos
+   * túltágulás, amit az `aquarium-visibility.ts` a lista-relációk kapcsán
+   * leír: itt a kapcsolt sor MAGA kell hogy megfeleljen a feltételnek,
+   * nincs "bármelyik kapcsolódó sor" kétértelműség.
+   */
+  portalListForVisibility(
+    visibility: Prisma.ServiceJobWhereInput,
+  ): Promise<PortalCompletionCertificateRow[]> {
+    return this.database.completionCertificate.findMany({
+      where: { serviceJob: visibility },
+      orderBy: { issuedAt: "desc" },
+      select: portalCertificateSelect,
+    });
+  }
+
+  portalDetail(
+    id: string,
+    visibility: Prisma.ServiceJobWhereInput,
+  ): Promise<PortalCompletionCertificateRow | null> {
+    return this.database.completionCertificate.findFirst({
+      where: { AND: [{ id }, { serviceJob: visibility }] },
+      select: portalCertificateSelect,
+    });
+  }
+
+  /** A helyszín NEVE (nem a teljes útja) -- lásd a hívó fejlécét. */
+  async departmentNames(
+    departmentIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    if (departmentIds.length === 0) return new Map();
+    const rows = await this.database.worksheetDepartment.findMany({
+      where: { id: { in: [...departmentIds] } },
+      select: { id: true, name: true },
+    });
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
+  /**
+   * VAN-E BEJELÖLVE A HÍVÓNÁL AZ ALÁÍRT TELJESÍTÉSI IGAZOLÁS FELTÖLTÉSÉNEK
+   * KÉPESSÉGE -- ugyanaz a minta, mint a `MaintenanceOrdersRepository`
+   * `hasUploadSignedCapability()`-je, KÜLÖN `ServiceCapability` értékkel.
+   */
+  async hasUploadSignedCapability(userId: string): Promise<boolean> {
+    const row = await this.database.userServiceCapability.findUnique({
+      where: {
+        userId_capability: {
+          userId,
+          capability: "COMPLETION_CERTIFICATE_UPLOAD_SIGNED",
+        },
+      },
+    });
+    return row !== null;
   }
 }

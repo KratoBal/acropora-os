@@ -50,6 +50,50 @@ export type MaintenanceOrderGeneratedDocument = {
   content: Buffer;
 };
 
+/**
+ * A PORTÁL SELECTJE -- STRUKTURÁLISAN ÁR NÉLKÜL, NEM CSAK A LEKÉPZÉSBEN
+ * ELHAGYVA.
+ *
+ * Szándékosan NEM az `orderInclude`-ot használja: az `items` relációja ott
+ * `unitNet`/`vatRatePercent`-et is hoz (`MaintenanceOrderItem` minden
+ * skalár mezője, mert nincs rajta `select`). Egy portál-mapper, ami csak
+ * NEM ír ki egy mezőt, egy jóhiszemű bővítésnél visszakerülhet a válaszba;
+ * egy `select`, ami a mezőt le sem kérdezi, nem tudja.
+ */
+const portalOrderSelect = {
+  id: true,
+  number: true,
+  status: true,
+  occasionYear: true,
+  issuedAt: true,
+  contract: {
+    select: { number: true, title: true, customerId: true },
+  },
+  items: {
+    select: {
+      id: true,
+      description: true,
+      quantity: true,
+      contractItem: { select: { position: true, departmentId: true } },
+    },
+  },
+  documents: {
+    orderBy: { createdAt: "desc" as const },
+    select: {
+      id: true,
+      type: true,
+      fileName: true,
+      contentType: true,
+      sizeBytes: true,
+      createdAt: true,
+    },
+  },
+} satisfies Prisma.MaintenanceOrderSelect;
+
+export type PortalMaintenanceOrderRow = Prisma.MaintenanceOrderGetPayload<{
+  select: typeof portalOrderSelect;
+}>;
+
 @Injectable()
 export class MaintenanceOrdersRepository {
   private readonly database = prisma;
@@ -109,6 +153,22 @@ export class MaintenanceOrdersRepository {
   /** A helyszínek teljes útja, hibaüzenetbe -- ugyanaz a felbontás, mint a munkalapon. */
   departmentPaths(departmentIds: readonly string[]) {
     return unitPathsFor(this.database, [...departmentIds]);
+  }
+
+  /**
+   * A HELYSZÍN NEVE, NEM A TELJES ÚTJA -- a portál "Helyszín" oszlopának
+   * (acrobot szabálya, msg_id 23868): "annak a neve", a Figma terv is
+   * rövid nevet mutat ("Trópusi ház"), nem breadcrumb-ösvényt.
+   */
+  async departmentNames(
+    departmentIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    if (departmentIds.length === 0) return new Map();
+    const rows = await this.database.worksheetDepartment.findMany({
+      where: { id: { in: [...departmentIds] } },
+      select: { id: true, name: true },
+    });
+    return new Map(rows.map((row) => [row.id, row.name]));
   }
 
   defaultAddress(customerId: string) {
@@ -269,5 +329,57 @@ export class MaintenanceOrdersRepository {
       },
       include: orderInclude,
     });
+  }
+
+  /**
+   * A PORTÁL LISTÁJA -- AZ ÜGYFÉL ÖSSZES SZERZŐDÉSÉBŐL, NEM EGYETLEN
+   * `contractId`-RA SZŰKÍTVE (ellentétben a belső `list()`-tel). A
+   * hívó-szintű láthatóságot (melyik helyszín) a szolgáltatás-réteg dönti
+   * el a betöltött tételeken -- lásd `maintenance-order-visibility.ts`.
+   */
+  portalListForCustomer(
+    customerId: string,
+  ): Promise<PortalMaintenanceOrderRow[]> {
+    return this.database.maintenanceOrder.findMany({
+      where: { contract: { customerId } },
+      orderBy: { issuedAt: "desc" },
+      select: portalOrderSelect,
+    });
+  }
+
+  /**
+   * `findFirst`, NEM `findUnique` -- ugyanaz az indok, mint az
+   * `AquariumsRepository.detail()`-nél: a hívó-szintű ügyfél-szűrést itt
+   * kötjük az `id`-hoz, a tétel-szintű helyszín-láthatóságot a
+   * szolgáltatás-réteg dönti el a visszaadott sorból.
+   */
+  portalDetail(
+    id: string,
+    customerId: string | null,
+  ): Promise<PortalMaintenanceOrderRow | null> {
+    return this.database.maintenanceOrder.findFirst({
+      where:
+        customerId === null
+          ? { id }
+          : { AND: [{ id }, { contract: { customerId } }] },
+      select: portalOrderSelect,
+    });
+  }
+
+  /**
+   * VAN-E BEJELÖLVE A HÍVÓNÁL AZ ALÁÍRT MEGRENDELŐLAP FELTÖLTÉSÉNEK
+   * KÉPESSÉGE -- ugyanaz a minta, mint az `AquariumsRepository`
+   * `hasAquariumAssetAssignCapability()`-je.
+   */
+  async hasUploadSignedCapability(userId: string): Promise<boolean> {
+    const row = await this.database.userServiceCapability.findUnique({
+      where: {
+        userId_capability: {
+          userId,
+          capability: "MAINTENANCE_ORDER_UPLOAD_SIGNED",
+        },
+      },
+    });
+    return row !== null;
   }
 }

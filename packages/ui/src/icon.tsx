@@ -18,6 +18,7 @@ export type IconName =
   | "dashboard"
   | "download"
   | "droplet"
+  | "file-text"
   | "finance"
   | "info"
   | "key"
@@ -123,6 +124,18 @@ export function Icon({ className, name, size = 18, ...props }: IconProps) {
       )}
       {name === "droplet" && (
         <path d="M12 3c3.5 4 6 7.4 6 10.5a6 6 0 1 1-12 0C6 10.4 8.5 7 12 3Z" />
+      )}
+      {/*
+        A PORTÁL MEGRENDELŐLAP/TELJESÍTÉSI IGAZOLÁS DOKUMENTUM-CHIPJÉHEZ --
+        a terv `FileTextIcon`-ja (`PartnerPortalScreen.tsx:122-123`: egy
+        lekerekített lap, három vízszintes szövegsorral), 24x24-re
+        arányosítva, a repó saját stroke-nyelvén (lásd "clipboard" fent).
+      */}
+      {name === "file-text" && (
+        <>
+          <rect x="5" y="3" width="14" height="18" rx="2" />
+          <path d="M8.5 9h7M8.5 13h7M8.5 17h4" />
+        </>
       )}
       {name === "calendar" && (
         <>
