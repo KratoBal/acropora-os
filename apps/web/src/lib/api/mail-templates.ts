@@ -43,6 +43,12 @@ export interface MailTemplateResponse {
    */
   defaultTemplate: { subject: string; body: string };
   /**
+   * A link-valtozok mintaja az elonezethez: a szerver a valodi level webcimevel
+   * es utvonalaval epiti (2026-09-28). Ures ertek: a szerveren nincs webcim, a
+   * valodi levelben is ures lesz.
+   */
+  sampleLinks: Readonly<Record<string, string>>;
+  /**
    * A VÁLTOZÓK A VÁLASZBAN JÖNNEK, NEM A KLIENS LISTÁJÁBÓL.
    *
    * A felület ezt rajzolja ki a szerkesztő mellé. Egy kézzel karbantartott

@@ -5,6 +5,7 @@ import {
   Get,
   NotFoundException,
   Param,
+  Optional,
   Put,
   BadRequestException,
 } from "@nestjs/common";
@@ -35,7 +36,11 @@ import {
   AQUARIUM_MEASUREMENT_RESULT,
   DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE,
 } from "./aquarium-measurement-mail.service.js";
+import { internalWorksheetLink } from "../../material-requests/material-request-link.js";
+import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { MailImageRepository } from "./mail-image.repository.js";
+import { partnerWorksheetLink } from "./partner-portal-link.js";
+import { internalTicketLink } from "./ticket-link.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
   DEFAULT_MATERIAL_REQUEST_CREATED_TEMPLATE,
@@ -80,6 +85,45 @@ export class SaveMailTemplateDto {
 const LINK_VALTOZOK = MAIL_TEMPLATE_VARIABLES.filter(
   (v) => v.kind === "link",
 ).map((v) => v.name);
+
+/**
+ * A LINK-VALTOZOK MINTAJA AZ ELONEZETHEZ -- UGYANAZZAL A FUGGVENNYEL ES
+ * UGYANABBOL A KORNYEZETBOL, AMIBOL A VALODI LEVEL EPUL.
+ *
+ * Balazs kerdese, 2026-09-28 08:35 UTC: „a minta adatokban ez van. a tenyleges
+ * levelbe is ezzel a domainnal megy ki?" -- az elonezet `os.acropora.hu`-t
+ * mutatott, a valodi level `app.acropora.hu`-t kuld. A minta a feluleten allt,
+ * kezzel beirva, es a HJ-szamot tette az utvonalba, holott a valodi link a
+ * hibajegy AZONOSITOJAT viszi.
+ *
+ * Ezert a mintat nem a felulet irja, hanem a szerver adja: a webcim a sajat
+ * kornyezetebol jon (elesben `app.acropora.hu`, stagingen a staging cime), az
+ * utvonal pedig ugyanabbol a fuggvenybol, amit a kuldes hiv. Ha a `WEB_URL`
+ * vagy a `PARTNER_URL` nincs beallitva, a minta URES -- pontosan ugy, mint a
+ * valodi levelben.
+ *
+ * AZ AZONOSITO MINTA, NEM VALODI: egy cuid alaku, olvashato ertek, hogy az
+ * utvonal alakja latsszon, de egyetlen letezo hibajegyre se mutasson.
+ */
+export const SAMPLE_SERVICE_JOB_ID = "cmgmintahibajegy0000000001";
+export const SAMPLE_WORKSHEET_ID = "cmgmintamunkalap0000000001";
+
+export function sampleLinks(environment: NodeJS.ProcessEnv) {
+  return {
+    jegy_linkje: internalTicketLink({
+      webUrl: environment.WEB_URL,
+      serviceJobId: SAMPLE_SERVICE_JOB_ID,
+    }),
+    munkalap_linkje: partnerWorksheetLink({
+      partnerUrl: environment.PARTNER_URL,
+      worksheetId: SAMPLE_WORKSHEET_ID,
+    }),
+    munkalap_belso_linkje: internalWorksheetLink({
+      webUrl: environment.WEB_URL,
+      worksheetId: SAMPLE_WORKSHEET_ID,
+    }),
+  };
+}
 
 /**
  * AZ ESEMENYHEZ TARTOZO KEZDO SZOVEG.
@@ -130,6 +174,13 @@ export class MailTemplateController {
     */
     @Inject(MailImageRepository)
     private readonly images: Pick<MailImageRepository, "existingIds">,
+    /*
+      UGYANAZ A KORNYEZET, AMIT A KULDO SZOLGALTATASOK LATNAK (`TICKET_MAIL_ENV`,
+      hianyaban `process.env`) -- a minta-link ebbol epul.
+    */
+    @Optional()
+    @Inject(TICKET_MAIL_ENV)
+    private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
   @Get(":id")
@@ -182,6 +233,8 @@ export class MailTemplateController {
         ment, mielott megnyomja.
       */
       defaultTemplate: alapertelmezes(id),
+      /** A link-valtozok mintaja: a valodi level webcimevel es utvonalaval. */
+      sampleLinks: sampleLinks(this.environment),
       variables: MAIL_TEMPLATE_VARIABLES,
     };
   }
