@@ -24,6 +24,7 @@ import {
   type CreatePurchaseInvoiceLine,
 } from "./purchase-invoice.repository.js";
 import { PurchaseProductSearchService } from "./purchase-product-search.service.js";
+import { navLineSource, navSourceLines } from "./nav-line-source.js";
 import { ProjectRepository } from "./project.repository.js";
 
 @Injectable()
@@ -212,8 +213,18 @@ export class PurchasingService {
       }
     }
 
+    // A NAV SOR FORRASA A TAROLT NAV ADATBOL jon, nem a klienstol (#1199
+    // A-007). Nem allit meg semmit: ha nincs NAV adat, vagy a sorszam nem
+    // egyertelmu, a ket mezo null marad.
+    const navLines = input.navIncomingInvoiceId
+      ? navSourceLines(
+          await this.invoices.navInvoiceParsedData(input.navIncomingInvoiceId),
+        )
+      : null;
+
     const preparedLines: CreatePurchaseInvoiceLine[] = [];
     for (const line of input.lines) {
+      const navSource = navLineSource(navLines, line.navLineNumber);
       if (!Number.isFinite(line.actualQuantity) || line.actualQuantity < 0)
         throw new BadRequestException(
           "A ténylegesen bevételezett mennyiség nem lehet negatív.",
@@ -282,6 +293,7 @@ export class PurchasingService {
           sku: null,
           createLocalProduct: null,
           sourceDescription,
+          ...navSource,
           orderedQuantity: new Prisma.Decimal(line.orderedQuantity),
           actualQuantity: new Prisma.Decimal(line.actualQuantity),
           unit: line.unit.trim(),
@@ -322,6 +334,7 @@ export class PurchasingService {
               line.createLocalProduct.primaryCategoryId?.trim() || null,
           },
           sourceDescription,
+          ...navSource,
           orderedQuantity: new Prisma.Decimal(line.orderedQuantity),
           actualQuantity: new Prisma.Decimal(line.actualQuantity),
           unit: line.unit.trim(),
@@ -368,6 +381,7 @@ export class PurchasingService {
         sku: info.sku,
         createLocalProduct: null,
         sourceDescription: line.sourceDescription?.trim() || null,
+        ...navSource,
         orderedQuantity: new Prisma.Decimal(line.orderedQuantity),
         actualQuantity: new Prisma.Decimal(line.actualQuantity),
         unit: line.unit.trim() || info.unit,

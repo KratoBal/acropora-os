@@ -51,6 +51,8 @@ interface InvoiceLineState {
   productName: string;
   unit: string;
   sourceDescription: string;
+  /** A NAV számlasor sorszáma, ha a sor NAV bejövő számlából jött; a mentés ezzel köti a sort a NAV sorhoz. */
+  navLineNumber: number | null;
   orderedQuantity: number;
   actualQuantity: number;
   unitNet: number;
@@ -231,6 +233,7 @@ export function PurchaseInvoiceEuEditorPage() {
               productName: "",
               unit: line.unit,
               sourceDescription: line.description,
+              navLineNumber: line.lineNumber,
               orderedQuantity: quantity,
               actualQuantity: quantity,
               unitNet: Number.isFinite(unitPrice) ? unitPrice : 0,
@@ -374,6 +377,7 @@ export function PurchaseInvoiceEuEditorPage() {
         productName: product.productName,
         unit: product.unit,
         sourceDescription: "",
+        navLineNumber: null,
         orderedQuantity: 1,
         actualQuantity: 1,
         unitNet: product.lastPurchaseNetPrice
@@ -398,6 +402,7 @@ export function PurchaseInvoiceEuEditorPage() {
         productName: "",
         unit: "",
         sourceDescription: "",
+        navLineNumber: null,
         orderedQuantity: 1,
         actualQuantity: 1,
         unitNet: 0,
@@ -681,6 +686,7 @@ export function PurchaseInvoiceEuEditorPage() {
               }
             : undefined,
           sourceDescription: line.sourceDescription.trim() || undefined,
+          navLineNumber: line.navLineNumber ?? undefined,
           orderedQuantity: line.orderedQuantity,
           actualQuantity: line.actualQuantity,
           unit: line.unit,
