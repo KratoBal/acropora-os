@@ -13,6 +13,7 @@ export {
 export {
   ASSET_CATEGORY_SCHEMA,
   assetDisplayName,
+  partOfSentence,
   projectAssetCategory,
   stripAssetNamePrefix,
   type AssetCategoryProjection,
@@ -39,6 +40,7 @@ export {
 export {
   ASSET_CATEGORY_POLICY,
   choiceCriteria,
+  modelState,
   optionsHash,
   reportMarkdown,
   runAssetCategoryEvaluation,

@@ -11,7 +11,13 @@ import {
   type AssetCategoryProjectionInput,
   type PrefixRule,
 } from "./asset-category-projection.js";
-import { Cph1Set, cph1, cph1Canonical, jcs, normalizeCph1 } from "./cph1.js";
+import {
+  Cph1Set,
+  cph1,
+  cph1Canonical,
+  normalizeCph1,
+  type Cph1Value,
+} from "./cph1.js";
 import {
   GO_THRESHOLDS,
   NONE_KEY,
@@ -33,15 +39,49 @@ import {
  * A POLICY: ami egyutt verziozodik (ACD-003 Q-003 `policyVersion`). A modell
  * ROGZITETT -- `jev-latest` soha, es eltunesnel a futas megall (Q-004 H).
  */
+/*
+  @2 (2026-09-28): AZ UTASITAS, A NONE LEIRASA ES A `state` ALAKJA BETURE AZ,
+  AMIT ACROBOT MERT (A/B, `exchange/jev-v0-ab-2026-09-28.py`). Az @1-ben harom
+  ponton tertem el tole, es a szulo nelkuli 68 elemen az en futasom 54, az ove
+  61 jot adott:
+
+    utasitas    @1: altalanos kerdes + "valaszd a NONE opciot" mondat
+                mert: "... ez az akvarium- vagy vizgepeszeti eszkoz?"
+    NONE        @1: "A megadott adatokbol nem donthető el."
+                mert: "Nem sorolhato be ebbol az adatbol" (ekezet NELKUL -- igy
+                futott, es a mert szam ezzel all)
+    state       @1: tomor JSON; mert: Python `json.dumps` (", " es ": ")
+
+  A harom kozul MELYIK okozta a kulonbseget, azt nem mertuk: a NONE-t az @1
+  futas egyszer sem valasztotta, tehat a NONE-mondat hatasa nem a NONE-
+  valaszokon at jott, ha jott. Ezert nem valasztottam kozuluk, hanem a MERT
+  alakot vettem at egeszeben: igy a policy sajat bizonyiteka a 79,5%. Barmelyik
+  szoveg atirasa uj meres es uj policy-verzio.
+*/
 export const ASSET_CATEGORY_POLICY = {
   key: "service-assets.asset-category",
-  version: 1,
+  version: 2,
   model: "jev-1.13.0",
   projectionSchema: ASSET_CATEGORY_SCHEMA,
   instructions:
-    "Melyik eszköz-kategóriába tartozik ez az eszköz? Ha a megadott adatokból nem dönthető el, válaszd a NONE opciót.",
-  noneDescription: "A megadott adatokból nem dönthető el.",
+    "Melyik eszköz-kategóriába tartozik ez az akvárium- vagy vízgépészeti eszköz?",
+  noneDescription: "Nem sorolhato be ebbol az adatbol",
 } as const;
+
+/**
+ * A MODELLNEK KULDOTT `state`: a vetulet adatresze Python `json.dumps` alakban
+ * (rendezett kulcsok, `", "` es `": "` elvalaszto, ekezet nyersen) -- a mert
+ * alak. A hash ettol fuggetlen: az a cph1 JCS-alakjabol keszul.
+ */
+export function modelState(value: Cph1Value): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(modelState).join(", ")}]`;
+  const obj = value as { readonly [key: string]: Cph1Value };
+  return `{${Object.keys(obj)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}: ${modelState(obj[k] as Cph1Value)}`)
+    .join(", ")}}`;
+}
 
 /** A valaszthato opciok: minden aktiv kategoria azonositoval, plusz NONE. */
 export function choiceCriteria(
@@ -153,7 +193,7 @@ export async function runAssetCategoryEvaluation(input: {
           apiKey: input.apiKey,
           model: ASSET_CATEGORY_POLICY.model,
           /* A MODELL A VETULET ADATRESZET LATJA, kanonikus JSON-kent. */
-          state: jcs(normalizeCph1(projection.data)),
+          state: modelState(normalizeCph1(projection.data)),
           instructions: ASSET_CATEGORY_POLICY.instructions,
           criteria,
         },

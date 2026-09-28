@@ -18,13 +18,16 @@ Szerződés: KratoBal/acropora-os #1199 (ACD-001–005). Balázs jóváhagyása:
 
 ## Döntések
 
-1. **A vetület kulcsai snake_case-ek** (`performance_unit`, `power_consumption`, `parent_category`). A cph1 szabálya `[a-z0-9_]` kulcsot kér, és más kulcsra dob. A P-004 példájában camelCase kulcsok álltak; a szabály a szerződés, nem a példa. acrobot 2026-09-28 12:21-kor egyetértett.
+1. **A vetület kulcsai snake_case-ek** (`performance_unit`, `power_consumption`, `resze_ennek`). A cph1 szabálya `[a-z0-9_]` kulcsot kér, és más kulcsra dob. A P-004 példájában camelCase kulcsok álltak; a szabály a szerződés, nem a példa. acrobot 2026-09-28 12:21-kor egyetértett.
 2. **A levágott whitespace halmaza ki van mondva** (ECMAScript WhiteSpace + LineTerminator), mert a JS `trim()` és a Python `strip()` nem ugyanazt vágja (pl. az U+FEFF-et). A vektorfájl tartalmaz rá esetet.
 3. **A vektorfájl jelölői:** a halmazt, a decimálist és az időpontot `$cph1_set`, `$cph1_decimal` és `$cph1_datetime` jelöli. A JSON ezeket nem tudja megkülönböztetni; minden nyelv betöltője a saját típusára fordítja őket.
 4. **Az előtag levágása:** az eszköz saját részleg-útvonalának (`WorksheetDepartment.code`, a gyökértől) leghosszabb végszelete, pontos egyezéssel és szóhatáron. Ha nem egyezik, egy tartalék minta jön (több szegmens, illetve a `CAP`). Az `UV` és a `GHL` marad. acrobot mérte az éles adaton, hogy az előtag a részleg-útvonal. A riport kiírja, melyik szabály hányszor vágott.
 5. **A `performance_unit` a mértékegység neve** (`UnitOfMeasure.name`), nem a kódja, ahogy a címkéző tábla is mutatja.
 6. **A modell rögzített** (`jev-1.13.0`). Ha eltűnik, a futás megáll (`MODEL_UNAVAILABLE`, kilépési kód 2), és nem vált `jev-latest`-re (Q-004 H).
-7. **A modell a vetület adatrészét kapja**, kanonikus JSON-szövegként (`state`). Ez a mért, működő alak; a JSON-objektum alakot a Jev dokumentálja, de nem mértük.
+7. **Policy @2 (2026-09-28), betű szerint acrobot mért A/B hívása** (`exchange/jev-v0-ab-2026-09-28.py`, B változat).
+   - **A szülő:** a `parent_category` helyett a `resze_ennek` magyarázó mondat. Az @1 éles futásán a nyers szülő-kategória mellett a modell a 67 hibából 53-szor a szülő kategóriáját választotta (szülővel 6/59 jó). A B változat ugyanazon a 127 elemen 79,5%-ot adott (≥ 0,9 mellett 2 rossz).
+   - **Az utasítás, a NONE leírása és a `state` alakja is a mért hívásé.** A `state` a vetület adatrésze Python `json.dumps` alakban (rendezett kulcs, `", "` és `": "`, nyers ékezet); egy teszt bájtra összeveti a Python kimenetével.
+   - **Az @1-ben ezeken a pontokon tértem el**, és a szülő nélküli 68 elemen 54 jót adott a mért 61 helyett. Hogy a három eltérés közül melyik okozta a különbséget, azt nem mértük. Ezért nem választottam közülük, hanem a mért alakot vettem át egészben. Ezeknek a szövegeknek bármelyik átírása új mérés és új policy-verzió.
 
 ## Futtatás
 

@@ -70,7 +70,12 @@ export type JevChoiceResult =
       readonly attempts: number;
     };
 
-const KERDES = "kategoria";
+/*
+  A KERDES KULCSA "q" -- a mert hivas (acrobot A/B) is ezt kuldte. A modellnek
+  valoszinuleg mindegy, de a policy @2 a mert hivast ismetli, es ez az egy
+  kulcs volt meg elteres.
+*/
+const KERDES = "q";
 
 function vag(szoveg: string): string {
   return szoveg.length > 500 ? `${szoveg.slice(0, 500)}…` : szoveg;

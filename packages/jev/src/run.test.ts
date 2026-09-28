@@ -7,6 +7,7 @@ import type { FetchLike } from "./jev-client.js";
 import {
   ASSET_CATEGORY_POLICY,
   choiceCriteria,
+  modelState,
   optionsHash,
   reportMarkdown,
   runAssetCategoryEvaluation,
@@ -64,7 +65,7 @@ function jevDupla(opciok: { unknownModel?: boolean } = {}) {
         JSON.stringify({
           model: body.model,
           answers: {
-            kategoria: {
+            q: {
               choice,
               confidence: 0.95,
               probabilities: { [choice]: 0.95 },
@@ -97,8 +98,8 @@ describe("a V0 kiértékelés futtatása", () => {
       arany("a2", "c_lampa"),
     ]);
     assert.deepEqual(jev.allapotok, [
-      '{"manufacturer":"Tunze","name":"Keringető szivattyú","parent_category":"Szűrési rendszer"}',
-      '{"name":"Lámpa"}',
+      '{"manufacturer": "Tunze", "name": "Keringető szivattyú", "resze_ennek": "Ez az eszköz egy nagyobb egység ALKATRÉSZE; a befoglaló egység kategóriája: Szűrési rendszer. A kérdés az ALKATRÉSZ saját kategóriája."}',
+      '{"name": "Lámpa"}',
     ]);
     for (const allapot of jev.allapotok)
       assert.doesNotMatch(allapot, /BIO|LSS07|AKV|A11|FAN/);
@@ -158,6 +159,33 @@ describe("a V0 kiértékelés futtatása", () => {
 });
 
 describe("a policy és az opciók", () => {
+  /**
+   * @2: A POLICY BETURE A MERT HIVAS (acrobot A/B, 2026-09-28). Ezek a szovegek
+   * a mert eredmeny reszei; atirasuk uj meres es uj policy-verzio.
+   */
+  it("a policy @2 a mért utasítást és NONE-leírást viszi", () => {
+    assert.equal(ASSET_CATEGORY_POLICY.version, 2);
+    assert.equal(
+      ASSET_CATEGORY_POLICY.instructions,
+      "Melyik eszköz-kategóriába tartozik ez az akvárium- vagy vízgépészeti eszköz?",
+    );
+    assert.equal(
+      ASSET_CATEGORY_POLICY.noneDescription,
+      "Nem sorolhato be ebbol az adatbol",
+    );
+    assert.equal(
+      ASSET_CATEGORY_POLICY.projectionSchema,
+      "service-assets.asset-category@2",
+    );
+  });
+
+  it("a state a Python json.dumps alakja: rendezett kulcs, vessző-szóköz, kettőspont-szóköz, nyers ékezet", () => {
+    assert.equal(
+      modelState({ b: "ő", a: ["x", 1], c: { z: null } }),
+      '{"a": ["x", 1], "b": "ő", "c": {"z": null}}',
+    );
+  });
+
   it("a modell rögzített, nem jev-latest", () => {
     assert.equal(ASSET_CATEGORY_POLICY.model, "jev-1.13.0");
     assert.notEqual(ASSET_CATEGORY_POLICY.model, "jev-latest");

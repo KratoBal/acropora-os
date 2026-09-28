@@ -61,7 +61,7 @@ function dupla(
 const JO = JSON.stringify({
   model: "jev-1.13.0",
   answers: {
-    kategoria: {
+    q: {
       type: "choice",
       choice: "cat1",
       confidence: 0.97,
@@ -83,7 +83,7 @@ describe("a Jev choice-hívás", () => {
       state: KERES.state,
       model: "jev-1.13.0",
       questions: {
-        kategoria: {
+        q: {
           type: "choice",
           instructions: KERES.instructions,
           criteria: KERES.criteria,

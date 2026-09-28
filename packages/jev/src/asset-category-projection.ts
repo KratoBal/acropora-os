@@ -14,7 +14,7 @@
  *
  *   ki:     name (helyszin-elotag es sorszam nelkul), manufacturer, model,
  *           kind, performance, performance_unit, power_consumption,
- *           parent_category (a SZULO ESZKOZ KATEGORIAJANAK neve)
+ *           resze_ennek (@2: a SZULO ESZKOZ KATEGORIAJA, magyarazo mondatban)
  *   nem:    description (szabad szoveg), serialNumber, partnerInternalCode,
  *           inventoryNumber, electricalCode (partnerkod), notes,
  *           function (ugyanazon az urlapon tolti az ember, a valasz resze lenne)
@@ -28,7 +28,25 @@
  */
 import { Cph1Decimal, canonicalDecimal } from "./cph1.js";
 
-export const ASSET_CATEGORY_SCHEMA = "service-assets.asset-category@1";
+/**
+ * @2 (2026-09-28): a szulo kategoriaja nem `parent_category`, hanem a
+ * `resze_ennek` magyarazo mondat. acrobot elso eles futasa (127 elem,
+ * Balazs megerositett cimkei): a nyers `parent_category` mellett a modell a 67
+ * hibabol 53-szor a SZULO kategoriajat valasztotta (szulovel 6/59 jo, szulo
+ * nelkul 54/68). A/B ugyanazon a 127-en: a mezo nelkul 66,9%, a magyarazo
+ * mondattal 79,5% (mindketto >= 0,9 mellett 2 rossz).
+ */
+export const ASSET_CATEGORY_SCHEMA = "service-assets.asset-category@2";
+
+/**
+ * A SZULO KATEGORIAJANAK MAGYARAZO MONDATA -- BETURE AZ, AMIT ACROBOT MERT
+ * (`exchange/jev-v0-ab-2026-09-28.py`, B valtozat). A mondat modellnek szol, es
+ * minden szava resze a mert eredmenynek: aki atfogalmazza, uj merest kell
+ * futtatnia, es a policy-verziot emelni.
+ */
+export function partOfSentence(parentCategory: string): string {
+  return `Ez az eszköz egy nagyobb egység ALKATRÉSZE; a befoglaló egység kategóriája: ${parentCategory}. A kérdés az ALKATRÉSZ saját kategóriája.`;
+}
 
 /** A vetito bemenete: az eszkoz sora es a hozza tartozo, mar feloldott nevek. */
 export interface AssetCategoryProjectionInput {
@@ -67,7 +85,8 @@ export interface AssetCategoryProjection {
     readonly performance?: Cph1Decimal;
     readonly performance_unit?: string;
     readonly power_consumption?: Cph1Decimal;
-    readonly parent_category?: string;
+    /** A szulo eszkoz kategoriaja magyarazo mondatban (`partOfSentence`). */
+    readonly resze_ennek?: string;
   };
 }
 
@@ -134,7 +153,9 @@ export function projectAssetCategory(input: AssetCategoryProjectionInput): {
     performance: decimalis(input.performance),
     performance_unit: szoveg(input.performanceUnit),
     power_consumption: decimalis(input.powerConsumption),
-    parent_category: szoveg(input.parentCategory),
+    resze_ennek: szoveg(input.parentCategory)
+      ? partOfSentence(szoveg(input.parentCategory) as string)
+      : undefined,
   };
   const data = Object.fromEntries(
     Object.entries(nyers).filter(([, ertek]) => ertek !== undefined),

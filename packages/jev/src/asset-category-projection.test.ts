@@ -93,7 +93,7 @@ describe("az eszköz-kategória vetülete", () => {
     assert.equal(prefixRule, "department");
     assert.equal(
       cph1Canonical(projection),
-      `{"data":{"kind":"EQUIPMENT","manufacturer":"Kessil","model":"A360X","name":"Lámpa","parent_category":"Világítás","performance":"90","performance_unit":"watt","power_consumption":"0.09"},"schema":"${ASSET_CATEGORY_SCHEMA}"}`,
+      `{"data":{"kind":"EQUIPMENT","manufacturer":"Kessil","model":"A360X","name":"Lámpa","performance":"90","performance_unit":"watt","power_consumption":"0.09","resze_ennek":"Ez az eszköz egy nagyobb egység ALKATRÉSZE; a befoglaló egység kategóriája: Világítás. A kérdés az ALKATRÉSZ saját kategóriája."},"schema":"${ASSET_CATEGORY_SCHEMA}"}`,
     );
   });
 
@@ -138,5 +138,36 @@ describe("az eszköz-kategória vetülete", () => {
       departmentPath: ["CAP", "NMD"],
     });
     assert.deepEqual(projection.data, {});
+  });
+
+  /**
+   * @2 (2026-09-28): A SZULO KATEGORIAJA MAGYARAZO MONDATBAN MEGY, NEM NYERS
+   * MEZOKENT. A nyers `parent_category` mellett acrobot eles futasan a modell a
+   * 67 hibabol 53-szor a szulo kategoriajat valasztotta. A mondat betu szerint
+   * a mert B valtozat: ha atirodik, a mert szam mar nem ra vonatkozik.
+   */
+  it("a szülő kategóriája a mért magyarázó mondatban áll, parent_category nincs", () => {
+    const { projection } = projectAssetCategory({
+      name: "Homokszűrő II. motoros szelep",
+      parentCategory: "Nyomástartó tartályok",
+    });
+    assert.equal(projection.schema, "service-assets.asset-category@2");
+    assert.deepEqual(Object.keys(projection.data).sort(), [
+      "name",
+      "resze_ennek",
+    ]);
+    assert.equal(
+      projection.data.resze_ennek,
+      "Ez az eszköz egy nagyobb egység ALKATRÉSZE; a befoglaló egység kategóriája: Nyomástartó tartályok. A kérdés az ALKATRÉSZ saját kategóriája.",
+    );
+    assert.doesNotMatch(cph1Canonical(projection), /parent_category/);
+  });
+
+  it("szülő nélkül nincs resze_ennek mező", () => {
+    const { projection } = projectAssetCategory({
+      name: "Szivattyú",
+      parentCategory: " ",
+    });
+    assert.deepEqual(projection.data, { name: "Szivattyú" });
   });
 });
