@@ -158,3 +158,51 @@ export interface PurchaseProductSearchResult {
   lastPurchaseCurrency?: string;
   currentStock: string;
 }
+
+/**
+ * A beszállítói számlafájl (CII XML vagy a Hertlein PDF-elrendezése)
+ * beolvasásának eredménye. CSAK előtöltés: a szerver semmit nem ment belőle,
+ * a sorokat az ember menti a szokásos számla-rögzítéssel (#1199 P-026).
+ */
+export type SupplierInvoiceImportFormat = "XML" | "PDF";
+
+export interface SupplierInvoiceImportLine {
+  /** A számlán álló sorszám (1-től). */
+  lineNumber: number;
+  /** A beszállító saját cikkszáma, ahogy a számlán áll. */
+  supplierSku: string | null;
+  /** EAN/GTIN, ha a számla hordozza (a PDF nem hordozza). */
+  ean: string | null;
+  description: string;
+  quantity: number;
+  unit: string;
+  /** Egységár a számla pénznemében, kedvezmény levonása előtt. */
+  unitNet: number;
+  discountPercent: number | null;
+  /** A számlán álló sor-összeg (nettó, kedvezmény után). */
+  lineNet: number;
+  /** Fuvar- vagy díjsor: nem termék, nem köthető a terméktörzshöz. */
+  isCharge: boolean;
+}
+
+export interface SupplierInvoiceImportResult {
+  format: SupplierInvoiceImportFormat;
+  supplier: {
+    name: string | null;
+    /** A beszállító közösségi adószáma szóköz nélkül, pl. "DE123456789". */
+    vatId: string | null;
+    /** ISO 3166-1 alpha-2, a közösségi adószámból vagy a számla címéből. */
+    country: string | null;
+  };
+  invoiceNumber: string | null;
+  /** YYYY-MM-DD */
+  invoiceDate: string | null;
+  /** YYYY-MM-DD */
+  dueDate: string | null;
+  currency: string | null;
+  /** A számla nettó végösszege, ha a fájl hordozza; a sorok összegével vetjük össze. */
+  netTotal: number | null;
+  lines: SupplierInvoiceImportLine[];
+  /** Emberi nyelvű figyelmeztetések (magyarul), pl. ha a sorösszeg eltér a végösszegtől. */
+  warnings: string[];
+}

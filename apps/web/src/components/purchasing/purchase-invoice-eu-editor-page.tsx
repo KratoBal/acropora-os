@@ -19,6 +19,8 @@ import {
   type PurchaseInvoiceResult,
   type PurchaseInvoiceSource,
   type PurchaseProductSearchResult,
+  type SupplierInvoiceImportFormat,
+  type SupplierInvoiceImportResult,
   type SupplierSummary,
   type ViesVatLookupResult,
 } from "@acropora/types";
@@ -51,6 +53,11 @@ interface InvoiceLineState {
   productName: string;
   unit: string;
   sourceDescription: string;
+  /**
+   * A beszállító saját cikkszáma, ha a sor beszállítói számlafájlból jött.
+   * Csak kijelzés és keresési segítség: a számlasorral nem mentődik.
+   */
+  supplierSku?: string | null;
   /** A NAV számlasor sorszáma, ha a sor NAV bejövő számlából jött; a mentés ezzel köti a sort a NAV sorhoz. */
   navLineNumber: number | null;
   orderedQuantity: number;
@@ -163,6 +170,68 @@ export function PurchaseInvoiceEuEditorPage() {
   const [lastResult, setLastResult] = useState<PurchaseInvoiceResult | null>(
     null,
   );
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSummary, setImportSummary] = useState<{
+    format: SupplierInvoiceImportFormat;
+    lineCount: number;
+    warnings: string[];
+  } | null>(null);
+
+  /**
+   * Beszállítói számlafájl betöltése (#1199 P-026). CSAK előtöltés: a
+   * fejléc, a szállító adatai és a sorok kitöltődnek, a sorok termék nélkül
+   * jönnek be, és semmi nem rögzül, amíg az ember nem ment.
+   */
+  const importSupplierFile = async (file: File) => {
+    setImporting(true);
+    setImportError(null);
+    setImportSummary(null);
+    try {
+      const result: SupplierInvoiceImportResult =
+        await purchasingApi.importSupplierInvoice(token, file);
+      if (result.invoiceNumber) setSupplierInvoiceNumber(result.invoiceNumber);
+      if (result.invoiceDate) setInvoiceDate(result.invoiceDate);
+      setDueDate(result.dueDate ?? "");
+      if (result.currency) setCurrency(result.currency);
+      if (result.supplier.name) setNewSupplierName(result.supplier.name);
+      if (result.supplier.vatId) setNewSupplierTaxNumber(result.supplier.vatId);
+      if (result.supplier.country)
+        setNewSupplierCountry(result.supplier.country);
+      // the supplier list is searched by the tax id first: a name can differ
+      // between the invoice and our record, the tax id does not
+      setSupplierSearch(result.supplier.vatId ?? result.supplier.name ?? "");
+      setLines(
+        result.lines.map((line, index) => ({
+          key: `import-${index}-${line.lineNumber}`,
+          variantId: null,
+          createLocalProduct: null,
+          sku: "",
+          productName: "",
+          unit: line.unit,
+          sourceDescription: line.description,
+          supplierSku: line.supplierSku,
+          navLineNumber: null,
+          orderedQuantity: line.quantity,
+          actualQuantity: line.quantity,
+          unitNet: line.unitNet,
+          discountPercent: line.discountPercent ?? "",
+          projectAllocations: [],
+        })),
+      );
+      setImportSummary({
+        format: result.format,
+        lineCount: result.lines.length,
+        warnings: result.warnings,
+      });
+    } catch (cause) {
+      setImportError(
+        cause instanceof Error ? cause.message : "A számla nem tölthető be.",
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const changeSource = (next: PurchaseInvoiceSource) => {
     setSource(next);
@@ -708,6 +777,7 @@ export function PurchaseInvoiceEuEditorPage() {
       // szinkron siker/hiba, amit meg kellene jeleníteni.
       setLastResult(result);
       setLines([]);
+      setImportSummary(null);
       setProductSearchTargetKey(null);
       setProductSearch("");
       setProductResults([]);
@@ -781,6 +851,54 @@ export function PurchaseInvoiceEuEditorPage() {
             Belföldi (kézi)
           </Button>
         </Card>
+      ) : null}
+
+      {!navInvoiceId && source === "EU" ? (
+        <Card className="p-4">
+          <label className="text-sm font-medium text-dusk-900">
+            Beszállítói számla betöltése fájlból (XML vagy PDF)
+            <input
+              type="file"
+              accept=".xml,.pdf,application/pdf,application/xml,text/xml"
+              aria-label="Beszállítói számla fájl"
+              disabled={importing || lines.length > 0}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void importSupplierFile(file);
+              }}
+              className="mt-2 block text-sm"
+            />
+          </label>
+          <p className="mt-1 text-xs text-dusk-500">
+            {lines.length > 0
+              ? "Betölteni csak üres tétellistára lehet: előbb távolítsd el a meglévő sorokat."
+              : "Kitölti a fejlécet, a szállító adatait és a sorokat. Semmi nem rögzül, amíg nem mentesz."}
+          </p>
+        </Card>
+      ) : null}
+
+      {importError ? (
+        <Alert
+          variant="danger"
+          title="A számla nem tölthető be"
+          description={importError}
+        />
+      ) : null}
+
+      {importSummary ? (
+        <Alert
+          variant="info"
+          title={
+            importSummary.format === "PDF"
+              ? "PDF-ből olvasva, ellenőrizendő"
+              : "Számla betöltve XML-ből"
+          }
+          description={[
+            `${importSummary.lineCount} sor betöltve. Kösd a sorokat a saját termékeidhez, vagy hozd létre őket újként.`,
+            ...importSummary.warnings,
+          ].join(" ")}
+        />
       ) : null}
 
       {navPrefillLoading ? (
@@ -1301,6 +1419,11 @@ export function PurchaseInvoiceEuEditorPage() {
                           <Badge variant="warning">Nincs terméktörzsben</Badge>
                         </div>
                       )}
+                      {line.supplierSku ? (
+                        <p className="font-mono text-xs text-dusk-500">
+                          Beszállítói cikkszám: {line.supplierSku}
+                        </p>
+                      ) : null}
                     </div>
                     <button
                       type="button"

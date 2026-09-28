@@ -63,6 +63,12 @@ export interface XmlNode {
   name: string;
   text: string;
   children: XmlNode[];
+  /**
+   * The element's attributes, name to value (prefixes kept as written). The
+   * NAV readers never needed them; the supplier invoice reader does (CII puts
+   * the unit on `unitCode` and the tax-id kind on `schemeID`).
+   */
+  attributes?: Record<string, string>;
 }
 
 export const child = (node: XmlNode | undefined, name: string) =>
@@ -100,7 +106,12 @@ export function parseXml(xml: string): XmlNode {
   const stack: XmlNode[] = [];
   const parser = new SaxesParser({ xmlns: false });
   parser.on("opentag", (tag) => {
-    const node: XmlNode = { name: tag.name, text: "", children: [] };
+    const node: XmlNode = {
+      name: tag.name,
+      text: "",
+      children: [],
+      attributes: { ...(tag.attributes as Record<string, string>) },
+    };
     const parent = stack.at(-1);
     if (parent) parent.children.push(node);
     else roots.push(node);

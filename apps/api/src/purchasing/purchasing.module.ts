@@ -9,6 +9,7 @@ import { PurchaseProductSearchService } from "./purchase-product-search.service.
 import { ProjectRepository } from "./project.repository.js";
 import { PurchasingController } from "./purchasing.controller.js";
 import { PurchasingService } from "./purchasing.service.js";
+import { SupplierInvoiceImportService } from "./supplier-invoice-import/supplier-invoice-import.service.js";
 
 // No longer imports UnasImportModule - PurchasingService's synchronous UNAS
 // push was removed (stock now goes through the shared postInventoryMovement
@@ -24,6 +25,7 @@ import { PurchasingService } from "./purchasing.service.js";
     PurchaseProductSearchService,
     ProjectRepository,
     PurchasingService,
+    SupplierInvoiceImportService,
   ],
 })
 export class PurchasingModule {}
