@@ -58,6 +58,14 @@ párhuzamosan futottak, és ugyanazokat a `dist` mappákat írták -- az `api` �
 annak a billegésnek, ami időnként megnevezetlen feladattal állt meg, és külön
 futtatva mindig zöld volt.
 
+**Ugyanezért nem generál Prisma-klienst a `@acropora/database` teszt-szkriptje**
+(2026-09-28 óta). Addig `prisma generate`-tel kezdett, és a turbo alatt
+PÁRHUZAMOSAN futhatott az `@acropora/api#build`-del: mindkettő csak a
+`@acropora/database#build`-re vár. A generálás újraírta a klienst, miközben az
+API `tsc`-je olvasta, és a build 489 „implicitly has an 'any' type" hibával
+állt meg (#1201 CI, 2026-09-28 11:34; ugyanaz a fej a következő futáson zöld
+volt). A generálás a `build` dolga, amit a turbo a teszt előtt úgyis lefuttat.
+
 A `pnpm install` beállítja a `core.hooksPath` értékét a repository `.githooks` mappájára, így egy pre-commit hook visszautasítja a formázatlan fájlokat tartalmazó commitot. Ez gyors helyi jelzés, nem maga a szabály: kihagyható (`git commit --no-verify`), és csak azon a gépen létezik, ahol lefutott a telepítés. A mérvadó ellenőrzés a `pnpm format:check`, és **ezt a CI is futtatja** (korábban nem futtatta senki).
 
 **A `pnpm lint` megszűnt, és ezt érdemes tudni:** mind a hat munkaterület-csomagban a `lint` szkript `tsc --noEmit` volt, vagyis betű szerint ugyanaz, amit a `pnpm typecheck` futtat. Két név, egy ellenőrzés. A repository egyetlen valódi lintere a mobil alkalmazás ESLint-je, az viszont **nem is volt elérhető** ezen az úton: a `pnpm-workspace.yaml` kizárja az `apps/mobile` mappát a munkaterületből, tehát a `turbo run lint` sosem futtatta. **A típusellenőrzés a `pnpm typecheck`, a mobil linter a `pnpm mobile:lint`** - és mostantól nincs olyan parancs, ami mindkettőt ígéri és egyiket sem adja.
