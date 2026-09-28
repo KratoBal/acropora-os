@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { RICH_TEXT_ALLOWED_TAGS } from "./schema.js";
 import { isAllowedRichHref, sanitizeRichHtml } from "./sanitize.js";
+import { richImageIds } from "./schema.js";
 
 describe("a tisztito: ami kiesik", () => {
   it("a script es a style TARTALMAVAL egyutt eltunik", () => {
@@ -83,7 +84,11 @@ describe("a tisztito: ami megmarad", () => {
   it("a whitelist minden tagje atmegy", () => {
     for (const tag of Object.keys(RICH_TEXT_ALLOWED_TAGS)) {
       const html =
-        tag === "br" || tag === "hr" ? `<${tag}>` : `<${tag}>x</${tag}>`;
+        tag === "img"
+          ? '<img src="acropora-image:logo1" alt="Logó" width="200">'
+          : tag === "br" || tag === "hr"
+            ? `<${tag}>`
+            : `<${tag}>x</${tag}>`;
       assert.equal(sanitizeRichHtml(html), html, tag);
     }
   });
@@ -140,5 +145,79 @@ describe("isAllowedRichHref", () => {
       const megmaradt = sanitizeRichHtml(html, opciok) !== "<a>a</a>";
       assert.equal(isAllowedRichHref(href, opciok), megmaradt, href);
     }
+  });
+});
+
+/**
+ * A KEP (2026-09-28). A `src` CSAK a sajat hivatkozas lehet: egy kulso cim a
+ * vevo levelezojeben nyomkoveto keppe valna, a `data:` URI-t a Gmail nem mutatja.
+ */
+describe("a tisztito: a kep", () => {
+  it("a sajat hivatkozasu kep alt szoveggel es szelesseggel megmarad", () => {
+    const html =
+      '<p><img src="acropora-image:logo1" alt="Acropora &lt;logó&gt;" width="200"></p>';
+    assert.equal(sanitizeRichHtml(html), html);
+  });
+
+  for (const src of [
+    "https://example.com/pixel.png",
+    "http://example.com/x.png",
+    "//example.com/x.png",
+    "data:image/png;base64,AAAA",
+    "javascript:alert(1)",
+    "acropora-image:../x",
+    "acropora-image:",
+    "cid:logo1@acropora",
+  ])
+    it(`idegen forrasu kep egeszeben kiesik: ${src}`, () => {
+      assert.equal(
+        sanitizeRichHtml(`<p>a<img src="${src}" alt="x">b</p>`),
+        "<p>ab</p>",
+      );
+    });
+
+  it("a forras nelkuli kep egeszeben kiesik", () => {
+    assert.equal(sanitizeRichHtml('<p>a<img alt="x">b</p>'), "<p>ab</p>");
+  });
+
+  it("a cid: hivatkozas CSAK kuldeskor, kulon kerve megy at", () => {
+    const html = '<p><img src="cid:logo1@acropora" alt="Logó"></p>';
+    assert.equal(sanitizeRichHtml(html, { allowCidImages: true }), html);
+    assert.equal(sanitizeRichHtml(html), "<p></p>");
+  });
+
+  it("a tul szeles, a nem szam es a nulla szelesseg kiesik, a kep marad", () => {
+    for (const w of ["601", "9000", "50%", "auto", "0", "-5"])
+      assert.equal(
+        sanitizeRichHtml(`<img src="acropora-image:logo1" width="${w}">`),
+        '<img src="acropora-image:logo1">',
+        w,
+      );
+  });
+
+  it("az esemeny-attributum es a stilus a keprol is kiesik", () => {
+    assert.equal(
+      sanitizeRichHtml(
+        '<img src="acropora-image:logo1" onerror="alert(1)" style="width:9000px">',
+      ),
+      '<img src="acropora-image:logo1">',
+    );
+  });
+
+  it("idempotens a keppel is", () => {
+    const egyszer = sanitizeRichHtml(
+      '<p><img src="acropora-image:logo1" alt="a &amp; b" width="120"></p>',
+    );
+    assert.equal(sanitizeRichHtml(egyszer), egyszer);
+  });
+
+  it("richImageIds: a hivatkozott kepek, ismetles nelkul, sorrendben", () => {
+    assert.deepEqual(
+      richImageIds(
+        '<p><img src="acropora-image:b2"><img src="acropora-image:a1"><img src="acropora-image:b2"></p>',
+      ),
+      ["b2", "a1"],
+    );
+    assert.deepEqual(richImageIds("<p>nincs kep</p>"), []);
   });
 });

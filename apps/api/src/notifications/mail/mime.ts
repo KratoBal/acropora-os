@@ -5,7 +5,7 @@
  * (fejlec-injekcio, kodolas) egyseg-szinten merhetok. A Gmail-adapter ennyit
  * tesz hozza: elkuldi.
  */
-import { sanitizeRichHtml } from "@acropora/rich-text";
+import { richImageIds, sanitizeRichHtml } from "@acropora/rich-text";
 
 import { hasHeaderInjection } from "./mail-header.js";
 import type { OutgoingMail } from "./mail.port.js";
@@ -119,6 +119,7 @@ export function buildMimeMessage(
   from: string,
   boundary: string = hatarjel(),
   alternativeBoundary: string = hatarjel(),
+  relatedBoundary: string = hatarjel(),
 ): string {
   for (const cim of mail.to)
     if (hasHeaderInjection(cim))
@@ -135,6 +136,18 @@ export function buildMimeMessage(
       hasHeaderInjection(csatolmany.contentType)
     )
       throw new MailBuildError("MAIL_HEADER_INJECTION_ATTACHMENT");
+  /*
+    A BEAGYAZOTT KEP HAROM FEJLECBE KERUL (tipus, `Content-ID`, fajlnev), tehat
+    ugyanaz a dobas all ra. A `Content-ID` ezen felul a `<...>` kozott all: egy
+    `>` benne lezarna, ezert szukebb karakterkeszletet kap.
+  */
+  for (const kep of mail.inlineImages ?? [])
+    if (
+      hasHeaderInjection(kep.filename) ||
+      hasHeaderInjection(kep.contentType) ||
+      !/^[A-Za-z0-9._@-]{1,128}$/.test(kep.contentId)
+    )
+      throw new MailBuildError("MAIL_HEADER_INJECTION_INLINE_IMAGE");
 
   /*
     URES CIMZETT-LISTA NEM MEHET -- ES EZ A MASODIK RETEG. MEGMONDOM, HOL AZ
@@ -172,8 +185,41 @@ export function buildMimeMessage(
     A MERES: a tisztito a sajat kimenetén nem valtoztat (allitas all ra a
     `@acropora/rich-text` csomagban), tehat ami tiszta, az atmegy valtozatlanul.
   */
-  if (mail.html !== undefined && sanitizeRichHtml(mail.html) !== mail.html)
+  if (
+    mail.html !== undefined &&
+    sanitizeRichHtml(mail.html, { allowCidImages: true }) !== mail.html
+  )
     throw new MailBuildError("MAIL_HTML_UNSANITIZED");
+
+  /*
+    A HTML ES A BEAGYAZOTT KEPEK PARBAN ALLNAK, ES EZT IS ITT MERJUK, NEM
+    TISZTITJUK. Egy hivatkozott, de hianyzo kep a levelben torott ikon; egy
+    mellekelt, de nem hivatkozott kep a levelezok egy reszeben ismeretlen
+    csatolmanykent jelenik meg. Egyik sem hiba, amit a vevo jelentene -- ezert
+    itt kell megallnia.
+  */
+  /*
+    A SAJAT KEP-HIVATKOZAS (`acropora-image:`) A LEVELBEN SEMMIRE NEM MUTAT. A
+    kuldo burok cid:-re csereli; ha egy hivo megkerulte, a tisztito ezt nem
+    fogja meg (a sema a szerkesztoben engedett), ezert kulon dobas all ra.
+  */
+  if (mail.html !== undefined && richImageIds(mail.html).length > 0)
+    throw new MailBuildError("MAIL_INLINE_IMAGE_UNRESOLVED");
+
+  const beagyazott = mail.inlineImages ?? [];
+  const hivatkozott = new Set(
+    [...(mail.html ?? "").matchAll(/\ssrc="cid:([^"]+)"/g)].map(
+      (m) => m[1] as string,
+    ),
+  );
+  const mellekelt = new Set(beagyazott.map((kep) => kep.contentId));
+  if (
+    (beagyazott.length > 0 && mail.html === undefined) ||
+    mellekelt.size !== beagyazott.length ||
+    [...hivatkozott].some((cid) => !mellekelt.has(cid)) ||
+    [...mellekelt].some((cid) => !hivatkozott.has(cid))
+  )
+    throw new MailBuildError("MAIL_INLINE_IMAGE_MISMATCH");
 
   /*
     A TORZS BASE64-BEN MEGY. Ket okbol: az ekezetes szoveg igy nem serul a
@@ -208,7 +254,7 @@ export function buildMimeMessage(
     "",
     torzsBase64,
   ];
-  const torzsResz =
+  const alternativa =
     mail.html === undefined
       ? szovegResz
       : [
@@ -222,6 +268,32 @@ export function buildMimeMessage(
           "",
           Buffer.from(mailHtmlDocument(mail.html), "utf8").toString("base64"),
           `--${alternativeBoundary}--`,
+        ];
+
+  /*
+    A BEAGYAZOTT KEPEK A KET ALTERNATIVAVAL EGY `multipart/related` BUROKBA
+    KERULNEK (RFC 2387): az elso resz a gyoker (az alternativa), a kepek utana,
+    `Content-ID`-vel es `inline` jelzessel. KEP NELKUL A BUROK NINCS, tehat a
+    mai levelek alakja valtozatlan -- allitas all ra.
+  */
+  const torzsResz =
+    beagyazott.length === 0
+      ? alternativa
+      : [
+          `Content-Type: multipart/related; type="multipart/alternative"; boundary="${relatedBoundary}"`,
+          "",
+          `--${relatedBoundary}`,
+          ...alternativa,
+          ...beagyazott.flatMap((kep) => [
+            `--${relatedBoundary}`,
+            `Content-Type: ${kep.contentType}`,
+            "Content-Transfer-Encoding: base64",
+            `Content-ID: <${kep.contentId}>`,
+            `Content-Disposition: inline; filename="${kep.filename}"`,
+            "",
+            Buffer.from(kep.bytes).toString("base64"),
+          ]),
+          `--${relatedBoundary}--`,
         ];
 
   /*

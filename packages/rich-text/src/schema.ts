@@ -37,6 +37,17 @@ export const RICH_TEXT_ALLOWED_TAGS = {
    * vissza, es egy felig kijelolt formazas ketté vaghatna.
    */
   span: ["data-variable"],
+  /**
+   * A BEAGYAZOTT KEP (Balazs kerese, 2026-09-28 07:39 UTC: „jo lenne ha kepet
+   * is lehetne beszurni. pl acropora log").
+   *
+   * A `src` CSAK a sajat kep-hivatkozasunk lehet (`RICH_TEXT_IMAGE_SCHEME`),
+   * kulso cim es `data:` nem. A kep a levelbe agyazva megy ki (inline CID), nem
+   * kulso URL-kent: a kulso kepet sok levelezo alapbol blokkolja, a `data:`
+   * URI-t a Gmail nem mutatja, es publikus tarhelyunk sincs. A `width` felso
+   * hatara `RICH_TEXT_IMAGE_MAX_WIDTH`, hogy a levelben ne legyen oriasi.
+   */
+  img: ["src", "alt", "width"],
 } as const satisfies Readonly<Record<string, readonly string[]>>;
 
 export type RichTextTag = keyof typeof RICH_TEXT_ALLOWED_TAGS;
@@ -44,5 +55,43 @@ export type RichTextTag = keyof typeof RICH_TEXT_ALLOWED_TAGS;
 /** A link cimenek engedett semai. Minden mas `href` kiesik. */
 export const RICH_TEXT_HREF_SCHEMES = ["http:", "https:", "mailto:"] as const;
 
+/**
+ * A SAJAT KEP-HIVATKOZAS SEMAJA: `acropora-image:<azonosito>`.
+ *
+ * Nem URL, es ez szandekos: sem a bongeszo, sem a levelezo nem tudja
+ * magatol feloldani. A kuldes `cid:`-re csereli es a kepet mellekeli, az
+ * elonezet es a szerkeszto pedig a sajat, hitelesitett uton tolti be. Igy a
+ * tarolt HTML-ben SOHA nem all olyan cim, ami kifele mutatna.
+ */
+export const RICH_TEXT_IMAGE_SCHEME = "acropora-image:";
+
+/** Egy kep-azonosito alakja a hivatkozasban. */
+export const RICH_TEXT_IMAGE_ID = /^[a-z0-9]{1,64}$/;
+
+/** A levelbe szant kep legnagyobb szelessege, pixelben. */
+export const RICH_TEXT_IMAGE_MAX_WIDTH = 600;
+
+/** A hivatkozasbol az azonosito, vagy `null`, ha nem a sajat semank. */
+export function richImageId(src: string): string | null {
+  if (!src.startsWith(RICH_TEXT_IMAGE_SCHEME)) return null;
+  const id = src.slice(RICH_TEXT_IMAGE_SCHEME.length);
+  return RICH_TEXT_IMAGE_ID.test(id) ? id : null;
+}
+
 /** Egy valtozo neve: ugyanaz a karakterkeszlet, mint a sablon-motor mintaja. */
 export const RICH_TEXT_VARIABLE_NAME = /^[a-zA-Z0-9_]+$/;
+
+/**
+ * A HTML-BEN HIVATKOZOTT SAJAT KEPEK AZONOSITOI, ismetles nelkul, a
+ * megjelenes sorrendjeben. TISZTITOTT HTML-re valo: ott a `src` a tisztito
+ * egyseges alakjaban all (`src="..."`), tehat a minta megbizhato.
+ *
+ * A mentes ezzel ellenorzi, hogy a hivatkozott kep letezik-e, a kuldes pedig
+ * ezzel tudja, mit kell mellekelni.
+ */
+export function richImageIds(html: string): readonly string[] {
+  const ids = [...html.matchAll(/<img[^>]*\ssrc="([^"]*)"/g)]
+    .map((m) => richImageId(m[1] as string))
+    .filter((id): id is string => id !== null);
+  return [...new Set(ids)];
+}
