@@ -161,6 +161,15 @@ export class AssetCategorySuggestionService {
       this.repository.activeCategories(),
     ]);
     const { projection } = projectAssetCategory(bemenet);
+    /*
+      NEV NELKUL NINCS HIVAS ES NINCS FUTAS (acrobot staging-merese,
+      2026-09-28 12:00 UTC). Ha a nev csak az elotagbol all (`BIO/LSS07`), a
+      levagas utan ures, es a Jev egy nev nelkuli eszkozre 1,00 bizonyossagot
+      adott. Ha az SHOWN lett volna, egy nev nelkuli eszkozre tett volna biztos
+      javaslatot. A nyers nev ures-ellenorzese ezt nem fogja meg -- a levagas
+      UTANI nevet kell nezni.
+    */
+    if (!projection.data.name) return { enabled: true, categoryId: null };
     const kulcs = {
       policyKey: policy.key,
       policyVersion: policy.version,

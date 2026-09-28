@@ -123,10 +123,11 @@ async function megjelenit() {
   await waitFor(() => expect(kategoria().options.length).toBe(3));
 }
 
+/** Beiras, majd a mezo elhagyasa: a javaslat a mezo elhagyasakor indul. */
 function nevetIr(nev: string) {
-  fireEvent.change(screen.getByLabelText("Eszköz neve"), {
-    target: { value: nev },
-  });
+  const mezo = screen.getByLabelText("Eszköz neve");
+  fireEvent.change(mezo, { target: { value: nev } });
+  fireEvent.blur(mezo);
 }
 
 describe("a létrehozó űrlap: Jev kategória-javaslat", () => {
@@ -254,5 +255,50 @@ describe("az előtöltés döntése", () => {
         suggestion: null,
       }),
     ).toEqual({ categoryId: "", prefilled: null });
+  });
+});
+
+/**
+ * GEPELES KOZBEN NINCS KERES (acrobot staging-merese, 2026-09-28: a "Homoks",
+ * "Homoksz" reszszavakra is futas keletkezett). A szovegmezo a mezo
+ * elhagyasakor kuld, es a 3 karakternel rovidebb nevre nem.
+ */
+describe("a létrehozó űrlap: mikor indul a javaslat-kérés", () => {
+  it("gépelés közben (mező elhagyása nélkül) nem kér", async () => {
+    api.categorySuggestion.mockResolvedValue({
+      enabled: true,
+      categoryId: "cat_lig",
+    });
+    await megjelenit();
+    fireEvent.change(screen.getByLabelText("Eszköz neve"), {
+      target: { value: "Homokszűrő" },
+    });
+    await new Promise((r) => setTimeout(r, 400));
+    expect(api.categorySuggestion).not.toHaveBeenCalled();
+  });
+
+  it("a mező elhagyásakor egyszer kér, a teljes névvel", async () => {
+    api.categorySuggestion.mockResolvedValue({
+      enabled: true,
+      categoryId: null,
+    });
+    await megjelenit();
+    const mezo = screen.getByLabelText("Eszköz neve");
+    for (const reszlet of ["Hom", "Homoks", "Homokszűrő"])
+      fireEvent.change(mezo, { target: { value: reszlet } });
+    fireEvent.blur(mezo);
+    await waitFor(() =>
+      expect(api.categorySuggestion).toHaveBeenCalledTimes(1),
+    );
+    expect(api.categorySuggestion.mock.calls[0]?.[1]).toMatchObject({
+      name: "Homokszűrő",
+    });
+  });
+
+  it("3 karakternél rövidebb névre nem kér", async () => {
+    await megjelenit();
+    nevetIr("BI");
+    await new Promise((r) => setTimeout(r, 400));
+    expect(api.categorySuggestion).not.toHaveBeenCalled();
   });
 });

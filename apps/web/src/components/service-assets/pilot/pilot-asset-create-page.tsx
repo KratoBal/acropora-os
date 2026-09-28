@@ -191,21 +191,42 @@ export function PilotAssetCreatePage() {
   const [nextServiceAt, setNextServiceAt] = useState("");
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
+  /*
+    A SZOVEGMEZOK A MEZO ELHAGYASAKOR KULDIK AZ ERTEKUKET, NEM GEPELES KOZBEN
+    (acrobot staging-merese, 2026-09-28: a "Homoks", "Homoksz" reszszavakra is
+    futas keletkezett, a 400 ms kesleltetes lassu gepelesnel keves). A
+    valasztok (tipus, egyseg, szulo, alegyseg) azonnal kuldenek: ott nincs
+    gepeles, tehat nincs csonk.
+
+    Az urlap `onBlur`-je buborekol: barmelyik mezo elhagyasa rogziti a
+    szovegmezok aktualis erteket.
+  */
+  const [rogzitett, setRogzitett] = useState({
+    name: "",
+    manufacturer: "",
+    model: "",
+    performance: "",
+    powerConsumption: "",
+  });
+  const rogzit = () =>
+    setRogzitett({ name, manufacturer, model, performance, powerConsumption });
   const javaslat = useCategorySuggestion({
     token,
     clientOperationId,
     fields: {
-      name: name.trim(),
-      manufacturer: manufacturer.trim() || undefined,
-      model: model.trim() || undefined,
+      name: rogzitett.name.trim(),
+      manufacturer: rogzitett.manufacturer.trim() || undefined,
+      model: rogzitett.model.trim() || undefined,
       kind,
-      performance: normalizePerformanceValue(performance) ?? undefined,
+      performance:
+        normalizePerformanceValue(rogzitett.performance) ?? undefined,
       performanceUnitId: performanceUnitId || undefined,
       powerConsumption:
-        normalizePerformanceValue(powerConsumption) ?? undefined,
+        normalizePerformanceValue(rogzitett.powerConsumption) ?? undefined,
       parentAssetId: parentAssetId || undefined,
       departmentId: departmentId || undefined,
     },
+    delayMs: 150,
   });
   useEffect(() => {
     const kovetkezo = applyCategorySuggestion({
@@ -531,7 +552,7 @@ export function PilotAssetCreatePage() {
           />
         ) : null}
 
-        <form className="flex flex-col gap-5" onSubmit={submit}>
+        <form className="flex flex-col gap-5" onSubmit={submit} onBlur={rogzit}>
           <PilotCard>
             <PilotCardHeader title="Azonosítás" />
             <div className="grid grid-cols-1 gap-x-6 gap-y-5 p-5 md:grid-cols-2">
