@@ -44,6 +44,13 @@ export interface JevChoiceRequest {
   readonly instructions: string;
   /** opcio-kulcs -> leiras. */
   readonly criteria: Readonly<Record<string, string>>;
+  /**
+   * A kerdes kulcsa a kerdesben es a valaszban. Alapertek: "q" (az eszkoz-
+   * pilot mert alakja, lasd lent). A beszallitoi sor-parositas "match"
+   * kulccsal kuld, mert a policy-jet (#1199 Stage B p3-final, P-023) azzal
+   * mertuk: elesben pontosan az menjen ki, amit merni lehetett.
+   */
+  readonly questionKey?: string;
 }
 
 export type JevChoiceResult =
@@ -75,7 +82,7 @@ export type JevChoiceResult =
   valoszinuleg mindegy, de a policy @2 a mert hivast ismetli, es ez az egy
   kulcs volt meg elteres.
 */
-const KERDES = "q";
+const KERDES_ALAP = "q";
 
 function vag(szoveg: string): string {
   return szoveg.length > 500 ? `${szoveg.slice(0, 500)}…` : szoveg;
@@ -102,7 +109,7 @@ export async function jevChoice(
     state: request.state,
     model: request.model,
     questions: {
-      [KERDES]: {
+      [request.questionKey ?? KERDES_ALAP]: {
         type: "choice",
         instructions: request.instructions,
         criteria: request.criteria,
@@ -197,7 +204,7 @@ function ertelmez(
     >;
     usage?: { input_tokens?: unknown };
   };
-  const valasz = r.answers?.[KERDES];
+  const valasz = r.answers?.[request.questionKey ?? KERDES_ALAP];
   if (!valasz) return rossz("A válaszban nincs meg a kérdés.");
   if (typeof valasz.choice !== "string" || !(valasz.choice in request.criteria))
     return rossz(

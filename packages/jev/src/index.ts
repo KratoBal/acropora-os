@@ -38,6 +38,19 @@ export {
   type JevChoiceResult,
 } from "./jev-client.js";
 export {
+  CANDIDATE_GENERATOR_VERSION,
+  CANDIDATE_LIMIT,
+  CANDIDATE_MIN_SHARED,
+  candidateTokens,
+  foldCandidateText,
+  generateCandidates,
+  indexCandidateMaster,
+  type CandidateIndexEntry,
+  type CandidateMasterRow,
+  type CandidateProfile,
+  type CandidateResult,
+} from "./supplier-line-candidates.js";
+export {
   PREFILL_CONFIDENCE_THRESHOLD,
   PREFILL_VISIBLE_CATEGORY_CODES,
   isHiddenControl,

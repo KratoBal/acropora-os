@@ -93,6 +93,26 @@ describe("a Jev choice-hívás", () => {
     assert.doesNotMatch(hivas.init.body, new RegExp(KULCS));
   });
 
+  it("a kérdés kulcsa megadható: kérésben és válaszban is az megy, alapértéke q", async () => {
+    // #1199 P-026: a beszállítói sor-párosítás "match" kulccsal küld, mert a
+    // policy-jét azzal mértük; az eszköz-pilot alapértéke nem változik
+    const matchValasz = JO.replace('"q":', '"match":');
+    const d = dupla([{ status: 200, body: matchValasz }]);
+    const eredmeny = await jevChoice(
+      { ...KERES, questionKey: "match" },
+      d.opciok,
+    );
+    assert.deepEqual(
+      Object.keys(JSON.parse((d.hivasok[0] as Hivas).init.body).questions),
+      ["match"],
+    );
+    assert.equal(eredmeny.ok && eredmeny.choice, "cat1");
+    // a q kulcsú válasz a match kérdésre nem fogadható el
+    const rossz = dupla([{ status: 200, body: JO }]);
+    const r = await jevChoice({ ...KERES, questionKey: "match" }, rossz.opciok);
+    assert.equal(r.ok, false);
+  });
+
   it("a sikeres válaszból a választás, a bizonyosság, a modell és a token", async () => {
     const d = dupla([{ status: 200, body: JO }]);
     assert.deepEqual(await jevChoice(KERES, d.opciok), {
