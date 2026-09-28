@@ -26,6 +26,18 @@ vi.mock("@/lib/api/mail-templates", async () => {
   return { ...valodi, mailTemplatesApi: api };
 });
 
+/*
+  A KEPEK KLIENSE (2026-09-28). Alapbol ures lista: a regi allitasok igy nem
+  kapnak halozati zajt, a kep-allitasok pedig maguk toltik fel.
+*/
+const kepApi = vi.hoisted(() => ({
+  list: vi.fn(),
+  upload: vi.fn(),
+  content: vi.fn(),
+}));
+
+vi.mock("@/lib/api/mail-images", () => ({ mailImagesApi: kepApi }));
+
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {
@@ -119,6 +131,9 @@ const szovegesElonezet = () => {
 beforeEach(() => {
   api.read.mockReset();
   api.save.mockReset();
+  kepApi.list.mockReset().mockResolvedValue([]);
+  kepApi.upload.mockReset();
+  kepApi.content.mockReset();
 });
 
 describe("a levélsablon szerkesztője", () => {
@@ -396,5 +411,99 @@ describe("MailTemplatePage és az alapértelmezés visszatöltése", () => {
     expect(
       screen.queryByRole("button", { name: "Alapértelmezés visszatöltése" }),
     ).toBeNull();
+  });
+});
+
+/**
+ * A KEP A SABLONBAN (2026-09-28): valasztas a feltoltottek kozul, feltoltes, es
+ * az elonezet homokozojaban a betoltott kep.
+ */
+describe("MailTemplatePage és a kép", () => {
+  const LOGO = {
+    id: "logo1",
+    fileName: "logo.png",
+    contentType: "image/png",
+    sizeBytes: 4,
+    width: 800,
+    height: 200,
+    createdAt: "2026-09-28T08:00:00Z",
+  };
+  const PNG = new Blob([new Uint8Array([137, 80, 78, 71])], {
+    type: "image/png",
+  });
+
+  it("a feltöltött képet kiválasztva, leírással a törzsbe szúrja, 600-ra vágott szélességgel", async () => {
+    kepApi.list.mockResolvedValue([LOGO]);
+    kepApi.content.mockResolvedValue(PNG);
+    await megjelenit({ body: "" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Kép beszúrása" }));
+    fireEvent.click(await screen.findByRole("button", { name: /logo\.png/ }));
+    expect(
+      (screen.getByLabelText("A kép szélessége") as HTMLInputElement).value,
+    ).toBe("600");
+    fireEvent.change(screen.getByLabelText("A kép leírása"), {
+      target: { value: "Acropora logó" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Beszúrás" }));
+
+    await waitFor(() =>
+      expect(szerkeszto().getHTML()).toContain(
+        '<img src="acropora-image:logo1" alt="Acropora logó" width="600">',
+      ),
+    );
+    expect(screen.queryByRole("dialog", { name: "Kép beszúrása" })).toBeNull();
+  });
+
+  it("a feltöltés a kiválasztott fájlt küldi, és az új kép kijelölve áll", async () => {
+    kepApi.upload.mockResolvedValue({ ...LOGO, id: "uj1", fileName: "uj.png" });
+    kepApi.content.mockResolvedValue(PNG);
+    await megjelenit({ body: "" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Kép beszúrása" }));
+    const fajl = new File([new Uint8Array([1])], "uj.png", {
+      type: "image/png",
+    });
+    fireEvent.change(screen.getByLabelText("Kép feltöltése"), {
+      target: { files: [fajl] },
+    });
+
+    await waitFor(() =>
+      expect(kepApi.upload).toHaveBeenCalledWith("token-1", fajl),
+    );
+    /*
+      A GOMB MAR A KIJELOLES ELOTT MEGJELENIK (a lista elobb frissul), tehat a
+      varakozas a kijelolesre szol, nem a gomb megjelenesere.
+    */
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("button", { name: /uj\.png/ })
+          .getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+  });
+
+  /**
+   * AZ ELONEZETBEN A KEP LATSZIK: a sajat hivatkozast a homokozo nem tudna
+   * betolteni, ezert a betoltott `data:` cim kerul a helyere -- CSAK ott.
+   */
+  it("az előnézet homokozójában a kép a betöltött data: címmel áll", async () => {
+    kepApi.list.mockResolvedValue([LOGO]);
+    kepApi.content.mockResolvedValue(PNG);
+    await megjelenit({
+      bodyHtml:
+        '<p><img src="acropora-image:logo1" alt="Logó"> Kedves {{cimzett}}!</p>',
+    });
+    const keret = screen.getByTitle(
+      "A levél formázott előnézete",
+    ) as HTMLIFrameElement;
+    await waitFor(() =>
+      expect(keret.getAttribute("srcdoc")).toMatch(
+        /<img src="data:image\/png;base64,[^"]+" alt="Logó">/,
+      ),
+    );
+    // A MENTENDO HTML-BEN a hivatkozas marad.
+    expect(szerkeszto().getHTML()).toContain('src="acropora-image:logo1"');
   });
 });

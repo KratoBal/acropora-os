@@ -46,7 +46,9 @@
  */
 import {
   isAllowedRichHref,
+  RICH_TEXT_IMAGE_MAX_WIDTH,
   RICH_TEXT_VARIABLE_NAME,
+  richImageId,
 } from "@acropora/rich-text";
 import {
   EditorContent,
@@ -77,11 +79,30 @@ export interface RichTextVariable {
 }
 
 export type RichTextToolbarItem =
-  "bold" | "italic" | "underline" | "link" | "bulletList" | "orderedList";
+  | "bold"
+  | "italic"
+  | "underline"
+  | "link"
+  | "bulletList"
+  | "orderedList"
+  | "image";
+
+/** A beszurando kep. A `src` a sajat hivatkozas: `acropora-image:<id>`. */
+export interface RichTextImage {
+  readonly src: string;
+  readonly alt?: string;
+  readonly width?: number;
+}
 
 export interface RichTextEditorHandle {
   /** A valtozot atomkent a kurzor helyere teszi. Ismeretlen nevre nem tesz semmit. */
   insertVariable(name: string): void;
+  /**
+   * A kepet a kurzor helyere teszi. Idegen forrasra (`http`, `data:`) nem tesz
+   * semmit: a tisztito ugyis kidobna, es a szerkeszto ne mutasson olyat, ami
+   * nem marad meg.
+   */
+  insertImage(image: RichTextImage): void;
   focus(): void;
 }
 
@@ -92,6 +113,19 @@ export interface RichTextEditorProps {
   /** Hianyaban nincs valtozo-atom: altalanos szovegszerkeszto. */
   readonly variables?: readonly RichTextVariable[];
   readonly toolbar?: readonly RichTextToolbarItem[];
+  /**
+   * A KEP GOMB ESEMENYE. A kepvalaszto (feltoltes, lista) a HIVO dolga, mert
+   * a kep tarolasa alkalmazasfuggo; a szerkeszto csak jelzi, hogy kep kell, es
+   * a hivo az `insertImage`-dzsel teszi be. Hianyaban a kep gomb nem jelenik
+   * meg, akkor sem, ha az eszkoztar listaja tartalmazza.
+   */
+  readonly onImageRequest?: () => void;
+  /**
+   * A SAJAT HIVATKOZAS MEGJELENITHETO CIME (pl. egy mar betoltott `data:` URL).
+   * A szerkesztoben csak a MEGJELENITES hasznalja: a kimenetben a hivatkozas
+   * all, nem ez. `undefined`-re a kep helye ures, amig a cim meg nincs meg.
+   */
+  readonly resolveImageSrc?: (src: string) => string | undefined;
   readonly "aria-label": string;
   readonly className?: string;
   readonly ref?: Ref<RichTextEditorHandle>;
@@ -194,9 +228,79 @@ function valtozoCsomopont(ismert: ReadonlySet<string>) {
   });
 }
 
+/**
+ * A KEP-CSOMOPONT (2026-09-28). HTML-alakja `<img src="acropora-image:<id>"
+ * alt="..." width="...">`, pontosan a tisztito altal engedett reszhalmaz.
+ *
+ * A BEOLVASAS CSAK A SAJAT HIVATKOZAST FOGADJA EL. Egy beillesztett kulso kep
+ * (`http`, `data:`) nem lesz csomopont, tehat el sem jut a mentesig -- ugyanaz
+ * a szabaly, mint a tisztitoban (`richImageId`).
+ *
+ * A MEGJELENITES KULON UT (`addNodeView`): a hivatkozast a bongeszo nem tudja
+ * betolteni, ezert a csomopont a hivo altal adott cimet mutatja, a kimenet
+ * (`renderHTML`) pedig a hivatkozast. A ketto soha nem keveredik: a
+ * megjelenitett cim nem kerulhet a mentett HTML-be.
+ */
+function kepCsomopont(felold: {
+  current: ((src: string) => string | undefined) | undefined;
+}) {
+  return Node.create({
+    name: "templateImage",
+    group: "inline",
+    inline: true,
+    atom: true,
+    draggable: true,
+    selectable: true,
+    addAttributes() {
+      return {
+        src: { default: null },
+        alt: { default: null },
+        width: {
+          default: null,
+          parseHTML: (elem) => {
+            const w = Number(elem.getAttribute("width"));
+            return Number.isInteger(w) &&
+              w >= 1 &&
+              w <= RICH_TEXT_IMAGE_MAX_WIDTH
+              ? w
+              : null;
+          },
+        },
+      };
+    },
+    parseHTML() {
+      return [
+        {
+          tag: "img[src]",
+          getAttrs: (elem) =>
+            richImageId(elem.getAttribute("src") ?? "") ? null : false,
+        },
+      ];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["img", HTMLAttributes];
+    },
+    addNodeView() {
+      return ({ node }) => {
+        const img = document.createElement("img");
+        const src = node.attrs.src as string;
+        img.dataset.src = src;
+        const cim = felold.current?.(src);
+        if (cim) img.src = cim;
+        if (node.attrs.alt) img.alt = node.attrs.alt as string;
+        if (node.attrs.width) img.width = node.attrs.width as number;
+        img.style.maxWidth = "100%";
+        img.style.display = "inline-block";
+        return { dom: img };
+      };
+    },
+  });
+}
+
 function bovitmenyek(
   variables: readonly RichTextVariable[],
   linkValtozok: readonly string[],
+  felold: { current: ((src: string) => string | undefined) | undefined },
 ) {
   return [
     StarterKit.configure({
@@ -216,6 +320,7 @@ function bovitmenyek(
     ...(variables.length
       ? [valtozoCsomopont(new Set(variables.map((v) => v.name)))]
       : []),
+    kepCsomopont(felold),
   ];
 }
 
@@ -333,8 +438,15 @@ export function RichTextEditor({
   toolbar = ALAP_ESZKOZTAR,
   className,
   ref,
+  onImageRequest,
+  resolveImageSrc,
   ...props
 }: RichTextEditorProps) {
+  /*
+    A KEP-FELOLDO REF-BEN, mint az `onChange`: a csomopont-nezet a
+    szerkesztovel egyutt jon letre, es a kesobb erkezo cimeket csak igy latja.
+  */
+  const feloldRef = useRef(resolveImageSrc);
   const linkValtozok = useMemo(
     () => variables.filter((v) => v.kind === "link"),
     [variables],
@@ -350,6 +462,7 @@ export function RichTextEditor({
       bovitmenyek(
         variables,
         linkValtozok.map((v) => v.name),
+        feloldRef,
       ),
     [kulcs],
   );
@@ -398,6 +511,22 @@ export function RichTextEditor({
       editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
 
+  /*
+    A KEPEK CIME KESOBB ERKEZIK, MINT A TARTALOM (a hivo betolti oket). A mar
+    kirajzolt kepek ezert itt kapjak meg: a csomopont-nezet a `data-src`-ben
+    orzi a hivatkozast, ebbol keressuk ki a cimet.
+  */
+  useEffect(() => {
+    feloldRef.current = resolveImageSrc;
+    if (!editor || !resolveImageSrc) return;
+    editor.view.dom
+      .querySelectorAll<HTMLImageElement>("img[data-src]")
+      .forEach((img) => {
+        const cim = resolveImageSrc(img.dataset.src ?? "");
+        if (cim && img.src !== cim) img.src = cim;
+      });
+  }, [editor, resolveImageSrc]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -407,6 +536,21 @@ export function RichTextEditor({
           .chain()
           .focus()
           .insertContent({ type: "templateVariable", attrs: { name } })
+          .run();
+      },
+      insertImage(image: RichTextImage) {
+        if (!editor || !richImageId(image.src)) return;
+        const width =
+          image.width && image.width >= 1
+            ? Math.min(Math.round(image.width), RICH_TEXT_IMAGE_MAX_WIDTH)
+            : null;
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: "templateImage",
+            attrs: { src: image.src, alt: image.alt?.trim() || null, width },
+          })
           .run();
       },
       focus() {
@@ -425,6 +569,7 @@ export function RichTextEditor({
       link: e?.isActive("link") ?? false,
       bulletList: e?.isActive("bulletList") ?? false,
       orderedList: e?.isActive("orderedList") ?? false,
+      image: e?.isActive("templateImage") ?? false,
     }),
   });
   const [linkNyitva, setLinkNyitva] = useState(false);
@@ -463,7 +608,16 @@ export function RichTextEditor({
       jel: "1.",
       futtat: (e) => e.chain().focus().toggleOrderedList().run(),
     },
+    image: {
+      cimke: "Kép beszúrása",
+      jel: "🖼",
+      futtat: () => onImageRequest?.(),
+    },
   };
+  /* A KEP GOMB CSAK AKKOR ALL OTT, HA VAN, AKI KEPET AD. */
+  const lathato = toolbar.filter(
+    (elem) => elem !== "image" || onImageRequest !== undefined,
+  );
 
   return (
     <div
@@ -477,7 +631,7 @@ export function RichTextEditor({
         aria-label="Formázás"
         className="flex flex-wrap gap-1 border-b border-dusk-100 px-2 py-1"
       >
-        {toolbar.map((elem) => (
+        {lathato.map((elem) => (
           <EszkozGomb
             key={elem}
             cimke={gombok[elem].cimke}

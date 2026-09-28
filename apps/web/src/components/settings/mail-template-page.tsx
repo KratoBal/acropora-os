@@ -29,6 +29,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import {
+  MailImagePicker,
+  useMailImages,
+  withImageSources,
+} from "@/components/settings/mail-image-picker";
+import {
   mailTemplatesApi,
   type MailTemplateResponse,
 } from "@/lib/api/mail-templates";
@@ -133,6 +138,9 @@ export function MailTemplatePage() {
   const [saved, setSaved] = useState(false);
   const [elonezetFul, setElonezetFul] = useState<"html" | "szoveg">("html");
   const szerkesztoRef = useRef<RichTextEditorHandle | null>(null);
+  /* A SABLON KEPEI (2026-09-28): a lista, a megjelenitheto cimuk es a feltoltes. */
+  const kepek = useMailImages(token);
+  const [kepValaszto, setKepValaszto] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -396,7 +404,28 @@ export function MailTemplatePage() {
                 value={body}
                 onChange={setBody}
                 variables={variables}
+                toolbar={[
+                  "bold",
+                  "italic",
+                  "underline",
+                  "link",
+                  "bulletList",
+                  "orderedList",
+                  "image",
+                ]}
+                onImageRequest={() => setKepValaszto((nyitva) => !nyitva)}
+                resolveImageSrc={kepek.resolve}
               />
+              {kepValaszto ? (
+                <MailImagePicker
+                  images={kepek.images}
+                  sources={kepek.sources}
+                  error={kepek.error}
+                  upload={kepek.upload}
+                  onInsert={(kep) => szerkesztoRef.current?.insertImage(kep)}
+                  onClose={() => setKepValaszto(false)}
+                />
+              ) : null}
             </div>
 
             {saveError ? (
@@ -537,7 +566,14 @@ export function MailTemplatePage() {
                     <iframe
                       title="A levél formázott előnézete"
                       sandbox=""
-                      srcDoc={elonezetDokumentum(elonezet.torzs.html)}
+                      srcDoc={elonezetDokumentum(
+                        /*
+                          A KEP A HOMOKOZOBAN `data:` CIMMEL LATSZIK: a sajat
+                          hivatkozast a bongeszo nem tolti be, a kuldes pedig
+                          cid: mellekletre csereli. Csak a megjelenites valtozik.
+                        */
+                        withImageSources(elonezet.torzs.html, kepek.sources),
+                      )}
                       className="h-72 w-full rounded-md border border-dusk-100 bg-white"
                     />
                   ) : (
