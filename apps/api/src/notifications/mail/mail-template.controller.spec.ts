@@ -2,14 +2,22 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import type { AuthenticatedUser } from "@acropora/types";
+import {
+  MAIL_TEMPLATE_VARIABLES,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import type { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
   AQUARIUM_MEASUREMENT_RESULT,
   DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE,
 } from "./aquarium-measurement-mail.service.js";
-import { MailTemplateController } from "./mail-template.controller.js";
+import {
+  MailTemplateController,
+  SAMPLE_SERVICE_JOB_ID,
+  SAMPLE_WORKSHEET_ID,
+  sampleLinks,
+} from "./mail-template.controller.js";
 import {
   DEFAULT_WORKSHEET_SIGNED_TEMPLATE,
   WORKSHEET_SIGNED,
@@ -316,5 +324,56 @@ describe("MailTemplateController.save, képpel", () => {
       SZERKESZTO,
     );
     assert.equal(mentett[0]?.bodyHtml, "<p>szöveg</p>");
+  });
+});
+
+/**
+ * AZ ELONEZET LINK-MINTAJA (Balazs kerdese, 2026-09-28 08:35 UTC: „a tenyleges
+ * levelbe is ezzel a domainnal megy ki?"). A minta a szerver kornyezetebol es a
+ * kuldes sajat link-fuggvenyeibol epul, tehat nem igerhet mas domaint vagy
+ * utvonalat, mint a valodi level.
+ */
+describe("MailTemplateController.read: a link-változók mintája", () => {
+  it("a szerver webcímével és a valódi útvonal-alakkal épül", async () => {
+    const valasz = await new MailTemplateController(tarolo(null), KEPEK, {
+      WEB_URL: "https://app.acropora.hu",
+      PARTNER_URL: "https://ticket.acropora.hu/",
+    } as NodeJS.ProcessEnv).read(WORKSHEET_SIGNED);
+    assert.deepEqual(valasz.sampleLinks, {
+      jegy_linkje: `https://app.acropora.hu/szerviz/hibajegyek/${SAMPLE_SERVICE_JOB_ID}`,
+      munkalap_linkje: `https://ticket.acropora.hu/munkalapok/${SAMPLE_WORKSHEET_ID}`,
+      munkalap_belso_linkje: `https://app.acropora.hu/szerviz/munkalapok/${SAMPLE_WORKSHEET_ID}`,
+    });
+  });
+
+  /*
+    A MINTA AZONOSITOJA NEM HJ-SZAM: a valodi link a hibajegy azonositojat
+    viszi, es a korabbi, kezzel irt minta epp ebben igert mast.
+  */
+  it("a minta azonosítója cuid-alakú, nem HJ-szám", () => {
+    assert.match(SAMPLE_SERVICE_JOB_ID, /^c[a-z0-9]{24,}$/);
+    assert.match(SAMPLE_WORKSHEET_ID, /^c[a-z0-9]{24,}$/);
+  });
+
+  it("beállítatlan webcímnél a minta ÜRES, mint a valódi levélben", async () => {
+    const valasz = await new MailTemplateController(
+      tarolo(null),
+      KEPEK,
+      {} as NodeJS.ProcessEnv,
+    ).read(WORKSHEET_SIGNED);
+    assert.deepEqual(valasz.sampleLinks, {
+      jegy_linkje: "",
+      munkalap_linkje: "",
+      munkalap_belso_linkje: "",
+    });
+  });
+
+  it("a minta minden link fajtájú változót lefed, és csak azokat", () => {
+    assert.deepEqual(
+      Object.keys(sampleLinks({})).sort(),
+      MAIL_TEMPLATE_VARIABLES.filter((v) => v.kind === "link")
+        .map((v) => v.name)
+        .sort(),
+    );
   });
 });

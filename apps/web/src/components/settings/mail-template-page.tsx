@@ -72,14 +72,31 @@ const MINTA: Readonly<Record<string, string>> = {
   jegyszam: "HJ-2026-001",
   jegy_targya: "Szivattyú zúg",
   jegy_leirasa: "Reggel óta hangos, és melegszik a motor.",
-  jegy_linkje: "https://os.acropora.hu/szerviz/hibajegyek/HJ-2026-001",
 };
 
+/**
+ * A LINK-VALTOZOK MINTAJA A SZERVERTOL JON, NEM EBBOL A TABLAZATBOL.
+ *
+ * Balazs kerdese, 2026-09-28 08:35 UTC: „a minta adatokban ez van. a tenyleges
+ * levelbe is ezzel a domainnal megy ki?" Itt 2026-09-28-ig egy kezzel beirt
+ * `https://os.acropora.hu/szerviz/hibajegyek/HJ-2026-001` allt: egy olyan
+ * domain, amit a DNS fel sem old, es a HJ-szam az utvonalban, holott a valodi
+ * link a hibajegy azonositojat viszi. A szerver ugyanazzal a fuggvennyel es
+ * ugyanabbol a kornyezetbol epiti a mintat (`sampleLinks`), mint a levelet,
+ * tehat az elonezet nem igerhet mast.
+ *
+ * URES ERTEK IS ERVENYES MINTA: ha a szerveren nincs webcim beallitva, a valodi
+ * levelben is ures a link.
+ */
 function mintaErtekek(
   variables: readonly MailTemplateVariable[],
+  sampleLinks: Readonly<Record<string, string>> = {},
 ): Record<string, string> {
   return Object.fromEntries(
-    variables.map((v) => [v.name, MINTA[v.name] ?? `‹${v.name}›`]),
+    variables.map((v) => [
+      v.name,
+      sampleLinks[v.name] ?? MINTA[v.name] ?? `‹${v.name}›`,
+    ]),
   );
 }
 
@@ -223,7 +240,7 @@ export function MailTemplatePage() {
    * küldéskor történne.
    */
   const elonezet = useMemo(() => {
-    const ertekek = mintaErtekek(variables);
+    const ertekek = mintaErtekek(variables, template?.sampleLinks);
     /*
       A FORMAZOTT ELONEZET PONTOSAN A KULDES LEPESEIT JARJA BE (`renderMailBody`,
       API): escape-elt behelyettesites, UTANA tisztitas, a szoveg a tiszta
@@ -236,7 +253,7 @@ export function MailTemplatePage() {
       torzs:
         tiszta === null ? null : { html: tiszta, text: richHtmlToText(tiszta) },
     };
-  }, [subject, body, variables]);
+  }, [subject, body, variables, template]);
 
   /*
     A VALTOZO A SZERKESZTO KURZORAHOZ KERUL, ATOMKENT. A kurzor utana marad, a

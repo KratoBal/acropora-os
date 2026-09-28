@@ -81,6 +81,14 @@ const VALASZ = {
     alakitja at. A szerver `null`-t ad, nem hianyzo kulcsot -- a dupla ugyanigy.
   */
   bodyHtml: null as string | null,
+  /*
+    2026-09-28 OTA A SZERVER ADJA A LINK-MINTAT. A dupla a valodi alakot
+    utanozza: eles webcim, cuid-alaku azonosito.
+  */
+  sampleLinks: {
+    jegy_linkje:
+      "https://app.acropora.hu/szerviz/hibajegyek/cmgmintahibajegy0000000001",
+  } as Readonly<Record<string, string>>,
   variables: [
     { name: "cimzett", description: "A hibajegy nyitójának neve." },
     { name: "jegyszam", description: "A hibajegy száma." },
@@ -505,5 +513,42 @@ describe("MailTemplatePage és a kép", () => {
     );
     // A MENTENDO HTML-BEN a hivatkozas marad.
     expect(szerkeszto().getHTML()).toContain('src="acropora-image:logo1"');
+  });
+});
+
+/**
+ * A LINK-MINTA A SZERVERTOL JON (Balazs kerdese, 2026-09-28 08:35 UTC). Az
+ * elonezet korabban egy kezzel irt `os.acropora.hu` cimet mutatott, a valodi
+ * level `app.acropora.hu`-t kuld.
+ */
+describe("MailTemplatePage: az előnézet link-mintája", () => {
+  it("a jegy linkje a szerver által adott mintát mutatja", async () => {
+    await megjelenit({
+      bodyHtml: "<p>Hibajegy: {{jegy_linkje}}</p>",
+      variables: [
+        ...VALASZ.variables,
+        { name: "jegy_linkje", description: "Link." },
+      ],
+    });
+    szovegesElonezet();
+    expect(
+      screen.getByText(
+        "Hibajegy: https://app.acropora.hu/szerviz/hibajegyek/cmgmintahibajegy0000000001",
+      ),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toContain("os.acropora.hu");
+  });
+
+  it("üres szerver-mintánál a link helye üres, mint a valódi levélben", async () => {
+    await megjelenit({
+      bodyHtml: "<p>Hibajegy: {{jegy_linkje}}</p>",
+      sampleLinks: { jegy_linkje: "" },
+      variables: [
+        ...VALASZ.variables,
+        { name: "jegy_linkje", description: "Link." },
+      ],
+    });
+    szovegesElonezet();
+    expect(screen.getByText(/^Hibajegy:\s*$/)).toBeTruthy();
   });
 });
