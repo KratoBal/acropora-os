@@ -18,6 +18,7 @@ import {
   type ProjectOption,
   type PurchaseInvoiceResult,
   type PurchaseInvoiceSource,
+  type PurchaseProductConflictLookup,
   type PurchaseProductSearchResult,
   type SupplierInvoiceImportFormat,
   type SupplierInvoiceImportResult,
@@ -48,6 +49,11 @@ interface InvoiceLineState {
   createLocalProduct: {
     name: string;
     primaryCategoryId: string;
+    /** #1199 P-026: az új termék alapadatai; üres = nincs megadva. */
+    brandId: string;
+    vatRate: number | "";
+    ean: string;
+    supplierSku: string;
   } | null;
   sku: string;
   productName: string;
@@ -58,6 +64,8 @@ interface InvoiceLineState {
    * Csak kijelzés és keresési segítség: a számlasorral nem mentődik.
    */
   supplierSku?: string | null;
+  /** EAN, ha a beszállítói számla hordozta; új termék felvételénél előtölt. */
+  ean?: string | null;
   /** A NAV számlasor sorszáma, ha a sor NAV bejövő számlából jött; a mentés ezzel köti a sort a NAV sorhoz. */
   navLineNumber: number | null;
   orderedQuantity: number;
@@ -160,6 +168,11 @@ export function PurchaseInvoiceEuEditorPage() {
   >([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<CatalogOption[]>([]);
+  const [brandOptions, setBrandOptions] = useState<CatalogOption[]>([]);
+  /** Soronként: van-e már termék az új termék EAN-jével vagy cikkszámával. */
+  const [productConflicts, setProductConflicts] = useState<
+    Record<string, PurchaseProductConflictLookup>
+  >({});
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [newProjectName, setNewProjectName] = useState("");
   const [creatingProject, setCreatingProject] = useState(false);
@@ -211,6 +224,7 @@ export function PurchaseInvoiceEuEditorPage() {
           unit: line.unit,
           sourceDescription: line.description,
           supplierSku: line.supplierSku,
+          ean: line.ean,
           navLineNumber: null,
           orderedQuantity: line.quantity,
           actualQuantity: line.quantity,
@@ -376,6 +390,10 @@ export function PurchaseInvoiceEuEditorPage() {
       .categoryOptions(token)
       .then(setCategoryOptions)
       .catch(() => setCategoryOptions([]));
+    void productApi
+      .brandOptions(token)
+      .then(setBrandOptions)
+      .catch(() => setBrandOptions([]));
   }, [canManage, token]);
 
   useEffect(() => {
@@ -564,15 +582,61 @@ export function PurchaseInvoiceEuEditorPage() {
       setProductSearch("");
       setProductResults([]);
     }
+    const localProduct = {
+      name: line.sourceDescription,
+      primaryCategoryId: "",
+      brandId: "",
+      vatRate: 27 as number | "",
+      ean: line.ean ?? "",
+      supplierSku: line.supplierSku ?? "",
+    };
     updateLine(line.key, {
       variantId: null,
       sku: "",
       productName: "",
-      createLocalProduct: {
-        name: line.sourceDescription,
-        primaryCategoryId: "",
-      },
+      createLocalProduct: localProduct,
     });
+    void checkProductConflicts(line.key, localProduct);
+  };
+
+  /**
+   * Új termék felvétele ELŐTT (#1199 P-026): ha az EAN vagy a beszállítói
+   * cikkszám már egy meglévő termékhez tartozik, a termék nem új. A mentést
+   * a szerver is megtagadja; itt korábban szólunk, és felajánljuk a kötést.
+   */
+  const checkProductConflicts = async (
+    key: string,
+    product: { ean: string; supplierSku: string },
+  ) => {
+    const ean = product.ean.trim();
+    const supplierSku = product.supplierSku.trim();
+    if (!ean && !(supplierSku && selectedSupplier)) {
+      setProductConflicts(({ [key]: _gone, ...rest }) => rest);
+      return;
+    }
+    try {
+      const found = await purchasingApi.productConflicts(token, {
+        ean: ean || undefined,
+        supplierId: selectedSupplier?.id,
+        supplierSku: supplierSku || undefined,
+      });
+      setProductConflicts((current) => ({ ...current, [key]: found }));
+    } catch {
+      // the server checks again on save; a failed lookup is not a verdict
+    }
+  };
+
+  const linkToExisting = (
+    key: string,
+    owner: { variantId: string; sku: string; productName: string },
+  ) => {
+    updateLine(key, {
+      variantId: owner.variantId,
+      sku: owner.sku,
+      productName: owner.productName,
+      createLocalProduct: null,
+    });
+    setProductConflicts(({ [key]: _gone, ...rest }) => rest);
   };
 
   const updateOrderedQuantity = (key: string, value: number) => {
@@ -752,6 +816,14 @@ export function PurchaseInvoiceEuEditorPage() {
                 name: line.createLocalProduct.name.trim(),
                 primaryCategoryId:
                   line.createLocalProduct.primaryCategoryId || undefined,
+                brandId: line.createLocalProduct.brandId || undefined,
+                vatRate:
+                  line.createLocalProduct.vatRate === ""
+                    ? undefined
+                    : line.createLocalProduct.vatRate,
+                ean: line.createLocalProduct.ean.trim() || undefined,
+                supplierSku:
+                  line.createLocalProduct.supplierSku.trim() || undefined,
               }
             : undefined,
           sourceDescription: line.sourceDescription.trim() || undefined,
@@ -1494,9 +1566,131 @@ export function PurchaseInvoiceEuEditorPage() {
                           </select>
                         </label>
                       </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <label className="text-xs text-dusk-600">
+                          Márka (opcionális)
+                          <select
+                            aria-label="Új helyi termék márkája"
+                            value={line.createLocalProduct.brandId}
+                            onChange={(event) =>
+                              updateLine(line.key, {
+                                createLocalProduct: {
+                                  ...line.createLocalProduct!,
+                                  brandId: event.target.value,
+                                },
+                              })
+                            }
+                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 bg-white px-2 text-sm"
+                          >
+                            <option value="">Nincs márka</option>
+                            {brandOptions.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-xs text-dusk-600">
+                          ÁFA-kulcs (%)
+                          <input
+                            aria-label="Új helyi termék ÁFA-kulcsa"
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={line.createLocalProduct.vatRate}
+                            onChange={(event) =>
+                              updateLine(line.key, {
+                                createLocalProduct: {
+                                  ...line.createLocalProduct!,
+                                  vatRate:
+                                    event.target.value === ""
+                                      ? ""
+                                      : Number(event.target.value),
+                                },
+                              })
+                            }
+                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
+                          />
+                        </label>
+                        <label className="text-xs text-dusk-600">
+                          EAN (opcionális)
+                          <input
+                            aria-label="Új helyi termék EAN-je"
+                            value={line.createLocalProduct.ean}
+                            onChange={(event) =>
+                              updateLine(line.key, {
+                                createLocalProduct: {
+                                  ...line.createLocalProduct!,
+                                  ean: event.target.value,
+                                },
+                              })
+                            }
+                            onBlur={() =>
+                              void checkProductConflicts(
+                                line.key,
+                                line.createLocalProduct!,
+                              )
+                            }
+                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 font-mono text-sm"
+                          />
+                        </label>
+                        <label className="text-xs text-dusk-600">
+                          Beszállítói cikkszám (opcionális)
+                          <input
+                            aria-label="Új helyi termék beszállítói cikkszáma"
+                            value={line.createLocalProduct.supplierSku}
+                            onChange={(event) =>
+                              updateLine(line.key, {
+                                createLocalProduct: {
+                                  ...line.createLocalProduct!,
+                                  supplierSku: event.target.value,
+                                },
+                              })
+                            }
+                            onBlur={() =>
+                              void checkProductConflicts(
+                                line.key,
+                                line.createLocalProduct!,
+                              )
+                            }
+                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 font-mono text-sm"
+                          />
+                        </label>
+                      </div>
+                      {[
+                        ["EAN", productConflicts[line.key]?.byEan] as const,
+                        [
+                          "beszállítói cikkszám",
+                          productConflicts[line.key]?.bySupplierSku,
+                        ] as const,
+                      ].map(([what, owner]) =>
+                        owner ? (
+                          <div
+                            key={what}
+                            role="alert"
+                            className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
+                          >
+                            <span>
+                              Ez az {what} már a „{owner.productName}” (
+                              {owner.sku}) termékhez tartozik: a termék nem új.
+                            </span>
+                            <button
+                              type="button"
+                              className="font-semibold hover:underline"
+                              onClick={() => linkToExisting(line.key, owner)}
+                            >
+                              Kötés a meglévő termékhez
+                            </button>
+                          </div>
+                        ) : null,
+                      )}
                       <p className="mt-2 text-xs text-dusk-500">
                         A belső cikkszámot az Acropora OS automatikusan
                         generálja mentéskor.
+                      </p>
+                      <p className="mt-1 text-xs text-dusk-500">
+                        A beszállítói cikkszám a számla szállítójához köti a
+                        terméket (beszállítói leképezés).
                       </p>
                       <div className="mt-2 flex items-center justify-between gap-3">
                         <p className="text-xs text-sky-800">

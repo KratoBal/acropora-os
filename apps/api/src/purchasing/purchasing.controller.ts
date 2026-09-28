@@ -19,6 +19,7 @@ import { CreatePurchaseInvoiceDto } from "./dto/create-purchase-invoice.dto.js";
 import { CreateProjectDto } from "./dto/create-project.dto.js";
 import { ExchangeRateQueryDto } from "./dto/exchange-rate-query.dto.js";
 import { PurchaseInvoiceListQueryDto } from "./dto/purchase-invoice-list-query.dto.js";
+import { PurchaseProductConflictQueryDto } from "./dto/purchase-product-conflict-query.dto.js";
 import { PurchaseProductSearchQueryDto } from "./dto/purchase-product-search-query.dto.js";
 import { PurchasingService } from "./purchasing.service.js";
 import { SupplierInvoiceImportError } from "./supplier-invoice-import/supplier-invoice-import.error.js";
@@ -38,6 +39,13 @@ export class PurchasingController {
   @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
   searchProducts(@Query() query: PurchaseProductSearchQueryDto) {
     return this.service.searchProducts(query.q);
+  }
+
+  /** #1199 P-026: új termék felvétele előtt, EAN és beszállítói cikkszám szerint. */
+  @Get("products/conflicts")
+  @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
+  productConflicts(@Query() query: PurchaseProductConflictQueryDto) {
+    return this.service.newProductConflicts(query);
   }
 
   @Get("projects")

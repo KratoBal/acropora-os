@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -11,10 +12,12 @@ import type {
   PurchaseInvoiceDetail,
   PurchaseInvoiceListResponse,
   PurchaseInvoiceResult,
+  PurchaseProductConflictLookup,
   PurchaseProductSearchResult,
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
+import { eanCheckDigitValid } from "../products/barcode.util.js";
 import { MnbExchangeRateService } from "../integrations/mnb/mnb-exchange-rate.service.js";
 import { SuppliersRepository } from "../suppliers/suppliers.repository.js";
 import type { CreatePurchaseInvoiceDto } from "./dto/create-purchase-invoice.dto.js";
@@ -106,6 +109,101 @@ export class PurchasingService {
     if (!detail)
       throw new NotFoundException("A beszerzési számla nem található.");
     return detail;
+  }
+
+  /**
+   * Új termék felvétele ELŐTT (#1199 P-026): van-e már termék ezzel az
+   * EAN-nel, vagy ezzel a beszállítói cikkszámmal ennél a szállítónál. A
+   * felület ebből ajánlja fel a meglévőhöz kötést.
+   */
+  async newProductConflicts(query: {
+    ean?: string;
+    supplierId?: string;
+    supplierSku?: string;
+  }): Promise<PurchaseProductConflictLookup> {
+    const ean = query.ean?.trim();
+    const supplierSku = query.supplierSku?.trim();
+    const [byEan] = ean ? await this.invoices.barcodeOwners([ean]) : [];
+    const [bySupplierSku] =
+      query.supplierId && supplierSku
+        ? await this.invoices.supplierSkuOwners(query.supplierId, [supplierSku])
+        : [];
+    const owner = (row?: {
+      variantId: string;
+      sku: string;
+      productName: string;
+    }) =>
+      row
+        ? {
+            variantId: row.variantId,
+            sku: row.sku,
+            productName: row.productName,
+          }
+        : null;
+    return { byEan: owner(byEan), bySupplierSku: owner(bySupplierSku) };
+  }
+
+  /**
+   * A számlával létrehozandó új termékek NEM lehetnek már meglévők. Egy
+   * foglalt EAN vagy egy már leképezett beszállítói cikkszám azt jelenti,
+   * hogy a termék megvan: új termék helyett a meglévőhöz kell kötni. Egy
+   * számlán belül két új termék sem kaphatja ugyanazt.
+   */
+  private async assertNewProductsAreNew(
+    supplierId: string,
+    lines: readonly CreatePurchaseInvoiceLine[],
+  ): Promise<void> {
+    const created = lines.flatMap((line) =>
+      line.createLocalProduct ? [line.createLocalProduct] : [],
+    );
+    if (created.length === 0) return;
+    const eans = created.flatMap((product) =>
+      product.ean ? [product.ean] : [],
+    );
+    const skus = created.flatMap((product) =>
+      product.supplierSku ? [product.supplierSku] : [],
+    );
+    const brandIds = [
+      ...new Set(
+        created.flatMap((product) =>
+          product.brandId ? [product.brandId] : [],
+        ),
+      ),
+    ];
+    const repeated = (values: string[]) =>
+      values.find((value, index) => values.indexOf(value) !== index);
+    const repeatedEan = repeated(eans);
+    if (repeatedEan)
+      throw new BadRequestException(
+        `Két új termék ugyanazt az EAN-t kapná: ${repeatedEan}.`,
+      );
+    const repeatedSku = repeated(skus);
+    if (repeatedSku)
+      throw new BadRequestException(
+        `Két új termék ugyanazt a beszállítói cikkszámot kapná: ${repeatedSku}.`,
+      );
+    const [takenEan] = eans.length
+      ? await this.invoices.barcodeOwners(eans)
+      : [];
+    if (takenEan)
+      throw new ConflictException(
+        `A(z) ${takenEan.code} EAN már a(z) „${takenEan.productName}” (${takenEan.sku}) termékhez tartozik: a sort ehhez kösd, ne hozz létre új terméket.`,
+      );
+    const [takenSku] = skus.length
+      ? await this.invoices.supplierSkuOwners(supplierId, skus)
+      : [];
+    if (takenSku)
+      throw new ConflictException(
+        `A(z) ${takenSku.supplierSku} beszállítói cikkszám ennél a szállítónál már a(z) „${takenSku.productName}” (${takenSku.sku}) termékhez tartozik: a sort ehhez kösd.`,
+      );
+    const activeBrands = brandIds.length
+      ? await this.invoices.activeBrandIds(brandIds)
+      : new Set<string>();
+    const unknownBrand = brandIds.find((id) => !activeBrands.has(id));
+    if (unknownBrand)
+      throw new BadRequestException(
+        "A kiválasztott márka nem található vagy archivált.",
+      );
   }
 
   async createInvoice(
@@ -332,6 +430,7 @@ export class PurchasingService {
             name,
             primaryCategoryId:
               line.createLocalProduct.primaryCategoryId?.trim() || null,
+            ...newProductDetails(line.createLocalProduct, name),
           },
           sourceDescription,
           ...navSource,
@@ -418,6 +517,8 @@ export class PurchasingService {
     // egyedisegi hiba. Az ennek a folyamatnak a DUPLA-BEKULDES elleni vedelme,
     // nem kodutkozes, es a mai valasza a helyes. A burkolat csak a
     // `documentNumber` oszlopra van felirva.
+    await this.assertNewProductsAreNew(input.supplierId, preparedLines);
+
     const detail = await withUniqueCode(
       { prefix: "BESZ", field: "documentNumber" },
       (documentNumber) =>
@@ -467,4 +568,37 @@ export class PurchasingService {
       ),
     };
   }
+}
+
+/**
+ * A számlasorból felvett új termék alapadatai, ellenőrizve (#1199 P-026).
+ * Minden mező opcionális: a régi kliens (csak név és kategória) változatlanul
+ * működik.
+ */
+function newProductDetails(
+  input: {
+    brandId?: string;
+    vatRate?: number;
+    ean?: string;
+    supplierSku?: string;
+  },
+  name: string,
+): {
+  brandId: string | null;
+  vatRate: Prisma.Decimal | null;
+  ean: string | null;
+  supplierSku: string | null;
+} {
+  const ean = input.ean?.replace(/\s/g, "") || null;
+  if (ean !== null && eanCheckDigitValid(ean) !== true)
+    throw new BadRequestException(
+      `Érvénytelen EAN (8, 12, 13 vagy 14 számjegy, helyes ellenőrzőjeggyel): ${name}.`,
+    );
+  return {
+    brandId: input.brandId?.trim() || null,
+    vatRate:
+      input.vatRate !== undefined ? new Prisma.Decimal(input.vatRate) : null,
+    ean,
+    supplierSku: input.supplierSku?.trim() || null,
+  };
 }

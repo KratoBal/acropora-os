@@ -6,6 +6,7 @@ import type {
   PurchaseInvoiceDetail,
   PurchaseInvoiceListResponse,
   PurchaseInvoiceResult,
+  PurchaseProductConflictLookup,
   PurchaseProductSearchResult,
   SupplierInvoiceImportResult,
 } from "@acropora/types";
@@ -17,6 +18,20 @@ export const purchasingApi = {
     if (q) params.set("q", q);
     return apiRequest<PurchaseProductSearchResult[]>(
       `/purchasing/products/search?${params}`,
+      token,
+    );
+  },
+  /** #1199 P-026: van-e már termék ezzel az EAN-nel vagy beszállítói cikkszámmal. */
+  productConflicts(
+    token: string,
+    query: { ean?: string; supplierId?: string; supplierSku?: string },
+  ) {
+    const params = new URLSearchParams();
+    if (query.ean) params.set("ean", query.ean);
+    if (query.supplierId) params.set("supplierId", query.supplierId);
+    if (query.supplierSku) params.set("supplierSku", query.supplierSku);
+    return apiRequest<PurchaseProductConflictLookup>(
+      `/purchasing/products/conflicts?${params}`,
       token,
     );
   },
