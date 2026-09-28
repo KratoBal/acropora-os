@@ -7,6 +7,7 @@ import type {
   PurchaseInvoiceListResponse,
   PurchaseInvoiceResult,
   PurchaseProductSearchResult,
+  SupplierInvoiceImportResult,
 } from "@acropora/types";
 import { apiRequest } from "./client";
 
@@ -38,6 +39,19 @@ export const purchasingApi = {
       `/purchasing/invoices/${encodeURIComponent(id)}`,
       token,
       { signal },
+    );
+  },
+  /**
+   * A beszállítói számlafájl (CII XML vagy ismert PDF) beolvasása. Csak
+   * előtöltés: a szerver semmit nem ment belőle (#1199 P-026).
+   */
+  importSupplierInvoice(token: string, file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<SupplierInvoiceImportResult>(
+      `/purchasing/invoices/import`,
+      token,
+      { method: "POST", body: form },
     );
   },
   create(token: string, input: CreatePurchaseInvoiceInput) {

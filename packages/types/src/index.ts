@@ -402,6 +402,9 @@ export type {
   PurchaseInvoiceStatus,
   PurchaseInvoiceSummary,
   PurchaseProductSearchResult,
+  SupplierInvoiceImportFormat,
+  SupplierInvoiceImportLine,
+  SupplierInvoiceImportResult,
 } from "./purchasing.js";
 export type {
   CreatePosSaleInput,

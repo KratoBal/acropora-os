@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type {
   NavIncomingInvoiceDetail,
   Session,
+  SupplierInvoiceImportResult,
   SupplierSummary,
 } from "@acropora/types";
 import { createElement } from "react";
@@ -20,6 +21,7 @@ const navApi = vi.hoisted(() => ({
 
 const purchasingApiMock = vi.hoisted(() => ({
   create: vi.fn(),
+  importSupplierInvoice: vi.fn(),
   getExchangeRate: vi.fn(),
   searchProducts: vi.fn(),
   listProjects: vi.fn(),
@@ -448,5 +450,159 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
         country: "DE",
       }),
     );
+  });
+});
+
+/** #1199 P-026: a beszállítói számlafájl csak előtölt, a mentés a régi út. */
+describe("PurchaseInvoiceEuEditorPage beszállítói számla betöltése", () => {
+  const imported: SupplierInvoiceImportResult = {
+    format: "XML",
+    supplier: {
+      name: "Német Beszállító GmbH",
+      vatId: "DE123456789",
+      country: "DE",
+    },
+    invoiceNumber: "990001",
+    invoiceDate: "2026-09-25",
+    dueDate: "2026-10-02",
+    currency: "EUR",
+    netTotal: 93.5,
+    lines: [
+      {
+        lineNumber: 1,
+        supplierSku: "81593",
+        ean: "4011444815934",
+        description: "Dupla Marin Coral Plugs 10 St., SB",
+        quantity: 3,
+        unit: "db",
+        unitNet: 4.5,
+        discountPercent: null,
+        lineNet: 13.5,
+        isCharge: false,
+      },
+      {
+        lineNumber: 2,
+        supplierSku: "z1",
+        ean: null,
+        description: "Frachtkosten (anteilig)",
+        quantity: 1,
+        unit: "db",
+        unitNet: 80,
+        discountPercent: null,
+        lineNet: 80,
+        isCharge: true,
+      },
+    ],
+    warnings: [],
+  };
+
+  beforeEach(() => {
+    navigation.params = new URLSearchParams();
+    purchasingApiMock.importSupplierInvoice
+      .mockReset()
+      .mockResolvedValue(imported);
+    suppliersApiMock.search.mockResolvedValue({
+      items: [euSupplier],
+      pagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
+    });
+  });
+
+  function upload() {
+    const input = screen.getByLabelText("Beszállítói számla fájl");
+    const file = new File(["<x/>"], "Rechnung.xml", { type: "text/xml" });
+    fireEvent.change(input, { target: { files: [file] } });
+    return file;
+  }
+
+  it("fills the header, the supplier search and the lines, without a product", async () => {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    const file = upload();
+
+    await screen.findByText("Számla betöltve XML-ből");
+    expect(purchasingApiMock.importSupplierInvoice).toHaveBeenCalledWith(
+      "token-owner",
+      file,
+    );
+    expect(screen.getByRole("textbox", { name: "Számlaszám" })).toHaveValue(
+      "990001",
+    );
+    expect(
+      screen.getByText("Dupla Marin Coral Plugs 10 St., SB"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Beszállítói cikkszám: 81593")).toBeInTheDocument();
+    expect(screen.getAllByText("Nincs terméktörzsben")).toHaveLength(2);
+    await waitFor(() =>
+      expect(suppliersApiMock.search).toHaveBeenCalledWith(
+        "token-owner",
+        "DE123456789",
+        "EU",
+      ),
+    );
+    // a second file cannot overwrite lines someone may have worked on
+    expect(screen.getByLabelText("Beszállítói számla fájl")).toBeDisabled();
+  });
+
+  it("marks a PDF-read invoice as one to check, with its warnings", async () => {
+    purchasingApiMock.importSupplierInvoice.mockResolvedValue({
+      ...imported,
+      format: "PDF",
+      warnings: [
+        "PDF-ből olvasva, nem XML-ből: vesd össze a sorokat a számlával mentés előtt.",
+      ],
+    });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    upload();
+
+    expect(
+      await screen.findByText("PDF-ből olvasva, ellenőrizendő"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/vesd össze a sorokat a számlával/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the reader's refusal and fills nothing", async () => {
+    purchasingApiMock.importSupplierInvoice.mockRejectedValue(
+      new Error(
+        "Ez jóváírás, nem számla: beszerzési számlaként nem tölthető be.",
+      ),
+    );
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    upload();
+
+    expect(
+      await screen.findByText(/Ez jóváírás, nem számla/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Nincs terméktörzsben")).not.toBeInTheDocument();
+  });
+
+  it("saves through the usual invoice path; the supplier code is not sent", async () => {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    upload();
+    await screen.findByText("Számla betöltve XML-ből");
+
+    fireEvent.click(await screen.findByText(euSupplier.name));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+
+    await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
+    const [, keres] = purchasingApiMock.create.mock.calls[0] ?? [];
+    expect(keres).toMatchObject({
+      source: "EU",
+      supplierId: euSupplier.id,
+      supplierInvoiceNumber: "990001",
+      currency: "EUR",
+    });
+    expect(keres.lines).toHaveLength(2);
+    expect(keres.lines[0]).toMatchObject({
+      sourceDescription: "Dupla Marin Coral Plugs 10 St., SB",
+      orderedQuantity: 3,
+      unitNet: 4.5,
+    });
+    expect(keres.lines[0].variantId).toBeUndefined();
+    expect(JSON.stringify(keres)).not.toContain("81593");
   });
 });
