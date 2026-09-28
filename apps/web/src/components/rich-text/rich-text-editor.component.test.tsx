@@ -212,3 +212,127 @@ describe("a közös szerkesztő felülete", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A KEP (2026-09-28). A szerkeszto csak a sajat hivatkozasu kepet fogadja el,
+ * a kimenetben a hivatkozas all, a megjelenitesben a hivo altal adott cim.
+ */
+describe("a közös szerkesztő: kép", () => {
+  const KEP =
+    '<p><img src="acropora-image:logo1" alt="Logó" width="200"> Kedves Anna!</p>';
+
+  it("a saját hivatkozású kép változatlanul átmegy a szerkesztőn és a tisztítón", () => {
+    const { editor } = megjelenit();
+    act(() => {
+      editor().commands.setContent(KEP);
+    });
+    expect(editor().getHTML()).toBe(KEP);
+    expect(sanitizeRichHtml(editor().getHTML())).toBe(KEP);
+  });
+
+  it("külső és data: forrású képet be sem olvas", () => {
+    const { editor } = megjelenit();
+    act(() => {
+      editor().commands.setContent(
+        '<p>a<img src="https://tracker.example/p.png">b<img src="data:image/png;base64,AAAA">c</p>',
+      );
+    });
+    expect(editor().getHTML()).toBe("<p>abc</p>");
+  });
+
+  it("insertImage: a saját képet beszúrja, a szélességet 600-ra vágja, az idegent nem", () => {
+    const { editor, ref } = megjelenit();
+    act(() => {
+      ref.current?.insertImage({ src: "https://x.hu/a.png", alt: "x" });
+    });
+    expect(editor().getHTML()).toBe("<p></p>");
+    act(() => {
+      ref.current?.insertImage({
+        src: "acropora-image:logo1",
+        alt: " Logó ",
+        width: 1200,
+      });
+    });
+    expect(editor().getHTML()).toBe(
+      '<p><img src="acropora-image:logo1" alt="Logó" width="600"></p>',
+    );
+  });
+
+  /**
+   * A MEGJELENITETT CIM NEM KERULHET A KIMENETBE. A szerkesztoben a hivo altal
+   * adott `data:` cim latszik, a mentett HTML-ben a hivatkozas.
+   */
+  it("a kép a hívó címével látszik, a kimenetben a hivatkozás marad", () => {
+    const cim = "data:image/png;base64,iVBORw0KGgo=";
+    render(
+      <RichTextEditor
+        aria-label="Kép-szerkesztő"
+        value={KEP}
+        onChange={() => undefined}
+        resolveImageSrc={(src) =>
+          src === "acropora-image:logo1" ? cim : undefined
+        }
+      />,
+    );
+    const mezo = screen.getByLabelText("Kép-szerkesztő") as HTMLElement & {
+      editor: Peldany;
+    };
+    expect(mezo.querySelector("img[data-src]")?.getAttribute("src")).toBe(cim);
+    expect(mezo.editor.getHTML()).toBe(KEP);
+  });
+
+  /*
+    A CIM KESOBB ERKEZIK, MINT A TARTALOM: a hivo a kepet a halozatrol tolti be.
+    A mar kirajzolt kepnek meg kell kapnia, kulonben ures marad, amig valaki
+    at nem irja a szoveget.
+  */
+  it("a később érkező cím a már kirajzolt képre is rákerül", () => {
+    const cim = "data:image/png;base64,iVBORw0KGgo=";
+    const { rerender } = render(
+      <RichTextEditor
+        aria-label="Kép-szerkesztő"
+        value={KEP}
+        onChange={() => undefined}
+        resolveImageSrc={() => undefined}
+      />,
+    );
+    const kep = () =>
+      screen.getByLabelText("Kép-szerkesztő").querySelector("img[data-src]");
+    expect(kep()?.getAttribute("src")).toBeNull();
+    rerender(
+      <RichTextEditor
+        aria-label="Kép-szerkesztő"
+        value={KEP}
+        onChange={() => undefined}
+        resolveImageSrc={(src) =>
+          src === "acropora-image:logo1" ? cim : undefined
+        }
+      />,
+    );
+    expect(kep()?.getAttribute("src")).toBe(cim);
+  });
+
+  it("a kép gomb csak akkor látszik, ha van, aki képet ad, és azt hívja", () => {
+    const keres = vi.fn();
+    const { rerender } = render(
+      <RichTextEditor
+        aria-label="Törzs"
+        value="<p></p>"
+        onChange={() => undefined}
+        toolbar={["bold", "image"]}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Kép beszúrása" })).toBeNull();
+    rerender(
+      <RichTextEditor
+        aria-label="Törzs"
+        value="<p></p>"
+        onChange={() => undefined}
+        toolbar={["bold", "image"]}
+        onImageRequest={keres}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Kép beszúrása" }));
+    expect(keres).toHaveBeenCalledTimes(1);
+  });
+});
