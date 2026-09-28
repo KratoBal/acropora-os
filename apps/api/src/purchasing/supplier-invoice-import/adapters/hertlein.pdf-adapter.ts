@@ -2,6 +2,7 @@ import type {
   SupplierInvoiceImportLine,
   SupplierInvoiceImportResult,
 } from "@acropora/types";
+import type { CandidateProfile } from "@acropora/jev";
 
 import {
   countryFromVatId,
@@ -203,4 +204,25 @@ export const hertleinPdfAdapter: SupplierPdfAdapter = {
       ],
     };
   },
+};
+
+/**
+ * A HERTLEIN JELÖLT-PROFILJA a számlasor -> termék jelöltlistához (#1199
+ * A-008 Stage A, `stage-a-v3`). Ami ebben áll, az a Hertleinről szóló, mért
+ * tudás, a generátor maga (`@acropora/jev` `generateCandidates`) beszállító-
+ * független.
+ *
+ *   - routing: a Hertlein cikkszám előtagja egy MÁRKÁT jelöl, soha nem
+ *     terméket (`fm12345` -> Fauna Marin, `e1234567` -> Eheim);
+ *   - álnév: a Hertlein a myAqua sort "Microbe-Lift" néven sorolja, a mi
+ *     törzsünk ARKA néven (az ARKA forgalmazza a Microbe-Liftet). Mérve a DEV
+ *     90 kódján (stage-a-v2).
+ */
+export const hertleinCandidateProfile: CandidateProfile = {
+  brandRouting: [
+    { pattern: /^fm\d{5}$/, words: ["fauna", "marin"] },
+    { pattern: /^e\d{7}$/, words: ["eheim"] },
+  ],
+  brandAliases: [{ when: ["microbe", "lift"], alternatives: [["arka"]] }],
+  titleWords: ["dr"],
 };
