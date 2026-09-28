@@ -12,7 +12,13 @@ import { child, children, value, type XmlNode } from "./nav-xml.util.js";
 // számlánként küld adatot.
 
 export interface ParsedNavInvoiceLine {
-  lineNumber: number;
+  /**
+   * A NAV tétel sorszáma, vagy `null`, ha hiányzik vagy nem pozitív egész.
+   * NEM 0: a `Number("")` 0-t ad, és a 0 véges szám, tehát egy hiányzó
+   * sorszám eddig érvényes értéknek látszott minden hívónak (lásd
+   * `lineNumberOf`).
+   */
+  lineNumber: number | null;
   description: string;
   quantity: string;
   unit: string;
@@ -127,8 +133,34 @@ function vatRatePercentFromNode(node: XmlNode | undefined): string | undefined {
   return (fraction * 100).toString();
 }
 
+/// A NAV `LineNumberType` pozitív egész, az adatbázis oszlopa (a
+/// `PurchaseInvoiceLine.navLineNumber`) 32 bites - ugyanaz a felső határ, mint a
+/// `purchasing/nav-line-source.ts` `ervenyesSorszam` függvényében.
+const MAX_LINE_NUMBER = 2_147_483_647;
+
+/// A tétel sorszáma, vagy `null`.
+///
+/// EZ A FÜGGVÉNY AZÉRT VAN, MERT A KORÁBBI ALAK KÉT IRÁNYBA TÉVEDETT
+/// (mérve 2026-09-28, a 66d5d079-es fő ágon):
+///   - egy HIÁNYZÓ vagy üres sorszám `Number("")` = 0 lett, a 0 pedig véges
+///     szám, tehát a tétel 0-s sorszámmal ment tovább, és minden hívó
+///     érvényesnek látta;
+///   - egy NEM SZÁM sorszám (NaN) viszont az EGÉSZ tételt eldobta, vagyis egy
+///     valódi számlatétel csendben kimaradt a bevételezésből.
+/// Mostantól mindkettő `null`, és a tétel megmarad: a sorszám a tétel
+/// forrás-hivatkozása, nem a léte feltétele.
+///
+/// Csak számjegy fogadható el: a `Number` a "1e2"-t 100-nak, a " 0x1f "-et
+/// 31-nek olvasná, és egyik sem sorszám.
+function lineNumberOf(raw: string | undefined): number | null {
+  const trimmed = raw?.trim();
+  if (!trimmed || !/^\d+$/.test(trimmed)) return null;
+  const number = Number(trimmed);
+  return number >= 1 && number <= MAX_LINE_NUMBER ? number : null;
+}
+
 function parseLine(node: XmlNode): ParsedNavInvoiceLine | null {
-  const lineNumber = Number(value(node, "lineNumber") ?? "");
+  const lineNumber = lineNumberOf(value(node, "lineNumber"));
   const description = value(node, "lineDescription");
   const quantity = value(node, "quantity");
   const normalAmounts = child(node, "lineAmountsNormal");
@@ -140,8 +172,7 @@ function parseLine(node: XmlNode): ParsedNavInvoiceLine | null {
     value(netAmountData, "lineNetAmount") ??
     value(normalAmounts, "lineNetAmount") ??
     value(node, "lineNetAmount");
-  if (!Number.isFinite(lineNumber) || !description || !quantity || !netAmount)
-    return null;
+  if (!description || !quantity || !netAmount) return null;
   const unitPrice = value(node, "unitPrice");
   return {
     lineNumber,

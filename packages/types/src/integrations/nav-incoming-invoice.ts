@@ -26,7 +26,8 @@ export interface NavIncomingInvoiceAddress {
 }
 
 export interface NavIncomingInvoiceLine {
-  lineNumber: number;
+  /** A NAV tétel sorszáma, vagy `null`, ha hiányzik vagy nem pozitív egész. */
+  lineNumber: number | null;
   description: string;
   quantity: string;
   unit: string;

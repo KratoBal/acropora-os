@@ -6,6 +6,7 @@ import type {
 } from "@acropora/types";
 
 import type { ParsedNavInvoiceData } from "../../integrations/nav/nav-invoice-data.parser.js";
+import { ervenyesSorszam } from "../nav-line-source.js";
 
 /// A NavIncomingInvoice.parsedData JSON mezőben tárolt pillanatkép alakja -
 /// a queryInvoiceData válaszból parszolt üzleti adat (lásd
@@ -70,7 +71,14 @@ export function toNavIncomingInvoiceDetail(
     supplierBankAccountNumber: parsed?.supplierBankAccountNumber,
     suggestedVatRatePercent: parsed?.suggestedVatRatePercent,
     lines: (parsed?.lines ?? []).map((line) => ({
-      lineNumber: line.lineNumber,
+      /*
+        A MAR ELTAROLT szamlakban a hianyzo sorszam 0-kent all (a parser
+        2026-09-28 elotti alakja irta), es a tarolt adatot nem irjuk at.
+        Kiolvasaskor ugyanaz a szabaly szuri, mint a forras-parositast:
+        a 0 itt is `null`, kulonben a web visszakuldene, es a DTO `@Min(1)`
+        kapuja 400-zal utasitana el a mentest.
+      */
+      lineNumber: ervenyesSorszam(line.lineNumber),
       description: line.description,
       quantity: line.quantity,
       unit: line.unit,
