@@ -20,6 +20,20 @@ import type {
 import { apiAuthHeaders, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
 
+/** A kategoria-javaslat bemenete: az urlap vetulet-mezoi (#1199 P-004/P-013). */
+export interface AssetCategorySuggestionInput {
+  clientOperationId: string;
+  name: string;
+  manufacturer?: string;
+  model?: string;
+  kind?: string;
+  performance?: string;
+  performanceUnitId?: string;
+  powerConsumption?: string;
+  parentAssetId?: string;
+  departmentId?: string;
+}
+
 export const assetLabelsApi = {
   /**
    * A KORABBI GENERALASOK: mikor, hany kod, hany szabad meg.
@@ -162,6 +176,22 @@ export const assetsApi = {
       `/service/assets/scan-label/${encodeURIComponent(code)}`,
       token,
       { signal },
+    );
+  },
+  /**
+   * A JEV KATEGORIA-JAVASLAT A LETREHOZO URLAPHOZ (V1 pilot, #1199 P-012/P-013).
+   * `categoryId` CSAK lathato javaslatnal jon; rejtettnel, kikapcsolt pilotnal
+   * vagy hibanal `null`. `enabled: false` utan az urlap ne kerdezzen tobbet.
+   */
+  categorySuggestion(
+    token: string,
+    input: AssetCategorySuggestionInput,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<{ enabled: boolean; categoryId: string | null }>(
+      "/service/assets/category-suggestion",
+      token,
+      { method: "POST", body: JSON.stringify(input), signal },
     );
   },
   create(token: string, input: CreateAssetInput) {

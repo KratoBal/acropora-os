@@ -6367,3 +6367,78 @@ model MailImage {
 
   @@index([uploadedById])
 }
+
+/// A JEV-DONTES AUDIT- ES MERESI REKORDJA (V1, eszkoz-kategoria elotoltes).
+///
+/// Szerzodes: KratoBal/acropora-os #1199 -- ACD-003 Q-003 (a REQUIRED IN V1
+/// mezolista), ACD-004 CH-003/P-006 (entitas-szintu identitas, nem
+/// inferencia-cache), ACD-008 P-012 es acrobot P-013 kommentje
+/// (`clientOperationId`). Balazs: PD-005 ACCEPT P-012, 2026-09-28 11:04 UTC.
+///
+/// A DOMAIN MARAD AZ IGAZSAG: ez a tabla soha nem ir kategoriat az eszkozre.
+/// A futas a letrehozo urlapnal keletkezik, amikor az eszkoz meg nem letezik:
+/// ekkor csak a `clientOperationId` kapcsolja az urlaphoz, es a menteskor
+/// kotodik az `entityId`-hez, ott dol el a `resolution` is.
+///
+/// NEM TAROLJUK (Q-003 DO NOT STORE): a keres torzset, a nyers eszkoznevet, a
+/// leirast, a gyari szamot, partnerkodot, API-kulcsot.
+model DecisionRun {
+  id                String              @id @default(cuid())
+  policyKey         String
+  policyVersion     Int
+  /// `cph1:sha256:...` a vetuletrol (a sema-azonosito a hash resze).
+  projectionHash    String
+  /// A PD-001-kompatibilis vetulet, a reprodukciohoz. 12 honap utan
+  /// nullazhato, a hash marad.
+  projectionPayload Json?
+  /// A valaszthato kategoriak halmazanak hash-e: policy-verzio nelkul is valtozik.
+  optionsHash       String
+  requestedModel    String
+  respondedModel    String?
+  /// A valasztott kategoria AZONOSITOJA vagy `NONE` -- soha nem a neve.
+  selectedValue     String?
+  probabilities     Json?
+  confidence        Float?
+  exposure          DecisionExposure
+  resolution        DecisionResolution?
+  /// Az ember vegso kategoriaja A FELOLDAS PILLANATABAN.
+  resolvedValue     String?
+  status            DecisionRunStatus
+  latencyMs         Int?
+  inputTokens       Int?
+  errorCode         String?
+  errorMessage      String?             @db.VarChar(500)
+  entityType        String
+  /// Menteskor toltodik: a futas az urlapnal meg entitas nelkul keletkezik.
+  entityId          String?
+  /// Az urlap muvelet-azonositoja (P-013): a futas ezzel kotodik a mentett eszkozhoz.
+  clientOperationId String?
+  createdAt         DateTime            @default(now())
+  resolvedAt        DateTime?
+
+  /// P-006: entitas-szintu identitas. Ket azonos vetuletu eszkoz ket kulon futas.
+  @@unique([entityType, entityId, policyKey, policyVersion, projectionHash, optionsHash, requestedModel])
+  /// Ugyanazon az urlapon ugyanarra a vetuletre nincs uj hivas: a meglevo futas jon vissza.
+  @@unique([policyKey, policyVersion, clientOperationId, projectionHash, optionsHash, requestedModel])
+  @@index([policyKey, policyVersion, createdAt])
+  @@index([clientOperationId])
+}
+
+enum DecisionExposure {
+  HIDDEN
+  SHOWN
+}
+
+enum DecisionResolution {
+  ACCEPTED
+  OVERRIDDEN
+  SHADOW_MATCH
+  SHADOW_MISMATCH
+  STALE
+  EXPIRED
+}
+
+enum DecisionRunStatus {
+  OK
+  ERROR
+}

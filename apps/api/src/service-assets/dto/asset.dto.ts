@@ -37,7 +37,7 @@ import {
 
 import { DOCUMENT_CAPTION_MAX_LENGTH } from "../../documents/document-caption.js";
 
-const ASSET_KINDS = [
+export const ASSET_KINDS = [
   "SYSTEM",
   "EQUIPMENT",
   "COMPONENT",

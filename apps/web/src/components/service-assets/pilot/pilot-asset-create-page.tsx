@@ -36,6 +36,11 @@ import {
   performancePairProblem,
   performanceUnitOptions,
 } from "../asset-performance-field";
+import {
+  applyCategorySuggestion,
+  newAssetCreateOperationId,
+  useCategorySuggestion,
+} from "./use-category-suggestion";
 import { buildSiteOptions, type SiteOption } from "@/lib/partners/site-tree";
 import {
   assetCriticalityLabel,
@@ -146,6 +151,24 @@ export function PilotAssetCreatePage() {
     null,
   );
   const [categoryId, setCategoryId] = useState("");
+  /*
+    A JEV KATEGORIA-JAVASLAT (V1 pilot, #1199 P-012/P-013).
+
+    EGY URLAP, EGY MUVELET-AZONOSITO: a szerver ezzel koti a javaslat futasat a
+    mentett eszkozhoz, es ezzel stabil a 10%-os rejtett kontroll is. A mentes
+    ugyanezt kuldi.
+
+    AZ ELOTOLTES CSAK ADDIG EL, AMIG AZ EMBER NEM NYULT A KATEGORIAHOZ. Utana
+    semmi nem irja felul a valasztasat. Ha a javaslat elmarad (a mezok
+    valtoztak, es az uj javaslat rejtett), a korabban elotoltott ertek is
+    kiurul -- kulonben a mentes egy olyan javaslatot rogzitene elfogadottkent,
+    ami mar nem ervenyes.
+
+    A KATEGORIAT AZ EMBER MENTI: az elotoltes csak a valaszto kezdoerteke.
+  */
+  const [clientOperationId] = useState(newAssetCreateOperationId);
+  const [kategoriaErintve, setKategoriaErintve] = useState(false);
+  const [elotoltott, setElotoltott] = useState<string | null>(null);
   const [categories, setCategories] = useState<AssetCategory[]>([]);
   const [functionId, setFunctionId] = useState("");
   const [functions, setFunctions] = useState<AssetFunction[]>([]);
@@ -168,6 +191,34 @@ export function PilotAssetCreatePage() {
   const [nextServiceAt, setNextServiceAt] = useState("");
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
+  const javaslat = useCategorySuggestion({
+    token,
+    clientOperationId,
+    fields: {
+      name: name.trim(),
+      manufacturer: manufacturer.trim() || undefined,
+      model: model.trim() || undefined,
+      kind,
+      performance: normalizePerformanceValue(performance) ?? undefined,
+      performanceUnitId: performanceUnitId || undefined,
+      powerConsumption:
+        normalizePerformanceValue(powerConsumption) ?? undefined,
+      parentAssetId: parentAssetId || undefined,
+      departmentId: departmentId || undefined,
+    },
+  });
+  useEffect(() => {
+    const kovetkezo = applyCategorySuggestion({
+      categoryId,
+      prefilled: elotoltott,
+      touched: kategoriaErintve,
+      suggestion: javaslat,
+    });
+    setCategoryId(kovetkezo.categoryId);
+    setElotoltott(kovetkezo.prefilled);
+    // Csak a javaslat valtozasara: a kategoria-ertek maga nem inditja ujra.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [javaslat, kategoriaErintve]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -407,6 +458,7 @@ export function PilotAssetCreatePage() {
     setError(null);
     try {
       const saved = await assetsApi.create(token, {
+        clientOperationId,
         ownerType: owner.type,
         ownerId: owner.id,
         customerAddressId: customerAddressId || undefined,
@@ -525,7 +577,10 @@ export function PilotAssetCreatePage() {
               <PilotFormField label="Kategória">
                 <PilotSelect
                   value={categoryId}
-                  onChange={setCategoryId}
+                  onChange={(ertek) => {
+                    setKategoriaErintve(true);
+                    setCategoryId(ertek);
+                  }}
                   aria-label="Kategória"
                 >
                   <option value="">Nincs megadva</option>
@@ -535,6 +590,13 @@ export function PilotAssetCreatePage() {
                     </option>
                   ))}
                 </PilotSelect>
+                {!kategoriaErintve &&
+                elotoltott &&
+                categoryId === elotoltott ? (
+                  <p className="mt-1 text-xs text-dusk-500">
+                    Javasolt kategória. Ellenőrizd, mielőtt mented.
+                  </p>
+                ) : null}
               </PilotFormField>
               <PilotFormField label="Funkció">
                 <PilotSelect

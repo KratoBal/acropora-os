@@ -38,6 +38,16 @@ export {
   type JevChoiceResult,
 } from "./jev-client.js";
 export {
+  PREFILL_CONFIDENCE_THRESHOLD,
+  PREFILL_VISIBLE_CATEGORY_CODES,
+  isHiddenControl,
+  prefillEnabled,
+  prefillExposure,
+  prefillResolution,
+  type PrefillExposure,
+  type PrefillResolution,
+} from "./asset-category-prefill.js";
+export {
   ASSET_CATEGORY_POLICY,
   choiceCriteria,
   modelState,
