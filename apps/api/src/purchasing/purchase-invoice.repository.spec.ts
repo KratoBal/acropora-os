@@ -55,6 +55,8 @@ class FakeDb {
     { lastPurchaseNetPrice: Prisma.Decimal; defaultPurchaseCurrency: string }
   > = new Map();
   navIncomingInvoices: Map<string, { status: string }> = new Map();
+  navParsedData: Map<string, unknown> = new Map();
+  createdLineInputs: any[] = [];
   domainEvents: unknown[] = [];
   localProducts: Array<{
     id: string;
@@ -137,6 +139,7 @@ class FakeDb {
         supplierInvoiceNumber: args.data.supplierInvoiceNumber,
       });
       const lineInputs: any[] = args.data.lines?.create ?? [];
+      this.createdLineInputs.push(...lineInputs);
       const lines = lineInputs.map((line: any) => ({
         id: line.id ?? nextId("invoice-line"),
         /// The foreign key back to the invoice. A real Prisma row always
@@ -145,6 +148,8 @@ class FakeDb {
         purchaseInvoiceId: id,
         variantId: line.variantId ?? null,
         sourceDescription: line.sourceDescription ?? null,
+        navLineNumber: line.navLineNumber ?? null,
+        navLineDescription: line.navLineDescription ?? null,
         orderedQuantity: line.orderedQuantity,
         actualQuantity: line.actualQuantity,
         unit: line.unit,
@@ -205,6 +210,10 @@ class FakeDb {
   };
 
   navIncomingInvoice = {
+    findUnique: async (args: any) =>
+      this.navParsedData.has(args.where.id)
+        ? { parsedData: this.navParsedData.get(args.where.id) ?? null }
+        : null,
     updateMany: async (args: any) => {
       const current = this.navIncomingInvoices.get(args.where.id);
       if (!current || current.status === "RECEIVED") return { count: 0 };
@@ -409,6 +418,41 @@ describe("PurchaseInvoiceRepository.create", () => {
       db.productExtensions.get("variant-1")?.lastPurchaseNetPrice.toString(),
       "10",
     );
+  });
+
+  /** #1199 A-007: a NAV sor forrasa a sorral egyutt mentodik. */
+  it("persists the NAV line number and original text on the invoice line", async () => {
+    const db = new FakeDb();
+    const repository = repositoryWith(db);
+    const [line] = baseParams().lines;
+    assert.ok(line);
+
+    await repository.create(
+      baseParams({
+        lines: [
+          { ...line, navLineNumber: 3, navLineDescription: "Reef Salt 20kg" },
+          line,
+        ],
+      }),
+    );
+
+    assert.deepEqual(
+      db.createdLineInputs.map((l) => [l.navLineNumber, l.navLineDescription]),
+      [
+        [3, "Reef Salt 20kg"],
+        [null, null],
+      ],
+    );
+  });
+
+  it("reads the stored NAV parsed data, and null for an unknown NAV invoice", async () => {
+    const db = new FakeDb();
+    db.navParsedData.set("nav-1", { lines: [] });
+    const repository = repositoryWith(db);
+    assert.deepEqual(await repository.navInvoiceParsedData("nav-1"), {
+      lines: [],
+    });
+    assert.equal(await repository.navInvoiceParsedData("nav-x"), null);
   });
 
   it("does not create a StockMovementLine, StockItem, or outbox row for a NOT_LINKED (no product match) line", async () => {

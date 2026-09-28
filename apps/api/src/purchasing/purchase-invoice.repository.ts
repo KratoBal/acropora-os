@@ -93,6 +93,9 @@ export interface CreatePurchaseInvoiceLine {
     primaryCategoryId: string | null;
   } | null;
   sourceDescription: string | null;
+  /** A NAV szamlasor sorszama es eredeti szovege (#1199 A-007), lasd nav-line-source.ts. */
+  navLineNumber?: number | null;
+  navLineDescription?: string | null;
   orderedQuantity: Prisma.Decimal;
   actualQuantity: Prisma.Decimal;
   unit: string;
@@ -191,6 +194,12 @@ export interface PurchaseInvoiceDatabase extends WarehouseLookupDatabase {
       args: unknown,
     ): Promise<Array<{ variantId: string; onHand: Prisma.Decimal }>>;
   };
+  navIncomingInvoice: {
+    findUnique(args: {
+      where: { id: string };
+      select: { parsedData: true };
+    }): Promise<{ parsedData: unknown } | null>;
+  };
   purchaseInvoice: {
     findMany(args: unknown): Promise<PurchaseInvoiceSummaryRow[]>;
     findUnique(args: unknown): Promise<PurchaseInvoiceDetailRow | null>;
@@ -216,6 +225,15 @@ export class PurchaseInvoiceRepository extends Repository {
     super(prisma);
     this.invoiceDatabase =
       invoiceDatabase ?? (prisma as unknown as PurchaseInvoiceDatabase);
+  }
+
+  /** A NAV bejovo szamla tarolt, felparszolt adata (`null`, ha nincs lekerve). */
+  async navInvoiceParsedData(navIncomingInvoiceId: string): Promise<unknown> {
+    const invoice = await this.invoiceDatabase.navIncomingInvoice.findUnique({
+      where: { id: navIncomingInvoiceId },
+      select: { parsedData: true },
+    });
+    return invoice?.parsedData ?? null;
   }
 
   async currentStock(
@@ -403,6 +421,8 @@ export class PurchaseInvoiceRepository extends Repository {
                     id: line.purchaseInvoiceLineId,
                     variantId: line.variantId,
                     sourceDescription: line.sourceDescription,
+                    navLineNumber: line.navLineNumber ?? null,
+                    navLineDescription: line.navLineDescription ?? null,
                     orderedQuantity: line.orderedQuantity,
                     actualQuantity: line.actualQuantity,
                     unit: line.unit,

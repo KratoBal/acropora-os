@@ -95,6 +95,8 @@ export interface CreatePurchaseInvoiceLineInput {
     primaryCategoryId?: string;
   };
   sourceDescription?: string;
+  /** A NAV számlasor sorszáma, ha a sor NAV bejövő számlából jött (#1199 A-007). */
+  navLineNumber?: number;
   orderedQuantity: number;
   actualQuantity: number;
   unit: string;

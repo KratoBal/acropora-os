@@ -36,7 +36,10 @@ function buildService(options: {
   /// Hany mentesi kiserlet bukjon el "ez a bizonylatszam mar foglalt" hibaval,
   /// mielott atmegy. Enelkul az utkozes 65 536-bol egy eselyre varna.
   takenDocumentNumbers?: number;
+  /// A NAV bejovo szamla tarolt `parsedData`-ja (#1199 A-007).
+  navParsedData?: unknown;
 }) {
+  const navParsedDataReads: string[] = [];
   let capturedCreateParams: CreatePurchaseInvoiceParams | undefined;
   let mnbCallCount = 0;
   let currentStockCallCount = 0;
@@ -48,6 +51,10 @@ function buildService(options: {
   // the shared postInventoryMovement primitive instead of a manual
   // stockMovement/stockItem/UNAS-push loop.
   const invoices = {
+    navInvoiceParsedData: async (id: string) => {
+      navParsedDataReads.push(id);
+      return options.navParsedData ?? null;
+    },
     currentStock: async () => {
       currentStockCallCount += 1;
       return {
@@ -153,6 +160,7 @@ function buildService(options: {
     getMnbCallCount: () => mnbCallCount,
     getSeenDocumentNumbers: () => [...seenDocumentNumbers],
     getCurrentStockCallCount: () => currentStockCallCount,
+    getNavParsedDataReads: () => [...navParsedDataReads],
   };
 }
 
@@ -643,5 +651,133 @@ describe("PurchasingService.createInvoice", () => {
     );
 
     assert.equal(getSeenDocumentNumbers().length, 5);
+  });
+});
+
+/**
+ * A NAV SOR FORRASA (#1199 A-007): a sorszamot a kliens kuldi, a SZOVEGET a
+ * szerver a tarolt NAV adatbol veszi. Semmi nem allitja meg a mentest.
+ */
+describe("PurchasingService.createInvoice: NAV line source", () => {
+  const NAV = {
+    lines: [
+      { lineNumber: 1, description: "Reef Salt 20kg vödör" },
+      { lineNumber: 2, description: "Szállítási díj" },
+      { lineNumber: 3, description: "Pumpa A" },
+      { lineNumber: 3, description: "Pumpa B" },
+    ],
+  };
+  const sor = (
+    navLineNumber: number | undefined,
+    extra: Partial<CreatePurchaseInvoiceDto["lines"][number]> = {},
+  ) => ({
+    orderedQuantity: 1,
+    actualQuantity: 1,
+    unit: "db",
+    unitNet: 10,
+    navLineNumber,
+    ...extra,
+  });
+  const nav = (lines: CreatePurchaseInvoiceDto["lines"], navId?: string) =>
+    baseInput({
+      source: "HU_NAV",
+      currency: "HUF",
+      vatRate: 27,
+      navIncomingInvoiceId: navId,
+      lines,
+    });
+
+  it("fills number and ORIGINAL text from the stored NAV data on all three line kinds", async () => {
+    const { service, getCapturedCreateParams, getNavParsedDataReads } =
+      buildService({
+        variants: new Map([["variant-1", variant()]]),
+        supplierCountry: "HU",
+        navParsedData: NAV,
+      });
+    await service.createInvoice(
+      nav(
+        [
+          sor(1, { variantId: "variant-1", sourceDescription: "átírt név" }),
+          sor(2, { sourceDescription: "Szállítás (kézzel átírva)" }),
+          sor(1, {
+            createLocalProduct: { name: "Új só" },
+            sourceDescription: "Új só",
+          }),
+        ],
+        "nav-1",
+      ),
+      "user-1",
+    );
+    assert.deepEqual(getNavParsedDataReads(), ["nav-1"]);
+    assert.deepEqual(
+      getCapturedCreateParams()?.lines.map((l) => [
+        l.navLineNumber,
+        l.navLineDescription,
+        l.sourceDescription,
+      ]),
+      [
+        [1, "Reef Salt 20kg vödör", "átírt név"],
+        [2, "Szállítási díj", "Szállítás (kézzel átírva)"],
+        [1, "Reef Salt 20kg vödör", "Új só"],
+      ],
+    );
+  });
+
+  it("an unknown or ambiguous line number, or none, leaves both fields null and still saves", async () => {
+    const { service, getCapturedCreateParams } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      supplierCountry: "HU",
+      navParsedData: NAV,
+    });
+    await service.createInvoice(
+      nav(
+        [
+          sor(9, { sourceDescription: "nincs ilyen sor" }),
+          sor(3, { sourceDescription: "kétszer álló sorszám" }),
+          sor(undefined, { sourceDescription: "kézi sor" }),
+        ],
+        "nav-1",
+      ),
+      "user-1",
+    );
+    assert.deepEqual(
+      getCapturedCreateParams()?.lines.map((l) => [
+        l.navLineNumber,
+        l.navLineDescription,
+      ]),
+      [
+        [null, null],
+        [null, null],
+        [null, null],
+      ],
+    );
+  });
+
+  it("without a NAV invoice the client's line number is ignored and nothing is read", async () => {
+    const { service, getCapturedCreateParams, getNavParsedDataReads } =
+      buildService({
+        variants: new Map([["variant-1", variant()]]),
+        supplierCountry: "HU",
+        navParsedData: NAV,
+      });
+    await service.createInvoice(
+      nav([sor(1, { sourceDescription: "kézi sor" })]),
+      "user-1",
+    );
+    assert.deepEqual(getNavParsedDataReads(), []);
+    assert.equal(getCapturedCreateParams()?.lines[0]?.navLineNumber, null);
+    assert.equal(getCapturedCreateParams()?.lines[0]?.navLineDescription, null);
+  });
+
+  it("a NAV invoice without parsed data leaves the fields null", async () => {
+    const { service, getCapturedCreateParams } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      supplierCountry: "HU",
+    });
+    await service.createInvoice(
+      nav([sor(1, { sourceDescription: "x" })], "nav-1"),
+      "user-1",
+    );
+    assert.equal(getCapturedCreateParams()?.lines[0]?.navLineNumber, null);
   });
 });

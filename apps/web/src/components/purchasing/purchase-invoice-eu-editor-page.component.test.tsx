@@ -225,6 +225,30 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     );
   });
 
+  /** #1199 A-007: a sor a NAV sorszámával megy, a szerver ebből köti a NAV sorhoz. */
+  it("a NAV-sorból jött tétel a NAV sorszámát is küldi", async () => {
+    navApi.detail.mockResolvedValue({
+      ...navDetail,
+      lines: navDetail.lines.map((line) => ({ ...line, lineNumber: 7 })),
+    });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    fireEvent.click(await screen.findByText(supplier.name));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+
+    await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
+    const [, keres] = purchasingApiMock.create.mock.calls[0] ?? [];
+    expect(keres.lines).toHaveLength(1);
+    expect(keres.lines[0]).toMatchObject({
+      navLineNumber: 7,
+      sourceDescription: "Teszt termék",
+    });
+  });
+
   it("a NAV-sorból új helyi terméket készít és a számlával együtt küldi", async () => {
     render(createElement(PurchaseInvoiceEuEditorPage));
 
