@@ -208,7 +208,10 @@ export interface Evaluated {
   readonly outcome: ItemOutcome;
 }
 
-function kvantilis(ertekek: readonly number[], q: number): number | null {
+export function kvantilis(
+  ertekek: readonly number[],
+  q: number,
+): number | null {
   if (ertekek.length === 0) return null;
   const rendezett = [...ertekek].sort((a, b) => a - b);
   const index = Math.min(

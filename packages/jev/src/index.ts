@@ -56,3 +56,18 @@ export {
   runAssetCategoryEvaluation,
   type RunReport,
 } from "./run.js";
+export {
+  CONFIDENCE_BANDS,
+  EXPIRY_DAYS,
+  REVIEW_TRIGGER,
+  decisionReport,
+  decisionReportMarkdown,
+  hiddenGroup,
+  rate,
+  runOutcome,
+  type DecisionReport,
+  type DecisionRunRow,
+  type HiddenGroup,
+  type ReportCategory,
+  type RunOutcome,
+} from "./decision-report.js";

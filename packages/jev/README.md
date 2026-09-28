@@ -6,15 +6,17 @@ Szerződés: KratoBal/acropora-os #1199 (ACD-001–005). Balázs jóváhagyása:
 
 ## Tartalom
 
-| Modul                             | Mit csinál                                                                                                 |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `cph1.ts`                         | Canonical Projection Hash v1: normalizálás, majd JCS (RFC 8785), UTF-8, SHA-256, végül `cph1:sha256:<hex>` |
-| `cph1-vectors.json`               | a közös tesztvektorok (22 eset). A várt értéket Python `json` + `hashlib` állította elő, nem ez a kód      |
-| `asset-category-projection.ts`    | a P-004 vetület (`service-assets.asset-category@1`)                                                        |
-| `jev-client.ts`                   | a Jev choice-hívás, befecskendezhető `fetch`-csel                                                          |
-| `evaluation.ts`                   | az arany készlet beolvasása és a G pont mérőszámai                                                         |
-| `run.ts`                          | a futtatás és a riport                                                                                     |
-| `scripts/eval-asset-category.mjs` | a futtató: adatbázisból olvas, `--dry-run` módban nem hív                                                  |
+| Modul                              | Mit csinál                                                                                                 |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `cph1.ts`                          | Canonical Projection Hash v1: normalizálás, majd JCS (RFC 8785), UTF-8, SHA-256, végül `cph1:sha256:<hex>` |
+| `cph1-vectors.json`                | a közös tesztvektorok (22 eset). A várt értéket Python `json` + `hashlib` állította elő, nem ez a kód      |
+| `asset-category-projection.ts`     | a P-004 vetület (`service-assets.asset-category@1`)                                                        |
+| `jev-client.ts`                    | a Jev choice-hívás, befecskendezhető `fetch`-csel                                                          |
+| `evaluation.ts`                    | az arany készlet beolvasása és a G pont mérőszámai                                                         |
+| `run.ts`                           | a futtatás és a riport                                                                                     |
+| `scripts/eval-asset-category.mjs`  | a futtató: adatbázisból olvas, `--dry-run` módban nem hív                                                  |
+| `decision-report.ts`               | a V1 pilot riportja a `DecisionRun` táblából (ACD-009): csak aggregátum                                    |
+| `scripts/report-decision-runs.mjs` | a pilot riport futtatója: `READ ONLY` tranzakcióban olvas, nem hív                                         |
 
 ## Döntések
 
@@ -48,6 +50,20 @@ Az arany készlet a címkéző tábla alakja: pontosvessző vagy vessző, BOM me
 - `ELDONTHETO…` (`igen`/`nem`) vagy `unresolvable`.
 
 Az `ELFOGADHATO_MEG` oszlop elhagyható; több kategória `|`-vel választható el. Az ismeretlen kategória megnevezett hiba, ilyenkor a Jev nem hívódik.
+
+## A V1 pilot riportja (ACD-009)
+
+A `DecisionRun` táblát olvassa, élesen és stage-en egyaránt. A lekérdezések egy `READ ONLY` tranzakcióban futnak, tehát az adatbázis maga tagadna meg bármilyen írást.
+
+```bash
+DATABASE_URL=... node packages/jev/scripts/report-decision-runs.mjs --out <mappa> --label eles
+```
+
+- **Mit riportol:** SHOWN ACCEPTED/OVERRIDDEN; HIDDEN SHADOW_MATCH/SHADOW_MISMATCH csoportonként (10%-os kontroll, ritka kategória, 0,90 alatti, NONE); a kettő különbségét (horgonyhatás); a bizonyosság-sávok találati arányát; a ritka kategóriák árnyék-eredményét; a hibaarányt és a késleltetést; a modell- és policy-driftet; a STALE és EXPIRED arányt; a review trigger (50 SHOWN + 10 HIDDEN-kontroll) állását.
+- **Mit nem ír ki:** a `projectionPayload`-ot. Csak aggregátumot, és típusonként legfeljebb néhány példát (`--examples`, alap 3, legfeljebb 10). Ezeknek a vetített neve a példa-futásonként külön olvasódik ki.
+- **Az EXPIRED itt számolódik**, a tábla nem írja (Council D4): az a futás, ami 14 nap után sincs eszközhöz kötve és feloldva. A `--now` a viszonyítási pont.
+- **A kategória nélkül mentett eszköz** a SHOWN ágon OVERRIDDEN, a HIDDEN ágon SHADOW_MISMATCH (így oldja fel az API). A riport ezt külön számolja („kategória nélkül mentve”, „üresen”), mert a D4 (még a létrehozás utáni árnyék-futásra írva) a 14 napig kategória nélkül maradt eszközt EXPIRED-nek szánta. A V1 a mentéskor old fel, ezért itt ez az eset nem EXPIRED; hogy melyik olvasat a helyes, az a review döntése.
+- **Konzisztencia:** a tárolt `exposure`-t a mai szabállyal újraszámolja. Ha eltér, egy kategória-kód megváltozott a futás óta, és a csoportosítás félrevezethet.
 
 ## Ami emberi munka, és ez a kód nem végzi el
 
