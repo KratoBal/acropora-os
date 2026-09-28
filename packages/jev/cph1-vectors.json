@@ -1,0 +1,298 @@
+{
+  "contract": "cph1 (KratoBal/acropora-os #1199, ACD-001 Q-001 P-002 + ACD-002 pontositasok)",
+  "pipeline": "normalizalas -> JCS (RFC 8785) -> UTF-8 -> SHA-256 -> 'cph1:sha256:<hex>'",
+  "markers": {
+    "$cph1_set": "halmaz-szemantikaju tomb: elemenkent normalizalva, a kanonikus alak szerint dedupe + rendezes",
+    "$cph1_decimal": "decimalis string: kanonikus alak (nincs exponens, nincs +, nincs felesleges nulla, -0 -> 0)",
+    "$cph1_datetime": "idopont: UTC ISO-8601, mindig ezredmasodperccel, Z-vel"
+  },
+  "trim_whitespace": "ECMAScript WhiteSpace + LineTerminator: U+0009-U+000D, U+0020, U+00A0, U+1680, U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF",
+  "generated_by": "Python json.dumps(ensure_ascii=False, separators=(',',':'), sort_keys=True) + hashlib.sha256 a kezzel irt, normalizalt alakon",
+  "vectors": [
+    {
+      "name": "kulcssorrend",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "b": 1,
+          "a": "x"
+        }
+      },
+      "canonical": "{\"data\":{\"a\":\"x\",\"b\":1},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:c9730801a4874c1f1d22d63d442fe0c04eca5e2b7006a5d12295853111aa3405"
+    },
+    {
+      "name": "beagyazott kulcssorrend szammal es alahuzassal",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "b_2": 1,
+          "b_10": 2,
+          "a": {
+            "z": 1,
+            "y": 2
+          }
+        }
+      },
+      "canonical": "{\"data\":{\"a\":{\"y\":2,\"z\":1},\"b_10\":2,\"b_2\":1},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:935f64a1b7a15b4ce41bef3971bc13ecbc8403488fbb5255ea97460160b70662"
+    },
+    {
+      "name": "NFC: felbontott e + vesszo -> e-ekezet",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "s": "é"
+        }
+      },
+      "canonical": "{\"data\":{\"s\":\"é\"},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:7675f4e872ad6acca1f011a9219d303d2516d64de63855a633ffe0e357c2c551"
+    },
+    {
+      "name": "sorvegek: CRLF es CR -> LF",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "s": "a\r\nb\rc"
+        }
+      },
+      "canonical": "{\"data\":{\"s\":\"a\\nb\\nc\"},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:dfefc7c99a98fb1c966326b93b7754cb57be28cedf45a0ff9c26ef5d85d4dce9"
+    },
+    {
+      "name": "trim: NBSP, BOM, tab a szeleken; belul nincs osszevonas",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "s": " ﻿ a  b \t"
+        }
+      },
+      "canonical": "{\"data\":{\"s\":\"a  b\"},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:e16839669e84f10ae4a4e2a3f70065c975c582d4df2dd67efb53f16f66ed875a"
+    },
+    {
+      "name": "belso tab megmarad, escape-elve",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "s": "tab\there"
+        }
+      },
+      "canonical": "{\"data\":{\"s\":\"tab\\there\"},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:b397c82001199762336493d08d954367a8beda4011b5e431c8d502a9e6520865"
+    },
+    {
+      "name": "null megmarad",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "a": null
+        }
+      },
+      "canonical": "{\"data\":{\"a\":null},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:09929646bac42ca31a8bc754848e9ad8739e4bcb7e477fb49baeca42ec75bd73"
+    },
+    {
+      "name": "hianyzo kulcs: ures objektum (mas hash, mint a null)",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {}
+      },
+      "canonical": "{\"data\":{},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:333351003ed6e1277c44f30817d23d0ab12588b3aa004eb5fd86114e068071e6"
+    },
+    {
+      "name": "rendezett tomb: a sorrend megmarad",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "a": [3, 1, 2]
+        }
+      },
+      "canonical": "{\"data\":{\"a\":[3,1,2]},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:3be50f18aafb198e8110b4af292f8c8179c6a6eb3cb8775779de3d721f2db540"
+    },
+    {
+      "name": "halmaz: dedupe + rendezes",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "a": {
+            "$cph1_set": ["b", "a", "b"]
+          }
+        }
+      },
+      "canonical": "{\"data\":{\"a\":[\"a\",\"b\"]},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:88663134f70bcfd89da5bbb9890869c4c1213b53f2c3a436863fd853ed39053d"
+    },
+    {
+      "name": "objektum-halmaz: a kanonikus alak szerint rendezve",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "a": {
+            "$cph1_set": [
+              {
+                "id": "2"
+              },
+              {
+                "id": "1"
+              },
+              {
+                "id": "2"
+              }
+            ]
+          }
+        }
+      },
+      "canonical": "{\"data\":{\"a\":[{\"id\":\"1\"},{\"id\":\"2\"}]},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:7dd6e28c0e83c935f17e22727b26d913c1df4f5ef3a1299b7026f920b74b76d9"
+    },
+    {
+      "name": "decimalis: vezeto es zaro nulla le",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "a": {
+            "$cph1_decimal": "012.500"
+          },
+          "b": {
+            "$cph1_decimal": "72.000000"
+          }
+        }
+      },
+      "canonical": "{\"data\":{\"a\":\"12.5\",\"b\":\"72\"},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:444d683d4f658f4fce905dd35159570cedba9b134a87d462acd231693c6ec60c"
+    },
+    {
+      "name": "decimalis: -0 es +",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "a": {
+            "$cph1_decimal": "-0.000"
+          },
+          "b": {
+            "$cph1_decimal": "+1.50"
+          }
+        }
+      },
+      "canonical": "{\"data\":{\"a\":\"0\",\"b\":\"1.5\"},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:d3363b809f001d5cf9e5d5960822fa1d4d6d6f271344ef4397bedc49d84de4fd"
+    },
+    {
+      "name": "ekezetes szoveg nyersen, nem \\u-escape",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "s": "Szivattyú zúg, őrző űr"
+        }
+      },
+      "canonical": "{\"data\":{\"s\":\"Szivattyú zúg, őrző űr\"},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:4500160e94e9ef497774ba99c21b0d396addab11ec8f755b196e96fc0b49ea5c"
+    },
+    {
+      "name": "egesz a biztos tartomany szelen",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "max": 9007199254740991,
+          "min": -9007199254740991,
+          "zero": 0
+        }
+      },
+      "canonical": "{\"data\":{\"max\":9007199254740991,\"min\":-9007199254740991,\"zero\":0},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:186e86351655f5c353092e7221cac654ad3f63c5cbffa6cb95eac1b7697f5076"
+    },
+    {
+      "name": "logikai ertekek",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "t": true,
+          "f": false
+        }
+      },
+      "canonical": "{\"data\":{\"f\":false,\"t\":true},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:2654d10340b7a3ea94d24b4fd6f5166de0a16ddea9a7606f3c2efafc87d1f130"
+    },
+    {
+      "name": "idopont: UTC, ezredmasodperccel; a datum string marad",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "at": {
+            "$cph1_datetime": "2026-09-28T11:49:33.872+02:00"
+          },
+          "d": "2026-09-28"
+        }
+      },
+      "canonical": "{\"data\":{\"at\":\"2026-09-28T09:49:33.872Z\",\"d\":\"2026-09-28\"},\"schema\":\"test.vector@1\"}",
+      "hash": "cph1:sha256:e71d29647fab1e53378f1a31afe3e8f1d2c408a6856fd67cd0553c76b3b0908f"
+    },
+    {
+      "name": "eszkoz-kategoria vetulet (P-004 alak, snake_case kulcsok)",
+      "input": {
+        "schema": "service-assets.asset-category@1",
+        "data": {
+          "name": "Homokszűrő szivattyú",
+          "manufacturer": "Astral Pool",
+          "model": "72556 NAUTILUS",
+          "kind": "EQUIPMENT",
+          "performance": {
+            "$cph1_decimal": "72.000000"
+          },
+          "performance_unit": "köbméter per óra",
+          "power_consumption": {
+            "$cph1_decimal": "1.500000"
+          },
+          "parent_category": "Szűrési rendszer"
+        }
+      },
+      "canonical": "{\"data\":{\"kind\":\"EQUIPMENT\",\"manufacturer\":\"Astral Pool\",\"model\":\"72556 NAUTILUS\",\"name\":\"Homokszűrő szivattyú\",\"parent_category\":\"Szűrési rendszer\",\"performance\":\"72\",\"performance_unit\":\"köbméter per óra\",\"power_consumption\":\"1.5\"},\"schema\":\"service-assets.asset-category@1\"}",
+      "hash": "cph1:sha256:1103fb69938bd02b8f5bf4d424335726b484be28912afd8c008dd93c561551a7"
+    },
+    {
+      "name": "tort JSON-szamkent tilos",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "a": 1.5
+        }
+      },
+      "error": "CPH1_FLOAT"
+    },
+    {
+      "name": "egesz a biztos tartomanyon kivul",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "a": 9007199254740992
+        }
+      },
+      "error": "CPH1_UNSAFE_INTEGER"
+    },
+    {
+      "name": "camelCase kulcs tilos",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "performanceUnit": "m3/h"
+        }
+      },
+      "error": "CPH1_BAD_KEY"
+    },
+    {
+      "name": "exponenses decimalis tilos",
+      "input": {
+        "schema": "test.vector@1",
+        "data": {
+          "a": {
+            "$cph1_decimal": "1e5"
+          }
+        }
+      },
+      "error": "CPH1_BAD_DECIMAL"
+    }
+  ]
+}
