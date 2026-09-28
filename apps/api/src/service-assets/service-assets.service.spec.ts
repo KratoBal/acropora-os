@@ -1034,3 +1034,82 @@ test("allows updating a supplier-owned asset without mentioning the department",
   );
   assert.equal(result.id, "asset-1");
 });
+
+/**
+ * A JEV-JAVASLAT FELOLDASA A LETREHOZAS UTAN (V1 pilot, #1199 P-012/P-013).
+ *
+ * A mentes UTAN fut, az urlap muvelet-azonositojaval es az uj eszkoz
+ * azonositojaval. Ha nem futna, a pilot egyetlen feloldast sem rogzitene, es
+ * semmi nem hibazna -- a meres csendben uresen maradna.
+ */
+test("a létrehozás után a Jev-javaslat feloldása az új eszköz azonosítójával fut", async () => {
+  const feloldasok: unknown[] = [];
+  const service = new ServiceAssetsService(
+    repository({
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
+      create: async () => ({ ...asset, id: "uj-eszkoz" }),
+    }),
+    new InMemoryDocumentStore(),
+    {
+      resolveOnCreate: async (input: unknown) => {
+        feloldasok.push(input);
+      },
+    } as never,
+  );
+  const mentett = await service.create(
+    {
+      clientOperationId: "asset-create:web:teszt-0",
+      ownerType: "SUPPLIER",
+      ownerId: "supplier-1",
+      departmentId: "department-1",
+      kind: "EQUIPMENT",
+      name: "Lámpa",
+      labelCode: "V2196",
+    },
+    "user-1",
+    { kind: "internal" },
+  );
+  assert.equal(mentett.id, "uj-eszkoz");
+  assert.deepEqual(feloldasok, [
+    { clientOperationId: "asset-create:web:teszt-0", assetId: "uj-eszkoz" },
+  ]);
+});
+
+test("a feloldó nélkül (a pilot modul hiányában) a létrehozás változatlanul működik", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
+      create: async () => ({ ...asset, id: "uj-eszkoz" }),
+    }),
+    new InMemoryDocumentStore(),
+  );
+  const mentett = await service.create(
+    {
+      ownerType: "SUPPLIER",
+      ownerId: "supplier-1",
+      departmentId: "department-1",
+      kind: "EQUIPMENT",
+      name: "Lámpa",
+      labelCode: "V2196",
+    },
+    "user-1",
+    { kind: "internal" },
+  );
+  assert.equal(mentett.id, "uj-eszkoz");
+});

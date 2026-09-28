@@ -516,6 +516,12 @@ export interface AssetListResponse {
 }
 
 export interface CreateAssetInput {
+  /**
+   * A KLIENS MUVELET-AZONOSITOJA. A webes letrehozo urlap 2026-09-28 ota kuldi:
+   * ezzel kotodik a Jev kategoria-javaslat futasa (#1199 P-013) a mentett
+   * eszkozhoz. A szerveren egyben idempotencia-kulcs (lasd `CreateAssetDto`).
+   */
+  clientOperationId?: string;
   ownerType: AssetOwnerType;
   ownerId: string;
   customerAddressId?: string;

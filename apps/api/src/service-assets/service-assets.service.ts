@@ -16,6 +16,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
@@ -73,6 +74,7 @@ import {
   thumbnailResponse,
   wantsThumbnail,
 } from "../documents/document-thumbnail.js";
+import { AssetCategorySuggestionService } from "../decisions/asset-category-suggestion.service.js";
 
 /**
  * A KET UZENET, EGYMAS MELLETT, HOGY A KULONBSEG LATSZODJON.
@@ -91,6 +93,8 @@ export class ServiceAssetsService {
   constructor(
     private readonly repository: ServiceAssetsRepository,
     @Inject(DOCUMENT_STORE) private readonly documentStore: DocumentStore,
+    @Optional()
+    private readonly suggestions?: AssetCategorySuggestionService,
   ) {}
 
   private readonly logger = new Logger(ServiceAssetsService.name);
@@ -295,13 +299,25 @@ export class ServiceAssetsService {
       parentAssetId: input.parentAssetId,
       productVariantId: input.productVariantId,
     });
+    let mentett: Awaited<ReturnType<ServiceAssetsRepository["create"]>>;
     try {
-      return await this.repository.create(input, actorUserId, {
+      mentett = await this.repository.create(input, actorUserId, {
         generatePartnerInternalCode: shouldGeneratePartnerInternalCode(input),
       });
     } catch (error) {
       this.map(error, scope);
     }
+    /*
+      A JEV-JAVASLAT FELOLDASA (V1 pilot, #1199 P-012/P-013): az urlap nyitott
+      futasa az uj eszkozhoz kotodik, es itt dol el, hogy az ember elfogadta,
+      felulirta, vagy a rejtett javaslat egyezett-e. A MENTES MAR MEGTORTENT: a
+      feloldas soha nem dob, es a kategoriat nem irja at.
+    */
+    await this.suggestions?.resolveOnCreate({
+      clientOperationId: input.clientOperationId,
+      assetId: mentett.id,
+    });
+    return mentett;
   }
 
   /**
