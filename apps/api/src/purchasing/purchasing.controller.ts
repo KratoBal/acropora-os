@@ -22,6 +22,8 @@ import { PurchaseInvoiceListQueryDto } from "./dto/purchase-invoice-list-query.d
 import { PurchaseProductConflictQueryDto } from "./dto/purchase-product-conflict-query.dto.js";
 import { PurchaseProductSearchQueryDto } from "./dto/purchase-product-search-query.dto.js";
 import { PurchasingService } from "./purchasing.service.js";
+import { SupplierLineSuggestionDto } from "./dto/supplier-line-suggestion.dto.js";
+import { SupplierLineSuggestionService } from "./line-suggestions/supplier-line-suggestion.service.js";
 import { SupplierInvoiceImportError } from "./supplier-invoice-import/supplier-invoice-import.error.js";
 import {
   SUPPLIER_INVOICE_MAX_BYTES,
@@ -33,7 +35,19 @@ export class PurchasingController {
   constructor(
     private readonly service: PurchasingService,
     private readonly supplierInvoiceImport: SupplierInvoiceImportService,
+    private readonly lineSuggestions: SupplierLineSuggestionService,
   ) {}
+
+  /**
+   * #1199 P-026: javaslat egy termék nélküli számlasorhoz (beszállítói
+   * leképezés, EAN-egyezés, Jev). Semmit nem köt és nem ment: a sor audit-
+   * futását írja, és a javaslatot adja vissza; az ember fogad el.
+   */
+  @Post("invoices/line-suggestions")
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  suggestLine(@Body() input: SupplierLineSuggestionDto) {
+    return this.lineSuggestions.suggest(input);
+  }
 
   @Get("products/search")
   @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)

@@ -22,6 +22,8 @@ import {
   type PurchaseProductSearchResult,
   type SupplierInvoiceImportFormat,
   type SupplierInvoiceImportResult,
+  type SupplierLineSuggestionResult,
+  type SupplierLineSuggestionSource,
   type SupplierSummary,
   type ViesVatLookupResult,
 } from "@acropora/types";
@@ -66,6 +68,10 @@ interface InvoiceLineState {
   supplierSku?: string | null;
   /** EAN, ha a beszállítói számla hordozta; új termék felvételénél előtölt. */
   ean?: string | null;
+  /** Fuvar- vagy díjsor a beolvasott számlán: nem kér termék-javaslatot. */
+  isCharge?: boolean;
+  /** #1199 P-026: a sorhoz kért javaslat audit-futása; a mentés ezzel zárja le. */
+  decisionRunId?: string | null;
   /** A NAV számlasor sorszáma, ha a sor NAV bejövő számlából jött; a mentés ezzel köti a sort a NAV sorhoz. */
   navLineNumber: number | null;
   orderedQuantity: number;
@@ -170,6 +176,16 @@ export function PurchaseInvoiceEuEditorPage() {
   const [categoryOptions, setCategoryOptions] = useState<CatalogOption[]>([]);
   const [brandOptions, setBrandOptions] = useState<CatalogOption[]>([]);
   /** Soronként: van-e már termék az új termék EAN-jével vagy cikkszámával. */
+  /** #1199 P-026: soronként a javaslat, és hogy az ember elvetette-e. */
+  const [lineSuggestions, setLineSuggestions] = useState<
+    Record<string, SupplierLineSuggestionResult & { dismissed?: boolean }>
+  >({});
+  const suggestionRequested = useRef(new Set<string>());
+  const clientOperationId = useRef(
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `op-${Date.now()}`,
+  );
   const [productConflicts, setProductConflicts] = useState<
     Record<string, PurchaseProductConflictLookup>
   >({});
@@ -225,6 +241,7 @@ export function PurchaseInvoiceEuEditorPage() {
           sourceDescription: line.description,
           supplierSku: line.supplierSku,
           ean: line.ean,
+          isCharge: line.isCharge,
           navLineNumber: null,
           orderedQuantity: line.quantity,
           actualQuantity: line.quantity,
@@ -576,6 +593,65 @@ export function PurchaseInvoiceEuEditorPage() {
     setProductSearch(line.sourceDescription || line.productName);
   };
 
+  /**
+   * #1199 P-026: a termék nélküli, nem díj-sorokhoz egyszer kér javaslatot,
+   * amint a szállító ki van választva. A javaslat csak felajánl; a
+   * szerver kapcsolói döntik el, fut-e egyáltalán.
+   */
+  useEffect(() => {
+    if (!canManage || !selectedSupplier) return;
+    const pending = lines.filter(
+      (line) =>
+        !line.variantId &&
+        !line.createLocalProduct &&
+        !line.isCharge &&
+        line.sourceDescription.trim() &&
+        !suggestionRequested.current.has(line.key),
+    );
+    if (pending.length === 0) return;
+    for (const line of pending) suggestionRequested.current.add(line.key);
+    // NOT cancelled when `lines` changes: every answer updates a line, and a
+    // cancel there would drop the requests still queued behind it.
+    void (async () => {
+      for (const line of pending) {
+        try {
+          const result = await purchasingApi.suggestLine(token, {
+            clientOperationId: clientOperationId.current,
+            lineKey: line.key,
+            supplierId: selectedSupplier.id,
+            description: line.sourceDescription,
+            supplierSku: line.supplierSku ?? undefined,
+            ean: line.ean ?? undefined,
+          });
+          if (!result.enabled) return; // off for this supplier: ask no more
+          setLineSuggestions((current) => ({ ...current, [line.key]: result }));
+          if (result.decisionRunId)
+            updateLine(line.key, { decisionRunId: result.decisionRunId });
+        } catch {
+          // no suggestion is an answer; the line is linked by hand as today
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManage, selectedSupplier, lines, token]);
+
+  const acceptSuggestion = (key: string) => {
+    const suggestion = lineSuggestions[key]?.suggestion;
+    if (!suggestion) return;
+    updateLine(key, {
+      variantId: suggestion.variantId,
+      sku: suggestion.sku,
+      productName: suggestion.productName,
+      createLocalProduct: null,
+    });
+  };
+
+  const dismissSuggestion = (key: string) =>
+    setLineSuggestions((current) => ({
+      ...current,
+      [key]: { ...current[key]!, dismissed: true },
+    }));
+
   const beginLocalProductCreation = (line: InvoiceLineState) => {
     if (productSearchTargetKey === line.key) {
       setProductSearchTargetKey(null);
@@ -828,6 +904,7 @@ export function PurchaseInvoiceEuEditorPage() {
             : undefined,
           sourceDescription: line.sourceDescription.trim() || undefined,
           navLineNumber: line.navLineNumber ?? undefined,
+          decisionRunId: line.decisionRunId ?? undefined,
           orderedQuantity: line.orderedQuantity,
           actualQuantity: line.actualQuantity,
           unit: line.unit,
@@ -1496,6 +1573,13 @@ export function PurchaseInvoiceEuEditorPage() {
                           Beszállítói cikkszám: {line.supplierSku}
                         </p>
                       ) : null}
+                      {!line.variantId && !line.createLocalProduct ? (
+                        <LineSuggestionNotice
+                          result={lineSuggestions[line.key]}
+                          onAccept={() => acceptSuggestion(line.key)}
+                          onDismiss={() => dismissSuggestion(line.key)}
+                        />
+                      ) : null}
                     </div>
                     <button
                       type="button"
@@ -1927,6 +2011,68 @@ export function PurchaseInvoiceEuEditorPage() {
           </Button>
         </div>
       </form>
+    </div>
+  );
+}
+
+const SUGGESTION_SOURCE_LABEL: Record<SupplierLineSuggestionSource, string> = {
+  MAPPING: "beszállítói leképezés",
+  EAN: "EAN-egyezés",
+  JEV: "Jev",
+};
+
+/**
+ * #1199 P-026: a sor javaslata, forrással. Magától nem köt: az „Elfogadom”
+ * tölti ki a sor termékét, a mentés a szokásos úton megy.
+ */
+function LineSuggestionNotice({
+  result,
+  onAccept,
+  onDismiss,
+}: {
+  result: (SupplierLineSuggestionResult & { dismissed?: boolean }) | undefined;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  if (!result) return null;
+  if (result.conflict)
+    return (
+      <p role="alert" className="mt-1 text-xs text-amber-800">
+        Ütközés: a beszállítói leképezés és az EAN két különböző termékre mutat.
+        Válaszd ki kézzel a helyes terméket.
+      </p>
+    );
+  if (result.blocked)
+    return (
+      <p className="mt-1 text-xs text-dusk-500">
+        Ehhez a sorhoz nincs javaslat: a sor szövege fennakadt a védelmi szűrőn.
+      </p>
+    );
+  const suggestion = result.suggestion;
+  if (!suggestion || result.dismissed) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">
+      <span>
+        Javaslat ({SUGGESTION_SOURCE_LABEL[suggestion.source]}):{" "}
+        <strong>{suggestion.productName}</strong> ({suggestion.sku})
+        {suggestion.confidence !== null
+          ? `, ${Math.round(suggestion.confidence * 100)}%`
+          : ""}
+      </span>
+      <button
+        type="button"
+        className="font-semibold hover:underline"
+        onClick={onAccept}
+      >
+        Elfogadom
+      </button>
+      <button
+        type="button"
+        className="text-dusk-600 hover:underline"
+        onClick={onDismiss}
+      >
+        Nem ez
+      </button>
     </div>
   );
 }

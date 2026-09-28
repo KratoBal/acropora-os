@@ -104,6 +104,8 @@ export interface CreatePurchaseInvoiceLineInput {
   sourceDescription?: string;
   /** A NAV számlasor sorszáma, ha a sor NAV bejövő számlából jött (#1199 A-007). */
   navLineNumber?: number;
+  /** #1199 P-026: a sorhoz kért javaslat audit-futása; mentéskor ez zárul le. */
+  decisionRunId?: string;
   orderedQuantity: number;
   actualQuantity: number;
   unit: string;
@@ -170,6 +172,41 @@ export interface PurchaseProductConflictOwner {
 export interface PurchaseProductConflictLookup {
   byEan: PurchaseProductConflictOwner | null;
   bySupplierSku: PurchaseProductConflictOwner | null;
+}
+
+/**
+ * Egy termék nélküli számlasorhoz javasolt termék (#1199 P-026). Soha nem
+ * köt magától: az ember fogadja el, és a mentés a szokásos úton megy.
+ */
+export type SupplierLineSuggestionSource = "MAPPING" | "EAN" | "JEV";
+
+export interface SupplierLineSuggestionRequest {
+  /** Az űrlap művelet-azonosítója; a sor kulcsával együtt azonosítja a futást. */
+  clientOperationId: string;
+  lineKey: string;
+  supplierId: string;
+  description: string;
+  supplierSku?: string;
+  ean?: string;
+}
+
+export interface SupplierLineSuggestionResult {
+  /** `false`: a javaslat ennél a szállítónál vagy most ki van kapcsolva. */
+  enabled: boolean;
+  /** Az audit-futás azonosítója; a mentés ezzel zárja le (elfogadva / felülírva). */
+  decisionRunId: string | null;
+  suggestion: {
+    source: SupplierLineSuggestionSource;
+    variantId: string;
+    sku: string;
+    productName: string;
+    /** Csak Jev-javaslatnál. */
+    confidence: number | null;
+  } | null;
+  /** A beszállítói leképezés és az EAN KÉT KÜLÖNBÖZŐ termékre mutat: nincs javaslat. */
+  conflict: boolean;
+  /** A sor szövege fennakadt a személyesadat-őrön: nincs hívás, nincs javaslat. */
+  blocked: boolean;
 }
 
 export interface PurchaseProductSearchResult {

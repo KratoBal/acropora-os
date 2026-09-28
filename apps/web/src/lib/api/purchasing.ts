@@ -9,6 +9,8 @@ import type {
   PurchaseProductConflictLookup,
   PurchaseProductSearchResult,
   SupplierInvoiceImportResult,
+  SupplierLineSuggestionRequest,
+  SupplierLineSuggestionResult,
 } from "@acropora/types";
 import { apiRequest } from "./client";
 
@@ -19,6 +21,21 @@ export const purchasingApi = {
     return apiRequest<PurchaseProductSearchResult[]>(
       `/purchasing/products/search?${params}`,
       token,
+    );
+  },
+  /**
+   * #1199 P-026: javaslat egy termék nélküli sorhoz (beszállítói leképezés,
+   * EAN-egyezés, Jev). Semmit nem köt: az ember fogad el.
+   */
+  suggestLine(token: string, input: SupplierLineSuggestionRequest) {
+    return apiRequest<SupplierLineSuggestionResult>(
+      `/purchasing/invoices/line-suggestions`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
     );
   },
   /** #1199 P-026: van-e már termék ezzel az EAN-nel vagy beszállítói cikkszámmal. */

@@ -112,6 +112,8 @@ export interface CreatePurchaseInvoiceLine {
     supplierSku?: string | null;
   } | null;
   sourceDescription: string | null;
+  /** #1199 P-026: a sor előre kiosztott azonosítója, ha egy javaslat-futás hozzá kötődik. */
+  lineId?: string;
   /** A NAV szamlasor sorszama es eredeti szovege (#1199 A-007), lasd nav-line-source.ts. */
   navLineNumber?: number | null;
   navLineDescription?: string | null;
@@ -515,7 +517,7 @@ export class PurchaseInvoiceRepository extends Repository {
               }
             > = resolvedLines.map((line) => ({
               ...line,
-              purchaseInvoiceLineId: randomUUID(),
+              purchaseInvoiceLineId: line.lineId ?? randomUUID(),
             }));
 
             const invoice = await transaction.purchaseInvoice.create({
