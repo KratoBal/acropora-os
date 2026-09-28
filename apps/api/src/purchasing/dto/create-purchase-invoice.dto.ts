@@ -46,6 +46,8 @@ export class CreatePurchaseInvoiceLineDto {
   // A NAV szamlasor sorszama, ha a sor NAV bejovo szamlabol jott (#1199
   // A-007). A szoveget a szerver a tarolt NAV adatbol veszi, nem innen.
   @IsInt() @Min(1) @Max(2147483647) @IsOptional() navLineNumber?: number;
+  /** #1199 P-026: a sorhoz kért javaslat audit-futása; mentéskor ez zárul le. */
+  @IsString() @IsOptional() decisionRunId?: string;
   @IsNumber() @Min(0) orderedQuantity!: number;
   @IsNumber() @Min(0) actualQuantity!: number;
   @IsString() @MinLength(1) unit!: string;

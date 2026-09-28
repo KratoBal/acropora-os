@@ -1,9 +1,13 @@
+import { randomUUID } from "node:crypto";
+
 import {
   BadGatewayException,
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import type {
@@ -29,6 +33,7 @@ import {
 import { PurchaseProductSearchService } from "./purchase-product-search.service.js";
 import { navLineSource, navSourceLines } from "./nav-line-source.js";
 import { ProjectRepository } from "./project.repository.js";
+import { SupplierLineSuggestionService } from "./line-suggestions/supplier-line-suggestion.service.js";
 
 @Injectable()
 export class PurchasingService {
@@ -46,7 +51,14 @@ export class PurchasingService {
     private readonly productSearch: PurchaseProductSearchService,
     private readonly mnbRates: MnbExchangeRateService,
     private readonly projects: ProjectRepository,
+    // #1199 P-026: closes the suggestion runs of the saved lines. Optional so
+    // a construction without it (tests, a module without the pilot) works as
+    // before: no run is resolved, and nothing else changes.
+    @Optional()
+    private readonly lineSuggestions?: SupplierLineSuggestionService,
   ) {}
+
+  private readonly logger = new Logger(PurchasingService.name);
 
   listProjects(): Promise<ProjectOption[]> {
     return this.projects.listAssignable();
@@ -519,6 +531,17 @@ export class PurchasingService {
     // `documentNumber` oszlopra van felirva.
     await this.assertNewProductsAreNew(input.supplierId, preparedLines);
 
+    // #1199 P-026: a line that carries a suggestion run gets its id here, so
+    // the run can be closed against exactly this saved line.
+    if (preparedLines.length !== input.lines.length)
+      throw new Error("PREPARED_LINES_OUT_OF_STEP");
+    const suggestionLinks = input.lines.flatMap((line, index) => {
+      if (!line.decisionRunId) return [];
+      const lineId = randomUUID();
+      preparedLines[index] = { ...preparedLines[index]!, lineId };
+      return [{ decisionRunId: line.decisionRunId, lineId }];
+    });
+
     const detail = await withUniqueCode(
       { prefix: "BESZ", field: "documentNumber" },
       (documentNumber) =>
@@ -543,6 +566,25 @@ export class PurchasingService {
           lines: preparedLines,
         }),
     );
+
+    if (suggestionLinks.length > 0 && this.lineSuggestions) {
+      const savedVariant = new Map(
+        detail.lines.map((line) => [line.id, line.variantId ?? null]),
+      );
+      try {
+        await this.lineSuggestions.resolveForInvoice(
+          suggestionLinks.map((link) => ({
+            ...link,
+            variantId: savedVariant.get(link.lineId) ?? null,
+          })),
+        );
+      } catch (error) {
+        // the invoice is saved and stays saved; only the audit closure failed
+        this.logger.warn(
+          `A sor-javaslatok lezárása kimaradt (${detail.id}): ${error instanceof Error ? error.name : "ismeretlen hiba"}`,
+        );
+      }
+    }
 
     const linkedLineCount = preparedLines.filter(
       (line) => line.variantId || line.createLocalProduct,

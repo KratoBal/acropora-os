@@ -620,6 +620,37 @@ describe("PurchaseInvoiceRepository.create", () => {
     assert.equal(db.productCreateData.length, 1);
   });
 
+  it("saves a line under its pre-assigned id, so a suggestion run can close against it", async () => {
+    const db = new FakeDb();
+    const repository = repositoryWith(db);
+    const detail = await repository.create(
+      baseParams({
+        lines: [
+          {
+            variantId: null,
+            sku: null,
+            createLocalProduct: null,
+            sourceDescription: "Frachtkosten",
+            lineId: "11111111-2222-3333-4444-555555555555",
+            orderedQuantity: new Prisma.Decimal("1"),
+            actualQuantity: new Prisma.Decimal("1"),
+            unit: "db",
+            unitNet: new Prisma.Decimal("80"),
+            discountPercent: null,
+            syncStatus: "NOT_LINKED",
+            syncError: null,
+            syncToUnas: false,
+          },
+        ],
+      }),
+    );
+    assert.equal(
+      db.createdLineInputs[0]?.id,
+      "11111111-2222-3333-4444-555555555555",
+    );
+    assert.equal(detail.lines[0]?.id, "11111111-2222-3333-4444-555555555555");
+  });
+
   it("retries automatic local SKU allocation after a collision", async () => {
     const db = new FakeDb();
     db.localProducts.push({

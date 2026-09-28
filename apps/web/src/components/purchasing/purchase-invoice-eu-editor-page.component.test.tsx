@@ -23,6 +23,7 @@ const purchasingApiMock = vi.hoisted(() => ({
   create: vi.fn(),
   importSupplierInvoice: vi.fn(),
   productConflicts: vi.fn(),
+  suggestLine: vi.fn(),
   getExchangeRate: vi.fn(),
   searchProducts: vi.fn(),
   listProjects: vi.fn(),
@@ -173,6 +174,13 @@ beforeEach(() => {
   purchasingApiMock.productConflicts
     .mockReset()
     .mockResolvedValue({ byEan: null, bySupplierSku: null });
+  purchasingApiMock.suggestLine.mockReset().mockResolvedValue({
+    enabled: false,
+    decisionRunId: null,
+    suggestion: null,
+    conflict: false,
+    blocked: false,
+  });
   suppliersApiMock.create.mockReset();
   suppliersApiMock.search.mockReset().mockResolvedValue({
     items: [supplier],
@@ -747,5 +755,186 @@ describe("PurchaseInvoiceEuEditorPage új termék a számlasorból", () => {
     const [, keres] = purchasingApiMock.create.mock.calls[0] ?? [];
     expect(keres.lines[0]).toMatchObject({ variantId: "variant-plugs" });
     expect(keres.lines[0].createLocalProduct).toBeUndefined();
+  });
+});
+
+/** #1199 P-026: javaslat a termék nélküli sorhoz; magától soha nem köt. */
+describe("PurchaseInvoiceEuEditorPage sor-javaslat", () => {
+  const imported: SupplierInvoiceImportResult = {
+    format: "XML",
+    supplier: {
+      name: "Német Beszállító GmbH",
+      vatId: "DE123456789",
+      country: "DE",
+    },
+    invoiceNumber: "990001",
+    invoiceDate: "2026-09-25",
+    dueDate: null,
+    currency: "EUR",
+    netTotal: 93.5,
+    lines: [
+      {
+        lineNumber: 1,
+        supplierSku: "81593",
+        ean: "4011444815934",
+        description: "Dupla Marin Coral Plugs 10 St., SB",
+        quantity: 3,
+        unit: "db",
+        unitNet: 4.5,
+        discountPercent: null,
+        lineNet: 13.5,
+        isCharge: false,
+      },
+      {
+        lineNumber: 2,
+        supplierSku: "z1",
+        ean: null,
+        description: "Frachtkosten (anteilig)",
+        quantity: 1,
+        unit: "db",
+        unitNet: 80,
+        discountPercent: null,
+        lineNet: 80,
+        isCharge: true,
+      },
+    ],
+    warnings: [],
+  };
+  const suggested = (overrides: Record<string, unknown>) => ({
+    enabled: true,
+    decisionRunId: "run-1",
+    suggestion: {
+      source: "MAPPING",
+      variantId: "variant-plugs",
+      sku: "ACR-L-000042",
+      productName: "Coral Plugs 10 db",
+      confidence: null,
+    },
+    conflict: false,
+    blocked: false,
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    navigation.params = new URLSearchParams();
+    purchasingApiMock.importSupplierInvoice
+      .mockReset()
+      .mockResolvedValue(imported);
+    suppliersApiMock.search.mockResolvedValue({
+      items: [euSupplier],
+      pagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
+    });
+  });
+
+  async function importAndPickSupplier() {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    fireEvent.change(screen.getByLabelText("Beszállítói számla fájl"), {
+      target: { files: [new File(["<x/>"], "r.xml", { type: "text/xml" })] },
+    });
+    await screen.findByText("Számla betöltve XML-ből");
+    fireEvent.click(await screen.findByText(euSupplier.name));
+  }
+
+  function save() {
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+  }
+
+  it("asks for the product line once, never for the freight line", async () => {
+    purchasingApiMock.suggestLine.mockResolvedValue(suggested({}));
+    await importAndPickSupplier();
+    await waitFor(() =>
+      expect(purchasingApiMock.suggestLine).toHaveBeenCalledTimes(1),
+    );
+    expect(purchasingApiMock.suggestLine).toHaveBeenCalledWith(
+      "token-owner",
+      expect.objectContaining({
+        supplierId: euSupplier.id,
+        description: "Dupla Marin Coral Plugs 10 St., SB",
+        supplierSku: "81593",
+        ean: "4011444815934",
+      }),
+    );
+  });
+
+  it("accepting fills the line's product, and the save carries the run", async () => {
+    purchasingApiMock.suggestLine.mockResolvedValue(suggested({}));
+    await importAndPickSupplier();
+    expect(
+      await screen.findByText(/Javaslat \(beszállítói leképezés\):/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Elfogadom" }));
+    expect(screen.getByText("Coral Plugs 10 db")).toBeInTheDocument();
+    save();
+    await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
+    const [, keres] = purchasingApiMock.create.mock.calls[0] ?? [];
+    expect(keres.lines[0]).toMatchObject({
+      variantId: "variant-plugs",
+      decisionRunId: "run-1",
+    });
+    expect(keres.lines[1].decisionRunId).toBeUndefined();
+  });
+
+  it("a Jev suggestion shows its confidence; 'Nem ez' hides it and the run still goes with the save", async () => {
+    purchasingApiMock.suggestLine.mockResolvedValue(
+      suggested({
+        suggestion: {
+          source: "JEV",
+          variantId: "variant-plugs",
+          sku: "ACR-L-000042",
+          productName: "Coral Plugs 10 db",
+          confidence: 0.96,
+        },
+      }),
+    );
+    await importAndPickSupplier();
+    expect(await screen.findByText(/Javaslat \(Jev\):/)).toBeInTheDocument();
+    expect(screen.getByText(/, 96%/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Nem ez" }));
+    expect(screen.queryByText(/Javaslat \(Jev\):/)).not.toBeInTheDocument();
+    save();
+    await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
+    const [, keres] = purchasingApiMock.create.mock.calls[0] ?? [];
+    expect(keres.lines[0].variantId).toBeUndefined();
+    expect(keres.lines[0].decisionRunId).toBe("run-1");
+  });
+
+  it("names a conflict and a blocked line, and offers nothing", async () => {
+    purchasingApiMock.suggestLine.mockResolvedValue(
+      suggested({ suggestion: null, conflict: true }),
+    );
+    await importAndPickSupplier();
+    expect(
+      await screen.findByText(/Ütközés: a beszállítói leképezés és az EAN/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Elfogadom" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("with the pilot off it offers nothing and asks no further", async () => {
+    // two product lines: after the first "off" answer the second is not asked
+    purchasingApiMock.importSupplierInvoice.mockResolvedValue({
+      ...imported,
+      lines: [
+        imported.lines[0]!,
+        {
+          ...imported.lines[0]!,
+          lineNumber: 3,
+          supplierSku: "81594",
+          description: "Dupla Marin Coral Plugs 20 St., SB",
+        },
+      ],
+    });
+    await importAndPickSupplier();
+    await waitFor(() =>
+      expect(purchasingApiMock.suggestLine).toHaveBeenCalledTimes(1),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(purchasingApiMock.suggestLine).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Javaslat \(/)).not.toBeInTheDocument();
   });
 });

@@ -42,6 +42,8 @@ function buildService(options: {
   takenEans?: Record<string, string>;
   takenSupplierSkus?: Record<string, string>;
   activeBrandIds?: string[];
+  /// #1199 P-026: a sor-javaslatok lezaroja.
+  lineSuggestions?: { resolveForInvoice(lines: unknown): Promise<void> };
 }) {
   const navParsedDataReads: string[] = [];
   let capturedCreateParams: CreatePurchaseInvoiceParams | undefined;
@@ -111,7 +113,8 @@ function buildService(options: {
         vatRate: undefined,
         note: params.note ?? undefined,
         lines: params.lines.map((line, index) => ({
-          id: `line-${index}`,
+          // the repository saves a line under its pre-assigned id, if it has one
+          id: line.lineId ?? `line-${index}`,
           variantId: line.variantId ?? undefined,
           sku: line.sku ?? "",
           productName:
@@ -175,6 +178,7 @@ function buildService(options: {
     productSearch,
     mnbRates,
     projects,
+    options.lineSuggestions as never,
   );
   return {
     service,
@@ -941,5 +945,76 @@ describe("PurchasingService new product details", () => {
       }),
       { byEan: null, bySupplierSku: null },
     );
+  });
+});
+
+/** #1199 P-026: a javaslat audit-futása pontosan a mentett sorhoz zárul. */
+describe("PurchasingService line suggestion closure", () => {
+  it("gives a line with a run its id up front, and closes the run against it", async () => {
+    const closed: unknown[] = [];
+    const { service, getCapturedCreateParams } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      lineSuggestions: {
+        resolveForInvoice: async (lines) => {
+          closed.push(lines);
+        },
+      },
+    });
+    await service.createInvoice(
+      baseInput({
+        lines: [
+          {
+            variantId: "variant-1",
+            decisionRunId: "run-7",
+            orderedQuantity: 1,
+            actualQuantity: 1,
+            unit: "db",
+            unitNet: 10,
+          },
+          {
+            sourceDescription: "Frachtkosten",
+            orderedQuantity: 1,
+            actualQuantity: 1,
+            unit: "db",
+            unitNet: 80,
+          },
+        ],
+      }),
+      "user-1",
+    );
+    const [first, second] = getCapturedCreateParams()!.lines;
+    assert.match(first!.lineId!, /^[0-9a-f-]{36}$/);
+    assert.equal(second!.lineId, undefined);
+    assert.equal(closed.length, 1);
+    assert.deepEqual(closed[0], [
+      { decisionRunId: "run-7", lineId: first!.lineId, variantId: "variant-1" },
+    ]);
+  });
+
+  it("a failed closure never undoes the saved invoice", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      lineSuggestions: {
+        resolveForInvoice: async () => {
+          throw new Error("adatbazis nem erheto el");
+        },
+      },
+    });
+    const result = await service.createInvoice(
+      baseInput({
+        lines: [
+          {
+            variantId: "variant-1",
+            decisionRunId: "run-7",
+            orderedQuantity: 1,
+            actualQuantity: 1,
+            unit: "db",
+            unitNet: 10,
+          },
+        ],
+      }),
+      "user-1",
+    );
+    assert.equal(result.detail.id, "invoice-1");
   });
 });

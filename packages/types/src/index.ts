@@ -405,6 +405,9 @@ export type {
   PurchaseProductConflictOwner,
   PurchaseProductSearchResult,
   SupplierInvoiceImportFormat,
+  SupplierLineSuggestionRequest,
+  SupplierLineSuggestionResult,
+  SupplierLineSuggestionSource,
   SupplierInvoiceImportLine,
   SupplierInvoiceImportResult,
 } from "./purchasing.js";
