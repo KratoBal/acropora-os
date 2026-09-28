@@ -37,10 +37,20 @@ function tarolo(
   } as unknown as TicketMailRepository;
 }
 
+/**
+ * A KEPEK TAROLOJA (2026-09-28): a `logo1` letezik, minden mas nem. A mentes
+ * ezzel meri, hogy a HTML-ben hivatkozott kep letezik-e.
+ */
+const KEPEK = {
+  existingIds: async (ids: readonly string[]) =>
+    new Set(ids.filter((id) => id === "logo1")),
+};
+
 describe("MailTemplateController.read", () => {
   it("MENTETT sablonnál is elküldi az alapértelmezést", async () => {
     const valasz = await new MailTemplateController(
       tarolo({ subject: "Átírt tárgy", body: "Átírt törzs" }),
+      KEPEK,
     ).read(WORKSHEET_SIGNED);
 
     // A HATALYOS szoveg a tarolt.
@@ -62,7 +72,7 @@ describe("MailTemplateController.read", () => {
     egy olyan valaszon is zold lenne, ami MINDIG ket kulonbozo szoveget ad.
   */
   it("tárolt sor nélkül a hatályos szöveg MAGA az alapértelmezés", async () => {
-    const valasz = await new MailTemplateController(tarolo(null)).read(
+    const valasz = await new MailTemplateController(tarolo(null), KEPEK).read(
       WORKSHEET_SIGNED,
     );
 
@@ -73,7 +83,7 @@ describe("MailTemplateController.read", () => {
 
   it("ismeretlen azonosítóra nem talál sablont", async () => {
     await assert.rejects(
-      () => new MailTemplateController(tarolo(null)).read("NINCS_ILYEN"),
+      () => new MailTemplateController(tarolo(null), KEPEK).read("NINCS_ILYEN"),
       NotFoundException,
     );
   });
@@ -87,7 +97,7 @@ describe("MailTemplateController.read", () => {
    * helyett.
    */
   it("a vízmérés-esemény tárolt sor nélkül a saját alapértelmezését adja", async () => {
-    const valasz = await new MailTemplateController(tarolo(null)).read(
+    const valasz = await new MailTemplateController(tarolo(null), KEPEK).read(
       AQUARIUM_MEASUREMENT_RESULT,
     );
 
@@ -113,7 +123,7 @@ function rogzitoTarolo() {
       mentett.push(input);
     },
   } as unknown as TicketMailRepository;
-  return { mentett, controller: new MailTemplateController(tarolo) };
+  return { mentett, controller: new MailTemplateController(tarolo, KEPEK) };
 }
 
 const SZERKESZTO = { id: "user-1" } as AuthenticatedUser;
@@ -233,13 +243,78 @@ describe("MailTemplateController.save, formázott törzzsel", () => {
   });
 
   it("olvasáskor az alapértelmezés bodyHtml-je null, a tárolté a tárolt", async () => {
-    const alap = await new MailTemplateController(tarolo(null)).read(
+    const alap = await new MailTemplateController(tarolo(null), KEPEK).read(
       WORKSHEET_SIGNED,
     );
     assert.equal(alap.bodyHtml, null);
-    const tarolt = await new MailTemplateController({
-      template: async () => ({ subject: "s", body: "b", bodyHtml: "<p>b</p>" }),
-    } as unknown as TicketMailRepository).read(WORKSHEET_SIGNED);
+    const tarolt = await new MailTemplateController(
+      {
+        template: async () => ({
+          subject: "s",
+          body: "b",
+          bodyHtml: "<p>b</p>",
+        }),
+      } as unknown as TicketMailRepository,
+      KEPEK,
+    ).read(WORKSHEET_SIGNED);
     assert.equal(tarolt.bodyHtml, "<p>b</p>");
+  });
+});
+
+/**
+ * A KEP A SABLONBAN (2026-09-28). A mentes a hivatkozott kep letezeset meri: egy
+ * nem letezo kep a kuldo buroknal minden levelet megallitana.
+ */
+describe("MailTemplateController.save, képpel", () => {
+  it("a létező képre hivatkozó sablont menti, a szövegbe az alt kerül", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await controller.save(
+      WORKSHEET_SIGNED,
+      {
+        subject: "x",
+        body: "x",
+        bodyHtml:
+          '<p><img src="acropora-image:logo1" alt="Acropora" width="200"></p><p>Kedves {{cimzett}}!</p>',
+      },
+      SZERKESZTO,
+    );
+    assert.equal(
+      mentett[0]?.bodyHtml,
+      '<p><img src="acropora-image:logo1" alt="Acropora" width="200"></p><p>Kedves {{cimzett}}!</p>',
+    );
+    assert.equal(mentett[0]?.body, "Acropora\n\nKedves {{cimzett}}!");
+  });
+
+  it("nem létező képre hivatkozó sablont 400-zal, az azonosítót megnevezve utasít el", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await assert.rejects(
+      () =>
+        controller.save(
+          WORKSHEET_SIGNED,
+          {
+            subject: "x",
+            body: "x",
+            bodyHtml: '<p><img src="acropora-image:nincsilyen">szöveg</p>',
+          },
+          SZERKESZTO,
+        ),
+      (hiba: unknown) =>
+        hiba instanceof BadRequestException && /nincsilyen/.test(hiba.message),
+    );
+    assert.deepEqual(mentett, []);
+  });
+
+  it("külső forrású képet kidob, a sablon a kép nélkül mentődik", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await controller.save(
+      WORKSHEET_SIGNED,
+      {
+        subject: "x",
+        body: "x",
+        bodyHtml: '<p><img src="https://tracker.example/pixel.png">szöveg</p>',
+      },
+      SZERKESZTO,
+    );
+    assert.equal(mentett[0]?.bodyHtml, "<p>szöveg</p>");
   });
 });

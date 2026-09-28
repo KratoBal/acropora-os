@@ -1,7 +1,8 @@
 import { escapeHtml } from "@acropora/rich-text";
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
-import { GmailMailSender, TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
+import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
+import { InlineImageMailSender } from "./inline-image.mail-sender.js";
 import type { MailSender, OutgoingMail } from "./mail.port.js";
 import { mailRedirect } from "./ticket-mail.rules.js";
 
@@ -48,8 +49,12 @@ export class RedirectingMailSender implements MailSender {
       SZANDEKOS. A Nest-nek osztaly kell, hogy fel tudja oldani; a TESZTNEK
       viszont nem szabad a Gmailt felepitenie ahhoz, hogy a teritest merje.
       Ha a tipus is az osztaly lenne, minden allitas a valodi kuldot igenyelne.
+
+      2026-09-28 OTA A BELSO KULDO A KEP-FELOLDO BUROK, NEM KOZVETLENUL A
+      GMAIL: a lanc `MAIL_SENDER` -> ez -> `InlineImageMailSender` -> Gmail.
+      Lasd az `inline-image.mail-sender.ts` fejlecet.
     */
-    @Inject(GmailMailSender)
+    @Inject(InlineImageMailSender)
     private readonly inner: MailSender,
     @Optional()
     @Inject(TICKET_MAIL_ENV)

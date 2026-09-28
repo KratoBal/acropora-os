@@ -86,6 +86,16 @@ export function richHtmlToText(
       aktualis += "\n";
       continue;
     }
+    /*
+      A KEP HELYEN AZ ALT SZOVEG ALL (acrobot kerese, 2026-09-28). Alt nelkul a
+      kep a szoveges levelbol nyomtalanul kimarad -- egy logonal ez helyes, egy
+      tartalmat hordozo kepnel a szerkeszto dolga, hogy leirast adjon.
+    */
+    if (tag === "img") {
+      const alt = /alt="([^"]*)"/.exec(attrs ?? "");
+      if (alt?.[1]) aktualis += entitasFeloldas(alt[1]);
+      continue;
+    }
     if (tag === "hr") {
       lezar();
       blokkok.push("----------");

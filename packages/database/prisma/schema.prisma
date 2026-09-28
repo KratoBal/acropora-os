@@ -771,6 +771,7 @@ model User {
   customer                   Customer?                     @relation("CustomerPortalUser", fields: [customerId], references: [id], onDelete: Restrict)
   supplier                   Supplier?                     @relation("SupplierPortalUser", fields: [supplierId], references: [id], onDelete: Restrict)
   ticketMailTemplates        TicketMailTemplate[]          @relation("TicketMailTemplateUpdatedBy")
+  mailImages                 MailImage[]                   @relation("MailImageUploadedBy")
 
   @@index([role, isActive])
   /// A Restrict ellenorzese MINDEN partner-torlesnel lefut, es index nelkul
@@ -6332,4 +6333,37 @@ model TicketMailTemplate {
   updatedBy User? @relation("TicketMailTemplateUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@index([updatedByUserId])
+}
+
+/// A LEVELSABLONBA BEAGYAZHATO KEP (Balazs kerese, 2026-09-28 07:39 UTC: „jo
+/// lenne ha kepet is lehetne beszurni. pl acropora log").
+///
+/// EGYSZER FELTOLTVE, TOBB SABLONBA BESZURHATO: a sablon HTML-je csak
+/// hivatkozik ra (`acropora-image:<id>`), a kep maga itt all. A kuldes a
+/// hivatkozott kepeket inline CID mellekletkent csatolja.
+///
+/// AZ ADATBAZISBAN, NEM A DOKUMENTUM-TAROLOBAN: a kep kicsi (1 MB a felso
+/// hatar), keves van belole, es a napi Postgres-mentes igy magatol viszi. A
+/// dokumentum-tarolo tulajdonos-halmaza eszkozokre es munkalapokra szol.
+///
+/// A `sha256` EGYEDI: ugyanaz a fajl masodszor feltoltve a meglevo sort adja
+/// vissza, nem egy masodik peldanyt -- a logo igy nem szaporodik.
+///
+/// TORLES NINCS: a sablonok hivatkoznak ra, es egy torolt kep minden olyan
+/// levelet megallitana, amelyik hivatkozik ra.
+model MailImage {
+  id           String   @id @default(cuid())
+  fileName     String
+  contentType  String
+  sizeBytes    Int
+  width        Int
+  height       Int
+  sha256       String   @unique @db.VarChar(64)
+  content      Bytes
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  uploadedBy User? @relation("MailImageUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([uploadedById])
 }

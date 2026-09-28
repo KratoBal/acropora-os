@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Inject,
   Get,
   NotFoundException,
   Param,
@@ -14,7 +15,11 @@ import {
   MinLength,
   ValidateIf,
 } from "class-validator";
-import { richHtmlToText, sanitizeRichHtml } from "@acropora/rich-text";
+import {
+  richHtmlToText,
+  richImageIds,
+  sanitizeRichHtml,
+} from "@acropora/rich-text";
 import {
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
@@ -30,6 +35,7 @@ import {
   AQUARIUM_MEASUREMENT_RESULT,
   DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE,
 } from "./aquarium-measurement-mail.service.js";
+import { MailImageRepository } from "./mail-image.repository.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
   DEFAULT_MATERIAL_REQUEST_CREATED_TEMPLATE,
@@ -116,7 +122,15 @@ function alapertelmezes(id: string) {
  */
 @Controller("notifications/mail-templates")
 export class MailTemplateController {
-  constructor(private readonly repository: TicketMailRepository) {}
+  constructor(
+    private readonly repository: TicketMailRepository,
+    /*
+      A KEPEK TAROLOJA (2026-09-28). A mentes ezzel meri, hogy a HTML-ben
+      hivatkozott kepek leteznek -- egy nem letezo kep a kuldest allitana meg.
+    */
+    @Inject(MailImageRepository)
+    private readonly images: Pick<MailImageRepository, "existingIds">,
+  ) {}
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
@@ -192,6 +206,21 @@ export class MailTemplateController {
     const torzs = input.bodyHtml
       ? formazottTorzs(input.bodyHtml)
       : { body: input.body, bodyHtml: null };
+
+    /*
+      A HIVATKOZOTT KEP LETEZIK -- ITT DERUL KI, NEM A KULDESKOR. A kuldo burok
+      egy hianyzo kepnel megallitja a levelet (lasd `inline-image.mail-sender.ts`),
+      tehat egy ilyen sablon MINDEN levele elmaradna.
+    */
+    const kepek = torzs.bodyHtml ? richImageIds(torzs.bodyHtml) : [];
+    if (kepek.length) {
+      const letezo = await this.images.existingIds(kepek);
+      const hianyzo = kepek.filter((id) => !letezo.has(id));
+      if (hianyzo.length)
+        throw new BadRequestException(
+          `A sablon olyan képre hivatkozik, ami nem létezik: ${hianyzo.join(", ")}. Töltsd fel újra, és illeszd be a listából.`,
+        );
+    }
 
     const ismeretlen = [
       ...unknownTemplateVariables(input.subject),

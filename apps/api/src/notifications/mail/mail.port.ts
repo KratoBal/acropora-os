@@ -24,6 +24,20 @@ export interface MailAttachment {
   readonly bytes: Uint8Array;
 }
 
+/**
+ * A LEVELBE AGYAZOTT KEP (inline CID melleklet, 2026-09-28).
+ *
+ * A HTML torzs `src="cid:<contentId>"` alakban hivatkozik ra. Nem kulon
+ * csatolmany: a levelezo a szovegben mutatja, nem a mellekletek kozott.
+ */
+export interface MailInlineImage {
+  /** A `Content-ID` erteke, `<` `>` nelkul -- a HTML `cid:` utani resze. */
+  readonly contentId: string;
+  readonly filename: string;
+  readonly contentType: string;
+  readonly bytes: Uint8Array;
+}
+
 export interface OutgoingMail {
   /**
    * A CIMZETTEK. TOMB, NEM EGY CIM -- es a valtozas nem kenyelmi.
@@ -65,6 +79,16 @@ export interface OutgoingMail {
    * kulon irt szoveg: a ket alternativa nem mondhat mast.
    */
   readonly html?: string;
+  /**
+   * A HTML altal `cid:` alakban hivatkozott kepek. Csak `html` mellett
+   * ertelmes, es a ketto PARBAN kell alljon: minden hivatkozott kep itt, es
+   * itt csak hivatkozott kep. Az epito ezt ellenorzi, es elteresnel DOB.
+   *
+   * A hivok NEM ezt toltik ki: a sablon HTML-je `acropora-image:<id>`
+   * hivatkozast visz, es a kuldo burok (`InlineImageMailSender`) oldja fel
+   * kepre es `cid:`-re -- egy helyen, amin mind a ot kuldesi ut atmegy.
+   */
+  readonly inlineImages?: readonly MailInlineImage[];
   /**
    * A FELADO CIME, LEVELFAJTANKENT ELTERHET.
    *

@@ -41,7 +41,9 @@ function fajlok(): string[] {
     .filter((nev) => nev.endsWith(".ts") && !nev.endsWith(".spec.ts"))
     .filter(
       (nev) =>
-        nev !== "gmail-mail.sender.ts" && nev !== "redirecting-mail.sender.ts",
+        nev !== "gmail-mail.sender.ts" &&
+        nev !== "redirecting-mail.sender.ts" &&
+        nev !== "inline-image.mail-sender.ts",
     );
 }
 
@@ -125,5 +127,19 @@ describe("a levélküldő bekötése", () => {
       1,
       `${kotesek.length} kötés tartozik a MAIL_SENDER jelzőhöz, nem egy`,
     );
+  });
+
+  /**
+   * A LANC SORRENDJE (2026-09-28): atiranyito -> kep-feloldo -> Gmail. Ha az
+   * atiranyito ujra kozvetlenul a Gmailt kerne, a sablon kepei feloldatlanul
+   * erkeznenek a MIME-epitohoz, es az minden kepes levelet elutasitana.
+   */
+  it("az átirányító a kép-feloldót kapja, a kép-feloldó a Gmailt", () => {
+    const atiranyito = torzs("redirecting-mail.sender.ts");
+    const feloldo = torzs("inline-image.mail-sender.ts");
+
+    assert.match(atiranyito, /@Inject\(InlineImageMailSender\)/);
+    assert.doesNotMatch(atiranyito, /@Inject\(GmailMailSender\)/);
+    assert.match(feloldo, /@Inject\(GmailMailSender\)/);
   });
 });

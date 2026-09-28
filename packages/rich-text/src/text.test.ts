@@ -152,3 +152,21 @@ describe("oda-vissza ut", () => {
       assert.equal(vissza, minta);
     });
 });
+
+describe("HTML -> szoveg: a kep", () => {
+  it("a kep helyen az alt szoveg all", () => {
+    assert.equal(
+      richHtmlToText(
+        '<p><img src="acropora-image:logo1" alt="Acropora &amp; logó"></p><p>Kedves Anna!</p>',
+      ),
+      "Acropora & logó\n\nKedves Anna!",
+    );
+  });
+
+  it("alt nelkul a kep nyomtalanul kimarad", () => {
+    assert.equal(
+      richHtmlToText('<p>a<img src="acropora-image:logo1">b</p>'),
+      "ab",
+    );
+  });
+});

@@ -26,7 +26,9 @@ import { FilterXSS } from "xss";
 import {
   RICH_TEXT_ALLOWED_TAGS,
   RICH_TEXT_HREF_SCHEMES,
+  RICH_TEXT_IMAGE_MAX_WIDTH,
   RICH_TEXT_VARIABLE_NAME,
+  richImageId,
 } from "./schema.js";
 
 export interface SanitizeRichHtmlOptions {
@@ -42,6 +44,20 @@ export interface SanitizeRichHtmlOptions {
    * ellenorizheto a mentes pillanataban.
    */
   readonly hrefPlaceholders?: readonly string[];
+  /**
+   * A KULDES MASODIK RETEGE KERI: ott a kep `src`-je mar `cid:` (a mellekelt
+   * kepre mutat), es a MIME-epito ugyanezzel a tisztitoval ellenorzi, hogy a
+   * torzs tiszta. Mashol NEM szabad megadni: a szerkesztobol erkezo `cid:`
+   * semmire nem mutatna.
+   */
+  readonly allowCidImages?: boolean;
+}
+
+/** A sajat kep-hivatkozas, vagy -- csak kuldeskor -- egy `cid:` hivatkozas. */
+function engedettKep(ertek: string, cidEngedett: boolean): string | null {
+  const src = ertek.trim();
+  if (richImageId(src)) return src;
+  return cidEngedett && /^cid:[A-Za-z0-9._@-]{1,128}$/.test(src) ? src : null;
 }
 
 const HELYORZO_HREF = /^\{\{\s*([a-zA-Z0-9_]+)\s*\}\}$/;
@@ -121,8 +137,32 @@ export function sanitizeRichHtml(
         return RICH_TEXT_VARIABLE_NAME.test(value)
           ? `data-variable="${value}"`
           : "";
+      if (tag === "img" && name === "src") {
+        const src = engedettKep(value, options.allowCidImages === true);
+        return src ? `src="${attrEscape(src)}"` : "";
+      }
+      if (tag === "img" && name === "width") {
+        /*
+          CSAK EGESZ SZAM, ES A FELSO HATAR ALATT. A tul szeles kep a levelben
+          vizszintes gorgetest ad a telefonon; egy szazalek vagy egy `auto`
+          nem ellenorizheto a szerveren.
+        */
+        const szelesseg = /^\d{1,4}$/.test(value.trim())
+          ? Number(value.trim())
+          : NaN;
+        return szelesseg >= 1 && szelesseg <= RICH_TEXT_IMAGE_MAX_WIDTH
+          ? `width="${szelesseg}"`
+          : "";
+      }
+      if (tag === "img" && name === "alt") return `alt="${attrEscape(value)}"`;
       return undefined;
     },
   });
-  return szuro.process(html);
+  /*
+    A FORRAS NELKULI KEP EGESZEBEN KIESIK. A tisztito az attributumot veszi ki,
+    a tag marad (`<img alt="x">`), es egy ilyen kep a levelben torott ikonkent
+    jelenne meg. A kimenet a tisztito sajat, egyseges alakja, ezert eleg ra a
+    minta.
+  */
+  return szuro.process(html).replace(/<img(?![^>]*\ssrc=")[^>]*>/g, "");
 }

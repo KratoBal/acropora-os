@@ -494,3 +494,184 @@ describe("buildMimeMessage: HTML és szöveg együtt", () => {
     assert.doesNotMatch(dok, /<style/);
   });
 });
+
+/**
+ * A BEAGYAZOTT KEP (2026-09-28): `multipart/related` a ket alternativa korul,
+ * a kepek `Content-ID`-vel. A teljes kimenet karakterre allitva, ugyanabbol az
+ * okbol, mint a fenti keszletekben.
+ */
+describe("buildMimeMessage: beágyazott kép", () => {
+  const CRLF = `${CR}${LF}`;
+  const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64");
+  const HTML = '<p><img src="cid:logo1@acropora" alt="Logó"></p>';
+  const KEP = {
+    contentId: "logo1@acropora",
+    filename: "logo.png",
+    contentType: "image/png",
+    bytes: new Uint8Array([137, 80, 78, 71]),
+  };
+  const FEJLEC = [
+    "From: ticket@acropora.hu",
+    "To: nyito@partner.hu",
+    "Subject: [HJ-2026-001] Szivattyu zug",
+    "MIME-Version: 1.0",
+  ];
+  const RELATED = [
+    'Content-Type: multipart/related; type="multipart/alternative"; boundary="REL"',
+    "",
+    "--REL",
+    'Content-Type: multipart/alternative; boundary="ALT"',
+    "",
+    "--ALT",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64("Kedves Nóra!"),
+    "--ALT",
+    'Content-Type: text/html; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64(mailHtmlDocument(HTML)),
+    "--ALT--",
+    "--REL",
+    "Content-Type: image/png",
+    "Content-Transfer-Encoding: base64",
+    "Content-ID: <logo1@acropora>",
+    'Content-Disposition: inline; filename="logo.png"',
+    "",
+    Buffer.from(KEP.bytes).toString("base64"),
+    "--REL--",
+  ];
+
+  it("csatolmány nélkül: related burok, benne az alternatíva és a kép", () => {
+    assert.equal(
+      buildMimeMessage(
+        { ...LEVEL, html: HTML, inlineImages: [KEP] },
+        FELADO,
+        "KULSO",
+        "ALT",
+        "REL",
+      ),
+      [...FEJLEC, ...RELATED].join(CRLF),
+    );
+  });
+
+  it("csatolmánnyal: a related burok a mixed első része", () => {
+    const bajtok = new Uint8Array([1, 2, 3]);
+    assert.equal(
+      buildMimeMessage(
+        {
+          ...LEVEL,
+          html: HTML,
+          inlineImages: [KEP],
+          attachments: [
+            {
+              filename: "a.pdf",
+              contentType: "application/pdf",
+              bytes: bajtok,
+            },
+          ],
+        },
+        FELADO,
+        "KULSO",
+        "ALT",
+        "REL",
+      ),
+      [
+        ...FEJLEC,
+        'Content-Type: multipart/mixed; boundary="KULSO"',
+        "",
+        "--KULSO",
+        ...RELATED,
+        "--KULSO",
+        "Content-Type: application/pdf",
+        "Content-Transfer-Encoding: base64",
+        'Content-Disposition: attachment; filename="a.pdf"',
+        "",
+        Buffer.from(bajtok).toString("base64"),
+        "--KULSO--",
+      ].join(CRLF),
+    );
+  });
+
+  it("kép nélkül a formázott levél BETŰRE a related burok nélküli alak", () => {
+    assert.equal(
+      buildMimeMessage(
+        { ...LEVEL, html: "<p>a</p>", inlineImages: [] },
+        FELADO,
+        "KULSO",
+        "ALT",
+        "REL",
+      ),
+      buildMimeMessage(
+        { ...LEVEL, html: "<p>a</p>" },
+        FELADO,
+        "KULSO",
+        "ALT",
+        "REL",
+      ),
+    );
+    assert.doesNotMatch(
+      buildMimeMessage({ ...LEVEL, html: "<p>a</p>" }, FELADO),
+      /multipart\/related/,
+    );
+  });
+
+  /**
+   * A HTML ES A KEPEK PARBAN: a hivatkozott, de hianyzo kep torott ikon, a
+   * mellekelt, de nem hivatkozott kep ismeretlen csatolmany. Mindketto DOB.
+   */
+  for (const [nev, level] of [
+    ["hivatkozott, de nem mellékelt kép", { ...LEVEL, html: HTML }],
+    [
+      "mellékelt, de nem hivatkozott kép",
+      { ...LEVEL, html: "<p>a</p>", inlineImages: [KEP] },
+    ],
+    ["kép HTML nélkül", { ...LEVEL, inlineImages: [KEP] }],
+    [
+      "kétszer mellékelt kép",
+      { ...LEVEL, html: HTML, inlineImages: [KEP, KEP] },
+    ],
+  ] as const)
+    it(`${nev}: nem épül levél`, () => {
+      assert.throws(
+        () => buildMimeMessage(level, FELADO),
+        (hiba: unknown) =>
+          hiba instanceof MailBuildError &&
+          hiba.code === "MAIL_INLINE_IMAGE_MISMATCH",
+      );
+    });
+
+  it("a Content-ID-t lezáró vagy sortörő jel megállítja a levelet", () => {
+    for (const contentId of ["logo1>@x", `logo1${LF}Bcc: x@y.hu`, "logo 1"])
+      assert.throws(
+        () =>
+          buildMimeMessage(
+            {
+              ...LEVEL,
+              html: `<p><img src="cid:${contentId}"></p>`,
+              inlineImages: [{ ...KEP, contentId }],
+            },
+            FELADO,
+          ),
+        (hiba: unknown) =>
+          hiba instanceof MailBuildError &&
+          (hiba.code === "MAIL_HEADER_INJECTION_INLINE_IMAGE" ||
+            hiba.code === "MAIL_HTML_UNSANITIZED"),
+        JSON.stringify(contentId),
+      );
+  });
+
+  it("a saját acropora-image: hivatkozás feloldás nélkül nem mehet ki", () => {
+    assert.throws(
+      () =>
+        buildMimeMessage(
+          { ...LEVEL, html: '<p><img src="acropora-image:logo1"></p>' },
+          FELADO,
+        ),
+      (hiba: unknown) =>
+        hiba instanceof MailBuildError &&
+        hiba.code === "MAIL_INLINE_IMAGE_UNRESOLVED",
+    );
+  });
+});

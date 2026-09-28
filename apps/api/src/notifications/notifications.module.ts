@@ -12,6 +12,10 @@ import { HandoverMailRepository } from "./mail/handover-mail.repository.js";
 import { HandoverMailService } from "./mail/handover-mail.service.js";
 import { MaintenanceMailRepository } from "./mail/maintenance-mail.repository.js";
 import { MaintenanceMailService } from "./mail/maintenance-mail.service.js";
+import { InlineImageMailSender } from "./mail/inline-image.mail-sender.js";
+import { MailImageController } from "./mail/mail-image.controller.js";
+import { MailImageRepository } from "./mail/mail-image.repository.js";
+import { MailImageService } from "./mail/mail-image.service.js";
 import { MailTemplateController } from "./mail/mail-template.controller.js";
 import { MAIL_SENDER } from "./mail/mail.port.js";
 import { RedirectingMailSender } from "./mail/redirecting-mail.sender.js";
@@ -19,7 +23,11 @@ import { TicketMailRepository } from "./mail/ticket-mail.repository.js";
 import { TicketMailService } from "./mail/ticket-mail.service.js";
 
 @Module({
-  controllers: [DeviceTokenController, MailTemplateController],
+  controllers: [
+    DeviceTokenController,
+    MailTemplateController,
+    MailImageController,
+  ],
   providers: [
     // A KÜLDŐ a tokenen át érkezik, nem osztályként. MA MÁR KETTŐ VAN, és a
     // 2026-08-28-i komment ("ha egyszer több lesz") ezzel a sorral járt le: a
@@ -44,6 +52,14 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
       `mail-sender-wiring.spec.ts` fajlban.
     */
     GmailMailSender,
+    /*
+      A KEP-FELOLDO BUROK (2026-09-28) A KET MASIK KOZOTT ALL: az atiranyito
+      ot kapja belso kuldokent, o a Gmailt. Onallo szolgaltato, mert az
+      atiranyito konstruktora keri; kozvetlenul NEM szabad injektalni.
+    */
+    InlineImageMailSender,
+    MailImageRepository,
+    MailImageService,
     { provide: MAIL_SENDER, useClass: RedirectingMailSender },
     TicketMailRepository,
     TicketMailService,
