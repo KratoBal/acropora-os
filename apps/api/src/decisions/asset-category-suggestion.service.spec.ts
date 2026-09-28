@@ -193,6 +193,33 @@ describe("a kategória-javaslat: kapcsoló", () => {
   });
 });
 
+/**
+ * NEV NELKUL NINCS HIVAS (acrobot staging-merese, 2026-09-28 12:00 UTC): a
+ * `BIO/LSS07` nev a reszleg-utvonal levagasa utan ures, es a Jev egy nev
+ * nelkuli eszkozre 1,00 bizonyossagot adott.
+ */
+describe("a kategória-javaslat: név nélkül", () => {
+  it("a csak előtagból álló név: nincs hívás és nincs futás", async () => {
+    const s = szolgaltatas(BE);
+    for (const nev of ["BIO/LSS07", "BIO/LSS07 ", "LSS07"])
+      assert.deepEqual(
+        await s.service.suggest(URLAP, { ...MEZOK, name: nev }),
+        {
+          enabled: true,
+          categoryId: null,
+        },
+      );
+    assert.equal(s.hivasok.length, 0);
+    assert.equal(s.sorok.length, 0);
+  });
+
+  it("kontroll: ugyanitt egy valódi név már hív", async () => {
+    const s = szolgaltatas(BE);
+    await s.service.suggest(URLAP, { ...MEZOK, name: "BIO/LSS07 Lámpa" });
+    assert.equal(s.hivasok.length, 1);
+  });
+});
+
 describe("a kategória-javaslat: láthatóság", () => {
   it("validált kategória ≥ 0,90-nel: a javaslat visszajön, a futás SHOWN", async () => {
     const s = szolgaltatas(BE);

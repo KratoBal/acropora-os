@@ -15,6 +15,14 @@ import { assetsApi, type AssetCategorySuggestionInput } from "@/lib/api/assets";
  * csendben `null` javaslat. Ha a szerver azt mondja, hogy a pilot ki van
  * kapcsolva (`enabled: false`), az urlap ezen a munkameneten tobbet nem kerdez.
  */
+/**
+ * A NEV LEGALABB 3 KARAKTER (acrobot staging-merese, 2026-09-28): a "BIO",
+ * "Hom" alaku csonkok zajt adnak, es a javaslatuk ugysem ervenyes. A nev
+ * nelkuli (csak elotagbol allo) esetet a SZERVER fogja meg, mert csak o ismeri
+ * a levagas szabalyat.
+ */
+const MIN_NEV = 3;
+
 export function useCategorySuggestion(input: {
   readonly token: string;
   readonly fields: Omit<AssetCategorySuggestionInput, "clientOperationId">;
@@ -29,7 +37,7 @@ export function useCategorySuggestion(input: {
 
   useEffect(() => {
     const mezok = JSON.parse(kulcs) as AssetCategorySuggestionInput;
-    if (kikapcsolva.current || !mezok.name?.trim()) {
+    if (kikapcsolva.current || (mezok.name?.trim().length ?? 0) < MIN_NEV) {
       setCategoryId(null);
       return;
     }
