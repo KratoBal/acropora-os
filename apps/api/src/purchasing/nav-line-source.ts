@@ -30,7 +30,7 @@ export const NO_NAV_LINE_SOURCE: NavLineSource = {
 /** Az `Int` oszlop felso hatara: nagyobb sorszamot nem tarolunk. */
 const MAX_LINE_NUMBER = 2_147_483_647;
 
-function ervenyesSorszam(ertek: unknown): number | null {
+export function ervenyesSorszam(ertek: unknown): number | null {
   return typeof ertek === "number" &&
     Number.isInteger(ertek) &&
     ertek >= 1 &&
@@ -61,9 +61,15 @@ export function navSourceLines(parsedData: unknown): NavSourceLine[] | null {
 /** Egy uj sor forrasa a kliens altal kuldott NAV sorszambol. */
 export function navLineSource(
   lines: readonly NavSourceLine[] | null,
-  navLineNumber: number | undefined,
+  navLineNumber: number | null | undefined,
 ): NavLineSource {
-  if (!lines || navLineNumber === undefined) return NO_NAV_LINE_SOURCE;
+  /*
+    A `null` IS "NINCS SORSZAM", nem egy keresheto ertek. A DTO `@IsOptional`
+    kapuja a `null`-t atengedi, es a NAV-tetelek kozott is lehet `null`
+    sorszamu: a ketto egyezese forrasnak latszana, holott egyik sem az.
+  */
+  if (!lines || navLineNumber === undefined || navLineNumber === null)
+    return NO_NAV_LINE_SOURCE;
   const talalat = lines.filter((line) => line.lineNumber === navLineNumber);
   const egy = talalat.length === 1 ? talalat[0] : undefined;
   return egy

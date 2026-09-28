@@ -235,8 +235,13 @@ export function NavIncomingInvoiceDetailPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dusk-100 bg-white">
-                  {detail.lines.map((line) => (
-                    <tr key={line.lineNumber}>
+                  {detail.lines.map((line, index) => (
+                    /*
+                      A SORSZAM NEM KULCS: hianyozhat (`null`), es a NAV-ban sem
+                      garantaltan egyedi. A sorrend a szamla sorrendje, es a
+                      lista nem rendezodik at, tehat az index stabil.
+                    */
+                    <tr key={index}>
                       <td className="px-5 py-3 text-sm text-dusk-600">
                         {line.description}
                       </td>

@@ -76,6 +76,15 @@ describe("navLineSource: egy új sor forrása", () => {
     assert.deepEqual(navLineSource(SOROK, undefined), NO_NAV_LINE_SOURCE);
     assert.deepEqual(navLineSource(null, 1), NO_NAV_LINE_SOURCE);
   });
+
+  /**
+   * A `null` NEM KERESHETŐ ÉRTÉK. A DTO `@IsOptional` kapuja átengedi, és a
+   * fenti `SOROK`-ban pontosan egy `null` sorszámú tétel áll: egy egyenlőség
+   * alapú keresés azt forrásnak adná ki ("rossz" szöveggel).
+   */
+  it("a null sorszám nem párosul egy null sorszámú NAV-tétellel", () => {
+    assert.deepEqual(navLineSource(SOROK, null), NO_NAV_LINE_SOURCE);
+  });
 });
 
 describe("pairExistingLines: a meglévő sorok visszatöltése", () => {

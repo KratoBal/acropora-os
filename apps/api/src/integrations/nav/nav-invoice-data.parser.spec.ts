@@ -89,6 +89,83 @@ describe("parseNavInvoiceData", () => {
   });
 });
 
+/**
+ * A TÉTEL SORSZÁMA (2026-09-28).
+ *
+ * A korábbi alak a hiányzó sorszámot `Number("")` = 0-ként engedte át, mert a 0
+ * véges szám; a nem szám sorszám (NaN) viszont az egész tételt eldobta. Mostantól
+ * minden nem pozitív egész `null`, és a tétel megmarad.
+ *
+ * MI PIROSÍT: ha a hiányzó vagy az üres sorszám 0 lesz (a régi hiba); ha a 0
+ * átmegy sorszámként; ha egy rossz sorszám a tételt is elviszi. A normál eset a
+ * kontroll: egy mindig-null megvalósítás a többit zölden hagyná.
+ */
+function oneLineInvoice(lineNumberXml: string): string {
+  return (
+    `<InvoiceData><invoiceMain><invoice>` +
+    `<invoiceHead><supplierInfo><supplierName>X Kft.</supplierName></supplierInfo>` +
+    `<invoiceDetail><currencyCode>HUF</currencyCode></invoiceDetail></invoiceHead>` +
+    `<invoiceLines><line>` +
+    lineNumberXml +
+    `<lineDescription>Tengeri só 25kg</lineDescription>` +
+    `<quantity>1</quantity>` +
+    `<lineAmountsNormal><lineNetAmountData><lineNetAmount>8000</lineNetAmount></lineNetAmountData></lineAmountsNormal>` +
+    `</line></invoiceLines>` +
+    `</invoice></invoiceMain></InvoiceData>`
+  );
+}
+
+function linesOf(lineNumberXml: string) {
+  return parseNavInvoiceData(parseXml(oneLineInvoice(lineNumberXml))).lines;
+}
+
+describe("parseNavInvoiceData: a tétel sorszáma", () => {
+  it("normál eset: a sorszám szám marad (kontroll)", () => {
+    const lines = linesOf(`<lineNumber>7</lineNumber>`);
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0]?.lineNumber, 7);
+  });
+
+  it("hiányzó sorszám: null, nem 0, és a tétel megmarad", () => {
+    const lines = linesOf(``);
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0]?.lineNumber, null);
+  });
+
+  it("üres sorszám: null, nem 0", () => {
+    const lines = linesOf(`<lineNumber></lineNumber>`);
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0]?.lineNumber, null);
+  });
+
+  it("a 0 nem sorszám: null", () => {
+    assert.equal(linesOf(`<lineNumber>0</lineNumber>`)[0]?.lineNumber, null);
+  });
+
+  /**
+   * A MÁSIK IRÁNY: eddig egy nem szám sorszám a TÉTELT is eldobta. A tétel
+   * létét nem a sorszám dönti el.
+   */
+  it("nem szám, negatív, tört vagy exponenciális alak: null, és a tétel megmarad", () => {
+    for (const raw of ["abc", "-1", "1.5", "1e2", "0x1f"]) {
+      const lines = linesOf(`<lineNumber>${raw}</lineNumber>`);
+      assert.equal(lines.length, 1, `${raw}: a tétel kiesett`);
+      assert.equal(lines[0]?.lineNumber, null, `${raw}: nem null`);
+    }
+  });
+
+  it("a 32 bites határ fölött: null", () => {
+    assert.equal(
+      linesOf(`<lineNumber>2147483648</lineNumber>`)[0]?.lineNumber,
+      null,
+    );
+    assert.equal(
+      linesOf(`<lineNumber>2147483647</lineNumber>`)[0]?.lineNumber,
+      2147483647,
+    );
+  });
+});
+
 describe("decodeInvoiceDataXml", () => {
   it("round-trips base64 + gzip compressed invoice data", () => {
     const original = sampleInvoiceXml();
