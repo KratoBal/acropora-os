@@ -11,6 +11,7 @@ import type {
   PurchaseInvoiceDetail,
   PurchaseInvoiceListResponse,
   PurchaseInvoiceSource,
+  PurchaseProductConflictOwner,
 } from "@acropora/types";
 
 import {
@@ -55,6 +56,17 @@ function isDuplicateLocalProductSkuError(error: unknown): boolean {
   return isPrismaUniqueConstraintViolation(error, "sku");
 }
 
+/// A new product's EAN or supplier code taken between the service's check and
+/// the transaction (two people saving at once). Checked BEFORE the SKU retry:
+/// these are not fixed by a new SKU, and retrying would only fail again.
+function isTakenBarcodeError(error: unknown): boolean {
+  return isPrismaUniqueConstraintViolation(error, "code");
+}
+
+function isTakenSupplierSkuError(error: unknown): boolean {
+  return isPrismaUniqueConstraintViolation(error, "supplierSku");
+}
+
 const LOCAL_PRODUCT_SKU_PREFIX = "ACR-L-";
 const LOCAL_PRODUCT_SKU_PAD_LENGTH = 6;
 const LOCAL_PRODUCT_SKU_MAX_ATTEMPTS = 3;
@@ -91,6 +103,13 @@ export interface CreatePurchaseInvoiceLine {
   createLocalProduct: {
     name: string;
     primaryCategoryId: string | null;
+    /** #1199 P-026: a számlasorból felvett termék alapadatai. */
+    brandId?: string | null;
+    vatRate?: Prisma.Decimal | null;
+    /** Elsődleges vonalkód; a service már ellenőrizte, hogy nem foglalt. */
+    ean?: string | null;
+    /** A számla szállítójához köti a terméket (`SupplierProduct`). */
+    supplierSku?: string | null;
   } | null;
   sourceDescription: string | null;
   /** A NAV szamlasor sorszama es eredeti szovege (#1199 A-007), lasd nav-line-source.ts. */
@@ -171,6 +190,10 @@ export interface PurchaseInvoiceCreateTransaction extends InventoryMovementDatab
   };
 }
 
+interface ConflictVariantRow {
+  variant: { id: string; sku: string; product: { name: string } };
+}
+
 export interface PurchaseInvoiceDatabase extends WarehouseLookupDatabase {
   productVariant: {
     findMany(args: unknown): Promise<
@@ -204,6 +227,19 @@ export interface PurchaseInvoiceDatabase extends WarehouseLookupDatabase {
     findMany(args: unknown): Promise<PurchaseInvoiceSummaryRow[]>;
     findUnique(args: unknown): Promise<PurchaseInvoiceDetailRow | null>;
     count(args: unknown): Promise<number>;
+  };
+  productBarcode: {
+    findMany(
+      args: unknown,
+    ): Promise<Array<{ code: string } & ConflictVariantRow>>;
+  };
+  supplierProduct: {
+    findMany(
+      args: unknown,
+    ): Promise<Array<{ supplierSku: string } & ConflictVariantRow>>;
+  };
+  brand: {
+    findMany(args: unknown): Promise<Array<{ id: string }>>;
   };
   $transaction<T>(
     operation: (transaction: PurchaseInvoiceCreateTransaction) => Promise<T>,
@@ -304,6 +340,61 @@ export class PurchaseInvoiceRepository extends Repository {
     return formatLocalProductSku(value);
   }
 
+  /** Which of these codes already belong to a variant, with its product. */
+  async barcodeOwners(
+    codes: readonly string[],
+  ): Promise<Array<{ code: string } & PurchaseProductConflictOwner>> {
+    if (codes.length === 0) return [];
+    const rows = await this.invoiceDatabase.productBarcode.findMany({
+      where: { code: { in: [...codes] } },
+      select: {
+        code: true,
+        variant: {
+          select: { id: true, sku: true, product: { select: { name: true } } },
+        },
+      },
+    });
+    return rows.map((row) => ({
+      code: row.code,
+      variantId: row.variant.id,
+      sku: row.variant.sku,
+      productName: row.variant.product.name,
+    }));
+  }
+
+  /** Which of these supplier codes are already mapped for this supplier. */
+  async supplierSkuOwners(
+    supplierId: string,
+    supplierSkus: readonly string[],
+  ): Promise<Array<{ supplierSku: string } & PurchaseProductConflictOwner>> {
+    if (supplierSkus.length === 0) return [];
+    const rows = await this.invoiceDatabase.supplierProduct.findMany({
+      where: { supplierId, supplierSku: { in: [...supplierSkus] } },
+      select: {
+        supplierSku: true,
+        variant: {
+          select: { id: true, sku: true, product: { select: { name: true } } },
+        },
+      },
+    });
+    return rows.map((row) => ({
+      supplierSku: row.supplierSku,
+      variantId: row.variant.id,
+      sku: row.variant.sku,
+      productName: row.variant.product.name,
+    }));
+  }
+
+  /** The ids among these that name an active, not archived brand. */
+  async activeBrandIds(ids: readonly string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.invoiceDatabase.brand.findMany({
+      where: { id: { in: [...ids] }, isActive: true, archivedAt: null },
+      select: { id: true },
+    });
+    return new Set(rows.map((row) => row.id));
+  }
+
   async create(
     params: CreatePurchaseInvoiceParams,
   ): Promise<PurchaseInvoiceDetail> {
@@ -340,6 +431,7 @@ export class PurchaseInvoiceRepository extends Repository {
                   origin: "LOCAL",
                   catalogAuthority: "ACROPORA",
                   createdById: params.actorUserId,
+                  brandId: requestedLocalProduct.brandId ?? null,
                   categoryId: requestedLocalProduct.primaryCategoryId,
                   ...(requestedLocalProduct.primaryCategoryId
                     ? {
@@ -356,6 +448,33 @@ export class PurchaseInvoiceRepository extends Repository {
                     create: {
                       sku,
                       unit: line.unit,
+                      vatRate: requestedLocalProduct.vatRate ?? null,
+                      ...(requestedLocalProduct.ean
+                        ? {
+                            barcodes: {
+                              create: {
+                                code: requestedLocalProduct.ean,
+                                isPrimary: true,
+                              },
+                            },
+                          }
+                        : {}),
+                      ...(requestedLocalProduct.supplierSku
+                        ? {
+                            // Supplier code -> this variant: the mapping a later
+                            // invoice from this supplier can be matched by
+                            // (#1199 P-026). Nothing reads it for matching yet.
+                            supplierProducts: {
+                              create: {
+                                supplierId: params.supplierId,
+                                supplierSku: requestedLocalProduct.supplierSku,
+                                supplierName: line.sourceDescription,
+                                lastPurchaseNet: line.unitNet,
+                                currency: params.currency,
+                              },
+                            },
+                          }
+                        : {}),
                     },
                   },
                 },
@@ -689,6 +808,14 @@ export class PurchaseInvoiceRepository extends Repository {
         );
         break;
       } catch (error) {
+        if (isTakenBarcodeError(error))
+          throw new ConflictException(
+            "Az új termék EAN-je időközben egy másik termékhez került. Kösd a sort a meglévő termékhez.",
+          );
+        if (isTakenSupplierSkuError(error))
+          throw new ConflictException(
+            "Az új termék beszállítói cikkszáma időközben egy másik termékhez került. Kösd a sort a meglévő termékhez.",
+          );
         if (
           isDuplicateLocalProductSkuError(error) &&
           attempt < LOCAL_PRODUCT_SKU_MAX_ATTEMPTS

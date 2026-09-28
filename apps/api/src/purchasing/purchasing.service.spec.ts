@@ -38,6 +38,10 @@ function buildService(options: {
   takenDocumentNumbers?: number;
   /// A NAV bejovo szamla tarolt `parsedData`-ja (#1199 A-007).
   navParsedData?: unknown;
+  /// #1199 P-026: a mar foglalt EAN-ek es beszallitoi cikkszamok, es az aktiv markak.
+  takenEans?: Record<string, string>;
+  takenSupplierSkus?: Record<string, string>;
+  activeBrandIds?: string[];
 }) {
   const navParsedDataReads: string[] = [];
   let capturedCreateParams: CreatePurchaseInvoiceParams | undefined;
@@ -50,7 +54,25 @@ function buildService(options: {
   // PurchaseInvoiceRepository, whose real implementation now posts stock via
   // the shared postInventoryMovement primitive instead of a manual
   // stockMovement/stockItem/UNAS-push loop.
+  const owner = (productName: string) => ({
+    variantId: `variant-of-${productName}`,
+    sku: "ACR-L-000001",
+    productName,
+  });
   const invoices = {
+    barcodeOwners: async (codes: string[]) =>
+      codes
+        .filter((code) => options.takenEans?.[code])
+        .map((code) => ({ code, ...owner(options.takenEans![code]!) })),
+    supplierSkuOwners: async (_supplierId: string, skus: string[]) =>
+      skus
+        .filter((sku) => options.takenSupplierSkus?.[sku])
+        .map((supplierSku) => ({
+          supplierSku,
+          ...owner(options.takenSupplierSkus![supplierSku]!),
+        })),
+    activeBrandIds: async (ids: string[]) =>
+      new Set(ids.filter((id) => (options.activeBrandIds ?? []).includes(id))),
     navInvoiceParsedData: async (id: string) => {
       navParsedDataReads.push(id);
       return options.navParsedData ?? null;
@@ -439,9 +461,14 @@ describe("PurchasingService.createInvoice", () => {
     );
 
     const line = getCapturedCreateParams()?.lines[0];
+    // the old client sends name and category only; the new details stay empty
     assert.deepEqual(line?.createLocalProduct, {
       name: "Egyedi szivattyú",
       primaryCategoryId: null,
+      brandId: null,
+      vatRate: null,
+      ean: null,
+      supplierSku: null,
     });
     assert.equal(line?.sku, null);
     assert.equal(line?.syncStatus, "NOT_APPLICABLE");
@@ -779,5 +806,140 @@ describe("PurchasingService.createInvoice: NAV line source", () => {
       "user-1",
     );
     assert.equal(getCapturedCreateParams()?.lines[0]?.navLineNumber, null);
+  });
+});
+
+/** #1199 P-026 UJ-TERMEK: egy új termék a számlasorból, és hogy tényleg új-e. */
+describe("PurchasingService new product details", () => {
+  function newProductLine(
+    details: Record<string, unknown>,
+    name = "Dupla Marin Coral Plugs",
+  ) {
+    return {
+      createLocalProduct: { name, ...details },
+      sourceDescription: "Dupla Marin Coral Plugs 10 St., SB",
+      orderedQuantity: 3,
+      actualQuantity: 3,
+      unit: "db",
+      unitNet: 4.5,
+    } as CreatePurchaseInvoiceDto["lines"][number];
+  }
+
+  it("passes brand, VAT, EAN and supplier code on to the repository", async () => {
+    const { service, getCapturedCreateParams } = buildService({
+      variants: new Map(),
+      activeBrandIds: ["brand-dupla"],
+    });
+    await service.createInvoice(
+      baseInput({
+        lines: [
+          newProductLine({
+            brandId: "brand-dupla",
+            vatRate: 27,
+            ean: " 4011444815934 ",
+            supplierSku: " 81593 ",
+          }),
+        ],
+      }),
+      "user-1",
+    );
+    const product = getCapturedCreateParams()?.lines[0]?.createLocalProduct;
+    assert.equal(product?.brandId, "brand-dupla");
+    assert.equal(product?.vatRate?.toString(), "27");
+    assert.equal(product?.ean, "4011444815934");
+    assert.equal(product?.supplierSku, "81593");
+  });
+
+  it("refuses a product whose EAN already belongs to one, and names it", async () => {
+    const { service, getCapturedCreateParams } = buildService({
+      variants: new Map(),
+      takenEans: { "4011444815934": "Coral Plugs 10 db" },
+    });
+    await assert.rejects(
+      service.createInvoice(
+        baseInput({ lines: [newProductLine({ ean: "4011444815934" })] }),
+        "user-1",
+      ),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.constructor.name === "ConflictException" &&
+        error.message.includes("Coral Plugs 10 db"),
+    );
+    assert.equal(getCapturedCreateParams(), undefined);
+  });
+
+  it("refuses a supplier code already mapped at this supplier", async () => {
+    const { service, getCapturedCreateParams } = buildService({
+      variants: new Map(),
+      takenSupplierSkus: { "81593": "Coral Plugs 10 db" },
+    });
+    await assert.rejects(
+      service.createInvoice(
+        baseInput({ lines: [newProductLine({ supplierSku: "81593" })] }),
+        "user-1",
+      ),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.constructor.name === "ConflictException" &&
+        error.message.includes("81593"),
+    );
+    assert.equal(getCapturedCreateParams(), undefined);
+  });
+
+  it("refuses two new products with the same EAN or code on one invoice", async () => {
+    const { service } = buildService({ variants: new Map() });
+    for (const details of [{ ean: "4011444815934" }, { supplierSku: "81593" }])
+      await assert.rejects(
+        service.createInvoice(
+          baseInput({
+            lines: [
+              newProductLine(details, "Egyik"),
+              newProductLine(details, "Másik"),
+            ],
+          }),
+          "user-1",
+        ),
+        /Két új termék ugyanazt/,
+      );
+  });
+
+  it("refuses an EAN with a wrong check digit, and an unknown brand", async () => {
+    const { service } = buildService({ variants: new Map() });
+    await assert.rejects(
+      service.createInvoice(
+        baseInput({ lines: [newProductLine({ ean: "4011444815935" })] }),
+        "user-1",
+      ),
+      /Érvénytelen EAN/,
+    );
+    await assert.rejects(
+      service.createInvoice(
+        baseInput({ lines: [newProductLine({ brandId: "brand-gone" })] }),
+        "user-1",
+      ),
+      /márka nem található/,
+    );
+  });
+
+  it("answers the pre-creation lookup by EAN and by supplier code", async () => {
+    const { service } = buildService({
+      variants: new Map(),
+      takenEans: { "4011444815934": "Coral Plugs 10 db" },
+      takenSupplierSkus: { "81593": "Coral Plugs 10 db" },
+    });
+    const found = await service.newProductConflicts({
+      ean: "4011444815934",
+      supplierId: "supplier-1",
+      supplierSku: "81593",
+    });
+    assert.equal(found.byEan?.productName, "Coral Plugs 10 db");
+    assert.equal(found.bySupplierSku?.productName, "Coral Plugs 10 db");
+    assert.deepEqual(
+      await service.newProductConflicts({
+        ean: "0000000000000",
+        supplierSku: "x",
+      }),
+      { byEan: null, bySupplierSku: null },
+    );
   });
 });

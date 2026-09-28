@@ -19,6 +19,14 @@ import {
 export class CreateLocalPurchaseProductDto {
   @IsString() @MinLength(2) @MaxLength(200) name!: string;
   @IsString() @IsOptional() primaryCategoryId?: string;
+  // #1199 P-026 UJ-TERMEK: a számlasorból felvett termék alapadatai. Mind
+  // opcionális: a régi kliens (csak név és kategória) változatlanul működik.
+  @IsString() @IsOptional() brandId?: string;
+  @IsNumber() @Min(0) @Max(100) @IsOptional() vatRate?: number;
+  /** EAN/GTIN; a változat elsődleges vonalkódja lesz. */
+  @IsString() @MinLength(8) @MaxLength(14) @IsOptional() ean?: string;
+  /** A beszállító saját cikkszáma; a számla szállítójához köti a terméket. */
+  @IsString() @MinLength(1) @MaxLength(100) @IsOptional() supplierSku?: string;
 }
 
 export class PurchaseInvoiceProjectAllocationDto {

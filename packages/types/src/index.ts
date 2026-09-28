@@ -401,6 +401,8 @@ export type {
   PurchaseInvoiceSource,
   PurchaseInvoiceStatus,
   PurchaseInvoiceSummary,
+  PurchaseProductConflictLookup,
+  PurchaseProductConflictOwner,
   PurchaseProductSearchResult,
   SupplierInvoiceImportFormat,
   SupplierInvoiceImportLine,

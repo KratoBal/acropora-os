@@ -22,6 +22,7 @@ const navApi = vi.hoisted(() => ({
 const purchasingApiMock = vi.hoisted(() => ({
   create: vi.fn(),
   importSupplierInvoice: vi.fn(),
+  productConflicts: vi.fn(),
   getExchangeRate: vi.fn(),
   searchProducts: vi.fn(),
   listProjects: vi.fn(),
@@ -30,6 +31,7 @@ const purchasingApiMock = vi.hoisted(() => ({
 
 const productApiMock = vi.hoisted(() => ({
   categoryOptions: vi.fn(),
+  brandOptions: vi.fn(),
 }));
 
 const suppliersApiMock = vi.hoisted(() => ({
@@ -165,6 +167,12 @@ beforeEach(() => {
   productApiMock.categoryOptions
     .mockReset()
     .mockResolvedValue([{ id: "category-1", label: "Technika / Szivattyúk" }]);
+  productApiMock.brandOptions
+    .mockReset()
+    .mockResolvedValue([{ id: "brand-dupla", label: "Dupla Marin" }]);
+  purchasingApiMock.productConflicts
+    .mockReset()
+    .mockResolvedValue({ byEan: null, bySupplierSku: null });
   suppliersApiMock.create.mockReset();
   suppliersApiMock.search.mockReset().mockResolvedValue({
     items: [supplier],
@@ -289,6 +297,11 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
             createLocalProduct: {
               name: "Teszt termék",
               primaryCategoryId: "category-1",
+              brandId: undefined,
+              // #1199 P-026: a new product starts at the Hungarian standard rate
+              vatRate: 27,
+              ean: undefined,
+              supplierSku: undefined,
             },
             sourceDescription: "Teszt termék",
           }),
@@ -604,5 +617,135 @@ describe("PurchaseInvoiceEuEditorPage beszállítói számla betöltése", () =>
     });
     expect(keres.lines[0].variantId).toBeUndefined();
     expect(JSON.stringify(keres)).not.toContain("81593");
+  });
+});
+
+/** #1199 P-026 UJ-TERMEK: új termék a számlasorból, és hogy tényleg új-e. */
+describe("PurchaseInvoiceEuEditorPage új termék a számlasorból", () => {
+  const imported: SupplierInvoiceImportResult = {
+    format: "XML",
+    supplier: {
+      name: "Német Beszállító GmbH",
+      vatId: "DE123456789",
+      country: "DE",
+    },
+    invoiceNumber: "990001",
+    invoiceDate: "2026-09-25",
+    dueDate: null,
+    currency: "EUR",
+    netTotal: 13.5,
+    lines: [
+      {
+        lineNumber: 1,
+        supplierSku: "81593",
+        ean: "4011444815934",
+        description: "Dupla Marin Coral Plugs 10 St., SB",
+        quantity: 3,
+        unit: "db",
+        unitNet: 4.5,
+        discountPercent: null,
+        lineNet: 13.5,
+        isCharge: false,
+      },
+    ],
+    warnings: [],
+  };
+
+  beforeEach(() => {
+    navigation.params = new URLSearchParams();
+    purchasingApiMock.importSupplierInvoice
+      .mockReset()
+      .mockResolvedValue(imported);
+    suppliersApiMock.search.mockResolvedValue({
+      items: [euSupplier],
+      pagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
+    });
+  });
+
+  async function importAndStartNewProduct() {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    fireEvent.change(screen.getByLabelText("Beszállítói számla fájl"), {
+      target: { files: [new File(["<x/>"], "r.xml", { type: "text/xml" })] },
+    });
+    await screen.findByText("Számla betöltve XML-ből");
+    fireEvent.click(await screen.findByText(euSupplier.name));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Új helyi termék létrehozása" }),
+    );
+  }
+
+  it("prefills EAN and supplier code from the invoice and sends the new details", async () => {
+    await importAndStartNewProduct();
+
+    expect(screen.getByLabelText("Új helyi termék EAN-je")).toHaveValue(
+      "4011444815934",
+    );
+    expect(
+      screen.getByLabelText("Új helyi termék beszállítói cikkszáma"),
+    ).toHaveValue("81593");
+    await waitFor(() =>
+      expect(purchasingApiMock.productConflicts).toHaveBeenCalledWith(
+        "token-owner",
+        {
+          ean: "4011444815934",
+          supplierId: euSupplier.id,
+          supplierSku: "81593",
+        },
+      ),
+    );
+    fireEvent.change(await screen.findByLabelText("Új helyi termék márkája"), {
+      target: { value: "brand-dupla" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+
+    await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
+    const [, keres] = purchasingApiMock.create.mock.calls[0] ?? [];
+    expect(keres.lines[0].createLocalProduct).toEqual({
+      name: "Dupla Marin Coral Plugs 10 St., SB",
+      primaryCategoryId: undefined,
+      brandId: "brand-dupla",
+      vatRate: 27,
+      ean: "4011444815934",
+      supplierSku: "81593",
+    });
+  });
+
+  it("says when the product already exists, and links the line to it", async () => {
+    purchasingApiMock.productConflicts.mockResolvedValue({
+      byEan: {
+        variantId: "variant-plugs",
+        sku: "ACR-L-000042",
+        productName: "Coral Plugs 10 db",
+      },
+      bySupplierSku: null,
+    });
+    await importAndStartNewProduct();
+
+    expect(
+      await screen.findByText(
+        /Ez az EAN már a „Coral Plugs 10 db” \(ACR-L-000042\) termékhez tartozik/,
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kötés a meglévő termékhez" }),
+    );
+    expect(screen.getByText("Coral Plugs 10 db")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Új helyi termék EAN-je"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+    await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
+    const [, keres] = purchasingApiMock.create.mock.calls[0] ?? [];
+    expect(keres.lines[0]).toMatchObject({ variantId: "variant-plugs" });
+    expect(keres.lines[0].createLocalProduct).toBeUndefined();
   });
 });

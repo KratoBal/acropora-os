@@ -67,8 +67,21 @@ class FakeDb {
     catalogAuthority: "ACROPORA";
   }> = [];
 
+  /** Every `product.create` payload, attempts included (#1199 P-026). */
+  productCreateData: any[] = [];
+  /** EANs another writer took between the service's check and the transaction. */
+  takenBarcodes = new Set<string>();
+
   product = {
     create: async (args: any) => {
+      this.productCreateData.push(args.data);
+      const barcode = args.data.variants.create.barcodes?.create?.code;
+      if (barcode && this.takenBarcodes.has(barcode))
+        throw new Prisma.PrismaClientKnownRequestError("duplicate", {
+          code: "P2002",
+          clientVersion: "test",
+          meta: { target: ["code"] },
+        });
       const sku = args.data.variants.create.sku as string;
       if (this.localProducts.some((product) => product.sku === sku)) {
         throw new Prisma.PrismaClientKnownRequestError("duplicate", {
@@ -523,6 +536,88 @@ describe("PurchaseInvoiceRepository.create", () => {
     assert.equal(db.outbox.length, 0);
     assert.equal(db.productExtensions.size, 1);
     assert.equal(db.domainEvents.length, 2);
+  });
+
+  it("writes the new product's brand, VAT, primary barcode and supplier mapping in the same create", async () => {
+    const db = new FakeDb();
+    const repository = repositoryWith(db);
+    const params = baseParams({
+      lines: [
+        {
+          variantId: null,
+          sku: null,
+          createLocalProduct: {
+            name: "Dupla Marin Coral Plugs",
+            primaryCategoryId: null,
+            brandId: "brand-dupla",
+            vatRate: new Prisma.Decimal("27"),
+            ean: "4011444815934",
+            supplierSku: "81593",
+          },
+          sourceDescription: "Dupla Marin Coral Plugs 10 St., SB",
+          orderedQuantity: new Prisma.Decimal("3"),
+          actualQuantity: new Prisma.Decimal("3"),
+          unit: "db",
+          unitNet: new Prisma.Decimal("4.5"),
+          discountPercent: null,
+          syncStatus: "NOT_APPLICABLE",
+          syncError: null,
+          syncToUnas: false,
+        },
+      ],
+    });
+    await repository.create(params);
+
+    const data = db.productCreateData[0];
+    assert.equal(data.brandId, "brand-dupla");
+    assert.equal(data.variants.create.vatRate.toString(), "27");
+    assert.deepEqual(data.variants.create.barcodes, {
+      create: { code: "4011444815934", isPrimary: true },
+    });
+    assert.deepEqual(data.variants.create.supplierProducts.create, {
+      supplierId: params.supplierId,
+      supplierSku: "81593",
+      supplierName: "Dupla Marin Coral Plugs 10 St., SB",
+      lastPurchaseNet: new Prisma.Decimal("4.5"),
+      currency: params.currency,
+    });
+  });
+
+  it("an EAN taken meanwhile is a conflict, not a SKU retry", async () => {
+    const db = new FakeDb();
+    db.takenBarcodes.add("4011444815934");
+    const repository = repositoryWith(db);
+    await assert.rejects(
+      repository.create(
+        baseParams({
+          lines: [
+            {
+              variantId: null,
+              sku: null,
+              createLocalProduct: {
+                name: "Dupla Marin Coral Plugs",
+                primaryCategoryId: null,
+                ean: "4011444815934",
+              },
+              sourceDescription: "Dupla Marin Coral Plugs",
+              orderedQuantity: new Prisma.Decimal("1"),
+              actualQuantity: new Prisma.Decimal("1"),
+              unit: "db",
+              unitNet: new Prisma.Decimal("1"),
+              discountPercent: null,
+              syncStatus: "NOT_APPLICABLE",
+              syncError: null,
+              syncToUnas: false,
+            },
+          ],
+        }),
+      ),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.constructor.name === "ConflictException" &&
+        error.message.includes("EAN"),
+    );
+    assert.equal(db.productCreateData.length, 1);
   });
 
   it("retries automatic local SKU allocation after a collision", async () => {

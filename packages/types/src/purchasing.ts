@@ -93,6 +93,13 @@ export interface CreatePurchaseInvoiceLineInput {
   createLocalProduct?: {
     name: string;
     primaryCategoryId?: string;
+    /** #1199 P-026: a számlasorból felvett termék alapadatai. */
+    brandId?: string;
+    vatRate?: number;
+    /** EAN/GTIN: a változat elsődleges vonalkódja lesz. */
+    ean?: string;
+    /** A beszállító saját cikkszáma: a számla szállítójához köti a terméket. */
+    supplierSku?: string;
   };
   sourceDescription?: string;
   /** A NAV számlasor sorszáma, ha a sor NAV bejövő számlából jött (#1199 A-007). */
@@ -146,6 +153,23 @@ export interface PurchaseInvoiceResult {
   localProductCreatedCount: number;
   /** Azonnal létrehozott aktív projektkészlet-foglalások száma. */
   projectReservationCount: number;
+}
+
+/** Egy már létező termék, amelyre egy új termék adatai ütköznének. */
+export interface PurchaseProductConflictOwner {
+  variantId: string;
+  sku: string;
+  productName: string;
+}
+
+/**
+ * Új termék felvétele ELŐTT: van-e már termék ezzel az EAN-nel, vagy ezzel a
+ * beszállítói cikkszámmal ennél a szállítónál. Ha van, a termék nem új: a
+ * sort a meglévőhöz kell kötni (#1199 P-026).
+ */
+export interface PurchaseProductConflictLookup {
+  byEan: PurchaseProductConflictOwner | null;
+  bySupplierSku: PurchaseProductConflictOwner | null;
 }
 
 export interface PurchaseProductSearchResult {
