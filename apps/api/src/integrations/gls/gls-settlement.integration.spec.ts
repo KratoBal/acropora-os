@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 import { ConflictException } from "@nestjs/common";
+import ExcelJS from "exceljs";
 
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
 import { glsXlsx } from "../../testing/gls-xlsx.fixture.js";
 import { GlsSettlementRepository } from "./gls-settlement.repository.js";
+import { GlsMonthlyReportXlsx } from "./gls-monthly-report.xlsx.js";
 import { GlsSettlementService } from "./gls-settlement.service.js";
 
 // What only a database can prove: a report that arrives twice (even with
@@ -25,7 +27,10 @@ const TEST_EMAIL_DOMAIN = "gls-integration.invalid";
 
 describe("GLS settlement integration", { skip: gate.mode === "skip" }, () => {
   const suffix = String(Date.now()).slice(-6);
-  const service = new GlsSettlementService(new GlsSettlementRepository());
+  const service = new GlsSettlementService(
+    new GlsSettlementRepository(),
+    new GlsMonthlyReportXlsx(),
+  );
   const invoiceNumber = `${INVOICE_PREFIX}-2026/${suffix.slice(-5)}`;
   const parcel = (n: number) => `${PARCEL_PREFIX}${suffix}${n}`;
   let userId: string;
@@ -185,5 +190,25 @@ describe("GLS settlement integration", { skip: gate.mode === "skip" }, () => {
       reprocessed.lines[1]!.manualApprovedByDisplayName,
       "GLS Integration",
     );
+  });
+
+  it("puts the month's transfer and its invoice into the accountant's file, and not the next month's", async () => {
+    const september = await service.monthlyReport(2026, 9);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(september.buffer as unknown as ExcelJS.Buffer);
+    const column: unknown[] = [];
+    workbook
+      .getWorksheet("GLS")!
+      .eachRow((row) => column.push(row.getCell(2).value));
+    assert.ok(column.includes(invoiceNumber));
+
+    const october = await service.monthlyReport(2026, 10);
+    const empty = new ExcelJS.Workbook();
+    await empty.xlsx.load(october.buffer as unknown as ExcelJS.Buffer);
+    const none: unknown[] = [];
+    empty
+      .getWorksheet("GLS")!
+      .eachRow((row) => none.push(row.getCell(2).value));
+    assert.ok(!none.includes(invoiceNumber));
   });
 });

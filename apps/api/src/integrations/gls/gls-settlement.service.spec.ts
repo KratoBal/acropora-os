@@ -8,6 +8,7 @@ import type {
   GlsSettlementRepository,
   UnresolvedLine,
 } from "./gls-settlement.repository.js";
+import { GlsMonthlyReportXlsx } from "./gls-monthly-report.xlsx.js";
 import { GlsSettlementService } from "./gls-settlement.service.js";
 
 function invoiceAttachment() {
@@ -68,7 +69,10 @@ describe("GlsSettlementService.upload", () => {
         codReference: null,
       },
     ]);
-    const result = await new GlsSettlementService(fake.repository).upload(
+    const result = await new GlsSettlementService(
+      fake.repository,
+      new GlsMonthlyReportXlsx(),
+    ).upload(
       invoiceAttachment(),
       "SettlementDocument_HU00000001_20260918011215.xlsx",
       "user-1",
@@ -103,7 +107,10 @@ describe("GlsSettlementService.upload", () => {
         codReference: "ACRW-2026/00001",
       },
     ]);
-    const result = await new GlsSettlementService(fake.repository).upload(
+    const result = await new GlsSettlementService(
+      fake.repository,
+      new GlsMonthlyReportXlsx(),
+    ).upload(
       glsXlsx({
         WeeklyThu: [
           ["Utalás dátuma: 2026. 09. 03."],
@@ -130,7 +137,10 @@ describe("GlsSettlementService.upload", () => {
   it("says in Hungarian why a file is refused", async () => {
     const fake = fakeRepository([]);
     await assert.rejects(
-      new GlsSettlementService(fake.repository).upload(
+      new GlsSettlementService(
+        fake.repository,
+        new GlsMonthlyReportXlsx(),
+      ).upload(
         glsXlsx({ Arlista: [["Cikkszám", "Ár"]] }),
         "arlista.xlsx",
         "user-1",
@@ -147,7 +157,10 @@ describe("GlsSettlementService.approveLine", () => {
   it("refuses an empty invoice number", async () => {
     const fake = fakeRepository([]);
     await assert.rejects(
-      new GlsSettlementService(fake.repository).approveLine(
+      new GlsSettlementService(
+        fake.repository,
+        new GlsMonthlyReportXlsx(),
+      ).approveLine(
         "report-1",
         "line-1",
         { invoiceNumber: "  ", expectedUpdatedAt: "2026-09-29T08:00:00.000Z" },

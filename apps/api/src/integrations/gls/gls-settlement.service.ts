@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type {
+  GlsCodLineError,
   GlsCodReportDetail,
   GlsCodReportListResponse,
   GlsDocumentUploadResult,
@@ -11,10 +12,20 @@ import type {
 import { classifyCodReference, orderKeyOf } from "./gls-cod-reference.js";
 import { resolveGlsCodLine } from "./gls-cod-resolution.js";
 import { GlsDocumentError, readGlsDocument } from "./gls-documents.parser.js";
+import { GlsMonthlyReportXlsx } from "./gls-monthly-report.xlsx.js";
 import {
   GlsSettlementRepository,
   type UnresolvedLine,
 } from "./gls-settlement.repository.js";
+
+/** Why a line waits, in the words the accountant reads. */
+const REVIEW_REASONS: Record<GlsCodLineError, string> = {
+  INVOICE_NOT_FOUND: "Nincs ilyen kimenő számla",
+  ORDER_NOT_FOUND: "A rendelés nincs a rendszerben",
+  ORDER_NOT_INVOICED: "A rendelésnek még nincs számlája",
+  PREFIX_MISSING: "Előtag nélküli számlaszám",
+  REFERENCE_UNKNOWN: "Ismeretlen hivatkozás",
+};
 
 /** What the person sees when a file is refused, per reader error. */
 const DOCUMENT_ERRORS: Record<string, string> = {
@@ -27,7 +38,10 @@ const DOCUMENT_ERRORS: Record<string, string> = {
 
 @Injectable()
 export class GlsSettlementService {
-  constructor(private readonly repository: GlsSettlementRepository) {}
+  constructor(
+    private readonly repository: GlsSettlementRepository,
+    private readonly reports: GlsMonthlyReportXlsx,
+  ) {}
 
   /**
    * One GLS file, either kind. A report's lines are resolved at once; an
@@ -141,6 +155,46 @@ export class GlsSettlementService {
     await this.repository.reportDetail(id);
     await this.resolve(await this.repository.unresolvedLines({ reportId: id }));
     return this.repository.reportDetail(id);
+  }
+
+  /** The accountant's file for one month, built from what is stored now. */
+  async monthlyReport(year: number, month: number) {
+    if (!Number.isInteger(year) || year < 2020 || year > 2100)
+      throw new BadRequestException("GLS_REPORT_YEAR_INVALID");
+    if (!Number.isInteger(month) || month < 1 || month > 12)
+      throw new BadRequestException("GLS_REPORT_MONTH_INVALID");
+    const { transfers, invoices } = await this.repository.monthData(
+      year,
+      month,
+    );
+    return this.reports.build(
+      year,
+      month,
+      transfers.map((transfer) => ({
+        transferDate: transfer.transferDate,
+        fileName: transfer.fileName,
+        total: Number(transfer.total),
+        invoiceNumbers: transfer.lines.flatMap((line) => line.invoiceNumbers),
+        unresolvedLines: transfer.lines
+          .filter((line) => line.status === "NEEDS_REVIEW")
+          .map((line) => ({
+            rowNumber: line.rowNumber,
+            parcelNumber: line.parcelNumber,
+            codReference: line.codReference,
+            amount: Number(line.amount),
+            reason:
+              REVIEW_REASONS[line.errorCode as GlsCodLineError] ??
+              "Ellenőrzendő",
+          })),
+      })),
+      invoices.map((invoice) => ({
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceDate: invoice.invoiceDate,
+        parcelCount: invoice.parcelCount,
+        feeTotal: Number(invoice.feeTotal),
+        cardFeeTotal: Number(invoice.cardFeeTotal),
+      })),
+    );
   }
 
   listReports(query: {

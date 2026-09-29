@@ -98,6 +98,10 @@ export function GlsSettlementsPage() {
     {},
   );
   const fileInput = useRef<HTMLInputElement>(null);
+  const [reportMonth, setReportMonth] = useState(() =>
+    new Date().toISOString().slice(0, 7),
+  );
+  const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -214,6 +218,22 @@ export function GlsSettlementsPage() {
       await load();
     }, "Az újrafeldolgozás nem sikerült.");
 
+  const download = async () => {
+    const [year, month] = reportMonth.split("-").map(Number);
+    if (!year || !month) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      await glsSettlementsApi.downloadReport(token, year, month);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A riport nem tölthető le.",
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   if (!canView)
     return (
       <Alert
@@ -266,6 +286,35 @@ export function GlsSettlementsPage() {
           }
         />
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <h2 className="text-sm font-semibold text-dusk-900">
+            Havi könyvelési fájl
+          </h2>
+          <span className="text-xs text-dusk-500">
+            Utalásonként a kifizetett számlák, a GLS díjszámlák külön lapon
+          </span>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="month"
+              aria-label="A riport hónapja"
+              className="rounded-md border border-dusk-300 bg-white px-2 py-1.5 text-sm text-dusk-900"
+              value={reportMonth}
+              onChange={(event) => setReportMonth(event.target.value)}
+            />
+            <Button
+              variant="secondary"
+              onClick={() => void download()}
+              disabled={downloading || !reportMonth}
+            >
+              {downloading ? "Letöltés…" : "XLSX letöltése"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

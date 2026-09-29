@@ -403,6 +403,47 @@ export class GlsSettlementRepository {
     };
   }
 
+  /** The month's transfers (by transfer day) and GLS invoices (by date). */
+  async monthData(year: number, month: number) {
+    const range = {
+      gte: new Date(Date.UTC(year, month - 1, 1)),
+      lt: new Date(Date.UTC(year, month, 1)),
+    };
+    const [transfers, invoices] = await Promise.all([
+      prisma.glsCodReport.findMany({
+        where: { transferDate: range },
+        select: {
+          transferDate: true,
+          fileName: true,
+          total: true,
+          lines: {
+            orderBy: { rowNumber: "asc" },
+            select: {
+              rowNumber: true,
+              parcelNumber: true,
+              codReference: true,
+              amount: true,
+              invoiceNumbers: true,
+              status: true,
+              errorCode: true,
+            },
+          },
+        },
+      }),
+      prisma.glsInvoice.findMany({
+        where: { invoiceDate: range },
+        select: {
+          invoiceNumber: true,
+          invoiceDate: true,
+          parcelCount: true,
+          feeTotal: true,
+          cardFeeTotal: true,
+        },
+      }),
+    ]);
+    return { transfers, invoices };
+  }
+
   async listInvoices(): Promise<GlsInvoiceSummary[]> {
     const invoices = await prisma.glsInvoice.findMany({
       orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
