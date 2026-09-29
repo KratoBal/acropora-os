@@ -33,6 +33,11 @@ import {
 } from "./supplier-line-policy.js";
 import { acceptCodeMatch, codeLookupKeys } from "./supplier-code-match.js";
 import {
+  DESCRIPTION_CHARS,
+  candidateCriterion,
+  type CandidateCriteria,
+} from "./supplier-line-criteria.js";
+import {
   SupplierLineSuggestionRepository,
   type SuggestionProduct,
 } from "./supplier-line-suggestion.repository.js";
@@ -41,18 +46,39 @@ export const SUPPLIER_LINE_ENV = Symbol("SUPPLIER_LINE_ENV");
 export const SUPPLIER_LINE_FETCH = Symbol("SUPPLIER_LINE_FETCH");
 
 /**
- * A beszállító jelölt-profilja a közösségi adószáma szerint. Egy szállító,
- * akinek nincs profilja, a márka-routing nélküli alapprofilt kapja; a Jev
- * akkor sem fut nála, ha nincs a `JEV_SUPPLIER_LINE_SUPPLIER_VAT_IDS`
- * listában (a policy szövege ma Hertlein-szavakkal áll, ACD-019).
+ * A beszállító Jev-beállítása a közösségi adószáma szerint: a jelölt-profil,
+ * a megjelenítési küszöb és az, hogy mit olvas a Jev a jelöltről. Egy
+ * szállító, akinek nincs beállítása, a márka-routing nélküli alapprofilt és
+ * a PD-010 küszöbét kapja; a Jev akkor sem fut nála, ha nincs a
+ * `JEV_SUPPLIER_LINE_SUPPLIER_VAT_IDS` listában.
+ *
+ * MINDEN SZÁM MÉRT, ÉS CSAK ARRA A SZÁLLÍTÓRA, AMELYIKEN MÉRTÜK:
+ *   Hertlein   0.9, név          PD-010 (P-023, A-008)
+ *   De Jong    0.8, név+leírás   PD-javaslat 2026-09-29: HOLDOUT 98,4% helyes a
+ *                                mutatottból, 1,8% mutatott a pár nélküli sorokon
+ * A 0.8 Hertleinre nincs mérve, ezért nem közös szám.
  */
-const CANDIDATE_PROFILES: Readonly<Record<string, CandidateProfile>> = {
-  DE342032439: hertleinCandidateProfile,
-  NL802708705B01: deJongCandidateProfile,
+interface SupplierJevSettings {
+  profile: CandidateProfile;
+  shownConfidence: number;
+  criteria: CandidateCriteria;
+}
+const SUPPLIER_JEV_SETTINGS: Readonly<Record<string, SupplierJevSettings>> = {
+  DE342032439: {
+    profile: hertleinCandidateProfile,
+    shownConfidence: SUPPLIER_LINE_SHOWN_CONFIDENCE,
+    criteria: "name",
+  },
+  NL802708705B01: {
+    profile: deJongCandidateProfile,
+    shownConfidence: 0.8,
+    criteria: "name+description",
+  },
 };
-const DEFAULT_PROFILE: CandidateProfile = {
-  brandRouting: [],
-  brandAliases: [],
+const DEFAULT_SETTINGS: SupplierJevSettings = {
+  profile: { brandRouting: [], brandAliases: [] },
+  shownConfidence: SUPPLIER_LINE_SHOWN_CONFIDENCE,
+  criteria: "name",
 };
 
 /** A törzs gyorsítótára: egy számla 20-60 sorára ne olvassuk újra minden sorra. */
@@ -91,6 +117,7 @@ export class SupplierLineSuggestionService {
     loadedAt: number;
     index: CandidateIndexEntry[];
     products: Map<string, SuggestionProduct>;
+    descriptions: Map<string, string | null>;
   } | null = null;
   /** A rögzített modell eltűnt: a Jev-rész a folyamat újraindulásáig áll. */
   private modelUnavailable = false;
@@ -270,6 +297,9 @@ export class SupplierLineSuggestionService {
       loadedAt: Date.now(),
       index: indexCandidateMaster(rows),
       products: new Map(rows.map((row) => [row.variantId, row.product])),
+      descriptions: new Map(
+        rows.map((row) => [row.variantId, row.description]),
+      ),
     };
     return this.master;
   }
@@ -283,12 +313,12 @@ export class SupplierLineSuggestionService {
     const base = { enabled: true, conflict: false, blocked: false } as const;
     const policy = SUPPLIER_LINE_JEV_POLICY;
     const master = await this.candidateMaster();
-    const profile = CANDIDATE_PROFILES[vatId] ?? DEFAULT_PROFILE;
+    const settings = SUPPLIER_JEV_SETTINGS[vatId] ?? DEFAULT_SETTINGS;
     const candidates = generateCandidates(
       request.description,
       (supplierSku ?? "").toLowerCase(),
       master.index,
-      profile,
+      settings.profile,
     ).candidates;
     const projection = {
       schema: `${policy.key}@${policy.version}`,
@@ -297,6 +327,10 @@ export class SupplierLineSuggestionService {
         supplier_vat_id: vatId,
         generator: CANDIDATE_GENERATOR_VERSION,
         candidates: [...candidates],
+        // only when it is not the name alone: a Hertlein run keeps its identity
+        ...(settings.criteria === "name"
+          ? {}
+          : { criteria: `${settings.criteria}@${DESCRIPTION_CHARS}` }),
       },
     };
     const common = {
@@ -326,7 +360,11 @@ export class SupplierLineSuggestionService {
     }));
     const criteria: Record<string, string> = {};
     for (const { key, variantId } of keyed)
-      criteria[key] = master.products.get(variantId)?.productName ?? variantId;
+      criteria[key] = candidateCriterion(
+        master.products.get(variantId)?.productName ?? variantId,
+        master.descriptions.get(variantId),
+        settings.criteria,
+      );
     criteria[NONE_KEY] = policy.noneDescription;
     const state = policy.stateTemplate.replace("{line}", request.description);
 
@@ -397,8 +435,7 @@ export class SupplierLineSuggestionService {
     const selected =
       result.choice === NONE_KEY ? NONE_KEY : byKey.get(result.choice)!;
     const shown =
-      decision === "MATCH" &&
-      result.confidence >= SUPPLIER_LINE_SHOWN_CONFIDENCE;
+      decision === "MATCH" && result.confidence >= settings.shownConfidence;
     const probabilities: Record<string, number> = {};
     for (const [key, value] of Object.entries(result.probabilities))
       probabilities[key === NONE_KEY ? NONE_KEY : (byKey.get(key) ?? key)] =

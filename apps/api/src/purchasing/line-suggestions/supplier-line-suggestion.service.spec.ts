@@ -47,6 +47,8 @@ function fake(options: {
   >;
   vatId?: string;
   master?: SuggestionProduct[];
+  /** variant id -> short description (HTML), as the product table holds it */
+  descriptions?: Record<string, string>;
   runs?: Array<{
     id: string;
     policyKey: string;
@@ -65,6 +67,7 @@ function fake(options: {
         variantId: product.variantId,
         text: product.productName,
         product,
+        description: options.descriptions?.[product.variantId] ?? null,
       })),
     supplierVatId: async () => options.vatId ?? "DE342032439",
     mappedProduct: async () => options.mapped ?? null,
@@ -234,6 +237,85 @@ describe("SupplierLineSuggestionService", () => {
     assert.equal(result.suggestion?.source, "JEV");
     assert.equal(jev.calls.length, 1);
     assert.ok(created.every((run) => run.policyKey !== "supplier-line-code"));
+  });
+
+  describe("per supplier, as measured (PD 2026-09-29)", () => {
+    const DEJONG = "NL802708705B01";
+    const BOTH = {
+      ...LIVE,
+      JEV_SUPPLIER_LINE_SUPPLIER_VAT_IDS: `DE342032439,${DEJONG}`,
+    } as NodeJS.ProcessEnv;
+    const DESCRIPTIONS = {
+      [PLUGS.variantId]:
+        "<p>Kerámia fragtalp&nbsp;10 db,\n korallok rögzítéséhez.</p>",
+    };
+    const sentCriteria = (calls: Array<{ body: string }>) =>
+      Object.values(
+        JSON.parse(calls[0]!.body).questions.match.criteria as Record<
+          string,
+          string
+        >,
+      );
+
+    it("De Jong: the Jev reads name + description, and the run says so", async () => {
+      const { repository, created } = fake({
+        vatId: DEJONG,
+        descriptions: DESCRIPTIONS,
+      });
+      const jev = jevAnswer(keyOf(PLUGS.productName), 0.85);
+      await new SupplierLineSuggestionService(
+        repository,
+        BOTH,
+        jev.fetch,
+      ).suggest(REQUEST);
+      const criteria = sentCriteria(jev.calls);
+      assert.ok(
+        criteria.includes(
+          "Dupla Marin Coral Plugs 10 db. Kerámia fragtalp 10 db, korallok rögzítéséhez.",
+        ),
+      );
+      // a product without a description goes by its name, as measured
+      assert.ok(criteria.includes(RACK.productName));
+      const projection = created[0]!.projectionPayload as {
+        data: { criteria?: string };
+      };
+      assert.equal(projection.data.criteria, "name+description@200");
+    });
+
+    it("De Jong shows from 0.80; Hertlein keeps 0.9 and the name alone", async () => {
+      // the choice is keyed by the text the Jev saw, so find it by prefix
+      const byPrefix = (criteria: Record<string, string>) =>
+        Object.entries(criteria).find(([, v]) =>
+          v.startsWith(PLUGS.productName),
+        )![0];
+      const dejong = fake({ vatId: DEJONG, descriptions: DESCRIPTIONS });
+      const shown = await new SupplierLineSuggestionService(
+        dejong.repository,
+        BOTH,
+        jevAnswer(byPrefix, 0.85).fetch,
+      ).suggest(REQUEST);
+      assert.equal(shown.suggestion?.variantId, PLUGS.variantId);
+
+      const hertlein = fake({ descriptions: DESCRIPTIONS });
+      const jev = jevAnswer(keyOf(PLUGS.productName), 0.85);
+      const hidden = await new SupplierLineSuggestionService(
+        hertlein.repository,
+        BOTH,
+        jev.fetch,
+      ).suggest(REQUEST);
+      assert.equal(hidden.suggestion, null);
+      assert.equal(hertlein.created[0]!.exposure, "HIDDEN");
+      // Hertlein was measured by name: the description never reaches the Jev
+      assert.ok(sentCriteria(jev.calls).includes(PLUGS.productName));
+      assert.equal(
+        (
+          hertlein.created[0]!.projectionPayload as {
+            data: { criteria?: string };
+          }
+        ).data.criteria,
+        undefined,
+      );
+    });
   });
 
   it("asks Jev only for a listed supplier, with the measured policy and question key", async () => {
