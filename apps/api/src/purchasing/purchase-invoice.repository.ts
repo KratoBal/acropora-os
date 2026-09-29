@@ -110,12 +110,6 @@ export interface CreatePurchaseInvoiceLine {
     ean?: string | null;
     /** A számla szállítójához köti a terméket (`SupplierProduct`). */
     supplierSku?: string | null;
-    /**
-     * A webshopba is, PISZKOZATKENT (Balazs, 2026-09-28). Ha nem kerte, a
-     * termek `webshopExcluded`, tehat a Medusa-vetites kihagyja. Publikalni
-     * ez az ut soha nem tud: a `webshopSellable` hamis marad.
-     */
-    webshopDraft?: boolean;
   } | null;
   sourceDescription: string | null;
   /** #1199 P-026: a sor előre kiosztott azonosítója, ha egy javaslat-futás hozzá kötődik. */
@@ -438,7 +432,6 @@ export class PurchaseInvoiceRepository extends Repository {
                   type: "PHYSICAL",
                   origin: "LOCAL",
                   catalogAuthority: "ACROPORA",
-                  webshopExcluded: requestedLocalProduct.webshopDraft !== true,
                   createdById: params.actorUserId,
                   brandId: requestedLocalProduct.brandId ?? null,
                   categoryId: requestedLocalProduct.primaryCategoryId,

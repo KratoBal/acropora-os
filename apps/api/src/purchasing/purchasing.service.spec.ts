@@ -478,7 +478,6 @@ describe("PurchasingService.createInvoice", () => {
       vatRate: null,
       ean: null,
       supplierSku: null,
-      webshopDraft: false,
     });
     assert.equal(line?.sku, null);
     assert.equal(line?.syncStatus, "NOT_APPLICABLE");
@@ -858,31 +857,6 @@ describe("PurchasingService new product details", () => {
     assert.equal(product?.vatRate?.toString(), "27");
     assert.equal(product?.ean, "4011444815934");
     assert.equal(product?.supplierSku, "81593");
-  });
-
-  it("passes the webshop-draft choice on, and a missing one as no", async () => {
-    for (const [given, passed] of [
-      [true, true],
-      [false, false],
-      [undefined, false],
-    ] as const) {
-      const { service, getCapturedCreateParams } = buildService({
-        variants: new Map(),
-      });
-      await service.createInvoice(
-        baseInput({
-          lines: [
-            newProductLine(given === undefined ? {} : { webshopDraft: given }),
-          ],
-        }),
-        "user-1",
-      );
-      assert.equal(
-        getCapturedCreateParams()?.lines[0]?.createLocalProduct?.webshopDraft,
-        passed,
-        `given ${given}`,
-      );
-    }
   });
 
   it("refuses a product whose EAN already belongs to one, and names it", async () => {

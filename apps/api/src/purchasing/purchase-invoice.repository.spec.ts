@@ -583,41 +583,6 @@ describe("PurchaseInvoiceRepository.create", () => {
     });
   });
 
-  it("keeps the new product out of the webshop unless it was asked for as a draft", async () => {
-    // Balázs, 2026-09-28 20:53 UTC: into the webshop only if wanted, and only
-    // as a draft. Not asked -> excluded from the Medusa projection; asked ->
-    // projected, and never sellable from this path.
-    const line = (webshopDraft?: boolean) => ({
-      variantId: null,
-      sku: null,
-      createLocalProduct: {
-        name: "Uj termek",
-        primaryCategoryId: null,
-        ...(webshopDraft === undefined ? {} : { webshopDraft }),
-      },
-      sourceDescription: "Uj termek",
-      orderedQuantity: new Prisma.Decimal("1"),
-      actualQuantity: new Prisma.Decimal("1"),
-      unit: "db",
-      unitNet: new Prisma.Decimal("1"),
-      discountPercent: null,
-      syncStatus: "NOT_APPLICABLE" as const,
-      syncError: null,
-      syncToUnas: false,
-    });
-    for (const [asked, excluded] of [
-      [undefined, true],
-      [false, true],
-      [true, false],
-    ] as const) {
-      const db = new FakeDb();
-      await repositoryWith(db).create(baseParams({ lines: [line(asked)] }));
-      const data = db.productCreateData[0];
-      assert.equal(data.webshopExcluded, excluded, `webshopDraft=${asked}`);
-      assert.equal(data.webshopSellable, undefined, "never sellable from here");
-    }
-  });
-
   it("an EAN taken meanwhile is a conflict, not a SKU retry", async () => {
     const db = new FakeDb();
     db.takenBarcodes.add("4011444815934");

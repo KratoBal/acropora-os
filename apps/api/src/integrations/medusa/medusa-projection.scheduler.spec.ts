@@ -398,32 +398,6 @@ describe("a kapcsolatok idobelyege esedekesse tesz", () => {
    * Ezt a SELECT alakjan merjuk, mert a kimeneten nem latszik: mind a ketto
    * ugyanugy "mukodne", csak az egyik tobbszor futna.
    */
-  /**
-   * A WEBSHOPBOL KIHAGYOTT TERMEK SOSEM ESEDEKES (2026-09-29).
-   *
-   * Ha a lekerdezes nem szurne ra, a kihagyott termek orokre "meg nem
-   * vetitett" maradna, es minden kor elore hozna: a futo szuri ki, a korlat
-   * viszont mar elfogyott ra.
-   */
-  it("a lekerdezes a webshopbol kihagyott termeket ki sem keri", async () => {
-    const { db, hivasok } = adatbazis([termek()]);
-    const { run } = futtato();
-    await new MedusaProjectionScheduler({
-      db,
-      runProjection: run,
-      environment: BEKAPCSOLVA,
-    }).runOnce();
-
-    const lekerdezes = hivasok.find(
-      (hivas) => hivas.metodus === "product.findMany",
-    );
-    assert.ok(lekerdezes, "kellett volna termek-lekerdezes");
-    assert.deepEqual((lekerdezes.args as { where: unknown }).where, {
-      isActive: true,
-      webshopExcluded: false,
-    });
-  });
-
   it("a lekerdezes a sourceRelations-t keri, a targetRelations-t NEM", async () => {
     const { db, hivasok } = adatbazis(
       [termek()],

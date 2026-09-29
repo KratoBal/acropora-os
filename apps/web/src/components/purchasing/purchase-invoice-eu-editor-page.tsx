@@ -56,8 +56,6 @@ interface InvoiceLineState {
     vatRate: number | "";
     ean: string;
     supplierSku: string;
-    /** A webshopba is, piszkozatként; alapból nem (Balázs, 2026-09-28). */
-    webshopDraft: boolean;
   } | null;
   sku: string;
   productName: string;
@@ -667,7 +665,6 @@ export function PurchaseInvoiceEuEditorPage() {
       vatRate: 27 as number | "",
       ean: line.ean ?? "",
       supplierSku: line.supplierSku ?? "",
-      webshopDraft: false,
     };
     updateLine(line.key, {
       variantId: null,
@@ -903,7 +900,6 @@ export function PurchaseInvoiceEuEditorPage() {
                 ean: line.createLocalProduct.ean.trim() || undefined,
                 supplierSku:
                   line.createLocalProduct.supplierSku.trim() || undefined,
-                webshopDraft: line.createLocalProduct.webshopDraft,
               }
             : undefined,
           sourceDescription: line.sourceDescription.trim() || undefined,
@@ -1766,28 +1762,6 @@ export function PurchaseInvoiceEuEditorPage() {
                           />
                         </label>
                       </div>
-                      <label className="mt-2 flex items-start gap-2 text-xs text-dusk-700">
-                        <input
-                          type="checkbox"
-                          aria-label="Új helyi termék a webshopba is, piszkozatként"
-                          checked={line.createLocalProduct.webshopDraft}
-                          onChange={(event) =>
-                            updateLine(line.key, {
-                              createLocalProduct: {
-                                ...line.createLocalProduct!,
-                                webshopDraft: event.target.checked,
-                              },
-                            })
-                          }
-                          className="mt-0.5"
-                        />
-                        <span>
-                          A webshopba is, piszkozatként. Nem jelenik meg a
-                          boltban: a terméklapot utána kell kitölteni és
-                          közzétenni. Bejelölés nélkül a termék csak az Acropora
-                          OS-ben jön létre.
-                        </span>
-                      </label>
                       {[
                         ["EAN", productConflicts[line.key]?.byEan] as const,
                         [

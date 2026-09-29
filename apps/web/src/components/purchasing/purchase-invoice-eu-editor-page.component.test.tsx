@@ -312,7 +312,6 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
               vatRate: 27,
               ean: undefined,
               supplierSku: undefined,
-              webshopDraft: false,
             },
             sourceDescription: "Teszt termék",
           }),
@@ -722,28 +721,7 @@ describe("PurchaseInvoiceEuEditorPage új termék a számlasorból", () => {
       vatRate: 27,
       ean: "4011444815934",
       supplierSku: "81593",
-      // not asked for the webshop: the product stays out of the Medusa projection
-      webshopDraft: false,
     });
-  });
-
-  it("sends the webshop-draft choice only when it is ticked, and it starts unticked", async () => {
-    // Balázs, 2026-09-28 20:53 UTC: into the webshop only if wanted, as a draft.
-    await importAndStartNewProduct();
-    const box = screen.getByRole("checkbox", {
-      name: "Új helyi termék a webshopba is, piszkozatként",
-    });
-    expect(box).not.toBeChecked();
-    fireEvent.click(box);
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Számla rögzítése és készlet frissítése",
-      }),
-    );
-
-    await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
-    const [, keres] = purchasingApiMock.create.mock.calls[0] ?? [];
-    expect(keres.lines[0].createLocalProduct.webshopDraft).toBe(true);
   });
 
   it("says when the product already exists, and links the line to it", async () => {

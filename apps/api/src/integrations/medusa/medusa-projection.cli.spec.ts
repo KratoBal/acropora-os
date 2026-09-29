@@ -1542,49 +1542,6 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
   });
 
   /**
-   * A WEBSHOPBOL KIHAGYOTT TERMEK NEM MEGY KI (Balazs, 2026-09-28 20:53 UTC).
-   *
-   * A beszallitoi szamlasorbol felvett uj termek csak akkor kerul a boltba
-   * (ott is csak piszkozatkent), ha a felvevo kerte. Ha nem kerte, a vetites
-   * egyetlen Medusa-kerest sem kuld rola, lekepezest sem ir, es ez SZANDEKOS
-   * kihagyas: a futas nem bukik el tole.
-   */
-  it("a webshopbol kihagyott termekrol egyetlen Medusa-keres sem megy, es a futas nem bukik el", async () => {
-    const { out, stdout, stderr } = collector();
-    const { db, hivasok } = adatbazis(termek({ webshopExcluded: true }));
-    const keresek: { url: string; method: string; body: unknown }[] = [];
-
-    const code = await boltiKorben(() =>
-      runProjectionCli(
-        ["prod-1"],
-        out,
-        provider(environmentSetting),
-        boltiKornyezet,
-        db,
-        boltiFetchTorzzsel(keresek),
-      ),
-    );
-
-    assert.equal(code, 0, stderr.join("") + stdout.join(""));
-    assert.deepEqual(
-      keresek.filter((k) => k.url.includes("/admin/products")),
-      [],
-    );
-    assert.equal(
-      hivasok.some((h) => h.metodus === "externalReference.create"),
-      false,
-    );
-    assert.match(
-      stdout.join(""),
-      /prod-1: a felvevő nem kérte a webshopba, kihagyva/,
-    );
-    assert.match(
-      stdout.join(""),
-      /1 termék maradt ki, mert a felvevője nem kérte a webshopba/,
-    );
-  });
-
-  /**
    * A WYSIWYG RESZFA VALODI BEMENETEN -- ugyanaz a vak folt, masik agon.
    *
    * A `category.findMany` duplaja MINDIG ures listat adott, tehat a reszfa MINDIG

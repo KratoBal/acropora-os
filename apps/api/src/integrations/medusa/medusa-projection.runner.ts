@@ -664,7 +664,6 @@ export async function runProjectionCli(
    * nem. (acrobot kikotese, 2026-09-10.)
    */
   let megnezettTermek = 0;
-  let webshopbolKihagyott = 0;
   let masoltKepek = 0;
   let bukottKepek = 0;
   /**
@@ -714,7 +713,6 @@ export async function runProjectionCli(
         catalogAuthority: true,
         isActive: true,
         webshopSellable: true,
-        webshopExcluded: true,
         /**
          * A MARKA, ES CSAK AZ AZONOSITOJA.
          *
@@ -817,20 +815,6 @@ export async function runProjectionCli(
         },
       });
       out.stdout(`${describeForgottenLink(product.id, removed.count)}\n`);
-      continue;
-    }
-
-    /**
-     * A WEBSHOPBOL KIHAGYOTT TERMEK (Balazs, 2026-09-28 20:53 UTC).
-     *
-     * A beszallitoi szamlasorbol felvett uj termek csak akkor megy a boltba,
-     * ha a felvevo kerte. Ez SZANDEKOS kihagyas, nem hiba: kiirodik, de a
-     * futast nem bukja el. A `--forget` ag elotte all, tehat egy korabbi
-     * lekepezes ettol meg torolheto.
-     */
-    if (product.webshopExcluded) {
-      out.stdout(`${productId}: a felvevő nem kérte a webshopba, kihagyva\n`);
-      webshopbolKihagyott += 1;
       continue;
     }
 
@@ -1376,11 +1360,6 @@ export async function runProjectionCli(
       `${tiltottVonalkod} vonalkód maradt ki a vetítési szűrő miatt. ` +
         `Ezek megmért, bizonyíthatóan téves értékek: a kód nem ezé a terméké. ` +
         `A javítás helye a forrás (UNAS); a szűrő addig tartja vissza.\n`,
-    );
-
-  if (webshopbolKihagyott)
-    out.stdout(
-      `${webshopbolKihagyott} termék maradt ki, mert a felvevője nem kérte a webshopba.\n`,
     );
 
   if (kihagyottVonalkod)
