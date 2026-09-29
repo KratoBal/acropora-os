@@ -285,6 +285,11 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.FINANCE_VIEW),
   },
   {
+    id: "gls-settlement",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.FINANCE_VIEW),
+  },
+  {
     id: "inventory",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.INVENTORY_VIEW),

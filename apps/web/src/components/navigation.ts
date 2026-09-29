@@ -209,6 +209,12 @@ export const businessNavigation: AppNavigationEntry[] = [
         entryId: "foxpost-settlement",
       },
       {
+        href: "/penzugy/gls",
+        label: "GLS elszámolás",
+        icon: "download",
+        entryId: "gls-settlement",
+      },
+      {
         // Ide KÖLTÖZÖTT a korábbi felső szintű "Raktár", és a lap tartalma
         // szerint kapta a nevét: készletleltárak indítása és korrekciója. Az
         // útvonal nem változott, csak a menüben elfoglalt helye és a felirata.

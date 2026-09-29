@@ -108,11 +108,12 @@ describe("navigation", () => {
    * és a költözéskor jogosan bukott el. Az új ötöt rögzít, a beköltözőkkel a
    * végén, tehát a meglévő három sorrendje nem mozdult.
    */
-  it("gathers purchasing, the NAV invoices, the Foxpost settlement and the two stock pages under Pénzügy", () => {
+  it("gathers purchasing, the NAV invoices, the Foxpost and GLS settlements and the stock pages under Pénzügy", () => {
     expect(group("Pénzügy").children.map((item) => item.href)).toEqual([
       "/beszerzes",
       "/beszerzes/nav-szamlak",
       "/penzugy/foxpost",
+      "/penzugy/gls",
       "/raktar",
       "/keszlet-egyeztetes",
       "/keszlet-kimenosor",
@@ -395,6 +396,7 @@ describe("navigation", () => {
     "/beszerzes": "purchasing.view",
     "/beszerzes/nav-szamlak": "purchasing.view",
     "/penzugy/foxpost": "finance.view",
+    "/penzugy/gls": "finance.view",
     "/raktar": "inventory.view",
     "/keszlet-egyeztetes": "inventory.view",
     "/keszlet-kimenosor": "inventory.view",
