@@ -71,6 +71,59 @@ async function sampleXlsx(): Promise<Buffer> {
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
+/**
+ * A week without cash on delivery, in the shape of the real 26H30 file
+ * (production, 2026-07): the COD sheet has only its header and its
+ * "ÖSSZESEN:" row, and Acropora pays the fee. The second "Beszedett összeg:"
+ * row of the real file holds a dash; the first one holds the number.
+ */
+async function weekWithoutCod(collected = 0): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const summary = workbook.addWorksheet("összesítés");
+  summary.getCell("A1").value = "26H30";
+  summary.getCell("D1").value = "W0166840";
+  summary.getRow(14).values = [
+    "Elszámolási időszak:",
+    "2026-07-20",
+    "-",
+    "2026-07-26",
+  ];
+  summary.getRow(26).values = ["Beszedett összeg:", collected];
+  summary.getRow(33).values = ["Beszedett összeg:", "-"];
+  summary.getRow(44).values = [
+    "FOXPOST által számlázandó bruttó összeg:",
+    2_283,
+  ];
+  summary.getRow(46).values = [
+    "PARTNER által utalandó összeg (számlázott):",
+    2_283,
+  ];
+  summary.getRow(47).values = ["FOXPOST által utalandó összeg:", 0];
+  workbook.addWorksheet("szolgáltatások");
+  const cod = workbook.addWorksheet("utánvétek");
+  cod.getRow(9).values = [
+    "Megrendelés száma",
+    "Megrendelés dátuma",
+    "Küldemény vonalkódja",
+    "Külső vonalkód",
+    "Referencia kód",
+    "Tranzakció dátuma",
+    "Címzett neve",
+    "Beszedett összeg",
+  ];
+  cod.getRow(10).values = [
+    "ÖSSZESEN:",
+    "ÖSSZESEN:",
+    "ÖSSZESEN:",
+    "ÖSSZESEN:",
+    "ÖSSZESEN:",
+    "ÖSSZESEN:",
+    "ÖSSZESEN:",
+    0,
+  ];
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
 const pdfTokens = [
   "FoxPost Kft.",
   "FX01015386",
@@ -125,5 +178,45 @@ describe("FoxpostSettlementParser", () => {
         error instanceof FoxpostParseError &&
         error.code === "FOXPOST_PARTNER_CODE_MISMATCH",
     );
+  });
+
+  it("reads a week without cash on delivery as a settlement Acropora pays", async () => {
+    const parsed = await new FoxpostSettlementParser().parseXlsx(
+      await weekWithoutCod(),
+    );
+    assert.deepEqual(parsed.lines, []);
+    assert.deepEqual(
+      [
+        parsed.collectedAmount,
+        parsed.invoiceGrossAmount,
+        parsed.transferredAmount,
+        parsed.partnerPaysAmount,
+      ],
+      [0, 2_283, 0, 2_283],
+    );
+    // the pair check holds: 0 - 2283 = 0 - 2283
+    validateFoxpostPair(parsed, {
+      ...parseFoxpostInvoiceTokens(pdfTokens),
+      settlementCode: "26H30",
+      periodStart: new Date("2026-07-20T00:00:00.000Z"),
+      periodEnd: new Date("2026-07-26T00:00:00.000Z"),
+      invoiceGrossAmount: 2_283,
+    });
+  });
+
+  it("still refuses a week whose summary collected money but whose sheet has no line", async () => {
+    await assert.rejects(
+      new FoxpostSettlementParser().parseXlsx(await weekWithoutCod(5_000)),
+      (error: unknown) =>
+        error instanceof FoxpostParseError &&
+        error.message === "FOXPOST_XLSX_COD_LINES_MISSING",
+    );
+  });
+
+  it("reads 0 for what Acropora pays when a normal week's file does not carry the row", async () => {
+    const parsed = await new FoxpostSettlementParser().parseXlsx(
+      await sampleXlsx(),
+    );
+    assert.equal(parsed.partnerPaysAmount, 0);
   });
 });
