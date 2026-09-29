@@ -19,13 +19,20 @@ export const maintenanceInvoiceApi = {
       { method: "POST" },
     );
   },
+  /** A VALÓDI kiállítás (146ccc61): a szerver csak bekapcsolt kapcsolóval engedi. */
+  issue(token: string, invoiceId: string) {
+    return apiRequest<MaintenanceInvoiceSummary>(
+      `${base}/${encodeURIComponent(invoiceId)}/issue`,
+      token,
+      { method: "POST" },
+    );
+  },
   async downloadPdf(token: string, invoiceId: string): Promise<Blob> {
     const response = await fetch(
       `${API_PREFIX}${base}/${encodeURIComponent(invoiceId)}/pdf`,
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
-    if (!response.ok)
-      throw new Error("A piszkozat-számla PDF-je nem tölthető le.");
+    if (!response.ok) throw new Error("A számla PDF-je nem tölthető le.");
     return response.blob();
   },
 };

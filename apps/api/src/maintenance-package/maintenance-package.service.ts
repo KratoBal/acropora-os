@@ -35,15 +35,14 @@ export interface MaintenancePackage {
  * (`ServiceJobPackageService`), NÉGY ELEMMEL: megrendelőlap, munkalapok,
  * teljesítési igazolás, számla.
  *
- * A NEGYEDIK ELEM MA A GYAKORLATBAN SOHA NEM KERÜL BELE: a `maintenance-
- * invoice` modul (4. szelet) tud PISZKOZATOT (DRAFT) létrehozni, de VALÓDI
- * kiállítást (ISSUED) még nem -- lásd `MAINTENANCE_INVOICE_ISSUE_ENABLED`
- * a `maintenance-invoice-draft.service.ts` fejlécében. Az `invoicePresent`
- * (`maintenance-package-gate.ts`) emiatt ma mindig hamisra fut ki, tehát
- * `assemble(..., "send")` mindig elutasít -- ez a helyes, várt állapot,
- * amíg a valódi kiállítás meg nem épül. Az alábbi kód ETTŐL FÜGGETLENÜL
- * teljes: ha egyszer lesz ISSUED számla, a negyedik elem AZONNAL bekerül a
- * csomagba, kód nélkül újra kellene nyúlni ehhez a függvényhez.
+ * A NEGYEDIK ELEM CSAK KIÁLLÍTOTT (ISSUED) SZÁMLÁVAL KERÜL BELE. A valódi
+ * kiállítás 2026-09-29 óta megvan (146ccc61, `MaintenanceInvoiceDraftService.
+ * issue`), de a `MAINTENANCE_INVOICE_ISSUE_ENABLED` kapcsoló mögött, ami alapból
+ * KI. Amíg ki van kapcsolva, ISSUED számla nem keletkezik, az `invoicePresent`
+ * (`maintenance-package-gate.ts`) hamis, és `assemble(..., "send")`
+ * elutasít. Bekapcsolt kiállítás után a negyedik elem kód nélkül bekerül: a
+ * PDF-et a `pdfFor` a kiállított számla VALÓDI PDF-jéből adja, nem az
+ * előnézetből.
  *
  * A KAPU RÉSZLETEI A `maintenance-package-gate.ts`-BEN ÁLLNAK, mérhetően.
  */
@@ -128,12 +127,10 @@ export class MaintenancePackageService {
       hasCertificate: job.completionCertificate != null,
       certificateSigned: certificateDocument != null,
       /*
-        CSAK A VALÓDI KIÁLLÍTÁS ELÉGÍTI KI -- a `maintenance-invoice` modul
-        (4. szelet) MA csak DRAFT (előnézeti) piszkozatot tud létrehozni, a
-        valódi kiállítás gomb/kapcsoló (`MAINTENANCE_INVOICE_ISSUE_ENABLED`)
-        még nem épült meg. Ezért a küldés MA IS mindig elutasít -- ugyanaz a
-        megfigyelhető viselkedés, mint a korábbi beégetett `false`-nál, de
-        immár a SÉMÁBÓL következik, nem egy TODO-jegyzetből.
+        CSAK A VALÓDI KIÁLLÍTÁS ELÉGÍTI KI. A kiállítás 2026-09-29 óta
+        megvan, de a `MAINTENANCE_INVOICE_ISSUE_ENABLED` kapcsoló (alapból KI)
+        mögött: amíg ki van kapcsolva, a küldés elutasít -- ugyanaz a
+        megfigyelhető viselkedés, mint eddig, és a SÉMÁBÓL következik.
       */
       invoicePresent: issuedInvoice != null,
       purpose,

@@ -42,14 +42,27 @@ export class MaintenanceInvoiceController {
     return this.draftService.draftFor(certificateId);
   }
 
+  /**
+   * A VALÓDI KIÁLLÍTÁS (146ccc61). A jog SZIGORÚBB, mint a piszkozaté: egy
+   * NAV-nak bejelentett számla pénzügyi lépés, ezért `FINANCE_MANAGE` (a
+   * metódus-szintű jog felülírja az osztályét, `getAllAndOverride`). A mai
+   * szerepek közül az OWNER, az ADMIN és a MANAGER kapja; a WAREHOUSE-nak
+   * `PARTNERS_MANAGE`-e van, tehát piszkozatot készíthet, kiállítani nem.
+   */
+  @Post(":invoiceId/issue")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  issue(@Param("invoiceId") invoiceId: string) {
+    return this.draftService.issue(invoiceId);
+  }
+
   @Get(":invoiceId/pdf")
   @Header("Cache-Control", "private, no-store")
   async pdf(@Param("invoiceId") invoiceId: string) {
-    const bytes = await this.draftService.pdfFor(invoiceId);
+    const { bytes, fileName } = await this.draftService.pdfDocument(invoiceId);
     return new StreamableFile(bytes, {
       type: "application/pdf",
       length: bytes.length,
-      disposition: `attachment; filename*=UTF-8''${encodeURIComponent("szamla-elonezet.pdf")}`,
+      disposition: `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
     });
   }
 }
