@@ -129,6 +129,26 @@ enum FoxpostSyncRunStatus {
   FAILED
 }
 
+/// GLS elszámolás: egy utánvét-jelentés akkor NEEDS_REVIEW, ha van
+/// feloldatlan sora.
+enum GlsCodReportStatus {
+  COMPLETED
+  NEEDS_REVIEW
+}
+
+enum GlsCodLineStatus {
+  RESOLVED
+  NEEDS_REVIEW
+}
+
+/// Honnan lett meg a sor kimenő számlája: a hivatkozás maga számlaszám,
+/// rendeléskulcsból a helyi tükrön át, vagy ember adta meg.
+enum GlsCodResolutionSource {
+  INVOICE_NUMBER
+  ORDER_KEY
+  MANUAL
+}
+
 /// A NAV-tól letöltött belföldi beszállítói (bejövő) számla állapota a
 /// bevételezési folyamatban: NEW - csak a digest ismert; DATA_FETCHED - a
 /// teljes számla-XML lekérve és feldolgozva, bevételezhető; RECEIVED - már
@@ -722,6 +742,7 @@ model User {
   createdProjects            Project[]                     @relation("ProjectCreatedBy")
   projectReservations        ProjectInventoryReservation[]
   approvedFoxpostLines       FoxpostSettlementLine[]       @relation("FoxpostLineManualApprovedBy")
+  approvedGlsCodLines        GlsCodReportLine[]            @relation("GlsCodLineManualApprovedBy")
   createdAssets              Asset[]                       @relation("AssetCreatedBy")
   updatedAssets              Asset[]                       @relation("AssetUpdatedBy")
   assetEvents                AssetEvent[]
@@ -5651,6 +5672,103 @@ model FoxpostSyncRun {
   updatedAt        DateTime             @updatedAt
 
   @@index([status, createdAt])
+}
+
+/// GLS heti utánvét-részletezője ("Utánvét részletező"): egy utalás a GLS-től,
+/// csomagonként. A forrásfájl megmarad (a címzett adataival együtt, ahogy a
+/// Foxpostnál); a sorok nevet és címet NEM tárolnak. Ugyanaz a jelentés
+/// kétszer is megérkezhet más bájtokkal (mérve 2022-03-24), ezért a
+/// `contentKey` (utalás napja + csomagok + összegek) is egyedi.
+model GlsCodReport {
+  id               String             @id @default(cuid())
+  fileName         String
+  sha256           String             @unique
+  content          Bytes
+  contentKey       String             @unique
+  transferDate     DateTime           @db.Date
+  currency         String             @default("HUF") @db.VarChar(3)
+  total            Decimal            @db.Decimal(19, 4)
+  lineCount        Int
+  status           GlsCodReportStatus
+  uploadedByUserId String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  lines GlsCodReportLine[]
+
+  @@index([transferDate])
+  @@index([status])
+}
+
+model GlsCodReportLine {
+  id                     String                  @id @default(cuid())
+  reportId               String
+  rowNumber              Int
+  reportNumber           String?
+  parcelNumber           String
+  codReference           String?
+  deliveryDate           DateTime?               @db.Date
+  amount                 Decimal                 @db.Decimal(19, 4)
+  /// A feloldott kimenő számlaszám(ok); egy csomag több számlát is fizethet.
+  invoiceNumbers         String[]
+  status                 GlsCodLineStatus
+  resolutionSource       GlsCodResolutionSource?
+  errorCode              String?
+  /// Javaslat a kezelőnek (pl. előtag nélküli számlaszám előtaggal); soha
+  /// nem kerül magától az invoiceNumbers közé.
+  suggestedInvoiceNumber String?
+  manualApprovedByUserId String?
+  manualApprovedAt       DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  report           GlsCodReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  manualApprovedBy User?        @relation("GlsCodLineManualApprovedBy", fields: [manualApprovedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([reportId, rowNumber])
+  @@index([parcelNumber])
+  @@index([status])
+}
+
+/// GLS díjszámlájának melléklete ("Számlamelléklet"): csomagonkénti díj,
+/// ügyfél- és utánvét-hivatkozás. A csomagszámon köthető az utánvét-sorhoz.
+model GlsInvoice {
+  id               String    @id @default(cuid())
+  invoiceNumber    String    @unique
+  invoiceDate      DateTime? @db.Date
+  currency         String    @default("HUF") @db.VarChar(3)
+  feeTotal         Decimal   @db.Decimal(19, 4)
+  cardFeeTotal     Decimal   @db.Decimal(19, 4)
+  parcelCount      Int
+  fileName         String
+  sha256           String    @unique
+  content          Bytes
+  uploadedByUserId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  parcels GlsInvoiceParcel[]
+
+  @@index([invoiceDate])
+}
+
+model GlsInvoiceParcel {
+  id              String    @id @default(cuid())
+  invoiceId       String
+  parcelNumber    String
+  clientReference String?
+  codReference    String?
+  pickupDate      DateTime? @db.Date
+  deliveryDate    DateTime? @db.Date
+  fee             Decimal   @db.Decimal(19, 4)
+  codValue        Decimal?  @db.Decimal(19, 4)
+  codFee          Decimal?  @db.Decimal(19, 4)
+  cardFee         Decimal?  @db.Decimal(19, 4)
+
+  invoice GlsInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([invoiceId, parcelNumber])
+  @@index([parcelNumber])
 }
 
 model AuditLog {
