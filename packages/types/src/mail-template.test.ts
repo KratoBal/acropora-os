@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  MAIL_TEMPLATE_EVENTS,
   MAIL_TEMPLATE_VARIABLES,
+  mailTemplateEventVariables,
   renderMailTemplate,
   renderMailTemplateHtml,
   splitTemplateVariables,
@@ -23,10 +25,54 @@ describe("a valtozo-szotar", () => {
    * olyan nevet gepelne be, amit a motor nem ismer.
    */
   it("minden meghirdetett valtozot ISMER a motor", () => {
-    const sablon = MAIL_TEMPLATE_VARIABLES.map((v) => `{{${v.name}}}`).join(
-      " ",
+    const nevek = MAIL_TEMPLATE_VARIABLES.map((v) => v.name);
+    const sablon = nevek.map((n) => `{{${n}}}`).join(" ");
+    assert.deepEqual(unknownTemplateVariables(sablon, nevek), []);
+  });
+
+  /**
+   * 2026-09-29: a `{{kuldo_neve}}` a kozos listan allt (a vizmeres-level
+   * valtozoja), ezert az alairasi sablon mentese elfogadta, holott az az ut nem
+   * adja -- es harom level kimaradt elesen. A mentes azota esemenyenkent mer.
+   */
+  it("egy MASIK esemeny valtozoja ennel az esemenynel ismeretlen", () => {
+    const vizmeres = mailTemplateEventVariables(
+      "AQUARIUM_MEASUREMENT_RESULT",
+    ).map((v) => v.name);
+    const jegyNyitas = mailTemplateEventVariables(
+      "SERVICE_JOB_OPENED_BY_CUSTOMER",
+    ).map((v) => v.name);
+    assert.deepEqual(
+      unknownTemplateVariables("{{akvarium_neve}} {{cimzett}}", jegyNyitas),
+      ["akvarium_neve"],
     );
-    assert.deepEqual(unknownTemplateVariables(sablon), []);
+    assert.deepEqual(
+      unknownTemplateVariables("{{akvarium_neve}} {{cimzett}}", vizmeres),
+      [],
+    );
+  });
+
+  it("minden esemeny valtozoja a kozos listan all, es minden valtozot hasznal esemeny", () => {
+    const kozos = new Set(MAIL_TEMPLATE_VARIABLES.map((v) => v.name));
+    const hasznalt = new Set<string>();
+    for (const esemeny of MAIL_TEMPLATE_EVENTS) {
+      assert.ok(esemeny.variables.length > 0, `ures: ${esemeny.id}`);
+      for (const nev of esemeny.variables) {
+        assert.ok(kozos.has(nev), `${esemeny.id}: ${nev} nincs a listan`);
+        hasznalt.add(nev);
+      }
+      // a leirasos lista ugyanazt a halmazt adja
+      assert.deepEqual(
+        mailTemplateEventVariables(esemeny.id)
+          .map((v) => v.name)
+          .sort(),
+        [...esemeny.variables].sort(),
+      );
+    }
+    assert.deepEqual(
+      [...kozos].filter((n) => !hasznalt.has(n)),
+      [],
+    );
   });
 
   it("minden valtozohoz tartozik emberi leiras", () => {

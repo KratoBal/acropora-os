@@ -36,6 +36,7 @@ export {
   renderMailTemplateHtml,
   splitTemplateVariables,
   unknownTemplateVariables,
+  mailTemplateEventVariables,
 } from "./mail-template.js";
 export type {
   MailTemplateRender,

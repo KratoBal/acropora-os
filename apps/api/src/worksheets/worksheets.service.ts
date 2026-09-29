@@ -1014,6 +1014,7 @@ export class WorksheetsService {
       partnerName: worksheet.customer.displayName,
       signerName: result.signerName,
       signerEmail: result.signerEmail,
+      senderName: actor.displayName,
       actorUserId: actor.id,
     });
 

@@ -520,6 +520,60 @@ describe("a beérkezés jelölése", () => {
     assert.deepEqual(pushInput.userIds, ["kero-1"]);
   });
 
+  /**
+   * 2026-09-29, production: the "Anyag beérkezett" template used
+   * `{{kuldo_neve}}`, the path did not give it, and the mail did not go out.
+   * And an "Új anyagigény:" mail went out with an empty number: a draft
+   * worksheet has none yet, so the linked ticket's number stands in, as in the
+   * signature mail.
+   */
+  it("a level a beerkeztetest rogzito nevet viszi, es szam nelkuli lapnal a hibajegy szamat", async () => {
+    const piszkozatLap = {
+      ...WORKSHEET,
+      number: null,
+      serviceJob: { id: "job-1", jobNumber: "HJ-2026-042" },
+    };
+    const beerkezes = service({
+      worksheets: { detail: async () => piszkozatLap },
+    });
+    await beerkezes.service.receive("mr-1", belsos("beszerzo-1"));
+    const kuldes = service({
+      repo: { detail: async () => DRAFT_ROW },
+      worksheets: { detail: async () => piszkozatLap },
+    });
+    await kuldes.service.submit("mr-1", belsos("kero-1"));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const [, beerkezett] = beerkezes.mail[0] as [
+      string,
+      { worksheetNumber: string | null; receiverName: string },
+    ];
+    assert.deepEqual(
+      [beerkezett.worksheetNumber, beerkezett.receiverName],
+      ["HJ-2026-042", "Beszerző Béla"],
+    );
+    const [, letrehozva] = kuldes.mail[0] as [
+      string,
+      { worksheetNumber: string | null },
+    ];
+    assert.equal(letrehozva.worksheetNumber, "HJ-2026-042");
+  });
+
+  it("szamozott lapnal a lap sajat szama marad", async () => {
+    const { service: s, mail } = service({
+      worksheets: {
+        detail: async () => ({
+          ...WORKSHEET,
+          serviceJob: { id: "job-1", jobNumber: "HJ-2026-042" },
+        }),
+      },
+    });
+    await s.receive("mr-1", belsos("beszerzo-1"));
+    await new Promise((resolve) => setImmediate(resolve));
+    const [, beerkezett] = mail[0] as [string, { worksheetNumber: string }];
+    assert.equal(beerkezett.worksheetNumber, "BIO-2026-001");
+  });
+
   /** A PARJA, LASD A `listForWorksheet` MELLETTI TESZT FEJLECET. */
   it("a beérkezés-jelölő számláló NEM fut a jelölés megadásakor sem", async () => {
     const { service: s } = service({

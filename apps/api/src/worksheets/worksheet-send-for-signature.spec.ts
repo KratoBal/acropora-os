@@ -35,7 +35,12 @@ before(async () => {
   KOD_HASH = await hashPassword(KOD);
 });
 
-const BELSOS = { id: "szerelo-1", customerId: null, supplierId: null };
+const BELSOS = {
+  id: "szerelo-1",
+  displayName: "Szerelő Szilárd",
+  customerId: null,
+  supplierId: null,
+};
 const PARTNER = { id: "kontakt-1", customerId: "customer-1", supplierId: null };
 
 function service(overrides: Record<string, unknown> = {}) {
@@ -144,6 +149,8 @@ describe("a kikuldes alairasra", () => {
       partnerName: "Fővárosi Állat- És Növénykert",
       signerName: "Vevő Vilmos",
       signerEmail: "vilmos@partner.invalid",
+      // the colleague who sends it: {{kuldo_neve}} (2026-09-29)
+      senderName: "Szerelő Szilárd",
       actorUserId: "szerelo-1",
     });
   });
