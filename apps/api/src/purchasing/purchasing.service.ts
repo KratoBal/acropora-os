@@ -98,11 +98,11 @@ export class PurchasingService {
     }
   }
 
-  /// Az MNB weboldala jelenleg bot-védelemmel (F5) blokkolja a programozott
-  /// SOAP-hívásokat (lásd docs/CURRENT_STATUS.md) - ez nem az itt írt kód
-  /// hibája, és jelenleg nem is javítható belőle. Emiatt a hívó felé csak
-  /// egy érthető, a kézi megadásra terelő üzenetet adunk vissza a nyers
-  /// hibakód helyett; a részletek szerveroldalon a kliens logjában maradnak.
+  /// Az MNB külső szolgáltatás, és kieshet (2026-07-23 és 2026-09-29 között
+  /// a https címe minden hívást elutasított, lásd a kliens kommentjét). A
+  /// hívó felé ezért csak egy érthető, a kézi megadásra terelő üzenetet adunk
+  /// vissza a nyers hibakód helyett; a részletek szerveroldalon a kliens
+  /// logjában maradnak.
   private mapExchangeRateError(error: unknown): Error {
     if (error instanceof NotFoundException) return error;
     return new BadGatewayException(
@@ -260,10 +260,9 @@ export class PurchasingService {
       } else if (input.exchangeRate !== undefined) {
         exchangeRate = new Prisma.Decimal(input.exchangeRate);
       } else {
-        // Az MNB automatikus lekérdezése jelenleg megbízhatatlan (lásd
-        // mapExchangeRateError) - a számla rögzítését emiatt nem szabad
-        // hagyni összeomlani, helyette egyértelmű kérést adunk a kézi
-        // árfolyam megadására.
+        // Az MNB kieshet (lásd mapExchangeRateError) - a számla rögzítését
+        // emiatt nem szabad hagyni összeomlani, helyette egyértelmű kérést
+        // adunk a kézi árfolyam megadására.
         try {
           const resolved = await this.mnbRates.getRateForDate(
             currency,
