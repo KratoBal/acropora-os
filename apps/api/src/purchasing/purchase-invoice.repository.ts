@@ -463,9 +463,9 @@ export class PurchaseInvoiceRepository extends Repository {
                         : {}),
                       ...(requestedLocalProduct.supplierSku
                         ? {
-                            // Supplier code -> this variant: the mapping a later
-                            // invoice from this supplier can be matched by
-                            // (#1199 P-026). Nothing reads it for matching yet.
+                            // Supplier code -> this variant: the mapping the
+                            // line suggestion looks up first on a later invoice
+                            // from this supplier (#1199 P-026).
                             supplierProducts: {
                               create: {
                                 supplierId: params.supplierId,

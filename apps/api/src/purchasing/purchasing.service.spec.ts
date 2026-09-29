@@ -44,6 +44,10 @@ function buildService(options: {
   activeBrandIds?: string[];
   /// #1199 P-026: a sor-javaslatok lezaroja.
   lineSuggestions?: { resolveForInvoice(lines: unknown): Promise<void> };
+  /// the (supplier code -> product) learning after the save
+  codeLearning?: {
+    learn(params: unknown): Promise<{ learned: number; conflicts: unknown[] }>;
+  };
 }) {
   const navParsedDataReads: string[] = [];
   let capturedCreateParams: CreatePurchaseInvoiceParams | undefined;
@@ -179,6 +183,7 @@ function buildService(options: {
     mnbRates,
     projects,
     options.lineSuggestions as never,
+    options.codeLearning as never,
   );
   return {
     service,
@@ -1016,5 +1021,97 @@ describe("PurchasingService line suggestion closure", () => {
       "user-1",
     );
     assert.equal(result.detail.id, "invoice-1");
+  });
+});
+
+/** Balázs, 2026-09-29: what a person links by hand is learned for next time. */
+describe("PurchasingService supplier code learning", () => {
+  it("sends only the lines linked to one of our products, with their code", async () => {
+    const asked: unknown[] = [];
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      codeLearning: {
+        learn: async (params) => {
+          asked.push(params);
+          return {
+            learned: 1,
+            conflicts: [
+              {
+                supplierSku: "AI-X",
+                productName: "Valami",
+                reason: "PRODUCT_HAS_OTHER_CODE",
+                otherSupplierSku: "AI-Y",
+              },
+            ],
+          };
+        },
+      },
+    });
+    const result = await service.createInvoice(
+      baseInput({
+        lines: [
+          {
+            variantId: "variant-1",
+            supplierSku: " RS-R22204 ",
+            decisionRunId: "run-3",
+            sourceDescription: "NO3:PO4-X 1 litre",
+            orderedQuantity: 1,
+            actualQuantity: 1,
+            unit: "db",
+            unitNet: 19.92,
+          },
+          {
+            // not linked: nothing to learn from
+            supplierSku: "SC-090012",
+            sourceDescription: "Schenker 1/2 pallet",
+            orderedQuantity: 1,
+            actualQuantity: 1,
+            unit: "db",
+            unitNet: 60,
+          },
+        ],
+      }),
+      "user-1",
+    );
+    assert.equal(asked.length, 1);
+    assert.deepEqual((asked[0] as { lines: unknown }).lines, [
+      {
+        supplierSku: "RS-R22204",
+        variantId: "variant-1",
+        sourceDescription: "NO3:PO4-X 1 litre",
+        unitNet: 19.92,
+        decisionRunId: "run-3",
+      },
+    ]);
+    assert.equal(result.supplierCodesLearned, 1);
+    assert.equal(result.supplierCodeConflicts.length, 1);
+  });
+
+  it("a failed learning never undoes the saved invoice", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      codeLearning: {
+        learn: async () => {
+          throw new Error("adatbazis nem erheto el");
+        },
+      },
+    });
+    const result = await service.createInvoice(
+      baseInput({
+        lines: [
+          {
+            variantId: "variant-1",
+            supplierSku: "RS-R22204",
+            orderedQuantity: 1,
+            actualQuantity: 1,
+            unit: "db",
+            unitNet: 10,
+          },
+        ],
+      }),
+      "user-1",
+    );
+    assert.equal(result.supplierCodesLearned, 0);
+    assert.deepEqual(result.supplierCodeConflicts, []);
   });
 });

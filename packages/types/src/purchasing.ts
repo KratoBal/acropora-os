@@ -106,6 +106,13 @@ export interface CreatePurchaseInvoiceLineInput {
   navLineNumber?: number;
   /** #1199 P-026: a sorhoz kért javaslat audit-futása; mentéskor ez zárul le. */
   decisionRunId?: string;
+  /**
+   * A szállító saját cikkszáma ezen a soron (a beolvasott számlából). Ha a
+   * sort a kezelő köti meglévő termékhez, mentéskor ebből tanul a rendszer:
+   * a (szállító, cikkszám) -> termék kötés, amit a következő számla elsőként
+   * talál meg. Elfogadott Jev-javaslatból NEM tanul (Council-kérdés).
+   */
+  supplierSku?: string;
   orderedQuantity: number;
   actualQuantity: number;
   unit: string;
@@ -155,6 +162,26 @@ export interface PurchaseInvoiceResult {
   localProductCreatedCount: number;
   /** Azonnal létrehozott aktív projektkészlet-foglalások száma. */
   projectReservationCount: number;
+  /** Új (szállító, cikkszám) -> termék kötések ebből a számlából. */
+  supplierCodesLearned: number;
+  /** Amit nem tanult meg, mert ütközne egy meglévő kötéssel. */
+  supplierCodeConflicts: SupplierCodeConflict[];
+}
+
+/**
+ * Egy szállítói cikkszám, amit a mentés NEM kötött a sor termékéhez:
+ *   CODE_ON_OTHER_PRODUCT   ez a kód ennél a szállítónál már egy másik
+ *                           termékhez van kötve (`otherProductName`);
+ *   PRODUCT_HAS_OTHER_CODE  a termékhez ennél a szállítónál már egy másik
+ *                           kód tartozik (`otherSupplierSku`).
+ * Egyik sem ír felül semmit: a kötést ember javítja.
+ */
+export interface SupplierCodeConflict {
+  supplierSku: string;
+  productName: string;
+  reason: "CODE_ON_OTHER_PRODUCT" | "PRODUCT_HAS_OTHER_CODE";
+  otherProductName?: string;
+  otherSupplierSku?: string;
 }
 
 /** Egy már létező termék, amelyre egy új termék adatai ütköznének. */
