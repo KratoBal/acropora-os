@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { Session, WorksheetDetail } from "@acropora/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,6 +44,8 @@ const api = vi.hoisted(() => ({
    * nem allit, az a dupla biztos hibaja.
    */
   signers: vi.fn(),
+  /** The resend button calls it (2026-09-29). */
+  sendForSignature: vi.fn(),
   /**
    * UGYANAZ A VARRAT, MASODSZOR (2026-09-17): a lap mostantol lekeri a
    * CSATOLMANYOKAT is. Ami a hivo hasznal, de a dupla nem ad meg, az a dupla
@@ -347,13 +355,35 @@ describe("WorksheetDetailPage és az aláíró", () => {
    * Enelkul egy "soha ne mutasd az alairast" javitas is zold lenne -- es akkor
    * a belsos rogzites egyaltalan nem lenne elerheto.
    */
-  it("KIKÜLDÖTT lapon az aláírás áll, a kiküldés-blokk nem", async () => {
+  /**
+   * 2026-09-29: the block stays after the first send, as a RESEND. That day
+   * three signature mails did not go out, and there was no way to send them
+   * again.
+   */
+  it("KIKÜLDÖTT lapon az aláírás áll, és a kiküldés újraküldésként", async () => {
     api.detail.mockResolvedValue(awaitingSignature());
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
     await waitFor(() =>
       expect(screen.getByText("Ügyfél döntésének rögzítése")).toBeTruthy(),
     );
     expect(screen.queryByText("Kiküldés aláírásra")).toBeNull();
+    expect(screen.getByText("Újraküldés aláírásra")).toBeTruthy();
+    expect(screen.getByText(/Kiküldve .*: Vevő Vilmos\./)).toBeTruthy();
+  });
+
+  it("az újraküldés ugyanazt a kiküldést hívja, a választott aláíróval", async () => {
+    api.detail.mockResolvedValue(awaitingSignature());
+    api.sendForSignature.mockResolvedValue(awaitingSignature());
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    const valaszto = await screen.findByLabelText("Kinek küldjük ki");
+    await within(valaszto).findByRole("option", { name: "Vevő Vilmos" });
+    fireEvent.change(valaszto, { target: { value: "kontakt-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Újraküldöm" }));
+    await waitFor(() => expect(api.sendForSignature).toHaveBeenCalledTimes(1));
+    expect(api.sendForSignature.mock.lastCall?.slice(1)).toEqual([
+      "worksheet-1",
+      "kontakt-1",
+    ]);
   });
 
   it("a LISTÁRÓL választott aláírónál CSAK az azonosító megy fel", async () => {
@@ -422,7 +452,10 @@ describe("WorksheetDetailPage és az aláíró", () => {
       emptyReason: "Ehhez a partnerhez még nincs hozzákötött munkatárs.",
     });
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
-    await screen.findByText(/nincs hozzákötött munkatárs/);
+    // both signer dropdowns say it: the internal signature and the resend
+    expect(
+      await screen.findAllByText(/nincs hozzákötött munkatárs/),
+    ).toHaveLength(2);
   });
 
   it("a RÖGZÍTETT aláírás mellett a szerver jelzése áll", async () => {

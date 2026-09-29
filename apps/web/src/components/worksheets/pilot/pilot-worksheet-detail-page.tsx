@@ -714,15 +714,26 @@ export function PilotWorksheetDetailPage({
             onSaved={setWorksheet}
           />
 
-          {canManage &&
-          current.status === "AWAITING_SIGNATURE" &&
-          current.sentForSignatureAt === null ? (
+          {/* the block stays after the first send: a mail that did not arrive
+              can be sent again (see `worksheet-detail-page.tsx`) */}
+          {canManage && current.status === "AWAITING_SIGNATURE" ? (
             <PilotCard>
-              <PilotCardHeader title="Kiküldés aláírásra" />
+              <PilotCardHeader
+                title={
+                  current.sentForSignatureAt
+                    ? "Újraküldés aláírásra"
+                    : "Kiküldés aláírásra"
+                }
+              />
               <div className="flex flex-col gap-3 p-5">
                 <p className="text-xs text-pilot-grey-400">
-                  A lap ki van állítva, de még nem küldtük ki. Amíg nem megy ki,
-                  az ügyfél a partnerportálon sem tudja aláírni.
+                  {current.sentForSignatureAt
+                    ? `Kiküldve ${formatDateTime(current.sentForSignatureAt)}${
+                        current.sentForSignatureToName
+                          ? `: ${current.sentForSignatureToName}`
+                          : ""
+                      }. Ha a levél nem érkezett meg, küldd ki újra: új levél megy, az aláírás állapota nem változik.`
+                    : "A lap ki van állítva, de még nem küldtük ki. Amíg nem megy ki, az ügyfél a partnerportálon sem tudja aláírni."}
                 </p>
                 <PilotFormField label="Kinek küldjük ki">
                   <PilotSelect
@@ -756,7 +767,9 @@ export function PilotWorksheetDetailPage({
                     )
                   }
                 >
-                  Elküldöm aláírásra
+                  {current.sentForSignatureAt
+                    ? "Újraküldöm"
+                    : "Elküldöm aláírásra"}
                 </PilotButton>
               </div>
             </PilotCard>
