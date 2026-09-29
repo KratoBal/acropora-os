@@ -53,9 +53,8 @@ export class GlsSettlementService {
     fileName: string,
     actorUserId: string,
   ): Promise<GlsDocumentUploadResult> {
-    let document: ReturnType<typeof readGlsDocument>;
     try {
-      document = readGlsDocument(buffer, fileName);
+      return await this.ingest(buffer, fileName, actorUserId);
     } catch (error) {
       if (error instanceof GlsDocumentError)
         throw new BadRequestException(
@@ -64,6 +63,18 @@ export class GlsSettlementService {
         );
       throw error;
     }
+  }
+
+  /**
+   * The same, for the Gmail pull: no person behind it (`actorUserId` null),
+   * and a file the readers refuse comes back as the reader's own error.
+   */
+  async ingest(
+    buffer: Buffer,
+    fileName: string,
+    actorUserId: string | null,
+  ): Promise<GlsDocumentUploadResult> {
+    const document = readGlsDocument(buffer, fileName);
     const source = {
       fileName,
       sha256: createHash("sha256").update(buffer).digest("hex"),

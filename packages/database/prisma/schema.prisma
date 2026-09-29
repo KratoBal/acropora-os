@@ -149,6 +149,12 @@ enum GlsCodResolutionSource {
   MANUAL
 }
 
+enum GlsSyncRunStatus {
+  RUNNING
+  APPLIED
+  FAILED
+}
+
 /// A NAV-tól letöltött belföldi beszállítói (bejövő) számla állapota a
 /// bevételezési folyamatban: NEW - csak a digest ismert; DATA_FETCHED - a
 /// teljes számla-XML lekérve és feldolgozva, bevételezhető; RECEIVED - már
@@ -5769,6 +5775,37 @@ model GlsInvoiceParcel {
 
   @@unique([invoiceId, parcelNumber])
   @@index([parcelNumber])
+}
+
+/// Egy GLS-levél, amit a Gmail-behúzás már feldolgozott: többet nem töltjük
+/// le. Ha a mellékletei közül valamelyik nem volt olvasható, az `errorCode`
+/// mondja meg; a levél akkor sem próbálkozik újra óránként.
+model GlsGmailMessage {
+  id             String    @id @default(cuid())
+  gmailMessageId String    @unique
+  receivedAt     DateTime?
+  subject        String?
+  documentCount  Int
+  errorCode      String?
+  createdAt      DateTime  @default(now())
+}
+
+/// A GLS Gmail-behúzás egy futása. Az `activeKey` egyedi, így egyszerre egy
+/// fut; egy elakadt futás 30 perc után feloldódik.
+model GlsSyncRun {
+  id             String           @id @default(cuid())
+  activeKey      String?          @unique
+  status         GlsSyncRunStatus @default(RUNNING)
+  startedAt      DateTime         @default(now())
+  completedAt    DateTime?
+  messagesSeen   Int              @default(0)
+  documentsRead  Int              @default(0)
+  duplicateCount Int              @default(0)
+  failedCount    Int              @default(0)
+  errorCode      String?
+  updatedAt      DateTime         @updatedAt
+
+  @@index([startedAt])
 }
 
 model AuditLog {

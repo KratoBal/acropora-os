@@ -20,6 +20,8 @@ import {
   type GlsCodReportListResponse,
   type GlsCodReportStatus,
   type GlsInvoiceSummary,
+  type GlsSyncState,
+  type GlsSyncStatus,
 } from "@acropora/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -72,6 +74,18 @@ function lineResolution(line: GlsCodReportLine) {
   );
 }
 
+/**
+ * Why the Gmail pull does not run, said on the page: the Foxpost pull was off
+ * for seven weeks and nothing showed it (production, 2026-09-29).
+ */
+const SYNC_OFF: Record<Exclude<GlsSyncState, "ENABLED">, string> = {
+  DISABLED_NOT_SET: "a kapcsoló (GMAIL_GLS_SYNC_ENABLED) nincs beállítva",
+  DISABLED_OFF: "a kapcsoló (GMAIL_GLS_SYNC_ENABLED) értéke false",
+  DISABLED_UNRECOGNISED:
+    "a kapcsoló (GMAIL_GLS_SYNC_ENABLED) értéke se nem true, se nem false",
+  NO_KEY: "be van kapcsolva, de nincs Gmail-kulcs",
+};
+
 function drafts(detail: GlsCodReportDetail): Record<string, string> {
   return Object.fromEntries(
     detail.lines.map((line) => [line.id, line.suggestedInvoiceNumber ?? ""]),
@@ -89,6 +103,7 @@ export function GlsSettlementsPage() {
   );
   const [data, setData] = useState<GlsCodReportListResponse | null>(null);
   const [invoices, setInvoices] = useState<GlsInvoiceSummary[]>([]);
+  const [syncStatus, setSyncStatus] = useState<GlsSyncStatus | null>(null);
   const [selected, setSelected] = useState<GlsCodReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -108,12 +123,14 @@ export function GlsSettlementsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [reports, glsInvoices] = await Promise.all([
+      const [reports, glsInvoices, status] = await Promise.all([
         glsSettlementsApi.list(token),
         glsSettlementsApi.invoices(token),
+        glsSettlementsApi.syncStatus(token),
       ]);
       setData(reports);
       setInvoices(glsInvoices);
+      setSyncStatus(status);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -168,6 +185,15 @@ export function GlsSettlementsPage() {
       if (fileInput.current) fileInput.current.value = "";
       await load();
     }, "A feltöltés nem sikerült.");
+
+  const syncNow = () =>
+    run(async () => {
+      const result = await glsSettlementsApi.syncNow(token);
+      setNotice(
+        `Gmail ellenőrzés kész: ${result.messagesSeen} GLS-levél, ${result.documentsRead} új dokumentum, ${result.duplicateCount} már bent volt, ${result.failedCount} nem olvasható.`,
+      );
+      await load();
+    }, "A Gmail ellenőrzése nem sikerült.");
 
   const openDetail = async (id: string) => {
     setError(null);
@@ -251,6 +277,15 @@ export function GlsSettlementsPage() {
         actions={
           canManage ? (
             <>
+              {syncStatus?.canRunNow ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => void syncNow()}
+                  disabled={working}
+                >
+                  Gmail ellenőrzése most
+                </Button>
+              ) : null}
               <input
                 ref={fileInput}
                 type="file"
@@ -271,6 +306,25 @@ export function GlsSettlementsPage() {
         }
       />
 
+      {syncStatus && syncStatus.state !== "ENABLED" ? (
+        <Alert
+          variant="info"
+          title="Az automatikus Gmail-behúzás ki van kapcsolva"
+          description={`Ok: ${SYNC_OFF[syncStatus.state]}. A GLS-fájlokat addig kézzel töltsd fel.`}
+        />
+      ) : null}
+      {syncStatus?.state === "ENABLED" ? (
+        <p className="text-sm text-dusk-600">
+          Automatikus Gmail-behúzás: {syncStatus.intervalMinutes} percenként.{" "}
+          {syncStatus.lastRun
+            ? `Utolsó futás: ${new Date(syncStatus.lastRun.startedAt).toLocaleString("hu-HU")}, ${
+                syncStatus.lastRun.status === "FAILED"
+                  ? `sikertelen (${syncStatus.lastRun.errorCode ?? "ismeretlen hiba"})`
+                  : `${syncStatus.lastRun.documentsRead} új dokumentum`
+              }.`
+            : "Még nem futott."}
+        </p>
+      ) : null}
       {notice ? (
         <Alert variant="info" title="GLS" description={notice} />
       ) : null}

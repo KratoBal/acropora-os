@@ -17,6 +17,8 @@ const api = vi.hoisted(() => ({
   approveLine: vi.fn(),
   invoices: vi.fn(),
   downloadReport: vi.fn(),
+  syncStatus: vi.fn(),
+  syncNow: vi.fn(),
 }));
 
 const auth = vi.hoisted(() => ({
@@ -117,6 +119,12 @@ beforeEach(() => {
     ],
   });
   api.upload.mockReset();
+  api.syncStatus.mockReset().mockResolvedValue({
+    state: "NO_KEY",
+    canRunNow: false,
+    intervalMinutes: 60,
+  });
+  api.syncNow.mockReset();
 });
 
 describe("GlsSettlementsPage", () => {
@@ -200,5 +208,66 @@ describe("GlsSettlementsPage", () => {
     await waitFor(() =>
       expect(api.downloadReport).toHaveBeenCalledWith("token-OWNER", 2026, 8),
     );
+  });
+
+  it("says on the page that the Gmail pull is off, and why", async () => {
+    api.syncStatus.mockResolvedValue({
+      state: "DISABLED_UNRECOGNISED",
+      canRunNow: true,
+      intervalMinutes: 60,
+    });
+    render(createElement(GlsSettlementsPage));
+    expect(
+      await screen.findByText(
+        "Ok: a kapcsoló (GMAIL_GLS_SYNC_ENABLED) értéke se nem true, se nem false. A GLS-fájlokat addig kézzel töltsd fel.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("offers no pull by hand without a Gmail key", async () => {
+    render(createElement(GlsSettlementsPage));
+    await screen.findByText(
+      "Ok: be van kapcsolva, de nincs Gmail-kulcs. A GLS-fájlokat addig kézzel töltsd fel.",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Gmail ellenőrzése most" }),
+    ).toBeNull();
+  });
+
+  it("shows the last run when the pull is on, and pulls by hand", async () => {
+    api.syncStatus.mockResolvedValue({
+      state: "ENABLED",
+      canRunNow: true,
+      intervalMinutes: 60,
+      lastRun: {
+        status: "FAILED",
+        startedAt: "2026-09-29T09:00:00.000Z",
+        messagesSeen: 0,
+        documentsRead: 0,
+        duplicateCount: 0,
+        failedCount: 0,
+        errorCode: "GLS_GMAIL_AUTH_FAILED",
+      },
+    });
+    api.syncNow.mockResolvedValue({
+      status: "APPLIED",
+      startedAt: "2026-09-29T10:00:00.000Z",
+      messagesSeen: 3,
+      documentsRead: 1,
+      duplicateCount: 1,
+      failedCount: 1,
+    });
+    render(createElement(GlsSettlementsPage));
+    expect(
+      await screen.findByText(/sikertelen \(GLS_GMAIL_AUTH_FAILED\)/),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Gmail ellenőrzése most" }),
+    );
+    expect(
+      await screen.findByText(
+        "Gmail ellenőrzés kész: 3 GLS-levél, 1 új dokumentum, 1 már bent volt, 1 nem olvasható.",
+      ),
+    ).toBeTruthy();
   });
 });
