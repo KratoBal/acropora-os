@@ -34,6 +34,12 @@ export interface NavIncomingInvoiceLine {
   unitPrice?: string;
   lineNetAmount: string;
   vatRatePercent?: string;
+  /**
+   * Díjsor (szállítás, fuvar, csomagolás): a számlán marad, de termékhez nem
+   * kötjük és javaslatot sem kér -- ugyanaz a szabály, mint a fájlból
+   * beolvasott szállítói számlán (`isChargeDescription`).
+   */
+  isCharge: boolean;
 }
 
 export interface NavIncomingInvoiceDetail extends NavIncomingInvoiceSummary {

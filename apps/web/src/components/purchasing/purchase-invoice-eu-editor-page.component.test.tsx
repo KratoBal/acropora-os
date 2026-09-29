@@ -118,6 +118,7 @@ const navDetail: NavIncomingInvoiceDetail = {
       unitPrice: "10000",
       lineNetAmount: "10000",
       vatRatePercent: "27",
+      isCharge: false,
     },
   ],
 };
@@ -267,6 +268,51 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
       navLineNumber: 7,
       sourceDescription: "Teszt termék",
     });
+  });
+
+  it("a NAV-ból jött díjsor nem kér javaslatot, a termék-sor igen", async () => {
+    // Balázs, 2026-09-29 11:49 UTC: a díjsor-szabály minden szállítóra; a
+    // NAV-ból jövő "Szállítási díj" eddig termék-javaslatot kért.
+    // BEKAPCSOLT javaslat kell: az alapértelmezett `enabled: false` válasz után
+    // a szerkesztő több sort nem kérdez, és a teszt a díjsor nélkül is zöld lenne.
+    purchasingApiMock.suggestLine.mockResolvedValue({
+      enabled: true,
+      decisionRunId: null,
+      suggestion: null,
+      conflict: false,
+      blocked: false,
+    });
+    navApi.detail.mockResolvedValue({
+      ...navDetail,
+      lines: [
+        navDetail.lines[0]!,
+        {
+          ...navDetail.lines[0]!,
+          lineNumber: 2,
+          description: "Szállítási díj",
+          lineNetAmount: "1500",
+          unitPrice: "1500",
+          isCharge: true,
+        },
+      ],
+    });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    fireEvent.click(await screen.findByText(supplier.name));
+
+    await waitFor(() =>
+      expect(purchasingApiMock.suggestLine).toHaveBeenCalledWith(
+        "token-owner",
+        expect.objectContaining({ description: "Teszt termék" }),
+      ),
+    );
+    // A szerkesztő a sorokat EGYMÁS UTÁN kérdezi: az első hívás után a
+    // következő még úton lehet. Hagyjuk lefutni, és csak utána számoljunk --
+    // különben a díjsor kérése a számolás után érkezne, és a teszt zöld maradna.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const descriptions = purchasingApiMock.suggestLine.mock.calls.map(
+      ([, request]) => (request as { description: string }).description,
+    );
+    expect(descriptions).toEqual(["Teszt termék"]);
   });
 
   it("a NAV-sorból új helyi terméket készít és a számlával együtt küldi", async () => {

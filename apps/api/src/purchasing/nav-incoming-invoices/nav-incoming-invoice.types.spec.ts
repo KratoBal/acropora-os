@@ -66,3 +66,45 @@ describe("toNavIncomingInvoiceDetail: a tétel sorszáma", () => {
     assert.equal(detail.lines[0]?.lineNumber, null);
   });
 });
+
+/**
+ * A DÍJSOR A NAV-BÓL JÖVŐ SORON IS DÍJSOR (Balázs, 2026-09-29 11:49 UTC: a
+ * kialakított szabály minden szállítóra). A fájlból beolvasott számlákon a
+ * közös `isChargeDescription` eddig is jelölte a szállítási és fuvar sorokat;
+ * a NAV-ból jövőkön semmi, ezért ott egy "Szállítási díj" termék-javaslatot
+ * kért.
+ *
+ * A NEGATÍV KONTROLL termék, amelyben a szó csak RÉSZ: egy túl tág szabály
+ * egy valódi termékről venné el a javaslatot, és az csendes hiba lenne.
+ */
+const described = (description: string) => ({ ...line(1), description });
+
+describe("toNavIncomingInvoiceDetail: a díjsor", () => {
+  it("a Szállítási díj és a Fuvar sor díjsor", () => {
+    const detail = toNavIncomingInvoiceDetail(
+      rowWithLines([
+        described("Szállítási díj"),
+        described("Fuvar"),
+        described("Fuvardíj Budapest"),
+      ]),
+    );
+    assert.deepEqual(
+      detail.lines.map((l) => l.isCharge),
+      [true, true, true],
+    );
+  });
+
+  it("a termék, amelyben a szó csak rész, NEM díjsor (negatív kontroll)", () => {
+    const detail = toNavIncomingInvoiceDetail(
+      rowWithLines([
+        described("Transzportzsák halszállításhoz 60x30 cm"),
+        described("Portobello élőkő 1 kg"),
+        described("Só"),
+      ]),
+    );
+    assert.deepEqual(
+      detail.lines.map((l) => l.isCharge),
+      [false, false, false],
+    );
+  });
+});
