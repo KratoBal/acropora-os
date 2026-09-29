@@ -94,3 +94,33 @@ export interface GlsManualApprovalInput {
   invoiceNumber: string;
   expectedUpdatedAt: string;
 }
+
+/**
+ * A Gmail-behúzás állapota, ahogy a szerver maga látja: a kapcsoló és a kulcs
+ * értelmezése ugyanabból a függvényből jön, mint az induló naplósor.
+ */
+export type GlsSyncState =
+  | "ENABLED"
+  | "DISABLED_NOT_SET"
+  | "DISABLED_OFF"
+  | "DISABLED_UNRECOGNISED"
+  | "NO_KEY";
+
+export interface GlsSyncRunSummary {
+  status: "RUNNING" | "APPLIED" | "FAILED";
+  startedAt: string;
+  completedAt?: string;
+  messagesSeen: number;
+  documentsRead: number;
+  duplicateCount: number;
+  failedCount: number;
+  errorCode?: string;
+}
+
+export interface GlsSyncStatus {
+  state: GlsSyncState;
+  /** Van-e olvasható Gmail-kulcs (a kézi "ellenőrizd most" ettől függ). */
+  canRunNow: boolean;
+  intervalMinutes: number;
+  lastRun?: GlsSyncRunSummary;
+}

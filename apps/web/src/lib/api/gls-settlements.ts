@@ -4,6 +4,8 @@ import type {
   GlsDocumentUploadResult,
   GlsInvoiceSummary,
   GlsManualApprovalInput,
+  GlsSyncRunSummary,
+  GlsSyncStatus,
 } from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
@@ -83,6 +85,14 @@ export const glsSettlementsApi = {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  },
+  syncStatus(token: string) {
+    return apiRequest<GlsSyncStatus>(`/integrations/gls/sync`, token);
+  },
+  syncNow(token: string) {
+    return apiRequest<GlsSyncRunSummary>(`/integrations/gls/sync`, token, {
+      method: "POST",
+    });
   },
   invoices(token: string) {
     return apiRequest<GlsInvoiceSummary[]>(`/integrations/gls/invoices`, token);

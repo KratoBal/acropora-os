@@ -19,6 +19,7 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { ApproveGlsCodLineDto } from "./dto/approve-gls-cod-line.dto.js";
 import { GlsCodReportListQueryDto } from "./dto/gls-cod-report-list-query.dto.js";
+import { GlsGmailSyncService } from "./gls-gmail-sync.service.js";
 import { GlsSettlementService } from "./gls-settlement.service.js";
 
 const XLSX_MIME =
@@ -29,7 +30,10 @@ const GLS_FILE_MAX_BYTES = 15 * 1024 * 1024;
 
 @Controller("integrations/gls")
 export class GlsSettlementController {
-  constructor(private readonly settlements: GlsSettlementService) {}
+  constructor(
+    private readonly settlements: GlsSettlementService,
+    private readonly gmailSync: GlsGmailSyncService,
+  ) {}
 
   /** A GLS COD report or invoice attachment, uploaded by hand. */
   @Post("documents")
@@ -92,6 +96,20 @@ export class GlsSettlementController {
       disposition: `attachment; filename="${filename}"`,
       length: buffer.length,
     });
+  }
+
+  /** Whether the Gmail pull runs, and why not; and its last run. */
+  @Get("sync")
+  @RequirePermissions(PERMISSIONS.FINANCE_VIEW)
+  syncStatus() {
+    return this.gmailSync.status();
+  }
+
+  /** One Gmail pull now, whatever the switch says, if there is a key. */
+  @Post("sync")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  syncNow() {
+    return this.gmailSync.sync();
   }
 
   @Get("invoices")

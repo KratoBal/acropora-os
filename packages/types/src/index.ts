@@ -570,6 +570,9 @@ export type {
   GlsDocumentUploadResult,
   GlsInvoiceSummary,
   GlsManualApprovalInput,
+  GlsSyncRunSummary,
+  GlsSyncState,
+  GlsSyncStatus,
 } from "./integrations/gls-settlement.js";
 export {
   AI_ACCURACY_RATINGS,
