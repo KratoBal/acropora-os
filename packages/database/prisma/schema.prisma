@@ -899,6 +899,11 @@ model Product {
   /// Alapertelmezese HAMIS: egy termek soha ne valjon ertekesithetove
   /// azzal, hogy letrejott.
   webshopSellable  Boolean                  @default(false)
+  /// A MEDUSA-VETITES KIHAGYJA (Balazs, 2026-09-28 20:53 UTC): a beszallitoi
+  /// szamlasorbol felvett uj termek csak akkor megy a webshopba (ott is csak
+  /// piszkozatkent), ha a felvevo kifejezetten kerte. Alapertek hamis, tehat a
+  /// meglevo termekek vetitese nem valtozik.
+  webshopExcluded  Boolean                  @default(false)
   /// Acropora-owned manual decision. UNAS does not calculate or overwrite it.
   advisorKind      ProductAdvisorKind?
   archivedAt       DateTime?
