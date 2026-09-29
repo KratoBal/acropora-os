@@ -210,4 +210,52 @@ describe("FoxpostSettlementsPage", () => {
       await screen.findByText(/A tétel jóváhagyva, az elszámolás elkészült/),
     ).toBeInTheDocument();
   });
+
+  it("prefills the server's prefixed suggestion, and says when we have no such invoice", async () => {
+    const base = {
+      ...settlements.items[0]!,
+      gmailMessageId: "gmail-message-1",
+      xlsxFileName: "FOXPOST_W0166840_26H27.xlsx",
+      pdfFileName: "FX01010000.pdf",
+      status: "NEEDS_REVIEW" as const,
+      matchedLineCount: 0,
+      unresolvedLineCount: 2,
+    };
+    const open = {
+      sourceRowNumber: 14,
+      transactionDate: "2026-07-09T00:00:00.000Z",
+      collectedAmount: "4000",
+      status: "ORDER_NOT_FOUND" as const,
+      errorCode: "FOXPOST_UNAS_ORDER_NOT_FOUND",
+      updatedAt: "2026-08-15T08:00:00.000Z",
+    };
+    api.detail.mockResolvedValue({
+      ...base,
+      lines: [
+        {
+          ...open,
+          id: "line-1",
+          referenceCode: "2026/00011",
+          suggestedInvoiceNumber: "ACRB-2026/00011",
+        },
+        {
+          ...open,
+          id: "line-2",
+          referenceCode: "2026/00033",
+          referenceInvoiceMissing: true,
+        },
+      ],
+    });
+    render(createElement(FoxpostSettlementsPage));
+    fireEvent.click(await screen.findByText("26H31"));
+    expect(
+      await screen.findByRole("textbox", { name: "Számlaszám – 2026/00011" }),
+    ).toHaveValue("ACRB-2026/00011");
+    expect(
+      screen.getByRole("textbox", { name: "Számlaszám – 2026/00033" }),
+    ).toHaveValue("2026/00033");
+    expect(
+      screen.getAllByText(/Ilyen kimenő számla nálunk nincs/),
+    ).toHaveLength(1);
+  });
 });

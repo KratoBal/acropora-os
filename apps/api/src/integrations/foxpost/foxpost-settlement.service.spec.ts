@@ -62,6 +62,7 @@ describe("FoxpostSettlementService", () => {
       currency: "HUF",
     };
     const repository = {
+      outboundInvoicesByNumber: async () => [],
       createRun: async () => "run-1",
       hasMessage: async () => false,
       createPending: async () => "settlement-1",
@@ -194,6 +195,7 @@ describe("FoxpostSettlementService", () => {
       lines: [],
     };
     const repository = {
+      outboundInvoicesByNumber: async () => [],
       approveLine: async (input: Record<string, unknown>) => {
         approvalInput = input;
         return { year: 2026, month: 8 };
@@ -293,6 +295,7 @@ describe("FoxpostSettlementService", () => {
       currency: "HUF",
     };
     const repository = {
+      outboundInvoicesByNumber: async () => [],
       storedSource: async () => ({
         xlsx: Buffer.from("xlsx"),
         pdf: Buffer.from("pdf"),
@@ -419,5 +422,105 @@ describe("FoxpostSettlementService", () => {
     assert.equal(result.skippedCount, 1);
     assert.equal(result.failedCount, 0);
     assert.equal(result.createdCount, 0);
+  });
+
+  describe("references that are invoice numbers", () => {
+    function service(
+      existing: string[],
+      unasKeys: string[] = [],
+      detailLines: Array<{ referenceCode: string; status: string }> = [],
+    ) {
+      const repository = {
+        resolveLocal: async () => [],
+        outboundInvoicesByNumber: async (numbers: readonly string[]) =>
+          numbers
+            .filter((number) => existing.includes(number))
+            .map((number) => ({
+              id: `invoice-${number}`,
+              invoiceNumber: number,
+              salesOrderId: null,
+            })),
+        detail: async () => ({
+          id: "settlement-1",
+          lines: detailLines.map((line, index) => ({
+            id: `line-${index}`,
+            ...line,
+          })),
+        }),
+      } as unknown as FoxpostSettlementRepository;
+      return new FoxpostSettlementService(
+        {} as FoxpostGmailClient,
+        {} as FoxpostSettlementParser,
+        repository,
+        {} as FoxpostMonthlyReportXlsx,
+        { getToken: async () => "unas-token" } as UnasAuthService,
+        {
+          getOrderByKey: async (_token: string, key: string) => {
+            unasKeys.push(key);
+            return null;
+          },
+        } as unknown as UnasApiClient,
+      );
+    }
+    const line = (referenceCode: string) => ({
+      sourceRowNumber: 1,
+      referenceCode,
+      transactionDate: new Date("2026-08-20T00:00:00.000Z"),
+      recipientName: null,
+      parcelBarcode: null,
+      collectedAmount: 1_000,
+    });
+
+    it("matches a reference that is an outgoing invoice number we have, without a webshop call", async () => {
+      const asked: string[] = [];
+      const lines = await (
+        service(["ACRW-2026/00469"], asked) as unknown as {
+          resolveLines(
+            lines: unknown[],
+          ): Promise<Array<Record<string, unknown>>>;
+        }
+      ).resolveLines([line("ACRW-2026/00469"), line("ACRW-2026/00999")]);
+      assert.deepEqual(
+        lines.map((row) => [row.status, row.invoiceNumber, row.invoiceId]),
+        [
+          ["MATCHED", "ACRW-2026/00469", "invoice-ACRW-2026/00469"],
+          ["ORDER_NOT_FOUND", null, null],
+        ],
+      );
+      // only the number we do not have went on to the webshop lookup
+      assert.deepEqual(asked, ["ACRW-2026/00999"]);
+    });
+
+    it("suggests a prefix only when exactly one series has the number, and says when none does", async () => {
+      const detail = await service(
+        ["ACRB-2026/00011", "ACRW-2026/00022", "ACRB-2026/00022"],
+        [],
+        [
+          { referenceCode: "2026/00011", status: "ORDER_NOT_FOUND" },
+          { referenceCode: "2026/00022", status: "ORDER_NOT_FOUND" },
+          { referenceCode: "2026/00033", status: "ORDER_NOT_FOUND" },
+          { referenceCode: "ACRW-2026/00044", status: "ORDER_NOT_FOUND" },
+          { referenceCode: "47679-174059", status: "ORDER_NOT_FOUND" },
+        ],
+      ).detail("settlement-1");
+      assert.deepEqual(
+        detail.lines.map((row) => [
+          row.referenceCode,
+          row.suggestedInvoiceNumber,
+          row.referenceInvoiceMissing,
+        ]),
+        [
+          // exactly one series has it: suggested
+          ["2026/00011", "ACRB-2026/00011", undefined],
+          // both series have it: no guess, and not "missing" either
+          ["2026/00022", undefined, undefined],
+          // measured on production: neither series has it
+          ["2026/00033", undefined, true],
+          ["ACRW-2026/00044", undefined, true],
+          // an order key is not an invoice number: no hint
+          ["47679-174059", undefined, undefined],
+        ],
+      );
+    });
   });
 });

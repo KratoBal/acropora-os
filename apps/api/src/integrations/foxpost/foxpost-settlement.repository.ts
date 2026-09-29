@@ -407,6 +407,31 @@ export class FoxpostSettlementRepository extends Repository {
     });
   }
 
+  /**
+   * Outgoing invoices by their number, from the local mirror. A Foxpost
+   * reference is sometimes the invoice number itself (measured on production
+   * 2026-09-29: 2 of the 4 unresolved lines).
+   */
+  async outboundInvoicesByNumber(
+    numbers: readonly string[],
+  ): Promise<
+    Array<{ id: string; invoiceNumber: string; salesOrderId: string | null }>
+  > {
+    if (!numbers.length) return [];
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        direction: "OUTBOUND",
+        invoiceNumber: { in: [...new Set(numbers)] },
+      },
+      select: { id: true, invoiceNumber: true, salesOrderId: true },
+    });
+    return invoices.map((invoice) => ({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber!,
+      salesOrderId: invoice.salesOrderId,
+    }));
+  }
+
   async resolveLocal(
     referenceCodes: readonly string[],
   ): Promise<LocalOrderResolution[]> {

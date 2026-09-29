@@ -62,8 +62,16 @@ function lineResolution(line: FoxpostSettlementLine) {
   return lineStatus(line.status);
 }
 
+/**
+ * The field's starting value. The server suggests an invoice number only
+ * when it exists here (a bare "2026/00123" gets its prefix only when exactly
+ * one series has it); otherwise the raw reference stays, and the line says
+ * that we have no such invoice, so a one-click approval never writes a number
+ * we do not have without a word.
+ */
 function suggestedInvoiceNumber(line: FoxpostSettlementLine): string {
   if (line.invoiceNumber) return line.invoiceNumber;
+  if (line.suggestedInvoiceNumber) return line.suggestedInvoiceNumber;
   return line.referenceCode.includes("/") ? line.referenceCode : "";
 }
 
@@ -489,7 +497,7 @@ export function FoxpostSettlementsPage() {
                       </td>
                       <td className="py-2 pr-3">
                         {line.status !== "MATCHED" && canManage ? (
-                          <div className="flex min-w-[290px] items-center gap-2">
+                          <div className="flex min-w-[290px] flex-wrap items-center gap-2">
                             <input
                               aria-label={`Számlaszám – ${line.referenceCode}`}
                               className="min-w-0 flex-1 rounded-md border border-dusk-300 bg-white px-2 py-1.5 font-mono text-xs text-dusk-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
@@ -513,6 +521,12 @@ export function FoxpostSettlementsPage() {
                             >
                               Jóváhagyás
                             </Button>
+                            {line.referenceInvoiceMissing ? (
+                              <p className="w-full text-xs text-amber-700">
+                                Ilyen kimenő számla nálunk nincs: ellenőrizd a
+                                számlaszámot jóváhagyás előtt.
+                              </p>
+                            ) : null}
                           </div>
                         ) : (
                           <div>

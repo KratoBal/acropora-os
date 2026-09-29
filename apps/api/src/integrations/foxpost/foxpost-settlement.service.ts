@@ -32,6 +32,13 @@ function sha256(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+/** An outgoing invoice number as the shop writes it: "ACRW-2026/00469". */
+const INVOICE_NUMBER = /^[A-Z]{3,6}-\d{4}\/\d{5}$/;
+/** The same without its series prefix: "2026/00123". */
+const BARE_INVOICE_NUMBER = /^\d{4}\/\d{5}$/;
+/** The series a bare number may belong to; none is guessed. */
+const INVOICE_SERIES = ["ACRW", "ACRB"] as const;
+
 function errorCode(error: unknown, fallback: string): string {
   if (
     error instanceof Error &&
@@ -61,8 +68,48 @@ export class FoxpostSettlementService {
     return this.repository.list(query);
   }
 
-  detail(id: string): Promise<FoxpostSettlementDetail> {
-    return this.repository.detail(id);
+  /**
+   * The settlement, with a hint on each open line whose reference looks like
+   * an invoice number. Measured on production 2026-09-29: of the two bare
+   * numbers ("2026/00123"), neither exists with an ACRW- or an ACRB- prefix,
+   * so a prefix is suggested only when EXACTLY ONE such invoice exists here;
+   * otherwise the line says that we have no such invoice.
+   */
+  async detail(id: string): Promise<FoxpostSettlementDetail> {
+    const detail = await this.repository.detail(id);
+    const open = detail.lines.filter((line) => line.status !== "MATCHED");
+    const candidates = open.flatMap((line) =>
+      INVOICE_NUMBER.test(line.referenceCode)
+        ? [line.referenceCode]
+        : BARE_INVOICE_NUMBER.test(line.referenceCode)
+          ? INVOICE_SERIES.map((series) => `${series}-${line.referenceCode}`)
+          : [],
+    );
+    const existing = new Set(
+      (await this.repository.outboundInvoicesByNumber(candidates)).map(
+        (invoice) => invoice.invoiceNumber,
+      ),
+    );
+    return {
+      ...detail,
+      lines: detail.lines.map((line) => {
+        if (line.status === "MATCHED") return line;
+        if (INVOICE_NUMBER.test(line.referenceCode))
+          return existing.has(line.referenceCode)
+            ? { ...line, suggestedInvoiceNumber: line.referenceCode }
+            : { ...line, referenceInvoiceMissing: true };
+        if (!BARE_INVOICE_NUMBER.test(line.referenceCode)) return line;
+        const found = INVOICE_SERIES.map(
+          (series) => `${series}-${line.referenceCode}`,
+        ).filter((number) => existing.has(number));
+        if (found.length === 1)
+          return { ...line, suggestedInvoiceNumber: found[0] };
+        // two series have it: no guess, and no "we have none" either
+        return found.length === 0
+          ? { ...line, referenceInvoiceMissing: true }
+          : line;
+      }),
+    };
   }
 
   listReports() {
@@ -155,7 +202,7 @@ export class FoxpostSettlementService {
     try {
       const result = await this.process(id, source.xlsx, source.pdf);
       return {
-        settlement: await this.repository.detail(id),
+        settlement: await this.detail(id),
         reportRegenerated: result.reportRegenerated,
       };
     } catch (error) {
@@ -188,7 +235,7 @@ export class FoxpostSettlementService {
     });
     await this.rebuildReport(period.year, period.month);
     return {
-      settlement: await this.repository.detail(settlementId),
+      settlement: await this.detail(settlementId),
       reportRegenerated: true,
     };
   }
@@ -251,8 +298,23 @@ export class FoxpostSettlementService {
     const localByReference = new Map(
       localRows.map((row) => [row.referenceCode, row]),
     );
+    // a reference that is itself an outgoing invoice number, found locally:
+    // no webshop call for it
+    const byInvoiceNumber = new Map(
+      (
+        await this.repository.outboundInvoicesByNumber(
+          uniqueReferences.filter(
+            (reference) =>
+              INVOICE_NUMBER.test(reference) &&
+              !localByReference.get(reference)?.invoiceNumber,
+          ),
+        )
+      ).map((invoice) => [invoice.invoiceNumber, invoice]),
+    );
     const needsUnas = uniqueReferences.filter(
-      (reference) => !localByReference.get(reference)?.invoiceNumber,
+      (reference) =>
+        !localByReference.get(reference)?.invoiceNumber &&
+        !byInvoiceNumber.has(reference),
     );
     const remoteByReference = new Map<
       string,
@@ -301,6 +363,17 @@ export class FoxpostSettlementService {
       const local = localByReference.get(line.referenceCode);
       if (local?.invoiceNumber)
         return this.resolvedLine(line, local, local.invoiceNumber, "LOCAL");
+      const invoice = byInvoiceNumber.get(line.referenceCode);
+      if (invoice)
+        return {
+          ...line,
+          salesOrderId: invoice.salesOrderId,
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          resolutionSource: "LOCAL",
+          status: "MATCHED",
+          errorCode: null,
+        };
       const remote = remoteByReference.get(line.referenceCode);
       if (remote?.invoiceNumber)
         return this.resolvedLine(line, local, remote.invoiceNumber, "UNAS");

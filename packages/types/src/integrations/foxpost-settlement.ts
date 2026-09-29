@@ -23,6 +23,12 @@ export interface FoxpostSettlementLine {
   manualApprovedAt?: string;
   manualApprovedByUserId?: string;
   manualApprovedByDisplayName?: string;
+  /** Open line: an invoice number the reference points to, and it exists here.
+   * A bare "2026/00123" gets its prefix only when exactly one series has it. */
+  suggestedInvoiceNumber?: string;
+  /** Open line: the reference looks like an invoice number, and we have no
+   * such outgoing invoice (with any prefix). */
+  referenceInvoiceMissing?: boolean;
   updatedAt: string;
 }
 
