@@ -15,8 +15,10 @@ adatot.
 
 ## Feldolgozási szabályok
 
-1. A Gmail keresés csak olyan levelet ad át, amelyben XLSX és PDF melléklet is
-   van. A feldolgozó pontosan egy XLSX + egy PDF párt fogad el levélenként.
+1. A Gmail keresés csak a Foxpost feladójától (`noreply@billzone.eu`) érkező
+   levelet ad át, amelyben XLSX és PDF melléklet is van. A feldolgozó pontosan egy XLSX + egy PDF párt fogad el levélenként,
+   és csak Foxpost-nevűt (`FOXPOST_W<partner>_<éé>H<hét>….xlsx` + `FX<szám>.pdf`). Más nevű pár
+   letöltés és mentés nélkül kimarad; a futás `skippedCount`-ja számolja, a napló megnevezi.
 2. A két dokumentum összetartozását a partnerkód, elszámolási kód és időszak
    egyezése igazolja.
 3. A PDF fizetendő végösszegének egyeznie kell az XLSX összesítőjének bruttó
@@ -67,13 +69,27 @@ GMAIL_FOXPOST_SYNC_ENABLED=true
 A javasolt alapértelmezett lekérdezés:
 
 ```text
-has:attachment filename:xlsx filename:pdf newer_than:90d
+from:noreply@billzone.eu has:attachment filename:xlsx filename:pdf newer_than:90d
 ```
+
+A feladó-szűrés 2026-09-29 óta része a keresésnek. Nélküle minden levél
+bejött, amelyben egy XLSX és egy PDF volt: élesen 14 idegen levél (ebből 9
+GLS-számlamelléklet) állt `ERROR` Foxpost-elszámolásként, a fájljaival együtt.
+Az elmúlt 90 nap mind a 13 valódi Foxpost-levele erről a címről jött. Ha a
+Foxpost más címről kezd küldeni, a levelei kimaradnak: a
+`GMAIL_FOXPOST_QUERY` felülírással kell követni.
 
 A 90 napos átfedés szándékos: az adatbázis-idempotencia miatt ugyanaz a levél
 bármennyiszer biztonságosan újra látható. Az automatikus poller alapértelmezett
 gyakorisága 60 perc. A többi in-process schedulerhez hasonlóan bekapcsolva egy
 API-replika mellett használható.
+
+A `GMAIL_FOXPOST_SYNC_ENABLED` értéke kis- és nagybetűtől, valamint a körülötte
+álló szóköztől függetlenül `true` esetén kapcsol be. Az ütemező induláskor
+mindkét állapotban egy sort ír a naplóba ("Foxpost Gmail scheduler enabled"
+vagy "... disabled", az okkal együtt). 2026-09-29-ig kikapcsolt állapotban
+semmit nem írt, és élesen hét hétig egyszer sem futott, miközben a változó be
+volt állítva.
 
 ## Kezelőfelület
 

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type {
   FoxpostManualApprovalInput,
@@ -12,7 +12,10 @@ import type {
 import { UnasApiClient } from "../../imports/unas/unas-api.client.js";
 import { UnasAuthService } from "../../imports/unas/unas-auth.service.js";
 import type { FoxpostSettlementListQueryDto } from "./dto/foxpost-settlement-list-query.dto.js";
-import { FoxpostGmailClient } from "./foxpost-gmail.client.js";
+import {
+  FoxpostForeignMessageError,
+  FoxpostGmailClient,
+} from "./foxpost-gmail.client.js";
 import { FoxpostMonthlyReportXlsx } from "./foxpost-monthly-report.xlsx.js";
 import {
   FoxpostParseError,
@@ -41,6 +44,8 @@ function errorCode(error: unknown, fallback: string): string {
 
 @Injectable()
 export class FoxpostSettlementService {
+  private readonly logger = new Logger(FoxpostSettlementService.name);
+
   constructor(
     private readonly gmail: FoxpostGmailClient,
     private readonly parser: FoxpostSettlementParser,
@@ -119,6 +124,14 @@ export class FoxpostSettlementService {
           counts.createdCount += 1;
           if (!result.completed) counts.needsReviewCount += 1;
         } catch (error) {
+          if (error instanceof FoxpostForeignMessageError) {
+            // not a Foxpost mail: nothing is stored, and the log says which
+            counts.skippedCount += 1;
+            this.logger.warn(
+              `Foxpost Gmail: skipped a mail that is not a Foxpost settlement (${error.xlsxFileName}, ${error.pdfFileName})`,
+            );
+            continue;
+          }
           counts.failedCount += 1;
           if (settlementId)
             await this.repository.markError(

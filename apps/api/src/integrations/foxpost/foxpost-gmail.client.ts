@@ -2,6 +2,16 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 
 const DEFAULT_GMAIL_API_URL = "https://gmail.googleapis.com/gmail/v1";
 const DEFAULT_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+
+/**
+ * Only Foxpost's own sender. Without it the search took every mail in the
+ * mailbox with one XLSX and one PDF: measured on production 2026-09-29, 14
+ * mails from other senders (9 of them GLS invoice attachments) were stored as
+ * failed Foxpost settlements, their files with them. Every one of the 13 real
+ * Foxpost mails of the last 90 days came from this address.
+ */
+export const DEFAULT_FOXPOST_GMAIL_QUERY =
+  "from:noreply@billzone.eu has:attachment filename:xlsx filename:pdf newer_than:90d";
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -12,6 +22,34 @@ export class FoxpostGmailError extends Error {
     super(code);
     this.name = "FoxpostGmailError";
   }
+}
+
+/**
+ * A mail that is not a Foxpost settlement: skipped, never stored. Foxpost
+ * names its files "FOXPOST_W<partner>_<yy>H<week>_....xlsx" and
+ * "FX<number>.pdf" (all 13 real mails of the last 90 days, measured
+ * 2026-09-29).
+ */
+export class FoxpostForeignMessageError extends FoxpostGmailError {
+  constructor(
+    readonly xlsxFileName: string,
+    readonly pdfFileName: string,
+  ) {
+    super("FOXPOST_GMAIL_FOREIGN_MESSAGE");
+    this.name = "FoxpostForeignMessageError";
+  }
+}
+
+const FOXPOST_XLSX_NAME = /^FOXPOST_W\d+_\d{2}H\d{2}.*\.xlsx$/i;
+const FOXPOST_PDF_NAME = /^FX\d+\.pdf$/i;
+
+export function isFoxpostAttachmentPair(
+  xlsxFileName: string,
+  pdfFileName: string,
+): boolean {
+  return (
+    FOXPOST_XLSX_NAME.test(xlsxFileName) && FOXPOST_PDF_NAME.test(pdfFileName)
+  );
 }
 
 export interface FoxpostGmailConfig {
@@ -53,8 +91,7 @@ export function foxpostGmailConfig(
     clientSecret,
     refreshToken,
     query:
-      environment.GMAIL_FOXPOST_QUERY?.trim() ||
-      "has:attachment filename:xlsx filename:pdf newer_than:90d",
+      environment.GMAIL_FOXPOST_QUERY?.trim() || DEFAULT_FOXPOST_GMAIL_QUERY,
     apiUrl: (environment.GMAIL_API_URL || DEFAULT_GMAIL_API_URL).replace(
       /\/$/,
       "",
@@ -197,6 +234,11 @@ export class FoxpostGmailClient {
     );
     if (xlsxParts.length !== 1 || pdfParts.length !== 1)
       throw new FoxpostGmailError("FOXPOST_GMAIL_ATTACHMENT_PAIR_INVALID");
+    const xlsxFileName = xlsxParts[0]!.filename ?? "";
+    const pdfFileName = pdfParts[0]!.filename ?? "";
+    // checked before anything is downloaded: a foreign mail is not read
+    if (!isFoxpostAttachmentPair(xlsxFileName, pdfFileName))
+      throw new FoxpostForeignMessageError(xlsxFileName, pdfFileName);
 
     const [xlsx, pdf] = await Promise.all([
       this.downloadPart(config, token, message.id, xlsxParts[0]!),
