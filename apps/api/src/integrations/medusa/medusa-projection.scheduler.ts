@@ -241,7 +241,9 @@ export class MedusaProjectionScheduler
    */
   private async esedekesAzonositok(limit: number): Promise<string[]> {
     const termekek = await this.db.product.findMany({
-      where: { isActive: true },
+      // A kihagyott termek (webshopExcluded, 2026-09-29) soha nem esedekes:
+      // kulonben orokre "meg nem vetitett" maradna, es minden kor elore hozna.
+      where: { isActive: true, webshopExcluded: false },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       take: limit * OVERSCAN,
       select: {

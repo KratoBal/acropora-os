@@ -100,6 +100,11 @@ export interface CreatePurchaseInvoiceLineInput {
     ean?: string;
     /** A beszállító saját cikkszáma: a számla szállítójához köti a terméket. */
     supplierSku?: string;
+    /**
+     * A webshopba is, PISZKOZATKÉNT (Balázs, 2026-09-28 20:53 UTC). Hiányzó
+     * érték = nem: a termék a Medusa-vetítésből kimarad.
+     */
+    webshopDraft?: boolean;
   };
   sourceDescription?: string;
   /** A NAV számlasor sorszáma, ha a sor NAV bejövő számlából jött (#1199 A-007). */

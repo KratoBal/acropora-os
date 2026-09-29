@@ -27,6 +27,11 @@ export class CreateLocalPurchaseProductDto {
   @IsString() @MinLength(8) @MaxLength(14) @IsOptional() ean?: string;
   /** A beszállító saját cikkszáma; a számla szállítójához köti a terméket. */
   @IsString() @MinLength(1) @MaxLength(100) @IsOptional() supplierSku?: string;
+  /**
+   * A webshopba is menjen-e, PISZKOZATKENT (Balazs, 2026-09-28 20:53 UTC).
+   * Hianyzo ertek = nem: a termek a Medusa-vetitesbol kimarad.
+   */
+  @IsBoolean() @IsOptional() webshopDraft?: boolean;
 }
 
 export class PurchaseInvoiceProjectAllocationDto {

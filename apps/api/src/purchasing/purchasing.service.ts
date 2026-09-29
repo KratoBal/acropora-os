@@ -448,6 +448,7 @@ export class PurchasingService {
             primaryCategoryId:
               line.createLocalProduct.primaryCategoryId?.trim() || null,
             ...newProductDetails(line.createLocalProduct, name),
+            webshopDraft: line.createLocalProduct.webshopDraft === true,
           },
           sourceDescription,
           ...navSource,
