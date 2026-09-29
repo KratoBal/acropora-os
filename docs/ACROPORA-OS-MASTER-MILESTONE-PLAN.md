@@ -170,7 +170,7 @@ elkészült, de a teljes üzleti vagy production workflow még nem.
 | Irányítószám-lookup               | DONE best-effort                          | nem hivatalos külső API, NAV-adatot nem ír felül                                                                                                                                                                                |
 | Beszállítótörzs                   | DONE első iteráció                        | lista/keresés/létrehozás, adószám, ország, elérhetőség, **önálló Partnerek modul (`/partnerek`) bank-/cím-/kapcsolattartó-mezőkkel és VIES adószám-ellenőrzéssel (2026-07-24)**                                                 |
 | EU-s beszerzés                    | DONE első iteráció                        | PurchaseInvoice, tételek, készletnövelés, UNAS push, termékextension-frissítés, **terméktörzsben nem szereplő tétel manuális (`NOT_LINKED`) felvétele (2026-07-24)**                                                            |
-| MNB árfolyamkliens                | IMPLEMENTED BUT BLOCKED                   | SOAP 1.1/1.2 és fallback elkészült, éles botvédelem miatt kézi árfolyam kell                                                                                                                                                    |
+| MNB árfolyamkliens                | FIXED IN CODE (2026-09-29, http)          | SOAP 1.1/1.2; a https végpont 404, a http válaszol, a kliens azt hívja                                                                                                                                                          |
 | Belföldi beszerzés                | **DONE első iteráció (2026-07-24)**       | kézi ÁFA-kulcsos rögzítés és NAV Online Számla (`queryInvoiceDigest`/`queryInvoiceData`) alapú bejövőszámla-betöltés a közös `/beszerzes/uj` űrlapon; NAV-sorok soronkénti formális termékvariáns-egyeztetése még nem indult el |
 | Számlázz.hu                       | NOT STARTED                               | adatmodellben/POS-ban előkészítő mező van, működő integráció nincs; **2026-07-24-től az elsődleges bejövő/kimenő számlaszinkron tervezett forrása, lásd 6.0A**                                                                  |
 | NAV számlareconciliation          | NOT STARTED                               | csak `queryTaxpayer` és a belföldi bevételezéshez épített `queryInvoiceDigest`/`queryInvoiceData` készült el, önálló napi teljességi/eltérés-egyeztetés (M9) nem                                                                |
@@ -644,9 +644,9 @@ az M8 implementációja előtti preflight/ADR-nek kell tisztáznia.
 
 - SOAP 1.1/1.2 kliens és hétvégi/ünnepnapi visszakeresés – **IMPLEMENTED**;
 - HUF esetén 1-es árfolyam – **DONE**;
-- kézi árfolyam – **DONE és jelenleg elsődleges**;
-- automatikus éles hívás – **BLOCKED**, az MNB F5 botvédelme miatt;
-- kerülő megoldás csak hivatalos, stabil és jogszerű adatforrás alapján vezethető be.
+- kézi árfolyam – **DONE**, az automatikus érték mindig felülírható;
+- automatikus éles hívás – **a kódban javítva 2026-09-29-én, élesben a következő kiadással**: a https végpont F5-választ ad (404), a hivatalos szolgáltatás saját WSDL-je a http címet nevezi meg, és az válaszol;
+- a http nem védi a sértetlenséget, ezért az árfolyam előtöltés marad, nem rejtett bemenet.
 
 ### M4.6 – Visszaküldés beszállítónak
 

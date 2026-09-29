@@ -5,7 +5,20 @@ import { SaxesParser } from "saxes";
 // GetExchangeRates(startDate, endDate, currencyNames) művelet neve/formátuma
 // évek óta változatlan, lásd az MNB hivatalos dokumentációját:
 // https://www.mnb.hu/letoltes/documentation-on-the-mnb-s-web-service-on-current-and-historic-exchange-rates.pdf
-const DEFAULT_API_BASE_URL = "https://www.mnb.hu/arfolyamok.asmx";
+//
+// PLAIN HTTP, ON PURPOSE. Measured 2026-09-29 with this client's own
+// GetExchangeRates request (SOAP 1.1 and 1.2, both SOAPAction forms), from
+// the api host and from Node's fetch:
+//   https://www.mnb.hu/arfolyamok.asmx  -> 404, empty body, F5 cookie and
+//                                          `Clear-Site-Data` (the "bot
+//                                          protection" seen since 2026-07-23)
+//   http://www.mnb.hu/arfolyamok.asmx   -> 200 with the rates
+// The service's own WSDL, fetched over https as well, names the http address
+// as its endpoint (`soap:address`), and `mnb.hu` without `www` behaves the
+// same. No https route answered the call. The feed is public and carries no
+// credentials; what plain http gives up is integrity, so the rate stays a
+// prefill the person sees and can overwrite, never a silent input.
+const DEFAULT_API_BASE_URL = "http://www.mnb.hu/arfolyamok.asmx";
 const SOAP_NAMESPACE = "http://www.mnb.hu/webservices/";
 const MAX_XML_BYTES = 512 * 1024;
 
@@ -185,10 +198,11 @@ export class MnbExchangeRateClient {
     endDate: string,
     currency: string,
   ): Promise<MnbDailyRate[]> {
-    const baseUrl = (process.env.MNB_API_URL ?? DEFAULT_API_BASE_URL).replace(
-      /\/$/,
-      "",
-    );
+    // `||`, not `??`: the env templates ship `MNB_API_URL=` empty, and an
+    // empty override must mean "use the default", not "post to nowhere"
+    const baseUrl = (
+      process.env.MNB_API_URL?.trim() || DEFAULT_API_BASE_URL
+    ).replace(/\/$/, "");
     const attempts: SoapAttempt[] = [
       {
         label: "SOAP 1.1",

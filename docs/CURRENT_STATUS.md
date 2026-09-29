@@ -291,13 +291,13 @@ alapú folyamat ugyanazt a bevételezési modellt használja.
   számla kelte, fizetési határidő, fizetve/fizetés dátuma, forrás
   EU/HU_MANUAL/HU_NAV), sor (termékvariáns, rendelt és tényleges átvett
   mennyiség, egység, egységár, kedvezmény%, UNAS szinkronállapot).
-- **MNB hivatalos árfolyam automatikus lekérdezése (jelenleg nem működik
-  élesben, lásd Known limitations)**: a `GetExchangeRates` SOAP végpont
+- **MNB hivatalos árfolyam automatikus lekérdezése (2026-09-29 óta a
+  http végponton, lásd Known limitations)**: a `GetExchangeRates` SOAP végpont
   hitelesítés nélküli lekérdezése a számla kelte alapján, visszafelé néző
   ablakkal hétvége/ünnepnap miatti hiányzó jegyzésre; a frontend előtölti,
-  de kézzel mindig felülírható/megadható. Az MNB oldala 2026-07-23 óta
-  bot-védelemmel blokkolja a programozott SOAP-hívásokat, ezért az árfolyam
-  mező a gyakorlatban kézi bevitelre szorul.
+  de kézzel mindig felülírható/megadható. Az MNB https végpontja 2026-07-23
+  óta minden SOAP-hívást elutasít; a http végpont válaszol, és a kliens azt
+  használja.
 - **Tételes bevételezés**: a számla mentésekor egy tranzakcióban jön létre a
   `PurchaseInvoice`, a `PURCHASE_RECEIPT` típusú `StockMovement` és a
   `StockItem` frissítés (a leltár/POS mintájával megegyező additív logika,
@@ -544,7 +544,7 @@ pnpm --filter @acropora/api unas:probe
 - A NAV Online Számla `queryInvoiceDigest`/`queryInvoiceData` integráció éles technikai felhasználó nélkül nem tesztelhető helyben - a válasz-XML mezőnevei (invoiceApi.xsd/invoiceData.xsd) a NAV nyilvános specifikációja és a közösségi `nav-online-invoice` referenciakliens alapján implementáltak, de valós NAV-válasszal még nincs megerősítve (ugyanaz a caveat, mint a UNAS `getCustomer` válasz gyökérelemén él).
 - A NAV digest-szinkron v1-ben csak az eredeti (`CREATE` műveletű) számlákat dolgozza fel; a módosító/sztornó (`MODIFY`/`STORNO`) digest-tételeket szándékosan kihagyja.
 - A NAV-alapú bevételezés a számla tételeit `variantId` nélküli, kézi sorként tölti elő - nincs automatikus terméktörzs-egyeztetés soronként, a felhasználó írja át a saját megnevezésére (vagy törli és keres rá egy létező termékre).
-- **Az MNB automatikus árfolyam-lekérdezés jelenleg nem működik**: az `arfolyamok.asmx` élesben (2026-07-23-i teszt szerint) F5 bot-védelemmel válaszol minden POST SOAP-hívásra (`TS...` cookie, `Clear-Site-Data` fejléc, üres törzsű 404 - feltehetően TLS-ujjlenyomat alapú szűrés, kóddal nem megkerülhető). A kliens/szolgáltatás implementálva marad (SOAP 1.1 és 1.2 megpróbálása, szerveroldali naplózás), de gyakorlatilag mindig a kézi megadásra visszaeső hibaágat futtatja; az űrlapon az árfolyam mező emiatt elsődlegesen kézi bevitelre való.
+- **Az MNB automatikus árfolyam-lekérdezés 2026-07-23 és 2026-09-29 között nem működött, és az ok nem a bot-védelem volt, hanem a https.** A 2026-07-23-i teszt helyesen látta, hogy a `https://www.mnb.hu/arfolyamok.asmx` minden POST SOAP-hívásra F5-választ ad (`TS...` cookie, `Clear-Site-Data`, üres törzsű 404), de a következtetés ("kóddal nem megkerülhető") hamis volt: 2026-09-29-én mérve ugyanaz a hívás a `http://www.mnb.hu/arfolyamok.asmx` címen 200-at és érvényes árfolyamot ad, és a szolgáltatás saját WSDL-je (https-en letöltve is) ezt a http címet nevezi meg végpontként. A kliens alapértelmezése azóta a http cím. Ára: a titkosítatlan csatorna nem védi az árfolyam sértetlenségét, ezért az űrlap továbbra is előtölt, és az ember látja, felülírhatja.
 - A rendelt/tényleges mennyiség közötti eltérés jelzése és jóváhagyása szándékosan még nincs kidolgozva.
 - A projektkészlet bevételezéskori foglalása elkészült, de a foglalás
   felhasználása, részleges felszabadítása és projektlezáráskor történő
