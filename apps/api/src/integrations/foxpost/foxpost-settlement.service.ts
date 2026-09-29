@@ -1,3 +1,4 @@
+import type { SyncRunTrigger } from "@acropora/database";
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type {
@@ -83,6 +84,7 @@ export class FoxpostSettlementService {
       canRunNow: foxpostGmailKeyPresent(environment),
       intervalMinutes: foxpostSyncIntervalMinutes(environment),
       lastRun: await this.repository.lastRun(),
+      lastScheduledRun: await this.repository.lastRun("SCHEDULED"),
     };
   }
 
@@ -143,8 +145,13 @@ export class FoxpostSettlementService {
     return { filename: report.filename, buffer: report.buffer };
   }
 
-  async sync(): Promise<FoxpostSyncSummary> {
-    const runId = await this.repository.createRun();
+  /**
+   * One pull. The trigger is REQUIRED: the page's "did it run by itself"
+   * line counts only SCHEDULED runs, so a caller that does not say which it
+   * is must not compile.
+   */
+  async sync(trigger: SyncRunTrigger): Promise<FoxpostSyncSummary> {
+    const runId = await this.repository.createRun(trigger);
     try {
       const messageIds = await this.gmail.listCandidateMessageIds();
       const counts = {

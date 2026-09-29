@@ -112,6 +112,11 @@ export type FoxpostSyncState =
 
 export interface FoxpostSyncRunSummary {
   status: "RUNNING" | "APPLIED" | "FAILED";
+  /**
+   * Who started the run: the timer or a person. Absent for runs from before
+   * 2026-09-29, when this was not recorded (unknown, not "manual").
+   */
+  trigger?: "SCHEDULED" | "MANUAL";
   startedAt: string;
   completedAt?: string;
   messagesSeen: number;
@@ -128,6 +133,8 @@ export interface FoxpostSyncStatus {
   canRunNow: boolean;
   intervalMinutes: number;
   lastRun?: FoxpostSyncRunSummary;
+  /** The newest run the timer started: whether the pull really runs by itself. */
+  lastScheduledRun?: FoxpostSyncRunSummary;
 }
 
 export interface FoxpostReprocessResult {

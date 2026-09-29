@@ -39,7 +39,7 @@ export class FoxpostSettlementController {
   @Post("settlements/sync")
   @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
   sync() {
-    return this.settlements.sync();
+    return this.settlements.sync("MANUAL");
   }
 
   @Get("settlements/:id")

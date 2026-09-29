@@ -154,7 +154,7 @@ describe("GLS Gmail sync integration", { skip: gate.mode === "skip" }, () => {
   }
 
   it("reads each new mail once: one document, one duplicate, one refused with its reason", async () => {
-    const run = await sync.sync();
+    const run = await sync.sync("MANUAL");
     assert.deepEqual(
       [run.status, run.documentsRead, run.duplicateCount, run.failedCount],
       ["APPLIED", 1, 1, 1],
@@ -172,11 +172,27 @@ describe("GLS Gmail sync integration", { skip: gate.mode === "skip" }, () => {
 
   it("does not fetch a known mail again, and the page sees the last run", async () => {
     fetched.length = 0;
-    const run = await sync.sync();
+    const run = await sync.sync("MANUAL");
     assert.deepEqual(fetched, []);
     assert.equal(run.documentsRead, 0);
     const status = await sync.status();
     assert.equal(status.canRunNow, true);
     assert.equal(status.lastRun?.status, "APPLIED");
+  });
+
+  it("keeps the last AUTOMATIC run apart: a button run does not replace it, an unknown one never counts", async () => {
+    // A run from before 2026-09-29 has no trigger: it stays unknown, and
+    // is never read as automatic.
+    await prisma.glsSyncRun.create({
+      data: { status: "APPLIED", startedAt: new Date(Date.now() + 60_000) },
+    });
+    const scheduled = await sync.sync("SCHEDULED");
+    assert.equal(scheduled.trigger, "SCHEDULED");
+    const manual = await sync.sync("MANUAL");
+    assert.equal(manual.trigger, "MANUAL");
+
+    const status = await sync.status();
+    assert.equal(status.lastScheduledRun?.trigger, "SCHEDULED");
+    assert.equal(status.lastScheduledRun?.startedAt, scheduled.startedAt);
   });
 });

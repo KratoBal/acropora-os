@@ -3,7 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, prisma, Repository } from "@acropora/database";
+import {
+  Prisma,
+  prisma,
+  Repository,
+  type SyncRunTrigger,
+} from "@acropora/database";
 import type {
   FoxpostMonthlyReportSummary,
   FoxpostSettlementDetail,
@@ -219,7 +224,7 @@ export class FoxpostSettlementRepository extends Repository {
     super(prisma);
   }
 
-  async createRun(): Promise<string> {
+  async createRun(trigger: SyncRunTrigger): Promise<string> {
     try {
       return await prisma.$transaction(async (tx) => {
         await tx.foxpostSyncRun.updateMany({
@@ -236,7 +241,7 @@ export class FoxpostSettlementRepository extends Repository {
           },
         });
         const run = await tx.foxpostSyncRun.create({
-          data: { activeKey: ACTIVE_SYNC_KEY, status: "RUNNING" },
+          data: { activeKey: ACTIVE_SYNC_KEY, status: "RUNNING", trigger },
         });
         return run.id;
       });
@@ -278,13 +283,18 @@ export class FoxpostSettlementRepository extends Repository {
     });
   }
 
-  async lastRun(): Promise<FoxpostSyncRunSummary | undefined> {
+  /** The newest run, or the newest the given trigger started. */
+  async lastRun(
+    trigger?: SyncRunTrigger,
+  ): Promise<FoxpostSyncRunSummary | undefined> {
     const run = await prisma.foxpostSyncRun.findFirst({
+      where: trigger ? { trigger } : undefined,
       orderBy: { startedAt: "desc" },
     });
     if (!run) return undefined;
     return {
       status: run.status,
+      trigger: run.trigger ?? undefined,
       startedAt: run.startedAt.toISOString(),
       completedAt: run.completedAt?.toISOString(),
       messagesSeen: run.messagesSeen,

@@ -108,6 +108,11 @@ export type GlsSyncState =
 
 export interface GlsSyncRunSummary {
   status: "RUNNING" | "APPLIED" | "FAILED";
+  /**
+   * Who started the run: the timer or a person. Absent for runs from before
+   * 2026-09-29, when this was not recorded (unknown, not "manual").
+   */
+  trigger?: "SCHEDULED" | "MANUAL";
   startedAt: string;
   completedAt?: string;
   messagesSeen: number;
@@ -123,4 +128,6 @@ export interface GlsSyncStatus {
   canRunNow: boolean;
   intervalMinutes: number;
   lastRun?: GlsSyncRunSummary;
+  /** The newest run the timer started: whether the pull really runs by itself. */
+  lastScheduledRun?: GlsSyncRunSummary;
 }
