@@ -53,15 +53,25 @@ export class SupplierLineSuggestionRepository {
    * inactive alike).
    */
   async candidateMaster(): Promise<
-    Array<{ variantId: string; text: string; product: SuggestionProduct }>
+    Array<{
+      variantId: string;
+      text: string;
+      product: SuggestionProduct;
+      /** The product's short description (HTML), for the suppliers that send it. */
+      description: string | null;
+    }>
   > {
     const variants = await prisma.productVariant.findMany({
-      select: productSelect,
+      select: {
+        ...productSelect,
+        product: { select: { name: true, description: true } },
+      },
     });
     return variants.map((variant) => ({
       variantId: variant.id,
       text: `${variant.product.name} ${variant.name ?? ""}`,
       product: productOf(variant),
+      description: variant.product.description,
     }));
   }
 
