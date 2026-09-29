@@ -224,8 +224,13 @@ export class NotificationsService {
        * A REGI `worksheetId` MEZO IS MEGY, es ez nem masolas: az ertesitesi
        * kozpontban MA is allhat bontatlan ertesites, ami csak azt hordozza.
        * Egy koppintas rajta a frissites UTAN tortenne, es tipus nelkul sehova
-       * nem vinne. A telefon ezert visszaesik ra -- de CSAK ha tipus nincs,
-       * ismeretlen tipusnal nem (lasd `push-target.ts`).
+       * nem vinne. A telefon ezert visszaesik ra, ha tipus nincs, es
+       * 2026-09-29 ota akkor is, ha a tipust nem ismeri (lasd `push-target.ts`).
+       *
+       * EBBOL KOVETKEZIK A MEZO JELENTESE, ES MINDEN KULDESRE ALL: a
+       * `worksheetId` azt allitja, hogy ez az ertesites ARROL a munkalaprol
+       * szol, es egy regebbi telefon arra nyitja meg. Csak oda kerulhet, ahol
+       * ez igaz.
        *
        * MIKOR HAGYHATO EL: ha egyszer biztosak vagyunk benne, hogy egyetlen
        * keszuleken sem all bontatlan, tipus nelkuli ertesites. Addig a ket mezo
@@ -250,6 +255,10 @@ export class NotificationsService {
    * UGYANEZ, HIBAJEGYRE.
    *
    * === A `worksheetId` VISSZAESES ITT NEM MEGY, ES EZ A LENYEG ===
+   *
+   * 2026-09-29 ota MEG FONTOSABB: a telefon ismeretlen tipusnal is erre a
+   * mezore esik vissza, tehat itt egy munkalap-azonosito egy regebbi kotegen
+   * tenylegesen megnyitna egy lapot.
    *
    * A munkalap-ertesites a regi mezot is viszi, hogy egy tipus nelkuli, regi
    * ertesitesbol meg lehessen nyitni a lapot. Egy JEGY ertesitesebe ugyanaz a
@@ -357,9 +366,18 @@ export class NotificationsService {
       userIds: notice.userIds,
       title: "Új anyagigény",
       body: notice.worksheetLabel,
+      /**
+       * A `worksheetId` IS MEGY (2026-09-29), ugyanazzal az ertekkel, mint a
+       * `targetId`. Ez NEM a mai telefonoknak szol (azok a tipust ismerik),
+       * hanem annak, amelyik NEM ismeri: Balazs 11:33 UTC-kor egy 09-18-i
+       * kotegen koppintott az "anyag beerkezett" ertesitesre, es a
+       * nyitooldalra jutott. A telefon ismeretlen tipusnal most erre a mezore
+       * esik vissza. Itt igaz: az anyagigeny a munkalaprol szol.
+       */
       data: {
         targetType: "materialRequest",
         targetId: notice.worksheetId,
+        worksheetId: notice.worksheetId,
       },
       record: (attempts) =>
         this.log.recordMaterialRequestCreated({
@@ -397,6 +415,7 @@ export class NotificationsService {
       data: {
         targetType: "materialRequest",
         targetId: notice.worksheetId,
+        worksheetId: notice.worksheetId,
       },
       record: (attempts) =>
         this.log.recordMaterialRequestReceived({
