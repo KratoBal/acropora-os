@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 
 import type { UnasApiClient } from "../../imports/unas/unas-api.client.js";
 import type { UnasAuthService } from "../../imports/unas/unas-auth.service.js";
-import type { FoxpostGmailClient } from "./foxpost-gmail.client.js";
+import {
+  FoxpostForeignMessageError,
+  type FoxpostGmailClient,
+} from "./foxpost-gmail.client.js";
 import type {
   FoxpostMonthlyReportXlsx,
   FoxpostReportSettlement,
@@ -380,5 +383,41 @@ describe("FoxpostSettlementService", () => {
     assert.equal(reportBuilt, true);
     assert.equal(result.reportRegenerated, true);
     assert.equal(result.settlement.status, "NEEDS_REVIEW");
+  });
+
+  it("skips a mail that is not a Foxpost settlement: nothing stored, counted as skipped", async () => {
+    let stored = 0;
+    const service = new FoxpostSettlementService(
+      {
+        listCandidateMessageIds: async () => ["gls-1"],
+        getMessage: async () => {
+          throw new FoxpostForeignMessageError(
+            "SettlementDocument_HU00000000_20260918.xlsx",
+            "InvoiceDocument_HU00000000_20260918.pdf",
+          );
+        },
+      } as unknown as FoxpostGmailClient,
+      {} as FoxpostSettlementParser,
+      {
+        createRun: async () => "run-1",
+        hasMessage: async () => false,
+        createPending: async () => {
+          stored += 1;
+          return "settlement-1";
+        },
+        markError: async () => {
+          stored += 1;
+        },
+        completeRun: async (_runId: string, counts: object) => counts,
+      } as unknown as FoxpostSettlementRepository,
+      {} as FoxpostMonthlyReportXlsx,
+      {} as UnasAuthService,
+      {} as UnasApiClient,
+    );
+    const result = await service.sync();
+    assert.equal(stored, 0);
+    assert.equal(result.skippedCount, 1);
+    assert.equal(result.failedCount, 0);
+    assert.equal(result.createdCount, 0);
   });
 });

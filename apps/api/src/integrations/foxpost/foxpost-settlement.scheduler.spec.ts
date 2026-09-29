@@ -28,6 +28,62 @@ describe("foxpostSettlementScheduleConfig", () => {
       /FOXPOST_SYNC_INTERVAL_INVALID/,
     );
   });
+
+  it("reads the switch patiently: case and surrounding space do not turn it off", () => {
+    // production 2026-09-29: the variable was set and the scheduler never ran
+    for (const value of ["true", "True", "TRUE", " true", "true\n"])
+      assert.equal(
+        foxpostSettlementScheduleConfig({ GMAIL_FOXPOST_SYNC_ENABLED: value })
+          .enabled,
+        true,
+        JSON.stringify(value),
+      );
+    for (const value of ["", "false", "1", "yes", "truee"])
+      assert.equal(
+        foxpostSettlementScheduleConfig({ GMAIL_FOXPOST_SYNC_ENABLED: value })
+          .enabled,
+        false,
+        JSON.stringify(value),
+      );
+  });
+});
+
+describe("FoxpostSettlementScheduler.onModuleInit", () => {
+  function startedWith(value: string | undefined): string[] {
+    const saved = process.env.GMAIL_FOXPOST_SYNC_ENABLED;
+    if (value === undefined) delete process.env.GMAIL_FOXPOST_SYNC_ENABLED;
+    else process.env.GMAIL_FOXPOST_SYNC_ENABLED = value;
+    const logged: string[] = [];
+    const scheduler = new FoxpostSettlementScheduler(
+      {} as FoxpostSettlementService,
+    );
+    (
+      scheduler as unknown as { logger: { log(message: string): void } }
+    ).logger = { log: (message: string) => logged.push(message) };
+    try {
+      scheduler.onModuleInit();
+    } finally {
+      scheduler.onModuleDestroy();
+      if (saved === undefined) delete process.env.GMAIL_FOXPOST_SYNC_ENABLED;
+      else process.env.GMAIL_FOXPOST_SYNC_ENABLED = saved;
+    }
+    return logged;
+  }
+
+  it("says in one log line that it is off, and why", () => {
+    assert.deepEqual(startedWith(undefined), [
+      "Foxpost Gmail scheduler disabled (GMAIL_FOXPOST_SYNC_ENABLED is not set)",
+    ]);
+    assert.deepEqual(startedWith("1"), [
+      "Foxpost Gmail scheduler disabled (GMAIL_FOXPOST_SYNC_ENABLED is set, but not true)",
+    ]);
+  });
+
+  it("says that it is on", () => {
+    assert.deepEqual(startedWith("True"), [
+      "Foxpost Gmail scheduler enabled (60 min)",
+    ]);
+  });
 });
 
 describe("FoxpostSettlementScheduler.runOnce", () => {

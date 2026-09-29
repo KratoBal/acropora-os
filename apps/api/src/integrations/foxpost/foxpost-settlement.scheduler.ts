@@ -31,7 +31,11 @@ function boundedInteger(
 export function foxpostSettlementScheduleConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): FoxpostSettlementScheduleConfig {
-  const enabled = environment.GMAIL_FOXPOST_SYNC_ENABLED === "true";
+  // "True", " true" and a trailing newline all mean on. Measured on
+  // production 2026-09-29: the variable was set, the scheduler never ran
+  // once in seven weeks (5 sync runs, all manual), and nothing said so.
+  const enabled =
+    environment.GMAIL_FOXPOST_SYNC_ENABLED?.trim().toLowerCase() === "true";
   if (!enabled) return { enabled: false, intervalMs: 0, startupDelayMs: 0 };
   return {
     enabled: true,
@@ -66,7 +70,17 @@ export class FoxpostSettlementScheduler
 
   onModuleInit(): void {
     const config = foxpostSettlementScheduleConfig();
-    if (!config.enabled) return;
+    if (!config.enabled) {
+      // one line, so that a switched-off sync shows in the log
+      this.logger.log(
+        `Foxpost Gmail scheduler disabled (GMAIL_FOXPOST_SYNC_ENABLED is ${
+          process.env.GMAIL_FOXPOST_SYNC_ENABLED === undefined
+            ? "not set"
+            : "set, but not true"
+        })`,
+      );
+      return;
+    }
     this.logger.log(
       `Foxpost Gmail scheduler enabled (${config.intervalMs / 60_000} min)`,
     );
