@@ -79,22 +79,15 @@ describe("a célpont a törzsből", () => {
     });
   });
 
-  it("ISMERETLEN tipusnal viszont NEM esik vissza", () => {
+  it("ISMERETLEN tipusnal `worksheetId` NELKUL NEM esik vissza", () => {
     /*
-      EZ A LENYEG, ES EZ A KULONBSEG A KET AG KOZOTT. Ha a szerver egyszer egy
-      HARMADIK tipust kezd kuldeni, es egy REGI app kapja meg, az NEM nyithatja
-      meg helyette a munkalapot. Inkabb ne vigyen sehova, mint rossz helyre: egy
-      rossz keperno az ugyfel elott rosszabb, mint egy nem mukodo koppintas.
+      AMI A 2026-09-29-I FORDULAS UTAN IS MARAD: egy ismeretlen tipus magatol
+      nem nyit munkalapot. Egy jegy vagy egy akvarium azonositojaval egy
+      munkalap-kepernyo vagy uresen, vagy egy VELETLENUL letezo MASIK lapon
+      nyilna meg.
 
-      A visszaeses tehat CSAK a tipus HIANYARA szol, nem az ismeretlen
-      tipusra -- meg akkor sem, ha a regi mezo is ott van.
-
-      === EZ AZ ALLITAS 2026-09-18-IG A `serviceJob` ERTEKEN ALLT ===
-
-      Akkor az volt az ismeretlen tipus. Ma ismert, tehat ugyanazzal az ertekkel
-      az allitas MAR NEM AZT MERNE, amit a neve mond -- ezert kapott egy olyan
-      erteket, amit a szerver nem kuld. Ha egyszer az `invoice` is valodi
-      tipussa valik, ezt a ket sort ugyanigy at kell allitani, nem torolni.
+      Az `invoice` azert all itt, mert a szerver nem kuldi: ha egyszer valodi
+      tipussa valik, ezt az erteket at kell allitani, nem torolni.
     */
     assert.equal(
       pushTarget(valasz({ targetType: "invoice", targetId: "inv-1" })),
@@ -102,13 +95,53 @@ describe("a célpont a törzsből", () => {
     );
     assert.equal(
       pushTarget(
+        valasz({ targetType: "invoice", targetId: "inv-1", worksheetId: "  " }),
+      ),
+      null,
+    );
+  });
+
+  it("ISMERETLEN tipusnal a szerver `worksheetId`-jere esik vissza", () => {
+    /*
+      A MERT ESET (Balazs, 2026-09-29 11:33 UTC): az "anyag beerkezett"
+      koppintasa a nyitooldalra vitt, mert a telefon kotege a
+      `materialRequest` tipust meg nem ismerte. A szerver most az anyagigeny
+      ertesitesebe is odateszi a munkalap azonositojat, es egy regebbi koteg
+      a KOVETKEZO uj tipusnal igy a munkalapra visz, nem sehova.
+
+      A `targetId` itt SZANDEKOSAN mas, mint a `worksheetId`: a visszaeses a
+      munkalap-mezot olvassa, nem az ismeretlen tipus azonositojat.
+
+      MI PIROSIT: ha az ismeretlen tipus ujra `null`-t ad, vagy ha a
+      visszaeses a `targetId`-t venne at.
+    */
+    assert.deepEqual(
+      pushTarget(
         valasz({
           targetType: "invoice",
           targetId: "inv-1",
           worksheetId: "ws-1",
         }),
       ),
-      null,
+      { type: "worksheet", id: "ws-1" },
+    );
+  });
+
+  it("ISMERT tipusnal a `worksheetId` nem irja felul a celpontot", () => {
+    /*
+      A szerver az anyagigenyhez most mindket mezot kuldi. A telefon, ami
+      ismeri a tipust, tovabbra is a sajat utvonalara vigye (az anyagigeny
+      kepernyo iranyit tovabb), ne a visszaesesre.
+    */
+    assert.deepEqual(
+      pushTarget(
+        valasz({
+          targetType: "materialRequest",
+          targetId: "ws-1",
+          worksheetId: "ws-1",
+        }),
+      ),
+      { type: "materialRequest", id: "ws-1" },
     );
   });
 
