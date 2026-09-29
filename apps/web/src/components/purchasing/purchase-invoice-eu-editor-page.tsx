@@ -335,6 +335,8 @@ export function PurchaseInvoiceEuEditorPage() {
               productName: "",
               unit: line.unit,
               sourceDescription: line.description,
+              // a díjsor javaslatot nem kér, ahogy a fájlból beolvasott számlán
+              isCharge: line.isCharge,
               navLineNumber: line.lineNumber,
               orderedQuantity: quantity,
               actualQuantity: quantity,

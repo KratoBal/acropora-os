@@ -7,6 +7,7 @@ import type {
 
 import type { ParsedNavInvoiceData } from "../../integrations/nav/nav-invoice-data.parser.js";
 import { ervenyesSorszam } from "../nav-line-source.js";
+import { isChargeDescription } from "../supplier-invoice-import/supplier-invoice-import.common.js";
 
 /// A NavIncomingInvoice.parsedData JSON mezőben tárolt pillanatkép alakja -
 /// a queryInvoiceData válaszból parszolt üzleti adat (lásd
@@ -85,6 +86,14 @@ export function toNavIncomingInvoiceDetail(
       unitPrice: line.unitPrice,
       lineNetAmount: line.lineNetAmount,
       vatRatePercent: line.vatRatePercent,
+      /*
+        A DIJSOR-SZABALY MINDEN SZALLITORA (Balazs, 2026-09-29 11:49 UTC): a
+        fajlbol beolvasott szamlakon eddig is ez jelolte a szallitasi es fuvar
+        sorokat, a NAV-bol jovokon semmi, ezert ott egy "Szallitasi dij" sor
+        termek-javaslatot kert. KIOLVASASKOR szamoljuk, nem a parserben, igy a
+        mar eltarolt NAV szamlakra is all.
+      */
+      isCharge: isChargeDescription(line.description),
     })),
   };
 }
