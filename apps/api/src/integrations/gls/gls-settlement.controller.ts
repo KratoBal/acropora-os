@@ -4,8 +4,10 @@ import {
   Controller,
   Get,
   Param,
+  ParseIntPipe,
   Post,
   Query,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
@@ -18,6 +20,9 @@ import { RequirePermissions } from "../../auth/decorators/require-permissions.de
 import { ApproveGlsCodLineDto } from "./dto/approve-gls-cod-line.dto.js";
 import { GlsCodReportListQueryDto } from "./dto/gls-cod-report-list-query.dto.js";
 import { GlsSettlementService } from "./gls-settlement.service.js";
+
+const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /** The largest measured GLS file is well under this. */
 const GLS_FILE_MAX_BYTES = 15 * 1024 * 1024;
@@ -70,6 +75,23 @@ export class GlsSettlementController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.settlements.approveLine(id, lineId, input, user.id);
+  }
+
+  @Get("reports/:year/:month/download")
+  @RequirePermissions(PERMISSIONS.FINANCE_VIEW)
+  async downloadReport(
+    @Param("year", ParseIntPipe) year: number,
+    @Param("month", ParseIntPipe) month: number,
+  ) {
+    const { filename, buffer } = await this.settlements.monthlyReport(
+      year,
+      month,
+    );
+    return new StreamableFile(buffer, {
+      type: XLSX_MIME,
+      disposition: `attachment; filename="${filename}"`,
+      length: buffer.length,
+    });
   }
 
   @Get("invoices")

@@ -6,7 +6,8 @@ import type {
   GlsManualApprovalInput,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { apiAuthHeaders, ApiError, apiRequest } from "./client";
 
 export const glsSettlementsApi = {
   /** A GLS utánvét-részletező vagy számlamelléklet (XLSX), kézi feltöltés. */
@@ -57,6 +58,31 @@ export const glsSettlementsApi = {
         body: JSON.stringify(input),
       },
     );
+  },
+  /** The monthly accountant's XLSX, as a download (binary, not JSON). */
+  async downloadReport(token: string, year: number, month: number) {
+    const response = await fetch(
+      `${API_PREFIX}/integrations/gls/reports/${year}/${month}/download`,
+      { headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok) {
+      let message = "A GLS riport letöltése nem sikerült.";
+      try {
+        const payload = (await response.json()) as { message?: string };
+        if (payload.message) message = payload.message;
+      } catch {
+        // a file endpoint's error is not always JSON
+      }
+      throw new ApiError(message, response.status);
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `gls-${year}-${String(month).padStart(2, "0")}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   },
   invoices(token: string) {
     return apiRequest<GlsInvoiceSummary[]>(`/integrations/gls/invoices`, token);

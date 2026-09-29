@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   reprocess: vi.fn(),
   approveLine: vi.fn(),
   invoices: vi.fn(),
+  downloadReport: vi.fn(),
 }));
 
 const auth = vi.hoisted(() => ({
@@ -187,5 +188,17 @@ describe("GlsSettlementsPage", () => {
       screen.getByText("Nincs hozzáférésed a GLS elszámolásokhoz"),
     ).toBeTruthy();
     expect(api.list).not.toHaveBeenCalled();
+  });
+
+  it("downloads the chosen month's accountant file", async () => {
+    api.downloadReport.mockReset().mockResolvedValue(undefined);
+    render(createElement(GlsSettlementsPage));
+    fireEvent.change(screen.getByLabelText("A riport hónapja"), {
+      target: { value: "2026-08" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "XLSX letöltése" }));
+    await waitFor(() =>
+      expect(api.downloadReport).toHaveBeenCalledWith("token-OWNER", 2026, 8),
+    );
   });
 });

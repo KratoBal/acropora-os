@@ -1,11 +1,16 @@
 import { Module } from "@nestjs/common";
 
+import { GlsMonthlyReportXlsx } from "./gls-monthly-report.xlsx.js";
 import { GlsSettlementController } from "./gls-settlement.controller.js";
 import { GlsSettlementRepository } from "./gls-settlement.repository.js";
 import { GlsSettlementService } from "./gls-settlement.service.js";
 
 @Module({
   controllers: [GlsSettlementController],
-  providers: [GlsSettlementRepository, GlsSettlementService],
+  providers: [
+    GlsSettlementRepository,
+    GlsSettlementService,
+    GlsMonthlyReportXlsx,
+  ],
 })
 export class GlsSettlementModule {}
