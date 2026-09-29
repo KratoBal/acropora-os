@@ -28,6 +28,10 @@ export interface ParsedFoxpostSettlementXlsx {
   collectedAmount: number;
   invoiceGrossAmount: number;
   transferredAmount: number;
+  /** What Acropora pays Foxpost ("PARTNER által utalandó összeg
+   * (számlázott)"): the fee when the week's COD does not cover it. 0 when the
+   * file does not carry the row. */
+  partnerPaysAmount: number;
   currency: string;
   lines: ParsedFoxpostCodLine[];
 }
@@ -125,6 +129,24 @@ function findSummaryValue(
   if (value === undefined)
     throw new FoxpostParseError("FOXPOST_XLSX_SUMMARY_FIELD_MISSING");
   return value;
+}
+
+/** A summary number that older files may not carry at all: 0 then. */
+function findOptionalSummaryNumber(
+  sheet: ExcelJS.Worksheet,
+  label: string,
+): number {
+  let value: ExcelJS.CellValue | undefined;
+  sheet.eachRow((row) => {
+    if (
+      value === undefined &&
+      normalized(textOf(row.getCell(1).value)) === normalized(label)
+    )
+      value = row.getCell(2).value;
+  });
+  return value === undefined
+    ? 0
+    : numberOf(value, "FOXPOST_XLSX_PARTNER_PAYS_INVALID");
 }
 
 function moneyFromPdfToken(value: string): number | null {
@@ -254,9 +276,14 @@ export function validateFoxpostPair(
     throw new FoxpostParseError("FOXPOST_PERIOD_MISMATCH");
   if (Math.abs(xlsx.invoiceGrossAmount - pdf.invoiceGrossAmount) > 0.01)
     throw new FoxpostParseError("FOXPOST_INVOICE_TOTAL_MISMATCH");
+  // Beszedett - Számla = what Foxpost transfers - what Acropora pays: one of
+  // the two is 0. In a normal week Acropora pays nothing and this is the old
+  // rule; in a week without COD, Foxpost transfers nothing.
   if (
     Math.abs(
-      xlsx.collectedAmount - xlsx.invoiceGrossAmount - xlsx.transferredAmount,
+      xlsx.collectedAmount -
+        xlsx.invoiceGrossAmount -
+        (xlsx.transferredAmount - xlsx.partnerPaysAmount),
     ) > 0.01
   )
     throw new FoxpostParseError("FOXPOST_TRANSFER_TOTAL_MISMATCH");
@@ -364,13 +391,16 @@ export class FoxpostSettlementParser {
         collectedAmount,
       });
     }
-    if (!lines.length)
-      throw new FoxpostParseError("FOXPOST_XLSX_COD_LINES_MISSING");
-
     const collectedAmount = numberOf(
       findSummaryValue(summary, "Beszedett összeg:"),
       "FOXPOST_XLSX_COLLECTED_TOTAL_INVALID",
     );
+    // A week without cash on delivery is a valid settlement: measured on
+    // production (26H30, 2026-07), the COD sheet has only its header and its
+    // "ÖSSZESEN: 0" row, the summary says "Beszedett összeg: 0", and Acropora
+    // pays the fee. Only lines missing next to a collected amount are an error.
+    if (!lines.length && collectedAmount !== 0)
+      throw new FoxpostParseError("FOXPOST_XLSX_COD_LINES_MISSING");
     const invoiceGrossAmount = numberOf(
       findSummaryValue(summary, "FOXPOST által számlázandó bruttó összeg:"),
       "FOXPOST_XLSX_INVOICE_TOTAL_INVALID",
@@ -378,6 +408,10 @@ export class FoxpostSettlementParser {
     const transferredAmount = numberOf(
       findSummaryValue(summary, "FOXPOST által utalandó összeg:", true),
       "FOXPOST_XLSX_TRANSFER_TOTAL_INVALID",
+    );
+    const partnerPaysAmount = findOptionalSummaryNumber(
+      summary,
+      "PARTNER által utalandó összeg (számlázott):",
     );
     const lineTotal = lines.reduce(
       (sum, line) => sum + line.collectedAmount,
@@ -394,6 +428,7 @@ export class FoxpostSettlementParser {
       collectedAmount,
       invoiceGrossAmount,
       transferredAmount,
+      partnerPaysAmount,
       currency: "HUF",
       lines,
     };

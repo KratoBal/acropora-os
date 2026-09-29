@@ -23,8 +23,13 @@ adatot.
    egyezése igazolja.
 3. A PDF fizetendő végösszegének egyeznie kell az XLSX összesítőjének bruttó
    számlaösszegével.
-4. Az `Utalt` összeg ellenőrzése `Beszedett - Számla` alapján történik; nem az
-   utánvétes sorok egyenként kerekített `Utalandó` értékeiből.
+4. Az `Utalt` összeg ellenőrzése `Beszedett - Számla = Utalt - Partner
+fizeti` alapján történik (a kettő közül az egyik 0); nem az utánvétes sorok
+   egyenként kerekített `Utalandó` értékeiből. Egy utánvét nélküli hét
+   (`Beszedett összeg: 0`, üres utánvétek-lap) érvényes elszámolás: a díjat
+   ilyenkor az Acropora fizeti ("PARTNER által utalandó összeg (számlázott)"),
+   a havi fájlban az `Utalt` 0, képlet helyett, "a díjat a partner fizeti"
+   megjegyzéssel. Mérve a 26H30-on (2026-07).
 5. A rendelési számla feloldása először a helyi
    `ExternalReference.externalKey -> SalesOrder -> Invoice` láncon történik.
    Ha a helyi tükörből hiányzik a rendelés vagy a számla, a rendszer célzott,

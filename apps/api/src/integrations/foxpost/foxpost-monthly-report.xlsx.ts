@@ -144,10 +144,18 @@ export class FoxpostMonthlyReportXlsx {
         indent: 1,
       };
       sheet.getCell(thirdRow, 4).value = "Utalt";
-      sheet.getCell(thirdRow, 5).value = {
-        formula: `E${firstRow}-E${secondRow}`,
-        result: settlement.transferredAmount,
-      };
+      // "Beszedett - Számla" is what Foxpost transfers only when the COD
+      // covers the fee. In a week without COD (26H30) it would read -2283:
+      // Foxpost transfers 0 there, and Acropora pays the invoice.
+      sheet.getCell(thirdRow, 5).value =
+        settlement.collectedAmount >= settlement.invoiceGrossAmount
+          ? {
+              formula: `E${firstRow}-E${secondRow}`,
+              result: settlement.transferredAmount,
+            }
+          : settlement.transferredAmount;
+      if (settlement.collectedAmount < settlement.invoiceGrossAmount)
+        sheet.getCell(thirdRow, 6).value = "a díjat a partner fizeti";
       collectedCells.push(`E${firstRow}`);
       invoiceCells.push(`E${secondRow}`);
       transferredCells.push(`E${thirdRow}`);

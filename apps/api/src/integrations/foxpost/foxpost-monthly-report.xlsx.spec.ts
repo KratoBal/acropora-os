@@ -58,4 +58,30 @@ describe("FoxpostMonthlyReportXlsx", () => {
     assert.equal(reviewSheet.getCell("J2").value, 4_000);
     assert.equal(reviewSheet.getCell("K2").value, "Rendelés nem található");
   });
+
+  it("writes 0 transferred, not a negative formula, for a week Acropora pays", async () => {
+    // 26H30: no cash on delivery, a 2283 HUF fee; "Beszedett - Számla" would
+    // read -2283, while Foxpost transferred nothing
+    const report = await new FoxpostMonthlyReportXlsx().build(2026, 7, [
+      {
+        invoiceIssueDate: new Date("2026-07-30T00:00:00.000Z"),
+        settlementCode: "26H30",
+        foxpostInvoiceNumber: "FX01011369",
+        collectedAmount: 0,
+        invoiceGrossAmount: 2_283,
+        transferredAmount: 0,
+        invoiceNumbers: [],
+        unresolvedLines: [],
+      },
+    ]);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(report.buffer as unknown as ExcelJS.Buffer);
+    const sheet = workbook.getWorksheet("FOXPOST")!;
+    assert.deepEqual(
+      [sheet.getCell("D6").value, sheet.getCell("E6").value],
+      ["Utalt", 0],
+    );
+    assert.equal(sheet.getCell("F6").value, "a díjat a partner fizeti");
+    assert.equal(sheet.getCell("E5").value, 2_283);
+  });
 });
