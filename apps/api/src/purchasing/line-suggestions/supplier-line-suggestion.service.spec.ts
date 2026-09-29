@@ -42,6 +42,9 @@ const LIVE = {
 function fake(options: {
   mapped?: SuggestionProduct | null;
   byEan?: SuggestionProduct | null;
+  byCode?: Array<
+    SuggestionProduct & { manufacturerPartNumber: string | null; name: string }
+  >;
   vatId?: string;
   master?: SuggestionProduct[];
   runs?: Array<{
@@ -55,6 +58,7 @@ function fake(options: {
 }) {
   const created: Array<Record<string, unknown>> = [];
   const resolved: Array<{ id: string; data: Record<string, unknown> }> = [];
+  const codesAsked: string[][] = [];
   const repository = {
     candidateMaster: async () =>
       (options.master ?? [PLUGS, RACK]).map((product) => ({
@@ -65,6 +69,10 @@ function fake(options: {
     supplierVatId: async () => options.vatId ?? "DE342032439",
     mappedProduct: async () => options.mapped ?? null,
     barcodeProduct: async () => options.byEan ?? null,
+    productsByCode: async (codes: readonly string[]) => {
+      codesAsked.push([...codes]);
+      return options.byCode ?? [];
+    },
     createRun: async (data: Record<string, unknown>) => {
       created.push(data);
       return { id: `run-${created.length}` };
@@ -74,7 +82,7 @@ function fake(options: {
       resolved.push({ id, data });
     },
   } as unknown as SupplierLineSuggestionRepository;
-  return { repository, created, resolved };
+  return { repository, created, resolved, codesAsked };
 }
 
 function jevAnswer(
@@ -171,6 +179,61 @@ describe("SupplierLineSuggestionService", () => {
     assert.equal(result.suggestion, null);
     assert.equal(jev.calls.length, 0);
     assert.equal(created[0]!.errorCode, "MAPPING_EAN_CONFLICT");
+  });
+
+  it("the supplier's code as our SKU or MPN comes after the EAN and before any Jev", async () => {
+    const TESTER: SuggestionProduct = {
+      variantId: "v-no3po4",
+      sku: "ACR-L-000512",
+      productName: "Red Sea NO3:PO4-X 1000 ml",
+    };
+    const { repository, created, codesAsked } = fake({
+      byCode: [
+        {
+          ...TESTER,
+          manufacturerPartNumber: "R22204",
+          name: TESTER.productName,
+        },
+      ],
+    });
+    const jev = jevAnswer(keyOf(PLUGS.productName), 0.99);
+    const result = await new SupplierLineSuggestionService(
+      repository,
+      LIVE,
+      jev.fetch,
+    ).suggest({
+      ...REQUEST,
+      description: "RS NO3:PO4-X 1 litre",
+      supplierSku: "RS-R22204",
+    });
+    assert.equal(result.suggestion?.source, "CODE");
+    assert.equal(result.suggestion?.variantId, TESTER.variantId);
+    assert.equal(result.suggestion?.confidence, null);
+    assert.deepEqual(codesAsked, [["RS-R22204", "R22204"]]);
+    assert.equal(jev.calls.length, 0);
+    assert.equal(created.length, 1);
+    assert.equal(created[0]!.policyKey, "supplier-line-code");
+    assert.equal(created[0]!.exposure, "SHOWN");
+    assert.equal(created[0]!.requestedModel, "deterministic");
+    assert.equal(created[0]!.selectedValue, TESTER.variantId);
+  });
+
+  it("a code that fits two of our products suggests nothing by itself and leaves it to the Jev", async () => {
+    const { repository, created } = fake({
+      byCode: [
+        { ...PLUGS, manufacturerPartNumber: "81593", name: PLUGS.productName },
+        { ...RACK, manufacturerPartNumber: "81593", name: RACK.productName },
+      ],
+    });
+    const jev = jevAnswer(keyOf(PLUGS.productName), 0.99);
+    const result = await new SupplierLineSuggestionService(
+      repository,
+      LIVE,
+      jev.fetch,
+    ).suggest(REQUEST);
+    assert.equal(result.suggestion?.source, "JEV");
+    assert.equal(jev.calls.length, 1);
+    assert.ok(created.every((run) => run.policyKey !== "supplier-line-code"));
   });
 
   it("asks Jev only for a listed supplier, with the measured policy and question key", async () => {

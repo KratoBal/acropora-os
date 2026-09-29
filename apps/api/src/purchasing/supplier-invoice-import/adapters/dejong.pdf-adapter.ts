@@ -2,6 +2,7 @@ import type {
   SupplierInvoiceImportLine,
   SupplierInvoiceImportResult,
 } from "@acropora/types";
+import type { CandidateProfile } from "@acropora/jev";
 
 import {
   countryFromVatId,
@@ -64,7 +65,10 @@ const CODE_TOKEN = /^(?=.*[\d-])[A-Z0-9][A-Za-z0-9._/-]*$/;
 const CODE_TAIL = /^[A-Z0-9-]{1,6}$/;
 // De Jong's own charge codes: "SC-090012 Schenker 1/2 pallet" says no
 // "shipping", the code does
-const CHARGE_CODE = /^SC-\d+$/;
+// and its 09xxxx service codes: box, heat pack, CITES, fuel and freight
+// surcharges (62 lines on the 98 invoices, every one a charge; measured
+// 2026-09-29, before which only the fuel surcharge was caught, by its words)
+const CHARGE_CODE = /^(SC-\d+|09\d{4})$/;
 
 /** "1.025,00" -> 1025 */
 function dutchNumber(raw: string): number {
@@ -217,4 +221,50 @@ export const deJongPdfAdapter: SupplierPdfAdapter = {
       ],
     };
   },
+};
+
+/**
+ * THE DE JONG CANDIDATE PROFILE for the Jev's candidate list: De Jong writes
+ * the brand as its code prefix ("AI-LENS16", "RS-R22204", "FAUNA-15010V"),
+ * while the line text often starts with the product ("Lens for Hydra 32 HD",
+ * "NO3:PO4-X 1 litre"), which the generator would otherwise read as the brand.
+ * Measured 2026-09-29 on inv26008847: without it the right lens was not among
+ * the 3 candidates, because "lens" became the brand.
+ *
+ * Only prefixes whose brand words occur in our catalogue names are routed
+ * (counted on the production export, 1927 variants); livestock codes and
+ * De Jong's own "DJM-" carry no brand and stay with the name.
+ */
+export const deJongCandidateProfile: CandidateProfile = {
+  brandRouting: [
+    { pattern: /^triton-/, words: ["triton"] },
+    { pattern: /^fauna-/, words: ["fauna", "marin"] },
+    { pattern: /^rs-/, words: ["redsea"] },
+    { pattern: /^afo-/, words: ["aquaforest"] },
+    { pattern: /^arka-/, words: ["arka"] },
+    { pattern: /^bluelife-/, words: ["blue", "life"] },
+    { pattern: /^salifert-/, words: ["salifert"] },
+    { pattern: /^ce-/, words: ["coral", "essentials"] },
+    { pattern: /^ns-/, words: ["neptune"] },
+    { pattern: /^ai-/, words: ["aqua", "illumination"] },
+    { pattern: /^kz-/, words: ["korallen", "zucht"] },
+    { pattern: /^nyos-/, words: ["nyos"] },
+    { pattern: /^ati-/, words: ["ati"] },
+    { pattern: /^grotech-/, words: ["grotech"] },
+    { pattern: /^rf-/, words: ["reef", "factory"] },
+    { pattern: /^vca-/, words: ["vca"] },
+    { pattern: /^flipper-/, words: ["flipper"] },
+    { pattern: /^tm-/, words: ["tropic", "marin"] },
+    { pattern: /^xepta-/, words: ["xepta"] },
+    { pattern: /^oa-/, words: ["ocean", "art"] },
+    { pattern: /^rowa-/, words: ["rowa"] },
+    { pattern: /^polyplab-/, words: ["polyplab"] },
+    { pattern: /^sicce-/, words: ["sicce"] },
+    { pattern: /^vi-/, words: ["vitalis"] },
+  ],
+  // the catalogue writes the brand both ways
+  brandAliases: [
+    { when: ["redsea"], alternatives: [["red", "sea"]] },
+    { when: ["polyplab"], alternatives: [["polyp", "lab"]] },
+  ],
 };

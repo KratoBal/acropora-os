@@ -178,7 +178,8 @@ export interface PurchaseProductConflictLookup {
  * Egy termék nélküli számlasorhoz javasolt termék (#1199 P-026). Soha nem
  * köt magától: az ember fogadja el, és a mentés a szokásos úton megy.
  */
-export type SupplierLineSuggestionSource = "MAPPING" | "EAN" | "JEV";
+/** CODE: the supplier's code is our SKU or manufacturer part number. */
+export type SupplierLineSuggestionSource = "MAPPING" | "EAN" | "CODE" | "JEV";
 
 export interface SupplierLineSuggestionRequest {
   /** Az űrlap művelet-azonosítója; a sor kulcsával együtt azonosítja a futást. */

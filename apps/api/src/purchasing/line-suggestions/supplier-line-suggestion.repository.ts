@@ -85,6 +85,40 @@ export class SupplierLineSuggestionRepository {
     return mapping ? productOf(mapping.variant) : null;
   }
 
+  /**
+   * The variants whose SKU or manufacturer part number equals one of the
+   * codes, case-insensitively, with the name the code check reads.
+   */
+  async productsByCode(codes: readonly string[]): Promise<
+    Array<
+      SuggestionProduct & {
+        manufacturerPartNumber: string | null;
+        name: string;
+      }
+    >
+  > {
+    if (codes.length === 0) return [];
+    const variants = await prisma.productVariant.findMany({
+      where: {
+        OR: codes.flatMap((code) => [
+          { sku: { equals: code, mode: "insensitive" as const } },
+          {
+            manufacturerPartNumber: {
+              equals: code,
+              mode: "insensitive" as const,
+            },
+          },
+        ]),
+      },
+      select: { ...productSelect, manufacturerPartNumber: true },
+    });
+    return variants.map((variant) => ({
+      ...productOf(variant),
+      manufacturerPartNumber: variant.manufacturerPartNumber,
+      name: `${variant.product.name} ${variant.name ?? ""}`.trim(),
+    }));
+  }
+
   /** The product whose barcode is exactly this code. */
   async barcodeProduct(code: string): Promise<SuggestionProduct | null> {
     const barcode = await prisma.productBarcode.findUnique({

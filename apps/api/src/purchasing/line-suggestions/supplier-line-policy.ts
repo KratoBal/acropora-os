@@ -41,6 +41,11 @@ export const SUPPLIER_LINE_EAN_POLICY = {
   key: "supplier-line-ean",
   version: 1,
 } as const;
+/** The supplier's code is our SKU or MPN (see `supplier-code-match.ts`). */
+export const SUPPLIER_LINE_CODE_POLICY = {
+  key: "supplier-line-code",
+  version: 1,
+} as const;
 export const DETERMINISTIC_MODEL = "deterministic";
 
 /**
