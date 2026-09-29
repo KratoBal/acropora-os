@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import {
+  MAIL_TEMPLATE_EVENTS,
+  mailTemplateEventVariables,
+} from "@acropora/types";
+
 import type { MailSender, OutgoingMail } from "./mail.port.js";
 import type {
   TicketMailContext,
@@ -594,6 +599,7 @@ const ALAIRAS_BEMENET = {
   partnerName: "Fővárosi Állat- És Növénykert",
   signerName: "Kiss Márta",
   signerEmail: "kiss.marta@partner.invalid",
+  senderName: "Szerviz Szabolcs",
   actorUserId: "user-2" as string | null,
 };
 
@@ -885,6 +891,7 @@ describe("az anyagigény levele -- beérkezéskor", () => {
       worksheetNumber: "BIO-2026-001",
       worksheetLink: "https://os.acropora.hu/szerviz/munkalapok/w-1",
       itemsText: EGY_TETEL,
+      receiverName: "Beszerző Béla",
       recipients: [
         { email: "kero@example.invalid" },
         { email: "felelos@example.invalid" },
@@ -911,6 +918,7 @@ describe("az anyagigény levele -- beérkezéskor", () => {
       worksheetNumber: "BIO-2026-001",
       worksheetLink: "",
       itemsText: EGY_TETEL,
+      receiverName: "Beszerző Béla",
       recipients: [{ email: "kero@example.invalid" }],
     });
     assert.deepEqual(eredmeny, { kind: "skipped", reason: "path-off" });
@@ -1082,5 +1090,121 @@ describe("formazott sablon a hibajegy-leveleknel", () => {
     });
     assert.deepEqual(eredmeny, { kind: "failed", unknown: ["cimzet"] });
     assert.deepEqual(kuldott, []);
+  });
+});
+
+/**
+ * EVERY VARIABLE AN EVENT DECLARES, ITS SEND PATH FILLS IN.
+ *
+ * 2026-09-29, production: the signature and the "material received" templates
+ * used `{{kuldo_neve}}`, the save accepted it (the name existed, for another
+ * event), the send path did not provide it, and the mails silently did not
+ * go out. The event's list (`MailTemplateEvent.variables`) is what the editor
+ * offers and the save accepts; this makes the send path keep that promise: a
+ * template with ALL of them must be SENT, and nothing may stay unreplaced.
+ */
+describe("minden esemeny minden meghirdetett valtozojat kitolti", () => {
+  const minden = (id: string) => {
+    const nevek = mailTemplateEventVariables(id).map((v) => v.name);
+    assert.ok(nevek.length > 0, id);
+    const szoveg = nevek.map((n) => `${n}=[{{${n}}}]`).join("\n");
+    return { subject: `${id} {{${nevek[0]}}}`, body: szoveg };
+  };
+  const kiment = (eredmeny: unknown, kuldott: OutgoingMail[]): void => {
+    assert.deepEqual(eredmeny, { kind: "sent" });
+    assert.equal(kuldott.length, 1);
+    assert.doesNotMatch(kuldott[0]!.text, /\{\{/);
+  };
+
+  it("WORKSHEET_SIGNED", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      template: minden("WORKSHEET_SIGNED"),
+    });
+    kiment(
+      await service.deliverWorksheetSigned({
+        serviceJobId: "job-1",
+        actorUserId: "user-2",
+      }),
+      kuldott,
+    );
+  });
+
+  it("SERVICE_JOB_OPENED_BY_CUSTOMER", async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      template: minden("SERVICE_JOB_OPENED_BY_CUSTOMER"),
+    });
+    kiment(
+      await service.deliverServiceJobOpened({
+        serviceJobId: "job-1",
+        actorUserId: "user-2",
+        recipients: [{ email: "felelos@example.invalid" }],
+      }),
+      kuldott,
+    );
+  });
+
+  it("WORKSHEET_SEND_FOR_SIGNATURE, a kikuldo nevevel", async () => {
+    const { service, kuldott } = alairasSzolgaltatas({
+      mode: "live",
+      template: minden("WORKSHEET_SEND_FOR_SIGNATURE"),
+    });
+    kiment(
+      await service.deliverWorksheetSendForSignature(ALAIRAS_BEMENET),
+      kuldott,
+    );
+    assert.match(kuldott[0]!.text, /^kuldo_neve=\[Szerviz Szabolcs\]$/m);
+  });
+
+  it("MATERIAL_REQUEST_CREATED", async () => {
+    const { service, kuldott } = anyagigenySzolgaltatas({
+      template: minden("MATERIAL_REQUEST_CREATED"),
+    });
+    kiment(
+      await service.deliverMaterialRequestCreated({
+        materialRequestId: "mr-1",
+        worksheetNumber: "BIO-2026-001",
+        worksheetLink: "",
+        requesterName: "Szerelő Sándor",
+        itemsText: EGY_TETEL,
+        recipients: [{ email: "beszerzo@example.invalid" }],
+      }),
+      kuldott,
+    );
+  });
+
+  it("MATERIAL_REQUEST_RECEIVED, a beerkeztetest rogzito nevevel", async () => {
+    const { service, kuldott } = anyagigenySzolgaltatas({
+      template: minden("MATERIAL_REQUEST_RECEIVED"),
+    });
+    kiment(
+      await service.deliverMaterialRequestReceived({
+        materialRequestId: "mr-1",
+        worksheetNumber: "BIO-2026-001",
+        worksheetLink: "",
+        itemsText: EGY_TETEL,
+        receiverName: "Beszerző Béla",
+        recipients: [{ email: "kero@example.invalid" }],
+      }),
+      kuldott,
+    );
+    assert.match(kuldott[0]!.text, /^kuldo_neve=\[Beszerző Béla\]$/m);
+  });
+
+  it("a lista minden esemenyt lefed, ami ebben a szolgaltatasban kuld", () => {
+    // the aquarium event is sent by its own service, and tested there
+    assert.deepEqual(
+      MAIL_TEMPLATE_EVENTS.map((e) => e.id).filter(
+        (id) => id !== "AQUARIUM_MEASUREMENT_RESULT",
+      ),
+      [
+        "WORKSHEET_SIGNED",
+        "SERVICE_JOB_OPENED_BY_CUSTOMER",
+        "WORKSHEET_SEND_FOR_SIGNATURE",
+        "MATERIAL_REQUEST_CREATED",
+        "MATERIAL_REQUEST_RECEIVED",
+      ],
+    );
   });
 });

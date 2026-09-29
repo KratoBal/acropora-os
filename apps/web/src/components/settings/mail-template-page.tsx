@@ -204,15 +204,16 @@ export function MailTemplatePage() {
    * helyen, hanem EGY függvény két hívóhellyel. A szerveré a döntő; ez csak
    * előbb szól, mielőtt bárki elmenti.
    */
-  const ismeretlen = useMemo(
-    () => [
+  const ismeretlen = useMemo(() => {
+    // the event's own variables, as the server checks on save
+    const hasznalhato = variables.map((v) => v.name);
+    return [
       ...new Set([
-        ...unknownTemplateVariables(subject),
-        ...unknownTemplateVariables(body),
+        ...unknownTemplateVariables(subject, hasznalhato),
+        ...unknownTemplateVariables(body, hasznalhato),
       ]),
-    ],
-    [subject, body],
-  );
+    ];
+  }, [subject, body, variables]);
 
   /**
    * A FORMAZAS ALTAL KETTEVAGOTT VALTOZO. A szerkeszto a valtozot atomkent

@@ -173,7 +173,9 @@ export class MaterialRequestsService {
     void this.ertesitsLetrehozasrol(
       updated,
       worksheet.customer.displayName,
-      worksheet.number,
+      // a draft worksheet has no number yet: the linked ticket's, as the
+      // signature mail does (2026-09-29: "Új anyagigény:" went out empty)
+      worksheet.number ?? worksheet.serviceJob?.jobNumber ?? null,
     );
     const response = await this.listForWorksheet(before.worksheetId, actor);
     const vanKiJelolje =
@@ -364,12 +366,14 @@ export class MaterialRequestsService {
 
       this.ticketMail.notifyMaterialRequestReceived({
         materialRequestId: row.id,
-        worksheetNumber: worksheet.number,
+        worksheetNumber:
+          worksheet.number ?? worksheet.serviceJob?.jobNumber ?? null,
         worksheetLink: internalWorksheetLink({
           webUrl: this.environment.WEB_URL,
           worksheetId: row.worksheetId,
         }),
         itemsText: materialRequestItemsText(row.items),
+        receiverName: row.receivedByName ?? "Kolléga",
         recipients,
       });
     } catch (cause) {

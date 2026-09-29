@@ -214,6 +214,47 @@ describe("MailTemplateController.save, formázott törzzsel", () => {
     assert.deepEqual(mentett, []);
   });
 
+  /**
+   * 2026-09-29, production: `{{kuldo_neve}}` (the aquarium mail's variable)
+   * was accepted in the signature template, and three mails did not go out.
+   */
+  it("MASIK esemeny valtozojat 400-zal utasitja el, megnevezve, mi hasznalhato", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await assert.rejects(
+      () =>
+        controller.save(
+          WORKSHEET_SIGNED,
+          { subject: "Aláírva", body: "Küldte: {{akvarium_neve}}" },
+          SZERKESZTO,
+        ),
+      (hiba: unknown) =>
+        hiba instanceof BadRequestException &&
+        /akvarium_neve/.test(hiba.message) &&
+        /használható: cimzett, jegyszam/.test(hiba.message),
+    );
+    assert.deepEqual(mentett, []);
+  });
+
+  it("az esemeny SAJAT valtozojat menti", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await controller.save(
+      AQUARIUM_MEASUREMENT_RESULT,
+      { subject: "{{akvarium_neve}}", body: "Küldte: {{kuldo_neve}}" },
+      SZERKESZTO,
+    );
+    assert.equal(mentett.length, 1);
+  });
+
+  it("a szerkeszto csak az esemeny valtozoit kapja", async () => {
+    const valasz = await new MailTemplateController(tarolo(null), KEPEK).read(
+      WORKSHEET_SIGNED,
+    );
+    assert.deepEqual(
+      valasz.variables.map((v) => v.name),
+      ["cimzett", "jegyszam", "jegy_targya", "jegy_leirasa", "jegy_linkje"],
+    );
+  });
+
   it("a tisztítás után üres HTML-t nem ment", async () => {
     const { mentett, controller } = rogzitoTarolo();
     await assert.rejects(

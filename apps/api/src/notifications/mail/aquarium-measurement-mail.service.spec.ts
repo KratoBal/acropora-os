@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+
+import { mailTemplateEventVariables } from "@acropora/types";
 import { describe, it } from "node:test";
 
 import { BadRequestException } from "@nestjs/common";
@@ -93,6 +95,26 @@ function domainEventStub<T>(futtat: () => Promise<T>): Promise<T> {
 }
 
 describe("AquariumMeasurementMailService.send", () => {
+  /** See the same guard for the ticket events in `ticket-mail.service.spec.ts`. */
+  it("minden meghirdetett valtozojat kitolti", () =>
+    domainEventStub(async () => {
+      const nevek = mailTemplateEventVariables(
+        "AQUARIUM_MEASUREMENT_RESULT",
+      ).map((v) => v.name);
+      const { service, kuldott } = szolgaltatas({
+        template: {
+          subject: "{{akvarium_neve}}",
+          body: nevek.map((n) => `${n}=[{{${n}}}]`).join("\n"),
+        },
+      });
+
+      await service.send(kuldesInput());
+
+      assert.equal(kuldott.length, 1);
+      assert.doesNotMatch(kuldott[0]!.text, /\{\{/);
+      assert.match(kuldott[0]!.text, /^kuldo_neve=\[Tóth Gábor\]$/m);
+    }));
+
   it("a KÖRNYEZET feladója megy, ha az AQUARIUM_MEASUREMENT_MAIL_FROM hiányzik (mai viselkedés)", () =>
     domainEventStub(async () => {
       const { service, kuldott } = szolgaltatas({});

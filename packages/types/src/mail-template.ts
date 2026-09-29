@@ -64,8 +64,8 @@ export interface MailTemplateVariable {
  * all: a `WORKSHEET_SEND_FOR_SIGNATURE` level EGY KONKRET munkalaprol szol,
  * ami a kuldes pillanataban egyertelmuen adott (a felhasznalo AZT a lapot
  * kuldi ki, amelyiken all). Az egyertelmuseg tehat nem a mezotol fugg, hanem
- * az esemenytol -- es ez pont az az erv, amiert a valtozo-lista majd
- * esemenyenkent fog szurni.
+ * az esemenytol -- es ez pont az az erv, amiert a valtozo-lista
+ * esemenyenkent szur (`MailTemplateEvent.variables`, 2026-09-29).
  */
 export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
   /**
@@ -133,11 +133,15 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
   },
   /**
    * A KOVETKEZO NEGY VALTOZO A `WORKSHEET_SEND_FOR_SIGNATURE` ESEMENYHEZ
-   * TARTOZIK, es ez a lista MA MEG NEM ESEMENYENKENT SZUR -- lasd a
-   * `MAIL_TEMPLATE_VARIABLES` fejlecet. Vagyis ezek a mai WORKSHEET_SIGNED es
-   * SERVICE_JOB_OPENED_BY_CUSTOMER szerkesztoiben IS megjelennek, es ott
-   * mindig uresen renderelodnek (a hivo nem tolti ki oket). Ismert allapot,
-   * nem hiba -- a szetvalasztas kulon dontesre var.
+   * TARTOZIK.
+   *
+   * ITT 2026-09-29-IG AZ ALLT, HOGY A TOBBI ESEMENY SZERKESZTOJEBEN "MINDIG
+   * URESEN RENDERELODNEK". EZ HAMIS VOLT: a `renderMailTemplate` ismeretlen
+   * nevnel NEM renderel, a level kimarad. Elesen igy maradt ki harom alairasi
+   * felkero level 2026-09-29-en: a sablonba `{{kuldo_neve}}` kerult, a
+   * mentes elfogadta (a nev letezett, csak MAS esemenynel), a kuldesi ut nem
+   * adta. Azota minden esemeny maga mondja meg, milyen valtozot ad
+   * (`MailTemplateEvent.variables`), es a mentes ahhoz mer.
    *
    * A `munkalap_szama` LEIRASA REBASE UTAN BOVULT: az anyagigeny esemenyek
    * (lent) ugyanezt a nevet hasznaljak, es a ket felhasznalas egymast fedi --
@@ -211,7 +215,7 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
    */
   {
     name: "kuldo_neve",
-    description: "A vízmérés eredményét kiküldő kolléga neve.",
+    description: "A levelet kiküldő kolléga neve.",
   },
 ] as const;
 
@@ -223,6 +227,14 @@ export interface MailTemplateEvent {
   readonly name: string;
   /** Mikor megy ki -- a szerkeszto melle. */
   readonly description: string;
+  /**
+   * A valtozok, amiket EZ AZ ESEMENY kuldesi utja kitolt -- es csak ezek.
+   * A mentes ehhez mer, a szerkeszto ezeket ajanlja fel. Egy itt felsorolt, de
+   * az uton ki nem toltott nev a level kimaradasat jelenti: ezt az esemenyenkenti
+   * kuldesi teszt fogja meg (`ticket-mail.service.spec.ts`,
+   * `aquarium-measurement-mail.service.spec.ts`).
+   */
+  readonly variables: readonly string[];
 }
 
 /**
@@ -248,30 +260,67 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
     name: "Munkalapot aláírtak",
     description:
       "A hibajegyhez tartozó munkalap aláírása után megy ki a jegy nyitójának.",
+    variables: [
+      "cimzett",
+      "jegyszam",
+      "jegy_targya",
+      "jegy_leirasa",
+      "jegy_linkje",
+    ],
   },
   {
     id: "SERVICE_JOB_OPENED_BY_CUSTOMER",
     name: "Ügyfél hibajegyet rögzít",
     description:
       "Akkor megy ki, amikor egy ügyfél hibajegyet nyit a partnerportálon. Címzettje mindenki, akinél a hibajegy-felelős szerep be van jelölve.",
+    variables: [
+      "cimzett",
+      "jegyszam",
+      "jegy_targya",
+      "jegy_leirasa",
+      "bejelento",
+      "ugyfelkod",
+      "jegy_linkje",
+    ],
   },
   {
     id: "WORKSHEET_SEND_FOR_SIGNATURE",
     name: "Munkalap aláírásra kiküldve",
     description:
       "Akkor megy ki, amikor egy kolléga a munkalapot aláírásra kiküldi. Címzettje a kiválasztott aláíró, a partner munkatársa.",
+    variables: [
+      "alairo_neve",
+      "kuldo_neve",
+      "munkalap_szama",
+      "partner_neve",
+      "munkalap_linkje",
+    ],
   },
   {
     id: "MATERIAL_REQUEST_CREATED",
     name: "Anyagigény érkezett",
     description:
       'Akkor megy ki, amikor egy szervizes anyagigényt küld a munkalapról. Címzettje mindenki, akinél a "szerviz anyagbeszerzés: értesítést fogad" jelölő be van jelölve.',
+    variables: [
+      "cimzett",
+      "munkalap_szama",
+      "kero",
+      "tetelek",
+      "munkalap_belso_linkje",
+    ],
   },
   {
     id: "MATERIAL_REQUEST_RECEIVED",
     name: "Anyag beérkezett",
     description:
       "Akkor megy ki, amikor a beszerző megjelöli, hogy az anyag megérkezett. Címzettje az igényt kérő kolléga és a munkalap minden felelőse.",
+    variables: [
+      "cimzett",
+      "kuldo_neve",
+      "munkalap_szama",
+      "tetelek",
+      "munkalap_belso_linkje",
+    ],
   },
   /**
    * Balazs kerese, 2026-09-24 17:03 UTC (Akvariumok szal, message_id
@@ -283,8 +332,22 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
     name: "Vízmérés eredménye",
     description:
       "Akkor megy ki, amikor egy kolléga elküldi egy akvárium vagy tó vízmérésének eredményét az ügyfélnek, gombnyomásra.",
+    variables: ["cimzett", "akvarium_neve", "kuldo_neve"],
   },
 ] as const;
+
+/**
+ * Az esemeny valtozoi, a leirasukkal, a kozos lista sorrendjeben. Ismeretlen
+ * esemenyre ures: annak nincs kuldesi utja, tehat semmit nem ad.
+ */
+export function mailTemplateEventVariables(
+  eventId: string,
+): readonly MailTemplateVariable[] {
+  const nevek = new Set(
+    MAIL_TEMPLATE_EVENTS.find((esemeny) => esemeny.id === eventId)?.variables,
+  );
+  return MAIL_TEMPLATE_VARIABLES.filter((valtozo) => nevek.has(valtozo.name));
+}
 
 /** Ismert esemeny-e. A vegpont ES a felulet ezt kerdezi, nem sajat listat. */
 export function isMailTemplateEvent(id: string): boolean {
@@ -436,9 +499,16 @@ export function splitTemplateVariables(html: string): readonly string[] {
  * Ugyanaz a motor, de a kimenete a SZERKESZTONEK szol, nem a vevonek. Enelkul
  * egy elgepelt mezonev csak a kovetkezo valodi kuldeskor bukna ki, amikor mar
  * senki nem emlekszik ra, hogy a sablont atirtak.
+ *
+ * AZ `allowed` KOTELEZO, ES EZ A LENYEG: az ESEMENY valtozoi, nem a kozos
+ * lista. 2026-09-29-ig a kozos listahoz mert, igy egy MASIK esemeny valtozoja
+ * (`kuldo_neve` az alairasi levelben) atment a mentesen, es a level kimaradt.
  */
-export function unknownTemplateVariables(template: string): readonly string[] {
-  const ismertek = new Set(MAIL_TEMPLATE_VARIABLES.map((v) => v.name));
+export function unknownTemplateVariables(
+  template: string,
+  allowed: readonly string[],
+): readonly string[] {
+  const ismertek = new Set(allowed);
   const talalt = [...template.matchAll(HELY)].map((m) => m[1] as string);
   return [...new Set(talalt.filter((n) => !ismertek.has(n)))];
 }

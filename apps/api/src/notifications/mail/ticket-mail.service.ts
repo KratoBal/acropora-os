@@ -460,6 +460,8 @@ export class TicketMailService {
     partnerName: string;
     signerName: string;
     signerEmail: string;
+    /** The colleague who sends it out: `{{kuldo_neve}}`. */
+    senderName: string;
     actorUserId: string | null;
   }): void {
     void this.deliverWorksheetSendForSignature(input).catch(
@@ -498,6 +500,8 @@ export class TicketMailService {
     partnerName: string;
     signerName: string;
     signerEmail: string;
+    /** The colleague who sends it out: `{{kuldo_neve}}`. */
+    senderName: string;
     actorUserId: string | null;
   }): Promise<TicketMailOutcome> {
     const decision = worksheetSendForSignatureMailDecision({
@@ -531,6 +535,7 @@ export class TicketMailService {
 
     const ertekek = {
       alairo_neve: input.signerName,
+      kuldo_neve: input.senderName,
       munkalap_szama: input.jobNumber ?? input.worksheetNumber ?? "",
       partner_neve: input.partnerName,
       munkalap_linkje: link,
@@ -667,6 +672,8 @@ export class TicketMailService {
     worksheetNumber: string | null;
     worksheetLink: string;
     itemsText: string;
+    /** The colleague who marked it received: `{{kuldo_neve}}`. */
+    receiverName: string;
     recipients: readonly { readonly email: string }[];
   }): Promise<TicketMailOutcome> {
     return this.deliverMaterialRequestMail({
@@ -675,6 +682,7 @@ export class TicketMailService {
       recipients: input.recipients,
       values: {
         cimzett: "Kolléga",
+        kuldo_neve: input.receiverName,
         munkalap_szama: input.worksheetNumber ?? "",
         tetelek: input.itemsText,
         munkalap_belso_linkje: input.worksheetLink,
@@ -688,6 +696,8 @@ export class TicketMailService {
     worksheetNumber: string | null;
     worksheetLink: string;
     itemsText: string;
+    /** The colleague who marked it received: `{{kuldo_neve}}`. */
+    receiverName: string;
     recipients: readonly { readonly email: string }[];
   }): void {
     void this.deliverMaterialRequestReceived(input).catch((cause: unknown) => {

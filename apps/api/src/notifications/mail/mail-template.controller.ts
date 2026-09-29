@@ -24,6 +24,7 @@ import {
 import {
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
+  mailTemplateEventVariables,
   PERMISSIONS,
   splitTemplateVariables,
   unknownTemplateVariables,
@@ -235,7 +236,8 @@ export class MailTemplateController {
       defaultTemplate: alapertelmezes(id),
       /** A link-valtozok mintaja: a valodi level webcimevel es utvonalaval. */
       sampleLinks: sampleLinks(this.environment),
-      variables: MAIL_TEMPLATE_VARIABLES,
+      // only what THIS event's send path fills in (2026-09-29)
+      variables: mailTemplateEventVariables(id),
     };
   }
 
@@ -275,13 +277,20 @@ export class MailTemplateController {
         );
     }
 
+    /*
+      AZ ESEMENY VALTOZOI, NEM A KOZOS LISTA. 2026-09-29-ig a kozos listahoz
+      mert, igy a `{{kuldo_neve}}` (a vizmeres-level valtozoja) atment az
+      alairasi es az "anyag beerkezett" sablon menteSEN, es mindket level
+      kimaradt elesen: a kuldesi ut nem adta.
+    */
+    const hasznalhato = mailTemplateEventVariables(id).map((v) => v.name);
     const ismeretlen = [
-      ...unknownTemplateVariables(input.subject),
-      ...unknownTemplateVariables(torzs.bodyHtml ?? torzs.body),
+      ...unknownTemplateVariables(input.subject, hasznalhato),
+      ...unknownTemplateVariables(torzs.bodyHtml ?? torzs.body, hasznalhato),
     ];
     if (ismeretlen.length)
       throw new BadRequestException(
-        `Ismeretlen változó a sablonban: ${[...new Set(ismeretlen)].join(", ")}. A használható változók: ${MAIL_TEMPLATE_VARIABLES.map((v) => v.name).join(", ")}.`,
+        `Ebben a levélben nem használható változó: ${[...new Set(ismeretlen)].join(", ")}. Ennél a levélnél használható: ${hasznalhato.join(", ")}.`,
       );
 
     await this.repository.saveTemplate({

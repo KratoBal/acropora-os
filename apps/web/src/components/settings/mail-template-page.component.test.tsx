@@ -206,6 +206,19 @@ describe("a levélsablon szerkesztője", () => {
     ).toContain("{{nincs_ilyen}}");
   });
 
+  /**
+   * 2026-09-29, production: `{{kuldo_neve}}` exists, but for ANOTHER event.
+   * The editor checks against the variables the server lists for THIS event,
+   * as the save does, not against every variable there is.
+   */
+  it("egy MASIK esemeny valtozojat is ismeretlennek jelzi", async () => {
+    await megjelenit();
+    await torzsBeir("<p>Küldte: {{kuldo_neve}}</p>");
+    expect(
+      screen.getByText(/ezeket a rendszer nem ismeri/).textContent,
+    ).toContain("{{kuldo_neve}}");
+  });
+
   /** 3. KIKÖTÉS, MÁSODIK FELE: ilyen sablont el sem lehet menteni. */
   it("ismeretlen változóval a mentést nem engedi", async () => {
     await megjelenit();
