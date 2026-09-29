@@ -35,8 +35,18 @@ export function unitLabel(code: string | null | undefined): string {
  * stays on the invoice (it is part of the total) and is never offered for
  * linking to a product.
  */
+/*
+ * BOVITVE 2026-09-29 (Balazs 11:49 UTC: a szabaly minden szallitora, acrobot
+ * 24749: csak MERT alakok):
+ *   - "(ki)szállítási díj/költség" -- a "Kiszállítási díj" eddig kimaradt, mert
+ *     a szo KOZEPEN nincs szohatar; a "Szállítási költség" nem is szerepelt;
+ *   - "postaköltség";
+ *   - "delivery": a De Jong 19005741-es szamlajan egy kod nelkuli "Truck
+ *     delivery" sor (5 050 EUR) eddig termek-javaslatot kert.
+ * A magyar alakok csak a NAV-bol jovo belfoldi szamlakon fordulnak elo.
+ */
 const CHARGE_WORDS =
-  /\b(fracht\w*|versand\w*|porto|shipping|freight|verpackung\w*|transport\w*|szállítási díj|fuvar\w*)\b/i;
+  /\b(fracht\w*|versand\w*|porto|shipping|freight|delivery|verpackung\w*|transport\w*|(?:ki)?szállítási (?:díj|költség)|postaköltség|fuvar\w*)\b/i;
 
 export function isChargeDescription(description: string): boolean {
   return CHARGE_WORDS.test(description);
