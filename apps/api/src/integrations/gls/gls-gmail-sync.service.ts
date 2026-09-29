@@ -1,4 +1,4 @@
-import { Prisma, prisma } from "@acropora/database";
+import { Prisma, prisma, type SyncRunTrigger } from "@acropora/database";
 import {
   BadRequestException,
   ConflictException,
@@ -71,23 +71,33 @@ export class GlsGmailSyncService {
   ) {}
 
   async status(): Promise<GlsSyncStatus> {
-    const last = await prisma.glsSyncRun.findFirst({
-      orderBy: { startedAt: "desc" },
-    });
+    const [last, lastScheduled] = await Promise.all([
+      prisma.glsSyncRun.findFirst({ orderBy: { startedAt: "desc" } }),
+      prisma.glsSyncRun.findFirst({
+        where: { trigger: "SCHEDULED" },
+        orderBy: { startedAt: "desc" },
+      }),
+    ]);
     return {
       state: glsSyncState(this.environment),
       canRunNow: glsGmailCredentials(this.environment) !== null,
       intervalMinutes: glsSyncIntervalMinutes(this.environment),
       lastRun: last ? summary(last) : undefined,
+      lastScheduledRun: lastScheduled ? summary(lastScheduled) : undefined,
     };
   }
 
-  async sync(): Promise<GlsSyncRunSummary> {
+  /**
+   * One pull. The trigger is REQUIRED: the page's "did it run by itself"
+   * line counts only SCHEDULED runs, so a caller that does not say which it
+   * is must not compile.
+   */
+  async sync(trigger: SyncRunTrigger): Promise<GlsSyncRunSummary> {
     if (!glsGmailCredentials(this.environment))
       throw new BadRequestException(
         "Nincs Gmail-kulcs beállítva, a GLS-leveleket nem lehet lehúzni.",
       );
-    const runId = await this.startRun();
+    const runId = await this.startRun(trigger);
     const counts = {
       messagesSeen: 0,
       documentsRead: 0,
@@ -183,7 +193,7 @@ export class GlsGmailSyncService {
     }
   }
 
-  private async startRun(): Promise<string> {
+  private async startRun(trigger: SyncRunTrigger): Promise<string> {
     try {
       return await prisma.$transaction(async (tx) => {
         await tx.glsSyncRun.updateMany({
@@ -200,7 +210,7 @@ export class GlsGmailSyncService {
           },
         });
         const run = await tx.glsSyncRun.create({
-          data: { activeKey: ACTIVE_KEY, status: "RUNNING" },
+          data: { activeKey: ACTIVE_KEY, status: "RUNNING", trigger },
         });
         return run.id;
       });
@@ -217,6 +227,7 @@ export class GlsGmailSyncService {
 
 function summary(run: {
   status: "RUNNING" | "APPLIED" | "FAILED";
+  trigger: SyncRunTrigger | null;
   startedAt: Date;
   completedAt: Date | null;
   messagesSeen: number;
@@ -227,6 +238,7 @@ function summary(run: {
 }): GlsSyncRunSummary {
   return {
     status: run.status,
+    trigger: run.trigger ?? undefined,
     startedAt: run.startedAt.toISOString(),
     completedAt: run.completedAt?.toISOString(),
     messagesSeen: run.messagesSeen,

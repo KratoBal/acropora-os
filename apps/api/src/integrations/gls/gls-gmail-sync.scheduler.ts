@@ -48,7 +48,7 @@ export class GlsGmailSyncScheduler implements OnModuleInit, OnModuleDestroy {
 
   async runOnce(): Promise<"APPLIED" | "SKIPPED" | "FAILED"> {
     try {
-      await this.sync.sync();
+      await this.sync.sync("SCHEDULED");
       return "APPLIED";
     } catch (error) {
       if (

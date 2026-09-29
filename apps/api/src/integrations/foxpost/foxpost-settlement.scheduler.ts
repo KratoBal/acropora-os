@@ -95,7 +95,7 @@ export class FoxpostSettlementScheduler
 
   async runOnce(): Promise<"APPLIED" | "SKIPPED" | "FAILED"> {
     try {
-      await this.settlements.sync();
+      await this.settlements.sync("SCHEDULED");
       return "APPLIED";
     } catch (error) {
       if (

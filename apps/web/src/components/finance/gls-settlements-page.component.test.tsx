@@ -128,6 +128,37 @@ beforeEach(() => {
 });
 
 describe("GlsSettlementsPage", () => {
+  it("when on, names the last AUTOMATIC run, not the newest button run", async () => {
+    const run = {
+      messagesSeen: 1,
+      duplicateCount: 0,
+      failedCount: 0,
+      status: "APPLIED" as const,
+    };
+    api.syncStatus.mockResolvedValue({
+      state: "ENABLED",
+      canRunNow: true,
+      intervalMinutes: 60,
+      lastRun: {
+        ...run,
+        trigger: "MANUAL",
+        startedAt: "2026-09-29T09:00:00.000Z",
+        documentsRead: 4,
+      },
+      lastScheduledRun: {
+        ...run,
+        trigger: "SCHEDULED",
+        startedAt: "2026-09-29T08:00:00.000Z",
+        documentsRead: 1,
+      },
+    });
+    render(createElement(GlsSettlementsPage));
+    expect(
+      await screen.findByText(/Utolsó automatikus futás: .*1 új dokumentum/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/4 új dokumentum/)).toBeNull();
+  });
+
   it("opens a transfer and approves the open line with the suggested number", async () => {
     render(createElement(GlsSettlementsPage));
     fireEvent.click(
@@ -250,8 +281,11 @@ describe("GlsSettlementsPage", () => {
       state: "ENABLED",
       canRunNow: true,
       intervalMinutes: 60,
-      lastRun: {
+      // The line names the last AUTOMATIC run (2026-09-29): a failed timer
+      // run is exactly what it must not hide.
+      lastScheduledRun: {
         status: "FAILED",
+        trigger: "SCHEDULED",
         startedAt: "2026-09-29T09:00:00.000Z",
         messagesSeen: 0,
         documentsRead: 0,

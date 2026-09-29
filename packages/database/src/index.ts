@@ -61,6 +61,7 @@ export type {
   SocialKeeping,
   Supplier,
   SupplierProduct,
+  SyncRunTrigger,
   Task,
   TaskSource,
   TaskStatus,

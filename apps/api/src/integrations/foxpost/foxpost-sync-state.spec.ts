@@ -87,12 +87,13 @@ describe("foxpostSyncState", () => {
 });
 
 describe("FoxpostSettlementService.syncStatus", () => {
-  function service(lastRun: unknown) {
+  function service(lastRun: unknown, lastScheduledRun?: unknown) {
     return new FoxpostSettlementService(
       {} as FoxpostGmailClient,
       {} as FoxpostSettlementParser,
       {
-        lastRun: async () => lastRun,
+        lastRun: async (trigger?: string) =>
+          trigger === "SCHEDULED" ? lastScheduledRun : lastRun,
       } as unknown as FoxpostSettlementRepository,
       {} as FoxpostMonthlyReportXlsx,
       {} as UnasAuthService,
@@ -120,6 +121,7 @@ describe("FoxpostSettlementService.syncStatus", () => {
         canRunNow: true,
         intervalMinutes: 60,
         lastRun: run,
+        lastScheduledRun: undefined,
       },
     );
   });
@@ -130,6 +132,20 @@ describe("FoxpostSettlementService.syncStatus", () => {
       canRunNow: false,
       intervalMinutes: 60,
       lastRun: undefined,
+      lastScheduledRun: undefined,
     });
+  });
+
+  it("reports the last AUTOMATIC run apart from the last run", async () => {
+    // A person pressed the button after the timer ran: the page must still
+    // say when the timer last ran, not the button's run.
+    const scheduled = { status: "APPLIED", trigger: "SCHEDULED" };
+    const manual = { status: "APPLIED", trigger: "MANUAL" };
+    const status = await service(manual, scheduled).syncStatus({
+      ...KEY,
+      GMAIL_FOXPOST_SYNC_ENABLED: "true",
+    });
+    assert.equal(status.lastRun, manual);
+    assert.equal(status.lastScheduledRun, scheduled);
   });
 });

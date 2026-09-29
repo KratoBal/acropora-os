@@ -166,7 +166,7 @@ describe("FoxpostSettlementService", () => {
       } as unknown as UnasApiClient,
     );
 
-    const result = await service.sync();
+    const result = await service.sync("MANUAL");
     assert.equal(result.createdCount, 1);
     assert.equal(result.needsReviewCount, 0);
     assert.equal(unasCalls, 1);
@@ -417,7 +417,7 @@ describe("FoxpostSettlementService", () => {
       {} as UnasAuthService,
       {} as UnasApiClient,
     );
-    const result = await service.sync();
+    const result = await service.sync("MANUAL");
     assert.equal(stored, 0);
     assert.equal(result.skippedCount, 1);
     assert.equal(result.failedCount, 0);

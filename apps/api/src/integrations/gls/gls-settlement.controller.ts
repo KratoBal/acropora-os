@@ -109,7 +109,7 @@ export class GlsSettlementController {
   @Post("sync")
   @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
   syncNow() {
-    return this.gmailSync.sync();
+    return this.gmailSync.sync("MANUAL");
   }
 
   @Get("invoices")

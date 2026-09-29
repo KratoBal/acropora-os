@@ -319,13 +319,13 @@ export function GlsSettlementsPage() {
       {syncStatus?.state === "ENABLED" ? (
         <p className="text-sm text-dusk-600">
           Automatikus Gmail-behúzás: {syncStatus.intervalMinutes} percenként.{" "}
-          {syncStatus.lastRun
-            ? `Utolsó futás: ${new Date(syncStatus.lastRun.startedAt).toLocaleString("hu-HU")}, ${
-                syncStatus.lastRun.status === "FAILED"
-                  ? `sikertelen (${syncStatus.lastRun.errorCode ?? "ismeretlen hiba"})`
-                  : `${syncStatus.lastRun.documentsRead} új dokumentum`
+          {syncStatus.lastScheduledRun
+            ? `Utolsó automatikus futás: ${new Date(syncStatus.lastScheduledRun.startedAt).toLocaleString("hu-HU")}, ${
+                syncStatus.lastScheduledRun.status === "FAILED"
+                  ? `sikertelen (${syncStatus.lastScheduledRun.errorCode ?? "ismeretlen hiba"})`
+                  : `${syncStatus.lastScheduledRun.documentsRead} új dokumentum`
               }.`
-            : "Még nem futott."}
+            : "Automatikus futás még nincs rögzítve."}
         </p>
       ) : null}
       {notice ? (

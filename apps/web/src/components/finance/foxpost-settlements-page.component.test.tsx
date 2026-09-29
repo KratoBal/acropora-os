@@ -133,13 +133,26 @@ describe("FoxpostSettlementsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("when on, says how often it runs and what the last run found", async () => {
+  it("when on, says how often it runs and what the last AUTOMATIC run found", async () => {
+    // A person pressed the button after the timer ran: the line is about
+    // the timer ("does it run by itself"), not the newest run.
     api.syncStatus.mockResolvedValue({
       state: "ENABLED",
       canRunNow: true,
       intervalMinutes: 30,
       lastRun: {
         status: "APPLIED",
+        trigger: "MANUAL",
+        startedAt: "2026-09-29T09:00:00.000Z",
+        messagesSeen: 5,
+        createdCount: 5,
+        skippedCount: 0,
+        needsReviewCount: 0,
+        failedCount: 0,
+      },
+      lastScheduledRun: {
+        status: "APPLIED",
+        trigger: "SCHEDULED",
         startedAt: "2026-09-29T08:00:00.000Z",
         messagesSeen: 2,
         createdCount: 1,
@@ -151,12 +164,20 @@ describe("FoxpostSettlementsPage", () => {
     render(createElement(FoxpostSettlementsPage));
     expect(
       await screen.findByText(
-        /Automatikus Gmail-behúzás: 30 percenként\..*1 új elszámolás/,
+        /Automatikus Gmail-behúzás: 30 percenként\. Utolsó automatikus futás: .*1 új elszámolás/,
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/5 új elszámolás/)).not.toBeInTheDocument();
     expect(
       screen.queryByText("Az automatikus Gmail-behúzás ki van kapcsolva"),
     ).not.toBeInTheDocument();
+  });
+
+  it("when on but no automatic run is recorded, says so, not that it never ran", async () => {
+    render(createElement(FoxpostSettlementsPage));
+    expect(
+      await screen.findByText(/Automatikus futás még nincs rögzítve\./),
+    ).toBeInTheDocument();
   });
 
   it("shows the imported settlement and its bookkeeping totals", async () => {

@@ -155,6 +155,13 @@ enum GlsSyncRunStatus {
   FAILED
 }
 
+/// Who started a Gmail pull run: the timer, or a person with the button.
+/// Recorded since 2026-09-29; older runs have NULL (unknown), not a guess.
+enum SyncRunTrigger {
+  SCHEDULED
+  MANUAL
+}
+
 /// A NAV-tól letöltött belföldi beszállítói (bejövő) számla állapota a
 /// bevételezési folyamatban: NEW - csak a digest ismert; DATA_FETCHED - a
 /// teljes számla-XML lekérve és feldolgozva, bevételezhető; RECEIVED - már
@@ -5666,6 +5673,8 @@ model FoxpostSyncRun {
   id               String               @id @default(cuid())
   activeKey        String?              @unique
   status           FoxpostSyncRunStatus @default(RUNNING)
+  /// NULL = a run from before 2026-09-29, when this was not recorded.
+  trigger          SyncRunTrigger?
   startedAt        DateTime             @default(now())
   completedAt      DateTime?
   messagesSeen     Int                  @default(0)
@@ -5822,6 +5831,8 @@ model GlsSyncRun {
   id             String           @id @default(cuid())
   activeKey      String?          @unique
   status         GlsSyncRunStatus @default(RUNNING)
+  /// NULL = a run from before 2026-09-29, when this was not recorded.
+  trigger        SyncRunTrigger?
   startedAt      DateTime         @default(now())
   completedAt    DateTime?
   messagesSeen   Int              @default(0)
