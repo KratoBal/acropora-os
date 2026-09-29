@@ -21,6 +21,7 @@ import { PostalCodeModule } from "./integrations/postal-code/postal-code.module.
 import { SzamlazzModule } from "./integrations/szamlazz/szamlazz.module.js";
 import { ViesVatModule } from "./integrations/vies/vies-vat.module.js";
 import { FoxpostSettlementModule } from "./integrations/foxpost/foxpost-settlement.module.js";
+import { GlsSettlementModule } from "./integrations/gls/gls-settlement.module.js";
 import { InventoryModule } from "./inventory/inventory.module.js";
 import { AssetCategoriesModule } from "./asset-categories/asset-categories.module.js";
 import { AssetFunctionsModule } from "./asset-functions/asset-functions.module.js";
@@ -71,6 +72,7 @@ import { SearchModule } from "./search/search.module.js";
     PostalCodeModule,
     ViesVatModule,
     FoxpostSettlementModule,
+    GlsSettlementModule,
     SuppliersModule,
     PurchasingModule,
     ContentModule,

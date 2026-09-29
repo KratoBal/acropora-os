@@ -558,6 +558,19 @@ export type {
   FoxpostSettlementSummary,
   FoxpostSyncSummary,
 } from "./integrations/foxpost-settlement.js";
+export type {
+  GlsCodLineError,
+  GlsCodLineStatus,
+  GlsCodReportDetail,
+  GlsCodReportLine,
+  GlsCodReportListResponse,
+  GlsCodReportStatus,
+  GlsCodReportSummary,
+  GlsCodResolutionSource,
+  GlsDocumentUploadResult,
+  GlsInvoiceSummary,
+  GlsManualApprovalInput,
+} from "./integrations/gls-settlement.js";
 export {
   AI_ACCURACY_RATINGS,
   AI_LANGUAGE_RATINGS,
