@@ -55,6 +55,7 @@ describe("GLS Gmail sync integration", { skip: gate.mode === "skip" }, () => {
         receivedAt: null,
         subject: "Utánvét",
         xlsx: [{ fileName: "a.xlsx", buffer: report }],
+        pdf: [],
       },
     ],
     [
@@ -69,6 +70,7 @@ describe("GLS Gmail sync integration", { skip: gate.mode === "skip" }, () => {
             buffer: glsXlsx({ Arlista: [["Cikkszám"]] }),
           },
         ],
+        pdf: [],
       },
     ],
     [
@@ -78,6 +80,7 @@ describe("GLS Gmail sync integration", { skip: gate.mode === "skip" }, () => {
         receivedAt: null,
         subject: "Újra",
         xlsx: [{ fileName: "b.xlsx", buffer: report }],
+        pdf: [],
       },
     ],
   ]);

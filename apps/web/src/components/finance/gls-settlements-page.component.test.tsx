@@ -172,21 +172,32 @@ describe("GlsSettlementsPage", () => {
         id: "invoice-1",
         duplicate: true,
         newlyResolvedLineCount: 0,
+      })
+      .mockResolvedValueOnce({
+        kind: "COMPENSATION_LETTER",
+        id: "letter-1",
+        duplicate: false,
+        newlyResolvedLineCount: 0,
       });
     render(createElement(GlsSettlementsPage));
     const files = [
       new File(["a"], "utanvet.xlsx"),
       new File(["b"], "SettlementDocument_HU00000001.xlsx"),
+      new File(["c"], "100031291_20260910.pdf"),
     ];
     fireEvent.change(screen.getByLabelText("GLS fájlok feltöltése"), {
       target: { files },
     });
     expect(
       await screen.findByText(
-        "utanvet.xlsx: utánvét-részletező beolvasva, 3 sor párosítva. SettlementDocument_HU00000001.xlsx: ez a számlamelléklet már bent volt.",
+        "utanvet.xlsx: utánvét-részletező beolvasva, 3 sor párosítva. SettlementDocument_HU00000001.xlsx: ez a számlamelléklet már bent volt. 100031291_20260910.pdf: kompenzációs értesítő beolvasva, a havi fájlban az utalás napjához kerül.",
       ),
     ).toBeTruthy();
-    expect(api.upload).toHaveBeenCalledTimes(2);
+    expect(api.upload).toHaveBeenCalledTimes(3);
+    expect(
+      (screen.getByLabelText("GLS fájlok feltöltése") as HTMLInputElement)
+        .accept,
+    ).toBe(".xlsx,.pdf");
   });
 
   it("shows no page to someone without finance.view", () => {

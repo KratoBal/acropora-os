@@ -5777,6 +5777,32 @@ model GlsInvoiceParcel {
   @@index([parcelNumber])
 }
 
+/// GLS "Kompenzációs értesítő" (PDF, dunning@): az utánvét-utalás napján a GLS
+/// a saját nyitott számláit beszámítja a beszedett utánvétbe, és csak a
+/// különbséget utalja. Beszedett - kompenzáció = utalt; a számla nyitott
+/// összege - kompenzáció = maradvány (egy későbbi levél számítja be).
+model GlsCompensationLetter {
+  id               String   @id @default(cuid())
+  /// A beszámítás napja, egyben az utánvét-utalásé (GlsCodReport.transferDate).
+  compensationDate DateTime @db.Date
+  clientNumber     String
+  currency         String   @default("HUF") @db.VarChar(3)
+  cod              Decimal  @db.Decimal(19, 4)
+  compensated      Decimal  @db.Decimal(19, 4)
+  transferred      Decimal  @db.Decimal(19, 4)
+  debt             Decimal  @db.Decimal(19, 4)
+  remaining        Decimal  @db.Decimal(19, 4)
+  /// A beszámított GLS-számlák (vagy csomagok) száma, a levél sorrendjében.
+  references       String[]
+  fileName         String
+  sha256           String   @unique
+  content          Bytes
+  uploadedByUserId String?
+  createdAt        DateTime @default(now())
+
+  @@index([compensationDate])
+}
+
 /// Egy GLS-levél, amit a Gmail-behúzás már feldolgozott: többet nem töltjük
 /// le. Ha a mellékletei közül valamelyik nem volt olvasható, az `errorCode`
 /// mondja meg; a levél akkor sem próbálkozik újra óránként.

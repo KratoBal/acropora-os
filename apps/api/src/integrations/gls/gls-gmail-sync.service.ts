@@ -51,7 +51,8 @@ export function glsSyncState(
 }
 
 /**
- * THE GLS GMAIL PULL: the GLS senders' mails, each XLSX attachment through
+ * THE GLS GMAIL PULL: the GLS senders' mails, each XLSX attachment (and a
+ * compensation letter's PDF) through
  * the same path as a hand upload (so a file already in is a duplicate, and
  * nothing is stored twice). A mail is fetched once: afterwards it is known by
  * its id, also when one of its files was refused. Every run is recorded, so
@@ -113,7 +114,7 @@ export class GlsGmailSyncService {
           const message = await this.gmail.getMessage(id);
           receivedAt = message.receivedAt;
           subject = message.subject;
-          for (const file of message.xlsx) {
+          for (const file of [...message.xlsx, ...message.pdf]) {
             try {
               const result = await this.settlements.ingest(
                 file.buffer,
@@ -132,7 +133,8 @@ export class GlsGmailSyncService {
               );
             }
           }
-          if (message.xlsx.length === 0) messageError = "GLS_GMAIL_NO_XLSX";
+          if (message.xlsx.length + message.pdf.length === 0)
+            messageError = "GLS_GMAIL_NO_XLSX";
         } catch (error) {
           // a mail that cannot be fetched is not recorded: the next run tries
           // it again (a network error is not a verdict on the mail)

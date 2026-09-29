@@ -82,7 +82,7 @@ export interface GlsInvoiceSummary {
 }
 
 export interface GlsDocumentUploadResult {
-  kind: "COD_REPORT" | "INVOICE_ATTACHMENT";
+  kind: "COD_REPORT" | "INVOICE_ATTACHMENT" | "COMPENSATION_LETTER";
   id: string;
   /** `true`: ez a dokumentum már bent volt, semmi nem változott. */
   duplicate: boolean;

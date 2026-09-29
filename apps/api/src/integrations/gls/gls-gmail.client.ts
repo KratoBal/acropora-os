@@ -3,6 +3,7 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import {
   DEFAULT_GLS_GMAIL_QUERY,
   glsGmailCredentials,
+  isGlsCompensationSubject,
   type GlsGmailCredentials,
 } from "./gls-gmail.config.js";
 
@@ -11,7 +12,8 @@ import {
  * senders' mails and download their XLSX attachments. The same token flow
  * as the Foxpost client (`foxpost-gmail.client.ts`); unlike it, a GLS mail is
  * not a fixed pair: the COD report comes alone, the invoice attachment comes
- * with a PDF and an XML, and only the XLSX files are read.
+ * with a PDF and an XML, and only the XLSX files are read. The one PDF that
+ * is read is the compensation letter's, recognised by its subject.
  */
 
 export const GLS_GMAIL_FETCH = Symbol("GLS_GMAIL_FETCH");
@@ -43,6 +45,8 @@ export interface GlsGmailMessage {
   receivedAt: Date | null;
   subject: string | null;
   xlsx: Array<{ fileName: string; buffer: Buffer }>;
+  /** Only a compensation letter's PDF; empty for every other mail. */
+  pdf: Array<{ fileName: string; buffer: Buffer }>;
 }
 
 function decodeBase64Url(data: string): Buffer {
@@ -56,6 +60,13 @@ function decodeBase64Url(data: string): Buffer {
 function allParts(root: GmailPart | undefined): GmailPart[] {
   if (!root) return [];
   return [root, ...(root.parts ?? []).flatMap((part) => allParts(part))];
+}
+
+function isPdf(part: GmailPart): boolean {
+  return (
+    Boolean(part.filename?.toLowerCase().endsWith(".pdf")) ||
+    part.mimeType === "application/pdf"
+  );
 }
 
 function isXlsx(part: GmailPart): boolean {
@@ -125,9 +136,16 @@ export class GlsGmailClient {
     }>(new URL(`${base}?format=full`), {
       headers: { Authorization: `Bearer ${token}` },
     });
+    const subject =
+      message.payload?.headers
+        ?.find((header) => header.name?.toLowerCase() === "subject")
+        ?.value?.trim() || null;
+    const compensation = isGlsCompensationSubject(subject);
     const xlsx: GlsGmailMessage["xlsx"] = [];
+    const pdf: GlsGmailMessage["pdf"] = [];
     for (const part of allParts(message.payload).filter(
-      (part) => part.filename && isXlsx(part),
+      (part) =>
+        part.filename && (isXlsx(part) || (compensation && isPdf(part))),
     )) {
       let encoded = part.body?.data;
       if (!encoded && part.body?.attachmentId) {
@@ -146,17 +164,15 @@ export class GlsGmailClient {
       const buffer = decodeBase64Url(encoded);
       if (buffer.length > MAX_ATTACHMENT_BYTES)
         throw new GlsGmailError("GLS_GMAIL_ATTACHMENT_TOO_LARGE");
-      xlsx.push({ fileName: part.filename!, buffer });
+      (isXlsx(part) ? xlsx : pdf).push({ fileName: part.filename!, buffer });
     }
     const internalDate = Number(message.internalDate);
     return {
       id: message.id,
       receivedAt: Number.isFinite(internalDate) ? new Date(internalDate) : null,
-      subject:
-        message.payload?.headers
-          ?.find((header) => header.name?.toLowerCase() === "subject")
-          ?.value?.trim() || null,
+      subject,
       xlsx,
+      pdf,
     };
   }
 

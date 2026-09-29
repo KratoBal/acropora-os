@@ -171,14 +171,17 @@ export function GlsSettlementsPage() {
       const results: string[] = [];
       for (const file of list) {
         const result = await glsSettlementsApi.upload(token, file);
-        const kind =
-          result.kind === "COD_REPORT"
-            ? "utánvét-részletező"
-            : "számlamelléklet";
+        const kind = {
+          COD_REPORT: "utánvét-részletező",
+          INVOICE_ATTACHMENT: "számlamelléklet",
+          COMPENSATION_LETTER: "kompenzációs értesítő",
+        }[result.kind];
         results.push(
           result.duplicate
             ? `${file.name}: ez a ${kind} már bent volt.`
-            : `${file.name}: ${kind} beolvasva, ${result.newlyResolvedLineCount} sor párosítva.`,
+            : result.kind === "COMPENSATION_LETTER"
+              ? `${file.name}: ${kind} beolvasva, a havi fájlban az utalás napjához kerül.`
+              : `${file.name}: ${kind} beolvasva, ${result.newlyResolvedLineCount} sor párosítva.`,
         );
       }
       setNotice(results.join(" "));
@@ -273,7 +276,7 @@ export function GlsSettlementsPage() {
     <div className="space-y-6">
       <PageHeader
         title="GLS elszámolások"
-        description="A GLS heti utánvét-részletezője és kéthetes számlamelléklete. Az utánvét soronként a kimenő számlához kötve; a díjszámla külön."
+        description="A GLS heti utánvét-részletezője, kéthetes számlamelléklete és kompenzációs értesítője. Az utánvét soronként a kimenő számlához kötve; a díjszámla külön; a kompenzáció az utalásból levonva."
         actions={
           canManage ? (
             <>
@@ -289,7 +292,7 @@ export function GlsSettlementsPage() {
               <input
                 ref={fileInput}
                 type="file"
-                accept=".xlsx"
+                accept=".xlsx,.pdf"
                 multiple
                 className="hidden"
                 aria-label="GLS fájlok feltöltése"

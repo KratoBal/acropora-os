@@ -95,6 +95,12 @@ describe("GLS settlement integration", { skip: gate.mode === "skip" }, () => {
         }),
       },
       {
+        nev: "GlsCompensationLetter by file name prefix",
+        darab: await prisma.glsCompensationLetter.count({
+          where: { fileName: { startsWith: `${INVOICE_PREFIX}-` } },
+        }),
+      },
+      {
         nev: "User by test domain",
         darab: await prisma.user.count({
           where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
@@ -113,6 +119,9 @@ describe("GLS settlement integration", { skip: gate.mode === "skip" }, () => {
     });
     await prisma.invoice.deleteMany({
       where: { invoiceNumber: { startsWith: `${INVOICE_PREFIX}-` } },
+    });
+    await prisma.glsCompensationLetter.deleteMany({
+      where: { fileName: { startsWith: `${INVOICE_PREFIX}-` } },
     });
     await prisma.user.deleteMany({
       where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
@@ -210,5 +219,60 @@ describe("GLS settlement integration", { skip: gate.mode === "skip" }, () => {
       .getWorksheet("GLS")!
       .eachRow((row) => none.push(row.getCell(2).value));
     assert.ok(!none.includes(invoiceNumber));
+  });
+
+  it("stores a compensation letter once, and sets it off in its day's block", async () => {
+    const repository = new GlsSettlementRepository();
+    const source = {
+      fileName: `${INVOICE_PREFIX}-${suffix}.pdf`,
+      sha256: `${INVOICE_PREFIX}-${suffix}`,
+      content: Buffer.from("%PDF"),
+      uploadedByUserId: userId,
+    };
+    const letter = {
+      // the day of the stored COD report above, whose total is 1 500
+      date: "2026-09-03",
+      clientNumber: "3480031291",
+      cod: 1500,
+      compensated: 500,
+      transferred: 1000,
+      references: [`HU${suffix}00`],
+      debt: 700,
+      remaining: 200,
+    };
+    const first = await repository.createCompensationLetter(source, letter);
+    const again = await repository.createCompensationLetter(source, letter);
+    assert.deepEqual(
+      [first.duplicate, again.duplicate, again.id],
+      [false, true, first.id],
+    );
+
+    const september = await service.monthlyReport(2026, 9);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(september.buffer as unknown as ExcelJS.Buffer);
+    const gls = workbook.getWorksheet("GLS")!;
+    let collectedRow = 0;
+    gls.eachRow((row, number) => {
+      if (row.getCell(4).value === "Beszedett" && row.getCell(5).value === 1500)
+        collectedRow = number;
+    });
+    assert.ok(collectedRow > 0, "the day's block is in the file");
+    const cell = (row: number, column: number) => {
+      const value = gls.getCell(row, column).value as
+        { result?: unknown } | unknown;
+      return value && typeof value === "object" && "result" in value
+        ? value.result
+        : value;
+    };
+    assert.deepEqual(
+      [
+        cell(collectedRow + 1, 4),
+        cell(collectedRow + 1, 5),
+        cell(collectedRow + 2, 4),
+        cell(collectedRow + 2, 5),
+      ],
+      ["Kompenzáció", 500, "Utalt", 1000],
+    );
+    assert.match(String(cell(collectedRow + 2, 6)), /^Egyezik az értesítővel/);
   });
 });
