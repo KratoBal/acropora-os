@@ -74,7 +74,6 @@ export class GlsGmailSyncService {
     const [last, lastScheduled] = await Promise.all([
       prisma.glsSyncRun.findFirst({ orderBy: { startedAt: "desc" } }),
       prisma.glsSyncRun.findFirst({
-        where: { trigger: "SCHEDULED" },
         orderBy: { startedAt: "desc" },
       }),
     ]);

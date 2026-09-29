@@ -1,0 +1,5 @@
+# Kalibracio a feat/sync-run-trigger (a7568348) ket adatbazis-szurojere.
+# Rontas: a GLS status nem szur trigger-re, a Foxpost lastRun sem.
+# Mindket integracios allitasnak el kell buknia.
+not ok - keeps the last AUTOMATIC run apart: a button run does not replace it, an unknown one never counts
+not ok - names the timer's run, not the newer button run nor an unknown one

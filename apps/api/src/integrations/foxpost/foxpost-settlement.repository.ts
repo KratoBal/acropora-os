@@ -288,7 +288,7 @@ export class FoxpostSettlementRepository extends Repository {
     trigger?: SyncRunTrigger,
   ): Promise<FoxpostSyncRunSummary | undefined> {
     const run = await prisma.foxpostSyncRun.findFirst({
-      where: trigger ? { trigger } : undefined,
+      where: trigger ? undefined : undefined,
       orderBy: { startedAt: "desc" },
     });
     if (!run) return undefined;
