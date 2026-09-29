@@ -905,6 +905,10 @@ export function PurchaseInvoiceEuEditorPage() {
           sourceDescription: line.sourceDescription.trim() || undefined,
           navLineNumber: line.navLineNumber ?? undefined,
           decisionRunId: line.decisionRunId ?? undefined,
+          // the supplier's code of a line linked to one of our products:
+          // saved, it becomes the mapping the next invoice finds first
+          supplierSku:
+            line.variantId && line.supplierSku ? line.supplierSku : undefined,
           orderedQuantity: line.orderedQuantity,
           actualQuantity: line.actualQuantity,
           unit: line.unit,
@@ -1084,7 +1088,11 @@ export function PurchaseInvoiceEuEditorPage() {
         <Alert
           variant="info"
           title={`Számla rögzítve: ${lastResult.detail.documentNumber}`}
-          description={`Készlet helyileg lekönyvelve ${lastResult.successCount} tételnél. Létrejött ${lastResult.localProductCreatedCount} helyi termék és ${lastResult.projectReservationCount} projektfoglalás; ${lastResult.unasQueuedCount} UNAS-termék szabad készletének szinkronja került sorba.`}
+          description={`Készlet helyileg lekönyvelve ${lastResult.successCount} tételnél. Létrejött ${lastResult.localProductCreatedCount} helyi termék és ${lastResult.projectReservationCount} projektfoglalás; ${lastResult.unasQueuedCount} UNAS-termék szabad készletének szinkronja került sorba.${
+            lastResult.supplierCodesLearned > 0
+              ? ` ${lastResult.supplierCodesLearned} szállítói cikkszám a termékéhez kötve ennél a szállítónál.`
+              : ""
+          }`}
           action={
             <Button
               variant="secondary"
@@ -1093,6 +1101,19 @@ export function PurchaseInvoiceEuEditorPage() {
               Számla megnyitása
             </Button>
           }
+        />
+      ) : null}
+      {lastResult && lastResult.supplierCodeConflicts.length > 0 ? (
+        <Alert
+          variant="danger"
+          title="Szállítói cikkszám, amit a rendszer nem kötött a termékhez"
+          description={lastResult.supplierCodeConflicts
+            .map((conflict) =>
+              conflict.reason === "CODE_ON_OTHER_PRODUCT"
+                ? `${conflict.supplierSku}: ennél a szállítónál már egy másik termékhez tartozik (${conflict.otherProductName ?? "?"}), nem ehhez (${conflict.productName}).`
+                : `${conflict.supplierSku}: a(z) ${conflict.productName} termékhez ennél a szállítónál már a(z) ${conflict.otherSupplierSku ?? "?"} kód tartozik.`,
+            )
+            .join("\n")}
         />
       ) : null}
 

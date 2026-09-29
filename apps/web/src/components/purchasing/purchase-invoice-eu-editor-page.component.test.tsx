@@ -156,6 +156,8 @@ beforeEach(() => {
     unasQueuedCount: 1,
     localProductCreatedCount: 0,
     projectReservationCount: 0,
+    supplierCodesLearned: 0,
+    supplierCodeConflicts: [],
   });
   purchasingApiMock.getExchangeRate.mockReset().mockResolvedValue({
     currency: "EUR",
@@ -874,6 +876,8 @@ describe("PurchaseInvoiceEuEditorPage sor-javaslat", () => {
     expect(keres.lines[0]).toMatchObject({
       variantId: "variant-plugs",
       decisionRunId: "run-1",
+      // a linked line carries its supplier code: the server learns from it
+      supplierSku: "81593",
     });
     expect(keres.lines[1].decisionRunId).toBeUndefined();
   });

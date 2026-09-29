@@ -18,6 +18,7 @@ import type {
   PurchaseInvoiceResult,
   PurchaseProductConflictLookup,
   PurchaseProductSearchResult,
+  SupplierCodeConflict,
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
@@ -34,6 +35,7 @@ import { PurchaseProductSearchService } from "./purchase-product-search.service.
 import { navLineSource, navSourceLines } from "./nav-line-source.js";
 import { ProjectRepository } from "./project.repository.js";
 import { SupplierLineSuggestionService } from "./line-suggestions/supplier-line-suggestion.service.js";
+import { SupplierCodeLearningRepository } from "./supplier-code-learning.repository.js";
 
 @Injectable()
 export class PurchasingService {
@@ -56,6 +58,10 @@ export class PurchasingService {
     // before: no run is resolved, and nothing else changes.
     @Optional()
     private readonly lineSuggestions?: SupplierLineSuggestionService,
+    // learns (supplier code -> product) from lines a person linked. Optional
+    // for the same reason: without it nothing is learned, nothing else changes
+    @Optional()
+    private readonly codeLearning?: SupplierCodeLearningRepository,
   ) {}
 
   private readonly logger = new Logger(PurchasingService.name);
@@ -585,6 +591,41 @@ export class PurchasingService {
       }
     }
 
+    // what a person linked by hand becomes the supplier mapping for next time
+    let supplierCodesLearned = 0;
+    let supplierCodeConflicts: SupplierCodeConflict[] = [];
+    const learnable = input.lines.flatMap((line, index) => {
+      const variantId = preparedLines[index]?.variantId;
+      const supplierSku = line.supplierSku?.trim();
+      return supplierSku && variantId
+        ? [
+            {
+              supplierSku,
+              variantId,
+              sourceDescription: line.sourceDescription?.trim() || null,
+              unitNet: line.unitNet,
+              decisionRunId: line.decisionRunId ?? null,
+            },
+          ]
+        : [];
+    });
+    if (learnable.length > 0 && this.codeLearning) {
+      try {
+        const learned = await this.codeLearning.learn({
+          supplierId: input.supplierId,
+          currency,
+          lines: learnable,
+        });
+        supplierCodesLearned = learned.learned;
+        supplierCodeConflicts = learned.conflicts;
+      } catch (error) {
+        // the invoice is saved and stays saved; only the learning failed
+        this.logger.warn(
+          `A szállítói kódok megtanulása kimaradt (${detail.id}): ${error instanceof Error ? error.name : "ismeretlen hiba"}`,
+        );
+      }
+    }
+
     const linkedLineCount = preparedLines.filter(
       (line) => line.variantId || line.createLocalProduct,
     ).length;
@@ -607,6 +648,8 @@ export class PurchasingService {
         (count, line) => count + (line.projectAllocations?.length ?? 0),
         0,
       ),
+      supplierCodesLearned,
+      supplierCodeConflicts,
     };
   }
 }

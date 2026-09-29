@@ -409,6 +409,7 @@ export type {
   SupplierLineSuggestionResult,
   SupplierLineSuggestionSource,
   SupplierInvoiceImportLine,
+  SupplierCodeConflict,
   SupplierInvoiceImportResult,
 } from "./purchasing.js";
 export type {

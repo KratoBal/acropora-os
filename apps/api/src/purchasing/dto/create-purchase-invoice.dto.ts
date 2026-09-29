@@ -48,6 +48,8 @@ export class CreatePurchaseInvoiceLineDto {
   @IsInt() @Min(1) @Max(2147483647) @IsOptional() navLineNumber?: number;
   /** #1199 P-026: a sorhoz kért javaslat audit-futása; mentéskor ez zárul le. */
   @IsString() @IsOptional() decisionRunId?: string;
+  /** The supplier's own code on this line; learned when a person links it. */
+  @IsString() @MinLength(1) @MaxLength(100) @IsOptional() supplierSku?: string;
   @IsNumber() @Min(0) orderedQuantity!: number;
   @IsNumber() @Min(0) actualQuantity!: number;
   @IsString() @MinLength(1) unit!: string;
