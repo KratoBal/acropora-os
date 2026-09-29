@@ -351,16 +351,29 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
    * A CIMZETT UGYANABBOL A LISTABOL JON, amibol a belso alairas valasztoja
    * (`signers`) -- nem egy masodik lekerdezesbol. Ket lista ugyanarra a kerdesre
    * elso nap ketté valna.
+   *
+   * RESEND (2026-09-29): the block stays after the first send. That day three
+   * signature mails did not go out (a template variable the path did not
+   * fill), and there was no way to send them again: the server allows it (the
+   * status stays AWAITING_SIGNATURE, a new mail goes), only this block hid.
    */
+  const sentForSignatureAt = current.sentForSignatureAt;
   const sendForSignatureBlock =
-    canManage &&
-    current.status === "AWAITING_SIGNATURE" &&
-    current.sentForSignatureAt === null ? (
+    canManage && current.status === "AWAITING_SIGNATURE" ? (
       <ServicePanel>
-        <ServicePanelHeading title="Kiküldés aláírásra" />
+        <ServicePanelHeading
+          title={
+            sentForSignatureAt ? "Újraküldés aláírásra" : "Kiküldés aláírásra"
+          }
+        />
         <p className="-mt-3 mb-4 text-xs text-muted">
-          A lap ki van állítva, de még nem küldtük ki. Amíg nem megy ki, az
-          ügyfél a partnerportálon sem tudja aláírni.
+          {sentForSignatureAt
+            ? `Kiküldve ${formatDateTime(sentForSignatureAt)}${
+                current.sentForSignatureToName
+                  ? `: ${current.sentForSignatureToName}`
+                  : ""
+              }. Ha a levél nem érkezett meg, küldd ki újra: új levél megy, az aláírás állapota nem változik.`
+            : "A lap ki van állítva, de még nem küldtük ki. Amíg nem megy ki, az ügyfél a partnerportálon sem tudja aláírni."}
         </p>
         <div className="grid gap-3 md:grid-cols-[2fr_auto]">
           <FormField label="Kinek küldjük ki">
@@ -393,7 +406,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                 )
               }
             >
-              Elküldöm aláírásra
+              {sentForSignatureAt ? "Újraküldöm" : "Elküldöm aláírásra"}
             </Button>
           </div>
         </div>
