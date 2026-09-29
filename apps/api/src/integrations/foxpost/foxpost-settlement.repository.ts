@@ -9,6 +9,7 @@ import type {
   FoxpostSettlementDetail,
   FoxpostSettlementListResponse,
   FoxpostSettlementSummary,
+  FoxpostSyncRunSummary,
   FoxpostSyncSummary,
 } from "@acropora/types";
 
@@ -275,6 +276,24 @@ export class FoxpostSettlementRepository extends Repository {
         errorCode: errorCode.slice(0, 200),
       },
     });
+  }
+
+  async lastRun(): Promise<FoxpostSyncRunSummary | undefined> {
+    const run = await prisma.foxpostSyncRun.findFirst({
+      orderBy: { startedAt: "desc" },
+    });
+    if (!run) return undefined;
+    return {
+      status: run.status,
+      startedAt: run.startedAt.toISOString(),
+      completedAt: run.completedAt?.toISOString(),
+      messagesSeen: run.messagesSeen,
+      createdCount: run.createdCount,
+      skippedCount: run.skippedCount,
+      needsReviewCount: run.needsReviewCount,
+      failedCount: run.failedCount,
+      errorCode: run.errorCode ?? undefined,
+    };
   }
 
   async hasMessage(gmailMessageId: string): Promise<boolean> {

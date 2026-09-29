@@ -558,6 +558,9 @@ export type {
   FoxpostSettlementListResponse,
   FoxpostSettlementStatus,
   FoxpostSettlementSummary,
+  FoxpostSyncRunSummary,
+  FoxpostSyncState,
+  FoxpostSyncStatus,
   FoxpostSyncSummary,
 } from "./integrations/foxpost-settlement.js";
 export type {

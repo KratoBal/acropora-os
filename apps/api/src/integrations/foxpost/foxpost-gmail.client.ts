@@ -77,6 +77,17 @@ function boundedInteger(
   return parsed;
 }
 
+/** Whether the three key variables are there (the manual check needs them). */
+export function foxpostGmailKeyPresent(
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return Boolean(
+    environment.GMAIL_FOXPOST_CLIENT_ID?.trim() &&
+    environment.GMAIL_FOXPOST_CLIENT_SECRET?.trim() &&
+    environment.GMAIL_FOXPOST_REFRESH_TOKEN?.trim(),
+  );
+}
+
 export function foxpostGmailConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): FoxpostGmailConfig {

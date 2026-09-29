@@ -29,6 +29,13 @@ export class FoxpostSettlementController {
     return this.settlements.list(query);
   }
 
+  /** Whether the Gmail pull runs by itself, and why not; and its last run. */
+  @Get("sync")
+  @RequirePermissions(PERMISSIONS.FINANCE_VIEW)
+  syncStatus() {
+    return this.settlements.syncStatus();
+  }
+
   @Post("settlements/sync")
   @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
   sync() {

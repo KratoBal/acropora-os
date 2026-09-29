@@ -5,6 +5,7 @@ import type {
   FoxpostReprocessResult,
   FoxpostSettlementDetail,
   FoxpostSettlementListResponse,
+  FoxpostSyncStatus,
   FoxpostSyncSummary,
 } from "@acropora/types";
 
@@ -70,6 +71,9 @@ export const foxpostSettlementsApi = {
       `/integrations/foxpost/settlements/${encodeURIComponent(id)}`,
       token,
     );
+  },
+  syncStatus(token: string) {
+    return apiRequest<FoxpostSyncStatus>("/integrations/foxpost/sync", token);
   },
   sync(token: string) {
     return apiRequest<FoxpostSyncSummary>(

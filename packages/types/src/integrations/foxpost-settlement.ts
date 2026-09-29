@@ -97,6 +97,39 @@ export interface FoxpostSyncSummary {
   failedCount: number;
 }
 
+/**
+ * Whether the Gmail pull runs by itself, as the server reads its switch and
+ * key: the same reader the scheduler's start-up log line uses. Measured on
+ * production 2026-09-29: the pull had never run by itself in seven weeks,
+ * and nothing on the page said so.
+ */
+export type FoxpostSyncState =
+  | "ENABLED"
+  | "DISABLED_NOT_SET"
+  | "DISABLED_OFF"
+  | "DISABLED_UNRECOGNISED"
+  | "NO_KEY";
+
+export interface FoxpostSyncRunSummary {
+  status: "RUNNING" | "APPLIED" | "FAILED";
+  startedAt: string;
+  completedAt?: string;
+  messagesSeen: number;
+  createdCount: number;
+  skippedCount: number;
+  needsReviewCount: number;
+  failedCount: number;
+  errorCode?: string;
+}
+
+export interface FoxpostSyncStatus {
+  state: FoxpostSyncState;
+  /** Whether there is a Gmail key (the manual check depends on it). */
+  canRunNow: boolean;
+  intervalMinutes: number;
+  lastRun?: FoxpostSyncRunSummary;
+}
+
 export interface FoxpostReprocessResult {
   settlement: FoxpostSettlementDetail;
   reportRegenerated: boolean;
