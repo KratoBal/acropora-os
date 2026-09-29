@@ -299,6 +299,8 @@ describe("MaintenanceInvoiceDraftService.byCertificate", () => {
       vatAmount: "27000",
       grossAmount: "127000",
       createdAt: "2026-09-24T18:00:00.000Z",
+      // a valódi kiállítás kapcsolója alapból KI (146ccc61)
+      issueEnabled: false,
     });
   });
 });

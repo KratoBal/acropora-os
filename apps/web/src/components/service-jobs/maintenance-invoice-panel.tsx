@@ -1,7 +1,11 @@
 "use client";
 
-import { Alert, Button } from "@acropora/ui";
-import type { MaintenanceInvoiceSummary } from "@acropora/types";
+import { Alert, Button, ConfirmDialog } from "@acropora/ui";
+import {
+  hasPermission,
+  PERMISSIONS,
+  type MaintenanceInvoiceSummary,
+} from "@acropora/types";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -26,8 +30,13 @@ import { maintenanceInvoiceApi } from "@/lib/api/maintenance-invoice";
  * tesztelt (`completionCertificatesApi.list`, amit a testvérpanel is
  * használ) -- nem érdemes a szülőn átvezetni egy második másolatot.
  *
- * A "KIÁLLÍTÁS" GOMB LÁTSZIK, DE TILTOTT: acrobot kifejezetten ezt kérte,
- * hogy a felhasználó lássa, a képesség úton van, ne találgasson.
+ * A "KIÁLLÍTÁS" GOMB (146ccc61) CSAK KÉT FELTÉTEL EGYÜTTES TELJESÜLÉSÉVEL ÉL:
+ * a szerver szerint be van kapcsolva a valódi kiállítás (`issueEnabled`, a
+ * `MAINTENANCE_INVOICE_ISSUE_ENABLED`, alapból KI), és a felhasználónak van
+ * `FINANCE_MANAGE` joga. Egyébként LÁTSZIK, de tiltott, és egy látható felirat
+ * mondja meg, miért (acrobot eredeti kérése: ne találgasson a felhasználó).
+ * Kiállítás előtt megerősítés kér, mert egy NAV-nak bejelentett számla csak
+ * sztornóval javítható.
  */
 export function MaintenanceInvoicePanel({
   serviceJobId,
@@ -36,6 +45,9 @@ export function MaintenanceInvoicePanel({
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
+  const canIssue = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
+  );
 
   const [certificateId, setCertificateId] = useState<string | null | undefined>(
     undefined,
@@ -47,6 +59,8 @@ export function MaintenanceInvoicePanel({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [confirmIssue, setConfirmIssue] = useState(false);
+  const [issuing, setIssuing] = useState(false);
 
   const load = async () => {
     try {
@@ -101,7 +115,28 @@ export function MaintenanceInvoicePanel({
     }
   };
 
-  const downloadPreview = async () => {
+  const issue = async () => {
+    if (!invoice) return;
+    setIssuing(true);
+    setError(null);
+    try {
+      setInvoice(await maintenanceInvoiceApi.issue(token, invoice.id));
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "A számla kiállítása nem sikerült.",
+      );
+      // Az állapotot a szerver dönti el (visszaállt piszkozatra, vagy
+      // ellenőrzésre vár): újraolvassuk, nem találgatunk.
+      await load();
+    } finally {
+      setIssuing(false);
+      setConfirmIssue(false);
+    }
+  };
+
+  const downloadPdf = async () => {
     if (!invoice) return;
     setDownloading(true);
     setError(null);
@@ -110,14 +145,17 @@ export function MaintenanceInvoicePanel({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "szamla-elonezet.pdf";
+      link.download =
+        invoice.status === "ISSUED" && invoice.invoiceNumber
+          ? `szamla-${invoice.invoiceNumber}.pdf`
+          : "szamla-elonezet.pdf";
       link.click();
       URL.revokeObjectURL(url);
     } catch (cause) {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Az előnézeti PDF nem tölthető le.",
+          : "A számla PDF-je nem tölthető le.",
       );
     } finally {
       setDownloading(false);
@@ -156,29 +194,72 @@ export function MaintenanceInvoicePanel({
                 {invoice.grossAmount} {invoice.currency}
               </dd>
             </div>
+            {invoice.status === "ISSUED" ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted">Számlaszám</dt>
+                <dd>{invoice.invoiceNumber}</dd>
+              </div>
+            ) : null}
           </dl>
+          {invoice.status === "ISSUING" ? (
+            <Alert
+              variant="danger"
+              title="A kiállítás ellenőrzésre vár"
+              description={
+                invoice.issueNote ??
+                "Ellenőrizd a Számlázz.hu-n, elkészült-e a számla."
+              }
+            />
+          ) : null}
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="secondary"
-              disabled={downloading}
-              onClick={() => void downloadPreview()}
-            >
-              {downloading ? "Letöltés…" : "Előnézet letöltése"}
-            </Button>
-            <Button disabled title="A kiállítás még nincs bekapcsolva">
-              Kiállítás
-            </Button>
-            {/*
-              LÁTHATÓ FELIRAT, NEM CSAK `title`: egy tiltott gomb
-              `pointer-events: none` szabállyal jár (lásd a `Button`
-              stílusát), ami a böngésző hover-buborékát is megakadályozhatja
-              -- a felirat így akkor is olvasható, ha az egérrel nem lehet a
-              gomb fölé állni.
-            */}
-            <span className="text-sm text-muted">
-              A kiállítás még nincs bekapcsolva.
-            </span>
+            {invoice.status !== "ISSUING" ? (
+              <Button
+                variant="secondary"
+                disabled={downloading}
+                onClick={() => void downloadPdf()}
+              >
+                {downloading
+                  ? "Letöltés…"
+                  : invoice.status === "ISSUED"
+                    ? "Számla letöltése"
+                    : "Előnézet letöltése"}
+              </Button>
+            ) : null}
+            {invoice.status === "DRAFT" ? (
+              <>
+                <Button
+                  disabled={!invoice.issueEnabled || !canIssue || issuing}
+                  onClick={() => setConfirmIssue(true)}
+                >
+                  {issuing ? "Kiállítás…" : "Kiállítás"}
+                </Button>
+                {/*
+                  LÁTHATÓ FELIRAT, NEM CSAK `title`: egy tiltott gomb
+                  `pointer-events: none` szabállyal jár (lásd a `Button`
+                  stílusát), ami a böngésző hover-buborékát is megakadályozhatja.
+                */}
+                {!invoice.issueEnabled ? (
+                  <span className="text-sm text-muted">
+                    A kiállítás még nincs bekapcsolva.
+                  </span>
+                ) : !canIssue ? (
+                  <span className="text-sm text-muted">
+                    A kiállításhoz pénzügyi jogosultság kell.
+                  </span>
+                ) : null}
+              </>
+            ) : null}
           </div>
+          <ConfirmDialog
+            open={confirmIssue}
+            title={`Kiállítod a számlát (${invoice.grossAmount} ${invoice.currency})?`}
+            consequence="Valódi, a NAV-nak bejelentett számla készül a Számlázz.hu-n, pontosan a piszkozat tételeivel és összegével."
+            recovery="Nem vonható vissza: egy kiállított számla csak sztornó számlával javítható."
+            confirmLabel="Számla kiállítása"
+            busy={issuing}
+            onConfirm={() => void issue()}
+            onCancel={() => setConfirmIssue(false)}
+          />
         </div>
       )}
     </ServicePanel>

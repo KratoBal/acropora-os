@@ -675,6 +675,13 @@ enum InvoiceSource {
 /// NÉLKÜL, mert az a valódi kiállításkor keletkezik.
 enum InvoiceStatus {
   DRAFT
+  /// A valodi kiallitas elindult, a kimenete meg nem ismert (2026-09-29,
+  /// 146ccc61). A DRAFT -> ISSUING atmenet egy feltételes frissites: ket
+  /// kattintas vagy ket felhasznalo kozul csak egy indithat valodi hivast.
+  /// Ha a Szamlazz.hu valasza nem jott meg (halozat, idotullepes), a sor
+  /// ITT MARAD, kezi ellenorzesre; automatikus ujraprobalas nincs, mert az
+  /// egy masodik valodi szamlat allithatna ki.
+  ISSUING
   ISSUED
 }
 

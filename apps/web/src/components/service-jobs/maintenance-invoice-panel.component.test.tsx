@@ -8,6 +8,7 @@ const certificatesApi = vi.hoisted(() => ({ list: vi.fn() }));
 const invoiceApi = vi.hoisted(() => ({
   byCertificate: vi.fn(),
   draft: vi.fn(),
+  issue: vi.fn(),
   downloadPdf: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -63,6 +64,8 @@ const invoiceSummary: MaintenanceInvoiceSummary = {
   vatAmount: "27000",
   grossAmount: "127000",
   createdAt: "2026-09-24T18:00:00.000Z",
+  // a szerver alapértelmezése (146ccc61): a valódi kiállítás KI van kapcsolva
+  issueEnabled: false,
 };
 
 beforeEach(() => {
@@ -138,5 +141,74 @@ describe("MaintenanceInvoicePanel", () => {
     expect(
       screen.getByRole("button", { name: "Előnézet letöltése" }),
     ).toBeTruthy();
+  });
+
+  it("a bekapcsolt kiállítás megerősítés után hív, és utána a számlaszámot és a valódi PDF-et mutatja", async () => {
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    invoiceApi.byCertificate.mockResolvedValue({
+      ...invoiceSummary,
+      issueEnabled: true,
+    });
+    invoiceApi.issue.mockResolvedValue({
+      ...invoiceSummary,
+      status: "ISSUED",
+      invoiceNumber: "ACRS-2026-1",
+      issuedAt: "2026-09-29T22:00:00.000Z",
+      issueEnabled: true,
+    });
+
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kiállítás" }));
+
+    // A kattintás még NEM hív: előbb a megerősítés, a következménnyel.
+    expect(invoiceApi.issue).not.toHaveBeenCalled();
+    expect(screen.getByText(/NAV-nak bejelentett számla készül/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Számla kiállítása" }));
+
+    await waitFor(() =>
+      expect(invoiceApi.issue).toHaveBeenCalledWith("dev-token", "invoice-1"),
+    );
+    await screen.findByText("ACRS-2026-1");
+    expect(
+      screen.getByRole("button", { name: "Számla letöltése" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Kiállítás" })).toBeNull();
+  });
+
+  it("pénzügyi jog nélkül a bekapcsolt kiállítás is tiltott, és megmondja, miért", async () => {
+    auth.session = {
+      ...session("dev-token"),
+      user: { ...session("dev-token").user, role: "WAREHOUSE" },
+    };
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    invoiceApi.byCertificate.mockResolvedValue({
+      ...invoiceSummary,
+      issueEnabled: true,
+    });
+
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+
+    expect(
+      await screen.findByRole("button", { name: "Kiállítás" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("A kiállításhoz pénzügyi jogosultság kell."),
+    ).toBeTruthy();
+  });
+
+  it("ellenőrzésre váró kiállításnál nem kínál sem kiállítást, sem letöltést, és kiírja az okát", async () => {
+    certificatesApi.list.mockResolvedValue([signedCertificate]);
+    invoiceApi.byCertificate.mockResolvedValue({
+      ...invoiceSummary,
+      status: "ISSUING",
+      issueEnabled: true,
+      issueNote: "A Számlázz.hu válasza nem érkezett meg (TimeoutError).",
+    });
+
+    render(<MaintenanceInvoicePanel serviceJobId="job-1" />);
+
+    await screen.findByText(/válasza nem érkezett meg/);
+    expect(screen.queryByRole("button", { name: "Kiállítás" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /letöltése/ })).toBeNull();
   });
 });

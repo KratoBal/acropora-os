@@ -25,7 +25,70 @@ export class MaintenanceInvoiceRepository {
   invoicePdfLookup(invoiceId: string) {
     return this.database.invoice.findUnique({
       where: { id: invoiceId },
-      select: { id: true, pdfStorageKey: true },
+      select: {
+        id: true,
+        status: true,
+        invoiceNumber: true,
+        pdfStorageKey: true,
+      },
+    });
+  }
+
+  invoiceById(invoiceId: string) {
+    return this.database.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { lines: true },
+    });
+  }
+
+  /**
+   * DRAFT -> ISSUING IN ONE CONDITIONAL UPDATE. Of two requests at the same
+   * moment (a double click, two people) exactly one gets `true`: the real
+   * Számlázz.hu call runs at most once per invoice.
+   */
+  async claimForIssue(invoiceId: string): Promise<boolean> {
+    const claimed = await this.database.invoice.updateMany({
+      where: { id: invoiceId, status: "DRAFT" },
+      data: { status: "ISSUING", syncError: null },
+    });
+    return claimed.count === 1;
+  }
+
+  /** Számlázz.hu said no, and nothing was issued: back to the draft. */
+  releaseClaim(invoiceId: string) {
+    return this.database.invoice.updateMany({
+      where: { id: invoiceId, status: "ISSUING" },
+      data: { status: "DRAFT" },
+    });
+  }
+
+  /** The outcome is not known: the row stays ISSUING, with the reason. */
+  markOutcomeUnknown(invoiceId: string, note: string) {
+    return this.database.invoice.updateMany({
+      where: { id: invoiceId, status: "ISSUING" },
+      data: { syncStatus: "ERROR", syncError: note.slice(0, 500) },
+    });
+  }
+
+  markIssued(
+    invoiceId: string,
+    issued: {
+      invoiceNumber: string;
+      issueDate: Date;
+      pdfStorageKey: string | null;
+    },
+  ) {
+    return this.database.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        status: "ISSUED",
+        invoiceNumber: issued.invoiceNumber,
+        issueDate: issued.issueDate,
+        pdfStorageKey: issued.pdfStorageKey,
+        syncStatus: "RECEIVED",
+        syncError: null,
+      },
+      include: { lines: true },
     });
   }
 
