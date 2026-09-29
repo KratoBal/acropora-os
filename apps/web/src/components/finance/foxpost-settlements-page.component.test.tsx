@@ -162,9 +162,71 @@ describe("FoxpostSettlementsPage", () => {
   it("shows the imported settlement and its bookkeeping totals", async () => {
     render(createElement(FoxpostSettlementsPage));
     expect(await screen.findByText("26H31")).toBeInTheDocument();
-    expect(screen.getByText("FX01015386")).toBeInTheDocument();
     expect(screen.getByText("97 500 Ft")).toBeInTheDocument();
     expect(screen.getByText("89 183 Ft")).toBeInTheDocument();
+  });
+
+  it("lays the list out like the GLS page: transfers, with a matched count", async () => {
+    // Balázs, 2026-09-29 15:53 UTC: the Foxpost page should look like the GLS
+    // one. The weekly invoice number moved to the detail; the list carries
+    // the matched count the GLS list has.
+    api.list.mockResolvedValue({
+      ...settlements,
+      items: [
+        {
+          ...settlements.items[0]!,
+          matchedLineCount: 3,
+          unresolvedLineCount: 1,
+        },
+      ],
+    });
+    render(createElement(FoxpostSettlementsPage));
+    expect(
+      await screen.findByRole("heading", { name: "Utánvét-utalások" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 utalás")).toBeInTheDocument();
+    expect(screen.getByText("3 / 4")).toBeInTheDocument();
+    expect(screen.queryByText("FX01015386")).not.toBeInTheDocument();
+  });
+
+  it("picks the month to download, and says when that month has no report", async () => {
+    api.reports.mockResolvedValue([
+      {
+        id: "report-8",
+        year: 2026,
+        month: 8,
+        filename: "foxpost-2026-08.xlsx",
+        settlementCount: 4,
+        invoiceCount: 4,
+        collectedAmount: "300000",
+        invoiceGrossAmount: "20000",
+        transferredAmount: "280000",
+        generatedAt: "2026-09-01T12:00:00.000Z",
+        blockedByUnresolvedSettlements: 0,
+        unresolvedLineCount: 0,
+      },
+    ]);
+    render(createElement(FoxpostSettlementsPage));
+
+    const month = await screen.findByLabelText("A riport hónapja");
+    // The picker opens on the latest report, not on the calendar month.
+    expect(month).toHaveValue("2026-08");
+    const download = screen.getByRole("button", { name: "XLSX letöltése" });
+    expect(download).toBeEnabled();
+    expect(screen.getByText(/Utalt 280 000 Ft/)).toBeInTheDocument();
+
+    fireEvent.change(month, { target: { value: "2026-07" } });
+    expect(download).toBeDisabled();
+    expect(
+      screen.getByText("Erre a hónapra még nincs feldolgozott Foxpost riport."),
+    ).toBeInTheDocument();
+
+    fireEvent.change(month, { target: { value: "2026-08" } });
+    fireEvent.click(download);
+    expect(api.downloadReport).toHaveBeenCalledWith(
+      "token-owner",
+      expect.objectContaining({ id: "report-8" }),
+    );
   });
 
   it("runs the Gmail check and reports the result", async () => {

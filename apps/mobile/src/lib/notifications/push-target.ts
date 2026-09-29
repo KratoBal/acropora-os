@@ -178,14 +178,25 @@ function szoveg(value: unknown): string | null {
  * koppintas rajta a frissites UTAN tortenne, es fallback nelkul sehova nem
  * vinne. Ez elo eset, nem elmeleti.
  *
- * ES AMI NEM ESIK VISSZA: az ISMERETLEN tipus. Ha a szerver egyszer egy
- * HARMADIK tipust kezd kuldeni, es egy REGI app kapja meg, az NEM nyithatja
- * meg helyette a munkalapot. Inkabb ne vigyen sehova, mint rossz helyre -- egy
- * rossz keperno az ugyfel elott rosszabb, mint egy nem mukodo koppintas.
+ * HARMADSZOR, az ISMERETLEN tipusnal: a munkalapra, de CSAK ha a szerver
+ * kifejezetten odatette a `worksheetId` mezot. Ez 2026-09-29 ota igy van, es
+ * egy korabbi dontest fordit meg, ezert a ket fele kulon all:
  *
- * EZ NEM ELMELETI: pontosan ez tortent a `serviceJob` tipussal 2026-09-14 es
- * 2026-09-18 kozott. A szerver kuldte, a telefon nem ismerte, es a koppintas
- * nem vitt sehova -- de legalabb nem vitt ROSSZ helyre.
+ *   - AMI MARAD: ismeretlen tipus `worksheetId` NELKUL sehova nem visz. Inkabb
+ *     semmi, mint rossz hely -- egy hibajegy azonositojaval nem nyitunk
+ *     munkalapot, es egy akvariumeval sem.
+ *   - AMI VALTOZOTT: ha a `worksheetId` ott van, az nem talalgatas, hanem a
+ *     szerver allitasa, hogy ez az ertesites ARROL a munkalaprol szol. A
+ *     szerver ezt csak ott kuldi, ahol ez igaz (a munkalap es az anyagigeny
+ *     ertesitesen; a hibajegyen szandekosan nem, lasd a
+ *     `notifications.service.ts` fejleceit).
+ *
+ * A MERT OK, AMIERT FORDULT (Balazs, 2026-09-29 11:33 UTC): az "anyag
+ * beerkezett" koppintasa a nyitooldalra vitt, mert a telefonon a 09-18-i
+ * koteg futott, ami a `materialRequest` tipust meg nem ismerte. A regi szabaly
+ * nem rossz helyre vitt, hanem SEHOVA, es a felhasznalo ezt hibanak eli meg. A
+ * KOVETKEZO uj tipus egy regebbi kotegen igy legalabb a munkalapra visz, ha van
+ * mihez.
  *
  * MIKOR HAGYHATO EL A VISSZAESES: ha egyszer biztosak vagyunk benne, hogy
  * egyetlen keszuleken sem all bontatlan, tipus nelkuli ertesites.
@@ -201,7 +212,10 @@ export function pushTarget(
   if (rawType !== undefined && rawType !== null) {
     const type = szoveg(rawType);
     if (!type) return null;
-    if (!(PUSH_TARGET_TYPES as readonly string[]).includes(type)) return null;
+    if (!(PUSH_TARGET_TYPES as readonly string[]).includes(type)) {
+      const worksheet = szoveg(row.worksheetId);
+      return worksheet ? { type: "worksheet", id: worksheet } : null;
+    }
     const id = szoveg(row.targetId);
     return id ? { type: type as PushTargetType, id } : null;
   }

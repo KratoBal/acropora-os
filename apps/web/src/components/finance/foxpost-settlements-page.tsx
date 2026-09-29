@@ -90,6 +90,15 @@ function suggestedInvoiceNumber(line: FoxpostSettlementLine): string {
   return line.referenceCode.includes("/") ? line.referenceCode : "";
 }
 
+function monthKey(report: FoxpostMonthlyReportSummary): string {
+  return `${report.year}-${String(report.month).padStart(2, "0")}`;
+}
+
+function latestReportMonth(reports: FoxpostMonthlyReportSummary[]): string {
+  const keys = reports.map(monthKey).sort();
+  return keys.at(-1) ?? new Date().toISOString().slice(0, 7);
+}
+
 export function FoxpostSettlementsPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -113,6 +122,7 @@ export function FoxpostSettlementsPage() {
   const [invoiceDrafts, setInvoiceDrafts] = useState<Record<string, string>>(
     {},
   );
+  const [reportMonth, setReportMonth] = useState("");
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -127,6 +137,10 @@ export function FoxpostSettlementsPage() {
       setData(settlements);
       setReports(monthlyReports);
       setSyncStatus(status);
+      // A Foxpost riport csak feldolgozott hónapra létezik, ezért a választó a
+      // legutóbbi riportra áll, nem a naptári hónapra (a GLS-nél az is jó,
+      // mert ott a fájl kéréskor készül).
+      setReportMonth((current) => current || latestReportMonth(monthlyReports));
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -251,6 +265,10 @@ export function FoxpostSettlementsPage() {
     }
   };
 
+  const selectedReport = reports.find(
+    (report) => monthKey(report) === reportMonth,
+  );
+
   const download = async (report: FoxpostMonthlyReportSummary) => {
     setDownloadingId(report.id);
     setError(null);
@@ -278,7 +296,7 @@ export function FoxpostSettlementsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Foxpost elszámolások"
-        description="Az info@acropora.hu Gmail-fiókba egy levélben érkező Foxpost XLSX és PDF automatikus feldolgozása."
+        description="A Foxpost heti elszámolása: egy levélben az utánvét-tételek (XLSX) és a Foxpost számlája (PDF). Az utánvét soronként a kimenő számlához kötve; a Foxpost díja az utalásból levonva."
         actions={
           canManage && syncStatus?.canRunNow ? (
             <Button onClick={() => void sync()} disabled={working}>
@@ -330,76 +348,54 @@ export function FoxpostSettlementsPage() {
       <Card>
         <CardHeader>
           <h2 className="text-sm font-semibold text-dusk-900">
-            Havi könyvelési fájlok
+            Havi könyvelési fájl
           </h2>
           <span className="text-xs text-dusk-500">
             Valódi dátum- és számértékekkel
           </span>
         </CardHeader>
-        <CardContent>
-          {loading ? <Skeleton className="h-20" /> : null}
-          {!loading && reports.length === 0 ? (
+        <CardContent className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="month"
+              aria-label="A riport hónapja"
+              className="rounded-md border border-dusk-300 bg-white px-2 py-1.5 text-sm text-dusk-900"
+              value={reportMonth}
+              onChange={(event) => setReportMonth(event.target.value)}
+            />
+            <Button
+              variant="secondary"
+              onClick={() =>
+                selectedReport ? void download(selectedReport) : undefined
+              }
+              disabled={!selectedReport || downloadingId !== null}
+            >
+              {selectedReport && downloadingId === selectedReport.id
+                ? "Letöltés…"
+                : "XLSX letöltése"}
+            </Button>
+          </div>
+          {loading && !reports.length ? <Skeleton className="h-5" /> : null}
+          {!loading && !selectedReport ? (
             <p className="text-sm text-dusk-500">
-              Még nincs feldolgozott havi Foxpost riport.
+              Erre a hónapra még nincs feldolgozott Foxpost riport.
             </p>
           ) : null}
-          {reports.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Hónap</th>
-                    <th>Hetek / számlák</th>
-                    <th className="text-right">Beszedett</th>
-                    <th className="text-right">Foxpost számla</th>
-                    <th className="text-right">Utalt</th>
-                    <th className="p-3 text-right">Fájl</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reports.map((report) => (
-                    <tr key={report.id} className="border-b last:border-0">
-                      <td className="p-3 font-semibold text-dusk-900">
-                        {report.year}. {String(report.month).padStart(2, "0")}.
-                      </td>
-                      <td>
-                        {report.settlementCount} hét / {report.invoiceCount}{" "}
-                        számla
-                      </td>
-                      <td className="text-right">
-                        {formatAmount(report.collectedAmount)}
-                      </td>
-                      <td className="text-right">
-                        {formatAmount(report.invoiceGrossAmount)}
-                      </td>
-                      <td className="text-right">
-                        {formatAmount(report.transferredAmount)}
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={downloadingId === report.id}
-                            onClick={() => void download(report)}
-                          >
-                            {downloadingId === report.id
-                              ? "Letöltés…"
-                              : "XLSX letöltése"}
-                          </Button>
-                          {report.unresolvedLineCount > 0 ? (
-                            <span className="text-xs text-amber-700">
-                              {report.unresolvedLineCount} ellenőrzendő tétel a
-                              külön munkalapon
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {selectedReport ? (
+            <p className="text-sm text-dusk-600">
+              {selectedReport.settlementCount} hét /{" "}
+              {selectedReport.invoiceCount} számla · Beszedett{" "}
+              {formatAmount(selectedReport.collectedAmount)} · Foxpost számla{" "}
+              {formatAmount(selectedReport.invoiceGrossAmount)} · Utalt{" "}
+              {formatAmount(selectedReport.transferredAmount)}
+              {selectedReport.unresolvedLineCount > 0 ? (
+                <span className="text-amber-700">
+                  {" "}
+                  · {selectedReport.unresolvedLineCount} ellenőrzendő tétel a
+                  külön munkalapon
+                </span>
+              ) : null}
+            </p>
           ) : null}
         </CardContent>
       </Card>
@@ -407,30 +403,30 @@ export function FoxpostSettlementsPage() {
       <Card>
         <CardHeader>
           <h2 className="text-sm font-semibold text-dusk-900">
-            Beolvasott heti elszámolások
+            Utánvét-utalások
           </h2>
           <span className="text-xs text-dusk-500">
-            {data?.pagination.totalItems ?? 0} elszámolás
+            {data?.pagination.totalItems ?? 0} utalás
           </span>
         </CardHeader>
         <CardContent>
           {loading && !data ? <Skeleton className="h-56" /> : null}
           {data && data.items.length === 0 ? (
             <EmptyState
-              title="Még nincs Foxpost elszámolás"
+              title="Még nincs Foxpost utánvét-utalás"
               description="A Gmail ellenőrzése után itt jelennek meg a heti XLSX + PDF párok."
             />
           ) : null}
           {data?.items.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-left text-sm">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Kelte</th>
                     <th>Elszámolás</th>
-                    <th>Foxpost számla</th>
                     <th className="text-right">Beszedett</th>
                     <th className="text-right">Utalt</th>
+                    <th className="text-right">Párosítva</th>
                     <th className="p-3">Állapot</th>
                   </tr>
                 </thead>
@@ -447,14 +443,15 @@ export function FoxpostSettlementsPage() {
                       <td className="font-mono text-xs">
                         {item.settlementCode ?? "—"}
                       </td>
-                      <td className="font-mono text-xs">
-                        {item.invoiceNumber ?? "—"}
-                      </td>
                       <td className="text-right">
                         {formatAmount(item.collectedAmount)}
                       </td>
                       <td className="text-right">
                         {formatAmount(item.transferredAmount)}
+                      </td>
+                      <td className="text-right">
+                        {item.matchedLineCount} /{" "}
+                        {item.matchedLineCount + item.unresolvedLineCount}
                       </td>
                       <td className="p-3">{settlementStatus(item.status)}</td>
                     </tr>
@@ -515,13 +512,14 @@ export function FoxpostSettlementsPage() {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] text-left text-sm">
+              <table className="w-full min-w-[980px] text-left text-sm">
                 <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Referencia kód</th>
                     <th>Címzett</th>
-                    <th>Tranzakció</th>
-                    <th>Rendelési számla / kézi jóváhagyás</th>
+                    <th>Tranzakció napja</th>
+                    <th className="text-right">Összeg</th>
+                    <th className="pl-4">Kimenő számla / kézi jóváhagyás</th>
                     <th className="p-3">Párosítás</th>
                   </tr>
                 </thead>
@@ -532,11 +530,11 @@ export function FoxpostSettlementsPage() {
                         {line.referenceCode}
                       </td>
                       <td>{line.recipientName ?? "—"}</td>
-                      <td>
-                        {formatDate(line.transactionDate)} ·{" "}
+                      <td>{formatDate(line.transactionDate)}</td>
+                      <td className="text-right">
                         {formatAmount(line.collectedAmount)}
                       </td>
-                      <td className="py-2 pr-3">
+                      <td className="py-2 pl-4 pr-3">
                         {line.status !== "MATCHED" && canManage ? (
                           <div className="flex min-w-[290px] flex-wrap items-center gap-2">
                             <input

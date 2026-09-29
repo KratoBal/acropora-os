@@ -646,6 +646,8 @@ describe("az anyagigény-értesítések célpontja", () => {
 
     assert.equal(sent[0]?.data?.targetType, "materialRequest");
     assert.equal(sent[0]?.data?.targetId, "worksheet-9");
+    // A regebbi telefon ismeretlen tipusnal erre esik vissza (2026-09-29).
+    assert.equal(sent[0]?.data?.worksheetId, "worksheet-9");
   });
 
   it("a BEÉRKEZÉS UGYANARRA a munkalapra visz, mint a létrehozás", async () => {
@@ -656,6 +658,7 @@ describe("az anyagigény-értesítések célpontja", () => {
 
     assert.equal(sent[0]?.data?.targetType, "materialRequest");
     assert.equal(sent[0]?.data?.targetId, "worksheet-9");
+    assert.equal(sent[0]?.data?.worksheetId, "worksheet-9");
   });
 
   /**
