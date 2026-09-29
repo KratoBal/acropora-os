@@ -17,18 +17,21 @@ import type {
 } from "@acropora/types";
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
+import { deJongCandidateProfile } from "../supplier-invoice-import/adapters/dejong.pdf-adapter.js";
 import { hertleinCandidateProfile } from "../supplier-invoice-import/adapters/hertlein.pdf-adapter.js";
 import { normalizeVatId } from "../supplier-invoice-import/supplier-invoice-import.common.js";
 import {
   DETERMINISTIC_MODEL,
   NONE_KEY,
   PERSONAL_DATA_PATTERN,
+  SUPPLIER_LINE_CODE_POLICY,
   SUPPLIER_LINE_EAN_POLICY,
   SUPPLIER_LINE_JEV_POLICY,
   SUPPLIER_LINE_MAPPING_POLICY,
   SUPPLIER_LINE_SHOWN_CONFIDENCE,
   decideSupplierLine,
 } from "./supplier-line-policy.js";
+import { acceptCodeMatch, codeLookupKeys } from "./supplier-code-match.js";
 import {
   SupplierLineSuggestionRepository,
   type SuggestionProduct,
@@ -45,6 +48,7 @@ export const SUPPLIER_LINE_FETCH = Symbol("SUPPLIER_LINE_FETCH");
  */
 const CANDIDATE_PROFILES: Readonly<Record<string, CandidateProfile>> = {
   DE342032439: hertleinCandidateProfile,
+  NL802708705B01: deJongCandidateProfile,
 };
 const DEFAULT_PROFILE: CandidateProfile = {
   brandRouting: [],
@@ -211,6 +215,43 @@ export class SupplierLineSuggestionService {
         decisionRunId: run.id,
         suggestion: { source, ...found, confidence: null },
       };
+    }
+
+    // the supplier's code is our SKU or MPN: deterministic, before any Jev
+    if (supplierSku) {
+      const byCode = acceptCodeMatch(
+        request.description,
+        await this.repository.productsByCode(codeLookupKeys(supplierSku)),
+      );
+      if (byCode) {
+        const run = await this.repository.createRun({
+          policyKey: SUPPLIER_LINE_CODE_POLICY.key,
+          policyVersion: SUPPLIER_LINE_CODE_POLICY.version,
+          projectionHash: cph1(deterministicPayload),
+          projectionPayload: JSON.parse(cph1Canonical(deterministicPayload)),
+          optionsHash: cph1({
+            schema: "supplier-line.options@1",
+            data: [byCode.variantId],
+          }),
+          requestedModel: DETERMINISTIC_MODEL,
+          selectedValue: byCode.variantId,
+          exposure: "SHOWN",
+          status: "OK",
+          entityType: "PurchaseInvoiceLine",
+          clientOperationId: operation,
+        });
+        return {
+          ...base,
+          decisionRunId: run.id,
+          suggestion: {
+            source: "CODE",
+            variantId: byCode.variantId,
+            sku: byCode.sku,
+            productName: byCode.productName,
+            confidence: null,
+          },
+        };
+      }
     }
 
     const vatId = normalizeVatId(

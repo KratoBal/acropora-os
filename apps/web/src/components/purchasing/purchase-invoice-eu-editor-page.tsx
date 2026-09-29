@@ -2039,6 +2039,7 @@ export function PurchaseInvoiceEuEditorPage() {
 const SUGGESTION_SOURCE_LABEL: Record<SupplierLineSuggestionSource, string> = {
   MAPPING: "beszállítói leképezés",
   EAN: "EAN-egyezés",
+  CODE: "a szállító kódja a mi cikkszámunk",
   JEV: "Jev",
 };
 

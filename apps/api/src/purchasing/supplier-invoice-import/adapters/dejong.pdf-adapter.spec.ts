@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { generateCandidates, indexCandidateMaster } from "@acropora/jev";
+
 import { SupplierInvoiceImportError } from "../supplier-invoice-import.error.js";
 import { DEJONG_PDF_LINES } from "../../../testing/dejong-invoice-pdf-lines.fixture.js";
 import { HERTLEIN_PDF_LINES } from "../../../testing/hertlein-invoice-pdf-lines.fixture.js";
-import { deJongPdfAdapter } from "./dejong.pdf-adapter.js";
+import {
+  deJongCandidateProfile,
+  deJongPdfAdapter,
+} from "./dejong.pdf-adapter.js";
 import { hertleinPdfAdapter } from "./hertlein.pdf-adapter.js";
 
 describe("deJongPdfAdapter", () => {
@@ -80,6 +85,23 @@ describe("deJongPdfAdapter", () => {
     );
   });
 
+  it("marks De Jong's 09xxxx service codes as charges, by the code alone", () => {
+    const at = DEJONG_PDF_LINES.indexOf(
+      "1 | SC-090012 | Schenker 1/2 pallet | € | 60,00 | 0,00% | € | 60,00",
+    );
+    const lines = deJongPdfAdapter.parse([
+      ...DEJONG_PDF_LINES.slice(0, at + 1),
+      // real texts from the 98 invoices, none of which says "shipping"
+      "1 | 090002 | Box charge | € | 12,50 | 0,00% | € | 12,50",
+      "1 | 090010 | Cites charge | € | 35,00 | 0,00% | € | 35,00",
+      ...DEJONG_PDF_LINES.slice(at + 1),
+    ]).lines;
+    assert.deepEqual(
+      lines.filter((line) => line.isCharge).map((line) => line.supplierSku),
+      ["SC-090012", "090002", "090010"],
+    );
+  });
+
   it("refuses a credit note", () => {
     assert.throws(
       () =>
@@ -92,5 +114,38 @@ describe("deJongPdfAdapter", () => {
         error instanceof SupplierInvoiceImportError &&
         error.code === "CREDIT_NOTE",
     );
+  });
+});
+
+describe("deJongCandidateProfile", () => {
+  // the measured miss, inv26008847: "Lens for Hydra 32 HD" read "lens" as
+  // the brand, and the right product was not among the candidates
+  const master = indexCandidateMaster([
+    { variantId: "v-lens", text: "Aqua Illumination Hydra 32 HD lencse 16" },
+    { variantId: "v-cloth", text: "Lens tisztító kendő" },
+    { variantId: "v-rs", text: "Red Sea NO3:PO4-X 1000 ml" },
+  ]);
+
+  it("takes the brand from the code prefix, not from the first word", () => {
+    const result = generateCandidates(
+      "Lens for Hydra 32 HD",
+      "ai-lens16",
+      master,
+      deJongCandidateProfile,
+    );
+    assert.equal(result.brandSource, "routing");
+    assert.deepEqual(result.candidates, ["v-lens"]);
+  });
+
+  it("reads RS as Red Sea, written in two words in our catalogue", () => {
+    const result = generateCandidates(
+      "NO3:PO4-X 1 litre",
+      "rs-r22204",
+      master,
+      deJongCandidateProfile,
+    );
+    // found by the brand, not by the fallback that drops the brand
+    assert.equal(result.fallback, false);
+    assert.deepEqual(result.candidates, ["v-rs"]);
   });
 });
