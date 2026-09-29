@@ -14,6 +14,7 @@ import type {
 } from "@acropora/types";
 
 import type { GlsLineResolution } from "./gls-cod-resolution.js";
+import type { GlsCompensation } from "./gls-compensation.parser.js";
 import type {
   GlsCodReport,
   GlsInvoiceAttachment,
@@ -154,6 +155,41 @@ export class GlsSettlementRepository {
             { invoiceNumber: attachment.invoiceNumber },
           ],
         },
+        select: { id: true },
+      });
+      if (!existing) throw error;
+      return { id: existing.id, duplicate: true };
+    }
+  }
+
+  /** A compensation letter; the same file again is a duplicate. */
+  async createCompensationLetter(
+    source: StoredSource,
+    letter: GlsCompensation,
+  ): Promise<{ id: string; duplicate: boolean }> {
+    try {
+      const created = await prisma.glsCompensationLetter.create({
+        data: {
+          compensationDate: day(letter.date)!,
+          clientNumber: letter.clientNumber,
+          cod: letter.cod,
+          compensated: letter.compensated,
+          transferred: letter.transferred,
+          debt: letter.debt,
+          remaining: letter.remaining,
+          references: letter.references,
+          fileName: source.fileName,
+          sha256: source.sha256,
+          content: new Uint8Array(source.content),
+          uploadedByUserId: source.uploadedByUserId,
+        },
+        select: { id: true },
+      });
+      return { id: created.id, duplicate: false };
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      const existing = await prisma.glsCompensationLetter.findUnique({
+        where: { sha256: source.sha256 },
         select: { id: true },
       });
       if (!existing) throw error;
@@ -409,7 +445,7 @@ export class GlsSettlementRepository {
       gte: new Date(Date.UTC(year, month - 1, 1)),
       lt: new Date(Date.UTC(year, month, 1)),
     };
-    const [transfers, invoices] = await Promise.all([
+    const [transfers, invoices, compensations] = await Promise.all([
       prisma.glsCodReport.findMany({
         where: { transferDate: range },
         select: {
@@ -440,8 +476,20 @@ export class GlsSettlementRepository {
           cardFeeTotal: true,
         },
       }),
+      prisma.glsCompensationLetter.findMany({
+        where: { compensationDate: range },
+        orderBy: [{ compensationDate: "asc" }, { createdAt: "asc" }],
+        select: {
+          compensationDate: true,
+          fileName: true,
+          cod: true,
+          compensated: true,
+          transferred: true,
+          references: true,
+        },
+      }),
     ]);
-    return { transfers, invoices };
+    return { transfers, invoices, compensations };
   }
 
   async listInvoices(): Promise<GlsInvoiceSummary[]> {

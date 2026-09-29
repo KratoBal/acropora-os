@@ -37,6 +37,7 @@ describe("GlsMonthlyReportXlsx", () => {
               reason: "Előtag nélküli számlaszám",
             },
           ],
+          compensation: null,
         },
         {
           transferDate: new Date("2026-09-03T00:00:00.000Z"),
@@ -44,6 +45,14 @@ describe("GlsMonthlyReportXlsx", () => {
           total: 56350,
           invoiceNumbers: ["ACRW-2026/00010", "ACRW-2026/00009"],
           unresolvedLines: [],
+          compensation: {
+            date: new Date("2026-09-03T00:00:00.000Z"),
+            fileName: "100031291_20260903.pdf",
+            cod: 56350,
+            compensated: 8013,
+            transferred: 48337,
+            references: ["HU00000009"],
+          },
         },
       ],
       [
@@ -77,15 +86,51 @@ describe("GlsMonthlyReportXlsx", () => {
       [gls.getCell("D4").value, gls.getCell("E4").value],
       ["Beszedett", 56350],
     );
-    // the whole COD amount is transferred: no fee row in the block
+    // GLS set its own invoice off against the COD: the rest was transferred
     assert.deepEqual(
-      [gls.getCell("D5").value, result(gls.getCell("E5"))],
-      ["Utalt", 56350],
+      [
+        gls.getCell("D5").value,
+        gls.getCell("E5").value,
+        gls.getCell("F5").value,
+      ],
+      ["Kompenzáció", 8013, "GLS számla: HU00000009"],
     );
-    const labels: unknown[] = [];
-    gls.eachRow((row) => labels.push(row.getCell(4).value));
-    assert.ok(!labels.includes("Számla"));
-    assert.ok(labels.includes("Havi összesen"));
+    assert.deepEqual(
+      [gls.getCell("D6").value, result(gls.getCell("E6"))],
+      ["Utalt", 48337],
+    );
+    assert.equal(
+      (gls.getCell("E6").value as { formula: string }).formula,
+      "E4-E5",
+    );
+    assert.equal(
+      gls.getCell("F6").value,
+      "Egyezik az értesítővel: 56\u00a0350 Ft - 8013 Ft = 48\u00a0337 Ft.",
+    );
+    // a day with no letter says so, and transfers the whole COD amount
+    assert.equal(
+      (gls.getCell("A8").value as Date).toISOString().slice(0, 10),
+      "2026-09-10",
+    );
+    assert.deepEqual(
+      [gls.getCell("E9").value, result(gls.getCell("E10"))],
+      [0, 27450],
+    );
+    assert.equal(
+      gls.getCell("F10").value,
+      "Erre a napra nincs kompenzációs értesítő.",
+    );
+    const totals: Record<string, unknown> = {};
+    gls.eachRow((row) => {
+      const label = row.getCell(4).value;
+      if (typeof label === "string") totals[label] = result(row.getCell(5));
+    });
+    // the monthly lines are the last ones with these labels
+    assert.deepEqual(
+      [totals["Beszedett"], totals["Kompenzáció"], totals["Utalt"]],
+      [83800, 8013, 75787],
+    );
+    assert.ok("Havi összesen" in totals);
 
     const invoices = workbook.getWorksheet("GLS számlák")!;
     assert.equal(invoices.getCell("B2").value, "HU00000001");
@@ -99,6 +144,55 @@ describe("GlsMonthlyReportXlsx", () => {
         review.getCell("G2").value,
       ],
       ["1000000002", "2026/00002", "Előtag nélküli számlaszám"],
+    );
+  });
+
+  it("sends a letter that disagrees with its COD report, and one with no report, to review", async () => {
+    const built = await new GlsMonthlyReportXlsx().build(
+      2026,
+      9,
+      [
+        {
+          transferDate: new Date("2026-09-10T00:00:00.000Z"),
+          fileName: "100031291_HUF_20260910_080212.xlsx",
+          total: 28900,
+          invoiceNumbers: [],
+          unresolvedLines: [],
+          compensation: {
+            date: new Date("2026-09-10T00:00:00.000Z"),
+            fileName: "100031291_20260910.pdf",
+            cod: 29900,
+            compensated: 18111,
+            transferred: 11789,
+            references: ["HU00000011"],
+          },
+        },
+      ],
+      [],
+      [
+        {
+          date: new Date("2026-09-17T00:00:00.000Z"),
+          fileName: "100031291_20260917.pdf",
+          cod: 6950,
+          compensated: 6950,
+          transferred: 0,
+          references: ["HU00000012"],
+        },
+      ],
+    );
+    const workbook = await workbookOf(built.buffer);
+    const gls = workbook.getWorksheet("GLS")!;
+    assert.match(String(gls.getCell("F6").value), /^ELTÉRÉS: /);
+    const review = workbook.getWorksheet("Ellenőrzendő tételek")!;
+    assert.deepEqual(
+      [2, 3].map((row) => [
+        review.getCell(`B${row}`).value,
+        String(review.getCell(`G${row}`).value).slice(0, 20),
+      ]),
+      [
+        ["100031291_20260910.pdf", "ELTÉRÉS: az értesítő"],
+        ["100031291_20260917.pdf", "Kompenzációs értesít"],
+      ],
     );
   });
 

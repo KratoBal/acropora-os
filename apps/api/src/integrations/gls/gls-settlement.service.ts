@@ -9,10 +9,15 @@ import type {
   GlsManualApprovalInput,
 } from "@acropora/types";
 
+import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { classifyCodReference, orderKeyOf } from "./gls-cod-reference.js";
 import { resolveGlsCodLine } from "./gls-cod-resolution.js";
+import { readGlsCompensationLetter } from "./gls-compensation.parser.js";
 import { GlsDocumentError, readGlsDocument } from "./gls-documents.parser.js";
-import { GlsMonthlyReportXlsx } from "./gls-monthly-report.xlsx.js";
+import {
+  GlsMonthlyReportXlsx,
+  type GlsReportCompensation,
+} from "./gls-monthly-report.xlsx.js";
 import {
   GlsSettlementRepository,
   type UnresolvedLine,
@@ -31,10 +36,19 @@ const REVIEW_REASONS: Record<GlsCodLineError, string> = {
 const DOCUMENT_ERRORS: Record<string, string> = {
   GLS_XLSX_INVALID: "A fájl nem olvasható XLSX.",
   GLS_DOCUMENT_UNKNOWN:
-    "Ez nem GLS utánvét-részletező és nem GLS számlamelléklet.",
+    "Ez nem GLS utánvét-részletező, számlamelléklet vagy kompenzációs értesítő.",
   GLS_COD_TOTAL_MISMATCH:
     "Az utánvét-részletező sorainak összege nem egyezik az összesítővel.",
+  GLS_PDF_INVALID: "A fájl nem olvasható PDF.",
+  GLS_COMPENSATION_UNREADABLE:
+    "A kompenzációs értesítő táblázata nem olvasható ki.",
+  GLS_COMPENSATION_MULTIPLE_ROWS:
+    "A kompenzációs értesítőben több sor van; ilyet még nem láttunk, ezért nem olvassuk be találgatva.",
+  GLS_COMPENSATION_SUM_MISMATCH:
+    "A kompenzációs értesítő összegei nem jönnek ki: beszedett - kompenzáció nem egyenlő az utalttal.",
 };
+
+const PDF_MAGIC = Buffer.from("%PDF");
 
 @Injectable()
 export class GlsSettlementService {
@@ -74,13 +88,32 @@ export class GlsSettlementService {
     fileName: string,
     actorUserId: string | null,
   ): Promise<GlsDocumentUploadResult> {
-    const document = readGlsDocument(buffer, fileName);
     const source = {
       fileName,
       sha256: createHash("sha256").update(buffer).digest("hex"),
       content: buffer,
       uploadedByUserId: actorUserId,
     };
+    // the compensation letter is the one GLS document that comes as a PDF
+    if (buffer.subarray(0, 4).equals(PDF_MAGIC)) {
+      let lines: string[];
+      try {
+        lines = await pdfTextLines(new Uint8Array(buffer));
+      } catch {
+        throw new GlsDocumentError("GLS_PDF_INVALID");
+      }
+      const stored = await this.repository.createCompensationLetter(
+        source,
+        readGlsCompensationLetter(lines),
+      );
+      return {
+        kind: "COMPENSATION_LETTER",
+        id: stored.id,
+        duplicate: stored.duplicate,
+        newlyResolvedLineCount: 0,
+      };
+    }
+    const document = readGlsDocument(buffer, fileName);
     if (document.kind === "COD_REPORT") {
       const stored = await this.repository.createCodReport(
         source,
@@ -174,14 +207,39 @@ export class GlsSettlementService {
       throw new BadRequestException("GLS_REPORT_YEAR_INVALID");
     if (!Number.isInteger(month) || month < 1 || month > 12)
       throw new BadRequestException("GLS_REPORT_MONTH_INVALID");
-    const { transfers, invoices } = await this.repository.monthData(
-      year,
-      month,
-    );
+    const { transfers, invoices, compensations } =
+      await this.repository.monthData(year, month);
+    // a letter belongs to the COD transfer of its day; when two transfers
+    // share a day, to the one whose total the letter names
+    const letters: GlsReportCompensation[] = compensations.map((letter) => ({
+      date: letter.compensationDate,
+      fileName: letter.fileName,
+      cod: Number(letter.cod),
+      compensated: Number(letter.compensated),
+      transferred: Number(letter.transferred),
+      references: letter.references,
+    }));
+    const paired = new Map<number, GlsReportCompensation>();
+    const unpaired: GlsReportCompensation[] = [];
+    for (const letter of letters) {
+      const sameDay = transfers
+        .map((transfer, index) => ({ transfer, index }))
+        .filter(
+          ({ transfer, index }) =>
+            !paired.has(index) &&
+            transfer.transferDate.getTime() === letter.date.getTime(),
+        );
+      const match =
+        sameDay.find(({ transfer }) => Number(transfer.total) === letter.cod) ??
+        sameDay[0];
+      if (match) paired.set(match.index, letter);
+      else unpaired.push(letter);
+    }
     return this.reports.build(
       year,
       month,
-      transfers.map((transfer) => ({
+      transfers.map((transfer, index) => ({
+        compensation: paired.get(index) ?? null,
         transferDate: transfer.transferDate,
         fileName: transfer.fileName,
         total: Number(transfer.total),
@@ -205,6 +263,7 @@ export class GlsSettlementService {
         feeTotal: Number(invoice.feeTotal),
         cardFeeTotal: Number(invoice.cardFeeTotal),
       })),
+      unpaired,
     );
   }
 

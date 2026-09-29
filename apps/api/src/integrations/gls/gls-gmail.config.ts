@@ -20,12 +20,24 @@
  *                                     GMAIL_FOXPOST_* key is used (the same
  *                                     info@ mailbox, gmail.readonly)
  *   GMAIL_GLS_USER                    default info@acropora.hu
- *   GMAIL_GLS_QUERY                   default: the two GLS senders
+ *   GMAIL_GLS_QUERY                   default: the two GLS senders' XLSX
+ *                                     mails, and the compensation letters
+ *                                     (dunning@, by subject: the same sender
+ *                                     also sends payment reminders)
  *   GMAIL_GLS_SYNC_INTERVAL_MINUTES   default 60 (5..1440)
  */
 
 export const DEFAULT_GLS_GMAIL_QUERY =
-  "from:(utanvet@gls-hungary.com OR szamlamelleklet@gls-hungary.com) has:attachment filename:xlsx newer_than:90d";
+  '(from:(utanvet@gls-hungary.com OR szamlamelleklet@gls-hungary.com) has:attachment filename:xlsx newer_than:90d) OR (from:dunning@gls-hungary.com subject:"Kompenzációs értesítő" has:attachment filename:pdf newer_than:90d)';
+
+/**
+ * The compensation letter's subject. Only these mails' PDFs are read: the
+ * invoice attachment mail carries a PDF too (the invoice itself), and the
+ * same dunning@ sender also sends payment reminders.
+ */
+export function isGlsCompensationSubject(subject: string | null): boolean {
+  return /kompenz[áa]ci[óo]s [ée]rtes[íi]t[őo]/i.test(subject ?? "");
+}
 
 export type GlsSyncSwitch =
   { on: true } | { on: false; reason: "NOT_SET" | "OFF" | "UNRECOGNISED" };

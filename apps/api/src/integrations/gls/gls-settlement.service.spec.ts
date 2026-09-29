@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BadRequestException } from "@nestjs/common";
+import PDFDocument from "pdfkit";
 
+import { registerEmbeddedPdfFont } from "../../documents/pdf/branded-document.js";
+import { PAGE_END_MARKER } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
+import { GLS_COMPENSATION_0827_LINES } from "../../testing/gls-compensation-pdf-lines.fixture.js";
 import { glsXlsx } from "../../testing/gls-xlsx.fixture.js";
+import type { GlsCompensation } from "./gls-compensation.parser.js";
 import type { GlsLineResolution } from "./gls-cod-resolution.js";
 import type {
   GlsSettlementRepository,
@@ -148,7 +153,160 @@ describe("GlsSettlementService.upload", () => {
       (error: unknown) =>
         error instanceof BadRequestException &&
         error.message ===
-          "Ez nem GLS utánvét-részletező és nem GLS számlamelléklet.",
+          "Ez nem GLS utánvét-részletező, számlamelléklet vagy kompenzációs értesítő.",
+    );
+  });
+});
+
+/** A one-page PDF whose text lines read back as `lines`, cell by cell. */
+function letterPdf(lines: readonly string[]): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ size: "A4", margin: 20 });
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("error", reject);
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    registerEmbeddedPdfFont(doc).fontSize(6);
+    let y = 30;
+    for (const line of lines.filter((line) => line !== PAGE_END_MARKER)) {
+      line.split(" | ").forEach((cell, index) => {
+        doc.text(cell, 20 + index * 70, y, { lineBreak: false });
+      });
+      y += 12;
+    }
+    doc.end();
+  });
+}
+
+describe("GlsSettlementService.upload, the compensation letter", () => {
+  it("reads the letter's PDF and stores what it says", async () => {
+    const stored: GlsCompensation[] = [];
+    const repository = {
+      createCompensationLetter: async (
+        _source: unknown,
+        letter: GlsCompensation,
+      ) => {
+        stored.push(letter);
+        return { id: "letter-1", duplicate: false };
+      },
+    } as unknown as GlsSettlementRepository;
+    const result = await new GlsSettlementService(
+      repository,
+      new GlsMonthlyReportXlsx(),
+    ).upload(
+      await letterPdf(GLS_COMPENSATION_0827_LINES),
+      "100031291_20260827.pdf",
+      "user-1",
+    );
+    assert.deepEqual(result, {
+      kind: "COMPENSATION_LETTER",
+      id: "letter-1",
+      duplicate: false,
+      newlyResolvedLineCount: 0,
+    });
+    assert.deepEqual(
+      stored.map((letter) => [
+        letter.date,
+        letter.cod,
+        letter.compensated,
+        letter.transferred,
+        letter.references.length,
+      ]),
+      [["2026-08-27", 6950, 6950, 0, 3]],
+    );
+  });
+
+  it("refuses another PDF, in Hungarian, and stores nothing", async () => {
+    let created = 0;
+    const repository = {
+      createCompensationLetter: async () => {
+        created++;
+        return { id: "x", duplicate: false };
+      },
+    } as unknown as GlsSettlementRepository;
+    const service = new GlsSettlementService(
+      repository,
+      new GlsMonthlyReportXlsx(),
+    );
+    await assert.rejects(
+      service.upload(
+        await letterPdf(["Számla", "Végösszeg | 18 111"]),
+        "szamla.pdf",
+        "user-1",
+      ),
+      (error: unknown) =>
+        error instanceof BadRequestException && /nem GLS/.test(error.message),
+    );
+    await assert.rejects(
+      service.upload(Buffer.from("%PDF-1.4 broken"), "rossz.pdf", "user-1"),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        error.message === "A fájl nem olvasható PDF.",
+    );
+    assert.equal(created, 0);
+  });
+});
+
+describe("GlsSettlementService.monthlyReport, pairing the letters", () => {
+  it("gives a letter to the transfer of its day, the one whose total it names, and keeps the rest apart", async () => {
+    const day = (value: string) => new Date(`${value}T00:00:00.000Z`);
+    const transfer = (date: string, total: number, fileName: string) => ({
+      transferDate: day(date),
+      fileName,
+      total,
+      lines: [],
+    });
+    const letter = (date: string, cod: number, compensated: number) => ({
+      compensationDate: day(date),
+      fileName: `${date}-${cod}.pdf`,
+      cod,
+      compensated,
+      transferred: cod - compensated,
+      references: ["HU00000001"],
+    });
+    const repository = {
+      monthData: async () => ({
+        transfers: [
+          transfer("2026-09-10", 1000, "a.xlsx"),
+          // two transfers on one day: the letter names the second one
+          transfer("2026-09-10", 28900, "b.xlsx"),
+          transfer("2026-09-03", 117450, "c.xlsx"),
+        ],
+        invoices: [],
+        compensations: [
+          letter("2026-09-10", 28900, 18111),
+          letter("2026-09-03", 117450, 8013),
+          // no transfer on its day
+          letter("2026-09-17", 6950, 6950),
+        ],
+      }),
+    } as unknown as GlsSettlementRepository;
+    const built: unknown[][] = [];
+    const reports = {
+      build: async (...args: unknown[]) => {
+        built.push(args);
+        return { filename: "x", buffer: Buffer.alloc(0) };
+      },
+    } as unknown as GlsMonthlyReportXlsx;
+    await new GlsSettlementService(repository, reports).monthlyReport(2026, 9);
+    const [, , transfers, , unpaired] = built[0]! as [
+      unknown,
+      unknown,
+      Array<{ fileName: string; compensation: { cod: number } | null }>,
+      unknown,
+      Array<{ cod: number }>,
+    ];
+    assert.deepEqual(
+      transfers.map((row) => [row.fileName, row.compensation?.cod ?? null]),
+      [
+        ["a.xlsx", null],
+        ["b.xlsx", 28900],
+        ["c.xlsx", 117450],
+      ],
+    );
+    assert.deepEqual(
+      unpaired.map((row) => row.cod),
+      [6950],
     );
   });
 });
