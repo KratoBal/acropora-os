@@ -6,6 +6,7 @@ import type {
   FoxpostReprocessResult,
   FoxpostSettlementDetail,
   FoxpostSettlementListResponse,
+  FoxpostSyncStatus,
   FoxpostSyncSummary,
 } from "@acropora/types";
 
@@ -15,8 +16,13 @@ import type { FoxpostSettlementListQueryDto } from "./dto/foxpost-settlement-lis
 import {
   FoxpostForeignMessageError,
   FoxpostGmailClient,
+  foxpostGmailKeyPresent,
 } from "./foxpost-gmail.client.js";
 import { FoxpostMonthlyReportXlsx } from "./foxpost-monthly-report.xlsx.js";
+import {
+  foxpostSyncIntervalMinutes,
+  foxpostSyncState,
+} from "./foxpost-sync-state.js";
 import {
   FoxpostParseError,
   FoxpostSettlementParser,
@@ -66,6 +72,18 @@ export class FoxpostSettlementService {
     query: FoxpostSettlementListQueryDto,
   ): Promise<FoxpostSettlementListResponse> {
     return this.repository.list(query);
+  }
+
+  /** Whether the Gmail pull runs by itself, and why not; and its last run. */
+  async syncStatus(
+    environment: NodeJS.ProcessEnv = process.env,
+  ): Promise<FoxpostSyncStatus> {
+    return {
+      state: foxpostSyncState(environment),
+      canRunNow: foxpostGmailKeyPresent(environment),
+      intervalMinutes: foxpostSyncIntervalMinutes(environment),
+      lastRun: await this.repository.lastRun(),
+    };
   }
 
   /**

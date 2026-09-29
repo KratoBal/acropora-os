@@ -19,6 +19,8 @@ import {
   type FoxpostSettlementLine,
   type FoxpostSettlementListResponse,
   type FoxpostSettlementStatus,
+  type FoxpostSyncState,
+  type FoxpostSyncStatus,
 } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
 
@@ -63,6 +65,19 @@ function lineResolution(line: FoxpostSettlementLine) {
 }
 
 /**
+ * Why the Gmail pull does not run by itself, said on the page, as on the GLS
+ * page. Measured on production 2026-09-29: the Foxpost pull had never run by
+ * itself in seven weeks (every run was a manual one), and nothing showed it.
+ */
+const SYNC_OFF: Record<Exclude<FoxpostSyncState, "ENABLED">, string> = {
+  DISABLED_NOT_SET: "a kapcsoló (GMAIL_FOXPOST_SYNC_ENABLED) nincs beállítva",
+  DISABLED_OFF: "a kapcsoló (GMAIL_FOXPOST_SYNC_ENABLED) értéke false",
+  DISABLED_UNRECOGNISED:
+    "a kapcsoló (GMAIL_FOXPOST_SYNC_ENABLED) értéke se nem true, se nem false",
+  NO_KEY: "be van kapcsolva, de nincs Gmail-kulcs",
+};
+
+/**
  * The field's starting value. The server suggests an invoice number only
  * when it exists here (a bare "2026/00123" gets its prefix only when exactly
  * one series has it); otherwise the raw reference stays, and the line says
@@ -95,6 +110,7 @@ export function FoxpostSettlementsPage() {
   );
   const [data, setData] = useState<FoxpostSettlementListResponse | null>(null);
   const [reports, setReports] = useState<FoxpostMonthlyReportSummary[]>([]);
+  const [syncStatus, setSyncStatus] = useState<FoxpostSyncStatus | null>(null);
   const [selected, setSelected] = useState<FoxpostSettlementDetail | null>(
     null,
   );
@@ -113,12 +129,14 @@ export function FoxpostSettlementsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [settlements, monthlyReports] = await Promise.all([
+      const [settlements, monthlyReports, status] = await Promise.all([
         foxpostSettlementsApi.list(token, { page: 1, pageSize: 50 }),
         foxpostSettlementsApi.reports(token),
+        foxpostSettlementsApi.syncStatus(token),
       ]);
       setData(settlements);
       setReports(monthlyReports);
+      setSyncStatus(status);
       // A Foxpost riport csak feldolgozott hónapra létezik, ezért a választó a
       // legutóbbi riportra áll, nem a naptári hónapra (a GLS-nél az is jó,
       // mert ott a fájl kéréskor készül).
@@ -280,7 +298,7 @@ export function FoxpostSettlementsPage() {
         title="Foxpost elszámolások"
         description="A Foxpost heti elszámolása: egy levélben az utánvét-tételek (XLSX) és a Foxpost számlája (PDF). Az utánvét soronként a kimenő számlához kötve; a Foxpost díja az utalásból levonva."
         actions={
-          canManage ? (
+          canManage && syncStatus?.canRunNow ? (
             <Button onClick={() => void sync()} disabled={working}>
               {working ? "Feldolgozás…" : "Gmail ellenőrzése most"}
             </Button>
@@ -288,6 +306,29 @@ export function FoxpostSettlementsPage() {
         }
       />
 
+      {syncStatus && syncStatus.state !== "ENABLED" ? (
+        <Alert
+          variant="info"
+          title="Az automatikus Gmail-behúzás ki van kapcsolva"
+          description={`Ok: ${SYNC_OFF[syncStatus.state]}. ${
+            syncStatus.canRunNow
+              ? "Addig a „Gmail ellenőrzése most” gombbal húzd be a leveleket."
+              : "Gmail-kulcs nélkül kézzel sem húzhatók be a levelek."
+          }`}
+        />
+      ) : null}
+      {syncStatus?.state === "ENABLED" ? (
+        <p className="text-sm text-dusk-600">
+          Automatikus Gmail-behúzás: {syncStatus.intervalMinutes} percenként.{" "}
+          {syncStatus.lastRun
+            ? `Utolsó futás: ${new Date(syncStatus.lastRun.startedAt).toLocaleString("hu-HU")}, ${
+                syncStatus.lastRun.status === "FAILED"
+                  ? `sikertelen (${syncStatus.lastRun.errorCode ?? "ismeretlen hiba"})`
+                  : `${syncStatus.lastRun.createdCount} új elszámolás`
+              }.`
+            : "Még nem futott."}
+        </p>
+      ) : null}
       {notice ? (
         <Alert variant="info" title="Foxpost" description={notice} />
       ) : null}

@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   list: vi.fn(),
   detail: vi.fn(),
   sync: vi.fn(),
+  syncStatus: vi.fn(),
   reprocess: vi.fn(),
   approveLine: vi.fn(),
   reports: vi.fn(),
@@ -76,6 +77,11 @@ beforeEach(() => {
   auth.session = ownerSession;
   api.list.mockReset().mockResolvedValue(settlements);
   api.reports.mockReset().mockResolvedValue([]);
+  api.syncStatus.mockReset().mockResolvedValue({
+    state: "ENABLED",
+    canRunNow: true,
+    intervalMinutes: 60,
+  });
   api.sync.mockReset().mockResolvedValue({
     runId: "run-1",
     status: "APPLIED",
@@ -92,6 +98,67 @@ beforeEach(() => {
 });
 
 describe("FoxpostSettlementsPage", () => {
+  it("says the automatic pull is off, and why, as the server reads it", async () => {
+    // Measured on production 2026-09-29: the pull never ran by itself in
+    // seven weeks, and the page said nothing. This line is that finding.
+    api.syncStatus.mockResolvedValue({
+      state: "DISABLED_UNRECOGNISED",
+      canRunNow: true,
+      intervalMinutes: 60,
+    });
+    render(createElement(FoxpostSettlementsPage));
+    expect(
+      await screen.findByText("Az automatikus Gmail-behúzás ki van kapcsolva"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/se nem true, se nem false.*Gmail ellenőrzése most/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Gmail ellenőrzése most" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the manual check when there is no Gmail key", async () => {
+    api.syncStatus.mockResolvedValue({
+      state: "NO_KEY",
+      canRunNow: false,
+      intervalMinutes: 60,
+    });
+    render(createElement(FoxpostSettlementsPage));
+    expect(
+      await screen.findByText(/nincs Gmail-kulcs.*kézzel sem/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Gmail ellenőrzése most" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("when on, says how often it runs and what the last run found", async () => {
+    api.syncStatus.mockResolvedValue({
+      state: "ENABLED",
+      canRunNow: true,
+      intervalMinutes: 30,
+      lastRun: {
+        status: "APPLIED",
+        startedAt: "2026-09-29T08:00:00.000Z",
+        messagesSeen: 2,
+        createdCount: 1,
+        skippedCount: 1,
+        needsReviewCount: 0,
+        failedCount: 0,
+      },
+    });
+    render(createElement(FoxpostSettlementsPage));
+    expect(
+      await screen.findByText(
+        /Automatikus Gmail-behúzás: 30 percenként\..*1 új elszámolás/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Az automatikus Gmail-behúzás ki van kapcsolva"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the imported settlement and its bookkeeping totals", async () => {
     render(createElement(FoxpostSettlementsPage));
     expect(await screen.findByText("26H31")).toBeInTheDocument();
