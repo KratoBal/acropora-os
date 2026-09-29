@@ -1,5 +1,6 @@
 import type { SupplierInvoiceImportResult } from "@acropora/types";
 
+import { deJongPdfAdapter } from "./adapters/dejong.pdf-adapter.js";
 import { hertleinPdfAdapter } from "./adapters/hertlein.pdf-adapter.js";
 
 /**
@@ -25,4 +26,5 @@ export interface SupplierPdfAdapter {
 
 export const SUPPLIER_PDF_ADAPTERS: readonly SupplierPdfAdapter[] = [
   hertleinPdfAdapter,
+  deJongPdfAdapter,
 ];
