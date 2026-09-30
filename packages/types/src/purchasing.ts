@@ -339,6 +339,8 @@ export interface SupplierInvoiceMailSyncRunSummary {
   documentsRead: number;
   duplicateCount: number;
   failedCount: number;
+  /** Fizetési felszólítás-levelek: a mellékleteiket nem olvastuk be. */
+  reminderCount: number;
   errorCode?: string;
 }
 
@@ -388,6 +390,11 @@ export interface ExpectedArrivalListItem {
 
 export interface ExpectedArrivalListResponse {
   items: ExpectedArrivalListItem[];
+  /**
+   * A "Nem kell" gombbal kivett, levélből jött tételek, a legutóbb kivettek
+   * elöl: innen vehetők vissza. Nem szerkeszthetők (`editorPath` null).
+   */
+  dismissed: ExpectedArrivalListItem[];
 }
 
 /** Egy levélből jött várható beérkezés a szerkesztőnek: a számla adatai és a javaslatok. */

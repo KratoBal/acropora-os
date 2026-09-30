@@ -1,6 +1,7 @@
-import { Controller, Get, Param, Post } from "@nestjs/common";
-import { PERMISSIONS } from "@acropora/types";
+import { Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
+import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
+import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { ExpectedArrivalIntakeService } from "./expected-arrival-intake.service.js";
 import { ExpectedArrivalService } from "./expected-arrival.service.js";
@@ -39,5 +40,20 @@ export class ExpectedArrivalController {
   @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
   detail(@Param("id") id: string) {
     return this.arrivals.detail(id);
+  }
+
+  /** "Nem kell": the arrival leaves the list, audited; `restore` undoes it. */
+  @Post(":id/dismiss")
+  @HttpCode(204)
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  dismiss(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.arrivals.dismiss(id, user.id);
+  }
+
+  @Post(":id/restore")
+  @HttpCode(204)
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  restore(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.arrivals.restore(id, user.id);
   }
 }

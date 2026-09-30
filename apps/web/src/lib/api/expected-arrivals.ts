@@ -29,6 +29,21 @@ export const expectedArrivalsApi = {
       { signal },
     );
   },
+  /** "Nem kell": a tétel lekerül a listáról; a `restore` visszaveszi. */
+  dismiss(token: string, id: string) {
+    return apiRequest<void>(
+      `/purchasing/expected-arrivals/${encodeURIComponent(id)}/dismiss`,
+      token,
+      { method: "POST" },
+    );
+  },
+  restore(token: string, id: string) {
+    return apiRequest<void>(
+      `/purchasing/expected-arrivals/${encodeURIComponent(id)}/restore`,
+      token,
+      { method: "POST" },
+    );
+  },
   sync(token: string) {
     return apiRequest<SupplierInvoiceMailSyncRunSummary>(
       `/purchasing/expected-arrivals/sync`,

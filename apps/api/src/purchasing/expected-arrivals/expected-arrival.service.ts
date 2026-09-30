@@ -1,4 +1,4 @@
-import { prisma } from "@acropora/database";
+import { prisma, type Prisma } from "@acropora/database";
 import {
   ConflictException,
   Injectable,
@@ -83,6 +83,25 @@ export function mailListItem(arrival: MailArrivalRow): ExpectedArrivalListItem {
   };
 }
 
+/** The documents a list row is built from, newest first. */
+const MAIL_LIST_DOCUMENTS = {
+  where: {
+    status: { in: ["READ", "LATE_CORRECTION"] },
+  } satisfies Prisma.IncomingSupplierDocumentWhereInput,
+  orderBy: { createdAt: "desc" as const },
+  select: {
+    kind: true,
+    status: true,
+    receivedAt: true,
+    createdAt: true,
+    importResult: true,
+    lineSuggestions: true,
+  },
+};
+
+/** How many dismissed arrivals the list returns, to take back. */
+const DISMISSED_SHOWN = 50;
+
 /**
  * VÁRHATÓ BEÉRKEZÉSEK, THE LIST AND THE EDITOR'S PREFILL (Balázs, 2026-09-30:
  * "a Várható beérkezések menüpontban ott van a lista, miből kiválasztja,
@@ -102,7 +121,7 @@ export function mailListItem(arrival: MailArrivalRow): ExpectedArrivalListItem {
 @Injectable()
 export class ExpectedArrivalService {
   async list(): Promise<ExpectedArrivalListResponse> {
-    const [arrivals, navInvoices] = await Promise.all([
+    const [arrivals, navInvoices, dismissed] = await Promise.all([
       prisma.expectedArrival.findMany({
         where: {
           OR: [
@@ -114,20 +133,7 @@ export class ExpectedArrivalService {
             },
           ],
         },
-        include: {
-          documents: {
-            where: { status: { in: ["READ", "LATE_CORRECTION"] } },
-            orderBy: { createdAt: "desc" },
-            select: {
-              kind: true,
-              status: true,
-              receivedAt: true,
-              createdAt: true,
-              importResult: true,
-              lineSuggestions: true,
-            },
-          },
-        },
+        include: { documents: MAIL_LIST_DOCUMENTS },
         orderBy: { updatedAt: "desc" },
       }),
       prisma.navIncomingInvoice.findMany({
@@ -144,6 +150,12 @@ export class ExpectedArrivalService {
           currency: true,
           invoiceNetAmount: true,
         },
+      }),
+      prisma.expectedArrival.findMany({
+        where: { status: "DISMISSED" },
+        include: { documents: MAIL_LIST_DOCUMENTS },
+        orderBy: { updatedAt: "desc" },
+        take: DISMISSED_SHOWN,
       }),
     ]);
 
@@ -175,7 +187,66 @@ export class ExpectedArrivalService {
       items: [...mail, ...nav].sort((a, b) =>
         (b.arrivedAt ?? "").localeCompare(a.arrivedAt ?? ""),
       ),
+      dismissed: dismissed
+        .filter((arrival) => arrival.documents.length > 0)
+        .map((arrival) => ({ ...mailListItem(arrival), editorPath: null })),
     };
+  }
+
+  /**
+   * "NEM KELL" (acrobot 25064, 2026-09-30): a mail arrival that will not be
+   * booked leaves the list. Only an OPEN one; a person's act, so it is
+   * audited, and `restore` takes it back. NAV rows are not arrivals and have
+   * no such button.
+   */
+  dismiss(id: string, actorUserId: string): Promise<void> {
+    return this.move(id, "OPEN", "DISMISSED", actorUserId);
+  }
+
+  restore(id: string, actorUserId: string): Promise<void> {
+    return this.move(id, "DISMISSED", "OPEN", actorUserId);
+  }
+
+  private async move(
+    id: string,
+    from: "OPEN" | "DISMISSED",
+    to: "OPEN" | "DISMISSED",
+    actorUserId: string,
+  ): Promise<void> {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // conditional: two clicks, or a booking in between, change one row once
+      const moved = await tx.expectedArrival.updateMany({
+        where: { id, status: from },
+        data: { status: to },
+      });
+      if (moved.count === 0) {
+        const arrival = await tx.expectedArrival.findUnique({
+          where: { id },
+          select: { status: true },
+        });
+        if (!arrival)
+          throw new NotFoundException("A várható beérkezés nem található.");
+        throw new ConflictException(
+          arrival.status === "RECEIVED"
+            ? "Ez a várható beérkezés már be van vételezve."
+            : to === "DISMISSED"
+              ? "Ez a tétel már ki van véve."
+              : "Ez a tétel nincs kivéve.",
+        );
+      }
+      await tx.auditLog.create({
+        data: {
+          userId: actorUserId,
+          action:
+            to === "DISMISSED"
+              ? "purchasing.expected-arrival.dismissed"
+              : "purchasing.expected-arrival.restored",
+          entityType: "ExpectedArrival",
+          entityId: id,
+          metadata: { from, to },
+        },
+      });
+    });
   }
 
   /**
@@ -221,7 +292,9 @@ export class ExpectedArrivalService {
       throw new NotFoundException("A várható beérkezés nem található.");
     if (arrival.status !== "OPEN")
       throw new ConflictException(
-        "Ez a várható beérkezés már be van vételezve.",
+        arrival.status === "DISMISSED"
+          ? "Ez a tétel ki van véve (Nem kell); előbb vedd vissza."
+          : "Ez a várható beérkezés már be van vételezve.",
       );
     const invoice = arrival.documents[0];
     if (!invoice?.importResult)

@@ -24,6 +24,7 @@ import {
   arrivalIdentity,
   documentContent,
   invoiceFiles,
+  isPaymentReminder,
   placeDocument,
   supplierIdByTaxKey,
 } from "./expected-arrival.intake.js";
@@ -56,6 +57,7 @@ type Counts = {
   documentsRead: number;
   duplicateCount: number;
   failedCount: number;
+  reminderCount: number;
 };
 
 /**
@@ -155,6 +157,7 @@ export class ExpectedArrivalIntakeService {
       documentsRead: 0,
       duplicateCount: 0,
       failedCount: 0,
+      reminderCount: 0,
     };
     try {
       const ids = await this.mail.listMessageIds(query);
@@ -179,9 +182,19 @@ export class ExpectedArrivalIntakeService {
           );
           continue;
         }
+        // a payment reminder carries the old invoice beside it: none of its
+        // files is read, and the mail is kept with its reason
+        const reminder = isPaymentReminder(message);
+        if (reminder) counts.reminderCount++;
         // the XML e-invoice wins over its PDF picture (`invoiceFiles`)
-        const { files } = invoiceFiles(message);
-        let errorCode: string | null = files.length ? null : "NO_PDF";
+        const { files } = reminder
+          ? { files: [] as SupplierInvoiceMail["pdfs"] }
+          : invoiceFiles(message);
+        let errorCode: string | null = reminder
+          ? "PAYMENT_REMINDER"
+          : files.length
+            ? null
+            : "NO_PDF";
         for (const file of files) {
           const outcome = await this.ingest(message, file);
           // a late correction is read and shown; an older version is not new
@@ -495,6 +508,7 @@ function summary(run: {
   documentsRead: number;
   duplicateCount: number;
   failedCount: number;
+  reminderCount: number;
   errorCode: string | null;
 }): SupplierInvoiceMailSyncRunSummary {
   return {
@@ -506,6 +520,7 @@ function summary(run: {
     documentsRead: run.documentsRead,
     duplicateCount: run.duplicateCount,
     failedCount: run.failedCount,
+    reminderCount: run.reminderCount,
     errorCode: run.errorCode ?? undefined,
   };
 }

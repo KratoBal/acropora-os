@@ -1,6 +1,7 @@
 import type { SupplierInvoiceImportResult } from "@acropora/types";
 
 import {
+  isPaymentReminderText,
   normalizeVatId,
   supplierTaxKey,
 } from "../supplier-invoice-import/supplier-invoice-import.common.js";
@@ -219,4 +220,25 @@ export function invoiceFiles(message: {
   return invoices.length
     ? { source: "XML", files: invoices }
     : { source: "PDF", files: [...message.pdfs] };
+}
+
+/**
+ * A PAYMENT REMINDER IS NOT AN ARRIVAL (Balázs, 2026-09-30 12:23 UTC,
+ * message_id 1554831001858080882). A supplier's reminder often carries the
+ * original invoice beside the reminder itself (De Jong: "First reminder
+ * 11069-<no>.pdf" and "inv<no>.pdf"), and reading that invoice opened an
+ * arrival for goods long received. A mail is a reminder when its subject or
+ * any attachment's name says so; then none of its files is read.
+ */
+export function isPaymentReminder(message: {
+  subject: string | null;
+  pdfs: readonly MailFile[];
+  xmls: readonly MailFile[];
+}): boolean {
+  return (
+    isPaymentReminderText(message.subject) ||
+    [...message.pdfs, ...message.xmls].some((file) =>
+      isPaymentReminderText(file.fileName),
+    )
+  );
 }
