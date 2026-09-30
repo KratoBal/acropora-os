@@ -1,0 +1,17 @@
+-- Az „Üzemen kívül" eszköz-állapot (OUT_OF_SERVICE).
+--
+-- A KÉRÉS: Balázs, 2026-09-30 12:29:29 UTC (fő csatorna, message_id
+-- 1554832557252542506): „az eszközöknél egy üzemen kívül státusz". A jelentés
+-- (acrobot döntése, ugyanaznap): átmenetileg nem működik, de nincs javításon és
+-- nincs kivezetve.
+--
+-- EZ AZ ÉRTÉK MÁR EGYSZER LÉTEZETT, és a 20260916150000_cold_and_warm_standby
+-- vette ki, Balázs akkori kérésére. Ott a kiesés miatt kellett típus-csere; itt
+-- egy érték JÖN, tehát elég az `ADD VALUE`, adat nem mozdul, és a meglévő sorok
+-- állapota változatlan.
+--
+-- A HELY ADAT: a lista állapot szerinti rendezése az enum DEKLARÁCIÓS
+-- sorrendjéből dolgozik (`assetListOrderBy`), csökkenő rendelkezésre állással.
+-- A javítás alatt álló eszköz VÁRHATÓAN visszaáll, az üzemen kívüli nem vett fel
+-- teendőt, tehát a javítás alatti UTÁN, a kivezetett ELŐTT áll.
+ALTER TYPE "AssetStatus" ADD VALUE 'OUT_OF_SERVICE' BEFORE 'RETIRED';

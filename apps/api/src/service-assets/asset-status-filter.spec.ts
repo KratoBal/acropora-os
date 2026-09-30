@@ -56,6 +56,14 @@ describe("az eszköz-lista állapot-szűrője", () => {
    * A SZURO MAGA NEM VALTOZOTT, es ez a tagadas erdeme: `not: RETIRED`. Ha
    * felsorolas allna ott, MOST kellett volna ket erteket hozzaadni -- es ha
    * valaki elfelejti, a ket tartalek CSENDBEN kiesne a "Beepitett" listabol.
+   *
+   * === ES MASODSZOR IS, 2026-09-30 ===
+   *
+   * Az `OUT_OF_SERVICE` ("Uzemen kivul") visszajott, mas jelentessel. A dontes
+   * itt is megszuletett, es nem a szuro mondja ki: BEEPITETTNEK SZAMIT (acrobot
+   * dontese, Balazs korabbi szabalya szerint a ful "minden, kivéve a
+   * kivezetettet"). Az eszkoz fizikailag a helyen all, csak nem mukodik -- es
+   * epp ezert kell ra hibajegyet nyitni tudni.
    */
   it("a séma állapotai: ha új jön, ezt a döntést újra kell hozni", () => {
     const sema = readFileSync(SEMA, "utf8");
@@ -66,7 +74,14 @@ describe("az eszköz-lista állapot-szűrője", () => {
         .split("\n")
         .map((sor) => sor.trim())
         .filter(Boolean),
-      ["ACTIVE", "WARM_STANDBY", "COLD_STANDBY", "IN_REPAIR", "RETIRED"],
+      [
+        "ACTIVE",
+        "WARM_STANDBY",
+        "COLD_STANDBY",
+        "IN_REPAIR",
+        "OUT_OF_SERVICE",
+        "RETIRED",
+      ],
       "új állapot került a sémába: döntsd el, beleszámít-e a Beépített szűrőbe",
     );
   });

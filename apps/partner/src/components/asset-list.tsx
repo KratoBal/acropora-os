@@ -58,6 +58,7 @@ const TABS = [
   { key: "IN_PLACE", label: "Beépített" },
   { key: "ACTIVE", label: "Aktív" },
   { key: "IN_REPAIR", label: "Javítás alatt" },
+  { key: "OUT_OF_SERVICE", label: "Üzemen kívül" },
   { key: "WARM_STANDBY", label: "Meleg tartalék" },
   { key: "COLD_STANDBY", label: "Hideg tartalék" },
   { key: "RETIRED", label: "Kivezetett" },

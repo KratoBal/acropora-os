@@ -27,15 +27,28 @@ export const assetKindLabel: Record<AssetKind, string> = {
  * A két tartalék a régi `OUT_OF_SERVICE` helyére jött (Balázs kérése,
  * 2026-09-16). A régi érték egyetlen dolgot mondott -- hogy nem üzemel --, és
  * azt is a HIÁNYÁVAL; a két új azt mondja meg, MIRE számíthat a szerelő.
+ *
+ * AZ `OUT_OF_SERVICE` 2026-09-30-ÁN VISSZAJÖTT, MÁS JELENTÉSSEL (Balázs kérése,
+ * 12:29 UTC: „az eszközöknél egy üzemen kívül státusz"; a jelentés acrobot
+ * döntése): átmenetileg nem működik, de nincs javításon és nincs kivezetve. Nem
+ * a két tartalék helyére jön, hanem melléjük: a tartalék SZÁNDÉKOS állapot, az
+ * üzemen kívüli egy fel nem vett teendő. A javítás alatti és a kivezetett között
+ * áll, a Beépített fülön bent marad (az a fül „minden, kivéve a kivezetettet").
  */
 export type AssetStatus =
-  "ACTIVE" | "WARM_STANDBY" | "COLD_STANDBY" | "IN_REPAIR" | "RETIRED";
+  | "ACTIVE"
+  | "WARM_STANDBY"
+  | "COLD_STANDBY"
+  | "IN_REPAIR"
+  | "OUT_OF_SERVICE"
+  | "RETIRED";
 
 export const assetStatusLabel: Record<AssetStatus, string> = {
   ACTIVE: "Aktív",
   WARM_STANDBY: "Meleg tartalék",
   COLD_STANDBY: "Hideg tartalék",
   IN_REPAIR: "Javítás alatt",
+  OUT_OF_SERVICE: "Üzemen kívül",
   RETIRED: "Kivezetett",
 };
 
@@ -83,6 +96,7 @@ export const assetStatusTone: Record<
   IN_REPAIR: "amber",
   WARM_STANDBY: "blue",
   COLD_STANDBY: "blue",
+  OUT_OF_SERVICE: "red",
   RETIRED: "neutral",
 };
 

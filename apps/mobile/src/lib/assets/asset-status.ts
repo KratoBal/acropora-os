@@ -20,6 +20,7 @@ export const ASSET_STATUS_LABELS: Record<AssetStatus, string> = {
   WARM_STANDBY: "Meleg tartalék",
   COLD_STANDBY: "Hideg tartalék",
   IN_REPAIR: "Javítás alatt",
+  OUT_OF_SERVICE: "Üzemen kívül",
   RETIRED: "Kivezetett",
 };
 
@@ -36,6 +37,7 @@ export const ASSET_STATUS_ORDER: readonly AssetStatus[] = [
   "WARM_STANDBY",
   "COLD_STANDBY",
   "IN_REPAIR",
+  "OUT_OF_SERVICE",
   "RETIRED",
 ];
 
