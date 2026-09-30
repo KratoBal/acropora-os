@@ -3,10 +3,20 @@ import type {
   BillingDocumentDraftInput,
   BillingDocumentEmailInput,
   BillingDocumentListResponse,
+  MailTemplateVariable,
 } from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
 import { ApiError, apiAuthHeaders, apiRequest } from "./client";
+
+/** `GET /billing/documents/:id/email-draft` válasza (nautilus #1293). */
+export interface BillingEmailTemplateDraft {
+  /** `stored`: a Levelezés oldalon átírt szöveg; `default`: az alapszöveg. */
+  source: "stored" | "default";
+  subject: string;
+  body: string;
+  variables: readonly MailTemplateVariable[];
+}
 
 export const billingDocumentsApi = {
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
@@ -45,6 +55,18 @@ export const billingDocumentsApi = {
       );
     }
     return response.blob();
+  },
+  /**
+   * A KIKÜLDŐ FIÓK KIINDULÓ SZÖVEGE (nautilus #1293): a Levelezés oldal
+   * `BILLING_DOCUMENT_MANUAL` sablonja, ahogy átírták, vagy az alapszövege;
+   * nyers, `{{név}}` alakú változókkal. `billing.resend` jog kell hozzá.
+   */
+  emailDraft(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<BillingEmailTemplateDraft>(
+      `/billing/documents/${encodeURIComponent(id)}/email-draft`,
+      token,
+      { signal },
+    );
   },
   /**
    * Kiküldés, hiba utáni újrapróbálás vagy újraküldés (nautilus #1288). SOHA

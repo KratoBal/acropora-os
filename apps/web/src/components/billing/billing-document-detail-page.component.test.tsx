@@ -30,6 +30,7 @@ const api = vi.hoisted(() => ({
   detail: vi.fn(),
   pdf: vi.fn(),
   email: vi.fn(),
+  emailDraft: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -184,6 +185,12 @@ beforeEach(() => {
   auth.role = "OWNER";
   navigation.push.mockReset();
   api.email.mockReset();
+  api.emailDraft.mockReset().mockResolvedValue({
+    source: "default",
+    subject: "Acropora – {{document_number}}",
+    body: "Kedves {{customer_name}}! {{document_number}}",
+    variables: [],
+  });
   api.detail.mockReset().mockResolvedValue(detail());
   api.pdf
     .mockReset()
@@ -385,7 +392,10 @@ describe("BillingDocumentDetailPage", () => {
     expect(first.mode).toBe("RETRY");
     expect(first.to).toEqual(["szamlazas@partner.hu"]);
     expect(second.requestId).toBe(first.requestId);
-    expect(first.body).toContain("{document_number}");
+    // A FIÓK A LEVELEZÉS OLDAL SABLONJÁVAL NYÍLT (nautilus #1293)
+    expect(api.emailDraft).toHaveBeenCalledWith("token-1", "doc-1");
+    expect(first.subject).toBe("Acropora – {{document_number}}");
+    expect(first.body).toBe("Kedves {{customer_name}}! {{document_number}}");
 
     // A SIKER UTÁNI KÖVETKEZŐ KÜLDÉS ÚJ KÉRÉS: új azonosító, különben a szerver
     // a régi kézbesítést adná vissza, és nem küldene.
@@ -427,15 +437,21 @@ describe("BillingDocumentDetailPage", () => {
     );
     const drawer = await screen.findByRole("dialog");
     fireEvent.click(
-      within(drawer).getByRole("button", { name: "{document_link} beszúrása" }),
+      within(drawer).getByRole("button", {
+        name: "{{document_link}} beszúrása",
+      }),
     );
     fireEvent.click(
       within(drawer).getByRole("button", { name: "Levél előnézete" }),
     );
     await act(async () => {});
-    expect(
-      within(drawer).getByLabelText("Levél előnézete").textContent,
-    ).toContain("https://www.szamlazz.hu/szamla/?page=vevoifiok&id=abc");
+    const preview =
+      within(drawer).getByLabelText("Levél előnézete").textContent;
+    expect(preview).toContain(
+      "https://www.szamlazz.hu/szamla/?page=vevoifiok&id=abc",
+    );
+    // a teljes {{…}} jelölő helyettesül, nem csak a belseje
+    expect(preview).not.toMatch(/\{https:/);
   });
 
   it("resend is not offered to a role without billing.resend", async () => {
