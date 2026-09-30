@@ -24,6 +24,7 @@ import {
 import {
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
+  isPlainTextMailTemplateEvent,
   mailTemplateEventVariables,
   PERMISSIONS,
   splitTemplateVariables,
@@ -37,6 +38,12 @@ import {
   AQUARIUM_MEASUREMENT_RESULT,
   DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE,
 } from "./aquarium-measurement-mail.service.js";
+import {
+  BILLING_DOCUMENT_MANUAL,
+  BILLING_DOCUMENT_WEBSHOP_ORDER,
+  DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE,
+  DEFAULT_BILLING_DOCUMENT_WEBSHOP_ORDER_TEMPLATE,
+} from "./billing-document-mail.content.js";
 import { internalWorksheetLink } from "../../material-requests/material-request-link.js";
 import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { MailImageRepository } from "./mail-image.repository.js";
@@ -148,6 +155,10 @@ function alapertelmezes(id: string) {
       return DEFAULT_MATERIAL_REQUEST_RECEIVED_TEMPLATE;
     case AQUARIUM_MEASUREMENT_RESULT:
       return DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE;
+    case BILLING_DOCUMENT_MANUAL:
+      return DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE;
+    case BILLING_DOCUMENT_WEBSHOP_ORDER:
+      return DEFAULT_BILLING_DOCUMENT_WEBSHOP_ORDER_TEMPLATE;
     default:
       throw new NotFoundException("Nincs ilyen levélsablon.");
   }
@@ -258,6 +269,10 @@ export class MailTemplateController {
       tud elcsuszni. Enelkul egy elgepelt nev csak a kovetkezo valodi kuldeskor
       bukna ki, amikor mar senki nem emlekszik ra, hogy a sablont atirtak.
     */
+    if (input.bodyHtml && isPlainTextMailTemplateEvent(id))
+      throw new BadRequestException(
+        "Ez a levél sima szövegként megy ki: formázott törzs nem menthető hozzá.",
+      );
     const torzs = input.bodyHtml
       ? formazottTorzs(input.bodyHtml)
       : { body: input.body, bodyHtml: null };

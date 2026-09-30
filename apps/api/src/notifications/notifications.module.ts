@@ -79,6 +79,8 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
       kerulheti meg.
     */
     MAIL_SENDER,
+    // a számla-levél alapszövegét a számlázás a Levelezés sablonjából olvassa
+    TicketMailRepository,
     NotificationsService,
     TicketMailService,
     HandoverMailService,

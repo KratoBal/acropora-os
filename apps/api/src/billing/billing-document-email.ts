@@ -75,17 +75,26 @@ export function renderBillingEmail(
 ): RenderResult {
   const unknown = new Set<string>();
   const missing = new Set<string>();
-  const rendered = text.replace(/\{([a-z_]+)\}/g, (whole, name: string) => {
-    if (!(BILLING_EMAIL_VARIABLES as readonly string[]).includes(name)) {
-      unknown.add(name);
+  // A kanonikus alak a Levelezés sablonjaié, `{{név}}` (acrobot, 2026-09-30);
+  // a régi, egy kapcsos zárójeles `{név}` is feloldódik, hogy a már megírt
+  // szövegek ne törjenek el. A dupla alak áll elöl, különben a belső
+  // `{név}`-et venné, és a külső zárójelek a levélben maradnának.
+  const pattern = /\{\{\s*([a-z_]+)\s*\}\}|\{([a-z_]+)\}/g;
+  const rendered = text.replace(
+    pattern,
+    (whole, double?: string, single?: string) => {
+      const name = (double ?? single)!;
+      if (!(BILLING_EMAIL_VARIABLES as readonly string[]).includes(name)) {
+        unknown.add(name);
+        return whole;
+      }
+      const value = values[name as BillingEmailVariable];
+      if (value !== null) return value;
+      if (OPTIONAL.has(name as BillingEmailVariable)) return "";
+      missing.add(name);
       return whole;
-    }
-    const value = values[name as BillingEmailVariable];
-    if (value !== null) return value;
-    if (OPTIONAL.has(name as BillingEmailVariable)) return "";
-    missing.add(name);
-    return whole;
-  });
+    },
+  );
   if (unknown.size > 0 || missing.size > 0)
     return { ok: false, unknown: [...unknown], missing: [...missing] };
   return { ok: true, text: rendered };

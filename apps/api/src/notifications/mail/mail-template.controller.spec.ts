@@ -7,6 +7,10 @@ import {
   type AuthenticatedUser,
 } from "@acropora/types";
 
+import {
+  DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE,
+  DEFAULT_BILLING_DOCUMENT_WEBSHOP_ORDER_TEMPLATE,
+} from "./billing-document-mail.content.js";
 import type { TicketMailRepository } from "./ticket-mail.repository.js";
 import {
   AQUARIUM_MEASUREMENT_RESULT,
@@ -243,6 +247,66 @@ describe("MailTemplateController.save, formázott törzzsel", () => {
       SZERKESZTO,
     );
     assert.equal(mentett.length, 1);
+  });
+
+  it("a számla-levélhez formázott törzset nem ment, a sima szöveget igen", async () => {
+    for (const id of [
+      "BILLING_DOCUMENT_MANUAL",
+      "BILLING_DOCUMENT_WEBSHOP_ORDER",
+    ]) {
+      const { mentett, controller } = rogzitoTarolo();
+      await assert.rejects(
+        () =>
+          controller.save(
+            id,
+            {
+              subject: "{{document_number}}",
+              body: "x",
+              bodyHtml: "<p><strong>{{customer_name}}</strong></p>",
+            },
+            SZERKESZTO,
+          ),
+        (hiba: unknown) =>
+          hiba instanceof BadRequestException &&
+          /sima szövegként/.test(hiba.message),
+        id,
+      );
+      assert.deepEqual(mentett, [], id);
+      await controller.save(
+        id,
+        { subject: "{{document_number}}", body: "Kedves {{customer_name}}!" },
+        SZERKESZTO,
+      );
+      assert.equal(mentett.length, 1, id);
+    }
+  });
+
+  it("a két számla-esemény tárolt sor nélkül a saját alapszövegét adja", async () => {
+    for (const [id, alap] of [
+      ["BILLING_DOCUMENT_MANUAL", DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE],
+      [
+        "BILLING_DOCUMENT_WEBSHOP_ORDER",
+        DEFAULT_BILLING_DOCUMENT_WEBSHOP_ORDER_TEMPLATE,
+      ],
+    ] as const) {
+      const valasz = await new MailTemplateController(tarolo(null), KEPEK).read(
+        id,
+      );
+      assert.equal(valasz.source, "default");
+      assert.equal(valasz.subject, alap.subject);
+      assert.deepEqual(
+        valasz.variables.map((v) => v.name),
+        [
+          "customer_name",
+          "document_number",
+          "invoice_number",
+          "gross_total",
+          "due_date",
+          "document_link",
+          "order_number",
+        ],
+      );
+    }
   });
 
   it("a szerkeszto csak az esemeny valtozoit kapja", async () => {

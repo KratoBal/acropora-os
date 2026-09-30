@@ -5,6 +5,7 @@ import { NotificationsModule } from "../notifications/notifications.module.js";
 import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
 import { BillingDocumentEmailController } from "./billing-document-email.controller.js";
 import { BillingDocumentEmailRepository } from "./billing-document-email.repository.js";
+import { BillingDocumentEmailDraftService } from "./billing-document-email-draft.service.js";
 import { BillingDocumentEmailService } from "./billing-document-email.service.js";
 import { BillingDocumentIssueController } from "./billing-document-issue.controller.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
@@ -41,6 +42,7 @@ import { BillingDocumentsService } from "./billing-documents.service.js";
     BillingDocumentPdfService,
     BillingDocumentEmailRepository,
     BillingDocumentEmailService,
+    BillingDocumentEmailDraftService,
     documentStoreProvider,
   ],
 })
