@@ -1,3 +1,4 @@
+import { escapeHtml } from "@acropora/rich-text";
 import type { BillingEmailMode, BillingEmailStatus } from "@acropora/types";
 
 import type { BillingDocumentRow } from "./billing-documents.repository.js";
@@ -72,6 +73,8 @@ export type RenderResult =
 export function renderBillingEmail(
   text: string,
   values: Record<BillingEmailVariable, string | null>,
+  /** HTML-törzsnél az érték escape-elve kerül be (egy vevőnév `<` jele nem tag). */
+  escape: (value: string) => string = (value) => value,
 ): RenderResult {
   const unknown = new Set<string>();
   const missing = new Set<string>();
@@ -89,7 +92,7 @@ export function renderBillingEmail(
         return whole;
       }
       const value = values[name as BillingEmailVariable];
-      if (value !== null) return value;
+      if (value !== null) return escape(value);
       if (OPTIONAL.has(name as BillingEmailVariable)) return "";
       missing.add(name);
       return whole;
@@ -99,6 +102,12 @@ export function renderBillingEmail(
     return { ok: false, unknown: [...unknown], missing: [...missing] };
   return { ok: true, text: rendered };
 }
+
+/** A formázott törzs behelyettesítése: ugyanaz a szabály, escape-elt értékekkel. */
+export const renderBillingEmailHtml = (
+  html: string,
+  values: Record<BillingEmailVariable, string | null>,
+) => renderBillingEmail(html, values, escapeHtml);
 
 /** Egy cím: szóköz, vessző, pontosvessző és szögletes zárójel nélkül. */
 const ADDRESS = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;

@@ -7,6 +7,7 @@ import {
   billingEmailRecipients,
   billingEmailValues,
   renderBillingEmail,
+  renderBillingEmailHtml,
 } from "./billing-document-email.js";
 import {
   DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE,
@@ -131,6 +132,22 @@ describe("renderBillingEmail, a Levelezés sablonjainak alakjával", () => {
         assert.equal(result.ok, true, text);
         assert.doesNotMatch(result.ok ? result.text : "", /[{}]/, text);
       }
+  });
+});
+
+describe("renderBillingEmailHtml", () => {
+  it("escapes the values, and keeps the template's own tags", () => {
+    const values = billingEmailValues(row(), "Kis & Nagy <Kft.>");
+    assert.deepEqual(
+      renderBillingEmailHtml(
+        "<p>Kedves <strong>{{customer_name}}</strong>!</p>",
+        values,
+      ),
+      {
+        ok: true,
+        text: "<p>Kedves <strong>Kis &amp; Nagy &lt;Kft.&gt;</strong>!</p>",
+      },
+    );
   });
 });
 

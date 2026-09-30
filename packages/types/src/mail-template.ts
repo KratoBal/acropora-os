@@ -391,17 +391,15 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
     id: "BILLING_DOCUMENT_MANUAL",
     name: "Számla kiküldése (kézi számlázás)",
     description:
-      "A kiállított számla, díjbekérő vagy előlegszámla kiküldésének alapszövege. A kiküldő fiók ezzel nyílik meg, és küldés előtt átírható. A PDF csatolmányként megy. Sima szöveg, formázás nélkül.",
+      "A kiállított számla, díjbekérő vagy előlegszámla kiküldésének alapszövege. A kiküldő fiók ezzel nyílik meg, és küldés előtt átírható. A PDF csatolmányként megy. Formázható: a levél HTML-ként és szöveges alternatívaként megy ki.",
     variables: BILLING_DOCUMENT_VARIABLES,
-    plainTextOnly: true,
   },
   {
     id: "BILLING_DOCUMENT_WEBSHOP_ORDER",
     name: "Számla kiküldése (webshopos rendelés)",
     description:
-      "A webshop-rendeléshez automatikusan kiállított számla levele. Ma csak a sablon szerkeszthető: az automatikus számlázás és kiküldés még nem épült meg. Sima szöveg, formázás nélkül.",
+      "A webshop-rendeléshez automatikusan kiállított számla levele. Ma csak a sablon szerkeszthető: az automatikus számlázás és kiküldés még nem épült meg.",
     variables: BILLING_DOCUMENT_VARIABLES,
-    plainTextOnly: true,
   },
 ] as const;
 

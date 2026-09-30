@@ -249,35 +249,27 @@ describe("MailTemplateController.save, formázott törzzsel", () => {
     assert.equal(mentett.length, 1);
   });
 
-  it("a számla-levélhez formázott törzset nem ment, a sima szöveget igen", async () => {
+  it("a számla-levélhez formázott törzs is menthető (Balázs kérése a stage-en, acrobot 25346)", async () => {
     for (const id of [
       "BILLING_DOCUMENT_MANUAL",
       "BILLING_DOCUMENT_WEBSHOP_ORDER",
     ]) {
       const { mentett, controller } = rogzitoTarolo();
-      await assert.rejects(
-        () =>
-          controller.save(
-            id,
-            {
-              subject: "{{document_number}}",
-              body: "x",
-              bodyHtml: "<p><strong>{{customer_name}}</strong></p>",
-            },
-            SZERKESZTO,
-          ),
-        (hiba: unknown) =>
-          hiba instanceof BadRequestException &&
-          /sima szövegként/.test(hiba.message),
-        id,
-      );
-      assert.deepEqual(mentett, [], id);
       await controller.save(
         id,
-        { subject: "{{document_number}}", body: "Kedves {{customer_name}}!" },
+        {
+          subject: "{{document_number}}",
+          body: "x",
+          bodyHtml: "<p><strong>{{customer_name}}</strong></p>",
+        },
         SZERKESZTO,
       );
       assert.equal(mentett.length, 1, id);
+      assert.match(
+        mentett[0]!.bodyHtml ?? "",
+        /<strong>\{\{customer_name\}\}<\/strong>/,
+        id,
+      );
     }
   });
 
