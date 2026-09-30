@@ -289,7 +289,7 @@ export function BillingDocumentEditor({
       let letter: BillingEmailDraft;
       if (email !== null) letter = email;
       else {
-        const draft = await billingDocumentsApi.emailDraft(token, issued.id);
+        const draft = await billingDocumentsApi.templateDraft(token);
         letter = { ...emailDraft, subject: draft.subject, body: draft.body };
       }
       const after = await billingDocumentsApi.email(token, issued.id, {
@@ -312,16 +312,17 @@ export function BillingDocumentEditor({
   };
 
   /**
-   * A FIÓK MEGNYITÁSA: egy már mentett bizonylatnál a Levelezés oldal sablonja
-   * tölti ki a levelet (nautilus #1293), amíg senki nem írt bele. Egy még nem
-   * mentett vázlatnak nincs szerver-oldali párja; ott a helyi alapszöveg
-   * látszik, és a kiküldés a mentés után kéri le a sablont.
+   * A FIÓK MEGNYITÁSA: a Levelezés oldal sablonja tölti ki a levelet, amíg
+   * senki nem írt bele, MENTÉSTŐL FÜGGETLENÜL (nautilus #1300, a bizonylat
+   * nélküli vázlat). Balázs a stage-en (acrobot 25337): az új, még nem mentett
+   * számla addig a beégetett alapszöveget mutatta, a kiküldés pedig már a
+   * sablont vitte, tehát az előnézet és a kimenő levél eltért.
    */
   const openDrawer = () => {
     setDrawerOpen(true);
-    if (email !== null || state.savedUpdatedAt === null || !canSend) return;
+    if (email !== null || !canSend) return;
     billingDocumentsApi
-      .emailDraft(token, state.id)
+      .templateDraft(token)
       .then((draft) =>
         setEmail(
           (current) =>
