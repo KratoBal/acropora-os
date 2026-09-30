@@ -36,6 +36,11 @@ import {
 } from "../asset-labels";
 import { TABS } from "../asset-list-page";
 import {
+  assetListQuery,
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZES,
+} from "./asset-list-query";
+import {
   PilotBadge,
   PilotButton,
   PilotThemeRoot,
@@ -78,8 +83,6 @@ import {
  */
 
 const NINCS_KATEGORIA = "__NINCS__";
-const PAGE_SIZES = [25, 50, 100] as const;
-const DEFAULT_PAGE_SIZE = String(PAGE_SIZES[0]);
 
 export function PilotAssetListPage() {
   const { session } = useAuth();
@@ -99,13 +102,7 @@ export function PilotAssetListPage() {
   const token = session?.token ?? "";
   const activeStatus = params.get("status") ?? "IN_PLACE";
 
-  const query = useMemo(() => {
-    const value = new URLSearchParams(params.toString());
-    if (!value.has("page")) value.set("page", "1");
-    if (!value.has("pageSize")) value.set("pageSize", DEFAULT_PAGE_SIZE);
-    if (!value.has("status")) value.set("status", "IN_PLACE");
-    return value;
-  }, [params]);
+  const query = useMemo(() => assetListQuery(params), [params]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {

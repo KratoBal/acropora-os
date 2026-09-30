@@ -341,6 +341,22 @@ export class ServiceAssetsController {
    * fájlban -- a `:id/documents/:documentId` három szegmensű. Ahol nem
    * tudok mérni, ott a fájl saját, működő sorrendjét követem.
    */
+  /**
+   * AZ ADATLAP ELOZO/KOVETKEZO GOMBJA (Balazs kerese, 2026-09-30). A lista
+   * query-jet kapja (ugyanaz a DTO, a lapozas itt nem szamit), es a lista
+   * hatokorevel dolgozik: a partner csak a sajat eszkozei kozott lep. Ket
+   * szegmensu GET a `:id` fole, a `:id/documents` mintajara.
+   */
+  @Get(":id/neighbors")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  neighbors(
+    @Param("id") id: string,
+    @Query() query: AssetListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.neighbors(id, query, user);
+  }
+
   @Get(":id/documents")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   documents(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {

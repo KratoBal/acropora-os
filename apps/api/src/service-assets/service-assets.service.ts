@@ -137,6 +137,16 @@ export class ServiceAssetsService {
     return this.repository.list(query, scope, assignedUnitIds);
   }
 
+  /** Az adatlap Elozo/Kovetkezo gombja: ugyanaz a hatokor, mint a listae. */
+  async neighbors(
+    id: string,
+    query: AssetListQueryDto,
+    user: AuthenticatedUser,
+  ) {
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    return this.repository.neighbors(id, query, scope, assignedUnitIds);
+  }
+
   /**
    * A tulajdonos-választó listája. A `ownerType`/`ownerId` páros egy MEGLÉVŐ
    * eszköz tulajdonosát nevezi meg, akit a lista akkor is tartalmazzon, ha ma

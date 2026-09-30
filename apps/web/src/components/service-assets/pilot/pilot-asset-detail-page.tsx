@@ -22,9 +22,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { useReturnTo } from "@/components/navigation-history";
+import { useReturnTo, useStepTo } from "@/components/navigation-history";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
 import { assetsApi } from "@/lib/api/assets";
+import { PilotAssetStepper, useAssetNeighbors } from "./pilot-asset-stepper";
 import {
   assetEventLabel,
   assetStatusLabel,
@@ -160,6 +161,12 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
   const [documentType, setDocumentType] =
     useState<AssetDocumentType>("INVOICE");
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const neighbors = useAssetNeighbors(token, assetId, canView && !deleted);
+  const stepTo = useStepTo();
+  const step = (id: string) => {
+    setNotice(null);
+    stepTo(`/szerviz/eszkozok/${id}`);
+  };
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -395,13 +402,20 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
       ) : asset ? (
         <>
           <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
-            <Link
-              href={backToList.href}
-              className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
-            >
-              <Icon name="chevron-left" size={12} />
-              {backToList.fromWithinApp ? "Vissza" : "Eszköznyilvántartás"}
-            </Link>
+            <div className="mb-3 flex items-center justify-between gap-4">
+              <Link
+                href={backToList.href}
+                className="flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
+              >
+                <Icon name="chevron-left" size={12} />
+                {backToList.fromWithinApp ? "Vissza" : "Eszköznyilvántartás"}
+              </Link>
+              <PilotAssetStepper
+                neighbors={neighbors}
+                onStep={step}
+                position="top"
+              />
+            </div>
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
                 <div>
@@ -886,6 +900,13 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                 </PilotCard>
               ) : null}
             </div>
+          </div>
+          <div className="flex justify-end px-8 pb-8">
+            <PilotAssetStepper
+              neighbors={neighbors}
+              onStep={step}
+              position="bottom"
+            />
           </div>
         </>
       ) : null}

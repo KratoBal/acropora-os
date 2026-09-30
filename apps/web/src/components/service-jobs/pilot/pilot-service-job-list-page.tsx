@@ -6,7 +6,7 @@ import {
   type ServiceJobListResponse,
 } from "@acropora/types";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -87,15 +87,64 @@ import {
 const ALL_LOCATIONS = "Mind";
 const ALL_PARTNERS = "Mind";
 
+/**
+ * A LISTA ÁLLAPOTA AZ URL-BEN (Balázs kérése, 2026-09-30 12:29 UTC: egy
+ * szűrt listáról az adatlapra, majd vissza, a szűrés maradjon meg). A fül,
+ * a keresés, a rejtettek, a partner és a helyszín az URL-ből indul, és
+ * minden változás oda íródik vissza; az alapérték nem kerül a címbe.
+ */
+const PILOT_TAB_VALUES: readonly PilotTab[] = [
+  "all",
+  "open",
+  "waiting",
+  "closed",
+];
+
+export function serviceJobListStateFromUrl(params: URLSearchParams): {
+  tab: PilotTab;
+  search: string;
+  includeHidden: boolean;
+  partner: string;
+  location: string;
+} {
+  const tab = params.get("tab") as PilotTab | null;
+  return {
+    tab: tab && PILOT_TAB_VALUES.includes(tab) ? tab : "open",
+    search: params.get("q") ?? "",
+    includeHidden: params.get("hidden") === "1",
+    partner: params.get("partner") || ALL_PARTNERS,
+    location: params.get("location") || ALL_LOCATIONS,
+  };
+}
+
+export function serviceJobListQuery(state: {
+  tab: PilotTab;
+  search: string;
+  includeHidden: boolean;
+  partner: string;
+  location: string;
+}): string {
+  const query = new URLSearchParams();
+  if (state.tab !== "open") query.set("tab", state.tab);
+  if (state.search.trim()) query.set("q", state.search.trim());
+  if (state.includeHidden) query.set("hidden", "1");
+  if (state.partner !== ALL_PARTNERS) query.set("partner", state.partner);
+  if (state.location !== ALL_LOCATIONS) query.set("location", state.location);
+  return query.toString();
+}
+
 export function PilotServiceJobListPage() {
   const { session } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<PilotTab>("open");
-  const [search, setSearch] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
-  const [includeHidden, setIncludeHidden] = useState(false);
-  const [partner, setPartner] = useState(ALL_PARTNERS);
-  const [location, setLocation] = useState(ALL_LOCATIONS);
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [initial] = useState(() => serviceJobListStateFromUrl(params));
+  const [tab, setTab] = useState<PilotTab>(initial.tab);
+  const [search, setSearch] = useState(initial.search);
+  const [appliedSearch, setAppliedSearch] = useState(initial.search);
+  const [includeHidden, setIncludeHidden] = useState(initial.includeHidden);
+  const [partner, setPartner] = useState(initial.partner);
+  const [location, setLocation] = useState(initial.location);
   const [data, setData] = useState<ServiceJobListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -159,11 +208,36 @@ export function PilotServiceJobListPage() {
   /* A FÜLVÁLTÁS A PARTNER/HELYSZÍN SZŰRŐT IS NULLÁZZA -- egy korábban
      kiválasztott partner/helyszín az ÚJ fülön lehet, hogy nem is szerepel
      az opciók között, és egy láthatatlanul aktív szűrő üres listát adna
-     magyarázat nélkül. */
-  useEffect(() => {
+     magyarázat nélkül. A kattintásban történik, nem effektben: induláskor
+     a partner/helyszín az URL-ből jön, és azt nem szabad nullázni. */
+  const selectTab = (next: PilotTab) => {
+    if (next === tab) return;
+    setTab(next);
     setPartner(ALL_PARTNERS);
     setLocation(ALL_LOCATIONS);
-  }, [tab]);
+  };
+
+  /* Az állapot visszaírása az URL-be, csak ha tényleg változott. */
+  useEffect(() => {
+    const next = serviceJobListQuery({
+      tab,
+      search: appliedSearch,
+      includeHidden,
+      partner,
+      location,
+    });
+    if (next === params.toString()) return;
+    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+  }, [
+    appliedSearch,
+    includeHidden,
+    location,
+    params,
+    partner,
+    pathname,
+    router,
+    tab,
+  ]);
 
   const tabItems = useMemo(
     () => (data ? pilotItemsForTab(data.items, tab) : []),
@@ -254,7 +328,7 @@ export function PilotServiceJobListPage() {
             <button
               key={entry.id}
               type="button"
-              onClick={() => setTab(entry.id)}
+              onClick={() => selectTab(entry.id)}
               className={`flex cursor-pointer items-center gap-2 border-b-2 px-4 py-3.5 text-sm font-medium transition-colors ${
                 tab === entry.id
                   ? "border-pilot-aqua-600 text-pilot-aqua-700"

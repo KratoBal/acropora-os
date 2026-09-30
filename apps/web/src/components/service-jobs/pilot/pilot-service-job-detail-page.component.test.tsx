@@ -89,6 +89,10 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
+// The list's latest query, as the navigation trail would hand it over.
+vi.mock("@/components/navigation-history", () => ({
+  useListHref: (listPath: string) => `${listPath}?tab=closed&partner=Alfa`,
+}));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
 
 function sessionAs(role: Session["user"]["role"]): Session {
@@ -340,5 +344,19 @@ describe("PilotServiceJobDetailPage -- Figma-igazítás (Mi a baj?, Eszköz)", (
     expect(
       screen.queryByText("Ehhez a jegyhez nincs eszköz rendelve."),
     ).not.toBeInTheDocument();
+  });
+
+  /*
+    BALÁZS KÉRÉSE (2026-09-30): a "Hibajegyek" morzsa a lista legutóbbi
+    szűrésére vigyen vissza, ne a szűretlen listára. MI PIROSÍT: ha a link
+    megint fix útvonalra mutat.
+  */
+  it("a Hibajegyek morzsa a lista legutóbbi szűrésére mutat", async () => {
+    api.detail.mockResolvedValue(detail());
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const crumb = await screen.findByRole("link", { name: "Hibajegyek" });
+    expect(crumb.getAttribute("href")).toBe(
+      "/szerviz/hibajegyek?tab=closed&partner=Alfa",
+    );
   });
 });

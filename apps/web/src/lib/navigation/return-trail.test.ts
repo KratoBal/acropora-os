@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { advanceTrail, previousPage } from "./return-trail";
+import {
+  advanceTrail,
+  lastVisitOf,
+  previousPage,
+  stepTrail,
+} from "./return-trail";
 
 describe("return trail", () => {
   it("remembers where the reader came from", () => {
@@ -55,5 +60,50 @@ describe("return trail", () => {
 
     trail = advanceTrail(trail, "/szerviz/munkalapok/42");
     expect(previousPage(trail)).toBe("/szerviz/munkalapok");
+  });
+
+  it("keeps the query: the same page's newer query replaces the older, and going back shortens", () => {
+    let trail = advanceTrail([], "/szerviz/eszkozok?status=INSTALLED");
+    trail = advanceTrail(trail, "/szerviz/eszkozok?status=INSTALLED&page=2");
+    expect(trail).toEqual(["/szerviz/eszkozok?status=INSTALLED&page=2"]);
+    trail = advanceTrail(trail, "/szerviz/eszkozok/asset-7");
+    expect(previousPage(trail)).toBe(
+      "/szerviz/eszkozok?status=INSTALLED&page=2",
+    );
+    // back to the list with its query: the trail shortens
+    trail = advanceTrail(trail, "/szerviz/eszkozok?status=INSTALLED&page=2");
+    expect(trail).toEqual(["/szerviz/eszkozok?status=INSTALLED&page=2"]);
+  });
+
+  it("finds a list's latest visit even when the reader came from elsewhere", () => {
+    let trail: string[] = [];
+    for (const page of [
+      "/szerviz/hibajegyek?tab=closed&partner=p1",
+      "/szerviz/hibajegyek/job-1",
+      "/szerviz/munkalapok/42",
+    ])
+      trail = advanceTrail(trail, page);
+    expect(lastVisitOf(trail, "/szerviz/hibajegyek")).toBe(
+      "/szerviz/hibajegyek?tab=closed&partner=p1",
+    );
+    // a detail path that starts with the list path is not the list
+    expect(
+      lastVisitOf(["/szerviz/hibajegyek/job-1"], "/szerviz/hibajegyek"),
+    ).toBe(null);
+  });
+
+  it("a sibling step takes the current page's place, so back still leads to the list", () => {
+    let trail = advanceTrail([], "/szerviz/eszkozok?status=ALL&page=2");
+    trail = advanceTrail(trail, "/szerviz/eszkozok/a1");
+    trail = stepTrail(trail, "/szerviz/eszkozok/a2");
+    trail = stepTrail(trail, "/szerviz/eszkozok/a3");
+    expect(trail).toEqual([
+      "/szerviz/eszkozok?status=ALL&page=2",
+      "/szerviz/eszkozok/a3",
+    ]);
+    expect(previousPage(trail)).toBe("/szerviz/eszkozok?status=ALL&page=2");
+    expect(stepTrail([], "/szerviz/eszkozok/a1")).toEqual([
+      "/szerviz/eszkozok/a1",
+    ]);
   });
 });

@@ -12,26 +12,38 @@
  * a kétszer feljegyzett lap és a vissza-oda pattogás mind itt dől el.
  */
 
+/** A cím útvonal-része, a query nélkül: a lapot ez azonosítja. */
+export function pathOf(href: string): string {
+  const cut = href.indexOf("?");
+  return cut === -1 ? href : href.slice(0, cut);
+}
+
 /**
  * Egy lapváltás hatása a nyomra.
  *
+ * A nyom elemei TELJES CÍMEK (útvonal + query), de a lapot az útvonal
+ * azonosítja. Balázs kérése (2026-09-30 12:29 UTC): egy szűrt listáról az
+ * adatlapra, majd vissza, a szűrés és az oldal maradjon meg. A nyom eddig
+ * csak az útvonalat tartotta, ezért a "vissza" a szűretlen listára vitt.
+ *
  * Három eset van, és a második az, ami nélkül a képernyő pattogna:
- * - ugyanaz a lap (újrarenderelés, szűrő, lapozás): a nyom nem változik;
+ * - ugyanaz a lap (újrarenderelés, szűrő, lapozás): a nyom nem hosszabbodik,
+ *   csak az utolsó elem címe frissül a legújabb queryre;
  * - visszaléptünk oda, ahonnan jöttünk: a nyom RÖVIDÜL, nem hosszabbodik,
  *   különben a "vissza" gomb ide-oda dobálna a két lap között;
  * - új lap: hozzáfűzzük.
  */
-export function advanceTrail(
-  trail: readonly string[],
-  pathname: string,
-): string[] {
+export function advanceTrail(trail: readonly string[], href: string): string[] {
+  const path = pathOf(href);
   const last = trail[trail.length - 1];
-  if (last === pathname) return [...trail];
+  if (last !== undefined && pathOf(last) === path)
+    return [...trail.slice(0, -1), href];
 
   const beforeLast = trail[trail.length - 2];
-  if (beforeLast === pathname) return trail.slice(0, -1);
+  if (beforeLast !== undefined && pathOf(beforeLast) === path)
+    return [...trail.slice(0, -2), href];
 
-  return [...trail, pathname];
+  return [...trail, href];
 }
 
 /**
@@ -43,4 +55,31 @@ export function advanceTrail(
  */
 export function previousPage(trail: readonly string[]): string | null {
   return trail.length >= 2 ? (trail[trail.length - 2] ?? null) : null;
+}
+
+/**
+ * Egy lista legutóbbi címe a nyomból, a queryjével együtt: a lista "ahogy
+ * legutóbb otthagytad". Egy morzsamenü-linknek ez való, nem az előző lap
+ * (az adatlapra lehet, hogy nem a listáról jöttek). Ha a lista nincs a
+ * nyomban, `null`.
+ */
+export function lastVisitOf(
+  trail: readonly string[],
+  listPath: string,
+): string | null {
+  for (let index = trail.length - 1; index >= 0; index -= 1) {
+    const href = trail[index]!;
+    if (pathOf(href) === listPath) return href;
+  }
+  return null;
+}
+
+/**
+ * TESTVÉR-LÉPÉS: az adatlap Előző/Következő gombja. Az új lap a jelenlegi
+ * HELYÉRE kerül, nem mögé: három "Következő" után a "Vissza" ugyanoda visz,
+ * ahonnan az első adatlapra jöttek (a szűrt listára), nem a harmadik
+ * előző eszközre.
+ */
+export function stepTrail(trail: readonly string[], href: string): string[] {
+  return trail.length ? [...trail.slice(0, -1), href] : [href];
 }
