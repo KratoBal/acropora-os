@@ -24,7 +24,8 @@ import {
  * lefelé állnak (a szerver sorrendjében), a sor egésze kattintható.
  *
  * KIVONAT NÉLKÜL A SZÁMOK NEM NULLÁK, HANEM ISMERETLENEK: a cella "—", nem "0".
- * Egy 0 azt állítaná, hogy megnéztük és nincs hiány.
+ * Egy 0 azt állítaná, hogy megnéztük és nincs hiány. A RÉSZLEGES kivonatnál
+ * (acrobot 25265) a számok állnak, a jelvény alatt a kivonat nélküli számlák.
  */
 export function MissingInvoicesMonthList({
   months,
@@ -41,15 +42,12 @@ export function MissingInvoicesMonthList({
   /** A cég, akinek a nevére a számla szólhat; a szerver konfigurációjából. */
   company: { name: string; taxNumber: string } | null;
 }) {
-  const count = (
-    row: MonthRow,
-    key: keyof NonNullable<MonthRow["counts"]>,
-    tone: string,
-  ) =>
-    row.counts ? (
-      <span className={`tabular-nums ${tone}`}>{row.counts[key]}</span>
-    ) : (
+  const unknown = (row: MonthRow) => row.state === "STATEMENT_MISSING";
+  const count = (row: MonthRow, key: keyof MonthRow["counts"], tone: string) =>
+    unknown(row) ? (
       <span className={tone}>—</span>
+    ) : (
+      <span className={`tabular-nums ${tone}`}>{row.counts[key]}</span>
     );
   const columns: PilotTableColumn<MonthRow>[] = [
     {
@@ -79,7 +77,7 @@ export function MissingInvoicesMonthList({
       header: "Nem párosodott",
       width: "120px",
       cell: (row) =>
-        count(row, "unmatched", "font-semibold text-pilot-amber-700"),
+        count(row, "notMatched", "font-semibold text-pilot-amber-700"),
     },
     {
       id: "noInvoice",
@@ -94,9 +92,7 @@ export function MissingInvoicesMonthList({
       width: "140px",
       cell: (row) => (
         <span className="font-semibold tabular-nums text-pilot-grey-900">
-          {row.missingAmount === null
-            ? "—"
-            : formatAmount(row.missingAmount, "HUF")}
+          {unknown(row) ? "—" : formatAmount(row.missingAmountHuf, "HUF")}
         </span>
       ),
     },
@@ -104,9 +100,17 @@ export function MissingInvoicesMonthList({
       id: "state",
       header: "Állapot",
       cell: (row) => (
-        <PilotBadge variant={MONTH_STATE_BADGES[row.state]}>
-          {MONTH_STATE_LABELS[row.state]}
-        </PilotBadge>
+        <span className="block min-w-0">
+          <PilotBadge variant={MONTH_STATE_BADGES[row.state]}>
+            {MONTH_STATE_LABELS[row.state]}
+          </PilotBadge>
+          {row.state === "STATEMENT_PARTIAL" &&
+          row.missingStatementAccounts.length > 0 ? (
+            <span className="mt-1 block truncate text-xs text-pilot-grey-500">
+              Nincs kivonat: {row.missingStatementAccounts.join(", ")}
+            </span>
+          ) : null}
+        </span>
       ),
     },
     {

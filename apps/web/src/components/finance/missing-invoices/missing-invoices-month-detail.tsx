@@ -15,27 +15,32 @@ import {
 import {
   CHARGE_STATE_BADGES,
   CHARGE_STATE_LABELS,
+  CATEGORY_LABELS,
   CHARGE_TABS,
+  FILTER_CATEGORIES,
   INVOICE_SOURCE_LABELS,
   formatAmount,
   formatDay,
   formatMonth,
+  type BankAccountOption,
+  type ChargeCategory,
   type ChargeRow,
   type ChargeTab,
+  type MonthState,
 } from "./missing-invoices-model";
 
 export interface MonthSummary {
   found: number;
-  unmatched: number;
+  notMatched: number;
   /** A Nem a cégre szól és a Csak díjbekérő is ide számít. */
   noInvoice: number;
-  notNeeded: number;
+  noInvoiceNeeded: number;
 }
 
 export interface MonthFilters {
   search: string;
-  category: string;
-  bankAccount: string;
+  category: ChargeCategory | "";
+  accountId: string;
 }
 
 /**
@@ -48,19 +53,20 @@ export interface MonthFilters {
  * A `minWidth` 900: az 1280-as tartalomszélességen belül marad, tehát nincs
  * vízszintes görgetés.
  *
- * HÁROM KÜLÖN ÁLLAPOT, HÁROM KÜLÖN LAP (brief 14. pont): nincs kivonat
- * (343:1299), minden megvan (343:1515), és a töltés.
+ * KÜLÖN ÁLLAPOTOK, KÜLÖN LAPOK (brief 14. pont): nincs kivonat (343:1299),
+ * minden megvan (343:1515), a töltés, és a Figmában nem szereplő részleges
+ * kivonat (acrobot 25265), ahol a lap áll, felette egy sáv mondja meg, melyik
+ * számlához hiányzik a kivonat.
  */
 export function MissingInvoicesMonthDetail({
   month,
-  bankAccounts,
+  accounts,
+  state,
   summary,
-  hasStatement,
   tab,
   onTab,
   filters,
   onFilters,
-  categories,
   rows,
   totalItems,
   page,
@@ -77,15 +83,15 @@ export function MissingInvoicesMonthDetail({
   exporting,
 }: {
   month: string;
-  bankAccounts: string[];
+  accounts: BankAccountOption[];
+  /** A szerver hónap-állapota; `null`: töltés. */
+  state: MonthState | null;
   /** `null`: töltés. */
   summary: MonthSummary | null;
-  hasStatement: boolean;
   tab: ChargeTab;
   onTab: (tab: ChargeTab) => void;
   filters: MonthFilters;
   onFilters: (patch: Partial<MonthFilters>) => void;
-  categories: string[];
   /** `null`: töltés. */
   rows: ChargeRow[] | null;
   totalItems: number;
@@ -105,13 +111,11 @@ export function MissingInvoicesMonthDetail({
 }) {
   const title = formatMonth(month);
   const monthName = title.split(" ")[1] ?? title;
-  const allFound =
-    summary !== null &&
-    hasStatement &&
-    summary.unmatched === 0 &&
-    summary.noInvoice === 0;
+  const hasStatement = state !== "STATEMENT_MISSING";
+  const allFound = state === "READY";
+  const withoutStatement = accounts.filter((account) => !account.hasStatement);
   const filtered = Boolean(
-    filters.search || filters.category || filters.bankAccount,
+    filters.search || filters.category || filters.accountId,
   );
 
   const columns: PilotTableColumn<ChargeRow>[] = [
@@ -128,14 +132,17 @@ export function MissingInvoicesMonthDetail({
     {
       id: "partner",
       header: "Partner",
-      cell: (row) => (
-        <span
-          className="block truncate font-semibold text-pilot-grey-900"
-          title={row.partner}
-        >
-          {row.partner}
-        </span>
-      ),
+      cell: (row) =>
+        row.partner ? (
+          <span
+            className="block truncate font-semibold text-pilot-grey-900"
+            title={row.partner}
+          >
+            {row.partner}
+          </span>
+        ) : (
+          <span className="text-pilot-grey-500">—</span>
+        ),
     },
     {
       id: "category",
@@ -143,7 +150,7 @@ export function MissingInvoicesMonthDetail({
       width: "140px",
       cell: (row) => (
         <span className="block truncate text-pilot-grey-600">
-          {row.category}
+          {CATEGORY_LABELS[row.category]}
         </span>
       ),
     },
@@ -155,7 +162,7 @@ export function MissingInvoicesMonthDetail({
       cell: (row) => (
         <span className="block whitespace-nowrap tabular-nums">
           <span className="block font-semibold text-pilot-grey-900">
-            {formatAmount(row.amountHuf, "HUF")}
+            {formatAmount(row.amount, row.currency)}
           </span>
           {row.original ? (
             <span className="block text-xs text-pilot-grey-500">
@@ -172,9 +179,9 @@ export function MissingInvoicesMonthDetail({
       cell: (row) => (
         <span
           className="block truncate text-pilot-grey-800"
-          title={row.invoice?.number}
+          title={row.document?.number}
         >
-          {row.invoice?.number ?? "—"}
+          {row.document?.number ?? "—"}
         </span>
       ),
     },
@@ -184,7 +191,7 @@ export function MissingInvoicesMonthDetail({
       width: "92px",
       cell: (row) => (
         <span className="text-pilot-grey-600">
-          {row.invoice ? INVOICE_SOURCE_LABELS[row.invoice.source] : "—"}
+          {row.document ? INVOICE_SOURCE_LABELS[row.document.source] : "—"}
         </span>
       ),
     },
@@ -206,7 +213,7 @@ export function MissingInvoicesMonthDetail({
       cell: (row) => (
         <button
           type="button"
-          aria-label={`${row.partner} részletei`}
+          aria-label={`${row.partner ?? formatDay(row.date)} részletei`}
           onClick={(event) => {
             event.stopPropagation();
             onOpenRow(row);
@@ -231,7 +238,7 @@ export function MissingInvoicesMonthDetail({
     },
     {
       label: "Nem párosodott",
-      value: summary?.unmatched,
+      value: summary?.notMatched,
       tone: "text-pilot-amber-700",
     },
     {
@@ -241,7 +248,7 @@ export function MissingInvoicesMonthDetail({
     },
     {
       label: "Nem kell számla",
-      value: summary?.notNeeded,
+      value: summary?.noInvoiceNeeded,
       tone: "text-pilot-grey-600",
     },
   ];
@@ -278,7 +285,7 @@ export function MissingInvoicesMonthDetail({
     <div className="space-y-6">
       <PilotPageHeader
         title={title}
-        description={bankAccounts.join(" · ")}
+        description={accounts.map((account) => account.name).join(" · ")}
         actions={actions}
       />
 
@@ -292,7 +299,7 @@ export function MissingInvoicesMonthDetail({
             Újrapróbálás
           </PilotButton>
         </div>
-      ) : summary === null ? (
+      ) : summary === null || state === null ? (
         <p
           role="status"
           className="rounded-xl bg-white px-5 py-10 text-sm text-pilot-grey-500 ring-1 ring-pilot-grey-200"
@@ -322,6 +329,27 @@ export function MissingInvoicesMonthDetail({
         </section>
       ) : (
         <>
+          {withoutStatement.length > 0 ? (
+            <div
+              role="status"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-pilot-grey-100 px-5 py-3 text-sm ring-1 ring-pilot-grey-200"
+            >
+              <p className="text-pilot-grey-700">
+                Részleges kivonat: ehhez a hónaphoz nincs kivonat a(z){" "}
+                {withoutStatement.map((account) => account.name).join(", ")}{" "}
+                számlához, ezért a hónap még nem zárható le.
+              </p>
+              {canManage ? (
+                <PilotButton
+                  variant="secondary"
+                  size="action"
+                  onClick={onUploadStatement}
+                >
+                  Kivonat feltöltése
+                </PilotButton>
+              ) : null}
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {tiles.map((tile) => (
               <article
@@ -369,12 +397,14 @@ export function MissingInvoicesMonthDetail({
                   <PilotSelect
                     aria-label="Kategória"
                     value={filters.category}
-                    onChange={(category) => onFilters({ category })}
+                    onChange={(category) =>
+                      onFilters({ category: category as ChargeCategory | "" })
+                    }
                   >
                     <option value="">Kategória</option>
-                    {categories.map((category) => (
+                    {FILTER_CATEGORIES.map((category) => (
                       <option key={category} value={category}>
-                        {category}
+                        {CATEGORY_LABELS[category]}
                       </option>
                     ))}
                   </PilotSelect>
@@ -382,13 +412,13 @@ export function MissingInvoicesMonthDetail({
                 <div className="w-full sm:w-44">
                   <PilotSelect
                     aria-label="Bankszámla"
-                    value={filters.bankAccount}
-                    onChange={(bankAccount) => onFilters({ bankAccount })}
+                    value={filters.accountId}
+                    onChange={(accountId) => onFilters({ accountId })}
                   >
                     <option value="">Bankszámla</option>
-                    {bankAccounts.map((account) => (
-                      <option key={account} value={account}>
-                        {account}
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
                       </option>
                     ))}
                   </PilotSelect>
@@ -417,7 +447,7 @@ export function MissingInvoicesMonthDetail({
                       rowKey={(row) => row.id}
                       onRowActivate={onOpenRow}
                       rowLabel={(row) =>
-                        `${row.partner}, ${formatDay(row.date)}`
+                        `${row.partner ?? "Ismeretlen partner"}, ${formatDay(row.date)}`
                       }
                       minWidth={900}
                     />

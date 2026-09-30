@@ -1,85 +1,127 @@
 import type { PilotBadgeVariant } from "@acropora/ui";
 
 /**
- * HIÁNYZÓ SZÁMLÁK: A FELÜLET SAJÁT NÉZET-MODELLJE (Balázs briefje, 2026-09-30).
+ * HIÁNYZÓ SZÁMLÁK: A FELÜLET NÉZET-MODELLJE (Balázs briefje, 2026-09-30).
  *
- * SZÁNDÉKOSAN NEM a `packages/types`-ban áll: a drót-típusokat nautilus írja a
- * háttérrel együtt (a számlázásnál is így volt, #1281), és két példány ugyanarról
- * elcsúszna. A felület ezekre a megjelenítési alakokra épül; a szerződés után egy
- * vékony átalakító köti a kettőt.
+ * A KULCSNEVEK nautilus szerződéséből jönnek
+ * (`agents/nautilus/megosztas/hianyzo-szamlak-vegpontok.md`), de a drót-típusok
+ * NEM itt állnak: azokat ő írja a `packages/types`-ba a háttérrel együtt (a
+ * számlázásnál is így volt, #1281), és két példány elcsúszna. A felület ezekre a
+ * megjelenítési alakokra épül; a bekötés egy vékony átalakító.
  *
  * AZ ÁLLAPOTOK ÉS A FÜLEK VISZONYA (acrobot 25261, a Figma számaiból mérve:
  * augusztusban 15 nem párosodott + 25 nincs számla = "1–7 / 40 hiányzó
  * terhelés"):
- *   Hiányzik        = Nem párosodott + Nincs számla + Nem a cégre szól + Csak díjbekérő
- *   Nincs számla    csempe: a Nem a cégre szól és a Csak díjbekérő is ide számít
- *   Terhelések      a Nem kell számla NÉLKÜL (27 + 15 + 25 = 67)
+ *   Hiányzik      = Nem párosodott + Nincs számla + Nem a cégre szól + Csak díjbekérő
+ *   Nincs számla  csempe: a Nem a cégre szól és a Csak díjbekérő is ide számít
+ *   Terhelések    a Nem kell számla NÉLKÜL (27 + 15 + 25 = 67)
  */
 export type ChargeInvoiceState =
   | "FOUND"
-  | "UNMATCHED"
+  | "NOT_MATCHED"
   | "NO_INVOICE"
   | "NOT_COMPANY"
   | "PROFORMA_ONLY"
-  | "NOT_NEEDED";
+  | "NO_INVOICE_NEEDED";
 
-export type MonthState = "READY" | "INCOMPLETE" | "NO_STATEMENT";
+/**
+ * A HÓNAP ÁLLAPOTA. A negyedik (Részleges kivonat) a Figmában nincs, acrobot
+ * döntése hozza (25265): az egyik bankszámlához van kivonat, a másikhoz nincs.
+ */
+export type MonthState =
+  "READY" | "INCOMPLETE" | "STATEMENT_MISSING" | "STATEMENT_PARTIAL";
 
 export type ChargeTab =
-  "MISSING" | "UNMATCHED" | "FOUND" | "NOT_NEEDED" | "ALL";
+  "MISSING" | "NOT_MATCHED" | "FOUND" | "NO_INVOICE_NEEDED" | "ALL";
 
-export type InvoiceSource = "NAV" | "MAILBOX" | "DRIVE" | "SETTLEMENT";
+export type InvoiceSource =
+  "NAV" | "MAILBOX" | "UPLOAD" | "DRIVE" | "SETTLEMENT" | "PREMIUM_NOTICE";
+
+export type ChargeCategory =
+  | "INTERNAL_TRANSFER"
+  | "BANK_FEE"
+  | "TAX"
+  | "PAYROLL"
+  | "LOAN"
+  | "INSURANCE"
+  | "CARD_SUBSCRIPTION"
+  | "FOREIGN_SUPPLIER"
+  | "DOMESTIC_SUPPLIER"
+  | "UNCERTAIN";
+
+/** A „Mit kell tenni” szöveg kulcsa; a szerver az állapotból adja. */
+export type ItemAction =
+  | "REQUEST_INVOICE"
+  | "REQUEST_REISSUE_TO_COMPANY"
+  | "REQUEST_FINAL_INVOICE"
+  | "PAIR_OR_UPLOAD"
+  | "NONE";
 
 export interface MonthRow {
   /** "2026-08" */
   month: string;
   state: MonthState;
-  /** `null`: nincs kivonat, a szám nem nulla, hanem ismeretlen. */
   counts: {
+    /** A Nem kell számla NÉLKÜL. */
     charges: number;
     found: number;
-    unmatched: number;
+    notMatched: number;
     noInvoice: number;
-  } | null;
-  /** Forint, tizedes szöveg; `null`, ha nincs kivonat. */
-  missingAmount: string | null;
+  };
+  /** Forint, tizedes szöveg. */
+  missingAmountHuf: string;
+  /** A bankszámlák neve, amelyekhez erre a hónapra nincs kivonat. */
+  missingStatementAccounts: string[];
+}
+
+export interface BankAccountOption {
+  id: string;
+  name: string;
+  hasStatement: boolean;
 }
 
 export interface ChargeRow {
   id: string;
   /** "2026-08-03" */
   date: string;
-  bankAccount: string;
-  /** A kivonaton álló partner vagy kereskedő, ahogy a bank írja. */
-  partner: string;
+  account: { id: string; name: string };
+  /** A kivonat nyers partner-neve; lehet, hogy a bank nem ad ilyet. */
+  partner: string | null;
   narrative: string;
-  /** Forintban könyvelt összeg, pozitív tizedes szöveg. */
-  amountHuf: string;
-  /** Az eredeti devizaösszeg, ha a terhelés nem forintban ment. */
+  /** A könyvelt összeg a bankszámla pénznemében, előjel nélkül. */
+  amount: string;
+  currency: string;
+  /** A kártyás devizás vásárlás eredeti összege. */
   original: { amount: string; currency: string } | null;
-  category: string;
+  category: ChargeCategory;
+  /** A besorolást döntő szabály mondata. */
+  categoryRule: string;
+  categoryOverridden: boolean;
   state: ChargeInvoiceState;
-  invoice: { number: string; source: InvoiceSource } | null;
-  note: string | null;
+  document: { number: string; source: InvoiceSource } | null;
+  matchedBy: "RULE" | "MANUAL" | null;
+  comment: string | null;
 }
 
 export interface CandidateInvoice {
-  id: string;
+  documentId: string;
   number: string;
   /** "2026-08-02" */
   date: string;
-  grossAmount: string;
+  gross: string;
   currency: string;
   source: InvoiceSource;
+  /** Kinek szól a számla. */
+  payee: "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
 }
 
 export const CHARGE_STATE_LABELS: Record<ChargeInvoiceState, string> = {
   FOUND: "Megvan",
-  UNMATCHED: "Nem párosodott",
+  NOT_MATCHED: "Nem párosodott",
   NO_INVOICE: "Nincs számla",
   NOT_COMPANY: "Nem a cégre szól",
   PROFORMA_ONLY: "Csak díjbekérő",
-  NOT_NEEDED: "Nem kell számla",
+  NO_INVOICE_NEEDED: "Nem kell számla",
 };
 
 export const CHARGE_STATE_BADGES: Record<
@@ -87,75 +129,104 @@ export const CHARGE_STATE_BADGES: Record<
   PilotBadgeVariant
 > = {
   FOUND: "success",
-  UNMATCHED: "amber",
+  NOT_MATCHED: "amber",
   NO_INVOICE: "danger",
   NOT_COMPANY: "danger",
   PROFORMA_ONLY: "amber",
-  NOT_NEEDED: "grey",
+  NO_INVOICE_NEEDED: "grey",
 };
 
 export const MONTH_STATE_LABELS: Record<MonthState, string> = {
   READY: "Kész a könyvelőnek",
   INCOMPLETE: "Hiányos",
-  NO_STATEMENT: "Kivonat hiányzik",
+  STATEMENT_MISSING: "Kivonat hiányzik",
+  STATEMENT_PARTIAL: "Részleges kivonat",
 };
 
 export const MONTH_STATE_BADGES: Record<MonthState, PilotBadgeVariant> = {
   READY: "success",
   INCOMPLETE: "amber",
-  NO_STATEMENT: "grey",
+  STATEMENT_MISSING: "grey",
+  STATEMENT_PARTIAL: "grey",
 };
 
 export const INVOICE_SOURCE_LABELS: Record<InvoiceSource, string> = {
   NAV: "NAV",
   MAILBOX: "Postafiók",
+  UPLOAD: "Feltöltés",
   DRIVE: "Drive",
   SETTLEMENT: "Elszámolás",
+  PREMIUM_NOTICE: "Díjértesítő",
 };
+
+export const CATEGORY_LABELS: Record<ChargeCategory, string> = {
+  DOMESTIC_SUPPLIER: "Magyar szállító",
+  FOREIGN_SUPPLIER: "Külföldi szállító",
+  CARD_SUBSCRIPTION: "Kártyás előfizetés",
+  INSURANCE: "Biztosítás",
+  UNCERTAIN: "Bizonytalan",
+  TAX: "Adó",
+  PAYROLL: "Munkabér",
+  BANK_FEE: "Banki díj",
+  INTERNAL_TRANSFER: "Belső átvezetés",
+  LOAN: "Kölcsön",
+};
+
+/**
+ * A SZŰRŐ KATEGÓRIÁI (brief 8. pont). A Nem kell számla kategóriái (adó, bér,
+ * bank, belső, kölcsön) a saját fülükön állnak, nem a szűrőben.
+ */
+export const FILTER_CATEGORIES: readonly ChargeCategory[] = [
+  "DOMESTIC_SUPPLIER",
+  "FOREIGN_SUPPLIER",
+  "CARD_SUBSCRIPTION",
+  "INSURANCE",
+  "UNCERTAIN",
+];
 
 export const CHARGE_TABS: ReadonlyArray<{ key: ChargeTab; label: string }> = [
   { key: "MISSING", label: "Hiányzik" },
-  { key: "UNMATCHED", label: "Nem párosodott" },
+  { key: "NOT_MATCHED", label: "Nem párosodott" },
   { key: "FOUND", label: "Megvan" },
-  { key: "NOT_NEEDED", label: "Nem kell számla" },
+  { key: "NO_INVOICE_NEEDED", label: "Nem kell számla" },
   { key: "ALL", label: "Mind" },
 ];
 
 /** Melyik állapotok tartoznak egy fülhöz. A szűrés a szerveren fut; ez a szabály. */
 export const TAB_STATES: Record<ChargeTab, readonly ChargeInvoiceState[]> = {
-  MISSING: ["UNMATCHED", "NO_INVOICE", "NOT_COMPANY", "PROFORMA_ONLY"],
-  UNMATCHED: ["UNMATCHED"],
+  MISSING: ["NOT_MATCHED", "NO_INVOICE", "NOT_COMPANY", "PROFORMA_ONLY"],
+  NOT_MATCHED: ["NOT_MATCHED"],
   FOUND: ["FOUND"],
-  NOT_NEEDED: ["NOT_NEEDED"],
+  NO_INVOICE_NEEDED: ["NO_INVOICE_NEEDED"],
   ALL: [
     "FOUND",
-    "UNMATCHED",
+    "NOT_MATCHED",
     "NO_INVOICE",
     "NOT_COMPANY",
     "PROFORMA_ONLY",
-    "NOT_NEEDED",
+    "NO_INVOICE_NEEDED",
   ],
 };
 
 /**
- * MIT KELL TENNI (brief 11. pont), állapot szerint. A cég neve paraméter: a
- * szerver konfigurációjából jön, nem ebből a fájlból (brief 4. pont).
+ * MIT KELL TENNI (brief 11. pont), a szerver kulcsa szerint. A cég neve
+ * paraméter: a szerver konfigurációjából jön, nem ebből a fájlból (brief 4.
+ * pont).
  */
 export function whatToDo(
-  state: ChargeInvoiceState,
+  action: ItemAction,
   companyName: string,
 ): string | null {
-  switch (state) {
-    case "NO_INVOICE":
+  switch (action) {
+    case "REQUEST_INVOICE":
       return "Kérd el a számlát a partnertől.";
-    case "NOT_COMPANY":
+    case "REQUEST_REISSUE_TO_COMPANY":
       return `A számla a magánszemély nevére szól: kérd újra az ${companyName} nevére.`;
-    case "PROFORMA_ONLY":
+    case "REQUEST_FINAL_INVOICE":
       return "Díjbekérő van, a végszámla hiányzik.";
-    case "UNMATCHED":
-      return "Van számla ettől a partnertől, de egyik sem egyezik ezzel a terheléssel: párosítsd a javasolt számlák közül, vagy kérd el a hiányzót.";
-    case "FOUND":
-    case "NOT_NEEDED":
+    case "PAIR_OR_UPLOAD":
+      return "Van számla ettől a partnertől, de egyik sem egyezik ezzel a terheléssel: párosítsd a javasolt számlák közül, vagy töltsd fel a hiányzót.";
+    case "NONE":
       return null;
   }
 }

@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { MissingInvoicesDrawer } from "./missing-invoices-drawer";
+import {
+  MissingInvoicesDrawer,
+  type ChargeDetailExtras,
+} from "./missing-invoices-drawer";
 import {
   TAB_STATES,
   formatMonth,
@@ -13,13 +16,16 @@ import { MissingInvoicesMonthDetail } from "./missing-invoices-month-detail";
 import { MissingInvoicesMonthList } from "./missing-invoices-month-list";
 
 /**
- * HIÁNYZÓ SZÁMLÁK, A FELÜLET (Balázs briefje, 2026-09-30; Figma 343:2).
+ * HIÁNYZÓ SZÁMLÁK, A FELÜLET (Balázs briefje, 2026-09-30; Figma 343:2; a
+ * kulcsnevek nautilus szerződéséből).
  *
  * MI PIROSÍT: ha egy kivonat nélküli hónap nullákat mutatna "—" helyett; ha a
- * Hiányzik fül nem a négy problémás állapotot fogná; ha a cég neve vagy
- * adószáma a komponensbe égne; ha a partner-oszlop fix szélességet kapna, vagy
- * a számoszlopok elveszítenék a sajátjukat (az 1280-as mérce); ha a drawer
- * magától párosítana, fiktív Drive-linket mutatna, vagy nem PDF-et engedne.
+ * részleges kivonat nem mondaná meg, melyik számlához hiányzik; ha a Hiányzik
+ * fül nem a négy problémás állapotot fogná; ha a cég neve vagy adószáma a
+ * komponensbe égne; ha a partner-oszlop fix szélességet kapna, vagy a
+ * számoszlopok elveszítenék a sajátjukat (az 1280-as mérce); ha a drawer
+ * magától párosítana, a szabály szerinti párosítást is visszavonhatóvá tenné,
+ * fiktív Drive-linket mutatna, vagy nem PDF-et engedne.
  */
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
@@ -30,49 +36,62 @@ const COMPANY = { name: "Próba Kft.", taxNumber: "11111111" };
 const charge = (overrides: Partial<ChargeRow> = {}): ChargeRow => ({
   id: "c-1",
   date: "2026-08-03",
-  bankAccount: "Kártyás számla",
+  account: { id: "acc-card", name: "Kártyás számla" },
   partner: "OPENAI *CHATGPT SUBSCR",
   narrative: "OPENAI *CHATGPT SUBSCR / CARD 4821 / DUBLIN IE",
-  amountHuf: "21990",
+  amount: "21990",
+  currency: "HUF",
   original: { amount: "55.38", currency: "EUR" },
-  category: "Kártyás előfizetés",
+  category: "CARD_SUBSCRIPTION",
+  categoryRule: "Kártyás terhelés, ismert előfizetés-kereskedő.",
+  categoryOverridden: false,
   state: "NOT_COMPANY",
-  invoice: null,
-  note: null,
+  document: null,
+  matchedBy: null,
+  comment: null,
   ...overrides,
 });
 
 describe("the model", () => {
   it("Hiányzik is every state that still needs work, and nothing else", () => {
     expect([...TAB_STATES.MISSING].sort()).toEqual(
-      ["NO_INVOICE", "NOT_COMPANY", "PROFORMA_ONLY", "UNMATCHED"].sort(),
+      ["NO_INVOICE", "NOT_COMPANY", "NOT_MATCHED", "PROFORMA_ONLY"].sort(),
     );
     expect(TAB_STATES.MISSING).not.toContain("FOUND");
-    expect(TAB_STATES.MISSING).not.toContain("NOT_NEEDED");
+    expect(TAB_STATES.MISSING).not.toContain("NO_INVOICE_NEEDED");
   });
 
-  it("months and the company name in the what-to-do text", () => {
+  it("months, and the company name in the what-to-do text", () => {
     expect(formatMonth("2026-08")).toBe("2026. augusztus");
-    expect(whatToDo("NOT_COMPANY", "Próba Kft.")).toBe(
+    expect(whatToDo("REQUEST_REISSUE_TO_COMPANY", "Próba Kft.")).toBe(
       "A számla a magánszemély nevére szól: kérd újra az Próba Kft. nevére.",
     );
-    expect(whatToDo("FOUND", "Próba Kft.")).toBeNull();
+    expect(whatToDo("NONE", "Próba Kft.")).toBeNull();
   });
 });
 
 describe("MissingInvoicesMonthList", () => {
   const months: MonthRow[] = [
     {
+      month: "2026-10",
+      state: "STATEMENT_PARTIAL",
+      counts: { charges: 12, found: 10, notMatched: 1, noInvoice: 1 },
+      missingAmountHuf: "15000",
+      missingStatementAccounts: ["EUR számla"],
+    },
+    {
       month: "2026-09",
-      state: "NO_STATEMENT",
-      counts: null,
-      missingAmount: null,
+      state: "STATEMENT_MISSING",
+      counts: { charges: 0, found: 0, notMatched: 0, noInvoice: 0 },
+      missingAmountHuf: "0",
+      missingStatementAccounts: ["Fő számla", "Kártyás számla", "EUR számla"],
     },
     {
       month: "2026-08",
       state: "INCOMPLETE",
-      counts: { charges: 67, found: 27, unmatched: 15, noInvoice: 25 },
-      missingAmount: "693967",
+      counts: { charges: 67, found: 27, notMatched: 15, noInvoice: 25 },
+      missingAmountHuf: "693967",
+      missingStatementAccounts: [],
     },
   ];
   const renderList = (
@@ -98,6 +117,7 @@ describe("MissingInvoicesMonthList", () => {
       name: "2026. szeptember megnyitása",
     });
     expect(within(september).queryByText("0")).toBeNull();
+    expect(within(september).queryByText("0 Ft")).toBeNull();
     expect(within(september).getAllByText("—")).toHaveLength(5);
     expect(within(september).getByText("Kivonat hiányzik")).toBeInTheDocument();
     const august = screen.getByRole("row", {
@@ -105,6 +125,18 @@ describe("MissingInvoicesMonthList", () => {
     });
     expect(within(august).getByText("693 967 Ft")).toBeInTheDocument();
     expect(within(august).getByText("Hiányos")).toBeInTheDocument();
+  });
+
+  it("a partial statement keeps its numbers and names the account without one", () => {
+    renderList();
+    const october = screen.getByRole("row", {
+      name: "2026. október megnyitása",
+    });
+    expect(within(october).getByText("Részleges kivonat")).toBeInTheDocument();
+    expect(
+      within(october).getByText("Nincs kivonat: EUR számla"),
+    ).toBeInTheDocument();
+    expect(within(october).getByText("15 000 Ft")).toBeInTheDocument();
   });
 
   it("the whole row opens the month", () => {
@@ -153,16 +185,20 @@ describe("MissingInvoicesMonthList", () => {
 
 describe("MissingInvoicesMonthDetail", () => {
   type Props = Parameters<typeof MissingInvoicesMonthDetail>[0];
+  const accounts = [
+    { id: "acc-main", name: "Fő számla", hasStatement: true },
+    { id: "acc-card", name: "Kártyás számla", hasStatement: true },
+    { id: "acc-eur", name: "EUR számla", hasStatement: true },
+  ];
   const base = (): Props => ({
     month: "2026-08",
-    bankAccounts: ["Fő számla", "Kártyás számla", "EUR számla"],
-    summary: { found: 27, unmatched: 15, noInvoice: 25, notNeeded: 24 },
-    hasStatement: true,
+    accounts,
+    state: "INCOMPLETE",
+    summary: { found: 27, notMatched: 15, noInvoice: 25, noInvoiceNeeded: 24 },
     tab: "MISSING",
     onTab: vi.fn(),
-    filters: { search: "", category: "", bankAccount: "" },
+    filters: { search: "", category: "", accountId: "" },
     onFilters: vi.fn(),
-    categories: ["Magyar szállító", "Kártyás előfizetés"],
     rows: [
       charge(),
       charge({
@@ -170,9 +206,12 @@ describe("MissingInvoicesMonthDetail", () => {
         partner:
           "von Wussow Importe GmbH Handelsgesellschaft für Aquaristik und Zubehör",
         original: null,
-        amountHuf: "184320",
+        amount: "468",
+        currency: "EUR",
+        account: { id: "acc-eur", name: "EUR számla" },
+        category: "FOREIGN_SUPPLIER",
         state: "NO_INVOICE",
-        invoice: { number: "AC-2026-881", source: "NAV" },
+        document: { number: "AC-2026-881", source: "NAV" },
       }),
     ],
     totalItems: 40,
@@ -198,17 +237,18 @@ describe("MissingInvoicesMonthDetail", () => {
     expect(
       screen.getByText("Fő számla · Kártyás számla · EUR számla"),
     ).toBeInTheDocument();
-    for (const [label, value] of [
+    const tiles: [string, string][] = [
       ["Megvan", "27"],
       ["Nem párosodott", "15"],
       ["Nincs számla", "25"],
       ["Nem kell számla", "24"],
-    ]) {
+    ];
+    for (const [label, value] of tiles) {
       const tile = screen
         .getAllByText(label)
         .find((node) => node.closest("article"))!
         .closest("article")!;
-      expect(tile).toHaveTextContent(value!);
+      expect(tile).toHaveTextContent(value);
     }
     const exports = screen.getByRole("group", { name: "Exportok" });
     expect(
@@ -220,7 +260,7 @@ describe("MissingInvoicesMonthDetail", () => {
   });
 
   /*
-    AZ 1280-AS MÉRCE SZERKEZETBEN (brief 10. pont). A jsdom nem számol
+    AZ 1280-AS MÉRCE SZERKEZETBEN (brief 10. pont). A happy-dom nem számol
     elrendezést, ezért a GARANCIÁT mérjük: a partner az egyetlen szélesség
     nélküli oszlop (a maradékot kapja és levágódik), az összeg, a számla, a
     forrás és az állapot fix szélességű, a tábla alsó határa belefér az 1280-as
@@ -244,14 +284,19 @@ describe("MissingInvoicesMonthDetail", () => {
     expect(longName).toHaveAttribute("title", longName.textContent!);
   });
 
-  it("a foreign card payment: forint first, the original amount under it", () => {
+  it("amounts: forint with the card's original under it; a EUR account in EUR", () => {
     render(<MissingInvoicesMonthDetail {...base()} />);
-    const row = screen.getByRole("row", {
+    const card = screen.getByRole("row", {
       name: "OPENAI *CHATGPT SUBSCR, 2026. 08. 03.",
     });
-    expect(within(row).getByText("21 990 Ft")).toBeInTheDocument();
-    expect(within(row).getByText("55,38 EUR")).toBeInTheDocument();
-    expect(within(row).getByText("Nem a cégre szól")).toBeInTheDocument();
+    expect(within(card).getByText("21 990 Ft")).toBeInTheDocument();
+    expect(within(card).getByText("55,38 EUR")).toBeInTheDocument();
+    expect(within(card).getByText("Nem a cégre szól")).toBeInTheDocument();
+    expect(within(card).getByText("Kártyás előfizetés")).toBeInTheDocument();
+    const eur = screen.getByRole("row", { name: /^von Wussow/ });
+    expect(within(eur).getByText("468,00 EUR")).toBeInTheDocument();
+    expect(within(eur).getByText("AC-2026-881")).toBeInTheDocument();
+    expect(within(eur).getByText("NAV")).toBeInTheDocument();
   });
 
   it("tabs, filters, a row and paging report back to the caller", () => {
@@ -264,9 +309,13 @@ describe("MissingInvoicesMonthDetail", () => {
     });
     expect(props.onFilters).toHaveBeenCalledWith({ search: "Telekom" });
     fireEvent.change(screen.getByLabelText("Bankszámla"), {
-      target: { value: "EUR számla" },
+      target: { value: "acc-eur" },
     });
-    expect(props.onFilters).toHaveBeenCalledWith({ bankAccount: "EUR számla" });
+    expect(props.onFilters).toHaveBeenCalledWith({ accountId: "acc-eur" });
+    fireEvent.change(screen.getByLabelText("Kategória"), {
+      target: { value: "INSURANCE" },
+    });
+    expect(props.onFilters).toHaveBeenCalledWith({ category: "INSURANCE" });
     fireEvent.click(
       screen.getByRole("row", {
         name: "OPENAI *CHATGPT SUBSCR, 2026. 08. 03.",
@@ -284,7 +333,15 @@ describe("MissingInvoicesMonthDetail", () => {
   });
 
   it("no statement: its own page, with the upload for who may manage", () => {
-    const props = { ...base(), hasStatement: false, rows: [] };
+    const props = {
+      ...base(),
+      state: "STATEMENT_MISSING" as const,
+      accounts: accounts.map((account) => ({
+        ...account,
+        hasStatement: false,
+      })),
+      rows: [],
+    };
     const { unmount } = render(<MissingInvoicesMonthDetail {...props} />);
     expect(
       screen.getByRole("heading", {
@@ -302,12 +359,57 @@ describe("MissingInvoicesMonthDetail", () => {
     ).toBeNull();
   });
 
+  it("a partial statement: the page stands, and a strip names the account without one", () => {
+    const props = {
+      ...base(),
+      state: "STATEMENT_PARTIAL" as const,
+      accounts: accounts.map((account) =>
+        account.id === "acc-eur"
+          ? { ...account, hasStatement: false }
+          : account,
+      ),
+    };
+    render(<MissingInvoicesMonthDetail {...props} />);
+    const strip = screen
+      .getByText(/^Részleges kivonat:/)
+      .closest("[role=status]")! as HTMLElement;
+    expect(strip).toHaveTextContent("EUR számla");
+    expect(strip).not.toHaveTextContent("Fő számla");
+    fireEvent.click(
+      within(strip).getByRole("button", { name: "Kivonat feltöltése" }),
+    );
+    expect(props.onUploadStatement).toHaveBeenCalled();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+
+  it("a partial statement with nothing missing yet is still not all found", () => {
+    render(
+      <MissingInvoicesMonthDetail
+        {...base()}
+        state="STATEMENT_PARTIAL"
+        accounts={accounts.map((account) =>
+          account.id === "acc-eur"
+            ? { ...account, hasStatement: false }
+            : account,
+        )}
+        summary={{ found: 20, notMatched: 0, noInvoice: 0, noInvoiceNeeded: 2 }}
+      />,
+    );
+    expect(
+      screen.queryByRole("heading", {
+        name: "Minden terheléshez megvan a számla",
+      }),
+    ).toBeNull();
+    expect(screen.getByText(/^Részleges kivonat:/)).toBeInTheDocument();
+  });
+
   it("all found: the green page and only the accountant package", () => {
     render(
       <MissingInvoicesMonthDetail
         {...base()}
         month="2026-07"
-        summary={{ found: 58, unmatched: 0, noInvoice: 0, notNeeded: 3 }}
+        state="READY"
+        summary={{ found: 58, notMatched: 0, noInvoice: 0, noInvoiceNeeded: 3 }}
       />,
     );
     expect(
@@ -329,7 +431,12 @@ describe("MissingInvoicesMonthDetail", () => {
 
   it("loading says so, and a viewer gets no export buttons", () => {
     const { unmount } = render(
-      <MissingInvoicesMonthDetail {...base()} summary={null} rows={null} />,
+      <MissingInvoicesMonthDetail
+        {...base()}
+        state={null}
+        summary={null}
+        rows={null}
+      />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("betöltése");
     unmount();
@@ -340,25 +447,43 @@ describe("MissingInvoicesMonthDetail", () => {
 
 describe("MissingInvoicesDrawer", () => {
   type Props = Parameters<typeof MissingInvoicesDrawer>[0];
+  const extras = (
+    overrides: Partial<ChargeDetailExtras> = {},
+  ): ChargeDetailExtras => ({
+    candidates: [
+      {
+        documentId: "inv-1",
+        number: "INV-2026-08341",
+        date: "2026-08-02",
+        gross: "21990",
+        currency: "HUF",
+        source: "MAILBOX",
+        payee: "NOT_COMPANY",
+      },
+      {
+        documentId: "inv-2",
+        number: "INV-2026-08177",
+        date: "2026-07-04",
+        gross: "20880",
+        currency: "HUF",
+        source: "DRIVE",
+        payee: "COMPANY",
+      },
+    ],
+    action: "REQUEST_REISSUE_TO_COMPANY",
+    driveFolderUrl: null,
+    ...overrides,
+  });
   const base = (): Props => ({
     row: charge(),
     onClose: vi.fn(),
     companyName: COMPANY.name,
-    candidates: [
-      {
-        id: "inv-1",
-        number: "INV-2026-08341",
-        date: "2026-08-02",
-        grossAmount: "21990",
-        currency: "HUF",
-        source: "MAILBOX",
-      },
-    ],
+    extras: extras(),
     onPair: vi.fn(),
-    pairingId: null,
-    driveUrl: null,
+    onUnpair: vi.fn(),
+    onCategory: vi.fn(),
+    busy: null,
     onUpload: vi.fn(),
-    uploading: false,
     note: "",
     onNote: vi.fn(),
     onSave: vi.fn(),
@@ -367,7 +492,7 @@ describe("MissingInvoicesDrawer", () => {
     canManage: true,
   });
 
-  it("the charge, with partner and narrative apart, and the what-to-do for its state", () => {
+  it("the charge, with partner and narrative apart, and the what-to-do from the server's action", () => {
     render(<MissingInvoicesDrawer {...base()} />);
     const dialog = screen.getByRole("dialog", {
       name: "OPENAI *CHATGPT SUBSCR",
@@ -385,14 +510,75 @@ describe("MissingInvoicesDrawer", () => {
     );
   });
 
-  it("pairing is an explicit click, never automatic", () => {
+  it("pairing is an explicit click, never automatic, and a private-person candidate says so", () => {
     const props = base();
     render(<MissingInvoicesDrawer {...props} />);
     expect(props.onPair).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Párosítás" }));
+    const first = screen.getByText("INV-2026-08341").closest("li")!;
+    expect(within(first).getByText("Nem a cégre szól")).toBeInTheDocument();
+    const second = screen.getByText("INV-2026-08177").closest("li")!;
+    expect(within(second).queryByText("Nem a cégre szól")).toBeNull();
+    fireEvent.click(within(second).getByRole("button", { name: "Párosítás" }));
     expect(props.onPair).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "inv-1" }),
+      expect.objectContaining({ documentId: "inv-2" }),
     );
+  });
+
+  it("only a manual pairing can be undone", () => {
+    const props = base();
+    const { unmount } = render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={charge({
+          state: "FOUND",
+          document: { number: "INV-2026-08177", source: "DRIVE" },
+          matchedBy: "RULE",
+        })}
+      />,
+    );
+    expect(screen.getByText(/Párosított számla/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Párosítás visszavonása" }),
+    ).toBeNull();
+    unmount();
+    render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={charge({
+          state: "FOUND",
+          document: { number: "INV-2026-08177", source: "DRIVE" },
+          matchedBy: "MANUAL",
+        })}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Párosítás visszavonása" }),
+    );
+    expect(props.onUnpair).toHaveBeenCalled();
+  });
+
+  it("the category can be moved by hand, and back to the rule", () => {
+    const props = base();
+    const { unmount } = render(<MissingInvoicesDrawer {...props} />);
+    const select = screen.getByLabelText("Kategória");
+    expect(select).toHaveDisplayValue("Automatikus: Kártyás előfizetés");
+    expect(
+      screen.getByText("Kártyás terhelés, ismert előfizetés-kereskedő."),
+    ).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "BANK_FEE" } });
+    expect(props.onCategory).toHaveBeenCalledWith("BANK_FEE");
+    unmount();
+    render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={charge({ category: "BANK_FEE", categoryOverridden: true })}
+      />,
+    );
+    expect(screen.getByText("Kézzel átsorolva")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Kategória"), {
+      target: { value: "" },
+    });
+    expect(props.onCategory).toHaveBeenCalledWith(null);
   });
 
   it("the Drive link only with a real address", () => {
@@ -404,7 +590,9 @@ describe("MissingInvoicesDrawer", () => {
     render(
       <MissingInvoicesDrawer
         {...base()}
-        driveUrl="https://drive.google.com/drive/folders/abc"
+        extras={extras({
+          driveFolderUrl: "https://drive.google.com/drive/folders/abc",
+        })}
       />,
     );
     expect(
@@ -412,7 +600,7 @@ describe("MissingInvoicesDrawer", () => {
     ).toHaveAttribute("href", "https://drive.google.com/drive/folders/abc");
   });
 
-  it("only a PDF is uploaded", () => {
+  it("only a PDF is uploaded, as an invoice or a premium notice", () => {
     const props = base();
     render(<MissingInvoicesDrawer {...props} />);
     const input = screen.getByLabelText("Számla PDF");
@@ -423,14 +611,18 @@ describe("MissingInvoicesDrawer", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Csak PDF");
     const pdf = new File(["%PDF"], "szamla.pdf", { type: "application/pdf" });
     fireEvent.change(input, { target: { files: [pdf] } });
-    expect(props.onUpload).toHaveBeenCalledWith(pdf);
+    expect(props.onUpload).toHaveBeenLastCalledWith(pdf, "INVOICE");
+    fireEvent.click(screen.getByRole("radio", { name: "Díjértesítő" }));
+    fireEvent.change(input, { target: { files: [pdf] } });
+    expect(props.onUpload).toHaveBeenLastCalledWith(pdf, "PREMIUM_NOTICE");
   });
 
-  it("a viewer reads it, but cannot pair, upload or save", () => {
+  it("a viewer reads it, but cannot pair, move, upload or save", () => {
     render(<MissingInvoicesDrawer {...base()} canManage={false} />);
     expect(screen.queryByRole("button", { name: "Párosítás" })).toBeNull();
     expect(screen.queryByLabelText("Számla PDF")).toBeNull();
     expect(screen.queryByRole("button", { name: "Mentés" })).toBeNull();
+    expect(screen.getByLabelText("Kategória")).toBeDisabled();
     expect(screen.getByLabelText("Megjegyzés")).toHaveAttribute("readonly");
   });
 });
