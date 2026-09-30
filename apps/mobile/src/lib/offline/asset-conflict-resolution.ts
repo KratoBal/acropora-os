@@ -1,6 +1,7 @@
 import { ASSET_CRITICALITY_LABELS } from "../assets/asset-criticality";
 import { ASSET_STATUS_LABELS } from "../assets/asset-status";
 import type { UpdateAssetInput } from "../assets/asset-fields";
+import { normalizeAssetLabelCode } from "../assets/asset-label-mirror";
 import type { QueuedAssetUpdateBase } from "./asset-update-queue";
 
 /**
@@ -336,6 +337,74 @@ export function rebuildResolvedPatch(input: {
     assignField(rebuilt, field, input.patch);
   }
   return rebuilt;
+}
+
+/**
+ * A FOGLALT MATRICA FELISMERESE -- A MAGYAR MONDAT OLVASASA NELKUL.
+ *
+ * === A MERT HIBA (2026-09-30) ===
+ *
+ * Offline rogzitett matricakodot a szerver a sor kiuritesekor 409-cel
+ * elutasit, ha a kod kozben mas eszkozon all (acrobot dontese: a szerver a
+ * biro). A sor ettol "utkozes"-be kerul, es ez a kepernyo MEZONKENTI
+ * feloldast kinalt fel. A matricanal viszont nincs mit mezonkent eldonteni: az
+ * eszkoz SAJAT matricajahoz kozben senki nem nyult, tehat a mezo nem utkozo,
+ * a feloldas magatol a szerelo erteket kuldte ujra -- ugyanazt a foglalt
+ * kodot, ugyanazzal a 409-cel. Kor, amibol csak az elvetes vezetett ki, a
+ * modositas TOBBI mezojevel egyutt.
+ *
+ * === MIBOL TUDJUK ===
+ *
+ * A mezo-szintu utkozes 409-et a szerver CSAK akkor ad, ha valaki kozben
+ * ugyanahhoz a mezohoz nyult -- ezt a kepernyo a friss eszkozon ugyanugy
+ * latja. Ha tehat a torzs matricat ir, es a friss osszevetes EGYETLEN utkozo
+ * mezot sem talal, a 409 nem mezo-utkozes volt, hanem a matrica.
+ */
+export function isLabelRefusal(input: {
+  patch: UpdateAssetInput;
+  rows: readonly { conflicting: boolean }[];
+}): boolean {
+  const code = input.patch.labelCode;
+  return (
+    typeof code === "string" &&
+    code.trim() !== "" &&
+    input.rows.every((row) => !row.conflicting)
+  );
+}
+
+/** Mit kezd a szerelo a foglalt matricaval. */
+export type LabelChoice = { kind: "other"; code: string } | { kind: "without" };
+
+/**
+ * A MATRICA-DONTES A TORZSRE: masik kod, vagy matrica NELKUL a tobbi mezo.
+ *
+ * A "matrica nelkul" a mezo ELHAGYASA, nem `null`: a `null` azt jelentene,
+ * hogy az eszkoz mostani matricajat is le kell venni -- a szerelo pedig csak
+ * annyit mondott, hogy ezt a foglalt kodot ne kuldjuk.
+ *
+ * A masik kod alakja itt dol el (egy betu es negy szam), nem a szerveren: egy
+ * elgepelt kod kulonben egy ujabb korben, terero mellett derulne ki.
+ */
+export function applyLabelChoice(
+  patch: UpdateAssetInput,
+  choice: LabelChoice,
+): { ok: true; patch: UpdateAssetInput } | { ok: false; message: string } {
+  const rest: UpdateAssetInput = { ...patch };
+  delete rest.labelCode;
+  if (choice.kind === "without") return { ok: true, patch: rest };
+  const code = normalizeAssetLabelCode(choice.code);
+  if (code === null)
+    return {
+      ok: false,
+      message: "A matricakód alakja egy betű és négy szám (például V2196).",
+    };
+  if (code === normalizeAssetLabelCode(patch.labelCode ?? ""))
+    return {
+      ok: false,
+      message:
+        "Ez ugyanaz a kód, amit a szerver elutasított. Olvass be másik matricát.",
+    };
+  return { ok: true, patch: { ...rest, labelCode: code } };
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,7 +19,9 @@ import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
+  applyLabelChoice,
   compareQueuedUpdate,
+  isLabelRefusal,
   rebuildResolvedPatch,
   resolutionIsEmpty,
   type ComparableField,
@@ -77,6 +80,11 @@ export default function QueueResolveScreen() {
     Partial<Record<ComparableField, "mine" | "theirs">>
   >({});
   const [error, setError] = useState<string | null>(null);
+  /** A foglalt matricanal: masik kod, vagy matrica nelkul (lasd lent). */
+  const [matricaMod, setMatricaMod] = useState<"other" | "without" | null>(
+    null,
+  );
+  const [masikKod, setMasikKod] = useState("");
 
   const sor = useQuery({
     queryKey: ["queue-row", id],
@@ -120,7 +128,7 @@ export default function QueueResolveScreen() {
     mutationFn: async () => {
       if (!payload || !eszkoz.data)
         throw new Error("Ez a módosítás nem nyitható meg.");
-      const uj = rebuildResolvedPatch({
+      let uj = rebuildResolvedPatch({
         patch: payload.patch,
         /**
          * A NEM ÜTKÖZŐ JAVÍTÁSOK AUTOMATIKUSAN MENNEK. Nem a szerelő
@@ -132,6 +140,23 @@ export default function QueueResolveScreen() {
           .map((s) => s.field),
         freshUpdatedAt: eszkoz.data.updatedAt,
       });
+      /*
+        A FOGLALT MATRICA NEM MEZONKENTI DONTES: a szerelo masik kodot ad,
+        vagy a matricat elhagyja, es a tobbi modositasa megy fel. Enelkul a
+        feloldas ugyanazt a foglalt kodot kuldene ujra (lasd
+        `isLabelRefusal`).
+      */
+      if (isLabelRefusal({ patch: payload.patch, rows: sorok })) {
+        if (!matricaMod) throw new Error("Válaszd ki, mi legyen a matricával.");
+        const valasztas = applyLabelChoice(
+          uj,
+          matricaMod === "without"
+            ? { kind: "without" }
+            : { kind: "other", code: masikKod },
+        );
+        if (!valasztas.ok) throw new Error(valasztas.message);
+        uj = valasztas.patch;
+      }
       if (resolutionIsEmpty(uj))
         throw new Error(
           "Minden mezőnél a másik értéket hagytad meg, tehát nincs mit elküldeni. A listán vesd el ezt a módosítást.",
@@ -192,12 +217,29 @@ export default function QueueResolveScreen() {
               : null,
           },
           unitNames,
+          /*
+            AMIT A SZERELO LATOTT, a sorbol. Eddig nem ment at, es emiatt
+            MINDEN atirt mezo "utkozonek" latszott: a "magatol atmegy" kartya
+            sosem jelent meg, es a foglalt matrica sem volt felismerheto
+            (`isLabelRefusal`). A szerkeszto 2026-09-04 ota felirja a sorba;
+            a regebbi sorokon hianyzik, ott marad a mezonkenti dontes.
+          */
+          base: payload.base,
         })
       : [];
 
   const eldontendo = sorok.filter((s) => s.conflicting);
-  const magatolAtmegy = sorok.filter((s) => !s.conflicting);
-  const keszEnDontesem = eldontendo.every((s) => dontes[s.field] !== undefined);
+  const matricaElutasitas = payload
+    ? isLabelRefusal({ patch: payload.patch, rows: sorok })
+    : false;
+  // a foglalt matrica sajat kartyat kap, a "magatol atmegy" listaban nem all
+  const magatolAtmegy = sorok.filter(
+    (s) => !s.conflicting && !(matricaElutasitas && s.field === "labelCode"),
+  );
+  const keszEnDontesem = matricaElutasitas
+    ? matricaMod === "without" ||
+      (matricaMod === "other" && masikKod.trim() !== "")
+    : eldontendo.every((s) => dontes[s.field] !== undefined);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
@@ -276,6 +318,60 @@ export default function QueueResolveScreen() {
               </View>
             ) : null}
 
+            {/*
+              A FOGLALT MATRICA (acrobot dontese, 2026-09-30: a szerver a biro,
+              a szerelo dont). A szerver mondata fent all, es belsosnek
+              megnevezi, melyik eszkozon van a kod. Felulirni nem lehet, csak
+              masik kodot adni, vagy a matricat elhagyni.
+            */}
+            {matricaElutasitas ? (
+              <View style={styles.card}>
+                <Text style={styles.label}>
+                  A(z) {payload.patch.labelCode} matricakód foglalt
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setMatricaMod("other")}
+                  style={[
+                    styles.choice,
+                    matricaMod === "other" && styles.choiceOn,
+                  ]}
+                >
+                  <Text style={styles.choiceTitle}>Másik matricát adok</Text>
+                  <Text style={styles.choiceValue}>
+                    A gépen lévő új matrica kódja
+                  </Text>
+                </Pressable>
+                {matricaMod === "other" ? (
+                  <TextInput
+                    accessibilityLabel="Másik matricakód"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    onChangeText={setMasikKod}
+                    placeholder="például V2196"
+                    placeholderTextColor={tokens.textMuted}
+                    style={styles.input}
+                    value={masikKod}
+                  />
+                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setMatricaMod("without")}
+                  style={[
+                    styles.choice,
+                    matricaMod === "without" && styles.choiceOn,
+                  ]}
+                >
+                  <Text style={styles.choiceTitle}>
+                    Matrica nélkül küldöm a többit
+                  </Text>
+                  <Text style={styles.choiceValue}>
+                    Az eszköz mostani matricája marad
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {eldontendo.map((mezo) => (
               <View key={mezo.field} style={styles.card}>
                 <Text style={styles.label}>{mezo.label}</Text>
@@ -323,9 +419,11 @@ export default function QueueResolveScreen() {
               ]}
             >
               <Text style={styles.primaryText}>
-                {keszEnDontesem
-                  ? "Feloldás és újraküldés"
-                  : `Még ${eldontendo.filter((s) => dontes[s.field] === undefined).length} mezőnél kell döntened`}
+                {matricaElutasitas
+                  ? "Újraküldés"
+                  : keszEnDontesem
+                    ? "Feloldás és újraküldés"
+                    : `Még ${eldontendo.filter((s) => dontes[s.field] === undefined).length} mezőnél kell döntened`}
               </Text>
             </Pressable>
           </>
@@ -372,6 +470,15 @@ function createStyles(t: ThemeTokens) {
     choiceOn: { borderColor: t.accent, borderWidth: 2 },
     choiceTitle: { color: t.textMuted, fontSize: 12, fontWeight: "700" },
     choiceValue: { color: t.textPrimary, fontSize: 15 },
+    input: {
+      backgroundColor: t.surfaceRaised,
+      borderColor: t.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      color: t.textPrimary,
+      fontSize: 15,
+      padding: 12,
+    },
     primary: {
       alignItems: "center",
       backgroundColor: t.accent,
