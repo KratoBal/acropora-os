@@ -718,6 +718,87 @@ describe("a komment és a sztring nem hívás", () => {
   });
 });
 
+/*
+  A REGEX-LITERÁL ÉS A SORON TÚLFUTÓ IDÉZŐJEL (mérve 2026-10-01).
+
+  A `lib/api/missing-invoices.ts` egy `/filename="([^"]+)"/` literált kapott,
+  és a maszk a nyers `"` jelnél sztring-módba váltott: a fájl VÉGÉIG mindent
+  kifehérített, az őr NULLA hívást olvasott ki belőle (a már beolvadtakat is),
+  és egy elrontott útra 25/0 zöld maradt. A három forrásfán 37 fájlban futott
+  így sorvégen túl egy idézőjeles sztring, köztük négy olyan kliensfájlban,
+  amit ez az őr olvas.
+*/
+describe("a regex-literál nem vakítja meg az őrt", () => {
+  it("a regex idézőjele után álló hívást megtalálja", () => {
+    // PIROSÍT: ha a maszk a regex `"` jelét sztring-kezdetnek venné.
+    const source = [
+      'const read = (h: string) => /filename="([^"]+)"/.exec(h);',
+      'export const list = () => apiRequest("/service/assets");',
+    ].join("\n");
+    const calls = callsInSource(source, "fixture.ts");
+    assert.deepEqual(
+      calls.map((call) => call.pattern),
+      ["service/assets"],
+    );
+  });
+
+  it("a sorvégen túlfutó idézőjel a következő sor hívását nem nyeli el", () => {
+    // PIROSÍT: ha a `"` vagy `'` sztring átléphetne egy sorvéget. TS-ben ilyen
+    // sztring nem létezik, tehát ami így néz ki (JSX-szöveg egy magyar „...")
+    // idézőjellel), annak a kára a saját soráig tart, nem a fájl végéig.
+    const source = [
+      'export const Note = () => <p>A(z) „{label}" listába kerül.</p>;',
+      'export const list = () => apiRequest("/service/assets");',
+    ].join("\n");
+    const calls = callsInSource(source, "fixture.tsx");
+    assert.deepEqual(
+      calls.map((call) => call.pattern),
+      ["service/assets"],
+    );
+  });
+
+  it("az osztás nem regex", () => {
+    // PIROSÍT: ha a `)` vagy egy azonosító utáni `/` regexnek számítana: a két
+    // perjel közti KÓD eltűnne, benne egy valódi hívással (a csendes irány).
+    const source = [
+      'export const a = (width) / 2 + fetch("/api/service/assets").length / 3;',
+      'export const b = total / apiRequest("/worksheets").length / 4;',
+    ].join("\n");
+    const calls = callsInSource(source, "fixture.ts", "/api");
+    // a sorrend csatornánként jön (apiRequest, aztán fetch), ezért rendezve
+    assert.deepEqual(calls.map((call) => call.pattern).sort(), [
+      "service/assets",
+      "worksheets",
+    ]);
+  });
+
+  it("a JSX záró tag és az önzáró tag nem regex", () => {
+    // PIROSÍT: ha a `</` vagy a `/>` regexet nyitna, és a köztük álló kódot
+    // (itt egy hívást a `{...}` kifejezésben) kifehérítené.
+    const source = [
+      "export const A = () => (",
+      '  <p>{apiRequest("/service/assets") && "x"}</p>',
+      ");",
+      "export const B = () => <Icon name={x} />;",
+      'export const C = () => <b>{apiRequest("/worksheets") && 1}</b>;',
+      // JSX-szöveg `/` jellel a `>` után (elválasztó): ez sem regex
+      'export const D = () => <nav>/{apiRequest("/customers")}</nav>;',
+    ].join("\n");
+    const calls = callsInSource(source, "fixture.tsx");
+    assert.deepEqual(
+      calls.map((call) => call.pattern),
+      ["service/assets", "worksheets", "customers"],
+    );
+  });
+
+  it("a regex-literál tartalma maszkolt", () => {
+    // PIROSÍT: ha a regex törzse kódként maradna: egy hívás ALAKJÁT leíró
+    // minta hamis találat lenne, ugyanúgy, mint egy komment.
+    const source = "export const looksLike = /apiRequest(\\w+)/g;\n";
+    assert.deepEqual(callsInSource(source, "fixture.ts"), []);
+  });
+});
+
 describe("a fetch csatorna is mérve van", () => {
   it("a nyers fetch hívást megtalálja, és a kliens előtagját levágja", () => {
     // EZ AZ A TESZT, AMI NÉLKÜL A CSATORNA BEVEZETÉSE BIZONYÍTATLAN LENNE.
