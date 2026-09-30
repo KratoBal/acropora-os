@@ -454,6 +454,23 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     );
   });
 
+  // projekt nélkül a foglalás nem indítható, és a sáv megmondja, mi a teendő
+  it("projekt nélkül a Projekt hozzáadása le van tiltva, és a sáv megmondja, miért", async () => {
+    purchasingApiMock.listProjects.mockResolvedValue([]);
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Új helyi termék létrehozása",
+      }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Projekt hozzáadása" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Előbb hozz létre egy projektet a fenti mezővel."),
+    ).toBeInTheDocument();
+  });
+
   it("a bevételezett mennyiséget projekthez tudja foglalni", async () => {
     purchasingApiMock.listProjects.mockResolvedValue([
       {
@@ -476,6 +493,16 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     expect(screen.getByRole("combobox", { name: "Projekt" })).toHaveValue(
       "project-1",
     );
+    // a foglalás-sáv a foglalást levonja a szabad készletből, és megnevezi
+    // a projektet; az összegző a valós foglalást számolja (Direction F)
+    expect(
+      screen.getByText(
+        "Szabad raktárkészlet ebből a sorból: 0 db · PRJ-000001: 1 db foglalva",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("1 számlasor · 1 helyi termék · 1 projektfoglalás"),
+    ).toBeInTheDocument();
     fireEvent.click(await screen.findByText(supplier.name));
     fireEvent.click(
       screen.getByRole("button", {
