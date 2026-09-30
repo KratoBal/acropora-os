@@ -71,7 +71,10 @@ describe("melyik sor javítható és küldhető újra", () => {
       szoveg miatt utasitotta el, hanem mert kozben MAS irta at ugyanazokat a
       mezoket: egy valtozatlan ujrakuldes ugyanezt adna vissza.
     */
-    assert.match(!d.ok ? d.message : "", /időközben más is átírta/);
+    assert.match(!d.ok ? d.message : "", /más is átírta ugyanazokat/);
+    // ES A MASIK OK IS (2026-09-30): a foglalt matrica nem mezo-utkozes, a
+    // regi mondat arrol hamisat allitott
+    assert.match(!d.ok ? d.message : "", /matricakód időközben másik eszközre/);
     /*
       A MONDAT MASODIK FELE A KIJARATOT NEVEZI MEG, es ez a fele 2026-09-04-en
       MEGVALTOZOTT: amig feloldo keperno nem volt, a szerelot az eszkoz

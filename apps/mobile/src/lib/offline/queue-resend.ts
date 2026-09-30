@@ -173,7 +173,11 @@ export function queueResendEligibility(
 const JAVITAS_ELUTASITAS_MUVELET: Record<SyncOperation, string | null> = {
   create: null,
   update:
-    "Ezt a módosítást nem a szövege miatt utasította el a szerver, hanem azért, mert időközben más is átírta ugyanazokat a mezőket. Változatlanul újraküldve ugyanezt kapnád, ezért itt nincs javítás: a Feloldás gombbal mezőnként eldöntheted, melyik érték maradjon.",
+    // KET OKA LEHET, ES A MONDAT MIND A KETTORE IGAZ (2026-09-30): kozben mas
+    // is atirta ugyanazokat a mezoket, VAGY a matricakod kozben mas eszkozre
+    // kerult. A masodiknal a korabbi mondat hamis volt, es a Feloldas is
+    // korbe vitt; a feloldo kepernyo ma mindkettot kezeli.
+    "Ezt a módosítást a szerver elutasította: vagy közben más is átírta ugyanazokat a mezőket, vagy a matricakód időközben másik eszközre került (az oka fent áll). Változatlanul újraküldve ugyanezt kapnád, ezért itt nincs javítás: a Feloldás gombbal eldöntheted, mi menjen fel.",
   "upload-photo":
     "Ez egy fénykép, nincs mit átírni rajta. A képet a rögzítés után lehet újra feltölteni.",
 };

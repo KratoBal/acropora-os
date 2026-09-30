@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  applyLabelChoice,
   compareQueuedUpdate,
+  isLabelRefusal,
   rebuildResolvedPatch,
   resolutionIsEmpty,
   type ComparableField,
@@ -359,5 +361,92 @@ describe("az electricalCode mező felirata", () => {
 
     assert.equal(sor?.label, "FP / Elektromos");
     assert.notEqual(sor?.label, "MAT kód (elektromos)");
+  });
+});
+
+/**
+ * A FOGLALT MATRICA (2026-09-30).
+ *
+ * Offline rogzitett matricakodot a szerver a kiuriteskor 409-cel elutasit, ha
+ * kozben mas eszkozre kerult. A mezonkenti feloldas ezt nem tudta kezelni:
+ * masik kodot nem lehetett megadni, es az "enyem maradjon" ugyanazt a foglalt
+ * kodot kuldte ujra.
+ */
+describe("a foglalt matrica a feloldásban", () => {
+  const lathato = { ...most, labelCode: "V1111" };
+  const matricaTorzs: UpdateAssetInput = {
+    expectedUpdatedAt: "2026-09-04T08:00:00Z",
+    labelCode: "V2196",
+    manufacturer: "Grundfos",
+  };
+  // a szerelo ugyanazt latta, ami most is all: kozben senki nem nyult hozza
+  const alap = { labelCode: "V1111", manufacturer: "Wilo" };
+
+  /*
+    MI PIROSIT: ha a matrica-elutasitas nem ismerheto fel (akkor a kepernyo
+    ugyanazt a foglalt kodot kuldi ujra), vagy ha egy VALODI mezo-utkozest is
+    annak nez.
+  */
+  it("felismeri: a törzs matricát ír, és egyetlen mező sem ütközik", () => {
+    const rows = compareQueuedUpdate({
+      patch: matricaTorzs,
+      current: lathato,
+      base: alap,
+    });
+    assert.equal(
+      rows.every((row) => !row.conflicting),
+      true,
+    );
+    assert.equal(isLabelRefusal({ patch: matricaTorzs, rows }), true);
+  });
+
+  it("nem az, ha közben valaki az eszköz SAJÁT matricájához nyúlt", () => {
+    const rows = compareQueuedUpdate({
+      patch: matricaTorzs,
+      current: { ...lathato, labelCode: "V3333" },
+      base: alap,
+    });
+    assert.equal(isLabelRefusal({ patch: matricaTorzs, rows }), false);
+  });
+
+  it("nem az, ha a törzs nem ír matricát", () => {
+    const rows = compareQueuedUpdate({
+      patch: torzs,
+      current: lathato,
+      base: { manufacturer: "Wilo", status: "IN_REPAIR" },
+    });
+    assert.equal(isLabelRefusal({ patch: torzs, rows }), false);
+  });
+
+  it("matrica nélkül: a kód kimarad (nem null), a többi mező megy", () => {
+    const r = applyLabelChoice(matricaTorzs, { kind: "without" });
+    assert.equal(r.ok, true);
+    assert.ok(r.ok);
+    assert.equal("labelCode" in r.patch, false);
+    assert.equal(r.patch.manufacturer, "Grundfos");
+    assert.equal(r.patch.expectedUpdatedAt, matricaTorzs.expectedUpdatedAt);
+  });
+
+  it("másik kód: nagybetűsítve kerül a törzsbe", () => {
+    const r = applyLabelChoice(matricaTorzs, {
+      kind: "other",
+      code: " v4242 ",
+    });
+    assert.ok(r.ok);
+    assert.equal(r.patch.labelCode, "V4242");
+  });
+
+  it("rossz alakú vagy ugyanaz a foglalt kód: nem küldi el", () => {
+    const rossz = applyLabelChoice(matricaTorzs, {
+      kind: "other",
+      code: "V42",
+    });
+    assert.equal(rossz.ok, false);
+    const ugyanaz = applyLabelChoice(matricaTorzs, {
+      kind: "other",
+      code: "v2196",
+    });
+    assert.equal(ugyanaz.ok, false);
+    assert.match(!ugyanaz.ok ? ugyanaz.message : "", /ugyanaz a kód/);
   });
 });

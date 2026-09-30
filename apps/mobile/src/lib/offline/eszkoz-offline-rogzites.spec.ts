@@ -92,3 +92,35 @@ describe("az eszköz adatlapja térerő nélkül is rögzít", () => {
     assert.doesNotMatch(s, /if \(!query\.data \|\| uploading\) return;/);
   });
 });
+
+/**
+ * A FELOLDO KEPERNYO LATJA, MIT LATOTT A SZERELO, ES KEZELI A FOGLALT MATRICAT.
+ *
+ * MI PIROSIT: ha a sor `base`-e nem megy at az osszevetesbe (akkor minden mezo
+ * utkozonek latszik, es a foglalt matrica felismerhetetlen), vagy ha a
+ * matrica-dontes kimarad a mentesbol.
+ */
+describe("a feloldó képernyő a foglalt matricát kezeli", () => {
+  const FELOLDO = "src/app/queue-resolve/[id].tsx";
+  const kod = () => readFileSync(FELOLDO, "utf8");
+
+  it("POZITÍV KONTROLL: a képernyő olvasható", () => {
+    assert.ok(kod().length > 2000);
+  });
+
+  it("az összevetés megkapja, amit a szerelő látott", () => {
+    assert.match(
+      kod(),
+      /compareQueuedUpdate\(\{[\s\S]{0,900}?base: payload\.base,/,
+    );
+  });
+
+  it("a mentés a matrica-döntést is alkalmazza", () => {
+    const s = kod();
+    assert.match(
+      s,
+      /isLabelRefusal\(\{ patch: payload\.patch, rows: sorok \}\)/,
+    );
+    assert.match(s, /applyLabelChoice\(\s*uj,/);
+  });
+});
