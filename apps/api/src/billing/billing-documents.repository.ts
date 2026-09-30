@@ -21,6 +21,12 @@ const EDITABLE = ["DRAFT", "ISSUE_FAILED"] as const;
 
 const DETAIL_INCLUDE = {
   lines: { orderBy: [{ position: "asc" }, { id: "asc" }] },
+  // A legutolsó kiküldési kísérlet, a részletek `delivery` blokkjához (nautilus).
+  mailDeliveries: {
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 1,
+    select: { recipients: true, outcome: true, error: true, createdAt: true },
+  },
   customer: {
     select: {
       id: true,

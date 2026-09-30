@@ -72,6 +72,7 @@ function row(id: string): BillingDocumentRow {
     vatAmount: d("270"),
     grossAmount: d("1270"),
     lines: [],
+    mailDeliveries: [],
     createdAt: new Date("2026-09-30T10:00:00Z"),
     updatedAt: new Date("2026-09-30T10:00:00Z"),
   } as unknown as BillingDocumentRow;

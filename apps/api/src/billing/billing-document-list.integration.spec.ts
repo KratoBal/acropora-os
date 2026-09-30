@@ -24,7 +24,8 @@ import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.j
  * részleteké (egy bejövő és egy nem a modulból jövő kimenő sor ugyanannál a
  * partnernél NEM kerül a listára); a kiállított sor a pillanatkép nevét viseli,
  * a vázlat a partner mai nevét; a keresés a partner mai nevére is talál; a
- * lapozás darabszáma a szűrt halmazé.
+ * lapozás darabszáma a szűrt halmazé; és a részletek ugyanezt a vevőt és
+ * végösszeget mutatják, a tárolt PDF-fel.
  */
 const gate = integrationDatabaseGate(process.env);
 const PREFIX = "SZAMLLIST";
@@ -231,6 +232,20 @@ describe(
         (await page(`${PREFIX} RÉGI`)).items.map((item) => item.id),
         [issuedId],
       );
+    });
+
+    it("opens the issued row with the snapshot buyer, the printed total and its PDF", async () => {
+      const detail = await drafts.detail(issuedId);
+      assert.equal(detail.customerSource, "ISSUED_SNAPSHOT");
+      assert.equal(detail.customer?.name, `${PREFIX} régi név`);
+      assert.equal(detail.totals.grossAmount, "2985");
+      assert.equal(detail.issueDate?.length, 10);
+      assert.deepEqual(detail.pdf, { available: true });
+      assert.equal(detail.delivery?.canResend, true);
+      const draft = await drafts.detail(draftId);
+      assert.equal(draft.customerSource, "DRAFT_PARTNER");
+      assert.equal(draft.customer?.name, `${PREFIX} új név`);
+      assert.equal(draft.totals.grossAmount, "2985");
     });
 
     it("filters by status and counts the filtered set for the pages", async () => {

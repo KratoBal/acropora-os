@@ -77,6 +77,7 @@ function row(
       ],
     },
     lines: [line({})],
+    mailDeliveries: [],
     ...overrides,
   } as unknown as BillingDocumentRow;
 }

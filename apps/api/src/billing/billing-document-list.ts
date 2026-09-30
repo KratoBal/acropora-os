@@ -70,7 +70,7 @@ const BUDAPEST_DAY = new Intl.DateTimeFormat("sv-SE", {
 });
 
 /** A kiállítás pillanata időbélyeg; a nap a budapesti naptári nap. */
-const issueDay = (value: Date | null) =>
+export const budapestDay = (value: Date | null) =>
   value ? BUDAPEST_DAY.format(value) : null;
 /** A határidő naptári nap, UTC éjfélként tárolva. */
 const calendarDay = (value: Date | null) =>
@@ -116,7 +116,7 @@ export function toListItem(
     invoiceFormat: (row.invoiceFormat as InvoiceFormat | null) ?? null,
     documentNumber: row.invoiceNumber,
     customerName: customerName(row),
-    issueDate: issueDay(row.issueDate),
+    issueDate: budapestDay(row.issueDate),
     dueDate: calendarDay(row.dueDate),
     grossAmount: listGross(row),
     currency: row.currency,
