@@ -154,6 +154,7 @@ describe(
       subject: tag,
       sender: "contact@aquarioom.com",
       pdfs: [pdf(tag)],
+      xmls: [],
     });
     const messages = new Map<string, SupplierInvoiceMail | "unreachable">([
       [id(1), mail(1, "proforma")],
@@ -416,6 +417,44 @@ describe(
       assert.deepEqual(
         arrival.documents.map((d) => d.subject),
         ["corrected"],
+      );
+    });
+
+    /*
+      XML ES PDF EGY LEVELBEN (acrobot dontese, 2026-09-30): a CoralSands minden
+      szamlajat e-szamla XML-kent ES PDF-kent is kuldi. Az XML nyer, es egy
+      szamlabol egy dokumentum lesz, nem ketto.
+      MI PIROSIT: ha a PDF is beolvasodik (a masodik dokumentum DUPLICATE-kent
+      megjelenik), vagy ha az XML helyett a PDF lesz a dokumentum.
+    */
+    it("a mail with the invoice as XML and as PDF makes ONE document, from the XML", async () => {
+      const xml = `<rsm:CrossIndustryInvoice xmlns:rsm="urn:x">xml-pair ${suffix}</rsm:CrossIndustryInvoice>`;
+      const same = doc({
+        documentKind: "INVOICE",
+        orderReference: "13999",
+        invoiceNumber: "RE66912",
+      });
+      readings.set(xml, same);
+      readings.set(`pdf-pair ${suffix}`, same);
+      messages.set(id(8), {
+        ...mail(8, "pdf-pair"),
+        xmls: [
+          { fileName: "X-Rechnung RE66912.xml", buffer: Buffer.from(xml) },
+        ],
+      });
+
+      const run = await intake.sync("MANUAL");
+      assert.deepEqual(
+        [run.documentsRead, run.duplicateCount, run.failedCount],
+        [1, 0, 1],
+      );
+      const documents = await prisma.incomingSupplierDocument.findMany({
+        where: { gmailMessageId: id(8) },
+        select: { fileName: true, status: true },
+      });
+      assert.deepEqual(
+        documents.map((d) => [d.fileName, d.status]),
+        [["X-Rechnung RE66912.xml", "READ"]],
       );
     });
   },

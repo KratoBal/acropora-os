@@ -7,6 +7,8 @@ import {
   adapterSenders,
   arrivalIdentity,
   documentContent,
+  invoiceFiles,
+  isCiiXml,
   placeDocument,
   supplierIdByTaxKey,
   type PlacedDocument,
@@ -286,5 +288,57 @@ describe("the supplier a document's tax id names", () => {
       ]),
       null,
     );
+  });
+});
+
+/*
+  XML VAGY PDF (acrobot dontese, 2026-09-30): ha egy levelben a szamla CII
+  e-szamla XML-kent is ott van, az nyer, es a PDF nem olvasodik (kulonben egy
+  szamlabol ket dokumentum lenne). Egy MAS XML (szallitolevel, katalogus) nem
+  szorithatja ki a PDF-et.
+  MI PIROSIT: ha a PDF is visszajon az XML mellett; ha egy nem-CII XML nyer; ha
+  XML nelkul a PDF elveszik.
+*/
+describe("invoiceFiles", () => {
+  const file = (fileName: string, content: string) => ({
+    fileName,
+    buffer: Buffer.from(content),
+  });
+  const cii = file(
+    "X-Rechnung RE66912.xml",
+    '<?xml version="1.0"?>\n<rsm:CrossIndustryInvoice xmlns:rsm="urn:x"></rsm:CrossIndustryInvoice>',
+  );
+  const pdfs = [
+    file("Invoice RE66912.pdf", "%PDF-1.4"),
+    file("Invoice RE66912(1).pdf", "%PDF-1.4"),
+  ];
+
+  it("the CII XML wins, and the PDFs are not read", () => {
+    const chosen = invoiceFiles({ pdfs, xmls: [cii] });
+    assert.equal(chosen.source, "XML");
+    assert.deepEqual(
+      chosen.files.map((f) => f.fileName),
+      ["X-Rechnung RE66912.xml"],
+    );
+  });
+
+  it("another XML does not push the PDF out", () => {
+    const other = file(
+      "Lieferschein.xml",
+      "<Lieferschein><Nr>1</Nr></Lieferschein>",
+    );
+    const chosen = invoiceFiles({ pdfs, xmls: [other] });
+    assert.equal(chosen.source, "PDF");
+    assert.equal(chosen.files.length, 2);
+  });
+
+  it("without an XML, the PDFs as before", () => {
+    assert.deepEqual(invoiceFiles({ pdfs, xmls: [] }).files, pdfs);
+  });
+
+  it("recognises the CII root with or without a namespace prefix", () => {
+    assert.equal(isCiiXml(Buffer.from("<CrossIndustryInvoice>")), true);
+    assert.equal(isCiiXml(Buffer.from("<x:CrossIndustryInvoice a='b'>")), true);
+    assert.equal(isCiiXml(Buffer.from("<Invoice xmlns='ubl'>")), false);
   });
 });

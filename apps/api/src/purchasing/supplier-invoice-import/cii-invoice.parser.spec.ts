@@ -220,6 +220,18 @@ describe("parseCiiInvoiceXml", () => {
     assert.equal(warns("325"), true);
   });
 
+  // acrobot dontese (2026-09-30): a Varhato beerkezes a rendelesszamra is
+  // kulcsol. MI PIROSIT: ha a rendelesszam nem olvasodik, vagy kitalalt lesz.
+  it("reads the buyer's order reference, and null when there is none", () => {
+    assert.equal(parseCiiInvoiceXml(cii()).orderReference, null);
+    const withOrder = cii().replace(
+      "<ram:SellerTradeParty>",
+      "<ram:BuyerOrderReferencedDocument><ram:IssuerAssignedID> <![CDATA[AB67993]]> </ram:IssuerAssignedID></ram:BuyerOrderReferencedDocument><ram:SellerTradeParty>",
+    );
+    assert.ok(withOrder.includes("AB67993"), "the fixture really carries it");
+    assert.equal(parseCiiInvoiceXml(withOrder).orderReference, "AB67993");
+  });
+
   it("does not depend on the namespace prefixes", () => {
     const renamed = cii()
       .replaceAll("ram:", "x:")

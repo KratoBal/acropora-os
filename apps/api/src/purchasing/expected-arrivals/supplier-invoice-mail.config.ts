@@ -15,9 +15,12 @@
  *                                             PDF adapters name (`senders`)
  *   SUPPLIER_INVOICE_MAIL_SYNC_INTERVAL_MINUTES  default 30 (5..1440)
  *
- * WHICH MAILS: only the senders named, with a PDF attachment, from the last
- * 120 days. The adapter is still chosen by the PDF's content; the sender only
- * narrows the query, so a new supplier is wired in one place, its adapter.
+ * WHICH MAILS: only the senders named, with a PDF or an XML attachment, from
+ * the last 120 days. The adapter is still chosen by the file's content; the
+ * sender only narrows the query, so a new PDF supplier is wired in one place,
+ * its adapter. A supplier whose invoice is an XML e-invoice needs no adapter
+ * (the CII reader is supplier-independent): its sender is listed in
+ * `XML_INVOICE_SENDERS` below.
  */
 
 export type SupplierInvoiceMailSwitch =
@@ -70,6 +73,14 @@ export function supplierInvoiceMailIntervalMinutes(
     : 30;
 }
 
+/**
+ * SENDERS WHOSE INVOICE IS AN XML E-INVOICE (CII), not a PDF an adapter reads.
+ * They have no adapter to name them, so they are named here.
+ *   CoralSands   info@coralsands.de   an XRechnung CII XML with every invoice
+ *                                     (6 of 6, April to August 2026)
+ */
+export const XML_INVOICE_SENDERS: readonly string[] = ["info@coralsands.de"];
+
 /** The sender addresses to watch: the adapters' own, plus the configured extra ones. */
 export function supplierInvoiceMailSenders(
   adapterSenders: readonly string[],
@@ -82,12 +93,12 @@ export function supplierInvoiceMailSenders(
   return [...new Set(addresses)].sort();
 }
 
-/** The Gmail search for these senders' PDF mails; null when there is no sender. */
+/** The Gmail search for these senders' PDF and XML mails; null when there is no sender. */
 export function supplierInvoiceMailQuery(
   senders: readonly string[],
 ): string | null {
   if (!senders.length) return null;
-  return `from:(${senders.join(" OR ")}) has:attachment filename:pdf newer_than:120d`;
+  return `from:(${senders.join(" OR ")}) has:attachment (filename:pdf OR filename:xml) newer_than:120d`;
 }
 
 /** The one sentence the log and the status both use. */
