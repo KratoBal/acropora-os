@@ -137,6 +137,28 @@ describe("ExpectedArrivalListPage", () => {
     ]);
   });
 
+  // a corrected invoice after the booking: it is shown, and it opens nothing
+  it("flags a correction that arrived after the booking, without opening the editor", async () => {
+    api.list.mockResolvedValue({
+      items: [
+        item({
+          id: "arr-3",
+          orderReference: "18319",
+          invoiceNumber: "32600434",
+          stage: "LATE_CORRECTION",
+          editorPath: null,
+          suggestedLineCount: null,
+        }),
+      ],
+    });
+    render(createElement(ExpectedArrivalListPage));
+    const [row] = await screen.findAllByTestId("varhato-sor");
+    expect(row).toHaveTextContent("Bevételezés után javított számla érkezett");
+    expect(row).not.toHaveTextContent("Bevételezhető");
+    fireEvent.click(row!);
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
   it("filters by source", async () => {
     render(createElement(ExpectedArrivalListPage));
     await screen.findAllByTestId("varhato-sor");

@@ -58,29 +58,98 @@ export function arrivalIdentity(
 }
 
 /**
- * A document already on the arrival makes the new one a DUPLICATE: the same
- * bytes, or the same kind with the same invoice number (De Jong's finance@
- * reminder attaches the same invoice again, nautilus measured 8 of them).
+ * What an invoice SAYS, for telling a re-sent copy from a corrected one: the
+ * header figures and every line, not the bytes. A reminder re-attaches the
+ * same invoice (De Jong's finance@, nautilus measured 8), possibly as a new
+ * file; a corrected invoice keeps its number and changes a line (Marine
+ * Aquatics 32600434, 2026-06-18: the "UPDATED INVOICE" 15 minutes later has
+ * one more line, 180 -> 254 EUR).
  */
-export function isDuplicateDocument(
-  incoming: {
-    sha256: string;
-    kind: "INVOICE" | "PROFORMA";
-    invoiceNumber: string | null;
-  },
-  existing: readonly {
-    sha256: string;
-    kind: "INVOICE" | "PROFORMA" | null;
-    invoiceNumber: string | null;
-  }[],
-): boolean {
-  return existing.some(
-    (document) =>
-      document.sha256 === incoming.sha256 ||
-      (document.kind === incoming.kind &&
-        incoming.invoiceNumber !== null &&
-        document.invoiceNumber === incoming.invoiceNumber),
-  );
+export function documentContent(
+  result: SupplierInvoiceImportResult | null | undefined,
+): string {
+  if (!result) return "";
+  return JSON.stringify([
+    result.invoiceDate,
+    result.currency,
+    result.netTotal,
+    result.lines.map((line) => [
+      line.supplierSku,
+      line.description,
+      line.quantity,
+      line.unitNet,
+      line.discountPercent,
+      line.lineNet,
+    ]),
+  ]);
+}
+
+export interface PlacedDocument {
+  sha256: string;
+  kind: "INVOICE" | "PROFORMA" | null;
+  invoiceNumber: string | null;
+  /** `documentContent` of its reading. */
+  content: string;
+  /** When the mail arrived: the later mail is the newer document. */
+  receivedAt: Date;
+}
+
+/**
+ * - READ: a new document on the arrival; `supersedes` lists the earlier READ
+ *   documents it replaces (by their index in `existing`).
+ * - DUPLICATE: the same bytes, or the same kind, number and content, as ANY
+ *   version already kept: a reminder that re-attaches the original after its
+ *   correction is a copy, not a newer version.
+ * - SUPERSEDED: a corrected version of it is already on the arrival, from a
+ *   LATER mail. The mailbox lists the newest mail first, so a correction is
+ *   often read before its original: the order of reading decides nothing.
+ * - LATE_CORRECTION: a different version of an invoice whose arrival is no
+ *   longer open (booked): it replaces nothing, the list shows it.
+ */
+export type DocumentPlacement =
+  | { status: "READ"; supersedes: number[] }
+  | { status: "DUPLICATE" | "SUPERSEDED" | "LATE_CORRECTION" };
+
+/**
+ * Where an arrived document goes (acrobot's decision, 2026-09-30 10:42): an
+ * invoice with the same number and DIFFERENT content replaces the earlier
+ * one while the arrival is open; on a booked arrival it replaces nothing and
+ * is flagged. The same content is still a duplicate.
+ */
+export function placeDocument(
+  incoming: PlacedDocument,
+  existing: readonly PlacedDocument[],
+  arrivalOpen: boolean,
+): DocumentPlacement {
+  const sameNumber = (document: PlacedDocument) =>
+    document.kind === incoming.kind &&
+    incoming.invoiceNumber !== null &&
+    document.invoiceNumber === incoming.invoiceNumber;
+  if (
+    existing.some(
+      (document) =>
+        document.sha256 === incoming.sha256 ||
+        (sameNumber(document) && document.content === incoming.content),
+    )
+  )
+    return { status: "DUPLICATE" };
+
+  // every kept version counts; replacing an already replaced one is a no-op
+  const versions = existing
+    .map((document, index) => ({ document, index }))
+    .filter(({ document }) => sameNumber(document));
+  if (!arrivalOpen)
+    return versions.length > 0
+      ? { status: "LATE_CORRECTION" }
+      : { status: "DUPLICATE" };
+  if (
+    versions.some(
+      ({ document }) =>
+        document.receivedAt.getTime() > incoming.receivedAt.getTime(),
+    )
+  )
+    return { status: "SUPERSEDED" };
+  return { status: "READ", supersedes: versions.map(({ index }) => index) };
 }
 
 /** The senders the PDF adapters name (`SupplierPdfAdapter.senders`, #1235). */

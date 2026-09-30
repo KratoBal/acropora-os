@@ -342,5 +342,81 @@ describe(
       );
       assert.equal(status.lastScheduledRun?.trigger, "SCHEDULED");
     });
+
+    // THE CORRECTED INVOICE (acrobot, 2026-09-30 10:42): the same number with
+    // other content from a LATER mail replaces the kept version; one from an
+    // EARLIER mail, read after it (the mailbox lists the newest first), is the
+    // replaced one. What must fail: the correction dropped as a duplicate, or
+    // the older version winning because it was read last.
+    it("a corrected invoice from a later mail replaces the invoice; an older version read after it does not", async () => {
+      const corrected = doc({
+        documentKind: "INVOICE",
+        orderReference: "13858",
+        invoiceNumber: "FA00009139",
+        netTotal: 104.4,
+        lines: [
+          ...(doc({}) as unknown as { lines: unknown[] }).lines,
+          {
+            lineNumber: 3,
+            supplierSku: "MJ-L230R",
+            ean: null,
+            description: "Jump LED",
+            quantity: 1,
+            unit: null,
+            unitNet: 74.4,
+            discountPercent: null,
+            lineNet: 74.4,
+            isCharge: false,
+          },
+        ],
+      });
+      readings.set(`corrected ${suffix}`, corrected);
+      readings.set(
+        `stale ${suffix}`,
+        doc({
+          documentKind: "INVOICE",
+          orderReference: "13858",
+          invoiceNumber: "FA00009139",
+          netTotal: 25,
+        }),
+      );
+      messages.set(id(6), {
+        ...mail(6, "corrected"),
+        receivedAt: new Date("2026-09-30T06:10:00Z"),
+      });
+      messages.set(id(7), {
+        ...mail(7, "stale"),
+        receivedAt: new Date("2026-09-30T05:00:00Z"),
+      });
+
+      const run = await intake.sync("MANUAL");
+      assert.deepEqual(
+        [run.documentsRead, run.duplicateCount, run.failedCount],
+        [1, 1, 1],
+      );
+      const documents = await prisma.incomingSupplierDocument.findMany({
+        where: { gmailMessageId: { in: [id(2), id(3), id(6), id(7)] } },
+        select: { subject: true, status: true },
+      });
+      assert.deepEqual(documents.map((d) => [d.subject, d.status]).sort(), [
+        ["corrected", "READ"],
+        ["invoice", "SUPERSEDED"],
+        ["reminder", "DUPLICATE"],
+        ["stale", "SUPERSEDED"],
+      ]);
+      const arrival = await prisma.expectedArrival.findFirstOrThrow({
+        where: { supplierKey: vat },
+        include: {
+          documents: {
+            where: { status: "READ", kind: "INVOICE" },
+            select: { subject: true },
+          },
+        },
+      });
+      assert.deepEqual(
+        arrival.documents.map((d) => d.subject),
+        ["corrected"],
+      );
+    });
   },
 );

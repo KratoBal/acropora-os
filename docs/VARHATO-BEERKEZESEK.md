@@ -32,8 +32,20 @@ Egy várható beérkezés egy beszállítói RENDELÉS (`ExpectedArrival`).
      és a válaszokat a dokumentummal együtt tárolja.
 - **Amit nem nyit új tételnek:**
   - **Duplikátum:** ugyanazok a bájtok, vagy ugyanaz a fajta ugyanazzal a
-    számlaszámmal. Ilyet küld a De Jong finance@ emlékeztetője, amely a számlát újra
-    csatolja.
+    számlaszámmal ÉS ugyanazzal a tartalommal (fejléc-összegek és minden sor).
+    Ilyet küld a De Jong finance@ emlékeztetője, amely a számlát újra csatolja.
+  - **Javított számla** (acrobot döntése, 2026-09-30 10:42): ugyanaz a számlaszám
+    MÁS tartalommal. Ilyen a Marine Aquatics „UPDATED INVOICE”-a, 15 perccel az
+    eredeti után, eggyel több sorral.
+    - Nyitott tételen a KÉSŐBBI levél változata marad (`READ`), a korábbi
+      `SUPERSEDED` lesz. A levél érkezése dönt, nem a beolvasás sorrendje: a
+      postafiók a legújabb levelet adja előre, így az eredeti gyakran a javítás
+      UTÁN kerül sorra.
+    - Egy már megtartott változat másolata (például az eredeti újraküldése a
+      javítás után) duplikátum, nem újabb változat.
+    - Bevételezett tételen semmit nem cserél: `LATE_CORRECTION` lesz, és a lista
+      „Bevételezés után javított számla érkezett” jelzéssel mutatja, szerkesztő
+      nélkül.
   - **Olvashatatlan PDF:** a hibakódjával tárolódik, és semmi nem kerül kitalálásra.
   - **Le nem tölthető levél:** nem kerül a naplóba, ezért a következő futás újra
     megpróbálja.

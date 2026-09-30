@@ -21,6 +21,66 @@ export function suggestedLineCount(stored: unknown): number {
   ).length;
 }
 
+/** One mail arrival as the list shows it (its documents newest first). */
+export interface MailArrivalRow {
+  id: string;
+  status: "OPEN" | "RECEIVED" | "DISMISSED";
+  supplierName: string;
+  supplierId: string | null;
+  orderReference: string | null;
+  invoiceNumber: string | null;
+  documents: Array<{
+    kind: "INVOICE" | "PROFORMA" | null;
+    status: string;
+    receivedAt: Date | null;
+    createdAt: Date;
+    importResult: unknown;
+    lineSuggestions: unknown;
+  }>;
+}
+
+/**
+ * The list row of a mail arrival. An open one shows its invoice (bookable)
+ * or its proforma; a booked one is here only for a correction that arrived
+ * after the booking, and shows that, without a way into the editor.
+ */
+export function mailListItem(arrival: MailArrivalRow): ExpectedArrivalListItem {
+  const late =
+    arrival.status === "RECEIVED"
+      ? arrival.documents.find(
+          (document) => document.status === "LATE_CORRECTION",
+        )
+      : undefined;
+  const invoice = late
+    ? undefined
+    : arrival.documents.find(
+        (document) => document.kind === "INVOICE" && document.status === "READ",
+      );
+  const shown = late ?? invoice ?? arrival.documents[0]!;
+  const result =
+    shown.importResult as unknown as SupplierInvoiceImportResult | null;
+  return {
+    source: "MAIL",
+    id: arrival.id,
+    supplierName: arrival.supplierName,
+    supplierId: arrival.supplierId,
+    orderReference: arrival.orderReference,
+    invoiceNumber: arrival.invoiceNumber,
+    stage: late ? "LATE_CORRECTION" : invoice ? "INVOICE" : "PROFORMA",
+    arrivedAt: (shown.receivedAt ?? shown.createdAt).toISOString(),
+    invoiceDate: result?.invoiceDate ?? null,
+    currency: result?.currency ?? null,
+    netTotal: result?.netTotal ?? null,
+    lineCount: result?.lines.filter((line) => !line.isCharge).length ?? null,
+    suggestedLineCount: invoice
+      ? suggestedLineCount(invoice.lineSuggestions)
+      : null,
+    editorPath: invoice
+      ? `/beszerzes/uj?beerkezes=${encodeURIComponent(arrival.id)}`
+      : null,
+  };
+}
+
 /**
  * VÁRHATÓ BEÉRKEZÉSEK, THE LIST AND THE EDITOR'S PREFILL (Balázs, 2026-09-30:
  * "a Várható beérkezések menüpontban ott van a lista, miből kiválasztja,
@@ -33,19 +93,32 @@ export function suggestedLineCount(stored: unknown): number {
  *   the editor already prefills (`?navInvoiceId=`).
  * A booked item leaves the list: the save marks it RECEIVED
  * (purchase-invoice.repository.ts), in the same transaction as the invoice.
+ * It comes back only when a corrected version of its invoice arrives after
+ * the booking (LATE_CORRECTION): shown, not bookable, for the person to
+ * settle with the supplier and the accounts.
  */
 @Injectable()
 export class ExpectedArrivalService {
   async list(): Promise<ExpectedArrivalListResponse> {
     const [arrivals, navInvoices] = await Promise.all([
       prisma.expectedArrival.findMany({
-        where: { status: "OPEN" },
+        where: {
+          OR: [
+            { status: "OPEN" },
+            // a corrected invoice after the booking: shown, not bookable
+            {
+              status: "RECEIVED",
+              documents: { some: { status: "LATE_CORRECTION" } },
+            },
+          ],
+        },
         include: {
           documents: {
-            where: { status: "READ" },
+            where: { status: { in: ["READ", "LATE_CORRECTION"] } },
             orderBy: { createdAt: "desc" },
             select: {
               kind: true,
+              status: true,
               receivedAt: true,
               createdAt: true,
               importResult: true,
@@ -74,35 +147,7 @@ export class ExpectedArrivalService {
 
     const mail: ExpectedArrivalListItem[] = arrivals
       .filter((arrival) => arrival.documents.length > 0)
-      .map((arrival) => {
-        const invoice = arrival.documents.find(
-          (document) => document.kind === "INVOICE",
-        );
-        const shown = invoice ?? arrival.documents[0]!;
-        const result =
-          shown.importResult as unknown as SupplierInvoiceImportResult | null;
-        return {
-          source: "MAIL",
-          id: arrival.id,
-          supplierName: arrival.supplierName,
-          supplierId: arrival.supplierId,
-          orderReference: arrival.orderReference,
-          invoiceNumber: arrival.invoiceNumber,
-          stage: invoice ? "INVOICE" : "PROFORMA",
-          arrivedAt: (shown.receivedAt ?? shown.createdAt).toISOString(),
-          invoiceDate: result?.invoiceDate ?? null,
-          currency: result?.currency ?? null,
-          netTotal: result?.netTotal ?? null,
-          lineCount:
-            result?.lines.filter((line) => !line.isCharge).length ?? null,
-          suggestedLineCount: invoice
-            ? suggestedLineCount(invoice.lineSuggestions)
-            : null,
-          editorPath: invoice
-            ? `/beszerzes/uj?beerkezes=${encodeURIComponent(arrival.id)}`
-            : null,
-        };
-      });
+      .map(mailListItem);
 
     const nav: ExpectedArrivalListItem[] = navInvoices.map((invoice) => ({
       source: "NAV",
