@@ -110,6 +110,9 @@ export {
   PilotPageHeader,
   PilotCallout,
   PilotLinkTabs,
+  PilotRadioGroup,
+  PilotVariableChips,
+  PilotTotals,
 } from "./pilot-os";
 export type { PilotTableColumn } from "./pilot-os";
 export {

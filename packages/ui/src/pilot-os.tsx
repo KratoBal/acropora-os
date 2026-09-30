@@ -472,3 +472,142 @@ export function PilotLinkTabs({
     </nav>
   );
 }
+
+/**
+ * EGY VALÓDI RÁDIÓCSOPORT, EGY SORBAN (a Számlázás-brief 4. pontja: "valódi
+ * accessible radio group, keyboard navigation és megfelelő label"). Natív
+ * `<input type="radio">`-kból áll egy `fieldset`-ben: a nyilak, a Tab és a
+ * képernyőolvasó a böngészőé, nem kézzel újraírt. A kijelölés aqua (a
+ * Direction F-ben a kiválasztás színe).
+ *
+ * Egy opció letiltható (`disabled`), és a csoport egésze is, rövid
+ * magyarázattal (`hint`): a brief 5. pontja szerint egy nem értelmezett
+ * választás rejtve vagy letiltva jelenik meg, indoklással. Hogy mikor, azt a
+ * hívó dönti el (a domain képessége), ez a komponens nem.
+ */
+export function PilotRadioGroup<Value extends string>({
+  name,
+  label,
+  options,
+  value,
+  onChange,
+  disabled = false,
+  hint,
+}: {
+  /** A natív `name`: egy lapon két csoport ne ütközzön. */
+  name: string;
+  label: string;
+  options: ReadonlyArray<{ value: Value; label: string; disabled?: boolean }>;
+  value: Value | null;
+  onChange: (value: Value) => void;
+  disabled?: boolean;
+  /** Egy sor a csoport után, pl. hogy miért nem választható. */
+  hint?: ReactNode;
+}) {
+  return (
+    <fieldset
+      disabled={disabled}
+      className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2"
+    >
+      <legend className="float-left mr-1 text-xs text-pilot-grey-600">
+        {label}:
+      </legend>
+      {options.map((option) => {
+        const checked = option.value === value;
+        const off = disabled || option.disabled;
+        return (
+          <label
+            key={option.value}
+            className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-sm ${
+              off ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+            } ${checked ? "font-semibold text-pilot-grey-900" : "text-pilot-grey-700"}`}
+          >
+            <input
+              type="radio"
+              name={name}
+              value={option.value}
+              checked={checked}
+              disabled={option.disabled}
+              onChange={() => onChange(option.value)}
+              className="size-4 accent-pilot-aqua-600"
+            />
+            {option.label}
+          </label>
+        );
+      })}
+      {hint ? (
+        <p className="basis-full text-xs text-pilot-grey-500">{hint}</p>
+      ) : null}
+    </fieldset>
+  );
+}
+
+/**
+ * SABLONVÁLTOZÓK KATTINTHATÓ CHIPEKKÉNT (a Számlázás-brief 17. pontja): a
+ * chip a változó nevét adja a hívónak (`onInsert`), aki a kurzorhoz szúrja.
+ * Hogy mely változók léteznek egy dokumentumtípusnál, azt a hívó adja.
+ */
+export function PilotVariableChips({
+  label = "Használható változók",
+  variables,
+  onInsert,
+}: {
+  label?: string;
+  variables: readonly string[];
+  onInsert: (variable: string) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-xs text-pilot-grey-500">{label}</p>
+      <ul className="flex flex-wrap gap-2">
+        {variables.map((variable) => (
+          <li key={variable}>
+            <button
+              type="button"
+              onClick={() => onInsert(variable)}
+              aria-label={`${variable} beszúrása`}
+              className="inline-flex h-7 items-center whitespace-nowrap rounded-full bg-pilot-aqua-50 px-3 font-mono text-xs text-pilot-aqua-700 ring-1 ring-pilot-aqua-200 transition-colors hover:bg-pilot-aqua-100"
+            >
+              {variable}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * CÍMKE–ÉRTÉK SOROK ÖSSZESÍTŐHÖZ (a terv "Számla összesen" kártyája): az
+ * érték jobbra zár, az `emphasis` sor (pl. a bruttó) félkövér. Az értékeket
+ * a hívó számolja és formázza; ez csak elrendez.
+ */
+export function PilotTotals({
+  rows,
+}: {
+  rows: ReadonlyArray<{
+    label: string;
+    value: ReactNode;
+    emphasis?: boolean;
+  }>;
+}) {
+  return (
+    <dl className="space-y-3">
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          className="flex items-baseline justify-between gap-4"
+        >
+          <dt
+            className={`text-sm ${row.emphasis ? "font-semibold text-pilot-grey-900" : "text-pilot-grey-600"}`}
+          >
+            {row.label}
+          </dt>
+          <dd className="text-right text-sm font-semibold tabular-nums text-pilot-grey-900">
+            {row.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
