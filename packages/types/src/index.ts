@@ -415,6 +415,10 @@ export type {
   SupplierInvoiceMailSyncRunSummary,
   SupplierInvoiceMailSyncState,
   SupplierInvoiceMailSyncStatus,
+  ExpectedArrivalDetail,
+  ExpectedArrivalListItem,
+  ExpectedArrivalListResponse,
+  ExpectedArrivalSource,
 } from "./purchasing.js";
 export type {
   CreatePosSaleInput,

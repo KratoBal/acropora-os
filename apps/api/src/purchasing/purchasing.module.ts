@@ -5,6 +5,7 @@ import { SuppliersModule } from "../suppliers/suppliers.module.js";
 import { ExpectedArrivalController } from "./expected-arrivals/expected-arrival.controller.js";
 import { ExpectedArrivalIntakeService } from "./expected-arrivals/expected-arrival-intake.service.js";
 import { ExpectedArrivalScheduler } from "./expected-arrivals/expected-arrival.scheduler.js";
+import { ExpectedArrivalService } from "./expected-arrivals/expected-arrival.service.js";
 import { SupplierInvoiceMailClient } from "./expected-arrivals/supplier-invoice-mail.client.js";
 import { NavIncomingInvoiceModule } from "./nav-incoming-invoices/nav-incoming-invoice.module.js";
 import { PurchaseInvoiceRepository } from "./purchase-invoice.repository.js";
@@ -39,6 +40,7 @@ import { SupplierCodeLearningRepository } from "./supplier-code-learning.reposit
     SupplierInvoiceMailClient,
     ExpectedArrivalIntakeService,
     ExpectedArrivalScheduler,
+    ExpectedArrivalService,
   ],
 })
 export class PurchasingModule {}
