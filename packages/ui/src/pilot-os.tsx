@@ -1,4 +1,6 @@
+"use client";
 import type { KeyboardEvent, ReactNode } from "react";
+import { useState } from "react";
 
 import type { ThumbnailFallback } from "./entity-thumbnail-fallback";
 import { Icon } from "./icon";
@@ -147,13 +149,17 @@ export function PilotThumbnail({
   size?: number;
 }) {
   const box = { width: size, height: size };
-  if (src)
+  // A törött kép (hibás URL, elérhetetlen kiszolgáló) a tartalékra esik
+  // vissza, nem marad üres négyzet: a sorrend kép, kategória, márka.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (src && src !== failedSrc)
     return (
       // a külső termékkép URL-je, nem a Next képoptimalizálón át
       <img
         src={src}
         alt={alt}
         style={box}
+        onError={() => setFailedSrc(src)}
         className="shrink-0 rounded-lg border border-pilot-grey-200 bg-white object-cover"
       />
     );

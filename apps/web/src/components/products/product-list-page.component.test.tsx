@@ -291,6 +291,40 @@ describe("ProductListPage", () => {
     expect(rows[2]).not.toHaveTextContent(/\bMS\b/);
   });
 
+  // stage, 2026-09-30 (acrobot): egy nem betöltődő kép üres négyzet maradt
+  // volna. MI PIROSÍT: ha a hibás kép nem esik vissza a kategória-tartalékra.
+  it("a nem betöltődő kép a kategória-tartalékra esik vissza, nem marad üres négyzet", async () => {
+    const base = populatedResponse.items[0]!;
+    api.list.mockResolvedValue({
+      ...populatedResponse,
+      items: [
+        {
+          ...base,
+          primaryCategory: {
+            id: "c-fish",
+            name: "Gébek",
+            isPrimary: true,
+            sortOrder: 0,
+            path: ["Halak", "Gébek"],
+          },
+        },
+      ],
+    });
+    render(createElement(ProductListPage));
+    const image = await screen.findByRole("img", { name: "ReefMat 500" });
+    const row = image.closest("tr") as HTMLElement;
+    expect(row.querySelector("[data-thumbnail-fallback]")).toBeNull();
+
+    fireEvent.error(image);
+
+    expect(screen.queryByRole("img", { name: "ReefMat 500" })).toBeNull();
+    expect(
+      row
+        .querySelector("[data-thumbnail-fallback]")
+        ?.getAttribute("data-thumbnail-fallback"),
+    ).toBe("icon");
+  });
+
   it("a fejléc és a sor ugyanabból az oszlopból igazodik: a számoszlop mindkettőben jobbra zár", async () => {
     api.list.mockResolvedValue(populatedResponse);
     render(createElement(ProductListPage));
