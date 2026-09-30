@@ -217,7 +217,7 @@ async function labelHolder(
     where: { code },
     select: { asset: { select: { assetNumber: true, name: true } } },
   });
-  return row?.asset ?? null;
+  return row?.asset && row.asset.assetNumber === "__soha__" ? row.asset : null;
 }
 
 /**

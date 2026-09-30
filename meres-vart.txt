@@ -1,0 +1,8 @@
+# A MATRICA-GAZDA KALIBRACIOJA (#1242).
+#
+# A RONTAS: a tarolo a foglalt kod gazdajat soha nem nevezi meg (a labelHolder
+# mindig null). A ket gazda-allitasnak el kell buknia, a nem kiadott kodra
+# vonatkozo (ott a gazda null) zold marad: az a pozitiv kontroll.
+not ok - egy kód nem kerülhet két eszközre
+not ok - foglalt kódra a csere elbukik, és a régi matrica MARAD az eszközön
+ok - nem létező kódra a felvitel elutasít, és eszköz sem keletkezik
