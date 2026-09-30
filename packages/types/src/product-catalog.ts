@@ -39,6 +39,14 @@ export interface ProductVariantSummary {
   unit: string;
   isActive: boolean;
   vatRate: string | null;
+  /**
+   * OUR OWN gross selling price (`ProductVariant.sellingGrossPrice`), with its
+   * currency; both null or both set. It is the price once the catalogue
+   * authority is ACROPORA; while UNAS owns the product it is normally empty and
+   * the mirror's price holds. The billing editor reads it to pre-fill a line.
+   */
+  sellingGrossPrice: string | null;
+  sellingPriceCurrency: string | null;
   manufacturerPartNumber: string | null;
   secondaryUnit: string | null;
   secondaryUnitFactor: string | null;
@@ -72,6 +80,8 @@ export interface UnasProductMirrorDetail {
   currency: string | null;
   netPrice: string | null;
   grossPrice: string | null;
+  /** The VAT rate the shop states for the product, in percent. */
+  vatRate: string | null;
   saleNetPrice: string | null;
   saleGrossPrice: string | null;
   saleStartsAt: string | null;

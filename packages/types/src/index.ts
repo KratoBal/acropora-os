@@ -91,6 +91,8 @@ export type {
   BillingEmailMode,
   BillingEmailRecipients,
 } from "./billing-document-read.js";
+export { billingProductPrice } from "./billing-product-price.js";
+export type { BillingProductPrice } from "./billing-product-price.js";
 export {
   BILLING_DOCUMENT_STATUS_LABELS,
   BILLING_EMAIL_STATUS_LABELS,

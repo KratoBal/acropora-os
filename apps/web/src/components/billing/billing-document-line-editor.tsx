@@ -7,7 +7,7 @@ import {
   PilotInput,
   PilotSection,
 } from "@acropora/ui";
-import type { ProductListItem } from "@acropora/types";
+import { billingProductPrice, type ProductListItem } from "@acropora/types";
 import { useEffect, useState } from "react";
 
 import { productApi } from "@/lib/api/products";
@@ -18,6 +18,7 @@ import {
   grossInputMismatch,
   trimDecimal,
   withGrossInput,
+  withProductPrice,
   type BillingPreview,
   type EditorLine,
 } from "./billing-editor-state";
@@ -39,8 +40,11 @@ type LineField =
  * közvetlenül a tétel alatt (Balázs döntése, 2026-09-30). A szerkesztő ezt a
  * sort meg is mutatja, ugyanazzal az összeggel, amit a szerver tárolni fog.
  *
- * A TERMÉK-SOR EGYSÉGÁRA ÜRESEN INDUL: a termék-lista csak bruttó bolti árat
- * ad, és abból a nettó egységár egy ÁFA-kulcs kitalálása lenne.
+ * A TERMÉK-SOR ÁRA A TERMÉKBŐL JÖN (Balázs a stage-en, 2026-09-30): a
+ * választás után a szerkesztő lekéri a termék részleteit, és a gazda szerinti
+ * árat írja be (`billingProductPrice`, `withProductPrice`). Ár nélkül az
+ * egységár üres marad, és a sor alatt kiírja, mi hiányzik. Kézzel utána is
+ * átírható.
  */
 export function BillingDocumentLineEditor({
   token,
@@ -48,6 +52,7 @@ export function BillingDocumentLineEditor({
   amounts,
   currency,
   onChange,
+  onLineUpdate,
   disabled,
 }: {
   token: string;
@@ -59,6 +64,12 @@ export function BillingDocumentLineEditor({
   amounts: BillingPreview["lines"] | null;
   currency: string;
   onChange: (lines: EditorLine[]) => void;
+  /**
+   * EGY SOR FRISSÍTÉSE A LEGFRISSEBB ÁLLAPOTON. Az aszinkron termék-ár ezt
+   * használja: a `lines` a lekérés indulásakor készült pillanatkép, és rá írva
+   * a közben gépelt változásokat eldobná.
+   */
+  onLineUpdate: (key: string, update: (line: EditorLine) => EditorLine) => void;
   disabled?: boolean;
 }) {
   const [productSearch, setProductSearch] = useState<string | null>(null);
@@ -67,7 +78,8 @@ export function BillingDocumentLineEditor({
     onChange(
       lines.map((line) => {
         if (line.key !== key) return line;
-        const next = { ...line, [field]: value };
+        const next: EditorLine = { ...line, [field]: value };
+        if (field === "unitNet") delete next.priceNote;
         // ami a bruttót meghatározza, az a beírt bruttót elengedi
         if (
           field === "quantity" ||
@@ -80,25 +92,52 @@ export function BillingDocumentLineEditor({
     );
   const updateGross = (key: string, value: string) =>
     onChange(
-      lines.map((line) =>
-        line.key === key ? withGrossInput(line, value, currency) : line,
-      ),
+      lines.map((line) => {
+        if (line.key !== key) return line;
+        const next = withGrossInput(line, value, currency);
+        delete next.priceNote;
+        return next;
+      }),
     );
   const remove = (key: string) =>
     onChange(lines.filter((line) => line.key !== key));
   const addCustom = () => onChange([...lines, emptyLine()]);
   const addProduct = (product: ProductListItem) => {
-    onChange([
-      ...lines,
-      emptyLine({
-        productId: product.id,
-        productLabel: product.primarySku
-          ? `${product.primarySku} · termék`
-          : "termék",
-        description: product.name,
-      }),
-    ]);
+    const line = emptyLine({
+      productId: product.id,
+      productLabel: product.primarySku
+        ? `${product.primarySku} · termék`
+        : "termék",
+      description: product.name,
+    });
+    onChange([...lines, line]);
     setProductSearch(null);
+    productApi
+      .detail(token, product.id)
+      .then((detail) =>
+        onLineUpdate(line.key, (current) =>
+          withProductPrice(
+            current,
+            billingProductPrice(detail, currency),
+            currency,
+          ),
+        ),
+      )
+      .catch((cause: unknown) =>
+        onLineUpdate(line.key, (current) =>
+          withProductPrice(
+            current,
+            {
+              kind: "NONE",
+              reason:
+                cause instanceof Error && cause.message
+                  ? `A termék ára nem tölthető be: ${cause.message}`
+                  : "A termék ára nem tölthető be.",
+            },
+            currency,
+          ),
+        ),
+      );
   };
 
   return (
@@ -238,6 +277,18 @@ export function BillingDocumentLineEditor({
                       </button>
                     </td>
                   </tr>
+                  {line.priceNote ? (
+                    <tr>
+                      <td
+                        className="px-3 pb-2 pl-6 text-xs text-pilot-grey-600"
+                        colSpan={8}
+                      >
+                        <span role="status">
+                          Az egységár nem töltődött ki: {line.priceNote}
+                        </span>
+                      </td>
+                    </tr>
+                  ) : null}
                   {mismatch ? (
                     <tr>
                       <td

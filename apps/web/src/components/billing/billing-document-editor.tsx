@@ -335,6 +335,18 @@ export function BillingDocumentEditor({
             amounts={preview?.lines ?? null}
             currency={state.currency}
             onChange={(lines) => change({ lines })}
+            onLineUpdate={(key, update) =>
+              setState((current) =>
+                current
+                  ? {
+                      ...current,
+                      lines: current.lines.map((line) =>
+                        line.key === key ? update(line) : line,
+                      ),
+                    }
+                  : current,
+              )
+            }
             disabled={!editable}
           />
         </div>
