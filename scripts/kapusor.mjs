@@ -31,8 +31,41 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 
 const NEM_LETEZO = "<NONEXISTENT>";
+
+/**
+ * A TYPECHECK ELOTT A NEXT-APPOK GENERALT `.next/types` MAPPAJA TORLODIK.
+ *
+ * Merve 2026-09-30: a Next-appok `tsconfig`-ja bevonja a `.next/types/**` fajlokat,
+ * amiket csak a `next build` general. Ha egy agvaltas oldalt mozgat vagy torol,
+ * a regi `validator.ts` nem letezo oldalra mutat (TS2307), es mivel ez a sor a
+ * typecheck-et a build ELOTT futtatja, a typecheck bukik -- a build-lepes pedig
+ * utana csendben kijavitja. Kontroll: friss build utan egy #1277 elotti agra
+ * valtva a web typecheck `exit 2`, visszavaltva `exit 0`.
+ *
+ * A torles azt a tiszta kicsekkolast allitja elo, amin a CI is fut. Hogy a
+ * typecheck a generalt fajlok NELKUL is lefut, azt az
+ * `apps/api/src/common/next-typecheck-gate.spec.ts` orzi (GLOB a hivatkozas, a
+ * `skipLibCheck` sehol sincs kikapcsolva); ha az piros, ez a torles is
+ * typecheck-hibat fog okozni, es ott van a javitas helye, nem itt.
+ */
+function generaltNextTipusokTorlese() {
+  const appsDir = join(process.cwd(), "apps");
+  for (const app of readdirSync(appsDir, { withFileTypes: true })) {
+    if (!app.isDirectory()) continue;
+    const nextApp = ["ts", "js", "mjs", "cjs"].some((v) =>
+      existsSync(join(appsDir, app.name, `next.config.${v}`)),
+    );
+    const tipusok = join(appsDir, app.name, ".next", "types");
+    if (nextApp && existsSync(tipusok)) {
+      rmSync(tipusok, { recursive: true, force: true });
+      console.log(`             torolve: apps/${app.name}/.next/types`);
+    }
+  }
+}
 
 /** A turbo sajat szamitasa arrol, hany feladat fut VALOJABAN. */
 function vartFeladatszam(feladat) {
@@ -75,6 +108,7 @@ const KAPUK = [
     nev: "typecheck",
     parancs: ["pnpm", "turbo", "run", "typecheck", "--force"],
     turbo: "typecheck",
+    elotte: generaltNextTipusokTorlese,
   },
   {
     nev: "test",
@@ -91,6 +125,7 @@ const KAPUK = [
 let bukott = false;
 
 for (const kapu of KAPUK) {
+  kapu.elotte?.();
   const vart = kapu.turbo ? vartFeladatszam(kapu.turbo) : null;
   const { kod, kimenet } = futtat(
     kapu.nev,
