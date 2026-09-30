@@ -61,6 +61,35 @@ function pageRange(pagination: PurchaseInvoiceListResponse["pagination"]) {
   return `${from.toLocaleString("hu-HU")}–${to.toLocaleString("hu-HU")} / ${total.toLocaleString("hu-HU")}`;
 }
 
+/**
+ * AZ OLDAL URL-JÉBŐL A LISTA-KÉRÉS, CSAK AZ ISMERT MEZŐKKEL.
+ *
+ * Mérve a stage-en (2026-09-30, acrobot): a lap az URL minden paraméterét
+ * továbbadta az API-nak, és a kézzel írt `/beszerzes?q=hertlein` 400-at
+ * kapott ("property q should not exist"). Egy régi könyvjelző vagy egy
+ * idegen paraméter így az egész listát eltörte. A `q` a keresés másik neve
+ * (a Termékek listája azt használja), a `search` az elsődleges.
+ */
+export function purchaseInvoiceListQuery(
+  params: URLSearchParams,
+): URLSearchParams {
+  const query = new URLSearchParams();
+  query.set("page", params.get("page") || "1");
+  query.set("pageSize", params.get("pageSize") || "25");
+  const search = params.get("search") || params.get("q");
+  if (search) query.set("search", search);
+  for (const name of ["supplierId", "source", "payment"]) {
+    const value = params.get(name);
+    if (value) query.set(name, value);
+  }
+  return query;
+}
+
+/** A keresőmező értéke az URL-ből: a `search`, vagy a `q`. */
+function searchFromUrl(params: URLSearchParams): string {
+  return params.get("search") ?? params.get("q") ?? "";
+}
+
 export function PurchaseInvoiceListPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -69,7 +98,7 @@ export function PurchaseInvoiceListPage() {
   const [data, setData] = useState<PurchaseInvoiceListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState(params.get("search") ?? "");
+  const [search, setSearch] = useState(searchFromUrl(params));
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_VIEW),
   );
@@ -77,12 +106,7 @@ export function PurchaseInvoiceListPage() {
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_MANAGE),
   );
   const token = session?.token ?? "";
-  const query = useMemo(() => {
-    const q = new URLSearchParams(params.toString());
-    if (!q.has("page")) q.set("page", "1");
-    if (!q.has("pageSize")) q.set("pageSize", "25");
-    return q;
-  }, [params]);
+  const query = useMemo(() => purchaseInvoiceListQuery(params), [params]);
   const load = useCallback(
     async (signal?: AbortSignal) => {
       if (!canView) return;
@@ -110,8 +134,9 @@ export function PurchaseInvoiceListPage() {
   }, [load]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      if (search === (params.get("search") ?? "")) return;
+      if (search === searchFromUrl(params)) return;
       const next = new URLSearchParams(params.toString());
+      next.delete("q");
       search ? next.set("search", search) : next.delete("search");
       next.set("page", "1");
       router.replace(`${pathname}?${next}`);
@@ -141,13 +166,13 @@ export function PurchaseInvoiceListPage() {
   const clearFilters = () => {
     setSearch("");
     const next = new URLSearchParams(params.toString());
-    for (const name of ["search", "source", "payment"]) next.delete(name);
+    for (const name of ["search", "q", "source", "payment"]) next.delete(name);
     next.set("page", "1");
     router.replace(`${pathname}?${next}`);
   };
   const source = params.get("source") ?? "";
   const payment = params.get("payment") ?? "";
-  const hasFilters = Boolean(params.get("search") || source || payment);
+  const hasFilters = Boolean(searchFromUrl(params) || source || payment);
   const tabs = PURCHASING_TABS.filter((tab) => {
     const entry = allNavigationPages.find((page) => page.href === tab.href);
     return Boolean(
