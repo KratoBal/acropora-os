@@ -28,6 +28,67 @@ const navGross = (net: Prisma.Decimal | null, vat: Prisma.Decimal | null) =>
   net === null ? null : net.plus(vat ?? 0);
 
 /**
+ * AZ ELSZÁMOLÓ PARTNEREK ADÓSZÁMA, hogy az elszámolás-sor a NAV-sorral egy
+ * számlává vonódjon össze. Mérve 2026-09-30 a NAV bejövő exportján (Foxpost
+ * 40 sor, GLS 18 sor) és egy augusztusi GLS e-számla XML-jén.
+ */
+const FOXPOST_TAX_BASE = "32435119";
+const GLS_TAX_BASE = "12369410";
+
+/** Egy számla azonossága: a száma, és a szállító adószám-törzse, vagy a neve. */
+function invoiceKey(
+  number: string,
+  taxNumber: string | null | undefined,
+  supplierName: string,
+): string {
+  const who = taxBase(taxNumber) || supplierName.trim().toLowerCase();
+  return `${number.replace(/\s/g, "").toLowerCase()}|${who}`;
+}
+
+/**
+ * UGYANAZ A SZÁMLA TÖBB FORRÁSBÓL EGY JELÖLT (acrobot 25322). A NAV-sor az
+ * azonosság és az összeg, a postafiók PDF-je az eredeti. Összevonás nélkül egy
+ * számla két terhelést is vihetne: egyszer NAV-sorként, egyszer PDF-ként.
+ *
+ * A NAV adja a bruttót és a vevőt (definíció szerint a Kft), az eredeti a
+ * forrást, amit a felület mutat. Szám nélküli dokumentum nem vonható össze.
+ */
+export function mergeSameInvoice(
+  documents: readonly CandidateDocument[],
+  keys: ReadonlyMap<string, string>,
+): CandidateDocument[] {
+  const groups = new Map<string, CandidateDocument[]>();
+  const alone: CandidateDocument[] = [];
+  for (const document of documents) {
+    const key = keys.get(document.id);
+    if (!key || key.startsWith("|")) {
+      alone.push(document);
+      continue;
+    }
+    groups.set(key, [...(groups.get(key) ?? []), document]);
+  }
+  const merged = [...groups.values()].map((group) => {
+    if (group.length === 1) return group[0]!;
+    const nav = group.find((d) => d.source === "NAV");
+    const original = group.find((d) => d.hasOriginal);
+    const primary = nav ?? group[0]!;
+    return {
+      ...primary,
+      source: original?.source ?? primary.source,
+      gross:
+        primary.gross ?? group.find((d) => d.gross !== null)?.gross ?? null,
+      kind: group.some((d) => d.kind === "INVOICE")
+        ? ("INVOICE" as const)
+        : primary.kind,
+      payee: nav ? ("COMPANY" as const) : primary.payee,
+      hasOriginal: group.some((d) => d.hasOriginal),
+      supplierAccounts: [...new Set(group.flatMap((d) => d.supplierAccounts))],
+    };
+  });
+  return [...merged, ...alone];
+}
+
+/**
  * A HIÁNYZÓ SZÁMLÁK OLVASÓ OLDALA: a terhelések és a jelölt dokumentumok a
  * négy forrásból (NAV, postafiók, Foxpost, GLS).
  */
@@ -146,6 +207,7 @@ export class MissingInvoicesRepository {
     }
 
     const documents: CandidateDocument[] = [];
+    const keys = new Map<string, string>();
     for (const invoice of nav) {
       const parsed = invoice.parsedData as {
         supplierBankAccountNumber?: string;
@@ -165,7 +227,17 @@ export class MissingInvoicesRepository {
         kind: "INVOICE",
         // a NAV bejövő lekérdezés a vevő adószámára szűr: definíció szerint a Kft-é
         payee: "COMPANY",
+        // a NAV-adatsor nem eredeti számla (acrobot 25322)
+        hasOriginal: false,
       });
+      keys.set(
+        invoice.id,
+        invoiceKey(
+          invoice.navInvoiceNumber,
+          invoice.supplierTaxNumber,
+          invoice.supplierName,
+        ),
+      );
     }
     for (const document of mailbox) {
       const result =
@@ -192,7 +264,16 @@ export class MissingInvoicesRepository {
           accountsByTaxBase.get(taxBase(result.supplier.vatId)) ?? [],
         kind: document.kind === "PROFORMA" ? "PROFORMA" : "INVOICE",
         payee: (document.payeeCheck as Payee | null) ?? "UNKNOWN",
+        hasOriginal: true,
       });
+      keys.set(
+        document.id,
+        invoiceKey(
+          result.invoiceNumber ?? "",
+          result.supplier.vatId,
+          result.supplier.name ?? "",
+        ),
+      );
     }
     for (const settlement of foxpost)
       documents.push({
@@ -206,7 +287,14 @@ export class MissingInvoicesRepository {
         supplierAccounts: [],
         kind: "INVOICE",
         payee: "COMPANY",
+        // az elszámolás PDF-je maga a számla, és tárolva van
+        hasOriginal: true,
       });
+    for (const settlement of foxpost)
+      keys.set(
+        settlement.id,
+        invoiceKey(settlement.invoiceNumber ?? "", FOXPOST_TAX_BASE, "Foxpost"),
+      );
     for (const invoice of gls)
       documents.push({
         id: invoice.id,
@@ -219,8 +307,18 @@ export class MissingInvoicesRepository {
         supplierAccounts: [],
         kind: "INVOICE",
         payee: "COMPANY",
+        // NEM EREDETI, mérve egy augusztusi „GLS - Számla és Számlamelléklet”
+        // levélen: a számla maga az InvoiceDocument_*.xml (APEH e-számla, a mi
+        // adószámunkkal), a tárolt xlsx a részletezése. Az XML-t ma nem
+        // tároljuk, tehát a GLS-sor a NAV-on át párosodik, eredeti nélkül.
+        hasOriginal: false,
       });
-    return documents;
+    for (const invoice of gls)
+      keys.set(
+        invoice.id,
+        invoiceKey(invoice.invoiceNumber, GLS_TAX_BASE, "GLS"),
+      );
+    return mergeSameInvoice(documents, keys);
   }
 
   /** A még nem ellenőrzött postafiók-dokumentumok bájtjai, a vevő-ellenőrzéshez. */

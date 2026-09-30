@@ -71,6 +71,7 @@ const nav = (
   supplierAccounts: [],
   kind: "INVOICE",
   payee: "COMPANY",
+  hasOriginal: true,
 });
 
 describe("MissingInvoicesService.months", () => {
@@ -97,6 +98,7 @@ describe("MissingInvoicesService.months", () => {
         month: "2026-08",
         debitCount: 2,
         found: 1,
+        originalMissing: 0,
         notMatched: 0,
         noInvoice: 1,
         noInvoiceNeeded: 1,
@@ -105,6 +107,31 @@ describe("MissingInvoicesService.months", () => {
         missingStatementAccounts: [],
       },
     ]);
+  });
+
+  it("counts a known invoice without its original apart, as missing work but not as a missing amount", async () => {
+    const { missing } = service({
+      debits: [debit("2026-08-03", 1000, "Szállító Kft.")],
+      documents: [
+        { ...nav("2026-08-01", 1000, "Szállító Kft."), hasOriginal: false },
+      ],
+      coverage: [`${MAIN.id}:2026-08`, `${CARD.id}:2026-08`],
+    });
+    const [month] = (await missing.months()).months;
+    assert.deepEqual(
+      [
+        month?.found,
+        month?.originalMissing,
+        month?.status,
+        month?.missingAmountHuf,
+      ],
+      [0, 1, "INCOMPLETE", "0"],
+    );
+    const detail = await missing.month("2026-08", {});
+    assert.deepEqual(
+      detail.items.map((i) => i.state),
+      ["ORIGINAL_MISSING"],
+    );
   });
 
   it("tells a missing statement, a partial one, and a month ready for the accountant", async () => {

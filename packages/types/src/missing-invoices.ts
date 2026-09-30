@@ -23,6 +23,8 @@ export interface BankStatementImportResult {
 
 export const MISSING_INVOICE_ITEM_STATES = [
   "FOUND",
+  /** Párosítva, de csak NAV-adat van: az eredeti (PDF vagy papír) kell. */
+  "ORIGINAL_MISSING",
   "NOT_MATCHED",
   "NO_INVOICE",
   "NOT_COMPANY",
@@ -74,11 +76,16 @@ export interface MissingInvoiceMonth {
   /** Terhelések, a Nem kell számla nélkül. */
   debitCount: number;
   found: number;
+  /** Eredeti hiányzik: a számla ismert, az eredeti PDF vagy a papír kell. */
+  originalMissing: number;
   notMatched: number;
   /** Nincs számla + Nem a cégre szól + Csak díjbekérő. */
   noInvoice: number;
   noInvoiceNeeded: number;
-  /** A Nem párosodott és a Nincs számla sorok HUF-összege, tizedes szöveg. */
+  /**
+   * A Nem párosodott és a Nincs számla sorok HUF-összege, tizedes szöveg. Az
+   * Eredeti hiányzik NEM számít bele: ott a számla ismert, csak az eredeti kell.
+   */
   missingAmountHuf: string;
   status: MissingInvoiceMonthStatus;
   /** A bankszámlák neve, amelyekhez erre a hónapra nincs kivonat. */
@@ -127,6 +134,7 @@ export interface MissingInvoiceMonthDetail {
   }[];
   tiles: {
     found: number;
+    originalMissing: number;
     notMatched: number;
     noInvoice: number;
     noInvoiceNeeded: number;

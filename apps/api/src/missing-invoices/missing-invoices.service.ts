@@ -27,7 +27,9 @@ import {
 import { originalAmountOf } from "./otp-statement.parser.js";
 import { payeeFromText } from "./payee-check.js";
 
+/** A „Hiányzik” fül és a Hiányos hónap: minden, amihez teendő van. */
 const MISSING_STATES: ReadonlySet<ItemState> = new Set([
+  "ORIGINAL_MISSING",
   "NOT_MATCHED",
   "NO_INVOICE",
   "NOT_COMPANY",
@@ -94,11 +96,17 @@ export class MissingInvoicesService {
           debitCount: items.filter((i) => i.state !== "NO_INVOICE_NEEDED")
             .length,
           found: count("FOUND"),
+          originalMissing: count("ORIGINAL_MISSING"),
           notMatched: count("NOT_MATCHED"),
           noInvoice: count(NO_INVOICE_TILE),
           noInvoiceNeeded: count("NO_INVOICE_NEEDED"),
           missingAmountHuf: items
-            .filter((i) => MISSING_STATES.has(i.state) && i.currency === "HUF")
+            .filter(
+              (i) =>
+                MISSING_STATES.has(i.state) &&
+                i.state !== "ORIGINAL_MISSING" &&
+                i.currency === "HUF",
+            )
             .reduce((sum, i) => sum.plus(i.amount), new Prisma.Decimal(0))
             .toFixed(0),
           status: statusOf(
@@ -166,6 +174,7 @@ export class MissingInvoicesService {
       })),
       tiles: {
         found: count((s) => s === "FOUND"),
+        originalMissing: count((s) => s === "ORIGINAL_MISSING"),
         notMatched: count((s) => s === "NOT_MATCHED"),
         noInvoice: count((s) => NO_INVOICE_TILE.has(s)),
         noInvoiceNeeded: count((s) => s === "NO_INVOICE_NEEDED"),

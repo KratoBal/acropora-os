@@ -39,6 +39,7 @@ const doc = (overrides: Partial<CandidateDocument>): CandidateDocument => ({
   supplierAccounts: [],
   kind: "INVOICE",
   payee: "COMPANY",
+  hasOriginal: true,
   ...overrides,
 });
 
@@ -187,6 +188,14 @@ describe("matchMonth", () => {
       },
     );
     assert.deepEqual(states, ["PROFORMA_ONLY", "NOT_COMPANY", "NOT_MATCHED"]);
+  });
+
+  it("asks for the original when only the NAV data row is there", () => {
+    const d = debit({});
+    assert.equal(
+      run([d], [doc({ hasOriginal: false })]).get(d.id)?.state,
+      "ORIGINAL_MISSING",
+    );
   });
 
   it("tells no invoice from an unmatched one by whether the partner has documents", () => {

@@ -83,7 +83,7 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
     ]);
   });
 
-  it("finds the NAV invoice for the payment, and leaves the other one missing", async () => {
+  it("finds the NAV invoice for the payment but asks for its original, and leaves the other one missing", async () => {
     const month = await missing.month("2026-08", { tab: "ALL" });
     const mine = month.items.filter((item) =>
       item.account.name.startsWith(ACCOUNT),
@@ -95,7 +95,8 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
         item.document?.number ?? null,
       ]),
       [
-        [SUPPLIER, "FOUND", "HIANYZOTESZT-1"],
+        // a NAV-adatsor nem eredeti: a számla ismert, az eredeti kell
+        [SUPPLIER, "ORIGINAL_MISSING", "HIANYZOTESZT-1"],
         ["Ismeretlen Bt.", "NO_INVOICE", null],
       ],
     );

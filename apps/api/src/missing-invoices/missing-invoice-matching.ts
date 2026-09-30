@@ -43,6 +43,12 @@ export interface CandidateDocument {
   supplierAccounts: readonly string[];
   kind: "INVOICE" | "PROFORMA" | "PREMIUM_NOTICE";
   payee: Payee;
+  /**
+   * VAN-E EREDETI (Balázs, 2026-09-30 20:01 UTC, acrobot 25322): a könyvelőnek
+   * az eredeti számla kell. PDF (postafiók, feltöltés, Drive, elszámolás) vagy
+   * kézi „papíron megvan” jelölés. A NAV-adatsor nem eredeti.
+   */
+  hasOriginal: boolean;
 }
 
 export interface MatchableDebit {
@@ -60,6 +66,7 @@ export interface MatchableDebit {
 
 export type ItemState =
   | "FOUND"
+  | "ORIGINAL_MISSING"
   | "NOT_MATCHED"
   | "NO_INVOICE"
   | "NOT_COMPANY"
@@ -155,6 +162,8 @@ function stateOf(documents: CandidateDocument[]): ItemState {
   // a vevő nem ellenőrizhető: a brief szerint csak a Kft-re szóló számla
   // Megvan, tehát ez a drawerben kézzel jelölendő, addig Nem párosodott
   if (documents.some((d) => d.payee === "UNKNOWN")) return "NOT_MATCHED";
+  // párosítva, de csak NAV-adat van: tudjuk, melyik számla, az eredeti kell
+  if (documents.some((d) => !d.hasOriginal)) return "ORIGINAL_MISSING";
   return "FOUND";
 }
 
