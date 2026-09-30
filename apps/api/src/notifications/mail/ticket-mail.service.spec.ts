@@ -1193,10 +1193,16 @@ describe("minden esemeny minden meghirdetett valtozojat kitolti", () => {
   });
 
   it("a lista minden esemenyt lefed, ami ebben a szolgaltatasban kuld", () => {
-    // the aquarium event is sent by its own service, and tested there
+    // the aquarium and the billing events are sent by their own services,
+    // and tested there
     assert.deepEqual(
       MAIL_TEMPLATE_EVENTS.map((e) => e.id).filter(
-        (id) => id !== "AQUARIUM_MEASUREMENT_RESULT",
+        (id) =>
+          ![
+            "AQUARIUM_MEASUREMENT_RESULT",
+            "BILLING_DOCUMENT_MANUAL",
+            "BILLING_DOCUMENT_WEBSHOP_ORDER",
+          ].includes(id),
       ),
       [
         "WORKSHEET_SIGNED",

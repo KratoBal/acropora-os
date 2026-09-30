@@ -217,6 +217,42 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     name: "kuldo_neve",
     description: "A levelet kiküldő kolléga neve.",
   },
+  // A SZÁMLÁZÁSI BIZONYLAT LEVELÉNEK VÁLTOZÓI (2026-09-30). A nevük angol, mert
+  // a brief és a kiküldő fiók így vezette be őket; a kiküldés a régi, egy
+  // kapcsos zárójeles alakot is elfogadja.
+  {
+    name: "customer_name",
+    description: "A vevő neve, ahogy a kiállított bizonylaton áll.",
+  },
+  {
+    name: "document_number",
+    description: "A bizonylat száma, amit a Számlázz.hu adott.",
+  },
+  {
+    name: "invoice_number",
+    description:
+      "A számla száma. Csak számlánál és előlegszámlánál van értéke; díjbekérőnél a levél nem megy ki, ha a szöveg használja.",
+  },
+  {
+    name: "gross_total",
+    description:
+      "A fizetendő bruttó végösszeg a pénznemmel, például 12 985 Ft.",
+  },
+  {
+    name: "due_date",
+    description: "A fizetési határidő, például 2026. 10. 08.",
+  },
+  {
+    // nem `link` fajtájú: az a HTML-hivatkozásoké, a számla-levél sima szöveg
+    name: "document_link",
+    description:
+      "A bizonylat a Számlázz.hu vevői fiókjában. Üres, ha a Számlázz.hu nem adott ilyet.",
+  },
+  {
+    name: "order_number",
+    description:
+      "A bizonylat hivatkozása (például a vevő rendelésszáma). Ha a szöveg használja és nincs kitöltve, a levél nem megy ki.",
+  },
 ] as const;
 
 /** Egy levelezesi esemeny: a sablon kulcsa es az emberi neve. */
@@ -235,7 +271,24 @@ export interface MailTemplateEvent {
    * `aquarium-measurement-mail.service.spec.ts`).
    */
   readonly variables: readonly string[];
+  /**
+   * CSAK SIMA SZÖVEG: a levél formázás nélkül megy ki, ezért a szerkesztő ne
+   * kínáljon HTML-t, és a szerver sem fogad el formázott törzset (acrobot,
+   * 2026-09-30: egy csendben eldobott formázás rosszabb, mint ha nem is
+   * lehetne megadni).
+   */
+  readonly plainTextOnly?: boolean;
 }
+
+const BILLING_DOCUMENT_VARIABLES = [
+  "customer_name",
+  "document_number",
+  "invoice_number",
+  "gross_total",
+  "due_date",
+  "document_link",
+  "order_number",
+] as const;
 
 /**
  * A LEVELEZESI ESEMENYEK, EGY HELYEN.
@@ -334,6 +387,22 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "Akkor megy ki, amikor egy kolléga elküldi egy akvárium vagy tó vízmérésének eredményét az ügyfélnek, gombnyomásra.",
     variables: ["cimzett", "akvarium_neve", "kuldo_neve"],
   },
+  {
+    id: "BILLING_DOCUMENT_MANUAL",
+    name: "Számla kiküldése (kézi számlázás)",
+    description:
+      "A kiállított számla, díjbekérő vagy előlegszámla kiküldésének alapszövege. A kiküldő fiók ezzel nyílik meg, és küldés előtt átírható. A PDF csatolmányként megy. Sima szöveg, formázás nélkül.",
+    variables: BILLING_DOCUMENT_VARIABLES,
+    plainTextOnly: true,
+  },
+  {
+    id: "BILLING_DOCUMENT_WEBSHOP_ORDER",
+    name: "Számla kiküldése (webshopos rendelés)",
+    description:
+      "A webshop-rendeléshez automatikusan kiállított számla levele. Ma csak a sablon szerkeszthető: az automatikus számlázás és kiküldés még nem épült meg. Sima szöveg, formázás nélkül.",
+    variables: BILLING_DOCUMENT_VARIABLES,
+    plainTextOnly: true,
+  },
 ] as const;
 
 /**
@@ -350,6 +419,13 @@ export function mailTemplateEventVariables(
 }
 
 /** Ismert esemeny-e. A vegpont ES a felulet ezt kerdezi, nem sajat listat. */
+export function isPlainTextMailTemplateEvent(id: string): boolean {
+  return (
+    MAIL_TEMPLATE_EVENTS.find((esemeny) => esemeny.id === id)?.plainTextOnly ===
+    true
+  );
+}
+
 export function isMailTemplateEvent(id: string): boolean {
   return MAIL_TEMPLATE_EVENTS.some((esemeny) => esemeny.id === id);
 }

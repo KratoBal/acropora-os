@@ -37,6 +37,7 @@ const api = vi.hoisted(() => ({
   update: vi.fn(),
   detail: vi.fn(),
   issue: vi.fn(),
+  email: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -121,6 +122,7 @@ beforeEach(() => {
     .mockReset()
     .mockImplementation(async (_token, id, body) => detailFrom(body, id));
   api.issue.mockReset();
+  api.email.mockReset();
   customers.list.mockReset().mockResolvedValue({
     items: [
       {
@@ -378,9 +380,101 @@ describe("BillingDocumentEditor", () => {
         await screen.findByText("Kiállítva: AC-2026-000001"),
       ).toBeInTheDocument();
       expect(screen.getByText("Csak olvasható")).toBeInTheDocument();
+      // A PAPÍR SZÁMLA LEVELE NEM KÖTELEZŐ: a kiállítás nem küld magától.
+      expect(api.email).not.toHaveBeenCalled();
     });
 
-    it("an e-invoice waits for the sending, and says so", async () => {
+    /*
+      AZ E-SZÁMLA: KIÁLLÍTÁS ÉS KIKÜLDÉS EGY LÉPÉSBEN (acrobot 25291). MI
+      PIROSÍT: ha a kiküldés a kiállítás előtt menne, vagy nem a szerkesztett
+      levéllel; ha a küldés hibája a kiállítást is hibának mutatná (az már
+      megtörtént, és nem vonható vissza); ha címzett nélkül is indítható lenne.
+    */
+    async function readyEInvoice() {
+      api.issue.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        emailStatus: "PENDING",
+        documentNumber: "AC-2026-000002",
+      }));
+      render(<BillingDocumentEditor />);
+      await pickPartner();
+      addLine("Munkadíj", "1", "280000");
+    }
+    const confirmIssueAndSend = async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Kiállítás és kiküldés" }),
+      );
+      fireEvent.click(
+        within(await screen.findByRole("dialog")).getByRole("button", {
+          name: "Kiállítás és kiküldés",
+        }),
+      );
+    };
+
+    it("an e-invoice: issued first, then the edited letter goes out", async () => {
+      api.email.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        emailStatus: "SENT",
+        documentNumber: "AC-2026-000002",
+      }));
+      await readyEInvoice();
+      await confirmIssueAndSend();
+      await waitFor(() => expect(api.email).toHaveBeenCalledTimes(1));
+      expect(api.issue.mock.invocationCallOrder[0]!).toBeLessThan(
+        api.email.mock.invocationCallOrder[0]!,
+      );
+      const [, id, input] = api.email.mock.calls[0]!;
+      expect(id).toBe(api.create.mock.calls[0]![1].id);
+      expect(input).toMatchObject({
+        mode: "SEND",
+        to: ["szamlazas@partner.hu"],
+        cc: [],
+        bcc: [],
+      });
+      expect(input.requestId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(input.body).toContain("{document_number}");
+      expect(
+        await screen.findByText(
+          "Az értesítő levél elment: szamlazas@partner.hu.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Kiállítva: AC-2026-000002")).toBeInTheDocument();
+    });
+
+    it("issued but the letter failed: says both, and points to the details for the retry", async () => {
+      api.email.mockRejectedValue(new Error("A levélküldés ki van kapcsolva."));
+      await readyEInvoice();
+      await confirmIssueAndSend();
+      const warning = await screen.findByText(
+        "A bizonylat kiállítva, de a levél nem ment ki",
+      );
+      const box = warning.closest("[role=alert]")!;
+      expect(box).toHaveTextContent("A levélküldés ki van kapcsolva.");
+      expect(box).toHaveTextContent("A kiállítás ettől érvényes");
+      expect(
+        within(box as HTMLElement).getByRole("link", {
+          name: "Részletek és újrapróbálás",
+        }),
+      ).toHaveAttribute(
+        "href",
+        `/penzugy/szamlazas/${api.create.mock.calls[0]![1].id}`,
+      );
+      expect(screen.getByText("Kiállítva: AC-2026-000002")).toBeInTheDocument();
+      expect(screen.getByText("Csak olvasható")).toBeInTheDocument();
+    });
+
+    it("an e-invoice without a recipient cannot be issued, and says why", async () => {
+      customers.detail.mockResolvedValue({
+        id: "cust-1",
+        customerNumber: "V-1",
+        displayName: "Állatkert",
+        companyName: "Fővárosi Állat- és Növénykert",
+        email: null,
+        taxNumber: "12345678-2-42",
+        address: "1146 Budapest, Állatkerti krt. 6-12.",
+      });
       render(<BillingDocumentEditor />);
       await pickPartner();
       addLine("Munkadíj", "1", "280000");
@@ -388,7 +482,7 @@ describe("BillingDocumentEditor", () => {
         screen.getByRole("button", { name: "Kiállítás és kiküldés" }),
       ).toBeDisabled();
       expect(
-        screen.getByText(/a kiküldés bekötése után érhető el/),
+        screen.getByText(/Add meg a kiküldési e-mail címzettjét/),
       ).toBeInTheDocument();
     });
 
