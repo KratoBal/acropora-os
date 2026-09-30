@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { EMAIL_CTA_STYLE } from "@acropora/rich-text";
+
 import {
   base64Url,
   buildMimeMessage,
@@ -526,6 +528,21 @@ describe("buildMimeMessage: HTML és szöveg együtt", () => {
           hiba.code === "MAIL_HTML_UNSANITIZED",
         html,
       );
+  });
+
+  it("az igazított gomb átmegy a tisztítottság-ellenőrzésen, és a levélben inline stílust kap", () => {
+    const toredek =
+      '<p data-cta="" data-align="center"><a href="https://os.acropora.hu/x">Megnyitás</a></p><h2 data-align="right">Cím</h2>';
+    const nyers = buildMimeMessage({ ...LEVEL, html: toredek }, FELADO);
+    assert.ok(nyers.includes(b64(mailHtmlDocument(toredek))));
+    const dok = mailHtmlDocument(toredek);
+    assert.ok(
+      dok.includes(
+        `<p style="text-align:center"><a href="https://os.acropora.hu/x" style="${EMAIL_CTA_STYLE}">Megnyitás</a></p>`,
+      ),
+    );
+    assert.ok(dok.includes('<h2 style="text-align:right">Cím</h2>'));
+    assert.doesNotMatch(dok, /data-(cta|align)/);
   });
 
   it("a keret betűtípust ad, és a töredéket változatlanul tartalmazza", () => {

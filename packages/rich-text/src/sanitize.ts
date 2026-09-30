@@ -24,6 +24,7 @@
 import { FilterXSS } from "xss";
 
 import {
+  RICH_TEXT_ALIGNMENTS,
   RICH_TEXT_ALLOWED_TAGS,
   RICH_TEXT_HREF_SCHEMES,
   RICH_TEXT_IMAGE_MAX_WIDTH,
@@ -104,11 +105,44 @@ function attrEscape(ertek: string): string {
     .replace(/>/g, "&gt;");
 }
 
+/**
+ * A TISZTITAS EREDMENYE, ES HOGY ELVETT-E VALAMIT.
+ *
+ * A szerkeszto HTML modjabol visszavaltaskor a felulet ezt kerdezi: ami a
+ * semaba nem fer, az elveszik, es ezt ki kell irni, nem csendben elnyelni. A
+ * lista NEM a kimenet es a bemenet osszevetesebol keszul (az attributumok
+ * sorrendje, az idezojel es a szokoz mindig kulonbseget adna), hanem abbol,
+ * amit a tisztito maga dobott el.
+ */
+export interface SanitizeRichHtmlReport {
+  readonly html: string;
+  /** Az eldobott elemek, pl. `table`, `p style`, `a href`; ismetles nelkul. */
+  readonly removed: readonly string[];
+}
+
 export function sanitizeRichHtml(
   html: string,
   options: SanitizeRichHtmlOptions = {},
 ): string {
+  return sanitizeRichHtmlReport(html, options).html;
+}
+
+export function sanitizeRichHtmlReport(
+  html: string,
+  options: SanitizeRichHtmlOptions = {},
+): SanitizeRichHtmlReport {
   const helyorzok = new Set(options.hrefPlaceholders ?? []);
+  const eldobott = new Set<string>();
+  /*
+    A `script` es a `style` TARTALMAVAL EGYUTT megy, es azt a js-xss sajat
+    agon kezeli: a lenti `onIgnoreTag` nem hallja. Ezert itt all kulon.
+  */
+  for (const m of html.matchAll(/<(script|style)[\s>/]/gi))
+    eldobott.add((m[1] as string).toLowerCase());
+  const elutasitott = (tag: string, name: string) => {
+    eldobott.add(`${tag} ${name}`);
+    return "";
+  };
   const szuro = new FilterXSS({
     whiteList: Object.fromEntries(
       Object.entries(RICH_TEXT_ALLOWED_TAGS).map(([tag, attrs]) => [
@@ -120,10 +154,26 @@ export function sanitizeRichHtml(
       AZ ISMERETLEN TAG ELTUNIK, A SZOVEGE MARAD. Kiveve a `script` es a
       `style`: azok TARTALMA sem szoveg, hanem kod, tehat egyutt mennek.
     */
-    stripIgnoreTag: true,
     stripIgnoreTagBody: ["script", "style"],
+    onIgnoreTag(tag, _html, { isClosing }) {
+      if (!isClosing) eldobott.add(tag.toLowerCase());
+      return "";
+    },
+    onIgnoreTagAttr(tag, name) {
+      eldobott.add(`${tag} ${name}`);
+      return "";
+    },
     allowCommentTag: false,
     onTagAttr(tag, name, value) {
+      /*
+        A js-xss EZT A NEM ENGEDETT ATTRIBUTUMRA IS MEGHIVJA, es amit itt
+        visszaadunk, az a feherlistat felulirja. Ezert elobb a tag sajat
+        listaja: ami nincs rajta, az a `undefined`-dal a kovetkezo lepesre
+        (`onIgnoreTagAttr`) megy, es ott esik ki.
+      */
+      const engedett: readonly string[] | undefined =
+        RICH_TEXT_ALLOWED_TAGS[tag as keyof typeof RICH_TEXT_ALLOWED_TAGS];
+      if (!engedett?.includes(name)) return undefined;
       /*
         AZ URES VISSZATERESI ERTEK AZ ATTRIBUTUMOT TELJESEN KIVESZI (mert). Egy
         `<a>` `href` nelkul sima szovegkent jelenik meg -- ez a helyes kimenet
@@ -131,15 +181,24 @@ export function sanitizeRichHtml(
       */
       if (tag === "a" && name === "href") {
         const cim = engedettHref(value, helyorzok);
-        return cim ? `href="${attrEscape(cim)}"` : "";
+        return cim ? `href="${attrEscape(cim)}"` : elutasitott(tag, name);
       }
+      if (name === "data-align") {
+        const igazitas = value.trim().toLowerCase();
+        if ((RICH_TEXT_ALIGNMENTS as readonly string[]).includes(igazitas))
+          return `data-align="${igazitas}"`;
+        // a bal az alapertelmezes: a jelolese nem veszteseg, csak folosleges
+        return igazitas === "left" ? "" : elutasitott(tag, name);
+      }
+      // a gomb jelolese ertek nelkuli: barmi allt benne, az alakja egy
+      if (name === "data-cta") return 'data-cta=""';
       if (tag === "span" && name === "data-variable")
         return RICH_TEXT_VARIABLE_NAME.test(value)
           ? `data-variable="${value}"`
-          : "";
+          : elutasitott(tag, name);
       if (tag === "img" && name === "src") {
         const src = engedettKep(value, options.allowCidImages === true);
-        return src ? `src="${attrEscape(src)}"` : "";
+        return src ? `src="${attrEscape(src)}"` : elutasitott(tag, name);
       }
       if (tag === "img" && name === "width") {
         /*
@@ -152,7 +211,7 @@ export function sanitizeRichHtml(
           : NaN;
         return szelesseg >= 1 && szelesseg <= RICH_TEXT_IMAGE_MAX_WIDTH
           ? `width="${szelesseg}"`
-          : "";
+          : elutasitott(tag, name);
       }
       if (tag === "img" && name === "alt") return `alt="${attrEscape(value)}"`;
       return undefined;
@@ -164,5 +223,11 @@ export function sanitizeRichHtml(
     jelenne meg. A kimenet a tisztito sajat, egyseges alakja, ezert eleg ra a
     minta.
   */
-  return szuro.process(html).replace(/<img(?![^>]*\ssrc=")[^>]*>/g, "");
+  const tiszta = szuro
+    .process(html)
+    .replace(/<img(?![^>]*\ssrc=")[^>]*>/g, () => {
+      eldobott.add("img");
+      return "";
+    });
+  return { html: tiszta, removed: [...eldobott] };
 }
