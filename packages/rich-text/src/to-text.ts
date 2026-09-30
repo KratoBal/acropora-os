@@ -53,6 +53,9 @@ interface Lista {
  *
  * A LINK: `szoveg (cim)`, kiveve ha a szoveg maga a cim. A sima szoveges
  * levelben a link-jeloles elveszne, a cim nem.
+ *
+ * A GOMB (`<p data-cta>`): `Felirat: cim`, sajat bekezdesben. A gomb a level
+ * fo teendoje, ezert a szoveges alakban sem zarojelben all, hanem mondatkent.
  */
 export function richHtmlToText(
   html: string,
@@ -63,6 +66,7 @@ export function richHtmlToText(
   let aktualis = "";
   const listak: Lista[] = [];
   const linkek: { cim: string | null; kezdet: number }[] = [];
+  let gombban = false;
 
   const lezar = () => {
     const sor = aktualis.replace(/[ \t]+\n/g, "\n").trim();
@@ -111,7 +115,8 @@ export function richHtmlToText(
       } else {
         const link = linkek.pop();
         const felirat = link ? aktualis.slice(link.kezdet).trim() : "";
-        if (link?.cim && link.cim !== felirat) aktualis += ` (${link.cim})`;
+        if (link?.cim && link.cim !== felirat)
+          aktualis += gombban ? `: ${link.cim}` : ` (${link.cim})`;
       }
       continue;
     }
@@ -146,6 +151,7 @@ export function richHtmlToText(
     */
     if (BLOKK.has(tag)) {
       if (listak.length === 0) lezar();
+      gombban = tag === "p" && !zaro && /\sdata-cta=""/.test(attrs ?? "");
       continue;
     }
     // strong, em, u, s, span: a szovegben nincs nyomuk.

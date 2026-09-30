@@ -5,7 +5,11 @@
  * (fejlec-injekcio, kodolas) egyseg-szinten merhetok. A Gmail-adapter ennyit
  * tesz hozza: elkuldi.
  */
-import { richImageIds, sanitizeRichHtml } from "@acropora/rich-text";
+import {
+  richHtmlForEmail,
+  richImageIds,
+  sanitizeRichHtml,
+} from "@acropora/rich-text";
 
 import { hasHeaderInjection } from "./mail-header.js";
 import type { OutgoingMail } from "./mail.port.js";
@@ -103,13 +107,17 @@ function hatarjel(): string {
  * INLINE STILUS, `<style>` BLOKK NELKUL: tobb levelezo a `<head>` stilusait
  * eldobja, az inline `style` attributumot megtartja. A keret csak betutipust
  * es sorkozt ad; minden mas a tartalome.
+ *
+ * AZ IGAZITAS ES A GOMB ITT KAP INLINE STILUST (`richHtmlForEmail`), a
+ * tisztitas-ellenorzes UTAN: a toredekben stilus nem allhat, tehat ami a
+ * kimeno levelben inline stilus, azt csak ez a lepes irhatta.
  */
 export function mailHtmlDocument(fragment: string): string {
   return [
     "<!DOCTYPE html>",
     '<html><head><meta charset="utf-8"></head>',
     '<body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1f2937;">',
-    fragment,
+    richHtmlForEmail(fragment),
     "</body></html>",
   ].join("\n");
 }

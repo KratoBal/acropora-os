@@ -16,7 +16,17 @@
  *   minden on*       esemeny-attributum: futtathato kod
  */
 export const RICH_TEXT_ALLOWED_TAGS = {
-  p: [],
+  /**
+   * AZ IGAZITAS ES A GOMB JELOLESE (EmailRichEditor, Balazs jovahagyasa
+   * 2026-09-30 21:26 UTC; a leiras: `agents/nautilus/megosztas/
+   * email-rich-editor-tarolt-html.md`). Szuk jeloles, nem `style`: a tarolt
+   * HTML-ben tovabbra sincs stilus, a kuldes forditja inline stilusra
+   * (`richHtmlForEmail`).
+   *
+   *   data-align   `center` vagy `right`; a bal az alapertelmezes, jeloles nelkul
+   *   data-cta     ures ertek; a bekezdes egyetlen linkje gombkent megy ki
+   */
+  p: ["data-align", "data-cta"],
   br: [],
   strong: [],
   em: [],
@@ -26,8 +36,8 @@ export const RICH_TEXT_ALLOWED_TAGS = {
   ul: [],
   ol: [],
   li: [],
-  h2: [],
-  h3: [],
+  h2: ["data-align"],
+  h3: ["data-align"],
   blockquote: [],
   hr: [],
   /**
@@ -51,6 +61,10 @@ export const RICH_TEXT_ALLOWED_TAGS = {
 } as const satisfies Readonly<Record<string, readonly string[]>>;
 
 export type RichTextTag = keyof typeof RICH_TEXT_ALLOWED_TAGS;
+
+/** Az igazitas jelolt ertekei. A `left` nincs koztuk: az a jeloletlen alap. */
+export const RICH_TEXT_ALIGNMENTS = ["center", "right"] as const;
+export type RichTextAlignment = (typeof RICH_TEXT_ALIGNMENTS)[number];
 
 /** A link cimenek engedett semai. Minden mas `href` kiesik. */
 export const RICH_TEXT_HREF_SCHEMES = ["http:", "https:", "mailto:"] as const;
