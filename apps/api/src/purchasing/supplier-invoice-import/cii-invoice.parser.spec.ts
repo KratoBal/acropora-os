@@ -207,6 +207,19 @@ describe("parseCiiInvoiceXml", () => {
     );
   });
 
+  // acrobot dontese (2026-09-30): a 326 reszszamla rendes szamla; a proforma
+  // (325) tovabbra is figyelmeztet. MI PIROSIT: ha a 326 megint figyelmeztet,
+  // vagy a 325 mar nem.
+  it("a partial invoice (326) is a normal invoice, a proforma (325) still warns", () => {
+    const warns = (typeCode: string) =>
+      parseCiiInvoiceXml(cii({ typeCode })).warnings.some((w) =>
+        w.includes("típuskódja"),
+      );
+    assert.equal(warns("380"), false);
+    assert.equal(warns("326"), false);
+    assert.equal(warns("325"), true);
+  });
+
   it("does not depend on the namespace prefixes", () => {
     const renamed = cii()
       .replaceAll("ram:", "x:")
