@@ -118,7 +118,6 @@ export {
   MAIL_TEMPLATE_EVENTS,
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
-  isPlainTextMailTemplateEvent,
   renderMailTemplate,
   renderMailTemplateHtml,
   splitTemplateVariables,
