@@ -113,12 +113,18 @@ describe(
       adapters: [
         { key: "aquarioom-teszt", senders: ["contact@aquarioom.com"] },
       ],
-      read: async (bytes: Uint8Array) => {
+      read: async (
+        bytes: Uint8Array,
+        options?: { allowProforma?: boolean },
+      ) => {
         const reading = readings.get(
           Buffer.from(bytes).toString().replace("%PDF ", ""),
         );
         if (!reading) throw new Error("unexpected bytes");
         if (reading instanceof SupplierInvoiceImportError) throw reading;
+        // as the real adapters do: a proforma only when asked for
+        if (reading.documentKind === "PROFORMA" && !options?.allowProforma)
+          throw new SupplierInvoiceImportError("PROFORMA");
         return reading;
       },
     } as unknown as SupplierInvoiceImportService;
