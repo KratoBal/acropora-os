@@ -94,6 +94,24 @@ export function listPriceSource(product: {
   return product.catalogAuthority === "ACROPORA" ? "unas_frozen" : "unas";
 }
 
+/** A category with as many ancestors as the query loaded. */
+interface CategoryNode {
+  name: string;
+  parent?: CategoryNode | null;
+}
+
+/** The names from the root down to the category, as far as loaded. */
+export function categoryPath(category: CategoryNode): string[] {
+  const path: string[] = [];
+  let node: CategoryNode | null | undefined = category;
+  // a cycle in the tree must not hang the list
+  while (node && path.length < 8) {
+    path.unshift(node.name);
+    node = node.parent;
+  }
+  return path;
+}
+
 export function toProductListItem(
   product: ProductWithRelations,
 ): ProductListItem {
@@ -123,6 +141,7 @@ export function toProductListItem(
           name: primaryCategory.category.name,
           isPrimary: true,
           sortOrder: primaryCategory.sortOrder,
+          path: categoryPath(primaryCategory.category),
         }
       : null,
     primarySku: primaryVariant?.unasBaseSku ?? primaryVariant?.sku ?? null,

@@ -49,7 +49,15 @@ const productListInclude = {
   brand: true,
   categories: {
     where: { isPrimary: true },
-    include: { category: true },
+    // the leaf and three ancestors: the list's image fallback reads the
+    // category group from the path (`categoryPath`)
+    include: {
+      category: {
+        include: {
+          parent: { include: { parent: { include: { parent: true } } } },
+        },
+      },
+    },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     take: 1,
   },

@@ -47,7 +47,7 @@ export interface PaginationProps extends HTMLAttributes<HTMLElement> {
    * maga sem ismeri ezt az esetet (a mintaadat kevés oldalt ad), ezért ez
    * a komponens sem talál ki ilyet.
    */
-  variant?: "prevNext" | "numberedGrey" | "numberedTeal";
+  variant?: "prevNext" | "numberedGrey" | "numberedTeal" | "directionF";
 }
 
 export function Pagination({
@@ -68,8 +68,12 @@ export function Pagination({
       className={cn(
         "flex items-center gap-1",
         position === "bottom"
-          ? "justify-center border-t border-dusk-200 px-5 py-4 sm:justify-end"
-          : "justify-end",
+          ? variant === "directionF"
+            ? "justify-end gap-2"
+            : "justify-center border-t border-dusk-200 px-5 py-4 sm:justify-end"
+          : variant === "directionF"
+            ? "justify-end gap-2"
+            : "justify-end",
         className,
       )}
       {...props}
@@ -95,6 +99,42 @@ export function Pagination({
           >
             Következő
           </Button>
+        </>
+      ) : null}
+
+      {/*
+        DIRECTION F (Termékek, 2026-09-30, Figma 273:33): ugyanaz a két gomb
+        és ugyanaz a felirat, mint a "prevNext"-nél, a pilot színekkel; a
+        "Következő" a lista alján primer gomb. Felül a számláló rövid
+        ("1. / 98"), alul teljes ("1. / 98 oldal"), ahogy a terv rajzolja.
+      */}
+      {variant === "directionF" ? (
+        <>
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+            className="inline-flex h-9 items-center rounded-md bg-white px-4 text-sm font-semibold text-pilot-grey-900 ring-1 ring-pilot-grey-200 transition-colors hover:bg-pilot-grey-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Előző
+          </button>
+          <span className="min-w-16 px-2 text-center text-sm text-pilot-grey-500">
+            {page}. / {safeTotal}
+            {position === "bottom" ? " oldal" : ""}
+          </span>
+          <button
+            type="button"
+            disabled={page >= safeTotal}
+            onClick={() => onPageChange(page + 1)}
+            className={cn(
+              "inline-flex h-9 items-center rounded-md px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+              position === "bottom"
+                ? "bg-pilot-aqua-600 text-white hover:bg-pilot-aqua-700"
+                : "bg-white text-pilot-grey-900 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50",
+            )}
+          >
+            Következő
+          </button>
         </>
       ) : null}
 

@@ -100,3 +100,19 @@ export {
   pilotBadgeVariantForTone,
   partnerStatusBadgeVariant,
 } from "./pilot-badge-tone";
+export {
+  PilotSection,
+  PilotDataGrid,
+  PilotDataItem,
+  PilotThumbnail,
+  PilotDataTable,
+  PilotPairedRows,
+  PilotPageHeader,
+} from "./pilot-os";
+export type { PilotTableColumn } from "./pilot-os";
+export {
+  brandMonogram,
+  categoryGroupIcon,
+  thumbnailFallback,
+} from "./entity-thumbnail-fallback";
+export type { ThumbnailFallback } from "./entity-thumbnail-fallback";

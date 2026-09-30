@@ -50,10 +50,10 @@ function NavigationGroup({
       <button
         type="button"
         className={[
-          "group flex h-10 w-full items-center gap-3 rounded-xl text-sm font-medium transition-colors",
+          "group flex h-10 w-full items-center gap-2.5 text-sm font-semibold transition-colors",
           level === 1 ? "px-2" : "px-3",
           active
-            ? "bg-pilot-aqua-50 text-pilot-aqua-800"
+            ? "bg-pilot-aqua-50 text-pilot-aqua-700"
             : "text-pilot-grey-600 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
         ].join(" ")}
         aria-expanded={open}
@@ -98,10 +98,10 @@ function NavigationItem({
       aria-current={active ? "page" : undefined}
       onClick={onChoose}
       className={[
-        "flex items-center gap-3 rounded-xl font-medium transition-colors",
+        "flex items-center gap-2.5 font-semibold transition-colors",
         nested ? "h-9 px-2 text-[13px]" : "h-10 px-3 text-sm",
         active
-          ? "bg-pilot-aqua-50 text-pilot-aqua-800"
+          ? "bg-pilot-aqua-50 text-pilot-aqua-700"
           : "text-pilot-grey-600 hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
       ].join(" ")}
     >
@@ -211,14 +211,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         ))}
       </div>
 
-      <p className="mb-2 mt-7 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-pilot-grey-500">
+      <p className="mb-2 mt-7 px-3 text-[11px] font-semibold uppercase leading-4 tracking-[0.05em] text-pilot-grey-500">
         Működés
       </p>
       <div className="space-y-1">{businessNavigation.map(renderEntry)}</div>
 
       {contentNavigation.filter(canAccess).length > 0 ? (
         <>
-          <p className="mb-2 mt-7 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-pilot-grey-500">
+          <p className="mb-2 mt-7 px-3 text-[11px] font-semibold uppercase leading-4 tracking-[0.05em] text-pilot-grey-500">
             Tartalom
           </p>
           <div className="space-y-1">
@@ -283,7 +283,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           : "fixed inset-y-0 left-0 z-30 hidden lg:flex",
       ].join(" ")}
     >
-      <a href="/" className="mb-8 px-2" aria-label="Acropora OS">
+      {/*
+        A DIRECTION F "OS" JELE A LOGÓ MELLETT (Figma 273:33, "OS Mark": Inter
+        12, aqua). A terv szöveges "acropora" feliratot rajzol Belleza betűvel;
+        az a betű az OS-ben nincs betöltve, ezért a meglévő logó marad
+        (ismert eltérés, a PR-ban megnevezve).
+      */}
+      <a
+        href="/"
+        className="mb-8 flex items-center gap-2 px-2"
+        aria-label="Acropora OS"
+      >
         {/* eslint-disable-next-line @next/next/no-img-element -- static SVG */}
         <img
           src="/acropora-logo.svg"
@@ -292,13 +302,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           height={40}
           className="h-10 w-auto"
         />
+        <span
+          aria-hidden="true"
+          className="text-xs font-normal leading-4 text-pilot-aqua-700"
+        >
+          OS
+        </span>
       </a>
       {navigation}
     </aside>
   );
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-screen bg-pilot-grey-50">
       {sidebar()}
 
       {mobileNavigationOpen ? (
@@ -336,7 +352,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
           </div>
 
-          <div className="mx-3 min-w-0 flex-1 lg:mx-auto lg:max-w-xl">
+          <div className="mx-3 min-w-0 flex-1 lg:mx-auto lg:max-w-[480px]">
             {session?.token ? <GlobalSearch token={session.token} /> : null}
           </div>
 

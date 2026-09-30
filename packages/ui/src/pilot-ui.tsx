@@ -61,15 +61,25 @@ export function PilotThemeRoot({
   children,
   className = "",
   fontClassName = "",
+  theme,
 }: {
   children?: ReactNode;
   className?: string;
   fontClassName?: string;
+  /**
+   * A MÓD RÖGZÍTÉSE, HA A TERVNEK CSAK EGY MÓDJA VAN. A Direction F OS
+   * oldalai (Termékek, 2026-09-30) csak világos értéket adnak a saját
+   * változóiknak (a meleg és a zöld család: egyik Figma-használat sem tesz
+   * rájuk sötét módot, acrobot mérte), ezért ott a lap világos marad a
+   * beállított sötét preferencia mellett is. Ismert eltérés, nem hiba.
+   * Megadás nélkül a beállítás dönt, ahogy eddig.
+   */
+  theme?: "light";
 }) {
   const { effectiveTheme } = useThemePreference();
   return (
     <div
-      data-theme={effectiveTheme}
+      data-theme={theme ?? effectiveTheme}
       className={`${fontClassName} ${className}`}
     >
       {children}
@@ -78,7 +88,7 @@ export function PilotThemeRoot({
 }
 
 export type PilotBadgeVariant =
-  "teal" | "grey" | "amber" | "blue" | "danger" | "default";
+  "teal" | "grey" | "amber" | "blue" | "danger" | "success" | "default";
 
 export function PilotBadge({
   children,
@@ -119,6 +129,13 @@ export function PilotBadge({
      * `figma-theme.css`.
      */
     danger: "bg-pilot-red-50 text-pilot-red-700 ring-1 ring-pilot-red-100",
+    /**
+     * SUCCESS -- A DIRECTION F "AKTÍV" JELVÉNYE (Figma 273:15/273:16): saját
+     * zöld, nem az aqua. Az aqua a Direction F-ben a primer művelet színe,
+     * egy állapot szemantikus színt kap (Balázs briefje, 2026-09-30, 7.
+     * pont). Keret nélkül, ahogy a terv rajzolja.
+     */
+    success: "bg-pilot-green-50 text-pilot-green-700",
     default: "bg-pilot-grey-100 text-pilot-grey-600 ring-1 ring-pilot-grey-200",
   };
   return (
@@ -362,6 +379,8 @@ export function PilotFormField({
 }
 
 export function PilotInput({
+  id,
+  leadingIcon,
   value,
   onChange,
   type = "text",
@@ -396,9 +415,14 @@ export function PilotInput({
    */
   min?: number | string;
   max?: number | string;
+  /** ADDITÍV (Direction F, 2026-09-30): egy külső `<label htmlFor>`-hoz. */
+  id?: string;
+  /** ADDITÍV: ikon a mező elején (a terv keresőmezője). */
+  leadingIcon?: ReactNode;
 }) {
-  return (
+  const input = (
     <input
+      id={id}
       type={type}
       placeholder={placeholder}
       value={value}
@@ -412,8 +436,17 @@ export function PilotInput({
       onChange={(event) => onChange?.(event.target.value)}
       className={`w-full rounded-md px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
         readOnly ? "bg-pilot-grey-50 text-pilot-grey-400" : "bg-white"
-      } ${className ?? ""}`}
+      } ${leadingIcon ? "pl-9" : ""} ${className ?? ""}`}
     />
+  );
+  if (!leadingIcon) return input;
+  return (
+    <div className="relative w-full">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-pilot-grey-500">
+        {leadingIcon}
+      </span>
+      {input}
+    </div>
   );
 }
 
@@ -423,23 +456,50 @@ export function PilotSelect({
   onChange,
   disabled,
   "aria-label": ariaLabel,
+  id,
+  className,
+  chevron = false,
 }: {
   children: ReactNode;
   value?: string;
   onChange?: (value: string) => void;
   disabled?: boolean;
   "aria-label"?: string;
+  /** ADDITÍV (Direction F, 2026-09-30): egy külső `<label htmlFor>`-hoz. */
+  id?: string;
+  /** ADDITÍV: méret a hívó sorához (pl. a lapméret-választó szélessége). */
+  className?: string;
+  /**
+   * ADDITÍV: a lenyíló nyíl. A régi hívók nélküle rajzolnak (`appearance-
+   * none` mellett a böngésző nyila sem látszik), és ez nem változik; a
+   * Direction F terv minden választóján nyíl áll.
+   */
+  chevron?: boolean;
 }) {
-  return (
+  const select = (
     <select
+      id={id}
       value={value}
       disabled={disabled}
       aria-label={ariaLabel}
       onChange={(event) => onChange?.(event.target.value)}
-      className="w-full cursor-pointer appearance-none rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400"
+      className={`w-full cursor-pointer appearance-none rounded-md bg-white px-3 py-1.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 disabled:cursor-not-allowed disabled:bg-pilot-grey-50 disabled:text-pilot-grey-400 ${
+        chevron ? "pr-9" : (className ?? "")
+      }`}
     >
       {children}
     </select>
+  );
+  if (!chevron) return select;
+  return (
+    <div className={`relative ${className ?? ""}`}>
+      {select}
+      <Icon
+        name="chevron-down"
+        size={16}
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-pilot-grey-500"
+      />
+    </div>
   );
 }
 

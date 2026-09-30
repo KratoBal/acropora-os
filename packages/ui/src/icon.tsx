@@ -19,9 +19,13 @@ export type IconName =
   | "download"
   | "droplet"
   | "file-text"
+  | "filter"
   | "finance"
+  | "fish"
+  | "food"
   | "info"
   | "key"
+  | "lightbulb"
   | "menu"
   | "package"
   | "pencil"
@@ -34,6 +38,7 @@ export type IconName =
   | "truck"
   | "users"
   | "warehouse"
+  | "waves"
   | "x";
 
 export interface IconProps extends SVGProps<SVGSVGElement> {
@@ -207,6 +212,40 @@ export function Icon({ className, name, size = 18, ...props }: IconProps) {
       )}
       {name === "menu" && <path d="M4 7h16M4 12h16M4 17h16" />}
       {name === "activity" && <path d="M3 12h4l2-7 4 14 2-7h6" />}
+      {/*
+        A TERMÉKLISTA KATEGÓRIA-TARTALÉKÁHOZ (Direction F, 2026-09-30): a kép
+        nélküli sor a kategóriacsoportja ikonját kapja. A rajzolat a Lucide
+        (ISC licenc) megfelelő ikonja, ugyanabban a 24-es, 1.8-as vonalú
+        stílusban, mint a fenti készlet.
+      */}
+      {name === "filter" && <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />}
+      {name === "fish" && (
+        <>
+          <path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z" />
+          <path d="M18 12v.5" />
+          <path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33" />
+        </>
+      )}
+      {name === "food" && (
+        <>
+          <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+          <path d="M7 2v20" />
+          <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
+        </>
+      )}
+      {name === "lightbulb" && (
+        <>
+          <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+          <path d="M9 18h6M10 22h4" />
+        </>
+      )}
+      {name === "waves" && (
+        <>
+          <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+          <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+          <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+        </>
+      )}
       {name === "download" && (
         <>
           <path d="M12 3v12" />

@@ -117,6 +117,35 @@
   --color-pilot-red-100: #fee2e2;
   --color-pilot-red-500: #ef4444;
   --color-pilot-red-700: #b91c1c;
+
+  /**
+   * A SIKERES ÁLLAPOT ZÖLDJE, A DIRECTION F TERVBŐL (Figma
+   * `ji64fTFss0jqm5Uifd0zhE`, változók 273:15 és 273:16: az "Aktív" jelvény
+   * háttere és szövege). NEM az aqua: az aqua a Direction F-ben a primer
+   * művelet és az aktív interakció színe (Balázs briefje, 7. pont), egy
+   * állapot pedig szemantikus színt kap. A `teal` jelvény ezért nem jó ide.
+   */
+  --color-pilot-green-50: #e5f3eb;
+  --color-pilot-green-700: #26664d;
+
+  /**
+   * A HERITAGE NARANCS, SZEMANTIKUS NÉVEN (Balázs briefje, 2026-09-30, 7.
+   * pont): a Direction F `accent/warm`, `accent/warm-soft` és
+   * `accent/warm-text` változói (297:313, 297:314, 297:315). Másodlagos
+   * márka-hangsúly: vékony kártya-sín, SKU, halvány meleg háttér a belső
+   * megjegyzésnél.
+   *
+   * A NARANCS NEM ÁLLAPOTSZÍN. Jelvénybe, figyelmeztetésbe, hibába nem
+   * kerül: arra a zöld, a sárga és a piros való.
+   *
+   * UGYANAZ A SZÍN, MINT A COMMERCE `--acr-color-heritage`-E (#d5782f,
+   * `acropora-commerce/apps/storefront/src/styles/acropora-tokens.css`),
+   * betűre egyezik. Két külön repó, közös csomag nélkül: az "egy forrás" itt
+   * az, hogy mindkettő ugyanarra a Figma-változóra (297:313) hivatkozik.
+   */
+  --color-pilot-accent-warm: #d5782f;
+  --color-pilot-accent-warm-soft: #fff4ea;
+  --color-pilot-accent-warm-text: #a2491a;
 }
 
 /**

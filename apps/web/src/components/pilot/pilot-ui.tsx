@@ -47,14 +47,18 @@ export type { PilotBadgeVariant };
 export function PilotThemeRoot({
   children,
   className = "",
+  theme,
 }: {
   children?: ReactNode;
   className?: string;
+  /** Lásd a megosztott komponens `theme` mezőjét: csak világos terv esetén. */
+  theme?: "light";
 }) {
   return (
     <SharedPilotThemeRoot
       className={className}
       fontClassName={pilotInter.className}
+      theme={theme}
     >
       {children}
     </SharedPilotThemeRoot>
