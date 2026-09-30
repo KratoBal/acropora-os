@@ -108,9 +108,11 @@ describe("navigation", () => {
    * és a költözéskor jogosan bukott el. Az új ötöt rögzít, a beköltözőkkel a
    * végén, tehát a meglévő három sorrendje nem mozdult.
    */
-  it("gathers purchasing, the NAV invoices, the Foxpost and GLS settlements and the stock pages under Pénzügy", () => {
+  it("gathers purchasing, the expected arrivals, the NAV invoices, the Foxpost and GLS settlements and the stock pages under Pénzügy", () => {
     expect(group("Pénzügy").children.map((item) => item.href)).toEqual([
       "/beszerzes",
+      // Várható beérkezések (Balázs, 2026-09-30): "a Beszerzés alatt"
+      "/beszerzes/varhato",
       "/beszerzes/nav-szamlak",
       "/penzugy/foxpost",
       "/penzugy/gls",
@@ -394,6 +396,7 @@ describe("navigation", () => {
     "/partnerek": "partners.view",
     "/partnerek/szerzodesek": "partners.manage",
     "/beszerzes": "purchasing.view",
+    "/beszerzes/varhato": "purchasing.view",
     "/beszerzes/nav-szamlak": "purchasing.view",
     "/penzugy/foxpost": "finance.view",
     "/penzugy/gls": "finance.view",

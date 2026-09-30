@@ -197,6 +197,13 @@ export const businessNavigation: AppNavigationEntry[] = [
         entryId: "purchasing",
       },
       {
+        // Várható beérkezések (Balázs, 2026-09-30): "a Beszerzés alatt".
+        href: "/beszerzes/varhato",
+        label: "Várható beérkezések",
+        icon: "truck",
+        entryId: "expected-arrivals",
+      },
+      {
         href: "/beszerzes/nav-szamlak",
         label: "NAV számla lekérés",
         icon: "download",
