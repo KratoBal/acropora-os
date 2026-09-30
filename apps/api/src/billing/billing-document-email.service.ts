@@ -31,6 +31,7 @@ import {
   MAIL_SENDER,
   type MailSender,
 } from "../notifications/mail/mail.port.js";
+import { richHtmlToText, sanitizeRichHtml } from "@acropora/rich-text";
 import {
   mailGate,
   mailModeOf,
@@ -43,6 +44,7 @@ import {
   billingEmailValues,
   MODE_LABEL,
   renderBillingEmail,
+  renderBillingEmailHtml,
 } from "./billing-document-email.js";
 import { BillingDocumentEmailRepository } from "./billing-document-email.repository.js";
 import { ISSUED_PDF } from "./billing-document-issue.service.js";
@@ -144,7 +146,12 @@ export class BillingDocumentEmailService {
       current.customer?.name ?? row.partnerName,
     );
     const subject = renderBillingEmail(input.subject, values);
-    const body = renderBillingEmail(input.body, values);
+    // A formázott törzs a jegy-levél mintáját követi (acrobot 25346): az
+    // értékek escape-elve kerülnek be, utána tisztítás, és a szöveges
+    // alternatíva a tisztított HTML-ből készül, nem a `body`-ból.
+    const body = input.bodyHtml?.trim()
+      ? renderBillingEmailHtml(input.bodyHtml, values)
+      : renderBillingEmail(input.body, values);
     if (!subject.ok || !body.ok) {
       const failed = [subject, body].filter((result) => !result.ok);
       const unknown = [
@@ -211,7 +218,12 @@ export class BillingDocumentEmailService {
       await this.sender.send({
         ...sentTo,
         subject: safeSubject,
-        text: body.text,
+        ...(input.bodyHtml?.trim()
+          ? (() => {
+              const html = sanitizeRichHtml(body.text);
+              return { html, text: richHtmlToText(html) };
+            })()
+          : { text: body.text }),
         attachments: [
           {
             filename: `${row.invoiceNumber ?? row.id}.pdf`,

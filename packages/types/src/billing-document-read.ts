@@ -182,6 +182,12 @@ export interface BillingDocumentEmailInput {
   bcc: string[];
   subject: string;
   body: string;
+  /**
+   * FORMÁZOTT TÖRZS (Balázs kérése a stage-en, 2026-09-30 20:26 UTC, acrobot
+   * 25346): ha megvan, a levél ebből megy, tisztított HTML-ként és belőle
+   * készült szöveges alternatívával; a `body` akkor nem számít.
+   */
+  bodyHtml?: string | null;
 }
 
 /**

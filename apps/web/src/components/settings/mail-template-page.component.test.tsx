@@ -566,77 +566,10 @@ describe("MailTemplatePage: az előnézet link-mintája", () => {
   });
 
   /*
-    A SIMA SZÖVEGES ESEMÉNY (a két számla-levél, nautilus #1293): a levél
-    formázás nélkül megy ki, és a szerver a formázott törzset 400-zal
-    utasítja el. MI PIROSÍT: ha itt formázó szerkesztő állna; ha a mentés
-    `bodyHtml`-t is küldene; ha a változó nem `{{név}}` alakban, nem a
-    kurzorhoz kerülne; ha az előnézet formázott fület kínálna.
+    A SIMA SZÖVEGES SZÁMLA-ESEMÉNY TESZTJEI KIKERÜLTEK (2026-09-30): Balázs a
+    stage-en HTML-szerkesztőt kért a számla-levélhez is, acrobot 25346 ezzel
+    felülírta a 25284-es „sima szöveg” döntést. A két számla-esemény már nem
+    `plainTextOnly`, tehát a sima szöveges ágnak nincs eseménye; az ág maga
+    murena felületi PR-jában megy ki.
   */
-  describe("sima szöveges esemény (számla-levél)", () => {
-    const SZAMLA = {
-      ...VALASZ,
-      id: "BILLING_DOCUMENT_MANUAL",
-      subject: "Acropora – {{document_number}}",
-      body: "Kedves {{customer_name}}!\nFizetendő: {{gross_total}}",
-      bodyHtml: null,
-      defaultTemplate: {
-        subject: "Acropora – {{document_number}}",
-        body: "Kedves {{customer_name}}!",
-      },
-      variables: [
-        { name: "customer_name", description: "A vevő neve." },
-        { name: "document_number", description: "A bizonylat száma." },
-        { name: "gross_total", description: "A bruttó végösszeg." },
-      ],
-    };
-    const szamlaEsemeny = async () => {
-      valaszal();
-      render(<MailTemplatePage />);
-      await waitFor(() => expect(screen.getByLabelText("Törzs")).toBeTruthy());
-      api.read.mockResolvedValue(SZAMLA);
-      fireEvent.change(screen.getByLabelText("Esemény"), {
-        target: { value: "BILLING_DOCUMENT_MANUAL" },
-      });
-      await waitFor(() =>
-        expect(
-          (screen.getByLabelText("Törzs") as HTMLTextAreaElement).value,
-        ).toBe("Kedves {{customer_name}}!\nFizetendő: {{gross_total}}"),
-      );
-    };
-
-    it("sima szövegmező áll, és kimondja, hogy formázás nem adható", async () => {
-      await szamlaEsemeny();
-      expect(screen.getByLabelText("Törzs").tagName).toBe("TEXTAREA");
-      expect(
-        screen.getByText(/sima szövegként megy ki: formázás és kép nem/),
-      ).toBeTruthy();
-      expect(screen.queryByRole("tab", { name: "Formázott" })).toBeNull();
-    });
-
-    it("a mentés bodyHtml nélkül megy", async () => {
-      await szamlaEsemeny();
-      api.save.mockResolvedValue({ ok: true });
-      fireEvent.change(screen.getByLabelText("Törzs"), {
-        target: { value: "Kedves {{customer_name}}! Új szöveg." },
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
-      await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-      expect(api.save.mock.calls[0]?.[1]).toBe("BILLING_DOCUMENT_MANUAL");
-      expect(api.save.mock.calls[0]?.[2]).toEqual({
-        subject: "Acropora – {{document_number}}",
-        body: "Kedves {{customer_name}}! Új szöveg.",
-      });
-    });
-
-    it("a változó {{név}} alakban a kurzorhoz kerül", async () => {
-      await szamlaEsemeny();
-      const mezo = screen.getByLabelText("Törzs") as HTMLTextAreaElement;
-      fireEvent.change(mezo, { target: { value: "Szám: . Köszönjük!" } });
-      mezo.setSelectionRange(6, 6);
-      fireEvent.click(
-        screen.getByRole("button", { name: /\{\{document_number\}\}/ }),
-      );
-      expect(mezo.value).toBe("Szám: {{document_number}}. Köszönjük!");
-    });
-  });
 });

@@ -35,9 +35,10 @@ describe("BillingDocumentEmailDraftService", () => {
     const { drafts, asked } = service({
       subject: "Számla: {{document_number}}",
       body: "Kedves {{customer_name}}!",
-      bodyHtml: null,
+      bodyHtml: "<p>Kedves {{customer_name}}!</p>",
     });
     const draft = await drafts.draft("doc-1");
+    assert.equal(draft.bodyHtml, "<p>Kedves {{customer_name}}!</p>");
     assert.deepEqual(asked, ["BILLING_DOCUMENT_MANUAL"]);
     assert.deepEqual(
       [draft.source, draft.subject, draft.body],
