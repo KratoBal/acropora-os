@@ -42,6 +42,25 @@ Egy várható beérkezés egy beszállítói RENDELÉS (`ExpectedArrival`).
   `POST /purchasing/expected-arrivals/sync`; az állapot: `GET` ugyanitt.
 - **Bevételezés itt nincs.** Az ember dolga marad.
 
+## Marine Aquatics (a negyedik PDF-illesztő)
+
+`adapters/marine-aquatics.pdf-adapter.ts`. Mérve 8 PDF-en, 7 levélből (2026-04..09,
+az info@ postafiókból, feladó: r.macek@marine-aquatics.eu). Mind a 8 figyelmeztetés
+nélkül olvasható, és a sorok összege egyezik a végösszeggel.
+
+- A számla és a proforma ugyanazt a rendelésszámot hordozza („Order No.: | 18260”),
+  ezért párosodnak.
+- Az előleg-elszámoló számla negatív sora („PRE-PAYMENT …”) fizetés, nem áru: kimarad.
+  A nettó végösszeg az áruké, nem a 0,00-s fizetendő.
+- A végösszeg egész euróra kerekített. Az 1 eurónál kisebb eltérés „Kerekítés” díjsor
+  lesz, a nagyobb figyelmeztetés marad.
+- A szállítási számlán üres a rendelésszám, ezért a saját számlaszáma a kulcs.
+- **Nyitott pont: a javított számla.** A 32600434-es számla kétszer jött (eredeti és
+  „UPDATED INVOICE”, 15 perc különbséggel), és a javított változatban eggyel több sor
+  áll. A mai szabály ugyanazt a fajtát ugyanazzal a számlaszámmal duplikátumnak veszi,
+  tehát a javított változat elveszne, és az eredeti maradna. Hogy mi legyen helyette,
+  az döntés, nem kód.
+
 ## A NAV-számlák behúzása időzítőre
 
 A kód már megvan (`nav-incoming-invoice.scheduler.ts`), és a
