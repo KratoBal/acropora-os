@@ -8,6 +8,7 @@ import {
   supplierInvoiceMailQuery,
   supplierInvoiceMailSenders,
   supplierInvoiceMailSwitch,
+  XML_INVOICE_SENDERS,
 } from "./supplier-invoice-mail.config.js";
 
 const key = (prefix: string) => ({
@@ -73,10 +74,15 @@ describe("the supplier invoice mail pull's settings", () => {
     );
   });
 
+  // CoralSands has no PDF adapter to name its sender: its invoice is the XML
+  it("names the XML e-invoice senders that have no adapter", () => {
+    assert.ok(XML_INVOICE_SENDERS.includes("info@coralsands.de"));
+  });
+
   it("builds the query from the senders, and none without a sender", () => {
     assert.equal(
       supplierInvoiceMailQuery(["a@x.hu", "b@y.hu"]),
-      "from:(a@x.hu OR b@y.hu) has:attachment filename:pdf newer_than:120d",
+      "from:(a@x.hu OR b@y.hu) has:attachment (filename:pdf OR filename:xml) newer_than:120d",
     );
     assert.equal(supplierInvoiceMailQuery([]), null);
   });
