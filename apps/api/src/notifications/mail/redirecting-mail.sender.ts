@@ -84,12 +84,25 @@ export class RedirectingMailSender implements MailSender {
 
     if (redirect.kind === "off") return this.inner.send(mail);
 
+    /*
+      A MASOLAT ES A REJTETT MASOLAT IS A VALODI CIMZETTEK KOZE TARTOZIK. A
+      `...mail` szetteritese oket IS tovabbvinne, es akkor a probalevel mellett
+      a valodi `cc` es `bcc` cimre is kimenne egy peldany. Ezert mindketto
+      KIFEJEZETTEN urul, es a cimuk jelolve kerul a targyba es a torzsbe.
+    */
+    const eredeti = [
+      ...mail.to,
+      ...(mail.cc ?? []).map((cim) => `cc: ${cim}`),
+      ...(mail.bcc ?? []).map((cim) => `bcc: ${cim}`),
+    ];
     this.logger.warn(
-      `A level ATIRANYITVA megy ki: ${mail.to.length} valodi cimzett helyett egy probacimre.`,
+      `A level ATIRANYITVA megy ki: ${eredeti.length} valodi cimzett helyett egy probacimre.`,
     );
     return this.inner.send({
       ...mail,
       to: [redirect.to],
+      cc: [],
+      bcc: [],
       /*
         A VALODI CIMZETT A TARGY ELEJEN, NEM CSAK A TORZSBEN.
 
@@ -99,8 +112,8 @@ export class RedirectingMailSender implements MailSender {
         konnyen atsiklik rajta), de aki csak a levellistat pergeti at, a
         targybol lassa, kinek ment volna.
       */
-      subject: `[eredeti: ${mail.to.join(", ")}] ${mail.subject}`,
-      text: `${redirectHeader(mail.to)}\n\n${mail.text}`,
+      subject: `[eredeti: ${eredeti.join(", ")}] ${mail.subject}`,
+      text: `${redirectHeader(eredeti)}\n\n${mail.text}`,
       /*
         A HTML TORZS ELE IS KERUL, NEM CSAK A SZOVEGES ELE. A levelezo a HTML
         alternativat mutatja; ha a blokk csak a `text`-ben allna, a probalevel
@@ -109,7 +122,7 @@ export class RedirectingMailSender implements MailSender {
       ...(mail.html === undefined
         ? {}
         : {
-            html: `<p>${escapeHtml(redirectHeader(mail.to)).replace(/\n/g, "<br>")}</p><hr>${mail.html}`,
+            html: `<p>${escapeHtml(redirectHeader(eredeti)).replace(/\n/g, "<br>")}</p><hr>${mail.html}`,
           }),
     });
   }

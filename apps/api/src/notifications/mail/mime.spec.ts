@@ -341,6 +341,47 @@ describe("buildMimeMessage: csatolmány és több címzett", () => {
 });
 
 /**
+ * MASOLAT ES REJTETT MASOLAT (a szamlazasi kikuldes, 2026-09-30). Ugyanaz a
+ * fejlec-vedelem all rajuk, mint a `To:`-ra, es ures listanal a fejlec sem
+ * jelenik meg, tehat a regi utak levele betűre valtozatlan.
+ */
+describe("buildMimeMessage: másolat és rejtett másolat", () => {
+  it("a Cc és a Bcc a fejlécben áll, vesszővel", () => {
+    const nyers = buildMimeMessage(
+      {
+        ...LEVEL,
+        cc: ["konyveles@partner.hu", "masik@partner.hu"],
+        bcc: ["archiv@acropora.hu"],
+      },
+      FELADO,
+    );
+    assert.match(nyers, /^Cc: konyveles@partner\.hu, masik@partner\.hu$/m);
+    assert.match(nyers, /^Bcc: archiv@acropora\.hu$/m);
+  });
+
+  it("üres másolat-listánál nincs Cc és Bcc fejléc, a levél betűre a régi", () => {
+    assert.equal(
+      buildMimeMessage({ ...LEVEL, cc: [], bcc: [] }, FELADO, "H", "A", "R"),
+      buildMimeMessage(LEVEL, FELADO, "H", "A", "R"),
+    );
+  });
+
+  it("sortörés a másolatban vagy a rejtett másolatban megállítja a levelet", () => {
+    for (const mezo of ["cc", "bcc"] as const)
+      assert.throws(
+        () =>
+          buildMimeMessage(
+            { ...LEVEL, [mezo]: [`rossz@partner.hu${LF}Bcc: x@y.hu`] },
+            FELADO,
+          ),
+        (hiba: unknown) =>
+          hiba instanceof MailBuildError &&
+          hiba.code === "MAIL_HEADER_INJECTION_CC",
+      );
+  });
+});
+
+/**
  * A FORMAZOTT LEVEL SZERKEZETE (2026-09-26, Balazs kerese).
  *
  * A HATARJELEK ROGZITETTEK, tehat a TELJES kimenet karakterre allithato -- ugyanaz
