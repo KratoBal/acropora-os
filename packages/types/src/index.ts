@@ -52,6 +52,24 @@ export type {
   BillingSourceType,
   InvoiceFormat,
 } from "./billing-document.js";
+export { computeBillingDocumentAmounts } from "./billing-document-amounts.js";
+export type {
+  BillingAmountError,
+  BillingAmounts,
+  BillingAmountsResult,
+  BillingDocumentAmounts,
+  BillingLineAmounts,
+  BillingLineInput,
+  BillingVatRateTotal,
+  DecimalText,
+} from "./billing-document-amounts.js";
+export type {
+  BillingDocumentCustomer,
+  BillingDocumentDetail,
+  BillingDocumentDraftInput,
+  BillingDocumentLine,
+  BillingDocumentLineInput,
+} from "./billing-document-draft.js";
 export {
   SZAMLAZZ_AMOUNT_RULE,
   szamlazzDocumentTotals,
