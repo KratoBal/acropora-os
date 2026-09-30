@@ -49,6 +49,7 @@ const ASSET_STATUSES = [
   "WARM_STANDBY",
   "COLD_STANDBY",
   "IN_REPAIR",
+  "OUT_OF_SERVICE",
   "RETIRED",
 ] as const;
 const ASSET_CRITICALITIES = ["LOW", "NORMAL", "HIGH", "CRITICAL"] as const;

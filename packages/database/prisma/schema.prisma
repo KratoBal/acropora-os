@@ -499,6 +499,7 @@ enum AssetStatus {
   WARM_STANDBY
   COLD_STANDBY
   IN_REPAIR
+  OUT_OF_SERVICE
   RETIRED
 }
 

@@ -506,6 +506,7 @@ const ZERO_PER_STATUS: Record<AssetStatus, 0> = {
   WARM_STANDBY: 0,
   COLD_STANDBY: 0,
   IN_REPAIR: 0,
+  OUT_OF_SERVICE: 0,
   RETIRED: 0,
 };
 

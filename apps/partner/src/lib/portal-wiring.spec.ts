@@ -457,6 +457,18 @@ describe("a partner eszköz-adatlapja és szűrői", () => {
    * szótárból oldódik fel most -- ugyanaz a szótár, amit a belső felület is
    * használ.
    */
+  /*
+    AZ "UZEMEN KIVUL" A PORTALON IS SAJAT FULET KAP (Balazs kerese,
+    2026-09-30: "Ezt lássuk mi és az ügyfél is"). A cimke es a szin a kozos
+    szotarbol jon, a ful-lista viszont itt kezzel irt, tehat kulon kell merni.
+  */
+  it("a lista Üzemen kívül fület kínál, a Javítás alatt után", () => {
+    assert.match(
+      kod(ESZKOZ_LISTA),
+      /key: "IN_REPAIR", label: "Javítás alatt" \},\s*\{ key: "OUT_OF_SERVICE", label: "Üzemen kívül" \}/,
+    );
+  });
+
   it("a lista magyar státusz-cimkét mutat, nem a nyers enumot", () => {
     assert.match(olvas(ESZKOZ_LISTA), /assetStatusLabel\[asset\.status\]/);
     assert.doesNotMatch(kod(ESZKOZ_LISTA), /\{asset\.status\}/);

@@ -84,6 +84,11 @@ describe("az eszköz-lista rendezése", () => {
     //
     // Beturendben a `COLD` elozne meg a `WARM`-ot, tehat a lista elejere a
     // KEVESBE elerheto eszkoz kerulne -- pontosan az, amit ez a rendezes kerul.
+    //
+    // ES MEGINT, 2026-09-30: az `OUT_OF_SERVICE` visszajott (Balazs kerese, mas
+    // jelentessel). A HELYE a `IN_REPAIR` utan, a `RETIRED` elott: a javitas
+    // alatti eszkoz VARHATOAN visszaall, az uzemen kivuli meg fel nem vett
+    // teendo, tehat kevesbe elerheto -- a sor csokkeno maradt.
     const sema = readFileSync(SEMA, "utf8");
     const blokk = /enum AssetStatus \{([^}]*)\}/.exec(sema);
     assert.ok(blokk, "nem találtam az AssetStatus enumot a sémában");
@@ -92,7 +97,14 @@ describe("az eszköz-lista rendezése", () => {
         .split("\n")
         .map((sor) => sor.trim())
         .filter(Boolean),
-      ["ACTIVE", "WARM_STANDBY", "COLD_STANDBY", "IN_REPAIR", "RETIRED"],
+      [
+        "ACTIVE",
+        "WARM_STANDBY",
+        "COLD_STANDBY",
+        "IN_REPAIR",
+        "OUT_OF_SERVICE",
+        "RETIRED",
+      ],
       "az állapotok sorrendje a sémában adja a lista sorrendjét, és megváltozott",
     );
   });

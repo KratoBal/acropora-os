@@ -21,11 +21,11 @@ import type { PilotBadgeVariant } from "@/components/pilot/pilot-ui";
  * A pilot rétegnek csak négy színcsaládja van (aqua/grey/amber/blue), az
  * `assetStatusTone` viszont egy TÁGABB, megosztott `ServiceTone` uniót
  * használ (a `red`/`purple` más entitásokon -- pl. munkalap -- fordul elő).
- * `AssetStatus` MA egyik státusza sem térképeződik `red`-re vagy
- * `purple`-re (lásd `assetStatusTone` a `packages/types`-ban), ezért ez a
- * két ág gyakorlatban nem fut le -- ha egy JÖVŐBELI állapot mégis ide
- * kerülne, a `default` (szürke) a biztonságos, nem-riasztó visszaesés,
- * amíg valaki nem dönt egy valódi pilot-red/pilot-purple tokenről.
+ * A `red` 2026-09-30 óta VALÓDI ág: az `OUT_OF_SERVICE` („Üzemen kívül")
+ * piros. A pilot-red token azóta létezik (`danger`, a munkalap `REJECTED`
+ * állapota is ezt kapja), és a partner-portál `pilotBadgeVariantForTone`-ja
+ * is `danger`-re képezi a pirosat -- a két felület így ugyanazt mutatja. A
+ * `purple` ma sem fordul elő eszköz-állapoton, a `default` marad.
  */
 const TONE_TO_PILOT_VARIANT: Record<
   "neutral" | "purple" | "green" | "amber" | "red" | "blue",
@@ -35,7 +35,7 @@ const TONE_TO_PILOT_VARIANT: Record<
   amber: "amber",
   blue: "blue",
   neutral: "grey",
-  red: "default",
+  red: "danger",
   purple: "default",
 };
 

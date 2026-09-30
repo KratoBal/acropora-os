@@ -98,6 +98,7 @@ function response(page: number): AssetListResponse {
       WARM_STANDBY: 4,
       COLD_STANDBY: 2,
       IN_REPAIR: 12,
+      OUT_OF_SERVICE: 0,
       RETIRED: 3,
     },
   };
