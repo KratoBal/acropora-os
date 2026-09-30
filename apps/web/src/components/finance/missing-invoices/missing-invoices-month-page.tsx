@@ -1,6 +1,10 @@
 "use client";
 
-import { hasPermission, PERMISSIONS } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  type BankStatementImportResult,
+} from "@acropora/types";
 import { Icon } from "@acropora/ui";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,6 +19,7 @@ import {
   useUrlQuery,
 } from "@/lib/navigation/use-url-query";
 
+import { MissingInvoicesImportResult } from "./missing-invoices-import-result";
 import {
   MissingInvoicesDrawer,
   type ChargeDetailExtras,
@@ -83,6 +88,9 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const statementInput = useRef<HTMLInputElement>(null);
+  const [imported, setImported] = useState<BankStatementImportResult | null>(
+    null,
+  );
 
   const [open, setOpen] = useState<ChargeRow | null>(null);
   const [extras, setExtras] = useState<ChargeDetailExtras | null>(null);
@@ -244,7 +252,7 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     if (!file) return;
     setNotice(null);
     try {
-      await missingInvoicesApi.uploadStatement(token, file);
+      setImported(await missingInvoicesApi.uploadStatement(token, file));
       await load();
     } catch (cause) {
       setNotice(
@@ -277,6 +285,12 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         <p role="alert" className="text-sm text-pilot-red-700">
           {notice}
         </p>
+      ) : null}
+      {imported ? (
+        <MissingInvoicesImportResult
+          result={imported}
+          onClose={() => setImported(null)}
+        />
       ) : null}
       <MissingInvoicesMonthDetail
         month={month}

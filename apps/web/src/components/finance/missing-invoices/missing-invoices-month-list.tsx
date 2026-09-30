@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import {
   Icon,
   PilotBadge,
@@ -33,6 +35,8 @@ export function MissingInvoicesMonthList({
   onRetry,
   onOpen,
   company,
+  actions,
+  notice,
 }: {
   /** `null`: töltés. */
   months: MonthRow[] | null;
@@ -41,6 +45,10 @@ export function MissingInvoicesMonthList({
   onOpen: (month: string) => void;
   /** A cég, akinek a nevére a számla szólhat; a szerver konfigurációjából. */
   company: { name: string; taxNumber: string } | null;
+  /** A fejléc jobb oldala (a kivonat-feltöltés gombja). */
+  actions?: ReactNode;
+  /** A fejléc alatti sáv (a feltöltés eredménye). */
+  notice?: ReactNode;
 }) {
   const unknown = (row: MonthRow) => row.state === "STATEMENT_MISSING";
   const count = (row: MonthRow, key: keyof MonthRow["counts"], tone: string) =>
@@ -141,7 +149,9 @@ export function MissingInvoicesMonthList({
       <PilotPageHeader
         title="Hiányzó számlák"
         description="Bankkivonat kontra számlák, hónaponként: mi van meg, és mi hiányzik a könyvelőnek."
+        actions={actions}
       />
+      {notice ?? null}
       <section className="overflow-hidden rounded-xl bg-white ring-1 ring-pilot-grey-200">
         {error ? (
           <div role="alert" className="space-y-3 px-5 py-6 text-sm">

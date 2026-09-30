@@ -145,6 +145,22 @@ const itemDetail = (
   ...overrides,
 });
 
+const IMPORT_RESULT = {
+  importId: "imp-1",
+  fileName: "export-24.csv",
+  rowCount: 40,
+  createdCount: 25,
+  skippedCount: 3,
+  rejected: Array.from({ length: 10 }, (_, index) => ({
+    line: index + 7,
+    reason:
+      index === 0 ? "A dátum nem olvasható: 2026.13.01" : "Az összeg nem szám.",
+  })),
+  rejectedCount: 12,
+  accounts: [{ accountNumber: "11773016-11111111", currency: "HUF" }],
+  months: ["2026-08", "2026-09"],
+};
+
 beforeEach(() => {
   auth.role = "OWNER";
   for (const fn of Object.values(api)) fn.mockReset();
@@ -186,6 +202,38 @@ describe("MissingInvoicesPage", () => {
     expect(urlNavigation.push).toHaveBeenCalledWith(
       "/penzugy/hianyzo-szamlak/2026-08",
     );
+  });
+
+  it("the first statement can be uploaded from the month list, and its result shows", async () => {
+    api.uploadStatement.mockResolvedValue({
+      ...IMPORT_RESULT,
+      rejected: [],
+      rejectedCount: 0,
+    });
+    render(<MissingInvoicesPage />);
+    await screen.findByRole("row", { name: "2026. augusztus megnyitása" });
+    expect(
+      screen.getByRole("button", { name: "Kivonat feltöltése" }),
+    ).toBeInTheDocument();
+    const csv = new File(["a;b"], "export-24.csv", { type: "text/csv" });
+    fireEvent.change(screen.getByLabelText("Bankkivonat CSV"), {
+      target: { files: [csv] },
+    });
+    const result = await screen.findByRole("region", {
+      name: "A kivonat-feltöltés eredménye",
+    });
+    expect(result).toHaveTextContent("A kivonat feltöltve");
+    expect(result).not.toHaveTextContent("elutasítva");
+    await waitFor(() => expect(api.months).toHaveBeenCalledTimes(2));
+  });
+
+  it("a viewer gets no upload button", async () => {
+    auth.role = "VIEWER";
+    render(<MissingInvoicesPage />);
+    await screen.findByRole("row", { name: "2026. augusztus megnyitása" });
+    expect(
+      screen.queryByRole("button", { name: "Kivonat feltöltése" }),
+    ).toBeNull();
   });
 
   it("a role without finance.view gets no data call", () => {
@@ -304,7 +352,7 @@ describe("MissingInvoicesMonthPage", () => {
 
   it("the statement upload and the two exports call their own endpoints", async () => {
     urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
-    api.uploadStatement.mockResolvedValue({});
+    api.uploadStatement.mockResolvedValue(IMPORT_RESULT);
     api.missingList.mockResolvedValue(new Blob(["x"]));
     api.accountantPackage.mockResolvedValue(new Blob(["%PDF"]));
     // a happy-dom URL-je nem ad blob-címet: a két statikus tagot pótoljuk
@@ -323,6 +371,22 @@ describe("MissingInvoicesMonthPage", () => {
       expect(api.uploadStatement).toHaveBeenCalledWith("token-1", csv),
     );
     await waitFor(() => expect(api.month).toHaveBeenCalledTimes(2));
+    // AZ ELUTASÍTOTT SOR NEM TŰNIK EL CSENDBEN (acrobot 25333)
+    const result = await screen.findByRole("region", {
+      name: "A kivonat-feltöltés eredménye",
+    });
+    expect(result).toHaveTextContent(
+      "export-24.csv: 40 sor olvasva, 25 új, 3 már megvolt, 12 elutasítva.",
+    );
+    expect(result).toHaveTextContent(
+      "7. sor: A dátum nem olvasható: 2026.13.01",
+    );
+    expect(result).toHaveTextContent(
+      "És további 2 elutasított sor, ami itt nem látszik.",
+    );
+    expect(
+      within(result).getByRole("link", { name: "2026. augusztus" }),
+    ).toHaveAttribute("href", "/penzugy/hianyzo-szamlak/2026-08");
 
     fireEvent.click(
       screen.getByRole("button", { name: "Hiánylista letöltése" }),

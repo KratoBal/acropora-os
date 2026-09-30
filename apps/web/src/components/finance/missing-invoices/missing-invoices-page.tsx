@@ -1,14 +1,20 @@
 "use client";
 
-import { hasPermission, PERMISSIONS } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  type BankStatementImportResult,
+} from "@acropora/types";
+import { PilotButton } from "@acropora/ui";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { MISSING_INVOICES_PATH } from "@/components/navigation";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { missingInvoicesApi } from "@/lib/api/missing-invoices";
 
+import { MissingInvoicesImportResult } from "./missing-invoices-import-result";
 import type { MonthRow } from "./missing-invoices-model";
 import { MissingInvoicesMonthList } from "./missing-invoices-month-list";
 import {
@@ -31,6 +37,15 @@ export function MissingInvoicesPage() {
   const [months, setMonths] = useState<MonthRow[] | null>(null);
   const [company, setCompany] = useState<MissingInvoiceCompany | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
+  );
+  const statementInput = useRef<HTMLInputElement>(null);
+  const [imported, setImported] = useState<BankStatementImportResult | null>(
+    null,
+  );
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -60,6 +75,28 @@ export function MissingInvoicesPage() {
     return () => controller.abort();
   }, [canView, load]);
 
+  /**
+   * AZ ELSŐ KIVONAT IS INNEN TÖLTHETŐ FEL: kivonat nélkül nincs hónap, amit
+   * megnyithatna, tehát a havi oldal gombja egy üres rendszerben elérhetetlen.
+   */
+  const uploadStatement = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      setImported(await missingInvoicesApi.uploadStatement(token, file));
+      await load();
+    } catch (cause) {
+      setUploadError(
+        cause instanceof Error
+          ? cause.message
+          : "A kivonat feltöltése nem sikerült.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (!canView)
     return (
       <PilotThemeRoot className="space-y-6">
@@ -77,6 +114,44 @@ export function MissingInvoicesPage() {
         onRetry={() => void load()}
         onOpen={(month) => router.push(`${MISSING_INVOICES_PATH}/${month}`)}
         company={company}
+        actions={
+          canManage ? (
+            <PilotButton
+              variant="secondary"
+              size="regular"
+              disabled={uploading}
+              onClick={() => statementInput.current?.click()}
+            >
+              {uploading ? "Feltöltés…" : "Kivonat feltöltése"}
+            </PilotButton>
+          ) : null
+        }
+        notice={
+          <>
+            {uploadError ? (
+              <p role="alert" className="text-sm text-pilot-red-700">
+                {uploadError}
+              </p>
+            ) : null}
+            {imported ? (
+              <MissingInvoicesImportResult
+                result={imported}
+                onClose={() => setImported(null)}
+              />
+            ) : null}
+          </>
+        }
+      />
+      <input
+        ref={statementInput}
+        type="file"
+        accept=".csv,text/csv"
+        aria-label="Bankkivonat CSV"
+        className="sr-only"
+        onChange={(event) => {
+          void uploadStatement(event.target.files?.[0]);
+          event.target.value = "";
+        }}
       />
     </PilotThemeRoot>
   );

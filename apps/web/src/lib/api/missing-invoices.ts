@@ -1,3 +1,4 @@
+import type { BankStatementImportResult } from "@acropora/types";
 import type {
   MissingInvoiceItemDetail,
   MissingInvoiceMonthDetail,
@@ -141,10 +142,14 @@ export const missingInvoicesApi = {
   uploadStatement(token: string, file: File) {
     const form = new FormData();
     form.append("file", file);
-    return apiRequest<unknown>(`${base}/bank-statements`, token, {
-      method: "POST",
-      body: form,
-    });
+    return apiRequest<BankStatementImportResult>(
+      `${base}/bank-statements`,
+      token,
+      {
+        method: "POST",
+        body: form,
+      },
+    );
   },
   async missingList(token: string, month: string): Promise<Blob> {
     return blobOrError(
