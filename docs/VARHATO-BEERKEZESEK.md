@@ -67,11 +67,10 @@ nélkül olvasható, és a sorok összege egyezik a végösszeggel.
 - A végösszeg egész euróra kerekített. Az 1 eurónál kisebb eltérés „Kerekítés” díjsor
   lesz, a nagyobb figyelmeztetés marad.
 - A szállítási számlán üres a rendelésszám, ezért a saját számlaszáma a kulcs.
-- **Nyitott pont: a javított számla.** A 32600434-es számla kétszer jött (eredeti és
-  „UPDATED INVOICE”, 15 perc különbséggel), és a javított változatban eggyel több sor
-  áll. A mai szabály ugyanazt a fajtát ugyanazzal a számlaszámmal duplikátumnak veszi,
-  tehát a javított változat elveszne, és az eredeti maradna. Hogy mi legyen helyette,
-  az döntés, nem kód.
+- **A javított számla** (lezárva, #1247): a 32600434-es számla kétszer jött (eredeti
+  és „UPDATED INVOICE”, 15 perc különbséggel), a javított változatban eggyel több
+  sorral. A javított változat marad, az eredeti lecserélődik: a szabály fent, a
+  duplikátumoknál áll.
 
 ## A NAV-számlák behúzása időzítőre
 
