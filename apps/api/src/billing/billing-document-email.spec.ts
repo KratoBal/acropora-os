@@ -8,6 +8,10 @@ import {
   billingEmailValues,
   renderBillingEmail,
 } from "./billing-document-email.js";
+import {
+  DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE,
+  DEFAULT_BILLING_DOCUMENT_WEBSHOP_ORDER_TEMPLATE,
+} from "../notifications/mail/billing-document-mail.content.js";
 import type { BillingDocumentRow } from "./billing-documents.repository.js";
 
 const NBSP = "\u00a0";
@@ -93,6 +97,40 @@ describe("renderBillingEmail", () => {
       ok: true,
       text: "Online: .",
     });
+  });
+});
+
+describe("renderBillingEmail, a Levelezés sablonjainak alakjával", () => {
+  const values = billingEmailValues(row(), "Partner Kft.");
+
+  it("resolves the canonical {{name}} form, spaces inside allowed, and the old {name} too", () => {
+    assert.deepEqual(
+      renderBillingEmail(
+        "{{customer_name}} / {{ document_number }} / {document_number}",
+        values,
+      ),
+      { ok: true, text: "Partner Kft. / E-ACR-2026-7 / E-ACR-2026-7" },
+    );
+  });
+
+  it("names an unknown variable in the double form too, and leaves no braces behind", () => {
+    assert.deepEqual(renderBillingEmail("{{szamlaszam}}", values), {
+      ok: false,
+      unknown: ["szamlaszam"],
+      missing: [],
+    });
+  });
+
+  it("renders both default templates completely for an issued invoice", () => {
+    for (const template of [
+      DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE,
+      DEFAULT_BILLING_DOCUMENT_WEBSHOP_ORDER_TEMPLATE,
+    ])
+      for (const text of [template.subject, template.body]) {
+        const result = renderBillingEmail(text, values);
+        assert.equal(result.ok, true, text);
+        assert.doesNotMatch(result.ok ? result.text : "", /[{}]/, text);
+      }
   });
 });
 
