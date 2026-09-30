@@ -104,6 +104,11 @@ describe(
     let user: AuthenticatedUser;
     let customerId = "";
     const productIds: Record<string, string> = {};
+    // A könyvelés a "fő raktárt" veszi (`ensureMainWarehouse`, a legelső
+    // raktár), és üres adatbázisban LÉTREHOZZA. Ha itt maradna, a később futó
+    // specek (a UNAS rendelés-szinkroné, ami ugyanezt hívja) már ezt kapnák
+    // a saját raktáruk helyett: a CI-ben pontosan így bukott el két tesztjük.
+    let warehousesBefore: string[] = [];
     const variantIds: Record<string, string> = {};
 
     const draft = (
@@ -149,6 +154,9 @@ describe(
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
+      warehousesBefore = (
+        await prisma.warehouse.findMany({ select: { id: true } })
+      ).map((warehouse) => warehouse.id);
       user = {
         id: (
           await prisma.user.create({
@@ -202,7 +210,16 @@ describe(
 
     after(async () => {
       await removeLeftovers();
+      await prisma.warehouse.deleteMany({
+        where: { id: { notIn: warehousesBefore } },
+      });
       nincsMaradek([
+        {
+          nev: "a suite által létrehozott raktár bent maradt",
+          darab: await prisma.warehouse.count({
+            where: { id: { notIn: warehousesBefore } },
+          }),
+        },
         {
           nev: "a suite termékei bent maradtak",
           darab: await prisma.product.count({
