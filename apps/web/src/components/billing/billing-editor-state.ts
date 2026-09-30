@@ -3,6 +3,7 @@ import {
   getDocumentCapabilities,
   szamlazzDocumentTotals,
   szamlazzLineAmounts,
+  szamlazzUnitNetFromGross,
   type BillingAmountsResult,
   type BillingDocumentCustomer,
   type BillingDocumentDetail,
@@ -40,6 +41,13 @@ export interface EditorLine {
   vatRatePercent: string;
   discountPercent: string;
   comment: string;
+  /**
+   * A BEÍRT BRUTTÓ, ha a sort bruttóból töltötték ki (Balázs a stage-en,
+   * 2026-09-30). Csak bevitel: a mentés a belőle számolt `unitNet`-et küldi.
+   * A mennyiség, a nettó egységár vagy a kulcs szerkesztése törli, onnantól a
+   * bruttó megint a nettóból következik.
+   */
+  grossInput?: string;
 }
 
 export interface EditorState {
@@ -378,5 +386,54 @@ export function formatMoney(value: string, currency: string): string {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   }).format(number);
+  return currency === "HUF" ? `${formatted} Ft` : `${formatted} ${currency}`;
+}
+
+/**
+ * EGY SOR KITÖLTÉSE BRUTTÓBÓL. A nettó egységár a Számlázz.hu szabályával
+ * számolódik vissza (`szamlazzUnitNetFromGross`); amíg a bruttó nem szám
+ * (gépelés közben), a nettó egységár nem változik, üres bruttónál kiürül.
+ */
+export function withGrossInput(
+  line: EditorLine,
+  grossInput: string,
+  currency: string,
+): EditorLine {
+  if (!grossInput.trim()) return { ...line, grossInput, unitNet: "" };
+  const result = szamlazzUnitNetFromGross({
+    grossAmount: grossInput.trim(),
+    quantity: line.quantity.trim(),
+    vatRatePercent: line.vatRatePercent.trim() || "0",
+    currency,
+  });
+  return result.ok
+    ? { ...line, grossInput, unitNet: result.unitNet }
+    : { ...line, grossInput };
+}
+
+/**
+ * HA A BEÍRT BRUTTÓ NEM JÖN KI PONTOSAN: a bruttó, ami a számlán állni fog
+ * (két tizedesen, a tétel szintjén). `null`: nincs beírt bruttó, vagy pontos.
+ */
+export function grossInputMismatch(
+  line: EditorLine,
+  currency: string,
+): string | null {
+  if (!line.grossInput?.trim()) return null;
+  const result = szamlazzUnitNetFromGross({
+    grossAmount: line.grossInput.trim(),
+    quantity: line.quantity.trim(),
+    vatRatePercent: line.vatRatePercent.trim() || "0",
+    currency,
+  });
+  return result.ok && !result.exact ? result.grossAmount : null;
+}
+
+/** Pénz két tizedesen, pénznemtől függetlenül: az eltérés fillérben látszik. */
+export function formatMoneyExact(value: string, currency: string): string {
+  const formatted = new Intl.NumberFormat("hu-HU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value));
   return currency === "HUF" ? `${formatted} Ft` : `${formatted} ${currency}`;
 }

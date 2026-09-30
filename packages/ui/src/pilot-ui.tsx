@@ -586,8 +586,17 @@ export function PilotCardHeader({
  * - Zárt állapotban a tartalma `inert` és `aria-hidden`: nem érhető el sem
  *   billentyűzettel, sem képernyőolvasóval, csak ki van tolva a képből.
  * - `subtitle`, `footer` (a lap alján álló, nem görgő sáv a gombokkal) és
- *   `width` (`md` a régi 448, `lg` a terv 520 pixele).
+ *   `width` (`md` a régi 448, `lg` a terv 520 pixele, `xl` 640 pixel: Balázs
+ *   a stage-en a számlázás 520-as paneljét keskenynek találta, 2026-09-30).
+ *   Az alapértelmezés `md` marad: a partner-portál vízértékei nem változnak.
+ * - A törzs belső margóját a hívó adja (az akvárium `px-6 py-5`-tel).
  */
+const DRAWER_WIDTHS = {
+  md: "max-w-md",
+  lg: "max-w-[520px]",
+  xl: "max-w-[640px]",
+} as const;
+
 export function PilotDrawer({
   open,
   onClose,
@@ -602,7 +611,7 @@ export function PilotDrawer({
   title: string;
   subtitle?: ReactNode;
   footer?: ReactNode;
-  width?: "md" | "lg";
+  width?: "md" | "lg" | "xl";
   children: ReactNode;
 }) {
   const titleId = useId();
@@ -636,7 +645,7 @@ export function PilotDrawer({
         aria-hidden={!open}
         inert={!open}
         className={`fixed right-0 top-0 z-50 flex h-full w-full ${
-          width === "lg" ? "max-w-[520px]" : "max-w-md"
+          DRAWER_WIDTHS[width]
         } flex-col bg-white shadow-2xl transition-transform duration-250 ease-in-out ${
           open ? "translate-x-0" : "translate-x-full"
         }`}

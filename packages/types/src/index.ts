@@ -96,12 +96,15 @@ export {
   szamlazzDocumentTotals,
   szamlazzLineAmounts,
   szamlazzMoneyDecimals,
+  szamlazzUnitNetFromGross,
 } from "./billing-szamlazz-amounts.js";
 export type {
   SzamlazzAmountRule,
   SzamlazzDocumentTotals,
   SzamlazzLineAmounts,
   SzamlazzLineAmountsInput,
+  SzamlazzUnitNetFromGross,
+  SzamlazzUnitNetFromGrossInput,
 } from "./billing-szamlazz-amounts.js";
 export {
   MAIL_TEMPLATE_EVENTS,
@@ -428,6 +431,7 @@ export type {
   CustomerType,
   UpdateCustomerInput,
 } from "./customer-management.js";
+export { CUSTOMER_LIST_PAGE_SIZE } from "./customer-management.js";
 export type {
   AcroporaDomainEvent,
   CatalogImportApplied,

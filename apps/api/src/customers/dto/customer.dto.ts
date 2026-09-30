@@ -13,6 +13,8 @@ import {
   ValidateNested,
 } from "class-validator";
 
+import { CUSTOMER_LIST_PAGE_SIZE } from "@acropora/types";
+
 export class CreateCustomerAddressDto {
   @IsIn(["BILLING", "SHIPPING", "OTHER"]) type!:
     "BILLING" | "SHIPPING" | "OTHER";
@@ -54,7 +56,12 @@ export class UpdateCustomerDto {
 
 export class CustomerListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() page = 1;
-  @Type(() => Number) @IsInt() @Min(10) @Max(100) @IsOptional() pageSize = 25;
+  @Type(() => Number)
+  @IsInt()
+  @Min(CUSTOMER_LIST_PAGE_SIZE.min)
+  @Max(CUSTOMER_LIST_PAGE_SIZE.max)
+  @IsOptional()
+  pageSize = 25;
   @IsString() @IsOptional() search?: string;
   @IsIn(["ACTIVE", "INACTIVE", "ALL"]) @IsOptional() status:
     "ACTIVE" | "INACTIVE" | "ALL" = "ACTIVE";

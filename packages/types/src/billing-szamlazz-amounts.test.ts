@@ -6,6 +6,7 @@ import {
   szamlazzDocumentTotals,
   szamlazzLineAmounts,
   szamlazzMoneyDecimals,
+  szamlazzUnitNetFromGross,
   type SzamlazzAmountRule,
 } from "./billing-szamlazz-amounts.js";
 
@@ -262,5 +263,139 @@ describe("szamlazzDocumentTotals", () => {
       grossAmount: "38.06",
       zeroForintLines: [],
     });
+  });
+});
+
+// GROSS IN, NET UNIT PRICE OUT (Balázs on stage, 2026-09-30: "brutto osszeget
+// is lehessen beirni es szamolja vissza a nettot"). What must fail: a unit
+// price whose line gross (by the Számlázz.hu rule) is not the one reported; a
+// reachable gross reported as inexact, or an unreachable one as exact.
+describe("szamlazzUnitNetFromGross", () => {
+  const fromGross = (
+    grossAmount: string,
+    quantity = "1",
+    vatRatePercent = "27",
+    currency = "HUF",
+  ) =>
+    szamlazzUnitNetFromGross({
+      grossAmount,
+      quantity,
+      vatRatePercent,
+      currency,
+    });
+
+  it("a gross that a net gives exactly", () => {
+    assert.deepEqual(fromGross("12700"), {
+      ok: true,
+      unitNet: "10000",
+      grossAmount: "12700.00",
+      exact: true,
+    });
+    assert.deepEqual(fromGross("25.40", "2", "27", "EUR"), {
+      ok: true,
+      unitNet: "10",
+      grossAmount: "25.40",
+      exact: true,
+    });
+    assert.deepEqual(fromGross("1000", "4", "0"), {
+      ok: true,
+      unitNet: "250",
+      grossAmount: "1000.00",
+      exact: true,
+    });
+  });
+
+  it("an unreachable gross: the nearest one, and it says so", () => {
+    // 7874.01 -> 9999.99 and 7874.02 -> 10000.01; the ideal is 7874.0157
+    assert.deepEqual(fromGross("10000"), {
+      ok: true,
+      unitNet: "7874.02",
+      grossAmount: "10000.01",
+      exact: false,
+    });
+  });
+
+  // THE IDEAL UNIT PRICE ALONE MISSES A REACHABLE GROSS. 32.45 / 1.05 / 7 =
+  // 4.4150 at 4 decimals gives a line net of 30.905 -> 30.91 and a gross of
+  // 32.46; the search finds 4.4143 (30.90 + 1.55 = 32.45). Over 259 416
+  // gross values the ideal alone was worse 968 times and never better.
+  it("finds the reachable gross the ideal unit price misses", () => {
+    assert.deepEqual(fromGross("32.45", "7", "5"), {
+      ok: true,
+      unitNet: "4.4143",
+      grossAmount: "32.45",
+      exact: true,
+    });
+  });
+
+  it("the comma a person types is a decimal point", () => {
+    const result = fromGross("12700,00", "1", "27");
+    assert.equal(result.ok && result.unitNet, "10000");
+  });
+
+  it("no unit price from a zero quantity or a non-number", () => {
+    assert.deepEqual(fromGross("12700", "0"), {
+      ok: false,
+      error: "ZERO_QUANTITY",
+    });
+    assert.deepEqual(fromGross("tizenkétezer"), {
+      ok: false,
+      error: "INVALID_NUMBER",
+    });
+  });
+
+  // Every gross a net of whole cents can reach must come back exact, and the
+  // reported gross must be the one the Számlázz.hu rule computes from the
+  // returned unit price. Checked over 0.01 .. 30.00 of line net, on four
+  // quantities and three rates.
+  it("round-trips every reachable gross, and reports the rule's own gross", () => {
+    let reachableChecked = 0;
+    let unreachableChecked = 0;
+    for (const rate of ["27", "18", "5"]) {
+      const reachable = new Set<string>();
+      for (let cents = 1; cents <= 3000; cents += 1) {
+        const net = (cents / 100).toFixed(2);
+        const line = szamlazzLineAmounts({
+          quantity: "1",
+          unitNet: net,
+          vatRatePercent: rate,
+          currency: "HUF",
+        });
+        assert.ok(line.ok);
+        reachable.add(line.grossAmount);
+      }
+      for (const quantity of ["1", "3", "2.5", "7"]) {
+        for (let cents = 200; cents <= 3000; cents += 7) {
+          const typed = (cents / 100).toFixed(2);
+          const result = fromGross(typed, quantity, rate);
+          assert.ok(result.ok, `${typed} × ${quantity} @ ${rate}`);
+          const again = szamlazzLineAmounts({
+            quantity,
+            unitNet: result.unitNet,
+            vatRatePercent: rate,
+            currency: "HUF",
+          });
+          assert.ok(again.ok);
+          assert.equal(again.grossAmount, result.grossAmount);
+          assert.equal(
+            result.exact,
+            reachable.has(typed),
+            `${typed} × ${quantity} @ ${rate}: exact ${result.exact}`,
+          );
+          if (result.exact) {
+            assert.equal(result.grossAmount, typed);
+            reachableChecked += 1;
+          } else {
+            assert.ok(
+              Math.abs(Number(result.grossAmount) - Number(typed)) <= 0.011,
+            );
+            unreachableChecked += 1;
+          }
+        }
+      }
+    }
+    // both halves ran: a sweep that only met one kind proves half the claim
+    assert.ok(reachableChecked > 500, `reachable ${reachableChecked}`);
+    assert.ok(unreachableChecked > 50, `unreachable ${unreachableChecked}`);
   });
 });

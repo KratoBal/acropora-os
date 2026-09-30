@@ -153,4 +153,25 @@ describe("PilotDrawer", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  // A SZÉLESSÉG PARAMÉTER, NEM ÚJ ALAPÉRTELMEZÉS (acrobot 25226): a számlázás
+  // szélesebb panelt kér, a partner-portál vízértékei a régi 448 pixelen
+  // maradnak. MI PIROSÍT: ha az alapértelmezés elmozdul, vagy az új szélesség
+  // nem a kért osztályt adja.
+  it("width: md stays the default, lg and xl are opt-in", () => {
+    const widthOf = (width?: "md" | "lg" | "xl") => {
+      const { unmount } = render(
+        <PilotDrawer open onClose={() => {}} title="Panel" width={width}>
+          <p>Tartalom</p>
+        </PilotDrawer>,
+      );
+      const className = screen.getByRole("dialog").className;
+      unmount();
+      return className.match(/max-w-\S+/)?.[0];
+    };
+    expect(widthOf()).toBe("max-w-md");
+    expect(widthOf("md")).toBe("max-w-md");
+    expect(widthOf("lg")).toBe("max-w-[520px]");
+    expect(widthOf("xl")).toBe("max-w-[640px]");
+  });
 });

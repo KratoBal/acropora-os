@@ -6,7 +6,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { BillingDocumentDetail, Session } from "@acropora/types";
+import {
+  CUSTOMER_LIST_PAGE_SIZE,
+  type BillingDocumentDetail,
+  type Session,
+} from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BillingDocumentEditor } from "./billing-document-editor";
@@ -300,6 +304,12 @@ describe("BillingDocumentEditor", () => {
     expect(
       within(drawer).getByRole("heading", { name: "E-számla kiküldése" }),
     ).toBeInTheDocument();
+    // SZÉLESEBB ÉS BELSŐ MARGÓVAL (Balázs a stage-en, 2026-09-30): a törzs a
+    // fejléc px-6-ját kapja, a szöveg nem ér a panel széléhez.
+    expect(drawer.className).toMatch(/max-w-\[640px\]/);
+    expect(
+      within(drawer).getByLabelText("Címzett").closest(".px-6"),
+    ).not.toBeNull();
     expect(
       (within(drawer).getByLabelText("Címzett") as HTMLInputElement).value,
     ).toBe("szamlazas@partner.hu");
@@ -398,6 +408,92 @@ describe("BillingDocumentEditor", () => {
         await screen.findByText("A valódi kiállítás ki van kapcsolva."),
       ).toBeInTheDocument();
       expect(screen.queryByText("Csak olvasható")).toBeNull();
+    });
+  });
+
+  /*
+    BRUTTÓ IS BEÍRHATÓ (Balázs a stage-en, 2026-09-30 17:04 UTC). MI PIROSÍT:
+    ha a nettó egységár nem a Számlázz.hu szabályával számolódik vissza; ha a
+    mentés a bruttót küldené a nettó helyett; ha egy pontosan ki nem jövő
+    bruttó csendben másra változna; ha a mennyiség szerkesztése után a régi
+    beírt bruttó ragadna a mezőben.
+  */
+  describe("gross input", () => {
+    const grossOf = (description: string) =>
+      screen.getByLabelText(`${description} bruttó összege`);
+    const netOf = (description: string) =>
+      screen.getByLabelText(
+        `${description} nettó egységára`,
+      ) as HTMLInputElement;
+
+    it("the net unit price comes back from the gross, and the draft saves the net", async () => {
+      render(<BillingDocumentEditor />);
+      await pickPartner();
+      addLine("Munkadíj", "1", "");
+      fireEvent.change(grossOf("Munkadíj"), { target: { value: "12700" } });
+      expect(netOf("Munkadíj").value).toBe("10000");
+      expect(screen.queryByText(/pontosan nem jön ki/)).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Vázlat mentése" }));
+      await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+      const [, created] = api.create.mock.calls[0]!;
+      expect(created.lines[0]).toMatchObject({ unitNet: "10000" });
+      expect(JSON.stringify(created)).not.toMatch(/gross/i);
+    });
+
+    it("a gross the rule cannot reach exactly says what the invoice will show", () => {
+      render(<BillingDocumentEditor />);
+      addLine("Munkadíj", "1", "");
+      fireEvent.change(grossOf("Munkadíj"), { target: { value: "10000" } });
+      expect(netOf("Munkadíj").value).toBe("7874.02");
+      expect(
+        screen.getByText(/pontosan nem jön ki/).closest("[role=status]"),
+      ).toHaveTextContent(
+        /A beírt bruttó \(10\s000,00\sFt\).*a tétel bruttója 10\s000,01\sFt lesz\./,
+      );
+    });
+
+    it("editing the quantity lets go of the typed gross", () => {
+      render(<BillingDocumentEditor />);
+      addLine("Munkadíj", "1", "");
+      fireEvent.change(grossOf("Munkadíj"), { target: { value: "12700" } });
+      fireEvent.change(screen.getByLabelText("Munkadíj mennyisége"), {
+        target: { value: "2" },
+      });
+      expect(netOf("Munkadíj").value).toBe("10000");
+      expect((grossOf("Munkadíj") as HTMLInputElement).value).toBe("25400");
+    });
+  });
+
+  /*
+    A STAGE-VISSZAJELZÉS (Balázs, 2026-09-30 17:04 UTC): "a partnerekbol nem
+    talal senkit". A választó 8 sort kért, a szerver 10 alatt 400-zal utasít
+    el, és a választó ezt "Nincs találat."-nak mutatta. MI PIROSÍT: ha a kérés
+    a szerver alsó határa alatti lapméretet kér; ha egy elutasított keresés
+    megint üres listának látszik.
+  */
+  describe("the partner picker", () => {
+    it("asks for a page size the server accepts", async () => {
+      render(<BillingDocumentEditor />);
+      await pickPartner();
+      const [, query] = customers.list.mock.calls[0]!;
+      expect((query as URLSearchParams).get("pageSize")).toBe(
+        String(CUSTOMER_LIST_PAGE_SIZE.min),
+      );
+    });
+
+    it("a refused search says so, not 'Nincs találat'", async () => {
+      customers.list.mockRejectedValue(
+        new Error("pageSize must not be less than 10"),
+      );
+      render(<BillingDocumentEditor />);
+      fireEvent.change(screen.getByLabelText("Partner keresése"), {
+        target: { value: "Főv" },
+      });
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "A partnerek keresése nem sikerült: pageSize must not be less than 10",
+      );
+      expect(screen.queryByText("Nincs találat.")).toBeNull();
     });
   });
 });
