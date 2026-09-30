@@ -9,7 +9,10 @@ import type { PurchaseInvoiceListResponse, Session } from "@acropora/types";
 import { useSyncExternalStore } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PurchaseInvoiceListPage } from "./purchase-invoice-list-page";
+import {
+  PurchaseInvoiceListPage,
+  purchaseInvoiceListQuery,
+} from "./purchase-invoice-list-page";
 
 const navigation = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -219,5 +222,66 @@ describe("PurchaseInvoiceListPage Direction F", () => {
     ]);
     expect(headers.map(right)).toEqual(cells.map(right));
     expect(right(headers[4]!)).toBe(true);
+  });
+});
+
+/*
+  AZ URL ÉS A KÉRÉS (stage, 2026-09-30, acrobot): a kézzel írt
+  "/beszerzes?q=hertlein" 400-at kapott, mert a lap az URL minden paraméterét
+  továbbadta, és az API a "q"-t nem ismeri. MI PIROSÍT: ha egy ismeretlen
+  paraméter megint átmegy, ha a "q" nem keresésként érkezik, vagy ha a beírt
+  keresés a "q"-t az URL-ben hagyja.
+*/
+describe("PurchaseInvoiceListPage query from the URL", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(1));
+  });
+
+  it("forwards only the known fields; q is the search's other name", () => {
+    const query = purchaseInvoiceListQuery(
+      new URLSearchParams("q=hertlein&foo=1&source=EU&page=2"),
+    );
+    expect(Object.fromEntries(query)).toEqual({
+      page: "2",
+      pageSize: "25",
+      search: "hertlein",
+      source: "EU",
+    });
+    // search wins over q
+    expect(
+      purchaseInvoiceListQuery(new URLSearchParams("q=a&search=b")).get(
+        "search",
+      ),
+    ).toBe("b");
+  });
+
+  it("a ?q= link lists with the search and fills the search box", async () => {
+    navigation.params = new URLSearchParams("q=hertlein&foo=1");
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    const sent = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(sent.get("search")).toBe("hertlein");
+    expect(sent.has("q")).toBe(false);
+    expect(sent.has("foo")).toBe(false);
+    expect(
+      screen.getByRole("textbox", { name: "Számla keresése" }),
+    ).toHaveValue("hertlein");
+  });
+
+  it("typing a new search writes search and drops q from the URL", async () => {
+    navigation.params = new URLSearchParams("q=hertlein");
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    fireEvent.change(screen.getByRole("textbox", { name: "Számla keresése" }), {
+      target: { value: "tropic" },
+    });
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    const url = new URLSearchParams(
+      String(navigation.replace.mock.calls.at(-1)?.[0]).split("?")[1],
+    );
+    expect(url.get("search")).toBe("tropic");
+    expect(url.has("q")).toBe(false);
   });
 });
