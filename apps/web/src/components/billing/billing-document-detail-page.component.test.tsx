@@ -1,5 +1,4 @@
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -396,6 +395,11 @@ describe("BillingDocumentDetailPage", () => {
     expect(api.emailDraft).toHaveBeenCalledWith("token-1", "doc-1");
     expect(first.subject).toBe("Acropora – {{document_number}}");
     expect(first.body).toBe("Kedves {{customer_name}}! {{document_number}}");
+    // SZÖVEGES SABLONBÓL IS FORMÁZOTT LEVÉL MEGY (nautilus #1301): a változók
+    // atomként, a szöveg mellé a HTML
+    expect(first.bodyHtml).toContain(
+      '<span data-variable="document_number">{{document_number}}</span>',
+    );
 
     // A SIKER UTÁNI KÖVETKEZŐ KÜLDÉS ÚJ KÉRÉS: új azonosító, különben a szerver
     // a régi kézbesítést adná vissza, és nem küldene.
@@ -444,14 +448,45 @@ describe("BillingDocumentDetailPage", () => {
     fireEvent.click(
       within(drawer).getByRole("button", { name: "Levél előnézete" }),
     );
-    await act(async () => {});
-    const preview =
-      within(drawer).getByLabelText("Levél előnézete").textContent;
-    expect(preview).toContain(
-      "https://www.szamlazz.hu/szamla/?page=vevoifiok&id=abc",
+    const srcdoc =
+      within(drawer).getByTitle("Levél előnézete").getAttribute("srcdoc") ?? "";
+    expect(srcdoc).toContain(
+      "https://www.szamlazz.hu/szamla/?page=vevoifiok&amp;id=abc",
     );
     // a teljes {{…}} jelölő helyettesül, nem csak a belseje
-    expect(preview).not.toMatch(/\{https:/);
+    expect(srcdoc).not.toMatch(/\{https:/);
+  });
+
+  it("a formatted Levelezés template goes out as that HTML", async () => {
+    api.emailDraft.mockResolvedValue({
+      source: "stored",
+      subject: "Acropora – {{document_number}}",
+      body: "Kedves {{customer_name}}! Formázott levél.",
+      bodyHtml:
+        '<p>Kedves <span data-variable="customer_name">{{customer_name}}</span>! <strong>Formázott</strong> levél.</p>',
+      variables: [],
+    });
+    api.email.mockResolvedValue(detail());
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(
+      within(
+        await screen.findByRole("group", { name: "Bizonylat műveletei" }),
+      ).getByRole("button", { name: "E-mail újraküldése" }),
+    );
+    const drawer = await screen.findByRole("dialog");
+    await waitFor(() =>
+      expect(
+        within(drawer).getByLabelText("Levél tartalma").innerHTML,
+      ).toContain("<strong>Formázott</strong>"),
+    );
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: "E-mail újraküldése" }),
+    );
+    await waitFor(() => expect(api.email).toHaveBeenCalledTimes(1));
+    const [, , input] = api.email.mock.calls[0]!;
+    expect(input.bodyHtml).toContain("<strong>Formázott</strong>");
+    expect(input.body).toContain("Formázott levél.");
+    expect(input.body).not.toContain("<strong>");
   });
 
   it("resend is not offered to a role without billing.resend", async () => {

@@ -328,21 +328,42 @@ describe("BillingDocumentEditor", () => {
       (within(drawer).getByLabelText("Címzett") as HTMLInputElement).value,
     ).toBe("szamlazas@partner.hu");
 
-    fireEvent.change(within(drawer).getByLabelText("Levél tartalma"), {
-      target: { value: "Szia " },
+    // A TÖRZS FORMÁZOTT SZERKESZTŐ (nautilus #1301): a TipTap példányt a
+    // saját parancsával állítjuk, ugyanúgy, mint a Levelezés oldal tesztjei.
+    const editor = (
+      within(drawer).getByLabelText("Levél tartalma") as HTMLElement & {
+        editor: {
+          getHTML(): string;
+          commands: {
+            setContent(html: string, o?: { emitUpdate?: boolean }): boolean;
+            focus(position: "end"): boolean;
+          };
+        };
+      }
+    ).editor;
+    await act(async () => {
+      editor.commands.setContent("<p>Szia,</p>", { emitUpdate: true });
+      editor.commands.focus("end");
     });
     fireEvent.click(
       within(drawer).getByRole("button", {
         name: "{{customer_name}} beszúrása",
       }),
     );
+    // A VÁLTOZÓ ATOMKÉNT A LEVÉLBE KERÜL, a korábbi szöveg előtte marad.
+    await waitFor(() =>
+      expect(editor.getHTML()).toContain(
+        'Szia,<span data-variable="customer_name">{{customer_name}}</span>',
+      ),
+    );
     fireEvent.click(
       within(drawer).getByRole("button", { name: "Levél előnézete" }),
     );
-    await act(async () => {});
-    // A VÁLTOZÓ A LEVÉLBE KERÜL, nem a helyére: a korábbi szöveg előtte marad.
-    expect(within(drawer).getByLabelText("Levél előnézete").textContent).toBe(
-      "Szia Fővárosi Állat- és Növénykert",
+    const frame = within(drawer).getByTitle("Levél előnézete");
+    expect(frame.getAttribute("sandbox")).toBe("");
+    // az érték az atom helyére kerül, a korábbi szöveg előtte
+    expect(frame.getAttribute("srcdoc")).toMatch(
+      /<p>Szia,<span[^>]*>Fővárosi Állat- és Növénykert<\/span><\/p>/,
     );
     expect(
       within(drawer).getByRole("button", {
@@ -477,14 +498,8 @@ describe("BillingDocumentEditor", () => {
       const drawer = await screen.findByRole("dialog");
       await waitFor(() =>
         expect(
-          (
-            within(drawer).getByLabelText(
-              "Levél tartalma",
-            ) as HTMLTextAreaElement
-          ).value,
-        ).toBe(
-          "Kedves {{customer_name}}! A(z) {{document_number}} számla csatolva.",
-        ),
+          within(drawer).getByLabelText("Levél tartalma").textContent,
+        ).toContain("A(z) {{document_number}} számla csatolva."),
       );
       expect(
         (within(drawer).getByLabelText("Tárgy") as HTMLInputElement).value,
