@@ -121,10 +121,7 @@ describe("what an arrived document opens or joins", () => {
 
   it("reads the adapters' senders, and none from an adapter that names none", () => {
     assert.deepEqual(
-      adapterSenders([
-        { senders: ["contact@aquarioom.com"] },
-        { key: "hertlein" },
-      ]),
+      adapterSenders([{ senders: ["contact@aquarioom.com"] }, {}]),
       ["contact@aquarioom.com"],
     );
   });

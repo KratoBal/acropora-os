@@ -1,6 +1,7 @@
 import type { SupplierInvoiceImportResult } from "@acropora/types";
 
 import { normalizeVatId } from "../supplier-invoice-import/supplier-invoice-import.common.js";
+import type { SupplierPdfAdapter } from "../supplier-invoice-import/supplier-pdf-adapter.js";
 
 /**
  * WHAT AN ARRIVED DOCUMENT OPENS OR JOINS (Várható beérkezések).
@@ -13,13 +14,9 @@ import { normalizeVatId } from "../supplier-invoice-import/supplier-invoice-impo
  * the document carries none.
  *
  * The order number and the document kind come from the adapter
- * (`orderReference`, `documentKind`); both are optional, so a reader that
- * does not know them yet gives an invoice keyed by its number.
+ * (`orderReference`, `documentKind`, #1235); both are optional, so an adapter
+ * that does not give them yields an invoice keyed by its number.
  */
-export type ArrivedDocumentResult = SupplierInvoiceImportResult & {
-  orderReference?: string | null;
-  documentKind?: "INVOICE" | "PROFORMA";
-};
 
 export interface ArrivalIdentity {
   supplierKey: string;
@@ -31,7 +28,7 @@ export interface ArrivalIdentity {
 }
 
 export function arrivalIdentity(
-  result: ArrivedDocumentResult,
+  result: SupplierInvoiceImportResult,
 ): ArrivalIdentity | null {
   const kind = result.documentKind === "PROFORMA" ? "PROFORMA" : "INVOICE";
   const orderReference = result.orderReference?.trim() || null;
@@ -86,13 +83,9 @@ export function isDuplicateDocument(
   );
 }
 
-/**
- * The senders the PDF adapters name (`senders`, nautilus's field on
- * `SupplierPdfAdapter`). Read without the type, so this compiles before and
- * after that field lands.
- */
-export function adapterSenders(adapters: readonly object[]): string[] {
-  return adapters.flatMap(
-    (adapter) => (adapter as { senders?: readonly string[] }).senders ?? [],
-  );
+/** The senders the PDF adapters name (`SupplierPdfAdapter.senders`, #1235). */
+export function adapterSenders(
+  adapters: readonly Pick<SupplierPdfAdapter, "senders">[],
+): string[] {
+  return adapters.flatMap((adapter) => adapter.senders ?? []);
 }

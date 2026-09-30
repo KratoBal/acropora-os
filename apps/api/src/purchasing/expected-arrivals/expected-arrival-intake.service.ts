@@ -10,6 +10,7 @@ import {
   Optional,
 } from "@nestjs/common";
 import type {
+  SupplierInvoiceImportResult,
   SupplierInvoiceMailSyncRunSummary,
   SupplierInvoiceMailSyncState,
   SupplierInvoiceMailSyncStatus,
@@ -23,7 +24,6 @@ import {
   adapterSenders,
   arrivalIdentity,
   isDuplicateDocument,
-  type ArrivedDocumentResult,
 } from "./expected-arrival.intake.js";
 import {
   SupplierInvoiceMailClient,
@@ -255,13 +255,13 @@ export class ExpectedArrivalIntakeService {
       content: new Uint8Array(pdf.buffer),
     };
 
-    let result: ArrivedDocumentResult;
+    let result: SupplierInvoiceImportResult;
     try {
       // a proforma opens the expected arrival, so the watcher reads it; the
       // manual upload keeps refusing it
-      result = (await this.reader.read(new Uint8Array(pdf.buffer), {
+      result = await this.reader.read(new Uint8Array(pdf.buffer), {
         allowProforma: true,
-      })) as ArrivedDocumentResult;
+      });
     } catch (error) {
       if (!(error instanceof SupplierInvoiceImportError)) throw error;
       await prisma.incomingSupplierDocument.create({
@@ -371,7 +371,7 @@ export class ExpectedArrivalIntakeService {
   private async suggestLines(
     arrivalId: string,
     supplierId: string,
-    result: ArrivedDocumentResult,
+    result: SupplierInvoiceImportResult,
   ) {
     const answers = [];
     for (const [index, line] of result.lines.entries()) {
