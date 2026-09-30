@@ -41,6 +41,13 @@ export interface UnresolvedSimplePayLine {
   amount: Prisma.Decimal;
 }
 
+/**
+ * The webshop's order numbers as the order sync writes them: "UNAS-" and the
+ * UNAS order key, whose first part is the shop id (ShopId 47679, the one UNAS
+ * shop; scripts/unas.sh). Measured on the five SimplePay orders of 2026-09-30.
+ */
+export const UNAS_SHOP_ORDER_PREFIX = "UNAS-47679-";
+
 function day(value: string | null): Date | null {
   return value ? new Date(`${value}T00:00:00.000Z`) : null;
 }
@@ -165,9 +172,12 @@ export class SimplePaySettlementRepository {
   }
 
   /**
-   * Order key end -> the webshop orders ending in it, with their outgoing
-   * invoice numbers. The order number is "UNAS-<key>" (unas-order-sync), and
-   * the key ends in the six digits after the "T" of the merchant ID.
+   * Order key end -> the webshop order with that key, with its outgoing
+   * invoice numbers. The order number is "UNAS-<key>" (unas-order-sync), the
+   * key is "<shop id>-<six digits>", and the six digits are what follows the
+   * "T" of the merchant ID. The shop id is matched too, not only the end
+   * (acrobot 25103: no collision on the six digits today, the rule keeps the
+   * prefix all the same).
    */
   async orderCandidates(
     suffixes: readonly string[],
@@ -176,10 +186,9 @@ export class SimplePaySettlementRepository {
     if (unique.length === 0) return new Map();
     const orders = await prisma.salesOrder.findMany({
       where: {
-        orderNumber: { startsWith: "UNAS-" },
-        OR: unique.map((suffix) => ({
-          orderNumber: { endsWith: `-${suffix}` },
-        })),
+        orderNumber: {
+          in: unique.map((suffix) => `${UNAS_SHOP_ORDER_PREFIX}${suffix}`),
+        },
       },
       select: {
         orderNumber: true,
@@ -193,9 +202,7 @@ export class SimplePaySettlementRepository {
     });
     const out = new Map<string, SimplePayOrderCandidate[]>();
     for (const order of orders) {
-      const suffix = order.orderNumber.slice(
-        order.orderNumber.lastIndexOf("-") + 1,
-      );
+      const suffix = order.orderNumber.slice(UNAS_SHOP_ORDER_PREFIX.length);
       out.set(suffix, [
         ...(out.get(suffix) ?? []),
         {
