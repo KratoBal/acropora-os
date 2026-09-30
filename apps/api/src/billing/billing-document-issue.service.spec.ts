@@ -95,6 +95,7 @@ function row(status = "DRAFT", invoiceFormat = "ELECTRONIC") {
         comment: null,
       },
     ],
+    mailDeliveries: [],
     createdAt: new Date("2026-09-30T10:00:00Z"),
     updatedAt: new Date("2026-09-30T10:00:00Z"),
   } as unknown as BillingDocumentRow;

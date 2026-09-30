@@ -9,7 +9,7 @@ import type { NormalizedBillingDraft } from "./billing-document-draft.js";
  * és a bejövő vagy UNAS-tükör sorok NEM ide tartoznak: azoknak más a
  * kiállítási útjuk, és ez az út nem szerkesztheti őket.
  */
-const OWN_ROWS = {
+export const OWN_ROWS = {
   direction: "OUTBOUND",
   source: "SZAMLAZZ",
   sourceType: { not: null },
@@ -21,6 +21,12 @@ const EDITABLE = ["DRAFT", "ISSUE_FAILED"] as const;
 
 const DETAIL_INCLUDE = {
   lines: { orderBy: [{ position: "asc" }, { id: "asc" }] },
+  // A legutolsó kiküldési kísérlet, a részletek `delivery` blokkjához (nautilus).
+  mailDeliveries: {
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 1,
+    select: { recipients: true, outcome: true, error: true, createdAt: true },
+  },
   customer: {
     select: {
       id: true,

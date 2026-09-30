@@ -5,24 +5,33 @@ import { documentStoreProvider } from "../service-assets/document-store/document
 import { BillingDocumentIssueController } from "./billing-document-issue.controller.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import { BillingDocumentIssueService } from "./billing-document-issue.service.js";
+import { BillingDocumentListRepository } from "./billing-document-list.repository.js";
+import { BillingDocumentPdfService } from "./billing-document-pdf.service.js";
+import { BillingDocumentReadController } from "./billing-document-read.controller.js";
 import { BillingDocumentsController } from "./billing-documents.controller.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { BillingDocumentsService } from "./billing-documents.service.js";
 
 /**
- * A SZÁMLÁZÁS MODUL: a vázlat (murena) és a kiállítás (nautilus). A
+ * A SZÁMLÁZÁS MODUL: a vázlat (murena), a kiállítás, a lista és a PDF (nautilus). A
  * `documentStoreProvider` és a `SzamlazzModule` a kiállításhoz kell, ugyanazért,
  * amiért a karbantartási számla moduljában is ott áll: a PDF tárolása és a
  * Számlázz.hu-kulcs feloldása.
  */
 @Module({
   imports: [SzamlazzModule],
-  controllers: [BillingDocumentsController, BillingDocumentIssueController],
+  controllers: [
+    BillingDocumentsController,
+    BillingDocumentIssueController,
+    BillingDocumentReadController,
+  ],
   providers: [
     BillingDocumentsRepository,
     BillingDocumentsService,
     BillingDocumentIssueRepository,
     BillingDocumentIssueService,
+    BillingDocumentListRepository,
+    BillingDocumentPdfService,
     documentStoreProvider,
   ],
 })

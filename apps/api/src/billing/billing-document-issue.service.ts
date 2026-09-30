@@ -42,7 +42,7 @@ export const BILLING_ISSUE_ENV = Symbol("BILLING_ISSUE_ENV");
 /** Injectable for tests: the Számlázz.hu client (a fake never calls out). */
 export const BILLING_SZAMLAZZ_CLIENT = Symbol("BILLING_SZAMLAZZ_CLIENT");
 
-const ISSUED_PDF = "billing-document.pdf";
+export const ISSUED_PDF = "billing-document.pdf";
 
 /**
  * A KIÁLLÍTÁS (Számlázás v0.1). A karbantartási számla kiállításának mintája
