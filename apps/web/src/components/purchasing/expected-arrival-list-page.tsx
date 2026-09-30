@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { urlChoice, useUrlQuery } from "@/lib/navigation/use-url-query";
 import { expectedArrivalsApi } from "@/lib/api/expected-arrivals";
 
 function formatAmount(value: number | null, currency: string | null): string {
@@ -84,7 +85,17 @@ export function ExpectedArrivalListPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [mailStatus, setMailStatus] =
     useState<SupplierInvoiceMailSyncStatus | null>(null);
-  const [source, setSource] = useState<"" | ExpectedArrivalSource>("");
+  // A FORRÁS-SZŰRŐ AZ URL-BEN (Balázs kérése, 2026-09-30): a szerkesztőből
+  // visszalépve a lista ugyanazt a forrást mutatja.
+  const { params, update } = useUrlQuery();
+  const source = urlChoice<"" | ExpectedArrivalSource>(
+    params,
+    "source",
+    ["MAIL", "NAV"],
+    "",
+  );
+  const setSource = (next: "" | ExpectedArrivalSource) =>
+    update({ source: next || null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);

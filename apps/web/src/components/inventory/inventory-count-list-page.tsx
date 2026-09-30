@@ -22,6 +22,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  urlChoice,
+  urlPage,
+  useUrlQuery,
+} from "@/lib/navigation/use-url-query";
 import { inventoryApi } from "@/lib/api/inventory";
 
 const STATUS_LABEL: Record<InventoryCountStatus, string> = {
@@ -69,8 +74,21 @@ export function InventoryCountListPage() {
     session && hasPermission(session.user, PERMISSIONS.INVENTORY_MANAGE),
   );
 
-  const [status, setStatus] = useState<InventoryCountStatus | "all">("all");
-  const [page, setPage] = useState(1);
+  /*
+    AZ ÁLLAPOT-SZŰRŐ ÉS A LAP AZ URL-BEN (Balázs kérése, 2026-09-30): a leltárból
+    visszalépve a lista ugyanott áll. A szűrő-váltás a lapot is nullázza, egy
+    írásban.
+  */
+  const { params, update } = useUrlQuery();
+  const status = urlChoice<InventoryCountStatus | "all">(
+    params,
+    "status",
+    ["all", "DRAFT", "UPLOADED", "CORRECTED"],
+    "all",
+  );
+  const page = urlPage(params);
+  const setPage = (next: number) =>
+    update({ page: next === 1 ? null : String(next) });
   const [data, setData] = useState<InventoryCountListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -154,8 +172,8 @@ export function InventoryCountListPage() {
             aria-label="Állapot szűrő"
             value={status}
             onChange={(event) => {
-              setStatus(event.target.value as InventoryCountStatus | "all");
-              setPage(1);
+              const next = event.target.value;
+              update({ status: next === "all" ? null : next, page: null });
             }}
           >
             <option value="all">Minden állapot</option>

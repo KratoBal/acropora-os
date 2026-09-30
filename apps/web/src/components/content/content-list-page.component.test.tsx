@@ -1,7 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { urlNavigation } from "@/test/url-navigation";
+
 import { ContentListPage } from "./content-list-page";
+
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/url-navigation")).nextNavigationModule,
+);
 
 const api = vi.hoisted(() => ({
   waiting: vi.fn(),
@@ -44,6 +51,7 @@ const item = (overrides: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
+  urlNavigation.reset("/tartalom");
   api.waiting.mockReset().mockResolvedValue([]);
   api.waitingOnMe.mockReset().mockResolvedValue({ items: [], notCovered: [] });
   api.waitingForImage.mockReset().mockResolvedValue([]);
@@ -245,6 +253,33 @@ describe("the view that opens by default", () => {
       expect(
         screen.getByText(/kiküldésre kész tételek nem szerepelnek/),
       ).toBeTruthy(),
+    );
+  });
+});
+
+/*
+  A NÉZET AZ URL-BEN (Balázs kérése, 2026-09-30): egy tartalomból visszalépve
+  a lista ugyanazt a nézetet mutatja. MI PIROSÍT: ha a nézet megint helyi
+  állapot lenne.
+*/
+describe("a nézet az URL-ben", () => {
+  it("az URL nézetével kérdez", async () => {
+    urlNavigation.reset("/tartalom", "view=reviewer");
+    render(<ContentListPage />);
+    await waitFor(() => expect(api.waiting).toHaveBeenCalled());
+    expect(api.waiting.mock.calls.at(-1)?.[1]).toBe("reviewer");
+    expect(api.waitingOnMe).not.toHaveBeenCalled();
+  });
+
+  it("a nézet-váltás az URL-be íródik", async () => {
+    render(<ContentListPage />);
+    await waitFor(() => expect(api.waitingOnMe).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("Kinek a szemével"), {
+      target: { value: "approver" },
+    });
+    await waitFor(() => expect(urlNavigation.search).toBe("view=approver"));
+    await waitFor(() =>
+      expect(api.waiting.mock.calls.at(-1)?.[1]).toBe("approver"),
     );
   });
 });
