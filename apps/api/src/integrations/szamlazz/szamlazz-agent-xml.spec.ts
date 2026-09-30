@@ -75,6 +75,33 @@ describe("buildSzamlazzAgentInvoiceXml", () => {
     assert.match(xml, /<szamlaLetoltes>true<\/szamlaLetoltes>/);
   });
 
+  it("always sends sendEmail=false, so Számlázz.hu never mails the document", () => {
+    const variants: SzamlazzAgentInvoiceInput[] = [
+      baseInput,
+      { ...baseInput, previewOnly: false },
+      {
+        ...baseInput,
+        buyer: { ...baseInput.buyer, email: "vevo@example.com" },
+      },
+      {
+        ...baseInput,
+        previewOnly: false,
+        buyer: { ...baseInput.buyer, email: "vevo@example.com" },
+      },
+    ];
+    for (const input of variants) {
+      const xml = buildSzamlazzAgentInvoiceXml(input);
+      const buyer = xml.slice(xml.indexOf("<vevo>"), xml.indexOf("</vevo>"));
+      assert.equal(xml.match(/<sendEmail>/g)?.length, 1);
+      assert.match(buyer, /<sendEmail>false<\/sendEmail>/);
+      // XSD order inside <vevo>: cim, email, sendEmail, ..., adoszam
+      assert.ok(buyer.indexOf("<sendEmail>") > buyer.indexOf("</cim>"));
+      assert.ok(buyer.indexOf("<sendEmail>") < buyer.indexOf("<adoszam>"));
+      if (input.buyer.email)
+        assert.ok(buyer.indexOf("<sendEmail>") > buyer.indexOf("</email>"));
+    }
+  });
+
   it("puts one <tetel> per item, in item order", () => {
     const xml = buildSzamlazzAgentInvoiceXml({
       ...baseInput,
