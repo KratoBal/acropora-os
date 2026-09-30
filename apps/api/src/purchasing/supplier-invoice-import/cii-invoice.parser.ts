@@ -67,6 +67,13 @@ function date(node: XmlNode | undefined, ...names: string[]): string | null {
 
 /** Credit note (381) and its corrected form (384 is a corrected invoice, allowed). */
 const CREDIT_NOTE_TYPE_CODES = new Set(["381", "396", "532"]);
+/**
+ * A RENDES SZAMLA KODJAI: ezekre nincs figyelmeztetes. A 326 (reszszamla) a
+ * nemet szamlazoknal a reszszallitas szamlaja, penzugyileg ugyanugy szamla: a
+ * CoralSands 6 szamlajabol 5 ezzel jon (acrobot dontese, 2026-09-30). Minden
+ * mas kod (pl. 325 proforma) figyelmeztetest kap.
+ */
+const INVOICE_TYPE_CODES = new Set(["380", "326"]);
 
 function readLine(item: XmlNode, index: number): SupplierInvoiceImportLine {
   const product = kid(item, "SpecifiedTradeProduct");
@@ -149,7 +156,7 @@ export function parseCiiInvoiceXml(xml: string): SupplierInvoiceImportResult {
   if (lines.length === 0) throw new SupplierInvoiceImportError("NO_LINES");
 
   const warnings: string[] = [];
-  if (typeCode && typeCode !== "380")
+  if (typeCode && !INVOICE_TYPE_CODES.has(typeCode))
     warnings.push(
       `A dokumentum típuskódja ${typeCode}, nem a szokásos számla (380).`,
     );

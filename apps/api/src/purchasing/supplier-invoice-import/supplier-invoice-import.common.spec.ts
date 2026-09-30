@@ -36,6 +36,16 @@ describe("isChargeDescription", () => {
       assert.equal(isChargeDescription(text), true, text);
   });
 
+  // CoralSands (2026-09-30): a szallitasi sor a futarszolgalat neve, vagy a
+  // "shipping" egy szo kozepen
+  it("a CoralSands szallitasi sorai dijsorok", () => {
+    for (const text of [
+      "FedEx International Economy",
+      "Groundshipping by Truck",
+    ])
+      assert.equal(isChargeDescription(text), true, text);
+  });
+
   it("a termek, amelyben a szo csak resz, NEM dijsor (negativ kontroll)", () => {
     for (const text of [
       "Transzportzsák halszállításhoz 60x30 cm",
