@@ -135,6 +135,29 @@ describe("billingProductPrice", () => {
     }
   });
 
+  /*
+    MÉRVE AZ ÉLES ADATON (acrobot 25311, 2026-09-30): az UnasProductSnapshot
+    mind az 1901 sorában a currency NULL. A fenti fixture "HUF"-ot adott, ezért
+    a hiba (UNAS terméknél soha nincs ár) zölden átment. Ez a teszt a valódi
+    alakot hozza.
+  */
+  it("a UNAS mirror without a currency is the shop's forint", () => {
+    assert.deepEqual(
+      billingProductPrice(product({ mirror: { currency: null } }), "HUF"),
+      {
+        kind: "NET",
+        unitNet: "1000",
+        vatRatePercent: "27",
+        source: "UNAS_MIRROR",
+      },
+    );
+    // euró számlára a forint tükör nem ár
+    assert.equal(
+      billingProductPrice(product({ mirror: { currency: null } }), "EUR").kind,
+      "NONE",
+    );
+  });
+
   it("a price in another currency is not a price for this document", () => {
     const result = billingProductPrice(product({}), "EUR");
     assert.equal(result.kind, "NONE");
