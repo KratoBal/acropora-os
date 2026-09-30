@@ -1,0 +1,6 @@
+# A PROFORMA-JELZO KALIBRACIOJA A POSTAFIOK-FIGYELON (#1235).
+#
+# A RONTAS: az intake a read()-et allowProforma NELKUL hivja, ahogy a #1237
+# beolvadt alakja. A hamis olvaso ilyenkor PROFORMA hibat dob, tehat a
+# proforma dokumentum FAILED lesz, es az egy-erkezes allitas elbukik.
+not ok - a proforma and its invoice make ONE arrival
