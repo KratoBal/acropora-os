@@ -124,6 +124,9 @@ export function buildMimeMessage(
   for (const cim of mail.to)
     if (hasHeaderInjection(cim))
       throw new MailBuildError("MAIL_HEADER_INJECTION_TO");
+  for (const cim of [...(mail.cc ?? []), ...(mail.bcc ?? [])])
+    if (hasHeaderInjection(cim))
+      throw new MailBuildError("MAIL_HEADER_INJECTION_CC");
   for (const [nev, ertek] of [
     ["subject", mail.subject],
     ["from", from],
@@ -235,6 +238,13 @@ export function buildMimeMessage(
   const fejlec = [
     `From: ${from}`,
     `To: ${mail.to.join(", ")}`,
+    /*
+      A `Cc` ES A `Bcc` CSAK AKKOR ALL, HA VAN BENNE CIM: a meglevo utak
+      levele igy betűre a regi marad. A `Bcc` fejlecet a Gmail API a kuldeskor
+      olvassa, es a cimzetteknek kezbesitett peldanybol elhagyja.
+    */
+    ...(mail.cc?.length ? [`Cc: ${mail.cc.join(", ")}`] : []),
+    ...(mail.bcc?.length ? [`Bcc: ${mail.bcc.join(", ")}`] : []),
     `Subject: ${encodeHeaderWord(mail.subject)}`,
     "MIME-Version: 1.0",
   ];
