@@ -26,6 +26,29 @@ function formatAmount(value: number | null, currency: string | null): string {
   return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency ?? ""}`.trim();
 }
 
+/** A kézi ellenőrzés eredménye egy mondatban. */
+function syncSentence(run: {
+  documentsRead: number;
+  reminderCount: number;
+}): string {
+  const parts = [
+    run.documentsRead > 0
+      ? `${run.documentsRead} új dokumentum beolvasva.`
+      : "Nincs új beszállítói levél.",
+  ];
+  // a felszólítás mellékletét (a régi számlát) nem olvassuk be: ez látszódjon
+  if (run.reminderCount > 0)
+    parts.push(
+      `${run.reminderCount} fizetési felszólítás kihagyva, nem nyit várható beérkezést.`,
+    );
+  return parts.join(" ");
+}
+
+/** A "Nem kell" csak a levélből jött, még nyitott tételnek jár. */
+function dismissable(item: ExpectedArrivalListItem): boolean {
+  return item.source === "MAIL" && item.stage !== "LATE_CORRECTION";
+}
+
 function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleDateString("hu-HU") : "—";
 }
@@ -57,6 +80,8 @@ export function ExpectedArrivalListPage() {
   const { session } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState<ExpectedArrivalListItem[] | null>(null);
+  const [dismissed, setDismissed] = useState<ExpectedArrivalListItem[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [mailStatus, setMailStatus] =
     useState<SupplierInvoiceMailSyncStatus | null>(null);
   const [source, setSource] = useState<"" | ExpectedArrivalSource>("");
@@ -81,6 +106,7 @@ export function ExpectedArrivalListPage() {
         expectedArrivalsApi.syncStatus(token).catch(() => null),
       ]);
       setItems(list.items);
+      setDismissed(list.dismissed ?? []);
       setMailStatus(status);
     } catch (cause) {
       setError(
@@ -101,11 +127,7 @@ export function ExpectedArrivalListPage() {
     setError(null);
     try {
       const run = await expectedArrivalsApi.sync(token);
-      setSyncNotice(
-        run.documentsRead > 0
-          ? `${run.documentsRead} új dokumentum beolvasva.`
-          : "Nincs új beszállítói levél.",
-      );
+      setSyncNotice(syncSentence(run));
       await load();
     } catch (cause) {
       setError(
@@ -115,6 +137,22 @@ export function ExpectedArrivalListPage() {
       );
     } finally {
       setSyncing(false);
+    }
+  };
+
+  /** "Nem kell" és visszavétel: a szerver auditálja, a lista újratöltődik. */
+  const handleMove = async (id: string, action: "dismiss" | "restore") => {
+    setBusyId(id);
+    setError(null);
+    try {
+      await expectedArrivalsApi[action](token, id);
+      await load();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A művelet nem sikerült.",
+      );
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -204,6 +242,7 @@ export function ExpectedArrivalListPage() {
                   <th>Nettó összeg</th>
                   <th>Sorok</th>
                   <th>Állapot</th>
+                  {canManage ? <th className="p-3" /> : null}
                 </tr>
               </thead>
               <tbody>
@@ -266,6 +305,24 @@ export function ExpectedArrivalListPage() {
                           </Badge>
                         )}
                       </td>
+                      {canManage ? (
+                        <td className="p-3 text-right">
+                          {dismissable(item) ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={busyId === item.id}
+                              onClick={(event) => {
+                                // a sor kattintása a szerkesztőt nyitná
+                                event.stopPropagation();
+                                void handleMove(item.id, "dismiss");
+                              }}
+                            >
+                              Nem kell
+                            </Button>
+                          ) : null}
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}
@@ -278,6 +335,44 @@ export function ExpectedArrivalListPage() {
             description="Minden beérkezett számla be van vételezve."
           />
         )
+      ) : null}
+      {dismissed.length ? (
+        <Card className="p-4">
+          <details data-testid="kivett-tetelek">
+            <summary className="cursor-pointer text-sm font-semibold text-dusk-700">
+              Kivett tételek ({dismissed.length})
+            </summary>
+            <ul className="mt-3 space-y-2 text-sm">
+              {dismissed.map((item) => (
+                <li
+                  key={item.id}
+                  data-testid="kivett-sor"
+                  className="flex flex-wrap items-center justify-between gap-2"
+                >
+                  <span>
+                    <span className="font-semibold text-dusk-900">
+                      {item.supplierName}
+                    </span>{" "}
+                    <span className="font-mono text-xs text-dusk-600">
+                      {item.invoiceNumber ?? item.orderReference ?? "—"}
+                    </span>{" "}
+                    · {formatAmount(item.netTotal, item.currency)}
+                  </span>
+                  {canManage ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={busyId === item.id}
+                      onClick={() => void handleMove(item.id, "restore")}
+                    >
+                      Visszavétel
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </Card>
       ) : null}
     </div>
   );

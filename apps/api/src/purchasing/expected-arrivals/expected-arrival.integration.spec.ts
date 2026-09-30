@@ -14,6 +14,7 @@ import { ExpectedArrivalService } from "./expected-arrival.service.js";
 const gate = integrationDatabaseGate(process.env);
 
 const PREFIX = "earr-list-it-";
+const TEST_EMAIL_DOMAIN = "earr-list-integration.invalid";
 
 describe(
   "Expected arrival list integration",
@@ -83,6 +84,16 @@ describe(
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
+      ids.user = (
+        await prisma.user.create({
+          data: {
+            email: `earr-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "Varhato beerkezes teszt",
+            role: "OWNER",
+            isActive: true,
+          },
+        })
+      ).id;
       ids.late = (
         await prisma.expectedArrival.create({
           data: {
@@ -261,6 +272,18 @@ describe(
             where: { navInvoiceNumber: { startsWith: PREFIX } },
           }),
         },
+        {
+          nev: "User by test e-mail domain",
+          darab: await prisma.user.count({
+            where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+          }),
+        },
+        {
+          nev: "AuditLog of the test user",
+          darab: await prisma.auditLog.count({
+            where: { user: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } } },
+          }),
+        },
       ]);
     });
 
@@ -276,6 +299,12 @@ describe(
       });
       await prisma.supplier.deleteMany({
         where: { code: { startsWith: PREFIX } },
+      });
+      await prisma.auditLog.deleteMany({
+        where: { user: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } } },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
       });
     }
 
@@ -362,6 +391,64 @@ describe(
         () => service.detail(ids.received!),
         ConflictException,
       );
+    });
+
+    // What must fail: a dismissed arrival still on the list or still
+    // openable; a dismiss with no audit row; a second dismiss, or a dismiss
+    // of a booked arrival, succeeding; a restore that does not bring it back.
+    it("'Nem kell' takes an open arrival off the list, audited; restore brings it back", async () => {
+      await service.dismiss(ids.invoiced!, ids.user!);
+
+      const afterDismiss = await service.list();
+      assert.equal(
+        afterDismiss.items.some((item) => item.id === ids.invoiced),
+        false,
+      );
+      const dismissed = afterDismiss.dismissed.find(
+        (item) => item.id === ids.invoiced,
+      );
+      assert.deepEqual(
+        [dismissed?.invoiceNumber, dismissed?.editorPath],
+        ["FA1", null],
+      );
+      await assert.rejects(
+        () => service.detail(ids.invoiced!),
+        (error: unknown) =>
+          error instanceof ConflictException &&
+          /ki van véve/.test((error as Error).message),
+      );
+      await assert.rejects(
+        () => service.dismiss(ids.invoiced!, ids.user!),
+        ConflictException,
+      );
+      await assert.rejects(
+        () => service.dismiss(ids.received!, ids.user!),
+        (error: unknown) =>
+          error instanceof ConflictException &&
+          /be van vételezve/.test((error as Error).message),
+      );
+
+      await service.restore(ids.invoiced!, ids.user!);
+      const afterRestore = await service.list();
+      assert.ok(afterRestore.items.some((item) => item.id === ids.invoiced));
+      assert.equal(
+        afterRestore.dismissed.some((item) => item.id === ids.invoiced),
+        false,
+      );
+      await assert.rejects(
+        () => service.restore(ids.invoiced!, ids.user!),
+        ConflictException,
+      );
+
+      const audit = await prisma.auditLog.findMany({
+        where: { entityType: "ExpectedArrival", entityId: ids.invoiced! },
+        orderBy: { createdAt: "asc" },
+        select: { userId: true, action: true },
+      });
+      assert.deepEqual(audit, [
+        { userId: ids.user, action: "purchasing.expected-arrival.dismissed" },
+        { userId: ids.user, action: "purchasing.expected-arrival.restored" },
+      ]);
     });
   },
 );

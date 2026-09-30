@@ -97,7 +97,7 @@ describe(
         }),
       ],
       [
-        `reminder ${suffix}`,
+        `resend ${suffix}`,
         doc({
           documentKind: "INVOICE",
           orderReference: "13858",
@@ -159,7 +159,7 @@ describe(
     const messages = new Map<string, SupplierInvoiceMail | "unreachable">([
       [id(1), mail(1, "proforma")],
       [id(2), mail(2, "invoice")],
-      [id(3), mail(3, "reminder")],
+      [id(3), mail(3, "resend")],
       [id(4), mail(4, "unknown")],
       [id(5), "unreachable"],
     ]);
@@ -258,7 +258,7 @@ describe(
       });
     }
 
-    it("a proforma and its invoice make ONE arrival; a reminder is a duplicate; an unreadable PDF is kept with its code", async () => {
+    it("a proforma and its invoice make ONE arrival; a re-sent invoice is a duplicate; an unreadable PDF is kept with its code", async () => {
       const run = await intake.sync("MANUAL");
       assert.deepEqual(
         [
@@ -292,7 +292,7 @@ describe(
         [
           ["invoice", "READ", "INVOICE"],
           ["proforma", "READ", "PROFORMA"],
-          ["reminder", "DUPLICATE", "INVOICE"],
+          ["resend", "DUPLICATE", "INVOICE"],
         ],
       );
 
@@ -404,7 +404,7 @@ describe(
       assert.deepEqual(documents.map((d) => [d.subject, d.status]).sort(), [
         ["corrected", "READ"],
         ["invoice", "SUPERSEDED"],
-        ["reminder", "DUPLICATE"],
+        ["resend", "DUPLICATE"],
         ["stale", "SUPERSEDED"],
       ]);
       const arrival = await prisma.expectedArrival.findFirstOrThrow({
@@ -429,6 +429,55 @@ describe(
       MI PIROSIT: ha a PDF is beolvasodik (a masodik dokumentum DUPLICATE-kent
       megjelenik), vagy ha az XML helyett a PDF lesz a dokumentum.
     */
+    it("a payment reminder with the invoice attached opens NO arrival, and says why", async () => {
+      // the De Jong shape (2026-09-30): the reminder and the original invoice
+      // side by side; the invoice alone WOULD open an arrival
+      readings.set(
+        `inv-reminded ${suffix}`,
+        doc({ documentKind: "INVOICE", invoiceNumber: "26007910" }),
+      );
+      messages.set(id(9), {
+        ...mail(9, "x"),
+        subject: "Reminder for invoice 26007910 of De Jong Marinelife B.V.",
+        pdfs: [
+          {
+            fileName: "First reminder 11069-26007910.pdf",
+            buffer: Buffer.from(`%PDF unknown ${suffix}`),
+          },
+          {
+            fileName: "inv26007910.pdf",
+            buffer: Buffer.from(`%PDF inv-reminded ${suffix}`),
+          },
+        ],
+      });
+
+      const run = await intake.sync("MANUAL");
+      assert.deepEqual(
+        [run.documentsRead, run.failedCount, run.reminderCount],
+        [0, 1, 1],
+      );
+      assert.equal(
+        await prisma.incomingSupplierDocument.count({
+          where: { gmailMessageId: id(9) },
+        }),
+        0,
+      );
+      assert.equal(
+        await prisma.expectedArrival.count({
+          where: { supplierKey: vat, invoiceNumber: "26007910" },
+        }),
+        0,
+      );
+      const message = await prisma.supplierInvoiceMailMessage.findUnique({
+        where: { gmailMessageId: id(9) },
+        select: { errorCode: true, documentCount: true },
+      });
+      assert.deepEqual(message, {
+        errorCode: "PAYMENT_REMINDER",
+        documentCount: 0,
+      });
+    });
+
     it("a mail with the invoice as XML and as PDF makes ONE document, from the XML", async () => {
       const xml = `<rsm:CrossIndustryInvoice xmlns:rsm="urn:x">xml-pair ${suffix}</rsm:CrossIndustryInvoice>`;
       const same = doc({

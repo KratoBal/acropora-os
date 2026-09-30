@@ -6768,6 +6768,9 @@ model SupplierInvoiceMailSyncRun {
   documentsRead  Int                              @default(0)
   duplicateCount Int                              @default(0)
   failedCount    Int                              @default(0)
+  /// Fizetési felszólítás-levelek: egyik fájljukat sem olvassuk be (Balázs,
+  /// 2026-09-30, message_id 1554831001858080882).
+  reminderCount  Int                              @default(0)
   errorCode      String?
   updatedAt      DateTime                         @updatedAt
 
