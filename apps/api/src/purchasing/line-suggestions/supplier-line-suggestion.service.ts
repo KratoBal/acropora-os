@@ -17,6 +17,7 @@ import type {
 } from "@acropora/types";
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
+import { aquarioomCandidateProfile } from "../supplier-invoice-import/adapters/aquarioom.pdf-adapter.js";
 import { deJongCandidateProfile } from "../supplier-invoice-import/adapters/dejong.pdf-adapter.js";
 import { hertleinCandidateProfile } from "../supplier-invoice-import/adapters/hertlein.pdf-adapter.js";
 import { normalizeVatId } from "../supplier-invoice-import/supplier-invoice-import.common.js";
@@ -73,6 +74,14 @@ const SUPPLIER_JEV_SETTINGS: Readonly<Record<string, SupplierJevSettings>> = {
     profile: deJongCandidateProfile,
     shownConfidence: 0.8,
     criteria: "name+description",
+  },
+  // Aquarioom (2026-09-30): the brand profile only. The threshold and the
+  // criteria stay the default until they are measured on Aquarioom lines
+  // (barracuda's blind labels), as they were for De Jong.
+  FR67529301244: {
+    profile: aquarioomCandidateProfile,
+    shownConfidence: SUPPLIER_LINE_SHOWN_CONFIDENCE,
+    criteria: "name",
   },
 };
 const DEFAULT_SETTINGS: SupplierJevSettings = {

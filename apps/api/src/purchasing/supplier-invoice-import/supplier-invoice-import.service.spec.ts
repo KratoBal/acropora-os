@@ -4,6 +4,10 @@ import PDFDocument from "pdfkit";
 
 import { registerEmbeddedPdfFont } from "../../documents/pdf/branded-document.js";
 import { HERTLEIN_PDF_LINES } from "../../testing/hertlein-invoice-pdf-lines.fixture.js";
+import {
+  AQUARIOOM_PDF_LINES,
+  AQUARIOOM_PROFORMA_LINES,
+} from "../../testing/aquarioom-invoice-pdf-lines.fixture.js";
 import { PAGE_END_MARKER } from "./pdf-text-lines.js";
 import { SupplierInvoiceImportError } from "./supplier-invoice-import.error.js";
 import { SupplierInvoiceImportService } from "./supplier-invoice-import.service.js";
@@ -84,6 +88,30 @@ describe("SupplierInvoiceImportService", () => {
     assert.deepEqual(result.warnings, [
       "PDF-ből olvasva, nem XML-ből: vesd össze a sorokat a számlával mentés előtt.",
     ]);
+  });
+
+  it("reads an Aquarioom invoice end to end, and the lines add up", async () => {
+    const result = await service.read(await tablePdf(AQUARIOOM_PDF_LINES));
+    assert.equal(result.invoiceNumber, "FA00001234");
+    assert.equal(result.documentKind, "INVOICE");
+    assert.equal(result.orderReference, "12345");
+    assert.deepEqual(
+      result.lines.map((line) => line.supplierSku),
+      ["A-FBN4", "AA-SATO270D", "F-EDSP", "M-RSX200", "M-GP3016CE", null],
+    );
+    assert.deepEqual(result.warnings, [
+      "PDF-ből olvasva, nem XML-ből: vesd össze a sorokat a számlával mentés előtt.",
+    ]);
+  });
+
+  it("refuses a proforma from the manual upload, and reads it only when asked", async () => {
+    const bytes = await tablePdf(AQUARIOOM_PROFORMA_LINES);
+    // the manual upload passes no options: a proforma is not an invoice to receive
+    await assert.rejects(service.read(bytes), fails("PROFORMA"));
+    const result = await service.read(bytes, { allowProforma: true });
+    assert.equal(result.documentKind, "PROFORMA");
+    assert.equal(result.invoiceNumber, "CM1234");
+    assert.equal(result.orderReference, "12346");
   });
 
   it("says so when no adapter knows the PDF", async () => {

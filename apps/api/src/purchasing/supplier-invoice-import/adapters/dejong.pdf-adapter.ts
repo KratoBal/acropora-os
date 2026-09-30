@@ -170,6 +170,13 @@ function readLines(lines: readonly string[]): {
 
 export const deJongPdfAdapter: SupplierPdfAdapter = {
   key: "dejong",
+  // the senders of the 84 mails with an invoice PDF (exchange/a008-dejong):
+  // info@ 75, finance@ 8 (reminders, the invoice attached again), werner@ 1
+  senders: [
+    "info@dejongmarinelife.nl",
+    "finance@dejongmarinelife.nl",
+    "werner@dejongmarinelife.nl",
+  ],
 
   matches(lines) {
     return (

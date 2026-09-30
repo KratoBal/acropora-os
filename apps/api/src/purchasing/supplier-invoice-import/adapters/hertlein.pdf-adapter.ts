@@ -154,6 +154,10 @@ function readLines(lines: readonly string[]): {
 
 export const hertleinPdfAdapter: SupplierPdfAdapter = {
   key: "hertlein",
+  // 62 of the 63 invoice PDFs ("Rechnung") came from this address; the 63rd
+  // was our own forward. shop@der-aquaristik.shop sends order confirmations
+  // with a privacy notice PDF, not invoices (exchange/a008-hertlein).
+  senders: ["info@hertlein-aquaristik.de"],
 
   matches(lines) {
     return (
