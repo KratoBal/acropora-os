@@ -69,6 +69,9 @@ export function navigationItems(
 }
 
 /** Az Elszámolások gyűjtő-útvonala: az első olyan fülre visz, amihez van jog. */
+/** A Hiányzó számlák hónaplistája; egy hónap: `${MISSING_INVOICES_PATH}/2026-08`. */
+export const MISSING_INVOICES_PATH = "/penzugy/hianyzo-szamlak";
+
 export const SETTLEMENTS_PATH = "/penzugy/elszamolasok";
 
 /**
@@ -258,6 +261,14 @@ export const businessNavigation: AppNavigationEntry[] = [
         icon: "download",
         entryId: "settlements",
         alsoActiveOn: SETTLEMENT_TABS.map((tab) => tab.href),
+      },
+      {
+        // Hiányzó számlák (Balázs briefje, 2026-09-30): az Elszámolások
+        // mellett. Egy hónap a /penzugy/hianyzo-szamlak/2026-08 alatt.
+        href: MISSING_INVOICES_PATH,
+        label: "Hiányzó számlák",
+        icon: "alert",
+        entryId: "missing-invoices",
       },
       {
         // Ide KÖLTÖZÖTT a korábbi felső szintű "Raktár", és a lap tartalma
