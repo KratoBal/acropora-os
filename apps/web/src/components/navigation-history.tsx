@@ -1,8 +1,9 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   createContext,
+  Suspense,
   useContext,
   useEffect,
   useMemo,
@@ -10,10 +11,18 @@ import {
   type ReactNode,
 } from "react";
 
-import { advanceTrail, previousPage } from "@/lib/navigation/return-trail";
+import {
+  advanceTrail,
+  lastVisitOf,
+  previousPage,
+} from "@/lib/navigation/return-trail";
 
-const NavigationHistoryContext = createContext<{ previous: string | null }>({
+const NavigationHistoryContext = createContext<{
+  previous: string | null;
+  trail: readonly string[];
+}>({
   previous: null,
+  trail: [],
 });
 
 /**
@@ -30,19 +39,43 @@ export function NavigationHistoryProvider({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const [search, setSearch] = useState("");
   const [trail, setTrail] = useState<string[]>([]);
 
+  /*
+    A NYOM A TELJES CÍMET TARTJA, A QUERYVEL EGYÜTT: a lista szűrése és oldala
+    az URL-ben él, és a "vissza" csak így viszi vissza őket (Balázs kérése,
+    2026-09-30). A query a lap-váltásnál és a szűrő-váltásnál is frissül.
+  */
   useEffect(() => {
-    setTrail((current) => advanceTrail(current, pathname));
-  }, [pathname]);
+    const href = search ? `${pathname}?${search}` : pathname;
+    setTrail((current) => advanceTrail(current, href));
+  }, [pathname, search]);
 
-  const value = useMemo(() => ({ previous: previousPage(trail) }), [trail]);
+  const value = useMemo(
+    () => ({ previous: previousPage(trail), trail }),
+    [trail],
+  );
 
   return (
     <NavigationHistoryContext.Provider value={value}>
+      {/*
+        A `useSearchParams` egy saját, Suspense alatti gyerekben él: így a
+        Next.js kliens-oldali visszaesése csak ezt a láthatatlan elemet
+        érinti, nem a teljes héjat.
+      */}
+      <Suspense fallback={null}>
+        <SearchTracker onChange={setSearch} />
+      </Suspense>
       {children}
     </NavigationHistoryContext.Provider>
   );
+}
+
+function SearchTracker({ onChange }: { onChange: (search: string) => void }) {
+  const search = useSearchParams().toString();
+  useEffect(() => onChange(search), [onChange, search]);
+  return null;
 }
 
 export interface ReturnTarget {
@@ -74,4 +107,14 @@ export function useReturnTo(fallbackHref: string): ReturnTarget {
     fromWithinApp,
     goBack: () => router.push(href),
   };
+}
+
+/**
+ * Egy lista címe a legutóbbi szűrésével és oldalával, ha a munkamenetben
+ * már járt ott, különben a puszta útvonal. Morzsamenühöz és "a listához"
+ * linkhez, ahol nem az előző lap a cél, hanem maga a lista.
+ */
+export function useListHref(listPath: string): string {
+  const { trail } = useContext(NavigationHistoryContext);
+  return lastVisitOf(trail, listPath) ?? listPath;
 }
