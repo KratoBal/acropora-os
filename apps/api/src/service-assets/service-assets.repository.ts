@@ -16,6 +16,10 @@ import { randomUUID } from "node:crypto";
 
 import { conflictingFields, intendedFields } from "./asset-field-conflict.js";
 import { assetListOrderBy } from "./asset-list-order.js";
+import {
+  ASSET_NEIGHBOR_SCAN_LIMIT,
+  assetListNeighbors,
+} from "./asset-list-neighbors.js";
 import { assetLabelWhere } from "./asset-label-filter.js";
 import { assetCategoryWhere } from "./asset-category-filter.js";
 import { assetSearchWhere } from "./asset-search-filter.js";
@@ -32,6 +36,7 @@ import type {
   AssetEventSummary,
   AssetHierarchyItem,
   AssetListItem,
+  AssetListNeighbors,
   AssetListResponse,
   AssetOwnerListResponse,
   AssetOwnerType,
@@ -554,11 +559,17 @@ export class ServiceAssetsRepository extends Repository {
     return [...ids];
   }
 
-  async list(
+  /**
+   * A LISTA FELTETELE, EGY HELYEN. A lista es a szomszed-kereso (`neighbors`)
+   * ugyanezt hasznalja: az adatlap Elozo/Kovetkezo gombja pontosan azt a
+   * halmazt lepkedi vegig, amit a lista mutat, es ha a ketto kulon epulne, egy
+   * uj szuro csak az egyikbe kerulne be.
+   */
+  private async listWheres(
     query: AssetListQueryDto,
     scope: PartnerScope,
     assignedUnitIds: readonly string[],
-  ): Promise<AssetListResponse> {
+  ): Promise<{ list: Prisma.AssetWhereInput; counts: Prisma.AssetWhereInput }> {
     // A KÉT MEZŐ EGYÜTT IS MEGADHATÓ, és a szűrő az uniójuk. A singularis alak
     // marad, hogy a meglévő hívások betűre változatlanok legyenek.
     const requestedUnitIds = [
@@ -628,13 +639,58 @@ export class ServiceAssetsRepository extends Repository {
        */
       ...assetSearchWhere(query.search),
     };
-    const { list: where, counts: countsWhere } = assetListWheres(
+    return assetListWheres(
       scope,
       assignedUnitIds,
       userWhereWithoutStatus,
       // A HAROM AG (egy allapot / minden / minden a kivezetetten kivul) egy
       // helyen all, tiszta fuggvenyben -- adatbazis nelkul merheto.
       assetStatusWhere(query.status),
+    );
+  }
+
+  /**
+   * AZ ADATLAP ELOZO/KOVETKEZO GOMBJA (Balazs kerese, 2026-09-30): a lista
+   * szurojevel es sorrendjevel az eszkoz ket szomszedja. A lapozas itt nem
+   * szamit: a gomb a lap szelen is atlep a kovetkezo lapra.
+   *
+   * CSAK AZONOSITOKAT KER, a lista sajat feltetelevel es sorrendjevel, es a
+   * helyet a tiszta `assetListNeighbors` keresi meg. A hatar
+   * (`ASSET_NEIGHBOR_SCAN_LIMIT`) folott a halmaz vege nem jon le: ha az eszkoz
+   * ott all, a valasz "nincs a listaban", es a gombok tiltottak, nem tevesek.
+   */
+  async neighbors(
+    id: string,
+    query: AssetListQueryDto,
+    scope: PartnerScope,
+    assignedUnitIds: readonly string[],
+  ): Promise<AssetListNeighbors> {
+    const { list: where } = await this.listWheres(
+      query,
+      scope,
+      assignedUnitIds,
+    );
+    const rows = await prisma.asset.findMany({
+      where,
+      orderBy: assetListOrderBy(query.sort, query.direction),
+      select: { id: true },
+      take: ASSET_NEIGHBOR_SCAN_LIMIT,
+    });
+    return assetListNeighbors(
+      rows.map((row) => row.id),
+      id,
+    );
+  }
+
+  async list(
+    query: AssetListQueryDto,
+    scope: PartnerScope,
+    assignedUnitIds: readonly string[],
+  ): Promise<AssetListResponse> {
+    const { list: where, counts: countsWhere } = await this.listWheres(
+      query,
+      scope,
+      assignedUnitIds,
     );
     const [rows, totalItems, counts] = await Promise.all([
       prisma.asset.findMany({

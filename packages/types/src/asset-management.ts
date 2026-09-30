@@ -515,6 +515,18 @@ export interface AssetListResponse {
   counts: Record<AssetStatus, number>;
 }
 
+/**
+ * AZ ADATLAP ELOZO/KOVETKEZO GOMBJA: az eszkoz ket szomszedja a lista
+ * szurojevel es sorrendjevel. `null` szomszed: a lista vege, a gomb tiltott.
+ * `position` 1-tol szamol, `null`, ha az eszkoz nincs a szurt listaban.
+ */
+export interface AssetListNeighbors {
+  previousId: string | null;
+  nextId: string | null;
+  position: number | null;
+  total: number;
+}
+
 export interface CreateAssetInput {
   /**
    * A KLIENS MUVELET-AZONOSITOJA. A webes letrehozo urlap 2026-09-28 ota kuldi:
