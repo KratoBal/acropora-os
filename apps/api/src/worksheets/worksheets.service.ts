@@ -846,6 +846,7 @@ export class WorksheetsService {
     const updated = await this.repository.replaceDraftContent({
       versionId: current.id,
       content,
+      actorUserId: actor.id,
     });
     if (!updated) {
       throw new ConflictException(
@@ -1259,6 +1260,7 @@ export class WorksheetsService {
       versionId,
       lineId: input.id ?? randomUUID(),
       line,
+      actorUserId: actor.id,
     });
     this.assertLineWritten(result);
     return this.detailAfterWrite(id);

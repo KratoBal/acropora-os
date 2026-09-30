@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
 import { nincsMaradek } from "../common/takaritas-leltar.js";
@@ -10,6 +10,7 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
 import type { WorksheetContentDto } from "./dto/worksheet.dto.js";
 import { normalizeWorksheetContent } from "./worksheet-content.js";
 import { worksheetYear } from "./worksheet-number.js";
+import { FIRST_LINE_STEP_NOTE } from "./first-line-ticket-step.js";
 import { WorksheetsRepository } from "./worksheets.repository.js";
 import { toWorksheetDetail } from "./worksheets.types.js";
 
@@ -1445,6 +1446,173 @@ describe(
         const egyik = await createDraft(bioDepartmentId);
         const masik = await createDraft(bioDepartmentId);
         assert.notEqual(masik, egyik);
+      });
+    });
+
+    /**
+     * AZ ELSŐ TÉTELSOR A HIBAJEGYET FOLYAMATBAN ÁLLAPOTBA LÉPTETI (Balázs
+     * kérése, 2026-09-30). A szabályt a `first-line-ticket-step.spec.ts` méri;
+     * ez a három HÍVÁSI HELYET, valódi adatbázison: új lap sorokkal, egy sor
+     * felvétele, teljes mentés. Egy kimaradt hívás itt nem hibázna, csak a jegy
+     * maradna a régi állapotában.
+     */
+    describe("az első tételsor léptetése", () => {
+      let jobCounter = 0;
+      async function job(status: "NEW" | "TRIAGED" | "WAITING_FOR_PARTS") {
+        jobCounter += 1;
+        return prisma.serviceJob.create({
+          data: {
+            jobNumber: `${TEST_JOB_PREFIX}${suffix}-EL${jobCounter}`,
+            title: "Első tételsor",
+            customerId,
+            departmentId: bioDepartmentId,
+            status,
+          },
+          select: { id: true },
+        });
+      }
+      async function state(jobId: string) {
+        const row = await prisma.serviceJob.findUniqueOrThrow({
+          where: { id: jobId },
+          select: {
+            status: true,
+            events: {
+              where: { kind: "STATUS_CHANGE" },
+              select: {
+                fromStatus: true,
+                toStatus: true,
+                note: true,
+                actorUserId: true,
+              },
+            },
+          },
+        });
+        return row;
+      }
+      async function draftVersionId(worksheetId: string) {
+        const version = await prisma.worksheetVersion.findFirstOrThrow({
+          where: { worksheetId, status: "DRAFT" },
+          select: { id: true },
+        });
+        return version.id;
+      }
+      const oneLine = () => content().lines[0]!;
+
+      it("az új, jegy alá nyitott lap a sorokkal együtt lépteti a jegyet", async () => {
+        const ticket = await job("NEW");
+        await repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content(),
+          actorUserId,
+          serviceJobId: ticket.id,
+        });
+        const row = await state(ticket.id);
+        assert.equal(row.status, "IN_PROGRESS");
+        assert.deepEqual(row.events, [
+          {
+            fromStatus: "NEW",
+            toStatus: "IN_PROGRESS",
+            note: FIRST_LINE_STEP_NOTE,
+            actorUserId,
+          },
+        ]);
+      });
+
+      it("üres lap nem léptet, az első felvett sor igen, a második már nem", async () => {
+        const ticket = await job("NEW");
+        const worksheetId = await repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content({ lines: [] }),
+          actorUserId,
+          serviceJobId: ticket.id,
+        });
+        assert.equal((await state(ticket.id)).status, "NEW");
+
+        const versionId = await draftVersionId(worksheetId);
+        await repository.addLine({
+          versionId,
+          lineId: randomUUID(),
+          line: oneLine(),
+          actorUserId: technicianUserId,
+        });
+        await repository.addLine({
+          versionId,
+          lineId: randomUUID(),
+          line: oneLine(),
+          actorUserId: technicianUserId,
+        });
+        const row = await state(ticket.id);
+        assert.equal(row.status, "IN_PROGRESS");
+        assert.equal(row.events.length, 1);
+        assert.equal(row.events[0]!.actorUserId, technicianUserId);
+
+        /*
+          NEM "MINDEN SOR", HANEM AZ ELSŐ. Ha a jegy közben visszakerült egy
+          korábbi állapotba (a kézi menet engedi: várakozásból ütemezettre), a
+          következő sor már nem az első, és a jegyhez nem nyúl. MI PIROSÍT: ha
+          a hívás minden sor után futna.
+        */
+        await prisma.serviceJob.update({
+          where: { id: ticket.id },
+          data: { status: "SCHEDULED" },
+        });
+        await repository.addLine({
+          versionId,
+          lineId: randomUUID(),
+          line: oneLine(),
+          actorUserId: technicianUserId,
+        });
+        assert.equal((await state(ticket.id)).status, "SCHEDULED");
+      });
+
+      it("a teljes mentés is léptet, ha azzal kerül fel az első sor", async () => {
+        const ticket = await job("TRIAGED");
+        const worksheetId = await repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content({ lines: [] }),
+          actorUserId,
+          serviceJobId: ticket.id,
+        });
+        const versionId = await draftVersionId(worksheetId);
+        await repository.replaceDraftContent({
+          versionId,
+          content: content(),
+          actorUserId,
+        });
+        const row = await state(ticket.id);
+        assert.equal(row.status, "IN_PROGRESS");
+        assert.equal(row.events.length, 1);
+        assert.equal(row.events[0]!.fromStatus, "TRIAGED");
+
+        // UGYANAZ, MINT A SOR-FELVÉTELNÉL: a visszaléptetett jegyet egy
+        // későbbi mentés (ami már sorokat cserél) nem lépteti újra.
+        await prisma.serviceJob.update({
+          where: { id: ticket.id },
+          data: { status: "SCHEDULED" },
+        });
+        await repository.replaceDraftContent({
+          versionId,
+          content: content(),
+          actorUserId,
+        });
+        assert.equal((await state(ticket.id)).status, "SCHEDULED");
+      });
+
+      it("KONTROLL: az alkatrészre váró jegyhez nem nyúl", async () => {
+        const ticket = await job("WAITING_FOR_PARTS");
+        await repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content(),
+          actorUserId,
+          serviceJobId: ticket.id,
+        });
+        const row = await state(ticket.id);
+        assert.equal(row.status, "WAITING_FOR_PARTS");
+        assert.deepEqual(row.events, []);
       });
     });
   },
