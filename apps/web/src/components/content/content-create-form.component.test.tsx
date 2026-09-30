@@ -16,7 +16,12 @@ const api = vi.hoisted(() => ({
 vi.mock("@/lib/api/content", () => ({ contentApi: api }));
 
 const router = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+const noQuery = new URLSearchParams();
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  usePathname: () => "/tartalom",
+  useSearchParams: () => noQuery,
+}));
 
 /**
  * A MUNKAMENET AZ ELES ALAKJABAN: NINCS BENNE TOKEN.

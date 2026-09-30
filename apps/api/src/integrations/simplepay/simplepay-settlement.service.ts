@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type {
+  SimplePayLineError,
   SimplePayManualApprovalInput,
   SimplePayReportDetail,
   SimplePayReportListResponse,
@@ -13,11 +14,21 @@ import {
   SimplePayReportError,
   type SimplePayReport,
 } from "./simplepay-report.parser.js";
+import { SimplePayMonthlyReportXlsx } from "./simplepay-monthly-report.xlsx.js";
 import { resolveSimplePayLine } from "./simplepay-resolution.js";
 import {
   SimplePaySettlementRepository,
   type UnresolvedSimplePayLine,
 } from "./simplepay-settlement.repository.js";
+
+/** Why a payment waits, in the words the accountant reads (as on the page). */
+const REVIEW_REASONS: Record<SimplePayLineError, string> = {
+  REFERENCE_UNKNOWN: "Az azonosítóból nem olvasható ki a rendelés",
+  ORDER_NOT_FOUND: "A rendelés nincs a rendszerben",
+  ORDER_AMBIGUOUS: "Több rendelés illik rá",
+  AMOUNT_MISMATCH: "A rendelés végösszege más",
+  ORDER_NOT_INVOICED: "A rendelésnek még nincs számlája",
+};
 
 /** What the person sees when a file is refused, per reader error. */
 const REPORT_ERRORS: Record<string, string> = {
@@ -75,7 +86,10 @@ export function summaryWarnings(
 
 @Injectable()
 export class SimplePaySettlementService {
-  constructor(private readonly repository: SimplePaySettlementRepository) {}
+  constructor(
+    private readonly repository: SimplePaySettlementRepository,
+    private readonly reports: SimplePayMonthlyReportXlsx,
+  ) {}
 
   /** A weekly report uploaded by hand. */
   async upload(
@@ -175,6 +189,49 @@ export class SimplePaySettlementService {
     await this.resolve(await this.repository.unresolvedLines(id));
     await this.repository.refreshReportStatus([id]);
     return this.repository.reportDetail(id);
+  }
+
+  /** The month's file in Luca's table shape, built from what is stored now. */
+  async monthlyReport(year: number, month: number) {
+    if (!Number.isInteger(year) || year < 2020 || year > 2100)
+      throw new BadRequestException("SIMPLEPAY_REPORT_YEAR_INVALID");
+    if (!Number.isInteger(month) || month < 1 || month > 12)
+      throw new BadRequestException("SIMPLEPAY_REPORT_MONTH_INVALID");
+    const reports = await this.repository.monthData(year, month);
+    return this.reports.build(
+      year,
+      month,
+      reports.map((report) => {
+        const open = report.lines.filter(
+          (line) => line.status === "NEEDS_REVIEW",
+        );
+        return {
+          reportDate: report.reportDate,
+          fileName: report.fileName,
+          amountTotal: Number(report.amountTotal),
+          commissionTotal: Number(report.commissionTotal),
+          netTotal: Number(report.netTotal),
+          invoiceNumbers: report.lines
+            .filter((line) => line.status === "RESOLVED")
+            .flatMap((line) => line.invoiceNumbers),
+          notInvoiced: open
+            .filter((line) => line.errorCode === "ORDER_NOT_INVOICED")
+            .map((line) => ({
+              amount: Number(line.amount),
+              orderNumber: line.orderNumber,
+            })),
+          review: open.map((line) => ({
+            merchantTransactionId: line.merchantTransactionId,
+            transactionAt: line.transactionAt,
+            amount: Number(line.amount),
+            orderNumber: line.orderNumber,
+            reason:
+              REVIEW_REASONS[line.errorCode as SimplePayLineError] ??
+              "Ellenőrzendő",
+          })),
+        };
+      }),
+    );
   }
 
   listReports(query: {

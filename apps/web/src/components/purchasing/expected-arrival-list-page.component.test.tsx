@@ -13,9 +13,10 @@ import type {
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { urlNavigation } from "@/test/url-navigation";
+
 import { ExpectedArrivalListPage } from "./expected-arrival-list-page";
 
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   syncStatus: vi.fn(),
@@ -26,7 +27,10 @@ const api = vi.hoisted(() => ({
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/url-navigation")).nextNavigationModule,
+);
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: auth.session,
@@ -80,7 +84,7 @@ const status: SupplierInvoiceMailSyncStatus = {
 
 beforeEach(() => {
   auth.session = session("OWNER");
-  navigation.push.mockReset();
+  urlNavigation.reset("/beszerzes/varhato");
   api.list.mockReset().mockResolvedValue({
     items: [
       item({}),
@@ -140,10 +144,10 @@ describe("ExpectedArrivalListPage", () => {
     expect(rows[0]).toHaveTextContent("7 (4 javaslattal)");
 
     fireEvent.click(rows[1]!);
-    expect(navigation.push).not.toHaveBeenCalled();
+    expect(urlNavigation.push).not.toHaveBeenCalled();
     fireEvent.click(rows[0]!);
     fireEvent.click(rows[2]!);
-    expect(navigation.push.mock.calls.map(([path]) => path)).toEqual([
+    expect(urlNavigation.push.mock.calls.map(([path]) => path)).toEqual([
       "/beszerzes/uj?beerkezes=arr-1",
       "/beszerzes/uj?navInvoiceId=nav-1",
     ]);
@@ -169,7 +173,7 @@ describe("ExpectedArrivalListPage", () => {
     expect(row).toHaveTextContent("Bevételezés után javított számla érkezett");
     expect(row).not.toHaveTextContent("Bevételezhető");
     fireEvent.click(row!);
-    expect(navigation.push).not.toHaveBeenCalled();
+    expect(urlNavigation.push).not.toHaveBeenCalled();
   });
 
   it("filters by source", async () => {
@@ -209,7 +213,7 @@ describe("ExpectedArrivalListPage", () => {
     await waitFor(() =>
       expect(api.dismiss).toHaveBeenCalledWith("token-owner", "arr-1"),
     );
-    expect(navigation.push).not.toHaveBeenCalled();
+    expect(urlNavigation.push).not.toHaveBeenCalled();
     await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
 
     api.list.mockResolvedValue({
@@ -258,5 +262,27 @@ describe("ExpectedArrivalListPage", () => {
       screen.queryByRole("button", { name: "Levelek ellenőrzése" }),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Nem kell" })).toBeNull();
+  });
+});
+
+/*
+  A FORRÁS-SZŰRŐ AZ URL-BEN (Balázs kérése, 2026-09-30): a szerkesztőből
+  visszalépve a lista ugyanazt a forrást mutatja. MI PIROSÍT: ha a szűrő
+  megint helyi állapot lenne.
+*/
+describe("Várható beérkezések -- a forrás-szűrő az URL-ben", () => {
+  it("az URL forrásával indul", async () => {
+    urlNavigation.reset("/beszerzes/varhato", "source=NAV");
+    render(<ExpectedArrivalListPage />);
+    await screen.findByText("Hazai Kft.");
+    expect(screen.queryByText("Aquarioom")).toBeNull();
+  });
+
+  it("a forrás-váltás az URL-be íródik", async () => {
+    render(<ExpectedArrivalListPage />);
+    await screen.findByText("Hazai Kft.");
+    fireEvent.click(screen.getByRole("button", { name: "Levélből" }));
+    await waitFor(() => expect(urlNavigation.search).toBe("source=MAIL"));
+    expect(screen.queryByText("Hazai Kft.")).toBeNull();
   });
 });

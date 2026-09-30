@@ -296,6 +296,11 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.FINANCE_VIEW),
   },
   {
+    id: "simplepay-settlement",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.FINANCE_VIEW),
+  },
+  {
     id: "inventory",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.INVENTORY_VIEW),

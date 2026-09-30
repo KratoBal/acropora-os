@@ -146,6 +146,12 @@ enum SimplePayResolutionSource {
   MANUAL
 }
 
+enum SimplePaySyncRunStatus {
+  RUNNING
+  APPLIED
+  FAILED
+}
+
 /// GLS elszámolás: egy utánvét-jelentés akkor NEEDS_REVIEW, ha van
 /// feloldatlan sora.
 enum GlsCodReportStatus {
@@ -5914,6 +5920,38 @@ model SimplePayTransactionLine {
   @@index([orderKeySuffix])
   @@index([status])
   @@index([transactionDate])
+}
+
+/// Egy SimplePay-levél, amit a Gmail-behúzás már feldolgozott: többet nem
+/// töltjük le. Ha a CSV nem volt olvasható, vagy a levél nem heti kimutatás,
+/// az `errorCode` mondja meg; a levél akkor sem próbálkozik újra.
+model SimplePayGmailMessage {
+  id             String    @id @default(cuid())
+  gmailMessageId String    @unique
+  receivedAt     DateTime?
+  subject        String?
+  documentCount  Int
+  errorCode      String?
+  createdAt      DateTime  @default(now())
+}
+
+/// A SimplePay Gmail-behúzás egy futása. Az `activeKey` egyedi, így egyszerre
+/// egy fut; egy elakadt futás 30 perc után feloldódik.
+model SimplePaySyncRun {
+  id             String                 @id @default(cuid())
+  activeKey      String?                @unique
+  status         SimplePaySyncRunStatus @default(RUNNING)
+  trigger        SyncRunTrigger
+  startedAt      DateTime               @default(now())
+  completedAt    DateTime?
+  messagesSeen   Int                    @default(0)
+  documentsRead  Int                    @default(0)
+  duplicateCount Int                    @default(0)
+  failedCount    Int                    @default(0)
+  errorCode      String?
+  updatedAt      DateTime               @updatedAt
+
+  @@index([startedAt])
 }
 
 /// GLS heti utánvét-részletezője ("Utánvét részletező"): egy utalás a GLS-től,

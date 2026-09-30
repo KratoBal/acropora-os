@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { urlChoice, useUrlQuery } from "@/lib/navigation/use-url-query";
 import {
   ServiceIcon,
   ServiceListFooter,
@@ -58,10 +59,24 @@ export function ServiceJobListPage({
   kind?: "REPAIR" | "MAINTENANCE";
 }) {
   const { session } = useAuth();
-  const [tab, setTab] = useState<ServiceJobTab>("open");
-  const [search, setSearch] = useState("");
-  const [includeHidden, setIncludeHidden] = useState(false);
-  const [appliedSearch, setAppliedSearch] = useState("");
+  /*
+    A FÜL, A KERESÉS ÉS A REJTETTEK KAPCSOLÓJA AZ URL-BEN (Balázs kérése,
+    2026-09-30): a jegyről visszalépve a lista ugyanott áll. A gépelt szöveg
+    helyi, a KÉSLELTETETT keresés viszont az URL-be kerül: az az, amit a lista
+    ténylegesen lekérdez.
+  */
+  const { params, update } = useUrlQuery();
+  const tab = urlChoice<ServiceJobTab>(
+    params,
+    "tab",
+    SERVICE_JOB_TABS.map((entry) => entry.id),
+    "open",
+  );
+  const appliedSearch = params.get("q") ?? "";
+  const includeHidden = params.get("hidden") === "1";
+  const [search, setSearch] = useState(appliedSearch);
+  const setTab = (next: ServiceJobTab) =>
+    update({ tab: next === "open" ? null : next });
   const [data, setData] = useState<ServiceJobListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,9 +113,9 @@ export function ServiceJobListPage({
     lista ne villogjon félig begépelt szavakra.
   */
   useEffect(() => {
-    const timer = setTimeout(() => setAppliedSearch(search), 250);
+    const timer = setTimeout(() => update({ q: search.trim() || null }), 250);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, update]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -274,7 +289,7 @@ export function ServiceJobListPage({
           {canHide ? (
             <Button
               variant={includeHidden ? "primary" : "secondary"}
-              onClick={() => setIncludeHidden((elozo) => !elozo)}
+              onClick={() => update({ hidden: includeHidden ? null : "1" })}
             >
               {includeHidden ? "Rejtettek nélkül" : "Rejtettek is"}
             </Button>
