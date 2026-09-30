@@ -210,6 +210,30 @@ export function BillingDocumentDetailPage({
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
 
+  /**
+   * A FIÓK A LEVELEZÉS OLDAL SABLONJÁVAL NYÍLIK (nautilus #1293): amíg a levélhez
+   * senki nem nyúlt, a szerver vázlata lesz a kiinduló szöveg. Ha közben már
+   * beleírtak, az nyer; ha a vázlat nem jön meg, a helyi alapszöveg marad, és
+   * küldés előtt úgyis látszik, mi megy ki.
+   */
+  const openDrawer = () => {
+    setDrawerOpen(true);
+    if (email !== null) return;
+    billingDocumentsApi
+      .emailDraft(token, detail.id)
+      .then((draft) =>
+        setEmail(
+          (current) =>
+            current ?? {
+              ...emailDraft,
+              subject: draft.subject,
+              body: draft.body,
+            },
+        ),
+      )
+      .catch(() => undefined);
+  };
+
   const send = async () => {
     setSending(true);
     setSendError(null);
@@ -304,7 +328,7 @@ export function BillingDocumentDetailPage({
                       : mode === null
                         ? "Épp fut egy küldés, vagy a bizonylat még nincs kiállítva."
                         : "A kiküldéshez a hivatalos PDF kell, és az még nincs meg.",
-                    onClick: () => setDrawerOpen(true),
+                    onClick: openDrawer,
                   }
             }
           />
@@ -553,16 +577,15 @@ export function BillingDocumentDetailPage({
               : ""
           }
           known={{
-            "{customer_name}": detail.customer?.name ?? "{customer_name}",
-            "{document_number}": detail.documentNumber ?? "{document_number}",
-            "{invoice_number}": detail.documentNumber ?? "{invoice_number}",
-            "{gross_total}": gross,
-            "{due_date}": detail.dueDate
+            customer_name: detail.customer?.name ?? "{{customer_name}}",
+            document_number: detail.documentNumber ?? "{{document_number}}",
+            invoice_number: detail.documentNumber ?? "{{invoice_number}}",
+            gross_total: gross,
+            due_date: detail.dueDate
               ? formatDay(detail.dueDate)
-              : "{due_date}",
-            "{order_number}": detail.reference ?? "{order_number}",
-            "{document_link}":
-              detail.szamlazz?.documentUrl ?? "{document_link}",
+              : "{{due_date}}",
+            order_number: detail.reference ?? "{{order_number}}",
+            document_link: detail.szamlazz?.documentUrl ?? "{{document_link}}",
           }}
           submit={{
             label: MODE_LABELS[mode ?? "RESEND"],

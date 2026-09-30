@@ -14,6 +14,7 @@ import {
   sanitizeRichHtml,
 } from "@acropora/rich-text";
 import {
+  isPlainTextMailTemplateEvent,
   MAIL_TEMPLATE_EVENTS,
   renderMailTemplate,
   renderMailTemplateHtml,
@@ -155,6 +156,14 @@ export function MailTemplatePage() {
   const [saved, setSaved] = useState(false);
   const [elonezetFul, setElonezetFul] = useState<"html" | "szoveg">("html");
   const szerkesztoRef = useRef<RichTextEditorHandle | null>(null);
+  /**
+   * SIMA SZÖVEGES ESEMÉNY (a két számla-levél, nautilus #1293): a levél
+   * formázás nélkül megy ki, ezért itt nincs formázó szerkesztő, és a mentés
+   * `bodyHtml` nélkül megy. A szerver a formázott törzset ezeknél 400-zal
+   * utasítja el; a lap ne is kínáljon olyat, ami mentéskor elbukna.
+   */
+  const sima = isPlainTextMailTemplateEvent(esemenyId);
+  const szovegRef = useRef<HTMLTextAreaElement | null>(null);
   /* A SABLON KEPEI (2026-09-28): a lista, a megjelenitheto cimuk es a feltoltes. */
   const kepek = useMailImages(token);
   const [kepValaszto, setKepValaszto] = useState(false);
@@ -170,7 +179,10 @@ export function MailTemplatePage() {
         setTemplate(response);
         setSubject(response.subject);
         setBody(
-          response.bodyHtml ?? formazott(response.body, response.variables),
+          isPlainTextMailTemplateEvent(esemenyId)
+            ? response.body
+            : (response.bodyHtml ??
+                formazott(response.body, response.variables)),
         );
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError")
@@ -224,8 +236,11 @@ export function MailTemplatePage() {
 
   /** A szoveges valtozat: ez megy a HTML melle `text/plain`-kent. */
   const szovegesTorzs = useMemo(
-    () => richHtmlToText(body, { hrefPlaceholders: linkNevek(variables) }),
-    [body, variables],
+    () =>
+      sima
+        ? body
+        : richHtmlToText(body, { hrefPlaceholders: linkNevek(variables) }),
+    [body, variables, sima],
   );
 
   /**
@@ -247,6 +262,13 @@ export function MailTemplatePage() {
       API): escape-elt behelyettesites, UTANA tisztitas, a szoveg a tiszta
       HTML-bol. A tisztito itt link-helyorzot NEM enged -- kuldeskor sem enged.
     */
+    if (sima) {
+      const szoveg = renderMailTemplate(body, ertekek);
+      return {
+        targy: renderMailTemplate(subject, ertekek),
+        torzs: szoveg.ok ? { html: null, text: szoveg.text } : null,
+      };
+    }
     const html = renderMailTemplateHtml(body, ertekek);
     const tiszta = html.ok ? sanitizeRichHtml(html.text) : null;
     return {
@@ -254,13 +276,21 @@ export function MailTemplatePage() {
       torzs:
         tiszta === null ? null : { html: tiszta, text: richHtmlToText(tiszta) },
     };
-  }, [subject, body, variables, template]);
+  }, [subject, body, variables, template, sima]);
 
   /*
     A VALTOZO A SZERKESZTO KURZORAHOZ KERUL, ATOMKENT. A kurzor utana marad, a
     kovetkezo beszuras tehat mogeje kerul, nem bele.
   */
-  const beszur = (nev: string) => szerkesztoRef.current?.insertVariable(nev);
+  const beszur = (nev: string) => {
+    if (!sima) return szerkesztoRef.current?.insertVariable(nev);
+    // a sima szövegbe a kurzorhoz, `{{név}}` alakban
+    const mezo = szovegRef.current;
+    const valtozo = `{{${nev}}}`;
+    const eleje = mezo?.selectionStart ?? body.length;
+    const vege = mezo?.selectionEnd ?? eleje;
+    setBody(body.slice(0, eleje) + valtozo + body.slice(vege));
+  };
 
   /**
    * AZ ALAPERTELMEZES VISSZATOLTESE -- A SZERKESZTOBE, NEM A SZERVERRE.
@@ -282,7 +312,11 @@ export function MailTemplatePage() {
   const alapertelmezesVisszatoltese = () => {
     if (!template) return;
     setSubject(template.defaultTemplate.subject);
-    setBody(formazott(template.defaultTemplate.body, variables));
+    setBody(
+      sima
+        ? template.defaultTemplate.body
+        : formazott(template.defaultTemplate.body, variables),
+    );
     setSaved(false);
   };
 
@@ -296,11 +330,13 @@ export function MailTemplatePage() {
         HTML-bol UJRA eloallitja (az a donto); itt azert kell, mert a mezo
         kotelezo, es egy regi szerver a szoveget tarolna.
       */
-      await mailTemplatesApi.save(token, esemenyId, {
-        subject,
-        body: szovegesTorzs,
-        bodyHtml: body,
-      });
+      await mailTemplatesApi.save(
+        token,
+        esemenyId,
+        sima
+          ? { subject, body }
+          : { subject, body: szovegesTorzs, bodyHtml: body },
+      );
       setSaved(true);
       /*
         ÚJRAOLVASSUK, ÉS NEM A HELYI ÁLLAPOTOT ÍRJUK ÁT. A `source` mező az első
@@ -416,34 +452,55 @@ export function MailTemplatePage() {
             </label>
             <div className="space-y-1">
               <span className="text-xs font-medium text-dusk-700">Törzs</span>
-              <RichTextEditor
-                ref={szerkesztoRef}
-                aria-label="Törzs"
-                value={body}
-                onChange={setBody}
-                variables={variables}
-                toolbar={[
-                  "bold",
-                  "italic",
-                  "underline",
-                  "link",
-                  "bulletList",
-                  "orderedList",
-                  "image",
-                ]}
-                onImageRequest={() => setKepValaszto((nyitva) => !nyitva)}
-                resolveImageSrc={kepek.resolve}
-              />
-              {kepValaszto ? (
-                <MailImagePicker
-                  images={kepek.images}
-                  sources={kepek.sources}
-                  error={kepek.error}
-                  upload={kepek.upload}
-                  onInsert={(kep) => szerkesztoRef.current?.insertImage(kep)}
-                  onClose={() => setKepValaszto(false)}
-                />
-              ) : null}
+              {sima ? (
+                <>
+                  <textarea
+                    ref={szovegRef}
+                    aria-label="Törzs"
+                    value={body}
+                    onChange={(event) => setBody(event.target.value)}
+                    rows={12}
+                    className="w-full rounded-lg border border-dusk-200 bg-white px-3 py-2 font-mono text-sm text-dusk-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+                  />
+                  <p className="text-xs text-dusk-500">
+                    Ez a levél sima szövegként megy ki: formázás és kép nem
+                    adható hozzá.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <RichTextEditor
+                    ref={szerkesztoRef}
+                    aria-label="Törzs"
+                    value={body}
+                    onChange={setBody}
+                    variables={variables}
+                    toolbar={[
+                      "bold",
+                      "italic",
+                      "underline",
+                      "link",
+                      "bulletList",
+                      "orderedList",
+                      "image",
+                    ]}
+                    onImageRequest={() => setKepValaszto((nyitva) => !nyitva)}
+                    resolveImageSrc={kepek.resolve}
+                  />
+                  {kepValaszto ? (
+                    <MailImagePicker
+                      images={kepek.images}
+                      sources={kepek.sources}
+                      error={kepek.error}
+                      upload={kepek.upload}
+                      onInsert={(kep) =>
+                        szerkesztoRef.current?.insertImage(kep)
+                      }
+                      onClose={() => setKepValaszto(false)}
+                    />
+                  ) : null}
+                </>
+              )}
             </div>
 
             {saveError ? (
@@ -466,7 +523,9 @@ export function MailTemplatePage() {
               {template &&
               (subject !== template.defaultTemplate.subject ||
                 body !==
-                  formazott(template.defaultTemplate.body, variables)) ? (
+                  (sima
+                    ? template.defaultTemplate.body
+                    : formazott(template.defaultTemplate.body, variables))) ? (
                 <Button
                   variant="secondary"
                   onClick={alapertelmezesVisszatoltese}
@@ -553,51 +612,62 @@ export function MailTemplatePage() {
                     levelezok tobbsege a formazottat mutatja, de amelyik nem
                     tud HTML-t, az a szovegeset -- es az is a vevohoz megy.
                   */}
-                  <div
-                    role="tablist"
-                    aria-label="Előnézet fajtája"
-                    className="flex gap-1"
-                  >
-                    {(
-                      [
-                        ["html", "Formázott"],
-                        ["szoveg", "Szöveges"],
-                      ] as const
-                    ).map(([kulcs, cimke]) => (
-                      <button
-                        key={kulcs}
-                        type="button"
-                        role="tab"
-                        aria-selected={elonezetFul === kulcs}
-                        onClick={() => setElonezetFul(kulcs)}
-                        className={
-                          elonezetFul === kulcs
-                            ? "rounded-md bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700"
-                            : "rounded-md px-2 py-1 text-xs text-dusk-600 hover:bg-dusk-100"
-                        }
+                  {elonezet.torzs.html === null ? (
+                    <pre className="whitespace-pre-wrap text-xs text-dusk-700">
+                      {elonezet.torzs.text}
+                    </pre>
+                  ) : (
+                    <>
+                      <div
+                        role="tablist"
+                        aria-label="Előnézet fajtája"
+                        className="flex gap-1"
                       >
-                        {cimke}
-                      </button>
-                    ))}
-                  </div>
-                  {elonezetFul === "html" ? (
-                    <iframe
-                      title="A levél formázott előnézete"
-                      sandbox=""
-                      srcDoc={elonezetDokumentum(
-                        /*
+                        {(
+                          [
+                            ["html", "Formázott"],
+                            ["szoveg", "Szöveges"],
+                          ] as const
+                        ).map(([kulcs, cimke]) => (
+                          <button
+                            key={kulcs}
+                            type="button"
+                            role="tab"
+                            aria-selected={elonezetFul === kulcs}
+                            onClick={() => setElonezetFul(kulcs)}
+                            className={
+                              elonezetFul === kulcs
+                                ? "rounded-md bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700"
+                                : "rounded-md px-2 py-1 text-xs text-dusk-600 hover:bg-dusk-100"
+                            }
+                          >
+                            {cimke}
+                          </button>
+                        ))}
+                      </div>
+                      {elonezetFul === "html" ? (
+                        <iframe
+                          title="A levél formázott előnézete"
+                          sandbox=""
+                          srcDoc={elonezetDokumentum(
+                            /*
                           A KEP A HOMOKOZOBAN `data:` CIMMEL LATSZIK: a sajat
                           hivatkozast a bongeszo nem tolti be, a kuldes pedig
                           cid: mellekletre csereli. Csak a megjelenites valtozik.
                         */
-                        withImageSources(elonezet.torzs.html, kepek.sources),
+                            withImageSources(
+                              elonezet.torzs.html,
+                              kepek.sources,
+                            ),
+                          )}
+                          className="h-72 w-full rounded-md border border-dusk-100 bg-white"
+                        />
+                      ) : (
+                        <pre className="whitespace-pre-wrap text-xs text-dusk-700">
+                          {elonezet.torzs.text}
+                        </pre>
                       )}
-                      className="h-72 w-full rounded-md border border-dusk-100 bg-white"
-                    />
-                  ) : (
-                    <pre className="whitespace-pre-wrap text-xs text-dusk-700">
-                      {elonezet.torzs.text}
-                    </pre>
+                    </>
                   )}
                 </div>
               ) : (

@@ -21,8 +21,11 @@ import { useRef, useState } from "react";
  * A KIKÜLDŐ FIÓK (brief 16-17. pont), általános néven: nem "invoice email",
  * mert díjbekérőt és előlegszámlát is küld.
  *
- * A VÁLTOZÓK: az alap a `{document_number}` és a `{document_link}`; az
- * `{invoice_number}` csak számlánál kínálkozik, kompatibilitásból. Ami a
+ * A VÁLTOZÓK `{{név}}` alakban (a Levelezés sablonjaival közös alak, nautilus
+ * #1293; a szerver a régi `{név}`-et is feloldja, tehát a már megírt szöveg nem
+ * törik el). Az alap a `{{document_number}}` és a `{{document_link}}`; az
+ * `{{invoice_number}}` csak számlánál és előlegszámlánál kínálkozik, mert csak
+ * ott van értéke (a közös változó-leírás szerint). Ami a
  * kiállítás előtt nem ismert (a szám, a hivatkozás), az az előnézetben
  * jelölve marad, nem kitalált értékkel.
  *
@@ -41,13 +44,15 @@ export function billingEmailVariables(
   documentType: BillingDocumentType,
 ): string[] {
   return [
-    "{customer_name}",
-    "{document_number}",
-    ...(documentType === "INVOICE" ? ["{invoice_number}"] : []),
-    "{gross_total}",
-    "{due_date}",
-    "{document_link}",
-    "{order_number}",
+    "{{customer_name}}",
+    "{{document_number}}",
+    ...(documentType === "INVOICE" || documentType === "ADVANCE_INVOICE"
+      ? ["{{invoice_number}}"]
+      : []),
+    "{{gross_total}}",
+    "{{due_date}}",
+    "{{document_link}}",
+    "{{order_number}}",
   ];
 }
 
@@ -67,14 +72,14 @@ export function defaultBillingEmail(
     to,
     cc: "",
     bcc: "",
-    subject: "Acropora – {document_number}",
+    subject: "Acropora – {{document_number}}",
     body: [
-      "Kedves {customer_name}!",
+      "Kedves {{customer_name}}!",
       "",
-      `Csatoltan küldjük a(z) {document_number} számú ${ACCUSATIVE[documentType]}.`,
+      `Csatoltan küldjük a(z) {{document_number}} számú ${ACCUSATIVE[documentType]}.`,
       "",
-      "Fizetendő összeg: {gross_total}",
-      "Fizetési határidő: {due_date}",
+      "Fizetendő összeg: {{gross_total}}",
+      "Fizetési határidő: {{due_date}}",
       "",
       "Köszönjük!",
       "Acropora",
@@ -89,14 +94,19 @@ export const splitAddresses = (text: string) =>
     .map((part) => part.trim())
     .filter(Boolean);
 
-/** Az előnézet: az ismert változók behelyettesítve, a többi jelölve marad. */
+/**
+ * Az előnézet: az ismert változók behelyettesítve, a többi jelölve marad. A
+ * `known` kulcsa a változó NEVE (`customer_name`); mindkét alakot feloldja,
+ * ahogy a szerver is: a `{{név}}`-et (szóközzel is) és a régi `{név}`-et.
+ */
 export function previewBillingEmail(
   text: string,
   known: Record<string, string>,
 ): string {
   return text.replace(
-    /\{[a-z_]+\}/g,
-    (variable) => known[variable] ?? variable,
+    /\{\{\s*([a-z_]+)\s*\}\}|\{([a-z_]+)\}/g,
+    (variable, modern: string | undefined, legacy: string | undefined) =>
+      known[(modern ?? legacy)!] ?? variable,
   );
 }
 
@@ -227,7 +237,7 @@ export function BillingDocumentEmailDrawer({
           <div className="rounded-xl border border-pilot-accent-warm bg-pilot-accent-warm-soft px-4 py-3 text-xs text-pilot-accent-warm-text">
             <p className="font-semibold">A bizonylat száma még nem ismert</p>
             <p className="mt-1">
-              A {"{document_number}"} változó a sikeres Számlázz.hu kiállítás
+              A {"{{document_number}}"} változó a sikeres Számlázz.hu kiállítás
               után helyettesítődik be.
             </p>
           </div>

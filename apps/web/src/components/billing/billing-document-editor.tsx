@@ -283,14 +283,23 @@ export function BillingDocumentEditor({
       return;
     }
     try {
+      // AMIHEZ NEM NYÚLTAK, AZ A LEVELEZÉS OLDAL SABLONJA (nautilus #1293): a
+      // helyi alapszöveg csak a fiók előnézete, a kiküldés a szerver vázlatát
+      // viszi. Ha az nem jön meg, a levél nem megy ki (a hiba alább).
+      let letter: BillingEmailDraft;
+      if (email !== null) letter = email;
+      else {
+        const draft = await billingDocumentsApi.emailDraft(token, issued.id);
+        letter = { ...emailDraft, subject: draft.subject, body: draft.body };
+      }
       const after = await billingDocumentsApi.email(token, issued.id, {
         requestId: crypto.randomUUID(),
         mode,
-        to: splitAddresses(emailDraft.to),
-        cc: splitAddresses(emailDraft.cc),
-        bcc: splitAddresses(emailDraft.bcc),
-        subject: emailDraft.subject,
-        body: emailDraft.body,
+        to: splitAddresses(letter.to),
+        cc: splitAddresses(letter.cc),
+        bcc: splitAddresses(letter.bcc),
+        subject: letter.subject,
+        body: letter.body,
       });
       setStatus(after.status);
       setSent({ ok: true, to: emailDraft.to });
@@ -300,6 +309,30 @@ export function BillingDocumentEditor({
         error: cause instanceof Error ? cause.message : "A levél nem ment ki.",
       });
     }
+  };
+
+  /**
+   * A FIÓK MEGNYITÁSA: egy már mentett bizonylatnál a Levelezés oldal sablonja
+   * tölti ki a levelet (nautilus #1293), amíg senki nem írt bele. Egy még nem
+   * mentett vázlatnak nincs szerver-oldali párja; ott a helyi alapszöveg
+   * látszik, és a kiküldés a mentés után kéri le a sablont.
+   */
+  const openDrawer = () => {
+    setDrawerOpen(true);
+    if (email !== null || state.savedUpdatedAt === null || !canSend) return;
+    billingDocumentsApi
+      .emailDraft(token, state.id)
+      .then((draft) =>
+        setEmail(
+          (current) =>
+            current ?? {
+              ...emailDraft,
+              subject: draft.subject,
+              body: draft.body,
+            },
+        ),
+      )
+      .catch(() => undefined);
   };
 
   const issueDisabledReason = !canIssue
@@ -469,7 +502,7 @@ export function BillingDocumentEditor({
                 <PilotButton
                   variant="secondary"
                   size="regular"
-                  onClick={() => setDrawerOpen(true)}
+                  onClick={openDrawer}
                 >
                   E-mail szerkesztése
                 </PilotButton>
@@ -516,12 +549,12 @@ export function BillingDocumentEditor({
             .filter(Boolean)
             .join(" · ")}
           known={{
-            "{customer_name}": state.customer?.name ?? "{customer_name}",
-            "{gross_total}": grossLabel,
-            "{due_date}": state.dueDate
+            customer_name: state.customer?.name ?? "{{customer_name}}",
+            gross_total: grossLabel,
+            due_date: state.dueDate
               ? `${state.dueDate.replaceAll("-", ". ")}.`
-              : "{due_date}",
-            "{order_number}": state.reference || "{order_number}",
+              : "{{due_date}}",
+            order_number: state.reference || "{{order_number}}",
           }}
         />
       ) : null}
