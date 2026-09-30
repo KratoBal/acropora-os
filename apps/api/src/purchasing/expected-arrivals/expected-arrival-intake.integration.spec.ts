@@ -337,9 +337,11 @@ describe(
       assert.equal(recorded, 4);
 
       const status = await intake.status();
+      // the adapter's sender, and the XML e-invoice sender that has no
+      // adapter to name it (XML_INVOICE_SENDERS, CoralSands)
       assert.deepEqual(
         [status.canRunNow, status.senders],
-        [true, ["contact@aquarioom.com"]],
+        [true, ["contact@aquarioom.com", "info@coralsands.de"]],
       );
       assert.equal(status.lastScheduledRun?.trigger, "SCHEDULED");
     });
