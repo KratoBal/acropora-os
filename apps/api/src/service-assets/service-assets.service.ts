@@ -1101,6 +1101,16 @@ export class ServiceAssetsService {
         throw new BadRequestException(
           "A matricakód alakja egy betű és négy szám (például V2196).",
         );
+      /*
+        A BELSOS MEGTUDJA, MELYIK ESZKOZON ALL A KOD (Balazs, 2026-09-30): a
+        pinceben rogzitett matrica utkozesekor a telefon a feltoltesre varok
+        kozott ezt a mondatot mutatja, es a szerelo ebbol dont. A partner a
+        mai osszevont mondatot kapja: idegen eszkoz letet sem tudhatja meg.
+      */
+      if (scope?.kind === "internal" && error.holder)
+        throw new ConflictException(
+          `A(z) ${error.code} matricakód már a(z) ${error.holder.assetNumber} (${error.holder.name}) eszközön áll. Olvass be másik matricát, vagy előbb vedd le arról az eszközről.`,
+        );
       throw new ConflictException(
         scope?.kind === "internal"
           ? MATRICA_UZENET_BELSOS

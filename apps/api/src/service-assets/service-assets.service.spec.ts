@@ -642,6 +642,114 @@ test("a szerkesztő ágon a rossz ALAK 400-at ad, nem 409-et", async () => {
   );
 });
 
+/**
+ * A FOGLALT KOD GAZDAJA A BELSOSNEK MEGNEVEZVE, A PARTNERNEK NEM (Balazs,
+ * 2026-09-30): a pinceben rogzitett matrica utkozesekor a telefon a
+ * feltoltesre varok kozott a szerver mondatat mutatja, es abbol kell latszania,
+ * MELYIK eszkozon all a kod.
+ *
+ * MI PIROSIT: ha a belsos a gazda helyett a regi, altalanos mondatot kapja;
+ * vagy ha a partner a gazda nevet is megkapja.
+ */
+test("foglalt kódnál a belsős megtudja, MELYIK eszközön áll, a partner nem", async () => {
+  const foglalt = () =>
+    new ServiceAssetsService(
+      repository({
+        basic: async () => ({
+          id: "asset-1",
+          customerId: null,
+          supplierId: "supplier-1",
+          customerAddressId: null,
+          aquariumId: null,
+          parentAssetId: null,
+          productVariantId: null,
+          status: "ACTIVE",
+          updatedAt: new Date(asset.updatedAt),
+          _count: { childAssets: 0 },
+        }),
+        validationContext: async () => ({
+          customer: null,
+          supplier: { id: "supplier-1", isActive: true },
+          address: null,
+          aquarium: null,
+          parent: null,
+          productVariant: null,
+        }),
+        update: async () => {
+          throw new AssetLabelUnavailableError("V2196", {
+            assetNumber: "ESZ-00042",
+            name: "Tunze szivattyú",
+          });
+        },
+      }),
+      new InMemoryDocumentStore(),
+    );
+  await assert.rejects(
+    () =>
+      foglalt().update(
+        "asset-1",
+        { labelCode: "V2196", expectedUpdatedAt: asset.updatedAt },
+        "user-1",
+        belsosUser(),
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.match(
+        String(error.message),
+        /V2196 matricakód már a\(z\) ESZ-00042 \(Tunze szivattyú\) eszközön áll/,
+      );
+      return true;
+    },
+  );
+  // a partner a FELVITELI uton jut el a matricaig (a szerkeszto ag nala a
+  // matrica elott megall), ugyanugy, mint a szomszed "osszevont" allitasban
+  const partnerService = new ServiceAssetsService(
+    repository({
+      validationContext: async () => ({
+        customer: null,
+        supplier: { id: "supplier-1", isActive: true },
+        address: null,
+        department: { customerId: null, isActive: true },
+        aquarium: null,
+        parent: null,
+        productVariant: null,
+      }),
+      create: async () => {
+        throw new AssetLabelUnavailableError("V2196", {
+          assetNumber: "ESZ-00042",
+          name: "Tunze szivattyú",
+        });
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      partnerService.create(
+        {
+          ownerType: "SUPPLIER",
+          ownerId: "supplier-1",
+          departmentId: "department-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+          labelCode: "V2196",
+        },
+        "user-1",
+        { kind: "customer", customerId: "customer-1" },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.equal(
+        /ESZ-00042|Tunze/.test(String(error.message)),
+        false,
+        "a partner NEM tudhatja meg, melyik eszközön áll a kód",
+      );
+      assert.match(String(error.message), /nem köthető/);
+      return true;
+    },
+  );
+});
+
 test("a partner az összevont üzenetet kapja", async () => {
   const service = new ServiceAssetsService(
     repository({
