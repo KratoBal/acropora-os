@@ -9,7 +9,7 @@ import type { NormalizedBillingDraft } from "./billing-document-draft.js";
  * és a bejövő vagy UNAS-tükör sorok NEM ide tartoznak: azoknak más a
  * kiállítási útjuk, és ez az út nem szerkesztheti őket.
  */
-const OWN_ROWS = {
+export const OWN_ROWS = {
   direction: "OUTBOUND",
   source: "SZAMLAZZ",
   sourceType: { not: null },
