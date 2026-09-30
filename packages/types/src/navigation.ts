@@ -309,6 +309,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.FINANCE_VIEW),
   },
   {
+    /**
+     * HIÁNYZÓ SZÁMLÁK (Balázs briefje, 2026-09-30): bankkivonat kontra
+     * számlák, hónaponként. Az Elszámolások mellett, ugyanazzal a joggal:
+     * nézni `finance.view`, módosítani és exportálni `finance.manage` (a
+     * végpontok szerződése: agents/nautilus/megosztas/hianyzo-szamlak-vegpontok.md).
+     */
+    id: "missing-invoices",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.FINANCE_VIEW),
+  },
+  {
     id: "foxpost-settlement",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.FINANCE_VIEW),

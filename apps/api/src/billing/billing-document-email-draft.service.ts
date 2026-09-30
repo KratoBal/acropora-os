@@ -38,6 +38,16 @@ export class BillingDocumentEmailDraftService {
   async draft(id: string): Promise<BillingEmailDraft> {
     if (!(await this.documents.find(id)))
       throw new NotFoundException("A bizonylat nem található.");
+    return this.templateDraft();
+  }
+
+  /**
+   * BIZONYLAT NÉLKÜL (acrobot 25343, Balázs találta a stage-en): egy még nem
+   * mentett számlának nincs azonosítója, így a kiküldő fiók a `draft(id)`-t nem
+   * tudja hívni, és addig egy beégetett szöveget mutatott, miközben a kiküldés
+   * már a sablont vitte. A szöveg ugyanaz, mert a sablon nem függ a bizonylattól.
+   */
+  async templateDraft(): Promise<BillingEmailDraft> {
     const stored = await this.templates.template(BILLING_DOCUMENT_MANUAL);
     return {
       source: stored ? "stored" : "default",

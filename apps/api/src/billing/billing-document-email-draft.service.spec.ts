@@ -59,6 +59,23 @@ describe("BillingDocumentEmailDraftService", () => {
     );
   });
 
+  it("gives the same text without a document, for a letter of an invoice not saved yet", async () => {
+    const { drafts, asked } = service(
+      {
+        subject: "Számla: {{document_number}}",
+        body: "Kedves {{customer_name}}!",
+        bodyHtml: null,
+      },
+      false,
+    );
+    const draft = await drafts.templateDraft();
+    assert.deepEqual(asked, ["BILLING_DOCUMENT_MANUAL"]);
+    assert.deepEqual(
+      [draft.source, draft.subject, draft.body],
+      ["stored", "Számla: {{document_number}}", "Kedves {{customer_name}}!"],
+    );
+  });
+
   it("does not find a document outside the module", async () => {
     await assert.rejects(
       service(null, false).drafts.draft("doc-1"),

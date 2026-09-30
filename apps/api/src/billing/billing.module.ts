@@ -14,6 +14,7 @@ import { BillingDocumentListRepository } from "./billing-document-list.repositor
 import { BillingDocumentPdfService } from "./billing-document-pdf.service.js";
 import { BillingDocumentReadController } from "./billing-document-read.controller.js";
 import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
+import { BillingEmailDraftController } from "./billing-email-draft.controller.js";
 import { BillingDocumentsController } from "./billing-documents.controller.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { BillingDocumentsService } from "./billing-documents.service.js";
@@ -31,6 +32,7 @@ import { BillingDocumentsService } from "./billing-documents.service.js";
     BillingDocumentIssueController,
     BillingDocumentReadController,
     BillingDocumentEmailController,
+    BillingEmailDraftController,
   ],
   providers: [
     BillingDocumentsRepository,
