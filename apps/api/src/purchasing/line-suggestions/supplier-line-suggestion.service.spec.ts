@@ -239,6 +239,45 @@ describe("SupplierLineSuggestionService", () => {
     assert.ok(created.every((run) => run.policyKey !== "supplier-line-code"));
   });
 
+  /*
+    A MAGYAR SZALLITO (murena, acrobot 24924, 2026-09-30): a torzsadatban a
+    hazai adoszam all ("14116380-2-06"), amibol eddig `null` kulcs lett, es a
+    Jev el sem indult, akarmi allt a listaban.
+    MI PIROSIT: ha a hazai alak megint nem ad kulcsot, vagy ha a lista a
+    torzsszamot nem ugyanarra a cegre erti.
+  */
+  describe("Hungarian suppliers, by the tax number's base (törzsszám)", () => {
+    const HAZAI = "14116380-2-06";
+    const env = (list: string) =>
+      ({
+        ...LIVE,
+        JEV_SUPPLIER_LINE_SUPPLIER_VAT_IDS: list,
+      }) as NodeJS.ProcessEnv;
+    const ask = async (list: string) => {
+      const { repository } = fake({ vatId: HAZAI });
+      const jev = jevAnswer(keyOf(PLUGS.productName), 0.95);
+      await new SupplierLineSuggestionService(
+        repository,
+        env(list),
+        jev.fetch,
+      ).suggest(REQUEST);
+      return jev.calls.length;
+    };
+
+    it("the Jev runs when the list names the supplier in its domestic form", async () => {
+      assert.equal(await ask(`DE342032439,${HAZAI}`), 1);
+    });
+
+    it("…or as its EU VAT id, or with another VAT or county code", async () => {
+      assert.equal(await ask("HU14116380"), 1);
+      assert.equal(await ask("14116380-1-41"), 1);
+    });
+
+    it("not when the list does not name it (no switch-on by default)", async () => {
+      assert.equal(await ask("DE342032439"), 0);
+    });
+  });
+
   describe("per supplier, as measured (PD 2026-09-29)", () => {
     const DEJONG = "NL802708705B01";
     const BOTH = {

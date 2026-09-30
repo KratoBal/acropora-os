@@ -20,7 +20,7 @@ import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { aquarioomCandidateProfile } from "../supplier-invoice-import/adapters/aquarioom.pdf-adapter.js";
 import { deJongCandidateProfile } from "../supplier-invoice-import/adapters/dejong.pdf-adapter.js";
 import { hertleinCandidateProfile } from "../supplier-invoice-import/adapters/hertlein.pdf-adapter.js";
-import { normalizeVatId } from "../supplier-invoice-import/supplier-invoice-import.common.js";
+import { supplierTaxKey } from "../supplier-invoice-import/supplier-invoice-import.common.js";
 import {
   DETERMINISTIC_MODEL,
   NONE_KEY,
@@ -150,7 +150,8 @@ export class SupplierLineSuggestionService {
     if (!this.environment.TYPESAFE_API_KEY?.trim()) return false;
     const allowed = (this.environment.JEV_SUPPLIER_LINE_SUPPLIER_VAT_IDS ?? "")
       .split(",")
-      .map((value) => normalizeVatId(value))
+      // a lista magyar adoszamot is elfogadhat, torzsszam szerint
+      .map((value) => supplierTaxKey(value))
       .filter(Boolean);
     return allowed.includes(vatId);
   }
@@ -290,7 +291,8 @@ export class SupplierLineSuggestionService {
       }
     }
 
-    const vatId = normalizeVatId(
+    // a magyar szallito hazai adoszama is kulcsot ad (lasd `supplierTaxKey`)
+    const vatId = supplierTaxKey(
       await this.repository.supplierVatId(request.supplierId),
     );
     if (!this.jevAllowedFor(vatId))
