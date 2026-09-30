@@ -1,0 +1,179 @@
+"use client";
+
+import {
+  Icon,
+  PilotBadge,
+  PilotButton,
+  PilotDataTable,
+  PilotPageHeader,
+  type PilotTableColumn,
+} from "@acropora/ui";
+
+import {
+  MONTH_STATE_BADGES,
+  MONTH_STATE_LABELS,
+  formatAmount,
+  formatMonth,
+  type MonthRow,
+} from "./missing-invoices-model";
+
+/**
+ * HIÁNYZÓ SZÁMLÁK: A HÓNAPOK (Figma 343:3 és 343:651).
+ *
+ * Megjelenítő komponens: az adat a hívótól jön. A hónapok a legújabbtól
+ * lefelé állnak (a szerver sorrendjében), a sor egésze kattintható.
+ *
+ * KIVONAT NÉLKÜL A SZÁMOK NEM NULLÁK, HANEM ISMERETLENEK: a cella "—", nem "0".
+ * Egy 0 azt állítaná, hogy megnéztük és nincs hiány.
+ */
+export function MissingInvoicesMonthList({
+  months,
+  error,
+  onRetry,
+  onOpen,
+  company,
+}: {
+  /** `null`: töltés. */
+  months: MonthRow[] | null;
+  error: string | null;
+  onRetry: () => void;
+  onOpen: (month: string) => void;
+  /** A cég, akinek a nevére a számla szólhat; a szerver konfigurációjából. */
+  company: { name: string; taxNumber: string } | null;
+}) {
+  const count = (
+    row: MonthRow,
+    key: keyof NonNullable<MonthRow["counts"]>,
+    tone: string,
+  ) =>
+    row.counts ? (
+      <span className={`tabular-nums ${tone}`}>{row.counts[key]}</span>
+    ) : (
+      <span className={tone}>—</span>
+    );
+  const columns: PilotTableColumn<MonthRow>[] = [
+    {
+      id: "month",
+      header: "Hónap",
+      width: "170px",
+      cell: (row) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {formatMonth(row.month)}
+        </span>
+      ),
+    },
+    {
+      id: "charges",
+      header: "Terhelések",
+      width: "96px",
+      cell: (row) => count(row, "charges", "text-pilot-grey-600"),
+    },
+    {
+      id: "found",
+      header: "Megvan",
+      width: "84px",
+      cell: (row) => count(row, "found", "font-semibold text-pilot-green-700"),
+    },
+    {
+      id: "unmatched",
+      header: "Nem párosodott",
+      width: "120px",
+      cell: (row) =>
+        count(row, "unmatched", "font-semibold text-pilot-amber-700"),
+    },
+    {
+      id: "noInvoice",
+      header: "Nincs számla",
+      width: "110px",
+      cell: (row) =>
+        count(row, "noInvoice", "font-semibold text-pilot-red-700"),
+    },
+    {
+      id: "missingAmount",
+      header: "Hiányzó összeg",
+      width: "140px",
+      cell: (row) => (
+        <span className="font-semibold tabular-nums text-pilot-grey-900">
+          {row.missingAmount === null
+            ? "—"
+            : formatAmount(row.missingAmount, "HUF")}
+        </span>
+      ),
+    },
+    {
+      id: "state",
+      header: "Állapot",
+      cell: (row) => (
+        <PilotBadge variant={MONTH_STATE_BADGES[row.state]}>
+          {MONTH_STATE_LABELS[row.state]}
+        </PilotBadge>
+      ),
+    },
+    {
+      id: "open",
+      header: <span className="sr-only">Megnyitás</span>,
+      width: "56px",
+      align: "right",
+      cell: () => (
+        <Icon
+          name="chevron-left"
+          size={16}
+          className="inline rotate-180 text-pilot-aqua-700"
+        />
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PilotPageHeader
+        title="Hiányzó számlák"
+        description="Bankkivonat kontra számlák, hónaponként: mi van meg, és mi hiányzik a könyvelőnek."
+      />
+      <section className="overflow-hidden rounded-xl bg-white ring-1 ring-pilot-grey-200">
+        {error ? (
+          <div role="alert" className="space-y-3 px-5 py-6 text-sm">
+            <p className="text-pilot-red-700">{error}</p>
+            <PilotButton variant="secondary" size="action" onClick={onRetry}>
+              Újrapróbálás
+            </PilotButton>
+          </div>
+        ) : months === null ? (
+          <p role="status" className="px-5 py-10 text-sm text-pilot-grey-500">
+            A hónapok betöltése…
+          </p>
+        ) : months.length === 0 ? (
+          <p className="px-5 py-10 text-sm text-pilot-grey-500">
+            Még nincs feltöltött bankkivonat.
+          </p>
+        ) : (
+          <>
+            <PilotDataTable
+              columns={columns}
+              rows={months}
+              rowKey={(row) => row.month}
+              onRowActivate={(row) => onOpen(row.month)}
+              rowLabel={(row) => `${formatMonth(row.month)} megnyitása`}
+              minWidth={900}
+            />
+            <p className="px-5 py-4 text-xs text-pilot-grey-500">
+              A sorra kattintva megnyílik az adott hónap részletes egyeztetése.
+            </p>
+          </>
+        )}
+      </section>
+      {company ? (
+        <aside className="rounded-xl bg-pilot-grey-100 px-5 py-4 text-sm ring-1 ring-pilot-grey-200">
+          <p className="font-semibold text-pilot-grey-900">
+            Csak az {company.name} (adószám: {company.taxNumber}) nevére szóló
+            számla számít meglévőnek.
+          </p>
+          <p className="mt-1 text-xs text-pilot-grey-600">
+            Magánszemély nevére kiállított bizonylat külön hiányállapotként
+            jelenik meg, és javítást igényel.
+          </p>
+        </aside>
+      ) : null}
+    </div>
+  );
+}
