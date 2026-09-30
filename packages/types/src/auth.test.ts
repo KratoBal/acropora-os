@@ -368,6 +368,12 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         "ai-test.view",
         "aquariums.manage",
         "aquariums.view",
+        // a Számlázás négy joga (acrobot 25175): a MANAGER-nek van
+        // finance.manage joga, tehát mind a négyet megkapja
+        "billing.create",
+        "billing.issue",
+        "billing.resend",
+        "billing.view",
         "content.manage",
         "content.view",
         "customers.manage",
@@ -394,5 +400,63 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
       "a MANAGER jogkör-készlete elmozdult -- ha új jogkör került be, döntsd el, " +
         "hogy a vezetők megkapják-e, és vezesd át itt VAGY a tiltólistán",
     );
+  });
+});
+
+/**
+ * A SZÁMLÁZÁS JOGAI (acrobot 25175): aki ma látja a Pénzügyet, a Számlázást is
+ * látja, és aki nem, az nem; aki ma a Pénzügyben írhat, a Számlázásban
+ * kiállíthat és újraküldhet, és aki nem, az nem. Minden szerepkörre, a gépi és
+ * a partner-szerepkörökkel együtt: egy új szerepkör nem kerülheti meg.
+ */
+describe("billing permissions follow the finance permissions", () => {
+  it("gives billing.view exactly to the roles that see finance, and the three write rights exactly to those that manage it", () => {
+    for (const [role, permissions] of Object.entries(ROLE_PERMISSIONS)) {
+      const has = (permission: string) =>
+        (permissions as readonly string[]).includes(permission);
+      assert.equal(
+        has(PERMISSIONS.BILLING_VIEW),
+        has(PERMISSIONS.FINANCE_VIEW),
+        `${role}: billing.view`,
+      );
+      for (const write of [
+        PERMISSIONS.BILLING_CREATE,
+        PERMISSIONS.BILLING_ISSUE,
+        PERMISSIONS.BILLING_RESEND,
+      ])
+        assert.equal(
+          has(write),
+          has(PERMISSIONS.FINANCE_MANAGE),
+          `${role}: ${write}`,
+        );
+    }
+  });
+
+  it("maps the roles we know as today's finance rights do", () => {
+    const billing = (role: keyof typeof ROLE_PERMISSIONS) =>
+      ROLE_PERMISSIONS[role].filter((permission) =>
+        permission.startsWith("billing."),
+      );
+    const all = [
+      PERMISSIONS.BILLING_VIEW,
+      PERMISSIONS.BILLING_CREATE,
+      PERMISSIONS.BILLING_ISSUE,
+      PERMISSIONS.BILLING_RESEND,
+    ];
+    for (const role of ["OWNER", "ADMIN", "MANAGER"] as const)
+      assert.deepEqual([...billing(role)].sort(), [...all].sort(), role);
+    assert.deepEqual(billing("SALES"), [PERMISSIONS.BILLING_VIEW]);
+    assert.deepEqual(billing("VIEWER"), [PERMISSIONS.BILLING_VIEW]);
+    assert.deepEqual(billing("WAREHOUSE"), []);
+    assert.deepEqual(billing("PARTNER_SERVICE"), []);
+  });
+
+  it("takes nothing else away: every role keeps each right it had besides billing", () => {
+    // a derivation only adds billing rights; a role's other rights are its own
+    for (const permissions of Object.values(ROLE_PERMISSIONS))
+      assert.equal(new Set(permissions).size, permissions.length);
+    assert.ok(ROLE_PERMISSIONS.OWNER.includes(PERMISSIONS.SETTINGS_MANAGE));
+    assert.ok(!ROLE_PERMISSIONS.MANAGER.includes(PERMISSIONS.SETTINGS_MANAGE));
+    assert.ok(ROLE_PERMISSIONS.SALES.includes(PERMISSIONS.ORDERS_MANAGE));
   });
 });
