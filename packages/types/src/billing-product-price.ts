@@ -58,6 +58,9 @@ function primaryVariant(product: ProductDetail) {
   );
 }
 
+/** A UNAS bolt egyetlen pénzneme (a tükör NULL pénznemét ez tölti ki). */
+const UNAS_SHOP_CURRENCY = "HUF";
+
 export function billingProductPrice(
   product: ProductDetail,
   currency: string,
@@ -75,9 +78,17 @@ export function billingProductPrice(
     const mirror = product.unasMirror;
     if (!mirror?.netPrice)
       return none("A terméknek nincs nettó ára a UNAS adataiban.");
-    if (!sameCurrency(mirror.currency))
+    /*
+      A TÜKÖR PÉNZNEME NULL: A BOLT FORINTJA. Mérve az éles adaton (acrobot
+      25311, 2026-09-30): az UnasProductSnapshot mind az 1901 sorában a currency
+      NULL, a netPrice pedig ki van töltve. A UNAS bolt egypénznemű és forintos,
+      tehát a hiányzó pénznem HUF (acrobot döntése, Balázs felülírhatja). Ha a
+      tükör KIFEJEZETTEN más pénznemet mond, az nem ár a forint bizonylatra.
+    */
+    const mirrorCurrency = mirror.currency ?? UNAS_SHOP_CURRENCY;
+    if (!sameCurrency(mirrorCurrency))
       return none(
-        `A termék ára ${mirror.currency ?? "ismeretlen pénznemben"} van, a bizonylat ${currency}.`,
+        `A termék ára ${mirrorCurrency} pénznemben van, a bizonylat ${currency}.`,
       );
     return {
       kind: "NET",
