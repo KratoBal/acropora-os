@@ -35,7 +35,13 @@ import {
   type PhotoPickResult,
 } from "@/lib/photos/pick-photos";
 import { describeUploadFailure } from "@/lib/api/network-failure";
-import { ApiNetworkError } from "@/lib/api/client";
+import { enqueuePhoto } from "@/lib/offline/queue-store";
+import { ownerPhotoOperationId } from "@/lib/offline/queue-order";
+import {
+  describePhotoSend,
+  uploadOrQueuePhotos,
+} from "@/lib/offline/photo-upload-or-queue";
+import { ApiError, ApiNetworkError } from "@/lib/api/client";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import { ASSET_CRITICALITY_LABELS } from "@/lib/assets/asset-criticality";
 import { ASSET_KIND_LABELS } from "@/lib/assets/asset-kind";
@@ -137,23 +143,53 @@ export default function AssetDetailScreen() {
       );
       return;
     }
-    if (!query.data) return;
+    /*
+      AZ AZONOSITO AZ UTVONALBOL JON, NEM A SZERVER VALASZABOL. Eddig itt
+      `query.data` allt, es terero nelkul -- mentett masolatbol nyitott lapon --
+      a kivalasztott kep CSENDBEN elveszett (Balazs, 2026-09-30).
+    */
+    if (!id) return;
 
     setUploading(true);
     try {
-      // A FAJTAT NEM MI DONTJUK EL: a szerver a fajl bajtjaibol allapitja meg,
-      // fajlonkent (kep -> PHOTO, minden mas -> OTHER). Ide beirni egy allando
-      // erteket azt jelentene, hogy a fajta nem a fajlrol allit valamit, hanem
-      // arrol, melyik kepernyorol indult a feltoltes.
-      const created = await uploadAssetDocuments(query.data.id, { files });
-      // A KIHAGYOTTAKAT AKKOR IS KIMONDJUK, HA A TÖBBI SIKERÜLT. Egy néma
-      // részleges siker azt a hitet hagyná, hogy mind a kép fent van.
-      setUploadNotice(
-        skipped.length > 0
-          ? `${created.length} kép feltöltve. Kimaradt: ${skipped.join(", ")}.`
-          : `${created.length} kép feltöltve.`,
-      );
-      void query.refetch();
+      /*
+        A DONTES (feltolt vagy sorba tesz) a `photo-upload-or-queue.ts`-ben
+        all, ugyanugy, mint a munkalapon: terero nelkul a kep a keszuleken
+        marad, es a sor felkuldi, amikor visszajon a halozat.
+
+        A FAJTAT NEM MI DONTJUK EL: a szerver a fajl bajtjaibol allapitja meg,
+        fajlonkent (kep -> PHOTO, minden mas -> OTHER).
+      */
+      const eredmeny = await uploadOrQueuePhotos({
+        files,
+        upload: async (kepek) => {
+          const created = await uploadAssetDocuments(id, { files: kepek });
+          return { count: created.length };
+        },
+        enqueue: async (file) => {
+          const r = await enqueuePhoto({
+            id: ownerPhotoOperationId({
+              entityType: "asset",
+              ownerId: id,
+              uri: file.uri,
+            }),
+            payload: { uri: file.uri, name: file.name, type: file.type },
+            createdAt: new Date().toISOString(),
+            entityType: "asset",
+            // az eszkoz MAR LETEZIK: a kep nem var senkire
+            ownerId: id,
+          });
+          return r.ok;
+        },
+        statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
+        describeRejection: (cause) =>
+          cause instanceof Error
+            ? cause.message
+            : "A feltöltés nem sikerült. Próbáld újra.",
+      });
+      // A KIHAGYOTTAKAT AKKOR IS KIMONDJUK, HA A TÖBBI SIKERÜLT.
+      setUploadNotice(describePhotoSend(eredmeny, skipped));
+      if (eredmeny.type === "uploaded") void query.refetch();
     } catch (error) {
       /**
        * A BUKAS MEGMONDJA, MI TORTENT. A halozati agon a mai mondat ("a
@@ -197,7 +233,7 @@ export default function AssetDetailScreen() {
   };
 
   const takeAndUploadPhoto = async () => {
-    if (!query.data || uploading) return;
+    if (!id || uploading) return;
     setUploadNotice(null);
     await feltoltAValasztasbol(await takePhotoFromCamera());
   };
@@ -236,7 +272,7 @@ export default function AssetDetailScreen() {
 
   /** A MÁSODIK ÚT: egy korábban készült kép a galériából. */
   const pickAndUploadPhotos = async () => {
-    if (!query.data || uploading) return;
+    if (!id || uploading) return;
     setUploadNotice(null);
     await feltoltAValasztasbol(await pickPhotosFromLibrary());
   };
@@ -587,11 +623,23 @@ export default function AssetDetailScreen() {
             ) : null}
 
             {/*
-              A SZERKESZTÉS ÉS A CÍMKENYOMTATÁS SZERVERT KÍVÁN, tehát mentett
-              lapon nem jelenik meg. A gomb, ami offline nem csinál semmit,
-              rosszabb, mint a hiányzó gomb: a szerelő azt hiszi, elmentette.
+              A SZERKESZTES MENTETT TELJES ADATLAPROL IS NYITHATO (Balazs,
+              2026-09-30: offline nem tudott matricat hozzaadni). Eddig itt az
+              allt, hogy a szerkesztes szervert kivan -- 2026-08-27-en igaz
+              volt, 2026-09-04 ota a szerkeszto terero nelkul SORBA tesz,
+              mezonkenti utkozes-feloldassal, a matricakoddal egyutt.
+
+              A MATRICAKOD EGYEDISEGET A SZERVER DONTI EL, a sor kiuritesekor
+              (acrobot dontese, 2026-09-30): ha a kod kozben mas eszkozon all, a
+              modositas nem megy fel, es a feltoltesre varok kozott, az utkozes
+              szakaszban latszik a szerver mondata. Felulirast es automatikus
+              athelyezest a telefon nem csinal.
+
+              Ez a szakasz csak TELJES adatlap mellett jelenik meg (a blokk az
+              `asset`-en all): listasorbol a szerkeszto nem tudna mihez kepest
+              menteni.
             */}
-            {capabilities?.assetsManage && !fromCache ? (
+            {capabilities?.assetsManage ? (
               <Section title="Szerkesztés">
                 <AssetLink
                   label="Eszközadatok módosítása"
@@ -703,14 +751,14 @@ export default function AssetDetailScreen() {
             ) : null}
 
             {/*
-              A FELTÖLTÉS SZERVERT KÍVÁN, tehát mentett lapon nem jelenik meg,
-              ugyanabból az okból, amiért a szerkesztés sem: egy gomb, ami
-              offline nem csinál semmit, rosszabb a hiányzó gombnál.
-
-              A telefon ma offline OLVASNI tud, RÖGZÍTENI nem - a várakozó sor
-              táblája elkészült, de senki nem tölti fel.
+              A FENYKEP MENTETT MASOLATON IS FELVEHETO (Balazs, 2026-09-30).
+              Eddig itt az allt, hogy "a telefon ma offline OLVASNI tud,
+              ROGZITENI nem" -- 2026-09-02-an igaz volt, azota a kep-sor MAR
+              LETEZO eszkozre is sorba tesz. Terero nelkul a kep a keszuleken
+              marad, es a sor kuldi fel; a mondat alatta megmondja, melyik
+              tortent.
             */}
-            {capabilities?.assetsManage && !fromCache ? (
+            {capabilities?.assetsManage ? (
               <Section title="Fényképek">
                 {/*
                   A SORREND SZÁNDÉK, NEM ELRENDEZÉS. A fényképezés áll elöl,

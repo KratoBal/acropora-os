@@ -387,7 +387,13 @@ describe(
       await assert.rejects(
         () =>
           repository.create(createInput({ labelCode: CODE_C }), actorUserId),
-        AssetLabelUnavailableError,
+        (error: unknown) => {
+          assert.ok(error instanceof AssetLabelUnavailableError);
+          // a gazda megnevezve (2026-09-30): a belsos ebbol tudja meg, hol all
+          assert.equal(error.holder?.assetNumber, first.assetNumber);
+          assert.equal(error.holder?.name, first.name);
+          return true;
+        },
       );
     });
 
@@ -407,7 +413,12 @@ describe(
       await assert.rejects(
         () =>
           repository.create(createInput({ labelCode: "Z9999" }), actorUserId),
-        AssetLabelUnavailableError,
+        (error: unknown) => {
+          assert.ok(error instanceof AssetLabelUnavailableError);
+          // nincs kiadva: nincs mit megnevezni
+          assert.equal(error.holder, null);
+          return true;
+        },
       );
       const after = await prisma.asset.count({
         where: { assetNumber: { startsWith: "ESZK" }, customerId },
@@ -742,7 +753,12 @@ describe(
 
         await assert.rejects(
           () => mentes(eszkozId, { labelCode: CODE_D }),
-          AssetLabelUnavailableError,
+          (error: unknown) => {
+            assert.ok(error instanceof AssetLabelUnavailableError);
+            // a szerkeszto agon is megnevezi a gazdat, nem csak a felvitelen
+            assert.equal(error.holder?.assetNumber, masik.assetNumber);
+            return true;
+          },
         );
 
         const sajat = await prisma.assetLabel.findUnique({

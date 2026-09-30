@@ -186,10 +186,38 @@ export class AssetLabelPoolExhaustedError extends Error {
   }
 }
 
+/** Az eszköz, amin a kért matricakód MOST áll. */
+export interface AssetLabelHolder {
+  assetNumber: string;
+  name: string;
+}
+
 export class AssetLabelUnavailableError extends Error {
-  constructor(readonly code: string) {
+  constructor(
+    readonly code: string,
+    /**
+     * AZ ESZKÖZ, AMIN A KÓD MOST ÁLL, ha áll valamin (`null`, ha a kód nincs
+     * kiadva). A tároló NEVEZI MEG, a szolgáltatás dönti el, kinek mondhatja
+     * ki: a belsős megkapja, a partner nem (idegen eszköz létét sem tudhatja
+     * meg). Balázs 2026-09-30-i kérésére: a pincében rögzített matrica
+     * ütközésekor a feltöltésre várók között látszódjon, MELYIK eszközön áll.
+     */
+    readonly holder: AssetLabelHolder | null = null,
+  ) {
     super(`A(z) ${code} matricakód nem köthető ehhez az eszközhöz.`);
   }
+}
+
+/** A kódot viselő eszköz, a tranzakción belül, a foglalás bukása után. */
+async function labelHolder(
+  tx: Prisma.TransactionClient,
+  code: string,
+): Promise<AssetLabelHolder | null> {
+  const row = await tx.assetLabel.findUnique({
+    where: { code },
+    select: { asset: { select: { assetNumber: true, name: true } } },
+  });
+  return row?.asset ?? null;
 }
 
 /**
@@ -1447,7 +1475,10 @@ export class ServiceAssetsRepository extends Repository {
                     data: { assetId: row.id, assignedAt: new Date() },
                   });
                   if (claimed.count !== 1)
-                    throw new AssetLabelUnavailableError(labelCode);
+                    throw new AssetLabelUnavailableError(
+                      labelCode,
+                      await labelHolder(tx, labelCode),
+                    );
                   await tx.assetEvent.create({
                     data: {
                       id: randomUUID(),
@@ -2100,7 +2131,10 @@ export class ServiceAssetsRepository extends Repository {
               data: { assetId: id, assignedAt: new Date() },
             });
             if (claimed.count !== 1)
-              throw new AssetLabelUnavailableError(labelCode);
+              throw new AssetLabelUnavailableError(
+                labelCode,
+                await labelHolder(tx, labelCode),
+              );
             events.push({
               type: "LABEL_ASSIGNED",
               payload: jsonPayload({
