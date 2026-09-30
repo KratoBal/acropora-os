@@ -18,7 +18,9 @@ import { decodeInvoiceDataXml } from "../../integrations/nav/nav-xml.util.js";
 import type { NavIncomingInvoiceListQueryDto } from "./dto/nav-incoming-invoice-list-query.dto.js";
 import { NavIncomingInvoiceRepository } from "./nav-incoming-invoice.repository.js";
 import {
+  hungarianTaxBase,
   toNavIncomingInvoiceDetail,
+  type NavIncomingInvoiceRow,
   type StoredNavInvoiceParsedData,
 } from "./nav-incoming-invoice.types.js";
 
@@ -116,9 +118,25 @@ export class NavIncomingInvoiceService {
       const refreshed = await this.repository.findById(id);
       if (!refreshed)
         throw new NotFoundException("A NAV számla nem található.");
-      return toNavIncomingInvoiceDetail(refreshed);
+      return this.withSupplier(refreshed);
     }
-    return toNavIncomingInvoiceDetail(row);
+    return this.withSupplier(row);
+  }
+
+  /**
+   * The detail with the supplier resolved by tax base, as an arrival from
+   * mail resolves it by VAT id: the editor selects it, and the line
+   * suggestions start. The NAV gives the same company as `14116380` on one
+   * invoice and `14116380-2-06` on another; the first 8 digits are the key.
+   */
+  private async withSupplier(
+    row: NavIncomingInvoiceRow,
+  ): Promise<NavIncomingInvoiceDetail> {
+    const taxBase = hungarianTaxBase(row.supplierTaxNumber);
+    const supplierId = taxBase
+      ? await this.repository.supplierIdByTaxBase(taxBase)
+      : null;
+    return { ...toNavIncomingInvoiceDetail(row), supplierId };
   }
 
   async sync(windowEnd = new Date()) {

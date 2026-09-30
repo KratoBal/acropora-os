@@ -185,3 +185,69 @@ describe("decodeInvoiceDataXml", () => {
     assert.equal(parsed.lines.length, 2);
   });
 });
+
+/**
+ * A tétel termékkódjai: NAV Online Számla 3.0, invoiceData.xsd
+ * `ProductCodesType` (1761. sor), `ProductCodeType` (1775. sor),
+ * `ProductCodeCategoryType` (136. sor). A `productCodeValue` és a
+ * `productCodeOwnValue` közül a séma pontosan egyet enged (xs:choice).
+ */
+describe("parseNavInvoiceData: productCodes", () => {
+  const invoiceWithLine = (lineXml: string) =>
+    parseNavInvoiceData(
+      parseXml(
+        `<InvoiceData><invoiceMain><invoice>` +
+          `<invoiceHead><supplierInfo><supplierName>HANNA Instruments Service Kft.</supplierName></supplierInfo>` +
+          `<invoiceDetail><currencyCode>HUF</currencyCode></invoiceDetail></invoiceHead>` +
+          `<invoiceLines><line><lineNumber>1</lineNumber>` +
+          lineXml +
+          `<lineDescription>pH mérő</lineDescription><quantity>1</quantity>` +
+          `<lineAmountsNormal><lineNetAmountData><lineNetAmount>15000</lineNetAmount></lineNetAmountData></lineAmountsNormal>` +
+          `</line></invoiceLines></invoice></invoiceMain></InvoiceData>`,
+      ),
+    ).lines[0]!;
+
+  it("reads every code with its category, own and not-own values alike", () => {
+    const line = invoiceWithLine(
+      `<productCodes>` +
+        `<productCode><productCodeCategory>VTSZ</productCodeCategory><productCodeValue>90278017</productCodeValue></productCode>` +
+        `<productCode><productCodeCategory>OWN</productCodeCategory><productCodeOwnValue>HI98107</productCodeOwnValue></productCode>` +
+        `<productCode><productCodeCategory>OTHER</productCodeCategory><productCodeValue>5901234123457</productCodeValue></productCode>` +
+        `</productCodes>`,
+    );
+
+    assert.deepEqual(line.productCodes, [
+      { category: "VTSZ", value: "90278017" },
+      { category: "OWN", value: "HI98107" },
+      { category: "OTHER", value: "5901234123457" },
+    ]);
+  });
+
+  it("reads the codes through namespace prefixes, trimmed", () => {
+    const line = invoiceWithLine(
+      `<ns2:productCodes><ns2:productCode><ns2:productCodeCategory>OWN</ns2:productCodeCategory><ns2:productCodeOwnValue> HI98107 </ns2:productCodeOwnValue></ns2:productCode></ns2:productCodes>`,
+    );
+
+    assert.deepEqual(line.productCodes, [
+      { category: "OWN", value: "HI98107" },
+    ]);
+  });
+
+  it("drops a code without a category or a value", () => {
+    const line = invoiceWithLine(
+      `<productCodes>` +
+        `<productCode><productCodeValue>90278017</productCodeValue></productCode>` +
+        `<productCode><productCodeCategory>OWN</productCodeCategory></productCode>` +
+        `</productCodes>`,
+    );
+
+    assert.equal("productCodes" in line, false);
+  });
+
+  it("leaves a line without codes as it was", () => {
+    const line = invoiceWithLine("");
+
+    assert.equal("productCodes" in line, false);
+    assert.equal(line.description, "pH mérő");
+  });
+});

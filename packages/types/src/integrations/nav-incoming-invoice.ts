@@ -25,6 +25,16 @@ export interface NavIncomingInvoiceAddress {
   country: string;
 }
 
+/**
+ * A NAV tétel egy termékkódja (NAV Online Számla 3.0, invoiceData.xsd
+ * `ProductCodeType`): a fajta a `ProductCodeCategoryType` értéke (VTSZ, SZJ,
+ * KN, AHK, CSK, KT, EJ, TESZOR, OWN, OTHER).
+ */
+export interface NavIncomingInvoiceProductCode {
+  category: string;
+  value: string;
+}
+
 export interface NavIncomingInvoiceLine {
   /** A NAV tétel sorszáma, vagy `null`, ha hiányzik vagy nem pozitív egész. */
   lineNumber: number | null;
@@ -40,6 +50,12 @@ export interface NavIncomingInvoiceLine {
    * beolvasott szállítói számlán (`isChargeDescription`).
    */
   isCharge: boolean;
+  /** A tétel összes termékkódja, a fajtájával; nincs, ha a számla nem hordozott kódot. */
+  productCodes?: NavIncomingInvoiceProductCode[];
+  /** A szállító saját cikkszáma: az első `OWN` fajtájú kód. */
+  supplierSku?: string;
+  /** Az első `OTHER` fajtájú kód, ha érvényes ellenőrző számjegyű GTIN (EAN-8/UPC/EAN-13/GTIN-14). */
+  ean?: string;
 }
 
 export interface NavIncomingInvoiceDetail extends NavIncomingInvoiceSummary {
@@ -48,6 +64,11 @@ export interface NavIncomingInvoiceDetail extends NavIncomingInvoiceSummary {
   /** A tételek leggyakoribb ÁFA-kulcsa - a bevételező űrlap egyetlen, számla-szintű ÁFA-kulcs mezőjének előtöltéséhez. */
   suggestedVatRatePercent?: string;
   lines: NavIncomingInvoiceLine[];
+  /**
+   * A beszállító a törzsben, ha a számla adószámának törzsszáma (az első 8
+   * jegy) pontosan egy nem törölt szállítóéval egyezik; különben `null`.
+   */
+  supplierId?: string | null;
 }
 
 export interface NavIncomingInvoiceListResponse {

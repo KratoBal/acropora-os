@@ -547,6 +547,7 @@ export type {
   NavIncomingInvoiceDetail,
   NavIncomingInvoiceLine,
   NavIncomingInvoiceListResponse,
+  NavIncomingInvoiceProductCode,
   NavIncomingInvoiceStatus,
   NavIncomingInvoiceSummary,
   NavInvoiceSyncRun,

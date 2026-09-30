@@ -324,6 +324,69 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     expect(descriptions).toEqual(["Teszt termék"]);
   });
 
+  /*
+    A SZÁLLÍTÓ A TÖRZSSZÁMBÓL (Hanna, 2026-09-30). A NAV részletező a
+    törzsszámmal talált szállítót adja; a szerkesztő kiválasztja, és a sor a
+    NAV termékkódjaival kér javaslatot - kattintás nélkül. MI PIROSÍT: ha a
+    szerkesztő nem választ, a javaslat nem indul; ha a kódok nem kerülnek a
+    sorra, a kérés nélkülük megy. A kontroll a szállító nélküli részletező:
+    ott se választás, se kérés.
+  */
+  it("a törzsszámmal ismert szállítót kiválasztja, és a sor a NAV kódjaival kér javaslatot", async () => {
+    purchasingApiMock.suggestLine.mockResolvedValue({
+      enabled: true,
+      decisionRunId: null,
+      suggestion: null,
+      conflict: false,
+      blocked: false,
+    });
+    suppliersApiMock.detail.mockReset().mockResolvedValue(supplier);
+    navApi.detail.mockResolvedValue({
+      ...navDetail,
+      supplierId: supplier.id,
+      lines: [
+        {
+          ...navDetail.lines[0]!,
+          productCodes: [
+            { category: "VTSZ", value: "90278017" },
+            { category: "OWN", value: "HI98107" },
+            { category: "OTHER", value: "5901234123457" },
+          ],
+          supplierSku: "HI98107",
+          ean: "5901234123457",
+        },
+      ],
+    });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    await waitFor(() =>
+      expect(purchasingApiMock.suggestLine).toHaveBeenCalledWith(
+        "token-owner",
+        expect.objectContaining({
+          supplierId: supplier.id,
+          description: "Teszt termék",
+          supplierSku: "HI98107",
+          ean: "5901234123457",
+        }),
+      ),
+    );
+    expect(suppliersApiMock.detail).toHaveBeenCalledWith(
+      "token-owner",
+      supplier.id,
+    );
+  });
+
+  it("szállító nélküli NAV-számlánál nem választ, és javaslatot sem kér (kontroll)", async () => {
+    suppliersApiMock.detail.mockReset().mockResolvedValue(supplier);
+    navApi.detail.mockResolvedValue({ ...navDetail, supplierId: null });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    await screen.findByText(supplier.name);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(suppliersApiMock.detail).not.toHaveBeenCalled();
+    expect(purchasingApiMock.suggestLine).not.toHaveBeenCalled();
+  });
+
   it("a NAV-sorból új helyi terméket készít és a számlával együtt küldi", async () => {
     render(createElement(PurchaseInvoiceEuEditorPage));
 
