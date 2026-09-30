@@ -34,6 +34,8 @@ import { BillingDocumentActions } from "./billing-document-actions";
 import {
   BillingDocumentEmailDrawer,
   defaultBillingEmail,
+  billingEmailHtmlFromText,
+  billingEmailText,
   splitAddresses,
   type BillingEmailDraft,
 } from "./billing-document-email-drawer";
@@ -227,7 +229,7 @@ export function BillingDocumentDetailPage({
             current ?? {
               ...emailDraft,
               subject: draft.subject,
-              body: draft.body,
+              bodyHtml: draft.bodyHtml ?? billingEmailHtmlFromText(draft.body),
             },
         ),
       )
@@ -245,7 +247,8 @@ export function BillingDocumentDetailPage({
         cc: splitAddresses(emailDraft.cc),
         bcc: splitAddresses(emailDraft.bcc),
         subject: emailDraft.subject,
-        body: emailDraft.body,
+        body: billingEmailText(emailDraft.bodyHtml),
+        bodyHtml: emailDraft.bodyHtml,
       });
       setDetail(next);
       setDrawerOpen(false);

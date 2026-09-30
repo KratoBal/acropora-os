@@ -9,12 +9,22 @@ import {
   PilotVariableChips,
 } from "@acropora/ui";
 import {
+  plainTextToRichHtml,
+  richHtmlToText,
+  sanitizeRichHtml,
+} from "@acropora/rich-text";
+import {
   billingDrawerCta,
   getDocumentCapabilities,
   INVOICE_FORMAT_LABELS,
+  renderMailTemplateHtml,
   type BillingDocumentType,
   type InvoiceFormat,
 } from "@acropora/types";
+import {
+  RichTextEditor,
+  type RichTextEditorHandle,
+} from "@acropora/ui/rich-text-editor";
 import { useRef, useState } from "react";
 
 /**
@@ -32,12 +42,43 @@ import { useRef, useState } from "react";
  * A VÉGSŐ GOMB TILTOTT, amíg a kiküldés nincs bekötve (nautilus). A fiók maga
  * használható: a levél megírható és előnézhető.
  */
+/**
+ * A LEVÉL TÖRZSE FORMÁZOTT (nautilus #1301, Balázs kérése a stage-en): a fiók a
+ * Levelezés oldal szerkesztőjével dolgozik, a törzs HTML, és a küldés mellé a
+ * belőle készült szöveges alternatíva megy (`billingEmailText`).
+ */
 export interface BillingEmailDraft {
   to: string;
   cc: string;
   bcc: string;
   subject: string;
-  body: string;
+  bodyHtml: string;
+}
+
+/** Minden számla-változó neve, a `{{…}}` nélkül (a fiók és az előnézet listája). */
+export const BILLING_EMAIL_VARIABLE_NAMES = [
+  "customer_name",
+  "document_number",
+  "invoice_number",
+  "gross_total",
+  "due_date",
+  "document_link",
+  "order_number",
+] as const;
+
+/**
+ * Szövegből formázott törzs: a `{{név}}` jelölők változó-atomok lesznek,
+ * ugyanúgy, ahogy a Levelezés oldal egy szöveges sablont betölt.
+ */
+export function billingEmailHtmlFromText(text: string): string {
+  return plainTextToRichHtml(text, {
+    variables: [...BILLING_EMAIL_VARIABLE_NAMES],
+  });
+}
+
+/** A küldés szöveges alternatívája (a szerver a HTML-ből úgyis újra előállítja). */
+export function billingEmailText(bodyHtml: string): string {
+  return richHtmlToText(bodyHtml);
 }
 
 export function billingEmailVariables(
@@ -73,17 +114,19 @@ export function defaultBillingEmail(
     cc: "",
     bcc: "",
     subject: "Acropora – {{document_number}}",
-    body: [
-      "Kedves {{customer_name}}!",
-      "",
-      `Csatoltan küldjük a(z) {{document_number}} számú ${ACCUSATIVE[documentType]}.`,
-      "",
-      "Fizetendő összeg: {{gross_total}}",
-      "Fizetési határidő: {{due_date}}",
-      "",
-      "Köszönjük!",
-      "Acropora",
-    ].join("\n"),
+    bodyHtml: billingEmailHtmlFromText(
+      [
+        "Kedves {{customer_name}}!",
+        "",
+        `Csatoltan küldjük a(z) {{document_number}} számú ${ACCUSATIVE[documentType]}.`,
+        "",
+        "Fizetendő összeg: {{gross_total}}",
+        "Fizetési határidő: {{due_date}}",
+        "",
+        "Köszönjük!",
+        "Acropora",
+      ].join("\n"),
+    ),
   };
 }
 
@@ -95,19 +138,29 @@ export const splitAddresses = (text: string) =>
     .filter(Boolean);
 
 /**
- * Az előnézet: az ismert változók behelyettesítve, a többi jelölve marad. A
- * `known` kulcsa a változó NEVE (`customer_name`); mindkét alakot feloldja,
- * ahogy a szerver is: a `{{név}}`-et (szóközzel is) és a régi `{név}`-et.
+ * Az előnézet: az ismert változók behelyettesítve, a többi jelölve marad
+ * (`{{név}}`). UGYANAZ a motor, amit a küldés használ
+ * (`renderMailTemplateHtml`, escape-elt értékek), utána a tisztító: az
+ * előnézet nem mutathat mást, mint ami kimegy. `null`: a motor nem renderel
+ * (ismeretlen változó), és küldéskor sem menne ki.
  */
 export function previewBillingEmail(
-  text: string,
+  bodyHtml: string,
   known: Record<string, string>,
-): string {
-  return text.replace(
-    /\{\{\s*([a-z_]+)\s*\}\}|\{([a-z_]+)\}/g,
-    (variable, modern: string | undefined, legacy: string | undefined) =>
-      known[(modern ?? legacy)!] ?? variable,
+): string | null {
+  const values = Object.fromEntries(
+    BILLING_EMAIL_VARIABLE_NAMES.map((name) => [
+      name,
+      known[name] ?? `{{${name}}}`,
+    ]),
   );
+  const rendered = renderMailTemplateHtml(bodyHtml, values);
+  return rendered.ok ? sanitizeRichHtml(rendered.text) : null;
+}
+
+/** Az előnézet kerete; a `sandbox` üres, benne semmi nem futhat. */
+function previewDocument(html: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1f2937;margin:12px;">${html}</body></html>`;
 }
 
 export function BillingDocumentEmailDrawer({
@@ -149,18 +202,14 @@ export function BillingDocumentEmailDrawer({
     draft.cc !== "" || draft.bcc !== "",
   );
   const [preview, setPreview] = useState(false);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<RichTextEditorHandle | null>(null);
   const noun = getDocumentCapabilities(documentType).label;
+  const chips = billingEmailVariables(documentType);
 
-  const insert = (variable: string) => {
-    const element = bodyRef.current;
-    const at = element?.selectionStart ?? draft.body.length;
-    const end = element?.selectionEnd ?? at;
-    onChange({
-      ...draft,
-      body: `${draft.body.slice(0, at)}${variable}${draft.body.slice(end)}`,
-    });
-  };
+  // a chip `{{név}}` alakot mutat; a szerkesztőbe a név atomként kerül
+  const insert = (variable: string) =>
+    editorRef.current?.insertVariable(variable.replace(/[{}]/g, ""));
+  const rendered = preview ? previewBillingEmail(draft.bodyHtml, known) : null;
 
   return (
     <PilotDrawer
@@ -292,30 +341,44 @@ export function BillingDocumentEmailDrawer({
         </PilotFormField>
         <PilotFormField label="Levél tartalma">
           {preview ? (
-            <div
-              aria-label="Levél előnézete"
-              className="min-h-56 whitespace-pre-wrap rounded-lg bg-pilot-grey-50 px-4 py-3 text-sm text-pilot-grey-800"
-            >
-              {previewBillingEmail(draft.body, known)}
-            </div>
+            rendered === null ? (
+              <p role="alert" className="text-xs text-pilot-red-700">
+                Ismeretlen változó miatt nincs előnézet, és küldéskor sem menne
+                ki a levél.
+              </p>
+            ) : (
+              <iframe
+                title="Levél előnézete"
+                sandbox=""
+                srcDoc={previewDocument(rendered)}
+                className="h-72 w-full rounded-lg bg-white ring-1 ring-pilot-grey-200"
+              />
+            )
           ) : (
-            <textarea
-              ref={bodyRef}
+            <RichTextEditor
+              ref={editorRef}
               aria-label="Levél tartalma"
-              value={draft.body}
-              onChange={(event) =>
-                onChange({ ...draft, body: event.target.value })
-              }
-              rows={10}
-              className="w-full rounded-lg px-4 py-3 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+              value={draft.bodyHtml}
+              onChange={(bodyHtml) => onChange({ ...draft, bodyHtml })}
+              variables={chips.map((chip) => ({
+                name: chip.replace(/[{}]/g, ""),
+                ...(chip === "{{document_link}}"
+                  ? { kind: "link" as const }
+                  : {}),
+              }))}
+              toolbar={[
+                "bold",
+                "italic",
+                "underline",
+                "link",
+                "bulletList",
+                "orderedList",
+              ]}
             />
           )}
         </PilotFormField>
         {preview ? null : (
-          <PilotVariableChips
-            variables={billingEmailVariables(documentType)}
-            onInsert={insert}
-          />
+          <PilotVariableChips variables={chips} onInsert={insert} />
         )}
         <div className="flex items-center gap-3">
           <PilotButton

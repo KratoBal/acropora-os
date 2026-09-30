@@ -15,6 +15,11 @@ export interface BillingEmailTemplateDraft {
   source: "stored" | "default";
   subject: string;
   body: string;
+  /**
+   * A formázott törzs, ha a Levelezés oldalon formázottként mentették
+   * (nautilus #1301); `null`: a sablon szöveges, a fiók alakítja formázottá.
+   */
+  bodyHtml: string | null;
   variables: readonly MailTemplateVariable[];
 }
 

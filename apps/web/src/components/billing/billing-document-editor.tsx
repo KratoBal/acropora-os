@@ -30,6 +30,8 @@ import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import {
   BillingDocumentEmailDrawer,
   defaultBillingEmail,
+  billingEmailHtmlFromText,
+  billingEmailText,
   splitAddresses,
   type BillingEmailDraft,
 } from "./billing-document-email-drawer";
@@ -290,7 +292,11 @@ export function BillingDocumentEditor({
       if (email !== null) letter = email;
       else {
         const draft = await billingDocumentsApi.templateDraft(token);
-        letter = { ...emailDraft, subject: draft.subject, body: draft.body };
+        letter = {
+          ...emailDraft,
+          subject: draft.subject,
+          bodyHtml: draft.bodyHtml ?? billingEmailHtmlFromText(draft.body),
+        };
       }
       const after = await billingDocumentsApi.email(token, issued.id, {
         requestId: crypto.randomUUID(),
@@ -299,7 +305,8 @@ export function BillingDocumentEditor({
         cc: splitAddresses(letter.cc),
         bcc: splitAddresses(letter.bcc),
         subject: letter.subject,
-        body: letter.body,
+        body: billingEmailText(letter.bodyHtml),
+        bodyHtml: letter.bodyHtml,
       });
       setStatus(after.status);
       setSent({ ok: true, to: emailDraft.to });
@@ -329,7 +336,7 @@ export function BillingDocumentEditor({
             current ?? {
               ...emailDraft,
               subject: draft.subject,
-              body: draft.body,
+              bodyHtml: draft.bodyHtml ?? billingEmailHtmlFromText(draft.body),
             },
         ),
       )
