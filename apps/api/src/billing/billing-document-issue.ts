@@ -65,6 +65,30 @@ export function vatRateText(value: string): string {
   return value.includes(".") ? value.replace(/\.?0+$/, "") : value;
 }
 
+/**
+ * EGY TÁROLT SOR ÖSSZEGEI, AHOGY A SZÁMLÁZZ.HU-RA MENNEK: a kedvezmény-sor
+ * mennyisége "1", egységára a tárolt negatív nettó. A kiállítás és a lista
+ * ugyanezt hívja, hogy a listában álló bruttó az legyen, amit a számla kiír.
+ */
+export function szamlazzAmountsOfLine(
+  line: {
+    kind: string;
+    quantity: { toString(): string };
+    unitNet: { toString(): string };
+    netAmount: { toString(): string };
+    vatRatePercent: { toString(): string };
+  },
+  currency: string,
+) {
+  const discount = line.kind === "DISCOUNT";
+  return szamlazzLineAmounts({
+    quantity: discount ? "1" : line.quantity.toString(),
+    unitNet: discount ? line.netAmount.toString() : line.unitNet.toString(),
+    vatRatePercent: line.vatRatePercent.toString(),
+    currency,
+  });
+}
+
 const day = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 
 function billingAddress(row: BillingDocumentRow) {
@@ -116,12 +140,7 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
   const forIssue: BillingDocumentForIssue["lines"][number][] = [];
   for (const line of row.lines) {
     const discount = line.kind === "DISCOUNT";
-    const amounts = szamlazzLineAmounts({
-      quantity: discount ? "1" : line.quantity.toString(),
-      unitNet: discount ? line.netAmount.toString() : line.unitNet.toString(),
-      vatRatePercent: line.vatRatePercent.toString(),
-      currency: row.currency,
-    });
+    const amounts = szamlazzAmountsOfLine(line, row.currency);
     if (!amounts.ok)
       return {
         ok: false,

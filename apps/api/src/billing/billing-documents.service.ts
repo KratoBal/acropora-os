@@ -21,6 +21,7 @@ import {
   normalizeBillingDraft,
   type NormalizedBillingDraft,
 } from "./billing-document-draft.js";
+import { withIssueAndDelivery } from "./billing-document-detail-read.js";
 import {
   BillingDocumentsRepository,
   type BillingDocumentRow,
@@ -134,6 +135,10 @@ function addressOf(row: BillingDocumentRow): string | null {
 export function toBillingDocumentDetail(
   row: BillingDocumentRow,
 ): BillingDocumentDetail {
+  return withIssueAndDelivery(row, draftDetail(row));
+}
+
+function draftDetail(row: BillingDocumentRow): BillingDocumentDetail {
   const items = row.lines.map((line) => ({
     id: line.id,
     kind: line.kind,

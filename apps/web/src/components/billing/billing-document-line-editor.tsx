@@ -14,7 +14,10 @@ import { productApi } from "@/lib/api/products";
 import {
   emptyLine,
   formatMoney,
+  formatMoneyExact,
+  grossInputMismatch,
   trimDecimal,
+  withGrossInput,
   type BillingPreview,
   type EditorLine,
 } from "./billing-editor-state";
@@ -62,8 +65,23 @@ export function BillingDocumentLineEditor({
 
   const update = (key: string, field: LineField, value: string) =>
     onChange(
+      lines.map((line) => {
+        if (line.key !== key) return line;
+        const next = { ...line, [field]: value };
+        // ami a bruttót meghatározza, az a beírt bruttót elengedi
+        if (
+          field === "quantity" ||
+          field === "unitNet" ||
+          field === "vatRatePercent"
+        )
+          delete next.grossInput;
+        return next;
+      }),
+    );
+  const updateGross = (key: string, value: string) =>
+    onChange(
       lines.map((line) =>
-        line.key === key ? { ...line, [field]: value } : line,
+        line.key === key ? withGrossInput(line, value, currency) : line,
       ),
     );
   const remove = (key: string) =>
@@ -144,6 +162,7 @@ export function BillingDocumentLineEditor({
             {lines.map((line, index) => {
               const computed = amounts?.[index] ?? null;
               const label = line.description || `${index + 1}. tétel`;
+              const mismatch = grossInputMismatch(line, currency);
               return (
                 <tbody
                   key={line.key}
@@ -185,10 +204,27 @@ export function BillingDocumentLineEditor({
                         />
                       </td>
                     ))}
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-pilot-grey-900">
-                      {computed
-                        ? formatMoney(computed.item.grossAmount, currency)
-                        : "—"}
+                    <td className="px-2 py-2">
+                      {/* BRUTTÓ IS BEÍRHATÓ (Balázs a stage-en, 2026-09-30):
+                          a nettó egységár ebből számolódik vissza. */}
+                      <PilotInput
+                        aria-label={`${label} bruttó összege`}
+                        inputMode="decimal"
+                        placeholder="—"
+                        value={
+                          line.grossInput ??
+                          (computed && line.unitNet.trim()
+                            ? trimDecimal(computed.item.grossAmount)
+                            : "")
+                        }
+                        onChange={(value) => updateGross(line.key, value)}
+                        disabled={disabled}
+                      />
+                      {computed && line.unitNet.trim() ? (
+                        <p className="mt-1 text-right text-xs font-semibold tabular-nums text-pilot-grey-900">
+                          {formatMoney(computed.item.grossAmount, currency)}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-2 py-2">
                       <button
@@ -202,6 +238,25 @@ export function BillingDocumentLineEditor({
                       </button>
                     </td>
                   </tr>
+                  {mismatch ? (
+                    <tr>
+                      <td
+                        className="px-3 pb-2 pl-6 text-xs text-pilot-amber-700"
+                        colSpan={8}
+                      >
+                        <span role="status">
+                          A beírt bruttó (
+                          {formatMoneyExact(
+                            line.grossInput!.trim().replace(",", "."),
+                            currency,
+                          )}
+                          ) ennél az ÁFA-kulcsnál pontosan nem jön ki: a számlán
+                          a tétel bruttója{" "}
+                          {formatMoneyExact(mismatch, currency)} lesz.
+                        </span>
+                      </td>
+                    </tr>
+                  ) : null}
                   {computed?.discount ? (
                     <tr className="text-pilot-grey-600">
                       <td className="px-3 pb-2 pl-6 text-xs" colSpan={6}>

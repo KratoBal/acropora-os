@@ -210,3 +210,172 @@ export function szamlazzDocumentTotals(
     zeroForintLines,
   };
 }
+
+export interface SzamlazzUnitNetFromGrossInput {
+  /** A beírt bruttó sorösszeg (mennyiség × egységár, a kedvezmény előtt). */
+  grossAmount: string;
+  quantity: string;
+  vatRatePercent: string;
+  currency: string;
+}
+
+export type SzamlazzUnitNetFromGross =
+  | {
+      ok: true;
+      /** A tárolandó nettó egységár, legfeljebb 4 tizedessel. */
+      unitNet: string;
+      /** A tétel bruttója ebből az egységárból, a `szamlazzLineAmounts` szerint. */
+      grossAmount: string;
+      /** A tétel bruttója pontosan a beírt érték-e. */
+      exact: boolean;
+    }
+  | {
+      ok: false;
+      /**
+       * INVALID_NUMBER: valamelyik bemenet nem tizedes szám.
+       * ZERO_QUANTITY: nullás mennyiségből nincs egységár.
+       */
+      error: "INVALID_NUMBER" | "ZERO_QUANTITY";
+    };
+
+/** A nettó egységár tárolási tizedesei (`Decimal(19, 4)`). */
+const UNIT_NET_SCALE = 4;
+
+/** `numerator / denominator`, fél-felfelé (a nullától el). */
+function divideRounded(numerator: bigint, denominator: bigint): bigint {
+  const negative = numerator < 0n !== denominator < 0n;
+  const n = numerator < 0n ? -numerator : numerator;
+  const d = denominator < 0n ? -denominator : denominator;
+  const rounded = (n * 2n + d) / (d * 2n);
+  return negative ? -rounded : rounded;
+}
+
+const abs = (value: bigint) => (value < 0n ? -value : value);
+
+/**
+ * BRUTTÓBÓL A NETTÓ EGYSÉGÁR (Balázs a stage-en, 2026-09-30: "brutto osszeget
+ * is lehessen beirni es szamolja vissza a nettot"). A tárolt érték továbbra is
+ * a nettó egységár; a bruttó csak bevitel.
+ *
+ * A VISSZASZÁMOLÁS NEM MINDIG PONTOS, és ezt nem takarjuk el. A tétel bruttója
+ * a Számlázz.hu szabályával nettó + round(nettó × kulcs), két tizedesen, tehát
+ * bizonyos bruttók egyik nettóból sem jönnek ki (27%-on a 10 000,00: a 7874,01
+ * nettó 9999,99-et, a 7874,02 10 000,01-et ad). A függvény a beírthoz
+ * legközelebbi elérhető bruttót választja, és az `exact` megmondja, hogy
+ * pontosan a beírt-e; a felület eltérésnél kiírja, mi kerül a számlára.
+ *
+ * A keresés a TÉTEL NETTÓJÁN megy (a pénznem tizedesein), mert a bruttó csak
+ * attól függ: az ideális nettó körüli néhány értékből mindegyikhez a
+ * mennyiséggel osztott, 4 tizedesre kerekített egységárat próbálja ki, a
+ * `szamlazzLineAmounts`-szal, és azt tartja meg, aminek a bruttója a
+ * beírthoz legközelebb esik. Azonos bruttónál a kevesebb tizedesű egységár
+ * nyer (az a számlán is áll, és a 7874,02 olvashatóbb a 7874,0157-nél), végül
+ * az ideálishoz közelebbi.
+ */
+export function szamlazzUnitNetFromGross(
+  input: SzamlazzUnitNetFromGrossInput,
+  rule: SzamlazzAmountRule = SZAMLAZZ_AMOUNT_RULE,
+): SzamlazzUnitNetFromGross {
+  const gross = parse(input.grossAmount.replace(",", "."));
+  const quantity = parse(input.quantity.replace(",", "."));
+  const rate = parse(input.vatRatePercent.replace(",", "."));
+  if (!gross || !quantity || !rate)
+    return { ok: false, error: "INVALID_NUMBER" };
+  if (quantity.value === 0n) return { ok: false, error: "ZERO_QUANTITY" };
+  const decimals = szamlazzMoneyDecimals(input.currency, rule);
+
+  // (100 + kulcs) a kulcs skáláján
+  const rateFactor = 100n * 10n ** BigInt(rate.scale) + rate.value;
+  // az ideális tétel-nettó a pénznem tizedesein: bruttó × 100 / (100 + kulcs)
+  const idealNet = divideRounded(
+    gross.value * 100n * 10n ** BigInt(rate.scale + decimals),
+    10n ** BigInt(gross.scale) * rateFactor,
+  );
+  // az ideális egységár 4 tizedesen: bruttó × 100 / (menny. × (100 + kulcs))
+  const idealUnitNet = divideRounded(
+    gross.value *
+      100n *
+      10n ** BigInt(rate.scale + quantity.scale + UNIT_NET_SCALE),
+    10n ** BigInt(gross.scale) * quantity.value * rateFactor,
+  );
+  const typedGross = rescale(
+    gross.value,
+    gross.scale,
+    Math.max(gross.scale, 2),
+  );
+  const typedScale = Math.max(gross.scale, 2);
+
+  let best: {
+    unitNet: bigint;
+    grossAmount: string;
+    distance: bigint;
+    places: number;
+    drift: bigint;
+  } | null = null;
+  const candidates = new Set<bigint>([idealUnitNet]);
+  for (let step = -3n; step <= 3n; step += 1n) {
+    // egységár = tétel-nettó / mennyiség, 4 tizedesre
+    candidates.add(
+      divideRounded(
+        (idealNet + step) * 10n ** BigInt(quantity.scale + UNIT_NET_SCALE),
+        10n ** BigInt(decimals) * quantity.value,
+      ),
+    );
+  }
+  for (const unitNet of candidates) {
+    const result = szamlazzLineAmounts(
+      {
+        quantity: input.quantity.replace(",", "."),
+        unitNet: format(unitNet, UNIT_NET_SCALE),
+        vatRatePercent: input.vatRatePercent.replace(",", "."),
+        currency: input.currency,
+      },
+      rule,
+    );
+    if (!result.ok) continue;
+    const computed = parse(result.grossAmount)!;
+    const distance = abs(
+      rescale(computed.value, computed.scale, typedScale) - typedGross,
+    );
+    const places = decimalPlaces(unitNet, UNIT_NET_SCALE);
+    const drift = abs(unitNet - idealUnitNet);
+    if (
+      !best ||
+      distance < best.distance ||
+      (distance === best.distance &&
+        (places < best.places ||
+          (places === best.places && drift < best.drift)))
+    )
+      best = {
+        unitNet,
+        grossAmount: result.grossAmount,
+        distance,
+        places,
+        drift,
+      };
+  }
+  if (!best) return { ok: false, error: "INVALID_NUMBER" };
+  return {
+    ok: true,
+    unitNet: trimTrailingZeros(format(best.unitNet, UNIT_NET_SCALE)),
+    grossAmount: best.grossAmount,
+    exact: best.distance === 0n,
+  };
+}
+
+/** Hány tizedes marad a végére álló nullák nélkül: 78740200 (4) -> 2. */
+function decimalPlaces(value: bigint, scale: number): number {
+  let places = scale;
+  let rest = abs(value);
+  while (places > 0 && rest % 10n === 0n) {
+    rest /= 10n;
+    places -= 1;
+  }
+  return places;
+}
+
+/** "7874.0200" -> "7874.02", "10000.0000" -> "10000". */
+function trimTrailingZeros(text: string): string {
+  if (!text.includes(".")) return text;
+  return text.replace(/0+$/, "").replace(/\.$/, "");
+}

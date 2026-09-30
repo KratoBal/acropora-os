@@ -137,7 +137,7 @@ export function BillingDocumentEmailDrawer({
     <PilotDrawer
       open={open}
       onClose={onClose}
-      width="lg"
+      width="xl"
       title={`${format === "ELECTRONIC" && documentType === "INVOICE" ? "E-számla" : noun} kiküldése`}
       subtitle="A levél a bizonylat végleges kiállítása előtt szerkeszthető."
       footer={
@@ -162,7 +162,9 @@ export function BillingDocumentEmailDrawer({
         </div>
       }
     >
-      <div className="space-y-5">
+      {/* A BELSŐ MARGÓ (Balázs a stage-en, 2026-09-30: "ne erjen hozza a
+          szoveg a szelehez"): a fejléc és a lábléc px-6-ja a törzsre is. */}
+      <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
         <div className="rounded-xl bg-pilot-grey-50 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <p className="font-semibold text-pilot-grey-900">{customerName}</p>
