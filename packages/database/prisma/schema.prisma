@@ -2083,6 +2083,9 @@ enum UnasStockSyncSourceProcess {
   /// (targetOut=0) használó, de üzletileg más eseményt.
   UNAS_ORDER_DELETED
   RECONCILIATION
+  /// A Számlázás modulban kiállított számla (2026-09-30): a kiszámlázott
+  /// készletezett termék levonása, a POS-eladással azonos úton.
+  BILLING_INVOICE
 }
 
 /// Tartós, tranzakciós outbox a UNAS-készletpublikáláshoz.
@@ -2873,6 +2876,10 @@ model InvoiceLine {
   grossAmount     Decimal         @db.Decimal(19, 4)
   /// Tételszintű megjegyzés (brief 14. pont); a Számlázz.hu `tetel/megjegyzes`.
   comment         String?
+  /// A kiállításkori készlethatás (MOVED, NOT_STOCKED, VARIANT_NOT_CHOSEN, ...;
+  /// a `@acropora/types` BILLING_LINE_STOCK_OUTCOMES listája). A kiállítás
+  /// készletkönyvelése írja; vázlatnál és a modul előtti soroknál NULL.
+  stockOutcome    String?
 
   invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   parentLine    InvoiceLine?  @relation("InvoiceLineDiscount", fields: [parentLineId], references: [id], onDelete: Cascade)
