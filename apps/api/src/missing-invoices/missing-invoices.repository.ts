@@ -255,15 +255,26 @@ export class MissingInvoicesRepository {
         },
       }),
       this.database.incomingSupplierDocument.findMany({
+        // a postafiók olvasott számlái, és MINDEN feltöltés: azt kifejezetten
+        // egy terheléshez csatolták, tehát akkor is jelölt, ha nem olvasható
         where: {
-          status: { in: ["READ", "LATE_CORRECTION"] },
-          kind: { not: null },
+          OR: [
+            {
+              status: { in: ["READ", "LATE_CORRECTION"] },
+              kind: { not: null },
+            },
+            { origin: "UPLOAD" },
+          ],
         },
         select: {
           id: true,
           kind: true,
           importResult: true,
           payeeCheck: true,
+          origin: true,
+          uploadKind: true,
+          fileName: true,
+          createdAt: true,
         },
       }),
       this.database.foxpostSettlement.findMany({
@@ -341,36 +352,48 @@ export class MissingInvoicesRepository {
     for (const document of mailbox) {
       const result =
         document.importResult as unknown as SupplierInvoiceImportResult | null;
-      const date = result?.invoiceDate;
-      if (!result || !date || date < from || date > to) continue;
+      const upload = document.origin === "UPLOAD";
+      const date =
+        result?.invoiceDate ?? (upload ? day(document.createdAt) : null);
+      if (!date) continue;
+      if (!upload && (!result || date < from || date > to)) continue;
       const foreign =
-        (result.supplier.country && result.supplier.country !== "HU") ||
-        (result.supplier.vatId && !result.supplier.vatId.startsWith("HU"));
+        (result?.supplier.country && result.supplier.country !== "HU") ||
+        (result?.supplier.vatId && !result.supplier.vatId.startsWith("HU"));
       documents.push({
         id: document.id,
-        source: "MAILBOX",
-        number: result.invoiceNumber ?? "",
+        source: !upload
+          ? "MAILBOX"
+          : document.uploadKind === "PREMIUM_NOTICE"
+            ? "PREMIUM_NOTICE"
+            : "UPLOAD",
+        number: result?.invoiceNumber ?? (upload ? document.fileName : ""),
         date,
         // a postafiók csak nettót olvas ki; EU-s (fordítottan adózó) szállítónál
         // ez a bruttó is, hazainál ismeretlen
         gross:
-          foreign && result.netTotal !== null
+          foreign && result?.netTotal != null
             ? new Prisma.Decimal(result.netTotal)
             : null,
-        currency: result.currency ?? "HUF",
-        supplierName: result.supplier.name ?? "",
+        currency: result?.currency ?? "HUF",
+        supplierName: result?.supplier.name ?? "",
         supplierAccounts:
-          accountsByTaxBase.get(taxBase(result.supplier.vatId)) ?? [],
-        kind: document.kind === "PROFORMA" ? "PROFORMA" : "INVOICE",
+          accountsByTaxBase.get(taxBase(result?.supplier.vatId)) ?? [],
+        kind:
+          document.uploadKind === "PREMIUM_NOTICE"
+            ? "PREMIUM_NOTICE"
+            : document.kind === "PROFORMA"
+              ? "PROFORMA"
+              : "INVOICE",
         payee: (document.payeeCheck as Payee | null) ?? "UNKNOWN",
         hasOriginal: true,
       });
       keys.set(
         document.id,
         invoiceKey(
-          result.invoiceNumber ?? "",
-          result.supplier.vatId,
-          result.supplier.name ?? "",
+          result?.invoiceNumber ?? "",
+          result?.supplier.vatId,
+          result?.supplier.name ?? "",
         ),
       );
     }
@@ -418,6 +441,72 @@ export class MissingInvoicesRepository {
         invoiceKey(invoice.invoiceNumber, GLS_TAX_BASE, "GLS"),
       );
     return mergeSameInvoice(documents, keys);
+  }
+
+  /**
+   * A DRAWERBŐL FELTÖLTÖTT SZÁMLA (acrobot 25274): a postafiókkal közös táblába
+   * kerül, UPLOAD származással és várható beérkezés NÉLKÜL, tehát a bevételezési
+   * láncba nem jut. Ugyanabban a tranzakcióban a terheléshez párosul (kézzel),
+   * és az auditnapló is megkapja.
+   */
+  async uploadAndPair(input: {
+    bankTransactionId: string;
+    fileName: string;
+    content: Buffer;
+    sha256: string;
+    kind: "INVOICE" | "PREMIUM_NOTICE";
+    importResult: SupplierInvoiceImportResult | null;
+    payee: Payee;
+    userId: string;
+  }): Promise<string> {
+    return this.database.$transaction(async (transaction) => {
+      const document = await transaction.incomingSupplierDocument.create({
+        data: {
+          gmailMessageId: `upload:${input.sha256}:${Date.now()}`,
+          fileName: input.fileName,
+          sizeBytes: input.content.length,
+          sha256: input.sha256,
+          content: new Uint8Array(input.content),
+          status: input.importResult ? "READ" : "FAILED",
+          kind:
+            input.importResult?.documentKind === "PROFORMA"
+              ? "PROFORMA"
+              : "INVOICE",
+          importResult: (input.importResult ??
+            undefined) as unknown as Prisma.InputJsonValue,
+          payeeCheck: input.payee,
+          origin: "UPLOAD",
+          uploadKind: input.kind,
+          uploadedByUserId: input.userId,
+        },
+        select: { id: true },
+      });
+      const source =
+        input.kind === "PREMIUM_NOTICE" ? "PREMIUM_NOTICE" : "UPLOAD";
+      await transaction.bankTransactionMatch.create({
+        data: {
+          bankTransactionId: input.bankTransactionId,
+          documentId: document.id,
+          documentSource: source,
+          pairedByUserId: input.userId,
+        },
+      });
+      await transaction.auditLog.create({
+        data: {
+          userId: input.userId,
+          action: "missing-invoices.uploaded",
+          entityType: "BankTransaction",
+          entityId: input.bankTransactionId,
+          metadata: {
+            documentId: document.id,
+            fileName: input.fileName,
+            kind: input.kind,
+            read: input.importResult !== null,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      return document.id;
+    });
   }
 
   /** A még nem ellenőrzött postafiók-dokumentumok bájtjai, a vevő-ellenőrzéshez. */

@@ -35,3 +35,9 @@ export class MissingInvoiceCategoryDto implements MissingInvoiceCategoryInput {
 export class MissingInvoicePaperOriginalDto implements MissingInvoicePaperOriginalInput {
   @IsBoolean() marked!: boolean;
 }
+
+/** A feltöltés fajtája: számla vagy biztosítási díjértesítő (acrobot 25265 c). */
+export class MissingInvoiceUploadDto {
+  @IsIn(["INVOICE", "PREMIUM_NOTICE"])
+  kind!: "INVOICE" | "PREMIUM_NOTICE";
+}

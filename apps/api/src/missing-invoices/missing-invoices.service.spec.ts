@@ -8,6 +8,13 @@ import { Prisma } from "@acropora/database";
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import type { MissingInvoicesRepository } from "./missing-invoices.repository.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
+import type { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
+
+const READER = {
+  read: async () => {
+    throw new Error("ismeretlen formátum");
+  },
+} as unknown as SupplierInvoiceImportService;
 
 const D = (v: number | string) => new Prisma.Decimal(v);
 const MAIN = {
@@ -57,7 +64,7 @@ function service(input: {
     setPayee: async (id: string, payee: string) =>
       void stored.push([id, payee]),
   } as unknown as MissingInvoicesRepository;
-  return { missing: new MissingInvoicesService(repository), stored };
+  return { missing: new MissingInvoicesService(repository, READER), stored };
 }
 
 const nav = (

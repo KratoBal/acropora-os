@@ -6989,6 +6989,13 @@ model IncomingSupplierDocument {
   /// a szövegben álló adószám-törzsszám alapján. Az első párosításkor
   /// számolódik és tárolódik; NULL, amíg senki nem kérdezte.
   payeeCheck        String?
+  /// Honnan jött: MAILBOX (a postafiók-figyelő) vagy UPLOAD (a Hiányzó számlák
+  /// drawerjéből feltöltve). A feltöltés SOHA nem kap várható beérkezést, tehát
+  /// a bevételezési láncba nem kerül (acrobot 25274).
+  origin            String                         @default("MAILBOX")
+  /// Feltöltésnél: INVOICE vagy PREMIUM_NOTICE (biztosítási díjértesítő).
+  uploadKind        String?
+  uploadedByUserId  String?
   createdAt         DateTime                       @default(now())
 
   expectedArrival ExpectedArrival? @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)

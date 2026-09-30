@@ -14,6 +14,13 @@ import type { AuthenticatedUser } from "@acropora/types";
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import type { MissingInvoicesRepository } from "./missing-invoices.repository.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
+import type { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
+
+const READER = {
+  read: async () => {
+    throw new Error("ismeretlen formátum");
+  },
+} as unknown as SupplierInvoiceImportService;
 
 const USER = { id: "user-1" } as AuthenticatedUser;
 const ACCOUNT = {
@@ -90,7 +97,7 @@ function setup(env: NodeJS.ProcessEnv = {}) {
     },
   } as unknown as MissingInvoicesRepository;
   return {
-    missing: new MissingInvoicesService(repository, env),
+    missing: new MissingInvoicesService(repository, READER, env),
     audit,
     taken: () => taken,
   };
