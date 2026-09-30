@@ -40,7 +40,6 @@ export interface SzamlazzAgentBuyer {
   city: string;
   address: string;
   email?: string;
-  sendEmail?: boolean;
   taxNumber?: string;
   phone?: string;
   comment?: string;
@@ -130,9 +129,12 @@ export function buildSzamlazzAgentInvoiceXml(
     tag("telepules", input.buyer.city) +
     tag("cim", input.buyer.address) +
     (input.buyer.email === undefined ? "" : tag("email", input.buyer.email)) +
-    (input.buyer.sendEmail === undefined
-      ? ""
-      : tag("sendEmail", input.buyer.sendEmail)) +
+    // SOHA NEM A SZÁMLÁZZ.HU KÜLDI A BIZONYLATOT (Balázs döntése, 2026-09-30,
+    // Eldöntendő szál, message_id 1554826347300392992): mi kérjük le a PDF-et,
+    // és mi küldjük. A doksi szerint ha a vevőnek van e-mail címe, arra a
+    // Számlázz.hu elküldi a számlát; ezért a jelző NEM hívófüggő, hanem minden
+    // számla-XML-ben kifejezetten false, akkor is, ha e-mail cím nincs.
+    tag("sendEmail", false) +
     (input.buyer.taxNumber === undefined
       ? ""
       : tag("adoszam", input.buyer.taxNumber)) +
