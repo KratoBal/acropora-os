@@ -1878,9 +1878,19 @@ export function PurchaseInvoiceEuEditorPage() {
                             <p className="text-sm font-semibold text-pilot-grey-900">
                               {line.sourceDescription || "Kézi tétel"}
                             </p>
-                            <PilotBadge variant="amber">
-                              Nincs terméktörzsben
-                            </PilotBadge>
+                            {/*
+                              A DÍJSOR (fuvar, csomagolás, kerekítés) nem
+                              termék: nem hiányzik a törzsből, ezért nem is ezt
+                              a jelvényt kapja (acrobot 25066, a Marine Aquatics
+                              32600405 DPD, RABEN és kerekítés sora).
+                            */}
+                            {line.isCharge ? (
+                              <PilotBadge variant="grey">Díjsor</PilotBadge>
+                            ) : (
+                              <PilotBadge variant="amber">
+                                Nincs terméktörzsben
+                              </PilotBadge>
+                            )}
                           </div>
                         )}
                         {line.supplierSku ? (
@@ -1921,7 +1931,26 @@ export function PurchaseInvoiceEuEditorPage() {
                         </PilotButton>
                       </div>
                     </div>
-                    {!line.variantId && !line.createLocalProduct ? (
+                    {!line.variantId &&
+                    !line.createLocalProduct &&
+                    line.isCharge ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {/*
+                          a díjsor-jelzés a szövegből jön, tehát tévedhet: egy
+                          kattintás termék-sorrá teszi, és visszaadja a két
+                          termék-gombot
+                        */}
+                        <PilotButton
+                          size="action"
+                          variant="secondary"
+                          onClick={() =>
+                            updateLine(line.key, { isCharge: false })
+                          }
+                        >
+                          Mégis termék
+                        </PilotButton>
+                      </div>
+                    ) : !line.variantId && !line.createLocalProduct ? (
                       <div className="mt-3 flex flex-wrap gap-2">
                         <PilotButton
                           size="action"

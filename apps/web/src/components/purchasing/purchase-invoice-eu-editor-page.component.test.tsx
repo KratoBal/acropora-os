@@ -714,7 +714,9 @@ describe("PurchaseInvoiceEuEditorPage beszállítói számla betöltése", () =>
       screen.getByText("Dupla Marin Coral Plugs 10 St., SB"),
     ).toBeInTheDocument();
     expect(screen.getByText("Beszállítói cikkszám: 81593")).toBeInTheDocument();
-    expect(screen.getAllByText("Nincs terméktörzsben")).toHaveLength(2);
+    // the freight line is a charge, not a product missing from the catalogue
+    expect(screen.getAllByText("Nincs terméktörzsben")).toHaveLength(1);
+    expect(screen.getAllByText("Díjsor")).toHaveLength(1);
     await waitFor(() =>
       expect(suppliersApiMock.search).toHaveBeenCalledWith(
         "token-owner",
@@ -724,6 +726,28 @@ describe("PurchaseInvoiceEuEditorPage beszállítói számla betöltése", () =>
     );
     // a second file cannot overwrite lines someone may have worked on
     expect(screen.getByLabelText("Beszállítói számla fájl")).toBeDisabled();
+  });
+
+  // What must fail: a charge line offered as a product to link or create
+  // (acrobot 25066, Marine Aquatics 32600405), or no way out when the reader
+  // took a product for a charge.
+  it("offers no product buttons on a charge line, until 'Mégis termék'", async () => {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    upload();
+    await screen.findByText("Frachtkosten (anteilig)");
+    expect(
+      screen.getAllByRole("button", { name: "Kapcsolás meglévő termékhez" }),
+    ).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: "Új helyi termék létrehozása" }),
+    ).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mégis termék" }));
+    expect(
+      screen.getAllByRole("button", { name: "Kapcsolás meglévő termékhez" }),
+    ).toHaveLength(2);
+    expect(screen.queryByText("Díjsor")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Nincs terméktörzsben")).toHaveLength(2);
   });
 
   it("marks a PDF-read invoice as one to check, with its warnings", async () => {

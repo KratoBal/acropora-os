@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { useListHref } from "@/components/navigation-history";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
@@ -204,6 +205,7 @@ function TimelineIcon({ kind }: { kind: ServiceJobTimelineEntry["kind"] }) {
 
 export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
   const { session } = useAuth();
+  const listHref = useListHref("/szerviz/hibajegyek");
   const [job, setJob] = useState<ServiceJobDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -596,7 +598,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
           </Link>
           <span>/</span>
           <Link
-            href="/szerviz/hibajegyek"
+            href={listHref}
             className="transition-colors hover:text-pilot-aqua-600"
           >
             Hibajegyek
