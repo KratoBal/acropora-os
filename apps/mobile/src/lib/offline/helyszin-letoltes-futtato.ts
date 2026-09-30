@@ -195,6 +195,38 @@ async function probald<T>(hivas: Probalkozas<T>): Promise<T | null> {
   }
 }
 
+/**
+ * EGY MENTES, AMINEK A HIBAJA MEGMARAD.
+ *
+ * A `probald` csak annyit mond, hogy elhasalt; a mentesnel a HIBA SZOVEGE is
+ * kell. Balazs 2026-09-30-an ket korben irta le, mit lat, es a kod alapjan
+ * harom ok johetett szoba -- egyetlen kepernyon allo hibaszoveg eldontotte
+ * volna. Az elso hiba ezert a zaro mondat ala kerul.
+ */
+async function mentsd(
+  hivas: () => Promise<unknown>,
+  hibak: string[],
+): Promise<boolean> {
+  try {
+    await hivas();
+    return true;
+  } catch (hiba) {
+    hibak.push(hibaSzovege(hiba));
+    return false;
+  }
+}
+
+/** A hiba szovege egy sorban, levagva: egy nativ hibalanc tobb soros is lehet. */
+function hibaSzovege(hiba: unknown): string {
+  const nyers = hiba instanceof Error ? hiba.message : String(hiba);
+  const egySor = nyers.replace(/\s+/g, " ").trim();
+  return egySor.length > MENTESI_HIBA_HOSSZ
+    ? `${egySor.slice(0, MENTESI_HIBA_HOSSZ)}…`
+    : egySor || "ismeretlen hiba";
+}
+
+export const MENTESI_HIBA_HOSSZ = 160;
+
 function utEgyezik(
   ut: readonly string[] | null,
   helyszinUt: readonly string[],
@@ -232,15 +264,27 @@ export async function letoltHelyszin<
     MunkalapReszlet
   >,
 ): Promise<LetoltesEredmeny> {
-  const eszkozEredmeny = await eszkozok(deps);
+  const mentesiHibak: string[] = [];
+  const eszkozEredmeny = await eszkozok(deps, mentesiHibak);
   const reszek: ReszEredmeny[] = [
     eszkozEredmeny.resz,
     eszkozEredmeny.kepek,
-    await hibajegyek(input.helyszinUt, deps),
-    await munkalapok(deps),
+    await hibajegyek(input.helyszinUt, deps, mentesiHibak),
+    await munkalapok(deps, mentesiHibak),
   ];
+  const osszegzes = osszegezHelyszinLetoltes({
+    helyszin: input.helyszinNeve,
+    reszek,
+  });
   return {
-    ...osszegezHelyszinLetoltes({ helyszin: input.helyszinNeve, reszek }),
+    ...osszegzes,
+    /*
+      AZ ELSO MENTESI HIBA SZOVEGE, a sorok vegen. Egy kepernyokep igy
+      megmondja, MIERT nem kerult a keszulekre, nem csak azt, hogy nem.
+    */
+    sorok: mentesiHibak[0]
+      ? [...osszegzes.sorok, `Az első mentési hiba: ${mentesiHibak[0]}`]
+      : osszegzes.sorok,
     /*
       A TELJES KEPEK LISTAJA A ZARO MONDAT MELLE. Nem toltjuk le oket: a
       meretuk nagysagrendekkel nagyobb, es a dontes a szereloe. A lista
@@ -252,6 +296,7 @@ export async function letoltHelyszin<
 
 async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
   deps: EszkozFuggosegek<Tetel, Reszlet>,
+  mentesiHibak: string[],
 ): Promise<{
   resz: ReszEredmeny;
   kepek: ReszEredmeny;
@@ -281,7 +326,15 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
     sorok.push(...kovetkezo.items);
   }
 
-  await probald(() => deps.eszkozokMentese(sorok));
+  /*
+    A MENTES HIBAJA IS SZAMIT, NEM CSAK A LEKERESE. A mentok eddig minden hibat
+    elnyeltek, tehat ez a sor sosem tudott elhasalni -- Balazs 2026-09-30-an
+    Androidon "kesz"-t kapott egy ures masolatra. A letolto most a hibat
+    tovabbado mentoket kapja (`storeAssets` es tarsai), es itt szamol.
+  */
+  let bukottMentes = 0;
+  if (!(await mentsd(() => deps.eszkozokMentese(sorok), mentesiHibak)))
+    bukottMentes += 1;
 
   /*
     A TELJES ADATLAP AZ, AMIERT EZ A GOMB LETEZIK. Balazs szava: a kollega ma
@@ -300,8 +353,13 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
       hibasReszlet = true;
       continue;
     }
-    await probald(() => deps.eszkozReszletMentese(detail));
-    reszletek += 1;
+    /*
+      A BUKOTT MENTES NEM HAGYJA KI A BELYEGKEPEKET: azok fajlkent kerulnek a
+      lemezre, az adatbazistol fuggetlenul.
+    */
+    if (!(await mentsd(() => deps.eszkozReszletMentese(detail), mentesiHibak)))
+      bukottMentes += 1;
+    else reszletek += 1;
 
     /*
       A BELYEGKEPEK UGYANEBBOL A VALASZBOL JONNEK: az eszkoz adatlapja
@@ -343,21 +401,29 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
   }
 
   const eszkozResz: ReszEredmeny =
-    hianyzoLap || hibasReszlet
+    bukottMentes > 0
       ? {
           resz: "eszkozok",
           allapot: "reszleges",
           darab: reszletek,
-          ok: "hibas-sor",
+          ok: "mentes",
+          bukott: bukottMentes,
         }
-      : sorok.length > RESZLET_HATAR
+      : hianyzoLap || hibasReszlet
         ? {
             resz: "eszkozok",
             allapot: "reszleges",
             darab: reszletek,
-            ok: "vagott",
+            ok: "hibas-sor",
           }
-        : { resz: "eszkozok", allapot: "kesz", darab: reszletek };
+        : sorok.length > RESZLET_HATAR
+          ? {
+              resz: "eszkozok",
+              allapot: "reszleges",
+              darab: reszletek,
+              ok: "vagott",
+            }
+          : { resz: "eszkozok", allapot: "kesz", darab: reszletek };
 
   return {
     resz: eszkozResz,
@@ -376,11 +442,14 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
 async function hibajegyek<Tetel extends JegySor, Reszlet>(
   helyszinUt: readonly string[],
   deps: JegyFuggosegek<Tetel, Reszlet>,
+  mentesiHibak: string[],
 ): Promise<ReszEredmeny> {
   const lista = await probald(() => deps.jegyLista());
   if (!lista) return { resz: "hibajegyek", allapot: "elhasalt", darab: 0 };
 
-  await probald(() => deps.jegyekMentese(lista.items));
+  let bukottMentes = 0;
+  if (!(await mentsd(() => deps.jegyekMentese(lista.items), mentesiHibak)))
+    bukottMentes += 1;
 
   const helyszinei = lista.items.filter((item) =>
     utEgyezik(item.departmentPath, helyszinUt),
@@ -394,9 +463,21 @@ async function hibajegyek<Tetel extends JegySor, Reszlet>(
       hibas = true;
       continue;
     }
-    await probald(() => deps.jegyReszletMentese(detail));
+    if (!(await mentsd(() => deps.jegyReszletMentese(detail), mentesiHibak))) {
+      bukottMentes += 1;
+      continue;
+    }
     reszletek += 1;
   }
+
+  if (bukottMentes > 0)
+    return {
+      resz: "hibajegyek",
+      allapot: "reszleges",
+      darab: reszletek,
+      ok: "mentes",
+      bukott: bukottMentes,
+    };
 
   /*
     A SZERVER VAGASA KULON OK: a jegylista ketszaz sornal vagodik, es errol a
@@ -422,6 +503,7 @@ async function hibajegyek<Tetel extends JegySor, Reszlet>(
 
 async function munkalapok<Tetel extends Sor, Reszlet>(
   deps: MunkalapFuggosegek<Tetel, Reszlet>,
+  mentesiHibak: string[],
 ): Promise<ReszEredmeny> {
   const elso = await probald(() => deps.munkalapLista(1));
   if (!elso) return { resz: "munkalapok", allapot: "elhasalt", darab: 0 };
@@ -440,16 +522,28 @@ async function munkalapok<Tetel extends Sor, Reszlet>(
   const kerheto = sorok.slice(0, RESZLET_HATAR);
   let reszletek = 0;
   let hibas = false;
+  let bukottMentes = 0;
   for (const sor of kerheto) {
     const detail = await probald(() => deps.munkalapReszlet(sor.id));
     if (!detail) {
       hibas = true;
       continue;
     }
-    await probald(() => deps.munkalapMentese(detail));
+    if (!(await mentsd(() => deps.munkalapMentese(detail), mentesiHibak))) {
+      bukottMentes += 1;
+      continue;
+    }
     reszletek += 1;
   }
 
+  if (bukottMentes > 0)
+    return {
+      resz: "munkalapok",
+      allapot: "reszleges",
+      darab: reszletek,
+      ok: "mentes",
+      bukott: bukottMentes,
+    };
   if (hianyzoLap || hibas)
     return {
       resz: "munkalapok",

@@ -55,12 +55,25 @@ export type ReszEredmeny =
    * levo masolat hianyos, es ezen a szerelo nem tud segiteni.
    *
    * `hibas-sor`: egyes tetelek lekerese hasalt el. A tobbi megvan.
+   *
+   * `mentes`: a tetel LEJOTT, de a keszulekre MENTESE hasalt el (`bukott`
+   * darab mentes). Ez a legveszelyesebb ag: a szerver felol minden rendben
+   * volt, tehat a lekeres szama sikert mutatna, a masolat viszont hianyos
+   * vagy ures. Balazs 2026-09-30-an pontosan ezt latta Androidon: a letoltes
+   * szamot mondott, terero nelkul a lista "nincs mentett masolat" volt.
    */
   | {
       resz: LetoltesResz;
       allapot: "reszleges";
       darab: number;
       ok: "vagott" | "hibas-sor";
+    }
+  | {
+      resz: LetoltesResz;
+      allapot: "reszleges";
+      darab: number;
+      ok: "mentes";
+      bukott: number;
     }
   /** Egyaltalan nem jott le semmi ebbol a reszbol. */
   | { resz: LetoltesResz; allapot: "elhasalt"; darab: 0 };
@@ -82,6 +95,8 @@ function sor(eredmeny: ReszEredmeny): string {
   if (eredmeny.allapot === "kesz") return `${eredmeny.darab} ${nev} letöltve.`;
   if (eredmeny.allapot === "elhasalt")
     return `${nev}: egy sem jött le. Ez a rész hiányzik a készülékről.`;
+  if (eredmeny.ok === "mentes")
+    return `${eredmeny.darab} ${nev} került a készülékre, de ${eredmeny.bukott} mentés a készülékre NEM sikerült: ami abban volt, az offline nem lesz meg.`;
   return eredmeny.ok === "vagott"
     ? `${eredmeny.darab} ${nev} jött le, de a lista ennél hosszabb: a többi NEM került a készülékre.`
     : `${eredmeny.darab} ${nev} jött le, a többi nem sikerült.`;

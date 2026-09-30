@@ -1,6 +1,6 @@
 import type { WorksheetDetail } from "@/lib/api/worksheets";
 
-import { initializeOfflineDatabase } from "./database";
+import { offlineDatabase } from "./database";
 
 /**
  * A MEGNYITOTT MUNKALAP HELYSZINI MASOLATA.
@@ -35,14 +35,8 @@ import { initializeOfflineDatabase } from "./database";
  * van, mert a kovetkezo olvaso ott fogja keresni.
  */
 
-type Database = Awaited<ReturnType<typeof initializeOfflineDatabase>>;
-
-let opening: Promise<Database> | null = null;
-
-function database(): Promise<Database> {
-  opening ??= initializeOfflineDatabase();
-  return opening;
-}
+// Egy megnyitas az egesz appnak: lasd `egyszeri-megnyitas.ts`.
+const database = offlineDatabase;
 
 export interface CachedWorksheet {
   /** A teljes adatlap, ha ezt a lapot megnyitottak tererovel. `null`, ha nem. */
@@ -59,19 +53,28 @@ function parse<T>(json: string): T | null {
   }
 }
 
+/**
+ * A munkalap a masolatba, A HIBAVAL EGYUTT. A helyszin-letolto ezt hivja:
+ * neki tudnia kell, ha a mentes elhasalt (lasd `asset-cache.ts`
+ * `storeAssets`).
+ */
+export async function storeWorksheet(detail: WorksheetDetail): Promise<void> {
+  const db = await database();
+  await db.runAsync(
+    `INSERT INTO cached_worksheet_details (id, payload_json, synced_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       payload_json = excluded.payload_json,
+       synced_at = excluded.synced_at`,
+    [detail.id, JSON.stringify(detail), new Date().toISOString()],
+  );
+}
+
 export async function rememberWorksheet(
   detail: WorksheetDetail,
 ): Promise<void> {
   try {
-    const db = await database();
-    await db.runAsync(
-      `INSERT INTO cached_worksheet_details (id, payload_json, synced_at)
-       VALUES (?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         payload_json = excluded.payload_json,
-         synced_at = excluded.synced_at`,
-      [detail.id, JSON.stringify(detail), new Date().toISOString()],
-    );
+    await storeWorksheet(detail);
   } catch {
     // Lasd a fejlecet: egy elhasalt mentes nem ronthat el egy mukodo kepernyot.
   }

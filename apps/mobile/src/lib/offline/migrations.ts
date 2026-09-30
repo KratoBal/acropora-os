@@ -28,6 +28,33 @@ export interface Migration {
   /** Mit csinal -- emberi szoveg, a naploba es ide, olvasasra. */
   name: string;
   sql: string;
+  /**
+   * AZ OSZLOPOT HOZZAADO LEPES OSZLOPAI. Ha meg van adva, a lepes CSAK a meg
+   * hianyzo oszlopokat adja hozza, es az `sql` nem fut -- lasd
+   * `applyMigrations`, miert.
+   */
+  addsColumns?: readonly AddedColumn[];
+}
+
+export interface AddedColumn {
+  table: string;
+  column: string;
+  /** Az oszlop tipusa es megszoritasai, ahogy az `ADD COLUMN` utan all. */
+  definition: string;
+}
+
+/** Egy oszlopot hozzaado lepes, amelynek az `sql`-je az oszlopokbol all elo. */
+function addColumns(
+  ...columns: AddedColumn[]
+): Pick<Migration, "sql" | "addsColumns"> {
+  return {
+    sql: columns.map(addColumnSql).join("\n"),
+    addsColumns: columns,
+  };
+}
+
+function addColumnSql(column: AddedColumn): string {
+  return `ALTER TABLE ${column.table} ADD COLUMN ${column.column} ${column.definition};`;
 }
 
 /**
@@ -38,7 +65,11 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
     name: "a sync_queue sorai allapotot kapnak",
-    sql: `ALTER TABLE sync_queue ADD COLUMN state TEXT NOT NULL DEFAULT 'pending';`,
+    ...addColumns({
+      table: "sync_queue",
+      column: "state",
+      definition: "TEXT NOT NULL DEFAULT 'pending'",
+    }),
   },
   {
     version: 2,
@@ -64,7 +95,11 @@ export const MIGRATIONS: readonly Migration[] = [
      * tablat nem modosit.
      */
     name: "a sync_queue sorai megjegyzik az utolso kiserlet idejet",
-    sql: `ALTER TABLE sync_queue ADD COLUMN last_attempt_at TEXT;`,
+    ...addColumns({
+      table: "sync_queue",
+      column: "last_attempt_at",
+      definition: "TEXT",
+    }),
   },
   {
     version: 4,
@@ -125,10 +160,14 @@ export const MIGRATIONS: readonly Migration[] = [
      * sor letezhet -- nevesitve, nem csendben.
      */
     name: "egy sorban allo muvelet megvarhat egy masikat",
-    sql: `
-      ALTER TABLE sync_queue ADD COLUMN depends_on_operation_id TEXT;
-      ALTER TABLE sync_queue ADD COLUMN depends_on_target TEXT;
-    `,
+    ...addColumns(
+      {
+        table: "sync_queue",
+        column: "depends_on_operation_id",
+        definition: "TEXT",
+      },
+      { table: "sync_queue", column: "depends_on_target", definition: "TEXT" },
+    ),
   },
 ];
 
@@ -174,4 +213,85 @@ export function firstBrokenStep(
     }
   }
   return null;
+}
+
+/** Amennyit a lepesek futtatasa az adatbazisbol hasznal. */
+export interface MigrationDatabase {
+  execAsync(source: string): Promise<void>;
+  getFirstAsync<T>(source: string): Promise<T | null>;
+  getAllAsync<T>(source: string): Promise<T[]>;
+}
+
+/**
+ * A SORSZAMOZOTT LEPESEK LEFUTTATASA, EGYSZER MINDEGYIK.
+ *
+ * A verziot az SQLite sajat `user_version` pragmaja tarolja. A lepesek MIND
+ * lefutnak, nem csak az utolso (lasd `pendingMigrations`).
+ *
+ * === A LEPES ES A VERZIO EGY TRANZAKCIOBAN (Balazs, 2026-09-30, Android) ===
+ *
+ * Eddig ket kulon hivas vitte: elobb a lepes SQL-je, utana kulon a
+ * `PRAGMA user_version`. A kapcsolat kozos (az expo-sqlite utvonal szerint
+ * ugyanazt adja vissza), tehat a ket hivas koze eshetett egy masik modul
+ * tranzakcioja, es ha az visszagorgetett, az oszlop megmaradt, a verzio nem.
+ * Onnantol minden nyitas ujrafuttatta a lepest, az `ALTER TABLE` "duplicate
+ * column name" hibat dobott, es az adatbazis app-ujrainditas utan SEM nyilt
+ * meg. Most a lepes es a verzio vagy egyutt tortenik meg, vagy egyik sem.
+ *
+ * === ES A MAR BERAGADT KESZULEK ===
+ *
+ * Az oszlopot hozzaado lepes a MEGLEVO oszlopot nem adja hozza ujra, csak a
+ * hianyzot. Ez NEM a verzio kivaltasa (a fejlec indoka all: a sorrendet a
+ * verzio mondja meg), hanem hogy egy felig lefutott lepes utan a lepes ujra
+ * lefuthasson. Enelkul a fenti javitas csak az UJ keszulekeket vedene meg, azt
+ * nem, amelyiken a hiba mar megtortent.
+ */
+export async function applyMigrations(
+  database: MigrationDatabase,
+  steps: readonly Migration[] = MIGRATIONS,
+): Promise<void> {
+  const torott = firstBrokenStep(steps);
+  if (torott) {
+    /**
+     * HEZAGOS LEPESSOR ESETEN MEG SEM KEZDJUK. Egy kihagyott sorszam mellett a
+     * `user_version` atugorhat egy lepest, es az azon a keszuleken SOHA nem fut
+     * le tobbe. Jobb itt megallni, mint felig migralt adatbazissal indulni.
+     */
+    throw new Error(`Hibás migrációs lépéssor: ${torott}`);
+  }
+  const sor = await database.getFirstAsync<{ user_version: number }>(
+    "PRAGMA user_version;",
+  );
+  const jelenlegi = sor?.user_version ?? 0;
+  for (const lepes of pendingMigrations(jelenlegi, steps)) {
+    const sql = lepes.addsColumns
+      ? await missingColumnsSql(database, lepes.addsColumns)
+      : lepes.sql;
+    try {
+      await database.execAsync(
+        `BEGIN;\n${sql}\nPRAGMA user_version = ${lepes.version};\nCOMMIT;`,
+      );
+    } catch (hiba) {
+      // A felbemaradt tranzakcio ne maradjon nyitva a kozos kapcsolaton. Ha
+      // mar nincs nyitott tranzakcio, a ROLLBACK maga hibat ad: azt nem
+      // dobjuk tovabb, a lepes EREDETI hibaja a fontos.
+      await database.execAsync("ROLLBACK;").catch(() => undefined);
+      throw hiba;
+    }
+  }
+}
+
+async function missingColumnsSql(
+  database: MigrationDatabase,
+  columns: readonly AddedColumn[],
+): Promise<string> {
+  const hianyzo: AddedColumn[] = [];
+  for (const column of columns) {
+    const meglevo = await database.getAllAsync<{ name: string }>(
+      `PRAGMA table_info(${column.table});`,
+    );
+    if (!meglevo.some((sor) => sor.name === column.column))
+      hianyzo.push(column);
+  }
+  return hianyzo.map(addColumnSql).join("\n");
 }

@@ -16,7 +16,7 @@ import {
   listWorksheetDepartments,
   listWorksheets,
 } from "@/lib/api/worksheets";
-import { rememberAssetDetail, rememberAssets } from "@/lib/offline/asset-cache";
+import { storeAssetDetail, storeAssets } from "@/lib/offline/asset-cache";
 import { environment } from "@/config/env";
 import {
   documentCacheFileName,
@@ -28,10 +28,10 @@ import { formatDocumentSize } from "@/lib/documents/document-view";
 import { LETOLTES_UTAN_UJRAOLVASANDO } from "@/lib/offline/helyszin-letoltes";
 import { letoltHelyszin } from "@/lib/offline/helyszin-letoltes-futtato";
 import {
-  rememberServiceJobDetail,
-  rememberServiceJobs,
+  storeServiceJobDetail,
+  storeServiceJobs,
 } from "@/lib/offline/service-job-cache";
-import { rememberWorksheet } from "@/lib/offline/worksheet-cache";
+import { storeWorksheet } from "@/lib/offline/worksheet-cache";
 import { menthetoMasolatkent } from "@/lib/service-jobs/jegy-alak";
 import type { ServiceJobDetail } from "@/lib/service-jobs/types";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
@@ -108,8 +108,13 @@ export function HelyszinLetolto() {
         {
           eszkozLista: (oldal) => listAssets(oldal, 50, "", departmentId),
           eszkozReszlet: getAsset,
-          eszkozokMentese: rememberAssets,
-          eszkozReszletMentese: rememberAssetDetail,
+          /*
+            A HIBAT TOVABBADO MENTOK, NEM A `remember*` PAROK. Azok minden
+            hibat elnyelnek, tehat a menet nem tudta meg, ha a masolat ures
+            maradt -- es "kesz"-t mondott (Balazs, 2026-09-30, Android).
+          */
+          eszkozokMentese: storeAssets,
+          eszkozReszletMentese: storeAssetDetail,
           /*
             A BELYEGKEP UGYANABBA A KONYVTARBA es UGYANAZZAL a fajlnevvel
             kerul, amit a galeria horga keres -- kulonben ott allna a
@@ -160,12 +165,12 @@ export function HelyszinLetolto() {
               );
             return jegy;
           },
-          jegyekMentese: rememberServiceJobs,
-          jegyReszletMentese: rememberServiceJobDetail,
+          jegyekMentese: storeServiceJobs,
+          jegyReszletMentese: storeServiceJobDetail,
           munkalapLista: (oldal) =>
             listWorksheets({ page: oldal, pageSize: 100, departmentId }),
           munkalapReszlet: getWorksheet,
-          munkalapMentese: rememberWorksheet,
+          munkalapMentese: storeWorksheet,
         },
       );
     },

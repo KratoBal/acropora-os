@@ -61,7 +61,7 @@ describe("a helyszín-letöltő bekötése", () => {
   it("a részletlapok is lejönnek, nem csak a listasorok", () => {
     const s = kod(KEPERNYO);
     assert.match(s, /eszkozReszlet: getAsset/);
-    assert.match(s, /eszkozReszletMentese: rememberAssetDetail/);
+    assert.match(s, /eszkozReszletMentese: storeAssetDetail/);
     /*
       A HIVAS MEGMARADT, AZ ALAKJA VALTOZOTT (2026-09-22).
 

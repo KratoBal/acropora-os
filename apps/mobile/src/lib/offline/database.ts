@@ -1,8 +1,35 @@
 import * as SQLite from "expo-sqlite";
 
-import { firstBrokenStep, pendingMigrations } from "./migrations";
+import { egymasUtan, egyszeriMegnyitas } from "./egyszeri-megnyitas";
+import { applyMigrations } from "./migrations";
 
 const DATABASE_NAME = "acropora-field.db";
+
+/**
+ * AZ ADATBAZIS, AHOGY A MODULOK KAPJAK: EGY MEGNYITAS AZ EGESZ APPNAK.
+ *
+ * Minden masolat-modul es a sor ezt hivja, nem az `initializeOfflineDatabase`
+ * fuggvenyt. Igy a sema es a sorszamozott lepesek EGYSZER futnak le, es egy
+ * elhasalt megnyitas utan a kovetkezo hivas ujraprobal -- lasd
+ * `egyszeri-megnyitas.ts`.
+ */
+export const offlineDatabase = egyszeriMegnyitas(initializeOfflineDatabase);
+
+const tranzakciok = egymasUtan();
+
+/**
+ * EGY TRANZAKCIO, A TOBBI UTAN SORBAN.
+ *
+ * A `withTransactionAsync` nem kizarolagos: ket egymasba csuszo tranzakcio
+ * kozul a masodik `BEGIN`-je hibat dob, es a hibaagon kiadott `ROLLBACK` az
+ * ELSOT gorgeti vissza. Itt a masodik megvarja az elsot.
+ */
+export function inTransaction(
+  database: SQLite.SQLiteDatabase,
+  task: () => Promise<void>,
+): Promise<void> {
+  return tranzakciok(() => database.withTransactionAsync(task));
+}
 
 /**
  * A KÉSZÜLÉKEN TÁROLT HELYSZÍNI MÁSOLAT.
@@ -120,42 +147,4 @@ export async function initializeOfflineDatabase(): Promise<SQLite.SQLiteDatabase
   `);
   await applyMigrations(database);
   return database;
-}
-
-/**
- * A SORSZAMOZOTT LEPESEK LEFUTTATASA, EGYSZER MINDEGYIK.
- *
- * A verziot az SQLite sajat `user_version` pragmaja tarolja -- KULON
- * nyilvantartas, nem a sema alakjabol olvasva. A "letezik-e mar az oszlop"
- * alaku ellenorzes ugyanaz a csapda, mint a `CREATE TABLE IF NOT EXISTS`:
- * egyetlen lepesnel mukodik, ketto utan mar nem mondja meg, hol tartunk.
- *
- * A LEPESEK MIND LEFUTNAK, NEM CSAK AZ UTOLSO. Egy nulladik verzion allo
- * keszuleknek a masodikig kell eljutnia, es a kozbenso lepes kihagyasa
- * CSENDES: az adatbazis mukodik, amig egy lekerdezes nem keresi a hianyzo
- * oszlopot. A `pendingMigrations` epp ezt a tulajdonsagot hordozza, es a
- * specje ket lepessel meri -- eggyel nem lenne merheto.
- *
- * A verziot LEPESENKENT irjuk fel, nem a vegen egyszer: ha a masodik lepes
- * elhasal, az elso akkor is megtortent, es egy vegen felirt verzio ezt
- * elfelejtene -- a kovetkezo indulas ujra futtatna az elsot.
- */
-async function applyMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
-  const torott = firstBrokenStep();
-  if (torott) {
-    /**
-     * HEZAGOS LEPESSOR ESETEN MEG SEM KEZDJUK. Egy kihagyott sorszam mellett a
-     * `user_version` atugorhat egy lepest, es az azon a keszuleken SOHA nem fut
-     * le tobbe. Jobb itt megallni, mint felig migralt adatbazissal indulni.
-     */
-    throw new Error(`Hibás migrációs lépéssor: ${torott}`);
-  }
-  const sor = await database.getFirstAsync<{ user_version: number }>(
-    "PRAGMA user_version;",
-  );
-  const jelenlegi = sor?.user_version ?? 0;
-  for (const lepes of pendingMigrations(jelenlegi)) {
-    await database.execAsync(lepes.sql);
-    await database.execAsync(`PRAGMA user_version = ${lepes.version};`);
-  }
 }

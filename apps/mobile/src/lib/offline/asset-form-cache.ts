@@ -1,7 +1,7 @@
 import type { AssetOwnerOption } from "@/lib/api/assets";
 import type { PartnerUnit } from "@/lib/api/partners";
 
-import { initializeOfflineDatabase } from "./database";
+import { inTransaction, offlineDatabase } from "./database";
 
 /**
  * AZ ESZKÖZ-FELVITEL KÉT VÁLASZTÓJA A KÉSZÜLÉKEN.
@@ -29,14 +29,8 @@ import { initializeOfflineDatabase } from "./database";
  * szemben BIZONYÍTÉK, és ott a hiba visszamegy a hívóhoz.
  */
 
-type Database = Awaited<ReturnType<typeof initializeOfflineDatabase>>;
-
-let opening: Promise<Database> | null = null;
-
-function database(): Promise<Database> {
-  opening ??= initializeOfflineDatabase();
-  return opening;
-}
+// Egy megnyitas az egesz appnak: lasd `egyszeri-megnyitas.ts`.
+const database = offlineDatabase;
 
 export interface CachedAssetOwners {
   items: AssetOwnerOption[];
@@ -60,7 +54,7 @@ export async function rememberAssetOwners(
   const savedAt = new Date().toISOString();
   try {
     const db = await database();
-    await db.withTransactionAsync(async () => {
+    await inTransaction(db, async () => {
       await db.runAsync(`DELETE FROM cached_asset_owners`);
       for (const item of items) {
         await db.runAsync(
@@ -97,7 +91,7 @@ export async function rememberPartnerUnits(
   const savedAt = new Date().toISOString();
   try {
     const db = await database();
-    await db.withTransactionAsync(async () => {
+    await inTransaction(db, async () => {
       await db.runAsync(
         `DELETE FROM cached_partner_units WHERE partner_id = ?`,
         [partnerId],

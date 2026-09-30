@@ -10,6 +10,7 @@ import {
   describeOfflineDetailNotice,
   describeOfflineEditNotice,
   describeOfflineNotice,
+  describeUnloadableDetail,
   isCacheStale,
   STALE_AFTER_HOURS,
 } from "./offline-notice";
@@ -491,5 +492,45 @@ describe("a szerkesztő képernyő sávja", () => {
 
     assert.match(sav?.message ?? "", /mentett másolat/);
     assert.notEqual((sav?.message ?? "").indexOf("órája"), -1);
+  });
+});
+
+/**
+ * AZ ADATLAP, AMIT SE A SZERVER, SE A MASOLAT NEM AD (Balazs, 2026-09-30).
+ *
+ * Offline a "szerver nem erheto el" igaz, de nem mondja meg a lenyeget: hogy
+ * ez az eszkoz nincs a keszuleken.
+ *
+ * MI PIROSIT: ha halozati hiba es megnezett, ures masolat mellett a regi
+ * mondat marad; vagy ha a szerver VALASZA helyett is a "nincs mentve" jon.
+ */
+describe("az adatlap, ami nem tölthető be", () => {
+  it("hálózati hiba és üres másolat: kimondja, hogy nincs a készülékre mentve", () => {
+    const uzenet = describeUnloadableDetail({
+      networkFailure: true,
+      copyChecked: true,
+      errorMessage: "A szerver jelenleg nem érhető el.",
+    });
+    assert.equal(uzenet.title, "Ez az eszköz nincs a készülékre mentve");
+    assert.match(uzenet.message, /Letöltöm a helyszínt/);
+  });
+
+  it("ha a szerver VÁLASZOLT, az ő mondata marad", () => {
+    const uzenet = describeUnloadableDetail({
+      networkFailure: false,
+      copyChecked: true,
+      errorMessage: "Nincs jogosultságod ehhez az eszközhöz.",
+    });
+    assert.equal(uzenet.title, "Az eszköz nem tölthető be");
+    assert.equal(uzenet.message, "Nincs jogosultságod ehhez az eszközhöz.");
+  });
+
+  it("amíg a másolat nem jött vissza, még nem mondja, hogy hiányzik", () => {
+    const uzenet = describeUnloadableDetail({
+      networkFailure: true,
+      copyChecked: false,
+      errorMessage: "A szerver jelenleg nem érhető el.",
+    });
+    assert.equal(uzenet.title, "Az eszköz nem tölthető be");
   });
 });
