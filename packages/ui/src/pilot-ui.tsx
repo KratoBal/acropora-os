@@ -1,6 +1,6 @@
 "use client";
 import type { InputHTMLAttributes, ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 
 import { Icon } from "./icon";
 import { useThemePreference } from "./use-theme-preference";
@@ -576,23 +576,50 @@ export function PilotCardHeader({
   );
 }
 
+/**
+ * A JOBB OLDALI FIÓK. A Direction F Számlázás-terve (Figma 316:1485, az
+ * e-mail szerkesztő) óta bővítve, ADDITÍVAN: a régi hívó (akvárium
+ * vízértékek) a `title`/`children` alakban változatlanul működik.
+ *
+ * - Valódi párbeszédablak: `role="dialog"`, `aria-modal`, a cím a neve.
+ * - Escape-re és a háttérre kattintva zár; a bezáró gomb neve "Bezárás".
+ * - Zárt állapotban a tartalma `inert` és `aria-hidden`: nem érhető el sem
+ *   billentyűzettel, sem képernyőolvasóval, csak ki van tolva a képből.
+ * - `subtitle`, `footer` (a lap alján álló, nem görgő sáv a gombokkal) és
+ *   `width` (`md` a régi 448, `lg` a terv 520 pixele).
+ */
 export function PilotDrawer({
   open,
   onClose,
   title,
+  subtitle,
+  footer,
+  width = "md",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  subtitle?: ReactNode;
+  footer?: ReactNode;
+  width?: "md" | "lg";
   children: ReactNode;
 }) {
+  const titleId = useId();
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
   }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   return (
     <>
@@ -603,23 +630,44 @@ export function PilotDrawer({
         onClick={onClose}
       />
       <div
-        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col bg-white shadow-2xl transition-transform duration-250 ease-in-out ${
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-hidden={!open}
+        inert={!open}
+        className={`fixed right-0 top-0 z-50 flex h-full w-full ${
+          width === "lg" ? "max-w-[520px]" : "max-w-md"
+        } flex-col bg-white shadow-2xl transition-transform duration-250 ease-in-out ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-pilot-grey-100 px-6 py-4">
-          <h2 className="text-base font-semibold text-pilot-grey-900">
-            {title}
-          </h2>
+        <div className="flex items-start justify-between gap-3 border-b border-pilot-grey-100 px-6 py-4">
+          <div className="min-w-0">
+            <h2
+              id={titleId}
+              className="text-base font-semibold text-pilot-grey-900"
+            >
+              {title}
+            </h2>
+            {subtitle ? (
+              <p className="mt-0.5 text-xs text-pilot-grey-500">{subtitle}</p>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="cursor-pointer rounded-md p-1.5 text-pilot-grey-400 transition hover:bg-pilot-grey-100 hover:text-pilot-grey-700"
+            aria-label="Bezárás"
+            className="shrink-0 cursor-pointer rounded-md p-1.5 text-pilot-grey-400 transition hover:bg-pilot-grey-100 hover:text-pilot-grey-700"
           >
             <Icon name="x" size={16} />
           </button>
         </div>
         {children}
+        {footer ? (
+          <div className="border-t border-pilot-grey-100 px-6 py-4">
+            {footer}
+          </div>
+        ) : null}
       </div>
     </>
   );
