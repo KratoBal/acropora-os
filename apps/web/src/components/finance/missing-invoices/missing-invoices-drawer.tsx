@@ -64,7 +64,8 @@ export function MissingInvoicesDrawer({
 }: {
   row: ChargeRow | null;
   onClose: () => void;
-  companyName: string;
+  /** A szerver konfigurációjából; `null`, amíg a szerződés nem adja. */
+  companyName: string | null;
   /** `null`: töltés. */
   extras: ChargeDetailExtras | null;
   onPair: (candidate: CandidateInvoice) => void;

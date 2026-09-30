@@ -215,13 +215,17 @@ export const TAB_STATES: Record<ChargeTab, readonly ChargeInvoiceState[]> = {
  */
 export function whatToDo(
   action: ItemAction,
-  companyName: string,
+  companyName: string | null,
 ): string | null {
   switch (action) {
     case "REQUEST_INVOICE":
       return "Kérd el a számlát a partnertől.";
     case "REQUEST_REISSUE_TO_COMPANY":
-      return `A számla a magánszemély nevére szól: kérd újra az ${companyName} nevére.`;
+      // A cég neve a szerver konfigurációjából jön; amíg nincs, a mondat
+      // nem találja ki (brief 4. pont).
+      return companyName
+        ? `A számla a magánszemély nevére szól: kérd újra az ${companyName} nevére.`
+        : "A számla a magánszemély nevére szól: kérd újra a cég nevére.";
     case "REQUEST_FINAL_INVOICE":
       return "Díjbekérő van, a végszámla hiányzik.";
     case "PAIR_OR_UPLOAD":

@@ -120,6 +120,8 @@ describe("navigation", () => {
       // Elszámolások (Balázs, 2026-09-30): a Foxpost, a GLS és a SimplePay
       // egy menüpont alatt, fülekkel
       "/penzugy/elszamolasok",
+      // Hiányzó számlák (Balázs briefje, 2026-09-30): az Elszámolások mellett
+      "/penzugy/hianyzo-szamlak",
       "/raktar",
       "/keszlet-egyeztetes",
       "/keszlet-kimenosor",
@@ -408,6 +410,9 @@ describe("navigation", () => {
     // amit a forrás kimond (`billing.view`, a #1276 óta).
     "/penzugy/szamlazas": "billing.view",
     "/penzugy/elszamolasok": "finance.view",
+    // A Hiányzó számlák 2026-09-30-án jött, a bevezetés UTÁN; a jog az
+    // Elszámolásoké (`finance.view`).
+    "/penzugy/hianyzo-szamlak": "finance.view",
     "/raktar": "inventory.view",
     "/keszlet-egyeztetes": "inventory.view",
     "/keszlet-kimenosor": "inventory.view",
