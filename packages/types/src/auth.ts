@@ -118,6 +118,15 @@ export const PERMISSIONS = {
   PARTNERS_MANAGE: "partners.manage",
   FINANCE_VIEW: "finance.view",
   FINANCE_MANAGE: "finance.manage",
+  /// A SZÁMLÁZÁS NÉGY JOGA (Balázs briefje, 2026-09-30, 29. pont; acrobot
+  /// döntése 25175). Nem új szerepkör-kiosztás: a `ROLE_PERMISSIONS` a pénzügyi
+  /// jogokból VEZETI LE őket (lásd `withBillingPermissions`), így aki ma látja a
+  /// Pénzügyet, a Számlázást is látja, és aki nem, az nem. A szétválasztás arra
+  /// kell, hogy később a kiállítás vagy az újraküldés külön szűkíthető legyen.
+  BILLING_VIEW: "billing.view",
+  BILLING_CREATE: "billing.create",
+  BILLING_ISSUE: "billing.issue",
+  BILLING_RESEND: "billing.resend",
   SERVICE_VIEW: "service.view",
   SERVICE_MANAGE: "service.manage",
   AQUARIUMS_VIEW: "aquariums.view",
@@ -268,213 +277,256 @@ const VIEW_PERMISSIONS: readonly Permission[] = [
   PERMISSIONS.CONTENT_VIEW,
 ];
 
+const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
+  {
+    OWNER: ALL_PERMISSIONS,
+    ADMIN: ALL_PERMISSIONS,
+    MANAGER: ALL_PERMISSIONS.filter(
+      (permission) =>
+        permission !== PERMISSIONS.SETTINGS_MANAGE &&
+        permission !== PERMISSIONS.USERS_MANAGE &&
+        permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR &&
+        permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND &&
+        permission !== PERMISSIONS.SERVICE_ASSET_DELETE &&
+        // A REJTES SEM VEZETOI JOG: Balazs "admin jogos felhasznalot" kert
+        // (2026-09-18 11:09 UTC). Egy MANAGER, aki rejthet, csendben kivehetne
+        // sorokat masok listajabol -- es a hianyt senki nem keresne, mert a
+        // lista nem hibazik, csak rovidebb.
+        permission !== PERMISSIONS.SERVICE_HIDE &&
+        // A LATHATOSAGI HOZZARENDELES NEM VEZETOI JOG. Egy MANAGER, aki
+        // hozzarendelest allithat, sajat magat is beallithatna -- es a lathatosag
+        // epp az a fajta, ahol a tullepes NEM latszik: a lista tobb sort ad, es
+        // helyes valasznak nez ki.
+        permission !== PERMISSIONS.SERVICE_VISIBILITY_ASSIGN &&
+        permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER &&
+        // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
+        // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
+        // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --
+        // es akkor a kapu nem kapu, hanem egy pipa a sajat munkajan.
+        permission !== PERMISSIONS.CONTENT_APPROVE,
+    ),
+    SALES: [
+      PERMISSIONS.AI_TEST_VIEW,
+      PERMISSIONS.DASHBOARD_VIEW,
+      PERMISSIONS.TASKS_VIEW,
+      PERMISSIONS.ORDERS_VIEW,
+      PERMISSIONS.ORDERS_MANAGE,
+      PERMISSIONS.PRODUCTS_VIEW,
+      PERMISSIONS.CUSTOMERS_VIEW,
+      PERMISSIONS.CUSTOMERS_MANAGE,
+      PERMISSIONS.INVENTORY_VIEW,
+      PERMISSIONS.FINANCE_VIEW,
+    ],
+    WAREHOUSE: [
+      PERMISSIONS.AI_TEST_VIEW,
+      PERMISSIONS.DASHBOARD_VIEW,
+      PERMISSIONS.TASKS_VIEW,
+      PERMISSIONS.ORDERS_VIEW,
+      PERMISSIONS.PRODUCTS_VIEW,
+      PERMISSIONS.INVENTORY_VIEW,
+      PERMISSIONS.INVENTORY_MANAGE,
+      PERMISSIONS.PURCHASING_VIEW,
+      PERMISSIONS.PURCHASING_MANAGE,
+      PERMISSIONS.PARTNERS_VIEW,
+      PERMISSIONS.PARTNERS_MANAGE,
+    ],
+    /**
+     * A LISTA, AMIT BALÁZS ADOTT (2026-09-02 08:39), ÉS AMI TELJES, NEM MINIMUM:
+     * Dashboard, Feladataim, Partnerek (csak olvasás), Szerviz (a két
+     * menüpontjával, olvasás és írás). Szó szerint: "ezen kívül nem kell másnak
+     * látszania".
+     *
+     * EZÉRT ESETT KI HÁROM JOG: `products.view`, `customers.view`,
+     * `ai-test.view`. Nem a menüből tűntek el, hanem INNEN -- a menü, az oldal és
+     * a szerver ugyanarra a kulcsra néz, tehát a jog elvétele mind a hármat
+     * lezárja. Ha csak a menüpontot vettük volna ki, az oldal a cím beírásával
+     * továbbra is megnyílt volna, és a szerver kiszolgálta volna: láthatatlan,
+     * de nyitva. (Pontosan ez az állapot állt fenn fordítva a Partnereknél, lásd
+     * lentebb.)
+     *
+     * AZ `ai-test.view` ELVÉTELE NEM ÍRJA FELÜL A 2026-08-26-I DÖNTÉST, hanem az
+     * abban KIMONDOTT feltétel teljesülése. A döntés mellé maga Balázs tette oda,
+     * hogy a szűkítés "a felhasználói jogosultságok rendezésekor" jön -- ez a
+     * mondat a menüben és a tesztben is ott állt, és ez a kör az.
+     *
+     * AZ AKVÁRIUM SZÁNDÉKOSAN MARAD, `manage` joggal együtt. Nem szerepel Balázs
+     * listáján, de az akvárium a szerviz TÁRGYA, tehát lehet, hogy kell neki; a
+     * kérdés nála van, és amíg nem válaszol, ez a sor nem mozdul. Egy elvett jog
+     * itt olyan munkát állítana meg, amit ma végeznek.
+     */
+    SERVICE: [
+      PERMISSIONS.DASHBOARD_VIEW,
+      PERMISSIONS.TASKS_VIEW,
+      /// Csak nézni. A szerviz partner a szervizesnek munkakörnyezet, de a
+      /// törzsadatát nem ő gondozza (Balázs döntése, 2026-08-21: "a
+      /// szervizesek csak lássák egyelőre"), ezért PARTNERS_MANAGE nincs.
+      PERMISSIONS.PARTNERS_VIEW,
+      PERMISSIONS.SERVICE_VIEW,
+      PERMISSIONS.SERVICE_MANAGE,
+      PERMISSIONS.AQUARIUMS_VIEW,
+      PERMISSIONS.AQUARIUMS_MANAGE,
+    ],
+    VIEWER: VIEW_PERMISSIONS,
+
+    /**
+     * GÉPI ÁGENS, AMI CSAK TARTALMAT VISZ BE.
+     *
+     * A legszűkebb szerep, ami tartalmat tud létrehozni. A mérés, amiért létezik:
+     * előtte a legszűkebb ilyen szerep a MANAGER volt, ami a rendszer 32 jogából
+     * 25-öt ad -- köztük a rendelés, a pénzügy, a készlet és a vevők írását. Egy
+     * gépi fiók, amit ember nem használ, túl tág jogkörrel NÉMA kockázat: senki
+     * nem veszi észre, ha többet tesz a kelleténél.
+     *
+     * NINCS BENNE `CONTENT_APPROVE`, és ez a szerep egyetlen legfontosabb
+     * tulajdonsága: egy ágens nem hagyhatja jóvá a saját vázlatát. Ezt a határt a
+     * SZEREPNEK kell tartania, nem annak, hogy a hívó nem próbálja meg.
+     *
+     * A `CONTENT_VIEW` benne van, és ez tágabb, mint "a saját tételei": a
+     * tartalom-nézetek olvasását engedi, nem csak a sajátokét. A saját-szűrés a
+     * szerzői nézet tulajdonsága, nem a jogosultságé -- ezt itt kimondjuk, hogy
+     * ne látszódjon szűkebbnek, mint amilyen.
+     */
+    CONTENT_AGENT: [PERMISSIONS.CONTENT_VIEW, PERMISSIONS.CONTENT_MANAGE],
+
+    /**
+     * PARTNERHEZ KOTOTT SZERVIZES FIÓK.
+     *
+     * Ez nem a belso `SERVICE` szerep szukitese: azt a sajat kollegaink
+     * hasznaljak, es a mukodesukhoz a dashboard, a feladatok, a partnerek es az
+     * akvariumok is kellenek. A partner-fiók viszont csak a sajat hatokorbe eso
+     * hibajegyeket, munkalapokat, eszkozoket es (2026-09-25-tol) akvariumokat
+     * kezelheti. A hatar ezert itt, a jogoknal all; a menuk es a szerver
+     * ugyanebből a jogokbol indulnak ki.
+     *
+     * Kulonosen nincs benne `partners.view`: egy partner-fióknak a sajat
+     * cegén kivuli partnerek olvasasa sem megengedett.
+     *
+     * === AZ AQUARIUMS_VIEW/MANAGE FELVETELE, ÉS AMIT EZ ÖNMAGÁBAN NEM OLD MEG
+     *     (Balázs döntése, 2026-09-25, Partner Portál Akváriumok terv) ===
+     *
+     * A jog megléte NEM elég a hatókörhöz -- az `aquariums.service.ts`
+     * `visibilityFor()`-ja szűkíti a listát/adatlapot a hívó saját
+     * ügyfelére és kiosztott helyszíneire (lásd `aquarium-visibility.ts`).
+     * ÉS EZ A JOG TÖBBET ENGEDNE, MINT AMIT BALÁZS KÉRT: az `AQUARIUMS_MANAGE`
+     * ugyanaz a jog gátolja az akvárium-szerkesztést, a berendezés- és a
+     * karbantartó-kezelést is, amiket a portál mai köre NEM kér. Ezeket a
+     * szolgáltatás-réteg `requireInternalWriter()`-rel zárja el partner-
+     * hívóktól, ugyanúgy, mint a munkalap-létrehozást -- a jog tehát tágabb,
+     * mint amit a partner ténylegesen elér.
+     *
+     * === AZ ESZKÖZ-AKVÁRIUM HOZZÁRENDELÉS SZÁNDÉKOSAN NINCS ITT (emlék 1843,
+     *     1847) ===
+     *
+     * Balázs szó szerint: "akinek megvan a kulon jog, hozzarendel es levesz;
+     * akinek nincs, csak latja" -- majd (1847, 2026-09-25 16:12 UTC) pontosan
+     * megnevezte a mintát: a `MATERIAL_REQUEST_MARK_RECEIVED`-hez hasonló,
+     * FELHASZNÁLÓNKÉNTI jelölő (`ServiceCapability`/`UserServiceCapability`,
+     * lásd a Prisma séma és a `service-capabilities.ts` fejlécét), NEM
+     * szerep-szintű jog. Ez a lista tehát SZÁNDÉKOSAN nem bővült
+     * `AQUARIUM_ASSET_ASSIGN`-nal -- egy ilyen sor itt AZONNAL minden
+     * `PARTNER_SERVICE` fióknak megnyitná a képességet, pontosan azt, amit
+     * Balázs a "külön jog" kéréssel el akart kerülni. Az ellenőrzés helye a
+     * `ServiceAssetsController`/`ServiceAssetsRepository`
+     * `hasAquariumAssetAssignCapability()`-ja, a `SERVICE_MANAGE` mögötti,
+     * MÁSODIK, finomabb rétegként -- ugyanaz a két-rétegű minta, mint a
+     * `MaterialRequestsService.listPending()`-nél
+     * (`requireInternalWriter` + `hasMarkReceivedCapability`).
+     *
+     * === A MEGRENDELŐLAP ÉS A TELJESÍTÉSI IGAZOLÁS OLVASÁSA/FELTÖLTÉSE
+     *     UGYANEZT A KÉT JOGOT ÚJRAHASZNÁLJA (acrobot, msg_id 23868,
+     *     2026-09-25 22:17 UTC) ===
+     *
+     * A portál olvasó végpontjai (`GET /service/maintenance-orders`,
+     * `GET /service/completion-certificates`) `SERVICE_VIEW` alatt állnak, az
+     * aláírt példány feltöltése `SERVICE_MANAGE` alatt -- UGYANAZ a két jog,
+     * amit ez a szerep már hordoz a hibajegynél/munkalapnál/eszköznél. A
+     * KIÁLLÍTÁS és a VISSZAVONÁS ITT SEM kerül a listára: azok a `partners/
+     * maintenance-orders` és `partners/completion-certificates` `PARTNERS_
+     * MANAGE`-es, belső végpontok maradnak, a portál felé nem nyílnak meg.
+     * Az aláírt példány feltöltésének FINOM kapuja a `MAINTENANCE_ORDER_
+     * UPLOAD_SIGNED`/`COMPLETION_CERTIFICATE_UPLOAD_SIGNED` felhasználónkénti
+     * `ServiceCapability`, ugyanabban a két-rétegű mintában, mint az
+     * `AQUARIUM_ASSET_ASSIGN`-nál.
+     */
+    PARTNER_SERVICE: [
+      PERMISSIONS.SERVICE_VIEW,
+      PERMISSIONS.SERVICE_MANAGE,
+      PERMISSIONS.AQUARIUMS_VIEW,
+      PERMISSIONS.AQUARIUMS_MANAGE,
+    ],
+
+    /**
+     * GÉPI ÁGENS, AMI ESZKÖZ-TÖRZSADATOT IMPORTÁL.
+     *
+     * Kanban 8c77cf3e, Balázs döntése 2026-09-23: legyen gépi felhasználó az
+     * importnak, ne a meglévő `SERVICE` szerep. A MÉRT KÜLÖNBSÉG, amiért nem
+     * elég egy meglévő szerep: a `SERVICE` 7 jogot ad (dashboard, feladatok,
+     * partnerek, eszközök, akváriumok), a betöltőnek ebből KETTŐ kell. A másik
+     * öt (`DASHBOARD_VIEW`, `TASKS_VIEW`, `PARTNERS_VIEW`, `AQUARIUMS_VIEW`,
+     * `AQUARIUMS_MANAGE`) csendben átmenne egy gépi fiókra, amit soha senki
+     * nem venne észre -- ugyanaz a kockázat, amiért a `CONTENT_AGENT` sem a
+     * `MANAGER`-ből lett szűkítve, hanem a hívásokból levezetve.
+     *
+     * A KÉT JOG, ÉS MELYIK HÍVÁS MIATT KELL (mérve, nem feltételezve -- a
+     * betöltő négy hívását végigkövetve a saját kontrollereimben):
+     *   - `SERVICE_VIEW`: HÁROM olvasó hívás miatt kell -- a
+     *     GET /service/assets?search= (partnerkód-kihagyás és lánc-szülő
+     *     keresés), a GET /worksheets/customers/:id/departments
+     *     (helyszín-feloldás) és a GET /asset-categories (kategória-feloldás)
+     *     mindegyike ezt a jogot várja el a saját `@RequirePermissions`
+     *     dekorátorán.
+     *   - `SERVICE_MANAGE`: az ÍRÓ hívás miatt -- a POST /service/assets
+     *     (a tényleges létrehozás) ezt kéri.
+     *
+     * NINCS BENNE SEMMI MÁS: a betöltő nem olvas partnert, nem lát feladatot,
+     * nem nyúl akváriumhoz -- egyiket sem hívja, tehát egyiket sem kapja meg.
+     */
+    ASSET_IMPORT_AGENT: [PERMISSIONS.SERVICE_VIEW, PERMISSIONS.SERVICE_MANAGE],
+  };
+
+const BILLING_PERMISSIONS: readonly Permission[] = [
+  PERMISSIONS.BILLING_VIEW,
+  PERMISSIONS.BILLING_CREATE,
+  PERMISSIONS.BILLING_ISSUE,
+  PERMISSIONS.BILLING_RESEND,
+];
+
+/**
+ * A SZÁMLÁZÁS JOGAI A PÉNZÜGYIEKBŐL, NEM KÉZI LISTÁBÓL: `billing.view` pontosan
+ * annak jár, akinek `finance.view` van, a három írási jog pontosan annak, akinek
+ * `finance.manage`. Egy szerepkör, ami a teljes listát kapja (OWNER), a
+ * szűrésen át ugyanide jut; egy kézi felsorolás elcsúszhatna a pénzügyi jogoktól,
+ * ez nem tud.
+ */
+function withBillingPermissions(
+  permissions: readonly Permission[],
+): readonly Permission[] {
+  const base = permissions.filter(
+    (permission) => !BILLING_PERMISSIONS.includes(permission),
+  );
+  return [
+    ...base,
+    ...(base.includes(PERMISSIONS.FINANCE_VIEW)
+      ? [PERMISSIONS.BILLING_VIEW]
+      : []),
+    ...(base.includes(PERMISSIONS.FINANCE_MANAGE)
+      ? [
+          PERMISSIONS.BILLING_CREATE,
+          PERMISSIONS.BILLING_ISSUE,
+          PERMISSIONS.BILLING_RESEND,
+        ]
+      : []),
+  ];
+}
+
 export const ROLE_PERMISSIONS: Readonly<
   Record<UserRole, readonly Permission[]>
-> = {
-  OWNER: ALL_PERMISSIONS,
-  ADMIN: ALL_PERMISSIONS,
-  MANAGER: ALL_PERMISSIONS.filter(
-    (permission) =>
-      permission !== PERMISSIONS.SETTINGS_MANAGE &&
-      permission !== PERMISSIONS.USERS_MANAGE &&
-      permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR &&
-      permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND &&
-      permission !== PERMISSIONS.SERVICE_ASSET_DELETE &&
-      // A REJTES SEM VEZETOI JOG: Balazs "admin jogos felhasznalot" kert
-      // (2026-09-18 11:09 UTC). Egy MANAGER, aki rejthet, csendben kivehetne
-      // sorokat masok listajabol -- es a hianyt senki nem keresne, mert a
-      // lista nem hibazik, csak rovidebb.
-      permission !== PERMISSIONS.SERVICE_HIDE &&
-      // A LATHATOSAGI HOZZARENDELES NEM VEZETOI JOG. Egy MANAGER, aki
-      // hozzarendelest allithat, sajat magat is beallithatna -- es a lathatosag
-      // epp az a fajta, ahol a tullepes NEM latszik: a lista tobb sort ad, es
-      // helyes valasznak nez ki.
-      permission !== PERMISSIONS.SERVICE_VISIBILITY_ASSIGN &&
-      permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER &&
-      // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
-      // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
-      // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --
-      // es akkor a kapu nem kapu, hanem egy pipa a sajat munkajan.
-      permission !== PERMISSIONS.CONTENT_APPROVE,
-  ),
-  SALES: [
-    PERMISSIONS.AI_TEST_VIEW,
-    PERMISSIONS.DASHBOARD_VIEW,
-    PERMISSIONS.TASKS_VIEW,
-    PERMISSIONS.ORDERS_VIEW,
-    PERMISSIONS.ORDERS_MANAGE,
-    PERMISSIONS.PRODUCTS_VIEW,
-    PERMISSIONS.CUSTOMERS_VIEW,
-    PERMISSIONS.CUSTOMERS_MANAGE,
-    PERMISSIONS.INVENTORY_VIEW,
-    PERMISSIONS.FINANCE_VIEW,
-  ],
-  WAREHOUSE: [
-    PERMISSIONS.AI_TEST_VIEW,
-    PERMISSIONS.DASHBOARD_VIEW,
-    PERMISSIONS.TASKS_VIEW,
-    PERMISSIONS.ORDERS_VIEW,
-    PERMISSIONS.PRODUCTS_VIEW,
-    PERMISSIONS.INVENTORY_VIEW,
-    PERMISSIONS.INVENTORY_MANAGE,
-    PERMISSIONS.PURCHASING_VIEW,
-    PERMISSIONS.PURCHASING_MANAGE,
-    PERMISSIONS.PARTNERS_VIEW,
-    PERMISSIONS.PARTNERS_MANAGE,
-  ],
-  /**
-   * A LISTA, AMIT BALÁZS ADOTT (2026-09-02 08:39), ÉS AMI TELJES, NEM MINIMUM:
-   * Dashboard, Feladataim, Partnerek (csak olvasás), Szerviz (a két
-   * menüpontjával, olvasás és írás). Szó szerint: "ezen kívül nem kell másnak
-   * látszania".
-   *
-   * EZÉRT ESETT KI HÁROM JOG: `products.view`, `customers.view`,
-   * `ai-test.view`. Nem a menüből tűntek el, hanem INNEN -- a menü, az oldal és
-   * a szerver ugyanarra a kulcsra néz, tehát a jog elvétele mind a hármat
-   * lezárja. Ha csak a menüpontot vettük volna ki, az oldal a cím beírásával
-   * továbbra is megnyílt volna, és a szerver kiszolgálta volna: láthatatlan,
-   * de nyitva. (Pontosan ez az állapot állt fenn fordítva a Partnereknél, lásd
-   * lentebb.)
-   *
-   * AZ `ai-test.view` ELVÉTELE NEM ÍRJA FELÜL A 2026-08-26-I DÖNTÉST, hanem az
-   * abban KIMONDOTT feltétel teljesülése. A döntés mellé maga Balázs tette oda,
-   * hogy a szűkítés "a felhasználói jogosultságok rendezésekor" jön -- ez a
-   * mondat a menüben és a tesztben is ott állt, és ez a kör az.
-   *
-   * AZ AKVÁRIUM SZÁNDÉKOSAN MARAD, `manage` joggal együtt. Nem szerepel Balázs
-   * listáján, de az akvárium a szerviz TÁRGYA, tehát lehet, hogy kell neki; a
-   * kérdés nála van, és amíg nem válaszol, ez a sor nem mozdul. Egy elvett jog
-   * itt olyan munkát állítana meg, amit ma végeznek.
-   */
-  SERVICE: [
-    PERMISSIONS.DASHBOARD_VIEW,
-    PERMISSIONS.TASKS_VIEW,
-    /// Csak nézni. A szerviz partner a szervizesnek munkakörnyezet, de a
-    /// törzsadatát nem ő gondozza (Balázs döntése, 2026-08-21: "a
-    /// szervizesek csak lássák egyelőre"), ezért PARTNERS_MANAGE nincs.
-    PERMISSIONS.PARTNERS_VIEW,
-    PERMISSIONS.SERVICE_VIEW,
-    PERMISSIONS.SERVICE_MANAGE,
-    PERMISSIONS.AQUARIUMS_VIEW,
-    PERMISSIONS.AQUARIUMS_MANAGE,
-  ],
-  VIEWER: VIEW_PERMISSIONS,
-
-  /**
-   * GÉPI ÁGENS, AMI CSAK TARTALMAT VISZ BE.
-   *
-   * A legszűkebb szerep, ami tartalmat tud létrehozni. A mérés, amiért létezik:
-   * előtte a legszűkebb ilyen szerep a MANAGER volt, ami a rendszer 32 jogából
-   * 25-öt ad -- köztük a rendelés, a pénzügy, a készlet és a vevők írását. Egy
-   * gépi fiók, amit ember nem használ, túl tág jogkörrel NÉMA kockázat: senki
-   * nem veszi észre, ha többet tesz a kelleténél.
-   *
-   * NINCS BENNE `CONTENT_APPROVE`, és ez a szerep egyetlen legfontosabb
-   * tulajdonsága: egy ágens nem hagyhatja jóvá a saját vázlatát. Ezt a határt a
-   * SZEREPNEK kell tartania, nem annak, hogy a hívó nem próbálja meg.
-   *
-   * A `CONTENT_VIEW` benne van, és ez tágabb, mint "a saját tételei": a
-   * tartalom-nézetek olvasását engedi, nem csak a sajátokét. A saját-szűrés a
-   * szerzői nézet tulajdonsága, nem a jogosultságé -- ezt itt kimondjuk, hogy
-   * ne látszódjon szűkebbnek, mint amilyen.
-   */
-  CONTENT_AGENT: [PERMISSIONS.CONTENT_VIEW, PERMISSIONS.CONTENT_MANAGE],
-
-  /**
-   * PARTNERHEZ KOTOTT SZERVIZES FIÓK.
-   *
-   * Ez nem a belso `SERVICE` szerep szukitese: azt a sajat kollegaink
-   * hasznaljak, es a mukodesukhoz a dashboard, a feladatok, a partnerek es az
-   * akvariumok is kellenek. A partner-fiók viszont csak a sajat hatokorbe eso
-   * hibajegyeket, munkalapokat, eszkozoket es (2026-09-25-tol) akvariumokat
-   * kezelheti. A hatar ezert itt, a jogoknal all; a menuk es a szerver
-   * ugyanebből a jogokbol indulnak ki.
-   *
-   * Kulonosen nincs benne `partners.view`: egy partner-fióknak a sajat
-   * cegén kivuli partnerek olvasasa sem megengedett.
-   *
-   * === AZ AQUARIUMS_VIEW/MANAGE FELVETELE, ÉS AMIT EZ ÖNMAGÁBAN NEM OLD MEG
-   *     (Balázs döntése, 2026-09-25, Partner Portál Akváriumok terv) ===
-   *
-   * A jog megléte NEM elég a hatókörhöz -- az `aquariums.service.ts`
-   * `visibilityFor()`-ja szűkíti a listát/adatlapot a hívó saját
-   * ügyfelére és kiosztott helyszíneire (lásd `aquarium-visibility.ts`).
-   * ÉS EZ A JOG TÖBBET ENGEDNE, MINT AMIT BALÁZS KÉRT: az `AQUARIUMS_MANAGE`
-   * ugyanaz a jog gátolja az akvárium-szerkesztést, a berendezés- és a
-   * karbantartó-kezelést is, amiket a portál mai köre NEM kér. Ezeket a
-   * szolgáltatás-réteg `requireInternalWriter()`-rel zárja el partner-
-   * hívóktól, ugyanúgy, mint a munkalap-létrehozást -- a jog tehát tágabb,
-   * mint amit a partner ténylegesen elér.
-   *
-   * === AZ ESZKÖZ-AKVÁRIUM HOZZÁRENDELÉS SZÁNDÉKOSAN NINCS ITT (emlék 1843,
-   *     1847) ===
-   *
-   * Balázs szó szerint: "akinek megvan a kulon jog, hozzarendel es levesz;
-   * akinek nincs, csak latja" -- majd (1847, 2026-09-25 16:12 UTC) pontosan
-   * megnevezte a mintát: a `MATERIAL_REQUEST_MARK_RECEIVED`-hez hasonló,
-   * FELHASZNÁLÓNKÉNTI jelölő (`ServiceCapability`/`UserServiceCapability`,
-   * lásd a Prisma séma és a `service-capabilities.ts` fejlécét), NEM
-   * szerep-szintű jog. Ez a lista tehát SZÁNDÉKOSAN nem bővült
-   * `AQUARIUM_ASSET_ASSIGN`-nal -- egy ilyen sor itt AZONNAL minden
-   * `PARTNER_SERVICE` fióknak megnyitná a képességet, pontosan azt, amit
-   * Balázs a "külön jog" kéréssel el akart kerülni. Az ellenőrzés helye a
-   * `ServiceAssetsController`/`ServiceAssetsRepository`
-   * `hasAquariumAssetAssignCapability()`-ja, a `SERVICE_MANAGE` mögötti,
-   * MÁSODIK, finomabb rétegként -- ugyanaz a két-rétegű minta, mint a
-   * `MaterialRequestsService.listPending()`-nél
-   * (`requireInternalWriter` + `hasMarkReceivedCapability`).
-   *
-   * === A MEGRENDELŐLAP ÉS A TELJESÍTÉSI IGAZOLÁS OLVASÁSA/FELTÖLTÉSE
-   *     UGYANEZT A KÉT JOGOT ÚJRAHASZNÁLJA (acrobot, msg_id 23868,
-   *     2026-09-25 22:17 UTC) ===
-   *
-   * A portál olvasó végpontjai (`GET /service/maintenance-orders`,
-   * `GET /service/completion-certificates`) `SERVICE_VIEW` alatt állnak, az
-   * aláírt példány feltöltése `SERVICE_MANAGE` alatt -- UGYANAZ a két jog,
-   * amit ez a szerep már hordoz a hibajegynél/munkalapnál/eszköznél. A
-   * KIÁLLÍTÁS és a VISSZAVONÁS ITT SEM kerül a listára: azok a `partners/
-   * maintenance-orders` és `partners/completion-certificates` `PARTNERS_
-   * MANAGE`-es, belső végpontok maradnak, a portál felé nem nyílnak meg.
-   * Az aláírt példány feltöltésének FINOM kapuja a `MAINTENANCE_ORDER_
-   * UPLOAD_SIGNED`/`COMPLETION_CERTIFICATE_UPLOAD_SIGNED` felhasználónkénti
-   * `ServiceCapability`, ugyanabban a két-rétegű mintában, mint az
-   * `AQUARIUM_ASSET_ASSIGN`-nál.
-   */
-  PARTNER_SERVICE: [
-    PERMISSIONS.SERVICE_VIEW,
-    PERMISSIONS.SERVICE_MANAGE,
-    PERMISSIONS.AQUARIUMS_VIEW,
-    PERMISSIONS.AQUARIUMS_MANAGE,
-  ],
-
-  /**
-   * GÉPI ÁGENS, AMI ESZKÖZ-TÖRZSADATOT IMPORTÁL.
-   *
-   * Kanban 8c77cf3e, Balázs döntése 2026-09-23: legyen gépi felhasználó az
-   * importnak, ne a meglévő `SERVICE` szerep. A MÉRT KÜLÖNBSÉG, amiért nem
-   * elég egy meglévő szerep: a `SERVICE` 7 jogot ad (dashboard, feladatok,
-   * partnerek, eszközök, akváriumok), a betöltőnek ebből KETTŐ kell. A másik
-   * öt (`DASHBOARD_VIEW`, `TASKS_VIEW`, `PARTNERS_VIEW`, `AQUARIUMS_VIEW`,
-   * `AQUARIUMS_MANAGE`) csendben átmenne egy gépi fiókra, amit soha senki
-   * nem venne észre -- ugyanaz a kockázat, amiért a `CONTENT_AGENT` sem a
-   * `MANAGER`-ből lett szűkítve, hanem a hívásokból levezetve.
-   *
-   * A KÉT JOG, ÉS MELYIK HÍVÁS MIATT KELL (mérve, nem feltételezve -- a
-   * betöltő négy hívását végigkövetve a saját kontrollereimben):
-   *   - `SERVICE_VIEW`: HÁROM olvasó hívás miatt kell -- a
-   *     GET /service/assets?search= (partnerkód-kihagyás és lánc-szülő
-   *     keresés), a GET /worksheets/customers/:id/departments
-   *     (helyszín-feloldás) és a GET /asset-categories (kategória-feloldás)
-   *     mindegyike ezt a jogot várja el a saját `@RequirePermissions`
-   *     dekorátorán.
-   *   - `SERVICE_MANAGE`: az ÍRÓ hívás miatt -- a POST /service/assets
-   *     (a tényleges létrehozás) ezt kéri.
-   *
-   * NINCS BENNE SEMMI MÁS: a betöltő nem olvas partnert, nem lát feladatot,
-   * nem nyúl akváriumhoz -- egyiket sem hívja, tehát egyiket sem kapja meg.
-   */
-  ASSET_IMPORT_AGENT: [PERMISSIONS.SERVICE_VIEW, PERMISSIONS.SERVICE_MANAGE],
-};
+> = Object.fromEntries(
+  Object.entries(BASE_ROLE_PERMISSIONS).map(([role, permissions]) => [
+    role,
+    withBillingPermissions(permissions),
+  ]),
+) as Record<UserRole, readonly Permission[]>;
 
 export interface AuthenticatedUser {
   id: string;
