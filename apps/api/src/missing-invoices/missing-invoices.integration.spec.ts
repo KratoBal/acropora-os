@@ -4,13 +4,16 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
 import { prisma } from "@acropora/database";
+import PDFDocument from "pdfkit";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import { registerEmbeddedPdfFont } from "../documents/pdf/branded-document.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { BankStatementImportRepository } from "./bank-statement-import.repository.js";
 import { BankStatementImportService } from "./bank-statement-import.service.js";
 import { MissingInvoicesRepository } from "./missing-invoices.repository.js";
+import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
 
 /**
@@ -46,11 +49,24 @@ async function removeLeftovers() {
   await prisma.navIncomingInvoice.deleteMany({
     where: { supplierName: SUPPLIER },
   });
+  const actors = await prisma.user.findMany({
+    where: { email: ACTOR_EMAIL },
+    select: { id: true },
+  });
+  await prisma.incomingSupplierDocument.deleteMany({
+    where: {
+      origin: "UPLOAD",
+      uploadedByUserId: { in: actors.map((user) => user.id) },
+    },
+  });
   await prisma.user.deleteMany({ where: { email: ACTOR_EMAIL } });
 }
 
 describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () => {
-  const missing = new MissingInvoicesService(new MissingInvoicesRepository());
+  const missing = new MissingInvoicesService(
+    new MissingInvoicesRepository(),
+    new SupplierInvoiceImportService(),
+  );
   let actor: AuthenticatedUser;
 
   before(async () => {
@@ -161,5 +177,56 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
 
     await missing.unpair(other.id, actor);
     assert.equal((await missing.item(payment.id)).document?.id, documentId);
+  });
+
+  it("stores an uploaded PDF outside the receipt chain, pairs it, and it counts as the original", async () => {
+    const other = (await missing.month("2026-08", { tab: "ALL" })).items.find(
+      (item) =>
+        item.account.name.startsWith(ACCOUNT) &&
+        item.partner === "Ismeretlen Bt.",
+    )!;
+    const bytes = await new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      const doc = new PDFDocument({ size: "A4" });
+      doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+      doc.on("error", reject);
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      registerEmbeddedPdfFont(doc).text(
+        "Vevő: Acropora Kft. 23916229-2-13",
+        40,
+        40,
+      );
+      doc.end();
+    });
+    const after = await missing.upload(
+      other.id,
+      { originalname: "ismeretlen.pdf", buffer: bytes },
+      "INVOICE",
+      actor,
+    );
+    assert.deepEqual(
+      [after.state, after.matchedBy, after.document?.source],
+      ["FOUND", "MANUAL", "UPLOAD"],
+    );
+    const stored = await prisma.incomingSupplierDocument.findFirst({
+      where: { origin: "UPLOAD", uploadedByUserId: actor.id },
+      select: { expectedArrivalId: true, payeeCheck: true, status: true },
+    });
+    // a bevételezési lánc a várható beérkezésen át olvas: feltöltésnek ilyen nincs
+    assert.deepEqual(stored, {
+      expectedArrivalId: null,
+      payeeCheck: "COMPANY",
+      status: "FAILED",
+    });
+    assert.equal(
+      await prisma.auditLog.count({
+        where: {
+          entityType: "BankTransaction",
+          entityId: other.id,
+          action: "missing-invoices.uploaded",
+        },
+      }),
+      1,
+    );
   });
 });

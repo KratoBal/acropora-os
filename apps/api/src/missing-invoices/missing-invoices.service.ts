@@ -13,6 +13,7 @@ import {
   type AuthenticatedUser,
   type MissingInvoiceAction,
   type MissingInvoiceItemDetail,
+  type SupplierInvoiceImportResult,
   type MissingInvoiceItem,
   type MissingInvoiceMonth,
   type MissingInvoiceMonthDetail,
@@ -22,6 +23,9 @@ import {
 } from "@acropora/types";
 
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
+import { createHash } from "node:crypto";
+
+import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import {
   classifyTransaction,
@@ -98,6 +102,7 @@ export class MissingInvoicesService {
 
   constructor(
     private readonly repository: MissingInvoicesRepository,
+    private readonly reader: SupplierInvoiceImportService,
     @Optional()
     @Inject(MISSING_INVOICES_ENV)
     private readonly environment: NodeJS.ProcessEnv = process.env,
@@ -334,6 +339,52 @@ export class MissingInvoicesService {
         : { paperOriginalAt: null, paperOriginalByUserId: null },
       { marked },
     );
+    return this.item(id);
+  }
+
+  /**
+   * SZÁMLA VAGY DÍJÉRTESÍTŐ FELTÖLTÉSE A DRAWERBŐL (brief 11, acrobot 25265 c
+   * és 25274): csak PDF. A meglévő beszállítói olvasó próbálja kiolvasni (szám,
+   * dátum, szállító); ha nem ismeri fel, a fájl akkor is tárolódik és párosul,
+   * csak adat nélkül. A vevőt a szövegéből ellenőrizzük, mint a postafióknál.
+   */
+  async upload(
+    id: string,
+    file: { originalname: string; buffer: Buffer },
+    kind: "INVOICE" | "PREMIUM_NOTICE",
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceItemDetail> {
+    const computed = await this.compute();
+    if (!computed.items.some((item) => item.id === id))
+      throw new NotFoundException("A banki terhelés nem található.");
+    if (!file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-")))
+      throw new BadRequestException("Csak PDF tölthető fel.");
+    let importResult: SupplierInvoiceImportResult | null = null;
+    try {
+      importResult = await this.reader.read(new Uint8Array(file.buffer), {
+        allowProforma: true,
+      });
+    } catch {
+      this.logger.log(
+        `A feltöltött ${file.originalname} beszállítói formátuma ismeretlen; adat nélkül tárolva.`,
+      );
+    }
+    let text = "";
+    try {
+      text = (await pdfTextLines(new Uint8Array(file.buffer))).join("\n");
+    } catch {
+      throw new BadRequestException("A PDF nem olvasható.");
+    }
+    await this.repository.uploadAndPair({
+      bankTransactionId: id,
+      fileName: file.originalname,
+      content: file.buffer,
+      sha256: createHash("sha256").update(file.buffer).digest("hex"),
+      kind,
+      importResult,
+      payee: payeeFromText(text),
+      userId: user.id,
+    });
     return this.item(id);
   }
 

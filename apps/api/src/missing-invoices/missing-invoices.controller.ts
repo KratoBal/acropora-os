@@ -24,9 +24,13 @@ import {
   MissingInvoiceCommentDto,
   MissingInvoiceMatchDto,
   MissingInvoicePaperOriginalDto,
+  MissingInvoiceUploadDto,
 } from "./missing-invoice-decision.dto.js";
 import { MissingInvoiceMonthQueryDto } from "./missing-invoice-month-query.dto.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
+
+/** Egy számla-PDF felső határa. */
+const DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
 
 /** Egy havi OTP-export néhány tíz kilobájt; a felső határ bőven fölötte van. */
 const STATEMENT_MAX_BYTES = 5 * 1024 * 1024;
@@ -110,6 +114,25 @@ export class MissingInvoicesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.missing.paperOriginal(id, input.marked, user);
+  }
+
+  @Post("items/:id/documents")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: DOCUMENT_MAX_BYTES },
+    }),
+  )
+  upload(
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() input: MissingInvoiceUploadDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("A fájl kötelező.");
+    return this.missing.upload(id, file, input.kind, user);
   }
 
   @Post("bank-statements")
