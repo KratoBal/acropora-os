@@ -102,6 +102,14 @@ describe("what an arrived document opens or joins", () => {
       ),
       false,
     );
+    // a proforma and an invoice may carry the same number: only the same kind is a duplicate
+    assert.equal(
+      isDuplicateDocument(
+        { sha256: "b", kind: "INVOICE", invoiceNumber: "13858" },
+        [{ sha256: "p", kind: "PROFORMA", invoiceNumber: "13858" }],
+      ),
+      false,
+    );
     assert.equal(
       isDuplicateDocument(
         { sha256: "b", kind: "INVOICE", invoiceNumber: null },
