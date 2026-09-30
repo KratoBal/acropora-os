@@ -12,6 +12,7 @@ export type SupplierInvoiceImportErrorCode =
   | "PDF_INVALID"
   | "PDF_LAYOUT_UNKNOWN"
   | "CREDIT_NOTE"
+  | "PROFORMA"
   | "NO_LINES";
 
 const MESSAGES: Record<SupplierInvoiceImportErrorCode, string> = {
@@ -27,6 +28,8 @@ const MESSAGES: Record<SupplierInvoiceImportErrorCode, string> = {
     "Ennek a beszállítónak a PDF-számláját még nem ismerjük fel. Ha a beszállító küld XML számlát, azt töltsd be.",
   CREDIT_NOTE:
     "Ez jóváírás, nem számla: beszerzési számlaként nem tölthető be.",
+  PROFORMA:
+    "Ez díjbekérő (proforma), nem számla: bevételezéshez a végleges számlát töltsd be.",
   NO_LINES: "A számlában nem találtunk tételsort.",
 };
 

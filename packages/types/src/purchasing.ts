@@ -304,6 +304,18 @@ export interface SupplierInvoiceImportResult {
   lines: SupplierInvoiceImportLine[];
   /** Emberi nyelvű figyelmeztetések (magyarul), pl. ha a sorösszeg eltér a végösszegtől. */
   warnings: string[];
+  /**
+   * A beszállító rendelésszáma, ha a dokumentum hordozza (Aquarioom: az
+   * "AQUARIOOM Order n° 13858" sorból "13858"). Ez köti össze a díjbekérőt a
+   * későbbi számlával (a Várható beérkezések, 2026-09-30). Hiányzik vagy `null`,
+   * ahol az illesztő nem ismeri.
+   */
+  orderReference?: string | null;
+  /**
+   * A dokumentum fajtája; hiányzó érték = számla. Díjbekérőt (PROFORMA) csak a
+   * kifejezetten kérő hívó kap (`allowProforma`), a kézi feltöltés elutasítja.
+   */
+  documentKind?: "INVOICE" | "PROFORMA";
 }
 
 /**
