@@ -863,3 +863,5 @@ export type {
   PendingMaterialRequest,
   PendingMaterialRequestListResponse,
 } from "./material-request-management.js";
+export { ACROPORA_COMPANY } from "./company.js";
+export type { BankStatementImportResult } from "./missing-invoices.js";

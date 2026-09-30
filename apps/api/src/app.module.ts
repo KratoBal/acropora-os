@@ -45,6 +45,7 @@ import { MaintenanceOrdersModule } from "./maintenance-orders/maintenance-orders
 import { CompletionCertificatesModule } from "./completion-certificates/completion-certificates.module.js";
 import { MaintenancePackageModule } from "./maintenance-package/maintenance-package.module.js";
 import { BillingModule } from "./billing/billing.module.js";
+import { MissingInvoicesModule } from "./missing-invoices/missing-invoices.module.js";
 import { MaintenanceInvoiceModule } from "./maintenance-invoice/maintenance-invoice.module.js";
 import { DashboardModule } from "./dashboard/dashboard.module.js";
 import { SearchModule } from "./search/search.module.js";
@@ -86,6 +87,7 @@ import { SearchModule } from "./search/search.module.js";
     CompletionCertificatesModule,
     MaintenancePackageModule,
     BillingModule,
+    MissingInvoicesModule,
     MaintenanceInvoiceModule,
     DashboardModule,
     SearchModule,
