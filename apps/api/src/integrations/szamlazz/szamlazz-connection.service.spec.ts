@@ -99,6 +99,19 @@ describe("SzamlazzConnectionService állapotai", () => {
     assert.notEqual(state.kind, "credential-corrupt");
   });
 
+  /*
+    Production, 2026-09-30: the API logged "credential corrupt" (ERROR) on
+    every start because the settings ROW did not exist. Only the Settings
+    page's first save writes it, so no row means never configured.
+    WHAT TURNS IT RED: a missing row read as corrupt again.
+  */
+  it("treats a missing settings row as not-configured, not as corrupt", async () => {
+    const { service: subject } = service({ record: null });
+    assert.deepEqual(await subject.inspectStoredState(), {
+      kind: "not-configured",
+    });
+  });
+
   it("tells a corrupt credential apart from a missing one", async () => {
     const { service: subject } = service({
       record: setting("DATABASE"),
