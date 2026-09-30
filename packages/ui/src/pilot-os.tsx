@@ -369,3 +369,106 @@ export function PilotPageHeader({
     </header>
   );
 }
+
+/**
+ * A SZÍNEZETT CALLOUT (Beszerzés-brief, 2026-09-30, 8., 11. és 16. pont): a
+ * színt a SZÜLŐ adja, a belső szöveg-tartó átlátszó. A Figma QA-ban két
+ * helyen fehér csík maradt a leírás mögött, mert egy belső elem saját fehér
+ * hátteret kapott; itt egyetlen elem sem kap hátteret a keret alatt.
+ *
+ * `warm`: import / ellenőrzendő terület (narancs, nem hiba). `aqua`:
+ * hasznos működési kontextus (pl. a projektkészlet). A jobb oldali rész
+ * (`action`) nem zsugorodik, a szöveg rugalmas és tördel.
+ */
+export function PilotCallout({
+  tone,
+  title,
+  description,
+  action,
+  children,
+}: {
+  tone: "warm" | "aqua";
+  title: string;
+  description?: ReactNode;
+  action?: ReactNode;
+  children?: ReactNode;
+}) {
+  const palette =
+    tone === "warm"
+      ? {
+          box: "border border-pilot-accent-warm bg-pilot-accent-warm-soft",
+          title: "text-pilot-grey-900",
+          text: "text-pilot-accent-warm-text",
+        }
+      : {
+          box: "bg-pilot-aqua-50",
+          title: "text-pilot-aqua-700",
+          text: "text-pilot-grey-600",
+        };
+  return (
+    <section
+      className={`flex flex-col gap-3 rounded-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${palette.box}`}
+    >
+      <div className="min-w-0 flex-1 bg-transparent">
+        <h3 className={`text-sm font-semibold leading-5 ${palette.title}`}>
+          {title}
+        </h3>
+        {description ? (
+          <p className={`mt-1 text-xs leading-5 ${palette.text}`}>
+            {description}
+          </p>
+        ) : null}
+        {children}
+      </div>
+      {action ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {action}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * LINKFÜLEK EGY MODUL TESTVÉR-OLDALAIHOZ (a Beszerzés lista teteje:
+ * Beszerzések, Várható beérkezések, NAV számla lekérés). Navigáció, nem
+ * állapot: minden fül egy valódi útvonal, az aktív `aria-current="page"`.
+ * A hívó adja a linket (`renderLink`), mert a csomag nem Next.js alkalmazás.
+ */
+export function PilotLinkTabs({
+  tabs,
+  label,
+  renderLink,
+}: {
+  tabs: ReadonlyArray<{ href: string; label: string; active: boolean }>;
+  label: string;
+  renderLink?: (tab: {
+    href: string;
+    className: string;
+    children: ReactNode;
+    "aria-current"?: "page";
+  }) => ReactNode;
+}) {
+  return (
+    <nav aria-label={label} className="flex flex-wrap gap-2">
+      {tabs.map((tab) => {
+        const className = `inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg px-3.5 text-sm transition-colors ${
+          tab.active
+            ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700 ring-1 ring-pilot-aqua-600"
+            : "bg-white text-pilot-grey-600 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 hover:text-pilot-grey-900"
+        }`;
+        const props = {
+          href: tab.href,
+          className,
+          children: tab.label,
+          ...(tab.active ? { "aria-current": "page" as const } : {}),
+        };
+        return (
+          <span key={tab.href} className="contents">
+            {renderLink ? renderLink(props) : <a {...props} />}
+          </span>
+        );
+      })}
+    </nav>
+  );
+}

@@ -24,7 +24,11 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { FilterXSS, type IFilterXSSOptions } from "xss";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { PilotBadge, PilotThemeRoot } from "@/components/pilot/pilot-ui";
+import {
+  PilotBadge,
+  PilotButton,
+  PilotThemeRoot,
+} from "@/components/pilot/pilot-ui";
 import { ProductAuthorityCard } from "@/components/products/product-authority-card";
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
@@ -1126,14 +1130,14 @@ export function ProductDetailPage({ productId }: { productId: string }) {
           </>
         }
         actions={
-          <button
-            type="button"
+          <PilotButton
+            size="regular"
+            variant="secondary"
             onClick={() => router.push(listHref)}
-            className="inline-flex h-10 items-center gap-1.5 rounded-md bg-white px-4 text-sm font-semibold text-pilot-grey-900 ring-1 ring-pilot-grey-200 transition-colors hover:bg-pilot-grey-50"
           >
             <span aria-hidden="true">←</span>
             Vissza a listához
-          </button>
+          </PilotButton>
         }
       />
 
