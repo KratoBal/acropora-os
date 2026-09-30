@@ -3,6 +3,7 @@ import type { SupplierInvoiceImportResult } from "@acropora/types";
 import { aquarioomPdfAdapter } from "./adapters/aquarioom.pdf-adapter.js";
 import { deJongPdfAdapter } from "./adapters/dejong.pdf-adapter.js";
 import { hertleinPdfAdapter } from "./adapters/hertlein.pdf-adapter.js";
+import { marineAquaticsPdfAdapter } from "./adapters/marine-aquatics.pdf-adapter.js";
 
 /**
  * EGY BESZÁLLÍTÓ PDF-SZÁMLÁJÁNAK ILLESZTŐJE.
@@ -50,4 +51,5 @@ export const SUPPLIER_PDF_ADAPTERS: readonly SupplierPdfAdapter[] = [
   hertleinPdfAdapter,
   deJongPdfAdapter,
   aquarioomPdfAdapter,
+  marineAquaticsPdfAdapter,
 ];
