@@ -5,6 +5,7 @@ import {
   szamlazzLineAmounts,
   szamlazzUnitNetFromGross,
   type BillingAmountsResult,
+  type BillingProductPrice,
   type BillingDocumentCustomer,
   type BillingDocumentDetail,
   type BillingDocumentDraftInput,
@@ -48,6 +49,11 @@ export interface EditorLine {
    * bruttó megint a nettóból következik.
    */
   grossInput?: string;
+  /**
+   * MIÉRT NEM TÖLTŐDÖTT KI A TERMÉK ÁRA (`billingProductPrice` indoka). Csak a
+   * felületnek szól; az egységár kézi kitöltése eltünteti.
+   */
+  priceNote?: string;
 }
 
 export interface EditorState {
@@ -436,4 +442,41 @@ export function formatMoneyExact(value: string, currency: string): string {
     maximumFractionDigits: 2,
   }).format(Number(value));
   return currency === "HUF" ? `${formatted} Ft` : `${formatted} ${currency}`;
+}
+
+/**
+ * A VÁLASZTOTT TERMÉK ÁRA A SORBA (Balázs a stage-en, 2026-09-30; a szabály a
+ * `billingProductPrice`-nál). A lekérés aszinkron, ezért ha a sor egységárát
+ * közben kézzel kitöltötték, az nyer: a termék ára nem írja felül.
+ *
+ * A saját bruttó ár EGYSÉGÁR. Egy darabnál a beírt bruttó útján megy (így a
+ * pontatlan visszaszámolást a sor jelzi); ha a mennyiséget közben átírták, a
+ * nettó egységár ugyanebből az egy darabos számolásból jön, jelzés nélkül.
+ */
+export function withProductPrice(
+  line: EditorLine,
+  price: BillingProductPrice,
+  currency: string,
+): EditorLine {
+  if (line.unitNet.trim() || line.grossInput !== undefined) return line;
+  if (price.kind === "NONE") return { ...line, priceNote: price.reason };
+  if (price.kind === "NET")
+    return {
+      ...line,
+      unitNet: price.unitNet,
+      vatRatePercent: price.vatRatePercent ?? line.vatRatePercent,
+      priceNote: undefined,
+    };
+  const priced = withGrossInput(
+    { ...line, quantity: "1", vatRatePercent: price.vatRatePercent },
+    price.unitGross,
+    currency,
+  );
+  const next: EditorLine = {
+    ...priced,
+    quantity: line.quantity,
+    priceNote: undefined,
+  };
+  if (line.quantity.trim() !== "1") delete next.grossInput;
+  return next;
 }

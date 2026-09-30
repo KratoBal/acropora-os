@@ -100,6 +100,8 @@ const product = {
       name: null,
       unit: "db",
       vatRate: null,
+      sellingGrossPrice: new Prisma.Decimal("1524"),
+      sellingPriceCurrency: "HUF",
       manufacturerPartNumber: "MPN-1",
       secondaryUnit: "karton",
       secondaryUnitFactor: new Prisma.Decimal("12"),
@@ -154,6 +156,7 @@ const product = {
     currency: "HUF",
     netPrice: new Prisma.Decimal("1000"),
     grossPrice: new Prisma.Decimal("1270"),
+    vatRate: new Prisma.Decimal("27"),
     saleNetPrice: null,
     saleGrossPrice: null,
     saleStartsAt: null,
@@ -536,6 +539,11 @@ describe("ProductRepository", () => {
     assert.equal(detail?.unasMirror?.grossPrice, "1270");
     assert.equal(detail?.unasMirror?.reportedStock, "7.5");
     assert.equal(detail?.variants[0]?.manufacturerPartNumber, "MPN-1");
+    // THE BILLING EDITOR READS THESE TWO to pre-fill a line (2026-09-30): our
+    // own gross price on the variant, and the shop's VAT rate on the mirror.
+    assert.equal(detail?.variants[0]?.sellingGrossPrice, "1524");
+    assert.equal(detail?.variants[0]?.sellingPriceCurrency, "HUF");
+    assert.equal(detail?.unasMirror?.vatRate, "27");
     assert.equal(detail?.variants[0]?.extension?.minimumStock, "2");
   });
 
