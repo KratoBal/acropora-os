@@ -182,3 +182,41 @@ export function adapterSenders(
 ): string[] {
   return adapters.flatMap((adapter) => adapter.senders ?? []);
 }
+
+/** An attachment of a supplier mail, as the client hands it over. */
+export interface MailFile {
+  fileName: string;
+  buffer: Buffer;
+}
+
+/**
+ * IS THIS XML A CII E-INVOICE: its root element is `CrossIndustryInvoice`,
+ * with any namespace prefix. Only the start of the file is read: the root
+ * stands there, and a large non-invoice XML is not parsed for it.
+ */
+export function isCiiXml(buffer: Buffer): boolean {
+  const head = buffer.subarray(0, 4096).toString("utf8");
+  return /<(?:[\w-]+:)?CrossIndustryInvoice[\s>/]/.test(head);
+}
+
+/**
+ * WHICH ATTACHMENTS OF A MAIL ARE READ AS THE INVOICE (acrobot's decision,
+ * 2026-09-30).
+ *
+ * A supplier can send the same invoice twice in one mail: as an e-invoice XML
+ * and as a PDF (CoralSands does, with every invoice, and even the PDF twice).
+ * The XML wins: it is the invoice's own data, the PDF only its picture, and
+ * reading both would make two documents of one invoice. The XML counts only
+ * when it IS a CII invoice: another XML in the mail (a delivery note, a
+ * catalogue) must not push the PDF out. Without such an XML, the PDFs, as
+ * before.
+ */
+export function invoiceFiles(message: {
+  pdfs: readonly MailFile[];
+  xmls: readonly MailFile[];
+}): { source: "XML" | "PDF"; files: MailFile[] } {
+  const invoices = message.xmls.filter((xml) => isCiiXml(xml.buffer));
+  return invoices.length
+    ? { source: "XML", files: invoices }
+    : { source: "PDF", files: [...message.pdfs] };
+}

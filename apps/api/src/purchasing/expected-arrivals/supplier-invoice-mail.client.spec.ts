@@ -62,6 +62,12 @@ describe("the supplier invoice mail client", () => {
                 filename: "logo.png",
                 body: { data: base64Url("png") },
               },
+              // an e-invoice next to the PDF (CoralSands sends one with each)
+              {
+                mimeType: "application/octet-stream",
+                filename: "X-Rechnung RE66912.xml",
+                body: { data: base64Url("<rsm:CrossIndustryInvoice/>") },
+              },
             ],
           },
         });
@@ -88,6 +94,11 @@ describe("the supplier invoice mail client", () => {
     assert.deepEqual(
       message.pdfs.map((pdf) => [pdf.fileName, pdf.buffer.toString()]),
       [["Facture FA00009139.pdf", "%PDF-1.4 x"]],
+    );
+    // the XML by its name too, kept apart from the PDFs; the image is not taken
+    assert.deepEqual(
+      message.xmls.map((xml) => [xml.fileName, xml.buffer.toString()]),
+      [["X-Rechnung RE66912.xml", "<rsm:CrossIndustryInvoice/>"]],
     );
     assert.equal(
       requested.filter((path) => path.includes("/attachments/")).length,

@@ -180,6 +180,18 @@ export function parseCiiInvoiceXml(xml: string): SupplierInvoiceImportResult {
       "LineTotalAmount",
     ),
     lines,
+    /*
+      A RENDELESSZAM (acrobot dontese, 2026-09-30): a Varhato beerkezes erre is
+      kulcsol. A CII-ben a vevo rendelesenek hivatkozasa; a CoralSands itt a
+      sajat rendelés-visszaigazolasa szamat kuldi ("AB67993").
+    */
+    orderReference: text(
+      transaction,
+      "ApplicableHeaderTradeAgreement",
+      "BuyerOrderReferencedDocument",
+      "IssuerAssignedID",
+    ),
+    documentKind: "INVOICE",
     warnings,
   };
 }

@@ -23,6 +23,7 @@ import {
   adapterSenders,
   arrivalIdentity,
   documentContent,
+  invoiceFiles,
   placeDocument,
   supplierIdByTaxKey,
 } from "./expected-arrival.intake.js";
@@ -36,6 +37,7 @@ import {
   supplierInvoiceMailIntervalMinutes,
   supplierInvoiceMailQuery,
   supplierInvoiceMailSenders,
+  XML_INVOICE_SENDERS,
   supplierInvoiceMailSwitch,
 } from "./supplier-invoice-mail.config.js";
 
@@ -88,7 +90,8 @@ export class ExpectedArrivalIntakeService {
 
   senders(): string[] {
     return supplierInvoiceMailSenders(
-      adapterSenders(this.reader.adapters),
+      // the PDF adapters name theirs; an XML e-invoice sender has no adapter
+      [...adapterSenders(this.reader.adapters), ...XML_INVOICE_SENDERS],
       this.environment,
     );
   }
@@ -176,9 +179,11 @@ export class ExpectedArrivalIntakeService {
           );
           continue;
         }
-        let errorCode: string | null = message.pdfs.length ? null : "NO_PDF";
-        for (const pdf of message.pdfs) {
-          const outcome = await this.ingest(message, pdf);
+        // the XML e-invoice wins over its PDF picture (`invoiceFiles`)
+        const { files } = invoiceFiles(message);
+        let errorCode: string | null = files.length ? null : "NO_PDF";
+        for (const file of files) {
+          const outcome = await this.ingest(message, file);
           // a late correction is read and shown; an older version is not new
           if (outcome === "READ" || outcome === "LATE_CORRECTION")
             counts.documentsRead++;
@@ -195,7 +200,7 @@ export class ExpectedArrivalIntakeService {
             sender: message.sender,
             receivedAt: message.receivedAt,
             subject: message.subject,
-            documentCount: message.pdfs.length,
+            documentCount: files.length,
             errorCode,
           },
         });
@@ -236,13 +241,13 @@ export class ExpectedArrivalIntakeService {
    */
   async ingest(
     message: SupplierInvoiceMail,
-    pdf: { fileName: string; buffer: Buffer },
+    file: { fileName: string; buffer: Buffer },
   ): Promise<IngestOutcome> {
     const existing = await prisma.incomingSupplierDocument.findUnique({
       where: {
         gmailMessageId_fileName: {
           gmailMessageId: message.id,
-          fileName: pdf.fileName,
+          fileName: file.fileName,
         },
       },
       select: { status: true, errorCode: true },
@@ -252,23 +257,23 @@ export class ExpectedArrivalIntakeService {
         ? (existing.errorCode ?? "FAILED")
         : existing.status;
 
-    const sha256 = createHash("sha256").update(pdf.buffer).digest("hex");
+    const sha256 = createHash("sha256").update(file.buffer).digest("hex");
     const base = {
       gmailMessageId: message.id,
-      fileName: pdf.fileName,
+      fileName: file.fileName,
       sender: message.sender,
       subject: message.subject,
       receivedAt: message.receivedAt,
-      sizeBytes: pdf.buffer.length,
+      sizeBytes: file.buffer.length,
       sha256,
-      content: new Uint8Array(pdf.buffer),
+      content: new Uint8Array(file.buffer),
     };
 
     let result: SupplierInvoiceImportResult;
     try {
       // a proforma opens the expected arrival, so the watcher reads it; the
       // manual upload keeps refusing it
-      result = await this.reader.read(new Uint8Array(pdf.buffer), {
+      result = await this.reader.read(new Uint8Array(file.buffer), {
         allowProforma: true,
       });
     } catch (error) {

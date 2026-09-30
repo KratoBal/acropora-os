@@ -10,9 +10,12 @@ import {
  *
  * The same raw Gmail API calls as the GLS and Foxpost pulls
  * (`gls-gmail.client.ts`): a refresh-token exchange, a message search, then
- * each message in full with its attachments. Only PDF attachments are
- * downloaded, recognised by the file name as well: Aquarioom sends its
- * invoices as `application/octet-stream` (measured, 2026-09-30).
+ * each message in full with its attachments. Only PDF and XML attachments
+ * are downloaded, recognised by the file name as well: Aquarioom sends its
+ * invoices as `application/octet-stream` (measured, 2026-09-30). The XML is
+ * the e-invoice (XRechnung/ZUGFeRD CII) some suppliers send next to the PDF,
+ * CoralSands with every invoice (2026-09-30): which of the two is read, the
+ * intake decides (`invoiceFiles`).
  */
 
 /** Injectable for tests: a fake transport instead of the network. */
@@ -48,6 +51,8 @@ export interface SupplierInvoiceMail {
   /** The sender's address, lower case; null when the header has none. */
   sender: string | null;
   pdfs: Array<{ fileName: string; buffer: Buffer }>;
+  /** XML attachments: an e-invoice, when the supplier sends one. */
+  xmls: Array<{ fileName: string; buffer: Buffer }>;
 }
 
 function decodeBase64Url(data: string): Buffer {
@@ -67,6 +72,14 @@ function isPdf(part: GmailPart): boolean {
   return (
     Boolean(part.filename?.toLowerCase().endsWith(".pdf")) ||
     part.mimeType === "application/pdf"
+  );
+}
+
+function isXml(part: GmailPart): boolean {
+  return (
+    Boolean(part.filename?.toLowerCase().endsWith(".xml")) ||
+    part.mimeType === "application/xml" ||
+    part.mimeType === "text/xml"
   );
 }
 
@@ -146,8 +159,9 @@ export class SupplierInvoiceMailClient {
         ?.find((h) => h.name?.toLowerCase() === name)
         ?.value?.trim() || null;
     const pdfs: SupplierInvoiceMail["pdfs"] = [];
+    const xmls: SupplierInvoiceMail["xmls"] = [];
     for (const part of allParts(message.payload).filter(
-      (part) => part.filename && isPdf(part),
+      (part) => part.filename && (isPdf(part) || isXml(part)),
     )) {
       let encoded = part.body?.data;
       if (!encoded && part.body?.attachmentId) {
@@ -173,7 +187,7 @@ export class SupplierInvoiceMailClient {
         throw new SupplierInvoiceMailError(
           "SUPPLIER_INVOICE_MAIL_ATTACHMENT_TOO_LARGE",
         );
-      pdfs.push({ fileName: part.filename!, buffer });
+      (isPdf(part) ? pdfs : xmls).push({ fileName: part.filename!, buffer });
     }
     const internalDate = Number(message.internalDate);
     return {
@@ -182,6 +196,7 @@ export class SupplierInvoiceMailClient {
       subject: header("subject"),
       sender: senderAddress(header("from")),
       pdfs,
+      xmls,
     };
   }
 
