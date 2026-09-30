@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  categoryPath,
   toProductListItem,
   type ProductWithRelations,
 } from "./product.types.js";
@@ -164,5 +165,46 @@ describe("which price the list is showing", () => {
     );
 
     assert.equal(item.priceSource, "unas");
+  });
+});
+
+// What must fail: the list losing the ancestors (the image fallback then sees
+// only a brand leaf such as "Fauna Marin"), or the path coming out leaf first.
+describe("the primary category's path on the list", () => {
+  it("names the root first and the leaf last, as far as loaded", () => {
+    const product = baseProduct({
+      categories: [
+        {
+          isPrimary: true,
+          sortOrder: 0,
+          category: {
+            id: "c-leaf",
+            name: "Fauna Marin",
+            parent: {
+              name: "Nyomelemek",
+              parent: { name: "Termékek", parent: null },
+            },
+          },
+        },
+      ],
+    } as unknown as Partial<ProductWithRelations>);
+
+    const item = toProductListItem(product);
+    assert.equal(item.primaryCategory?.name, "Fauna Marin");
+    assert.deepEqual(item.primaryCategory?.path, [
+      "Termékek",
+      "Nyomelemek",
+      "Fauna Marin",
+    ]);
+  });
+
+  it("a category loaded without ancestors is its own path, and a cycle stops", () => {
+    assert.deepEqual(categoryPath({ name: "Halak" }), ["Halak"]);
+    const loop: { name: string; parent?: unknown } = { name: "A" };
+    loop.parent = loop;
+    assert.equal(
+      categoryPath(loop as { name: string; parent: null }).length,
+      8,
+    );
   });
 });

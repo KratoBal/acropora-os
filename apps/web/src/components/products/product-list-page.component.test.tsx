@@ -29,6 +29,11 @@ const auth = vi.hoisted(() => ({
   session: null as Session | null,
 }));
 
+// a lap a Direction F óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
+
 vi.mock("next/navigation", () => ({
   usePathname: () => "/products",
   useRouter: () => navigation,
@@ -212,6 +217,109 @@ describe("ProductListPage", () => {
     expect(
       await screen.findByText("Helyi Acropora OS-termék"),
     ).toBeInTheDocument();
+  });
+
+  /*
+    A KÉP NÉLKÜLI SOR (Balázs briefje, 2026-09-30, 4. pont): nem mindenhol
+    ugyanaz a csomag-ikon, hanem kategória-ikon, márka-monogram, és csak a
+    végén a generikus. MI PIROSÍT: ha a kategória útját nem olvassa (a márka-
+    levél "Fauna Marin" egyedül nem mond csoportot), ha a monogram a kategória
+    elé kerül, vagy ha a kategória nevéből márkát gyárt.
+  */
+  it("a kép nélküli sor a kategória ikonját, a márka monogramját vagy a generikusat kapja, ebben a sorrendben", async () => {
+    const base = populatedResponse.items[0]!;
+    api.list.mockResolvedValue({
+      ...populatedResponse,
+      items: [
+        {
+          ...base,
+          id: "p-icon",
+          name: "Fauna Marin Balling Light",
+          thumbnail: null,
+          brand: { id: "brand-1", name: "Red Sea" },
+          primaryCategory: {
+            id: "c-fm",
+            name: "Fauna Marin",
+            isPrimary: true,
+            sortOrder: 0,
+            path: ["Termékek", "Nyomelemek", "Fauna Marin"],
+          },
+        },
+        {
+          ...base,
+          id: "p-mono",
+          name: "Red Sea ReefDose 4",
+          thumbnail: null,
+          brand: { id: "brand-1", name: "Red Sea" },
+          primaryCategory: {
+            id: "c-root",
+            name: "Termékek",
+            isPrimary: true,
+            sortOrder: 0,
+            path: ["Termékek"],
+          },
+        },
+        {
+          ...base,
+          id: "p-generic",
+          name: "Maxspect tartó",
+          thumbnail: null,
+          brand: null,
+          primaryCategory: {
+            id: "c-mx",
+            name: "Maxspect",
+            isPrimary: true,
+            sortOrder: 0,
+            path: ["Termékek", "Maxspect"],
+          },
+        },
+      ],
+    });
+
+    render(createElement(ProductListPage));
+    await screen.findByText("Fauna Marin Balling Light");
+    const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+    const kinds = rows.map(
+      (row) =>
+        row
+          .querySelector("[data-thumbnail-fallback]")
+          ?.getAttribute("data-thumbnail-fallback") ?? "image",
+    );
+    expect(kinds).toEqual(["icon", "monogram", "generic"]);
+    expect(rows[1]).toHaveTextContent("RS");
+    // a márkanevű kategóriából nem lesz monogram
+    expect(rows[2]).not.toHaveTextContent(/\bMS\b/);
+  });
+
+  it("a fejléc és a sor ugyanabból az oszlopból igazodik: a számoszlop mindkettőben jobbra zár", async () => {
+    api.list.mockResolvedValue(populatedResponse);
+    render(createElement(ProductListPage));
+    const table = await screen.findByRole("table");
+    const headers = within(table).getAllByRole("columnheader");
+    const cells = within(within(table).getAllByRole("row")[1]!).getAllByRole(
+      "cell",
+    );
+    expect(headers.map((header) => header.textContent)).toEqual([
+      "Termék",
+      "SKU",
+      "Bruttó ár",
+      "Akciós ár",
+      "Készlet",
+      "Állapot",
+      "Művelet",
+    ]);
+    const right = (element: HTMLElement) =>
+      element.className.split(" ").includes("text-right");
+    expect(headers.map(right)).toEqual(cells.map(right));
+    expect(headers.map(right)).toEqual([
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+    ]);
   });
 
   it("üres katalógus állapotot jelenít meg", async () => {

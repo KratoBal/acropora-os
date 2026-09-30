@@ -2,27 +2,34 @@
 
 import {
   Alert,
-  Badge,
   Button,
-  Card,
   EmptyState,
   Icon,
-  Input,
-  PageHeader,
   Pagination,
-  Select,
+  PilotDataTable,
+  PilotPageHeader,
+  PilotThumbnail,
   Skeleton,
+  thumbnailFallback,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
   type CatalogOption,
+  type ProductListItem,
   type ProductListResponse,
 } from "@acropora/types";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  PilotBadge,
+  PilotInput,
+  PilotSelect,
+  PilotThemeRoot,
+} from "@/components/pilot/pilot-ui";
 import { productApi } from "@/lib/api/products";
 import {
   changeProductFilters,
@@ -42,28 +49,59 @@ function formatHuf(value: string | null): string {
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
 }
 
+/** "1–25 / 2 438": a látható sorok és az összes (Figma "Footer Count"). */
+function pageRange(pagination: ProductListResponse["pagination"]): string {
+  const total = pagination.totalItems;
+  if (total === 0) return "0 / 0";
+  const from = (pagination.page - 1) * pagination.pageSize + 1;
+  const to = Math.min(pagination.page * pagination.pageSize, total);
+  return `${from.toLocaleString("hu-HU")}–${to.toLocaleString("hu-HU")} / ${total.toLocaleString("hu-HU")}`;
+}
+
 function formatStock(value: string | null): string {
   if (value === null) return "—";
   return Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 });
 }
 
-function provenanceBadge(origin: "UNAS" | "LOCAL" | null): {
+/**
+ * AZ EREDET A NÉV ALATT, SZÖVEGKÉNT (Direction F, Figma 273:33: 12-es,
+ * kék "UNAS-termék"), nem jelvényként: a jelvény az állapot oszlopé, és két
+ * jelvény egy sorban egyenrangúnak mutatná a kettőt.
+ */
+function provenance(origin: "UNAS" | "LOCAL" | null): {
   label: string;
-  variant: "info" | "neutral" | "warning";
+  className: string;
 } {
-  if (origin === "UNAS") return { label: "UNAS-termék", variant: "info" };
+  if (origin === "UNAS")
+    return { label: "UNAS-termék", className: "text-pilot-blue-700" };
   if (origin === "LOCAL")
-    return { label: "Helyi Acropora OS-termék", variant: "neutral" };
-  return { label: "Eredet ellenőrzendő", variant: "warning" };
+    return {
+      label: "Helyi Acropora OS-termék",
+      className: "text-pilot-grey-600",
+    };
+  return { label: "Eredet ellenőrzendő", className: "text-pilot-amber-700" };
+}
+
+/** A kártya felső élén a vékony meleg sáv (Figma "Warm Top Accent"). */
+function WarmTopAccent() {
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute inset-x-4 top-0 h-0.5 bg-pilot-accent-warm"
+    />
+  );
 }
 
 function ProductTableSkeleton() {
   return (
-    <Card className="overflow-hidden" aria-label="Terméklista betöltése">
-      <div className="border-b border-dusk-200 bg-dusk-50 px-5 py-3">
+    <section
+      className="overflow-hidden rounded-2xl border border-pilot-grey-200 bg-white"
+      aria-label="Terméklista betöltése"
+    >
+      <div className="bg-pilot-grey-100 px-5 py-3">
         <Skeleton className="h-4 w-48" />
       </div>
-      <div className="divide-y divide-dusk-100">
+      <div className="divide-y divide-pilot-grey-200">
         {Array.from({ length: 8 }, (_, index) => (
           <div key={index} className="flex items-center gap-4 px-5 py-4">
             <Skeleton className="size-10 shrink-0" />
@@ -73,7 +111,7 @@ function ProductTableSkeleton() {
           </div>
         ))}
       </div>
-    </Card>
+    </section>
   );
 }
 
@@ -234,49 +272,169 @@ export function ProductListPage() {
       ? `/products/${productId}?returnTo=${encodeURIComponent(queryKey)}`
       : `/products/${productId}`;
 
+  const openDetail = (product: ProductListItem) =>
+    router.push(detailHref(product.id));
+  const pageChange = (page: number) =>
+    data
+      ? replaceState(changeProductPage(state, page, data.pagination.totalPages))
+      : undefined;
+
+  /*
+    A KÖZÖS OSZLOPRÁCS (a brief 5. pontja): a fejléc és a sor ugyanebből a
+    definícióból épül, a szélességet és a számoszlopok jobbra zárását
+    egyszer mondjuk ki (`PilotDataTable`).
+  */
+  const columns: PilotTableColumn<ProductListItem>[] = [
+    {
+      id: "product",
+      header: "Termék",
+      cell: (product) => {
+        const origin = provenance(product.origin);
+        return (
+          <div className="flex min-w-0 items-center gap-3">
+            <PilotThumbnail
+              src={product.thumbnail?.url}
+              alt={product.thumbnail?.altText ?? ""}
+              fallback={thumbnailFallback({
+                categoryPath: product.primaryCategory?.path,
+                brandName: product.brand?.name,
+              })}
+            />
+            <div className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-pilot-grey-900">
+                {product.name}
+              </span>
+              <span className={`mt-0.5 block text-xs ${origin.className}`}>
+                {origin.label}
+              </span>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "sku",
+      header: "SKU",
+      width: "160px",
+      cell: (product) => (
+        <span className="block truncate text-[13px] text-pilot-grey-600">
+          {product.primarySku ?? "—"}
+        </span>
+      ),
+    },
+    {
+      id: "gross",
+      header: "Bruttó ár",
+      width: "140px",
+      align: "right",
+      cell: (product) => (
+        <span className="text-pilot-grey-600">
+          {formatHuf(product.grossPrice)}
+        </span>
+      ),
+    },
+    {
+      id: "sale",
+      header: "Akciós ár",
+      width: "140px",
+      align: "right",
+      cell: (product) =>
+        product.saleGrossPrice ? (
+          <span className="font-semibold text-pilot-red-700">
+            {formatHuf(product.saleGrossPrice)}
+          </span>
+        ) : (
+          <span className="text-pilot-grey-400">—</span>
+        ),
+    },
+    {
+      id: "stock",
+      header: "Készlet",
+      width: "96px",
+      align: "right",
+      cell: (product) => (
+        <span className="text-pilot-grey-900">
+          {formatStock(product.stockOnHand)}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Állapot",
+      width: "120px",
+      cell: (product) => (
+        <PilotBadge variant={product.isActive ? "success" : "grey"}>
+          {product.isActive ? "Aktív" : "Archivált"}
+        </PilotBadge>
+      ),
+    },
+    {
+      id: "action",
+      header: "Művelet",
+      width: "128px",
+      align: "right",
+      cell: (product) => (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            openDetail(product);
+          }}
+          className="inline-flex items-center gap-1 text-sm font-semibold text-pilot-aqua-700 hover:text-pilot-aqua-800"
+        >
+          Részletek
+          <span aria-hidden="true">→</span>
+        </button>
+      ),
+    },
+  ];
+
   return (
-    <div className="space-y-6">
-      <PageHeader
+    <PilotThemeRoot theme="light" className="space-y-6">
+      <PilotPageHeader
         title="Termékek"
         description="A teljes termékkatalógus és webshop-megjelenések operatív áttekintése."
         actions={
-          <Button
+          <button
+            type="button"
             disabled
             title="A termékszerkesztő egy következő sprintben készül el."
+            className="inline-flex h-10 items-center rounded-md bg-white px-4 text-sm font-semibold text-pilot-grey-500 ring-1 ring-pilot-grey-200 disabled:cursor-not-allowed"
           >
             Új termék · hamarosan
-          </Button>
+          </button>
         }
       />
 
-      <Card className="p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1fr)_180px_240px_220px]">
-          <Input
+      <section className="rounded-2xl border border-pilot-grey-200 bg-white p-5">
+        <div className="grid items-center gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_180px_220px_220px_auto]">
+          <PilotInput
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={setSearch}
             leadingIcon={<Icon name="search" size={17} />}
             placeholder="Keresés név vagy SKU alapján…"
             aria-label="Termék keresése"
+            className="h-10"
           />
-          <Select
+          <PilotSelect
+            chevron
             aria-label="Aktivitási állapot"
             value={state.active}
-            onChange={(event) =>
-              updateFilter({
-                active: event.target.value as ProductActiveFilter,
-              })
+            onChange={(value) =>
+              updateFilter({ active: value as ProductActiveFilter })
             }
+            className="[&_select]:h-10"
           >
             <option value="all">Minden állapot</option>
             <option value="active">Aktív</option>
             <option value="archived">Archivált</option>
-          </Select>
-          <Select
+          </PilotSelect>
+          <PilotSelect
+            chevron
             aria-label="Kategória"
             value={state.categoryId}
-            onChange={(event) =>
-              updateFilter({ categoryId: event.target.value })
-            }
+            onChange={(value) => updateFilter({ categoryId: value })}
+            className="[&_select]:h-10"
           >
             <option value="">Minden kategória</option>
             {categories.map((option) => (
@@ -284,11 +442,13 @@ export function ProductListPage() {
                 {option.label}
               </option>
             ))}
-          </Select>
-          <Select
+          </PilotSelect>
+          <PilotSelect
+            chevron
             aria-label="Márka"
             value={state.brandId}
-            onChange={(event) => updateFilter({ brandId: event.target.value })}
+            onChange={(value) => updateFilter({ brandId: value })}
+            className="[&_select]:h-10"
           >
             <option value="">Minden márka</option>
             {brands.map((option) => (
@@ -296,12 +456,27 @@ export function ProductListPage() {
                 {option.label}
               </option>
             ))}
-          </Select>
+          </PilotSelect>
+          {/*
+            A SÁV "SZŰRŐK TÖRLÉSE" LINKJE (Figma "Clear", meleg szöveg) CSAK
+            AKKOR, HA VAN MIT TÖRÖLNI, ÉS NEM A "NINCS TALÁLAT" ÁLLAPOTBAN: ott
+            az üres állapot maga kínálja fel ugyanezt, és két azonos gomb
+            egymás mellett csak zaj.
+          */}
+          {hasFilters && viewState !== "no-results" ? (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="justify-self-start whitespace-nowrap text-xs text-pilot-accent-warm-text hover:underline xl:justify-self-end"
+            >
+              Szűrők törlése
+            </button>
+          ) : null}
         </div>
-      </Card>
+      </section>
 
       {refreshing ? (
-        <p className="text-xs font-medium text-brand-700" role="status">
+        <p className="text-xs font-medium text-pilot-aqua-700" role="status">
           Lista frissítése…
         </p>
       ) : null}
@@ -361,30 +536,27 @@ export function ProductListPage() {
       ) : null}
 
       {viewState === "populated" && data ? (
-        <Card className="overflow-hidden">
-          <div className="flex flex-col gap-3 border-b border-dusk-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-dusk-600">
-              <span className="font-semibold text-dusk-900">
-                {data.pagination.totalItems.toLocaleString("hu-HU")}
-              </span>{" "}
-              termék
+        <section className="relative overflow-hidden rounded-2xl border border-pilot-grey-200 bg-white">
+          <WarmTopAccent />
+          <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-pilot-accent-warm-text">
+              {data.pagination.totalItems.toLocaleString("hu-HU")} termék
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <label
                 htmlFor="product-page-size"
-                className="text-xs text-dusk-500"
+                className="text-xs text-pilot-grey-500"
               >
                 Sorok száma
               </label>
-              <Select
+              <PilotSelect
+                chevron
                 id="product-page-size"
-                className="h-8 w-20"
-                value={state.pageSize}
-                onChange={(event) =>
+                className="w-20 [&_select]:h-9"
+                value={String(state.pageSize)}
+                onChange={(value) =>
                   updateFilter({
-                    pageSize: Number(
-                      event.target.value,
-                    ) as ProductListUrlState["pageSize"],
+                    pageSize: Number(value) as ProductListUrlState["pageSize"],
                   })
                 }
               >
@@ -393,121 +565,38 @@ export function ProductListPage() {
                     {size}
                   </option>
                 ))}
-              </Select>
+              </PilotSelect>
               <Pagination
+                variant="directionF"
                 position="top"
                 page={data.pagination.page}
                 totalPages={data.pagination.totalPages}
-                onPageChange={(page) =>
-                  replaceState(
-                    changeProductPage(state, page, data.pagination.totalPages),
-                  )
-                }
+                onPageChange={pageChange}
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-left">
-              <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
-                <tr>
-                  <th className="px-5 py-3">Termék</th>
-                  <th className="px-4 py-3">SKU</th>
-                  <th className="px-4 py-3 text-right">Bruttó ár</th>
-                  <th className="px-4 py-3 text-right">Akciós ár</th>
-                  <th className="px-4 py-3 text-right">Készlet</th>
-                  <th className="px-4 py-3">Állapot</th>
-                  <th className="px-5 py-3 text-right">Művelet</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-dusk-100 bg-white">
-                {data.items.map((product) => (
-                  <tr
-                    key={product.id}
-                    tabIndex={0}
-                    className="cursor-pointer transition hover:bg-dusk-50 focus:bg-dusk-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
-                    onClick={() => router.push(detailHref(product.id))}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        router.push(detailHref(product.id));
-                      }
-                    }}
-                  >
-                    <td className="max-w-sm px-5 py-3.5">
-                      <div className="flex items-center gap-3">
-                        {product.thumbnail ? (
-                          <img
-                            src={product.thumbnail.url}
-                            alt={product.thumbnail.altText ?? ""}
-                            className="size-10 rounded-lg border border-dusk-200 object-cover"
-                          />
-                        ) : (
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-dusk-100 text-dusk-400">
-                            <Icon name="package" size={17} />
-                          </span>
-                        )}
-                        <div className="min-w-0 space-y-1">
-                          <span className="block truncate text-sm font-semibold text-dusk-900">
-                            {product.name}
-                          </span>
-                          <Badge
-                            variant={provenanceBadge(product.origin).variant}
-                          >
-                            {provenanceBadge(product.origin).label}
-                          </Badge>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 font-mono text-xs text-dusk-600">
-                      {product.primarySku ?? "—"}
-                    </td>
-                    <td className="px-4 py-3.5 text-right text-sm text-dusk-600">
-                      {formatHuf(product.grossPrice)}
-                    </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-semibold text-rose-600">
-                      {product.saleGrossPrice
-                        ? formatHuf(product.saleGrossPrice)
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3.5 text-right text-sm text-dusk-600">
-                      {formatStock(product.stockOnHand)}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <Badge variant={product.isActive ? "success" : "neutral"}>
-                        {product.isActive ? "Aktív" : "Archivált"}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          router.push(detailHref(product.id));
-                        }}
-                      >
-                        Részletek
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <Pagination
-            position="bottom"
-            page={data.pagination.page}
-            totalPages={data.pagination.totalPages}
-            onPageChange={(page) =>
-              replaceState(
-                changeProductPage(state, page, data.pagination.totalPages),
-              )
-            }
+          <PilotDataTable
+            columns={columns}
+            rows={data.items}
+            rowKey={(product) => product.id}
+            onRowActivate={openDetail}
           />
-        </Card>
+
+          <div className="flex flex-col gap-3 border-t border-pilot-grey-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-pilot-grey-500">
+              {pageRange(data.pagination)}
+            </p>
+            <Pagination
+              variant="directionF"
+              position="bottom"
+              page={data.pagination.page}
+              totalPages={data.pagination.totalPages}
+              onPageChange={pageChange}
+            />
+          </div>
+        </section>
       ) : null}
-    </div>
+    </PilotThemeRoot>
   );
 }

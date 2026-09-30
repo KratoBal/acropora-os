@@ -135,7 +135,7 @@ export function GlobalSearch({ token }: { token: string }) {
       */}
       <label className="block w-full">
         <span className="sr-only">Keresés</span>
-        <span className="flex h-10 items-center gap-2 rounded-xl bg-pilot-grey-100 px-3 text-pilot-grey-500 ring-pilot-aqua-500 transition focus-within:ring-2">
+        <span className="flex h-9 items-center gap-2 rounded-md bg-white px-3 text-pilot-grey-500 ring-1 ring-pilot-grey-200 transition focus-within:ring-2 focus-within:ring-pilot-aqua-500">
           <Icon name="search" size={17} />
           <input
             type="search"

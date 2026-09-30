@@ -12,6 +12,13 @@ export interface ProductCategorySummary {
   name: string;
   isPrimary: boolean;
   sortOrder: number | null;
+  /**
+   * The category's names from the root down to itself, as far as the list
+   * loads them (the leaf and three ancestors). The list's image fallback
+   * reads the group from it: the primary category is often a brand leaf
+   * ("Fauna Marin" under "Nyomelemek"). Only on the list item.
+   */
+  path?: string[];
 }
 
 /**
