@@ -7051,3 +7051,69 @@ enum SupplierInvoiceMailSyncRunStatus {
   APPLIED
   FAILED
 }
+
+/// HIÁNYZÓ SZÁMLÁK (2026-09-30): a cég egy bankszámlája, ahogy a kivonat-export
+/// első oszlopa nevezi (kötőjel nélkül, 16 vagy 24 számjegy). Az első import
+/// hozza létre; a megjelenítendő nevet (Fő számla, Kártyás számla, EUR számla)
+/// később lehet megadni.
+model BankAccount {
+  id            String   @id @default(cuid())
+  accountNumber String   @unique
+  currency      String   @db.VarChar(3)
+  name          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transactions BankTransaction[]
+}
+
+/// Egy feltöltött kivonat-fájl nyoma: ki, mikor, mit töltött fel, és mennyi
+/// sor lett belőle új. Maga a fájl nem tárolódik, a sorai igen.
+model BankStatementImport {
+  id               String   @id @default(cuid())
+  fileName         String
+  sha256           String
+  rowCount         Int
+  createdCount     Int
+  skippedCount     Int
+  rejectedCount    Int
+  importedByUserId String?
+  createdAt        DateTime @default(now())
+
+  transactions BankTransaction[]
+
+  @@index([sha256])
+}
+
+enum BankTransactionDirection {
+  DEBIT
+  CREDIT
+}
+
+/// Egy kivonat-sor, nyersen: a kategóriát OLVASÁSKOR számoljuk (a szabály
+/// javítása így migráció nélkül hat). A `transactionKey` a sor mezőiből és a
+/// fájlon belüli sorszámából képzett kulcs: két export átfedő napja egyszer
+/// kerül be, egy exporton belüli két azonos sor kétszer.
+model BankTransaction {
+  id                  String                   @id @default(cuid())
+  bankAccountId       String
+  importId            String
+  direction           BankTransactionDirection
+  /// Előjel nélkül; az irány mondja meg, terhelés-e.
+  amount              Decimal                  @db.Decimal(19, 4)
+  currency            String                   @db.VarChar(3)
+  bookingDate         DateTime                 @db.Date
+  valueDate           DateTime?                @db.Date
+  counterpartyAccount String?
+  counterpartyName    String?
+  narrative           String
+  transactionType     String?
+  transactionKey      String                   @unique
+  createdAt           DateTime                 @default(now())
+
+  bankAccount BankAccount         @relation(fields: [bankAccountId], references: [id])
+  import      BankStatementImport @relation(fields: [importId], references: [id])
+
+  @@index([bankAccountId, bookingDate])
+  @@index([bookingDate, direction])
+}
