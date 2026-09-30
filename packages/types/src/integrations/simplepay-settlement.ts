@@ -96,3 +96,36 @@ export interface SimplePayManualApprovalInput {
   invoiceNumber: string;
   expectedUpdatedAt: string;
 }
+
+/**
+ * A Gmail-behúzás állapota, ahogy a szerver maga látja: a kapcsoló és a kulcs
+ * értelmezése ugyanabból a függvényből jön, mint az induló naplósor.
+ */
+export type SimplePaySyncState =
+  | "ENABLED"
+  | "DISABLED_NOT_SET"
+  | "DISABLED_OFF"
+  | "DISABLED_UNRECOGNISED"
+  | "NO_KEY";
+
+export interface SimplePaySyncRunSummary {
+  status: "RUNNING" | "APPLIED" | "FAILED";
+  trigger: "SCHEDULED" | "MANUAL";
+  startedAt: string;
+  completedAt?: string;
+  messagesSeen: number;
+  documentsRead: number;
+  duplicateCount: number;
+  failedCount: number;
+  errorCode?: string;
+}
+
+export interface SimplePaySyncStatus {
+  state: SimplePaySyncState;
+  /** Van-e olvasható Gmail-kulcs (a kézi "ellenőrizd most" ettől függ). */
+  canRunNow: boolean;
+  intervalMinutes: number;
+  lastRun?: SimplePaySyncRunSummary;
+  /** A legutóbbi, időzítő indította futás: tényleg fut-e magától. */
+  lastScheduledRun?: SimplePaySyncRunSummary;
+}

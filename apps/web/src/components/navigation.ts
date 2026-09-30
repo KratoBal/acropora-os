@@ -222,6 +222,14 @@ export const businessNavigation: AppNavigationEntry[] = [
         entryId: "gls-settlement",
       },
       {
+        // Balázs, 2026-09-30: "kellene egy simple pay kimutatás is mint a
+        // foxpostnál és a gls-nél"
+        href: "/penzugy/simplepay",
+        label: "SimplePay elszámolás",
+        icon: "download",
+        entryId: "simplepay-settlement",
+      },
+      {
         // Ide KÖLTÖZÖTT a korábbi felső szintű "Raktár", és a lap tartalma
         // szerint kapta a nevét: készletleltárak indítása és korrekciója. Az
         // útvonal nem változott, csak a menüben elfoglalt helye és a felirata.

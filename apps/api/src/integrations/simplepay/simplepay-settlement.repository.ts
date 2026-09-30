@@ -326,6 +326,43 @@ export class SimplePaySettlementRepository {
     };
   }
 
+  /**
+   * The month's reports, by their day (report_YYYYMMDD.csv); a report whose
+   * file name carried no day counts by the day it was stored.
+   */
+  monthData(year: number, month: number) {
+    const range = {
+      gte: new Date(Date.UTC(year, month - 1, 1)),
+      lt: new Date(Date.UTC(year, month, 1)),
+    };
+    return prisma.simplePayReport.findMany({
+      where: {
+        OR: [{ reportDate: range }, { reportDate: null, createdAt: range }],
+      },
+      orderBy: [{ reportDate: "asc" }, { createdAt: "asc" }],
+      select: {
+        reportDate: true,
+        createdAt: true,
+        fileName: true,
+        amountTotal: true,
+        commissionTotal: true,
+        netTotal: true,
+        lines: {
+          orderBy: { rowNumber: "asc" },
+          select: {
+            merchantTransactionId: true,
+            transactionAt: true,
+            amount: true,
+            orderNumber: true,
+            invoiceNumbers: true,
+            status: true,
+            errorCode: true,
+          },
+        },
+      },
+    });
+  }
+
   async reportDetail(id: string): Promise<SimplePayReportDetail> {
     const report = await prisma.simplePayReport.findUnique({
       where: { id },
