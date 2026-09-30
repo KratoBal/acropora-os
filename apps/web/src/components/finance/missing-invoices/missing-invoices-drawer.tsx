@@ -55,13 +55,13 @@ export function MissingInvoicesDrawer({
   onCategory,
   busy,
   onUpload,
+  onPaperOriginal,
   note,
   onNote,
   onSave,
   saving,
   error,
   canManage,
-  detailsLater = false,
 }: {
   row: ChargeRow | null;
   onClose: () => void;
@@ -75,7 +75,16 @@ export function MissingInvoicesDrawer({
   onCategory: (category: ChargeCategory | null) => void;
   /** A futó módosítás: `pair:<dokumentum>`, `unpair`, `category`, `upload`. */
   busy: string | null;
-  onUpload: (file: File, kind: UploadKind) => void;
+  /**
+   * A számla feltöltése; ha nincs megadva, a rész nem jelenik meg (a
+   * feltöltés végpontja nautilus 4b szeletével jön).
+   */
+  onUpload?: (file: File, kind: UploadKind) => void;
+  /**
+   * AZ EREDETI PAPÍRON MEGVAN (nautilus #1303, `PUT …/paper-original`): az
+   * Eredeti hiányzik így Megvan lesz. Csak párosított számlánál kérdés.
+   */
+  onPaperOriginal?: (marked: boolean) => void;
   note: string;
   onNote: (note: string) => void;
   onSave: () => void;
@@ -83,12 +92,6 @@ export function MissingInvoicesDrawer({
   error: string | null;
   /** Párosítás, átsorolás, feltöltés, megjegyzés (`finance.manage`). */
   canManage: boolean;
-  /**
-   * A tétel részletei (jelöltek, teendő, Drive) és a módosítások még nincsenek
-   * a szerveren (nautilus 4. szelete): a drawer a sor adatait mutatja, és ezt
-   * kimondja, nem egy soha véget nem érő töltést.
-   */
-  detailsLater?: boolean;
 }) {
   const [dragging, setDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -101,7 +104,7 @@ export function MissingInvoicesDrawer({
       return;
     }
     setFileError(null);
-    onUpload(file, kind);
+    onUpload?.(file, kind);
   };
 
   const amountLine = row
@@ -245,6 +248,27 @@ export function MissingInvoicesDrawer({
                       : "Párosítás visszavonása"}
                   </PilotButton>
                 ) : null}
+
+                {row.document &&
+                onPaperOriginal &&
+                (row.state === "ORIGINAL_MISSING" || row.paperOriginal) ? (
+                  <label className="flex items-center gap-2 text-sm text-pilot-grey-800">
+                    <input
+                      type="checkbox"
+                      checked={row.paperOriginal}
+                      disabled={!canManage || busy !== null}
+                      onChange={(event) =>
+                        onPaperOriginal(event.target.checked)
+                      }
+                    />
+                    Az eredeti papíron megvan
+                    {busy === "paper" ? (
+                      <span className="text-xs text-pilot-grey-500">
+                        Mentés…
+                      </span>
+                    ) : null}
+                  </label>
+                ) : null}
               </div>
             </section>
           ) : null}
@@ -256,12 +280,7 @@ export function MissingInvoicesDrawer({
             <p className="mt-1 text-xs text-pilot-grey-500">
               Azonos szállítóhoz talált lehetséges bizonylatok.
             </p>
-            {detailsLater ? (
-              <p className="mt-3 text-sm text-pilot-grey-500">
-                A javasolt számlák, a párosítás és a számla feltöltése a
-                következő lépésben érkezik.
-              </p>
-            ) : extras === null ? (
+            {extras === null ? (
               <p role="status" className="mt-3 text-sm text-pilot-grey-500">
                 A jelöltek betöltése…
               </p>
@@ -284,7 +303,9 @@ export function MissingInvoicesDrawer({
                         {formatDay(candidate.date)}
                       </span>
                       <span className="whitespace-nowrap font-semibold tabular-nums text-pilot-grey-900">
-                        {formatAmount(candidate.gross, candidate.currency)}
+                        {candidate.gross === null
+                          ? "—"
+                          : formatAmount(candidate.gross, candidate.currency)}
                       </span>
                       <span className="text-xs text-pilot-grey-500">
                         {INVOICE_SOURCE_LABELS[candidate.source]}
@@ -295,7 +316,13 @@ export function MissingInvoicesDrawer({
                             Nem a cégre szól
                           </PilotBadge>
                         </span>
-                      ) : candidate.payee === "UNKNOWN" ? (
+                      ) : null}
+                      {candidate.hasOriginal ? null : (
+                        <span className="col-span-2 text-xs text-pilot-amber-700">
+                          Csak NAV-adat, eredeti nincs a rendszerben
+                        </span>
+                      )}
+                      {candidate.payee === "UNKNOWN" ? (
                         <span className="col-span-2 text-xs text-pilot-grey-500">
                           A vevő nem ellenőrizhető
                         </span>
@@ -331,7 +358,7 @@ export function MissingInvoicesDrawer({
             </section>
           ) : null}
 
-          {canManage ? (
+          {canManage && onUpload ? (
             <section>
               <h3 className="text-sm font-semibold text-pilot-grey-900">
                 Számla feltöltése

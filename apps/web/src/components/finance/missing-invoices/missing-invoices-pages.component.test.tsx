@@ -14,6 +14,7 @@ import { MissingInvoicesMonthPage } from "./missing-invoices-month-page";
 import { MissingInvoicesPage } from "./missing-invoices-page";
 import type {
   MissingInvoiceItem,
+  MissingInvoiceItemDetail,
   MissingInvoiceMonthDetail,
 } from "./missing-invoices-wire";
 
@@ -37,6 +38,12 @@ const api = vi.hoisted(() => ({
   months: vi.fn(),
   month: vi.fn(),
   uploadStatement: vi.fn(),
+  item: vi.fn(),
+  match: vi.fn(),
+  unmatch: vi.fn(),
+  comment: vi.fn(),
+  category: vi.fn(),
+  paperOriginal: vi.fn(),
 }));
 vi.mock("@/lib/api/missing-invoices", () => ({ missingInvoicesApi: api }));
 
@@ -116,6 +123,27 @@ const monthDetail = (
   ...overrides,
 });
 
+const itemDetail = (
+  overrides: Partial<MissingInvoiceItemDetail> = {},
+): MissingInvoiceItemDetail => ({
+  ...item(),
+  candidates: [
+    {
+      documentId: "inv-2",
+      number: "INV-2026-08177",
+      date: "2026-07-04",
+      gross: "21990",
+      currency: "HUF",
+      source: "DRIVE",
+      payee: "COMPANY",
+      hasOriginal: true,
+    },
+  ],
+  action: "REQUEST_REISSUE_TO_COMPANY",
+  driveFolderUrl: null,
+  ...overrides,
+});
+
 const IMPORT_RESULT = {
   importId: "imp-1",
   fileName: "export-24.csv",
@@ -153,6 +181,7 @@ beforeEach(() => {
     ],
   });
   api.month.mockResolvedValue(monthDetail());
+  api.item.mockResolvedValue(itemDetail());
 });
 
 describe("MissingInvoicesPage", () => {
@@ -276,25 +305,188 @@ describe("MissingInvoicesMonthPage", () => {
     expect(screen.queryByRole("group", { name: "Exportok" })).toBeNull();
   });
 
-  it("a row opens the drawer with its data, read-only, saying the details come next", async () => {
-    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
-    render(<MissingInvoicesMonthPage month="2026-08" />);
+  const openFirstRow = async () => {
     fireEvent.click(
       await screen.findByRole("row", {
         name: "OPENAI *CHATGPT SUBSCR, 2026. 08. 03.",
       }),
     );
-    const dialog = await screen.findByRole("dialog", {
-      name: "OPENAI *CHATGPT SUBSCR",
-    });
-    expect(dialog).toHaveTextContent("OPENAI *CHATGPT SUBSCR / CARD 4821");
-    expect(dialog).toHaveTextContent(
-      "A javasolt számlák, a párosítás és a számla feltöltése a következő lépésben érkezik.",
+    return screen.findByRole("dialog");
+  };
+
+  /*
+    A 4A SZELET BEKÖTÉSE (nautilus #1303). MI PIROSÍT: ha a drawer nem kérné
+    le a tétel részleteit; ha a párosítás mást küldene, mint a dokumentumot;
+    ha utána a hónap nem töltődne újra (a csempék a szerver számai); ha egy
+    409 mondata elveszne; ha a cég neve nem a szerverről jönne.
+  */
+  it("pairing: the item's candidates, the explicit match, then the month reloads with the server's counts", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.match.mockResolvedValue(
+      itemDetail({
+        state: "FOUND",
+        document: { id: "inv-2", number: "INV-2026-08177", source: "DRIVE" },
+        matchedBy: "MANUAL",
+        action: "NONE",
+      }),
     );
-    expect(within(dialog).queryByRole("status")).toBeNull();
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const dialog = await openFirstRow();
+    expect(api.item).toHaveBeenCalledWith("token-1", "debit-1");
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("region", { name: "Mit kell tenni" }),
+      ).toHaveTextContent("kérd újra az Szerver Kft. nevére"),
+    );
+    api.month.mockResolvedValue(
+      monthDetail({
+        tiles: {
+          found: 28,
+          notMatched: 15,
+          noInvoice: 24,
+          originalMissing: 0,
+          noInvoiceNeeded: 24,
+        },
+      }),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Párosítás" }));
+    await waitFor(() =>
+      expect(api.match).toHaveBeenCalledWith("token-1", "debit-1", "inv-2"),
+    );
+    await waitFor(() => expect(api.month).toHaveBeenCalledTimes(2));
+    const tile = screen
+      .getAllByText("Megvan")
+      .find((node) => node.closest("article"))!
+      .closest("article")!;
+    await waitFor(() => expect(tile).toHaveTextContent("28"));
+    expect(
+      await within(dialog).findByRole("button", {
+        name: "Párosítás visszavonása",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("undoing a manual pairing asks first, and only the confirmation calls the server", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.item.mockResolvedValue(
+      itemDetail({
+        state: "FOUND",
+        document: { id: "inv-2", number: "INV-2026-08177", source: "DRIVE" },
+        matchedBy: "MANUAL",
+        action: "NONE",
+      }),
+    );
+    api.unmatch.mockResolvedValue(itemDetail());
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const drawer = await openFirstRow();
+    fireEvent.click(
+      await within(drawer).findByRole("button", {
+        name: "Párosítás visszavonása",
+      }),
+    );
+    expect(api.unmatch).not.toHaveBeenCalled();
+    const question = await screen.findByRole("dialog", {
+      name: "A kézi párosítás visszavonása",
+    });
+    expect(question).toHaveTextContent("INV-2026-08177");
+    fireEvent.click(
+      within(question).getByRole("button", { name: "Visszavonás" }),
+    );
+    await waitFor(() =>
+      expect(api.unmatch).toHaveBeenCalledWith("token-1", "debit-1"),
+    );
+  });
+
+  it("a pairing the server refuses (409) says why, and nothing changes", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.match.mockRejectedValue(
+      new Error("Ezt a számlát már egy másik terheléshez párosították."),
+    );
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const dialog = await openFirstRow();
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: "Párosítás" }),
+    );
+    expect(
+      await within(dialog).findByText(
+        "Ezt a számlát már egy másik terheléshez párosították.",
+      ),
+    ).toBeInTheDocument();
+    expect(api.month).toHaveBeenCalledTimes(1);
+  });
+
+  it("the note, the category and the paper original each go to their own endpoint", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.item.mockResolvedValue(
+      itemDetail({
+        state: "ORIGINAL_MISSING",
+        document: { id: "nav-1", number: "NAV-2026-1", source: "NAV" },
+        matchedBy: "RULE",
+        action: "PROVIDE_ORIGINAL",
+      }),
+    );
+    api.comment.mockResolvedValue(itemDetail({ comment: "Kérve e-mailben" }));
+    api.category.mockResolvedValue(
+      itemDetail({ category: "BANK_FEE", categoryOverridden: true }),
+    );
+    api.paperOriginal.mockResolvedValue(
+      itemDetail({
+        state: "FOUND",
+        paperOriginal: true,
+        document: { id: "nav-1", number: "NAV-2026-1", source: "NAV" },
+        matchedBy: "RULE",
+      }),
+    );
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const dialog = await openFirstRow();
+    fireEvent.click(
+      await within(dialog).findByRole("checkbox", {
+        name: "Az eredeti papíron megvan",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.paperOriginal).toHaveBeenCalledWith(
+        "token-1",
+        "debit-1",
+        true,
+      ),
+    );
+    fireEvent.change(within(dialog).getByLabelText("Kategória"), {
+      target: { value: "BANK_FEE" },
+    });
+    await waitFor(() =>
+      expect(api.category).toHaveBeenCalledWith(
+        "token-1",
+        "debit-1",
+        "BANK_FEE",
+      ),
+    );
+    fireEvent.change(within(dialog).getByLabelText("Megjegyzés"), {
+      target: { value: "  Kérve e-mailben " },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mentés" }));
+    await waitFor(() =>
+      expect(api.comment).toHaveBeenCalledWith(
+        "token-1",
+        "debit-1",
+        "Kérve e-mailben",
+      ),
+    );
+  });
+
+  it("a viewer (finance.view only) reads the drawer, but cannot pair, move or save", async () => {
+    auth.role = "VIEWER";
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const dialog = await openFirstRow();
+    expect(
+      await within(dialog).findByText("INV-2026-08177"),
+    ).toBeInTheDocument();
     expect(
       within(dialog).queryByRole("button", { name: "Párosítás" }),
     ).toBeNull();
     expect(within(dialog).queryByRole("button", { name: "Mentés" })).toBeNull();
+    expect(within(dialog).getByLabelText("Kategória")).toBeDisabled();
+    expect(within(dialog).queryByLabelText("Számla PDF")).toBeNull();
   });
 });

@@ -5,7 +5,7 @@ import {
   PERMISSIONS,
   type BankStatementImportResult,
 } from "@acropora/types";
-import { Icon } from "@acropora/ui";
+import { ConfirmDialog, Icon } from "@acropora/ui";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -19,7 +19,10 @@ import {
   useUrlQuery,
 } from "@/lib/navigation/use-url-query";
 
-import { MissingInvoicesDrawer } from "./missing-invoices-drawer";
+import {
+  MissingInvoicesDrawer,
+  type ChargeDetailExtras,
+} from "./missing-invoices-drawer";
 import { MissingInvoicesImportResult } from "./missing-invoices-import-result";
 import {
   CHARGE_TABS,
@@ -34,7 +37,9 @@ import {
 } from "./missing-invoices-month-detail";
 import {
   toChargeRow,
+  toExtras,
   toSummary,
+  type MissingInvoiceItemDetail,
   type MissingInvoiceMonthDetail,
 } from "./missing-invoices-wire";
 
@@ -48,10 +53,11 @@ const TAB_KEYS = CHARGE_TABS.map((tab) => tab.key);
  * visszajövet ugyanaz a nézet áll. A szűrés és a lapozás a szerveren fut
  * (brief 7. pont).
  *
- * EBBEN A KÖRBEN OLVASÓ LAP (acrobot 25309): a hónap, a csempék, a tábla és a
- * kivonat-feltöltés áll. A tétel részletei (jelöltek, teendő), a párosítás, a
- * megjegyzés és az exportok nautilus következő szeleteivel jönnek; a drawer
- * addig a sor adatait mutatja, és ezt kimondja.
+ * A DRAWER a tétel részleteivel nyílik (`GET …/items/:id`, nautilus #1303):
+ * jelöltek, teendő, Drive. Minden módosítás (párosítás, visszavonás,
+ * átsorolás, papír-eredeti, megjegyzés) a frissített tételt adja vissza, és
+ * utána a HÓNAP ÚJRATÖLTŐDIK: a csempék a szerver számai (brief 19. pont, 8.).
+ * A számla feltöltése (4b) és az exportok a következő szeletekkel jönnek.
  */
 export function MissingInvoicesMonthPage({ month }: { month: string }) {
   const { session } = useAuth();
@@ -85,6 +91,12 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     null,
   );
   const [open, setOpen] = useState<ChargeRow | null>(null);
+  const [extras, setExtras] = useState<ChargeDetailExtras | null>(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [confirmUnpair, setConfirmUnpair] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(
@@ -157,6 +169,66 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     if (Object.keys(next).length > 0) update({ ...next, page: null });
   };
 
+  const applyItem = (item: MissingInvoiceItemDetail) => {
+    setOpen(toChargeRow(item));
+    setExtras(toExtras(item));
+  };
+
+  const openRow = (row: ChargeRow) => {
+    setOpen(row);
+    setExtras(null);
+    setNote(row.comment ?? "");
+    setDrawerError(null);
+    missingInvoicesApi
+      .item(token, row.id)
+      .then(applyItem)
+      .catch((cause: unknown) =>
+        setDrawerError(
+          cause instanceof Error
+            ? cause.message
+            : "A terhelés részletei nem tölthetők be.",
+        ),
+      );
+  };
+
+  /** Egy módosítás a drawerből: a válasz a frissített tétel, utána a hónap. */
+  const mutate = async (
+    key: string,
+    run: () => Promise<MissingInvoiceItemDetail>,
+  ) => {
+    setBusy(key);
+    setDrawerError(null);
+    try {
+      applyItem(await run());
+      await load();
+    } catch (cause) {
+      // a 409 mondata is ide jön (a számla máshoz van kézzel párosítva)
+      setDrawerError(
+        cause instanceof Error ? cause.message : "A módosítás nem sikerült.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveNote = async () => {
+    if (!open) return;
+    setSaving(true);
+    setDrawerError(null);
+    try {
+      applyItem(
+        await missingInvoicesApi.comment(token, open.id, note.trim() || null),
+      );
+      await load();
+    } catch (cause) {
+      setDrawerError(
+        cause instanceof Error ? cause.message : "A megjegyzés nem menthető.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const uploadStatement = async (file: File | undefined) => {
     if (!file) return;
     setNotice(null);
@@ -218,7 +290,7 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         pageSize={detail?.pagination.pageSize ?? PAGE_SIZE}
         totalPages={detail?.pagination.totalPages ?? 1}
         onPage={(next) => update({ page: next === 1 ? null : String(next) })}
-        onOpenRow={setOpen}
+        onOpenRow={openRow}
         error={error}
         onRetry={() => void load()}
         canManage={canManage}
@@ -240,19 +312,53 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         row={open}
         onClose={() => setOpen(null)}
         companyName={companyName}
-        extras={null}
-        detailsLater
-        onPair={() => undefined}
-        onUnpair={() => undefined}
-        onCategory={() => undefined}
-        busy={null}
-        onUpload={() => undefined}
-        note={open?.comment ?? ""}
-        onNote={() => undefined}
-        onSave={() => undefined}
-        saving={false}
-        error={null}
-        canManage={false}
+        extras={extras}
+        onPair={(candidate) =>
+          open &&
+          void mutate(`pair:${candidate.documentId}`, () =>
+            missingInvoicesApi.match(token, open.id, candidate.documentId),
+          )
+        }
+        onUnpair={() => setConfirmUnpair(true)}
+        onCategory={(next) =>
+          open &&
+          void mutate("category", () =>
+            missingInvoicesApi.category(token, open.id, next),
+          )
+        }
+        onPaperOriginal={(marked) =>
+          open &&
+          void mutate("paper", () =>
+            missingInvoicesApi.paperOriginal(token, open.id, marked),
+          )
+        }
+        busy={busy}
+        note={note}
+        onNote={setNote}
+        onSave={() => void saveNote()}
+        saving={saving}
+        error={drawerError}
+        canManage={canManage}
+      />
+      {/*
+        A KÉZI PÁROSÍTÁS VISSZAVONÁSA EGY DÖNTÉST SZÜNTET MEG, ezért a közös
+        kérdés előzi meg (a repó szabálya: minden törlő hívás előtt).
+      */}
+      <ConfirmDialog
+        open={confirmUnpair}
+        title="A kézi párosítás visszavonása"
+        consequence={`A terhelés és a(z) ${open?.document?.number ?? "párosított"} számla kapcsolata megszűnik; a terhelés újra a szabály szerint áll.`}
+        recovery="A számla a javasolt számlák közül újra párosítható."
+        confirmLabel="Visszavonás"
+        busy={busy === "unpair"}
+        onConfirm={() => {
+          setConfirmUnpair(false);
+          if (open)
+            void mutate("unpair", () =>
+              missingInvoicesApi.unmatch(token, open.id),
+            );
+        }}
+        onCancel={() => setConfirmUnpair(false)}
       />
     </PilotThemeRoot>
   );

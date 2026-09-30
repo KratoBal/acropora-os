@@ -1,21 +1,22 @@
 import type {
   MissingInvoiceItem,
+  MissingInvoiceItemDetail,
   MissingInvoiceMonth,
   MissingInvoiceMonthDetail,
   MissingInvoiceMonthsResponse,
 } from "@acropora/types";
 
+import type { ChargeDetailExtras } from "./missing-invoices-drawer";
 import type { ChargeRow, MonthRow } from "./missing-invoices-model";
 import type { MonthSummary } from "./missing-invoices-month-detail";
 
 /**
  * A DRÓT-TÍPUSOK A KÖZÖS CSOMAGBÓL (nautilus, `packages/types/src/missing-invoices.ts`,
- * #1297); itt csak az átalakítók állnak a felület nézet-modelljére. A tétel
- * részletei (`GET /missing-invoices/items/:id`) és azok átalakítója a 4.
- * szelettel jönnek.
+ * #1297, #1303); itt csak az átalakítók állnak a felület nézet-modelljére.
  */
 export type {
   MissingInvoiceItem,
+  MissingInvoiceItemDetail,
   MissingInvoiceMonth,
   MissingInvoiceMonthDetail,
   MissingInvoiceMonthsResponse,
@@ -59,6 +60,7 @@ export function toChargeRow(item: MissingInvoiceItem): ChargeRow {
       : null,
     matchedBy: item.matchedBy,
     comment: item.comment,
+    paperOriginal: item.paperOriginal,
   };
 }
 
@@ -66,4 +68,13 @@ export function toSummary(
   tiles: MissingInvoiceMonthDetail["tiles"],
 ): MonthSummary {
   return { ...tiles };
+}
+
+/** A drawer második kérésből jövő része (`GET /missing-invoices/items/:id`). */
+export function toExtras(detail: MissingInvoiceItemDetail): ChargeDetailExtras {
+  return {
+    candidates: detail.candidates,
+    action: detail.action,
+    driveFolderUrl: detail.driveFolderUrl,
+  };
 }
