@@ -25,7 +25,7 @@ const EXTERNAL_ENTITY_TYPE = "Customer";
  * anything. (Prisma's `contains` did this for us; the raw query has to.)
  */
 export function customerSearchPattern(search: string): string {
-  return `%${search.trim().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+  return `%${search.trim().replace(/[\\]/g, (char) => `\\${char}`)}%`;
 }
 
 const addressesInclude = {
@@ -110,7 +110,7 @@ export class CustomersRepository extends Repository {
       ...(query.status === "ALL"
         ? {}
         : { isActive: query.status === "ACTIVE" }),
-      ...(idFilters.length > 0 ? { AND: idFilters } : {}),
+      ...(idFilters.length > 0 ? idFilters[idFilters.length - 1] : {}),
     };
     const [customers, totalItems] = await Promise.all([
       prisma.customer.findMany({

@@ -1,0 +1,5 @@
+# Kor B: a minta escapeles nelkul (% es _ joker), es az id-szurok kozul csak az
+# utolso marad (a kereses felulirja a forras-szurot).
+# Joslat: 4 es 5 piros; 1, 2, 3 zold.
+not ok 4 - % and _ are literal, not wildcards
+not ok 5 - the search narrows the origin filter instead of replacing it
