@@ -363,7 +363,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="mx-3 min-w-0 flex-1 lg:mx-auto lg:max-w-[480px]">
-            {session?.token ? <GlobalSearch token={session.token} /> : null}
+            {/*
+              A MUNKAMENETEN MÚLIK, NEM A TOKENEN. Élesben és a stage-en a
+              munkamenet httpOnly süti, a `session.token` üres, és a
+              `searchApi` (mint minden hívó) a sütire támaszkodik, ha nincs
+              Bearer token. A korábbi `session?.token` feltétel miatt a kereső
+              #1156 óta csak a fejlesztői belépésnél látszott (stage-en mérve,
+              2026-09-30).
+            */}
+            {session ? <GlobalSearch token={session.token ?? ""} /> : null}
           </div>
 
           <div className="ml-auto">
