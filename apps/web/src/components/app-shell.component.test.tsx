@@ -133,7 +133,7 @@ describe("AppShell business navigation groups", () => {
     ).toHaveAttribute("href", "/vevok");
   });
 
-  it("gathers purchasing, the NAV invoices and the Foxpost settlement under Pénzügy", () => {
+  it("gathers purchasing, the NAV invoices and the settlements under Pénzügy", () => {
     render(<AppShell>Oldaltartalom</AppShell>);
 
     fireEvent.click(screen.getByRole("button", { name: "Pénzügy" }));
@@ -145,9 +145,33 @@ describe("AppShell business navigation groups", () => {
     expect(
       screen.getByRole("link", { name: "NAV számla lekérés" }),
     ).toHaveAttribute("href", "/beszerzes/nav-szamlak");
+    expect(screen.getByRole("link", { name: "Elszámolások" })).toHaveAttribute(
+      "href",
+      "/penzugy/elszamolasok",
+    );
     expect(
-      screen.getByRole("link", { name: "Foxpost elszámolás" }),
-    ).toHaveAttribute("href", "/penzugy/foxpost");
+      screen.queryByRole("link", { name: "Foxpost elszámolás" }),
+    ).toBeNull();
+  });
+
+  /*
+    AZ ELSZÁMOLÁSOK A RÉGI ÚTVONALAKON IS AKTÍV (Balázs, 2026-09-30): a fülek a
+    saját útvonalukon élnek, és ott a menüpont a jelenlegi. MI PIROSÍT: ha az
+    `alsoActiveOn` elveszne, és a GLS oldalon egyik menüpont sem lenne aktív.
+  */
+  it("marks Elszámolások on each of the three settlement pages", () => {
+    for (const pathname of [
+      "/penzugy/foxpost",
+      "/penzugy/gls",
+      "/penzugy/simplepay",
+    ]) {
+      navigation.pathname = pathname;
+      const { unmount } = render(<AppShell>Oldaltartalom</AppShell>);
+      expect(
+        screen.getByRole("link", { name: "Elszámolások" }),
+      ).toHaveAttribute("aria-current", "page");
+      unmount();
+    }
   });
 
   /**

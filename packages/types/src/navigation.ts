@@ -286,6 +286,19 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.PURCHASING_VIEW),
   },
   {
+    /**
+     * ELSZÁMOLÁSOK (Balázs, 2026-09-30 15:06 UTC): egy menüpont a Pénzügy
+     * alatt, fülekkel a Foxpost, a GLS és a SimplePay elszámolásra. A menüpont
+     * annak látszik, akinek legalább egy fülhöz van joga; ma mindhárom
+     * `finance.view`, és egy teszt őrzi, hogy ez a szabály és a fülek szabálya
+     * ne váljon el. A három fül saját bejegyzése alább marad: a fülsor abból
+     * dönti el, melyik fül látszik.
+     */
+    id: "settlements",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.FINANCE_VIEW),
+  },
+  {
     id: "foxpost-settlement",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.FINANCE_VIEW),
