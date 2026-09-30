@@ -2,13 +2,13 @@
 
 import {
   Alert,
-  Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
   Input,
-  PageHeader,
+  PilotDataGrid,
+  PilotDataItem,
+  PilotPageHeader,
+  PilotPairedRows,
+  PilotSection,
   Skeleton,
   Textarea,
 } from "@acropora/ui";
@@ -24,6 +24,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { FilterXSS, type IFilterXSSOptions } from "xss";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { PilotBadge, PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { ProductAuthorityCard } from "@/components/products/product-authority-card";
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
@@ -249,12 +250,19 @@ const computeGrossPrice = (
 function ProductExtensionEditor({
   canManage,
   extension,
+  noteShownElsewhere = false,
   onSaved,
   token,
   variantId,
 }: {
   canManage: boolean;
   extension: ProductExtensionDetail | null;
+  /**
+   * A belső megjegyzést a lap jobb oszlopa mutatja (egyváltozatos termék,
+   * Direction F): az olvasó nézet ilyenkor nem ismétli meg. A szerkesztő
+   * mezője marad, itt szerkeszthető.
+   */
+  noteShownElsewhere?: boolean;
   onSaved: () => void;
   token: string;
   variantId: string;
@@ -330,7 +338,7 @@ function ProductExtensionEditor({
           <p className="text-xs font-bold uppercase tracking-wide text-sky-800">
             Acropora Product Extension
           </p>
-          <Badge variant="info">Saját adat</Badge>
+          <PilotBadge variant="blue">Saját adat</PilotBadge>
         </div>
         {canManage && !editing ? (
           <Button
@@ -593,7 +601,7 @@ function ProductExtensionEditor({
                 {flag(extension?.phaseOut)}
               </dd>
             </div>
-            {extension?.internalNote ? (
+            {extension?.internalNote && !noteShownElsewhere ? (
               <div className="sm:col-span-3">
                 <dt className="text-dusk-400">Belső megjegyzés</dt>
                 <dd className="mt-1 whitespace-pre-wrap text-dusk-700">
@@ -712,500 +720,481 @@ export function ProductDetailPage({ productId }: { productId: string }) {
   const primaryPurchaseExtension =
     activeVariants.length === 1 ? (activeVariants[0]?.extension ?? null) : null;
 
+  const originBadge =
+    product.origin === "UNAS" ? (
+      <PilotBadge variant="blue">UNAS-termék</PilotBadge>
+    ) : product.origin === "LOCAL" ? (
+      <PilotBadge variant="grey">Helyi Acropora OS-termék</PilotBadge>
+    ) : (
+      <PilotBadge variant="amber">Eredet ellenőrzendő</PilotBadge>
+    );
+  const statusBadge = (
+    <PilotBadge variant={product.isActive ? "success" : "grey"}>
+      {product.isActive ? "Aktív" : "Archivált"}
+    </PilotBadge>
+  );
+  const primaryCategory =
+    product.categories.find((category) => category.isPrimary) ??
+    product.primaryCategory;
+  const otherCategories = product.categories.filter(
+    (category) => !category.isPrimary,
+  );
+  const variantNotes = activeVariants.filter(
+    (variant) => variant.extension?.internalNote,
+  );
+
+  const basics = (
+    <PilotSection title="Alapadatok" action={statusBadge}>
+      <PilotDataGrid>
+        <PilotDataItem label="Márka">{product.brand?.name}</PilotDataItem>
+        <PilotDataItem label="Elsődleges kategória">
+          {primaryCategory?.name}
+        </PilotDataItem>
+        {otherCategories.length ? (
+          <div className="col-span-2">
+            <PilotDataItem label="További kategóriák">
+              {otherCategories.map((category) => category.name).join(", ")}
+            </PilotDataItem>
+          </div>
+        ) : null}
+      </PilotDataGrid>
+    </PilotSection>
+  );
+
+  /*
+    KÉSZLET ÉS BESZERZÉS, A TERV JOBB OSZLOPÁBAN. Az adat VÁLTOZÓNKÉNT él
+    (a beszerzési kiegészítő a változaté), és a szerkesztője a Változatok
+    kártyán marad: ez a kártya olvas. Egyváltozatos terméknél a változat
+    értékeit mutatja, többváltozatosnál a Változatok kártyára utal. A csomag
+    saját készletet nem tart, azt a terméktükör mondja ki.
+  */
+  const stock = (
+    <PilotSection title="Készlet és beszerzés">
+      <PilotDataGrid>
+        <PilotDataItem
+          label="OS készlet"
+          hint={product.unasMirror?.isPackageProduct ? "Csomagtermék" : null}
+        >
+          {product.unasMirror?.isPackageProduct
+            ? null
+            : formatStock(product.stockOnHand)}
+        </PilotDataItem>
+        {primaryPurchaseExtension ? (
+          <>
+            <PilotDataItem label="Beszerzár">
+              {formatMoney(
+                primaryPurchaseExtension.lastPurchaseNetPrice,
+                primaryPurchaseExtension.defaultPurchaseCurrency,
+              )}
+            </PilotDataItem>
+            <PilotDataItem label="Minimum">
+              {primaryPurchaseExtension.minimumStock}
+            </PilotDataItem>
+            <PilotDataItem label="Optimális">
+              {primaryPurchaseExtension.optimalStock}
+            </PilotDataItem>
+            <PilotDataItem label="Újrarendelési pont">
+              {primaryPurchaseExtension.reorderPoint}
+            </PilotDataItem>
+            <PilotDataItem label="Automata újrarendelés">
+              {flag(primaryPurchaseExtension.autoReorderEnabled)}
+            </PilotDataItem>
+          </>
+        ) : null}
+      </PilotDataGrid>
+      {!primaryPurchaseExtension ? (
+        <p className="mt-4 text-xs leading-5 text-pilot-grey-500">
+          {activeVariants.length > 1
+            ? "Változatonként: a Változatok és SKU-k kártyán."
+            : "Ehhez a termékhez még nincs mentett beszerzési beállítás."}
+        </p>
+      ) : null}
+    </PilotSection>
+  );
+
+  const channels = (
+    <PilotSection title="Csatornák">
+      {product.channelListings.length ? (
+        <ul className="divide-y divide-pilot-grey-200">
+          {product.channelListings.map((listing) => (
+            <li key={listing.channel} className="py-3 first:pt-0 last:pb-0">
+              <p className="text-sm font-semibold text-pilot-grey-900">
+                {listing.channel}
+              </p>
+              <p className="mt-1 text-xs text-pilot-grey-500">
+                Nyers külső státusz: {listing.externalStatus ?? "—"}
+              </p>
+              {listing.productUrl ? (
+                <a
+                  href={listing.productUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-block text-xs font-semibold text-pilot-aqua-700 hover:underline"
+                >
+                  Webshop oldal megnyitása
+                </a>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-pilot-grey-500">Nincs csatornalisting.</p>
+      )}
+    </PilotSection>
+  );
+
+  /*
+    A BELSŐ MEGJEGYZÉS, HALVÁNY MELEG HÁTTÉRREL (a terv szerint). Egyváltozatos
+    terméknél a változat jegyzete (a szerkesztő olvasó nézete ilyenkor nem
+    ismétli meg), többváltozatosnál a jegyzetes változatok, névvel.
+  */
+  const note = (
+    <PilotSection title="Belső megjegyzés" tone="warm">
+      {variantNotes.length === 0 ? (
+        <p className="text-sm text-pilot-grey-500">Nincs belső megjegyzés.</p>
+      ) : activeVariants.length === 1 ? (
+        <p className="whitespace-pre-wrap text-sm leading-6 text-pilot-grey-700">
+          {variantNotes[0]!.extension!.internalNote}
+        </p>
+      ) : (
+        <dl className="space-y-3">
+          {variantNotes.map((variant) => (
+            <div key={variant.id}>
+              <dt className="text-xs font-semibold text-pilot-grey-600">
+                {variant.name ?? variant.unasBaseSku ?? variant.sku}
+              </dt>
+              <dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-pilot-grey-700">
+                {variant.extension!.internalNote}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </PilotSection>
+  );
+
+  const mirror = product.unasMirror ? (
+    <PilotSection
+      title="UNAS terméktükör"
+      subtitle="Product Master adatok · csak olvasható"
+      action={
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {product.unasMirror.isPackageProduct ? (
+            <PilotBadge variant="amber">Számított csomagtermék</PilotBadge>
+          ) : null}
+          <PilotBadge
+            variant={
+              product.unasMirror.state === "ACTIVE"
+                ? "success"
+                : product.unasMirror.state === "MISSING"
+                  ? "amber"
+                  : "danger"
+            }
+          >
+            {product.unasMirror.state === "ACTIVE"
+              ? "Szinkronban"
+              : product.unasMirror.state === "MISSING"
+                ? "Hiányzik az UNAS-ból"
+                : product.unasMirror.state === "CONFLICT"
+                  ? "Azonosítási konfliktus"
+                  : "Ismeretlen állapot"}
+          </PilotBadge>
+        </div>
+      }
+    >
+      <PilotDataGrid columns={4}>
+        <PilotDataItem label="UNAS Product ID" mono>
+          {value(product.unasMirror.externalId)}
+        </PilotDataItem>
+        <PilotDataItem label="Utolsó szinkron">
+          {dateTime(product.unasMirror.lastSyncedAt)}
+        </PilotDataItem>
+        <PilotDataItem label="Nettó ár">
+          {value(product.unasMirror.netPrice)}{" "}
+          {product.unasMirror.currency ?? ""}
+        </PilotDataItem>
+        <PilotDataItem label="Bruttó ár">
+          {value(product.unasMirror.grossPrice)}{" "}
+          {product.unasMirror.currency ?? ""}
+        </PilotDataItem>
+        <PilotDataItem label="Akciós bruttó ár">
+          {value(product.unasMirror.saleGrossPrice)}{" "}
+          {product.unasMirror.currency ?? ""}
+        </PilotDataItem>
+        <PilotDataItem
+          label={
+            product.unasMirror.isPackageProduct
+              ? "UNAS számított csomagkészlet"
+              : "UNAS jelentett készlet"
+          }
+          hint="Összehasonlító adat, nem az Acropora készlet."
+        >
+          {value(product.unasMirror.reportedStock)}
+        </PilotDataItem>
+        <PilotDataItem label="Acropora OS készlet">
+          {product.unasMirror.isPackageProduct
+            ? "Nincs önálló készlet"
+            : formatStock(product.stockOnHand)}
+        </PilotDataItem>
+        <PilotDataItem label="Vásárolható készlet nélkül">
+          {flag(product.unasMirror.backorderAllowed)}
+        </PilotDataItem>
+        <PilotDataItem label="Utolsó beszerár">
+          {formatMoney(
+            primaryPurchaseExtension?.lastPurchaseNetPrice,
+            primaryPurchaseExtension?.defaultPurchaseCurrency,
+          )}
+        </PilotDataItem>
+        {/*
+          A RENDELESI KORLATOK. A tukorbol jonnek; ez a lap a belso kollega
+          kepernyoje, tehat a megjelenites itt nem tesz igeretet a vevonek.
+          A bevitel ellenorzese a bolti oldal kerdese, es kulon dontes.
+        */}
+        <PilotDataItem label="Minimális rendelhető mennyiség">
+          {value(product.unasMirror.minimumOrderQuantity)}
+        </PilotDataItem>
+        <PilotDataItem label="Maximális rendelhető mennyiség">
+          {value(product.unasMirror.maximumOrderQuantity)}
+        </PilotDataItem>
+        <PilotDataItem label="Rendelési lépésköz">
+          {value(product.unasMirror.orderQuantityStep)}
+        </PilotDataItem>
+        <PilotDataItem label="Utolsó forrásmódosítás">
+          {dateTime(product.unasMirror.sourceUpdatedAt)}
+        </PilotDataItem>
+        <PilotDataItem label="Hiány kezdete">
+          {dateTime(product.unasMirror.missingSince)}
+        </PilotDataItem>
+        <PilotDataItem label="Készlet snapshot ideje">
+          {dateTime(product.unasMirror.reportedStockSyncedAt)}
+        </PilotDataItem>
+      </PilotDataGrid>
+      {product.unasMirror.isPackageProduct ? (
+        <div className="mt-5 rounded-lg bg-pilot-amber-50 p-4 ring-1 ring-pilot-amber-100">
+          <p className="text-xs font-semibold uppercase tracking-[0.05em] text-pilot-amber-700">
+            Csomag összetevői
+          </p>
+          <p className="mt-1 text-xs text-pilot-amber-700">
+            A csomag készletét az UNAS az összetevők elérhető mennyiségéből
+            számítja; a csomaghoz nem tartozik önálló Acropora OS készlet.
+          </p>
+          <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+            {product.unasMirror.packageComponents.map((component) => (
+              <li
+                key={`${component.sku}:${component.qty}`}
+                className="flex items-center justify-between rounded-md bg-white px-3 py-2"
+              >
+                <span className="font-mono text-xs text-pilot-grey-700">
+                  {component.sku}
+                </span>
+                <span className="font-semibold text-pilot-grey-900">
+                  {component.qty} db
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </PilotSection>
+  ) : (
+    <Alert
+      title="Acropora által kezelt termék"
+      description="Ehhez a termékhez nem tartozik UNAS terméktükör."
+    />
+  );
+
+  const variants = (
+    <PilotSection title="Változatok és SKU-k" bodyClassName="">
+      <div className="divide-y divide-pilot-grey-200">
+        {product.variants.length ? (
+          product.variants.map((variant) => (
+            <div key={variant.id} className="px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-pilot-grey-900">
+                    {variant.name ?? product.name}
+                  </p>
+                  <p className="mt-0.5 text-xs text-pilot-grey-500">
+                    {variant.unasBaseSku ?? variant.sku}
+                  </p>
+                </div>
+                <PilotBadge variant={variant.isActive ? "success" : "grey"}>
+                  {variant.isActive ? "Aktív" : "Inaktív"}
+                </PilotBadge>
+              </div>
+              <div className="mt-4">
+                <PilotDataGrid columns={4}>
+                  {variant.unasVariantValues ? (
+                    <PilotDataItem label="UNAS-változat">
+                      {variant.unasVariantValues
+                        .map((item) => `${item.name}: ${item.value}`)
+                        .join(", ")}
+                    </PilotDataItem>
+                  ) : null}
+                  <PilotDataItem label="UNAS készlet">
+                    {value(variant.unasReportedStock)}
+                  </PilotDataItem>
+                  <PilotDataItem label="Egység">{variant.unit}</PilotDataItem>
+                  <PilotDataItem label="Gyártói cikkszám">
+                    {value(variant.manufacturerPartNumber)}
+                  </PilotDataItem>
+                  <PilotDataItem label="Másodlagos egység">
+                    {variant.secondaryUnit
+                      ? `${variant.secondaryUnit} × ${value(variant.secondaryUnitFactor)}`
+                      : "—"}
+                  </PilotDataItem>
+                </PilotDataGrid>
+              </div>
+
+              <BarcodeEditor
+                barcodes={variant.barcodes}
+                canManage={canManage}
+                onChanged={() => setRequestVersion((current) => current + 1)}
+                token={token}
+                variantId={variant.id}
+              />
+
+              <ProductExtensionEditor
+                canManage={canManage}
+                extension={variant.extension}
+                noteShownElsewhere={activeVariants.length === 1}
+                onSaved={() => setRequestVersion((current) => current + 1)}
+                token={token}
+                variantId={variant.id}
+              />
+            </div>
+          ))
+        ) : (
+          <p className="px-5 py-5 text-sm text-pilot-grey-500">
+            Nincs rögzített változat.
+          </p>
+        )}
+      </div>
+    </PilotSection>
+  );
+
+  const description = (
+    <PilotSection title="Termékleírás">
+      {product.description ? (
+        <div
+          data-testid="product-description"
+          className="max-w-none text-sm leading-6 text-pilot-grey-700 [&_a]:text-pilot-aqua-700 [&_a]:underline [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_td]:border [&_td]:border-pilot-grey-200 [&_td]:p-2 [&_th]:border [&_th]:border-pilot-grey-200 [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5"
+          dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+        />
+      ) : (
+        <p className="text-sm text-pilot-grey-500">
+          Ehhez a termékhez nincs leírás.
+        </p>
+      )}
+    </PilotSection>
+  );
+
+  const images = (
+    <PilotSection title="Képek">
+      {product.images.length ? (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {product.images.map((image) => (
+            <figure key={image.id}>
+              <img
+                src={image.url}
+                alt={image.altText ?? product.name}
+                className="aspect-[156/112] w-full rounded-lg border border-pilot-grey-200 object-cover"
+              />
+              {image.title ? (
+                <figcaption className="mt-2 text-xs text-pilot-grey-500">
+                  {image.title}
+                </figcaption>
+              ) : null}
+            </figure>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-pilot-grey-500">Nincs termékkép.</p>
+      )}
+    </PilotSection>
+  );
+
   return (
-    <div className="space-y-6">
-      <PageHeader
+    <PilotThemeRoot theme="light" className="space-y-6">
+      <PilotPageHeader
         eyebrow={product.primarySku ?? "Nincs SKU"}
         title={product.name}
+        meta={
+          <>
+            {originBadge}
+            {statusBadge}
+          </>
+        }
         actions={
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge
-              variant={
-                product.origin === "UNAS"
-                  ? "info"
-                  : product.origin === "LOCAL"
-                    ? "neutral"
-                    : "warning"
-              }
-            >
-              {product.origin === "UNAS"
-                ? "UNAS-termék"
-                : product.origin === "LOCAL"
-                  ? "Helyi Acropora OS-termék"
-                  : "Eredet ellenőrzendő"}
-            </Badge>
-            <Button variant="secondary" onClick={() => router.push(listHref)}>
-              Vissza a listához
-            </Button>
-          </div>
+          <button
+            type="button"
+            onClick={() => router.push(listHref)}
+            className="inline-flex h-10 items-center gap-1.5 rounded-md bg-white px-4 text-sm font-semibold text-pilot-grey-900 ring-1 ring-pilot-grey-200 transition-colors hover:bg-pilot-grey-50"
+          >
+            <span aria-hidden="true">←</span>
+            Vissza a listához
+          </button>
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-        <div className="space-y-6">
-          <ProductAuthorityCard
-            token={token}
-            product={product}
-            canTransfer={canTransferAuthority}
-            onTransferred={setProduct}
-          />
-          {/*
-            A szállítási jellemzők KÉZZEL gondozott törzsadatok: a UNAS-szinkron
-            nem ír rájuk, és ezért a gazda-állapottól függetlenül látszanak. Egy
-            UNAS-gazdájú terméknek is lehet "csak üzletben vehető át" jelzője.
-          */}
-          <ProductShippingProfileCard
-            token={token}
-            productId={product.id}
-            canManage={canManage}
-          />
-          {/*
+      {/*
+        A PÁROS SOROK (a brief 6. pontja): minden bal kártya mellett a párja,
+        közös kezdőponttal. Ami után nem áll pár, a bal oszlopban marad.
+      */}
+      <PilotPairedRows
+        rows={[
+          {
+            id: "authority",
+            main: (
+              <ProductAuthorityCard
+                token={token}
+                product={product}
+                canTransfer={canTransferAuthority}
+                onTransferred={setProduct}
+              />
+            ),
+            side: basics,
+          },
+          /*
             A szerkesztő csak az Acropora OS tulajdonában lévő terméken jelenik
-            meg. Ez KÉNYELEM, nem védelem: a tiltás a szolgáltatásban áll, és
-            egy UNAS-gazdájú termék módosítása ott is elhasalna.
-          */}
-          {product.catalogAuthority === "ACROPORA" ? (
-            <ProductBasicsEditor
-              token={token}
-              product={product}
-              canManage={canManage}
-              onSaved={setProduct}
-            />
-          ) : null}
-          {product.unasMirror ? (
-            <Card className="border-brand-200">
-              <CardHeader className="bg-brand-50/70">
-                <div>
-                  <h2 className="text-sm font-semibold text-dusk-900">
-                    UNAS terméktükör
-                  </h2>
-                  <p className="mt-1 text-xs text-dusk-500">
-                    Product Master adatok · csak olvasható
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  {product.unasMirror.isPackageProduct ? (
-                    <Badge variant="warning">Számított csomagtermék</Badge>
-                  ) : null}
-                  <Badge
-                    variant={
-                      product.unasMirror.state === "ACTIVE"
-                        ? "success"
-                        : product.unasMirror.state === "MISSING"
-                          ? "warning"
-                          : "danger"
-                    }
-                  >
-                    {product.unasMirror.state === "ACTIVE"
-                      ? "Szinkronban"
-                      : product.unasMirror.state === "MISSING"
-                        ? "Hiányzik az UNAS-ból"
-                        : product.unasMirror.state === "CONFLICT"
-                          ? "Azonosítási konfliktus"
-                          : "Ismeretlen állapot"}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <dt className="text-xs font-medium text-dusk-400">
-                      UNAS Product ID
-                    </dt>
-                    <dd className="mt-1 font-mono text-dusk-800">
-                      {value(product.unasMirror.externalId)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-medium text-dusk-400">
-                      Utolsó forrásmódosítás
-                    </dt>
-                    <dd className="mt-1 text-dusk-800">
-                      {dateTime(product.unasMirror.sourceUpdatedAt)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-medium text-dusk-400">
-                      Utolsó szinkron
-                    </dt>
-                    <dd className="mt-1 text-dusk-800">
-                      {dateTime(product.unasMirror.lastSyncedAt)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-medium text-dusk-400">
-                      Hiány kezdete
-                    </dt>
-                    <dd className="mt-1 text-dusk-800">
-                      {dateTime(product.unasMirror.missingSince)}
-                    </dd>
-                  </div>
-                </dl>
-
-                <div className="border-t border-dusk-100 pt-5">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-dusk-500">
-                    UNAS értékesítési adatok
-                  </h3>
-                  <dl className="mt-3 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                    <div>
-                      <dt className="text-xs text-dusk-400">Nettó ár</dt>
-                      <dd className="mt-1 font-semibold text-dusk-800">
-                        {value(product.unasMirror.netPrice)}{" "}
-                        {product.unasMirror.currency ?? ""}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-dusk-400">Bruttó ár</dt>
-                      <dd className="mt-1 font-semibold text-dusk-800">
-                        {value(product.unasMirror.grossPrice)}{" "}
-                        {product.unasMirror.currency ?? ""}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-dusk-400">
-                        Akciós bruttó ár
-                      </dt>
-                      <dd className="mt-1 text-dusk-800">
-                        {value(product.unasMirror.saleGrossPrice)}{" "}
-                        {product.unasMirror.currency ?? ""}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-dusk-400">
-                        {product.unasMirror.isPackageProduct
-                          ? "UNAS számított csomagkészlet"
-                          : "UNAS jelentett készlet"}
-                      </dt>
-                      <dd className="mt-1 font-semibold text-dusk-800">
-                        {value(product.unasMirror.reportedStock)}
-                      </dd>
-                      <p className="mt-1 text-[11px] text-amber-700">
-                        Összehasonlító adat, nem az Acropora készlet.
-                      </p>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-dusk-400">Utolsó beszerár</dt>
-                      <dd className="mt-1 text-dusk-800">
-                        {formatMoney(
-                          primaryPurchaseExtension?.lastPurchaseNetPrice,
-                          primaryPurchaseExtension?.defaultPurchaseCurrency,
-                        )}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-dusk-400">
-                        Acropora OS készlet
-                      </dt>
-                      <dd className="mt-1 font-semibold text-dusk-800">
-                        {product.unasMirror.isPackageProduct
-                          ? "Nincs önálló készlet"
-                          : formatStock(product.stockOnHand)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-dusk-400">
-                        Vásárolható készlet nélkül
-                      </dt>
-                      <dd className="mt-1 text-dusk-800">
-                        {flag(product.unasMirror.backorderAllowed)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-dusk-400">
-                        Készlet snapshot ideje
-                      </dt>
-                      <dd className="mt-1 text-dusk-800">
-                        {dateTime(product.unasMirror.reportedStockSyncedAt)}
-                      </dd>
-                    </div>
-                    {/*
-                      A RENDELESI KORLATOK. A tukorbol jonnek, es eddig eljutottak
-                      a sajat API-nkig (a `toProductDetail` mind a harmat
-                      visszaadja), csak ez a lap nem hasznalta oket.
-
-                      EZ A LAP A BELSO KOLLEGA KEPERNYOJE, tehat a megjelenites
-                      itt NEM tesz igeretet a vevonek -- eleg megmutatni. A
-                      bevitel ellenorzese (hogy a rendelt mennyiseg tenyleg a
-                      lepeskozre essen) NEM ide tartozik: az a bolti oldal
-                      kerdese, es kulon dontes.
-                    */}
-                    <div>
-                      <dt className="text-xs text-dusk-400">
-                        Minimális rendelhető mennyiség
-                      </dt>
-                      <dd className="mt-1 text-dusk-800">
-                        {value(product.unasMirror.minimumOrderQuantity)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-dusk-400">
-                        Maximális rendelhető mennyiség
-                      </dt>
-                      <dd className="mt-1 text-dusk-800">
-                        {value(product.unasMirror.maximumOrderQuantity)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-dusk-400">
-                        Rendelési lépésköz
-                      </dt>
-                      <dd className="mt-1 text-dusk-800">
-                        {value(product.unasMirror.orderQuantityStep)}
-                      </dd>
-                    </div>
-                  </dl>
-                  {product.unasMirror.isPackageProduct ? (
-                    <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                      <p className="text-xs font-bold uppercase tracking-wide text-amber-800">
-                        Csomag összetevői
-                      </p>
-                      <p className="mt-1 text-xs text-amber-700">
-                        A csomag készletét az UNAS az összetevők elérhető
-                        mennyiségéből számítja; a csomaghoz nem tartozik önálló
-                        Acropora OS készlet.
-                      </p>
-                      <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                        {product.unasMirror.packageComponents.map(
-                          (component) => (
-                            <li
-                              key={`${component.sku}:${component.qty}`}
-                              className="flex items-center justify-between rounded-md bg-white px-3 py-2"
-                            >
-                              <span className="font-mono text-xs text-dusk-700">
-                                {component.sku}
-                              </span>
-                              <span className="font-semibold text-dusk-800">
-                                {component.qty} db
-                              </span>
-                            </li>
-                          ),
-                        )}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Alert
-              title="Acropora által kezelt termék"
-              description="Ehhez a termékhez nem tartozik UNAS terméktükör."
-            />
-          )}
-
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-dusk-900">
-                Változatok és SKU-k
-              </h2>
-            </CardHeader>
-            <div className="divide-y divide-dusk-100">
-              {product.variants.length ? (
-                product.variants.map((variant) => (
-                  <div key={variant.id} className="px-5 py-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-semibold text-dusk-800">
-                          {variant.name ?? product.name}
-                        </p>
-                        <p className="mt-0.5 font-mono text-xs text-dusk-500">
-                          {variant.unasBaseSku ?? variant.sku}
-                        </p>
-                      </div>
-                      <Badge variant={variant.isActive ? "success" : "neutral"}>
-                        {variant.isActive ? "Aktív" : "Inaktív"}
-                      </Badge>
-                    </div>
-                    <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-4">
-                      {variant.unasVariantValues ? (
-                        <div>
-                          <dt className="text-dusk-400">UNAS-változat</dt>
-                          <dd className="mt-1 text-dusk-700">
-                            {variant.unasVariantValues
-                              .map((item) => `${item.name}: ${item.value}`)
-                              .join(", ")}
-                          </dd>
-                        </div>
-                      ) : null}
-                      <div>
-                        <dt className="text-dusk-400">UNAS készlet</dt>
-                        <dd className="mt-1 text-dusk-700">
-                          {value(variant.unasReportedStock)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-dusk-400">Egység</dt>
-                        <dd className="mt-1 text-dusk-700">{variant.unit}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-dusk-400">Gyártói cikkszám</dt>
-                        <dd className="mt-1 text-dusk-700">
-                          {value(variant.manufacturerPartNumber)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-dusk-400">Másodlagos egység</dt>
-                        <dd className="mt-1 text-dusk-700">
-                          {variant.secondaryUnit
-                            ? `${variant.secondaryUnit} × ${value(variant.secondaryUnitFactor)}`
-                            : "—"}
-                        </dd>
-                      </div>
-                    </dl>
-
-                    <BarcodeEditor
-                      barcodes={variant.barcodes}
-                      canManage={canManage}
-                      onChanged={() =>
-                        setRequestVersion((current) => current + 1)
-                      }
+            meg. Ez KÉNYELEM, nem védelem: a tiltás a szolgáltatásban áll.
+          */
+          ...(product.catalogAuthority === "ACROPORA"
+            ? [
+                {
+                  id: "basics-editor",
+                  main: (
+                    <ProductBasicsEditor
                       token={token}
-                      variantId={variant.id}
-                    />
-
-                    <ProductExtensionEditor
+                      product={product}
                       canManage={canManage}
-                      extension={variant.extension}
-                      onSaved={() =>
-                        setRequestVersion((current) => current + 1)
-                      }
-                      token={token}
-                      variantId={variant.id}
+                      onSaved={setProduct}
                     />
-                  </div>
-                ))
-              ) : (
-                <p className="px-5 py-5 text-sm text-dusk-500">
-                  Nincs rögzített változat.
-                </p>
-              )}
-            </div>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-dusk-900">
-                Termékleírás
-              </h2>
-            </CardHeader>
-            <CardContent>
-              {product.description ? (
-                <div
-                  data-testid="product-description"
-                  className="max-w-none text-sm text-dusk-700 [&_a]:text-brand-700 [&_a]:underline [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_td]:border [&_td]:border-dusk-200 [&_td]:p-2 [&_th]:border [&_th]:border-dusk-200 [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5"
-                  dangerouslySetInnerHTML={{
-                    __html: descriptionHtml,
-                  }}
-                />
-              ) : (
-                <p className="text-sm text-dusk-500">
-                  Ehhez a termékhez nincs leírás.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-dusk-900">Képek</h2>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {product.images.length ? (
-                product.images.map((image) => (
-                  <figure key={image.id}>
-                    <img
-                      src={image.url}
-                      alt={image.altText ?? product.name}
-                      className="aspect-square w-full rounded-xl border border-dusk-200 object-cover"
-                    />
-                    {image.title ? (
-                      <figcaption className="mt-2 text-xs text-dusk-500">
-                        {image.title}
-                      </figcaption>
-                    ) : null}
-                  </figure>
-                ))
-              ) : (
-                <p className="text-sm text-dusk-500">Nincs termékkép.</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-dusk-900">
-                Alapadatok
-              </h2>
-              <Badge variant={product.isActive ? "success" : "neutral"}>
-                {product.isActive ? "Aktív" : "Archivált"}
-              </Badge>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <div>
-                <p className="text-xs font-medium text-dusk-400">Márka</p>
-                <p className="mt-1 text-dusk-800">
-                  {product.brand?.name ?? "—"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-dusk-400">Kategóriák</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {product.categories.length ? (
-                    product.categories.map((category) => (
-                      <Badge
-                        key={category.id}
-                        variant={category.isPrimary ? "info" : "neutral"}
-                      >
-                        {category.name}
-                        {category.isPrimary ? " · elsődleges" : ""}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-dusk-500">—</span>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-dusk-900">Csatornák</h2>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {product.channelListings.length ? (
-                product.channelListings.map((listing) => (
-                  <div
-                    key={listing.channel}
-                    className="rounded-lg border border-dusk-200 p-3"
-                  >
-                    <p className="text-sm font-semibold text-dusk-800">
-                      {listing.channel}
-                    </p>
-                    <p className="mt-1 text-xs text-dusk-500">
-                      Nyers külső státusz: {listing.externalStatus ?? "—"}
-                    </p>
-                    {listing.productUrl ? (
-                      <a
-                        href={listing.productUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-2 inline-block text-xs font-semibold text-brand-700 hover:underline"
-                      >
-                        Webshop oldal megnyitása
-                      </a>
-                    ) : null}
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-dusk-500">Nincs csatornalisting.</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+                  ),
+                },
+              ]
+            : []),
+          /*
+            A szállítási jellemzők KÉZZEL gondozott törzsadatok: a UNAS-szinkron
+            nem ír rájuk, ezért a gazda-állapottól függetlenül látszanak.
+          */
+          {
+            id: "shipping",
+            main: (
+              <ProductShippingProfileCard
+                token={token}
+                productId={product.id}
+                canManage={canManage}
+              />
+            ),
+            side: stock,
+          },
+          { id: "mirror", main: mirror, side: channels },
+          { id: "variants", main: variants, side: note },
+          { id: "description", main: description },
+          { id: "images", main: images },
+        ]}
+      />
+    </PilotThemeRoot>
   );
 }

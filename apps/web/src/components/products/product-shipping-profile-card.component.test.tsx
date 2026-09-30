@@ -55,7 +55,8 @@ describe("ProductShippingProfileCard", () => {
     expect(
       await screen.findByText("Még senki nem vizsgálta meg ezt a terméket."),
     ).toBeTruthy();
-    expect(screen.queryByText(/Nehéz áru: nem/)).toBeNull();
+    // a vizsgálatlan termék nem mutat négy "Nem" értéket: a jelzők sora sem áll
+    expect(screen.queryByText("Nehéz áru")).toBeNull();
   });
 
   /**
@@ -74,7 +75,9 @@ describe("ProductShippingProfileCard", () => {
       />,
     );
 
-    expect(await screen.findByText("Nehéz áru: nem")).toBeTruthy();
+    // a Direction F rácsa: a címke mezőjében az érték
+    const nehez = await screen.findByText("Nehéz áru");
+    expect(nehez.parentElement?.textContent).toBe("Nehéz áruNem");
     expect(
       screen.queryByText("Még senki nem vizsgálta meg ezt a terméket."),
     ).toBeNull();
@@ -128,7 +131,7 @@ describe("ProductShippingProfileCard", () => {
       />,
     );
 
-    await screen.findByText("Nehéz áru: nem");
+    await screen.findByText("Nehéz áru");
     expect(screen.queryByRole("button", { name: "Módosítás" })).toBeNull();
   });
 });

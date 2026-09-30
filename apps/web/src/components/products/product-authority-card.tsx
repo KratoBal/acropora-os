@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Badge, Button, Card } from "@acropora/ui";
+import { Alert, Button, PilotBadge, PilotSection } from "@acropora/ui";
 import type { ProductDetail } from "@acropora/types";
 import { useState } from "react";
 
@@ -50,22 +50,30 @@ export function ProductAuthorityCard({
   };
 
   return (
-    <Card className="space-y-3 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-dusk-900">
-          A törzsadat gazdája
-        </h2>
-        <Badge variant={authority === "ACROPORA" ? "success" : "info"}>
+    <PilotSection
+      title="Katalógusgazda"
+      subtitle="Ki az elsődleges forrás a termék törzsadataihoz?"
+      action={
+        <PilotBadge
+          variant={
+            authority === "ACROPORA"
+              ? "teal"
+              : authority === "UNAS"
+                ? "blue"
+                : "amber"
+          }
+        >
           {authority === "ACROPORA"
             ? "Acropora OS"
             : authority === "UNAS"
               ? "UNAS webshop"
               : "Ellenőrzendő"}
-        </Badge>
-      </div>
-
+        </PilotBadge>
+      }
+      bodyClassName="space-y-3 px-5 py-5"
+    >
       {authority === "ACROPORA" ? (
-        <p className="text-sm text-dusk-700">
+        <p className="text-sm leading-6 text-pilot-grey-600">
           A nevet és a leírást itt szerkesztjük. A webshop-szinkron ezt a
           terméket kihagyja, tehát egy UNAS oldali módosítás nem írja felül,
           amit itt beírunk.
@@ -73,14 +81,14 @@ export function ProductAuthorityCard({
       ) : null}
 
       {authority === "UNAS" ? (
-        <p className="text-sm text-dusk-700">
+        <p className="text-sm leading-6 text-pilot-grey-600">
           A nevet és a leírást a webshop szinkronja gondozza, ezért itt nem
           szerkeszthető.
         </p>
       ) : null}
 
       {authority === null ? (
-        <p className="text-sm text-dusk-700">
+        <p className="text-sm leading-6 text-pilot-grey-600">
           Erről a termékről nem tudjuk, ki a törzsadat gazdája, ezért sem
           szerkeszteni, sem átvenni nem lehet. Ez adatállapot, nem jogosultsági
           kérdés.
@@ -136,6 +144,6 @@ export function ProductAuthorityCard({
           </Button>
         )
       ) : null}
-    </Card>
+    </PilotSection>
   );
 }

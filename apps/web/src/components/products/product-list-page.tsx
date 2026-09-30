@@ -301,7 +301,15 @@ export function ProductListPage() {
               })}
             />
             <div className="min-w-0">
-              <span className="block truncate text-sm font-semibold text-pilot-grey-900">
+              {/*
+                KÉT SOR, NEM EGY (stage, 2026-09-30: 1280-nál a halak nevéből
+                csak a nemzetség látszott, "Acanthurus ch..."). A 72-es sorba
+                két sor név és az eredet belefér; a teljes név a `title`-ben.
+              */}
+              <span
+                title={product.name}
+                className="line-clamp-2 text-sm font-semibold leading-5 text-pilot-grey-900"
+              >
                 {product.name}
               </span>
               <span className={`mt-0.5 block text-xs ${origin.className}`}>
@@ -315,7 +323,7 @@ export function ProductListPage() {
     {
       id: "sku",
       header: "SKU",
-      width: "160px",
+      width: "128px",
       cell: (product) => (
         <span className="block truncate text-[13px] text-pilot-grey-600">
           {product.primarySku ?? "—"}
@@ -325,7 +333,7 @@ export function ProductListPage() {
     {
       id: "gross",
       header: "Bruttó ár",
-      width: "140px",
+      width: "120px",
       align: "right",
       cell: (product) => (
         <span className="text-pilot-grey-600">
@@ -336,7 +344,7 @@ export function ProductListPage() {
     {
       id: "sale",
       header: "Akciós ár",
-      width: "140px",
+      width: "120px",
       align: "right",
       cell: (product) =>
         product.saleGrossPrice ? (
@@ -350,7 +358,7 @@ export function ProductListPage() {
     {
       id: "stock",
       header: "Készlet",
-      width: "96px",
+      width: "84px",
       align: "right",
       cell: (product) => (
         <span className="text-pilot-grey-900">
@@ -361,7 +369,7 @@ export function ProductListPage() {
     {
       id: "status",
       header: "Állapot",
-      width: "120px",
+      width: "104px",
       cell: (product) => (
         <PilotBadge variant={product.isActive ? "success" : "grey"}>
           {product.isActive ? "Aktív" : "Archivált"}
@@ -371,7 +379,7 @@ export function ProductListPage() {
     {
       id: "action",
       header: "Művelet",
-      width: "128px",
+      width: "116px",
       align: "right",
       cell: (product) => (
         <button
@@ -407,15 +415,23 @@ export function ProductListPage() {
       />
 
       <section className="rounded-2xl border border-pilot-grey-200 bg-white p-5">
-        <div className="grid items-center gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_180px_220px_220px_auto]">
-          <PilotInput
-            value={search}
-            onChange={setSearch}
-            leadingIcon={<Icon name="search" size={17} />}
-            placeholder="Keresés név vagy SKU alapján…"
-            aria-label="Termék keresése"
-            className="h-10"
-          />
+        {/*
+          A SZŰRŐSOR TÖRIK, NEM CSÚSZIK (a brief 10. pontja; a stage-en mérve
+          2026-09-30: 1280-nál a rögzített sávok és a "Szűrők törlése" együtt
+          szélesebbek voltak a kártyánál, és a lap vízszintesen görgetett).
+          Rugalmas elemek alsó határral: ami nem fér, a következő sorba kerül.
+        */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-[240px] flex-[2_1_320px]">
+            <PilotInput
+              value={search}
+              onChange={setSearch}
+              leadingIcon={<Icon name="search" size={17} />}
+              placeholder="Keresés név vagy SKU alapján…"
+              aria-label="Termék keresése"
+              className="h-10"
+            />
+          </div>
           <PilotSelect
             chevron
             aria-label="Aktivitási állapot"
@@ -423,7 +439,7 @@ export function ProductListPage() {
             onChange={(value) =>
               updateFilter({ active: value as ProductActiveFilter })
             }
-            className="[&_select]:h-10"
+            className="min-w-[160px] flex-[1_1_180px] [&_select]:h-10"
           >
             <option value="all">Minden állapot</option>
             <option value="active">Aktív</option>
@@ -434,7 +450,7 @@ export function ProductListPage() {
             aria-label="Kategória"
             value={state.categoryId}
             onChange={(value) => updateFilter({ categoryId: value })}
-            className="[&_select]:h-10"
+            className="min-w-[160px] flex-[1_1_180px] [&_select]:h-10"
           >
             <option value="">Minden kategória</option>
             {categories.map((option) => (
@@ -448,7 +464,7 @@ export function ProductListPage() {
             aria-label="Márka"
             value={state.brandId}
             onChange={(value) => updateFilter({ brandId: value })}
-            className="[&_select]:h-10"
+            className="min-w-[160px] flex-[1_1_180px] [&_select]:h-10"
           >
             <option value="">Minden márka</option>
             {brands.map((option) => (
@@ -467,7 +483,7 @@ export function ProductListPage() {
             <button
               type="button"
               onClick={resetFilters}
-              className="justify-self-start whitespace-nowrap text-xs text-pilot-accent-warm-text hover:underline xl:justify-self-end"
+              className="ml-auto whitespace-nowrap text-xs text-pilot-accent-warm-text hover:underline"
             >
               Szűrők törlése
             </button>
