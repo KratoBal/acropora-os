@@ -1,0 +1,6 @@
+# Kor A: a kereses vissza a Prisma contains + insensitive utra.
+# Joslat: 2, 3, 5 piros; 1 es 4 zold (a vart fajl csak a pirosakat tudja nevezni,
+# a zoldeket a naplobol olvasom vissza).
+not ok 2 - text typed without accents finds the accented row, in any case
+not ok 3 - accented text finds a row written without accents
+not ok 5 - the search narrows the origin filter instead of replacing it

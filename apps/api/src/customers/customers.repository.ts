@@ -92,7 +92,35 @@ export class CustomersRepository extends Repository {
       ...(query.source === "MANUAL"
         ? [{ id: { notIn: unasCustomerIds! } }]
         : []),
-      ...(searchCustomerIds ? [{ id: { in: searchCustomerIds } }] : []),
+      ...(query.search?.trim()
+        ? [
+            {
+              OR: [
+                {
+                  displayName: {
+                    contains: query.search,
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  companyName: {
+                    contains: query.search,
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  email: { contains: query.search, mode: "insensitive" as const },
+                },
+                {
+                  customerNumber: {
+                    contains: query.search,
+                    mode: "insensitive" as const,
+                  },
+                },
+              ],
+            },
+          ]
+        : []),
     ];
     const where: Prisma.CustomerWhereInput = {
       /**
