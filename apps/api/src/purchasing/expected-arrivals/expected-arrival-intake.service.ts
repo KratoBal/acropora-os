@@ -180,7 +180,7 @@ export class ExpectedArrivalIntakeService {
           continue;
         }
         // the XML e-invoice wins over its PDF picture (`invoiceFiles`)
-        const { files } = invoiceFiles(message);
+        const { files } = invoiceFiles({ pdfs: message.pdfs, xmls: [] });
         let errorCode: string | null = files.length ? null : "NO_PDF";
         for (const file of files) {
           const outcome = await this.ingest(message, file);

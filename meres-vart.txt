@@ -1,0 +1,8 @@
+# A POSTAFIOK-FIGYELO XML-ELSOBBSEGENEK KALIBRACIOJA (feat/mail-xml-invoices).
+#
+# A RONTAS: a sync az XML-mellekletet figyelmen kivul hagyja, csak a PDF-eket
+# olvassa (invoiceFiles ures xmls-szel). Az uj integracios allitasnak el kell
+# buknia (a PDF lesz a dokumentum, nem az XML); a korabbi, XML nelkuli allitas
+# zold marad: az a pozitiv kontroll.
+not ok - a mail with the invoice as XML and as PDF makes ONE document, from the XML
+ok - a corrected invoice from a later mail replaces the invoice; an older version read after it does not
