@@ -59,6 +59,9 @@ async function removeLeftovers() {
       uploadedByUserId: { in: actors.map((user) => user.id) },
     },
   });
+  await prisma.incomingSupplierDocument.deleteMany({
+    where: { gmailMessageId: { startsWith: "collect:INFO_MAIL:hianyzo-it-" } },
+  });
   await prisma.user.deleteMany({ where: { email: ACTOR_EMAIL } });
 }
 
@@ -227,6 +230,38 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
         },
       }),
       1,
+    );
+  });
+
+  it("a collected PDF carrying the NAV row's number is its original: the payment is found", async () => {
+    const payment = (await missing.month("2026-08", { tab: "ALL" })).items.find(
+      (item) =>
+        item.account.name.startsWith(ACCOUNT) && item.partner === SUPPLIER,
+    )!;
+    assert.equal(payment.state, "ORIGINAL_MISSING");
+    await prisma.incomingSupplierDocument.create({
+      data: {
+        gmailMessageId: "collect:INFO_MAIL:hianyzo-it-1",
+        fileName: "HIANYZOTESZT-1.pdf",
+        sizeBytes: 14,
+        sha256: "hianyzo-it-collected",
+        content: new Uint8Array(Buffer.from("%PDF-1.4 teszt")),
+        status: "FAILED",
+        kind: "INVOICE",
+        origin: "COLLECTED_MAIL",
+        receivedAt: new Date("2026-08-06T09:00:00Z"),
+        payeeCheck: "COMPANY",
+        textReading: {
+          invoiceNumber: "HIANYZOTESZT-1",
+          numberFrom: "NAV",
+          supplierTaxNumber: "99999999-2-42",
+        },
+      },
+    });
+    const after = await missing.item(payment.id);
+    assert.deepEqual(
+      [after.state, after.document?.source],
+      ["FOUND", "MAILBOX"],
     );
   });
 });
