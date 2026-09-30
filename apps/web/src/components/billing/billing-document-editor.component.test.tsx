@@ -32,6 +32,7 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   detail: vi.fn(),
+  issue: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -114,6 +115,7 @@ beforeEach(() => {
   api.update
     .mockReset()
     .mockImplementation(async (_token, id, body) => detailFrom(body, id));
+  api.issue.mockReset();
   customers.list.mockReset().mockResolvedValue({
     items: [
       {
@@ -321,5 +323,81 @@ describe("BillingDocumentEditor", () => {
         name: "E-számla kiállítása és elküldése",
       }),
     ).toBeDisabled();
+  });
+
+  /*
+    A KIÁLLÍTÁS (#1279). MI PIROSÍT: ha a gomb megerősítés nélkül állítana ki,
+    ha a kiállítás a mentés nélkül (a régi időbélyeggel) menne, ha az e-számla
+    a kiküldés nélkül kiállíthatóvá válna, vagy ha egy elutasítás után a vázlat
+    csak olvashatóvá válna.
+  */
+  describe("issuing", () => {
+    async function readyPaperInvoice() {
+      render(<BillingDocumentEditor />);
+      fireEvent.click(radio("Papír alapú"));
+      await pickPartner();
+      addLine("Munkadíj", "1", "280000");
+    }
+
+    it("a paper invoice: confirm, then save and issue with the fresh timestamp, then read-only with the number", async () => {
+      api.issue.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        documentNumber: "AC-2026-000001",
+      }));
+      await readyPaperInvoice();
+      const button = screen.getByRole("button", { name: "Számla kiállítása" });
+      expect(button).toBeEnabled();
+      fireEvent.click(button);
+      expect(api.issue).not.toHaveBeenCalled();
+      const dialog = await screen.findByRole("dialog");
+      expect(dialog).toHaveTextContent("valódi számla készül a Számlázz.hu-n");
+
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Számla kiállítása" }),
+      );
+      await waitFor(() => expect(api.issue).toHaveBeenCalledTimes(1));
+      const [, created] = api.create.mock.calls[0]!;
+      expect(api.issue).toHaveBeenCalledWith(
+        "token-1",
+        created.id,
+        "2026-09-30T10:05:00.000Z",
+      );
+      expect(
+        await screen.findByText("Kiállítva: AC-2026-000001"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Csak olvasható")).toBeInTheDocument();
+    });
+
+    it("an e-invoice waits for the sending, and says so", async () => {
+      render(<BillingDocumentEditor />);
+      await pickPartner();
+      addLine("Munkadíj", "1", "280000");
+      expect(
+        screen.getByRole("button", { name: "Kiállítás és kiküldés" }),
+      ).toBeDisabled();
+      expect(
+        screen.getByText(/a kiküldés bekötése után érhető el/),
+      ).toBeInTheDocument();
+    });
+
+    it("a refused issue (the switch is off) shows the reason and the draft stays editable", async () => {
+      api.issue.mockRejectedValue(
+        new Error("A valódi kiállítás ki van kapcsolva."),
+      );
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      fireEvent.click(
+        within(await screen.findByRole("dialog")).getByRole("button", {
+          name: "Számla kiállítása",
+        }),
+      );
+      expect(
+        await screen.findByText("A valódi kiállítás ki van kapcsolva."),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Csak olvasható")).toBeNull();
+    });
   });
 });
