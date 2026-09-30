@@ -26,6 +26,8 @@ export interface MissingInvoiceMonth {
   found: number;
   notMatched: number;
   noInvoice: number;
+  /** ELŐRE, acrobot 25328 alapján; a pontos kulcsnevet nautilus küldi. */
+  originalMissing: number;
   noInvoiceNeeded: number;
   missingAmountHuf: string;
   status: MonthState;
@@ -80,6 +82,7 @@ export interface MissingInvoiceMonthDetail {
     found: number;
     notMatched: number;
     noInvoice: number;
+    originalMissing: number;
     noInvoiceNeeded: number;
   };
   items: MissingInvoiceItem[];
@@ -114,6 +117,7 @@ export function toMonthRow(month: MissingInvoiceMonth): MonthRow {
       found: month.found,
       notMatched: month.notMatched,
       noInvoice: month.noInvoice,
+      originalMissing: month.originalMissing,
     },
     missingAmountHuf: month.missingAmountHuf,
     missingStatementAccounts: month.missingStatementAccounts,

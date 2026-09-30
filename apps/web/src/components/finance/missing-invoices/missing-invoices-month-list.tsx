@@ -53,7 +53,7 @@ export function MissingInvoicesMonthList({
     {
       id: "month",
       header: "Hónap",
-      width: "170px",
+      width: "150px",
       cell: (row) => (
         <span className="font-semibold text-pilot-grey-900">
           {formatMonth(row.month)}
@@ -63,33 +63,41 @@ export function MissingInvoicesMonthList({
     {
       id: "charges",
       header: "Terhelések",
-      width: "96px",
+      width: "88px",
       cell: (row) => count(row, "charges", "text-pilot-grey-600"),
     },
     {
       id: "found",
       header: "Megvan",
-      width: "84px",
+      width: "76px",
       cell: (row) => count(row, "found", "font-semibold text-pilot-green-700"),
     },
     {
       id: "unmatched",
       header: "Nem párosodott",
-      width: "120px",
+      width: "112px",
       cell: (row) =>
         count(row, "notMatched", "font-semibold text-pilot-amber-700"),
     },
     {
       id: "noInvoice",
       header: "Nincs számla",
-      width: "110px",
+      width: "100px",
       cell: (row) =>
         count(row, "noInvoice", "font-semibold text-pilot-red-700"),
     },
     {
+      // A FIGMÁBAN NINCS (acrobot 25328): csak NAV-adat, eredeti nincs.
+      id: "originalMissing",
+      header: "Eredeti hiányzik",
+      width: "112px",
+      cell: (row) =>
+        count(row, "originalMissing", "font-semibold text-pilot-amber-700"),
+    },
+    {
       id: "missingAmount",
       header: "Hiányzó összeg",
-      width: "140px",
+      width: "128px",
       cell: (row) => (
         <span className="font-semibold tabular-nums text-pilot-grey-900">
           {unknown(row) ? "—" : formatAmount(row.missingAmountHuf, "HUF")}
@@ -116,7 +124,7 @@ export function MissingInvoicesMonthList({
     {
       id: "open",
       header: <span className="sr-only">Megnyitás</span>,
-      width: "56px",
+      width: "44px",
       align: "right",
       cell: () => (
         <Icon

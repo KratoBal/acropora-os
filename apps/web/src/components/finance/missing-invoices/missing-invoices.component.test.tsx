@@ -55,7 +55,13 @@ const charge = (overrides: Partial<ChargeRow> = {}): ChargeRow => ({
 describe("the model", () => {
   it("Hiányzik is every state that still needs work, and nothing else", () => {
     expect([...TAB_STATES.MISSING].sort()).toEqual(
-      ["NO_INVOICE", "NOT_COMPANY", "NOT_MATCHED", "PROFORMA_ONLY"].sort(),
+      [
+        "NO_INVOICE",
+        "NOT_COMPANY",
+        "NOT_MATCHED",
+        "ORIGINAL_MISSING",
+        "PROFORMA_ONLY",
+      ].sort(),
     );
     expect(TAB_STATES.MISSING).not.toContain("FOUND");
     expect(TAB_STATES.MISSING).not.toContain("NO_INVOICE_NEEDED");
@@ -75,21 +81,39 @@ describe("MissingInvoicesMonthList", () => {
     {
       month: "2026-10",
       state: "STATEMENT_PARTIAL",
-      counts: { charges: 12, found: 10, notMatched: 1, noInvoice: 1 },
+      counts: {
+        charges: 12,
+        found: 10,
+        notMatched: 1,
+        noInvoice: 1,
+        originalMissing: 0,
+      },
       missingAmountHuf: "15000",
       missingStatementAccounts: ["EUR számla"],
     },
     {
       month: "2026-09",
       state: "STATEMENT_MISSING",
-      counts: { charges: 0, found: 0, notMatched: 0, noInvoice: 0 },
+      counts: {
+        charges: 0,
+        found: 0,
+        notMatched: 0,
+        noInvoice: 0,
+        originalMissing: 0,
+      },
       missingAmountHuf: "0",
       missingStatementAccounts: ["Fő számla", "Kártyás számla", "EUR számla"],
     },
     {
       month: "2026-08",
       state: "INCOMPLETE",
-      counts: { charges: 67, found: 27, notMatched: 15, noInvoice: 25 },
+      counts: {
+        charges: 70,
+        found: 27,
+        notMatched: 15,
+        noInvoice: 25,
+        originalMissing: 3,
+      },
       missingAmountHuf: "693967",
       missingStatementAccounts: [],
     },
@@ -118,7 +142,7 @@ describe("MissingInvoicesMonthList", () => {
     });
     expect(within(september).queryByText("0")).toBeNull();
     expect(within(september).queryByText("0 Ft")).toBeNull();
-    expect(within(september).getAllByText("—")).toHaveLength(5);
+    expect(within(september).getAllByText("—")).toHaveLength(6);
     expect(within(september).getByText("Kivonat hiányzik")).toBeInTheDocument();
     const august = screen.getByRole("row", {
       name: "2026. augusztus megnyitása",
@@ -137,6 +161,32 @@ describe("MissingInvoicesMonthList", () => {
       within(october).getByText("Nincs kivonat: EUR számla"),
     ).toBeInTheDocument();
     expect(within(october).getByText("15 000 Ft")).toBeInTheDocument();
+  });
+
+  /*
+    AZ EREDETI HIÁNYZIK A HÓNAP SORÁBAN (acrobot 25328; a Figmában nincs), és
+    az 1280-as mérce a hónaplistán: az Állapot oszlop az egyetlen szélesség
+    nélküli, és a fix oszlopok mellett 1280-on is elfér a leghosszabb jelvény.
+  */
+  it("the month row counts the missing originals, and the state column keeps room at 1280", () => {
+    renderList();
+    const august = screen.getByRole("row", {
+      name: "2026. augusztus megnyitása",
+    });
+    const table = august.closest("table")!;
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent);
+    const cells = within(august).getAllByRole("cell");
+    expect(cells[headers.indexOf("Eredeti hiányzik")]).toHaveTextContent("3");
+    const cols = [...table.querySelectorAll("col")] as HTMLElement[];
+    expect(cols[headers.indexOf("Állapot")]!.style.width).toBe("");
+    const fixed = cols.reduce(
+      (sum, col) => sum + (parseInt(col.style.width, 10) || 0),
+      0,
+    );
+    // az 1280-as tartalomszélesség ~968 px; a "Kész a könyvelőnek" ~150 px
+    expect(968 - fixed).toBeGreaterThanOrEqual(150);
   });
 
   it("the whole row opens the month", () => {
@@ -194,7 +244,13 @@ describe("MissingInvoicesMonthDetail", () => {
     month: "2026-08",
     accounts,
     state: "INCOMPLETE",
-    summary: { found: 27, notMatched: 15, noInvoice: 25, noInvoiceNeeded: 24 },
+    summary: {
+      found: 27,
+      notMatched: 15,
+      noInvoice: 25,
+      originalMissing: 3,
+      noInvoiceNeeded: 24,
+    },
     tab: "MISSING",
     onTab: vi.fn(),
     filters: { search: "", category: "", accountId: "" },
@@ -282,6 +338,24 @@ describe("MissingInvoicesMonthDetail", () => {
     const longName = screen.getByText(/^von Wussow Importe GmbH/);
     expect(longName).toHaveClass("truncate");
     expect(longName).toHaveAttribute("title", longName.textContent!);
+  });
+
+  it("the fifth tile counts the missing originals, and such a row says so", () => {
+    render(
+      <MissingInvoicesMonthDetail
+        {...base()}
+        rows={[charge({ state: "ORIGINAL_MISSING" })]}
+      />,
+    );
+    const tile = screen
+      .getAllByText("Eredeti hiányzik")
+      .find((node) => node.closest("article"))!
+      .closest("article")!;
+    expect(tile).toHaveTextContent("3");
+    const row = screen.getByRole("row", {
+      name: "OPENAI *CHATGPT SUBSCR, 2026. 08. 03.",
+    });
+    expect(within(row).getByText("Eredeti hiányzik")).toBeInTheDocument();
   });
 
   it("amounts: forint with the card's original under it; a EUR account in EUR", () => {
@@ -392,7 +466,13 @@ describe("MissingInvoicesMonthDetail", () => {
             ? { ...account, hasStatement: false }
             : account,
         )}
-        summary={{ found: 20, notMatched: 0, noInvoice: 0, noInvoiceNeeded: 2 }}
+        summary={{
+          found: 20,
+          notMatched: 0,
+          noInvoice: 0,
+          originalMissing: 0,
+          noInvoiceNeeded: 2,
+        }}
       />,
     );
     expect(
@@ -409,7 +489,13 @@ describe("MissingInvoicesMonthDetail", () => {
         {...base()}
         month="2026-07"
         state="READY"
-        summary={{ found: 58, notMatched: 0, noInvoice: 0, noInvoiceNeeded: 3 }}
+        summary={{
+          found: 58,
+          notMatched: 0,
+          noInvoice: 0,
+          originalMissing: 0,
+          noInvoiceNeeded: 3,
+        }}
       />,
     );
     expect(

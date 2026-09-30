@@ -34,6 +34,8 @@ export interface MonthSummary {
   notMatched: number;
   /** A Nem a cégre szól és a Csak díjbekérő is ide számít. */
   noInvoice: number;
+  /** Csak NAV-adat, eredeti nincs: az ÖTÖDIK csempe (acrobot 25328). */
+  originalMissing: number;
   noInvoiceNeeded: number;
 }
 
@@ -247,6 +249,11 @@ export function MissingInvoicesMonthDetail({
       tone: "text-pilot-red-700",
     },
     {
+      label: "Eredeti hiányzik",
+      value: summary?.originalMissing,
+      tone: "text-pilot-amber-700",
+    },
+    {
       label: "Nem kell számla",
       value: summary?.noInvoiceNeeded,
       tone: "text-pilot-grey-600",
@@ -350,7 +357,7 @@ export function MissingInvoicesMonthDetail({
               ) : null}
             </div>
           ) : null}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
             {tiles.map((tile) => (
               <article
                 key={tile.label}

@@ -13,6 +13,8 @@ import type { PilotBadgeVariant } from "@acropora/ui";
  * augusztusban 15 nem párosodott + 25 nincs számla = "1–7 / 40 hiányzó
  * terhelés"):
  *   Hiányzik      = Nem párosodott + Nincs számla + Nem a cégre szól + Csak díjbekérő
+ *                   + Eredeti hiányzik (acrobot 25328: csak NAV-adat, eredeti nincs;
+ *                   a Figmában nincs, ÖTÖDIK csempe)
  *   Nincs számla  csempe: a Nem a cégre szól és a Csak díjbekérő is ide számít
  *   Terhelések    a Nem kell számla NÉLKÜL (27 + 15 + 25 = 67)
  */
@@ -22,6 +24,7 @@ export type ChargeInvoiceState =
   | "NO_INVOICE"
   | "NOT_COMPANY"
   | "PROFORMA_ONLY"
+  | "ORIGINAL_MISSING"
   | "NO_INVOICE_NEEDED";
 
 /**
@@ -67,6 +70,8 @@ export interface MonthRow {
     found: number;
     notMatched: number;
     noInvoice: number;
+    /** Csak NAV-adat van, eredeti (PDF vagy papír) nincs (acrobot 25328). */
+    originalMissing: number;
   };
   /** Forint, tizedes szöveg. */
   missingAmountHuf: string;
@@ -121,6 +126,7 @@ export const CHARGE_STATE_LABELS: Record<ChargeInvoiceState, string> = {
   NO_INVOICE: "Nincs számla",
   NOT_COMPANY: "Nem a cégre szól",
   PROFORMA_ONLY: "Csak díjbekérő",
+  ORIGINAL_MISSING: "Eredeti hiányzik",
   NO_INVOICE_NEEDED: "Nem kell számla",
 };
 
@@ -133,6 +139,7 @@ export const CHARGE_STATE_BADGES: Record<
   NO_INVOICE: "danger",
   NOT_COMPANY: "danger",
   PROFORMA_ONLY: "amber",
+  ORIGINAL_MISSING: "amber",
   NO_INVOICE_NEEDED: "grey",
 };
 
@@ -194,7 +201,13 @@ export const CHARGE_TABS: ReadonlyArray<{ key: ChargeTab; label: string }> = [
 
 /** Melyik állapotok tartoznak egy fülhöz. A szűrés a szerveren fut; ez a szabály. */
 export const TAB_STATES: Record<ChargeTab, readonly ChargeInvoiceState[]> = {
-  MISSING: ["NOT_MATCHED", "NO_INVOICE", "NOT_COMPANY", "PROFORMA_ONLY"],
+  MISSING: [
+    "NOT_MATCHED",
+    "NO_INVOICE",
+    "NOT_COMPANY",
+    "PROFORMA_ONLY",
+    "ORIGINAL_MISSING",
+  ],
   NOT_MATCHED: ["NOT_MATCHED"],
   FOUND: ["FOUND"],
   NO_INVOICE_NEEDED: ["NO_INVOICE_NEEDED"],
@@ -204,6 +217,7 @@ export const TAB_STATES: Record<ChargeTab, readonly ChargeInvoiceState[]> = {
     "NO_INVOICE",
     "NOT_COMPANY",
     "PROFORMA_ONLY",
+    "ORIGINAL_MISSING",
     "NO_INVOICE_NEEDED",
   ],
 };
@@ -231,6 +245,10 @@ export function whatToDo(
     case "PAIR_OR_UPLOAD":
       return "Van számla ettől a partnertől, de egyik sem egyezik ezzel a terheléssel: párosítsd a javasolt számlák közül, vagy töltsd fel a hiányzót.";
     case "NONE":
+      return null;
+    default:
+      // EGY MÉG NEM ISMERT KULCS (például az Eredeti hiányzik sajátja, amíg
+      // nautilus nem küldi a nevét): a felület nem talál ki mondatot.
       return null;
   }
 }
