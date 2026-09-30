@@ -47,7 +47,6 @@ export function PilotSection({
 }) {
   return (
     <section
-      aria-label={title}
       className={`overflow-hidden rounded-2xl border border-pilot-grey-200 ${
         tone === "warm" ? "bg-pilot-accent-warm-soft" : "bg-white"
       } ${className}`}

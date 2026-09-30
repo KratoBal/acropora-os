@@ -1,6 +1,12 @@
 "use client";
 
-import { Alert, Button, Card } from "@acropora/ui";
+import {
+  Alert,
+  Button,
+  PilotDataGrid,
+  PilotDataItem,
+  PilotSection,
+} from "@acropora/ui";
 import { useEffect, useState } from "react";
 
 import {
@@ -136,24 +142,24 @@ export function ProductShippingProfileCard({
   };
 
   return (
-    <Card className="space-y-3 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-dusk-900">
-          Szállítási jellemzők
-        </h2>
-        {canManage && !draft && loaded ? (
-          <Button variant="secondary" onClick={szerkesztesKezdese}>
+    <PilotSection
+      title="Szállítási jellemzők"
+      subtitle="Kézzel gondozott, UNAS-szinkrontól független törzsadatok"
+      action={
+        canManage && !draft && loaded ? (
+          <Button variant="secondary" size="sm" onClick={szerkesztesKezdese}>
             {profile ? "Módosítás" : "Kitöltés"}
           </Button>
-        ) : null}
-      </div>
-
+        ) : undefined
+      }
+      bodyClassName="space-y-3 px-5 py-5"
+    >
       {error ? (
         <Alert variant="danger" title="Nem sikerült" description={error} />
       ) : null}
 
       {!loaded ? (
-        <p className="text-sm text-dusk-500">Betöltés…</p>
+        <p className="text-sm text-pilot-grey-500">Betöltés…</p>
       ) : draft ? (
         <div className="space-y-2">
           {JELZOK.map((jelzo) => (
@@ -191,23 +197,23 @@ export function ProductShippingProfileCard({
           </div>
         </div>
       ) : profile ? (
-        <ul className="space-y-1 text-sm text-dusk-700">
+        <PilotDataGrid columns={4}>
           {JELZOK.map((jelzo) => (
-            <li key={jelzo.key}>
-              {jelzo.label}: {profile[jelzo.key] ? "igen" : "nem"}
-            </li>
+            <PilotDataItem key={jelzo.key} label={jelzo.label}>
+              {profile[jelzo.key] ? "Igen" : "Nem"}
+            </PilotDataItem>
           ))}
-        </ul>
+        </PilotDataGrid>
       ) : (
         /*
           A HIANYZO PROFIL SAJAT MONDATOT KAP, nem negy kikapcsolt kapcsolot.
           Egy "minden nem" latszat itt hamis allitas lenne: azt sugallna, hogy
           valaki megnezte a terméket es ugy dontott, hogy egyik jelzo sem all ra.
         */
-        <p className="text-sm text-dusk-500">
+        <p className="text-sm text-pilot-grey-500">
           Még senki nem vizsgálta meg ezt a terméket.
         </p>
       )}
-    </Card>
+    </PilotSection>
   );
 }
