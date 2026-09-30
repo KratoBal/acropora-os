@@ -72,8 +72,17 @@ a Várható beérkezések kiadásával együtt.
   Egy második bevételezést `EXPECTED_ARRIVAL_ALREADY_RECEIVED` állít meg, mielőtt
   bármilyen készlet mozdulna.
 
-## Ami még jön
+## A harmadik rész: a menüpont és az oldal
 
-- **A harmadik rész:** a „Várható beérkezések” menüpont a Beszerzés alatt, egy listán
-  a levélből és a NAV-ból jött, még be nem vételezett számlákkal, forrás szerint
-  jelölve.
+- **Menüpont:** „Várható beérkezések” a Pénzügy csoportban, közvetlenül a „Beszerzés”
+  alatt (`/beszerzes/varhato`, `purchasing.view`). Új csoport nincs (acrobot,
+  2026-09-30).
+- **A lap:** egy táblázat, forrás szerint szűrhető (Összes, Levélből, NAV). A sorok:
+  - forrás, beszállító, rendelés és számlaszám, érkezés, nettó összeg;
+  - a sorok száma, és hány sorra van javaslat;
+  - állapot: „Bevételezhető”, vagy „Csak proforma, a számla még nem érkezett meg”.
+- **Kattintás:** egy bevételezhető sor a szerkesztőbe visz, előtöltve; a proforma sora
+  nem kattintható.
+- **A levél-behúzás:**
+  - a lap tetején egy mondat mondja meg, magától fut-e;
+  - a „Levelek ellenőrzése” gomb (`purchasing.manage`) kézzel indítja.
