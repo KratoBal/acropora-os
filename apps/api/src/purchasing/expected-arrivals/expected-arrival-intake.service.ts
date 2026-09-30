@@ -17,7 +17,6 @@ import type {
 } from "@acropora/types";
 
 import { SupplierLineSuggestionService } from "../line-suggestions/supplier-line-suggestion.service.js";
-import { normalizeVatId } from "../supplier-invoice-import/supplier-invoice-import.common.js";
 import { SupplierInvoiceImportError } from "../supplier-invoice-import/supplier-invoice-import.error.js";
 import { SupplierInvoiceImportService } from "../supplier-invoice-import/supplier-invoice-import.service.js";
 import {
@@ -25,6 +24,7 @@ import {
   arrivalIdentity,
   documentContent,
   placeDocument,
+  supplierIdByTaxKey,
 } from "./expected-arrival.intake.js";
 import {
   SupplierInvoiceMailClient,
@@ -433,20 +433,18 @@ export class ExpectedArrivalIntakeService {
     return answers;
   }
 
-  /** The supplier with this VAT id, when there is exactly one (active, not deleted). */
+  /** The supplier with this tax id, when there is exactly one (not deleted). */
   private async supplierIdFor(
     vatId: string | null | undefined,
   ): Promise<string | null> {
-    const wanted = normalizeVatId(vatId);
-    if (!wanted) return null;
-    const suppliers = await prisma.supplier.findMany({
-      where: { deletedAt: null, taxNumber: { not: null } },
-      select: { id: true, taxNumber: true },
-    });
-    const matches = suppliers.filter(
-      (supplier) => normalizeVatId(supplier.taxNumber) === wanted,
+    if (!vatId) return null;
+    return supplierIdByTaxKey(
+      vatId,
+      await prisma.supplier.findMany({
+        where: { deletedAt: null, taxNumber: { not: null } },
+        select: { id: true, taxNumber: true },
+      }),
     );
-    return matches.length === 1 ? matches[0]!.id : null;
   }
 
   private async startRun(trigger: SyncRunTrigger): Promise<string> {

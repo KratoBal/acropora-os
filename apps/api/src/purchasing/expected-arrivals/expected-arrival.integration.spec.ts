@@ -77,9 +77,76 @@ describe(
       importResult: reading(invoiceNumber),
     });
 
+    // a supplier recorded AFTER its arrival (the Aquarioom case, 2026-09-30)
+    const vat = `FR88${suffix}`;
+
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
+      ids.late = (
+        await prisma.expectedArrival.create({
+          data: {
+            supplierKey: key,
+            arrivalKey: "order:4",
+            supplierName: "Kesobb rogzitett szallito",
+            orderReference: "4",
+            invoiceNumber: "FA4",
+            documents: {
+              create: [
+                {
+                  ...document(5, "INVOICE", "FA4"),
+                  importResult: {
+                    ...reading("FA4"),
+                    // written another way than the record: the key decides
+                    supplier: {
+                      name: "Kesobb",
+                      vatId: `FR 88 ${suffix}`,
+                      country: "FR",
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        })
+      ).id;
+      ids.unknown = (
+        await prisma.expectedArrival.create({
+          data: {
+            supplierKey: key,
+            arrivalKey: "order:5",
+            supplierName: "Ismeretlen szallito",
+            orderReference: "5",
+            invoiceNumber: "FA5",
+            documents: {
+              create: [
+                {
+                  ...document(6, "INVOICE", "FA5"),
+                  importResult: {
+                    ...reading("FA5"),
+                    supplier: {
+                      name: "Ismeretlen",
+                      vatId: `FR77${suffix}`,
+                      country: "FR",
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        })
+      ).id;
+      ids.lateSupplier = (
+        await prisma.supplier.create({
+          data: {
+            code: `${key}-SUP`,
+            name: "Kesobb rogzitett szallito",
+            taxNumber: vat,
+            isSupplier: true,
+            isService: false,
+          },
+        })
+      ).id;
       ids.invoiced = (
         await prisma.expectedArrival.create({
           data: {
@@ -183,6 +250,12 @@ describe(
           }),
         },
         {
+          nev: "Supplier by code prefix",
+          darab: await prisma.supplier.count({
+            where: { code: { startsWith: PREFIX } },
+          }),
+        },
+        {
           nev: "NavIncomingInvoice by number prefix",
           darab: await prisma.navIncomingInvoice.count({
             where: { navInvoiceNumber: { startsWith: PREFIX } },
@@ -201,7 +274,25 @@ describe(
       await prisma.navIncomingInvoice.deleteMany({
         where: { navInvoiceNumber: { startsWith: PREFIX } },
       });
+      await prisma.supplier.deleteMany({
+        where: { code: { startsWith: PREFIX } },
+      });
     }
+
+    // What must fail: the arrival's NULL passed on while the supplier now
+    // exists (the editor then selects none and asks no suggestion); a guess
+    // where no supplier has the key; the detail writing the arrival.
+    it("a supplier recorded after the arrival is found by the invoice's tax id; the arrival is not written", async () => {
+      const detail = await service.detail(ids.late!);
+      assert.equal(detail.supplierId, ids.lateSupplier);
+      const arrival = await prisma.expectedArrival.findUniqueOrThrow({
+        where: { id: ids.late! },
+      });
+      assert.equal(arrival.supplierId, null);
+
+      const unknown = await service.detail(ids.unknown!);
+      assert.equal(unknown.supplierId, null);
+    });
 
     it("one list: the invoiced order, the proforma-only order and the unbooked NAV invoice; nothing booked", async () => {
       const { items } = await service.list();

@@ -11,6 +11,8 @@ import type {
   SupplierInvoiceImportResult,
 } from "@acropora/types";
 
+import { supplierIdByTaxKey } from "./expected-arrival.intake.js";
+
 type StoredSuggestion = ExpectedArrivalDetail["lineSuggestions"][number];
 
 /** The number of lines that have a product suggestion to show. */
@@ -181,6 +183,29 @@ export class ExpectedArrivalService {
    * suggestions kept from the arrival. Only an OPEN arrival whose invoice has
    * arrived can be opened: a proforma is not booked.
    */
+  /**
+   * THE SUPPLIER RECORDED AFTER THE ARRIVAL (Balázs ran into it, 2026-09-30):
+   * the five Aquarioom arrivals came in at 07:51-07:52 UTC, the supplier was
+   * recorded at 07:53:52, so the arrivals kept `supplierId = NULL`. The editor
+   * selects a supplier only by the detail's id, and without one it asks for
+   * no line suggestion. The detail resolves it now, by the same tax key as
+   * the intake. It does not write it back: the detail is a read (a
+   * PURCHASING_VIEW viewer may open it); the next document of the order
+   * fills the arrival's NULL at intake.
+   */
+  private async supplierIdLater(
+    vatId: string | null | undefined,
+  ): Promise<string | null> {
+    if (!vatId) return null;
+    return supplierIdByTaxKey(
+      vatId,
+      await prisma.supplier.findMany({
+        where: { deletedAt: null, taxNumber: { not: null } },
+        select: { id: true, taxNumber: true },
+      }),
+    );
+  }
+
   async detail(id: string): Promise<ExpectedArrivalDetail> {
     const arrival = await prisma.expectedArrival.findUnique({
       where: { id },
@@ -203,17 +228,20 @@ export class ExpectedArrivalService {
       throw new ConflictException(
         "Ehhez a rendeléshez még csak a proforma érkezett meg, a számla nem.",
       );
+    const importResult =
+      invoice.importResult as unknown as SupplierInvoiceImportResult;
 
     return {
       id: arrival.id,
-      supplierId: arrival.supplierId,
+      supplierId:
+        arrival.supplierId ??
+        (await this.supplierIdLater(importResult.supplier.vatId)),
       supplierName: arrival.supplierName,
       orderReference: arrival.orderReference,
       invoiceNumber: arrival.invoiceNumber,
       documentId: invoice.id,
       fileName: invoice.fileName,
-      importResult:
-        invoice.importResult as unknown as SupplierInvoiceImportResult,
+      importResult,
       lineSuggestions: Array.isArray(invoice.lineSuggestions)
         ? (invoice.lineSuggestions as unknown as StoredSuggestion[])
         : [],
