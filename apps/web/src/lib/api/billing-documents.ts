@@ -25,6 +25,22 @@ export const billingDocumentsApi = {
       body: JSON.stringify(input),
     });
   },
+  /**
+   * A VALÓDI KIÁLLÍTÁS (#1279, nautilus). Valódi Számlázz.hu-bizonylatot hoz
+   * létre; a szerver kapcsolója (`BILLING_ISSUE_ENABLED`) nélkül elutasítja,
+   * hívás előtt. Az ütközés-őr ugyanaz, mint a mentésnél.
+   */
+  issue(token: string, id: string, expectedUpdatedAt: string) {
+    return apiRequest<BillingDocumentDetail>(
+      `/billing/documents/${encodeURIComponent(id)}/issue`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedUpdatedAt }),
+      },
+    );
+  },
   update(token: string, id: string, input: BillingDocumentDraftInput) {
     return apiRequest<BillingDocumentDetail>(
       `/billing/documents/${encodeURIComponent(id)}`,

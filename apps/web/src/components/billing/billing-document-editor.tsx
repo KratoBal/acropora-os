@@ -2,6 +2,7 @@
 
 import {
   Alert,
+  ConfirmDialog,
   PilotButton,
   PilotCallout,
   PilotPageHeader,
@@ -10,6 +11,7 @@ import {
 } from "@acropora/ui";
 import {
   billingEmailDelivery,
+  billingIssueCta,
   getDocumentCapabilities,
   hasPermission,
   PERMISSIONS,
@@ -82,6 +84,9 @@ export function BillingDocumentEditor({
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.BILLING_CREATE),
   );
+  const canIssue = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_ISSUE),
+  );
 
   const [state, setState] = useState<EditorState | null>(() =>
     documentId
@@ -99,6 +104,9 @@ export function BillingDocumentEditor({
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [confirmIssue, setConfirmIssue] = useState(false);
+  const [issuing, setIssuing] = useState(false);
+  const [issuedNumber, setIssuedNumber] = useState<string | null>(null);
   const [email, setEmail] = useState<BillingEmailDraft | null>(null);
 
   useEffect(() => {
@@ -159,19 +167,25 @@ export function BillingDocumentEditor({
   const change = (patch: Partial<EditorState>) =>
     setState((current) => (current ? { ...current, ...patch } : current));
 
+  /** A mentés maga: a tárolt bizonylat, vagy hiba. A kiállítás is ezzel kezd. */
+  const persist = async () => {
+    const created = state.savedUpdatedAt === null;
+    const detail = created
+      ? await billingDocumentsApi.create(token, toDraftInput(state, "create"))
+      : await billingDocumentsApi.update(
+          token,
+          state.id,
+          toDraftInput(state, "update"),
+        );
+    return { detail, created };
+  };
+
   const save = async () => {
     if (missing.length > 0) return;
     setSaving(true);
     setSaveError(null);
     try {
-      const created = state.savedUpdatedAt === null;
-      const detail = created
-        ? await billingDocumentsApi.create(token, toDraftInput(state, "create"))
-        : await billingDocumentsApi.update(
-            token,
-            state.id,
-            toDraftInput(state, "update"),
-          );
+      const { detail, created } = await persist();
       // A TÁROLT ÁLLAPOT A MÉRVADÓ (a szerver számolt), a termék-sor alcíme
       // viszont csak a szerkesztőben él: sorrend szerint átvesszük.
       setState((previous) => {
@@ -201,6 +215,46 @@ export function BillingDocumentEditor({
       setSaving(false);
     }
   };
+
+  /**
+   * A KIÁLLÍTÁS: előbb a mostani állapot mentése (a szerver azt állítja ki,
+   * amit lát), aztán a kiállítás a friss időbélyeggel. Siker után a bizonylat
+   * csak olvasható, a számot a Számlázz.hu adta.
+   */
+  const issue = async () => {
+    setIssuing(true);
+    setSaveError(null);
+    try {
+      const { detail: saved, created } = await persist();
+      const issued = await billingDocumentsApi.issue(
+        token,
+        saved.id,
+        saved.updatedAt,
+      );
+      setState(fromDetail(issued));
+      setStatus(issued.status);
+      setIssuedNumber(issued.documentNumber);
+      if (created)
+        router.replace(`${BILLING_EDITOR_PATH}/${issued.id}/szerkesztes`);
+    } catch (cause) {
+      setSaveError(
+        cause instanceof Error ? cause.message : "A kiállítás nem sikerült.",
+      );
+    } finally {
+      setIssuing(false);
+      setConfirmIssue(false);
+    }
+  };
+
+  const issueDisabledReason = !canIssue
+    ? "A kiállításhoz billing.issue jog kell."
+    : !editable
+      ? "Ez a bizonylat már nem állítható ki."
+      : missing.length > 0
+        ? "Kiállítás előtt töltsd ki a hiányzó adatokat."
+        : delivery === "REQUIRED"
+          ? "Az e-számla kiállítása a kiküldéssel együtt megy; a kiküldés bekötése után érhető el."
+          : null;
 
   const grossLabel = preview
     ? formatMoney(preview.totals.grossAmount, state.currency)
@@ -235,6 +289,13 @@ export function BillingDocumentEditor({
         }
       />
 
+      {issuedNumber ? (
+        <Alert
+          variant="info"
+          title={`Kiállítva: ${issuedNumber}`}
+          description="A bizonylat számát a Számlázz.hu adta."
+        />
+      ) : null}
       {!editable ? (
         <Alert
           variant="info"
@@ -295,6 +356,11 @@ export function BillingDocumentEditor({
                   : null
             }
             savedLabel={savedAt ? `Mentve ${savedAt}.` : null}
+            issue={{
+              onClick: () => setConfirmIssue(true),
+              disabledReason: issueDisabledReason,
+              busy: issuing,
+            }}
           />
           {delivery !== "NONE" ? (
             <PilotSection
@@ -369,6 +435,16 @@ export function BillingDocumentEditor({
           }}
         />
       ) : null}
+      <ConfirmDialog
+        open={confirmIssue}
+        title={`${capabilities.label} kiállítása`}
+        consequence={`A kiállítással valódi ${capabilities.label.toLowerCase()} készül a Számlázz.hu-n, saját számmal. A bizonylat ezután nem szerkeszthető.`}
+        recovery="Egy kiállított bizonylat nem vonható vissza; javítani csak sztornóval vagy helyesbítő bizonylattal lehet."
+        confirmLabel={billingIssueCta(state.documentType, format)}
+        busy={issuing}
+        onConfirm={() => void issue()}
+        onCancel={() => setConfirmIssue(false)}
+      />
     </PilotThemeRoot>
   );
 }

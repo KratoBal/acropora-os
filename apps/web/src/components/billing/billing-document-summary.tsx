@@ -25,9 +25,9 @@ import {
  * a típust és a formátumot követi, és a kettő külön jelvény: a "Számla" és az
  * "E-számla" nem mosódik egybe.
  *
- * A KIÁLLÍTÁS GOMBJA TILTOTT, amíg a Számlázz.hu kiállítás nincs bekötve
- * (nautilus, az adapterrel). A felirat már a végleges, a `title` megmondja,
- * miért nem nyomható. A mentés viszont működik: az a saját adatbázisunkba ír.
+ * A KIÁLLÍTÁS GOMBJA a szerkesztő döntése szerint él (`issue`): ahol a
+ * kiküldés a kiállítás része (e-számla), ott a kiküldés bekötéséig tiltott, és
+ * a gomb alatti mondat megmondja, miért.
  */
 export function BillingDocumentSummary({
   documentType,
@@ -39,6 +39,7 @@ export function BillingDocumentSummary({
   saving,
   saveDisabledReason,
   savedLabel,
+  issue,
 }: {
   documentType: BillingDocumentType;
   format: InvoiceFormat | null;
@@ -52,6 +53,8 @@ export function BillingDocumentSummary({
   saveDisabledReason: string | null;
   /** "Mentve 16:42" vagy `null`, ha még nincs mentve. */
   savedLabel: string | null;
+  /** A kiállítás gombja: mikor nyomható, mit csinál, és ha nem, miért nem. */
+  issue: { onClick: () => void; disabledReason: string | null; busy: boolean };
 }) {
   const capabilities = getDocumentCapabilities(documentType);
   const rows = preview
@@ -123,16 +126,17 @@ export function BillingDocumentSummary({
         <PilotButton
           variant="primary"
           size="regular"
-          disabled
-          title="A kiállítás a Számlázz.hu bekötésével érkezik."
+          onClick={issue.onClick}
+          disabled={issue.busy || issue.disabledReason !== null}
+          title={issue.disabledReason ?? undefined}
         >
-          {billingIssueCta(documentType, format)}
+          {issue.busy ? "Kiállítás…" : billingIssueCta(documentType, format)}
         </PilotButton>
         <p className="text-xs text-pilot-grey-500">
           {saveDisabledReason
             ? `Mentéshez hiányzik: ${saveDisabledReason}.`
-            : (savedLabel ?? "A vázlat még nincs mentve.")}{" "}
-          A kiállítás a Számlázz.hu bekötésével érkezik.
+            : (savedLabel ?? "A vázlat még nincs mentve.")}
+          {issue.disabledReason ? ` ${issue.disabledReason}` : ""}
         </p>
       </div>
     </PilotSection>
