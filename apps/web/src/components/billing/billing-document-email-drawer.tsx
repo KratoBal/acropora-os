@@ -10,6 +10,7 @@ import {
 } from "@acropora/ui";
 import {
   plainTextToRichHtml,
+  richHtmlForEmail,
   richHtmlToText,
   sanitizeRichHtml,
 } from "@acropora/rich-text";
@@ -22,9 +23,9 @@ import {
   type InvoiceFormat,
 } from "@acropora/types";
 import {
-  RichTextEditor,
-  type RichTextEditorHandle,
-} from "@acropora/ui/rich-text-editor";
+  EmailRichEditor,
+  type EmailRichEditorHandle,
+} from "@acropora/ui/email-rich-editor";
 import { useRef, useState } from "react";
 
 /**
@@ -155,7 +156,8 @@ export function previewBillingEmail(
     ]),
   );
   const rendered = renderMailTemplateHtml(bodyHtml, values);
-  return rendered.ok ? sanitizeRichHtml(rendered.text) : null;
+  // a kuldes keretenek lepese is (MIME-epito): igazitas es gomb inline stilussal
+  return rendered.ok ? richHtmlForEmail(sanitizeRichHtml(rendered.text)) : null;
 }
 
 /** Az előnézet kerete; a `sandbox` üres, benne semmi nem futhat. */
@@ -202,7 +204,7 @@ export function BillingDocumentEmailDrawer({
     draft.cc !== "" || draft.bcc !== "",
   );
   const [preview, setPreview] = useState(false);
-  const editorRef = useRef<RichTextEditorHandle | null>(null);
+  const editorRef = useRef<EmailRichEditorHandle | null>(null);
   const noun = getDocumentCapabilities(documentType).label;
   const chips = billingEmailVariables(documentType);
 
@@ -355,7 +357,7 @@ export function BillingDocumentEmailDrawer({
               />
             )
           ) : (
-            <RichTextEditor
+            <EmailRichEditor
               ref={editorRef}
               aria-label="Levél tartalma"
               value={draft.bodyHtml}
@@ -366,14 +368,6 @@ export function BillingDocumentEmailDrawer({
                   ? { kind: "link" as const }
                   : {}),
               }))}
-              toolbar={[
-                "bold",
-                "italic",
-                "underline",
-                "link",
-                "bulletList",
-                "orderedList",
-              ]}
             />
           )}
         </PilotFormField>

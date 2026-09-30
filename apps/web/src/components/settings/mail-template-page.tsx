@@ -10,6 +10,7 @@ import {
 } from "@acropora/ui";
 import {
   plainTextToRichHtml,
+  richHtmlForEmail,
   richHtmlToText,
   sanitizeRichHtml,
 } from "@acropora/rich-text";
@@ -22,9 +23,9 @@ import {
   type MailTemplateVariable,
 } from "@acropora/types";
 import {
-  RichTextEditor,
-  type RichTextEditorHandle,
-} from "@acropora/ui/rich-text-editor";
+  EmailRichEditor,
+  type EmailRichEditorHandle,
+} from "@acropora/ui/email-rich-editor";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -154,7 +155,7 @@ export function MailTemplatePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [elonezetFul, setElonezetFul] = useState<"html" | "szoveg">("html");
-  const szerkesztoRef = useRef<RichTextEditorHandle | null>(null);
+  const szerkesztoRef = useRef<EmailRichEditorHandle | null>(null);
   /* A SABLON KEPEI (2026-09-28): a lista, a megjelenitheto cimuk es a feltoltes. */
   const kepek = useMailImages(token);
   const [kepValaszto, setKepValaszto] = useState(false);
@@ -251,8 +252,15 @@ export function MailTemplatePage() {
     const tiszta = html.ok ? sanitizeRichHtml(html.text) : null;
     return {
       targy: renderMailTemplate(subject, ertekek),
+      /*
+        A HTML ELONEZET A KULDES KERETEBEN FUTO LEPEST IS MEGTESZI
+        (`richHtmlForEmail`, a MIME-epito): az igazitas es a gomb inline
+        stilust kap, ahogy a levelezo latja.
+      */
       torzs:
-        tiszta === null ? null : { html: tiszta, text: richHtmlToText(tiszta) },
+        tiszta === null
+          ? null
+          : { html: richHtmlForEmail(tiszta), text: richHtmlToText(tiszta) },
     };
   }, [subject, body, variables, template]);
 
@@ -416,21 +424,12 @@ export function MailTemplatePage() {
             </label>
             <div className="space-y-1">
               <span className="text-xs font-medium text-dusk-700">Törzs</span>
-              <RichTextEditor
+              <EmailRichEditor
                 ref={szerkesztoRef}
                 aria-label="Törzs"
                 value={body}
                 onChange={setBody}
                 variables={variables}
-                toolbar={[
-                  "bold",
-                  "italic",
-                  "underline",
-                  "link",
-                  "bulletList",
-                  "orderedList",
-                  "image",
-                ]}
                 onImageRequest={() => setKepValaszto((nyitva) => !nyitva)}
                 resolveImageSrc={kepek.resolve}
               />
