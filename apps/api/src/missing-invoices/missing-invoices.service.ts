@@ -44,6 +44,8 @@ import {
 } from "./missing-invoices.repository.js";
 import { originalAmountOf } from "./otp-statement.parser.js";
 import { payeeFromText } from "./payee-check.js";
+import { buildAccountantPackage } from "./missing-invoices-package.pdf.js";
+import { buildMissingInvoicesXlsx } from "./missing-invoices-xlsx.js";
 
 /** A „Hiányzik” fül és a Hiányos hónap: minden, amihez teendő van. */
 /** A környezet (a Drive-mappa hivatkozása); a teszt ezen át adja. */
@@ -386,6 +388,79 @@ export class MissingInvoicesService {
       userId: user.id,
     });
     return this.item(id);
+  }
+
+  /**
+   * A HIÁNYLISTA (brief 13. pont): a hónap Hiányzik fülének minden tétele,
+   * lapozás nélkül. A számla száma a párosítotté (a hibás számláé is, például a
+   * díjbekérőé), ha nincs ilyen, a jelölteké.
+   */
+  async missingXlsx(
+    month: string,
+  ): Promise<{ fileName: string; content: Buffer }> {
+    const computed = await this.compute();
+    const rows = computed.items
+      .filter((item) => item.month === month && MISSING_STATES.has(item.state))
+      .map((item) => {
+        const outcome = computed.outcomes.get(item.id);
+        const documents = outcome?.documents.length
+          ? outcome.documents
+          : (outcome?.candidates ?? []);
+        return {
+          item,
+          invoiceNumbers: documents.map((d) => d.number).filter(Boolean),
+        };
+      });
+    return {
+      fileName: `hianyzo-szamlak-${month}.xlsx`,
+      content: await buildMissingInvoicesXlsx(month, rows),
+    };
+  }
+
+  /**
+   * A KÖNYVELŐI CSOMAG: a hónap Megvan-tételeinek eredetijei egy PDF-ben. A
+   * díjbekérő, a nem a cégre szóló és a hiányzó nem Megvan, tehát nem is kerül
+   * bele. Összevont számlánál a fájl az eredetit hordozó forrásé.
+   */
+  async accountantPackage(
+    month: string,
+  ): Promise<{ fileName: string; content: Buffer }> {
+    const computed = await this.compute();
+    const found = computed.items.filter(
+      (item) => item.month === month && item.state === "FOUND",
+    );
+    const documentsOf = (id: string) =>
+      (computed.outcomes.get(id)?.documents ?? []).map((document) => ({
+        number: document.number,
+        originalId:
+          document.originalId ?? (document.hasOriginal ? document.id : null),
+      }));
+    const files = await this.repository.originals(
+      found.flatMap((item) =>
+        documentsOf(item.id).flatMap((d) =>
+          d.originalId ? [d.originalId] : [],
+        ),
+      ),
+    );
+    const { pdf } = await buildAccountantPackage({
+      month,
+      company: {
+        name: ACROPORA_COMPANY.name,
+        taxNumber: ACROPORA_COMPANY.taxNumberBase,
+      },
+      entries: found.map((item) => ({
+        bookingDate: item.bookingDate,
+        partner: item.partner ?? "",
+        amount: item.amount,
+        currency: item.currency,
+        paperOriginal: item.paperOriginal,
+        documents: documentsOf(item.id).map((d) => ({
+          number: d.number,
+          file: (d.originalId && files.get(d.originalId)) || null,
+        })),
+      })),
+    });
+    return { fileName: `konyveloi-csomag-${month}.pdf`, content: pdf };
   }
 
   private missingStatementAccounts(

@@ -55,6 +55,13 @@ export interface CandidateDocument {
    * számla később egy másik forrásból is beérkezik.
    */
   aliasIds?: readonly string[];
+  /**
+   * AZ ÖSSZEVONT JELÖLTBEN MELYIK FORRÁS HORDOZZA AZ EREDETIT. Az azonosító
+   * gyakran a NAV-soré (az a fő), a fájl viszont a postafiókos vagy a
+   * feltöltött társánál van; a könyvelői csomag ezt tölti le. Összevonás
+   * nélkül nincs kitöltve: ott az eredeti maga a jelölt.
+   */
+  originalId?: string;
 }
 
 export interface MatchableDebit {

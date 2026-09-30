@@ -75,6 +75,7 @@ export function mergeSameInvoice(
     return {
       ...primary,
       aliasIds: group.filter((d) => d !== primary).map((d) => d.id),
+      ...(original ? { originalId: original.id } : {}),
       source: original?.source ?? primary.source,
       gross:
         primary.gross ?? group.find((d) => d.gross !== null)?.gross ?? null,
@@ -441,6 +442,40 @@ export class MissingInvoicesRepository {
         invoiceKey(invoice.invoiceNumber, GLS_TAX_BASE, "GLS"),
       );
     return mergeSameInvoice(documents, keys);
+  }
+
+  /**
+   * AZ EREDETI FÁJLOK A KÖNYVELŐI CSOMAGHOZ: a postafiókos és a feltöltött
+   * dokumentum, valamint a Foxpost-elszámolás PDF-je. A NAV-sornak és a
+   * GLS-számlának nincs tárolt eredetije, azok itt nem is szerepelnek.
+   */
+  async originals(
+    ids: readonly string[],
+  ): Promise<Map<string, { fileName: string; content: Uint8Array }>> {
+    if (ids.length === 0) return new Map();
+    const [documents, settlements] = await Promise.all([
+      this.database.incomingSupplierDocument.findMany({
+        where: { id: { in: [...ids] } },
+        select: { id: true, fileName: true, content: true },
+      }),
+      this.database.foxpostSettlement.findMany({
+        where: { id: { in: [...ids] } },
+        select: { id: true, pdfFileName: true, pdfContent: true },
+      }),
+    ]);
+    return new Map([
+      ...documents.map(
+        (row) =>
+          [row.id, { fileName: row.fileName, content: row.content }] as const,
+      ),
+      ...settlements.map(
+        (row) =>
+          [
+            row.id,
+            { fileName: row.pdfFileName, content: row.pdfContent },
+          ] as const,
+      ),
+    ]);
   }
 
   /**
