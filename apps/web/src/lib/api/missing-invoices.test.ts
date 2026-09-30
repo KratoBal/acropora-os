@@ -41,3 +41,69 @@ describe("missingInvoicesApi.uploadDocument", () => {
     expect(await sent.text()).toBe("%PDF-1.7");
   });
 });
+
+/**
+ * A KÉT EXPORT (nautilus #1308): fájlt adnak, nem JSON-t. MI PIROSÍT: ha a
+ * letöltés nem a szerver adta néven menne; ha egy elutasítás (jog, hónap
+ * alakja) mondata elveszne; ha a csomag a hiánylista végpontjára menne.
+ */
+describe("missingInvoicesApi exports", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const respond = (response: Response) => {
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  };
+
+  it("missingXlsx fetches the month's list under the server's file name", async () => {
+    const fetchMock = respond(
+      new Response(new Blob(["PK"]), {
+        status: 200,
+        headers: {
+          "Content-Disposition":
+            'attachment; filename="hianyzo-szamlak-2026-08-v2.xlsx"',
+        },
+      }),
+    );
+    const { blob, fileName } = await missingInvoicesApi.missingXlsx(
+      "token-1",
+      "2026-08",
+    );
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/missing-invoices/months/2026-08/missing.xlsx",
+    );
+    expect(fileName).toBe("hianyzo-szamlak-2026-08-v2.xlsx");
+    expect(await blob.text()).toBe("PK");
+  });
+
+  it("a refused export keeps the server's sentence, a non-JSON body the general one", async () => {
+    respond(
+      new Response(
+        JSON.stringify({ statusCode: 400, message: "A hónap alakja ÉÉÉÉ-HH." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await expect(
+      missingInvoicesApi.missingXlsx("token-1", "2026-8"),
+    ).rejects.toThrow("A hónap alakja ÉÉÉÉ-HH.");
+    respond(new Response("Bad Gateway", { status: 502 }));
+    await expect(
+      missingInvoicesApi.accountantPackage("token-1", "2026-08"),
+    ).rejects.toThrow("A könyvelői csomag nem tölthető le.");
+  });
+
+  it("accountantPackage falls back to its own name without the header", async () => {
+    const fetchMock = respond(
+      new Response(new Blob(["%PDF-1.7"]), { status: 200 }),
+    );
+    const { fileName } = await missingInvoicesApi.accountantPackage(
+      "token-1",
+      "2026-08",
+    );
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/missing-invoices/months/2026-08/accountant-package.pdf",
+    );
+    expect(fileName).toBe("konyveloi-csomag-2026-08.pdf");
+  });
+});

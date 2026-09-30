@@ -45,6 +45,8 @@ const api = vi.hoisted(() => ({
   category: vi.fn(),
   paperOriginal: vi.fn(),
   uploadDocument: vi.fn(),
+  missingXlsx: vi.fn(),
+  accountantPackage: vi.fn(),
 }));
 vi.mock("@/lib/api/missing-invoices", () => ({ missingInvoicesApi: api }));
 
@@ -301,9 +303,6 @@ describe("MissingInvoicesMonthPage", () => {
     expect(
       within(result).getByRole("link", { name: "2026. augusztus" }),
     ).toHaveAttribute("href", "/penzugy/hianyzo-szamlak/2026-08");
-
-    // AZ EXPORT VÉGPONTJAI NAUTILUS 5. SZELETÉVEL JÖNNEK: addig nincs gomb
-    expect(screen.queryByRole("group", { name: "Exportok" })).toBeNull();
   });
 
   const openFirstRow = async () => {
@@ -531,6 +530,65 @@ describe("MissingInvoicesMonthPage", () => {
     expect(
       await within(drawer).findByText("A fájl nem PDF, ezért nem tárolható."),
     ).toBeInTheDocument();
+  });
+
+  /*
+    A KÉT EXPORT (nautilus #1308). MI PIROSÍT: ha a gomb nem a saját
+    végpontját hívná; ha a fájl nem a szerver adta néven töltődne le; ha egy
+    elutasítás mondata elveszne.
+  */
+  it("the missing list downloads under the server's name", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.missingXlsx.mockResolvedValue({
+      blob: new Blob(["PK"]),
+      fileName: "hianyzo-szamlak-2026-08.xlsx",
+    });
+    // a valódi URL objektumot nem írjuk át tartósan: a végén visszaáll
+    const original = {
+      createObjectURL: URL.createObjectURL,
+      revokeObjectURL: URL.revokeObjectURL,
+    };
+    const createObjectURL = vi.fn(() => "blob:lista");
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const downloads: string[] = [];
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        downloads.push(`${this.download} ${this.href}`);
+      });
+    try {
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      const exports = await screen.findByRole("group", { name: "Exportok" });
+      fireEvent.click(
+        within(exports).getByRole("button", { name: "Hiánylista letöltése" }),
+      );
+      await waitFor(() =>
+        expect(downloads).toEqual(["hianyzo-szamlak-2026-08.xlsx blob:lista"]),
+      );
+      expect(api.missingXlsx).toHaveBeenCalledWith("token-1", "2026-08");
+      expect(api.accountantPackage).not.toHaveBeenCalled();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:lista");
+    } finally {
+      click.mockRestore();
+      Object.assign(URL, original);
+    }
+  });
+
+  it("a refused package says why", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.accountantPackage.mockRejectedValue(
+      new Error("A könyvelői csomaghoz finance.manage jog kell."),
+    );
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const exports = await screen.findByRole("group", { name: "Exportok" });
+    fireEvent.click(
+      within(exports).getByRole("button", { name: "Könyvelői csomag" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "A könyvelői csomaghoz finance.manage jog kell.",
+    );
+    expect(api.accountantPackage).toHaveBeenCalledWith("token-1", "2026-08");
   });
 
   it("a viewer (finance.view only) reads the drawer, but cannot pair, move or save", async () => {
