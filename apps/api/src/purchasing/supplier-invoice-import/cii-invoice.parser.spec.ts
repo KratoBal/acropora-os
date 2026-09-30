@@ -176,6 +176,37 @@ describe("parseCiiInvoiceXml", () => {
     );
   });
 
+  /*
+    CoralSands (2026-09-30): minden ertek CDATA-ban, es a CDATA eddig elveszett:
+    a szamlaszam, az elado neve es a sorok cikkszama uresen jott at, hiba nelkul.
+    MI PIROSIT: ha a CDATA tartalma megint nem lesz az elem szovege.
+  */
+  it("reads a value wrapped in CDATA as the element's text", () => {
+    const wrapped = cii()
+      .replace(
+        "<ram:ID>990001</ram:ID>",
+        "<ram:ID><![CDATA[990001]]></ram:ID> <!-- Rechnungsnummer -->",
+      )
+      .replace(
+        "<ram:SellerAssignedID>81593</ram:SellerAssignedID>",
+        "<ram:SellerAssignedID><![CDATA[81593]]></ram:SellerAssignedID>",
+      )
+      .replace(
+        "<ram:Name>Dupla Marin Coral Plugs 10 St., SB</ram:Name>",
+        "<ram:Name><![CDATA[Dupla Marin Coral Plugs 10 St., SB]]></ram:Name>",
+      );
+    // the fixture really wraps all three, or the test would pass without CDATA
+    for (const value of ["CDATA[990001]", "CDATA[81593]", "CDATA[Dupla Marin"])
+      assert.ok(wrapped.includes(value), `not wrapped: ${value}`);
+    const result = parseCiiInvoiceXml(wrapped);
+    assert.equal(result.invoiceNumber, "990001");
+    assert.equal(result.lines[0]!.supplierSku, "81593");
+    assert.equal(
+      result.lines[0]!.description,
+      "Dupla Marin Coral Plugs 10 St., SB",
+    );
+  });
+
   it("does not depend on the namespace prefixes", () => {
     const renamed = cii()
       .replaceAll("ram:", "x:")

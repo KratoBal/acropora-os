@@ -44,9 +44,18 @@ export function unitLabel(code: string | null | undefined): string {
  *   - "delivery": a De Jong 19005741-es szamlajan egy kod nelkuli "Truck
  *     delivery" sor (5 050 EUR) eddig termek-javaslatot kert.
  * A magyar alakok csak a NAV-bol jovo belfoldi szamlakon fordulnak elo.
+ *
+ * BOVITVE 2026-09-30 (CoralSands XRechnung, 6 szamla): a szallitasi sor
+ * "FedEx International Economy" (5 szamlan) es "Groundshipping by Truck" (1).
+ * Az elsoben nincs a listan allo szo, a masodikban a "shipping" egy szo
+ * kozepen all, szohatar nelkul. Uj: "fedex", es a "shipping" elotagot is
+ * elfogad ("\w*shipping"). Merve felvetel ELOTT: a 7 szallito 1 756 ismert
+ * sora es termekneve (Aquarioom, Hanna, Menzel, Fluidra, Marine-Aquatics,
+ * De Jong, Hertlein) es a katalogus 1 928 neve kozul EGYIK itelete sem
+ * valtozik; csak a ket CoralSands-alak.
  */
 const CHARGE_WORDS =
-  /\b(fracht\w*|versand\w*|porto|shipping|freight|delivery|verpackung\w*|transport\w*|(?:ki)?szállítási (?:díj|költség)|postaköltség|fuvar\w*)\b/i;
+  /\b(fracht\w*|versand\w*|porto|\w*shipping|freight|delivery|verpackung\w*|transport\w*|(?:ki)?szállítási (?:díj|költség)|postaköltség|fuvar\w*|fedex)\b/i;
 
 export function isChargeDescription(description: string): boolean {
   return CHARGE_WORDS.test(description);

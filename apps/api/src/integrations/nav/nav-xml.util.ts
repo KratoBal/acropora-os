@@ -121,6 +121,17 @@ export function parseXml(xml: string): XmlNode {
     const current = stack.at(-1);
     if (current) current.text += text;
   });
+  /*
+    A CDATA IS SZOVEG. A saxes kulon eseményként adja ("cdata"), es eddig senki
+    nem hallgatta: a CoralSands XRechnung-szamlaja (2026-09-30) minden erteket
+    CDATA-ba tesz ("<ram:ID><![CDATA[RE66912]]></ram:ID>"), es a beolvasott
+    szamlan a szamlaszam, az elado neve es MINDEN sor cikkszama ures lett --
+    hiba nelkul, mert a mezo egyszeruen nem kapott szoveget.
+  */
+  parser.on("cdata", (data) => {
+    const current = stack.at(-1);
+    if (current) current.text += data;
+  });
   parser.on("closetag", () => {
     stack.pop();
   });
