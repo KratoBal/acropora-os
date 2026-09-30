@@ -9,6 +9,7 @@ import {
   documentContent,
   invoiceFiles,
   isCiiXml,
+  isPaymentReminder,
   placeDocument,
   supplierIdByTaxKey,
   type PlacedDocument,
@@ -340,5 +341,62 @@ describe("invoiceFiles", () => {
     assert.equal(isCiiXml(Buffer.from("<CrossIndustryInvoice>")), true);
     assert.equal(isCiiXml(Buffer.from("<x:CrossIndustryInvoice a='b'>")), true);
     assert.equal(isCiiXml(Buffer.from("<Invoice xmlns='ubl'>")), false);
+  });
+});
+
+describe("isPaymentReminder", () => {
+  const mail = (subject: string | null, ...names: string[]) => ({
+    subject,
+    pdfs: names.map((fileName) => ({ fileName, buffer: Buffer.alloc(0) })),
+    xmls: [],
+  });
+
+  // every shape below is taken from the info@ mailbox (2026-09-30, 1 750
+  // mails of 25 senders): 66 marked, all reminders; none of the invoice
+  // mails of De Jong, Hertlein, Aquarioom, CoralSands, Marine Aquatics,
+  // Hanna, Menzel or Fluidra marked
+  it("knows the reminders seen, by subject or by attachment name", () => {
+    for (const reminder of [
+      mail(
+        "Reminder for invoice 26007910 of De Jong Marinelife B.V.",
+        "First reminder 11069-26007910.pdf",
+        "inv26007910.pdf",
+      ),
+      mail(
+        "Second reminder for invoice 26003393 of De Jong Marinelife B.V.",
+        "Second_reminder_11069-26003393.pdf",
+        "inv26003393.pdf",
+      ),
+      mail("Fizetési emlékeztető - Acropora Kft."),
+      // the attachment alone is enough
+      mail("Invoice 26007910", "First reminder 11069-26007910.pdf"),
+    ])
+      assert.equal(isPaymentReminder(reminder), true, reminder.subject!);
+  });
+
+  it("knows the other languages' words, with or without accents", () => {
+    for (const subject of [
+      "Zahlungserinnerung Rechnung 4711",
+      "1. Mahnung",
+      "Betalingsherinnering factuur 123",
+      "Aanmaning",
+      "Relance facture 88",
+      "Rappel de paiement",
+      "Invoice 12 is overdue",
+      "Fizetési felszólítás",
+      "Fizetesi felszolitas",
+    ])
+      assert.equal(isPaymentReminder(mail(subject)), true, subject);
+  });
+
+  it("does not mark the invoice mails", () => {
+    for (const invoice of [
+      mail("Invoice number 26007910", "inv26007910.pdf"),
+      mail("RE: Invoice number 26007910 -delivery error", "inv26007910.pdf"),
+      mail("Fluidra Magyarország számla értesítő", "szamla.pdf"),
+      mail("Rechnung RE66912", "RE66912.pdf"),
+      mail(null, "FA00009139.pdf"),
+    ])
+      assert.equal(isPaymentReminder(invoice), false, invoice.subject ?? "");
   });
 });
