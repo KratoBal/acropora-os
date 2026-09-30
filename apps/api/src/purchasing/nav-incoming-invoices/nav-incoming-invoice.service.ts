@@ -47,6 +47,39 @@ function hasParsedLines(row: { parsedData: unknown }): boolean {
   );
 }
 
+export interface NavBackfillWindowResult {
+  windowStart: string;
+  windowEnd: string;
+  invoicesSeen: number;
+  /** Szárazon: ennyi jönne létre; élesen: ennyi jött létre. */
+  createdCount: number;
+  skippedCount: number;
+  dryRun: boolean;
+}
+
+/**
+ * Egymás utáni, legfeljebb 30 napos ablakok `from`-tól `to`-ig. A NAV a
+ * befogadási dátumra legfeljebb 35 napos tartományt fogad el; a 30 a napi
+ * szinkron saját határa is.
+ */
+export function backfillWindows(
+  from: Date,
+  to: Date,
+  maxMs: number = MAX_WINDOW_MS,
+): { start: Date; end: Date }[] {
+  const windows: { start: Date; end: Date }[] = [];
+  for (
+    let start = from.getTime();
+    start < to.getTime();
+    start = Math.min(start + maxMs, to.getTime())
+  )
+    windows.push({
+      start: new Date(start),
+      end: new Date(Math.min(start + maxMs, to.getTime())),
+    });
+  return windows;
+}
+
 @Injectable()
 export class NavIncomingInvoiceService {
   constructor(
@@ -168,6 +201,78 @@ export class NavIncomingInvoiceService {
       await this.repository.markFailed(runId, errorCode);
       throw error;
     }
+  }
+
+  /**
+   * A VISSZATÖLTÉS (acrobot, 2026-09-30): a napi szinkron a kurzorról halad
+   * előre, legfeljebb 30 napot visszanézve, tehát egy régebbi időszakot nem
+   * tud betölteni. Ez 30 napos befogadási (insDate) ablakokban megy végig
+   * `from`-tól `to`-ig, ugyanazzal a letöltéssel és ugyanazzal az idempotens
+   * beírással, de a KURZORHOZ NEM NYÚL. Szárazon csak lekérdez és számol:
+   * nem ír, futás-rekordot sem nyit.
+   */
+  async backfill(options: {
+    from: Date;
+    to?: Date;
+    dryRun: boolean;
+    onWindow?: (result: NavBackfillWindowResult) => void;
+  }): Promise<NavBackfillWindowResult[]> {
+    const results: NavBackfillWindowResult[] = [];
+    for (const window of backfillWindows(
+      options.from,
+      options.to ?? new Date(),
+    )) {
+      const items = await this.downloadDigest(window.start, window.end);
+      let result: NavBackfillWindowResult;
+      if (options.dryRun) {
+        const creatable = items.filter(
+          (item) =>
+            item.invoiceOperation === "CREATE" && item.supplierTaxNumber,
+        ).length;
+        const known = await this.repository.countKnown(items);
+        result = {
+          windowStart: window.start.toISOString(),
+          windowEnd: window.end.toISOString(),
+          invoicesSeen: items.length,
+          createdCount: creatable - known,
+          skippedCount: items.length - (creatable - known),
+          dryRun: true,
+        };
+      } else {
+        const runId = await this.repository.createRun({
+          windowStart: window.start,
+          windowEnd: window.end,
+        });
+        try {
+          const applied = await this.repository.applyDigest(
+            runId,
+            items,
+            window.start,
+            window.end,
+            { moveCursor: false },
+          );
+          result = {
+            windowStart: window.start.toISOString(),
+            windowEnd: window.end.toISOString(),
+            invoicesSeen: applied.invoicesSeen,
+            createdCount: applied.createdCount,
+            skippedCount: applied.skippedCount,
+            dryRun: false,
+          };
+        } catch (error) {
+          await this.repository.markFailed(
+            runId,
+            error instanceof Error
+              ? error.message
+              : "NAV_INVOICE_BACKFILL_FAILED",
+          );
+          throw error;
+        }
+      }
+      results.push(result);
+      options.onWindow?.(result);
+    }
+    return results;
   }
 
   private async downloadDigest(

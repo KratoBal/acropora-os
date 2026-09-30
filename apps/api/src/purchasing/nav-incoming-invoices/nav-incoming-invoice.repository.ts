@@ -150,6 +150,11 @@ export class NavIncomingInvoiceRepository extends Repository {
     items: readonly NavInvoiceDigestItem[],
     windowStart: Date | null,
     windowEnd: Date,
+    /**
+     * A visszatöltő (`backfill`) régebbi ablakot tölt be: ott a kurzor nem
+     * mozdulhat, különben a napi szinkron a régi ablakról folytatná.
+     */
+    options: { moveCursor?: boolean } = {},
   ): Promise<NavInvoiceSyncApplyResult> {
     return prisma.$transaction(
       async (tx) => {
@@ -204,15 +209,16 @@ export class NavIncomingInvoiceRepository extends Repository {
           createdCount += 1;
         }
 
-        await tx.integrationCursor.upsert({
-          where: { provider_stream: { provider: PROVIDER, stream: STREAM } },
-          create: {
-            provider: PROVIDER,
-            stream: STREAM,
-            lastSuccessfulWindowEnd: windowEnd,
-          },
-          update: { lastSuccessfulWindowEnd: windowEnd },
-        });
+        if (options.moveCursor !== false)
+          await tx.integrationCursor.upsert({
+            where: { provider_stream: { provider: PROVIDER, stream: STREAM } },
+            create: {
+              provider: PROVIDER,
+              stream: STREAM,
+              lastSuccessfulWindowEnd: windowEnd,
+            },
+            update: { lastSuccessfulWindowEnd: windowEnd },
+          });
         await tx.navInvoiceSyncRun.update({
           where: { id: runId },
           data: {
@@ -240,6 +246,25 @@ export class NavIncomingInvoiceRepository extends Repository {
         timeout: 60_000,
       },
     );
+  }
+
+  /**
+   * A SZÁRAZ VISSZATÖLTÉS SZÁMLÁLÓJA: egy digest-lista CREATE tételei közül
+   * hány ismert már. Csak olvas; a beírás ugyanezt a kulcsot használja.
+   */
+  async countKnown(items: readonly NavInvoiceDigestItem[]): Promise<number> {
+    const keys = items.filter(
+      (item) => item.invoiceOperation === "CREATE" && item.supplierTaxNumber,
+    );
+    if (keys.length === 0) return 0;
+    return prisma.navIncomingInvoice.count({
+      where: {
+        OR: keys.map((item) => ({
+          navInvoiceNumber: item.invoiceNumber,
+          supplierTaxNumber: item.supplierTaxNumber!,
+        })),
+      },
+    });
   }
 
   async list(
