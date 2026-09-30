@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -30,6 +31,11 @@ const auth = vi.hoisted(() => ({ session: null as Session | null }));
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
   params: new URLSearchParams(),
+}));
+
+// a lap a Direction F óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -240,6 +246,104 @@ describe("ProductDetailPage mirror ownership", () => {
     api.detail.mockResolvedValue(detail);
     api.updateExtension.mockResolvedValue(detail.variants[0]!.extension);
     api.categoryOptions.mockResolvedValue([]);
+  });
+
+  /*
+    DIRECTION F (Balázs briefje, 2026-09-30, 6. pont): a jobb oldal nem egy
+    függetlenül lefelé csúszó oszlop, hanem párok. MI PIROSÍT: ha a párok
+    sorrendje felborul (a jobb oldali kártyák egy tömbben állnának a bal
+    oldaliak után), ha a belső megjegyzés kétszer áll a lapon, ha a
+    "Készlet és beszerzés" nem a változat értékeit mutatja, ha a többváltozatos
+    terméknél egy változat értékét adná ki a termékének, vagy ha a lap a sötét
+    preferenciát követné, amihez a tervnek nincs értéke.
+  */
+  it("a kártyák páronként állnak: bal, jobb, bal, jobb", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+    const titles = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent);
+    expect(titles).toEqual([
+      "Katalógusgazda",
+      "Alapadatok",
+      "Szállítási jellemzők",
+      "Készlet és beszerzés",
+      "UNAS terméktükör",
+      "Csatornák",
+      "Változatok és SKU-k",
+      "Belső megjegyzés",
+      "Termékleírás",
+      "Képek",
+    ]);
+  });
+
+  it("egyváltozatos terméknél a belső megjegyzés egyszer áll, a meleg kártyában, és a készlet-kártya a változat értékeit mutatja", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    const note = screen.getByText("Csak belső adat");
+    const noteCard = note.closest("section");
+    expect(noteCard?.querySelector("h2")?.textContent).toBe("Belső megjegyzés");
+    expect(noteCard?.className).toContain("bg-pilot-accent-warm-soft");
+
+    const stockCard = screen
+      .getByRole("heading", { name: "Készlet és beszerzés" })
+      .closest("section") as HTMLElement;
+    const field = (label: string) =>
+      within(stockCard).getByText(label).parentElement?.textContent;
+    expect(field("Beszerzár")).toBe("Beszerzár10 EUR");
+    expect(field("Minimum")).toBe("Minimum2");
+    expect(field("Optimális")).toBe("Optimális8");
+    expect(field("Újrarendelési pont")).toBe("Újrarendelési pont3");
+  });
+
+  it("többváltozatos terméknél a készlet-kártya a Változatok kártyára utal, nem egy változat értékét adja ki", async () => {
+    const first = detail.variants[0]!;
+    api.detail.mockResolvedValue({
+      ...detail,
+      variants: [
+        first,
+        {
+          ...first,
+          id: "variant-2",
+          sku: "SALT-2",
+          unasBaseSku: "SKU-2",
+          barcodes: [],
+          extension: { ...first.extension!, variantId: "variant-2" },
+        },
+      ],
+    });
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    const stockCard = screen
+      .getByRole("heading", { name: "Készlet és beszerzés" })
+      .closest("section") as HTMLElement;
+    expect(within(stockCard).queryByText("Beszerzár")).toBeNull();
+    expect(
+      within(stockCard).getByText(
+        "Változatonként: a Változatok és SKU-k kártyán.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("sötét preferencia mellett is világos marad, mert a terv színeinek nincs sötét értéke", async () => {
+    window.localStorage.setItem("acropora-theme-preference", "dark");
+    try {
+      const { container } = render(<ProductDetailPage productId="product-1" />);
+      await screen.findByText("UNAS terméktükör");
+      // A tárolt preferenciát a hook EFFEKTBEN olvassa: az első render még
+      // "light" akkor is, ha a lap a sötétet követné. Az effektek lefutása
+      // után mérünk, különben a hibás kód is zöld (mérve, 2026-09-30).
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(
+        container.querySelector("[data-theme]")?.getAttribute("data-theme"),
+      ).toBe("light");
+    } finally {
+      window.localStorage.removeItem("acropora-theme-preference");
+    }
   });
 
   it("separates the read-only UNAS mirror from Acropora extension data", async () => {

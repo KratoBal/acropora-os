@@ -314,7 +314,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-pilot-grey-50">
+    <div className="relative min-h-screen bg-pilot-grey-50">
+      {/*
+        A SIDEBAR HÁTTERE A DOKUMENTUM TELJES MAGASSÁGÁBAN. A sidebar maga
+        `fixed`, tehát görgetésnél mindig kitölti a nézetet; egy teljes oldalas
+        képernyőképen viszont csak egy nézetnyi magas, és alatta a tartalom
+        háttere látszott (stage, 2026-09-30). Ez a sáv mögötte áll, díszként.
+      */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 left-0 hidden w-56 border-r border-pilot-grey-200 bg-white lg:block"
+      />
       {sidebar()}
 
       {mobileNavigationOpen ? (
