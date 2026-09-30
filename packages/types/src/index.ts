@@ -229,6 +229,7 @@ export type {
   AssetKind,
   AssetLabelScanResult,
   AssetListItem,
+  AssetListNeighbors,
   AssetListResponse,
   AssetOwnerListResponse,
   AssetOwnerOption,

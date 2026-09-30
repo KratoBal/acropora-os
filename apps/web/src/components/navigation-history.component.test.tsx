@@ -5,16 +5,18 @@ import {
   NavigationHistoryProvider,
   useListHref,
   useReturnTo,
+  useStepTo,
 } from "./navigation-history";
 
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
+  replace: vi.fn(),
   pathname: "/partnerek",
   search: "",
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: navigation.push }),
+  useRouter: () => ({ push: navigation.push, replace: navigation.replace }),
   usePathname: () => navigation.pathname,
   useSearchParams: () => new URLSearchParams(navigation.search),
 }));
@@ -33,6 +35,16 @@ function BackButton() {
 function ListCrumb() {
   const href = useListHref("/szerviz/hibajegyek");
   return <a href={href}>Hibajegyek</a>;
+}
+
+/** The detail page's Előző/Következő, reduced to one button. */
+function StepButton({ to }: { to: string }) {
+  const step = useStepTo();
+  return (
+    <button type="button" onClick={() => step(to)}>
+      Következő
+    </button>
+  );
 }
 
 function renderAt(pathname: string, search = "") {
@@ -153,5 +165,61 @@ describe("navigation history", () => {
     expect(
       screen.getByRole("link", { name: "Hibajegyek" }).getAttribute("href"),
     ).toBe("/szerviz/hibajegyek");
+  });
+
+  /*
+    AZ ELŐZŐ/KÖVETKEZŐ TESTVÉR-LÉPÉS: három lépés után a "Vissza" a szűrt
+    listára visz, nem a korábbi eszközre. MI PIROSÍT: ha a lépés rendes
+    navigációként kerül a nyomba (a "Vissza" az előző eszköz lesz), vagy ha a
+    lépés-jelölés egy MÁSIK útra érkező navigációt is elnyel.
+  */
+  it("a sibling step replaces the detail in the trail, so back still goes to the list", () => {
+    const tree = (to: string) => (
+      <NavigationHistoryProvider>
+        <BackButton />
+        <StepButton to={to} />
+      </NavigationHistoryProvider>
+    );
+    navigation.pathname = "/szerviz/eszkozok";
+    navigation.search = "status=ALL&page=2";
+    const { rerender } = render(tree("/szerviz/eszkozok/a2"));
+    const at = (pathname: string, to: string) => {
+      navigation.pathname = pathname;
+      navigation.search = "";
+      rerender(tree(to));
+    };
+    at("/szerviz/eszkozok/a1", "/szerviz/eszkozok/a2");
+
+    fireEvent.click(screen.getByRole("button", { name: "Következő" }));
+    expect(navigation.replace).toHaveBeenCalledWith("/szerviz/eszkozok/a2");
+    at("/szerviz/eszkozok/a2", "/szerviz/eszkozok/a3");
+    fireEvent.click(screen.getByRole("button", { name: "Következő" }));
+    at("/szerviz/eszkozok/a3", "/szerviz/eszkozok/a4");
+
+    expect(
+      screen.getByRole("button", { name: "Vissza" }).getAttribute("data-href"),
+    ).toBe("/szerviz/eszkozok?status=ALL&page=2");
+  });
+
+  it("a step marked for one page does not swallow a navigation elsewhere", () => {
+    const tree = () => (
+      <NavigationHistoryProvider>
+        <BackButton />
+        <StepButton to="/szerviz/eszkozok/a2" />
+      </NavigationHistoryProvider>
+    );
+    navigation.pathname = "/szerviz/eszkozok";
+    const { rerender } = render(tree());
+    navigation.pathname = "/szerviz/eszkozok/a1";
+    rerender(tree());
+
+    // the step is marked, but the reader goes to a worksheet instead
+    fireEvent.click(screen.getByRole("button", { name: "Következő" }));
+    navigation.pathname = "/szerviz/munkalapok/42";
+    rerender(tree());
+
+    expect(
+      screen.getByRole("button", { name: "Vissza" }).getAttribute("data-href"),
+    ).toBe("/szerviz/eszkozok/a1");
   });
 });

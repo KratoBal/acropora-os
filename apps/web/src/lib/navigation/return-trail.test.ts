@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { advanceTrail, lastVisitOf, previousPage } from "./return-trail";
+import {
+  advanceTrail,
+  lastVisitOf,
+  previousPage,
+  stepTrail,
+} from "./return-trail";
 
 describe("return trail", () => {
   it("remembers where the reader came from", () => {
@@ -85,5 +90,20 @@ describe("return trail", () => {
     expect(
       lastVisitOf(["/szerviz/hibajegyek/job-1"], "/szerviz/hibajegyek"),
     ).toBe(null);
+  });
+
+  it("a sibling step takes the current page's place, so back still leads to the list", () => {
+    let trail = advanceTrail([], "/szerviz/eszkozok?status=ALL&page=2");
+    trail = advanceTrail(trail, "/szerviz/eszkozok/a1");
+    trail = stepTrail(trail, "/szerviz/eszkozok/a2");
+    trail = stepTrail(trail, "/szerviz/eszkozok/a3");
+    expect(trail).toEqual([
+      "/szerviz/eszkozok?status=ALL&page=2",
+      "/szerviz/eszkozok/a3",
+    ]);
+    expect(previousPage(trail)).toBe("/szerviz/eszkozok?status=ALL&page=2");
+    expect(stepTrail([], "/szerviz/eszkozok/a1")).toEqual([
+      "/szerviz/eszkozok/a1",
+    ]);
   });
 });
