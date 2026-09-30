@@ -126,7 +126,9 @@ describe("a számlázási vázlat tárolása", { skip: gate.mode === "skip" }, (
       ],
     );
     assert.equal(detail.lines[1]!.parentLineId, detail.lines[0]!.id);
-    assert.equal(detail.totals.grossAmount, "22860.0000");
+    // A végösszeg a nyomtatott (#1283: HUF-nál egész forint, a #1275
+    // szabályával), nem a vázlat 4 tizedese.
+    assert.equal(detail.totals.grossAmount, "22860");
     assert.equal(
       detail.customer?.address,
       "1146 Budapest, Állatkerti krt. 6-12.",

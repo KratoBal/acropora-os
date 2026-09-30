@@ -23,7 +23,8 @@ import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.j
  * A LISTA VALÓDI ADATBÁZISON. Amit csak adatbázis bizonyít: a hatókör a
  * részleteké (egy bejövő és egy nem a modulból jövő kimenő sor ugyanannál a
  * partnernél NEM kerül a listára); a kiállított sor a pillanatkép nevét viseli,
- * a vázlat a partner mai nevét; a keresés a partner mai nevére is talál; a
+ * a vázlat a partner mai nevét; a keresés a partner mai nevére és a
+ * kiállításkori névre is talál; a
  * lapozás darabszáma a szűrt halmazé; és a részletek ugyanezt a vevőt és
  * végösszeget mutatják, a tárolt PDF-fel.
  */
@@ -223,10 +224,13 @@ describe(
       assert.equal(draft?.opens, "EDITOR");
     });
 
-    it("finds a draft by its partner's new name, and the issued one only by the old", async () => {
+    it("finds every document of a partner by today's name, and the issued one by the name it was issued to", async () => {
+      // A mai név a partner összes bizonylatát hozza (a kiállítottat is, a
+      // partner-kapcsolaton át); a régi név csak a pillanatkép nevét viselő
+      // kiállított sort.
       assert.deepEqual(
         (await page(`${PREFIX} új`)).items.map((item) => item.id),
-        [draftId],
+        [draftId, issuedId],
       );
       assert.deepEqual(
         (await page(`${PREFIX} RÉGI`)).items.map((item) => item.id),
