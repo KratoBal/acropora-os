@@ -38,6 +38,11 @@ const productApiMock = vi.hoisted(() => ({
 const suppliersApiMock = vi.hoisted(() => ({
   create: vi.fn(),
   search: vi.fn(),
+  detail: vi.fn(),
+}));
+
+const arrivalsApi = vi.hoisted(() => ({
+  detail: vi.fn(),
 }));
 
 const viesApi = vi.hoisted(() => ({
@@ -64,6 +69,10 @@ vi.mock("@/components/auth/auth-provider", () => ({
 
 vi.mock("@/lib/api/nav-incoming-invoices", () => ({
   navIncomingInvoicesApi: navApi,
+}));
+
+vi.mock("@/lib/api/expected-arrivals", () => ({
+  expectedArrivalsApi: arrivalsApi,
 }));
 
 vi.mock("@/lib/api/purchasing", () => ({
@@ -1008,5 +1017,147 @@ describe("PurchaseInvoiceEuEditorPage sor-javaslat", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(purchasingApiMock.suggestLine).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Javaslat \(/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * VÁRHATÓ BEÉRKEZÉS A SZERKESZTŐBEN (?beerkezes=<id>). MI PIROSIT: ha a
+ * levélből jött számla nem tölt elő; ha az ismert beszállító nincs
+ * kiválasztva; ha a tárolt javaslat helyett új javaslatot kér (új audit-futás
+ * nyílna); ha a mentés nem viszi a beérkezés azonosítóját (a tétel a listán
+ * maradna) vagy a tárolt futást; ha egy proforma-rendelés hibáját elnyeli.
+ */
+describe("PurchaseInvoiceEuEditorPage várható beérkezésből", () => {
+  const detail = {
+    id: "arr-1",
+    supplierId: euSupplier.id,
+    supplierName: euSupplier.name,
+    orderReference: "13858",
+    invoiceNumber: "FA00009139",
+    documentId: "doc-1",
+    fileName: "Facture FA00009139.pdf",
+    importResult: {
+      format: "PDF",
+      supplier: { name: euSupplier.name, vatId: "DE123456789", country: "DE" },
+      invoiceNumber: "FA00009139",
+      invoiceDate: "2026-09-30",
+      dueDate: null,
+      currency: "EUR",
+      netTotal: 93.5,
+      lines: [
+        {
+          lineNumber: 1,
+          supplierSku: "81593",
+          ean: null,
+          description: "Dupla Marin Coral Plugs",
+          quantity: 3,
+          unit: "db",
+          unitNet: 4.5,
+          discountPercent: null,
+          lineNet: 13.5,
+          isCharge: false,
+        },
+        {
+          lineNumber: 2,
+          supplierSku: null,
+          ean: null,
+          description: "Frachtkosten",
+          quantity: 1,
+          unit: "db",
+          unitNet: 80,
+          discountPercent: null,
+          lineNet: 80,
+          isCharge: true,
+        },
+      ],
+      warnings: [],
+    } satisfies SupplierInvoiceImportResult,
+    lineSuggestions: [
+      {
+        lineKey: "import-0-1",
+        lineNumber: 1,
+        result: {
+          enabled: true,
+          decisionRunId: "run-arrival-1",
+          suggestion: {
+            source: "MAPPING",
+            variantId: "variant-plugs",
+            sku: "ACR-L-000042",
+            productName: "Coral Plugs 10 db",
+            confidence: null,
+          },
+          conflict: false,
+          blocked: false,
+        },
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    navigation.params = new URLSearchParams("beerkezes=arr-1");
+    arrivalsApi.detail.mockReset().mockResolvedValue(detail);
+    suppliersApiMock.detail.mockReset().mockResolvedValue(euSupplier);
+  });
+
+  it("fills the invoice, picks the known supplier and shows the kept suggestion without asking again", async () => {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    expect(
+      await screen.findByText("Várható beérkezésből előtöltve"),
+    ).toBeInTheDocument();
+    expect(arrivalsApi.detail).toHaveBeenCalledWith("token-owner", "arr-1");
+    expect(
+      await screen.findByText(/Javaslat \(beszállítói leképezés\):/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(euSupplier.name)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Beszállítói számla fájl")).toBeNull();
+    // give the suggestion effect a chance: it must not ask for the kept line
+    await waitFor(() =>
+      expect(suppliersApiMock.detail).toHaveBeenCalledWith(
+        "token-owner",
+        euSupplier.id,
+      ),
+    );
+    expect(purchasingApiMock.suggestLine).not.toHaveBeenCalled();
+  });
+
+  it("the save books the arrival and closes the kept run", async () => {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    fireEvent.click(await screen.findByRole("button", { name: "Elfogadom" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+
+    await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
+    const [, keres] = purchasingApiMock.create.mock.calls[0] ?? [];
+    expect(keres).toMatchObject({
+      expectedArrivalId: "arr-1",
+      supplierId: euSupplier.id,
+      supplierInvoiceNumber: "FA00009139",
+    });
+    expect(keres.navIncomingInvoiceId).toBeUndefined();
+    expect(keres.lines[0]).toMatchObject({
+      variantId: "variant-plugs",
+      decisionRunId: "run-arrival-1",
+    });
+  });
+
+  it("says why a proforma-only order cannot be opened, and fills nothing", async () => {
+    arrivalsApi.detail.mockRejectedValue(
+      new Error(
+        "Ehhez a rendeléshez még csak a proforma érkezett meg, a számla nem.",
+      ),
+    );
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    expect(
+      await screen.findByText("A várható beérkezés nem tölthető be"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/csak a proforma érkezett meg/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Várható beérkezésből előtöltve")).toBeNull();
   });
 });

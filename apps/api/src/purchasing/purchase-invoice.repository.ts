@@ -157,6 +157,8 @@ export interface CreatePurchaseInvoiceParams {
   note: string | null;
   /** Ha a számla egy NAV bejövő számla bevételezéseként jön létre - a mentés a NavIncomingInvoice-ot RECEIVED állapotba állítja és összeköti ezzel a számlával. */
   navIncomingInvoiceId?: string;
+  /** Ha a számla egy várható beérkezés bevételezése: a mentés RECEIVED-re állítja és összeköti. */
+  expectedArrivalId?: string;
   actorUserId: string;
   lines: CreatePurchaseInvoiceLine[];
 }
@@ -189,6 +191,9 @@ export interface PurchaseInvoiceCreateTransaction extends InventoryMovementDatab
   };
   projectInventoryReservation: {
     create(args: unknown): Promise<{ id: string }>;
+  };
+  expectedArrival: {
+    updateMany(args: unknown): Promise<{ count: number }>;
   };
   navIncomingInvoice: {
     updateMany(args: unknown): Promise<{ count: number }>;
@@ -577,6 +582,20 @@ export class PurchaseInvoiceRepository extends Repository {
               });
               if (linked.count !== 1)
                 throw new ConflictException("NAV_INVOICE_ALREADY_RECEIVED");
+            }
+
+            if (params.expectedArrivalId) {
+              // Ugyanaz a zár, mint a NAV-nál: csak egy NYITOTT várható
+              // beérkezés vételezhető be, egyszer. A tétel ezzel lekerül a
+              // Várható beérkezések listájáról.
+              const received = await transaction.expectedArrival.updateMany({
+                where: { id: params.expectedArrivalId, status: "OPEN" },
+                data: { status: "RECEIVED", purchaseInvoiceId: invoice.id },
+              });
+              if (received.count !== 1)
+                throw new ConflictException(
+                  "EXPECTED_ARRIVAL_ALREADY_RECEIVED",
+                );
             }
 
             // Minden termékhez kapcsolt sor hat a helyi készletre. UNAS
