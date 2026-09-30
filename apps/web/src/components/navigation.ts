@@ -18,6 +18,13 @@ export interface AppNavigationItem {
    */
   entryId: string;
   exact?: boolean;
+  /**
+   * TOVÁBBI ÚTVONALAK, amiken a menüpont aktív. Az Elszámolások egy
+   * gyűjtő-útvonalra visz, de a három fül a saját, régi útvonalán él
+   * (könyvjelzők, levélben küldött linkek), és ott is az Elszámolások a
+   * jelenlegi menüpont.
+   */
+  alsoActiveOn?: string[];
 }
 
 /**
@@ -60,6 +67,29 @@ export function navigationItems(
     isNavigationGroup(entry) ? entry.children : [entry],
   );
 }
+
+/** Az Elszámolások gyűjtő-útvonala: az első olyan fülre visz, amihez van jog. */
+export const SETTLEMENTS_PATH = "/penzugy/elszamolasok";
+
+/**
+ * AZ ELSZÁMOLÁSOK FÜLEI. Az útvonalak a régiek maradtak (könyvjelzők, levélben
+ * küldött linkek); az `entryId` a fül saját láthatósági szabálya.
+ */
+export const SETTLEMENT_TABS: ReadonlyArray<{
+  href: string;
+  label: string;
+  entryId: string;
+}> = [
+  { href: "/penzugy/foxpost", label: "Foxpost", entryId: "foxpost-settlement" },
+  { href: "/penzugy/gls", label: "GLS", entryId: "gls-settlement" },
+  {
+    // Balázs, 2026-09-30: "kellene egy simple pay kimutatás is mint a
+    // foxpostnál és a gls-nél"
+    href: "/penzugy/simplepay",
+    label: "SimplePay",
+    entryId: "simplepay-settlement",
+  },
+];
 
 export const primaryNavigation: AppNavigationItem[] = [
   {
@@ -210,24 +240,15 @@ export const businessNavigation: AppNavigationEntry[] = [
         entryId: "nav-invoices",
       },
       {
-        href: "/penzugy/foxpost",
-        label: "Foxpost elszámolás",
+        // Balázs, 2026-09-30 15:06 UTC: "Szintén a Pénzügyek alá készüljön
+        // egy Elszámolások menüpont. Ez alá kerüljön be a Foxpost a GLS és a
+        // Simple Pay elszámolás." A menü két szintű, ezért a három fül a
+        // gyűjtő oldalon áll (`SETTLEMENT_TABS`), nem harmadik menüszinten.
+        href: SETTLEMENTS_PATH,
+        label: "Elszámolások",
         icon: "download",
-        entryId: "foxpost-settlement",
-      },
-      {
-        href: "/penzugy/gls",
-        label: "GLS elszámolás",
-        icon: "download",
-        entryId: "gls-settlement",
-      },
-      {
-        // Balázs, 2026-09-30: "kellene egy simple pay kimutatás is mint a
-        // foxpostnál és a gls-nél"
-        href: "/penzugy/simplepay",
-        label: "SimplePay elszámolás",
-        icon: "download",
-        entryId: "simplepay-settlement",
+        entryId: "settlements",
+        alsoActiveOn: SETTLEMENT_TABS.map((tab) => tab.href),
       },
       {
         // Ide KÖLTÖZÖTT a korábbi felső szintű "Raktár", és a lap tartalma
@@ -421,6 +442,12 @@ export function isNavigationItemActive(
   others: AppNavigationItem[] = [],
 ) {
   if (pathname === item.href) return true;
+  if (
+    item.alsoActiveOn?.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    )
+  )
+    return true;
   if (item.exact) return false;
   if (!pathname.startsWith(`${item.href}/`)) return false;
 

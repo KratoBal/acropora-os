@@ -17,6 +17,7 @@ import {
   primaryNavigation,
   secondaryNavigation,
   settingsNavigation,
+  SETTLEMENT_TABS,
   unasSettingsNavigation,
   type AppNavigationGroup,
   type AppNavigationItem,
@@ -114,9 +115,9 @@ describe("navigation", () => {
       // Várható beérkezések (Balázs, 2026-09-30): "a Beszerzés alatt"
       "/beszerzes/varhato",
       "/beszerzes/nav-szamlak",
-      "/penzugy/foxpost",
-      "/penzugy/gls",
-      "/penzugy/simplepay",
+      // Elszámolások (Balázs, 2026-09-30): a Foxpost, a GLS és a SimplePay
+      // egy menüpont alatt, fülekkel
+      "/penzugy/elszamolasok",
       "/raktar",
       "/keszlet-egyeztetes",
       "/keszlet-kimenosor",
@@ -399,9 +400,9 @@ describe("navigation", () => {
     "/beszerzes": "purchasing.view",
     "/beszerzes/varhato": "purchasing.view",
     "/beszerzes/nav-szamlak": "purchasing.view",
-    "/penzugy/foxpost": "finance.view",
-    "/penzugy/gls": "finance.view",
-    "/penzugy/simplepay": "finance.view",
+    // Az Elszámolások menüpont 2026-09-30-án váltotta a három külön tételt;
+    // a jog ugyanaz, mint a három fülé volt.
+    "/penzugy/elszamolasok": "finance.view",
     "/raktar": "inventory.view",
     "/keszlet-egyeztetes": "inventory.view",
     "/keszlet-kimenosor": "inventory.view",
@@ -476,5 +477,44 @@ describe("navigation", () => {
 
     expect(hrefs).toEqual([...new Set(hrefs)]);
     expect(hrefs).toContain("/tartalom");
+  });
+});
+
+/*
+  AZ ELSZÁMOLÁSOK MENÜPONTJA ÉS A FÜLEI UGYANAKKOR LÁTSZANAK (Balázs,
+  2026-09-30): a menüpont annak jár, akinek legalább egy fülhöz van joga. Ma
+  mindhárom fül és a menüpont is `finance.view`; ha valaha elválnak, ez a
+  teszt pirosodik, és akkor a menüpont szabályát is meg kell nézni. MI
+  PIROSÍT: ha a menüpont más jogra kerül, mint a fülek bármelyike.
+*/
+describe("Elszámolások", () => {
+  it("the menu entry shows exactly when at least one tab does, for every role", () => {
+    for (const role of USER_ROLES) {
+      const anyTab = SETTLEMENT_TABS.some((tab) =>
+        isNavigationEntryVisible(tab.entryId, role),
+      );
+      expect([role, isNavigationEntryVisible("settlements", role)]).toEqual([
+        role,
+        anyTab,
+      ]);
+    }
+  });
+
+  it("is active on the collecting path and on each tab's own path, and nowhere else", () => {
+    const entry = navigationItems(businessNavigation).find(
+      (item) => item.entryId === "settlements",
+    )!;
+    for (const pathname of [
+      "/penzugy/elszamolasok",
+      "/penzugy/foxpost",
+      "/penzugy/gls/2026-09",
+      "/penzugy/simplepay",
+    ])
+      expect([pathname, isNavigationItemActive(pathname, entry)]).toEqual([
+        pathname,
+        true,
+      ]);
+    expect(isNavigationItemActive("/penzugy/szamlazas/uj", entry)).toBe(false);
+    expect(isNavigationItemActive("/penzugy/glsx", entry)).toBe(false);
   });
 });
