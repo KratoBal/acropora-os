@@ -2814,6 +2814,12 @@ model Invoice {
   /// Hány valódi kiállítási hívás indult erre a sorra. A Számlázz.hu
   /// kérésenként legfeljebb öt kísérletet enged (hibakezelési doksi).
   issueAttemptCount       Int                 @default(0)
+  /// A VEVŐ, AHOGY A KIÁLLÍTOTT BIZONYLATON ÁLL (Számlázás brief, lista és
+  /// részletek, 15. pont): név, cím, adószám, EU-adószám, e-mail, pontosan
+  /// úgy, ahogy a Számlázz.hu-nak ment. A kiállítás írja; a részletek egy
+  /// kiállított bizonylatnál EZT mutatják, soha nem a partner mai adatát.
+  /// Vázlatnál NULL.
+  buyerSnapshot           Json?
   createdAt               DateTime            @default(now())
   updatedAt               DateTime            @updatedAt
 
