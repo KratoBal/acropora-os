@@ -36,9 +36,8 @@ export interface SzamlazzAmountRule {
  *   - az egységár × mennyiség = nettó azonosságon van tűrés: a D (2350,395 ->
  *     2350,40) és az E (2350,395 -> 2350) is átment, tehát a tört mennyiség
  *     tizedes egységárral NEM termék-döntés;
- *   - a HUF VÉGÖSSZEGET a Számlázz.hu egész forintra kerekíti a válaszban
- *     (B: 4700,79 -> 4701; D: 2985,01 -> 2985; E: 2984,50 -> 2985). Ezt a
- *     `szamlazzDocumentTotals` követi.
+ *   - a HUF végösszeget a Számlázz.hu TÉTELENKÉNT kerekíti egész forintra; a
+ *     pontos szabály a `szamlazzDocumentTotals`-nál áll, 14 mérésből.
  */
 export const SZAMLAZZ_AMOUNT_RULE: SzamlazzAmountRule = {
   hufDecimals: 2,
@@ -148,34 +147,66 @@ export interface SzamlazzDocumentTotals {
   netAmount: string;
   vatAmount: string;
   grossAmount: string;
+  /**
+   * A tételek (a bemenet sorrendjében, 0-tól), amik nem nulla összeggel mentek,
+   * és a forint-kerekítés után 0 Ft-os bruttóval állnak a számlán (mért: 0,20
+   * Ft -> 0). Nem hiba, de a felület jelezze, ne tűnjön el csendben.
+   */
+  zeroForintLines: number[];
 }
 
 /**
- * A bizonylat végösszege, ahogy a Számlázz.hu kiírja: HUF-ban EGÉSZ FORINTRA
- * kerekítve (mért, lásd `SZAMLAZZ_AMOUNT_RULE`), más pénznemben 2 tizedesen.
- * A nettó és a bruttó külön kerekül, az ÁFA a kettő különbsége: az öt mért
- * változat mindegyike így jön ki (B: 4701 és 5970, tehát 1269).
+ * A bizonylat végösszege, AHOGY A SZÁMLÁZZ.HU KIÍRJA. MÉRVE a stage
+ * tesztfiókján (2026-09-30, acrobot 25153, 25157, 25159 és 25161, 14
+ * előnézet, mindegyik sikeres), HUF-ban TÉTELENKÉNT:
  *
- * NEM MÉRT MÉG: hogy a forintra kerekítés tételenként vagy az összegen
- * történik. Egytételes bizonylatnál a kettő ugyanaz; ez a függvény az ÖSSZEGEN
- * kerekít. A kéttételes mérés (meres-kerekites-osszeg.mjs) dönti el.
+ *   bruttó = round(tétel bruttó)                    fél-felfelé, a nullától el
+ *   ÁFA    = round(tétel ÁFA)
+ *   nettó  = bruttó - ÁFA
+ *
+ * és a végösszeg ezek összege. Ami ezt eldöntötte, mert első ránézésre más
+ * szabály is illett rá:
+ *   - G (2350,40 + 2350,40): a nettó 4700, nem 4701 -> TÉTELENKÉNT kerekít;
+ *   - H3 (1,40, bruttó 1,78): a nettó 2, nem 1 -> a nettót NEM önmagában
+ *     kerekíti, hanem a kerekített bruttóból vezeti le;
+ *   - I1 (5,75; ÁFA 1,55; bruttó 7,30): a nettó 5, I2 (20,12; 5,43; 25,55):
+ *     a nettó 21 -> bruttó MÍNUSZ kerekített ÁFA, nem round(bruttó / 1,27);
+ *   - H5 (10,00 és -0,40): -0,51 -> -1, a negatív sor is a nullától el kerül.
+ * Más pénznemben a tétel 2 tizedese marad, ott nincs forint-kerekítés.
  */
 export function szamlazzDocumentTotals(
-  lines: ReadonlyArray<{ netAmount: string; grossAmount: string }>,
+  lines: ReadonlyArray<{
+    netAmount: string;
+    vatAmount: string;
+    grossAmount: string;
+  }>,
   currency: string,
 ): SzamlazzDocumentTotals {
   const decimals = currency.toUpperCase() === "HUF" ? 0 : 2;
-  const sum = (key: "netAmount" | "grossAmount") =>
-    lines.reduce((total, line) => {
-      const parsed = parse(line[key]);
-      if (!parsed) throw new Error("SZAMLAZZ_TOTAL_INVALID_NUMBER");
-      return total + rescale(parsed.value, parsed.scale, 4);
-    }, 0n);
-  const net = rescale(sum("netAmount"), 4, decimals);
-  const gross = rescale(sum("grossAmount"), 4, decimals);
+  const read = (text: string) => {
+    const parsed = parse(text);
+    if (!parsed) throw new Error("SZAMLAZZ_TOTAL_INVALID_NUMBER");
+    return parsed;
+  };
+  let net = 0n;
+  let vat = 0n;
+  let gross = 0n;
+  const zeroForintLines: number[] = [];
+  lines.forEach((line, index) => {
+    const lineGross = read(line.grossAmount);
+    const lineVat = read(line.vatAmount);
+    const roundedGross = rescale(lineGross.value, lineGross.scale, decimals);
+    const roundedVat = rescale(lineVat.value, lineVat.scale, decimals);
+    if (roundedGross === 0n && lineGross.value !== 0n)
+      zeroForintLines.push(index);
+    gross += roundedGross;
+    vat += roundedVat;
+    net += roundedGross - roundedVat;
+  });
   return {
     netAmount: format(net, decimals),
-    vatAmount: format(gross - net, decimals),
+    vatAmount: format(vat, decimals),
     grossAmount: format(gross, decimals),
+    zeroForintLines,
   };
 }

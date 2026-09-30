@@ -141,74 +141,126 @@ describe("szamlazzLineAmounts", () => {
   });
 });
 
-// the Agent's own answers on the stage test account (acrobot 25153): the
-// totals it returned for what each variant sent
+// THE AGENT'S OWN ANSWERS on the stage test account, 2026-09-30 (acrobot 25153,
+// 25157, 25159, 25161): what each preview sent, and the net and gross totals
+// Számlázz.hu answered. Every one of them must come out exactly.
+const MEASURED: Array<{
+  name: string;
+  sent: Array<[net: string, vat: string, gross: string]>;
+  net: string;
+  gross: string;
+}> = [
+  { name: "A", sent: [["2000", "540", "2540"]], net: "2000", gross: "2540" },
+  {
+    name: "B",
+    sent: [["4700.79", "1269.21", "5970.00"]],
+    net: "4701",
+    gross: "5970",
+  },
+  { name: "C", sent: [["1500", "405", "1905"]], net: "1500", gross: "1905" },
+  {
+    name: "D",
+    sent: [["2350.40", "634.61", "2985.01"]],
+    net: "2350",
+    gross: "2985",
+  },
+  {
+    name: "E",
+    sent: [["2350", "634.5", "2984.50"]],
+    net: "2350",
+    gross: "2985",
+  },
+  {
+    name: "F",
+    sent: [
+      ["0.40", "0.11", "0.51"],
+      ["0.40", "0.11", "0.51"],
+    ],
+    net: "2",
+    gross: "2",
+  },
+  {
+    name: "G",
+    sent: [
+      ["2350.40", "634.61", "2985.01"],
+      ["2350.40", "634.61", "2985.01"],
+    ],
+    net: "4700",
+    gross: "5970",
+  },
+  { name: "H1", sent: [["0.20", "0.05", "0.25"]], net: "0", gross: "0" },
+  { name: "H2", sent: [["0.60", "0.16", "0.76"]], net: "1", gross: "1" },
+  { name: "H3", sent: [["1.40", "0.38", "1.78"]], net: "2", gross: "2" },
+  { name: "H4", sent: [["0.50", "0.14", "0.64"]], net: "1", gross: "1" },
+  {
+    name: "H5",
+    sent: [
+      ["10", "2.7", "12.70"],
+      ["-0.40", "-0.11", "-0.51"],
+    ],
+    net: "9",
+    gross: "12",
+  },
+  { name: "I1", sent: [["5.75", "1.55", "7.30"]], net: "5", gross: "7" },
+  { name: "I2", sent: [["20.12", "5.43", "25.55"]], net: "21", gross: "26" },
+];
+
 describe("szamlazzDocumentTotals", () => {
-  const totals = (lines: Array<[string, string]>, currency = "HUF") =>
+  const totals = (
+    sent: ReadonlyArray<readonly [string, string, string]>,
+    currency = "HUF",
+  ) =>
     szamlazzDocumentTotals(
-      lines.map(([netAmount, grossAmount]) => ({ netAmount, grossAmount })),
+      sent.map(([netAmount, vatAmount, grossAmount]) => ({
+        netAmount,
+        vatAmount,
+        grossAmount,
+      })),
       currency,
     );
 
-  it("rounds a forint document to whole forints, as Számlázz.hu answered", () => {
-    for (const [sent, net, gross] of [
-      [["2000", "2540"], "2000", "2540"], // A
-      [["4700.79", "5970.00"], "4701", "5970"], // B
-      [["1500", "1905"], "1500", "1905"], // C
-      [["2350.40", "2985.01"], "2350", "2985"], // D
-      [["2350", "2984.50"], "2350", "2985"], // E
-    ] as const) {
-      const result = totals([sent as unknown as [string, string]]);
+  it("gives every total Számlázz.hu answered on the test account", () => {
+    for (const measured of MEASURED) {
+      const result = totals(measured.sent);
       assert.deepEqual(
         [result.netAmount, result.grossAmount],
-        [net, gross],
-        sent.join(" / "),
+        [measured.net, measured.gross],
+        measured.name,
       );
     }
   });
 
-  it("makes the VAT the difference, so net + VAT = gross on the total", () => {
-    assert.deepEqual(totals([["4700.79", "5970.00"]]), {
-      netAmount: "4701",
-      vatAmount: "1269",
-      grossAmount: "5970",
-    });
+  it("makes net + VAT = gross on the total", () => {
+    for (const measured of MEASURED) {
+      const result = totals(measured.sent);
+      assert.equal(
+        Number(result.netAmount) + Number(result.vatAmount),
+        Number(result.grossAmount),
+        measured.name,
+      );
+    }
   });
 
-  it("rounds the sum, not each line (not yet measured: two-line preview pending)", () => {
-    // 0.40 + 0.40 = 0.80 -> 1; line by line it would be 0
+  it("names a line that became 0 Ft, instead of letting it vanish", () => {
+    assert.deepEqual(totals([["0.20", "0.05", "0.25"]]).zeroForintLines, [0]);
     assert.deepEqual(
       totals([
-        ["0.40", "0.51"],
-        ["0.40", "0.51"],
-      ]),
-      {
-        netAmount: "1",
-        vatAmount: "0",
-        grossAmount: "1",
-      },
+        ["10", "2.7", "12.70"],
+        ["0.20", "0.05", "0.25"],
+      ]).zeroForintLines,
+      [1],
     );
+    assert.deepEqual(totals([["0.60", "0.16", "0.76"]]).zeroForintLines, []);
+    // a line that was 0 to begin with is not flagged
+    assert.deepEqual(totals([["0", "0", "0"]]).zeroForintLines, []);
   });
 
-  it("subtracts a discount line before rounding", () => {
-    assert.deepEqual(
-      totals([
-        ["2000.00", "2540.00"],
-        ["-200.00", "-254.00"],
-      ]),
-      {
-        netAmount: "1800",
-        vatAmount: "486",
-        grossAmount: "2286",
-      },
-    );
-  });
-
-  it("keeps two decimals in another currency", () => {
-    assert.deepEqual(totals([["29.97", "38.06"]], "EUR"), {
+  it("keeps two decimals, and no forint rounding, in another currency", () => {
+    assert.deepEqual(totals([["29.97", "8.09", "38.06"]], "EUR"), {
       netAmount: "29.97",
       vatAmount: "8.09",
       grossAmount: "38.06",
+      zeroForintLines: [],
     });
   });
 });
