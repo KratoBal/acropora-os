@@ -37,12 +37,13 @@ export function listWhere(
   const q = query.q?.trim();
   if (q) {
     const contains = { contains: q, mode: "insensitive" as const };
-    // A vevő neve két helyen állhat: kiállított sornál a pillanatkép neve
-    // (partnerName), vázlatnál a partner mai neve. Mindkettőre keresünk, hogy
-    // egy átnevezett partner vázlata is előkerüljön.
+    // A vevő nevét úgy keressük, ahogy a lista mutatja: kiállított sornál a
+    // pillanatkép nevét (partnerName), minden sornál a partner mai nevét. A
+    // vázlat partnerName-je a legutóbbi mentéskori név, amit a lista már nem
+    // mutat, ezért arra NEM keresünk (a CI integrációs futása fogta meg).
     where.OR = [
       { invoiceNumber: contains },
-      { partnerName: contains },
+      { status: "ISSUED", partnerName: contains },
       { customer: { is: { companyName: contains } } },
       { customer: { is: { displayName: contains } } },
       { reference: contains },

@@ -113,6 +113,17 @@ describe("listWhere", () => {
     }
   });
 
+  it("matches the stored buyer name only on issued rows", () => {
+    // A draft's partnerName is the name at its last save, which the list no
+    // longer shows; searching it would bring up a draft under a stale name.
+    const clauses = listWhere({ q: "Régi" }).OR ?? [];
+    const onName = clauses.filter((clause) => "partnerName" in clause);
+    assert.deepEqual(
+      onName.map((clause) => clause.status),
+      ["ISSUED"],
+    );
+  });
+
   it("searches nothing for a blank q", () => {
     assert.equal(listWhere({ q: "   " }).OR, undefined);
   });
