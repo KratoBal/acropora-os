@@ -15,8 +15,8 @@ import { apiRequest } from "./client";
  * A HIÁNYZÓ SZÁMLÁK VÉGPONTJAI (nautilus szerződése,
  * agents/nautilus/megosztas/hianyzo-szamlak-vegpontok.md). Olvasás
  * `finance.view`, minden módosítás `finance.manage`, és a frissített tételt
- * adja vissza (nautilus #1295, #1297, #1303). A számla feltöltése (4b) és az
- * exportok a következő szeletekkel.
+ * adja vissza (nautilus #1295, #1297, #1303, #1305). Az exportok a következő
+ * szelettel.
  */
 const base = "/missing-invoices";
 
@@ -115,6 +115,26 @@ export const missingInvoicesApi = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ marked }),
       },
+    );
+  },
+  /**
+   * SZÁMLA FELTÖLTÉSE A DRAWERBŐL (nautilus #1305): a PDF a postafiókkal közös
+   * helyre kerül, a bevételezési láncba nem, és ugyanabban a lépésben párosul
+   * a terheléshez. Ami nem PDF, azt a szerver elutasítja.
+   */
+  uploadDocument(
+    token: string,
+    id: string,
+    file: File,
+    kind: "INVOICE" | "PREMIUM_NOTICE",
+  ) {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("kind", kind);
+    return apiRequest<MissingInvoiceItemDetail>(
+      `${base}/items/${encodeURIComponent(id)}/documents`,
+      token,
+      { method: "POST", body: form },
     );
   },
   uploadStatement(token: string, file: File) {

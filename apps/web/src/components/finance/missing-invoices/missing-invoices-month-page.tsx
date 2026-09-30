@@ -57,7 +57,8 @@ const TAB_KEYS = CHARGE_TABS.map((tab) => tab.key);
  * jelöltek, teendő, Drive. Minden módosítás (párosítás, visszavonás,
  * átsorolás, papír-eredeti, megjegyzés) a frissített tételt adja vissza, és
  * utána a HÓNAP ÚJRATÖLTŐDIK: a csempék a szerver számai (brief 19. pont, 8.).
- * A számla feltöltése (4b) és az exportok a következő szeletekkel jönnek.
+ * A számla feltöltése (4b, nautilus #1305) ugyanígy megy. Az exportok a
+ * következő szelettel jönnek.
  */
 export function MissingInvoicesMonthPage({ month }: { month: string }) {
   const { session } = useAuth();
@@ -324,6 +325,12 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
           open &&
           void mutate("category", () =>
             missingInvoicesApi.category(token, open.id, next),
+          )
+        }
+        onUpload={(file, kind) =>
+          open &&
+          void mutate("upload", () =>
+            missingInvoicesApi.uploadDocument(token, open.id, file, kind),
           )
         }
         onPaperOriginal={(marked) =>
