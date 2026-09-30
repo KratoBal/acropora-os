@@ -412,6 +412,9 @@ export type {
   SupplierInvoiceImportLine,
   SupplierCodeConflict,
   SupplierInvoiceImportResult,
+  SupplierInvoiceMailSyncRunSummary,
+  SupplierInvoiceMailSyncState,
+  SupplierInvoiceMailSyncStatus,
 } from "./purchasing.js";
 export type {
   CreatePosSaleInput,
