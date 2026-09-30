@@ -18,6 +18,16 @@ import type {
 
 const EXTERNAL_ENTITY_TYPE = "Customer";
 
+/**
+ * The search text as a LIKE pattern that matches it anywhere, literally. `%`
+ * and `_` are wildcards in LIKE and the backslash is PostgreSQL's default
+ * escape, so all three are escaped: "100%" finds "100%", not "100" followed by
+ * anything. (Prisma's `contains` did this for us; the raw query has to.)
+ */
+export function customerSearchPattern(search: string): string {
+  return `%${search.trim().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
+
 const addressesInclude = {
   orderBy: [{ isDefault: "desc" as const }, { createdAt: "asc" as const }],
 };
@@ -71,6 +81,19 @@ export class CustomersRepository extends Repository {
     const unasCustomerIds = query.source
       ? await this.loadUnasCustomerIds()
       : null;
+    const searchCustomerIds = query.search?.trim()
+      ? await this.searchCustomerIds(query.search)
+      : null;
+    // Two id sets can apply at once (origin and search), so each is its own
+    // AND term: a spread `id` key would let the second silently replace the
+    // first.
+    const idFilters: Prisma.CustomerWhereInput[] = [
+      ...(query.source === "UNAS" ? [{ id: { in: unasCustomerIds! } }] : []),
+      ...(query.source === "MANUAL"
+        ? [{ id: { notIn: unasCustomerIds! } }]
+        : []),
+      ...(searchCustomerIds ? [{ id: { in: searchCustomerIds } }] : []),
+    ];
     const where: Prisma.CustomerWhereInput = {
       /**
        * A service partner carries its worksheets on a customer row of its own
@@ -87,23 +110,7 @@ export class CustomersRepository extends Repository {
       ...(query.status === "ALL"
         ? {}
         : { isActive: query.status === "ACTIVE" }),
-      ...(query.source === "UNAS" ? { id: { in: unasCustomerIds! } } : {}),
-      ...(query.source === "MANUAL" ? { id: { notIn: unasCustomerIds! } } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { displayName: { contains: query.search, mode: "insensitive" } },
-              { companyName: { contains: query.search, mode: "insensitive" } },
-              { email: { contains: query.search, mode: "insensitive" } },
-              {
-                customerNumber: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-            ],
-          }
-        : {}),
+      ...(idFilters.length > 0 ? { AND: idFilters } : {}),
     };
     const [customers, totalItems] = await Promise.all([
       prisma.customer.findMany({
@@ -130,6 +137,32 @@ export class CustomersRepository extends Repository {
         totalPages: Math.ceil(totalItems / query.pageSize),
       },
     };
+  }
+
+  /**
+   * THE SEARCH IGNORES ACCENTS AND CASE (Balázs on stage, 2026-09-30: "a
+   * partnerekbol nem talal senkit"). Measured there: "Főv" found the partner,
+   * "Fov" did not; "Állat" found three, "allat" none. People type without
+   * accents, so a search that folds only the case finds nobody for them.
+   *
+   * Prisma's `contains` + `mode: "insensitive"` becomes ILIKE, which folds case
+   * but not accents. The `unaccent` extension is installed by migration
+   * 20260828124000 (for the product search); applied to BOTH sides here, so
+   * "fov" finds "Fővárosi" and "Fov" finds "fővárosi". It cannot live in a
+   * generated column (`unaccent` is not immutable), so the matching ids are
+   * resolved first and narrow the list query, the same shape as the UNAS
+   * origin filter above.
+   */
+  private async searchCustomerIds(search: string): Promise<string[]> {
+    const pattern = customerSearchPattern(search);
+    const rows = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Customer"
+      WHERE unaccent("displayName") ILIKE unaccent(${pattern}::text)
+         OR unaccent(COALESCE("companyName", '')) ILIKE unaccent(${pattern}::text)
+         OR unaccent(COALESCE("email", '')) ILIKE unaccent(${pattern}::text)
+         OR unaccent("customerNumber") ILIKE unaccent(${pattern}::text)
+    `;
+    return rows.map((row) => row.id);
   }
 
   private async loadUnasCustomerIds(): Promise<string[]> {
