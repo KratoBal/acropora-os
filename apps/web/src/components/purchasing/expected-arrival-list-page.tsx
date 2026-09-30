@@ -256,6 +256,10 @@ export function ExpectedArrivalListPage() {
                       <td>
                         {item.stage === "INVOICE" ? (
                           <Badge variant="success">Bevételezhető</Badge>
+                        ) : item.stage === "LATE_CORRECTION" ? (
+                          <Badge variant="danger">
+                            Bevételezés után javított számla érkezett
+                          </Badge>
                         ) : (
                           <Badge variant="warning">
                             Csak proforma, a számla még nem érkezett meg

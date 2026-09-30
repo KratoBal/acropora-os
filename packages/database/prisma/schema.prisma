@@ -6729,6 +6729,12 @@ enum IncomingSupplierDocumentStatus {
   READ
   DUPLICATE
   FAILED
+  /// Egy későbbi levélben ugyanaz a számlaszám MÁS tartalommal jött (javított
+  /// számla, Marine Aquatics "UPDATED INVOICE"): ez a változat lecserélve.
+  SUPERSEDED
+  /// A már bevételezett tétel számlájának javított változata: nem cserél semmit,
+  /// a Várható beérkezések listája jelzi.
+  LATE_CORRECTION
 }
 
 enum IncomingSupplierDocumentKind {

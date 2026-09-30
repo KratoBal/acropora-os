@@ -368,8 +368,12 @@ export interface ExpectedArrivalListItem {
   supplierId: string | null;
   orderReference: string | null;
   invoiceNumber: string | null;
-  /** INVOICE: a számla megérkezett, bevételezhető; PROFORMA: még csak a proforma. */
-  stage: "PROFORMA" | "INVOICE";
+  /**
+   * INVOICE: a számla megérkezett, bevételezhető; PROFORMA: még csak a
+   * proforma; LATE_CORRECTION: a már bevételezett számla javított változata
+   * érkezett meg, nem bevételezhető, csak jelzés.
+   */
+  stage: "PROFORMA" | "INVOICE" | "LATE_CORRECTION";
   /** A legutóbbi dokumentum érkezése (NAV-nál a számla kelte). */
   arrivedAt: string | null;
   invoiceDate: string | null;

@@ -23,7 +23,8 @@ import { SupplierInvoiceImportService } from "../supplier-invoice-import/supplie
 import {
   adapterSenders,
   arrivalIdentity,
-  isDuplicateDocument,
+  documentContent,
+  placeDocument,
 } from "./expected-arrival.intake.js";
 import {
   SupplierInvoiceMailClient,
@@ -43,6 +44,10 @@ export const SUPPLIER_INVOICE_MAIL_ENV = Symbol("SUPPLIER_INVOICE_MAIL_ENV");
 
 const ACTIVE_KEY = "SUPPLIER_INVOICE_MAIL_SYNC";
 const STALE_RUN_AFTER_MS = 30 * 60_000;
+
+/** Where a PDF went, or the code it failed with. */
+type IngestOutcome =
+  "READ" | "DUPLICATE" | "SUPERSEDED" | "LATE_CORRECTION" | (string & {});
 
 type Counts = {
   messagesSeen: number;
@@ -174,8 +179,11 @@ export class ExpectedArrivalIntakeService {
         let errorCode: string | null = message.pdfs.length ? null : "NO_PDF";
         for (const pdf of message.pdfs) {
           const outcome = await this.ingest(message, pdf);
-          if (outcome === "READ") counts.documentsRead++;
-          else if (outcome === "DUPLICATE") counts.duplicateCount++;
+          // a late correction is read and shown; an older version is not new
+          if (outcome === "READ" || outcome === "LATE_CORRECTION")
+            counts.documentsRead++;
+          else if (outcome === "DUPLICATE" || outcome === "SUPERSEDED")
+            counts.duplicateCount++;
           else {
             counts.failedCount++;
             errorCode = outcome;
@@ -222,13 +230,14 @@ export class ExpectedArrivalIntakeService {
   }
 
   /**
-   * One PDF of one mail. Returns READ, DUPLICATE, or the code it failed with.
+   * One PDF of one mail. Returns where it went (READ, DUPLICATE, SUPERSEDED,
+   * LATE_CORRECTION), or the code it failed with.
    * Exported for the test through the class; the database calls are Prisma's.
    */
   async ingest(
     message: SupplierInvoiceMail,
     pdf: { fileName: string; buffer: Buffer },
-  ): Promise<"READ" | "DUPLICATE" | string> {
+  ): Promise<IngestOutcome> {
     const existing = await prisma.incomingSupplierDocument.findUnique({
       where: {
         gmailMessageId_fileName: {
@@ -302,35 +311,66 @@ export class ExpectedArrivalIntakeService {
       update: {},
       include: {
         documents: {
-          where: { status: "READ" },
-          select: { sha256: true, kind: true, importResult: true },
+          // every version kept: a copy of a replaced one is still a copy
+          where: { status: { in: ["READ", "SUPERSEDED", "LATE_CORRECTION"] } },
+          select: {
+            id: true,
+            sha256: true,
+            kind: true,
+            importResult: true,
+            receivedAt: true,
+            createdAt: true,
+          },
         },
       },
     });
 
-    const duplicate =
-      arrival.status !== "OPEN" ||
-      isDuplicateDocument(
-        { sha256, kind: identity.kind, invoiceNumber: identity.invoiceNumber },
-        arrival.documents.map((document) => ({
+    const placement = placeDocument(
+      {
+        sha256,
+        kind: identity.kind,
+        invoiceNumber: identity.invoiceNumber,
+        content: documentContent(result),
+        receivedAt: message.receivedAt ?? new Date(),
+      },
+      arrival.documents.map((document) => {
+        const reading =
+          document.importResult as SupplierInvoiceImportResult | null;
+        return {
           sha256: document.sha256,
           kind: document.kind,
           invoiceNumber:
-            (document.importResult as { invoiceNumber?: string | null } | null)
-              ?.invoiceNumber ?? null,
-        })),
-      );
+            document.kind === "INVOICE"
+              ? (reading?.invoiceNumber ?? null)
+              : null,
+          content: documentContent(reading),
+          receivedAt: document.receivedAt ?? document.createdAt,
+        };
+      }),
+      arrival.status === "OPEN",
+    );
 
-    const document = await prisma.incomingSupplierDocument.create({
-      data: {
-        ...base,
-        status: duplicate ? "DUPLICATE" : "READ",
-        kind: identity.kind,
-        importResult: result as unknown as Prisma.InputJsonValue,
-        expectedArrivalId: arrival.id,
-      },
+    const replaced =
+      placement.status === "READ"
+        ? placement.supersedes.map((index) => arrival.documents[index]!.id)
+        : [];
+    const document = await prisma.$transaction(async (tx) => {
+      if (replaced.length > 0)
+        await tx.incomingSupplierDocument.updateMany({
+          where: { id: { in: replaced } },
+          data: { status: "SUPERSEDED" },
+        });
+      return tx.incomingSupplierDocument.create({
+        data: {
+          ...base,
+          status: placement.status,
+          kind: identity.kind,
+          importResult: result as unknown as Prisma.InputJsonValue,
+          expectedArrivalId: arrival.id,
+        },
+      });
     });
-    if (duplicate) return "DUPLICATE";
+    if (placement.status !== "READ") return placement.status;
 
     // The invoice arrives to an order the proforma opened: it names the invoice.
     if (

@@ -32,8 +32,20 @@ Egy várható beérkezés egy beszállítói RENDELÉS (`ExpectedArrival`).
      és a válaszokat a dokumentummal együtt tárolja.
 - **Amit nem nyit új tételnek:**
   - **Duplikátum:** ugyanazok a bájtok, vagy ugyanaz a fajta ugyanazzal a
-    számlaszámmal. Ilyet küld a De Jong finance@ emlékeztetője, amely a számlát újra
-    csatolja.
+    számlaszámmal ÉS ugyanazzal a tartalommal (fejléc-összegek és minden sor).
+    Ilyet küld a De Jong finance@ emlékeztetője, amely a számlát újra csatolja.
+  - **Javított számla** (acrobot döntése, 2026-09-30 10:42): ugyanaz a számlaszám
+    MÁS tartalommal. Ilyen a Marine Aquatics „UPDATED INVOICE”-a, 15 perccel az
+    eredeti után, eggyel több sorral.
+    - Nyitott tételen a KÉSŐBBI levél változata marad (`READ`), a korábbi
+      `SUPERSEDED` lesz. A levél érkezése dönt, nem a beolvasás sorrendje: a
+      postafiók a legújabb levelet adja előre, így az eredeti gyakran a javítás
+      UTÁN kerül sorra.
+    - Egy már megtartott változat másolata (például az eredeti újraküldése a
+      javítás után) duplikátum, nem újabb változat.
+    - Bevételezett tételen semmit nem cserél: `LATE_CORRECTION` lesz, és a lista
+      „Bevételezés után javított számla érkezett” jelzéssel mutatja, szerkesztő
+      nélkül.
   - **Olvashatatlan PDF:** a hibakódjával tárolódik, és semmi nem kerül kitalálásra.
   - **Le nem tölthető levél:** nem kerül a naplóba, ezért a következő futás újra
     megpróbálja.
@@ -55,11 +67,10 @@ nélkül olvasható, és a sorok összege egyezik a végösszeggel.
 - A végösszeg egész euróra kerekített. Az 1 eurónál kisebb eltérés „Kerekítés” díjsor
   lesz, a nagyobb figyelmeztetés marad.
 - A szállítási számlán üres a rendelésszám, ezért a saját számlaszáma a kulcs.
-- **Nyitott pont: a javított számla.** A 32600434-es számla kétszer jött (eredeti és
-  „UPDATED INVOICE”, 15 perc különbséggel), és a javított változatban eggyel több sor
-  áll. A mai szabály ugyanazt a fajtát ugyanazzal a számlaszámmal duplikátumnak veszi,
-  tehát a javított változat elveszne, és az eredeti maradna. Hogy mi legyen helyette,
-  az döntés, nem kód.
+- **A javított számla** (lezárva, #1247): a 32600434-es számla kétszer jött (eredeti
+  és „UPDATED INVOICE”, 15 perc különbséggel), a javított változatban eggyel több
+  sorral. A javított változat marad, az eredeti lecserélődik: a szabály fent, a
+  duplikátumoknál áll.
 
 ## A NAV-számlák behúzása időzítőre
 
