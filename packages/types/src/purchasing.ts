@@ -300,3 +300,38 @@ export interface SupplierInvoiceImportResult {
   /** Emberi nyelvű figyelmeztetések (magyarul), pl. ha a sorösszeg eltér a végösszegtől. */
   warnings: string[];
 }
+
+/**
+ * VÁRHATÓ BEÉRKEZÉSEK (Balázs, 2026-09-30): a beszállítói számla-levelek
+ * behúzásának állapota és egy futás összegzése.
+ */
+export type SupplierInvoiceMailSyncState =
+  | "ENABLED"
+  | "NO_KEY"
+  | "NO_SENDERS"
+  | "DISABLED_NOT_SET"
+  | "DISABLED_OFF"
+  | "DISABLED_UNRECOGNISED";
+
+export interface SupplierInvoiceMailSyncRunSummary {
+  status: "RUNNING" | "APPLIED" | "FAILED";
+  trigger: "SCHEDULED" | "MANUAL";
+  startedAt: string;
+  completedAt?: string;
+  messagesSeen: number;
+  documentsRead: number;
+  duplicateCount: number;
+  failedCount: number;
+  errorCode?: string;
+}
+
+export interface SupplierInvoiceMailSyncStatus {
+  state: SupplierInvoiceMailSyncState;
+  /** Kézzel indítható-e most (van kulcs és figyelt feladó). */
+  canRunNow: boolean;
+  intervalMinutes: number;
+  /** A figyelt feladó-címek. */
+  senders: string[];
+  lastRun?: SupplierInvoiceMailSyncRunSummary;
+  lastScheduledRun?: SupplierInvoiceMailSyncRunSummary;
+}
