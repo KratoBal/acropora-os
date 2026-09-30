@@ -24,7 +24,6 @@ import {
 import {
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
-  isPlainTextMailTemplateEvent,
   mailTemplateEventVariables,
   PERMISSIONS,
   splitTemplateVariables,
@@ -269,10 +268,6 @@ export class MailTemplateController {
       tud elcsuszni. Enelkul egy elgepelt nev csak a kovetkezo valodi kuldeskor
       bukna ki, amikor mar senki nem emlekszik ra, hogy a sablont atirtak.
     */
-    if (input.bodyHtml && isPlainTextMailTemplateEvent(id))
-      throw new BadRequestException(
-        "Ez a levél sima szövegként megy ki: formázott törzs nem menthető hozzá.",
-      );
     const torzs = input.bodyHtml
       ? formazottTorzs(input.bodyHtml)
       : { body: input.body, bodyHtml: null };

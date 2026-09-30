@@ -271,13 +271,6 @@ export interface MailTemplateEvent {
    * `aquarium-measurement-mail.service.spec.ts`).
    */
   readonly variables: readonly string[];
-  /**
-   * CSAK SIMA SZÖVEG: a levél formázás nélkül megy ki, ezért a szerkesztő ne
-   * kínáljon HTML-t, és a szerver sem fogad el formázott törzset (acrobot,
-   * 2026-09-30: egy csendben eldobott formázás rosszabb, mint ha nem is
-   * lehetne megadni).
-   */
-  readonly plainTextOnly?: boolean;
 }
 
 const BILLING_DOCUMENT_VARIABLES = [
@@ -417,13 +410,6 @@ export function mailTemplateEventVariables(
 }
 
 /** Ismert esemeny-e. A vegpont ES a felulet ezt kerdezi, nem sajat listat. */
-export function isPlainTextMailTemplateEvent(id: string): boolean {
-  return (
-    MAIL_TEMPLATE_EVENTS.find((esemeny) => esemeny.id === id)?.plainTextOnly ===
-    true
-  );
-}
-
 export function isMailTemplateEvent(id: string): boolean {
   return MAIL_TEMPLATE_EVENTS.some((esemeny) => esemeny.id === id);
 }
