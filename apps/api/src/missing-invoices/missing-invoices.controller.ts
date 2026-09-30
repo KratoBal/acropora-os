@@ -4,11 +4,13 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   Post,
   Put,
   Query,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
@@ -28,12 +30,19 @@ import {
 } from "./missing-invoice-decision.dto.js";
 import { MissingInvoiceMonthQueryDto } from "./missing-invoice-month-query.dto.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
+import { XLSX_MIME } from "./missing-invoices-xlsx.js";
 
 /** Egy számla-PDF felső határa. */
 const DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
 
 /** Egy havi OTP-export néhány tíz kilobájt; a felső határ bőven fölötte van. */
 const STATEMENT_MAX_BYTES = 5 * 1024 * 1024;
+
+function monthParam(month: string): string {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+    throw new BadRequestException("A hónap alakja ÉÉÉÉ-HH.");
+  return month;
+}
 
 /**
  * HIÁNYZÓ SZÁMLÁK (Pénzügy): a kivonat-feltöltés és a két olvasó végpont. A
@@ -58,9 +67,37 @@ export class MissingInvoicesController {
     @Param("month") month: string,
     @Query() query: MissingInvoiceMonthQueryDto,
   ) {
-    if (!/^\d{4}-\d{2}$/.test(month))
-      throw new BadRequestException("A hónap alakja ÉÉÉÉ-HH.");
-    return this.missing.month(month, query);
+    return this.missing.month(monthParam(month), query);
+  }
+
+  /** A hiánylista: a hónap Hiányzik fülének tételei (brief 13. pont). */
+  @Get("months/:month/missing.xlsx")
+  @Header("Cache-Control", "private, no-store")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  async missingXlsx(@Param("month") month: string) {
+    const { fileName, content } = await this.missing.missingXlsx(
+      monthParam(month),
+    );
+    return new StreamableFile(content, {
+      type: XLSX_MIME,
+      length: content.length,
+      disposition: `attachment; filename="${fileName}"`,
+    });
+  }
+
+  /** A könyvelői csomag: a hónap Megvan-számláinak eredetijei egy PDF-ben. */
+  @Get("months/:month/accountant-package.pdf")
+  @Header("Cache-Control", "private, no-store")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  async accountantPackage(@Param("month") month: string) {
+    const { fileName, content } = await this.missing.accountantPackage(
+      monthParam(month),
+    );
+    return new StreamableFile(content, {
+      type: "application/pdf",
+      length: content.length,
+      disposition: `attachment; filename="${fileName}"`,
+    });
   }
 
   @Get("items/:id")

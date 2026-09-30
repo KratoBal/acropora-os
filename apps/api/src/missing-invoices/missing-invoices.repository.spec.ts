@@ -49,8 +49,9 @@ describe("mergeSameInvoice", () => {
         merged[0]!.gross?.toString(),
         merged[0]!.payee,
         merged[0]!.hasOriginal,
+        merged[0]!.originalId,
       ],
-      ["nav-1", "MAILBOX", "12700", "COMPANY", true],
+      ["nav-1", "MAILBOX", "12700", "COMPANY", true, "mb-1"],
     );
   });
 

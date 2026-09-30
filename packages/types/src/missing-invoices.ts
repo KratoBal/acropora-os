@@ -34,6 +34,22 @@ export const MISSING_INVOICE_ITEM_STATES = [
 export type MissingInvoiceItemState =
   (typeof MISSING_INVOICE_ITEM_STATES)[number];
 
+/**
+ * AZ ÁLLAPOT FELIRATA: a felület és a hiánylista (xlsx) ugyanazt a szót
+ * mutatja, ezért egy helyen áll.
+ */
+export const MISSING_INVOICE_STATE_LABELS: Readonly<
+  Record<MissingInvoiceItemState, string>
+> = {
+  FOUND: "Megvan",
+  ORIGINAL_MISSING: "Eredeti hiányzik",
+  NOT_MATCHED: "Nem párosodott",
+  NO_INVOICE: "Nincs számla",
+  NOT_COMPANY: "Nem a cégre szól",
+  PROFORMA_ONLY: "Csak díjbekérő",
+  NO_INVOICE_NEEDED: "Nem kell számla",
+};
+
 export const MISSING_INVOICE_MONTH_STATUSES = [
   "READY",
   "INCOMPLETE",
@@ -57,6 +73,22 @@ export const MISSING_INVOICE_CATEGORIES = [
 ] as const;
 export type MissingInvoiceCategory =
   (typeof MISSING_INVOICE_CATEGORIES)[number];
+
+/** A kategória felirata, ugyanúgy közösen (lásd az állapotét). */
+export const MISSING_INVOICE_CATEGORY_LABELS: Readonly<
+  Record<MissingInvoiceCategory, string>
+> = {
+  DOMESTIC_SUPPLIER: "Magyar szállító",
+  FOREIGN_SUPPLIER: "Külföldi szállító",
+  CARD_SUBSCRIPTION: "Kártyás előfizetés",
+  INSURANCE: "Biztosítás",
+  UNCERTAIN: "Bizonytalan",
+  TAX: "Adó",
+  PAYROLL: "Munkabér",
+  BANK_FEE: "Banki díj",
+  INTERNAL_TRANSFER: "Belső átvezetés",
+  LOAN: "Kölcsön",
+};
 
 export const MISSING_INVOICE_TABS = [
   "MISSING",
