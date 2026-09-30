@@ -31,6 +31,11 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BillingDocumentActions } from "./billing-document-actions";
+import {
+  BillingDocumentEmailDrawer,
+  defaultBillingEmail,
+  type BillingEmailDraft,
+} from "./billing-document-email-drawer";
 import { BillingDocumentStatus } from "./billing-document-status";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
@@ -42,6 +47,12 @@ const SOURCE_LABELS: Record<string, string> = {
   SERVICE_JOB: "Szerviz munka",
   MANUAL: "Manuális",
 };
+
+const splitAddresses = (text: string) =>
+  text
+    .split(/[,;]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
 
 const MODE_LABELS: Record<BillingEmailMode, string> = {
   SEND: "E-mail kiküldése",
@@ -60,10 +71,9 @@ const MODE_LABELS: Record<BillingEmailMode, string> = {
  * A NYOMTATÁS ÉS A PDF A HIVATALOS, TÁROLT PDF (brief 12-13. pont): a felület
  * nem gyárt "hasonló" dokumentumot, és vázlatnál a két gomb tiltott.
  *
- * AZ ÚJRAKÜLDÉS GOMBJA MÉG TILTOTT (acrobot 25241): a kiküldés végpontja
- * (`POST /billing/documents/:id/email`) nautilus következő PR-jában jön. A gomb
- * addig is ott áll, a módnak megfelelő felirattal, és megmondja, miért nem
- * nyomható; a levélszerkesztő a végponttal együtt kerül ide.
+ * AZ ÚJRAKÜLDÉS SOHA NEM ÁLLÍT KI ÚJ BIZONYLATOT (brief 14. pont): csak a
+ * kiküldés végpontját hívja, a kliens által adott `requestId`-val, így egy
+ * dupla kattintás egy kézbesítés.
  */
 export function BillingDocumentDetailPage({
   documentId,
@@ -84,6 +94,11 @@ export function BillingDocumentDetailPage({
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [email, setEmail] = useState<BillingEmailDraft | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -159,6 +174,14 @@ export function BillingDocumentDetailPage({
     detail.status,
     detail.delivery?.status ?? detail.emailStatus,
   );
+  const emailDraft =
+    email ??
+    defaultBillingEmail(
+      detail.documentType,
+      detail.delivery?.lastAttempt?.recipients.to.join(", ") ??
+        detail.customer?.email ??
+        "",
+    );
   const title = detail.documentNumber ?? "Piszkozat";
   const gross = formatMoney(detail.totals.grossAmount, detail.currency);
 
@@ -191,6 +214,34 @@ export function BillingDocumentDetailPage({
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
+
+  const send = async () => {
+    setSending(true);
+    setSendError(null);
+    try {
+      const next = await billingDocumentsApi.email(token, detail.id, {
+        requestId,
+        mode: mode ?? "RESEND",
+        to: splitAddresses(emailDraft.to),
+        cc: splitAddresses(emailDraft.cc),
+        bcc: splitAddresses(emailDraft.bcc),
+        subject: emailDraft.subject,
+        body: emailDraft.body,
+      });
+      setDetail(next);
+      setDrawerOpen(false);
+      // Egy SIKERES kérés után a következő újraküldés új kérés: új azonosító.
+      setRequestId(crypto.randomUUID());
+    } catch (cause) {
+      // HIBÁNÁL AZ AZONOSÍTÓ MARAD: az újrapróbálás ugyanaz a kérés, a szerver
+      // nem küld kétszer.
+      setSendError(
+        cause instanceof Error ? cause.message : "A levél nem ment ki.",
+      );
+    } finally {
+      setSending(false);
+    }
+  };
 
   const customerNote =
     detail.customerSource === "ISSUED_SNAPSHOT"
@@ -249,11 +300,16 @@ export function BillingDocumentDetailPage({
                 ? null
                 : {
                     label: MODE_LABELS[mode ?? "RESEND"],
-                    enabled: false,
-                    reason: canResend
-                      ? "A kiküldés bekötése folyamatban van, a gomb utána lesz elérhető."
-                      : "Nincs jogosultságod e-mailt küldeni.",
-                    onClick: () => {},
+                    enabled:
+                      canResend &&
+                      mode !== null &&
+                      (detail.delivery?.canResend ?? false),
+                    reason: !canResend
+                      ? "Nincs jogosultságod e-mailt küldeni."
+                      : mode === null
+                        ? "Épp fut egy küldés, vagy a bizonylat még nincs kiállítva."
+                        : "A kiküldéshez a hivatalos PDF kell, és az még nincs meg.",
+                    onClick: () => setDrawerOpen(true),
                   }
             }
           />
@@ -485,6 +541,42 @@ export function BillingDocumentDetailPage({
           ) : null}
         </aside>
       </div>
+
+      {delivery !== "NONE" ? (
+        <BillingDocumentEmailDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          documentType={detail.documentType}
+          format={detail.invoiceFormat}
+          draft={emailDraft}
+          onChange={setEmail}
+          customerName={detail.customer?.name ?? ""}
+          grossLabel={gross}
+          meta={
+            detail.dueDate
+              ? `Fizetési határidő: ${formatDay(detail.dueDate)}`
+              : ""
+          }
+          known={{
+            "{customer_name}": detail.customer?.name ?? "{customer_name}",
+            "{document_number}": detail.documentNumber ?? "{document_number}",
+            "{invoice_number}": detail.documentNumber ?? "{invoice_number}",
+            "{gross_total}": gross,
+            "{due_date}": detail.dueDate
+              ? formatDay(detail.dueDate)
+              : "{due_date}",
+            "{order_number}": detail.reference ?? "{order_number}",
+            "{document_link}":
+              detail.szamlazz?.documentUrl ?? "{document_link}",
+          }}
+          submit={{
+            label: MODE_LABELS[mode ?? "RESEND"],
+            onSubmit: () => void send(),
+            busy: sending,
+            error: sendError,
+          }}
+        />
+      ) : null}
     </PilotThemeRoot>
   );
 }
