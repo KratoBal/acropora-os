@@ -49,6 +49,7 @@ const charge = (overrides: Partial<ChargeRow> = {}): ChargeRow => ({
   document: null,
   matchedBy: null,
   comment: null,
+  paperOriginal: false,
   ...overrides,
 });
 
@@ -545,6 +546,7 @@ describe("MissingInvoicesDrawer", () => {
         currency: "HUF",
         source: "MAILBOX",
         payee: "NOT_COMPANY",
+        hasOriginal: true,
       },
       {
         documentId: "inv-2",
@@ -554,6 +556,7 @@ describe("MissingInvoicesDrawer", () => {
         currency: "HUF",
         source: "DRIVE",
         payee: "COMPANY",
+        hasOriginal: true,
       },
     ],
     action: "REQUEST_REISSUE_TO_COMPANY",
@@ -665,6 +668,120 @@ describe("MissingInvoicesDrawer", () => {
       target: { value: "" },
     });
     expect(props.onCategory).toHaveBeenCalledWith(null);
+  });
+
+  /*
+    A 4A SZELET (nautilus #1303). MI PIROSÍT: ha a "papíron megvan" jelölő
+    nem a szerver felé menne, vagy olyan tételnél is látszana, ahol nem
+    kérdés; ha a bruttó nélküli jelölt 0-t mutatna; ha a csak NAV-adatos
+    jelölt nem mondaná meg, hogy eredeti nincs; ha a feltöltés része kezelő
+    nélkül is látszana (a végpont a 4b-vel jön).
+  */
+  it("an original-missing pairing can be marked as on paper, and back", () => {
+    const props = { ...base(), onPaperOriginal: vi.fn() };
+    const { unmount } = render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={charge({
+          state: "ORIGINAL_MISSING",
+          document: { number: "NAV-2026-1", source: "NAV" },
+          matchedBy: "RULE",
+        })}
+        extras={extras({ action: "PROVIDE_ORIGINAL" })}
+      />,
+    );
+    const box = screen.getByRole("checkbox", {
+      name: "Az eredeti papíron megvan",
+    });
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    expect(props.onPaperOriginal).toHaveBeenCalledWith(true);
+    expect(
+      screen.getByRole("region", { name: "Mit kell tenni" }),
+    ).toHaveTextContent(
+      "A számla megvan a NAV-ban; az eredeti (PDF vagy papír) kell a könyvelőnek.",
+    );
+    unmount();
+    render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={charge({
+          state: "FOUND",
+          document: { number: "NAV-2026-1", source: "NAV" },
+          matchedBy: "RULE",
+          paperOriginal: true,
+        })}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Az eredeti papíron megvan" }),
+    );
+    expect(props.onPaperOriginal).toHaveBeenLastCalledWith(false);
+  });
+
+  it("no paper-original question where there is no pairing, or the original is not the gap", () => {
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        onPaperOriginal={vi.fn()}
+        row={charge({ state: "NO_INVOICE" })}
+      />,
+    );
+    expect(
+      screen.queryByRole("checkbox", { name: "Az eredeti papíron megvan" }),
+    ).toBeNull();
+  });
+
+  it("no paper-original question on a pairing whose original is already there", () => {
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        onPaperOriginal={vi.fn()}
+        row={charge({
+          state: "FOUND",
+          document: { number: "INV-2026-08177", source: "MAILBOX" },
+          matchedBy: "RULE",
+          paperOriginal: false,
+        })}
+      />,
+    );
+    expect(
+      screen.queryByRole("checkbox", { name: "Az eredeti papíron megvan" }),
+    ).toBeNull();
+  });
+
+  it("a candidate without a gross shows a dash, and one with only NAV data says so", () => {
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        extras={extras({
+          candidates: [
+            {
+              documentId: "nav-1",
+              number: "NAV-2026-7",
+              date: "2026-08-01",
+              gross: null,
+              currency: "HUF",
+              source: "NAV",
+              payee: "COMPANY",
+              hasOriginal: false,
+            },
+          ],
+        })}
+      />,
+    );
+    const candidate = screen.getByText("NAV-2026-7").closest("li")!;
+    expect(within(candidate).getByText("—")).toBeInTheDocument();
+    expect(within(candidate).queryByText(/0 Ft/)).toBeNull();
+    expect(
+      within(candidate).getByText("Csak NAV-adat, eredeti nincs a rendszerben"),
+    ).toBeInTheDocument();
+  });
+
+  it("without an upload handler there is no upload section", () => {
+    render(<MissingInvoicesDrawer {...base()} onUpload={undefined} />);
+    expect(screen.queryByLabelText("Számla PDF")).toBeNull();
+    expect(screen.queryByText("Számla feltöltése")).toBeNull();
   });
 
   it("the Drive link only with a real address", () => {

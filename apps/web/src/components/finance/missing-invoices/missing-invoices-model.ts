@@ -1,4 +1,6 @@
 import type {
+  MissingInvoiceAction,
+  MissingInvoiceCandidate,
   MissingInvoiceCategory,
   MissingInvoiceDocumentSource,
   MissingInvoiceItemState,
@@ -40,12 +42,7 @@ export type InvoiceSource = MissingInvoiceDocumentSource;
 export type ChargeCategory = MissingInvoiceCategory;
 
 /** A „Mit kell tenni” szöveg kulcsa; a szerver az állapotból adja. */
-export type ItemAction =
-  | "REQUEST_INVOICE"
-  | "REQUEST_REISSUE_TO_COMPANY"
-  | "REQUEST_FINAL_INVOICE"
-  | "PAIR_OR_UPLOAD"
-  | "NONE";
+export type ItemAction = MissingInvoiceAction;
 
 export interface MonthRow {
   /** "2026-08" */
@@ -93,19 +90,15 @@ export interface ChargeRow {
   document: { number: string; source: InvoiceSource } | null;
   matchedBy: "RULE" | "MANUAL" | null;
   comment: string | null;
+  /** Az eredeti papíron megvan (kézi jelölés, nautilus #1303). */
+  paperOriginal: boolean;
 }
 
-export interface CandidateInvoice {
-  documentId: string;
-  number: string;
-  /** "2026-08-02" */
-  date: string;
-  gross: string;
-  currency: string;
-  source: InvoiceSource;
-  /** Kinek szól a számla. */
-  payee: "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
-}
+/**
+ * A drawer jelöltje: a közös típus (nautilus #1303). A `gross` `null`, ahol a
+ * forrás nem ad bruttót; a `hasOriginal` hamis, ha csak a NAV-adat van meg.
+ */
+export type CandidateInvoice = MissingInvoiceCandidate;
 
 export const CHARGE_STATE_LABELS: Record<ChargeInvoiceState, string> = {
   FOUND: "Megvan",
@@ -219,6 +212,9 @@ export function whatToDo(
   companyName: string | null,
 ): string | null {
   switch (action) {
+    case "PROVIDE_ORIGINAL":
+      // nautilus javaslata (25334), a szerver kulcsa #1303
+      return "A számla megvan a NAV-ban; az eredeti (PDF vagy papír) kell a könyvelőnek.";
     case "REQUEST_INVOICE":
       return "Kérd el a számlát a partnertől.";
     case "REQUEST_REISSUE_TO_COMPANY":
