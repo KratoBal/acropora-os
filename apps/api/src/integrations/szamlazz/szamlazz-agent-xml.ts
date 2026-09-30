@@ -79,6 +79,29 @@ export interface SzamlazzAgentInvoiceInput {
   comment?: string;
   /** A Számlázz.hu saját külső azonosítója (`rendelesSzam`) -- a teljesítési igazolás száma. */
   orderNumber?: string;
+  /**
+   * MELYIK BIZONYLAT (Számlázás v0.1). A négy típus UGYANAZ a kérés, csak a
+   * `fejlec` egy jelzője más (XSD 114, 119, 120): díjbekérő = `dijbekero`,
+   * előlegszámla = `elolegszamla`, szállítólevél = `szallitolevel`, a számla
+   * jelző nélkül. Hiányzó érték: számla (a karbantartási számla így hív).
+   */
+  documentType?: SzamlazzDocumentType;
+  /**
+   * `eszamla` (XSD 56, KÖTELEZŐ minden kérésben). Hiányzó: `true`, a
+   * karbantartási számla eddigi viselkedése. Díjbekérőnél és szállítólevélnél
+   * az adapter `false`-t ad: ott a formátum nem értelmezett (brief 32. pont).
+   */
+  electronic?: boolean;
+  /** A díjbekérő száma, amelyből a számla vagy az előleg készül (`dijbekeroSzamlaszam`). */
+  proformaNumber?: string;
+  /**
+   * A mi azonosítónk a Számlázz.hu-n (`szamlaKulsoAzon`). Ezzel egy ismeretlen
+   * kimenetű kiállítás utólag lekérdezhető (01-es doksi): "later the invoice can
+   * be queried with this key".
+   */
+  externalId?: string;
+  /** `szamlaNyelve`; hiányzó: "hu". */
+  language?: SzamlazzInvoiceLanguage;
   seller: {
     bank?: string;
     bankAccount?: string;
@@ -87,28 +110,69 @@ export interface SzamlazzAgentInvoiceInput {
   items: SzamlazzAgentItem[];
 }
 
+export type SzamlazzDocumentType =
+  "INVOICE" | "PROFORMA" | "ADVANCE_INVOICE" | "DELIVERY_NOTE";
+
+/** Az XSD `szamlaNyelveTipus` értékkészlete. */
+export const SZAMLAZZ_INVOICE_LANGUAGES = [
+  "hu",
+  "en",
+  "de",
+  "it",
+  "ro",
+  "sk",
+  "hr",
+  "fr",
+  "es",
+  "cz",
+  "pl",
+] as const;
+export type SzamlazzInvoiceLanguage =
+  (typeof SZAMLAZZ_INVOICE_LANGUAGES)[number];
+
+/** A típus jelzője a `fejlec`-ben; a számlának nincs. */
+const DOCUMENT_FLAG: Record<SzamlazzDocumentType, string | null> = {
+  INVOICE: null,
+  PROFORMA: "dijbekero",
+  ADVANCE_INVOICE: "elolegszamla",
+  DELIVERY_NOTE: "szallitolevel",
+};
+
 export function buildSzamlazzAgentInvoiceXml(
   input: SzamlazzAgentInvoiceInput,
 ): string {
   const settings =
     tag("szamlaagentkulcs", input.agentKey) +
-    tag("eszamla", true) +
+    tag("eszamla", input.electronic ?? true) +
     tag("szamlaLetoltes", true) +
     // valaszVerzio=2: strukturált XML válasz, a base64 PDF-fel együtt --
     // lásd generating_invoice_response.txt. Az 1-es (szöveg/PDF) alak nem
     // adna gépileg elemezhető sikeres/hiba jelzést.
-    tag("valaszVerzio", 2);
+    tag("valaszVerzio", 2) +
+    // az XSD sorrendjében a `beallitasok` utolsó eleme
+    (input.externalId === undefined
+      ? ""
+      : tag("szamlaKulsoAzon", input.externalId));
+
+  const flag = DOCUMENT_FLAG[input.documentType ?? "INVOICE"];
 
   const header =
     tag("teljesitesDatum", input.fulfillmentDate) +
     tag("fizetesiHataridoDatum", input.paymentDueDate) +
     tag("fizmod", input.paymentMethod) +
     tag("penznem", input.currency) +
-    tag("szamlaNyelve", "hu") +
+    tag("szamlaNyelve", input.language ?? "hu") +
     (input.comment === undefined ? "" : tag("megjegyzes", input.comment)) +
     (input.orderNumber === undefined
       ? ""
       : tag("rendelesSzam", input.orderNumber)) +
+    (input.proformaNumber === undefined
+      ? ""
+      : tag("dijbekeroSzamlaszam", input.proformaNumber)) +
+    // XSD 114: elolegszamla áll a dijbekero és a szallitolevel ELŐTT
+    (flag === "elolegszamla" ? tag("elolegszamla", true) : "") +
+    (flag === "dijbekero" ? tag("dijbekero", true) : "") +
+    (flag === "szallitolevel" ? tag("szallitolevel", true) : "") +
     // elonezetpdf: lásd a fejlecTipus doc-commentjét a séma 128. sorában:
     // "bizonylat előnézeti pdf (bizonylat nem készül)". Csak akkor kerül a
     // kimenetbe, ha kifejezetten kértük -- a mező hiánya a valódi kiállítás.
