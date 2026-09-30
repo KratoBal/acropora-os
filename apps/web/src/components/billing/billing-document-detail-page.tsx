@@ -34,6 +34,7 @@ import { BillingDocumentActions } from "./billing-document-actions";
 import {
   BillingDocumentEmailDrawer,
   defaultBillingEmail,
+  splitAddresses,
   type BillingEmailDraft,
 } from "./billing-document-email-drawer";
 import { BillingDocumentStatus } from "./billing-document-status";
@@ -47,12 +48,6 @@ const SOURCE_LABELS: Record<string, string> = {
   SERVICE_JOB: "Szerviz munka",
   MANUAL: "Manuális",
 };
-
-const splitAddresses = (text: string) =>
-  text
-    .split(/[,;]/)
-    .map((part) => part.trim())
-    .filter(Boolean);
 
 const MODE_LABELS: Record<BillingEmailMode, string> = {
   SEND: "E-mail kiküldése",

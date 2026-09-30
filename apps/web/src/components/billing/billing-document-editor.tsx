@@ -11,6 +11,7 @@ import {
 } from "@acropora/ui";
 import {
   billingEmailDelivery,
+  billingEmailModeFor,
   billingIssueCta,
   getDocumentCapabilities,
   hasPermission,
@@ -19,6 +20,7 @@ import {
   type BillingDocumentType,
   type InvoiceFormat,
 } from "@acropora/types";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -28,11 +30,13 @@ import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import {
   BillingDocumentEmailDrawer,
   defaultBillingEmail,
+  splitAddresses,
   type BillingEmailDraft,
 } from "./billing-document-email-drawer";
 import { BillingDocumentFields } from "./billing-document-fields";
 import { BillingDocumentLineEditor } from "./billing-document-line-editor";
 import { BillingDocumentSummary } from "./billing-document-summary";
+import { BILLING_LIST_PATH } from "./billing-document-table";
 import { BillingDocumentTypeSelector } from "./billing-document-type-selector";
 import {
   billingPreview,
@@ -87,6 +91,11 @@ export function BillingDocumentEditor({
   const canIssue = Boolean(
     session && hasPermission(session.user, PERMISSIONS.BILLING_ISSUE),
   );
+  // AZ E-SZÁMLA KIÁLLÍTÁSA A KIKÜLDÉSSEL EGYÜTT MEGY, és a kiküldés végpontja
+  // `billing.resend` jogot kér (nautilus #1288): mindkettő kell a gombhoz.
+  const canSend = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_RESEND),
+  );
 
   const [state, setState] = useState<EditorState | null>(() =>
     documentId
@@ -108,6 +117,10 @@ export function BillingDocumentEditor({
   const [issuing, setIssuing] = useState(false);
   const [issuedNumber, setIssuedNumber] = useState<string | null>(null);
   const [email, setEmail] = useState<BillingEmailDraft | null>(null);
+  /** A kiállítás utáni kiküldés kimenete: a címzettek, vagy a hiba. */
+  const [sent, setSent] = useState<
+    { ok: true; to: string } | { ok: false; error: string } | null
+  >(null);
 
   useEffect(() => {
     if (!documentId || !canView) return;
@@ -166,6 +179,10 @@ export function BillingDocumentEditor({
   const missing = missingForSave(state);
   const change = (patch: Partial<EditorState>) =>
     setState((current) => (current ? { ...current, ...patch } : current));
+
+  const emailDraft =
+    email ??
+    defaultBillingEmail(state.documentType, state.customer?.email ?? "");
 
   /** A mentés maga: a tárolt bizonylat, vagy hiba. A kiállítás is ezzel kezd. */
   const persist = async () => {
@@ -236,6 +253,7 @@ export function BillingDocumentEditor({
       setIssuedNumber(issued.documentNumber);
       if (created)
         router.replace(`${BILLING_EDITOR_PATH}/${issued.id}/szerkesztes`);
+      if (delivery === "REQUIRED") await sendAfterIssue(issued);
     } catch (cause) {
       setSaveError(
         cause instanceof Error ? cause.message : "A kiállítás nem sikerült.",
@@ -246,22 +264,60 @@ export function BillingDocumentEditor({
     }
   };
 
+  /**
+   * A KIÁLLÍTÁS UTÁNI KIKÜLDÉS, a szerkesztett levéllel. A bizonylat ekkor MÁR
+   * kiállított: ha a küldés elbukik, az nem a kiállítás hibája, és nem is
+   * vonható vissza. A felület ezt kimondja, és a részletekre visz, ahol a
+   * hiba utáni újrapróbálás ugyanazzal a levéllel megy.
+   */
+  const sendAfterIssue = async (issued: BillingDocumentDetail) => {
+    const mode = billingEmailModeFor(
+      issued.status,
+      issued.delivery?.status ?? issued.emailStatus,
+    );
+    if (mode === null) {
+      setSent({
+        ok: false,
+        error: "A bizonylat most nem küldhető ki.",
+      });
+      return;
+    }
+    try {
+      const after = await billingDocumentsApi.email(token, issued.id, {
+        requestId: crypto.randomUUID(),
+        mode,
+        to: splitAddresses(emailDraft.to),
+        cc: splitAddresses(emailDraft.cc),
+        bcc: splitAddresses(emailDraft.bcc),
+        subject: emailDraft.subject,
+        body: emailDraft.body,
+      });
+      setStatus(after.status);
+      setSent({ ok: true, to: emailDraft.to });
+    } catch (cause) {
+      setSent({
+        ok: false,
+        error: cause instanceof Error ? cause.message : "A levél nem ment ki.",
+      });
+    }
+  };
+
   const issueDisabledReason = !canIssue
     ? "A kiállításhoz billing.issue jog kell."
     : !editable
       ? "Ez a bizonylat már nem állítható ki."
       : missing.length > 0
         ? "Kiállítás előtt töltsd ki a hiányzó adatokat."
-        : delivery === "REQUIRED"
-          ? "Az e-számla kiállítása a kiküldéssel együtt megy; a kiküldés bekötése után érhető el."
-          : null;
+        : delivery === "REQUIRED" && !canSend
+          ? "Az e-számla kiállítása a kiküldéssel együtt megy, ahhoz billing.resend jog is kell."
+          : delivery === "REQUIRED" &&
+              splitAddresses(emailDraft.to).length === 0
+            ? "Add meg a kiküldési e-mail címzettjét."
+            : null;
 
   const grossLabel = preview
     ? formatMoney(preview.totals.grossAmount, state.currency)
     : "—";
-  const emailDraft =
-    email ??
-    defaultBillingEmail(state.documentType, state.customer?.email ?? "");
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
@@ -294,6 +350,28 @@ export function BillingDocumentEditor({
           variant="info"
           title={`Kiállítva: ${issuedNumber}`}
           description="A bizonylat számát a Számlázz.hu adta."
+        />
+      ) : null}
+      {sent?.ok ? (
+        <Alert
+          variant="info"
+          title="Kiküldve"
+          description={`Az értesítő levél elment: ${sent.to}.`}
+        />
+      ) : null}
+      {sent && !sent.ok ? (
+        <Alert
+          variant="danger"
+          title="A bizonylat kiállítva, de a levél nem ment ki"
+          description={`${sent.error} A kiállítás ettől érvényes; a levél a részleteknél újrapróbálható.`}
+          action={
+            <Link
+              href={`${BILLING_LIST_PATH}/${state.id}`}
+              className="text-sm font-semibold text-pilot-aqua-700 underline"
+            >
+              Részletek és újrapróbálás
+            </Link>
+          }
         />
       ) : null}
       {!editable ? (

@@ -82,6 +82,13 @@ export function defaultBillingEmail(
   };
 }
 
+/** "a@x.hu, b@y.hu; c@z.hu" -> a címek listája (a kiküldés `to`/`cc`/`bcc`-je). */
+export const splitAddresses = (text: string) =>
+  text
+    .split(/[,;]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
 /** Az előnézet: az ismert változók behelyettesítve, a többi jelölve marad. */
 export function previewBillingEmail(
   text: string,
