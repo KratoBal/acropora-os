@@ -568,6 +568,7 @@ export class PurchasingService {
           vatRate,
           note: input.note?.trim() || null,
           navIncomingInvoiceId: input.navIncomingInvoiceId,
+          expectedArrivalId: input.expectedArrivalId,
           actorUserId,
           lines: preparedLines,
         }),

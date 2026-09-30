@@ -8,6 +8,7 @@ import { SupplierInvoiceImportError } from "./supplier-invoice-import.error.js";
 import {
   SUPPLIER_PDF_ADAPTERS,
   type SupplierPdfAdapter,
+  type SupplierPdfParseOptions,
 } from "./supplier-pdf-adapter.js";
 
 /** A számla-XML és a számla-PDF is jóval kisebb ennél; a korlát a memóriát védi. */
@@ -29,7 +30,15 @@ export class SupplierInvoiceImportService {
   /** The supplier PDF adapters, in order; a test may hand in its own list. */
   adapters: readonly SupplierPdfAdapter[] = SUPPLIER_PDF_ADAPTERS;
 
-  async read(bytes: Uint8Array): Promise<SupplierInvoiceImportResult> {
+  /**
+   * `options` a PDF-illesztőhöz megy tovább. A kézi feltöltés NEM ad át semmit,
+   * tehát ott a díjbekérő `PROFORMA` hibával elutasít; a postafiók-figyelő
+   * (a Várható beérkezések) `allowProforma`-val kéri.
+   */
+  async read(
+    bytes: Uint8Array,
+    options?: SupplierPdfParseOptions,
+  ): Promise<SupplierInvoiceImportResult> {
     if (bytes.length === 0) throw new SupplierInvoiceImportError("FILE_EMPTY");
     if (bytes.length > SUPPLIER_INVOICE_MAX_BYTES)
       throw new SupplierInvoiceImportError("FILE_TOO_LARGE");
@@ -42,7 +51,7 @@ export class SupplierInvoiceImportService {
         candidate.matches(lines),
       );
       if (!adapter) throw new SupplierInvoiceImportError("PDF_LAYOUT_UNKNOWN");
-      result = adapter.parse(lines);
+      result = adapter.parse(lines, options);
     } else if (
       head
         .replace(/^﻿|^ï»¿/, "")

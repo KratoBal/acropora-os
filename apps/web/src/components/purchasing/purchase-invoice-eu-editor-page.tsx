@@ -32,6 +32,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { inferCountryFromTaxNumber } from "@/components/customers/country-options";
+import { expectedArrivalsApi } from "@/lib/api/expected-arrivals";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
 import { productApi } from "@/lib/api/products";
 import { purchasingApi } from "@/lib/api/purchasing";
@@ -119,6 +120,10 @@ export function PurchaseInvoiceEuEditorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const navInvoiceId = searchParams.get("navInvoiceId") ?? undefined;
+  // Várható beérkezések: a levélből jött számla, a listáról megnyitva.
+  const arrivalId = navInvoiceId
+    ? undefined
+    : (searchParams.get("beerkezes") ?? undefined);
   const token = session?.token ?? "";
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_MANAGE),
@@ -135,6 +140,16 @@ export function PurchaseInvoiceEuEditorPage() {
   );
   const [navPrefillError, setNavPrefillError] = useState<string | null>(null);
   const [navPrefillNumber, setNavPrefillNumber] = useState<string | null>(null);
+  const [arrivalPrefillLoading, setArrivalPrefillLoading] = useState(
+    Boolean(arrivalId),
+  );
+  const [arrivalPrefillError, setArrivalPrefillError] = useState<string | null>(
+    null,
+  );
+  const [arrivalPrefill, setArrivalPrefill] = useState<{
+    fileName: string;
+    orderReference: string | null;
+  } | null>(null);
 
   const [supplierSearch, setSupplierSearch] = useState("");
   const [supplierResults, setSupplierResults] = useState<SupplierSummary[]>([]);
@@ -210,6 +225,50 @@ export function PurchaseInvoiceEuEditorPage() {
   } | null>(null);
 
   /**
+   * Egy beolvasott beszállítói számla a szerkesztőbe: fejléc, szállító-adatok
+   * és a sorok, termék nélkül. A fájlfeltöltés és a Várható beérkezések
+   * ugyanezzel tölt, tehát a két út sorai ugyanazt a kulcsot kapják
+   * (`import-{i}-{lineNumber}`), amire az érkezéskor számolt javaslat is szól.
+   */
+  const applySupplierInvoice = (result: SupplierInvoiceImportResult) => {
+    if (result.invoiceNumber) setSupplierInvoiceNumber(result.invoiceNumber);
+    if (result.invoiceDate) setInvoiceDate(result.invoiceDate);
+    setDueDate(result.dueDate ?? "");
+    if (result.currency) setCurrency(result.currency);
+    if (result.supplier.name) setNewSupplierName(result.supplier.name);
+    if (result.supplier.vatId) setNewSupplierTaxNumber(result.supplier.vatId);
+    if (result.supplier.country) setNewSupplierCountry(result.supplier.country);
+    // the supplier list is searched by the tax id first: a name can differ
+    // between the invoice and our record, the tax id does not
+    setSupplierSearch(result.supplier.vatId ?? result.supplier.name ?? "");
+    setLines(
+      result.lines.map((line, index) => ({
+        key: `import-${index}-${line.lineNumber}`,
+        variantId: null,
+        createLocalProduct: null,
+        sku: "",
+        productName: "",
+        unit: line.unit,
+        sourceDescription: line.description,
+        supplierSku: line.supplierSku,
+        ean: line.ean,
+        isCharge: line.isCharge,
+        navLineNumber: null,
+        orderedQuantity: line.quantity,
+        actualQuantity: line.quantity,
+        unitNet: line.unitNet,
+        discountPercent: line.discountPercent ?? "",
+        projectAllocations: [],
+      })),
+    );
+    setImportSummary({
+      format: result.format,
+      lineCount: result.lines.length,
+      warnings: result.warnings,
+    });
+  };
+
+  /**
    * Beszállítói számlafájl betöltése (#1199 P-026). CSAK előtöltés: a
    * fejléc, a szállító adatai és a sorok kitöltődnek, a sorok termék nélkül
    * jönnek be, és semmi nem rögzül, amíg az ember nem ment.
@@ -221,42 +280,7 @@ export function PurchaseInvoiceEuEditorPage() {
     try {
       const result: SupplierInvoiceImportResult =
         await purchasingApi.importSupplierInvoice(token, file);
-      if (result.invoiceNumber) setSupplierInvoiceNumber(result.invoiceNumber);
-      if (result.invoiceDate) setInvoiceDate(result.invoiceDate);
-      setDueDate(result.dueDate ?? "");
-      if (result.currency) setCurrency(result.currency);
-      if (result.supplier.name) setNewSupplierName(result.supplier.name);
-      if (result.supplier.vatId) setNewSupplierTaxNumber(result.supplier.vatId);
-      if (result.supplier.country)
-        setNewSupplierCountry(result.supplier.country);
-      // the supplier list is searched by the tax id first: a name can differ
-      // between the invoice and our record, the tax id does not
-      setSupplierSearch(result.supplier.vatId ?? result.supplier.name ?? "");
-      setLines(
-        result.lines.map((line, index) => ({
-          key: `import-${index}-${line.lineNumber}`,
-          variantId: null,
-          createLocalProduct: null,
-          sku: "",
-          productName: "",
-          unit: line.unit,
-          sourceDescription: line.description,
-          supplierSku: line.supplierSku,
-          ean: line.ean,
-          isCharge: line.isCharge,
-          navLineNumber: null,
-          orderedQuantity: line.quantity,
-          actualQuantity: line.quantity,
-          unitNet: line.unitNet,
-          discountPercent: line.discountPercent ?? "",
-          projectAllocations: [],
-        })),
-      );
-      setImportSummary({
-        format: result.format,
-        lineCount: result.lines.length,
-        warnings: result.warnings,
-      });
+      applySupplierInvoice(result);
     } catch (cause) {
       setImportError(
         cause instanceof Error ? cause.message : "A számla nem tölthető be.",
@@ -357,6 +381,64 @@ export function PurchaseInvoiceEuEditorPage() {
       .finally(() => setNavPrefillLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navInvoiceId, token]);
+
+  /*
+    VÁRHATÓ BEÉRKEZÉS ELŐTÖLTÉSE (?beerkezes=<id>): a levélből érkezéskor
+    beolvasott számla, ugyanúgy, mint egy feltöltött fájl. Ha a beszállító
+    adószámmal ismert, ki is választjuk. Az érkezéskor számolt sor-javaslatok
+    a sorokra kerülnek, a saját audit-futásukkal együtt, és ezekre a sorokra
+    NEM kérünk újat: a mentés ezeket a futásokat zárja le.
+  */
+  useEffect(() => {
+    if (!arrivalId) return;
+    setSource("EU");
+    setArrivalPrefillLoading(true);
+    setArrivalPrefillError(null);
+    void expectedArrivalsApi
+      .detail(token, arrivalId)
+      .then(async (detail) => {
+        applySupplierInvoice(detail.importResult);
+        const kept = detail.lineSuggestions.filter(
+          (answer) => answer.result.enabled,
+        );
+        for (const answer of detail.lineSuggestions)
+          suggestionRequested.current.add(answer.lineKey);
+        setLineSuggestions(
+          Object.fromEntries(
+            kept.map((answer) => [answer.lineKey, answer.result]),
+          ),
+        );
+        setLines((current) =>
+          current.map((line) => {
+            const answer = kept.find(
+              (candidate) => candidate.lineKey === line.key,
+            );
+            return answer?.result.decisionRunId
+              ? { ...line, decisionRunId: answer.result.decisionRunId }
+              : line;
+          }),
+        );
+        setArrivalPrefill({
+          fileName: detail.fileName,
+          orderReference: detail.orderReference,
+        });
+        if (detail.supplierId) {
+          const supplier = await suppliersApi
+            .detail(token, detail.supplierId)
+            .catch(() => null);
+          if (supplier) setSelectedSupplier(supplier);
+        }
+      })
+      .catch((cause: unknown) =>
+        setArrivalPrefillError(
+          cause instanceof Error
+            ? cause.message
+            : "A várható beérkezés nem tölthető be.",
+        ),
+      )
+      .finally(() => setArrivalPrefillLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arrivalId, token]);
 
   useEffect(() => {
     void purchasingApi
@@ -890,6 +972,7 @@ export function PurchaseInvoiceEuEditorPage() {
         paidAt: isPaid && paidAt ? new Date(paidAt).toISOString() : undefined,
         note: note.trim() || undefined,
         navIncomingInvoiceId: navInvoiceId,
+        expectedArrivalId: arrivalId,
         lines: lines.map((line) => ({
           variantId: line.variantId ?? undefined,
           createLocalProduct: line.createLocalProduct
@@ -1012,7 +1095,7 @@ export function PurchaseInvoiceEuEditorPage() {
         </Card>
       ) : null}
 
-      {!navInvoiceId && source === "EU" ? (
+      {!navInvoiceId && !arrivalId && source === "EU" ? (
         <Card className="p-4">
           <label className="text-sm font-medium text-dusk-900">
             Beszállítói számla betöltése fájlból (XML vagy PDF)
@@ -1057,6 +1140,32 @@ export function PurchaseInvoiceEuEditorPage() {
             `${importSummary.lineCount} sor betöltve. Kösd a sorokat a saját termékeidhez, vagy hozd létre őket újként.`,
             ...importSummary.warnings,
           ].join(" ")}
+        />
+      ) : null}
+
+      {arrivalPrefillLoading ? (
+        <Card className="p-5">
+          <Skeleton className="h-4 w-1/3" />
+        </Card>
+      ) : null}
+
+      {arrivalPrefillError ? (
+        <Alert
+          variant="danger"
+          title="A várható beérkezés nem tölthető be"
+          description={arrivalPrefillError}
+        />
+      ) : null}
+
+      {arrivalPrefill && !arrivalPrefillLoading ? (
+        <Alert
+          variant="info"
+          title="Várható beérkezésből előtöltve"
+          description={`A levélből érkezett számla: ${arrivalPrefill.fileName}${
+            arrivalPrefill.orderReference
+              ? `, rendelés: ${arrivalPrefill.orderReference}`
+              : ""
+          }. Kösd a sorokat a saját termékeidhez, és add meg a ténylegesen beérkezett mennyiséget. Mentés után a tétel lekerül a Várható beérkezések listájáról.`}
         />
       ) : null}
 

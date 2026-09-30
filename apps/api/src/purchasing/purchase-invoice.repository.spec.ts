@@ -55,6 +55,10 @@ class FakeDb {
     { lastPurchaseNetPrice: Prisma.Decimal; defaultPurchaseCurrency: string }
   > = new Map();
   navIncomingInvoices: Map<string, { status: string }> = new Map();
+  expectedArrivals: Map<
+    string,
+    { status: string; purchaseInvoiceId: string | null }
+  > = new Map();
   navParsedData: Map<string, unknown> = new Map();
   createdLineInputs: any[] = [];
   domainEvents: unknown[] = [];
@@ -219,6 +223,16 @@ class FakeDb {
         defaultPurchaseCurrency: args.update.defaultPurchaseCurrency,
       });
       return {};
+    },
+  };
+
+  expectedArrival = {
+    updateMany: async (args: any) => {
+      const current = this.expectedArrivals.get(args.where.id);
+      if (!current || current.status !== args.where.status) return { count: 0 };
+      current.status = args.data.status;
+      current.purchaseInvoiceId = args.data.purchaseInvoiceId;
+      return { count: 1 };
     },
   };
 
@@ -928,6 +942,46 @@ describe("PurchaseInvoiceRepository.create", () => {
       "stock was not double-booked",
     );
     assert.equal(db.outbox.length, 1);
+  });
+
+  // Várható beérkezések: the save closes the arrival in the same transaction,
+  // once; a second booking of the same arrival is refused before any stock moves.
+  it("marks the expected arrival RECEIVED and links it to the saved invoice", async () => {
+    const db = new FakeDb();
+    db.expectedArrivals.set("arr-1", {
+      status: "OPEN",
+      purchaseInvoiceId: null,
+    });
+    const repository = repositoryWith(db);
+
+    const invoice = await repository.create(
+      baseParams({ expectedArrivalId: "arr-1" }),
+    );
+
+    assert.deepEqual(db.expectedArrivals.get("arr-1"), {
+      status: "RECEIVED",
+      purchaseInvoiceId: invoice.id,
+    });
+    assert.equal(db.movements.length, 1);
+  });
+
+  it("throws (and books nothing) when the expected arrival was already received", async () => {
+    const db = new FakeDb();
+    db.expectedArrivals.set("arr-1", {
+      status: "RECEIVED",
+      purchaseInvoiceId: "earlier",
+    });
+    const repository = repositoryWith(db);
+
+    await assert.rejects(
+      () => repository.create(baseParams({ expectedArrivalId: "arr-1" })),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message === "EXPECTED_ARRIVAL_ALREADY_RECEIVED",
+    );
+    assert.equal(db.movements.length, 0);
+    assert.equal(db.stockItems.length, 0);
+    assert.equal(db.outbox.length, 0);
   });
 
   it("throws (and books nothing) when the linked NAV incoming invoice was already received - the guard runs before any stock is touched", async () => {

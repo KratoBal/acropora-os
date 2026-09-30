@@ -275,6 +275,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.PURCHASING_VIEW),
   },
   {
+    /** Várható beérkezések: a levélből és a NAV-ból jött, még be nem vételezett számlák. */
+    id: "expected-arrivals",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.PURCHASING_VIEW),
+  },
+  {
     id: "nav-invoices",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.PURCHASING_VIEW),

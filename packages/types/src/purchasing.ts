@@ -147,6 +147,11 @@ export interface CreatePurchaseInvoiceInput {
   note?: string;
   /** Ha a számla egy NAV-ból lekérdezett belföldi bejövő számla bevételezéseként jön létre - lásd NavIncomingInvoiceDetail. */
   navIncomingInvoiceId?: string;
+  /**
+   * Ha a számla egy várható beérkezés bevételezése (Várható beérkezések): a
+   * mentés ugyanabban a tranzakcióban RECEIVED-re állítja, és lekerül a listáról.
+   */
+  expectedArrivalId?: string;
   lines: CreatePurchaseInvoiceLineInput[];
 }
 
@@ -299,6 +304,18 @@ export interface SupplierInvoiceImportResult {
   lines: SupplierInvoiceImportLine[];
   /** Emberi nyelvű figyelmeztetések (magyarul), pl. ha a sorösszeg eltér a végösszegtől. */
   warnings: string[];
+  /**
+   * A beszállító rendelésszáma, ha a dokumentum hordozza (Aquarioom: az
+   * "AQUARIOOM Order n° 13858" sorból "13858"). Ez köti össze a díjbekérőt a
+   * későbbi számlával (a Várható beérkezések, 2026-09-30). Hiányzik vagy `null`,
+   * ahol az illesztő nem ismeri.
+   */
+  orderReference?: string | null;
+  /**
+   * A dokumentum fajtája; hiányzó érték = számla. Díjbekérőt (PROFORMA) csak a
+   * kifejezetten kérő hívó kap (`allowProforma`), a kézi feltöltés elutasítja.
+   */
+  documentKind?: "INVOICE" | "PROFORMA";
 }
 
 /**
@@ -334,4 +351,55 @@ export interface SupplierInvoiceMailSyncStatus {
   senders: string[];
   lastRun?: SupplierInvoiceMailSyncRunSummary;
   lastScheduledRun?: SupplierInvoiceMailSyncRunSummary;
+}
+
+/** Honnan jött a várható beérkezés: az info@ postafiókból vagy a NAV-ból. */
+export type ExpectedArrivalSource = "MAIL" | "NAV";
+
+/**
+ * A Várható beérkezések lista egy sora. A levélből jött tétel egy RENDELÉS
+ * (proforma, majd számla); a NAV-ból jött egy még be nem vételezett NAV számla.
+ */
+export interface ExpectedArrivalListItem {
+  source: ExpectedArrivalSource;
+  /** Az ExpectedArrival, NAV-nál a NavIncomingInvoice azonosítója. */
+  id: string;
+  supplierName: string;
+  supplierId: string | null;
+  orderReference: string | null;
+  invoiceNumber: string | null;
+  /** INVOICE: a számla megérkezett, bevételezhető; PROFORMA: még csak a proforma. */
+  stage: "PROFORMA" | "INVOICE";
+  /** A legutóbbi dokumentum érkezése (NAV-nál a számla kelte). */
+  arrivedAt: string | null;
+  invoiceDate: string | null;
+  currency: string | null;
+  netTotal: number | null;
+  lineCount: number | null;
+  /** Hány sorra van termék-javaslat (csak a levélből jött számlánál). */
+  suggestedLineCount: number | null;
+  /** A szerkesztő címe, ha bevételezhető; proformánál null. */
+  editorPath: string | null;
+}
+
+export interface ExpectedArrivalListResponse {
+  items: ExpectedArrivalListItem[];
+}
+
+/** Egy levélből jött várható beérkezés a szerkesztőnek: a számla adatai és a javaslatok. */
+export interface ExpectedArrivalDetail {
+  id: string;
+  supplierId: string | null;
+  supplierName: string;
+  orderReference: string | null;
+  invoiceNumber: string | null;
+  documentId: string;
+  fileName: string;
+  importResult: SupplierInvoiceImportResult;
+  /** Soronként, a szerkesztő sor-kulcsával (`import-{i}-{lineNumber}`). */
+  lineSuggestions: Array<{
+    lineKey: string;
+    lineNumber: number;
+    result: SupplierLineSuggestionResult;
+  }>;
 }

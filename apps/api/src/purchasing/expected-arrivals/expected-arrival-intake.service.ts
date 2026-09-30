@@ -257,9 +257,11 @@ export class ExpectedArrivalIntakeService {
 
     let result: ArrivedDocumentResult;
     try {
-      result = (await this.reader.read(
-        new Uint8Array(pdf.buffer),
-      )) as ArrivedDocumentResult;
+      // a proforma opens the expected arrival, so the watcher reads it; the
+      // manual upload keeps refusing it
+      result = (await this.reader.read(new Uint8Array(pdf.buffer), {
+        allowProforma: true,
+      })) as ArrivedDocumentResult;
     } catch (error) {
       if (!(error instanceof SupplierInvoiceImportError)) throw error;
       await prisma.incomingSupplierDocument.create({

@@ -48,11 +48,41 @@ A kód már megvan (`nav-incoming-invoice.scheduler.ts`), és a
 `NAV_INVOICE_SYNC_ENABLED=true` kapcsolja be. Éles bekapcsolás csak Balázs igenjével,
 a Várható beérkezések kiadásával együtt.
 
-## Ami még jön
+## A második rész: a lista, a részlet és a bevételezés
 
-- **A második rész:** a lista és a részlet végpontja; a szerkesztő megnyitása
-  `?beerkezes=<id>` paraméterrel, előtöltve és a tárolt javaslatokkal; mentéskor a
-  tétel RECEIVED lesz, és lekerül a listáról.
-- **A harmadik rész:** a „Várható beérkezések” menüpont a Beszerzés alatt, egy listán
-  a levélből és a NAV-ból jött, még be nem vételezett számlákkal, forrás szerint
-  jelölve.
+- **A lista:** `GET /purchasing/expected-arrivals`. Egy listán áll a levélből jött és a
+  NAV-ból jött tétel, forrás szerint jelölve (acrobot döntése, 2026-09-30).
+  - A levélből jött, nyitott rendelés egy sor. Ha még csak a proformája érkezett meg,
+    látszik, de nem vételezhető be.
+  - A NAV-ból a még be nem vételezett (NEW, DATA_FETCHED) számlák kerülnek ide, a mai
+    NAV-előtöltés címével.
+  - A lista a legutóbb érkezett tétellel kezdődik.
+- **A részlet:** `GET /purchasing/expected-arrivals/:id`. A szerkesztőnek adja a számla
+  beolvasott adatait és az érkezéskor tárolt javaslatokat.
+  - Proforma-rendelésnél és már bevételezett tételnél 409-cel, magyar mondattal
+    utasít el.
+- **A szerkesztő:** a `/beszerzes/uj?beerkezes=<id>` a levélből jött számlával nyílik
+  meg.
+  - Ugyanúgy előtölt, mint a fájlfeltöltés (`applySupplierInvoice`), és az ismert
+    beszállítót ki is választja.
+  - A tárolt javaslatok a sorokra kerülnek a saját audit-futásukkal együtt, és ezekre
+    a sorokra nem kér újat.
+- **A mentés:** az `expectedArrivalId` a számlával EGY tranzakcióban RECEIVED-re
+  állítja a tételt (`purchase-invoice.repository.ts`), és a tétel lekerül a listáról.
+  Egy második bevételezést `EXPECTED_ARRIVAL_ALREADY_RECEIVED` állít meg, mielőtt
+  bármilyen készlet mozdulna.
+
+## A harmadik rész: a menüpont és az oldal
+
+- **Menüpont:** „Várható beérkezések” a Pénzügy csoportban, közvetlenül a „Beszerzés”
+  alatt (`/beszerzes/varhato`, `purchasing.view`). Új csoport nincs (acrobot,
+  2026-09-30).
+- **A lap:** egy táblázat, forrás szerint szűrhető (Összes, Levélből, NAV). A sorok:
+  - forrás, beszállító, rendelés és számlaszám, érkezés, nettó összeg;
+  - a sorok száma, és hány sorra van javaslat;
+  - állapot: „Bevételezhető”, vagy „Csak proforma, a számla még nem érkezett meg”.
+- **Kattintás:** egy bevételezhető sor a szerkesztőbe visz, előtöltve; a proforma sora
+  nem kattintható.
+- **A levél-behúzás:**
+  - a lap tetején egy mondat mondja meg, magától fut-e;
+  - a „Levelek ellenőrzése” gomb (`purchasing.manage`) kézzel indítja.
