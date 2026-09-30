@@ -61,6 +61,20 @@ export const billingDocumentsApi = {
    * `BILLING_DOCUMENT_MANUAL` sablonja, ahogy átírták, vagy az alapszövege;
    * nyers, `{{név}}` alakú változókkal. `billing.resend` jog kell hozzá.
    */
+  /**
+   * UGYANAZ A SABLON, BIZONYLAT NÉLKÜL (nautilus #1300): egy még nem mentett
+   * új számla fiókja is a Levelezés oldalon beállított szövegből induljon
+   * (Balázs a stage-en, acrobot 25337). `billing.resend` jog kell hozzá.
+   */
+  templateDraft(token: string, signal?: AbortSignal) {
+    return apiRequest<BillingEmailTemplateDraft>(
+      `/billing/email-draft`,
+      token,
+      {
+        signal,
+      },
+    );
+  },
   emailDraft(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<BillingEmailTemplateDraft>(
       `/billing/documents/${encodeURIComponent(id)}/email-draft`,

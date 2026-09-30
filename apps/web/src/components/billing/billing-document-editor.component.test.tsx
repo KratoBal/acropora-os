@@ -39,6 +39,7 @@ const api = vi.hoisted(() => ({
   issue: vi.fn(),
   email: vi.fn(),
   emailDraft: vi.fn(),
+  templateDraft: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -126,7 +127,8 @@ beforeEach(() => {
   api.email.mockReset();
   // A LEVELEZÉS OLDAL SABLONJA (nautilus #1293): ez megy ki, amíg a levélhez
   // senki nem nyúlt.
-  api.emailDraft.mockReset().mockResolvedValue({
+  api.emailDraft.mockReset();
+  api.templateDraft.mockReset().mockResolvedValue({
     source: "stored",
     subject: "Sablon – {{document_number}}",
     body: "Kedves {{customer_name}}! A(z) {{document_number}} számla csatolva.",
@@ -447,7 +449,7 @@ describe("BillingDocumentEditor", () => {
       expect(input.requestId).toMatch(/^[0-9a-f-]{36}$/);
       // AZ ÉRINTETLEN LEVÉL A LEVELEZÉS OLDAL SABLONJA, nem a fiók helyi
       // alapszövege (nautilus #1293)
-      expect(api.emailDraft).toHaveBeenCalledWith("token-1", id);
+      expect(api.templateDraft).toHaveBeenCalledWith("token-1");
       expect(input.subject).toBe("Sablon – {{document_number}}");
       expect(input.body).toBe(
         "Kedves {{customer_name}}! A(z) {{document_number}} számla csatolva.",
@@ -458,6 +460,36 @@ describe("BillingDocumentEditor", () => {
         ),
       ).toBeInTheDocument();
       expect(screen.getByText("Kiállítva: AC-2026-000002")).toBeInTheDocument();
+    });
+
+    /*
+      BALÁZS A STAGE-EN (acrobot 25337): a Levelezés oldalon átírt sablon az
+      ÚJ, még nem mentett számla fiókjában nem jelent meg. MI PIROSÍT: ha a
+      fiók mentés nélkül nem kérné le a sablont, vagy a beégetett alapszöveget
+      mutatná helyette.
+    */
+    it("a new, unsaved invoice opens its letter from the Levelezés template", async () => {
+      render(<BillingDocumentEditor />);
+      await pickPartner();
+      fireEvent.click(
+        screen.getByRole("button", { name: "E-mail szerkesztése" }),
+      );
+      const drawer = await screen.findByRole("dialog");
+      await waitFor(() =>
+        expect(
+          (
+            within(drawer).getByLabelText(
+              "Levél tartalma",
+            ) as HTMLTextAreaElement
+          ).value,
+        ).toBe(
+          "Kedves {{customer_name}}! A(z) {{document_number}} számla csatolva.",
+        ),
+      );
+      expect(
+        (within(drawer).getByLabelText("Tárgy") as HTMLInputElement).value,
+      ).toBe("Sablon – {{document_number}}");
+      expect(api.create).not.toHaveBeenCalled();
     });
 
     it("a letter edited in the drawer goes out as edited, not the template", async () => {
@@ -479,11 +511,13 @@ describe("BillingDocumentEditor", () => {
       await confirmIssueAndSend();
       await waitFor(() => expect(api.email).toHaveBeenCalledTimes(1));
       expect(api.email.mock.calls[0]![2].subject).toBe("Saját tárgy");
-      expect(api.emailDraft).not.toHaveBeenCalled();
+      // a sablont a fiók megnyitása kérte le egyszer; a kiállítás nem kéri
+      // újra, és nem írja felül a kézzel szerkesztett levelet
+      expect(api.templateDraft).toHaveBeenCalledTimes(1);
     });
 
     it("if the template cannot be loaded, no letter goes out, and it says so", async () => {
-      api.emailDraft.mockRejectedValue(new Error("A sablon nem érhető el."));
+      api.templateDraft.mockRejectedValue(new Error("A sablon nem érhető el."));
       await readyEInvoice();
       await confirmIssueAndSend();
       const warning = await screen.findByText(
