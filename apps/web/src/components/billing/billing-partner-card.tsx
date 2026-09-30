@@ -6,7 +6,11 @@ import {
   PilotInput,
   PilotSection,
 } from "@acropora/ui";
-import type { BillingDocumentCustomer, CustomerSummary } from "@acropora/types";
+import {
+  CUSTOMER_LIST_PAGE_SIZE,
+  type BillingDocumentCustomer,
+  type CustomerSummary,
+} from "@acropora/types";
 import { useEffect, useState } from "react";
 
 import { customersApi } from "@/lib/api/customers";
@@ -32,9 +36,14 @@ export function BillingPartnerCard({
   const [picking, setPicking] = useState(customer === null);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<CustomerSummary[]>([]);
+  // A KERESÉS HIBÁJA NEM "NINCS TALÁLAT" (Balázs a stage-en, 2026-09-30: "a
+  // partnerekbol nem talal senkit"). A választó egy elutasított kérést üres
+  // listának mutatott, így a 400 hetekig "Nincs találat."-nak látszott.
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setSearchError(null);
     if (!picking || search.trim().length < 2) {
       setResults([]);
       return;
@@ -44,11 +53,23 @@ export function BillingPartnerCard({
       customersApi
         .list(
           token,
-          new URLSearchParams({ search, page: "1", pageSize: "8" }),
+          new URLSearchParams({
+            search,
+            page: "1",
+            pageSize: String(CUSTOMER_LIST_PAGE_SIZE.min),
+          }),
           controller.signal,
         )
         .then((response) => setResults(response.items))
-        .catch(() => setResults([]));
+        .catch((cause: unknown) => {
+          if (controller.signal.aborted) return;
+          setResults([]);
+          setSearchError(
+            cause instanceof Error && cause.message
+              ? `A partnerek keresése nem sikerült: ${cause.message}`
+              : "A partnerek keresése nem sikerült.",
+          );
+        });
     }, 250);
     return () => {
       controller.abort();
@@ -129,12 +150,12 @@ export function BillingPartnerCard({
             onChange={setSearch}
             disabled={disabled}
           />
-          {error ? (
+          {error || searchError ? (
             <p role="alert" className="text-xs text-pilot-red-700">
-              {error}
+              {error ?? searchError}
             </p>
           ) : null}
-          {results.length > 0 ? (
+          {searchError ? null : results.length > 0 ? (
             <ul className="divide-y divide-pilot-grey-100 rounded-lg ring-1 ring-pilot-grey-200">
               {results.map((result) => (
                 <li key={result.id}>
