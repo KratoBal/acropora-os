@@ -667,6 +667,46 @@ enum InvoiceDocumentType {
   STORNO
   CORRECTION
   PROFORMA
+  /// Szállítólevél (Számlázás v0.1, 2026-09-30). Nem számla, de ugyanaz a
+  /// kiállítási gép viszi, ezért ugyanebben a táblában áll.
+  DELIVERY_NOTE
+}
+
+/// A bizonylat formátuma, a dokumentumtípustól KÜLÖN dimenzió (Számlázás
+/// v0.1, brief 3. pont). NULL ott, ahol a típusnál nem értelmezett (a
+/// képesség-tábla: `getDocumentCapabilities` a @acropora/types-ban), és a
+/// bejövő, valamint a UNAS-tükör soroknál.
+enum InvoiceFormat {
+  PAPER
+  ELECTRONIC
+}
+
+/// A bizonylat e-mailes kiküldésének állapota, a kiállítástól KÜLÖN (brief
+/// 20. pont): egy elbukott küldés újrapróbálása soha nem indít új kiállítást.
+enum BillingEmailStatus {
+  NOT_REQUIRED
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+/// Honnan indult a bizonylat (brief 12. pont). A `sourceId` szándékosan
+/// idegen kulcs nélküli: a POS-tranzakciónak ma nincs táblája.
+enum BillingSourceType {
+  PROJECT
+  SALES_ORDER
+  POS_TRANSACTION
+  SERVICE_JOB
+  MANUAL
+}
+
+/// Egy bizonylat-sor fajtája. A kedvezmény KÜLÖN, NEGATÍV sor, közvetlenül az
+/// érintett tétel alatt (Balázs döntése, 2026-09-30 12:19:59 UTC, message_id
+/// 1554830166734143498): a Számlázz.hu tételén nincs kedvezmény-mező.
+enum InvoiceLineKind {
+  ITEM
+  DISCOUNT
 }
 
 /// Az adott Invoice-sor rögzítésének eredeti adatforrása. A NAV itt csak
@@ -700,6 +740,10 @@ enum InvoiceStatus {
   /// egy masodik valodi szamlat allithatna ki.
   ISSUING
   ISSUED
+  /// A Számlázz.hu hibakóddal ELUTASÍTOTTA a kiállítást (a kimenet tehát
+  /// ismert, szemben az ISSUING-gel). Bizonylat nem jött létre; szerkesztés
+  /// után újra kiállítható.
+  ISSUE_FAILED
 }
 
 enum InvoiceSyncStatus {
@@ -830,6 +874,9 @@ model User {
   supplier                   Supplier?                     @relation("SupplierPortalUser", fields: [supplierId], references: [id], onDelete: Restrict)
   ticketMailTemplates        TicketMailTemplate[]          @relation("TicketMailTemplateUpdatedBy")
   mailImages                 MailImage[]                   @relation("MailImageUploadedBy")
+  invoicesCreated            Invoice[]                     @relation("InvoiceCreatedBy")
+  invoicesIssued             Invoice[]                     @relation("InvoiceIssuedBy")
+  billingMailDeliveries      BillingDocumentMailDelivery[] @relation("BillingMailInitiatedBy")
   simplePayLinesApproved     SimplePayTransactionLine[]    @relation("SimplePayLineManualApprovedBy")
 
   @@index([role, isActive])
@@ -979,6 +1026,7 @@ model Product {
   aiSearchDocument           AiProductSearchDocument?
   datasheet                  ProductDatasheet?
   shippingProfile            ProductShippingProfile?
+  invoiceLines               InvoiceLine[]
 
   @@index([brandId])
   @@index([categoryId])
@@ -2736,18 +2784,45 @@ model Invoice {
   externalUrl             String?
   bookkeepingStatus       String?
   tags                    String[]
+  /// A bizonylat megjegyzése. Kimenő bizonylatnál ez kerül a Számlázz.hu
+  /// `fejlec/megjegyzes` mezőjébe.
   note                    String?
+  /// PAPER | ELECTRONIC, csak ahol a típusnál értelmezett (lásd InvoiceFormat).
+  invoiceFormat           InvoiceFormat?
+  /// NULL: a sor nem a Számlázás modulból jön (bejövő, tükör, régi sor).
+  emailStatus             BillingEmailStatus?
+  sourceType              BillingSourceType?
+  sourceId                String?
+  /// A díjbekérő, amelyből ez a számla vagy előlegszámla készült. A
+  /// Számlázz.hu-nak a `dijbekeroSzamlaszam` mezőben megy.
+  proformaInvoiceId       String?
+  /// A fizetési mód szövege, ahogy a bizonylaton áll ("Átutalás").
+  paymentMethod           String?
+  /// A bizonylat nyelve (ISO 639-1); NULL = magyar.
+  language                String?             @db.VarChar(2)
+  /// A vevő hivatkozása (például a rendelésszáma), a bizonylaton megjelenik.
+  reference               String?
+  createdByUserId         String?
+  issuedByUserId          String?
+  /// Hány valódi kiállítási hívás indult erre a sorra. A Számlázz.hu
+  /// kérésenként legfeljebb öt kísérletet enged (hibakezelési doksi).
+  issueAttemptCount       Int                 @default(0)
   createdAt               DateTime            @default(now())
   updatedAt               DateTime            @updatedAt
 
-  customer               Customer?               @relation(fields: [customerId], references: [id])
-  supplier               Supplier?               @relation(fields: [supplierId], references: [id])
-  salesOrder             SalesOrder?             @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
-  referencedInvoice      Invoice?                @relation("InvoiceCorrectionChain", fields: [referencedInvoiceId], references: [id])
-  correctionInvoices     Invoice[]               @relation("InvoiceCorrectionChain")
+  customer               Customer?                     @relation(fields: [customerId], references: [id])
+  supplier               Supplier?                     @relation(fields: [supplierId], references: [id])
+  salesOrder             SalesOrder?                   @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  referencedInvoice      Invoice?                      @relation("InvoiceCorrectionChain", fields: [referencedInvoiceId], references: [id])
+  correctionInvoices     Invoice[]                     @relation("InvoiceCorrectionChain")
+  proformaInvoice        Invoice?                      @relation("InvoiceProformaChain", fields: [proformaInvoiceId], references: [id], onDelete: SetNull)
+  invoicesFromProforma   Invoice[]                     @relation("InvoiceProformaChain")
+  createdBy              User?                         @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  issuedBy               User?                         @relation("InvoiceIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
   lines                  InvoiceLine[]
+  mailDeliveries         BillingDocumentMailDelivery[]
   foxpostSettlementLines FoxpostSettlementLine[]
-  completionCertificate  CompletionCertificate?  @relation(fields: [completionCertificateId], references: [id], onDelete: SetNull)
+  completionCertificate  CompletionCertificate?        @relation(fields: [completionCertificateId], references: [id], onDelete: SetNull)
 
   @@unique([source, szamlazzInvoiceId])
   /// Idempotencia-kulcs a UNAS read-only számlatükör upsertjéhez (és
@@ -2758,23 +2833,66 @@ model Invoice {
   @@index([partnerTaxNumber])
   @@index([syncStatus])
   @@index([salesOrderId])
+  @@index([sourceType, sourceId])
+  @@index([proformaInvoiceId])
 }
 
 model InvoiceLine {
-  id             String  @id @default(cuid())
-  invoiceId      String
-  description    String
-  quantity       Decimal @db.Decimal(19, 6)
-  unit           String?
-  unitNet        Decimal @db.Decimal(19, 4)
-  vatRatePercent Decimal @db.Decimal(5, 2)
-  netAmount      Decimal @db.Decimal(19, 4)
-  vatAmount      Decimal @db.Decimal(19, 4)
-  grossAmount    Decimal @db.Decimal(19, 4)
+  id              String          @id @default(cuid())
+  invoiceId       String
+  /// A sor helye a bizonylaton (0-tól). NULL a régi soroknál.
+  position        Int?
+  kind            InvoiceLineKind @default(ITEM)
+  /// DISCOUNT sornál: a tétel, amely alatt áll.
+  parentLineId    String?
+  /// Opcionális hivatkozás az Acropora termékre; szabad szöveges tételnél NULL.
+  productId       String?
+  description     String
+  quantity        Decimal         @db.Decimal(19, 6)
+  unit            String?
+  unitNet         Decimal         @db.Decimal(19, 4)
+  vatRatePercent  Decimal         @db.Decimal(5, 2)
+  /// ITEM sornál a felhasználó által megadott kedvezmény; a hozzá tartozó
+  /// negatív DISCOUNT sor ebből készül.
+  discountPercent Decimal?        @db.Decimal(5, 2)
+  netAmount       Decimal         @db.Decimal(19, 4)
+  vatAmount       Decimal         @db.Decimal(19, 4)
+  grossAmount     Decimal         @db.Decimal(19, 4)
+  /// Tételszintű megjegyzés (brief 14. pont); a Számlázz.hu `tetel/megjegyzes`.
+  comment         String?
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  parentLine    InvoiceLine?  @relation("InvoiceLineDiscount", fields: [parentLineId], references: [id], onDelete: Cascade)
+  discountLines InvoiceLine[] @relation("InvoiceLineDiscount")
+  product       Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
+  @@index([parentLineId])
+  @@index([productId])
+}
+
+/// Egy bizonylat egy e-mailes kiküldési kísérlete (brief 20., 21. és 28.
+/// pont). A `MaintenanceMailDelivery` mintája: minden kísérlet külön sor, így
+/// az újrapróbálások száma és oka visszakereshető, és a kiállítást egyik sem
+/// ismétli meg.
+model BillingDocumentMailDelivery {
+  id                String   @id @default(cuid())
+  invoiceId         String
+  initiatedByUserId String?
+  /// A címzettek (to, cc, bcc), névvel és címmel.
+  recipients        Json
+  subject           String
+  templateId        String?
+  /// SENT | FAILED | INDETERMINATE, szövegként, ahogy a
+  /// `MaintenanceMailDelivery.outcome`.
+  outcome           String
+  error             String?
+  createdAt         DateTime @default(now())
+
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  initiatedBy User?   @relation("BillingMailInitiatedBy", fields: [initiatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId, createdAt])
 }
 
 model ServiceJob {
@@ -6863,6 +6981,9 @@ model SupplierInvoiceMailSyncRun {
   documentsRead  Int                              @default(0)
   duplicateCount Int                              @default(0)
   failedCount    Int                              @default(0)
+  /// Fizetési felszólítás-levelek: egyik fájljukat sem olvassuk be (Balázs,
+  /// 2026-09-30, message_id 1554831001858080882).
+  reminderCount  Int                              @default(0)
   errorCode      String?
   updatedAt      DateTime                         @updatedAt
 

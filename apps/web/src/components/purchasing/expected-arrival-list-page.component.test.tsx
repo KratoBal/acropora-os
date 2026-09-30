@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type {
   ExpectedArrivalListItem,
   Session,
@@ -15,6 +21,8 @@ const api = vi.hoisted(() => ({
   syncStatus: vi.fn(),
   sync: vi.fn(),
   detail: vi.fn(),
+  dismiss: vi.fn(),
+  restore: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -97,7 +105,10 @@ beforeEach(() => {
         editorPath: "/beszerzes/uj?navInvoiceId=nav-1",
       }),
     ],
+    dismissed: [],
   });
+  api.dismiss.mockReset().mockResolvedValue(undefined);
+  api.restore.mockReset().mockResolvedValue(undefined);
   api.syncStatus.mockReset().mockResolvedValue(status);
   api.sync.mockReset().mockResolvedValue({
     status: "APPLIED",
@@ -107,6 +118,7 @@ beforeEach(() => {
     documentsRead: 2,
     duplicateCount: 0,
     failedCount: 0,
+    reminderCount: 0,
   });
 });
 
@@ -150,6 +162,7 @@ describe("ExpectedArrivalListPage", () => {
           suggestedLineCount: null,
         }),
       ],
+      dismissed: [],
     });
     render(createElement(ExpectedArrivalListPage));
     const [row] = await screen.findAllByTestId("varhato-sor");
@@ -183,6 +196,60 @@ describe("ExpectedArrivalListPage", () => {
     expect(api.list).toHaveBeenCalledTimes(2);
   });
 
+  // What must fail: "Nem kell" on a NAV row (not an arrival) or on a booked
+  // one; a click that also opens the editor; no way back from the list.
+  it("'Nem kell' takes a mail row off without opening it, and a dismissed one can be taken back", async () => {
+    render(createElement(ExpectedArrivalListPage));
+    const rows = await screen.findAllByTestId("varhato-sor");
+    expect(
+      rows.map((row) => row.textContent?.includes("Nem kell") ?? false),
+    ).toEqual([true, true, false]);
+
+    fireEvent.click(within(rows[0]!).getByRole("button", { name: "Nem kell" }));
+    await waitFor(() =>
+      expect(api.dismiss).toHaveBeenCalledWith("token-owner", "arr-1"),
+    );
+    expect(navigation.push).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
+
+    api.list.mockResolvedValue({
+      items: [],
+      dismissed: [item({ editorPath: null })],
+    });
+    fireEvent.click(within(rows[1]!).getByRole("button", { name: "Nem kell" }));
+    const [kivett] = await screen.findAllByTestId("kivett-sor");
+    expect(kivett).toHaveTextContent("Aquarioom");
+    fireEvent.click(
+      within(kivett!).getByRole("button", { name: "Visszavétel" }),
+    );
+    await waitFor(() =>
+      expect(api.restore).toHaveBeenCalledWith("token-owner", "arr-1"),
+    );
+  });
+
+  it("says how many payment reminders the check skipped", async () => {
+    api.sync.mockResolvedValue({
+      status: "APPLIED",
+      trigger: "MANUAL",
+      startedAt: "",
+      messagesSeen: 3,
+      documentsRead: 0,
+      duplicateCount: 0,
+      failedCount: 0,
+      reminderCount: 2,
+    });
+    render(createElement(ExpectedArrivalListPage));
+    await screen.findAllByTestId("varhato-sor");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Levelek ellenőrzése" }),
+    );
+    expect(
+      await screen.findByText(
+        "Nincs új beszállítói levél. 2 fizetési felszólítás kihagyva, nem nyit várható beérkezést.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("a viewer without the manage right sees the list but no check button", async () => {
     auth.session = session("VIEWER");
     render(createElement(ExpectedArrivalListPage));
@@ -190,5 +257,6 @@ describe("ExpectedArrivalListPage", () => {
     expect(
       screen.queryByRole("button", { name: "Levelek ellenőrzése" }),
     ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Nem kell" })).toBeNull();
   });
 });

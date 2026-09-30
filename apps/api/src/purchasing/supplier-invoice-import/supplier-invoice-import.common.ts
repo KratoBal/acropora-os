@@ -61,6 +61,35 @@ export function isChargeDescription(description: string): boolean {
   return CHARGE_WORDS.test(description);
 }
 
+/**
+ * A FIZETESI FELSZOLITAS SZAVAI (Balazs, 2026-09-30 12:23 UTC, fo csatorna,
+ * message_id 1554831001858080882: a felszolitasbol, amibe a szamlat is
+ * becsatoljak, NE legyen varhato beerkezes).
+ *
+ * A mert eset: a De Jong finance@ felszolito levelei ("Reminder for invoice
+ * ...", "Second reminder for invoice ...") ket mellekletet hoznak, a
+ * felszolitast ("First reminder 11069-<szamlaszam>.pdf") es MELLETTE az
+ * eredeti szamlat ("inv<szamlaszam>.pdf"). Az utobbibol a figyelo harom varhato
+ * beerkezest nyitott (26007910, 26007558, 26006195).
+ *
+ * A jel a TARGY vagy egy MELLEKLETNEV, nyelvfuggetlenul: angol, nemet,
+ * holland, francia es magyar alakok. Az ekezeteket a vizsgalat elott
+ * levesszuk, mert a JS `\b` szohatara ekezetes betu mellett nem mukodik
+ * ("emlékeztető" vegen nincs szohatar).
+ */
+const PAYMENT_REMINDER_WORDS =
+  /\b(\w*reminder|overdue|\w*mahnung|zahlungserinnerung|\w*herinnering|aanmaning|rappel|relance|felszolitas|fizetesi emlekezteto)\b/i;
+
+function withoutAccents(text: string): string {
+  return text.normalize("NFD").replace(/\p{M}/gu, "");
+}
+
+export function isPaymentReminderText(
+  text: string | null | undefined,
+): boolean {
+  return Boolean(text) && PAYMENT_REMINDER_WORDS.test(withoutAccents(text!));
+}
+
 /** "DE 342 032 439" -> "DE342032439"; anything not shaped like a VAT id -> null. */
 export function normalizeVatId(raw: string | null | undefined): string | null {
   if (!raw) return null;
