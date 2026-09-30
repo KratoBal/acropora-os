@@ -12,7 +12,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { MISSING_INVOICES_PATH } from "@/components/navigation";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
-import { missingInvoicesApi } from "@/lib/api/missing-invoices";
+import {
+  missingInvoicesApi,
+  type MissingInvoicesExport,
+} from "@/lib/api/missing-invoices";
 import {
   urlChoice,
   urlPage,
@@ -57,8 +60,8 @@ const TAB_KEYS = CHARGE_TABS.map((tab) => tab.key);
  * jelöltek, teendő, Drive. Minden módosítás (párosítás, visszavonás,
  * átsorolás, papír-eredeti, megjegyzés) a frissített tételt adja vissza, és
  * utána a HÓNAP ÚJRATÖLTŐDIK: a csempék a szerver számai (brief 19. pont, 8.).
- * A számla feltöltése (4b, nautilus #1305) ugyanígy megy. Az exportok a
- * következő szelettel jönnek.
+ * A számla feltöltése (4b, nautilus #1305) ugyanígy megy. A két export
+ * (hiánylista, könyvelői csomag) fájlként töltődik le (nautilus #1308).
  */
 export function MissingInvoicesMonthPage({ month }: { month: string }) {
   const { session } = useAuth();
@@ -98,6 +101,7 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
   const [saving, setSaving] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [confirmUnpair, setConfirmUnpair] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(
@@ -245,6 +249,32 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     }
   };
 
+  /**
+   * A KÉT EXPORT (nautilus #1308): a fájl a szerver adta néven töltődik le. Egy
+   * elutasítás (jog, hónap alakja) a szerver mondatával jelenik meg fent.
+   */
+  const download = async (
+    fetchExport: () => Promise<MissingInvoicesExport>,
+  ) => {
+    setExporting(true);
+    setNotice(null);
+    try {
+      const { blob, fileName } = await fetchExport();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setNotice(
+        cause instanceof Error ? cause.message : "Az export nem tölthető le.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (!canView)
     return (
       <PilotThemeRoot className="space-y-6">
@@ -296,7 +326,15 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         onRetry={() => void load()}
         canManage={canManage}
         onUploadStatement={() => statementInput.current?.click()}
-        exporting={false}
+        onDownloadMissing={() =>
+          void download(() => missingInvoicesApi.missingXlsx(token, month))
+        }
+        onDownloadPackage={() =>
+          void download(() =>
+            missingInvoicesApi.accountantPackage(token, month),
+          )
+        }
+        exporting={exporting}
       />
       <input
         ref={statementInput}
