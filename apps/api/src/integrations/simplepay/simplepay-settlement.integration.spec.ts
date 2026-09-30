@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
+import ExcelJS from "exceljs";
 
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
+import { SimplePayMonthlyReportXlsx } from "./simplepay-monthly-report.xlsx.js";
 import { SimplePaySettlementRepository } from "./simplepay-settlement.repository.js";
 import { SimplePaySettlementService } from "./simplepay-settlement.service.js";
 
@@ -27,6 +29,7 @@ describe(
   () => {
     const service = new SimplePaySettlementService(
       new SimplePaySettlementRepository(),
+      new SimplePayMonthlyReportXlsx(),
     );
     const s5 = String(Date.now()).slice(-5);
     const key = (lead: string) => `${lead}${s5}`;
@@ -273,6 +276,25 @@ describe(
       );
       assert.equal(again.status, "NEEDS_REVIEW");
       assert.equal(again.resolvedLineCount, 3);
+
+      // the month's file, in Luca's shape: the week's invoices, and the
+      // payments still open on their own sheet
+      const { buffer } = await service.monthlyReport(2026, 9);
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+      const values = (name: string) =>
+        workbook
+          .getWorksheet(name)!
+          .getSheetValues()
+          .flat()
+          .map((cell) => String(cell ?? ""));
+      assert.ok(values("SimplePay").includes(invoiceNumber));
+      assert.ok(values("SimplePay").includes(laterInvoice));
+      assert.ok(
+        values("Ellenőrzendő fizetések").includes(
+          "A rendelés nincs a rendszerben",
+        ),
+      );
 
       // a stale version is refused, not applied over the newer state
       await assert.rejects(
