@@ -48,7 +48,10 @@ import {
   rememberAssetDetail,
 } from "@/lib/offline/asset-cache";
 import { useIsOnline } from "@/lib/offline/connectivity";
-import { describeOfflineDetailNotice } from "@/lib/offline/offline-notice";
+import {
+  describeOfflineDetailNotice,
+  describeUnloadableDetail,
+} from "@/lib/offline/offline-notice";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 
@@ -289,12 +292,14 @@ export default function AssetDetailScreen() {
         ) : null}
         {query.isError && !fromCache ? (
           <MessageCard
-            title="Az eszköz nem tölthető be"
-            message={
-              query.error instanceof Error
-                ? query.error.message
-                : "Ismeretlen hiba történt."
-            }
+            {...describeUnloadableDetail({
+              networkFailure: query.error instanceof ApiNetworkError,
+              copyChecked: cached.isSuccess,
+              errorMessage:
+                query.error instanceof Error
+                  ? query.error.message
+                  : "Ismeretlen hiba történt.",
+            })}
             onRetry={() => void query.refetch()}
           />
         ) : null}

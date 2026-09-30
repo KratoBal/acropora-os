@@ -210,6 +210,45 @@ export function describeOfflineDetailNotice(input: {
 }
 
 /**
+ * AZ ADATLAP, AMIT SE A SZERVER, SE A MENTETT MASOLAT NEM AD.
+ *
+ * === A MERT HIBA (Balazs, 2026-09-30, Android) ===
+ *
+ * Repulogep modban a listarol belepve egy eszkozbe ezt latta: "A szerver
+ * jelenleg nem erheto el". A mondat IGAZ, de nem arrol szol, amit a szerelonek
+ * tudnia kell: terero nelkul a szerver MINDIG elerhetetlen, a kerdes az, hogy
+ * ez az eszkoz a keszulekre kerult-e. Es nem: a masolat sem teljes lapot, sem
+ * listasort nem adott ra.
+ *
+ * A lista ettol meg mutathatta: offline is a memoriaban maradt szerver-valaszt
+ * mutatja, ha van, es az MINDEN eszkozt tartalmaz, nem csak a letoltott
+ * helyszinet.
+ *
+ * === MIKOR MELYIK MONDAT ===
+ *
+ * A "nincs a keszulekre mentve" CSAK akkor igaz, ha a keres a halozaton bukott
+ * el (a szerver nem valaszolt) ES a masolat mar megnezve, ures. Ha a szerver
+ * VALASZOLT (pl. nincs jogosultsag, nem letezik), az o mondata a helyes; ha a
+ * masolat meg nem jott vissza, meg nem tudjuk, hogy hianyzik.
+ */
+export function describeUnloadableDetail(input: {
+  /** A keres a halozaton bukott el (`ApiNetworkError`), nem a szerver utasitotta el. */
+  networkFailure: boolean;
+  /** A mentett masolat mar visszajott (ures). */
+  copyChecked: boolean;
+  /** A hiba sajat szovege, ha a masik ag all. */
+  errorMessage: string;
+}): { title: string; message: string } {
+  if (input.networkFailure && input.copyChecked)
+    return {
+      title: "Ez az eszköz nincs a készülékre mentve",
+      message:
+        "Térerő nélkül csak a készülékre mentett eszközök nyithatók meg: amit a „Letöltöm a helyszínt” gomb lehozott, vagy amit korábban térerővel megnyitottál. Ez az eszköz nincs köztük.",
+    };
+  return { title: "Az eszköz nem tölthető be", message: input.errorMessage };
+}
+
+/**
  * A SZERKESZTŐ KÉPERNYŐ FÖLÖTTI SÁV, ha a lap a mentett másolatból áll.
  *
  * === MIÉRT KÜLÖN FÜGGVÉNY, ÉS MIÉRT NEM ELÉG AZ ADATLAPÉ ===
