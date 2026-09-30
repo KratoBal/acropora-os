@@ -1412,6 +1412,7 @@ model Supplier {
   products              SupplierProduct[]
   purchaseOrders        PurchaseOrder[]
   purchaseInvoices      PurchaseInvoice[]
+  expectedArrivals      ExpectedArrival[]
   preferredByExtensions ProductExtension[]
   invoices              Invoice[]
   assets                Asset[]
@@ -2464,6 +2465,7 @@ model PurchaseInvoice {
   /// bevételezéseként jött létre - a fordított irányú, opcionális kapcsolat
   /// a NavIncomingInvoice oldalán él (purchaseInvoiceId).
   navIncomingInvoice NavIncomingInvoice?
+  expectedArrival    ExpectedArrival?
 
   @@unique([supplierId, supplierInvoiceNumber])
   @@index([status, invoiceDate])
@@ -6655,4 +6657,119 @@ enum DecisionResolution {
 enum DecisionRunStatus {
   OK
   ERROR
+}
+
+/// VÁRHATÓ BEÉRKEZÉS (Balázs, 2026-09-30): egy beszállítói rendelés, amihez az
+/// info@ postafiókba megérkezett a proforma vagy a számla, de még nincs
+/// bevételezve. Egy sor egy RENDELÉS: a proforma nyitja, a számla ugyanahhoz
+/// érkezik, és a kettőt a rendelésszám köti össze (Aquarioom, nautilus mérése).
+/// Rendelésszám nélkül a számlaszám a kulcs. Bevételezéskor a
+/// `purchaseInvoiceId` kitöltődik, és a sor lekerül a listáról.
+model ExpectedArrival {
+  id                String                @id @default(cuid())
+  /// A beszállító kulcsa: a normalizált adószám, vagy a név, ha a dokumentum nem hozza.
+  supplierKey       String
+  /// "order:<rendelésszám>" vagy "invoice:<számlaszám>".
+  arrivalKey        String
+  supplierId        String?
+  supplierName      String
+  orderReference    String?
+  invoiceNumber     String?
+  status            ExpectedArrivalStatus @default(OPEN)
+  purchaseInvoiceId String?               @unique
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  supplier        Supplier?                  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  purchaseInvoice PurchaseInvoice?           @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+  documents       IncomingSupplierDocument[]
+
+  @@unique([supplierKey, arrivalKey])
+  @@index([status, updatedAt])
+}
+
+enum ExpectedArrivalStatus {
+  OPEN
+  RECEIVED
+  DISMISSED
+}
+
+/// Egy levélből jött PDF (proforma vagy számla), a bájtjaival együtt, hogy a
+/// szerkesztő és egy újraolvasás is elérje. Egy levél egy mellékletét egyszer
+/// tároljuk (`gmailMessageId` + `fileName`); egy újra csatolt számla (a De Jong
+/// finance@ emlékeztetője) DUPLICATE, és nem nyit új várható beérkezést.
+model IncomingSupplierDocument {
+  id                String                         @id @default(cuid())
+  gmailMessageId    String
+  fileName          String
+  sender            String?
+  subject           String?
+  receivedAt        DateTime?
+  sizeBytes         Int
+  sha256            String
+  content           Bytes
+  status            IncomingSupplierDocumentStatus
+  kind              IncomingSupplierDocumentKind?
+  errorCode         String?
+  /// A beolvasás eredménye (SupplierInvoiceImportResult).
+  importResult      Json?
+  /// Soronként a sor-javaslat (P-026), érkezéskor számolva, ha a beszállító ismert.
+  lineSuggestions   Json?
+  expectedArrivalId String?
+  createdAt         DateTime                       @default(now())
+
+  expectedArrival ExpectedArrival? @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
+
+  @@unique([gmailMessageId, fileName])
+  @@index([expectedArrivalId])
+  @@index([sha256])
+}
+
+enum IncomingSupplierDocumentStatus {
+  READ
+  DUPLICATE
+  FAILED
+}
+
+enum IncomingSupplierDocumentKind {
+  INVOICE
+  PROFORMA
+}
+
+/// A feldolgozott levelek naplója: egy levél egyszer kerül sorra. A le nem
+/// töltött levél nem kerül ide, tehát a következő futás újra megpróbálja.
+model SupplierInvoiceMailMessage {
+  id             String    @id @default(cuid())
+  gmailMessageId String    @unique
+  sender         String?
+  receivedAt     DateTime?
+  subject        String?
+  documentCount  Int
+  errorCode      String?
+  createdAt      DateTime  @default(now())
+}
+
+/// A beszállítói számla-levelek behúzásának egy futása. Az `activeKey` egyedi,
+/// így egyszerre egy fut; egy elakadt futás 30 perc után feloldódik.
+model SupplierInvoiceMailSyncRun {
+  id             String                           @id @default(cuid())
+  activeKey      String?                          @unique
+  status         SupplierInvoiceMailSyncRunStatus @default(RUNNING)
+  trigger        SyncRunTrigger
+  startedAt      DateTime                         @default(now())
+  completedAt    DateTime?
+  messagesSeen   Int                              @default(0)
+  documentsRead  Int                              @default(0)
+  duplicateCount Int                              @default(0)
+  failedCount    Int                              @default(0)
+  errorCode      String?
+  updatedAt      DateTime                         @updatedAt
+
+  @@index([startedAt])
+}
+
+enum SupplierInvoiceMailSyncRunStatus {
+  RUNNING
+  APPLIED
+  FAILED
 }
