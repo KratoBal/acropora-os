@@ -159,6 +159,27 @@ describe("worksheet line endpoints", () => {
       );
     });
 
+    /*
+      A KÉRŐ A TÁROLÓIG ÉR: a jegy automatikus lépésének naplósora (első
+      tételsor -> Folyamatban, 2026-09-30) az ő nevét viszi. MI PIROSÍT: ha a
+      szolgáltatás nem adja át, és a naplóban szerző nélküli lépés áll.
+    */
+    it("passes the requester on, for the ticket step's log row", async () => {
+      let received: { actorUserId?: string | null } | undefined;
+      const service = new WorksheetsService(
+        repository({
+          addLine: async (input: unknown) => {
+            received = input as typeof received;
+            return { outcome: "ok", alreadyPresent: false };
+          },
+        }),
+      );
+
+      await service.addLine("worksheet-1", lineDto(), BELSOS_KERO);
+
+      assert.equal(received?.actorUserId, "user-1");
+    });
+
     it("computes the amounts on the server, never from the client", async () => {
       let received: { line: { netAmount: Prisma.Decimal } } | undefined;
       const service = new WorksheetsService(

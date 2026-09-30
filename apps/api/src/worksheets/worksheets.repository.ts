@@ -1,4 +1,5 @@
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
+import { advanceTicketOnFirstLine } from "./first-line-ticket-step.js";
 import {
   rowBelongsToScope,
   scopeOwnWhereForAndBranch,
@@ -1208,6 +1209,13 @@ export class WorksheetsRepository extends Repository {
       const versionId = worksheet.versions[0]?.id;
       if (!versionId) throw new Error("WORKSHEET_VERSION_NOT_CREATED");
       await this.writeLines(transaction, versionId, input.content);
+      // AZ ÚJ LAP SORAI MIND ELSŐK: ha a lap jegy alá nyílik és van tétele, a
+      // jegy a sorokkal egy tranzakcióban lép (lásd `first-line-ticket-step`).
+      if (input.serviceJobId && input.content.lines.length > 0)
+        await advanceTicketOnFirstLine(transaction, {
+          versionId,
+          actorUserId: input.actorUserId,
+        });
 
       /**
        * AZ ESZKOZOK UGYANABBAN A TRANZAKCIOBAN, ugyanabbol az okbol, mint a
@@ -1245,6 +1253,8 @@ export class WorksheetsRepository extends Repository {
   async replaceDraftContent(input: {
     versionId: string;
     content: NormalizedWorksheetContent;
+    /** Aki ment: a jegy automatikus lépésének naplósorába kerül. */
+    actorUserId?: string | null;
   }): Promise<boolean> {
     return this.database.$transaction(async (transaction) => {
       const version = await transaction.worksheetVersion.findUnique({
@@ -1264,10 +1274,20 @@ export class WorksheetsRepository extends Repository {
       });
       if (claimed.count !== 1) return false;
 
+      // A TÖRLÉS ELŐTTI SZÁM mondja meg, hogy az első sor most kerül-e fel: a
+      // teljes cserénél a régi sorok eltűnnek, tehát utána már nem látszik.
+      const hadLines = await transaction.worksheetLine.count({
+        where: { worksheetVersionId: input.versionId },
+      });
       await transaction.worksheetLine.deleteMany({
         where: { worksheetVersionId: input.versionId },
       });
       await this.writeLines(transaction, input.versionId, input.content);
+      if (hadLines === 0 && input.content.lines.length > 0)
+        await advanceTicketOnFirstLine(transaction, {
+          versionId: input.versionId,
+          actorUserId: input.actorUserId ?? null,
+        });
       return true;
     });
   }
@@ -1930,6 +1950,8 @@ export class WorksheetsRepository extends Repository {
     versionId: string;
     lineId: string;
     line: NormalizedWorksheetLine;
+    /** Aki a sort felvette: a jegy automatikus lépésének naplósorába kerül. */
+    actorUserId?: string | null;
   }): Promise<WorksheetLineWriteResult> {
     return this.database.$transaction(async (transaction) => {
       const claimable = await this.draftLines(transaction, input.versionId);
@@ -1967,6 +1989,11 @@ export class WorksheetsRepository extends Repository {
       });
 
       await this.refreshTotals(transaction, input.versionId);
+      if (claimable.lines.length === 0)
+        await advanceTicketOnFirstLine(transaction, {
+          versionId: input.versionId,
+          actorUserId: input.actorUserId ?? null,
+        });
       return { outcome: "ok", alreadyPresent: false };
     });
   }
