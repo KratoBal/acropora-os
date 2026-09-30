@@ -1,14 +1,15 @@
 /**
- * A TÉTEL ÖSSZEGEI, AHOGY A SZÁMLÁZZ.HU-RA MENNEK (Számlázás v0.1).
+ * A TÉTEL ÉS A BIZONYLAT ÖSSZEGEI, AHOGY A SZÁMLÁZZ.HU-RA MENNEK ÉS AHOGY
+ * VISSZAJÖNNEK (Számlázás v0.1).
  *
  * A Számlázz.hu Agent tételenként két azonosságot ellenőriz (01-es doksi):
  * nettó egységár × mennyiség = nettó érték, nettó + ÁFA = bruttó; eltérésre
  * 259-264-es hibát ad. Hogy HUF-ban hány tizedest fogad el, és van-e tűrés az
- * első azonosságon, a doksi NEM mondja meg: a stage tesztfiókján mérjük
- * (acrobot 25138), öt változattal. A mérés a tesztfiók kulcsára vár.
+ * első azonosságon, a doksi NEM mondja meg: a stage tesztfiókján mértük
+ * (acrobot 25138 és 25153), öt változattal; az eredmény a konstansnál áll.
  *
- * EZÉRT A SZABÁLY PARAMÉTER, és a mérés után egyetlen konstans rögzíti
- * (`SZAMLAZZ_AMOUNT_RULE`). A két kérdés, amire a mérés válaszol:
+ * A SZABÁLY PARAMÉTER, és egyetlen konstans rögzíti (`SZAMLAZZ_AMOUNT_RULE`).
+ * A két kérdés, amire a mérés válaszolt:
  *   - `hufDecimals`: HUF-ban 0 (egész forint) vagy 2 tizedes;
  *   - `exactNet`: kell-e, hogy az egységár × mennyiség PONTOSAN kiadja a
  *     nettót a kerekítés után is. Ha kell, egy tört mennyiség tizedes
@@ -29,13 +30,19 @@ export interface SzamlazzAmountRule {
 }
 
 /**
- * A MÉRÉS ELŐTTI ÉRTÉK, ÉS NEM MÉRT: 2 tizedes, pontos nettó. Ez a kettő a
- * legszigorúbb pár, amit a doksi azonosságai megengednek: ami így elmegy, az
- * a mért szabály szerint is elmegy, fordítva nem biztos.
+ * A MÉRT SZABÁLY (stage tesztfiók, 2026-09-30, acrobot 25153, öt előnézet,
+ * mind sikeres):
+ *   - a tétel 2 tizedessel megy át (B: 3 × 1566,93 = 4700,79);
+ *   - az egységár × mennyiség = nettó azonosságon van tűrés: a D (2350,395 ->
+ *     2350,40) és az E (2350,395 -> 2350) is átment, tehát a tört mennyiség
+ *     tizedes egységárral NEM termék-döntés;
+ *   - a HUF VÉGÖSSZEGET a Számlázz.hu egész forintra kerekíti a válaszban
+ *     (B: 4700,79 -> 4701; D: 2985,01 -> 2985; E: 2984,50 -> 2985). Ezt a
+ *     `szamlazzDocumentTotals` követi.
  */
 export const SZAMLAZZ_AMOUNT_RULE: SzamlazzAmountRule = {
   hufDecimals: 2,
-  exactNet: true,
+  exactNet: false,
 };
 
 export interface SzamlazzLineAmountsInput {
@@ -134,5 +141,41 @@ export function szamlazzLineAmounts(
     netAmount: format(net, decimals),
     vatAmount: format(vat, decimals),
     grossAmount: format(net + vat, decimals),
+  };
+}
+
+export interface SzamlazzDocumentTotals {
+  netAmount: string;
+  vatAmount: string;
+  grossAmount: string;
+}
+
+/**
+ * A bizonylat végösszege, ahogy a Számlázz.hu kiírja: HUF-ban EGÉSZ FORINTRA
+ * kerekítve (mért, lásd `SZAMLAZZ_AMOUNT_RULE`), más pénznemben 2 tizedesen.
+ * A nettó és a bruttó külön kerekül, az ÁFA a kettő különbsége: az öt mért
+ * változat mindegyike így jön ki (B: 4701 és 5970, tehát 1269).
+ *
+ * NEM MÉRT MÉG: hogy a forintra kerekítés tételenként vagy az összegen
+ * történik. Egytételes bizonylatnál a kettő ugyanaz; ez a függvény az ÖSSZEGEN
+ * kerekít. A kéttételes mérés (meres-kerekites-osszeg.mjs) dönti el.
+ */
+export function szamlazzDocumentTotals(
+  lines: ReadonlyArray<{ netAmount: string; grossAmount: string }>,
+  currency: string,
+): SzamlazzDocumentTotals {
+  const decimals = currency.toUpperCase() === "HUF" ? 0 : 2;
+  const sum = (key: "netAmount" | "grossAmount") =>
+    lines.reduce((total, line) => {
+      const parsed = parse(line[key]);
+      if (!parsed) throw new Error("SZAMLAZZ_TOTAL_INVALID_NUMBER");
+      return total + rescale(parsed.value, parsed.scale, 4);
+    }, 0n);
+  const net = rescale(sum("netAmount"), 4, decimals);
+  const gross = rescale(sum("grossAmount"), 4, decimals);
+  return {
+    netAmount: format(net, decimals),
+    vatAmount: format(gross - net, decimals),
+    grossAmount: format(gross, decimals),
   };
 }

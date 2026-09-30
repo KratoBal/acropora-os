@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   SZAMLAZZ_AMOUNT_RULE,
+  szamlazzDocumentTotals,
   szamlazzLineAmounts,
   szamlazzMoneyDecimals,
   type SzamlazzAmountRule,
@@ -133,7 +134,81 @@ describe("szamlazzLineAmounts", () => {
     });
   });
 
-  it("starts from the strictest rule until the measurement decides", () => {
-    assert.deepEqual(SZAMLAZZ_AMOUNT_RULE, { hufDecimals: 2, exactNet: true });
+  it("holds the measured rule: two decimals, a tolerance on unit × quantity", () => {
+    assert.deepEqual(SZAMLAZZ_AMOUNT_RULE, { hufDecimals: 2, exactNet: false });
+    // D went through on the test account, so the default rule sends it
+    assert.equal(szamlazzLineAmounts(line("1.5", "1566.93")).ok, true);
+  });
+});
+
+// the Agent's own answers on the stage test account (acrobot 25153): the
+// totals it returned for what each variant sent
+describe("szamlazzDocumentTotals", () => {
+  const totals = (lines: Array<[string, string]>, currency = "HUF") =>
+    szamlazzDocumentTotals(
+      lines.map(([netAmount, grossAmount]) => ({ netAmount, grossAmount })),
+      currency,
+    );
+
+  it("rounds a forint document to whole forints, as Számlázz.hu answered", () => {
+    for (const [sent, net, gross] of [
+      [["2000", "2540"], "2000", "2540"], // A
+      [["4700.79", "5970.00"], "4701", "5970"], // B
+      [["1500", "1905"], "1500", "1905"], // C
+      [["2350.40", "2985.01"], "2350", "2985"], // D
+      [["2350", "2984.50"], "2350", "2985"], // E
+    ] as const) {
+      const result = totals([sent as unknown as [string, string]]);
+      assert.deepEqual(
+        [result.netAmount, result.grossAmount],
+        [net, gross],
+        sent.join(" / "),
+      );
+    }
+  });
+
+  it("makes the VAT the difference, so net + VAT = gross on the total", () => {
+    assert.deepEqual(totals([["4700.79", "5970.00"]]), {
+      netAmount: "4701",
+      vatAmount: "1269",
+      grossAmount: "5970",
+    });
+  });
+
+  it("rounds the sum, not each line (not yet measured: two-line preview pending)", () => {
+    // 0.40 + 0.40 = 0.80 -> 1; line by line it would be 0
+    assert.deepEqual(
+      totals([
+        ["0.40", "0.51"],
+        ["0.40", "0.51"],
+      ]),
+      {
+        netAmount: "1",
+        vatAmount: "0",
+        grossAmount: "1",
+      },
+    );
+  });
+
+  it("subtracts a discount line before rounding", () => {
+    assert.deepEqual(
+      totals([
+        ["2000.00", "2540.00"],
+        ["-200.00", "-254.00"],
+      ]),
+      {
+        netAmount: "1800",
+        vatAmount: "486",
+        grossAmount: "2286",
+      },
+    );
+  });
+
+  it("keeps two decimals in another currency", () => {
+    assert.deepEqual(totals([["29.97", "38.06"]], "EUR"), {
+      netAmount: "29.97",
+      vatAmount: "8.09",
+      grossAmount: "38.06",
+    });
   });
 });
