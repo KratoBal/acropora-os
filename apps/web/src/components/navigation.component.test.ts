@@ -115,6 +115,8 @@ describe("navigation", () => {
       // Várható beérkezések (Balázs, 2026-09-30): "a Beszerzés alatt"
       "/beszerzes/varhato",
       "/beszerzes/nav-szamlak",
+      // Számlázás (Balázs, 2026-09-30): a bizonylatok listája
+      "/penzugy/szamlazas",
       // Elszámolások (Balázs, 2026-09-30): a Foxpost, a GLS és a SimplePay
       // egy menüpont alatt, fülekkel
       "/penzugy/elszamolasok",
@@ -402,6 +404,9 @@ describe("navigation", () => {
     "/beszerzes/nav-szamlak": "purchasing.view",
     // Az Elszámolások menüpont 2026-09-30-án váltotta a három külön tételt;
     // a jog ugyanaz, mint a három fülé volt.
+    // A Számlázás menüpontja 2026-09-30-án jött, a bevezetés UTÁN; a jog az,
+    // amit a forrás kimond (`billing.view`, a #1276 óta).
+    "/penzugy/szamlazas": "billing.view",
     "/penzugy/elszamolasok": "finance.view",
     "/raktar": "inventory.view",
     "/keszlet-egyeztetes": "inventory.view",

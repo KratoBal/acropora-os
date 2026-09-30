@@ -92,6 +92,10 @@ export type {
   BillingEmailRecipients,
 } from "./billing-document-read.js";
 export {
+  BILLING_DOCUMENT_STATUS_LABELS,
+  BILLING_EMAIL_STATUS_LABELS,
+} from "./billing-document-labels.js";
+export {
   SZAMLAZZ_AMOUNT_RULE,
   szamlazzDocumentTotals,
   szamlazzLineAmounts,
