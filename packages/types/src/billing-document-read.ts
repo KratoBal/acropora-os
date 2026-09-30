@@ -134,6 +134,31 @@ export interface BillingDocumentDeliveryInfo {
 }
 
 /**
+ * EGY SZÁMLASOR KÉSZLETHATÁSA a kiállításkor (Balázs kérése, 2026-09-30). A
+ * felület soronként kiírja, hogy a sor levont-e készletet, és ha nem, miért.
+ *
+ * - `MOVED`: levonva az OS-ben (UNAS-terméknél a UNAS felé is sorba állítva);
+ * - `NOT_STOCKED`: egyedi tétel, szolgáltatás vagy kedvezmény-sor;
+ * - `NOT_A_STOCK_DOCUMENT`: díjbekérő, előleg vagy szállítólevél;
+ * - `MOVED_BY_SOURCE`: a forrás (webshop-rendelés, POS) már levonta;
+ * - `VARIANT_NOT_CHOSEN`: a terméknek több változata van, a sor nem mondja meg,
+ *   melyik;
+ * - `NO_VARIANT`: a terméknek nincs aktív változata;
+ * - `PACKAGE_UNRESOLVED`: csomagtermék, amelynek összetevői nem oldhatók fel.
+ */
+export const BILLING_LINE_STOCK_OUTCOMES = [
+  "MOVED",
+  "NOT_STOCKED",
+  "NOT_A_STOCK_DOCUMENT",
+  "MOVED_BY_SOURCE",
+  "VARIANT_NOT_CHOSEN",
+  "NO_VARIANT",
+  "PACKAGE_UNRESOLVED",
+] as const;
+export type BillingLineStockOutcome =
+  (typeof BILLING_LINE_STOCK_OUTCOMES)[number];
+
+/**
  * A kiküldés módja. `SEND` az első kiküldés, `RETRY` egy bukott után,
  * `RESEND` egy sikeres után, kifejezett kérésre.
  */

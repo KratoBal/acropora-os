@@ -16,6 +16,7 @@ import type { SzamlazzAgentResponse } from "../integrations/szamlazz/szamlazz-ag
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import type { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
+import type { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
 import { BillingDocumentIssueService } from "./billing-document-issue.service.js";
 import type {
   BillingDocumentRow,
@@ -108,11 +109,13 @@ function setup(
     claim?: boolean;
     env?: NodeJS.ProcessEnv;
     respond?: () => Promise<SzamlazzAgentResponse>;
+    stockFails?: boolean;
   } = {},
 ) {
   const calls = {
     generate: 0,
     claim: 0,
+    stock: 0,
     issued: [] as unknown[],
     failed: [] as string[],
     unknown: [] as string[],
@@ -151,6 +154,13 @@ function setup(
       calls.pdf.push(key);
     },
   } as unknown as DocumentStore;
+  const stock = {
+    postIssuedInvoice: async () => {
+      calls.stock++;
+      if (options.stockFails) throw new Error("adatbázis nem elérhető");
+      return { alreadyPosted: false, movedLines: 1 };
+    },
+  } as unknown as BillingDocumentStockRepository;
   const client: SzamlazzAgentClient = {
     generateInvoice: async (xml: string) => {
       calls.generate++;
@@ -174,6 +184,7 @@ function setup(
     repository,
     credentials,
     store,
+    stock,
     client,
     options.env ?? ON,
   );
@@ -213,6 +224,25 @@ describe("BillingDocumentIssueService", () => {
     ]);
     assert.equal((issued!.buyer as { zip: string }).zip, "1011");
     assert.equal(calls.pdf.length, 2); // stored, then its key written
+  });
+
+  it("books the stock once the document is issued", async () => {
+    const { service, calls } = setup();
+    await issue(service);
+    assert.equal(calls.stock, 1);
+  });
+
+  it("keeps the issued document when the stock booking fails", async () => {
+    const { service, calls } = setup({ stockFails: true });
+    const detail = await issue(service);
+    assert.equal(detail.status, "ISSUED");
+    assert.equal(calls.issued.length, 1);
+  });
+
+  it("retries the stock booking on a second click, without a second Számlázz.hu call", async () => {
+    const { service, calls } = setup({ status: "ISSUED" });
+    await issue(service);
+    assert.deepEqual([calls.stock, calls.generate], [1, 0]);
   });
 
   it("keeps Számlázz.hu's customer-account link for {document_link}, https only", async () => {

@@ -24,6 +24,7 @@ import { BillingDocumentEmailRepository } from "./billing-document-email.reposit
 import { BillingDocumentEmailService } from "./billing-document-email.service.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import { BillingDocumentIssueService } from "./billing-document-issue.service.js";
+import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { BillingDocumentsService } from "./billing-documents.service.js";
 import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.js";
@@ -98,6 +99,7 @@ describe(
         }),
       } as unknown as SzamlazzCredentialProvider,
       store,
+      new BillingDocumentStockRepository(),
       client,
       { BILLING_ISSUE_ENABLED: "true" },
     );

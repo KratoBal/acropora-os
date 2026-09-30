@@ -15,6 +15,7 @@ import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamla
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import { BillingDocumentIssueService } from "./billing-document-issue.service.js";
+import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { BillingDocumentsService } from "./billing-documents.service.js";
 import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.js";
@@ -77,6 +78,7 @@ describe(
       {
         put: async (key: unknown) => void stored.push(key),
       } as unknown as DocumentStore,
+      new BillingDocumentStockRepository(),
       client,
       { BILLING_ISSUE_ENABLED: "true" },
     );

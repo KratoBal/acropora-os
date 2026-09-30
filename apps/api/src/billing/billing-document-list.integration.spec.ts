@@ -14,6 +14,7 @@ import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamla
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import { BillingDocumentIssueService } from "./billing-document-issue.service.js";
+import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
 import { BillingDocumentListRepository } from "./billing-document-list.repository.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { BillingDocumentsService } from "./billing-documents.service.js";
@@ -70,6 +71,7 @@ describe(
         }),
       } as unknown as SzamlazzCredentialProvider,
       { put: async () => undefined } as unknown as DocumentStore,
+      new BillingDocumentStockRepository(),
       client,
       { BILLING_ISSUE_ENABLED: "true" },
     );
