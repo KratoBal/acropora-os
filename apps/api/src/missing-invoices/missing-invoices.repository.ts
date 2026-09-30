@@ -74,6 +74,7 @@ export function mergeSameInvoice(
     const primary = nav ?? group[0]!;
     return {
       ...primary,
+      aliasIds: group.filter((d) => d !== primary).map((d) => d.id),
       source: original?.source ?? primary.source,
       gross:
         primary.gross ?? group.find((d) => d.gross !== null)?.gross ?? null,
@@ -117,8 +118,106 @@ export class MissingInvoicesRepository {
         counterpartyName: true,
         narrative: true,
         transactionType: true,
+        comment: true,
+        categoryOverride: true,
+        paperOriginalAt: true,
       },
     });
+  }
+
+  /** A kézi párosítások: terhelés -> dokumentum-azonosítók. */
+  async manualMatches(): Promise<Map<string, string[]>> {
+    const rows = await this.database.bankTransactionMatch.findMany({
+      select: { bankTransactionId: true, documentId: true },
+    });
+    const matches = new Map<string, string[]>();
+    for (const row of rows)
+      matches.set(row.bankTransactionId, [
+        ...(matches.get(row.bankTransactionId) ?? []),
+        row.documentId,
+      ]);
+    return matches;
+  }
+
+  /**
+   * A KEZELŐ DÖNTÉSE, AUDITTAL (brief 12. pont): egy tranzakcióban a döntés és
+   * az auditnapló eseménye, benne a régi és az új érték.
+   */
+  private async decide(
+    bankTransactionId: string,
+    userId: string,
+    action: string,
+    metadata: Record<string, unknown>,
+    write: (transaction: Prisma.TransactionClient) => Promise<unknown>,
+  ) {
+    await this.database.$transaction(async (transaction) => {
+      await write(transaction);
+      await transaction.auditLog.create({
+        data: {
+          userId,
+          action,
+          entityType: "BankTransaction",
+          entityId: bankTransactionId,
+          metadata: metadata as Prisma.InputJsonValue,
+        },
+      });
+    });
+  }
+
+  pair(input: {
+    bankTransactionId: string;
+    documentId: string;
+    documentSource: string;
+    userId: string;
+  }) {
+    return this.decide(
+      input.bankTransactionId,
+      input.userId,
+      "missing-invoices.paired",
+      { documentId: input.documentId, documentSource: input.documentSource },
+      (transaction) =>
+        transaction.bankTransactionMatch.create({
+          data: {
+            bankTransactionId: input.bankTransactionId,
+            documentId: input.documentId,
+            documentSource: input.documentSource,
+            pairedByUserId: input.userId,
+          },
+        }),
+    );
+  }
+
+  unpair(bankTransactionId: string, userId: string, removed: string[]) {
+    return this.decide(
+      bankTransactionId,
+      userId,
+      "missing-invoices.unpaired",
+      { documentIds: removed },
+      (transaction) =>
+        transaction.bankTransactionMatch.deleteMany({
+          where: { bankTransactionId },
+        }),
+    );
+  }
+
+  annotate(
+    bankTransactionId: string,
+    userId: string,
+    action: string,
+    data: Prisma.BankTransactionUpdateInput,
+    metadata: Record<string, unknown>,
+  ) {
+    return this.decide(
+      bankTransactionId,
+      userId,
+      action,
+      metadata,
+      (transaction) =>
+        transaction.bankTransaction.update({
+          where: { id: bankTransactionId },
+          data,
+        }),
+    );
   }
 
   /** Mely (bankszámla, hónap) párhoz van importált sor: a „Kivonat hiányzik” alapja. */

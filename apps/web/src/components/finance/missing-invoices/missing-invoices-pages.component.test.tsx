@@ -79,6 +79,7 @@ const item = (
   document: null,
   matchedBy: null,
   comment: null,
+  paperOriginal: false,
   ...overrides,
 });
 

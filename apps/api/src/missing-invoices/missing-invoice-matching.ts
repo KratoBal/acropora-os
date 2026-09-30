@@ -49,6 +49,12 @@ export interface CandidateDocument {
    * kézi „papíron megvan” jelölés. A NAV-adatsor nem eredeti.
    */
   hasOriginal: boolean;
+  /**
+   * Az összevont jelölt többi azonosítója (ugyanaz a számla másik forrásból).
+   * Egy kézi párosítás bármelyikre mutathat, és akkor is érvényes marad, ha a
+   * számla később egy másik forrásból is beérkezik.
+   */
+  aliasIds?: readonly string[];
 }
 
 export interface MatchableDebit {
@@ -187,8 +193,17 @@ export function matchMonth(input: {
   documents: readonly CandidateDocument[];
   /** terhelés -> kézzel párosított dokumentum(ok) azonosítója */
   manual: ReadonlyMap<string, readonly string[]>;
+  /**
+   * A „papíron megvan” jelölésű terhelések (acrobot 25322): a párosított
+   * számla eredetije papíron van meg, tehát nem Eredeti hiányzik.
+   */
+  paperOriginals?: ReadonlySet<string>;
 }): Map<string, MatchOutcome> {
-  const byId = new Map(input.documents.map((d) => [d.id, d]));
+  const byId = new Map<string, CandidateDocument>();
+  for (const d of input.documents) {
+    byId.set(d.id, d);
+    for (const alias of d.aliasIds ?? []) byId.set(alias, d);
+  }
   const used = new Set<string>();
   const outcomes = new Map<string, MatchOutcome>();
   const free = () => input.documents.filter((d) => !used.has(d.id));
@@ -197,7 +212,7 @@ export function matchMonth(input: {
   for (const debit of input.debits) {
     const ids = input.manual.get(debit.id);
     if (!ids?.length) continue;
-    const documents = ids.flatMap((id) => byId.get(id) ?? []);
+    const documents = [...new Set(ids.flatMap((id) => byId.get(id) ?? []))];
     documents.forEach((d) => used.add(d.id));
     outcomes.set(debit.id, {
       state: stateOf(documents),
@@ -386,6 +401,15 @@ export function matchMonth(input: {
               : "a partnertől nincs számla a forrásokban",
       candidates,
     });
+  }
+  for (const id of input.paperOriginals ?? []) {
+    const outcome = outcomes.get(id);
+    if (outcome?.state === "ORIGINAL_MISSING")
+      outcomes.set(id, {
+        ...outcome,
+        state: "FOUND",
+        reason: `${outcome.reason}; az eredeti papíron megvan`,
+      });
   }
   return outcomes;
 }

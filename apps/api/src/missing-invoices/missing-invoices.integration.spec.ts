@@ -23,8 +23,19 @@ const gate = integrationDatabaseGate(process.env);
 const ACCOUNT = "9999000033334444";
 const IMPORTER = "missing-invoices-read-it";
 const SUPPLIER = "HIANYZOTESZT Kft.";
+// a döntés audit-sort ír, annak a szerzője valódi felhasználó kell legyen
+const ACTOR_EMAIL = "missing-invoices-it-actor@example.invalid";
 
 async function removeLeftovers() {
+  const ids = (
+    await prisma.bankTransaction.findMany({
+      where: { bankAccount: { accountNumber: ACCOUNT } },
+      select: { id: true },
+    })
+  ).map((row) => row.id);
+  await prisma.auditLog.deleteMany({
+    where: { entityType: "BankTransaction", entityId: { in: ids } },
+  });
   await prisma.bankTransaction.deleteMany({
     where: { bankAccount: { accountNumber: ACCOUNT } },
   });
@@ -35,14 +46,24 @@ async function removeLeftovers() {
   await prisma.navIncomingInvoice.deleteMany({
     where: { supplierName: SUPPLIER },
   });
+  await prisma.user.deleteMany({ where: { email: ACTOR_EMAIL } });
 }
 
 describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () => {
   const missing = new MissingInvoicesService(new MissingInvoicesRepository());
+  let actor: AuthenticatedUser;
 
   before(async () => {
     if (gate.mode === "refuse") throw new Error(gate.reason);
     await removeLeftovers();
+    actor = (await prisma.user.create({
+      data: {
+        email: ACTOR_EMAIL,
+        displayName: "Hiányzó számlák aktor",
+        role: "OWNER",
+      },
+      select: { id: true },
+    })) as AuthenticatedUser;
     await new BankStatementImportService(
       new BankStatementImportRepository(),
     ).import(
@@ -80,6 +101,10 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
           where: { supplierName: SUPPLIER },
         }),
       },
+      {
+        nev: "a suite aktor-felhasználója bent maradt",
+        darab: await prisma.user.count({ where: { email: ACTOR_EMAIL } }),
+      },
     ]);
   });
 
@@ -102,5 +127,39 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
     );
     const account = month.accounts.find((a) => a.accountNumber === ACCOUNT);
     assert.equal(account?.hasStatement, true);
+  });
+
+  it("pairs by hand with an audit row, lets an invoice go to one debit only, and takes it back", async () => {
+    const all = (await missing.month("2026-08", { tab: "ALL" })).items.filter(
+      (item) => item.account.name.startsWith(ACCOUNT),
+    );
+    const payment = all.find((item) => item.partner === SUPPLIER)!;
+    const other = all.find((item) => item.partner === "Ismeretlen Bt.")!;
+    const documentId = payment.document!.id;
+
+    const paired = await missing.pair(other.id, documentId, actor);
+    assert.deepEqual(
+      [paired.matchedBy, paired.document?.id],
+      ["MANUAL", documentId],
+    );
+    // a kézi párosítás elvitte a számlát a szabály elől
+    assert.equal((await missing.item(payment.id)).document, null);
+    await assert.rejects(
+      missing.pair(payment.id, documentId, actor),
+      /másik terheléshez/,
+    );
+    assert.equal(
+      await prisma.auditLog.count({
+        where: {
+          entityType: "BankTransaction",
+          entityId: other.id,
+          action: "missing-invoices.paired",
+        },
+      }),
+      1,
+    );
+
+    await missing.unpair(other.id, actor);
+    assert.equal((await missing.item(payment.id)).document?.id, documentId);
   });
 });

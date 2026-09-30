@@ -7099,25 +7099,52 @@ enum BankTransactionDirection {
 /// fájlon belüli sorszámából képzett kulcs: két export átfedő napja egyszer
 /// kerül be, egy exporton belüli két azonos sor kétszer.
 model BankTransaction {
-  id                  String                   @id @default(cuid())
-  bankAccountId       String
-  importId            String
-  direction           BankTransactionDirection
+  id                    String                   @id @default(cuid())
+  bankAccountId         String
+  importId              String
+  direction             BankTransactionDirection
   /// Előjel nélkül; az irány mondja meg, terhelés-e.
-  amount              Decimal                  @db.Decimal(19, 4)
-  currency            String                   @db.VarChar(3)
-  bookingDate         DateTime                 @db.Date
-  valueDate           DateTime?                @db.Date
-  counterpartyAccount String?
-  counterpartyName    String?
-  narrative           String
-  transactionType     String?
-  transactionKey      String                   @unique
-  createdAt           DateTime                 @default(now())
+  amount                Decimal                  @db.Decimal(19, 4)
+  currency              String                   @db.VarChar(3)
+  bookingDate           DateTime                 @db.Date
+  valueDate             DateTime?                @db.Date
+  counterpartyAccount   String?
+  counterpartyName      String?
+  narrative             String
+  transactionType       String?
+  transactionKey        String                   @unique
+  /// A KEZELŐ DÖNTÉSEI (Hiányzó számlák, 4. szelet), auditnaplóval: belső
+  /// megjegyzés; kézi átsorolás (NULL: a szabály dönt); és a „papíron megvan”
+  /// jelölés, ha a könyvelőnek az eredeti papíron van meg.
+  comment               String?
+  categoryOverride      String?
+  paperOriginalAt       DateTime?
+  paperOriginalByUserId String?
+  createdAt             DateTime                 @default(now())
 
-  bankAccount BankAccount         @relation(fields: [bankAccountId], references: [id])
-  import      BankStatementImport @relation(fields: [importId], references: [id])
+  bankAccount BankAccount            @relation(fields: [bankAccountId], references: [id])
+  import      BankStatementImport    @relation(fields: [importId], references: [id])
+  matches     BankTransactionMatch[]
 
   @@index([bankAccountId, bookingDate])
   @@index([bookingDate, direction])
+}
+
+/// KÉZI PÁROSÍTÁS (Hiányzó számlák, brief 12. pont): a terhelés és a
+/// dokumentum, ki és mikor. A szabály nem írja felül. Egy dokumentum egy
+/// terheléshez párosítható; egy terheléshez több dokumentum is tartozhat
+/// (több számla egy utalásban).
+model BankTransactionMatch {
+  id                String   @id @default(cuid())
+  bankTransactionId String
+  /// NAV, MAILBOX, SETTLEMENT, ...: a forrás, és benne az azonosító
+  documentSource    String
+  documentId        String
+  pairedByUserId    String?
+  createdAt         DateTime @default(now())
+
+  bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
+
+  @@unique([documentSource, documentId])
+  @@index([bankTransactionId])
 }

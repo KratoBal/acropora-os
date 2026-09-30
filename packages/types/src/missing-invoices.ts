@@ -120,6 +120,54 @@ export interface MissingInvoiceItem {
   } | null;
   matchedBy: "RULE" | "MANUAL" | null;
   comment: string | null;
+  /** Kézzel jelölve: az eredeti papíron megvan (acrobot 25322). */
+  paperOriginal: boolean;
+}
+
+/** A „Mit kell tenni” szöveg kulcsa, az állapotból. */
+export const MISSING_INVOICE_ACTIONS = [
+  "NONE",
+  "PROVIDE_ORIGINAL",
+  "PAIR_OR_UPLOAD",
+  "REQUEST_INVOICE",
+  "REQUEST_REISSUE_TO_COMPANY",
+  "REQUEST_FINAL_INVOICE",
+] as const;
+export type MissingInvoiceAction = (typeof MISSING_INVOICE_ACTIONS)[number];
+
+export interface MissingInvoiceCandidate {
+  documentId: string;
+  number: string;
+  /** `ÉÉÉÉ-HH-NN` */
+  date: string;
+  /** `null`, ahol a forrás nem ad bruttót (hazai postafiók-számla). */
+  gross: string | null;
+  currency: string;
+  source: MissingInvoiceDocumentSource;
+  payee: "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
+  hasOriginal: boolean;
+}
+
+export interface MissingInvoiceItemDetail extends MissingInvoiceItem {
+  /** A partner ablakba eső, még nem párosított számlái (a drawer jelöltjei). */
+  candidates: MissingInvoiceCandidate[];
+  action: MissingInvoiceAction;
+  /** A „Hiányzó számlák” Drive-mappa, ha a szerveren be van állítva. */
+  driveFolderUrl: string | null;
+}
+
+export interface MissingInvoiceMatchInput {
+  documentId: string;
+}
+export interface MissingInvoiceCommentInput {
+  comment: string | null;
+}
+export interface MissingInvoiceCategoryInput {
+  /** `null`: a szabály dönt. */
+  category: MissingInvoiceCategory | null;
+}
+export interface MissingInvoicePaperOriginalInput {
+  marked: boolean;
 }
 
 export interface MissingInvoiceMonthDetail {
