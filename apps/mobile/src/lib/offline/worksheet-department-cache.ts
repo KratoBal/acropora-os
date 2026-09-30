@@ -1,6 +1,6 @@
 import type { WorksheetDepartment } from "@/lib/api/worksheets";
 
-import { initializeOfflineDatabase } from "./database";
+import { inTransaction, offlineDatabase } from "./database";
 
 /**
  * A MUNKALAP HELYSZÍNEI A KÉSZÜLÉKEN.
@@ -24,14 +24,8 @@ import { initializeOfflineDatabase } from "./database";
  * lásd `queue-store.ts`.)
  */
 
-type Database = Awaited<ReturnType<typeof initializeOfflineDatabase>>;
-
-let opening: Promise<Database> | null = null;
-
-function database(): Promise<Database> {
-  opening ??= initializeOfflineDatabase();
-  return opening;
-}
+// Egy megnyitas az egesz appnak: lasd `egyszeri-megnyitas.ts`.
+const database = offlineDatabase;
 
 export interface CachedWorksheetDepartments {
   items: WorksheetDepartment[];
@@ -52,7 +46,7 @@ export async function rememberWorksheetDepartments(
   const savedAt = new Date().toISOString();
   try {
     const db = await database();
-    await db.withTransactionAsync(async () => {
+    await inTransaction(db, async () => {
       await db.runAsync(
         `DELETE FROM cached_worksheet_departments WHERE customer_id = ?`,
         [customerId],

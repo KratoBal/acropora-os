@@ -1,8 +1,35 @@
 import * as SQLite from "expo-sqlite";
 
+import { egymasUtan, egyszeriMegnyitas } from "./egyszeri-megnyitas";
 import { firstBrokenStep, pendingMigrations } from "./migrations";
 
 const DATABASE_NAME = "acropora-field.db";
+
+/**
+ * AZ ADATBAZIS, AHOGY A MODULOK KAPJAK: EGY MEGNYITAS AZ EGESZ APPNAK.
+ *
+ * Minden masolat-modul es a sor ezt hivja, nem az `initializeOfflineDatabase`
+ * fuggvenyt. Igy a sema es a sorszamozott lepesek EGYSZER futnak le, es egy
+ * elhasalt megnyitas utan a kovetkezo hivas ujraprobal -- lasd
+ * `egyszeri-megnyitas.ts`.
+ */
+export const offlineDatabase = egyszeriMegnyitas(initializeOfflineDatabase);
+
+const tranzakciok = egymasUtan();
+
+/**
+ * EGY TRANZAKCIO, A TOBBI UTAN SORBAN.
+ *
+ * A `withTransactionAsync` nem kizarolagos: ket egymasba csuszo tranzakcio
+ * kozul a masodik `BEGIN`-je hibat dob, es a hibaagon kiadott `ROLLBACK` az
+ * ELSOT gorgeti vissza. Itt a masodik megvarja az elsot.
+ */
+export function inTransaction(
+  database: SQLite.SQLiteDatabase,
+  task: () => Promise<void>,
+): Promise<void> {
+  return tranzakciok(() => database.withTransactionAsync(task));
+}
 
 /**
  * A KÉSZÜLÉKEN TÁROLT HELYSZÍNI MÁSOLAT.

@@ -3,7 +3,7 @@ import type {
   ServiceJobListItem,
 } from "@/lib/api/service-jobs";
 
-import { initializeOfflineDatabase } from "./database";
+import { inTransaction, offlineDatabase } from "./database";
 
 /**
  * A HIBAJEGYEK HELYSZÍNI MÁSOLATA -- CSAK OLVASÁSRA, ÉS EZ DÖNTÉS.
@@ -26,14 +26,8 @@ import { initializeOfflineDatabase } from "./database";
  * üres másolatnak látszik -- és az üreset a felület kimondja.
  */
 
-type Database = Awaited<ReturnType<typeof initializeOfflineDatabase>>;
-
-let opening: Promise<Database> | null = null;
-
-function database(): Promise<Database> {
-  opening ??= initializeOfflineDatabase();
-  return opening;
-}
+// Egy megnyitas az egesz appnak: lasd `egyszeri-megnyitas.ts`.
+const database = offlineDatabase;
 
 export interface CachedServiceJobs {
   items: ServiceJobListItem[];
@@ -55,70 +49,88 @@ function parse<T>(json: string): T | null {
   }
 }
 
-export async function rememberServiceJobs(
+/**
+ * A LISTA SORAI A MASOLATBA, A HIBAVAL EGYUTT. A helyszin-letolto ezt hivja:
+ * neki tudnia kell, ha a mentes elhasalt (lasd `asset-cache.ts`
+ * `storeAssets`).
+ */
+export async function storeServiceJobs(
   items: readonly ServiceJobListItem[],
 ): Promise<void> {
   if (items.length === 0) return;
   const savedAt = new Date().toISOString();
+  const db = await database();
+  await inTransaction(db, async () => {
+    for (const item of items) {
+      await db.runAsync(
+        `INSERT INTO cached_service_jobs (id, payload_json, synced_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           payload_json = excluded.payload_json,
+           synced_at = excluded.synced_at`,
+        [item.id, JSON.stringify(item), savedAt],
+      );
+    }
+  });
+}
+
+export async function rememberServiceJobs(
+  items: readonly ServiceJobListItem[],
+): Promise<void> {
   try {
-    const db = await database();
-    await db.withTransactionAsync(async () => {
-      for (const item of items) {
-        await db.runAsync(
-          `INSERT INTO cached_service_jobs (id, payload_json, synced_at)
-           VALUES (?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             payload_json = excluded.payload_json,
-             synced_at = excluded.synced_at`,
-          [item.id, JSON.stringify(item), savedAt],
-        );
-      }
-    });
+    await storeServiceJobs(items);
   } catch {
     // Lásd a modul fejlécét.
   }
 }
 
-export async function rememberServiceJobDetail(
+/** A teljes lap a masolatba, a hibaval egyutt -- lasd `storeServiceJobs`. */
+export async function storeServiceJobDetail(
   detail: ServiceJobDetail,
 ): Promise<void> {
   const savedAt = new Date().toISOString();
+  const db = await database();
+  await db.runAsync(
+    `INSERT INTO cached_service_job_details (id, payload_json, synced_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       payload_json = excluded.payload_json,
+       synced_at = excluded.synced_at`,
+    [detail.id, JSON.stringify(detail), savedAt],
+  );
+  /**
+   * A LAP A LISTASORT IS NAPRAKÉSZEN TARTJA. Aki megnyitott egy jegyet, annak
+   * a listán se a tegnapi állapota jöjjön elő -- és a léptetés UTÁN ez a
+   * mentés az, ami a listát is előreviszi.
+   *
+   * A `detail` A LISTASOR MEZŐINEK CSAK EGY RÉSZÉT HORDOZZA -- MÉRVE
+   * 2026-09-22: a `worksheetCount`-ot a szerver a lap-válaszban SOHA nem
+   * küldi (lásd `ServiceJobDetail` fejlécét a `packages/types`-ban). A régi
+   * alak ezt a mezőt `undefined`-ként írta a listasorba, és a lista utána
+   * csendben "0 munkalap"-ot mutatott, akkor is, ha valójában volt. A
+   * fordító EZT a hiányt fogta meg, amikor a két alak szétvált -- pontosan
+   * úgy, ahogy ez a megjegyzés korábban megígérte.
+   *
+   * A JAVÍTÁS: a hiányzó mezőt a MÁR MEGLÉVŐ listasorból vesszük át. Ha
+   * nincs korábbi sor (a jegyet még sosem húzta le a lista), a szám 0 --
+   * ez ugyanaz a hiányos állapot, ami korábban is fennállt, csak most
+   * KIMONDOTTAN, nem `undefined`-ből fakadó véletlenül.
+   */
+  const korabbiSor = await db.getFirstAsync<{ payload_json: string }>(
+    `SELECT payload_json FROM cached_service_jobs WHERE id = ?`,
+    [detail.id],
+  );
+  const korabbiSzam =
+    (korabbiSor && parse<ServiceJobListItem>(korabbiSor.payload_json))
+      ?.worksheetCount ?? 0;
+  await storeServiceJobs([{ ...detail, worksheetCount: korabbiSzam }]);
+}
+
+export async function rememberServiceJobDetail(
+  detail: ServiceJobDetail,
+): Promise<void> {
   try {
-    const db = await database();
-    await db.runAsync(
-      `INSERT INTO cached_service_job_details (id, payload_json, synced_at)
-       VALUES (?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         payload_json = excluded.payload_json,
-         synced_at = excluded.synced_at`,
-      [detail.id, JSON.stringify(detail), savedAt],
-    );
-    /**
-     * A LAP A LISTASORT IS NAPRAKÉSZEN TARTJA. Aki megnyitott egy jegyet, annak
-     * a listán se a tegnapi állapota jöjjön elő -- és a léptetés UTÁN ez a
-     * mentés az, ami a listát is előreviszi.
-     *
-     * A `detail` A LISTASOR MEZŐINEK CSAK EGY RÉSZÉT HORDOZZA -- MÉRVE
-     * 2026-09-22: a `worksheetCount`-ot a szerver a lap-válaszban SOHA nem
-     * küldi (lásd `ServiceJobDetail` fejlécét a `packages/types`-ban). A régi
-     * alak ezt a mezőt `undefined`-ként írta a listasorba, és a lista utána
-     * csendben "0 munkalap"-ot mutatott, akkor is, ha valójában volt. A
-     * fordító EZT a hiányt fogta meg, amikor a két alak szétvált -- pontosan
-     * úgy, ahogy ez a megjegyzés korábban megígérte.
-     *
-     * A JAVÍTÁS: a hiányzó mezőt a MÁR MEGLÉVŐ listasorból vesszük át. Ha
-     * nincs korábbi sor (a jegyet még sosem húzta le a lista), a szám 0 --
-     * ez ugyanaz a hiányos állapot, ami korábban is fennállt, csak most
-     * KIMONDOTTAN, nem `undefined`-ből fakadó véletlenül.
-     */
-    const korabbiSor = await db.getFirstAsync<{ payload_json: string }>(
-      `SELECT payload_json FROM cached_service_jobs WHERE id = ?`,
-      [detail.id],
-    );
-    const korabbiSzam =
-      (korabbiSor && parse<ServiceJobListItem>(korabbiSor.payload_json))
-        ?.worksheetCount ?? 0;
-    await rememberServiceJobs([{ ...detail, worksheetCount: korabbiSzam }]);
+    await storeServiceJobDetail(detail);
   } catch {
     // Ugyanaz, mint fent.
   }

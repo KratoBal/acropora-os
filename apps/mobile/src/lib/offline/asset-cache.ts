@@ -1,6 +1,6 @@
 import type { AssetDetail, AssetListItem } from "@/lib/api/assets";
 
-import { initializeOfflineDatabase } from "./database";
+import { inTransaction, offlineDatabase } from "./database";
 
 /**
  * A HELYSZÍNI MÁSOLAT ÍRÁSA ÉS OLVASÁSA.
@@ -22,14 +22,8 @@ import { initializeOfflineDatabase } from "./database";
  * marad rejtve a szerelő elől.
  */
 
-type Database = Awaited<ReturnType<typeof initializeOfflineDatabase>>;
-
-let opening: Promise<Database> | null = null;
-
-function database(): Promise<Database> {
-  opening ??= initializeOfflineDatabase();
-  return opening;
-}
+// Egy megnyitas az egesz appnak: lasd `egyszeri-megnyitas.ts`.
+const database = offlineDatabase;
 
 export interface CachedAssets {
   items: AssetListItem[];
@@ -53,47 +47,64 @@ function parse<T>(json: string): T | null {
   }
 }
 
-/** A lista egy oldala. Ugyanannak az eszköznek az újabb sora felülírja a régit. */
-export async function rememberAssets(items: AssetListItem[]): Promise<void> {
+/**
+ * A LISTA SORAI A MASOLATBA -- ES A HIBA TOVABBMEGY.
+ *
+ * A helyszin-letolto ezt hivja, nem a `rememberAssets`-t: neki TUDNIA kell, ha
+ * a mentes elhasalt, kulonben a zaro mondat "kesz"-t mond egy ures masolatra
+ * (Balazs, 2026-09-30, Android). Ugyanannak az eszkoznek az ujabb sora
+ * felulirja a regit.
+ */
+export async function storeAssets(items: AssetListItem[]): Promise<void> {
   if (items.length === 0) return;
   const savedAt = new Date().toISOString();
+  const db = await database();
+  await inTransaction(db, async () => {
+    for (const item of items) {
+      await db.runAsync(
+        `INSERT INTO cached_assets (id, qr_token, payload_json, synced_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           qr_token = excluded.qr_token,
+           payload_json = excluded.payload_json,
+           synced_at = excluded.synced_at`,
+        [item.id, item.qrToken, JSON.stringify(item), savedAt],
+      );
+    }
+  });
+}
+
+/** A lista egy oldala, a kepernyok felol: a hiba itt nem megy tovabb. */
+export async function rememberAssets(items: AssetListItem[]): Promise<void> {
   try {
-    const db = await database();
-    await db.withTransactionAsync(async () => {
-      for (const item of items) {
-        await db.runAsync(
-          `INSERT INTO cached_assets (id, qr_token, payload_json, synced_at)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             qr_token = excluded.qr_token,
-             payload_json = excluded.payload_json,
-             synced_at = excluded.synced_at`,
-          [item.id, item.qrToken, JSON.stringify(item), savedAt],
-        );
-      }
-    });
+    await storeAssets(items);
   } catch {
     // Lásd a modul fejlécét: a mentés hibája nem ronthat el egy működő,
     // online képernyőt.
   }
 }
 
-export async function rememberAssetDetail(detail: AssetDetail): Promise<void> {
+/** A teljes adatlap a masolatba, a hibaval egyutt -- lasd `storeAssets`. */
+export async function storeAssetDetail(detail: AssetDetail): Promise<void> {
   const savedAt = new Date().toISOString();
+  const db = await database();
+  await db.runAsync(
+    `INSERT INTO cached_asset_details (id, qr_token, payload_json, synced_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       qr_token = excluded.qr_token,
+       payload_json = excluded.payload_json,
+       synced_at = excluded.synced_at`,
+    [detail.id, detail.qrToken, JSON.stringify(detail), savedAt],
+  );
+  // Az adatlap a listasort is naprakészen tartja: aki megnyitott egy eszközt,
+  // annak a listán se a tegnapi állapota jöjjön elő.
+  await storeAssets([detail]);
+}
+
+export async function rememberAssetDetail(detail: AssetDetail): Promise<void> {
   try {
-    const db = await database();
-    await db.runAsync(
-      `INSERT INTO cached_asset_details (id, qr_token, payload_json, synced_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         qr_token = excluded.qr_token,
-         payload_json = excluded.payload_json,
-         synced_at = excluded.synced_at`,
-      [detail.id, detail.qrToken, JSON.stringify(detail), savedAt],
-    );
-    // Az adatlap a listasort is naprakészen tartja: aki megnyitott egy eszközt,
-    // annak a listán se a tegnapi állapota jöjjön elő.
-    await rememberAssets([detail]);
+    await storeAssetDetail(detail);
   } catch {
     // Ugyanaz, mint fent.
   }

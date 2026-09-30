@@ -3,7 +3,7 @@ import {
   readQueuedAssetUpdate,
   type QueuedAssetUpdate,
 } from "./asset-update-queue";
-import { initializeOfflineDatabase } from "./database";
+import { offlineDatabase } from "./database";
 import { readPhotoPayload, type PhotoPayload } from "./queue-order";
 import {
   isSyncEntityType,
@@ -60,7 +60,7 @@ export async function applyQueueResend(
   patch: { payloadJson: string; attemptCount: number; lastError: null },
 ): Promise<{ ok: true; changed: number } | { ok: false; error: string }> {
   try {
-    const db = await initializeOfflineDatabase();
+    const db = await offlineDatabase();
     const result = await db.runAsync(
       `UPDATE sync_queue
           SET payload_json = ?, state = 'pending', attempt_count = ?, last_error = NULL
@@ -100,7 +100,7 @@ export async function discardQueueRow(
   id: string,
 ): Promise<{ ok: true; changed: number } | { ok: false; error: string }> {
   try {
-    const db = await initializeOfflineDatabase();
+    const db = await offlineDatabase();
     const result = await db.runAsync(
       `UPDATE sync_queue SET state = 'discarded'
         WHERE id = ? AND state = 'conflict'`,
@@ -127,7 +127,7 @@ export async function enqueueAssetCreate(
   input: EnqueueInput,
 ): Promise<EnqueueResult> {
   try {
-    const db = await initializeOfflineDatabase();
+    const db = await offlineDatabase();
     await db.runAsync(
       `INSERT OR IGNORE INTO sync_queue
          (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
@@ -175,7 +175,7 @@ export async function enqueueAssetUpdate(input: {
   createdAt: string;
 }): Promise<EnqueueResult> {
   try {
-    const db = await initializeOfflineDatabase();
+    const db = await offlineDatabase();
     const letezo = await db.getFirstAsync<{
       payload_json: string;
       state: string;
@@ -262,7 +262,7 @@ export async function enqueueWorksheetCreate(
   },
 ): Promise<EnqueueResult> {
   try {
-    const db = await initializeOfflineDatabase();
+    const db = await offlineDatabase();
     const fuggoseg = input.dependsOnServiceJobOperationId?.trim() || null;
     await db.runAsync(
       `INSERT OR IGNORE INTO sync_queue
@@ -325,7 +325,7 @@ export async function enqueueServiceJobCreate(input: {
   createdAt: string;
 }): Promise<EnqueueResult> {
   try {
-    const db = await initializeOfflineDatabase();
+    const db = await offlineDatabase();
     await db.runAsync(
       `INSERT OR IGNORE INTO sync_queue
          (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
@@ -357,7 +357,7 @@ export async function enqueueAquariumCreate(input: {
   createdAt: string;
 }): Promise<EnqueueResult> {
   try {
-    const db = await initializeOfflineDatabase();
+    const db = await offlineDatabase();
     await db.runAsync(
       `INSERT OR IGNORE INTO sync_queue
          (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
@@ -390,7 +390,7 @@ export async function enqueueAquariumMeasurement(input: {
   createdAt: string;
 }): Promise<EnqueueResult> {
   try {
-    const db = await initializeOfflineDatabase();
+    const db = await offlineDatabase();
     await db.runAsync(
       `INSERT OR IGNORE INTO sync_queue
          (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
@@ -420,7 +420,7 @@ export async function enqueueWorksheetLine(input: {
   createdAt: string;
 }): Promise<EnqueueResult> {
   try {
-    const db = await initializeOfflineDatabase();
+    const db = await offlineDatabase();
     await db.runAsync(
       `INSERT OR IGNORE INTO sync_queue
          (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
@@ -475,7 +475,7 @@ export async function enqueuePhoto(input: {
   ownerId?: string;
 }): Promise<EnqueueResult> {
   try {
-    const db = await initializeOfflineDatabase();
+    const db = await offlineDatabase();
     await db.runAsync(
       /**
        * A FUGGOSEG MOSTANTOL OSZLOPBAN ALL, NEM CSAK A PAYLOADBAN.
@@ -538,7 +538,7 @@ export async function attachRecordingResult(
   recordingOperationId: string,
   assetId: string,
 ): Promise<number> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   /**
    * A KERESES MOSTANTOL A FUGGOSEGRE MEGY, NEM A MUVELET TIPUSARA.
    *
@@ -618,7 +618,7 @@ export async function attachRecordingResult(
 
 /** Amit el LEHET kuldeni: a `pending` es a `failed` sorok, regi elore. */
 export async function pendingQueueRows(): Promise<SyncQueueRow[]> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   const rows = await db.getAllAsync<{
     id: string;
     operation: string;
@@ -662,7 +662,7 @@ export async function pendingQueueRows(): Promise<SyncQueueRow[]> {
 
 /** A szerver nyugtazta: a helyi bizonyitek mehet. CSAK ilyenkor. */
 export async function removeQueueRow(id: string): Promise<void> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, [id]);
 }
 
@@ -671,7 +671,7 @@ export async function markQueueRetry(
   attemptCount: number,
   lastError: string,
 ): Promise<void> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   await db.runAsync(
     /**
      * AZ IDOPONT IS FELKERUL, ES E NELKUL A VARAKOZTATAS NEM LETEZIK. Az
@@ -697,7 +697,7 @@ export async function markQueueStalled(
   attemptCount: number,
   lastError: string,
 ): Promise<void> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   await db.runAsync(
     `UPDATE sync_queue
         SET state = 'stalled', attempt_count = ?, last_error = ?, last_attempt_at = ?
@@ -710,7 +710,7 @@ export async function markQueueConflict(
   id: string,
   lastError: string,
 ): Promise<void> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   await db.runAsync(
     `UPDATE sync_queue SET state = 'conflict', last_error = ? WHERE id = ?`,
     [lastError, id],
@@ -733,7 +733,7 @@ export async function queueCounts(): Promise<{
   recordings: number;
   photos: number;
 }> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   const rows = await db.getAllAsync<{
     state: string;
     operation: string;
@@ -778,7 +778,7 @@ export async function queueCounts(): Promise<{
 export async function queuedWorksheetLineCount(
   worksheetId: string,
 ): Promise<number> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   const row = await db.getFirstAsync<{ db: number }>(
     `SELECT COUNT(*) AS db FROM sync_queue
       WHERE operation = 'create' AND entity_type = 'worksheet-line'
@@ -854,7 +854,7 @@ export interface RepeatedFailures {
 export async function repeatedFailures(
   threshold: number = ISMETLODO_HIBA_HATAR,
 ): Promise<RepeatedFailures> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   const rows = await db.getAllAsync<{
     attempt_count: number;
     last_error: string | null;
@@ -883,7 +883,7 @@ export async function repeatedFailures(
  * „meg nem ment fel".
  */
 export async function allQueueRows(): Promise<SyncQueueRow[]> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   const rows = await db.getAllAsync<{
     id: string;
     operation: string;
@@ -934,7 +934,7 @@ export async function allQueueRows(): Promise<SyncQueueRow[]> {
  * ujrakuldes eredmenye meg nem erkezik.
  */
 export async function retryQueueRow(id: string): Promise<void> {
-  const db = await initializeOfflineDatabase();
+  const db = await offlineDatabase();
   await db.runAsync(
     `UPDATE sync_queue
         SET state = 'pending', attempt_count = 0, last_attempt_at = NULL

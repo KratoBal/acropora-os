@@ -281,7 +281,15 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
     sorok.push(...kovetkezo.items);
   }
 
-  await probald(() => deps.eszkozokMentese(sorok));
+  /*
+    A MENTES HIBAJA IS SZAMIT, NEM CSAK A LEKERESE. A mentok eddig minden hibat
+    elnyeltek, tehat ez a sor sosem tudott elhasalni -- Balazs 2026-09-30-an
+    Androidon "kesz"-t kapott egy ures masolatra. A letolto most a hibat
+    tovabbado mentoket kapja (`storeAssets` es tarsai), es itt szamol.
+  */
+  let bukottMentes = 0;
+  if ((await probald(() => deps.eszkozokMentese(sorok))) === null)
+    bukottMentes += 1;
 
   /*
     A TELJES ADATLAP AZ, AMIERT EZ A GOMB LETEZIK. Balazs szava: a kollega ma
@@ -300,8 +308,13 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
       hibasReszlet = true;
       continue;
     }
-    await probald(() => deps.eszkozReszletMentese(detail));
-    reszletek += 1;
+    /*
+      A BUKOTT MENTES NEM HAGYJA KI A BELYEGKEPEKET: azok fajlkent kerulnek a
+      lemezre, az adatbazistol fuggetlenul.
+    */
+    if ((await probald(() => deps.eszkozReszletMentese(detail))) === null)
+      bukottMentes += 1;
+    else reszletek += 1;
 
     /*
       A BELYEGKEPEK UGYANEBBOL A VALASZBOL JONNEK: az eszkoz adatlapja
@@ -343,21 +356,29 @@ async function eszkozok<Tetel extends Sor, Reszlet extends EszkozReszletAlak>(
   }
 
   const eszkozResz: ReszEredmeny =
-    hianyzoLap || hibasReszlet
+    bukottMentes > 0
       ? {
           resz: "eszkozok",
           allapot: "reszleges",
           darab: reszletek,
-          ok: "hibas-sor",
+          ok: "mentes",
+          bukott: bukottMentes,
         }
-      : sorok.length > RESZLET_HATAR
+      : hianyzoLap || hibasReszlet
         ? {
             resz: "eszkozok",
             allapot: "reszleges",
             darab: reszletek,
-            ok: "vagott",
+            ok: "hibas-sor",
           }
-        : { resz: "eszkozok", allapot: "kesz", darab: reszletek };
+        : sorok.length > RESZLET_HATAR
+          ? {
+              resz: "eszkozok",
+              allapot: "reszleges",
+              darab: reszletek,
+              ok: "vagott",
+            }
+          : { resz: "eszkozok", allapot: "kesz", darab: reszletek };
 
   return {
     resz: eszkozResz,
@@ -380,7 +401,9 @@ async function hibajegyek<Tetel extends JegySor, Reszlet>(
   const lista = await probald(() => deps.jegyLista());
   if (!lista) return { resz: "hibajegyek", allapot: "elhasalt", darab: 0 };
 
-  await probald(() => deps.jegyekMentese(lista.items));
+  let bukottMentes = 0;
+  if ((await probald(() => deps.jegyekMentese(lista.items))) === null)
+    bukottMentes += 1;
 
   const helyszinei = lista.items.filter((item) =>
     utEgyezik(item.departmentPath, helyszinUt),
@@ -394,9 +417,21 @@ async function hibajegyek<Tetel extends JegySor, Reszlet>(
       hibas = true;
       continue;
     }
-    await probald(() => deps.jegyReszletMentese(detail));
+    if ((await probald(() => deps.jegyReszletMentese(detail))) === null) {
+      bukottMentes += 1;
+      continue;
+    }
     reszletek += 1;
   }
+
+  if (bukottMentes > 0)
+    return {
+      resz: "hibajegyek",
+      allapot: "reszleges",
+      darab: reszletek,
+      ok: "mentes",
+      bukott: bukottMentes,
+    };
 
   /*
     A SZERVER VAGASA KULON OK: a jegylista ketszaz sornal vagodik, es errol a
@@ -440,16 +475,28 @@ async function munkalapok<Tetel extends Sor, Reszlet>(
   const kerheto = sorok.slice(0, RESZLET_HATAR);
   let reszletek = 0;
   let hibas = false;
+  let bukottMentes = 0;
   for (const sor of kerheto) {
     const detail = await probald(() => deps.munkalapReszlet(sor.id));
     if (!detail) {
       hibas = true;
       continue;
     }
-    await probald(() => deps.munkalapMentese(detail));
+    if ((await probald(() => deps.munkalapMentese(detail))) === null) {
+      bukottMentes += 1;
+      continue;
+    }
     reszletek += 1;
   }
 
+  if (bukottMentes > 0)
+    return {
+      resz: "munkalapok",
+      allapot: "reszleges",
+      darab: reszletek,
+      ok: "mentes",
+      bukott: bukottMentes,
+    };
   if (hianyzoLap || hibas)
     return {
       resz: "munkalapok",

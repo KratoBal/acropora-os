@@ -215,6 +215,64 @@ describe("a helyszín letöltésének menete", () => {
   });
 
   /**
+   * A MENTES HIBAJA NEM LEHET NEMA (Balazs, 2026-09-30, Android).
+   *
+   * A letoltes szamot mondott ("N eszkoz letoltve"), terero nelkul a lista
+   * pedig "nincs mentett masolat" volt: a szerverrol minden lejott, a
+   * keszulekre semmi nem kerult, es a mentok a hibat elnyeltek.
+   *
+   * MI PIROSIT: ha a lista mentesenek hibaja utan a zaro mondat "kesz" marad,
+   * vagy a sor nem mondja ki, hogy a mentes nem sikerult.
+   */
+  it("ha a lista MENTÉSE elhasal, a zárómondat HIÁNYOS, és kimondja, hogy a mentés nem sikerült", async () => {
+    const eredmeny = await futtat({
+      eszkozokMentese: async () => {
+        throw new Error("duplicate column name: state");
+      },
+    });
+    assert.equal(eredmeny.teljes, false);
+    assert.match(eredmeny.cim, /HIÁNYOS/);
+    assert.match(
+      sorAmi(eredmeny.sorok, /eszköz/),
+      /1 mentés a készülékre NEM sikerült/,
+    );
+  });
+
+  it("a bukott adatlap-mentés nem számít letöltött eszköznek", async () => {
+    const eredmeny = await futtat({
+      eszkozReszletMentese: async (detail) => {
+        if ((detail as { id: string }).id === "a2")
+          throw new Error("database is locked");
+      },
+    });
+    assert.equal(eredmeny.teljes, false);
+    assert.match(
+      sorAmi(eredmeny.sorok, /eszköz/),
+      /^1 eszköz került a készülékre, de 1 mentés/,
+    );
+  });
+
+  it("a hibajegyek és a munkalapok mentési hibája is látszik", async () => {
+    const eredmeny = await futtat({
+      jegyekMentese: async () => {
+        throw new Error("nem nyilik");
+      },
+      munkalapMentese: async () => {
+        throw new Error("nem nyilik");
+      },
+    });
+    assert.equal(eredmeny.teljes, false);
+    assert.match(
+      sorAmi(eredmeny.sorok, /hibajegy/),
+      /mentés a készülékre NEM sikerült/,
+    );
+    assert.match(
+      sorAmi(eredmeny.sorok, /munkalap/),
+      /^0 munkalap került a készülékre, de 2 mentés/,
+    );
+  });
+
+  /**
    * POZITIV KONTROLL A MENTESRE: a menet TENYLEG ir a masolatba. Enelkul a
    * fenti allitasok egy olyan valtozatot is zolden hagynanak, ami mindent
    * lekér, es semmit nem ment el -- a szerelo pedig ures keszulekkel menne le.
