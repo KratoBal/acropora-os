@@ -84,6 +84,8 @@ export class CustomersRepository extends Repository {
     const searchCustomerIds = query.search?.trim()
       ? await this.searchCustomerIds(query.search)
       : null;
+    // meres kor A: a raw ut eredmenye nincs hasznalva (noUnusedLocals miatt all itt)
+    void searchCustomerIds;
     // Two id sets can apply at once (origin and search), so each is its own
     // AND term: a spread `id` key would let the second silently replace the
     // first.
