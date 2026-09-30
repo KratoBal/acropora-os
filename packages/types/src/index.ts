@@ -634,6 +634,9 @@ export type {
   SimplePayReportSummary,
   SimplePayReportUploadResult,
   SimplePayResolutionSource,
+  SimplePaySyncRunSummary,
+  SimplePaySyncState,
+  SimplePaySyncStatus,
   SimplePayTransactionLine,
 } from "./integrations/simplepay-settlement.js";
 export {
