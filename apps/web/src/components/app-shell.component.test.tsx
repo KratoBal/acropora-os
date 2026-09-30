@@ -17,11 +17,15 @@ vi.mock("./auth/auth-provider", () => ({
 vi.mock("./auth/user-menu", () => ({
   UserMenu: () => <div>Felhasználói menü</div>,
 }));
+const searchProps = vi.hoisted(() => ({ tokens: [] as string[] }));
 vi.mock("./global-search", () => ({
   // The mock keeps the real control's role and name (type="search",
   // aria-label="Keresés"), so tests that locate the top bar through its
-  // search box still find it.
-  GlobalSearch: () => <input type="search" aria-label="Keresés" />,
+  // search box still find it. It records the token it was given.
+  GlobalSearch: ({ token }: { token: string }) => {
+    searchProps.tokens.push(token);
+    return <input type="search" aria-label="Keresés" />;
+  },
 }));
 
 const ownerSession: Session = {
@@ -386,5 +390,40 @@ describe("AppShell navigation source", () => {
         .map((item) => item.href)
         .sort(),
     );
+  });
+});
+
+// THE SEARCH ON A COOKIE SESSION (stage and production, measured 2026-09-30):
+// the session carries no client-readable token, and the search box was not
+// drawn at all. What must fail: gating the box on the token again; passing
+// `undefined` on. The control: no session, no box.
+describe("AppShell global search", () => {
+  beforeEach(() => {
+    navigation.pathname = "/";
+    searchProps.tokens.length = 0;
+  });
+
+  it("a cookie session without a token still gets the search, with an empty token", () => {
+    auth.session = { ...ownerSession, token: undefined };
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(
+      screen.getByRole("searchbox", { name: "Keresés" }),
+    ).toBeInTheDocument();
+    expect(searchProps.tokens.at(-1)).toBe("");
+  });
+
+  it("a session with a token passes it on", () => {
+    auth.session = ownerSession;
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(searchProps.tokens.at(-1)).toBe("owner-token");
+  });
+
+  it("without a session there is no search (control)", () => {
+    auth.session = null;
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(screen.queryByRole("searchbox", { name: "Keresés" })).toBeNull();
   });
 });
