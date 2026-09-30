@@ -215,6 +215,32 @@ describe("BillingDocumentIssueService", () => {
     assert.equal(calls.pdf.length, 2); // stored, then its key written
   });
 
+  it("keeps Számlázz.hu's customer-account link for {document_link}, https only", async () => {
+    const link = "https://www.szamlazz.hu/szamla/?page=vevoifiok&azon=abc";
+    for (const [given, stored] of [
+      [link, link],
+      [undefined, null],
+      ["http://www.szamlazz.hu/x", null],
+      ["javascript:alert(1)", null],
+    ] as const) {
+      const { service, calls } = setup({
+        respond: async () => ({
+          successful: true,
+          invoiceNumber: "E-TEST-2026-1",
+          netTotal: 1000,
+          grossTotal: 1270,
+          customerAccountUrl: given,
+        }),
+      });
+      await issue(service);
+      assert.equal(
+        (calls.issued[0] as { externalUrl: unknown }).externalUrl,
+        stored,
+        String(given),
+      );
+    }
+  });
+
   it("marks a paper invoice as not needing an e-mail", async () => {
     const { service, calls } = setup({ format: "PAPER" });
     await issue(service);

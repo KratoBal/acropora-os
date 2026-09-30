@@ -95,6 +95,11 @@ export interface BillingDocumentSzamlazzInfo {
   issueAttemptCount: number;
   /** `ISSUE_FAILED` vagy ismeretlen kimenet oka; egyébként `null`. */
   lastError: string | null;
+  /**
+   * A bizonylat a Számlázz.hu vevői fiókjában (`vevoifiokurl`), ha a
+   * Számlázz.hu adott ilyet; a kiküldés `{document_link}`-je is ez.
+   */
+  documentUrl: string | null;
 }
 
 /** Csak `ISSUED`-nél `true`, és csak ha a tárolt PDF megvan. */

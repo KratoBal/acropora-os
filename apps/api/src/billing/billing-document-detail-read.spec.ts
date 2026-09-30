@@ -62,6 +62,7 @@ function row(overrides: Record<string, unknown> = {}): BillingDocumentRow {
     issueAttemptCount: 0,
     syncError: null,
     pdfStorageKey: null,
+    externalUrl: null,
     buyerSnapshot: null,
     lines: [line("a", "0.40"), line("b", "0.40"), line("c", "0.40")],
     mailDeliveries: [],
@@ -79,6 +80,7 @@ const ISSUED = {
   vatAmount: D("635"),
   grossAmount: D("2985"),
   pdfStorageKey: "invoice/doc-1/billing-document.pdf",
+  externalUrl: "https://www.szamlazz.hu/szamla/?page=vevoifiok&azon=abc",
   issueAttemptCount: 1,
   // a régi, sikertelen kísérlet nyoma: kiállított soron nem mutatjuk
   syncError: "régi hiba",
@@ -158,6 +160,7 @@ describe("a részletek bővítése", () => {
       externalId: "doc-1",
       issueAttemptCount: 1,
       lastError: null,
+      documentUrl: "https://www.szamlazz.hu/szamla/?page=vevoifiok&azon=abc",
     });
     assert.deepEqual(detail.pdf, { available: true });
     assert.equal(detail.delivery?.canResend, true);
