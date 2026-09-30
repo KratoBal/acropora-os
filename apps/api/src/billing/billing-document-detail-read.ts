@@ -79,6 +79,7 @@ export function withIssueAndDelivery(
         status === "ISSUE_FAILED" || status === "ISSUING"
           ? row.syncError
           : null,
+      documentUrl: status === "ISSUED" ? row.externalUrl : null,
     },
     pdf: { available: pdfAvailable },
     delivery: {

@@ -59,6 +59,21 @@ export const ISSUED_PDF = "billing-document.pdf";
  * állíthatna ki, és a Számlázz.hu is tiltja a hurokban ismétlést.
  * A kiküldés KÜLÖN hívás (`:id/email`), a kiállítás után (brief 22. pont).
  */
+/**
+ * Egy külső szolgáltatás által adott hivatkozás csak `https:` alakban kerül a
+ * vevőnek menő levélbe és a felületre; minden más (üres, `http:`, `javascript:`)
+ * `null`.
+ */
+export function httpsUrl(value: string | undefined): string | null {
+  const text = value?.trim();
+  if (!text) return null;
+  try {
+    return new URL(text).protocol === "https:" ? text : null;
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class BillingDocumentIssueService {
   private readonly logger = new Logger(BillingDocumentIssueService.name);
@@ -206,6 +221,9 @@ export class BillingDocumentIssueService {
         lines: input.lines,
         totals,
         emailStatus: delivery === "REQUIRED" ? "PENDING" : "NOT_REQUIRED",
+        // acrobot döntése (25240): a kiküldés `{document_link}`-je ebből jön,
+        // és a részletek is ezt mutatják Számlázz.hu-hivatkozásként.
+        externalUrl: httpsUrl(response.customerAccountUrl),
       });
     } catch {
       await this.repository

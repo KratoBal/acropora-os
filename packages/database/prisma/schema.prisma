@@ -2907,6 +2907,10 @@ model BillingDocumentMailDelivery {
   /// `MaintenanceMailDelivery.outcome`.
   outcome           String
   error             String?
+  /// A kliens kérés-azonosítója (UUID): ugyanazzal az azonosítóval küldött
+  /// második kérés a meglévő kézbesítést kapja vissza, és NEM küld újra.
+  /// A régi, azonosító nélküli sorokra NULL (több NULL nem ütközik).
+  requestId         String?  @unique
   createdAt         DateTime @default(now())
 
   invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)

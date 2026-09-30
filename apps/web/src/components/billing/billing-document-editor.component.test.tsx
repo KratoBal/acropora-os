@@ -42,9 +42,8 @@ vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
 const customers = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn() }));
 vi.mock("@/lib/api/customers", () => ({ customersApi: customers }));
-vi.mock("@/lib/api/products", () => ({
-  productApi: { list: vi.fn().mockResolvedValue({ items: [] }) },
-}));
+const products = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn() }));
+vi.mock("@/lib/api/products", () => ({ productApi: products }));
 
 const session: Session = {
   id: "s",
@@ -112,6 +111,8 @@ function detailFrom(body: Record<string, unknown>, id: string) {
 }
 
 beforeEach(() => {
+  products.list.mockReset().mockResolvedValue({ items: [] });
+  products.detail.mockReset();
   navigation.replace.mockReset();
   api.create
     .mockReset()
@@ -462,6 +463,122 @@ describe("BillingDocumentEditor", () => {
       });
       expect(netOf("Munkadíj").value).toBe("10000");
       expect((grossOf("Munkadíj") as HTMLInputElement).value).toBe("25400");
+    });
+  });
+
+  /*
+    A TERMÉK ÁRA A TÉTELBE (Balázs a stage-en, 2026-09-30; a szabály acrobot
+    25248-ban). MI PIROSÍT: ha a választás után az egységár üres maradna ott,
+    ahol a terméknek van ára; ha egy ACROPORA-gazdájú termék a befagyott tükör
+    árát kapná; ha ár nélkül nulla kerülne a mezőbe, vagy nem derülne ki, miért
+    üres; ha a késve érkező ár felülírná, amit közben kézzel beírtak.
+  */
+  describe("a picked product's price", () => {
+    const listed = {
+      id: "prod-1",
+      name: "Tengeri só",
+      primarySku: "SALT-1",
+    };
+    const detailOf = (overrides: Record<string, unknown>) => ({
+      ...listed,
+      catalogAuthority: "UNAS",
+      variants: [
+        {
+          sku: "SALT-1",
+          isActive: true,
+          vatRate: "18.00",
+          sellingGrossPrice: null,
+          sellingPriceCurrency: null,
+        },
+      ],
+      unasMirror: {
+        currency: "HUF",
+        netPrice: "1000.0000",
+        grossPrice: "1180.0000",
+        vatRate: "18.00",
+        saleNetPrice: "800.0000",
+      },
+      ...overrides,
+    });
+    async function pickProduct() {
+      products.list.mockResolvedValue({ items: [listed] });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Termék hozzáadása" }),
+      );
+      fireEvent.change(screen.getByLabelText("Termék keresése"), {
+        target: { value: "Tengeri" },
+      });
+      fireEvent.click(
+        await screen.findByRole("button", { name: /Tengeri só/ }),
+      );
+    }
+    const net = () =>
+      screen.getByLabelText("Tengeri só nettó egységára") as HTMLInputElement;
+    const rate = () =>
+      screen.getByLabelText("Tengeri só ÁFA-kulcsa") as HTMLInputElement;
+
+    it("a UNAS product brings the mirror's net list price and its VAT rate, and stays editable", async () => {
+      products.detail.mockResolvedValue(detailOf({}));
+      render(<BillingDocumentEditor />);
+      await pickProduct();
+      await waitFor(() => expect(net().value).toBe("1000"));
+      expect(rate().value).toBe("18");
+      expect(products.detail).toHaveBeenCalledWith("token-1", "prod-1");
+      fireEvent.change(net(), { target: { value: "950" } });
+      expect(net().value).toBe("950");
+    });
+
+    it("a product we own brings our gross price, back-calculated to the net", async () => {
+      products.detail.mockResolvedValue(
+        detailOf({
+          catalogAuthority: "ACROPORA",
+          variants: [
+            {
+              sku: "SALT-1",
+              isActive: true,
+              vatRate: "27.00",
+              sellingGrossPrice: "1524.0000",
+              sellingPriceCurrency: "HUF",
+            },
+          ],
+        }),
+      );
+      render(<BillingDocumentEditor />);
+      await pickProduct();
+      await waitFor(() => expect(net().value).toBe("1200"));
+      expect(rate().value).toBe("27");
+    });
+
+    it("no price: the unit price stays empty, not zero, and the line says why", async () => {
+      products.detail.mockResolvedValue(
+        detailOf({ unasMirror: { currency: "HUF", netPrice: null } }),
+      );
+      render(<BillingDocumentEditor />);
+      await pickProduct();
+      expect(
+        await screen.findByText(
+          /Az egységár nem töltődött ki: A terméknek nincs nettó ára/,
+        ),
+      ).toBeInTheDocument();
+      expect(net().value).toBe("");
+      fireEvent.change(net(), { target: { value: "500" } });
+      expect(screen.queryByText(/Az egységár nem töltődött ki/)).toBeNull();
+    });
+
+    it("a price that arrives after a hand-typed one does not overwrite it", async () => {
+      let resolve!: (value: unknown) => void;
+      products.detail.mockReturnValue(
+        new Promise((done) => {
+          resolve = done;
+        }),
+      );
+      render(<BillingDocumentEditor />);
+      await pickProduct();
+      fireEvent.change(net(), { target: { value: "777" } });
+      await act(async () => {
+        resolve(detailOf({}));
+      });
+      expect(net().value).toBe("777");
     });
   });
 

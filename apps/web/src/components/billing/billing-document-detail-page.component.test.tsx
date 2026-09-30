@@ -156,6 +156,7 @@ function detail(
       externalId: "doc-1",
       issueAttemptCount: 1,
       lastError: null,
+      documentUrl: null,
     },
     pdf: { available: true },
     delivery: {
