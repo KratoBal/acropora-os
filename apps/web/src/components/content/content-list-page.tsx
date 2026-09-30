@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { urlChoice, useUrlQuery } from "@/lib/navigation/use-url-query";
 import { contentApi } from "@/lib/api/content";
 import {
   CONTENT_ROLE_LABELS,
@@ -79,7 +80,12 @@ export function ContentListPage() {
   // AZ ALAPÉRTELMEZETT NÉZET AZ, AMI RÁM VÁR. Balázs panasza szó szerint az volt,
   // hogy nem látja, mi vár rá; egy szerep-választó, amit előbb be kell állítani,
   // ezt a kérdést egy lépéssel odébb tolja.
-  const [view, setView] = useState<ContentView>("mine");
+  // A NÉZET AZ URL-BEN (Balázs kérése, 2026-09-30): egy tartalomból
+  // visszalépve a lista ugyanazt a nézetet mutatja.
+  const { params, update } = useUrlQuery();
+  const view = urlChoice<ContentView>(params, "view", VIEWS, "mine");
+  const setView = (next: ContentView) =>
+    update({ view: next === "mine" ? null : next });
   const [items, setItems] = useState<ContentListItem[] | null>(null);
   const [notCovered, setNotCovered] = useState<
     { role: ContentViewerRole; reason: string }[]

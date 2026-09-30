@@ -6,11 +6,17 @@ import {
   savotMond,
   setOnLine,
 } from "@/components/service/service-offline-notice.testing";
+import { urlNavigation } from "@/test/url-navigation";
+
 import { ServiceJobListPage } from "./service-job-list-page";
 
 const api = vi.hoisted(() => ({ list: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/url-navigation")).nextNavigationModule,
+);
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
@@ -80,6 +86,7 @@ function response(
 
 describe("ServiceJobListPage", () => {
   beforeEach(() => {
+    urlNavigation.reset("/szerviz/karbantartas");
     auth.session = session;
     api.list.mockReset().mockResolvedValue(response());
   });
@@ -227,3 +234,45 @@ describe("ServiceJobListPage", () => {
  * szolna, amit megirt.
  */
 afterEach(() => setOnLine(true));
+
+/*
+  A LISTA ÁLLAPOTA AZ URL-BEN (Balázs kérése, 2026-09-30): a jegyről
+  visszalépve a Karbantartás ugyanazon a fülön, ugyanazzal a kereséssel áll.
+  MI PIROSÍT: ha a fül, a keresés vagy a rejtettek kapcsolója megint helyi
+  állapot lenne (az URL-t sem nem olvasná, sem nem írná).
+*/
+describe("ServiceJobListPage -- állapot az URL-ben", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.list.mockReset().mockResolvedValue(response());
+  });
+
+  it("az URL füléből, kereséséből és rejtett-kapcsolójából indul", async () => {
+    urlNavigation.reset("/szerviz/karbantartas", "tab=closed&q=pumpa&hidden=1");
+    render(<ServiceJobListPage kind="MAINTENANCE" />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    const [, scope, , search, includeHidden] = api.list.mock.calls.at(-1)!;
+    expect([scope, search, includeHidden]).toEqual(["all", "pumpa", true]);
+    expect(
+      (screen.getByLabelText("Karbantartás keresése") as HTMLInputElement)
+        .value,
+    ).toBe("pumpa");
+  });
+
+  it("a fülváltás és a keresés az URL-be íródik", async () => {
+    urlNavigation.reset("/szerviz/karbantartas");
+    render(<ServiceJobListPage kind="MAINTENANCE" />);
+    await screen.findByText("Alkatrészre vár");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Lezárt" }));
+    await waitFor(() => expect(urlNavigation.search).toBe("tab=closed"));
+
+    fireEvent.change(screen.getByLabelText("Karbantartás keresése"), {
+      target: { value: "szűrő" },
+    });
+    await waitFor(() =>
+      expect(new URLSearchParams(urlNavigation.search).get("q")).toBe("szűrő"),
+    );
+    expect(new URLSearchParams(urlNavigation.search).get("tab")).toBe("closed");
+  });
+});
