@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -28,6 +29,7 @@ vi.mock("next/navigation", () => ({
 const api = vi.hoisted(() => ({
   detail: vi.fn(),
   pdf: vi.fn(),
+  email: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -181,6 +183,7 @@ const printSpy = vi.fn();
 beforeEach(() => {
   auth.role = "OWNER";
   navigation.push.mockReset();
+  api.email.mockReset();
   api.detail.mockReset().mockResolvedValue(detail());
   api.pdf
     .mockReset()
@@ -295,13 +298,29 @@ describe("BillingDocumentDetailPage", () => {
     );
   });
 
-  it("an issued document whose PDF is missing keeps the two buttons disabled", async () => {
-    api.detail.mockResolvedValue(detail({ pdf: { available: false } }));
+  it("an issued document whose PDF is missing keeps the two buttons disabled, and cannot be sent", async () => {
+    const issued = detail();
+    api.detail.mockResolvedValue(
+      detail({
+        pdf: { available: false },
+        delivery: { ...issued.delivery!, canResend: false },
+      }),
+    );
     render(<BillingDocumentDetailPage documentId="doc-1" />);
     await screen.findByRole("heading", { level: 1, name: "AC-2026-001248" });
     expect(
       within(actions()).getByRole("button", { name: "PDF letöltése" }),
     ).toBeDisabled();
+    // A SZERVER MONDJA MEG, hogy küldhető-e (`delivery.canResend`): a gomb
+    // ezt követi, és kimondja, mi hiányzik.
+    const resend = within(actions()).getByRole("button", {
+      name: "E-mail újraküldése",
+    });
+    expect(resend).toBeDisabled();
+    expect(resend).toHaveAttribute(
+      "title",
+      "A kiküldéshez a hivatalos PDF kell, és az még nincs meg.",
+    );
   });
 
   it("a delivery note has no e-mail: no resend button, no sending card", async () => {
@@ -317,12 +336,11 @@ describe("BillingDocumentDetailPage", () => {
   });
 
   /*
-    A KIKÜLDÉS VÉGPONTJA MÉG NINCS BEKÖTVE (acrobot 25241): a gomb a mód
-    feliratával ott áll, de tiltott, és megmondja, miért. MI PIROSÍT: ha a gomb
-    nyomható lenne (egy nem létező végpontra küldene), ha a mód felirata nem a
-    hiba utáni lenne, vagy ha a hiba üzenete eltűnne a lapról.
+    AZ ÚJRAKÜLDÉS SOHA NEM ÁLLÍT KI (brief 14. pont), és egy dupla kattintás egy
+    kézbesítés. MI PIROSÍT: ha a hiba utáni újrapróbálás új azonosítóval menne
+    (a szerver kétszer küldene), vagy ha a mód nem a "hiba utáni" lenne.
   */
-  it("a failed e-mail: the warning stays, the retry button is there but disabled, and says why", async () => {
+  it("a failed e-mail: the warning, a retry with the same request id, and only the e-mail endpoint", async () => {
     api.detail.mockResolvedValue(
       detail({
         emailStatus: "FAILED",
@@ -338,20 +356,86 @@ describe("BillingDocumentDetailPage", () => {
         },
       }),
     );
+    api.email
+      .mockRejectedValueOnce(new Error("Átmeneti hiba"))
+      .mockResolvedValueOnce(detail());
     render(<BillingDocumentDetailPage documentId="doc-1" />);
     expect(
       await screen.findByText("A címzett postafiókja megtelt."),
     ).toBeInTheDocument();
-    const retry = within(actions()).getByRole("button", {
+    expect(
+      screen.getByText("A levél újraküldése nem állít ki új számlát."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(actions()).getByRole("button", { name: "Kiküldés újrapróbálása" }),
+    );
+    const drawer = await screen.findByRole("dialog");
+    const submit = within(drawer).getByRole("button", {
       name: "Kiküldés újrapróbálása",
     });
-    expect(retry).toBeDisabled();
-    expect(retry).toHaveAttribute(
-      "title",
-      "A kiküldés bekötése folyamatban van, a gomb utána lesz elérhető.",
+    fireEvent.click(submit);
+    expect(
+      await within(drawer).findByText("Átmeneti hiba"),
+    ).toBeInTheDocument();
+    fireEvent.click(submit);
+    await waitFor(() => expect(api.email).toHaveBeenCalledTimes(2));
+
+    const [first, second] = api.email.mock.calls.map((call) => call[2]);
+    expect(first.mode).toBe("RETRY");
+    expect(first.to).toEqual(["szamlazas@partner.hu"]);
+    expect(second.requestId).toBe(first.requestId);
+    expect(first.body).toContain("{document_number}");
+
+    // A SIKER UTÁNI KÖVETKEZŐ KÜLDÉS ÚJ KÉRÉS: új azonosító, különben a szerver
+    // a régi kézbesítést adná vissza, és nem küldene.
+    api.email.mockResolvedValueOnce(detail());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(
+      within(actions()).getByRole("button", { name: "E-mail újraküldése" }),
     );
-    fireEvent.click(retry);
-    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "E-mail újraküldése",
+      }),
+    );
+    await waitFor(() => expect(api.email).toHaveBeenCalledTimes(3));
+    expect(api.email.mock.calls[2]![2].requestId).not.toBe(first.requestId);
+  });
+
+  /*
+    A {document_link} A SZÁMLÁZZ.HU VEVŐI FIÓKJA (nautilus #1288): az előnézet a
+    részletek `szamlazz.documentUrl`-jével tölti. MI PIROSÍT: ha a változó
+    jelölve maradna, holott a cím megvan.
+  */
+  it("the preview fills {document_link} from the document's Számlázz.hu link", async () => {
+    const issued = detail();
+    api.detail.mockResolvedValue({
+      ...issued,
+      szamlazz: {
+        ...issued.szamlazz!,
+        documentUrl: "https://www.szamlazz.hu/szamla/?page=vevoifiok&id=abc",
+      },
+    });
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(
+      within(
+        await screen.findByRole("group", { name: "Bizonylat műveletei" }),
+      ).getByRole("button", {
+        name: "E-mail újraküldése",
+      }),
+    );
+    const drawer = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: "{document_link} beszúrása" }),
+    );
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: "Levél előnézete" }),
+    );
+    await act(async () => {});
+    expect(
+      within(drawer).getByLabelText("Levél előnézete").textContent,
+    ).toContain("https://www.szamlazz.hu/szamla/?page=vevoifiok&id=abc");
   });
 
   it("resend is not offered to a role without billing.resend", async () => {

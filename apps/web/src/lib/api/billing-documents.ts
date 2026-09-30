@@ -1,6 +1,7 @@
 import type {
   BillingDocumentDetail,
   BillingDocumentDraftInput,
+  BillingDocumentEmailInput,
   BillingDocumentListResponse,
 } from "@acropora/types";
 
@@ -44,6 +45,21 @@ export const billingDocumentsApi = {
       );
     }
     return response.blob();
+  },
+  /**
+   * Kiküldés, hiba utáni újrapróbálás vagy újraküldés (nautilus #1288). SOHA
+   * nem állít ki új bizonylatot; ugyanazzal a `requestId`-val egy kézbesítés.
+   */
+  email(token: string, id: string, input: BillingDocumentEmailInput) {
+    return apiRequest<BillingDocumentDetail>(
+      `/billing/documents/${encodeURIComponent(id)}/email`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
   },
   detail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<BillingDocumentDetail>(
