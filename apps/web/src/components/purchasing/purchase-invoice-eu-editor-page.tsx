@@ -8,7 +8,9 @@ import {
   FormField,
   Icon,
   Input,
-  PageHeader,
+  PilotCallout,
+  PilotPageHeader,
+  PilotSection,
   Skeleton,
 } from "@acropora/ui";
 import {
@@ -31,6 +33,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  PilotBadge,
+  PilotButton,
+  PilotInput,
+  PilotThemeRoot,
+} from "@/components/pilot/pilot-ui";
 import { inferCountryFromTaxNumber } from "@/components/customers/country-options";
 import { expectedArrivalsApi } from "@/lib/api/expected-arrivals";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
@@ -101,6 +109,57 @@ function allocatedQuantity(line: InvoiceLineState): number {
     (sum, allocation) => sum + (Number(allocation.quantity) || 0),
     0,
   );
+}
+
+/**
+ * A TÉTELSOR OSZLOPRÁCSA, EGY HELYEN (a Beszerzés-brief 13. pontja): a
+ * fejléc és minden sor mezői ugyanezt használják, tehát nem tudnak
+ * elcsúszni egymáshoz képest. Nagy képernyőn: számlasor, rendelt,
+ * tényleges, egység, egységár, kedvezmény, sorösszeg; kisebben két-három
+ * oszlopba törik, a mezők saját címkéjével.
+ */
+const LINE_GRID =
+  "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-[minmax(0,1fr)_84px_84px_72px_112px_72px_128px] lg:items-end";
+
+/**
+ * A SOR TERMÉK-ÁLLAPOTA A MEGJELENÍTÉSHEZ (a brief 14. pontja). Csak olvas:
+ * a javaslat kérése és elfogadása a meglévő logikán megy, változatlanul.
+ */
+export function lineState(
+  line: Pick<InvoiceLineState, "variantId" | "createLocalProduct">,
+  suggestion:
+    (SupplierLineSuggestionResult & { dismissed?: boolean }) | undefined,
+): "matched" | "local" | "suggested" | "unlinked" {
+  if (line.createLocalProduct) return "local";
+  if (line.variantId) return "matched";
+  if (
+    suggestion?.suggestion &&
+    !suggestion.dismissed &&
+    !suggestion.conflict &&
+    !suggestion.blocked
+  )
+    return "suggested";
+  return "unlinked";
+}
+
+/** Az alsó összegző sora: a valós sorokból, nem a terv mintaszámaiból. */
+export function submitSummary(
+  lines: readonly Pick<
+    InvoiceLineState,
+    "createLocalProduct" | "projectAllocations"
+  >[],
+): string {
+  if (lines.length === 0) return "Még nincs számlasor";
+  const local = lines.filter((line) => line.createLocalProduct).length;
+  const reservations = lines.reduce(
+    (sum, line) =>
+      sum +
+      line.projectAllocations.filter(
+        (allocation) => allocation.projectId && Number(allocation.quantity) > 0,
+      ).length,
+    0,
+  );
+  return `${lines.length} számlasor · ${local} helyi termék · ${reservations} projektfoglalás`;
 }
 
 function formatMoney(value: number, currency: string): string {
@@ -1059,6 +1118,25 @@ export function PurchaseInvoiceEuEditorPage() {
     );
   }
 
+  /** A projektfoglalás sávjának szövege: szabad készlet és a foglalások. */
+  const allocationSummary = (line: InvoiceLineState) => {
+    const free = Math.max(0, line.actualQuantity - allocatedQuantity(line));
+    const reserved = line.projectAllocations
+      .filter(
+        (allocation) => allocation.projectId && Number(allocation.quantity) > 0,
+      )
+      .map(
+        (allocation) =>
+          `${
+            projects.find((project) => project.id === allocation.projectId)
+              ?.projectNumber ?? "Projekt"
+          }: ${allocation.quantity} ${line.unit} foglalva`,
+      );
+    return reserved.length
+      ? `Szabad raktárkészlet ebből a sorból: ${free} ${line.unit} · ${reserved.join(" · ")}`
+      : `Nincs projektfoglalás · szabad készlet: ${free} ${line.unit}`;
+  };
+
   const pageTitle = navInvoiceId
     ? "Belföldi számla bevételezése (NAV)"
     : isDomestic
@@ -1071,12 +1149,13 @@ export function PurchaseInvoiceEuEditorPage() {
       : "Beérkezett EU-n belüli beszállítói számla rögzítése, tételes bevételezéssel.";
 
   return (
-    <div className="space-y-6">
-      <PageHeader
+    <PilotThemeRoot theme="light" className="space-y-6">
+      <PilotPageHeader
         title={pageTitle}
         description={pageDescription}
         actions={
-          <Button
+          <PilotButton
+            size="regular"
             variant="secondary"
             onClick={() =>
               router.push(
@@ -1086,53 +1165,82 @@ export function PurchaseInvoiceEuEditorPage() {
               )
             }
           >
+            <span aria-hidden="true">←</span>
             {navInvoiceId ? "Vissza a NAV számlához" : "Vissza a listához"}
-          </Button>
+          </PilotButton>
         }
       />
 
+      {/*
+        A FORRÁS VÁLASZTÓJA (Direction F, a Beszerzés-brief 7. pontja): nem
+        dísz, a meglévő `changeSource` állítja a devizát, az MNB-t és a
+        belföldi ÁFA-logikát, ahogy eddig.
+      */}
       {!navInvoiceId ? (
-        <Card className="flex gap-2 p-4">
-          <Button
-            type="button"
-            variant={source === "EU" ? "primary" : "secondary"}
-            onClick={() => changeSource("EU")}
-          >
-            EU-s beszerzés
-          </Button>
-          <Button
-            type="button"
-            variant={source === "HU_MANUAL" ? "primary" : "secondary"}
-            onClick={() => changeSource("HU_MANUAL")}
-          >
-            Belföldi (kézi)
-          </Button>
-        </Card>
+        <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-pilot-grey-200 bg-white p-4">
+          <div className="flex flex-wrap gap-2">
+            <PilotButton
+              size="regular"
+              variant={source === "EU" ? "primary" : "secondary"}
+              onClick={() => changeSource("EU")}
+            >
+              EU-s beszerzés
+            </PilotButton>
+            <PilotButton
+              size="regular"
+              variant={source === "HU_MANUAL" ? "primary" : "secondary"}
+              onClick={() => changeSource("HU_MANUAL")}
+            >
+              Belföldi (kézi)
+            </PilotButton>
+          </div>
+          <p className="min-w-0 flex-1 text-xs leading-5 text-pilot-grey-500">
+            A forrás határozza meg a devizát, az MNB-árfolyamot és a belföldi
+            ÁFA-logikát.
+          </p>
+          <PilotBadge variant={source === "EU" ? "blue" : "grey"}>
+            {source === "EU" ? "EU" : "Belföldi"}
+          </PilotBadge>
+        </section>
       ) : null}
 
       {!navInvoiceId && !arrivalId && source === "EU" ? (
-        <Card className="p-4">
-          <label className="text-sm font-medium text-dusk-900">
-            Beszállítói számla betöltése fájlból (XML vagy PDF)
-            <input
-              type="file"
-              accept=".xml,.pdf,application/pdf,application/xml,text/xml"
-              aria-label="Beszállítói számla fájl"
-              disabled={importing || lines.length > 0}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) void importSupplierFile(file);
-              }}
-              className="mt-2 block text-sm"
-            />
-          </label>
-          <p className="mt-1 text-xs text-dusk-500">
-            {lines.length > 0
+        <PilotCallout
+          tone="warm"
+          title="Beszállítói számla betöltése fájlból"
+          description={
+            lines.length > 0
               ? "Betölteni csak üres tétellistára lehet: előbb távolítsd el a meglévő sorokat."
-              : "Kitölti a fejlécet, a szállító adatait és a sorokat. Semmi nem rögzül, amíg nem mentesz."}
-          </p>
-        </Card>
+              : "XML vagy ismert PDF. Kitölti a fejlécet, a szállító adatait és a sorokat; semmi nem rögzül, amíg nem mentesz."
+          }
+          action={
+            /*
+              A FÁJLVÁLASZTÓ EGY GOMBNAK LÁTSZÓ CÍMKE, a mező maga láthatatlan,
+              de a neve ("Beszállítói számla fájl") és a letiltása a régi.
+            */
+            <label
+              className={`inline-flex h-10 shrink-0 cursor-pointer items-center whitespace-nowrap rounded-md bg-white px-4 text-sm font-semibold leading-none text-pilot-grey-900 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 focus-within:ring-2 focus-within:ring-pilot-aqua-500 ${
+                importing || lines.length > 0
+                  ? "cursor-not-allowed opacity-40"
+                  : ""
+              }`}
+            >
+              <input
+                type="file"
+                accept=".xml,.pdf,application/pdf,application/xml,text/xml"
+                aria-label="Beszállítói számla fájl"
+                disabled={importing || lines.length > 0}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void importSupplierFile(file);
+                }}
+                className="sr-only"
+              />
+              {importing ? "Betöltés…" : "Fájl kiválasztása"}
+            </label>
+          }
+        />
       ) : null}
 
       {importError ? (
@@ -1248,364 +1356,388 @@ export function PurchaseInvoiceEuEditorPage() {
       ) : null}
 
       <form className="space-y-6" onSubmit={submit}>
-        <Card className="p-6">
-          <h2 className="font-semibold">Beszállító</h2>
-          {selectedSupplier ? (
-            <div className="mt-3 flex items-center justify-between rounded-lg border border-dusk-200 p-3">
-              <div>
-                <p className="text-sm font-semibold text-dusk-900">
-                  {selectedSupplier.name}
-                </p>
-                <p className="text-xs text-dusk-500">
-                  {selectedSupplier.code}
-                  {selectedSupplier.taxNumber
-                    ? ` · ${selectedSupplier.taxNumber}`
-                    : ""}{" "}
-                  · {selectedSupplier.country}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setSelectedSupplier(null)}
-              >
-                Módosítás
-              </Button>
-            </div>
-          ) : (
-            <div className="mt-3 space-y-3">
-              <Input
-                aria-label="Beszállító keresése"
-                value={supplierSearch}
-                onChange={(event) => setSupplierSearch(event.target.value)}
-                placeholder="Beszállító neve, adószáma…"
-                leadingIcon={<Icon name="search" size={17} />}
-              />
-              {supplierResults.length > 0 ? (
-                <Card className="divide-y divide-dusk-100 overflow-hidden">
-                  {supplierResults.map((supplier) => (
-                    <button
-                      key={supplier.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSupplier(supplier);
-                        setSupplierResults([]);
-                      }}
-                      className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-dusk-50"
-                    >
-                      <span className="font-medium text-dusk-900">
-                        {supplier.name}
-                      </span>
-                      <span className="text-xs text-dusk-500">
-                        {supplier.country}
-                      </span>
-                    </button>
-                  ))}
-                </Card>
-              ) : null}
-              {!showNewSupplier ? (
-                <Button
-                  type="button"
+        {/*
+          A BESZÁLLÍTÓ ÉS A SZÁMLA ADATAI EGYMÁS MELLETT (Figma 302:64), közös
+          kezdőponttal; szűkebb képernyőn egymás alá törnek.
+        */}
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+          <PilotSection
+            title="Beszállító"
+            subtitle={
+              isDomestic
+                ? "Belföldi beszerzésnél csak magyarországi partnerek jelennek meg."
+                : "EU-s beszerzésnél csak nem-HU partnerek jelennek meg."
+            }
+          >
+            {selectedSupplier ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-pilot-grey-100 p-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-pilot-grey-900">
+                    {selectedSupplier.name}
+                  </p>
+                  <p className="text-xs text-pilot-grey-500">
+                    {selectedSupplier.code}
+                    {selectedSupplier.taxNumber
+                      ? ` · ${selectedSupplier.taxNumber}`
+                      : ""}{" "}
+                    · {selectedSupplier.country}
+                  </p>
+                </div>
+                <PilotButton
+                  size="action"
                   variant="secondary"
-                  onClick={() => setShowNewSupplier(true)}
+                  onClick={() => setSelectedSupplier(null)}
                 >
-                  Új beszállító létrehozása
-                </Button>
-              ) : (
-                <div className="space-y-3 rounded-lg border border-dusk-200 p-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <FormField label="Név">
-                      <Input
-                        aria-label="Beszállító neve"
-                        value={newSupplierName}
-                        onChange={(event) =>
-                          setNewSupplierName(event.target.value)
-                        }
-                      />
-                    </FormField>
-                    <FormField
-                      label={isDomestic ? "Adószám" : "Közösségi adószám"}
-                    >
-                      <div className="flex gap-2">
+                  Módosítás
+                </PilotButton>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <Input
+                  aria-label="Beszállító keresése"
+                  value={supplierSearch}
+                  onChange={(event) => setSupplierSearch(event.target.value)}
+                  placeholder="Beszállító neve, adószáma…"
+                  leadingIcon={<Icon name="search" size={17} />}
+                />
+                {supplierResults.length > 0 ? (
+                  <Card className="divide-y divide-dusk-100 overflow-hidden">
+                    {supplierResults.map((supplier) => (
+                      <button
+                        key={supplier.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSupplier(supplier);
+                          setSupplierResults([]);
+                        }}
+                        className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-dusk-50"
+                      >
+                        <span className="font-medium text-dusk-900">
+                          {supplier.name}
+                        </span>
+                        <span className="text-xs text-dusk-500">
+                          {supplier.country}
+                        </span>
+                      </button>
+                    ))}
+                  </Card>
+                ) : null}
+                {!showNewSupplier ? (
+                  <PilotButton
+                    size="regular"
+                    variant="secondary"
+                    onClick={() => setShowNewSupplier(true)}
+                  >
+                    Új beszállító létrehozása
+                  </PilotButton>
+                ) : (
+                  <div className="space-y-3 rounded-lg border border-dusk-200 p-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <FormField label="Név">
                         <Input
-                          aria-label="Adószám"
-                          value={newSupplierTaxNumber}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setNewSupplierTaxNumber(value);
-                            setViesResult(null);
-                            if (!isDomestic) {
-                              const inferred = inferCountryFromTaxNumber(value);
-                              setNewSupplierCountry(
-                                inferred && inferred !== "HU" ? inferred : "",
-                              );
-                            }
-                          }}
-                          placeholder={
-                            isDomestic ? "12345678-2-13" : "DE123456789"
+                          aria-label="Beszállító neve"
+                          value={newSupplierName}
+                          onChange={(event) =>
+                            setNewSupplierName(event.target.value)
                           }
                         />
-                        {!isDomestic ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={!newSupplierTaxNumber.trim() || viesBusy}
-                            onClick={() => void checkVies()}
-                          >
-                            {viesBusy ? "Ellenőrzés…" : "VIES"}
-                          </Button>
-                        ) : null}
-                      </div>
-                      {!isDomestic && viesResult ? (
-                        viesResult.valid === undefined ? (
-                          <p className="mt-1 text-xs text-amber-600">
-                            {viesResult.message}
-                          </p>
-                        ) : (
-                          <div className="mt-1 flex items-center gap-2">
-                            <Badge
-                              variant={viesResult.valid ? "success" : "danger"}
+                      </FormField>
+                      <FormField
+                        label={isDomestic ? "Adószám" : "Közösségi adószám"}
+                      >
+                        <div className="flex gap-2">
+                          <Input
+                            aria-label="Adószám"
+                            value={newSupplierTaxNumber}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setNewSupplierTaxNumber(value);
+                              setViesResult(null);
+                              if (!isDomestic) {
+                                const inferred =
+                                  inferCountryFromTaxNumber(value);
+                                setNewSupplierCountry(
+                                  inferred && inferred !== "HU" ? inferred : "",
+                                );
+                              }
+                            }}
+                            placeholder={
+                              isDomestic ? "12345678-2-13" : "DE123456789"
+                            }
+                          />
+                          {!isDomestic ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={
+                                !newSupplierTaxNumber.trim() || viesBusy
+                              }
+                              onClick={() => void checkVies()}
                             >
-                              {viesResult.valid ? "Érvényes" : "Érvénytelen"}
-                            </Badge>
-                            {viesResult.valid &&
-                            (viesResult.name || viesResult.address) ? (
-                              <span className="text-xs text-dusk-500">
-                                {[viesResult.name, viesResult.address]
-                                  .filter(Boolean)
-                                  .join(" - ")}
-                              </span>
-                            ) : null}
-                          </div>
-                        )
-                      ) : null}
-                    </FormField>
-                    <FormField label="Ország (ISO kód)">
-                      <Input
-                        aria-label="Ország"
-                        value={newSupplierCountry}
-                        maxLength={2}
-                        disabled
-                        placeholder={isDomestic ? "HU" : "Adószámból"}
-                      />
-                    </FormField>
-                    <FormField label="E-mail">
-                      <Input
-                        aria-label="E-mail"
-                        value={newSupplierEmail}
-                        onChange={(event) =>
-                          setNewSupplierEmail(event.target.value)
+                              {viesBusy ? "Ellenőrzés…" : "VIES"}
+                            </Button>
+                          ) : null}
+                        </div>
+                        {!isDomestic && viesResult ? (
+                          viesResult.valid === undefined ? (
+                            <p className="mt-1 text-xs text-amber-600">
+                              {viesResult.message}
+                            </p>
+                          ) : (
+                            <div className="mt-1 flex items-center gap-2">
+                              <Badge
+                                variant={
+                                  viesResult.valid ? "success" : "danger"
+                                }
+                              >
+                                {viesResult.valid ? "Érvényes" : "Érvénytelen"}
+                              </Badge>
+                              {viesResult.valid &&
+                              (viesResult.name || viesResult.address) ? (
+                                <span className="text-xs text-dusk-500">
+                                  {[viesResult.name, viesResult.address]
+                                    .filter(Boolean)
+                                    .join(" - ")}
+                                </span>
+                              ) : null}
+                            </div>
+                          )
+                        ) : null}
+                      </FormField>
+                      <FormField label="Ország (ISO kód)">
+                        <Input
+                          aria-label="Ország"
+                          value={newSupplierCountry}
+                          maxLength={2}
+                          disabled
+                          placeholder={isDomestic ? "HU" : "Adószámból"}
+                        />
+                      </FormField>
+                      <FormField label="E-mail">
+                        <Input
+                          aria-label="E-mail"
+                          value={newSupplierEmail}
+                          onChange={(event) =>
+                            setNewSupplierEmail(event.target.value)
+                          }
+                        />
+                      </FormField>
+                      <FormField label="Telefon">
+                        <Input
+                          aria-label="Telefon"
+                          value={newSupplierPhone}
+                          onChange={(event) =>
+                            setNewSupplierPhone(event.target.value)
+                          }
+                        />
+                      </FormField>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setShowNewSupplier(false)}
+                      >
+                        Mégse
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={
+                          !newSupplierName.trim() ||
+                          (!isDomestic && !newSupplierCountry) ||
+                          creatingSupplier
                         }
-                      />
-                    </FormField>
-                    <FormField label="Telefon">
-                      <Input
-                        aria-label="Telefon"
-                        value={newSupplierPhone}
-                        onChange={(event) =>
-                          setNewSupplierPhone(event.target.value)
-                        }
-                      />
-                    </FormField>
+                        onClick={() => void createSupplier()}
+                      >
+                        {creatingSupplier
+                          ? "Létrehozás…"
+                          : "Beszállító létrehozása"}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => setShowNewSupplier(false)}
-                    >
-                      Mégse
-                    </Button>
-                    <Button
-                      type="button"
-                      disabled={
-                        !newSupplierName.trim() ||
-                        (!isDomestic && !newSupplierCountry) ||
-                        creatingSupplier
-                      }
-                      onClick={() => void createSupplier()}
-                    >
-                      {creatingSupplier
-                        ? "Létrehozás…"
-                        : "Beszállító létrehozása"}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
-
-        <Card className="p-6">
-          <h2 className="font-semibold">Számla adatai</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <FormField
-              label="Számlaszám"
-              error={
-                supplierInvoiceNumberError
-                  ? "A számlaszám megadása kötelező."
-                  : undefined
-              }
-            >
-              <div ref={supplierInvoiceNumberFieldRef}>
-                <Input
-                  aria-label="Számlaszám"
-                  aria-invalid={supplierInvoiceNumberError}
-                  value={supplierInvoiceNumber}
-                  placeholder={
-                    supplierInvoiceNumberError
-                      ? "A számlaszám megadása kötelező."
-                      : undefined
-                  }
-                  className={
-                    supplierInvoiceNumberError
-                      ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15"
-                      : undefined
-                  }
-                  onChange={(event) => {
-                    setSupplierInvoiceNumber(event.target.value);
-                    if (event.target.value.trim())
-                      setSupplierInvoiceNumberError(false);
-                  }}
-                />
+                )}
               </div>
-            </FormField>
-            <FormField label="Pénznem">
-              <Input
-                aria-label="Pénznem"
-                value={effectiveCurrency}
-                maxLength={3}
-                disabled={isDomestic}
-                onChange={(event) =>
-                  setCurrency(event.target.value.toUpperCase())
-                }
-              />
-            </FormField>
-            {isDomestic ? (
-              <FormField label="ÁFA-kulcs (%)">
-                <Input
-                  aria-label="ÁFA-kulcs"
-                  type="number"
-                  step="any"
-                  min={0}
-                  max={100}
-                  value={vatRate}
-                  onChange={(event) =>
-                    setVatRate(
-                      event.target.value === ""
-                        ? ""
-                        : Number(event.target.value),
-                    )
-                  }
-                />
-              </FormField>
-            ) : (
-              <FormField label="MNB árfolyam (HUF)">
-                <Input
-                  aria-label="Árfolyam"
-                  type="number"
-                  step="any"
-                  min={0}
-                  value={exchangeRate}
-                  disabled={currency.trim().toUpperCase() === "HUF"}
-                  onChange={(event) =>
-                    setExchangeRate(
-                      event.target.value === ""
-                        ? ""
-                        : Number(event.target.value),
-                    )
-                  }
-                />
-                {rateLoading ? (
-                  <p className="mt-1 text-xs text-dusk-500">
-                    Árfolyam lekérdezése…
-                  </p>
-                ) : rateNotice ? (
-                  <p className="mt-1 text-xs text-dusk-500">{rateNotice}</p>
-                ) : null}
-              </FormField>
             )}
-            <FormField label="Számla kelte">
-              <Input
-                aria-label="Számla kelte"
-                type="date"
-                value={invoiceDate}
-                onChange={(event) => setInvoiceDate(event.target.value)}
-              />
-            </FormField>
-            <FormField label="Fizetési határidő">
-              <Input
-                aria-label="Fizetési határidő"
-                type="date"
-                value={dueDate}
-                onChange={(event) => setDueDate(event.target.value)}
-              />
-            </FormField>
-            <FormField label="Megjegyzés">
-              <Input
-                aria-label="Megjegyzés"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={isPaid}
-                onChange={(event) => setIsPaid(event.target.checked)}
-              />
-              A számla ki van fizetve
-            </label>
-            {isPaid ? (
-              <FormField label="Fizetés dátuma">
+          </PilotSection>
+
+          <PilotSection
+            title="Számla adatai"
+            subtitle="A rögzített adatok a beszerzés és a készletmozgás alapjai."
+          >
+            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+              <FormField
+                label="Számlaszám"
+                error={
+                  supplierInvoiceNumberError
+                    ? "A számlaszám megadása kötelező."
+                    : undefined
+                }
+              >
+                <div ref={supplierInvoiceNumberFieldRef}>
+                  <Input
+                    aria-label="Számlaszám"
+                    aria-invalid={supplierInvoiceNumberError}
+                    value={supplierInvoiceNumber}
+                    placeholder={
+                      supplierInvoiceNumberError
+                        ? "A számlaszám megadása kötelező."
+                        : undefined
+                    }
+                    className={
+                      supplierInvoiceNumberError
+                        ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15"
+                        : undefined
+                    }
+                    onChange={(event) => {
+                      setSupplierInvoiceNumber(event.target.value);
+                      if (event.target.value.trim())
+                        setSupplierInvoiceNumberError(false);
+                    }}
+                  />
+                </div>
+              </FormField>
+              <FormField label="Pénznem">
                 <Input
-                  aria-label="Fizetés dátuma"
-                  type="date"
-                  value={paidAt}
-                  onChange={(event) => setPaidAt(event.target.value)}
+                  aria-label="Pénznem"
+                  value={effectiveCurrency}
+                  maxLength={3}
+                  disabled={isDomestic}
+                  onChange={(event) =>
+                    setCurrency(event.target.value.toUpperCase())
+                  }
                 />
               </FormField>
-            ) : null}
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <h2 className="font-semibold">Tételek</h2>
-          <p className="mt-1 text-sm text-dusk-500">
-            Keresd meg a saját termékedet a számlán szereplő tétel alapján
-            (cikkszám vagy terméknév). Egy ismeretlen sor meglévő termékhez
-            kapcsolható, vagy készletezett helyi Acropora OS-termékként
-            létrehozható.
-          </p>
-          <div className="mt-4 rounded-lg border border-dusk-200 bg-dusk-50 p-3">
-            <p className="text-sm font-semibold text-dusk-900">
-              Projektkészlet
-            </p>
-            <p className="mt-1 text-xs text-dusk-500">
-              A projekthez rendelt mennyiség fizikailag készleten marad, de
-              azonnal foglalt lesz: nem számít eladható készletnek, és az UNAS
-              felé sem jelenik meg szabad mennyiségként.
-            </p>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Input
-                aria-label="Új projekt neve"
-                value={newProjectName}
-                onChange={(event) => setNewProjectName(event.target.value)}
-                placeholder="Új projekt neve…"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={newProjectName.trim().length < 2 || creatingProject}
-                onClick={() => void createProject()}
-              >
-                {creatingProject ? "Létrehozás…" : "Projekt létrehozása"}
-              </Button>
+              {isDomestic ? (
+                <FormField label="ÁFA-kulcs (%)">
+                  <Input
+                    aria-label="ÁFA-kulcs"
+                    type="number"
+                    step="any"
+                    min={0}
+                    max={100}
+                    value={vatRate}
+                    onChange={(event) =>
+                      setVatRate(
+                        event.target.value === ""
+                          ? ""
+                          : Number(event.target.value),
+                      )
+                    }
+                  />
+                </FormField>
+              ) : (
+                <FormField label="MNB árfolyam (HUF)">
+                  <Input
+                    aria-label="Árfolyam"
+                    type="number"
+                    step="any"
+                    min={0}
+                    value={exchangeRate}
+                    disabled={currency.trim().toUpperCase() === "HUF"}
+                    onChange={(event) =>
+                      setExchangeRate(
+                        event.target.value === ""
+                          ? ""
+                          : Number(event.target.value),
+                      )
+                    }
+                  />
+                  {rateLoading ? (
+                    <p className="mt-1 text-xs text-dusk-500">
+                      Árfolyam lekérdezése…
+                    </p>
+                  ) : rateNotice ? (
+                    <p className="mt-1 text-xs text-dusk-500">{rateNotice}</p>
+                  ) : null}
+                </FormField>
+              )}
+              <FormField label="Számla kelte">
+                <Input
+                  aria-label="Számla kelte"
+                  type="date"
+                  value={invoiceDate}
+                  onChange={(event) => setInvoiceDate(event.target.value)}
+                />
+              </FormField>
+              <FormField label="Fizetési határidő">
+                <Input
+                  aria-label="Fizetési határidő"
+                  type="date"
+                  value={dueDate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                />
+              </FormField>
+              <FormField label="Megjegyzés">
+                <Input
+                  aria-label="Megjegyzés"
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                />
+              </FormField>
             </div>
-          </div>
-          <div className="mt-4">
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={isPaid}
+                  onChange={(event) => setIsPaid(event.target.checked)}
+                />
+                A számla ki van fizetve
+              </label>
+              {isPaid ? (
+                <FormField label="Fizetés dátuma">
+                  <Input
+                    aria-label="Fizetés dátuma"
+                    type="date"
+                    value={paidAt}
+                    onChange={(event) => setPaidAt(event.target.value)}
+                  />
+                </FormField>
+              ) : null}
+            </div>
+          </PilotSection>
+        </div>
+
+        <PilotSection
+          title="Tételek"
+          subtitle="A számlasorokat meglévő termékhez kötheted, új helyi termékként létrehozhatod, vagy terméktörzs nélkül rögzítheted."
+          bodyClassName="space-y-4 px-5 py-5"
+        >
+          {/*
+            A PROJEKTKÉSZLET (a brief 11. pontja): a színt a callout adja, a
+            szöveg-tartó átlátszó; a mező és a gomb jobb oldalon marad, a
+            szöveg rugalmas és tördel.
+          */}
+          <PilotCallout
+            tone="aqua"
+            title="Projektkészlet"
+            description="A projekthez rendelt mennyiség készleten marad, de azonnal foglalt; nem számít eladható készletnek, és nem kerül az UNAS szabad készletébe."
+            action={
+              <>
+                <div className="w-56">
+                  <PilotInput
+                    aria-label="Új projekt neve"
+                    value={newProjectName}
+                    onChange={setNewProjectName}
+                    placeholder="Új projekt neve…"
+                    className="h-10"
+                  />
+                </div>
+                <PilotButton
+                  size="regular"
+                  variant="secondary"
+                  disabled={newProjectName.trim().length < 2 || creatingProject}
+                  onClick={() => void createProject()}
+                >
+                  {creatingProject ? "Létrehozás…" : "Projekt létrehozása"}
+                </PilotButton>
+              </>
+            }
+          />
+          <div>
+            <p className="mb-2 text-xs text-pilot-grey-500">
+              Termék kapcsolása a számlasorhoz
+            </p>
             {productSearchTargetKey ? (
               <div className="mb-2 flex items-center justify-between rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
                 <span>A kiválasztott számlasorhoz keresel terméket.</span>
@@ -1622,13 +1754,26 @@ export function PurchaseInvoiceEuEditorPage() {
                 </button>
               </div>
             ) : null}
-            <Input
-              aria-label="Termék keresése"
-              value={productSearch}
-              onChange={(event) => setProductSearch(event.target.value)}
-              placeholder="Cikkszám vagy terméknév…"
-              leadingIcon={<Icon name="search" size={17} />}
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-[240px] flex-1">
+                <PilotInput
+                  aria-label="Termék keresése"
+                  value={productSearch}
+                  onChange={setProductSearch}
+                  placeholder="Cikkszám vagy terméknév…"
+                  leadingIcon={<Icon name="search" size={17} />}
+                  className="h-10"
+                />
+              </div>
+              <PilotButton
+                size="regular"
+                variant="secondary"
+                title="Olyan tétel, ami nincs a terméktörzsben."
+                onClick={addManualLine}
+              >
+                Kézi tétel felvétele
+              </PilotButton>
+            </div>
             {searchingProducts ? <Skeleton className="mt-2 h-4 w-1/3" /> : null}
             {productResults.length > 0 ? (
               <Card className="mt-2 divide-y divide-dusk-100 overflow-hidden">
@@ -1667,524 +1812,588 @@ export function PurchaseInvoiceEuEditorPage() {
                 ))}
               </Card>
             ) : null}
-            <Button
-              type="button"
-              variant="secondary"
-              className="mt-2"
-              onClick={addManualLine}
-            >
-              Kézi tétel felvétele (nincs a terméktörzsben)
-            </Button>
           </div>
 
           {lines.length === 0 ? (
-            <p className="mt-4 text-sm text-dusk-500">
+            <p className="text-sm text-pilot-grey-500">
               Még nincs felvett tétel. Keress rá egy termékre, vagy vegyél fel
               egy kézi tételt.
             </p>
           ) : (
-            <div className="mt-4 space-y-3">
-              {lines.map((line) => (
-                <div
-                  key={line.key}
-                  className="rounded-lg border border-dusk-200 p-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      {line.createLocalProduct ? (
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-dusk-900">
-                            {line.createLocalProduct.name ||
-                              line.sourceDescription ||
-                              "Új helyi termék"}
-                          </p>
-                          <Badge variant="info">
-                            Új helyi Acropora OS-termék
-                          </Badge>
-                        </div>
-                      ) : line.variantId ? (
-                        <>
-                          <p className="text-sm font-semibold text-dusk-900">
-                            {line.productName}
-                          </p>
-                          <p className="font-mono text-xs text-dusk-500">
-                            {line.sku}
-                          </p>
-                        </>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-dusk-900">
-                            {line.sourceDescription || "Kézi tétel"}
-                          </p>
-                          <Badge variant="warning">Nincs terméktörzsben</Badge>
-                        </div>
-                      )}
-                      {line.supplierSku ? (
-                        <p className="font-mono text-xs text-dusk-500">
-                          Beszállítói cikkszám: {line.supplierSku}
-                        </p>
-                      ) : null}
-                      {!line.variantId && !line.createLocalProduct ? (
-                        <LineSuggestionNotice
-                          result={lineSuggestions[line.key]}
-                          onAccept={() => acceptSuggestion(line.key)}
-                          onDismiss={() => dismissSuggestion(line.key)}
-                        />
-                      ) : null}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeLine(line.key)}
-                      className="shrink-0 text-xs text-rose-600 hover:underline"
-                    >
-                      Eltávolítás
-                    </button>
-                  </div>
-                  {!line.variantId && !line.createLocalProduct ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => beginExistingProductLink(line)}
-                      >
-                        Kapcsolás meglévő termékhez
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => beginLocalProductCreation(line)}
-                      >
-                        Új helyi termék létrehozása
-                      </Button>
-                    </div>
-                  ) : null}
-                  {line.createLocalProduct ? (
-                    <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-3">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="text-xs text-dusk-600">
-                          Terméknév
-                          <input
-                            aria-label="Új helyi termék neve"
-                            value={line.createLocalProduct.name}
-                            onChange={(event) =>
-                              updateLine(line.key, {
-                                createLocalProduct: {
-                                  ...line.createLocalProduct!,
-                                  name: event.target.value,
-                                },
-                              })
-                            }
-                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
-                          />
-                        </label>
-                        <label className="text-xs text-dusk-600">
-                          Kategória (opcionális)
-                          <select
-                            aria-label="Új helyi termék kategóriája"
-                            value={line.createLocalProduct.primaryCategoryId}
-                            onChange={(event) =>
-                              updateLine(line.key, {
-                                createLocalProduct: {
-                                  ...line.createLocalProduct!,
-                                  primaryCategoryId: event.target.value,
-                                },
-                              })
-                            }
-                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 bg-white px-2 text-sm"
-                          >
-                            <option value="">Nincs kategória</option>
-                            {categoryOptions.map((option) => (
-                              <option key={option.id} value={option.id}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        <label className="text-xs text-dusk-600">
-                          Márka (opcionális)
-                          <select
-                            aria-label="Új helyi termék márkája"
-                            value={line.createLocalProduct.brandId}
-                            onChange={(event) =>
-                              updateLine(line.key, {
-                                createLocalProduct: {
-                                  ...line.createLocalProduct!,
-                                  brandId: event.target.value,
-                                },
-                              })
-                            }
-                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 bg-white px-2 text-sm"
-                          >
-                            <option value="">Nincs márka</option>
-                            {brandOptions.map((option) => (
-                              <option key={option.id} value={option.id}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="text-xs text-dusk-600">
-                          ÁFA-kulcs (%)
-                          <input
-                            aria-label="Új helyi termék ÁFA-kulcsa"
-                            type="number"
-                            min={0}
-                            max={100}
-                            value={line.createLocalProduct.vatRate}
-                            onChange={(event) =>
-                              updateLine(line.key, {
-                                createLocalProduct: {
-                                  ...line.createLocalProduct!,
-                                  vatRate:
-                                    event.target.value === ""
-                                      ? ""
-                                      : Number(event.target.value),
-                                },
-                              })
-                            }
-                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
-                          />
-                        </label>
-                        <label className="text-xs text-dusk-600">
-                          EAN (opcionális)
-                          <input
-                            aria-label="Új helyi termék EAN-je"
-                            value={line.createLocalProduct.ean}
-                            onChange={(event) =>
-                              updateLine(line.key, {
-                                createLocalProduct: {
-                                  ...line.createLocalProduct!,
-                                  ean: event.target.value,
-                                },
-                              })
-                            }
-                            onBlur={() =>
-                              void checkProductConflicts(
-                                line.key,
-                                line.createLocalProduct!,
-                              )
-                            }
-                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 font-mono text-sm"
-                          />
-                        </label>
-                        <label className="text-xs text-dusk-600">
-                          Beszállítói cikkszám (opcionális)
-                          <input
-                            aria-label="Új helyi termék beszállítói cikkszáma"
-                            value={line.createLocalProduct.supplierSku}
-                            onChange={(event) =>
-                              updateLine(line.key, {
-                                createLocalProduct: {
-                                  ...line.createLocalProduct!,
-                                  supplierSku: event.target.value,
-                                },
-                              })
-                            }
-                            onBlur={() =>
-                              void checkProductConflicts(
-                                line.key,
-                                line.createLocalProduct!,
-                              )
-                            }
-                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 font-mono text-sm"
-                          />
-                        </label>
-                      </div>
-                      <label className="mt-2 flex items-start gap-2 text-xs text-dusk-700">
-                        <input
-                          type="checkbox"
-                          aria-label="Új helyi termék a webshopba is, piszkozatként"
-                          checked={line.createLocalProduct.webshopDraft}
-                          onChange={(event) =>
-                            updateLine(line.key, {
-                              createLocalProduct: {
-                                ...line.createLocalProduct!,
-                                webshopDraft: event.target.checked,
-                              },
-                            })
-                          }
-                          className="mt-0.5"
-                        />
-                        <span>
-                          A webshopba is, piszkozatként. Nem jelenik meg a
-                          boltban: a terméklapot utána kell kitölteni és
-                          közzétenni. Bejelölés nélkül a termék csak az Acropora
-                          OS-ben jön létre.
-                        </span>
-                      </label>
-                      {[
-                        ["EAN", productConflicts[line.key]?.byEan] as const,
-                        [
-                          "beszállítói cikkszám",
-                          productConflicts[line.key]?.bySupplierSku,
-                        ] as const,
-                      ].map(([what, owner]) =>
-                        owner ? (
-                          <div
-                            key={what}
-                            role="alert"
-                            className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
-                          >
-                            <span>
-                              Ez az {what} már a „{owner.productName}” (
-                              {owner.sku}) termékhez tartozik: a termék nem új.
-                            </span>
-                            <button
-                              type="button"
-                              className="font-semibold hover:underline"
-                              onClick={() => linkToExisting(line.key, owner)}
-                            >
-                              Kötés a meglévő termékhez
-                            </button>
+            <div className="space-y-3">
+              {/*
+                A FEJLÉC ÉS A SOR UGYANAZT AZ OSZLOPRÁCSOT HASZNÁLJA (a brief 13.
+                pontja): a `LINE_GRID`-et. Nagy képernyőn a fejléc adja a mezők
+                nevét (a mezők címkéje ilyenkor csak a képernyőolvasónak szól),
+                kisebben a mezők saját címkéje.
+              */}
+              <div
+                aria-hidden="true"
+                className={`hidden rounded-lg border border-transparent bg-pilot-grey-100 px-4 py-2.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.05em] text-pilot-grey-500 lg:grid ${LINE_GRID}`}
+              >
+                <span>Termék / számlasor</span>
+                <span>Rendelt</span>
+                <span>Tényleges</span>
+                <span>Egység</span>
+                <span>Egységár</span>
+                <span>Kedv.</span>
+                <span className="text-right">Sorösszeg</span>
+              </div>
+              {lines.map((line) => {
+                const state = lineState(line, lineSuggestions[line.key]);
+                return (
+                  <div
+                    key={line.key}
+                    data-line-state={state}
+                    className={`rounded-xl border p-4 ${
+                      state === "suggested"
+                        ? "border-pilot-accent-warm bg-pilot-accent-warm-soft"
+                        : "border-pilot-grey-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        {line.createLocalProduct ? (
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-pilot-grey-900">
+                              {line.createLocalProduct.name ||
+                                line.sourceDescription ||
+                                "Új helyi termék"}
+                            </p>
+                            <PilotBadge variant="grey">
+                              Új helyi Acropora OS-termék
+                            </PilotBadge>
                           </div>
-                        ) : null,
-                      )}
-                      <p className="mt-2 text-xs text-dusk-500">
-                        A belső cikkszámot az Acropora OS automatikusan
-                        generálja mentéskor.
-                      </p>
-                      <p className="mt-1 text-xs text-dusk-500">
-                        A beszállítói cikkszám a számla szállítójához köti a
-                        terméket (beszállítói leképezés).
-                      </p>
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <p className="text-xs text-sky-800">
-                          Készletezett fizikai termék lesz, UNAS-szinkron
-                          nélkül.
-                        </p>
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-dusk-600 hover:underline"
-                          onClick={() =>
-                            updateLine(line.key, {
-                              createLocalProduct: null,
-                            })
-                          }
+                        ) : line.variantId ? (
+                          <>
+                            <p className="text-sm font-semibold text-pilot-grey-900">
+                              {line.productName}
+                            </p>
+                            <p className="text-xs text-pilot-grey-500">
+                              {line.sku}
+                            </p>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-pilot-grey-900">
+                              {line.sourceDescription || "Kézi tétel"}
+                            </p>
+                            <PilotBadge variant="amber">
+                              Nincs terméktörzsben
+                            </PilotBadge>
+                          </div>
+                        )}
+                        {line.supplierSku ? (
+                          <p className="text-xs text-pilot-grey-500">
+                            Beszállítói cikkszám: {line.supplierSku}
+                          </p>
+                        ) : null}
+                        {!line.variantId && !line.createLocalProduct ? (
+                          <LineSuggestionNotice
+                            result={lineSuggestions[line.key]}
+                            onAccept={() => acceptSuggestion(line.key)}
+                            onDismiss={() => dismissSuggestion(line.key)}
+                          />
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {/*
+                        A SOR ÁLLAPOTA (a brief 14. pontja): a kötött sor
+                        semleges, a javaslat meleg (operátori ellenőrzés, nem
+                        hiba), az új helyi termék és a törzsön kívüli sor a
+                        saját jelvényét a név mellett viseli.
+                      */}
+                        {state === "matched" ? (
+                          <PilotBadge variant="blue">
+                            Termékhez kötve
+                          </PilotBadge>
+                        ) : state === "suggested" ? (
+                          <span className="rounded px-2 py-0.5 text-xs font-medium text-pilot-accent-warm-text ring-1 ring-pilot-accent-warm">
+                            Javaslat ellenőrzendő
+                          </span>
+                        ) : null}
+                        <PilotButton
+                          size="action"
+                          variant="secondary"
+                          onClick={() => removeLine(line.key)}
                         >
-                          Mégse
-                        </button>
+                          Eltávolítás
+                        </PilotButton>
                       </div>
                     </div>
-                  ) : null}
-                  {line.variantId || line.createLocalProduct ? (
-                    <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="text-xs font-semibold text-emerald-900">
-                            Projekt-hozzárendelés
-                          </p>
-                          <p className="text-xs text-emerald-800">
-                            Szabad raktárkészlet ebből a sorból:{" "}
-                            {Math.max(
-                              0,
-                              line.actualQuantity - allocatedQuantity(line),
-                            )}{" "}
-                            {line.unit}
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
+                    {!line.variantId && !line.createLocalProduct ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <PilotButton
+                          size="action"
                           variant="secondary"
-                          disabled={
-                            projects.length === 0 ||
-                            line.projectAllocations.length >= projects.length
-                          }
-                          onClick={() => addProjectAllocation(line)}
+                          onClick={() => beginExistingProductLink(line)}
                         >
-                          Projekt hozzáadása
-                        </Button>
+                          Kapcsolás meglévő termékhez
+                        </PilotButton>
+                        <PilotButton
+                          size="action"
+                          variant="secondary"
+                          onClick={() => beginLocalProductCreation(line)}
+                        >
+                          Új helyi termék létrehozása
+                        </PilotButton>
                       </div>
-                      {projects.length === 0 ? (
-                        <p className="mt-2 text-xs text-amber-700">
-                          Előbb hozz létre egy projektet a fenti mezővel.
-                        </p>
-                      ) : null}
-                      {line.projectAllocations.length > 0 ? (
-                        <div className="mt-3 space-y-2">
-                          {line.projectAllocations.map((allocation) => (
-                            <div
-                              key={allocation.key}
-                              className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_auto]"
+                    ) : null}
+                    {line.createLocalProduct ? (
+                      <div className="mt-3 rounded-lg bg-pilot-grey-50 p-3 ring-1 ring-pilot-grey-200">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="text-xs text-dusk-600">
+                            Terméknév
+                            <input
+                              aria-label="Új helyi termék neve"
+                              value={line.createLocalProduct.name}
+                              onChange={(event) =>
+                                updateLine(line.key, {
+                                  createLocalProduct: {
+                                    ...line.createLocalProduct!,
+                                    name: event.target.value,
+                                  },
+                                })
+                              }
+                              className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
+                            />
+                          </label>
+                          <label className="text-xs text-dusk-600">
+                            Kategória (opcionális)
+                            <select
+                              aria-label="Új helyi termék kategóriája"
+                              value={line.createLocalProduct.primaryCategoryId}
+                              onChange={(event) =>
+                                updateLine(line.key, {
+                                  createLocalProduct: {
+                                    ...line.createLocalProduct!,
+                                    primaryCategoryId: event.target.value,
+                                  },
+                                })
+                              }
+                              className="mt-1 h-9 w-full rounded-lg border border-dusk-200 bg-white px-2 text-sm"
                             >
-                              <select
-                                aria-label="Projekt"
-                                value={allocation.projectId}
-                                onChange={(event) =>
-                                  updateProjectAllocation(
-                                    line,
-                                    allocation.key,
-                                    { projectId: event.target.value },
-                                  )
-                                }
-                                className="h-9 rounded-lg border border-emerald-200 bg-white px-2 text-sm"
-                              >
-                                <option value="">Válassz projektet</option>
-                                {projects.map((project) => (
-                                  <option
-                                    key={project.id}
-                                    value={project.id}
-                                    disabled={line.projectAllocations.some(
-                                      (other) =>
-                                        other.key !== allocation.key &&
-                                        other.projectId === project.id,
-                                    )}
-                                  >
-                                    {project.projectNumber} · {project.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <input
-                                aria-label="Projekthez rendelt mennyiség"
-                                type="number"
-                                min={0}
-                                max={line.actualQuantity}
-                                step="any"
-                                value={allocation.quantity}
-                                onChange={(event) =>
-                                  updateProjectAllocation(
-                                    line,
-                                    allocation.key,
-                                    { quantity: Number(event.target.value) },
-                                  )
-                                }
-                                className="h-9 rounded-lg border border-emerald-200 bg-white px-2 text-sm"
-                              />
+                              <option value="">Nincs kategória</option>
+                              {categoryOptions.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <label className="text-xs text-dusk-600">
+                            Márka (opcionális)
+                            <select
+                              aria-label="Új helyi termék márkája"
+                              value={line.createLocalProduct.brandId}
+                              onChange={(event) =>
+                                updateLine(line.key, {
+                                  createLocalProduct: {
+                                    ...line.createLocalProduct!,
+                                    brandId: event.target.value,
+                                  },
+                                })
+                              }
+                              className="mt-1 h-9 w-full rounded-lg border border-dusk-200 bg-white px-2 text-sm"
+                            >
+                              <option value="">Nincs márka</option>
+                              {brandOptions.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="text-xs text-dusk-600">
+                            ÁFA-kulcs (%)
+                            <input
+                              aria-label="Új helyi termék ÁFA-kulcsa"
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={line.createLocalProduct.vatRate}
+                              onChange={(event) =>
+                                updateLine(line.key, {
+                                  createLocalProduct: {
+                                    ...line.createLocalProduct!,
+                                    vatRate:
+                                      event.target.value === ""
+                                        ? ""
+                                        : Number(event.target.value),
+                                  },
+                                })
+                              }
+                              className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
+                            />
+                          </label>
+                          <label className="text-xs text-dusk-600">
+                            EAN (opcionális)
+                            <input
+                              aria-label="Új helyi termék EAN-je"
+                              value={line.createLocalProduct.ean}
+                              onChange={(event) =>
+                                updateLine(line.key, {
+                                  createLocalProduct: {
+                                    ...line.createLocalProduct!,
+                                    ean: event.target.value,
+                                  },
+                                })
+                              }
+                              onBlur={() =>
+                                void checkProductConflicts(
+                                  line.key,
+                                  line.createLocalProduct!,
+                                )
+                              }
+                              className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 font-mono text-sm"
+                            />
+                          </label>
+                          <label className="text-xs text-dusk-600">
+                            Beszállítói cikkszám (opcionális)
+                            <input
+                              aria-label="Új helyi termék beszállítói cikkszáma"
+                              value={line.createLocalProduct.supplierSku}
+                              onChange={(event) =>
+                                updateLine(line.key, {
+                                  createLocalProduct: {
+                                    ...line.createLocalProduct!,
+                                    supplierSku: event.target.value,
+                                  },
+                                })
+                              }
+                              onBlur={() =>
+                                void checkProductConflicts(
+                                  line.key,
+                                  line.createLocalProduct!,
+                                )
+                              }
+                              className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 font-mono text-sm"
+                            />
+                          </label>
+                        </div>
+                        <label className="mt-2 flex items-start gap-2 text-xs text-dusk-700">
+                          <input
+                            type="checkbox"
+                            aria-label="Új helyi termék a webshopba is, piszkozatként"
+                            checked={line.createLocalProduct.webshopDraft}
+                            onChange={(event) =>
+                              updateLine(line.key, {
+                                createLocalProduct: {
+                                  ...line.createLocalProduct!,
+                                  webshopDraft: event.target.checked,
+                                },
+                              })
+                            }
+                            className="mt-0.5"
+                          />
+                          <span>
+                            A webshopba is, piszkozatként. Nem jelenik meg a
+                            boltban: a terméklapot utána kell kitölteni és
+                            közzétenni. Bejelölés nélkül a termék csak az
+                            Acropora OS-ben jön létre.
+                          </span>
+                        </label>
+                        {[
+                          ["EAN", productConflicts[line.key]?.byEan] as const,
+                          [
+                            "beszállítói cikkszám",
+                            productConflicts[line.key]?.bySupplierSku,
+                          ] as const,
+                        ].map(([what, owner]) =>
+                          owner ? (
+                            <div
+                              key={what}
+                              role="alert"
+                              className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
+                            >
+                              <span>
+                                Ez az {what} már a „{owner.productName}” (
+                                {owner.sku}) termékhez tartozik: a termék nem
+                                új.
+                              </span>
                               <button
                                 type="button"
-                                className="px-2 text-xs font-semibold text-rose-600 hover:underline"
-                                onClick={() =>
-                                  removeProjectAllocation(line, allocation.key)
-                                }
+                                className="font-semibold hover:underline"
+                                onClick={() => linkToExisting(line.key, owner)}
                               >
-                                Törlés
+                                Kötés a meglévő termékhez
                               </button>
                             </div>
-                          ))}
+                          ) : null,
+                        )}
+                        <p className="mt-2 text-xs text-dusk-500">
+                          A belső cikkszámot az Acropora OS automatikusan
+                          generálja mentéskor.
+                        </p>
+                        <p className="mt-1 text-xs text-dusk-500">
+                          A beszállítói cikkszám a számla szállítójához köti a
+                          terméket (beszállítói leképezés).
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <p className="text-xs text-sky-800">
+                            Készletezett fizikai termék lesz, UNAS-szinkron
+                            nélkül.
+                          </p>
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-dusk-600 hover:underline"
+                            onClick={() =>
+                              updateLine(line.key, {
+                                createLocalProduct: null,
+                              })
+                            }
+                          >
+                            Mégse
+                          </button>
                         </div>
-                      ) : null}
+                      </div>
+                    ) : null}
+                    <div className={`mt-3 ${LINE_GRID}`}>
+                      <label className="col-span-2 text-xs text-pilot-grey-500 sm:col-span-3 lg:col-span-1">
+                        <span className="lg:sr-only">
+                          Megnevezés a számlán
+                          {line.variantId || line.createLocalProduct
+                            ? " (opcionális)"
+                            : " (kötelező)"}
+                        </span>
+                        <input
+                          value={line.sourceDescription}
+                          onChange={(event) =>
+                            updateLine(line.key, {
+                              sourceDescription: event.target.value,
+                            })
+                          }
+                          className="mt-1 h-9 w-full rounded-md bg-white px-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        />
+                      </label>
+                      <label className="text-xs text-pilot-grey-500">
+                        <span className="lg:sr-only">
+                          Rendelt ({line.unit})
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={line.orderedQuantity}
+                          onChange={(event) =>
+                            updateOrderedQuantity(
+                              line.key,
+                              Number(event.target.value),
+                            )
+                          }
+                          className="mt-1 h-9 w-full rounded-md bg-white px-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        />
+                      </label>
+                      <label className="text-xs text-pilot-grey-500">
+                        <span className="lg:sr-only">
+                          Tényleges ({line.unit})
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={line.actualQuantity}
+                          onChange={(event) =>
+                            updateLine(line.key, {
+                              actualQuantity: Number(event.target.value),
+                            })
+                          }
+                          className="mt-1 h-9 w-full rounded-md bg-white px-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        />
+                      </label>
+                      <label className="text-xs text-pilot-grey-500">
+                        <span className="lg:sr-only">Egység</span>
+                        <input
+                          value={line.unit}
+                          onChange={(event) =>
+                            updateLine(line.key, { unit: event.target.value })
+                          }
+                          className="mt-1 h-9 w-full rounded-md bg-white px-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        />
+                      </label>
+                      <label className="text-xs text-pilot-grey-500">
+                        <span className="lg:sr-only">
+                          Egységár ({effectiveCurrency || "—"})
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={line.unitNet}
+                          onChange={(event) =>
+                            updateLine(line.key, {
+                              unitNet: Number(event.target.value),
+                            })
+                          }
+                          className="mt-1 h-9 w-full rounded-md bg-white px-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        />
+                      </label>
+                      <label className="text-xs text-pilot-grey-500">
+                        <span className="lg:sr-only">Kedvezmény (%)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="any"
+                          value={line.discountPercent}
+                          onChange={(event) =>
+                            updateLine(line.key, {
+                              discountPercent:
+                                event.target.value === ""
+                                  ? ""
+                                  : Number(event.target.value),
+                            })
+                          }
+                          className="mt-1 h-9 w-full rounded-md bg-white px-2 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        />
+                      </label>
+                      {/*
+                      A SORÖSSZEG SZÁMÍTOTT ÉRTÉK, NEM MEZŐ (a brief 13.
+                      pontja): a meglévő `lineNet` számolja, itt csak áll.
+                    */}
+                      <p className="col-span-2 self-end pb-2 text-right text-sm font-semibold text-pilot-grey-900 sm:col-span-1">
+                        <span className="text-xs font-normal text-pilot-grey-500 lg:sr-only">
+                          Sorösszeg:{" "}
+                        </span>
+                        {formatMoney(lineNet(line), effectiveCurrency)}
+                      </p>
                     </div>
-                  ) : null}
-                  <div className="mt-2">
-                    <label className="text-xs text-dusk-500">
-                      Megnevezés a számlán
-                      {line.variantId || line.createLocalProduct
-                        ? " (opcionális)"
-                        : " (kötelező)"}
-                      <input
-                        value={line.sourceDescription}
-                        onChange={(event) =>
-                          updateLine(line.key, {
-                            sourceDescription: event.target.value,
-                          })
-                        }
-                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
-                      />
-                    </label>
+                    {line.variantId || line.createLocalProduct ? (
+                      <div className="mt-3 rounded-lg bg-pilot-aqua-50 px-3 py-2">
+                        {/*
+                        A PROJEKTFOGLALÁS SÁVJA (a brief 15. pontja): a szöveg
+                        balra és rugalmas, a "Projekt hozzáadása" mindig a sáv
+                        jobb szélén, nem a változó hosszú szöveg után, és nem
+                        zsugorodik.
+                      */}
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="min-w-0 flex-1 text-xs leading-5 text-pilot-aqua-700">
+                            {allocationSummary(line)}
+                          </p>
+                          <PilotButton
+                            size="action"
+                            variant="secondary"
+                            disabled={
+                              projects.length === 0 ||
+                              line.projectAllocations.length >= projects.length
+                            }
+                            onClick={() => addProjectAllocation(line)}
+                          >
+                            Projekt hozzáadása
+                          </PilotButton>
+                        </div>
+                        {projects.length === 0 ? (
+                          <p className="mt-1 text-xs text-pilot-amber-700">
+                            Előbb hozz létre egy projektet a fenti mezővel.
+                          </p>
+                        ) : null}
+                        {line.projectAllocations.length > 0 ? (
+                          <div className="mt-3 space-y-2">
+                            {line.projectAllocations.map((allocation) => (
+                              <div
+                                key={allocation.key}
+                                className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_auto]"
+                              >
+                                <select
+                                  aria-label="Projekt"
+                                  value={allocation.projectId}
+                                  onChange={(event) =>
+                                    updateProjectAllocation(
+                                      line,
+                                      allocation.key,
+                                      { projectId: event.target.value },
+                                    )
+                                  }
+                                  className="h-9 rounded-md bg-white px-2 text-sm ring-1 ring-pilot-grey-200"
+                                >
+                                  <option value="">Válassz projektet</option>
+                                  {projects.map((project) => (
+                                    <option
+                                      key={project.id}
+                                      value={project.id}
+                                      disabled={line.projectAllocations.some(
+                                        (other) =>
+                                          other.key !== allocation.key &&
+                                          other.projectId === project.id,
+                                      )}
+                                    >
+                                      {project.projectNumber} · {project.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <input
+                                  aria-label="Projekthez rendelt mennyiség"
+                                  type="number"
+                                  min={0}
+                                  max={line.actualQuantity}
+                                  step="any"
+                                  value={allocation.quantity}
+                                  onChange={(event) =>
+                                    updateProjectAllocation(
+                                      line,
+                                      allocation.key,
+                                      { quantity: Number(event.target.value) },
+                                    )
+                                  }
+                                  className="h-9 rounded-md bg-white px-2 text-sm ring-1 ring-pilot-grey-200"
+                                />
+                                <button
+                                  type="button"
+                                  className="px-2 text-xs font-semibold text-pilot-red-700 hover:underline"
+                                  onClick={() =>
+                                    removeProjectAllocation(
+                                      line,
+                                      allocation.key,
+                                    )
+                                  }
+                                >
+                                  Törlés
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                    <label className="text-xs text-dusk-500">
-                      Rendelt ({line.unit})
-                      <input
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={line.orderedQuantity}
-                        onChange={(event) =>
-                          updateOrderedQuantity(
-                            line.key,
-                            Number(event.target.value),
-                          )
-                        }
-                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
-                      />
-                    </label>
-                    <label className="text-xs text-dusk-500">
-                      Tényleges ({line.unit})
-                      <input
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={line.actualQuantity}
-                        onChange={(event) =>
-                          updateLine(line.key, {
-                            actualQuantity: Number(event.target.value),
-                          })
-                        }
-                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
-                      />
-                    </label>
-                    <label className="text-xs text-dusk-500">
-                      Egység
-                      <input
-                        value={line.unit}
-                        onChange={(event) =>
-                          updateLine(line.key, { unit: event.target.value })
-                        }
-                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
-                      />
-                    </label>
-                    <label className="text-xs text-dusk-500">
-                      Egységár ({effectiveCurrency || "—"})
-                      <input
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={line.unitNet}
-                        onChange={(event) =>
-                          updateLine(line.key, {
-                            unitNet: Number(event.target.value),
-                          })
-                        }
-                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
-                      />
-                    </label>
-                    <label className="text-xs text-dusk-500">
-                      Kedvezmény (%)
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="any"
-                        value={line.discountPercent}
-                        onChange={(event) =>
-                          updateLine(line.key, {
-                            discountPercent:
-                              event.target.value === ""
-                                ? ""
-                                : Number(event.target.value),
-                          })
-                        }
-                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
-                      />
-                    </label>
-                  </div>
-                  <p className="mt-2 text-right text-sm font-semibold text-dusk-900">
-                    {formatMoney(lineNet(line), effectiveCurrency)}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
-          <div className="mt-4 flex justify-end border-t border-dusk-100 pt-4 text-sm">
+          <div className="flex justify-end border-t border-pilot-grey-200 pt-4">
             <div className="text-right">
-              <p className="text-dusk-400">Nettó összeg</p>
-              <p className="text-lg font-bold text-dusk-900">
+              <p className="text-xs text-pilot-grey-500">Nettó összeg</p>
+              <p className="text-[28px] font-semibold leading-[34px] tracking-[-0.3px] text-pilot-grey-900">
                 {formatMoney(totalNet, effectiveCurrency)}
               </p>
             </div>
           </div>
-        </Card>
+        </PilotSection>
 
-        <div className="flex justify-end">
-          <Button type="submit" disabled={submitting}>
+        {/*
+          AZ ALSÓ ÖSSZEGZŐ ÉS A VÉGLEGESÍTÉS (a brief 18. pontja): a számok a
+          valós sorokból jönnek; a mentés a meglévő úton megy (bevételezés,
+          készletmozgás, projektfoglalás, UNAS-szinkron a háttérben).
+        */}
+        <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-pilot-grey-200 bg-white p-5">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-pilot-grey-900">
+              {submitSummary(lines)}
+            </p>
+            <p className="mt-1 text-xs text-pilot-grey-500">
+              Mentéskor készletre vétel és projektfoglalás; az UNAS
+              készletszinkron háttérfolyamatból megy.
+            </p>
+          </div>
+          <PilotButton type="submit" size="regular" disabled={submitting}>
             {submitting ? "Mentés…" : "Számla rögzítése és készlet frissítése"}
-          </Button>
-        </div>
+          </PilotButton>
+        </section>
       </form>
-    </div>
+    </PilotThemeRoot>
   );
 }
 
@@ -2225,7 +2434,7 @@ function LineSuggestionNotice({
   const suggestion = result.suggestion;
   if (!suggestion || result.dismissed) return null;
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-white p-2 text-xs text-pilot-grey-900 ring-1 ring-pilot-accent-warm">
       <span>
         Javaslat ({SUGGESTION_SOURCE_LABEL[suggestion.source]}):{" "}
         <strong>{suggestion.productName}</strong> ({suggestion.sku})
