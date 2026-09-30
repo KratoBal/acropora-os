@@ -64,6 +64,8 @@ export class BillingDocumentIssueRepository {
     lines: readonly SentLineAmounts[];
     totals: { netAmount: string; vatAmount: string; grossAmount: string };
     emailStatus: "PENDING" | "NOT_REQUIRED";
+    /** A Számlázz.hu `vevoifiokurl`-je: a bizonylat online, a vevő fiókjában. */
+    externalUrl: string | null;
   }): Promise<void> {
     await this.database.$transaction(async (transaction) => {
       await transaction.invoice.update({
@@ -79,6 +81,7 @@ export class BillingDocumentIssueRepository {
           vatAmount: input.totals.vatAmount,
           grossAmount: input.totals.grossAmount,
           emailStatus: input.emailStatus,
+          externalUrl: input.externalUrl,
           syncStatus: "RECEIVED",
           syncError: null,
         },

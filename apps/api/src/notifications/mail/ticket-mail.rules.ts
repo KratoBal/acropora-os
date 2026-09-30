@@ -67,7 +67,12 @@ export type MailPathKey =
    * "3.5" szelet) -- ugyanaz a mintázat, mint a `TICKET_MAIL_HANDOVER`,
    * saját kulccsal, mert a két út egymástól függetlenül kapcsolható.
    */
-  | "TICKET_MAIL_MAINTENANCE_PACKAGE";
+  | "TICKET_MAIL_MAINTENANCE_PACKAGE"
+  /**
+   * A SZÁMLÁZÁSI BIZONYLAT KIKÜLDÉSE (2026-09-30): számla, díjbekérő,
+   * előlegszámla, a kiállított bizonylat Számlázz.hu PDF-jével, gombra.
+   */
+  | "TICKET_MAIL_BILLING_DOCUMENT";
 
 /**
  * A KET KAPU EGYUTT, SORRENDBEN -- ES A SORREND ADJA A KIHAGYAS OKAT.

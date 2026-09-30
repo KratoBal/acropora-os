@@ -73,6 +73,12 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
     AquariumMeasurementMailService,
   ],
   exports: [
+    /*
+      A TERITO BUROK A SZAMLAZASI KIKULDESNEK (2026-09-30): a `BillingModule`
+      ugyanazon a jelzon at kapja a kuldot, tehat az atiranyitast o sem
+      kerulheti meg.
+    */
+    MAIL_SENDER,
     NotificationsService,
     TicketMailService,
     HandoverMailService,
