@@ -23,6 +23,8 @@ const gate = integrationDatabaseGate(process.env);
 const ACCOUNT = "9999000033334444";
 const IMPORTER = "missing-invoices-read-it";
 const SUPPLIER = "HIANYZOTESZT Kft.";
+// a döntés audit-sort ír, annak a szerzője valódi felhasználó kell legyen
+const ACTOR_EMAIL = "missing-invoices-it-actor@example.invalid";
 
 async function removeLeftovers() {
   const ids = (
@@ -44,14 +46,24 @@ async function removeLeftovers() {
   await prisma.navIncomingInvoice.deleteMany({
     where: { supplierName: SUPPLIER },
   });
+  await prisma.user.deleteMany({ where: { email: ACTOR_EMAIL } });
 }
 
 describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () => {
   const missing = new MissingInvoicesService(new MissingInvoicesRepository());
+  let actor: AuthenticatedUser;
 
   before(async () => {
     if (gate.mode === "refuse") throw new Error(gate.reason);
     await removeLeftovers();
+    actor = (await prisma.user.create({
+      data: {
+        email: ACTOR_EMAIL,
+        displayName: "Hiányzó számlák aktor",
+        role: "OWNER",
+      },
+      select: { id: true },
+    })) as AuthenticatedUser;
     await new BankStatementImportService(
       new BankStatementImportRepository(),
     ).import(
@@ -89,6 +101,10 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
           where: { supplierName: SUPPLIER },
         }),
       },
+      {
+        nev: "a suite aktor-felhasználója bent maradt",
+        darab: await prisma.user.count({ where: { email: ACTOR_EMAIL } }),
+      },
     ]);
   });
 
@@ -121,9 +137,7 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
     const other = all.find((item) => item.partner === "Ismeretlen Bt.")!;
     const documentId = payment.document!.id;
 
-    const paired = await missing.pair(other.id, documentId, {
-      id: IMPORTER,
-    } as AuthenticatedUser);
+    const paired = await missing.pair(other.id, documentId, actor);
     assert.deepEqual(
       [paired.matchedBy, paired.document?.id],
       ["MANUAL", documentId],
@@ -131,9 +145,7 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
     // a kézi párosítás elvitte a számlát a szabály elől
     assert.equal((await missing.item(payment.id)).document, null);
     await assert.rejects(
-      missing.pair(payment.id, documentId, {
-        id: IMPORTER,
-      } as AuthenticatedUser),
+      missing.pair(payment.id, documentId, actor),
       /másik terheléshez/,
     );
     assert.equal(
@@ -147,7 +159,7 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
       1,
     );
 
-    await missing.unpair(other.id, { id: IMPORTER } as AuthenticatedUser);
+    await missing.unpair(other.id, actor);
     assert.equal((await missing.item(payment.id)).document?.id, documentId);
   });
 });
