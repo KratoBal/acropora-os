@@ -64,6 +64,7 @@ const STATUS_TABS: { key: AssetListStatusFilter; label: string }[] = [
   { key: "IN_PLACE", label: "Beépített" },
   { key: "ACTIVE", label: ASSET_STATUS_LABELS.ACTIVE },
   { key: "IN_REPAIR", label: ASSET_STATUS_LABELS.IN_REPAIR },
+  { key: "OUT_OF_SERVICE", label: ASSET_STATUS_LABELS.OUT_OF_SERVICE },
   { key: "WARM_STANDBY", label: ASSET_STATUS_LABELS.WARM_STANDBY },
   { key: "COLD_STANDBY", label: ASSET_STATUS_LABELS.COLD_STANDBY },
   { key: "RETIRED", label: ASSET_STATUS_LABELS.RETIRED },
