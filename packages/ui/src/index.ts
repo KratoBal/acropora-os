@@ -108,6 +108,8 @@ export {
   PilotDataTable,
   PilotPairedRows,
   PilotPageHeader,
+  PilotCallout,
+  PilotLinkTabs,
 } from "./pilot-os";
 export type { PilotTableColumn } from "./pilot-os";
 export {

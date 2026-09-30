@@ -262,6 +262,44 @@ export interface PurchaseInvoiceDatabase extends WarehouseLookupDatabase {
 
 export const PURCHASE_INVOICE_DATABASE = Symbol("PURCHASE_INVOICE_DATABASE");
 
+/**
+ * The list's filter. Every part is optional and they combine with AND: the
+ * search over the document number, the supplier's invoice number and the
+ * supplier's name; the supplier; the source; the payment state.
+ */
+export function purchaseInvoiceListWhere(
+  query: Pick<
+    PurchaseInvoiceListQueryDto,
+    "search" | "supplierId" | "source" | "payment"
+  >,
+): Prisma.PurchaseInvoiceWhereInput {
+  return {
+    ...(query.supplierId ? { supplierId: query.supplierId } : {}),
+    ...(query.source ? { source: query.source } : {}),
+    ...(query.payment ? { isPaid: query.payment === "paid" } : {}),
+    ...(query.search
+      ? {
+          OR: [
+            {
+              documentNumber: { contains: query.search, mode: "insensitive" },
+            },
+            {
+              supplierInvoiceNumber: {
+                contains: query.search,
+                mode: "insensitive",
+              },
+            },
+            {
+              supplier: {
+                name: { contains: query.search, mode: "insensitive" },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+}
+
 @Injectable()
 export class PurchaseInvoiceRepository extends Repository {
   private readonly invoiceDatabase: PurchaseInvoiceDatabase;
@@ -872,29 +910,7 @@ export class PurchaseInvoiceRepository extends Repository {
   async list(
     query: PurchaseInvoiceListQueryDto,
   ): Promise<PurchaseInvoiceListResponse> {
-    const where: Prisma.PurchaseInvoiceWhereInput = {
-      ...(query.supplierId ? { supplierId: query.supplierId } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              {
-                documentNumber: { contains: query.search, mode: "insensitive" },
-              },
-              {
-                supplierInvoiceNumber: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-              {
-                supplier: {
-                  name: { contains: query.search, mode: "insensitive" },
-                },
-              },
-            ],
-          }
-        : {}),
-    };
+    const where = purchaseInvoiceListWhere(query);
     const [invoices, totalItems] = await Promise.all([
       this.invoiceDatabase.purchaseInvoice.findMany({
         where,

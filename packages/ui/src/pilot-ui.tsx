@@ -259,6 +259,7 @@ export function PilotButton({
   fullWidth = false,
   size = "md",
   "aria-label": ariaLabel,
+  title,
 }: {
   children: ReactNode;
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -266,7 +267,9 @@ export function PilotButton({
   type?: "button" | "submit";
   disabled?: boolean;
   fullWidth?: boolean;
-  size?: "md" | "lg";
+  size?: "md" | "lg" | "action" | "regular";
+  /** ADDITÍV: a súgó, pl. hogy egy letiltott gomb miért nem nyomható. */
+  title?: string;
   /**
    * ISMETLODO GOMBOKHOZ (pl. soronkenti "Torles"), ahol a lathato felirat
    * onmagaban nem mondja meg, MELYIK sorra vonatkozik -- ugyanaz az igeny,
@@ -274,16 +277,31 @@ export function PilotButton({
    */
   "aria-label"?: string;
 }) {
-  const base = `inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${fullWidth ? "w-full" : ""}`;
+  const base = `inline-flex items-center justify-center gap-1.5 rounded-md transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${fullWidth ? "w-full" : ""}`;
+  /*
+    AZ `action` ÉS A `regular` A DIRECTION F GOMBJA (Balázs Beszerzés-briefje,
+    2026-09-30, 4. pont): 32 és 40 px magas, a szélessége a felirat plusz a
+    vízszintes belső margó, a felirat mindkét irányban középen, és a gomb nem
+    törik és nem zsugorodik (egy hosszú magyar felirat, pl. "Projekt
+    hozzáadása", így sosem lóg ki és sosem vágódik). Fix szélesség nincs.
+    Az `md` és az `lg` a régi pilot oldalaké, változatlanul.
+  */
   const sizes = {
-    md: "px-3.5 py-1.5 text-sm",
-    lg: "px-5 py-3.5 text-base",
+    md: "px-3.5 py-1.5 text-sm font-medium",
+    lg: "px-5 py-3.5 text-base font-medium",
+    action:
+      "h-8 shrink-0 whitespace-nowrap px-3 text-sm font-semibold leading-none",
+    regular:
+      "h-10 shrink-0 whitespace-nowrap px-4 text-sm font-semibold leading-none",
   };
   const variants = {
     primary:
       "bg-pilot-aqua-600 text-white hover:bg-pilot-aqua-700 active:bg-pilot-aqua-800",
-    secondary:
-      "bg-white text-pilot-grey-700 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 active:bg-pilot-grey-100",
+    secondary: `bg-white ${
+      size === "action" || size === "regular"
+        ? "text-pilot-grey-900"
+        : "text-pilot-grey-700"
+    } ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50 active:bg-pilot-grey-100`,
     /*
       A `bg-transparent` NEM DISZ (megelozo javitas, 2026-09-25, lasd
       `apps/partner/src/components/ticket-list.tsx` azonos komment
@@ -306,6 +324,7 @@ export function PilotButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel}
+      title={title}
     >
       {children}
     </button>

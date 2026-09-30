@@ -21,6 +21,11 @@ const navigation = vi.hoisted(() => ({
 const api = vi.hoisted(() => ({ list: vi.fn(), sync: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
+// a lap a Direction F óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
+
 vi.mock("next/navigation", () => ({
   usePathname: () => "/beszerzes",
   useRouter: () => navigation,
@@ -103,5 +108,116 @@ describe("PurchaseInvoiceListPage paging", () => {
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     const target = String(navigation.replace.mock.calls.at(-1)?.[0]);
     expect(new URLSearchParams(target.split("?")[1]).get("page")).toBe("3");
+  });
+});
+
+/*
+  DIRECTION F (Balázs Beszerzés-briefje, 2026-09-30, 5. pont). MI PIROSÍT: ha
+  a forrás vagy a fizetési állapot nem kerül az URL-be (és így a kérésbe), ha
+  a szűrő-váltás a 3. oldalon hagyja a listát, ha a "Szűrők törlése" valamelyik
+  szűrőt ott felejti, ha a fülek aktív jelölése elcsúszik, vagy ha az összeg
+  fejléce és cellája máshová igazodik.
+*/
+describe("PurchaseInvoiceListPage Direction F", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams("page=3&search=SZ");
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(3));
+  });
+
+  const lastQuery = () =>
+    new URLSearchParams(
+      String(navigation.replace.mock.calls.at(-1)?.[0]).split("?")[1],
+    );
+
+  it("the source and payment filters go into the query and back to page 1", async () => {
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Forrás" }), {
+      target: { value: "HU_NAV" },
+    });
+    expect(lastQuery().get("source")).toBe("HU_NAV");
+    expect(lastQuery().get("page")).toBe("1");
+    expect(lastQuery().get("search")).toBe("SZ");
+
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Fizetési állapot" }),
+      { target: { value: "open" } },
+    );
+    expect(lastQuery().get("payment")).toBe("open");
+  });
+
+  it("the filters reach the request", async () => {
+    navigation.params = new URLSearchParams("source=EU&payment=paid");
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    const query = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(query.get("source")).toBe("EU");
+    expect(query.get("payment")).toBe("paid");
+  });
+
+  it("'Szűrők törlése' clears the search, the source and the payment", async () => {
+    navigation.params = new URLSearchParams(
+      "page=2&search=SZ&source=EU&payment=paid",
+    );
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+
+    fireEvent.click(screen.getByRole("button", { name: "Szűrők törlése" }));
+    const query = lastQuery();
+    expect(query.get("search")).toBeNull();
+    expect(query.get("source")).toBeNull();
+    expect(query.get("payment")).toBeNull();
+    expect(query.get("page")).toBe("1");
+  });
+
+  it("without a filter there is no 'Szűrők törlése' (control)", async () => {
+    navigation.params = new URLSearchParams("page=1");
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    expect(screen.queryByRole("button", { name: "Szűrők törlése" })).toBeNull();
+  });
+
+  it("the tabs link the purchasing pages, the list is the current one", async () => {
+    render(<PurchaseInvoiceListPage />);
+    await screen.findByText("BESZ-2026-001");
+    const tabs = within(
+      screen.getByRole("navigation", { name: "Beszerzés oldalai" }),
+    ).getAllByRole("link");
+    expect(
+      tabs.map((tab) => [
+        tab.textContent,
+        tab.getAttribute("href"),
+        tab.getAttribute("aria-current"),
+      ]),
+    ).toEqual([
+      ["Beszerzések", "/beszerzes", "page"],
+      ["Várható beérkezések", "/beszerzes/varhato", null],
+      ["NAV számla lekérés", "/beszerzes/nav-szamlak", null],
+    ]);
+  });
+
+  it("the amount is right-aligned in the header and in the cell alike", async () => {
+    render(<PurchaseInvoiceListPage />);
+    const table = await screen.findByRole("table");
+    const headers = within(table).getAllByRole("columnheader");
+    const cells = within(within(table).getAllByRole("row")[1]!).getAllByRole(
+      "cell",
+    );
+    const right = (element: HTMLElement) =>
+      element.className.split(" ").includes("text-right");
+    expect(headers.map((header) => header.textContent)).toEqual([
+      "Bizonylatszám",
+      "Beszállító",
+      "Számlaszám",
+      "Kelte",
+      "Összeg",
+      "Fizetve",
+      "Forrás",
+    ]);
+    expect(headers.map(right)).toEqual(cells.map(right));
+    expect(right(headers[4]!)).toBe(true);
   });
 });
