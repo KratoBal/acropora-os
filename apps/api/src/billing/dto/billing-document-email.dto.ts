@@ -7,6 +7,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsIn,
+  IsOptional,
   IsString,
   IsUUID,
   MaxLength,
@@ -21,4 +22,5 @@ export class BillingDocumentEmailDto implements BillingDocumentEmailInput {
   @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) bcc!: string[];
   @IsString() @MaxLength(300) subject!: string;
   @IsString() @MaxLength(20000) body!: string;
+  @IsString() @MaxLength(100000) @IsOptional() bodyHtml?: string | null;
 }

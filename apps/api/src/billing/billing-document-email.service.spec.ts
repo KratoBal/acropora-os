@@ -165,6 +165,24 @@ describe("BillingDocumentEmailService", () => {
     assert.equal(calls.finished[0]!.previousEmailStatus, "PENDING");
   });
 
+  it("sends a formatted body as cleaned HTML with a text alternative made from it", async () => {
+    const { service, calls } = setup();
+    await service.send(
+      "doc-1",
+      input({
+        body: "ez nem számít",
+        bodyHtml:
+          "<p>Kedves <strong>{{customer_name}}</strong>!</p><script>alert(1)</script>",
+      }),
+      USER,
+    );
+    const mail = calls.sent[0]!;
+    assert.match(mail.html ?? "", /<strong>Partner Kft\.<\/strong>/);
+    assert.doesNotMatch(mail.html ?? "", /script/);
+    assert.match(mail.text, /Kedves Partner Kft\.!/);
+    assert.doesNotMatch(mail.text, /ez nem számít/);
+  });
+
   it("answers a repeated requestId with the document, without sending again", async () => {
     const { service, calls } = setup({ previous: { invoiceId: "doc-1" } });
     await service.send("doc-1", input(), USER);

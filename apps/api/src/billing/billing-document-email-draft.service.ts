@@ -17,6 +17,8 @@ export interface BillingEmailDraft {
   /** Nyers, `{{név}}` alakú változókkal: a szerver küldéskor helyettesít. */
   subject: string;
   body: string;
+  /** A Levelezés oldalon formázott törzs, ha van; a kiküldő fiók ezt szerkeszti. */
+  bodyHtml: string | null;
   variables: readonly MailTemplateVariable[];
 }
 
@@ -51,6 +53,7 @@ export class BillingDocumentEmailDraftService {
       source: stored ? "stored" : "default",
       subject: (stored ?? DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE).subject,
       body: (stored ?? DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE).body,
+      bodyHtml: stored?.bodyHtml ?? null,
       variables: mailTemplateEventVariables(BILLING_DOCUMENT_MANUAL),
     };
   }
