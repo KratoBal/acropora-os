@@ -129,6 +129,23 @@ enum FoxpostSyncRunStatus {
   FAILED
 }
 
+/// SimplePay elszámolás: egy kimutatás akkor NEEDS_REVIEW, ha van
+/// feloldatlan sora.
+enum SimplePayReportStatus {
+  COMPLETED
+  NEEDS_REVIEW
+}
+
+enum SimplePayLineStatus {
+  RESOLVED
+  NEEDS_REVIEW
+}
+
+enum SimplePayResolutionSource {
+  ORDER_KEY
+  MANUAL
+}
+
 /// GLS elszámolás: egy utánvét-jelentés akkor NEEDS_REVIEW, ha van
 /// feloldatlan sora.
 enum GlsCodReportStatus {
@@ -860,6 +877,7 @@ model User {
   invoicesCreated            Invoice[]                     @relation("InvoiceCreatedBy")
   invoicesIssued             Invoice[]                     @relation("InvoiceIssuedBy")
   billingMailDeliveries      BillingDocumentMailDelivery[] @relation("BillingMailInitiatedBy")
+  simplePayLinesApproved     SimplePayTransactionLine[]    @relation("SimplePayLineManualApprovedBy")
 
   @@index([role, isActive])
   /// A Restrict ellenorzese MINDEN partner-torlesnel lefut, es index nelkul
@@ -5819,6 +5837,83 @@ model FoxpostSyncRun {
   updatedAt        DateTime             @updatedAt
 
   @@index([status, createdAt])
+}
+
+/// SIMPLEPAY ELSZÁMOLÁS (Balázs, 2026-09-30 12:07 UTC): a heti "Forgalmi
+/// kimutatás" (report_YYYYMMDD.csv) kártyás fizetései, tranzakciónként a
+/// webshop-rendeléshez és a kimenő számlájához kötve. A forrásfájl megmarad
+/// (a vevő nevével és e-mail címével együtt, ahogy a GLS-nél és a
+/// Foxpostnál); a sorok nevet és e-mail címet NEM tárolnak. Ugyanaz a
+/// kimutatás más bájtokkal is megérkezhet, ezért a `contentKey` (a nap és a
+/// tranzakciók azonosítói) is egyedi.
+model SimplePayReport {
+  id               String                @id @default(cuid())
+  fileName         String
+  sha256           String                @unique
+  content          Bytes
+  contentKey       String                @unique
+  /// A fájlnévből (report_YYYYMMDD.csv); NULL, ha a név más alakú.
+  reportDate       DateTime?             @db.Date
+  /// A levél törzséből ("2026.09.21 - 2026.09.27 forgalmi időszak"); kézi
+  /// feltöltésnél NULL.
+  periodStart      DateTime?             @db.Date
+  periodEnd        DateTime?             @db.Date
+  currency         String                @default("HUF") @db.VarChar(3)
+  amountTotal      Decimal               @db.Decimal(19, 4)
+  commissionTotal  Decimal               @db.Decimal(19, 4)
+  netTotal         Decimal               @db.Decimal(19, 4)
+  lineCount        Int
+  /// Figyelmeztetések: nem összeadódó sor, eltérés a levél saját összegzésétől.
+  warnings         String[]
+  status           SimplePayReportStatus
+  gmailMessageId   String?               @unique
+  uploadedByUserId String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  lines SimplePayTransactionLine[]
+
+  @@index([reportDate])
+  @@index([status])
+}
+
+model SimplePayTransactionLine {
+  id                     String                     @id @default(cuid())
+  reportId               String
+  rowNumber              Int
+  transactionStatus      String
+  /// A SimplePay saját azonosítója: egy fizetés egyszer szerepel.
+  simplePayTransactionId String                     @unique
+  merchantTransactionId  String
+  orderKeySuffix         String?
+  /// A tranzakció helyi (budapesti) ideje, ahogy a SimplePay írja.
+  transactionAt          String
+  transactionDate        DateTime                   @db.Date
+  currency               String                     @default("HUF") @db.VarChar(3)
+  amount                 Decimal                    @db.Decimal(19, 4)
+  commission             Decimal                    @db.Decimal(19, 4)
+  netAmount              Decimal                    @db.Decimal(19, 4)
+  interchangeFee         Decimal?                   @db.Decimal(19, 4)
+  schemeFee              Decimal?                   @db.Decimal(19, 4)
+  merchantFee            Decimal?                   @db.Decimal(19, 4)
+  orderNumber            String?
+  orderTotal             Decimal?                   @db.Decimal(19, 4)
+  invoiceNumbers         String[]
+  status                 SimplePayLineStatus
+  resolutionSource       SimplePayResolutionSource?
+  errorCode              String?
+  manualApprovedByUserId String?
+  manualApprovedAt       DateTime?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  report           SimplePayReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  manualApprovedBy User?           @relation("SimplePayLineManualApprovedBy", fields: [manualApprovedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([reportId, rowNumber])
+  @@index([orderKeySuffix])
+  @@index([status])
+  @@index([transactionDate])
 }
 
 /// GLS heti utánvét-részletezője ("Utánvét részletező"): egy utalás a GLS-től,
