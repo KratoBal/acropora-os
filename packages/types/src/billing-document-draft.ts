@@ -10,6 +10,12 @@ import type {
   BillingVatRateTotal,
   DecimalText,
 } from "./billing-document-amounts.js";
+import type {
+  BillingCustomerSource,
+  BillingDocumentDeliveryInfo,
+  BillingDocumentPdfInfo,
+  BillingDocumentSzamlazzInfo,
+} from "./billing-document-read.js";
 
 /**
  * A SZÁMLÁZÁSI VÁZLAT DRÓTON (Számlázás v0.1). A szerződés:
@@ -113,7 +119,25 @@ export interface BillingDocumentDetail {
   sourceType: BillingSourceType | null;
   sourceId: string | null;
   lines: BillingDocumentLine[];
-  totals: BillingAmounts & { byVatRate: BillingVatRateTotal[] };
+  totals: BillingAmounts & {
+    byVatRate: BillingVatRateTotal[];
+    /** A 0 Ft-ra kerekült tételek azonosítói (#1275 szabálya szerint). */
+    zeroForintLineIds?: string[];
+  };
   createdAt: string;
   updatedAt: string;
+  /*
+   * A KIÁLLÍTÁS ÉS A KIKÜLDÉS MEZŐI (nautilus, a részletek bővítése; a szerződés
+   * `agents/nautilus/megosztas/szamlazas-kiallitas-lista-reszletek-vegpontok.md`).
+   * Ma VÁLASZTHATÓK: a vázlat-végpont még nem tölti ki őket. Amikor a részletek
+   * végpontja mindet kitölti, kötelezővé válnak, hogy a felület ne kezeljen egy
+   * soha be nem következő hiányt.
+   */
+  /** Honnan jön a `customer`: a partner mai adata vagy a kiállításkori pillanatkép. */
+  customerSource?: BillingCustomerSource;
+  /** `YYYY-MM-DD`; vázlatnál `null`. */
+  issueDate?: string | null;
+  szamlazz?: BillingDocumentSzamlazzInfo;
+  pdf?: BillingDocumentPdfInfo;
+  delivery?: BillingDocumentDeliveryInfo;
 }

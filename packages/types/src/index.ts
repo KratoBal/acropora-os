@@ -71,6 +71,27 @@ export type {
   BillingDocumentLineInput,
 } from "./billing-document-draft.js";
 export {
+  BILLING_CUSTOMER_SOURCES,
+  BILLING_DELIVERY_OUTCOMES,
+  BILLING_DOCUMENT_LIST_PAGE_SIZE,
+  BILLING_EMAIL_MODES,
+  billingEmailModeFor,
+} from "./billing-document-read.js";
+export type {
+  BillingCustomerSource,
+  BillingDeliveryOutcome,
+  BillingDocumentDeliveryInfo,
+  BillingDocumentEmailInput,
+  BillingDocumentListItem,
+  BillingDocumentListQuery,
+  BillingDocumentListResponse,
+  BillingDocumentListTarget,
+  BillingDocumentPdfInfo,
+  BillingDocumentSzamlazzInfo,
+  BillingEmailMode,
+  BillingEmailRecipients,
+} from "./billing-document-read.js";
+export {
   SZAMLAZZ_AMOUNT_RULE,
   szamlazzDocumentTotals,
   szamlazzLineAmounts,
