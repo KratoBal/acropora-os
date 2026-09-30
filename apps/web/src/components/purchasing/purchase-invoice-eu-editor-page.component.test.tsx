@@ -1184,6 +1184,35 @@ describe("PurchaseInvoiceEuEditorPage várható beérkezésből", () => {
     expect(purchasingApiMock.suggestLine).not.toHaveBeenCalled();
   });
 
+  // THE SUPPLIER RECORDED AFTER THE ARRIVAL (Aquarioom, 2026-09-30): nothing
+  // was kept at arrival (no supplier then), the detail now names the supplier.
+  // What must fail: an empty kept list marking the lines as asked, so the
+  // editor asks nothing even with a supplier selected.
+  it("with nothing kept at arrival, the resolved supplier's lines are asked live, the charge line not", async () => {
+    purchasingApiMock.suggestLine.mockResolvedValue({
+      enabled: true,
+      decisionRunId: "run-live-1",
+      suggestion: null,
+      conflict: false,
+      blocked: false,
+    });
+    arrivalsApi.detail.mockResolvedValue({ ...detail, lineSuggestions: [] });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    await waitFor(() =>
+      expect(purchasingApiMock.suggestLine).toHaveBeenCalledWith(
+        "token-owner",
+        expect.objectContaining({
+          supplierId: euSupplier.id,
+          lineKey: "import-0-1",
+          supplierSku: "81593",
+        }),
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(purchasingApiMock.suggestLine).toHaveBeenCalledTimes(1);
+  });
+
   it("the save books the arrival and closes the kept run", async () => {
     render(createElement(PurchaseInvoiceEuEditorPage));
     fireEvent.click(await screen.findByRole("button", { name: "Elfogadom" }));

@@ -1,6 +1,9 @@
 import type { SupplierInvoiceImportResult } from "@acropora/types";
 
-import { normalizeVatId } from "../supplier-invoice-import/supplier-invoice-import.common.js";
+import {
+  normalizeVatId,
+  supplierTaxKey,
+} from "../supplier-invoice-import/supplier-invoice-import.common.js";
 import type { SupplierPdfAdapter } from "../supplier-invoice-import/supplier-pdf-adapter.js";
 
 /**
@@ -150,6 +153,27 @@ export function placeDocument(
   )
     return { status: "SUPERSEDED" };
   return { status: "READ", supersedes: versions.map(({ index }) => index) };
+}
+
+/**
+ * The supplier a document's tax id names: the one non-deleted supplier whose
+ * tax number gives the same `supplierTaxKey`, else null (none, or two).
+ *
+ * The same key the Jev gate uses: a foreign VAT id however written, and a
+ * Hungarian tax number in any of its forms ("14116380-2-06", "HU14116380").
+ * The earlier `normalizeVatId` match gave null for every Hungarian domestic
+ * number, and missed a supplier recorded that way.
+ */
+export function supplierIdByTaxKey(
+  vatId: string | null | undefined,
+  suppliers: readonly { id: string; taxNumber: string | null }[],
+): string | null {
+  const wanted = supplierTaxKey(vatId);
+  if (!wanted) return null;
+  const matches = suppliers.filter(
+    (supplier) => supplierTaxKey(supplier.taxNumber) === wanted,
+  );
+  return matches.length === 1 ? matches[0]!.id : null;
 }
 
 /** The senders the PDF adapters name (`SupplierPdfAdapter.senders`, #1235). */

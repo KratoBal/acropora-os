@@ -91,6 +91,11 @@ a Várható beérkezések kiadásával együtt.
   beolvasott adatait és az érkezéskor tárolt javaslatokat.
   - Proforma-rendelésnél és már bevételezett tételnél 409-cel, magyar mondattal
     utasít el.
+  - Ha a beszállítót a tétel érkezése UTÁN rögzítették (az Aquarioom esete,
+    2026-09-30), a részlet a számla adószámából megkeresi (`supplierIdByTaxKey`,
+    ugyanaz a kulcs, mint az intake-ben). Az arrival-t nem írja vissza: a részlet
+    olvasás, a rendelés következő dokumentuma tölti ki a hiányzó beszállítót.
+    Érkezéskor ilyenkor nem készült javaslat, ezért a szerkesztő élőben kér.
 - **A szerkesztő:** a `/beszerzes/uj?beerkezes=<id>` a levélből jött számlával nyílik
   meg.
   - Ugyanúgy előtölt, mint a fájlfeltöltés (`applySupplierInvoice`), és az ismert

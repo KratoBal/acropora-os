@@ -8,6 +8,7 @@ import {
   arrivalIdentity,
   documentContent,
   placeDocument,
+  supplierIdByTaxKey,
   type PlacedDocument,
 } from "./expected-arrival.intake.js";
 
@@ -250,6 +251,40 @@ describe("what an arrived document opens or joins", () => {
     assert.deepEqual(
       adapterSenders([{ senders: ["contact@aquarioom.com"] }, {}]),
       ["contact@aquarioom.com"],
+    );
+  });
+});
+
+// THE SUPPLIER BY TAX KEY (the intake, and the detail for a supplier recorded
+// after the arrival). What must fail: a foreign VAT id missed by its spelling;
+// a Hungarian supplier missed because only the EU form was compared; a guess
+// between two suppliers with the same key.
+describe("the supplier a document's tax id names", () => {
+  const suppliers = [
+    { id: "aquarioom", taxNumber: "FR67529301244" },
+    { id: "hanna", taxNumber: "14116380-2-06" },
+    { id: "no-tax", taxNumber: null },
+  ];
+
+  it("finds a foreign supplier however the VAT id is written", () => {
+    assert.equal(supplierIdByTaxKey("FR 67 529301244", suppliers), "aquarioom");
+    assert.equal(supplierIdByTaxKey("fr67529301244", suppliers), "aquarioom");
+  });
+
+  it("finds a Hungarian supplier from its EU or domestic form", () => {
+    assert.equal(supplierIdByTaxKey("HU14116380", suppliers), "hanna");
+    assert.equal(supplierIdByTaxKey("14116380-1-41", suppliers), "hanna");
+  });
+
+  it("no supplier with the key, no tax id, or two suppliers: null", () => {
+    assert.equal(supplierIdByTaxKey("DE342032439", suppliers), null);
+    assert.equal(supplierIdByTaxKey(null, suppliers), null);
+    assert.equal(
+      supplierIdByTaxKey("FR67529301244", [
+        ...suppliers,
+        { id: "aquarioom-2", taxNumber: "FR 67529301244" },
+      ]),
+      null,
     );
   });
 });
