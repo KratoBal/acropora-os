@@ -11,6 +11,7 @@ export type InvoiceCollectionVerdict =
   | "STORED"
   | "NOT_INVOICE"
   | "UNMATCHED"
+  | "OWN_INVOICE"
   | "DUPLICATE"
   | "TOO_LARGE"
   | "UNREADABLE";
@@ -21,6 +22,8 @@ export interface InvoiceCollectionCounts {
   notInvoiceCount: number;
   /** Számlának látszik, de sem illesztő, sem NAV-sor nem ismeri: nem tárolódik. */
   unmatchedCount: number;
+  /** A saját kimenő számlánk másolata (a bankszámlánk áll benne): nem tárolódik. */
+  ownInvoiceCount: number;
   duplicateCount: number;
   failedCount: number;
 }
@@ -83,6 +86,16 @@ export class InvoiceCollectionRepository {
       select: { navInvoiceNumber: true },
     });
     return rows.map((row) => row.navInvoiceNumber);
+  }
+
+  /** A saját bankszámláink számjegyei; egy PDF-ben ezek a kiállító jelei. */
+  async ownAccounts(): Promise<string[]> {
+    const rows = await this.database.bankAccount.findMany({
+      select: { accountNumber: true },
+    });
+    return rows
+      .map((row) => row.accountNumber.replace(/\D/g, ""))
+      .filter((digits) => digits.length >= 16);
   }
 
   /** Van-e már ilyen tartalmú dokumentum, bármilyen úton érkezett. */

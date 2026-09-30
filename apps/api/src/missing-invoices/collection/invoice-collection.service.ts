@@ -69,14 +69,18 @@ interface Found {
  *      és a tartalma NEM tárolódik (a balazs@ fiókban bármi lehet)
  *   4. a szállítói illesztő olvassa, VAGY a szállító egy NAV-ban ismert
  *      számlaszáma áll a szövegében                              -> STORED
- *   5. minden más számlának látszó                              -> UNMATCHED,
+ *   5. a saját bankszámlánk áll benne: a SAJÁT kimenő számlánk  -> OWN_INVOICE,
+ *      tartalom nélkül (a kiállító a saját számláját nyomtatja rá)
+ *   6. minden más számlának látszó                              -> UNMATCHED,
  *      tartalom nélkül
  *
  * MIÉRT CSAK AZ ISMERTET TÁROLJA (mérve 2026-10-01, az info@ augusztusi 90
  * PDF-jén): a számlának látszó 65-ből 30 a SAJÁT kimenő számlánk másolata, a
  * többi között rendelés-visszaigazolás és szállítólevél is van. A NAV-kulcs és
- * az illesztő 27-et adott, mind a 27 helyes. A maradék szétválogatása a Jev
- * dolga lesz (Balázs döntése 2026-09-30 22:40 UTC), nem egy kitalált szabályé.
+ * az illesztő 27-et adott, mind a 27 helyes. A saját bankszámlánk 24 PDF-ben
+ * áll, mind a 24 a saját kimenő számlánk, és a 27 tárolt egyikében sincs; ezért
+ * ez a próba a tárolás UTÁN jön, és soha nem vesz el tárolandót. A maradék 14
+ * szétválogatása a Jev dolga lesz (Balázs döntése 2026-09-30 22:40 UTC).
  *
  * A tárolt dokumentumot a Hiányzó számlák párosítója a többi jelölttel együtt
  * látja; várható beérkezést nem kap, tehát a bevételezési láncba nem jut.
@@ -113,10 +117,12 @@ export class InvoiceCollectionService {
       storedCount: 0,
       notInvoiceCount: 0,
       unmatchedCount: 0,
+      ownInvoiceCount: 0,
       duplicateCount: 0,
       failedCount: 0,
     };
     const runId = await this.repository.startRun(trigger);
+    this.ownAccountDigits = null;
     const failedSources: string[] = [];
     for (const source of sources) {
       try {
@@ -139,6 +145,14 @@ export class InvoiceCollectionService {
       failedSources.length ? failedSources.join(",").slice(0, 200) : null,
     );
     return counts;
+  }
+
+  private ownAccountDigits: Promise<string[]> | null = null;
+
+  /** Egy futásban egyszer kérdezzük le. */
+  private ownAccounts(): Promise<string[]> {
+    this.ownAccountDigits ??= this.repository.ownAccounts();
+    return this.ownAccountDigits;
   }
 
   private async collect(
@@ -238,6 +252,7 @@ export class InvoiceCollectionService {
       if (verdict === "DUPLICATE") counts.duplicateCount++;
       else if (verdict === "NOT_INVOICE") counts.notInvoiceCount++;
       else if (verdict === "UNMATCHED") counts.unmatchedCount++;
+      else if (verdict === "OWN_INVOICE") counts.ownInvoiceCount++;
       else counts.failedCount++;
       await this.repository.record(
         source,
@@ -276,7 +291,13 @@ export class InvoiceCollectionService {
         ...hints,
         navNumbers: () => navNumbers,
       });
-      if (textReading.numberFrom !== "NAV") return skip("UNMATCHED");
+      if (textReading.numberFrom !== "NAV") {
+        const digits = text.replace(/\D/g, "");
+        const own = (await this.ownAccounts()).some((account) =>
+          digits.includes(account),
+        );
+        return skip(own ? "OWN_INVOICE" : "UNMATCHED");
+      }
     }
     const proforma = importResult
       ? importResult.documentKind === "PROFORMA"

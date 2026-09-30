@@ -30,6 +30,7 @@ CREATE TABLE "InvoiceCollectionRun" (
     "storedCount" INTEGER NOT NULL DEFAULT 0,
     "notInvoiceCount" INTEGER NOT NULL DEFAULT 0,
     "unmatchedCount" INTEGER NOT NULL DEFAULT 0,
+    "ownInvoiceCount" INTEGER NOT NULL DEFAULT 0,
     "duplicateCount" INTEGER NOT NULL DEFAULT 0,
     "failedCount" INTEGER NOT NULL DEFAULT 0,
     "errorCode" TEXT,
