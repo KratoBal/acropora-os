@@ -58,7 +58,10 @@ function buildService(options: {
     compressed: boolean;
   }>;
   queryInvoiceDigest?: (page: number) => Promise<NavInvoiceDigestResult>;
+  /** The supplier id per tax base; a base not listed has no supplier. */
+  suppliersByTaxBase?: Record<string, string>;
 }) {
+  const askedTaxBases: string[] = [];
   let savedParsedData: unknown;
   let markedErrorCode: string | undefined;
   let appliedItems: NavInvoiceDigestItem[] | undefined;
@@ -106,6 +109,10 @@ function buildService(options: {
 
   const repository = {
     findById: async () => options.row,
+    supplierIdByTaxBase: async (taxBase: string) => {
+      askedTaxBases.push(taxBase);
+      return options.suppliersByTaxBase?.[taxBase] ?? null;
+    },
     saveParsedData: async (_id: string, parsedData: unknown) => {
       savedParsedData = parsedData;
     },
@@ -161,6 +168,7 @@ function buildService(options: {
     getAppliedItems: () => appliedItems,
     wasCreateRunCalled: () => createRunCalled,
     wasMarkFailedCalled: () => markFailedCalled,
+    askedTaxBases,
   };
 }
 
@@ -343,6 +351,78 @@ describe("NavIncomingInvoiceService.detail", () => {
 
     const detail = await service.detail("nav-invoice-1");
     assert.equal(detail.lines.length, 1);
+  });
+});
+
+describe("NavIncomingInvoiceService.detail supplier", () => {
+  const fetched = (supplierTaxNumber: string) =>
+    baseRow({
+      status: "DATA_FETCHED",
+      supplierTaxNumber,
+      parsedData: {
+        supplierName: "HANNA Instruments Service Kft.",
+        currency: "HUF",
+        lines: [
+          {
+            lineNumber: 1,
+            description: "pH mérő",
+            quantity: "1",
+            unit: "db",
+            lineNetAmount: "15000",
+          },
+        ],
+      },
+    });
+
+  // the NAV gives the same company both ways (staging, 2026-09-30: two
+  // Hanna invoices with 14116380, one with 14116380-2-06)
+  for (const taxNumber of ["14116380", "14116380-2-06"]) {
+    it(`selects the supplier by the tax base of ${taxNumber}`, async () => {
+      const { service, askedTaxBases } = buildService({
+        row: fetched(taxNumber),
+        suppliersByTaxBase: { "14116380": "supplier-hanna" },
+      });
+
+      const detail = await service.detail("nav-invoice-1");
+
+      assert.equal(detail.supplierId, "supplier-hanna");
+      assert.deepEqual(askedTaxBases, ["14116380"]);
+    });
+  }
+
+  it("leaves the supplier empty when no supplier has the tax base", async () => {
+    const { service } = buildService({
+      row: fetched("14116380-2-06"),
+      suppliersByTaxBase: { "87654321": "supplier-other" },
+    });
+
+    const detail = await service.detail("nav-invoice-1");
+
+    assert.equal(detail.supplierId, null);
+  });
+
+  it("does not look a supplier up for a tax number that is not Hungarian", async () => {
+    const { service, askedTaxBases } = buildService({
+      row: fetched("DE342032439"),
+    });
+
+    const detail = await service.detail("nav-invoice-1");
+
+    assert.equal(detail.supplierId, null);
+    assert.deepEqual(askedTaxBases, []);
+  });
+
+  it("resolves the supplier from the refreshed row after a fetch", async () => {
+    const { service, askedTaxBases } = buildService({
+      row: baseRow({ supplierTaxNumber: "87654321" }),
+      refreshedRow: fetched("14116380-2-06"),
+      suppliersByTaxBase: { "14116380": "supplier-hanna" },
+    });
+
+    const detail = await service.detail("nav-invoice-1");
+
+    assert.equal(detail.supplierId, "supplier-hanna");
+    assert.deepEqual(askedTaxBases, ["14116380"]);
   });
 });
 

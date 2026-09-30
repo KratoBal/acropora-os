@@ -12,6 +12,7 @@ import type {
 import type { NavInvoiceDigestItem } from "../../integrations/nav/nav-online-invoice.client.js";
 import type { NavIncomingInvoiceListQueryDto } from "./dto/nav-incoming-invoice-list-query.dto.js";
 import {
+  hungarianTaxBase,
   toNavIncomingInvoiceSummary,
   type NavIncomingInvoiceRow,
   type StoredNavInvoiceParsedData,
@@ -270,6 +271,24 @@ export class NavIncomingInvoiceRepository extends Repository {
   async findById(id: string): Promise<NavIncomingInvoiceRow | null> {
     const row = await prisma.navIncomingInvoice.findUnique({ where: { id } });
     return row as NavIncomingInvoiceRow | null;
+  }
+
+  /**
+   * The supplier whose tax number has this tax base (first 8 digits), when
+   * exactly one non-deleted supplier does. Every supplier is read and matched
+   * here, not in the query: the stored forms differ (`14116380`,
+   * `14116380-2-06`, `HU14116380`), and a prefix match in SQL would miss the
+   * community form. Two matches are no answer: the person picks.
+   */
+  async supplierIdByTaxBase(taxBase: string): Promise<string | null> {
+    const suppliers = await prisma.supplier.findMany({
+      where: { deletedAt: null, taxNumber: { not: null } },
+      select: { id: true, taxNumber: true },
+    });
+    const matches = suppliers.filter(
+      (supplier) => hungarianTaxBase(supplier.taxNumber) === taxBase,
+    );
+    return matches.length === 1 ? matches[0]!.id : null;
   }
 
   async saveParsedData(

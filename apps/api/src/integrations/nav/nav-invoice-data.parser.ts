@@ -26,6 +26,22 @@ export interface ParsedNavInvoiceLine {
   lineNetAmount: string;
   /** Az ÁFA-kulcs százalékban (pl. "27"), ha a NAV normál kulcsot adott vissza (nem mentesség/kívül eső). */
   vatRatePercent?: string;
+  /**
+   * A tétel termékkódjai, a fajtájukkal együtt, ahogy a számla hordozta
+   * (`productCodes`). Nincs, ha a tételen nem állt kód.
+   */
+  productCodes?: ParsedNavProductCode[];
+}
+
+/**
+ * Egy NAV termékkód (invoiceData.xsd `ProductCodeType`). A fajta a
+ * `ProductCodeCategoryType` értéke (VTSZ, SZJ, KN, AHK, CSK, KT, EJ, TESZOR,
+ * OWN, OTHER); az érték a `productCodeValue` vagy a saját kódnál a
+ * `productCodeOwnValue` - a séma a kettő közül pontosan egyet enged.
+ */
+export interface ParsedNavProductCode {
+  category: string;
+  value: string;
 }
 
 export interface ParsedNavInvoiceAddress {
@@ -152,6 +168,22 @@ const MAX_LINE_NUMBER = 2_147_483_647;
 ///
 /// Csak számjegy fogadható el: a `Number` a "1e2"-t 100-nak, a " 0x1f "-et
 /// 31-nek olvasná, és egyik sem sorszám.
+/// A tétel `productCodes/productCode` elemei (NAV Online Számla 3.0,
+/// invoiceData.xsd `ProductCodesType` és `ProductCodeType`). A fajta nélküli
+/// vagy érték nélküli kódot kihagyjuk: a séma szerint egyik sem hiányozhat,
+/// és egy fajta nélküli értékből nem tudnánk, mire való.
+function productCodesOf(node: XmlNode): ParsedNavProductCode[] | undefined {
+  const codes = children(child(node, "productCodes"), "productCode").flatMap(
+    (code) => {
+      const category = value(code, "productCodeCategory");
+      const codeValue =
+        value(code, "productCodeValue") ?? value(code, "productCodeOwnValue");
+      return category && codeValue ? [{ category, value: codeValue }] : [];
+    },
+  );
+  return codes.length > 0 ? codes : undefined;
+}
+
 function lineNumberOf(raw: string | undefined): number | null {
   const trimmed = raw?.trim();
   if (!trimmed || !/^\d+$/.test(trimmed)) return null;
@@ -174,6 +206,7 @@ function parseLine(node: XmlNode): ParsedNavInvoiceLine | null {
     value(node, "lineNetAmount");
   if (!description || !quantity || !netAmount) return null;
   const unitPrice = value(node, "unitPrice");
+  const productCodes = productCodesOf(node);
   return {
     lineNumber,
     description,
@@ -184,6 +217,9 @@ function parseLine(node: XmlNode): ParsedNavInvoiceLine | null {
     vatRatePercent: vatRatePercentFromNode(
       normalAmounts ?? child(node, "lineAmountsSimplified") ?? node,
     ),
+    // only when present: the stored lines of invoices without codes keep
+    // their shape
+    ...(productCodes ? { productCodes } : {}),
   };
 }
 

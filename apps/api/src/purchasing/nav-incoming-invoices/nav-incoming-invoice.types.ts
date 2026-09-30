@@ -5,7 +5,11 @@ import type {
   NavIncomingInvoiceSummary,
 } from "@acropora/types";
 
-import type { ParsedNavInvoiceData } from "../../integrations/nav/nav-invoice-data.parser.js";
+import type {
+  ParsedNavInvoiceData,
+  ParsedNavProductCode,
+} from "../../integrations/nav/nav-invoice-data.parser.js";
+import { eanCheckDigitValid } from "../../products/barcode.util.js";
 import { ervenyesSorszam } from "../nav-line-source.js";
 import { isChargeDescription } from "../supplier-invoice-import/supplier-invoice-import.common.js";
 
@@ -62,6 +66,51 @@ export function toNavIncomingInvoiceSummary(
   };
 }
 
+/**
+ * A tétel kódjaiból a javaslat két bemenete (supplierSku, ean).
+ *
+ * A NAV 3.0 séma (invoiceData.xsd `ProductCodeCategoryType`) EAN fajtát nem
+ * ismer. A szállító saját cikkszáma az `OWN` ("A vállalkozás által képzett
+ * termékkód"); EAN-t csak az `OTHER` ("Egyéb termékkód") hordozhat, ezért
+ * onnan is csak akkor vesszük, ha az ellenőrző számjegye stimmel - egy
+ * tetszőleges "egyéb" kódot nem nevezünk EAN-nek. A VTSZ, KN, TESZOR és a
+ * többi hatósági osztályozó kód termékcsaládot jelöl, nem terméket.
+ */
+function codeInputsOf(codes: readonly ParsedNavProductCode[] | undefined): {
+  supplierSku?: string;
+  ean?: string;
+} {
+  const supplierSku = codes?.find((code) => code.category === "OWN")?.value;
+  const ean = codes?.find(
+    (code) =>
+      code.category === "OTHER" && eanCheckDigitValid(code.value) === true,
+  )?.value;
+  return {
+    ...(supplierSku ? { supplierSku } : {}),
+    ...(ean ? { ean } : {}),
+  };
+}
+
+/**
+ * A magyar adószám törzsszáma (az első 8 jegy), vagy `null`.
+ *
+ * Ugyanaz a cég többféle alakban áll: a NAV hol csak a törzsszámot adja
+ * (`14116380`), hol a teljes adószámot (`14116380-2-06`), a szállítói
+ * törzsben pedig a közösségi alak is előfordulhat (`HU14116380`). Mindhárom
+ * `14116380`. Más ország adószáma nem magyar törzsszám: `null`.
+ */
+export function hungarianTaxBase(
+  raw: string | null | undefined,
+): string | null {
+  if (!raw) return null;
+  const compact = raw.replace(/[\s.-]/g, "").toUpperCase();
+  const digits = compact.startsWith("HU") ? compact.slice(2) : compact;
+  if (!/^\d+$/.test(digits)) return null;
+  return digits.length === 8 || digits.length === 11
+    ? digits.slice(0, 8)
+    : null;
+}
+
 export function toNavIncomingInvoiceDetail(
   row: NavIncomingInvoiceRow,
 ): NavIncomingInvoiceDetail {
@@ -94,6 +143,8 @@ export function toNavIncomingInvoiceDetail(
         mar eltarolt NAV szamlakra is all.
       */
       isCharge: isChargeDescription(line.description),
+      ...(line.productCodes ? { productCodes: line.productCodes } : {}),
+      ...codeInputsOf(line.productCodes),
     })),
   };
 }

@@ -313,7 +313,8 @@ export function PurchaseInvoiceEuEditorPage() {
 
   // NAV-alapú bevételezés előtöltése: a beszállító nevét/adószámát a
   // keresőmezőbe és a soron kívüli gyorslétrehozás mezőibe is betöltjük
-  // (a felhasználó választja ki a találatot vagy hozza létre egy
+  // (ha a törzsszám alapján egyértelmű, ki is választjuk; különben a
+  // felhasználó választja ki a találatot vagy hozza létre egy
   // kattintással), a tételeket pedig a NAV-on szereplő megnevezéssel,
   // mennyiséggel és egységárral - ezeket írja át a saját elnevezésére és a
   // ténylegesen átvett mennyiségre a bevételezés előtt.
@@ -328,7 +329,7 @@ export function PurchaseInvoiceEuEditorPage() {
     setNavPrefillError(null);
     void navIncomingInvoicesApi
       .detail(token, navInvoiceId)
-      .then((detail) => {
+      .then(async (detail) => {
         setNavPrefillNumber(detail.navInvoiceNumber);
         setSupplierInvoiceNumber(detail.navInvoiceNumber);
         setInvoiceDate(toDateInput(detail.invoiceIssueDate) || todayIso());
@@ -359,6 +360,10 @@ export function PurchaseInvoiceEuEditorPage() {
               productName: "",
               unit: line.unit,
               sourceDescription: line.description,
+              // a NAV tétel saját (OWN) kódja és az érvényes EAN: a javaslat
+              // ezekkel keres, ahogy a fájlból beolvasott számlán
+              supplierSku: line.supplierSku ?? null,
+              ean: line.ean ?? null,
               // a díjsor javaslatot nem kér, ahogy a fájlból beolvasott számlán
               isCharge: line.isCharge,
               navLineNumber: line.lineNumber,
@@ -370,6 +375,16 @@ export function PurchaseInvoiceEuEditorPage() {
             };
           }),
         );
+        // A szállító a törzsben, ha az adószám törzsszáma (első 8 jegy)
+        // pontosan egyre illik: kiválasztjuk, ahogy a levélből jött tételnél,
+        // és ezzel a sor-javaslatok is elindulnak. Ha nincs meg, marad a
+        // keresőmező és a gyorslétrehozás.
+        if (detail.supplierId) {
+          const supplier = await suppliersApi
+            .detail(token, detail.supplierId)
+            .catch(() => null);
+          if (supplier) setSelectedSupplier(supplier);
+        }
       })
       .catch((cause: unknown) =>
         setNavPrefillError(
