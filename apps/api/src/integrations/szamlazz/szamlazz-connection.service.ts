@@ -46,11 +46,15 @@ export class SzamlazzConnectionService {
    */
   async inspectStoredState(): Promise<SzamlazzStoredState> {
     const setting = await this.repository.getSetting();
-    if (!setting)
-      return {
-        kind: "credential-corrupt",
-        code: "SZAMLAZZ_CONNECTION_CONFIGURATION_MISSING",
-      };
+    /*
+      A HIANYZO SOR "MEG NINCS BEALLITVA", NEM SERULES. A Medusanal a sort egy
+      migracio hozza letre, ott a hianya valoban hiba; a Szamlazz.hu sorat
+      viszont CSAK a Beallitasok oldal elso mentese irja. Eddig ez az ag
+      "serult hitelesito adat" ERROR-t naplozott minden eles indulaskor
+      (2026-09-30, 0a082740), holott a kulcsot egyszerusen meg soha nem
+      allitottak be.
+    */
+    if (!setting) return { kind: "not-configured" };
 
     try {
       this.credentials.validateRecord(setting);
