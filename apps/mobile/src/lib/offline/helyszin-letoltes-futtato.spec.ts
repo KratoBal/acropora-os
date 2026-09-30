@@ -238,6 +238,38 @@ describe("a helyszín letöltésének menete", () => {
     );
   });
 
+  /**
+   * A HIBA SZOVEGE IS A KEPERNYORE KERUL (acrobot kerdese, 2026-09-30): egy
+   * kepernyokep igy megmondja, melyik ok all, nem csak azt, hogy van.
+   *
+   * MI PIROSIT: ha a zaro sorok kozott nem all ott az ELSO mentesi hiba
+   * szovege, vagy ha hiba nelkul is megjelenik a sor.
+   */
+  it("az első mentési hiba szövege a záró sorok végére kerül", async () => {
+    const eredmeny = await futtat({
+      eszkozokMentese: async () => {
+        throw new Error("duplicate column name:\n  depends_on_operation_id");
+      },
+      munkalapMentese: async () => {
+        throw new Error("masodik hiba");
+      },
+    });
+    assert.equal(
+      eredmeny.sorok.at(-1),
+      "Az első mentési hiba: duplicate column name: depends_on_operation_id",
+    );
+    assert.equal(
+      eredmeny.sorok.filter((sor) => sor.startsWith("Az első mentési hiba"))
+        .length,
+      1,
+    );
+    const hibatlan = await futtat();
+    assert.equal(
+      hibatlan.sorok.some((sor) => sor.startsWith("Az első mentési hiba")),
+      false,
+    );
+  });
+
   it("a bukott adatlap-mentés nem számít letöltött eszköznek", async () => {
     const eredmeny = await futtat({
       eszkozReszletMentese: async (detail) => {
