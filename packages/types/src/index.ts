@@ -865,4 +865,22 @@ export type {
   PendingMaterialRequestListResponse,
 } from "./material-request-management.js";
 export { ACROPORA_COMPANY } from "./company.js";
-export type { BankStatementImportResult } from "./missing-invoices.js";
+export {
+  MISSING_INVOICE_CATEGORIES,
+  MISSING_INVOICE_ITEM_STATES,
+  MISSING_INVOICE_MONTH_STATUSES,
+  MISSING_INVOICE_TABS,
+} from "./missing-invoices.js";
+export type {
+  BankStatementImportResult,
+  MissingInvoiceCategory,
+  MissingInvoiceDocumentSource,
+  MissingInvoiceItem,
+  MissingInvoiceItemState,
+  MissingInvoiceMonth,
+  MissingInvoiceMonthDetail,
+  MissingInvoiceMonthQuery,
+  MissingInvoiceMonthStatus,
+  MissingInvoiceMonthsResponse,
+  MissingInvoiceTab,
+} from "./missing-invoices.js";

@@ -6985,6 +6985,10 @@ model IncomingSupplierDocument {
   /// Soronként a sor-javaslat (P-026), érkezéskor számolva, ha a beszállító ismert.
   lineSuggestions   Json?
   expectedArrivalId String?
+  /// Kinek szól a számla (Hiányzó számlák): COMPANY, NOT_COMPANY vagy UNKNOWN,
+  /// a szövegben álló adószám-törzsszám alapján. Az első párosításkor
+  /// számolódik és tárolódik; NULL, amíg senki nem kérdezte.
+  payeeCheck        String?
   createdAt         DateTime                       @default(now())
 
   expectedArrival ExpectedArrival? @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
