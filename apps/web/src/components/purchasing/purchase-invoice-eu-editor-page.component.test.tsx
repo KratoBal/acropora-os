@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type {
   NavIncomingInvoiceDetail,
   Session,
@@ -8,7 +14,11 @@ import type {
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PurchaseInvoiceEuEditorPage } from "./purchase-invoice-eu-editor-page";
+import {
+  lineState,
+  PurchaseInvoiceEuEditorPage,
+  submitSummary,
+} from "./purchase-invoice-eu-editor-page";
 
 const navigation = vi.hoisted(() => ({
   params: new URLSearchParams("navInvoiceId=nav-invoice-1"),
@@ -51,6 +61,11 @@ const viesApi = vi.hoisted(() => ({
 
 const auth = vi.hoisted(() => ({
   session: null as Session | null,
+}));
+
+// a lap a Direction F óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -1002,6 +1017,40 @@ describe("PurchaseInvoiceEuEditorPage sor-javaslat", () => {
     );
   });
 
+  /*
+    DIRECTION F (Beszerzés-brief, 2026-09-30, 14., 15. és 18. pont). MI
+    PIROSÍT: ha a javaslatos sor nem kapja a meleg ellenőrzendő állapotot, ha
+    elfogadás után is ellenőrzendőnek látszik, ha a projektfoglalás sávja nem
+    a valós szabad készletet mondja, vagy ha az alsó összegző nem a valós
+    sorokat számolja.
+  */
+  it("a suggested line is marked for review, and after accepting it is linked", async () => {
+    purchasingApiMock.suggestLine.mockResolvedValue(suggested({}));
+    await importAndPickSupplier();
+    await screen.findByText(/Javaslat \(beszállítói leképezés\):/);
+    const line = () =>
+      screen
+        .getByText("Beszállítói cikkszám: 81593")
+        .closest("[data-line-state]") as HTMLElement;
+    expect(line().getAttribute("data-line-state")).toBe("suggested");
+    expect(
+      within(line()).getByText("Javaslat ellenőrzendő"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Elfogadom" }));
+    expect(line().getAttribute("data-line-state")).toBe("matched");
+    expect(within(line()).queryByText("Javaslat ellenőrzendő")).toBeNull();
+    expect(within(line()).getByText("Termékhez kötve")).toBeInTheDocument();
+    // a kötött sor foglalás-sávja a valós szabad készletet mondja
+    expect(
+      within(line()).getByText("Nincs projektfoglalás · szabad készlet: 3 db"),
+    ).toBeInTheDocument();
+    // az összegző a valós sorokból: két számlasor, nincs helyi, nincs foglalás
+    expect(
+      screen.getByText("2 számlasor · 0 helyi termék · 0 projektfoglalás"),
+    ).toBeInTheDocument();
+  });
+
   it("accepting fills the line's product, and the save carries the run", async () => {
     purchasingApiMock.suggestLine.mockResolvedValue(suggested({}));
     await importAndPickSupplier();
@@ -1251,5 +1300,60 @@ describe("PurchaseInvoiceEuEditorPage várható beérkezésből", () => {
       screen.getByText(/csak a proforma érkezett meg/),
     ).toBeInTheDocument();
     expect(screen.queryByText("Várható beérkezésből előtöltve")).toBeNull();
+  });
+});
+
+describe("the editor's line state and summary", () => {
+  const line = (overrides: Record<string, unknown> = {}) =>
+    ({
+      variantId: null,
+      createLocalProduct: null,
+      projectAllocations: [],
+      ...overrides,
+    }) as unknown as Parameters<typeof lineState>[0] &
+      Parameters<typeof submitSummary>[0][number];
+
+  it("names the four states, a conflict or a dismissed suggestion is not a suggestion", () => {
+    const suggestion = {
+      enabled: true,
+      decisionRunId: "r",
+      suggestion: {
+        source: "MAPPING" as const,
+        variantId: "v",
+        sku: "S",
+        productName: "P",
+        confidence: null,
+      },
+      conflict: false,
+      blocked: false,
+    };
+    expect(lineState(line({ variantId: "v" }), undefined)).toBe("matched");
+    expect(
+      lineState(line({ createLocalProduct: { name: "x" } }), suggestion),
+    ).toBe("local");
+    expect(lineState(line(), suggestion)).toBe("suggested");
+    expect(lineState(line(), { ...suggestion, dismissed: true })).toBe(
+      "unlinked",
+    );
+    expect(lineState(line(), { ...suggestion, conflict: true })).toBe(
+      "unlinked",
+    );
+    expect(lineState(line(), undefined)).toBe("unlinked");
+  });
+
+  it("counts lines, local products and real reservations only", () => {
+    expect(submitSummary([])).toBe("Még nincs számlasor");
+    expect(
+      submitSummary([
+        line({
+          projectAllocations: [
+            { key: "a", projectId: "p1", quantity: 2 },
+            { key: "b", projectId: "", quantity: 1 },
+            { key: "c", projectId: "p2", quantity: 0 },
+          ],
+        }),
+        line({ createLocalProduct: { name: "x" } }),
+      ]),
+    ).toBe("2 számlasor · 1 helyi termék · 1 projektfoglalás");
   });
 });
