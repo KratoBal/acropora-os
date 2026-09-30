@@ -86,6 +86,9 @@ export class CreatePurchaseInvoiceDto {
   // Ha a számla egy NAV-ból lekérdezett belföldi bejövő számla
   // bevételezéseként jön létre - lásd NavIncomingInvoiceService.detail().
   @IsString() @IsOptional() navIncomingInvoiceId?: string;
+  // Ha a számla egy várható beérkezés (info@ postafiókból jött számla)
+  // bevételezése - lásd ExpectedArrivalService.
+  @IsString() @IsOptional() expectedArrivalId?: string;
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
