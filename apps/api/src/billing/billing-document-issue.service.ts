@@ -33,6 +33,7 @@ import {
   BillingDocumentAdapterError,
   toSzamlazzAgentInput,
 } from "./billing-document-szamlazz.adapter.js";
+import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { toBillingDocumentDetail } from "./billing-documents.service.js";
 import { billingIssueEnabled } from "./billing-issue.config.js";
@@ -82,6 +83,7 @@ export class BillingDocumentIssueService {
     private readonly repository: BillingDocumentIssueRepository,
     private readonly credentials: SzamlazzCredentialProvider,
     @Inject(DOCUMENT_STORE) private readonly documentStore: DocumentStore,
+    private readonly stock: BillingDocumentStockRepository,
     @Optional()
     @Inject(BILLING_SZAMLAZZ_CLIENT)
     private readonly client: SzamlazzAgentClient = new HttpSzamlazzAgentClient(),
@@ -102,8 +104,9 @@ export class BillingDocumentIssueService {
 
     const row = await this.documents.find(id);
     if (!row) throw new NotFoundException("A bizonylat nem található.");
-    // a sikeres kiállítás utáni második kattintás a kiállított bizonylatot kapja
-    if (row.status === "ISSUED") return toBillingDocumentDetail(row);
+    // a sikeres kiállítás utáni második kattintás a kiállított bizonylatot
+    // kapja; ha a készletkönyvelése elmaradt, most pótolja (idempotensen)
+    if (row.status === "ISSUED") return this.withStock(id, user);
     if (row.status === "ISSUING")
       throw new ConflictException(
         "Ennek a bizonylatnak a kiállítása már elindult, és ellenőrzésre vár: nézd meg a Számlázz.hu-n, mielőtt bármit újra próbálsz.",
@@ -253,6 +256,29 @@ export class BillingDocumentIssueService {
       }
     }
 
+    return this.withStock(id, user);
+  }
+
+  /**
+   * A KÉSZLETKÖNYVELÉS A KIÁLLÍTÁS UTÁN, SAJÁT TRANZAKCIÓBAN. Nem a kiállítás
+   * tranzakciójában: egy készlet-oldali hiba nem veheti el a Számlázz.hu-n már
+   * létező bizonylat rögzítését. Ha elbukik, a hiba naplóba kerül, és a
+   * következő kiállítás-kattintás (ami a kiállított bizonylatot adja vissza)
+   * újra megpróbálja; az idempotencia-kulcs miatt ez sosem von le kétszer.
+   */
+  private async withStock(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<BillingDocumentDetail> {
+    try {
+      await this.stock.postIssuedInvoice(id, user.id);
+    } catch (error) {
+      this.logger.error(
+        `A(z) ${id} bizonylat készletkönyvelése nem sikerült: ${
+          error instanceof Error ? error.message : "ismeretlen hiba"
+        }`,
+      );
+    }
     const issued = await this.documents.find(id);
     if (!issued) throw new NotFoundException("A bizonylat nem található.");
     return toBillingDocumentDetail(issued);

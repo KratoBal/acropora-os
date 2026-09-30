@@ -104,6 +104,7 @@ export function BillingDocumentEmailDrawer({
   grossLabel,
   meta,
   known,
+  submit,
 }: {
   open: boolean;
   onClose: () => void;
@@ -115,6 +116,17 @@ export function BillingDocumentEmailDrawer({
   grossLabel: string;
   meta: string;
   known: Record<string, string>;
+  /**
+   * A KÜLDÉS, ha már bekötött (a részletek oldalán: kiküldés, hiba utáni
+   * újrapróbálás, kifejezett újraküldés). Nélküle a végső gomb tiltott, és a
+   * fiók a kiállítás előtti szerkesztésre szolgál.
+   */
+  submit?: {
+    label: string;
+    onSubmit: () => void;
+    busy: boolean;
+    error: string | null;
+  };
 }) {
   const [showCopies, setShowCopies] = useState(
     draft.cc !== "" || draft.bcc !== "",
@@ -142,22 +154,47 @@ export function BillingDocumentEmailDrawer({
       subtitle="A levél a bizonylat végleges kiállítása előtt szerkeszthető."
       footer={
         <div className="space-y-3">
-          <p className="text-xs text-pilot-grey-500">
-            A kiállítás elküldi az adatokat a Számlázz.hu-nak, majd siker esetén
-            az értesítő levelet. A kiküldés a Számlázz.hu bekötésével érkezik.
-          </p>
+          {submit ? (
+            <>
+              <p className="text-xs text-pilot-grey-500">
+                A levél újraküldése nem állít ki új bizonylatot.
+              </p>
+              {submit.error ? (
+                <p role="alert" className="text-xs text-pilot-red-700">
+                  {submit.error}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-xs text-pilot-grey-500">
+              A kiállítás elküldi az adatokat a Számlázz.hu-nak, majd siker
+              esetén az értesítő levelet. A kiküldés a Számlázz.hu bekötésével
+              érkezik.
+            </p>
+          )}
           <div className="flex gap-2">
             <PilotButton variant="secondary" size="regular" onClick={onClose}>
               Mégse
             </PilotButton>
-            <PilotButton
-              variant="primary"
-              size="regular"
-              disabled
-              title="A kiküldés a Számlázz.hu bekötésével érkezik."
-            >
-              {billingDrawerCta(documentType, format)}
-            </PilotButton>
+            {submit ? (
+              <PilotButton
+                variant="primary"
+                size="regular"
+                disabled={submit.busy || !draft.to.trim()}
+                onClick={submit.onSubmit}
+              >
+                {submit.busy ? "Küldés…" : submit.label}
+              </PilotButton>
+            ) : (
+              <PilotButton
+                variant="primary"
+                size="regular"
+                disabled
+                title="A kiküldés a Számlázz.hu bekötésével érkezik."
+              >
+                {billingDrawerCta(documentType, format)}
+              </PilotButton>
+            )}
           </div>
         </div>
       }
@@ -179,13 +216,15 @@ export function BillingDocumentEmailDrawer({
           </p>
           <p className="mt-1 text-xs text-pilot-grey-600">{meta}</p>
         </div>
-        <div className="rounded-xl border border-pilot-accent-warm bg-pilot-accent-warm-soft px-4 py-3 text-xs text-pilot-accent-warm-text">
-          <p className="font-semibold">A bizonylat száma még nem ismert</p>
-          <p className="mt-1">
-            A {"{document_number}"} változó a sikeres Számlázz.hu kiállítás után
-            helyettesítődik be.
-          </p>
-        </div>
+        {submit ? null : (
+          <div className="rounded-xl border border-pilot-accent-warm bg-pilot-accent-warm-soft px-4 py-3 text-xs text-pilot-accent-warm-text">
+            <p className="font-semibold">A bizonylat száma még nem ismert</p>
+            <p className="mt-1">
+              A {"{document_number}"} változó a sikeres Számlázz.hu kiállítás
+              után helyettesítődik be.
+            </p>
+          </div>
+        )}
         <PilotFormField label="Címzett">
           <PilotInput
             aria-label="Címzett"

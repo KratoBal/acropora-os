@@ -12,6 +12,7 @@ import type {
 } from "./billing-document-amounts.js";
 import type {
   BillingCustomerSource,
+  BillingLineStockOutcome,
   BillingDocumentDeliveryInfo,
   BillingDocumentPdfInfo,
   BillingDocumentSzamlazzInfo,
@@ -98,6 +99,11 @@ export interface BillingDocumentLine extends BillingAmounts {
   vatRatePercent: DecimalText;
   discountPercent: DecimalText | null;
   comment: string | null;
+  /**
+   * A kiállításkori készlethatás (nautilus). Vázlatnál és a modul előtti
+   * soroknál `null`; választható, mert a vázlat-végpont nem tölti ki.
+   */
+  stockOutcome?: BillingLineStockOutcome | null;
 }
 
 export interface BillingDocumentDetail {

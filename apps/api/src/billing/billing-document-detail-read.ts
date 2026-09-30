@@ -9,6 +9,7 @@ import {
   type BillingDocumentType,
   type BillingEmailRecipients,
   type BillingEmailStatus,
+  type BillingLineStockOutcome,
   type BillingVatRateTotal,
   type InvoiceFormat,
 } from "@acropora/types";
@@ -60,6 +61,12 @@ export function withIssueAndDelivery(
         }
       : base.customer,
     issueDate: budapestDay(row.issueDate),
+    lines: base.lines.map((line) => ({
+      ...line,
+      stockOutcome:
+        (row.lines.find((stored) => stored.id === line.id)?.stockOutcome as
+          BillingLineStockOutcome | null | undefined) ?? null,
+    })),
     totals: printedTotals(row, base.totals),
     szamlazz: {
       documentNumber: row.invoiceNumber,

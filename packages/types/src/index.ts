@@ -75,6 +75,7 @@ export {
   BILLING_DELIVERY_OUTCOMES,
   BILLING_DOCUMENT_LIST_PAGE_SIZE,
   BILLING_EMAIL_MODES,
+  BILLING_LINE_STOCK_OUTCOMES,
   billingEmailModeFor,
 } from "./billing-document-read.js";
 export type {
@@ -90,6 +91,7 @@ export type {
   BillingDocumentSzamlazzInfo,
   BillingEmailMode,
   BillingEmailRecipients,
+  BillingLineStockOutcome,
 } from "./billing-document-read.js";
 export { billingProductPrice } from "./billing-product-price.js";
 export type { BillingProductPrice } from "./billing-product-price.js";
