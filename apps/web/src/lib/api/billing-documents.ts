@@ -1,16 +1,50 @@
 import type {
   BillingDocumentDetail,
   BillingDocumentDraftInput,
+  BillingDocumentListResponse,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { ApiError, apiAuthHeaders, apiRequest } from "./client";
 
-/**
- * A SZÁMLÁZÁSI VÁZLAT VÉGPONTJAI (Számlázás v0.1). A kiállítás és a kiküldés
- * (`:id/issue`, `:id/email`) a Számlázz.hu adapterrel érkezik; addig a
- * felület a két véglegesítő gombot tiltva mutatja.
- */
 export const billingDocumentsApi = {
+  list(token: string, query: URLSearchParams, signal?: AbortSignal) {
+    return apiRequest<BillingDocumentListResponse>(
+      `/billing/documents?${query}`,
+      token,
+      { signal },
+    );
+  },
+  /**
+   * A HIVATALOS PDF, ahogy a Számlázz.hu visszaadta és eltároltuk. A szerver
+   * soha nem gyárt "hasonló" PDF-et; vázlatnál és PDF nélkül 409-et ad.
+   */
+  async pdf(token: string, id: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}/billing/documents/${encodeURIComponent(id)}/pdf`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok) {
+      // A 409 MONDATA KIÍRHATÓ (nautilus #1283: vázlat, vagy nincs PDF), ezért
+      // a szerver szövege megy tovább, nem egy általános hiba.
+      let message: string | undefined;
+      try {
+        const payload = (await response.json()) as {
+          message?: string | string[];
+        };
+        message = Array.isArray(payload.message)
+          ? payload.message.join("\n")
+          : payload.message;
+      } catch {
+        message = undefined;
+      }
+      throw new ApiError(
+        message ?? "A bizonylat PDF-je nem tölthető le.",
+        response.status,
+      );
+    }
+    return response.blob();
+  },
   detail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<BillingDocumentDetail>(
       `/billing/documents/${encodeURIComponent(id)}`,

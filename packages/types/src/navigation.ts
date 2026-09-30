@@ -287,6 +287,16 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * SZÁMLÁZÁS (Balázs briefje, 2026-09-30): a bizonylatok listája, a négy
+     * típussal. A menüpont annak látszik, aki a listát láthatja (`billing.view`);
+     * az Új számla gomb a listán a `billing.create`-hez kötött.
+     */
+    id: "billing",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.BILLING_VIEW),
+  },
+  {
+    /**
      * ELSZÁMOLÁSOK (Balázs, 2026-09-30 15:06 UTC): egy menüpont a Pénzügy
      * alatt, fülekkel a Foxpost, a GLS és a SimplePay elszámolásra. A menüpont
      * annak látszik, akinek legalább egy fülhöz van joga; ma mindhárom
