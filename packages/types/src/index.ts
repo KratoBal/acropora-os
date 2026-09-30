@@ -588,6 +588,18 @@ export type {
   GlsSyncState,
   GlsSyncStatus,
 } from "./integrations/gls-settlement.js";
+export type {
+  SimplePayLineError,
+  SimplePayLineStatus,
+  SimplePayManualApprovalInput,
+  SimplePayReportDetail,
+  SimplePayReportListResponse,
+  SimplePayReportStatus,
+  SimplePayReportSummary,
+  SimplePayReportUploadResult,
+  SimplePayResolutionSource,
+  SimplePayTransactionLine,
+} from "./integrations/simplepay-settlement.js";
 export {
   AI_ACCURACY_RATINGS,
   AI_LANGUAGE_RATINGS,
