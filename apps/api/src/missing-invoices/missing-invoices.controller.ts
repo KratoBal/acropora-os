@@ -1,9 +1,13 @@
 import {
   BadRequestException,
+  Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseInterceptors,
@@ -15,6 +19,12 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { BankStatementImportService } from "./bank-statement-import.service.js";
+import {
+  MissingInvoiceCategoryDto,
+  MissingInvoiceCommentDto,
+  MissingInvoiceMatchDto,
+  MissingInvoicePaperOriginalDto,
+} from "./missing-invoice-decision.dto.js";
 import { MissingInvoiceMonthQueryDto } from "./missing-invoice-month-query.dto.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
 
@@ -47,6 +57,59 @@ export class MissingInvoicesController {
     if (!/^\d{4}-\d{2}$/.test(month))
       throw new BadRequestException("A hónap alakja ÉÉÉÉ-HH.");
     return this.missing.month(month, query);
+  }
+
+  @Get("items/:id")
+  @RequirePermissions(PERMISSIONS.FINANCE_VIEW)
+  item(@Param("id") id: string) {
+    return this.missing.item(id);
+  }
+
+  @Post("items/:id/match")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  pair(
+    @Param("id") id: string,
+    @Body() input: MissingInvoiceMatchDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.missing.pair(id, input.documentId, user);
+  }
+
+  @Delete("items/:id/match")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  unpair(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.missing.unpair(id, user);
+  }
+
+  @Put("items/:id/comment")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  comment(
+    @Param("id") id: string,
+    @Body() input: MissingInvoiceCommentDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.missing.comment(id, input.comment, user);
+  }
+
+  @Put("items/:id/category")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  recategorize(
+    @Param("id") id: string,
+    @Body() input: MissingInvoiceCategoryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.missing.recategorize(id, input.category, user);
+  }
+
+  @Put("items/:id/paper-original")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  paperOriginal(
+    @Param("id") id: string,
+    @Body() input: MissingInvoicePaperOriginalDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.missing.paperOriginal(id, input.marked, user);
   }
 
   @Post("bank-statements")

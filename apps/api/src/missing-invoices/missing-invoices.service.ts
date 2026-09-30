@@ -1,7 +1,18 @@
-import { Injectable, Logger } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import {
   ACROPORA_COMPANY,
+  type AuthenticatedUser,
+  type MissingInvoiceAction,
+  type MissingInvoiceItemDetail,
   type MissingInvoiceItem,
   type MissingInvoiceMonth,
   type MissingInvoiceMonthDetail,
@@ -10,13 +21,16 @@ import {
   type MissingInvoiceMonthStatus,
 } from "@acropora/types";
 
+import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import {
   classifyTransaction,
   payrollNamesOf,
+  type BankCategory,
 } from "./bank-transaction.classify.js";
 import {
   matchMonth,
+  type CandidateDocument,
   type ItemState,
   type MatchOutcome,
 } from "./missing-invoice-matching.js";
@@ -28,6 +42,9 @@ import { originalAmountOf } from "./otp-statement.parser.js";
 import { payeeFromText } from "./payee-check.js";
 
 /** A „Hiányzik” fül és a Hiányos hónap: minden, amihez teendő van. */
+/** A környezet (a Drive-mappa hivatkozása); a teszt ezen át adja. */
+export const MISSING_INVOICES_ENV = Symbol("MISSING_INVOICES_ENV");
+
 const MISSING_STATES: ReadonlySet<ItemState> = new Set([
   "ORIGINAL_MISSING",
   "NOT_MATCHED",
@@ -62,6 +79,8 @@ interface Computed {
     currency: string;
   }[];
   coverage: Set<string>;
+  outcomes: Map<string, MatchOutcome>;
+  documents: CandidateDocument[];
 }
 
 /**
@@ -77,7 +96,12 @@ interface Computed {
 export class MissingInvoicesService {
   private readonly logger = new Logger(MissingInvoicesService.name);
 
-  constructor(private readonly repository: MissingInvoicesRepository) {}
+  constructor(
+    private readonly repository: MissingInvoicesRepository,
+    @Optional()
+    @Inject(MISSING_INVOICES_ENV)
+    private readonly environment: NodeJS.ProcessEnv = process.env,
+  ) {}
 
   async months(): Promise<MissingInvoiceMonthsResponse> {
     const computed = await this.compute();
@@ -191,6 +215,128 @@ export class MissingInvoicesService {
     };
   }
 
+  async item(id: string): Promise<MissingInvoiceItemDetail> {
+    const computed = await this.compute();
+    const found = computed.items.find((item) => item.id === id);
+    if (!found) throw new NotFoundException("A banki terhelés nem található.");
+    const { month: _month, accountId: _accountId, ...item } = found;
+    const outcome = computed.outcomes.get(id);
+    return {
+      ...item,
+      candidates: (outcome?.candidates ?? []).map((d) => ({
+        documentId: d.id,
+        number: d.number,
+        date: d.date,
+        gross:
+          d.gross === null
+            ? null
+            : d.gross.toFixed(d.currency === "HUF" ? 0 : 2),
+        currency: d.currency,
+        source: d.source,
+        payee: d.payee,
+        hasOriginal: d.hasOriginal,
+      })),
+      action: ACTION[item.state],
+      driveFolderUrl: httpsOrNull(
+        this.environment.MISSING_INVOICES_DRIVE_FOLDER_URL,
+      ),
+    };
+  }
+
+  /**
+   * KÉZI PÁROSÍTÁS (brief 12): a dokumentum a jelöltek bármelyike lehet (egy
+   * összevont számla bármelyik azonosítójával), és egy dokumentum csak egy
+   * terheléshez párosítható kézzel.
+   */
+  async pair(
+    id: string,
+    documentId: string,
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceItemDetail> {
+    const computed = await this.compute();
+    if (!computed.items.some((item) => item.id === id))
+      throw new NotFoundException("A banki terhelés nem található.");
+    const document = computed.documents.find(
+      (d) => d.id === documentId || d.aliasIds?.includes(documentId),
+    );
+    if (!document)
+      throw new BadRequestException("Ilyen számla nincs a jelöltek között.");
+    try {
+      await this.repository.pair({
+        bankTransactionId: id,
+        documentId: document.id,
+        documentSource: document.source,
+        userId: user.id,
+      });
+    } catch (error) {
+      if (isPrismaUniqueConstraintViolation(error, "documentSource"))
+        throw new ConflictException(
+          "Ezt a számlát már egy másik terheléshez párosították kézzel.",
+        );
+      throw error;
+    }
+    return this.item(id);
+  }
+
+  async unpair(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceItemDetail> {
+    const manual = (await this.repository.manualMatches()).get(id) ?? [];
+    if (manual.length > 0) await this.repository.unpair(id, user.id, manual);
+    return this.item(id);
+  }
+
+  async comment(
+    id: string,
+    comment: string | null,
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceItemDetail> {
+    const text = comment?.trim() || null;
+    await this.repository.annotate(
+      id,
+      user.id,
+      "missing-invoices.commented",
+      { comment: text },
+      { comment: text },
+    );
+    return this.item(id);
+  }
+
+  async recategorize(
+    id: string,
+    category: string | null,
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceItemDetail> {
+    await this.repository.annotate(
+      id,
+      user.id,
+      "missing-invoices.recategorized",
+      { categoryOverride: category },
+      { category },
+    );
+    return this.item(id);
+  }
+
+  async paperOriginal(
+    id: string,
+    marked: boolean,
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceItemDetail> {
+    await this.repository.annotate(
+      id,
+      user.id,
+      marked
+        ? "missing-invoices.paper-original-marked"
+        : "missing-invoices.paper-original-cleared",
+      marked
+        ? { paperOriginalAt: new Date(), paperOriginalByUserId: user.id }
+        : { paperOriginalAt: null, paperOriginalByUserId: null },
+      { marked },
+    );
+    return this.item(id);
+  }
+
   private missingStatementAccounts(
     computed: Computed,
     month: string,
@@ -201,10 +347,11 @@ export class MissingInvoicesService {
   }
 
   private async compute(): Promise<Computed> {
-    const [accountRows, debits, coverage] = await Promise.all([
+    const [accountRows, debits, coverage, manual] = await Promise.all([
       this.repository.accounts(),
       this.repository.debits(),
       this.repository.statementCoverage(),
+      this.repository.manualMatches(),
     ]);
     const accounts = accountRows.map((account) => ({
       id: account.id,
@@ -213,7 +360,14 @@ export class MissingInvoicesService {
       currency: account.currency,
     }));
     if (debits.length === 0)
-      return { items: [], months: [], accounts, coverage };
+      return {
+        items: [],
+        months: [],
+        accounts,
+        coverage,
+        outcomes: new Map(),
+        documents: [],
+      };
 
     const first = monthOf(debits[0]!.bookingDate);
     const last = monthOf(debits[debits.length - 1]!.bookingDate);
@@ -232,11 +386,21 @@ export class MissingInvoicesService {
       accountRows.map((a) => normalizeAccount(a.accountNumber)),
     );
     const payrollNames = payrollNamesOf(debits);
-    const classified = debits.map((debit) => ({
-      debit,
-      classification: classifyTransaction(debit, { ownAccounts, payrollNames }),
-      original: originalAmountOf(debit.narrative),
-    }));
+    const classified = debits.map((debit) => {
+      const ruled = classifyTransaction(debit, { ownAccounts, payrollNames });
+      // a kézi átsorolás a szabály fölött áll; a szabály mondata megmarad
+      const classification = debit.categoryOverride
+        ? {
+            category: debit.categoryOverride as BankCategory,
+            rule: `kézzel átsorolva (a szabály szerint: ${ruled.rule})`,
+          }
+        : ruled;
+      return {
+        debit,
+        classification,
+        original: originalAmountOf(debit.narrative),
+      };
+    });
     const outcomes = matchMonth({
       debits: classified.map(({ debit, classification, original }) => ({
         id: debit.id,
@@ -250,7 +414,10 @@ export class MissingInvoicesService {
         category: classification.category,
       })),
       documents,
-      manual: new Map(),
+      manual,
+      paperOriginals: new Set(
+        debits.filter((d) => d.paperOriginalAt).map((d) => d.id),
+      ),
     });
 
     const accountName = new Map(accounts.map((a) => [a.id, a.name]));
@@ -275,7 +442,7 @@ export class MissingInvoicesService {
           : null,
         category: classification.category,
         categoryRule: classification.rule,
-        categoryOverridden: false,
+        categoryOverridden: debit.categoryOverride !== null,
         state: outcome.state,
         document: document
           ? {
@@ -285,10 +452,11 @@ export class MissingInvoicesService {
             }
           : null,
         matchedBy: outcome.matchedBy,
-        comment: null,
+        comment: debit.comment,
+        paperOriginal: debit.paperOriginalAt !== null,
       };
     });
-    return { items, months, accounts, coverage };
+    return { items, months, accounts, coverage, outcomes, documents };
   }
 
   /**
@@ -326,4 +494,26 @@ function statusOf(
     return "STATEMENT_MISSING";
   if (missingStatementCount > 0) return "STATEMENT_PARTIAL";
   return missingItems > 0 ? "INCOMPLETE" : "READY";
+}
+
+/** A „Mit kell tenni” kulcsa állapotonként. */
+const ACTION: Record<ItemState, MissingInvoiceAction> = {
+  FOUND: "NONE",
+  ORIGINAL_MISSING: "PROVIDE_ORIGINAL",
+  NOT_MATCHED: "PAIR_OR_UPLOAD",
+  NO_INVOICE: "REQUEST_INVOICE",
+  NOT_COMPANY: "REQUEST_REISSUE_TO_COMPANY",
+  PROFORMA_ONLY: "REQUEST_FINAL_INVOICE",
+  NO_INVOICE_NEEDED: "NONE",
+};
+
+/** A Drive-mappa hivatkozása csak https alakban; fiktív link nem lehet (brief 11). */
+function httpsOrNull(value: string | undefined): string | null {
+  const text = value?.trim();
+  if (!text) return null;
+  try {
+    return new URL(text).protocol === "https:" ? text : null;
+  } catch {
+    return null;
+  }
 }

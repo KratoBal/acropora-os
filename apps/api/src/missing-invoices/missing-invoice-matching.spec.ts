@@ -198,6 +198,24 @@ describe("matchMonth", () => {
     );
   });
 
+  it("takes the paper original as the original, and a manual pairing by any id of a merged invoice", () => {
+    const d = debit({});
+    const nav = doc({ hasOriginal: false, aliasIds: ["pdf-1"] });
+    const paper = matchMonth({
+      debits: [d],
+      documents: [nav],
+      manual: new Map(),
+      paperOriginals: new Set([d.id]),
+    });
+    assert.equal(paper.get(d.id)?.state, "FOUND");
+    const e = debit({ amount: D(1) });
+    const byAlias = run([e], [nav], new Map([[e.id, ["pdf-1"]]]));
+    assert.deepEqual(
+      [byAlias.get(e.id)?.matchedBy, byAlias.get(e.id)?.documents[0]?.id],
+      ["MANUAL", nav.id],
+    );
+  });
+
   it("tells no invoice from an unmatched one by whether the partner has documents", () => {
     const d = debit({ amount: D(777) });
     const e = debit({ amount: D(777), counterpartyName: "Ismeretlen Bt." });

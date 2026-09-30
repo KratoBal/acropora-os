@@ -34,6 +34,9 @@ const debit = (date: string, amount: number, name: string, overrides = {}) => ({
   counterpartyName: name,
   narrative: "",
   transactionType: "ÁTUTALÁS",
+  comment: null,
+  categoryOverride: null,
+  paperOriginalAt: null,
   ...overrides,
 });
 
@@ -48,6 +51,7 @@ function service(input: {
     accounts: async () => [MAIN, CARD],
     debits: async () => input.debits,
     statementCoverage: async () => new Set(input.coverage),
+    manualMatches: async () => new Map(),
     candidates: async () => input.documents ?? [],
     uncheckedMailboxContent: async () => input.mailbox ?? [],
     setPayee: async (id: string, payee: string) =>

@@ -866,6 +866,7 @@ export type {
 } from "./material-request-management.js";
 export { ACROPORA_COMPANY } from "./company.js";
 export {
+  MISSING_INVOICE_ACTIONS,
   MISSING_INVOICE_CATEGORIES,
   MISSING_INVOICE_ITEM_STATES,
   MISSING_INVOICE_MONTH_STATUSES,
@@ -873,9 +874,16 @@ export {
 } from "./missing-invoices.js";
 export type {
   BankStatementImportResult,
+  MissingInvoiceAction,
+  MissingInvoiceCandidate,
   MissingInvoiceCategory,
+  MissingInvoiceCategoryInput,
+  MissingInvoiceCommentInput,
   MissingInvoiceDocumentSource,
   MissingInvoiceItem,
+  MissingInvoiceItemDetail,
+  MissingInvoiceMatchInput,
+  MissingInvoicePaperOriginalInput,
   MissingInvoiceItemState,
   MissingInvoiceMonth,
   MissingInvoiceMonthDetail,

@@ -25,6 +25,15 @@ const IMPORTER = "missing-invoices-read-it";
 const SUPPLIER = "HIANYZOTESZT Kft.";
 
 async function removeLeftovers() {
+  const ids = (
+    await prisma.bankTransaction.findMany({
+      where: { bankAccount: { accountNumber: ACCOUNT } },
+      select: { id: true },
+    })
+  ).map((row) => row.id);
+  await prisma.auditLog.deleteMany({
+    where: { entityType: "BankTransaction", entityId: { in: ids } },
+  });
   await prisma.bankTransaction.deleteMany({
     where: { bankAccount: { accountNumber: ACCOUNT } },
   });
@@ -102,5 +111,43 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
     );
     const account = month.accounts.find((a) => a.accountNumber === ACCOUNT);
     assert.equal(account?.hasStatement, true);
+  });
+
+  it("pairs by hand with an audit row, lets an invoice go to one debit only, and takes it back", async () => {
+    const all = (await missing.month("2026-08", { tab: "ALL" })).items.filter(
+      (item) => item.account.name.startsWith(ACCOUNT),
+    );
+    const payment = all.find((item) => item.partner === SUPPLIER)!;
+    const other = all.find((item) => item.partner === "Ismeretlen Bt.")!;
+    const documentId = payment.document!.id;
+
+    const paired = await missing.pair(other.id, documentId, {
+      id: IMPORTER,
+    } as AuthenticatedUser);
+    assert.deepEqual(
+      [paired.matchedBy, paired.document?.id],
+      ["MANUAL", documentId],
+    );
+    // a kézi párosítás elvitte a számlát a szabály elől
+    assert.equal((await missing.item(payment.id)).document, null);
+    await assert.rejects(
+      missing.pair(payment.id, documentId, {
+        id: IMPORTER,
+      } as AuthenticatedUser),
+      /másik terheléshez/,
+    );
+    assert.equal(
+      await prisma.auditLog.count({
+        where: {
+          entityType: "BankTransaction",
+          entityId: other.id,
+          action: "missing-invoices.paired",
+        },
+      }),
+      1,
+    );
+
+    await missing.unpair(other.id, { id: IMPORTER } as AuthenticatedUser);
+    assert.equal((await missing.item(payment.id)).document?.id, documentId);
   });
 });
