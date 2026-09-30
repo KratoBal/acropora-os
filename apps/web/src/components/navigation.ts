@@ -240,6 +240,15 @@ export const businessNavigation: AppNavigationEntry[] = [
         entryId: "nav-invoices",
       },
       {
+        // Számlázás (Balázs, 2026-09-30): "a Számlázás menüpont a Pénzügy
+        // alá kerül", a lista a /penzugy/szamlazas-on, a bizonylat a
+        // /penzugy/szamlazas/:id-n, a vázlat a .../szerkesztes-en.
+        href: "/penzugy/szamlazas",
+        label: "Számlázás",
+        icon: "file-text",
+        entryId: "billing",
+      },
+      {
         // Balázs, 2026-09-30 15:06 UTC: "Szintén a Pénzügyek alá készüljön
         // egy Elszámolások menüpont. Ez alá kerüljön be a Foxpost a GLS és a
         // Simple Pay elszámolás." A menü két szintű, ezért a három fül a

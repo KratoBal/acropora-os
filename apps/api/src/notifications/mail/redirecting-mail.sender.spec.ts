@@ -177,6 +177,44 @@ describe("a levél-átirányító burok", () => {
     assert.equal(belso.kapott[0]?.attachments?.[0]?.filename, "csomag.zip");
   });
 
+  /**
+   * A MASOLAT ES A REJTETT MASOLAT IS VALODI CIMZETT. A `...mail` szetteritese
+   * oket is tovabbvinne, es akkor a probalevel mellett a valodi masolat-cimre
+   * is kimenne egy peldany -- probakornyezetbol a vevohoz.
+   */
+  it("a másolat és a rejtett másolat NEM megy ki átirányításkor, de a címük látszik", async () => {
+    const { belso, sender } = kuldo({
+      TICKET_MAIL_REDIRECT_TO: "proba@acropora.hu",
+    });
+    await sender.send({
+      ...LEVEL,
+      cc: ["konyveles@partner.hu"],
+      bcc: ["archiv@partner.hu"],
+    });
+
+    const kapott = belso.kapott[0];
+    assert.deepEqual(kapott?.to, ["proba@acropora.hu"]);
+    assert.deepEqual(kapott?.cc, []);
+    assert.deepEqual(kapott?.bcc, []);
+    assert.match(
+      kapott?.subject ?? "",
+      /^\[eredeti: vevo@partner\.hu, masik@partner\.hu, cc: konyveles@partner\.hu, bcc: archiv@partner\.hu\]/,
+    );
+    assert.ok(kapott?.text.includes("cc: konyveles@partner.hu"));
+    assert.ok(kapott?.text.includes("bcc: archiv@partner.hu"));
+  });
+
+  it("kimondott `off` mellett a másolat és a rejtett másolat érintetlenül megy", async () => {
+    const { belso, sender } = kuldo({ TICKET_MAIL_REDIRECT_TO: "off" });
+    const level = {
+      ...LEVEL,
+      cc: ["konyveles@partner.hu"],
+      bcc: ["archiv@partner.hu"],
+    };
+    await sender.send(level);
+    assert.deepEqual(belso.kapott[0], level);
+  });
+
   it("a fejléc-blokk megmondja a valódi címzettek DARABSZÁMÁT is", () => {
     const blokk = redirectHeader(["a@b.hu", "c@d.hu"]);
     assert.match(blokk, /\(2\)/);

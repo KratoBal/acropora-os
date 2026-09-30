@@ -59,6 +59,14 @@ export interface OutgoingMail {
    *     nem adhat at vesszos szoveget, amit az epito EGY cimnek venne
    */
   readonly to: readonly string[];
+  /**
+   * MÁSOLAT ÉS REJTETT MÁSOLAT (a számlázási kiküldés kéri, 2026-09-30).
+   * Választható: a meglévő utak nem adják, és náluk a levél betűre a régi.
+   * Az átirányító burok próba-környezetben MINDKETTŐT kiüríti, és a valódi
+   * címeket a tárgyba és a törzsbe írja, ugyanúgy, mint a `to`-t.
+   */
+  readonly cc?: readonly string[];
+  readonly bcc?: readonly string[];
   readonly subject: string;
   readonly text: string;
   /**
