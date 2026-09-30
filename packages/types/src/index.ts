@@ -29,6 +29,30 @@ export {
   serviceJobWorksheetLabel,
 } from "./service-job-management.js";
 export {
+  BILLING_DOCUMENT_STATUSES,
+  BILLING_DOCUMENT_TYPES,
+  BILLING_EMAIL_STATUSES,
+  BILLING_SOURCE_TYPES,
+  INVOICE_FORMATS,
+  INVOICE_FORMAT_LABELS,
+  billingDrawerCta,
+  billingEmailDelivery,
+  billingIssueCta,
+  canTransitionBillingDocument,
+  getDocumentCapabilities,
+  resolveInvoiceFormat,
+} from "./billing-document.js";
+export type {
+  BillingDocumentCapabilities,
+  BillingDocumentStatus,
+  BillingDocumentType,
+  BillingEmailDelivery,
+  BillingEmailStatus,
+  BillingFormatError,
+  BillingSourceType,
+  InvoiceFormat,
+} from "./billing-document.js";
+export {
   MAIL_TEMPLATE_EVENTS,
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
