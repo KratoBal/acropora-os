@@ -1,0 +1,440 @@
+"use client";
+
+import {
+  PilotBadge,
+  PilotButton,
+  PilotDrawer,
+  PilotSelect,
+} from "@acropora/ui";
+import { useState } from "react";
+
+import {
+  CATEGORY_LABELS,
+  CHARGE_STATE_LABELS,
+  INVOICE_SOURCE_LABELS,
+  formatAmount,
+  formatDay,
+  whatToDo,
+  type CandidateInvoice,
+  type ChargeCategory,
+  type ChargeRow,
+  type ItemAction,
+} from "./missing-invoices-model";
+
+export type UploadKind = "INVOICE" | "PREMIUM_NOTICE";
+
+/** A drawer második kérésből jövő része (`GET /missing-invoices/items/:id`). */
+export interface ChargeDetailExtras {
+  candidates: CandidateInvoice[];
+  action: ItemAction;
+  /** A „Hiányzó számlák” Drive-mappa, ha a szerveren be van állítva. */
+  driveFolderUrl: string | null;
+}
+
+/**
+ * EGY TERHELÉS RÉSZLETEI (Figma 343:435, brief 11-12. pont; a szerződés
+ * nautilusé: agents/nautilus/megosztas/hianyzo-szamlak-vegpontok.md).
+ *
+ * A PÁROSÍTÁS KIFEJEZETT FELHASZNÁLÓI LÉPÉS: jelöltenként egy gomb, és a
+ * felület soha nem párosít magától, akármilyen valószínű a jelölt. A KÉZI
+ * párosítás visszavonható; a szabály szerinti nem (azt a szabály adja).
+ *
+ * A FIGMA-KERETBEN a Partner értéke és a Közlemény egymásra csúszik; ez a keret
+ * hibája, nem terv (acrobot 25261), ezért itt két külön sor.
+ *
+ * A DRIVE-LINK CSAK VALÓDI CÍMMEL látszik (a szerver adja, a konfigurációból):
+ * a brief szerint fiktív link nem lehet.
+ */
+export function MissingInvoicesDrawer({
+  row,
+  onClose,
+  companyName,
+  extras,
+  onPair,
+  onUnpair,
+  onCategory,
+  busy,
+  onUpload,
+  note,
+  onNote,
+  onSave,
+  saving,
+  error,
+  canManage,
+  detailsLater = false,
+}: {
+  row: ChargeRow | null;
+  onClose: () => void;
+  /** A szerver konfigurációjából; `null`, amíg a szerződés nem adja. */
+  companyName: string | null;
+  /** `null`: töltés. */
+  extras: ChargeDetailExtras | null;
+  onPair: (candidate: CandidateInvoice) => void;
+  onUnpair: () => void;
+  /** `null`: vissza az automatikus besorolásra. */
+  onCategory: (category: ChargeCategory | null) => void;
+  /** A futó módosítás: `pair:<dokumentum>`, `unpair`, `category`, `upload`. */
+  busy: string | null;
+  onUpload: (file: File, kind: UploadKind) => void;
+  note: string;
+  onNote: (note: string) => void;
+  onSave: () => void;
+  saving: boolean;
+  error: string | null;
+  /** Párosítás, átsorolás, feltöltés, megjegyzés (`finance.manage`). */
+  canManage: boolean;
+  /**
+   * A tétel részletei (jelöltek, teendő, Drive) és a módosítások még nincsenek
+   * a szerveren (nautilus 4. szelete): a drawer a sor adatait mutatja, és ezt
+   * kimondja, nem egy soha véget nem érő töltést.
+   */
+  detailsLater?: boolean;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [kind, setKind] = useState<UploadKind>("INVOICE");
+
+  const takeFile = (file: File | undefined) => {
+    if (!file) return;
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) {
+      setFileError("Csak PDF tölthető fel.");
+      return;
+    }
+    setFileError(null);
+    onUpload(file, kind);
+  };
+
+  const amountLine = row
+    ? [
+        formatAmount(row.amount, row.currency),
+        ...(row.original
+          ? [formatAmount(row.original.amount, row.original.currency)]
+          : []),
+      ].join(" · ")
+    : "";
+  const todo = extras ? whatToDo(extras.action, companyName) : null;
+  const title = row ? (row.partner ?? "Ismeretlen partner") : "";
+
+  return (
+    <PilotDrawer
+      open={row !== null}
+      onClose={onClose}
+      width="xl"
+      title={title}
+      subtitle={row ? `${formatDay(row.date)} · ${amountLine}` : undefined}
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          <PilotButton variant="secondary" size="regular" onClick={onClose}>
+            Bezárás
+          </PilotButton>
+          {canManage ? (
+            <PilotButton
+              variant="primary"
+              size="regular"
+              disabled={saving}
+              onClick={onSave}
+            >
+              {saving ? "Mentés…" : "Mentés"}
+            </PilotButton>
+          ) : null}
+        </div>
+      }
+    >
+      {row ? (
+        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+          <section className="rounded-xl bg-pilot-grey-100 px-4 py-4 text-sm">
+            <h3 className="font-semibold text-pilot-grey-900">
+              Banki terhelés
+            </h3>
+            <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3">
+              <div>
+                <dt className="text-xs text-pilot-grey-500">Dátum</dt>
+                <dd className="text-pilot-grey-900">{formatDay(row.date)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-pilot-grey-500">Összeg</dt>
+                <dd className="text-pilot-grey-900">{amountLine}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-xs text-pilot-grey-500">Partner</dt>
+                <dd className="break-words text-pilot-grey-900">
+                  {row.partner ?? "—"}
+                </dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-xs text-pilot-grey-500">Közlemény</dt>
+                <dd className="break-words text-pilot-grey-900">
+                  {row.narrative || "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-pilot-grey-500">Bankszámla</dt>
+                <dd className="text-pilot-grey-900">{row.account.name}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-pilot-grey-500">Állapot</dt>
+                <dd className="text-pilot-grey-900">
+                  {CHARGE_STATE_LABELS[row.state]}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section>
+            <label
+              htmlFor="missing-invoice-category"
+              className="text-sm font-semibold text-pilot-grey-900"
+            >
+              Kategória
+            </label>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <div className="w-60">
+                <PilotSelect
+                  id="missing-invoice-category"
+                  value={row.categoryOverridden ? row.category : ""}
+                  disabled={!canManage || busy !== null}
+                  onChange={(value) =>
+                    onCategory(value === "" ? null : (value as ChargeCategory))
+                  }
+                >
+                  <option value="">
+                    Automatikus: {CATEGORY_LABELS[row.category]}
+                  </option>
+                  {(Object.keys(CATEGORY_LABELS) as ChargeCategory[]).map(
+                    (category) => (
+                      <option key={category} value={category}>
+                        {CATEGORY_LABELS[category]}
+                      </option>
+                    ),
+                  )}
+                </PilotSelect>
+              </div>
+              {row.categoryOverridden ? (
+                <PilotBadge variant="blue">Kézzel átsorolva</PilotBadge>
+              ) : null}
+            </div>
+            <p className="mt-2 text-xs text-pilot-grey-500">
+              {row.categoryRule}
+            </p>
+          </section>
+
+          {row.document ? (
+            <section className="rounded-xl px-4 py-3 text-sm ring-1 ring-pilot-grey-200">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs text-pilot-grey-500">
+                    Párosított számla
+                    {row.matchedBy === "MANUAL" ? " (kézi)" : ""}
+                  </p>
+                  <p className="font-semibold text-pilot-grey-900">
+                    {row.document.number}{" "}
+                    <span className="font-normal text-pilot-grey-500">
+                      · {INVOICE_SOURCE_LABELS[row.document.source]}
+                    </span>
+                  </p>
+                </div>
+                {canManage && row.matchedBy === "MANUAL" ? (
+                  <PilotButton
+                    variant="secondary"
+                    size="action"
+                    disabled={busy !== null}
+                    onClick={onUnpair}
+                  >
+                    {busy === "unpair"
+                      ? "Visszavonás…"
+                      : "Párosítás visszavonása"}
+                  </PilotButton>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          <section>
+            <h3 className="text-sm font-semibold text-pilot-grey-900">
+              Javasolt számlák
+            </h3>
+            <p className="mt-1 text-xs text-pilot-grey-500">
+              Azonos szállítóhoz talált lehetséges bizonylatok.
+            </p>
+            {detailsLater ? (
+              <p className="mt-3 text-sm text-pilot-grey-500">
+                A javasolt számlák, a párosítás és a számla feltöltése a
+                következő lépésben érkezik.
+              </p>
+            ) : extras === null ? (
+              <p role="status" className="mt-3 text-sm text-pilot-grey-500">
+                A jelöltek betöltése…
+              </p>
+            ) : extras.candidates.length === 0 ? (
+              <p className="mt-3 text-sm text-pilot-grey-500">
+                Ehhez a partnerhez nincs jelölt számla.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {extras.candidates.map((candidate) => (
+                  <li
+                    key={candidate.documentId}
+                    className="flex items-center gap-3 rounded-xl px-4 py-3 ring-1 ring-pilot-grey-200"
+                  >
+                    <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-4 gap-y-1 text-sm">
+                      <span className="truncate font-semibold text-pilot-grey-900">
+                        {candidate.number}
+                      </span>
+                      <span className="whitespace-nowrap text-xs text-pilot-grey-600">
+                        {formatDay(candidate.date)}
+                      </span>
+                      <span className="whitespace-nowrap font-semibold tabular-nums text-pilot-grey-900">
+                        {formatAmount(candidate.gross, candidate.currency)}
+                      </span>
+                      <span className="text-xs text-pilot-grey-500">
+                        {INVOICE_SOURCE_LABELS[candidate.source]}
+                      </span>
+                      {candidate.payee === "NOT_COMPANY" ? (
+                        <span className="col-span-2">
+                          <PilotBadge variant="danger">
+                            Nem a cégre szól
+                          </PilotBadge>
+                        </span>
+                      ) : candidate.payee === "UNKNOWN" ? (
+                        <span className="col-span-2 text-xs text-pilot-grey-500">
+                          A vevő nem ellenőrizhető
+                        </span>
+                      ) : null}
+                    </div>
+                    {canManage ? (
+                      <PilotButton
+                        variant="secondary"
+                        size="action"
+                        disabled={busy !== null}
+                        onClick={() => onPair(candidate)}
+                      >
+                        {busy === `pair:${candidate.documentId}`
+                          ? "Párosítás…"
+                          : "Párosítás"}
+                      </PilotButton>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {todo ? (
+            <section
+              aria-label="Mit kell tenni"
+              className="rounded-xl bg-pilot-red-50 px-4 py-4 text-sm ring-1 ring-pilot-red-100"
+            >
+              <h3 className="font-semibold text-pilot-red-700">
+                Mit kell tenni
+              </h3>
+              <p className="mt-1 text-pilot-red-700">{todo}</p>
+            </section>
+          ) : null}
+
+          {canManage ? (
+            <section>
+              <h3 className="text-sm font-semibold text-pilot-grey-900">
+                Számla feltöltése
+              </h3>
+              <div
+                role="radiogroup"
+                aria-label="A feltöltött dokumentum"
+                className="mt-2 flex gap-4 text-sm text-pilot-grey-700"
+              >
+                {(
+                  [
+                    ["INVOICE", "Számla"],
+                    ["PREMIUM_NOTICE", "Díjértesítő"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="missing-invoice-upload-kind"
+                      value={value}
+                      checked={kind === value}
+                      onChange={() => setKind(value)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <label
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragging(false);
+                  takeFile(event.dataTransfer.files[0]);
+                }}
+                className={`mt-3 flex min-h-24 cursor-pointer items-center justify-center rounded-xl px-4 py-6 text-center text-sm text-pilot-grey-600 ring-1 ${
+                  dragging
+                    ? "bg-pilot-aqua-50 ring-pilot-aqua-600"
+                    : "bg-pilot-grey-100 ring-pilot-grey-200"
+                }`}
+              >
+                {busy === "upload"
+                  ? "Feltöltés…"
+                  : "Húzd ide a PDF-et, vagy kattints a tallózáshoz"}
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  aria-label="Számla PDF"
+                  className="sr-only"
+                  disabled={busy !== null}
+                  onChange={(event) => {
+                    takeFile(event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+              {fileError ? (
+                <p role="alert" className="mt-2 text-xs text-pilot-red-700">
+                  {fileError}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          {extras?.driveFolderUrl ? (
+            <a
+              href={extras.driveFolderUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block text-sm font-medium text-pilot-aqua-700 hover:underline"
+            >
+              Drive mappa megnyitása →
+            </a>
+          ) : null}
+
+          <section>
+            <label
+              htmlFor="missing-invoice-note"
+              className="text-sm font-semibold text-pilot-grey-900"
+            >
+              Megjegyzés
+            </label>
+            <textarea
+              id="missing-invoice-note"
+              value={note}
+              onChange={(event) => onNote(event.target.value)}
+              readOnly={!canManage}
+              placeholder="Belső megjegyzés ehhez a terheléshez…"
+              rows={5}
+              className="mt-3 w-full rounded-xl bg-white px-4 py-3 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-600"
+            />
+          </section>
+
+          {error ? (
+            <p role="alert" className="text-sm text-pilot-red-700">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </PilotDrawer>
+  );
+}
