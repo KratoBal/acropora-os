@@ -3,9 +3,9 @@ import { describe, it } from "node:test";
 
 import { customerSearchPattern } from "./customers.repository.js";
 
-// THE RAW SEARCH ESCAPES WHAT LIKE WOULD READ AS A WILDCARD. Prisma's
-// `contains` escaped `%` and `_` for us; the accent-insensitive raw query has
-// to do it itself. What must fail: a `%` or `_` reaching LIKE unescaped (the
+// THE RAW SEARCH ESCAPES WHAT LIKE WOULD READ AS A WILDCARD. The Prisma
+// `contains` path before it did not (measured on the calibration branch:
+// "100% Kft" also found "1000 Kft"). What must fail: a `%` or `_` reaching LIKE unescaped (the
 // search "100%" would then match every "100…"), or a backslash left alone (it
 // would escape the next character instead of standing for itself).
 describe("customerSearchPattern", () => {

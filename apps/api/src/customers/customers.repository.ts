@@ -22,7 +22,12 @@ const EXTERNAL_ENTITY_TYPE = "Customer";
  * The search text as a LIKE pattern that matches it anywhere, literally. `%`
  * and `_` are wildcards in LIKE and the backslash is PostgreSQL's default
  * escape, so all three are escaped: "100%" finds "100%", not "100" followed by
- * anything. (Prisma's `contains` did this for us; the raw query has to.)
+ * anything.
+ *
+ * THE OLD PATH DID NOT DO THIS EITHER, and that was measured, not assumed: on
+ * the calibration branch that put Prisma's `contains` back, "100% Kft" also
+ * returned "1000 Kft" (meres/vevo-kereses-a, run 36752101646). So this is a
+ * fix of its own, not a behaviour the raw query had to re-create.
  */
 export function customerSearchPattern(search: string): string {
   return `%${search.trim().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
