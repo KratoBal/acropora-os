@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   PilotBadge,
+  PilotButton,
   PilotInput,
   PilotSelect,
   PilotThemeRoot,
@@ -403,14 +404,14 @@ export function ProductListPage() {
         title="Termékek"
         description="A teljes termékkatalógus és webshop-megjelenések operatív áttekintése."
         actions={
-          <button
-            type="button"
+          <PilotButton
+            size="regular"
+            variant="secondary"
             disabled
             title="A termékszerkesztő egy következő sprintben készül el."
-            className="inline-flex h-10 items-center rounded-md bg-white px-4 text-sm font-semibold text-pilot-grey-500 ring-1 ring-pilot-grey-200 disabled:cursor-not-allowed"
           >
             Új termék · hamarosan
-          </button>
+          </PilotButton>
         }
       />
 
