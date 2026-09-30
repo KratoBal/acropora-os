@@ -4,9 +4,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   createContext,
   Suspense,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -14,15 +16,20 @@ import {
 import {
   advanceTrail,
   lastVisitOf,
+  pathOf,
   previousPage,
+  stepTrail,
 } from "@/lib/navigation/return-trail";
 
 const NavigationHistoryContext = createContext<{
   previous: string | null;
   trail: readonly string[];
+  /** A következő navigáció erre az útra testvér-lépés (lásd `useStepTo`). */
+  markStep: (path: string) => void;
 }>({
   previous: null,
   trail: [],
+  markStep: () => {},
 });
 
 /**
@@ -41,6 +48,12 @@ export function NavigationHistoryProvider({
   const pathname = usePathname();
   const [search, setSearch] = useState("");
   const [trail, setTrail] = useState<string[]>([]);
+  /*
+    A TESTVÉR-LÉPÉS CÉLJA, NEM EGY IGAZ/HAMIS JELZŐ: ha a lépés elmarad (a
+    navigáció megszakad), egy puszta jelző a következő, egészen más
+    navigációt is lépésnek venné. Az út csak a saját célján sül el.
+  */
+  const stepTarget = useRef<string | null>(null);
 
   /*
     A NYOM A TELJES CÍMET TARTJA, A QUERYVEL EGYÜTT: a lista szűrése és oldala
@@ -49,12 +62,19 @@ export function NavigationHistoryProvider({
   */
   useEffect(() => {
     const href = search ? `${pathname}?${search}` : pathname;
-    setTrail((current) => advanceTrail(current, href));
+    const step = stepTarget.current === pathname;
+    if (step) stepTarget.current = null;
+    setTrail((current) =>
+      step ? stepTrail(current, href) : advanceTrail(current, href),
+    );
   }, [pathname, search]);
 
+  const markStep = useCallback((path: string) => {
+    stepTarget.current = path;
+  }, []);
   const value = useMemo(
-    () => ({ previous: previousPage(trail), trail }),
-    [trail],
+    () => ({ previous: previousPage(trail), trail, markStep }),
+    [markStep, trail],
   );
 
   return (
@@ -117,4 +137,21 @@ export function useReturnTo(fallbackHref: string): ReturnTarget {
 export function useListHref(listPath: string): string {
   const { trail } = useContext(NavigationHistoryContext);
   return lastVisitOf(trail, listPath) ?? listPath;
+}
+
+/**
+ * TESTVÉR-LÉPÉS egy adatlapról a szomszédjára (Előző/Következő). A nyomban
+ * és a böngésző előzményében is a jelenlegi lap helyére lép, tehát a
+ * "Vissza" továbbra is oda visz, ahonnan az első adatlapra jöttek.
+ */
+export function useStepTo(): (href: string) => void {
+  const { markStep } = useContext(NavigationHistoryContext);
+  const router = useRouter();
+  return useCallback(
+    (href: string) => {
+      markStep(pathOf(href));
+      router.replace(href);
+    },
+    [markStep, router],
+  );
 }

@@ -124,6 +124,17 @@ const HELPERS = [
    */
   "assetDetailWhere",
   "assetListWheres",
+  /**
+   * AZ ESZKOZ-TAROLO SAJAT LISTA-FELTETELE (2026-09-30, az adatlap
+   * Elozo/Kovetkezo gombjaval). A `list` es a `neighbors` KOZOS feltetel-
+   * epitoje: a hatokort tovabbadja az `assetListWheres`-nek, ami MAGA teszi
+   * az `AND` agba. A fenti figyelmeztetes szerint merve: a fuggveny a
+   * `PartnerScope`-ot a feltetelbe teszi, nem csak a neve hasonlit, es a
+   * `listWheres(` alak mas nevre nem illeszkedik (a ket `...ListWheres` nagy
+   * L-lel all). Kiemeleskor a `list` torzsebol eltunt az `assetListWheres`
+   * neve -- ugyanaz a csapda, mint a `detail`-nel, egy szinttel lejjebb.
+   */
+  "listWheres",
   "worksheetListWheres",
   /**
    * A FAJTA-SZURES LISTA ALAKJA (2026-09-17).

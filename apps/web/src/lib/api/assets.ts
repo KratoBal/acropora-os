@@ -7,6 +7,7 @@ import type {
   AssetDetail,
   AssetLabelScanResult,
   AssetListItem,
+  AssetListNeighbors,
   AssetListResponse,
   AssetDocumentSummary,
   AssetDocumentType,
@@ -120,6 +121,19 @@ export const assetsApi = {
     return apiRequest<AssetListResponse>(`/service/assets?${query}`, token, {
       signal,
     });
+  },
+  /** Az adatlap Előző/Következő gombja: a lista kérésével a két szomszéd. */
+  neighbors(
+    token: string,
+    id: string,
+    query: URLSearchParams,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<AssetListNeighbors>(
+      `/service/assets/${encodeURIComponent(id)}/neighbors?${query}`,
+      token,
+      { signal },
+    );
   },
   /**
    * A választható tulajdonosok: a szerviz-jelölt partnerek.

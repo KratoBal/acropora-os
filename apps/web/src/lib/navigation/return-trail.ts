@@ -13,7 +13,7 @@
  */
 
 /** A cím útvonal-része, a query nélkül: a lapot ez azonosítja. */
-function pathOf(href: string): string {
+export function pathOf(href: string): string {
   const cut = href.indexOf("?");
   return cut === -1 ? href : href.slice(0, cut);
 }
@@ -72,4 +72,14 @@ export function lastVisitOf(
     if (pathOf(href) === listPath) return href;
   }
   return null;
+}
+
+/**
+ * TESTVÉR-LÉPÉS: az adatlap Előző/Következő gombja. Az új lap a jelenlegi
+ * HELYÉRE kerül, nem mögé: három "Következő" után a "Vissza" ugyanoda visz,
+ * ahonnan az első adatlapra jöttek (a szűrt listára), nem a harmadik
+ * előző eszközre.
+ */
+export function stepTrail(trail: readonly string[], href: string): string[] {
+  return trail.length ? [...trail.slice(0, -1), href] : [href];
 }
