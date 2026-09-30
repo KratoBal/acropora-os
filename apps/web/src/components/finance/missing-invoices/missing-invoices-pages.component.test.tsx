@@ -44,6 +44,7 @@ const api = vi.hoisted(() => ({
   comment: vi.fn(),
   category: vi.fn(),
   paperOriginal: vi.fn(),
+  uploadDocument: vi.fn(),
 }));
 vi.mock("@/lib/api/missing-invoices", () => ({ missingInvoicesApi: api }));
 
@@ -472,6 +473,64 @@ describe("MissingInvoicesMonthPage", () => {
         "Kérve e-mailben",
       ),
     );
+  });
+
+  /*
+    A 4B SZELET (nautilus #1305): a számla feltöltése a drawerből. MI
+    PIROSÍT: ha a fájl vagy a fajtája nem jutna el a végpontig; ha a feltöltés
+    után a hónap nem töltődne újra; ha a szerver elutasítása (nem PDF)
+    elveszne.
+  */
+  it("an invoice uploaded from the drawer goes with its kind, pairs, and the month reloads", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.uploadDocument.mockResolvedValue(
+      itemDetail({
+        state: "FOUND",
+        document: { id: "up-1", number: "szamla.pdf", source: "UPLOAD" },
+        matchedBy: "MANUAL",
+        action: "NONE",
+      }),
+    );
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const drawer = await openFirstRow();
+    fireEvent.click(
+      await within(drawer).findByRole("radio", { name: "Díjértesítő" }),
+    );
+    const pdf = new File(["%PDF-1.7"], "szamla.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(within(drawer).getByLabelText("Számla PDF"), {
+      target: { files: [pdf] },
+    });
+    await waitFor(() =>
+      expect(api.uploadDocument).toHaveBeenCalledWith(
+        "token-1",
+        "debit-1",
+        pdf,
+        "PREMIUM_NOTICE",
+      ),
+    );
+    await waitFor(() => expect(api.month).toHaveBeenCalledTimes(2));
+    expect(
+      await within(drawer).findByText(/Párosított számla/),
+    ).toBeInTheDocument();
+  });
+
+  it("an upload the server refuses says why", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.uploadDocument.mockRejectedValue(
+      new Error("A fájl nem PDF, ezért nem tárolható."),
+    );
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const drawer = await openFirstRow();
+    fireEvent.change(await within(drawer).findByLabelText("Számla PDF"), {
+      target: {
+        files: [new File(["%PDF"], "szamla.pdf", { type: "application/pdf" })],
+      },
+    });
+    expect(
+      await within(drawer).findByText("A fájl nem PDF, ezért nem tárolható."),
+    ).toBeInTheDocument();
   });
 
   it("a viewer (finance.view only) reads the drawer, but cannot pair, move or save", async () => {
