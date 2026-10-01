@@ -26,6 +26,53 @@ const category = (
     .category;
 
 describe("classifyTransaction", () => {
+  it("files an ATM withdrawal as cash, which needs no invoice (8 of 8 measured were Uncertain)", () => {
+    const withdrawal = {
+      counterpartyName: "OTP",
+      narrative: "2025.12.23 7404942795 Budapest,X.Ör s vezér tere",
+      transactionType: "KÉSZPÉNZFELVÉT ATM-BŐL",
+    };
+    assert.equal(category(withdrawal), "CASH_WITHDRAWAL");
+    assert.ok(NO_INVOICE_CATEGORIES.has("CASH_WITHDRAWAL"));
+  });
+
+  it("files money sent to a private person citing our own invoice number as a customer refund, the misspelt ARCW too", () => {
+    for (const narrative of [
+      "ARCW-2025/00650",
+      "ACRW-2026/00362",
+      "ACRB-2026/00012 visszautalás",
+    ])
+      assert.equal(
+        category({
+          counterpartyName: "Tóth János",
+          narrative,
+          transactionType: "AZONNALI FIZETÉS",
+        }),
+        "CUSTOMER_REFUND",
+        narrative,
+      );
+    assert.ok(NO_INVOICE_CATEGORIES.has("CUSTOMER_REFUND"));
+  });
+
+  it("does not take a company or a card payment citing our invoice number for a refund", () => {
+    assert.notEqual(
+      category({
+        counterpartyName: "Szállító Kft.",
+        narrative: "ACRW-2026/00362",
+        transactionType: "ÁTUTALÁS",
+      }),
+      "CUSTOMER_REFUND",
+    );
+    assert.notEqual(
+      category({
+        counterpartyName: "Tóth János",
+        narrative: "ACRW-2026/00362",
+        transactionType: "VÁSÁRLÁS KÁRTYÁVAL",
+      }),
+      "CUSTOMER_REFUND",
+    );
+  });
+
   it("files social-security contribution as tax, not as insurance (measured trap)", () => {
     assert.equal(
       category({

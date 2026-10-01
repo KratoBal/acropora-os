@@ -21,6 +21,8 @@ export const BANK_CATEGORIES = [
   "TAX",
   "PAYROLL",
   "LOAN",
+  "CASH_WITHDRAWAL",
+  "CUSTOMER_REFUND",
   "INSURANCE",
   "CARD_SUBSCRIPTION",
   "FOREIGN_SUPPLIER",
@@ -36,6 +38,8 @@ export const NO_INVOICE_CATEGORIES: ReadonlySet<BankCategory> = new Set([
   "TAX",
   "PAYROLL",
   "LOAN",
+  "CASH_WITHDRAWAL",
+  "CUSTOMER_REFUND",
 ]);
 
 export interface ClassifiableTransaction {
@@ -64,6 +68,12 @@ const BANK_FEE =
 const PAYROLL = /munkab[ée]r|\bb[ée]r\b|fizet[ée]s\b|el[őo]leg/i;
 const LOAN = /kölcsön|kolcson/i;
 const INSURANCE = /biztos[íi]t[áa]s|allianz|generali|groupama|uniqa/i;
+const CASH = /KÉSZPÉNZ\s?FELVÉT/i;
+/**
+ * A SAJÁT SZÁMLASZÁMUNK A KÖZLEMÉNYBEN: ACRW vagy ACRB sorozat, az elírt ARCW
+ * alakkal együtt (mérve: egy visszatérítés közleménye ARCW-2025/00650).
+ */
+const OWN_INVOICE_NUMBER = /\bA(?:CR|RC)[WB][-\s]?\d{4}\s*\/\s*\d{3,}/i;
 
 export function classifyTransaction(
   transaction: ClassifiableTransaction,
@@ -81,6 +91,15 @@ export function classifyTransaction(
   const text = `${name} ${narrative}`;
   const card = /KÁRTY/i.test(type);
 
+  /*
+    KÉSZPÉNZFELVÉTEL és VEVŐI VISSZATÉRÍTÉS (barracuda javaslata a vak
+    címkézésből, acrobot 25454/25461). Mérve 2026-10-01, a 2025-12 .. 2026-08
+    kivonatain: 8 terhelés KÉSZPÉNZFELVÉT ATM-BŐL típusú, és 3 megy
+    magánszemélynek a saját számlaszámunkkal a közleményben; mind a 11 eddig
+    Bizonytalan volt. Egyikhez sem kell beszállítói számla.
+  */
+  if (CASH.test(type))
+    return { category: "CASH_WITHDRAWAL", rule: `készpénzfelvétel: ${type}` };
   if (TAX.test(text))
     return { category: "TAX", rule: "adó, járulék vagy hatóság" };
   if (INSURANCE.test(`${type} ${name}`))
@@ -100,6 +119,16 @@ export function classifyTransaction(
     return { category: "LOAN", rule: "kölcsön a közleményben" };
   if (PAYROLL.test(narrative))
     return { category: "PAYROLL", rule: "munkabér a közleményben" };
+  if (
+    !card &&
+    OWN_INVOICE_NUMBER.test(narrative) &&
+    !DOMESTIC_COMPANY.test(name) &&
+    !FOREIGN_COMPANY.test(name)
+  )
+    return {
+      category: "CUSTOMER_REFUND",
+      rule: "magánszemélynek, a saját számlaszámunkkal a közleményben",
+    };
   if (card) {
     if (SUBSCRIPTIONS.test(text))
       return {
