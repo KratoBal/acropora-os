@@ -1,6 +1,7 @@
 import { Prisma } from "@acropora/database";
 import {
   szamlazzDocumentTotals,
+  outgoingMissingPayments,
   paymentStateOf,
   type BillingDocumentListItem,
   type BillingDocumentListQuery,
@@ -132,6 +133,7 @@ export function toListItem(
     paymentState: null,
     paidAmount: null,
     lastPaymentDate: null,
+    paymentSource: null,
   };
 }
 
@@ -236,6 +238,7 @@ export interface ExternalListRow {
   paidAmount: Prisma.Decimal;
   lastPaymentDate: Date | null;
   paymentsKnown: boolean | null;
+  paymentMethod: string | null;
   cancelled: boolean;
 }
 
@@ -244,42 +247,62 @@ export interface ExternalListRow {
  * (`paymentStateOf`, murena 25902). A sztornózott számla nem fizetendő: ott
  * `null`, nem „nem fizetett”.
  *
- * A KIMENŐN A `kifizetesek` HIÁNYA NEM FIZETETT (acrobot döntése, 25910), mert
- * minden külső sornak van feed-változata. A mérés: a 927341621-es számla előbb
- * elem nélkül jött, a fizetés után elemmel (acrobot 25894). EZ EGY MEGFIGYELT
- * ESET, NEM DOKUMENTÁLT GARANCIA. Feed-változat nélkül (a saját bizonylat, amíg
- * a száma nem jön vissza) az állapot UNKNOWN, nem UNPAID. A bejövőn a hiány
- * UNKNOWN marad.
- *
- * A MÉG NEM VETÍTETT SOR (`paymentsKnown` `null`: a migráció óta nem jött rá
- * újravetítés) UNKNOWN, különben az újravetítésig a már kifizetett számlák is
- * „Nincs fizetve”-nek látszanának (murena review-ja).
+ *   `paymentsKnown` null     a sort a migráció óta nem vetítettük újra: UNKNOWN
+ *                            (különben a kifizetettek is „Nincs fizetve”-nek
+ *                            látszanának; murena review-ja)
+ *   `paymentsKnown` true     a Számlázz.hu rögzítette: számolt, forrás SZAMLAZZ
+ *   `paymentsKnown` false    nincs `kifizetesek` elem; a jelentése a fizetési
+ *                            módtól függ (`outgoingMissingPayments`, acrobot
+ *                            25936 és 25938):
+ *       átutalás, utánvét, üres   UNPAID (a fizetés később jön; a 927341621-es
+ *                                 számla előbb elem nélkül, a fizetés után
+ *                                 elemmel jött: MEGFIGYELT ESET, NEM GARANCIA)
+ *       kártya, online, készpénz  PAID a rendeléskor: összeg a bruttó, a forrás
+ *                                 jelölve, DÁTUM NÉLKÜL (a kelt nem a fizetés
+ *                                 napja; acrobot 25950)
+ *       bármi más                 UNKNOWN
  */
 export function externalPaymentFields(row: {
   grossAmount: Prisma.Decimal;
   paidAmount: Prisma.Decimal;
   lastPaymentDate: Date | null;
   paymentsKnown: boolean | null;
+  paymentMethod: string | null;
   currency: string;
   cancelled: boolean;
 }): Pick<
   BillingDocumentListItem,
-  "paymentState" | "paidAmount" | "lastPaymentDate"
+  "paymentState" | "paidAmount" | "lastPaymentDate" | "paymentSource"
 > {
-  if (row.cancelled)
-    return { paymentState: null, paidAmount: null, lastPaymentDate: null };
+  const none = {
+    paymentState: null,
+    paidAmount: null,
+    lastPaymentDate: null,
+    paymentSource: null,
+  } as const;
+  if (row.cancelled) return none;
   const decimals = row.currency.toUpperCase() === "HUF" ? 0 : 2;
-  return {
+  const recorded = (paymentsKnown: boolean) => ({
     paymentState: paymentStateOf({
-      // van feed-változat: a hiány itt "nem fizetett"; a még nem vetített sor
-      // viszont ismeretlen (lásd fent)
-      paymentsKnown: row.paymentsKnown !== null,
+      paymentsKnown,
       paidAmount: row.paidAmount.toFixed(),
       grossAmount: row.grossAmount.toFixed(),
       currency: row.currency,
     }),
     paidAmount: row.paidAmount.toFixed(decimals),
     lastPaymentDate: calendarDay(row.lastPaymentDate),
+    paymentSource: paymentsKnown ? ("SZAMLAZZ" as const) : null,
+  });
+  if (row.paymentsKnown === null) return recorded(false);
+  if (row.paymentsKnown) return recorded(true);
+  const missing = outgoingMissingPayments(row.paymentMethod);
+  if (missing === "UNPAID") return recorded(true);
+  if (missing === "UNKNOWN") return recorded(false);
+  return {
+    paymentState: "PAID",
+    paidAmount: row.grossAmount.toFixed(decimals),
+    lastPaymentDate: null,
+    paymentSource: missing,
   };
 }
 

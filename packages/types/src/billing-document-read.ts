@@ -97,7 +97,17 @@ export interface BillingDocumentListItem {
   paidAmount: DecimalText | null;
   /** `YYYY-MM-DD`, a legkésőbbi kifizetés. */
   lastPaymentDate: string | null;
+  /**
+   * HONNAN TUDJUK (acrobot 25938): `SZAMLAZZ` = a Számlázz.hu kifizetés-adata
+   * (vagy kimenőn a hiánya, átutalásnál); `CARD_AT_ORDER` / `CASH_AT_ORDER` =
+   * kártyával vagy készpénzzel fizetve a rendeléskor, a Számlázz.hu-ban nincs
+   * rögzítve. `null`, ahol a `paymentState` is az, vagy ismeretlen.
+   */
+  paymentSource: BillingPaymentSource | null;
 }
+
+export type BillingPaymentSource =
+  "SZAMLAZZ" | "CARD_AT_ORDER" | "CASH_AT_ORDER";
 
 /** Egy külső bizonylat tétele, ahogy a számlán áll (szamla.xsd `tetel`). */
 export interface BillingExternalDocumentLine {
@@ -142,6 +152,7 @@ export interface BillingExternalDocumentDetail {
   paymentState: BillingPaymentState | null;
   paidAmount: DecimalText | null;
   lastPaymentDate: string | null;
+  paymentSource: BillingPaymentSource | null;
   /** Küldött-e a Számlázz.hu kifizetés-adatot (a bejövő adatlapé szerint). */
   paymentsKnown: boolean;
   /** A kifizetések a számla sorrendjében; `title` a jogcím. */
