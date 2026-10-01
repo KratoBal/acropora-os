@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -151,6 +152,24 @@ describe("worksheetDisplayLabel", () => {
    * A REGI SZERVER NEM KULDI A SZAMOT. Ha a hianyt nullanak vennenk, minden
    * folyamatban levo lap "Új"-nak latszana -- az osszevont nev viszont igaz.
    */
+  /**
+   * A KEPERNYOK BEKOTESE, SZOVEGBOL: a mobilon nincs renderelo, tehat ez az
+   * egyetlen, ami meri, hogy a tetelszam eljut a jelvenyig. MI PIROSIT (W8,
+   * kalibralva): ha a lista vagy az adatlap a szamot nem adna at.
+   */
+  it("the list and the detail screen pass the line count", () => {
+    const lista = readFileSync("src/app/worksheets/index.tsx", "utf8");
+    const adatlap = readFileSync("src/app/worksheets/[id].tsx", "utf8");
+    assert.match(
+      lista,
+      /worksheetDisplayLabel\(item\.status, item\.lineCount\)/,
+    );
+    assert.match(
+      adatlap,
+      /worksheetDisplayLabel\(\s*current\.status,\s*current\.lines\.length,?\s*\)/,
+    );
+  });
+
   it("without a line count it says the combined name, not 'Új'", () => {
     assert.equal(
       worksheetDisplayLabel("DRAFT", undefined),
