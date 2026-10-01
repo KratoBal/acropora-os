@@ -430,6 +430,48 @@ describe("MissingInvoicesMonthPage", () => {
     expect(api.month).toHaveBeenCalledTimes(1);
   });
 
+  it("offers the paper original without any digital invoice, and not on a wrong document (Aqua-Light)", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-09");
+    // a drawer a hónap-lista soráról nyílik: annak is ez az állapota
+    api.month.mockResolvedValue(
+      monthDetail({ items: [item({ state: "NO_INVOICE" })] }),
+    );
+    api.item.mockResolvedValue(itemDetail({ state: "NO_INVOICE" }));
+    api.paperOriginal.mockResolvedValue(
+      itemDetail({ state: "FOUND", paperOriginal: true }),
+    );
+    render(<MissingInvoicesMonthPage month="2026-09" />);
+    const dialog = await openFirstRow();
+    fireEvent.click(
+      await within(dialog).findByRole("checkbox", {
+        name: "Az eredeti papíron megvan",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.paperOriginal).toHaveBeenCalledWith(
+        "token-1",
+        "debit-1",
+        true,
+      ),
+    );
+  });
+
+  it("does not offer the paper original on a document that is not the company's", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-09");
+    api.month.mockResolvedValue(
+      monthDetail({ items: [item({ state: "NOT_COMPANY" })] }),
+    );
+    api.item.mockResolvedValue(itemDetail({ state: "NOT_COMPANY" }));
+    render(<MissingInvoicesMonthPage month="2026-09" />);
+    const dialog = await openFirstRow();
+    await within(dialog).findByText(/Kártyás terhelés/);
+    expect(
+      within(dialog).queryByRole("checkbox", {
+        name: "Az eredeti papíron megvan",
+      }),
+    ).toBeNull();
+  });
+
   it("the note, the category and the paper original each go to their own endpoint", async () => {
     urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
     api.item.mockResolvedValue(

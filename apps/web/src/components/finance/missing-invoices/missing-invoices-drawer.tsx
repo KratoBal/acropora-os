@@ -134,6 +134,29 @@ export function MissingInvoicesDrawer({
   const todo = extras ? whatToDo(extras.action, companyName) : null;
   const title = row ? (row.partner ?? "Ismeretlen partner") : "";
 
+  // a papíros jelölés digitális számla NÉLKÜL is (acrobot 25745, Aqua-Light:
+  // külföldi számla csak papíron, NAV-sor nincs); hibás dokumentumnál nem
+  const paperCheckbox =
+    row &&
+    onPaperOriginal &&
+    (row.state === "ORIGINAL_MISSING" ||
+      row.state === "NOT_MATCHED" ||
+      row.state === "NO_INVOICE" ||
+      row.paperOriginal) ? (
+      <label className="flex items-center gap-2 text-sm text-pilot-grey-800">
+        <input
+          type="checkbox"
+          checked={row.paperOriginal}
+          disabled={!canManage || busy !== null}
+          onChange={(event) => onPaperOriginal(event.target.checked)}
+        />
+        Az eredeti papíron megvan
+        {busy === "paper" ? (
+          <span className="text-xs text-pilot-grey-500">Mentés…</span>
+        ) : null}
+      </label>
+    ) : null;
+
   return (
     <PilotDrawer
       open={row !== null}
@@ -237,6 +260,12 @@ export function MissingInvoicesDrawer({
             </p>
           </section>
 
+          {!row.document && paperCheckbox ? (
+            <section className="rounded-xl px-4 py-3 text-sm ring-1 ring-pilot-grey-200">
+              {paperCheckbox}
+            </section>
+          ) : null}
+
           {row.document ? (
             <section className="rounded-xl px-4 py-3 text-sm ring-1 ring-pilot-grey-200">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -271,26 +300,7 @@ export function MissingInvoicesDrawer({
                   </PilotButton>
                 ) : null}
 
-                {row.document &&
-                onPaperOriginal &&
-                (row.state === "ORIGINAL_MISSING" || row.paperOriginal) ? (
-                  <label className="flex items-center gap-2 text-sm text-pilot-grey-800">
-                    <input
-                      type="checkbox"
-                      checked={row.paperOriginal}
-                      disabled={!canManage || busy !== null}
-                      onChange={(event) =>
-                        onPaperOriginal(event.target.checked)
-                      }
-                    />
-                    Az eredeti papíron megvan
-                    {busy === "paper" ? (
-                      <span className="text-xs text-pilot-grey-500">
-                        Mentés…
-                      </span>
-                    ) : null}
-                  </label>
-                ) : null}
+                {paperCheckbox}
               </div>
               {extras && extras.doublePaidWith.length > 0 ? (
                 <p className="mt-2 text-sm text-pilot-red-700">
