@@ -79,6 +79,7 @@ const detail = (
   paymentState: "UNKNOWN",
   paidAmount: "0",
   lastPaymentDate: null,
+  paymentSource: null,
   paymentsKnown: false,
   payments: [],
   versionCount: 2,
@@ -126,6 +127,7 @@ describe("BillingExternalDocumentPage", () => {
         paymentState: "PAID",
         paidAmount: "25400",
         lastPaymentDate: "2026-09-28",
+        paymentSource: "SZAMLAZZ",
         paymentsKnown: true,
         payments: [
           {

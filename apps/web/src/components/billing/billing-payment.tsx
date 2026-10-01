@@ -42,18 +42,32 @@ export const PAYMENT_STATE_TONE: Readonly<
  * (`INCOMING_PAYMENT_STATE_LABELS`, murena 25902). A forrás a Számlázz.hu; ahol
  * nincs mire mérni (`null`: a saját bizonylat, a sztornózott számla), ott "—".
  */
+/**
+ * HONNAN TUDJUK (acrobot 25938): a Számlázz.hu rögzítette, vagy a vevő a
+ * rendeléskor kártyával vagy készpénzzel fizetett, és a Számlázz.hu-ban nincs
+ * rögzítve. A felirat ezt megmondja, hogy látsszon, mire épül a „Fizetve”.
+ */
+const AT_ORDER: Record<string, string> = {
+  CARD_AT_ORDER: "kártya, a rendeléskor",
+  CASH_AT_ORDER: "készpénz, a rendeléskor",
+};
+
 export function PaymentBadge({
   paymentState,
   paidAmount,
   lastPaymentDate,
+  paymentSource = null,
   currency,
 }: Pick<
   BillingDocumentListItem,
   "paymentState" | "paidAmount" | "lastPaymentDate" | "currency"
->) {
+> & { paymentSource?: BillingDocumentListItem["paymentSource"] }) {
   if (paymentState === null)
     return <span className="text-pilot-grey-400">—</span>;
-  const label = INCOMING_PAYMENT_STATE_LABELS[paymentState];
+  const atOrder = paymentSource ? AT_ORDER[paymentSource] : undefined;
+  const label = atOrder
+    ? `${INCOMING_PAYMENT_STATE_LABELS[paymentState]} (${atOrder})`
+    : INCOMING_PAYMENT_STATE_LABELS[paymentState];
   const tone = PAYMENT_STATE_TONE[paymentState].pill;
   const detail =
     paymentState === "PAID"

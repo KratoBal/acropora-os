@@ -145,8 +145,14 @@ export interface MatchOutcome {
   pairing?: string;
 }
 
+/**
+ * AZ ÁLTALÁNOS SZAVAK, szóhatárral, ami az ÉKEZETES betűt is betűnek látja. A
+ * régi `\b` csak ASCII-t ismert: egy ékezetre végződő szó (felelősségű,
+ * hungária) után nincs `\b`, tehát ezek sosem estek ki (barracuda esetlistája,
+ * acrobot 25928: a B-O 2001 NAV-neve kiírt jogi formával áll).
+ */
 const GENERIC =
-  /\b(hungária|hungaria|magyarország|magyarorszag|online|digital|technologies|international|kereskedelmi|korlátolt|korlatolt|felelősségű|felelossegu|társaság|tarsasag|kft|zrt|nyrt|bt|gmbh|ltd|limited|inc|llc|bv|srl|sas|doo|ag)\b/g;
+  /(?<![\p{L}\p{N}])(hungária|hungaria|magyarország|magyarorszag|online|digital|technologies|international|kereskedelmi|korlátolt|korlatolt|felelősségű|felelossegu|társaság|tarsasag|zártkörűen|zartkoruen|működő|mukodo|részvénytársaság|reszvenytarsasag|kft|zrt|nyrt|bt|gmbh|ltd|limited|inc|llc|bv|srl|sas|doo|ag)(?![\p{L}\p{N}])/gu;
 
 /** Név a hasonlítás előtt: kisbetű, fizetési előtagok és általános szavak nélkül. */
 export function normalizeName(name: string): string {
@@ -171,7 +177,20 @@ export function samePartner(a: string, b: string, threshold = 0.6): boolean {
   const y = normalizeName(b);
   if (!x || !y) return false;
   const first = (s: string) => s.split(" ")[0]!.slice(0, 4);
-  return first(x) === first(y) && sequenceRatio(x, y) >= threshold;
+  if (first(x) !== first(y)) return false;
+  return sequenceRatio(x, y) >= threshold || wordPrefix(x, y);
+}
+
+/**
+ * A RÖVIDEBB NÉV A HOSSZABB ELEJE, egész szavakban, legalább KÉT szóval: a
+ * cégnév kiírt alakja a magja után tevékenység-szavakat visel („B-O 2001.
+ * BEFEKTETÉSI ÉS KERESKEDELMI KFT.”), ezért a hasonlósági arány alacsony,
+ * pedig a kezdete betűre a bank partnerneve. Egyetlen szóra nem: egy
+ * vezetéknév sok cég és személy elején áll.
+ */
+function wordPrefix(x: string, y: string): boolean {
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return short.split(" ").length >= 2 && `${long} `.startsWith(`${short} `);
 }
 
 function shiftMonth(date: string, months: number, day: string): string {
@@ -212,6 +231,65 @@ const exact = (gap: Prisma.Decimal | null, currency: string) =>
 /** KEREKÍTÉSSEL: HUF-ban 5 Ft-ig Megvan (acrobot 25265 a). */
 const rounded = (gap: Prisma.Decimal | null, currency: string) =>
   gap !== null && currency === "HUF" && gap.gt(1) && gap.lte(5);
+
+const MONTHS: readonly [RegExp, number][] = [
+  [/^jan/, 1],
+  [/^feb/, 2],
+  [/^m[áa]rc/, 3],
+  [/^[áa]pr/, 4],
+  [/^m[áa]j/, 5],
+  [/^j[úu]n/, 6],
+  [/^j[úu]l/, 7],
+  [/^aug/, 8],
+  [/^sz?ep/, 9],
+  [/^o[kc]t/, 10],
+  [/^nov/, 11],
+  [/^dec/, 12],
+];
+
+/**
+ * A KÖZLEMÉNYBEN MEGNEVEZETT HÓNAP, `YYYY-MM` (barracuda esetlistája, B-O 2001:
+ * „2026 aug” egy szeptemberi fizetésen, és ugyanaz a havidíj augusztusra és
+ * szeptemberre is ott áll). Csak a hónap NEVE: a kártyás közlemény eleje egy
+ * teljes dátum (2026.09.10), az a vásárlás napja, nem a számlázott hónap. Év
+ * nélkül a fizetés éve, és ha a hónap a fizetésé után van, az előző év.
+ */
+export function namedMonth(
+  narrative: string,
+  bookingDate: string,
+): string | null {
+  const match =
+    /(?<![\p{L}\p{N}])(?:(20\d{2})[\s.\/-]*)?(jan|febr?|m[áa]rc|[áa]pr|m[áa]j|j[úu]n|j[úu]l|aug|szept?|sep|okt|oct|nov|dec)\p{L}*\.?(?![\p{L}\p{N}])/iu.exec(
+      narrative,
+    );
+  if (!match) return null;
+  const month = MONTHS.find(([rx]) => rx.test(match[2]!.toLowerCase()))![1];
+  const bookingYear = Number(bookingDate.slice(0, 4));
+  const year = match[1]
+    ? Number(match[1])
+    : month > Number(bookingDate.slice(5, 7))
+      ? bookingYear - 1
+      : bookingYear;
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+/** A számla hónapja a megnevezett hónaphoz: a hónap utolsó 3 napja a következőé. */
+const billedMonth = (date: string) =>
+  new Date(Date.parse(`${date}T00:00:00Z`) + 3 * 86_400_000)
+    .toISOString()
+    .slice(0, 7);
+
+/** A kártyás közlemény eleje: a vásárlás napja (2026.09.10 7413124583 OBI ...). */
+export function cardPurchaseDay(narrative: string): string | null {
+  const match = /^(\d{4})\.(\d{2})\.(\d{2}) \d{10} /.exec(narrative);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+}
+
+/** A normalizált név első szava, ha legalább 3 betű (a márka); számjegyre nem. */
+const firstWord = (name: string) => {
+  const word = normalizeName(name).split(" ")[0] ?? "";
+  return /^\p{L}{3,}$/u.test(word) ? word : null;
+};
 
 /** A valódi számla előbb, a proforma utána: a proforma tartalék (acrobot 25607). */
 const proformaLast = (a: CandidateDocument, b: CandidateDocument) =>
@@ -585,6 +663,17 @@ export function matchMonth(input: {
         ),
     );
   };
+  /**
+   * 1, ha a közlemény egy hónapot nevez meg, és a számla nem arra a hónapra
+   * szól. A hónap utolsó 3 napján kelt számla a KÖVETKEZŐ hónapé: a havidíjat
+   * a hónap elején számlázzák, és néha egy-két nappal előbb (mérve: a B-O 2001
+   * júniusi számlája 05-31-én kelt; e nélkül a „május” fizetés vitte el, és a
+   * „június” a 05-01-i májusit kapta, mindkettő rosszul).
+   */
+  const monthMiss = (debit: MatchableDebit, document: CandidateDocument) => {
+    const month = namedMonth(debit.narrative, debit.bookingDate);
+    return month !== null && billedMonth(document.date) !== month ? 1 : 0;
+  };
   const closest = (debit: MatchableDebit, documents: CandidateDocument[]) =>
     [...documents].sort(
       (a, b) =>
@@ -692,6 +781,8 @@ export function matchMonth(input: {
                 debit,
                 document: d,
                 gap: gap!,
+                // a közleményben megnevezett hónap számlája előbb (B-O 2001)
+                month: monthMiss(debit, d),
                 days: dayDistance(d.date, debit.bookingDate),
               },
             ]
@@ -702,6 +793,7 @@ export function matchMonth(input: {
       (x, y) =>
         proformaLast(x.document, y.document) ||
         x.gap.comparedTo(y.gap) ||
+        x.month - y.month ||
         x.days - y.days ||
         x.debit.bookingDate.localeCompare(y.debit.bookingDate) ||
         x.document.id.localeCompare(y.document.id),
@@ -787,6 +879,29 @@ export function matchMonth(input: {
         amountDifference: difference,
       });
     }
+  }
+  // 3d. KÁRTYÁS LEÍRÓ, MÁS KIÁLLÍTÓNÉV (barracuda esetlistája, OBI: a bank
+  // „OBI 042 KISTARCSA”-t ír, a számla „OBI HUNGARY RETAIL KFT.”). A hasonlósági
+  // arány itt alacsony, de HÁROM független egyezés együtt elég: a márka (az
+  // első szó, legalább 3 betű), a pontos összeg, és a számla kelte a vásárlás
+  // napja a közlemény elejéről. Csak ha EGY ilyen számla van.
+  for (const debit of open) {
+    if (outcomes.has(debit.id)) continue;
+    const purchase = cardPurchaseDay(debit.narrative);
+    const brand = firstWord(debit.counterpartyName ?? "");
+    if (!purchase || !brand) continue;
+    const invoices = window(debit).filter(
+      (d) =>
+        d.date === purchase &&
+        firstWord(d.supplierName) === brand &&
+        exact(amountGap(debit, d.gross, d.currency), d.currency),
+    );
+    if (invoices.length === 1)
+      found(
+        debit,
+        invoices,
+        "kártyás vásárlás: a márka, az összeg és a vásárlás napja egyezik",
+      );
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;

@@ -117,6 +117,7 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
           paymentState={item.paymentState}
           paidAmount={item.paidAmount}
           lastPaymentDate={item.lastPaymentDate}
+          paymentSource={item.paymentSource}
           currency={item.currency}
         />
       ),

@@ -245,6 +245,7 @@ export function BillingExternalDocumentPage({
               paymentState={detail.paymentState}
               paidAmount={detail.paidAmount}
               lastPaymentDate={detail.lastPaymentDate}
+              paymentSource={detail.paymentSource}
               currency={detail.currency}
             />
             {detail.payments.length > 0 ? (

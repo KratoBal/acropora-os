@@ -71,6 +71,7 @@ function item(
     paymentState: null,
     paidAmount: null,
     lastPaymentDate: null,
+    paymentSource: null,
     ...overrides,
   };
 }
@@ -221,6 +222,11 @@ describe("BillingDocumentListPage", () => {
         ext("ACRW-2026/00481", "PARTIAL", "50000", "2026-09-17"),
         ext("ACRW-2026/00485", "UNPAID", "0", null),
         ext("ACRW-2026/00486", "UNKNOWN", "0", null),
+        // kártyával fizetve a rendeléskor, a Számlázz.hu-ban nincs rögzítve (acrobot 25938)
+        {
+          ...ext("ACRW-2026/00490", "PAID", "15450", "2026-09-14"),
+          paymentSource: "CARD_AT_ORDER",
+        },
       ]),
     );
     render(<BillingDocumentListPage />);
@@ -229,6 +235,11 @@ describe("BillingDocumentListPage", () => {
     expect(rows[1]).toHaveTextContent(/Részben fizetve50\s000\sFt/);
     expect(within(rows[2]!).getByText("Nincs fizetve")).toBeInTheDocument();
     expect(within(rows[3]!).getByText("Nincs adat")).toBeInTheDocument();
+    // a forrás látszik: a Számlázz.hu rögzítette, vagy a rendeléskor kártyával
+    expect(within(rows[0]!).getByText("Fizetve")).toBeInTheDocument();
+    expect(
+      within(rows[4]!).getByText("Fizetve (kártya, a rendeléskor)"),
+    ).toBeInTheDocument();
   });
 
   it("the source filter goes to the request, and back from the URL", async () => {

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { paymentStateOf } from "./billing-payment-state.js";
+import {
+  outgoingMissingPayments,
+  paymentStateOf,
+} from "./billing-payment-state.js";
 
 /**
  * MI PIROSÍT: ha a hiányzó kifizetés-adat „nem fizetett”-nek látszana; ha az 5
@@ -40,5 +43,35 @@ describe("paymentStateOf (incoming and outgoing alike)", () => {
 
   it("refuses a value that is not a decimal", () => {
     assert.throws(() => state("sok", "100"));
+  });
+});
+
+describe("outgoingMissingPayments (acrobot 25936, 25938)", () => {
+  it("a later payment is unpaid; a card or cash paid at ordering is paid; anything else unknown", () => {
+    assert.deepEqual(
+      ["Átutalás", "ATUTALAS", "Utalás", "Utánvét", "  ", null].map(
+        outgoingMissingPayments,
+      ),
+      ["UNPAID", "UNPAID", "UNPAID", "UNPAID", "UNPAID", "UNPAID"],
+    );
+    assert.deepEqual(
+      ["Bankkártya", "SimplePay", "Online bankkártya", "PayPal", "Barion"].map(
+        outgoingMissingPayments,
+      ),
+      Array(5).fill("CARD_AT_ORDER"),
+    );
+    assert.deepEqual(
+      ["Készpénz", "Csekk", "OTP Simple"].map(outgoingMissingPayments),
+      ["CASH_AT_ORDER", "UNKNOWN", "CARD_AT_ORDER"],
+    );
+    // A KONTROLL (murena 25948, acrobot 25950): a kártya- vagy online-szó
+    // mellett is később fizet, ha utánvét vagy utalás; a hamis „Fizetve” a
+    // veszélyes irány
+    assert.deepEqual(
+      ["Készpénzes utánvét", "Bankkártyás utánvét", "Online átutalás"].map(
+        outgoingMissingPayments,
+      ),
+      ["UNPAID", "UNPAID", "UNPAID"],
+    );
   });
 });
