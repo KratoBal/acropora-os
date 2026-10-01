@@ -82,6 +82,8 @@ const detail = (
   paymentSource: null,
   paymentsKnown: false,
   payments: [],
+  orderNumber: "47679-665706",
+  paymentMethodUnified: "átutalás",
   versionCount: 2,
   receivedAt: "2026-10-01T15:00:00.000Z",
   ...overrides,
@@ -111,6 +113,8 @@ describe("BillingExternalDocumentPage", () => {
       screen.getByText("Külső bizonylat, csak olvasásra"),
     ).toBeInTheDocument();
     expect(screen.getByText("a legutóbbi a 2 közül")).toBeInTheDocument();
+    // a webshop rendelésszáma (`alap.rendelesszam`, acrobot 25964)
+    expect(screen.getByText("47679-665706")).toBeInTheDocument();
     // a KONTROLL a gombokra: a lapon csak a „Vissza a listához” link van
     expect(screen.queryAllByRole("button")).toEqual([]);
     expect(

@@ -63,6 +63,8 @@ describe("projectExternalInvoice", () => {
       fulfillmentDate: "2026-09-29",
       dueDate: "2026-10-08",
       paymentMethod: "Átutalás",
+      paymentMethodUnified: "átutalás",
+      orderNumber: null,
       currency: "HUF",
       customerName: "Teszt Akvárium Bt.",
       customerTaxNumber: "12345678-2-41",
@@ -161,6 +163,24 @@ describe("projectExternalInvoice", () => {
       [p.issueDate, p.electronic, p.kindCode, p.currency, p.cancelled],
       ["2026-09-30", false, "XY", "EUR", true],
     );
+  });
+
+  // MI PIROSÍT: ha a rendelésszám vagy az egységesített mód nem az `alap`-ból
+  // jönne; ha a hiányzó rendelésszám üres szöveg lenne `null` helyett; ha az
+  // egységesített mód átíródna (a döntés az osztályozóé, nem a vetítésé).
+  it("reads the order number and the unified payment method as they stand (acrobot 25964)", () => {
+    const xml = szamla({
+      extraAlap: "<rendelesszam>47679-665706</rendelesszam>",
+    }).replace(
+      "<fizmodunified>átutalás</fizmodunified>",
+      "<fizmodunified>egyéb</fizmodunified>",
+    );
+    const projection = projectExternalInvoice(xml);
+    assert.deepEqual(
+      [projection.orderNumber, projection.paymentMethodUnified],
+      ["47679-665706", "egyéb"],
+    );
+    assert.equal(projectExternalInvoice(szamla()).orderNumber, null);
   });
 
   it("refuses a half invoice: a missing customer name, a broken date, a foreign root", () => {

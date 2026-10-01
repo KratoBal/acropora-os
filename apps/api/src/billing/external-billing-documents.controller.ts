@@ -68,6 +68,8 @@ export class ExternalBillingDocumentsController {
           note: p.note,
         }),
       ),
+      orderNumber: row.orderNumber,
+      paymentMethodUnified: row.paymentMethodUnified,
       versionCount: row.versionCount,
       receivedAt: row.feedReceivedAt.toISOString(),
     };

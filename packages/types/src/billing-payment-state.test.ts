@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  FIZMODUNIFIED_MISSING_PAYMENTS,
   outgoingMissingPayments,
   paymentStateOf,
 } from "./billing-payment-state.js";
@@ -49,19 +50,21 @@ describe("paymentStateOf (incoming and outgoing alike)", () => {
 describe("outgoingMissingPayments (acrobot 25936, 25938)", () => {
   it("a later payment is unpaid; a card or cash paid at ordering is paid; anything else unknown", () => {
     assert.deepEqual(
-      ["Átutalás", "ATUTALAS", "Utalás", "Utánvét", "  ", null].map(
-        outgoingMissingPayments,
+      ["Átutalás", "ATUTALAS", "Utalás", "Utánvét", "  ", null].map((method) =>
+        outgoingMissingPayments(method),
       ),
       ["UNPAID", "UNPAID", "UNPAID", "UNPAID", "UNPAID", "UNPAID"],
     );
     assert.deepEqual(
       ["Bankkártya", "SimplePay", "Online bankkártya", "PayPal", "Barion"].map(
-        outgoingMissingPayments,
+        (method) => outgoingMissingPayments(method),
       ),
       Array(5).fill("CARD_AT_ORDER"),
     );
     assert.deepEqual(
-      ["Készpénz", "Csekk", "OTP Simple"].map(outgoingMissingPayments),
+      ["Készpénz", "Csekk", "OTP Simple"].map((method) =>
+        outgoingMissingPayments(method),
+      ),
       ["CASH_AT_ORDER", "UNKNOWN", "CARD_AT_ORDER"],
     );
     // A KONTROLL (murena 25948, acrobot 25950): a kártya- vagy online-szó
@@ -69,9 +72,57 @@ describe("outgoingMissingPayments (acrobot 25936, 25938)", () => {
     // veszélyes irány
     assert.deepEqual(
       ["Készpénzes utánvét", "Bankkártyás utánvét", "Online átutalás"].map(
-        outgoingMissingPayments,
+        (method) => outgoingMissingPayments(method),
       ),
       ["UNPAID", "UNPAID", "UNPAID"],
+    );
+  });
+});
+
+/*
+  A `fizmodunified` TÁBLÁJA KIMERÍTŐ (acrobot 25964): pontosan a szamla.xsd
+  `fizmodunifiedTipus` 21 értéke, sem több, sem kevesebb. MI PIROSÍT: egy
+  kimaradt vagy elgépelt érték (az csendben a szabad szövegre esne); egy
+  kitalált, nem XSD-érték; ha a kis- és nagybetű vagy az ékezet számítana.
+*/
+describe("outgoingMissingPayments: the unified payment method", () => {
+  const XSD_VALUES = [
+    "átutalás",
+    "készpénz",
+    "bankkártya",
+    "csekk",
+    "utánvét",
+    "ajándékutalvány",
+    "barion",
+    "barter",
+    "csoportos beszedés",
+    "OTP Simple",
+    "kompenzáció",
+    "kupon",
+    "PayPal",
+    "PayU",
+    "SZÉP kártya",
+    "utalvány",
+    "MasterCard Mobile",
+    "Borgun",
+    "EP kártya",
+    "térítésmentes",
+    "egyéb",
+  ];
+
+  it("covers exactly the 21 values of the schema's closed list", () => {
+    assert.deepEqual(
+      Object.keys(FIZMODUNIFIED_MISSING_PAYMENTS).sort(),
+      [...XSD_VALUES].sort(),
+    );
+  });
+
+  it("matches regardless of case and accents", () => {
+    assert.deepEqual(
+      ["BANKKARTYA", "otp simple", "Keszpenz", "ATUTALAS"].map((u) =>
+        outgoingMissingPayments(null, u),
+      ),
+      ["CARD_AT_ORDER", "CARD_AT_ORDER", "CASH_AT_ORDER", "UNPAID"],
     );
   });
 });

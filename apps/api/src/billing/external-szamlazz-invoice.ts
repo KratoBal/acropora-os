@@ -28,7 +28,10 @@ import {
  *   alap.kelt          issueDate      (xs:date, az időzóna-utótag nélkül)
  *   alap.telj          fulfillmentDate
  *   alap.fizh          dueDate
- *   alap.fizmod        paymentMethod
+ *   alap.fizmod        paymentMethod (szabad szöveg)
+ *   alap.fizmodunified paymentMethodUnified (az XSD zárt felsorolása; a
+ *                      kifizetés-osztályozó ELSŐKÉNT erre épít, acrobot 25964)
+ *   alap.rendelesszam  orderNumber (a webshop rendelésszáma, „47679-665706”)
  *   alap.devizanem     currency (a forint minden írásmódja HUF, lásd #1355)
  *   alap.sztornozott   cancelled
  *   vevo.nev, vevo.adoszam (vagy adoszameu), vevo.cim
@@ -79,6 +82,10 @@ export interface ExternalInvoiceProjection {
   fulfillmentDate: string | null;
   dueDate: string | null;
   paymentMethod: string | null;
+  /** `alap.fizmodunified`: a Számlázz.hu egységesített fizetési módja. */
+  paymentMethodUnified: string | null;
+  /** `alap.rendelesszam`: a webshop rendelésszáma, ha van. */
+  orderNumber: string | null;
   currency: string;
   customerName: string;
   customerTaxNumber: string | null;
@@ -199,6 +206,8 @@ export function projectExternalInvoice(xml: string): ExternalInvoiceProjection {
     fulfillmentDate: day(textAt(root, "alap", "telj")),
     dueDate: day(textAt(root, "alap", "fizh")),
     paymentMethod: textAt(root, "alap", "fizmod"),
+    paymentMethodUnified: textAt(root, "alap", "fizmodunified"),
+    orderNumber: textAt(root, "alap", "rendelesszam"),
     currency: szamlazzCurrency(required(root, "alap", "devizanem")),
     customerName: required(root, "vevo", "nev"),
     customerTaxNumber:
