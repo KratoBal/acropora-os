@@ -75,6 +75,7 @@ const pairing = (over: Partial<DocumentPairing> = {}): DocumentPairing => ({
 // MI PIROSÍT: ha a hiányzó kifizetés-adat „nincs fizetve” lenne; ha a kerekítés
 // egy forint alatti maradékkal részlegesnek, vagy egy cent hiánnyal fizetettnek
 // mondana egy számlát; ha a sztornó (negatív bruttó) sosem lehetne fizetett.
+// A számítás közös a kimenő listával (`@acropora/types` paymentStateOf).
 describe("paymentStateOf", () => {
   const state = (paid: string, gross: string, currency = "HUF", known = true) =>
     paymentStateOf({
@@ -93,7 +94,9 @@ describe("paymentStateOf", () => {
       [
         state("12700", "12700"),
         state("12699.6", "12700"),
-        state("12699", "12700"),
+        // a forint tűrése 2 Ft (az 5 forintos készpénz-kerekítés): a részleges
+        // eset ezért 3 Ft hiánnyal mér (murena kérése, 25902)
+        state("12697", "12700"),
         state("0", "12700"),
         state("99.99", "100", "EUR"),
         state("99.996", "100", "EUR"),

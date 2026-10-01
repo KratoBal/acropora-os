@@ -76,7 +76,10 @@ const detail = (
   ],
   totals: { netAmount: "20000", vatAmount: "5400", grossAmount: "25400" },
   cancelled: false,
-  payment: { state: "UNPAID", paidAmount: "0", lastPaidAt: null },
+  paymentState: "UNKNOWN",
+  paidAmount: "0",
+  lastPaymentDate: null,
+  paymentsKnown: false,
   payments: [],
   versionCount: 2,
   receivedAt: "2026-10-01T15:00:00.000Z",
@@ -120,15 +123,14 @@ describe("BillingExternalDocumentPage", () => {
   it("shows the payments Számlázz.hu recorded, its own bank pairing too", async () => {
     api.externalDetail.mockResolvedValue(
       detail({
-        payment: {
-          state: "PAID",
-          paidAmount: "25400",
-          lastPaidAt: "2026-09-28",
-        },
+        paymentState: "PAID",
+        paidAmount: "25400",
+        lastPaymentDate: "2026-09-28",
+        paymentsKnown: true,
         payments: [
           {
             date: "2026-09-28",
-            method: "átutalás",
+            title: "átutalás",
             amount: "25400",
             note: "Automatikus banki tranzakció párosítás",
           },
@@ -136,7 +138,7 @@ describe("BillingExternalDocumentPage", () => {
       }),
     );
     render(<BillingExternalDocumentPage documentId="ext-1" />);
-    expect(await screen.findByText("Kifizetve")).toBeInTheDocument();
+    expect(await screen.findByText("Fizetve")).toBeInTheDocument();
     expect(
       screen.getByText("Automatikus banki tranzakció párosítás"),
     ).toBeInTheDocument();

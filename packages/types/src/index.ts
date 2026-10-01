@@ -77,7 +77,6 @@ export {
   BILLING_DOCUMENT_ORIGINS,
   BILLING_EMAIL_MODES,
   BILLING_LINE_STOCK_OUTCOMES,
-  BILLING_PAYMENT_STATES,
   billingEmailModeFor,
 } from "./billing-document-read.js";
 export type {
@@ -90,18 +89,17 @@ export type {
   BillingDocumentListResponse,
   BillingDocumentListTarget,
   BillingDocumentOrigin,
-  BillingDocumentPayment,
   BillingDocumentPdfInfo,
   BillingExternalDocumentDetail,
   BillingExternalDocumentLine,
-  BillingExternalDocumentPaymentLine,
-  BillingPaymentState,
   BillingDocumentSzamlazzInfo,
   BillingEmailMode,
   BillingEmailRecipients,
   BillingLineStockOutcome,
 } from "./billing-document-read.js";
 export { billingProductPrice } from "./billing-product-price.js";
+export { paymentStateOf } from "./billing-payment-state.js";
+export type { BillingPaymentState } from "./billing-payment-state.js";
 export type { BillingProductPrice } from "./billing-product-price.js";
 export {
   BILLING_DOCUMENT_STATUS_LABELS,

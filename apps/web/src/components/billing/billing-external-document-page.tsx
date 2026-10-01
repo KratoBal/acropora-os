@@ -241,7 +241,12 @@ export function BillingExternalDocumentPage({
             title="Kifizetés"
             subtitle="Ahogy a Számlázz.hu nyilvántartja, a saját banki párosításával együtt."
           >
-            <PaymentBadge payment={detail.payment} currency={detail.currency} />
+            <PaymentBadge
+              paymentState={detail.paymentState}
+              paidAmount={detail.paidAmount}
+              lastPaymentDate={detail.lastPaymentDate}
+              currency={detail.currency}
+            />
             {detail.payments.length > 0 ? (
               <ul className="mt-3 space-y-2 text-sm">
                 {detail.payments.map((payment, index) => (
@@ -250,7 +255,7 @@ export function BillingExternalDocumentPage({
                     className="flex items-baseline justify-between gap-3"
                   >
                     <span className="text-pilot-grey-700">
-                      {formatDay(payment.date)} · {payment.method}
+                      {formatDay(payment.date)} · {payment.title}
                       {payment.note ? (
                         <span className="block text-xs text-pilot-grey-500">
                           {payment.note}

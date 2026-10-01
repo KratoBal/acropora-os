@@ -97,14 +97,16 @@ export class SzamlazzFeedsRepository {
         issueDate,
         fulfillmentDate,
         dueDate,
-        lastPaidAt,
+        lastPaymentDate,
         ...rest
       } = input.projection;
       const data = {
         ...rest,
         lines: rest.lines as unknown as Prisma.InputJsonValue,
         payments: rest.payments as unknown as Prisma.InputJsonValue,
-        lastPaidAt: lastPaidAt ? new Date(`${lastPaidAt}T00:00:00Z`) : null,
+        lastPaymentDate: lastPaymentDate
+          ? new Date(`${lastPaymentDate}T00:00:00Z`)
+          : null,
         issueDate: new Date(`${issueDate}T00:00:00Z`),
         fulfillmentDate: fulfillmentDate
           ? new Date(`${fulfillmentDate}T00:00:00Z`)

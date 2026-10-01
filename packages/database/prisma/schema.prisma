@@ -7282,10 +7282,13 @@ model ExternalBillingDocument {
   /// dátum, jogcím, összeg, megjegyzés, banki azonosító. A Számlázz.hu egy
   /// kifizetés után újraküldi a számlát, a saját banki párosítása is ide ír.
   payments          Json      @default("[]")
+  /// Küldött-e a Számlázz.hu `kifizetesek` elemet; a hiánya nem azonos a
+  /// „nem fizetett”-tel (a bejövő oldal szabálya, IncomingBillingDocument).
+  paymentsKnown     Boolean   @default(false)
   /// A kifizetések összege; a lista ebből számolja a kifizetettséget.
   paidAmount        Decimal   @default(0) @db.Decimal(18, 2)
   /// A legkésőbbi kifizetés napja.
-  lastPaidAt        DateTime? @db.Date
+  lastPaymentDate   DateTime? @db.Date
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

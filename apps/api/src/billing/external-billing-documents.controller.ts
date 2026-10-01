@@ -7,7 +7,10 @@ import {
 } from "@acropora/types";
 
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
-import { externalKindLabel, externalPayment } from "./billing-document-list.js";
+import {
+  externalKindLabel,
+  externalPaymentFields,
+} from "./billing-document-list.js";
 import type { ExternalInvoicePayment } from "./external-szamlazz-invoice.js";
 
 const day = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
@@ -55,11 +58,12 @@ export class ExternalBillingDocumentsController {
         grossAmount: row.grossAmount.toFixed(decimals),
       },
       cancelled: row.cancelled,
-      payment: externalPayment(row),
+      ...externalPaymentFields(row),
+      paymentsKnown: row.paymentsKnown,
       payments: (row.payments as unknown as ExternalInvoicePayment[]).map(
         (p) => ({
           date: p.date,
-          method: p.method,
+          title: p.title,
           amount: new Prisma.Decimal(p.amount).toFixed(decimals),
           note: p.note,
         }),

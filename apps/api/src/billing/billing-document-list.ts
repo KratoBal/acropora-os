@@ -1,8 +1,8 @@
 import { Prisma } from "@acropora/database";
 import {
   szamlazzDocumentTotals,
+  paymentStateOf,
   type BillingDocumentListItem,
-  type BillingDocumentPayment,
   type BillingDocumentListQuery,
   type BillingDocumentStatus,
   type BillingDocumentType,
@@ -129,7 +129,9 @@ export function toListItem(
     origin: "OWN",
     externalKindLabel: null,
     // a saját bizonylat kifizetéséről ma nincs forrásunk
-    payment: null,
+    paymentState: null,
+    paidAmount: null,
+    lastPaymentDate: null,
   };
 }
 
@@ -232,35 +234,39 @@ export interface ExternalListRow {
   currency: string;
   createdAt: Date;
   paidAmount: Prisma.Decimal;
-  lastPaidAt: Date | null;
+  lastPaymentDate: Date | null;
+  paymentsKnown: boolean;
   cancelled: boolean;
 }
 
 /**
- * A KIFIZETETTSÉG EGY KÜLSŐ BIZONYLATRA, a tárolt kifizetésekből (lásd
- * `BillingDocumentPayment`). Sztornózott vagy nem pozitív végösszegű bizonylat
- * nem fizetendő: ott `null`.
+ * A KIFIZETETTSÉG EGY KÜLSŐ BIZONYLATRA: a bejövő listával közös számítás
+ * (`paymentStateOf`, murena 25902). A sztornózott számla nem fizetendő: ott
+ * `null`, nem „nem fizetett”.
  */
-export function externalPayment(row: {
+export function externalPaymentFields(row: {
   grossAmount: Prisma.Decimal;
   paidAmount: Prisma.Decimal;
-  lastPaidAt: Date | null;
+  lastPaymentDate: Date | null;
+  paymentsKnown: boolean;
   currency: string;
   cancelled: boolean;
-}): BillingDocumentPayment | null {
-  if (row.cancelled || row.grossAmount.lte(0)) return null;
-  const huf = row.currency.toUpperCase() === "HUF";
-  // a készpénzes utánvét 5 forintra kerekít (barracuda, acrobot 25898)
-  const tolerance = huf ? 2 : 0;
-  const state = row.paidAmount.gte(row.grossAmount.minus(tolerance))
-    ? "PAID"
-    : row.paidAmount.gt(0)
-      ? "PARTIAL"
-      : "UNPAID";
+}): Pick<
+  BillingDocumentListItem,
+  "paymentState" | "paidAmount" | "lastPaymentDate"
+> {
+  if (row.cancelled)
+    return { paymentState: null, paidAmount: null, lastPaymentDate: null };
+  const decimals = row.currency.toUpperCase() === "HUF" ? 0 : 2;
   return {
-    state,
-    paidAmount: row.paidAmount.toFixed(huf ? 0 : 2),
-    lastPaidAt: calendarDay(row.lastPaidAt),
+    paymentState: paymentStateOf({
+      paymentsKnown: row.paymentsKnown,
+      paidAmount: row.paidAmount.toFixed(),
+      grossAmount: row.grossAmount.toFixed(),
+      currency: row.currency,
+    }),
+    paidAmount: row.paidAmount.toFixed(decimals),
+    lastPaymentDate: calendarDay(row.lastPaymentDate),
   };
 }
 
@@ -284,7 +290,7 @@ export function toExternalListItem(
     opens: "EXTERNAL_DETAIL",
     origin: "EXTERNAL",
     externalKindLabel: externalKindLabel(row.kindCode),
-    payment: externalPayment(row),
+    ...externalPaymentFields(row),
   };
 }
 

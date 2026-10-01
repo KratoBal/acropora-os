@@ -174,15 +174,16 @@ describe(
             ? [
                 {
                   date: "2026-09-28",
-                  method: "átutalás",
+                  title: "átutalás",
                   amount: "127",
                   note: "Automatikus banki tranzakció párosítás",
                   bankTransactionId: "77877311",
                 },
               ]
             : [],
+        paymentsKnown: documentNumber === "UJ-1",
         paidAmount: documentNumber === "UJ-1" ? "127.00" : "0.00",
-        lastPaidAt: documentNumber === "UJ-1" ? "2026-09-28" : null,
+        lastPaymentDate: documentNumber === "UJ-1" ? "2026-09-28" : null,
       });
       assert.deepEqual(
         [
@@ -210,7 +211,8 @@ describe(
           documentNumber: true,
           versionCount: true,
           paidAmount: true,
-          lastPaidAt: true,
+          lastPaymentDate: true,
+          paymentsKnown: true,
           payments: true,
         },
       });
@@ -219,11 +221,12 @@ describe(
           row.documentNumber,
           row.versionCount,
           row.paidAmount.toFixed(2),
-          row.lastPaidAt?.toISOString().slice(0, 10),
+          row.lastPaymentDate?.toISOString().slice(0, 10),
+          row.paymentsKnown,
           (row.payments as { bankTransactionId: string }[])[0]
             ?.bankTransactionId,
         ],
-        ["UJ-1", 2, "127.00", "2026-09-28", "77877311"],
+        ["UJ-1", 2, "127.00", "2026-09-28", true, "77877311"],
       );
 
       const list = new BillingDocumentListRepository();

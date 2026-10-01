@@ -113,7 +113,12 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       header: "Kifizetés",
       width: "120px",
       cell: (item) => (
-        <PaymentBadge payment={item.payment} currency={item.currency} />
+        <PaymentBadge
+          paymentState={item.paymentState}
+          paidAmount={item.paidAmount}
+          lastPaymentDate={item.lastPaymentDate}
+          currency={item.currency}
+        />
       ),
     },
     {

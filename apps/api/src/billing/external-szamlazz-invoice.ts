@@ -36,8 +36,10 @@ import {
  *   tetelek.tetel[]    lines, a számla sorrendjében
  *   osszegek.totalossz netAmount, vatAmount, grossAmount
  *   kifizetesek.kifizetes[]
- *                      payments, és belőlük paidAmount (összeg) és lastPaidAt
- *                      (a legkésőbbi dátum). A Számlázz.hu egy kifizetés után
+ *                      payments, és belőlük paidAmount (összeg) és
+ *                      lastPaymentDate (a legkésőbbi dátum); paymentsKnown: van-e
+ *                      egyáltalán `kifizetesek` elem (a bejövő oldal szabálya:
+ *                      a hiánya nem azonos a „nem fizetett”-tel). A Számlázz.hu egy kifizetés után
  *                      újraküldi a számlát (acrobot 25894, élesen mérve), és a
  *                      saját banki párosítása is ide ír; az igazság ez.
  *
@@ -61,7 +63,7 @@ export interface ExternalInvoiceLine {
 export interface ExternalInvoicePayment {
   date: string;
   /** A jogcím, nyersen (átutalás, készpénz, utánvét, ...). */
-  method: string;
+  title: string;
   amount: string;
   note: string | null;
   /** A Számlázz.hu banki párosításának azonosítója, ha onnan jött. */
@@ -86,11 +88,13 @@ export interface ExternalInvoiceProjection {
   grossAmount: string;
   lines: ExternalInvoiceLine[];
   cancelled: boolean;
+  /** Küldött-e a Számlázz.hu `kifizetesek` elemet. */
+  paymentsKnown: boolean;
   payments: ExternalInvoicePayment[];
   /** A kifizetések összege, két tizedesre. */
   paidAmount: string;
   /** A legkésőbbi kifizetés napja; kifizetés nélkül `null`. */
-  lastPaidAt: string | null;
+  lastPaymentDate: string | null;
 }
 
 /**
@@ -136,7 +140,7 @@ function payment(kifizetes: XmlElement, index: number): ExternalInvoicePayment {
     throw new SzamlazzFeedParseError(`a(z) ${field("datum")} nem dátum`);
   return {
     date,
-    method: required(kifizetes, "jogcim"),
+    title: required(kifizetes, "jogcim"),
     amount: number(textAt(kifizetes, "osszeg"), field("osszeg")),
     note: textAt(kifizetes, "megjegyzes"),
     bankTransactionId: textAt(kifizetes, "banktranzid"),
@@ -182,7 +186,8 @@ export function projectExternalInvoice(xml: string): ExternalInvoiceProjection {
     .filter((element) => element.name === "tetel")
     .map(line);
   const truthy = (value: string | null) => value === "true" || value === "1";
-  const payments = (child(root, "kifizetesek")?.children ?? [])
+  const kifizetesek = child(root, "kifizetesek");
+  const payments = (kifizetesek?.children ?? [])
     .filter((element) => element.name === "kifizetes")
     .map(payment);
   return {
@@ -213,11 +218,12 @@ export function projectExternalInvoice(xml: string): ExternalInvoiceProjection {
     ),
     lines,
     cancelled: truthy(textAt(root, "alap", "sztornozott")),
+    paymentsKnown: kifizetesek !== undefined,
     payments,
     paidAmount: payments
       .reduce((sum, p) => sum.plus(p.amount), new Prisma.Decimal(0))
       .toFixed(2),
-    lastPaidAt: payments.reduce<string | null>(
+    lastPaymentDate: payments.reduce<string | null>(
       (last, p) => (last === null || p.date > last ? p.date : last),
       null,
     ),

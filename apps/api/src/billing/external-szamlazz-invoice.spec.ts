@@ -93,9 +93,10 @@ describe("projectExternalInvoice", () => {
         },
       ],
       cancelled: false,
+      paymentsKnown: false,
       payments: [],
       paidAmount: "0.00",
-      lastPaidAt: null,
+      lastPaymentDate: null,
     });
   });
 
@@ -117,20 +118,23 @@ describe("projectExternalInvoice", () => {
     assert.deepEqual(p.payments, [
       {
         date: "2026-09-28",
-        method: "átutalás",
+        title: "átutalás",
         amount: "20000.0",
         note: "Automatikus banki tranzakció párosítás",
         bankTransactionId: "77877311",
       },
       {
         date: "2026-09-17",
-        method: "utánvét",
+        title: "utánvét",
         amount: "9210.5",
         note: null,
         bankTransactionId: null,
       },
     ]);
-    assert.deepEqual([p.paidAmount, p.lastPaidAt], ["29210.50", "2026-09-28"]);
+    assert.deepEqual(
+      [p.paymentsKnown, p.paidAmount, p.lastPaymentDate],
+      [true, "29210.50", "2026-09-28"],
+    );
     assert.throws(
       () =>
         projectExternalInvoice(

@@ -68,7 +68,9 @@ function item(
     opens: "DETAIL",
     origin: "OWN",
     externalKindLabel: null,
-    payment: null,
+    paymentState: null,
+    paidAmount: null,
+    lastPaymentDate: null,
     ...overrides,
   };
 }
@@ -195,8 +197,13 @@ describe("BillingDocumentListPage", () => {
 
   // MI PIROSÍT: ha a kifizetettség nem a válaszból jönne, vagy a három állapot
   // összemosódna; ha a saját bizonylat kitalált állapotot mutatna.
-  it("shows whether an external invoice is paid: paid with its day, partly with the amount, open (Balázs, GLS)", async () => {
-    const ext = (id: string, payment: BillingDocumentListItem["payment"]) =>
+  it("shows whether an external invoice is paid, with the incoming list's labels (Balázs, GLS)", async () => {
+    const ext = (
+      id: string,
+      paymentState: BillingDocumentListItem["paymentState"],
+      paidAmount: string,
+      lastPaymentDate: string | null,
+    ) =>
       item({
         id,
         documentNumber: id,
@@ -204,33 +211,24 @@ describe("BillingDocumentListPage", () => {
         opens: "EXTERNAL_DETAIL",
         origin: "EXTERNAL",
         externalKindLabel: "Számla",
-        payment,
+        paymentState,
+        paidAmount,
+        lastPaymentDate,
       });
     api.list.mockResolvedValue(
       response([
-        ext("ACRW-2026/00479", {
-          state: "PAID",
-          paidAmount: "27450",
-          lastPaidAt: "2026-09-17",
-        }),
-        ext("ACRW-2026/00481", {
-          state: "PARTIAL",
-          paidAmount: "50000",
-          lastPaidAt: "2026-09-17",
-        }),
-        ext("ACRW-2026/00485", {
-          state: "UNPAID",
-          paidAmount: "0",
-          lastPaidAt: null,
-        }),
+        ext("ACRW-2026/00479", "PAID", "27450", "2026-09-17"),
+        ext("ACRW-2026/00481", "PARTIAL", "50000", "2026-09-17"),
+        ext("ACRW-2026/00485", "UNPAID", "0", null),
+        ext("ACRW-2026/00486", "UNKNOWN", "0", null),
       ]),
     );
     render(<BillingDocumentListPage />);
     const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
-    expect(rows[0]).toHaveTextContent("Kifizetve2026. 09. 17.");
-    expect(rows[1]).toHaveTextContent(/Részben50\s000\sFt/);
-    expect(within(rows[2]!).getByText("Nyitott")).toBeInTheDocument();
-    expect(within(rows[2]!).queryByText(/Kifizetve|Részben/)).toBeNull();
+    expect(rows[0]).toHaveTextContent("Fizetve2026. 09. 17.");
+    expect(rows[1]).toHaveTextContent(/Részben fizetve50\s000\sFt/);
+    expect(within(rows[2]!).getByText("Nincs fizetve")).toBeInTheDocument();
+    expect(within(rows[3]!).getByText("Nincs adat")).toBeInTheDocument();
   });
 
   it("the source filter goes to the request, and back from the URL", async () => {

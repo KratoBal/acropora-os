@@ -8,7 +8,7 @@ import {
   listWhere,
   mergeListRows,
   ownWhere,
-  externalPayment,
+  externalPaymentFields,
   toExternalListItem,
   toListItem,
   type ExternalListRow,
@@ -158,51 +158,51 @@ const external = (
   currency: "HUF",
   createdAt: new Date("2026-10-01T15:00:00.000Z"),
   paidAmount: D("0"),
-  lastPaidAt: null,
+  lastPaymentDate: null,
+  paymentsKnown: false,
   cancelled: false,
   ...overrides,
 });
 
 describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () => {
-  // MI PIROSÍT: ha az 5 forintos kerekítés miatt egy kifizetett számla
-  // rész-kifizetettnek látszana; ha egy rész-kifizetés kifizetettnek; ha a
-  // devizás számla is kapná a forint-tűrést; ha egy sztornózott vagy sztornó
-  // számla fizetendőnek látszana; ha a saját bizonylat kitalált állapotot kapna.
-  const paid = (amount: string, overrides: Partial<ExternalListRow> = {}) =>
-    externalPayment(
+  // MI PIROSÍT: ha a mezők nem a közös számításból jönnének (a bejövő listával
+  // eltérne); ha a hiányzó kifizetés-adat „nem fizetett” lenne; ha egy
+  // sztornózott számla fizetendőnek látszana; ha a saját bizonylat állapotot kapna.
+  const fields = (overrides: Partial<ExternalListRow> = {}) =>
+    externalPaymentFields(
       external({
         grossAmount: D("105831"),
-        paidAmount: D(amount),
-        lastPaidAt: new Date("2026-09-17T00:00:00.000Z"),
+        paidAmount: D("105830"),
+        lastPaymentDate: new Date("2026-09-17T00:00:00.000Z"),
+        paymentsKnown: true,
         ...overrides,
       }),
     );
 
-  it("paid, also when the cash on delivery was rounded to 5 Ft; partial; unpaid", () => {
-    assert.deepEqual(paid("105831"), {
-      state: "PAID",
-      paidAmount: "105831",
-      lastPaidAt: "2026-09-17",
+  it("paid with the 5 Ft cash rounding, in the shared computation, with its day", () => {
+    assert.deepEqual(fields(), {
+      paymentState: "PAID",
+      paidAmount: "105830",
+      lastPaymentDate: "2026-09-17",
     });
-    // a GLS 09-17-i sora: 105 830 a 105 831-es számlára (barracuda, 25888)
-    assert.equal(paid("105830")?.state, "PAID");
-    assert.equal(paid("105828")?.state, "PARTIAL");
-    assert.equal(paid("50000")?.state, "PARTIAL");
-    assert.deepEqual(paid("0", { lastPaidAt: null }), {
-      state: "UNPAID",
-      paidAmount: "0",
-      lastPaidAt: null,
-    });
+    assert.equal(fields({ paidAmount: D("50000") }).paymentState, "PARTIAL");
   });
 
-  it("no forint tolerance on a foreign currency, and nothing to pay on a storno", () => {
-    assert.equal(
-      paid("99.99", { grossAmount: D("100"), currency: "EUR" })?.state,
-      "PARTIAL",
+  it("unknown without payment data; nothing on a cancelled invoice or our own", () => {
+    assert.deepEqual(
+      fields({
+        paymentsKnown: false,
+        paidAmount: D("0"),
+        lastPaymentDate: null,
+      }).paymentState,
+      "UNKNOWN",
     );
-    assert.equal(paid("0", { cancelled: true }), null);
-    assert.equal(paid("0", { grossAmount: D("-15450") }), null);
-    assert.equal(toListItem(row()).payment, null);
+    assert.deepEqual(fields({ cancelled: true }), {
+      paymentState: null,
+      paidAmount: null,
+      lastPaymentDate: null,
+    });
+    assert.equal(toListItem(row()).paymentState, null);
   });
 });
 
@@ -225,7 +225,9 @@ describe("the external documents on the list", () => {
       opens: "EXTERNAL_DETAIL",
       origin: "EXTERNAL",
       externalKindLabel: "Számla",
-      payment: { state: "UNPAID", paidAmount: "0", lastPaidAt: null },
+      paymentState: "UNKNOWN",
+      paidAmount: "0",
+      lastPaymentDate: null,
     });
     assert.deepEqual(
       [
