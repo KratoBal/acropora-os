@@ -149,6 +149,7 @@ export const INVOICE_SOURCE_LABELS: Record<InvoiceSource, string> = {
   DRIVE: "Drive",
   SETTLEMENT: "Elszámolás",
   PREMIUM_NOTICE: "Díjértesítő",
+  SZAMLAZZ: "Számlázz.hu",
 };
 
 /** A kategória felirata, szintén a közös helyről (nautilus #1308). */
