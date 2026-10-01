@@ -44,9 +44,17 @@ export type IncomingBankMatchState =
 export const INCOMING_BANK_MATCH_LABELS: Readonly<
   Record<IncomingBankMatchState, string>
 > = {
-  PAIRED: "Párosítva",
-  UNPAIRED: "Nincs párosítva",
+  PAIRED: "Bankkal párosodott",
+  UNPAIRED: "Nincs banki pár",
   NOT_TO_PAIR: "Nem párosítandó",
+};
+
+/** A „nem párosítandó” oka, a felületen kiírva. */
+export const INCOMING_NOT_TO_PAIR_REASON_LABELS: Readonly<
+  Record<"NOT_COMPANY" | "PROFORMA", string>
+> = {
+  NOT_COMPANY: "A számla nem a cégre szól.",
+  PROFORMA: "Díjbekérő, nem számla: nem kerül banki párosításra.",
 };
 
 export interface IncomingBankMatch {
