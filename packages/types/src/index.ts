@@ -884,6 +884,9 @@ export {
 } from "./missing-invoices.js";
 export type {
   BankStatementImportResult,
+  InvoiceCollectionSuggestion,
+  InvoiceCollectionSuggestionDecision,
+  InvoiceCollectionSuggestionsResponse,
   MissingInvoiceAction,
   MissingInvoiceCandidate,
   MissingInvoiceCategory,

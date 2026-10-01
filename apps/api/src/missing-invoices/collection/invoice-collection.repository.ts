@@ -20,7 +20,13 @@ export type InvoiceCollectionVerdict =
   | "OWN_INVOICE"
   | "DUPLICATE"
   | "TOO_LARGE"
-  | "UNREADABLE";
+  | "UNREADABLE"
+  /**
+   * A Jev bejövő számlának látta (levél-válogatás, 4. szelet): a dokumentum
+   * tárolva, de jóváhagyásra vár, és addig nem jelölt. Végleges ítélet: a
+   * következő futás nem olvassa újra (a döntés emberé).
+   */
+  | "SUGGESTED";
 
 export interface InvoiceCollectionCounts {
   filesSeen: number;
@@ -30,6 +36,8 @@ export interface InvoiceCollectionCounts {
   unmatchedCount: number;
   /** A saját kimenő számlánk másolata (a bankszámlánk áll benne): nem tárolódik. */
   ownInvoiceCount: number;
+  /** A Jev bejövő számlának látta: jóváhagyásra vár (nem jelölt). */
+  suggestedCount: number;
   duplicateCount: number;
   failedCount: number;
 }
@@ -48,6 +56,11 @@ export interface CollectedDocumentInput {
   importResult: unknown;
   textReading: unknown;
   payee: string;
+  /**
+   * A JEV JAVASLATA (4. szelet): ha áll, a dokumentum SUGGESTED állapotban
+   * tárolódik (nem jelölt), és a begyűjtés sora is SUGGESTED.
+   */
+  suggestion?: { confidence: number; decisionRunId: string };
 }
 
 /**
@@ -256,7 +269,7 @@ export class InvoiceCollectionRepository {
     source: InvoiceCollectionSource,
     externalId: string,
     fileName: string,
-    verdict: Exclude<InvoiceCollectionVerdict, "STORED">,
+    verdict: Exclude<InvoiceCollectionVerdict, "STORED" | "SUGGESTED">,
     sha256: string | null,
   ): Promise<void> {
     const key = { source, externalId, fileName };
@@ -264,7 +277,10 @@ export class InvoiceCollectionRepository {
       where: { source_externalId_fileName: key },
       select: { verdict: true },
     });
-    if (existing?.verdict === "STORED") return;
+    // a tárolt és a javasolt sor egy dokumentumra mutat: egy újraolvasott
+    // levél DUPLICATE-ítélete ezt nem írhatja felül
+    if (existing?.verdict === "STORED" || existing?.verdict === "SUGGESTED")
+      return;
     await this.database.invoiceCollectionItem.upsert({
       where: {
         source_externalId_fileName: { source, externalId, fileName },
@@ -300,11 +316,27 @@ export class InvoiceCollectionRepository {
           payeeCheck: input.payee,
           origin:
             input.source === "DRIVE" ? "COLLECTED_DRIVE" : "COLLECTED_MAIL",
+          ...(input.suggestion
+            ? {
+                reviewState: "SUGGESTED",
+                suggestionConfidence: input.suggestion.confidence,
+                suggestionDecisionRunId: input.suggestion.decisionRunId,
+              }
+            : {}),
         },
         select: { id: true },
       });
+      const verdict = input.suggestion ? "SUGGESTED" : "STORED";
+      // a javaslatként megmutatott futás SHOWN: a mérleg ebből tudja, mit látott
+      // ember (a besoroló HIDDEN-ként írta, nautilus #1356)
+      if (input.suggestion)
+        await transaction.decisionRun.updateMany({
+          where: { id: input.suggestion.decisionRunId },
+          data: { exposure: "SHOWN" },
+        });
       // UPSERT: egy korábban UNMATCHED fájl újraolvasva ugyanazt a kulcsot kapja
-      // (forrás, azonosító, fájlnév); a sora most STORED lesz, a dokumentumra mutat.
+      // (forrás, azonosító, fájlnév); a sora most STORED (vagy a Jev javaslatánál
+      // SUGGESTED) lesz, a dokumentumra mutat.
       await transaction.invoiceCollectionItem.upsert({
         where: {
           source_externalId_fileName: {
@@ -317,12 +349,12 @@ export class InvoiceCollectionRepository {
           source: input.source,
           externalId: input.externalId,
           fileName: input.fileName,
-          verdict: "STORED",
+          verdict,
           sha256: input.sha256,
           documentId: document.id,
         },
         update: {
-          verdict: "STORED",
+          verdict,
           sha256: input.sha256,
           documentId: document.id,
         },
