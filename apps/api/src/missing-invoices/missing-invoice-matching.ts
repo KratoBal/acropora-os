@@ -174,6 +174,46 @@ const dayDistance = (a: string, b: string) =>
 
 const compact = (s: string) => s.replace(/\s/g, "").toLowerCase();
 
+/**
+ * A KÖZLEMÉNY SZAVAI: szóköz, vessző, pontosvessző és kettőspont mentén, a
+ * szó végi pont nélkül.
+ */
+const narrativeTokens = (narrative: string) =>
+  narrative
+    .split(/[\s,;:]+/)
+    .map((token) => token.replace(/\.$/, "").toLowerCase())
+    .filter(Boolean);
+
+/** Ennél rövidebb számlaszámnál a partnernek is egyeznie kell. */
+const SHORT_NUMBER = 8;
+
+/**
+ * A SZÁMLA SZÁMA A KÖZLEMÉNYBEN: a szám a közlemény EGY EGÉSZ SZAVA, és rövid
+ * számnál a partner is egyezik.
+ *
+ * Mérve 2026-10-01, az exchange kivonatain (2025-12 .. 2026-08, 1144
+ * terhelés), barracuda lelete nyomán: a régi részszöveg-keresés 158
+ * párosításából kettő rossz volt. A `PETIK-2026-3` a `PETIK-2026-30`
+ * közleményű fizetést vitte el, és egy MÁSIK partner `2026-37` számlája az
+ * `E-VEGA-2026-37` közleményűt. A szóhatár magában az utóbbit nem fogta volna:
+ * a kötőjel a szám része. Ezzel a szabállyal a 158-ból 156 marad, és a kieső
+ * kettő pontosan a két rossz.
+ */
+function numberInNarrative(debit: MatchableDebit, document: CandidateDocument) {
+  const tokens = narrativeTokens(debit.narrative);
+  // a számla száma MELLETT a hivatkozásai is (#1323: a Fauna Marin közleménye a
+  // rendelésszámot nevezi meg), ugyanazzal az egész-szó szabállyal
+  return [document.number, ...(document.references ?? [])].some((raw) => {
+    const number = compact(raw);
+    return (
+      number.length >= 5 &&
+      tokens.includes(number) &&
+      (number.length >= SHORT_NUMBER ||
+        samePartner(debit.counterpartyName ?? "", document.supplierName))
+    );
+  });
+}
+
 function stateOf(documents: CandidateDocument[]): ItemState {
   if (documents.some((d) => d.kind === "PROFORMA")) return "PROFORMA_ONLY";
   if (documents.some((d) => d.payee === "NOT_COMPANY")) return "NOT_COMPANY";
@@ -326,13 +366,7 @@ export function matchMonth(input: {
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
     // 1. a számla száma a közleményben
-    const byNumber = free().find((d) =>
-      [d.number, ...(d.references ?? [])].some(
-        (number) =>
-          number.replace(/\s/g, "").length >= 5 &&
-          compact(debit.narrative).includes(compact(number)),
-      ),
-    );
+    const byNumber = free().find((d) => numberInNarrative(debit, d));
     if (byNumber) found(debit, [byNumber], "a számla száma a közleményben");
   }
   for (const debit of open) {
