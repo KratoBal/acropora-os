@@ -283,6 +283,13 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
         origin: "COLLECTED_MAIL",
         receivedAt: new Date("2026-08-07T09:00:00Z"),
         payeeCheck: "COMPANY",
+        // a gyűjtött dokumentum a szövegolvasatból kap számot és dátumot;
+        // nélküle nem jelölt (az első CI-futás ezen bukott, a teszt hibája volt)
+        textReading: {
+          invoiceNumber: "HIANYZOTESZT-SHA-1",
+          numberFrom: "NAV",
+          supplierTaxNumber: "99999999-2-42",
+        },
       },
       select: { id: true },
     });
