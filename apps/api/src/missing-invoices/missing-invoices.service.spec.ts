@@ -248,6 +248,31 @@ describe("MissingInvoicesService.month", () => {
   ha a két terhelés a Megvan-csempébe számítana; ha a hiányzó összegből
   kimaradna; ha a drawer nem nevezné meg a másik terhelést dátummal, összeggel.
 */
+/*
+  BIZTOSÍTÁS A DRAWERBEN (barracuda esetlistája, 2. csoport). MI PIROSÍT: ha egy
+  biztosítási díjnál a „Mit kell tenni” a számla elkérését mondaná, holott
+  díjértesítő kell; ha egy szállítónál is a díjértesítőt kérné.
+*/
+describe("an insurance premium without a document", () => {
+  it("asks for the premium notice, while a supplier still gets the invoice request", async () => {
+    const premium = debit("2026-09-25", 85688, "Genertel Biztosító Zrt.", {
+      transactionType: "AZONNALI FIZETÉS",
+      narrative: "10023943821",
+    });
+    const supplier = debit("2026-09-25", 12000, "Szállító Kft.");
+    const { missing } = service({
+      debits: [premium, supplier],
+      coverage: [`${MAIN.id}:2026-09`, `${CARD.id}:2026-09`],
+    });
+    const insured = await missing.item(premium.id);
+    const other = await missing.item(supplier.id);
+    assert.deepEqual(
+      [insured.state, insured.category, insured.action, other.action],
+      ["NO_INVOICE", "INSURANCE", "PROVIDE_PREMIUM_NOTICE", "REQUEST_INVOICE"],
+    );
+  });
+});
+
 describe("a double-paid invoice", () => {
   it("is counted as missing an invoice, and the drawer names the other debit", async () => {
     const sopro = (id: string): CandidateDocument => ({

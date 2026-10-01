@@ -187,6 +187,33 @@ describe("classifyTransaction", () => {
     assert.equal(NO_INVOICE_CATEGORIES.has(c), false);
   });
 
+  // MI PIROSÍT (barracuda esetlistája, 2. csoport; acrobot 25953): ha a
+  // „Biztosító” nevű partner magyar szállító maradna; ha a bank beszedte
+  // személybiztosítás számlát várna, holott Balázs szerint a kivonat sora elég.
+  it("files an insurer by its own name (Biztosító), and the bank-collected personal insurance as needing no invoice", () => {
+    assert.deepEqual(
+      [
+        category({
+          counterpartyName: "Genertel Biztosító Zrt.",
+          transactionType: "AZONNALI FIZETÉS",
+          narrative: "10023943821",
+        }),
+        category({
+          counterpartyName: "Gránit Biztosító Zrt.",
+          transactionType: "QVIK  FIZETÉS",
+        }),
+      ],
+      ["INSURANCE", "INSURANCE"],
+    );
+    const otp = category({
+      counterpartyName: "OTP BANK NYRT.",
+      transactionType: "VÉDELMEZŐ SZEMÉLYBIZTOSÍTÁS DÍJ",
+      narrative: "01749735MKVEXTR1",
+    });
+    assert.equal(otp, "BANK_FEE");
+    assert.equal(NO_INVOICE_CATEGORIES.has(otp), true);
+  });
+
   it("files a foreign IBAN and a foreign company form as foreign", () => {
     assert.equal(
       category({

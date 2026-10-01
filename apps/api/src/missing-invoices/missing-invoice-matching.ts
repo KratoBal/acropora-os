@@ -844,8 +844,16 @@ export function matchMonth(input: {
         rounded(amountGap(debit, d.gross, d.currency), d.currency),
       ).length > 1;
     const kept = withheld.get(debit.id) ?? [];
+    // BIZTOSÍTÁS (barracuda esetlistája, 2. csoport): a díjhoz díjértesítő jár,
+    // vagy a biztosító számlája; a partner más számlái (az OTP banki díjai)
+    // nem ehhez valók, tehát a „van számla a partnertől” itt félrevezet
+    const insurance =
+      debit.category === "INSURANCE" &&
+      !kept.length &&
+      fitting.length <= 1 &&
+      !ambiguousRounding;
     outcomes.set(debit.id, {
-      state: partnerHasDocuments ? "NOT_MATCHED" : "NO_INVOICE",
+      state: partnerHasDocuments && !insurance ? "NOT_MATCHED" : "NO_INVOICE",
       documents: [],
       matchedBy: null,
       reason: kept.length
@@ -855,9 +863,11 @@ export function matchMonth(input: {
           ? "több számla-összeállítás is kiadja az összeget: kézi választás"
           : ambiguousRounding
             ? "több kerekítési találat: kézi választás"
-            : partnerHasDocuments
-              ? "a partnertől van számla, de ez a fizetés nem párosodott"
-              : "a partnertől nincs számla a forrásokban",
+            : insurance
+              ? "biztosítás: a díjértesítő (vagy a biztosító számlája) hiányzik"
+              : partnerHasDocuments
+                ? "a partnertől van számla, de ez a fizetés nem párosodott"
+                : "a partnertől nincs számla a forrásokban",
       // a neki hagyott számla jelöltként látszik, akkor is, ha már a másiké
       candidates: [...kept, ...candidates.filter((c) => !kept.includes(c))],
     });
