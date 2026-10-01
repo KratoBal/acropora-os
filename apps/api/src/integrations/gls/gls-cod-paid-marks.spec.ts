@@ -106,7 +106,11 @@ describe("decideGlsTransfer: September as measured", () => {
   it("09-10: the compensation letter's transferred sum is the bank credit", () => {
     const decision = decideGlsTransfer({
       report: report("2026-09-10", [line(["ACRW-2026/00469"], 28900)]),
-      compensation: { cod: D(28900), transferred: D(10789) },
+      compensation: {
+        cod: D(28900),
+        transferred: D(10789),
+        references: ["HU00920611"],
+      },
       credits: [
         { id: "bt-other", amount: D(28900) },
         { id: "bt-0910", amount: D(10789) },
@@ -118,6 +122,59 @@ describe("decideGlsTransfer: September as measured", () => {
       [decision.creditId, decision.marks.map((m) => m.invoiceNumber)],
       ["bt-0910", ["ACRW-2026/00469"]],
     );
+  });
+});
+
+/*
+  A BESZÁMÍTÁS CSAK GLS-SZÁMLÁRA SZÓLHAT (acrobot 25971). 09-03, ahogy a levél
+  mondja: 117 450 beszedve, 8 013 beszámítva a HU00912382-re, 109 437 utalva; a
+  vevő a teljes összeget fizette. MI PIROSÍT: ha egy csomagszámra (vagy
+  megnevezés nélkül) beszámított összeg mellett is jelölhető lenne az utalás;
+  ha a beszámítás nélküli levél hivatkozás nélkül is elutasítást kapna.
+*/
+describe("decideGlsTransfer: a compensation sets off GLS invoices only", () => {
+  const invoices = new Map([["ACRW-2026/00467", invoice(117450)]]);
+  const decide = (references: string[], transferred = 109437) =>
+    decideGlsTransfer({
+      report: report("2026-09-03", [line(["ACRW-2026/00467"], 117450)]),
+      compensation: {
+        cod: D(117450),
+        transferred: D(transferred),
+        references,
+      },
+      credits: [{ id: "bt-0903", amount: D(transferred) }],
+      invoices,
+    });
+  const outcome = (d: ReturnType<typeof decideGlsTransfer>) =>
+    d.markable ? d.marks.map((m) => m.invoiceNumber) : d.refusal;
+
+  it("09-03: 8 013 Ft set off against HU00912382, the buyer's invoice is paid in full", () => {
+    assert.deepEqual(outcome(decide(["HU00912382"])), ["ACRW-2026/00467"]);
+  });
+
+  it("a set-off against a parcel, a mixed list or nothing named is refused", () => {
+    assert.deepEqual(
+      [
+        decide(["0021234567890"]),
+        decide(["HU00912382", "0021234567890"]),
+        decide([]),
+        decide(["HU0091238"]),
+        decide(["HU009123820"]),
+        decide(["XHU00912382"]),
+      ].map(outcome),
+      [
+        "COMPENSATION_NOT_GLS_INVOICE",
+        "COMPENSATION_NOT_GLS_INVOICE",
+        "COMPENSATION_NOT_GLS_INVOICE",
+        "COMPENSATION_NOT_GLS_INVOICE",
+        "COMPENSATION_NOT_GLS_INVOICE",
+        "COMPENSATION_NOT_GLS_INVOICE",
+      ],
+    );
+  });
+
+  it("a letter that set nothing off needs no reference", () => {
+    assert.deepEqual(outcome(decide([], 117450)), ["ACRW-2026/00467"]);
   });
 });
 
@@ -146,7 +203,9 @@ describe("decideGlsTransfer: an unproven transfer marks nothing", () => {
       "REPORT_NEEDS_REVIEW",
     );
     assert.equal(
-      refusal({ compensation: { cod: D(999), transferred: D(1000) } }),
+      refusal({
+        compensation: { cod: D(999), transferred: D(1000), references: [] },
+      }),
       "COMPENSATION_MISMATCH",
     );
     assert.equal(
@@ -275,6 +334,12 @@ describe("the dry run's list and switch", () => {
         transferred: "109437",
       },
       {
+        transferDate: "2026-09-10",
+        markable: false,
+        refusal: "COMPENSATION_NOT_GLS_INVOICE",
+        transferred: "10789",
+      },
+      {
         transferDate: "2026-09-17",
         markable: true,
         transferred: "160880",
@@ -295,10 +360,11 @@ describe("the dry run's list and switch", () => {
       report,
       [
         "2026-09-03  utalt 109437 Ft  NEM JELÖLHETŐ: a részletező egy sora még ellenőrzésre vár",
+        "2026-09-10  utalt 10789 Ft  NEM JELÖLHETŐ: a kompenzációs levél beszámítása nem GLS-számlára szól",
         "2026-09-17  utalt 160880 Ft  jelölhető",
         "  ACRW-2026/00481\t105831 Ft\t2026-09-17\tutánvét\tGLS utánvét, 2026-09-17, 5 Ft-os kerekítés: beszedve 105830",
         "  ACRW-2026/00485\tkimarad: már kifizetett (a Számlázz.hu szerint)",
-        "összesen: 1 számla jelölhető, 2 utalásból",
+        "összesen: 1 számla jelölhető, 3 utalásból",
         "",
       ].join("\n"),
     );
