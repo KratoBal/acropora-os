@@ -59,6 +59,14 @@ const SUBSCRIPTIONS =
   /openai|chatgpt|anthropic|claude|tesla|google|apple|microsoft|adobe|canva|figma|github|amazon|aws|hetzner|digitalocean|netflix|spotify|zoom|slack|notion|dropbox|meta|facebook|linkedin|shopify|cloudflare|openrouter|elevenlabs|midjourney|atlassian|jetbrains|coolify/i;
 const FOREIGN_COMPANY =
   /\b(gmbh|ltd|limited|inc|llc|b\.?v\.?|s\.?r\.?l|s\.?a\.?s|sas|doo|d\.o\.o|ag|sp\.? z|oy|ab|s\.?p\.?a|e\.?k)\b/i;
+/**
+ * ISMERT HAZAI KÁRTYÁS KERESKEDŐ, cégforma nélküli névvel (acrobot 25673,
+ * Balázs a Telekomról). A kártyahálózat a forintos terhelés mellé euró-
+ * egyenértéket ír („TELEKOMSZAML* 003426827 -APPLE 167,100EUR”), és a
+ * devizaösszeg emiatt külföldinek sorolta; a számlájuk a NAV-ban van.
+ */
+const DOMESTIC_MERCHANT =
+  /telekom|yettel|vodafone|\bdigi\b|\bmvm\b|\be\.?on\b|\bnkm\b|f[őo]g[áa]z/i;
 const DOMESTIC_COMPANY =
   /\b(kft|zrt|nyrt|bt|kkt|e\.?v|egyesület|alapítvány|szövetkezet|intézet|hivatal)\b\.?/i;
 const TAX =
@@ -144,6 +152,13 @@ export function classifyTransaction(
       return {
         category: "DOMESTIC_SUPPLIER",
         rule: "kártya, hazai cégforma (devizás terhelésnél is)",
+      };
+    // Mérve 2026-10-01 a 2025-12 .. 2026-09 kivonatain: a szabály pontosan a
+    // kilenc TelekomSzaml* terhelést fordítja át, külföldit egyet sem.
+    if (DOMESTIC_MERCHANT.test(name) && !FOREIGN_COMPANY.test(name))
+      return {
+        category: "DOMESTIC_SUPPLIER",
+        rule: "kártya, ismert hazai kereskedő (devizás terhelésnél is)",
       };
     if (FOREIGN_COMPANY.test(name) || /(\d|\b)(EUR|USD|GBP)\b/.test(narrative))
       return {
