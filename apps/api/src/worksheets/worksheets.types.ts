@@ -153,6 +153,8 @@ export const worksheetSummaryInclude = {
       status: true,
       subject: true,
       grossAmount: true,
+      // a megjelenített állapothoz (Új vagy Folyamatban): van-e már tétel
+      _count: { select: { lines: true } },
     },
     orderBy: { version: "desc" as const },
     take: 1,
@@ -433,6 +435,7 @@ export function toWorksheetListItem(
     departmentPath: departmentPaths?.get(row.department.id) ?? null,
     subject: current.subject,
     status: current.status,
+    lineCount: current._count.lines,
     version: current.version,
     versionCount: row._count.versions,
     grossAmount: current.grossAmount.toString(),

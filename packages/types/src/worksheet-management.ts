@@ -630,6 +630,11 @@ export interface WorksheetListItem {
   departmentPath: string[] | null;
   subject: string;
   status: WorksheetVersionStatus;
+  /**
+   * A legutolsó változat tételsorainak száma: ebből és az állapotból jön a
+   * megjelenített állapot (`worksheetDisplayStatus`, Új vagy Folyamatban).
+   */
+  lineCount: number;
   version: number;
   versionCount: number;
   grossAmount: string;
@@ -916,11 +921,71 @@ export interface WorksheetDocumentListResponse {
  * állapota van, és azt mind a két felület ugyanúgy nevezi meg.
  */
 export const worksheetStatusLabel: Record<WorksheetVersionStatus, string> = {
-  DRAFT: "Piszkozat",
-  AWAITING_SIGNATURE: "Aláírásra vár",
-  SIGNED: "Aláírva",
+  // a DRAFT két megjelenített állapotot fed (Új, Folyamatban, lásd lent); ahol
+  // a tételszám nem ismert (fülek, csempék, régi változatok), mindkettőt mondja
+  DRAFT: "Új és folyamatban",
+  AWAITING_SIGNATURE: "Elkészült",
+  SIGNED: "Lezárva",
   REJECTED: "Elutasítva",
 };
+
+/**
+ * A MUNKALAP MEGJELENÍTETT ÁLLAPOTA (Balázs döntése 2026-08-26, emlék 890,
+ * kártya ca267753: egy állapotsor, Új, Folyamatban, Elkészült, Lezárva; a
+ * forma acrobot döntése 2026-10-01, 25724).
+ *
+ * NEM ÚJ ENUM, HANEM SZÁRMAZTATOTT: a változat-állapot (`WorksheetVersionStatus`)
+ * és a tételszám adja. Egy piszkozat tétel nélkül Új, legalább egy tétellel
+ * Folyamatban; az aláírásra váró lap Elkészült (aláírható), az aláírt Lezárva.
+ * Az Elutasított megjelenítése marad. A hibajegy saját állapotsora (#1270)
+ * ettől független.
+ */
+export type WorksheetDisplayStatus =
+  "NEW" | "IN_PROGRESS" | "COMPLETED" | "CLOSED" | "REJECTED";
+
+export function worksheetDisplayStatus(
+  status: WorksheetVersionStatus,
+  lineCount: number,
+): WorksheetDisplayStatus {
+  switch (status) {
+    case "DRAFT":
+      return lineCount > 0 ? "IN_PROGRESS" : "NEW";
+    case "AWAITING_SIGNATURE":
+      return "COMPLETED";
+    case "SIGNED":
+      return "CLOSED";
+    case "REJECTED":
+      return "REJECTED";
+  }
+}
+
+export const worksheetDisplayStatusLabel: Record<
+  WorksheetDisplayStatus,
+  string
+> = {
+  NEW: "Új",
+  IN_PROGRESS: "Folyamatban",
+  COMPLETED: "Elkészült",
+  CLOSED: "Lezárva",
+  REJECTED: "Elutasítva",
+};
+
+const WORKSHEET_DISPLAY_STATUS_TONE: Record<
+  WorksheetDisplayStatus,
+  "neutral" | "purple" | "green" | "amber" | "red" | "blue"
+> = {
+  NEW: "neutral",
+  IN_PROGRESS: "blue",
+  COMPLETED: "amber",
+  CLOSED: "green",
+  REJECTED: "red",
+};
+
+export function worksheetDisplayStatusTone(
+  status: WorksheetDisplayStatus,
+): "neutral" | "purple" | "green" | "amber" | "red" | "blue" {
+  return WORKSHEET_DISPLAY_STATUS_TONE[status];
+}
 
 /**
  * A MUNKALAP-ALLAPOT SZINE, ATKOLTOZOTT `apps/web`-bol (2026-09-24, a

@@ -133,6 +133,9 @@ export type {
 export {
   worksheetStatusLabel,
   worksheetStatusTone,
+  worksheetDisplayStatus,
+  worksheetDisplayStatusLabel,
+  worksheetDisplayStatusTone,
 } from "./worksheet-management.js";
 export type {
   MaintenancePackageMailPreview,
@@ -817,6 +820,7 @@ export type {
   WorksheetVersionDetail,
   WorksheetVersionDiff,
   WorksheetVersionStatus,
+  WorksheetDisplayStatus,
   WorksheetVersionSummary,
   WorksheetDocumentListResponse,
   WorksheetDocumentSummary,

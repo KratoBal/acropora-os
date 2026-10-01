@@ -140,3 +140,41 @@ export function worksheetStatusPilotVariant(
 ): PilotBadgeVariant {
   return TONE_TO_PILOT_VARIANT[worksheetStatusTone(status)];
 }
+
+/**
+ * A MEGJELENÍTETT ÁLLAPOT (Új, Folyamatban, Elkészült, Lezárva, Elutasítva) a
+ * `@acropora/types` szabálya szerint: a változat-állapotból és a tételszámból.
+ * A sorok és az adatlap jelvénye ezt mutatja; a fülek és a csempék a szerver
+ * változat-állapot szerinti számait (ott a DRAFT „Új és folyamatban”).
+ */
+export {
+  worksheetDisplayStatus,
+  worksheetDisplayStatusLabel,
+} from "@acropora/types";
+
+import {
+  worksheetDisplayStatus,
+  worksheetDisplayStatusLabel,
+  worksheetDisplayStatusTone,
+} from "@acropora/types";
+
+export function worksheetDisplayLabel(
+  status: WorksheetVersionStatus,
+  lineCount: number,
+): string {
+  return worksheetDisplayStatusLabel[worksheetDisplayStatus(status, lineCount)];
+}
+
+export function worksheetDisplayTone(
+  status: WorksheetVersionStatus,
+  lineCount: number,
+) {
+  return worksheetDisplayStatusTone(worksheetDisplayStatus(status, lineCount));
+}
+
+export function worksheetDisplayPilotVariant(
+  status: WorksheetVersionStatus,
+  lineCount: number,
+): PilotBadgeVariant {
+  return TONE_TO_PILOT_VARIANT[worksheetDisplayTone(status, lineCount)];
+}
