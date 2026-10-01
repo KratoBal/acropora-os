@@ -1,0 +1,6588 @@
+{
+ "version": "r11",
+ "reference": "ea35b2705138bf5a5a2eaa5f47ec383e3192bfc894c672d6b883f49e9e955e9a",
+ "commonWords": [
+  "adoszam",
+  "allatkert",
+  "bank",
+  "bankszamla",
+  "brutto",
+  "budapesti",
+  "cim",
+  "cimzett",
+  "cold",
+  "csatoltam",
+  "doboz",
+  "felado",
+  "from",
+  "hiba",
+  "hivd",
+  "invoice",
+  "irj",
+  "kapcsolattarto",
+  "kerjuk",
+  "ket",
+  "kiszallas",
+  "korallgarazs",
+  "kuldd",
+  "kuldve",
+  "letoltes",
+  "link",
+  "megrendelo",
+  "mobil",
+  "osszeg",
+  "partner",
+  "private",
+  "reference",
+  "reported",
+  "sajat",
+  "sent",
+  "subject",
+  "szallitas",
+  "szallitasi",
+  "szallito",
+  "szerinte",
+  "szul",
+  "targy",
+  "tel",
+  "telefon",
+  "tetel",
+  "ticket",
+  "to",
+  "tovabbitott",
+  "utalas",
+  "vizcsere",
+  "webhook"
+ ],
+ "cases": [
+  {
+   "suite": "hu-leak",
+   "id": "name-accented",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> írta, hogy a szivattyú kattog.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> írta, hogy a szivattyú kattog.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-unaccented",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> irta, hogy a szivattyu kattog.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> irta, hogy a szivattyu kattog.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-lowercase-sentence-mid",
+   "keep": [],
+   "default": {
+    "text": "tegnap beszéltem <PERSON_1> a vízcseréről",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "tegnap beszéltem <PERSON_1> a vízcseréről",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-inflected-given",
+   "keep": [],
+   "default": {
+    "text": "Küldd el <PERSON_1> és <PERSON_2> is az árajánlatot.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Küldd el <PERSON_1> és <PERSON_2> is az árajánlatot.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-sentence-initial-given",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> szerint a lámpa hibás.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> szerint a lámpa hibás.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-sentence-initial-surname-first",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> holnap jön a helyszínre.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> holnap jön a helyszínre.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-unlisted-surname",
+   "keep": [],
+   "default": {
+    "text": "A telepítést <PERSON_1> végezte el.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A telepítést <PERSON_1> végezte el.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-compound-surname",
+   "keep": [],
+   "default": {
+    "text": "Az ügyfél <PERSON_1>, a férje <PERSON_2>.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Az ügyfél <PERSON_1>, a férje <PERSON_2>.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-married-ne",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> hívott a számla miatt.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> hívott a számla miatt.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-honorific",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> állatorvos megnézte a halakat.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> állatorvos megnézte a halakat.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-single-midsentence-unlisted",
+   "keep": [],
+   "default": {
+    "text": "Holnap reggel <PROPER_1> keresd a raktárban.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Holnap reggel <PROPER_1> keresd a raktárban.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-homoglyph-cyrillic",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> jelezte a hibát.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> jelezte a hibát.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-homoglyph-inside-word",
+   "keep": [],
+   "default": {
+    "text": "szólj <PERSON_1>",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "szólj <PERSON_1>",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "name-in-quotes",
+   "keep": [],
+   "default": {
+    "text": "Az aláíró: „<PERSON_1>” (üzemvezető).",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Az aláíró: „<PERSON_1>” (üzemvezető).",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "email-plain",
+   "keep": [],
+   "default": {
+    "text": "Írj neki: <EMAIL_1>",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Írj neki: <EMAIL_1>",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "email-accented-local",
+   "keep": [],
+   "default": {
+    "text": "A cím <EMAIL_1>, erre menjen.",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A cím <EMAIL_1>, erre menjen.",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "phone-plus36",
+   "keep": [],
+   "default": {
+    "text": "Hívd a <PHONE_1> számon.",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Hívd a <PHONE_1> számon.",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "phone-06-slash",
+   "keep": [],
+   "default": {
+    "text": "Telefon: <PHONE_1>",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Telefon: <PHONE_1>",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "phone-compact",
+   "keep": [],
+   "default": {
+    "text": "tel <PHONE_1> vagy <PHONE_2>",
+    "counts": {
+     "PHONE": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "tel <PHONE_1> vagy <PHONE_2>",
+    "counts": {
+     "PHONE": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "phone-landline",
+   "keep": [],
+   "default": {
+    "text": "Budapesti szám: <PHONE_1>",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Budapesti szám: <PHONE_1>",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "address-full",
+   "keep": [],
+   "default": {
+    "text": "A helyszín: <ADDRESS_1>",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A helyszín: <ADDRESS_1>",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "address-abbrev",
+   "keep": [],
+   "default": {
+    "text": "Szállítás: <ADDRESS_1>",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Szállítás: <ADDRESS_1>",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "address-ut",
+   "keep": [],
+   "default": {
+    "text": "a <ADDRESS_1> alatt van a telephely",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a <ADDRESS_1> alatt van a telephely",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "address-ter",
+   "keep": [],
+   "default": {
+    "text": "<ADDRESS_1> előtt parkoljon.",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<ADDRESS_1> előtt parkoljon.",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "address-unaccented",
+   "keep": [],
+   "default": {
+    "text": "cim: <ADDRESS_1>",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "cim: <ADDRESS_1>",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "iban-spaced",
+   "keep": [],
+   "default": {
+    "text": "Utalás ide: <IBAN_1>",
+    "counts": {
+     "IBAN": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Utalás ide: <IBAN_1>",
+    "counts": {
+     "IBAN": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "iban-compact",
+   "keep": [],
+   "default": {
+    "text": "IBAN <IBAN_1> számlán.",
+    "counts": {
+     "IBAN": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "IBAN <IBAN_1> számlán.",
+    "counts": {
+     "IBAN": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "bank-account-hu",
+   "keep": [],
+   "default": {
+    "text": "Bankszámla: <BANK_ACCOUNT_1>",
+    "counts": {
+     "BANK_ACCOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Bankszámla: <BANK_ACCOUNT_1>",
+    "counts": {
+     "BANK_ACCOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "tax-number",
+   "keep": [],
+   "default": {
+    "text": "Adószám: <TAX_ID_1>, cégjegyzék rendben.",
+    "counts": {
+     "TAX_ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Adószám: <TAX_ID_1>, cégjegyzék rendben.",
+    "counts": {
+     "TAX_ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "tax-id-person",
+   "keep": [],
+   "default": {
+    "text": "adóazonosító jel: <TAX_ID_1>",
+    "counts": {
+     "TAX_ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "adóazonosító jel: <TAX_ID_1>",
+    "counts": {
+     "TAX_ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "ticket-id",
+   "keep": [],
+   "default": {
+    "text": "A <ID_1> jegyen a szivattyú ki-be kapcsol.",
+    "counts": {
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A HJ-2026-018 jegyen a szivattyú ki-be kapcsol.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "order-id",
+   "keep": [],
+   "default": {
+    "text": "A rendelés száma <ID_1>, a számla <ID_2>.",
+    "counts": {
+     "ID": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A rendelés száma 104582, a számla SZ-2026/00417.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "asset-id",
+   "keep": [],
+   "default": {
+    "text": "Az eszköz leltári szám: <ID_1>, sorozatszám <ID_2>.",
+    "counts": {
+     "ID": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Az eszköz leltári szám: ACR-000912, sorozatszám SN77812345.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "uuid",
+   "keep": [],
+   "default": {
+    "text": "kártya <SECRET_1> lezárva",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "kártya <SECRET_1> lezárva",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "hash-id",
+   "keep": [],
+   "default": {
+    "text": "a commit <ID_1> és a <ID_2> megjegyzés",
+    "counts": {
+     "ID": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a commit f442100 és a 5872440051 megjegyzés",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "url-query-token",
+   "keep": [],
+   "default": {
+    "text": "Link: https://<DOMAIN_1>/share",
+    "counts": {
+     "DOMAIN": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Link: https://<DOMAIN_1>/share",
+    "counts": {
+     "DOMAIN": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "url-signature",
+   "keep": [],
+   "default": {
+    "text": "https://<DOMAIN_1>/f.pdf",
+    "counts": {
+     "DOMAIN": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "https://<DOMAIN_1>/f.pdf",
+    "counts": {
+     "DOMAIN": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "bearer",
+   "keep": [],
+   "default": {
+    "text": "<PROPER_1>: <SECRET_1>",
+    "counts": {
+     "PROPER": 1,
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: <SECRET_1>",
+    "counts": {
+     "PROPER": 1,
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "api-key-prefixed",
+   "keep": [],
+   "default": {
+    "text": "a kulcs <SECRET_1> volt a fájlban",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a kulcs <SECRET_1> volt a fájlban",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "github-token",
+   "keep": [],
+   "default": {
+    "text": "token: <SECRET_1>",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   },
+   "pairing": {
+    "text": "token: <SECRET_1>",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "password-assign",
+   "keep": [],
+   "default": {
+    "text": "jelszó: <SECRET_1>",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   },
+   "pairing": {
+    "text": "jelszó: <SECRET_1>",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "long-random-secret",
+   "keep": [],
+   "default": {
+    "text": "a titok <SECRET_1> van benne",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a titok <SECRET_1> van benne",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "amount-ft",
+   "keep": [],
+   "default": {
+    "text": "Az árajánlat <AMOUNT_1>, a kiszállás <AMOUNT_2>.",
+    "counts": {
+     "AMOUNT": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Az árajánlat 12 487 <PROPER_1>, a kiszállás 8500 forint.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "amount-eur",
+   "keep": [],
+   "default": {
+    "text": "A tétel <AMOUNT_1> volt.",
+    "counts": {
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A tétel 349,90 EUR volt.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "date-iso",
+   "keep": [],
+   "default": {
+    "text": "<DATE_1> óta nem ment ki levél.",
+    "counts": {
+     "DATE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "2026-09-22 óta nem ment ki levél.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "date-hu",
+   "keep": [],
+   "default": {
+    "text": "<DATE_1> kezdődött a hiba",
+    "counts": {
+     "DATE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "szeptember 22-én kezdődött a hiba",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "mixed-message",
+   "keep": [],
+   "default": {
+    "text": "Szia! <PERSON_1> vagyok, a <ADDRESS_1> címről írok, a <PHONE_1> számon elérsz, a rendelésem <ID_1>.",
+    "counts": {
+     "PERSON": 1,
+     "ADDRESS": 1,
+     "PHONE": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Szia! <PERSON_1> vagyok, a <ADDRESS_1> címről írok, a <PHONE_1> számon elérsz, a rendelésem 88213.",
+    "counts": {
+     "PERSON": 1,
+     "ADDRESS": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "coref-stable",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> hívott. <PERSON_1> szerint a hűtő zajos.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> hívott. <PERSON_1> szerint a hűtő zajos.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "preserve-domain",
+   "keep": [],
+   "default": {
+    "text": "Az Acropora OS szerviz menüjében a Medusa és a Jev nem érintett.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Az Acropora OS szerviz menüjében a Medusa és a Jev nem érintett.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "preserve-question-shape",
+   "keep": [],
+   "default": {
+    "text": "Mikor jön a technikus? És hozza a szűrőt is?",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Mikor jön a technikus? És hozza a szűrőt is?",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-lowercase-name-chat",
+   "keep": [],
+   "default": {
+    "text": "szia, a <PERSON_1> <PERSON_2> megint csopog a szivattyu, ki tudsz menni hozza?",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "szia, a <PERSON_1> <PERSON_2> megint csopog a szivattyu, ki tudsz menni hozza?",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-dative-nak",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1>, hogy a lámpát jövő héten cseréljük.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1>, hogy a lámpát jövő héten cseréljük.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-family-ek-nal",
+   "keep": [],
+   "default": {
+    "text": "Tegnap <PROPER_1> voltunk, a 300 literes akváriumban algásodik a dekor.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Tegnap <PROPER_1> voltunk, a 300 literes akváriumban algásodik a dekor.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-married-ne-diminutive",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> hívott, a vízcsere után bepárásodott az üveg.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> hívott, a vízcsere után bepárásodott az üveg.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-possessive-name",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> számláját még nem küldtük ki, <PERSON_2> felesége kérdezte rá.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> számláját még nem küldtük ki, <PERSON_2> felesége kérdezte rá.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-nicknames-pile",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> ma <PERSON_2> megy a <PERSON_3> meg <PERSON_4> a raktárban leltároz.",
+    "counts": {
+     "PERSON": 4
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> ma <PERSON_2> megy a <PERSON_3> meg <PERSON_4> a raktárban leltároz.",
+    "counts": {
+     "PERSON": 4
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-foreign-residents",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> és <PERSON_2> ma kezd nálunk, <PROPER_1> viszi a szűrőket <PERSON_3>.",
+    "counts": {
+     "PERSON": 3,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> és <PERSON_2> ma kezd nálunk, <PROPER_1> viszi a szűrőket <PERSON_3>.",
+    "counts": {
+     "PERSON": 3,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-surname-sentence-start",
+   "keep": [],
+   "default": {
+    "text": "<PROPER_1> ma nem ér rá. Szerinte a szűrő eltömődött, de <PROPER_2> nem hiszek.",
+    "counts": {
+     "PROPER": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1> ma nem ér rá. Szerinte a szűrő eltömődött, de <PROPER_2> nem hiszek.",
+    "counts": {
+     "PROPER": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-name-is-common-word",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> írt, hogy a fekete háttérfólia leesett és virág alakú algafolt lett rajta.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> írt, hogy a fekete háttérfólia leesett és virág alakú algafolt lett rajta.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-szabo-occupation",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1>, aki amúgy szabó, két akváriumot rendelt a műhelyébe.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1>, aki amúgy szabó, két akváriumot rendelt a műhelyébe.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-kovacs-occupation",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1>, a kovács, holnapra hozza a kovácsoltvas állványt.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1>, a kovács, holnapra hozza a kovácsoltvas állványt.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-name-then-colon-comma",
+   "keep": [],
+   "default": {
+    "text": "<PROPER_1>: a lámpa időzítője elállítódott. <PROPER_2>, nézd meg légyszi!",
+    "counts": {
+     "PROPER": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: a lámpa időzítője elállítódott. <PROPER_2>, nézd meg légyszi!",
+    "counts": {
+     "PROPER": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-names-no-accents",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> es <PERSON_2> kerte, hogy jovo kedden jojjunk a vizcserere.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> es <PERSON_2> kerte, hogy jovo kedden jojjunk a vizcserere.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-email-obfuscated-words",
+   "keep": [],
+   "default": {
+    "text": "az emailje <EMAIL_1>, oda küldd az árajánlatot",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "az emailje <EMAIL_1>, oda küldd az árajánlatot",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-email-plus-subdomain",
+   "keep": [],
+   "default": {
+    "text": "Írj a <EMAIL_1> címre, másolatban <EMAIL_2>.",
+    "counts": {
+     "EMAIL": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Írj a <EMAIL_1> címre, másolatban <EMAIL_2>.",
+    "counts": {
+     "EMAIL": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-phone-paren-and-slash",
+   "keep": [],
+   "default": {
+    "text": "Hívd a <PHONE_1> számot, vagy ha nem veszi fel, a <PHONE_2>-et.",
+    "counts": {
+     "PHONE": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Hívd a <PHONE_1> számot, vagy ha nem veszi fel, a <PHONE_2>-et.",
+    "counts": {
+     "PHONE": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-phone-dots",
+   "keep": [],
+   "default": {
+    "text": "tel: <PHONE_1>, csak délután, mert délelőtt a boltban van",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "tel: <PHONE_1>, csak délután, mert délelőtt a boltban van",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-phone-words-mixed",
+   "keep": [],
+   "default": {
+    "text": "a mobilja <PHONE_1>, este hívd",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a mobilja <PHONE_1>, este hívd",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-address-sugarut-floor-door",
+   "keep": [],
+   "default": {
+    "text": "Cím: <ADDRESS_1>/b ajtó, kapukód: <SECRET_1>, a nagy akvárium a nappaliban.",
+    "counts": {
+     "ADDRESS": 1,
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Cím: <ADDRESS_1>/b ajtó, kapukód: <SECRET_1>, a nagy akvárium a nappaliban.",
+    "counts": {
+     "ADDRESS": 1,
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-address-district-rakpart",
+   "keep": [],
+   "default": {
+    "text": "Budapest <ADDRESS_1>, <ADDRESS_2> alatt lakik az ügyfél, ott szivárog a sump.",
+    "counts": {
+     "ADDRESS": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Budapest <ADDRESS_1>, <ADDRESS_2> alatt lakik az ügyfél, ott szivárog a sump.",
+    "counts": {
+     "ADDRESS": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-address-korut-lakotelep",
+   "keep": [],
+   "default": {
+    "text": "<ADDRESS_1>, ill. a második medence a <ADDRESS_2> <ADDRESS_3> alatt van.",
+    "counts": {
+     "ADDRESS": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<ADDRESS_1>, ill. a második medence a <ADDRESS_2> <ADDRESS_3> alatt van.",
+    "counts": {
+     "ADDRESS": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-address-hrsz-dulo",
+   "keep": [],
+   "default": {
+    "text": "A tavas ügyfél telephelye: <PROPER_1>, <ADDRESS_1>, a <PROPER_2> dűlő végén, kutya van.",
+    "counts": {
+     "PROPER": 2,
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A tavas ügyfél telephelye: <PROPER_1>, <ADDRESS_1>, a <PROPER_2> dűlő végén, kutya van.",
+    "counts": {
+     "PROPER": 2,
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-address-postbox",
+   "keep": [],
+   "default": {
+    "text": "Postacím: <ADDRESS_1>., oda kérik a papír számlát.",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Postacím: <ADDRESS_1>., oda kérik a papír számlát.",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-iban-hu-with-reference",
+   "keep": [],
+   "default": {
+    "text": "Utalás: <IBAN_1>, közlemény: <ID_1> szerviz",
+    "counts": {
+     "IBAN": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Utalás: <IBAN_1>, közlemény: SZ-2026/0412 szerviz",
+    "counts": {
+     "IBAN": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-iban-foreign",
+   "keep": [],
+   "default": {
+    "text": "A német beszállító IBAN-ja <IBAN_1>, az osztráké <IBAN_2>.",
+    "counts": {
+     "IBAN": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A német beszállító IBAN-ja <IBAN_1>, az osztráké <IBAN_2>.",
+    "counts": {
+     "IBAN": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-giro-account",
+   "keep": [],
+   "default": {
+    "text": "számlaszám: <BANK_ACCOUNT_1> (K&H), régi számla <BANK_ACCOUNT_2>",
+    "counts": {
+     "BANK_ACCOUNT": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "számlaszám: <BANK_ACCOUNT_1> (K&H), régi számla <BANK_ACCOUNT_2>",
+    "counts": {
+     "BANK_ACCOUNT": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-card-spaced",
+   "keep": [],
+   "default": {
+    "text": "a kártyája <PHONE_1>, lejárat <SECRET_1>, a CVC <SECRET_2>, de ne ezzel fizessen többet",
+    "counts": {
+     "PHONE": 1,
+     "SECRET": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a kártyája <PHONE_1>, lejárat <SECRET_1>, a CVC <SECRET_2>, de ne ezzel fizessen többet",
+    "counts": {
+     "PHONE": 1,
+     "SECRET": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-tax-ids",
+   "keep": [],
+   "default": {
+    "text": "Adószám: <TAX_ID_1>, a magánszemély adóazonosítója <ID_1>, mindkettő kell a számlára.",
+    "counts": {
+     "TAX_ID": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Adószám: <TAX_ID_1>, a magánszemély adóazonosítója 8412345670, mindkettő kell a számlára.",
+    "counts": {
+     "TAX_ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-taj-number",
+   "keep": [],
+   "default": {
+    "text": "TAJ szám: <TAX_ID_1> (a munkavédelmi nyomtatványra kell az új kollégától)",
+    "counts": {
+     "TAX_ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "TAJ szám: <TAX_ID_1> (a munkavédelmi nyomtatványra kell az új kollégától)",
+    "counts": {
+     "TAX_ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-password-pw",
+   "keep": [],
+   "default": {
+    "text": "wifi a boltban: AkvaBolt_2G, pw: <SECRET_1> ha a kasszagép lecsatlakozna",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   },
+   "pairing": {
+    "text": "wifi a boltban: AkvaBolt_2G, pw: <SECRET_1> ha a kasszagép lecsatlakozna",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-password-a-jelszo",
+   "keep": [],
+   "default": {
+    "text": "a jelszó: <SECRET_1> a felhasználónév admin, a dashboardon kell belépni",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   },
+   "pairing": {
+    "text": "a jelszó: <SECRET_1> a felhasználónév admin, a dashboardon kell belépni",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-json-api-key",
+   "keep": [],
+   "default": {
+    "text": "a config így néz ki: {\"api_key\":<SECRET_1>,\"endpoint\":\"/v1/tickets\"}",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a config így néz ki: {\"api_key\":<SECRET_1>,\"endpoint\":\"/v1/tickets\"}",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-env-lines",
+   "keep": [],
+   "default": {
+    "text": "DB_PASSWORD=<SECRET_1>\nREDIS_URL=redis://<SECRET_2>@<ID_1>\nNODE_ENV=production",
+    "counts": {
+     "SECRET": 2,
+     "ID": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   },
+   "pairing": {
+    "text": "DB_PASSWORD=<SECRET_1>\nREDIS_URL=redis://<SECRET_2>@10.0.4.12:6379\nNODE_ENV=production",
+    "counts": {
+     "SECRET": 2
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-signed-url",
+   "keep": [],
+   "default": {
+    "text": "Letöltés: https://<DOMAIN_1>/export/leltar.xlsx innen húzd le",
+    "counts": {
+     "DOMAIN": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Letöltés: https://<DOMAIN_1>/export/leltar.xlsx innen húzd le",
+    "counts": {
+     "DOMAIN": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-bearer-and-github-token",
+   "keep": [],
+   "default": {
+    "text": "próbáld ezzel: <PROPER_1>: <SECRET_1> vagy a <SECRET_2> tokennel",
+    "counts": {
+     "PROPER": 1,
+     "SECRET": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "próbáld ezzel: <PROPER_1>: <SECRET_1> vagy a <SECRET_2> tokennel",
+    "counts": {
+     "PROPER": 1,
+     "SECRET": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-amounts-hu-forms",
+   "keep": [],
+   "default": {
+    "text": "Az ár <AMOUNT_1>, a szerviz bruttó <AMOUNT_2>, a nagy medence pedig <AMOUNT_3> lenne.",
+    "counts": {
+     "AMOUNT": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Az ár 12.500,- <PROPER_1>, a szerviz bruttó 45e <PROPER_1>, a nagy medence pedig 3,2 millió forint lenne.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-amounts-net-gross-eur",
+   "keep": [],
+   "default": {
+    "text": "Bruttó <AMOUNT_1> helyett nettó <AMOUNT_2> írtunk, a német rész <AMOUNT_3>.",
+    "counts": {
+     "AMOUNT": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Bruttó 189 900 <PROPER_1> helyett nettó 149.528 HUF-ot írtunk, a német rész 1 240 EUR.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-dates-mixed-relative-kept",
+   "keep": [],
+   "default": {
+    "text": "A vízcserét <DATE_1>-án csináltuk, a következőt <DATE_2>-án, a számla kelte <ID_1>, jövő kedden pedig lámpát cserélünk.",
+    "counts": {
+     "DATE": 2,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A vízcserét 10.03.-án csináltuk, a következőt okt. 3-án, a számla kelte 2026.09.28, jövő kedden pedig lámpát cserélünk.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-dates-iso-and-spelled",
+   "keep": [],
+   "default": {
+    "text": "<DATE_1>-én jön a futár, <DATE_2> volt az utolsó szállítás, holnapután hívjuk vissza.",
+    "counts": {
+     "DATE": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "2026-11-05-én jön a futár, szeptember 17-én volt az utolsó szállítás, holnapután hívjuk vissza.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-ids-ticket-wo-asset-invoice",
+   "keep": [],
+   "default": {
+    "text": "A #<ID_1> hibajegyhez a <ID_2> munkalap és az <ID_3> eszköz tartozik, számla: <ID_4>, rendelés <ID_5>.",
+    "counts": {
+     "ID": 5
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A #HJ-2026-00417 hibajegyhez a WO-8812 munkalap és az <PROPER_1>-000315 eszköz tartozik, számla: E-KORALL-2026-1187, rendelés 100245781.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-product-names-vs-person",
+   "keep": [],
+   "default": {
+    "text": "A Medusa-ban és az Acropora OS-ben is fent van a Jev döntési modell, de <PERSON_1> szerint a szivattyú kártya hiányzik.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A Medusa-ban és az Acropora OS-ben is fent van a Jev döntési modell, de <PERSON_1> szerint a szivattyú kártya hiányzik.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-ablative-comitative-question",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1>, hogy a Tunze szivattyút <PERSON_2> együtt szerelik-e be?",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1>, hogy a Tunze szivattyút <PERSON_2> együtt szerelik-e be?",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-hyphenated-name-agent-chat",
+   "keep": [],
+   "default": {
+    "text": "@barracuda nézd meg a <PERSON_1>-féle ticketet, <PERSON_2> a 2. medencéje szivárog.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "@barracuda nézd meg a <PERSON_1>-féle ticketet, <PERSON_2> a 2. medencéje szivárog.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-title-dr-and-phone",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> ügyvéd kért árajánlatot, <PROPER_1> asszony a <PHONE_1>-ön érhető el.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> ügyvéd kért árajánlatot, <PROPER_1> asszony a <PHONE_1>-ön érhető el.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b1-lowercase-nick-no-accents",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> mondta h a <PERSON_2> szuroje megint dugulas, vigyel uj szivacsot",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> mondta h a <PERSON_2> szuroje megint dugulas, vigyel uj szivacsot",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-fwd-header-full",
+   "keep": [],
+   "default": {
+    "text": "---------- Továbbított üzenet ----------\nFeladó: <PERSON_1> <<EMAIL_1>>\nKüldve: <DATE_1>, vasárnap <DATE_2>\nCímzett: <EMAIL_2>\n<PROPER_1>: RE: a szivattyú megint zörög",
+    "counts": {
+     "PERSON": 1,
+     "EMAIL": 2,
+     "DATE": 2,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "---------- Továbbított üzenet ----------\nFeladó: <PERSON_1> <<EMAIL_1>>\nKüldve: 2026. szeptember 14., vasárnap 21:07\nCímzett: <EMAIL_2>\n<PROPER_1>: RE: a szivattyú megint zörög",
+    "counts": {
+     "PERSON": 1,
+     "EMAIL": 2,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-tisztelettel-footer-newline",
+   "keep": [],
+   "default": {
+    "text": "Kérem, jöjjenek ki megnézni a UV lámpát, mert nem világít.\nTisztelettel:\n<PERSON_1>\n<PHONE_1>",
+    "counts": {
+     "PERSON": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Kérem, jöjjenek ki megnézni a UV lámpát, mert nem világít.\nTisztelettel:\n<PERSON_1>\n<PHONE_1>",
+    "counts": {
+     "PERSON": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-ai-note-accentless-decision",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> dontese: a <PERSON_2>-fele tavat (<ADDRESS_1>) nem vallaljuk jovo heten, a RO viz rendszert Aquaforest sollal toltjuk.",
+    "counts": {
+     "PERSON": 2,
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> dontese: a <PERSON_2>-fele tavat (<ADDRESS_1>) nem vallaljuk jovo heten, a RO viz rendszert Aquaforest sollal toltjuk.",
+    "counts": {
+     "PERSON": 2,
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-mixed-english-invoice",
+   "keep": [],
+   "default": {
+    "text": "customer <PERSON_1> called re: invoice <ID_1>, says the Tunze pump is still under warranty. callback at <DATE_1>.",
+    "counts": {
+     "PERSON": 1,
+     "ID": 1,
+     "DATE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "customer <PERSON_1> called re: invoice 2026/118, says the Tunze pump is still under warranty. callback at 14:30.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-name-glued-to-digit",
+   "keep": [],
+   "default": {
+    "text": "Ticket szerint a nitrát 50 fölött van, KH érték 6.",
+    "counts": {
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Ticket szerint a nitrát 50 fölött van, KH érték 6.",
+    "counts": {
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-name-in-parens",
+   "keep": [],
+   "default": {
+    "text": "A fehérje-lefölözőt (<PERSON_1> hozta vissza) kicseréltük Red Sea típusra.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A fehérje-lefölözőt (<PERSON_1> hozta vissza) kicseréltük Red Sea típusra.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-possessive-evanak",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> a tava tegnap este bezöldült, <PERSON_2> meg a szűrő folyik.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> a tava tegnap este bezöldült, <PERSON_2> meg a szűrő folyik.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-possessive-gaboreke",
+   "keep": [],
+   "default": {
+    "text": "a <PERSON_1> meg mindig nem fizetett, <AMOUNT_1> a tartozas",
+    "counts": {
+     "PERSON": 1,
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a <PERSON_1> meg mindig nem fizetett, 48 500 <PROPER_1> a tartozas",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-surname-looks-like-place",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> írt, hogy <PERSON_2> együtt jönnek a halakért.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> írt, hogy <PERSON_2> együtt jönnek a halakért.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-street-is-person-name",
+   "keep": [],
+   "default": {
+    "text": "Cím: <ADDRESS_1> <ADDRESS_2>, a kapucsengő nem működik.",
+    "counts": {
+     "ADDRESS": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Cím: <ADDRESS_1> <ADDRESS_2>, a kapucsengő nem működik.",
+    "counts": {
+     "ADDRESS": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-plate-hyphen-old",
+   "keep": [],
+   "default": {
+    "text": "A furgon (rendszám: <ID_1>) a telephelyen áll, a Jev teszt holnapra csúszott.",
+    "counts": {
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A furgon (rendszám: KLM-482) a telephelyen áll, a Jev teszt holnapra csúszott.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-plate-new-format",
+   "keep": [],
+   "default": {
+    "text": "szerelo az <PERSON_1> kocsival megy ki, a kulcs a portan",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "szerelo az <PERSON_1>-123 kocsival megy ki, a kulcs a portan",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-ipv4-in-ai-note",
+   "keep": [],
+   "default": {
+    "text": "Medusa staging DB listen on <ID_1>, prod proxy <ID_2>, no public exposure yet.",
+    "counts": {
+     "ID": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Medusa staging DB listen on 10.44.7.19:5432, prod proxy 185.112.64.201, no public exposure yet.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-ssh-key-fragment",
+   "keep": [],
+   "default": {
+    "text": "authorized_keys-be felvéve: <SECRET_1>",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "authorized_keys-be felvéve: <SECRET_1>",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-private-key-block",
+   "keep": [],
+   "default": {
+    "text": "véletlenül bemásolta a chatbe:\n<SECRET_1>\nezt azonnal cseréljük",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "véletlenül bemásolta a chatbe:\n<SECRET_1>\nezt azonnal cseréljük",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-email-local-part-name",
+   "keep": [],
+   "default": {
+    "text": "irj a <EMAIL_1> cimre, o a tulaj",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "irj a <EMAIL_1> cimre, o a tulaj",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-company-hq-line",
+   "keep": [],
+   "default": {
+    "text": "<ORG_1>\n<PROPER_1>: <ADDRESS_1>\nAdószám: <TAX_ID_1>\nCégjegyzékszám: 13-09-<ID_1>",
+    "counts": {
+     "ORG": 1,
+     "PROPER": 1,
+     "ADDRESS": 1,
+     "TAX_ID": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Tükörhal Kft.\n<PROPER_1>: <ADDRESS_1>\nAdószám: <TAX_ID_1>\nCégjegyzékszám: 13-09-187654",
+    "counts": {
+     "PROPER": 1,
+     "ADDRESS": 1,
+     "TAX_ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-company-bt-lowercase",
+   "keep": [],
+   "default": {
+    "text": "<ORG_1>-nek holnap megy ki a szamla, ugyanaz a jegy mint a mult havi",
+    "counts": {
+     "ORG": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a koiponty bt-nek holnap megy ki a szamla, ugyanaz a jegy mint a mult havi",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-iban-spaced",
+   "keep": [],
+   "default": {
+    "text": "Kérjük az összeget az alábbi számlára utalni: <IBAN_1> (OTP), közlemény: <ID_1>",
+    "counts": {
+     "IBAN": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Kérjük az összeget az alábbi számlára utalni: <IBAN_1> (OTP), közlemény: SZ-2026-0931",
+    "counts": {
+     "IBAN": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-hu-bank-account-dashed",
+   "keep": [],
+   "default": {
+    "text": "szamlaszam <BANK_ACCOUNT_1>, <PERSON_1> nevere",
+    "counts": {
+     "BANK_ACCOUNT": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "szamlaszam <BANK_ACCOUNT_1>, <PERSON_1> nevere",
+    "counts": {
+     "BANK_ACCOUNT": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-taj-and-tax",
+   "keep": [],
+   "default": {
+    "text": "Munkavállaló: <PERSON_1>, TAJ: <TAX_ID_1>, adóazonosító jel: <TAX_ID_2>",
+    "counts": {
+     "PERSON": 1,
+     "TAX_ID": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Munkavállaló: <PERSON_1>, TAJ: <TAX_ID_1>, adóazonosító jel: <TAX_ID_2>",
+    "counts": {
+     "PERSON": 1,
+     "TAX_ID": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-card-number",
+   "keep": [],
+   "default": {
+    "text": "fizetett kartyaval, <PHONE_1>, lejarat <SECRET_1>, cvc <SECRET_2>",
+    "counts": {
+     "PHONE": 1,
+     "SECRET": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "fizetett kartyaval, <PHONE_1>, lejarat <SECRET_1>, cvc <SECRET_2>",
+    "counts": {
+     "PHONE": 1,
+     "SECRET": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-url-secret-query",
+   "keep": [],
+   "default": {
+    "text": "a webhook: https://<DOMAIN_1>/in , ne oszd meg",
+    "counts": {
+     "DOMAIN": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a webhook: https://<DOMAIN_1>/in , ne oszd meg",
+    "counts": {
+     "DOMAIN": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-api-key-env",
+   "keep": [],
+   "default": {
+    "text": "OPENAI_API_KEY=<SECRET_1> a .env-ben volt, kiszivárgott a logba",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   },
+   "pairing": {
+    "text": "OPENAI_API_KEY=<SECRET_1> a .env-ben volt, kiszivárgott a logba",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-password-inline",
+   "keep": [],
+   "default": {
+    "text": "wifi jelszo a boltban: <SECRET_1>, a router admin pw pedig <SECRET_2>",
+    "counts": {
+     "SECRET": 2
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   },
+   "pairing": {
+    "text": "wifi jelszo a boltban: <SECRET_1>, a router admin pw pedig <SECRET_2>",
+    "counts": {
+     "SECRET": 2
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-appointment-date-time",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> úrhoz <DATE_1>-án <DATE_2>-re megyünk medencetisztításra, utána jövő héten nézzük a nitrátot.",
+    "counts": {
+     "PERSON": 1,
+     "DATE": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> úrhoz szeptember 30-án 9:15-re megyünk medencetisztításra, utána jövő héten nézzük a nitrátot.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-nickname-lowercase",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> mondd meg h a lampa megjott",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> mondd meg h a lampa megjott",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-foreign-name-ticket",
+   "keep": [],
+   "default": {
+    "text": "Hibajegy: <PERSON_1> (<PROPER_1>) reports the Tunze Turbelle stopped. Tel: <PHONE_1>",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Hibajegy: <PERSON_1> (<PROPER_1>) reports the Tunze Turbelle stopped. Tel: <PHONE_1>",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-layperson-ticket-typos",
+   "keep": [],
+   "default": {
+    "text": "jo napot a halaim nem esznek es a viz zavaros lett. a cimem debrecen ,<ADDRESS_1> . csengo <PERSON_1>. koszonom szepen <PERSON_2>",
+    "counts": {
+     "ADDRESS": 1,
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "jo napot a halaim nem esznek es a viz zavaros lett. a cimem debrecen ,<ADDRESS_1> . csengo <PERSON_1>. koszonom szepen <PERSON_2>",
+    "counts": {
+     "ADDRESS": 1,
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-hrsz-plot",
+   "keep": [],
+   "default": {
+    "text": "A tó a <ADDRESS_1> ingatlanon van, <PROPER_1> külterület, tulajdonos <PERSON_1>.",
+    "counts": {
+     "ADDRESS": 1,
+     "PROPER": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A tó a <ADDRESS_1> ingatlanon van, <PROPER_1> külterület, tulajdonos <PERSON_1>.",
+    "counts": {
+     "ADDRESS": 1,
+     "PROPER": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-asset-serial-ids",
+   "keep": [],
+   "default": {
+    "text": "Eszköz: <ID_1>, gyári szám SN: <ID_2>, a Red Sea REEFER-hez tartozik.",
+    "counts": {
+     "ID": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Eszköz: ESZ-00817, gyári szám SN: <PROPER_1>-9921-44B, a Red Sea REEFER-hez tartozik.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-order-id-discord",
+   "keep": [],
+   "default": {
+    "text": "a #<ID_1> rendeles duplán jott be a medusaba",
+    "counts": {
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a #U-551209 rendeles duplán jott be a medusaba",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-signature-dash-dash",
+   "keep": [],
+   "default": {
+    "text": "Köszönöm a gyors választ!\n--\n<PERSON_1>\nügyvezető | <ORG_1>\nMobil: <PHONE_1>",
+    "counts": {
+     "PERSON": 1,
+     "ORG": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Köszönöm a gyors választ!\n--\n<PERSON_1>\nügyvezető | Aranyponty Zrt.\nMobil: <PHONE_1>",
+    "counts": {
+     "PERSON": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-name-before-colon-chat",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1>: holnap nem tudok bejönni, a fehérje-lefölözőt <PERSON_2> szereli be",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1>: holnap nem tudok bejönni, a fehérje-lefölözőt <PERSON_2> szereli be",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-memory-note-customer-and-money",
+   "keep": [],
+   "default": {
+    "text": "Cold memory: ugyfel <PERSON_1> (<PROPER_1>) 3x reklamalt, a kompenzacio <AMOUNT_1> jovairas lett, Acropora OS ticket <ID_1>.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1,
+     "AMOUNT": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Cold memory: ugyfel <PERSON_1> (<PROPER_1>) 3x reklamalt, a kompenzacio 25 000 HUF jovairas lett, Acropora OS ticket T-2026-0412.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-money-eur-and-plus-afa",
+   "keep": [],
+   "default": {
+    "text": "Az árajánlat: <AMOUNT_1> + ÁFA, vagy <AMOUNT_2>, a Tunze szivattyúval együtt.",
+    "counts": {
+     "AMOUNT": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Az árajánlat: 1 240 000 <PROPER_1> + ÁFA, vagy 3 150 EUR, a Tunze szivattyúval együtt.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-reply-quote-header",
+   "keep": [],
+   "default": {
+    "text": "<DATE_1> <DATE_2> időpontban <PERSON_1> <<EMAIL_1>> ezt írta:\n> a tavirózsák elrohadtak",
+    "counts": {
+     "DATE": 2,
+     "PERSON": 1,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "2026. 09. 21. 18:42 időpontban <PERSON_1> <<EMAIL_1>> ezt írta:\n> a tavirózsák elrohadtak",
+    "counts": {
+     "PERSON": 1,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-english-outlook-header",
+   "keep": [],
+   "default": {
+    "text": "From: <PERSON_1> <<EMAIL_1>>\nSent: <DATE_1> <DATE_2>\nTo: <PERSON_2>\nSubject: KH ertek meres",
+    "counts": {
+     "PERSON": 2,
+     "EMAIL": 1,
+     "DATE": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "From: <PERSON_1> <<EMAIL_1>>\nSent: <PERSON_2> 22, 2026 8:03 AM\nTo: <PERSON_3>\nSubject: KH ertek meres",
+    "counts": {
+     "PERSON": 3,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-phone-no-spaces-in-sentence",
+   "keep": [],
+   "default": {
+    "text": "hivd a <ID_1> delutan, <PROPER_1> nenivel beszelj",
+    "counts": {
+     "ID": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "hivd a <PHONE_1>-ot delutan, <PROPER_1> nenivel beszelj",
+    "counts": {
+     "PHONE": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-zip-city-inline",
+   "keep": [],
+   "default": {
+    "text": "szallitas: <ADDRESS_1> <ADDRESS_2>, kaputelefon 12",
+    "counts": {
+     "ADDRESS": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "szallitas: <ADDRESS_1> <ADDRESS_2>, kaputelefon 12",
+    "counts": {
+     "ADDRESS": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-invoice-and-date-ai",
+   "keep": [],
+   "default": {
+    "text": "Invoice <ID_1> kiallitva <DATE_1>, due <DATE_2>, Medusa order sync OK.",
+    "counts": {
+     "ID": 1,
+     "DATE": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Invoice ACR-2026/00731 kiallitva 2026-09-19, due 2026-10-03, Medusa order sync OK.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-name-inside-hashtag-mention",
+   "keep": [],
+   "default": {
+    "text": "<HANDLE_1> koszi, a Jev deploy megvan",
+    "counts": {
+     "HANDLE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<HANDLE_1> koszi, a Jev deploy megvan",
+    "counts": {
+     "HANDLE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-keep-only-domain-terms",
+   "keep": [],
+   "default": {
+    "text": "A fehérje-lefölöző és a UV lámpa rendben, a nitrát 10 alatt, KH érték stabil, jövő héten RO víz csere.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A fehérje-lefölöző és a UV lámpa rendben, a nitrát 10 alatt, KH érték stabil, jövő héten RO víz csere.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-name-with-hyphen-suffix-accentless",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1>-tol jott a kerdes, <PERSON_2>-nal egyeztetek",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1>-tol jott a kerdes, <PERSON_2>-nal egyeztetek",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-allcaps-name-footer",
+   "keep": [],
+   "default": {
+    "text": "Üdvözlettel:\n<PERSON_1>\n<ORG_1>\n<EMAIL_1>",
+    "counts": {
+     "PERSON": 1,
+     "ORG": 1,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Üdvözlettel:\n<PERSON_1>\nKatica Díszhal Bt.\n<EMAIL_1>",
+    "counts": {
+     "PERSON": 1,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-ip-and-password-ai",
+   "keep": [],
+   "default": {
+    "text": "coolify box <ID_1>, root pass: <SECRET_1> ssh port 2222",
+    "counts": {
+     "ID": 1,
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   },
+   "pairing": {
+    "text": "coolify box 91.214.33.7, root pass: <SECRET_1> ssh port 2222",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-birth-date-and-mother",
+   "keep": [],
+   "default": {
+    "text": "Szül.: <DATE_1>, anyja neve: <PERSON_1>, lakcím: <ADDRESS_1>",
+    "counts": {
+     "DATE": 1,
+     "PERSON": 1,
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Szül.: 1979.03.12., anyja neve: <PERSON_1>, lakcím: <ADDRESS_1>",
+    "counts": {
+     "PERSON": 1,
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-name-then-quote",
+   "keep": [],
+   "default": {
+    "text": "„Nem kell a kiszállás” – írta <PERSON_1>, de a tó szivattyúja tényleg halott.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "„Nem kell a kiszállás” – írta <PERSON_1>, de a tó szivattyúja tényleg halott.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-github-token-and-name",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> tegnap este betette a <SECRET_1> tokent a repo <PROPER_1>-be",
+    "counts": {
+     "PERSON": 1,
+     "SECRET": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> tegnap este betette a <SECRET_1> tokent a repo <PROPER_1>-be",
+    "counts": {
+     "PERSON": 1,
+     "SECRET": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b2-ticket-slash-id-and-tel-label",
+   "keep": [],
+   "default": {
+    "text": "Hibajegy #<ID_1> (<PROPER_1>.: <PHONE_1>) megnyitva, ugyfel: <PERSON_1>, a KH érték 4.",
+    "counts": {
+     "ID": 1,
+     "PROPER": 1,
+     "PHONE": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Hibajegy #HJ-10442 (<PROPER_1>.: <PHONE_1>) megnyitva, ugyfel: <PERSON_1>, a KH érték 4.",
+    "counts": {
+     "PROPER": 1,
+     "PHONE": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-caps-names",
+   "keep": [],
+   "default": {
+    "text": "Megrendelő: <PERSON_1>, <PERSON_2>",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Megrendelő: <PERSON_1>, <PERSON_2>",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-caps-address",
+   "keep": [],
+   "default": {
+    "text": "<PROPER_1> cím: <ADDRESS_1>",
+    "counts": {
+     "PROPER": 1,
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1> cím: <ADDRESS_1>",
+    "counts": {
+     "PROPER": 1,
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-underscore-file",
+   "keep": [],
+   "default": {
+    "text": "Csatoltam a <PERSON_1>_<PERSON_2>_<PERSON_3>.pdf fájlt.",
+    "counts": {
+     "PERSON": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Csatoltam a <PERSON_1>_<PERSON_2>_<PERSON_3>.pdf fájlt.",
+    "counts": {
+     "PERSON": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-init-unlisted-1",
+   "keep": [],
+   "default": {
+    "text": "<PROPER_1> szerint a lámpa hibás.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1> szerint a lámpa hibás.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-init-unlisted-2",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> holnap jön.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> holnap jön.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-init-nick",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> hívott.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> hívott.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-after-abbrev",
+   "keep": [],
+   "default": {
+    "text": "Ezt pl. <PERSON_1> is mondta.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Ezt pl. <PERSON_1> is mondta.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-label-eol",
+   "keep": [],
+   "default": {
+    "text": "<PROPER_1>: <PERSON_1>",
+    "counts": {
+     "PROPER": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: <PERSON_1>",
+    "counts": {
+     "PROPER": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-dash-bullet",
+   "keep": [],
+   "default": {
+    "text": "- <PROPER_1> visszahív",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "- <PROPER_1> visszahív",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-assim-1",
+   "keep": [],
+   "default": {
+    "text": "beszéltem <PERSON_1> a számláról",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "beszéltem <PERSON_1> a számláról",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-assim-2",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> egyeztettem.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> egyeztettem.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-assim-3",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> jössz?",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> jössz?",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-family-1",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> megyek szerelni.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> megyek szerelni.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-family-2",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> jött az ajánlat",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> jött az ajánlat",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-phone-noprefix-1",
+   "keep": [],
+   "default": {
+    "text": "Hívd a <PHONE_1> számon.",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Hívd a <PHONE_1> számon.",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-phone-noprefix-2",
+   "keep": [],
+   "default": {
+    "text": "<PHONE_1>",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PHONE_1>",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-lower-unlisted",
+   "keep": [],
+   "default": {
+    "text": "szólj a <PERSON_1>",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "szólj a <PERSON_1>",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-lower-ambig-1",
+   "keep": [],
+   "default": {
+    "text": "beszéltem <PERSON_1>",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "beszéltem <PERSON_1>",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-lower-ambig-2",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> megbeszéltük",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> megbeszéltük",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-lower-address",
+   "keep": [],
+   "default": {
+    "text": "a <ADDRESS_1> alatt lakik",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a <ADDRESS_1> alatt lakik",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-u-nodot",
+   "keep": [],
+   "default": {
+    "text": "a <ADDRESS_1> alatt",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a <ADDRESS_1> alatt",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-kukac-dotdomain",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1>.<PERSON_2> kukac gmail.com",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1>.<PERSON_2> kukac gmail.com",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-kukac-paren",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1>.<PERSON_2> (kukac) gmail pont com",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1>.<PERSON_2> (kukac) gmail pont com",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-id-card",
+   "keep": [],
+   "default": {
+    "text": "a személyi száma <ID_1>",
+    "counts": {
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a személyi száma 482913KL",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-url-path-name",
+   "keep": [],
+   "default": {
+    "text": "https://<DOMAIN_1>/<PERSON_1>.<PERSON_2>",
+    "counts": {
+     "DOMAIN": 1,
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "https://<DOMAIN_1>/<PERSON_1>.<PERSON_2>",
+    "counts": {
+     "DOMAIN": 1,
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-zip-alone",
+   "keep": [],
+   "default": {
+    "text": "a <ID_1> körzetben",
+    "counts": {
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a 1134-es körzetben",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-monogram",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> B. hívott",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> B. hívott",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b3-obrien",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> O'<PROPER_1>-nel egyeztettem.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> O'<PROPER_1>-nel egyeztettem.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-wa-chat-inflected-surname",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> holnap reggel megy <PERSON_2>, a lefölöző megint zajos. Hívd fel a <PHONE_1> számon.",
+    "counts": {
+     "PERSON": 2,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> holnap reggel megy <PERSON_2>, a lefölöző megint zajos. Hívd fel a <PHONE_1> számon.",
+    "counts": {
+     "PERSON": 2,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-voice-email-kukac",
+   "keep": [],
+   "default": {
+    "text": "a címe <EMAIL_1> és kérte hogy csütörtökön hívjuk vissza a vízcsere miatt",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a címe <EMAIL_1> és kérte hogy csütörtökön hívjuk vissza a vízcsere miatt",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-voice-phone-spelled",
+   "keep": [],
+   "default": {
+    "text": "a telefonszáma <PHONE_1> a nitrát ötven fölött volt",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a telefonszáma <PHONE_1> a nitrát ötven fölött volt",
+    "counts": {
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-calendar-ek-suffix",
+   "keep": [],
+   "default": {
+    "text": "Szerda <DATE_1> - <PERSON_1>-ék, tófeltöltés",
+    "counts": {
+     "DATE": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Szerda 10:00 - <PERSON_1>-ék, tófeltöltés",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-calendar-tol-suffix",
+   "keep": [],
+   "default": {
+    "text": "Péntek <DATE_1> <PERSON_1>-tól átvenni a Tunze szivattyút",
+    "counts": {
+     "DATE": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Péntek 14:30 <PERSON_1>-tól átvenni a Tunze szivattyút",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-customer-review-signed",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> elégedett vagyok, <PERSON_2> pontosan jött és a Red Sea akvárium azóta kristálytiszta. <PERSON_3>",
+    "counts": {
+     "PERSON": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> elégedett vagyok, <PERSON_2> pontosan jött és a Red Sea akvárium azóta kristálytiszta. <PERSON_3>",
+    "counts": {
+     "PERSON": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-delivery-note",
+   "keep": [],
+   "default": {
+    "text": "<PROPER_1> <ID_1>\nCímzett: <PERSON_1>, <ADDRESS_1> 2/5\n<PROPER_2>: Aquaforest AF <PROPER_3> 22 kg, 2 db\nÖsszeg: <AMOUNT_1>",
+    "counts": {
+     "PROPER": 3,
+     "ID": 1,
+     "PERSON": 1,
+     "ADDRESS": 1,
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1> SZL-2026/00418\nCímzett: <PERSON_1>, <ADDRESS_1> 2/5\n<PROPER_2>: Aquaforest AF <PROPER_3> 22 kg, 2 db\nÖsszeg: 48 990 <PROPER_4>",
+    "counts": {
+     "PROPER": 4,
+     "PERSON": 1,
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-csv-customer-row",
+   "keep": [],
+   "default": {
+    "text": "ugyfel_id;nev;email;telefon\n<ID_1>;<PERSON_1>;<EMAIL_1>;<PHONE_1>",
+    "counts": {
+     "ID": 1,
+     "PERSON": 1,
+     "EMAIL": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "ugyfel_id;nev;email;telefon\n10482;<PERSON_1>;<EMAIL_1>;<PHONE_1>",
+    "counts": {
+     "PERSON": 1,
+     "EMAIL": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-json-iban-amount",
+   "keep": [],
+   "default": {
+    "text": "{\"customer\":\"<PERSON_1>\",\"iban\":\"<IBAN_1>\",\"amount\":\"<AMOUNT_1>\",\"note\":\"KH 7.5, RO víz\"}",
+    "counts": {
+     "PERSON": 1,
+     "IBAN": 1,
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "{\"customer\":\"<PERSON_1>\",\"iban\":\"<IBAN_1>\",\"amount\":\"125 000 <PROPER_1>\",\"note\":\"KH 7.5, RO víz\"}",
+    "counts": {
+     "PERSON": 1,
+     "IBAN": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-log-line-login",
+   "keep": [],
+   "default": {
+    "text": "<ID_1>Z INFO login ok <EMAIL_1> ip=<ID_2> agent=barracuda",
+    "counts": {
+     "ID": 2,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "2026-09-12T08:14:03Z INFO login ok <EMAIL_1> ip=185.43.207.19 agent=barracuda",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-git-commit-reported-by",
+   "keep": [],
+   "default": {
+    "text": "fix(ticket): <PERSON_1> bejelentése alapján javítva a lefölöző státusz\n\nReported-by: <PERSON_1> <<EMAIL_1>>",
+    "counts": {
+     "PERSON": 1,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "fix(ticket): <PERSON_1> bejelentése alapján javítva a lefölöző státusz\n\nReported-by: <PERSON_1> <<EMAIL_1>>",
+    "counts": {
+     "PERSON": 1,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-discord-quote-company",
+   "keep": [],
+   "default": {
+    "text": "> <PERSON_1> írta: \"<ORG_1>-nél holnap lesz a tó leeresztése, <PERSON_2> lesz ott\"\nOké, murena átnézi a munkalapot.",
+    "counts": {
+     "PERSON": 2,
+     "ORG": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "> <PERSON_1> írta: \"a Molnár Kft-nél holnap lesz a tó leeresztése, <PERSON_2> lesz ott\"\nOké, murena átnézi a munkalapot.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-english-sentence-invoice",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> asked whether the Medusa sync can run tonight; his invoice <ID_1> is still open.",
+    "counts": {
+     "PERSON": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> asked whether the Medusa sync can run tonight; his invoice INV-2026-0931 is still open.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-hungarian-text-english-name-order",
+   "keep": [],
+   "default": {
+    "text": "Holnap <PERSON_1> jön a koralltelepítéshez, a Jev alapján döntünk.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Holnap <PERSON_1> jön a koralltelepítéshez, a Jev alapján döntünk.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-double-acute-initials",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> és <PERSON_2> kérte, hogy a nitrát mérés után szóljunk.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> és <PERSON_2> kérte, hogy a nitrát mérés után szóljunk.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-lowercase-names-inflected",
+   "keep": [],
+   "default": {
+    "text": "ma <PERSON_1> <PERSON_2> és <PERSON_3> <PERSON_4> voltam, a tó szivattyúja cserére szorul, holnap viszem az újat",
+    "counts": {
+     "PERSON": 4
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "ma <PERSON_1> <PERSON_2> és <PERSON_3> <PERSON_4> voltam, a tó szivattyúja cserére szorul, holnap viszem az újat",
+    "counts": {
+     "PERSON": 4
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-uppercase-form",
+   "keep": [],
+   "default": {
+    "text": "MEGRENDELŐ: <PERSON_1>, MUNKALAP: <ID_1>",
+    "counts": {
+     "PERSON": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "MEGRENDELŐ: <PERSON_1>, MUNKALAP: ML-2026-0587",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-hyphenated-surname",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> akváriumát kell holnap átnézni, a KH túl alacsony.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> akváriumát kell holnap átnézni, a KH túl alacsony.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-particle-surname",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> de la <PROPER_1> a spanyol nagykövetségről írt a tengeri akvárium karbantartásáról.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> de la <PROPER_1> a spanyol nagykövetségről írt a tengeri akvárium karbantartásáról.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-apostrophe-surname-suffix",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> O'<PROPER_1>-nel egyeztettem, jövő héten jön a Tunze pumpáért.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> O'<PROPER_1>-nel egyeztettem, jövő héten jön a Tunze pumpáért.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-family-ek-agent-name",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1>-ék tavánál a UV lámpa kiégett, polip felírta a kártyára.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1>-ék tavánál a UV lámpa kiégett, polip felírta a kártyára.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-nicknames",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> bácsi megint hívott, a <PERSON_2> szerint a szivattyú zúg.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> bácsi megint hívott, a <PERSON_2> szerint a szivattyú zúg.",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-card-number",
+   "keep": [],
+   "default": {
+    "text": "A kártyaszám <PHONE_1>, lejárat <SECRET_1>, CVC <SECRET_2>.",
+    "counts": {
+     "PHONE": 1,
+     "SECRET": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A kártyaszám <PHONE_1>, lejárat <SECRET_1>, CVC <SECRET_2>.",
+    "counts": {
+     "PHONE": 1,
+     "SECRET": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-tax-taj-ids",
+   "keep": [],
+   "default": {
+    "text": "Adószám: <TAX_ID_1>, TAJ: <TAX_ID_2>, adóazonosító jel: <TAX_ID_3>",
+    "counts": {
+     "TAX_ID": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Adószám: <TAX_ID_1>, TAJ: <TAX_ID_2>, adóazonosító jel: <TAX_ID_3>",
+    "counts": {
+     "TAX_ID": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-license-plates",
+   "keep": [],
+   "default": {
+    "text": "A szervizautó <PERSON_1> helyett ma a <ID_1> rendszámú kisbusszal megyünk a tavas ügyfélhez.",
+    "counts": {
+     "PERSON": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A szervizautó <PERSON_1>-123 helyett ma a NKR-419 rendszámú kisbusszal megyünk a tavas ügyfélhez.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-url-query-token",
+   "keep": [],
+   "default": {
+    "text": "<PROPER_1>: https://api.acropora.hu/hooks/unas",
+    "counts": {
+     "PROPER": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: https://api.acropora.hu/hooks/unas",
+    "counts": {
+     "PROPER": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-git-remote-pat",
+   "keep": [],
+   "default": {
+    "text": "git remote set-url origin https:<EMAIL_1>",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "git remote set-url origin https:<EMAIL_1>",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-passwords-in-chat",
+   "keep": [],
+   "default": {
+    "text": "wifi jelszó a boltban: <SECRET_1>, a routeré admin / <PROPER_1>",
+    "counts": {
+     "SECRET": 1,
+     "PROPER": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   },
+   "pairing": {
+    "text": "wifi jelszó a boltban: <SECRET_1>, a routeré admin / <PROPER_1>",
+    "counts": {
+     "SECRET": 1,
+     "PROPER": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [
+     "SECRET"
+    ],
+    "guardPairing": [
+     "SECRET"
+    ]
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-private-key-block",
+   "keep": [],
+   "default": {
+    "text": "nautilus kulcsa a stage géphez:\n<SECRET_1>",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "nautilus kulcsa a stage géphez:\n<SECRET_1>",
+    "counts": {
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-money-mixed-formats",
+   "keep": [],
+   "default": {
+    "text": "A tófeltöltés <AMOUNT_1> volt, plusz <AMOUNT_2> kiszállás, euróban kb. <AMOUNT_3>.",
+    "counts": {
+     "AMOUNT": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A tófeltöltés 185 000 forint volt, plusz 12.500 <PROPER_1> kiszállás, euróban kb. €470.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-date-time-written",
+   "keep": [],
+   "default": {
+    "text": "<DATE_1>-án <DATE_2> jönnek, a következő vízcsere két hét múlva.",
+    "counts": {
+     "DATE": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "2026. október 3-án 9 óra 15-kor jönnek, a következő vízcsere két hét múlva.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-voice-date-spelled",
+   "keep": [],
+   "default": {
+    "text": "jövő kedden reggel <DATE_1> megyünk a nagy tóhoz aztán <DATE_2> délután <DATE_3> a boltba",
+    "counts": {
+     "DATE": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "jövő kedden reggel nyolckor megyünk a nagy tóhoz aztán szeptember huszonkilencedikén délután háromkor a boltba",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-ip-v4-v6",
+   "keep": [],
+   "default": {
+    "text": "A kamera <ID_1> címen fut, a tavi szenzor <ID_2>",
+    "counts": {
+     "ID": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A kamera 192.168.1.54 címen fut, a tavi szenzor fe80::1ff:fe23:4567:890a",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-company-forms",
+   "keep": [],
+   "default": {
+    "text": "<ORG_1> és <ORG_2> is kért ajánlatot, <ORG_3> még nem.",
+    "counts": {
+     "ORG": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A Zöldvíz Akvarisztika Kft. és a Halas és Társa Bt. is kért ajánlatot, a Pannon Tó Zrt. még nem.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-keep-products-and-agents",
+   "keep": [],
+   "default": {
+    "text": "Az Acropora OS-ben a Medusa szinkron után a Red Sea és Aquaforest termékek jól jelennek meg; barracuda és nautilus ellenőrizte.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Az Acropora OS-ben a Medusa szinkron után a Red Sea és Aquaforest termékek jól jelennek meg; barracuda és nautilus ellenőrizte.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-keep-domain-measurements",
+   "keep": [],
+   "default": {
+    "text": "Vízcsere után a nitrát 5 mg/l, KH 8, RO víz TDS 0, a lefölöző fél napig ment üresben.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Vízcsere után a nitrát 5 mg/l, KH 8, RO víz TDS 0, a lefölöző fél napig ment üresben.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-ticket-asset-serial",
+   "keep": [],
+   "default": {
+    "text": "Hibajegy #<ID_1>, eszköz <ID_2>, gyári szám SN: <ID_3>, cserélni kell a Tunze motort.",
+    "counts": {
+     "ID": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Hibajegy #T-20931, eszköz ESZ-00417, gyári szám SN: TNZ6095-88213A, cserélni kell a Tunze motort.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-order-number-cancel",
+   "keep": [],
+   "default": {
+    "text": "A <ID_1> számú rendelést <PERSON_1> mondta le.",
+    "counts": {
+     "ID": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A 100234871 számú rendelést <PERSON_1> mondta le.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-giro-account-transfer",
+   "keep": [],
+   "default": {
+    "text": "Utalás a <BANK_ACCOUNT_1> számlára, közlemény: <PERSON_1> karbantartás",
+    "counts": {
+     "BANK_ACCOUNT": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Utalás a <BANK_ACCOUNT_1> számlára, közlemény: <PERSON_1> karbantartás",
+    "counts": {
+     "BANK_ACCOUNT": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-address-with-gate-code",
+   "keep": [],
+   "default": {
+    "text": "<PROPER_1>: Budapest, <ADDRESS_1>, <ADDRESS_2> <PROPER_2> <SECRET_1>",
+    "counts": {
+     "PROPER": 2,
+     "ADDRESS": 2,
+     "SECRET": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: Budapest, <ADDRESS_1>, <ADDRESS_2> <PROPER_2> <SECRET_1>",
+    "counts": {
+     "PROPER": 2,
+     "ADDRESS": 2,
+     "SECRET": 1,
+     "URL_QUERY": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-whatsapp-export-timestamps",
+   "keep": [],
+   "default": {
+    "text": "[<DATE_1>] <PERSON_1>: megjött az Aquaforest só?\n[<DATE_2>] <PERSON_2>: igen, <PERSON_3> hagytam",
+    "counts": {
+     "DATE": 2,
+     "PERSON": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "[09:42] <PERSON_1>: megjött az Aquaforest só?\n[09:43] <PERSON_2>: igen, <PERSON_3> hagytam",
+    "counts": {
+     "PERSON": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-foreign-german-name",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> aus <PROPER_1> möchte einen <PROPER_2>, a nagy koi tóhoz.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> aus <PROPER_1> möchte einen <PROPER_2>, a nagy koi tóhoz.",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-title-and-double-surname",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> rendelőjében a váró akváriumban elpusztult két bohóchal.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> rendelőjében a váró akváriumban elpusztult két bohóchal.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-surname-three-suffixes",
+   "keep": [],
+   "default": {
+    "text": "Tegnap <PERSON_1> szóltam, aztán <PERSON_1> egyeztettem, végül <PERSON_1> kaptam meg a kulcsot.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Tegnap <PERSON_1> szóltam, aztán <PERSON_1> egyeztettem, végül <PERSON_1> kaptam meg a kulcsot.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-agent-names-vs-person",
+   "keep": [],
+   "default": {
+    "text": "polip szerint <PERSON_1> fizetése elmaradt, korall pedig javasolta a korallok áthelyezését.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "polip szerint <PERSON_1> fizetése elmaradt, korall pedig javasolta a korallok áthelyezését.",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-json-log-payment",
+   "keep": [],
+   "default": {
+    "text": "{\"ts\":\"<DATE_1> <DATE_2>\",\"level\":\"warn\",\"msg\":\"payment failed\",\"email\":\"<EMAIL_1>\"}",
+    "counts": {
+     "DATE": 2,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "{\"ts\":\"2026-09-27 21:05:44\",\"level\":\"warn\",\"msg\":\"payment failed\",\"email\":\"<EMAIL_1>\"}",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-relative-time-only",
+   "keep": [],
+   "default": {
+    "text": "Két napja cseréltük a szivattyút, jövő héten nézzük meg újra, addig napi kétszer etetés.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Két napja cseréltük a szivattyút, jövő héten nézzük meg újra, addig napi kétszer etetés.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-voice-address-spelled",
+   "keep": [],
+   "default": {
+    "text": "a cím győr <ADDRESS_1> második emelet hat és a kapunál csengessen",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a cím győr <ADDRESS_1> második emelet hat és a kapunál csengessen",
+    "counts": {
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-obfuscated-emails",
+   "keep": [],
+   "default": {
+    "text": "Írj neki: <PERSON_1>.<PERSON_2> [at] outlook [dot] com vagy <EMAIL_1>",
+    "counts": {
+     "PERSON": 2,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Írj neki: <PERSON_1>.<PERSON_2> [at] outlook [dot] com vagy <EMAIL_1>",
+    "counts": {
+     "PERSON": 2,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "b4-phone-formats",
+   "keep": [],
+   "default": {
+    "text": "Mobil: <PHONE_1>, vezetékes: <PHONE_2>, <PROPER_1>: <PHONE_3>",
+    "counts": {
+     "PHONE": 3,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Mobil: <PHONE_1>, vezetékes: <PHONE_2>, <PROPER_1>: <PHONE_3>",
+    "counts": {
+     "PHONE": 3,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r5-caps-single",
+   "keep": [],
+   "default": {
+    "text": "<PERSON_1> dontese: a <PERSON_2> ugyfelet kell hivni",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> dontese: a <PERSON_2> ugyfelet kell hivni",
+    "counts": {
+     "PERSON": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r5-caps-emphasis",
+   "keep": [],
+   "default": {
+    "text": "SAJAT HIBA, de a <PERSON_1> ugy lezarva",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "SAJAT HIBA, de a <PERSON_1> ugy lezarva",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r5-partner-codes",
+   "keep": [],
+   "default": {
+    "text": "A partner helyszinei: <ID_1> es <ID_2>, kodok <ID_3>, <ID_4>",
+    "counts": {
+     "ID": 4
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "A partner helyszinei: <PROPER_1>-01-FIB es <PROPER_2>-VPU-02, kodok CAP/NMD, AKV/A11",
+    "counts": {
+     "PROPER": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r5-month-day",
+   "keep": [],
+   "default": {
+    "text": "a <DATE_1> es a <DATE_2> kozotti futasok, <DATE_3>-kor nezve",
+    "counts": {
+     "DATE": 3
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a 09-03 es a 08-28 kozotti futasok, 19:5x-kor nezve",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r5-infra-id",
+   "keep": [],
+   "default": {
+    "text": "a <ID_1> alkalmazas ujraindult",
+    "counts": {
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a vrjxxwffsxytstq8oepgbhii alkalmazas ujraindult",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r5-partial-email",
+   "keep": [],
+   "default": {
+    "text": "az <EMAIL_1> cimre kuldtem",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "az <EMAIL_1> cimre kuldtem",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r5-third-domain",
+   "keep": [],
+   "default": {
+    "text": "a <DOMAIN_1> es a <DOMAIN_2> arai, de a ticket.acropora.hu marad",
+    "counts": {
+     "DOMAIN": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a <DOMAIN_1> es a <DOMAIN_2> arai, de a ticket.acropora.hu marad",
+    "counts": {
+     "DOMAIN": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r5-time-then-word",
+   "keep": [],
+   "default": {
+    "text": "<DATE_1> <DATE_2> helyi ido szerint",
+    "counts": {
+     "DATE": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "2026-08-18 15:44:45 helyi ido szerint",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r5-internal-refs-keep",
+   "keep": [],
+   "default": {
+    "text": "a PR 1204, az emlek 1681 es a PD-006 szerint",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a PR 1204, az emlek 1681 es a PD-006 szerint",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r5-cuid",
+   "keep": [],
+   "default": {
+    "text": "rekord <ID_1> torolve",
+    "counts": {
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "rekord cmufq7z2x0009ab07zx748r4z torolve",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r10-medusa-sc",
+   "keep": [],
+   "default": {
+    "text": "az eles bolt csatornaja <ID_1>, a tesztee <ID_2>",
+    "counts": {
+     "ID": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "az eles bolt csatornaja sc_01M1M83JB5PB0Y0P3R7SRP6A6B, a tesztee sc_01M0JZ32ZDKGS33AWVVSVQPZX7",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r10-competitor",
+   "keep": [],
+   "default": {
+    "text": "<PROPER_1>=olcsobb, a <PROPER_1> kinalata szukebb",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>=olcsobb, a <PROPER_1> kinalata szukebb",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r10-inflected-ft",
+   "keep": [],
+   "default": {
+    "text": "ezt <AMOUNT_1> adjuk, a masikat <AMOUNT_2>",
+    "counts": {
+     "AMOUNT": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "ezt 800 forintnak adjuk, a masikat 1200 <PROPER_1>-ert",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "r10-bare-price",
+   "keep": [],
+   "default": {
+    "text": "a <AMOUNT_1> helyett <AMOUNT_2> felett ingyenes a szallitas",
+    "counts": {
+     "AMOUNT": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "a 13 800 helyett 30 ezer felett ingyenes a szallitas",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-business-all",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "Bank payment on <DATE_1>: <AMOUNT_1>. <PROPER_1>: <ORG_1> <PROPER_2>: <ID_1>.",
+    "counts": {
+     "DATE": 1,
+     "AMOUNT": 1,
+     "PROPER": 2,
+     "ORG": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Bank payment on 2026-08-17: 1999 HUF. <PROPER_1>: Parkl Digital Technologies Kft. <PROPER_2>: E-PAR-2026-36143.",
+    "counts": {
+     "PROPER": 2
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-invoice-line",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "Invoice <ID_1>, issued <DATE_1>, gross <AMOUNT_1>, issuer: <ORG_1>",
+    "counts": {
+     "ID": 1,
+     "DATE": 1,
+     "AMOUNT": 1,
+     "ORG": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Invoice KS26/09229, issued 2026-08-03, gross 17807 HUF, issuer: Fluidra Magyarország Kft.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-person-in-reference",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "<PROPER_1>: <PERSON_1> részére visszautalás <ID_1>, <AMOUNT_1>.",
+    "counts": {
+     "PROPER": 1,
+     "PERSON": 1,
+     "ID": 1,
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: <PERSON_1> részére visszautalás ACRW-2026/00362, 34000 HUF.",
+    "counts": {
+     "PROPER": 1,
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-person-company-name",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "<PROPER_1>: <ORG_1>, <AMOUNT_1>.",
+    "counts": {
+     "PROPER": 1,
+     "ORG": 1,
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: Kovács Péter Kft., 12700 HUF.",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-sole-trader",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "issuer: <ORG_1>, <PROPER_1> <ID_1>",
+    "counts": {
+     "ORG": 1,
+     "PROPER": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "issuer: <PERSON_1> ev., <PROPER_1> 2026/0815",
+    "counts": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-email",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "<PROPER_1>: szamla <EMAIL_1> <DATE_1>",
+    "counts": {
+     "PROPER": 1,
+     "EMAIL": 1,
+     "DATE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: szamla <EMAIL_1> 2026-08-17",
+    "counts": {
+     "PROPER": 1,
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-phone",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "<PROPER_1>: hívjon <PHONE_1> számon, <AMOUNT_1>",
+    "counts": {
+     "PROPER": 1,
+     "PHONE": 1,
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: hívjon <PHONE_1> számon, 5000 HUF",
+    "counts": {
+     "PROPER": 1,
+     "PHONE": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-bank-account",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "Partner account <BANK_ACCOUNT_1>, <PROPER_1>: <ID_1>",
+    "counts": {
+     "BANK_ACCOUNT": 1,
+     "PROPER": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Partner account <BANK_ACCOUNT_1>, <PROPER_1>: E-SA1-2026-296",
+    "counts": {
+     "BANK_ACCOUNT": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-iban",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "<AMOUNT_1> <ID_1> 5 <PROPER_1> <PERSON_1> <IBAN_1>",
+    "counts": {
+     "AMOUNT": 1,
+     "ID": 1,
+     "PROPER": 1,
+     "PERSON": 1,
+     "IBAN": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "1.969,50 EUR CM8779 5 <PROPER_1> <PERSON_1> <IBAN_1>",
+    "counts": {
+     "PROPER": 1,
+     "PERSON": 1,
+     "IBAN": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-tax-number",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "issuer: <ORG_1>, adószám: <TAX_ID_1>, <PROPER_1> <ID_1>",
+    "counts": {
+     "ORG": 1,
+     "TAX_ID": 1,
+     "PROPER": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "issuer: Szállító Kft., adószám: <TAX_ID_1>, <PROPER_1> SZ-2026/0815",
+    "counts": {
+     "TAX_ID": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-address",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "<PROPER_1>: <ORG_1>, <ADDRESS_1>, <AMOUNT_1>",
+    "counts": {
+     "PROPER": 1,
+     "ORG": 1,
+     "ADDRESS": 1,
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: Állatkert Kft., <ADDRESS_1>, 82000 HUF",
+    "counts": {
+     "PROPER": 1,
+     "ADDRESS": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-secret",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "<PROPER_1>: <SECRET_1> <AMOUNT_1>",
+    "counts": {
+     "PROPER": 1,
+     "SECRET": 1,
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PROPER_1>: <SECRET_1> 1999 HUF",
+    "counts": {
+     "PROPER": 1,
+     "SECRET": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-company-with-email",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "issuer: <ORG_1> (<EMAIL_1>), <PROPER_1> <ID_1>",
+    "counts": {
+     "ORG": 1,
+     "EMAIL": 1,
+     "PROPER": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "issuer: Kovács Péter Kft. (<EMAIL_1>), <PROPER_1> SZ-2026/0815",
+    "counts": {
+     "EMAIL": 1,
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-company-caps",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "issuer: <ORG_1>, gross <AMOUNT_1>",
+    "counts": {
+     "ORG": 1,
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "issuer: MOHU MOL HULLADÉKGAZDÁLKODÁSI ZRT., gross 10882 HUF",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-company-gmbh",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "issuer: <ORG_1>, <PROPER_1> <ID_1>",
+    "counts": {
+     "ORG": 1,
+     "PROPER": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "issuer: Hertlein Aquaristik GmbH, <PROPER_1> 261276",
+    "counts": {
+     "PROPER": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-name-without-form",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "partner: <PERSON_1>; reference: <ID_1>",
+    "counts": {
+     "PERSON": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "partner: <PERSON_1>; reference: SZ-2026/0815",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-sole-trader-with-dot",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "issuer: <ORG_1>, gross <AMOUNT_1>",
+    "counts": {
+     "ORG": 1,
+     "AMOUNT": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "issuer: <PERSON_1> e.v., gross 5000 HUF",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-number-in-company",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "Invoice <ID_1>, gross <AMOUNT_1>, issuer: <ORG_1>",
+    "counts": {
+     "ID": 1,
+     "AMOUNT": 1,
+     "ORG": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Invoice 2026/118, gross 4500 HUF, issuer: Tisza 97 Kft.",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-number-in-hyphenated-company",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "issuer: <ORG_1>; reference: <ID_1>",
+    "counts": {
+     "ORG": 1,
+     "ID": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "issuer: B-O 2001 Kft.; reference: BO-2026-0042",
+    "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "pairing",
+   "id": "pair-amount-before-company",
+   "keep": [
+    "AMOUNT",
+    "DATE",
+    "ID",
+    "ORG"
+   ],
+   "default": {
+    "text": "<PERSON_1> <ID_1> <ORG_1> díj",
+    "counts": {
+     "PERSON": 1,
+     "ID": 1,
+     "ORG": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "<PERSON_1> 45000 FoxPost Kft. díj",
+    "counts": {
+     "PERSON": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  }
+ ],
+ "known": {
+  "entries": [
+   [
+    "PERSON",
+    "Varga Ilona"
+   ],
+   [
+    "PERSON",
+    "Ilona Varga"
+   ],
+   [
+    "ORG",
+    "Fekete Bolt"
+   ],
+   [
+    "ORG",
+    "Tisza 97 Kft."
+   ],
+   [
+    "ORG",
+    "Kovács János"
+   ],
+   [
+    "EMAIL",
+    "ilona.varga@example.com"
+   ],
+   [
+    "ADDRESS",
+    "Petőfi utca 12"
+   ],
+   [
+    "ORG",
+    "Lap Állatkert"
+   ],
+   [
+    "HANDLE",
+    "KratoBal"
+   ],
+   [
+    "ORG",
+    "FANK"
+   ],
+   [
+    "ORG",
+    "Großhandel Weiß GmbH"
+   ]
+  ],
+  "cases": [
+   {
+    "text": "issuer: Varga Ilona",
+    "default": {
+     "text": "issuer: <PERSON_1>",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "issuer: <PERSON_1>",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      8,
+      19,
+      "PERSON"
+     ]
+    ]
+   },
+   {
+    "text": "Varga Ilonának küldtük",
+    "default": {
+     "text": "<PERSON_1> küldtük",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "<PERSON_1> küldtük",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      14,
+      "PERSON"
+     ]
+    ]
+   },
+   {
+    "text": "Fekete Bolt Kft., 5000 HUF",
+    "default": {
+     "text": "<ORG_1>, <AMOUNT_1>",
+     "counts": {
+      "ORG": 1,
+      "AMOUNT": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "Fekete Bolt Kft., 5000 HUF",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      11,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "Fekete Bolt e.v., 5000 HUF",
+    "default": {
+     "text": "<ORG_1>, <AMOUNT_1>",
+     "counts": {
+      "ORG": 1,
+      "AMOUNT": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "<PERSON_1> e.v., 5000 HUF",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      11,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "Fekete Bolt, 5000 HUF",
+    "default": {
+     "text": "<PERSON_1>, <AMOUNT_1>",
+     "counts": {
+      "PERSON": 1,
+      "AMOUNT": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "<PERSON_1>, 5000 HUF",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      11,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "issuer: Tisza 97 Kft.",
+    "default": {
+     "text": "issuer: <ORG_1>",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "issuer: Tisza 97 Kft.",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      8,
+      20,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "partner: Kovács János",
+    "default": {
+     "text": "partner: <PERSON_1>",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "partner: <PERSON_1>",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      9,
+      21,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "Kovács János FoxPost Kft.",
+    "default": {
+     "text": "<ORG_1>",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "Kovács János FoxPost Kft.",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": [
+      "KNOWN_ENTITY"
+     ]
+    },
+    "spans": [
+     [
+      0,
+      12,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "Kovács János Kft. számla",
+    "default": {
+     "text": "<ORG_1> számla",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "Kovács János Kft. számla",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      12,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "a lap-allatkert.docx fájl",
+    "default": {
+     "text": "a <ORG_1>.docx fájl",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "a lap-allatkert.docx fájl",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": [
+      "KNOWN_ENTITY"
+     ]
+    },
+    "spans": [
+     [
+      2,
+      15,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "írj az ilona.varga@example.com címre",
+    "default": {
+     "text": "írj az <EMAIL_1> címre",
+     "counts": {
+      "EMAIL": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "írj az <EMAIL_1> címre",
+     "counts": {
+      "EMAIL": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": []
+   },
+   {
+    "text": "Petőfi utca 12 alatt",
+    "default": {
+     "text": "<ADDRESS_1> alatt",
+     "counts": {
+      "ADDRESS": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "<ADDRESS_1> alatt",
+     "counts": {
+      "ADDRESS": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      14,
+      "ADDRESS"
+     ]
+    ]
+   },
+   {
+    "text": "KratoBal/acropora-os #6",
+    "default": {
+     "text": "<HANDLE_1>/acropora-os #6",
+     "counts": {
+      "HANDLE": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "<HANDLE_1>/acropora-os #6",
+     "counts": {
+      "HANDLE": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      8,
+      "HANDLE"
+     ]
+    ]
+   },
+   {
+    "text": "Fekete Boltnál vettük",
+    "default": {
+     "text": "<PERSON_1> vettük",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "<PERSON_1> vettük",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      14,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "Fekete Bolt egyéni vállalkozó",
+    "default": {
+     "text": "<PERSON_1> egyéni vállalkozó",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "<PERSON_1> egyéni vállalkozó",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      11,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "FANK karbantartás",
+    "default": {
+     "text": "<ORG_1> karbantartás",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "FANK karbantartás",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": [
+      "KNOWN_ENTITY"
+     ]
+    },
+    "spans": [
+     [
+      0,
+      4,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "a FANK Zrt. számlája",
+    "default": {
+     "text": "<ORG_1> számlája",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "a FANK Zrt. számlája",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      2,
+      6,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "issuer: Fekete Bolt Kft., e.v., 5000 HUF",
+    "default": {
+     "text": "issuer: <ORG_1>, e.v., <AMOUNT_1>",
+     "counts": {
+      "ORG": 1,
+      "AMOUNT": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "issuer: Fekete Bolt Kft., e.v., 5000 HUF",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": [
+      "KNOWN_ENTITY"
+     ]
+    },
+    "spans": [
+     [
+      8,
+      19,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "GROSSHANDEL WEISS GmbH számla",
+    "default": {
+     "text": "<ORG_1> számla",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "GROSSHANDEL WEISS GmbH számla",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      22,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "Großhandel Weiß GmbH számla",
+    "default": {
+     "text": "<ORG_1> számla",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "Großhandel Weiß GmbH számla",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      20,
+      "ORG"
+     ]
+    ]
+   }
+  ]
+ },
+ "pairing": {
+  "items": [
+   {
+    "id": "p1",
+    "date": "2026-08-17",
+    "amount": "1999",
+    "currency": "HUF",
+    "original": "",
+    "partner": "SIMPLEP*PARKL.NET",
+    "narrative": "E-PAR-2026-36143 PARKL",
+    "type": "KÁRTYATRANZAKCIÓ",
+    "candidates": [
+     {
+      "number": "E-PAR-2026-36143",
+      "date": "2026-08-01",
+      "gross": "1999",
+      "currency": "HUF",
+      "supplier": "Parkl Digital Technologies Kft."
+     },
+     {
+      "number": "SZ-2026/0790",
+      "date": "2026-07-01",
+      "gross": "2499",
+      "currency": "HUF",
+      "supplier": "Szabó Géza ev."
+     }
+    ]
+   },
+   {
+    "id": "p2",
+    "date": "2026-03-05",
+    "amount": "258173",
+    "currency": "HUF",
+    "original": "",
+    "partner": "Kovács Péter",
+    "narrative": "U26/00918-SZ Kovács Péter tel +36 20 123 4567",
+    "type": "ÁTUTALÁS",
+    "candidates": [
+     {
+      "number": "U26/00918-SZ",
+      "date": "2026-03-05",
+      "gross": "258173",
+      "currency": "HUF",
+      "supplier": "Tisza 97 Munkaruházati és Munkavédelmi Kft."
+     }
+    ]
+   },
+   {
+    "id": "p3",
+    "date": "2026-05-01",
+    "amount": "99.71",
+    "currency": "EUR",
+    "original": "38488 HUF",
+    "partner": "TelekomSzaml*925585488",
+    "narrative": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "type": "",
+    "candidates": [
+     {
+      "number": "5120260001254481",
+      "date": "2026-05-02",
+      "gross": "38488",
+      "currency": "HUF",
+      "supplier": "Magyar Telekom Nyrt."
+     }
+    ]
+   },
+   {
+    "id": "p4",
+    "date": "2026-06-01",
+    "amount": "5000",
+    "currency": "HUF",
+    "original": "",
+    "partner": "Fekete Bolt e.v.",
+    "narrative": "Fekete Bolt, Varga Ilona",
+    "type": "ÁTUTALÁS",
+    "candidates": [
+     {
+      "number": "FB-1",
+      "date": "2026-06-01",
+      "gross": "5000",
+      "currency": "HUF",
+      "supplier": "Fekete Bolt Kft."
+     }
+    ]
+   },
+   {
+    "id": "p5",
+    "date": "2026-06-02",
+    "amount": "12000",
+    "currency": "HUF",
+    "original": "",
+    "partner": "Akvárium Szerviz Kft.",
+    "narrative": "FANK karbantartás",
+    "type": "ÁTUTALÁS",
+    "candidates": [
+     {
+      "number": "AK-7",
+      "date": "2026-06-01",
+      "gross": "12000",
+      "currency": "HUF",
+      "supplier": "Akvárium Szerviz Kft."
+     }
+    ]
+   },
+   {
+    "id": "p6",
+    "date": "2026-07-01",
+    "amount": "100",
+    "currency": "HUF",
+    "original": "",
+    "partner": "Akvárium Szerviz Kft.",
+    "type": "ÁTUTALÁS",
+    "candidates": [
+     {
+      "number": "AK-8",
+      "date": "2026-07-01",
+      "gross": "100",
+      "currency": "HUF",
+      "supplier": "Akvárium Szerviz Kft."
+     }
+    ],
+    "narrative": "x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x Kovács Péter Zoltán úrnak"
+   }
+  ],
+  "unknown": [
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-08-17: 1999 HUF; partner: <PROPER_1>*<DOMAIN_1>; reference: E-PAR-2026-36143 PARKL; type: <PROPER_2>.\", \"c0\": \"Invoice E-PAR-2026-36143, issued 2026-08-01, gross 1999 HUF, issuer: Parkl Digital Technologies Kft..\", \"c1\": \"Invoice SZ-2026/0790, issued 2026-07-01, gross 2499 HUF, issuer: <PRIVATE_PARTNER>.\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"c1\": \"The invoice in field c1.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PROPER": 2,
+     "DOMAIN": 1
+    },
+    "options": [
+     "c0",
+     "c1",
+     "NONE"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-03-05: 258173 HUF; partner: <PRIVATE_PARTNER>; reference: U26/00918-SZ <PRIVATE_PARTNER> tel <PHONE_1>; type: <PROPER_1>.\", \"c0\": \"Invoice U26/00918-SZ, issued 2026-03-05, gross 258173 HUF, issuer: <PROPER_1> 97 Munkaruházati és Munkavédelmi Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PHONE": 1,
+     "PROPER": 2
+    },
+    "options": [
+     "c0",
+     "NONE"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-05-01: 99.71 EUR (original: 38488 HUF); partner: <PROPER_1>*925585488; reference: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\", \"c0\": \"Invoice 5120260001254481, issued 2026-05-02, gross 38488 HUF, issuer: Magyar Telekom Nyrt..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PROPER": 1
+    },
+    "options": [
+     "c0",
+     "NONE"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-06-01: 5000 HUF; partner: <PRIVATE_PARTNER>; reference: <PERSON_1>; type: <PROPER_1>.\", \"c0\": \"Invoice FB-1, issued 2026-06-01, gross 5000 HUF, issuer: Fekete Bolt Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "options": [
+     "c0",
+     "NONE"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-06-02: 12000 HUF; partner: Akvárium Szerviz Kft.; reference: FANK karbantartás; type: <PROPER_1>.\", \"c0\": \"Invoice AK-7, issued 2026-06-01, gross 12000 HUF, issuer: Akvárium Szerviz Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PROPER": 1
+    },
+    "options": [
+     "c0",
+     "NONE"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-07-01: 100 HUF; partner: Akvárium Szerviz Kft.; reference: x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x \", \"c0\": \"Invoice AK-8, issued 2026-07-01, gross 100 HUF, issuer: Akvárium Szerviz Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "options": [
+     "c0",
+     "NONE"
+    ]
+   }
+  ],
+  "known": [
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-08-17: 1999 HUF; partner: <PROPER_1>*<DOMAIN_1>; reference: E-PAR-2026-36143 PARKL; type: <PROPER_2>.\", \"c0\": \"Invoice E-PAR-2026-36143, issued 2026-08-01, gross 1999 HUF, issuer: Parkl Digital Technologies Kft..\", \"c1\": \"Invoice SZ-2026/0790, issued 2026-07-01, gross 2499 HUF, issuer: <PRIVATE_PARTNER>.\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"c1\": \"The invoice in field c1.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PROPER": 2,
+     "DOMAIN": 1
+    },
+    "options": [
+     "c0",
+     "c1",
+     "NONE"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-03-05: 258173 HUF; partner: <PRIVATE_PARTNER>; reference: U26/00918-SZ <PRIVATE_PARTNER> tel <PHONE_1>; type: <PROPER_1>.\", \"c0\": \"Invoice U26/00918-SZ, issued 2026-03-05, gross 258173 HUF, issuer: <PROPER_1> 97 Munkaruházati és Munkavédelmi Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PHONE": 1,
+     "PROPER": 2
+    },
+    "options": [
+     "c0",
+     "NONE"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-05-01: 99.71 EUR (original: 38488 HUF); partner: <PROPER_1>*925585488; reference: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\", \"c0\": \"Invoice 5120260001254481, issued 2026-05-02, gross 38488 HUF, issuer: Magyar Telekom Nyrt..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PROPER": 1
+    },
+    "options": [
+     "c0",
+     "NONE"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-06-01: 5000 HUF; partner: <PRIVATE_PARTNER>; reference: <PERSON_1>; type: <PROPER_1>.\", \"c0\": \"Invoice FB-1, issued 2026-06-01, gross 5000 HUF, issuer: Fekete Bolt Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "options": [
+     "c0",
+     "NONE"
+    ]
+   },
+   {
+    "blocked": "blocked_runtime_guard",
+    "detail": "KNOWN_ENTITY"
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-07-01: 100 HUF; partner: Akvárium Szerviz Kft.; reference: x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x \", \"c0\": \"Invoice AK-8, issued 2026-07-01, gross 100 HUF, issuer: Akvárium Szerviz Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PERSON": 1,
+     "PROPER": 1
+    },
+    "options": [
+     "c0",
+     "NONE"
+    ]
+   }
+  ]
+ }
+}

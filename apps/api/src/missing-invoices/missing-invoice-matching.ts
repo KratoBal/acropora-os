@@ -50,6 +50,11 @@ export interface CandidateDocument {
    */
   hasOriginal: boolean;
   /**
+   * Amivel a fizetés közleménye a számlára hivatkozhat, ha az nem a száma
+   * (például a rendelésszám a Fauna Marin számláján); az 1. szabály nézi.
+   */
+  references?: readonly string[];
+  /**
    * Az összevont jelölt többi azonosítója (ugyanaz a számla másik forrásból).
    * Egy kézi párosítás bármelyikre mutathat, és akkor is érvényes marad, ha a
    * számla később egy másik forrásból is beérkezik.
@@ -321,10 +326,12 @@ export function matchMonth(input: {
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
     // 1. a számla száma a közleményben
-    const byNumber = free().find(
-      (d) =>
-        d.number.replace(/\s/g, "").length >= 5 &&
-        compact(debit.narrative).includes(compact(d.number)),
+    const byNumber = free().find((d) =>
+      [d.number, ...(d.references ?? [])].some(
+        (number) =>
+          number.replace(/\s/g, "").length >= 5 &&
+          compact(debit.narrative).includes(compact(number)),
+      ),
     );
     if (byNumber) found(debit, [byNumber], "a számla száma a közleményben");
   }
