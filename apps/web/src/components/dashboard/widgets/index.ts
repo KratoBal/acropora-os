@@ -1,7 +1,11 @@
 import type { DashboardWidgetId } from "@acropora/types";
 
 import { expectedArrivalsWidget } from "./expected-arrivals-widget";
+import { maintenanceCalendarWidget } from "./maintenance-calendar-widget";
+import { materialRequestsWidget } from "./material-requests-widget";
+import { serviceTicketsWidget } from "./service-tickets-widget";
 import { tasksWidget } from "./tasks-widget";
+import { worksheetsWidget } from "./worksheets-widget";
 import type { DashboardWidgetView } from "./widget-view";
 
 /**
@@ -14,4 +18,8 @@ export const DASHBOARD_WIDGET_VIEWS: Partial<
 > = {
   tasks: tasksWidget,
   "expected-arrivals": expectedArrivalsWidget,
+  "service-tickets": serviceTicketsWidget,
+  worksheets: worksheetsWidget,
+  "material-requests": materialRequestsWidget,
+  "maintenance-calendar": maintenanceCalendarWidget,
 };
