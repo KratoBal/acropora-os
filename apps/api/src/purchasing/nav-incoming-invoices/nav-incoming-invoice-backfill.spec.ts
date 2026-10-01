@@ -27,7 +27,9 @@ function item(invoiceNumber: string): NavInvoiceDigestItem {
   } as NavInvoiceDigestItem;
 }
 
-function setup(options: { failApply?: boolean } = {}) {
+function setup(
+  options: { failApply?: boolean; items?: NavInvoiceDigestItem[] } = {},
+) {
   const calls = {
     windows: [] as [string, string][],
     runs: 0,
@@ -46,7 +48,10 @@ function setup(options: { failApply?: boolean } = {}) {
         end.toISOString().slice(0, 10),
       ]);
       return {
-        items: [item(`A-${calls.windows.length}`), item("KNOWN")],
+        items: options.items ?? [
+          item(`A-${calls.windows.length}`),
+          item("KNOWN"),
+        ],
         availablePage: 1,
       };
     },
@@ -111,6 +116,27 @@ describe("backfillWindows", () => {
 });
 
 describe("NavIncomingInvoiceService.backfill", () => {
+  it("dry: a modification or storno document (credit note) counts as to be created; one without a tax number does not", async () => {
+    const { service } = setup({
+      items: [
+        item("KNOWN"),
+        { ...item("4934/26"), invoiceOperation: "MODIFY" },
+        { ...item("FELOK00481/2026"), invoiceOperation: "STORNO" },
+        { ...item("ADOSZAM-NELKUL"), supplierTaxNumber: undefined },
+      ],
+    });
+    const [window] = await service.backfill({
+      from: day("2026-01-01"),
+      to: day("2026-01-20"),
+      dryRun: true,
+    });
+    // a fake szerint egy ismert van: 3 tárolható, 1 ismert -> 2 jönne létre
+    assert.deepEqual(
+      [window!.invoicesSeen, window!.createdCount, window!.skippedCount],
+      [4, 2, 2],
+    );
+  });
+
   it("dry: queries every window, counts what would be created, and writes nothing", async () => {
     const { service, calls } = setup();
     const results = await service.backfill({

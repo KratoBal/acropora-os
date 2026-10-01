@@ -14,6 +14,7 @@ import type {
   InvoiceCollectionRepository,
 } from "./invoice-collection.repository.js";
 import { unmatchedRetryDue } from "./invoice-collection.config.js";
+import type { CardDebit } from "./invoice-text.js";
 import {
   InvoiceCollectionService,
   type GoogleClientFactory,
@@ -50,8 +51,10 @@ function setup(input: {
   known?: Buffer[];
   failingUser?: string;
   failingCode?: string;
+  failingDetail?: string;
   nav?: Record<string, string[]>;
   debits?: string[];
+  cardDebits?: CardDebit[];
   retryDue?: boolean;
 }) {
   const stored: CollectedDocumentInput[] = [];
@@ -75,6 +78,7 @@ function setup(input: {
     hasContent: async (sha: string) => knownShas.has(sha),
     navNumbers: async (base: string) => input.nav?.[base] ?? [],
     debitNarratives: async () => input.debits ?? [],
+    cardDebits: async () => input.cardDebits ?? [],
     record: async (
       _source: string,
       id: string,
@@ -102,6 +106,7 @@ function setup(input: {
       if (user === input.failingUser)
         throw new GoogleReadonlyError(
           input.failingCode ?? "GOOGLE_AUTH_FAILED",
+          input.failingDetail ?? null,
         );
       return Object.keys(input.messages);
     },
@@ -257,6 +262,53 @@ describe("InvoiceCollectionService", () => {
       ],
     );
     assert.deepEqual(recorded, ["m-1/F2609999.PDF:UNMATCHED"]);
+  });
+
+  it("stores a NAV-less subscription invoice its card payment fits, with the payment's amount and partner (Hetzner)", async () => {
+    const invoice = await pdf([
+      "Hetzner Online GmbH Industriestr. 25 91710 Gunzenhausen Germany",
+      "Acropora Kft.",
+      "VAT Reg. No.: HU23916229",
+      "Invoice no.: 089001181580",
+      "Total | 46.64 EUR",
+    ]);
+    const other = await pdf([
+      "INVOICE",
+      "Hetzner Online GmbH",
+      "Invoice no.: 1",
+      "Total 1.00 EUR",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          { fileName: "Hetzner_2026-09-05_089001181580.pdf", buffer: invoice },
+          { fileName: "Hetzner_masik.pdf", buffer: other },
+        ],
+      },
+      cardDebits: [
+        {
+          counterpartyName: "HETZNER ONLINE GMBH",
+          amount: "17113",
+          currency: "HUF",
+          original: { amount: "46.64", currency: "EUR" },
+        },
+      ],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [
+        d.fileName,
+        (d.textReading as { cardPayment?: unknown } | null)?.cardPayment,
+      ]),
+      [
+        [
+          "Hetzner_2026-09-05_089001181580.pdf",
+          { amount: "46.64", currency: "EUR", partner: "HETZNER ONLINE GMBH" },
+        ],
+      ],
+    );
+    assert.deepEqual(recorded, ["m-1/Hetzner_masik.pdf:UNMATCHED"]);
   });
 
   it("skips the payment reminder but stores the invoice attached next to it (De Jong, 2026-09-24)", async () => {
@@ -415,12 +467,17 @@ describe("InvoiceCollectionService", () => {
       messages: { "m-1": [{ fileName: "x.pdf", buffer: invoice }] },
       failingUser: "info@acropora.hu",
       failingCode: "GOOGLE_RATE_LIMITED",
+      failingDetail: "403 userRateLimitExceeded usageLimits",
       nav: { "12345678": ["X-7701"] },
     });
     await collection.run("SCHEDULED");
     assert.deepEqual(
       [stored.map((d) => d.source), finished, failedFlags],
-      [["BALAZS_MAIL"], ["INFO_MAIL:GOOGLE_RATE_LIMITED"], [false]],
+      [
+        ["BALAZS_MAIL"],
+        ["INFO_MAIL:GOOGLE_RATE_LIMITED 403 userRateLimitExceeded usageLimits"],
+        [false],
+      ],
     );
     assert.deepEqual(gaps, [250, 250]);
   });

@@ -71,8 +71,17 @@ export function mergeSameInvoice(
     }
     groups.set(key, [...(groups.get(key) ?? []), document]);
   }
+  // az azonosság: a fájl lenyomata (a dokumentumon) és a számlaszám-kulcs
+  const identified = (document: CandidateDocument): CandidateDocument => {
+    const key = keys.get(document.id);
+    const extra = key && !key.startsWith("|") ? [`inv:${key}`] : [];
+    return {
+      ...document,
+      identities: [...new Set([...(document.identities ?? []), ...extra])],
+    };
+  };
   const merged = [...groups.values()].map((group) => {
-    if (group.length === 1) return group[0]!;
+    if (group.length === 1) return identified(group[0]!);
     const nav = group.find((d) => d.source === "NAV");
     const original = group.find((d) => d.hasOriginal);
     const primary = nav ?? group[0]!;
@@ -89,9 +98,12 @@ export function mergeSameInvoice(
       payee: nav ? ("COMPANY" as const) : primary.payee,
       hasOriginal: group.some((d) => d.hasOriginal),
       supplierAccounts: [...new Set(group.flatMap((d) => d.supplierAccounts))],
+      identities: [
+        ...new Set(group.flatMap((d) => identified(d).identities ?? [])),
+      ],
     };
   });
-  return [...merged, ...alone];
+  return [...merged, ...alone.map(identified)];
 }
 
 /**
@@ -246,7 +258,9 @@ export class MissingInvoicesRepository {
     };
     const [nav, mailbox, foxpost, gls, suppliers] = await Promise.all([
       this.database.navIncomingInvoice.findMany({
-        where: { invoiceIssueDate: range },
+        // csak az alapszámla: a módosító és a sztornó okirat (jóváíró)
+        // párosítása külön, mért döntés lesz (acrobot 25649)
+        where: { invoiceIssueDate: range, invoiceOperation: "CREATE" },
         select: {
           id: true,
           navInvoiceNumber: true,
@@ -278,6 +292,7 @@ export class MissingInvoicesRepository {
           kind: true,
           importResult: true,
           payeeCheck: true,
+          payeeMarkedAt: true,
           origin: true,
           uploadKind: true,
           fileName: true,
@@ -381,7 +396,15 @@ export class MissingInvoicesRepository {
             invoiceNumber: string | null;
             supplierTaxNumber: string | null;
             bankReference?: string | null;
+            cardPayment?: {
+              amount: string;
+              currency: string;
+              partner: string;
+            } | null;
           } | null);
+      // a kártyás fizetéshez illesztett NAV nélküli számla: a fizetés összege,
+      // devizája és partnere a bruttó, a pénznem és a szállító (acrobot 25666)
+      const card = reading?.cardPayment ?? null;
       const date =
         result?.invoiceDate ??
         (upload
@@ -423,9 +446,11 @@ export class MissingInvoicesRepository {
         gross:
           foreign && result?.netTotal != null
             ? new Prisma.Decimal(result.netTotal)
-            : null,
-        currency: result?.currency ?? "HUF",
-        supplierName: result?.supplier.name ?? "",
+            : card
+              ? new Prisma.Decimal(card.amount)
+              : null,
+        currency: result?.currency ?? card?.currency ?? "HUF",
+        supplierName: result?.supplier.name ?? card?.partner ?? "",
         supplierAccounts:
           accountsByTaxBase.get(
             taxBase(result?.supplier.vatId ?? reading?.supplierTaxNumber),
@@ -437,7 +462,9 @@ export class MissingInvoicesRepository {
               ? "PROFORMA"
               : "INVOICE",
         payee: (document.payeeCheck as Payee | null) ?? "UNKNOWN",
+        payeeMarked: document.payeeMarkedAt !== null,
         hasOriginal: true,
+        identities: document.sha256 ? [`sha:${document.sha256}`] : [],
       });
       keys.set(
         document.id,
@@ -599,6 +626,58 @@ export class MissingInvoicesRepository {
     return this.database.incomingSupplierDocument.findMany({
       where: { id: { in: [...ids] }, payeeCheck: null },
       select: { id: true, content: true, fileName: true },
+    });
+  }
+
+  /**
+   * A VEVŐ KÉZI JELÖLÉSE, AUDITTAL (acrobot 25633). Csak az írható, aminek a
+   * vevője nem ellenőrizhető (UNKNOWN vagy még nem számolt), vagy amit már
+   * kézzel jelöltek; a szövegből olvasott COMPANY vagy NOT_COMPANY nem. A
+   * feltétel a frissítés WHERE-jében áll, tehát egy közben beolvasott érték sem
+   * íródik felül. Visszaadja, hány sort írt (0: nem jelölhető).
+   */
+  async markPayee(input: {
+    documentIds: readonly string[];
+    payee: "COMPANY" | "NOT_COMPANY";
+    userId: string;
+    bankTransactionId: string;
+  }): Promise<number> {
+    return this.database.$transaction(async (transaction) => {
+      const before = await transaction.incomingSupplierDocument.findMany({
+        where: { id: { in: [...input.documentIds] } },
+        select: { id: true, payeeCheck: true },
+      });
+      const { count } = await transaction.incomingSupplierDocument.updateMany({
+        where: {
+          id: { in: [...input.documentIds] },
+          OR: [
+            { payeeCheck: null },
+            { payeeCheck: "UNKNOWN" },
+            { payeeMarkedAt: { not: null } },
+          ],
+        },
+        data: {
+          payeeCheck: input.payee,
+          payeeMarkedAt: new Date(),
+          payeeMarkedByUserId: input.userId,
+        },
+      });
+      if (count > 0)
+        await transaction.auditLog.create({
+          data: {
+            userId: input.userId,
+            action: "missing-invoices.payee-marked",
+            entityType: "IncomingSupplierDocument",
+            entityId: before[0]?.id ?? null,
+            metadata: {
+              bankTransactionId: input.bankTransactionId,
+              documentIds: before.map((row) => row.id),
+              from: before.map((row) => row.payeeCheck),
+              to: input.payee,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      return count;
     });
   }
 

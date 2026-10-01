@@ -26,6 +26,28 @@ export interface InvoiceTextReading {
    * számla száma (például a rendelésé); a párosító 1. szabálya ezt is nézi.
    */
   bankReference?: string | null;
+  /**
+   * A kártyás fizetés, amihez a NAV nélküli számla illik (`cardPaymentMatch`):
+   * az összeg és a deviza a terhelésé, a partner a terhelés partnerneve. A
+   * párosító ebből tudja a dokumentum bruttóját és szállítóját.
+   */
+  cardPayment?: CardPaymentMatch | null;
+}
+
+/** Egy kártyás terhelés, amennyit a számla felismeréséhez kell. */
+export interface CardDebit {
+  counterpartyName: string;
+  /** a könyvelt összeg, a bankszámla pénznemében */
+  amount: string;
+  currency: string;
+  /** a közlemény eredeti devizás összege (`originalAmountOf`), ha van */
+  original: { amount: string; currency: string } | null;
+}
+
+export interface CardPaymentMatch {
+  amount: string;
+  currency: string;
+  partner: string;
 }
 
 export interface InvoiceTextHints {
@@ -316,4 +338,73 @@ export function readInvoiceText(
         compactText.includes(compactNumber(token)),
     );
   return fromName ? reading(fromName, "FILE_NAME") : reading(null, null);
+}
+
+/**
+ * A NAV NÉLKÜLI SZÁMLA ÉS A KÁRTYÁS FIZETÉS (acrobot 25666 és 25673, Balázs a
+ * Hetznerről): a külföldi előfizetés számlája nincs a NAV-ban, és a kártyás
+ * közlemény nem nevezi meg (`2026.09.06 ... HETZNER ONLINE GMBH 46,640EUR`).
+ * A számla akkor tartozik egy fizetéshez, ha
+ *
+ *   - a fizetés partnernevének jellemző szava (az első legalább négybetűs,
+ *     nem a mi nevünk) önálló szóként áll a szövegben, ÉS
+ *   - a fizetés összege (a devizás eredeti, vagy a könyvelt forint) pénzösszegként
+ *     áll a szövegben,
+ *
+ * és ez PONTOSAN EGY fizetésre igaz. Nem a végösszeget olvassuk ki (az
+ * általános olvasó azt nem tudja, és a formák túl sokfélék), hanem azt nézzük,
+ * hogy a fizetés összege szerepel-e. Mérve 2026-10-01 az exchange PDF-jein:
+ * lásd a PR leírását.
+ */
+const OWN_NAME = /^acropora/;
+
+/** A szöveg pénzösszeg-alakú számai, értékként (két tizedesre kerekítve, centben). */
+function moneyValues(text: string): Set<number> {
+  const values = new Set<number>();
+  const token =
+    /(?<![\d.,])(\d{1,3}(?:[ \u00a0.,]\d{3})+(?:[.,]\d{1,4})?|\d+(?:[.,]\d{1,4})?)(?![\d])/g;
+  for (const match of text.matchAll(token)) {
+    const raw = match[1]!.replace(/[ \u00a0]/g, "");
+    // az utolsó elválasztó tizedesjel, ha nem pontosan három jegy követi
+    const last = Math.max(raw.lastIndexOf("."), raw.lastIndexOf(","));
+    const decimals = last >= 0 ? raw.length - last - 1 : 0;
+    const normalized =
+      last >= 0 && decimals !== 3
+        ? `${raw.slice(0, last).replace(/[.,]/g, "")}.${raw.slice(last + 1)}`
+        : raw.replace(/[.,]/g, "");
+    const value = Number(normalized);
+    if (Number.isFinite(value)) values.add(Math.round(value * 100));
+  }
+  return values;
+}
+
+export function cardPaymentMatch(
+  lines: readonly string[],
+  debits: readonly CardDebit[],
+  distinctiveWord: (name: string) => string | null,
+): CardPaymentMatch | null {
+  const text = lines.join("\n");
+  const values = moneyValues(text);
+  const matches: CardPaymentMatch[] = [];
+  for (const debit of debits) {
+    const word = distinctiveWord(debit.counterpartyName);
+    if (!word || OWN_NAME.test(word)) continue;
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!new RegExp(`(?<!\\p{L})${escaped}(?!\\p{L})`, "iu").test(text))
+      continue;
+    const amounts = [
+      ...(debit.original ? [debit.original] : []),
+      { amount: debit.amount, currency: debit.currency },
+    ];
+    const hit = amounts.find((a) =>
+      values.has(Math.round(Number(a.amount) * 100)),
+    );
+    if (hit)
+      matches.push({
+        amount: hit.amount,
+        currency: hit.currency,
+        partner: debit.counterpartyName,
+      });
+  }
+  return matches.length === 1 ? matches[0]! : null;
 }

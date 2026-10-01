@@ -6,6 +6,7 @@ import {
   PilotDrawer,
   PilotSelect,
 } from "@acropora/ui";
+import type { MissingInvoicePayeeDocument } from "@acropora/types";
 import { useState } from "react";
 
 import {
@@ -26,6 +27,15 @@ export type UploadKind = "INVOICE" | "PREMIUM_NOTICE";
 /** A drawer második kérésből jövő része (`GET /missing-invoices/items/:id`). */
 export interface ChargeDetailExtras {
   candidates: CandidateInvoice[];
+  /** A párosított számlák közül a kézzel jelölhető vevőjűek (acrobot 25633). */
+  payeeDocuments: MissingInvoicePayeeDocument[];
+  /** A többi terhelés ugyanezzel a számlával (Kétszer fizetett számla). */
+  doublePaidWith: {
+    id: string;
+    bookingDate: string;
+    amount: string;
+    currency: string;
+  }[];
   action: ItemAction;
   /** A „Hiányzó számlák” Drive-mappa, ha a szerveren be van állítva. */
   driveFolderUrl: string | null;
@@ -56,6 +66,7 @@ export function MissingInvoicesDrawer({
   busy,
   onUpload,
   onPaperOriginal,
+  onPayee,
   note,
   onNote,
   onSave,
@@ -85,6 +96,11 @@ export function MissingInvoicesDrawer({
    * Eredeti hiányzik így Megvan lesz. Csak párosított számlánál kérdés.
    */
   onPaperOriginal?: (marked: boolean) => void;
+  /**
+   * A VEVŐ KÉZI JELÖLÉSE (acrobot 25633, `PUT …/documents/:id/payee`): a
+   * beszkennelt számla vevője nem olvasható, a kezelő mondja meg.
+   */
+  onPayee?: (documentId: string, payee: "COMPANY" | "NOT_COMPANY") => void;
   note: string;
   onNote: (note: string) => void;
   onSave: () => void;
@@ -276,6 +292,72 @@ export function MissingInvoicesDrawer({
                   </label>
                 ) : null}
               </div>
+              {extras && extras.doublePaidWith.length > 0 ? (
+                <p className="mt-2 text-sm text-pilot-red-700">
+                  Ugyanez a számla ehhez is párosítva:{" "}
+                  {extras.doublePaidWith
+                    .map(
+                      (other) =>
+                        `${formatDay(other.bookingDate)}, ${formatAmount(other.amount, other.currency)}`,
+                    )
+                    .join("; ")}
+                </p>
+              ) : null}
+              {extras?.payeeDocuments.map((document) => (
+                <div
+                  key={document.documentId}
+                  className="mt-3 flex flex-wrap items-center gap-3 border-t border-pilot-grey-100 pt-3"
+                >
+                  <p className="min-w-0 flex-1 text-sm text-pilot-grey-700">
+                    {document.marked ? (
+                      <>
+                        {document.number}: kézzel jelölve,{" "}
+                        <strong>
+                          {document.payee === "COMPANY"
+                            ? "a cégre szól"
+                            : "nem a cégre szól"}
+                        </strong>
+                        .
+                      </>
+                    ) : (
+                      <>
+                        {document.number}: a vevő a számlából nem olvasható
+                        (képként jött). Kinek szól?
+                      </>
+                    )}
+                  </p>
+                  {canManage && onPayee ? (
+                    <div className="flex gap-2">
+                      {document.payee !== "COMPANY" ? (
+                        <PilotButton
+                          variant="secondary"
+                          size="action"
+                          disabled={busy !== null}
+                          onClick={() =>
+                            onPayee(document.documentId, "COMPANY")
+                          }
+                        >
+                          {busy === `payee:${document.documentId}`
+                            ? "Mentés…"
+                            : "A cégre szól"}
+                        </PilotButton>
+                      ) : null}
+                      {document.payee !== "NOT_COMPANY" ? (
+                        <PilotButton
+                          variant="secondary"
+                          size="action"
+                          disabled={busy !== null}
+                          onClick={() =>
+                            onPayee(document.documentId, "NOT_COMPANY")
+                          }
+                        >
+                          Nem a cégre szól
+                        </PilotButton>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
               {row.missingNumbers.length > 0 ? (
                 <p className="mt-2 text-sm text-pilot-red-700">
                   Hiányzik: {row.missingNumbers.join(", ")}

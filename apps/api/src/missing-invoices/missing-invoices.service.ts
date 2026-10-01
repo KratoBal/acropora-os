@@ -65,11 +65,15 @@ const MISSING_STATES: ReadonlySet<ItemState> = new Set([
   "NO_INVOICE",
   "NOT_COMPANY",
   "PROFORMA_ONLY",
+  "DOUBLE_PAID",
 ]);
+// a kétszer fizetett tételnek sincs saját számlája: a „Nincs számla” csempébe
+// számít, és a hiányzó összegbe is (acrobot 25636)
 const NO_INVOICE_TILE: ReadonlySet<ItemState> = new Set([
   "NO_INVOICE",
   "NOT_COMPANY",
   "PROFORMA_ONLY",
+  "DOUBLE_PAID",
 ]);
 
 /** A tétel-lista lapmérete, ha a kérés nem ad (szerződés: 1..100, 25). */
@@ -261,10 +265,33 @@ export class MissingInvoicesService {
         payee: d.payee,
         hasOriginal: d.hasOriginal,
       })),
+      payeeDocuments: (outcome?.documents ?? [])
+        .filter((d) => d.payee === "UNKNOWN" || d.payeeMarked)
+        .map((d) => ({
+          documentId: d.id,
+          number: d.number,
+          payee: d.payee,
+          marked: d.payeeMarked === true,
+        })),
       action: ACTION[item.state],
       driveFolderUrl: httpsOrNull(
         this.environment.MISSING_INVOICES_DRIVE_FOLDER_URL,
       ),
+      doublePaidWith: (outcome?.doublePaidWith ?? []).flatMap((other) => {
+        const debit = computed.items.find(
+          (candidate) => candidate.id === other,
+        );
+        return debit
+          ? [
+              {
+                id: debit.id,
+                bookingDate: debit.bookingDate,
+                amount: debit.amount,
+                currency: debit.currency,
+              },
+            ]
+          : [];
+      }),
     };
   }
 
@@ -411,6 +438,43 @@ export class MissingInvoicesService {
         : { paperOriginalAt: null, paperOriginalByUserId: null },
       { marked },
     );
+    return this.item(id);
+  }
+
+  /**
+   * A VEVŐ KÉZI JELÖLÉSE (acrobot 25633, Balázs éles esete: a beszkennelt
+   * Sopro-számla vevője UNKNOWN, a tétel örökre Nem párosodott maradt, mert a
+   * jelölendő állapot megvolt, a jelölés nem). Csak a terheléshez párosított,
+   * nem ellenőrizhető (vagy már kézzel jelölt) vevőjű számlán; a NAV-ból vagy a
+   * szövegből olvasott vevő nem írható így felül.
+   */
+  async markPayee(
+    id: string,
+    documentId: string,
+    payee: "COMPANY" | "NOT_COMPANY",
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceItemDetail> {
+    const computed = await this.compute();
+    if (!computed.items.some((item) => item.id === id))
+      throw new NotFoundException("A banki terhelés nem található.");
+    const document = (computed.outcomes.get(id)?.documents ?? []).find(
+      (d) => d.id === documentId || d.aliasIds?.includes(documentId),
+    );
+    if (!document)
+      throw new BadRequestException(
+        "A számla nincs ehhez a terheléshez párosítva.",
+      );
+    const refused = new ConflictException(
+      "A vevő a számla szövegéből vagy a NAV-ból ismert, kézzel nem írható felül.",
+    );
+    if (document.payee !== "UNKNOWN" && !document.payeeMarked) throw refused;
+    const written = await this.repository.markPayee({
+      documentIds: [document.id, ...(document.aliasIds ?? [])],
+      payee,
+      userId: user.id,
+      bankTransactionId: id,
+    });
+    if (written === 0) throw refused;
     return this.item(id);
   }
 
@@ -581,9 +645,10 @@ export class MissingInvoicesService {
       `${shiftMonth(first, -12)}-01`,
       `${shiftMonth(last, 1)}-15`,
     );
-    await this.checkPayees(
-      documents.filter((d) => d.source === "MAILBOX" && d.payee === "UNKNOWN"),
-    );
+    // minden forrás, aminek a vevője még nincs kiszámolva (payeeCheck NULL):
+    // a postafiók lustán, és a cégnév-szabály előtti NOT_COMPANY sorok is,
+    // amiket a 20261001000800 migráció visszaállított (acrobot 25640)
+    await this.checkPayees(documents.filter((d) => d.payee === "UNKNOWN"));
 
     const ownAccounts = new Set(
       accountRows.map((a) => normalizeAccount(a.accountNumber)),
@@ -681,7 +746,7 @@ export class MissingInvoicesService {
   }
 
   /**
-   * A postafiók-számla vevőjének ellenőrzése, egyszer: a szövegéből, és az
+   * A dokumentum vevőjének ellenőrzése, egyszer: a szövegéből, és az
    * eredmény tárolódik. A PDF olvasása drága, ezért nem minden kérésnél.
    */
   private async checkPayees(documents: { id: string; payee: string }[]) {
@@ -725,6 +790,7 @@ const ACTION: Record<ItemState, MissingInvoiceAction> = {
   NO_INVOICE: "REQUEST_INVOICE",
   NOT_COMPANY: "REQUEST_REISSUE_TO_COMPANY",
   PROFORMA_ONLY: "REQUEST_FINAL_INVOICE",
+  DOUBLE_PAID: "CHECK_DOUBLE_PAYMENT",
   NO_INVOICE_NEEDED: "NONE",
 };
 

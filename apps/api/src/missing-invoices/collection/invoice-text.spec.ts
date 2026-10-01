@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { normalizeName } from "../missing-invoice-matching.js";
 import {
+  cardPaymentMatch,
+  type CardDebit,
   looksLikeBankAccount,
   looksLikeInvoice,
   looksLikeProforma,
@@ -128,6 +131,129 @@ describe("readInvoiceText", () => {
         "VAT: DE152405660",
       ]).supplierTaxNumber,
       "DE152405660",
+    );
+  });
+});
+
+describe("cardPaymentMatch: a NAV-less invoice and the card payment it was paid with (acrobot 25666, 25673)", () => {
+  const word = (name: string) =>
+    normalizeName(name)
+      .split(" ")
+      .find((w) => w.length >= 4) ?? null;
+  // a valos Hetzner-szamla sorai (2026-08-05, 081001079225)
+  const hetzner = [
+    "Hetzner Online GmbH • Industriestr. 25 • 91710 Gunzenhausen • Germany",
+    "Acropora Kft. | Tel.: +49 9831 505-0",
+    "VAT Reg. No.: HU23916229",
+    "Invoice no.: 081001079225",
+    "Total | € 7.04 | € 0.00 | € 7.04",
+  ];
+  // a valos Kia Charge-szamla sorai (2026-07, KHU00014089)
+  const kia = [
+    "Digital Charging Solutions GmbH Mies-van-der-Rohe-Straße 6 D-80807 München",
+    "Acropora Kft. | HÉA azonosító szám DE312237805",
+    "Teljes összeg* | 9125,00 HUF | 9125,00 HUF",
+  ];
+  const card = (
+    counterpartyName: string,
+    amount: string,
+    original: CardDebit["original"] = null,
+  ): CardDebit => ({ counterpartyName, amount, currency: "HUF", original });
+
+  it("takes the payment whose partner word and amount (the original or the booked one) are in the text", () => {
+    assert.deepEqual(
+      cardPaymentMatch(
+        hetzner,
+        [
+          card("HETZNER ONLINE GMBH", "2690", {
+            amount: "7.04",
+            currency: "EUR",
+          }),
+          card("HETZNER ONLINE GMBH", "17113", {
+            amount: "46.64",
+            currency: "EUR",
+          }),
+          card("Tesla Hungary Korlatol", "2449"),
+        ],
+        word,
+      ),
+      { amount: "7.04", currency: "EUR", partner: "HETZNER ONLINE GMBH" },
+    );
+    assert.deepEqual(
+      cardPaymentMatch(
+        kia,
+        [
+          card("Digital Charging Solut", "9125", {
+            amount: "25.1",
+            currency: "EUR",
+          }),
+        ],
+        word,
+      ),
+      { amount: "9125", currency: "HUF", partner: "Digital Charging Solut" },
+    );
+  });
+
+  it("takes nothing when the amount, the partner word, or the uniqueness is missing, or the partner is us", () => {
+    const hetznerCard = (amount: string) =>
+      card("HETZNER ONLINE GMBH", "999", { amount, currency: "EUR" });
+    assert.equal(cardPaymentMatch(hetzner, [hetznerCard("7.05")], word), null);
+    assert.equal(
+      cardPaymentMatch(
+        hetzner,
+        [
+          card("Tesla Hungary Korlatol", "999", {
+            amount: "7.04",
+            currency: "EUR",
+          }),
+        ],
+        word,
+      ),
+      null,
+    );
+    assert.equal(
+      cardPaymentMatch(
+        hetzner,
+        [hetznerCard("7.04"), hetznerCard("7.04")],
+        word,
+      ),
+      null,
+    );
+    // NYITOTT (PR): a Kia Charge júliusi számláján a havi díj (1518) egy másik
+    // hónap teljes fizetése is; két fizetés illik, tehát nem választunk. A
+    // „nagyobb nyer” feloldás a havi összesítő számlán (Parkl) a legnagyobb
+    // TÉTELT választaná a végösszeg helyett, ezért nincs benne.
+    assert.equal(
+      cardPaymentMatch(
+        [...kia, "Havi díj | 1518,00 HUF | 1518,00 HUF"],
+        [
+          card("Digital Charging Solut", "1518"),
+          card("Digital Charging Solut", "9125"),
+        ],
+        word,
+      ),
+      null,
+    );
+    // a saját átvezetésünk neve minden nekünk szóló számlán ott van
+    assert.equal(
+      cardPaymentMatch(
+        hetzner,
+        [card("ACROPORA KFT EUR", "999", { amount: "7.04", currency: "EUR" })],
+        word,
+      ),
+      null,
+    );
+    // a Kia Charge augusztusi számlája két terhelés ÖSSZEGE: egyik sem illik
+    assert.equal(
+      cardPaymentMatch(
+        ["Digital Charging Solutions GmbH", "Teljes összeg* | 40086,00 HUF"],
+        [
+          card("Digital Charging Solut", "21279"),
+          card("Digital Charging Solut", "18807"),
+        ],
+        word,
+      ),
+      null,
     );
   });
 });

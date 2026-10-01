@@ -66,6 +66,29 @@ describe("mergeSameInvoice", () => {
     );
     assert.equal(merged.length, 3);
   });
+
+  // MI PIROSÍT (acrobot 25636): ha az összevont számla nem vinné a társai
+  // fájl-lenyomatát és a számlaszám-kulcsát; ha egy szám nélküli dokumentum
+  // hamis kulcsot kapna.
+  it("carries what makes two documents the same invoice: the file prints and the number key", () => {
+    const merged = mergeSameInvoice(
+      [
+        doc({ id: "nav-1" }),
+        doc({ id: "up-1", source: "UPLOAD", identities: ["sha:aaa"] }),
+        doc({ id: "up-2", source: "UPLOAD", identities: ["sha:bbb"] }),
+      ],
+      new Map([
+        ["nav-1", "sz-1|12345678"],
+        ["up-1", "sz-1|12345678"],
+        ["up-2", "|12345678"],
+      ]),
+    );
+    const byId = (id: string) => merged.find((d) => d.id === id)?.identities;
+    assert.deepEqual(
+      [byId("nav-1")?.slice().sort(), byId("up-2")],
+      [["inv:sz-1|12345678", "sha:aaa"], ["sha:bbb"]],
+    );
+  });
 });
 
 describe("normalizeAccount", () => {

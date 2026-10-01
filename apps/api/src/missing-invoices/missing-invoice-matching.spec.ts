@@ -167,11 +167,104 @@ describe("matchMonth", () => {
       );
     };
     assert.deepEqual(reasons([parkl("2026-04-10", 1200)]), [false, false]); // késői, de az ablakon belül
-    assert.deepEqual(reasons([parkl("2026-04-01", 1210)]), [false, false]); // más összeg
+    assert.deepEqual(reasons([parkl("2026-04-01", 1190)]), [false, false]); // a számla a kisebb
+    // a többlet nagyobb a legnagyobb fizetésnél (900 > 800), vagy a számla 10 %-ánál (300 > 150)
+    assert.deepEqual(reasons([parkl("2026-04-01", 2100)]), [false, false]);
+    assert.deepEqual(reasons([parkl("2026-04-01", 1500)]), [false, false]);
+    // csak a legnagyobb-fizetés korlát: 12 x 100 Ft, a többlet 120 (a 10 % alatt, a 100 fölött)
+    const many = Array.from({ length: 12 }, (_, i) =>
+      card(`2026-03-${String(i + 10)}`, 100),
+    );
+    const manyOut = run(many, [parkl("2026-04-01", 1320)]);
+    assert.equal(manyOut.get(many[0]!.id)?.state, "NOT_MATCHED");
+    assert.equal(
+      run(many, [parkl("2026-04-01", 1290)]).get(many[0]!.id)?.state,
+      "FOUND",
+    );
     assert.deepEqual(
       reasons([parkl("2026-04-01", 1200), parkl("2026-04-02", 1200)]),
       [false, false],
     ); // kettő közül nem választunk
+  });
+
+  it("a small remainder on the invoice still pairs the month, with the difference (Parkl, 2026-09: a pending 640 Ft payment)", () => {
+    const card = (date: string, amount: number, number = "0194683438") =>
+      debit({
+        bookingDate: date,
+        amount: D(amount),
+        counterpartyName: "SIMPLEP*PARKL.NET",
+        narrative: `${date.replace(/-/g, ".")} ${number} SIMPLEP*PARKL .NET`,
+        category: "CARD_SUBSCRIPTION",
+      });
+    const month = [
+      card("2026-09-03", 6900),
+      card("2026-09-14", 3980),
+      card("2026-09-29", 11202),
+    ];
+    const invoice = doc({
+      number: "E-PAR-2026-46439",
+      date: "2026-10-01",
+      gross: D(22722),
+      supplierName: "Parkl Digital Technologies Kft.",
+    });
+    const out = run(month, [invoice]);
+    for (const d of month) {
+      const o = out.get(d.id)!;
+      assert.equal(o.state, "FOUND");
+      assert.deepEqual(o.documents, [invoice]);
+      assert.equal(
+        o.reason,
+        "gyűjtőszámla: 3 kártyás fizetés havi összege, a számla többlete 640 HUF, könyveletlen tétel lehet",
+      );
+      assert.equal(o.amountDifference?.amount.toString(), "-640");
+      assert.equal(o.amountDifference?.currency, "HUF");
+    }
+  });
+
+  it("the exact card takes its invoice first, so the other card's remainder finds its own", () => {
+    const card = (date: string, amount: number, number: string) =>
+      debit({
+        bookingDate: date,
+        amount: D(amount),
+        counterpartyName: "SIMPLEP*PARKL.NET",
+        narrative: `${date.replace(/-/g, ".")} ${number} SIMPLEP*PARKL .NET`,
+        category: "CARD_SUBSCRIPTION",
+      });
+    const exactCard = [
+      card("2026-03-05", 500, "1111111111"),
+      card("2026-03-06", 500, "1111111111"),
+    ];
+    const shortCard = [
+      card("2026-03-07", 480, "2222222222"),
+      card("2026-03-08", 480, "2222222222"),
+    ];
+    const parkl = (number: string, gross: number) =>
+      doc({
+        number,
+        date: "2026-04-01",
+        gross: D(gross),
+        supplierName: "Parkl Digital Technologies Kft.",
+      });
+    // az E-PAR-Y a pontos kártyáé; a rövid kártyának MINDKETTŐ kis többlet
+    // lenne (40 és 30 Ft), tehát a pontos kör nélkül kettő közül nem választana
+    const out = run(
+      [...exactCard, ...shortCard],
+      [parkl("E-PAR-Y", 1000), parkl("E-PAR-X", 990)],
+    );
+    const numbers = (ds: MatchableDebit[]) =>
+      ds.map((d) =>
+        out
+          .get(d.id)
+          ?.documents.map((c) => c.number)
+          .join(),
+      );
+    assert.deepEqual(numbers(exactCard), ["E-PAR-Y", "E-PAR-Y"]);
+    assert.deepEqual(numbers(shortCard), ["E-PAR-X", "E-PAR-X"]);
+    assert.equal(
+      out.get(shortCard[0]!.id)?.amountDifference?.amount.toString(),
+      "-30",
+    );
+    assert.equal(out.get(exactCard[0]!.id)?.amountDifference, undefined);
   });
 
   it("takes the number only as a whole word of the narrative (the two measured wrong pairings)", () => {
@@ -379,6 +472,89 @@ describe("matchMonth", () => {
     assert.deepEqual(
       [byAlias.get(e.id)?.matchedBy, byAlias.get(e.id)?.documents[0]?.id],
       ["MANUAL", nav.id],
+    );
+  });
+
+  /*
+    KÉTSZER FIZETETT SZÁMLA (acrobot 25636: a Sopro KB-2855/2026 két 172 006
+    Ft-os terheléshez, ugyanaz a PDF kétszer feltöltve). MI PIROSÍT: ha a két
+    terhelés Megvan maradna; ha nem neveznék meg egymást; ha egyetlen
+    párosítás is kettősnek látszana; ha egy más gondú tétel (nem a cégre szól)
+    elveszítené a saját állapotát.
+  */
+  it("the same file paired to two debits: both are double paid, and name each other", () => {
+    const a = debit({
+      id: "pay-28",
+      bookingDate: "2026-09-28",
+      amount: D(172006),
+    });
+    const b = debit({
+      id: "pay-29",
+      bookingDate: "2026-09-29",
+      amount: D(172006),
+    });
+    const first = doc({
+      id: "up-1",
+      source: "UPLOAD",
+      gross: null,
+      identities: ["sha:same"],
+    });
+    const second = doc({
+      id: "up-2",
+      source: "UPLOAD",
+      gross: null,
+      identities: ["sha:same"],
+    });
+    const outcome = run(
+      [a, b],
+      [first, second],
+      new Map([
+        [a.id, ["up-1"]],
+        [b.id, ["up-2"]],
+      ]),
+    );
+    assert.deepEqual(
+      [a, b].map((d) => [
+        outcome.get(d.id)?.state,
+        outcome.get(d.id)?.doublePaidWith,
+      ]),
+      [
+        ["DOUBLE_PAID", ["pay-29"]],
+        ["DOUBLE_PAID", ["pay-28"]],
+      ],
+    );
+  });
+
+  it("the same invoice number paired twice is double paid too; one pairing, or another problem, is not", () => {
+    const a = debit({ id: "n-1" });
+    const b = debit({ id: "n-2", bookingDate: "2026-08-11" });
+    const same = (id: string, payee: CandidateDocument["payee"] = "COMPANY") =>
+      doc({ id, identities: ["inv:kb-2855/2026|12345678"], payee });
+    const twice = run(
+      [a, b],
+      [same("x-1"), same("x-2")],
+      new Map([
+        [a.id, ["x-1"]],
+        [b.id, ["x-2"]],
+      ]),
+    );
+    assert.equal(twice.get(a.id)?.state, "DOUBLE_PAID");
+    const once = run([a], [same("x-3")], new Map([[a.id, ["x-3"]]]));
+    assert.deepEqual(
+      [once.get(a.id)?.state, once.get(a.id)?.doublePaidWith],
+      ["FOUND", undefined],
+    );
+    const notOurs = run(
+      [a, b],
+      [same("x-4", "NOT_COMPANY"), same("x-5")],
+      new Map([
+        [a.id, ["x-4"]],
+        [b.id, ["x-5"]],
+      ]),
+    );
+    assert.deepEqual(
+      [notOurs.get(a.id)?.state, notOurs.get(b.id)?.state],
+      ["NOT_COMPANY", "DOUBLE_PAID"],
     );
   });
 
@@ -677,6 +853,97 @@ describe("a proforma is only a fallback (acrobot 25607, Aquarioom 2026-09-29)", 
       ["FA00009139"],
     );
     assert.equal(outcomes.get(second.id)!.state, "PROFORMA_ONLY");
+  });
+});
+
+describe("a typo twin: the exact payment wins over the by-name one (acrobot 25655, Fluidra 2026-07-30)", () => {
+  const fluidra = (
+    amount: number,
+    narrative: string,
+    overrides: Partial<MatchableDebit> = {},
+  ) =>
+    debit({
+      bookingDate: "2026-07-30",
+      amount: D(amount),
+      counterpartyName: "Fluidra Magyarország Kft.",
+      narrative,
+      ...overrides,
+    });
+  const ks4727 = () =>
+    doc({
+      number: "KS26/04727",
+      date: "2026-05-27",
+      gross: D(234778),
+      supplierName: "Fluidra Magyarország Kft.",
+    });
+
+  it("the exact payment with the mistyped number takes the invoice; the by-name one stays unmatched with it as a candidate", () => {
+    const byName = fluidra(81915, "KS26/04727");
+    const exactTypo = fluidra(234778, "KS26/04724");
+    const invoice = ks4727();
+    const out = run([byName, exactTypo], [invoice]);
+    assert.deepEqual(out.get(exactTypo.id)!.documents, [invoice]);
+    assert.equal(out.get(exactTypo.id)!.state, "FOUND");
+    const left = out.get(byName.id)!;
+    assert.equal(left.state, "NOT_MATCHED");
+    assert.deepEqual(left.candidates, [invoice]);
+    assert.match(left.reason, /KS26\/04727.*elírás-gyanú/);
+  });
+
+  it("without a typo twin the by-name pairing stands, with the difference (#1332)", () => {
+    const other = () =>
+      doc({
+        number: "KS26/09999",
+        date: "2026-06-01",
+        gross: D(1),
+        supplierName: "Fluidra Magyarország Kft.",
+      });
+    const cases: [string, () => MatchableDebit[], CandidateDocument[]][] = [
+      ["nincs másik fizetés", () => [], []],
+      // a másik fizetés LÉTEZŐ számot nevez meg, nem elírást
+      ["létező szám", () => [fluidra(234778, "KS26/09999")], [other()]],
+      ["nem pontos összeg", () => [fluidra(234000, "KS26/04724")], []],
+      [
+        "másik partner",
+        () => [
+          fluidra(234778, "KS26/04724", {
+            counterpartyName: "Menet-Trend Kft.",
+          }),
+        ],
+        [],
+      ],
+      ["más alakú szám", () => [fluidra(234778, "rendeles 4724")], []],
+      // a másik fizetésnek van MÁSIK pontos számlája is: nem ezt kell elvenni
+      [
+        "a másiknak két pontos számlája van",
+        () => [fluidra(234778, "KS26/04724")],
+        [
+          doc({
+            number: "KS26/04800",
+            date: "2026-06-10",
+            gross: D(234778),
+            supplierName: "Fluidra Magyarország Kft.",
+          }),
+        ],
+      ],
+    ];
+    for (const [name, others, extra] of cases) {
+      const byName = fluidra(81915, "KS26/04727");
+      const invoice = ks4727();
+      const o = run([byName, ...others()], [invoice, ...extra]).get(byName.id)!;
+      assert.deepEqual(o.documents, [invoice], name);
+      assert.equal(o.amountDifference?.amount.toString(), "-152863", name);
+    }
+    // ha a név szerinti fizetés összege is pontos, az övé marad
+    const exactByName = fluidra(234778, "KS26/04727");
+    const invoice = ks4727();
+    const out = run([exactByName, fluidra(234778, "KS26/04724")], [invoice]);
+    assert.deepEqual(out.get(exactByName.id)!.documents, [invoice]);
+    // név szerint, nem egy későbbi szabály adta vissza
+    assert.equal(
+      out.get(exactByName.id)!.reason,
+      "a számla száma a közleményben",
+    );
   });
 });
 

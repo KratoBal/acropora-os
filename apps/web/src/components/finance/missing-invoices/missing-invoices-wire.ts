@@ -77,7 +77,11 @@ export function toSummary(
 export function toExtras(detail: MissingInvoiceItemDetail): ChargeDetailExtras {
   return {
     candidates: detail.candidates,
+    // egy a mezőt még nem ismerő API (a web előbb települ) ne döntse el a drawert
+    payeeDocuments: detail.payeeDocuments ?? [],
     action: detail.action,
     driveFolderUrl: detail.driveFolderUrl,
+    // egy a mezőt még nem küldő API (a web előbb települ) ne döntse el a drawert
+    doublePaidWith: detail.doublePaidWith ?? [],
   };
 }
