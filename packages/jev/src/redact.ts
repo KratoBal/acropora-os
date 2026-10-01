@@ -89,7 +89,7 @@ function pySplit(s: string): string[] {
 }
 
 /** Python `str.strip()`. */
-function pyStrip(s: string): string {
+export function pyStrip(s: string): string {
   return s.replace(PY_STRIP, "");
 }
 
@@ -174,11 +174,15 @@ export function fold(s: string): string {
 const SET = (xs: readonly string[]) => new Set(xs);
 const GIVEN = SET(GIVEN_NAMES);
 const PRESERVED = SET(PRESERVE);
+/** A megorzendo kifejezesek (normalizalva): a known-entity epito is ezt nezi. */
+export const PRESERVED_TERMS: ReadonlySet<string> = PRESERVED;
 const CUES = SET(NAME_CUES);
 const LABEL = SET(LABELS);
 const COMMON_I_SET = SET(COMMON_I);
 const AMBIG = SET(AMBIGUOUS);
 const OPENER = SET(OPENERS);
+/** A mondatnyito szavak (normalizalva): a known-entity epito is ezt nezi. */
+export const OPENER_WORDS: ReadonlySet<string> = OPENER;
 const ALWAYS = SET(ALWAYS_MASKED);
 const KEEPABLE_SET = SET(KEEPABLE);
 const ALLOWABLE = SET(KNOWN_ALLOWABLE);

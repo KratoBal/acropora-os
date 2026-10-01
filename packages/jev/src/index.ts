@@ -101,10 +101,26 @@ export {
   PAIR_POLICY_KEY,
   PairBlocked,
   buildPairRequest,
+  buildPairRequestDroppingBlocked,
   candidateText,
   isPrivatePartner,
   paymentText,
   type PairCandidate,
   type PairPayment,
   type PairRequest,
+  type PairRequestWithDrops,
 } from "./pairing.js";
+export {
+  KNOWN_SOURCE_FIELDS,
+  knownEntries,
+  type KnownRow,
+} from "./known-builder.js";
+export {
+  MISSING_INVOICE_PAIR_POLICY,
+  PAIR_NONE_KEY,
+  pairExposure,
+  pairResolution,
+  pairSuggestionEnabled,
+  type PairExposure,
+  type PairResolution,
+} from "./missing-invoice-pair-policy.js";
