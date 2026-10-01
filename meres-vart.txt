@@ -1,0 +1,5 @@
+# Kalibracio: feat/szamlazz-invoice-receipt-feeds, KET rontas egy korben (fuggetlen allitasok):
+# I1 a storeRaw nem ismeri fel az ujrakuldest (P2002 tovabbdobva); I2 a SZAMLAZZ_FEED kimarad a jeloltekbol.
+# Joslat: pontosan a ket allitas piros, a tobbi integracios teszt zold.
+not ok 1 - a message is stored once, a resent one is recognised
+not ok 2 - a forwarded invoice is a candidate, with its source, gross and supplier

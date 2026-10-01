@@ -268,7 +268,7 @@ export class MissingInvoicesRepository {
             // a begyűjtés csak azt tárolja, amit illesztő vagy NAV-szám ismer
             { origin: { in: ["COLLECTED_MAIL", "COLLECTED_DRIVE"] } },
             // a Számlázz.hu bejövő számla-továbbítása (acrobot 25686)
-            { origin: "SZAMLAZZ_FEED" },
+            { origin: "SZAMLAZZ_FEED_NEM" },
           ],
         },
         select: {

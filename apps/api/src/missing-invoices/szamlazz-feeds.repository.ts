@@ -31,7 +31,8 @@ export class SzamlazzFeedsRepository {
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
+        error.code === "P2002" &&
+        input.kind === ("" as SzamlazzFeedKind)
       )
         return false;
       throw error;
