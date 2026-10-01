@@ -1,0 +1,4 @@
+# Kalibracio: feat/payee-manual-mark, EGY rontas:
+# M2 a markPayee WHERE-je a szovegbol olvasott COMPANY-t is irja.
+# Joslat: pontosan a "a hand mark writes only an unknown payee, with an audit row" piros.
+not ok 5 - a hand mark writes only an unknown payee, with an audit row

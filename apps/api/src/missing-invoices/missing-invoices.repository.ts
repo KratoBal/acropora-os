@@ -618,6 +618,7 @@ export class MissingInvoicesRepository {
             { payeeCheck: null },
             { payeeCheck: "UNKNOWN" },
             { payeeMarkedAt: { not: null } },
+            { payeeCheck: { not: null } },
           ],
         },
         data: {
