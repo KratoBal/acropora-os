@@ -10,6 +10,7 @@ import {
 import { formatMoney } from "./billing-editor-state";
 import { BillingDocumentStatus } from "./billing-document-status";
 import { ExternalBadge } from "./billing-external-document-page";
+import { PaymentBadge } from "./billing-payment";
 
 export const BILLING_LIST_PATH = "/penzugy/szamlazas";
 
@@ -105,6 +106,14 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
         <span className="whitespace-nowrap font-semibold tabular-nums text-pilot-grey-900">
           {formatMoney(item.grossAmount, item.currency)}
         </span>
+      ),
+    },
+    {
+      id: "payment",
+      header: "Kifizetés",
+      width: "120px",
+      cell: (item) => (
+        <PaymentBadge payment={item.payment} currency={item.currency} />
       ),
     },
     {

@@ -24,6 +24,7 @@ import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
+import { PaymentBadge } from "./billing-payment";
 
 /** Az áfakulcs, ahogy a számlán áll: szám mellé %, a jelölés (AAM, TAM) magában. */
 const vatRateText = (rate: string) =>
@@ -235,6 +236,34 @@ export function BillingExternalDocumentPage({
                 },
               ]}
             />
+          </PilotSection>
+          <PilotSection
+            title="Kifizetés"
+            subtitle="Ahogy a Számlázz.hu nyilvántartja, a saját banki párosításával együtt."
+          >
+            <PaymentBadge payment={detail.payment} currency={detail.currency} />
+            {detail.payments.length > 0 ? (
+              <ul className="mt-3 space-y-2 text-sm">
+                {detail.payments.map((payment, index) => (
+                  <li
+                    key={`${payment.date}-${index}`}
+                    className="flex items-baseline justify-between gap-3"
+                  >
+                    <span className="text-pilot-grey-700">
+                      {formatDay(payment.date)} · {payment.method}
+                      {payment.note ? (
+                        <span className="block text-xs text-pilot-grey-500">
+                          {payment.note}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="whitespace-nowrap font-semibold tabular-nums text-pilot-grey-900">
+                      {formatMoney(payment.amount, detail.currency)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </PilotSection>
           <PilotSection title="Számlázz.hu" subtitle="A továbbítás adatai.">
             <PilotDataGrid>

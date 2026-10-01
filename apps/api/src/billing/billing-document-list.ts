@@ -2,6 +2,7 @@ import { Prisma } from "@acropora/database";
 import {
   szamlazzDocumentTotals,
   type BillingDocumentListItem,
+  type BillingDocumentPayment,
   type BillingDocumentListQuery,
   type BillingDocumentStatus,
   type BillingDocumentType,
@@ -127,6 +128,8 @@ export function toListItem(
     opens: status === "DRAFT" ? "EDITOR" : "DETAIL",
     origin: "OWN",
     externalKindLabel: null,
+    // a saját bizonylat kifizetéséről ma nincs forrásunk
+    payment: null,
   };
 }
 
@@ -228,6 +231,37 @@ export interface ExternalListRow {
   grossAmount: Prisma.Decimal;
   currency: string;
   createdAt: Date;
+  paidAmount: Prisma.Decimal;
+  lastPaidAt: Date | null;
+  cancelled: boolean;
+}
+
+/**
+ * A KIFIZETETTSÉG EGY KÜLSŐ BIZONYLATRA, a tárolt kifizetésekből (lásd
+ * `BillingDocumentPayment`). Sztornózott vagy nem pozitív végösszegű bizonylat
+ * nem fizetendő: ott `null`.
+ */
+export function externalPayment(row: {
+  grossAmount: Prisma.Decimal;
+  paidAmount: Prisma.Decimal;
+  lastPaidAt: Date | null;
+  currency: string;
+  cancelled: boolean;
+}): BillingDocumentPayment | null {
+  if (row.cancelled || row.grossAmount.lte(0)) return null;
+  const huf = row.currency.toUpperCase() === "HUF";
+  // a készpénzes utánvét 5 forintra kerekít (barracuda, acrobot 25898)
+  const tolerance = huf ? 2 : 0;
+  const state = row.paidAmount.gte(row.grossAmount.minus(tolerance))
+    ? "PAID"
+    : row.paidAmount.gt(0)
+      ? "PARTIAL"
+      : "UNPAID";
+  return {
+    state,
+    paidAmount: row.paidAmount.toFixed(huf ? 0 : 2),
+    lastPaidAt: calendarDay(row.lastPaidAt),
+  };
 }
 
 export function toExternalListItem(
@@ -250,6 +284,7 @@ export function toExternalListItem(
     opens: "EXTERNAL_DETAIL",
     origin: "EXTERNAL",
     externalKindLabel: externalKindLabel(row.kindCode),
+    payment: externalPayment(row),
   };
 }
 

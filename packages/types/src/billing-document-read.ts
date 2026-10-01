@@ -60,6 +60,36 @@ export type BillingDocumentListTarget =
   /** A külső bizonylat csak olvasható adatlapja (acrobot 25812). */
   | "EXTERNAL_DETAIL";
 
+/**
+ * A KIMENŐ SZÁMLA KIFIZETETTSÉGE (Balázs, GLS szál, 2026-10-01 18:33 UTC). A
+ * forrás a Számlázz.hu: a kifizetés után újraküldi a számlát, és a
+ * `kifizetesek` elem hordozza a kifizetéseket, a saját banki párosításáét is.
+ *
+ *   PAID      a kifizetések összege eléri a bruttót (forintnál 2 Ft tűréssel:
+ *             a készpénzes utánvét 5 forintra kerekít)
+ *   PARTIAL   van kifizetés, de kevesebb
+ *   UNPAID    nincs kifizetés
+ */
+export const BILLING_PAYMENT_STATES = ["PAID", "PARTIAL", "UNPAID"] as const;
+export type BillingPaymentState = (typeof BILLING_PAYMENT_STATES)[number];
+
+export interface BillingDocumentPayment {
+  state: BillingPaymentState;
+  /** Tizedes szöveg, a bruttóval azonos pontossággal. */
+  paidAmount: DecimalText;
+  /** `YYYY-MM-DD`, a legkésőbbi kifizetés; kifizetés nélkül `null`. */
+  lastPaidAt: string | null;
+}
+
+/** Egy kifizetés a külső bizonylat adatlapján (szamla.xsd `kifizetes`). */
+export interface BillingExternalDocumentPaymentLine {
+  date: string;
+  /** A jogcím, ahogy a Számlázz.hu adja (átutalás, utánvét, ...). */
+  method: string;
+  amount: DecimalText;
+  note: string | null;
+}
+
 export interface BillingDocumentListItem {
   /** Az `Invoice.id`, a megnyitás kulcsa. */
   id: string;
@@ -86,6 +116,12 @@ export interface BillingDocumentListItem {
    * Sztornó számla, ...), ismeretlen kódnál maga a kód; a mieinknél `null`.
    */
   externalKindLabel: string | null;
+  /**
+   * A kifizetettség (külső bizonylatnál a Számlázz.hu szerint). `null`: nincs
+   * forrásunk rá (a saját bizonylatok), vagy nem fizetendő (sztornózott,
+   * nulla vagy negatív végösszeg).
+   */
+  payment: BillingDocumentPayment | null;
 }
 
 /** Egy külső bizonylat tétele, ahogy a számlán áll (szamla.xsd `tetel`). */
@@ -127,6 +163,10 @@ export interface BillingExternalDocumentDetail {
   };
   /** A Számlázz.hu szerint sztornózott. */
   cancelled: boolean;
+  /** Lásd `BillingDocumentListItem.payment`. */
+  payment: BillingDocumentPayment | null;
+  /** A kifizetések a számla sorrendjében. */
+  payments: BillingExternalDocumentPaymentLine[];
   /** Hány változat érkezett; a lap a legkésőbbit mutatja. */
   versionCount: number;
   /** A mutatott változat érkezése (ISO időbélyeg). */

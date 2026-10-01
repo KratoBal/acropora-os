@@ -8,6 +8,7 @@ import {
   listWhere,
   mergeListRows,
   ownWhere,
+  externalPayment,
   toExternalListItem,
   toListItem,
   type ExternalListRow,
@@ -156,7 +157,53 @@ const external = (
   grossAmount: D("29210"),
   currency: "HUF",
   createdAt: new Date("2026-10-01T15:00:00.000Z"),
+  paidAmount: D("0"),
+  lastPaidAt: null,
+  cancelled: false,
   ...overrides,
+});
+
+describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () => {
+  // MI PIROSÍT: ha az 5 forintos kerekítés miatt egy kifizetett számla
+  // rész-kifizetettnek látszana; ha egy rész-kifizetés kifizetettnek; ha a
+  // devizás számla is kapná a forint-tűrést; ha egy sztornózott vagy sztornó
+  // számla fizetendőnek látszana; ha a saját bizonylat kitalált állapotot kapna.
+  const paid = (amount: string, overrides: Partial<ExternalListRow> = {}) =>
+    externalPayment(
+      external({
+        grossAmount: D("105831"),
+        paidAmount: D(amount),
+        lastPaidAt: new Date("2026-09-17T00:00:00.000Z"),
+        ...overrides,
+      }),
+    );
+
+  it("paid, also when the cash on delivery was rounded to 5 Ft; partial; unpaid", () => {
+    assert.deepEqual(paid("105831"), {
+      state: "PAID",
+      paidAmount: "105831",
+      lastPaidAt: "2026-09-17",
+    });
+    // a GLS 09-17-i sora: 105 830 a 105 831-es számlára (barracuda, 25888)
+    assert.equal(paid("105830")?.state, "PAID");
+    assert.equal(paid("105828")?.state, "PARTIAL");
+    assert.equal(paid("50000")?.state, "PARTIAL");
+    assert.deepEqual(paid("0", { lastPaidAt: null }), {
+      state: "UNPAID",
+      paidAmount: "0",
+      lastPaidAt: null,
+    });
+  });
+
+  it("no forint tolerance on a foreign currency, and nothing to pay on a storno", () => {
+    assert.equal(
+      paid("99.99", { grossAmount: D("100"), currency: "EUR" })?.state,
+      "PARTIAL",
+    );
+    assert.equal(paid("0", { cancelled: true }), null);
+    assert.equal(paid("0", { grossAmount: D("-15450") }), null);
+    assert.equal(toListItem(row()).payment, null);
+  });
 });
 
 describe("the external documents on the list", () => {
@@ -178,6 +225,7 @@ describe("the external documents on the list", () => {
       opens: "EXTERNAL_DETAIL",
       origin: "EXTERNAL",
       externalKindLabel: "Számla",
+      payment: { state: "UNPAID", paidAmount: "0", lastPaidAt: null },
     });
     assert.deepEqual(
       [
