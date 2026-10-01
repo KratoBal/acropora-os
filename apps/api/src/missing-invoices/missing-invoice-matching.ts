@@ -365,6 +365,22 @@ function subsets<T>(items: readonly T[], max: number): T[][] {
 const MONTHLY_INVOICE_LAST_DAY = 5;
 
 /**
+ * A GYŰJTŐSZÁMLA KIS MARADÉKA (acrobot 25647, Balázs a Parkl szeptemberi
+ * számlájáról): a számla nagyobb a havi fizetések összegénél, mert egy tétel
+ * még nincs a kivonatban (a bank még nem könyvelte; mérve: a szeptemberi
+ * kivonat elutasított, függő -640 Ft-os Parkl-sora, és a számla 640 Ft-tal
+ * több). Ilyenkor a fizetések a számlához párosodnak, összeg-eltéréssel.
+ *
+ * A maradék legfeljebb a csoport legnagyobb fizetése (kb. egy hiányzó tétel),
+ * és legfeljebb a számla ennyi része. Mérve 2026-10-01 a 2025-12 .. 2026-09
+ * kivonatain: a pontosan nem párosodó gyűjtő-jelöltek közül négy Parkl-csoport
+ * marad el kis maradékkal (225, 640, 760, 835 Ft; 1,9-6,3 %), a többi messze
+ * (eurogreen +54 734 Ft = 37 %, Fluidra +12 millió), vagy a számla a kisebb
+ * (Tesla: a terhelésenkénti számlák, nem havi összesítő).
+ */
+const MONTHLY_REMAINDER_SHARE = 0.1;
+
+/**
  * A KÁRTYÁS FIZETÉSEK HAVI CSOPORTJAI. A kártyás terhelés közleménye így
  * kezdődik: `2026.03.05 7413124583 SIMPLEP*PARKL .NET`, vagyis a VÁSÁRLÁS napja
  * és a kártya. A csoport kulcsa a partner, a kártya és a vásárlás hónapja; a
@@ -656,6 +672,51 @@ export function matchMonth(input: {
         [invoices[0]!],
         `gyűjtőszámla: ${group.debits.length} kártyás fizetés havi összege`,
       );
+  }
+  // 3c. GYŰJTŐSZÁMLA KIS MARADÉKKAL: a pontos kör után, a megmaradt számlákra
+  // (két kártyánál a pontosan egyező kártya előbb elviszi a sajátját)
+  for (const group of monthlyCardGroups(
+    open.filter((debit) => !outcomes.has(debit.id)),
+  )) {
+    const first = group.debits[0]!;
+    const sum = group.debits.reduce(
+      (total, debit) => total.plus(debit.amount),
+      new Prisma.Decimal(0),
+    );
+    const largest = Prisma.Decimal.max(...group.debits.map((d) => d.amount));
+    const invoices = partnerDocs(first, 0.5).filter((d) => {
+      if (
+        d.gross === null ||
+        d.currency !== first.currency ||
+        d.date.slice(0, 7) !== group.nextMonth ||
+        Number(d.date.slice(8, 10)) > MONTHLY_INVOICE_LAST_DAY
+      )
+        return false;
+      const remainder = d.gross.minus(sum);
+      return (
+        remainder.gt(0) &&
+        remainder.lte(largest) &&
+        remainder.lte(d.gross.times(MONTHLY_REMAINDER_SHARE))
+      );
+    });
+    if (invoices.length !== 1) continue;
+    const invoice = invoices[0]!;
+    const difference = {
+      amount: sum.minus(invoice.gross!),
+      currency: invoice.currency,
+    };
+    for (const debit of group.debits) {
+      found(
+        debit,
+        [invoice],
+        `gyűjtőszámla: ${group.debits.length} kártyás fizetés havi összege, ` +
+          `a számla többlete ${invoice.gross!.minus(sum).toFixed(0)} ${invoice.currency}, könyveletlen tétel lehet`,
+      );
+      outcomes.set(debit.id, {
+        ...outcomes.get(debit.id)!,
+        amountDifference: difference,
+      });
+    }
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
