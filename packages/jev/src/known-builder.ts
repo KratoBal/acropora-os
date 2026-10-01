@@ -5,7 +5,7 @@
  * ezzel a listaval futott): ugyanazok a forras-mezok (a hivo olvassa oket, lasd
  * `KNOWN_SOURCE_FIELDS`), ugyanaz az alias-kepzes es ugyanaz a befogado szuro,
  * a vegen a flotta szintu `EXTRA` nevekkel. A tesztek a Python kimenetevel vetik
- * ossze (`redact-vectors/r11-expected.json`, `knownBuilder`).
+ * ossze (`redact-vectors/expected.json`, `knownBuilder`).
  *
  * A lista NEM kerul lemezre: a folyamat memoriajaban el (lasd `knownTable`).
  */
@@ -17,7 +17,7 @@ import {
   PRESERVED_TERMS,
   pyStrip,
 } from "./redact.js";
-import { INLINE, KNOWN_EXTRA, OTHER } from "./redact-r11-data.js";
+import { INLINE, KNOWN_EXTRA, OTHER } from "./redact-data.js";
 
 export type KnownRow = readonly [kind: string, value: string];
 

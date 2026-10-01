@@ -1,13 +1,13 @@
 /**
  * GENERALT FAJL, NE SZERKESZD KEZZEL. Forras: marveen scripts/jev/redact.py
- * (sha256 ea35b2705138bf5a5a2eaa5f47ec383e3192bfc894c672d6b883f49e9e955e9a), a scripts/redact-r11-export.py irta ki.
+ * (sha256 094f68233b56a2013aebf12a1bc87afd55a8b8fa3fa70795973dab4c101f967e), a scripts/redact-export.py irta ki.
  *
  * A Python a referencia. Barmelyik oldal valtozasa = az export es a paritas-
  * futas ujra (README, "Kitakaras").
  */
 
-export const REDACTION_VERSION = "r11";
-export const REFERENCE_SHA256 = "ea35b2705138bf5a5a2eaa5f47ec383e3192bfc894c672d6b883f49e9e955e9a";
+export const REDACTION_VERSION = "r12";
+export const REFERENCE_SHA256 = "094f68233b56a2013aebf12a1bc87afd55a8b8fa3fa70795973dab4c101f967e";
 export const BUILD_KNOWN_SHA256 = "04ab71bbdea513047d97a86af27ae8230b19cd716b1675ec8dc658726dfa89da";
 /** build_known.EXTRA: a flotta szintu nevek, amik nem adatbazis-sorok; a szuro NEM fut rajtuk. */
 export const KNOWN_EXTRA: readonly (readonly [string, string])[] = [["HANDLE", "KratoBal"], ["ORG", "FANK"], ["ORG", "Állatkert"], ["ORG", "Fővárosi Állatkert"], ["ORG", "INNONEST"], ["ORG", "TROPUS"], ["ORG", "Korallgarazs"], ["ORG", "Korallgarázs"]];

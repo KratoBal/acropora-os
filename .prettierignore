@@ -8,7 +8,7 @@ packages/database/src/generated
 # Generated Expo asset, not hand-written source.
 apps/mobile/assets/expo.icon/icon.json
 
-# The r11 redactor's generated data and vectors (packages/jev/scripts/redact-r11-export.py):
+# The r11 redactor's generated data and vectors (packages/jev/scripts/redact-export.py):
 # byte-for-byte what the Python reference wrote, so a re-export diffs cleanly.
 packages/jev/redact-vectors
-packages/jev/src/redact-r11-data.ts
+packages/jev/src/redact-data.ts

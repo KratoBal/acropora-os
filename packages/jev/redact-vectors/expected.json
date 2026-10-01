@@ -1,6 +1,6 @@
 {
- "version": "r11",
- "reference": "ea35b2705138bf5a5a2eaa5f47ec383e3192bfc894c672d6b883f49e9e955e9a",
+ "version": "r12",
+ "reference": "094f68233b56a2013aebf12a1bc87afd55a8b8fa3fa70795973dab4c101f967e",
  "commonWords": [
   "adoszam",
   "allatkert",
@@ -6008,6 +6008,22 @@
    [
     "ORG",
     "Großhandel Weiß GmbH"
+   ],
+   [
+    "ORG",
+    "HANNA Instruments Service Kft."
+   ],
+   [
+    "ORG",
+    "HANNA Instruments Service"
+   ],
+   [
+    "ORG",
+    "HANNA"
+   ],
+   [
+    "ORG",
+    "Alfa HANNA Beta Kft."
    ]
   ],
   "cases": [
@@ -6536,6 +6552,170 @@
       "ORG"
      ]
     ]
+   },
+   {
+    "text": "issuer: HANNA Instruments Service Kft.",
+    "default": {
+     "text": "issuer: <ORG_1>",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "issuer: HANNA Instruments Service Kft.",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      8,
+      13,
+      "ORG"
+     ],
+     [
+      8,
+      33,
+      "ORG"
+     ],
+     [
+      8,
+      37,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "HANNA szerint a lámpa jó",
+    "default": {
+     "text": "<PERSON_1> szerint a lámpa jó",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "<PERSON_1> szerint a lámpa jó",
+     "counts": {
+      "PERSON": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      0,
+      5,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "issuer: Alfa HANNA Beta Kft.",
+    "default": {
+     "text": "issuer: <ORG_1>",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "issuer: Alfa HANNA Beta Kft.",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": [
+      "KNOWN_ENTITY"
+     ]
+    },
+    "spans": [
+     [
+      8,
+      27,
+      "ORG"
+     ],
+     [
+      13,
+      18,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "a HANNA Instruments Service szerint",
+    "default": {
+     "text": "a <ORG_1> szerint",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "a <PERSON_1> <PERSON_2> szerint",
+     "counts": {
+      "PERSON": 2
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "spans": [
+     [
+      2,
+      7,
+      "ORG"
+     ],
+     [
+      2,
+      27,
+      "ORG"
+     ]
+    ]
+   },
+   {
+    "text": "issuer: HANNA Instruments Service Kft., e.v.",
+    "default": {
+     "text": "issuer: <ORG_1>, e.v.",
+     "counts": {
+      "ORG": 1
+     },
+     "guard": [],
+     "guardPairing": []
+    },
+    "pairing": {
+     "text": "issuer: HANNA Instruments Service Kft., e.v.",
+     "counts": {},
+     "guard": [
+      "KNOWN_ENTITY"
+     ],
+     "guardPairing": [
+      "KNOWN_ENTITY"
+     ]
+    },
+    "spans": [
+     [
+      8,
+      13,
+      "ORG"
+     ],
+     [
+      8,
+      33,
+      "ORG"
+     ],
+     [
+      8,
+      37,
+      "ORG"
+     ]
+    ]
    }
   ]
  },
@@ -6661,6 +6841,39 @@
      }
     ],
     "narrative": "x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x Kovács Péter Zoltán úrnak"
+   },
+   {
+    "id": "p7",
+    "date": "2026-06-03",
+    "amount": "1999",
+    "currency": "HUF",
+    "original": "",
+    "partner": "Akvárium Szerviz Kft.",
+    "narrative": "SZ-2026/0815",
+    "type": "ÁTUTALÁS",
+    "candidates": [
+     {
+      "number": "FANK-2026",
+      "date": "2026-06-01",
+      "gross": "1999",
+      "currency": "HUF",
+      "supplier": "Szállító Kft."
+     },
+     {
+      "number": "SZ-2026/0815",
+      "date": "2026-06-02",
+      "gross": "1999",
+      "currency": "HUF",
+      "supplier": "Szállító Kft."
+     },
+     {
+      "number": "HI-26/000878",
+      "date": "2026-06-02",
+      "gross": "1950",
+      "currency": "HUF",
+      "supplier": "HANNA Instruments Service Kft."
+     }
+    ]
    }
   ],
   "unknown": [
@@ -6674,7 +6887,12 @@
      "c0",
      "c1",
      "NONE"
-    ]
+    ],
+    "kept": [
+     0,
+     1
+    ],
+    "dropped": []
    },
    {
     "body": "{\"state\": {\"query\": \"Bank payment on 2026-03-05: 258173 HUF; partner: <PRIVATE_PARTNER>; reference: U26/00918-SZ <PRIVATE_PARTNER> tel <PHONE_1>; type: <PROPER_1>.\", \"c0\": \"Invoice U26/00918-SZ, issued 2026-03-05, gross 258173 HUF, issuer: <PROPER_1> 97 Munkaruházati és Munkavédelmi Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
@@ -6685,7 +6903,11 @@
     "options": [
      "c0",
      "NONE"
-    ]
+    ],
+    "kept": [
+     0
+    ],
+    "dropped": []
    },
    {
     "body": "{\"state\": {\"query\": \"Bank payment on 2026-05-01: 99.71 EUR (original: 38488 HUF); partner: <PROPER_1>*925585488; reference: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\", \"c0\": \"Invoice 5120260001254481, issued 2026-05-02, gross 38488 HUF, issuer: Magyar Telekom Nyrt..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
@@ -6695,7 +6917,11 @@
     "options": [
      "c0",
      "NONE"
-    ]
+    ],
+    "kept": [
+     0
+    ],
+    "dropped": []
    },
    {
     "body": "{\"state\": {\"query\": \"Bank payment on 2026-06-01: 5000 HUF; partner: <PRIVATE_PARTNER>; reference: <PERSON_1>; type: <PROPER_1>.\", \"c0\": \"Invoice FB-1, issued 2026-06-01, gross 5000 HUF, issuer: Fekete Bolt Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
@@ -6706,7 +6932,11 @@
     "options": [
      "c0",
      "NONE"
-    ]
+    ],
+    "kept": [
+     0
+    ],
+    "dropped": []
    },
    {
     "body": "{\"state\": {\"query\": \"Bank payment on 2026-06-02: 12000 HUF; partner: Akvárium Szerviz Kft.; reference: FANK karbantartás; type: <PROPER_1>.\", \"c0\": \"Invoice AK-7, issued 2026-06-01, gross 12000 HUF, issuer: Akvárium Szerviz Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
@@ -6716,7 +6946,11 @@
     "options": [
      "c0",
      "NONE"
-    ]
+    ],
+    "kept": [
+     0
+    ],
+    "dropped": []
    },
    {
     "body": "{\"state\": {\"query\": \"Bank payment on 2026-07-01: 100 HUF; partner: Akvárium Szerviz Kft.; reference: x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x \", \"c0\": \"Invoice AK-8, issued 2026-07-01, gross 100 HUF, issuer: Akvárium Szerviz Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
@@ -6727,7 +6961,29 @@
     "options": [
      "c0",
      "NONE"
-    ]
+    ],
+    "kept": [
+     0
+    ],
+    "dropped": []
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-06-03: 1999 HUF; partner: Akvárium Szerviz Kft.; reference: SZ-2026/0815; type: <PROPER_1>.\", \"c0\": \"Invoice FANK-2026, issued 2026-06-01, gross 1999 HUF, issuer: Szállító Kft..\", \"c1\": \"Invoice SZ-2026/0815, issued 2026-06-02, gross 1999 HUF, issuer: Szállító Kft..\", \"c2\": \"Invoice HI-26/000878, issued 2026-06-02, gross 1950 HUF, issuer: HANNA Instruments Service Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"c1\": \"The invoice in field c1.\", \"c2\": \"The invoice in field c2.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PROPER": 1
+    },
+    "options": [
+     "c0",
+     "c1",
+     "c2",
+     "NONE"
+    ],
+    "kept": [
+     0,
+     1,
+     2
+    ],
+    "dropped": []
    }
   ],
   "known": [
@@ -6741,7 +6997,12 @@
      "c0",
      "c1",
      "NONE"
-    ]
+    ],
+    "kept": [
+     0,
+     1
+    ],
+    "dropped": []
    },
    {
     "body": "{\"state\": {\"query\": \"Bank payment on 2026-03-05: 258173 HUF; partner: <PRIVATE_PARTNER>; reference: U26/00918-SZ <PRIVATE_PARTNER> tel <PHONE_1>; type: <PROPER_1>.\", \"c0\": \"Invoice U26/00918-SZ, issued 2026-03-05, gross 258173 HUF, issuer: <PROPER_1> 97 Munkaruházati és Munkavédelmi Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
@@ -6752,7 +7013,11 @@
     "options": [
      "c0",
      "NONE"
-    ]
+    ],
+    "kept": [
+     0
+    ],
+    "dropped": []
    },
    {
     "body": "{\"state\": {\"query\": \"Bank payment on 2026-05-01: 99.71 EUR (original: 38488 HUF); partner: <PROPER_1>*925585488; reference: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\", \"c0\": \"Invoice 5120260001254481, issued 2026-05-02, gross 38488 HUF, issuer: Magyar Telekom Nyrt..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
@@ -6762,7 +7027,11 @@
     "options": [
      "c0",
      "NONE"
-    ]
+    ],
+    "kept": [
+     0
+    ],
+    "dropped": []
    },
    {
     "body": "{\"state\": {\"query\": \"Bank payment on 2026-06-01: 5000 HUF; partner: <PRIVATE_PARTNER>; reference: <PERSON_1>; type: <PROPER_1>.\", \"c0\": \"Invoice FB-1, issued 2026-06-01, gross 5000 HUF, issuer: Fekete Bolt Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
@@ -6773,7 +7042,11 @@
     "options": [
      "c0",
      "NONE"
-    ]
+    ],
+    "kept": [
+     0
+    ],
+    "dropped": []
    },
    {
     "blocked": "blocked_runtime_guard",
@@ -6788,6 +7061,31 @@
     "options": [
      "c0",
      "NONE"
+    ],
+    "kept": [
+     0
+    ],
+    "dropped": []
+   },
+   {
+    "body": "{\"state\": {\"query\": \"Bank payment on 2026-06-03: 1999 HUF; partner: Akvárium Szerviz Kft.; reference: SZ-2026/0815; type: <PROPER_1>.\", \"c0\": \"Invoice SZ-2026/0815, issued 2026-06-02, gross 1999 HUF, issuer: Szállító Kft..\", \"c1\": \"Invoice HI-26/000878, issued 2026-06-02, gross 1950 HUF, issuer: HANNA Instruments Service Kft..\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"pair\": {\"type\": \"choice\", \"criteria\": {\"c0\": \"The invoice in field c0.\", \"c1\": \"The invoice in field c1.\", \"NONE\": \"None of these invoices is the one this payment pays.\"}, \"instructions\": \"'query' is one payment from the company's bank account. Each field c0, c1, ... is one invoice the company received from that partner. Which invoice does this payment pay? Compare the amount, the date and any invoice number in the reference.\"}}}",
+    "placeholders": {
+     "PROPER": 1
+    },
+    "options": [
+     "c0",
+     "c1",
+     "NONE"
+    ],
+    "kept": [
+     1,
+     2
+    ],
+    "dropped": [
+     [
+      0,
+      "blocked_runtime_guard"
+     ]
     ]
    }
   ]

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Exports the r11 redactor's DATA from the Python reference into TypeScript, and
+"""Exports the redactor's DATA from the Python reference into TypeScript, and
 the reference OUTPUTS into test vectors. The TypeScript side (src/redact.ts) ports
 only the program logic; every pattern string and word list comes from here, read
 out of the loaded Python module, so a hand copy cannot drift.
 
-The reference: marveen scripts/jev/redact.py (r11). Any change on either side
+The reference: marveen scripts/jev/redact.py (its REDACTION_VERSION). Any change on either side
 means running this again and the parity check (README, "Kitakaras").
 
 Usage:
-  python3 -B packages/jev/scripts/redact-r11-export.py <marveen>/scripts/jev
+  python3 -B packages/jev/scripts/redact-export.py <marveen>/scripts/jev
 
 Writes:
-  packages/jev/src/redact-r11-data.ts        patterns, word sets, constants
-  packages/jev/redact-vectors/r11-expected.json
+  packages/jev/src/redact-data.ts        patterns, word sets, constants
+  packages/jev/redact-vectors/expected.json
       the reference output for every leak-suite case (default and pairing
       mode, runtime guard), with the suite common-words subset, plus the
       synthetic known-entity cases.
@@ -43,7 +43,7 @@ import redact  # noqa: E402
 import shadow  # noqa: E402
 
 if not redact.COMMON:
-    sys.exit("the common-words file is missing: the vectors would not be the measured r11")
+    sys.exit("the common-words file is missing: the vectors would not be the measured redactor")
 
 
 def sha(path):
@@ -88,7 +88,7 @@ ref = os.path.join(JEV, "redact.py")
 lines = [
     "/**",
     " * GENERALT FAJL, NE SZERKESZD KEZZEL. Forras: marveen scripts/jev/redact.py",
-    f" * (sha256 {sha(ref)}), a scripts/redact-r11-export.py irta ki.",
+    f" * (sha256 {sha(ref)}), a scripts/redact-export.py irta ki.",
     " *",
     " * A Python a referencia. Barmelyik oldal valtozasa = az export es a paritas-",
     " * futas ujra (README, \"Kitakaras\").",
@@ -157,7 +157,7 @@ rank = [c for c in redact._merge.__code__.co_consts if isinstance(c, tuple) and 
 if len(rank) != 1:
     sys.exit("could not read the merge rank from redact._merge")
 lines.insert(-1, f"export const MERGE_RANK: readonly string[] = {ts(list(rank[0]))};")
-open(os.path.join(PKG, "src", "redact-r11-data.ts"), "w", encoding="utf-8").write("\n".join(lines))
+open(os.path.join(PKG, "src", "redact-data.ts"), "w", encoding="utf-8").write("\n".join(lines))
 
 # ------------------------------------------------------------ vectors
 os.makedirs(VEC, exist_ok=True)
@@ -211,7 +211,10 @@ common_subset = sorted(w for w in redact.COMMON if w in lookups)
 KNOWN = [("PERSON", "Varga Ilona"), ("PERSON", "Ilona Varga"), ("ORG", "Fekete Bolt"),
          ("ORG", "Tisza 97 Kft."), ("ORG", "Kovács János"), ("EMAIL", "ilona.varga@example.com"),
          ("ADDRESS", "Petőfi utca 12"), ("ORG", "Lap Állatkert"), ("HANDLE", "KratoBal"), ("ORG", "FANK"),
-         ("ORG", "Großhandel Weiß GmbH")]
+         ("ORG", "Großhandel Weiß GmbH"),
+         # r12: build_known's caps alias next to the full name (acrobot 25567)
+         ("ORG", "HANNA Instruments Service Kft."), ("ORG", "HANNA Instruments Service"),
+         ("ORG", "HANNA"), ("ORG", "Alfa HANNA Beta Kft.")]
 KNOWN_TEXTS = [
     "issuer: Varga Ilona", "Varga Ilonának küldtük", "Fekete Bolt Kft., 5000 HUF",
     "Fekete Bolt e.v., 5000 HUF", "Fekete Bolt, 5000 HUF", "issuer: Tisza 97 Kft.",
@@ -223,6 +226,9 @@ KNOWN_TEXTS = [
     "issuer: Fekete Bolt Kft., e.v., 5000 HUF",
     # casefold beyond lower(): ß -> ss on one side only
     "GROSSHANDEL WEISS GmbH számla", "Großhandel Weiß GmbH számla",
+    "issuer: HANNA Instruments Service Kft.", "HANNA szerint a lámpa jó",
+    "issuer: Alfa HANNA Beta Kft.", "a HANNA Instruments Service szerint",
+    "issuer: HANNA Instruments Service Kft., e.v.",
 ]
 
 
@@ -305,16 +311,28 @@ def _straddling_item():
 
 
 PAIR_ITEMS.append(_straddling_item())
+# r12 / acrobot 25560: a candidate the guard stops leaves the list, the rest are renumbered
+PAIR_ITEMS.append(
+    {"id": "p7", "date": "2026-06-03", "amount": "1999", "currency": "HUF", "original": "",
+     "partner": "Akvárium Szerviz Kft.", "narrative": "SZ-2026/0815", "type": "ÁTUTALÁS",
+     "candidates": [{"number": "FANK-2026", "date": "2026-06-01", "gross": "1999", "currency": "HUF",
+                     "supplier": "Szállító Kft."},
+                    {"number": "SZ-2026/0815", "date": "2026-06-02", "gross": "1999", "currency": "HUF",
+                     "supplier": "Szállító Kft."},
+                    {"number": "HI-26/000878", "date": "2026-06-02", "gross": "1950", "currency": "HUF",
+                     "supplier": "HANNA Instruments Service Kft."}]})
 
 
 def pair_vector(item):
     try:
-        dto, questions, options = offline.build("missing_invoice_pair", item)
+        dto, questions, options, back, dropped = offline.build_with_map("missing_invoice_pair", item)
     except shadow.Blocked as b:
         return {"blocked": b.outcome, "detail": b.detail}
     return {"body": json.dumps({"state": dto.fields, "model": shadow.MODEL, "questions": questions},
                                ensure_ascii=False),
-            "placeholders": dto.counts, "options": options}
+            "placeholders": dto.counts, "options": options,
+            "kept": [int(v[1:]) for k, v in back.items() if k != "NONE"],
+            "dropped": dropped}
 
 
 out["pairing"] = {"items": PAIR_ITEMS, "unknown": [pair_vector(i) for i in PAIR_ITEMS]}
@@ -324,6 +342,6 @@ out["pairing"]["known"] = [pair_vector(i) for i in PAIR_ITEMS]
 os.remove(kpath)
 redact._KNOWN_CACHE.clear()
 
-json.dump(out, open(os.path.join(VEC, "r11-expected.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+json.dump(out, open(os.path.join(VEC, "expected.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print(f"patterns {len(P)}, cases {len(out['cases'])}, known cases {len(KNOWN_TEXTS)}, "
       f"common subset {len(common_subset)} of {len(redact.COMMON)} (after intersect)")

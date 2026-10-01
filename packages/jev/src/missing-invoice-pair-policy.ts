@@ -11,7 +11,7 @@
  *   soha:              automatikus parositas -- az ember parosit, a mai kezi uton
  */
 import { isHiddenControl } from "./asset-category-prefill.js";
-import { JEV_MODEL, PAIR_POLICY_KEY } from "./redact-r11-data.js";
+import { JEV_MODEL, PAIR_POLICY_KEY } from "./redact-data.js";
 
 export const MISSING_INVOICE_PAIR_POLICY = {
   key: PAIR_POLICY_KEY,

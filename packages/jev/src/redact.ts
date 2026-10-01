@@ -1,18 +1,20 @@
 /**
- * AZ R11 KITAKARO, TYPESCRIPTBEN.
+ * A KITAKARO (r12), TYPESCRIPTBEN.
  *
  * === A REFERENCIA A PYTHON ===
  *
- * A marveen `scripts/jev/redact.py` (r11) a referencia: azzal mertuk a DEV-et es a
+ * A marveen `scripts/jev/redact.py` a referencia. Az r11-gyel mertuk a DEV-et es a
  * HOLDOUT-ot (Balazs: PD-006 szukitese, 2026-10-01 04:38 UTC; a HOLDOUT kapuja
- * 0,9-en atment). Elesben az fusson, amit mertunk, ezert:
+ * 0,9-en atment); az r12 csak az ort valtoztatja (acrobot 25567: a csupasz
+ * ceg-alias a teljes, jogi formas neven belul atmegy), es friss meresre var.
+ * Elesben az fusson, amit mertunk, ezert:
  *
- *   - minden minta es szolista a Pythonbol GENERALT (`redact-r11-data.ts`, a
- *     `scripts/redact-r11-export.py` irja ki), kezzel masolt minta nincs;
+ *   - minden minta es szolista a Pythonbol GENERALT (`redact-data.ts`, a
+ *     `scripts/redact-export.py` irja ki), kezzel masolt minta nincs;
  *   - a mintakat a `pyre` forditja, mert a Python `\w`, `\d`, `\b`, `\s` es `$`
  *     mast jelent, mint a JS-e;
  *   - csak a PROGRAM-LOGIKA van kezzel atirva (ez a fajl), es a tesztek a Python
- *     kimenetevel vetik ossze (`redact-vectors/r11-expected.json`).
+ *     kimenetevel vetik ossze (`redact-vectors/expected.json`).
  *
  * BARMELYIK OLDAL VALTOZASA = AZ EXPORT ES A PARITAS-FUTAS UJRA (README, "Kitakaras").
  *
@@ -48,7 +50,7 @@ import {
   REDACTION_VERSION,
   SUFFIXES,
   SUFFIXES_F,
-} from "./redact-r11-data.js";
+} from "./redact-data.js";
 
 export { REDACTION_VERSION };
 
@@ -339,18 +341,29 @@ export class Redactor {
         if (rx.test(t)) problems.add(kind);
         rx.lastIndex = 0;
       }
-    if (this.known)
-      for (const [s, e, kind] of knownSpans(t, this.known)) {
+    if (this.known) {
+      const spans = knownSpans(t, this.known);
+      const formed = (s: number, e: number) =>
+        RX.formInHit.test(t.slice(s, e)) ||
+        matchAt(RX.formAfterHit, t, e) !== null;
+      for (const [s, e, kind] of spans) {
+        // r12 (acrobot 25567): a bare ORG hit passes when it is the start of a
+        // longer allowed ORG hit that reaches a legal form ("HANNA" inside
+        // "HANNA Instruments Service Kft."); the longer hit is checked itself too
+        const inside = spans.some(
+          ([s2, e2, k2]) =>
+            allow.has(k2) && s2 === s && e2 > e && formed(s2, e2),
+        );
         const allowed =
           allow.has(kind) &&
-          (RX.formInHit.test(t.slice(s, e)) ||
-            matchAt(RX.formAfterHit, t, e) !== null) &&
+          (formed(s, e) || inside) &&
           !RX.soleTrader.test(t.slice(s, e + 24));
         if (!allowed) {
           problems.add("KNOWN_ENTITY");
           break;
         }
       }
+    }
     return [...problems].sort();
   }
 

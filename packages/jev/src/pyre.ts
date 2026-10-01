@@ -1,7 +1,7 @@
 /**
  * A PYTHON `re` MINTAK FORDITASA JS `RegExp`-RE, A KITAKARO (redact.ts) SZAMARA.
  *
- * A referencia a marveen `scripts/jev/redact.py` (r11), ami `re.UNICODE`-dal fordit.
+ * A referencia a marveen `scripts/jev/redact.py`, ami `re.UNICODE`-dal fordit.
  * A ket motor sok jelet MASKENT ert, es a kulonbseg nema: egy rossz forditas nem
  * dob, hanem egy ekezetes nevet atenged. Ezert a kitakaro mintai SZO SZERINT a
  * Python-alakban allnak, es ez a fuggveny forditja oket, egy helyen:

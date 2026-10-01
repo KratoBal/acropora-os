@@ -65,28 +65,34 @@ DATABASE_URL=... node packages/jev/scripts/report-decision-runs.mjs --out <mappa
 - **A kategória nélkül mentett eszköz** a SHOWN ágon OVERRIDDEN, a HIDDEN ágon SHADOW_MISMATCH (így oldja fel az API). A riport ezt külön számolja („kategória nélkül mentve”, „üresen”), mert a D4 (még a létrehozás utáni árnyék-futásra írva) a 14 napig kategória nélkül maradt eszközt EXPIRED-nek szánta. A V1 a mentéskor old fel, ezért itt ez az eset nem EXPIRED; hogy melyik olvasat a helyes, az a review döntése.
 - **Konzisztencia:** a tárolt `exposure`-t a mai szabállyal újraszámolja. Ha eltér, egy kategória-kód megváltozott a futás óta, és a csoportosítás félrevezethet.
 
-## Kitakarás (r11)
+## Kitakarás
 
 A Hiányzó számlák párosításának kitakarója. Balázs döntése: PD-006 szűkítése a párosításra, 2026-10-01
 04:38 UTC; a HOLDOUT kapuja r11-gyel 0,9-en átment. acrobot döntése (25537): TypeScript port, a
-**Python a referencia** (marveen `scripts/jev/redact.py`), és élesben az fut, amit mértünk.
+**Python a referencia** (marveen `scripts/jev/redact.py`), és élesben az fut, amit mértünk. A verzió a
+generált adatban áll (`REDACTION_VERSION`).
+
+**r12** (acrobot 25567): az őrben a csupasz cég-alias (a `build_known` csupa nagybetűs aliasa, például
+`HANNA`) átmegy, ha egy hosszabb, ugyanott kezdődő és jogi formáig érő cég-találat eleje. A párosítás a
+megálló jelöltet ejti ki, nem az egész tételt (acrobot 25560); a Python `offline.build_with_map` a
+referenciája, és a vektorok ezt is összevetik. Az r12 friss mérésre vár.
 
 | Fájl                                 | Mi                                                                                                                                              |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/redact.ts`                      | a kitakaró program-logikája, kézzel átírva                                                                                                      |
 | `src/pyre.ts`                        | a Python `re` minták fordítása JS-re (`\w`, `\d`, `\b`, `\s`, `$` mást jelent a két motorban)                                                   |
-| `src/redact-r11-data.ts`             | **generált**: minden minta, szólista és a mért kérdés szövege, a Python modulból kiolvasva                                                      |
+| `src/redact-data.ts`                 | **generált**: minden minta, szólista és a mért kérdés szövege, a Python modulból kiolvasva                                                      |
 | `src/pairing.ts`                     | a mért kérés: a szövegek, a magánszemély-maszk, a mezőnkénti kitakarás, az őr, a vágás                                                          |
 | `src/known-builder.ts`               | a known-entity lista az adatbázis soraiból: a `build_known.py` (acrobot) mezői, aliasai, szűrője és `EXTRA` nevei; a vektorok ezt is összevetik |
 | `src/missing-invoice-pair-policy.ts` | a javaslat szabályai: kapcsoló (`live`), 0,9-es küszöb, 10%-os rejtett kontroll a terhelés azonosítóján, feloldás a kézi párosításkor           |
 | `redact-vectors/`                    | **generált**: a két leak-készlet és a Python kimenete minden esetre                                                                             |
-| `scripts/redact-r11-export.py`       | a generátor                                                                                                                                     |
+| `scripts/redact-export.py`           | a generátor                                                                                                                                     |
 
 **Bármelyik oldal változása = az export és a paritás-futás újra:**
 
 ```bash
 cd /home/marveen/marveen/agents/nautilus/acropora-os
-python3 -B packages/jev/scripts/redact-r11-export.py <marveen>/scripts/jev
+python3 -B packages/jev/scripts/redact-export.py <marveen>/scripts/jev
 pnpm --filter @acropora/jev test
 ```
 
