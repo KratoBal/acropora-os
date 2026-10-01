@@ -131,6 +131,48 @@ describe("the missing list (xlsx)", () => {
   });
 });
 
+describe("the missing list names the missing invoices (acrobot 25610)", () => {
+  it("lists every paired number, the missing ones BY NAME and the difference", async () => {
+    const { missing } = service({
+      debits: [
+        debit("2026-08-20", 3000, "Fluidra Magyarország Kft.", {
+          narrative: "KS26/08132 KS26/08382 KS26/08999",
+        }),
+      ],
+      documents: [
+        document({
+          id: "a",
+          number: "KS26/08132",
+          supplierName: "Fluidra Magyarország Kft.",
+          source: "NAV",
+          hasOriginal: false,
+        }),
+        document({
+          id: "b",
+          number: "KS26/08382",
+          supplierName: "Fluidra Magyarország Kft.",
+        }),
+      ],
+      files: {},
+    });
+    const { content } = await missing.missingXlsx("2026-08");
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(content as unknown as ExcelJS.Buffer);
+    const sheet = workbook.worksheets[0]!;
+    const header = (sheet.getRow(1).values as unknown[]).slice(12);
+    assert.deepEqual(header, [
+      "Számla száma",
+      "Hiányzó számla",
+      "Összeg-eltérés",
+    ]);
+    const row = sheet.getRow(2).values as unknown[];
+    assert.deepEqual(
+      [row[12], row[13], row[14]],
+      ["KS26/08132, KS26/08382", "KS26/08132, KS26/08999", "1000 HUF"],
+    );
+  });
+});
+
 describe("the accountant package (pdf)", () => {
   it("puts a cover first, then every attachable original, and keeps the found items only", async () => {
     const { missing, asked } = service({

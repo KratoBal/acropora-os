@@ -60,6 +60,9 @@ export function toChargeRow(item: MissingInvoiceItem): ChargeRow {
       : null,
     matchedBy: item.matchedBy,
     comment: item.comment,
+    documentNumbers: item.documentNumbers,
+    missingNumbers: item.missingNumbers,
+    amountDifference: item.amountDifference,
     paperOriginal: item.paperOriginal,
   };
 }

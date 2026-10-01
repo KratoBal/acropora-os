@@ -49,6 +49,9 @@ const charge = (overrides: Partial<ChargeRow> = {}): ChargeRow => ({
   document: null,
   matchedBy: null,
   comment: null,
+  documentNumbers: [],
+  missingNumbers: [],
+  amountDifference: null,
   paperOriginal: false,
   ...overrides,
 });
@@ -748,6 +751,53 @@ describe("MissingInvoicesDrawer", () => {
     expect(
       screen.queryByRole("checkbox", { name: "Az eredeti papíron megvan" }),
     ).toBeNull();
+  });
+
+  it("several invoices in one payment: all numbers, the missing ones BY NAME, and the difference", () => {
+    // Fluidra, 2026-09-25 (acrobot 25610): a kozlemeny ot szamlat nevez meg
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        row={charge({
+          state: "ORIGINAL_MISSING",
+          document: { number: "KS26/08132", source: "NAV" },
+          matchedBy: "RULE",
+          documentNumbers: [
+            "KS26/08132",
+            "KS26/08382",
+            "KS26/08450",
+            "KS26/08541",
+            "KS26/08638",
+          ],
+          missingNumbers: ["KS26/08132", "KS26/08382"],
+          amountDifference: { amount: "-76096", currency: "HUF" },
+        })}
+      />,
+    );
+    expect(
+      screen.getByText(
+        /Mind a 5 számla: KS26\/08132, KS26\/08382, KS26\/08450/,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Hiányzik: KS26/08132, KS26/08382")).toBeTruthy();
+    expect(screen.getByText(/Összeg-eltérés a számlákhoz képest/)).toBeTruthy();
+  });
+
+  it("one invoice and nothing missing: no list, no missing line, no difference", () => {
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        row={charge({
+          state: "FOUND",
+          document: { number: "INV-2026-08177", source: "MAILBOX" },
+          matchedBy: "RULE",
+          documentNumbers: ["INV-2026-08177"],
+        })}
+      />,
+    );
+    expect(screen.queryByText(/Mind a/)).toBeNull();
+    expect(screen.queryByText(/Hiányzik:/)).toBeNull();
+    expect(screen.queryByText(/Összeg-eltérés/)).toBeNull();
   });
 
   it("a candidate without a gross shows a dash, and one with only NAV data says so", () => {

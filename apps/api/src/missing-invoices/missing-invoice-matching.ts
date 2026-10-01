@@ -99,6 +99,18 @@ export interface MatchOutcome {
   reason: string;
   /** A drawer jelöltjei: a partner ablakba eső dokumentumai. */
   candidates: CandidateDocument[];
+  /**
+   * A KÖZLEMÉNY ÁLTAL MEGNEVEZETT, DE HIÁNYZÓ SZÁMLÁK, név szerint (Balázs,
+   * acrobot 25610: „ki kellene írni melyik hiányzik”): a párosított számla,
+   * aminek nincs eredetije, és a megnevezett szám, amihez egyáltalán nincs
+   * dokumentum. Csak az 1. szabály tölti.
+   */
+  missingNumbers?: string[];
+  /**
+   * A terhelés és a párosított számlák összegének különbsége (terhelés mínusz
+   * számlák), ha a tűrésen túl eltér. A párosítás ettől még áll.
+   */
+  amountDifference?: { amount: Prisma.Decimal; currency: string };
 }
 
 const GENERIC =
@@ -188,8 +200,41 @@ const narrativeTokens = (narrative: string) =>
 const SHORT_NUMBER = 8;
 
 /**
- * A SZÁMLA SZÁMA A KÖZLEMÉNYBEN: a szám a közlemény EGY EGÉSZ SZAVA, és rövid
- * számnál a partner is egyezik.
+ * A BANK TÖRDELÉSE: a közleményt mezőkre vágja, és a mezőhatár egy szám KÖZEPÉRE
+ * eshet (Fluidra, 2026-09-25: „KS26/0 8450”, „K S26/08541”). Ezért egy szám a
+ * közlemény legfeljebb ennyi SZOMSZÉDOS szavának összefűzéséből is állhat. Az
+ * összefűzött alak csak a partner saját számlájára talál: két számjegy-csoport
+ * összefűzve hosszú, ártatlannak látszó számot ad (bankszámla-darabok, dátum).
+ */
+const JOIN_LIMIT = 3;
+
+interface NarrativeSpan {
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+}
+
+function narrativeSpans(narrative: string): NarrativeSpan[] {
+  const tokens = narrativeTokens(narrative);
+  const spans: NarrativeSpan[] = [];
+  for (let start = 0; start < tokens.length; start++)
+    for (let n = 1; n <= JOIN_LIMIT && start + n <= tokens.length; n++)
+      spans.push({
+        start,
+        end: start + n,
+        text: tokens.slice(start, start + n).join(""),
+      });
+  return spans;
+}
+
+/** Egy szám alakja: betű helyén `a`, számjegy helyén `9`, a többi jel marad. */
+const shapeOf = (number: string) =>
+  number.replace(/\p{L}/gu, "a").replace(/\p{N}/gu, "9");
+
+/**
+ * A SZÁMLA SZÁMA A KÖZLEMÉNYBEN: a szám a közlemény EGY EGÉSZ SZAVA (vagy a bank
+ * tördelése miatt szomszédos szavainak összefűzése), és rövid számnál a partner
+ * is egyezik. A közlemény-darabot adja vissza, vagy `null`-t.
  *
  * Mérve 2026-10-01, az exchange kivonatain (2025-12 .. 2026-08, 1144
  * terhelés), barracuda lelete nyomán: a régi részszöveg-keresés 158
@@ -199,19 +244,86 @@ const SHORT_NUMBER = 8;
  * a kötőjel a szám része. Ezzel a szabállyal a 158-ból 156 marad, és a kieső
  * kettő pontosan a két rossz.
  */
-function numberInNarrative(debit: MatchableDebit, document: CandidateDocument) {
-  const tokens = narrativeTokens(debit.narrative);
+function spanNaming(
+  debit: MatchableDebit,
+  document: CandidateDocument,
+  spans: readonly NarrativeSpan[],
+): NarrativeSpan | null {
   // a számla száma MELLETT a hivatkozásai is (#1323: a Fauna Marin közleménye a
   // rendelésszámot nevezi meg), ugyanazzal az egész-szó szabállyal
-  return [document.number, ...(document.references ?? [])].some((raw) => {
+  for (const raw of [document.number, ...(document.references ?? [])]) {
     const number = compact(raw);
-    return (
-      number.length >= 5 &&
-      tokens.includes(number) &&
-      (number.length >= SHORT_NUMBER ||
-        samePartner(debit.counterpartyName ?? "", document.supplierName))
-    );
-  });
+    if (number.length < 5) continue;
+    for (const span of spans) {
+      if (span.text !== number) continue;
+      const joined = span.end - span.start > 1;
+      const partner = samePartner(
+        debit.counterpartyName ?? "",
+        document.supplierName,
+      );
+      if (joined ? partner : number.length >= SHORT_NUMBER || partner)
+        return span;
+    }
+  }
+  return null;
+}
+
+/**
+ * A MEGNEVEZETT, DE DOKUMENTUM NÉLKÜLI SZÁMOK: a közlemény olyan darabjai, amik
+ * UGYANOLYAN ALAKÚAK, mint a már megtalált számlák száma (`KS26/08132` mellett
+ * egy `KS26/08999`), és egyetlen megtalált darabbal sem fednek át. Az alak
+ * nélkül minden szó számlaszámnak látszana.
+ */
+function namedWithoutDocument(
+  spans: readonly NarrativeSpan[],
+  named: readonly { document: CandidateDocument; span: NarrativeSpan }[],
+  /** MINDEN ismert dokumentum száma és hivatkozása: a másik terheléshez párosított nem hiányzik. */
+  known: ReadonlySet<string>,
+): string[] {
+  const shapes = new Set(named.map((n) => shapeOf(compact(n.document.number))));
+  const taken = named.map((n) => n.span);
+  const overlaps = (a: NarrativeSpan, b: NarrativeSpan) =>
+    a.start < b.end && b.start < a.end;
+  const out: string[] = [];
+  // a hosszabb darab előbb: a „KS26/0 8450” egy szám, nem kettő
+  for (const span of [...spans].sort(
+    (a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start,
+  )) {
+    if (!shapes.has(shapeOf(span.text)) || known.has(span.text)) continue;
+    if (taken.some((t) => overlaps(t, span))) continue;
+    taken.push(span);
+    out.push(span.text.toUpperCase());
+  }
+  return out;
+}
+
+/**
+ * A terhelés mínusz a számlák összege, ha a tűrésen túl eltér; `null`, ha
+ * egyezik, vagy nem összeadható (hiányzó bruttó, eltérő devizák).
+ */
+function invoiceDifference(
+  debit: MatchableDebit,
+  documents: readonly CandidateDocument[],
+): { amount: Prisma.Decimal; currency: string } | null {
+  if (documents.some((d) => d.gross === null)) return null;
+  const currency = documents[0]!.currency;
+  if (documents.some((d) => d.currency !== currency)) return null;
+  const paid =
+    currency === debit.currency
+      ? debit.amount
+      : debit.original?.currency === currency
+        ? debit.original.amount
+        : null;
+  if (!paid) return null;
+  const total = documents.reduce(
+    (sum, d) => sum.plus(d.gross!),
+    new Prisma.Decimal(0),
+  );
+  const gap = paid.minus(total);
+  // a kerekítési tűrésen belül (HUF-ban 5 Ft, devizában 5 cent) nem eltérés
+  return gap.abs().lte(currency === "HUF" ? 5 : 0.05)
+    ? null
+    : { amount: gap, currency };
 }
 
 function stateOf(documents: CandidateDocument[]): ItemState {
@@ -298,6 +410,11 @@ export function matchMonth(input: {
   const used = new Set<string>();
   const outcomes = new Map<string, MatchOutcome>();
   const free = () => input.documents.filter((d) => !used.has(d.id));
+  const knownNumbers = new Set(
+    input.documents.flatMap((d) =>
+      [d.number, ...(d.references ?? [])].map((n) => compact(n)),
+    ),
+  );
 
   // 0. a kézi párosítás elsőbbsége: ezek a dokumentumok senki másé
   for (const debit of input.debits) {
@@ -365,9 +482,32 @@ export function matchMonth(input: {
   // 07-15-i 1999 Ft-os Tesla-fizetés vitte el a 08-07-i 1998 Ft-os számláját).
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
-    // 1. a számla száma a közleményben
-    const byNumber = free().find((d) => numberInNarrative(debit, d));
-    if (byNumber) found(debit, [byNumber], "a számla száma a közleményben");
+    // 1. a számla száma a közleményben: MINDEN megnevezett számla (acrobot 25610)
+    const spans = narrativeSpans(debit.narrative);
+    const named: { document: CandidateDocument; span: NarrativeSpan }[] = [];
+    for (const d of free()) {
+      const span = spanNaming(debit, d, spans);
+      if (span) named.push({ document: d, span });
+    }
+    if (named.length === 0) continue;
+    const documents = named.map((n) => n.document);
+    found(debit, documents, "a számla száma a közleményben");
+    const missing = [
+      ...documents.filter((d) => !d.hasOriginal).map((d) => d.number),
+      ...namedWithoutDocument(spans, named, knownNumbers),
+    ];
+    const difference = invoiceDifference(debit, documents);
+    const outcome = outcomes.get(debit.id)!;
+    outcomes.set(debit.id, {
+      ...outcome,
+      // a megnevezett, de dokumentum nélküli szám miatt a tétel nem Megvan
+      state:
+        outcome.state === "FOUND" && missing.length > 0
+          ? "ORIGINAL_MISSING"
+          : outcome.state,
+      ...(missing.length > 0 ? { missingNumbers: missing } : {}),
+      ...(difference ? { amountDifference: difference } : {}),
+    });
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
