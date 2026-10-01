@@ -39,7 +39,7 @@ async function main(argv: readonly string[]): Promise<number> {
     ki(`változna: ${changed.length} fájl (látott: ${changes.length})\n`);
     for (const c of changed)
       ki(
-        `  ${c.source}\t${c.externalId}\t${c.fileName}\t${c.before ?? "(új)"} -> ${c.after}${c.detail ? `\t${c.detail}` : ""}\n`,
+        `  ${c.source}\t${c.externalId}\t${c.fileName}\t${c.before ?? "(új)"} -> ${c.after}${c.detail ? `\t${c.detail}` : ""}${c.sameNumber ? `\t!! azonos számú már tárolva: ${c.sameNumber.join(", ")}` : ""}\n`,
       );
   }
   ki(

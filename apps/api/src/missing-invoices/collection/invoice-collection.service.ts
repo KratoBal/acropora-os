@@ -71,6 +71,13 @@ export interface InvoiceCollectionDryChange {
   before: string | null;
   after: InvoiceCollectionVerdict;
   detail?: string;
+  /**
+   * MÁR TÁROLT, UGYANILYEN SZÁMÚ DOKUMENTUM, más tartalommal (acrobot 25800,
+   * murena review-ja): ilyenkor az éles újraolvasás egy második dokumentumot
+   * tárolna ugyanarra a számlára (például a kézzel feltöltött másik fájl
+   * mellé). `fájlnév (eredet)` alakban, hogy a sor egyedül is eldönthető legyen.
+   */
+  sameNumber?: string[];
 }
 
 const emptyCounts = (): InvoiceCollectionCounts => ({
@@ -459,6 +466,12 @@ export class InvoiceCollectionService {
       ? importResult.documentKind === "PROFORMA"
       : looksLikeProforma(text);
     if (this.dry) {
+      const number = importResult?.invoiceNumber ?? textReading?.invoiceNumber;
+      const sameNumber = number
+        ? (await this.repository.sameNumberDocuments(number)).map(
+            (d) => `${d.fileName} (${d.origin})`,
+          )
+        : [];
       this.dry.push({
         source,
         externalId,
@@ -469,6 +482,7 @@ export class InvoiceCollectionService {
           found.fileName,
         ),
         after: "STORED",
+        ...(sameNumber.length ? { sameNumber } : {}),
         detail: textReading?.cardPayment
           ? `kártyás fizetés: ${textReading.cardPayment.amount} ${textReading.cardPayment.currency}, ${textReading.cardPayment.partner}`
           : (textReading?.bankReference ??

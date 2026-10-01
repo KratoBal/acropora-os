@@ -61,6 +61,8 @@ function setup(input: {
   retryDue?: boolean;
   /** a fájlok korábbi ítélete, a száraz újraértékelés ehhez méri */
   before?: string | null;
+  /** a már tárolt dokumentumok számlaszám szerint */
+  storedNumbers?: Record<string, { fileName: string; origin: string }[]>;
 }) {
   const stored: CollectedDocumentInput[] = [];
   const recorded: string[] = [];
@@ -83,6 +85,7 @@ function setup(input: {
     unmatchedRetryDue: async () => input.retryDue ?? true,
     verdictOf: async () => input.before ?? null,
     hasContent: async (sha: string) => knownShas.has(sha),
+    sameNumberDocuments: async (n: string) => input.storedNumbers?.[n] ?? [],
     navNumbers: async (base: string) => input.nav?.[base] ?? [],
     debitNarratives: async () => input.debits ?? [],
     cardDebits: async () => input.cardDebits ?? [],
@@ -569,6 +572,39 @@ describe("InvoiceCollectionService", () => {
     // száraz: sem futás, sem ítélet, sem dokumentum; és az újraolvasás kényszerített
     assert.deepEqual([stored, recorded, started], [[], [], []]);
     assert.deepEqual(seenFlags, [true]);
+  });
+
+  it("marks a dry row whose invoice number is already stored from another file (acrobot 25800)", async () => {
+    const invoice = await pdf([
+      "INVOICE",
+      "De Jong Marinelife B.V., VAT NL001234567B01",
+      "Customer: Acropora Kft., VAT HU23916229",
+      "Invoice number 26007910",
+      "IBAN NL30RABO0322265428",
+    ]);
+    const dry = (
+      storedNumbers?: Record<string, { fileName: string; origin: string }[]>,
+    ) =>
+      setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: { "m-1": [{ fileName: "inv26007910.pdf", buffer: invoice }] },
+        debits: [
+          "1.703,08 EUR 26007910 Spijksesteeg 2 A RABONL2U NL30RABO0322265428 De Jong Marinelife B.V. 4212 SPIJK,",
+        ],
+        before: "UNMATCHED",
+        storedNumbers,
+      }).collection.reevaluate(false);
+    // a kézzel feltöltött másik fájl ugyanezzel a számmal: az éles futás mellé tárolna
+    const marked = await dry({
+      "26007910": [{ fileName: "DeJong_szamla_scan.pdf", origin: "UPLOAD" }],
+    });
+    assert.deepEqual(
+      marked.changes.map((c) => [c.fileName, c.after, c.sameNumber]),
+      [["inv26007910.pdf", "STORED", ["DeJong_szamla_scan.pdf (UPLOAD)"]]],
+    );
+    const clean = await dry();
+    assert.equal(clean.changes[0]!.after, "STORED");
+    assert.equal("sameNumber" in clean.changes[0]!, false);
   });
 
   it("re-evaluates for real with apply: an ordinary run that re-reads although it is not due", async () => {
