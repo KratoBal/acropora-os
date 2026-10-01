@@ -958,6 +958,10 @@ export {
 export type {
   DashboardExpectedArrivalsWidgetData,
   DashboardLayoutEntry,
+  DashboardMaintenanceCalendarWidgetData,
+  DashboardMaterialRequestsWidgetData,
+  DashboardServiceTicketsWidgetData,
+  DashboardWorksheetsWidgetData,
   DashboardLayoutInputResult,
   DashboardLayoutResponse,
   DashboardLayoutUpdate,
