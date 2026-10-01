@@ -4,6 +4,11 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  codNarrativePrefix,
+  dryRunReport,
+  glsCodMarkPaidMode,
+} from "./gls-cod-paid-marks.dry-run.js";
+import {
   decideGlsTransfer,
   type GlsCodReportInput,
   type OutgoingInvoiceInput,
@@ -248,6 +253,54 @@ describe("decideGlsTransfer: which invoices of a proven transfer are skipped, an
         new Map([["A", invoice(100)]]),
       ),
       { marked: ["A:100"], skipped: [] },
+    );
+  });
+});
+
+describe("the dry run's list and switch", () => {
+  it("off unless switched to dry or live; the bank narrative's COD day", () => {
+    assert.deepEqual(
+      [undefined, "", "on", "dry", " live "].map(glsCodMarkPaidMode),
+      ["off", "off", "off", "dry", "live"],
+    );
+    assert.equal(codNarrativePrefix("2026-09-17"), "COD-2026.09.17");
+  });
+
+  it("names a refused transfer and why, every mark, every skip with its reason, and the total", () => {
+    const report = dryRunReport([
+      {
+        transferDate: "2026-09-03",
+        markable: false,
+        refusal: "REPORT_NEEDS_REVIEW",
+        transferred: "109437",
+      },
+      {
+        transferDate: "2026-09-17",
+        markable: true,
+        transferred: "160880",
+        creditId: "bt",
+        marks: [
+          {
+            invoiceNumber: "ACRW-2026/00481",
+            date: "2026-09-17",
+            amount: "105831",
+            title: "utánvét",
+            note: "GLS utánvét, 2026-09-17, 5 Ft-os kerekítés: beszedve 105830",
+          },
+        ],
+        skipped: [{ invoiceNumber: "ACRW-2026/00485", reason: "ALREADY_PAID" }],
+      },
+    ]);
+    assert.equal(
+      report,
+      [
+        "2026-09-03  utalt 109437 Ft  NEM JELÖLHETŐ: a részletező egy sora még ellenőrzésre vár",
+        "2026-09-17  utalt 160880 Ft  jelölhető",
+        "  ACRW-2026/00481\t105831 Ft\t2026-09-17\tutánvét\tGLS utánvét, 2026-09-17, 5 Ft-os kerekítés: beszedve 105830",
+        "  ACRW-2026/00485\tkimarad: már kifizetett (a Számlázz.hu szerint)",
+        "összesen: 1 számla jelölhető, 2 utalásból",
+        "",
+      ].join("\n"),
     );
   });
 });
