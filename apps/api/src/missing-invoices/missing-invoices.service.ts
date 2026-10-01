@@ -628,7 +628,7 @@ export class MissingInvoicesService {
     );
     // minden forrás, aminek a vevője még nincs kiszámolva (payeeCheck NULL):
     // a postafiók lustán, és a cégnév-szabály előtti NOT_COMPANY sorok is,
-    // amiket a 20261001000600 migráció visszaállított (acrobot 25640)
+    // amiket a 20261001000800 migráció visszaállított (acrobot 25640)
     await this.checkPayees(documents.filter((d) => d.payee === "UNKNOWN"));
 
     const ownAccounts = new Set(
