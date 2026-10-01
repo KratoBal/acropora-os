@@ -15,6 +15,17 @@ export interface BankStatementImportResult {
   /** Az olvashatatlan sorok (az első tíz), sorszámmal és okkal. */
   rejected: { line: number; reason: string }[];
   rejectedCount: number;
+  /**
+   * A függő kártyás tételek (az első tíz): a bank még nem könyvelte, dátumuk
+   * nincs, a következő kivonatban jönnek. Nem hiba (acrobot 25637).
+   */
+  pending: {
+    line: number;
+    partner: string | null;
+    amount: string;
+    currency: string;
+  }[];
+  pendingCount: number;
   /** A fájlban szereplő bankszámlák. */
   accounts: { accountNumber: string; currency: string }[];
   /** A fájl könyvelési hónapjai, `ÉÉÉÉ-HH` alakban, növekvően. */

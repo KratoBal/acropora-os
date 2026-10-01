@@ -6,7 +6,7 @@ import Link from "next/link";
 
 import { MISSING_INVOICES_PATH } from "@/components/navigation";
 
-import { formatMonth } from "./missing-invoices-model";
+import { formatAmount, formatMonth } from "./missing-invoices-model";
 
 /**
  * A KIVONAT-FELTÖLTÉS EREDMÉNYE (acrobot 25333): mi lett új, mi volt már meg,
@@ -26,6 +26,9 @@ export function MissingInvoicesImportResult({
 }) {
   const hidden = result.rejectedCount - result.rejected.length;
   const failed = result.rejectedCount > 0;
+  // egy a mezőt még nem küldő API mellett a `pendingCount` hiányzik, és a
+  // feltétel (undefined > 0) a részt magától elhagyja
+  const { pending, pendingCount } = result;
   return (
     <section
       aria-label="A kivonat-feltöltés eredménye"
@@ -71,6 +74,34 @@ export function MissingInvoicesImportResult({
           {hidden > 0 ? (
             <p className="mt-1 text-pilot-grey-700">
               És további {hidden} elutasított sor, ami itt nem látszik.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {pendingCount > 0 ? (
+        <div>
+          <h3 className="font-semibold text-pilot-grey-900">
+            Függő kártyás tételek
+          </h3>
+          <p className="mt-1 text-pilot-grey-700">
+            {pendingCount} kártyás tételt a bank még nem könyvelt, ezért nincs
+            dátuma. Nem hiba: a következő kivonatban jön, akkor kerül be.
+          </p>
+          <ul className="mt-1 space-y-1">
+            {pending.map((row) => (
+              <li key={row.line} className="text-pilot-grey-800">
+                <span className="font-medium tabular-nums">
+                  {row.line}. sor:
+                </span>{" "}
+                {row.partner ?? "Ismeretlen partner"},{" "}
+                {formatAmount(row.amount, row.currency)}
+              </li>
+            ))}
+          </ul>
+          {pendingCount > pending.length ? (
+            <p className="mt-1 text-pilot-grey-700">
+              És további {pendingCount - pending.length} függő tétel.
             </p>
           ) : null}
         </div>

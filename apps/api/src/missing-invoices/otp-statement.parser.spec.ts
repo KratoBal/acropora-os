@@ -78,6 +78,36 @@ describe("parseOtpStatement", () => {
     );
   });
 
+  /*
+    A FÜGGŐ KÁRTYÁS TÉTEL (acrobot 25637, éles: a kártya-számla exportjának
+    Vízművek, Figma és Parkl sora). MI PIROSÍT: ha a dátum nélküli, összeges
+    sor az olvashatatlanok közé kerülne; ha egy csak könyvelési nap nélküli
+    (értéknapos) sor függőnek számítana; ha bekerülne a tételek közé.
+  */
+  it("a pending card line (no booking and no value date) is pending, not rejected", () => {
+    const PENDING =
+      '"1171400626009841";T;-12990;HUF;;;;;"FIGMA";"2026.09.29 7413124583 FIGMA";;;Kártyás művelet;;';
+    const { rows, rejected, pending } = parseOtpStatement(
+      bytes([DEBIT, PENDING, DEBIT.replace("20260801;20260801", ";20260801")]),
+    );
+    assert.deepEqual(
+      [rows.length, rejected.map((r) => r.line), pending],
+      [
+        1,
+        [3],
+        [
+          {
+            line: 2,
+            partner: "FIGMA",
+            amount: "12990",
+            currency: "HUF",
+            transactionType: "Kártyás művelet",
+          },
+        ],
+      ],
+    );
+  });
+
   it("drops a byte-order mark, and refuses bytes that are not UTF-8", () => {
     assert.equal(
       parseOtpStatement(

@@ -10,6 +10,7 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { BankStatementImportRepository } from "./bank-statement-import.repository.js";
 import { BankStatementImportService } from "./bank-statement-import.service.js";
+import { SzamlazzBanktranzService } from "./szamlazz-banktranz.service.js";
 
 /**
  * A KIVONAT-FELTÖLTÉS VALÓDI ADATBÁZISON: a bankszámla egyszer jön létre; a
@@ -34,6 +35,9 @@ async function removeLeftovers() {
   });
   await prisma.bankStatementImport.deleteMany({
     where: { importedByUserId: IMPORTER },
+  });
+  await prisma.bankStatementImport.deleteMany({
+    where: { fileName: { startsWith: "Számlázz.hu banki tranzakció #9900" } },
   });
   await prisma.bankAccount.deleteMany({ where: { accountNumber: ACCOUNT } });
 }
@@ -94,6 +98,56 @@ describe("a havi kivonat feltöltése", { skip: gate.mode === "skip" }, () => {
         where: { bankAccount: { accountNumber: ACCOUNT } },
       }),
       4,
+    );
+  });
+
+  it("the Számlázz.hu transfer and the CSV meet: the same payment is one transaction from either side", async () => {
+    // a fenti teszt utan: 07-30 Bolt 1000, 08-03 Alza 23810 KETSZER, 08-05 Posta 500
+    const KEY = "integracios-teszt-kulcs-12345";
+    const feed = new SzamlazzBanktranzService(
+      new BankStatementImportRepository(),
+      {
+        SZAMLAZZ_BANKTRANZ_MODE: "live",
+        SZAMLAZZ_BANKTRANZ_KEY: KEY,
+      },
+    );
+    const message = (id: number, day: string, amount: number) =>
+      `<banktranz xmlns="http://www.szamlazz.hu/banktranz"><id>${id}</id><bankszamla>${ACCOUNT}</bankszamla>` +
+      `<erteknap>${day}</erteknap><irany>KI</irany><technikai>false</technikai><osszeg>${amount}</osszeg>` +
+      `<devizanem>HUF</devizanem><kozlemeny>teszt</kozlemeny></banktranz>`;
+    const count = () =>
+      prisma.bankTransaction.count({
+        where: { bankAccount: { accountNumber: ACCOUNT } },
+      });
+
+    // a ket Alza-fizetest a tovabbitas ket kulonbozo id-vel foglalja le; a harmadik uj
+    for (const id of [990001, 990002]) {
+      const r = await feed.receive(KEY, message(id, "2026-08-03", 23810));
+      assert.equal(r.status, 200);
+      assert.doesNotMatch(r.body, /hibakod/);
+    }
+    assert.equal(await count(), 4);
+    await feed.receive(KEY, message(990003, "2026-08-03", 23810));
+    assert.equal(await count(), 5);
+    // ugyanaz az id ujra (a 72 oras ujrakuldes): semmi
+    await feed.receive(KEY, message(990001, "2026-08-03", 23810));
+    assert.equal(await count(), 5);
+
+    // a masik irany: elobb a tovabbitas, utana a CSV ugyanarrol a fizetesrol
+    await feed.receive(KEY, message(990004, "2026-08-07", 777));
+    assert.equal(await count(), 6);
+    const later = await service.import(
+      file("export-28.csv", [line("20260807", 777, "Bolt")]),
+      USER,
+    );
+    assert.deepEqual([later.createdCount, later.skippedCount], [0, 1]);
+    assert.equal(await count(), 6);
+    assert.equal(
+      await prisma.bankTransactionSourceKey.count({
+        where: { bankTransaction: { bankAccount: { accountNumber: ACCOUNT } } },
+      }),
+      // 5 CSV-sor (4 + a 08-07-i) es 4 tovabbitott id
+      9,
     );
   });
 });
