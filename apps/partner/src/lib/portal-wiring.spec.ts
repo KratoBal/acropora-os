@@ -770,13 +770,18 @@ describe("a partner munkalap-adatlapja", () => {
    * egy adatlapra szűkített állítás a listát zölden hagyná.
    */
   it("az állapot felirata a közös szótárból jön, a listán is", () => {
+    /*
+     * 2026-10-01 OTA A MEGJELENITETT ALLAPOT (acrobot 25724): a piszkozat a
+     * tetelei szama szerint "Új" vagy "Folyamatban". A felirat tovabbra is a
+     * kozos szotarbol jon, csak a megjelenitett allapot tablajabol.
+     */
     assert.match(
       olvas(MUNKALAP_RESZLET),
-      /worksheetStatusLabel\[current\.status\]/,
+      /worksheetDisplayStatusLabel\[\s*worksheetDisplayStatus\(current\.status, current\.lines\.length\)/,
     );
     assert.match(
       olvas(MUNKALAP_LISTA),
-      /worksheetStatusLabel\[worksheet\.status\]/,
+      /worksheetDisplayStatusLabel\[\s*worksheetDisplayStatus\(\s*worksheet\.status,\s*worksheet\.lineCount/,
     );
     /* ES A NYERS ERTEK SEHOL: egy bennmaradt alak a masik helyen allna. */
     assert.doesNotMatch(olvas(MUNKALAP_LISTA), /\{worksheet\.status\}/);

@@ -24,6 +24,8 @@ import { WorksheetDocuments } from "../worksheet-documents";
 import {
   formatDate,
   formatDateTime,
+  worksheetDisplayLabel,
+  worksheetDisplayPilotVariant,
   worksheetStatusLabel,
   worksheetStatusPilotVariant,
 } from "../worksheet-labels";
@@ -280,8 +282,13 @@ export function PilotWorksheetDetailPage({
                   </span>
                 )}
               </h1>
-              <PilotBadge variant={worksheetStatusPilotVariant(current.status)}>
-                {worksheetStatusLabel[current.status]}
+              <PilotBadge
+                variant={worksheetDisplayPilotVariant(
+                  current.status,
+                  current.lines.length,
+                )}
+              >
+                {worksheetDisplayLabel(current.status, current.lines.length)}
               </PilotBadge>
             </div>
             <p className="text-sm text-pilot-grey-500">

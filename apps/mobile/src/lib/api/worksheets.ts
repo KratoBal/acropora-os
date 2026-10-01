@@ -71,6 +71,12 @@ export interface WorksheetListItem {
   departmentCode: string;
   subject: string;
   status: WorksheetVersionStatus;
+  /**
+   * A JELENLEGI VERZIO TETELEINEK SZAMA. Ebbol dol el, hogy egy piszkozat
+   * "Új" vagy "Folyamatban". ELHAGYHATO: a 2026-10-01 elotti szerver nem
+   * kuldi, es akkor az osszevont nev latszik (`worksheetDisplayLabel`).
+   */
+  lineCount?: number;
   version: number;
   versionCount: number;
   grossAmount: string;

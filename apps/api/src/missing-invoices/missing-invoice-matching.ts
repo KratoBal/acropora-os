@@ -83,6 +83,12 @@ export interface CandidateDocument {
    * is. Ha egy azonosság két terheléshez párosul, az Kétszer fizetett számla.
    */
   identities?: readonly string[];
+  /**
+   * A KÁRTYÁS FIZETÉS(EK), amihez a begyűjtő a NAV nélküli számlát kötötte
+   * (`cardPaymentMatch`): egy, vagy legfeljebb három fizetés, aminek az összege
+   * a számla végösszege (Kia Charge: 40 086 = 21 279 + 18 807).
+   */
+  cardPaymentIds?: readonly string[];
 }
 
 export interface MatchableDebit {
@@ -489,6 +495,30 @@ export function matchMonth(input: {
       reason: "kézzel párosítva",
       candidates: [],
     });
+  }
+
+  // 0b. A BEGYŰJTŐ ÁLTAL A FIZETÉS(EK)HEZ KÖTÖTT SZÁMLA (acrobot 25691): az
+  // összeg és a partner a begyűjtéskor már egyezett, és több fizetésnél csak
+  // így kerülhet egy számla mindegyikhez. Csak ha MINDEGYIK fizetés szabad.
+  for (const document of input.documents) {
+    const ids = document.cardPaymentIds ?? [];
+    if (!ids.length || used.has(document.id)) continue;
+    const debits = ids.map((id) => input.debits.find((d) => d.id === id));
+    if (debits.some((d) => !d || outcomes.has(d.id))) continue;
+    used.add(document.id);
+    for (const debit of debits as MatchableDebit[])
+      outcomes.set(debit.id, {
+        state: stateOf([document]),
+        documents: [document],
+        matchedBy: "RULE",
+        reason:
+          ids.length > 1
+            ? `a számla végösszege ${ids.length} kártyás fizetés összege`
+            : "a számla összege és kiállítója a kártyás fizetésé",
+        candidates: [],
+        // a halmaz egy párosítás: a tagjai egymás miatt nem kétszer fizetettek
+        pairing: `set:${document.id}`,
+      });
   }
 
   const ordered = [...input.debits].sort(
