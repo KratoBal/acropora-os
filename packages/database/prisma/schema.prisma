@@ -6992,7 +6992,8 @@ model InvoiceCollectionItem {
   externalId String
   fileName   String
   sha256     String?
-  /// STORED, NOT_INVOICE, UNMATCHED, DUPLICATE, TOO_LARGE vagy UNREADABLE.
+  /// STORED, NOT_INVOICE, UNMATCHED, OWN_INVOICE, DUPLICATE, TOO_LARGE vagy
+  /// UNREADABLE.
   verdict    String
   /// STORED-nál a létrehozott IncomingSupplierDocument.
   documentId String?
@@ -7013,6 +7014,7 @@ model InvoiceCollectionRun {
   storedCount     Int                              @default(0)
   notInvoiceCount Int                              @default(0)
   unmatchedCount  Int                              @default(0)
+  ownInvoiceCount Int                              @default(0)
   duplicateCount  Int                              @default(0)
   failedCount     Int                              @default(0)
   errorCode       String?

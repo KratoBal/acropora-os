@@ -87,6 +87,7 @@ function setup(input: {
     hasContent: async (sha: string) => knownShas.has(sha),
     sameNumberDocuments: async (n: string) => input.storedNumbers?.[n] ?? [],
     navNumbers: async (base: string) => input.nav?.[base] ?? [],
+    ownAccounts: async () => ["1170900220624460"],
     debitNarratives: async () => input.debits ?? [],
     cardDebits: async () => input.cardDebits ?? [],
     record: async (
@@ -181,6 +182,13 @@ describe("InvoiceCollectionService", () => {
       "Eladó: Acropora Kft., adószám: 23916229-2-13",
       "Vevő: Vevő Bt., adószám: 87654321-2-41",
       "Számla sorszáma: ACRW-2026-00439",
+      "Bankszámlaszám: 11709002-20624460-00000000",
+    ]);
+    // egy szállító számlája, amit se illesztő, se NAV-sor nem ismer
+    const unknown = await pdf([
+      "Invoice",
+      "Supplier VAT: DE152405660",
+      "Invoice number: RE67456",
     ]);
     const { collection, stored, recorded } = setup({
       environment: env(["GMAIL_FOXPOST"]),
@@ -189,6 +197,7 @@ describe("InvoiceCollectionService", () => {
           { fileName: "szamla.pdf", buffer: invoice },
           { fileName: "akcio.pdf", buffer: leaflet },
           { fileName: "E-ACRW-2026-00439.pdf", buffer: ours },
+          { fileName: "RE67456.pdf", buffer: unknown },
         ],
       },
       nav: { "12345678": ["SZ-2026/0815"] },
@@ -220,7 +229,8 @@ describe("InvoiceCollectionService", () => {
     );
     assert.deepEqual(recorded, [
       "m-1/akcio.pdf:NOT_INVOICE",
-      "m-1/E-ACRW-2026-00439.pdf:UNMATCHED",
+      "m-1/E-ACRW-2026-00439.pdf:OWN_INVOICE",
+      "m-1/RE67456.pdf:UNMATCHED",
     ]);
     assert.deepEqual(
       [
@@ -228,8 +238,9 @@ describe("InvoiceCollectionService", () => {
         counts.storedCount,
         counts.notInvoiceCount,
         counts.unmatchedCount,
+        counts.ownInvoiceCount,
       ],
-      [3, 1, 1, 1],
+      [4, 1, 1, 1, 1],
     );
   });
 
@@ -276,6 +287,26 @@ describe("InvoiceCollectionService", () => {
       ],
     );
     assert.deepEqual(recorded, ["m-1/F2609999.PDF:UNMATCHED"]);
+  });
+
+  it("keeps our own invoice out even when a refund debit quotes its number", async () => {
+    // a vevoi visszautalas terhelese a SAJAT kimeno szamlank szamat idezi: a
+    // banki hivatkozas aga nem tarolhatja el szallitoi szamlakent
+    const ours = await pdf([
+      "SZÁMLA",
+      "Eladó: Acropora Kft., adószám: 23916229-2-13",
+      "Vevő: Vevő Bt., adószám: 87654321-2-41",
+      "Számla sorszáma: ACRW-2026-00440",
+      "Bankszámlaszám: 11709002-20624460-00000000",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: { "m-1": [{ fileName: "ACRW-2026-00440.pdf", buffer: ours }] },
+      debits: ["Visszautalás ACRW-2026-00440 Vevő Bt."],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(stored, []);
+    assert.deepEqual(recorded, ["m-1/ACRW-2026-00440.pdf:OWN_INVOICE"]);
   });
 
   it("stores a NAV-less subscription invoice its card payment fits, with the payment's amount and partner (Hetzner)", async () => {
@@ -489,6 +520,23 @@ describe("InvoiceCollectionService", () => {
       [stored.map((d) => d.source), finished, failedFlags],
       [["BALAZS_MAIL"], ["INFO_MAIL:GOOGLE_AUTH_FAILED"], [true]],
     );
+  });
+
+  it("stores a known invoice even when our bank account stands in it", async () => {
+    // például egy csoportos beszedési megbízás: a mi számlánk áll rajta, és mégis bejövő
+    const invoice = await pdf([
+      "SZÁMLA",
+      "Eladó: Szállító Kft., adószám: 12345678-2-42",
+      "Számla sorszáma: SZ-2026/0999",
+      "Terhelendő számla: 11709002-20624460-00000000",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: { "m-1": [{ fileName: "sz.pdf", buffer: invoice }] },
+      nav: { "12345678": ["SZ-2026/0999"] },
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual([stored.length, recorded], [1, []]);
   });
 
   /*
