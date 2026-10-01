@@ -418,6 +418,35 @@ describe("MissingInvoiceJevService: a feloldas a kezi parositaskor", () => {
     }
   });
 
+  it("arnyek-mod (acrobot 25821): hiv es rogzit, de semmit nem mutat, es a kezi parositas a cimke", async () => {
+    for (const [paired, want] of [
+      ["docB", "SHADOW_MATCH"],
+      ["docA", "SHADOW_MISMATCH"],
+    ] as const) {
+      const p = szolgaltato(valasz("c1", 0.99));
+      const t = tarolo();
+      const { s } = szolgaltatas({
+        env: { JEV_MISSING_INVOICE_PAIR: "shadow" },
+        fetch: p.fetch,
+        repo: t.repo,
+      });
+      assert.equal(s.enabled(), true);
+      // a LATHATO terheles, 0,99-cel: elo modban ez megjelenne
+      assert.deepEqual(await javaslat(s, LATHATO), {
+        enabled: true,
+        documentId: null,
+        confidence: null,
+      });
+      assert.equal(p.hivasok.length, 1);
+      assert.deepEqual(
+        [t.sorok[0]!.status, t.sorok[0]!.exposure, t.sorok[0]!.selectedValue],
+        ["OK", "HIDDEN", "docB"],
+      );
+      await s.resolveOnPair({ bankTransactionId: LATHATO, documentId: paired });
+      assert.equal(t.sorok[0]!.resolution, want);
+    }
+  });
+
   it("a hibas futasnak nincs javaslata, es a feloldas soha nem dob", async () => {
     const t = tarolo();
     const { s } = szolgaltatas({

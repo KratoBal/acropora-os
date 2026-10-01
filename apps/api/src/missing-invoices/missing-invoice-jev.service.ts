@@ -16,6 +16,7 @@ import {
   pairExposure,
   pairResolution,
   pairSuggestionEnabled,
+  pairSuggestionMode,
   type FetchLike,
   type KnownTable,
   type PairCandidate,
@@ -46,7 +47,9 @@ import {
  *
  * === A KORNYEZET ===
  *
- *   JEV_MISSING_INVOICE_PAIR   `live`: fut. Barmi mas vagy hianyzo: KI.
+ *   JEV_MISSING_INVOICE_PAIR   `live`: fut es mutat. `shadow`: fut es rogzit, de
+ *                              soha nem mutat (a kezi parositas a cimke). Barmi
+ *                              mas vagy hianyzo: KI.
  *   TYPESAFE_API_KEY           a kulcs; csak a keres fejlecebe kerul.
  *   JEV_COMMON_WORDS           a kozonseges szavak fajlja (a flotta adja, a repoban
  *                              nincs). HIANYABAN NEM HIV: nelkule a kitakaro nem
@@ -284,6 +287,7 @@ export class MissingInvoiceJevService {
       : null;
     const exposure = eredmeny.ok
       ? pairExposure({
+          mode: pairSuggestionMode(this.environment.JEV_MISSING_INVOICE_PAIR),
           choice: selected,
           confidence: eredmeny.confidence,
           bankTransactionId: input.bankTransactionId,
