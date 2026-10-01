@@ -236,15 +236,31 @@ export interface RedactorOptions {
   readonly commonWords: ReadonlySet<string>;
   /** A known-entity tabla; `null` = nincs (az A reteg kimarad, a B fut). */
   readonly known: KnownTable | null;
+  /**
+   * A feladat sajat szavai, amik itt megorzott szonak szamitanak, mint a
+   * Python `redact.preserving(terms)` blokkjaban (a level-besorolo "Invoice",
+   * "Proforma" szavai). A mindig kitakart fajtakat (e-mail, telefon, IBAN,
+   * adoszam) minta fogja, nem szo, tehat ez sosem fedi fel oket; az or nem olvassa.
+   */
+  readonly preserve?: Iterable<string>;
 }
 
 export class Redactor {
   private readonly common: ReadonlySet<string>;
   private readonly known: KnownTable | null;
+  private readonly preserved: ReadonlySet<string>;
+  private readonly preserveMulti: readonly RegExp[];
 
   constructor(options: RedactorOptions) {
     this.common = options.commonWords;
     this.known = options.known;
+    const extra = [...(options.preserve ?? [])].map(fold);
+    this.preserved = extra.length
+      ? new Set([...PRESERVED, ...extra])
+      : PRESERVED;
+    this.preserveMulti = extra.length
+      ? multiWordPatterns(this.preserved)
+      : PRESERVE_MULTI;
   }
 
   /**
@@ -264,7 +280,7 @@ export class Redactor {
     try {
       const text = input.normalize("NFC");
       let spans = this.findSpans(text);
-      const keep = preservedRanges(text);
+      const keep = preservedRanges(text, this.preserveMulti);
       if (keep.length)
         spans = spans.filter(
           (sp) =>
@@ -379,7 +395,7 @@ export class Redactor {
           const host = fold(text.slice(s, e));
           if (
             host.endsWith("acropora.hu") ||
-            PRESERVED.has(host.split(".")[0]!) ||
+            this.preserved.has(host.split(".")[0]!) ||
             [
               "github.com",
               "discord.com",
@@ -398,7 +414,9 @@ export class Redactor {
             (common &&
               words.some(
                 (w) =>
-                  this.isCommonMiss(w) && !PRESERVED.has(w) && !LABEL.has(w),
+                  this.isCommonMiss(w) &&
+                  !this.preserved.has(w) &&
+                  !LABEL.has(w),
               ))
           )
             spans.push([s, e, "PERSON"]);
@@ -406,11 +424,11 @@ export class Redactor {
         }
         if (
           kind === "HANDLE" &&
-          isPreserved(lstripAt(text.slice(s, e)).split("@")[0]!)
+          isPreserved(lstripAt(text.slice(s, e)).split("@")[0]!, this.preserved)
         )
           continue;
         if (kind === "PERSON") {
-          const span = personSpan(text, s, e);
+          const span = personSpan(text, s, e, this.preserved);
           if (span) spans.push([span[0], span[1], kind]);
           continue;
         }
@@ -422,7 +440,7 @@ export class Redactor {
     const initial: RegExpExecArray[] = [];
     for (const m of finditer(RX.singleCap, text)) {
       const w = m[0];
-      if (isPreserved(w)) continue;
+      if (isPreserved(w, this.preserved)) continue;
       const base = fold(w);
       if (![...w].some(isLower)) {
         if (cpLen(base) >= 3 && isName(base))
@@ -459,7 +477,7 @@ export class Redactor {
         after &&
         isName(base) === false &&
         starts.has(after.indices![1]![0]) &&
-        !isPreserved(w)
+        !isPreserved(w, this.preserved)
       ) {
         spans.push([m.index, end, "PROPER"]);
         continue;
@@ -492,7 +510,7 @@ export class Redactor {
       )
         for (const p of parts)
           if (
-            !isPreserved(p[0]) &&
+            !isPreserved(p[0], this.preserved) &&
             ![
               "pdf",
               "jpg",
@@ -615,11 +633,14 @@ export function stripSuffix(w: string, depth = 0): string {
   return w;
 }
 
-function isPreserved(spanText: string): boolean {
+function isPreserved(
+  spanText: string,
+  preserved: ReadonlySet<string>,
+): boolean {
   const f = fold(spanText);
-  if (PRESERVED.has(f)) return true;
+  if (preserved.has(f)) return true;
   const words = pySplit(f);
-  return words.length > 0 && words.every((w) => PRESERVED.has(w));
+  return words.length > 0 && words.every((w) => preserved.has(w));
 }
 
 function sentenceInitial(text: string, start: number): boolean {
@@ -645,6 +666,7 @@ function personSpan(
   text: string,
   s: number,
   e: number,
+  preserved: ReadonlySet<string>,
 ): readonly [number, number] | null {
   const frag = text.slice(s, e);
   const first = [...frag][0] ?? "";
@@ -659,8 +681,9 @@ function personSpan(
     w: m[0],
   }));
   while (words.length && OPENER.has(fold(words[0]!.w))) words.shift();
-  while (words.length && isPreserved(words[0]!.w)) words.shift();
-  while (words.length && isPreserved(words[words.length - 1]!.w)) words.pop();
+  while (words.length && isPreserved(words[0]!.w, preserved)) words.shift();
+  while (words.length && isPreserved(words[words.length - 1]!.w, preserved))
+    words.pop();
   if (words.length <= 1) return null;
   return [s + words[0]!.start, s + words[words.length - 1]!.end];
 }
@@ -688,18 +711,25 @@ function foldedIndex(text: string): {
 }
 
 const escapeRx = (s: string) => s.replace(/[\\^$.*+?()[\]{}|/-]/g, "\\$&");
-const PRESERVE_MULTI = PRESERVE.filter((t) => t.includes(" ")).map(
-  (t) =>
-    new RegExp(`(?<![\\p{L}\\p{N}])${escapeRx(t)}(?![\\p{L}\\p{N}])`, "gu"),
-);
+const multiWordPatterns = (terms: Iterable<string>): RegExp[] =>
+  [...terms]
+    .filter((t) => t.includes(" "))
+    .map(
+      (t) =>
+        new RegExp(`(?<![\\p{L}\\p{N}])${escapeRx(t)}(?![\\p{L}\\p{N}])`, "gu"),
+    );
+const PRESERVE_MULTI = multiWordPatterns(PRESERVE);
 
-function preservedRanges(text: string): (readonly [number, number])[] {
+function preservedRanges(
+  text: string,
+  multi: readonly RegExp[],
+): (readonly [number, number])[] {
   const out: (readonly [number, number])[] = [
     ...finditer(RX.council, text),
   ].map((m) => [m.index, m.index + m[0].length] as const);
-  if (PRESERVE_MULTI.length === 0) return out;
+  if (multi.length === 0) return out;
   const { folded, from, to } = foldedIndex(text);
-  for (const rx of PRESERVE_MULTI)
+  for (const rx of multi)
     for (const m of finditer(rx, folded))
       out.push([from[m.index]!, to[m.index + m[0].length - 1]!]);
   return out;
