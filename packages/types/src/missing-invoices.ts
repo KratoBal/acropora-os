@@ -200,9 +200,23 @@ export interface MissingInvoiceCandidate {
   hasOriginal: boolean;
 }
 
+/**
+ * A párosított számla, amelynek vevőjét kézzel lehet (vagy kellett) jelölni:
+ * a szövegréteg nélküli PDF vevője UNKNOWN (acrobot 25633).
+ */
+export interface MissingInvoicePayeeDocument {
+  documentId: string;
+  number: string;
+  payee: "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
+  /** Kézzel jelölték (és ezért kézzel át is jelölhető). */
+  marked: boolean;
+}
+
 export interface MissingInvoiceItemDetail extends MissingInvoiceItem {
   /** A partner ablakba eső, még nem párosított számlái (a drawer jelöltjei). */
   candidates: MissingInvoiceCandidate[];
+  /** A párosított számlák közül a kézzel jelölhető vevőjűek. */
+  payeeDocuments: MissingInvoicePayeeDocument[];
   action: MissingInvoiceAction;
   /** A „Hiányzó számlák” Drive-mappa, ha a szerveren be van állítva. */
   driveFolderUrl: string | null;
@@ -220,6 +234,9 @@ export interface MissingInvoiceCategoryInput {
 }
 export interface MissingInvoicePaperOriginalInput {
   marked: boolean;
+}
+export interface MissingInvoicePayeeInput {
+  payee: "COMPANY" | "NOT_COMPANY";
 }
 
 export interface MissingInvoiceMonthDetail {

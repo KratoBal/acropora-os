@@ -31,7 +31,7 @@ const ACCOUNT = {
 };
 
 /** Állapotos hamis tároló: a döntéseket megjegyzi, és a következő olvasás látja. */
-function setup(env: NodeJS.ProcessEnv = {}) {
+function setup(env: NodeJS.ProcessEnv = {}, extra: CandidateDocument[] = []) {
   const debit = {
     id: "debit-1",
     bankAccountId: ACCOUNT.id,
@@ -62,13 +62,14 @@ function setup(env: NodeJS.ProcessEnv = {}) {
   };
   const matches = new Map<string, string[]>();
   const audit: string[] = [];
+  const marked: string[][] = [];
   let taken = new Set<string>();
   const repository = {
     accounts: async () => [ACCOUNT],
     debits: async () => [debit],
     statementCoverage: async () => new Set([`${ACCOUNT.id}:2026-08`]),
     manualMatches: async () => new Map(matches),
-    candidates: async () => [nav],
+    candidates: async () => [nav, ...extra.map((d) => ({ ...d }))],
     uncheckedMailboxContent: async () => [],
     setPayee: async () => undefined,
     pair: async (input: { bankTransactionId: string; documentId: string }) => {
@@ -86,6 +87,24 @@ function setup(env: NodeJS.ProcessEnv = {}) {
       taken = new Set();
       audit.push("unpaired");
     },
+    markPayee: async (input: {
+      documentIds: string[];
+      payee: "COMPANY" | "NOT_COMPANY";
+    }) => {
+      // a valódi tároló feltétele: csak UNKNOWN vagy már kézzel jelölt
+      const writable = extra.filter(
+        (d) =>
+          input.documentIds.includes(d.id) &&
+          (d.payee === "UNKNOWN" || d.payeeMarked),
+      );
+      for (const d of writable)
+        Object.assign(d, { payee: input.payee, payeeMarked: true });
+      if (writable.length) {
+        marked.push(input.documentIds);
+        audit.push("missing-invoices.payee-marked");
+      }
+      return writable.length;
+    },
     annotate: async (
       _id: string,
       _user: string,
@@ -99,9 +118,27 @@ function setup(env: NodeJS.ProcessEnv = {}) {
   return {
     missing: new MissingInvoicesService(repository, READER, env),
     audit,
+    marked,
     taken: () => taken,
   };
 }
+
+/** Egy feltöltött, beszkennelt (szöveg nélküli) számla: a vevője nem olvasható. */
+const scanned = (
+  payee: CandidateDocument["payee"] = "UNKNOWN",
+): CandidateDocument => ({
+  id: "up-1",
+  source: "UPLOAD",
+  number: "KB-2855/2026",
+  date: "2026-08-10",
+  gross: null,
+  currency: "HUF",
+  supplierName: "Sopro Hungária Kft.",
+  supplierAccounts: [],
+  kind: "INVOICE",
+  payee,
+  hasOriginal: true,
+});
 
 describe("the decisions on a debit", () => {
   it("pairs by hand with the id of either source, and keeps the invoice for one debit", async () => {
@@ -198,5 +235,82 @@ describe("the decisions on a debit", () => {
       ).driveFolderUrl,
       null,
     );
+  });
+
+  /*
+    A VEVŐ KÉZI JELÖLÉSE (acrobot 25633: a beszkennelt Sopro-számla örökre Nem
+    párosodott maradt). MI PIROSÍT: ha a jelölés után sem lenne Megvan; ha a
+    szövegből olvasott vevő kézzel felülírható lenne; ha a kézi jelölést nem
+    lehetne visszafordítani; ha a nem ehhez a terheléshez tartozó számla
+    jelölhető lenne; ha nem kerülne auditba; ha a drawer nem kapná meg.
+  */
+  it("a scanned invoice's payee is marked by hand, and the item is found", async () => {
+    const { missing, audit, marked } = setup({}, [scanned()]);
+    const paired = await missing.pair("debit-1", "up-1", USER);
+    assert.deepEqual(
+      [paired.state, paired.payeeDocuments],
+      [
+        "NOT_MATCHED",
+        [
+          {
+            documentId: "up-1",
+            number: "KB-2855/2026",
+            payee: "UNKNOWN",
+            marked: false,
+          },
+        ],
+      ],
+    );
+    const after = await missing.markPayee("debit-1", "up-1", "COMPANY", USER);
+    assert.deepEqual(
+      [
+        after.state,
+        after.payeeDocuments[0]?.payee,
+        after.payeeDocuments[0]?.marked,
+      ],
+      ["FOUND", "COMPANY", true],
+    );
+    assert.deepEqual(marked, [["up-1"]]);
+    assert.equal(audit.at(-1), "missing-invoices.payee-marked");
+  });
+
+  it("a hand mark can be turned the other way", async () => {
+    const { missing } = setup({}, [scanned()]);
+    await missing.pair("debit-1", "up-1", USER);
+    await missing.markPayee("debit-1", "up-1", "COMPANY", USER);
+    const back = await missing.markPayee(
+      "debit-1",
+      "up-1",
+      "NOT_COMPANY",
+      USER,
+    );
+    assert.equal(back.state, "NOT_COMPANY");
+  });
+
+  it("a payee read from the text or from NAV is not overwritten by hand", async () => {
+    const { missing, marked } = setup({}, [scanned("COMPANY")]);
+    await missing.pair("debit-1", "up-1", USER);
+    await assert.rejects(
+      missing.markPayee("debit-1", "up-1", "NOT_COMPANY", USER),
+      ConflictException,
+    );
+    const nav = setup();
+    const navPaired = await nav.missing.pair("debit-1", "nav-1", USER);
+    // a NAV-ból ismert vevőjű számla nem kerül a jelölhetők közé
+    assert.deepEqual(navPaired.payeeDocuments, []);
+    await assert.rejects(
+      nav.missing.markPayee("debit-1", "nav-1", "NOT_COMPANY", USER),
+      ConflictException,
+    );
+    assert.deepEqual([marked, nav.marked], [[], []]);
+  });
+
+  it("only an invoice paired to this debit can be marked", async () => {
+    const { missing, marked } = setup({}, [scanned()]);
+    await assert.rejects(
+      missing.markPayee("debit-1", "up-1", "COMPANY", USER),
+      BadRequestException,
+    );
+    assert.deepEqual(marked, []);
   });
 });

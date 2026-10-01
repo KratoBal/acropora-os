@@ -261,6 +261,14 @@ export class MissingInvoicesService {
         payee: d.payee,
         hasOriginal: d.hasOriginal,
       })),
+      payeeDocuments: (outcome?.documents ?? [])
+        .filter((d) => d.payee === "UNKNOWN" || d.payeeMarked)
+        .map((d) => ({
+          documentId: d.id,
+          number: d.number,
+          payee: d.payee,
+          marked: d.payeeMarked === true,
+        })),
       action: ACTION[item.state],
       driveFolderUrl: httpsOrNull(
         this.environment.MISSING_INVOICES_DRIVE_FOLDER_URL,
@@ -411,6 +419,43 @@ export class MissingInvoicesService {
         : { paperOriginalAt: null, paperOriginalByUserId: null },
       { marked },
     );
+    return this.item(id);
+  }
+
+  /**
+   * A VEVŐ KÉZI JELÖLÉSE (acrobot 25633, Balázs éles esete: a beszkennelt
+   * Sopro-számla vevője UNKNOWN, a tétel örökre Nem párosodott maradt, mert a
+   * jelölendő állapot megvolt, a jelölés nem). Csak a terheléshez párosított,
+   * nem ellenőrizhető (vagy már kézzel jelölt) vevőjű számlán; a NAV-ból vagy a
+   * szövegből olvasott vevő nem írható így felül.
+   */
+  async markPayee(
+    id: string,
+    documentId: string,
+    payee: "COMPANY" | "NOT_COMPANY",
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceItemDetail> {
+    const computed = await this.compute();
+    if (!computed.items.some((item) => item.id === id))
+      throw new NotFoundException("A banki terhelés nem található.");
+    const document = (computed.outcomes.get(id)?.documents ?? []).find(
+      (d) => d.id === documentId || d.aliasIds?.includes(documentId),
+    );
+    if (!document)
+      throw new BadRequestException(
+        "A számla nincs ehhez a terheléshez párosítva.",
+      );
+    const refused = new ConflictException(
+      "A vevő a számla szövegéből vagy a NAV-ból ismert, kézzel nem írható felül.",
+    );
+    if (document.payee !== "UNKNOWN" && !document.payeeMarked) throw refused;
+    const written = await this.repository.markPayee({
+      documentIds: [document.id, ...(document.aliasIds ?? [])],
+      payee,
+      userId: user.id,
+      bankTransactionId: id,
+    });
+    if (written === 0) throw refused;
     return this.item(id);
   }
 
