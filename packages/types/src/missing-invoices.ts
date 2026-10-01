@@ -155,6 +155,22 @@ export interface MissingInvoiceItem {
     source: MissingInvoiceDocumentSource;
   } | null;
   matchedBy: "RULE" | "MANUAL" | null;
+  /**
+   * MINDEN párosított számla száma (a `document` csak az első). Több számla egy
+   * utalásban, ha a közlemény megnevezi őket (acrobot 25610).
+   */
+  documentNumbers: string[];
+  /**
+   * A közlemény által megnevezett, de hiányzó számlák NÉV SZERINT (Balázs: „ki
+   * kellene írni melyik hiányzik”): aminek nincs eredetije, vagy semmilyen
+   * dokumentuma. Ha nem üres, a tétel nem Megvan.
+   */
+  missingNumbers: string[];
+  /**
+   * A terhelés mínusz a párosított számlák összege, ha a kerekítési tűrésen túl
+   * eltér (előjeles: negatív, ha a számlák többet tesznek ki). A párosítás áll.
+   */
+  amountDifference: { amount: string; currency: string } | null;
   comment: string | null;
   /** Kézzel jelölve: az eredeti papíron megvan (acrobot 25322). */
   paperOriginal: boolean;

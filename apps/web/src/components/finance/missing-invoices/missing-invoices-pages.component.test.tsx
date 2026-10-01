@@ -89,6 +89,9 @@ const item = (
   document: null,
   matchedBy: null,
   comment: null,
+  documentNumbers: [],
+  missingNumbers: [],
+  amountDifference: null,
   paperOriginal: false,
   ...overrides,
 });

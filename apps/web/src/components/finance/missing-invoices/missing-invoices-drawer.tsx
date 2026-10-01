@@ -235,6 +235,12 @@ export function MissingInvoicesDrawer({
                       · {INVOICE_SOURCE_LABELS[row.document.source]}
                     </span>
                   </p>
+                  {row.documentNumbers.length > 1 ? (
+                    <p className="mt-1 text-xs text-pilot-grey-600">
+                      Mind a {row.documentNumbers.length} számla:{" "}
+                      {row.documentNumbers.join(", ")}
+                    </p>
+                  ) : null}
                 </div>
                 {canManage && row.matchedBy === "MANUAL" ? (
                   <PilotButton
@@ -270,6 +276,20 @@ export function MissingInvoicesDrawer({
                   </label>
                 ) : null}
               </div>
+              {row.missingNumbers.length > 0 ? (
+                <p className="mt-2 text-sm text-pilot-red-700">
+                  Hiányzik: {row.missingNumbers.join(", ")}
+                </p>
+              ) : null}
+              {row.amountDifference ? (
+                <p className="mt-1 text-sm text-pilot-grey-700">
+                  Összeg-eltérés a számlákhoz képest:{" "}
+                  {formatAmount(
+                    row.amountDifference.amount,
+                    row.amountDifference.currency,
+                  )}
+                </p>
+              ) : null}
             </section>
           ) : null}
 

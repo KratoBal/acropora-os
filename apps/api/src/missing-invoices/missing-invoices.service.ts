@@ -655,6 +655,16 @@ export class MissingInvoicesService {
             }
           : null,
         matchedBy: outcome.matchedBy,
+        documentNumbers: outcome.documents.map((d) => d.number),
+        missingNumbers: outcome.missingNumbers ?? [],
+        amountDifference: outcome.amountDifference
+          ? {
+              amount: outcome.amountDifference.amount.toFixed(
+                outcome.amountDifference.currency === "HUF" ? 0 : 2,
+              ),
+              currency: outcome.amountDifference.currency,
+            }
+          : null,
         comment: debit.comment,
         paperOriginal: debit.paperOriginalAt !== null,
       };

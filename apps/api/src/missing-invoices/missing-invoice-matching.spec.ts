@@ -420,3 +420,130 @@ describe("matchMonth", () => {
     assert.equal(run([d], [c]).get(d.id)?.state, "FOUND");
   });
 });
+
+describe("several invoices named in one payment (acrobot 25610)", () => {
+  const FLUIDRA = "Fluidra Magyarország Kft.";
+  const ks = (
+    number: string,
+    gross: number,
+    extra: Partial<CandidateDocument> = {},
+  ) =>
+    doc({
+      number,
+      gross: D(gross),
+      supplierName: FLUIDRA,
+      date: "2026-09-10",
+      ...extra,
+    });
+
+  it("pairs EVERY named invoice, the bank's split forms too (Fluidra, 2026-09-25)", () => {
+    const d = debit({
+      bookingDate: "2026-09-25",
+      amount: D(5000),
+      counterpartyName: FLUIDRA,
+      narrative: "KS26/08132 KS26/08382 KS26/0 8450 K S26/08541 KS26/08638",
+    });
+    const docs = [
+      ks("KS26/08132", 1000),
+      ks("KS26/08382", 1000),
+      ks("KS26/08450", 1000),
+      ks("KS26/08541", 1000),
+      ks("KS26/08638", 1000),
+    ];
+    const outcome = run([d], docs).get(d.id)!;
+    assert.equal(outcome.reason, "a számla száma a közleményben");
+    assert.deepEqual(outcome.documents.map((x) => x.number).sort(), [
+      "KS26/08132",
+      "KS26/08382",
+      "KS26/08450",
+      "KS26/08541",
+      "KS26/08638",
+    ]);
+    assert.equal(outcome.state, "FOUND");
+    assert.equal(outcome.missingNumbers, undefined);
+    assert.equal(outcome.amountDifference, undefined);
+  });
+
+  it("a split number finds only the partner's own invoice", () => {
+    // "26/0 8450" osszefuzve egy MASIK kiallito szamlaszama: nem talalat
+    const d = debit({
+      counterpartyName: FLUIDRA,
+      narrative: "26/0 8450 befizetes",
+    });
+    const other = doc({
+      number: "26/08450",
+      supplierName: "Más Kft.",
+      gross: D(1),
+    });
+    assert.notEqual(
+      run([d], [other]).get(d.id)?.reason,
+      "a számla száma a közleményben",
+    );
+    const own = ks("26/08450", 2);
+    assert.deepEqual(
+      run([d], [own])
+        .get(d.id)
+        ?.documents.map((x) => x.id),
+      [own.id],
+    );
+  });
+
+  it("names the missing ones: an invoice without its original, and a named number with no document", () => {
+    const d = debit({
+      amount: D(3000),
+      counterpartyName: FLUIDRA,
+      narrative: "KS26/08132 KS26/08382 KS26/08999",
+    });
+    const navOnly = ks("KS26/08132", 1000, { hasOriginal: false });
+    const withPdf = ks("KS26/08382", 1000);
+    const outcome = run([d], [navOnly, withPdf]).get(d.id)!;
+    assert.equal(outcome.state, "ORIGINAL_MISSING");
+    assert.deepEqual(outcome.missingNumbers, ["KS26/08132", "KS26/08999"]);
+    // ket szamla 2000, a terheles 3000: az elteres jelezve, a parositas all
+    assert.equal(outcome.amountDifference?.amount.toString(), "1000");
+    assert.equal(outcome.documents.length, 2);
+  });
+
+  it("a named number with no document keeps the item from Found, even when every paired invoice has its original", () => {
+    const d = debit({
+      counterpartyName: FLUIDRA,
+      narrative: "KS26/08132 KS26/08999",
+    });
+    const outcome = run([d], [ks("KS26/08132", 1000)]).get(d.id)!;
+    assert.equal(outcome.state, "ORIGINAL_MISSING");
+    assert.deepEqual(outcome.missingNumbers, ["KS26/08999"]);
+  });
+
+  it("a named number already paired to another payment is not missing", () => {
+    const first = debit({
+      bookingDate: "2026-09-01",
+      counterpartyName: FLUIDRA,
+      narrative: "KS26/08132",
+    });
+    const second = debit({
+      bookingDate: "2026-09-20",
+      counterpartyName: FLUIDRA,
+      narrative: "KS26/08132 KS26/08382",
+    });
+    const a = ks("KS26/08132", 1000);
+    const b = ks("KS26/08382", 1000);
+    const out = run([first, second], [a, b]);
+    assert.deepEqual(
+      out.get(second.id)?.documents.map((x) => x.id),
+      [b.id],
+    );
+    assert.equal(out.get(second.id)?.missingNumbers, undefined);
+  });
+
+  it("only a different shape is not taken for a missing invoice, and a rounding gap is no difference", () => {
+    const d = debit({
+      amount: D(1003),
+      counterpartyName: FLUIDRA,
+      narrative: "KS26/08132 rendeles 20260915 Budapest",
+    });
+    const outcome = run([d], [ks("KS26/08132", 1000)]).get(d.id)!;
+    assert.equal(outcome.missingNumbers, undefined);
+    assert.equal(outcome.amountDifference, undefined);
+    assert.equal(outcome.state, "FOUND");
+  });
+});

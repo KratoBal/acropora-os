@@ -93,6 +93,12 @@ export interface ChargeRow {
   state: ChargeInvoiceState;
   document: { number: string; source: InvoiceSource } | null;
   matchedBy: "RULE" | "MANUAL" | null;
+  /** Minden párosított számla száma (több számla egy utalásban). */
+  documentNumbers: string[];
+  /** A megnevezett, de hiányzó számlák név szerint (acrobot 25610). */
+  missingNumbers: string[];
+  /** A terhelés mínusz a számlák összege, ha a tűrésen túl eltér. */
+  amountDifference: { amount: string; currency: string } | null;
   comment: string | null;
   /** Az eredeti papíron megvan (kézi jelölés, nautilus #1303). */
   paperOriginal: boolean;
