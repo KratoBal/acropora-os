@@ -18,6 +18,7 @@ import { BillingEmailDraftController } from "./billing-email-draft.controller.js
 import { BillingDocumentsController } from "./billing-documents.controller.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { BillingDocumentsService } from "./billing-documents.service.js";
+import { ExternalBillingDocumentsController } from "./external-billing-documents.controller.js";
 
 /**
  * A SZÁMLÁZÁS MODUL: a vázlat (murena), a kiállítás, a lista, a PDF és a kiküldés (nautilus). A
@@ -28,6 +29,7 @@ import { BillingDocumentsService } from "./billing-documents.service.js";
 @Module({
   imports: [SzamlazzModule, NotificationsModule],
   controllers: [
+    ExternalBillingDocumentsController,
     BillingDocumentsController,
     BillingDocumentIssueController,
     BillingDocumentReadController,
