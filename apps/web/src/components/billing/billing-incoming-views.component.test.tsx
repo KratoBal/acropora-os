@@ -192,7 +192,8 @@ describe("the billing view tiles", () => {
   });
 });
 
-// MI PIROSÍT: ha a fizetés napja hiányozna a „Fizetve” mellől; ha a hiányzó
+// MI PIROSÍT: ha a fizetés napja hiányozna a „Fizetve” alól; ha a jelvény és az
+// állapot-oszlop más színt mondana ugyanarra az állapotra; ha a hiányzó
 // kifizetés-adat „Nincs fizetve” lenne; ha a deviza két tizedese vagy a
 // forint egésze elveszne; ha a sor a kimenő adatlapra nyílna.
 describe("the incoming list", () => {
@@ -203,7 +204,9 @@ describe("the incoming list", () => {
     expect(rows).toHaveLength(3);
     const [eur, huf, proforma] = rows.map((row) => within(row));
     expect(eur!.getByText("Normál · E-számla")).toBeInTheDocument();
-    expect(eur!.getByText("Fizetve · 09.30.")).toBeInTheDocument();
+    // a fizetés a kimenő listával azonos jelvény és dátumírás (#1368)
+    expect(eur!.getAllByText("Fizetve")).toHaveLength(2);
+    expect(eur!.getByText("2026. 09. 30.")).toBeInTheDocument();
     expect(eur!.getByText("Bankkal párosodott")).toBeInTheDocument();
     // a hu-HU a négyjegyűt nem csoportosítja (CLDR), mint az app többi összege
     expect(eur!.getByText("Bruttó 1631,19")).toBeInTheDocument();
@@ -215,6 +218,11 @@ describe("the incoming list", () => {
     // a DOM-szöveg normalizált: a hu-HU ezres-elválasztó (NBSP) itt szóköz
     expect(huf!.getByText("Bruttó 486 200")).toBeInTheDocument();
     expect(proforma!.getByText("Nem párosítandó")).toBeInTheDocument();
+    // a jelvény és az állapot-oszlop felirata ugyanazt a színt mondja
+    const unpaid = proforma!.getAllByText("Nincs fizetve");
+    expect(unpaid).toHaveLength(2);
+    for (const label of unpaid)
+      expect(label).toHaveClass("text-pilot-grey-700");
     expect(screen.getByText("3 bejövő számla")).toBeInTheDocument();
 
     fireEvent.click(huf!.getByText("Aqua-Fauna Kft."));
