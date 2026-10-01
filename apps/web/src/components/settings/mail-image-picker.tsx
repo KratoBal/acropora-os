@@ -37,7 +37,17 @@ function dataUrl(blob: Blob): Promise<string> {
  * szerkeszto es az elonezet. A `data:` URL CSAK a megjelenitesre szol: a sablon
  * HTML-jeben a sajat hivatkozas all, es a tisztito a `data:` forrast kidobna.
  */
-export function useMailImages(token: string) {
+export type MailImages = ReturnType<typeof useMailImages>;
+
+/**
+ * `enabled: false`: nem tolt be semmit (a kepvegpontok `settings.manage` jogot
+ * kernek; akinek nincs, annak a hivas csak egy 403 lenne). A szamla drawer csak
+ * nyitva es jogosult felhasznalonal kapcsolja be.
+ */
+export function useMailImages(
+  token: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   const [images, setImages] = useState<MailImage[]>([]);
   const [sources, setSources] = useState<ReadonlyMap<string, string>>(
     new Map(),
@@ -68,6 +78,7 @@ export function useMailImages(token: string) {
   );
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     mailImagesApi
       .list(token, { signal: controller.signal })
@@ -82,7 +93,7 @@ export function useMailImages(token: string) {
         );
       });
     return () => controller.abort();
-  }, [token, betolt]);
+  }, [token, betolt, enabled]);
 
   const upload = useCallback(
     async (file: File) => {
@@ -129,7 +140,12 @@ export function MailImagePicker(props: {
   images: readonly MailImage[];
   sources: ReadonlyMap<string, string>;
   error: string | null;
-  upload: (file: File) => Promise<MailImage>;
+  /**
+   * Hianyaban a feltoltes nem jelenik meg: a meglevo kepekbol lehet valasztani
+   * (a szamlalevel drawere `billing.resend` joggal olvas, de feltolteni csak
+   * `settings.manage` joggal lehet).
+   */
+  upload?: (file: File) => Promise<MailImage>;
   onInsert: (image: RichTextImage) => void;
   onClose: () => void;
 }) {
@@ -151,7 +167,7 @@ export function MailImagePicker(props: {
   };
 
   const feltolt = async (file: File | undefined) => {
-    if (!file) return;
+    if (!file || !upload) return;
     setFeltoltes(true);
     setHiba(null);
     try {
@@ -173,23 +189,30 @@ export function MailImagePicker(props: {
       aria-label="Kép beszúrása"
       className="space-y-3 rounded-lg border border-dusk-200 bg-white p-3 shadow-sm"
     >
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm font-medium text-dusk-700">
-          Új kép feltöltése
-          <input
-            aria-label="Kép feltöltése"
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
-            disabled={feltoltes}
-            onChange={(event) => void feltolt(event.target.files?.[0])}
-            className="mt-1 block text-xs"
-          />
-        </label>
+      {upload ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm font-medium text-dusk-700">
+            Új kép feltöltése
+            <input
+              aria-label="Kép feltöltése"
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              disabled={feltoltes}
+              onChange={(event) => void feltolt(event.target.files?.[0])}
+              className="mt-1 block text-xs"
+            />
+          </label>
+          <p className="text-xs text-dusk-500">
+            PNG, JPG, GIF vagy WebP, legfeljebb 1 MB. Egyszer feltöltve minden
+            sablonba beszúrható.
+          </p>
+        </div>
+      ) : (
         <p className="text-xs text-dusk-500">
-          PNG, JPG, GIF vagy WebP, legfeljebb 1 MB. Egyszer feltöltve minden
-          sablonba beszúrható.
+          A már feltöltött képek közül választhatsz. Új képet a Levelezés
+          oldalon lehet feltölteni.
         </p>
-      </div>
+      )}
       {hiba || props.error ? (
         <p role="alert" className="text-xs text-rose-600">
           {hiba ?? props.error}

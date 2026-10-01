@@ -16,7 +16,10 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { memoryStorage } from "multer";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
-import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
+import {
+  RequireAnyPermission,
+  RequirePermissions,
+} from "../../auth/decorators/require-permissions.decorator.js";
 import { MailImageRepository } from "./mail-image.repository.js";
 import {
   MAIL_IMAGE_MAX_BYTES,
@@ -26,8 +29,11 @@ import {
 /**
  * A LEVELSABLON KEPEI: feltoltes, lista, tartalom.
  *
- * UGYANAZ A JOG, MINT A SABLONE (`SETTINGS_MANAGE`): aki a sablont irhatja, az
- * tolthet bele kepet. A tartalom-vegpont is hitelesitett -- a szerkeszto es az
+ * A FELTOLTES UGYANAZ A JOG, MINT A SABLONE (`SETTINGS_MANAGE`): aki a sablont
+ * irhatja, az tolthet bele kepet. Az OLVASAS (lista, tartalom) a szamlalevel
+ * drawerebol is kell (`BILLING_RESEND`, 2026-10-01): az a felhasznalo a sablon
+ * kepet amugy is kikuldi, tehat a megjelenites nem ad uj informaciot, a
+ * feltoltes viszont a sablont modositana. A tartalom-vegpont is hitelesitett -- a szerkeszto es az
  * elonezet a sajat tokenjevel tolti be, a levelbe pedig mellekletkent megy.
  * Publikus kep-cim nincs, es nem is kell.
  */
@@ -38,8 +44,12 @@ export class MailImageController {
     private readonly repository: MailImageRepository,
   ) {}
 
+  /*
+    OLVASAS: a Levelezes oldal (settings.manage) ES a szamlalevel drawere
+    (billing.resend) is. A feltoltes marad settings.manage (acrobot 25433).
+  */
   @Get()
-  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @RequireAnyPermission(PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.BILLING_RESEND)
   list() {
     return this.service.list();
   }
@@ -66,7 +76,7 @@ export class MailImageController {
   }
 
   @Get(":id/content")
-  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @RequireAnyPermission(PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.BILLING_RESEND)
   @Header("Cache-Control", "private, max-age=3600")
   async content(@Param("id") id: string) {
     if (!RICH_TEXT_IMAGE_ID.test(id))
