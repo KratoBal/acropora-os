@@ -240,6 +240,45 @@ function subsets<T>(items: readonly T[], max: number): T[][] {
   return result;
 }
 
+/** A havi gyűjtőszámla legkésőbbi napja a következő hónapban (mérve: 1. vagy 2.). */
+const MONTHLY_INVOICE_LAST_DAY = 5;
+
+/**
+ * A KÁRTYÁS FIZETÉSEK HAVI CSOPORTJAI. A kártyás terhelés közleménye így
+ * kezdődik: `2026.03.05 7413124583 SIMPLEP*PARKL .NET`, vagyis a VÁSÁRLÁS napja
+ * és a kártya. A csoport kulcsa a partner, a kártya és a vásárlás hónapja; a
+ * könyvelés napja nem jó kulcs, mert egy hónap utolsó napjainak vásárlása a
+ * következő hónapban könyvelődik.
+ *
+ * Mérve 2026-10-01, a 2025-12 .. 2026-08 kivonatain (barracuda megfigyelése
+ * nyomán): a Parkl-fizetések 14 ilyen csoportjából 10 pontosan egy következő
+ * elsejei Parkl-számlát ad, ez a 209 Parkl-fizetésből 128. A maradék 4 a
+ * hiányzó februári kivonaton és a hónap szélén múlik.
+ */
+export function monthlyCardGroups(debits: readonly MatchableDebit[]): {
+  debits: MatchableDebit[];
+  nextMonth: string;
+}[] {
+  const groups = new Map<string, MatchableDebit[]>();
+  for (const debit of debits) {
+    const card = /^(\d{4})\.(\d{2})\.\d{2}\s+(\d{6,})\s/.exec(
+      debit.narrative.trim() + " ",
+    );
+    if (!card || !debit.counterpartyName) continue;
+    const key = `${normalizeName(debit.counterpartyName)}|${card[3]}|${card[1]}-${card[2]}`;
+    groups.set(key, [...(groups.get(key) ?? []), debit]);
+  }
+  return [...groups.entries()]
+    .filter(([, members]) => members.length >= 2)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, members]) => {
+      const month = key.slice(-7);
+      const next = new Date(`${month}-01T00:00:00Z`);
+      next.setUTCMonth(next.getUTCMonth() + 1);
+      return { debits: members, nextMonth: next.toISOString().slice(0, 7) };
+    });
+}
+
 export function matchMonth(input: {
   debits: readonly MatchableDebit[];
   documents: readonly CandidateDocument[];
@@ -383,6 +422,33 @@ export function matchMonth(input: {
       [pair.document],
       "egyező összeg és partner a dátumablakban",
     );
+  }
+  // 3b. GYŰJTŐSZÁMLA: egy partner kártyás fizetéseinek havi összege egyetlen,
+  // a következő hónap elején kelt számla. Ez az „egy számla egy terhelés”
+  // szabály szűk kivétele: csak pontos összeg, egy kártya, egy vásárlási hónap,
+  // legalább két fizetés, és egyetlen illeszkedő számla.
+  for (const group of monthlyCardGroups(
+    open.filter((debit) => !outcomes.has(debit.id)),
+  )) {
+    const sum = group.debits.reduce(
+      (total, debit) => total.plus(debit.amount),
+      new Prisma.Decimal(0),
+    );
+    const invoices = partnerDocs(group.debits[0]!, 0.5).filter(
+      (d) =>
+        d.gross !== null &&
+        d.currency === group.debits[0]!.currency &&
+        d.gross.equals(sum) &&
+        d.date.slice(0, 7) === group.nextMonth &&
+        Number(d.date.slice(8, 10)) <= MONTHLY_INVOICE_LAST_DAY,
+    );
+    if (invoices.length !== 1) continue;
+    for (const debit of group.debits)
+      found(
+        debit,
+        [invoices[0]!],
+        `gyűjtőszámla: ${group.debits.length} kártyás fizetés havi összege`,
+      );
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
