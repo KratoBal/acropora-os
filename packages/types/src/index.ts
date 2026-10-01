@@ -887,6 +887,8 @@ export type {
   MissingInvoiceJevSuggestion,
   MissingInvoiceMatchInput,
   MissingInvoicePaperOriginalInput,
+  MissingInvoicePayeeDocument,
+  MissingInvoicePayeeInput,
   MissingInvoiceItemState,
   MissingInvoiceMonth,
   MissingInvoiceMonthDetail,

@@ -7022,40 +7022,46 @@ model InvoiceCollectionRun {
 }
 
 model IncomingSupplierDocument {
-  id                String                         @id @default(cuid())
-  gmailMessageId    String
-  fileName          String
-  sender            String?
-  subject           String?
-  receivedAt        DateTime?
-  sizeBytes         Int
-  sha256            String
-  content           Bytes
-  status            IncomingSupplierDocumentStatus
-  kind              IncomingSupplierDocumentKind?
-  errorCode         String?
+  id                  String                         @id @default(cuid())
+  gmailMessageId      String
+  fileName            String
+  sender              String?
+  subject             String?
+  receivedAt          DateTime?
+  sizeBytes           Int
+  sha256              String
+  content             Bytes
+  status              IncomingSupplierDocumentStatus
+  kind                IncomingSupplierDocumentKind?
+  errorCode           String?
   /// A beolvasás eredménye (SupplierInvoiceImportResult).
-  importResult      Json?
+  importResult        Json?
   /// Az általános olvasó eredménye (számlaszám, a szállító adószáma), ha a
   /// szállítói illesztő a PDF-et nem ismerte (számla-begyűjtés, 3e75c2f4). Nem
   /// `importResult`: az egy illesztő teljes olvasata, ez csak a párosítás kulcsa.
-  textReading       Json?
+  textReading         Json?
   /// Soronként a sor-javaslat (P-026), érkezéskor számolva, ha a beszállító ismert.
-  lineSuggestions   Json?
-  expectedArrivalId String?
+  lineSuggestions     Json?
+  expectedArrivalId   String?
   /// Kinek szól a számla (Hiányzó számlák): COMPANY, NOT_COMPANY vagy UNKNOWN,
   /// a szövegben álló adószám-törzsszám alapján. Az első párosításkor
   /// számolódik és tárolódik; NULL, amíg senki nem kérdezte.
-  payeeCheck        String?
+  payeeCheck          String?
+  /// KÉZI JELÖLÉS (acrobot 25633): a szövegréteg nélküli (beszkennelt) számla
+  /// vevője UNKNOWN; a kezelő a drawerben jelöli COMPANY-ra vagy NOT_COMPANY-ra.
+  /// Csak UNKNOWN (vagy már kézzel jelölt) írható így felül; ki és mikor az
+  /// auditnaplóban is áll.
+  payeeMarkedAt       DateTime?
+  payeeMarkedByUserId String?
   /// Honnan jött: MAILBOX (a postafiók-figyelő), UPLOAD (a Hiányzó számlák
   /// drawerjéből feltöltve), COLLECTED_MAIL vagy COLLECTED_DRIVE (a számla-
   /// begyűjtés, kártya 3e75c2f4). A feltöltés SOHA nem kap várható beérkezést, tehát
   /// a bevételezési láncba nem kerül (acrobot 25274).
-  origin            String                         @default("MAILBOX")
+  origin              String                         @default("MAILBOX")
   /// Feltöltésnél: INVOICE vagy PREMIUM_NOTICE (biztosítási díjértesítő).
-  uploadKind        String?
-  uploadedByUserId  String?
-  createdAt         DateTime                       @default(now())
+  uploadKind          String?
+  uploadedByUserId    String?
+  createdAt           DateTime                       @default(now())
 
   expectedArrival ExpectedArrival? @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
 
