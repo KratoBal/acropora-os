@@ -6,6 +6,8 @@ import { Prisma } from "@acropora/database";
 import {
   inWindow,
   matchMonth,
+  namedMonth,
+  normalizeName,
   samePartner,
   type CandidateDocument,
   type MatchableDebit,
@@ -48,6 +50,175 @@ const run = (
   documents: CandidateDocument[],
   manual = new Map<string, string[]>(),
 ) => matchMonth({ debits, documents, manual });
+
+/*
+  BARRACUDA ESETLISTÁJA (agents/barracuda/megosztas/javitasi-esetlista-2026-10-01.md,
+  acrobot 25928). MI PIROSÍT: ha egy ékezetre végződő általános szó (felelősségű,
+  hungária) a névben maradna; ha a kiírt jogi formájú NAV-név nem lenne a bank
+  partnerneve; ha egyetlen közös szó (vezetéknév) is elég lenne; ha az azonos
+  összegű havidíjak közül nem a közleményben megnevezett hónapé nyerne, vagy a
+  hónap végén előre kiállított számla rossz hónaphoz kerülne; ha a kártyás
+  szabály egy feltétel hiányával is párosítana.
+*/
+describe("the case list: a spelled-out legal form, a named month, a card descriptor", () => {
+  it("generic words ending in an accented letter leave the name too", () => {
+    assert.equal(
+      normalizeName(
+        "B-O 2001. BEFEKTETÉSI ÉS KERESKEDELMI KORLÁTOLT FELELŐSSÉGŰ TÁRSASÁG",
+      ),
+      "b o 2001 befektetési és",
+    );
+    assert.equal(normalizeName("Allianz Hungária Zrt."), "allianz");
+    assert.equal(
+      normalizeName("NUMBER ONE CAR KORLÁTOLT FELELŐSSÉGŰ TÁRSASÁG"),
+      "number one car",
+    );
+  });
+
+  it("the bank's name is the start of the spelled-out one, by whole words, from two words on", () => {
+    assert.equal(
+      samePartner(
+        "B-O 2001. BEFEKTETÉSI ÉS KERESKEDELMI KORLÁTOLT FELELŐSSÉGŰ TÁRSASÁG",
+        "B-O 2001 Kft.",
+      ),
+      true,
+    );
+    // egy szó nem elég: egy vezetéknév sok név elején áll
+    assert.equal(
+      samePartner("Szabó Géza Bt. Szerelő Üzem", "Szabó Kft."),
+      false,
+    );
+    // csak egész szavakban: a "b o 20" nem eleje a "b o 2001 ..."-nek
+    assert.equal(
+      samePartner(
+        "B-O 2001. BEFEKTETÉSI ÉS KERESKEDELMI KORLÁTOLT FELELŐSSÉGŰ TÁRSASÁG",
+        "B-O 20 Kft.",
+      ),
+      false,
+    );
+  });
+
+  it("the month a narrative names, with or without the year", () => {
+    assert.deepEqual(
+      [
+        namedMonth("2026 aug", "2026-09-11"),
+        namedMonth("2026 febr.", "2026-03-10"),
+        namedMonth("március", "2026-04-13"),
+        namedMonth("2025 dec", "2026-01-12"),
+        namedMonth("dec", "2026-01-12"),
+        // a kártyás közlemény eleje egy dátum, nem hónap-név
+        namedMonth(
+          "2026.09.10 7413124583 OBI 042 KISTA RCSA -APPLE",
+          "2026-09-14",
+        ),
+        namedMonth("Augusztusi bérleti díj", "2026-09-02"),
+      ],
+      ["2026-08", "2026-02", "2026-03", "2025-12", "2025-12", null, "2026-08"],
+    );
+  });
+
+  it("B-O 2001: of the same monthly fee the named month's invoice, a NAV row, so its original is missing", () => {
+    const bo =
+      "B-O 2001. BEFEKTETÉSI ÉS KERESKEDELMI KORLÁTOLT FELELŐSSÉGŰ TÁRSASÁG";
+    const august = doc({
+      number: "BO-2026-68",
+      date: "2026-08-01",
+      gross: D(78000),
+      supplierName: bo,
+      hasOriginal: false,
+    });
+    const september = doc({
+      number: "BO-2026-83",
+      date: "2026-09-01",
+      gross: D(78000),
+      supplierName: bo,
+    });
+    const payment = debit({
+      bookingDate: "2026-09-11",
+      amount: D(78000),
+      counterpartyName: "B-O 2001 Kft.",
+      narrative: "2026 aug",
+    });
+    const outcome = run([payment], [august, september]).get(payment.id)!;
+    assert.deepEqual(
+      [outcome.state, outcome.documents.map((d) => d.number)],
+      ["ORIGINAL_MISSING", ["BO-2026-68"]],
+    );
+  });
+
+  it("a monthly invoice issued on the last days of the month before is the next month's", () => {
+    const bo =
+      "B-O 2001. BEFEKTETÉSI ÉS KERESKEDELMI KORLÁTOLT FELELŐSSÉGŰ TÁRSASÁG";
+    const may = doc({
+      number: "BO-2026-31",
+      date: "2026-05-01",
+      gross: D(78000),
+      supplierName: bo,
+    });
+    const june = doc({
+      number: "BO-2026-41",
+      date: "2026-05-31",
+      gross: D(78000),
+      supplierName: bo,
+    });
+    const paidMay = debit({
+      bookingDate: "2026-06-15",
+      amount: D(78000),
+      counterpartyName: "B-O 2001 Kft.",
+      narrative: "2026 május",
+    });
+    const paidJune = debit({
+      bookingDate: "2026-07-13",
+      amount: D(78000),
+      counterpartyName: "B-O 2001 Kft.",
+      narrative: "2026 június",
+    });
+    const outcomes = run([paidMay, paidJune], [may, june]);
+    assert.deepEqual(
+      [paidMay, paidJune].map((d) => outcomes.get(d.id)!.documents[0]?.number),
+      ["BO-2026-31", "BO-2026-41"],
+    );
+  });
+
+  it("OBI: a card descriptor pairs by the brand, the exact amount and the purchase day, all three", () => {
+    const obi = (overrides: Partial<CandidateDocument> = {}) =>
+      doc({
+        number: "A06600684/0138/00002",
+        source: "SZAMLAZZ",
+        date: "2026-09-10",
+        gross: D(13646),
+        supplierName: "OBI HUNGARY RETAIL KFT.",
+        ...overrides,
+      });
+    const purchase = () =>
+      debit({
+        bookingDate: "2026-09-14",
+        amount: D(13646),
+        counterpartyName: "OBI 042 KISTARCSA",
+        narrative: "2026.09.10 7413124583 OBI 042 KISTA RCSA        -APPLE",
+      });
+    const state = (documents: CandidateDocument[]) => {
+      const p = purchase();
+      const outcome = run([p], documents).get(p.id)!;
+      return `${outcome.state}:${outcome.documents.map((d) => d.number).join(",")}`;
+    };
+    assert.equal(state([obi()]), "FOUND:A06600684/0138/00002");
+    // egy feltétel hiányzik: nincs párosítás
+    assert.equal(state([obi({ date: "2026-09-11" })]), "NO_INVOICE:");
+    assert.equal(state([obi({ gross: D(13600) })]), "NO_INVOICE:");
+    assert.equal(
+      state([obi({ supplierName: "OTP HUNGARY RETAIL KFT." })]),
+      "NO_INVOICE:",
+    );
+    // összeg nélküli NAV-sor sosem pár
+    assert.equal(state([obi({ gross: null })]), "NO_INVOICE:");
+    // két egyforma: nem választ
+    assert.equal(
+      state([obi(), obi({ number: "A06600684/0138/00003" })]),
+      "NO_INVOICE:",
+    );
+  });
+});
 
 describe("sequenceRatio", () => {
   it("gives Python difflib's ratio (values measured against difflib)", () => {
