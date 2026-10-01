@@ -46,6 +46,7 @@ export interface JevDebit {
   readonly currency: string;
   readonly original: { amount: Prisma.Decimal; currency: string } | null;
   readonly counterpartyName: string | null;
+  readonly narrative: string;
   readonly category: BankCategory;
 }
 
@@ -54,6 +55,23 @@ export type JevKind = "NEV" | "OSSZEG";
 export interface JevPairInput {
   readonly kinds: readonly JevKind[];
   readonly candidates: readonly CandidateDocument[];
+}
+
+/**
+ * KOZMU A DIJNETEN ES A SIMPLEPAY-EN AT (barracuda cimke-iteletei, 2. es 3. pont;
+ * acrobot 25588): a havi szamlat a fizetes ELOTT allitjak ki, tehat a fizetes
+ * utan kelt szamla a KOVETKEZO honape, nem ennek a parja. A celzott HOLDOUT egyik
+ * 0,8-as rossz talalata ilyen volt (a havi szamla 8 nappal a fizetes utan kelt).
+ * Kartyas vasarlasra NEM all: ott a szamla 1-3 nappal kesobb is kelhet (Wizz Air).
+ * A ket szolgaltato a kivonatokban: SIMPLEP*DIJNET (DIJNE) es SIMPLEP*VIZMUVEK.HU
+ * (VIZMU); a tobbi SimplePay-terheles webaruhaz vagy elofizetes.
+ */
+const UTILITY = /simplep\*(?:dijne|vizmu)/i;
+
+export function isUtilityPayment(
+  debit: Pick<JevDebit, "counterpartyName" | "narrative">,
+): boolean {
+  return UTILITY.test(`${debit.counterpartyName ?? ""} ${debit.narrative}`);
 }
 
 const amountOf = (debit: JevDebit, currency: string): number | null =>
@@ -97,7 +115,13 @@ export function jevPairInput(
     return null;
   const name = debit.counterpartyName ?? "";
   if (/parkl/i.test(name)) return null;
-  const window = free.filter((d) => inWindow(debit.bookingDate, d.date));
+  const utility = isUtilityPayment(debit);
+  const window = free.filter(
+    (d) =>
+      inWindow(debit.bookingDate, d.date) &&
+      // kozmunel csak a fizetes napjan vagy elotte kelt szamla
+      (!utility || d.date <= debit.bookingDate),
+  );
   const kinds = new Set<JevKind>();
   const hits: CandidateDocument[] = [];
   for (const d of window) {

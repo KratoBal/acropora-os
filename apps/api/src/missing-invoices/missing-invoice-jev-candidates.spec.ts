@@ -45,6 +45,7 @@ const debit = (
   currency: "HUF",
   original: null,
   counterpartyName: name,
+  narrative: "",
   category: "DOMESTIC_SUPPLIER",
   ...extra,
 });
@@ -167,5 +168,39 @@ describe("jevPairInput: ugyanaz a szabaly, mint a celzott meres osszeallitoja", 
     ]);
     assert.equal(input?.candidates.length, 12);
     assert.ok(input?.candidates.some((d) => d.id === hit.id));
+  });
+
+  it("kozmunel (dijnet, Vizmuvek a SimplePay-en at) csak a fizetes napjan vagy elotte kelt szamla jelolt", () => {
+    // a havi szamla, ami a fizetes UTAN kelt, a kovetkezo honape (barracuda 3. pont)
+    const before = doc("2026-05-02", 15512, "Fővárosi Vízművek Zrt.");
+    const sameDay = doc("2026-05-10", 15512, "Fővárosi Vízművek Zrt.");
+    const after = doc("2026-05-18", 15512, "Fővárosi Vízművek Zrt.");
+    const ids = (name: string, narrative = "") =>
+      jevPairInput(
+        debit(15512, name, { narrative, category: "CARD_SUBSCRIPTION" }),
+        outcome(),
+        [before, sameDay, after],
+      )?.candidates.map((d) => d.id);
+    assert.deepEqual(ids("SIMPLEP*VIZMUVEK.HU"), [before.id, sameDay.id]);
+    assert.deepEqual(ids("SIMPLEP*dijnet"), [before.id, sameDay.id]);
+    // a csonka kivonat-alak is (SIMPLEP*DIJNE), es ha csak a kozlemenyben all
+    assert.deepEqual(ids("Valami", "2026.05.10 SIMPLEP*DIJNE 1234"), [
+      before.id,
+      sameDay.id,
+    ]);
+    // kartyas vasarlasnal NEM all: ott kesobb kelt szamla is jelolt
+    assert.deepEqual(ids("SIMPLEP*luba.hu"), [before.id, sameDay.id, after.id]);
+  });
+
+  it("ha a kozmunek csak kesobb kelt szamlaja van, nincs javaslat", () => {
+    const after = doc("2026-05-18", 15512, "Fővárosi Vízművek Zrt.");
+    assert.equal(
+      jevPairInput(
+        debit(15512, "SIMPLEP*VIZMUVEK.HU", { category: "CARD_SUBSCRIPTION" }),
+        outcome(),
+        [after],
+      ),
+      null,
+    );
   });
 });
