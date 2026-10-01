@@ -679,3 +679,94 @@ describe("a proforma is only a fallback (acrobot 25607, Aquarioom 2026-09-29)", 
     assert.equal(outcomes.get(second.id)!.state, "PROFORMA_ONLY");
   });
 });
+
+describe("a typo twin: the exact payment wins over the by-name one (acrobot 25655, Fluidra 2026-07-30)", () => {
+  const fluidra = (
+    amount: number,
+    narrative: string,
+    overrides: Partial<MatchableDebit> = {},
+  ) =>
+    debit({
+      bookingDate: "2026-07-30",
+      amount: D(amount),
+      counterpartyName: "Fluidra Magyarország Kft.",
+      narrative,
+      ...overrides,
+    });
+  const ks4727 = () =>
+    doc({
+      number: "KS26/04727",
+      date: "2026-05-27",
+      gross: D(234778),
+      supplierName: "Fluidra Magyarország Kft.",
+    });
+
+  it("the exact payment with the mistyped number takes the invoice; the by-name one stays unmatched with it as a candidate", () => {
+    const byName = fluidra(81915, "KS26/04727");
+    const exactTypo = fluidra(234778, "KS26/04724");
+    const invoice = ks4727();
+    const out = run([byName, exactTypo], [invoice]);
+    assert.deepEqual(out.get(exactTypo.id)!.documents, [invoice]);
+    assert.equal(out.get(exactTypo.id)!.state, "FOUND");
+    const left = out.get(byName.id)!;
+    assert.equal(left.state, "NOT_MATCHED");
+    assert.deepEqual(left.candidates, [invoice]);
+    assert.match(left.reason, /KS26\/04727.*elírás-gyanú/);
+  });
+
+  it("without a typo twin the by-name pairing stands, with the difference (#1332)", () => {
+    const other = () =>
+      doc({
+        number: "KS26/09999",
+        date: "2026-06-01",
+        gross: D(1),
+        supplierName: "Fluidra Magyarország Kft.",
+      });
+    const cases: [string, () => MatchableDebit[], CandidateDocument[]][] = [
+      ["nincs másik fizetés", () => [], []],
+      // a másik fizetés LÉTEZŐ számot nevez meg, nem elírást
+      ["létező szám", () => [fluidra(234778, "KS26/09999")], [other()]],
+      ["nem pontos összeg", () => [fluidra(234000, "KS26/04724")], []],
+      [
+        "másik partner",
+        () => [
+          fluidra(234778, "KS26/04724", {
+            counterpartyName: "Menet-Trend Kft.",
+          }),
+        ],
+        [],
+      ],
+      ["más alakú szám", () => [fluidra(234778, "rendeles 4724")], []],
+      // a másik fizetésnek van MÁSIK pontos számlája is: nem ezt kell elvenni
+      [
+        "a másiknak két pontos számlája van",
+        () => [fluidra(234778, "KS26/04724")],
+        [
+          doc({
+            number: "KS26/04800",
+            date: "2026-06-10",
+            gross: D(234778),
+            supplierName: "Fluidra Magyarország Kft.",
+          }),
+        ],
+      ],
+    ];
+    for (const [name, others, extra] of cases) {
+      const byName = fluidra(81915, "KS26/04727");
+      const invoice = ks4727();
+      const o = run([byName, ...others()], [invoice, ...extra]).get(byName.id)!;
+      assert.deepEqual(o.documents, [invoice], name);
+      assert.equal(o.amountDifference?.amount.toString(), "-152863", name);
+    }
+    // ha a név szerinti fizetés összege is pontos, az övé marad
+    const exactByName = fluidra(234778, "KS26/04727");
+    const invoice = ks4727();
+    const out = run([exactByName, fluidra(234778, "KS26/04724")], [invoice]);
+    assert.deepEqual(out.get(exactByName.id)!.documents, [invoice]);
+    // név szerint, nem egy későbbi szabály adta vissza
+    assert.equal(
+      out.get(exactByName.id)!.reason,
+      "a számla száma a közleményben",
+    );
+  });
+});

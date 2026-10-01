@@ -475,6 +475,29 @@ export function matchMonth(input: {
       candidates: [],
     });
   };
+  /** A név szerint megnevezett, de egy elírás-gyanús pontos fizetésnek hagyott számlák. */
+  const withheld = new Map<string, CandidateDocument[]>();
+  const typoTwin = (debit: MatchableDebit, document: CandidateDocument) => {
+    const shape = shapeOf(compact(document.number));
+    const fits = (other: MatchableDebit, d: CandidateDocument) =>
+      samePartner(d.supplierName, other.counterpartyName ?? "", 0.5) &&
+      inWindow(other.bookingDate, d.date) &&
+      exact(amountGap(other, d.gross, d.currency), d.currency);
+    return open.some(
+      (other) =>
+        other.id !== debit.id &&
+        !outcomes.has(other.id) &&
+        other.counterpartyName !== null &&
+        fits(other, document) &&
+        // csak ha EZ az egyetlen pontos számlája: ha másik is van, nem ezt
+        // kell elvenni (mérve: Hanna 2026-01-06, két 53 651 Ft-os számla)
+        free().filter((d) => fits(other, d)).length === 1 &&
+        narrativeSpans(other.narrative).some(
+          (span) =>
+            shapeOf(span.text) === shape && !knownNumbers.has(span.text),
+        ),
+    );
+  };
   const closest = (debit: MatchableDebit, documents: CandidateDocument[]) =>
     [...documents].sort(
       (a, b) =>
@@ -510,6 +533,25 @@ export function matchMonth(input: {
     if (realInvoice)
       for (let i = named.length - 1; i >= 0; i--)
         if (named[i]!.document.kind === "PROFORMA") named.splice(i, 1);
+    // ELÍRÁS-GYANÚ (acrobot 25655, Fluidra 2026-07-30): a közlemény helyesen
+    // nevezi meg a számlát (KS26/04727), de az összeg nem illik hozzá, és
+    // ugyanattól a partnertől egy MÁSIK fizetés pontosan a számla összegét
+    // fizeti, egy nem létező, ugyanolyan alakú számmal (KS26/04724, elírás).
+    // Ilyenkor a pontos összegű fizetés kapja a számlát, ez pedig Nem
+    // párosodott marad, a számlával a jelöltjei között.
+    if (
+      named.length &&
+      invoiceDifference(
+        debit,
+        named.map((n) => n.document),
+      )
+    )
+      for (let i = named.length - 1; i >= 0; i--) {
+        const document = named[i]!.document;
+        if (!typoTwin(debit, document)) continue;
+        withheld.set(debit.id, [...(withheld.get(debit.id) ?? []), document]);
+        named.splice(i, 1);
+      }
     if (named.length === 0) continue;
     const documents = named.map((n) => n.document);
     found(debit, documents, "a számla száma a közleményben");
@@ -667,19 +709,23 @@ export function matchMonth(input: {
       partnerDocs(debit, 0.5).filter((d) =>
         rounded(amountGap(debit, d.gross, d.currency), d.currency),
       ).length > 1;
+    const kept = withheld.get(debit.id) ?? [];
     outcomes.set(debit.id, {
       state: partnerHasDocuments ? "NOT_MATCHED" : "NO_INVOICE",
       documents: [],
       matchedBy: null,
-      reason:
-        fitting.length > 1
+      reason: kept.length
+        ? `a közlemény a ${kept.map((d) => d.number).join(", ")} számlát nevezi meg, ` +
+          "de az összegét egy másik fizetés pontosan fizeti (elírás-gyanú): kézi döntés"
+        : fitting.length > 1
           ? "több számla-összeállítás is kiadja az összeget: kézi választás"
           : ambiguousRounding
             ? "több kerekítési találat: kézi választás"
             : partnerHasDocuments
               ? "a partnertől van számla, de ez a fizetés nem párosodott"
               : "a partnertől nincs számla a forrásokban",
-      candidates,
+      // a neki hagyott számla jelöltként látszik, akkor is, ha már a másiké
+      candidates: [...kept, ...candidates.filter((c) => !kept.includes(c))],
     });
   }
   for (const id of input.paperOriginals ?? []) {
