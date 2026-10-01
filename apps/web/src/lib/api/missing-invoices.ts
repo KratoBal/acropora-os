@@ -1,6 +1,7 @@
 import type {
   BankStatementImportResult,
   InvoiceCollectionSuggestionsResponse,
+  MissingInvoiceJevSuggestion,
 } from "@acropora/types";
 import type {
   MissingInvoiceItemDetail,
@@ -135,6 +136,17 @@ export const missingInvoicesApi = {
   item(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<MissingInvoiceItemDetail>(
       `${base}/items/${encodeURIComponent(id)}`,
+      token,
+      { signal },
+    );
+  },
+  /**
+   * A JEV PÁROSÍTÁSI JAVASLATA (nautilus #1324 végpontja; a #1324 óta nem volt
+   * hívója). Árnyék-módban és kikapcsolva a `documentId` mindig `null`.
+   */
+  jevSuggestion(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<MissingInvoiceJevSuggestion>(
+      `${base}/items/${encodeURIComponent(id)}/jev-suggestion`,
       token,
       { signal },
     );

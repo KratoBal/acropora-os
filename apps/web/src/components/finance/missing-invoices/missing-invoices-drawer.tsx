@@ -60,6 +60,7 @@ export function MissingInvoicesDrawer({
   onClose,
   companyName,
   extras,
+  jevSuggestion = null,
   onPair,
   onUnpair,
   onCategory,
@@ -80,6 +81,12 @@ export function MissingInvoicesDrawer({
   companyName: string | null;
   /** `null`: töltés. */
   extras: ChargeDetailExtras | null;
+  /**
+   * A JEV LÁTHATÓ JAVASLATA (élő módban): a jelölt, amit a Jev a számlának tart.
+   * `null`: nincs mit mutatni (kikapcsolva, árnyék-mód, nincs javaslat, hiba);
+   * ilyenkor a drawer betűre ugyanaz, mint e nélkül. Soha nem párosít magától.
+   */
+  jevSuggestion?: { documentId: string; confidence: number | null } | null;
   onPair: (candidate: CandidateInvoice) => void;
   onUnpair: () => void;
   /** `null`: vissza az automatikus besorolásra. */
@@ -422,6 +429,16 @@ export function MissingInvoicesDrawer({
                       <span className="text-xs text-pilot-grey-500">
                         {INVOICE_SOURCE_LABELS[candidate.source]}
                       </span>
+                      {jevSuggestion?.documentId === candidate.documentId ? (
+                        <span className="col-span-2">
+                          <PilotBadge variant="blue">
+                            A Jev ezt javasolja
+                            {jevSuggestion.confidence === null
+                              ? ""
+                              : ` (${Math.round(jevSuggestion.confidence * 100)}%)`}
+                          </PilotBadge>
+                        </span>
+                      ) : null}
                       {candidate.payee === "NOT_COMPANY" ? (
                         <span className="col-span-2">
                           <PilotBadge variant="danger">
