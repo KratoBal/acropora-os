@@ -20,7 +20,7 @@
     "@tiptap/pm": "3.31.3",
     "@tiptap/react": "3.31.3",
     "@tiptap/starter-kit": "3.31.3",
-    "next": "^16.3.3",
+    "next": "^16.3.6",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "recharts": "^3.10.1",
