@@ -135,6 +135,16 @@ export function classifyTransaction(
         category: "CARD_SUBSCRIPTION",
         rule: "ismert előfizetés kártyával",
       };
+    // Hazai cégforma a devizaösszeget is megelőzi: a magyar Kft. euróban is
+    // terhelhet, a számlája attól még a NAV-ban van. Mérve 2026-10-01, éles:
+    // az Elektro-Light Kft. öt kártyás terhelése („... 100,650EUR”) emiatt lett
+    // külföldi; a szabály az összes kártyás terhelésből pontosan ezt az ötöt
+    // fordítja át.
+    if (DOMESTIC_COMPANY.test(name) && !FOREIGN_COMPANY.test(name))
+      return {
+        category: "DOMESTIC_SUPPLIER",
+        rule: "kártya, hazai cégforma (devizás terhelésnél is)",
+      };
     if (FOREIGN_COMPANY.test(name) || /(\d|\b)(EUR|USD|GBP)\b/.test(narrative))
       return {
         category: "FOREIGN_SUPPLIER",
