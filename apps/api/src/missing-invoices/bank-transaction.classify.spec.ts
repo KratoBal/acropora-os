@@ -116,6 +116,28 @@ describe("classifyTransaction", () => {
     );
   });
 
+  it("files a known Hungarian merchant as domestic despite the card network's EUR equivalent (Telekom)", () => {
+    assert.equal(
+      category({
+        counterpartyName: "TelekomSzaml*003426827",
+        narrative:
+          "2026.09.03 0194683438 TELEKOMSZAML* 003426827   -APPLE 167,100EUR    0,",
+        transactionType: "VÁSÁRLÁS KÁRTYÁVAL",
+      }),
+      "DOMESTIC_SUPPLIER",
+    );
+    // a Kia Charge (Digital Charging Solutions GmbH, Berlin) külföldi marad
+    assert.equal(
+      category({
+        counterpartyName: "Digital Charging Solut",
+        narrative:
+          "2026.09.08 0194683438 Digital Charging Solut   -APPLE 58,660EUR    0,",
+        transactionType: "VÁSÁRLÁS KÁRTYÁVAL",
+      }),
+      "FOREIGN_SUPPLIER",
+    );
+  });
+
   it("does not read the Apple Pay marker as an Apple subscription", () => {
     assert.equal(
       category({
