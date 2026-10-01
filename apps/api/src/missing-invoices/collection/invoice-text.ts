@@ -36,6 +36,10 @@ export interface InvoiceTextReading {
 
 /** Egy kártyás terhelés, amennyit a számla felismeréséhez kell. */
 export interface CardDebit {
+  /** a BankTransaction azonosítója: a párosító ehhez köti a dokumentumot */
+  id: string;
+  /** ÉÉÉÉ-HH-NN */
+  bookingDate: string;
   counterpartyName: string;
   /** a könyvelt összeg, a bankszámla pénznemében */
   amount: string;
@@ -45,9 +49,12 @@ export interface CardDebit {
 }
 
 export interface CardPaymentMatch {
+  /** a számla összege (több fizetésnél azok összege) */
   amount: string;
   currency: string;
   partner: string;
+  /** a fizetés(ek) azonosítója: egy, vagy legfeljebb három (Kia Charge) */
+  debitIds: string[];
 }
 
 export interface InvoiceTextHints {
@@ -378,20 +385,88 @@ function moneyValues(text: string): Set<number> {
   return values;
 }
 
+/** A pénzösszeg a sorban: a szám és a pénznem jele UGYANABBAN a sorban, egymás mellett. */
+const CURRENCY = String.raw`HUF|Ft\.?|EUR|€|USD|\$|GBP|£`;
+const AMOUNT = String.raw`\d{1,3}(?:[ \u00a0.,]\d{3})+(?:[.,]\d{1,4})?|\d+(?:[.,]\d{1,4})?`;
+const MONEY = new RegExp(
+  String.raw`(?:(${CURRENCY})[ \t\u00a0]*(${AMOUNT})(?![\d])|(?<![\d.,])(${AMOUNT})[ \t\u00a0]*(${CURRENCY}))`,
+  "gu",
+);
+const CURRENCY_CODE: Record<string, string> = {
+  "€": "EUR",
+  Ft: "HUF",
+  "Ft.": "HUF",
+  $: "USD",
+  "£": "GBP",
+};
+
+function amountValue(raw: string): number {
+  const compact = raw.replace(/[ \u00a0]/g, "");
+  const last = Math.max(compact.lastIndexOf("."), compact.lastIndexOf(","));
+  const decimals = last >= 0 ? compact.length - last - 1 : 0;
+  return Number(
+    last >= 0 && decimals !== 3
+      ? `${compact.slice(0, last).replace(/[.,]/g, "")}.${compact.slice(last + 1)}`
+      : compact.replace(/[.,]/g, ""),
+  );
+}
+
+/**
+ * A SZÁMLA VÉGÖSSZEGE: a legnagyobb, pénznemmel jelölt összeg (acrobot 25691:
+ * a végösszeg soha nem kisebb egy tételnél). Pénznem nélküli szám nem számít:
+ * a Kia Charge számláján a „34,625 kWh” nagyobb lenne a végösszegnél.
+ */
+export function largestMoney(
+  text: string,
+): { cents: number; currency: string } | null {
+  let best: { cents: number; currency: string } | null = null;
+  for (const m of text.matchAll(MONEY)) {
+    const symbol = (m[1] ?? m[4])!;
+    const cents = Math.round(amountValue((m[2] ?? m[3])!) * 100);
+    if (Number.isFinite(cents) && (!best || cents > best.cents))
+      best = { cents, currency: CURRENCY_CODE[symbol] ?? symbol };
+  }
+  return best;
+}
+
+/** Legfeljebb `max` elemű, nem üres részhalmazok. */
+function smallSubsets<T>(items: readonly T[], max: number): T[][] {
+  const out: T[][] = [];
+  const walk = (start: number, picked: T[]) => {
+    if (picked.length) out.push(picked);
+    if (picked.length === max) return;
+    for (let i = start; i < items.length; i++)
+      walk(i + 1, [...picked, items[i]!]);
+  };
+  walk(0, []);
+  return out;
+}
+
+const DAY_MS = 86_400_000;
+/** a számla kelte körül ennyi napon belül könyvelt fizetés illhet hozzá */
+const SET_WINDOW = { before: 15, after: 45 };
+const SET_MAX = 3;
+
 export function cardPaymentMatch(
   lines: readonly string[],
   debits: readonly CardDebit[],
   distinctiveWord: (name: string) => string | null,
+  /** a számla kelte, vagy ha az nincs meg, a levél érkezése (ÉÉÉÉ-HH-NN) */
+  invoiceDate?: string,
 ): CardPaymentMatch | null {
   const text = lines.join("\n");
   const values = moneyValues(text);
   const matches: CardPaymentMatch[] = [];
-  for (const debit of debits) {
+  const partnerOf = (debit: CardDebit) => {
     const word = distinctiveWord(debit.counterpartyName);
-    if (!word || OWN_NAME.test(word)) continue;
+    if (!word || OWN_NAME.test(word)) return null;
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    if (!new RegExp(`(?<!\\p{L})${escaped}(?!\\p{L})`, "iu").test(text))
-      continue;
+    return new RegExp(`(?<!\\p{L})${escaped}(?!\\p{L})`, "iu").test(text)
+      ? word
+      : null;
+  };
+  for (const debit of debits) {
+    if (!partnerOf(debit)) continue;
     const amounts = [
       ...(debit.original ? [debit.original] : []),
       { amount: debit.amount, currency: debit.currency },
@@ -404,7 +479,62 @@ export function cardPaymentMatch(
         amount: hit.amount,
         currency: hit.currency,
         partner: debit.counterpartyName,
+        debitIds: [debit.id],
       });
   }
-  return matches.length === 1 ? matches[0]! : null;
+  if (matches.length === 1) return matches[0]!;
+  return invoiceDate
+    ? cardPaymentSet(text, debits, partnerOf, invoiceDate)
+    : null;
+}
+
+/**
+ * MÁSODIK ÚT (acrobot 25691, Kia Charge): ha az első út nem talált egyértelmű
+ * fizetést, a számla VÉGÖSSZEGÉHEZ (`largestMoney`) keresünk egy fizetést vagy
+ * legfeljebb három fizetésből álló halmazt, ugyanattól a partnertől, a számla
+ * kelte körül, aminek az összege centre egyezik. Csak egyértelmű halmaz számít:
+ * ha két különböző is kiadja, nem döntünk.
+ *
+ *   Kia július: a havi díj (1518) egy másik hónap fizetése is, az első út
+ *     kettőt talál; a végösszeg (9125) egy fizetés.
+ *   Kia augusztus: 40 086 = 21 279 + 18 807, két fizetés.
+ */
+function cardPaymentSet(
+  text: string,
+  debits: readonly CardDebit[],
+  partnerOf: (debit: CardDebit) => string | null,
+  invoiceDate: string,
+): CardPaymentMatch | null {
+  const total = largestMoney(text);
+  if (!total) return null;
+  const day = Date.parse(`${invoiceDate}T00:00:00Z`);
+  const byPartner = new Map<string, { debit: CardDebit; cents: number }[]>();
+  for (const debit of debits) {
+    const word = partnerOf(debit);
+    if (!word) continue;
+    const offset =
+      (Date.parse(`${debit.bookingDate}T00:00:00Z`) - day) / DAY_MS;
+    if (offset < -SET_WINDOW.before || offset > SET_WINDOW.after) continue;
+    const amount = [
+      ...(debit.original ? [debit.original] : []),
+      { amount: debit.amount, currency: debit.currency },
+    ].find((a) => a.currency === total.currency);
+    if (!amount) continue;
+    const list = byPartner.get(word) ?? [];
+    list.push({ debit, cents: Math.round(Number(amount.amount) * 100) });
+    byPartner.set(word, list);
+  }
+  const fits: { debit: CardDebit; cents: number }[][] = [];
+  for (const list of byPartner.values())
+    for (const set of smallSubsets(list.slice(0, 20), SET_MAX))
+      if (set.reduce((sum, item) => sum + item.cents, 0) === total.cents)
+        fits.push(set);
+  if (fits.length !== 1) return null;
+  const set = fits[0]!;
+  return {
+    amount: (total.cents / 100).toFixed(2),
+    currency: total.currency,
+    partner: set[0]!.debit.counterpartyName,
+    debitIds: set.map((item) => item.debit.id),
+  };
 }

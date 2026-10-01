@@ -157,6 +157,8 @@ export class InvoiceCollectionRepository {
         counterpartyName: { not: null },
       },
       select: {
+        id: true,
+        bookingDate: true,
         amount: true,
         currency: true,
         counterpartyName: true,
@@ -166,6 +168,8 @@ export class InvoiceCollectionRepository {
     return rows.map((row) => {
       const original = originalAmountOf(row.narrative);
       return {
+        id: row.id,
+        bookingDate: row.bookingDate.toISOString().slice(0, 10),
         counterpartyName: row.counterpartyName!,
         amount: row.amount.toString(),
         currency: row.currency,
