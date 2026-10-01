@@ -103,7 +103,8 @@ function suiteTexts(): Map<string, string> {
 
 describe("r11 port: a Python-referencia kimenete", () => {
   it("ugyanaz a verzio es ugyanaz a referencia-fajl, amibol az adat jott", () => {
-    assert.equal(REDACTION_VERSION, "r11");
+    // r14 (marveen #9, #10): az e-mail, aminek a domainjét a PDF sortörése vágta el
+    assert.equal(REDACTION_VERSION, "r14");
     assert.equal(V.version, REDACTION_VERSION);
     assert.equal(V.reference, REFERENCE_SHA256);
   });
@@ -159,8 +160,8 @@ describe("r11 port: a Python-referencia kimenete", () => {
       }
     }
     assert.deepEqual(leaks, []);
-    // a Python ugyanezt meri: 431/440 es 36/36 (a 9 elveszett megorzendo nem szivargas)
-    assert.equal(`${kept}/${keepTotal}`, "467/476");
+    // a Python ugyanezt meri: 433/442 es 36/36 (a 9 elveszett megorzendo nem szivargas)
+    assert.equal(`${kept}/${keepTotal}`, "469/478");
   });
 
   it("a known-entity reteg: ugyanazok a talalatok, ugyanaz a kimenet es ugyanaz az or", () => {
