@@ -59,7 +59,7 @@ export class ExternalBillingDocumentsController {
       },
       cancelled: row.cancelled,
       ...externalPaymentFields(row),
-      paymentsKnown: row.paymentsKnown,
+      paymentsKnown: row.paymentsKnown === true,
       payments: (row.payments as unknown as ExternalInvoicePayment[]).map(
         (p) => ({
           date: p.date,

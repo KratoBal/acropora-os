@@ -235,7 +235,7 @@ export interface ExternalListRow {
   createdAt: Date;
   paidAmount: Prisma.Decimal;
   lastPaymentDate: Date | null;
-  paymentsKnown: boolean;
+  paymentsKnown: boolean | null;
   cancelled: boolean;
 }
 
@@ -250,11 +250,16 @@ export interface ExternalListRow {
  * ESET, NEM DOKUMENTÁLT GARANCIA. Feed-változat nélkül (a saját bizonylat, amíg
  * a száma nem jön vissza) az állapot UNKNOWN, nem UNPAID. A bejövőn a hiány
  * UNKNOWN marad.
+ *
+ * A MÉG NEM VETÍTETT SOR (`paymentsKnown` `null`: a migráció óta nem jött rá
+ * újravetítés) UNKNOWN, különben az újravetítésig a már kifizetett számlák is
+ * „Nincs fizetve”-nek látszanának (murena review-ja).
  */
 export function externalPaymentFields(row: {
   grossAmount: Prisma.Decimal;
   paidAmount: Prisma.Decimal;
   lastPaymentDate: Date | null;
+  paymentsKnown: boolean | null;
   currency: string;
   cancelled: boolean;
 }): Pick<
@@ -266,8 +271,9 @@ export function externalPaymentFields(row: {
   const decimals = row.currency.toUpperCase() === "HUF" ? 0 : 2;
   return {
     paymentState: paymentStateOf({
-      // van feed-változat: a hiány itt "nem fizetett" (lásd fent)
-      paymentsKnown: true,
+      // van feed-változat: a hiány itt "nem fizetett"; a még nem vetített sor
+      // viszont ismeretlen (lásd fent)
+      paymentsKnown: row.paymentsKnown !== null,
       paidAmount: row.paidAmount.toFixed(),
       grossAmount: row.grossAmount.toFixed(),
       currency: row.currency,

@@ -159,7 +159,8 @@ const external = (
   createdAt: new Date("2026-10-01T15:00:00.000Z"),
   paidAmount: D("0"),
   lastPaymentDate: null,
-  paymentsKnown: false,
+  // a migráció óta nem vetített sor (murena review-ja): ismeretlen
+  paymentsKnown: null,
   cancelled: false,
   ...overrides,
 });
@@ -189,16 +190,22 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
     assert.equal(fields({ paidAmount: D("50000") }).paymentState, "PARTIAL");
   });
 
-  it("unpaid without payment elements on an outgoing invoice (acrobot 25910); nothing on a cancelled one or our own", () => {
-    assert.deepEqual(
-      fields({
-        paymentsKnown: false,
-        paidAmount: D("0"),
-        lastPaymentDate: null,
-      }).paymentState,
-      // a kimenőn a hiány "nem fizetett": a sornak van feed-változata (927341621)
+  it("a row not yet re-projected is unknown; the same row projected without payment elements is unpaid (acrobot 25918)", () => {
+    // A KONTROLL: a migráció null-t hagy; az újravetítésig a kifizetett számla
+    // sem látszhat „Nincs fizetve”-nek (murena review-ja)
+    const migrated = { paidAmount: D("0"), lastPaymentDate: null };
+    assert.equal(
+      fields({ ...migrated, paymentsKnown: null }).paymentState,
+      "UNKNOWN",
+    );
+    // a kimenőn a hiány "nem fizetett": a sornak van feed-változata (927341621)
+    assert.equal(
+      fields({ ...migrated, paymentsKnown: false }).paymentState,
       "UNPAID",
     );
+  });
+
+  it("nothing on a cancelled invoice or our own", () => {
     assert.deepEqual(fields({ cancelled: true }), {
       paymentState: null,
       paidAmount: null,
@@ -227,7 +234,7 @@ describe("the external documents on the list", () => {
       opens: "EXTERNAL_DETAIL",
       origin: "EXTERNAL",
       externalKindLabel: "Számla",
-      paymentState: "UNPAID",
+      paymentState: "UNKNOWN",
       paidAmount: "0",
       lastPaymentDate: null,
     });
