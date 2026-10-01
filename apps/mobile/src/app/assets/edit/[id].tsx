@@ -55,6 +55,7 @@ import { describeAssetUpdateWrite } from "@/lib/assets/offline-edit";
 import { ApiError } from "@/lib/api/client";
 import { assetUpdateOperationId } from "@/lib/offline/sync-queue";
 import { enqueueAssetUpdate } from "@/lib/offline/queue-store";
+import { deviceConnectivity } from "@/lib/offline/connectivity";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { UnitPicker } from "@/components/assets/unit-picker";
 import { matricaElotoltes } from "@/lib/assets/matrica-elotoltes";
@@ -408,6 +409,7 @@ export default function AssetEditScreen() {
        */
       let utolsoHiba: unknown = null;
       const outcome = await saveOrQueue({
+        connectivity: deviceConnectivity,
         save: async () => {
           try {
             return await updateAsset(asset.id, patch);

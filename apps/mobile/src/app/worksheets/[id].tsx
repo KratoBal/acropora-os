@@ -37,7 +37,7 @@ import {
 } from "@/lib/api/material-requests";
 import { ApiError, ApiNetworkError } from "@/lib/api/client";
 import { describeUploadFailure } from "@/lib/api/network-failure";
-import { useIsOnline } from "@/lib/offline/connectivity";
+import { deviceConnectivity, useIsOnline } from "@/lib/offline/connectivity";
 import { describeCachedWorksheetNotice } from "@/lib/offline/offline-notice";
 import {
   enqueuePhoto,
@@ -559,6 +559,7 @@ export default function WorksheetDetailScreen() {
        * pinceben, terero nelkul.
        */
       const eredmeny = await uploadOrQueuePhotos({
+        connectivity: deviceConnectivity,
         files: photos,
         upload: async (files) => {
           const created = await uploadWorksheetDocuments(id, { files });
@@ -691,6 +692,7 @@ export default function WorksheetDetailScreen() {
        * ujrakerdezi. Igy a ket ag ugyanazt az alakot adja vissza.
        */
       return saveOrQueue({
+        connectivity: deviceConnectivity,
         save: async () => {
           await addWorksheetLine(id, built.payload);
           return { id: lineId };
