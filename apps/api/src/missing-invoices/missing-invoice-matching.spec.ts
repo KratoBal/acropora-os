@@ -990,3 +990,64 @@ describe("a company original is not overruled by another document of the same in
     );
   });
 });
+
+describe("a summary invoice's group is one pairing, not a double payment (acrobot 25708)", () => {
+  const card = (date: string, amount: number) =>
+    debit({
+      bookingDate: date,
+      amount: D(amount),
+      counterpartyName: "SIMPLEP*PARKL.NET",
+      narrative: `${date.replace(/-/g, ".")} 0194683438 SIMPLEP*PARKL .NET`,
+      category: "CARD_SUBSCRIPTION",
+    });
+  const parkl = (gross: number, id?: string) =>
+    doc({
+      ...(id ? { id } : {}),
+      number: "E-PAR-2026-46439",
+      date: "2026-10-01",
+      gross: D(gross),
+      supplierName: "Parkl Digital Technologies Kft.",
+      identities: ["inv:e-par-2026-46439|12967726"],
+    });
+
+  it("the exact monthly group and the small-remainder group are not double paid", () => {
+    for (const gross of [1200, 1260]) {
+      const month = [
+        card("2026-09-05", 400),
+        card("2026-09-17", 350),
+        card("2026-09-28", 450),
+      ];
+      const out = run(month, [parkl(gross)]);
+      for (const d of month) {
+        assert.equal(out.get(d.id)?.state, "FOUND", `${gross}`);
+        assert.equal(out.get(d.id)?.doublePaidWith, undefined);
+      }
+    }
+  });
+
+  it("the same invoice in a group AND in another pairing is still double paid", () => {
+    const month = [
+      card("2026-09-05", 400),
+      card("2026-09-17", 350),
+      card("2026-09-28", 450),
+    ];
+    // egy átutalás ugyanarra a számlára (egy másik, azonos számú dokumentummal)
+    const transfer = debit({
+      bookingDate: "2026-10-02",
+      amount: D(1200),
+      counterpartyName: "Parkl Digital Technologies Kft.",
+      narrative: "szamla",
+      category: "DOMESTIC_SUPPLIER",
+    });
+    const out = run(
+      [...month, transfer],
+      [parkl(1200, "nav-1"), parkl(1200, "pdf-1")],
+    );
+    for (const d of [...month, transfer])
+      assert.equal(out.get(d.id)?.state, "DOUBLE_PAID", d.id);
+    assert.deepEqual(
+      out.get(transfer.id)?.doublePaidWith,
+      month.map((d) => d.id).sort(),
+    );
+  });
+});
