@@ -166,7 +166,8 @@ const external = (
 
 describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () => {
   // MI PIROSÍT: ha a mezők nem a közös számításból jönnének (a bejövő listával
-  // eltérne); ha a hiányzó kifizetés-adat „nem fizetett” lenne; ha egy
+  // eltérne); ha a kimenő számla elem nélkül "nincs adat" lenne, holott van
+  // feed-változata (acrobot 25910); ha egy
   // sztornózott számla fizetendőnek látszana; ha a saját bizonylat állapotot kapna.
   const fields = (overrides: Partial<ExternalListRow> = {}) =>
     externalPaymentFields(
@@ -188,14 +189,15 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
     assert.equal(fields({ paidAmount: D("50000") }).paymentState, "PARTIAL");
   });
 
-  it("unknown without payment data; nothing on a cancelled invoice or our own", () => {
+  it("unpaid without payment elements on an outgoing invoice (acrobot 25910); nothing on a cancelled one or our own", () => {
     assert.deepEqual(
       fields({
         paymentsKnown: false,
         paidAmount: D("0"),
         lastPaymentDate: null,
       }).paymentState,
-      "UNKNOWN",
+      // a kimenőn a hiány "nem fizetett": a sornak van feed-változata (927341621)
+      "UNPAID",
     );
     assert.deepEqual(fields({ cancelled: true }), {
       paymentState: null,
@@ -225,7 +227,7 @@ describe("the external documents on the list", () => {
       opens: "EXTERNAL_DETAIL",
       origin: "EXTERNAL",
       externalKindLabel: "Számla",
-      paymentState: "UNKNOWN",
+      paymentState: "UNPAID",
       paidAmount: "0",
       lastPaymentDate: null,
     });

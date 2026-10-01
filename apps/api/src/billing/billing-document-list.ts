@@ -243,12 +243,18 @@ export interface ExternalListRow {
  * A KIFIZETETTSÉG EGY KÜLSŐ BIZONYLATRA: a bejövő listával közös számítás
  * (`paymentStateOf`, murena 25902). A sztornózott számla nem fizetendő: ott
  * `null`, nem „nem fizetett”.
+ *
+ * A KIMENŐN A `kifizetesek` HIÁNYA NEM FIZETETT (acrobot döntése, 25910), mert
+ * minden külső sornak van feed-változata. A mérés: a 927341621-es számla előbb
+ * elem nélkül jött, a fizetés után elemmel (acrobot 25894). EZ EGY MEGFIGYELT
+ * ESET, NEM DOKUMENTÁLT GARANCIA. Feed-változat nélkül (a saját bizonylat, amíg
+ * a száma nem jön vissza) az állapot UNKNOWN, nem UNPAID. A bejövőn a hiány
+ * UNKNOWN marad.
  */
 export function externalPaymentFields(row: {
   grossAmount: Prisma.Decimal;
   paidAmount: Prisma.Decimal;
   lastPaymentDate: Date | null;
-  paymentsKnown: boolean;
   currency: string;
   cancelled: boolean;
 }): Pick<
@@ -260,7 +266,8 @@ export function externalPaymentFields(row: {
   const decimals = row.currency.toUpperCase() === "HUF" ? 0 : 2;
   return {
     paymentState: paymentStateOf({
-      paymentsKnown: row.paymentsKnown,
+      // van feed-változat: a hiány itt "nem fizetett" (lásd fent)
+      paymentsKnown: true,
       paidAmount: row.paidAmount.toFixed(),
       grossAmount: row.grossAmount.toFixed(),
       currency: row.currency,
