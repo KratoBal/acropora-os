@@ -36,13 +36,17 @@ export {
 } from "./units.js";
 export {
   FIELD_SPECS,
+  RESTRICTED_CIRCULATION_GTIN,
+  containsFactualClaims,
   fieldSpec,
   UnknownFieldError,
   isFieldKey,
   normalizeFieldValue,
   type FieldKey,
   type FieldKind,
+  type ClaimPolicy,
   type FieldSpec,
+  type NormalizeFailureCode,
   type NormalizeResult,
   type Tier,
 } from "./fields.js";
@@ -56,8 +60,12 @@ export { reconcileField, type ReconcileOptions } from "./reconcile.js";
 export {
   BENCHMARK_SCHEMA,
   benchmarkReportMarkdown,
+  conflictProvenanceComplete,
   parseBenchmarkDataset,
+  provenanceComplete,
   scoreBenchmark,
+  type BenchmarkConflictEntry,
+  type BenchmarkConflictSource,
   type BenchmarkDataset,
   type BenchmarkProduct,
   type BenchmarkReport,

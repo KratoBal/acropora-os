@@ -73,11 +73,25 @@
           "conflicts": [
             {
               "value": "20000 g",
-              "sourceRef": "synthetic://manufacturer/imaginary-reef-salt/page"
+              "sources": [
+                {
+                  "value": "20 kg",
+                  "sourceType": "MANUFACTURER_PAGE",
+                  "sourceRef": "synthetic://manufacturer/imaginary-reef-salt/page",
+                  "retrievedAt": "2026-10-01T09:05:00Z"
+                }
+              ]
             },
             {
               "value": "25000 g",
-              "sourceRef": "synthetic://supplier/imaginary-reef-salt"
+              "sources": [
+                {
+                  "value": "25 kg",
+                  "sourceType": "SUPPLIER_PAGE",
+                  "sourceRef": "synthetic://supplier/imaginary-reef-salt",
+                  "retrievedAt": "2026-10-01T09:05:00Z"
+                }
+              ]
             }
           ]
         },
@@ -175,9 +189,68 @@
           "sourceRef": "synthetic://supplier/placeholder-trace-additive-x",
           "retrievedAt": "2026-10-01T09:15:00Z",
           "confidence": 0.5,
-          "conflicts": [{ "value": "40123455" }, { "value": "96385074" }]
+          "conflicts": [
+            {
+              "value": "00000040123455",
+              "sources": [
+                {
+                  "value": "40123455",
+                  "sourceType": "SUPPLIER_PAGE",
+                  "sourceRef": "synthetic://supplier/placeholder-trace-additive-x",
+                  "retrievedAt": "2026-10-01T09:15:00Z"
+                }
+              ]
+            },
+            {
+              "value": "00000096385074",
+              "sources": [
+                {
+                  "value": "96385074",
+                  "sourceType": "SUPPLIER_PAGE",
+                  "retrievedAt": "2026-10-01T09:15:00Z"
+                }
+              ]
+            }
+          ]
         }
       }
+    },
+    {
+      "id": "synthetic-5-hypothetical-tank-light-mount",
+      "sources": [
+        "synthetic://manufacturer/hypothetical-tank-light-mount/page"
+      ],
+      "gold": {
+        "compatibility": { "status": "MISSING" },
+        "featureBullets": { "status": "VERIFIED" }
+      },
+      "candidate": {
+        "compatibility": {
+          "status": "SUGGESTED",
+          "value": "Compatible with the Imaginary Tank 60 rim",
+          "sourceType": "JEV_PROPOSAL",
+          "sourceRef": "synthetic://jev/decision-run/5",
+          "retrievedAt": "2026-10-01T09:20:00Z",
+          "confidence": 0.7
+        },
+        "featureBullets": {
+          "status": "SUGGESTED",
+          "value": "Placeholder mount for a hypothetical light bar",
+          "sourceType": "JEV_PROPOSAL",
+          "sourceRef": "synthetic://jev/decision-run/5",
+          "retrievedAt": "2026-10-01T09:20:00Z",
+          "confidence": 0.8
+        },
+        "seoTitle": {
+          "status": "SUGGESTED",
+          "value": "Hypothetical Tank Light Mount",
+          "sourceType": "JEV_PROPOSAL",
+          "sourceRef": "synthetic://jev/decision-run/5",
+          "retrievedAt": "2026-10-01T09:20:00Z",
+          "confidence": 0.8
+        }
+      },
+      "copyQuality": 5
     }
   ]
 }

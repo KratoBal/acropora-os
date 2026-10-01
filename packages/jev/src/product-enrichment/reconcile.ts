@@ -8,7 +8,9 @@
  *      or is REJECTED as UNSUPPORTED. A Tier C value from Jev, or any evidence
  *      without a sourceRef or a retrievedAt, stops here.
  *   2. Every remaining candidate is normalized for its field (GTIN check
- *      digit, unit conversion, ...) or is REJECTED as INVALID.
+ *      digit, unit conversion, ...) or is REJECTED as INVALID. For the `ean`
+ *      field a restricted-circulation (in-store) GTIN is INVALID too, with
+ *      the code `RESTRICTED_CIRCULATION_GTIN`: it is not a manufacturer EAN.
  *   3. Nothing accepted:  INVALID present     -> POSSIBLE_WRONG_VALUE
  *                         UNSUPPORTED present -> UNVERIFIED
  *                         no candidate        -> MISSING
@@ -63,7 +65,12 @@ export function reconcileField(
     }
     const n = normalizeFieldValue(field, candidate.value);
     if (!n.ok) {
-      rejected.push({ candidate, kind: "INVALID", reason: n.reason });
+      rejected.push({
+        candidate,
+        kind: "INVALID",
+        reason: n.reason,
+        ...(n.code ? { code: n.code } : {}),
+      });
       continue;
     }
     const group = groups.get(n.value);
@@ -181,6 +188,7 @@ function conflictSet(
       value: null,
       sources: [r.candidate],
       invalidReason: r.reason,
+      ...(r.code ? { invalidCode: r.code } : {}),
     });
   return entries.sort(
     (a, b) =>

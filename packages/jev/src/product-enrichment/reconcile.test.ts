@@ -3,10 +3,12 @@ import { describe, it } from "node:test";
 
 import {
   FIELD_SPECS,
+  RESTRICTED_CIRCULATION_GTIN,
   normalizeFieldValue,
   UnknownFieldError,
   type FieldKey,
 } from "./fields.js";
+import { validateGtin } from "./gtin.js";
 import { candidateProvenanceProblem, guardFieldResult } from "./guard.js";
 import {
   INDEPENDENT_SOURCES,
@@ -352,6 +354,82 @@ describe("Tier C: a value without evidence can never come out VERIFIED or SUGGES
         assert.equal(r.value, null);
       }
     }
+  });
+});
+
+describe("EAN: a restricted-circulation (in-store) GTIN is never a VERIFIED EAN", () => {
+  // 2001234567893: valid check digit, GS1 prefix 2 (restricted circulation).
+  const RESTRICTED = "2001234567893";
+
+  it("a normal EAN with valid provenance verifies", () => {
+    const r = reconcileField("ean", [
+      src("4006381333931", "MANUFACTURER_PAGE"),
+    ]);
+    assert.equal(r.status, "VERIFIED");
+    assert.equal(r.value, "04006381333931");
+  });
+
+  it("a restricted-circulation GTIN from an independent source does not verify: POSSIBLE_WRONG_VALUE, explicit code and reason", () => {
+    const r = reconcileField("ean", [
+      src(RESTRICTED, "MANUFACTURER_PAGE"),
+      src(RESTRICTED, "SUPPLIER_PAGE"),
+    ]);
+    assert.equal(r.status, "POSSIBLE_WRONG_VALUE");
+    assert.equal(r.value, null);
+    assert.ok(r.rejected.length === 2);
+    for (const x of r.rejected) {
+      assert.equal(x.kind, "INVALID");
+      assert.equal(x.code, RESTRICTED_CIRCULATION_GTIN);
+      assert.match(
+        x.reason,
+        /restricted-circulation \(in-store\) GTIN 2001234567893/,
+      );
+    }
+    assert.ok(
+      r.conflicts?.every((c) => c.invalidCode === RESTRICTED_CIRCULATION_GTIN),
+    );
+  });
+
+  it("next to a normal EAN it still blocks VERIFIED (never silently discarded)", () => {
+    const r = reconcileField("ean", [
+      src("4006381333931", "MANUFACTURER_PAGE"),
+      src(RESTRICTED, "SUPPLIER_PAGE"),
+    ]);
+    assert.equal(r.status, "POSSIBLE_WRONG_VALUE");
+    assert.equal(r.value, null);
+    const flagged = r.conflicts?.find(
+      (c) => c.invalidCode === RESTRICTED_CIRCULATION_GTIN,
+    );
+    assert.equal(flagged?.sources[0]?.value, RESTRICTED);
+  });
+
+  it("the normalizer reports the code; validateGtin keeps accepting the number as a GTIN", () => {
+    const n = normalizeFieldValue("ean", RESTRICTED);
+    assert.equal(n.ok, false);
+    assert.equal(n.ok ? undefined : n.code, RESTRICTED_CIRCULATION_GTIN);
+    const g = validateGtin(RESTRICTED);
+    assert.ok(g.ok && g.restrictedCirculation);
+  });
+
+  it("the guard rejects an external result claiming a restricted GTIN as VERIFIED EAN", () => {
+    const g = guardFieldResult("ean", {
+      field: "ean",
+      value: RESTRICTED,
+      sourceType: "MANUFACTURER_PAGE",
+      sourceRef: "synthetic://m",
+      retrievedAt: T,
+      confidence: 1,
+      status: "VERIFIED",
+      evidence: [src(RESTRICTED, "MANUFACTURER_PAGE", "synthetic://m")],
+      rejected: [],
+      reconciledAt: T,
+    });
+    assert.equal(g.ok, false);
+    assert.equal(g.result.status, "UNVERIFIED");
+    assert.ok(
+      !g.ok &&
+        g.violations.some((v) => /restricted-circulation/.test(v.reason)),
+    );
   });
 });
 

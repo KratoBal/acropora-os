@@ -101,6 +101,8 @@ export interface RejectedCandidate {
   /** `UNSUPPORTED`: provenance missing. `INVALID`: the value failed validation. */
   kind: "UNSUPPORTED" | "INVALID";
   reason: string;
+  /** A structured failure code (e.g. `RESTRICTED_CIRCULATION_GTIN`), when there is one. */
+  code?: string;
 }
 
 /** One distinct value inside a conflict set, with every source that states it. */
@@ -109,6 +111,8 @@ export interface ConflictEntry {
   value: string | null;
   sources: SourcedValue[];
   invalidReason?: string;
+  /** The structured code of the validation failure, when there is one. */
+  invalidCode?: string;
   /**
    * The source states this (normalized) value, but its provenance is
    * incomplete: it cannot VERIFY anything, and it still CONTRADICTS the

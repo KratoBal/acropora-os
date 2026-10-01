@@ -123,6 +123,20 @@ them is circular: a Tier C value backed only by them is UNVERIFIED.
 | C    | ean, manufacturerSku, lengthMm / widthMm / heightMm, volume, weight, flowRate, power, voltage, dosingAmount, composition, warranty, safetyInformation | **copy or verify only; never synthesize.** No trustworthy source → `MISSING` or `UNVERIFIED`                           |
 | C\*  | brand, capacity, packSize, packageContents                                                                                                            | named in P-031 but not placed in a tier by the decision: **the strictest tier by default** (`tierFromDecision: false`) |
 
+### Factual claims are a separate axis from the tier
+
+The tier says who may write a field. It does not say whether the field
+asserts product facts: a Tier B "compatibility" or a Tier A "long
+description" can state a fact as surely as a Tier C EAN. Every field
+therefore also has a `claims` policy (`FIELD_SPECS[field].claims`,
+`containsFactualClaims(field)`):
+
+| Policy  | Fields                                                                                        | What the benchmark checks                                                                                                                                                                      |
+| ------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `none`  | searchKeywords, seoTitle, metaDescription, categorySuggestion, title, category, productFamily | editorial or classification: not a factual claim; Jev suggestions stay allowed                                                                                                                 |
+| `value` | every Tier C field, compatibility, application, dosingText                                    | the value itself is a fact: it must be one that a source states                                                                                                                                |
+| `prose` | featureBullets, shortDescription, longDescription                                             | free text that may contain facts. **No sentence-level extraction in V0:** it fails if gold says no fact is supported (`MISSING` / `UNVERIFIED`) or the labeller marks `unsupportedClaim: true` |
+
 ## The deterministic parts
 
 The decision's architecture boundary assigns identifiers, schemas, field
@@ -136,8 +150,15 @@ functions. Uniqueness, writes and publication do not exist in V0.
   GS1 check digit. The only formatting it forgives is whitespace. The
   comparison form is zero-padded to 14 digits, so a UPC-A and its 13-digit
   form are the same GTIN. Restricted-circulation (in-store) numbers are
-  flagged, not rejected. This is deliberately stricter than `barcode.util.ts`,
-  which has to accept internal codes.
+  flagged (`restrictedCirculation`), not rejected, by `validateGtin`. This is
+  deliberately stricter than `barcode.util.ts`, which has to accept internal
+  codes.
+- **The `ean` field** rejects a restricted-circulation GTIN: an in-store
+  number is a valid GTIN, but it is not evidence of a manufacturer EAN. The
+  failure carries the code `RESTRICTED_CIRCULATION_GTIN` and an explicit
+  reason. That code reaches the reconciler's `rejected` entry and the
+  conflict entry (`invalidCode`), so the outcome is `POSSIBLE_WRONG_VALUE`,
+  never `VERIFIED`. The guard rejects an external result that claims one.
 - **`parseQuantity`** (`units.ts`): flow (l/h, L/h, lph, l/óra, m³/h → l/h),
   power (W, kW → W), voltage (V, with AC/DC kept), volume (ml, l → ml), length
   (mm, cm, m → mm), mass (g, kg → g). The arithmetic is exact decimal. **It
@@ -266,6 +287,8 @@ only to test the harness.
           "supportedValues": ["12 V", "24 V"],
         },
         "ean": { "status": "MISSING" },
+        "compatibility": { "status": "MISSING" }, // no source supports any compatibility claim
+        "longDescription": { "status": "VERIFIED", "unsupportedClaim": false }, // prose: a label, no value
       },
       "candidate": {
         // Jev output, one FieldResult-shaped entry per field
@@ -277,6 +300,38 @@ only to test the harness.
           "retrievedAt": "2026-10-01T09:00:00Z",
           "confidence": 0.95,
         },
+        "voltage": {
+          "status": "CONFLICTING_SOURCES",
+          "sourceType": "MANUFACTURER_PAGE",
+          "sourceRef": "<ref>",
+          "retrievedAt": "2026-10-01T09:00:00Z",
+          "confidence": 0.9,
+          // the ConflictEntry shape: every source of every value with full provenance
+          "conflicts": [
+            {
+              "value": "12 V",
+              "sources": [
+                {
+                  "value": "12 V",
+                  "sourceType": "MANUFACTURER_PAGE",
+                  "sourceRef": "<ref>",
+                  "retrievedAt": "2026-10-01T09:00:00Z",
+                },
+              ],
+            },
+            {
+              "value": "24 V",
+              "sources": [
+                {
+                  "value": "24 V",
+                  "sourceType": "SUPPLIER_PAGE",
+                  "sourceRef": "<ref>",
+                  "retrievedAt": "2026-10-01T09:00:00Z",
+                },
+              ],
+            },
+          ],
+        },
       },
       "human": { "flowRate": "ACCEPTED" }, // optional: ACCEPTED | EDITED | REJECTED
       "copyQuality": 4, // optional: 1..5
@@ -285,30 +340,56 @@ only to test the harness.
 }
 ```
 
+**Parsing is fail-fast.** `parseBenchmarkDataset` validates the whole
+dataset before anything is scored. It reports each problem with its exact
+path, for example
+`products[0](p1).gold.power.supportedValues: must be an array of non-empty strings`.
+It checks:
+
+- unknown properties and wrong types;
+- unknown source types and field values that are invalid for their field;
+- status invariants. A VERIFIED gold field needs a value (prose excepted).
+  A CONFLICTING_SOURCES gold field needs at least two distinct supported
+  values. A MISSING or UNVERIFIED field carries no value. A candidate
+  carries a value exactly when it is VERIFIED or SUGGESTED, and a
+  CONFLICTING_SOURCES candidate needs a conflicts array.
+
+A dataset with any problem never reaches `scoreBenchmark`. Missing
+provenance is not a parse error, because metric 5 measures it.
+
 ### The seven metrics, each reported separately
 
-1. **Field extraction accuracy:** of the gold `VERIFIED` fields, the share
-   the candidate asserted with the same value after normalization.
+1. **Field extraction accuracy:** of the gold `VERIFIED` fields (prose
+   excepted: copy is not an extracted value), the share the candidate
+   asserted with the same value after normalization.
 2. **Conflict detection accuracy:** whether `CONFLICTING_SOURCES` was flagged,
    compared with gold over every gold-labelled field (accuracy, precision,
    recall, and the confusion counts).
 3. **Missing-field detection:** recall over gold `MISSING` fields (the
    candidate left the field without a value), plus the number of false
    `MISSING` results.
-4. **Unsupported-fact (hallucination) rate:** over asserted Tier C values.
-   A value counts as unsupported if any of these holds:
-   - the guard rejects it;
-   - its `sourceRef` is not in the product's source inventory;
+4. **Unsupported factual claims (hallucination) rate:** over asserted values
+   of **every field with a factual-claims policy, in any tier** (see
+   above). A value counts as unsupported if any of these holds:
+   - the Tier C guard rejects it;
+   - its evidence `sourceRef` is not in the product's source inventory (a
+     Jev proposal's reference names its run, so it is not looked up there);
    - gold says no source supports any value;
-   - no source states that value.
+   - for a `value` field, no source states that value;
+   - for a `prose` field, the labeller marked an unsupported claim.
+
+   An unsupported claim makes the product fail the factual checks, so its
+   copy quality is not scored.
 
    **This is the hard gate: it must be zero** (`PASS`). If nothing was
    asserted, the result is `NO_DATA`, not `PASS`.
 
 5. **Provenance completeness:** of the asserted values and the conflict
    outputs, the share with a source type, a `sourceRef`, a valid
-   `retrievedAt` and a confidence. A conflict output also needs at least two
-   conflict entries.
+   `retrievedAt` and a confidence. A conflict output counts as complete only
+   if it has at least two entries, and **every source of every entry** has
+   a value, a source type, a `sourceRef` and a valid `retrievedAt`.
+   Provenance on the top-level candidate does not stand in for the entries.
 6. **Human acceptance rate:** only if the dataset has labels; otherwise
    `n/a`.
 7. **Copy quality:** scored **only** for products that passed the factual
@@ -344,3 +425,8 @@ A metric with nothing to measure reports `n/a`, never 0% or 100%.
 8. **Calendar-invalid timestamps.** `isIsoTimestamp` accepts
    `2026-02-30T10:00Z`, because `Date.parse` rolls it over into March (it
    rejects month 13). Should `retrievedAt` be checked against the calendar?
+9. **Claims policy placement.** V0 treats the product title, the SEO title
+   and the meta description as editorial (`claims: "none"`), following the
+   review's list. A title such as "... 3000 l/h pump" does assert a fact.
+   Should these fields become `prose`, so that a labeller can mark an
+   unsupported claim in them too?
