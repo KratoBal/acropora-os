@@ -39,6 +39,7 @@ import {
   enqueuePhoto,
   enqueueServiceJobCreate,
 } from "@/lib/offline/queue-store";
+import { deviceConnectivity } from "@/lib/offline/connectivity";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
 import {
@@ -211,6 +212,7 @@ export default function NewServiceJobScreen() {
       if (!torzs.ok) throw new Error(torzs.hiba);
       const { operationId, payload } = torzs;
       const outcome = await saveOrQueue({
+        connectivity: deviceConnectivity,
         save: () =>
           createServiceJob({ ...payload, clientOperationId: operationId }),
         enqueue: () =>

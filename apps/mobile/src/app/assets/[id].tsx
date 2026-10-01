@@ -53,7 +53,7 @@ import {
   readCachedAsset,
   rememberAssetDetail,
 } from "@/lib/offline/asset-cache";
-import { useIsOnline } from "@/lib/offline/connectivity";
+import { deviceConnectivity, useIsOnline } from "@/lib/offline/connectivity";
 import {
   describeOfflineDetailNotice,
   describeUnloadableDetail,
@@ -161,6 +161,7 @@ export default function AssetDetailScreen() {
         fajlonkent (kep -> PHOTO, minden mas -> OTHER).
       */
       const eredmeny = await uploadOrQueuePhotos({
+        connectivity: deviceConnectivity,
         files,
         upload: async (kepek) => {
           const created = await uploadAssetDocuments(id, { files: kepek });

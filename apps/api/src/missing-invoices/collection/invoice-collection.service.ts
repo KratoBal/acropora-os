@@ -426,6 +426,8 @@ export class InvoiceCollectionService {
             lines,
             await this.repository.cardDebits(),
             distinctiveWord,
+            // a számla keltét az általános olvasó nem nyeri ki: a levél érkezése
+            (found.receivedAt ?? new Date()).toISOString().slice(0, 10),
           );
           if (!payment) return skip("UNMATCHED");
           textReading = {

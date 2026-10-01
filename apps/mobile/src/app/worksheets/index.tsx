@@ -31,7 +31,7 @@ import {
   worksheetLabelOrDraft,
   worksheetListStartsMineOnly,
   worksheetListSubtitle,
-  worksheetStatusLabel,
+  worksheetDisplayLabel,
   worksheetStatusTone,
   worksheetVersionNote,
   WORKSHEET_STATUS_FILTERS,
@@ -462,7 +462,7 @@ export default function WorksheetsScreen() {
                   ]}
                 >
                   <Text style={[styles.statusText, { color: statusTone.text }]}>
-                    {worksheetStatusLabel[item.status]}
+                    {worksheetDisplayLabel(item.status, item.lineCount)}
                   </Text>
                 </View>
               </View>

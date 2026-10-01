@@ -37,7 +37,7 @@ import {
 } from "@/lib/api/material-requests";
 import { ApiError, ApiNetworkError } from "@/lib/api/client";
 import { describeUploadFailure } from "@/lib/api/network-failure";
-import { useIsOnline } from "@/lib/offline/connectivity";
+import { deviceConnectivity, useIsOnline } from "@/lib/offline/connectivity";
 import { describeCachedWorksheetNotice } from "@/lib/offline/offline-notice";
 import {
   enqueuePhoto,
@@ -124,6 +124,7 @@ import {
   worksheetDetailRows,
   worksheetLabelOrDraft,
   worksheetLineSummary,
+  worksheetDisplayLabel,
   worksheetStatusLabel,
   worksheetStatusTone,
 } from "@/lib/worksheets/worksheet-presentation";
@@ -559,6 +560,7 @@ export default function WorksheetDetailScreen() {
        * pinceben, terero nelkul.
        */
       const eredmeny = await uploadOrQueuePhotos({
+        connectivity: deviceConnectivity,
         files: photos,
         upload: async (files) => {
           const created = await uploadWorksheetDocuments(id, { files });
@@ -691,6 +693,7 @@ export default function WorksheetDetailScreen() {
        * ujrakerdezi. Igy a ket ag ugyanazt az alakot adja vissza.
        */
       return saveOrQueue({
+        connectivity: deviceConnectivity,
         save: async () => {
           await addWorksheetLine(id, built.payload);
           return { id: lineId };
@@ -943,7 +946,10 @@ export default function WorksheetDetailScreen() {
                     ]}
                   >
                     <Text style={[styles.statusText, { color: tone.text }]}>
-                      {worksheetStatusLabel[current.status]}
+                      {worksheetDisplayLabel(
+                        current.status,
+                        current.lines.length,
+                      )}
                     </Text>
                   </View>
                 );
