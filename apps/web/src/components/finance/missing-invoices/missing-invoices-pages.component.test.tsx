@@ -133,6 +133,7 @@ const itemDetail = (
   overrides: Partial<MissingInvoiceItemDetail> = {},
 ): MissingInvoiceItemDetail => ({
   ...item(),
+  payeeDocuments: [],
   candidates: [
     {
       documentId: "inv-2",
@@ -162,6 +163,8 @@ const IMPORT_RESULT = {
       index === 0 ? "A dátum nem olvasható: 2026.13.01" : "Az összeg nem szám.",
   })),
   rejectedCount: 12,
+  pending: [],
+  pendingCount: 0,
   accounts: [{ accountNumber: "11773016-11111111", currency: "HUF" }],
   months: ["2026-08", "2026-09"],
 };

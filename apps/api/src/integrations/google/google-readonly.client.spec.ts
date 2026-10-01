@@ -282,6 +282,59 @@ describe("GoogleReadonlyClient, a 403 és a 429", () => {
     assert.equal(t.calls(), 1);
   });
 
+  /*
+    A MEGÁLLÁS MÉRT OKA (acrobot 25629). MI PIROSÍT: ha a végső hiba nem vinné a
+    Google okát, tartományát és a Retry-After értékeket; ha szabad szöveg (a
+    hibaüzenet, egy nem azonosító alakú ok) a naplóba jutna.
+  */
+  const detail = async (promise: Promise<unknown>) => {
+    try {
+      await promise;
+      return "ok";
+    } catch (error) {
+      return error instanceof GoogleReadonlyError
+        ? error.detail
+        : String(error);
+    }
+  };
+
+  it("the final rate-limit error names Google's reason, domain and the retry times", async () => {
+    const t = make([
+      () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 403,
+              message:
+                "User-rate limit exceeded.  Retry after 2026-10-01T09:30:00.123Z (info@acropora.hu)",
+              errors: [
+                { domain: "usageLimits", reason: "userRateLimitExceeded" },
+                { domain: "global", reason: "free text, not an id" },
+              ],
+            },
+          }),
+          { status: 403, headers: { "Retry-After": "30" } },
+        ),
+    ]);
+    assert.equal(
+      await detail(ids(t.google)),
+      "403 userRateLimitExceeded usageLimits+global retry-after=30 retry-at=2026-10-01T09:30:00.123Z",
+    );
+  });
+
+  it("a permission 403 carries its reason too, and a 429 without a body its status", async () => {
+    const forbiddenT = make([
+      () =>
+        forbidden({ error: { errors: [{ reason: "dailyLimitExceeded" }] } }),
+    ]);
+    assert.equal(
+      await detail(ids(forbiddenT.google)),
+      "403 dailyLimitExceeded -",
+    );
+    const tooMany = make([() => new Response("{}", { status: 429 })]);
+    assert.equal(await detail(ids(tooMany.google)), "429 - -");
+  });
+
   it("a 429 is retried, and Retry-After is honoured up to 10 seconds", async () => {
     const t = make([
       () =>
