@@ -167,11 +167,104 @@ describe("matchMonth", () => {
       );
     };
     assert.deepEqual(reasons([parkl("2026-04-10", 1200)]), [false, false]); // késői, de az ablakon belül
-    assert.deepEqual(reasons([parkl("2026-04-01", 1210)]), [false, false]); // más összeg
+    assert.deepEqual(reasons([parkl("2026-04-01", 1190)]), [false, false]); // a számla a kisebb
+    // a többlet nagyobb a legnagyobb fizetésnél (900 > 800), vagy a számla 10 %-ánál (300 > 150)
+    assert.deepEqual(reasons([parkl("2026-04-01", 2100)]), [false, false]);
+    assert.deepEqual(reasons([parkl("2026-04-01", 1500)]), [false, false]);
+    // csak a legnagyobb-fizetés korlát: 12 x 100 Ft, a többlet 120 (a 10 % alatt, a 100 fölött)
+    const many = Array.from({ length: 12 }, (_, i) =>
+      card(`2026-03-${String(i + 10)}`, 100),
+    );
+    const manyOut = run(many, [parkl("2026-04-01", 1320)]);
+    assert.equal(manyOut.get(many[0]!.id)?.state, "NOT_MATCHED");
+    assert.equal(
+      run(many, [parkl("2026-04-01", 1290)]).get(many[0]!.id)?.state,
+      "FOUND",
+    );
     assert.deepEqual(
       reasons([parkl("2026-04-01", 1200), parkl("2026-04-02", 1200)]),
       [false, false],
     ); // kettő közül nem választunk
+  });
+
+  it("a small remainder on the invoice still pairs the month, with the difference (Parkl, 2026-09: a pending 640 Ft payment)", () => {
+    const card = (date: string, amount: number, number = "0194683438") =>
+      debit({
+        bookingDate: date,
+        amount: D(amount),
+        counterpartyName: "SIMPLEP*PARKL.NET",
+        narrative: `${date.replace(/-/g, ".")} ${number} SIMPLEP*PARKL .NET`,
+        category: "CARD_SUBSCRIPTION",
+      });
+    const month = [
+      card("2026-09-03", 6900),
+      card("2026-09-14", 3980),
+      card("2026-09-29", 11202),
+    ];
+    const invoice = doc({
+      number: "E-PAR-2026-46439",
+      date: "2026-10-01",
+      gross: D(22722),
+      supplierName: "Parkl Digital Technologies Kft.",
+    });
+    const out = run(month, [invoice]);
+    for (const d of month) {
+      const o = out.get(d.id)!;
+      assert.equal(o.state, "FOUND");
+      assert.deepEqual(o.documents, [invoice]);
+      assert.equal(
+        o.reason,
+        "gyűjtőszámla: 3 kártyás fizetés havi összege, a számla többlete 640 HUF, könyveletlen tétel lehet",
+      );
+      assert.equal(o.amountDifference?.amount.toString(), "-640");
+      assert.equal(o.amountDifference?.currency, "HUF");
+    }
+  });
+
+  it("the exact card takes its invoice first, so the other card's remainder finds its own", () => {
+    const card = (date: string, amount: number, number: string) =>
+      debit({
+        bookingDate: date,
+        amount: D(amount),
+        counterpartyName: "SIMPLEP*PARKL.NET",
+        narrative: `${date.replace(/-/g, ".")} ${number} SIMPLEP*PARKL .NET`,
+        category: "CARD_SUBSCRIPTION",
+      });
+    const exactCard = [
+      card("2026-03-05", 500, "1111111111"),
+      card("2026-03-06", 500, "1111111111"),
+    ];
+    const shortCard = [
+      card("2026-03-07", 480, "2222222222"),
+      card("2026-03-08", 480, "2222222222"),
+    ];
+    const parkl = (number: string, gross: number) =>
+      doc({
+        number,
+        date: "2026-04-01",
+        gross: D(gross),
+        supplierName: "Parkl Digital Technologies Kft.",
+      });
+    // az E-PAR-Y a pontos kártyáé; a rövid kártyának MINDKETTŐ kis többlet
+    // lenne (40 és 30 Ft), tehát a pontos kör nélkül kettő közül nem választana
+    const out = run(
+      [...exactCard, ...shortCard],
+      [parkl("E-PAR-Y", 1000), parkl("E-PAR-X", 990)],
+    );
+    const numbers = (ds: MatchableDebit[]) =>
+      ds.map((d) =>
+        out
+          .get(d.id)
+          ?.documents.map((c) => c.number)
+          .join(),
+      );
+    assert.deepEqual(numbers(exactCard), ["E-PAR-Y", "E-PAR-Y"]);
+    assert.deepEqual(numbers(shortCard), ["E-PAR-X", "E-PAR-X"]);
+    assert.equal(
+      out.get(shortCard[0]!.id)?.amountDifference?.amount.toString(),
+      "-30",
+    );
+    assert.equal(out.get(exactCard[0]!.id)?.amountDifference, undefined);
   });
 
   it("takes the number only as a whole word of the narrative (the two measured wrong pairings)", () => {
