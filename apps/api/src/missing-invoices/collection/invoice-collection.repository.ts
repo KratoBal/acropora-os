@@ -202,6 +202,29 @@ export class InvoiceCollectionRepository {
     return row?.verdict ?? null;
   }
 
+  /**
+   * A már tárolt dokumentumok ugyanezzel a számlaszámmal, bármilyen úton
+   * érkeztek (az illesztő vagy a szövegolvasó száma). A száraz újraértékelés
+   * jelzi őket; azonos tartalmú itt nem lehet, mert az már DUPLICATE.
+   */
+  async sameNumberDocuments(
+    invoiceNumber: string,
+  ): Promise<{ fileName: string; origin: string }[]> {
+    const numbers = [
+      ...new Set([invoiceNumber, invoiceNumber.replace(/\s/g, "")]),
+    ];
+    return this.database.incomingSupplierDocument.findMany({
+      where: {
+        OR: numbers.flatMap((n) => [
+          { importResult: { path: ["invoiceNumber"], equals: n } },
+          { textReading: { path: ["invoiceNumber"], equals: n } },
+        ]),
+      },
+      select: { fileName: true, origin: true },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
   /** Van-e már ilyen tartalmú dokumentum, bármilyen úton érkezett. */
   async hasContent(sha256: string): Promise<boolean> {
     return (
