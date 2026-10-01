@@ -17,7 +17,10 @@ const gate = integrationDatabaseGate(process.env);
 const PREFIX = "NAVVISSZA";
 const CURSOR = { provider: "NAV", stream: "INBOUND_INVOICES" };
 
-const item = (invoiceNumber: string): NavInvoiceDigestItem =>
+const item = (
+  invoiceNumber: string,
+  overrides: Partial<NavInvoiceDigestItem> = {},
+): NavInvoiceDigestItem =>
   ({
     invoiceNumber,
     invoiceOperation: "CREATE",
@@ -26,6 +29,7 @@ const item = (invoiceNumber: string): NavInvoiceDigestItem =>
     invoiceIssueDate: "2026-01-10",
     insDate: "2026-01-10T10:00:00Z",
     currency: "HUF",
+    ...overrides,
   }) as NavInvoiceDigestItem;
 
 describe("a NAV-visszatöltés beírása", { skip: gate.mode === "skip" }, () => {
@@ -90,5 +94,45 @@ describe("a NAV-visszatöltés beírása", { skip: gate.mode === "skip" }, () =>
       )?.lastSuccessfulWindowEnd ?? null;
     assert.deepEqual(cursorAfter, cursorBefore);
     assert.equal(await repository.countKnown([item(`${PREFIX}-1`)]), 1);
+  });
+
+  it("stores a credit note (MODIFY) and a storno with the operation and the original invoice, once", async () => {
+    const credit = item(`${PREFIX}-JOVAIRO`, {
+      invoiceOperation: "MODIFY",
+      originalInvoiceNumber: `${PREFIX}-1`,
+      modificationIndex: 1,
+      invoiceNetAmount: "-59918",
+    });
+    const storno = item(`${PREFIX}-STORNO`, { invoiceOperation: "STORNO" });
+    const first = await apply([credit, storno]);
+    const second = await apply([credit, storno]);
+    assert.deepEqual([first.createdCount, second.createdCount], [2, 0]);
+    const rows = await prisma.navIncomingInvoice.findMany({
+      where: {
+        navInvoiceNumber: { in: [credit.invoiceNumber, storno.invoiceNumber] },
+      },
+      orderBy: { navInvoiceNumber: "asc" },
+      select: {
+        navInvoiceNumber: true,
+        invoiceOperation: true,
+        originalInvoiceNumber: true,
+        modificationIndex: true,
+        invoiceNetAmount: true,
+      },
+    });
+    assert.deepEqual(
+      rows.map((r) => [
+        r.navInvoiceNumber,
+        r.invoiceOperation,
+        r.originalInvoiceNumber,
+        r.modificationIndex,
+        r.invoiceNetAmount?.toString() ?? null,
+      ]),
+      [
+        [credit.invoiceNumber, "MODIFY", `${PREFIX}-1`, 1, "-59918"],
+        [storno.invoiceNumber, "STORNO", null, null, null],
+      ],
+    );
+    assert.equal(await repository.countKnown([credit, storno]), 2);
   });
 });

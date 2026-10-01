@@ -120,7 +120,11 @@ export class InvoiceCollectionRepository {
   async navNumbers(supplierTaxBase: string): Promise<string[]> {
     if (!/^\d{8}$/.test(supplierTaxBase)) return [];
     const rows = await this.database.navIncomingInvoice.findMany({
-      where: { supplierTaxNumber: { startsWith: supplierTaxBase } },
+      // csak az alapszámla, mint a párosítóban: a jóváíró PDF-je külön döntés
+      where: {
+        supplierTaxNumber: { startsWith: supplierTaxBase },
+        invoiceOperation: "CREATE",
+      },
       select: { navInvoiceNumber: true },
     });
     return rows.map((row) => row.navInvoiceNumber);
