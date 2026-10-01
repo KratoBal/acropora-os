@@ -61,8 +61,49 @@ describe(
           await repository.storeRaw(message),
           await repository.storeRaw(message),
         ],
-        [true, false],
+        ["NEW", "SEEN"],
       );
+    });
+
+    /**
+     * UGYANAZ A SZÁMLA, MÁS TARTALOMMAL (acrobot 25781): a Számlázz.hu a
+     * fizetési állapot vagy egy mező változása után ugyanazzal az azonosítóval
+     * küldi újra. MI PIROSÍT: ha az új tartalom eldobódna (a régi egyedi kulcs
+     * ezt tette); ha felülírná a régit; ha ugyanaz a tartalom kétszer íródna; ha
+     * egy másik fajta azonos azonosítója változatnak számítana.
+     */
+    it("the same invoice with a different body is a new version, and the old one stays", async () => {
+      const first = {
+        kind: "SZAMLAKI" as const,
+        externalId: `${PREFIX}2`,
+        sha256: "elso",
+        body: "<szamla>fizetetlen</szamla>",
+      };
+      const paid = {
+        ...first,
+        sha256: "masodik",
+        body: "<szamla>fizetve</szamla>",
+      };
+      assert.deepEqual(
+        [
+          await repository.storeRaw(first),
+          await repository.storeRaw(paid),
+          await repository.storeRaw(paid),
+          await repository.storeRaw({ ...first, kind: "SZAMLABE" }),
+        ],
+        ["NEW", "NEW_VERSION", "SEEN", "NEW"],
+      );
+      const rows = await prisma.szamlazzFeedMessage.findMany({
+        where: { kind: "SZAMLAKI", externalId: `${PREFIX}2` },
+        // a sha256 szerint, nem az idő szerint: két sor egy ezredmásodpercen belül
+        // is keletkezhet, és az azonos időbélyeg sorrendje nem rögzített
+        orderBy: { sha256: "asc" },
+        select: { sha256: true, body: true },
+      });
+      assert.deepEqual(rows, [
+        { sha256: "elso", body: "<szamla>fizetetlen</szamla>" },
+        { sha256: "masodik", body: "<szamla>fizetve</szamla>" },
+      ]);
     });
 
     it("a forwarded invoice is a candidate, with its source, gross and supplier", async () => {
