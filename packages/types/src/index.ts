@@ -956,11 +956,14 @@ export {
   starterDashboardLayout,
 } from "./dashboard-widgets.js";
 export type {
+  DashboardAquariumAlertsWidgetData,
+  DashboardAquariumEquipmentWidgetData,
   DashboardExpectedArrivalsWidgetData,
   DashboardLayoutEntry,
   DashboardMaintenanceCalendarWidgetData,
   DashboardMaterialRequestsWidgetData,
   DashboardServiceTicketsWidgetData,
+  DashboardWaterValuesWidgetData,
   DashboardWorksheetsWidgetData,
   DashboardLayoutInputResult,
   DashboardLayoutResponse,
