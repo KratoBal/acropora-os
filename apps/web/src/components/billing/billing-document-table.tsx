@@ -9,6 +9,7 @@ import {
 
 import { formatMoney } from "./billing-editor-state";
 import { BillingDocumentStatus } from "./billing-document-status";
+import { ExternalBadge } from "./billing-external-document-page";
 
 export const BILLING_LIST_PATH = "/penzugy/szamlazas";
 
@@ -21,9 +22,12 @@ export function billingDocumentHref(item: {
   id: string;
   opens: BillingDocumentListItem["opens"];
 }): string {
-  return item.opens === "EDITOR"
-    ? `${BILLING_LIST_PATH}/${item.id}/szerkesztes`
-    : `${BILLING_LIST_PATH}/${item.id}`;
+  if (item.opens === "EDITOR")
+    return `${BILLING_LIST_PATH}/${item.id}/szerkesztes`;
+  // a Számlázz.hu-ból kapott külső bizonylat: csak olvasható adatlap (acrobot 25812)
+  if (item.opens === "EXTERNAL_DETAIL")
+    return `${BILLING_LIST_PATH}/kulso/${item.id}`;
+  return `${BILLING_LIST_PATH}/${item.id}`;
 }
 
 /** `YYYY-MM-DD` -> "2026. 09. 30.", hiányzó dátumnál "—" (a Figma jele). */
@@ -47,7 +51,8 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       cell: (item) => (
         <span className="flex flex-col">
           <span className="font-semibold text-pilot-grey-900">
-            {getDocumentCapabilities(item.documentType).label}
+            {item.externalKindLabel ??
+              getDocumentCapabilities(item.documentType).label}
           </span>
           <span className="text-xs text-pilot-aqua-700">
             {item.invoiceFormat
@@ -62,8 +67,11 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       header: "Bizonylatszám",
       width: "160px",
       cell: (item) => (
-        <span className="font-semibold text-pilot-grey-900">
-          {item.documentNumber ?? "Piszkozat"}
+        <span className="flex flex-col items-start gap-1">
+          <span className="font-semibold text-pilot-grey-900">
+            {item.documentNumber ?? "Piszkozat"}
+          </span>
+          {item.origin === "EXTERNAL" ? <ExternalBadge /> : null}
         </span>
       ),
     },
@@ -138,9 +146,10 @@ export function BillingDocumentTable({
       rowKey={(item) => item.id}
       onRowActivate={onOpen}
       rowLabel={(item) =>
-        `${getDocumentCapabilities(item.documentType).label} ${
-          item.documentNumber ?? "piszkozat"
-        }, ${item.customerName} megnyitása`
+        `${item.origin === "EXTERNAL" ? "Külső " : ""}${
+          item.externalKindLabel ??
+          getDocumentCapabilities(item.documentType).label
+        } ${item.documentNumber ?? "piszkozat"}, ${item.customerName} megnyitása`
       }
       minWidth={960}
     />

@@ -4,7 +4,6 @@ import { describe, it } from "node:test";
 
 import { knownEntries, type KnownRow } from "./known-builder.js";
 import {
-  buildPairRequest,
   buildPairRequestDroppingBlocked,
   PairBlocked,
   type PairCandidate,
@@ -60,7 +59,13 @@ interface Vectors {
   };
 }
 type PairVector =
-  | { body: string; placeholders: Record<string, number>; options: string[] }
+  | {
+      body: string;
+      placeholders: Record<string, number>;
+      options: string[];
+      kept: number[];
+      dropped: [number, string][];
+    }
   | { blocked: string; detail: string };
 
 const vec = (name: string) =>
@@ -195,7 +200,7 @@ describe("a parositas kerese: ugyanaz a torzs, mint a merese", () => {
         const want = V.pairing[mode][i]!;
         let got: PairVector;
         try {
-          const q = buildPairRequest(r, item, item.candidates);
+          const q = buildPairRequestDroppingBlocked(r, item, item.candidates);
           got = {
             body: JSON.stringify({
               state: q.state,
@@ -210,6 +215,8 @@ describe("a parositas kerese: ugyanaz a torzs, mint a merese", () => {
             }),
             placeholders: q.placeholders,
             options: Object.keys(q.criteria),
+            kept: [...q.candidateIndexes],
+            dropped: q.dropped.map((d) => [d.index, d.outcome]),
           };
         } catch (e) {
           if (!(e instanceof PairBlocked)) throw e;
@@ -225,86 +232,75 @@ describe("a parositas kerese: ugyanaz a torzs, mint a merese", () => {
           );
           assert.deepEqual(got.placeholders, want.placeholders, item.id);
           assert.deepEqual(got.options, want.options, item.id);
+          assert.deepEqual(got.kept, want.kept, item.id);
+          assert.deepEqual(got.dropped, want.dropped, item.id);
         } else assert.deepEqual(got, want, item.id);
       });
     });
 });
 
-describe("a jeloltet kiejto keres (acrobot 25560)", () => {
-  it("ahol nincs mit kiejteni, bajtra a mert keres; ahol a lekerdezes all meg, ott is megall", () => {
-    for (const known of [null, knownTable(V.known.entries)]) {
-      const r = new Redactor({ commonWords: common, known });
-      for (const item of V.pairing.items) {
-        let mert: unknown;
-        try {
-          mert = buildPairRequest(r, item, item.candidates);
-        } catch (e) {
-          mert = (e as PairBlocked).outcome;
-        }
-        let uj: unknown;
-        try {
-          const { candidateIndexes, dropped, ...q } =
-            buildPairRequestDroppingBlocked(r, item, item.candidates);
-          assert.deepEqual(dropped, [], item.id);
-          assert.deepEqual(
-            candidateIndexes,
-            item.candidates.map((_, i) => i),
-            item.id,
-          );
-          uj = q;
-        } catch (e) {
-          uj = (e as PairBlocked).outcome;
-        }
-        assert.deepEqual(uj, mert, item.id);
-      }
-    }
-  });
-
-  it("a zavaro jeloltet ejti ki, a tobbi atszamozva megy; ha egy sem marad, nincs keres", () => {
-    // a known-lista a HANNA szallitobol egy "HANNA" aliast is kepez, jogi forma nelkul
-    const known = knownTable(
+describe("r12: a csupasz ceg-alias a teljes neven belul (acrobot 25567)", () => {
+  const known = () =>
+    knownTable(
       knownEntries([["ORG", "HANNA Instruments Service Kft."]], common),
     );
-    const r = new Redactor({ commonWords: common, known });
+  const hanna = {
+    number: "26/000878",
+    date: "2026-05-02",
+    gross: "146000",
+    currency: "HUF",
+    supplier: "HANNA Instruments Service Kft.",
+  };
+  const masik = {
+    number: "2026/01039632",
+    date: "2026-05-01",
+    gross: "145854",
+    currency: "HUF",
+    supplier: "Euroleasing Zrt.",
+  };
+
+  it("a HANNA szamla jelolt marad, es lehet o maga a helyes", () => {
+    const r = new Redactor({ commonWords: common, known: known() });
     const fizetes = {
       date: "2026-05-10",
-      amount: "146236",
+      amount: "146000",
       currency: "HUF",
       original: "",
-      partner: "Euroleasing Zrt.",
-      narrative: "70862025177054",
+      partner: "HANNA Instruments Service Kft.",
+      narrative: "26/000878",
       type: "ÁTUTALÁS",
     };
-    const hanna = {
-      number: "26/000878",
-      date: "2026-05-02",
-      gross: "146000",
+    const q = buildPairRequestDroppingBlocked(r, fizetes, [hanna, masik]);
+    assert.deepEqual(q.dropped, []);
+    assert.deepEqual(q.candidateIndexes, [0, 1]);
+    assert.match(q.state.c0!, /HANNA Instruments Service Kft\./);
+    assert.match(q.state.query!, /HANNA Instruments Service Kft\./);
+  });
+
+  it("egy jelolt, amit az or tenyleg megallit, kiesik; ha egy sem marad, nincs keres", () => {
+    const r = new Redactor({
+      commonWords: common,
+      known: knownTable([["ORG", "FANK"]]),
+    });
+    const fizetes = {
+      date: "2026-05-10",
+      amount: "1999",
       currency: "HUF",
-      supplier: "HANNA Instruments Service Kft.",
+      original: "",
+      partner: "Akvárium Szerviz Kft.",
+      narrative: "SZ-2026/0815",
+      type: "ÁTUTALÁS",
     };
-    const helyes = {
-      number: "2026/01039632",
-      date: "2026-05-01",
-      gross: "145854",
-      currency: "HUF",
-      supplier: "Euroleasing Zrt.",
-    };
-    assert.throws(
-      () => buildPairRequest(r, fizetes, [hanna, helyes]),
-      PairBlocked,
-    );
-    const q = buildPairRequestDroppingBlocked(r, fizetes, [hanna, helyes]);
+    const fank = { ...masik, number: "FANK-2026" };
+    const q = buildPairRequestDroppingBlocked(r, fizetes, [fank, masik]);
     assert.deepEqual(q.candidateIndexes, [1]);
     assert.deepEqual(
       q.dropped.map((d) => [d.index, d.outcome]),
       [[0, "blocked_runtime_guard"]],
     );
-    assert.deepEqual(Object.keys(q.state), ["query", "c0"]);
-    assert.deepEqual(Object.keys(q.criteria), ["c0", "NONE"]);
-    assert.match(q.state.c0!, /Euroleasing Zrt\./);
-    assert.ok(!JSON.stringify(q).includes("HANNA"));
+    assert.ok(!JSON.stringify(q.state).includes("FANK"));
     assert.throws(
-      () => buildPairRequestDroppingBlocked(r, fizetes, [hanna]),
+      () => buildPairRequestDroppingBlocked(r, fizetes, [fank]),
       (e: unknown) =>
         e instanceof PairBlocked && e.detail === "no candidate left",
     );

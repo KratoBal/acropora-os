@@ -355,18 +355,29 @@ export class Redactor {
         if (rx.test(t)) problems.add(kind);
         rx.lastIndex = 0;
       }
-    if (this.known)
-      for (const [s, e, kind] of knownSpans(t, this.known)) {
+    if (this.known) {
+      const spans = knownSpans(t, this.known);
+      const formed = (s: number, e: number) =>
+        RX.formInHit.test(t.slice(s, e)) ||
+        matchAt(RX.formAfterHit, t, e) !== null;
+      for (const [s, e, kind] of spans) {
+        // r12 (acrobot 25567): a bare ORG hit passes when it is the start of a
+        // longer allowed ORG hit that reaches a legal form ("HANNA" inside
+        // "HANNA Instruments Service Kft."); the longer hit is checked itself too
+        const inside = spans.some(
+          ([s2, e2, k2]) =>
+            allow.has(k2) && s2 === s && e2 > e && formed(s2, e2),
+        );
         const allowed =
           allow.has(kind) &&
-          (RX.formInHit.test(t.slice(s, e)) ||
-            matchAt(RX.formAfterHit, t, e) !== null) &&
+          (formed(s, e) || inside) &&
           !RX.soleTrader.test(t.slice(s, e + 24));
         if (!allowed) {
           problems.add("KNOWN_ENTITY");
           break;
         }
       }
+    }
     return [...problems].sort();
   }
 

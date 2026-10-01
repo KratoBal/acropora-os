@@ -66,6 +66,8 @@ function item(
     status: "ISSUED",
     emailStatus: "SENT",
     opens: "DETAIL",
+    origin: "OWN",
+    externalKindLabel: null,
     ...overrides,
   };
 }
@@ -154,6 +156,57 @@ describe("BillingDocumentListPage", () => {
     fireEvent.keyDown(rows[2]!, { key: "Enter" });
     expect(urlNavigation.push).toHaveBeenLastCalledWith(
       "/penzugy/szamlazas/draft-1/szerkesztes",
+    );
+  });
+
+  /**
+   * A KÜLSŐ BIZONYLAT A LISTÁN (acrobot 25812): a mieink mellett, „Külső”
+   * jelöléssel és a Számlázz.hu típus-feliratával, és a csak olvasható
+   * adatlapjára nyílik. MI PIROSÍT: ha a jelölés hiányozna, vagy a sor a mieink
+   * adatlapjára nyílna (ott 404 lenne); a KONTROLL: a saját sor nem jelölt.
+   */
+  it("an external row is marked, labelled with its Számlázz.hu kind, and opens its read-only page", async () => {
+    api.list.mockResolvedValue(
+      response([
+        item({}),
+        item({
+          id: "ext-1",
+          documentNumber: "ACRW-2026/00508",
+          customerName: "Teszt Akvárium Bt.",
+          emailStatus: null,
+          opens: "EXTERNAL_DETAIL",
+          origin: "EXTERNAL",
+          externalKindLabel: "Sztornó számla",
+        }),
+      ]),
+    );
+    render(<BillingDocumentListPage />);
+    const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
+    expect(within(rows[1]!).getByText("Külső")).toBeInTheDocument();
+    expect(within(rows[1]!).getByText("Sztornó számla")).toBeInTheDocument();
+    expect(within(rows[0]!).queryByText("Külső")).toBeNull();
+    fireEvent.click(within(rows[1]!).getByText("Teszt Akvárium Bt."));
+    expect(urlNavigation.push).toHaveBeenLastCalledWith(
+      "/penzugy/szamlazas/kulso/ext-1",
+    );
+  });
+
+  it("the source filter goes to the request, and back from the URL", async () => {
+    urlNavigation.reset("/penzugy/szamlazas", "origin=EXTERNAL");
+    render(<BillingDocumentListPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    expect(lastQuery()).toEqual({
+      page: "1",
+      pageSize: "25",
+      origin: "EXTERNAL",
+    });
+    fireEvent.change(screen.getByLabelText("Forrás"), {
+      target: { value: "OWN" },
+    });
+    await waitFor(() =>
+      expect(new URLSearchParams(urlNavigation.search).get("origin")).toBe(
+        "OWN",
+      ),
     );
   });
 
