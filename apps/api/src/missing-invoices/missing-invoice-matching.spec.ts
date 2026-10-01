@@ -109,6 +109,71 @@ describe("matchMonth", () => {
     );
   });
 
+  it("pays a month of one card's payments with the partner's one invoice from the start of the next month", () => {
+    const card = (date: string, amount: number, number = "7413124583") =>
+      debit({
+        bookingDate: date,
+        amount: D(amount),
+        counterpartyName: "SIMPLEP*PARKL.NET",
+        narrative: `${date.replace(/-/g, ".")} ${number} SIMPLEP*PARKL .NET`,
+        category: "CARD_SUBSCRIPTION",
+      });
+    const march = [
+      card("2026-03-05", 400),
+      card("2026-03-17", 350),
+      card("2026-03-31", 450),
+    ];
+    const otherCard = card("2026-03-20", 999, "0194683438");
+    const invoice = doc({
+      number: "E-PAR-2026-13900",
+      date: "2026-04-01",
+      gross: D(1200),
+      supplierName: "Parkl Digital Technologies Kft.",
+    });
+    const out = run([...march, otherCard], [invoice]);
+    assert.deepEqual(
+      march.map((d) => [
+        out.get(d.id)?.documents[0]?.id,
+        out.get(d.id)?.reason,
+      ]),
+      march.map(() => [
+        invoice.id,
+        "gyűjtőszámla: 3 kártyás fizetés havi összege",
+      ]),
+    );
+    assert.equal(out.get(otherCard.id)?.state, "NOT_MATCHED");
+  });
+
+  it("does not take a monthly invoice that is late, off by an amount, or one of two equal ones", () => {
+    const card = (date: string, amount: number) =>
+      debit({
+        bookingDate: date,
+        amount: D(amount),
+        counterpartyName: "SIMPLEP*PARKL.NET",
+        narrative: `${date.replace(/-/g, ".")} 7413124583 SIMPLEP*PARKL .NET`,
+        category: "CARD_SUBSCRIPTION",
+      });
+    const parkl = (date: string, gross: number) =>
+      doc({
+        date,
+        gross: D(gross),
+        supplierName: "Parkl Digital Technologies Kft.",
+      });
+    const reasons = (documents: CandidateDocument[]) => {
+      const month = [card("2026-03-05", 400), card("2026-03-17", 800)];
+      const out = run(month, documents);
+      return month.map(
+        (d) => out.get(d.id)?.reason.startsWith("gyűjtőszámla") ?? false,
+      );
+    };
+    assert.deepEqual(reasons([parkl("2026-04-10", 1200)]), [false, false]); // késői, de az ablakon belül
+    assert.deepEqual(reasons([parkl("2026-04-01", 1210)]), [false, false]); // más összeg
+    assert.deepEqual(
+      reasons([parkl("2026-04-01", 1200), parkl("2026-04-02", 1200)]),
+      [false, false],
+    ); // kettő közül nem választunk
+  });
+
   it("pairs by the supplier's bank account with an exact amount", () => {
     const d = debit({
       counterpartyName: "más név",
