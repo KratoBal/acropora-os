@@ -1,6 +1,6 @@
 {
- "version": "r11",
- "reference": "ea35b2705138bf5a5a2eaa5f47ec383e3192bfc894c672d6b883f49e9e955e9a",
+ "version": "r14",
+ "reference": "2ce5d0322f3272e0ef8b6e1f35c659006f32d454d848252db4a6dff3febc49c5",
  "commonWords": [
   "adoszam",
   "allatkert",
@@ -5184,6 +5184,48 @@
    "pairing": {
     "text": "a 13 800 helyett 30 ezer felett ingyenes a szallitas",
     "counts": {},
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "email-domain-broken-by-line",
+   "keep": [],
+   "default": {
+    "text": "E-mail | : <EMAIL_1>. | : / com",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "E-mail | : <EMAIL_1>. | : / com",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "email-bare-host",
+   "keep": [],
+   "default": {
+    "text": "Írj a <EMAIL_1> címre.",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Írj a <EMAIL_1> címre.",
+    "counts": {
+     "EMAIL": 1
+    },
     "guard": [],
     "guardPairing": []
    }
