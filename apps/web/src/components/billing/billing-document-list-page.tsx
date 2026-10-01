@@ -26,7 +26,7 @@ import {
   type BillingDocumentListItem,
   type BillingDocumentListResponse,
 } from "@acropora/types";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -42,6 +42,13 @@ import {
   BillingDocumentTable,
   billingDocumentHref,
 } from "./billing-document-table";
+import { BillingIncomingList } from "./billing-incoming-list";
+import { BillingReceiptsView } from "./billing-receipts-view";
+import {
+  BILLING_VIEWS,
+  BillingViewTiles,
+  type BillingView,
+} from "./billing-view-tiles";
 
 const PAGE_SIZE = String(BILLING_DOCUMENT_LIST_PAGE_SIZE.default);
 
@@ -53,8 +60,91 @@ function pageRange(pagination: BillingDocumentListResponse["pagination"]) {
   return `${from.toLocaleString("hu-HU")}–${to.toLocaleString("hu-HU")} / ${total.toLocaleString("hu-HU")}`;
 }
 
+/** Az oldal leírása nézetenként (Figma 330:355, 374:651, 374:1033). */
+const VIEW_DESCRIPTIONS: Record<BillingView, string> = {
+  kimeno:
+    "Kiállított és előkészítés alatt lévő számlák, díjbekérők, előlegszámlák és szállítólevelek.",
+  bejovo:
+    "Beszállítói számlák a Számlázz.hu pénzügyi adatkapcsolatból, banki párosítási és fizetési állapotokkal.",
+  nyugtak: "A Számlázz.hu-ból naponta, kötegelve érkező nyugták.",
+};
+
 /**
- * A SZÁMLÁZÁS LISTÁJA (Balázs briefje, 2026-09-30, "Dokumentumlista"): a négy
+ * A SZÁMLÁZÁS OLDALA (Balázs újraterv-promptja, acrobot 25869): közös fejléc,
+ * a három nézet csempéje, alatta a választott nézet. A nézet az URL `nezet`
+ * kulcsában áll; a kimenő az alap, az ő URL-je tiszta marad.
+ *
+ * A NÉZETVÁLTÁS MINDEN SZŰRŐT TÖRÖL: a három nézet szűrői mások, és egy
+ * kimenő „Csak a külsők” vagy egy lapszám nem jelenthet semmit a bejövőn.
+ */
+export function BillingDocumentListPage() {
+  const { session } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const token = session?.token ?? "";
+  const canView = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_VIEW),
+  );
+  const canCreate = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_CREATE),
+  );
+  const { params } = useUrlQuery();
+  const view = urlChoice(params, "nezet", BILLING_VIEWS, "kimeno");
+
+  const selectView = (next: BillingView) => {
+    if (next === view) return;
+    router.replace(next === "kimeno" ? pathname : `${pathname}?nezet=${next}`, {
+      scroll: false,
+    });
+  };
+  const newDocument = () => router.push(`${BILLING_LIST_PATH}/uj`);
+
+  if (!canView)
+    return (
+      <Alert
+        variant="danger"
+        title="Nincs hozzáférésed a számlázáshoz"
+        description="billing.view jogosultság szükséges."
+      />
+    );
+
+  return (
+    <PilotThemeRoot theme="light" className="space-y-6">
+      <PilotPageHeader
+        title="Számlázás"
+        description={VIEW_DESCRIPTIONS[view]}
+        actions={
+          canCreate ? (
+            <PilotButton size="regular" onClick={newDocument}>
+              Új számla
+            </PilotButton>
+          ) : undefined
+        }
+      />
+      <BillingViewTiles active={view} onSelect={selectView} />
+      <div
+        role="tabpanel"
+        aria-labelledby={`billing-view-${view}`}
+        className="space-y-6"
+      >
+        {view === "bejovo" ? (
+          <BillingIncomingList token={token} />
+        ) : view === "nyugtak" ? (
+          <BillingReceiptsView token={token} />
+        ) : (
+          <OutgoingList
+            token={token}
+            canCreate={canCreate}
+            onNew={newDocument}
+          />
+        )}
+      </div>
+    </PilotThemeRoot>
+  );
+}
+
+/**
+ * A KIMENŐ LISTA (Balázs briefje, 2026-09-30, "Dokumentumlista"): a négy
  * bizonylattípus és a vázlatok egy listán, nem típusonként külön oldalon.
  *
  * A SZŰRŐK ÉS A LAP AZ URL-BEN (`useUrlQuery`, #1271): egy bizonylatból
@@ -64,16 +154,16 @@ function pageRange(pagination: BillingDocumentListResponse["pagination"]) {
  * A SOR EGÉSZE KATTINTHATÓ (brief 7. pont); a vázlat a szerkesztőbe, minden
  * más a részletekre nyílik (a szerver `opens` mezője szerint).
  */
-export function BillingDocumentListPage() {
-  const { session } = useAuth();
+function OutgoingList({
+  token,
+  canCreate,
+  onNew,
+}: {
+  token: string;
+  canCreate: boolean;
+  onNew: () => void;
+}) {
   const router = useRouter();
-  const token = session?.token ?? "";
-  const canView = Boolean(
-    session && hasPermission(session.user, PERMISSIONS.BILLING_VIEW),
-  );
-  const canCreate = Boolean(
-    session && hasPermission(session.user, PERMISSIONS.BILLING_CREATE),
-  );
 
   const { params, update } = useUrlQuery();
   const documentType = urlChoice(
@@ -138,7 +228,6 @@ export function BillingDocumentListPage() {
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
-      if (!canView) return;
       setLoading(true);
       setError(null);
       try {
@@ -154,7 +243,7 @@ export function BillingDocumentListPage() {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [canView, query, token],
+    [query, token],
   );
 
   useEffect(() => {
@@ -180,31 +269,9 @@ export function BillingDocumentListPage() {
     update({ page: next === 1 ? null : String(next) });
   const open = (item: BillingDocumentListItem) =>
     router.push(billingDocumentHref(item));
-  const newDocument = () => router.push(`${BILLING_LIST_PATH}/uj`);
-
-  if (!canView)
-    return (
-      <Alert
-        variant="danger"
-        title="Nincs hozzáférésed a számlázáshoz"
-        description="billing.view jogosultság szükséges."
-      />
-    );
 
   return (
-    <PilotThemeRoot theme="light" className="space-y-6">
-      <PilotPageHeader
-        title="Számlázás"
-        description="Kiállított és előkészítés alatt lévő számlák, díjbekérők, előlegszámlák és szállítólevelek."
-        actions={
-          canCreate ? (
-            <PilotButton size="regular" onClick={newDocument}>
-              Új számla
-            </PilotButton>
-          ) : undefined
-        }
-      />
-
+    <>
       <section className="rounded-2xl border border-pilot-grey-200 bg-white p-5">
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-[240px] flex-[2_1_360px]">
@@ -352,7 +419,7 @@ export function BillingDocumentListPage() {
                   Szűrők törlése
                 </PilotButton>
               ) : canCreate ? (
-                <PilotButton size="regular" onClick={newDocument}>
+                <PilotButton size="regular" onClick={onNew}>
                   Új számla
                 </PilotButton>
               ) : undefined
@@ -360,6 +427,6 @@ export function BillingDocumentListPage() {
           />
         )
       ) : null}
-    </PilotThemeRoot>
+    </>
   );
 }

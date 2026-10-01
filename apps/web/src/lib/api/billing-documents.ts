@@ -4,7 +4,10 @@ import type {
   BillingDocumentEmailInput,
   BillingDocumentListResponse,
   BillingExternalDocumentDetail,
+  IncomingDocumentDetail,
+  IncomingDocumentListResponse,
   MailTemplateVariable,
+  ReceiptsResponse,
 } from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
@@ -24,6 +27,31 @@ export interface BillingEmailTemplateDraft {
   variables: readonly MailTemplateVariable[];
 }
 
+/**
+ * EGY PDF-VÁLASZ BLOBKÉNT. A hiba szövege a szerveré, ha ad (nautilus #1283:
+ * vázlat, vagy nincs PDF), mert az kiírható; különben a tartalék.
+ *
+ * Az útvonal SZÁNDÉKOSAN a hívó `fetch`-jében áll, literálként: az útvonal-őr
+ * (`mobile-api-routes.spec`) csak a hívás helyén álló szöveget látja.
+ */
+async function pdfBlob(response: Response, fallback: string): Promise<Blob> {
+  if (!response.ok) {
+    let message: string | undefined;
+    try {
+      const payload = (await response.json()) as {
+        message?: string | string[];
+      };
+      message = Array.isArray(payload.message)
+        ? payload.message.join("\n")
+        : payload.message;
+    } catch {
+      message = undefined;
+    }
+    throw new ApiError(message ?? fallback, response.status);
+  }
+  return response.blob();
+}
+
 export const billingDocumentsApi = {
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
     return apiRequest<BillingDocumentListResponse>(
@@ -41,26 +69,36 @@ export const billingDocumentsApi = {
       `${API_PREFIX}/billing/documents/${encodeURIComponent(id)}/pdf`,
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
-    if (!response.ok) {
-      // A 409 MONDATA KIÍRHATÓ (nautilus #1283: vázlat, vagy nincs PDF), ezért
-      // a szerver szövege megy tovább, nem egy általános hiba.
-      let message: string | undefined;
-      try {
-        const payload = (await response.json()) as {
-          message?: string | string[];
-        };
-        message = Array.isArray(payload.message)
-          ? payload.message.join("\n")
-          : payload.message;
-      } catch {
-        message = undefined;
-      }
-      throw new ApiError(
-        message ?? "A bizonylat PDF-je nem tölthető le.",
-        response.status,
-      );
-    }
-    return response.blob();
+    return pdfBlob(response, "A bizonylat PDF-je nem tölthető le.");
+  },
+  /** A Számlázz.hu-ból kapott bejövő számlák (a Számlázás „Bejövő” nézete). */
+  incomingList(token: string, query: URLSearchParams, signal?: AbortSignal) {
+    return apiRequest<IncomingDocumentListResponse>(
+      `/billing/incoming-documents?${query}`,
+      token,
+      { signal },
+    );
+  },
+  incomingDetail(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<IncomingDocumentDetail>(
+      `/billing/incoming-documents/${encodeURIComponent(id)}`,
+      token,
+      { signal },
+    );
+  },
+  /** CSAK ott, ahol a Számlázz.hu valódi PDF-et küldött (`hasPdf`); máshol 404. */
+  async incomingPdf(token: string, id: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}/billing/incoming-documents/${encodeURIComponent(id)}/pdf`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "A számla PDF-je nem tölthető le.");
+  },
+  /** A nyugták: a C szeletig csak a beérkezett darabszám. */
+  receipts(token: string, signal?: AbortSignal) {
+    return apiRequest<ReceiptsResponse>(`/billing/receipts`, token, {
+      signal,
+    });
   },
   /**
    * A KIKÜLDŐ FIÓK KIINDULÓ SZÖVEGE (nautilus #1293): a Levelezés oldal
