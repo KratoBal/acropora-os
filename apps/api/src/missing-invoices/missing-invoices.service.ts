@@ -280,7 +280,11 @@ export class MissingInvoicesService {
           payee: d.payee,
           marked: d.payeeMarked === true,
         })),
-      action: ACTION[item.state],
+      // biztosításnál díjértesítő kell, nem számla-kérés (barracuda, 2. csoport)
+      action:
+        item.state === "NO_INVOICE" && item.category === "INSURANCE"
+          ? "PROVIDE_PREMIUM_NOTICE"
+          : ACTION[item.state],
       driveFolderUrl: httpsOrNull(
         this.environment.MISSING_INVOICES_DRIVE_FOLDER_URL,
       ),

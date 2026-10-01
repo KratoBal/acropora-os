@@ -209,6 +209,8 @@ export const MISSING_INVOICE_ACTIONS = [
   "REQUEST_REISSUE_TO_COMPANY",
   "REQUEST_FINAL_INVOICE",
   "CHECK_DOUBLE_PAYMENT",
+  /** Biztosításnál: díjértesítő (vagy a biztosító számlája) kell (barracuda, 2. csoport). */
+  "PROVIDE_PREMIUM_NOTICE",
 ] as const;
 export type MissingInvoiceAction = (typeof MISSING_INVOICE_ACTIONS)[number];
 

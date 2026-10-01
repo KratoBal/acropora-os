@@ -216,6 +216,9 @@ export function whatToDo(
       return "A számla megvan a NAV-ban; az eredeti (PDF vagy papír) kell a könyvelőnek.";
     case "REQUEST_INVOICE":
       return "Kérd el a számlát a partnertől.";
+    case "PROVIDE_PREMIUM_NOTICE":
+      // biztosítás: a díjértesítő érvényes bizonylat (a 2026-09-30-i döntés c pontja)
+      return "Biztosítás: töltsd fel a díjértesítőt (Díjértesítő típussal), vagy ha a biztosító számlát állított ki, azt.";
     case "REQUEST_REISSUE_TO_COMPANY":
       // A cég neve a szerver konfigurációjából jön; amíg nincs, a mondat
       // nem találja ki (brief 4. pont).

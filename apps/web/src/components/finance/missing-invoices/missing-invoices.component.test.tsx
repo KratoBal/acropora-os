@@ -80,6 +80,10 @@ describe("the model", () => {
       "A számla a magánszemély nevére szól: kérd újra az Próba Kft. nevére.",
     );
     expect(whatToDo("NONE", "Próba Kft.")).toBeNull();
+    // biztosításnál díjértesítő kell, nem számla-kérés (barracuda, 2. csoport)
+    expect(whatToDo("PROVIDE_PREMIUM_NOTICE", "Próba Kft.")).toMatch(
+      /díjértesítőt/,
+    );
   });
 });
 

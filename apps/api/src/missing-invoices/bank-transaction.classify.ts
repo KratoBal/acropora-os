@@ -75,7 +75,20 @@ const BANK_FEE =
   /költség|koltseg|díj|dij|jutalék|jutalek|különdíj|zárlati|zarlati|kamat/i;
 const PAYROLL = /munkab[ée]r|\bb[ée]r\b|fizet[ée]s\b|el[őo]leg/i;
 const LOAN = /kölcsön|kolcson/i;
-const INSURANCE = /biztos[íi]t[áa]s|allianz|generali|groupama|uniqa/i;
+/**
+ * A „Biztosító” is (barracuda esetlistája, 2. csoport: a Genertel Biztosító
+ * 85 688 Ft-os díja Magyar szállító lett, mert a minta csak a „biztosítás”
+ * alakot ismerte).
+ */
+const INSURANCE =
+  /biztos[íi]t[áa]s|biztos[íi]t[óo]|allianz|generali|groupama|uniqa|genertel/i;
+/**
+ * A BANK ÁLTAL BESZEDETT SZEMÉLYBIZTOSÍTÁS (az OTP „VÉDELMEZŐ
+ * SZEMÉLYBIZTOSÍTÁS DÍJ” tétele): Balázs döntése, 2026-10-01 20:41 UTC
+ * („Elég”, acrobot 25953): nem kell hozzá számla, a kivonat sora elég.
+ */
+const BANK_COLLECTED_INSURANCE =
+  /v[ée]delmez[őo]\s+szem[ée]lybiztos[íi]t[áa]s/i;
 const CASH = /KÉSZPÉNZ\s?FELVÉT/i;
 /**
  * A SAJÁT SZÁMLASZÁMUNK A KÖZLEMÉNYBEN: ACRW vagy ACRB sorozat, az elírt ARCW
@@ -110,6 +123,11 @@ export function classifyTransaction(
     return { category: "CASH_WITHDRAWAL", rule: `készpénzfelvétel: ${type}` };
   if (TAX.test(text))
     return { category: "TAX", rule: "adó, járulék vagy hatóság" };
+  if (BANK_COLLECTED_INSURANCE.test(type))
+    return {
+      category: "BANK_FEE",
+      rule: `a bank vonja le, nem kell számla: ${type}`,
+    };
   if (INSURANCE.test(`${type} ${name}`))
     return { category: "INSURANCE", rule: "biztosító vagy biztosítási díj" };
   if (
