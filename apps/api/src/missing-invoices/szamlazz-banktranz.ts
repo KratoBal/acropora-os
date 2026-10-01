@@ -15,6 +15,8 @@
  * külső entitást (XXE), DOCTYPE-ot és belső entitás-kiterjesztést (elutasítja).
  */
 
+import { szamlazzCurrency, xsDateDay } from "./szamlazz-values.js";
+
 export interface BanktranzMessage {
   readonly id: string;
   readonly bankszamla: string;
@@ -127,12 +129,8 @@ export function parseBanktranz(xml: string): BanktranzMessage {
   const id = required("id");
   if (!/^-?\d{1,10}$/.test(id))
     throw new BanktranzParseError("az id nem egész");
-  const erteknap = required("erteknap");
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(erteknap) ||
-    Number.isNaN(Date.parse(`${erteknap}T00:00:00Z`))
-  )
-    throw new BanktranzParseError("az értéknap nem dátum");
+  const erteknap = xsDateDay(required("erteknap"));
+  if (!erteknap) throw new BanktranzParseError("az értéknap nem dátum");
   const irany = required("irany");
   if (irany !== "BE" && irany !== "KI")
     throw new BanktranzParseError("az irány nem BE vagy KI");
@@ -145,9 +143,8 @@ export function parseBanktranz(xml: string): BanktranzMessage {
     !Number.isFinite(Number(osszeg))
   )
     throw new BanktranzParseError("az összeg nem szám");
-  const devizanem = required("devizanem").toUpperCase();
-  if (!/^[A-Z]{3}$/.test(devizanem))
-    throw new BanktranzParseError("a devizanem nem háromjegyű kód");
+  // az XSD-ben string: a „Ft” is jó (lásd `szamlazzCurrency`)
+  const devizanem = szamlazzCurrency(required("devizanem"));
 
   let partnerNev: string | null = null;
   let partnerBankszamla: string | null = null;

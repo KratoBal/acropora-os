@@ -20,6 +20,8 @@
  * TISZTA FÜGGVÉNYEK, hálózat és adatbázis nélkül.
  */
 
+import { szamlazzCurrency, xsDateDay } from "./szamlazz-values.js";
+
 export class SzamlazzFeedParseError extends Error {}
 
 /**
@@ -160,7 +162,6 @@ export function rootOf(
   return root;
 }
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const NUMBER = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
 /** Egy bejövő számla, amennyit a Hiányzó számlák párosítója használ. */
@@ -200,15 +201,14 @@ export function parseSzamlabe(xml: string): SzamlabeMessage {
   const id = required("alap", "id");
   if (!/^-?\d{1,10}$/.test(id))
     throw new SzamlazzFeedParseError("az id nem egész");
-  const kelt = required("alap", "kelt");
-  if (!DATE.test(kelt) || Number.isNaN(Date.parse(`${kelt}T00:00:00Z`)))
-    throw new SzamlazzFeedParseError("a kelt nem dátum");
+  const kelt = xsDateDay(required("alap", "kelt"));
+  if (!kelt) throw new SzamlazzFeedParseError("a kelt nem dátum");
   const brutto = required("osszegek", "totalossz", "brutto");
   if (!NUMBER.test(brutto) || !Number.isFinite(Number(brutto)))
     throw new SzamlazzFeedParseError("a bruttó nem szám");
-  const devizanem = required("alap", "devizanem").toUpperCase();
-  if (!/^[A-Z]{3}$/.test(devizanem))
-    throw new SzamlazzFeedParseError("a devizanem nem háromjegyű kód");
+  // az XSD-ben string: a „Ft” is jó, és egy ismeretlen szöveg sem buktatja el
+  // az üzenetet (lásd `szamlazzCurrency`)
+  const devizanem = szamlazzCurrency(required("alap", "devizanem"));
   return {
     id,
     szamlaszam: required("alap", "szamlaszam"),
