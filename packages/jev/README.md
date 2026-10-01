@@ -104,6 +104,29 @@ készletben 2 szivárgás), ezért a szolgáltatás hiányában nem hív.
 **A known-entity tábla** a Pythonban kulcsolt lenyomat-fájl; itt a normalizált kulcs maga, a folyamat
 memóriájában, adatbázisból építve. A keresés ugyanaz az egyenlőség.
 
+## Termékadat-gazdagítás és -ellenőrzés, V0 (ACD-021 / PD-011)
+
+A terv: [`docs/jev/product-enrichment-v0.md`](../../docs/jev/product-enrichment-v0.md). A kód a
+`src/product-enrichment/` mappában van, és **a csomag fő belépési pontja nem exportálja**, mert az
+API azt importálja, a V0-nak pedig nincs éles hívási útja. Nem ír terméket, nem publikál, nem hívja
+a Jevet, és nem kér környezeti változót.
+
+| Fájl                                         | Mit csinál                                                                                            |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `provenance.ts`                              | a P-033 mezőmodell: státuszok, forrástípusok és a sorrendjük, független források                      |
+| `gtin.ts`, `units.ts`                        | a Tier C validátorai: GTIN-ellenőrzőszám, mértékegység-normalizálás, a kétértelmű bemenet elutasítása |
+| `fields.ts`                                  | a mezők szintje (A/B/C) és a normalizálójuk                                                           |
+| `reconcile.ts`, `guard.ts`                   | az egyeztető (soha nem választ csendben) és a Tier C őr                                               |
+| `benchmark.ts`                               | a hét mérőszám, külön-külön                                                                           |
+| `scripts/eval-product-enrichment.mjs`        | a futtató: egy JSON fájlt olvas, hálózat és adatbázis nélkül                                          |
+| `fixtures/product-enrichment-synthetic.json` | **szintetikus** készlet, csak a futtató tesztjéhez                                                    |
+
+```bash
+node packages/jev/scripts/eval-product-enrichment.mjs --dataset <fajl.json> [--out <mappa>] [--json] [--gate]
+```
+
+A valódi, 30-50 termékes készlet **nincs a repóban**, és nem is kerülhet bele.
+
 ## Ami emberi munka, és ez a kód nem végzi el
 
 - **Az arany készlet címkézése** (PD-003: a címkézőt Balázs jelöli ki). Minden sorhoz meg kell adni a helyes kategóriát és azt, hogy eldönthető-e a vetületből.
