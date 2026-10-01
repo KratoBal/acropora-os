@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { InventoryModule } from "../inventory/inventory.module.js";
 import { PurchasingModule } from "../purchasing/purchasing.module.js";
+import { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
 import { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
 import { DashboardServiceWidgetsRepository } from "./dashboard-service-widgets.repository.js";
 import { DashboardWidgetsService } from "./dashboard-widgets.service.js";
@@ -17,6 +18,7 @@ import { DashboardService } from "./dashboard.service.js";
     DashboardService,
     DashboardLayoutRepository,
     DashboardServiceWidgetsRepository,
+    DashboardAquariumWidgetsRepository,
     DashboardWidgetsService,
   ],
 })
