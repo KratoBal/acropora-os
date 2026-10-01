@@ -1080,7 +1080,7 @@ describe("a paper original without any digital invoice (acrobot 25745, Aqua-Ligh
     assert.deepEqual([none.state, none.documents], ["FOUND", []]);
     assert.equal(
       none.reason,
-      "nincs digitális számla, az eredeti papíron megvan",
+      "a partnertől nincs számla a forrásokban; nincs digitális számla, az eredeti papíron megvan",
     );
     // a partnertől van más számla, de ez a fizetés nem párosodik: NOT_MATCHED
     const b = aqua();
@@ -1092,6 +1092,11 @@ describe("a paper original without any digital invoice (acrobot 25745, Aqua-Ligh
     });
     const unpaired = withPaper([b], [other], [b.id]).get(b.id)!;
     assert.deepEqual([unpaired.state, unpaired.documents], ["FOUND", []]);
+    // az indokból látszik, hogy volt jelölt digitális számla (acrobot 25762)
+    assert.match(
+      unpaired.reason,
+      /^a partnertől van számla, de ez a fizetés nem párosodott; nincs digitális számla/,
+    );
   });
 
   it("unmarked it stays missing, and a wrong document (proforma, not the company's) is not resolved by paper", () => {

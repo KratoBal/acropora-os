@@ -852,7 +852,8 @@ export function matchMonth(input: {
         ...outcome,
         state: "FOUND",
         documents: [],
-        reason: "nincs digitális számla, az eredeti papíron megvan",
+        // az eredeti indok marad (acrobot 25762): látszik, hogy volt-e jelölt
+        reason: `${outcome.reason}; nincs digitális számla, az eredeti papíron megvan`,
       });
   }
   markDoublePaid(outcomes);
