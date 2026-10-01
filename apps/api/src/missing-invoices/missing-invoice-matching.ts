@@ -17,7 +17,9 @@ import { sequenceRatio } from "./sequence-ratio.js";
  *   4. több számla egy utalásban: legfeljebb 5 elemű részhalmaz; ha több is
  *      kiadja, nem választunk;
  *   5. egy számlát egy terhelés visz (mért: két 23 810 Ft-os Alza-fizetés);
- *   6. a proforma nem számla.
+ *   6. a proforma nem számla, és CSAK TARTALÉK (acrobot 25607): ha a partnertől
+ *      van pontos összegű valódi számla az ablakban, az nyer, akkor is, ha a
+ *      közlemény a proforma számát nevezi meg.
  *
  * A 2-4 Ft-os kerekítés Megvan (acrobot 25265 a): HUF-ban 5 Ft a tűrés, EUR-ban
  * 5 cent. TISZTA FÜGGVÉNY: a hívó adja a hónap terheléseit és a jelölteket.
@@ -180,6 +182,10 @@ const exact = (gap: Prisma.Decimal | null, currency: string) =>
 /** KEREKÍTÉSSEL: HUF-ban 5 Ft-ig Megvan (acrobot 25265 a). */
 const rounded = (gap: Prisma.Decimal | null, currency: string) =>
   gap !== null && currency === "HUF" && gap.gt(1) && gap.lte(5);
+
+/** A valódi számla előbb, a proforma utána: a proforma tartalék (acrobot 25607). */
+const proformaLast = (a: CandidateDocument, b: CandidateDocument) =>
+  Number(a.kind === "PROFORMA") - Number(b.kind === "PROFORMA");
 
 const dayDistance = (a: string, b: string) =>
   Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
@@ -472,8 +478,10 @@ export function matchMonth(input: {
   const closest = (debit: MatchableDebit, documents: CandidateDocument[]) =>
     [...documents].sort(
       (a, b) =>
+        proformaLast(a, b) ||
         dayDistance(a.date, debit.bookingDate) -
-          dayDistance(b.date, debit.bookingDate) || a.id.localeCompare(b.id),
+          dayDistance(b.date, debit.bookingDate) ||
+        a.id.localeCompare(b.id),
     )[0]!;
 
   // A RÉTEGEK SORRENDJE A LÉNYEG: minden terhelés előbb a PONTOS egyezést
@@ -489,6 +497,19 @@ export function matchMonth(input: {
       const span = spanNaming(debit, d, spans);
       if (span) named.push({ document: d, span });
     }
+    // A PROFORMA CSAK TARTALÉK (acrobot 25607, Aquarioom 2026-09-29): a
+    // közlemény a rendelés számát nevezi meg (CM9201), ami a proforma száma,
+    // a valódi számla (FA00009139) más számot visel. Ha a partnertől van
+    // pontos összegű valódi számla az ablakban, a proforma kimarad, és a
+    // terhelés a további szabályokhoz megy.
+    const realInvoice = partnerDocs(debit, 0.5).some(
+      (d) =>
+        d.kind === "INVOICE" &&
+        exact(amountGap(debit, d.gross, d.currency), d.currency),
+    );
+    if (realInvoice)
+      for (let i = named.length - 1; i >= 0; i--)
+        if (named[i]!.document.kind === "PROFORMA") named.splice(i, 1);
     if (named.length === 0) continue;
     const documents = named.map((n) => n.document);
     found(debit, documents, "a számla száma a közleményben");
@@ -550,6 +571,7 @@ export function matchMonth(input: {
     )
     .sort(
       (x, y) =>
+        proformaLast(x.document, y.document) ||
         x.gap.comparedTo(y.gap) ||
         x.days - y.days ||
         x.debit.bookingDate.localeCompare(y.debit.bookingDate) ||
@@ -593,9 +615,13 @@ export function matchMonth(input: {
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
     // 4. kerekítéssel (2-5 Ft), csak ha EGY jelölt van: többől nem választunk
-    const roundings = partnerDocs(debit, 0.5).filter((d) =>
+    const anyRounding = partnerDocs(debit, 0.5).filter((d) =>
       rounded(amountGap(debit, d.gross, d.currency), d.currency),
     );
+    // a valódi számla mellett a proforma nem tesz kétértelművé
+    const roundings = anyRounding.some((d) => d.kind !== "PROFORMA")
+      ? anyRounding.filter((d) => d.kind !== "PROFORMA")
+      : anyRounding;
     if (roundings.length === 1)
       found(
         debit,
