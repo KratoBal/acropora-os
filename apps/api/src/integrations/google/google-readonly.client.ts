@@ -24,12 +24,23 @@ export interface GoogleReadonlySettings {
   gmailApiUrl?: string;
   driveApiUrl?: string;
   tokenUrl?: string;
+  /** A rate limit utáni várakozások, egymás után; a hosszuk a próbák száma. */
+  rateLimitDelaysMs?: readonly number[];
+  /** A várakozás (a tesztben azonnali). */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export class GoogleReadonlyError extends Error {
   constructor(readonly code: string) {
     super(code);
     this.name = "GoogleReadonlyError";
+  }
+}
+
+/** Belső jel: a hívás rate limitbe futott, és újrapróbálható. */
+class GoogleRateLimit extends Error {
+  constructor(readonly retryAfterMs: number) {
+    super("GOOGLE_RATE_LIMITED");
   }
 }
 
@@ -63,6 +74,48 @@ const DEFAULT_TOKEN_URL = "https://oauth2.googleapis.com/token";
 /** Egy számla-PDF felső határa; a Hiányzó számlák feltöltésével azonos. */
 export const GOOGLE_PDF_MAX_BYTES = 15 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * RATE LIMIT UTÁN RÖVID, KORLÁTOS VISSZAVÁRÁS (Balázs éles próbája, 2026-10-01:
+ * az info@ és a balazs@ egy perc munka után állt le). Három próba, 1, 2, 4
+ * másodperc; a Google `Retry-After` fejlécét is figyelembe vesszük, de legfeljebb
+ * 10 másodpercig. Ennyi után a hiba megy tovább (GOOGLE_RATE_LIMITED), a
+ * következő futás folytatja.
+ */
+const RATE_LIMIT_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000];
+const RETRY_AFTER_CAP_MS = 10_000;
+
+/**
+ * EGY 403 NEM MIND HITELESÍTÉSI HIBA. A Gmail a sebesség-korlátot is 403-mal
+ * adhatja (`rateLimitExceeded`, `userRateLimitExceeded`), és azt eddig
+ * GOOGLE_AUTH_FAILED-nek neveztük: a forrás leállt, holott a kulcs jó volt.
+ *
+ * A TÖRZS ALAKJA NEM MÉRT: a Google általános hibaformája szerint olvassuk
+ * (`error.errors[].reason`, a régebbi alak, és `error.details[].reason`, az
+ * újabb). Valódi rate-limit 403-at nem tudtunk előidézni, és Gmail kulcs a
+ * fejlesztői gépen nincs. EZÉRT AZ IRÁNY ÓVATOS: csak az a 403 rate limit,
+ * amelyik törzsében rate-limit ok áll; minden más (üres, más alakú, más ok)
+ * marad GOOGLE_AUTH_FAILED, vagyis a régi viselkedés. Egy félreolvasás így
+ * legfeljebb a mai állapotot adja, sosem nevez egy valódi jogosultsági hibát
+ * átmenetinek.
+ */
+const RATE_LIMIT_REASON =
+  /^(rateLimitExceeded|userRateLimitExceeded|RATE_LIMIT_EXCEEDED)$/;
+
+const forbiddenIsRateLimit = (body: unknown): boolean => {
+  const error = (body as { error?: Record<string, unknown> } | null)?.error;
+  if (!error || typeof error !== "object") return false;
+  const reasons = [
+    ...((Array.isArray(error.errors) ? error.errors : []) as Array<{
+      reason?: unknown;
+    }>),
+    ...((Array.isArray(error.details) ? error.details : []) as Array<{
+      reason?: unknown;
+    }>),
+  ].map((entry) => entry?.reason);
+  return reasons.some(
+    (reason) => typeof reason === "string" && RATE_LIMIT_REASON.test(reason),
+  );
+};
 const MAX_PAGES = 10;
 
 function decodeBase64Url(data: string): Buffer {
@@ -290,6 +343,30 @@ export class GoogleReadonlyClient {
     url: URL | string,
     init: RequestInit,
   ): Promise<Response> {
+    const delays = this.settings.rateLimitDelaysMs ?? RATE_LIMIT_DELAYS_MS;
+    const sleep =
+      this.settings.sleep ??
+      ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.fetchOnce(url, init);
+      } catch (error) {
+        const retry =
+          error instanceof GoogleRateLimit && attempt < delays.length;
+        if (!retry) {
+          throw error instanceof GoogleRateLimit
+            ? new GoogleReadonlyError("GOOGLE_RATE_LIMITED")
+            : error;
+        }
+        await sleep(Math.max(delays[attempt]!, error.retryAfterMs));
+      }
+    }
+  }
+
+  private async fetchOnce(
+    url: URL | string,
+    init: RequestInit,
+  ): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
@@ -297,17 +374,32 @@ export class GoogleReadonlyClient {
         ...init,
         signal: controller.signal,
       });
-      if (!response.ok)
+      if (!response.ok) {
+        const rateLimited =
+          response.status === 429 ||
+          (response.status === 403 &&
+            forbiddenIsRateLimit(await response.json().catch(() => null)));
+        if (rateLimited) {
+          const seconds = Number(response.headers.get("retry-after"));
+          throw new GoogleRateLimit(
+            Number.isFinite(seconds) && seconds > 0
+              ? Math.min(seconds * 1000, RETRY_AFTER_CAP_MS)
+              : 0,
+          );
+        }
         throw new GoogleReadonlyError(
           response.status === 401 || response.status === 403
             ? "GOOGLE_AUTH_FAILED"
-            : response.status === 429
-              ? "GOOGLE_RATE_LIMITED"
-              : `GOOGLE_HTTP_${response.status}`,
+            : `GOOGLE_HTTP_${response.status}`,
         );
+      }
       return response;
     } catch (error) {
-      if (error instanceof GoogleReadonlyError) throw error;
+      if (
+        error instanceof GoogleReadonlyError ||
+        error instanceof GoogleRateLimit
+      )
+        throw error;
       throw new GoogleReadonlyError(
         error instanceof DOMException && error.name === "AbortError"
           ? "GOOGLE_TIMEOUT"

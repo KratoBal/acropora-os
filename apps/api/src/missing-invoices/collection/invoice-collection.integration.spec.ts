@@ -103,6 +103,117 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
     );
   });
 
+  /*
+    AZ UNMATCHED NEM VÉGLEGES (Balázs éles próbája, 2026-10-01: két számla
+    UNMATCHED maradt, pedig a javított szabály már tárolná; a számla gyakran a
+    fizetés előtt jön). MI PIROSÍT: ha egy UNMATCHED tételű levél látottnak
+    számítana, és soha nem kapna új esélyt; ha egy újraolvasott UNMATCHED fájl
+    tárolása a meglévő sor miatt elhasalna; ha a már tárolt társ-melléklet
+    DUPLICATE-ként felülírná a STORED sorát (a dokumentumra mutató kapcsot).
+  */
+  const doc = (externalId: string, fileName: string, sha256: string) => ({
+    source: "INFO_MAIL" as const,
+    externalId,
+    fileName,
+    sender: null,
+    subject: null,
+    receivedAt: null,
+    content: Buffer.from(`%PDF-1.4 ${sha256}`),
+    sha256,
+    read: false,
+    kind: "INVOICE" as const,
+    importResult: null,
+    textReading: null,
+    payee: "COMPANY",
+  });
+
+  it("a message with an UNMATCHED file is not seen; a final one is", async () => {
+    await repository.record(
+      "INFO_MAIL",
+      "collect-it-u1",
+      "U.pdf",
+      "UNMATCHED",
+      "collect-it-u-sha",
+    );
+    await repository.record(
+      "INFO_MAIL",
+      "collect-it-n1",
+      "N.pdf",
+      "NOT_INVOICE",
+      "collect-it-n-sha",
+    );
+    // egy levélben egy tárolt és egy UNMATCHED melléklet: a levél újra jön
+    await repository.store(
+      doc("collect-it-m1", "STORED.pdf", "collect-it-m-sha"),
+    );
+    await repository.record(
+      "INFO_MAIL",
+      "collect-it-m1",
+      "LATER.pdf",
+      "UNMATCHED",
+      "collect-it-l-sha",
+    );
+
+    assert.deepEqual(
+      await repository.seen("INFO_MAIL", [
+        "collect-it-u1",
+        "collect-it-n1",
+        "collect-it-m1",
+      ]),
+      new Set(["collect-it-n1"]),
+    );
+  });
+
+  it("a re-read UNMATCHED file is stored over its own row", async () => {
+    await repository.record(
+      "INFO_MAIL",
+      "collect-it-r1",
+      "R.pdf",
+      "UNMATCHED",
+      "collect-it-r-sha",
+    );
+    const documentId = await repository.store(
+      doc("collect-it-r1", "R.pdf", "collect-it-r-sha"),
+    );
+
+    const row = await prisma.invoiceCollectionItem.findUniqueOrThrow({
+      where: {
+        source_externalId_fileName: {
+          source: "INFO_MAIL",
+          externalId: "collect-it-r1",
+          fileName: "R.pdf",
+        },
+      },
+      select: { verdict: true, documentId: true },
+    });
+    assert.deepEqual(row, { verdict: "STORED", documentId });
+  });
+
+  it("a stored file read again as DUPLICATE keeps its STORED row", async () => {
+    const documentId = await repository.store(
+      doc("collect-it-d1", "D.pdf", "collect-it-d-sha"),
+    );
+    await repository.record(
+      "INFO_MAIL",
+      "collect-it-d1",
+      "D.pdf",
+      "DUPLICATE",
+      "collect-it-d-sha",
+    );
+
+    const row = await prisma.invoiceCollectionItem.findUniqueOrThrow({
+      where: {
+        source_externalId_fileName: {
+          source: "INFO_MAIL",
+          externalId: "collect-it-d1",
+          fileName: "D.pdf",
+        },
+      },
+      select: { verdict: true, documentId: true },
+    });
+    assert.deepEqual(row, { verdict: "STORED", documentId });
+  });
+
   it("lets one run at a time", async () => {
     const first = await repository.startRun("MANUAL");
     await assert.rejects(repository.startRun("MANUAL"), /ALREADY_RUNNING/);

@@ -62,6 +62,14 @@ export class InvoiceCollectionRepository {
    * A forrás már látott levelei vagy Drive-fájljai. Levélnél a fájlnevek csak a
    * letöltés után ismertek, ezért a levél egészben számít látottnak: amit
    * egyszer végigolvastunk, azt a következő futás nem tölti le újra.
+   *
+   * KIVÉVE, HA VAN UNMATCHED TÉTELE (Balázs éles próbája, 2026-10-01). Az
+   * UNMATCHED nem végleges: a számla gyakran a fizetés ELŐTT érkezik, a
+   * kivonat havonta töltődik be, tehát a begyűjtéskor a közlemény még nincs
+   * meg; egy javított párosító szabály is csak így ér el egy korábbi levelet.
+   * Az ilyen levél a következő futásban újra jön; a többi ítélet (STORED,
+   * NOT_INVOICE, DUPLICATE, TOO_LARGE, UNREADABLE) végleges marad. A begyűjtés
+   * ablaka (a napok száma) határolja, mennyi jön újra.
    */
   async seen(
     source: InvoiceCollectionSource,
@@ -70,9 +78,16 @@ export class InvoiceCollectionRepository {
     if (externalIds.length === 0) return new Set();
     const rows = await this.database.invoiceCollectionItem.findMany({
       where: { source, externalId: { in: [...externalIds] } },
-      select: { externalId: true },
+      select: { externalId: true, verdict: true },
     });
-    return new Set(rows.map((row) => row.externalId));
+    const retry = new Set(
+      rows
+        .filter((row) => row.verdict === "UNMATCHED")
+        .map((row) => row.externalId),
+    );
+    return new Set(
+      rows.map((row) => row.externalId).filter((id) => !retry.has(id)),
+    );
   }
 
   /**
@@ -120,6 +135,11 @@ export class InvoiceCollectionRepository {
     );
   }
 
+  /**
+   * Egy fájl ítélete. Egy újraolvasott levélben (lásd `seen`) a már TÁROLT
+   * társ-melléklet DUPLICATE-nek olvasódik (a tartalma megvan); a STORED sort
+   * ez nem írja felül, mert az a tárolt dokumentumra mutat.
+   */
   async record(
     source: InvoiceCollectionSource,
     externalId: string,
@@ -127,6 +147,12 @@ export class InvoiceCollectionRepository {
     verdict: Exclude<InvoiceCollectionVerdict, "STORED">,
     sha256: string | null,
   ): Promise<void> {
+    const key = { source, externalId, fileName };
+    const existing = await this.database.invoiceCollectionItem.findUnique({
+      where: { source_externalId_fileName: key },
+      select: { verdict: true },
+    });
+    if (existing?.verdict === "STORED") return;
     await this.database.invoiceCollectionItem.upsert({
       where: {
         source_externalId_fileName: { source, externalId, fileName },
@@ -165,11 +191,25 @@ export class InvoiceCollectionRepository {
         },
         select: { id: true },
       });
-      await transaction.invoiceCollectionItem.create({
-        data: {
+      // UPSERT: egy korábban UNMATCHED fájl újraolvasva ugyanazt a kulcsot kapja
+      // (forrás, azonosító, fájlnév); a sora most STORED lesz, a dokumentumra mutat.
+      await transaction.invoiceCollectionItem.upsert({
+        where: {
+          source_externalId_fileName: {
+            source: input.source,
+            externalId: input.externalId,
+            fileName: input.fileName,
+          },
+        },
+        create: {
           source: input.source,
           externalId: input.externalId,
           fileName: input.fileName,
+          verdict: "STORED",
+          sha256: input.sha256,
+          documentId: document.id,
+        },
+        update: {
           verdict: "STORED",
           sha256: input.sha256,
           documentId: document.id,
