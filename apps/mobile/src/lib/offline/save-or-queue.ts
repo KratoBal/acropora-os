@@ -73,6 +73,27 @@ export interface SaveDeps {
    * ezert meg nem letezik. Reszletek a `saveOrQueue` torzseben.
    */
   queueOnly?: boolean;
+  /**
+   * A KESZULEK KAPCSOLATA, ES AMIT A MENTES VISSZAIR BELE.
+   *
+   * Elhagyhato (a tesztek es a regi hivok miatt), de a kepernyok MIND atadjak
+   * (`deviceConnectivity`). Ket iranya van:
+   *
+   *   offline()     -> ha igaz, a szervert meg sem probaljuk: egyenesen a sorba.
+   *   unreachable() -> a mentes valasz nelkul hasalt el: a kovetkezok mar ne
+   *                    varjanak ugyanigy.
+   *
+   * A MERT HIBA (acrobot 25730, 2026-10-01): iOS-en terero nelkul a matrica-
+   * es a fenykep-mentes porgott, Androidon nem. Az iOS akar 75 masodpercig
+   * online-nak mondja magat (lasd `stalledConnectivity`), es ezalatt minden
+   * mentes a hivas idokorlatjaig vart, egyenkent.
+   */
+  connectivity?: SaveConnectivity;
+}
+
+export interface SaveConnectivity {
+  offline(): boolean;
+  unreachable(): void;
 }
 
 export async function saveOrQueue(deps: SaveDeps): Promise<SaveOutcome> {
@@ -88,7 +109,11 @@ export async function saveOrQueue(deps: SaveDeps): Promise<SaveOutcome> {
    * A sor viszont MEG TUDJA VARNI a szulot, es a fuggoseg feloldasa utan a
    * torzs mar a valodi azonositot viszi.
    */
-  if (deps.queueOnly) {
+  /**
+   * OFFLINE-BAN A SZERVERT MEG SEM PROBALJUK. Ugyanaz a sor-ag, mint a
+   * `queueOnly`-nal: a kulonbseg csak az ok.
+   */
+  if (deps.queueOnly || deps.connectivity?.offline()) {
     const written = await deps.enqueue();
     const outcome = deps.describeWrite(written);
     return outcome.type === "queued"
@@ -118,6 +143,7 @@ export async function saveOrQueue(deps: SaveDeps): Promise<SaveOutcome> {
             : `A szerver elutasította (${status}).`,
       };
     }
+    deps.connectivity?.unreachable();
     const written = await deps.enqueue();
     const outcome = deps.describeWrite(written);
     return outcome.type === "queued"

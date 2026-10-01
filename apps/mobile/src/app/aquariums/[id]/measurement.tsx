@@ -30,7 +30,7 @@ import {
 } from "@/lib/aquariums/aquarium-measurement-create";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
-import { useIsOnline } from "@/lib/offline/connectivity";
+import { deviceConnectivity, useIsOnline } from "@/lib/offline/connectivity";
 import { enqueueAquariumMeasurement } from "@/lib/offline/queue-store";
 import { saveOrQueue } from "@/lib/offline/save-or-queue";
 import { aquariumMeasurementOperationId } from "@/lib/offline/sync-queue";
@@ -155,6 +155,7 @@ export default function NewAquariumMeasurementScreen() {
         measuredAt,
       });
       return saveOrQueue({
+        connectivity: deviceConnectivity,
         save: () =>
           createAquariumMeasurement(id, {
             ...payload,

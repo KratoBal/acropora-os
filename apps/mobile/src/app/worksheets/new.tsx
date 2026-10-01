@@ -45,6 +45,7 @@ import {
   enqueuePhoto,
   enqueueWorksheetCreate,
 } from "@/lib/offline/queue-store";
+import { deviceConnectivity } from "@/lib/offline/connectivity";
 import { saveOrQueue } from "@/lib/offline/save-or-queue";
 import {
   mustQueue,
@@ -483,6 +484,7 @@ export default function NewWorksheetScreen() {
     mutationFn: async (payload: WorksheetCreatePayload) => {
       const nyitas = new Date().toISOString();
       const outcome = await saveOrQueue({
+        connectivity: deviceConnectivity,
         /**
          * A SORBAN ALLO JEGY ALATT A SZERVERT MEG SEM PROBALJUK. A hivas
          * sikerulne -- csak `serviceJobId` nelkul, es a lap soha nem kerulne a
