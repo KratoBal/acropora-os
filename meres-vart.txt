@@ -1,0 +1,4 @@
+# Kalibracio: feat/double-paid-invoice, EGY rontas:
+# K8 a jelolt nem kapja meg a tarolt dokumentum sha256-jat.
+# Joslat: pontosan a "a stored document's file print..." piros (a fo agon az 5. teszt).
+not ok 5 - a stored document's file print is among its candidate identities

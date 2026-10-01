@@ -439,7 +439,10 @@ export class MissingInvoicesRepository {
               : "INVOICE",
         payee: (document.payeeCheck as Payee | null) ?? "UNKNOWN",
         hasOriginal: true,
-        identities: document.sha256 ? [`sha:${document.sha256}`] : [],
+        identities:
+          document.sha256 && document.id === ""
+            ? [`sha:${document.sha256}`]
+            : [],
       });
       keys.set(
         document.id,
