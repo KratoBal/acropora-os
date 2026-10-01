@@ -84,3 +84,27 @@ export {
   type ReportCategory,
   type RunOutcome,
 } from "./decision-report.js";
+export {
+  RedactionError,
+  Redactor,
+  REDACTION_VERSION,
+  entityTokens,
+  fold,
+  knownSpans,
+  knownTable,
+  type KnownTable,
+  type RedactResult,
+  type RedactorOptions,
+} from "./redact.js";
+export {
+  JEV_MODEL,
+  PAIR_POLICY_KEY,
+  PairBlocked,
+  buildPairRequest,
+  candidateText,
+  isPrivatePartner,
+  paymentText,
+  type PairCandidate,
+  type PairPayment,
+  type PairRequest,
+} from "./pairing.js";
