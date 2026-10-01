@@ -528,6 +528,8 @@ describe("InvoiceCollectionService", () => {
       },
       cardDebits: [
         {
+          id: "bt-hetzner",
+          bookingDate: "2026-09-09",
           counterpartyName: "HETZNER ONLINE GMBH",
           amount: "17113",
           currency: "HUF",
