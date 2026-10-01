@@ -115,7 +115,14 @@ export const MISSING_INVOICE_TABS = [
 export type MissingInvoiceTab = (typeof MISSING_INVOICE_TABS)[number];
 
 export type MissingInvoiceDocumentSource =
-  "NAV" | "MAILBOX" | "UPLOAD" | "DRIVE" | "SETTLEMENT" | "PREMIUM_NOTICE";
+  | "NAV"
+  | "MAILBOX"
+  | "UPLOAD"
+  | "DRIVE"
+  | "SETTLEMENT"
+  | "PREMIUM_NOTICE"
+  /** A Számlázz.hu bejövő számla-továbbítása (acrobot 25686). */
+  | "SZAMLAZZ";
 
 export interface MissingInvoiceMonth {
   /** `ÉÉÉÉ-HH` */
