@@ -53,6 +53,59 @@ const run = (
 ) => matchMonth({ debits, documents, manual });
 
 /*
+  BIZTOSÍTÁS (barracuda esetlistája, 2. csoport). MI PIROSÍT: ha egy biztosítási
+  díj a partner MÁS számlái miatt „nem párosodott”-nak látszana (az OTP banki
+  díjszámlái), vagy ha a biztosító saját, pontos összegű számláját nem találná meg.
+*/
+describe("insurance: the insurer's invoice first, otherwise a premium notice is missing", () => {
+  it("an exact invoice of the insurer pairs; otherwise no invoice, saying a premium notice is missing", () => {
+    const premium = () =>
+      debit({
+        bookingDate: "2026-09-15",
+        amount: D(172440),
+        counterpartyName: "Allianz Hungária Zrt.",
+        narrative: "AMC287127862",
+        category: "INSURANCE",
+      });
+    const other = doc({
+      number: "26-10000009740",
+      date: "2026-09-01",
+      gross: D(49500),
+      supplierName: "Allianz Hungária Zrt.",
+    });
+    const p = premium();
+    const missing = run([p], [other]).get(p.id)!;
+    assert.deepEqual(
+      [missing.state, missing.reason],
+      [
+        "NO_INVOICE",
+        "biztosítás: a díjértesítő (vagy a biztosító számlája) hiányzik",
+      ],
+    );
+    // a partner másik számlája jelöltként látszik, kézzel párosítható
+    assert.deepEqual(
+      missing.candidates.map((c) => c.number),
+      ["26-10000009740"],
+    );
+    const q = premium();
+    const invoice = doc({
+      number: "26-10000012345",
+      date: "2026-09-10",
+      gross: D(172440),
+      supplierName: "Allianz Hungária Zrt.",
+    });
+    assert.equal(run([q], [invoice]).get(q.id)!.state, "FOUND");
+    // A KONTROLL: egy nem biztosítási terhelés ugyanígy „nem párosodott” marad
+    const r = debit({
+      ...premium(),
+      id: "nem-bizt",
+      category: "DOMESTIC_SUPPLIER",
+    });
+    assert.equal(run([r], [other]).get(r.id)!.state, "NOT_MATCHED");
+  });
+});
+
+/*
   BARRACUDA ESETLISTÁJA (agents/barracuda/megosztas/javitasi-esetlista-2026-10-01.md,
   acrobot 25928). MI PIROSÍT: ha egy ékezetre végződő általános szó (felelősségű,
   hungária) a névben maradna; ha a kiírt jogi formájú NAV-név nem lenne a bank
@@ -791,8 +844,14 @@ describe("matchMonth", () => {
   });
 
   it("lets one invoice pay one debit only (the two 23 810 Ft Alza payments)", () => {
-    const first = debit({ amount: D(23810), counterpartyName: "Alza.hu Kft." });
+    // fix ids: a tie goes by id, and the counter's `d99` sorts after `d100`
+    const first = debit({
+      id: "alza-1",
+      amount: D(23810),
+      counterpartyName: "Alza.hu Kft.",
+    });
     const second = debit({
+      id: "alza-2",
       amount: D(23810),
       counterpartyName: "Alza.hu Kft.",
     });
