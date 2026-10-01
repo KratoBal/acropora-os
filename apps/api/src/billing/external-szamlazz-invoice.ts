@@ -1,3 +1,5 @@
+import { Prisma } from "@acropora/database";
+
 import {
   SZAMLA_NAMESPACE,
   SzamlazzFeedParseError,
@@ -33,6 +35,11 @@ import {
  *                      customerName, customerTaxNumber, customerAddress
  *   tetelek.tetel[]    lines, a számla sorrendjében
  *   osszegek.totalossz netAmount, vatAmount, grossAmount
+ *   kifizetesek.kifizetes[]
+ *                      payments, és belőlük paidAmount (összeg) és lastPaidAt
+ *                      (a legkésőbbi dátum). A Számlázz.hu egy kifizetés után
+ *                      újraküldi a számlát (acrobot 25894, élesen mérve), és a
+ *                      saját banki párosítása is ide ír; az igazság ez.
  *
  * A KÖTELEZŐ MEZŐK (az XSD szerint is kötelezők) hiányánál a leképezés HIBÁT
  * DOB: egy fél számla a listán rosszabb, mint egy, ami nincs ott (a nyers
@@ -48,6 +55,17 @@ export interface ExternalInvoiceLine {
   netAmount: string;
   vatAmount: string;
   grossAmount: string;
+}
+
+/** Egy kifizetés, ahogy a számlán áll (szamla.xsd `kifizetes`). */
+export interface ExternalInvoicePayment {
+  date: string;
+  /** A jogcím, nyersen (átutalás, készpénz, utánvét, ...). */
+  method: string;
+  amount: string;
+  note: string | null;
+  /** A Számlázz.hu banki párosításának azonosítója, ha onnan jött. */
+  bankTransactionId: string | null;
 }
 
 export interface ExternalInvoiceProjection {
@@ -68,6 +86,11 @@ export interface ExternalInvoiceProjection {
   grossAmount: string;
   lines: ExternalInvoiceLine[];
   cancelled: boolean;
+  payments: ExternalInvoicePayment[];
+  /** A kifizetések összege, két tizedesre. */
+  paidAmount: string;
+  /** A legkésőbbi kifizetés napja; kifizetés nélkül `null`. */
+  lastPaidAt: string | null;
 }
 
 /**
@@ -104,6 +127,20 @@ function required(root: XmlElement, ...path: string[]): string {
 
 function day(value: string | null): string | null {
   return value ? xsDateDay(value) : null;
+}
+
+function payment(kifizetes: XmlElement, index: number): ExternalInvoicePayment {
+  const field = (name: string) => `kifizetes[${index + 1}].${name}`;
+  const date = day(required(kifizetes, "datum"));
+  if (!date)
+    throw new SzamlazzFeedParseError(`a(z) ${field("datum")} nem dátum`);
+  return {
+    date,
+    method: required(kifizetes, "jogcim"),
+    amount: number(textAt(kifizetes, "osszeg"), field("osszeg")),
+    note: textAt(kifizetes, "megjegyzes"),
+    bankTransactionId: textAt(kifizetes, "banktranzid"),
+  };
 }
 
 function address(cim: XmlElement | undefined): string | null {
@@ -145,6 +182,9 @@ export function projectExternalInvoice(xml: string): ExternalInvoiceProjection {
     .filter((element) => element.name === "tetel")
     .map(line);
   const truthy = (value: string | null) => value === "true" || value === "1";
+  const payments = (child(root, "kifizetesek")?.children ?? [])
+    .filter((element) => element.name === "kifizetes")
+    .map(payment);
   return {
     externalId,
     kindCode: required(root, "alap", "tipus"),
@@ -173,5 +213,13 @@ export function projectExternalInvoice(xml: string): ExternalInvoiceProjection {
     ),
     lines,
     cancelled: truthy(textAt(root, "alap", "sztornozott")),
+    payments,
+    paidAmount: payments
+      .reduce((sum, p) => sum.plus(p.amount), new Prisma.Decimal(0))
+      .toFixed(2),
+    lastPaidAt: payments.reduce<string | null>(
+      (last, p) => (last === null || p.date > last ? p.date : last),
+      null,
+    ),
   };
 }
