@@ -243,6 +243,52 @@ describe("MissingInvoicesService.month", () => {
   });
 });
 
+/*
+  KÉTSZER FIZETETT SZÁMLA A HÓNAPBAN ÉS A DRAWERBEN (acrobot 25636). MI PIROSÍT:
+  ha a két terhelés a Megvan-csempébe számítana; ha a hiányzó összegből
+  kimaradna; ha a drawer nem nevezné meg a másik terhelést dátummal, összeggel.
+*/
+describe("a double-paid invoice", () => {
+  it("is counted as missing an invoice, and the drawer names the other debit", async () => {
+    const sopro = (id: string): CandidateDocument => ({
+      ...nav("2026-09-20", 172006, "Sopro Hungária Kft."),
+      id,
+      source: "UPLOAD",
+      identities: ["sha:same-pdf"],
+    });
+    const first = debit("2026-09-28", 172006, "Sopro Hungária Kft.");
+    const second = debit("2026-09-29", 172006, "Sopro Hungária Kft.");
+    const { missing } = service({
+      debits: [first, second],
+      documents: [sopro("up-1"), sopro("up-2")],
+      coverage: [`${MAIN.id}:2026-09`, `${CARD.id}:2026-09`],
+    });
+    const month = (await missing.months()).months.find(
+      (m) => m.month === "2026-09",
+    )!;
+    assert.deepEqual(
+      [month.found, month.noInvoice, month.missingAmountHuf],
+      [0, 2, "344012"],
+    );
+    const detail = await missing.item(first.id);
+    assert.deepEqual(
+      [detail.state, detail.action, detail.doublePaidWith],
+      [
+        "DOUBLE_PAID",
+        "CHECK_DOUBLE_PAYMENT",
+        [
+          {
+            id: second.id,
+            bookingDate: "2026-09-29",
+            amount: "172006",
+            currency: "HUF",
+          },
+        ],
+      ],
+    );
+  });
+});
+
 describe("the payee check of mailbox invoices", () => {
   it("reads an unchecked document once and stores the answer", async () => {
     const mailbox: CandidateDocument = {
@@ -265,5 +311,30 @@ describe("the payee check of mailbox invoices", () => {
     const result = await missing.month("2026-08", { tab: "FOUND" });
     assert.deepEqual(stored, [[mailbox.id, "COMPANY"]]);
     assert.equal(result.items[0]?.state, "FOUND");
+  });
+
+  // MI PIROSÍT: ha egy NEM postafiókos (feltöltött, gyűjtött) dokumentum
+  // visszaállított (NULL) vevője sosem számolódna újra (acrobot 25640: a
+  // migráció a régi NOT_COMPANY sorokat NULL-ra teszi, köztük feltöltötteket).
+  it("an upload whose payee was reset is read again too, by our name this time", async () => {
+    const upload: CandidateDocument = {
+      ...nav("2026-08-01", 1000, "Magic Patterns Inc."),
+      source: "UPLOAD",
+      payee: "UNKNOWN",
+    };
+    const { missing, stored } = service({
+      debits: [debit("2026-08-03", 1000, "Magic Patterns Inc.")],
+      documents: [upload],
+      coverage: [`${MAIN.id}:2026-08`, `${CARD.id}:2026-08`],
+      mailbox: [
+        {
+          id: upload.id,
+          fileName: "invoice.txt",
+          content: Buffer.from("Bill to Acropora Kft. Budapest 1106 Hungary"),
+        },
+      ],
+    });
+    await missing.month("2026-08", { tab: "ALL" });
+    assert.deepEqual(stored, [[upload.id, "COMPANY"]]);
   });
 });

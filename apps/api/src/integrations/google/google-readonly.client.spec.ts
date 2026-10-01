@@ -282,6 +282,59 @@ describe("GoogleReadonlyClient, a 403 és a 429", () => {
     assert.equal(t.calls(), 1);
   });
 
+  /*
+    A MEGÁLLÁS MÉRT OKA (acrobot 25629). MI PIROSÍT: ha a végső hiba nem vinné a
+    Google okát, tartományát és a Retry-After értékeket; ha szabad szöveg (a
+    hibaüzenet, egy nem azonosító alakú ok) a naplóba jutna.
+  */
+  const detail = async (promise: Promise<unknown>) => {
+    try {
+      await promise;
+      return "ok";
+    } catch (error) {
+      return error instanceof GoogleReadonlyError
+        ? error.detail
+        : String(error);
+    }
+  };
+
+  it("the final rate-limit error names Google's reason, domain and the retry times", async () => {
+    const t = make([
+      () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 403,
+              message:
+                "User-rate limit exceeded.  Retry after 2026-10-01T09:30:00.123Z (info@acropora.hu)",
+              errors: [
+                { domain: "usageLimits", reason: "userRateLimitExceeded" },
+                { domain: "global", reason: "free text, not an id" },
+              ],
+            },
+          }),
+          { status: 403, headers: { "Retry-After": "30" } },
+        ),
+    ]);
+    assert.equal(
+      await detail(ids(t.google)),
+      "403 userRateLimitExceeded usageLimits+global retry-after=30 retry-at=2026-10-01T09:30:00.123Z",
+    );
+  });
+
+  it("a permission 403 carries its reason too, and a 429 without a body its status", async () => {
+    const forbiddenT = make([
+      () =>
+        forbidden({ error: { errors: [{ reason: "dailyLimitExceeded" }] } }),
+    ]);
+    assert.equal(
+      await detail(ids(forbiddenT.google)),
+      "403 dailyLimitExceeded -",
+    );
+    const tooMany = make([() => new Response("{}", { status: 429 })]);
+    assert.equal(await detail(ids(tooMany.google)), "429 - -");
+  });
+
   it("a 429 is retried, and Retry-After is honoured up to 10 seconds", async () => {
     const t = make([
       () =>
@@ -292,5 +345,49 @@ describe("GoogleReadonlyClient, a 403 és a 429", () => {
     ]);
     assert.deepEqual(await ids(t.google), []);
     assert.deepEqual(t.sleeps, [3_000, 10_000]);
+  });
+});
+
+/*
+  A KÉRÉSEK KÖZÖTT SZÜNET (acrobot 25605, éles 2026-10-01: a szünet nélküli
+  letöltés a Gmail kvótájába futott). MI PIROSÍT: ha két egymás utáni API-kérés
+  között nem várna; ha a már eltelt időt nem számítaná be; ha a token-kérés is
+  várna; ha alapból (a beállítás nélkül) is lassítana.
+*/
+describe("GoogleReadonlyClient pacing", () => {
+  const listing = () => Response.json({ messages: [{ id: "m" }] });
+  const make = (gap: number | undefined, clock: number[]) => {
+    const sleeps: number[] = [];
+    let tick = 0;
+    const fetcher: typeof fetch = async (input) =>
+      String(input) === SETTINGS.tokenUrl
+        ? Response.json({ access_token: "access", expires_in: 3600 })
+        : listing();
+    const google = new GoogleReadonlyClient(
+      {
+        ...SETTINGS,
+        requestGapMs: gap,
+        now: () => clock[Math.min(tick++, clock.length - 1)]!,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+      },
+      fetcher,
+    );
+    return { google, sleeps };
+  };
+
+  it("waits out the gap between two requests, counting the time already gone", async () => {
+    // óra-olvasások: 1. kérés bélyege; 2. kérés: döntés 100 ms múlva (150-et
+    // vár), bélyeg a várakozás után; 3. kérés 400 ms-mal később: nem vár
+    const t = make(250, [1_000, 1_100, 1_250, 1_650, 1_650]);
+    for (let i = 0; i < 3; i++) await t.google.gmailMessageIds("a@b.hu", "q");
+    assert.deepEqual(t.sleeps, [150]);
+  });
+
+  it("no gap set: no waiting", async () => {
+    const t = make(undefined, [1_000]);
+    for (let i = 0; i < 3; i++) await t.google.gmailMessageIds("a@b.hu", "q");
+    assert.deepEqual(t.sleeps, []);
   });
 });

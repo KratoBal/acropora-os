@@ -28,6 +28,8 @@ const COLUMNS = [
   { header: "Állapot", width: 18 },
   { header: "Megjegyzés", width: 36 },
   { header: "Számla száma", width: 28 },
+  { header: "Hiányzó számla", width: 28 },
+  { header: "Összeg-eltérés", width: 16 },
 ] as const;
 
 /**
@@ -58,6 +60,11 @@ export async function buildMissingInvoicesXlsx(
       MISSING_INVOICE_STATE_LABELS[item.state],
       item.comment ?? "",
       invoiceNumbers.join(", "),
+      // név szerint, ahogy a felület is (acrobot 25610)
+      item.missingNumbers.join(", "),
+      item.amountDifference
+        ? `${item.amountDifference.amount} ${item.amountDifference.currency}`
+        : "",
     ]);
   for (const key of [5, 7]) sheet.getColumn(key).numFmt = "#,##0.##";
   return Buffer.from(await workbook.xlsx.writeBuffer());

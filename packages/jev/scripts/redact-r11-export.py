@@ -152,6 +152,19 @@ lines.insert(-1, f"export const PAIR_INSTRUCTIONS = {ts(_q['instructions'])};")
 lines.insert(-1, "/** A jelolt kriteriuma; {i} a sorszam helye. */")
 lines.insert(-1, f"export const PAIR_CRITERION = {ts(_crit.replace('c0', 'c{i}'))};")
 lines.insert(-1, f"export const PAIR_NONE = {ts(_q['criteria']['NONE'])};")
+# the letter question, the same way (acrobot 25784: the measured DEV/HOLDOUT request)
+_ldto, _lquestions, _loptions = offline.build("letter_class", {"subject": "probe", "head": "probe"})
+(_lkey, _lq), = _lquestions.items()
+assert list(_lq) == ["type", "criteria", "instructions"] and _lq["type"] == "choice", list(_lq)
+assert list(_lq["criteria"]) == _loptions == list(offline.LETTER_CLASSES)
+lines.insert(-1, "")
+lines.insert(-1, "/** offline.py `letter_class`: a level-besorolo merve kerese (DEV es HOLDOUT, r14). */")
+lines.insert(-1, f"export const MAX_LETTER_CHARS = {offline.MAX_LETTER_CHARS};")
+lines.insert(-1, f"export const LETTER_POLICY_KEY = {ts(offline.POLICIES['letter_class'])};")
+lines.insert(-1, f"export const LETTER_QUESTION_KEY = {ts(_lkey)};")
+lines.insert(-1, f"export const LETTER_INSTRUCTIONS = {ts(_lq['instructions'])};")
+lines.insert(-1, f"export const LETTER_CLASSES: Readonly<Record<string, string>> = {ts(_lq['criteria'])};")
+lines.insert(-1, f"export const LETTER_TERMS: readonly string[] = {ts(list(offline.LETTER_TERMS))};")
 # the merge rank lives inside _merge; read it back from the function's constants
 rank = [c for c in redact._merge.__code__.co_consts if isinstance(c, tuple) and "SECRET" in c]
 if len(rank) != 1:
@@ -203,6 +216,58 @@ def known_kept(rows):
     return kept + list(build_known.EXTRA)
 
 
+# the letter request (acrobot 25784), on invented letters; head is built as the
+# DEV/HOLDOUT set built it: "File: <name>" and the PDF's first 40 lines
+LETTER_HEAD_LINES = 40
+LETTER_ITEMS = [
+    {"id": "l1", "subject": "Invoice INV-2026-0412 from Fekete Bolt Kft.", "fileName": "Invoice_INV-2026-0412.pdf",
+     "lines": ["INVOICE", "Invoice number: INV-2026-0412", "Date: 2026-09-12", "Customer: Acropora Kft.",
+               "Contact: Varga Ilona, ilona.varga@example.com, +36 20 123 4567",
+               "IBAN: HU42 1170 9002 2062 4460 0000 0000", "Total: 1 234,00 EUR"]},
+    {"id": "l2", "subject": "Pro forma Rechnung 4711", "fileName": "PF-4711.pdf",
+     "lines": ["Pro forma", "Rechnung Nr. 4711", "Tax invoice follows after payment", "Kunde: Kovács Péter",
+               "Gesamt 99,50 EUR"]},
+    {"id": "l3", "subject": "Szállítólevél", "fileName": "SZL-2026-88.pdf",
+     "lines": ["Szállítólevél SZL-2026/88", "Delivery note", "Átvevő: Nagy Péter", "Kelt: Budapest, 2026.09.01."]},
+    {"id": "l4", "subject": "Payment reminder", "fileName": "First reminder 11069.pdf",
+     "lines": ["Payment reminder", "Zahlungserinnerung", "Dear Mr Smith,", "Our records show invoice 26007910 is open.",
+               "Mahnung"]},
+    {"id": "l5", "subject": "Ajánlat és Árajánlat", "fileName": "",
+     "lines": [f"Tétel {i}: Tunze Turbelle szivattyú, Végösszeg {i * 1000} Ft" for i in range(60)]},
+    {"id": "l6", "subject": "FANK karbantartás", "fileName": "fank.pdf",
+     "lines": ["Számla", "FANK karbantartás", "Összesen 12 000 Ft"]},
+]
+
+
+def _letter_item(item):
+    head = "\n".join([f"File: {item['fileName']}"] + item["lines"][:LETTER_HEAD_LINES])
+    return {"subject": item["subject"], "head": head}
+
+
+def _straddling_letter():
+    """A letter whose redacted text has a placeholder across the 1500-char cut."""
+    for n in range(1300, 1520):
+        item = {"id": "l7", "subject": "Számla", "fileName": "a.pdf",
+                "lines": ["x " * (n // 2) + "Kovács Péter Zoltán úrnak"]}
+        with redact.preserving(offline.LETTER_TERMS):
+            out = redact.redact(offline.letter_text(_letter_item(item)))["text"]
+        i = out.find("<PERSON_1>")
+        if 0 <= i < offline.MAX_LETTER_CHARS < i + len("<PERSON_1>"):
+            return item
+    sys.exit("could not place a placeholder across the letter cut")
+
+
+LETTER_ITEMS.append(_straddling_letter())
+# longer than the redactor takes: blocked, never cut first and sent
+LETTER_ITEMS.append({"id": "l8", "subject": "Számla", "fileName": "b.pdf",
+                     "lines": ["y" * (shadow.MAX_REDACT_CHARS + 1)]})
+with redact.preserving(offline.LETTER_TERMS):
+    for _item in LETTER_ITEMS:
+        try:
+            redact.redact(offline.letter_text(_letter_item(_item)))
+        except redact.RedactionError:
+            pass
+
 known_kept(KNOWN_ROWS)
 lookups = Recorder.asked
 common_subset = sorted(w for w in redact.COMMON if w in lookups)
@@ -237,6 +302,19 @@ def outputs(text, keep):
 
 
 full = [(outputs(text, ()), outputs(text, redact.PAIRING_KEEP)) for _, _, text, _ in cases]
+
+
+def letter_vector(item):
+    try:
+        dto, questions, options = offline.build("letter_class", _letter_item(item))
+    except shadow.Blocked as b:
+        return {"blocked": b.outcome, "detail": b.detail}
+    return {"body": json.dumps({"state": dto.fields, "model": shadow.MODEL, "questions": questions},
+                               ensure_ascii=False),
+            "placeholders": dto.counts, "options": options}
+
+
+letter_full = [letter_vector(i) for i in LETTER_ITEMS]
 redact.COMMON = set(common_subset)   # the vectors see what the test will see
 sub = [(outputs(text, ()), outputs(text, redact.PAIRING_KEEP)) for _, _, text, _ in cases]
 if full != sub:
@@ -321,6 +399,17 @@ out["pairing"] = {"items": PAIR_ITEMS, "unknown": [pair_vector(i) for i in PAIR_
 redact.write_known_file(KNOWN, kpath)
 redact._KNOWN_CACHE.clear()
 out["pairing"]["known"] = [pair_vector(i) for i in PAIR_ITEMS]
+os.remove(kpath)
+redact._KNOWN_CACHE.clear()
+
+letter_sub = [letter_vector(i) for i in LETTER_ITEMS]
+if letter_sub != letter_full:
+    sys.exit("the common-words subset changes a letter request: "
+             f"{[LETTER_ITEMS[i]['id'] for i in range(len(LETTER_ITEMS)) if letter_sub[i] != letter_full[i]]}")
+out["letter"] = {"items": LETTER_ITEMS, "unknown": letter_sub}
+redact.write_known_file(KNOWN, kpath)
+redact._KNOWN_CACHE.clear()
+out["letter"]["known"] = [letter_vector(i) for i in LETTER_ITEMS]
 os.remove(kpath)
 redact._KNOWN_CACHE.clear()
 

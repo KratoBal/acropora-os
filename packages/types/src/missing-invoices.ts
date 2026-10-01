@@ -15,6 +15,17 @@ export interface BankStatementImportResult {
   /** Az olvashatatlan sorok (az első tíz), sorszámmal és okkal. */
   rejected: { line: number; reason: string }[];
   rejectedCount: number;
+  /**
+   * A függő kártyás tételek (az első tíz): a bank még nem könyvelte, dátumuk
+   * nincs, a következő kivonatban jönnek. Nem hiba (acrobot 25637).
+   */
+  pending: {
+    line: number;
+    partner: string | null;
+    amount: string;
+    currency: string;
+  }[];
+  pendingCount: number;
   /** A fájlban szereplő bankszámlák. */
   accounts: { accountNumber: string; currency: string }[];
   /** A fájl könyvelési hónapjai, `ÉÉÉÉ-HH` alakban, növekvően. */
@@ -29,6 +40,11 @@ export const MISSING_INVOICE_ITEM_STATES = [
   "NO_INVOICE",
   "NOT_COMPANY",
   "PROFORMA_ONLY",
+  /**
+   * Ugyanaz a számla (azonos fájl vagy azonos számlaszám) két terheléshez is
+   * párosítva: valószínűleg kétszer fizettük (acrobot 25636). Egyik sem Megvan.
+   */
+  "DOUBLE_PAID",
   "NO_INVOICE_NEEDED",
 ] as const;
 export type MissingInvoiceItemState =
@@ -47,6 +63,7 @@ export const MISSING_INVOICE_STATE_LABELS: Readonly<
   NO_INVOICE: "Nincs számla",
   NOT_COMPANY: "Nem a cégre szól",
   PROFORMA_ONLY: "Csak díjbekérő",
+  DOUBLE_PAID: "Kétszer fizetett számla",
   NO_INVOICE_NEEDED: "Nem kell számla",
 };
 
@@ -104,7 +121,14 @@ export const MISSING_INVOICE_TABS = [
 export type MissingInvoiceTab = (typeof MISSING_INVOICE_TABS)[number];
 
 export type MissingInvoiceDocumentSource =
-  "NAV" | "MAILBOX" | "UPLOAD" | "DRIVE" | "SETTLEMENT" | "PREMIUM_NOTICE";
+  | "NAV"
+  | "MAILBOX"
+  | "UPLOAD"
+  | "DRIVE"
+  | "SETTLEMENT"
+  | "PREMIUM_NOTICE"
+  /** A Számlázz.hu bejövő számla-továbbítása (acrobot 25686). */
+  | "SZAMLAZZ";
 
 export interface MissingInvoiceMonth {
   /** `ÉÉÉÉ-HH` */
@@ -155,6 +179,22 @@ export interface MissingInvoiceItem {
     source: MissingInvoiceDocumentSource;
   } | null;
   matchedBy: "RULE" | "MANUAL" | null;
+  /**
+   * MINDEN párosított számla száma (a `document` csak az első). Több számla egy
+   * utalásban, ha a közlemény megnevezi őket (acrobot 25610).
+   */
+  documentNumbers: string[];
+  /**
+   * A közlemény által megnevezett, de hiányzó számlák NÉV SZERINT (Balázs: „ki
+   * kellene írni melyik hiányzik”): aminek nincs eredetije, vagy semmilyen
+   * dokumentuma. Ha nem üres, a tétel nem Megvan.
+   */
+  missingNumbers: string[];
+  /**
+   * A terhelés mínusz a párosított számlák összege, ha a kerekítési tűrésen túl
+   * eltér (előjeles: negatív, ha a számlák többet tesznek ki). A párosítás áll.
+   */
+  amountDifference: { amount: string; currency: string } | null;
   comment: string | null;
   /** Kézzel jelölve: az eredeti papíron megvan (acrobot 25322). */
   paperOriginal: boolean;
@@ -168,6 +208,7 @@ export const MISSING_INVOICE_ACTIONS = [
   "REQUEST_INVOICE",
   "REQUEST_REISSUE_TO_COMPANY",
   "REQUEST_FINAL_INVOICE",
+  "CHECK_DOUBLE_PAYMENT",
 ] as const;
 export type MissingInvoiceAction = (typeof MISSING_INVOICE_ACTIONS)[number];
 
@@ -184,12 +225,36 @@ export interface MissingInvoiceCandidate {
   hasOriginal: boolean;
 }
 
+/**
+ * A párosított számla, amelynek vevőjét kézzel lehet (vagy kellett) jelölni:
+ * a szövegréteg nélküli PDF vevője UNKNOWN (acrobot 25633).
+ */
+export interface MissingInvoicePayeeDocument {
+  documentId: string;
+  number: string;
+  payee: "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
+  /** Kézzel jelölték (és ezért kézzel át is jelölhető). */
+  marked: boolean;
+}
+
 export interface MissingInvoiceItemDetail extends MissingInvoiceItem {
   /** A partner ablakba eső, még nem párosított számlái (a drawer jelöltjei). */
   candidates: MissingInvoiceCandidate[];
+  /** A párosított számlák közül a kézzel jelölhető vevőjűek. */
+  payeeDocuments: MissingInvoicePayeeDocument[];
   action: MissingInvoiceAction;
   /** A „Hiányzó számlák” Drive-mappa, ha a szerveren be van állítva. */
   driveFolderUrl: string | null;
+  /**
+   * A többi terhelés, amelyhez ugyanez a számla párosítva van (Kétszer
+   * fizetett számla, acrobot 25636).
+   */
+  doublePaidWith: {
+    id: string;
+    bookingDate: string;
+    amount: string;
+    currency: string;
+  }[];
 }
 
 export interface MissingInvoiceMatchInput {
@@ -204,6 +269,9 @@ export interface MissingInvoiceCategoryInput {
 }
 export interface MissingInvoicePaperOriginalInput {
   marked: boolean;
+}
+export interface MissingInvoicePayeeInput {
+  payee: "COMPANY" | "NOT_COMPANY";
 }
 
 export interface MissingInvoiceMonthDetail {

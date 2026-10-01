@@ -43,6 +43,8 @@ import {
   formatDate,
   formatDateTime,
   worksheetLabelOrDraft,
+  worksheetDisplayLabel,
+  worksheetDisplayTone,
   worksheetStatusLabel,
   worksheetStatusTone,
 } from "./worksheet-labels";
@@ -820,8 +822,10 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
         eyebrow={worksheetLabelOrDraft(current.label)}
         title={current.subject}
         badge={
-          <ServiceStatusBadge tone={worksheetStatusTone(current.status)}>
-            {worksheetStatusLabel[current.status]}
+          <ServiceStatusBadge
+            tone={worksheetDisplayTone(current.status, current.lines.length)}
+          >
+            {worksheetDisplayLabel(current.status, current.lines.length)}
           </ServiceStatusBadge>
         }
         sub={

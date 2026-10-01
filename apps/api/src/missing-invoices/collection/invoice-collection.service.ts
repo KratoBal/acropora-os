@@ -16,6 +16,7 @@ import {
 } from "../../integrations/google/google-readonly.client.js";
 import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { SupplierInvoiceImportService } from "../../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
+import { normalizeName } from "../missing-invoice-matching.js";
 import { payeeFromText } from "../payee-check.js";
 import {
   invoiceCollectionDays,
@@ -33,7 +34,10 @@ import {
 import {
   looksLikeInvoice,
   looksLikeProforma,
+  looksLikeOtherDocument,
+  looksLikeReminder,
   bankReference,
+  cardPaymentMatch,
   readInvoiceText,
   type InvoiceTextReading,
 } from "./invoice-text.js";
@@ -47,8 +51,50 @@ export type GoogleClientFactory = (
   "gmailMessageIds" | "gmailPdfMessage" | "driveFolderPdfs" | "driveFile"
 >;
 
+/**
+ * KÉT GOOGLE-KÉRÉS KÖZÖTT LEGALÁBB ENNYI (acrobot 25605, éles 2026-10-01: a
+ * sorban, szünet nélkül menő melléklet-letöltés a Gmail felhasználónkénti
+ * kvótájába futott, 188 fájl után mindkét postafiók GOOGLE_RATE_LIMITED).
+ * Másodpercenként legfeljebb négy kérés; egy 190 fájlos futás így is két perc
+ * alatt van. A Gmail pontos kvótáját élesben nem mértük.
+ */
+export const INVOICE_COLLECTION_REQUEST_GAP_MS = 250;
+
 /** A környezet; a teszt ezen át adja. */
 export const INVOICE_COLLECTION_ENV = Symbol("INVOICE_COLLECTION_ENV");
+
+/** A száraz újraértékelés egy sora: mi volt és mi lenne egy fájl ítélete. */
+export interface InvoiceCollectionDryChange {
+  source: InvoiceCollectionSource;
+  externalId: string;
+  fileName: string;
+  before: string | null;
+  after: InvoiceCollectionVerdict;
+  detail?: string;
+  /**
+   * MÁR TÁROLT, UGYANILYEN SZÁMÚ DOKUMENTUM, más tartalommal (acrobot 25800,
+   * murena review-ja): ilyenkor az éles újraolvasás egy második dokumentumot
+   * tárolna ugyanarra a számlára (például a kézzel feltöltött másik fájl
+   * mellé). `fájlnév (eredet)` alakban, hogy a sor egyedül is eldönthető legyen.
+   */
+  sameNumber?: string[];
+}
+
+const emptyCounts = (): InvoiceCollectionCounts => ({
+  filesSeen: 0,
+  storedCount: 0,
+  notInvoiceCount: 0,
+  unmatchedCount: 0,
+  ownInvoiceCount: 0,
+  duplicateCount: 0,
+  failedCount: 0,
+});
+
+/** Egy partnernév jellemző szava: a normalizált név első, legalább négybetűs szava. */
+const distinctiveWord = (name: string): string | null =>
+  normalizeName(name)
+    .split(" ")
+    .find((word) => word.length >= 4) ?? null;
 
 interface Found {
   fileName: string;
@@ -105,8 +151,51 @@ export class InvoiceCollectionService {
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
-  /** Egy futás, az összes beállított forráson. */
-  async run(trigger: SyncRunTrigger): Promise<InvoiceCollectionCounts> {
+  /**
+   * SZÁRAZ ÚJRAÉRTÉKELÉSNÉL (acrobot 25750) ide kerül minden ítélet, és semmi
+   * nem íródik: sem futás, sem ítélet, sem dokumentum.
+   */
+  private dry: InvoiceCollectionDryChange[] | null = null;
+
+  /**
+   * A MÁR LÁTOTT UNMATCHED LEVELEK ÚJRAÉRTÉKELÉSE a mai szabályokkal (a Hetzner-
+   * és a Kia-szabály csak az új levelekre hatott). Szárazon semmit nem ír, és
+   * kilistázza, mi változna; `apply`-jal egy rendes futás, kényszerített
+   * újraolvasással.
+   */
+  async reevaluate(apply: boolean): Promise<{
+    counts: InvoiceCollectionCounts;
+    changes: InvoiceCollectionDryChange[];
+  }> {
+    if (apply)
+      return {
+        counts: await this.run("MANUAL", { forceRetry: true }),
+        changes: [],
+      };
+    const sources = this.enabledSources();
+    this.dry = [];
+    try {
+      const counts = emptyCounts();
+      const { failed, paused } = await this.collectAll(sources, counts, true);
+      const changes = this.dry;
+      if (failed.length || paused.length)
+        changes.push(
+          ...[...failed, ...paused].map((note) => ({
+            source: note.split(":")[0] as InvoiceCollectionSource,
+            externalId: "",
+            fileName: "(forrás)",
+            before: null,
+            after: "UNREADABLE" as const,
+            detail: note,
+          })),
+        );
+      return { counts, changes };
+    } finally {
+      this.dry = null;
+    }
+  }
+
+  private enabledSources() {
     if (!invoiceCollectionSwitch(this.environment).on)
       throw new BadRequestException(
         "A számla-begyűjtés ki van kapcsolva (INVOICE_COLLECTION_ENABLED).",
@@ -116,39 +205,92 @@ export class InvoiceCollectionService {
       throw new BadRequestException(
         "A számla-begyűjtésnek egyetlen forrásához sincs kulcs beállítva.",
       );
-    const counts: InvoiceCollectionCounts = {
-      filesSeen: 0,
-      storedCount: 0,
-      notInvoiceCount: 0,
-      unmatchedCount: 0,
-      ownInvoiceCount: 0,
-      duplicateCount: 0,
-      failedCount: 0,
-    };
+    return sources;
+  }
+
+  /** Egy futás, az összes beállított forráson. */
+  async run(
+    trigger: SyncRunTrigger,
+    options: { forceRetry?: boolean } = {},
+  ): Promise<InvoiceCollectionCounts> {
+    const sources = this.enabledSources();
+    const counts = emptyCounts();
     const runId = await this.repository.startRun(trigger);
+    const retryUnmatched =
+      options.forceRetry ||
+      (await this.repository.unmatchedRetryDue(new Date()));
+    const { failed: failedSources, paused: pausedSources } =
+      await this.collectAll(sources, counts, retryUnmatched);
+    const notes = [...failedSources, ...pausedSources];
+    await this.repository.finishRun(
+      runId,
+      counts,
+      notes.length ? notes.join(",").slice(0, 200) : null,
+      failedSources.length > 0,
+    );
+    return counts;
+  }
+
+  private async collectAll(
+    sources: InvoiceCollectionSourceConfig[],
+    counts: InvoiceCollectionCounts,
+    retryUnmatched: boolean,
+  ): Promise<{ failed: string[]; paused: string[] }> {
+    // a saját bankszámláink: futásonként egyszer, frissen
     this.ownAccountDigits = null;
     const failedSources: string[] = [];
+    const pausedSources: string[] = [];
     for (const source of sources) {
       try {
-        await this.collect(source, counts);
+        await this.collect(source, counts, retryUnmatched);
       } catch (error) {
         // egy forrás hibája (lejárt kulcs) a többit nem állítja meg
         const code =
           error instanceof GoogleReadonlyError
             ? error.code
             : "INVOICE_COLLECTION_SOURCE_FAILED";
-        failedSources.push(`${source.source}:${code}`);
+        // A Google mért oka (státusz, ok, tartomány) a futáson is látszik.
+        const detail =
+          error instanceof GoogleReadonlyError && error.detail
+            ? ` ${error.detail}`
+            : "";
+        // A rate limit nem hiba: a forrás itt megáll, a már feldolgozott
+        // levelek látottak, a következő futás onnan folytatja.
+        if (code === "GOOGLE_RATE_LIMITED") {
+          pausedSources.push(`${source.source}:${code}${detail}`);
+          this.logger.warn(
+            `Invoice collection: ${source.source} paused (${code}${detail})`,
+          );
+          continue;
+        }
+        failedSources.push(`${source.source}:${code}${detail}`);
         this.logger.error(
-          `Invoice collection: ${source.source} failed (${code})`,
+          `Invoice collection: ${source.source} failed (${code}${detail})`,
         );
       }
     }
-    await this.repository.finishRun(
-      runId,
-      counts,
-      failedSources.length ? failedSources.join(",").slice(0, 200) : null,
-    );
-    return counts;
+    return { failed: failedSources, paused: pausedSources };
+  }
+
+  /** Egy ítélet rögzítése; szárazon csak feljegyzés, a korábbi ítélettel együtt. */
+  private async record(
+    source: InvoiceCollectionSource,
+    externalId: string,
+    fileName: string,
+    verdict: Exclude<InvoiceCollectionVerdict, "STORED">,
+    sha256: string | null,
+  ): Promise<void> {
+    if (this.dry) {
+      this.dry.push({
+        source,
+        externalId,
+        fileName,
+        before: await this.repository.verdictOf(source, externalId, fileName),
+        after: verdict,
+      });
+      return;
+    }
+    await this.repository.record(source, externalId, fileName, verdict, sha256);
   }
 
   private ownAccountDigits: Promise<string[]> | null = null;
@@ -162,13 +304,18 @@ export class InvoiceCollectionService {
   private async collect(
     config: InvoiceCollectionSourceConfig,
     counts: InvoiceCollectionCounts,
+    retryUnmatched: boolean,
   ): Promise<void> {
-    const google = this.google({ credentials: config.credentials });
+    const google = this.google({
+      credentials: config.credentials,
+      requestGapMs: INVOICE_COLLECTION_REQUEST_GAP_MS,
+    });
     if (config.source === "DRIVE") {
       const files = await google.driveFolderPdfs(config.folderId);
       const seen = await this.repository.seen(
         config.source,
         files.map((file) => file.id),
+        retryUnmatched,
       );
       for (const file of files.filter((f) => !seen.has(f.id))) {
         let content: Buffer;
@@ -181,7 +328,7 @@ export class InvoiceCollectionService {
           ) {
             counts.filesSeen++;
             counts.failedCount++;
-            await this.repository.record(
+            await this.record(
               config.source,
               file.id,
               file.name,
@@ -206,7 +353,7 @@ export class InvoiceCollectionService {
       config.user,
       invoiceCollectionMailQuery(invoiceCollectionDays(this.environment)),
     );
-    const seen = await this.repository.seen(config.source, ids);
+    const seen = await this.repository.seen(config.source, ids, retryUnmatched);
     for (const id of ids.filter((messageId) => !seen.has(messageId))) {
       const message = await google.gmailPdfMessage(config.user, id);
       for (let i = 0; i < message.skippedTooLarge; i++) {
@@ -214,7 +361,7 @@ export class InvoiceCollectionService {
         counts.failedCount++;
       }
       if (message.skippedTooLarge)
-        await this.repository.record(
+        await this.record(
           config.source,
           id,
           "(túl nagy melléklet)",
@@ -231,7 +378,7 @@ export class InvoiceCollectionService {
         });
       // egy PDF nélküli levél is látott: a következő futás ne kérje le újra
       if (!message.pdfs.length && !message.skippedTooLarge)
-        await this.repository.record(
+        await this.record(
           config.source,
           id,
           "(nincs PDF)",
@@ -258,13 +405,7 @@ export class InvoiceCollectionService {
       else if (verdict === "UNMATCHED") counts.unmatchedCount++;
       else if (verdict === "OWN_INVOICE") counts.ownInvoiceCount++;
       else counts.failedCount++;
-      await this.repository.record(
-        source,
-        externalId,
-        found.fileName,
-        verdict,
-        sha256,
-      );
+      await this.record(source, externalId, found.fileName, verdict, sha256);
       return verdict;
     };
     if (await this.repository.hasContent(sha256)) return skip("DUPLICATE");
@@ -278,6 +419,12 @@ export class InvoiceCollectionService {
     }
     const text = lines.join("\n");
     if (!looksLikeInvoice(text)) return skip("NOT_INVOICE");
+    // a fizetési emlékeztető idézi a számlát, de nem az; a mellette álló
+    // számla-melléklet külön fájlként megy tovább
+    if (looksLikeReminder(lines, found.fileName)) return skip("NOT_INVOICE");
+    // szerződés, ajánlat, vámnyilatkozat: nem számla, és nem lehet jelölt
+    if (looksLikeOtherDocument(lines, found.fileName))
+      return skip("NOT_INVOICE");
 
     const importResult = await this.reader
       .read(new Uint8Array(found.content), { allowProforma: true })
@@ -307,20 +454,68 @@ export class InvoiceCollectionService {
           hints,
           await this.repository.debitNarratives(),
         );
-        if (!reference) return skip("UNMATCHED");
-        textReading = textReading.invoiceNumber
-          ? { ...textReading, bankReference: reference }
-          : {
-              ...textReading,
-              invoiceNumber: reference,
-              numberFrom: "BANK",
-              bankReference: reference,
-            };
+        if (!reference) {
+          // a NAV nélküli előfizetés: a kártyás fizetés összege és partnere
+          const payment = cardPaymentMatch(
+            lines,
+            await this.repository.cardDebits(),
+            distinctiveWord,
+            // a számla keltét az általános olvasó nem nyeri ki: a levél érkezése
+            (found.receivedAt ?? new Date()).toISOString().slice(0, 10),
+          );
+          if (!payment) return skip("UNMATCHED");
+          textReading = {
+            ...textReading,
+            ...(textReading.invoiceNumber
+              ? {}
+              : {
+                  invoiceNumber: found.fileName.replace(/\.[^.]+$/, ""),
+                  numberFrom: "FILE_NAME" as const,
+                }),
+            cardPayment: payment,
+          };
+        } else
+          textReading = textReading.invoiceNumber
+            ? { ...textReading, bankReference: reference }
+            : {
+                ...textReading,
+                invoiceNumber: reference,
+                numberFrom: "BANK",
+                bankReference: reference,
+              };
       }
     }
     const proforma = importResult
       ? importResult.documentKind === "PROFORMA"
       : looksLikeProforma(text);
+    if (this.dry) {
+      const number = importResult?.invoiceNumber ?? textReading?.invoiceNumber;
+      const sameNumber = number
+        ? (await this.repository.sameNumberDocuments(number)).map(
+            (d) => `${d.fileName} (${d.origin})`,
+          )
+        : [];
+      this.dry.push({
+        source,
+        externalId,
+        fileName: found.fileName,
+        before: await this.repository.verdictOf(
+          source,
+          externalId,
+          found.fileName,
+        ),
+        after: "STORED",
+        ...(sameNumber.length ? { sameNumber } : {}),
+        detail: textReading?.cardPayment
+          ? `kártyás fizetés: ${textReading.cardPayment.amount} ${textReading.cardPayment.currency}, ${textReading.cardPayment.partner}`
+          : (textReading?.bankReference ??
+            importResult?.invoiceNumber ??
+            textReading?.invoiceNumber ??
+            undefined),
+      });
+      counts.storedCount++;
+      return "STORED";
+    }
     await this.repository.store({
       source,
       externalId,

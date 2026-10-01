@@ -1,7 +1,13 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { Prisma, prisma, type SyncRunTrigger } from "@acropora/database";
 
-import type { InvoiceCollectionSource } from "./invoice-collection.config.js";
+import { originalAmountOf } from "../otp-statement.parser.js";
+import {
+  INVOICE_COLLECTION_RULES_VERSION,
+  type InvoiceCollectionSource,
+  unmatchedRetryDue,
+} from "./invoice-collection.config.js";
+import type { CardDebit } from "./invoice-text.js";
 
 const ACTIVE_KEY = "ACTIVE";
 /** Egy futás, ami ennyi ideje nem frissült, elakadt: a következő átveszi. */
@@ -67,13 +73,15 @@ export class InvoiceCollectionRepository {
    * UNMATCHED nem végleges: a számla gyakran a fizetés ELŐTT érkezik, a
    * kivonat havonta töltődik be, tehát a begyűjtéskor a közlemény még nincs
    * meg; egy javított párosító szabály is csak így ér el egy korábbi levelet.
-   * Az ilyen levél a következő futásban újra jön; a többi ítélet (STORED,
-   * NOT_INVOICE, DUPLICATE, TOO_LARGE, UNREADABLE) végleges marad. A begyűjtés
-   * ablaka (a napok száma) határolja, mennyi jön újra.
+   * Az ilyen levél újra jön, de csak ha `retryUnmatched` (lásd
+   * `unmatchedRetryDue`); a többi ítélet (STORED, NOT_INVOICE, DUPLICATE,
+   * TOO_LARGE, UNREADABLE) végleges marad. A begyűjtés ablaka (a napok száma)
+   * határolja, mennyi jön újra.
    */
   async seen(
     source: InvoiceCollectionSource,
     externalIds: readonly string[],
+    retryUnmatched: boolean,
   ): Promise<Set<string>> {
     if (externalIds.length === 0) return new Set();
     const rows = await this.database.invoiceCollectionItem.findMany({
@@ -82,11 +90,37 @@ export class InvoiceCollectionRepository {
     });
     const retry = new Set(
       rows
-        .filter((row) => row.verdict === "UNMATCHED")
+        .filter((row) => retryUnmatched && row.verdict === "UNMATCHED")
         .map((row) => row.externalId),
     );
     return new Set(
       rows.map((row) => row.externalId).filter((id) => !retry.has(id)),
+    );
+  }
+
+  /**
+   * Kell-e most újraolvasni az UNMATCHED leveleket (acrobot 25605: óránként
+   * mind a ~90-et letöltötte újra, és ez is a Gmail kvótáját ette). Egy
+   * UNMATCHED ítélet csak két dologtól változhat: új banki terheléstől (a
+   * közlemény köti a külföldi számlát) vagy javított szabálytól. Ezért:
+   * naponta egyszer, és ha az utolsó TELJES futás óta új terhelés jött.
+   */
+  async unmatchedRetryDue(now: Date): Promise<boolean> {
+    const last = await this.database.invoiceCollectionRun.findFirst({
+      where: { status: "APPLIED", errorCode: null },
+      orderBy: { startedAt: "desc" },
+      select: { startedAt: true, rulesVersion: true },
+    });
+    const newDebits = last
+      ? await this.database.bankTransaction.count({
+          where: { direction: "DEBIT", createdAt: { gt: last.startedAt } },
+        })
+      : 0;
+    return unmatchedRetryDue(
+      last?.startedAt ?? null,
+      newDebits,
+      now,
+      last?.rulesVersion ?? null,
     );
   }
 
@@ -97,7 +131,11 @@ export class InvoiceCollectionRepository {
   async navNumbers(supplierTaxBase: string): Promise<string[]> {
     if (!/^\d{8}$/.test(supplierTaxBase)) return [];
     const rows = await this.database.navIncomingInvoice.findMany({
-      where: { supplierTaxNumber: { startsWith: supplierTaxBase } },
+      // csak az alapszámla, mint a párosítóban: a jóváíró PDF-je külön döntés
+      where: {
+        supplierTaxNumber: { startsWith: supplierTaxBase },
+        invoiceOperation: "CREATE",
+      },
       select: { navInvoiceNumber: true },
     });
     return rows.map((row) => row.navInvoiceNumber);
@@ -124,6 +162,80 @@ export class InvoiceCollectionRepository {
       select: { narrative: true },
     });
     return rows.map((row) => row.narrative);
+  }
+
+  /**
+   * A kártyás terhelések: a NAV nélküli (külföldi) előfizetés számláját ez köti
+   * a fizetéshez, ha a közlemény nem nevezi meg (`cardPaymentMatch`).
+   */
+  async cardDebits(): Promise<CardDebit[]> {
+    const rows = await this.database.bankTransaction.findMany({
+      where: {
+        direction: "DEBIT",
+        transactionType: { contains: "KÁRTY", mode: "insensitive" },
+        counterpartyName: { not: null },
+      },
+      select: {
+        id: true,
+        bookingDate: true,
+        amount: true,
+        currency: true,
+        counterpartyName: true,
+        narrative: true,
+      },
+    });
+    return rows.map((row) => {
+      const original = originalAmountOf(row.narrative);
+      return {
+        id: row.id,
+        bookingDate: row.bookingDate.toISOString().slice(0, 10),
+        counterpartyName: row.counterpartyName!,
+        amount: row.amount.toString(),
+        currency: row.currency,
+        original: original
+          ? {
+              amount: original.amount.toString(),
+              currency: original.currency,
+            }
+          : null,
+      };
+    });
+  }
+
+  /** Egy fájl eddigi ítélete (a száraz újraértékelés ehhez méri a változást). */
+  async verdictOf(
+    source: InvoiceCollectionSource,
+    externalId: string,
+    fileName: string,
+  ): Promise<string | null> {
+    const row = await this.database.invoiceCollectionItem.findUnique({
+      where: { source_externalId_fileName: { source, externalId, fileName } },
+      select: { verdict: true },
+    });
+    return row?.verdict ?? null;
+  }
+
+  /**
+   * A már tárolt dokumentumok ugyanezzel a számlaszámmal, bármilyen úton
+   * érkeztek (az illesztő vagy a szövegolvasó száma). A száraz újraértékelés
+   * jelzi őket; azonos tartalmú itt nem lehet, mert az már DUPLICATE.
+   */
+  async sameNumberDocuments(
+    invoiceNumber: string,
+  ): Promise<{ fileName: string; origin: string }[]> {
+    const numbers = [
+      ...new Set([invoiceNumber, invoiceNumber.replace(/\s/g, "")]),
+    ];
+    return this.database.incomingSupplierDocument.findMany({
+      where: {
+        OR: numbers.flatMap((n) => [
+          { importResult: { path: ["invoiceNumber"], equals: n } },
+          { textReading: { path: ["invoiceNumber"], equals: n } },
+        ]),
+      },
+      select: { fileName: true, origin: true },
+      orderBy: { createdAt: "asc" },
+    });
   }
 
   /** Van-e már ilyen tartalmú dokumentum, bármilyen úton érkezett. */
@@ -236,7 +348,12 @@ export class InvoiceCollectionRepository {
           },
         });
         const run = await transaction.invoiceCollectionRun.create({
-          data: { activeKey: ACTIVE_KEY, status: "RUNNING", trigger },
+          data: {
+            activeKey: ACTIVE_KEY,
+            status: "RUNNING",
+            trigger,
+            rulesVersion: INVOICE_COLLECTION_RULES_VERSION,
+          },
           select: { id: true },
         });
         return run.id;
@@ -251,16 +368,22 @@ export class InvoiceCollectionRepository {
     }
   }
 
+  /**
+   * `failed`: egy forrás valódi hibával állt meg. Egy rate limit miatt megállt
+   * forrás nem az: a futás APPLIED, a kódja a `errorCode`-ban látszik, és mivel
+   * nem teljes, a következő futás az UNMATCHED újraolvasásnál nem számol vele.
+   */
   async finishRun(
     id: string,
     counts: InvoiceCollectionCounts,
     errorCode: string | null,
+    failed: boolean,
   ): Promise<void> {
     await this.database.invoiceCollectionRun.update({
       where: { id },
       data: {
         ...counts,
-        status: errorCode ? "FAILED" : "APPLIED",
+        status: failed ? "FAILED" : "APPLIED",
         activeKey: null,
         completedAt: new Date(),
         errorCode,

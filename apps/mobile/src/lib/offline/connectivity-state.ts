@@ -60,6 +60,12 @@ export interface ConnectivityState {
    * (ezredmasodperc). `null`, ha eppen nincs ilyen.
    */
   offlineSince: number | null;
+  /**
+   * EGY MENTES MAR NEM ERTE EL A SZERVERT, es eddig az idopontig (ezred-
+   * masodperc) hiszunk neki jobban, mint a keszuleknek. `null`, ha nincs ilyen.
+   * Lasd `stalledConnectivity`.
+   */
+  stalledUntil: number | null;
 }
 
 /**
@@ -70,9 +76,18 @@ export interface ConnectivityState {
  */
 export const OFFLINE_CONFIRM_MS = 3000;
 
+/**
+ * MEDDIG HISZUNK EGY ELAKADT MENTESNEK. VALASZTOTT ertek, nem meres: az iOS
+ * sajat probaja (lasd `stalledConnectivity`) eleresi hibanal 5 masodpercenkent
+ * ujrakerdez, tehat ennyi ido alatt tobbszor is megszolalhat. Ha valaha merunk
+ * hozza adatot, EZ a szam valtozik, es semmi mas.
+ */
+export const STALL_HOLD_MS = 30_000;
+
 export const initialConnectivity: ConnectivityState = {
   online: true,
   offlineSince: null,
+  stalledUntil: null,
 };
 
 /**
@@ -98,14 +113,83 @@ export function nextConnectivity(
 ): ConnectivityState {
   if (report && !reportSaysOffline(report))
     // VISSZATERES AZONNAL: itt nincs varakozas, mert a tul keson kiirt "megint
-    // van kapcsolat" ugyanugy hazudik, csak a masik iranyba.
-    return { online: true, offlineSince: null };
+    // van kapcsolat" ugyanugy hazudik, csak a masik iranyba. Egy elakadt mentes
+    // tartasat is feloldja: a NetInfo csak VALTOZASKOR szol, tehat egy online
+    // jelentes a tartas alatt valodi visszaterest jelent, nem egy regi allapotot.
+    return { online: true, offlineSince: null, stalledUntil: null };
 
-  const since = previous.offlineSince ?? now;
-  if (now - since >= OFFLINE_CONFIRM_MS)
-    return { online: false, offlineSince: since };
+  // Egy jelentes nelkuli hivas (idozito) NEM kezd uj offline sorozatot: csak a
+  // mar elindultat meri, es a tartas lejartat.
+  const since = report ? (previous.offlineSince ?? now) : previous.offlineSince;
+  const stalledUntil =
+    previous.stalledUntil !== null && now < previous.stalledUntil
+      ? previous.stalledUntil
+      : null;
+
+  if (since !== null && now - since >= OFFLINE_CONFIRM_MS)
+    return { online: false, offlineSince: since, stalledUntil };
+
+  if (stalledUntil !== null)
+    return { online: false, offlineSince: since, stalledUntil };
 
   // MEG NEM ERESITETT: a korabbi allapot marad. Ha eddig online volt, online is
-  // marad -- ez az egesz javitas lenyege.
-  return { online: previous.online, offlineSince: since };
+  // marad -- ez az egesz javitas lenyege. Ha csak egy lejart tartas tartotta
+  // offline-ban, az a tartassal egyutt megszunik.
+  return {
+    online: previous.stalledUntil !== null ? true : previous.online,
+    offlineSince: since,
+    stalledUntil: null,
+  };
+}
+
+/**
+ * EGY MENTES NEM ERTE EL A SZERVERT: MOSTANTOL A TOBBI EGYENESEN A SORBA MEGY.
+ *
+ * === A MERT KULONBSEG A KET RENDSZER KOZOTT (2026-10-01, forrasbol) ===
+ *
+ * A NetInfo 12.0.1 ANDROIDON a rendszertol kapja az `isInternetReachable`
+ * mezot (`ConnectivityReceiver.java`), tehat a halozat elvesztesekor azonnal
+ * hamis. IOS-EN a nativ modul CSAK `isConnected`-et ad (`RNCNetInfo.mm` 139.
+ * sor), es az elerhetoseget a konyvtar egy SAJAT HTTP-probaval meri
+ * (`internetReachability.ts`): elerheto allapotban 60 masodpercenkent, 15
+ * masodperces korlattal. Egy pinceben, ahol a telefon terero-jelet mutat, de
+ * adat nem megy at, az iOS tehat akar 75 masodpercig ONLINE-nak mondja magat.
+ *
+ * Ezalatt minden mentes eloszor a szervert probalja, es a hivas idokorlatjaig
+ * var (20 masodperc, fenykepnel 120). A szerelo ezt vegtelen porgesnek latja.
+ *
+ * === EZERT A SAJAT KUDARCUNK IS JEL ===
+ *
+ * Egy mentes, ami valasz nelkul hasalt el, erosebb bizonyitek, mint egy regi
+ * proba: a mi szerverunket nem erte el, most. A kovetkezo `STALL_HOLD_MS`
+ * idore offline-nak vesszuk magunkat, a tovabbi mentesek azonnal a sorba
+ * kerulnek, es a sav is kimondja. A tartas vegen (vagy egy online jelentesre)
+ * visszaterunk -- es mivel ez offline-bol online-ba valtas, a sor kiurul.
+ *
+ * Egy mar futo offline sorozat merese megmarad: ha a keszulek kozben is
+ * offline-t mond, a tartas utan sem terunk vissza addig.
+ */
+export function stalledConnectivity(
+  previous: ConnectivityState,
+  now: number,
+): ConnectivityState {
+  return {
+    online: false,
+    offlineSince: previous.offlineSince,
+    stalledUntil: now + STALL_HOLD_MS,
+  };
+}
+
+/**
+ * MIKOR KELL LEGKOZELEBB UJRA RANEZNI AZ ALLAPOTRA. `null`, ha soha (nincs
+ * futo sorozat es nincs tartas). Az idozito ezt az egy szamot varja.
+ */
+export function nextWakeAt(state: ConnectivityState): number | null {
+  const confirm =
+    state.online && state.offlineSince !== null
+      ? state.offlineSince + OFFLINE_CONFIRM_MS
+      : null;
+  if (confirm === null) return state.stalledUntil;
+  if (state.stalledUntil === null) return confirm;
+  return Math.min(confirm, state.stalledUntil);
 }

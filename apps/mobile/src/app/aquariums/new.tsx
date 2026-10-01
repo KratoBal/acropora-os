@@ -39,6 +39,7 @@ import {
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { enqueueAquariumCreate } from "@/lib/offline/queue-store";
+import { deviceConnectivity } from "@/lib/offline/connectivity";
 import { saveOrQueue } from "@/lib/offline/save-or-queue";
 import { aquariumOperationId } from "@/lib/offline/sync-queue";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
@@ -121,6 +122,7 @@ export default function NewAquariumScreen() {
         startedAt,
       });
       return saveOrQueue({
+        connectivity: deviceConnectivity,
         save: () =>
           createAquarium({ ...payload, clientOperationId: operationId }),
         enqueue: () =>

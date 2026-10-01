@@ -133,6 +133,9 @@ export type {
 export {
   worksheetStatusLabel,
   worksheetStatusTone,
+  worksheetDisplayStatus,
+  worksheetDisplayStatusLabel,
+  worksheetDisplayStatusTone,
 } from "./worksheet-management.js";
 export type {
   MaintenancePackageMailPreview,
@@ -635,6 +638,7 @@ export type {
   NavIncomingInvoiceDetail,
   NavIncomingInvoiceLine,
   NavIncomingInvoiceListResponse,
+  NavIncomingInvoiceOperation,
   NavIncomingInvoiceProductCode,
   NavIncomingInvoiceStatus,
   NavIncomingInvoiceSummary,
@@ -816,6 +820,7 @@ export type {
   WorksheetVersionDetail,
   WorksheetVersionDiff,
   WorksheetVersionStatus,
+  WorksheetDisplayStatus,
   WorksheetVersionSummary,
   WorksheetDocumentListResponse,
   WorksheetDocumentSummary,
@@ -886,6 +891,8 @@ export type {
   MissingInvoiceJevSuggestion,
   MissingInvoiceMatchInput,
   MissingInvoicePaperOriginalInput,
+  MissingInvoicePayeeDocument,
+  MissingInvoicePayeeInput,
   MissingInvoiceItemState,
   MissingInvoiceMonth,
   MissingInvoiceMonthDetail,

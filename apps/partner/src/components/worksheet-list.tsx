@@ -12,8 +12,10 @@ import {
   pilotInitials,
 } from "@acropora/ui";
 import {
+  worksheetDisplayStatus,
+  worksheetDisplayStatusLabel,
+  worksheetDisplayStatusTone,
   worksheetStatusLabel,
-  worksheetStatusTone,
   type WorksheetListResponse,
 } from "@acropora/types";
 
@@ -60,9 +62,9 @@ import { partnerApi } from "@/lib/api";
 
 const TABS = [
   { key: "ALL", label: "Összes" },
-  { key: "DRAFT", label: "Piszkozat" },
-  { key: "AWAITING_SIGNATURE", label: "Aláírásra vár" },
-  { key: "SIGNED", label: "Aláírva" },
+  { key: "DRAFT", label: worksheetStatusLabel.DRAFT },
+  { key: "AWAITING_SIGNATURE", label: worksheetStatusLabel.AWAITING_SIGNATURE },
+  { key: "SIGNED", label: worksheetStatusLabel.SIGNED },
   { key: "REJECTED", label: "Elutasítva" },
 ] as const;
 
@@ -113,19 +115,19 @@ export function WorksheetList() {
       [
         {
           key: "DRAFT",
-          label: "Szerkesztés alatt",
+          label: worksheetStatusLabel.DRAFT,
           value: counts?.DRAFT ?? null,
           icon: "clipboard",
         },
         {
           key: "AWAITING_SIGNATURE",
-          label: "Aláírásra vár",
+          label: worksheetStatusLabel.AWAITING_SIGNATURE,
           value: counts?.AWAITING_SIGNATURE ?? null,
           icon: "pencil",
         },
         {
           key: "SIGNED",
-          label: "Aláírt munkalap",
+          label: worksheetStatusLabel.SIGNED,
           value: counts?.SIGNED ?? null,
           icon: "pencil",
         },
@@ -329,10 +331,22 @@ export function WorksheetList() {
                   <td className="px-5 py-3">
                     <PilotBadge
                       variant={pilotBadgeVariantForTone(
-                        worksheetStatusTone(worksheet.status),
+                        worksheetDisplayStatusTone(
+                          worksheetDisplayStatus(
+                            worksheet.status,
+                            worksheet.lineCount ?? 0,
+                          ),
+                        ),
                       )}
                     >
-                      {worksheetStatusLabel[worksheet.status]}
+                      {
+                        worksheetDisplayStatusLabel[
+                          worksheetDisplayStatus(
+                            worksheet.status,
+                            worksheet.lineCount ?? 0,
+                          )
+                        ]
+                      }
                     </PilotBadge>
                   </td>
                   <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-500">

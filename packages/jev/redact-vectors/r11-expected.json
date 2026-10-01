@@ -1,9 +1,10 @@
 {
- "version": "r11",
- "reference": "ea35b2705138bf5a5a2eaa5f47ec383e3192bfc894c672d6b883f49e9e955e9a",
+ "version": "r14",
+ "reference": "2ce5d0322f3272e0ef8b6e1f35c659006f32d454d848252db4a6dff3febc49c5",
  "commonWords": [
   "adoszam",
   "allatkert",
+  "atvevo",
   "bank",
   "bankszamla",
   "brutto",
@@ -14,6 +15,7 @@
   "csatoltam",
   "doboz",
   "felado",
+  "first",
   "from",
   "gyors",
   "hiba",
@@ -21,6 +23,7 @@
   "invoice",
   "irj",
   "kapcsolattarto",
+  "kelt",
   "kerjuk",
   "ket",
   "kiszallas",
@@ -32,6 +35,7 @@
   "megrendelo",
   "mobil",
   "osszeg",
+  "our",
   "partner",
   "private",
   "reference",
@@ -5189,6 +5193,48 @@
    }
   },
   {
+   "suite": "hu-leak",
+   "id": "email-domain-broken-by-line",
+   "keep": [],
+   "default": {
+    "text": "E-mail | : <EMAIL_1>. | : / com",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "E-mail | : <EMAIL_1>. | : / com",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
+   "suite": "hu-leak",
+   "id": "email-bare-host",
+   "keep": [],
+   "default": {
+    "text": "Írj a <EMAIL_1> címre.",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   },
+   "pairing": {
+    "text": "Írj a <EMAIL_1> címre.",
+    "counts": {
+     "EMAIL": 1
+    },
+    "guard": [],
+    "guardPairing": []
+   }
+  },
+  {
    "suite": "pairing",
    "id": "pair-business-all",
    "keep": [
@@ -6789,6 +6835,419 @@
      "c0",
      "NONE"
     ]
+   }
+  ]
+ },
+ "letter": {
+  "items": [
+   {
+    "id": "l1",
+    "subject": "Invoice INV-2026-0412 from Fekete Bolt Kft.",
+    "fileName": "Invoice_INV-2026-0412.pdf",
+    "lines": [
+     "INVOICE",
+     "Invoice number: INV-2026-0412",
+     "Date: 2026-09-12",
+     "Customer: Acropora Kft.",
+     "Contact: Varga Ilona, ilona.varga@example.com, +36 20 123 4567",
+     "IBAN: HU42 1170 9002 2062 4460 0000 0000",
+     "Total: 1 234,00 EUR"
+    ]
+   },
+   {
+    "id": "l2",
+    "subject": "Pro forma Rechnung 4711",
+    "fileName": "PF-4711.pdf",
+    "lines": [
+     "Pro forma",
+     "Rechnung Nr. 4711",
+     "Tax invoice follows after payment",
+     "Kunde: Kovács Péter",
+     "Gesamt 99,50 EUR"
+    ]
+   },
+   {
+    "id": "l3",
+    "subject": "Szállítólevél",
+    "fileName": "SZL-2026-88.pdf",
+    "lines": [
+     "Szállítólevél SZL-2026/88",
+     "Delivery note",
+     "Átvevő: Nagy Péter",
+     "Kelt: Budapest, 2026.09.01."
+    ]
+   },
+   {
+    "id": "l4",
+    "subject": "Payment reminder",
+    "fileName": "First reminder 11069.pdf",
+    "lines": [
+     "Payment reminder",
+     "Zahlungserinnerung",
+     "Dear Mr Smith,",
+     "Our records show invoice 26007910 is open.",
+     "Mahnung"
+    ]
+   },
+   {
+    "id": "l5",
+    "subject": "Ajánlat és Árajánlat",
+    "fileName": "",
+    "lines": [
+     "Tétel 0: Tunze Turbelle szivattyú, Végösszeg 0 Ft",
+     "Tétel 1: Tunze Turbelle szivattyú, Végösszeg 1000 Ft",
+     "Tétel 2: Tunze Turbelle szivattyú, Végösszeg 2000 Ft",
+     "Tétel 3: Tunze Turbelle szivattyú, Végösszeg 3000 Ft",
+     "Tétel 4: Tunze Turbelle szivattyú, Végösszeg 4000 Ft",
+     "Tétel 5: Tunze Turbelle szivattyú, Végösszeg 5000 Ft",
+     "Tétel 6: Tunze Turbelle szivattyú, Végösszeg 6000 Ft",
+     "Tétel 7: Tunze Turbelle szivattyú, Végösszeg 7000 Ft",
+     "Tétel 8: Tunze Turbelle szivattyú, Végösszeg 8000 Ft",
+     "Tétel 9: Tunze Turbelle szivattyú, Végösszeg 9000 Ft",
+     "Tétel 10: Tunze Turbelle szivattyú, Végösszeg 10000 Ft",
+     "Tétel 11: Tunze Turbelle szivattyú, Végösszeg 11000 Ft",
+     "Tétel 12: Tunze Turbelle szivattyú, Végösszeg 12000 Ft",
+     "Tétel 13: Tunze Turbelle szivattyú, Végösszeg 13000 Ft",
+     "Tétel 14: Tunze Turbelle szivattyú, Végösszeg 14000 Ft",
+     "Tétel 15: Tunze Turbelle szivattyú, Végösszeg 15000 Ft",
+     "Tétel 16: Tunze Turbelle szivattyú, Végösszeg 16000 Ft",
+     "Tétel 17: Tunze Turbelle szivattyú, Végösszeg 17000 Ft",
+     "Tétel 18: Tunze Turbelle szivattyú, Végösszeg 18000 Ft",
+     "Tétel 19: Tunze Turbelle szivattyú, Végösszeg 19000 Ft",
+     "Tétel 20: Tunze Turbelle szivattyú, Végösszeg 20000 Ft",
+     "Tétel 21: Tunze Turbelle szivattyú, Végösszeg 21000 Ft",
+     "Tétel 22: Tunze Turbelle szivattyú, Végösszeg 22000 Ft",
+     "Tétel 23: Tunze Turbelle szivattyú, Végösszeg 23000 Ft",
+     "Tétel 24: Tunze Turbelle szivattyú, Végösszeg 24000 Ft",
+     "Tétel 25: Tunze Turbelle szivattyú, Végösszeg 25000 Ft",
+     "Tétel 26: Tunze Turbelle szivattyú, Végösszeg 26000 Ft",
+     "Tétel 27: Tunze Turbelle szivattyú, Végösszeg 27000 Ft",
+     "Tétel 28: Tunze Turbelle szivattyú, Végösszeg 28000 Ft",
+     "Tétel 29: Tunze Turbelle szivattyú, Végösszeg 29000 Ft",
+     "Tétel 30: Tunze Turbelle szivattyú, Végösszeg 30000 Ft",
+     "Tétel 31: Tunze Turbelle szivattyú, Végösszeg 31000 Ft",
+     "Tétel 32: Tunze Turbelle szivattyú, Végösszeg 32000 Ft",
+     "Tétel 33: Tunze Turbelle szivattyú, Végösszeg 33000 Ft",
+     "Tétel 34: Tunze Turbelle szivattyú, Végösszeg 34000 Ft",
+     "Tétel 35: Tunze Turbelle szivattyú, Végösszeg 35000 Ft",
+     "Tétel 36: Tunze Turbelle szivattyú, Végösszeg 36000 Ft",
+     "Tétel 37: Tunze Turbelle szivattyú, Végösszeg 37000 Ft",
+     "Tétel 38: Tunze Turbelle szivattyú, Végösszeg 38000 Ft",
+     "Tétel 39: Tunze Turbelle szivattyú, Végösszeg 39000 Ft",
+     "Tétel 40: Tunze Turbelle szivattyú, Végösszeg 40000 Ft",
+     "Tétel 41: Tunze Turbelle szivattyú, Végösszeg 41000 Ft",
+     "Tétel 42: Tunze Turbelle szivattyú, Végösszeg 42000 Ft",
+     "Tétel 43: Tunze Turbelle szivattyú, Végösszeg 43000 Ft",
+     "Tétel 44: Tunze Turbelle szivattyú, Végösszeg 44000 Ft",
+     "Tétel 45: Tunze Turbelle szivattyú, Végösszeg 45000 Ft",
+     "Tétel 46: Tunze Turbelle szivattyú, Végösszeg 46000 Ft",
+     "Tétel 47: Tunze Turbelle szivattyú, Végösszeg 47000 Ft",
+     "Tétel 48: Tunze Turbelle szivattyú, Végösszeg 48000 Ft",
+     "Tétel 49: Tunze Turbelle szivattyú, Végösszeg 49000 Ft",
+     "Tétel 50: Tunze Turbelle szivattyú, Végösszeg 50000 Ft",
+     "Tétel 51: Tunze Turbelle szivattyú, Végösszeg 51000 Ft",
+     "Tétel 52: Tunze Turbelle szivattyú, Végösszeg 52000 Ft",
+     "Tétel 53: Tunze Turbelle szivattyú, Végösszeg 53000 Ft",
+     "Tétel 54: Tunze Turbelle szivattyú, Végösszeg 54000 Ft",
+     "Tétel 55: Tunze Turbelle szivattyú, Végösszeg 55000 Ft",
+     "Tétel 56: Tunze Turbelle szivattyú, Végösszeg 56000 Ft",
+     "Tétel 57: Tunze Turbelle szivattyú, Végösszeg 57000 Ft",
+     "Tétel 58: Tunze Turbelle szivattyú, Végösszeg 58000 Ft",
+     "Tétel 59: Tunze Turbelle szivattyú, Végösszeg 59000 Ft"
+    ]
+   },
+   {
+    "id": "l6",
+    "subject": "FANK karbantartás",
+    "fileName": "fank.pdf",
+    "lines": [
+     "Számla",
+     "FANK karbantartás",
+     "Összesen 12 000 Ft"
+    ]
+   },
+   {
+    "id": "l7",
+    "subject": "Számla",
+    "fileName": "a.pdf",
+    "lines": [
+     "x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x Kovács Péter Zoltán úrnak"
+    ]
+   },
+   {
+    "id": "l8",
+    "subject": "Számla",
+    "fileName": "b.pdf",
+    "lines": [
+     "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+    ]
+   }
+  ],
+  "unknown": [
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Invoice <ORG_1>\\nFile: Invoice_INV-2026-0412.pdf\\nINVOICE\\nInvoice number: <ID_1>\\nDate: <DATE_1>\\nCustomer: <ORG_2>\\n<PROPER_1>: <PERSON_1>, <EMAIL_1>, <PHONE_1>\\nIBAN: <IBAN_1>\\nTotal: <AMOUNT_1>\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "ORG": 2,
+     "ID": 1,
+     "DATE": 1,
+     "PROPER": 1,
+     "PERSON": 1,
+     "EMAIL": 1,
+     "PHONE": 1,
+     "IBAN": 1,
+     "AMOUNT": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Pro forma Rechnung 4711\\nFile: <ID_1>.pdf\\nPro forma\\nRechnung <PROPER_1>. 4711\\nTax invoice follows after payment\\nKunde: <PERSON_1>\\nGesamt <AMOUNT_1>\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "ID": 1,
+     "PROPER": 1,
+     "PERSON": 1,
+     "AMOUNT": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Szállítólevél\\nFile: <ID_1>.pdf\\nSzállítólevél <ID_2>\\nDelivery note\\n<PROPER_1>: <PERSON_1>\\n<PROPER_2>: Budapest, <DATE_1>\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "ID": 2,
+     "PROPER": 2,
+     "PERSON": 1,
+     "DATE": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Payment reminder\\nFile: First reminder <ID_1>.pdf\\nPayment reminder\\nZahlungserinnerung\\n<PERSON_1>,\\nOur records show invoice <ID_2> is open.\\nMahnung\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "ID": 2,
+     "PERSON": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Ajánlat és Árajánlat\\nFile: \\nTétel 0: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_1>\\nTétel 1: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_2>\\nTétel 2: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_3>\\nTétel 3: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_4>\\nTétel 4: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_5>\\nTétel 5: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_6>\\nTétel 6: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_7>\\nTétel 7: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_8>\\nTétel 8: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_9>\\nTétel 9: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_10>\\nTétel 10: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_11>\\nTétel 11: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_12>\\nTétel 12: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_13>\\nTétel 13: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_14>\\nTétel 14: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_15>\\nTétel 15: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_16>\\nTétel 16: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_17>\\nTétel 17: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_18>\\nTétel 18: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_19>\\nTétel 19: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_20>\\nTétel 20: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_21>\\nTétel 21: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_22>\\nTétel 22: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_23>\\nTétel 23: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_24>\\nTétel 24: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_25>\\nTétel 25: Tunze Turbelle szivatt\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "AMOUNT": 40
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: FANK karbantartás\\nFile: fank.pdf\\nSzámla\\nFANK karbantartás\\nÖsszesen <AMOUNT_1>\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "AMOUNT": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Számla\\nFile: a.pdf\\nx x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x \"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "PERSON": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "blocked": "blocked_too_long",
+    "detail": ""
+   }
+  ],
+  "known": [
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Invoice <ORG_1>\\nFile: Invoice_INV-2026-0412.pdf\\nINVOICE\\nInvoice number: <ID_1>\\nDate: <DATE_1>\\nCustomer: <ORG_2>\\n<PROPER_1>: <PERSON_1>, <EMAIL_1>, <PHONE_1>\\nIBAN: <IBAN_1>\\nTotal: <AMOUNT_1>\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "ORG": 2,
+     "ID": 1,
+     "DATE": 1,
+     "PROPER": 1,
+     "PERSON": 1,
+     "EMAIL": 1,
+     "PHONE": 1,
+     "IBAN": 1,
+     "AMOUNT": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Pro forma Rechnung 4711\\nFile: <ID_1>.pdf\\nPro forma\\nRechnung <PROPER_1>. 4711\\nTax invoice follows after payment\\nKunde: <PERSON_1>\\nGesamt <AMOUNT_1>\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "ID": 1,
+     "PROPER": 1,
+     "PERSON": 1,
+     "AMOUNT": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Szállítólevél\\nFile: <ID_1>.pdf\\nSzállítólevél <ID_2>\\nDelivery note\\n<PROPER_1>: <PERSON_1>\\n<PROPER_2>: Budapest, <DATE_1>\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "ID": 2,
+     "PROPER": 2,
+     "PERSON": 1,
+     "DATE": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Payment reminder\\nFile: First reminder <ID_1>.pdf\\nPayment reminder\\nZahlungserinnerung\\n<PERSON_1>,\\nOur records show invoice <ID_2> is open.\\nMahnung\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "ID": 2,
+     "PERSON": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Ajánlat és Árajánlat\\nFile: \\nTétel 0: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_1>\\nTétel 1: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_2>\\nTétel 2: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_3>\\nTétel 3: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_4>\\nTétel 4: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_5>\\nTétel 5: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_6>\\nTétel 6: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_7>\\nTétel 7: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_8>\\nTétel 8: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_9>\\nTétel 9: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_10>\\nTétel 10: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_11>\\nTétel 11: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_12>\\nTétel 12: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_13>\\nTétel 13: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_14>\\nTétel 14: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_15>\\nTétel 15: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_16>\\nTétel 16: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_17>\\nTétel 17: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_18>\\nTétel 18: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_19>\\nTétel 19: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_20>\\nTétel 20: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_21>\\nTétel 21: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_22>\\nTétel 22: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_23>\\nTétel 23: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_24>\\nTétel 24: Tunze Turbelle szivattyú, Végösszeg <AMOUNT_25>\\nTétel 25: Tunze Turbelle szivatt\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "AMOUNT": 40
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: <ORG_1> karbantartás\\nFile: <ORG_1>.pdf\\nSzámla\\n<ORG_1> karbantartás\\nÖsszesen <AMOUNT_1>\"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "ORG": 1,
+     "AMOUNT": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "body": "{\"state\": {\"message\": \"Subject: Számla\\nFile: a.pdf\\nx x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x \"}, \"model\": \"jev-1.13.0\", \"questions\": {\"kind\": {\"type\": \"choice\", \"criteria\": {\"BEJOVO_SZAMLA\": \"An invoice issued TO the company by a supplier, Hungarian or foreign (Invoice, Rechnung, Facture, számla).\", \"NYUGTA\": \"A payment receipt that accompanies an invoice; not the invoice itself.\", \"DIJBEKERO\": \"A pro forma invoice or a request for advance payment (díjbekérő, Proforma Invoice).\", \"SAJAT_KIMENO\": \"An invoice issued BY the company to its own customer.\", \"SZALLITOLEVEL\": \"A delivery note (szállítólevél, Lieferschein, Delivery note).\", \"VISSZAIGAZOLAS\": \"An order confirmation, an offer or a booking confirmation.\", \"EMLEKEZTETO\": \"A payment reminder or dunning letter about an earlier invoice.\", \"EGYEB\": \"Anything else: contract, terms and conditions, notice, newsletter.\"}, \"instructions\": \"'message' is the start of one PDF that arrived in the company's mailbox, with the mail's subject. What kind of document is the PDF itself (not what the mail is about)?\"}}}",
+    "placeholders": {
+     "PERSON": 1
+    },
+    "options": [
+     "BEJOVO_SZAMLA",
+     "NYUGTA",
+     "DIJBEKERO",
+     "SAJAT_KIMENO",
+     "SZALLITOLEVEL",
+     "VISSZAIGAZOLAS",
+     "EMLEKEZTETO",
+     "EGYEB"
+    ]
+   },
+   {
+    "blocked": "blocked_too_long",
+    "detail": ""
    }
   ]
  }

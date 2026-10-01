@@ -17,14 +17,22 @@ import { sequenceRatio } from "./sequence-ratio.js";
  *   4. több számla egy utalásban: legfeljebb 5 elemű részhalmaz; ha több is
  *      kiadja, nem választunk;
  *   5. egy számlát egy terhelés visz (mért: két 23 810 Ft-os Alza-fizetés);
- *   6. a proforma nem számla.
+ *   6. a proforma nem számla, és CSAK TARTALÉK (acrobot 25607): ha a partnertől
+ *      van pontos összegű valódi számla az ablakban, az nyer, akkor is, ha a
+ *      közlemény a proforma számát nevezi meg.
  *
  * A 2-4 Ft-os kerekítés Megvan (acrobot 25265 a): HUF-ban 5 Ft a tűrés, EUR-ban
  * 5 cent. TISZTA FÜGGVÉNY: a hívó adja a hónap terheléseit és a jelölteket.
  */
 
 export type DocumentSource =
-  "NAV" | "MAILBOX" | "UPLOAD" | "DRIVE" | "SETTLEMENT" | "PREMIUM_NOTICE";
+  | "NAV"
+  | "MAILBOX"
+  | "UPLOAD"
+  | "DRIVE"
+  | "SETTLEMENT"
+  | "PREMIUM_NOTICE"
+  | "SZAMLAZZ";
 
 export type Payee = "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
 
@@ -43,6 +51,8 @@ export interface CandidateDocument {
   supplierAccounts: readonly string[];
   kind: "INVOICE" | "PROFORMA" | "PREMIUM_NOTICE";
   payee: Payee;
+  /** A vevőt kézzel jelölték (acrobot 25633); csak feltöltött vagy postafiókos PDF-nél. */
+  payeeMarked?: boolean;
   /**
    * VAN-E EREDETI (Balázs, 2026-09-30 20:01 UTC, acrobot 25322): a könyvelőnek
    * az eredeti számla kell. PDF (postafiók, feltöltés, Drive, elszámolás) vagy
@@ -67,6 +77,18 @@ export interface CandidateDocument {
    * nélkül nincs kitöltve: ott az eredeti maga a jelölt.
    */
   originalId?: string;
+  /**
+   * AMI ALAPJÁN KÉT DOKUMENTUM UGYANAZ A SZÁMLA (acrobot 25636): `sha:<fájl
+   * lenyomata>` és `inv:<számlaszám|szállító>`. Az összevont jelölt a társaié
+   * is. Ha egy azonosság két terheléshez párosul, az Kétszer fizetett számla.
+   */
+  identities?: readonly string[];
+  /**
+   * A KÁRTYÁS FIZETÉS(EK), amihez a begyűjtő a NAV nélküli számlát kötötte
+   * (`cardPaymentMatch`): egy, vagy legfeljebb három fizetés, aminek az összege
+   * a számla végösszege (Kia Charge: 40 086 = 21 279 + 18 807).
+   */
+  cardPaymentIds?: readonly string[];
 }
 
 export interface MatchableDebit {
@@ -89,6 +111,7 @@ export type ItemState =
   | "NO_INVOICE"
   | "NOT_COMPANY"
   | "PROFORMA_ONLY"
+  | "DOUBLE_PAID"
   | "NO_INVOICE_NEEDED";
 
 export interface MatchOutcome {
@@ -99,6 +122,27 @@ export interface MatchOutcome {
   reason: string;
   /** A drawer jelöltjei: a partner ablakba eső dokumentumai. */
   candidates: CandidateDocument[];
+  /**
+   * A KÖZLEMÉNY ÁLTAL MEGNEVEZETT, DE HIÁNYZÓ SZÁMLÁK, név szerint (Balázs,
+   * acrobot 25610: „ki kellene írni melyik hiányzik”): a párosított számla,
+   * aminek nincs eredetije, és a megnevezett szám, amihez egyáltalán nincs
+   * dokumentum. Csak az 1. szabály tölti.
+   */
+  missingNumbers?: string[];
+  /**
+   * A terhelés és a párosított számlák összegének különbsége (terhelés mínusz
+   * számlák), ha a tűrésen túl eltér. A párosítás ettől még áll.
+   */
+  amountDifference?: { amount: Prisma.Decimal; currency: string };
+  /** A többi terhelés, amelyhez ugyanez a számla is párosítva van. */
+  doublePaidWith?: string[];
+  /**
+   * A PÁROSÍTÁS, amelyben ez a terhelés a dokumentumot kapta. Alapból maga a
+   * terhelés; a gyűjtőszámla-szabályok (egy számla, sok fizetés) egy közös
+   * párosítást adnak a csoport minden tagjának. A kettős fizetés ezt nézi: egy
+   * számla akkor kétszer fizetett, ha KÉT KÜLÖNBÖZŐ párosításban szerepel.
+   */
+  pairing?: string;
 }
 
 const GENERIC =
@@ -169,6 +213,10 @@ const exact = (gap: Prisma.Decimal | null, currency: string) =>
 const rounded = (gap: Prisma.Decimal | null, currency: string) =>
   gap !== null && currency === "HUF" && gap.gt(1) && gap.lte(5);
 
+/** A valódi számla előbb, a proforma utána: a proforma tartalék (acrobot 25607). */
+const proformaLast = (a: CandidateDocument, b: CandidateDocument) =>
+  Number(a.kind === "PROFORMA") - Number(b.kind === "PROFORMA");
+
 const dayDistance = (a: string, b: string) =>
   Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
 
@@ -188,8 +236,41 @@ const narrativeTokens = (narrative: string) =>
 const SHORT_NUMBER = 8;
 
 /**
- * A SZÁMLA SZÁMA A KÖZLEMÉNYBEN: a szám a közlemény EGY EGÉSZ SZAVA, és rövid
- * számnál a partner is egyezik.
+ * A BANK TÖRDELÉSE: a közleményt mezőkre vágja, és a mezőhatár egy szám KÖZEPÉRE
+ * eshet (Fluidra, 2026-09-25: „KS26/0 8450”, „K S26/08541”). Ezért egy szám a
+ * közlemény legfeljebb ennyi SZOMSZÉDOS szavának összefűzéséből is állhat. Az
+ * összefűzött alak csak a partner saját számlájára talál: két számjegy-csoport
+ * összefűzve hosszú, ártatlannak látszó számot ad (bankszámla-darabok, dátum).
+ */
+const JOIN_LIMIT = 3;
+
+interface NarrativeSpan {
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+}
+
+function narrativeSpans(narrative: string): NarrativeSpan[] {
+  const tokens = narrativeTokens(narrative);
+  const spans: NarrativeSpan[] = [];
+  for (let start = 0; start < tokens.length; start++)
+    for (let n = 1; n <= JOIN_LIMIT && start + n <= tokens.length; n++)
+      spans.push({
+        start,
+        end: start + n,
+        text: tokens.slice(start, start + n).join(""),
+      });
+  return spans;
+}
+
+/** Egy szám alakja: betű helyén `a`, számjegy helyén `9`, a többi jel marad. */
+const shapeOf = (number: string) =>
+  number.replace(/\p{L}/gu, "a").replace(/\p{N}/gu, "9");
+
+/**
+ * A SZÁMLA SZÁMA A KÖZLEMÉNYBEN: a szám a közlemény EGY EGÉSZ SZAVA (vagy a bank
+ * tördelése miatt szomszédos szavainak összefűzése), és rövid számnál a partner
+ * is egyezik. A közlemény-darabot adja vissza, vagy `null`-t.
  *
  * Mérve 2026-10-01, az exchange kivonatain (2025-12 .. 2026-08, 1144
  * terhelés), barracuda lelete nyomán: a régi részszöveg-keresés 158
@@ -199,26 +280,107 @@ const SHORT_NUMBER = 8;
  * a kötőjel a szám része. Ezzel a szabállyal a 158-ból 156 marad, és a kieső
  * kettő pontosan a két rossz.
  */
-function numberInNarrative(debit: MatchableDebit, document: CandidateDocument) {
-  const tokens = narrativeTokens(debit.narrative);
+function spanNaming(
+  debit: MatchableDebit,
+  document: CandidateDocument,
+  spans: readonly NarrativeSpan[],
+): NarrativeSpan | null {
   // a számla száma MELLETT a hivatkozásai is (#1323: a Fauna Marin közleménye a
   // rendelésszámot nevezi meg), ugyanazzal az egész-szó szabállyal
-  return [document.number, ...(document.references ?? [])].some((raw) => {
+  for (const raw of [document.number, ...(document.references ?? [])]) {
     const number = compact(raw);
-    return (
-      number.length >= 5 &&
-      tokens.includes(number) &&
-      (number.length >= SHORT_NUMBER ||
-        samePartner(debit.counterpartyName ?? "", document.supplierName))
-    );
-  });
+    if (number.length < 5) continue;
+    for (const span of spans) {
+      if (span.text !== number) continue;
+      const joined = span.end - span.start > 1;
+      const partner = samePartner(
+        debit.counterpartyName ?? "",
+        document.supplierName,
+      );
+      if (joined ? partner : number.length >= SHORT_NUMBER || partner)
+        return span;
+    }
+  }
+  return null;
+}
+
+/**
+ * A MEGNEVEZETT, DE DOKUMENTUM NÉLKÜLI SZÁMOK: a közlemény olyan darabjai, amik
+ * UGYANOLYAN ALAKÚAK, mint a már megtalált számlák száma (`KS26/08132` mellett
+ * egy `KS26/08999`), és egyetlen megtalált darabbal sem fednek át. Az alak
+ * nélkül minden szó számlaszámnak látszana.
+ */
+function namedWithoutDocument(
+  spans: readonly NarrativeSpan[],
+  named: readonly { document: CandidateDocument; span: NarrativeSpan }[],
+  /** MINDEN ismert dokumentum száma és hivatkozása: a másik terheléshez párosított nem hiányzik. */
+  known: ReadonlySet<string>,
+): string[] {
+  const shapes = new Set(named.map((n) => shapeOf(compact(n.document.number))));
+  const taken = named.map((n) => n.span);
+  const overlaps = (a: NarrativeSpan, b: NarrativeSpan) =>
+    a.start < b.end && b.start < a.end;
+  const out: string[] = [];
+  // a hosszabb darab előbb: a „KS26/0 8450” egy szám, nem kettő
+  for (const span of [...spans].sort(
+    (a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start,
+  )) {
+    if (!shapes.has(shapeOf(span.text)) || known.has(span.text)) continue;
+    if (taken.some((t) => overlaps(t, span))) continue;
+    taken.push(span);
+    out.push(span.text.toUpperCase());
+  }
+  return out;
+}
+
+/**
+ * A terhelés mínusz a számlák összege, ha a tűrésen túl eltér; `null`, ha
+ * egyezik, vagy nem összeadható (hiányzó bruttó, eltérő devizák).
+ */
+function invoiceDifference(
+  debit: MatchableDebit,
+  documents: readonly CandidateDocument[],
+): { amount: Prisma.Decimal; currency: string } | null {
+  if (documents.some((d) => d.gross === null)) return null;
+  const currency = documents[0]!.currency;
+  if (documents.some((d) => d.currency !== currency)) return null;
+  const paid =
+    currency === debit.currency
+      ? debit.amount
+      : debit.original?.currency === currency
+        ? debit.original.amount
+        : null;
+  if (!paid) return null;
+  const total = documents.reduce(
+    (sum, d) => sum.plus(d.gross!),
+    new Prisma.Decimal(0),
+  );
+  const gap = paid.minus(total);
+  // a kerekítési tűrésen belül (HUF-ban 5 Ft, devizában 5 cent) nem eltérés
+  return gap.abs().lte(currency === "HUF" ? 5 : 0.05)
+    ? null
+    : { amount: gap, currency };
 }
 
 function stateOf(documents: CandidateDocument[]): ItemState {
   if (documents.some((d) => d.kind === "PROFORMA")) return "PROFORMA_ONLY";
-  if (documents.some((d) => d.payee === "NOT_COMPANY")) return "NOT_COMPANY";
+  // ugyanannak a számlának a cégre szóló eredetije mellett egy másik
+  // dokumentum (emlékeztető, másolat) „nem a cégre” ítélete nem dönt (acrobot 25664)
+  const companyOriginals = new Set(
+    documents
+      .filter((d) => d.payee === "COMPANY" && d.hasOriginal)
+      .map((d) => compact(d.number)),
+  );
+  if (
+    documents.some(
+      (d) =>
+        d.payee === "NOT_COMPANY" && !companyOriginals.has(compact(d.number)),
+    )
+  )
+    return "NOT_COMPANY";
   // a vevő nem ellenőrizhető: a brief szerint csak a Kft-re szóló számla
-  // Megvan, tehát ez a drawerben kézzel jelölendő, addig Nem párosodott
+  // Megvan, tehát ez a drawerben kézzel jelölendő („A cégre szól”), addig
+  // Nem párosodott
   if (documents.some((d) => d.payee === "UNKNOWN")) return "NOT_MATCHED";
   // párosítva, de csak NAV-adat van: tudjuk, melyik számla, az eredeti kell
   if (documents.some((d) => !d.hasOriginal)) return "ORIGINAL_MISSING";
@@ -242,6 +404,22 @@ function subsets<T>(items: readonly T[], max: number): T[][] {
 
 /** A havi gyűjtőszámla legkésőbbi napja a következő hónapban (mérve: 1. vagy 2.). */
 const MONTHLY_INVOICE_LAST_DAY = 5;
+
+/**
+ * A GYŰJTŐSZÁMLA KIS MARADÉKA (acrobot 25647, Balázs a Parkl szeptemberi
+ * számlájáról): a számla nagyobb a havi fizetések összegénél, mert egy tétel
+ * még nincs a kivonatban (a bank még nem könyvelte; mérve: a szeptemberi
+ * kivonat elutasított, függő -640 Ft-os Parkl-sora, és a számla 640 Ft-tal
+ * több). Ilyenkor a fizetések a számlához párosodnak, összeg-eltéréssel.
+ *
+ * A maradék legfeljebb a csoport legnagyobb fizetése (kb. egy hiányzó tétel),
+ * és legfeljebb a számla ennyi része. Mérve 2026-10-01 a 2025-12 .. 2026-09
+ * kivonatain: a pontosan nem párosodó gyűjtő-jelöltek közül négy Parkl-csoport
+ * marad el kis maradékkal (225, 640, 760, 835 Ft; 1,9-6,3 %), a többi messze
+ * (eurogreen +54 734 Ft = 37 %, Fluidra +12 millió), vagy a számla a kisebb
+ * (Tesla: a terhelésenkénti számlák, nem havi összesítő).
+ */
+const MONTHLY_REMAINDER_SHARE = 0.1;
 
 /**
  * A KÁRTYÁS FIZETÉSEK HAVI CSOPORTJAI. A kártyás terhelés közleménye így
@@ -298,6 +476,11 @@ export function matchMonth(input: {
   const used = new Set<string>();
   const outcomes = new Map<string, MatchOutcome>();
   const free = () => input.documents.filter((d) => !used.has(d.id));
+  const knownNumbers = new Set(
+    input.documents.flatMap((d) =>
+      [d.number, ...(d.references ?? [])].map((n) => compact(n)),
+    ),
+  );
 
   // 0. a kézi párosítás elsőbbsége: ezek a dokumentumok senki másé
   for (const debit of input.debits) {
@@ -312,6 +495,30 @@ export function matchMonth(input: {
       reason: "kézzel párosítva",
       candidates: [],
     });
+  }
+
+  // 0b. A BEGYŰJTŐ ÁLTAL A FIZETÉS(EK)HEZ KÖTÖTT SZÁMLA (acrobot 25691): az
+  // összeg és a partner a begyűjtéskor már egyezett, és több fizetésnél csak
+  // így kerülhet egy számla mindegyikhez. Csak ha MINDEGYIK fizetés szabad.
+  for (const document of input.documents) {
+    const ids = document.cardPaymentIds ?? [];
+    if (!ids.length || used.has(document.id)) continue;
+    const debits = ids.map((id) => input.debits.find((d) => d.id === id));
+    if (debits.some((d) => !d || outcomes.has(d.id))) continue;
+    used.add(document.id);
+    for (const debit of debits as MatchableDebit[])
+      outcomes.set(debit.id, {
+        state: stateOf([document]),
+        documents: [document],
+        matchedBy: "RULE",
+        reason:
+          ids.length > 1
+            ? `a számla végösszege ${ids.length} kártyás fizetés összege`
+            : "a számla összege és kiállítója a kártyás fizetésé",
+        candidates: [],
+        // a halmaz egy párosítás: a tagjai egymás miatt nem kétszer fizetettek
+        pairing: `set:${document.id}`,
+      });
   }
 
   const ordered = [...input.debits].sort(
@@ -342,6 +549,8 @@ export function matchMonth(input: {
     debit: MatchableDebit,
     documents: CandidateDocument[],
     reason: string,
+    /** a gyűjtőszámla-szabályok közös párosítása; alapból a terhelés maga */
+    pairing?: string,
   ) => {
     documents.forEach((d) => used.add(d.id));
     outcomes.set(debit.id, {
@@ -350,13 +559,39 @@ export function matchMonth(input: {
       matchedBy: "RULE",
       reason,
       candidates: [],
+      ...(pairing ? { pairing } : {}),
     });
+  };
+  /** A név szerint megnevezett, de egy elírás-gyanús pontos fizetésnek hagyott számlák. */
+  const withheld = new Map<string, CandidateDocument[]>();
+  const typoTwin = (debit: MatchableDebit, document: CandidateDocument) => {
+    const shape = shapeOf(compact(document.number));
+    const fits = (other: MatchableDebit, d: CandidateDocument) =>
+      samePartner(d.supplierName, other.counterpartyName ?? "", 0.5) &&
+      inWindow(other.bookingDate, d.date) &&
+      exact(amountGap(other, d.gross, d.currency), d.currency);
+    return open.some(
+      (other) =>
+        other.id !== debit.id &&
+        !outcomes.has(other.id) &&
+        other.counterpartyName !== null &&
+        fits(other, document) &&
+        // csak ha EZ az egyetlen pontos számlája: ha másik is van, nem ezt
+        // kell elvenni (mérve: Hanna 2026-01-06, két 53 651 Ft-os számla)
+        free().filter((d) => fits(other, d)).length === 1 &&
+        narrativeSpans(other.narrative).some(
+          (span) =>
+            shapeOf(span.text) === shape && !knownNumbers.has(span.text),
+        ),
+    );
   };
   const closest = (debit: MatchableDebit, documents: CandidateDocument[]) =>
     [...documents].sort(
       (a, b) =>
+        proformaLast(a, b) ||
         dayDistance(a.date, debit.bookingDate) -
-          dayDistance(b.date, debit.bookingDate) || a.id.localeCompare(b.id),
+          dayDistance(b.date, debit.bookingDate) ||
+        a.id.localeCompare(b.id),
     )[0]!;
 
   // A RÉTEGEK SORRENDJE A LÉNYEG: minden terhelés előbb a PONTOS egyezést
@@ -365,9 +600,64 @@ export function matchMonth(input: {
   // 07-15-i 1999 Ft-os Tesla-fizetés vitte el a 08-07-i 1998 Ft-os számláját).
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
-    // 1. a számla száma a közleményben
-    const byNumber = free().find((d) => numberInNarrative(debit, d));
-    if (byNumber) found(debit, [byNumber], "a számla száma a közleményben");
+    // 1. a számla száma a közleményben: MINDEN megnevezett számla (acrobot 25610)
+    const spans = narrativeSpans(debit.narrative);
+    const named: { document: CandidateDocument; span: NarrativeSpan }[] = [];
+    for (const d of free()) {
+      const span = spanNaming(debit, d, spans);
+      if (span) named.push({ document: d, span });
+    }
+    // A PROFORMA CSAK TARTALÉK (acrobot 25607, Aquarioom 2026-09-29): a
+    // közlemény a rendelés számát nevezi meg (CM9201), ami a proforma száma,
+    // a valódi számla (FA00009139) más számot visel. Ha a partnertől van
+    // pontos összegű valódi számla az ablakban, a proforma kimarad, és a
+    // terhelés a további szabályokhoz megy.
+    const realInvoice = partnerDocs(debit, 0.5).some(
+      (d) =>
+        d.kind === "INVOICE" &&
+        exact(amountGap(debit, d.gross, d.currency), d.currency),
+    );
+    if (realInvoice)
+      for (let i = named.length - 1; i >= 0; i--)
+        if (named[i]!.document.kind === "PROFORMA") named.splice(i, 1);
+    // ELÍRÁS-GYANÚ (acrobot 25655, Fluidra 2026-07-30): a közlemény helyesen
+    // nevezi meg a számlát (KS26/04727), de az összeg nem illik hozzá, és
+    // ugyanattól a partnertől egy MÁSIK fizetés pontosan a számla összegét
+    // fizeti, egy nem létező, ugyanolyan alakú számmal (KS26/04724, elírás).
+    // Ilyenkor a pontos összegű fizetés kapja a számlát, ez pedig Nem
+    // párosodott marad, a számlával a jelöltjei között.
+    if (
+      named.length &&
+      invoiceDifference(
+        debit,
+        named.map((n) => n.document),
+      )
+    )
+      for (let i = named.length - 1; i >= 0; i--) {
+        const document = named[i]!.document;
+        if (!typoTwin(debit, document)) continue;
+        withheld.set(debit.id, [...(withheld.get(debit.id) ?? []), document]);
+        named.splice(i, 1);
+      }
+    if (named.length === 0) continue;
+    const documents = named.map((n) => n.document);
+    found(debit, documents, "a számla száma a közleményben");
+    const missing = [
+      ...documents.filter((d) => !d.hasOriginal).map((d) => d.number),
+      ...namedWithoutDocument(spans, named, knownNumbers),
+    ];
+    const difference = invoiceDifference(debit, documents);
+    const outcome = outcomes.get(debit.id)!;
+    outcomes.set(debit.id, {
+      ...outcome,
+      // a megnevezett, de dokumentum nélküli szám miatt a tétel nem Megvan
+      state:
+        outcome.state === "FOUND" && missing.length > 0
+          ? "ORIGINAL_MISSING"
+          : outcome.state,
+      ...(missing.length > 0 ? { missingNumbers: missing } : {}),
+      ...(difference ? { amountDifference: difference } : {}),
+    });
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
@@ -410,6 +700,7 @@ export function matchMonth(input: {
     )
     .sort(
       (x, y) =>
+        proformaLast(x.document, y.document) ||
         x.gap.comparedTo(y.gap) ||
         x.days - y.days ||
         x.debit.bookingDate.localeCompare(y.debit.bookingDate) ||
@@ -448,14 +739,65 @@ export function matchMonth(input: {
         debit,
         [invoices[0]!],
         `gyűjtőszámla: ${group.debits.length} kártyás fizetés havi összege`,
+        `group:${invoices[0]!.id}`,
       );
+  }
+  // 3c. GYŰJTŐSZÁMLA KIS MARADÉKKAL: a pontos kör után, a megmaradt számlákra
+  // (két kártyánál a pontosan egyező kártya előbb elviszi a sajátját)
+  for (const group of monthlyCardGroups(
+    open.filter((debit) => !outcomes.has(debit.id)),
+  )) {
+    const first = group.debits[0]!;
+    const sum = group.debits.reduce(
+      (total, debit) => total.plus(debit.amount),
+      new Prisma.Decimal(0),
+    );
+    const largest = Prisma.Decimal.max(...group.debits.map((d) => d.amount));
+    const invoices = partnerDocs(first, 0.5).filter((d) => {
+      if (
+        d.gross === null ||
+        d.currency !== first.currency ||
+        d.date.slice(0, 7) !== group.nextMonth ||
+        Number(d.date.slice(8, 10)) > MONTHLY_INVOICE_LAST_DAY
+      )
+        return false;
+      const remainder = d.gross.minus(sum);
+      return (
+        remainder.gt(0) &&
+        remainder.lte(largest) &&
+        remainder.lte(d.gross.times(MONTHLY_REMAINDER_SHARE))
+      );
+    });
+    if (invoices.length !== 1) continue;
+    const invoice = invoices[0]!;
+    const difference = {
+      amount: sum.minus(invoice.gross!),
+      currency: invoice.currency,
+    };
+    for (const debit of group.debits) {
+      found(
+        debit,
+        [invoice],
+        `gyűjtőszámla: ${group.debits.length} kártyás fizetés havi összege, ` +
+          `a számla többlete ${invoice.gross!.minus(sum).toFixed(0)} ${invoice.currency}, könyveletlen tétel lehet`,
+        `group:${invoice.id}`,
+      );
+      outcomes.set(debit.id, {
+        ...outcomes.get(debit.id)!,
+        amountDifference: difference,
+      });
+    }
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
     // 4. kerekítéssel (2-5 Ft), csak ha EGY jelölt van: többől nem választunk
-    const roundings = partnerDocs(debit, 0.5).filter((d) =>
+    const anyRounding = partnerDocs(debit, 0.5).filter((d) =>
       rounded(amountGap(debit, d.gross, d.currency), d.currency),
     );
+    // a valódi számla mellett a proforma nem tesz kétértelművé
+    const roundings = anyRounding.some((d) => d.kind !== "PROFORMA")
+      ? anyRounding.filter((d) => d.kind !== "PROFORMA")
+      : anyRounding;
     if (roundings.length === 1)
       found(
         debit,
@@ -501,19 +843,23 @@ export function matchMonth(input: {
       partnerDocs(debit, 0.5).filter((d) =>
         rounded(amountGap(debit, d.gross, d.currency), d.currency),
       ).length > 1;
+    const kept = withheld.get(debit.id) ?? [];
     outcomes.set(debit.id, {
       state: partnerHasDocuments ? "NOT_MATCHED" : "NO_INVOICE",
       documents: [],
       matchedBy: null,
-      reason:
-        fitting.length > 1
+      reason: kept.length
+        ? `a közlemény a ${kept.map((d) => d.number).join(", ")} számlát nevezi meg, ` +
+          "de az összegét egy másik fizetés pontosan fizeti (elírás-gyanú): kézi döntés"
+        : fitting.length > 1
           ? "több számla-összeállítás is kiadja az összeget: kézi választás"
           : ambiguousRounding
             ? "több kerekítési találat: kézi választás"
             : partnerHasDocuments
               ? "a partnertől van számla, de ez a fizetés nem párosodott"
               : "a partnertől nincs számla a forrásokban",
-      candidates,
+      // a neki hagyott számla jelöltként látszik, akkor is, ha már a másiké
+      candidates: [...kept, ...candidates.filter((c) => !kept.includes(c))],
     });
   }
   for (const id of input.paperOriginals ?? []) {
@@ -524,6 +870,76 @@ export function matchMonth(input: {
         state: "FOUND",
         reason: `${outcome.reason}; az eredeti papíron megvan`,
       });
+    // DIGITÁLIS SZÁMLA NÉLKÜL (acrobot 25745, Balázs: az Aqua-Light külföldi
+    // számlája csak papíron van meg; NAV-sor nincs, tehát a tétel nem
+    // párosodhatott): a jelölés a hiánylistáról is leveszi, és a könyvelői
+    // csomag „papíron megvan”-ként sorolja
+    else if (
+      outcome?.state === "NOT_MATCHED" ||
+      outcome?.state === "NO_INVOICE"
+    )
+      outcomes.set(id, {
+        ...outcome,
+        state: "FOUND",
+        documents: [],
+        // az eredeti indok marad (acrobot 25762): látszik, hogy volt-e jelölt
+        reason: `${outcome.reason}; nincs digitális számla, az eredeti papíron megvan`,
+      });
   }
+  markDoublePaid(outcomes);
   return outcomes;
+}
+
+/** Ezek az állapotok számítanának rendezettnek; a kettős fizetés felülírja őket. */
+const SETTLED_LIKE: ReadonlySet<ItemState> = new Set([
+  "FOUND",
+  "ORIGINAL_MISSING",
+  "NOT_MATCHED",
+]);
+
+/**
+ * KÉTSZER FIZETETT SZÁMLA (acrobot 25636, éles: a Sopro KB-2855/2026 két
+ * 172 006 Ft-os terheléshez, ugyanaz a PDF kétszer feltöltve). Ha ugyanaz a
+ * számla (azonos fájl vagy számlaszám) KÉT KÜLÖNBÖZŐ PÁROSÍTÁSBAN szerepel,
+ * egyik sem Megvan: mindkettő a másikat nevezi meg.
+ *
+ * Egy gyűjtőszámla-párosítás (egy havi számla a kártya összes fizetéséhez,
+ * acrobot 25708) EGY párosítás: a tagjai egymás miatt nem kétszer fizetettek.
+ * Mérve 2026-10-01: e nélkül egy Parkl-hónap minden fizetése DOUBLE_PAID lett.
+ */
+function markDoublePaid(outcomes: Map<string, MatchOutcome>): void {
+  // azonosság -> párosítás -> a párosítás terhelései
+  const pairingsOf = new Map<string, Map<string, string[]>>();
+  for (const [debitId, outcome] of outcomes)
+    for (const document of outcome.documents)
+      for (const identity of document.identities ?? []) {
+        const pairings =
+          pairingsOf.get(identity) ?? new Map<string, string[]>();
+        const pairing = outcome.pairing ?? debitId;
+        pairings.set(pairing, [...(pairings.get(pairing) ?? []), debitId]);
+        pairingsOf.set(identity, pairings);
+      }
+  const others = new Map<string, Set<string>>();
+  for (const pairings of pairingsOf.values()) {
+    if (pairings.size < 2) continue;
+    for (const [pairing, debits] of pairings)
+      for (const debitId of debits)
+        for (const [otherPairing, otherDebits] of pairings)
+          if (otherPairing !== pairing)
+            for (const other of otherDebits)
+              others.set(
+                debitId,
+                new Set([...(others.get(debitId) ?? []), other]),
+              );
+  }
+  for (const [debitId, with_] of others) {
+    const outcome = outcomes.get(debitId)!;
+    if (!SETTLED_LIKE.has(outcome.state)) continue;
+    outcomes.set(debitId, {
+      ...outcome,
+      state: "DOUBLE_PAID",
+      doublePaidWith: [...with_].sort(),
+      reason: `${outcome.reason}; ugyanez a számla egy másik terheléshez is párosítva`,
+    });
+  }
 }

@@ -2649,32 +2649,45 @@ model ProjectInventoryReservation {
 /// parszolódik a parsedData mezőbe (lásd nav-invoice-data.parser.ts) -
 /// nincs értelme minden digest-sorhoz azonnal lekérni a teljes adatot,
 /// hiszen a legtöbb sosem kerül ténylegesen bevételezésre.
+/// A NAV Online Számla számlaművelete (invoiceApi.xsd `ManageInvoiceOperationType`).
+enum NavInvoiceOperation {
+  CREATE
+  MODIFY
+  STORNO
+}
+
 model NavIncomingInvoice {
-  id                  String                   @id @default(cuid())
-  navInvoiceNumber    String
-  supplierTaxNumber   String
-  supplierName        String
-  invoiceIssueDate    DateTime
-  invoiceDeliveryDate DateTime?
-  paymentDate         DateTime?
-  currency            String                   @default("HUF") @db.VarChar(3)
-  invoiceNetAmount    Decimal?                 @db.Decimal(19, 2)
-  invoiceVatAmount    Decimal?                 @db.Decimal(19, 2)
+  id                    String                   @id @default(cuid())
+  navInvoiceNumber      String
+  supplierTaxNumber     String
+  supplierName          String
+  invoiceIssueDate      DateTime
+  invoiceDeliveryDate   DateTime?
+  paymentDate           DateTime?
+  currency              String                   @default("HUF") @db.VarChar(3)
+  invoiceNetAmount      Decimal?                 @db.Decimal(19, 2)
+  invoiceVatAmount      Decimal?                 @db.Decimal(19, 2)
   /// A NAV-oldali regisztrálás időpontja - ez a szinkron kurzor alapja
   /// (lásd IntegrationCursor provider="NAV" stream="INBOUND_INVOICES"),
   /// nem az invoiceIssueDate (ami a kiállító által megadott, nem a NAV
   /// szerver órája szerinti időpont).
-  insDate             DateTime
-  status              NavIncomingInvoiceStatus @default(NEW)
+  insDate               DateTime
+  /// A NAV számlaművelet: az alapszámla CREATE, a módosító okirat MODIFY, a
+  /// sztornó STORNO. A módosító és a sztornó saját sorszámot visel; az
+  /// eredeti számla sorszáma az `originalInvoiceNumber` (a digest hozza).
+  invoiceOperation      NavInvoiceOperation      @default(CREATE)
+  originalInvoiceNumber String?
+  modificationIndex     Int?
+  status                NavIncomingInvoiceStatus @default(NEW)
   /// A queryInvoiceData válaszból felparszolt, bevételezéshez szükséges
   /// pillanatkép (beszállító adatok, cím, tételek) - lásd
   /// ParsedNavInvoiceData (nav-invoice-data.parser.ts). Csak DATA_FETCHED
   /// vagy RECEIVED állapotban nem null.
-  parsedData          Json?
-  errorCode           String?
-  purchaseInvoiceId   String?                  @unique
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+  parsedData            Json?
+  errorCode             String?
+  purchaseInvoiceId     String?                  @unique
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
 
   purchaseInvoice PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
 
@@ -7005,46 +7018,56 @@ model InvoiceCollectionRun {
   duplicateCount  Int                              @default(0)
   failedCount     Int                              @default(0)
   errorCode       String?
+  /// A begyűjtő szabályainak változata ezen a futáson
+  /// (INVOICE_COLLECTION_RULES_VERSION). Ha a kód változata más, az UNMATCHED
+  /// levelek újraolvasódnak: az új szabály a már látott leveleken is érvényesül.
+  rulesVersion    String?
   updatedAt       DateTime                         @updatedAt
 
   @@index([startedAt])
 }
 
 model IncomingSupplierDocument {
-  id                String                         @id @default(cuid())
-  gmailMessageId    String
-  fileName          String
-  sender            String?
-  subject           String?
-  receivedAt        DateTime?
-  sizeBytes         Int
-  sha256            String
-  content           Bytes
-  status            IncomingSupplierDocumentStatus
-  kind              IncomingSupplierDocumentKind?
-  errorCode         String?
+  id                  String                         @id @default(cuid())
+  gmailMessageId      String
+  fileName            String
+  sender              String?
+  subject             String?
+  receivedAt          DateTime?
+  sizeBytes           Int
+  sha256              String
+  content             Bytes
+  status              IncomingSupplierDocumentStatus
+  kind                IncomingSupplierDocumentKind?
+  errorCode           String?
   /// A beolvasás eredménye (SupplierInvoiceImportResult).
-  importResult      Json?
+  importResult        Json?
   /// Az általános olvasó eredménye (számlaszám, a szállító adószáma), ha a
   /// szállítói illesztő a PDF-et nem ismerte (számla-begyűjtés, 3e75c2f4). Nem
   /// `importResult`: az egy illesztő teljes olvasata, ez csak a párosítás kulcsa.
-  textReading       Json?
+  textReading         Json?
   /// Soronként a sor-javaslat (P-026), érkezéskor számolva, ha a beszállító ismert.
-  lineSuggestions   Json?
-  expectedArrivalId String?
+  lineSuggestions     Json?
+  expectedArrivalId   String?
   /// Kinek szól a számla (Hiányzó számlák): COMPANY, NOT_COMPANY vagy UNKNOWN,
   /// a szövegben álló adószám-törzsszám alapján. Az első párosításkor
   /// számolódik és tárolódik; NULL, amíg senki nem kérdezte.
-  payeeCheck        String?
+  payeeCheck          String?
+  /// KÉZI JELÖLÉS (acrobot 25633): a szövegréteg nélküli (beszkennelt) számla
+  /// vevője UNKNOWN; a kezelő a drawerben jelöli COMPANY-ra vagy NOT_COMPANY-ra.
+  /// Csak UNKNOWN (vagy már kézzel jelölt) írható így felül; ki és mikor az
+  /// auditnaplóban is áll.
+  payeeMarkedAt       DateTime?
+  payeeMarkedByUserId String?
   /// Honnan jött: MAILBOX (a postafiók-figyelő), UPLOAD (a Hiányzó számlák
   /// drawerjéből feltöltve), COLLECTED_MAIL vagy COLLECTED_DRIVE (a számla-
   /// begyűjtés, kártya 3e75c2f4). A feltöltés SOHA nem kap várható beérkezést, tehát
   /// a bevételezési láncba nem kerül (acrobot 25274).
-  origin            String                         @default("MAILBOX")
+  origin              String                         @default("MAILBOX")
   /// Feltöltésnél: INVOICE vagy PREMIUM_NOTICE (biztosítási díjértesítő).
-  uploadKind        String?
-  uploadedByUserId  String?
-  createdAt         DateTime                       @default(now())
+  uploadKind          String?
+  uploadedByUserId    String?
+  createdAt           DateTime                       @default(now())
 
   expectedArrival ExpectedArrival? @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
 
@@ -7153,6 +7176,58 @@ enum BankTransactionDirection {
 /// javítása így migráció nélkül hat). A `transactionKey` a sor mezőiből és a
 /// fájlon belüli sorszámából képzett kulcs: két export átfedő napja egyszer
 /// kerül be, egy exporton belüli két azonos sor kétszer.
+/// Melyik forrás hozta a tranzakciót: a havi CSV-kivonat vagy a Számlázz.hu
+/// tranzakció-továbbítása (acrobot 25599).
+enum BankTransactionSource {
+  CSV
+  SZAMLAZZ
+}
+
+/// EGY TRANZAKCIÓ, TÖBB FORRÁS: minden forrás a saját kulcsával (a CSV a sor
+/// mezőiből képzett kulccsal, a Számlázz.hu a tranzakció `id`-jével) egyszer
+/// foglalja le. Ugyanazt a fizetést a két forrás egy tranzakcióként hozza, és
+/// ugyanaz a kulcs másodszor semmit nem ír. A párosítás a számla, az irány, az
+/// összeg, a deviza, az értéknap és a partner-számla mentén megy (lásd
+/// `bank-transaction-sources.ts`).
+/// A SZÁMLÁZZ.HU SZÁMLA- ÉS NYUGTA-TOVÁBBÍTÁS NYERS ÜZENETEI (acrobot 25686): a
+/// bejövő számla (`SZAMLABE`), a kimenő számla (`SZAMLAKI`) és a nyugta (`NYUGTA`)
+/// minden fogadott üzenete, változatlanul. A kimenő számlát és a nyugtát ma csak
+/// tároljuk (a feldolgozásuk még nem eldöntött); a bejövőből ezen felül
+/// IncomingSupplierDocument lesz. Egy üzenet egyszer: a Számlázz.hu a változásig
+/// újraküldheti, a (fajta, azonosító, tartalom) hármas egyedi.
+///
+/// UGYANARRÓL A SZÁMLÁRÓL TÖBB VÁLTOZAT IS LEHET (acrobot 25781): a Számlázz.hu a
+/// kimenő számlát a fizetési állapot vagy egy módosítható mező változásakor újra
+/// elküldi, ugyanazzal az azonosítóval. Eddig a (fajta, azonosító) pár volt
+/// egyedi, tehát a második, MÁS tartalmú üzenetet a fogadó nyugtázta és eldobta.
+/// Mostantól az új tartalom új sorként tárolódik, a régi megmarad; ugyanaz a
+/// tartalom (azonos sha256) továbbra is egyszer.
+model SzamlazzFeedMessage {
+  id         String   @id @default(cuid())
+  /// SZAMLABE, SZAMLAKI vagy NYUGTA.
+  kind       String
+  /// A Számlázz.hu azonosítója (`alap.id`); a nyugtánál a törzs sha256-ja.
+  externalId String
+  sha256     String
+  body       String
+  receivedAt DateTime @default(now())
+
+  @@unique([kind, externalId, sha256])
+  @@index([kind, externalId])
+}
+
+model BankTransactionSourceKey {
+  id                String                @id @default(cuid())
+  key               String                @unique
+  source            BankTransactionSource
+  bankTransactionId String
+  createdAt         DateTime              @default(now())
+
+  bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
+
+  @@index([bankTransactionId])
+}
+
 model BankTransaction {
   id                    String                   @id @default(cuid())
   bankAccountId         String
@@ -7177,9 +7252,10 @@ model BankTransaction {
   paperOriginalByUserId String?
   createdAt             DateTime                 @default(now())
 
-  bankAccount BankAccount            @relation(fields: [bankAccountId], references: [id])
-  import      BankStatementImport    @relation(fields: [importId], references: [id])
+  bankAccount BankAccount                @relation(fields: [bankAccountId], references: [id])
+  import      BankStatementImport        @relation(fields: [importId], references: [id])
   matches     BankTransactionMatch[]
+  sourceKeys  BankTransactionSourceKey[]
 
   @@index([bankAccountId, bookingDate])
   @@index([bookingDate, direction])

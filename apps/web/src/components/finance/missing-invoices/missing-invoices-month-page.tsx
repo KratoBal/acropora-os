@@ -377,6 +377,12 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
             missingInvoicesApi.paperOriginal(token, open.id, marked),
           )
         }
+        onPayee={(documentId, payee) =>
+          open &&
+          void mutate(`payee:${documentId}`, () =>
+            missingInvoicesApi.markPayee(token, open.id, documentId, payee),
+          )
+        }
         busy={busy}
         note={note}
         onNote={setNote}

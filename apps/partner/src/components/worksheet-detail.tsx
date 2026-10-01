@@ -16,6 +16,9 @@ import {
   pilotBadgeVariantForTone,
 } from "@acropora/ui";
 import {
+  worksheetDisplayStatus,
+  worksheetDisplayStatusLabel,
+  worksheetDisplayStatusTone,
   worksheetStatusLabel,
   worksheetStatusTone,
   type WorksheetDetail as Munkalap,
@@ -201,10 +204,16 @@ export function WorksheetDetail({ id }: { id: string }) {
           </h1>
           <PilotBadge
             variant={pilotBadgeVariantForTone(
-              worksheetStatusTone(current.status),
+              worksheetDisplayStatusTone(
+                worksheetDisplayStatus(current.status, current.lines.length),
+              ),
             )}
           >
-            {worksheetStatusLabel[current.status]}
+            {
+              worksheetDisplayStatusLabel[
+                worksheetDisplayStatus(current.status, current.lines.length)
+              ]
+            }
           </PilotBadge>
         </div>
         <p className="mt-1 text-sm text-pilot-grey-400">

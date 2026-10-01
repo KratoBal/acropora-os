@@ -331,6 +331,18 @@ export class PurchasingService {
     // A NAV SOR FORRASA A TAROLT NAV ADATBOL jon, nem a klienstol (#1199
     // A-007). Nem allit meg semmit: ha nincs NAV adat, vagy a sorszam nem
     // egyertelmu, a ket mezo null marad.
+    // A módosító és a sztornó okirat (jóváíró) nem vételezhető be: nem áru
+    // érkezik vele, hanem egy korábbi számla változik.
+    if (input.navIncomingInvoiceId) {
+      const operation = await this.invoices.navInvoiceOperation(
+        input.navIncomingInvoiceId,
+      );
+      if (operation === "MODIFY" || operation === "STORNO")
+        throw new BadRequestException(
+          "A NAV módosító vagy sztornó okirata nem vételezhető be.",
+        );
+    }
+
     const navLines = input.navIncomingInvoiceId
       ? navSourceLines(
           await this.invoices.navInvoiceParsedData(input.navIncomingInvoiceId),

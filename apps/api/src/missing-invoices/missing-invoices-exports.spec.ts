@@ -131,6 +131,48 @@ describe("the missing list (xlsx)", () => {
   });
 });
 
+describe("the missing list names the missing invoices (acrobot 25610)", () => {
+  it("lists every paired number, the missing ones BY NAME and the difference", async () => {
+    const { missing } = service({
+      debits: [
+        debit("2026-08-20", 3000, "Fluidra Magyarország Kft.", {
+          narrative: "KS26/08132 KS26/08382 KS26/08999",
+        }),
+      ],
+      documents: [
+        document({
+          id: "a",
+          number: "KS26/08132",
+          supplierName: "Fluidra Magyarország Kft.",
+          source: "NAV",
+          hasOriginal: false,
+        }),
+        document({
+          id: "b",
+          number: "KS26/08382",
+          supplierName: "Fluidra Magyarország Kft.",
+        }),
+      ],
+      files: {},
+    });
+    const { content } = await missing.missingXlsx("2026-08");
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(content as unknown as ExcelJS.Buffer);
+    const sheet = workbook.worksheets[0]!;
+    const header = (sheet.getRow(1).values as unknown[]).slice(12);
+    assert.deepEqual(header, [
+      "Számla száma",
+      "Hiányzó számla",
+      "Összeg-eltérés",
+    ]);
+    const row = sheet.getRow(2).values as unknown[];
+    assert.deepEqual(
+      [row[12], row[13], row[14]],
+      ["KS26/08132, KS26/08382", "KS26/08132, KS26/08999", "1000 HUF"],
+    );
+  });
+});
+
 describe("the accountant package (pdf)", () => {
   it("puts a cover first, then every attachable original, and keeps the found items only", async () => {
     const { missing, asked } = service({
@@ -214,4 +256,40 @@ describe("buildAccountantPackage", () => {
     ])
       assert.ok(cover.includes(expected), `a borítón nincs: ${expected}`);
   });
+});
+
+describe("a paper-only item (Aqua-Light, acrobot 25752; murena's export test, 25764)", () => {
+  // MI PIROSIT: ha a jelolt, szamla nelkuli tetel a hianylistan maradna,
+  // vagy a konyveloi csomag boritoja nem sorolna fel "papiron megvan"-kent;
+  // a jeloletlen ag a kontroll (enelkul egy mindig ures xlsx is zold volna)
+  for (const marked of [true, false])
+    it(`${marked ? "marked: off the missing list, on the cover as paper" : "unmarked: stays on the missing list, not on the cover"}`, async () => {
+      const { missing } = service({
+        debits: [
+          debit("2026-08-07", 297458, "AQUA-LIGHT GmbH", {
+            paperOriginalAt: marked ? new Date() : null,
+          }),
+        ],
+        documents: [],
+        files: {},
+      });
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(
+        (await missing.missingXlsx("2026-08"))
+          .content as unknown as ExcelJS.Buffer,
+      );
+      const rows: string[] = [];
+      workbook.worksheets[0]!.eachRow((row, i) => {
+        if (i > 1) rows.push((row.values as unknown[]).join("|"));
+      });
+      assert.equal(
+        rows.some((r) => r.includes("AQUA-LIGHT")),
+        !marked,
+      );
+
+      const { content } = await missing.accountantPackage("2026-08");
+      const cover = (await pdfTextLines(new Uint8Array(content))).join("\n");
+      assert.equal(cover.includes("AQUA-LIGHT GmbH | 297 458 HUF"), marked);
+      assert.equal(cover.includes("papíron megvan"), marked);
+    });
 });

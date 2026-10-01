@@ -93,6 +93,12 @@ export interface ChargeRow {
   state: ChargeInvoiceState;
   document: { number: string; source: InvoiceSource } | null;
   matchedBy: "RULE" | "MANUAL" | null;
+  /** Minden párosított számla száma (több számla egy utalásban). */
+  documentNumbers: string[];
+  /** A megnevezett, de hiányzó számlák név szerint (acrobot 25610). */
+  missingNumbers: string[];
+  /** A terhelés mínusz a számlák összege, ha a tűrésen túl eltér. */
+  amountDifference: { amount: string; currency: string } | null;
   comment: string | null;
   /** Az eredeti papíron megvan (kézi jelölés, nautilus #1303). */
   paperOriginal: boolean;
@@ -117,6 +123,7 @@ export const CHARGE_STATE_BADGES: Record<
   NO_INVOICE: "danger",
   NOT_COMPANY: "danger",
   PROFORMA_ONLY: "amber",
+  DOUBLE_PAID: "danger",
   ORIGINAL_MISSING: "amber",
   NO_INVOICE_NEEDED: "grey",
 };
@@ -142,6 +149,7 @@ export const INVOICE_SOURCE_LABELS: Record<InvoiceSource, string> = {
   DRIVE: "Drive",
   SETTLEMENT: "Elszámolás",
   PREMIUM_NOTICE: "Díjértesítő",
+  SZAMLAZZ: "Számlázz.hu",
 };
 
 /** A kategória felirata, szintén a közös helyről (nautilus #1308). */
@@ -175,6 +183,7 @@ export const TAB_STATES: Record<ChargeTab, readonly ChargeInvoiceState[]> = {
     "NO_INVOICE",
     "NOT_COMPANY",
     "PROFORMA_ONLY",
+    "DOUBLE_PAID",
     "ORIGINAL_MISSING",
   ],
   NOT_MATCHED: ["NOT_MATCHED"],
@@ -186,6 +195,7 @@ export const TAB_STATES: Record<ChargeTab, readonly ChargeInvoiceState[]> = {
     "NO_INVOICE",
     "NOT_COMPANY",
     "PROFORMA_ONLY",
+    "DOUBLE_PAID",
     "ORIGINAL_MISSING",
     "NO_INVOICE_NEEDED",
   ],
@@ -214,6 +224,9 @@ export function whatToDo(
         : "A számla a magánszemély nevére szól: kérd újra a cég nevére.";
     case "REQUEST_FINAL_INVOICE":
       return "Díjbekérő van, a végszámla hiányzik.";
+    case "CHECK_DOUBLE_PAYMENT":
+      // acrobot 25636: a Sopro-számlát két terheléssel fizettük ki
+      return "Ugyanez a számla egy másik terheléshez is párosítva van. Ha kétszer fizettük, kérd vissza az egyiket; ha két külön számla, töltsd fel a másikat.";
     case "PAIR_OR_UPLOAD":
       return "Van számla ettől a partnertől, de egyik sem egyezik ezzel a terheléssel: párosítsd a javasolt számlák közül, vagy töltsd fel a hiányzót.";
     case "NONE":

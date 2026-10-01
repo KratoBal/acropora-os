@@ -13,6 +13,7 @@ import {
   type MonthRow,
 } from "./missing-invoices-model";
 import { MissingInvoicesMonthDetail } from "./missing-invoices-month-detail";
+import { toExtras } from "./missing-invoices-wire";
 import { MissingInvoicesMonthList } from "./missing-invoices-month-list";
 
 /**
@@ -49,6 +50,9 @@ const charge = (overrides: Partial<ChargeRow> = {}): ChargeRow => ({
   document: null,
   matchedBy: null,
   comment: null,
+  documentNumbers: [],
+  missingNumbers: [],
+  amountDifference: null,
   paperOriginal: false,
   ...overrides,
 });
@@ -62,6 +66,8 @@ describe("the model", () => {
         "NOT_MATCHED",
         "ORIGINAL_MISSING",
         "PROFORMA_ONLY",
+        // a kétszer fizetett számla is teendő (acrobot 25636)
+        "DOUBLE_PAID",
       ].sort(),
     );
     expect(TAB_STATES.MISSING).not.toContain("FOUND");
@@ -74,6 +80,30 @@ describe("the model", () => {
       "A számla a magánszemély nevére szól: kérd újra az Próba Kft. nevére.",
     );
     expect(whatToDo("NONE", "Próba Kft.")).toBeNull();
+  });
+});
+
+describe("the item detail on the wire", () => {
+  // MI PIROSÍT: ha egy a payeeDocuments mezőt még nem küldő API (a web előbb
+  // települ, mint az API) eldöntené a drawert.
+  it("an API without payeeDocuments gives an empty list, not a crash", () => {
+    const detail = {
+      candidates: [],
+      action: "NONE",
+      driveFolderUrl: null,
+    } as unknown as Parameters<typeof toExtras>[0];
+    expect(toExtras(detail).payeeDocuments).toEqual([]);
+  });
+
+  // MI PIROSÍT: ha egy a doublePaidWith mezőt még nem küldő API (a web előbb
+  // települ) eldöntené a drawert.
+  it("an API without doublePaidWith gives an empty list", () => {
+    const detail = {
+      candidates: [],
+      action: "NONE",
+      driveFolderUrl: null,
+    } as unknown as Parameters<typeof toExtras>[0];
+    expect(toExtras(detail).doublePaidWith).toEqual([]);
   });
 });
 
@@ -559,6 +589,8 @@ describe("MissingInvoicesDrawer", () => {
         hasOriginal: true,
       },
     ],
+    payeeDocuments: [],
+    doublePaidWith: [],
     action: "REQUEST_REISSUE_TO_COMPANY",
     driveFolderUrl: null,
     ...overrides,
@@ -719,17 +751,137 @@ describe("MissingInvoicesDrawer", () => {
     expect(props.onPaperOriginal).toHaveBeenLastCalledWith(false);
   });
 
-  it("no paper-original question where there is no pairing, or the original is not the gap", () => {
-    render(
+  /*
+    A VEVŐ KÉZI JELÖLÉSE (acrobot 25633: a beszkennelt Sopro-számlánál csak
+    felirat volt, gomb nem). MI PIROSÍT: ha a nem olvasható vevőjű párosított
+    számlánál nincs két gomb; ha a gomb nem a számla azonosítójával hív; ha a
+    kézi jelölés nem látszik, és nem fordítható vissza; ha a néző is jelölhet.
+  */
+  it("an unreadable payee is marked by hand, either way, and a mark shows and turns", () => {
+    const props = { ...base(), onPayee: vi.fn() };
+    const paired = charge({
+      state: "NOT_MATCHED",
+      document: { number: "KB-2855/2026", source: "UPLOAD" },
+      matchedBy: "MANUAL",
+    });
+    const unknown = {
+      documentId: "up-1",
+      number: "KB-2855/2026",
+      payee: "UNKNOWN" as const,
+      marked: false,
+    };
+    const { unmount } = render(
       <MissingInvoicesDrawer
-        {...base()}
-        onPaperOriginal={vi.fn()}
-        row={charge({ state: "NO_INVOICE" })}
+        {...props}
+        row={paired}
+        extras={extras({ candidates: [], payeeDocuments: [unknown] })}
       />,
     );
     expect(
-      screen.queryByRole("checkbox", { name: "Az eredeti papíron megvan" }),
-    ).toBeNull();
+      screen.getByText(/a vevő a számlából nem olvasható/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "A cégre szól" }));
+    expect(props.onPayee).toHaveBeenCalledWith("up-1", "COMPANY");
+    fireEvent.click(screen.getByRole("button", { name: "Nem a cégre szól" }));
+    expect(props.onPayee).toHaveBeenLastCalledWith("up-1", "NOT_COMPANY");
+    unmount();
+    const { unmount: again } = render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={{ ...paired, state: "FOUND" }}
+        extras={extras({
+          candidates: [],
+          payeeDocuments: [{ ...unknown, payee: "COMPANY", marked: true }],
+        })}
+      />,
+    );
+    expect(screen.getByText(/kézzel jelölve/)).toHaveTextContent(
+      "a cégre szól",
+    );
+    expect(screen.queryByRole("button", { name: "A cégre szól" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Nem a cégre szól" }));
+    expect(props.onPayee).toHaveBeenLastCalledWith("up-1", "NOT_COMPANY");
+    again();
+    render(
+      <MissingInvoicesDrawer
+        {...props}
+        canManage={false}
+        row={paired}
+        extras={extras({ candidates: [], payeeDocuments: [unknown] })}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "A cégre szól" })).toBeNull();
+  });
+
+  /*
+    KÉTSZER FIZETETT SZÁMLA (acrobot 25636). MI PIROSÍT: ha a drawer nem nevezné
+    meg a másik terhelést; ha a teendő nem mondaná, mit kell tenni.
+  */
+  it("a double-paid invoice names the other debit and what to do", () => {
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        row={charge({
+          state: "DOUBLE_PAID",
+          document: { number: "KB-2855/2026", source: "UPLOAD" },
+          matchedBy: "MANUAL",
+        })}
+        extras={extras({
+          candidates: [],
+          action: "CHECK_DOUBLE_PAYMENT",
+          doublePaidWith: [
+            {
+              id: "pay-29",
+              bookingDate: "2026-09-29",
+              amount: "172006",
+              currency: "HUF",
+            },
+          ],
+        })}
+      />,
+    );
+    expect(
+      screen.getByText(/Ugyanez a számla ehhez is párosítva/),
+    ).toHaveTextContent("2026. 09. 29.");
+    expect(
+      screen.getByRole("region", { name: "Mit kell tenni" }),
+    ).toHaveTextContent("Ha kétszer fizettük, kérd vissza az egyiket");
+  });
+
+  it("the paper-original question without any digital invoice too, but not on a wrong document (acrobot 25745)", () => {
+    // Aqua-Light: külföldi számla csak papíron, NAV-sor nincs, tehát nincs párosítás
+    for (const state of ["NO_INVOICE", "NOT_MATCHED"] as const) {
+      const { unmount } = render(
+        <MissingInvoicesDrawer
+          {...base()}
+          onPaperOriginal={vi.fn()}
+          row={charge({ state })}
+        />,
+      );
+      expect(
+        screen.getByRole("checkbox", { name: "Az eredeti papíron megvan" }),
+      ).toBeTruthy();
+      unmount();
+    }
+    // a hibás dokumentum (díjbekérő, nem a cégre szóló) és a számla nélküli
+    // tétel gondja nem az, hogy az eredeti hol van
+    for (const state of [
+      "NOT_COMPANY",
+      "PROFORMA_ONLY",
+      "NO_INVOICE_NEEDED",
+    ] as const) {
+      const { unmount } = render(
+        <MissingInvoicesDrawer
+          {...base()}
+          onPaperOriginal={vi.fn()}
+          row={charge({ state })}
+        />,
+      );
+      expect(
+        screen.queryByRole("checkbox", { name: "Az eredeti papíron megvan" }),
+      ).toBeNull();
+      unmount();
+    }
   });
 
   it("no paper-original question on a pairing whose original is already there", () => {
@@ -748,6 +900,53 @@ describe("MissingInvoicesDrawer", () => {
     expect(
       screen.queryByRole("checkbox", { name: "Az eredeti papíron megvan" }),
     ).toBeNull();
+  });
+
+  it("several invoices in one payment: all numbers, the missing ones BY NAME, and the difference", () => {
+    // Fluidra, 2026-09-25 (acrobot 25610): a kozlemeny ot szamlat nevez meg
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        row={charge({
+          state: "ORIGINAL_MISSING",
+          document: { number: "KS26/08132", source: "NAV" },
+          matchedBy: "RULE",
+          documentNumbers: [
+            "KS26/08132",
+            "KS26/08382",
+            "KS26/08450",
+            "KS26/08541",
+            "KS26/08638",
+          ],
+          missingNumbers: ["KS26/08132", "KS26/08382"],
+          amountDifference: { amount: "-76096", currency: "HUF" },
+        })}
+      />,
+    );
+    expect(
+      screen.getByText(
+        /Mind a 5 számla: KS26\/08132, KS26\/08382, KS26\/08450/,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Hiányzik: KS26/08132, KS26/08382")).toBeTruthy();
+    expect(screen.getByText(/Összeg-eltérés a számlákhoz képest/)).toBeTruthy();
+  });
+
+  it("one invoice and nothing missing: no list, no missing line, no difference", () => {
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        row={charge({
+          state: "FOUND",
+          document: { number: "INV-2026-08177", source: "MAILBOX" },
+          matchedBy: "RULE",
+          documentNumbers: ["INV-2026-08177"],
+        })}
+      />,
+    );
+    expect(screen.queryByText(/Mind a/)).toBeNull();
+    expect(screen.queryByText(/Hiányzik:/)).toBeNull();
+    expect(screen.queryByText(/Összeg-eltérés/)).toBeNull();
   });
 
   it("a candidate without a gross shows a dash, and one with only NAV data says so", () => {

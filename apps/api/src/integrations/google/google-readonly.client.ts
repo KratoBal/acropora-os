@@ -28,10 +28,24 @@ export interface GoogleReadonlySettings {
   rateLimitDelaysMs?: readonly number[];
   /** A várakozás (a tesztben azonnali). */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Legalább ennyi idő két API-kérés között (alapból 0). A Gmail
+   * felhasználónkénti kvótája a gyors egymásutáni kérésekre fut fel.
+   */
+  requestGapMs?: number;
+  /** Az óra (a tesztben rögzített). */
+  now?: () => number;
 }
 
 export class GoogleReadonlyError extends Error {
-  constructor(readonly code: string) {
+  /**
+   * `detail`: a Google válaszának mért tényei (státusz, ok, tartomány,
+   * Retry-After), a naplónak; titok és szabad szöveg nincs benne.
+   */
+  constructor(
+    readonly code: string,
+    readonly detail: string | null = null,
+  ) {
     super(code);
     this.name = "GoogleReadonlyError";
   }
@@ -39,7 +53,10 @@ export class GoogleReadonlyError extends Error {
 
 /** Belső jel: a hívás rate limitbe futott, és újrapróbálható. */
 class GoogleRateLimit extends Error {
-  constructor(readonly retryAfterMs: number) {
+  constructor(
+    readonly retryAfterMs: number,
+    readonly detail: string,
+  ) {
     super("GOOGLE_RATE_LIMITED");
   }
 }
@@ -78,8 +95,8 @@ const REQUEST_TIMEOUT_MS = 30_000;
  * RATE LIMIT UTÁN RÖVID, KORLÁTOS VISSZAVÁRÁS (Balázs éles próbája, 2026-10-01:
  * az info@ és a balazs@ egy perc munka után állt le). Három próba, 1, 2, 4
  * másodperc; a Google `Retry-After` fejlécét is figyelembe vesszük, de legfeljebb
- * 10 másodpercig. Ennyi után a hiba megy tovább (GOOGLE_RATE_LIMITED), a
- * következő futás folytatja.
+ * 10 másodpercig. Ennyi után a hiba megy tovább (GOOGLE_RATE_LIMITED): a
+ * begyűjtő a forrást megállítja, és a következő futás folytatja.
  */
 const RATE_LIMIT_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000];
 const RETRY_AFTER_CAP_MS = 10_000;
@@ -101,21 +118,70 @@ const RETRY_AFTER_CAP_MS = 10_000;
 const RATE_LIMIT_REASON =
   /^(rateLimitExceeded|userRateLimitExceeded|RATE_LIMIT_EXCEEDED)$/;
 
-const forbiddenIsRateLimit = (body: unknown): boolean => {
+/** Csak azonosító alakú érték megy a naplóba (ok, tartomány), szabad szöveg nem. */
+const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/;
+
+interface GoogleErrorFacts {
+  reasons: string[];
+  domains: string[];
+  /** A Gmail üzenetében álló „Retry after <időpont>”, ha van. */
+  retryAt: string | null;
+}
+
+const googleErrorFacts = (body: unknown): GoogleErrorFacts => {
   const error = (body as { error?: Record<string, unknown> } | null)?.error;
-  if (!error || typeof error !== "object") return false;
-  const reasons = [
+  if (!error || typeof error !== "object")
+    return { reasons: [], domains: [], retryAt: null };
+  const entries = [
     ...((Array.isArray(error.errors) ? error.errors : []) as Array<{
       reason?: unknown;
+      domain?: unknown;
     }>),
     ...((Array.isArray(error.details) ? error.details : []) as Array<{
       reason?: unknown;
+      domain?: unknown;
     }>),
-  ].map((entry) => entry?.reason);
-  return reasons.some(
-    (reason) => typeof reason === "string" && RATE_LIMIT_REASON.test(reason),
-  );
+  ];
+  const ids = (values: unknown[]) => [
+    ...new Set(
+      values.filter(
+        (value): value is string =>
+          typeof value === "string" && IDENTIFIER.test(value),
+      ),
+    ),
+  ];
+  const message = typeof error.message === "string" ? error.message : "";
+  return {
+    reasons: ids(entries.map((entry) => entry?.reason)),
+    domains: ids(entries.map((entry) => entry?.domain)),
+    retryAt:
+      /Retry after (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)/.exec(
+        message,
+      )?.[1] ?? null,
+  };
 };
+
+/**
+ * A MEGÁLLÁS MÉRT OKA (acrobot 25629, éles 2026-10-01: a 250 ms-os ütem mellett
+ * is mindkét postafiók megállt, és nem tudjuk, melyik kvóta fogyott el).
+ * Például: `403 userRateLimitExceeded usageLimits retry-after=30`.
+ */
+const errorDetail = (
+  status: number,
+  facts: GoogleErrorFacts,
+  retryAfter: string | null,
+): string =>
+  [
+    String(status),
+    facts.reasons.join("+") || "-",
+    facts.domains.join("+") || "-",
+    retryAfter && /^\d{1,6}$/.test(retryAfter)
+      ? `retry-after=${retryAfter}`
+      : "",
+    facts.retryAt ? `retry-at=${facts.retryAt}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 const MAX_PAGES = 10;
 
 function decodeBase64Url(data: string): Buffer {
@@ -154,6 +220,7 @@ export class GoogleReadonlyClient {
   private readonly gmailApiUrl: string;
   private readonly driveApiUrl: string;
   private readonly tokenUrl: string;
+  private lastRequestAt: number | null = null;
 
   constructor(
     private readonly settings: GoogleReadonlySettings,
@@ -334,9 +401,27 @@ export class GoogleReadonlyClient {
   }
 
   private async request(url: URL): Promise<Response> {
+    await this.pace();
     return this.fetchWithTimeout(url, {
       headers: { Authorization: `Bearer ${await this.token()}` },
     });
+  }
+
+  /** Az API-kérések sorban mennek; kettő között legalább `requestGapMs`. */
+  private async pace(): Promise<void> {
+    const gap = this.settings.requestGapMs ?? 0;
+    const now = this.settings.now ?? Date.now;
+    if (gap > 0 && this.lastRequestAt !== null) {
+      const wait = this.lastRequestAt + gap - now();
+      if (wait > 0) await this.sleep(wait);
+    }
+    this.lastRequestAt = now();
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return this.settings.sleep
+      ? this.settings.sleep(ms)
+      : new Promise<void>((resolve) => setTimeout(resolve, ms));
   }
 
   private async fetchWithTimeout(
@@ -344,9 +429,6 @@ export class GoogleReadonlyClient {
     init: RequestInit,
   ): Promise<Response> {
     const delays = this.settings.rateLimitDelaysMs ?? RATE_LIMIT_DELAYS_MS;
-    const sleep =
-      this.settings.sleep ??
-      ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     for (let attempt = 0; ; attempt++) {
       try {
         return await this.fetchOnce(url, init);
@@ -355,10 +437,10 @@ export class GoogleReadonlyClient {
           error instanceof GoogleRateLimit && attempt < delays.length;
         if (!retry) {
           throw error instanceof GoogleRateLimit
-            ? new GoogleReadonlyError("GOOGLE_RATE_LIMITED")
+            ? new GoogleReadonlyError("GOOGLE_RATE_LIMITED", error.detail)
             : error;
         }
-        await sleep(Math.max(delays[attempt]!, error.retryAfterMs));
+        await this.sleep(Math.max(delays[attempt]!, error.retryAfterMs));
       }
     }
   }
@@ -375,22 +457,30 @@ export class GoogleReadonlyClient {
         signal: controller.signal,
       });
       if (!response.ok) {
+        const facts =
+          response.status === 403 || response.status === 429
+            ? googleErrorFacts(await response.json().catch(() => null))
+            : { reasons: [], domains: [], retryAt: null };
+        const retryAfter = response.headers.get("retry-after");
+        const detail = errorDetail(response.status, facts, retryAfter);
         const rateLimited =
           response.status === 429 ||
           (response.status === 403 &&
-            forbiddenIsRateLimit(await response.json().catch(() => null)));
+            facts.reasons.some((reason) => RATE_LIMIT_REASON.test(reason)));
         if (rateLimited) {
-          const seconds = Number(response.headers.get("retry-after"));
+          const seconds = Number(retryAfter);
           throw new GoogleRateLimit(
             Number.isFinite(seconds) && seconds > 0
               ? Math.min(seconds * 1000, RETRY_AFTER_CAP_MS)
               : 0,
+            detail,
           );
         }
         throw new GoogleReadonlyError(
           response.status === 401 || response.status === 403
             ? "GOOGLE_AUTH_FAILED"
             : `GOOGLE_HTTP_${response.status}`,
+          detail,
         );
       }
       return response;

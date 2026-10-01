@@ -98,7 +98,7 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
       },
     });
     assert.deepEqual(
-      await repository.seen("INFO_MAIL", [MESSAGE, "x"]),
+      await repository.seen("INFO_MAIL", [MESSAGE, "x"], true),
       new Set([MESSAGE]),
     );
   });
@@ -154,13 +154,15 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
       "collect-it-l-sha",
     );
 
+    const ids = ["collect-it-u1", "collect-it-n1", "collect-it-m1"];
     assert.deepEqual(
-      await repository.seen("INFO_MAIL", [
-        "collect-it-u1",
-        "collect-it-n1",
-        "collect-it-m1",
-      ]),
+      await repository.seen("INFO_MAIL", ids, true),
       new Set(["collect-it-n1"]),
+    );
+    // amikor az újraolvasás nem esedékes, az UNMATCHED is látott
+    assert.deepEqual(
+      await repository.seen("INFO_MAIL", ids, false),
+      new Set(ids),
     );
   });
 
@@ -214,6 +216,35 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
     assert.deepEqual(row, { verdict: "STORED", documentId });
   });
 
+  it("finds a stored document by its invoice number, read by either reader (acrobot 25800)", async () => {
+    const stored = (key: string, data: object) =>
+      prisma.incomingSupplierDocument.create({
+        data: {
+          gmailMessageId: `collect:INFO_MAIL:collect-it-${key}`,
+          fileName: `${key}.pdf`,
+          sizeBytes: 14,
+          sha256: `collect-it-${key}`,
+          content: new Uint8Array(Buffer.from("%PDF-1.4 teszt")),
+          status: "READ",
+          origin: "UPLOAD",
+          ...data,
+        },
+      });
+    await stored("same-text", { textReading: { invoiceNumber: "IT-SAME-1" } });
+    await stored("same-import", {
+      importResult: { invoiceNumber: "ITSAME2" },
+    });
+    await stored("other", { textReading: { invoiceNumber: "IT-OTHER-9" } });
+    assert.deepEqual(await repository.sameNumberDocuments("IT-SAME-1"), [
+      { fileName: "same-text.pdf", origin: "UPLOAD" },
+    ]);
+    // a szóköz nélküli alak is: a PDF-olvasó szóközt tehet a számba
+    assert.deepEqual(await repository.sameNumberDocuments("ITSAME 2"), [
+      { fileName: "same-import.pdf", origin: "UPLOAD" },
+    ]);
+    assert.deepEqual(await repository.sameNumberDocuments("IT-NONE-0"), []);
+  });
+
   it("lets one run at a time", async () => {
     const first = await repository.startRun("MANUAL");
     await assert.rejects(repository.startRun("MANUAL"), /ALREADY_RUNNING/);
@@ -229,6 +260,7 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
         failedCount: 0,
       },
       "COLLECT_IT",
+      true,
     );
     const second = await repository.startRun("MANUAL");
     await repository.finishRun(
@@ -243,6 +275,7 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
         failedCount: 0,
       },
       "COLLECT_IT",
+      true,
     );
   });
 });

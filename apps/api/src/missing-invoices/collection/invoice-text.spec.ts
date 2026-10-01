@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { normalizeName } from "../missing-invoice-matching.js";
 import {
+  cardPaymentMatch,
+  largestMoney,
+  type CardDebit,
+  looksLikeBankAccount,
   looksLikeInvoice,
+  looksLikeOtherDocument,
   looksLikeProforma,
+  looksLikeReminder,
+  otherDocumentFileName,
   readInvoiceText,
 } from "./invoice-text.js";
 
@@ -127,5 +135,314 @@ describe("readInvoiceText", () => {
       ]).supplierTaxNumber,
       "DE152405660",
     );
+  });
+});
+
+describe("cardPaymentMatch: a NAV-less invoice and the card payment(s) it was paid with (acrobot 25666, 25673, 25691)", () => {
+  const word = (name: string) =>
+    normalizeName(name)
+      .split(" ")
+      .find((w) => w.length >= 4) ?? null;
+  // a valos Hetzner-szamla sorai (2026-08-05, 081001079225)
+  const hetzner = [
+    "Hetzner Online GmbH • Industriestr. 25 • 91710 Gunzenhausen • Germany",
+    "Acropora Kft. | Tel.: +49 9831 505-0",
+    "VAT Reg. No.: HU23916229",
+    "Invoice no.: 081001079225",
+    "Total | € 7.04 | € 0.00 | € 7.04",
+  ];
+  // a valos Kia Charge-szamla sorai (2026-07, KHU00014089)
+  const kia = [
+    "Digital Charging Solutions GmbH Mies-van-der-Rohe-Straße 6 D-80807 München",
+    "Acropora Kft. | HÉA azonosító szám DE312237805",
+    "Havi díj ebből 2026. júl. 1. - 2026. júl. 31. | 1518,00 HUF | 1518,00 HUF",
+    "Összes töltés száma | 1 | 34,625 kWh | 7607,00 HUF | 7607,00 HUF",
+    "Teljes összeg* | 9125,00 HUF | 9125,00 HUF",
+  ];
+  let n = 0;
+  const card = (
+    counterpartyName: string,
+    amount: string,
+    original: CardDebit["original"] = null,
+    bookingDate = "2026-08-07",
+  ): CardDebit => ({
+    id: `k${++n}`,
+    bookingDate,
+    counterpartyName,
+    amount,
+    currency: "HUF",
+    original,
+  });
+  const dcs = (amount: string, bookingDate = "2026-08-07") =>
+    card("Digital Charging Solut", amount, null, bookingDate);
+
+  it("takes the payment whose partner word and amount (the original or the booked one) are in the text", () => {
+    const h = card("HETZNER ONLINE GMBH", "2690", {
+      amount: "7.04",
+      currency: "EUR",
+    });
+    assert.deepEqual(
+      cardPaymentMatch(
+        hetzner,
+        [
+          h,
+          card("HETZNER ONLINE GMBH", "17113", {
+            amount: "46.64",
+            currency: "EUR",
+          }),
+          card("Tesla Hungary Korlatol", "2449"),
+        ],
+        word,
+      ),
+      {
+        amount: "7.04",
+        currency: "EUR",
+        partner: "HETZNER ONLINE GMBH",
+        debitIds: [h.id],
+      },
+    );
+  });
+
+  it("takes nothing when the amount, the partner word, or the uniqueness is missing, or the partner is us", () => {
+    const hetznerCard = (amount: string) =>
+      card("HETZNER ONLINE GMBH", "999", { amount, currency: "EUR" });
+    assert.equal(
+      cardPaymentMatch(hetzner, [hetznerCard("7.05")], word, "2026-08-05"),
+      null,
+    );
+    assert.equal(
+      cardPaymentMatch(
+        hetzner,
+        [
+          card("Tesla Hungary Korlatol", "999", {
+            amount: "7.04",
+            currency: "EUR",
+          }),
+        ],
+        word,
+        "2026-08-05",
+      ),
+      null,
+    );
+    // két egyenlő fizetés: a végösszeghez is kettő illik, nem választunk
+    assert.equal(
+      cardPaymentMatch(
+        hetzner,
+        [hetznerCard("7.04"), hetznerCard("7.04")],
+        word,
+        "2026-08-05",
+      ),
+      null,
+    );
+    // a saját átvezetésünk neve minden nekünk szóló számlán ott van
+    assert.equal(
+      cardPaymentMatch(
+        hetzner,
+        [card("ACROPORA KFT EUR", "999", { amount: "7.04", currency: "EUR" })],
+        word,
+        "2026-08-05",
+      ),
+      null,
+    );
+  });
+
+  it("Kia July: the monthly fee is another month's payment, so the total (the largest money, not the kWh) decides", () => {
+    const july = dcs("9125", "2026-08-07");
+    const june = dcs("1518", "2026-07-06");
+    // az első út kettőt talál; dátum nélkül nem dönt
+    assert.equal(cardPaymentMatch(kia, [june, july], word), null);
+    assert.deepEqual(cardPaymentMatch(kia, [june, july], word, "2026-08-01"), {
+      amount: "9125.00",
+      currency: "HUF",
+      partner: "Digital Charging Solut",
+      debitIds: [july.id],
+    });
+  });
+
+  it("Kia August: the total is the sum of two card payments", () => {
+    const august = [
+      "Digital Charging Solutions GmbH",
+      "Acropora Kft.",
+      "Havi díj | 1518,00 HUF",
+      "Teljes összeg* | 40086,00 HUF | 40086,00 HUF",
+    ];
+    const a = dcs("21279", "2026-09-10");
+    const b = dcs("18807", "2026-09-10");
+    const other = dcs("6840", "2026-09-12");
+    assert.deepEqual(
+      cardPaymentMatch(august, [a, b, other], word, "2026-09-01")?.debitIds,
+      [a.id, b.id],
+    );
+    // a dátumablakon kívül (a számla előtt több mint 15 nappal) nem illik
+    assert.equal(
+      cardPaymentMatch(
+        august,
+        [dcs("21279", "2026-08-10"), dcs("18807", "2026-08-10")],
+        word,
+        "2026-09-01",
+      ),
+      null,
+    );
+    // ha két különböző halmaz is kiadja, nem döntünk
+    assert.equal(
+      cardPaymentMatch(
+        august,
+        [a, b, dcs("21279", "2026-09-11"), dcs("18807", "2026-09-12")],
+        word,
+        "2026-09-01",
+      ),
+      null,
+    );
+  });
+
+  it("the largest money needs its currency on the same line (Anthropic: a tax number above an EUR line)", () => {
+    assert.deepEqual(largestMoney("VAT HU23916229\nEUR 180.00\n34,625 kWh"), {
+      cents: 18000,
+      currency: "EUR",
+    });
+  });
+
+  it("a monthly summary is tied to its total, never to its largest line (Parkl, 2026-08)", () => {
+    const parkl = [
+      "Parkl Digital Technologies Kft.",
+      "Acropora Kft.",
+      "2026.08.04 | parkolás | 11 170",
+      "2026.08.20 | parkolás | 6 900",
+      "Fizetendő összesen: 21 699 HUF",
+    ];
+    const payment = (amount: string, day: string) =>
+      card("SIMPLEP*PARKL.NET", amount, null, day);
+    // a fizetések a számla előtt: a végösszeghez nincs ablakbeli halmaz
+    assert.equal(
+      cardPaymentMatch(
+        parkl,
+        [
+          payment("11170", "2026-08-05"),
+          payment("6900", "2026-08-21"),
+          payment("3629", "2026-08-25"),
+        ],
+        word,
+        "2026-09-01",
+      ),
+      null,
+    );
+  });
+});
+
+describe("contracts, offers and customs declarations are not invoices (acrobot 25784)", () => {
+  it("by the title: the kind alone, or the kind and its number", () => {
+    for (const title of [
+      "ADÁSVÉTELI SZERZŐDÉS",
+      "Vállalkozási keretszerződés",
+      "Árajánlat | AJ26-U60-01170",
+      "Ajánlat",
+      "Quotation #Q-2026/0412",
+      "Megállapodás",
+    ])
+      assert.equal(
+        looksLikeOtherDocument(["Acropora Kft.", title, "szöveg"], "a.pdf"),
+        true,
+        title,
+      );
+    // a megnevezés előtt más szó áll: ez már nem cím
+    assert.equal(
+      looksLikeOtherDocument(["Import árunyilatkozat alapján"], "a.pdf"),
+      false,
+    );
+  });
+
+  it("by the file name, also decomposed (NFD) or written as one camelCase word", () => {
+    for (const name of [
+      "Szerződés_FÁNK_Homokszűrő 2026 aláírásra.pdf",
+      "Szerződés_FÁNK_Homokszűrő 2026 aláírásra.pdf".normalize("NFD"),
+      "Árajánlat AJ26-U60-01170.pdf",
+      "26HU123 árunyilatkozat.frx.pdf",
+      "Angebot_4711.pdf",
+      "mycarAjanlat_AMC297489479.pdf",
+    ])
+      assert.equal(otherDocumentFileName(name), true, name);
+    for (const name of ["inv26007910.pdf", "Szamla_2026-09.pdf", null])
+      assert.equal(otherDocumentFileName(name), false, String(name));
+  });
+
+  it("an invoice that names its offer or its contract is still an invoice", () => {
+    assert.equal(
+      looksLikeOtherDocument(
+        [
+          "SZÁMLA",
+          "Számlaszám: KS26/08132",
+          "Ajánlat száma: AJ26-U60-01170",
+          "Szerződés: 2026/14",
+          "Megállapodás:",
+          "2026/15",
+          "a szerződés szerinti díj",
+        ],
+        "KS26_08132.pdf",
+      ),
+      false,
+    );
+    // a cím csak az első sorokban számít
+    const late = Array.from({ length: 20 }, (_, i) =>
+      i === 15 ? "Árajánlat" : "SZÁMLA",
+    );
+    assert.equal(looksLikeOtherDocument(late, "szamla.pdf"), false);
+  });
+
+  it("a facture provisoire is a proforma", () => {
+    assert.equal(looksLikeProforma("FACTURE PROVISOIRE N° 2026-118"), true);
+  });
+});
+
+describe("payment reminders and bank accounts (acrobot 25664)", () => {
+  it("a reminder by its file name or its title, not by a word deep in a long text", () => {
+    assert.equal(
+      looksLikeReminder(["De Jong", "x", "y", "REMINDER"], "a.pdf"),
+      true,
+    );
+    assert.equal(
+      looksLikeReminder(
+        ["Ügyfélszolgálat", "", "", "I. számú Fizetési emlékeztető"],
+        null,
+      ),
+      true,
+    );
+    assert.equal(
+      looksLikeReminder(["INVOICE"], "First_reminder_11069-26004529.pdf"),
+      true,
+    );
+    assert.equal(looksLikeReminder(["INVOICE"], "Mahnung-2026-03.pdf"), true);
+    // a szerződés 398. sorában: nem cím
+    const contract = Array.from({ length: 400 }, (_, i) =>
+      i === 397
+        ? "felszólítás kézhezvételét követő nyolc (8) munkanapon belül"
+        : "szöveg",
+    );
+    assert.equal(looksLikeReminder(contract, "Szerződés.pdf"), false);
+    assert.equal(
+      looksLikeReminder(
+        ["INVOICE", "Invoice number 26007910"],
+        "inv26007910.pdf",
+      ),
+      false,
+    );
+  });
+
+  it("an IBAN or a Hungarian account is a bank account; invoice numbers are not", () => {
+    for (const account of [
+      "NL30RABO0322265428",
+      "FR7630003004730002571158",
+      "HU42 1170 9002 2062 4460 0000 0000",
+      "11709002-20624460",
+    ])
+      assert.equal(looksLikeBankAccount(account), true, account);
+    for (const number of [
+      "26007910",
+      "KS26/08132",
+      "E-PAR-2026-46439",
+      "FA00009139",
+      "F2602896",
+      "4042P0000640463",
+    ])
+      assert.equal(looksLikeBankAccount(number), false, number);
   });
 });

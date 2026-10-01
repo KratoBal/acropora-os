@@ -21,6 +21,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
 
+import { NavInvoiceOperationNote } from "./nav-invoice-operation";
+
 function formatAmount(value: string | undefined, currency: string): string {
   if (!value) return "—";
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
@@ -226,6 +228,9 @@ export function NavIncomingInvoiceListPage() {
                     >
                       <td className="p-3 font-mono text-xs text-dusk-600">
                         {item.navInvoiceNumber}
+                        <div className="font-sans">
+                          <NavInvoiceOperationNote invoice={item} />
+                        </div>
                       </td>
                       <td className="font-semibold text-dusk-900">
                         {item.supplierName}
