@@ -80,6 +80,12 @@ export const sv = {
   tabs: "flex items-center gap-5 overflow-x-auto border-b border-line px-[22px]",
   tab: "whitespace-nowrap border-b-2 border-transparent py-[15px] text-xs text-muted transition-colors hover:text-ink",
   tabActive: "border-brand-700 font-bold text-brand-700",
+  /** A Hiányzó számlák fülei (Figma): kitöltött, zöld aktív fül. */
+  pillTabs: "flex items-center gap-1 overflow-x-auto border-b border-line pb-3",
+  pillTab:
+    "whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-medium text-pilot-grey-600 transition-colors hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
+  pillTabActive:
+    "bg-pilot-aqua-50 font-bold text-pilot-aqua-700 hover:bg-pilot-aqua-50 hover:text-pilot-aqua-700",
 
   /** `.search` -- a kereso mezo kerete. */
   search:

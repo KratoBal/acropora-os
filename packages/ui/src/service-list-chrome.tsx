@@ -169,19 +169,32 @@ export interface ServiceListTab {
   label: string;
 }
 
+/**
+ * A „pill” alak a Hiányzó számlák Figma-terve (2026-09-30): az aktív fül
+ * halványzöld háttért és sötétzöld, félkövér feliratot kap, ugyanazt, amit
+ * az oldalsáv aktív menüpontja. Balázs 2026-10-01: az aláhúzásos alakon nem
+ * látszott, melyik fülön áll. A szerviz-listák alapértelmezése nem változik.
+ */
 export function ServiceListTabs({
   tabs,
   active,
   onSelect,
   label,
+  variant = "underline",
 }: {
   tabs: ServiceListTab[];
   active: string;
   onSelect: (key: string) => void;
   label: string;
+  variant?: "underline" | "pill";
 }) {
+  const pill = variant === "pill";
   return (
-    <div className={sv.tabs} role="tablist" aria-label={label}>
+    <div
+      className={pill ? sv.pillTabs : sv.tabs}
+      role="tablist"
+      aria-label={label}
+    >
       {tabs.map((tab) => {
         const on = tab.key === active;
         return (
@@ -191,7 +204,11 @@ export function ServiceListTabs({
             role="tab"
             aria-selected={on}
             onClick={() => onSelect(tab.key)}
-            className={`${sv.tab} ${on ? sv.tabActive : ""}`}
+            className={
+              pill
+                ? `${sv.pillTab} ${on ? sv.pillTabActive : ""}`
+                : `${sv.tab} ${on ? sv.tabActive : ""}`
+            }
           >
             {tab.label}
           </button>
