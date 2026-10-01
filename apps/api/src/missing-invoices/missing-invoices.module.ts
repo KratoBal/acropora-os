@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { IncomingBillingDocumentsController } from "../billing/incoming-billing-documents.controller.js";
 import { BankStatementImportRepository } from "./bank-statement-import.repository.js";
 import { BankStatementImportService } from "./bank-statement-import.service.js";
 import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
@@ -24,6 +25,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
 /** HIÁNYZÓ SZÁMLÁK (Pénzügy): a banki terhelés és a számla egyeztetése. */
 @Module({
   controllers: [
+    IncomingBillingDocumentsController,
     InvoiceCollectionSuggestionsController,
     MissingInvoicesController,
     SzamlazzBanktranzController,

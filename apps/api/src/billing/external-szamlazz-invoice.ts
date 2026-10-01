@@ -89,24 +89,24 @@ export const EXTERNAL_KIND_LABELS: Readonly<Record<string, string>> = {
 
 const NUMBER = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
-function number(value: string | null, field: string): string {
+export function number(value: string | null, field: string): string {
   if (!value || !NUMBER.test(value) || !Number.isFinite(Number(value)))
     throw new SzamlazzFeedParseError(`a(z) ${field} nem szám`);
   return value;
 }
 
-function required(root: XmlElement, ...path: string[]): string {
+export function required(root: XmlElement, ...path: string[]): string {
   const value = textAt(root, ...path);
   if (!value)
     throw new SzamlazzFeedParseError(`hiányzó mező: ${path.join(".")}`);
   return value;
 }
 
-function day(value: string | null): string | null {
+export function day(value: string | null): string | null {
   return value ? xsDateDay(value) : null;
 }
 
-function address(cim: XmlElement | undefined): string | null {
+export function address(cim: XmlElement | undefined): string | null {
   if (!cim) return null;
   const parts = [
     textAt(cim, "irsz"),
@@ -119,7 +119,7 @@ function address(cim: XmlElement | undefined): string | null {
   return parts.length ? parts.join(" ") : null;
 }
 
-function line(tetel: XmlElement, index: number): ExternalInvoiceLine {
+export function line(tetel: XmlElement, index: number): ExternalInvoiceLine {
   const field = (name: string) => `tetel[${index + 1}].${name}`;
   return {
     name: required(tetel, "nev"),

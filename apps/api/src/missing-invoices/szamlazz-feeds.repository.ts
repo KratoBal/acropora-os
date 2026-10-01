@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 
 import type { ExternalInvoiceProjection } from "../billing/external-szamlazz-invoice.js";
+import type { IncomingInvoiceProjection } from "../billing/incoming-szamlazz-invoice.js";
 
 export type SzamlazzFeedKind = "SZAMLABE" | "SZAMLAKI" | "NYUGTA";
 
@@ -111,6 +112,101 @@ export class SzamlazzFeedsRepository {
         update: data,
       });
       return "PROJECTED";
+    });
+  }
+
+  /**
+   * A BEJÖVŐ SZÁMLA A SZÁMLÁZÁS „BEJÖVŐ SZÁMLÁK” NÉZETÉBE (acrobot 25869): a
+   * kimenő vetítés (`projectOutgoing`) szabályával. Egy sor egy számla, a
+   * legkésőbb érkezett változatból; egy korábbi változat nem írja felül.
+   *
+   * A PDF a Hiányzó számlák forrásai közé tett első változatban van
+   * (`szamlazz:szamlabe:<id>` kulccsal, `storeInvoice`): a sor arra mutat, és a
+   * fájlnév kiterjesztése mondja meg, PDF-e (a fogadó `.pdf`-et csak valódi,
+   * `%PDF-` kezdetű tartalomnak ad).
+   */
+  async projectIncoming(input: {
+    externalId: string;
+    sha256: string;
+    projection: IncomingInvoiceProjection;
+  }): Promise<"PROJECTED" | "OLDER" | "MISSING"> {
+    return this.database.$transaction(async (transaction) => {
+      const message = await transaction.szamlazzFeedMessage.findUnique({
+        where: {
+          kind_externalId_sha256: {
+            kind: "SZAMLABE",
+            externalId: input.externalId,
+            sha256: input.sha256,
+          },
+        },
+        select: { id: true, receivedAt: true },
+      });
+      if (!message) return "MISSING";
+      const latest = await transaction.szamlazzFeedMessage.findFirst({
+        where: { kind: "SZAMLABE", externalId: input.externalId },
+        orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+        select: { id: true },
+      });
+      if (latest?.id !== message.id) return "OLDER";
+      const versionCount = await transaction.szamlazzFeedMessage.count({
+        where: { kind: "SZAMLABE", externalId: input.externalId },
+      });
+      const source = await transaction.incomingSupplierDocument.findFirst({
+        where: { gmailMessageId: `szamlazz:szamlabe:${input.externalId}` },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, fileName: true },
+      });
+      const {
+        externalId,
+        issueDate,
+        fulfillmentDate,
+        dueDate,
+        lines,
+        vatSummary,
+        payments,
+        ...rest
+      } = input.projection;
+      const asDate = (value: string | null) =>
+        value ? new Date(`${value}T00:00:00Z`) : null;
+      const paid = payments.reduce(
+        (sum, payment) => sum.add(new Prisma.Decimal(payment.amount)),
+        new Prisma.Decimal(0),
+      );
+      const lastPayment = payments
+        .map((payment) => payment.date)
+        .sort()
+        .at(-1);
+      const data = {
+        ...rest,
+        issueDate: asDate(issueDate)!,
+        fulfillmentDate: asDate(fulfillmentDate),
+        dueDate: asDate(dueDate),
+        lines: lines as unknown as Prisma.InputJsonValue,
+        vatSummary: vatSummary as unknown as Prisma.InputJsonValue,
+        payments: payments as unknown as Prisma.InputJsonValue,
+        paidAmount: paid,
+        lastPaymentDate: asDate(lastPayment ?? null),
+        sourceDocumentId: source?.id ?? null,
+        hasPdf: source?.fileName.toLowerCase().endsWith(".pdf") ?? false,
+        feedMessageId: message.id,
+        feedReceivedAt: message.receivedAt,
+        versionCount,
+      };
+      await transaction.incomingBillingDocument.upsert({
+        where: { source_externalId: { source: "SZAMLAZZ", externalId } },
+        create: { source: "SZAMLAZZ", externalId, ...data },
+        update: data,
+      });
+      return "PROJECTED";
+    });
+  }
+
+  /** A visszatöltéshez: minden tárolt bejövő számla-üzenet, érkezési sorrendben. */
+  incomingMessages() {
+    return this.database.szamlazzFeedMessage.findMany({
+      where: { kind: "SZAMLABE" },
+      orderBy: [{ receivedAt: "asc" }, { id: "asc" }],
+      select: { externalId: true, sha256: true, body: true },
     });
   }
 

@@ -18,6 +18,11 @@ import {
   type ExternalInvoiceProjection,
 } from "../billing/external-szamlazz-invoice.js";
 import {
+  IncomingTestInvoice,
+  projectIncomingInvoice,
+  type IncomingInvoiceProjection,
+} from "../billing/incoming-szamlazz-invoice.js";
+import {
   SzamlazzFeedsRepository,
   type FeedStoreOutcome,
   type SzamlazzFeedKind,
@@ -195,6 +200,10 @@ export class SzamlazzFeedsService {
               : ""
           }.`,
         );
+      // a Számlázás „Bejövő számlák” nézete a legkésőbbi változatból (acrobot
+      // 25869); a forrás-dokumentum (a PDF) ekkorra már megvan
+      if (stored !== "SEEN")
+        await this.intoBillingIncoming(message.id, sha256, body);
       return { status: 200, body: feedReply(REPLY[kind], { id: message.id }) };
     } catch (error) {
       if (!(error instanceof SzamlazzFeedParseError)) throw error;
@@ -224,6 +233,30 @@ export class SzamlazzFeedsService {
       return "UNREADABLE";
     }
     return this.repository.projectOutgoing({ externalId, sha256, projection });
+  }
+
+  /**
+   * A BEJÖVŐ SZÁMLA A SZÁMLÁZÁS „BEJÖVŐ SZÁMLÁK” NÉZETÉBE (acrobot 25869). A
+   * teszt-számla nem vetül; a vetítés HIBÁJA NEM BUKTATJA EL A FOGADÁST (a nyers
+   * üzenet tárolva, a Számlázz.hu visszakapja az azonosítót), a visszatöltés
+   * (`billing:incoming-backfill`) később pótolhatja.
+   */
+  async intoBillingIncoming(
+    externalId: string,
+    sha256: string,
+    body: string,
+  ): Promise<"PROJECTED" | "OLDER" | "MISSING" | "TEST" | "UNREADABLE"> {
+    let projection: IncomingInvoiceProjection;
+    try {
+      projection = projectIncomingInvoice(body);
+    } catch (error) {
+      if (error instanceof IncomingTestInvoice) return "TEST";
+      this.logger.warn(
+        `Számlázz.hu bejövő számla #${externalId}: nem vetíthető a Számlázás listájába (${error instanceof Error ? error.message : String(error)}).`,
+      );
+      return "UNREADABLE";
+    }
+    return this.repository.projectIncoming({ externalId, sha256, projection });
   }
 
   /** A bejövő számla a Hiányzó számlák forrásai közé, ha valódi és még nincs meg. */
