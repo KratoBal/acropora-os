@@ -161,6 +161,7 @@ const external = (
   lastPaymentDate: null,
   // a migráció óta nem vetített sor (murena review-ja): ismeretlen
   paymentsKnown: null,
+  paymentMethod: "Átutalás",
   cancelled: false,
   ...overrides,
 });
@@ -186,6 +187,7 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
       paymentState: "PAID",
       paidAmount: "105830",
       lastPaymentDate: "2026-09-17",
+      paymentSource: "SZAMLAZZ",
     });
     assert.equal(fields({ paidAmount: D("50000") }).paymentState, "PARTIAL");
   });
@@ -205,11 +207,54 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
     );
   });
 
+  it("without payment elements: a later payment unpaid, a card or cash paid at ordering, with its source (acrobot 25938)", () => {
+    // A KONTROLL: élesen 18 kártyás webshop-számla mutatott „Nincs fizetve”-t
+    const without = (paymentMethod: string | null) =>
+      fields({
+        paymentsKnown: false,
+        paidAmount: D("0"),
+        lastPaymentDate: null,
+        paymentMethod,
+      });
+    assert.deepEqual(without("Bankkártya"), {
+      paymentState: "PAID",
+      paidAmount: "105831",
+      lastPaymentDate: "2026-09-30",
+      paymentSource: "CARD_AT_ORDER",
+    });
+    assert.deepEqual(
+      [without("Készpénz").paymentState, without("Készpénz").paymentSource],
+      ["PAID", "CASH_AT_ORDER"],
+    );
+    assert.deepEqual(
+      ["Átutalás", "Utánvét", "", null].map((m) => [
+        without(m).paymentState,
+        without(m).paymentSource,
+      ]),
+      Array(4).fill(["UNPAID", "SZAMLAZZ"]),
+    );
+    assert.deepEqual(
+      [without("Csekk").paymentState, without("Csekk").paymentSource],
+      ["UNKNOWN", null],
+    );
+    // ha a Számlázz.hu rögzítette, a kártyás is onnan számolt
+    assert.deepEqual(
+      [
+        fields({ paymentsKnown: true, paymentMethod: "Bankkártya" })
+          .paymentState,
+        fields({ paymentsKnown: true, paymentMethod: "Bankkártya" })
+          .paymentSource,
+      ],
+      ["PAID", "SZAMLAZZ"],
+    );
+  });
+
   it("nothing on a cancelled invoice or our own", () => {
     assert.deepEqual(fields({ cancelled: true }), {
       paymentState: null,
       paidAmount: null,
       lastPaymentDate: null,
+      paymentSource: null,
     });
     assert.equal(toListItem(row()).paymentState, null);
   });
@@ -237,6 +282,7 @@ describe("the external documents on the list", () => {
       paymentState: "UNKNOWN",
       paidAmount: "0",
       lastPaymentDate: null,
+      paymentSource: null,
     });
     assert.deepEqual(
       [

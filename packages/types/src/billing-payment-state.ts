@@ -50,3 +50,35 @@ export function paymentStateOf(input: {
   if (paid > 0n) return "PARTIAL";
   return "UNPAID";
 }
+
+/**
+ * KIMENŐ SZÁMLA `kifizetesek` NÉLKÜL: MIT JELENT A HIÁNY, a fizetési módtól
+ * függően (acrobot 25936 és 25938, Balázs kérdése 20:16 UTC: „miért nincs adat
+ * fog állni, ha tudjuk, hogy kifizették?”):
+ *
+ *   UNPAID          átutalás, utánvét, üres mód: a fizetés a számla UTÁN jön
+ *   CARD_AT_ORDER   bankkártya, SimplePay, online fizetés: a vevő a
+ *                   rendeléskor fizetett, a Számlázz.hu-ban csak nincs rögzítve
+ *   CASH_AT_ORDER   készpénz: ugyanígy, a helyszínen
+ *   UNKNOWN         bármi más: nem tudjuk
+ *
+ * E nélkül 18 kártyás webshop-számla „Nincs fizetve”-t mutatott élesen.
+ */
+export type OutgoingMissingPayments =
+  "UNPAID" | "CARD_AT_ORDER" | "CASH_AT_ORDER" | "UNKNOWN";
+
+export function outgoingMissingPayments(
+  paymentMethod: string | null,
+): OutgoingMissingPayments {
+  const method = (paymentMethod ?? "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .trim()
+    .toLowerCase();
+  if (method === "" || /^(atutalas|utalas|utanvet)/.test(method))
+    return "UNPAID";
+  if (/kartya|card|simplepay|barion|paypal|online/.test(method))
+    return "CARD_AT_ORDER";
+  if (/^keszpenz/.test(method)) return "CASH_AT_ORDER";
+  return "UNKNOWN";
+}
