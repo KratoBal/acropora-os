@@ -141,6 +141,9 @@ export function PilotAssetCreatePage() {
   const [selectedOwner, setSelectedOwner] = useState("");
   const [customerAddressId, setCustomerAddressId] = useState("");
   const [parentAssetId, setParentAssetId] = useState("");
+  const [parentSearch, setParentSearch] = useState("");
+  /** A kiválasztott szülő sora, hogy egy új keresés után is látsszon. */
+  const [parentChoice, setParentChoice] = useState<AssetListItem | null>(null);
   const [aquariumId, setAquariumId] = useState("");
   const [aquariums, setAquariums] = useState<AquariumSummary[]>([]);
   const [kind, setKind] = useState<AssetKind>("EQUIPMENT");
@@ -330,6 +333,13 @@ export function PilotAssetCreatePage() {
     return () => controller.abort();
   }, [token]);
 
+  /**
+   * A SZÜLŐESZKÖZ-LISTA SZŰKÍTVE, NEM AZ ELSŐ SZÁZ (Balázs, 2026-10-01): a
+   * lista eddig a partner első 100 aktív eszközét hozta betűrendben, és a
+   * FANK 406 eszközéből így csak AKV kezdetűek jöttek fel. Most a kiválasztott
+   * alegység részfájára szűkít (a végpont `departmentId` szűrője a részfára
+   * szól), és a keresőmező a név, a kód és a matrica szerint keres.
+   */
   useEffect(() => {
     setParentAssets([]);
     if (!owner) return;
@@ -341,6 +351,9 @@ export function PilotAssetCreatePage() {
       ownerType: owner.type,
       ownerId: owner.id,
     });
+    if (departmentId) assetQuery.set("departmentId", departmentId);
+    if (parentSearch.trim().length >= 2)
+      assetQuery.set("search", parentSearch.trim());
     void assetsApi
       .list(token, assetQuery, controller.signal)
       .then((result) => setParentAssets(result.items))
@@ -353,7 +366,7 @@ export function PilotAssetCreatePage() {
           );
       });
     return () => controller.abort();
-  }, [owner, token]);
+  }, [owner, departmentId, parentSearch, token]);
 
   /**
    * AZ AKVÁRIUM CSAK VEVŐ TULAJDONOSNÁL ÉRTELMEZETT (a szerver
@@ -768,6 +781,8 @@ export function PilotAssetCreatePage() {
                     setSelectedOwner(value);
                     setCustomerAddressId("");
                     setParentAssetId("");
+                    setParentChoice(null);
+                    setParentSearch("");
                     setAquariumId("");
                   }}
                   aria-label="Partner"
@@ -879,19 +894,48 @@ export function PilotAssetCreatePage() {
                 label="Szülőeszköz (opcionális)"
                 className="md:col-span-2"
               >
-                <PilotSelect
-                  value={parentAssetId}
-                  disabled={!owner}
-                  onChange={setParentAssetId}
-                  aria-label="Szülőeszköz"
-                >
-                  <option value="">Önálló / főegység</option>
-                  {parentAssets.map((asset) => (
-                    <option key={asset.id} value={asset.id}>
-                      {asset.name} ({asset.assetNumber})
-                    </option>
-                  ))}
-                </PilotSelect>
+                <div className="space-y-2">
+                  <PilotInput
+                    value={parentSearch}
+                    disabled={!owner}
+                    onChange={setParentSearch}
+                    placeholder="Keresés név, kód vagy matrica szerint…"
+                    aria-label="Szülőeszköz keresése"
+                  />
+                  <PilotSelect
+                    value={parentAssetId}
+                    disabled={!owner}
+                    onChange={(value) => {
+                      setParentAssetId(value);
+                      setParentChoice(
+                        parentAssets.find((asset) => asset.id === value) ??
+                          null,
+                      );
+                    }}
+                    aria-label="Szülőeszköz"
+                  >
+                    <option value="">Önálló / főegység</option>
+                    {parentChoice &&
+                    !parentAssets.some(
+                      (asset) => asset.id === parentChoice.id,
+                    ) ? (
+                      <option value={parentChoice.id}>
+                        {parentChoice.name} ({parentChoice.assetNumber})
+                      </option>
+                    ) : null}
+                    {parentAssets.map((asset) => (
+                      <option key={asset.id} value={asset.id}>
+                        {asset.name} ({asset.assetNumber})
+                      </option>
+                    ))}
+                  </PilotSelect>
+                  {parentAssets.length >= 100 ? (
+                    <p className="text-xs text-pilot-grey-500">
+                      Az első 100 találat látszik. Szűkíts alegységre vagy
+                      keresővel.
+                    </p>
+                  ) : null}
+                </div>
               </PilotFormField>
             </div>
           </PilotCard>
