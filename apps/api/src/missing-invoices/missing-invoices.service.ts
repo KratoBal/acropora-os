@@ -512,7 +512,7 @@ export class MissingInvoicesService {
     } catch {
       throw new BadRequestException("A PDF nem olvasható.");
     }
-    await this.repository.uploadAndPair({
+    const documentId = await this.repository.uploadAndPair({
       bankTransactionId: id,
       fileName: file.originalname,
       content: file.buffer,
@@ -522,6 +522,9 @@ export class MissingInvoicesService {
       payee: payeeFromText(text),
       userId: user.id,
     });
+    // a Jev-javaslat feloldása, mint a jelölt kiválasztásánál: a feltöltés azt
+    // jelenti, hogy egyik jelölt sem volt a jó (acrobot 25880); soha nem dob
+    await this.jev?.resolveOnPair({ bankTransactionId: id, documentId });
     return this.item(id);
   }
 
