@@ -14,6 +14,7 @@ import {
 } from "@acropora/ui";
 import {
   BILLING_DOCUMENT_LIST_PAGE_SIZE,
+  BILLING_DOCUMENT_ORIGINS,
   BILLING_DOCUMENT_STATUS_LABELS,
   BILLING_DOCUMENT_STATUSES,
   BILLING_DOCUMENT_TYPES,
@@ -93,11 +94,18 @@ export function BillingDocumentListPage() {
     ["", ...INVOICE_FORMATS],
     "",
   );
+  // a forrás (acrobot 25812): a mieink, a Számlázz.hu-ból kapott külsők, vagy mind
+  const origin = urlChoice(
+    params,
+    "origin",
+    ["", ...BILLING_DOCUMENT_ORIGINS],
+    "",
+  );
   const page = urlPage(params);
   const appliedSearch = params.get("q") ?? "";
   const [search, setSearch] = useState(appliedSearch);
   const hasFilters = Boolean(
-    appliedSearch || documentType || status || invoiceFormat,
+    appliedSearch || documentType || status || invoiceFormat || origin,
   );
 
   const [data, setData] = useState<BillingDocumentListResponse | null>(null);
@@ -124,8 +132,9 @@ export function BillingDocumentListPage() {
     if (documentType) value.set("documentType", documentType);
     if (status) value.set("status", status);
     if (invoiceFormat) value.set("invoiceFormat", invoiceFormat);
+    if (origin) value.set("origin", origin);
     return value;
-  }, [appliedSearch, documentType, invoiceFormat, page, status]);
+  }, [appliedSearch, documentType, invoiceFormat, origin, page, status]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -163,6 +172,7 @@ export function BillingDocumentListPage() {
       documentType: null,
       status: null,
       invoiceFormat: null,
+      origin: null,
       page: null,
     });
   };
@@ -248,6 +258,17 @@ export function BillingDocumentListPage() {
                 {INVOICE_FORMAT_LABELS[value]}
               </option>
             ))}
+          </PilotSelect>
+          <PilotSelect
+            chevron
+            aria-label="Forrás"
+            value={origin}
+            onChange={(value) => setFilter("origin", value)}
+            className="min-w-[170px] flex-[1_1_180px] [&_select]:h-10"
+          >
+            <option value="">Minden forrás</option>
+            <option value="OWN">Csak a mieink</option>
+            <option value="EXTERNAL">Csak a külsők</option>
           </PilotSelect>
           {hasFilters ? (
             <button

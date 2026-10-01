@@ -128,7 +128,7 @@ function namespaceOf(element: XmlElement): string | null {
   return element.attributes.match(/xmlns\s*=\s*"([^"]*)"/)?.[1] ?? null;
 }
 
-function child(
+export function child(
   element: XmlElement | undefined,
   name: string,
 ): XmlElement | undefined {
@@ -138,7 +138,7 @@ function child(
   return found[0];
 }
 
-function textAt(
+export function textAt(
   element: XmlElement | undefined,
   ...path: string[]
 ): string | null {
