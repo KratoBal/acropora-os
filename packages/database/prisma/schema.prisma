@@ -885,6 +885,7 @@ model User {
   invoicesIssued             Invoice[]                     @relation("InvoiceIssuedBy")
   billingMailDeliveries      BillingDocumentMailDelivery[] @relation("BillingMailInitiatedBy")
   simplePayLinesApproved     SimplePayTransactionLine[]    @relation("SimplePayLineManualApprovedBy")
+  dashboardLayout            UserDashboardLayout?
 
   @@index([role, isActive])
   /// A Restrict ellenorzese MINDEN partner-torlesnel lefut, es index nelkul
@@ -7430,4 +7431,27 @@ model BankTransactionMatch {
 
   @@unique([documentSource, documentId])
   @@index([bankTransactionId])
+}
+
+/// A FELHASZNÁLÓ SAJÁT VEZÉRLŐPULTJA (`docs/dashboard/v1-discovery.md` 3. pont).
+///
+/// A sor CSAK akkor létezik, ha a felhasználó testre szabta a pultját: sor
+/// nélkül a szerepköre ajánlott elrendezése érvényes, így egy ajánlás-változás
+/// mindenkihez eljut, aki nem szabta testre. A "visszaállítás" a sor törlése.
+///
+/// MIÉRT EGY SOR JSON-NAL, ÉS NEM SORONKÉNT EGY WIDGET: az elrendezést mindig
+/// egészben olvassuk és írjuk, egy átrendezés egyetlen atomi írás, a widget-
+/// azonosító pedig kódban élő regiszter-adat (`@acropora/types`
+/// `DASHBOARD_WIDGETS`), nem adatbázis-hivatkozás. A tartalmat a regiszter
+/// minden olvasáskor ÚJRA ellenőrzi: ami már nem jár a felhasználónak, az nem
+/// jelenik meg csak azért, mert el volt mentve.
+model UserDashboardLayout {
+  userId    String   @id
+  /// `[{ widgetId, enabled, order, size }]`, a regiszter szerint validálva.
+  widgets   Json
+  /// Az alak verziója; egy későbbi alak olvasáskor migrálható.
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

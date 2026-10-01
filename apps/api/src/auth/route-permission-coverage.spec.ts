@@ -73,6 +73,12 @@ const CONTROLLERS = [
     nelkul.
   */
   "src/aquariums/aquariums.controller.ts",
+  /*
+    A VEZERLOPULT VEZERLOJE, 2026-10-01-tol: a testreszabhato pult elrendezes-
+    es widget-vegpontjai. Mind az ot utvonal sajat dekoratorral all; a
+    widgetenkenti jogot a szolgaltatas ellenorzi ujra.
+  */
+  "src/dashboard/dashboard.controller.ts",
 ];
 
 const ROUTE = new RegExp(
