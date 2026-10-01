@@ -5,6 +5,7 @@ import {
   type MissingInvoiceCommentInput,
   type MissingInvoiceMatchInput,
   type MissingInvoicePaperOriginalInput,
+  type MissingInvoicePayeeInput,
 } from "@acropora/types";
 import {
   IsBoolean,
@@ -34,6 +35,11 @@ export class MissingInvoiceCategoryDto implements MissingInvoiceCategoryInput {
 
 export class MissingInvoicePaperOriginalDto implements MissingInvoicePaperOriginalInput {
   @IsBoolean() marked!: boolean;
+}
+
+export class MissingInvoicePayeeDto implements MissingInvoicePayeeInput {
+  @IsIn(["COMPANY", "NOT_COMPANY"])
+  payee!: "COMPANY" | "NOT_COMPANY";
 }
 
 /** A feltöltés fajtája: számla vagy biztosítási díjértesítő (acrobot 25265 c). */

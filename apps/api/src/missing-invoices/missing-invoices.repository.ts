@@ -274,6 +274,7 @@ export class MissingInvoicesRepository {
           kind: true,
           importResult: true,
           payeeCheck: true,
+          payeeMarkedAt: true,
           origin: true,
           uploadKind: true,
           fileName: true,
@@ -426,6 +427,7 @@ export class MissingInvoicesRepository {
               ? "PROFORMA"
               : "INVOICE",
         payee: (document.payeeCheck as Payee | null) ?? "UNKNOWN",
+        payeeMarked: document.payeeMarkedAt !== null,
         hasOriginal: true,
       });
       keys.set(
@@ -588,6 +590,58 @@ export class MissingInvoicesRepository {
     return this.database.incomingSupplierDocument.findMany({
       where: { id: { in: [...ids] }, payeeCheck: null },
       select: { id: true, content: true, fileName: true },
+    });
+  }
+
+  /**
+   * A VEVŐ KÉZI JELÖLÉSE, AUDITTAL (acrobot 25633). Csak az írható, aminek a
+   * vevője nem ellenőrizhető (UNKNOWN vagy még nem számolt), vagy amit már
+   * kézzel jelöltek; a szövegből olvasott COMPANY vagy NOT_COMPANY nem. A
+   * feltétel a frissítés WHERE-jében áll, tehát egy közben beolvasott érték sem
+   * íródik felül. Visszaadja, hány sort írt (0: nem jelölhető).
+   */
+  async markPayee(input: {
+    documentIds: readonly string[];
+    payee: "COMPANY" | "NOT_COMPANY";
+    userId: string;
+    bankTransactionId: string;
+  }): Promise<number> {
+    return this.database.$transaction(async (transaction) => {
+      const before = await transaction.incomingSupplierDocument.findMany({
+        where: { id: { in: [...input.documentIds] } },
+        select: { id: true, payeeCheck: true },
+      });
+      const { count } = await transaction.incomingSupplierDocument.updateMany({
+        where: {
+          id: { in: [...input.documentIds] },
+          OR: [
+            { payeeCheck: null },
+            { payeeCheck: "UNKNOWN" },
+            { payeeMarkedAt: { not: null } },
+          ],
+        },
+        data: {
+          payeeCheck: input.payee,
+          payeeMarkedAt: new Date(),
+          payeeMarkedByUserId: input.userId,
+        },
+      });
+      if (count > 0)
+        await transaction.auditLog.create({
+          data: {
+            userId: input.userId,
+            action: "missing-invoices.payee-marked",
+            entityType: "IncomingSupplierDocument",
+            entityId: before[0]?.id ?? null,
+            metadata: {
+              bankTransactionId: input.bankTransactionId,
+              documentIds: before.map((row) => row.id),
+              from: before.map((row) => row.payeeCheck),
+              to: input.payee,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      return count;
     });
   }
 
