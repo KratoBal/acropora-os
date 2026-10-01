@@ -392,7 +392,15 @@ export class MissingInvoicesRepository {
             invoiceNumber: string | null;
             supplierTaxNumber: string | null;
             bankReference?: string | null;
+            cardPayment?: {
+              amount: string;
+              currency: string;
+              partner: string;
+            } | null;
           } | null);
+      // a kártyás fizetéshez illesztett NAV nélküli számla: a fizetés összege,
+      // devizája és partnere a bruttó, a pénznem és a szállító (acrobot 25666)
+      const card = reading?.cardPayment ?? null;
       const date =
         result?.invoiceDate ??
         (upload
@@ -427,9 +435,11 @@ export class MissingInvoicesRepository {
         gross:
           foreign && result?.netTotal != null
             ? new Prisma.Decimal(result.netTotal)
-            : null,
-        currency: result?.currency ?? "HUF",
-        supplierName: result?.supplier.name ?? "",
+            : card
+              ? new Prisma.Decimal(card.amount)
+              : null,
+        currency: result?.currency ?? card?.currency ?? "HUF",
+        supplierName: result?.supplier.name ?? card?.partner ?? "",
         supplierAccounts:
           accountsByTaxBase.get(
             taxBase(result?.supplier.vatId ?? reading?.supplierTaxNumber),

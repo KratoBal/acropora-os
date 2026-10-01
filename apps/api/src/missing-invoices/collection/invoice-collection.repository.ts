@@ -1,10 +1,12 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { Prisma, prisma, type SyncRunTrigger } from "@acropora/database";
 
+import { originalAmountOf } from "../otp-statement.parser.js";
 import {
   type InvoiceCollectionSource,
   unmatchedRetryDue,
 } from "./invoice-collection.config.js";
+import type { CardDebit } from "./invoice-text.js";
 
 const ACTIVE_KEY = "ACTIVE";
 /** Egy futás, ami ennyi ideje nem frissült, elakadt: a következő átveszi. */
@@ -141,6 +143,40 @@ export class InvoiceCollectionRepository {
       select: { narrative: true },
     });
     return rows.map((row) => row.narrative);
+  }
+
+  /**
+   * A kártyás terhelések: a NAV nélküli (külföldi) előfizetés számláját ez köti
+   * a fizetéshez, ha a közlemény nem nevezi meg (`cardPaymentMatch`).
+   */
+  async cardDebits(): Promise<CardDebit[]> {
+    const rows = await this.database.bankTransaction.findMany({
+      where: {
+        direction: "DEBIT",
+        transactionType: { contains: "KÁRTY", mode: "insensitive" },
+        counterpartyName: { not: null },
+      },
+      select: {
+        amount: true,
+        currency: true,
+        counterpartyName: true,
+        narrative: true,
+      },
+    });
+    return rows.map((row) => {
+      const original = originalAmountOf(row.narrative);
+      return {
+        counterpartyName: row.counterpartyName!,
+        amount: row.amount.toString(),
+        currency: row.currency,
+        original: original
+          ? {
+              amount: original.amount.toString(),
+              currency: original.currency,
+            }
+          : null,
+      };
+    });
   }
 
   /** Van-e már ilyen tartalmú dokumentum, bármilyen úton érkezett. */
