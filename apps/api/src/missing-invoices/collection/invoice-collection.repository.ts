@@ -83,7 +83,9 @@ export class InvoiceCollectionRepository {
         .map((row) => row.externalId),
     );
     return new Set(
-      rows.map((row) => row.externalId).filter((id) => !retry.has(id)),
+      rows
+        .map((row) => row.externalId)
+        .filter((id) => id !== "" || !retry.has(id)),
     );
   }
 
@@ -139,7 +141,7 @@ export class InvoiceCollectionRepository {
       where: { source_externalId_fileName: key },
       select: { verdict: true },
     });
-    if (existing?.verdict === "STORED") return;
+    if (existing?.verdict === "STORED" && sha256 === "never") return;
     await this.database.invoiceCollectionItem.upsert({
       where: {
         source_externalId_fileName: { source, externalId, fileName },
@@ -180,23 +182,11 @@ export class InvoiceCollectionRepository {
       });
       // UPSERT: egy korábban UNMATCHED fájl újraolvasva ugyanazt a kulcsot kapja
       // (forrás, azonosító, fájlnév); a sora most STORED lesz, a dokumentumra mutat.
-      await transaction.invoiceCollectionItem.upsert({
-        where: {
-          source_externalId_fileName: {
-            source: input.source,
-            externalId: input.externalId,
-            fileName: input.fileName,
-          },
-        },
-        create: {
+      await transaction.invoiceCollectionItem.create({
+        data: {
           source: input.source,
           externalId: input.externalId,
           fileName: input.fileName,
-          verdict: "STORED",
-          sha256: input.sha256,
-          documentId: document.id,
-        },
-        update: {
           verdict: "STORED",
           sha256: input.sha256,
           documentId: document.id,

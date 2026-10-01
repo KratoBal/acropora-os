@@ -1,0 +1,7 @@
+# Kalibracio: szamla-begyujtes (fix/invoice-collection-retry-unmatched), EGY kor, harom rontas:
+# R1 seen() minden sort latottnak vesz; R2 store() create-tel (upsert helyett);
+# R3 record() a STORED-or nelkul. A harom teszt egymastol fuggetlen.
+# Joslat: pontosan ez a harom piros; a regi "stores outside..." es "one run at a time" zold.
+not ok 2 - a message with an UNMATCHED file is not seen; a final one is
+not ok 3 - a re-read UNMATCHED file is stored over its own row
+not ok 4 - a stored file read again as DUPLICATE keeps its STORED row
