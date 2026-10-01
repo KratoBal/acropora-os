@@ -1,0 +1,256 @@
+{
+  "schema": "product-enrichment-benchmark@1",
+  "synthetic": true,
+  "description": "SYNTHETIC FIXTURE. Invented products with obviously fake names, invented values and placeholder source references. It exists only to test the benchmark harness itself. It is not Acropora data and its numbers say nothing about Jev. The real 30-50 product dataset is kept outside the repository.",
+  "products": [
+    {
+      "id": "synthetic-1-fictional-flowmaster-q0",
+      "sources": [
+        "synthetic://manufacturer/fictional-flowmaster-q0/datasheet#p2",
+        "synthetic://supplier/fictional-flowmaster-q0"
+      ],
+      "gold": {
+        "ean": { "status": "VERIFIED", "value": "4006381333931" },
+        "flowRate": { "status": "VERIFIED", "value": "3000 l/h" },
+        "power": { "status": "VERIFIED", "value": "24 W" },
+        "voltage": { "status": "MISSING" }
+      },
+      "candidate": {
+        "ean": {
+          "status": "VERIFIED",
+          "value": "4006381333931",
+          "sourceType": "MANUFACTURER_DOCUMENT",
+          "sourceRef": "synthetic://manufacturer/fictional-flowmaster-q0/datasheet#p2",
+          "retrievedAt": "2026-10-01T09:00:00Z",
+          "confidence": 1
+        },
+        "flowRate": {
+          "status": "VERIFIED",
+          "value": "3 m³/h",
+          "sourceType": "SUPPLIER_PAGE",
+          "sourceRef": "synthetic://supplier/fictional-flowmaster-q0",
+          "retrievedAt": "2026-10-01T09:00:00Z",
+          "confidence": 0.95
+        },
+        "power": {
+          "status": "VERIFIED",
+          "value": "24 W",
+          "sourceType": "MANUFACTURER_DOCUMENT",
+          "sourceRef": "synthetic://manufacturer/fictional-flowmaster-q0/datasheet#p2",
+          "retrievedAt": "2026-10-01T09:00:00Z",
+          "confidence": 0.9
+        },
+        "voltage": { "status": "MISSING", "value": null }
+      },
+      "human": {
+        "ean": "ACCEPTED",
+        "flowRate": "ACCEPTED",
+        "power": "ACCEPTED"
+      },
+      "copyQuality": 4
+    },
+    {
+      "id": "synthetic-2-imaginary-reef-salt-placeholder",
+      "sources": [
+        "synthetic://manufacturer/imaginary-reef-salt/page",
+        "synthetic://supplier/imaginary-reef-salt"
+      ],
+      "gold": {
+        "weight": {
+          "status": "CONFLICTING_SOURCES",
+          "supportedValues": ["20 kg", "25 kg"]
+        },
+        "ean": { "status": "VERIFIED", "value": "5901234123457" }
+      },
+      "candidate": {
+        "weight": {
+          "status": "CONFLICTING_SOURCES",
+          "value": null,
+          "sourceType": "MANUFACTURER_PAGE",
+          "sourceRef": "synthetic://manufacturer/imaginary-reef-salt/page",
+          "retrievedAt": "2026-10-01T09:05:00Z",
+          "confidence": 0.9,
+          "conflicts": [
+            {
+              "value": "20000 g",
+              "sources": [
+                {
+                  "value": "20 kg",
+                  "sourceType": "MANUFACTURER_PAGE",
+                  "sourceRef": "synthetic://manufacturer/imaginary-reef-salt/page",
+                  "retrievedAt": "2026-10-01T09:05:00Z"
+                }
+              ]
+            },
+            {
+              "value": "25000 g",
+              "sources": [
+                {
+                  "value": "25 kg",
+                  "sourceType": "SUPPLIER_PAGE",
+                  "sourceRef": "synthetic://supplier/imaginary-reef-salt",
+                  "retrievedAt": "2026-10-01T09:05:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "ean": {
+          "status": "VERIFIED",
+          "value": "5901234123457",
+          "sourceType": "MANUFACTURER_PAGE",
+          "sourceRef": "synthetic://manufacturer/imaginary-reef-salt/page",
+          "retrievedAt": "2026-10-01T09:05:00Z",
+          "confidence": 1
+        }
+      },
+      "human": { "ean": "ACCEPTED" },
+      "copyQuality": 5
+    },
+    {
+      "id": "synthetic-3-nonexistent-lumen-bar-z",
+      "sources": ["synthetic://manufacturer/nonexistent-lumen-bar-z/page"],
+      "gold": {
+        "power": { "status": "VERIFIED", "value": "60 W" },
+        "ean": { "status": "MISSING" },
+        "manufacturerSku": { "status": "VERIFIED", "value": "LZ-0" },
+        "voltage": {
+          "status": "CONFLICTING_SOURCES",
+          "supportedValues": ["12 V", "24 V"]
+        }
+      },
+      "candidate": {
+        "power": {
+          "status": "VERIFIED",
+          "value": "60 W",
+          "sourceType": "MANUFACTURER_PAGE",
+          "sourceRef": "synthetic://manufacturer/nonexistent-lumen-bar-z/page",
+          "retrievedAt": "2026-10-01T09:10:00Z",
+          "confidence": 0.92
+        },
+        "ean": {
+          "status": "VERIFIED",
+          "value": "96385074",
+          "sourceType": "JEV_PROPOSAL",
+          "sourceRef": null,
+          "retrievedAt": null,
+          "confidence": 0.6
+        },
+        "manufacturerSku": {
+          "status": "VERIFIED",
+          "value": "lz-0",
+          "sourceType": "MANUFACTURER_PAGE",
+          "sourceRef": "synthetic://manufacturer/nonexistent-lumen-bar-z/page",
+          "retrievedAt": "2026-10-01T09:10:00Z"
+        },
+        "voltage": {
+          "status": "VERIFIED",
+          "value": "12 V",
+          "sourceType": "MANUFACTURER_PAGE",
+          "sourceRef": "synthetic://manufacturer/nonexistent-lumen-bar-z/page",
+          "retrievedAt": "2026-10-01T09:10:00Z",
+          "confidence": 0.8
+        }
+      },
+      "human": { "ean": "REJECTED", "power": "EDITED" },
+      "copyQuality": 5
+    },
+    {
+      "id": "synthetic-4-placeholder-trace-additive-x",
+      "sources": ["synthetic://supplier/placeholder-trace-additive-x"],
+      "gold": {
+        "volume": { "status": "VERIFIED", "value": "500 ml" },
+        "dosingAmount": { "status": "MISSING" },
+        "composition": { "status": "MISSING" },
+        "ean": { "status": "VERIFIED", "value": "40123455" }
+      },
+      "candidate": {
+        "volume": {
+          "status": "VERIFIED",
+          "value": "0,5 l",
+          "sourceType": "SUPPLIER_PAGE",
+          "sourceRef": "synthetic://supplier/placeholder-trace-additive-x",
+          "retrievedAt": "2026-10-01T09:15:00Z",
+          "confidence": 0.88
+        },
+        "dosingAmount": { "status": "UNVERIFIED", "value": null },
+        "seoTitle": {
+          "status": "SUGGESTED",
+          "value": "Placeholder Trace Additive X 500 ml",
+          "sourceType": "JEV_PROPOSAL",
+          "sourceRef": "synthetic://jev/decision-run/4",
+          "retrievedAt": "2026-10-01T09:15:00Z",
+          "confidence": 0.7
+        },
+        "ean": {
+          "status": "CONFLICTING_SOURCES",
+          "value": null,
+          "sourceType": "SUPPLIER_PAGE",
+          "sourceRef": "synthetic://supplier/placeholder-trace-additive-x",
+          "retrievedAt": "2026-10-01T09:15:00Z",
+          "confidence": 0.5,
+          "conflicts": [
+            {
+              "value": "00000040123455",
+              "sources": [
+                {
+                  "value": "40123455",
+                  "sourceType": "SUPPLIER_PAGE",
+                  "sourceRef": "synthetic://supplier/placeholder-trace-additive-x",
+                  "retrievedAt": "2026-10-01T09:15:00Z"
+                }
+              ]
+            },
+            {
+              "value": "00000096385074",
+              "sources": [
+                {
+                  "value": "96385074",
+                  "sourceType": "SUPPLIER_PAGE",
+                  "retrievedAt": "2026-10-01T09:15:00Z"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "synthetic-5-hypothetical-tank-light-mount",
+      "sources": [
+        "synthetic://manufacturer/hypothetical-tank-light-mount/page"
+      ],
+      "gold": {
+        "compatibility": { "status": "MISSING" },
+        "featureBullets": { "status": "VERIFIED" }
+      },
+      "candidate": {
+        "compatibility": {
+          "status": "SUGGESTED",
+          "value": "Compatible with the Imaginary Tank 60 rim",
+          "sourceType": "JEV_PROPOSAL",
+          "sourceRef": "synthetic://jev/decision-run/5",
+          "retrievedAt": "2026-10-01T09:20:00Z",
+          "confidence": 0.7
+        },
+        "featureBullets": {
+          "status": "SUGGESTED",
+          "value": "Placeholder mount for a hypothetical light bar",
+          "sourceType": "JEV_PROPOSAL",
+          "sourceRef": "synthetic://jev/decision-run/5",
+          "retrievedAt": "2026-10-01T09:20:00Z",
+          "confidence": 0.8
+        },
+        "seoTitle": {
+          "status": "SUGGESTED",
+          "value": "Hypothetical Tank Light Mount",
+          "sourceType": "JEV_PROPOSAL",
+          "sourceRef": "synthetic://jev/decision-run/5",
+          "retrievedAt": "2026-10-01T09:20:00Z",
+          "confidence": 0.8
+        }
+      },
+      "copyQuality": 5
+    }
+  ]
+}
