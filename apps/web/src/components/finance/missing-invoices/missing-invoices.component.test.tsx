@@ -848,17 +848,40 @@ describe("MissingInvoicesDrawer", () => {
     ).toHaveTextContent("Ha kétszer fizettük, kérd vissza az egyiket");
   });
 
-  it("no paper-original question where there is no pairing, or the original is not the gap", () => {
-    render(
-      <MissingInvoicesDrawer
-        {...base()}
-        onPaperOriginal={vi.fn()}
-        row={charge({ state: "NO_INVOICE" })}
-      />,
-    );
-    expect(
-      screen.queryByRole("checkbox", { name: "Az eredeti papíron megvan" }),
-    ).toBeNull();
+  it("the paper-original question without any digital invoice too, but not on a wrong document (acrobot 25745)", () => {
+    // Aqua-Light: külföldi számla csak papíron, NAV-sor nincs, tehát nincs párosítás
+    for (const state of ["NO_INVOICE", "NOT_MATCHED"] as const) {
+      const { unmount } = render(
+        <MissingInvoicesDrawer
+          {...base()}
+          onPaperOriginal={vi.fn()}
+          row={charge({ state })}
+        />,
+      );
+      expect(
+        screen.getByRole("checkbox", { name: "Az eredeti papíron megvan" }),
+      ).toBeTruthy();
+      unmount();
+    }
+    // a hibás dokumentum (díjbekérő, nem a cégre szóló) és a számla nélküli
+    // tétel gondja nem az, hogy az eredeti hol van
+    for (const state of [
+      "NOT_COMPANY",
+      "PROFORMA_ONLY",
+      "NO_INVOICE_NEEDED",
+    ] as const) {
+      const { unmount } = render(
+        <MissingInvoicesDrawer
+          {...base()}
+          onPaperOriginal={vi.fn()}
+          row={charge({ state })}
+        />,
+      );
+      expect(
+        screen.queryByRole("checkbox", { name: "Az eredeti papíron megvan" }),
+      ).toBeNull();
+      unmount();
+    }
   });
 
   it("no paper-original question on a pairing whose original is already there", () => {

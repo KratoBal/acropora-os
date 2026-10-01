@@ -870,6 +870,21 @@ export function matchMonth(input: {
         state: "FOUND",
         reason: `${outcome.reason}; az eredeti papíron megvan`,
       });
+    // DIGITÁLIS SZÁMLA NÉLKÜL (acrobot 25745, Balázs: az Aqua-Light külföldi
+    // számlája csak papíron van meg; NAV-sor nincs, tehát a tétel nem
+    // párosodhatott): a jelölés a hiánylistáról is leveszi, és a könyvelői
+    // csomag „papíron megvan”-ként sorolja
+    else if (
+      outcome?.state === "NOT_MATCHED" ||
+      outcome?.state === "NO_INVOICE"
+    )
+      outcomes.set(id, {
+        ...outcome,
+        state: "FOUND",
+        documents: [],
+        // az eredeti indok marad (acrobot 25762): látszik, hogy volt-e jelölt
+        reason: `${outcome.reason}; nincs digitális számla, az eredeti papíron megvan`,
+      });
   }
   markDoublePaid(outcomes);
   return outcomes;

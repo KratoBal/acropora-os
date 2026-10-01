@@ -1096,3 +1096,68 @@ describe("an invoice the collector tied to its card payment(s) (acrobot 25691, K
     assert.notDeepEqual(manual.get(b.id)?.documents, [invoice]);
   });
 });
+
+describe("a paper original without any digital invoice (acrobot 25745, Aqua-Light 2026-09-07)", () => {
+  const aqua = () =>
+    debit({
+      bookingDate: "2026-09-07",
+      amount: D(297458),
+      original: { amount: D("810.69"), currency: "EUR" },
+      counterpartyName: "AQUA-LIGHT Gmbh",
+      category: "FOREIGN_SUPPLIER",
+    });
+  const withPaper = (
+    debits: MatchableDebit[],
+    documents: CandidateDocument[],
+    paper: string[],
+  ) =>
+    matchMonth({
+      debits,
+      documents,
+      manual: new Map(),
+      paperOriginals: new Set(paper),
+    });
+
+  it("marked, a payment with no invoice at all, or none that pairs, is found on paper", () => {
+    // nincs dokumentum: NO_INVOICE
+    const a = aqua();
+    const none = withPaper([a], [], [a.id]).get(a.id)!;
+    assert.deepEqual([none.state, none.documents], ["FOUND", []]);
+    assert.equal(
+      none.reason,
+      "a partnertől nincs számla a forrásokban; nincs digitális számla, az eredeti papíron megvan",
+    );
+    // a partnertől van más számla, de ez a fizetés nem párosodik: NOT_MATCHED
+    const b = aqua();
+    const other = doc({
+      number: "AL-1",
+      gross: D(5),
+      currency: "EUR",
+      supplierName: "AQUA-LIGHT GmbH",
+    });
+    const unpaired = withPaper([b], [other], [b.id]).get(b.id)!;
+    assert.deepEqual([unpaired.state, unpaired.documents], ["FOUND", []]);
+    // az indokból látszik, hogy volt jelölt digitális számla (acrobot 25762)
+    assert.match(
+      unpaired.reason,
+      /^a partnertől van számla, de ez a fizetés nem párosodott; nincs digitális számla/,
+    );
+  });
+
+  it("unmarked it stays missing, and a wrong document (proforma, not the company's) is not resolved by paper", () => {
+    const a = aqua();
+    assert.equal(withPaper([a], [], []).get(a.id)?.state, "NO_INVOICE");
+    const b = aqua();
+    const proforma = doc({
+      number: "PF-1",
+      gross: D("810.69"),
+      currency: "EUR",
+      supplierName: "AQUA-LIGHT GmbH",
+      kind: "PROFORMA",
+    });
+    assert.equal(
+      withPaper([b], [proforma], [b.id]).get(b.id)?.state,
+      "PROFORMA_ONLY",
+    );
+  });
+});
