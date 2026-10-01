@@ -13,7 +13,10 @@ import type {
   CollectedDocumentInput,
   InvoiceCollectionRepository,
 } from "./invoice-collection.repository.js";
-import { unmatchedRetryDue } from "./invoice-collection.config.js";
+import {
+  INVOICE_COLLECTION_RULES_VERSION,
+  unmatchedRetryDue,
+} from "./invoice-collection.config.js";
 import type { CardDebit } from "./invoice-text.js";
 import {
   InvoiceCollectionService,
@@ -56,10 +59,13 @@ function setup(input: {
   debits?: string[];
   cardDebits?: CardDebit[];
   retryDue?: boolean;
+  /** a fájlok korábbi ítélete, a száraz újraértékelés ehhez méri */
+  before?: string | null;
 }) {
   const stored: CollectedDocumentInput[] = [];
   const recorded: string[] = [];
   const fetched: string[] = [];
+  const started: string[] = [];
   const finished: (string | null)[] = [];
   const failedFlags: boolean[] = [];
   const seenFlags: boolean[] = [];
@@ -75,6 +81,7 @@ function setup(input: {
       return new Set(ids.filter((id) => (input.seen ?? []).includes(id)));
     },
     unmatchedRetryDue: async () => input.retryDue ?? true,
+    verdictOf: async () => input.before ?? null,
     hasContent: async (sha: string) => knownShas.has(sha),
     navNumbers: async (base: string) => input.nav?.[base] ?? [],
     debitNarratives: async () => input.debits ?? [],
@@ -89,7 +96,10 @@ function setup(input: {
       stored.push(document);
       return `doc-${stored.length}`;
     },
-    startRun: async () => "run-1",
+    startRun: async () => {
+      started.push("run-1");
+      return "run-1";
+    },
     finishRun: async (
       _id: string,
       _counts: unknown,
@@ -138,6 +148,7 @@ function setup(input: {
     ),
     stored,
     recorded,
+    started,
     fetched,
     finished,
     failedFlags,
@@ -522,6 +533,54 @@ describe("InvoiceCollectionService", () => {
     }
   });
 
+  it("re-evaluates dry: lists what would change, and writes nothing (Hetzner, seen UNMATCHED in the morning)", async () => {
+    const invoice = await pdf([
+      "Hetzner Online GmbH Industriestr. 25 91710 Gunzenhausen Germany",
+      "Acropora Kft.",
+      "Invoice no.: 089001181580",
+      "Total | 46.64 EUR",
+    ]);
+    const { collection, stored, recorded, started, seenFlags } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          { fileName: "Hetzner_2026-09-05_089001181580.pdf", buffer: invoice },
+        ],
+      },
+      cardDebits: [
+        {
+          id: "bt-hetzner",
+          bookingDate: "2026-09-09",
+          counterpartyName: "HETZNER ONLINE GMBH",
+          amount: "17113",
+          currency: "HUF",
+          original: { amount: "46.64", currency: "EUR" },
+        },
+      ],
+      retryDue: false,
+      before: "UNMATCHED",
+    });
+    const { changes } = await collection.reevaluate(false);
+    assert.deepEqual(
+      changes.map((c) => [c.fileName, c.before, c.after]),
+      [["Hetzner_2026-09-05_089001181580.pdf", "UNMATCHED", "STORED"]],
+    );
+    assert.match(changes[0]!.detail ?? "", /46\.64 EUR, HETZNER/);
+    // száraz: sem futás, sem ítélet, sem dokumentum; és az újraolvasás kényszerített
+    assert.deepEqual([stored, recorded, started], [[], [], []]);
+    assert.deepEqual(seenFlags, [true]);
+  });
+
+  it("re-evaluates for real with apply: an ordinary run that re-reads although it is not due", async () => {
+    const { collection, started, seenFlags } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {},
+      retryDue: false,
+    });
+    await collection.reevaluate(true);
+    assert.deepEqual([started, seenFlags], [["run-1"], [true]]);
+  });
+
   it("does not run while switched off", async () => {
     const { collection } = setup({
       environment: {
@@ -558,5 +617,15 @@ describe("unmatchedRetryDue", () => {
     const now = at("2026-10-01T09:00:00Z");
     assert.equal(unmatchedRetryDue(last, 0, now), false);
     assert.equal(unmatchedRetryDue(last, 1, now), true);
+  });
+  it("a run with other rules (or none recorded) re-reads once the code's rules changed (acrobot 25750)", () => {
+    const last = at("2026-10-01T08:00:00Z");
+    const now = at("2026-10-01T09:00:00Z");
+    assert.equal(
+      unmatchedRetryDue(last, 0, now, INVOICE_COLLECTION_RULES_VERSION),
+      false,
+    );
+    assert.equal(unmatchedRetryDue(last, 0, now, "2026-09-30.1"), true);
+    assert.equal(unmatchedRetryDue(last, 0, now, null), true);
   });
 });

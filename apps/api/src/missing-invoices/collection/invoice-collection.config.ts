@@ -189,15 +189,31 @@ const BUDAPEST_DAY = new Intl.DateTimeFormat("en-CA", {
 });
 
 /**
+ * A BEGYŰJTŐ SZABÁLYAINAK VÁLTOZATA. Minden olyan változásnál lépjen, ami egy
+ * már látott levél ítéletét megváltoztathatja (acrobot 25750: a Hetzner- és a
+ * Kia-szabály a kiadás után csak az új levelekre hatott, a reggel látott két
+ * Hetzner-számla UNMATCHED maradt). A futás eltárolja; ha a kódé más, az első
+ * futás az UNMATCHED leveleket újraolvassa.
+ *
+ *   2026-10-01.1  fizetési emlékeztető, IBAN nem hivatkozás (#1342)
+ *   2026-10-01.2  NAV nélküli számla egy kártyás fizetéshez (#1344)
+ *   2026-10-01.3  kártyás fizetés-halmaz a végösszeghez (#1347)
+ */
+export const INVOICE_COLLECTION_RULES_VERSION = "2026-10-01.3";
+
+/**
  * Az UNMATCHED újraolvasás döntése: nincs még teljes futás, az utolsó teljes
- * futás egy korábbi budapesti napon indult, vagy azóta új terhelés jött.
+ * futás más szabály-változattal vagy egy korábbi budapesti napon indult, vagy
+ * azóta új terhelés jött.
  */
 export function unmatchedRetryDue(
   lastCompleteStartedAt: Date | null,
   newDebitsSince: number,
   now: Date,
+  lastRulesVersion: string | null = INVOICE_COLLECTION_RULES_VERSION,
 ): boolean {
   if (!lastCompleteStartedAt) return true;
+  if (lastRulesVersion !== INVOICE_COLLECTION_RULES_VERSION) return true;
   if (BUDAPEST_DAY.format(lastCompleteStartedAt) !== BUDAPEST_DAY.format(now))
     return true;
   return newDebitsSince > 0;
