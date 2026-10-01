@@ -84,7 +84,9 @@ export class InvoiceCollectionRepository {
     });
     const retry = new Set(
       rows
-        .filter((row) => retryUnmatched && row.verdict === "UNMATCHED")
+        .filter(
+          (row) => (retryUnmatched || true) && row.verdict === "UNMATCHED",
+        )
         .map((row) => row.externalId),
     );
     return new Set(

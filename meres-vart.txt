@@ -1,0 +1,5 @@
+# Kalibracio: szamla-begyujtes (fix/invoice-collection-paced-resume), EGY rontas:
+# P10 seen() a retryUnmatched-et figyelmen kivul hagyja (mindig ujraolvas).
+# Joslat: pontosan a "a message with an UNMATCHED file..." piros (a false-ag allitasa);
+# a tobbi negy zold.
+not ok 2 - a message with an UNMATCHED file is not seen; a final one is
