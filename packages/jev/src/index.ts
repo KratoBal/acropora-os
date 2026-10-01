@@ -120,7 +120,9 @@ export {
   pairExposure,
   pairResolution,
   pairSuggestionEnabled,
+  pairSuggestionMode,
   type PairExposure,
+  type PairMode,
   type PairResolution,
 } from "./missing-invoice-pair-policy.js";
 export {

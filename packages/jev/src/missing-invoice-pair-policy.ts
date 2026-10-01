@@ -6,7 +6,8 @@
  * SHOWN (DEV 25/48, HOLDOUT 18/27, mind nev-elteres fajta).
  *
  *   LATHATO csak ha:   a valasztas egy jelolt (nem NONE), ES a bizonyossag
- *                      >= 0,90, ES a terheles nem a 10%-os kontrollba esik
+ *                      >= 0,90, ES a terheles nem a 10%-os kontrollba esik,
+ *                      ES a kapcsolo `live` (nem `shadow`)
  *   minden mas:        HIDDEN
  *   soha:              automatikus parositas -- az ember parosit, a mai kezi uton
  */
@@ -27,9 +28,22 @@ export const MISSING_INVOICE_PAIR_POLICY = {
 
 export const PAIR_NONE_KEY = "NONE";
 
-/** A kapcsolo: CSAK a kimondott `live` ertekre fut; minden mas KI. */
+export type PairMode = "off" | "shadow" | "live";
+
+/**
+ * A kapcsolo. `live`: fut es mutat. `shadow` (acrobot 25821): fut es rogzit, de
+ * SOHA nem mutat; a kezi parositas feloldja (SHADOW_MATCH / SHADOW_MISMATCH),
+ * tehat a friss HOLDOUT magatol gyulik, es a cimke az ember sajat dontese. Minden
+ * mas ertek: KI.
+ */
+export function pairSuggestionMode(value: string | undefined): PairMode {
+  const v = value?.trim();
+  return v === "live" ? "live" : v === "shadow" ? "shadow" : "off";
+}
+
+/** Fut-e egyaltalan (`live` vagy `shadow`). */
 export function pairSuggestionEnabled(value: string | undefined): boolean {
-  return value?.trim() === "live";
+  return pairSuggestionMode(value) !== "off";
 }
 
 export type PairExposure = "HIDDEN" | "SHOWN";
@@ -42,7 +56,10 @@ export function pairExposure(input: {
   readonly choice: string | null;
   readonly confidence: number | null;
   readonly bankTransactionId: string;
+  /** `shadow` modban minden futas rejtett. */
+  readonly mode: PairMode;
 }): PairExposure {
+  if (input.mode !== "live") return "HIDDEN";
   const eligible =
     input.choice !== null &&
     input.choice !== PAIR_NONE_KEY &&

@@ -265,6 +265,20 @@ describe("LetterClassJevService: a hivas", () => {
     assert.equal(p.hivasok.length, 1);
   });
 
+  it("a dijbekero nem megy a Jevhez: nincs hivas, nincs futas (acrobot 25840)", async () => {
+    const p = szolgaltato(valasz("BEJOVO_SZAMLA", 0.83));
+    const t = tarolo();
+    const { s } = szolgaltatas({ fetch: p.fetch, repo: t.repo });
+    assert.equal(
+      await s.classify(
+        level(["CONTRACT/PROFORMA-INVOICE", "number: | \u0420I-WR26-0104"]),
+      ),
+      null,
+    );
+    assert.equal(p.hivasok.length, 0);
+    assert.equal(t.sorok.length, 0);
+  });
+
   it("soha nem dob: az adatbazis hibaja is `null`", async () => {
     const p = szolgaltato(valasz("BEJOVO_SZAMLA", 0.93));
     const { s } = szolgaltatas({
