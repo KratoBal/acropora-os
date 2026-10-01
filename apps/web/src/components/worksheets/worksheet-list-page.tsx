@@ -37,15 +37,15 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import {
   formatDateTime,
   worksheetLabelOrDraft,
-  worksheetStatusLabel,
-  worksheetStatusTone,
+  worksheetDisplayLabel,
+  worksheetDisplayTone,
 } from "./worksheet-labels";
 
 const TABS = [
   { key: "all", label: "Összes" },
-  { key: "DRAFT", label: "Piszkozat" },
-  { key: "AWAITING_SIGNATURE", label: "Aláírásra vár" },
-  { key: "SIGNED", label: "Aláírva" },
+  { key: "DRAFT", label: "Új és folyamatban" },
+  { key: "AWAITING_SIGNATURE", label: "Elkészült" },
+  { key: "SIGNED", label: "Lezárva" },
   { key: "REJECTED", label: "Elutasítva" },
 ];
 
@@ -226,21 +226,21 @@ export function WorksheetListPage() {
       key: "DRAFT",
       icon: "edit",
       tone: "purple",
-      label: "Szerkesztés alatt",
+      label: "Új és folyamatban",
       count: counts?.DRAFT ?? null,
     },
     {
       key: "AWAITING_SIGNATURE",
       icon: "clock",
       tone: "amber",
-      label: "Aláírásra vár",
+      label: "Elkészült",
       count: counts?.AWAITING_SIGNATURE ?? null,
     },
     {
       key: "SIGNED",
       icon: "checkCircle",
       tone: "green",
-      label: "Aláírt munkalap",
+      label: "Lezárva",
       count: counts?.SIGNED ?? null,
     },
   ];
@@ -441,9 +441,15 @@ export function WorksheetListPage() {
                       </td>
                       <td className={sv.tableCell}>
                         <ServiceStatusBadge
-                          tone={worksheetStatusTone(worksheet.status)}
+                          tone={worksheetDisplayTone(
+                            worksheet.status,
+                            worksheet.lineCount ?? 0,
+                          )}
                         >
-                          {worksheetStatusLabel[worksheet.status]}
+                          {worksheetDisplayLabel(
+                            worksheet.status,
+                            worksheet.lineCount ?? 0,
+                          )}
                         </ServiceStatusBadge>
                       </td>
                       {/* A DESIGN ITT "Arazasra var"-t mutat a meg nem arazott

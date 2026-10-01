@@ -210,7 +210,10 @@ function ManagerTiles({
     },
     {
       href: "/szerviz/munkalapok",
-      label: "Aláírásra vár",
+      // A munkalap allapot-nevei 2026-10-01 ota: Uj, Folyamatban, Elkeszult,
+      // Lezarva (acrobot 25724). A szam ugyanaz (AWAITING_SIGNATURE), csak a
+      // neve koveti a listat -- kulonben a csempe es a ful mast mondana.
+      label: "Elkészült munkalap",
       value: data.worksheetsWaitingForSignature,
       icon: "clipboard",
       color: "blue",
