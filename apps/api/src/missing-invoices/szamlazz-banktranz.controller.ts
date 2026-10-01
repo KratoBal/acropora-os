@@ -17,12 +17,12 @@ import { SzamlazzBanktranzService } from "./szamlazz-banktranz.service.js";
  * globális beállításhoz egy végpont kedvéért nem nyúlunk.
  */
 /** Amit a kérésből használunk: a nyers törzs-folyam (a globális olvasó nem nyúlt hozzá). */
-interface RawRequest extends AsyncIterable<Buffer | string> {
+export interface RawRequest extends AsyncIterable<Buffer | string> {
   body?: unknown;
 }
 
 /** Amit a válaszból használunk (az Express válasza ezt teljesíti). */
-interface XmlResponse {
+export interface XmlResponse {
   status(code: number): XmlResponse;
   type(contentType: string): XmlResponse;
   send(body: string): void;
@@ -54,14 +54,17 @@ export class SzamlazzBanktranzController {
 }
 
 /** A nyers törzs UTF-8-ként; `null`, ha a korlátnál nagyobb. */
-async function readBody(request: RawRequest): Promise<string | null> {
+export async function readBody(
+  request: RawRequest,
+  maxBytes: number = BANKTRANZ_MAX_BYTES,
+): Promise<string | null> {
   if (typeof request.body === "string") return request.body;
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > BANKTRANZ_MAX_BYTES) return null;
+    if (size > maxBytes) return null;
     chunks.push(buffer);
   }
   return Buffer.concat(chunks).toString("utf8");

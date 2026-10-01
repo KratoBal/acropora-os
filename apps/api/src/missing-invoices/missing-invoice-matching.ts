@@ -26,7 +26,13 @@ import { sequenceRatio } from "./sequence-ratio.js";
  */
 
 export type DocumentSource =
-  "NAV" | "MAILBOX" | "UPLOAD" | "DRIVE" | "SETTLEMENT" | "PREMIUM_NOTICE";
+  | "NAV"
+  | "MAILBOX"
+  | "UPLOAD"
+  | "DRIVE"
+  | "SETTLEMENT"
+  | "PREMIUM_NOTICE"
+  | "SZAMLAZZ";
 
 export type Payee = "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
 

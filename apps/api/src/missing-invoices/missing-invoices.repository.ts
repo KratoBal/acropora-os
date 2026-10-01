@@ -285,6 +285,8 @@ export class MissingInvoicesRepository {
             { origin: "UPLOAD" },
             // a begyűjtés csak azt tárolja, amit illesztő vagy NAV-szám ismer
             { origin: { in: ["COLLECTED_MAIL", "COLLECTED_DRIVE"] } },
+            // a Számlázz.hu bejövő számla-továbbítása (acrobot 25686)
+            { origin: "SZAMLAZZ_FEED" },
           ],
         },
         select: {
@@ -396,6 +398,10 @@ export class MissingInvoicesRepository {
             invoiceNumber: string | null;
             supplierTaxNumber: string | null;
             bankReference?: string | null;
+            /** a Számlázz.hu továbbítás ennyit tud még (`szamlazz-feeds.service.ts`) */
+            supplierName?: string;
+            gross?: string;
+            currency?: string;
             cardPayment?: {
               amount: string;
               currency: string;
@@ -426,11 +432,13 @@ export class MissingInvoicesRepository {
         source:
           document.origin === "COLLECTED_DRIVE"
             ? "DRIVE"
-            : !upload
-              ? "MAILBOX"
-              : document.uploadKind === "PREMIUM_NOTICE"
-                ? "PREMIUM_NOTICE"
-                : "UPLOAD",
+            : document.origin === "SZAMLAZZ_FEED"
+              ? "SZAMLAZZ"
+              : !upload
+                ? "MAILBOX"
+                : document.uploadKind === "PREMIUM_NOTICE"
+                  ? "PREMIUM_NOTICE"
+                  : "UPLOAD",
         number:
           result?.invoiceNumber ??
           reading?.invoiceNumber ??
@@ -441,16 +449,21 @@ export class MissingInvoicesRepository {
             ? [reading.bankReference]
             : [],
         date,
-        // a postafiók csak nettót olvas ki; EU-s (fordítottan adózó) szállítónál
-        // ez a bruttó is, hazainál ismeretlen
+        // a Számlázz.hu továbbítás a bruttót is hozza; a postafiók csak nettót
+        // olvas ki, ami EU-s (fordítottan adózó) szállítónál a bruttó is; a
+        // kártyás vásárlás visszaigazolása a saját összegét hozza
         gross:
-          foreign && result?.netTotal != null
-            ? new Prisma.Decimal(result.netTotal)
-            : card
-              ? new Prisma.Decimal(card.amount)
-              : null,
-        currency: result?.currency ?? card?.currency ?? "HUF",
-        supplierName: result?.supplier.name ?? card?.partner ?? "",
+          reading?.gross != null
+            ? new Prisma.Decimal(reading.gross)
+            : foreign && result?.netTotal != null
+              ? new Prisma.Decimal(result.netTotal)
+              : card
+                ? new Prisma.Decimal(card.amount)
+                : null,
+        currency:
+          result?.currency ?? reading?.currency ?? card?.currency ?? "HUF",
+        supplierName:
+          result?.supplier.name ?? reading?.supplierName ?? card?.partner ?? "",
         supplierAccounts:
           accountsByTaxBase.get(
             taxBase(result?.supplier.vatId ?? reading?.supplierTaxNumber),
@@ -471,7 +484,7 @@ export class MissingInvoicesRepository {
         invoiceKey(
           result?.invoiceNumber ?? reading?.invoiceNumber ?? "",
           result?.supplier.vatId ?? reading?.supplierTaxNumber,
-          result?.supplier.name ?? "",
+          result?.supplier.name ?? reading?.supplierName ?? "",
         ),
       );
     }
