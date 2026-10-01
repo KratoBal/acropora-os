@@ -4,6 +4,8 @@ import { BankStatementImportRepository } from "./bank-statement-import.repositor
 import { BankStatementImportService } from "./bank-statement-import.service.js";
 import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
 import { MissingInvoicesController } from "./missing-invoices.controller.js";
+import { SzamlazzBanktranzController } from "./szamlazz-banktranz.controller.js";
+import { SzamlazzBanktranzService } from "./szamlazz-banktranz.service.js";
 import { MissingInvoicesRepository } from "./missing-invoices.repository.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
 import { InvoiceCollectionRepository } from "./collection/invoice-collection.repository.js";
@@ -14,7 +16,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
 
 /** HIÁNYZÓ SZÁMLÁK (Pénzügy): a banki terhelés és a számla egyeztetése. */
 @Module({
-  controllers: [MissingInvoicesController],
+  controllers: [MissingInvoicesController, SzamlazzBanktranzController],
   providers: [
     BankStatementImportRepository,
     BankStatementImportService,
@@ -26,6 +28,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
     MissingInvoicesRepository,
     MissingInvoicesService,
     SupplierInvoiceImportService,
+    SzamlazzBanktranzService,
   ],
 })
 export class MissingInvoicesModule {}

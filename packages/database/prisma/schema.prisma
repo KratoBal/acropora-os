@@ -7151,6 +7151,31 @@ enum BankTransactionDirection {
 /// javítása így migráció nélkül hat). A `transactionKey` a sor mezőiből és a
 /// fájlon belüli sorszámából képzett kulcs: két export átfedő napja egyszer
 /// kerül be, egy exporton belüli két azonos sor kétszer.
+/// Melyik forrás hozta a tranzakciót: a havi CSV-kivonat vagy a Számlázz.hu
+/// tranzakció-továbbítása (acrobot 25599).
+enum BankTransactionSource {
+  CSV
+  SZAMLAZZ
+}
+
+/// EGY TRANZAKCIÓ, TÖBB FORRÁS: minden forrás a saját kulcsával (a CSV a sor
+/// mezőiből képzett kulccsal, a Számlázz.hu a tranzakció `id`-jével) egyszer
+/// foglalja le. Ugyanazt a fizetést a két forrás egy tranzakcióként hozza, és
+/// ugyanaz a kulcs másodszor semmit nem ír. A párosítás a számla, az irány, az
+/// összeg, a deviza, az értéknap és a partner-számla mentén megy (lásd
+/// `bank-transaction-sources.ts`).
+model BankTransactionSourceKey {
+  id                String                @id @default(cuid())
+  key               String                @unique
+  source            BankTransactionSource
+  bankTransactionId String
+  createdAt         DateTime              @default(now())
+
+  bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
+
+  @@index([bankTransactionId])
+}
+
 model BankTransaction {
   id                    String                   @id @default(cuid())
   bankAccountId         String
@@ -7175,9 +7200,10 @@ model BankTransaction {
   paperOriginalByUserId String?
   createdAt             DateTime                 @default(now())
 
-  bankAccount BankAccount            @relation(fields: [bankAccountId], references: [id])
-  import      BankStatementImport    @relation(fields: [importId], references: [id])
+  bankAccount BankAccount                @relation(fields: [bankAccountId], references: [id])
+  import      BankStatementImport        @relation(fields: [importId], references: [id])
   matches     BankTransactionMatch[]
+  sourceKeys  BankTransactionSourceKey[]
 
   @@index([bankAccountId, bookingDate])
   @@index([bookingDate, direction])
