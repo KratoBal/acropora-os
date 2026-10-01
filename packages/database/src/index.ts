@@ -33,6 +33,7 @@ export type {
   FoxpostSyncRunStatus,
   GoodsReceipt,
   GoodsReceiptLine,
+  IncomingBillingDocument,
   IcpReport,
   IcpResult,
   Product,

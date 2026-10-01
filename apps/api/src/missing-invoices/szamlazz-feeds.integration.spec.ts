@@ -19,6 +19,9 @@ const gate = integrationDatabaseGate(process.env);
 const PREFIX = "szamlazz-it-";
 
 async function removeLeftovers() {
+  await prisma.incomingBillingDocument.deleteMany({
+    where: { externalId: { startsWith: PREFIX } },
+  });
   await prisma.externalBillingDocument.deleteMany({
     where: { externalId: { startsWith: PREFIX } },
   });
@@ -47,6 +50,12 @@ describe(
         {
           nev: "a kimenő számla vetítés-sorai bent maradtak",
           darab: await prisma.externalBillingDocument.count({
+            where: { externalId: { startsWith: PREFIX } },
+          }),
+        },
+        {
+          nev: "a bejövő számla vetítés-sorai bent maradtak",
+          darab: await prisma.incomingBillingDocument.count({
             where: { externalId: { startsWith: PREFIX } },
           }),
         },
@@ -194,6 +203,122 @@ describe(
       assert.deepEqual(await numbers("EXTERNAL"), [["UJ-1", "EXTERNAL"]]);
       assert.deepEqual(await numbers(), [["UJ-1", "EXTERNAL"]]);
       assert.deepEqual(await numbers("OWN"), []);
+    });
+
+    /**
+     * A BEJÖVŐ SZÁMLA A SZÁMLÁZÁS „BEJÖVŐ” NÉZETÉBE (acrobot 25869, A szelet), a
+     * valódi adatbázison. MI PIROSÍT: ha egy korábbi változat felülírná a
+     * későbbit; ha a változatok száma nem számolódna; ha a kifizetett összeg és
+     * az utolsó kifizetés napja nem a kifizetésekből jönne; ha a forrás-dokumentum
+     * (a PDF hordozója) nem kötődne, vagy egy `.xml` forrás PDF-nek látszana.
+     */
+    it("an incoming invoice is projected once, from its latest version, with its payments and source", async () => {
+      const externalId = `${PREFIX}be-1`;
+      const base = {
+        kind: "SZAMLABE" as const,
+        externalId,
+        body: "<szamlabe/>",
+      };
+      await repository.storeRaw({ ...base, sha256: "regi" });
+      await repository.storeRaw({ ...base, sha256: "uj" });
+      await prisma.szamlazzFeedMessage.updateMany({
+        where: { externalId, sha256: "regi" },
+        data: { receivedAt: new Date("2026-10-01T10:00:00Z") },
+      });
+      await prisma.szamlazzFeedMessage.updateMany({
+        where: { externalId, sha256: "uj" },
+        data: { receivedAt: new Date("2026-10-01T11:00:00Z") },
+      });
+      const { id: sourceId } = await repository.storeInvoice({
+        externalId,
+        fileName: "BE-1.pdf",
+        content: Buffer.from("%PDF-1.4 teszt"),
+        sha256: `${PREFIX}sha-be-1`,
+        receivedAt: new Date("2026-10-01T10:00:00Z"),
+        payee: "COMPANY",
+        textReading: { invoiceNumber: "UJ-BE-1" },
+      });
+      const projection = (documentNumber: string) => ({
+        externalId,
+        kindCode: "SZ",
+        documentNumber,
+        electronic: true,
+        issueDate: "2026-09-28",
+        fulfillmentDate: "2026-09-25",
+        dueDate: "2026-10-06",
+        paymentMethod: "Átutalás",
+        currency: "HUF",
+        exchangeRate: null,
+        exchangeBank: null,
+        supplierName: "KBOSS.hu Kft.",
+        supplierTaxNumber: "13421739-2-41",
+        supplierEuTaxNumber: null,
+        supplierAddress: null,
+        supplierBankAccount: null,
+        buyerName: "Acropora Kft.",
+        buyerTaxNumber: "23916229-2-42",
+        netAmount: "10000",
+        vatAmount: "2700",
+        grossAmount: "12700",
+        lines: [],
+        vatSummary: [],
+        paymentsKnown: true,
+        payments: [
+          {
+            date: "2026-10-02",
+            title: "átutalás",
+            amount: "2700",
+            note: null,
+            bankTransactionId: null,
+          },
+          {
+            date: "2026-09-30",
+            title: "átutalás",
+            amount: "10000",
+            note: null,
+            bankTransactionId: "9001",
+          },
+        ],
+        note: null,
+        orderNumber: null,
+        referencedInvoiceNumber: null,
+        referencedProformaNumber: null,
+        cancelled: false,
+      });
+      assert.deepEqual(
+        [
+          await repository.projectIncoming({
+            externalId,
+            sha256: "uj",
+            projection: projection("UJ-BE-1"),
+          }),
+          await repository.projectIncoming({
+            externalId,
+            sha256: "regi",
+            projection: projection("REGI-BE-1"),
+          }),
+          await repository.projectIncoming({
+            externalId,
+            sha256: "nincs",
+            projection: projection("SEHOL"),
+          }),
+        ],
+        ["PROJECTED", "OLDER", "MISSING"],
+      );
+      const row = await prisma.incomingBillingDocument.findUniqueOrThrow({
+        where: { source_externalId: { source: "SZAMLAZZ", externalId } },
+      });
+      assert.deepEqual(
+        [
+          row.documentNumber,
+          row.versionCount,
+          row.paidAmount.toString(),
+          row.lastPaymentDate?.toISOString().slice(0, 10),
+          row.sourceDocumentId,
+          row.hasPdf,
+        ],
+        ["UJ-BE-1", 2, "12700", "2026-10-02", sourceId, true],
+      );
     });
 
     it("a forwarded invoice is a candidate, with its source, gross and supplier", async () => {
