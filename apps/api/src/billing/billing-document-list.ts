@@ -11,6 +11,7 @@ import {
 
 import { szamlazzAmountsOfLine } from "./billing-document-issue.js";
 import type { BillingDocumentListRow } from "./billing-document-list.repository.js";
+import { EXTERNAL_KIND_LABELS } from "./external-szamlazz-invoice.js";
 import { OWN_ROWS } from "./billing-documents.repository.js";
 
 /**
@@ -124,5 +125,180 @@ export function toListItem(
     status,
     emailStatus: (row.emailStatus as BillingEmailStatus | null) ?? null,
     opens: status === "DRAFT" ? "EDITOR" : "DETAIL",
+    origin: "OWN",
+    externalKindLabel: null,
   };
+}
+
+/*
+  ===========================================================================
+  A KÜLSŐ BIZONYLATOK (acrobot 25812): a Számlázz.hu-ból kapott kimenő számlák
+  (ExternalBillingDocument), a mieink mellett, „Külső” jelöléssel.
+  ===========================================================================
+*/
+
+/**
+ * A SZÁMLÁZZ.HU BIZONYLATTÍPUSA A MI TÍPUSUNKRA, A SZŰRŐHÖZ ÉS A „Dokumentum”
+ * OSZLOPHOZ. A felirat ettől függetlenül a Számlázz.hu sajátja
+ * (`externalKindLabel`). A sztornó, a jóváíró, a helyesbítő és a végszámla
+ * számla-fajta, tehát INVOICE; az ismeretlen kód is az, a felirat pedig a nyers
+ * kódot mutatja.
+ */
+export const EXTERNAL_KIND_TYPES: Readonly<
+  Record<string, BillingDocumentType>
+> = {
+  SZ: "INVOICE",
+  SS: "INVOICE",
+  JS: "INVOICE",
+  HS: "INVOICE",
+  VS: "INVOICE",
+  ES: "ADVANCE_INVOICE",
+  D: "PROFORMA",
+  SL: "DELIVERY_NOTE",
+};
+
+export const externalDocumentType = (kindCode: string): BillingDocumentType =>
+  EXTERNAL_KIND_TYPES[kindCode.toUpperCase()] ?? "INVOICE";
+
+export const externalKindLabel = (kindCode: string): string =>
+  EXTERNAL_KIND_LABELS[kindCode.toUpperCase()] ?? kindCode;
+
+/**
+ * A KÜLSŐ SOROK SZŰRŐJE, vagy `null`, ha a lekérdezésre egyik sem illhet: a
+ * külső bizonylat mindig kiállított, e-mail állapota nincs, tehát egy vázlatra
+ * vagy egy e-mail állapotra szűrt lista nem mutat külsőt.
+ */
+export function externalWhere(
+  query: BillingDocumentListQuery,
+): Prisma.ExternalBillingDocumentWhereInput | null {
+  if (query.origin === "OWN") return null;
+  if (query.status && query.status !== "ISSUED") return null;
+  if (query.emailStatus) return null;
+  const where: Prisma.ExternalBillingDocumentWhereInput = {};
+  if (query.documentType) {
+    const codes = Object.entries(EXTERNAL_KIND_TYPES)
+      .filter(([, type]) => type === query.documentType)
+      .map(([code]) => code);
+    where.kindCode =
+      query.documentType === "INVOICE"
+        ? // az ismeretlen kód is számla-fajta (lásd EXTERNAL_KIND_TYPES)
+          {
+            notIn: Object.keys(EXTERNAL_KIND_TYPES).filter(
+              (code) => !codes.includes(code),
+            ),
+          }
+        : { in: codes };
+  }
+  if (query.invoiceFormat)
+    where.electronic = query.invoiceFormat === "ELECTRONIC";
+  const q = query.q?.trim();
+  if (q) {
+    const contains = { contains: q, mode: "insensitive" as const };
+    where.OR = [
+      { documentNumber: contains },
+      { customerName: contains },
+      { externalId: contains },
+    ];
+  }
+  return where;
+}
+
+/** A mieink ugyanígy: `null`, ha a lekérdezés csak a külsőket kéri. */
+export function ownWhere(
+  query: BillingDocumentListQuery,
+): Prisma.InvoiceWhereInput | null {
+  return query.origin === "EXTERNAL" ? null : listWhere(query);
+}
+
+/** A külső lista sorrendje, a mieinkével azonos szabállyal (LIST_ORDER_BY). */
+export const EXTERNAL_LIST_ORDER_BY = [
+  { issueDate: "desc" },
+  { createdAt: "desc" },
+  { id: "desc" },
+] satisfies Prisma.ExternalBillingDocumentOrderByWithRelationInput[];
+
+export interface ExternalListRow {
+  id: string;
+  kindCode: string;
+  documentNumber: string;
+  electronic: boolean;
+  customerName: string;
+  issueDate: Date;
+  dueDate: Date | null;
+  grossAmount: Prisma.Decimal;
+  currency: string;
+  createdAt: Date;
+}
+
+export function toExternalListItem(
+  row: ExternalListRow,
+): BillingDocumentListItem {
+  return {
+    id: row.id,
+    documentType: externalDocumentType(row.kindCode),
+    invoiceFormat: row.electronic ? "ELECTRONIC" : "PAPER",
+    documentNumber: row.documentNumber,
+    customerName: row.customerName,
+    issueDate: calendarDay(row.issueDate),
+    dueDate: calendarDay(row.dueDate),
+    grossAmount: row.grossAmount.toFixed(
+      row.currency.toUpperCase() === "HUF" ? 0 : 2,
+    ),
+    currency: row.currency,
+    status: "ISSUED",
+    emailStatus: null,
+    opens: "EXTERNAL_DETAIL",
+    origin: "EXTERNAL",
+    externalKindLabel: externalKindLabel(row.kindCode),
+  };
+}
+
+/** A két forrás sora a rendezéshez: a kulcsok és a kész listaelem. */
+export interface MergeRow {
+  issueDate: Date | null;
+  createdAt: Date;
+  id: string;
+  item: BillingDocumentListItem;
+}
+
+/**
+ * A KÉT FORRÁS EGY LISTÁVÁ, a LIST_ORDER_BY szabályával: kiállítás napja nélkül
+ * (vázlat) felül, utána a kiállítás szerint csökkenően, majd a létrehozás és az
+ * azonosító. Mindkét bemenet már így rendezett, és mindkettőből az első
+ * `offset + limit` sor jön; ebből a lap pontosan kivágható.
+ */
+export function mergeListRows(
+  own: readonly MergeRow[],
+  external: readonly MergeRow[],
+  offset: number,
+  limit: number,
+): BillingDocumentListItem[] {
+  const before = (a: MergeRow, b: MergeRow): boolean => {
+    if ((a.issueDate === null) !== (b.issueDate === null))
+      return a.issueDate === null;
+    if (
+      a.issueDate &&
+      b.issueDate &&
+      a.issueDate.getTime() !== b.issueDate.getTime()
+    )
+      return a.issueDate.getTime() > b.issueDate.getTime();
+    if (a.createdAt.getTime() !== b.createdAt.getTime())
+      return a.createdAt.getTime() > b.createdAt.getTime();
+    return a.id > b.id;
+  };
+  const merged: MergeRow[] = [];
+  let i = 0;
+  let j = 0;
+  while (
+    merged.length < offset + limit &&
+    (i < own.length || j < external.length)
+  ) {
+    if (
+      j >= external.length ||
+      (i < own.length && before(own[i]!, external[j]!))
+    )
+      merged.push(own[i++]!);
+    else merged.push(external[j++]!);
+  }
+  return merged.slice(offset).map((row) => row.item);
 }

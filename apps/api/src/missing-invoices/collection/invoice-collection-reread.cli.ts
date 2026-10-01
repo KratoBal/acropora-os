@@ -43,7 +43,7 @@ async function main(argv: readonly string[]): Promise<number> {
       );
   }
   ki(
-    `fájl ${counts.filesSeen}: tárolt ${counts.storedCount}, nem számla ${counts.notInvoiceCount}, ismeretlen ${counts.unmatchedCount}, már megvolt ${counts.duplicateCount}, hiba ${counts.failedCount}\n`,
+    `fájl ${counts.filesSeen}: tárolt ${counts.storedCount}, nem számla ${counts.notInvoiceCount}, ismeretlen ${counts.unmatchedCount}, saját kimenő ${counts.ownInvoiceCount}, már megvolt ${counts.duplicateCount}, hiba ${counts.failedCount}\n`,
   );
   return 0;
 }

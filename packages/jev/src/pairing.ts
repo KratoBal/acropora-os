@@ -176,9 +176,10 @@ function pairCriteria(count: number): Record<string, string> {
  *   egy jelolt nem mehet ki           -> kiesik; a tobbi kap c0, c1, ... kulcsot
  *   egyetlen jelolt sem marad         -> `PairBlocked`, nincs hivas
  *
- * Egy jelolt ugyanazon a ket orszuron megy at, mint a `buildPairRequest`-ben
- * (a teljes kitakart szovegen, majd a vagott darabon); a kiesett jelolt
- * helyorzoi nem szamitanak bele a keresbe.
+ * Egy jelolt ket orszuron megy at (a teljes kitakart szovegen, majd a vagott
+ * darabon), ahogy a Python `offline.build_with_map`-ben; a kiesett jelolt
+ * helyorzoi nem szamitanak bele a keresbe. Ez a Python `offline.build` maga is
+ * (marveen #7 ota), tehat ez az EGYETLEN parositasi keres.
  */
 export function buildPairRequestDroppingBlocked(
   redactor: Redactor,
@@ -227,56 +228,5 @@ export function buildPairRequestDroppingBlocked(
     placeholders,
     candidateIndexes,
     dropped,
-  };
-}
-
-/**
- * A kitakart keres. `PairBlocked`-ot dob, ha barmelyik darab nem mehet ki: ilyenkor
- * NINCS hivas, es a hivo nem esik vissza semmilyen mas alakra.
- */
-export function buildPairRequest(
-  redactor: Redactor,
-  payment: PairPayment,
-  candidates: readonly PairCandidate[],
-): PairRequest {
-  const placeholders: Record<string, number> = {};
-  const state: Record<string, string> = {
-    query: redactedField(
-      redactor,
-      paymentText(payment),
-      MAX_QUERY_CHARS,
-      placeholders,
-    ),
-  };
-  candidates.forEach((c, i) => {
-    state[`c${i}`] = redactedField(
-      redactor,
-      candidateText(c),
-      MAX_CANDIDATE_CHARS,
-      placeholders,
-    );
-  });
-  // P-016: az osszerakott keres minden darabja meg egyszer az or ele
-  for (const text of Object.values(state)) {
-    const problems = redactor.runtimeGuard(
-      { text, version: REDACTION_VERSION },
-      { allowKnownKinds: PAIRING_KNOWN_ALLOW },
-    );
-    if (problems.length)
-      throw new PairBlocked("blocked_runtime_guard", problems.join(","));
-  }
-  const criteria: Record<string, string> = {};
-  candidates.forEach((_, i) => {
-    criteria[`c${i}`] = PAIR_CRITERION.split("{i}").join(String(i));
-  });
-  criteria.NONE = PAIR_NONE;
-  return {
-    state,
-    questionKey: PAIR_QUESTION_KEY,
-    instructions: PAIR_INSTRUCTIONS,
-    criteria,
-    model: JEV_MODEL,
-    redactionVersion: REDACTION_VERSION,
-    placeholders,
   };
 }

@@ -1,10 +1,12 @@
 import {
   BILLING_DOCUMENT_LIST_PAGE_SIZE,
+  BILLING_DOCUMENT_ORIGINS,
   BILLING_DOCUMENT_STATUSES,
   BILLING_DOCUMENT_TYPES,
   BILLING_EMAIL_STATUSES,
   INVOICE_FORMATS,
   type BillingDocumentListQuery,
+  type BillingDocumentOrigin,
   type BillingDocumentStatus,
   type BillingDocumentType,
   type BillingEmailStatus,
@@ -29,4 +31,6 @@ export class BillingDocumentListQueryDto implements BillingDocumentListQuery {
   @IsIn(INVOICE_FORMATS) @IsOptional() invoiceFormat?: InvoiceFormat;
   @IsIn(BILLING_DOCUMENT_STATUSES) @IsOptional() status?: BillingDocumentStatus;
   @IsIn(BILLING_EMAIL_STATUSES) @IsOptional() emailStatus?: BillingEmailStatus;
+  /** OWN: a mieink, EXTERNAL: a Számlázz.hu-ból kapottak; hiányzó: mind. */
+  @IsIn(BILLING_DOCUMENT_ORIGINS) @IsOptional() origin?: BillingDocumentOrigin;
 }

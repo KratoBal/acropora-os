@@ -32,6 +32,16 @@ const api = vi.hoisted(() => ({
   emailDraft: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
+/*
+  A LEVÉLKÉPEK KLIENSE: a drawer nyitásakor a képtár töltődik (acrobot 25433).
+  Alapból üres lista, hogy a régi állítások ne menjenek a hálózatra.
+*/
+const kepApi = vi.hoisted(() => ({
+  list: vi.fn(),
+  upload: vi.fn(),
+  content: vi.fn(),
+}));
+vi.mock("@/lib/api/mail-images", () => ({ mailImagesApi: kepApi }));
 
 const auth = vi.hoisted(() => ({ role: "OWNER" as UserRole }));
 vi.mock("@/components/auth/auth-provider", () => ({
@@ -181,6 +191,9 @@ const openSpy = vi.fn();
 const printSpy = vi.fn();
 
 beforeEach(() => {
+  kepApi.list.mockReset().mockResolvedValue([]);
+  kepApi.upload.mockReset();
+  kepApi.content.mockReset();
   auth.role = "OWNER";
   navigation.push.mockReset();
   api.email.mockReset();
@@ -501,5 +514,101 @@ describe("BillingDocumentDetailPage", () => {
       "title",
       "Nincs jogosultságod e-mailt küldeni.",
     );
+  });
+
+  /*
+    A LEVÉL KÉPEI A DRAWERBEN (acrobot 25433): olvasni számlaküldési joggal is
+    lehet, feltölteni csak beállítás-kezelési joggal. MI PIROSÍT: ha a
+    számlázó (MANAGER) nem látná a sablon képét; ha feltölthetne; ha a
+    beállítás-kezelő (OWNER) nem; ha a képtár a drawer nyitása előtt töltődne;
+    ha az előnézet üres képet mutatna.
+  */
+  const LOGO = {
+    id: "logo1",
+    fileName: "logo.png",
+    contentType: "image/png",
+    sizeBytes: 4,
+    width: 800,
+    height: 200,
+    createdAt: "2026-09-28T08:00:00Z",
+  };
+  const PNG = new Blob([new Uint8Array([137, 80, 78, 71])], {
+    type: "image/png",
+  });
+  const kepesLevel = async () => {
+    kepApi.list.mockResolvedValue([LOGO]);
+    kepApi.content.mockResolvedValue(PNG);
+    api.emailDraft.mockResolvedValue({
+      source: "stored",
+      subject: "Acropora – {{document_number}}",
+      body: "Kedves {{customer_name}}!",
+      bodyHtml:
+        '<p><img src="acropora-image:logo1" alt="Logó" width="200"></p><p>Kedves vevő!</p>',
+      variables: [],
+    });
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    const gomb = within(
+      await screen.findByRole("group", { name: "Bizonylat műveletei" }),
+    ).getByRole("button", { name: "E-mail újraküldése" });
+    expect(kepApi.list).not.toHaveBeenCalled();
+    fireEvent.click(gomb);
+    return screen.findByRole("dialog");
+  };
+
+  it("the billing role sees the template image and picks from the library, without upload", async () => {
+    auth.role = "MANAGER";
+    const drawer = await kepesLevel();
+    await waitFor(() =>
+      expect(
+        drawer.querySelector<HTMLImageElement>(
+          'img[data-src="acropora-image:logo1"]',
+        )?.src,
+      ).toMatch(/^data:image\/png/),
+    );
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: "Kép beszúrása" }),
+    );
+    const picker = within(drawer).getByRole("dialog", {
+      name: "Kép beszúrása",
+    });
+    expect(within(picker).queryByLabelText("Kép feltöltése")).toBeNull();
+    expect(
+      within(picker).getByText(/A már feltöltött képek közül választhatsz/),
+    ).toBeInTheDocument();
+  });
+
+  it("the settings role can upload a new image from the drawer", async () => {
+    const drawer = await kepesLevel();
+    await waitFor(() => expect(kepApi.list).toHaveBeenCalled());
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: "Kép beszúrása" }),
+    );
+    expect(
+      within(
+        within(drawer).getByRole("dialog", { name: "Kép beszúrása" }),
+      ).getByLabelText("Kép feltöltése"),
+    ).toBeInTheDocument();
+  });
+
+  it("the preview shows the image from the library", async () => {
+    auth.role = "MANAGER";
+    const drawer = await kepesLevel();
+    await waitFor(() =>
+      expect(kepApi.content).toHaveBeenCalledWith("token-1", "logo1"),
+    );
+    await waitFor(() =>
+      expect(
+        drawer.querySelector<HTMLImageElement>(
+          'img[data-src="acropora-image:logo1"]',
+        )?.src,
+      ).toMatch(/^data:/),
+    );
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: "Levél előnézete" }),
+    );
+    const srcdoc =
+      within(drawer).getByTitle("Levél előnézete").getAttribute("srcdoc") ?? "";
+    expect(srcdoc).toMatch(/<img[^>]*src="data:image\/png/);
+    expect(srcdoc).not.toContain("acropora-image:");
   });
 });

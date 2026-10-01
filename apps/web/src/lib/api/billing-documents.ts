@@ -3,6 +3,7 @@ import type {
   BillingDocumentDraftInput,
   BillingDocumentEmailInput,
   BillingDocumentListResponse,
+  BillingExternalDocumentDetail,
   MailTemplateVariable,
 } from "@acropora/types";
 
@@ -100,6 +101,14 @@ export const billingDocumentsApi = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       },
+    );
+  },
+  /** A Számlázz.hu-ból kapott külső bizonylat, csak olvasásra (acrobot 25812). */
+  externalDetail(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<BillingExternalDocumentDetail>(
+      `/billing/external-documents/${encodeURIComponent(id)}`,
+      token,
+      { signal },
     );
   },
   detail(token: string, id: string, signal?: AbortSignal) {

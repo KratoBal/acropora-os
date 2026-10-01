@@ -26,7 +26,14 @@ import {
   EmailRichEditor,
   type EmailRichEditorHandle,
 } from "@acropora/ui/email-rich-editor";
+import { richImageIds } from "@acropora/rich-text";
 import { useRef, useState } from "react";
+
+import {
+  MailImagePicker,
+  withImageSources,
+  type MailImages,
+} from "@/components/settings/mail-image-picker";
 
 /**
  * A KIKÜLDŐ FIÓK (brief 16-17. pont), általános néven: nem "invoice email",
@@ -177,6 +184,8 @@ export function BillingDocumentEmailDrawer({
   meta,
   known,
   submit,
+  images,
+  imageUpload = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -199,11 +208,21 @@ export function BillingDocumentEmailDrawer({
     busy: boolean;
     error: string | null;
   };
+  /**
+   * A LEVÉL KÉPEI (a Levelezés oldal képtára). Olvasni `billing.resend` vagy
+   * `settings.manage` joggal lehet, feltölteni csak az utóbbival (acrobot
+   * 25433). Nélküle a kép a levélben kimegy (a küldés beágyazza), de itt nem
+   * látszik, és nem is szúrható be.
+   */
+  images?: MailImages;
+  /** Feltölthet-e új képet (`settings.manage`). */
+  imageUpload?: boolean;
 }) {
   const [showCopies, setShowCopies] = useState(
     draft.cc !== "" || draft.bcc !== "",
   );
   const [preview, setPreview] = useState(false);
+  const [picker, setPicker] = useState(false);
   const editorRef = useRef<EmailRichEditorHandle | null>(null);
   const noun = getDocumentCapabilities(documentType).label;
   const chips = billingEmailVariables(documentType);
@@ -212,6 +231,7 @@ export function BillingDocumentEmailDrawer({
   const insert = (variable: string) =>
     editorRef.current?.insertVariable(variable.replace(/[{}]/g, ""));
   const rendered = preview ? previewBillingEmail(draft.bodyHtml, known) : null;
+  const hiddenImages = !images && richImageIds(draft.bodyHtml).length > 0;
 
   return (
     <PilotDrawer
@@ -352,7 +372,11 @@ export function BillingDocumentEmailDrawer({
               <iframe
                 title="Levél előnézete"
                 sandbox=""
-                srcDoc={previewDocument(rendered)}
+                srcDoc={previewDocument(
+                  images
+                    ? withImageSources(rendered, images.sources)
+                    : rendered,
+                )}
                 className="h-72 w-full rounded-lg bg-white ring-1 ring-pilot-grey-200"
               />
             )
@@ -368,8 +392,30 @@ export function BillingDocumentEmailDrawer({
                   ? { kind: "link" as const }
                   : {}),
               }))}
+              {...(images
+                ? {
+                    onImageRequest: () => setPicker((nyitva) => !nyitva),
+                    resolveImageSrc: images.resolve,
+                  }
+                : {})}
             />
           )}
+          {!preview && picker && images ? (
+            <MailImagePicker
+              images={images.images}
+              sources={images.sources}
+              error={images.error}
+              upload={imageUpload ? images.upload : undefined}
+              onInsert={(kep) => editorRef.current?.insertImage(kep)}
+              onClose={() => setPicker(false)}
+            />
+          ) : null}
+          {hiddenImages ? (
+            <p className="text-xs text-pilot-grey-500">
+              A levélben kép is van. Kiküldéskor bekerül a levélbe, itt
+              megjelenítéséhez számlaküldési jog kell.
+            </p>
+          ) : null}
         </PilotFormField>
         {preview ? null : (
           <PilotVariableChips variables={chips} onInsert={insert} />

@@ -17,6 +17,7 @@ import {
   billingEmailDelivery,
   getDocumentCapabilities,
   billingEmailModeFor,
+  hasAnyPermission,
   hasPermission,
   INVOICE_FORMAT_LABELS,
   PERMISSIONS,
@@ -28,6 +29,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { useMailImages } from "@/components/settings/mail-image-picker";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BillingDocumentActions } from "./billing-document-actions";
@@ -92,6 +94,24 @@ export function BillingDocumentDetailPage({
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /*
+    A LEVÉL KÉPEI: olvasni számlaküldési vagy beállítás-kezelési joggal,
+    feltölteni csak az utóbbival (acrobot 25433); csak nyitott drawernél
+    töltődnek.
+  */
+  const canReadMailImages = Boolean(
+    session &&
+    hasAnyPermission(session.user, [
+      PERMISSIONS.BILLING_RESEND,
+      PERMISSIONS.SETTINGS_MANAGE,
+    ]),
+  );
+  const canUploadMailImages = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE),
+  );
+  const mailImages = useMailImages(token, {
+    enabled: canReadMailImages && drawerOpen,
+  });
   const [email, setEmail] = useState<BillingEmailDraft | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -566,6 +586,8 @@ export function BillingDocumentDetailPage({
 
       {delivery !== "NONE" ? (
         <BillingDocumentEmailDrawer
+          images={canReadMailImages ? mailImages : undefined}
+          imageUpload={canUploadMailImages}
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
           documentType={detail.documentType}
