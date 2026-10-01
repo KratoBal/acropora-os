@@ -28,14 +28,16 @@ import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
+import { PaymentBadge } from "./billing-payment";
 
 const vatRateText = (rate: string) =>
   /^\d+(\.\d+)?$/.test(rate) ? `${trimDecimal(rate)}%` : rate;
 
-const pillTone = (state: string) =>
-  state === "PAID" || state === "PAIRED"
+/** A banki párosítás pirulája (a kifizetésé a közös `PaymentBadge`). */
+const bankPillTone = (state: IncomingDocumentDetail["bankMatch"]["state"]) =>
+  state === "PAIRED"
     ? "bg-pilot-aqua-50 text-pilot-aqua-700"
-    : state === "UNKNOWN" || state === "NOT_TO_PAIR"
+    : state === "NOT_TO_PAIR"
       ? "bg-pilot-grey-100 text-pilot-grey-700"
       : "bg-pilot-accent-warm-soft text-pilot-accent-warm-text";
 
@@ -157,13 +159,14 @@ export function BillingIncomingDocumentPage({
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-2 lg:justify-end">
+          <PaymentBadge
+            paymentState={detail.paymentState}
+            paidAmount={detail.paidAmount}
+            lastPaymentDate={detail.lastPaymentDate}
+            currency={detail.currency}
+          />
           <span
-            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${pillTone(detail.paymentState)}`}
-          >
-            {INCOMING_PAYMENT_STATE_LABELS[detail.paymentState]}
-          </span>
-          <span
-            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${pillTone(bank.state)}`}
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bankPillTone(bank.state)}`}
           >
             {INCOMING_BANK_MATCH_LABELS[bank.state]}
           </span>
