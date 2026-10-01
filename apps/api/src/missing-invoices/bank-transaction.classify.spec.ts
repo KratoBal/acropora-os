@@ -95,6 +95,27 @@ describe("classifyTransaction", () => {
     );
   });
 
+  it("files a card payment to a Hungarian company as domestic even in EUR (the Elektro-Light case)", () => {
+    assert.equal(
+      category({
+        counterpartyName: "Elektro-Light Kft. Vil",
+        narrative:
+          "2026.09.01 7413124583 Elektro-Light Kft. Vil   -APPLE 100,650EUR    0,",
+        transactionType: "VÁSÁRLÁS KÁRTYÁVAL",
+      }),
+      "DOMESTIC_SUPPLIER",
+    );
+    // a külföldi cégforma kártyával továbbra is külföldi
+    assert.equal(
+      category({
+        counterpartyName: "Fauna Marin GmbH",
+        narrative: "2026.09.01 7413124583 Fauna Marin GmbH 98,00EUR",
+        transactionType: "VÁSÁRLÁS KÁRTYÁVAL",
+      }),
+      "FOREIGN_SUPPLIER",
+    );
+  });
+
   it("does not read the Apple Pay marker as an Apple subscription", () => {
     assert.equal(
       category({
