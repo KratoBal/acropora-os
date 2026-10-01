@@ -42,6 +42,23 @@ export interface OtpStatementParse {
   rows: OtpStatementRow[];
   /** Az olvashatatlan sorok száma és az első néhány, hogy a hiba megnevezhető legyen. */
   rejected: { line: number; reason: string }[];
+  /**
+   * A FÜGGŐ KÁRTYÁS TÉTELEK (acrobot 25637, éles: a kártya-számla exportjának
+   * Vízművek, Figma és Parkl sora): az összeg megvan, a könyvelési és az
+   * értéknap üres, mert a bank még nem könyvelte. Nem hiba, és nem is tétel:
+   * a következő kivonatban dátummal jön. Eddig az olvashatatlanok közé került,
+   * és Balázs hibának hitte.
+   */
+  pending: OtpPendingRow[];
+}
+
+export interface OtpPendingRow {
+  line: number;
+  partner: string | null;
+  /** Előjel nélkül. */
+  amount: string;
+  currency: string;
+  transactionType: string | null;
 }
 
 /** Egy pontosvesszős sor mezői, idézőjeles mezőkkel (`"a;b"`, `""` escape). */
@@ -90,6 +107,7 @@ export function parseOtpStatement(bytes: Uint8Array): OtpStatementParse {
     .replace(/^\uFEFF/, "");
   const rows: OtpStatementRow[] = [];
   const rejected: { line: number; reason: string }[] = [];
+  const pending: OtpPendingRow[] = [];
   const occurrences = new Map<string, number>();
 
   text.split(/\r?\n/).forEach((raw, index) => {
@@ -113,6 +131,17 @@ export function parseOtpStatement(bytes: Uint8Array): OtpStatementParse {
     }
     if (marker !== "T" && marker !== "J") {
       rejected.push({ line, reason: `ismeretlen irány: ${marker}` });
+      return;
+    }
+    // a bank még nem könyvelte: összeg van, se könyvelési, se értéknap
+    if (signed && !f[4]!.trim() && !f[5]!.trim()) {
+      pending.push({
+        line,
+        partner: blank(f[8]),
+        amount: signed.abs().toString(),
+        currency: f[3]!.trim().toUpperCase() || "HUF",
+        transactionType: blank(f[12]),
+      });
       return;
     }
     if (!signed || !bookingDate) {
@@ -157,7 +186,7 @@ export function parseOtpStatement(bytes: Uint8Array): OtpStatementParse {
         .digest("hex"),
     });
   });
-  return { rows, rejected };
+  return { rows, rejected, pending };
 }
 
 /**

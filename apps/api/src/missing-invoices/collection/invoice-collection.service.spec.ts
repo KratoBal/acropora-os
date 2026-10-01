@@ -50,6 +50,7 @@ function setup(input: {
   known?: Buffer[];
   failingUser?: string;
   failingCode?: string;
+  failingDetail?: string;
   nav?: Record<string, string[]>;
   debits?: string[];
   retryDue?: boolean;
@@ -102,6 +103,7 @@ function setup(input: {
       if (user === input.failingUser)
         throw new GoogleReadonlyError(
           input.failingCode ?? "GOOGLE_AUTH_FAILED",
+          input.failingDetail ?? null,
         );
       return Object.keys(input.messages);
     },
@@ -415,12 +417,17 @@ describe("InvoiceCollectionService", () => {
       messages: { "m-1": [{ fileName: "x.pdf", buffer: invoice }] },
       failingUser: "info@acropora.hu",
       failingCode: "GOOGLE_RATE_LIMITED",
+      failingDetail: "403 userRateLimitExceeded usageLimits",
       nav: { "12345678": ["X-7701"] },
     });
     await collection.run("SCHEDULED");
     assert.deepEqual(
       [stored.map((d) => d.source), finished, failedFlags],
-      [["BALAZS_MAIL"], ["INFO_MAIL:GOOGLE_RATE_LIMITED"], [false]],
+      [
+        ["BALAZS_MAIL"],
+        ["INFO_MAIL:GOOGLE_RATE_LIMITED 403 userRateLimitExceeded usageLimits"],
+        [false],
+      ],
     );
     assert.deepEqual(gaps, [250, 250]);
   });

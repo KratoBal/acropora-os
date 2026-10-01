@@ -45,6 +45,8 @@ export interface CandidateDocument {
   supplierAccounts: readonly string[];
   kind: "INVOICE" | "PROFORMA" | "PREMIUM_NOTICE";
   payee: Payee;
+  /** A vevőt kézzel jelölték (acrobot 25633); csak feltöltött vagy postafiókos PDF-nél. */
+  payeeMarked?: boolean;
   /**
    * VAN-E EREDETI (Balázs, 2026-09-30 20:01 UTC, acrobot 25322): a könyvelőnek
    * az eredeti számla kell. PDF (postafiók, feltöltés, Drive, elszámolás) vagy
@@ -349,7 +351,8 @@ function stateOf(documents: CandidateDocument[]): ItemState {
   )
     return "NOT_COMPANY";
   // a vevő nem ellenőrizhető: a brief szerint csak a Kft-re szóló számla
-  // Megvan, tehát ez a drawerben kézzel jelölendő, addig Nem párosodott
+  // Megvan, tehát ez a drawerben kézzel jelölendő („A cégre szól”), addig
+  // Nem párosodott
   if (documents.some((d) => d.payee === "UNKNOWN")) return "NOT_MATCHED";
   // párosítva, de csak NAV-adat van: tudjuk, melyik számla, az eredeti kell
   if (documents.some((d) => !d.hasOriginal)) return "ORIGINAL_MISSING";

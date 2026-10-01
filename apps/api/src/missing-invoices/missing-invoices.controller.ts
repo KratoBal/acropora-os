@@ -30,6 +30,7 @@ import {
   MissingInvoiceCommentDto,
   MissingInvoiceMatchDto,
   MissingInvoicePaperOriginalDto,
+  MissingInvoicePayeeDto,
   MissingInvoiceUploadDto,
 } from "./missing-invoice-decision.dto.js";
 import { MissingInvoiceMonthQueryDto } from "./missing-invoice-month-query.dto.js";
@@ -165,6 +166,17 @@ export class MissingInvoicesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.missing.paperOriginal(id, input.marked, user);
+  }
+
+  @Put("items/:id/documents/:documentId/payee")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  markPayee(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @Body() input: MissingInvoicePayeeDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.missing.markPayee(id, documentId, input.payee, user);
   }
 
   @Post("items/:id/documents")

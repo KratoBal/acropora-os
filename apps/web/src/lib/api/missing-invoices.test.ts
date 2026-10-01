@@ -107,3 +107,29 @@ describe("missingInvoicesApi exports", () => {
     expect(fileName).toBe("konyveloi-csomag-2026-08.pdf");
   });
 });
+
+/**
+ * A VEVŐ KÉZI JELÖLÉSE (acrobot 25633). MI PIROSÍT: ha a jelölés nem a
+ * terhelés és a számla útjára menne, kódolatlanul, PUT-tól eltérő metódussal,
+ * vagy a törzsből hiányozna a vevő.
+ */
+describe("missingInvoicesApi.markPayee", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("puts the payee on the item's document", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "debit/1" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await missingInvoicesApi.markPayee("token-1", "debit/1", "up/1", "COMPANY");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "/api/missing-invoices/items/debit%2F1/documents/up%2F1/payee",
+    );
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(String(init.body))).toEqual({ payee: "COMPANY" });
+  });
+});

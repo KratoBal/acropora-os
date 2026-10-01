@@ -141,18 +141,23 @@ export class InvoiceCollectionService {
           error instanceof GoogleReadonlyError
             ? error.code
             : "INVOICE_COLLECTION_SOURCE_FAILED";
+        // A Google mért oka (státusz, ok, tartomány) a futáson is látszik.
+        const detail =
+          error instanceof GoogleReadonlyError && error.detail
+            ? ` ${error.detail}`
+            : "";
         // A rate limit nem hiba: a forrás itt megáll, a már feldolgozott
         // levelek látottak, a következő futás onnan folytatja.
         if (code === "GOOGLE_RATE_LIMITED") {
-          pausedSources.push(`${source.source}:${code}`);
+          pausedSources.push(`${source.source}:${code}${detail}`);
           this.logger.warn(
-            `Invoice collection: ${source.source} paused (${code})`,
+            `Invoice collection: ${source.source} paused (${code}${detail})`,
           );
           continue;
         }
-        failedSources.push(`${source.source}:${code}`);
+        failedSources.push(`${source.source}:${code}${detail}`);
         this.logger.error(
-          `Invoice collection: ${source.source} failed (${code})`,
+          `Invoice collection: ${source.source} failed (${code}${detail})`,
         );
       }
     }
