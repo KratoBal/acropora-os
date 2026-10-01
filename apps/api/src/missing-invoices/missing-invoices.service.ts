@@ -46,6 +46,14 @@ import { originalAmountOf } from "./otp-statement.parser.js";
 import { payeeFromText } from "./payee-check.js";
 import { buildAccountantPackage } from "./missing-invoices-package.pdf.js";
 import { buildMissingInvoicesXlsx } from "./missing-invoices-xlsx.js";
+import {
+  freeDocuments,
+  jevPairInput,
+} from "./missing-invoice-jev-candidates.js";
+import {
+  MissingInvoiceJevService,
+  type PairSuggestion,
+} from "./missing-invoice-jev.service.js";
 
 /** A „Hiányzik” fül és a Hiányos hónap: minden, amihez teendő van. */
 /** A környezet (a Drive-mappa hivatkozása); a teszt ezen át adja. */
@@ -87,6 +95,14 @@ interface Computed {
   coverage: Set<string>;
   outcomes: Map<string, MatchOutcome>;
   documents: CandidateDocument[];
+  /** A terhelesek a besorolasukkal: a Jev-javaslat bemenete. */
+  classified: Classified[];
+}
+
+interface Classified {
+  debit: Awaited<ReturnType<MissingInvoicesRepository["debits"]>>[number];
+  classification: { category: BankCategory; rule: string };
+  original: ReturnType<typeof originalAmountOf>;
 }
 
 /**
@@ -108,6 +124,8 @@ export class MissingInvoicesService {
     @Optional()
     @Inject(MISSING_INVOICES_ENV)
     private readonly environment: NodeJS.ProcessEnv = process.env,
+    @Optional()
+    private readonly jev?: MissingInvoiceJevService,
   ) {}
 
   async months(): Promise<MissingInvoiceMonthsResponse> {
@@ -251,6 +269,53 @@ export class MissingInvoicesService {
   }
 
   /**
+   * A JEV-JAVASLAT A DRAWERHEZ: melyik jelölt a számla. Csak javaslat; az ember a
+   * mai kézi párosítással fogadja el. Kikapcsolva, nem mért tételnél vagy bármi
+   * hibánál `documentId: null`, és a drawer úgy halad, mint javaslat nélkül.
+   */
+  async jevSuggestion(id: string): Promise<PairSuggestion> {
+    if (!this.jev?.enabled())
+      return { enabled: false, documentId: null, confidence: null };
+    const computed = await this.compute();
+    const row = computed.classified.find((c) => c.debit.id === id);
+    if (!row) throw new NotFoundException("A banki terhelés nem található.");
+    const outcome = computed.outcomes.get(id);
+    const input = outcome
+      ? jevPairInput(
+          {
+            id,
+            bookingDate: row.debit.bookingDate.toISOString().slice(0, 10),
+            amount: row.debit.amount,
+            currency: row.debit.currency,
+            original: row.original,
+            counterpartyName: row.debit.counterpartyName,
+            category: row.classification.category,
+          },
+          outcome,
+          freeDocuments(computed.documents, computed.outcomes),
+        )
+      : null;
+    if (!input) return { enabled: true, documentId: null, confidence: null };
+    return this.jev.suggest({
+      bankTransactionId: id,
+      // a mért szöveg mezői: a nyers terhelés, nem a megjelenítésre kerekített
+      payment: {
+        date: row.debit.bookingDate.toISOString().slice(0, 10),
+        amount: row.debit.amount.toString(),
+        currency: row.debit.currency,
+        original: row.original
+          ? `${row.original.amount.toString()} ${row.original.currency}`
+          : "",
+        partner: row.debit.counterpartyName ?? "",
+        narrative: row.debit.narrative,
+        type: row.debit.transactionType ?? "",
+      },
+      candidates: input.candidates,
+      kinds: input.kinds,
+    });
+  }
+
+  /**
    * KÉZI PÁROSÍTÁS (brief 12): a dokumentum a jelöltek bármelyike lehet (egy
    * összevont számla bármelyik azonosítójával), és egy dokumentum csak egy
    * terheléshez párosítható kézzel.
@@ -282,6 +347,11 @@ export class MissingInvoicesService {
         );
       throw error;
     }
+    // a Jev-javaslat feloldása; soha nem dob, a párosítás már megtörtént
+    await this.jev?.resolveOnPair({
+      bankTransactionId: id,
+      documentId: document.id,
+    });
     return this.item(id);
   }
 
@@ -493,6 +563,7 @@ export class MissingInvoicesService {
         coverage,
         outcomes: new Map(),
         documents: [],
+        classified: [],
       };
 
     const first = monthOf(debits[0]!.bookingDate);
@@ -588,7 +659,15 @@ export class MissingInvoicesService {
         paperOriginal: debit.paperOriginalAt !== null,
       };
     });
-    return { items, months, accounts, coverage, outcomes, documents };
+    return {
+      items,
+      months,
+      accounts,
+      coverage,
+      outcomes,
+      documents,
+      classified,
+    };
   }
 
   /**

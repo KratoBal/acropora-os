@@ -240,3 +240,16 @@ export interface MissingInvoiceMonthQuery {
   page?: number;
   pageSize?: number;
 }
+
+/**
+ * A Jev párosítási javaslata egy terheléshez (`GET .../items/:id/jev-suggestion`).
+ * Csak javaslat: az elfogadás a kézi párosítás (`POST .../items/:id/match`).
+ */
+export interface MissingInvoiceJevSuggestion {
+  /** `false`: ki van kapcsolva vagy leállt; a drawer ne kérdezzen többet. */
+  enabled: boolean;
+  /** A javasolt jelölt `documentId`-je, CSAK látható javaslatnál; különben `null`. */
+  documentId: string | null;
+  /** A Jev bizonyossága (0..1), csak látható javaslatnál. */
+  confidence: number | null;
+}
