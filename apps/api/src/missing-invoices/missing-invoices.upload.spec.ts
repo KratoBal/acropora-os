@@ -10,6 +10,7 @@ import PDFDocument from "pdfkit";
 
 import { registerEmbeddedPdfFont } from "../documents/pdf/branded-document.js";
 import type { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
+import type { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
 import type { MissingInvoicesRepository } from "./missing-invoices.repository.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
 
@@ -30,6 +31,7 @@ function pdf(lines: string[]): Promise<Buffer> {
 
 function setup() {
   const uploads: Record<string, unknown>[] = [];
+  const resolved: { bankTransactionId: string; documentId: string }[] = [];
   const repository = {
     accounts: async () => [
       {
@@ -70,9 +72,16 @@ function setup() {
       throw new Error("ismeretlen szállítói formátum");
     },
   } as unknown as SupplierInvoiceImportService;
+  const jev = {
+    resolveOnPair: async (input: {
+      bankTransactionId: string;
+      documentId: string;
+    }) => void resolved.push(input),
+  } as unknown as MissingInvoiceJevService;
   return {
-    missing: new MissingInvoicesService(repository, reader, {}),
+    missing: new MissingInvoicesService(repository, reader, {}, jev),
     uploads,
+    resolved,
   };
 }
 
@@ -130,6 +139,30 @@ describe("uploading an invoice from the drawer", () => {
       ],
       ["PREMIUM_NOTICE", "COMPANY", null, "debit-1"],
     );
+  });
+
+  it("resolves the Jev suggestion with the uploaded document: none of the candidates was the one (acrobot 25880)", async () => {
+    const { missing, resolved } = setup();
+    await missing.upload(
+      "debit-1",
+      { originalname: "szamla.pdf", buffer: await pdf(["SZÁMLA"]) },
+      "INVOICE",
+      USER,
+    );
+    assert.deepEqual(resolved, [
+      { bankTransactionId: "debit-1", documentId: "doc-1" },
+    ]);
+    // egy elutasított feltöltés nem párosít, tehát nem is old fel
+    const refused = setup();
+    await assert.rejects(
+      refused.missing.upload(
+        "debit-1",
+        { originalname: "x.pdf", buffer: Buffer.from("nem pdf") },
+        "INVOICE",
+        USER,
+      ),
+    );
+    assert.deepEqual(refused.resolved, []);
   });
 
   it("marks a PDF without our tax number as not the company's", async () => {
