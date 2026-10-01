@@ -34,6 +34,7 @@ import {
 import {
   looksLikeInvoice,
   looksLikeProforma,
+  looksLikeOtherDocument,
   looksLikeReminder,
   bankReference,
   cardPaymentMatch,
@@ -396,6 +397,9 @@ export class InvoiceCollectionService {
     // a fizetési emlékeztető idézi a számlát, de nem az; a mellette álló
     // számla-melléklet külön fájlként megy tovább
     if (looksLikeReminder(lines, found.fileName)) return skip("NOT_INVOICE");
+    // szerződés, ajánlat, vámnyilatkozat: nem számla, és nem lehet jelölt
+    if (looksLikeOtherDocument(lines, found.fileName))
+      return skip("NOT_INVOICE");
 
     const importResult = await this.reader
       .read(new Uint8Array(found.content), { allowProforma: true })

@@ -8,8 +8,10 @@ import {
   type CardDebit,
   looksLikeBankAccount,
   looksLikeInvoice,
+  looksLikeOtherDocument,
   looksLikeProforma,
   looksLikeReminder,
+  otherDocumentFileName,
   readInvoiceText,
 } from "./invoice-text.js";
 
@@ -324,6 +326,70 @@ describe("cardPaymentMatch: a NAV-less invoice and the card payment(s) it was pa
       ),
       null,
     );
+  });
+});
+
+describe("contracts, offers and customs declarations are not invoices (acrobot 25784)", () => {
+  it("by the title: the kind alone, or the kind and its number", () => {
+    for (const title of [
+      "ADÁSVÉTELI SZERZŐDÉS",
+      "Vállalkozási keretszerződés",
+      "Árajánlat | AJ26-U60-01170",
+      "Ajánlat",
+      "Quotation #Q-2026/0412",
+      "Megállapodás",
+    ])
+      assert.equal(
+        looksLikeOtherDocument(["Acropora Kft.", title, "szöveg"], "a.pdf"),
+        true,
+        title,
+      );
+    // a megnevezés előtt más szó áll: ez már nem cím
+    assert.equal(
+      looksLikeOtherDocument(["Import árunyilatkozat alapján"], "a.pdf"),
+      false,
+    );
+  });
+
+  it("by the file name, also decomposed (NFD) or written as one camelCase word", () => {
+    for (const name of [
+      "Szerződés_FÁNK_Homokszűrő 2026 aláírásra.pdf",
+      "Szerződés_FÁNK_Homokszűrő 2026 aláírásra.pdf".normalize("NFD"),
+      "Árajánlat AJ26-U60-01170.pdf",
+      "26HU123 árunyilatkozat.frx.pdf",
+      "Angebot_4711.pdf",
+      "mycarAjanlat_AMC297489479.pdf",
+    ])
+      assert.equal(otherDocumentFileName(name), true, name);
+    for (const name of ["inv26007910.pdf", "Szamla_2026-09.pdf", null])
+      assert.equal(otherDocumentFileName(name), false, String(name));
+  });
+
+  it("an invoice that names its offer or its contract is still an invoice", () => {
+    assert.equal(
+      looksLikeOtherDocument(
+        [
+          "SZÁMLA",
+          "Számlaszám: KS26/08132",
+          "Ajánlat száma: AJ26-U60-01170",
+          "Szerződés: 2026/14",
+          "Megállapodás:",
+          "2026/15",
+          "a szerződés szerinti díj",
+        ],
+        "KS26_08132.pdf",
+      ),
+      false,
+    );
+    // a cím csak az első sorokban számít
+    const late = Array.from({ length: 20 }, (_, i) =>
+      i === 15 ? "Árajánlat" : "SZÁMLA",
+    );
+    assert.equal(looksLikeOtherDocument(late, "szamla.pdf"), false);
+  });
+
+  it("a facture provisoire is a proforma", () => {
+    assert.equal(looksLikeProforma("FACTURE PROVISOIRE N° 2026-118"), true);
   });
 });
 

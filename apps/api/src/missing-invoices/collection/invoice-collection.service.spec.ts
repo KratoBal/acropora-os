@@ -369,6 +369,27 @@ describe("InvoiceCollectionService", () => {
     ]);
   });
 
+  it("does not store an offer that quotes an invoice number the bank paid (acrobot 25784)", async () => {
+    // a fájlnév semmit nem árul el: a CÍM dönt
+    const offer = await pdf([
+      "De Jong Marinelife B.V.",
+      "Quotation #Q-2026/0412",
+      "Customer: Acropora Kft., VAT HU23916229",
+      "Following invoice 26007910, total 1.703,08 EUR",
+      "IBAN NL30RABO0322265428",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: { "m-1": [{ fileName: "doc0412.pdf", buffer: offer }] },
+      debits: [
+        "1.703,08 EUR 26007910 Spijksesteeg 2 A RABONL2U NL30RABO0322265428 De Jong Marinelife B.V. 4212 SPIJK,",
+      ],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(stored, []);
+    assert.deepEqual(recorded, ["m-1/doc0412.pdf:NOT_INVOICE"]);
+  });
+
   it("never takes the supplier's IBAN for the invoice's bank reference", async () => {
     // a szállító IBAN-ja minden fizetésének közleményében ott áll
     const statement = await pdf([
