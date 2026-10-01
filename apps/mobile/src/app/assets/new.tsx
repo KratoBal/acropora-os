@@ -57,6 +57,7 @@ import {
   decideOfflineRecord,
   describeQueueWrite,
 } from "@/lib/assets/offline-record";
+import { deviceConnectivity } from "@/lib/offline/connectivity";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
 import { ApiError } from "@/lib/api/client";
@@ -551,6 +552,7 @@ export default function NewAssetScreen() {
         };
       }
       const outcome = await saveOrQueue({
+        connectivity: deviceConnectivity,
         save: () => createAsset(payload),
         enqueue: () =>
           enqueueAssetCreate({

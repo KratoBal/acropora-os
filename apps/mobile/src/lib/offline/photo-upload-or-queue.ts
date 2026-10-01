@@ -1,5 +1,6 @@
 // RELATIV UT, NEM `@/`: a teszt-fordito nem ismeri az aliast.
 import type { PickedFile } from "../api/picked-image";
+import type { SaveConnectivity } from "./save-or-queue";
 
 /**
  * FENYKEP EGY MAR LETEZO GAZDAHOZ: ELOSZOR A SZERVERNEK, ES CSAK HALOZATI
@@ -50,12 +51,20 @@ export interface PhotoSendDeps {
   statusOf(error: unknown): number | null;
   /** Az elutasitas emberi alakja. Hivonkent mas, ezert kivulrol jon. */
   describeRejection(error: unknown): string;
+  /**
+   * A KESZULEK KAPCSOLATA, ugyanaz, mint a `saveOrQueue`-nal -- es itt a
+   * legdragabb a hianya: a fenykep 120 masodperces korlattal megy, tehat egy
+   * elakadt iOS-feltoltes ket percig porog, mielott a sorba kerulne.
+   */
+  connectivity?: SaveConnectivity;
 }
 
 export async function uploadOrQueuePhotos(
   deps: PhotoSendDeps,
 ): Promise<PhotoSendOutcome> {
   if (deps.files.length === 0) return { type: "none" };
+  /** OFFLINE-BAN A SZERVERT MEG SEM PROBALJUK: egyenesen a sorba. */
+  if (deps.connectivity?.offline()) return sorba(deps);
   try {
     const { count } = await deps.upload(deps.files);
     return { type: "uploaded", count };
@@ -67,19 +76,24 @@ export async function uploadOrQueuePhotos(
     if (deps.statusOf(cause) !== null)
       return { type: "rejected", message: deps.describeRejection(cause) };
 
-    /**
-     * EGY BUKAS NEM ALLITJA MEG A TOBBIT, DE MEGSZAMOLJUK. Egy csendes
-     * reszleges siker pontosan azt a kepet vinne el, amirol a szerelo azt
-     * hiszi, megvan.
-     */
-    let queued = 0;
-    let failed = 0;
-    for (const file of deps.files) {
-      if (await deps.enqueue(file)) queued += 1;
-      else failed += 1;
-    }
-    return { type: "queued", queued, failed };
+    deps.connectivity?.unreachable();
+    return sorba(deps);
   }
+}
+
+async function sorba(deps: PhotoSendDeps): Promise<PhotoSendOutcome> {
+  /**
+   * EGY BUKAS NEM ALLITJA MEG A TOBBIT, DE MEGSZAMOLJUK. Egy csendes
+   * reszleges siker pontosan azt a kepet vinne el, amirol a szerelo azt
+   * hiszi, megvan.
+   */
+  let queued = 0;
+  let failed = 0;
+  for (const file of deps.files) {
+    if (await deps.enqueue(file)) queued += 1;
+    else failed += 1;
+  }
+  return { type: "queued", queued, failed };
 }
 
 /**
