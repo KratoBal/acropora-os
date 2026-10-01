@@ -64,6 +64,7 @@ const firstPage: NavIncomingInvoiceListResponse = {
       currency: "HUF",
       invoiceNetAmount: "10000",
       insDate: "2026-07-30T00:00:00.000Z",
+      invoiceOperation: "CREATE",
       status: "NEW",
     },
   ],
@@ -97,6 +98,31 @@ describe("NavIncomingInvoiceListPage", () => {
     expect(navigation.replace).toHaveBeenCalledWith(
       "/beszerzes/nav-szamlak?page=2",
     );
+  });
+
+  it("a jóváírót (módosító okirat) megjelöli, az eredeti számla számával", async () => {
+    api.list.mockResolvedValue({
+      ...firstPage,
+      items: [
+        ...firstPage.items,
+        {
+          ...firstPage.items[0]!,
+          id: "nav-invoice-2",
+          navInvoiceNumber: "KS26/05898",
+          invoiceNetAmount: "-59918",
+          invoiceOperation: "MODIFY",
+          originalInvoiceNumber: "KS26/05101",
+        },
+      ],
+    });
+
+    render(createElement(NavIncomingInvoiceListPage));
+
+    const row = (await screen.findByText("KS26/05898")).closest("tr")!;
+    expect(within(row).getByText("Módosító")).toBeTruthy();
+    expect(within(row).getByText("eredeti: KS26/05101")).toBeTruthy();
+    const plain = screen.getByText("INV-2026-1").closest("tr")!;
+    expect(within(plain).queryByText("Módosító")).toBeNull();
   });
 
   it("állapotszűréskor visszaáll az első oldalra", async () => {

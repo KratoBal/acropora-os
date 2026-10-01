@@ -32,6 +32,9 @@ function rowWithLines(lines: unknown[]): NavIncomingInvoiceRow {
     invoiceNetAmount: null,
     invoiceVatAmount: null,
     insDate: new Date("2026-09-01T00:00:00Z"),
+    invoiceOperation: "CREATE",
+    originalInvoiceNumber: null,
+    modificationIndex: null,
     status: "DATA_FETCHED",
     parsedData: {
       supplierName: "X Kft.",
