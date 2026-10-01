@@ -23,6 +23,17 @@ const STREAM = "INBOUND_INVOICES";
 const ACTIVE_SYNC_KEY = "NAV_INBOUND_INVOICES";
 const STALE_RUN_AFTER_MS = 15 * 60_000;
 
+/**
+ * A TÁROLHATÓ DIGEST-TÉTEL: minden művelet (CREATE, MODIFY, STORNO), ha van
+ * kibocsátói adószáma. A v1 csak a CREATE tételeket tárolta, ezért a módosító
+ * és sztornó okiratok (jóváírók) hiányoztak; mérve 2026-10-01, éles digest
+ * 2026-01-01-től: CREATE 793, MODIFY 12, STORNO 8, köztük a három ismert
+ * jóváíró (Menet-Trend 4934/26, Fluidra KS26/05898, Jász-Plasztik
+ * FELOK00481/2026). A beírás és a száraz számláló ugyanezt a szabályt követi.
+ */
+export const storableDigestItem = (item: NavInvoiceDigestItem) =>
+  Boolean(item.supplierTaxNumber);
+
 function toRunView(run: {
   id: string;
   status: string;
@@ -139,12 +150,12 @@ export class NavIncomingInvoiceRepository extends Repository {
     return runs.map(toRunView);
   }
 
-  /// Idempotensen alkalmazza egy digest-lekérdezés eredményét: a MODIFY/STORNO
-  /// műveletű digest-tételeket v1-ben szándékosan kihagyjuk (lásd
-  /// docs/CURRENT_STATUS.md), CREATE tételnél pedig csak akkor jön létre új
-  /// NavIncomingInvoice sor, ha (navInvoiceNumber, supplierTaxNumber) még
-  /// ismeretlen - egy már ismert (esetleg már bevételezett) sort nem írunk
-  /// felül, nehogy egy átfedő ablak visszaállítsa NEW állapotba.
+  /// Idempotensen alkalmazza egy digest-lekérdezés eredményét: minden
+  /// tárolható tételből (`storableDigestItem`, a MODIFY/STORNO is) csak akkor
+  /// jön létre új NavIncomingInvoice sor, ha (navInvoiceNumber,
+  /// supplierTaxNumber) még ismeretlen - egy már ismert (esetleg már
+  /// bevételezett) sort nem írunk felül, nehogy egy átfedő ablak visszaállítsa
+  /// NEW állapotba.
   async applyDigest(
     runId: string,
     items: readonly NavInvoiceDigestItem[],
@@ -168,7 +179,7 @@ export class NavIncomingInvoiceRepository extends Repository {
         let skippedCount = 0;
 
         for (const item of items) {
-          if (item.invoiceOperation !== "CREATE" || !item.supplierTaxNumber) {
+          if (!storableDigestItem(item) || !item.supplierTaxNumber) {
             skippedCount += 1;
             continue;
           }
@@ -203,6 +214,9 @@ export class NavIncomingInvoiceRepository extends Repository {
                 ? new Prisma.Decimal(item.invoiceVatAmount)
                 : null,
               insDate: new Date(item.insDate),
+              invoiceOperation: item.invoiceOperation,
+              originalInvoiceNumber: item.originalInvoiceNumber ?? null,
+              modificationIndex: item.modificationIndex ?? null,
               status: "NEW",
             },
           });
@@ -249,13 +263,11 @@ export class NavIncomingInvoiceRepository extends Repository {
   }
 
   /**
-   * A SZÁRAZ VISSZATÖLTÉS SZÁMLÁLÓJA: egy digest-lista CREATE tételei közül
-   * hány ismert már. Csak olvas; a beírás ugyanezt a kulcsot használja.
+   * A SZÁRAZ VISSZATÖLTÉS SZÁMLÁLÓJA: egy digest-lista tárolható tételei
+   * közül hány ismert már. Csak olvas; a beírás ugyanezt a kulcsot használja.
    */
   async countKnown(items: readonly NavInvoiceDigestItem[]): Promise<number> {
-    const keys = items.filter(
-      (item) => item.invoiceOperation === "CREATE" && item.supplierTaxNumber,
-    );
+    const keys = items.filter(storableDigestItem);
     if (keys.length === 0) return 0;
     return prisma.navIncomingInvoice.count({
       where: {

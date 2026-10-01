@@ -233,8 +233,8 @@ export interface PurchaseInvoiceDatabase extends WarehouseLookupDatabase {
   navIncomingInvoice: {
     findUnique(args: {
       where: { id: string };
-      select: { parsedData: true };
-    }): Promise<{ parsedData: unknown } | null>;
+      select: { parsedData: true } | { invoiceOperation: true };
+    }): Promise<{ parsedData?: unknown; invoiceOperation?: string } | null>;
   };
   purchaseInvoice: {
     findMany(args: unknown): Promise<PurchaseInvoiceSummaryRow[]>;
@@ -321,6 +321,17 @@ export class PurchaseInvoiceRepository extends Repository {
       select: { parsedData: true },
     });
     return invoice?.parsedData ?? null;
+  }
+
+  /** A NAV bejovo szamla muvelete (CREATE, MODIFY, STORNO); `null`, ha nincs ilyen sor. */
+  async navInvoiceOperation(
+    navIncomingInvoiceId: string,
+  ): Promise<string | null> {
+    const invoice = await this.invoiceDatabase.navIncomingInvoice.findUnique({
+      where: { id: navIncomingInvoiceId },
+      select: { invoiceOperation: true },
+    });
+    return invoice?.invoiceOperation ?? null;
   }
 
   async currentStock(
@@ -615,6 +626,9 @@ export class PurchaseInvoiceRepository extends Repository {
                 where: {
                   id: params.navIncomingInvoiceId,
                   status: { not: "RECEIVED" },
+                  // a módosító és a sztornó okirat nem vételezhető be (a
+                  // szolgáltatás előbb érthető hibával megállít)
+                  invoiceOperation: "CREATE",
                 },
                 data: { status: "RECEIVED", purchaseInvoiceId: invoice.id },
               });

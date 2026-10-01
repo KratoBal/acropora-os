@@ -140,6 +140,8 @@ export class ExpectedArrivalService {
         where: {
           status: { in: ["NEW", "DATA_FETCHED"] },
           purchaseInvoiceId: null,
+          // a módosító és a sztornó okirat nem vételezhető be
+          invoiceOperation: "CREATE",
         },
         orderBy: { invoiceIssueDate: "desc" },
         select: {

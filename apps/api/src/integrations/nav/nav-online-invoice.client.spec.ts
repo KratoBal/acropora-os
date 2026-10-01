@@ -66,6 +66,43 @@ describe("parseQueryInvoiceDigestResponse", () => {
     assert.equal(result.items[1]?.invoiceOperation, "MODIFY");
   });
 
+  it("reads the original invoice and the modification index of a credit note, and skips an unknown operation", () => {
+    const digest = (operation: string, extra = "") =>
+      `<invoiceDigest>` +
+      `<invoiceNumber>KS26/05898</invoiceNumber>` +
+      `<invoiceOperation>${operation}</invoiceOperation>` +
+      `<invoiceIssueDate>2026-06-12</invoiceIssueDate>` +
+      `<supplierTaxNumber>12345678</supplierTaxNumber>` +
+      `<invoiceNetAmount>-59918</invoiceNetAmount>` +
+      `<insDate>2026-06-12T09:00:00.000Z</insDate>` +
+      extra +
+      `</invoiceDigest>`;
+    const xml =
+      `${HEADER}<QueryInvoiceDigestResponse>` +
+      `<result><funcCode>OK</funcCode></result>` +
+      `<invoiceDigestResult><currentPage>1</currentPage><availablePage>1</availablePage>` +
+      digest(
+        "MODIFY",
+        "<originalInvoiceNumber>KS26/05101</originalInvoiceNumber><modificationIndex>1</modificationIndex>",
+      ) +
+      digest("STORNO", "<modificationIndex></modificationIndex>") +
+      digest("ANNUL") +
+      `</invoiceDigestResult></QueryInvoiceDigestResponse>`;
+    const items = parseQueryInvoiceDigestResponse(xml).items;
+    assert.deepEqual(
+      items.map((i) => [
+        i.invoiceOperation,
+        i.originalInvoiceNumber,
+        i.modificationIndex,
+        i.invoiceNetAmount,
+      ]),
+      [
+        ["MODIFY", "KS26/05101", 1, "-59918"],
+        ["STORNO", undefined, undefined, "-59918"],
+      ],
+    );
+  });
+
   it("throws API_REJECTED when funcCode is not OK", () => {
     const xml =
       `${HEADER}<QueryInvoiceDigestResponse>` +
