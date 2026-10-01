@@ -640,3 +640,135 @@ describe("several invoices named in one payment (acrobot 25610)", () => {
     assert.equal(outcome.state, "FOUND");
   });
 });
+
+describe("a proforma is only a fallback (acrobot 25607, Aquarioom 2026-09-29)", () => {
+  // a valos eset alakja: EUR-terheles, a kozlemeny a rendelesszamot nevezi meg,
+  // ami a proforma (Commande) szama; a valodi szamla (Facture) mas szamu
+  const aq = (overrides: Partial<MatchableDebit> = {}) =>
+    debit({
+      bookingDate: "2026-09-29",
+      amount: D("939.67"),
+      currency: "EUR",
+      counterpartyName: "AQUARIOOM",
+      narrative: "CM9201 ACROPORA",
+      category: "FOREIGN_SUPPLIER",
+      ...overrides,
+    });
+  const proforma = (overrides: Partial<CandidateDocument> = {}) =>
+    doc({
+      source: "MAILBOX",
+      number: "CM9201",
+      date: "2026-09-28",
+      gross: D("939.67"),
+      currency: "EUR",
+      supplierName: "Aquarioom",
+      kind: "PROFORMA",
+      payee: "NOT_COMPANY",
+      ...overrides,
+    });
+  const invoice = (overrides: Partial<CandidateDocument> = {}) =>
+    doc({
+      source: "MAILBOX",
+      number: "FA00009139",
+      date: "2026-09-30",
+      gross: D("939.67"),
+      currency: "EUR",
+      supplierName: "Aquarioom",
+      ...overrides,
+    });
+
+  it("the named proforma gives way to the partner's exact-amount invoice", () => {
+    const d = aq();
+    const fa = invoice();
+    const outcome = run([d], [proforma(), fa]).get(d.id)!;
+    assert.equal(outcome.state, "FOUND");
+    assert.deepEqual(
+      outcome.documents.map((x) => x.number),
+      ["FA00009139"],
+    );
+  });
+
+  it("with no real invoice, or one of another amount or partner, the proforma stays", () => {
+    for (const others of [
+      [],
+      [invoice({ gross: D("939.00") })],
+      [invoice({ supplierName: "Fauna Marin GmbH" })],
+    ]) {
+      const d = aq();
+      const outcome = run([d], [proforma(), ...others]).get(d.id)!;
+      assert.equal(outcome.state, "PROFORMA_ONLY");
+      assert.deepEqual(
+        outcome.documents.map((x) => x.number),
+        ["CM9201"],
+      );
+      // az 1. szabaly tartotta meg, nem egy kesobbi szabaly talalta ujra
+      assert.equal(outcome.reason, "a számla száma a közleményben");
+    }
+  });
+
+  it("the account rule also prefers the invoice to a closer proforma", () => {
+    const d = aq({ narrative: "rendeles", counterpartyAccount: "FR7612345" });
+    const outcome = run(
+      [d],
+      [
+        proforma({ date: "2026-09-29", supplierAccounts: ["FR7612345"] }),
+        invoice({ date: "2026-10-05", supplierAccounts: ["FR7612345"] }),
+      ],
+    ).get(d.id)!;
+    assert.equal(
+      outcome.reason,
+      "a szállító bankszámlájára ment, egyező összeggel",
+    );
+    assert.deepEqual(
+      outcome.documents.map((x) => x.number),
+      ["FA00009139"],
+    );
+  });
+
+  it("when the narrative names both, only the invoice pairs", () => {
+    const d = aq({ narrative: "CM9201 FA00009139" });
+    const outcome = run([d], [proforma(), invoice()]).get(d.id)!;
+    assert.deepEqual(
+      outcome.documents.map((x) => x.number),
+      ["FA00009139"],
+    );
+  });
+
+  it("amount and partner alone: the invoice wins even when the proforma is closer in date", () => {
+    const d = aq({ narrative: "rendeles" });
+    const outcome = run(
+      [d],
+      [proforma({ date: "2026-09-29" }), invoice({ date: "2026-10-05" })],
+    ).get(d.id)!;
+    assert.deepEqual(
+      outcome.documents.map((x) => x.number),
+      ["FA00009139"],
+    );
+  });
+
+  it("a rounding proforma next to a rounding invoice is not an ambiguity", () => {
+    const d = debit({ amount: D(10003), narrative: "rendeles" });
+    const outcome = run(
+      [d],
+      [
+        doc({ kind: "PROFORMA", gross: D(10000), payee: "NOT_COMPANY" }),
+        doc({ number: "SZ-VALODI", gross: D(10000) }),
+      ],
+    ).get(d.id)!;
+    assert.deepEqual(
+      outcome.documents.map((x) => x.number),
+      ["SZ-VALODI"],
+    );
+  });
+
+  it("the invoice taken by another payment does not displace the proforma", () => {
+    const first = aq({ bookingDate: "2026-09-20", narrative: "FA00009139" });
+    const second = aq();
+    const outcomes = run([first, second], [proforma(), invoice()]);
+    assert.deepEqual(
+      outcomes.get(first.id)!.documents.map((x) => x.number),
+      ["FA00009139"],
+    );
+    assert.equal(outcomes.get(second.id)!.state, "PROFORMA_ONLY");
+  });
+});
