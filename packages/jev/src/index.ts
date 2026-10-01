@@ -108,3 +108,17 @@ export {
   type PairPayment,
   type PairRequest,
 } from "./pairing.js";
+export {
+  KNOWN_SOURCE_FIELDS,
+  knownEntries,
+  type KnownRow,
+} from "./known-builder.js";
+export {
+  MISSING_INVOICE_PAIR_POLICY,
+  PAIR_NONE_KEY,
+  pairExposure,
+  pairResolution,
+  pairSuggestionEnabled,
+  type PairExposure,
+  type PairResolution,
+} from "./missing-invoice-pair-policy.js";

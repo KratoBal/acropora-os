@@ -15,6 +15,7 @@
   "doboz",
   "felado",
   "from",
+  "gyors",
   "hiba",
   "hivd",
   "invoice",
@@ -5756,6 +5757,212 @@
    }
   }
  ],
+ "knownBuilder": {
+  "rows": [
+   [
+    "PERSON",
+    "Varga Ilona"
+   ],
+   [
+    "PERSON",
+    "Ilona"
+   ],
+   [
+    "PERSON",
+    ""
+   ],
+   [
+    "EMAIL",
+    "ilona.varga@example.com"
+   ],
+   [
+    "ORG",
+    "Fekete Bolt Kft."
+   ],
+   [
+    "ORG",
+    "Tisza 97 Munkaruházati és Munkavédelmi Kft."
+   ],
+   [
+    "ORG",
+    "Lap Állatkert Nonprofit Zrt. (LAPZOO)"
+   ],
+   [
+    "ORG",
+    "FANKSZER BANK Szolgáltató Kft."
+   ],
+   [
+    "ORG",
+    "ACROPORA HUNGARY Kft."
+   ],
+   [
+    "ORG",
+    "Kis Kft"
+   ],
+   [
+    "ORG",
+    "Nagy Péter e.v."
+   ],
+   [
+    "ORG",
+    "Kovács János"
+   ],
+   [
+    "ORG",
+    "Acropora"
+   ],
+   [
+    "ADDRESS",
+    "Petőfi utca 12."
+   ],
+   [
+    "ORG",
+    "Hal-Pont Bt.,"
+   ],
+   [
+    "ORG",
+    "GYORS SZALLITAS Kft."
+   ],
+   [
+    "PERSON",
+    "dr. Szabó Géza"
+   ],
+   [
+    "ORG",
+    "  "
+   ]
+  ],
+  "kept": [
+   [
+    "PERSON",
+    "Varga Ilona"
+   ],
+   [
+    "EMAIL",
+    "ilona.varga@example.com"
+   ],
+   [
+    "ORG",
+    "Fekete Bolt Kft."
+   ],
+   [
+    "ORG",
+    "Tisza 97 Munkaruházati és Munkavédelmi Kft."
+   ],
+   [
+    "ORG",
+    "Lap Állatkert Nonprofit Zrt. (LAPZOO)"
+   ],
+   [
+    "ORG",
+    "FANKSZER BANK Szolgáltató Kft."
+   ],
+   [
+    "ORG",
+    "ACROPORA HUNGARY Kft."
+   ],
+   [
+    "ORG",
+    "Kis Kft"
+   ],
+   [
+    "ORG",
+    "Nagy Péter e.v."
+   ],
+   [
+    "ORG",
+    "Kovács János"
+   ],
+   [
+    "ADDRESS",
+    "Petőfi utca 12."
+   ],
+   [
+    "ORG",
+    "Hal-Pont Bt.,"
+   ],
+   [
+    "ORG",
+    "GYORS SZALLITAS Kft."
+   ],
+   [
+    "PERSON",
+    "dr. Szabó Géza"
+   ],
+   [
+    "ORG",
+    "Fekete Bolt"
+   ],
+   [
+    "ORG",
+    "Tisza 97 Munkaruházati és Munkavédelmi"
+   ],
+   [
+    "ORG",
+    "LAPZOO"
+   ],
+   [
+    "ORG",
+    "LAPZOO"
+   ],
+   [
+    "ORG",
+    "FANKSZER BANK Szolgáltató"
+   ],
+   [
+    "ORG",
+    "FANKSZER"
+   ],
+   [
+    "ORG",
+    "ACROPORA HUNGARY"
+   ],
+   [
+    "ORG",
+    "HUNGARY"
+   ],
+   [
+    "ORG",
+    "Nagy Péter"
+   ],
+   [
+    "ORG",
+    "GYORS SZALLITAS"
+   ],
+   [
+    "HANDLE",
+    "KratoBal"
+   ],
+   [
+    "ORG",
+    "FANK"
+   ],
+   [
+    "ORG",
+    "Állatkert"
+   ],
+   [
+    "ORG",
+    "Fővárosi Állatkert"
+   ],
+   [
+    "ORG",
+    "INNONEST"
+   ],
+   [
+    "ORG",
+    "TROPUS"
+   ],
+   [
+    "ORG",
+    "Korallgarazs"
+   ],
+   [
+    "ORG",
+    "Korallgarázs"
+   ]
+  ]
+ },
  "known": {
   "entries": [
    [

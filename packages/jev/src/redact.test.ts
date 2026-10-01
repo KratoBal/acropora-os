@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
+import { knownEntries, type KnownRow } from "./known-builder.js";
 import {
   buildPairRequest,
   PairBlocked,
@@ -50,6 +51,7 @@ interface Vectors {
       spans: [number, number, string][];
     }[];
   };
+  knownBuilder: { rows: KnownRow[]; kept: KnownRow[] };
   pairing: {
     items: (PairPayment & { id: string; candidates: PairCandidate[] })[];
     unknown: PairVector[];
@@ -168,6 +170,15 @@ describe("r11 port: a Python-referencia kimenete", () => {
       assert.deepEqual(outputs(r, c.text, []), c.default, c.text);
       assert.deepEqual(outputs(r, c.text, PAIRING_KEEP), c.pairing, c.text);
     }
+  });
+});
+
+describe("a known-entity lista epitese: ugyanaz, mint a build_known.py", () => {
+  it("a sorok, az aliasok, a szuro es az EXTRA, ugyanabban a sorrendben", () => {
+    assert.deepEqual(
+      knownEntries(V.knownBuilder.rows, common),
+      V.knownBuilder.kept,
+    );
   });
 });
 
