@@ -122,6 +122,25 @@ export class MissingInvoicesRepository {
     });
   }
 
+  /**
+   * A jóváírások: a sztornózott vásárlás visszatérítése ezekből látszik
+   * (acrobot 25933), és a kivonatok utolsó napja is ezekkel együtt mérhető.
+   */
+  credits() {
+    return this.database.bankTransaction.findMany({
+      where: { direction: "CREDIT" },
+      orderBy: [{ bookingDate: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        amount: true,
+        currency: true,
+        bookingDate: true,
+        counterpartyName: true,
+        narrative: true,
+      },
+    });
+  }
+
   debits(where: Prisma.BankTransactionWhereInput = {}) {
     return this.database.bankTransaction.findMany({
       where: { direction: "DEBIT", ...where },

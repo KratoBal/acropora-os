@@ -104,6 +104,22 @@ export interface MatchableDebit {
   category: BankCategory;
 }
 
+/**
+ * EGY JÓVÁÍRÁS A BANKBAN: a sztornózott vásárlás visszatérítése ebből látszik
+ * (acrobot 25933). A kártyás visszatérítés („ÁRUVISSZAVÉT ELLENÉRTÉKE”)
+ * partner-név nélkül jön, a közleménye a terhelésé alakú: `2026.08.28
+ * 0194683438 Alza.hu Kft. -APPLE`.
+ */
+export interface MatchableCredit {
+  id: string;
+  /** ÉÉÉÉ-HH-NN */
+  bookingDate: string;
+  amount: Prisma.Decimal;
+  currency: string;
+  counterpartyName: string | null;
+  narrative: string;
+}
+
 export type ItemState =
   | "FOUND"
   | "ORIGINAL_MISSING"
@@ -112,7 +128,11 @@ export type ItemState =
   | "NOT_COMPANY"
   | "PROFORMA_ONLY"
   | "DOUBLE_PAID"
-  | "NO_INVOICE_NEEDED";
+  | "NO_INVOICE_NEEDED"
+  /** Sztornózva (jóváíró van), a visszatérítés még a határidőn belül. */
+  | "REFUND_EXPECTED"
+  /** Sztornózva, de a visszatérítés a határidőig nem jött meg. */
+  | "REFUND_MISSING";
 
 export interface MatchOutcome {
   state: ItemState;
@@ -143,6 +163,17 @@ export interface MatchOutcome {
    * számla akkor kétszer fizetett, ha KÉT KÜLÖNBÖZŐ párosításban szerepel.
    */
   pairing?: string;
+  /**
+   * A SZTORNÓZOTT VÁSÁRLÁS VISSZATÉRÍTÉSE (acrobot 25933): a várt összeg, a
+   * határidő (a jóváíró kelte + 30 nap), és ha megjött, a jóváírás napja.
+   */
+  refund?: {
+    amount: Prisma.Decimal;
+    currency: string;
+    creditNoteNumber: string;
+    due: string;
+    receivedOn: string | null;
+  };
 }
 
 /**
@@ -292,6 +323,20 @@ const firstWord = (name: string) => {
 };
 
 /** A valódi számla előbb, a proforma utána: a proforma tartalék (acrobot 25607). */
+/** A jóváíró kelte legfeljebb ennyi nappal a vásárlás után (barracuda esetlistája). */
+const CREDIT_NOTE_DAYS = 15;
+/** A visszatérítés határideje a jóváíró keltétől (acrobot 25933). */
+const REFUND_DAYS = 30;
+
+const addDays = (date: string, days: number) =>
+  new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
+/** A kártyás közlemény kereskedője: a vásárlás napja és a kártyaszám után. */
+const cardMerchant = (narrative: string) =>
+  /^\d{4}\.\d{2}\.\d{2} \d{10} (.+)$/.exec(narrative)?.[1] ?? null;
+
 const proformaLast = (a: CandidateDocument, b: CandidateDocument) =>
   Number(a.kind === "PROFORMA") - Number(b.kind === "PROFORMA");
 
@@ -545,6 +590,14 @@ export function matchMonth(input: {
    * számla eredetije papíron van meg, tehát nem Eredeti hiányzik.
    */
   paperOriginals?: ReadonlySet<string>;
+  /** A bank jóváírásai: a sztornózott vásárlás visszatérítése ezekből látszik. */
+  credits?: readonly MatchableCredit[];
+  /**
+   * A beolvasott kivonatok utolsó napja (ÉÉÉÉ-HH-NN). A visszatérítés
+   * határidejét ehhez méri, nem a mai naphoz: egy még be nem töltött kivonat
+   * nem jelent elmaradt visszatérítést. Nélküle semmi sem „elmaradt”.
+   */
+  asOf?: string;
 }): Map<string, MatchOutcome> {
   const byId = new Map<string, CandidateDocument>();
   for (const d of input.documents) {
@@ -902,6 +955,75 @@ export function matchMonth(input: {
         invoices,
         "kártyás vásárlás: a márka, az összeg és a vásárlás napja egyezik",
       );
+  }
+  // 3e. SZTORNÓZOTT VÁSÁRLÁS (barracuda esetlistája, Tesla; acrobot 25933): a
+  // partner jóváírót adott ki, aminek az abszolút értéke a terhelés, és a
+  // kelte a vásárlás után legfeljebb 15 nappal van. Az eredeti számlára nem
+  // támaszkodik: a NAV-sora 0 bruttót hordoz. Csak ha EGY ilyen jóváíró van.
+  // Számla nem kell; a visszatérítés zárja le, és ha a jóváíró keltétől 30
+  // napig nem jön meg, a tétel nem marad csendben a Nem kell számla alatt.
+  const usedCredits = new Set<string>();
+  for (const debit of open) {
+    if (outcomes.has(debit.id)) continue;
+    const purchase = cardPurchaseDay(debit.narrative) ?? debit.bookingDate;
+    const brand = firstWord(debit.counterpartyName ?? "");
+    const sameSeller = (name: string | null) =>
+      !!name &&
+      ((!!debit.counterpartyName &&
+        samePartner(name, debit.counterpartyName, 0.6)) ||
+        (brand !== null && firstWord(name) === brand));
+    const notes = free().filter(
+      (d) =>
+        d.gross !== null &&
+        d.gross.isNegative() &&
+        d.date >= purchase &&
+        d.date <= addDays(purchase, CREDIT_NOTE_DAYS) &&
+        sameSeller(d.supplierName) &&
+        exact(amountGap(debit, d.gross.abs(), d.currency), d.currency),
+    );
+    if (notes.length !== 1) continue;
+    const note = notes[0]!;
+    used.add(note.id);
+    const refund = (input.credits ?? [])
+      .filter(
+        (c) =>
+          !usedCredits.has(c.id) &&
+          c.currency === debit.currency &&
+          c.amount.equals(debit.amount) &&
+          c.bookingDate >= purchase &&
+          (sameSeller(c.counterpartyName) ||
+            sameSeller(cardMerchant(c.narrative))),
+      )
+      .sort(
+        (a, b) =>
+          a.bookingDate.localeCompare(b.bookingDate) ||
+          a.id.localeCompare(b.id),
+      )[0];
+    if (refund) usedCredits.add(refund.id);
+    const due = addDays(note.date, REFUND_DAYS);
+    const late = !refund && input.asOf !== undefined && input.asOf > due;
+    outcomes.set(debit.id, {
+      state: refund
+        ? "NO_INVOICE_NEEDED"
+        : late
+          ? "REFUND_MISSING"
+          : "REFUND_EXPECTED",
+      documents: [note],
+      matchedBy: "RULE",
+      reason: refund
+        ? `sztornózva (${note.number}), a visszatérítés megjött: ${refund.bookingDate}`
+        : late
+          ? `sztornózva (${note.number}), a visszatérítés elmaradt (határidő: ${due})`
+          : `sztornózva (${note.number}), visszatérítés várható (határidő: ${due})`,
+      candidates: [],
+      refund: {
+        amount: debit.amount,
+        currency: debit.currency,
+        creditNoteNumber: note.number,
+        due,
+        receivedOn: refund?.bookingDate ?? null,
+      },
+    });
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;

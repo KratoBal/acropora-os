@@ -66,6 +66,7 @@ const MISSING_STATES: ReadonlySet<ItemState> = new Set([
   "NOT_COMPANY",
   "PROFORMA_ONLY",
   "DOUBLE_PAID",
+  "REFUND_MISSING",
 ]);
 // a kétszer fizetett tételnek sincs saját számlája: a „Nincs számla” csempébe
 // számít, és a hiányzó összegbe is (acrobot 25636)
@@ -74,12 +75,20 @@ const NO_INVOICE_TILE: ReadonlySet<ItemState> = new Set([
   "NOT_COMPANY",
   "PROFORMA_ONLY",
   "DOUBLE_PAID",
+  // az elmaradt visszatérítés a Nincs számla mellé (acrobot 25933)
+  "REFUND_MISSING",
+]);
+// a várt visszatérítés a Nem kell számla mellé számít (acrobot 25933)
+const NO_INVOICE_NEEDED_TILE: ReadonlySet<ItemState> = new Set([
+  "NO_INVOICE_NEEDED",
+  "REFUND_EXPECTED",
 ]);
 
 /** A tétel-lista lapmérete, ha a kérés nem ad (szerződés: 1..100, 25). */
 const DEFAULT_PAGE_SIZE = 25;
 
 const monthOf = (date: Date) => date.toISOString().slice(0, 7);
+const dayOf = (date: Date) => date.toISOString().slice(0, 10);
 
 function shiftMonth(month: string, by: number): string {
   const total =
@@ -153,13 +162,13 @@ export class MissingInvoicesService {
         const missingAccounts = this.missingStatementAccounts(computed, month);
         return {
           month,
-          debitCount: items.filter((i) => i.state !== "NO_INVOICE_NEEDED")
+          debitCount: items.filter((i) => !NO_INVOICE_NEEDED_TILE.has(i.state))
             .length,
           found: count("FOUND"),
           originalMissing: count("ORIGINAL_MISSING"),
           notMatched: count("NOT_MATCHED"),
           noInvoice: count(NO_INVOICE_TILE),
-          noInvoiceNeeded: count("NO_INVOICE_NEEDED"),
+          noInvoiceNeeded: count(NO_INVOICE_NEEDED_TILE),
           missingAmountHuf: items
             .filter(
               (i) =>
@@ -202,7 +211,7 @@ export class MissingInvoicesService {
           (tab === "NOT_MATCHED" && item.state === "NOT_MATCHED") ||
           (tab === "FOUND" && item.state === "FOUND") ||
           (tab === "NO_INVOICE_NEEDED" &&
-            item.state === "NO_INVOICE_NEEDED")) &&
+            NO_INVOICE_NEEDED_TILE.has(item.state))) &&
         (!query.category || item.category === query.category) &&
         (!query.accountId || item.accountId === query.accountId) &&
         (!q ||
@@ -237,7 +246,7 @@ export class MissingInvoicesService {
         originalMissing: count((s) => s === "ORIGINAL_MISSING"),
         notMatched: count((s) => s === "NOT_MATCHED"),
         noInvoice: count((s) => NO_INVOICE_TILE.has(s)),
-        noInvoiceNeeded: count((s) => s === "NO_INVOICE_NEEDED"),
+        noInvoiceNeeded: count((s) => NO_INVOICE_NEEDED_TILE.has(s)),
       },
       items: filtered
         .slice((page - 1) * pageSize, page * pageSize)
@@ -656,9 +665,10 @@ export class MissingInvoicesService {
   }
 
   private async compute(): Promise<Computed> {
-    const [accountRows, debits, coverage, manual] = await Promise.all([
+    const [accountRows, debits, credits, coverage, manual] = await Promise.all([
       this.repository.accounts(),
       this.repository.debits(),
+      this.repository.credits(),
       this.repository.statementCoverage(),
       this.repository.manualMatches(),
     ]);
@@ -735,6 +745,19 @@ export class MissingInvoicesService {
       paperOriginals: new Set(
         debits.filter((d) => d.paperOriginalAt).map((d) => d.id),
       ),
+      credits: credits.map((credit) => ({
+        id: credit.id,
+        bookingDate: dayOf(credit.bookingDate),
+        amount: credit.amount,
+        currency: credit.currency,
+        counterpartyName: credit.counterpartyName,
+        narrative: credit.narrative,
+      })),
+      // a kivonatok utolsó napja, nem a mai nap: egy még be nem töltött
+      // kivonat nem jelent elmaradt visszatérítést
+      asOf: [...debits, ...credits]
+        .map((t) => dayOf(t.bookingDate))
+        .reduce((a, b) => (a > b ? a : b)),
     });
 
     const accountName = new Map(accounts.map((a) => [a.id, a.name]));
@@ -777,6 +800,17 @@ export class MissingInvoicesService {
                 outcome.amountDifference.currency === "HUF" ? 0 : 2,
               ),
               currency: outcome.amountDifference.currency,
+            }
+          : null,
+        refund: outcome.refund
+          ? {
+              amount: outcome.refund.amount.toFixed(
+                outcome.refund.currency === "HUF" ? 0 : 2,
+              ),
+              currency: outcome.refund.currency,
+              creditNoteNumber: outcome.refund.creditNoteNumber,
+              due: outcome.refund.due,
+              receivedOn: outcome.refund.receivedOn,
             }
           : null,
         comment: debit.comment,
@@ -841,6 +875,8 @@ const ACTION: Record<ItemState, MissingInvoiceAction> = {
   PROFORMA_ONLY: "REQUEST_FINAL_INVOICE",
   DOUBLE_PAID: "CHECK_DOUBLE_PAYMENT",
   NO_INVOICE_NEEDED: "NONE",
+  REFUND_EXPECTED: "NONE",
+  REFUND_MISSING: "CHASE_REFUND",
 };
 
 /** A Drive-mappa hivatkozása csak https alakban; fiktív link nem lehet (brief 11). */

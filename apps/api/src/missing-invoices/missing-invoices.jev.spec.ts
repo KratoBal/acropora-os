@@ -62,6 +62,7 @@ function setup(enabled = true) {
   const repository = {
     accounts: async () => [ACCOUNT],
     debits: async () => [debit],
+    credits: async () => [],
     statementCoverage: async () => new Set([`${ACCOUNT.id}:2026-05`]),
     manualMatches: async () => new Map(matches),
     candidates: async () => documents,

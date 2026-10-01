@@ -63,6 +63,8 @@ export function toChargeRow(item: MissingInvoiceItem): ChargeRow {
     documentNumbers: item.documentNumbers,
     missingNumbers: item.missingNumbers,
     amountDifference: item.amountDifference,
+    // egy a mezőt még nem ismerő API (a web előbb települ) ne döntse el a sort
+    refund: item.refund ?? null,
     paperOriginal: item.paperOriginal,
   };
 }

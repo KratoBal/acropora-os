@@ -10,6 +10,7 @@ import {
   normalizeName,
   samePartner,
   type CandidateDocument,
+  type MatchableCredit,
   type MatchableDebit,
 } from "./missing-invoice-matching.js";
 import { sequenceRatio } from "./sequence-ratio.js";
@@ -270,6 +271,226 @@ describe("the case list: a spelled-out legal form, a named month, a card descrip
       state([obi(), obi({ number: "A06600684/0138/00003" })]),
       "NO_INVOICE:",
     );
+  });
+});
+
+/*
+  SZTORNÓZOTT VÁSÁRLÁS (barracuda esetlistája, Tesla; acrobot 25933), a mért
+  eset: 85 000 Ft kártyával 09-17-én, a Tesla 09-25-én 85 000-es jóváírót adott,
+  az eredeti számla NAV-sora 0 bruttót hordoz. MI PIROSÍT: ha a jóváíró nélkül,
+  más összegűvel, a 15 napos ablakon kívülivel, más eladóéval vagy kettő közül
+  is sztornónak látszana; ha a határidő a mai naphoz és nem a kivonatokhoz
+  mérne; ha a visszatérítés más összegű, más kereskedőjű vagy a vásárlás előtti
+  jóváírással is lezárulna; ha egy jóváírás két terhelést zárna le; ha a pontos
+  számla elől elvenné a terhelést.
+*/
+describe("a cancelled purchase: no invoice needed, the refund is expected", () => {
+  const tesla = (overrides: Partial<MatchableDebit> = {}) =>
+    debit({
+      bookingDate: "2026-09-21",
+      amount: D(85000),
+      counterpartyName: "Tesla Inc",
+      narrative: "2026.09.17 7413124583 Tesla Inc -APPLE",
+      category: "CARD_SUBSCRIPTION",
+      ...overrides,
+    });
+  const original = () =>
+    doc({
+      number: "4042A0000031808",
+      date: "2026-09-17",
+      gross: D(0),
+      supplierName: "Tesla Hungary Kft.",
+      hasOriginal: false,
+    });
+  const creditNote = (overrides: Partial<CandidateDocument> = {}) =>
+    doc({
+      source: "SZAMLAZZ",
+      number: "CR4042A0000012507",
+      date: "2026-09-25",
+      gross: D(-85000),
+      supplierName: "Tesla Hungary Kft.",
+      ...overrides,
+    });
+  let k = 0;
+  const refund = (
+    overrides: Partial<MatchableCredit> = {},
+  ): MatchableCredit => ({
+    id: `cr${++k}`,
+    bookingDate: "2026-10-03",
+    amount: D(85000),
+    currency: "HUF",
+    counterpartyName: null,
+    narrative: "2026.10.02 7413124583 Tesla Inc -APPLE",
+    ...overrides,
+  });
+  const decide = (
+    debits: MatchableDebit[],
+    documents: CandidateDocument[],
+    extra: { credits?: MatchableCredit[]; asOf?: string } = {},
+  ) => matchMonth({ debits, documents, manual: new Map(), ...extra });
+
+  it("the Tesla case: expected until 30 days after the credit note, measured to the statements", () => {
+    const d = tesla();
+    const note = creditNote();
+    const at = (asOf?: string) =>
+      decide([d], [original(), note], asOf ? { asOf } : {}).get(d.id)!;
+    const expected = at("2026-09-30");
+    assert.equal(expected.state, "REFUND_EXPECTED");
+    assert.deepEqual(
+      expected.documents.map((x) => x.number),
+      ["CR4042A0000012507"],
+    );
+    assert.deepEqual(
+      { ...expected.refund, amount: expected.refund?.amount.toFixed(0) },
+      {
+        amount: "85000",
+        currency: "HUF",
+        creditNoteNumber: "CR4042A0000012507",
+        due: "2026-10-25",
+        receivedOn: null,
+      },
+    );
+    assert.deepEqual(
+      [at("2026-10-25"), at("2026-10-26"), at()].map((o) => o.state),
+      ["REFUND_EXPECTED", "REFUND_MISSING", "REFUND_EXPECTED"],
+    );
+  });
+
+  it("the card refund closes it, also after the due date: no invoice needed", () => {
+    const d = tesla();
+    const out = decide([d], [original(), creditNote()], {
+      credits: [refund()],
+      asOf: "2026-11-30",
+    }).get(d.id)!;
+    assert.equal(out.state, "NO_INVOICE_NEEDED");
+    assert.equal(out.refund?.receivedOn, "2026-10-03");
+    // átutalásként, a partner nevével is
+    const e = tesla();
+    const transfer = decide([e], [creditNote()], {
+      credits: [
+        refund({
+          counterpartyName: "Tesla Hungary Kft.",
+          narrative: "Visszautalás CR4042A0000012507",
+        }),
+      ],
+    }).get(e.id)!;
+    assert.equal(transfer.refund?.receivedOn, "2026-10-03");
+  });
+
+  it("a refund of another amount, another merchant, or before the purchase does not close it", () => {
+    const d = tesla();
+    const states = [
+      refund({ amount: D(84000) }),
+      refund({ currency: "EUR" }),
+      refund({ narrative: "2026.10.02 7413124583 Alza.hu Kft. -APPLE" }),
+      refund({ bookingDate: "2026-09-16" }),
+    ].map(
+      (credit) =>
+        decide([d], [creditNote()], { credits: [credit] }).get(d.id)!.refund
+          ?.receivedOn,
+    );
+    assert.deepEqual(states, [null, null, null, null]);
+  });
+
+  it("one refund closes one purchase", () => {
+    const first = tesla({ id: "tesla-1" });
+    // két külön sztornózott vásárlás, mindegyiknek a saját jóváírója
+    const second = tesla({
+      id: "tesla-2",
+      bookingDate: "2026-09-03",
+      narrative: "2026.09.01 7413124583 Tesla Inc -APPLE",
+    });
+    const out = decide(
+      [first, second],
+      [
+        creditNote({ id: "cn-1" }),
+        creditNote({
+          id: "cn-2",
+          number: "CR4042A0000012508",
+          date: "2026-09-05",
+        }),
+      ],
+      { credits: [refund()] },
+    );
+    assert.deepEqual(
+      [first, second].map((d) => out.get(d.id)!.state),
+      ["REFUND_EXPECTED", "NO_INVOICE_NEEDED"],
+    );
+  });
+
+  it("without a credit note of the whole amount, from the seller, within 15 days, and only one: not a cancellation", () => {
+    const cancelled = (documents: CandidateDocument[]) => {
+      const d = tesla();
+      return decide([d], [original(), ...documents])
+        .get(d.id)!
+        .state.startsWith("REFUND");
+    };
+    assert.deepEqual(
+      [
+        cancelled([]),
+        cancelled([creditNote({ gross: D(-84000) })]),
+        cancelled([creditNote({ gross: D(85000) })]),
+        cancelled([creditNote({ date: "2026-10-03" })]),
+        cancelled([creditNote({ date: "2026-09-16" })]),
+        cancelled([creditNote({ supplierName: "Alza.hu Kft." })]),
+        cancelled([creditNote(), creditNote({ number: "CR4042A0000012508" })]),
+      ],
+      [false, false, false, false, false, false, false],
+    );
+    // a 15. nap még benne van
+    assert.equal(cancelled([creditNote({ date: "2026-10-02" })]), true);
+    // egy márkatárs (az első szó egyezik, a név nem hasonló): a 3. szabály nem
+    // viszi el, tehát itt az előjel dönt; a jóváírója sztornó, a számlája nem
+    const sibling = "Tesla Energy Solutions Europe Kft.";
+    assert.deepEqual(
+      [
+        cancelled([creditNote({ supplierName: sibling })]),
+        cancelled([creditNote({ supplierName: sibling, gross: D(85000) })]),
+      ],
+      [true, false],
+    );
+  });
+
+  it("a transfer: the booking day is the purchase day, and a short name pairs by similarity", () => {
+    // az „OM” két betű: nincs márka-szó, csak a név hasonlósága köti össze
+    const d = debit({
+      bookingDate: "2026-09-10",
+      amount: D(20000),
+      counterpartyName: "OM Kft.",
+      narrative: "Rendelés 4411",
+    });
+    const note = (date: string) =>
+      creditNote({
+        number: "OM-J-12",
+        date,
+        gross: D(-20000),
+        supplierName: "OM Kereskedelmi Kft.",
+      });
+    assert.deepEqual(
+      ["2026-09-15", "2026-09-26"].map((date) =>
+        decide([d], [note(date)])
+          .get(d.id)!
+          .state.startsWith("REFUND"),
+      ),
+      [true, false],
+    );
+  });
+
+  it("an exact invoice still wins over a credit note", () => {
+    const d = tesla();
+    const out = decide(
+      [d],
+      [
+        creditNote(),
+        doc({
+          number: "4042A0000031809",
+          date: "2026-09-17",
+          gross: D(85000),
+          supplierName: "Tesla Hungary Kft.",
+        }),
+      ],
+    ).get(d.id)!;
+    assert.equal(out.state, "FOUND");
   });
 });
 

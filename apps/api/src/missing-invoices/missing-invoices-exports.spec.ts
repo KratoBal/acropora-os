@@ -70,6 +70,7 @@ function service(input: {
   const repository = {
     accounts: async () => [ACCOUNT],
     debits: async () => input.debits,
+    credits: async () => [],
     statementCoverage: async () => new Set([`${ACCOUNT.id}:2026-08`]),
     manualMatches: async () => new Map(),
     candidates: async () => input.documents,
