@@ -89,6 +89,30 @@ describe("parseBanktranz", () => {
       );
   });
 
+  /**
+   * AMIT AZ XSD MEGENGED, AZ NEM BUKTATJA EL AZ ÜZENETET (acrobot 25807; a
+   * banktranz.xsd-ben a devizanem `string`, az értéknap `xs:date`). MI PIROSÍT:
+   * ha a „Ft”, a „FORINT” vagy egy ismeretlen pénznem-szöveg, vagy egy időzónás
+   * értéknap az üzenetet elutasítaná; ha a forint nem HUF-ként menne tovább.
+   */
+  it("takes the currency and the value date in every form the schema allows", () => {
+    const read = (devizanem: string, erteknap = "2026-09-25") =>
+      parseBanktranz(
+        FULL.replace(
+          "<devizanem>HUF</devizanem>",
+          `<devizanem>${devizanem}</devizanem>`,
+        ).replace(
+          "<erteknap>2026-09-25</erteknap>",
+          `<erteknap>${erteknap}</erteknap>`,
+        ),
+      );
+    assert.deepEqual(
+      ["Ft", "FORINT", "huf", "Euró"].map((d) => read(d).devizanem),
+      ["HUF", "HUF", "HUF", "Euró"],
+    );
+    assert.equal(read("HUF", "2026-09-25+02:00").erteknap, "2026-09-25");
+  });
+
   it("refuses a missing or malformed required field", () => {
     const bad = [
       FULL.replace("<id>4711</id>", ""),
@@ -98,9 +122,10 @@ describe("parseBanktranz", () => {
         "<erteknap>2026-09-25</erteknap>",
         "<erteknap>2026.09.25</erteknap>",
       ),
+      FULL.replace("<devizanem>HUF</devizanem>", "<devizanem> </devizanem>"),
       FULL.replace(
-        "<devizanem>HUF</devizanem>",
-        "<devizanem>FORINT</devizanem>",
+        "<erteknap>2026-09-25</erteknap>",
+        "<erteknap>2026-02-30</erteknap>",
       ),
       FULL.replace(
         "<technikai>false</technikai>",

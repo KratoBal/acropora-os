@@ -89,6 +89,38 @@ describe("the Számlázz.hu invoice message", () => {
     );
   });
 
+  /**
+   * AMIT AZ XSD MEGENGED, AZ NEM BUKTATJA EL AZ ÜZENETET (acrobot 25807, éles
+   * hiba 2026-10-01 15:00 UTC: két bejövő számla „a devizanem nem háromjegyű kód”
+   * miatt 400-at kapott). A devizanem `string`, a kelt `xs:date` (időzónával is).
+   * MI PIROSÍT: ha a „Ft” vagy egy ismeretlen pénznem-szöveg, vagy egy időzónás
+   * dátum az egész üzenetet elutasítaná; ha a forint nem HUF-ként menne tovább
+   * (a párosító a terhelés pénznemével veti össze).
+   */
+  it("takes the currency and the date in every form the schema allows", () => {
+    const read = (devizanem: string, kelt = "2026-09-28") =>
+      parseSzamlabe(
+        szamlabe()
+          .replace(
+            "<devizanem>HUF</devizanem>",
+            `<devizanem>${devizanem}</devizanem>`,
+          )
+          .replace("<kelt>2026-09-28</kelt>", `<kelt>${kelt}</kelt>`),
+      );
+    assert.deepEqual(
+      ["Ft", "ft.", "HUF", "Forint", "eur", "Euró"].map(
+        (d) => read(d).devizanem,
+      ),
+      ["HUF", "HUF", "HUF", "HUF", "EUR", "Euró"],
+    );
+    assert.deepEqual(
+      ["2026-09-28+02:00", "2026-09-28Z", "2026-09-28"].map(
+        (k) => read("Ft", k).kelt,
+      ),
+      ["2026-09-28", "2026-09-28", "2026-09-28"],
+    );
+  });
+
   it("refuses DOCTYPE, entities, a processing instruction, a foreign root or namespace, broken markup", () => {
     for (const bad of [
       `<!DOCTYPE x [<!ENTITY a "b">]>${szamlabe()}`,
@@ -98,6 +130,11 @@ describe("the Számlázz.hu invoice message", () => {
       szamlabe().replace("</alap>", ""),
       szamlabe().replace("<szamlaszam>E-KBOSS-2026-1234</szamlaszam>", ""),
       szamlabe().replace("<kelt>2026-09-28</kelt>", "<kelt>tegnap</kelt>"),
+      szamlabe().replace("<kelt>2026-09-28</kelt>", "<kelt>2026-02-31</kelt>"),
+      szamlabe().replace(
+        "<devizanem>HUF</devizanem>",
+        "<devizanem> </devizanem>",
+      ),
       szamlabe().replace("Acropora Kft.", "Acropora & Társa"),
     ])
       assert.equal(
@@ -225,6 +262,38 @@ describe("SzamlazzFeedsService", () => {
         },
       },
     );
+  });
+
+  /**
+   * AZ ÉLES ESET (acrobot 25807): a „Ft” pénznemű bejövő számla 400 helyett
+   * nyugtázva (az azonosítóval), és HUF-ként kerül a Hiányzó számlák közé. A
+   * valóban hibás üzenet továbbra is 400, és semmi nem íródik.
+   */
+  it("a forint written as Ft is answered and goes in as HUF; a broken message is still 400", async () => {
+    const ft = setup();
+    const ok = await ft.service.receive(
+      "SZAMLABE",
+      KEY,
+      szamlabe().replace(
+        "<devizanem>HUF</devizanem>",
+        "<devizanem>Ft</devizanem>",
+      ),
+    );
+    assert.deepEqual(
+      [ok.status, /<id>98765<\/id>/.test(ok.body), ft.raw.length],
+      [200, true, 1],
+    );
+    assert.equal(
+      (ft.invoices[0]?.textReading as { currency?: string }).currency,
+      "HUF",
+    );
+    const broken = setup();
+    const bad = await broken.service.receive(
+      "SZAMLABE",
+      KEY,
+      szamlabe().replace("<devizanem>HUF</devizanem>", ""),
+    );
+    assert.deepEqual([bad.status, broken.raw, broken.invoices], [400, [], []]);
   });
 
   it("the payee from the buyer's tax number, else from its name", async () => {
