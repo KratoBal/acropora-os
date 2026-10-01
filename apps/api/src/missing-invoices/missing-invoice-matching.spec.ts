@@ -109,6 +109,172 @@ describe("matchMonth", () => {
     );
   });
 
+  it("pays a month of one card's payments with the partner's one invoice from the start of the next month", () => {
+    const card = (date: string, amount: number, number = "7413124583") =>
+      debit({
+        bookingDate: date,
+        amount: D(amount),
+        counterpartyName: "SIMPLEP*PARKL.NET",
+        narrative: `${date.replace(/-/g, ".")} ${number} SIMPLEP*PARKL .NET`,
+        category: "CARD_SUBSCRIPTION",
+      });
+    const march = [
+      card("2026-03-05", 400),
+      card("2026-03-17", 350),
+      card("2026-03-31", 450),
+    ];
+    const otherCard = card("2026-03-20", 999, "0194683438");
+    const invoice = doc({
+      number: "E-PAR-2026-13900",
+      date: "2026-04-01",
+      gross: D(1200),
+      supplierName: "Parkl Digital Technologies Kft.",
+    });
+    const out = run([...march, otherCard], [invoice]);
+    assert.deepEqual(
+      march.map((d) => [
+        out.get(d.id)?.documents[0]?.id,
+        out.get(d.id)?.reason,
+      ]),
+      march.map(() => [
+        invoice.id,
+        "gyűjtőszámla: 3 kártyás fizetés havi összege",
+      ]),
+    );
+    assert.equal(out.get(otherCard.id)?.state, "NOT_MATCHED");
+  });
+
+  it("does not take a monthly invoice that is late, off by an amount, or one of two equal ones", () => {
+    const card = (date: string, amount: number) =>
+      debit({
+        bookingDate: date,
+        amount: D(amount),
+        counterpartyName: "SIMPLEP*PARKL.NET",
+        narrative: `${date.replace(/-/g, ".")} 7413124583 SIMPLEP*PARKL .NET`,
+        category: "CARD_SUBSCRIPTION",
+      });
+    const parkl = (date: string, gross: number) =>
+      doc({
+        date,
+        gross: D(gross),
+        supplierName: "Parkl Digital Technologies Kft.",
+      });
+    const reasons = (documents: CandidateDocument[]) => {
+      const month = [card("2026-03-05", 400), card("2026-03-17", 800)];
+      const out = run(month, documents);
+      return month.map(
+        (d) => out.get(d.id)?.reason.startsWith("gyűjtőszámla") ?? false,
+      );
+    };
+    assert.deepEqual(reasons([parkl("2026-04-10", 1200)]), [false, false]); // késői, de az ablakon belül
+    assert.deepEqual(reasons([parkl("2026-04-01", 1210)]), [false, false]); // más összeg
+    assert.deepEqual(
+      reasons([parkl("2026-04-01", 1200), parkl("2026-04-02", 1200)]),
+      [false, false],
+    ); // kettő közül nem választunk
+  });
+
+  it("takes the number only as a whole word of the narrative (the two measured wrong pairings)", () => {
+    // PETIK-2026-3 a PETIK-2026-30 közleményben: a teljes szám a helyes
+    const d = debit({ narrative: "PETIK-2026-30", amount: D(777) });
+    const short = doc({ number: "PETIK-2026-3", gross: D(1) });
+    const right = doc({ number: "PETIK-2026-30", gross: D(2) });
+    assert.equal(
+      run([d], [short, right]).get(d.id)?.documents[0]?.id,
+      right.id,
+    );
+    // egy MÁSIK partner 2026-37 számlája az E-VEGA-2026-37 közleményben
+    const e = debit({
+      narrative: "E-VEGA-2026-37",
+      counterpartyName: "Vértes és Tsa Bt.",
+      amount: D(778),
+    });
+    const other = doc({
+      number: "2026-37",
+      supplierName: "UPS Bt.",
+      gross: D(3),
+    });
+    assert.notEqual(
+      run([e], [other]).get(e.id)?.reason,
+      "a számla száma a közleményben",
+    );
+  });
+
+  it("needs the partner too for a short number, and never takes a number under 5 characters", () => {
+    const d = debit({
+      narrative: "Számla 26/88",
+      counterpartyName: "Szállító Kft.",
+      amount: D(779),
+    });
+    const theirs = doc({
+      number: "26/88",
+      supplierName: "Szállító Kft.",
+      gross: D(4),
+    });
+    const others = doc({
+      number: "26/88",
+      supplierName: "Másik Bt.",
+      gross: D(5),
+    });
+    assert.equal(
+      run([d], [others]).get(d.id)?.reason === "a számla száma a közleményben",
+      false,
+    );
+    assert.equal(run([d], [theirs]).get(d.id)?.documents[0]?.id, theirs.id);
+    // a 469-es (rövid) szám a saját partnerénél sem elég
+    const e = debit({ narrative: "469", amount: D(780) });
+    assert.notEqual(
+      run([e], [doc({ number: "469", gross: D(6) })]).get(e.id)?.reason,
+      "a számla száma a közleményben",
+    );
+  });
+
+  it("takes a short number from the partner's own invoice even when the bank spells the name otherwise (Hertlein shape)", () => {
+    // Hertlein 260835: 6 karakter, tehát a partnernek is egyeznie kell
+    const d = debit({
+      narrative: "Invoice 260835",
+      counterpartyName: "HERTLEIN AQUARISTIK E.KFR.",
+      amount: D(781),
+    });
+    const theirs = doc({
+      number: "260835",
+      supplierName: "Hertlein Aquaristik e.Kfr.",
+      gross: D(7),
+    });
+    assert.equal(run([d], [theirs]).get(d.id)?.documents[0]?.id, theirs.id);
+    // ugyanez a rövid szám egy másik kiállító HIVATKOZÁSAKÉNT nem párosít
+    const other = doc({
+      number: "X-99999999",
+      references: ["260835"],
+      supplierName: "Másik GmbH",
+      gross: D(8),
+    });
+    assert.notEqual(
+      run([d], [other]).get(d.id)?.reason,
+      "a számla száma a közleményben",
+    );
+  });
+
+  it("pairs by a reference the invoice carries, when the narrative names that instead of the number", () => {
+    // Fauna Marin, éles 2026-10-01: a fizetés a rendelésszámot nevezi meg
+    const d = debit({
+      narrative: "1.698,58 EUR 20144304 Fauna Marin Gmbh",
+      counterpartyName: "Fauna Marin Gmbh",
+    });
+    const c = doc({
+      number: "40142365",
+      references: ["20144304"],
+      supplierName: "Fauna Marin",
+      gross: null,
+    });
+    const outcome = run([d], [c]).get(d.id);
+    assert.equal(outcome?.reason, "a számla száma a közleményben");
+    assert.deepEqual(
+      outcome?.documents.map((x) => x.id),
+      [c.id],
+    );
+  });
+
   it("pairs by the supplier's bank account with an exact amount", () => {
     const d = debit({
       counterpartyName: "más név",

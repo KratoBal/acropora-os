@@ -33,6 +33,7 @@ import {
 import {
   looksLikeInvoice,
   looksLikeProforma,
+  bankReference,
   readInvoiceText,
   type InvoiceTextReading,
 } from "./invoice-text.js";
@@ -68,7 +69,8 @@ interface Found {
  *   3. nem látszik számlának                                     -> NOT_INVOICE,
  *      és a tartalma NEM tárolódik (a balazs@ fiókban bármi lehet)
  *   4. a szállítói illesztő olvassa, VAGY a szállító egy NAV-ban ismert
- *      számlaszáma áll a szövegében                              -> STORED
+ *      számlaszáma áll a szövegében, VAGY a számla száma egy banki
+ *      terhelés közleményében áll (külföldi szállító)           -> STORED
  *   5. minden más számlának látszó                              -> UNMATCHED,
  *      tartalom nélkül
  *
@@ -276,7 +278,23 @@ export class InvoiceCollectionService {
         ...hints,
         navNumbers: () => navNumbers,
       });
-      if (textReading.numberFrom !== "NAV") return skip("UNMATCHED");
+      if (textReading.numberFrom !== "NAV") {
+        const reference = bankReference(
+          lines,
+          textReading,
+          hints,
+          await this.repository.debitNarratives(),
+        );
+        if (!reference) return skip("UNMATCHED");
+        textReading = textReading.invoiceNumber
+          ? { ...textReading, bankReference: reference }
+          : {
+              ...textReading,
+              invoiceNumber: reference,
+              numberFrom: "BANK",
+              bankReference: reference,
+            };
+      }
     }
     const proforma = importResult
       ? importResult.documentKind === "PROFORMA"
