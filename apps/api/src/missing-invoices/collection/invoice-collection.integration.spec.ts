@@ -259,6 +259,19 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
       { fileName: "same-import.pdf", origin: "UPLOAD" },
     ]);
     assert.deepEqual(await repository.sameNumberDocuments("IT-NONE-0"), []);
+    // A SAJÁT SORAI A TESZT VÉGÉN TÖRLŐDNEK, nem csak az after()-ben: ezek
+    // feltöltések (a jelöltlista dátumszűrés nélkül veszi őket), és a hiányos
+    // importResult-juk (szállító nélkül) a fájl későbbi, jelöltlistát olvasó
+    // tesztjét buktatná el, ami a valódi olvasatot mindig teljesnek látja.
+    await prisma.incomingSupplierDocument.deleteMany({
+      where: {
+        gmailMessageId: {
+          in: ["same-text", "same-import", "other"].map(
+            (key) => `collect:INFO_MAIL:collect-it-${key}`,
+          ),
+        },
+      },
+    });
   });
 
   it("lets one run at a time", async () => {
