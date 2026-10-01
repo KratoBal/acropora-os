@@ -26,6 +26,7 @@ import {
   type StoredPairRun,
 } from "../missing-invoice-jev.repository.js";
 import type { InvoiceCollectionSource } from "./invoice-collection.config.js";
+import { looksLikeProformaLetter } from "./invoice-text.js";
 
 /**
  * A BEGYUJTOTT PDF BESOROLASA A JEV-VEL. Terv: `jev-level-szetvalogatas-terv-
@@ -140,6 +141,8 @@ export class LetterClassJevService {
     letter: CollectedLetter,
   ): Promise<LetterClassification | null> {
     if (!this.enabled()) return null;
+    // a díjbekérő nem megy a Jevhez: hívás és futás nélkül kimarad (acrobot 25840)
+    if (looksLikeProformaLetter(letter.lines, letter.fileName)) return null;
     try {
       return await this.besorol(letter);
     } catch (error) {

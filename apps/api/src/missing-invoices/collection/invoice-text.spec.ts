@@ -10,6 +10,7 @@ import {
   looksLikeInvoice,
   looksLikeOtherDocument,
   looksLikeProforma,
+  looksLikeProformaLetter,
   looksLikeReminder,
   otherDocumentFileName,
   readInvoiceText,
@@ -390,6 +391,53 @@ describe("contracts, offers and customs declarations are not invoices (acrobot 2
 
   it("a facture provisoire is a proforma", () => {
     assert.equal(looksLikeProforma("FACTURE PROVISOIRE N° 2026-118"), true);
+  });
+});
+
+describe("a pro forma never goes to the letter classifier (acrobot 25840)", () => {
+  it("by its header, its PI number (Cyrillic \u0420 too) or its file name", () => {
+    // a Waterro-alak: a PDF a számot cirill \u0420-vel hozta
+    const waterro = [
+      "CONTRACT/PROFORMA-INVOICE",
+      "number: | \u0420I-WR26-0104",
+      "Seller: | SIA Waterro | Buyer: | Acropora Kft.",
+    ];
+    assert.equal(looksLikeProformaLetter(waterro, "doc.pdf"), true);
+    assert.equal(
+      looksLikeProformaLetter(
+        ["CONTRACT", "number: | \u0420I-WR26-0104"],
+        "doc.pdf",
+      ),
+      true,
+    );
+    assert.equal(
+      looksLikeProformaLetter(["CONTRACT", "number: | PI-2026-17"], "doc.pdf"),
+      true,
+    );
+    assert.equal(looksLikeProformaLetter(["Díjbekérő"], "a.pdf"), true);
+    assert.equal(
+      looksLikeProformaLetter(["x"], "PI-WR26-0104 Acropora.pdf"),
+      true,
+    );
+    assert.equal(looksLikeProformaLetter(["x"], "Dijbekero_2026_09.pdf"), true);
+    assert.equal(
+      looksLikeProformaLetter(["x"], "Díjbekérő.pdf".normalize("NFD")),
+      true,
+    );
+  });
+
+  it("an invoice that names its pro forma later, or a PI inside a word, is not one", () => {
+    const later = Array.from({ length: 20 }, (_, i) =>
+      i === 14 ? "Előzmény: díjbekérő PI-2026-17, kiegyenlítve" : "SZÁMLA",
+    );
+    assert.equal(looksLikeProformaLetter(later, "szamla.pdf"), false);
+    for (const line of ["API-2026-1", "PIPE-12 csőidom", "Pi-hole", "SPI-1"])
+      assert.equal(
+        looksLikeProformaLetter(["INVOICE", line], "inv.pdf"),
+        false,
+        line,
+      );
+    assert.equal(looksLikeProformaLetter(["INVOICE"], "PIPE-123.pdf"), false);
   });
 });
 

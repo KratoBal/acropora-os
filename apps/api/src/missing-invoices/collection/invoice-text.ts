@@ -319,6 +319,40 @@ export function looksLikeProforma(text: string): boolean {
   return PROFORMA_WORD.test(text);
 }
 
+/**
+ * DÍJBEKÉRŐ A LEVÉL-BESOROLÓ ELŐTT (acrobot 25840). A Jev a díjbekérőt számlának
+ * veheti: a HOLDOUT egyetlen hamis „bejövő számlája” egy CONTRACT/PROFORMA-INVOICE
+ * fejlécű, `РI-` számú díjbekérő volt (0,83), és a DEV-en ugyanez a fajta állt
+ * (0,74). A díjbekérő nem kerülhet számlaként a jelöltek közé, ezért ez a szűrő
+ * a hívás ELŐTT dönt, determinisztikusan.
+ *
+ * A fájlnév (`PI-`, vagy a díjbekérő szó), vagy az első 10 sor (a díjbekérő szó,
+ * vagy egy `PI-` szám; a `Р` cirill is lehet, a PDF így hozta). A teljes szöveg
+ * NEM: egy számla, ami a korábbi díjbekérőjére hivatkozik, attól még számla.
+ * Mérve 2026-10-01 az 1029 mért levélen: 35-öt fog meg, ebből 10 UNMATCHED; ott
+ * a Jev kettőt mondott számlának, és mind a kettő díjbekérő volt. A teljes
+ * szövegre egy vakon címkézett valódi számlát is elvett volna.
+ */
+const PROFORMA_NUMBER = /(?<![\p{L}\d])[PР][IІ]-[\p{L}\d]*\d/u;
+const PROFORMA_FILE = /^[PР][IІ][-_ ]/iu;
+
+export function looksLikeProformaLetter(
+  lines: readonly string[],
+  fileName: string | null | undefined,
+): boolean {
+  const name = (fileName ?? "").normalize("NFC");
+  const title = lines
+    .slice(0, REMINDER_TITLE_LINES)
+    .map((line) => line.normalize("NFC"))
+    .join("\n");
+  return (
+    PROFORMA_FILE.test(name) ||
+    PROFORMA_WORD.test(name.replace(/[_.]+/g, " ")) ||
+    PROFORMA_WORD.test(title) ||
+    PROFORMA_NUMBER.test(title)
+  );
+}
+
 export function readInvoiceText(
   lines: readonly string[],
   hints: InvoiceTextHints = {},
