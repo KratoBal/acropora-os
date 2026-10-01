@@ -34,7 +34,9 @@ export class BankStatementImportService {
       throw new BadRequestException(
         parsed.rejected.length > 0
           ? `A fájlban nincs olvasható kivonat-sor (az első hiba a ${parsed.rejected[0]!.line}. sorban: ${parsed.rejected[0]!.reason}).`
-          : "A fájl üres.",
+          : parsed.pending.length > 0
+            ? `A fájlban csak függő kártyás tétel van (${parsed.pending.length}): a bank még nem könyvelte őket, a következő kivonatban jönnek.`
+            : "A fájl üres.",
       );
     const { importId, createdCount } = await this.repository.importRows({
       fileName: file.originalname,
@@ -55,6 +57,15 @@ export class BankStatementImportService {
       skippedCount: parsed.rows.length - createdCount,
       rejected: parsed.rejected.slice(0, 10),
       rejectedCount: parsed.rejected.length,
+      pending: parsed.pending
+        .slice(0, 10)
+        .map(({ line, partner, amount, currency }) => ({
+          line,
+          partner,
+          amount,
+          currency,
+        })),
+      pendingCount: parsed.pending.length,
       accounts: [...accounts].map(([accountNumber, currency]) => ({
         accountNumber,
         currency,
