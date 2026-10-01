@@ -87,6 +87,13 @@ function shiftMonth(month: string, by: number): string {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
+/** Egy forrás-dokumentum párosítása (a Számlázás „Bejövő számlák” nézetéhez). */
+export interface DocumentPairing {
+  payee: CandidateDocument["payee"];
+  kind: CandidateDocument["kind"];
+  debits: { bookingDate: string; amount: string; currency: string }[];
+}
+
 interface Computed {
   items: (MissingInvoiceItem & { month: string; accountId: string })[];
   months: string[];
@@ -300,6 +307,40 @@ export class MissingInvoicesService {
    * mai kézi párosítással fogadja el. Kikapcsolva, nem mért tételnél vagy bármi
    * hibánál `documentId: null`, és a drawer úgy halad, mint javaslat nélkül.
    */
+  /**
+   * A SZÁMLÁZÁS „BEJÖVŐ SZÁMLÁK” NÉZETÉNEK (acrobot 25869): melyik
+   * forrás-dokumentum melyik terheléshez párosodott, a meglévő számításból, ÚJ
+   * LOGIKA NÉLKÜL. A kulcs a dokumentum azonosítója ÉS minden aliasa (egy
+   * összevont NAV-sor mögött álló továbbított számla is megtalálja a magáét),
+   * mellette a dokumentum vevő-ítélete és fajtája (a „nem párosítandó”-hoz).
+   */
+  async documentPairings(): Promise<Map<string, DocumentPairing>> {
+    const computed = await this.compute();
+    const result = new Map<string, DocumentPairing>();
+    const entry = (document: CandidateDocument) => {
+      const ids = [document.id, ...(document.aliasIds ?? [])];
+      const found = ids.map((id) => result.get(id)).find(Boolean);
+      const pairing: DocumentPairing = found ?? {
+        payee: document.payee,
+        kind: document.kind,
+        debits: [],
+      };
+      for (const id of ids) result.set(id, pairing);
+      return pairing;
+    };
+    for (const document of computed.documents) entry(document);
+    for (const item of computed.items) {
+      const outcome = computed.outcomes.get(item.id);
+      for (const document of outcome?.documents ?? [])
+        entry(document).debits.push({
+          bookingDate: item.bookingDate,
+          amount: item.amount,
+          currency: item.currency,
+        });
+    }
+    return result;
+  }
+
   async jevSuggestion(id: string): Promise<PairSuggestion> {
     if (!this.jev?.enabled())
       return { enabled: false, documentId: null, confidence: null };
@@ -512,7 +553,7 @@ export class MissingInvoicesService {
     } catch {
       throw new BadRequestException("A PDF nem olvasható.");
     }
-    await this.repository.uploadAndPair({
+    const documentId = await this.repository.uploadAndPair({
       bankTransactionId: id,
       fileName: file.originalname,
       content: file.buffer,
@@ -522,6 +563,9 @@ export class MissingInvoicesService {
       payee: payeeFromText(text),
       userId: user.id,
     });
+    // a Jev-javaslat feloldása, mint a jelölt kiválasztásánál: a feltöltés azt
+    // jelenti, hogy egyik jelölt sem volt a jó (acrobot 25880); soha nem dob
+    await this.jev?.resolveOnPair({ bankTransactionId: id, documentId });
     return this.item(id);
   }
 

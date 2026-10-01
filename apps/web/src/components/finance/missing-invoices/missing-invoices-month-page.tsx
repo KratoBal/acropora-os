@@ -63,6 +63,16 @@ const TAB_KEYS = CHARGE_TABS.map((tab) => tab.key);
  * A számla feltöltése (4b, nautilus #1305) ugyanígy megy. A két export
  * (hiánylista, könyvelői csomag) fájlként töltődik le (nautilus #1308).
  */
+/** A szerver csak ezekre ad javaslatot (`OPEN_STATES`); a többire nem kérdezünk. */
+const JEV_STATES = new Set<ChargeRow["state"]>(["NOT_MATCHED", "NO_INVOICE"]);
+
+/** Egy látható Jev-javaslat; a sor azonosítójával, hogy késve se kerüljön másik drawerbe. */
+interface JevPick {
+  rowId: string;
+  documentId: string;
+  confidence: number | null;
+}
+
 export function MissingInvoicesMonthPage({ month }: { month: string }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -96,6 +106,8 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
   );
   const [open, setOpen] = useState<ChargeRow | null>(null);
   const [extras, setExtras] = useState<ChargeDetailExtras | null>(null);
+  const [jev, setJev] = useState<JevPick | null>(null);
+  const jevRequest = useRef<AbortController | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -179,11 +191,49 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     setExtras(toExtras(item));
   };
 
+  /**
+   * A JEV JAVASLATA KÜLÖN KÉRÉSBEN (acrobot 25871): nem várja meg a drawer, és
+   * semmit nem mutat, amíg nincs látható javaslat. Árnyék-módban a válasz üres,
+   * tehát a felület betűre ugyanaz; hibánál (időtúllépés, 5xx) csendben semmi.
+   * A #1324 végpontjának eddig nem volt hívója: ettől jelenik meg élőben.
+   */
+  const askJev = (row: ChargeRow) => {
+    jevRequest.current?.abort();
+    setJev(null);
+    if (!JEV_STATES.has(row.state)) return;
+    const controller = new AbortController();
+    jevRequest.current = controller;
+    missingInvoicesApi
+      .jevSuggestion(token, row.id, controller.signal)
+      .then((suggestion) => {
+        if (
+          !controller.signal.aborted &&
+          suggestion.enabled &&
+          suggestion.documentId !== null
+        )
+          setJev({
+            rowId: row.id,
+            documentId: suggestion.documentId,
+            confidence: suggestion.confidence,
+          });
+      })
+      .catch(() => {
+        // a javaslat kimaradása nem hiba: a drawer nélküle is teljes
+      });
+  };
+
+  const closeDrawer = () => {
+    jevRequest.current?.abort();
+    setJev(null);
+    setOpen(null);
+  };
+
   const openRow = (row: ChargeRow) => {
     setOpen(row);
     setExtras(null);
     setNote(row.comment ?? "");
     setDrawerError(null);
+    askJev(row);
     missingInvoicesApi
       .item(token, row.id)
       .then(applyItem)
@@ -349,9 +399,14 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
       />
       <MissingInvoicesDrawer
         row={open}
-        onClose={() => setOpen(null)}
+        onClose={closeDrawer}
         companyName={companyName}
         extras={extras}
+        jevSuggestion={
+          jev && open && jev.rowId === open.id && JEV_STATES.has(open.state)
+            ? jev
+            : null
+        }
         onPair={(candidate) =>
           open &&
           void mutate(`pair:${candidate.documentId}`, () =>

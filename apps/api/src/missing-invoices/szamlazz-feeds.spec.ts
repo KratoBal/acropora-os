@@ -193,7 +193,20 @@ function setup(
   const raw: string[] = [];
   const invoices: FeedInvoiceInput[] = [];
   const projected: { externalId: string; documentNumber: string }[] = [];
+  const incoming: { externalId: string; documentNumber: string }[] = [];
+  const order: string[] = [];
   const repository = {
+    projectIncoming: async (input: {
+      externalId: string;
+      projection: { documentNumber: string };
+    }) => {
+      order.push("projectIncoming");
+      incoming.push({
+        externalId: input.externalId,
+        documentNumber: input.projection.documentNumber,
+      });
+      return "PROJECTED";
+    },
     projectOutgoing: async (input: {
       externalId: string;
       projection: { documentNumber: string };
@@ -210,6 +223,7 @@ function setup(
     },
     hasContent: async () => opts.known ?? false,
     storeInvoice: async (input: FeedInvoiceInput) => {
+      order.push("storeInvoice");
       invoices.push(input);
       return { id: "doc-1" };
     },
@@ -219,6 +233,8 @@ function setup(
     raw,
     invoices,
     projected,
+    incoming,
+    order,
   };
 }
 
@@ -346,6 +362,55 @@ describe("SzamlazzFeedsService", () => {
         /<id>98765<\/id>/.test(reply.body),
         half.raw.length,
         half.projected,
+      ],
+      [200, true, 1, []],
+    );
+  });
+
+  /**
+   * A BEJÖVŐ SZÁMLA A SZÁMLÁZÁS „BEJÖVŐ” NÉZETÉBE (acrobot 25869, A szelet). MI
+   * PIROSÍT: ha a vetítés a forrás-dokumentum (a PDF) tárolása ELŐTT futna
+   * (akkor az első változatnak nem lenne PDF-je); ha egy új változat nem
+   * frissítené, vagy egy újraküldött igen; ha a teszt-számla vetülne; ha egy nem
+   * vetíthető számla a Számlázz.hu válaszát is elrontaná.
+   */
+  it("an incoming invoice goes to the billing incoming view after its source; a new version too, a resent or test one not", async () => {
+    const fresh = setup();
+    await fresh.service.receive("SZAMLABE", KEY, szamlabe());
+    assert.deepEqual(
+      [fresh.incoming, fresh.order],
+      [
+        [{ externalId: "98765", documentNumber: "E-KBOSS-2026-1234" }],
+        ["storeInvoice", "projectIncoming"],
+      ],
+    );
+
+    const version = setup(live, { stored: "NEW_VERSION" });
+    await version.service.receive("SZAMLABE", KEY, szamlabe());
+    const seen = setup(live, { seen: true });
+    await seen.service.receive("SZAMLABE", KEY, szamlabe());
+    const test = setup();
+    await test.service.receive("SZAMLABE", KEY, szamlabe({ teszt: "true" }));
+    assert.deepEqual(
+      [version.incoming.length, seen.incoming.length, test.incoming.length],
+      [1, 0, 0],
+    );
+
+    const half = setup();
+    const reply = await half.service.receive(
+      "SZAMLABE",
+      KEY,
+      szamlabe().replace(
+        "<totalossz><netto>10000</netto>",
+        "<totalossz><netto>sok</netto>",
+      ),
+    );
+    assert.deepEqual(
+      [
+        reply.status,
+        /<id>98765<\/id>/.test(reply.body),
+        half.invoices.length,
+        half.incoming,
       ],
       [200, true, 1, []],
     );

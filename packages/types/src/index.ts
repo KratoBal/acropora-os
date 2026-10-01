@@ -912,3 +912,21 @@ export type {
   MissingInvoiceMonthsResponse,
   MissingInvoiceTab,
 } from "./missing-invoices.js";
+export {
+  INCOMING_BANK_MATCH_LABELS,
+  INCOMING_BANK_MATCH_STATES,
+  INCOMING_PAYMENT_STATE_LABELS,
+  INCOMING_PAYMENT_STATES,
+} from "./billing-incoming.js";
+export type {
+  IncomingBankMatch,
+  IncomingBankMatchState,
+  IncomingDateBasis,
+  IncomingDocumentDetail,
+  IncomingDocumentLine,
+  IncomingDocumentListItem,
+  IncomingDocumentListQuery,
+  IncomingDocumentListResponse,
+  IncomingPaymentState,
+  ReceiptsResponse,
+} from "./billing-incoming.js";

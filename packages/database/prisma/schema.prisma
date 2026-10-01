@@ -7293,6 +7293,70 @@ model ExternalBillingDocument {
   @@index([issueDate])
 }
 
+/// A SZÁMLÁZZ.HU-BÓL KAPOTT BEJÖVŐ SZÁMLÁK VETÍTÉSE A SZÁMLÁZÁS „BEJÖVŐ
+/// SZÁMLÁK” NÉZETÉHEZ (Balázs újraterv-promptja, acrobot 25869). Ugyanaz a
+/// minta, mint az ExternalBillingDocument (a kimenő külsők, #1358): a forrás a
+/// nyers üzenet (SzamlazzFeedMessage, kind SZAMLABE), ez a tábla belőle
+/// SZÁRMAZTATOTT és újraépíthető (`billing:incoming-backfill`); egy sor egy
+/// számla, a LEGKÉSŐBB érkezett változatából.
+///
+/// A PDF NEM ITT VAN: a Hiányzó számlák forrásai közé tett első változat
+/// (IncomingSupplierDocument, origin SZAMLAZZ_FEED) hordozza, ha a `pdf` mező
+/// valódi PDF volt. A `sourceDocumentId` arra mutat, a `hasPdf` megmondja, PDF-e.
+model IncomingBillingDocument {
+  id                       String    @id @default(cuid())
+  source                   String    @default("SZAMLAZZ")
+  externalId               String
+  feedMessageId            String
+  feedReceivedAt           DateTime
+  versionCount             Int       @default(1)
+  /// A Számlázz.hu bizonylattípusa, nyersen (`alap.tipus`).
+  kindCode                 String
+  documentNumber           String
+  electronic               Boolean
+  issueDate                DateTime  @db.Date
+  fulfillmentDate          DateTime? @db.Date
+  dueDate                  DateTime? @db.Date
+  paymentMethod            String?
+  currency                 String
+  exchangeRate             Decimal?  @db.Decimal(18, 6)
+  exchangeBank             String?
+  supplierName             String
+  supplierTaxNumber        String?
+  supplierEuTaxNumber      String?
+  supplierAddress          String?
+  supplierBankAccount      String?
+  buyerName                String
+  buyerTaxNumber           String?
+  netAmount                Decimal   @db.Decimal(18, 2)
+  vatAmount                Decimal   @db.Decimal(18, 2)
+  grossAmount              Decimal   @db.Decimal(18, 2)
+  /// A tételek, az ÁFA-kulcsonkénti összesítő és a kifizetések, a számla szerint.
+  lines                    Json
+  vatSummary               Json
+  payments                 Json
+  /// Küldött-e a Számlázz.hu kifizetés-adatot (a `kifizetesek` elem opcionális):
+  /// a hiánya NEM azonos a „nem fizetett”-tel.
+  paymentsKnown            Boolean
+  /// A kifizetések összege (a szűrő és a lista ebből olvas).
+  paidAmount               Decimal   @db.Decimal(18, 2)
+  lastPaymentDate          DateTime? @db.Date
+  note                     String?
+  orderNumber              String?
+  referencedInvoiceNumber  String?
+  referencedProformaNumber String?
+  cancelled                Boolean   @default(false)
+  /// A PDF-et (vagy az XML-t) hordozó forrás-dokumentum, ha van.
+  sourceDocumentId         String?
+  hasPdf                   Boolean   @default(false)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  @@unique([source, externalId])
+  @@index([issueDate])
+  @@index([fulfillmentDate])
+}
+
 model BankTransactionSourceKey {
   id                String                @id @default(cuid())
   key               String                @unique
