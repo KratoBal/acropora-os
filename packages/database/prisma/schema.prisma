@@ -6967,6 +6967,47 @@ enum ExpectedArrivalStatus {
 /// szerkesztő és egy újraolvasás is elérje. Egy levél egy mellékletét egyszer
 /// tároljuk (`gmailMessageId` + `fileName`); egy újra csatolt számla (a De Jong
 /// finance@ emlékeztetője) DUPLICATE, és nem nyit új várható beérkezést.
+/// A számla-begyűjtés (kártya 3e75c2f4) egy látott fájlja: levél-melléklet vagy
+/// Drive-fájl, és hogy mi lett vele. Tartalmat NEM tárol: a nem számlának látszó
+/// PDF (a balazs@ fiókban bármi lehet) csak itt hagy nyomot, hogy a következő
+/// futás ne töltse le újra.
+model InvoiceCollectionItem {
+  id         String   @id @default(cuid())
+  /// INFO_MAIL, BALAZS_MAIL vagy DRIVE.
+  source     String
+  /// A Gmail-levél vagy a Drive-fájl azonosítója.
+  externalId String
+  fileName   String
+  sha256     String?
+  /// STORED, NOT_INVOICE, UNMATCHED, DUPLICATE, TOO_LARGE vagy UNREADABLE.
+  verdict    String
+  /// STORED-nál a létrehozott IncomingSupplierDocument.
+  documentId String?
+  createdAt  DateTime @default(now())
+
+  @@unique([source, externalId, fileName])
+  @@index([sha256])
+}
+
+model InvoiceCollectionRun {
+  id              String                           @id @default(cuid())
+  activeKey       String?                          @unique
+  status          SupplierInvoiceMailSyncRunStatus @default(RUNNING)
+  trigger         SyncRunTrigger
+  startedAt       DateTime                         @default(now())
+  completedAt     DateTime?
+  filesSeen       Int                              @default(0)
+  storedCount     Int                              @default(0)
+  notInvoiceCount Int                              @default(0)
+  unmatchedCount  Int                              @default(0)
+  duplicateCount  Int                              @default(0)
+  failedCount     Int                              @default(0)
+  errorCode       String?
+  updatedAt       DateTime                         @updatedAt
+
+  @@index([startedAt])
+}
+
 model IncomingSupplierDocument {
   id                String                         @id @default(cuid())
   gmailMessageId    String
@@ -6982,6 +7023,10 @@ model IncomingSupplierDocument {
   errorCode         String?
   /// A beolvasás eredménye (SupplierInvoiceImportResult).
   importResult      Json?
+  /// Az általános olvasó eredménye (számlaszám, a szállító adószáma), ha a
+  /// szállítói illesztő a PDF-et nem ismerte (számla-begyűjtés, 3e75c2f4). Nem
+  /// `importResult`: az egy illesztő teljes olvasata, ez csak a párosítás kulcsa.
+  textReading       Json?
   /// Soronként a sor-javaslat (P-026), érkezéskor számolva, ha a beszállító ismert.
   lineSuggestions   Json?
   expectedArrivalId String?
@@ -6989,8 +7034,9 @@ model IncomingSupplierDocument {
   /// a szövegben álló adószám-törzsszám alapján. Az első párosításkor
   /// számolódik és tárolódik; NULL, amíg senki nem kérdezte.
   payeeCheck        String?
-  /// Honnan jött: MAILBOX (a postafiók-figyelő) vagy UPLOAD (a Hiányzó számlák
-  /// drawerjéből feltöltve). A feltöltés SOHA nem kap várható beérkezést, tehát
+  /// Honnan jött: MAILBOX (a postafiók-figyelő), UPLOAD (a Hiányzó számlák
+  /// drawerjéből feltöltve), COLLECTED_MAIL vagy COLLECTED_DRIVE (a számla-
+  /// begyűjtés, kártya 3e75c2f4). A feltöltés SOHA nem kap várható beérkezést, tehát
   /// a bevételezési láncba nem kerül (acrobot 25274).
   origin            String                         @default("MAILBOX")
   /// Feltöltésnél: INVOICE vagy PREMIUM_NOTICE (biztosítási díjértesítő).

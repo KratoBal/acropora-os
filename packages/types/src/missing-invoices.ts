@@ -65,6 +65,8 @@ export const MISSING_INVOICE_CATEGORIES = [
   "TAX",
   "PAYROLL",
   "LOAN",
+  "CASH_WITHDRAWAL",
+  "CUSTOMER_REFUND",
   "INSURANCE",
   "CARD_SUBSCRIPTION",
   "FOREIGN_SUPPLIER",
@@ -88,6 +90,8 @@ export const MISSING_INVOICE_CATEGORY_LABELS: Readonly<
   BANK_FEE: "Banki díj",
   INTERNAL_TRANSFER: "Belső átvezetés",
   LOAN: "Kölcsön",
+  CASH_WITHDRAWAL: "Készpénzfelvétel",
+  CUSTOMER_REFUND: "Vevői visszatérítés",
 };
 
 export const MISSING_INVOICE_TABS = [
@@ -235,4 +239,17 @@ export interface MissingInvoiceMonthQuery {
   accountId?: string;
   page?: number;
   pageSize?: number;
+}
+
+/**
+ * A Jev párosítási javaslata egy terheléshez (`GET .../items/:id/jev-suggestion`).
+ * Csak javaslat: az elfogadás a kézi párosítás (`POST .../items/:id/match`).
+ */
+export interface MissingInvoiceJevSuggestion {
+  /** `false`: ki van kapcsolva vagy leállt; a drawer ne kérdezzen többet. */
+  enabled: boolean;
+  /** A javasolt jelölt `documentId`-je, CSAK látható javaslatnál; különben `null`. */
+  documentId: string | null;
+  /** A Jev bizonyossága (0..1), csak látható javaslatnál. */
+  confidence: number | null;
 }

@@ -265,6 +265,8 @@ export class MissingInvoicesRepository {
               kind: { not: null },
             },
             { origin: "UPLOAD" },
+            // a begyűjtés csak azt tárolja, amit illesztő vagy NAV-szám ismer
+            { origin: { in: ["COLLECTED_MAIL", "COLLECTED_DRIVE"] } },
           ],
         },
         select: {
@@ -276,6 +278,9 @@ export class MissingInvoicesRepository {
           uploadKind: true,
           fileName: true,
           createdAt: true,
+          receivedAt: true,
+          textReading: true,
+          sha256: true,
         },
       }),
       this.database.foxpostSettlement.findMany({
@@ -350,25 +355,57 @@ export class MissingInvoicesRepository {
         ),
       );
     }
+    /*
+      A BEGYŰJTÖTT MÁSOLAT KIESIK, HA UGYANEZ A FÁJL MÁS ÚTON IS MEGVAN: az
+      info@ fiókot a Várható beérkezések figyelője is olvassa, és a kettő saját
+      kulcs-névtérben ír (lásd `invoice-collection.repository.ts`).
+    */
+    const collected = (origin: string) => origin.startsWith("COLLECTED_");
+    const otherContent = new Set(
+      mailbox.filter((d) => !collected(d.origin)).map((d) => d.sha256),
+    );
     for (const document of mailbox) {
       const result =
         document.importResult as unknown as SupplierInvoiceImportResult | null;
       const upload = document.origin === "UPLOAD";
+      const collectedCopy = collected(document.origin);
+      if (collectedCopy && otherContent.has(document.sha256)) continue;
+      // az általános olvasó eredménye: csak a szám és a szállító adószáma
+      const reading = result
+        ? null
+        : (document.textReading as {
+            invoiceNumber: string | null;
+            supplierTaxNumber: string | null;
+            bankReference?: string | null;
+          } | null);
       const date =
-        result?.invoiceDate ?? (upload ? day(document.createdAt) : null);
+        result?.invoiceDate ??
+        (upload
+          ? day(document.createdAt)
+          : reading
+            ? day(document.receivedAt ?? document.createdAt)
+            : null);
       if (!date) continue;
-      if (!upload && (!result || date < from || date > to)) continue;
+      if (!upload && ((!result && !reading) || date < from || date > to))
+        continue;
       const foreign =
         (result?.supplier.country && result.supplier.country !== "HU") ||
         (result?.supplier.vatId && !result.supplier.vatId.startsWith("HU"));
       documents.push({
         id: document.id,
-        source: !upload
-          ? "MAILBOX"
-          : document.uploadKind === "PREMIUM_NOTICE"
-            ? "PREMIUM_NOTICE"
-            : "UPLOAD",
-        number: result?.invoiceNumber ?? (upload ? document.fileName : ""),
+        source:
+          document.origin === "COLLECTED_DRIVE"
+            ? "DRIVE"
+            : !upload
+              ? "MAILBOX"
+              : document.uploadKind === "PREMIUM_NOTICE"
+                ? "PREMIUM_NOTICE"
+                : "UPLOAD",
+        number:
+          result?.invoiceNumber ??
+          reading?.invoiceNumber ??
+          (upload ? document.fileName : ""),
+        references: reading?.bankReference ? [reading.bankReference] : [],
         date,
         // a postafiók csak nettót olvas ki; EU-s (fordítottan adózó) szállítónál
         // ez a bruttó is, hazainál ismeretlen
@@ -379,7 +416,9 @@ export class MissingInvoicesRepository {
         currency: result?.currency ?? "HUF",
         supplierName: result?.supplier.name ?? "",
         supplierAccounts:
-          accountsByTaxBase.get(taxBase(result?.supplier.vatId)) ?? [],
+          accountsByTaxBase.get(
+            taxBase(result?.supplier.vatId ?? reading?.supplierTaxNumber),
+          ) ?? [],
         kind:
           document.uploadKind === "PREMIUM_NOTICE"
             ? "PREMIUM_NOTICE"
@@ -392,8 +431,8 @@ export class MissingInvoicesRepository {
       keys.set(
         document.id,
         invoiceKey(
-          result?.invoiceNumber ?? "",
-          result?.supplier.vatId,
+          result?.invoiceNumber ?? reading?.invoiceNumber ?? "",
+          result?.supplier.vatId ?? reading?.supplierTaxNumber,
           result?.supplier.name ?? "",
         ),
       );

@@ -39,8 +39,12 @@ export type FetchLike = (
 export interface JevChoiceRequest {
   readonly apiKey: string;
   readonly model: string;
-  /** A vetulet szovegkent (a merve mukodo alak). */
-  readonly state: string;
+  /**
+   * A vetulet szovegkent (a merve mukodo alak), vagy mezonkent: a Hianyzo
+   * szamlak parositasat `{query, c0, c1, ...}` alakkal mertuk (marveen
+   * offline.py), es elesben pontosan az menjen ki.
+   */
+  readonly state: string | Readonly<Record<string, string>>;
   readonly instructions: string;
   /** opcio-kulcs -> leiras. */
   readonly criteria: Readonly<Record<string, string>>;
@@ -51,6 +55,13 @@ export interface JevChoiceRequest {
    * mertuk: elesben pontosan az menjen ki, amit merni lehetett.
    */
   readonly questionKey?: string;
+  /**
+   * A kerdes kulcsainak sorrendje: alapbol `type, instructions, criteria` (az
+   * eszkoz-pilot mert alakja); `true` eseten `type, criteria, instructions`,
+   * ahogy a Python offline-meres kuldte. A JSON-nak mindegy, de a mert hivast
+   * ismeteljuk, nem egy egyenerteku alakot.
+   */
+  readonly criteriaFirst?: boolean;
 }
 
 export type JevChoiceResult =
@@ -109,11 +120,17 @@ export async function jevChoice(
     state: request.state,
     model: request.model,
     questions: {
-      [request.questionKey ?? KERDES_ALAP]: {
-        type: "choice",
-        instructions: request.instructions,
-        criteria: request.criteria,
-      },
+      [request.questionKey ?? KERDES_ALAP]: request.criteriaFirst
+        ? {
+            type: "choice",
+            criteria: request.criteria,
+            instructions: request.instructions,
+          }
+        : {
+            type: "choice",
+            instructions: request.instructions,
+            criteria: request.criteria,
+          },
     },
   });
 

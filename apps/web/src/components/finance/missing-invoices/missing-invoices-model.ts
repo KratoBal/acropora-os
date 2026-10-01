@@ -7,6 +7,10 @@ import type {
   MissingInvoiceMonthStatus,
   MissingInvoiceTab,
 } from "@acropora/types";
+import {
+  MISSING_INVOICE_CATEGORY_LABELS,
+  MISSING_INVOICE_STATE_LABELS,
+} from "@acropora/types";
 import type { PilotBadgeVariant } from "@acropora/ui";
 
 /**
@@ -100,15 +104,9 @@ export interface ChargeRow {
  */
 export type CandidateInvoice = MissingInvoiceCandidate;
 
-export const CHARGE_STATE_LABELS: Record<ChargeInvoiceState, string> = {
-  FOUND: "Megvan",
-  NOT_MATCHED: "Nem párosodott",
-  NO_INVOICE: "Nincs számla",
-  NOT_COMPANY: "Nem a cégre szól",
-  PROFORMA_ONLY: "Csak díjbekérő",
-  ORIGINAL_MISSING: "Eredeti hiányzik",
-  NO_INVOICE_NEEDED: "Nem kell számla",
-};
+/** Az állapot felirata: a hiánylistával (xlsx) közös szó (nautilus #1308). */
+export const CHARGE_STATE_LABELS: Readonly<Record<ChargeInvoiceState, string>> =
+  MISSING_INVOICE_STATE_LABELS;
 
 export const CHARGE_STATE_BADGES: Record<
   ChargeInvoiceState,
@@ -146,18 +144,9 @@ export const INVOICE_SOURCE_LABELS: Record<InvoiceSource, string> = {
   PREMIUM_NOTICE: "Díjértesítő",
 };
 
-export const CATEGORY_LABELS: Record<ChargeCategory, string> = {
-  DOMESTIC_SUPPLIER: "Magyar szállító",
-  FOREIGN_SUPPLIER: "Külföldi szállító",
-  CARD_SUBSCRIPTION: "Kártyás előfizetés",
-  INSURANCE: "Biztosítás",
-  UNCERTAIN: "Bizonytalan",
-  TAX: "Adó",
-  PAYROLL: "Munkabér",
-  BANK_FEE: "Banki díj",
-  INTERNAL_TRANSFER: "Belső átvezetés",
-  LOAN: "Kölcsön",
-};
+/** A kategória felirata, szintén a közös helyről (nautilus #1308). */
+export const CATEGORY_LABELS: Readonly<Record<ChargeCategory, string>> =
+  MISSING_INVOICE_CATEGORY_LABELS;
 
 /**
  * A SZŰRŐ KATEGÓRIÁI (brief 8. pont). A Nem kell számla kategóriái (adó, bér,

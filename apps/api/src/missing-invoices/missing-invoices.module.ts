@@ -6,6 +6,11 @@ import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-imp
 import { MissingInvoicesController } from "./missing-invoices.controller.js";
 import { MissingInvoicesRepository } from "./missing-invoices.repository.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
+import { InvoiceCollectionRepository } from "./collection/invoice-collection.repository.js";
+import { InvoiceCollectionScheduler } from "./collection/invoice-collection.scheduler.js";
+import { InvoiceCollectionService } from "./collection/invoice-collection.service.js";
+import { MissingInvoiceJevRepository } from "./missing-invoice-jev.repository.js";
+import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
 
 /** HIÁNYZÓ SZÁMLÁK (Pénzügy): a banki terhelés és a számla egyeztetése. */
 @Module({
@@ -13,6 +18,11 @@ import { MissingInvoicesService } from "./missing-invoices.service.js";
   providers: [
     BankStatementImportRepository,
     BankStatementImportService,
+    InvoiceCollectionRepository,
+    InvoiceCollectionScheduler,
+    InvoiceCollectionService,
+    MissingInvoiceJevRepository,
+    MissingInvoiceJevService,
     MissingInvoicesRepository,
     MissingInvoicesService,
     SupplierInvoiceImportService,

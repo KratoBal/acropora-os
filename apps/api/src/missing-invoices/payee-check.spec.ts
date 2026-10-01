@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { PAGE_END_MARKER } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { payeeFromText } from "./payee-check.js";
 
 describe("payeeFromText", () => {
@@ -19,6 +20,16 @@ describe("payeeFromText", () => {
       "NOT_COMPANY",
     );
     assert.equal(payeeFromText("   \n "), "UNKNOWN");
+  });
+
+  it("calls a scanned PDF unknown, though the reader wrote a page-end marker for each page", () => {
+    // ahogy a pdfTextLines egy kétoldalas, szövegréteg nélküli szkent ad vissza
+    const scanned = [PAGE_END_MARKER, PAGE_END_MARKER].join("\n");
+    assert.equal(payeeFromText(scanned), "UNKNOWN");
+    assert.equal(
+      payeeFromText(["Adószám: 23916229-2-13", PAGE_END_MARKER].join("\n")),
+      "COMPANY",
+    );
   });
 
   it("does not take our number from inside a longer digit run", () => {
