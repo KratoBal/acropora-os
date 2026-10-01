@@ -289,6 +289,7 @@ export class MissingInvoicesService {
             currency: row.debit.currency,
             original: row.original,
             counterpartyName: row.debit.counterpartyName,
+            narrative: row.debit.narrative,
             category: row.classification.category,
           },
           outcome,
