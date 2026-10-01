@@ -7016,6 +7016,10 @@ model InvoiceCollectionRun {
   duplicateCount  Int                              @default(0)
   failedCount     Int                              @default(0)
   errorCode       String?
+  /// A begyűjtő szabályainak változata ezen a futáson
+  /// (INVOICE_COLLECTION_RULES_VERSION). Ha a kód változata más, az UNMATCHED
+  /// levelek újraolvasódnak: az új szabály a már látott leveleken is érvényesül.
+  rulesVersion    String?
   updatedAt       DateTime                         @updatedAt
 
   @@index([startedAt])

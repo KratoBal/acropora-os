@@ -3,6 +3,7 @@ import { Prisma, prisma, type SyncRunTrigger } from "@acropora/database";
 
 import { originalAmountOf } from "../otp-statement.parser.js";
 import {
+  INVOICE_COLLECTION_RULES_VERSION,
   type InvoiceCollectionSource,
   unmatchedRetryDue,
 } from "./invoice-collection.config.js";
@@ -105,14 +106,19 @@ export class InvoiceCollectionRepository {
     const last = await this.database.invoiceCollectionRun.findFirst({
       where: { status: "APPLIED", errorCode: null },
       orderBy: { startedAt: "desc" },
-      select: { startedAt: true },
+      select: { startedAt: true, rulesVersion: true },
     });
     const newDebits = last
       ? await this.database.bankTransaction.count({
           where: { direction: "DEBIT", createdAt: { gt: last.startedAt } },
         })
       : 0;
-    return unmatchedRetryDue(last?.startedAt ?? null, newDebits, now);
+    return unmatchedRetryDue(
+      last?.startedAt ?? null,
+      newDebits,
+      now,
+      last?.rulesVersion ?? null,
+    );
   }
 
   /**
@@ -177,6 +183,19 @@ export class InvoiceCollectionRepository {
           : null,
       };
     });
+  }
+
+  /** Egy fájl eddigi ítélete (a száraz újraértékelés ehhez méri a változást). */
+  async verdictOf(
+    source: InvoiceCollectionSource,
+    externalId: string,
+    fileName: string,
+  ): Promise<string | null> {
+    const row = await this.database.invoiceCollectionItem.findUnique({
+      where: { source_externalId_fileName: { source, externalId, fileName } },
+      select: { verdict: true },
+    });
+    return row?.verdict ?? null;
   }
 
   /** Van-e már ilyen tartalmú dokumentum, bármilyen úton érkezett. */
@@ -289,7 +308,12 @@ export class InvoiceCollectionRepository {
           },
         });
         const run = await transaction.invoiceCollectionRun.create({
-          data: { activeKey: ACTIVE_KEY, status: "RUNNING", trigger },
+          data: {
+            activeKey: ACTIVE_KEY,
+            status: "RUNNING",
+            trigger,
+            rulesVersion: INVOICE_COLLECTION_RULES_VERSION,
+          },
           select: { id: true },
         });
         return run.id;
