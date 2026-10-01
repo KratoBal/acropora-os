@@ -2,6 +2,10 @@ import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 import type { SupplierInvoiceImportResult } from "@acropora/types";
 
+import {
+  looksLikeBankAccount,
+  reminderFileName,
+} from "./collection/invoice-text.js";
 import type { CandidateDocument, Payee } from "./missing-invoice-matching.js";
 
 /**
@@ -67,8 +71,17 @@ export function mergeSameInvoice(
     }
     groups.set(key, [...(groups.get(key) ?? []), document]);
   }
+  // az azonosság: a fájl lenyomata (a dokumentumon) és a számlaszám-kulcs
+  const identified = (document: CandidateDocument): CandidateDocument => {
+    const key = keys.get(document.id);
+    const extra = key && !key.startsWith("|") ? [`inv:${key}`] : [];
+    return {
+      ...document,
+      identities: [...new Set([...(document.identities ?? []), ...extra])],
+    };
+  };
   const merged = [...groups.values()].map((group) => {
-    if (group.length === 1) return group[0]!;
+    if (group.length === 1) return identified(group[0]!);
     const nav = group.find((d) => d.source === "NAV");
     const original = group.find((d) => d.hasOriginal);
     const primary = nav ?? group[0]!;
@@ -85,9 +98,12 @@ export function mergeSameInvoice(
       payee: nav ? ("COMPANY" as const) : primary.payee,
       hasOriginal: group.some((d) => d.hasOriginal),
       supplierAccounts: [...new Set(group.flatMap((d) => d.supplierAccounts))],
+      identities: [
+        ...new Set(group.flatMap((d) => identified(d).identities ?? [])),
+      ],
     };
   });
-  return [...merged, ...alone];
+  return [...merged, ...alone.map(identified)];
 }
 
 /**
@@ -242,7 +258,9 @@ export class MissingInvoicesRepository {
     };
     const [nav, mailbox, foxpost, gls, suppliers] = await Promise.all([
       this.database.navIncomingInvoice.findMany({
-        where: { invoiceIssueDate: range },
+        // csak az alapszámla: a módosító és a sztornó okirat (jóváíró)
+        // párosítása külön, mért döntés lesz (acrobot 25649)
+        where: { invoiceIssueDate: range, invoiceOperation: "CREATE" },
         select: {
           id: true,
           navInvoiceNumber: true,
@@ -384,7 +402,15 @@ export class MissingInvoicesRepository {
             supplierName?: string;
             gross?: string;
             currency?: string;
+            cardPayment?: {
+              amount: string;
+              currency: string;
+              partner: string;
+            } | null;
           } | null);
+      // a kártyás fizetéshez illesztett NAV nélküli számla: a fizetés összege,
+      // devizája és partnere a bruttó, a pénznem és a szállító (acrobot 25666)
+      const card = reading?.cardPayment ?? null;
       const date =
         result?.invoiceDate ??
         (upload
@@ -395,6 +421,9 @@ export class MissingInvoicesRepository {
       if (!date) continue;
       if (!upload && ((!result && !reading) || date < from || date > to))
         continue;
+      // a már eltárolt fizetési emlékeztető nem számla (acrobot 25664): az új
+      // begyűjtés már nem tárolja, a régieket itt hagyjuk ki
+      if (!upload && reminderFileName(document.fileName)) continue;
       const foreign =
         (result?.supplier.country && result.supplier.country !== "HU") ||
         (result?.supplier.vatId && !result.supplier.vatId.startsWith("HU"));
@@ -414,20 +443,27 @@ export class MissingInvoicesRepository {
           result?.invoiceNumber ??
           reading?.invoiceNumber ??
           (upload ? document.fileName : ""),
-        references: reading?.bankReference ? [reading.bankReference] : [],
+        // egy bankszámlaszám (IBAN) nem hivatkozás: minden fizetésben ott áll
+        references:
+          reading?.bankReference && !looksLikeBankAccount(reading.bankReference)
+            ? [reading.bankReference]
+            : [],
         date,
-        // a postafiók csak nettót olvas ki; EU-s (fordítottan adózó) szállítónál
-        // ez a bruttó is, hazainál ismeretlen
         // a Számlázz.hu továbbítás a bruttót is hozza; a postafiók csak nettót
-        // olvas ki, ami EU-s (fordítottan adózó) szállítónál a bruttó is
+        // olvas ki, ami EU-s (fordítottan adózó) szállítónál a bruttó is; a
+        // kártyás vásárlás visszaigazolása a saját összegét hozza
         gross:
           reading?.gross != null
             ? new Prisma.Decimal(reading.gross)
             : foreign && result?.netTotal != null
               ? new Prisma.Decimal(result.netTotal)
-              : null,
-        currency: result?.currency ?? reading?.currency ?? "HUF",
-        supplierName: result?.supplier.name ?? reading?.supplierName ?? "",
+              : card
+                ? new Prisma.Decimal(card.amount)
+                : null,
+        currency:
+          result?.currency ?? reading?.currency ?? card?.currency ?? "HUF",
+        supplierName:
+          result?.supplier.name ?? reading?.supplierName ?? card?.partner ?? "",
         supplierAccounts:
           accountsByTaxBase.get(
             taxBase(result?.supplier.vatId ?? reading?.supplierTaxNumber),
@@ -441,6 +477,7 @@ export class MissingInvoicesRepository {
         payee: (document.payeeCheck as Payee | null) ?? "UNKNOWN",
         payeeMarked: document.payeeMarkedAt !== null,
         hasOriginal: true,
+        identities: document.sha256 ? [`sha:${document.sha256}`] : [],
       });
       keys.set(
         document.id,

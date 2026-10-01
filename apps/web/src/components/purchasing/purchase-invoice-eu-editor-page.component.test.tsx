@@ -131,6 +131,7 @@ const navDetail: NavIncomingInvoiceDetail = {
   invoiceNetAmount: "10000",
   invoiceVatAmount: "2700",
   insDate: "2026-07-30T00:00:00.000Z",
+  invoiceOperation: "CREATE",
   status: "DATA_FETCHED",
   suggestedVatRatePercent: "27",
   lines: [

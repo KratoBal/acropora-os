@@ -1,6 +1,7 @@
 import type { Prisma } from "@acropora/database";
 import type {
   NavIncomingInvoiceDetail,
+  NavIncomingInvoiceOperation,
   NavIncomingInvoiceStatus,
   NavIncomingInvoiceSummary,
 } from "@acropora/types";
@@ -33,6 +34,9 @@ export interface NavIncomingInvoiceRow {
   invoiceNetAmount: Prisma.Decimal | null;
   invoiceVatAmount: Prisma.Decimal | null;
   insDate: Date;
+  invoiceOperation: NavIncomingInvoiceOperation;
+  originalInvoiceNumber: string | null;
+  modificationIndex: number | null;
   status: NavIncomingInvoiceStatus;
   parsedData: Prisma.JsonValue | null;
   errorCode: string | null;
@@ -60,6 +64,9 @@ export function toNavIncomingInvoiceSummary(
     invoiceNetAmount: row.invoiceNetAmount?.toString(),
     invoiceVatAmount: row.invoiceVatAmount?.toString(),
     insDate: row.insDate.toISOString(),
+    invoiceOperation: row.invoiceOperation,
+    originalInvoiceNumber: row.originalInvoiceNumber ?? undefined,
+    modificationIndex: row.modificationIndex ?? undefined,
     status: row.status,
     purchaseInvoiceId: row.purchaseInvoiceId ?? undefined,
     errorCode: row.errorCode ?? undefined,

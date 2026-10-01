@@ -1,6 +1,12 @@
 export type NavIncomingInvoiceStatus =
   "NEW" | "DATA_FETCHED" | "RECEIVED" | "ERROR";
 
+/**
+ * A NAV számlaművelet: alapszámla (CREATE), módosító okirat (MODIFY, például
+ * jóváíró) vagy sztornó (STORNO). Csak az alapszámla vételezhető be.
+ */
+export type NavIncomingInvoiceOperation = "CREATE" | "MODIFY" | "STORNO";
+
 export interface NavIncomingInvoiceSummary {
   id: string;
   navInvoiceNumber: string;
@@ -13,6 +19,10 @@ export interface NavIncomingInvoiceSummary {
   invoiceNetAmount?: string;
   invoiceVatAmount?: string;
   insDate: string;
+  invoiceOperation: NavIncomingInvoiceOperation;
+  /** MODIFY/STORNO: az eredeti számla sorszáma, amire a módosítás vonatkozik. */
+  originalInvoiceNumber?: string;
+  modificationIndex?: number;
   status: NavIncomingInvoiceStatus;
   purchaseInvoiceId?: string;
   errorCode?: string;

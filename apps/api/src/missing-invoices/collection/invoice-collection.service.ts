@@ -16,6 +16,7 @@ import {
 } from "../../integrations/google/google-readonly.client.js";
 import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { SupplierInvoiceImportService } from "../../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
+import { normalizeName } from "../missing-invoice-matching.js";
 import { payeeFromText } from "../payee-check.js";
 import {
   invoiceCollectionDays,
@@ -33,7 +34,9 @@ import {
 import {
   looksLikeInvoice,
   looksLikeProforma,
+  looksLikeReminder,
   bankReference,
+  cardPaymentMatch,
   readInvoiceText,
   type InvoiceTextReading,
 } from "./invoice-text.js";
@@ -58,6 +61,12 @@ export const INVOICE_COLLECTION_REQUEST_GAP_MS = 250;
 
 /** A környezet; a teszt ezen át adja. */
 export const INVOICE_COLLECTION_ENV = Symbol("INVOICE_COLLECTION_ENV");
+
+/** Egy partnernév jellemző szava: a normalizált név első, legalább négybetűs szava. */
+const distinctiveWord = (name: string): string | null =>
+  normalizeName(name)
+    .split(" ")
+    .find((word) => word.length >= 4) ?? null;
 
 interface Found {
   fileName: string;
@@ -293,6 +302,9 @@ export class InvoiceCollectionService {
     }
     const text = lines.join("\n");
     if (!looksLikeInvoice(text)) return skip("NOT_INVOICE");
+    // a fizetési emlékeztető idézi a számlát, de nem az; a mellette álló
+    // számla-melléklet külön fájlként megy tovább
+    if (looksLikeReminder(lines, found.fileName)) return skip("NOT_INVOICE");
 
     const importResult = await this.reader
       .read(new Uint8Array(found.content), { allowProforma: true })
@@ -317,15 +329,33 @@ export class InvoiceCollectionService {
           hints,
           await this.repository.debitNarratives(),
         );
-        if (!reference) return skip("UNMATCHED");
-        textReading = textReading.invoiceNumber
-          ? { ...textReading, bankReference: reference }
-          : {
-              ...textReading,
-              invoiceNumber: reference,
-              numberFrom: "BANK",
-              bankReference: reference,
-            };
+        if (!reference) {
+          // a NAV nélküli előfizetés: a kártyás fizetés összege és partnere
+          const payment = cardPaymentMatch(
+            lines,
+            await this.repository.cardDebits(),
+            distinctiveWord,
+          );
+          if (!payment) return skip("UNMATCHED");
+          textReading = {
+            ...textReading,
+            ...(textReading.invoiceNumber
+              ? {}
+              : {
+                  invoiceNumber: found.fileName.replace(/\.[^.]+$/, ""),
+                  numberFrom: "FILE_NAME" as const,
+                }),
+            cardPayment: payment,
+          };
+        } else
+          textReading = textReading.invoiceNumber
+            ? { ...textReading, bankReference: reference }
+            : {
+                ...textReading,
+                invoiceNumber: reference,
+                numberFrom: "BANK",
+                bankReference: reference,
+              };
       }
     }
     const proforma = importResult

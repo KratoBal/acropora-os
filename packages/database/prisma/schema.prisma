@@ -2649,32 +2649,45 @@ model ProjectInventoryReservation {
 /// parszolódik a parsedData mezőbe (lásd nav-invoice-data.parser.ts) -
 /// nincs értelme minden digest-sorhoz azonnal lekérni a teljes adatot,
 /// hiszen a legtöbb sosem kerül ténylegesen bevételezésre.
+/// A NAV Online Számla számlaművelete (invoiceApi.xsd `ManageInvoiceOperationType`).
+enum NavInvoiceOperation {
+  CREATE
+  MODIFY
+  STORNO
+}
+
 model NavIncomingInvoice {
-  id                  String                   @id @default(cuid())
-  navInvoiceNumber    String
-  supplierTaxNumber   String
-  supplierName        String
-  invoiceIssueDate    DateTime
-  invoiceDeliveryDate DateTime?
-  paymentDate         DateTime?
-  currency            String                   @default("HUF") @db.VarChar(3)
-  invoiceNetAmount    Decimal?                 @db.Decimal(19, 2)
-  invoiceVatAmount    Decimal?                 @db.Decimal(19, 2)
+  id                    String                   @id @default(cuid())
+  navInvoiceNumber      String
+  supplierTaxNumber     String
+  supplierName          String
+  invoiceIssueDate      DateTime
+  invoiceDeliveryDate   DateTime?
+  paymentDate           DateTime?
+  currency              String                   @default("HUF") @db.VarChar(3)
+  invoiceNetAmount      Decimal?                 @db.Decimal(19, 2)
+  invoiceVatAmount      Decimal?                 @db.Decimal(19, 2)
   /// A NAV-oldali regisztrálás időpontja - ez a szinkron kurzor alapja
   /// (lásd IntegrationCursor provider="NAV" stream="INBOUND_INVOICES"),
   /// nem az invoiceIssueDate (ami a kiállító által megadott, nem a NAV
   /// szerver órája szerinti időpont).
-  insDate             DateTime
-  status              NavIncomingInvoiceStatus @default(NEW)
+  insDate               DateTime
+  /// A NAV számlaművelet: az alapszámla CREATE, a módosító okirat MODIFY, a
+  /// sztornó STORNO. A módosító és a sztornó saját sorszámot visel; az
+  /// eredeti számla sorszáma az `originalInvoiceNumber` (a digest hozza).
+  invoiceOperation      NavInvoiceOperation      @default(CREATE)
+  originalInvoiceNumber String?
+  modificationIndex     Int?
+  status                NavIncomingInvoiceStatus @default(NEW)
   /// A queryInvoiceData válaszból felparszolt, bevételezéshez szükséges
   /// pillanatkép (beszállító adatok, cím, tételek) - lásd
   /// ParsedNavInvoiceData (nav-invoice-data.parser.ts). Csak DATA_FETCHED
   /// vagy RECEIVED állapotban nem null.
-  parsedData          Json?
-  errorCode           String?
-  purchaseInvoiceId   String?                  @unique
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+  parsedData            Json?
+  errorCode             String?
+  purchaseInvoiceId     String?                  @unique
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
 
   purchaseInvoice PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
 

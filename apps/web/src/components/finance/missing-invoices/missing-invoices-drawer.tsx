@@ -29,6 +29,13 @@ export interface ChargeDetailExtras {
   candidates: CandidateInvoice[];
   /** A párosított számlák közül a kézzel jelölhető vevőjűek (acrobot 25633). */
   payeeDocuments: MissingInvoicePayeeDocument[];
+  /** A többi terhelés ugyanezzel a számlával (Kétszer fizetett számla). */
+  doublePaidWith: {
+    id: string;
+    bookingDate: string;
+    amount: string;
+    currency: string;
+  }[];
   action: ItemAction;
   /** A „Hiányzó számlák” Drive-mappa, ha a szerveren be van állítva. */
   driveFolderUrl: string | null;
@@ -285,6 +292,17 @@ export function MissingInvoicesDrawer({
                   </label>
                 ) : null}
               </div>
+              {extras && extras.doublePaidWith.length > 0 ? (
+                <p className="mt-2 text-sm text-pilot-red-700">
+                  Ugyanez a számla ehhez is párosítva:{" "}
+                  {extras.doublePaidWith
+                    .map(
+                      (other) =>
+                        `${formatDay(other.bookingDate)}, ${formatAmount(other.amount, other.currency)}`,
+                    )
+                    .join("; ")}
+                </p>
+              ) : null}
               {extras?.payeeDocuments.map((document) => (
                 <div
                   key={document.documentId}

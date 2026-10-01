@@ -134,6 +134,7 @@ const itemDetail = (
 ): MissingInvoiceItemDetail => ({
   ...item(),
   payeeDocuments: [],
+  doublePaidWith: [],
   candidates: [
     {
       documentId: "inv-2",

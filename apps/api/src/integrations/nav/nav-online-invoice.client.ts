@@ -121,7 +121,13 @@ export interface NavInvoiceDigestItem {
   invoiceNetAmount?: string;
   invoiceVatAmount?: string;
   insDate: string;
+  /** MODIFY/STORNO tételnél: az eredeti számla sorszáma, amire a módosítás vonatkozik. */
+  originalInvoiceNumber?: string;
+  /** A számlára vonatkozó módosító okirat egyedi sorszáma. */
+  modificationIndex?: number;
 }
+
+const OPERATIONS: ReadonlySet<string> = new Set(["CREATE", "MODIFY", "STORNO"]);
 
 export interface NavInvoiceDigestResult {
   currentPage: number;
@@ -194,11 +200,13 @@ export function parseQueryInvoiceDigestResponse(
       // Ezek nélkül a mező nélkül a digest-tétel nem használható - inkább
       // kihagyjuk, mint hogy hiányos rekordot mentsünk el.
       if (!invoiceNumber || !invoiceIssueDate || !insDate) return null;
+      // a séma három műveletet ismer; más érték nem kerülhet az adatbázisba
+      const operation = value(node, "invoiceOperation") ?? "CREATE";
+      if (!OPERATIONS.has(operation)) return null;
+      const modificationIndex = value(node, "modificationIndex");
       return {
         invoiceNumber,
-        invoiceOperation:
-          (value(node, "invoiceOperation") as
-            NavInvoiceOperation | undefined) ?? "CREATE",
+        invoiceOperation: operation as NavInvoiceOperation,
         invoiceIssueDate,
         invoiceDeliveryDate: value(node, "invoiceDeliveryDate"),
         paymentDate: value(node, "paymentDate"),
@@ -208,6 +216,11 @@ export function parseQueryInvoiceDigestResponse(
         invoiceNetAmount: value(node, "invoiceNetAmount"),
         invoiceVatAmount: value(node, "invoiceVatAmount"),
         insDate,
+        originalInvoiceNumber: value(node, "originalInvoiceNumber"),
+        modificationIndex:
+          modificationIndex && /^\d{1,9}$/.test(modificationIndex)
+            ? Number(modificationIndex)
+            : undefined,
       };
     })
     .filter((item): item is NavInvoiceDigestItem => item !== null);

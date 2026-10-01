@@ -14,6 +14,7 @@ import type {
   InvoiceCollectionRepository,
 } from "./invoice-collection.repository.js";
 import { unmatchedRetryDue } from "./invoice-collection.config.js";
+import type { CardDebit } from "./invoice-text.js";
 import {
   InvoiceCollectionService,
   type GoogleClientFactory,
@@ -53,6 +54,7 @@ function setup(input: {
   failingDetail?: string;
   nav?: Record<string, string[]>;
   debits?: string[];
+  cardDebits?: CardDebit[];
   retryDue?: boolean;
 }) {
   const stored: CollectedDocumentInput[] = [];
@@ -76,6 +78,7 @@ function setup(input: {
     hasContent: async (sha: string) => knownShas.has(sha),
     navNumbers: async (base: string) => input.nav?.[base] ?? [],
     debitNarratives: async () => input.debits ?? [],
+    cardDebits: async () => input.cardDebits ?? [],
     record: async (
       _source: string,
       id: string,
@@ -259,6 +262,113 @@ describe("InvoiceCollectionService", () => {
       ],
     );
     assert.deepEqual(recorded, ["m-1/F2609999.PDF:UNMATCHED"]);
+  });
+
+  it("stores a NAV-less subscription invoice its card payment fits, with the payment's amount and partner (Hetzner)", async () => {
+    const invoice = await pdf([
+      "Hetzner Online GmbH Industriestr. 25 91710 Gunzenhausen Germany",
+      "Acropora Kft.",
+      "VAT Reg. No.: HU23916229",
+      "Invoice no.: 089001181580",
+      "Total | 46.64 EUR",
+    ]);
+    const other = await pdf([
+      "INVOICE",
+      "Hetzner Online GmbH",
+      "Invoice no.: 1",
+      "Total 1.00 EUR",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          { fileName: "Hetzner_2026-09-05_089001181580.pdf", buffer: invoice },
+          { fileName: "Hetzner_masik.pdf", buffer: other },
+        ],
+      },
+      cardDebits: [
+        {
+          counterpartyName: "HETZNER ONLINE GMBH",
+          amount: "17113",
+          currency: "HUF",
+          original: { amount: "46.64", currency: "EUR" },
+        },
+      ],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [
+        d.fileName,
+        (d.textReading as { cardPayment?: unknown } | null)?.cardPayment,
+      ]),
+      [
+        [
+          "Hetzner_2026-09-05_089001181580.pdf",
+          { amount: "46.64", currency: "EUR", partner: "HETZNER ONLINE GMBH" },
+        ],
+      ],
+    );
+    assert.deepEqual(recorded, ["m-1/Hetzner_masik.pdf:UNMATCHED"]);
+  });
+
+  it("skips the payment reminder but stores the invoice attached next to it (De Jong, 2026-09-24)", async () => {
+    const reminder = await pdf([
+      "De Jong Marinelife B.V.",
+      "Spijksesteeg 2 A, 4212 SPIJK",
+      "2nd REMINDER",
+      "Our records show that invoice 26007910 is still open.",
+      "IBAN NL30RABO0322265428",
+    ]);
+    const invoice = await pdf([
+      "INVOICE",
+      "De Jong Marinelife B.V., VAT NL001234567B01",
+      "Customer: Acropora Kft., VAT HU23916229",
+      "Invoice number 26007910",
+      "IBAN NL30RABO0322265428",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          { fileName: "Second reminder 11069-26007910.pdf", buffer: reminder },
+          { fileName: "inv26007910.pdf", buffer: invoice },
+        ],
+      },
+      debits: [
+        "1.703,08 EUR 26007910 Spijksesteeg 2 A RABONL2U NL30RABO0322265428 De Jong Marinelife B.V. 4212 SPIJK,",
+      ],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [
+        d.fileName,
+        (d.textReading as { bankReference?: string } | null)?.bankReference,
+      ]),
+      [["inv26007910.pdf", "26007910"]],
+    );
+    assert.deepEqual(recorded, [
+      "m-1/Second reminder 11069-26007910.pdf:NOT_INVOICE",
+    ]);
+  });
+
+  it("never takes the supplier's IBAN for the invoice's bank reference", async () => {
+    // a szállító IBAN-ja minden fizetésének közleményében ott áll
+    const statement = await pdf([
+      "INVOICE",
+      "De Jong Marinelife B.V.",
+      "Invoice number 26009999",
+      "IBAN NL30RABO0322265428",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: { "m-1": [{ fileName: "doc.pdf", buffer: statement }] },
+      debits: [
+        "1.703,08 EUR 26007910 Spijksesteeg 2 A RABONL2U NL30RABO0322265428 De Jong",
+      ],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(stored, []);
+    assert.deepEqual(recorded, ["m-1/doc.pdf:UNMATCHED"]);
   });
 
   it("stores an invoice whose order number the debit narrative names, keeping its own number", async () => {
