@@ -40,6 +40,17 @@ async function removeLeftovers() {
   await prisma.decisionRun.deleteMany({
     where: { policyKey: "collect-it-letter" },
   });
+  // a javaslat-döntés auditja a teszt-felhasználóra mutat (idegen kulcs)
+  const users = await prisma.user.findMany({
+    where: { email: { startsWith: "collect-it-" } },
+    select: { id: true },
+  });
+  await prisma.auditLog.deleteMany({
+    where: { userId: { in: users.map((user) => user.id) } },
+  });
+  await prisma.user.deleteMany({
+    where: { email: { startsWith: "collect-it-" } },
+  });
 }
 
 describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () => {
@@ -278,6 +289,16 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
         },
         select: { id: true },
       });
+    // az audit idegen kulccsal köt a User táblára: valódi felhasználó kell
+    const user = await prisma.user.create({
+      data: {
+        email: "collect-it-reviewer@example.invalid",
+        displayName: "Begyűjtés teszt",
+        role: "OWNER",
+        isActive: true,
+      },
+      select: { id: true },
+    });
     const runA = await run("collect-it-sug-a");
     const runB = await run("collect-it-sug-b");
     const suggest = (externalId: string, decisionRunId: string) =>
@@ -332,8 +353,8 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
     );
 
     // elfogadva: jelölt, a sor STORED, a futás ACCEPTED; másodszor nem dönthető
-    assert.equal(await suggestions.accept(docA, "user-it"), true);
-    assert.equal(await suggestions.accept(docA, "user-it"), false);
+    assert.equal(await suggestions.accept(docA, user.id), true);
+    assert.equal(await suggestions.accept(docA, user.id), false);
     assert.equal((await candidates()).includes(docA), true);
     const itemA = await prisma.invoiceCollectionItem.findFirstOrThrow({
       where: { externalId: "collect-it-sug-a" },
@@ -347,8 +368,8 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
     });
 
     // elvetve: a dokumentum törlődik, a sor NOT_INVOICE, a futás OVERRIDDEN
-    assert.equal(await suggestions.reject(docB, "user-it"), true);
-    assert.equal(await suggestions.reject(docB, "user-it"), false);
+    assert.equal(await suggestions.reject(docB, user.id), true);
+    assert.equal(await suggestions.reject(docB, user.id), false);
     assert.equal(
       await prisma.incomingSupplierDocument.count({ where: { id: docB } }),
       0,
