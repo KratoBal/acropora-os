@@ -92,11 +92,21 @@ export class SzamlazzFeedsRepository {
       const versionCount = await transaction.szamlazzFeedMessage.count({
         where: { kind: "SZAMLAKI", externalId: input.externalId },
       });
-      const { externalId, issueDate, fulfillmentDate, dueDate, ...rest } =
-        input.projection;
+      const {
+        externalId,
+        issueDate,
+        fulfillmentDate,
+        dueDate,
+        lastPaymentDate,
+        ...rest
+      } = input.projection;
       const data = {
         ...rest,
         lines: rest.lines as unknown as Prisma.InputJsonValue,
+        payments: rest.payments as unknown as Prisma.InputJsonValue,
+        lastPaymentDate: lastPaymentDate
+          ? new Date(`${lastPaymentDate}T00:00:00Z`)
+          : null,
         issueDate: new Date(`${issueDate}T00:00:00Z`),
         fulfillmentDate: fulfillmentDate
           ? new Date(`${fulfillmentDate}T00:00:00Z`)

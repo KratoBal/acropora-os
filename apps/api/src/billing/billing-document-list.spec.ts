@@ -8,6 +8,7 @@ import {
   listWhere,
   mergeListRows,
   ownWhere,
+  externalPaymentFields,
   toExternalListItem,
   toListItem,
   type ExternalListRow,
@@ -156,7 +157,62 @@ const external = (
   grossAmount: D("29210"),
   currency: "HUF",
   createdAt: new Date("2026-10-01T15:00:00.000Z"),
+  paidAmount: D("0"),
+  lastPaymentDate: null,
+  // a migráció óta nem vetített sor (murena review-ja): ismeretlen
+  paymentsKnown: null,
+  cancelled: false,
   ...overrides,
+});
+
+describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () => {
+  // MI PIROSÍT: ha a mezők nem a közös számításból jönnének (a bejövő listával
+  // eltérne); ha a kimenő számla elem nélkül "nincs adat" lenne, holott van
+  // feed-változata (acrobot 25910); ha egy
+  // sztornózott számla fizetendőnek látszana; ha a saját bizonylat állapotot kapna.
+  const fields = (overrides: Partial<ExternalListRow> = {}) =>
+    externalPaymentFields(
+      external({
+        grossAmount: D("105831"),
+        paidAmount: D("105830"),
+        lastPaymentDate: new Date("2026-09-17T00:00:00.000Z"),
+        paymentsKnown: true,
+        ...overrides,
+      }),
+    );
+
+  it("paid with the 5 Ft cash rounding, in the shared computation, with its day", () => {
+    assert.deepEqual(fields(), {
+      paymentState: "PAID",
+      paidAmount: "105830",
+      lastPaymentDate: "2026-09-17",
+    });
+    assert.equal(fields({ paidAmount: D("50000") }).paymentState, "PARTIAL");
+  });
+
+  it("a row not yet re-projected is unknown; the same row projected without payment elements is unpaid (acrobot 25918)", () => {
+    // A KONTROLL: a migráció null-t hagy; az újravetítésig a kifizetett számla
+    // sem látszhat „Nincs fizetve”-nek (murena review-ja)
+    const migrated = { paidAmount: D("0"), lastPaymentDate: null };
+    assert.equal(
+      fields({ ...migrated, paymentsKnown: null }).paymentState,
+      "UNKNOWN",
+    );
+    // a kimenőn a hiány "nem fizetett": a sornak van feed-változata (927341621)
+    assert.equal(
+      fields({ ...migrated, paymentsKnown: false }).paymentState,
+      "UNPAID",
+    );
+  });
+
+  it("nothing on a cancelled invoice or our own", () => {
+    assert.deepEqual(fields({ cancelled: true }), {
+      paymentState: null,
+      paidAmount: null,
+      lastPaymentDate: null,
+    });
+    assert.equal(toListItem(row()).paymentState, null);
+  });
 });
 
 describe("the external documents on the list", () => {
@@ -178,6 +234,9 @@ describe("the external documents on the list", () => {
       opens: "EXTERNAL_DETAIL",
       origin: "EXTERNAL",
       externalKindLabel: "Számla",
+      paymentState: "UNKNOWN",
+      paidAmount: "0",
+      lastPaymentDate: null,
     });
     assert.deepEqual(
       [

@@ -76,6 +76,11 @@ const detail = (
   ],
   totals: { netAmount: "20000", vatAmount: "5400", grossAmount: "25400" },
   cancelled: false,
+  paymentState: "UNKNOWN",
+  paidAmount: "0",
+  lastPaymentDate: null,
+  paymentsKnown: false,
+  payments: [],
   versionCount: 2,
   receivedAt: "2026-10-01T15:00:00.000Z",
   ...overrides,
@@ -113,6 +118,31 @@ describe("BillingExternalDocumentPage", () => {
     expect(
       screen.getByRole("link", { name: /Vissza a listához/ }),
     ).toHaveAttribute("href", "/penzugy/szamlazas");
+  });
+
+  it("shows the payments Számlázz.hu recorded, its own bank pairing too", async () => {
+    api.externalDetail.mockResolvedValue(
+      detail({
+        paymentState: "PAID",
+        paidAmount: "25400",
+        lastPaymentDate: "2026-09-28",
+        paymentsKnown: true,
+        payments: [
+          {
+            date: "2026-09-28",
+            title: "átutalás",
+            amount: "25400",
+            note: "Automatikus banki tranzakció párosítás",
+          },
+        ],
+      }),
+    );
+    render(<BillingExternalDocumentPage documentId="ext-1" />);
+    expect(await screen.findByText("Fizetve")).toBeInTheDocument();
+    expect(
+      screen.getByText("Automatikus banki tranzakció párosítás"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/2026\. 09\. 28\. · átutalás/)).toBeInTheDocument();
   });
 
   it("says when Számlázz.hu marks it cancelled", async () => {

@@ -68,6 +68,9 @@ function item(
     opens: "DETAIL",
     origin: "OWN",
     externalKindLabel: null,
+    paymentState: null,
+    paidAmount: null,
+    lastPaymentDate: null,
     ...overrides,
   };
 }
@@ -132,7 +135,8 @@ describe("BillingDocumentListPage", () => {
     expect(invoice!.getByText("Kiállítva")).toBeInTheDocument();
     expect(invoice!.getByText("Elküldve")).toBeInTheDocument();
     // a díjbekérőnek nincs formátuma, és a kiküldés hibája NEM a bizonylat állapota
-    expect(proforma!.getByText("—")).toBeInTheDocument();
+    // két üres cella: a formátum és a kifizetés (a saját bizonylatnál nincs forrása)
+    expect(proforma!.getAllByText("—")).toHaveLength(2);
     expect(proforma!.getByText("Kiállítva")).toBeInTheDocument();
     expect(proforma!.getByText("Sikertelen kiküldés")).toBeInTheDocument();
     // a vázlatnak nincs száma és kiállítási napja
@@ -189,6 +193,42 @@ describe("BillingDocumentListPage", () => {
     expect(urlNavigation.push).toHaveBeenLastCalledWith(
       "/penzugy/szamlazas/kulso/ext-1",
     );
+  });
+
+  // MI PIROSÍT: ha a kifizetettség nem a válaszból jönne, vagy a három állapot
+  // összemosódna; ha a saját bizonylat kitalált állapotot mutatna.
+  it("shows whether an external invoice is paid, with the incoming list's labels (Balázs, GLS)", async () => {
+    const ext = (
+      id: string,
+      paymentState: BillingDocumentListItem["paymentState"],
+      paidAmount: string,
+      lastPaymentDate: string | null,
+    ) =>
+      item({
+        id,
+        documentNumber: id,
+        emailStatus: null,
+        opens: "EXTERNAL_DETAIL",
+        origin: "EXTERNAL",
+        externalKindLabel: "Számla",
+        paymentState,
+        paidAmount,
+        lastPaymentDate,
+      });
+    api.list.mockResolvedValue(
+      response([
+        ext("ACRW-2026/00479", "PAID", "27450", "2026-09-17"),
+        ext("ACRW-2026/00481", "PARTIAL", "50000", "2026-09-17"),
+        ext("ACRW-2026/00485", "UNPAID", "0", null),
+        ext("ACRW-2026/00486", "UNKNOWN", "0", null),
+      ]),
+    );
+    render(<BillingDocumentListPage />);
+    const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
+    expect(rows[0]).toHaveTextContent("Fizetve2026. 09. 17.");
+    expect(rows[1]).toHaveTextContent(/Részben fizetve50\s000\sFt/);
+    expect(within(rows[2]!).getByText("Nincs fizetve")).toBeInTheDocument();
+    expect(within(rows[3]!).getByText("Nincs adat")).toBeInTheDocument();
   });
 
   it("the source filter goes to the request, and back from the URL", async () => {

@@ -168,6 +168,22 @@ describe(
         grossAmount: "127",
         lines: [],
         cancelled: false,
+        // a legújabb változat hozza a kifizetést (a Számlázz.hu újraküldi)
+        payments:
+          documentNumber === "UJ-1"
+            ? [
+                {
+                  date: "2026-09-28",
+                  title: "átutalás",
+                  amount: "127",
+                  note: "Automatikus banki tranzakció párosítás",
+                  bankTransactionId: "77877311",
+                },
+              ]
+            : [],
+        paymentsKnown: documentNumber === "UJ-1",
+        paidAmount: documentNumber === "UJ-1" ? "127.00" : "0.00",
+        lastPaymentDate: documentNumber === "UJ-1" ? "2026-09-28" : null,
       });
       assert.deepEqual(
         [
@@ -191,9 +207,27 @@ describe(
       );
       const row = await prisma.externalBillingDocument.findUniqueOrThrow({
         where: { source_externalId: { source: "SZAMLAZZ", externalId } },
-        select: { documentNumber: true, versionCount: true },
+        select: {
+          documentNumber: true,
+          versionCount: true,
+          paidAmount: true,
+          lastPaymentDate: true,
+          paymentsKnown: true,
+          payments: true,
+        },
       });
-      assert.deepEqual(row, { documentNumber: "UJ-1", versionCount: 2 });
+      assert.deepEqual(
+        [
+          row.documentNumber,
+          row.versionCount,
+          row.paidAmount.toFixed(2),
+          row.lastPaymentDate?.toISOString().slice(0, 10),
+          row.paymentsKnown,
+          (row.payments as { bankTransactionId: string }[])[0]
+            ?.bankTransactionId,
+        ],
+        ["UJ-1", 2, "127.00", "2026-09-28", true, "77877311"],
+      );
 
       const list = new BillingDocumentListRepository();
       const numbers = async (origin?: "OWN" | "EXTERNAL") =>

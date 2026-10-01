@@ -98,6 +98,8 @@ export type {
   BillingLineStockOutcome,
 } from "./billing-document-read.js";
 export { billingProductPrice } from "./billing-product-price.js";
+export { paymentStateOf } from "./billing-payment-state.js";
+export type { BillingPaymentState } from "./billing-payment-state.js";
 export type { BillingProductPrice } from "./billing-product-price.js";
 export {
   BILLING_DOCUMENT_STATUS_LABELS,

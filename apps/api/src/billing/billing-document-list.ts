@@ -1,6 +1,7 @@
 import { Prisma } from "@acropora/database";
 import {
   szamlazzDocumentTotals,
+  paymentStateOf,
   type BillingDocumentListItem,
   type BillingDocumentListQuery,
   type BillingDocumentStatus,
@@ -127,6 +128,10 @@ export function toListItem(
     opens: status === "DRAFT" ? "EDITOR" : "DETAIL",
     origin: "OWN",
     externalKindLabel: null,
+    // a saját bizonylat kifizetéséről ma nincs forrásunk
+    paymentState: null,
+    paidAmount: null,
+    lastPaymentDate: null,
   };
 }
 
@@ -228,6 +233,54 @@ export interface ExternalListRow {
   grossAmount: Prisma.Decimal;
   currency: string;
   createdAt: Date;
+  paidAmount: Prisma.Decimal;
+  lastPaymentDate: Date | null;
+  paymentsKnown: boolean | null;
+  cancelled: boolean;
+}
+
+/**
+ * A KIFIZETETTSÉG EGY KÜLSŐ BIZONYLATRA: a bejövő listával közös számítás
+ * (`paymentStateOf`, murena 25902). A sztornózott számla nem fizetendő: ott
+ * `null`, nem „nem fizetett”.
+ *
+ * A KIMENŐN A `kifizetesek` HIÁNYA NEM FIZETETT (acrobot döntése, 25910), mert
+ * minden külső sornak van feed-változata. A mérés: a 927341621-es számla előbb
+ * elem nélkül jött, a fizetés után elemmel (acrobot 25894). EZ EGY MEGFIGYELT
+ * ESET, NEM DOKUMENTÁLT GARANCIA. Feed-változat nélkül (a saját bizonylat, amíg
+ * a száma nem jön vissza) az állapot UNKNOWN, nem UNPAID. A bejövőn a hiány
+ * UNKNOWN marad.
+ *
+ * A MÉG NEM VETÍTETT SOR (`paymentsKnown` `null`: a migráció óta nem jött rá
+ * újravetítés) UNKNOWN, különben az újravetítésig a már kifizetett számlák is
+ * „Nincs fizetve”-nek látszanának (murena review-ja).
+ */
+export function externalPaymentFields(row: {
+  grossAmount: Prisma.Decimal;
+  paidAmount: Prisma.Decimal;
+  lastPaymentDate: Date | null;
+  paymentsKnown: boolean | null;
+  currency: string;
+  cancelled: boolean;
+}): Pick<
+  BillingDocumentListItem,
+  "paymentState" | "paidAmount" | "lastPaymentDate"
+> {
+  if (row.cancelled)
+    return { paymentState: null, paidAmount: null, lastPaymentDate: null };
+  const decimals = row.currency.toUpperCase() === "HUF" ? 0 : 2;
+  return {
+    paymentState: paymentStateOf({
+      // van feed-változat: a hiány itt "nem fizetett"; a még nem vetített sor
+      // viszont ismeretlen (lásd fent)
+      paymentsKnown: row.paymentsKnown !== null,
+      paidAmount: row.paidAmount.toFixed(),
+      grossAmount: row.grossAmount.toFixed(),
+      currency: row.currency,
+    }),
+    paidAmount: row.paidAmount.toFixed(decimals),
+    lastPaymentDate: calendarDay(row.lastPaymentDate),
+  };
 }
 
 export function toExternalListItem(
@@ -250,6 +303,7 @@ export function toExternalListItem(
     opens: "EXTERNAL_DETAIL",
     origin: "EXTERNAL",
     externalKindLabel: externalKindLabel(row.kindCode),
+    ...externalPaymentFields(row),
   };
 }
 

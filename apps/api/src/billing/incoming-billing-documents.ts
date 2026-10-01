@@ -8,6 +8,7 @@ import type {
   IncomingDocumentListResponse,
   IncomingPaymentState,
 } from "@acropora/types";
+import { paymentStateOf as sharedPaymentStateOf } from "@acropora/types";
 
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
 import { externalKindLabel } from "./billing-document-list.js";
@@ -34,9 +35,9 @@ const money = (value: Prisma.Decimal, currency: string) =>
 const day = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 
 /**
- * A KIFIZETÉSI ÁLLAPOT, SZÁRMAZTATVA: a kifizetések összege a bruttóhoz mérve
- * (abszolút értékben, mert a sztornó negatív). A tűrés a pénznem kerekítése
- * (forintnál fél forint). Kifizetés-adat nélkül UNKNOWN, nem UNPAID.
+ * A KIFIZETÉSI ÁLLAPOT: a kimenő listával KÖZÖS számítás (`paymentStateOf` a
+ * `@acropora/types`-ban; murena és nautilus, 2026-10-01). A tűrés forintnál 2 Ft
+ * (az 5 forintos készpénz-kerekítés), devizánál fél cent, abszolút értékben.
  */
 export function paymentStateOf(row: {
   paymentsKnown: boolean;
@@ -44,15 +45,12 @@ export function paymentStateOf(row: {
   grossAmount: Prisma.Decimal;
   currency: string;
 }): IncomingPaymentState {
-  if (!row.paymentsKnown) return "UNKNOWN";
-  const paid = row.paidAmount.abs();
-  const gross = row.grossAmount.abs();
-  const tolerance = new Prisma.Decimal(
-    decimals(row.currency) === 0 ? 0.5 : 0.005,
-  );
-  if (paid.gte(gross.sub(tolerance))) return "PAID";
-  if (paid.gt(0)) return "PARTIAL";
-  return "UNPAID";
+  return sharedPaymentStateOf({
+    paymentsKnown: row.paymentsKnown,
+    paidAmount: row.paidAmount.toFixed(),
+    grossAmount: row.grossAmount.toFixed(),
+    currency: row.currency,
+  });
 }
 
 /**

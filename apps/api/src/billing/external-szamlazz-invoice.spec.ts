@@ -21,6 +21,7 @@ const szamla = (
     vevoNev?: string;
     eszamla?: string;
     extraAlap?: string;
+    kifizetesek?: string;
   } = {},
 ) => `<?xml version="1.0" encoding="UTF-8"?>
 <szamla xmlns="http://www.szamlazz.hu/szamla">
@@ -45,7 +46,7 @@ const szamla = (
       <brutto>3810.0</brutto><sztetordering>2</sztetordering></tetel>
   </tetelek>
   <osszegek><afakulcsossz><afakulcs>27</afakulcs><netto>23000.0</netto><afa>6210.0</afa><brutto>29210.0</brutto></afakulcsossz>
-    <totalossz><netto>23000.0</netto><afa>6210.0</afa><brutto>29210.0</brutto></totalossz></osszegek>
+    <totalossz><netto>23000.0</netto><afa>6210.0</afa><brutto>29210.0</brutto></totalossz></osszegek>${over.kifizetesek ?? ""}
 </szamla>`;
 
 // MI PIROSÍT: ha egy mező rossz helyről jönne; ha a második tétel elveszne (a
@@ -92,7 +93,58 @@ describe("projectExternalInvoice", () => {
         },
       ],
       cancelled: false,
+      paymentsKnown: false,
+      payments: [],
+      paidAmount: "0.00",
+      lastPaymentDate: null,
     });
+  });
+
+  // MI PIROSÍT: ha a kifizetés elveszne vagy rossz mezőből jönne; ha az összeg
+  // nem a kifizetések összege, vagy a dátum nem a legkésőbbi; ha egy hibás
+  // kifizetés csendben nullának számítana.
+  it("reads the payments the re-sent invoice carries, their sum and the latest day (acrobot 25894)", () => {
+    // az élesen látott alak: a Számlázz.hu saját banki párosítása, és egy utánvét
+    const p = projectExternalInvoice(
+      szamla({
+        kifizetesek: `<kifizetesek>
+    <kifizetes><datum>2026-09-28</datum><jogcim>átutalás</jogcim><osszeg>20000.0</osszeg>
+      <megjegyzes>Automatikus banki tranzakció párosítás</megjegyzes><bankszamlaszam>11709002-20624460</bankszamlaszam>
+      <banktranzid>77877311</banktranzid></kifizetes>
+    <kifizetes><datum>2026-09-17+02:00</datum><jogcim>utánvét</jogcim><osszeg>9210.5</osszeg></kifizetes>
+  </kifizetesek>`,
+      }),
+    );
+    assert.deepEqual(p.payments, [
+      {
+        date: "2026-09-28",
+        title: "átutalás",
+        amount: "20000.0",
+        note: "Automatikus banki tranzakció párosítás",
+        bankTransactionId: "77877311",
+      },
+      {
+        date: "2026-09-17",
+        title: "utánvét",
+        amount: "9210.5",
+        note: null,
+        bankTransactionId: null,
+      },
+    ]);
+    assert.deepEqual(
+      [p.paymentsKnown, p.paidAmount, p.lastPaymentDate],
+      [true, "29210.50", "2026-09-28"],
+    );
+    assert.throws(
+      () =>
+        projectExternalInvoice(
+          szamla({
+            kifizetesek:
+              "<kifizetesek><kifizetes><datum>2026-09-28</datum><jogcim>átutalás</jogcim><osszeg>sok</osszeg></kifizetes></kifizetesek>",
+          }),
+        ),
+      SzamlazzFeedParseError,
+    );
   });
 
   it("takes the schema's other forms: a dated timezone, a paper invoice, a storno flag, an unknown kind", () => {

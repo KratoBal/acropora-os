@@ -5,6 +5,7 @@ import type {
   InvoiceFormat,
 } from "./billing-document.js";
 import type { DecimalText } from "./billing-document-amounts.js";
+import type { BillingPaymentState } from "./billing-payment-state.js";
 
 /**
  * A SZÁMLÁZÁS OLVASÓ OLDALA DRÓTON: a lista, a részletek bővítése és a
@@ -86,6 +87,16 @@ export interface BillingDocumentListItem {
    * Sztornó számla, ...), ismeretlen kódnál maga a kód; a mieinknél `null`.
    */
   externalKindLabel: string | null;
+  /**
+   * A KIFIZETETTSÉG (Balázs, GLS szál, 2026-10-01), a bejövő listával azonos
+   * mezőnevekkel és számítással (`paymentStateOf`). `null`: nincs forrásunk
+   * rá (a saját bizonylat), vagy nem fizetendő (sztornózott számla).
+   */
+  paymentState: BillingPaymentState | null;
+  /** A kifizetések összege; `paymentState` `null`-jánál `null`. */
+  paidAmount: DecimalText | null;
+  /** `YYYY-MM-DD`, a legkésőbbi kifizetés. */
+  lastPaymentDate: string | null;
 }
 
 /** Egy külső bizonylat tétele, ahogy a számlán áll (szamla.xsd `tetel`). */
@@ -127,6 +138,19 @@ export interface BillingExternalDocumentDetail {
   };
   /** A Számlázz.hu szerint sztornózott. */
   cancelled: boolean;
+  /** Lásd `BillingDocumentListItem.paymentState`. */
+  paymentState: BillingPaymentState | null;
+  paidAmount: DecimalText | null;
+  lastPaymentDate: string | null;
+  /** Küldött-e a Számlázz.hu kifizetés-adatot (a bejövő adatlapé szerint). */
+  paymentsKnown: boolean;
+  /** A kifizetések a számla sorrendjében; `title` a jogcím. */
+  payments: {
+    date: string;
+    title: string;
+    amount: DecimalText;
+    note: string | null;
+  }[];
   /** Hány változat érkezett; a lap a legkésőbbit mutatja. */
   versionCount: number;
   /** A mutatott változat érkezése (ISO időbélyeg). */
