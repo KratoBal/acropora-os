@@ -947,6 +947,50 @@ describe("a typo twin: the exact payment wins over the by-name one (acrobot 2565
   });
 });
 
+describe("a company original is not overruled by another document of the same invoice (acrobot 25664)", () => {
+  it("the reminder's not-the-company verdict gives way to the invoice's", () => {
+    const d = debit({
+      narrative: "26007910",
+      amount: D(1703.08),
+      currency: "EUR",
+      counterpartyName: "De Jong Marinelife B.V.",
+    });
+    const invoice = doc({
+      number: "26007910",
+      gross: D(1703.08),
+      currency: "EUR",
+      supplierName: "De Jong Marinelife B.V.",
+      source: "MAILBOX",
+    });
+    const reminder = doc({
+      number: "26007910",
+      gross: null,
+      supplierName: "",
+      source: "MAILBOX",
+      payee: "NOT_COMPANY",
+    });
+    assert.equal(run([d], [invoice, reminder]).get(d.id)?.state, "FOUND");
+    // egy MÁSIK számla „nem a cégre” ítélete továbbra is dönt
+    const e = debit({
+      narrative: "26007910 26007911",
+      amount: D(1703.08),
+      currency: "EUR",
+      counterpartyName: "De Jong Marinelife B.V.",
+    });
+    const other = doc({
+      number: "26007911",
+      gross: D(1),
+      supplierName: "De Jong Marinelife B.V.",
+      source: "MAILBOX",
+      payee: "NOT_COMPANY",
+    });
+    assert.equal(
+      run([e], [{ ...invoice, id: "inv-2" }, other]).get(e.id)?.state,
+      "NOT_COMPANY",
+    );
+  });
+});
+
 describe("a summary invoice's group is one pairing, not a double payment (acrobot 25708)", () => {
   const card = (date: string, amount: number) =>
     debit({

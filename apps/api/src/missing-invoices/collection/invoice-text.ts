@@ -96,6 +96,20 @@ const NUMBER_LABELS = [
  */
 const BANK_ACCOUNT = /^\d{8}-\d{8}(-\d{8})?$/;
 
+/**
+ * IBAN: országkód, két ellenőrző számjegy, legalább 11 további jel (a
+ * legrövidebb IBAN 15 jel). Mérve 2026-10-01, éles: a De Jong fizetési
+ * emlékeztetőiben a szállító IBAN-ja (NL30RABO0322265428) minden De Jong
+ * terhelés közleményében önálló szóként áll, ezért a banki hivatkozás
+ * keresése az IBAN-t találta meg „számlaszámként”, és az emlékeztető minden
+ * De Jong fizetéshez párosodott.
+ */
+const IBAN = /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/;
+
+/** Bankszámlaszám (hazai vagy IBAN), ami soha nem számlaszám. */
+export const looksLikeBankAccount = (value: string): boolean =>
+  BANK_ACCOUNT.test(value) || IBAN.test(compactNumber(value));
+
 /** Egy számlaszám alakja: betűvel vagy számmal kezdődik, legalább 3 jel. */
 const NUMBER_TOKEN = /^[#:.\s]*([A-Za-z0-9][A-Za-z0-9\-/_.]{2,39})/;
 
@@ -175,7 +189,7 @@ export function bankReference(
   const loose = [reading.invoiceNumber, ...fromName]
     .filter((n): n is string => n !== null)
     .filter((n) => compactNumber(n).length >= 5 && /\d/.test(n))
-    .filter((n) => !BANK_ACCOUNT.test(n))
+    .filter((n) => !looksLikeBankAccount(n))
     .find((n) =>
       compactNarratives.some((narrative) =>
         narrative.includes(compactNumber(n)),
@@ -194,7 +208,8 @@ export function bankReference(
       .filter(
         (word) =>
           compactNumber(word).length >= 6 &&
-          (word.match(/\d/g) ?? []).length >= 5,
+          (word.match(/\d/g) ?? []).length >= 5 &&
+          !looksLikeBankAccount(word),
       )
       .find((word) => narrativeWords.has(compactNumber(word))) ?? null
   );
@@ -210,6 +225,40 @@ export function looksLikeInvoice(text: string): boolean {
  */
 const PROFORMA_WORD =
   /(?<!\p{L})(díjbekérő|dijbekero|előlegbekérő|proforma|pro forma|pro-forma)(?!\p{L})/iu;
+
+/**
+ * FIZETÉSI EMLÉKEZTETŐ, FELSZÓLÍTÁS (acrobot 25664 és 25668, Balázs a De
+ * Jong-számlákról): nem számla, de idézi a számla számát, ezért a NAV- vagy a
+ * banki kulcs megtalálja. A levélben gyakran MELLETTE áll a számla PDF-je is
+ * (De Jong: „Second reminder 11069-26007910.pdf” és „inv26007910.pdf”), tehát
+ * nem a levelet, csak ezt a mellékletet kell kihagyni.
+ *
+ * A fájlnév, vagy a szöveg ELEJE (a cím). Mérve 2026-10-01 az exchange 627
+ * olvasható PDF-jén: a 15 emlékeztető mind a fájlnévben, mind az első öt sorban
+ * viseli a szót; a többi találat hosszú szöveg mélyén áll (egy adatkezelési
+ * tájékoztató 195. sorában „Mahnung”, egy szerződés 398. sorában
+ * „felszólítás”), és egyik sem számla.
+ */
+const REMINDER_WORD =
+  /(?<!\p{L})(reminder|mahnung|zahlungserinnerung|zahlungsaufforderung|emlékeztető|emlekezteto|felszólítás|felszolitas|rappel|relance|herinnering|aanmaning|sollecito|upomínka|dunning)(?!\p{L})/iu;
+const REMINDER_TITLE_LINES = 10;
+
+/** A fájlnév fizetési emlékeztetőé (a már tárolt dokumentumoknál csak ez van kéznél). */
+export function reminderFileName(fileName: string | null | undefined): boolean {
+  return REMINDER_WORD.test((fileName ?? "").replace(/[_.-]+/g, " "));
+}
+
+export function looksLikeReminder(
+  lines: readonly string[],
+  fileName: string | null | undefined,
+): boolean {
+  return (
+    reminderFileName(fileName) ||
+    lines
+      .slice(0, REMINDER_TITLE_LINES)
+      .some((line) => REMINDER_WORD.test(line))
+  );
+}
 
 export function looksLikeProforma(text: string): boolean {
   return PROFORMA_WORD.test(text);

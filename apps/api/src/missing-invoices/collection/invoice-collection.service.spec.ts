@@ -311,6 +311,66 @@ describe("InvoiceCollectionService", () => {
     assert.deepEqual(recorded, ["m-1/Hetzner_masik.pdf:UNMATCHED"]);
   });
 
+  it("skips the payment reminder but stores the invoice attached next to it (De Jong, 2026-09-24)", async () => {
+    const reminder = await pdf([
+      "De Jong Marinelife B.V.",
+      "Spijksesteeg 2 A, 4212 SPIJK",
+      "2nd REMINDER",
+      "Our records show that invoice 26007910 is still open.",
+      "IBAN NL30RABO0322265428",
+    ]);
+    const invoice = await pdf([
+      "INVOICE",
+      "De Jong Marinelife B.V., VAT NL001234567B01",
+      "Customer: Acropora Kft., VAT HU23916229",
+      "Invoice number 26007910",
+      "IBAN NL30RABO0322265428",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          { fileName: "Second reminder 11069-26007910.pdf", buffer: reminder },
+          { fileName: "inv26007910.pdf", buffer: invoice },
+        ],
+      },
+      debits: [
+        "1.703,08 EUR 26007910 Spijksesteeg 2 A RABONL2U NL30RABO0322265428 De Jong Marinelife B.V. 4212 SPIJK,",
+      ],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [
+        d.fileName,
+        (d.textReading as { bankReference?: string } | null)?.bankReference,
+      ]),
+      [["inv26007910.pdf", "26007910"]],
+    );
+    assert.deepEqual(recorded, [
+      "m-1/Second reminder 11069-26007910.pdf:NOT_INVOICE",
+    ]);
+  });
+
+  it("never takes the supplier's IBAN for the invoice's bank reference", async () => {
+    // a szállító IBAN-ja minden fizetésének közleményében ott áll
+    const statement = await pdf([
+      "INVOICE",
+      "De Jong Marinelife B.V.",
+      "Invoice number 26009999",
+      "IBAN NL30RABO0322265428",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: { "m-1": [{ fileName: "doc.pdf", buffer: statement }] },
+      debits: [
+        "1.703,08 EUR 26007910 Spijksesteeg 2 A RABONL2U NL30RABO0322265428 De Jong",
+      ],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(stored, []);
+    assert.deepEqual(recorded, ["m-1/doc.pdf:UNMATCHED"]);
+  });
+
   it("stores an invoice whose order number the debit narrative names, keeping its own number", async () => {
     // Fauna Marin, éles 2026-10-01: a fizetés a rendelésszámot (20144304)
     // nevezi meg, a számla száma 40142365, a rendelésszám „Auftragsnr.” alatt

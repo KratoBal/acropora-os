@@ -352,7 +352,20 @@ function invoiceDifference(
 
 function stateOf(documents: CandidateDocument[]): ItemState {
   if (documents.some((d) => d.kind === "PROFORMA")) return "PROFORMA_ONLY";
-  if (documents.some((d) => d.payee === "NOT_COMPANY")) return "NOT_COMPANY";
+  // ugyanannak a számlának a cégre szóló eredetije mellett egy másik
+  // dokumentum (emlékeztető, másolat) „nem a cégre” ítélete nem dönt (acrobot 25664)
+  const companyOriginals = new Set(
+    documents
+      .filter((d) => d.payee === "COMPANY" && d.hasOriginal)
+      .map((d) => compact(d.number)),
+  );
+  if (
+    documents.some(
+      (d) =>
+        d.payee === "NOT_COMPANY" && !companyOriginals.has(compact(d.number)),
+    )
+  )
+    return "NOT_COMPANY";
   // a vevő nem ellenőrizhető: a brief szerint csak a Kft-re szóló számla
   // Megvan, tehát ez a drawerben kézzel jelölendő („A cégre szól”), addig
   // Nem párosodott
