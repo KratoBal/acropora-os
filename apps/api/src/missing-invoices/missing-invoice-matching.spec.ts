@@ -109,6 +109,26 @@ describe("matchMonth", () => {
     );
   });
 
+  it("pairs by a reference the invoice carries, when the narrative names that instead of the number", () => {
+    // Fauna Marin, éles 2026-10-01: a fizetés a rendelésszámot nevezi meg
+    const d = debit({
+      narrative: "1.698,58 EUR 20144304 Fauna Marin Gmbh",
+      counterpartyName: "Fauna Marin Gmbh",
+    });
+    const c = doc({
+      number: "40142365",
+      references: ["20144304"],
+      supplierName: "Fauna Marin",
+      gross: null,
+    });
+    const outcome = run([d], [c]).get(d.id);
+    assert.equal(outcome?.reason, "a számla száma a közleményben");
+    assert.deepEqual(
+      outcome?.documents.map((x) => x.id),
+      [c.id],
+    );
+  });
+
   it("pairs by the supplier's bank account with an exact amount", () => {
     const d = debit({
       counterpartyName: "más név",

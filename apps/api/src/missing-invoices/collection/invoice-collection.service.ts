@@ -33,7 +33,7 @@ import {
 import {
   looksLikeInvoice,
   looksLikeProforma,
-  numberInNarratives,
+  bankReference,
   readInvoiceText,
   type InvoiceTextReading,
 } from "./invoice-text.js";
@@ -279,18 +279,21 @@ export class InvoiceCollectionService {
         navNumbers: () => navNumbers,
       });
       if (textReading.numberFrom !== "NAV") {
-        const fromBank = numberInNarratives(
+        const reference = bankReference(
           lines,
           textReading,
           hints,
           await this.repository.debitNarratives(),
         );
-        if (!fromBank) return skip("UNMATCHED");
-        textReading = {
-          ...textReading,
-          invoiceNumber: fromBank,
-          numberFrom: "BANK",
-        };
+        if (!reference) return skip("UNMATCHED");
+        textReading = textReading.invoiceNumber
+          ? { ...textReading, bankReference: reference }
+          : {
+              ...textReading,
+              invoiceNumber: reference,
+              numberFrom: "BANK",
+              bankReference: reference,
+            };
       }
     }
     const proforma = importResult
