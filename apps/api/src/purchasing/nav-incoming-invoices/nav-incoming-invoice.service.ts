@@ -16,7 +16,10 @@ import {
 } from "../../integrations/nav/nav-online-invoice.client.js";
 import { decodeInvoiceDataXml } from "../../integrations/nav/nav-xml.util.js";
 import type { NavIncomingInvoiceListQueryDto } from "./dto/nav-incoming-invoice-list-query.dto.js";
-import { NavIncomingInvoiceRepository } from "./nav-incoming-invoice.repository.js";
+import {
+  NavIncomingInvoiceRepository,
+  storableDigestItem,
+} from "./nav-incoming-invoice.repository.js";
 import {
   hungarianTaxBase,
   toNavIncomingInvoiceDetail,
@@ -225,10 +228,7 @@ export class NavIncomingInvoiceService {
       const items = await this.downloadDigest(window.start, window.end);
       let result: NavBackfillWindowResult;
       if (options.dryRun) {
-        const creatable = items.filter(
-          (item) =>
-            item.invoiceOperation === "CREATE" && item.supplierTaxNumber,
-        ).length;
+        const creatable = items.filter(storableDigestItem).length;
         const known = await this.repository.countKnown(items);
         result = {
           windowStart: window.start.toISOString(),

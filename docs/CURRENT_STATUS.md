@@ -358,9 +358,13 @@ mezővel.
   bejövő (INBOUND irányú) számlák listája, "Frissítés" gombbal kézi
   szinkron-indítással, illetve env-kapcsolt (`NAV_INVOICE_SYNC_ENABLED`)
   időszakos háttérfuttatással (a UNAS vevő-szinkron mintáját követve,
-  `insDate`-kurzoros ablakos lekérdezéssel, 120s átfedéssel). A digest-ben
-  szereplő MODIFY/STORNO műveletű tételeket a v1 szándékosan kihagyja
-  (csak CREATE-tételek kerülnek be) - lásd Known limitations.
+  `insDate`-kurzoros ablakos lekérdezéssel, 120s átfedéssel). A digest
+  MINDEN műveletű tétele bekerül (2026-10-01 óta): az alapszámla (CREATE)
+  mellett a módosító (MODIFY) és a sztornó (STORNO) okirat is, a művelettel és
+  az eredeti számla sorszámával. A listán jelölve látszik, és nem
+  vételezhető be. A párosító, a gyűjtő és a várható érkezések egyelőre csak az
+  alapszámlát látják. A korábban kihagyott okiratokat a `nav:backfill` tölti
+  vissza.
 - **Lusta teljes adat lekérdezés**: a lista csak a NAV `queryInvoiceDigest`
   kivonatát tárolja; a részletnézet megnyitásakor kerül lekérdezésre és
   elparszolásra a teljes számla-XML (`queryInvoiceData`, base64+opcionális
@@ -465,8 +469,8 @@ nem ebben a repositoryban).
 Következő projektkészlet-munkacsomag: a foglalás felhasználása/felszabadítása
 a Szerviz és Projekt modulból, projektlezárási szabályokkal és külön
 készletmozgással. További irányok: a NAV
-digest-ben szereplő MODIFY/STORNO számlamódosítások kezelése (jelenleg
-csak az eredeti CREATE-számlák kerülnek be), rendelt/tényleges mennyiség
+módosító és sztornó okiratok (jóváírók) bevonása a Hiányzó számlák
+párosításába (tárolva már megvannak), rendelt/tényleges mennyiség
 eltérés jelzése és jóváhagyása, Vevő szerkesztés (update) UI,
 kapcsolattartó/jegyzet/címke CRM-mezők (lásd
 [backlog/domain-follow-ups.md](../backlog/domain-follow-ups.md)), valódi
@@ -542,7 +546,7 @@ pnpm --filter @acropora/api unas:probe
 - A NAV adószám-lekérdezés és az UNAS vevő-szinkron éles hitelesítő adatok nélkül nem tesztelhető helyben.
 - Az irányítószám → város lookup nem hivatalos, harmadik féltől származó API-ra épül; kimenete nem tekinthető hatóságilag hitelesnek.
 - A NAV Online Számla `queryInvoiceDigest`/`queryInvoiceData` integráció éles technikai felhasználó nélkül nem tesztelhető helyben - a válasz-XML mezőnevei (invoiceApi.xsd/invoiceData.xsd) a NAV nyilvános specifikációja és a közösségi `nav-online-invoice` referenciakliens alapján implementáltak, de valós NAV-válasszal még nincs megerősítve (ugyanaz a caveat, mint a UNAS `getCustomer` válasz gyökérelemén él).
-- A NAV digest-szinkron v1-ben csak az eredeti (`CREATE` műveletű) számlákat dolgozza fel; a módosító/sztornó (`MODIFY`/`STORNO`) digest-tételeket szándékosan kihagyja.
+- A NAV digest-szinkron a módosító/sztornó (`MODIFY`/`STORNO`) okiratokat tárolja, de a Hiányzó számlák párosítója, a számla-gyűjtő és a várható érkezések még csak az alapszámlát (`CREATE`) használják.
 - A NAV-alapú bevételezés a számla tételeit `variantId` nélküli, kézi sorként tölti elő - nincs automatikus terméktörzs-egyeztetés soronként, a felhasználó írja át a saját megnevezésére (vagy törli és keres rá egy létező termékre).
 - **Az MNB automatikus árfolyam-lekérdezés 2026-07-23 és 2026-09-29 között nem működött, és az ok nem a bot-védelem volt, hanem a https.** A 2026-07-23-i teszt helyesen látta, hogy a `https://www.mnb.hu/arfolyamok.asmx` minden POST SOAP-hívásra F5-választ ad (`TS...` cookie, `Clear-Site-Data`, üres törzsű 404), de a következtetés ("kóddal nem megkerülhető") hamis volt: 2026-09-29-én mérve ugyanaz a hívás a `http://www.mnb.hu/arfolyamok.asmx` címen 200-at és érvényes árfolyamot ad, és a szolgáltatás saját WSDL-je (https-en letöltve is) ezt a http címet nevezi meg végpontként. A kliens alapértelmezése azóta a http cím. Ára: a titkosítatlan csatorna nem védi az árfolyam sértetlenségét, ezért az űrlap továbbra is előtölt, és az ember látja, felülírhatja.
 - A rendelt/tényleges mennyiség közötti eltérés jelzése és jóváhagyása szándékosan még nincs kidolgozva.

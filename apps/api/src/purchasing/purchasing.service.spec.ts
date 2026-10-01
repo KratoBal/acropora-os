@@ -38,6 +38,8 @@ function buildService(options: {
   takenDocumentNumbers?: number;
   /// A NAV bejovo szamla tarolt `parsedData`-ja (#1199 A-007).
   navParsedData?: unknown;
+  /** A NAV sor művelete; alapból CREATE. */
+  navOperation?: string;
   /// #1199 P-026: a mar foglalt EAN-ek es beszallitoi cikkszamok, es az aktiv markak.
   takenEans?: Record<string, string>;
   takenSupplierSkus?: Record<string, string>;
@@ -79,6 +81,7 @@ function buildService(options: {
         })),
     activeBrandIds: async (ids: string[]) =>
       new Set(ids.filter((id) => (options.activeBrandIds ?? []).includes(id))),
+    navInvoiceOperation: async () => options.navOperation ?? "CREATE",
     navInvoiceParsedData: async (id: string) => {
       navParsedDataReads.push(id);
       return options.navParsedData ?? null;
@@ -301,6 +304,29 @@ describe("PurchasingService.createInvoice", () => {
       getCapturedCreateParams()?.navIncomingInvoiceId,
       "nav-invoice-1",
     );
+  });
+
+  it("refuses to receive a NAV modification or storno document (a credit note)", async () => {
+    for (const navOperation of ["MODIFY", "STORNO"]) {
+      const { service, getCapturedCreateParams } = buildService({
+        variants: new Map([["variant-1", variant()]]),
+        supplierCountry: "HU",
+        navOperation,
+      });
+      await assert.rejects(
+        service.createInvoice(
+          baseInput({
+            source: "HU_NAV",
+            currency: "HUF",
+            vatRate: 27,
+            navIncomingInvoiceId: "nav-storno-1",
+          }),
+          "user-1",
+        ),
+        /nem vételezhető be/,
+      );
+      assert.equal(getCapturedCreateParams(), undefined);
+    }
   });
 
   it("rejects an unknown supplier", async () => {

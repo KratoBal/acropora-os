@@ -246,7 +246,9 @@ export class MissingInvoicesRepository {
     };
     const [nav, mailbox, foxpost, gls, suppliers] = await Promise.all([
       this.database.navIncomingInvoice.findMany({
-        where: { invoiceIssueDate: range },
+        // csak az alapszámla: a módosító és a sztornó okirat (jóváíró)
+        // párosítása külön, mért döntés lesz (acrobot 25649)
+        where: { invoiceIssueDate: range, invoiceOperation: "CREATE" },
         select: {
           id: true,
           navInvoiceNumber: true,

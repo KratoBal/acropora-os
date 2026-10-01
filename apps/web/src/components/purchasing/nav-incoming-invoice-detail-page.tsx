@@ -18,6 +18,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+
+import { NavInvoiceOperationNote } from "./nav-invoice-operation";
 import { useReturnTo } from "@/components/navigation-history";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
 
@@ -187,7 +189,18 @@ export function NavIncomingInvoiceDetailPage({
                   ). Próbáld újra a lap frissítésével.
                 </p>
               ) : null}
-              {canManage && detail.status !== "RECEIVED" ? (
+              {detail.invoiceOperation !== "CREATE" ? (
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-dusk-100 pt-4 text-sm text-dusk-600">
+                  <NavInvoiceOperationNote invoice={detail} />
+                  <span>
+                    Ez egy korábbi számla módosító vagy sztornó okirata, nem
+                    vételezhető be.
+                  </span>
+                </div>
+              ) : null}
+              {canManage &&
+              detail.status !== "RECEIVED" &&
+              detail.invoiceOperation === "CREATE" ? (
                 <div className="mt-4 flex justify-end border-t border-dusk-100 pt-4">
                   <Button
                     disabled={detail.lines.length === 0}
