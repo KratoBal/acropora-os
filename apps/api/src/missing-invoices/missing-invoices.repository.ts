@@ -435,9 +435,12 @@ export class MissingInvoicesRepository {
           otherDocumentFileName(document.fileName))
       )
         continue;
+      // a SUPPLIER IS HIÁNYOZHAT: egy hiányos tárolt olvasat (például egy
+      // feltöltés csak számlaszámmal) ne döntse le az egész jelöltlistát, vagyis
+      // a havi nézetet sem
       const foreign =
-        (result?.supplier.country && result.supplier.country !== "HU") ||
-        (result?.supplier.vatId && !result.supplier.vatId.startsWith("HU"));
+        (result?.supplier?.country && result.supplier.country !== "HU") ||
+        (result?.supplier?.vatId && !result.supplier.vatId.startsWith("HU"));
       documents.push({
         id: document.id,
         source:
