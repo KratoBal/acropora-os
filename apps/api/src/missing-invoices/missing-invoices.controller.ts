@@ -16,7 +16,11 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
-import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+import {
+  PERMISSIONS,
+  type AuthenticatedUser,
+  type MissingInvoiceJevSuggestion,
+} from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
@@ -104,6 +108,16 @@ export class MissingInvoicesController {
   @RequirePermissions(PERMISSIONS.FINANCE_VIEW)
   item(@Param("id") id: string) {
     return this.missing.item(id);
+  }
+
+  /**
+   * A JEV-JAVASLAT (csak javaslat: az elfogadás a mai kézi párosítás). A
+   * módosító jog kell hozzá, mert külső hívást indít és futást rögzít.
+   */
+  @Get("items/:id/jev-suggestion")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  jevSuggestion(@Param("id") id: string): Promise<MissingInvoiceJevSuggestion> {
+    return this.missing.jevSuggestion(id);
   }
 
   @Post("items/:id/match")
