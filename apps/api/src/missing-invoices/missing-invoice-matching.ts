@@ -130,6 +130,13 @@ export interface MatchOutcome {
   amountDifference?: { amount: Prisma.Decimal; currency: string };
   /** A többi terhelés, amelyhez ugyanez a számla is párosítva van. */
   doublePaidWith?: string[];
+  /**
+   * A PÁROSÍTÁS, amelyben ez a terhelés a dokumentumot kapta. Alapból maga a
+   * terhelés; a gyűjtőszámla-szabályok (egy számla, sok fizetés) egy közös
+   * párosítást adnak a csoport minden tagjának. A kettős fizetés ezt nézi: egy
+   * számla akkor kétszer fizetett, ha KÉT KÜLÖNBÖZŐ párosításban szerepel.
+   */
+  pairing?: string;
 }
 
 const GENERIC =
@@ -512,6 +519,8 @@ export function matchMonth(input: {
     debit: MatchableDebit,
     documents: CandidateDocument[],
     reason: string,
+    /** a gyűjtőszámla-szabályok közös párosítása; alapból a terhelés maga */
+    pairing?: string,
   ) => {
     documents.forEach((d) => used.add(d.id));
     outcomes.set(debit.id, {
@@ -520,6 +529,7 @@ export function matchMonth(input: {
       matchedBy: "RULE",
       reason,
       candidates: [],
+      ...(pairing ? { pairing } : {}),
     });
   };
   /** A név szerint megnevezett, de egy elírás-gyanús pontos fizetésnek hagyott számlák. */
@@ -699,6 +709,7 @@ export function matchMonth(input: {
         debit,
         [invoices[0]!],
         `gyűjtőszámla: ${group.debits.length} kártyás fizetés havi összege`,
+        `group:${invoices[0]!.id}`,
       );
   }
   // 3c. GYŰJTŐSZÁMLA KIS MARADÉKKAL: a pontos kör után, a megmaradt számlákra
@@ -739,6 +750,7 @@ export function matchMonth(input: {
         [invoice],
         `gyűjtőszámla: ${group.debits.length} kártyás fizetés havi összege, ` +
           `a számla többlete ${invoice.gross!.minus(sum).toFixed(0)} ${invoice.currency}, könyveletlen tétel lehet`,
+        `group:${invoice.id}`,
       );
       outcomes.set(debit.id, {
         ...outcomes.get(debit.id)!,
@@ -843,25 +855,37 @@ const SETTLED_LIKE: ReadonlySet<ItemState> = new Set([
 /**
  * KÉTSZER FIZETETT SZÁMLA (acrobot 25636, éles: a Sopro KB-2855/2026 két
  * 172 006 Ft-os terheléshez, ugyanaz a PDF kétszer feltöltve). Ha ugyanaz a
- * számla (azonos fájl vagy számlaszám) két terheléshez párosul, egyik sem
- * Megvan: mindkettő a másikat nevezi meg.
+ * számla (azonos fájl vagy számlaszám) KÉT KÜLÖNBÖZŐ PÁROSÍTÁSBAN szerepel,
+ * egyik sem Megvan: mindkettő a másikat nevezi meg.
+ *
+ * Egy gyűjtőszámla-párosítás (egy havi számla a kártya összes fizetéséhez,
+ * acrobot 25708) EGY párosítás: a tagjai egymás miatt nem kétszer fizetettek.
+ * Mérve 2026-10-01: e nélkül egy Parkl-hónap minden fizetése DOUBLE_PAID lett.
  */
 function markDoublePaid(outcomes: Map<string, MatchOutcome>): void {
-  const debitsOf = new Map<string, Set<string>>();
+  // azonosság -> párosítás -> a párosítás terhelései
+  const pairingsOf = new Map<string, Map<string, string[]>>();
   for (const [debitId, outcome] of outcomes)
     for (const document of outcome.documents)
-      for (const identity of document.identities ?? [])
-        debitsOf.set(
-          identity,
-          new Set([...(debitsOf.get(identity) ?? []), debitId]),
-        );
+      for (const identity of document.identities ?? []) {
+        const pairings =
+          pairingsOf.get(identity) ?? new Map<string, string[]>();
+        const pairing = outcome.pairing ?? debitId;
+        pairings.set(pairing, [...(pairings.get(pairing) ?? []), debitId]);
+        pairingsOf.set(identity, pairings);
+      }
   const others = new Map<string, Set<string>>();
-  for (const debits of debitsOf.values()) {
-    if (debits.size < 2) continue;
-    for (const debitId of debits)
-      for (const other of debits)
-        if (other !== debitId)
-          others.set(debitId, new Set([...(others.get(debitId) ?? []), other]));
+  for (const pairings of pairingsOf.values()) {
+    if (pairings.size < 2) continue;
+    for (const [pairing, debits] of pairings)
+      for (const debitId of debits)
+        for (const [otherPairing, otherDebits] of pairings)
+          if (otherPairing !== pairing)
+            for (const other of otherDebits)
+              others.set(
+                debitId,
+                new Set([...(others.get(debitId) ?? []), other]),
+              );
   }
   for (const [debitId, with_] of others) {
     const outcome = outcomes.get(debitId)!;
