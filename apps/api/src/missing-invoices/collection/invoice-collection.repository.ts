@@ -85,6 +85,19 @@ export class InvoiceCollectionRepository {
     return rows.map((row) => row.navInvoiceNumber);
   }
 
+  /**
+   * A terhelések közleményei: a NAV-ban nem szereplő (külföldi) számlát ez
+   * köti a fizetéshez. Csak terhelés: a jóváírások közleményében a SAJÁT kimenő
+   * számláink száma áll, és azok másolatát nem tároljuk.
+   */
+  async debitNarratives(): Promise<string[]> {
+    const rows = await this.database.bankTransaction.findMany({
+      where: { direction: "DEBIT" },
+      select: { narrative: true },
+    });
+    return rows.map((row) => row.narrative);
+  }
+
   /** Van-e már ilyen tartalmú dokumentum, bármilyen úton érkezett. */
   async hasContent(sha256: string): Promise<boolean> {
     return (
