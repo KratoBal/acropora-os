@@ -65,6 +65,8 @@ export const MISSING_INVOICE_CATEGORIES = [
   "TAX",
   "PAYROLL",
   "LOAN",
+  "CASH_WITHDRAWAL",
+  "CUSTOMER_REFUND",
   "INSURANCE",
   "CARD_SUBSCRIPTION",
   "FOREIGN_SUPPLIER",
@@ -88,6 +90,8 @@ export const MISSING_INVOICE_CATEGORY_LABELS: Readonly<
   BANK_FEE: "Banki díj",
   INTERNAL_TRANSFER: "Belső átvezetés",
   LOAN: "Kölcsön",
+  CASH_WITHDRAWAL: "Készpénzfelvétel",
+  CUSTOMER_REFUND: "Vevői visszatérítés",
 };
 
 export const MISSING_INVOICE_TABS = [
