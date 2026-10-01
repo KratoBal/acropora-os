@@ -47,6 +47,15 @@ export type GoogleClientFactory = (
   "gmailMessageIds" | "gmailPdfMessage" | "driveFolderPdfs" | "driveFile"
 >;
 
+/**
+ * KÉT GOOGLE-KÉRÉS KÖZÖTT LEGALÁBB ENNYI (acrobot 25605, éles 2026-10-01: a
+ * sorban, szünet nélkül menő melléklet-letöltés a Gmail felhasználónkénti
+ * kvótájába futott, 188 fájl után mindkét postafiók GOOGLE_RATE_LIMITED).
+ * Másodpercenként legfeljebb négy kérés; egy 190 fájlos futás így is két perc
+ * alatt van. A Gmail pontos kvótáját élesben nem mértük.
+ */
+export const INVOICE_COLLECTION_REQUEST_GAP_MS = 250;
+
 /** A környezet; a teszt ezen át adja. */
 export const INVOICE_COLLECTION_ENV = Symbol("INVOICE_COLLECTION_ENV");
 
@@ -119,26 +128,39 @@ export class InvoiceCollectionService {
       failedCount: 0,
     };
     const runId = await this.repository.startRun(trigger);
+    const retryUnmatched = await this.repository.unmatchedRetryDue(new Date());
     const failedSources: string[] = [];
+    const pausedSources: string[] = [];
     for (const source of sources) {
       try {
-        await this.collect(source, counts);
+        await this.collect(source, counts, retryUnmatched);
       } catch (error) {
         // egy forrás hibája (lejárt kulcs) a többit nem állítja meg
         const code =
           error instanceof GoogleReadonlyError
             ? error.code
             : "INVOICE_COLLECTION_SOURCE_FAILED";
+        // A rate limit nem hiba: a forrás itt megáll, a már feldolgozott
+        // levelek látottak, a következő futás onnan folytatja.
+        if (code === "GOOGLE_RATE_LIMITED") {
+          pausedSources.push(`${source.source}:${code}`);
+          this.logger.warn(
+            `Invoice collection: ${source.source} paused (${code})`,
+          );
+          continue;
+        }
         failedSources.push(`${source.source}:${code}`);
         this.logger.error(
           `Invoice collection: ${source.source} failed (${code})`,
         );
       }
     }
+    const notes = [...failedSources, ...pausedSources];
     await this.repository.finishRun(
       runId,
       counts,
-      failedSources.length ? failedSources.join(",").slice(0, 200) : null,
+      notes.length ? notes.join(",").slice(0, 200) : null,
+      failedSources.length > 0,
     );
     return counts;
   }
@@ -146,13 +168,18 @@ export class InvoiceCollectionService {
   private async collect(
     config: InvoiceCollectionSourceConfig,
     counts: InvoiceCollectionCounts,
+    retryUnmatched: boolean,
   ): Promise<void> {
-    const google = this.google({ credentials: config.credentials });
+    const google = this.google({
+      credentials: config.credentials,
+      requestGapMs: INVOICE_COLLECTION_REQUEST_GAP_MS,
+    });
     if (config.source === "DRIVE") {
       const files = await google.driveFolderPdfs(config.folderId);
       const seen = await this.repository.seen(
         config.source,
         files.map((file) => file.id),
+        retryUnmatched,
       );
       for (const file of files.filter((f) => !seen.has(f.id))) {
         let content: Buffer;
@@ -190,7 +217,7 @@ export class InvoiceCollectionService {
       config.user,
       invoiceCollectionMailQuery(invoiceCollectionDays(this.environment)),
     );
-    const seen = await this.repository.seen(config.source, ids);
+    const seen = await this.repository.seen(config.source, ids, retryUnmatched);
     for (const id of ids.filter((messageId) => !seen.has(messageId))) {
       const message = await google.gmailPdfMessage(config.user, id);
       for (let i = 0; i < message.skippedTooLarge; i++) {

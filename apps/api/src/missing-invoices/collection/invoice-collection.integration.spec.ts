@@ -98,7 +98,7 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
       },
     });
     assert.deepEqual(
-      await repository.seen("INFO_MAIL", [MESSAGE, "x"]),
+      await repository.seen("INFO_MAIL", [MESSAGE, "x"], true),
       new Set([MESSAGE]),
     );
   });
@@ -154,13 +154,15 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
       "collect-it-l-sha",
     );
 
+    const ids = ["collect-it-u1", "collect-it-n1", "collect-it-m1"];
     assert.deepEqual(
-      await repository.seen("INFO_MAIL", [
-        "collect-it-u1",
-        "collect-it-n1",
-        "collect-it-m1",
-      ]),
+      await repository.seen("INFO_MAIL", ids, true),
       new Set(["collect-it-n1"]),
+    );
+    // amikor az újraolvasás nem esedékes, az UNMATCHED is látott
+    assert.deepEqual(
+      await repository.seen("INFO_MAIL", ids, false),
+      new Set(ids),
     );
   });
 
@@ -228,6 +230,7 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
         failedCount: 0,
       },
       "COLLECT_IT",
+      true,
     );
     const second = await repository.startRun("MANUAL");
     await repository.finishRun(
@@ -241,6 +244,7 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
         failedCount: 0,
       },
       "COLLECT_IT",
+      true,
     );
   });
 });

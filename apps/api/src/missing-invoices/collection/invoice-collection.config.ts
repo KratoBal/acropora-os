@@ -183,3 +183,22 @@ export function describeInvoiceCollectionState(
     return `Invoice collection disabled (switched on, but no source has a key: ${missing.join("; ")})`;
   return `Invoice collection enabled (${invoiceCollectionIntervalMinutes(environment)} min, sources: ${sources.map((s) => s.source).join(", ")}${missing.length ? `; skipped: ${missing.join("; ")}` : ""})`;
 }
+
+const BUDAPEST_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Budapest",
+});
+
+/**
+ * Az UNMATCHED újraolvasás döntése: nincs még teljes futás, az utolsó teljes
+ * futás egy korábbi budapesti napon indult, vagy azóta új terhelés jött.
+ */
+export function unmatchedRetryDue(
+  lastCompleteStartedAt: Date | null,
+  newDebitsSince: number,
+  now: Date,
+): boolean {
+  if (!lastCompleteStartedAt) return true;
+  if (BUDAPEST_DAY.format(lastCompleteStartedAt) !== BUDAPEST_DAY.format(now))
+    return true;
+  return newDebitsSince > 0;
+}

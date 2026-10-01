@@ -28,6 +28,13 @@ export interface GoogleReadonlySettings {
   rateLimitDelaysMs?: readonly number[];
   /** A várakozás (a tesztben azonnali). */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Legalább ennyi idő két API-kérés között (alapból 0). A Gmail
+   * felhasználónkénti kvótája a gyors egymásutáni kérésekre fut fel.
+   */
+  requestGapMs?: number;
+  /** Az óra (a tesztben rögzített). */
+  now?: () => number;
 }
 
 export class GoogleReadonlyError extends Error {
@@ -78,8 +85,8 @@ const REQUEST_TIMEOUT_MS = 30_000;
  * RATE LIMIT UTÁN RÖVID, KORLÁTOS VISSZAVÁRÁS (Balázs éles próbája, 2026-10-01:
  * az info@ és a balazs@ egy perc munka után állt le). Három próba, 1, 2, 4
  * másodperc; a Google `Retry-After` fejlécét is figyelembe vesszük, de legfeljebb
- * 10 másodpercig. Ennyi után a hiba megy tovább (GOOGLE_RATE_LIMITED), a
- * következő futás folytatja.
+ * 10 másodpercig. Ennyi után a hiba megy tovább (GOOGLE_RATE_LIMITED): a
+ * begyűjtő a forrást megállítja, és a következő futás folytatja.
  */
 const RATE_LIMIT_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000];
 const RETRY_AFTER_CAP_MS = 10_000;
@@ -154,6 +161,7 @@ export class GoogleReadonlyClient {
   private readonly gmailApiUrl: string;
   private readonly driveApiUrl: string;
   private readonly tokenUrl: string;
+  private lastRequestAt: number | null = null;
 
   constructor(
     private readonly settings: GoogleReadonlySettings,
@@ -334,9 +342,27 @@ export class GoogleReadonlyClient {
   }
 
   private async request(url: URL): Promise<Response> {
+    await this.pace();
     return this.fetchWithTimeout(url, {
       headers: { Authorization: `Bearer ${await this.token()}` },
     });
+  }
+
+  /** Az API-kérések sorban mennek; kettő között legalább `requestGapMs`. */
+  private async pace(): Promise<void> {
+    const gap = this.settings.requestGapMs ?? 0;
+    const now = this.settings.now ?? Date.now;
+    if (gap > 0 && this.lastRequestAt !== null) {
+      const wait = this.lastRequestAt + gap - now();
+      if (wait > 0) await this.sleep(wait);
+    }
+    this.lastRequestAt = now();
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return this.settings.sleep
+      ? this.settings.sleep(ms)
+      : new Promise<void>((resolve) => setTimeout(resolve, ms));
   }
 
   private async fetchWithTimeout(
@@ -344,9 +370,6 @@ export class GoogleReadonlyClient {
     init: RequestInit,
   ): Promise<Response> {
     const delays = this.settings.rateLimitDelaysMs ?? RATE_LIMIT_DELAYS_MS;
-    const sleep =
-      this.settings.sleep ??
-      ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     for (let attempt = 0; ; attempt++) {
       try {
         return await this.fetchOnce(url, init);
@@ -358,7 +381,7 @@ export class GoogleReadonlyClient {
             ? new GoogleReadonlyError("GOOGLE_RATE_LIMITED")
             : error;
         }
-        await sleep(Math.max(delays[attempt]!, error.retryAfterMs));
+        await this.sleep(Math.max(delays[attempt]!, error.retryAfterMs));
       }
     }
   }

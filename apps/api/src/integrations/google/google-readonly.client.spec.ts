@@ -294,3 +294,47 @@ describe("GoogleReadonlyClient, a 403 és a 429", () => {
     assert.deepEqual(t.sleeps, [3_000, 10_000]);
   });
 });
+
+/*
+  A KÉRÉSEK KÖZÖTT SZÜNET (acrobot 25605, éles 2026-10-01: a szünet nélküli
+  letöltés a Gmail kvótájába futott). MI PIROSÍT: ha két egymás utáni API-kérés
+  között nem várna; ha a már eltelt időt nem számítaná be; ha a token-kérés is
+  várna; ha alapból (a beállítás nélkül) is lassítana.
+*/
+describe("GoogleReadonlyClient pacing", () => {
+  const listing = () => Response.json({ messages: [{ id: "m" }] });
+  const make = (gap: number | undefined, clock: number[]) => {
+    const sleeps: number[] = [];
+    let tick = 0;
+    const fetcher: typeof fetch = async (input) =>
+      String(input) === SETTINGS.tokenUrl
+        ? Response.json({ access_token: "access", expires_in: 3600 })
+        : listing();
+    const google = new GoogleReadonlyClient(
+      {
+        ...SETTINGS,
+        requestGapMs: gap,
+        now: () => clock[Math.min(tick++, clock.length - 1)]!,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+      },
+      fetcher,
+    );
+    return { google, sleeps };
+  };
+
+  it("waits out the gap between two requests, counting the time already gone", async () => {
+    // óra-olvasások: 1. kérés bélyege; 2. kérés: döntés 100 ms múlva (150-et
+    // vár), bélyeg a várakozás után; 3. kérés 400 ms-mal később: nem vár
+    const t = make(250, [1_000, 1_100, 1_250, 1_650, 1_650]);
+    for (let i = 0; i < 3; i++) await t.google.gmailMessageIds("a@b.hu", "q");
+    assert.deepEqual(t.sleeps, [150]);
+  });
+
+  it("no gap set: no waiting", async () => {
+    const t = make(undefined, [1_000]);
+    for (let i = 0; i < 3; i++) await t.google.gmailMessageIds("a@b.hu", "q");
+    assert.deepEqual(t.sleeps, []);
+  });
+});
