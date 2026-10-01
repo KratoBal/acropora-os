@@ -14,6 +14,7 @@ import { MissingInvoicesService } from "./missing-invoices.service.js";
 import { InvoiceCollectionRepository } from "./collection/invoice-collection.repository.js";
 import { InvoiceCollectionScheduler } from "./collection/invoice-collection.scheduler.js";
 import { InvoiceCollectionService } from "./collection/invoice-collection.service.js";
+import { LetterClassJevService } from "./collection/letter-class-jev.service.js";
 import { MissingInvoiceJevRepository } from "./missing-invoice-jev.repository.js";
 import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
 
@@ -30,6 +31,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
     InvoiceCollectionRepository,
     InvoiceCollectionScheduler,
     InvoiceCollectionService,
+    LetterClassJevService,
     MissingInvoiceJevRepository,
     MissingInvoiceJevService,
     MissingInvoicesRepository,
