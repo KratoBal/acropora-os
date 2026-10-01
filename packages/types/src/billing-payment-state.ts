@@ -67,14 +67,60 @@ export function paymentStateOf(input: {
 export type OutgoingMissingPayments =
   "UNPAID" | "CARD_AT_ORDER" | "CASH_AT_ORDER" | "UNKNOWN";
 
+/**
+ * A `fizmodunified` (szamla.xsd, `fizmodunifiedTipus`) MIND A 21 ÉRTÉKE, és
+ * mit jelent a `kifizetesek` hiánya mellette (acrobot 25964 és 25967). A
+ * felsorolás zárt, ezért ELSŐKÉNT ez dönt, a szabad szöveges `fizmod` csak
+ * tartalék. `null`: a tábla nem dönt, a szabad szöveg igen; ez az „egyéb”:
+ * élesen mind a 27 üres fizmodú webshop-számla „egyéb”, és UNKNOWN-ként a
+ * „Nincs fizetve”-ből „Nincs adat” lenne, épp az utánvétes számlákon.
+ */
+export const FIZMODUNIFIED_MISSING_PAYMENTS: Readonly<
+  Record<string, OutgoingMissingPayments | null>
+> = {
+  átutalás: "UNPAID",
+  utánvét: "UNPAID",
+  csekk: "UNPAID",
+  "csoportos beszedés": "UNPAID",
+  bankkártya: "CARD_AT_ORDER",
+  "OTP Simple": "CARD_AT_ORDER",
+  "SZÉP kártya": "CARD_AT_ORDER",
+  "EP kártya": "CARD_AT_ORDER",
+  PayPal: "CARD_AT_ORDER",
+  PayU: "CARD_AT_ORDER",
+  barion: "CARD_AT_ORDER",
+  "MasterCard Mobile": "CARD_AT_ORDER",
+  Borgun: "CARD_AT_ORDER",
+  készpénz: "CASH_AT_ORDER",
+  ajándékutalvány: "UNKNOWN",
+  utalvány: "UNKNOWN",
+  kupon: "UNKNOWN",
+  barter: "UNKNOWN",
+  kompenzáció: "UNKNOWN",
+  térítésmentes: "UNKNOWN",
+  egyéb: null,
+};
+
+const fold = (value: string) =>
+  value.normalize("NFD").replace(/\p{M}/gu, "").trim().toLowerCase();
+
+const UNIFIED_BY_FOLDED = new Map(
+  Object.entries(FIZMODUNIFIED_MISSING_PAYMENTS).map(([value, missing]) => [
+    fold(value),
+    missing,
+  ]),
+);
+
 export function outgoingMissingPayments(
   paymentMethod: string | null,
+  paymentMethodUnified: string | null = null,
 ): OutgoingMissingPayments {
-  const method = (paymentMethod ?? "")
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .trim()
-    .toLowerCase();
+  // a zárt felsorolás előbb; ismeretlen értéknél vagy az „egyéb”-nél a szabad szöveg
+  const unified = paymentMethodUnified
+    ? UNIFIED_BY_FOLDED.get(fold(paymentMethodUnified))
+    : undefined;
+  if (unified) return unified;
+  const method = fold(paymentMethod ?? "");
   // ELSŐKÉNT és BÁRHOL a szövegben (murena review-ja, 25948): a „Készpénzes
   // utánvét”, a „Bankkártyás utánvét” és az „Online átutalás” is később fizet;
   // a kártya- vagy online-szó előre véve ezeket hamisan „Fizetve”-nek mondaná

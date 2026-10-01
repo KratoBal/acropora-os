@@ -162,6 +162,8 @@ const external = (
   // a migráció óta nem vetített sor (murena review-ja): ismeretlen
   paymentsKnown: null,
   paymentMethod: "Átutalás",
+  // a régi sor: a vetítés még nem olvasta ki (újravetítésig null)
+  paymentMethodUnified: null,
   cancelled: false,
   ...overrides,
 });
@@ -254,6 +256,58 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
           .paymentSource,
       ],
       ["PAID", "SZAMLAZZ"],
+    );
+  });
+
+  /*
+    A ZÁRT `fizmodunified` DÖNT ELŐBB (acrobot 25964), a szabad szöveg csak
+    tartalék. MI PIROSÍT: ha a szabad szöveg felülírná a felsorolást; ha az
+    „egyéb” UNKNOWN lenne (acrobot 25967: élesen a 27 üres fizmodú
+    webshop-számla mind „egyéb”, és utánvétesek, tehát „Nincs fizetve” kell);
+    ha egy utalvány-féle érték fizetettnek látszana.
+  */
+  it("the unified payment method decides first; 'egyéb' hands over to the free text", () => {
+    const without = (
+      paymentMethodUnified: string | null,
+      paymentMethod: string | null,
+    ) => {
+      const f = fields({
+        paymentsKnown: false,
+        paidAmount: D("0"),
+        lastPaymentDate: null,
+        paymentMethod,
+        paymentMethodUnified,
+      });
+      return [f.paymentState, f.paymentSource];
+    };
+    assert.deepEqual(
+      [
+        // a felsorolás nyer a szabad szöveg ellen, mindkét irányban
+        without("átutalás", "Bankkártya"),
+        without("bankkártya", ""),
+        without("OTP Simple", null),
+        without("készpénz", null),
+        without("kupon", "Bankkártya"),
+        // az „egyéb” nem dönt: a szabad szöveg igen, az üres szöveg UNPAID
+        without("egyéb", ""),
+        without("egyéb", null),
+        without("egyéb", "Bankkártya"),
+        // ismeretlen érték és a még nem kiolvasott (null): a szabad szöveg
+        without("valami új", "Bankkártya"),
+        without(null, "Bankkártya"),
+      ],
+      [
+        ["UNPAID", "SZAMLAZZ"],
+        ["PAID", "CARD_AT_ORDER"],
+        ["PAID", "CARD_AT_ORDER"],
+        ["PAID", "CASH_AT_ORDER"],
+        ["UNKNOWN", null],
+        ["UNPAID", "SZAMLAZZ"],
+        ["UNPAID", "SZAMLAZZ"],
+        ["PAID", "CARD_AT_ORDER"],
+        ["PAID", "CARD_AT_ORDER"],
+        ["PAID", "CARD_AT_ORDER"],
+      ],
     );
   });
 

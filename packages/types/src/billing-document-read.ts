@@ -162,6 +162,10 @@ export interface BillingExternalDocumentDetail {
     amount: DecimalText;
     note: string | null;
   }[];
+  /** `alap.rendelesszam`: a webshop rendelésszáma; `null`, ha nincs. */
+  orderNumber: string | null;
+  /** `alap.fizmodunified`: a Számlázz.hu egységesített fizetési módja. */
+  paymentMethodUnified: string | null;
   /** Hány változat érkezett; a lap a legkésőbbit mutatja. */
   versionCount: number;
   /** A mutatott változat érkezése (ISO időbélyeg). */

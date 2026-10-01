@@ -159,6 +159,8 @@ describe(
         fulfillmentDate: null,
         dueDate: "2026-10-08",
         paymentMethod: "Átutalás",
+        paymentMethodUnified: "átutalás",
+        orderNumber: documentNumber === "UJ-1" ? "47679-665706" : null,
         currency: "HUF",
         customerName: "Teszt Akvárium Bt.",
         customerTaxNumber: null,
@@ -214,6 +216,8 @@ describe(
           lastPaymentDate: true,
           paymentsKnown: true,
           payments: true,
+          orderNumber: true,
+          paymentMethodUnified: true,
         },
       });
       assert.deepEqual(
@@ -225,8 +229,20 @@ describe(
           row.paymentsKnown,
           (row.payments as { bankTransactionId: string }[])[0]
             ?.bankTransactionId,
+          // a rendelésszám és az egységesített mód is a legújabb változatból
+          row.orderNumber,
+          row.paymentMethodUnified,
         ],
-        ["UJ-1", 2, "127.00", "2026-09-28", true, "77877311"],
+        [
+          "UJ-1",
+          2,
+          "127.00",
+          "2026-09-28",
+          true,
+          "77877311",
+          "47679-665706",
+          "átutalás",
+        ],
       );
 
       const list = new BillingDocumentListRepository();

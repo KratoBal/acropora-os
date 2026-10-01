@@ -101,6 +101,7 @@ export type {
 export { billingProductPrice } from "./billing-product-price.js";
 export {
   outgoingMissingPayments,
+  FIZMODUNIFIED_MISSING_PAYMENTS,
   paymentStateOf,
 } from "./billing-payment-state.js";
 export type {

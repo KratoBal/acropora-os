@@ -176,7 +176,7 @@ export function BillingExternalDocumentPage({
                 {formatDay(detail.fulfillmentDate)}
               </PilotDataItem>
               <PilotDataItem label="Fizetési mód">
-                {detail.paymentMethod ?? "—"}
+                {detail.paymentMethod ?? detail.paymentMethodUnified ?? "—"}
               </PilotDataItem>
               <PilotDataItem label="Határidő">
                 {formatDay(detail.dueDate)}
@@ -277,6 +277,9 @@ export function BillingExternalDocumentPage({
                 {detail.documentNumber}
               </PilotDataItem>
               <PilotDataItem label="Típuskód">{detail.kindCode}</PilotDataItem>
+              <PilotDataItem label="Rendelésszám">
+                {detail.orderNumber ?? "—"}
+              </PilotDataItem>
               <PilotDataItem label="PDF">
                 Nincs (a Számlázz.hu nem adja)
               </PilotDataItem>

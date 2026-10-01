@@ -205,6 +205,8 @@ export function externalWhere(
       { documentNumber: contains },
       { customerName: contains },
       { externalId: contains },
+      // a webshop rendelésszáma (`alap.rendelesszam`) is megtalálja
+      { orderNumber: contains },
     ];
   }
   return where;
@@ -239,6 +241,7 @@ export interface ExternalListRow {
   lastPaymentDate: Date | null;
   paymentsKnown: boolean | null;
   paymentMethod: string | null;
+  paymentMethodUnified: string | null;
   cancelled: boolean;
 }
 
@@ -253,7 +256,11 @@ export interface ExternalListRow {
  *   `paymentsKnown` true     a Számlázz.hu rögzítette: számolt, forrás SZAMLAZZ
  *   `paymentsKnown` false    nincs `kifizetesek` elem; a jelentése a fizetési
  *                            módtól függ (`outgoingMissingPayments`, acrobot
- *                            25936 és 25938):
+ *                            25936 és 25938). ELŐBB a zárt `fizmodunified`
+ *                            dönt (acrobot 25964); az „egyéb” és az
+ *                            ismeretlen érték a szabad szöveges fizmodra megy
+ *                            tovább (25967: élesen a 27 üres fizmodú
+ *                            webshop-számla mind „egyéb”):
  *       átutalás, utánvét, üres   UNPAID (a fizetés később jön; a 927341621-es
  *                                 számla előbb elem nélkül, a fizetés után
  *                                 elemmel jött: MEGFIGYELT ESET, NEM GARANCIA)
@@ -268,6 +275,7 @@ export function externalPaymentFields(row: {
   lastPaymentDate: Date | null;
   paymentsKnown: boolean | null;
   paymentMethod: string | null;
+  paymentMethodUnified: string | null;
   currency: string;
   cancelled: boolean;
 }): Pick<
@@ -295,7 +303,11 @@ export function externalPaymentFields(row: {
   });
   if (row.paymentsKnown === null) return recorded(false);
   if (row.paymentsKnown) return recorded(true);
-  const missing = outgoingMissingPayments(row.paymentMethod);
+  // a zárt `fizmodunified` előbb, a szabad szöveg csak tartalék (acrobot 25964)
+  const missing = outgoingMissingPayments(
+    row.paymentMethod,
+    row.paymentMethodUnified,
+  );
   if (missing === "UNPAID") return recorded(true);
   if (missing === "UNKNOWN") return recorded(false);
   return {

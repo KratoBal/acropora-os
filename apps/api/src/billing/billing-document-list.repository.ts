@@ -59,6 +59,7 @@ export const EXTERNAL_LIST_SELECT = {
   lastPaymentDate: true,
   paymentsKnown: true,
   paymentMethod: true,
+  paymentMethodUnified: true,
   cancelled: true,
 } satisfies Prisma.ExternalBillingDocumentSelect;
 

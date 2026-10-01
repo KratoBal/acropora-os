@@ -7266,6 +7266,13 @@ model ExternalBillingDocument {
   fulfillmentDate   DateTime? @db.Date
   dueDate           DateTime? @db.Date
   paymentMethod     String?
+  /// `alap.fizmodunified`: az XSD zárt felsorolása (átutalás, bankkártya, OTP
+  /// Simple, ...). A kifizetés-osztályozó előbb erre épít, a szabad szöveges
+  /// `paymentMethod` csak tartalék. `null`: a sort még nem vetítettük újra.
+  paymentMethodUnified String?
+  /// `alap.rendelesszam`: a webshop rendelésszáma („47679-665706”); a
+  /// SimplePay-elszámolás sorával ez köti össze (következő szelet).
+  orderNumber       String?
   currency          String
   customerName      String
   customerTaxNumber String?
