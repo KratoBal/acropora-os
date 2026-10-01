@@ -247,11 +247,10 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "aquariums",
     requiredPermissions: [P.AQUARIUMS_VIEW],
     recommendedRoles: ["SERVICE", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 30,
     dataSource:
       "Latest AquariumMeasurement per parameter vs aquariumEffectiveMeasurementTargetRange.",
-    plannedReason: "Built with the aquarium batch (PR 4).",
   }),
   widget({
     id: "water-values",
@@ -260,11 +259,10 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "aquariums",
     requiredPermissions: [P.AQUARIUMS_VIEW],
     recommendedRoles: ["SERVICE", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 31,
     dataSource:
       "Latest KH / FOSZFAT / NITRAT per aquarium vs the effective range.",
-    plannedReason: "Built with the aquarium batch (PR 4).",
   }),
   widget({
     id: "aquarium-equipment",
@@ -273,10 +271,10 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "aquariums",
     requiredPermissions: [P.SERVICE_VIEW, P.AQUARIUMS_VIEW],
     recommendedRoles: ["SERVICE"],
-    availability: "planned",
+    availability: "active",
     priority: 32,
-    dataSource: "Asset.nextServiceAt for assets with an aquariumId.",
-    plannedReason: "Built with the aquarium batch (PR 4).",
+    dataSource:
+      "Asset.nextServiceAt for assets with an aquariumId, due within 14 days (Figma example; open question).",
   }),
   widget({
     id: "next-measurements",
@@ -1036,6 +1034,62 @@ export interface DashboardMaintenanceCalendarWidgetData {
     assetId: string;
     assetName: string;
     placeName: string;
+    nextServiceAt: string;
+  }[];
+}
+
+/**
+ * Mérési figyelmeztetések: the latest measurement occasion of each visible
+ * aquarium against its effective target range
+ * (`aquariumEffectiveMeasurementTargetRange`: own range, else the marine
+ * default, else none). No range, no alert: no limit is invented.
+ */
+export interface DashboardAquariumAlertsWidgetData {
+  /** Active aquariums checked (the caller's scope). */
+  checked: number;
+  outOfRangeCount: number;
+  /** No measurement, or the latest older than `staleAfterDays`. */
+  staleCount: number;
+  staleAfterDays: number;
+  /** The out-of-range values, most recent first (a few). */
+  items: {
+    aquariumId: string;
+    aquariumName: string;
+    parameterCode: string;
+    value: number;
+    min: number | null;
+    max: number | null;
+    measuredAt: string;
+  }[];
+}
+
+/** Legutóbbi vízértékek: KH, PO4 and NO3 across the aquariums with a fresh reading. */
+export interface DashboardWaterValuesWidgetData {
+  aquariumCount: number;
+  /** Aquariums whose latest occasion is not older than `staleAfterDays`. */
+  freshCount: number;
+  staleAfterDays: number;
+  parameters: {
+    code: "KH" | "FOSZFAT" | "NITRAT";
+    inRange: number;
+    outOfRange: number;
+    /** Measured, but no target range exists: never folded into "in range". */
+    noTarget: number;
+    /** Not measured at the latest occasion. */
+    notMeasured: number;
+  }[];
+}
+
+/** Eszköz-karbantartás: equipment attached to an aquarium, by next service date. */
+export interface DashboardAquariumEquipmentWidgetData {
+  windowDays: number;
+  overdue: number;
+  /** Due today or within `windowDays` days. */
+  dueSoon: number;
+  soonest: {
+    assetId: string;
+    assetName: string;
+    aquariumName: string;
     nextServiceAt: string;
   }[];
 }

@@ -10,6 +10,7 @@ import {
 } from "@acropora/types";
 
 import type { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
+import type { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
 import type { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
 import type { DashboardServiceWidgetsRepository } from "./dashboard-service-widgets.repository.js";
 import {
@@ -36,7 +37,7 @@ function service(
   options: {
     stored?: unknown;
     capabilities?: ServiceCapabilityValue[];
-    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[3];
+    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[4];
   } = {},
 ) {
   const store: Store = {
@@ -75,6 +76,7 @@ function service(
       repository,
       expectedArrivals,
       {} as DashboardServiceWidgetsRepository,
+      {} as DashboardAquariumWidgetsRepository,
       options.loaders,
     ),
   };
@@ -91,7 +93,15 @@ describe("the layout", () => {
     );
     assert.deepEqual(
       r.available.map((w) => w.id),
-      ["tasks", "service-tickets", "worksheets", "maintenance-calendar"],
+      [
+        "tasks",
+        "service-tickets",
+        "worksheets",
+        "maintenance-calendar",
+        "aquarium-alerts",
+        "water-values",
+        "aquarium-equipment",
+      ],
     );
     // the registry is never exposed whole
     assert.ok(!("availability" in (r.available[0] ?? {})));

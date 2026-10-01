@@ -89,9 +89,15 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
 /**
  * A DARABSZAM IS ALLITAS, A MERES DATUMAVAL -- nem `>=`, hanem PONTOS.
  *
- * UJRAMERVE 2026-10-01 (a testreszabhato vezerlopult szerviz-widgetjei): 16
- * hivasi hely (service-assets 9, worksheets 4, suppliers 1, dashboard 2). A
+ * UJRAMERVE 2026-10-01 (a testreszabhato vezerlopult akvarium-widgetjei): 17
+ * hivasi hely (service-assets 9, worksheets 4, suppliers 1, dashboard 3). A
  * definicios sorok NEM szamitanak bele.
+ *
+ * MI JOTT A 16-OS MERES OTA, ES MIERT:
+ *
+ *   +1  `dashboard-aquarium-widgets.repository.ts` `equipment()`: az
+ *       "Eszkoz-karbantartas" widget az akvariumhoz kotott eszkozoket
+ *       ugyanazzal az eszkoz-hatokorrel szamolja, mint a naptar.
  *
  * MI JOTT A LEGUTOBBI MERES (15) OTA, ES MIERT:
  *
@@ -139,7 +145,7 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
  * es a datumot is frissitsd, kulonben a kovetkezo olvaso egy regi merESre
  * hivatkozik.
  */
-const VART_HIVASI_HELY = 16;
+const VART_HIVASI_HELY = 17;
 
 const SCOPE_HELPERS = [
   "scopeWhereForAndBranch",
