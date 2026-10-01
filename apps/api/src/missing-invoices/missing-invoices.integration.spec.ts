@@ -62,6 +62,12 @@ async function removeLeftovers() {
   await prisma.incomingSupplierDocument.deleteMany({
     where: { gmailMessageId: { startsWith: "collect:INFO_MAIL:hianyzo-it-" } },
   });
+  await prisma.auditLog.deleteMany({
+    where: {
+      action: "missing-invoices.payee-marked",
+      userId: { in: actors.map((user) => user.id) },
+    },
+  });
   await prisma.user.deleteMany({ where: { email: ACTOR_EMAIL } });
 }
 
@@ -262,6 +268,60 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
     assert.deepEqual(
       [after.state, after.document?.source],
       ["FOUND", "MAILBOX"],
+    );
+  });
+
+  /*
+    A KÉZI VEVŐ-JELÖLÉS FELTÉTELE AZ ADATBÁZISBAN ÁLL (acrobot 25633). MI
+    PIROSÍT: ha a szövegből olvasott COMPANY-t a kézi jelölés felülírná; ha az
+    UNKNOWN nem íródna; ha nem lenne auditsor, szerzővel.
+  */
+  it("a hand mark writes only an unknown payee, with an audit row", async () => {
+    const make = (n: string, payeeCheck: string) =>
+      prisma.incomingSupplierDocument.create({
+        data: {
+          gmailMessageId: `collect:INFO_MAIL:hianyzo-it-p${n}`,
+          fileName: `p${n}.pdf`,
+          sizeBytes: 14,
+          sha256: `hianyzo-it-payee-${n}`,
+          content: new Uint8Array(Buffer.from("%PDF-1.4 teszt")),
+          status: "FAILED",
+          kind: "INVOICE",
+          origin: "COLLECTED_MAIL",
+          payeeCheck,
+        },
+        select: { id: true },
+      });
+    const unknown = await make("1", "UNKNOWN");
+    const read = await make("2", "COMPANY");
+    const written = await new MissingInvoicesRepository().markPayee({
+      documentIds: [unknown.id, read.id],
+      payee: "NOT_COMPANY",
+      userId: actor.id,
+      bankTransactionId: "hianyzo-it-debit",
+    });
+    const rows = await prisma.incomingSupplierDocument.findMany({
+      where: { id: { in: [unknown.id, read.id] } },
+      select: { id: true, payeeCheck: true, payeeMarkedByUserId: true },
+    });
+    const byId = (id: string) => rows.find((row) => row.id === id);
+    assert.deepEqual(
+      [written, byId(unknown.id), byId(read.id)],
+      [
+        1,
+        {
+          id: unknown.id,
+          payeeCheck: "NOT_COMPANY",
+          payeeMarkedByUserId: actor.id,
+        },
+        { id: read.id, payeeCheck: "COMPANY", payeeMarkedByUserId: null },
+      ],
+    );
+    assert.equal(
+      await prisma.auditLog.count({
+        where: { action: "missing-invoices.payee-marked", userId: actor.id },
+      }),
+      1,
     );
   });
 

@@ -312,4 +312,29 @@ describe("the payee check of mailbox invoices", () => {
     assert.deepEqual(stored, [[mailbox.id, "COMPANY"]]);
     assert.equal(result.items[0]?.state, "FOUND");
   });
+
+  // MI PIROSÍT: ha egy NEM postafiókos (feltöltött, gyűjtött) dokumentum
+  // visszaállított (NULL) vevője sosem számolódna újra (acrobot 25640: a
+  // migráció a régi NOT_COMPANY sorokat NULL-ra teszi, köztük feltöltötteket).
+  it("an upload whose payee was reset is read again too, by our name this time", async () => {
+    const upload: CandidateDocument = {
+      ...nav("2026-08-01", 1000, "Magic Patterns Inc."),
+      source: "UPLOAD",
+      payee: "UNKNOWN",
+    };
+    const { missing, stored } = service({
+      debits: [debit("2026-08-03", 1000, "Magic Patterns Inc.")],
+      documents: [upload],
+      coverage: [`${MAIN.id}:2026-08`, `${CARD.id}:2026-08`],
+      mailbox: [
+        {
+          id: upload.id,
+          fileName: "invoice.txt",
+          content: Buffer.from("Bill to Acropora Kft. Budapest 1106 Hungary"),
+        },
+      ],
+    });
+    await missing.month("2026-08", { tab: "ALL" });
+    assert.deepEqual(stored, [[upload.id, "COMPANY"]]);
+  });
 });

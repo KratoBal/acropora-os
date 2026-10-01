@@ -15,6 +15,17 @@ export interface BankStatementImportResult {
   /** Az olvashatatlan sorok (az első tíz), sorszámmal és okkal. */
   rejected: { line: number; reason: string }[];
   rejectedCount: number;
+  /**
+   * A függő kártyás tételek (az első tíz): a bank még nem könyvelte, dátumuk
+   * nincs, a következő kivonatban jönnek. Nem hiba (acrobot 25637).
+   */
+  pending: {
+    line: number;
+    partner: string | null;
+    amount: string;
+    currency: string;
+  }[];
+  pendingCount: number;
   /** A fájlban szereplő bankszámlák. */
   accounts: { accountNumber: string; currency: string }[];
   /** A fájl könyvelési hónapjai, `ÉÉÉÉ-HH` alakban, növekvően. */
@@ -207,9 +218,23 @@ export interface MissingInvoiceCandidate {
   hasOriginal: boolean;
 }
 
+/**
+ * A párosított számla, amelynek vevőjét kézzel lehet (vagy kellett) jelölni:
+ * a szövegréteg nélküli PDF vevője UNKNOWN (acrobot 25633).
+ */
+export interface MissingInvoicePayeeDocument {
+  documentId: string;
+  number: string;
+  payee: "COMPANY" | "NOT_COMPANY" | "UNKNOWN";
+  /** Kézzel jelölték (és ezért kézzel át is jelölhető). */
+  marked: boolean;
+}
+
 export interface MissingInvoiceItemDetail extends MissingInvoiceItem {
   /** A partner ablakba eső, még nem párosított számlái (a drawer jelöltjei). */
   candidates: MissingInvoiceCandidate[];
+  /** A párosított számlák közül a kézzel jelölhető vevőjűek. */
+  payeeDocuments: MissingInvoicePayeeDocument[];
   action: MissingInvoiceAction;
   /** A „Hiányzó számlák” Drive-mappa, ha a szerveren be van állítva. */
   driveFolderUrl: string | null;
@@ -237,6 +262,9 @@ export interface MissingInvoiceCategoryInput {
 }
 export interface MissingInvoicePaperOriginalInput {
   marked: boolean;
+}
+export interface MissingInvoicePayeeInput {
+  payee: "COMPANY" | "NOT_COMPANY";
 }
 
 export interface MissingInvoiceMonthDetail {

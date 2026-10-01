@@ -84,6 +84,17 @@ describe("the model", () => {
 });
 
 describe("the item detail on the wire", () => {
+  // MI PIROSÍT: ha egy a payeeDocuments mezőt még nem küldő API (a web előbb
+  // települ, mint az API) eldöntené a drawert.
+  it("an API without payeeDocuments gives an empty list, not a crash", () => {
+    const detail = {
+      candidates: [],
+      action: "NONE",
+      driveFolderUrl: null,
+    } as unknown as Parameters<typeof toExtras>[0];
+    expect(toExtras(detail).payeeDocuments).toEqual([]);
+  });
+
   // MI PIROSÍT: ha egy a doublePaidWith mezőt még nem küldő API (a web előbb
   // települ) eldöntené a drawert.
   it("an API without doublePaidWith gives an empty list", () => {
@@ -578,9 +589,10 @@ describe("MissingInvoicesDrawer", () => {
         hasOriginal: true,
       },
     ],
+    payeeDocuments: [],
+    doublePaidWith: [],
     action: "REQUEST_REISSUE_TO_COMPANY",
     driveFolderUrl: null,
-    doublePaidWith: [],
     ...overrides,
   });
   const base = (): Props => ({
@@ -737,6 +749,68 @@ describe("MissingInvoicesDrawer", () => {
       screen.getByRole("checkbox", { name: "Az eredeti papíron megvan" }),
     );
     expect(props.onPaperOriginal).toHaveBeenLastCalledWith(false);
+  });
+
+  /*
+    A VEVŐ KÉZI JELÖLÉSE (acrobot 25633: a beszkennelt Sopro-számlánál csak
+    felirat volt, gomb nem). MI PIROSÍT: ha a nem olvasható vevőjű párosított
+    számlánál nincs két gomb; ha a gomb nem a számla azonosítójával hív; ha a
+    kézi jelölés nem látszik, és nem fordítható vissza; ha a néző is jelölhet.
+  */
+  it("an unreadable payee is marked by hand, either way, and a mark shows and turns", () => {
+    const props = { ...base(), onPayee: vi.fn() };
+    const paired = charge({
+      state: "NOT_MATCHED",
+      document: { number: "KB-2855/2026", source: "UPLOAD" },
+      matchedBy: "MANUAL",
+    });
+    const unknown = {
+      documentId: "up-1",
+      number: "KB-2855/2026",
+      payee: "UNKNOWN" as const,
+      marked: false,
+    };
+    const { unmount } = render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={paired}
+        extras={extras({ candidates: [], payeeDocuments: [unknown] })}
+      />,
+    );
+    expect(
+      screen.getByText(/a vevő a számlából nem olvasható/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "A cégre szól" }));
+    expect(props.onPayee).toHaveBeenCalledWith("up-1", "COMPANY");
+    fireEvent.click(screen.getByRole("button", { name: "Nem a cégre szól" }));
+    expect(props.onPayee).toHaveBeenLastCalledWith("up-1", "NOT_COMPANY");
+    unmount();
+    const { unmount: again } = render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={{ ...paired, state: "FOUND" }}
+        extras={extras({
+          candidates: [],
+          payeeDocuments: [{ ...unknown, payee: "COMPANY", marked: true }],
+        })}
+      />,
+    );
+    expect(screen.getByText(/kézzel jelölve/)).toHaveTextContent(
+      "a cégre szól",
+    );
+    expect(screen.queryByRole("button", { name: "A cégre szól" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Nem a cégre szól" }));
+    expect(props.onPayee).toHaveBeenLastCalledWith("up-1", "NOT_COMPANY");
+    again();
+    render(
+      <MissingInvoicesDrawer
+        {...props}
+        canManage={false}
+        row={paired}
+        extras={extras({ candidates: [], payeeDocuments: [unknown] })}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "A cégre szól" })).toBeNull();
   });
 
   /*

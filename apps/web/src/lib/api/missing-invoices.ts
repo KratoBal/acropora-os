@@ -157,6 +157,27 @@ export const missingInvoicesApi = {
     );
   },
   /**
+   * A VEVŐ KÉZI JELÖLÉSE (acrobot 25633): a beszkennelt számla vevője nem
+   * olvasható, a kezelő mondja meg. Csak a nem ellenőrizhető vagy már kézzel
+   * jelölt vevőjű párosított számlán; máshol a szerver 409-cel elutasítja.
+   */
+  markPayee(
+    token: string,
+    id: string,
+    documentId: string,
+    payee: "COMPANY" | "NOT_COMPANY",
+  ) {
+    return apiRequest<MissingInvoiceItemDetail>(
+      `${base}/items/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}/payee`,
+      token,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payee }),
+      },
+    );
+  },
+  /**
    * SZÁMLA FELTÖLTÉSE A DRAWERBŐL (nautilus #1305): a PDF a postafiókkal közös
    * helyre kerül, a bevételezési láncba nem, és ugyanabban a lépésben párosul
    * a terheléshez. Ami nem PDF, azt a szerver elutasítja.
