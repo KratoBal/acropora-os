@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { normalizeName } from "../missing-invoice-matching.js";
 import {
   cardPaymentMatch,
+  largestMoney,
   type CardDebit,
   looksLikeBankAccount,
   looksLikeInvoice,
@@ -135,7 +136,7 @@ describe("readInvoiceText", () => {
   });
 });
 
-describe("cardPaymentMatch: a NAV-less invoice and the card payment it was paid with (acrobot 25666, 25673)", () => {
+describe("cardPaymentMatch: a NAV-less invoice and the card payment(s) it was paid with (acrobot 25666, 25673, 25691)", () => {
   const word = (name: string) =>
     normalizeName(name)
       .split(" ")
@@ -152,23 +153,37 @@ describe("cardPaymentMatch: a NAV-less invoice and the card payment it was paid 
   const kia = [
     "Digital Charging Solutions GmbH Mies-van-der-Rohe-Straße 6 D-80807 München",
     "Acropora Kft. | HÉA azonosító szám DE312237805",
+    "Havi díj ebből 2026. júl. 1. - 2026. júl. 31. | 1518,00 HUF | 1518,00 HUF",
+    "Összes töltés száma | 1 | 34,625 kWh | 7607,00 HUF | 7607,00 HUF",
     "Teljes összeg* | 9125,00 HUF | 9125,00 HUF",
   ];
+  let n = 0;
   const card = (
     counterpartyName: string,
     amount: string,
     original: CardDebit["original"] = null,
-  ): CardDebit => ({ counterpartyName, amount, currency: "HUF", original });
+    bookingDate = "2026-08-07",
+  ): CardDebit => ({
+    id: `k${++n}`,
+    bookingDate,
+    counterpartyName,
+    amount,
+    currency: "HUF",
+    original,
+  });
+  const dcs = (amount: string, bookingDate = "2026-08-07") =>
+    card("Digital Charging Solut", amount, null, bookingDate);
 
   it("takes the payment whose partner word and amount (the original or the booked one) are in the text", () => {
+    const h = card("HETZNER ONLINE GMBH", "2690", {
+      amount: "7.04",
+      currency: "EUR",
+    });
     assert.deepEqual(
       cardPaymentMatch(
         hetzner,
         [
-          card("HETZNER ONLINE GMBH", "2690", {
-            amount: "7.04",
-            currency: "EUR",
-          }),
+          h,
           card("HETZNER ONLINE GMBH", "17113", {
             amount: "46.64",
             currency: "EUR",
@@ -177,27 +192,22 @@ describe("cardPaymentMatch: a NAV-less invoice and the card payment it was paid 
         ],
         word,
       ),
-      { amount: "7.04", currency: "EUR", partner: "HETZNER ONLINE GMBH" },
-    );
-    assert.deepEqual(
-      cardPaymentMatch(
-        kia,
-        [
-          card("Digital Charging Solut", "9125", {
-            amount: "25.1",
-            currency: "EUR",
-          }),
-        ],
-        word,
-      ),
-      { amount: "9125", currency: "HUF", partner: "Digital Charging Solut" },
+      {
+        amount: "7.04",
+        currency: "EUR",
+        partner: "HETZNER ONLINE GMBH",
+        debitIds: [h.id],
+      },
     );
   });
 
   it("takes nothing when the amount, the partner word, or the uniqueness is missing, or the partner is us", () => {
     const hetznerCard = (amount: string) =>
       card("HETZNER ONLINE GMBH", "999", { amount, currency: "EUR" });
-    assert.equal(cardPaymentMatch(hetzner, [hetznerCard("7.05")], word), null);
+    assert.equal(
+      cardPaymentMatch(hetzner, [hetznerCard("7.05")], word, "2026-08-05"),
+      null,
+    );
     assert.equal(
       cardPaymentMatch(
         hetzner,
@@ -208,29 +218,17 @@ describe("cardPaymentMatch: a NAV-less invoice and the card payment it was paid 
           }),
         ],
         word,
+        "2026-08-05",
       ),
       null,
     );
+    // két egyenlő fizetés: a végösszeghez is kettő illik, nem választunk
     assert.equal(
       cardPaymentMatch(
         hetzner,
         [hetznerCard("7.04"), hetznerCard("7.04")],
         word,
-      ),
-      null,
-    );
-    // NYITOTT (PR): a Kia Charge júliusi számláján a havi díj (1518) egy másik
-    // hónap teljes fizetése is; két fizetés illik, tehát nem választunk. A
-    // „nagyobb nyer” feloldás a havi összesítő számlán (Parkl) a legnagyobb
-    // TÉTELT választaná a végösszeg helyett, ezért nincs benne.
-    assert.equal(
-      cardPaymentMatch(
-        [...kia, "Havi díj | 1518,00 HUF | 1518,00 HUF"],
-        [
-          card("Digital Charging Solut", "1518"),
-          card("Digital Charging Solut", "9125"),
-        ],
-        word,
+        "2026-08-05",
       ),
       null,
     );
@@ -240,18 +238,89 @@ describe("cardPaymentMatch: a NAV-less invoice and the card payment it was paid 
         hetzner,
         [card("ACROPORA KFT EUR", "999", { amount: "7.04", currency: "EUR" })],
         word,
+        "2026-08-05",
       ),
       null,
     );
-    // a Kia Charge augusztusi számlája két terhelés ÖSSZEGE: egyik sem illik
+  });
+
+  it("Kia July: the monthly fee is another month's payment, so the total (the largest money, not the kWh) decides", () => {
+    const july = dcs("9125", "2026-08-07");
+    const june = dcs("1518", "2026-07-06");
+    // az első út kettőt talál; dátum nélkül nem dönt
+    assert.equal(cardPaymentMatch(kia, [june, july], word), null);
+    assert.deepEqual(cardPaymentMatch(kia, [june, july], word, "2026-08-01"), {
+      amount: "9125.00",
+      currency: "HUF",
+      partner: "Digital Charging Solut",
+      debitIds: [july.id],
+    });
+  });
+
+  it("Kia August: the total is the sum of two card payments", () => {
+    const august = [
+      "Digital Charging Solutions GmbH",
+      "Acropora Kft.",
+      "Havi díj | 1518,00 HUF",
+      "Teljes összeg* | 40086,00 HUF | 40086,00 HUF",
+    ];
+    const a = dcs("21279", "2026-09-10");
+    const b = dcs("18807", "2026-09-10");
+    const other = dcs("6840", "2026-09-12");
+    assert.deepEqual(
+      cardPaymentMatch(august, [a, b, other], word, "2026-09-01")?.debitIds,
+      [a.id, b.id],
+    );
+    // a dátumablakon kívül (a számla előtt több mint 15 nappal) nem illik
     assert.equal(
       cardPaymentMatch(
-        ["Digital Charging Solutions GmbH", "Teljes összeg* | 40086,00 HUF"],
+        august,
+        [dcs("21279", "2026-08-10"), dcs("18807", "2026-08-10")],
+        word,
+        "2026-09-01",
+      ),
+      null,
+    );
+    // ha két különböző halmaz is kiadja, nem döntünk
+    assert.equal(
+      cardPaymentMatch(
+        august,
+        [a, b, dcs("21279", "2026-09-11"), dcs("18807", "2026-09-12")],
+        word,
+        "2026-09-01",
+      ),
+      null,
+    );
+  });
+
+  it("the largest money needs its currency on the same line (Anthropic: a tax number above an EUR line)", () => {
+    assert.deepEqual(largestMoney("VAT HU23916229\nEUR 180.00\n34,625 kWh"), {
+      cents: 18000,
+      currency: "EUR",
+    });
+  });
+
+  it("a monthly summary is tied to its total, never to its largest line (Parkl, 2026-08)", () => {
+    const parkl = [
+      "Parkl Digital Technologies Kft.",
+      "Acropora Kft.",
+      "2026.08.04 | parkolás | 11 170",
+      "2026.08.20 | parkolás | 6 900",
+      "Fizetendő összesen: 21 699 HUF",
+    ];
+    const payment = (amount: string, day: string) =>
+      card("SIMPLEP*PARKL.NET", amount, null, day);
+    // a fizetések a számla előtt: a végösszeghez nincs ablakbeli halmaz
+    assert.equal(
+      cardPaymentMatch(
+        parkl,
         [
-          card("Digital Charging Solut", "21279"),
-          card("Digital Charging Solut", "18807"),
+          payment("11170", "2026-08-05"),
+          payment("6900", "2026-08-21"),
+          payment("3629", "2026-08-25"),
         ],
         word,
+        "2026-09-01",
       ),
       null,
     );

@@ -406,6 +406,7 @@ export class MissingInvoicesRepository {
               amount: string;
               currency: string;
               partner: string;
+              debitIds?: string[];
             } | null;
           } | null);
       // a kártyás fizetéshez illesztett NAV nélküli számla: a fizetés összege,
@@ -478,6 +479,7 @@ export class MissingInvoicesRepository {
         payeeMarked: document.payeeMarkedAt !== null,
         hasOriginal: true,
         identities: document.sha256 ? [`sha:${document.sha256}`] : [],
+        ...(card?.debitIds?.length ? { cardPaymentIds: card.debitIds } : {}),
       });
       keys.set(
         document.id,

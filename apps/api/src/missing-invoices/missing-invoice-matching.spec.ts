@@ -1051,3 +1051,48 @@ describe("a summary invoice's group is one pairing, not a double payment (acrobo
     );
   });
 });
+
+describe("an invoice the collector tied to its card payment(s) (acrobot 25691, Kia Charge)", () => {
+  it("pairs the invoice to every payment of its set, and only when all of them are free", () => {
+    const a = debit({
+      amount: D(21279),
+      counterpartyName: "Digital Charging Solut",
+      bookingDate: "2026-09-10",
+    });
+    const b = debit({
+      amount: D(18807),
+      counterpartyName: "Digital Charging Solut",
+      bookingDate: "2026-09-10",
+    });
+    const invoice = doc({
+      number: "OVR_6284372308261",
+      gross: D(40086),
+      supplierName: "Digital Charging Solut",
+      source: "MAILBOX",
+      cardPaymentIds: [a.id, b.id],
+    });
+    const out = run([a, b], [invoice]);
+    for (const d of [a, b]) {
+      assert.deepEqual(out.get(d.id)?.documents, [invoice]);
+      assert.equal(
+        out.get(d.id)?.reason,
+        "a számla végösszege 2 kártyás fizetés összege",
+      );
+    }
+    // a számla azonossággal (NAV- vagy fájl-kulcs) sem kétszer fizetett: a
+    // halmaz EGY párosítás (acrobot 25709, Kia augusztus)
+    const identified = {
+      ...invoice,
+      identities: ["inv:ovr_6284372308261|dcs"],
+    };
+    const once = run([a, b], [identified]);
+    for (const d of [a, b]) {
+      assert.equal(once.get(d.id)?.state, "FOUND");
+      assert.equal(once.get(d.id)?.doublePaidWith, undefined);
+    }
+    // ha az egyik fizetést kézzel máshoz párosították, a halmaz nem áll össze
+    const other = doc({ number: "X-1", gross: D(1) });
+    const manual = run([a, b], [invoice, other], new Map([[a.id, [other.id]]]));
+    assert.notDeepEqual(manual.get(b.id)?.documents, [invoice]);
+  });
+});
