@@ -571,8 +571,14 @@ export class MissingInvoicesService {
     const months: string[] = [];
     for (let m = first; m <= last; m = shiftMonth(m, 1)) months.push(m);
 
+    // 12 hónap vissza, nem 4: a számlaszám-szabálynak (1.) nincs dátumablaka,
+    // csak annak, amit betöltünk; a többi szabály az `inWindow` 4 hónapján
+    // belül marad. Mérve 2026-10-01, éles: a Hertlein 260835 április 29-én
+    // kelt, szeptember 25-én fizettük, a közlemény megnevezi, és a 4 hónapos
+    // betöltés kizárta. Decembertől minden dokumentumon mérve a bővítés
+    // pontosan ezt az egy párt adja hozzá, hamisat egyet sem.
     const documents = await this.repository.candidates(
-      `${shiftMonth(first, -4)}-01`,
+      `${shiftMonth(first, -12)}-01`,
       `${shiftMonth(last, 1)}-15`,
     );
     await this.checkPayees(

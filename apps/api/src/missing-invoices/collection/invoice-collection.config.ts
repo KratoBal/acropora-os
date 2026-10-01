@@ -19,7 +19,7 @@
  *   MISSING_INVOICES_DRIVE_FOLDER_URL a mappa; ugyanaz, amit a drawer „Drive
  *                                     mappa megnyitása” gombja nyit, tehát a
  *                                     kettő nem mutathat máshová
- *   INVOICE_COLLECTION_DAYS           hány napra visszamenőleg (7..400, alap 45)
+ *   INVOICE_COLLECTION_DAYS           hány napra visszamenőleg (7..400, alap 150)
  *   INVOICE_COLLECTION_INTERVAL_MINUTES  alap 60 (5..1440)
  */
 import type { GoogleReadonlyCredentials } from "../../integrations/google/google-readonly.client.js";
@@ -123,10 +123,17 @@ function bounded(
     : fallback;
 }
 
+/**
+ * MIÉRT 150 ÉS NEM 45: a párosító a terhelés előtt 4 hónapig keres számlát
+ * (`inWindow`), a 45 napos begyűjtés ennél rövidebb. Mérve 2026-10-01, éles:
+ * a Fluidra KS26/08732 július 24-én kelt, szeptember 25-én fizettük, a levele
+ * a 45 napos ablakon kívül esett, és a gyűjtő sosem látta. A már látott levelet
+ * a `seen` nem tölti le újra, tehát a hosszabb ablak csak az első futást drágítja.
+ */
 export function invoiceCollectionDays(
   environment: NodeJS.ProcessEnv = process.env,
 ): number {
-  return bounded(environment.INVOICE_COLLECTION_DAYS, 7, 400, 45);
+  return bounded(environment.INVOICE_COLLECTION_DAYS, 7, 400, 150);
 }
 
 export function invoiceCollectionIntervalMinutes(

@@ -18,9 +18,14 @@ import { ACROPORA_COMPANY } from "@acropora/types";
 export interface InvoiceTextReading {
   invoiceNumber: string | null;
   /** Honnan jött a szám; a mérés és a hibakeresés ebből látja, melyik szabály vitte. */
-  numberFrom: "NAV" | "LABEL" | "FILE_NAME" | null;
+  numberFrom: "NAV" | "BANK" | "LABEL" | "FILE_NAME" | null;
   /** A szállító adószáma: az első, ami nem a miénk (magyar vagy EU-s alak). */
   supplierTaxNumber: string | null;
+  /**
+   * Amivel egy banki terhelés közleménye a számlára hivatkozik, ha az nem a
+   * számla száma (például a rendelésé); a párosító 1. szabálya ezt is nézi.
+   */
+  bankReference?: string | null;
 }
 
 export interface InvoiceTextHints {
@@ -112,6 +117,65 @@ export const compactNumber = (value: string): string =>
 
 const taxBase = (tax: string): string =>
   tax.replace(/^HU/, "").replace(/\D/g, "").slice(0, 8);
+
+/**
+ * A SZÁMLA HIVATKOZÁSA EGY BANKI TERHELÉS KÖZLEMÉNYÉBEN. A külföldi szállító
+ * számlája nincs a NAV-ban, tehát a NAV-kulcs soha nem viszi; a közlemény
+ * viszont sokszor megnevezi. Mérve 2026-10-01, éles:
+ *
+ *   Amblard      „485,40 EUR F2602896 ...”    a számla száma (F2602896.PDF)
+ *   Fauna Marin  „1.698,58 EUR 20144304 ...”  a RENDELÉS száma, ami a számlán
+ *                                               „Auftragsnr.” alatt áll; a
+ *                                               számla száma 40142365
+ *
+ * A jelöltek sorrendben: amit az olvasó számnak talált, a fájlnév és a tárgy
+ * szavai (ha a PDF szövegében is állnak), végül a PDF szövegének szám-szavai.
+ * Az első kettő a közlemény tömörített szövegében bárhol állhat, mint a
+ * párosító 1. szabályánál. A harmadik szigorúbb, mert sok van belőle: csak
+ * pont és vessző nélküli szó (az összeg és a dátum így kiesik), legalább 6
+ * karakter és 5 számjegy, és a közleményben is ÖNÁLLÓ SZÓKÉNT kell állnia (egy
+ * IBAN belseje nem találat).
+ */
+export function bankReference(
+  lines: readonly string[],
+  reading: InvoiceTextReading,
+  hints: Pick<InvoiceTextHints, "fileName" | "subject">,
+  narratives: readonly string[],
+): string | null {
+  const text = lines.join("\n");
+  const compactText = compactNumber(text);
+  const fromName = `${hints.fileName ?? ""} ${hints.subject ?? ""}`
+    .split(/[^A-Za-z0-9/_-]+/)
+    .map((token) => token.replace(/^[-_/]+|[-_/]+$/g, ""))
+    .filter((token) => compactText.includes(compactNumber(token)));
+  const compactNarratives = narratives.map(compactNumber);
+  const loose = [reading.invoiceNumber, ...fromName]
+    .filter((n): n is string => n !== null)
+    .filter((n) => compactNumber(n).length >= 5 && /\d/.test(n))
+    .filter((n) => !BANK_ACCOUNT.test(n))
+    .find((n) =>
+      compactNarratives.some((narrative) =>
+        narrative.includes(compactNumber(n)),
+      ),
+    );
+  if (loose) return loose;
+  const narrativeWords = new Set(
+    narratives.flatMap((narrative) =>
+      narrative.split(/\s+/).map(compactNumber),
+    ),
+  );
+  return (
+    text
+      .split(/[\s|]+/)
+      .filter((word) => /^[A-Za-z0-9/-]+$/.test(word))
+      .filter(
+        (word) =>
+          compactNumber(word).length >= 6 &&
+          (word.match(/\d/g) ?? []).length >= 5,
+      )
+      .find((word) => narrativeWords.has(compactNumber(word))) ?? null
+  );
+}
 
 export function looksLikeInvoice(text: string): boolean {
   return INVOICE_WORD.test(text);

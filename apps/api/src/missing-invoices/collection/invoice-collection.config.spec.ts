@@ -71,7 +71,7 @@ describe("the invoice collection settings", () => {
       ["3", "90", "x", undefined].map((days) =>
         invoiceCollectionDays({ INVOICE_COLLECTION_DAYS: days }),
       ),
-      [45, 90, 45, 45],
+      [150, 90, 150, 150],
     );
   });
 });
