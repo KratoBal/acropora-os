@@ -164,6 +164,52 @@ describe("matchMonth", () => {
     );
   });
 
+  it("takes a short number from the partner's own invoice even when the bank spells the name otherwise (Hertlein shape)", () => {
+    // Hertlein 260835: 6 karakter, tehát a partnernek is egyeznie kell
+    const d = debit({
+      narrative: "Invoice 260835",
+      counterpartyName: "HERTLEIN AQUARISTIK E.KFR.",
+      amount: D(781),
+    });
+    const theirs = doc({
+      number: "260835",
+      supplierName: "Hertlein Aquaristik e.Kfr.",
+      gross: D(7),
+    });
+    assert.equal(run([d], [theirs]).get(d.id)?.documents[0]?.id, theirs.id);
+    // ugyanez a rövid szám egy másik kiállító HIVATKOZÁSAKÉNT nem párosít
+    const other = doc({
+      number: "X-99999999",
+      references: ["260835"],
+      supplierName: "Másik GmbH",
+      gross: D(8),
+    });
+    assert.notEqual(
+      run([d], [other]).get(d.id)?.reason,
+      "a számla száma a közleményben",
+    );
+  });
+
+  it("pairs by a reference the invoice carries, when the narrative names that instead of the number", () => {
+    // Fauna Marin, éles 2026-10-01: a fizetés a rendelésszámot nevezi meg
+    const d = debit({
+      narrative: "1.698,58 EUR 20144304 Fauna Marin Gmbh",
+      counterpartyName: "Fauna Marin Gmbh",
+    });
+    const c = doc({
+      number: "40142365",
+      references: ["20144304"],
+      supplierName: "Fauna Marin",
+      gross: null,
+    });
+    const outcome = run([d], [c]).get(d.id);
+    assert.equal(outcome?.reason, "a számla száma a közleményben");
+    assert.deepEqual(
+      outcome?.documents.map((x) => x.id),
+      [c.id],
+    );
+  });
+
   it("pairs by the supplier's bank account with an exact amount", () => {
     const d = debit({
       counterpartyName: "más név",

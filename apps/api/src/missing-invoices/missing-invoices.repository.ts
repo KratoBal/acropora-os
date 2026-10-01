@@ -376,6 +376,7 @@ export class MissingInvoicesRepository {
         : (document.textReading as {
             invoiceNumber: string | null;
             supplierTaxNumber: string | null;
+            bankReference?: string | null;
           } | null);
       const date =
         result?.invoiceDate ??
@@ -404,6 +405,7 @@ export class MissingInvoicesRepository {
           result?.invoiceNumber ??
           reading?.invoiceNumber ??
           (upload ? document.fileName : ""),
+        references: reading?.bankReference ? [reading.bankReference] : [],
         date,
         // a postafiók csak nettót olvas ki; EU-s (fordítottan adózó) szállítónál
         // ez a bruttó is, hazainál ismeretlen

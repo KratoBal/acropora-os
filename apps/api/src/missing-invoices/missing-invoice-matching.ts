@@ -50,6 +50,11 @@ export interface CandidateDocument {
    */
   hasOriginal: boolean;
   /**
+   * Amivel a fizetés közleménye a számlára hivatkozhat, ha az nem a száma
+   * (például a rendelésszám a Fauna Marin számláján); az 1. szabály nézi.
+   */
+  references?: readonly string[];
+  /**
    * Az összevont jelölt többi azonosítója (ugyanaz a számla másik forrásból).
    * Egy kézi párosítás bármelyikre mutathat, és akkor is érvényes marad, ha a
    * számla később egy másik forrásból is beérkezik.
@@ -195,13 +200,18 @@ const SHORT_NUMBER = 8;
  * kettő pontosan a két rossz.
  */
 function numberInNarrative(debit: MatchableDebit, document: CandidateDocument) {
-  const number = compact(document.number);
-  return (
-    number.length >= 5 &&
-    narrativeTokens(debit.narrative).includes(number) &&
-    (number.length >= SHORT_NUMBER ||
-      samePartner(debit.counterpartyName ?? "", document.supplierName))
-  );
+  const tokens = narrativeTokens(debit.narrative);
+  // a számla száma MELLETT a hivatkozásai is (#1323: a Fauna Marin közleménye a
+  // rendelésszámot nevezi meg), ugyanazzal az egész-szó szabállyal
+  return [document.number, ...(document.references ?? [])].some((raw) => {
+    const number = compact(raw);
+    return (
+      number.length >= 5 &&
+      tokens.includes(number) &&
+      (number.length >= SHORT_NUMBER ||
+        samePartner(debit.counterpartyName ?? "", document.supplierName))
+    );
+  });
 }
 
 function stateOf(documents: CandidateDocument[]): ItemState {
