@@ -133,6 +133,7 @@ const itemDetail = (
   overrides: Partial<MissingInvoiceItemDetail> = {},
 ): MissingInvoiceItemDetail => ({
   ...item(),
+  doublePaidWith: [],
   candidates: [
     {
       documentId: "inv-2",

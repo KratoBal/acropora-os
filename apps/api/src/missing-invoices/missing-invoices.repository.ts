@@ -67,8 +67,17 @@ export function mergeSameInvoice(
     }
     groups.set(key, [...(groups.get(key) ?? []), document]);
   }
+  // az azonosság: a fájl lenyomata (a dokumentumon) és a számlaszám-kulcs
+  const identified = (document: CandidateDocument): CandidateDocument => {
+    const key = keys.get(document.id);
+    const extra = key && !key.startsWith("|") ? [`inv:${key}`] : [];
+    return {
+      ...document,
+      identities: [...new Set([...(document.identities ?? []), ...extra])],
+    };
+  };
   const merged = [...groups.values()].map((group) => {
-    if (group.length === 1) return group[0]!;
+    if (group.length === 1) return identified(group[0]!);
     const nav = group.find((d) => d.source === "NAV");
     const original = group.find((d) => d.hasOriginal);
     const primary = nav ?? group[0]!;
@@ -85,9 +94,12 @@ export function mergeSameInvoice(
       payee: nav ? ("COMPANY" as const) : primary.payee,
       hasOriginal: group.some((d) => d.hasOriginal),
       supplierAccounts: [...new Set(group.flatMap((d) => d.supplierAccounts))],
+      identities: [
+        ...new Set(group.flatMap((d) => identified(d).identities ?? [])),
+      ],
     };
   });
-  return [...merged, ...alone];
+  return [...merged, ...alone.map(identified)];
 }
 
 /**
@@ -427,6 +439,7 @@ export class MissingInvoicesRepository {
               : "INVOICE",
         payee: (document.payeeCheck as Payee | null) ?? "UNKNOWN",
         hasOriginal: true,
+        identities: document.sha256 ? [`sha:${document.sha256}`] : [],
       });
       keys.set(
         document.id,

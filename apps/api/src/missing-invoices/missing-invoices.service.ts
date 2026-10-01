@@ -65,11 +65,15 @@ const MISSING_STATES: ReadonlySet<ItemState> = new Set([
   "NO_INVOICE",
   "NOT_COMPANY",
   "PROFORMA_ONLY",
+  "DOUBLE_PAID",
 ]);
+// a kétszer fizetett tételnek sincs saját számlája: a „Nincs számla” csempébe
+// számít, és a hiányzó összegbe is (acrobot 25636)
 const NO_INVOICE_TILE: ReadonlySet<ItemState> = new Set([
   "NO_INVOICE",
   "NOT_COMPANY",
   "PROFORMA_ONLY",
+  "DOUBLE_PAID",
 ]);
 
 /** A tétel-lista lapmérete, ha a kérés nem ad (szerződés: 1..100, 25). */
@@ -265,6 +269,21 @@ export class MissingInvoicesService {
       driveFolderUrl: httpsOrNull(
         this.environment.MISSING_INVOICES_DRIVE_FOLDER_URL,
       ),
+      doublePaidWith: (outcome?.doublePaidWith ?? []).flatMap((other) => {
+        const debit = computed.items.find(
+          (candidate) => candidate.id === other,
+        );
+        return debit
+          ? [
+              {
+                id: debit.id,
+                bookingDate: debit.bookingDate,
+                amount: debit.amount,
+                currency: debit.currency,
+              },
+            ]
+          : [];
+      }),
     };
   }
 
@@ -725,6 +744,7 @@ const ACTION: Record<ItemState, MissingInvoiceAction> = {
   NO_INVOICE: "REQUEST_INVOICE",
   NOT_COMPANY: "REQUEST_REISSUE_TO_COMPANY",
   PROFORMA_ONLY: "REQUEST_FINAL_INVOICE",
+  DOUBLE_PAID: "CHECK_DOUBLE_PAYMENT",
   NO_INVOICE_NEEDED: "NONE",
 };
 

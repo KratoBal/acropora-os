@@ -29,6 +29,13 @@ export interface ChargeDetailExtras {
   action: ItemAction;
   /** A „Hiányzó számlák” Drive-mappa, ha a szerveren be van állítva. */
   driveFolderUrl: string | null;
+  /** A többi terhelés ugyanezzel a számlával (Kétszer fizetett számla). */
+  doublePaidWith: {
+    id: string;
+    bookingDate: string;
+    amount: string;
+    currency: string;
+  }[];
 }
 
 /**
@@ -276,6 +283,17 @@ export function MissingInvoicesDrawer({
                   </label>
                 ) : null}
               </div>
+              {extras && extras.doublePaidWith.length > 0 ? (
+                <p className="mt-2 text-sm text-pilot-red-700">
+                  Ugyanez a számla ehhez is párosítva:{" "}
+                  {extras.doublePaidWith
+                    .map(
+                      (other) =>
+                        `${formatDay(other.bookingDate)}, ${formatAmount(other.amount, other.currency)}`,
+                    )
+                    .join("; ")}
+                </p>
+              ) : null}
               {row.missingNumbers.length > 0 ? (
                 <p className="mt-2 text-sm text-pilot-red-700">
                   Hiányzik: {row.missingNumbers.join(", ")}

@@ -29,6 +29,11 @@ export const MISSING_INVOICE_ITEM_STATES = [
   "NO_INVOICE",
   "NOT_COMPANY",
   "PROFORMA_ONLY",
+  /**
+   * Ugyanaz a számla (azonos fájl vagy azonos számlaszám) két terheléshez is
+   * párosítva: valószínűleg kétszer fizettük (acrobot 25636). Egyik sem Megvan.
+   */
+  "DOUBLE_PAID",
   "NO_INVOICE_NEEDED",
 ] as const;
 export type MissingInvoiceItemState =
@@ -47,6 +52,7 @@ export const MISSING_INVOICE_STATE_LABELS: Readonly<
   NO_INVOICE: "Nincs számla",
   NOT_COMPANY: "Nem a cégre szól",
   PROFORMA_ONLY: "Csak díjbekérő",
+  DOUBLE_PAID: "Kétszer fizetett számla",
   NO_INVOICE_NEEDED: "Nem kell számla",
 };
 
@@ -184,6 +190,7 @@ export const MISSING_INVOICE_ACTIONS = [
   "REQUEST_INVOICE",
   "REQUEST_REISSUE_TO_COMPANY",
   "REQUEST_FINAL_INVOICE",
+  "CHECK_DOUBLE_PAYMENT",
 ] as const;
 export type MissingInvoiceAction = (typeof MISSING_INVOICE_ACTIONS)[number];
 
@@ -206,6 +213,16 @@ export interface MissingInvoiceItemDetail extends MissingInvoiceItem {
   action: MissingInvoiceAction;
   /** A „Hiányzó számlák” Drive-mappa, ha a szerveren be van állítva. */
   driveFolderUrl: string | null;
+  /**
+   * A többi terhelés, amelyhez ugyanez a számla párosítva van (Kétszer
+   * fizetett számla, acrobot 25636).
+   */
+  doublePaidWith: {
+    id: string;
+    bookingDate: string;
+    amount: string;
+    currency: string;
+  }[];
 }
 
 export interface MissingInvoiceMatchInput {
