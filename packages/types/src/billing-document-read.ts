@@ -35,13 +35,30 @@ export interface BillingDocumentListQuery {
   invoiceFormat?: InvoiceFormat;
   status?: BillingDocumentStatus;
   emailStatus?: BillingEmailStatus;
+  /**
+   * Honnan jön a bizonylat: a mieink (OWN), a Számlázz.hu-ból kapott külsők
+   * (EXTERNAL); hiányzó: mind (Balázs szűrője, acrobot 25812).
+   */
+  origin?: BillingDocumentOrigin;
 }
+
+/**
+ * A BIZONYLAT EREDETE. A külső a Számlázz.hu-ból kapott kimenő számla (egy
+ * másik számlázóban készült, a Számlázz.hu csak továbbította): csak olvasható,
+ * PDF nincs hozzá (acrobot 25812).
+ */
+export const BILLING_DOCUMENT_ORIGINS = ["OWN", "EXTERNAL"] as const;
+export type BillingDocumentOrigin = (typeof BILLING_DOCUMENT_ORIGINS)[number];
 
 /**
  * A sor kattintásának célja (brief 24. pont): vázlatnál a szerkesztő, minden
  * más állapotban a részletek.
  */
-export type BillingDocumentListTarget = "EDITOR" | "DETAIL";
+export type BillingDocumentListTarget =
+  | "EDITOR"
+  | "DETAIL"
+  /** A külső bizonylat csak olvasható adatlapja (acrobot 25812). */
+  | "EXTERNAL_DETAIL";
 
 export interface BillingDocumentListItem {
   /** Az `Invoice.id`, a megnyitás kulcsa. */
@@ -63,6 +80,57 @@ export interface BillingDocumentListItem {
   status: BillingDocumentStatus;
   emailStatus: BillingEmailStatus | null;
   opens: BillingDocumentListTarget;
+  origin: BillingDocumentOrigin;
+  /**
+   * Külső bizonylatnál a Számlázz.hu bizonylattípusának felirata (Számla,
+   * Sztornó számla, ...), ismeretlen kódnál maga a kód; a mieinknél `null`.
+   */
+  externalKindLabel: string | null;
+}
+
+/** Egy külső bizonylat tétele, ahogy a számlán áll (szamla.xsd `tetel`). */
+export interface BillingExternalDocumentLine {
+  name: string;
+  quantity: DecimalText;
+  unit: string;
+  unitNet: DecimalText;
+  /** A kulcs, ahogy a számlán áll: 27, 5, AAM, TAM, ... */
+  vatRate: string;
+  netAmount: DecimalText;
+  vatAmount: DecimalText;
+  grossAmount: DecimalText;
+}
+
+/** `GET /billing/external-documents/:id`: a külső bizonylat, csak olvasásra. */
+export interface BillingExternalDocumentDetail {
+  id: string;
+  source: "SZAMLAZZ";
+  kindCode: string;
+  kindLabel: string;
+  documentNumber: string;
+  invoiceFormat: InvoiceFormat;
+  issueDate: string;
+  fulfillmentDate: string | null;
+  dueDate: string | null;
+  paymentMethod: string | null;
+  currency: string;
+  customer: {
+    name: string;
+    taxNumber: string | null;
+    address: string | null;
+  };
+  lines: BillingExternalDocumentLine[];
+  totals: {
+    netAmount: DecimalText;
+    vatAmount: DecimalText;
+    grossAmount: DecimalText;
+  };
+  /** A Számlázz.hu szerint sztornózott. */
+  cancelled: boolean;
+  /** Hány változat érkezett; a lap a legkésőbbit mutatja. */
+  versionCount: number;
+  /** A mutatott változat érkezése (ISO időbélyeg). */
+  receivedAt: string;
 }
 
 export interface BillingDocumentListResponse {

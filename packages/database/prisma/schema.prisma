@@ -6992,8 +6992,8 @@ model InvoiceCollectionItem {
   externalId String
   fileName   String
   sha256     String?
-  /// STORED, NOT_INVOICE, UNMATCHED, DUPLICATE, TOO_LARGE, UNREADABLE, vagy
-  /// SUGGESTED (a Jev bejövő számlának látta; a dokumentum jóváhagyásra vár).
+  /// STORED, NOT_INVOICE, UNMATCHED, OWN_INVOICE, DUPLICATE, TOO_LARGE, UNREADABLE,
+  /// vagy SUGGESTED (a Jev bejövő számlának látta; a dokumentum jóváhagyásra vár).
   verdict    String
   /// STORED-nál a létrehozott IncomingSupplierDocument.
   documentId String?
@@ -7014,6 +7014,7 @@ model InvoiceCollectionRun {
   storedCount     Int                              @default(0)
   notInvoiceCount Int                              @default(0)
   unmatchedCount  Int                              @default(0)
+  ownInvoiceCount Int                              @default(0)
   /// A Jev bejövő számlának látta (levél-válogatás, 4. szelet): jóváhagyásra vár.
   suggestedCount  Int                              @default(0)
   duplicateCount  Int                              @default(0)
@@ -7231,6 +7232,57 @@ model SzamlazzFeedMessage {
 
   @@unique([kind, externalId, sha256])
   @@index([kind, externalId])
+}
+
+/// A SZÁMLÁZZ.HU-BÓL KAPOTT KIMENŐ SZÁMLÁK VETÍTÉSE A SZÁMLÁZÁS LISTÁJÁHOZ
+/// (Balázs „mehet”-je 2026-10-01 15:43 UTC, acrobot 25812). A mi számláink
+/// mellett, „Külső” jelöléssel, csak olvasásra.
+///
+/// MIÉRT KÜLÖN TÁBLA ÉS NEM OLVASÁSKORI VETÍTÉS: a lista a saját számlákkal
+/// együtt lapoz, rendez (kiállítás napja), keres (szám, vevő) és szűr; ehhez
+/// rendezhető oszlop kell, nem minden kérésnél az összes nyers XML újraolvasása.
+/// A forrás továbbra is a nyers üzenet (SzamlazzFeedMessage): ez a tábla belőle
+/// SZÁRMAZTATOTT, bármikor újraépíthető (`billing:external-backfill`).
+///
+/// EGY SOR EGY SZÁMLA, nem egy üzenet: a Számlázz.hu ugyanazt a számlát a változásai
+/// után újraküldi (#1353), és a LEGKÉSŐBB érkezett változat adja a sort.
+model ExternalBillingDocument {
+  id                String    @id @default(cuid())
+  /// A forrás rendszer; ma csak SZAMLAZZ.
+  source            String    @default("SZAMLAZZ")
+  /// A Számlázz.hu azonosítója (`alap.id`).
+  externalId        String
+  /// A sort adó (legkésőbb érkezett) változat nyers üzenete, és az érkezése.
+  feedMessageId     String
+  feedReceivedAt    DateTime
+  /// Hány különböző változat érkezett eddig erről a számláról.
+  versionCount      Int       @default(1)
+  /// A Számlázz.hu bizonylattípusa, nyersen (`alap.tipus`, például SZ).
+  kindCode          String
+  documentNumber    String
+  /// `alap.eszamla`: 1 elektronikus, minden más papír.
+  electronic        Boolean
+  issueDate         DateTime  @db.Date
+  fulfillmentDate   DateTime? @db.Date
+  dueDate           DateTime? @db.Date
+  paymentMethod     String?
+  currency          String
+  customerName      String
+  customerTaxNumber String?
+  customerAddress   String?
+  netAmount         Decimal   @db.Decimal(18, 2)
+  vatAmount         Decimal   @db.Decimal(18, 2)
+  grossAmount       Decimal   @db.Decimal(18, 2)
+  /// A tételek a számla sorrendjében: név, mennyiség, egység, nettó egységár,
+  /// áfakulcs, nettó, áfa, bruttó.
+  lines             Json
+  /// `alap.sztornozott`: a Számlázz.hu szerint sztornózott.
+  cancelled         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([source, externalId])
+  @@index([issueDate])
 }
 
 model BankTransactionSourceKey {

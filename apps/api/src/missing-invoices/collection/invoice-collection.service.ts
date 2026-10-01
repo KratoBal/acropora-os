@@ -74,6 +74,13 @@ export interface InvoiceCollectionDryChange {
   before: string | null;
   after: InvoiceCollectionVerdict;
   detail?: string;
+  /**
+   * MÁR TÁROLT, UGYANILYEN SZÁMÚ DOKUMENTUM, más tartalommal (acrobot 25800,
+   * murena review-ja): ilyenkor az éles újraolvasás egy második dokumentumot
+   * tárolna ugyanarra a számlára (például a kézzel feltöltött másik fájl
+   * mellé). `fájlnév (eredet)` alakban, hogy a sor egyedül is eldönthető legyen.
+   */
+  sameNumber?: string[];
 }
 
 const emptyCounts = (): InvoiceCollectionCounts => ({
@@ -81,6 +88,7 @@ const emptyCounts = (): InvoiceCollectionCounts => ({
   storedCount: 0,
   notInvoiceCount: 0,
   unmatchedCount: 0,
+  ownInvoiceCount: 0,
   suggestedCount: 0,
   duplicateCount: 0,
   failedCount: 0,
@@ -113,14 +121,20 @@ interface Found {
  *   4. a szállítói illesztő olvassa, VAGY a szállító egy NAV-ban ismert
  *      számlaszáma áll a szövegében, VAGY a számla száma egy banki
  *      terhelés közleményében áll (külföldi szállító)           -> STORED
- *   5. minden más számlának látszó                              -> UNMATCHED,
+ *   5. a saját bankszámlánk áll benne: a SAJÁT kimenő számlánk  -> OWN_INVOICE,
+ *      tartalom nélkül (a kiállító a saját számláját nyomtatja rá). Ezt a 4.
+ *      banki ága ELŐTT nézzük: egy vevői visszautalás terhelése a saját
+ *      számlánk számát idézi, és a saját számla nem szállítói számla.
+ *   6. minden más számlának látszó                              -> UNMATCHED,
  *      tartalom nélkül
  *
  * MIÉRT CSAK AZ ISMERTET TÁROLJA (mérve 2026-10-01, az info@ augusztusi 90
  * PDF-jén): a számlának látszó 65-ből 30 a SAJÁT kimenő számlánk másolata, a
  * többi között rendelés-visszaigazolás és szállítólevél is van. A NAV-kulcs és
- * az illesztő 27-et adott, mind a 27 helyes. A maradék szétválogatása a Jev
- * dolga lesz (Balázs döntése 2026-09-30 22:40 UTC), nem egy kitalált szabályé.
+ * az illesztő 27-et adott, mind a 27 helyes. A saját bankszámlánk 24 PDF-ben
+ * áll, mind a 24 a saját kimenő számlánk, és a 27 tárolt egyikében sincs; ezért
+ * ez a próba a tárolás UTÁN jön, és soha nem vesz el tárolandót. A maradék 14
+ * szétválogatása a Jev dolga lesz (Balázs döntése 2026-09-30 22:40 UTC).
  *
  * A tárolt dokumentumot a Hiányzó számlák párosítója a többi jelölttel együtt
  * látja; várható beérkezést nem kap, tehát a bevételezési láncba nem jut.
@@ -233,6 +247,8 @@ export class InvoiceCollectionService {
     counts: InvoiceCollectionCounts,
     retryUnmatched: boolean,
   ): Promise<{ failed: string[]; paused: string[] }> {
+    // a saját bankszámláink: futásonként egyszer, frissen
+    this.ownAccountDigits = null;
     const failedSources: string[] = [];
     const pausedSources: string[] = [];
     for (const source of sources) {
@@ -286,6 +302,14 @@ export class InvoiceCollectionService {
       return;
     }
     await this.repository.record(source, externalId, fileName, verdict, sha256);
+  }
+
+  private ownAccountDigits: Promise<string[]> | null = null;
+
+  /** Egy futásban egyszer kérdezzük le. */
+  private ownAccounts(): Promise<string[]> {
+    this.ownAccountDigits ??= this.repository.ownAccounts();
+    return this.ownAccountDigits;
   }
 
   private async collect(
@@ -418,6 +442,7 @@ export class InvoiceCollectionService {
       if (verdict === "DUPLICATE") counts.duplicateCount++;
       else if (verdict === "NOT_INVOICE") counts.notInvoiceCount++;
       else if (verdict === "UNMATCHED") counts.unmatchedCount++;
+      else if (verdict === "OWN_INVOICE") counts.ownInvoiceCount++;
       else counts.failedCount++;
       await this.record(source, externalId, found.fileName, verdict, sha256);
       return verdict;
@@ -457,6 +482,11 @@ export class InvoiceCollectionService {
         navNumbers: () => navNumbers,
       });
       if (textReading.numberFrom !== "NAV") {
+        const digits = text.replace(/\D/g, "");
+        const own = (await this.ownAccounts()).some((account) =>
+          digits.includes(account),
+        );
+        if (own) return skip("OWN_INVOICE");
         const reference = bankReference(
           lines,
           textReading,
@@ -532,6 +562,12 @@ export class InvoiceCollectionService {
       ? importResult.documentKind === "PROFORMA"
       : looksLikeProforma(text);
     if (this.dry) {
+      const number = importResult?.invoiceNumber ?? textReading?.invoiceNumber;
+      const sameNumber = number
+        ? (await this.repository.sameNumberDocuments(number)).map(
+            (d) => `${d.fileName} (${d.origin})`,
+          )
+        : [];
       this.dry.push({
         source,
         externalId,
@@ -542,6 +578,7 @@ export class InvoiceCollectionService {
           found.fileName,
         ),
         after: "STORED",
+        ...(sameNumber.length ? { sameNumber } : {}),
         detail: textReading?.cardPayment
           ? `kártyás fizetés: ${textReading.cardPayment.amount} ${textReading.cardPayment.currency}, ${textReading.cardPayment.partner}`
           : (textReading?.bankReference ??

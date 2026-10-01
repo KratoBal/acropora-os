@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 
+import type { ExternalInvoiceProjection } from "../billing/external-szamlazz-invoice.js";
+
 export type SzamlazzFeedKind = "SZAMLABE" | "SZAMLAKI" | "NYUGTA";
 
 /** Egy fogadott üzenet sorsa, lásd `storeRaw`. */
@@ -52,6 +54,73 @@ export class SzamlazzFeedsRepository {
         return "SEEN";
       throw error;
     }
+  }
+
+  /**
+   * A KIMENŐ SZÁMLA A SZÁMLÁZÁS LISTÁJÁBA (acrobot 25812): egy tárolt SZAMLAKI
+   * üzenetből a vetítés sora (ExternalBillingDocument). EGY SOR EGY SZÁMLA: ha
+   * ugyanarról a számláról később érkezett változat már a sor, egy korábbi nem
+   * írja felül (a visszatöltés tehát bármilyen sorrendben futhat).
+   *
+   * A visszatérés: PROJECTED (a sor ebből a változatból áll), OLDER (egy későbbi
+   * változat adja a sort), MISSING (nincs ilyen tárolt üzenet).
+   */
+  async projectOutgoing(input: {
+    externalId: string;
+    sha256: string;
+    projection: ExternalInvoiceProjection;
+  }): Promise<"PROJECTED" | "OLDER" | "MISSING"> {
+    return this.database.$transaction(async (transaction) => {
+      const message = await transaction.szamlazzFeedMessage.findUnique({
+        where: {
+          kind_externalId_sha256: {
+            kind: "SZAMLAKI",
+            externalId: input.externalId,
+            sha256: input.sha256,
+          },
+        },
+        select: { id: true, receivedAt: true },
+      });
+      if (!message) return "MISSING";
+      const latest = await transaction.szamlazzFeedMessage.findFirst({
+        where: { kind: "SZAMLAKI", externalId: input.externalId },
+        orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+        select: { id: true },
+      });
+      if (latest?.id !== message.id) return "OLDER";
+      const versionCount = await transaction.szamlazzFeedMessage.count({
+        where: { kind: "SZAMLAKI", externalId: input.externalId },
+      });
+      const { externalId, issueDate, fulfillmentDate, dueDate, ...rest } =
+        input.projection;
+      const data = {
+        ...rest,
+        lines: rest.lines as unknown as Prisma.InputJsonValue,
+        issueDate: new Date(`${issueDate}T00:00:00Z`),
+        fulfillmentDate: fulfillmentDate
+          ? new Date(`${fulfillmentDate}T00:00:00Z`)
+          : null,
+        dueDate: dueDate ? new Date(`${dueDate}T00:00:00Z`) : null,
+        feedMessageId: message.id,
+        feedReceivedAt: message.receivedAt,
+        versionCount,
+      };
+      await transaction.externalBillingDocument.upsert({
+        where: { source_externalId: { source: "SZAMLAZZ", externalId } },
+        create: { source: "SZAMLAZZ", externalId, ...data },
+        update: data,
+      });
+      return "PROJECTED";
+    });
+  }
+
+  /** A visszatöltéshez: minden tárolt kimenő számla-üzenet, érkezési sorrendben. */
+  outgoingMessages() {
+    return this.database.szamlazzFeedMessage.findMany({
+      where: { kind: "SZAMLAKI" },
+      orderBy: [{ receivedAt: "asc" }, { id: "asc" }],
+      select: { externalId: true, sha256: true, body: true },
+    });
   }
 
   /** Van-e már ilyen tartalmú dokumentum, bármilyen úton érkezett. */

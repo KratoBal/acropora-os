@@ -276,7 +276,10 @@ common_subset = sorted(w for w in redact.COMMON if w in lookups)
 KNOWN = [("PERSON", "Varga Ilona"), ("PERSON", "Ilona Varga"), ("ORG", "Fekete Bolt"),
          ("ORG", "Tisza 97 Kft."), ("ORG", "Kovács János"), ("EMAIL", "ilona.varga@example.com"),
          ("ADDRESS", "Petőfi utca 12"), ("ORG", "Lap Állatkert"), ("HANDLE", "KratoBal"), ("ORG", "FANK"),
-         ("ORG", "Großhandel Weiß GmbH")]
+         ("ORG", "Großhandel Weiß GmbH"),
+         # r12: build_known's caps alias next to the full name (acrobot 25567)
+         ("ORG", "HANNA Instruments Service Kft."), ("ORG", "HANNA Instruments Service"),
+         ("ORG", "HANNA"), ("ORG", "Alfa HANNA Beta Kft.")]
 KNOWN_TEXTS = [
     "issuer: Varga Ilona", "Varga Ilonának küldtük", "Fekete Bolt Kft., 5000 HUF",
     "Fekete Bolt e.v., 5000 HUF", "Fekete Bolt, 5000 HUF", "issuer: Tisza 97 Kft.",
@@ -288,6 +291,10 @@ KNOWN_TEXTS = [
     "issuer: Fekete Bolt Kft., e.v., 5000 HUF",
     # casefold beyond lower(): ß -> ss on one side only
     "GROSSHANDEL WEISS GmbH számla", "Großhandel Weiß GmbH számla",
+    # r12: the bare alias inside the full, legally formed name passes the pairing guard
+    "issuer: HANNA Instruments Service Kft.", "HANNA szerint a lámpa jó",
+    "issuer: Alfa HANNA Beta Kft.", "a HANNA Instruments Service szerint",
+    "issuer: HANNA Instruments Service Kft., e.v.",
 ]
 
 
@@ -383,16 +390,29 @@ def _straddling_item():
 
 
 PAIR_ITEMS.append(_straddling_item())
+# r12 / acrobot 25560: a candidate the guard stops leaves the list, the rest are renumbered
+PAIR_ITEMS.append(
+    {"id": "p7", "date": "2026-06-03", "amount": "1999", "currency": "HUF", "original": "",
+     "partner": "Akvárium Szerviz Kft.", "narrative": "SZ-2026/0815", "type": "ÁTUTALÁS",
+     "candidates": [{"number": "FANK-2026", "date": "2026-06-01", "gross": "1999", "currency": "HUF",
+                     "supplier": "Szállító Kft."},
+                    {"number": "SZ-2026/0815", "date": "2026-06-02", "gross": "1999", "currency": "HUF",
+                     "supplier": "Szállító Kft."},
+                    {"number": "HI-26/000878", "date": "2026-06-02", "gross": "1950", "currency": "HUF",
+                     "supplier": "HANNA Instruments Service Kft."}]})
 
 
 def pair_vector(item):
     try:
-        dto, questions, options = offline.build("missing_invoice_pair", item)
+        dto, questions, options, back, dropped = offline.build_with_map("missing_invoice_pair", item)
     except shadow.Blocked as b:
         return {"blocked": b.outcome, "detail": b.detail}
     return {"body": json.dumps({"state": dto.fields, "model": shadow.MODEL, "questions": questions},
                                ensure_ascii=False),
-            "placeholders": dto.counts, "options": options}
+            "placeholders": dto.counts, "options": options,
+            # which input candidates went out as c0, c1, ... and which the guard dropped
+            "kept": [int(v[1:]) for k, v in back.items() if k != "NONE"],
+            "dropped": dropped}
 
 
 out["pairing"] = {"items": PAIR_ITEMS, "unknown": [pair_vector(i) for i in PAIR_ITEMS]}

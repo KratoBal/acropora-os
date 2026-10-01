@@ -17,6 +17,7 @@ export type InvoiceCollectionVerdict =
   | "STORED"
   | "NOT_INVOICE"
   | "UNMATCHED"
+  | "OWN_INVOICE"
   | "DUPLICATE"
   | "TOO_LARGE"
   | "UNREADABLE"
@@ -33,6 +34,8 @@ export interface InvoiceCollectionCounts {
   notInvoiceCount: number;
   /** Számlának látszik, de sem illesztő, sem NAV-sor nem ismeri: nem tárolódik. */
   unmatchedCount: number;
+  /** A saját kimenő számlánk másolata (a bankszámlánk áll benne): nem tárolódik. */
+  ownInvoiceCount: number;
   /** A Jev bejövő számlának látta: jóváhagyásra vár (nem jelölt). */
   suggestedCount: number;
   duplicateCount: number;
@@ -151,6 +154,16 @@ export class InvoiceCollectionRepository {
     return rows.map((row) => row.navInvoiceNumber);
   }
 
+  /** A saját bankszámláink számjegyei; egy PDF-ben ezek a kiállító jelei. */
+  async ownAccounts(): Promise<string[]> {
+    const rows = await this.database.bankAccount.findMany({
+      select: { accountNumber: true },
+    });
+    return rows
+      .map((row) => row.accountNumber.replace(/\D/g, ""))
+      .filter((digits) => digits.length >= 16);
+  }
+
   /**
    * A terhelések közleményei: a NAV-ban nem szereplő (külföldi) számlát ez
    * köti a fizetéshez. Csak terhelés: a jóváírások közleményében a SAJÁT kimenő
@@ -213,6 +226,29 @@ export class InvoiceCollectionRepository {
       select: { verdict: true },
     });
     return row?.verdict ?? null;
+  }
+
+  /**
+   * A már tárolt dokumentumok ugyanezzel a számlaszámmal, bármilyen úton
+   * érkeztek (az illesztő vagy a szövegolvasó száma). A száraz újraértékelés
+   * jelzi őket; azonos tartalmú itt nem lehet, mert az már DUPLICATE.
+   */
+  async sameNumberDocuments(
+    invoiceNumber: string,
+  ): Promise<{ fileName: string; origin: string }[]> {
+    const numbers = [
+      ...new Set([invoiceNumber, invoiceNumber.replace(/\s/g, "")]),
+    ];
+    return this.database.incomingSupplierDocument.findMany({
+      where: {
+        OR: numbers.flatMap((n) => [
+          { importResult: { path: ["invoiceNumber"], equals: n } },
+          { textReading: { path: ["invoiceNumber"], equals: n } },
+        ]),
+      },
+      select: { fileName: true, origin: true },
+      orderBy: { createdAt: "asc" },
+    });
   }
 
   /** Van-e már ilyen tartalmú dokumentum, bármilyen úton érkezett. */

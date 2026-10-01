@@ -14,6 +14,10 @@ import {
   type SzamlabeMessage,
 } from "./szamlazz-feed-xml.js";
 import {
+  projectExternalInvoice,
+  type ExternalInvoiceProjection,
+} from "../billing/external-szamlazz-invoice.js";
+import {
   SzamlazzFeedsRepository,
   type FeedStoreOutcome,
   type SzamlazzFeedKind,
@@ -42,7 +46,9 @@ import {
  *     origin SZAMLAZZ_FEED): a PDF-fel, ha a `pdf` mező base64-ben PDF-et hoz; ha
  *     nem, az XML maga a tartalom (a PDF kódolását az XSD nem mondja meg, az első
  *     élő csomag dönti el; addig nem találgatunk). A vevő az XML vevő-adószámából;
- *   - a KIMENŐ számla és a nyugta MA CSAK TÁROLÓDIK: a feldolgozásuk még nem eldöntött.
+ *   - a KIMENŐ számla ezen felül a Számlázás listájába kerül, „Külső” jelöléssel
+ *     (ExternalBillingDocument, a legkésőbb érkezett változatból; acrobot 25812);
+ *   - a nyugta MA CSAK TÁROLÓDIK: a feldolgozása még nem eldöntött.
  *
  * Ellenőrzés, mint a banki fogadónál: a kulcs állandó idejű összevetéssel (rossz
  * kulcsra KEY_ERR, semmi nem íródik), szűk XML-olvasó DOCTYPE és entitás nélkül,
@@ -162,8 +168,9 @@ export class SzamlazzFeedsService {
           body,
         });
         this.logger.log(
-          `Számlázz.hu kimenő számla ${szamlaszam} (#${id}): ${STORED_LABEL[stored]} (feldolgozás nélkül).`,
+          `Számlázz.hu kimenő számla ${szamlaszam} (#${id}): ${STORED_LABEL[stored]}.`,
         );
+        if (stored !== "SEEN") await this.intoBilling(id, sha256, body);
         return { status: 200, body: feedReply(REPLY[kind], { id }) };
       }
       const message = parseSzamlabe(body);
@@ -194,6 +201,29 @@ export class SzamlazzFeedsService {
       this.logger.warn(`Számlázz.hu ${kind} olvashatatlan: ${error.message}`);
       return { status: 400, body: "" };
     }
+  }
+
+  /**
+   * A KIMENŐ SZÁMLA A SZÁMLÁZÁS LISTÁJÁBA (acrobot 25812): a vetítés sora a
+   * nyers üzenetből. A HIBÁJA NEM BUKTATJA EL A FOGADÁST: a nyers üzenet már
+   * tárolva van, a Számlázz.hu visszakapja az azonosítót, a hiba naplózódik, és
+   * a visszatöltés (`billing:external-backfill`) később pótolhatja.
+   */
+  async intoBilling(
+    externalId: string,
+    sha256: string,
+    body: string,
+  ): Promise<"PROJECTED" | "OLDER" | "MISSING" | "UNREADABLE"> {
+    let projection: ExternalInvoiceProjection;
+    try {
+      projection = projectExternalInvoice(body);
+    } catch (error) {
+      this.logger.warn(
+        `Számlázz.hu kimenő számla #${externalId}: nem vetíthető a Számlázás listájába (${error instanceof Error ? error.message : String(error)}).`,
+      );
+      return "UNREADABLE";
+    }
+    return this.repository.projectOutgoing({ externalId, sha256, projection });
   }
 
   /** A bejövő számla a Hiányzó számlák forrásai közé, ha valódi és még nincs meg. */

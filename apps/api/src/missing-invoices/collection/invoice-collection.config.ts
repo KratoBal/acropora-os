@@ -223,8 +223,9 @@ const BUDAPEST_DAY = new Intl.DateTimeFormat("en-CA", {
  *   2026-10-01.1  fizetési emlékeztető, IBAN nem hivatkozás (#1342)
  *   2026-10-01.2  NAV nélküli számla egy kártyás fizetéshez (#1344)
  *   2026-10-01.3  kártyás fizetés-halmaz a végösszeghez (#1347)
+ *   2026-10-01.4  a saját bankszámlánk a szövegben: saját kimenő számla (#1315)
  */
-export const INVOICE_COLLECTION_RULES_VERSION = "2026-10-01.3";
+export const INVOICE_COLLECTION_RULES_VERSION = "2026-10-01.4";
 
 /**
  * Az UNMATCHED újraolvasás döntése: nincs még teljes futás, az utolsó teljes

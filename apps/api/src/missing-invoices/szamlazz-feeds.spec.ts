@@ -192,7 +192,18 @@ function setup(
 ) {
   const raw: string[] = [];
   const invoices: FeedInvoiceInput[] = [];
+  const projected: { externalId: string; documentNumber: string }[] = [];
   const repository = {
+    projectOutgoing: async (input: {
+      externalId: string;
+      projection: { documentNumber: string };
+    }) => {
+      projected.push({
+        externalId: input.externalId,
+        documentNumber: input.projection.documentNumber,
+      });
+      return "PROJECTED";
+    },
     storeRaw: async (input: { kind: string; externalId: string }) => {
       raw.push(`${input.kind}:${input.externalId.slice(0, 12)}`);
       return opts.stored ?? (opts.seen ? "SEEN" : "NEW");
@@ -203,7 +214,12 @@ function setup(
       return { id: "doc-1" };
     },
   } as unknown as SzamlazzFeedsRepository;
-  return { service: new SzamlazzFeedsService(repository, env), raw, invoices };
+  return {
+    service: new SzamlazzFeedsService(repository, env),
+    raw,
+    invoices,
+    projected,
+  };
 }
 
 // MI PIROSÍT: ha kikapcsolva vagy rossz kulccsal írna; ha a bejövő számla nem
@@ -294,6 +310,45 @@ describe("SzamlazzFeedsService", () => {
       szamlabe().replace("<devizanem>HUF</devizanem>", ""),
     );
     assert.deepEqual([bad.status, broken.raw, broken.invoices], [400, [], []]);
+  });
+
+  /**
+   * A KIMENŐ SZÁMLA A SZÁMLÁZÁS LISTÁJÁBA (acrobot 25812). MI PIROSÍT: ha az
+   * új (vagy új változatú) kimenő számla nem vetülne; ha egy már ismert tartalom
+   * újra; ha egy vetíthetetlen, de tárolható üzenet a fogadást buktatná el (a
+   * Számlázz.hu akkor 72 órán át újraküldené).
+   */
+  it("an outgoing invoice goes to the billing list; a known one does not; an unprojectable one is still answered", async () => {
+    const ki = szamlabe().replace(/szamlabe/g, "szamla");
+    const fresh = setup();
+    await fresh.service.receive("SZAMLAKI", KEY, ki);
+    assert.deepEqual(fresh.projected, [
+      { externalId: "98765", documentNumber: "E-KBOSS-2026-1234" },
+    ]);
+
+    const version = setup(live, { stored: "NEW_VERSION" });
+    await version.service.receive("SZAMLAKI", KEY, ki);
+    assert.equal(version.projected.length, 1);
+
+    const seen = setup(live, { seen: true });
+    await seen.service.receive("SZAMLAKI", KEY, ki);
+    assert.deepEqual(seen.projected, []);
+
+    const half = setup();
+    const reply = await half.service.receive(
+      "SZAMLAKI",
+      KEY,
+      ki.replace("<nev>Acropora Kft.</nev>", "<nev></nev>"),
+    );
+    assert.deepEqual(
+      [
+        reply.status,
+        /<id>98765<\/id>/.test(reply.body),
+        half.raw.length,
+        half.projected,
+      ],
+      [200, true, 1, []],
+    );
   });
 
   it("the payee from the buyer's tax number, else from its name", async () => {

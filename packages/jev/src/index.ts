@@ -100,7 +100,6 @@ export {
   JEV_MODEL,
   PAIR_POLICY_KEY,
   PairBlocked,
-  buildPairRequest,
   buildPairRequestDroppingBlocked,
   candidateText,
   isPrivatePartner,
