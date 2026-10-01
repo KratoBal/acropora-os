@@ -39,6 +39,7 @@ const api = vi.hoisted(() => ({
   month: vi.fn(),
   uploadStatement: vi.fn(),
   item: vi.fn(),
+  jevSuggestion: vi.fn(),
   match: vi.fn(),
   unmatch: vi.fn(),
   comment: vi.fn(),
@@ -192,6 +193,11 @@ beforeEach(() => {
   });
   api.month.mockResolvedValue(monthDetail());
   api.item.mockResolvedValue(itemDetail());
+  api.jevSuggestion.mockResolvedValue({
+    enabled: false,
+    documentId: null,
+    confidence: null,
+  });
 });
 
 describe("MissingInvoicesPage", () => {
@@ -379,6 +385,82 @@ describe("MissingInvoicesMonthPage", () => {
         name: "Párosítás visszavonása",
       }),
     ).toBeInTheDocument();
+  });
+
+  /*
+    A JEV JAVASLATA A DRAWERBEN (acrobot 25871; a #1324 végpontjának eddig nem
+    volt hívója). MI PIROSÍT: ha a drawer nem kérdezné meg (Nem párosodott
+    tételnél); ha megkérdezné egy lezárt tételnél; ha árnyék-módban, hibánál vagy
+    egy el nem jövő válasznál a drawer bármiben eltérne; ha a jelöltek a Jevre
+    várnának; ha élő módban a javasolt jelölt nem kapná meg a jelzést.
+  */
+  const openOpenRow = async (suggestion: () => Promise<unknown>) => {
+    api.month.mockResolvedValue(
+      monthDetail({ items: [item({ state: "NOT_MATCHED" })] }),
+    );
+    api.item.mockResolvedValue(itemDetail({ state: "NOT_MATCHED" }));
+    api.jevSuggestion.mockImplementation(suggestion);
+    const view = render(<MissingInvoicesMonthPage month="2026-08" />);
+    const dialog = await openFirstRow();
+    await within(dialog).findByText("INV-2026-08177");
+    await waitFor(() => expect(api.jevSuggestion).toHaveBeenCalled());
+    // a válasz (vagy a hibája) feldolgozása
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // a React useId-ja renderelésenként más (_r_3_, _r_4_); a felület nem
+    const html = dialog.innerHTML.replace(/_r_\w+_/g, "_r_");
+    view.unmount();
+    return html;
+  };
+
+  it("asks Jev for an open item in its own request, and in shadow mode the drawer is the same, byte for byte", async () => {
+    const off = await openOpenRow(async () => ({
+      enabled: false,
+      documentId: null,
+      confidence: null,
+    }));
+    expect(api.jevSuggestion).toHaveBeenCalledWith(
+      "token-1",
+      "debit-1",
+      expect.any(AbortSignal),
+    );
+    const shadow = await openOpenRow(async () => ({
+      enabled: true,
+      documentId: null,
+      confidence: null,
+    }));
+    const failed = await openOpenRow(async () => {
+      throw new Error("504 Gateway Timeout");
+    });
+    // a soha meg nem jövő válasz: a jelöltek ettől még megjelennek
+    const pending = await openOpenRow(() => new Promise(() => {}));
+    expect(shadow).toBe(off);
+    expect(failed).toBe(off);
+    expect(pending).toBe(off);
+    expect(off).not.toMatch(/Jev/);
+  });
+
+  it("in live mode the suggested candidate is marked, and nothing is paired by itself", async () => {
+    api.month.mockResolvedValue(
+      monthDetail({ items: [item({ state: "NOT_MATCHED" })] }),
+    );
+    api.item.mockResolvedValue(itemDetail({ state: "NOT_MATCHED" }));
+    api.jevSuggestion.mockResolvedValue({
+      enabled: true,
+      documentId: "inv-2",
+      confidence: 0.93,
+    });
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const dialog = await openFirstRow();
+    const mark = await within(dialog).findByText("A Jev ezt javasolja (93%)");
+    expect(mark.closest("li")).toHaveTextContent("INV-2026-08177");
+    expect(api.match).not.toHaveBeenCalled();
+  });
+
+  it("does not ask Jev for an item that is not open", async () => {
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const dialog = await openFirstRow();
+    await within(dialog).findByText("INV-2026-08177");
+    expect(api.jevSuggestion).not.toHaveBeenCalled();
   });
 
   it("undoing a manual pairing asks first, and only the confirmation calls the server", async () => {
