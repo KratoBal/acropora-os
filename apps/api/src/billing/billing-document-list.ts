@@ -242,6 +242,7 @@ export interface ExternalListRow {
   paymentsKnown: boolean | null;
   paymentMethod: string | null;
   paymentMethodUnified: string | null;
+  orderNumber: string | null;
   cancelled: boolean;
 }
 
@@ -269,16 +270,89 @@ export interface ExternalListRow {
  *                                 napja; acrobot 25950)
  *       bármi más                 UNKNOWN
  */
-export function externalPaymentFields(row: {
-  grossAmount: Prisma.Decimal;
-  paidAmount: Prisma.Decimal;
-  lastPaymentDate: Date | null;
-  paymentsKnown: boolean | null;
-  paymentMethod: string | null;
-  paymentMethodUnified: string | null;
-  currency: string;
-  cancelled: boolean;
-}): Pick<
+/** Egy SimplePay elszámolás-sor, ahogy a kifizetéshez kell. */
+export interface SimplePaySettlementLine {
+  transactionStatus: string;
+  amount: Prisma.Decimal;
+  transactionDate: Date;
+}
+
+/**
+ * A WEBSHOP RENDELÉSSZÁMÁBÓL A SIMPLEPAY-SOR KULCSA. A feed rendelésszáma
+ * „47679-665706” (bolt-azonosító + 6 számjegy); a SimplePay-sor `orderKeySuffix`
+ * mezője a 6 számjegy, a bolt a `UNAS-47679-` előtagból (a SimplePay-oldal
+ * `UNAS_SHOP_ORDER_PREFIX`-e). Más bolt vagy más alak: nincs kulcs, nem találgat.
+ */
+export function simplePayOrderKey(
+  orderNumber: string | null,
+  shopPrefix: string,
+): string | null {
+  const shop = shopPrefix.replace(/^UNAS-/, "");
+  if (!orderNumber?.startsWith(shop)) return null;
+  const suffix = orderNumber.slice(shop.length);
+  return /^\d{6}$/.test(suffix) ? suffix : null;
+}
+
+/**
+ * A KÁRTYÁS SZÁMLA KIFIZETÉSE A SIMPLEPAY ELSZÁMOLÁS-SORAIBÓL (acrobot 25964,
+ * 25979). Élesen mérve: COMPLETED 53, REFUND 3 sor; más státuszt nem láttunk,
+ * ezért más nem számít (nem találgatjuk, mit jelentene).
+ *
+ *   COMPLETED   fizetés; az összegek összeadódnak (minden sor külön SimplePay-
+ *               tranzakció, külön pénz)
+ *   REFUND      visszatérítés ugyanarra a rendelésre: a kifizetett összeget
+ *               csökkenti. Teljes visszatérítésnél nem „Fizetve”, és a forrás
+ *               jelöli, hogy visszatérítés volt.
+ *
+ * ABSZOLÚT ÉRTÉKKEL számol: visszatérítéses mintánk nincs, tehát a REFUND sor
+ * előjelét nem ismerjük, és így egyik előjellel sem számol rosszul. A nettó
+ * nulla alá nem megy. `null`: nincs COMPLETED sor, a hívó a kártyás
+ * feltevésnél marad.
+ */
+export function simplePayPayment(
+  lines: readonly SimplePaySettlementLine[],
+  grossAmount: Prisma.Decimal,
+  currency: string,
+): Pick<
+  BillingDocumentListItem,
+  "paymentState" | "paidAmount" | "lastPaymentDate" | "paymentSource"
+> | null {
+  const completed = lines.filter((l) => l.transactionStatus === "COMPLETED");
+  if (completed.length === 0) return null;
+  const refunds = lines.filter((l) => l.transactionStatus === "REFUND");
+  const sum = (rows: readonly SimplePaySettlementLine[]) =>
+    rows.reduce((total, l) => total.add(l.amount.abs()), new Prisma.Decimal(0));
+  const net = Prisma.Decimal.max(sum(completed).sub(sum(refunds)), 0);
+  const decimals = currency.toUpperCase() === "HUF" ? 0 : 2;
+  const lastPaid = completed
+    .map((l) => l.transactionDate)
+    .reduce((a, b) => (a > b ? a : b));
+  return {
+    paymentState: paymentStateOf({
+      paymentsKnown: true,
+      paidAmount: net.toFixed(),
+      grossAmount: grossAmount.toFixed(),
+      currency,
+    }),
+    paidAmount: net.toFixed(decimals),
+    lastPaymentDate: calendarDay(lastPaid),
+    paymentSource: refunds.length > 0 ? "SIMPLEPAY_REFUNDED" : "SIMPLEPAY",
+  };
+}
+
+export function externalPaymentFields(
+  row: {
+    grossAmount: Prisma.Decimal;
+    paidAmount: Prisma.Decimal;
+    lastPaymentDate: Date | null;
+    paymentsKnown: boolean | null;
+    paymentMethod: string | null;
+    paymentMethodUnified: string | null;
+    currency: string;
+    cancelled: boolean;
+  },
+  simplePay: readonly SimplePaySettlementLine[] = [],
+): Pick<
   BillingDocumentListItem,
   "paymentState" | "paidAmount" | "lastPaymentDate" | "paymentSource"
 > {
@@ -310,6 +384,11 @@ export function externalPaymentFields(row: {
   );
   if (missing === "UNPAID") return recorded(true);
   if (missing === "UNKNOWN") return recorded(false);
+  // a kártyás számla tényleges kifizetése, ha a SimplePay elszámolta
+  if (missing === "CARD_AT_ORDER") {
+    const settled = simplePayPayment(simplePay, row.grossAmount, row.currency);
+    if (settled) return settled;
+  }
   return {
     paymentState: "PAID",
     paidAmount: row.grossAmount.toFixed(decimals),
@@ -320,6 +399,7 @@ export function externalPaymentFields(row: {
 
 export function toExternalListItem(
   row: ExternalListRow,
+  simplePay: readonly SimplePaySettlementLine[] = [],
 ): BillingDocumentListItem {
   return {
     id: row.id,
@@ -338,7 +418,7 @@ export function toExternalListItem(
     opens: "EXTERNAL_DETAIL",
     origin: "EXTERNAL",
     externalKindLabel: externalKindLabel(row.kindCode),
-    ...externalPaymentFields(row),
+    ...externalPaymentFields(row, simplePay),
   };
 }
 

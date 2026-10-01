@@ -106,8 +106,18 @@ export interface BillingDocumentListItem {
   paymentSource: BillingPaymentSource | null;
 }
 
+/**
+ * HONNAN TUDJUK A KIFIZETÉST: a Számlázz.hu rögzítette; a vevő a rendeléskor
+ * kártyával vagy készpénzzel fizetett; vagy a SimplePay elszámolás-sora mondja
+ * meg (a rendelésszám szerint), és ha abban visszatérítés is van, azt jelöljük
+ * (acrobot 25979).
+ */
 export type BillingPaymentSource =
-  "SZAMLAZZ" | "CARD_AT_ORDER" | "CASH_AT_ORDER";
+  | "SZAMLAZZ"
+  | "CARD_AT_ORDER"
+  | "CASH_AT_ORDER"
+  | "SIMPLEPAY"
+  | "SIMPLEPAY_REFUNDED";
 
 /** Egy külső bizonylat tétele, ahogy a számlán áll (szamla.xsd `tetel`). */
 export interface BillingExternalDocumentLine {

@@ -10,7 +10,10 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import {
   externalKindLabel,
   externalPaymentFields,
+  simplePayOrderKey,
 } from "./billing-document-list.js";
+import { simplePayLinesByOrder } from "./billing-document-list.repository.js";
+import { UNAS_SHOP_ORDER_PREFIX } from "../integrations/simplepay/simplepay-settlement.repository.js";
 import type { ExternalInvoicePayment } from "./external-szamlazz-invoice.js";
 
 const day = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
@@ -58,7 +61,12 @@ export class ExternalBillingDocumentsController {
         grossAmount: row.grossAmount.toFixed(decimals),
       },
       cancelled: row.cancelled,
-      ...externalPaymentFields(row),
+      ...externalPaymentFields(
+        row,
+        (await simplePayLinesByOrder(this.database, [row.orderNumber])).get(
+          simplePayOrderKey(row.orderNumber, UNAS_SHOP_ORDER_PREFIX) ?? "",
+        ) ?? [],
+      ),
       paymentsKnown: row.paymentsKnown === true,
       payments: (row.payments as unknown as ExternalInvoicePayment[]).map(
         (p) => ({

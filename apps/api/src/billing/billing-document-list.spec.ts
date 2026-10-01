@@ -9,9 +9,11 @@ import {
   mergeListRows,
   ownWhere,
   externalPaymentFields,
+  simplePayOrderKey,
   toExternalListItem,
   toListItem,
   type ExternalListRow,
+  type SimplePaySettlementLine,
   type MergeRow,
 } from "./billing-document-list.js";
 import type { BillingDocumentListRow } from "./billing-document-list.repository.js";
@@ -164,6 +166,7 @@ const external = (
   paymentMethod: "Átutalás",
   // a régi sor: a vetítés még nem olvasta ki (újravetítésig null)
   paymentMethodUnified: null,
+  orderNumber: null,
   cancelled: false,
   ...overrides,
 });
@@ -173,7 +176,10 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
   // eltérne); ha a kimenő számla elem nélkül "nincs adat" lenne, holott van
   // feed-változata (acrobot 25910); ha egy
   // sztornózott számla fizetendőnek látszana; ha a saját bizonylat állapotot kapna.
-  const fields = (overrides: Partial<ExternalListRow> = {}) =>
+  const fields = (
+    overrides: Partial<ExternalListRow> = {},
+    simplePay: SimplePaySettlementLine[] = [],
+  ) =>
     externalPaymentFields(
       external({
         grossAmount: D("105831"),
@@ -182,6 +188,7 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
         paymentsKnown: true,
         ...overrides,
       }),
+      simplePay,
     );
 
   it("paid with the 5 Ft cash rounding, in the shared computation, with its day", () => {
@@ -308,6 +315,115 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
         ["PAID", "CARD_AT_ORDER"],
         ["PAID", "CARD_AT_ORDER"],
       ],
+    );
+  });
+
+  /*
+    A KÁRTYÁS SZÁMLA KIFIZETÉSE A SIMPLEPAY-SORBÓL (acrobot 25964, 25979; élesen
+    COMPLETED 53, REFUND 3). MI PIROSÍT: ha a csak-COMPLETED sor nem adna dátumot
+    és SimplePay-forrást; ha a részleges visszatérítés nem csökkentené az összeget;
+    ha a teljes visszatérítés „Fizetve” maradna; ha egy ismeretlen státusz
+    fizetésnek számítana; ha a REFUND előjele (amit nem ismerünk) elrontaná.
+  */
+  it("a card invoice's payment from the SimplePay lines: completed, partly refunded, fully refunded", () => {
+    const line = (
+      transactionStatus: string,
+      amount: string,
+      day: string,
+    ): SimplePaySettlementLine => ({
+      transactionStatus,
+      amount: D(amount),
+      transactionDate: new Date(`${day}T00:00:00.000Z`),
+    });
+    const card = (lines: SimplePaySettlementLine[]) =>
+      fields(
+        {
+          paymentsKnown: false,
+          paidAmount: D("0"),
+          lastPaymentDate: null,
+          paymentMethod: "Bankkártya",
+          grossAmount: D("29210"),
+        },
+        lines,
+      );
+    assert.deepEqual(card([line("COMPLETED", "29210", "2026-09-28")]), {
+      paymentState: "PAID",
+      paidAmount: "29210",
+      lastPaymentDate: "2026-09-28",
+      paymentSource: "SIMPLEPAY",
+    });
+    // a REFUND előjele ismeretlen: mindkét alakra ugyanaz
+    for (const refund of ["10000", "-10000"])
+      assert.deepEqual(
+        card([
+          line("COMPLETED", "29210", "2026-09-28"),
+          line("REFUND", refund, "2026-09-30"),
+        ]),
+        {
+          paymentState: "PARTIAL",
+          paidAmount: "19210",
+          lastPaymentDate: "2026-09-28",
+          paymentSource: "SIMPLEPAY_REFUNDED",
+        },
+      );
+    assert.deepEqual(
+      card([
+        line("COMPLETED", "29210", "2026-09-28"),
+        line("REFUND", "29210", "2026-09-30"),
+      ]),
+      {
+        paymentState: "UNPAID",
+        paidAmount: "0",
+        lastPaymentDate: "2026-09-28",
+        paymentSource: "SIMPLEPAY_REFUNDED",
+      },
+    );
+    // A KONTROLL: ismeretlen státusz nem fizetés; COMPLETED nélkül a kártyás
+    // feltevés marad (dátum nélkül)
+    assert.deepEqual(card([line("PENDING", "29210", "2026-09-28")]), {
+      paymentState: "PAID",
+      paidAmount: "29210",
+      lastPaymentDate: null,
+      paymentSource: "CARD_AT_ORDER",
+    });
+  });
+
+  it("the SimplePay lines never override what Számlázz.hu recorded, nor a later-payment method", () => {
+    const lines: SimplePaySettlementLine[] = [
+      {
+        transactionStatus: "COMPLETED",
+        amount: D("29210"),
+        transactionDate: new Date("2026-09-28T00:00:00.000Z"),
+      },
+    ];
+    assert.deepEqual(
+      [
+        fields({ paymentsKnown: true, paymentMethod: "Bankkártya" }, lines)
+          .paymentSource,
+        fields(
+          {
+            paymentsKnown: false,
+            paidAmount: D("0"),
+            paymentMethod: "Átutalás",
+          },
+          lines,
+        ).paymentState,
+      ],
+      ["SZAMLAZZ", "UNPAID"],
+    );
+  });
+
+  it("finds the SimplePay key only in our shop's order number", () => {
+    assert.deepEqual(
+      [
+        "47679-665706",
+        "47679-66570",
+        "47679-6657060",
+        "12345-665706",
+        "UNAS-47679-665706",
+        null,
+      ].map((n) => simplePayOrderKey(n, "UNAS-47679-")),
+      ["665706", null, null, null, null, null],
     );
   });
 

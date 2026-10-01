@@ -50,6 +50,9 @@ export const PAYMENT_STATE_TONE: Readonly<
 const AT_ORDER: Record<string, string> = {
   CARD_AT_ORDER: "kártya, a rendeléskor",
   CASH_AT_ORDER: "készpénz, a rendeléskor",
+  // a SimplePay elszámolás-sorából (acrobot 25964, 25979)
+  SIMPLEPAY: "SimplePay",
+  SIMPLEPAY_REFUNDED: "SimplePay, visszatérítve",
 };
 
 export function PaymentBadge({
