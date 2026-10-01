@@ -13,6 +13,7 @@ import type {
   CollectedDocumentInput,
   InvoiceCollectionRepository,
 } from "./invoice-collection.repository.js";
+import { unmatchedRetryDue } from "./invoice-collection.config.js";
 import {
   InvoiceCollectionService,
   type GoogleClientFactory,
@@ -48,21 +49,29 @@ function setup(input: {
   seen?: string[];
   known?: Buffer[];
   failingUser?: string;
+  failingCode?: string;
   nav?: Record<string, string[]>;
   debits?: string[];
+  retryDue?: boolean;
 }) {
   const stored: CollectedDocumentInput[] = [];
   const recorded: string[] = [];
   const fetched: string[] = [];
   const finished: (string | null)[] = [];
+  const failedFlags: boolean[] = [];
+  const seenFlags: boolean[] = [];
+  const gaps: (number | undefined)[] = [];
   const knownShas = new Set(
     (input.known ?? []).map((b) =>
       createHash("sha256").update(b).digest("hex"),
     ),
   );
   const repository = {
-    seen: async (_source: string, ids: readonly string[]) =>
-      new Set(ids.filter((id) => (input.seen ?? []).includes(id))),
+    seen: async (_source: string, ids: readonly string[], retry: boolean) => {
+      seenFlags.push(retry);
+      return new Set(ids.filter((id) => (input.seen ?? []).includes(id)));
+    },
+    unmatchedRetryDue: async () => input.retryDue ?? true,
     hasContent: async (sha: string) => knownShas.has(sha),
     navNumbers: async (base: string) => input.nav?.[base] ?? [],
     debitNarratives: async () => input.debits ?? [],
@@ -77,13 +86,23 @@ function setup(input: {
       return `doc-${stored.length}`;
     },
     startRun: async () => "run-1",
-    finishRun: async (_id: string, _counts: unknown, error: string | null) =>
-      void finished.push(error),
+    finishRun: async (
+      _id: string,
+      _counts: unknown,
+      error: string | null,
+      failed: boolean,
+    ) => {
+      finished.push(error);
+      failedFlags.push(failed);
+    },
   } as unknown as InvoiceCollectionRepository;
-  const google: GoogleClientFactory = () => ({
+  const google: GoogleClientFactory = (settings) => ({
     gmailMessageIds: async (user: string) => {
+      gaps.push(settings.requestGapMs);
       if (user === input.failingUser)
-        throw new GoogleReadonlyError("GOOGLE_AUTH_FAILED");
+        throw new GoogleReadonlyError(
+          input.failingCode ?? "GOOGLE_AUTH_FAILED",
+        );
       return Object.keys(input.messages);
     },
     gmailPdfMessage: async (_user: string, id: string) => {
@@ -116,6 +135,9 @@ function setup(input: {
     recorded,
     fetched,
     finished,
+    failedFlags,
+    seenFlags,
+    gaps,
   };
 }
 
@@ -302,7 +324,7 @@ describe("InvoiceCollectionService", () => {
       "Supplier VAT: 12345678-2-42",
       "Invoice number: X-7701",
     ]);
-    const { collection, stored, finished } = setup({
+    const { collection, stored, finished, failedFlags } = setup({
       environment: env(["GMAIL_FOXPOST", "GMAIL_BALAZS"]),
       messages: { "m-1": [{ fileName: "x.pdf", buffer: invoice }] },
       failingUser: "info@acropora.hu",
@@ -310,9 +332,49 @@ describe("InvoiceCollectionService", () => {
     });
     await collection.run("SCHEDULED");
     assert.deepEqual(
-      [stored.map((d) => d.source), finished],
-      [["BALAZS_MAIL"], ["INFO_MAIL:GOOGLE_AUTH_FAILED"]],
+      [stored.map((d) => d.source), finished, failedFlags],
+      [["BALAZS_MAIL"], ["INFO_MAIL:GOOGLE_AUTH_FAILED"], [true]],
     );
+  });
+
+  /*
+    A RATE LIMIT NEM HIBA (acrobot 25605, éles 2026-10-01: a futás FAILED lett,
+    holott csak a Gmail kvótája fogyott el). MI PIROSÍT: ha a rate limit a
+    futást FAILED-re vinné; ha a megállt forrás a többit megállítaná; ha a kódja
+    nem látszana a futáson; ha a letöltés szünet nélkül menne; ha az UNMATCHED
+    újraolvasás döntése nem jutna el a látott-szűrőig.
+  */
+  it("a rate-limited source pauses: the run is not failed, the other source goes on", async () => {
+    const invoice = await pdf([
+      "Invoice",
+      "Supplier VAT: 12345678-2-42",
+      "Invoice number: X-7701",
+    ]);
+    const { collection, stored, finished, failedFlags, gaps } = setup({
+      environment: env(["GMAIL_FOXPOST", "GMAIL_BALAZS"]),
+      messages: { "m-1": [{ fileName: "x.pdf", buffer: invoice }] },
+      failingUser: "info@acropora.hu",
+      failingCode: "GOOGLE_RATE_LIMITED",
+      nav: { "12345678": ["X-7701"] },
+    });
+    await collection.run("SCHEDULED");
+    assert.deepEqual(
+      [stored.map((d) => d.source), finished, failedFlags],
+      [["BALAZS_MAIL"], ["INFO_MAIL:GOOGLE_RATE_LIMITED"], [false]],
+    );
+    assert.deepEqual(gaps, [250, 250]);
+  });
+
+  it("asks the seen-filter to re-read UNMATCHED only when it is due", async () => {
+    for (const retryDue of [true, false]) {
+      const { collection, seenFlags } = setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: {},
+        retryDue,
+      });
+      await collection.run("SCHEDULED");
+      assert.deepEqual(seenFlags, [retryDue]);
+    }
   });
 
   it("does not run while switched off", async () => {
@@ -324,5 +386,32 @@ describe("InvoiceCollectionService", () => {
       messages: {},
     });
     await assert.rejects(collection.run("MANUAL"), /ki van kapcsolva/);
+  });
+});
+
+/*
+  AZ UNMATCHED ÚJRAOLVASÁS NAPONTA EGYSZER, VAGY ÚJ TERHELÉSRE (acrobot 25605).
+  MI PIROSÍT: ha óránként újraolvasna; ha egy új terhelés vagy egy új nap nem
+  indítaná el; ha a legelső futás nem olvasná újra.
+*/
+describe("unmatchedRetryDue", () => {
+  const at = (iso: string) => new Date(iso);
+  it("the first complete run of a Budapest day re-reads", () => {
+    // 22:30 UTC = 00:30 Budapest, already the next day
+    assert.equal(
+      unmatchedRetryDue(
+        at("2026-10-01T21:00:00Z"),
+        0,
+        at("2026-10-01T22:30:00Z"),
+      ),
+      true,
+    );
+    assert.equal(unmatchedRetryDue(null, 0, at("2026-10-01T10:00:00Z")), true);
+  });
+  it("later the same day only after a new debit", () => {
+    const last = at("2026-10-01T08:00:00Z");
+    const now = at("2026-10-01T09:00:00Z");
+    assert.equal(unmatchedRetryDue(last, 0, now), false);
+    assert.equal(unmatchedRetryDue(last, 1, now), true);
   });
 });
