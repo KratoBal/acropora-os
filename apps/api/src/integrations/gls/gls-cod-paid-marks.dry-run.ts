@@ -3,6 +3,7 @@ import { Prisma, prisma } from "@acropora/database";
 import {
   decideGlsTransfer,
   type GlsCodReportInput,
+  type GlsCompensationInput,
   type GlsTransferDecision,
   type OutgoingInvoiceInput,
 } from "./gls-cod-paid-marks.js";
@@ -43,7 +44,7 @@ const day = (value: Date) => value.toISOString().slice(0, 10);
 export async function loadGlsTransfers(from: string): Promise<
   {
     report: GlsCodReportInput;
-    compensation: { cod: Prisma.Decimal; transferred: Prisma.Decimal } | null;
+    compensation: GlsCompensationInput | null;
     credits: { id: string; amount: Prisma.Decimal }[];
     invoices: Map<string, OutgoingInvoiceInput>;
   }[]
@@ -101,7 +102,7 @@ export async function loadGlsTransfers(from: string): Promise<
     const letter = await prisma.glsCompensationLetter.findFirst({
       where: { compensationDate: report.transferDate },
       orderBy: { createdAt: "desc" },
-      select: { cod: true, transferred: true },
+      select: { cod: true, transferred: true, references: true },
     });
     const credits = await prisma.bankTransaction.findMany({
       where: {
@@ -134,6 +135,8 @@ const REFUSAL_TEXT: Record<string, string> = {
   REPORT_NEEDS_REVIEW: "a részletező egy sora még ellenőrzésre vár",
   COMPENSATION_MISMATCH:
     "a kompenzációs levél beszedettje nem a részletező összege",
+  COMPENSATION_NOT_GLS_INVOICE:
+    "a kompenzációs levél beszámítása nem GLS-számlára szól",
   NO_CREDIT: "nincs ilyen összegű GLS-jóváírás aznap",
   AMBIGUOUS_CREDIT: "több ilyen összegű GLS-jóváírás aznap",
 };

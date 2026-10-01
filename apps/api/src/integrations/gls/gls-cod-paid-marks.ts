@@ -15,7 +15,12 @@ import { paymentStateOf } from "@acropora/types";
  *   1. the COD report is complete: every line resolved to our invoices;
  *   2. if a compensation letter exists for the day, its COD equals the
  *      report's total, and the transferred sum is the letter's; otherwise the
- *      transferred sum is the report's total;
+ *      transferred sum is the report's total. What the letter set off must be
+ *      GLS INVOICES (acrobot 25971): then the difference paid our debt to
+ *      GLS, and the buyer's COD was collected in full (09-03: 8 013 Ft set off
+ *      against HU00912382). A set-off against anything else (the letter may
+ *      name a parcel) can be the buyer's money taken back, so the transfer is
+ *      refused, not guessed;
  *   3. exactly one GLS bank credit that day, of exactly that sum.
  *
  * Per invoice of a markable transfer, the mark is the invoice's GROSS, dated
@@ -41,7 +46,12 @@ export interface GlsCodReportInput {
 export interface GlsCompensationInput {
   readonly cod: Prisma.Decimal;
   readonly transferred: Prisma.Decimal;
+  /** What was set off, in the letter's order: GLS invoice or parcel numbers. */
+  readonly references: readonly string[];
 }
+
+/** A GLS invoice number, as the compensation letter names it (`HU00912382`). */
+const GLS_INVOICE = /^HU\d{8}$/;
 
 /** What we know of one of our invoices (Számlázz.hu's feed or its Agent). */
 export interface OutgoingInvoiceInput {
@@ -60,6 +70,7 @@ export interface OutgoingInvoiceInput {
 export type GlsTransferRefusal =
   | "REPORT_NEEDS_REVIEW"
   | "COMPENSATION_MISMATCH"
+  | "COMPENSATION_NOT_GLS_INVOICE"
   | "NO_CREDIT"
   | "AMBIGUOUS_CREDIT";
 
@@ -125,6 +136,13 @@ export function decideGlsTransfer(input: {
     return refuse("REPORT_NEEDS_REVIEW");
   if (compensation && !compensation.cod.equals(report.total))
     return refuse("COMPENSATION_MISMATCH");
+  if (
+    compensation &&
+    !compensation.transferred.equals(compensation.cod) &&
+    (compensation.references.length === 0 ||
+      !compensation.references.every((r) => GLS_INVOICE.test(r)))
+  )
+    return refuse("COMPENSATION_NOT_GLS_INVOICE");
   const credits = input.credits.filter((credit) =>
     credit.amount.equals(transferred),
   );
