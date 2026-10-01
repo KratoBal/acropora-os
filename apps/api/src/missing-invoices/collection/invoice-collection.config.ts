@@ -21,6 +21,9 @@
  *                                     kettő nem mutathat máshová
  *   INVOICE_COLLECTION_DAYS           hány napra visszamenőleg (7..400, alap 150)
  *   INVOICE_COLLECTION_INTERVAL_MINUTES  alap 60 (5..1440)
+ *   JEV_INVOICE_COLLECTION_THRESHOLD  a Jev „bejövő számla” besorolásának küszöbe
+ *                                     a javaslathoz (0,5..1, alap 0,8; lásd
+ *                                     `suggestionThreshold`)
  */
 import type { GoogleReadonlyCredentials } from "../../integrations/google/google-readonly.client.js";
 import {
@@ -147,6 +150,28 @@ export function invoiceCollectionIntervalMinutes(
  * szűrés a tartalmon megy (számlának látszik-e), nem a feladón: egy új
  * szállító így nem kíván beállítást.
  */
+/**
+ * A JEV JAVASLATÁNAK KÜSZÖBE (levél-válogatás terv, 4. szelet; acrobot 25803).
+ * Ennél kisebb bizonyosságú „bejövő számla” besorolás nem lesz javaslat: a fájl
+ * UNMATCHED marad, mint eddig.
+ *
+ * AZ ALAP 0,8, ÉS EZ MÉRT, NEM VÁLASZTOTT: nautilus DEV-értékelésén (538 fájl,
+ * barracuda vak címkéivel) az UNMATCHED fájlok „bejövő számla” besorolása 0,8-tól
+ * 36-ból 36 valódi számla, 0,7-től 41-ből 40. A végleges értéket a HOLDOUT egyszeri
+ * futása adja; addig ez. A tartomány alja azért 0,5, mert alatta a besorolás
+ * gyakorlatilag találgatás, és egy hamis számla a jelöltek közt egy terheléshez
+ * hamis eredetit adhat (a jóváhagyás ezt fogja meg, de nem erre való).
+ */
+export function suggestionThreshold(
+  environment: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = environment.JEV_INVOICE_COLLECTION_THRESHOLD?.trim();
+  const value = Number(raw?.replace(",", "."));
+  return raw && Number.isFinite(value) && value >= 0.5 && value <= 1
+    ? value
+    : 0.8;
+}
+
 export function invoiceCollectionMailQuery(days: number): string {
   return `has:attachment filename:pdf newer_than:${days}d`;
 }

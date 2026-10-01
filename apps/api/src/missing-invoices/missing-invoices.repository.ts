@@ -278,6 +278,10 @@ export class MissingInvoicesRepository {
         // a postafiók olvasott számlái, és MINDEN feltöltés: azt kifejezetten
         // egy terheléshez csatolták, tehát akkor is jelölt, ha nem olvasható
         where: {
+          // a Jev JAVASLATA nem jelölt, amíg ember jóvá nem hagyta (acrobot
+          // 25803, Balázs keretdöntése: a Jev csak javasol). Az olvasott-ág
+          // (READ + kind) nélküle is beengedné, ezért itt, minden ág előtt.
+          reviewState: null,
           OR: [
             {
               status: { in: ["READ", "LATE_CORRECTION"] },

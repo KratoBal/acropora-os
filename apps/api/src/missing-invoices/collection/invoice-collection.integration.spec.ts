@@ -7,6 +7,8 @@ import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
+import { MissingInvoicesRepository } from "../missing-invoices.repository.js";
+import { InvoiceCollectionSuggestionsRepository } from "./invoice-collection-suggestions.repository.js";
 import { InvoiceCollectionRepository } from "./invoice-collection.repository.js";
 
 /**
@@ -34,6 +36,9 @@ async function removeLeftovers() {
   });
   await prisma.invoiceCollectionRun.deleteMany({
     where: { errorCode: "COLLECT_IT" },
+  });
+  await prisma.decisionRun.deleteMany({
+    where: { policyKey: "collect-it-letter" },
   });
 }
 
@@ -226,6 +231,7 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
         storedCount: 0,
         notInvoiceCount: 0,
         unmatchedCount: 0,
+        suggestedCount: 0,
         duplicateCount: 0,
         failedCount: 0,
       },
@@ -240,11 +246,122 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
         storedCount: 0,
         notInvoiceCount: 0,
         unmatchedCount: 0,
+        suggestedCount: 0,
         duplicateCount: 0,
         failedCount: 0,
       },
       "COLLECT_IT",
       true,
     );
+  });
+
+  /**
+   * A JEV JAVASLATA ÉS A JÓVÁHAGYÁS (levél-válogatás terv, 4. szelet; acrobot
+   * 25803), a valódi adatbázison. MI PIROSÍT: ha a javasolt dokumentum jelölt
+   * lenne jóváhagyás előtt; ha a futás nem lenne SHOWN, illetve nem oldódna fel
+   * (ACCEPTED, OVERRIDDEN); ha az elvetett dokumentum tartalma megmaradna; ha egy
+   * már eldöntött javaslatról másodszor is lehetne dönteni.
+   */
+  it("a suggestion is not a candidate until accepted; accepted it is, rejected it is gone, and its run is resolved", async () => {
+    const run = (id: string) =>
+      prisma.decisionRun.create({
+        data: {
+          policyKey: "collect-it-letter",
+          policyVersion: 1,
+          projectionHash: id,
+          optionsHash: "o",
+          requestedModel: "m",
+          exposure: "HIDDEN",
+          status: "OK",
+          entityType: "InvoiceCollectionFile",
+          entityId: `INFO_MAIL:${id}:x.pdf`,
+        },
+        select: { id: true },
+      });
+    const runA = await run("collect-it-sug-a");
+    const runB = await run("collect-it-sug-b");
+    const suggest = (externalId: string, decisionRunId: string) =>
+      repository.store({
+        source: "INFO_MAIL",
+        externalId,
+        fileName: "WR26-0220.pdf",
+        sender: "invoice@waterro.lv",
+        subject: "Invoice",
+        receivedAt: new Date("2026-08-06T10:00:00Z"),
+        content: Buffer.from(`%PDF-1.4 ${externalId}`),
+        sha256: `${externalId}-sha`,
+        read: false,
+        kind: "INVOICE",
+        importResult: null,
+        textReading: { invoiceNumber: "WR26-0220", gross: "1063.00" },
+        payee: "COMPANY",
+        suggestion: { confidence: 0.9, decisionRunId },
+      });
+    const docA = await suggest("collect-it-sug-a", runA.id);
+    const docB = await suggest("collect-it-sug-b", runB.id);
+
+    const candidates = async () =>
+      (
+        await new MissingInvoicesRepository().candidates(
+          "2026-08-01",
+          "2026-08-31",
+        )
+      ).flatMap((d) => [d.id, ...(d.aliasIds ?? [])]);
+    const exposure = async (id: string) =>
+      (await prisma.decisionRun.findUniqueOrThrow({
+        where: { id },
+        select: { exposure: true, resolution: true, resolvedValue: true },
+      })) as Record<string, unknown>;
+
+    // javaslat: nem jelölt, a futás SHOWN, a sor SUGGESTED, a lista mutatja
+    const before = await candidates();
+    assert.equal(before.includes(docA), false);
+    assert.equal(before.includes(docB), false);
+    assert.deepEqual(await exposure(runA.id), {
+      exposure: "SHOWN",
+      resolution: null,
+      resolvedValue: null,
+    });
+    const suggestions = new InvoiceCollectionSuggestionsRepository();
+    assert.deepEqual(
+      (await suggestions.list())
+        .filter((row) => row.id === docA || row.id === docB)
+        .map((row) => row.suggestionConfidence?.toString())
+        .sort(),
+      ["0.9", "0.9"],
+    );
+
+    // elfogadva: jelölt, a sor STORED, a futás ACCEPTED; másodszor nem dönthető
+    assert.equal(await suggestions.accept(docA, "user-it"), true);
+    assert.equal(await suggestions.accept(docA, "user-it"), false);
+    assert.equal((await candidates()).includes(docA), true);
+    const itemA = await prisma.invoiceCollectionItem.findFirstOrThrow({
+      where: { externalId: "collect-it-sug-a" },
+      select: { verdict: true, documentId: true },
+    });
+    assert.deepEqual(itemA, { verdict: "STORED", documentId: docA });
+    assert.deepEqual(await exposure(runA.id), {
+      exposure: "SHOWN",
+      resolution: "ACCEPTED",
+      resolvedValue: "BEJOVO_SZAMLA",
+    });
+
+    // elvetve: a dokumentum törlődik, a sor NOT_INVOICE, a futás OVERRIDDEN
+    assert.equal(await suggestions.reject(docB, "user-it"), true);
+    assert.equal(await suggestions.reject(docB, "user-it"), false);
+    assert.equal(
+      await prisma.incomingSupplierDocument.count({ where: { id: docB } }),
+      0,
+    );
+    const itemB = await prisma.invoiceCollectionItem.findFirstOrThrow({
+      where: { externalId: "collect-it-sug-b" },
+      select: { verdict: true, documentId: true },
+    });
+    assert.deepEqual(itemB, { verdict: "NOT_INVOICE", documentId: null });
+    assert.deepEqual(await exposure(runB.id), {
+      exposure: "SHOWN",
+      resolution: "OVERRIDDEN",
+      resolvedValue: "NOT_INVOICE",
+    });
   });
 });

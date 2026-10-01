@@ -321,3 +321,32 @@ export interface MissingInvoiceJevSuggestion {
   /** A Jev bizonyossága (0..1), csak látható javaslatnál. */
   confidence: number | null;
 }
+
+/**
+ * A JEV JAVASLATA A BEGYŰJTÉSBŐL (levél-válogatás terv, 4. szelet; acrobot
+ * 25803): egy illesztő nélküli levél PDF-je, amit a Jev bejövő számlának látott.
+ * Amíg ember nem fogadja el, NEM jelölt a Hiányzó számlák között.
+ */
+export interface InvoiceCollectionSuggestion {
+  documentId: string;
+  fileName: string;
+  sender: string | null;
+  subject: string | null;
+  receivedAt: string | null;
+  /** A Jev bizonyossága, 0..1, két tizedesre kerekítve. */
+  confidence: number | null;
+  decisionRunId: string | null;
+  /** Az általános olvasó eredménye, ha volt (számlaszám, szállító, bruttó). */
+  invoiceNumber: string | null;
+  supplierName: string | null;
+  gross: string | null;
+  currency: string | null;
+  createdAt: string;
+}
+
+export interface InvoiceCollectionSuggestionsResponse {
+  items: InvoiceCollectionSuggestion[];
+}
+
+/** A javaslat sorsa: elfogadva jelölt lesz, elvetve a dokumentum törlődik. */
+export type InvoiceCollectionSuggestionDecision = "ACCEPT" | "REJECT";

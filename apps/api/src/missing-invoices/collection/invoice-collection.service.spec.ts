@@ -18,6 +18,7 @@ import {
   unmatchedRetryDue,
 } from "./invoice-collection.config.js";
 import type { CardDebit } from "./invoice-text.js";
+import type { LetterClassJevService } from "./letter-class-jev.service.js";
 import {
   InvoiceCollectionService,
   type GoogleClientFactory,
@@ -61,7 +62,14 @@ function setup(input: {
   retryDue?: boolean;
   /** a fájlok korábbi ítélete, a száraz újraértékelés ehhez méri */
   before?: string | null;
+  /** a Jev levél-besorolója (4. szelet); hiányában nincs javaslat */
+  classify?: (letter: {
+    fileName: string;
+    source: string;
+    externalId: string;
+  }) => Promise<unknown>;
 }) {
+  const classified: string[] = [];
   const stored: CollectedDocumentInput[] = [];
   const recorded: string[] = [];
   const fetched: string[] = [];
@@ -145,7 +153,20 @@ function setup(input: {
       reader,
       google,
       input.environment,
+      input.classify
+        ? ({
+            classify: async (letter: {
+              fileName: string;
+              source: string;
+              externalId: string;
+            }) => {
+              classified.push(`${letter.externalId}/${letter.fileName}`);
+              return input.classify!(letter);
+            },
+          } as unknown as LetterClassJevService)
+        : null,
     ),
+    classified,
     stored,
     recorded,
     started,
@@ -579,6 +600,115 @@ describe("InvoiceCollectionService", () => {
     });
     await collection.reevaluate(true);
     assert.deepEqual([started, seenFlags], [["run-1"], [true]]);
+  });
+
+  /**
+   * A JEV JAVASLATA (levél-válogatás terv, 4. szelet; acrobot 25803): ami
+   * számlának látszik, de semmi nem köti, azt a Jev besorolja, és a küszöb
+   * feletti „bejövő számla” SUGGESTED-ként tárolódik (nem jelölt). MI PIROSÍT:
+   * ha a küszöb alatti, a más osztályú, a hibázó vagy a hiányzó besorolás is
+   * javaslat lenne; ha a javaslat nem a futás azonosítójával tárolódna.
+   */
+  it("a Jev incoming-invoice class above the threshold is stored as a suggestion, anything else stays UNMATCHED", async () => {
+    const unmatched = await pdf([
+      "INVOICE",
+      "SIA Waterro",
+      "Invoice no.: WR26-0220",
+      "Total 1063.00 EUR",
+    ]);
+    const run = async (
+      classify: ((letter: unknown) => Promise<unknown>) | undefined,
+      environment = env(["GMAIL_FOXPOST"]),
+    ) => {
+      const s = setup({
+        environment,
+        messages: { "m-1": [{ fileName: "WR26-0220.pdf", buffer: unmatched }] },
+        classify,
+      });
+      await s.collection.run("MANUAL");
+      return s;
+    };
+    const suggested = await run(async () => ({
+      kind: "BEJOVO_SZAMLA",
+      confidence: 0.9,
+      decisionRunId: "run-jev-1",
+    }));
+    assert.deepEqual(
+      [
+        suggested.stored.map((d) => [d.fileName, d.suggestion, d.read]),
+        suggested.recorded,
+        suggested.classified,
+      ],
+      [
+        [
+          [
+            "WR26-0220.pdf",
+            { confidence: 0.9, decisionRunId: "run-jev-1" },
+            false,
+          ],
+        ],
+        [],
+        ["m-1/WR26-0220.pdf"],
+      ],
+    );
+    for (const classify of [
+      async () => ({
+        kind: "BEJOVO_SZAMLA",
+        confidence: 0.79,
+        decisionRunId: "r",
+      }),
+      async () => ({ kind: "NYUGTA", confidence: 0.99, decisionRunId: "r" }),
+      async () => null,
+      async () => {
+        throw new Error("hálózat");
+      },
+      undefined,
+    ]) {
+      const s = await run(classify);
+      assert.deepEqual(
+        [s.stored, s.recorded],
+        [[], ["m-1/WR26-0220.pdf:UNMATCHED"]],
+      );
+    }
+    // a küszöb config: 0,95-ös küszöb mellett a 0,9 nem javaslat
+    const strict = await run(
+      async () => ({
+        kind: "BEJOVO_SZAMLA",
+        confidence: 0.9,
+        decisionRunId: "r",
+      }),
+      env(["GMAIL_FOXPOST"], { JEV_INVOICE_COLLECTION_THRESHOLD: "0,95" }),
+    );
+    assert.deepEqual(strict.recorded, ["m-1/WR26-0220.pdf:UNMATCHED"]);
+  });
+
+  /**
+   * A SZÁRAZ ÚJRAÉRTÉKELÉS NEM HÍV (nautilus kikötése): a hívás DecisionRun-t
+   * ír, a száraz út pedig semmit nem írhat.
+   */
+  it("the dry re-evaluation does not call the classifier", async () => {
+    const unmatched = await pdf([
+      "INVOICE",
+      "SIA Waterro",
+      "Invoice no.: WR26-0220",
+      "Total 1063.00 EUR",
+    ]);
+    const s = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: { "m-1": [{ fileName: "WR26-0220.pdf", buffer: unmatched }] },
+      classify: async () => ({
+        kind: "BEJOVO_SZAMLA",
+        confidence: 0.99,
+        decisionRunId: "r",
+      }),
+      before: "UNMATCHED",
+    });
+    const { changes } = await s.collection.reevaluate(false);
+    assert.deepEqual(s.classified, []);
+    assert.deepEqual(
+      changes.map((c) => [c.fileName, c.after]),
+      [["WR26-0220.pdf", "UNMATCHED"]],
+    );
   });
 
   it("does not run while switched off", async () => {

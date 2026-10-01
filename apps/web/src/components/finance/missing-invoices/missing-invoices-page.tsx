@@ -115,16 +115,26 @@ export function MissingInvoicesPage() {
         onOpen={(month) => router.push(`${MISSING_INVOICES_PATH}/${month}`)}
         company={company}
         actions={
-          canManage ? (
+          <>
+            {/* a Jev javaslatai a begyűjtésből (levél-válogatás, 4. szelet) */}
             <PilotButton
               variant="secondary"
               size="regular"
-              disabled={uploading}
-              onClick={() => statementInput.current?.click()}
+              onClick={() => router.push(`${MISSING_INVOICES_PATH}/javaslatok`)}
             >
-              {uploading ? "Feltöltés…" : "Kivonat feltöltése"}
+              Javasolt számlák
             </PilotButton>
-          ) : null
+            {canManage ? (
+              <PilotButton
+                variant="secondary"
+                size="regular"
+                disabled={uploading}
+                onClick={() => statementInput.current?.click()}
+              >
+                {uploading ? "Feltöltés…" : "Kivonat feltöltése"}
+              </PilotButton>
+            ) : null}
+          </>
         }
         notice={
           <>
