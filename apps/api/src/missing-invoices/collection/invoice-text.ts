@@ -231,7 +231,7 @@ export function looksLikeInvoice(text: string): boolean {
  * állapota), ezért a kind ennek alapján PROFORMA, ha illesztő nem olvasta.
  */
 const PROFORMA_WORD =
-  /(?<!\p{L})(díjbekérő|dijbekero|előlegbekérő|proforma|pro forma|pro-forma)(?!\p{L})/iu;
+  /(?<!\p{L})(díjbekérő|dijbekero|előlegbekérő|proforma|pro forma|pro-forma|facture provisoire)(?!\p{L})/iu;
 
 /**
  * FIZETÉSI EMLÉKEZTETŐ, FELSZÓLÍTÁS (acrobot 25664 és 25668, Balázs a De
@@ -253,6 +253,44 @@ const REMINDER_TITLE_LINES = 10;
 /** A fájlnév fizetési emlékeztetőé (a már tárolt dokumentumoknál csak ez van kéznél). */
 export function reminderFileName(fileName: string | null | undefined): boolean {
   return REMINDER_WORD.test((fileName ?? "").replace(/[_.-]+/g, " "));
+}
+
+/**
+ * SZERZŐDÉS, AJÁNLAT, VÁMNYILATKOZAT (acrobot 25784, barracuda vak címkéi a Jev
+ * levél-válogatás DEV-eltérésein): a gyűjtő ezeket számlaként tárolta, mert a
+ * szövegükben a partner egy NAV-számlaszáma vagy egy banki hivatkozás is
+ * állhat. Nem számlák, tehát a fizetéshez sem lehetnek jelöltek.
+ *
+ * A fájlnév, vagy a CÍM: az első 10 sor egyike, ami csak a megnevezésből és
+ * esetleg egy azonosítóból áll („ADÁSVÉTELI SZERZŐDÉS”, „Árajánlat |
+ * AJ26-U60-01170”). Egy számla „Ajánlat száma: …” sora nem cím, és nem zár ki.
+ * Mérve 2026-10-01 a 435 tárolt dokumentumon: 10-et zár ki, mind a 10 szerződés,
+ * ajánlat vagy vámnyilatkozat (4 vakon címkézve, 6 szövegből ellenőrizve),
+ * számlát egyet sem.
+ */
+const OTHER_DOCUMENT_KIND = String.raw`(?:adásvételi\s+|vállalkozási\s+|bérleti\s+)?(?:keret)?szerződés|megállapodás|árajánlat|ajánlat|quotation|angebot|devis|árunyilatkozat|vámáru-nyilatkozat`;
+const OTHER_DOCUMENT_TITLE = new RegExp(
+  String.raw`^[\s|:\-–]*(?:${OTHER_DOCUMENT_KIND})(?:[\s|:#\-–]+[\p{Lu}\d][\p{L}\d/._-]*\d[\p{L}\d/._-]*)?[\s|:\-–]*$`,
+  "iu",
+);
+const OTHER_DOCUMENT_NAME = /(?<!\p{L})(szerződés|szerzodes|árajánlat|arajanlat|ajánlat|ajanlat|árunyilatkozat|arunyilatkozat|quotation|angebot)/iu;
+
+/** A fájlnév szerződésé, ajánlaté vagy vámnyilatkozaté (a tárolt dokumentumnál csak ez van kéznél). */
+export function otherDocumentFileName(fileName: string | null | undefined): boolean {
+  // a levelek fájlneve gyakran NFD alakú (ő = o + ékezet), a minta NFC
+  return OTHER_DOCUMENT_NAME.test((fileName ?? "").normalize("NFC").replace(/[_.]+/g, " "));
+}
+
+export function looksLikeOtherDocument(
+  lines: readonly string[],
+  fileName: string | null | undefined,
+): boolean {
+  return (
+    otherDocumentFileName(fileName) ||
+    lines
+      .slice(0, REMINDER_TITLE_LINES)
+      .some((line) => OTHER_DOCUMENT_TITLE.test(line.normalize("NFC")))
+  );
 }
 
 export function looksLikeReminder(
