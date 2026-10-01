@@ -18,7 +18,7 @@ import { ACROPORA_COMPANY } from "@acropora/types";
 export interface InvoiceTextReading {
   invoiceNumber: string | null;
   /** Honnan jött a szám; a mérés és a hibakeresés ebből látja, melyik szabály vitte. */
-  numberFrom: "NAV" | "LABEL" | "FILE_NAME" | null;
+  numberFrom: "NAV" | "BANK" | "LABEL" | "FILE_NAME" | null;
   /** A szállító adószáma: az első, ami nem a miénk (magyar vagy EU-s alak). */
   supplierTaxNumber: string | null;
 }
@@ -112,6 +112,40 @@ export const compactNumber = (value: string): string =>
 
 const taxBase = (tax: string): string =>
   tax.replace(/^HU/, "").replace(/\D/g, "").slice(0, 8);
+
+/**
+ * A SZÁMLA SZÁMA EGY BANKI TERHELÉS KÖZLEMÉNYÉBEN. A jelöltek: amit az olvasó
+ * számnak talált, és a fájlnév meg a tárgy szavai, ha a PDF szövegében is
+ * állnak. Legalább 5 karakter és benne számjegy, mint a párosító 1. szabályánál.
+ *
+ * A külföldi szállító számlája nincs a NAV-ban, tehát a NAV-kulcs soha nem
+ * viszi; a közlemény viszont sokszor szó szerint megnevezi (mérve 2026-10-01,
+ * éles: Amblard, „485,40 EUR F2602896 ...”, a levélben F2602896.PDF).
+ */
+export function numberInNarratives(
+  lines: readonly string[],
+  reading: InvoiceTextReading,
+  hints: Pick<InvoiceTextHints, "fileName" | "subject">,
+  narratives: readonly string[],
+): string | null {
+  const compactText = compactNumber(lines.join("\n"));
+  const fromName = `${hints.fileName ?? ""} ${hints.subject ?? ""}`
+    .split(/[^A-Za-z0-9/_-]+/)
+    .map((token) => token.replace(/^[-_/]+|[-_/]+$/g, ""))
+    .filter((token) => compactText.includes(compactNumber(token)));
+  const compactNarratives = narratives.map(compactNumber);
+  return (
+    [reading.invoiceNumber, ...fromName]
+      .filter((n): n is string => n !== null)
+      .filter((n) => compactNumber(n).length >= 5 && /\d/.test(n))
+      .filter((n) => !BANK_ACCOUNT.test(n))
+      .find((n) =>
+        compactNarratives.some((narrative) =>
+          narrative.includes(compactNumber(n)),
+        ),
+      ) ?? null
+  );
+}
 
 export function looksLikeInvoice(text: string): boolean {
   return INVOICE_WORD.test(text);
