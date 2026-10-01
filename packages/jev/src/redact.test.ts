@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { knownEntries, type KnownRow } from "./known-builder.js";
 import {
   buildPairRequest,
+  buildPairRequestDroppingBlocked,
   PairBlocked,
   type PairCandidate,
   type PairPayment,
@@ -226,6 +227,87 @@ describe("a parositas kerese: ugyanaz a torzs, mint a merese", () => {
         } else assert.deepEqual(got, want, item.id);
       });
     });
+});
+
+describe("a jeloltet kiejto keres (acrobot 25560)", () => {
+  it("ahol nincs mit kiejteni, bajtra a mert keres; ahol a lekerdezes all meg, ott is megall", () => {
+    for (const known of [null, knownTable(V.known.entries)]) {
+      const r = new Redactor({ commonWords: common, known });
+      for (const item of V.pairing.items) {
+        let mert: unknown;
+        try {
+          mert = buildPairRequest(r, item, item.candidates);
+        } catch (e) {
+          mert = (e as PairBlocked).outcome;
+        }
+        let uj: unknown;
+        try {
+          const { candidateIndexes, dropped, ...q } =
+            buildPairRequestDroppingBlocked(r, item, item.candidates);
+          assert.deepEqual(dropped, [], item.id);
+          assert.deepEqual(
+            candidateIndexes,
+            item.candidates.map((_, i) => i),
+            item.id,
+          );
+          uj = q;
+        } catch (e) {
+          uj = (e as PairBlocked).outcome;
+        }
+        assert.deepEqual(uj, mert, item.id);
+      }
+    }
+  });
+
+  it("a zavaro jeloltet ejti ki, a tobbi atszamozva megy; ha egy sem marad, nincs keres", () => {
+    // a known-lista a HANNA szallitobol egy "HANNA" aliast is kepez, jogi forma nelkul
+    const known = knownTable(
+      knownEntries([["ORG", "HANNA Instruments Service Kft."]], common),
+    );
+    const r = new Redactor({ commonWords: common, known });
+    const fizetes = {
+      date: "2026-05-10",
+      amount: "146236",
+      currency: "HUF",
+      original: "",
+      partner: "Euroleasing Zrt.",
+      narrative: "70862025177054",
+      type: "ÁTUTALÁS",
+    };
+    const hanna = {
+      number: "26/000878",
+      date: "2026-05-02",
+      gross: "146000",
+      currency: "HUF",
+      supplier: "HANNA Instruments Service Kft.",
+    };
+    const helyes = {
+      number: "2026/01039632",
+      date: "2026-05-01",
+      gross: "145854",
+      currency: "HUF",
+      supplier: "Euroleasing Zrt.",
+    };
+    assert.throws(
+      () => buildPairRequest(r, fizetes, [hanna, helyes]),
+      PairBlocked,
+    );
+    const q = buildPairRequestDroppingBlocked(r, fizetes, [hanna, helyes]);
+    assert.deepEqual(q.candidateIndexes, [1]);
+    assert.deepEqual(
+      q.dropped.map((d) => [d.index, d.outcome]),
+      [[0, "blocked_runtime_guard"]],
+    );
+    assert.deepEqual(Object.keys(q.state), ["query", "c0"]);
+    assert.deepEqual(Object.keys(q.criteria), ["c0", "NONE"]);
+    assert.match(q.state.c0!, /Euroleasing Zrt\./);
+    assert.ok(!JSON.stringify(q).includes("HANNA"));
+    assert.throws(
+      () => buildPairRequestDroppingBlocked(r, fizetes, [hanna]),
+      (e: unknown) =>
+        e instanceof PairBlocked && e.detail === "no candidate left",
+    );
+  });
 });
 
 describe("pyre: a Python-jelek forditasa", () => {

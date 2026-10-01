@@ -101,12 +101,14 @@ export {
   PAIR_POLICY_KEY,
   PairBlocked,
   buildPairRequest,
+  buildPairRequestDroppingBlocked,
   candidateText,
   isPrivatePartner,
   paymentText,
   type PairCandidate,
   type PairPayment,
   type PairRequest,
+  type PairRequestWithDrops,
 } from "./pairing.js";
 export {
   KNOWN_SOURCE_FIELDS,

@@ -7,7 +7,7 @@ import {
   PairBlocked,
   Redactor,
   REDACTION_VERSION,
-  buildPairRequest,
+  buildPairRequestDroppingBlocked,
   cph1,
   cph1Canonical,
   jevChoice,
@@ -206,7 +206,11 @@ export class MissingInvoiceJevService {
 
     let request;
     try {
-      request = buildPairRequest(redactor, input.payment, fields);
+      request = buildPairRequestDroppingBlocked(
+        redactor,
+        input.payment,
+        fields,
+      );
     } catch (error) {
       if (!(error instanceof PairBlocked)) throw error;
       /* NEM MENT KI SEMMI. A futas a merleg miatt rogzul, vetulet nelkul. */
@@ -233,6 +237,8 @@ export class MissingInvoiceJevService {
         state: request.state,
         redaction_version: REDACTION_VERSION,
         kinds: [...input.kinds],
+        // a kiejtett jeloltek azonositoja: az or miatt a Jev ezeket nem latta
+        dropped: request.dropped.map((d) => ids[d.index]!),
       },
     };
     const key = { ...base, projectionHash: cph1(projection) };
@@ -267,11 +273,14 @@ export class MissingInvoiceJevService {
         `A rögzített Jev-modell nem érhető el (${policy.model}): a párosítási javaslat leállt a folyamat újraindulásáig. Nincs automatikus váltás jev-latest-re.`,
       );
     }
-    /* a valasztas kulcsa (c0, c1, ...) helyett a szamla azonositoja, vagy NONE */
+    /* a valasztas kulcsa (c0, c1, ...) helyett a szamla azonositoja, vagy NONE; a
+       kulcs a MEGMARADT jeloltek sorszama, a kiejtettek kimaradnak a szamozasbol */
     const selected = eredmeny.ok
       ? eredmeny.choice === PAIR_NONE_KEY
         ? PAIR_NONE_KEY
-        : (ids[Number(eredmeny.choice.slice(1))] ?? null)
+        : (ids[
+            request.candidateIndexes[Number(eredmeny.choice.slice(1))] ?? -1
+          ] ?? null)
       : null;
     const exposure = eredmeny.ok
       ? pairExposure({

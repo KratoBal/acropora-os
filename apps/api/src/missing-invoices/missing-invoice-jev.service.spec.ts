@@ -341,6 +341,63 @@ describe("MissingInvoiceJevService: a hivas", () => {
   });
 });
 
+describe("MissingInvoiceJevService: a zavaro jelolt kiejtese (acrobot 25560)", () => {
+  const euroleasing = {
+    date: "2026-05-10",
+    amount: "146236",
+    currency: "HUF",
+    original: "",
+    partner: "Euroleasing Zrt.",
+    narrative: "70862025177054",
+    type: "ÁTUTALÁS",
+  };
+  const hanna = doc("docH", 146000, "HANNA Instruments Service Kft.");
+  const helyes = doc("docE", 145854, "Euroleasing Zrt.");
+
+  it("a HANNA-alak: a zavaro jelolt kiesik, a helyes megmarad, es a valasz az o azonositoja", async () => {
+    const p = szolgaltato(valasz("c0", 0.95));
+    const t = tarolo({ known: [["ORG", "HANNA Instruments Service Kft."]] });
+    const { s } = szolgaltatas({ fetch: p.fetch, repo: t.repo });
+    const v = await s.suggest({
+      bankTransactionId: LATHATO,
+      payment: euroleasing,
+      candidates: [hanna, helyes],
+      kinds: ["OSSZEG"],
+    });
+    assert.deepEqual(v, {
+      enabled: true,
+      documentId: "docE",
+      confidence: 0.95,
+    });
+    const body = p.hivasok[0]!.body;
+    assert.deepEqual(Object.keys(body.state as object), ["query", "c0"]);
+    assert.ok(!JSON.stringify(body).includes("HANNA"));
+    const sor = t.sorok[0]!;
+    assert.equal(sor.selectedValue, "docE");
+    assert.deepEqual(
+      (sor.data.projectionPayload as { data: { dropped: string[] } }).data
+        .dropped,
+      ["docH"],
+    );
+  });
+
+  it("ha minden jelolt kiesik, nincs hivas, es a futas hibakent rogzul", async () => {
+    const p = szolgaltato(valasz("c0", 0.95));
+    const t = tarolo({ known: [["ORG", "HANNA Instruments Service Kft."]] });
+    const { s } = szolgaltatas({ fetch: p.fetch, repo: t.repo });
+    const v = await s.suggest({
+      bankTransactionId: LATHATO,
+      payment: euroleasing,
+      candidates: [hanna],
+      kinds: ["OSSZEG"],
+    });
+    assert.deepEqual(v, { enabled: true, documentId: null, confidence: null });
+    assert.equal(p.hivasok.length, 0);
+    assert.equal(t.sorok[0]!.status, "ERROR");
+    assert.equal(t.sorok[0]!.data.errorMessage, "no candidate left");
+  });
+});
+
 describe("MissingInvoiceJevService: a feloldas a kezi parositaskor", () => {
   it("elfogadott, felulirt, es a rejtettnel arnyek-egyezes", async () => {
     for (const [id, paired, want] of [
