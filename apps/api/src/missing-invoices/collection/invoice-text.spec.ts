@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  looksLikeBankAccount,
   looksLikeInvoice,
   looksLikeProforma,
+  looksLikeReminder,
   readInvoiceText,
 } from "./invoice-text.js";
 
@@ -127,5 +129,59 @@ describe("readInvoiceText", () => {
       ]).supplierTaxNumber,
       "DE152405660",
     );
+  });
+});
+
+describe("payment reminders and bank accounts (acrobot 25664)", () => {
+  it("a reminder by its file name or its title, not by a word deep in a long text", () => {
+    assert.equal(
+      looksLikeReminder(["De Jong", "x", "y", "REMINDER"], "a.pdf"),
+      true,
+    );
+    assert.equal(
+      looksLikeReminder(
+        ["Ügyfélszolgálat", "", "", "I. számú Fizetési emlékeztető"],
+        null,
+      ),
+      true,
+    );
+    assert.equal(
+      looksLikeReminder(["INVOICE"], "First_reminder_11069-26004529.pdf"),
+      true,
+    );
+    assert.equal(looksLikeReminder(["INVOICE"], "Mahnung-2026-03.pdf"), true);
+    // a szerződés 398. sorában: nem cím
+    const contract = Array.from({ length: 400 }, (_, i) =>
+      i === 397
+        ? "felszólítás kézhezvételét követő nyolc (8) munkanapon belül"
+        : "szöveg",
+    );
+    assert.equal(looksLikeReminder(contract, "Szerződés.pdf"), false);
+    assert.equal(
+      looksLikeReminder(
+        ["INVOICE", "Invoice number 26007910"],
+        "inv26007910.pdf",
+      ),
+      false,
+    );
+  });
+
+  it("an IBAN or a Hungarian account is a bank account; invoice numbers are not", () => {
+    for (const account of [
+      "NL30RABO0322265428",
+      "FR7630003004730002571158",
+      "HU42 1170 9002 2062 4460 0000 0000",
+      "11709002-20624460",
+    ])
+      assert.equal(looksLikeBankAccount(account), true, account);
+    for (const number of [
+      "26007910",
+      "KS26/08132",
+      "E-PAR-2026-46439",
+      "FA00009139",
+      "F2602896",
+      "4042P0000640463",
+    ])
+      assert.equal(looksLikeBankAccount(number), false, number);
   });
 });

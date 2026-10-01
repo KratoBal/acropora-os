@@ -33,6 +33,7 @@ import {
 import {
   looksLikeInvoice,
   looksLikeProforma,
+  looksLikeReminder,
   bankReference,
   readInvoiceText,
   type InvoiceTextReading,
@@ -288,6 +289,9 @@ export class InvoiceCollectionService {
     }
     const text = lines.join("\n");
     if (!looksLikeInvoice(text)) return skip("NOT_INVOICE");
+    // a fizetési emlékeztető idézi a számlát, de nem az; a mellette álló
+    // számla-melléklet külön fájlként megy tovább
+    if (looksLikeReminder(lines, found.fileName)) return skip("NOT_INVOICE");
 
     const importResult = await this.reader
       .read(new Uint8Array(found.content), { allowProforma: true })
