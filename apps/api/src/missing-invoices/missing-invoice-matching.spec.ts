@@ -475,6 +475,89 @@ describe("matchMonth", () => {
     );
   });
 
+  /*
+    KÉTSZER FIZETETT SZÁMLA (acrobot 25636: a Sopro KB-2855/2026 két 172 006
+    Ft-os terheléshez, ugyanaz a PDF kétszer feltöltve). MI PIROSÍT: ha a két
+    terhelés Megvan maradna; ha nem neveznék meg egymást; ha egyetlen
+    párosítás is kettősnek látszana; ha egy más gondú tétel (nem a cégre szól)
+    elveszítené a saját állapotát.
+  */
+  it("the same file paired to two debits: both are double paid, and name each other", () => {
+    const a = debit({
+      id: "pay-28",
+      bookingDate: "2026-09-28",
+      amount: D(172006),
+    });
+    const b = debit({
+      id: "pay-29",
+      bookingDate: "2026-09-29",
+      amount: D(172006),
+    });
+    const first = doc({
+      id: "up-1",
+      source: "UPLOAD",
+      gross: null,
+      identities: ["sha:same"],
+    });
+    const second = doc({
+      id: "up-2",
+      source: "UPLOAD",
+      gross: null,
+      identities: ["sha:same"],
+    });
+    const outcome = run(
+      [a, b],
+      [first, second],
+      new Map([
+        [a.id, ["up-1"]],
+        [b.id, ["up-2"]],
+      ]),
+    );
+    assert.deepEqual(
+      [a, b].map((d) => [
+        outcome.get(d.id)?.state,
+        outcome.get(d.id)?.doublePaidWith,
+      ]),
+      [
+        ["DOUBLE_PAID", ["pay-29"]],
+        ["DOUBLE_PAID", ["pay-28"]],
+      ],
+    );
+  });
+
+  it("the same invoice number paired twice is double paid too; one pairing, or another problem, is not", () => {
+    const a = debit({ id: "n-1" });
+    const b = debit({ id: "n-2", bookingDate: "2026-08-11" });
+    const same = (id: string, payee: CandidateDocument["payee"] = "COMPANY") =>
+      doc({ id, identities: ["inv:kb-2855/2026|12345678"], payee });
+    const twice = run(
+      [a, b],
+      [same("x-1"), same("x-2")],
+      new Map([
+        [a.id, ["x-1"]],
+        [b.id, ["x-2"]],
+      ]),
+    );
+    assert.equal(twice.get(a.id)?.state, "DOUBLE_PAID");
+    const once = run([a], [same("x-3")], new Map([[a.id, ["x-3"]]]));
+    assert.deepEqual(
+      [once.get(a.id)?.state, once.get(a.id)?.doublePaidWith],
+      ["FOUND", undefined],
+    );
+    const notOurs = run(
+      [a, b],
+      [same("x-4", "NOT_COMPANY"), same("x-5")],
+      new Map([
+        [a.id, ["x-4"]],
+        [b.id, ["x-5"]],
+      ]),
+    );
+    assert.deepEqual(
+      [notOurs.get(a.id)?.state, notOurs.get(b.id)?.state],
+      ["NOT_COMPANY", "DOUBLE_PAID"],
+    );
+  });
+
   it("tells no invoice from an unmatched one by whether the partner has documents", () => {
     const d = debit({ amount: D(777) });
     const e = debit({ amount: D(777), counterpartyName: "Ismeretlen Bt." });

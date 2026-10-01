@@ -66,6 +66,8 @@ describe("the model", () => {
         "NOT_MATCHED",
         "ORIGINAL_MISSING",
         "PROFORMA_ONLY",
+        // a kétszer fizetett számla is teendő (acrobot 25636)
+        "DOUBLE_PAID",
       ].sort(),
     );
     expect(TAB_STATES.MISSING).not.toContain("FOUND");
@@ -91,6 +93,17 @@ describe("the item detail on the wire", () => {
       driveFolderUrl: null,
     } as unknown as Parameters<typeof toExtras>[0];
     expect(toExtras(detail).payeeDocuments).toEqual([]);
+  });
+
+  // MI PIROSÍT: ha egy a doublePaidWith mezőt még nem küldő API (a web előbb
+  // települ) eldöntené a drawert.
+  it("an API without doublePaidWith gives an empty list", () => {
+    const detail = {
+      candidates: [],
+      action: "NONE",
+      driveFolderUrl: null,
+    } as unknown as Parameters<typeof toExtras>[0];
+    expect(toExtras(detail).doublePaidWith).toEqual([]);
   });
 });
 
@@ -577,6 +590,7 @@ describe("MissingInvoicesDrawer", () => {
       },
     ],
     payeeDocuments: [],
+    doublePaidWith: [],
     action: "REQUEST_REISSUE_TO_COMPANY",
     driveFolderUrl: null,
     ...overrides,
@@ -797,6 +811,41 @@ describe("MissingInvoicesDrawer", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: "A cégre szól" })).toBeNull();
+  });
+
+  /*
+    KÉTSZER FIZETETT SZÁMLA (acrobot 25636). MI PIROSÍT: ha a drawer nem nevezné
+    meg a másik terhelést; ha a teendő nem mondaná, mit kell tenni.
+  */
+  it("a double-paid invoice names the other debit and what to do", () => {
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        row={charge({
+          state: "DOUBLE_PAID",
+          document: { number: "KB-2855/2026", source: "UPLOAD" },
+          matchedBy: "MANUAL",
+        })}
+        extras={extras({
+          candidates: [],
+          action: "CHECK_DOUBLE_PAYMENT",
+          doublePaidWith: [
+            {
+              id: "pay-29",
+              bookingDate: "2026-09-29",
+              amount: "172006",
+              currency: "HUF",
+            },
+          ],
+        })}
+      />,
+    );
+    expect(
+      screen.getByText(/Ugyanez a számla ehhez is párosítva/),
+    ).toHaveTextContent("2026. 09. 29.");
+    expect(
+      screen.getByRole("region", { name: "Mit kell tenni" }),
+    ).toHaveTextContent("Ha kétszer fizettük, kérd vissza az egyiket");
   });
 
   it("no paper-original question where there is no pairing, or the original is not the gap", () => {

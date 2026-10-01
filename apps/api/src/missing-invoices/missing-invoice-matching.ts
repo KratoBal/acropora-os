@@ -71,6 +71,12 @@ export interface CandidateDocument {
    * nélkül nincs kitöltve: ott az eredeti maga a jelölt.
    */
   originalId?: string;
+  /**
+   * AMI ALAPJÁN KÉT DOKUMENTUM UGYANAZ A SZÁMLA (acrobot 25636): `sha:<fájl
+   * lenyomata>` és `inv:<számlaszám|szállító>`. Az összevont jelölt a társaié
+   * is. Ha egy azonosság két terheléshez párosul, az Kétszer fizetett számla.
+   */
+  identities?: readonly string[];
 }
 
 export interface MatchableDebit {
@@ -93,6 +99,7 @@ export type ItemState =
   | "NO_INVOICE"
   | "NOT_COMPANY"
   | "PROFORMA_ONLY"
+  | "DOUBLE_PAID"
   | "NO_INVOICE_NEEDED";
 
 export interface MatchOutcome {
@@ -115,6 +122,8 @@ export interface MatchOutcome {
    * számlák), ha a tűrésen túl eltér. A párosítás ettől még áll.
    */
   amountDifference?: { amount: Prisma.Decimal; currency: string };
+  /** A többi terhelés, amelyhez ugyanez a számla is párosítva van. */
+  doublePaidWith?: string[];
 }
 
 const GENERIC =
@@ -801,5 +810,48 @@ export function matchMonth(input: {
         reason: `${outcome.reason}; az eredeti papíron megvan`,
       });
   }
+  markDoublePaid(outcomes);
   return outcomes;
+}
+
+/** Ezek az állapotok számítanának rendezettnek; a kettős fizetés felülírja őket. */
+const SETTLED_LIKE: ReadonlySet<ItemState> = new Set([
+  "FOUND",
+  "ORIGINAL_MISSING",
+  "NOT_MATCHED",
+]);
+
+/**
+ * KÉTSZER FIZETETT SZÁMLA (acrobot 25636, éles: a Sopro KB-2855/2026 két
+ * 172 006 Ft-os terheléshez, ugyanaz a PDF kétszer feltöltve). Ha ugyanaz a
+ * számla (azonos fájl vagy számlaszám) két terheléshez párosul, egyik sem
+ * Megvan: mindkettő a másikat nevezi meg.
+ */
+function markDoublePaid(outcomes: Map<string, MatchOutcome>): void {
+  const debitsOf = new Map<string, Set<string>>();
+  for (const [debitId, outcome] of outcomes)
+    for (const document of outcome.documents)
+      for (const identity of document.identities ?? [])
+        debitsOf.set(
+          identity,
+          new Set([...(debitsOf.get(identity) ?? []), debitId]),
+        );
+  const others = new Map<string, Set<string>>();
+  for (const debits of debitsOf.values()) {
+    if (debits.size < 2) continue;
+    for (const debitId of debits)
+      for (const other of debits)
+        if (other !== debitId)
+          others.set(debitId, new Set([...(others.get(debitId) ?? []), other]));
+  }
+  for (const [debitId, with_] of others) {
+    const outcome = outcomes.get(debitId)!;
+    if (!SETTLED_LIKE.has(outcome.state)) continue;
+    outcomes.set(debitId, {
+      ...outcome,
+      state: "DOUBLE_PAID",
+      doublePaidWith: [...with_].sort(),
+      reason: `${outcome.reason}; ugyanez a számla egy másik terheléshez is párosítva`,
+    });
+  }
 }

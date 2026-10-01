@@ -324,4 +324,42 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
       1,
     );
   });
+
+  /*
+    A FÁJL LENYOMATA A JELÖLTEN (acrobot 25636). MI PIROSÍT: ha a tárolt
+    dokumentum sha256-ja nem jutna el a jelölt azonosságai közé (akkor a
+    kétszer feltöltött PDF két külön számlának látszana).
+  */
+  it("a stored document's file print is among its candidate identities", async () => {
+    const created = await prisma.incomingSupplierDocument.create({
+      data: {
+        gmailMessageId: "collect:INFO_MAIL:hianyzo-it-sha",
+        fileName: "kb-2855.pdf",
+        sizeBytes: 14,
+        sha256: "hianyzo-it-same-pdf",
+        content: new Uint8Array(Buffer.from("%PDF-1.4 teszt")),
+        status: "FAILED",
+        kind: "INVOICE",
+        origin: "COLLECTED_MAIL",
+        receivedAt: new Date("2026-08-07T09:00:00Z"),
+        payeeCheck: "COMPANY",
+        // a gyűjtött dokumentum a szövegolvasatból kap számot és dátumot;
+        // nélküle nem jelölt (az első CI-futás ezen bukott, a teszt hibája volt)
+        textReading: {
+          invoiceNumber: "HIANYZOTESZT-SHA-1",
+          numberFrom: "NAV",
+          supplierTaxNumber: "99999999-2-42",
+        },
+      },
+      select: { id: true },
+    });
+    const candidates = await new MissingInvoicesRepository().candidates(
+      "2026-08-01",
+      "2026-08-31",
+    );
+    const found = candidates.find(
+      (d) => d.id === created.id || d.aliasIds?.includes(created.id),
+    );
+    assert.ok(found?.identities?.includes("sha:hianyzo-it-same-pdf"));
+  });
 });
