@@ -6992,8 +6992,8 @@ model InvoiceCollectionItem {
   externalId String
   fileName   String
   sha256     String?
-  /// STORED, NOT_INVOICE, UNMATCHED, OWN_INVOICE, DUPLICATE, TOO_LARGE vagy
-  /// UNREADABLE.
+  /// STORED, NOT_INVOICE, UNMATCHED, OWN_INVOICE, DUPLICATE, TOO_LARGE, UNREADABLE,
+  /// vagy SUGGESTED (a Jev bejövő számlának látta; a dokumentum jóváhagyásra vár).
   verdict    String
   /// STORED-nál a létrehozott IncomingSupplierDocument.
   documentId String?
@@ -7015,6 +7015,8 @@ model InvoiceCollectionRun {
   notInvoiceCount Int                              @default(0)
   unmatchedCount  Int                              @default(0)
   ownInvoiceCount Int                              @default(0)
+  /// A Jev bejövő számlának látta (levél-válogatás, 4. szelet): jóváhagyásra vár.
+  suggestedCount  Int                              @default(0)
   duplicateCount  Int                              @default(0)
   failedCount     Int                              @default(0)
   errorCode       String?
@@ -7028,50 +7030,66 @@ model InvoiceCollectionRun {
 }
 
 model IncomingSupplierDocument {
-  id                  String                         @id @default(cuid())
-  gmailMessageId      String
-  fileName            String
-  sender              String?
-  subject             String?
-  receivedAt          DateTime?
-  sizeBytes           Int
-  sha256              String
-  content             Bytes
-  status              IncomingSupplierDocumentStatus
-  kind                IncomingSupplierDocumentKind?
-  errorCode           String?
+  id                      String                         @id @default(cuid())
+  gmailMessageId          String
+  fileName                String
+  sender                  String?
+  subject                 String?
+  receivedAt              DateTime?
+  sizeBytes               Int
+  sha256                  String
+  content                 Bytes
+  status                  IncomingSupplierDocumentStatus
+  kind                    IncomingSupplierDocumentKind?
+  errorCode               String?
   /// A beolvasás eredménye (SupplierInvoiceImportResult).
-  importResult        Json?
+  importResult            Json?
   /// Az általános olvasó eredménye (számlaszám, a szállító adószáma), ha a
   /// szállítói illesztő a PDF-et nem ismerte (számla-begyűjtés, 3e75c2f4). Nem
   /// `importResult`: az egy illesztő teljes olvasata, ez csak a párosítás kulcsa.
-  textReading         Json?
+  textReading             Json?
   /// Soronként a sor-javaslat (P-026), érkezéskor számolva, ha a beszállító ismert.
-  lineSuggestions     Json?
-  expectedArrivalId   String?
+  lineSuggestions         Json?
+  expectedArrivalId       String?
   /// Kinek szól a számla (Hiányzó számlák): COMPANY, NOT_COMPANY vagy UNKNOWN,
   /// a szövegben álló adószám-törzsszám alapján. Az első párosításkor
   /// számolódik és tárolódik; NULL, amíg senki nem kérdezte.
-  payeeCheck          String?
+  payeeCheck              String?
   /// KÉZI JELÖLÉS (acrobot 25633): a szövegréteg nélküli (beszkennelt) számla
   /// vevője UNKNOWN; a kezelő a drawerben jelöli COMPANY-ra vagy NOT_COMPANY-ra.
   /// Csak UNKNOWN (vagy már kézzel jelölt) írható így felül; ki és mikor az
   /// auditnaplóban is áll.
-  payeeMarkedAt       DateTime?
-  payeeMarkedByUserId String?
+  payeeMarkedAt           DateTime?
+  payeeMarkedByUserId     String?
   /// Honnan jött: MAILBOX (a postafiók-figyelő), UPLOAD (a Hiányzó számlák
   /// drawerjéből feltöltve), COLLECTED_MAIL vagy COLLECTED_DRIVE (a számla-
   /// begyűjtés, kártya 3e75c2f4). A feltöltés SOHA nem kap várható beérkezést, tehát
   /// a bevételezési láncba nem kerül (acrobot 25274).
-  origin              String                         @default("MAILBOX")
+  origin                  String                         @default("MAILBOX")
   /// Feltöltésnél: INVOICE vagy PREMIUM_NOTICE (biztosítási díjértesítő).
-  uploadKind          String?
-  uploadedByUserId    String?
-  createdAt           DateTime                       @default(now())
+  uploadKind              String?
+  uploadedByUserId        String?
+  /// A JEV JAVASLATA (levél-válogatás terv, 4. szelet; acrobot 25803): a
+  /// begyűjtés egy illesztő nélküli levél PDF-jét a Jev szerint bejövő számlának
+  /// látta. SUGGESTED, amíg ember nem döntött róla: addig NEM jelölt a Hiányzó
+  /// számlák között (Balázs keretdöntése: a Jev csak javasol). Elfogadva NULL lesz
+  /// (rendes begyűjtött dokumentum); elvetve a dokumentum törlődik. NULL: nem
+  /// javaslatból jött.
+  reviewState             String?
+  /// A Jev bizonyossága (0..1) és a döntés futása (DecisionRun), a javaslat
+  /// visszakereshetőségéhez.
+  suggestionConfidence    Decimal?                       @db.Decimal(5, 4)
+  suggestionDecisionRunId String?
+  /// Ki és mikor fogadta el (az elvetésnél a dokumentum törlődik; az az
+  /// auditnaplóban látszik).
+  reviewedAt              DateTime?
+  reviewedByUserId        String?
+  createdAt               DateTime                       @default(now())
 
   expectedArrival ExpectedArrival? @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
 
   @@unique([gmailMessageId, fileName])
+  @@index([reviewState])
   @@index([expectedArrivalId])
   @@index([sha256])
 }

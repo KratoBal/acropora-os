@@ -1,5 +1,6 @@
 import type {
   BankStatementImportResult,
+  InvoiceCollectionSuggestionsResponse,
   MissingInvoiceJevSuggestion,
 } from "@acropora/types";
 import type {
@@ -84,6 +85,42 @@ function monthQueryString(query: MonthQuery): string {
 }
 
 export const missingInvoicesApi = {
+  /**
+   * A JEV JAVASLATAI A BEGYŰJTÉSBŐL (levél-válogatás, 4. szelet; acrobot 25803):
+   * a döntésre váró bejövő-számla javaslatok. Elfogadva jelölt lesz, elvetve
+   * törlődik.
+   */
+  suggestions(token: string, signal?: AbortSignal) {
+    return apiRequest<InvoiceCollectionSuggestionsResponse>(
+      `${base}/suggestions`,
+      token,
+      { signal },
+    );
+  },
+  async suggestionFile(
+    token: string,
+    id: string,
+  ): Promise<MissingInvoicesExport> {
+    const response = await fetch(
+      `${API_PREFIX}${base}/suggestions/${encodeURIComponent(id)}/file`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return readExport(response, "javaslat.pdf", "A PDF nem tölthető be.");
+  },
+  acceptSuggestion(token: string, id: string) {
+    return apiRequest<void>(
+      `${base}/suggestions/${encodeURIComponent(id)}/accept`,
+      token,
+      { method: "POST" },
+    );
+  },
+  rejectSuggestion(token: string, id: string) {
+    return apiRequest<void>(
+      `${base}/suggestions/${encodeURIComponent(id)}/reject`,
+      token,
+      { method: "POST" },
+    );
+  },
   months(token: string, signal?: AbortSignal) {
     return apiRequest<MissingInvoiceMonthsResponse>(`${base}/months`, token, {
       signal,

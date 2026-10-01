@@ -23,9 +23,12 @@ import {
   invoiceCollectionMailQuery,
   invoiceCollectionSources,
   invoiceCollectionSwitch,
+  suggestionThreshold,
   type InvoiceCollectionSource,
   type InvoiceCollectionSourceConfig,
 } from "./invoice-collection.config.js";
+import { suggestionOf } from "./invoice-collection-letter-classifier.js";
+import { LetterClassJevService } from "./letter-class-jev.service.js";
 import {
   InvoiceCollectionRepository,
   type InvoiceCollectionCounts,
@@ -86,6 +89,7 @@ const emptyCounts = (): InvoiceCollectionCounts => ({
   notInvoiceCount: 0,
   unmatchedCount: 0,
   ownInvoiceCount: 0,
+  suggestedCount: 0,
   duplicateCount: 0,
   failedCount: 0,
 });
@@ -149,6 +153,13 @@ export class InvoiceCollectionService {
     @Optional()
     @Inject(INVOICE_COLLECTION_ENV)
     private readonly environment: NodeJS.ProcessEnv = process.env,
+    /**
+     * A LEVÉL-BESOROLÓ (levél-válogatás terv, 3. szelet, nautilus #1356). A
+     * kapcsolója a sajátja (`JEV_LETTER_CLASS`, alapból KI): kikapcsolva `null`
+     * jön, és a fájl UNMATCHED marad.
+     */
+    @Optional()
+    private readonly classifier: LetterClassJevService | null = null,
   ) {}
 
   /**
@@ -277,7 +288,7 @@ export class InvoiceCollectionService {
     source: InvoiceCollectionSource,
     externalId: string,
     fileName: string,
-    verdict: Exclude<InvoiceCollectionVerdict, "STORED">,
+    verdict: Exclude<InvoiceCollectionVerdict, "STORED" | "SUGGESTED">,
     sha256: string | null,
   ): Promise<void> {
     if (this.dry) {
@@ -388,6 +399,34 @@ export class InvoiceCollectionService {
     }
   }
 
+  /**
+   * A Jev besorolása és a küszöb: javaslat, vagy semmi. A besoroló hibája nem
+   * állítja meg a begyűjtést (a fájl UNMATCHED marad).
+   */
+  private async suggestionFor(
+    source: InvoiceCollectionSource,
+    externalId: string,
+    lines: readonly string[],
+    found: Found,
+  ): Promise<{ confidence: number; decisionRunId: string } | null> {
+    if (!this.classifier) return null;
+    const classification = await this.classifier
+      .classify({
+        source,
+        externalId,
+        subject: found.subject ?? "",
+        fileName: found.fileName,
+        lines,
+      })
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `Invoice collection: the letter classifier failed for ${found.fileName} (${String(error)})`,
+        );
+        return null;
+      });
+    return suggestionOf(classification, suggestionThreshold(this.environment));
+  }
+
   /** Egy fájl; a visszatérés az ítélete. */
   async handle(
     source: InvoiceCollectionSource,
@@ -398,7 +437,7 @@ export class InvoiceCollectionService {
     counts.filesSeen++;
     const sha256 = createHash("sha256").update(found.content).digest("hex");
     const skip = async (
-      verdict: Exclude<InvoiceCollectionVerdict, "STORED">,
+      verdict: Exclude<InvoiceCollectionVerdict, "STORED" | "SUGGESTED">,
     ) => {
       if (verdict === "DUPLICATE") counts.duplicateCount++;
       else if (verdict === "NOT_INVOICE") counts.notInvoiceCount++;
@@ -463,7 +502,41 @@ export class InvoiceCollectionService {
             // a számla keltét az általános olvasó nem nyeri ki: a levél érkezése
             (found.receivedAt ?? new Date()).toISOString().slice(0, 10),
           );
-          if (!payment) return skip("UNMATCHED");
+          if (!payment) {
+            /*
+              A JEV JAVASLATA (levél-válogatás terv, 4. szelet; acrobot 25803):
+              ami számlának látszik, de sem illesztő, sem NAV-szám, sem banki
+              hivatkozás, sem kártyás fizetés nem köti, azt a Jev besorolja. A
+              „bejövő számla” a küszöb felett SUGGESTED-ként tárolódik: NEM
+              jelölt, ember hagyja jóvá. Minden más UNMATCHED marad, mint eddig.
+
+              A SZÁRAZ ÚJRAÉRTÉKELÉS NEM HÍV (nautilus kikötése): a hívás
+              DecisionRun-t ír, a száraz út pedig semmit nem írhat. Ott a fájl
+              UNMATCHED-ként látszik.
+            */
+            const suggestion = this.dry
+              ? null
+              : await this.suggestionFor(source, externalId, lines, found);
+            if (!suggestion) return skip("UNMATCHED");
+            await this.repository.store({
+              source,
+              externalId,
+              fileName: found.fileName,
+              sender: found.sender,
+              subject: found.subject,
+              receivedAt: found.receivedAt,
+              content: found.content,
+              sha256,
+              read: false,
+              kind: looksLikeProforma(text) ? "PROFORMA" : "INVOICE",
+              importResult: null,
+              textReading,
+              payee: payeeFromText(text),
+              suggestion,
+            });
+            counts.suggestedCount++;
+            return "SUGGESTED";
+          }
           textReading = {
             ...textReading,
             ...(textReading.invoiceNumber
