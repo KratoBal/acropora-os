@@ -217,6 +217,21 @@ describe("cardPaymentMatch: a NAV-less invoice and the card payment it was paid 
       ),
       null,
     );
+    // NYITOTT (PR): a Kia Charge júliusi számláján a havi díj (1518) egy másik
+    // hónap teljes fizetése is; két fizetés illik, tehát nem választunk. A
+    // „nagyobb nyer” feloldás a havi összesítő számlán (Parkl) a legnagyobb
+    // TÉTELT választaná a végösszeg helyett, ezért nincs benne.
+    assert.equal(
+      cardPaymentMatch(
+        [...kia, "Havi díj | 1518,00 HUF | 1518,00 HUF"],
+        [
+          card("Digital Charging Solut", "1518"),
+          card("Digital Charging Solut", "9125"),
+        ],
+        word,
+      ),
+      null,
+    );
     // a saját átvezetésünk neve minden nekünk szóló számlán ott van
     assert.equal(
       cardPaymentMatch(
