@@ -362,4 +362,42 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
     );
     assert.ok(found?.identities?.includes("sha:hianyzo-it-same-pdf"));
   });
+
+  it("a contract stored earlier as an invoice is not a candidate (acrobot 25784)", async () => {
+    // ugyanaz a dokumentum két néven: a szerződésé NFD alakú, ahogy a levélből
+    // jön; a másik a kontroll, hogy a kizárás a névből jön, nem az alakból
+    const stored = (key: string, fileName: string) =>
+      prisma.incomingSupplierDocument.create({
+        data: {
+          gmailMessageId: `collect:INFO_MAIL:hianyzo-it-${key}`,
+          fileName,
+          sizeBytes: 14,
+          sha256: `hianyzo-it-${key}`,
+          content: new Uint8Array(Buffer.from("%PDF-1.4 teszt")),
+          status: "FAILED",
+          kind: "INVOICE",
+          origin: "COLLECTED_MAIL",
+          receivedAt: new Date("2026-08-08T09:00:00Z"),
+          payeeCheck: "COMPANY",
+          textReading: {
+            invoiceNumber: `HIANYZOTESZT-${key}`,
+            numberFrom: "NAV",
+            supplierTaxNumber: "99999999-2-42",
+          },
+        },
+        select: { id: true },
+      });
+    const contract = await stored(
+      "contract",
+      "Szerződés_FÁNK_Homokszűrő 2026.pdf".normalize("NFD"),
+    );
+    const invoice = await stored("contract-control", "HIANYZOTESZT-2.pdf");
+    const candidates = await new MissingInvoicesRepository().candidates(
+      "2026-08-01",
+      "2026-08-31",
+    );
+    const among = (id: string) =>
+      candidates.some((d) => d.id === id || d.aliasIds?.includes(id));
+    assert.deepEqual([among(contract.id), among(invoice.id)], [false, true]);
+  });
 });

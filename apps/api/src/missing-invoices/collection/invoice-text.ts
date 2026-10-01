@@ -266,19 +266,29 @@ export function reminderFileName(fileName: string | null | undefined): boolean {
  * AJ26-U60-01170”). Egy számla „Ajánlat száma: …” sora nem cím, és nem zár ki.
  * Mérve 2026-10-01 a 435 tárolt dokumentumon: 10-et zár ki, mind a 10 szerződés,
  * ajánlat vagy vámnyilatkozat (4 vakon címkézve, 6 szövegből ellenőrizve),
- * számlát egyet sem.
+ * számlát egyet sem. Mind a 10-et a fájlneve fogja meg; a cím a fájlnév nélküli
+ * új levelekre való.
  */
 const OTHER_DOCUMENT_KIND = String.raw`(?:adásvételi\s+|vállalkozási\s+|bérleti\s+)?(?:keret)?szerződés|megállapodás|árajánlat|ajánlat|quotation|angebot|devis|árunyilatkozat|vámáru-nyilatkozat`;
 const OTHER_DOCUMENT_TITLE = new RegExp(
-  String.raw`^[\s|:\-–]*(?:${OTHER_DOCUMENT_KIND})(?:[\s|:#\-–]+[\p{Lu}\d][\p{L}\d/._-]*\d[\p{L}\d/._-]*)?[\s|:\-–]*$`,
+  String.raw`^[\s|:\-–]*(?:${OTHER_DOCUMENT_KIND})(?:[\s|#\-–]+[\p{Lu}\d][\p{L}\d/._-]*\d[\p{L}\d/._-]*)?[\s|\-–]*$`,
   "iu",
 );
-const OTHER_DOCUMENT_NAME = /(?<!\p{L})(szerződés|szerzodes|árajánlat|arajanlat|ajánlat|ajanlat|árunyilatkozat|arunyilatkozat|quotation|angebot)/iu;
+const OTHER_DOCUMENT_NAME =
+  /(?<!\p{L})(szerződés|szerzodes|árajánlat|arajanlat|ajánlat|ajanlat|árunyilatkozat|arunyilatkozat|quotation|angebot)/iu;
 
 /** A fájlnév szerződésé, ajánlaté vagy vámnyilatkozaté (a tárolt dokumentumnál csak ez van kéznél). */
-export function otherDocumentFileName(fileName: string | null | undefined): boolean {
-  // a levelek fájlneve gyakran NFD alakú (ő = o + ékezet), a minta NFC
-  return OTHER_DOCUMENT_NAME.test((fileName ?? "").normalize("NFC").replace(/[_.]+/g, " "));
+export function otherDocumentFileName(
+  fileName: string | null | undefined,
+): boolean {
+  // a levelek fájlneve gyakran NFD alakú (ő = o + ékezet), a minta NFC; a
+  // „mycarAjanlat” alakban a szóhatár a nagybetű előtt van
+  return OTHER_DOCUMENT_NAME.test(
+    (fileName ?? "")
+      .normalize("NFC")
+      .replace(/[_.]+/g, " ")
+      .replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2"),
+  );
 }
 
 export function looksLikeOtherDocument(
