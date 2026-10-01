@@ -245,8 +245,11 @@ export class MissingInvoiceJevService {
       },
     };
     const key = { ...base, projectionHash: cph1(projection) };
+    /* a TAROLT futas expozicioja ELO modban keletkezett; arnyek-modban akkor sem
+       latszik (murena review-ja, 25848: egy live->shadow valtas utan kinyilt volna) */
+    const mode = pairSuggestionMode(this.environment.JEV_MISSING_INVOICE_PAIR);
     const valasz = (run: StoredPairRun): PairSuggestion =>
-      run.exposure === "SHOWN"
+      run.exposure === "SHOWN" && mode === "live"
         ? {
             enabled: true,
             documentId: run.selectedValue,
@@ -287,7 +290,7 @@ export class MissingInvoiceJevService {
       : null;
     const exposure = eredmeny.ok
       ? pairExposure({
-          mode: pairSuggestionMode(this.environment.JEV_MISSING_INVOICE_PAIR),
+          mode,
           choice: selected,
           confidence: eredmeny.confidence,
           bankTransactionId: input.bankTransactionId,

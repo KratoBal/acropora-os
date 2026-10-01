@@ -418,6 +418,28 @@ describe("MissingInvoiceJevService: a feloldas a kezi parositaskor", () => {
     }
   });
 
+  it("egy elo modban SHOWN futas arnyek-modban sem latszik, elo modban tovabbra is (murena, 25848)", async () => {
+    const p = szolgaltato(valasz("c1", 0.99));
+    const t = tarolo();
+    const mod = (m: string) =>
+      szolgaltatas({
+        env: { JEV_MISSING_INVOICE_PAIR: m },
+        fetch: p.fetch,
+        repo: t.repo,
+      }).s;
+    const lathato = { enabled: true, documentId: "docB", confidence: 0.99 };
+    assert.deepEqual(await javaslat(mod("live"), LATHATO), lathato);
+    assert.equal(t.sorok[0]!.exposure, "SHOWN");
+    // ugyanaz a tarolt futas, uj hivas nelkul: arnyekban semmi, eloben ugyanaz
+    assert.deepEqual(await javaslat(mod("shadow"), LATHATO), {
+      enabled: true,
+      documentId: null,
+      confidence: null,
+    });
+    assert.deepEqual(await javaslat(mod("live"), LATHATO), lathato);
+    assert.deepEqual([p.hivasok.length, t.sorok.length], [1, 1]);
+  });
+
   it("arnyek-mod (acrobot 25821): hiv es rogzit, de semmit nem mutat, es a kezi parositas a cimke", async () => {
     for (const [paired, want] of [
       ["docB", "SHADOW_MATCH"],
