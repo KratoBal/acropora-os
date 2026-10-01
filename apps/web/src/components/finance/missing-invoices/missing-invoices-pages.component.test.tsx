@@ -264,6 +264,14 @@ describe("MissingInvoicesMonthPage", () => {
       page: 2,
       pageSize: 25,
     });
+    // Balázs 2026-10-01: a Figma szerint az aktív fül zöld kitöltést kap,
+    // különben nem látszik, melyik fülön áll a kezelő
+    const found = await screen.findByRole("tab", { name: "Megvan" });
+    expect(found).toHaveAttribute("aria-selected", "true");
+    expect(found.className).toContain("bg-pilot-aqua-50");
+    expect(
+      screen.getByRole("tab", { name: "Nem párosodott" }).className,
+    ).not.toContain("bg-pilot-aqua-50");
     fireEvent.click(await screen.findByRole("tab", { name: "Nem párosodott" }));
     const tabHref = urlNavigation.replace.mock.calls
       .map(([href]) => href as string)

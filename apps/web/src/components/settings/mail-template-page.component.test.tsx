@@ -1,3 +1,4 @@
+import { EMAIL_CTA_STYLE } from "@acropora/rich-text";
 import {
   act,
   fireEvent,
@@ -357,6 +358,25 @@ describe("a levélsablon szerkesztője", () => {
     expect(keret.getAttribute("srcdoc")).toContain(
       "<p><strong>Tárgy:</strong> Szivattyú zúg</p>",
     );
+  });
+
+  /*
+    AZ IGAZÍTÁS ÉS A GOMB AZ ELŐNÉZETBEN IS ÚGY LÁTSZIK, AHOGY KIMEGY: a küldés
+    kerete (`richHtmlForEmail`, MIME-építő) inline stílust ad nekik. PIROSÍT: ha
+    az előnézet a jelölést nyersen mutatná, és a gomb sima linknek látszana.
+  */
+  it("az előnézet a gombot és az igazítást a küldés stílusával mutatja", async () => {
+    await megjelenit({
+      bodyHtml:
+        '<p data-align="right">Jobbra</p><p data-cta="" data-align="center"><a href="https://acropora.hu/">Megnyitás</a></p>',
+    });
+    const srcdoc =
+      (
+        screen.getByTitle("A levél formázott előnézete") as HTMLIFrameElement
+      ).getAttribute("srcdoc") ?? "";
+    expect(srcdoc).toContain('<p style="text-align:right">Jobbra</p>');
+    expect(srcdoc).toContain(`style="${EMAIL_CTA_STYLE}"`);
+    expect(srcdoc).not.toContain("data-cta");
   });
 });
 

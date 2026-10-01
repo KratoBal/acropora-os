@@ -11,6 +11,10 @@
     "./rich-text-editor": {
       "types": "./src/rich-text-editor.tsx",
       "default": "./src/rich-text-editor.tsx"
+    },
+    "./email-rich-editor": {
+      "types": "./src/email-rich-editor.tsx",
+      "default": "./src/email-rich-editor.tsx"
     }
   },
   "scripts": {

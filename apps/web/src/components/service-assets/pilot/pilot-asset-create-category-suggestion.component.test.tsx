@@ -302,3 +302,66 @@ describe("a létrehozó űrlap: mikor indul a javaslat-kérés", () => {
     expect(api.categorySuggestion).not.toHaveBeenCalled();
   });
 });
+
+describe("a létrehozó űrlap: a szülőeszköz keresése", () => {
+  /**
+   * Balázs, 2026-10-01: a szülőeszköz-lista a partner első 100 eszközét hozta
+   * betűrendben, a FANK 406 eszközéből így csak AKV kezdetűek jöttek fel. A
+   * kérés most az alegység részfájára és a keresőre szűkít.
+   */
+  const utolsoKeres = () =>
+    (api.list.mock.calls.at(-1)?.[1] as URLSearchParams | undefined) ??
+    new URLSearchParams();
+
+  it("a beírt keresést és a választott alegységet is elküldi", async () => {
+    api.owners.mockResolvedValue({
+      items: [
+        {
+          type: "SUPPLIER",
+          id: "supplier-1",
+          code: "FANK",
+          displayName: "FANK",
+          isActive: true,
+          addresses: [],
+        },
+      ],
+    });
+    suppliers.units.mockResolvedValue({
+      items: [
+        {
+          id: "dep-biodom",
+          name: "Biodóm",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+    await megjelenit();
+    fireEvent.change(screen.getByLabelText("Partner"), {
+      target: { value: "SUPPLIER:supplier-1" },
+    });
+    await waitFor(() =>
+      expect(utolsoKeres().get("ownerId")).toBe("supplier-1"),
+    );
+    expect(utolsoKeres().get("departmentId")).toBeNull();
+
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Alegység") as HTMLSelectElement).options.length,
+      ).toBe(2),
+    );
+    fireEvent.change(screen.getByLabelText("Alegység"), {
+      target: { value: "dep-biodom" },
+    });
+    await waitFor(() =>
+      expect(utolsoKeres().get("departmentId")).toBe("dep-biodom"),
+    );
+
+    fireEvent.change(screen.getByLabelText("Szülőeszköz keresése"), {
+      target: { value: "szűrő" },
+    });
+    await waitFor(() => expect(utolsoKeres().get("search")).toBe("szűrő"));
+    expect(utolsoKeres().get("departmentId")).toBe("dep-biodom");
+  });
+});

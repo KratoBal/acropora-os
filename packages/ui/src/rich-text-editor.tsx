@@ -46,12 +46,15 @@
  */
 import {
   isAllowedRichHref,
+  RICH_TEXT_ALIGNMENTS,
   RICH_TEXT_IMAGE_MAX_WIDTH,
   RICH_TEXT_VARIABLE_NAME,
   richImageId,
+  type RichTextAlignment,
 } from "@acropora/rich-text";
 import {
   EditorContent,
+  Extension,
   InputRule,
   Node,
   PasteRule,
@@ -79,13 +82,37 @@ export interface RichTextVariable {
 }
 
 export type RichTextToolbarItem =
+  | "blockType"
   | "bold"
   | "italic"
   | "underline"
+  | "undo"
+  | "redo"
   | "link"
+  | "align"
   | "bulletList"
   | "orderedList"
-  | "image";
+  | "image"
+  | "cta";
+
+/**
+ * A LEVELEK ESZKOZTARA (Figma 358:829, 358:1143): a sorrend a tervé. A kep gomb
+ * itt is csak akkor latszik, ha a hivo ad `onImageRequest`-et.
+ */
+export const EMAIL_TOOLBAR: readonly RichTextToolbarItem[] = [
+  "blockType",
+  "bold",
+  "italic",
+  "underline",
+  "undo",
+  "redo",
+  "link",
+  "align",
+  "bulletList",
+  "orderedList",
+  "image",
+  "cta",
+];
 
 /** A beszurando kep. A `src` a sajat hivatkozas: `acropora-image:<id>`. */
 export interface RichTextImage {
@@ -297,6 +324,52 @@ function kepCsomopont(felold: {
   });
 }
 
+const IGAZITASOK: ReadonlySet<string> = new Set(RICH_TEXT_ALIGNMENTS);
+
+/**
+ * AZ IGAZITAS ES A GOMB JELOLESE (nautilus #1309, a tarolt alak:
+ * `agents/nautilus/megosztas/email-rich-editor-tarolt-html.md`).
+ *
+ * - `data-align="center|right"` a bekezdesen es a cimsoron. A bal az
+ *   alapertelmezes, es NINCS jelolese: a `null` nem ir attributumot.
+ * - `data-cta=""` a bekezdesen: a benne allo egyetlen link gombkent megy ki.
+ *
+ * Nem a TipTap `TextAlign`-ja: az `style="text-align"`-t ir, a tisztito pedig a
+ * `style`-t eldobja. Igy a szerkeszto pontosan azt a jelolest adja, amit a
+ * tisztito atenged, es amit a kuldes (`richHtmlForEmail`) inline stilusra fordit.
+ */
+const blokkJelolesek = Extension.create({
+  name: "emailBlockMarks",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["paragraph", "heading"],
+        attributes: {
+          align: {
+            default: null,
+            parseHTML: (elem) => {
+              const ertek = elem.getAttribute("data-align");
+              return ertek && IGAZITASOK.has(ertek) ? ertek : null;
+            },
+            renderHTML: (attrs) =>
+              attrs.align ? { "data-align": attrs.align as string } : {},
+          },
+        },
+      },
+      {
+        types: ["paragraph"],
+        attributes: {
+          cta: {
+            default: false,
+            parseHTML: (elem) => elem.hasAttribute("data-cta"),
+            renderHTML: (attrs) => (attrs.cta ? { "data-cta": "" } : {}),
+          },
+        },
+      },
+    ];
+  },
+});
+
 function bovitmenyek(
   variables: readonly RichTextVariable[],
   linkValtozok: readonly string[],
@@ -321,12 +394,14 @@ function bovitmenyek(
       ? [valtozoCsomopont(new Set(variables.map((v) => v.name)))]
       : []),
     kepCsomopont(felold),
+    blokkJelolesek,
   ];
 }
 
 function EszkozGomb(props: {
   cimke: string;
   aktiv: boolean;
+  tiltott?: boolean;
   onClick: () => void;
   children: string;
 }) {
@@ -336,10 +411,11 @@ function EszkozGomb(props: {
       aria-label={props.cimke}
       title={props.cimke}
       aria-pressed={props.aktiv}
+      disabled={props.tiltott}
       onMouseDown={(event) => event.preventDefault()}
       onClick={props.onClick}
       className={cn(
-        "min-w-8 rounded-md px-2 py-1 text-sm text-dusk-700 transition hover:bg-dusk-100",
+        "min-w-8 rounded-md px-2 py-1 text-sm text-dusk-700 transition hover:bg-dusk-100 disabled:opacity-40 disabled:hover:bg-transparent",
         props.aktiv && "bg-brand-50 text-brand-700",
       )}
     >
@@ -431,6 +507,241 @@ function LinkSzerkeszto(props: {
   );
 }
 
+const IGAZITAS_GOMBOK: readonly {
+  ertek: RichTextAlignment | null;
+  cimke: string;
+}[] = [
+  { ertek: null, cimke: "Balra" },
+  { ertek: "center", cimke: "Középre" },
+  { ertek: "right", cimke: "Jobbra" },
+];
+
+/** A kijelolt blokk igazitasa: bekezdes vagy cimsor, a bal a `null`. */
+function blokkIgazitas(editor: Editor): RichTextAlignment | null {
+  const ertek =
+    (editor.getAttributes("paragraph").align as string | null | undefined) ??
+    (editor.getAttributes("heading").align as string | null | undefined);
+  return ertek && IGAZITASOK.has(ertek) ? (ertek as RichTextAlignment) : null;
+}
+
+function IgazitasPanel(props: { editor: Editor; onClose: () => void }) {
+  const { editor, onClose } = props;
+  const most = blokkIgazitas(editor);
+  return (
+    <div
+      role="group"
+      aria-label="Igazítás"
+      className="flex flex-wrap items-center gap-1 border-b border-dusk-100 px-2 py-2"
+    >
+      {IGAZITAS_GOMBOK.map(({ ertek, cimke }) => (
+        <button
+          key={cimke}
+          type="button"
+          aria-pressed={most === ertek}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            // a nem kijelolt tipusra a parancs nem tesz semmit, a masik igen
+            editor
+              .chain()
+              .focus()
+              .updateAttributes("paragraph", { align: ertek })
+              .updateAttributes("heading", { align: ertek })
+              .run();
+            onClose();
+          }}
+          className={cn(
+            "rounded-md px-2 py-1 text-xs text-dusk-700 hover:bg-dusk-100",
+            most === ertek && "bg-brand-50 text-brand-700",
+          )}
+        >
+          {cimke}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A kurzor bekezdese, ha gomb (`data-cta`): a felirata es a link celja. */
+function ctaBekezdes(editor: Editor): { felirat: string; cel: string } | null {
+  const { $from } = editor.state.selection;
+  const blokk = $from.parent;
+  if (blokk.type.name !== "paragraph" || !blokk.attrs.cta) return null;
+  let cel = "";
+  blokk.forEach((gyerek) => {
+    const link = gyerek.marks.find((mark) => mark.type.name === "link");
+    if (!cel && link) cel = (link.attrs.href as string | undefined) ?? "";
+  });
+  return { felirat: blokk.textContent, cel };
+}
+
+/**
+ * A GOMB (CTA) PANELJE. A gomb egy SAJAT SORBAN allo bekezdes, benne pontosan
+ * EGY link, csak szoveggel (`<p data-cta="" data-align="center"><a href>`): a
+ * panel ezt az alakot allitja elo, es a meglevo gombot is ebben az alakban
+ * irja at. A cel ugyanazon a szabalyon dol el, mint a linke
+ * (`isAllowedRichHref`), a link-valtozok kulon felkinalva.
+ */
+function CtaPanel(props: {
+  editor: Editor;
+  linkValtozok: readonly RichTextVariable[];
+  onClose: () => void;
+}) {
+  const { editor, linkValtozok, onClose } = props;
+  const meglevo = ctaBekezdes(editor);
+  const [felirat, setFelirat] = useState(meglevo?.felirat ?? "");
+  const [cel, setCel] = useState(
+    meglevo?.cel ?? (linkValtozok[0] ? `{{${linkValtozok[0].name}}}` : ""),
+  );
+  const ervenyes =
+    felirat.trim() !== "" &&
+    isAllowedRichHref(cel, {
+      hrefPlaceholders: linkValtozok.map((v) => v.name),
+    });
+  const alkalmaz = () => {
+    if (!ervenyes) return;
+    const szoveg = felirat.trim();
+    if (meglevo) {
+      editor
+        .chain()
+        .focus()
+        .command(({ tr, state }) => {
+          const { $from } = state.selection;
+          const link = state.schema.marks.link!.create({ href: cel });
+          tr.replaceWith(
+            $from.start(),
+            $from.end(),
+            state.schema.text(szoveg, [link]),
+          );
+          return true;
+        })
+        .run();
+    } else {
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: "paragraph",
+          attrs: { cta: true, align: "center" },
+          content: [
+            {
+              type: "text",
+              text: szoveg,
+              marks: [{ type: "link", attrs: { href: cel } }],
+            },
+          ],
+        })
+        .run();
+    }
+    onClose();
+  };
+  return (
+    <div
+      role="group"
+      aria-label="Gomb"
+      className="flex flex-wrap items-center gap-2 border-b border-dusk-100 px-2 py-2"
+    >
+      <input
+        aria-label="Gomb felirata"
+        value={felirat}
+        placeholder="Számla megnyitása"
+        onChange={(event) => setFelirat(event.target.value)}
+        className="min-w-40 flex-1 rounded-md border border-dusk-200 px-2 py-1 text-sm outline-none focus:border-brand-500"
+      />
+      <input
+        aria-label="Gomb célja"
+        value={cel}
+        placeholder="https://"
+        onChange={(event) => setCel(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            alkalmaz();
+          }
+        }}
+        className="min-w-40 flex-1 rounded-md border border-dusk-200 px-2 py-1 text-sm outline-none focus:border-brand-500"
+      />
+      {linkValtozok.map((v) => (
+        <button
+          key={v.name}
+          type="button"
+          onClick={() => setCel(`{{${v.name}}}`)}
+          className="rounded-md bg-dusk-50 px-2 py-1 font-mono text-xs text-dusk-700 hover:bg-dusk-100"
+        >
+          {`{{${v.name}}}`}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={alkalmaz}
+        disabled={!ervenyes}
+        className="rounded-md bg-brand-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+      >
+        {meglevo ? "Gomb módosítása" : "Gomb beszúrása"}
+      </button>
+      {meglevo ? (
+        <button
+          type="button"
+          onClick={() => {
+            // a gombbol sima bekezdes lesz; a felirat es a link megmarad
+            editor
+              .chain()
+              .focus()
+              .updateAttributes("paragraph", { cta: false })
+              .run();
+            onClose();
+          }}
+          className="rounded-md px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
+        >
+          Gomb megszüntetése
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={onClose}
+        className="rounded-md px-2 py-1 text-xs text-dusk-600 hover:bg-dusk-100"
+      >
+        Mégse
+      </button>
+      {!ervenyes && felirat.trim() !== "" && cel ? (
+        <p className="w-full text-xs text-rose-600">
+          Csak http(s), mailto vagy link-változó lehet a cél.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+type BlokkTipus = "p" | "h2" | "h3";
+
+function BlokkValaszto(props: { editor: Editor; ertek: BlokkTipus }) {
+  const { editor, ertek } = props;
+  return (
+    <select
+      aria-label="Bekezdés típusa"
+      value={ertek}
+      onChange={(event) => {
+        const uj = event.target.value as BlokkTipus;
+        /*
+          AZ IGAZITAS ATMEGY AZ UJ BLOKKRA, es ezt nem mi csinaljuk: a TipTap
+          `setNode`-ja (3.31.3) a blokk sajat attributumait masolja, ha a
+          kijeloles egy blokkon belul all. Merve: a kulon atadott `align`
+          nelkul is megmaradt; `align: null`-lal elveszett.
+        */
+        const lanc = editor.chain().focus();
+        (uj === "p"
+          ? lanc.setParagraph()
+          : lanc.setHeading({ level: uj === "h2" ? 2 : 3 })
+        ).run();
+      }}
+      className="rounded-md bg-transparent px-2 py-1 text-sm text-dusk-700 outline-none hover:bg-dusk-100"
+    >
+      <option value="p">Bekezdés</option>
+      <option value="h2">Címsor</option>
+      <option value="h3">Alcím</option>
+    </select>
+  );
+}
+
 export function RichTextEditor({
   value,
   onChange,
@@ -492,7 +803,7 @@ export function RichTextEditor({
           role: "textbox",
           "aria-multiline": "true",
           class:
-            "min-h-48 px-3 py-2 text-sm text-dusk-900 outline-none [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:text-brand-700 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-dusk-200 [&_blockquote]:pl-3 [&_[data-variable]]:rounded [&_[data-variable]]:bg-brand-50 [&_[data-variable]]:px-1 [&_[data-variable]]:font-mono [&_[data-variable]]:text-xs [&_[data-variable]]:text-brand-700",
+            "min-h-48 px-3 py-2 text-sm text-dusk-900 outline-none [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:text-brand-700 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-dusk-200 [&_blockquote]:pl-3 [&_[data-variable]]:rounded [&_[data-variable]]:bg-brand-50 [&_[data-variable]]:px-1 [&_[data-variable]]:font-mono [&_[data-variable]]:text-xs [&_[data-variable]]:text-brand-700 [&_[data-align=center]]:text-center [&_[data-align=right]]:text-right [&_p[data-cta]]:my-4 [&_p[data-cta]_a]:inline-block [&_p[data-cta]_a]:rounded-[7px] [&_p[data-cta]_a]:bg-[#0b7a6e] [&_p[data-cta]_a]:px-6 [&_p[data-cta]_a]:py-3 [&_p[data-cta]_a]:font-semibold [&_p[data-cta]_a]:text-white [&_p[data-cta]_a]:no-underline",
         },
       },
       onUpdate: ({ editor: e }) => onChangeRef.current(e.getHTML()),
@@ -570,13 +881,33 @@ export function RichTextEditor({
       bulletList: e?.isActive("bulletList") ?? false,
       orderedList: e?.isActive("orderedList") ?? false,
       image: e?.isActive("templateImage") ?? false,
+      align: e ? blokkIgazitas(e) !== null : false,
+      cta: e?.isActive("paragraph", { cta: true }) ?? false,
+      undo: false,
+      redo: false,
+      blockType: false,
+      canUndo: e?.can().undo() ?? false,
+      canRedo: e?.can().redo() ?? false,
+      tipus: (e?.isActive("heading", { level: 2 })
+        ? "h2"
+        : e?.isActive("heading", { level: 3 })
+          ? "h3"
+          : "p") as BlokkTipus,
     }),
   });
-  const [linkNyitva, setLinkNyitva] = useState(false);
+  /* EGYSZERRE EGY PANEL: a link, az igazitas vagy a gomb. */
+  const [panel, setPanel] = useState<"link" | "align" | "cta" | null>(null);
+  const valt = (nev: "link" | "align" | "cta") =>
+    setPanel((nyitva) => (nyitva === nev ? null : nev));
 
   const gombok: Record<
-    RichTextToolbarItem,
-    { cimke: string; jel: string; futtat: (e: Editor) => void }
+    Exclude<RichTextToolbarItem, "blockType">,
+    {
+      cimke: string;
+      jel: string;
+      futtat: (e: Editor) => void;
+      tiltott?: boolean;
+    }
   > = {
     bold: {
       cimke: "Félkövér",
@@ -593,10 +924,32 @@ export function RichTextEditor({
       jel: "U",
       futtat: (e) => e.chain().focus().toggleUnderline().run(),
     },
+    undo: {
+      cimke: "Visszavonás",
+      jel: "↶",
+      futtat: (e) => e.chain().focus().undo().run(),
+      tiltott: !allapot?.canUndo,
+    },
+    redo: {
+      cimke: "Újra",
+      jel: "↷",
+      futtat: (e) => e.chain().focus().redo().run(),
+      tiltott: !allapot?.canRedo,
+    },
     link: {
       cimke: "Link",
       jel: "🔗",
-      futtat: () => setLinkNyitva((nyitva) => !nyitva),
+      futtat: () => valt("link"),
+    },
+    align: {
+      cimke: "Igazítás",
+      jel: "↔",
+      futtat: () => valt("align"),
+    },
+    cta: {
+      cimke: "Gomb (CTA)",
+      jel: "CTA",
+      futtat: () => valt("cta"),
     },
     bulletList: {
       cimke: "Felsorolás",
@@ -631,22 +984,43 @@ export function RichTextEditor({
         aria-label="Formázás"
         className="flex flex-wrap gap-1 border-b border-dusk-100 px-2 py-1"
       >
-        {lathato.map((elem) => (
-          <EszkozGomb
-            key={elem}
-            cimke={gombok[elem].cimke}
-            aktiv={allapot?.[elem] ?? false}
-            onClick={() => editor && gombok[elem].futtat(editor)}
-          >
-            {gombok[elem].jel}
-          </EszkozGomb>
-        ))}
+        {lathato.map((elem) =>
+          elem === "blockType" ? (
+            editor ? (
+              <BlokkValaszto
+                key={elem}
+                editor={editor}
+                ertek={allapot?.tipus ?? "p"}
+              />
+            ) : null
+          ) : (
+            <EszkozGomb
+              key={elem}
+              cimke={gombok[elem].cimke}
+              aktiv={allapot?.[elem] ?? false}
+              tiltott={gombok[elem].tiltott}
+              onClick={() => editor && gombok[elem].futtat(editor)}
+            >
+              {gombok[elem].jel}
+            </EszkozGomb>
+          ),
+        )}
       </div>
-      {linkNyitva && editor ? (
+      {panel === "link" && editor ? (
         <LinkSzerkeszto
           editor={editor}
           linkValtozok={linkValtozok}
-          onClose={() => setLinkNyitva(false)}
+          onClose={() => setPanel(null)}
+        />
+      ) : null}
+      {panel === "align" && editor ? (
+        <IgazitasPanel editor={editor} onClose={() => setPanel(null)} />
+      ) : null}
+      {panel === "cta" && editor ? (
+        <CtaPanel
+          editor={editor}
+          linkValtozok={linkValtozok}
+          onClose={() => setPanel(null)}
         />
       ) : null}
       <EditorContent editor={editor} />

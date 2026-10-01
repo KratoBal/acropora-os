@@ -29,15 +29,40 @@ describe("readInvoiceText", () => {
   const SUPPLIER = "Eladó: Szállító Kft. Adószám: 12345678-2-42";
   const US = "Vevő: Acropora Kft. Adószám: 23916229-2-13";
 
-  it("takes the supplier's NAV number from the text first, even over a labelled one", () => {
+  it("takes the supplier's NAV number from the text, whatever the layout, when no label says otherwise", () => {
     assert.deepEqual(
-      readInvoiceText([SUPPLIER, US, "Sorszám: 0001", "KS26/09229"], {
+      readInvoiceText([SUPPLIER, US, "Kelt: 2026.08.03.", "KS26/09229"], {
         navNumbers: (base) =>
-          base === "12345678" ? ["KS26/09229", "KS26/1"] : [],
+          base === "12345678" ? ["KS26/09229", "KS26/0922"] : [],
       }),
       {
         invoiceNumber: "KS26/09229",
         numberFrom: "NAV",
+        supplierTaxNumber: "12345678-2-42",
+      },
+    );
+  });
+
+  it("lets the labelled number decide when the text lists other invoices of the supplier (the MVM bill)", () => {
+    const lines = [
+      SUPPLIER,
+      US,
+      "Számla sorszáma: 845114371429",
+      "Korábbi számlák sorszáma és végösszege",
+      "846602789443 | 267.429",
+    ];
+    const both = ["846602789443", "845114371429"];
+    assert.deepEqual(readInvoiceText(lines, { navNumbers: () => both }), {
+      invoiceNumber: "845114371429",
+      numberFrom: "NAV",
+      supplierTaxNumber: "12345678-2-42",
+    });
+    // a saját száma még nincs a NAV-ban, a hivatkozott régi igen: az nem találat
+    assert.deepEqual(
+      readInvoiceText(lines, { navNumbers: () => ["846602789443"] }),
+      {
+        invoiceNumber: "845114371429",
+        numberFrom: "LABEL",
         supplierTaxNumber: "12345678-2-42",
       },
     );
@@ -79,6 +104,17 @@ describe("readInvoiceText", () => {
       readInvoiceText([SUPPLIER, "számla"], { fileName: "FX01015386.pdf" })
         .invoiceNumber,
       null,
+    );
+  });
+
+  it("prefers the full Hungarian tax number to an id fragment that looks European (FleetCor)", () => {
+    assert.equal(
+      readInvoiceText([
+        "Ügyfélazonosító: HU00008659",
+        "Kibocsátó: FleetCor Hungary Kft. Adószám: 25103272-2-42",
+        "Vevő: Acropora Kft. Adószám: 23916229-2-42",
+      ]).supplierTaxNumber,
+      "25103272-2-42",
     );
   });
 

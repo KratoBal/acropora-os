@@ -394,6 +394,7 @@ export function MissingInvoicesMonthDetail({
             <>
               <ServiceListTabs
                 label="Terhelések állapot szerint"
+                variant="pill"
                 tabs={CHARGE_TABS.map(({ key, label }) => ({ key, label }))}
                 active={tab}
                 onSelect={(key) => onTab(key as ChargeTab)}

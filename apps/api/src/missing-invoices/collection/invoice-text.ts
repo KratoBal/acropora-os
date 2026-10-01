@@ -83,6 +83,7 @@ const NUMBER_TOKEN = /^[#:.\s]*([A-Za-z0-9][A-Za-z0-9\-/_.]{2,39})/;
  * betűs változat a mintán BIC-kódot (`DRESDEFF510`) és szót (`CONFIRMATION`)
  * fogott.
  */
+const HU_TAX_NUMBER = /^\d{8}-\d-\d{2}$/;
 const TAX_NUMBER =
   /(?<![\dA-Za-z])(\d{8}-\d-\d{2}|FR[0-9A-Z]{2}\d{9}|NL\d{9}B\d{2}|ATU\d{8}|[A-Z]{2}\d{8,12})(?![\dA-Za-z])/g;
 
@@ -198,31 +199,63 @@ export function readInvoiceText(
 ): InvoiceTextReading {
   const text = lines.join("\n");
   const ours = ACROPORA_COMPANY.taxNumberBase;
+  /*
+    A TELJES MAGYAR ALAK ELŐBB, AZ EU-S UTÁNA, nem a szöveg sorrendjében. Mérve
+    2026-10-01, a balazs@ augusztusi mintáján: a FleetCor számláján egy
+    ügyfél-azonosító (`HU0000865961148`) darabja előbb állt, mint a szállító
+    `25103272-2-42` adószáma, és EU-s adószámnak látszott; a NAV-kulcs így
+    elment a számla mellett.
+  */
+  const taxNumbers = [...text.matchAll(TAX_NUMBER)]
+    .map((m) => m[1] as string)
+    .filter((tax) => taxBase(tax) !== ours);
   const supplierTaxNumber =
-    [...text.matchAll(TAX_NUMBER)]
-      .map((m) => m[1] as string)
-      .find((tax) => taxBase(tax) !== ours) ?? null;
+    taxNumbers.find((tax) => HU_TAX_NUMBER.test(tax)) ?? taxNumbers[0] ?? null;
   const reading = (
     invoiceNumber: string | null,
     numberFrom: InvoiceTextReading["numberFrom"],
   ): InvoiceTextReading => ({ invoiceNumber, numberFrom, supplierTaxNumber });
 
   const compactText = compactNumber(text);
+  let labelled: string | null = null;
+  for (const label of NUMBER_LABELS) {
+    labelled = labelledValue(lines, label);
+    if (labelled) break;
+  }
   if (supplierTaxNumber && hints.navNumbers) {
-    // a leghosszabb elöl: egy rövid szám egy hosszabbnak a része is lehet
-    const found = [...hints.navNumbers(taxBase(supplierTaxNumber))]
-      .sort((a, b) => compactNumber(b).length - compactNumber(a).length)
-      .find(
+    const present = hints
+      .navNumbers(taxBase(supplierTaxNumber))
+      .filter(
         (number) =>
           compactNumber(number).length >= 4 &&
           compactText.includes(compactNumber(number)),
       );
+    // ami egy másik, itt álló számnak csak a része, az nem önálló találat
+    const whole = present.filter(
+      (number) =>
+        !present.some(
+          (other) =>
+            compactNumber(other).length > compactNumber(number).length &&
+            compactNumber(other).includes(compactNumber(number)),
+        ),
+    );
+    /*
+      TÖBB NAV-SZÁM IS ÁLLHAT A SZÖVEGBEN (mérve 2026-10-01, egy MVM-számlán:
+      a korábbi számlák listája a számla végén). Ezért a címke dönt, ha van:
+      a címkézett számtól ELTÉRŐ NAV-szám nem találat, akkor sem, ha egyedül
+      áll (a számla saját száma még nincs a NAV-ban, a hivatkozott régi igen).
+      Címke nélkül a fájlnév vagy a tárgy dönt, végül az egyetlen találat.
+    */
+    const inName = compactNumber(
+      `${hints.fileName ?? ""} ${hints.subject ?? ""}`,
+    );
+    const found = labelled
+      ? whole.find((n) => compactNumber(n) === compactNumber(labelled!))
+      : (whole.find((n) => inName.includes(compactNumber(n))) ??
+        (whole.length === 1 ? whole[0] : undefined));
     if (found) return reading(found, "NAV");
   }
-  for (const label of NUMBER_LABELS) {
-    const labelled = labelledValue(lines, label);
-    if (labelled) return reading(labelled, "LABEL");
-  }
+  if (labelled) return reading(labelled, "LABEL");
   const fromName = `${hints.fileName ?? ""} ${hints.subject ?? ""}`
     .split(/[^A-Za-z0-9/_-]+/)
     .map((token) => token.replace(/^[-_/]+|[-_/]+$/g, ""))
