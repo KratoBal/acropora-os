@@ -41,6 +41,7 @@ function setup() {
         name: "Fő számla",
       },
     ],
+    credits: async () => [],
     debits: async () => [
       {
         id: "debit-1",

@@ -53,6 +53,7 @@ const charge = (overrides: Partial<ChargeRow> = {}): ChargeRow => ({
   documentNumbers: [],
   missingNumbers: [],
   amountDifference: null,
+  refund: null,
   paperOriginal: false,
   ...overrides,
 });
@@ -68,10 +69,18 @@ describe("the model", () => {
         "PROFORMA_ONLY",
         // a kétszer fizetett számla is teendő (acrobot 25636)
         "DOUBLE_PAID",
+        // az elmaradt visszatérítés is (acrobot 25933)
+        "REFUND_MISSING",
       ].sort(),
     );
     expect(TAB_STATES.MISSING).not.toContain("FOUND");
     expect(TAB_STATES.MISSING).not.toContain("NO_INVOICE_NEEDED");
+    // a várt visszatérítés nem teendő: a Nem kell számla mellé számít
+    expect(TAB_STATES.MISSING).not.toContain("REFUND_EXPECTED");
+    expect(TAB_STATES.NO_INVOICE_NEEDED).toContain("REFUND_EXPECTED");
+    expect(whatToDo("CHASE_REFUND", null)).toMatch(
+      /a visszatérítés a határidőig nem jött meg/,
+    );
   });
 
   it("months, and the company name in the what-to-do text", () => {
@@ -930,6 +939,57 @@ describe("MissingInvoicesDrawer", () => {
     ).toBeTruthy();
     expect(screen.getByText("Hiányzik: KS26/08132, KS26/08382")).toBeTruthy();
     expect(screen.getByText(/Összeg-eltérés a számlákhoz képest/)).toBeTruthy();
+  });
+
+  it("a cancelled purchase: the expected refund, the missed one, and the one that came (acrobot 25933)", () => {
+    const tesla = (overrides: Partial<ChargeRow>) =>
+      charge({
+        partner: "Tesla Inc",
+        amount: "85000",
+        original: null,
+        document: { number: "CR4042A0000012507", source: "SZAMLAZZ" },
+        matchedBy: "RULE",
+        documentNumbers: ["CR4042A0000012507"],
+        ...overrides,
+      });
+    const refund = {
+      amount: "85000",
+      currency: "HUF",
+      creditNoteNumber: "CR4042A0000012507",
+      due: "2026-10-25",
+      receivedOn: null,
+    };
+    const { unmount } = render(
+      <MissingInvoicesDrawer
+        {...base()}
+        row={tesla({ state: "REFUND_EXPECTED", refund })}
+      />,
+    );
+    expect(screen.getByText("Sztornózva: CR4042A0000012507")).toBeTruthy();
+    expect(screen.getByText(/Várt visszatérítés:/).textContent).toMatch(
+      /\+85\s000\sFt.*határidő/,
+    );
+    unmount();
+    const missed = render(
+      <MissingInvoicesDrawer
+        {...base()}
+        row={tesla({ state: "REFUND_MISSING", refund })}
+      />,
+    );
+    expect(screen.getByText(/A visszatérítés elmaradt/)).toBeTruthy();
+    expect(screen.queryByText(/Várt visszatérítés/)).toBeNull();
+    missed.unmount();
+    render(
+      <MissingInvoicesDrawer
+        {...base()}
+        row={tesla({
+          state: "NO_INVOICE_NEEDED",
+          refund: { ...refund, receivedOn: "2026-10-03" },
+        })}
+      />,
+    );
+    expect(screen.getByText(/A visszatérítés megjött/)).toBeTruthy();
+    expect(screen.queryByText(/elmaradt/)).toBeNull();
   });
 
   it("one invoice and nothing missing: no list, no missing line, no difference", () => {

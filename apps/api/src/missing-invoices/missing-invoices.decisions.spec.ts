@@ -67,6 +67,7 @@ function setup(env: NodeJS.ProcessEnv = {}, extra: CandidateDocument[] = []) {
   const repository = {
     accounts: async () => [ACCOUNT],
     debits: async () => [debit],
+    credits: async () => [],
     statementCoverage: async () => new Set([`${ACCOUNT.id}:2026-08`]),
     manualMatches: async () => new Map(matches),
     candidates: async () => [nav, ...extra.map((d) => ({ ...d }))],

@@ -46,6 +46,17 @@ export const MISSING_INVOICE_ITEM_STATES = [
    */
   "DOUBLE_PAID",
   "NO_INVOICE_NEEDED",
+  /**
+   * SZTORNÓZOTT VÁSÁRLÁS (acrobot 25933): a partner jóváírót adott ki a teljes
+   * összegre, számla nem kell, a visszatérítés még a határidőn belül van. A
+   * Nem kell számla mellé számít.
+   */
+  "REFUND_EXPECTED",
+  /**
+   * Sztornózva, de a visszatérítés a jóváíró keltétől 30 napig nem jött meg:
+   * a Nincs számla mellé kerül, hogy ne maradjon csendben.
+   */
+  "REFUND_MISSING",
 ] as const;
 export type MissingInvoiceItemState =
   (typeof MISSING_INVOICE_ITEM_STATES)[number];
@@ -65,6 +76,8 @@ export const MISSING_INVOICE_STATE_LABELS: Readonly<
   PROFORMA_ONLY: "Csak díjbekérő",
   DOUBLE_PAID: "Kétszer fizetett számla",
   NO_INVOICE_NEEDED: "Nem kell számla",
+  REFUND_EXPECTED: "Sztornózva, visszatérítés várható",
+  REFUND_MISSING: "Visszatérítés elmaradt",
 };
 
 export const MISSING_INVOICE_MONTH_STATUSES = [
@@ -195,6 +208,20 @@ export interface MissingInvoiceItem {
    * eltér (előjeles: negatív, ha a számlák többet tesznek ki). A párosítás áll.
    */
   amountDifference: { amount: string; currency: string } | null;
+  /**
+   * SZTORNÓZOTT VÁSÁRLÁS (acrobot 25933): a várt visszatérítés összege, a
+   * jóváíró száma, a határidő, és ha megjött, a jóváírás napja. Csak a
+   * jóváíróval párosított terhelésnél.
+   */
+  refund: {
+    amount: string;
+    currency: string;
+    creditNoteNumber: string;
+    /** `ÉÉÉÉ-HH-NN` */
+    due: string;
+    /** `ÉÉÉÉ-HH-NN`, vagy `null`, amíg nem jött meg. */
+    receivedOn: string | null;
+  } | null;
   comment: string | null;
   /** Kézzel jelölve: az eredeti papíron megvan (acrobot 25322). */
   paperOriginal: boolean;
@@ -209,6 +236,7 @@ export const MISSING_INVOICE_ACTIONS = [
   "REQUEST_REISSUE_TO_COMPANY",
   "REQUEST_FINAL_INVOICE",
   "CHECK_DOUBLE_PAYMENT",
+  "CHASE_REFUND",
 ] as const;
 export type MissingInvoiceAction = (typeof MISSING_INVOICE_ACTIONS)[number];
 

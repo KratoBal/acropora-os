@@ -93,6 +93,7 @@ const item = (
   documentNumbers: [],
   missingNumbers: [],
   amountDifference: null,
+  refund: null,
   paperOriginal: false,
   ...overrides,
 });

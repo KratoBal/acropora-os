@@ -99,6 +99,14 @@ export interface ChargeRow {
   missingNumbers: string[];
   /** A terhelés mínusz a számlák összege, ha a tűrésen túl eltér. */
   amountDifference: { amount: string; currency: string } | null;
+  /** Sztornózott vásárlás: a várt (vagy megjött) visszatérítés (acrobot 25933). */
+  refund: {
+    amount: string;
+    currency: string;
+    creditNoteNumber: string;
+    due: string;
+    receivedOn: string | null;
+  } | null;
   comment: string | null;
   /** Az eredeti papíron megvan (kézi jelölés, nautilus #1303). */
   paperOriginal: boolean;
@@ -126,6 +134,8 @@ export const CHARGE_STATE_BADGES: Record<
   DOUBLE_PAID: "danger",
   ORIGINAL_MISSING: "amber",
   NO_INVOICE_NEEDED: "grey",
+  REFUND_EXPECTED: "grey",
+  REFUND_MISSING: "danger",
 };
 
 export const MONTH_STATE_LABELS: Record<MonthState, string> = {
@@ -185,10 +195,13 @@ export const TAB_STATES: Record<ChargeTab, readonly ChargeInvoiceState[]> = {
     "PROFORMA_ONLY",
     "DOUBLE_PAID",
     "ORIGINAL_MISSING",
+    // az elmaradt visszatérítés nem marad csendben (acrobot 25933)
+    "REFUND_MISSING",
   ],
   NOT_MATCHED: ["NOT_MATCHED"],
   FOUND: ["FOUND"],
-  NO_INVOICE_NEEDED: ["NO_INVOICE_NEEDED"],
+  // a várt visszatérítés a Nem kell számla mellé számít (acrobot 25933)
+  NO_INVOICE_NEEDED: ["NO_INVOICE_NEEDED", "REFUND_EXPECTED"],
   ALL: [
     "FOUND",
     "NOT_MATCHED",
@@ -198,6 +211,8 @@ export const TAB_STATES: Record<ChargeTab, readonly ChargeInvoiceState[]> = {
     "DOUBLE_PAID",
     "ORIGINAL_MISSING",
     "NO_INVOICE_NEEDED",
+    "REFUND_EXPECTED",
+    "REFUND_MISSING",
   ],
 };
 
@@ -227,6 +242,9 @@ export function whatToDo(
     case "CHECK_DOUBLE_PAYMENT":
       // acrobot 25636: a Sopro-számlát két terheléssel fizettük ki
       return "Ugyanez a számla egy másik terheléshez is párosítva van. Ha kétszer fizettük, kérd vissza az egyiket; ha két külön számla, töltsd fel a másikat.";
+    case "CHASE_REFUND":
+      // acrobot 25933: a sztornózott vásárlás pénze nem jött vissza
+      return "A vásárlást sztornózták, de a visszatérítés a határidőig nem jött meg: kérd vissza az eladótól, vagy kártyás vásárlásnál a banktól.";
     case "PAIR_OR_UPLOAD":
       return "Van számla ettől a partnertől, de egyik sem egyezik ezzel a terheléssel: párosítsd a javasolt számlák közül, vagy töltsd fel a hiányzót.";
     case "NONE":

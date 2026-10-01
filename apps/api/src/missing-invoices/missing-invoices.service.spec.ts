@@ -49,6 +49,14 @@ const debit = (date: string, amount: number, name: string, overrides = {}) => ({
 
 function service(input: {
   debits: ReturnType<typeof debit>[];
+  credits?: {
+    id: string;
+    amount: Prisma.Decimal;
+    currency: string;
+    bookingDate: Date;
+    counterpartyName: string | null;
+    narrative: string;
+  }[];
   documents?: CandidateDocument[];
   coverage: string[];
   mailbox?: { id: string; content: Uint8Array; fileName: string }[];
@@ -58,6 +66,7 @@ function service(input: {
   const repository = {
     accounts: async () => [MAIN, CARD],
     debits: async () => input.debits,
+    credits: async () => input.credits ?? [],
     statementCoverage: async () => new Set(input.coverage),
     manualMatches: async () => new Map(),
     candidates: async (from: string, to: string) => {
@@ -103,6 +112,110 @@ describe("MissingInvoicesService candidate range", () => {
     });
     await missing.months();
     assert.deepEqual(ranges, [["2025-09-01", "2026-10-15"]]);
+  });
+});
+
+/*
+  SZTORNÓZOTT VÁSÁRLÁS A LISTÁBAN (acrobot 25933). MI PIROSÍT: ha a várt
+  visszatérítés nem a Nem kell számla csempébe és fülre kerülne, vagy terhelésnek
+  számítana; ha az elmaradt nem a Nincs számla mellé és a Hiányzik fülre; ha a
+  határidőt a mai naphoz, és nem a beolvasott kivonatok utolsó napjához mérné;
+  ha a jóváírás nem zárná le.
+*/
+describe("MissingInvoicesService: a cancelled purchase", () => {
+  const setup = (lastCredit: string, refunded = false) => {
+    const tesla = debit("2026-09-21", 85000, "Tesla Inc", {
+      bankAccountId: CARD.id,
+      narrative: "2026.09.17 7413124583 Tesla Inc -APPLE",
+    });
+    const credit = (
+      id: string,
+      date: string,
+      amount: number,
+      narrative: string,
+    ) => ({
+      id,
+      amount: D(amount),
+      currency: "HUF",
+      bookingDate: new Date(`${date}T00:00:00Z`),
+      counterpartyName: null,
+      narrative,
+    });
+    return {
+      tesla,
+      ...service({
+        debits: [tesla],
+        credits: [
+          credit("other", lastCredit, 1234, "Kamatjóváírás"),
+          ...(refunded
+            ? [
+                credit(
+                  "refund",
+                  "2026-10-03",
+                  85000,
+                  "2026.10.02 7413124583 Tesla Inc -APPLE",
+                ),
+              ]
+            : []),
+        ],
+        documents: [
+          {
+            ...nav("2026-09-25", -85000, "Tesla Hungary Kft."),
+            source: "SZAMLAZZ",
+            number: "CR4042A0000012507",
+          },
+        ],
+        coverage: [`${MAIN.id}:2026-09`, `${CARD.id}:2026-09`],
+      }),
+    };
+  };
+  const view = async (lastCredit: string, refunded = false) => {
+    const { missing } = setup(lastCredit, refunded);
+    const [month] = (await missing.months()).months;
+    const tab = async (t: "MISSING" | "NO_INVOICE_NEEDED") =>
+      (await missing.month("2026-09", { tab: t })).items.map((i) => [
+        i.state,
+        i.refund?.receivedOn ?? null,
+      ]);
+    return {
+      tiles: [month!.debitCount, month!.noInvoice, month!.noInvoiceNeeded],
+      missing: await tab("MISSING"),
+      notNeeded: await tab("NO_INVOICE_NEEDED"),
+    };
+  };
+
+  it("expected: with Nem kell számla, not a debit to account for", async () => {
+    const out = await view("2026-10-25");
+    assert.deepEqual(out, {
+      tiles: [0, 0, 1],
+      missing: [],
+      notNeeded: [["REFUND_EXPECTED", null]],
+    });
+    const { missing } = setup("2026-10-25");
+    const [item] = (await missing.month("2026-09", { tab: "ALL" })).items;
+    assert.deepEqual(item!.refund, {
+      amount: "85000",
+      currency: "HUF",
+      creditNoteNumber: "CR4042A0000012507",
+      due: "2026-10-25",
+      receivedOn: null,
+    });
+  });
+
+  it("missed, measured to the last statement day: next to Nincs számla, on Hiányzik", async () => {
+    assert.deepEqual(await view("2026-10-26"), {
+      tiles: [1, 1, 0],
+      missing: [["REFUND_MISSING", null]],
+      notNeeded: [],
+    });
+  });
+
+  it("refunded: closed, under Nem kell számla", async () => {
+    assert.deepEqual(await view("2026-12-01", true), {
+      tiles: [0, 0, 1],
+      missing: [],
+      notNeeded: [["NO_INVOICE_NEEDED", "2026-10-03"]],
+    });
   });
 });
 

@@ -392,6 +392,43 @@ export function MissingInvoicesDrawer({
             </section>
           ) : null}
 
+          {row.refund ? (
+            <section
+              className={`rounded-xl px-4 py-3 text-sm ring-1 ${
+                row.state === "REFUND_MISSING"
+                  ? "ring-pilot-red-200"
+                  : "ring-pilot-grey-200"
+              }`}
+            >
+              <p className="text-xs text-pilot-grey-500">
+                Sztornózva: {row.refund.creditNoteNumber}
+              </p>
+              {row.refund.receivedOn ? (
+                <p className="text-pilot-grey-900">
+                  A visszatérítés megjött:{" "}
+                  <span className="font-semibold">
+                    +{formatAmount(row.refund.amount, row.refund.currency)}
+                  </span>
+                  , {formatDay(row.refund.receivedOn)}
+                </p>
+              ) : row.state === "REFUND_MISSING" ? (
+                <p className="font-semibold text-pilot-red-700">
+                  A visszatérítés elmaradt: +
+                  {formatAmount(row.refund.amount, row.refund.currency)}, a
+                  határidő {formatDay(row.refund.due)} volt
+                </p>
+              ) : (
+                <p className="text-pilot-grey-900">
+                  Várt visszatérítés:{" "}
+                  <span className="font-semibold">
+                    +{formatAmount(row.refund.amount, row.refund.currency)}
+                  </span>
+                  , határidő: {formatDay(row.refund.due)}
+                </p>
+              )}
+            </section>
+          ) : null}
+
           <section>
             <h3 className="text-sm font-semibold text-pilot-grey-900">
               Javasolt számlák
