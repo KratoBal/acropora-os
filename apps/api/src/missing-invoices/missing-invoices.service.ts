@@ -626,9 +626,10 @@ export class MissingInvoicesService {
       `${shiftMonth(first, -12)}-01`,
       `${shiftMonth(last, 1)}-15`,
     );
-    await this.checkPayees(
-      documents.filter((d) => d.source === "MAILBOX" && d.payee === "UNKNOWN"),
-    );
+    // minden forrás, aminek a vevője még nincs kiszámolva (payeeCheck NULL):
+    // a postafiók lustán, és a cégnév-szabály előtti NOT_COMPANY sorok is,
+    // amiket a 20261001000600 migráció visszaállított (acrobot 25640)
+    await this.checkPayees(documents.filter((d) => d.payee === "UNKNOWN"));
 
     const ownAccounts = new Set(
       accountRows.map((a) => normalizeAccount(a.accountNumber)),
@@ -726,7 +727,7 @@ export class MissingInvoicesService {
   }
 
   /**
-   * A postafiók-számla vevőjének ellenőrzése, egyszer: a szövegéből, és az
+   * A dokumentum vevőjének ellenőrzése, egyszer: a szövegéből, és az
    * eredmény tárolódik. A PDF olvasása drága, ezért nem minden kérésnél.
    */
   private async checkPayees(documents: { id: string; payee: string }[]) {
