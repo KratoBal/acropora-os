@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { FIELD_SPECS, type FieldKey } from "./fields.js";
-import { guardFieldResult } from "./guard.js";
+import {
+  FIELD_SPECS,
+  normalizeFieldValue,
+  UnknownFieldError,
+  type FieldKey,
+} from "./fields.js";
+import { candidateProvenanceProblem, guardFieldResult } from "./guard.js";
 import {
   INDEPENDENT_SOURCES,
   SOURCE_TYPES,
@@ -221,15 +226,70 @@ describe("Tier C: a value without evidence can never come out VERIFIED or SUGGES
         }
   });
 
-  it("an unsupported Tier C value next to real evidence is reported, and does not become the value", () => {
-    const r = reconcileField("flowRate", [
+  /*
+    AN UNSUPPORTED VALUE NEXT TO REAL EVIDENCE (acrobot 25935, PD-011 "never
+    picks"). Its provenance is too thin to VERIFY, not too thin to CONTRADICT:
+    a different value makes the field CONFLICTING_SOURCES, with the unsupported
+    entry marked; the same value stays a plain rejection. Before this, the
+    outcome turned on bookkeeping: the same 1600 next to a manufacturer's 1500
+    was CONFLICTING with a sourceRef and VERIFIED without one.
+    What turns this red: a DIFFERENT unsupported value silently rejected
+    (VERIFIED 1500); the SAME unsupported value counted as a conflict; the
+    conflict entry losing its unsupported marker.
+  */
+  it("an unsupported value that contradicts real evidence is a conflict, never the value", () => {
+    const jev = reconcileField("flowRate", [
       src("3000 l/h", "MANUFACTURER_PAGE"),
       src("4200 l/h", "JEV_PROPOSAL", null, null),
     ]);
+    assert.equal(jev.status, "CONFLICTING_SOURCES");
+    assert.equal(jev.value, null);
+    assert.equal(jev.rejected.length, 1);
+    assert.equal(jev.rejected[0]?.candidate.value, "4200 l/h");
+
+    // the reviewer's case: our own row, no sourceRef, another value
+    const own = reconcileField("flowRate", [
+      src("1500 l/h", "MANUFACTURER_PAGE"),
+      src("1600 l/h", "UNAS_CURRENT", null),
+    ]);
+    assert.equal(own.status, "CONFLICTING_SOURCES");
+    assert.equal(own.value, null);
+    assert.deepEqual(
+      own.conflicts?.map((c) => [c.value, c.unsupportedReason ?? null]),
+      [
+        ["1500 l/h", null],
+        ["1600 l/h", "no source reference"],
+      ],
+    );
+  });
+
+  it("an unsupported value that states the SAME value stays a rejection, and the field is verified", () => {
+    const r = reconcileField("flowRate", [
+      src("1500 l/h", "MANUFACTURER_PAGE"),
+      src("1,5 m3/h", "UNAS_CURRENT", null),
+    ]);
     assert.equal(r.status, "VERIFIED");
-    assert.equal(r.value, "3000 l/h");
-    assert.equal(r.rejected.length, 1);
-    assert.equal(r.rejected[0]?.candidate.value, "4200 l/h");
+    assert.equal(r.value, "1500 l/h");
+    assert.equal(r.conflicts, undefined);
+    assert.equal(r.rejected[0]?.kind, "UNSUPPORTED");
+  });
+
+  // What turns this red: a typo in a field name surfacing as a bare TypeError.
+  it("an unknown field name is a clear error, not a TypeError", () => {
+    const bad = "flowrate" as FieldKey;
+    for (const call of [
+      () => reconcileField(bad, [src("1 l/h", "MANUFACTURER_PAGE")]),
+      () => normalizeFieldValue(bad, "1 l/h"),
+      () => candidateProvenanceProblem(bad, src("1 l/h", "MANUFACTURER_PAGE")),
+    ])
+      assert.throws(call, (error: unknown) => {
+        assert.ok(error instanceof UnknownFieldError);
+        assert.match(
+          (error as Error).message,
+          /unknown product field "flowrate"/,
+        );
+        return true;
+      });
   });
 
   it("randomized: every VERIFIED/SUGGESTED Tier C result is stated by independent, referenced, timestamped evidence", () => {

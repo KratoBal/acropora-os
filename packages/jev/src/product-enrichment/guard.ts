@@ -12,7 +12,7 @@
  *     violations are returned so the caller can count them.
  */
 
-import { FIELD_SPECS, normalizeFieldValue, type FieldKey } from "./fields.js";
+import { fieldSpec, normalizeFieldValue, type FieldKey } from "./fields.js";
 import {
   INDEPENDENT_SOURCES,
   JEV_PROPOSAL,
@@ -28,7 +28,7 @@ export function candidateProvenanceProblem(
   field: FieldKey,
   candidate: SourcedValue,
 ): string | null {
-  const tier = FIELD_SPECS[field].tier;
+  const tier = fieldSpec(field).tier;
   if (!isSourceType(candidate.sourceType)) return "unknown source type";
   if (
     candidate.confidence !== undefined &&
@@ -67,7 +67,7 @@ export function guardFieldResult(
   field: FieldKey,
   result: FieldResult,
 ): GuardOutcome {
-  if (FIELD_SPECS[field].tier !== "C") return { ok: true, result };
+  if (fieldSpec(field).tier !== "C") return { ok: true, result };
   const asserts =
     result.status === "VERIFIED" ||
     result.status === "SUGGESTED" ||

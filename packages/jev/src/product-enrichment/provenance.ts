@@ -109,6 +109,12 @@ export interface ConflictEntry {
   value: string | null;
   sources: SourcedValue[];
   invalidReason?: string;
+  /**
+   * The source states this (normalized) value, but its provenance is
+   * incomplete: it cannot VERIFY anything, and it still CONTRADICTS the
+   * accepted value. The reason is the provenance guard's.
+   */
+  unsupportedReason?: string;
 }
 
 /**

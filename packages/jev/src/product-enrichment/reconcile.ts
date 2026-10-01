@@ -13,7 +13,11 @@
  *                         UNSUPPORTED present -> UNVERIFIED
  *                         no candidate        -> MISSING
  *   4. Accepted values disagree after normalization -> CONFLICTING_SOURCES,
- *      with every value and every source in `conflicts`.
+ *      with every value and every source in `conflicts`. So does an accepted
+ *      value next to an UNSUPPORTED candidate that states ANOTHER value: its
+ *      provenance is too thin to verify, not too thin to contradict (acrobot
+ *      25935, PD-011). It is in `conflicts` with `unsupportedReason`. An
+ *      UNSUPPORTED candidate that states the SAME value stays a rejection.
  *   5. Accepted values agree, but a source stated an invalid value
  *      -> POSSIBLE_WRONG_VALUE, with the conflict set.
  *   6. Accepted values agree:
@@ -24,7 +28,7 @@
  * Only VERIFIED and SUGGESTED carry a value.
  */
 
-import { FIELD_SPECS, normalizeFieldValue, type FieldKey } from "./fields.js";
+import { fieldSpec, normalizeFieldValue, type FieldKey } from "./fields.js";
 import { candidateProvenanceProblem } from "./guard.js";
 import {
   INDEPENDENT_SOURCES,
@@ -47,7 +51,7 @@ export function reconcileField(
   candidates: readonly SourcedValue[],
   options: ReconcileOptions = {},
 ): FieldResult {
-  const tier = FIELD_SPECS[field].tier;
+  const tier = fieldSpec(field).tier;
   const rejected: RejectedCandidate[] = [];
   const groups = new Map<string, SourcedValue[]>();
 
@@ -92,8 +96,20 @@ export function reconcileField(
     if (rejected.length > 0) return empty("UNVERIFIED");
     return empty("MISSING");
   }
-  if (groups.size > 1)
-    return empty("CONFLICTING_SOURCES", conflictSet(groups, invalid));
+  // Without this, the outcome turned on bookkeeping: the same 1600 next to a
+  // manufacturer's 1500 was CONFLICTING with a sourceRef and VERIFIED without.
+  const contradicting = rejected.flatMap((r) => {
+    if (r.kind !== "UNSUPPORTED") return [];
+    const n = normalizeFieldValue(field, r.candidate.value);
+    return n.ok && !groups.has(n.value)
+      ? [{ rejected: r, value: n.value }]
+      : [];
+  });
+  if (groups.size > 1 || contradicting.length > 0)
+    return empty(
+      "CONFLICTING_SOURCES",
+      conflictSet(groups, invalid, contradicting),
+    );
   if (invalid.length > 0)
     return empty("POSSIBLE_WRONG_VALUE", conflictSet(groups, invalid));
 
@@ -146,6 +162,7 @@ function byPrecedence<T extends SourcedValue>(values: readonly T[]): T[] {
 function conflictSet(
   groups: Map<string, SourcedValue[]>,
   invalid: RejectedCandidate[],
+  contradicting: { rejected: RejectedCandidate; value: string }[] = [],
 ): ConflictEntry[] {
   const entries: ConflictEntry[] = [...groups.entries()].map(
     ([value, sources]) => ({
@@ -153,6 +170,12 @@ function conflictSet(
       sources,
     }),
   );
+  for (const c of contradicting)
+    entries.push({
+      value: c.value,
+      sources: [c.rejected.candidate],
+      unsupportedReason: c.rejected.reason,
+    });
   for (const r of invalid)
     entries.push({
       value: null,

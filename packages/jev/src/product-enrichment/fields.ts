@@ -82,7 +82,23 @@ export function isFieldKey(value: unknown): value is FieldKey {
   return typeof value === "string" && Object.hasOwn(FIELD_SPECS, value);
 }
 
+/**
+ * An unknown field name is a data or programming error, and it is said in words:
+ * without this, a typo in a dataset or a caller surfaced as a bare TypeError
+ * ("Cannot read properties of undefined") from deep inside the reconciler.
+ */
+export class UnknownFieldError extends Error {
+  readonly field: unknown;
+  constructor(field: unknown) {
+    super(`unknown product field "${String(field)}"`);
+    this.name = "UnknownFieldError";
+    this.field = field;
+  }
+}
+
+/** The field's spec; throws `UnknownFieldError` for a name that is not a field. */
 export function fieldSpec(field: FieldKey): FieldSpec {
+  if (!isFieldKey(field)) throw new UnknownFieldError(field);
   return FIELD_SPECS[field];
 }
 
@@ -97,7 +113,7 @@ export function normalizeFieldValue(
   field: FieldKey,
   raw: string,
 ): NormalizeResult {
-  const kind = FIELD_SPECS[field].kind;
+  const kind = fieldSpec(field).kind;
   switch (kind.kind) {
     case "gtin": {
       const r = validateGtin(raw);

@@ -169,7 +169,13 @@ functions. Uniqueness, writes and publication do not exist in V0.
    when there was no candidate at all.
 4. If the accepted values disagree after normalization, the result is
    **`CONFLICTING_SOURCES`, with the full conflict set**, whatever the
-   sources' precedence.
+   sources' precedence. The same holds when an accepted value stands next to
+   an `UNSUPPORTED` candidate that states **another** value: incomplete
+   provenance cannot verify, but it can still contradict. That entry is in the
+   conflict set with `unsupportedReason`. An `UNSUPPORTED` candidate that
+   states the **same** value stays a plain rejection. (Review of #1370: without
+   this, the same contradicting value was a conflict with a `sourceRef` and
+   silently dropped without one.)
 5. If the values agree but some source stated an invalid value, the result
    is `POSSIBLE_WRONG_VALUE`, with the conflict set.
 6. If the values agree, the result is `VERIFIED` when at least one source is
@@ -330,3 +336,11 @@ A metric with nothing to measure reports `n/a`, never 0% or 100%.
    triplet parser is a question for the benchmark data.
 6. **Who labels** the 30-50 product gold set, and where it is stored outside
    the repository (the precedent is PD-003 for the asset-category gold set).
+7. **VERIFIED outside Tier C.** `guardFieldResult` checks Tier C only, so a
+   result from elsewhere (a Jev output) that claims `VERIFIED` for a Tier A/B
+   field without any source passes unchanged. The reconciler never produces
+   one. Should `VERIFIED` need an independent source on every tier once Jev
+   outputs arrive directly (V1)?
+8. **Calendar-invalid timestamps.** `isIsoTimestamp` accepts
+   `2026-02-30T10:00Z`, because `Date.parse` rolls it over into March (it
+   rejects month 13). Should `retrievedAt` be checked against the calendar?

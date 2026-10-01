@@ -37,6 +37,7 @@ export {
 export {
   FIELD_SPECS,
   fieldSpec,
+  UnknownFieldError,
   isFieldKey,
   normalizeFieldValue,
   type FieldKey,
