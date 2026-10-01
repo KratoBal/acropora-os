@@ -3,10 +3,38 @@
 import {
   INCOMING_PAYMENT_STATE_LABELS,
   type BillingDocumentListItem,
+  type BillingPaymentState,
 } from "@acropora/types";
 
 import { formatDay } from "./billing-document-table";
 import { formatMoney } from "./billing-editor-state";
+
+/**
+ * AZ ÁLLAPOT SZÍNE EGY HELYEN: a pirula (`pill`) és ahol a felirat szövegként
+ * áll (`text`, a bejövő lista állapot-oszlopa), ugyanazt mondja. Enélkül a
+ * Számlázás két nézete ugyanarra az állapotra két színt mutatott (murena,
+ * #1368 review, 25916).
+ */
+export const PAYMENT_STATE_TONE: Readonly<
+  Record<BillingPaymentState, { pill: string; text: string }>
+> = {
+  PAID: {
+    pill: "bg-pilot-aqua-50 text-pilot-aqua-700",
+    text: "text-pilot-aqua-700",
+  },
+  PARTIAL: {
+    pill: "bg-pilot-amber-50 text-pilot-amber-700",
+    text: "text-pilot-amber-700",
+  },
+  UNPAID: {
+    pill: "bg-pilot-grey-100 text-pilot-grey-700",
+    text: "text-pilot-grey-700",
+  },
+  UNKNOWN: {
+    pill: "bg-pilot-grey-50 text-pilot-grey-500",
+    text: "text-pilot-grey-500",
+  },
+};
 
 /**
  * A SZÁMLA KIFIZETETTSÉGE (Balázs, GLS szál, 2026-10-01): a listán és az
@@ -40,12 +68,7 @@ export function PaymentBadge({
   const label = atOrder
     ? `${INCOMING_PAYMENT_STATE_LABELS[paymentState]} (${atOrder})`
     : INCOMING_PAYMENT_STATE_LABELS[paymentState];
-  const tone = {
-    PAID: "bg-pilot-aqua-50 text-pilot-aqua-700",
-    PARTIAL: "bg-pilot-amber-50 text-pilot-amber-700",
-    UNPAID: "bg-pilot-grey-100 text-pilot-grey-700",
-    UNKNOWN: "bg-pilot-grey-50 text-pilot-grey-500",
-  }[paymentState];
+  const tone = PAYMENT_STATE_TONE[paymentState].pill;
   const detail =
     paymentState === "PAID"
       ? formatDay(lastPaymentDate)

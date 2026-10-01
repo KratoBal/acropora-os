@@ -57,7 +57,7 @@ export function paymentStateOf(input: {
  * fog állni, ha tudjuk, hogy kifizették?”):
  *
  *   UNPAID          átutalás, utánvét, üres mód: a fizetés a számla UTÁN jön
- *   CARD_AT_ORDER   bankkártya, SimplePay, online fizetés: a vevő a
+ *   CARD_AT_ORDER   bankkártya, SimplePay (OTP Simple), online fizetés: a vevő a
  *                   rendeléskor fizetett, a Számlázz.hu-ban csak nincs rögzítve
  *   CASH_AT_ORDER   készpénz: ugyanígy, a helyszínen
  *   UNKNOWN         bármi más: nem tudjuk
@@ -75,9 +75,11 @@ export function outgoingMissingPayments(
     .replace(/\p{M}/gu, "")
     .trim()
     .toLowerCase();
-  if (method === "" || /^(atutalas|utalas|utanvet)/.test(method))
-    return "UNPAID";
-  if (/kartya|card|simplepay|barion|paypal|online/.test(method))
+  // ELSŐKÉNT és BÁRHOL a szövegben (murena review-ja, 25948): a „Készpénzes
+  // utánvét”, a „Bankkártyás utánvét” és az „Online átutalás” is később fizet;
+  // a kártya- vagy online-szó előre véve ezeket hamisan „Fizetve”-nek mondaná
+  if (method === "" || /utanvet|utalas/.test(method)) return "UNPAID";
+  if (/kartya|card|simple|barion|paypal|online/.test(method))
     return "CARD_AT_ORDER";
   if (/^keszpenz/.test(method)) return "CASH_AT_ORDER";
   return "UNKNOWN";

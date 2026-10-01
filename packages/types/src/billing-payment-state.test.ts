@@ -60,9 +60,18 @@ describe("outgoingMissingPayments (acrobot 25936, 25938)", () => {
       ),
       Array(5).fill("CARD_AT_ORDER"),
     );
-    assert.deepEqual(["Készpénz", "Csekk"].map(outgoingMissingPayments), [
-      "CASH_AT_ORDER",
-      "UNKNOWN",
-    ]);
+    assert.deepEqual(
+      ["Készpénz", "Csekk", "OTP Simple"].map(outgoingMissingPayments),
+      ["CASH_AT_ORDER", "UNKNOWN", "CARD_AT_ORDER"],
+    );
+    // A KONTROLL (murena 25948, acrobot 25950): a kártya- vagy online-szó
+    // mellett is később fizet, ha utánvét vagy utalás; a hamis „Fizetve” a
+    // veszélyes irány
+    assert.deepEqual(
+      ["Készpénzes utánvét", "Bankkártyás utánvét", "Online átutalás"].map(
+        outgoingMissingPayments,
+      ),
+      ["UNPAID", "UNPAID", "UNPAID"],
+    );
   });
 });

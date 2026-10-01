@@ -257,8 +257,9 @@ export interface ExternalListRow {
  *       átutalás, utánvét, üres   UNPAID (a fizetés később jön; a 927341621-es
  *                                 számla előbb elem nélkül, a fizetés után
  *                                 elemmel jött: MEGFIGYELT ESET, NEM GARANCIA)
- *       kártya, online, készpénz  PAID a rendeléskor: összeg a bruttó, dátum a
- *                                 számla kelte, a forrás jelölve
+ *       kártya, online, készpénz  PAID a rendeléskor: összeg a bruttó, a forrás
+ *                                 jelölve, DÁTUM NÉLKÜL (a kelt nem a fizetés
+ *                                 napja; acrobot 25950)
  *       bármi más                 UNKNOWN
  */
 export function externalPaymentFields(row: {
@@ -267,7 +268,6 @@ export function externalPaymentFields(row: {
   lastPaymentDate: Date | null;
   paymentsKnown: boolean | null;
   paymentMethod: string | null;
-  issueDate: Date;
   currency: string;
   cancelled: boolean;
 }): Pick<
@@ -301,7 +301,7 @@ export function externalPaymentFields(row: {
   return {
     paymentState: "PAID",
     paidAmount: row.grossAmount.toFixed(decimals),
-    lastPaymentDate: calendarDay(row.issueDate),
+    lastPaymentDate: null,
     paymentSource: missing,
   };
 }

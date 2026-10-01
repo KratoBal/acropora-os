@@ -219,7 +219,8 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
     assert.deepEqual(without("Bankkártya"), {
       paymentState: "PAID",
       paidAmount: "105831",
-      lastPaymentDate: "2026-09-30",
+      // a kelt nem a fizetés napja: dátum nincs (acrobot 25950)
+      lastPaymentDate: null,
       paymentSource: "CARD_AT_ORDER",
     });
     assert.deepEqual(
@@ -236,6 +237,13 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
     assert.deepEqual(
       [without("Csekk").paymentState, without("Csekk").paymentSource],
       ["UNKNOWN", null],
+    );
+    // a kártya-szó mellett is utánvét: nem fizetett (murena 25948)
+    assert.deepEqual(
+      ["Bankkártyás utánvét", "Készpénzes utánvét", "Online átutalás"].map(
+        (m) => without(m).paymentState,
+      ),
+      ["UNPAID", "UNPAID", "UNPAID"],
     );
     // ha a Számlázz.hu rögzítette, a kártyás is onnan számolt
     assert.deepEqual(

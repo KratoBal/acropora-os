@@ -33,6 +33,7 @@ import {
   useUrlQuery,
 } from "@/lib/navigation/use-url-query";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
+import { PAYMENT_STATE_TONE, PaymentBadge } from "./billing-payment";
 
 const PAGE_SIZE = String(BILLING_DOCUMENT_LIST_PAGE_SIZE.default);
 
@@ -56,27 +57,17 @@ const rateText = (value: string | null) =>
       }).format(Number(value))
     : "—";
 
-/** „09.30.”: a Figma a fizetés napját a hónappal mutatja a sorban. */
-const shortDay = (value: string) => `${value.slice(5).replace("-", ".")}.`;
-
-/** A fizetés a sorban: a kifizetés napja a „Fizetve” mellett, ha van. */
-export function paymentText(item: IncomingDocumentListItem): string {
-  const label = INCOMING_PAYMENT_STATE_LABELS[item.paymentState];
-  return item.paymentState === "PAID" && item.lastPaymentDate
-    ? `${label} · ${shortDay(item.lastPaymentDate)}`
-    : label;
-}
-
 /** A számla jelzői: a típus röviden (a „Számla” itt „Normál”) és a formátum. */
 const flagsText = (item: IncomingDocumentListItem) =>
   `${item.kindCode.toUpperCase() === "SZ" ? "Normál" : item.kindLabel} · ${
     INVOICE_FORMAT_LABELS[item.invoiceFormat]
   }`;
 
-const stateTone = (state: string) =>
-  state === "PAID" || state === "PAIRED"
+/** A banki párosítás színe (a kifizetésé a közös `PAYMENT_STATE_TONE`). */
+const bankTone = (state: IncomingDocumentListItem["bankMatch"]["state"]) =>
+  state === "PAIRED"
     ? "text-pilot-aqua-700"
-    : state === "UNKNOWN" || state === "NOT_TO_PAIR"
+    : state === "NOT_TO_PAIR"
       ? "text-pilot-grey-500"
       : "text-pilot-accent-warm-text";
 
@@ -136,9 +127,13 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
           <span className="text-pilot-grey-900">
             {item.paymentMethod ?? "—"}
           </span>
-          <span className={`text-xs ${stateTone(item.paymentState)}`}>
-            {paymentText(item)}
-          </span>
+          {/* a kimenő listával azonos jelzés és dátumírás (#1368) */}
+          <PaymentBadge
+            paymentState={item.paymentState}
+            paidAmount={item.paidAmount}
+            lastPaymentDate={item.lastPaymentDate}
+            currency={item.currency}
+          />
         </span>
       ),
     },
@@ -186,10 +181,10 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
             {item.kindLabel}
             {item.cancelled ? " · sztornózott" : ""}
           </span>
-          <span className={stateTone(item.paymentState)}>
+          <span className={PAYMENT_STATE_TONE[item.paymentState].text}>
             {INCOMING_PAYMENT_STATE_LABELS[item.paymentState]}
           </span>
-          <span className={stateTone(item.bankMatch.state)}>
+          <span className={bankTone(item.bankMatch.state)}>
             {INCOMING_BANK_MATCH_LABELS[item.bankMatch.state]}
           </span>
         </span>
