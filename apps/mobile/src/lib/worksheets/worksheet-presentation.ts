@@ -99,11 +99,68 @@ export interface WorksheetDetailLike {
 }
 
 export const worksheetStatusLabel: Record<WorksheetStatus, string> = {
-  DRAFT: "Piszkozat",
-  AWAITING_SIGNATURE: "Aláírásra vár",
-  SIGNED: "Aláírva",
+  DRAFT: "Új és folyamatban",
+  AWAITING_SIGNATURE: "Elkészült",
+  SIGNED: "Lezárva",
   REJECTED: "Elutasítva",
 };
+
+/**
+ * A MEGJELENITETT ALLAPOT: a piszkozat KET neven latszik, a tetelei szama
+ * szerint (acrobot 25724 es 25729, 2026-10-01). Tetel nelkul "Új", tetellel
+ * "Folyamatban". A tarolt allapot (es a szerver szuroje) valtozatlan, ezert a
+ * fulsor tovabbra is a fenti, osszevont nevet mutatja.
+ *
+ * A KOZOS FORRAS MASOLATA (`packages/types/src/worksheet-management.ts`),
+ * ugyanazzal az okkal, mint a fenti tabla: az Expo app nem huzza be a munkater
+ * csomagjait, ezert a spec forrasszovegkent veti ossze a kettot.
+ */
+export type WorksheetDisplayStatus =
+  "NEW" | "IN_PROGRESS" | "COMPLETED" | "CLOSED" | "REJECTED";
+
+export const worksheetDisplayStatusLabel: Record<
+  WorksheetDisplayStatus,
+  string
+> = {
+  NEW: "Új",
+  IN_PROGRESS: "Folyamatban",
+  COMPLETED: "Elkészült",
+  CLOSED: "Lezárva",
+  REJECTED: "Elutasítva",
+};
+
+export function worksheetDisplayStatus(
+  status: WorksheetStatus,
+  lineCount: number,
+): WorksheetDisplayStatus {
+  switch (status) {
+    case "DRAFT":
+      return lineCount > 0 ? "IN_PROGRESS" : "NEW";
+    case "AWAITING_SIGNATURE":
+      return "COMPLETED";
+    case "SIGNED":
+      return "CLOSED";
+    case "REJECTED":
+      return "REJECTED";
+  }
+}
+
+/**
+ * A FELIRAT, AMIT A SZERELO LAT -- es ha a tetelszam HIANYZIK, az osszevont
+ * nev.
+ *
+ * MIERT ELHAGYHATO A `lineCount`: a mobil OTA-val kimehet az API elott, es a
+ * regi szerver listaja nem kuldi a mezot. Egy hianyzo szamot nullanak venni
+ * HAMIS lenne: minden folyamatban levo lap "Új"-nak latszana. Az osszevont
+ * nev ("Új és folyamatban") ilyenkor is igaz.
+ */
+export function worksheetDisplayLabel(
+  status: WorksheetStatus,
+  lineCount: number | undefined,
+): string {
+  if (lineCount === undefined) return worksheetStatusLabel[status];
+  return worksheetDisplayStatusLabel[worksheetDisplayStatus(status, lineCount)];
+}
 
 /**
  * A MUNKALAP-ÁLLAPOT SZÍNE, A MOBIL NÉGY TOKENJÉRE SZABVA.

@@ -1131,6 +1131,47 @@ describe(
     });
 
     /**
+     * A TETELSZAM A JELENLEGI VERZIO SOROIBOL JON, AZ ADATBAZISBOL (acrobot
+     * 25724, 2026-10-01): ebbol dol el, hogy egy piszkozat "Új" vagy
+     * "Folyamatban". MI PIROSIT: ha a szam nem a sorokbol, vagy nem a
+     * jelenlegi verziobol jonne, vagy egy uj sor nem latszana benne.
+     */
+    it("lists the current version's line count", async () => {
+      const ures = await repository.createDraft({
+        customerId,
+        departmentId: bioDepartmentId,
+        content: content({ lines: [] }),
+        actorUserId,
+      });
+      const tetelesId = await repository.createDraft({
+        customerId,
+        departmentId: bioDepartmentId,
+        content: content(),
+        actorUserId,
+      });
+      const version = await prisma.worksheetVersion.findFirstOrThrow({
+        where: { worksheetId: tetelesId, status: "DRAFT" },
+        select: { id: true },
+      });
+      await repository.addLine({
+        versionId: version.id,
+        lineId: randomUUID(),
+        line: content().lines[0]!,
+        actorUserId,
+      });
+
+      const drafts = await repository.list(
+        { page: 1, pageSize: 100, status: "DRAFT" },
+        { kind: "internal" },
+        [],
+      );
+      const sorbol = (id: string) =>
+        drafts.items.find((item) => item.id === id)?.lineCount;
+      assert.equal(sorbol(ures), 0);
+      assert.equal(sorbol(tetelesId), 2);
+    });
+
+    /**
      * AZ ÜGYFÉL SAJÁT KÓDJA ÉLŐ HIVATKOZÁS, ÉS EZT CSAK ADATBÁZISON LEHET
      * BIZONYÍTANI.
      *

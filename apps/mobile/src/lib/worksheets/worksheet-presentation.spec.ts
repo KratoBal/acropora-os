@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -10,6 +11,8 @@ import {
   worksheetLabelOrDraft,
   worksheetLineSummary,
   worksheetListSubtitle,
+  worksheetDisplayLabel,
+  worksheetDisplayStatusLabel,
   worksheetStatusLabel,
   worksheetStatusTone,
   worksheetFilterSummary,
@@ -117,6 +120,61 @@ describe("worksheetStatusLabel", () => {
       "worksheetStatusLabel",
     );
     assert.deepEqual(worksheetStatusLabel, kozos);
+  });
+});
+
+/**
+ * A MEGJELENITETT ALLAPOT (acrobot 25724/25729): a piszkozat a tetelei szama
+ * szerint "Új" vagy "Folyamatban".
+ */
+describe("worksheetDisplayLabel", () => {
+  it("matches the common source", () => {
+    const kozos = recordLiteralFromSource(
+      "../../packages/types/src/worksheet-management.ts",
+      "worksheetDisplayStatusLabel",
+    );
+    assert.deepEqual(worksheetDisplayStatusLabel, kozos);
+  });
+
+  // MI PIROSIT: ha a hatar nem a nulla lenne, vagy a ket ag felcserelodne.
+  it("a draft with no lines is new, with lines in progress", () => {
+    assert.equal(worksheetDisplayLabel("DRAFT", 0), "Új");
+    assert.equal(worksheetDisplayLabel("DRAFT", 1), "Folyamatban");
+  });
+
+  it("the other statuses do not depend on the line count", () => {
+    assert.equal(worksheetDisplayLabel("AWAITING_SIGNATURE", 0), "Elkészült");
+    assert.equal(worksheetDisplayLabel("SIGNED", 3), "Lezárva");
+    assert.equal(worksheetDisplayLabel("REJECTED", 0), "Elutasítva");
+  });
+
+  /**
+   * A REGI SZERVER NEM KULDI A SZAMOT. Ha a hianyt nullanak vennenk, minden
+   * folyamatban levo lap "Új"-nak latszana -- az osszevont nev viszont igaz.
+   */
+  /**
+   * A KEPERNYOK BEKOTESE, SZOVEGBOL: a mobilon nincs renderelo, tehat ez az
+   * egyetlen, ami meri, hogy a tetelszam eljut a jelvenyig. MI PIROSIT (W8,
+   * kalibralva): ha a lista vagy az adatlap a szamot nem adna at.
+   */
+  it("the list and the detail screen pass the line count", () => {
+    const lista = readFileSync("src/app/worksheets/index.tsx", "utf8");
+    const adatlap = readFileSync("src/app/worksheets/[id].tsx", "utf8");
+    assert.match(
+      lista,
+      /worksheetDisplayLabel\(item\.status, item\.lineCount\)/,
+    );
+    assert.match(
+      adatlap,
+      /worksheetDisplayLabel\(\s*current\.status,\s*current\.lines\.length,?\s*\)/,
+    );
+  });
+
+  it("without a line count it says the combined name, not 'Új'", () => {
+    assert.equal(
+      worksheetDisplayLabel("DRAFT", undefined),
+      "Új és folyamatban",
+    );
   });
 });
 
@@ -448,7 +506,7 @@ describe("worksheetFilterSummary", () => {
         partnerName: "Fánk Kft.",
         status: "AWAITING_SIGNATURE",
       }),
-      "Rád kiosztva · Fánk Kft. · Aláírásra vár",
+      "Rád kiosztva · Fánk Kft. · Elkészült",
     );
   });
 

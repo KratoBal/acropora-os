@@ -22,8 +22,8 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import {
   formatDateTime,
   worksheetLabelOrDraft,
-  worksheetStatusLabel,
-  worksheetStatusPilotVariant,
+  worksheetDisplayLabel,
+  worksheetDisplayPilotVariant,
 } from "../worksheet-labels";
 import {
   PilotBadge,
@@ -94,9 +94,9 @@ const FIGMA_TAB_ORDER: {
   key: "" | WorksheetVersionStatus;
   label: string;
 }[] = [
-  { key: "DRAFT", label: "Piszkozat" },
-  { key: "AWAITING_SIGNATURE", label: "Aláírásra vár" },
-  { key: "SIGNED", label: "Aláírva" },
+  { key: "DRAFT", label: "Új és folyamatban" },
+  { key: "AWAITING_SIGNATURE", label: "Elkészült" },
+  { key: "SIGNED", label: "Lezárva" },
   { key: "REJECTED", label: "Elutasítva" },
   { key: "", label: "Összes" },
 ];
@@ -224,21 +224,21 @@ export function PilotWorksheetListPage() {
       key: "DRAFT",
       icon: "edit",
       tone: "purple",
-      label: "Szerkesztés alatt",
+      label: "Új és folyamatban",
       count: counts?.DRAFT ?? null,
     },
     {
       key: "AWAITING_SIGNATURE",
       icon: "clock",
       tone: "amber",
-      label: "Aláírásra vár",
+      label: "Elkészült",
       count: counts?.AWAITING_SIGNATURE ?? null,
     },
     {
       key: "SIGNED",
       icon: "checkCircle",
       tone: "green",
-      label: "Aláírt munkalap",
+      label: "Lezárva",
       count: counts?.SIGNED ?? null,
     },
   ];
@@ -465,9 +465,15 @@ export function PilotWorksheetListPage() {
                     </td>
                     <td className="px-4 py-3">
                       <PilotBadge
-                        variant={worksheetStatusPilotVariant(worksheet.status)}
+                        variant={worksheetDisplayPilotVariant(
+                          worksheet.status,
+                          worksheet.lineCount ?? 0,
+                        )}
                       >
-                        {worksheetStatusLabel[worksheet.status]}
+                        {worksheetDisplayLabel(
+                          worksheet.status,
+                          worksheet.lineCount ?? 0,
+                        )}
                       </PilotBadge>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-pilot-grey-400">
