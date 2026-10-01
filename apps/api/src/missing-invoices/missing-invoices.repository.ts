@@ -2,6 +2,10 @@ import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 import type { SupplierInvoiceImportResult } from "@acropora/types";
 
+import {
+  looksLikeBankAccount,
+  reminderFileName,
+} from "./collection/invoice-text.js";
 import type { CandidateDocument, Payee } from "./missing-invoice-matching.js";
 
 /**
@@ -411,6 +415,9 @@ export class MissingInvoicesRepository {
       if (!date) continue;
       if (!upload && ((!result && !reading) || date < from || date > to))
         continue;
+      // a már eltárolt fizetési emlékeztető nem számla (acrobot 25664): az új
+      // begyűjtés már nem tárolja, a régieket itt hagyjuk ki
+      if (!upload && reminderFileName(document.fileName)) continue;
       const foreign =
         (result?.supplier.country && result.supplier.country !== "HU") ||
         (result?.supplier.vatId && !result.supplier.vatId.startsWith("HU"));
@@ -428,7 +435,11 @@ export class MissingInvoicesRepository {
           result?.invoiceNumber ??
           reading?.invoiceNumber ??
           (upload ? document.fileName : ""),
-        references: reading?.bankReference ? [reading.bankReference] : [],
+        // egy bankszámlaszám (IBAN) nem hivatkozás: minden fizetésben ott áll
+        references:
+          reading?.bankReference && !looksLikeBankAccount(reading.bankReference)
+            ? [reading.bankReference]
+            : [],
         date,
         // a postafiók csak nettót olvas ki; EU-s (fordítottan adózó) szállítónál
         // ez a bruttó is, hazainál ismeretlen
