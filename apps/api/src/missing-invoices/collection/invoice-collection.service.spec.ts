@@ -49,6 +49,7 @@ function setup(input: {
   known?: Buffer[];
   failingUser?: string;
   nav?: Record<string, string[]>;
+  debits?: string[];
 }) {
   const stored: CollectedDocumentInput[] = [];
   const recorded: string[] = [];
@@ -65,6 +66,7 @@ function setup(input: {
     hasContent: async (sha: string) => knownShas.has(sha),
     navNumbers: async (base: string) => input.nav?.[base] ?? [],
     ownAccounts: async () => ["1170900220624460"],
+    debitNarratives: async () => input.debits ?? [],
     record: async (
       _source: string,
       id: string,
@@ -199,6 +201,112 @@ describe("InvoiceCollectionService", () => {
       ],
       [4, 1, 1, 1, 1],
     );
+  });
+
+  it("stores a foreign invoice whose number a debit narrative names, and only that", async () => {
+    // Amblard, éles 2026-10-01: francia számla, nincs a NAV-ban; a közlemény
+    // szó szerint megnevezi. A jóváírás közleménye a saját kimenő számlánk.
+    const foreign = await pdf([
+      "FACTURE / INVOICE",
+      "Amblard SAS, TVA FR12345678901",
+      "Client: Acropora Kft., VAT HU23916229",
+      "Facture N° F2602896",
+    ]);
+    const unpaid = await pdf([
+      "FACTURE / INVOICE",
+      "Autre SAS, TVA FR98765432109",
+      "Facture N° F2609999",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          { fileName: "F2602896.PDF", buffer: foreign },
+          { fileName: "F2609999.PDF", buffer: unpaid },
+        ],
+      },
+      debits: [
+        "485,40 EUR F2602896 34 chemin de Berniquaut FR7630003004730002571158",
+      ],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [d.fileName, d.payee, d.textReading]),
+      [
+        [
+          "F2602896.PDF",
+          "COMPANY",
+          {
+            invoiceNumber: "F2602896",
+            numberFrom: "LABEL",
+            supplierTaxNumber: "FR12345678901",
+            bankReference: "F2602896",
+          },
+        ],
+      ],
+    );
+    assert.deepEqual(recorded, ["m-1/F2609999.PDF:UNMATCHED"]);
+  });
+
+  it("keeps our own invoice out even when a refund debit quotes its number", async () => {
+    // a vevoi visszautalas terhelese a SAJAT kimeno szamlank szamat idezi: a
+    // banki hivatkozas aga nem tarolhatja el szallitoi szamlakent
+    const ours = await pdf([
+      "SZÁMLA",
+      "Eladó: Acropora Kft., adószám: 23916229-2-13",
+      "Vevő: Vevő Bt., adószám: 87654321-2-41",
+      "Számla sorszáma: ACRW-2026-00440",
+      "Bankszámlaszám: 11709002-20624460-00000000",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: { "m-1": [{ fileName: "ACRW-2026-00440.pdf", buffer: ours }] },
+      debits: ["Visszautalás ACRW-2026-00440 Vevő Bt."],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(stored, []);
+    assert.deepEqual(recorded, ["m-1/ACRW-2026-00440.pdf:OWN_INVOICE"]);
+  });
+
+  it("stores an invoice whose order number the debit narrative names, keeping its own number", async () => {
+    // Fauna Marin, éles 2026-10-01: a fizetés a rendelésszámot (20144304)
+    // nevezi meg, a számla száma 40142365, a rendelésszám „Auftragsnr.” alatt
+    // áll a számlán. Az összeg és a dátum (pont, vessző) nem hivatkozás.
+    const invoice = await pdf([
+      "Rechnung 40142365",
+      "Fauna Marin GmbH, USt-IdNr. DE812345678",
+      "Kunden-Nr. | Auftragsnr. | Datum | Betrag",
+      "33620 | 20144304 | 18.09.2026 | 1.698,58",
+    ]);
+    const other = await pdf([
+      "Rechnung 40199999",
+      "Fauna Marin GmbH, USt-IdNr. DE812345678",
+      "Datum 17.09.2026 | Betrag 1.698,58",
+    ]);
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          {
+            fileName: "Rechnung 40142365 - Kunden-Nr. 33620.pdf",
+            buffer: invoice,
+          },
+          { fileName: "Rechnung 40199999.pdf", buffer: other },
+        ],
+      },
+      debits: [
+        "1.698,58 EUR 20144304 Gottlieb-Binder-Str. 9 DE55603900000376285001 Fauna Marin Gmbh",
+      ],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [
+        d.fileName,
+        (d.textReading as { bankReference?: string } | null)?.bankReference,
+      ]),
+      [["Rechnung 40142365 - Kunden-Nr. 33620.pdf", "20144304"]],
+    );
+    assert.deepEqual(recorded, ["m-1/Rechnung 40199999.pdf:UNMATCHED"]);
   });
 
   it("skips a content it already has and a mail it has already read", async () => {

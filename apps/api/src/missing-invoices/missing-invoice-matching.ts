@@ -50,6 +50,11 @@ export interface CandidateDocument {
    */
   hasOriginal: boolean;
   /**
+   * Amivel a fizetés közleménye a számlára hivatkozhat, ha az nem a száma
+   * (például a rendelésszám a Fauna Marin számláján); az 1. szabály nézi.
+   */
+  references?: readonly string[];
+  /**
    * Az összevont jelölt többi azonosítója (ugyanaz a számla másik forrásból).
    * Egy kézi párosítás bármelyikre mutathat, és akkor is érvényes marad, ha a
    * számla később egy másik forrásból is beérkezik.
@@ -169,6 +174,46 @@ const dayDistance = (a: string, b: string) =>
 
 const compact = (s: string) => s.replace(/\s/g, "").toLowerCase();
 
+/**
+ * A KÖZLEMÉNY SZAVAI: szóköz, vessző, pontosvessző és kettőspont mentén, a
+ * szó végi pont nélkül.
+ */
+const narrativeTokens = (narrative: string) =>
+  narrative
+    .split(/[\s,;:]+/)
+    .map((token) => token.replace(/\.$/, "").toLowerCase())
+    .filter(Boolean);
+
+/** Ennél rövidebb számlaszámnál a partnernek is egyeznie kell. */
+const SHORT_NUMBER = 8;
+
+/**
+ * A SZÁMLA SZÁMA A KÖZLEMÉNYBEN: a szám a közlemény EGY EGÉSZ SZAVA, és rövid
+ * számnál a partner is egyezik.
+ *
+ * Mérve 2026-10-01, az exchange kivonatain (2025-12 .. 2026-08, 1144
+ * terhelés), barracuda lelete nyomán: a régi részszöveg-keresés 158
+ * párosításából kettő rossz volt. A `PETIK-2026-3` a `PETIK-2026-30`
+ * közleményű fizetést vitte el, és egy MÁSIK partner `2026-37` számlája az
+ * `E-VEGA-2026-37` közleményűt. A szóhatár magában az utóbbit nem fogta volna:
+ * a kötőjel a szám része. Ezzel a szabállyal a 158-ból 156 marad, és a kieső
+ * kettő pontosan a két rossz.
+ */
+function numberInNarrative(debit: MatchableDebit, document: CandidateDocument) {
+  const tokens = narrativeTokens(debit.narrative);
+  // a számla száma MELLETT a hivatkozásai is (#1323: a Fauna Marin közleménye a
+  // rendelésszámot nevezi meg), ugyanazzal az egész-szó szabállyal
+  return [document.number, ...(document.references ?? [])].some((raw) => {
+    const number = compact(raw);
+    return (
+      number.length >= 5 &&
+      tokens.includes(number) &&
+      (number.length >= SHORT_NUMBER ||
+        samePartner(debit.counterpartyName ?? "", document.supplierName))
+    );
+  });
+}
+
 function stateOf(documents: CandidateDocument[]): ItemState {
   if (documents.some((d) => d.kind === "PROFORMA")) return "PROFORMA_ONLY";
   if (documents.some((d) => d.payee === "NOT_COMPANY")) return "NOT_COMPANY";
@@ -193,6 +238,45 @@ function subsets<T>(items: readonly T[], max: number): T[][] {
   };
   walk(0, []);
   return result;
+}
+
+/** A havi gyűjtőszámla legkésőbbi napja a következő hónapban (mérve: 1. vagy 2.). */
+const MONTHLY_INVOICE_LAST_DAY = 5;
+
+/**
+ * A KÁRTYÁS FIZETÉSEK HAVI CSOPORTJAI. A kártyás terhelés közleménye így
+ * kezdődik: `2026.03.05 7413124583 SIMPLEP*PARKL .NET`, vagyis a VÁSÁRLÁS napja
+ * és a kártya. A csoport kulcsa a partner, a kártya és a vásárlás hónapja; a
+ * könyvelés napja nem jó kulcs, mert egy hónap utolsó napjainak vásárlása a
+ * következő hónapban könyvelődik.
+ *
+ * Mérve 2026-10-01, a 2025-12 .. 2026-08 kivonatain (barracuda megfigyelése
+ * nyomán): a Parkl-fizetések 14 ilyen csoportjából 10 pontosan egy következő
+ * elsejei Parkl-számlát ad, ez a 209 Parkl-fizetésből 128. A maradék 4 a
+ * hiányzó februári kivonaton és a hónap szélén múlik.
+ */
+export function monthlyCardGroups(debits: readonly MatchableDebit[]): {
+  debits: MatchableDebit[];
+  nextMonth: string;
+}[] {
+  const groups = new Map<string, MatchableDebit[]>();
+  for (const debit of debits) {
+    const card = /^(\d{4})\.(\d{2})\.\d{2}\s+(\d{6,})\s/.exec(
+      debit.narrative.trim() + " ",
+    );
+    if (!card || !debit.counterpartyName) continue;
+    const key = `${normalizeName(debit.counterpartyName)}|${card[3]}|${card[1]}-${card[2]}`;
+    groups.set(key, [...(groups.get(key) ?? []), debit]);
+  }
+  return [...groups.entries()]
+    .filter(([, members]) => members.length >= 2)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, members]) => {
+      const month = key.slice(-7);
+      const next = new Date(`${month}-01T00:00:00Z`);
+      next.setUTCMonth(next.getUTCMonth() + 1);
+      return { debits: members, nextMonth: next.toISOString().slice(0, 7) };
+    });
 }
 
 export function matchMonth(input: {
@@ -282,11 +366,7 @@ export function matchMonth(input: {
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
     // 1. a számla száma a közleményben
-    const byNumber = free().find(
-      (d) =>
-        d.number.replace(/\s/g, "").length >= 5 &&
-        compact(debit.narrative).includes(compact(d.number)),
-    );
+    const byNumber = free().find((d) => numberInNarrative(debit, d));
     if (byNumber) found(debit, [byNumber], "a számla száma a közleményben");
   }
   for (const debit of open) {
@@ -342,6 +422,33 @@ export function matchMonth(input: {
       [pair.document],
       "egyező összeg és partner a dátumablakban",
     );
+  }
+  // 3b. GYŰJTŐSZÁMLA: egy partner kártyás fizetéseinek havi összege egyetlen,
+  // a következő hónap elején kelt számla. Ez az „egy számla egy terhelés”
+  // szabály szűk kivétele: csak pontos összeg, egy kártya, egy vásárlási hónap,
+  // legalább két fizetés, és egyetlen illeszkedő számla.
+  for (const group of monthlyCardGroups(
+    open.filter((debit) => !outcomes.has(debit.id)),
+  )) {
+    const sum = group.debits.reduce(
+      (total, debit) => total.plus(debit.amount),
+      new Prisma.Decimal(0),
+    );
+    const invoices = partnerDocs(group.debits[0]!, 0.5).filter(
+      (d) =>
+        d.gross !== null &&
+        d.currency === group.debits[0]!.currency &&
+        d.gross.equals(sum) &&
+        d.date.slice(0, 7) === group.nextMonth &&
+        Number(d.date.slice(8, 10)) <= MONTHLY_INVOICE_LAST_DAY,
+    );
+    if (invoices.length !== 1) continue;
+    for (const debit of group.debits)
+      found(
+        debit,
+        [invoices[0]!],
+        `gyűjtőszámla: ${group.debits.length} kártyás fizetés havi összege`,
+      );
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;

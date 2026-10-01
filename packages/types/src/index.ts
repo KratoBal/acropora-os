@@ -883,6 +883,7 @@ export type {
   MissingInvoiceDocumentSource,
   MissingInvoiceItem,
   MissingInvoiceItemDetail,
+  MissingInvoiceJevSuggestion,
   MissingInvoiceMatchInput,
   MissingInvoicePaperOriginalInput,
   MissingInvoiceItemState,

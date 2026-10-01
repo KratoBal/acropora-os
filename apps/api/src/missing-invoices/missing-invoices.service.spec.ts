@@ -54,17 +54,25 @@ function service(input: {
   mailbox?: { id: string; content: Uint8Array; fileName: string }[];
 }) {
   const stored: [string, string][] = [];
+  const ranges: [string, string][] = [];
   const repository = {
     accounts: async () => [MAIN, CARD],
     debits: async () => input.debits,
     statementCoverage: async () => new Set(input.coverage),
     manualMatches: async () => new Map(),
-    candidates: async () => input.documents ?? [],
+    candidates: async (from: string, to: string) => {
+      ranges.push([from, to]);
+      return input.documents ?? [];
+    },
     uncheckedMailboxContent: async () => input.mailbox ?? [],
     setPayee: async (id: string, payee: string) =>
       void stored.push([id, payee]),
   } as unknown as MissingInvoicesRepository;
-  return { missing: new MissingInvoicesService(repository, READER), stored };
+  return {
+    missing: new MissingInvoicesService(repository, READER),
+    stored,
+    ranges,
+  };
 }
 
 const nav = (
@@ -83,6 +91,19 @@ const nav = (
   kind: "INVOICE",
   payee: "COMPANY",
   hasOriginal: true,
+});
+
+describe("MissingInvoicesService candidate range", () => {
+  it("loads documents from 12 months before the first statement month", async () => {
+    // Hertlein 260835: április 29-i számla, szeptember 25-i fizetés; a 4
+    // hónapos betöltés (05-01-től) kizárta, holott a közlemény megnevezi
+    const { missing, ranges } = service({
+      debits: [debit("2026-09-25", 25337, "HERTLEIN Aquaristik")],
+      coverage: [`${MAIN.id}:2026-09`, `${CARD.id}:2026-09`],
+    });
+    await missing.months();
+    assert.deepEqual(ranges, [["2025-09-01", "2026-10-15"]]);
+  });
 });
 
 describe("MissingInvoicesService.months", () => {

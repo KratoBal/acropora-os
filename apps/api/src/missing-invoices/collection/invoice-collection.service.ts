@@ -33,6 +33,7 @@ import {
 import {
   looksLikeInvoice,
   looksLikeProforma,
+  bankReference,
   readInvoiceText,
   type InvoiceTextReading,
 } from "./invoice-text.js";
@@ -68,9 +69,12 @@ interface Found {
  *   3. nem látszik számlának                                     -> NOT_INVOICE,
  *      és a tartalma NEM tárolódik (a balazs@ fiókban bármi lehet)
  *   4. a szállítói illesztő olvassa, VAGY a szállító egy NAV-ban ismert
- *      számlaszáma áll a szövegében                              -> STORED
+ *      számlaszáma áll a szövegében, VAGY a számla száma egy banki
+ *      terhelés közleményében áll (külföldi szállító)           -> STORED
  *   5. a saját bankszámlánk áll benne: a SAJÁT kimenő számlánk  -> OWN_INVOICE,
- *      tartalom nélkül (a kiállító a saját számláját nyomtatja rá)
+ *      tartalom nélkül (a kiállító a saját számláját nyomtatja rá). Ezt a 4.
+ *      banki ága ELŐTT nézzük: egy vevői visszautalás terhelése a saját
+ *      számlánk számát idézi, és a saját számla nem szállítói számla.
  *   6. minden más számlának látszó                              -> UNMATCHED,
  *      tartalom nélkül
  *
@@ -296,7 +300,22 @@ export class InvoiceCollectionService {
         const own = (await this.ownAccounts()).some((account) =>
           digits.includes(account),
         );
-        return skip(own ? "OWN_INVOICE" : "UNMATCHED");
+        if (own) return skip("OWN_INVOICE");
+        const reference = bankReference(
+          lines,
+          textReading,
+          hints,
+          await this.repository.debitNarratives(),
+        );
+        if (!reference) return skip("UNMATCHED");
+        textReading = textReading.invoiceNumber
+          ? { ...textReading, bankReference: reference }
+          : {
+              ...textReading,
+              invoiceNumber: reference,
+              numberFrom: "BANK",
+              bankReference: reference,
+            };
       }
     }
     const proforma = importResult
