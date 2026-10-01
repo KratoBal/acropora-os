@@ -78,6 +78,17 @@ export interface PairRequest {
   readonly placeholders: Readonly<Record<string, number>>;
 }
 
+export interface PairRequestWithDrops extends PairRequest {
+  /** A kerdes c0, c1, ... kulcsa melyik BEADOTT jelolt (index a bemeneti listaban). */
+  readonly candidateIndexes: readonly number[];
+  /** A kiejtett jeloltek: a bemeneti index es az ok (a nev soha). */
+  readonly dropped: readonly {
+    index: number;
+    outcome: string;
+    detail: string;
+  }[];
+}
+
 const COMPANY = pyre(OTHER.offlineCompany);
 
 /**
@@ -135,6 +146,88 @@ function redactedField(
   for (const [k, v] of Object.entries(r.counts))
     counts[k] = (counts[k] ?? 0) + v;
   return dropHalfPlaceholder([...r.text].slice(0, limit).join(""));
+}
+
+function guardCut(redactor: Redactor, text: string): void {
+  const problems = redactor.runtimeGuard(
+    { text, version: REDACTION_VERSION },
+    { allowKnownKinds: PAIRING_KNOWN_ALLOW },
+  );
+  if (problems.length)
+    throw new PairBlocked("blocked_runtime_guard", problems.join(","));
+}
+
+function pairCriteria(count: number): Record<string, string> {
+  const criteria: Record<string, string> = {};
+  for (let i = 0; i < count; i++)
+    criteria[`c${i}`] = PAIR_CRITERION.split("{i}").join(String(i));
+  criteria.NONE = PAIR_NONE;
+  return criteria;
+}
+
+/**
+ * A KERES A KIEJTETT JELOLTEKKEL (acrobot dontese, 25560): az or ne az egesz
+ * tetelt allitsa meg egy zavaro jelolt miatt, hanem azt a jeloltet ejtse ki, es
+ * a tobbivel menjen tovabb. Barracuda merese (25559): a 2+3 r11-es blokkot mind
+ * egyetlen zavaro jelolt valtotta ki (HANNA Instruments, a known-lista "HANNA"
+ * aliasa jogi forma nelkul).
+ *
+ *   a lekerdezes nem mehet ki         -> `PairBlocked`, nincs hivas (mint eddig)
+ *   egy jelolt nem mehet ki           -> kiesik; a tobbi kap c0, c1, ... kulcsot
+ *   egyetlen jelolt sem marad         -> `PairBlocked`, nincs hivas
+ *
+ * Egy jelolt ugyanazon a ket orszuron megy at, mint a `buildPairRequest`-ben
+ * (a teljes kitakart szovegen, majd a vagott darabon); a kiesett jelolt
+ * helyorzoi nem szamitanak bele a keresbe.
+ */
+export function buildPairRequestDroppingBlocked(
+  redactor: Redactor,
+  payment: PairPayment,
+  candidates: readonly PairCandidate[],
+): PairRequestWithDrops {
+  const placeholders: Record<string, number> = {};
+  const query = redactedField(
+    redactor,
+    paymentText(payment),
+    MAX_QUERY_CHARS,
+    placeholders,
+  );
+  guardCut(redactor, query);
+  const state: Record<string, string> = { query };
+  const candidateIndexes: number[] = [];
+  const dropped: { index: number; outcome: string; detail: string }[] = [];
+  candidates.forEach((c, index) => {
+    const local: Record<string, number> = {};
+    try {
+      const text = redactedField(
+        redactor,
+        candidateText(c),
+        MAX_CANDIDATE_CHARS,
+        local,
+      );
+      guardCut(redactor, text);
+      state[`c${candidateIndexes.length}`] = text;
+      candidateIndexes.push(index);
+      for (const [k, v] of Object.entries(local))
+        placeholders[k] = (placeholders[k] ?? 0) + v;
+    } catch (error) {
+      if (!(error instanceof PairBlocked)) throw error;
+      dropped.push({ index, outcome: error.outcome, detail: error.detail });
+    }
+  });
+  if (candidateIndexes.length === 0)
+    throw new PairBlocked("blocked_runtime_guard", "no candidate left");
+  return {
+    state,
+    questionKey: PAIR_QUESTION_KEY,
+    instructions: PAIR_INSTRUCTIONS,
+    criteria: pairCriteria(candidateIndexes.length),
+    model: JEV_MODEL,
+    redactionVersion: REDACTION_VERSION,
+    placeholders,
+    candidateIndexes,
+    dropped,
+  };
 }
 
 /**

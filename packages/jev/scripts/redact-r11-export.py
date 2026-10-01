@@ -36,6 +36,7 @@ VEC = os.path.join(PKG, "redact-vectors")
 os.environ["JEV_COMMON_WORDS"] = os.environ.get("JEV_COMMON_WORDS", "/home/marveen/marveen/store/jev-common-words.txt")
 os.environ["JEV_KNOWN_ENTITIES"] = os.path.join(tempfile.mkdtemp(), "none.json")
 sys.path.insert(0, JEV)
+import build_known  # noqa: E402
 import leak_gate  # noqa: E402
 import offline  # noqa: E402
 import redact  # noqa: E402
@@ -67,6 +68,9 @@ INLINE = {
     "alnum": r"[^\W_]+",
     "spaces": r"\s+",
     "halfPlaceholder": r"<[A-Z_]*\d*$",
+    # build_known.aliases, assembled exactly as there
+    "aliasParen": r"\(([^)]{2,40})\)",
+    "aliasCaps": r"\b[A-ZÁÉÍÓÖŐÚÜŰ]{3,}\b",
 }
 OTHER = {
     "formInHit": redact._FORM_IN_HIT.pattern,
@@ -76,6 +80,7 @@ OTHER = {
     "token": redact._TOKEN.pattern,
     "council": redact._COUNCIL.pattern,
     "offlineCompany": offline._COMPANY.pattern,
+    "knownForm": build_known._FORM.pattern,
 }
 assert all("(?i)" not in v or v.startswith("(?i)") for v in OTHER.values())
 
@@ -91,6 +96,9 @@ lines = [
     "",
     f"export const REDACTION_VERSION = {ts(redact.REDACTION_VERSION)};",
     f"export const REFERENCE_SHA256 = {ts(sha(ref))};",
+    f"export const BUILD_KNOWN_SHA256 = {ts(sha(os.path.join(JEV, 'build_known.py')))};",
+    "/** build_known.EXTRA: a flotta szintu nevek, amik nem adatbazis-sorok; a szuro NEM fut rajtuk. */",
+    f"export const KNOWN_EXTRA: readonly (readonly [string, string])[] = {ts([list(e) for e in build_known.EXTRA])};",
     "",
     "/** [fajta, Python-minta] a Python _P sorrendjeben: a sorrend szamit. */",
     f"export const PATTERNS: readonly (readonly [string, string])[] = {ts(P)};",
@@ -176,6 +184,26 @@ redact.COMMON = Recorder(redact.COMMON)
 for _, _, text, _ in cases:
     redact.redact(text)
     redact.redact(text, keep_kinds=redact.PAIRING_KEEP)
+# synthetic database rows for the known-entity builder (build_known.aliases/admit)
+KNOWN_ROWS = [
+    ("PERSON", "Varga Ilona"), ("PERSON", "Ilona"), ("PERSON", ""), ("EMAIL", "ilona.varga@example.com"),
+    ("ORG", "Fekete Bolt Kft."), ("ORG", "Tisza 97 Munkaruházati és Munkavédelmi Kft."),
+    ("ORG", "Lap Állatkert Nonprofit Zrt. (LAPZOO)"), ("ORG", "FANKSZER BANK Szolgáltató Kft."),
+    ("ORG", "ACROPORA HUNGARY Kft."), ("ORG", "Kis Kft"), ("ORG", "Nagy Péter e.v."),
+    ("ORG", "Kovács János"), ("ORG", "Acropora"), ("ADDRESS", "Petőfi utca 12."),
+    ("ORG", "Hal-Pont Bt.,"), ("ORG", "GYORS SZALLITAS Kft."), ("PERSON", "dr. Szabó Géza"), ("ORG", "  "),
+]
+
+
+def known_kept(rows):
+    """build_known.main without the database: the rows, their aliases, the admit
+    filter, then EXTRA."""
+    rows = rows + [al for kind, value in rows for al in build_known.aliases(kind, value)]
+    kept = [(k, v) for k, v in rows if build_known.admit(k, v)]
+    return kept + list(build_known.EXTRA)
+
+
+known_kept(KNOWN_ROWS)
 lookups = Recorder.asked
 common_subset = sorted(w for w in redact.COMMON if w in lookups)
 
@@ -223,6 +251,7 @@ for suite, cid, text, keep in cases:
 kpath = os.environ["JEV_KNOWN_ENTITIES"]
 redact.write_known_file(KNOWN, kpath)
 redact._KNOWN_CACHE.clear()
+out["knownBuilder"] = {"rows": KNOWN_ROWS, "kept": known_kept(KNOWN_ROWS)}
 out["known"] = {"entries": KNOWN, "cases": [
     {"text": t, "default": outputs(t, ()), "pairing": outputs(t, redact.PAIRING_KEEP),
      "spans": [list(s) for s in redact._known_spans(t, redact._load_known())]}
