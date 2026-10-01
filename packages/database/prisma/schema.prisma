@@ -7016,6 +7016,10 @@ model InvoiceCollectionRun {
   duplicateCount  Int                              @default(0)
   failedCount     Int                              @default(0)
   errorCode       String?
+  /// A begyűjtő szabályainak változata ezen a futáson
+  /// (INVOICE_COLLECTION_RULES_VERSION). Ha a kód változata más, az UNMATCHED
+  /// levelek újraolvasódnak: az új szabály a már látott leveleken is érvényesül.
+  rulesVersion    String?
   updatedAt       DateTime                         @updatedAt
 
   @@index([startedAt])
@@ -7188,7 +7192,14 @@ enum BankTransactionSource {
 /// minden fogadott üzenete, változatlanul. A kimenő számlát és a nyugtát ma csak
 /// tároljuk (a feldolgozásuk még nem eldöntött); a bejövőből ezen felül
 /// IncomingSupplierDocument lesz. Egy üzenet egyszer: a Számlázz.hu a változásig
-/// újraküldheti, a (fajta, azonosító) pár egyedi.
+/// újraküldheti, a (fajta, azonosító, tartalom) hármas egyedi.
+///
+/// UGYANARRÓL A SZÁMLÁRÓL TÖBB VÁLTOZAT IS LEHET (acrobot 25781): a Számlázz.hu a
+/// kimenő számlát a fizetési állapot vagy egy módosítható mező változásakor újra
+/// elküldi, ugyanazzal az azonosítóval. Eddig a (fajta, azonosító) pár volt
+/// egyedi, tehát a második, MÁS tartalmú üzenetet a fogadó nyugtázta és eldobta.
+/// Mostantól az új tartalom új sorként tárolódik, a régi megmarad; ugyanaz a
+/// tartalom (azonos sha256) továbbra is egyszer.
 model SzamlazzFeedMessage {
   id         String   @id @default(cuid())
   /// SZAMLABE, SZAMLAKI vagy NYUGTA.
@@ -7199,7 +7210,8 @@ model SzamlazzFeedMessage {
   body       String
   receivedAt DateTime @default(now())
 
-  @@unique([kind, externalId])
+  @@unique([kind, externalId, sha256])
+  @@index([kind, externalId])
 }
 
 model BankTransactionSourceKey {

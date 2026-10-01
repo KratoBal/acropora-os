@@ -15,6 +15,7 @@ import {
 } from "./szamlazz-feed-xml.js";
 import {
   SzamlazzFeedsRepository,
+  type FeedStoreOutcome,
   type SzamlazzFeedKind,
 } from "./szamlazz-feeds.repository.js";
 
@@ -35,7 +36,9 @@ import {
  * === MIT CSINÁL ===
  *
  *   - minden fogadott üzenet NYERSEN tárolódik (SzamlazzFeedMessage), egyszer;
- *   - a BEJÖVŐ számla ezen felül Hiányzó számlák-forrás lesz (IncomingSupplierDocument,
+ *     ugyanannak a számlának egy MÁS tartalmú újraküldése (fizetési állapot,
+ *     módosított mező) új változatként, a régi mellé (acrobot 25781);
+ *   - a BEJÖVŐ számla első változata ezen felül Hiányzó számlák-forrás lesz (IncomingSupplierDocument,
  *     origin SZAMLAZZ_FEED): a PDF-fel, ha a `pdf` mező base64-ben PDF-et hoz; ha
  *     nem, az XML maga a tartalom (a PDF kódolását az XSD nem mondja meg, az első
  *     élő csomag dönti el; addig nem találgatunk). A vevő az XML vevő-adószámából;
@@ -47,6 +50,13 @@ import {
  */
 
 export const SZAMLAZZ_FEEDS_ENV = Symbol("SZAMLAZZ_FEEDS_ENV");
+
+/** A naplósor szava: az első üzenet, egy új változat, vagy egy már ismert tartalom. */
+const STORED_LABEL: Record<FeedStoreOutcome, string> = {
+  NEW: "tárolva",
+  NEW_VERSION: "új változat, tárolva (a korábbi megmarad)",
+  SEEN: "már megvolt",
+};
 
 const MODE_ENV: Record<SzamlazzFeedKind, string> = {
   SZAMLABE: "SZAMLAZZ_SZAMLABE_MODE",
@@ -145,28 +155,38 @@ export class SzamlazzFeedsService {
       }
       if (kind === "SZAMLAKI") {
         const { id, szamlaszam } = parseSzamlaKi(body);
-        const fresh = await this.repository.storeRaw({
+        const stored = await this.repository.storeRaw({
           kind,
           externalId: id,
           sha256,
           body,
         });
         this.logger.log(
-          `Számlázz.hu kimenő számla ${szamlaszam} (#${id}): ${fresh ? "tárolva" : "már megvolt"} (feldolgozás nélkül).`,
+          `Számlázz.hu kimenő számla ${szamlaszam} (#${id}): ${STORED_LABEL[stored]} (feldolgozás nélkül).`,
         );
         return { status: 200, body: feedReply(REPLY[kind], { id }) };
       }
       const message = parseSzamlabe(body);
-      const fresh = await this.repository.storeRaw({
+      const stored = await this.repository.storeRaw({
         kind,
         externalId: message.id,
         sha256,
         body,
       });
-      if (fresh) await this.intoMissingInvoices(message, body);
+      /*
+        CSAK AZ ELSŐ VÁLTOZAT KERÜL A HIÁNYZÓ SZÁMLÁK KÖZÉ. Egy későbbi változat
+        (fizetési állapot, módosított mező) ugyanaz a számla: ha az is
+        dokumentum lenne, a számla kétszer állna a jelöltek között, és a
+        párosító kétszer fizetettnek láthatná. A változat nyersen megmarad.
+      */
+      if (stored === "NEW") await this.intoMissingInvoices(message, body);
       else
         this.logger.log(
-          `Számlázz.hu bejövő számla ${message.szamlaszam} (#${message.id}): már megvolt.`,
+          `Számlázz.hu bejövő számla ${message.szamlaszam} (#${message.id}): ${STORED_LABEL[stored]}${
+            stored === "NEW_VERSION"
+              ? "; a Hiányzó számlák forrásai között az első változat marad"
+              : ""
+          }.`,
         );
       return { status: 200, body: feedReply(REPLY[kind], { id: message.id }) };
     } catch (error) {

@@ -11,6 +11,7 @@ import {
 } from "./szamlazz-feed-xml.js";
 import type {
   FeedInvoiceInput,
+  FeedStoreOutcome,
   SzamlazzFeedsRepository,
 } from "./szamlazz-feeds.repository.js";
 import { SzamlazzFeedsService } from "./szamlazz-feeds.service.js";
@@ -187,14 +188,14 @@ const live = {
 
 function setup(
   env: NodeJS.ProcessEnv = live,
-  opts: { known?: boolean; seen?: boolean } = {},
+  opts: { known?: boolean; seen?: boolean; stored?: FeedStoreOutcome } = {},
 ) {
   const raw: string[] = [];
   const invoices: FeedInvoiceInput[] = [];
   const repository = {
     storeRaw: async (input: { kind: string; externalId: string }) => {
       raw.push(`${input.kind}:${input.externalId.slice(0, 12)}`);
-      return !opts.seen;
+      return opts.stored ?? (opts.seen ? "SEEN" : "NEW");
     },
     hasContent: async () => opts.known ?? false,
     storeInvoice: async (input: FeedInvoiceInput) => {
@@ -331,6 +332,21 @@ describe("SzamlazzFeedsService", () => {
       assert.equal((await service.receive("SZAMLABE", KEY, body)).status, 200);
       assert.deepEqual(invoices, []);
     }
+  });
+
+  /**
+   * EGY ÚJ VÁLTOZAT UGYANARRÓL A SZÁMLÁRÓL (acrobot 25781): a Számlázz.hu a
+   * fizetési állapot vagy egy mező változása után ugyanazzal az azonosítóval
+   * küldi újra. MI PIROSÍT: ha a változat második dokumentumként a Hiányzó
+   * számlák közé kerülne (a számla kétszer állna a jelöltek között); ha a
+   * Számlázz.hu nem kapná vissza az azonosítót (akkor újraküldené).
+   */
+  it("a new version of the same invoice is answered, and does not go in a second time", async () => {
+    const { service, invoices } = setup(live, { stored: "NEW_VERSION" });
+    const reply = await service.receive("SZAMLABE", KEY, szamlabe());
+    assert.equal(reply.status, 200);
+    assert.match(reply.body, /<id>98765<\/id>/);
+    assert.deepEqual(invoices, []);
   });
 
   it("a pdf field that is not a base64 PDF: the XML itself is the content", async () => {
