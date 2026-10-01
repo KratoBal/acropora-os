@@ -42,6 +42,14 @@ const api = vi.hoisted(() => ({
   templateDraft: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
+/* a drawer nyitásakor a képtár töltődik; itt üres, hálózat nélkül */
+vi.mock("@/lib/api/mail-images", () => ({
+  mailImagesApi: {
+    list: vi.fn().mockResolvedValue([]),
+    upload: vi.fn(),
+    content: vi.fn(),
+  },
+}));
 
 const customers = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn() }));
 vi.mock("@/lib/api/customers", () => ({ customersApi: customers }));
