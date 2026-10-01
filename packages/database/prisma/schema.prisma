@@ -7170,6 +7170,25 @@ enum BankTransactionSource {
 /// ugyanaz a kulcs másodszor semmit nem ír. A párosítás a számla, az irány, az
 /// összeg, a deviza, az értéknap és a partner-számla mentén megy (lásd
 /// `bank-transaction-sources.ts`).
+/// A SZÁMLÁZZ.HU SZÁMLA- ÉS NYUGTA-TOVÁBBÍTÁS NYERS ÜZENETEI (acrobot 25686): a
+/// bejövő számla (`SZAMLABE`), a kimenő számla (`SZAMLAKI`) és a nyugta (`NYUGTA`)
+/// minden fogadott üzenete, változatlanul. A kimenő számlát és a nyugtát ma csak
+/// tároljuk (a feldolgozásuk még nem eldöntött); a bejövőből ezen felül
+/// IncomingSupplierDocument lesz. Egy üzenet egyszer: a Számlázz.hu a változásig
+/// újraküldheti, a (fajta, azonosító) pár egyedi.
+model SzamlazzFeedMessage {
+  id         String   @id @default(cuid())
+  /// SZAMLABE, SZAMLAKI vagy NYUGTA.
+  kind       String
+  /// A Számlázz.hu azonosítója (`alap.id`); a nyugtánál a törzs sha256-ja.
+  externalId String
+  sha256     String
+  body       String
+  receivedAt DateTime @default(now())
+
+  @@unique([kind, externalId])
+}
+
 model BankTransactionSourceKey {
   id                String                @id @default(cuid())
   key               String                @unique
