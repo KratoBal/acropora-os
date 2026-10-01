@@ -207,7 +207,7 @@ describe("DashboardCards", () => {
     render(<DashboardCards summary={summary} />);
 
     expect(screen.getByText("Nyitott hibajegy")).toBeInTheDocument();
-    expect(screen.getByText("Aláírásra vár")).toBeInTheDocument();
+    expect(screen.getByText("Elkészült munkalap")).toBeInTheDocument();
     expect(screen.getByText("Anyagigény")).toBeInTheDocument();
     expect(screen.getByText("Megrendelőlap")).toBeInTheDocument();
   });

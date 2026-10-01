@@ -132,6 +132,35 @@ describe("WorksheetListPage", () => {
     api.selectablePartners.mockReset().mockResolvedValue({ items: [] });
   });
 
+  /**
+   * A PISZKOZAT KET NEVEN LATSZIK, a tetelei szama szerint (acrobot 25724):
+   * tetel nelkul "Új", tetellel "Folyamatban". MI PIROSIT: ha a sor a tarolt
+   * allapot osszevont nevet irna ki, vagy ha a tetelszam nem jutna el a jelveny
+   * ele (akkor mindket piszkozat "Új" lenne).
+   */
+  it("a draft row says Új without lines and Folyamatban with lines", async () => {
+    const alap = response();
+    api.list.mockResolvedValue(
+      response({
+        items: [
+          alap.items[1]!,
+          {
+            ...alap.items[1]!,
+            id: "worksheet-3",
+            subject: "Szűrő csere",
+            lineCount: 2,
+          },
+        ],
+      }),
+    );
+    render(<WorksheetListPage />);
+    await screen.findByText("Szűrő csere");
+
+    const sor = (subject: string) => screen.getByText(subject).closest("tr")!;
+    expect(within(sor("Szivattyú csere")).getByText("Új")).toBeTruthy();
+    expect(within(sor("Szűrő csere")).getByText("Folyamatban")).toBeTruthy();
+  });
+
   it("names the people a worksheet is on, and says so when it is nobody's", async () => {
     render(<WorksheetListPage />);
 
@@ -255,7 +284,7 @@ describe("WorksheetListPage állapot-csempék", () => {
     render(<WorksheetListPage />);
     await screen.findByText("Sanyi, Kiss Péter");
 
-    fireEvent.click(screen.getByRole("button", { name: /Szerkesztés alatt/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Új és folyamatban/ }));
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     const target = String(navigation.replace.mock.calls.at(-1)?.[0]);
@@ -274,7 +303,7 @@ describe("WorksheetListPage állapot-csempék", () => {
     render(<WorksheetListPage />);
     await screen.findByText("Sanyi, Kiss Péter");
 
-    fireEvent.click(screen.getByRole("button", { name: /Szerkesztés alatt/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Új és folyamatban/ }));
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     const target = String(navigation.replace.mock.calls.at(-1)?.[0]);

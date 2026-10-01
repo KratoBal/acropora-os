@@ -124,6 +124,7 @@ import {
   worksheetDetailRows,
   worksheetLabelOrDraft,
   worksheetLineSummary,
+  worksheetDisplayLabel,
   worksheetStatusLabel,
   worksheetStatusTone,
 } from "@/lib/worksheets/worksheet-presentation";
@@ -943,7 +944,10 @@ export default function WorksheetDetailScreen() {
                     ]}
                   >
                     <Text style={[styles.statusText, { color: tone.text }]}>
-                      {worksheetStatusLabel[current.status]}
+                      {worksheetDisplayLabel(
+                        current.status,
+                        current.lines.length,
+                      )}
                     </Text>
                   </View>
                 );
