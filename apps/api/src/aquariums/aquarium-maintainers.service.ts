@@ -16,7 +16,14 @@ export class AquariumMaintainersService {
     private readonly aquariums: AquariumsRepository,
   ) {}
 
-  selectable() {
+  /**
+   * The internal staff who may maintain an aquarium. Internal only
+   * (2026-10-02): assigning maintainers is an internal step (`set` below),
+   * and until then a partner account with `aquariums.manage` could read the
+   * whole list of names.
+   */
+  selectable(user: AuthenticatedUser) {
+    requireInternalWriter(user, "A karbantartók listája");
     return this.repository.selectable();
   }
 

@@ -10,6 +10,7 @@ import { Prisma } from "@acropora/database";
 import {
   AQUARIUM_MEASUREMENT_PARAMETERS,
   type AquariumDetail,
+  type AquariumSelectableCustomerListResponse,
   type AuthenticatedUser,
 } from "@acropora/types";
 
@@ -101,8 +102,24 @@ export class AquariumsService {
     return this.withCanAssignAssets(aquarium, user);
   }
 
-  searchSelectableCustomers(search?: string) {
-    return this.repository.searchSelectableCustomers(search);
+  /**
+   * THE CUSTOMER PICKER, SCOPED (2026-10-02). Until then it listed every
+   * active buyer's name and city to anyone with `aquariums.view`, partner
+   * accounts included. A partner may only create an aquarium for its own
+   * customer (`resolvePartnerOwnership`), so its picker offers exactly that
+   * one; a supplier-linked account has no customer to offer. Internal users
+   * are unchanged.
+   */
+  async searchSelectableCustomers(
+    search: string | undefined,
+    user: AuthenticatedUser,
+  ): Promise<AquariumSelectableCustomerListResponse> {
+    const scope = partnerScopeOf(user);
+    if (scope.kind === "supplier") return { items: [] };
+    return this.repository.searchSelectableCustomers(
+      search,
+      scope.kind === "customer" ? scope.customerId : undefined,
+    );
   }
 
   private checkEquipment(rows: CreateAquariumEquipmentDto[]) {

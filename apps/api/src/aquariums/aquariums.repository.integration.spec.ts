@@ -271,6 +271,47 @@ describe(
      * egy paramétert. Két külön vevő, két külön akvárium: ha a `where`
      * ág hibás (pl. lemarad a spread), MINDKETTŐ visszajönne.
      */
+    /**
+     * THE CUSTOMER PICKER FOR A PARTNER (2026-10-02): two buyers with the
+     * same name. Before the fix a partner's search returned both; now only
+     * its own comes back. The control: an internal search finds both.
+     */
+    describe("searchSelectableCustomers -- partner gets only its own customer", () => {
+      it("a partner search does not return a foreign customer with the same name", async () => {
+        const own = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}PICK-OWN-${suffix}`,
+            type: "COMPANY",
+            displayName: `Akvárium választó ${suffix}`,
+          },
+        });
+        const foreign = await prisma.customer.create({
+          data: {
+            customerNumber: `${CUSTOMER_PREFIX}PICK-FOREIGN-${suffix}`,
+            type: "COMPANY",
+            displayName: `Akvárium választó ${suffix}`,
+          },
+        });
+        const search = `Akvárium választó ${suffix}`;
+
+        const internal = await repository.searchSelectableCustomers(search);
+        assert.deepEqual(
+          internal.items.map((item) => item.id).sort(),
+          [own.id, foreign.id].sort(),
+          "control: the internal search finds both",
+        );
+
+        const partner = await repository.searchSelectableCustomers(
+          search,
+          own.id,
+        );
+        assert.deepEqual(
+          partner.items.map((item) => item.id),
+          [own.id],
+        );
+      });
+    });
+
     describe("list -- customerId szűrő", () => {
       it("csak a kiválasztott vevő akváriumát adja vissza", async () => {
         const customerA = await prisma.customer.create({

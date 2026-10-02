@@ -270,15 +270,10 @@ export class AquariumsRepository {
    */
   async searchSelectableCustomers(
     search?: string,
+    onlyCustomerId?: string,
   ): Promise<AquariumSelectableCustomerListResponse> {
     const rows = await prisma.customer.findMany({
-      where: {
-        partner: null,
-        isActive: true,
-        ...(search
-          ? { displayName: { contains: search, mode: "insensitive" } }
-          : {}),
-      },
+      where: selectableCustomerWhere(search, onlyCustomerId),
       select: {
         id: true,
         displayName: true,
@@ -647,4 +642,22 @@ export class AquariumsRepository {
     });
     return row !== null;
   }
+}
+
+/**
+ * Who the aquarium customer picker may offer. Internal callers: every active
+ * buyer (service-partner mirror rows excluded). A partner caller
+ * (`onlyCustomerId`): its own customer and nothing else, mirror row or not,
+ * because that is the only customer it may create an aquarium for.
+ */
+export function selectableCustomerWhere(
+  search: string | undefined,
+  onlyCustomerId: string | undefined,
+): Prisma.CustomerWhereInput {
+  const byName: Prisma.CustomerWhereInput = search
+    ? { displayName: { contains: search, mode: "insensitive" } }
+    : {};
+  return onlyCustomerId === undefined
+    ? { partner: null, isActive: true, ...byName }
+    : { id: onlyCustomerId, isActive: true, ...byName };
 }
