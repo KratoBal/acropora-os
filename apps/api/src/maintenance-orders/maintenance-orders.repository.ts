@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 
-import { unitPathsFor } from "../common/unit-path-lookup.js";
+import { unitPathsFor, unitRowsFor } from "../common/unit-path-lookup.js";
 
 const orderInclude = {
   contract: {
@@ -153,6 +153,11 @@ export class MaintenanceOrdersRepository {
   /** A helyszínek teljes útja, hibaüzenetbe -- ugyanaz a felbontás, mint a munkalapon. */
   departmentPaths(departmentIds: readonly string[]) {
     return unitPathsFor(this.database, [...departmentIds]);
+  }
+
+  /** A helyszínek gazdáinak teljes fája (a közös felső helyszínhez). */
+  departmentTree(departmentIds: readonly string[]) {
+    return unitRowsFor(this.database, departmentIds);
   }
 
   /**

@@ -34,19 +34,14 @@ import type { PartnerScope } from "../auth/partner-scope.util.js";
  *     05:31, emlék 1833) később eldől, a szabály legfeljebb BŐVÜL, nem
  *     szűkül.
  *
- * === MIÉRT NEM TUDOK MA POZITÍV PÉLDÁT MUTATNI A "TÖBB HELYSZÍN" ÁGRA ===
+ * === A "TÖBB HELYSZÍN" ÁG ÉLES LETT (2026-10-02) ===
  *
- * A `MaintenanceOrdersService.issue()` `ensureSingleDepartment()`-je MA
- * elutasít minden kiállítást, aminek a tételei egynél több különböző
- * helyszínre mutatnának -- ÉS ugyanezt az ellenőrzést `uploadSignedDocument()`
- * is megismétli, az aláírás visszaérkezésekor. A helyszín nélküli tételt is
- * kizárja a kiállítás (`helyszinNelkul` ellenőrzés). Vagyis a MAI
- * konstrukció szerint egy `MaintenanceOrder` MINDIG pontosan egy,
- * NEM NULL helyszínre mutat -- a "több helyszín" és a "helyszín nélküli
- * tétel" ág ma bizonyíthatóan LEHETETLEN, nem csak valószínűtlen. A szabály
- * ennek ellenére a TELJES, általános alakban készült, mert acrobot
- * kifejezetten ezt kérte, és mert a jövőben (ha a nyitott kérdés eldől)
- * ennek nem szabad újra megíródnia.
+ * Balázs döntése (2026-10-02 07:36 UTC, kártya 1806e061): ha a tételek egy
+ * KÖZÖS FELSŐ HELYSZÍN alatt vannak (a Cápasuli és a medencéi), egy
+ * megrendelőlap készül. Egy `MaintenanceOrder` tehát már TÖBB helyszínre is
+ * mutathat. Ez a szabály ehhez nem változik: a rendelést az látja, akinek a
+ * hatóköre MINDEN tétel helyszínét lefedi. A helyszín nélküli tételt a
+ * kiállítás továbbra is kizárja.
  */
 export interface MaintenanceOrderLocationView {
   /** A rendelés tételeinek EGYEDI, NEM NULL helyszín-azonosítói. */

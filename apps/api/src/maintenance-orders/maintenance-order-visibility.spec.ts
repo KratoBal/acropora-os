@@ -37,8 +37,8 @@ describe("a megrendelőlap tételeinek helyszín-nézete", () => {
 describe("a megrendelőlap láthatósága a portál hívó hatókörében", () => {
   /**
    * ACROBOT SZABÁLYA (msg_id 23868): minden tétel helyszíne a hívó
-   * hatókörében legyen. Ez a KÖZPONTI, mai eset -- a `ensureSingleDepartment`
-   * miatt ma minden létező rendelés ide esik.
+   * hatókörében legyen. Ez a gyakori eset; a közös felső helyszín alatti,
+   * több helyszínes rendelés (2026-10-02 óta) ugyanezt a szabályt kapja.
    */
   it("egy helyszínre mutató rendelést csak a helyszínt látó hívó lát", () => {
     const location = maintenanceOrderLocationView([
