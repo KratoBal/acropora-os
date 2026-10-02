@@ -358,6 +358,54 @@ lastCheckedAt }`, plus a server-side summary DTO for the KPIs. The browser
 Each phase is branched from `main` after the previous one has merged, and is
 rebased onto `main` before the gates and before review.
 
+## Answers (owner, 2026-10-02)
+
+These answer the questions below. They override any proposal above that says
+otherwise.
+
+1. **Placement: agreed.**
+   - The review is a sub-route on the product,
+     `/products/[id]/adatellenorzes`, laid out as frame `394:18`.
+   - The detail page gets only a compact card with the status and a link.
+   - The conflict view is `/products/[id]/adatellenorzes/[field]`.
+2. **Permission: agreed.**
+   - Viewing evidence needs `products.view`.
+   - Recording a decision needs `products.manage`.
+   - `settings.manage` is not used.
+3. **Availability: agreed.** One environment variable,
+   `JEV_PRODUCT_ENRICHMENT`, default `off`, read on the server only.
+4. **The six Figma deviations (§9): agreed, all six.** No view shows more than
+   the data backs.
+5. **Number format: keep the system's current formatting**, so every page
+   writes numbers the same way. That is `toLocaleString("hu-HU", …)`, as the
+   product pages use today.
+   - **Consequence, stated so it is not a surprise:** this formatting does
+     not group four-digit numbers. The Figma's "3 000 l/h" therefore renders
+     as "3000 l/h", while "12 500" renders as "12 500" with a no-break space.
+   - Decimals keep the comma ("1,00").
+   - The JEV components call one small shared helper with exactly these
+     options, so they do not add another local copy.
+   - The helper does not change any other page's output.
+6. **Navigation:** the catalogue data-quality page goes under Termékek.
+   - It appears only when `JEV_PRODUCT_ENRICHMENT` is not `off`.
+   - It still needs `products.view`.
+   - The server decides visibility through the menu it already serves, so
+     the browser never reads the variable.
+7. **"Nem eldönthető" is a resolution of its own in the decision log**, so
+   Jev's learning can count it.
+   - When the decision write contract is authorized, `DecisionResolution`
+     gets a new value (proposed name `UNRESOLVABLE`), alongside ACCEPTED and
+     OVERRIDDEN. This is an additive enum migration, made in that phase, not
+     now.
+   - **Dependency to remember:** the dashboard's JEV intelligencia widget
+     (#1398, `apps/api/src/dashboard/jev-system.ts`) counts an unknown
+     resolution of a shown run as "open". The phase that adds the value must
+     also give it its own figure there, with a test, so a "cannot resolve"
+     decision is never counted as still open.
+
+All questions are answered. Phase 2 (the UI foundation) starts from `main`
+after this PR has merged.
+
 ## Open questions
 
 1. **Placement.** Is this right?
