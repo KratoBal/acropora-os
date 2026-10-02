@@ -162,17 +162,3 @@ export function describeEmptyMaterialRequests(canWrite: boolean): string {
     ? "Ezen a munkalapon még nincs anyagigény. Az Anyagigénylés gombbal viheted fel, mire van szükséged."
     : "Ezen a munkalapon még nincs anyagigény.";
 }
-
-/**
- * A MUNKALAP SORA A BESZERZO LISTAJAN.
- *
- * A munkalap piszkozatkent (meg nincs sorszama) is szerepelhet a beszerzo
- * listajan -- lasd a szerver `PendingMaterialRequest.worksheetNumber` mezojet.
- */
-export function describePendingMaterialRequestWorksheet(
-  worksheetNumber: string | null,
-): string {
-  return worksheetNumber
-    ? `Munkalap: ${worksheetNumber}`
-    : "Munkalap: még piszkozat";
-}

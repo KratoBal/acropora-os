@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect, useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -12,72 +12,93 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { eyebrowStyle } from "@/lib/theme/label-styles";
-import { useAppTheme } from "@/lib/theme/useAppTheme";
-import type { ThemeTokens } from "@/lib/theme/tokens";
-import {
-  listPendingMaterialRequests,
-  receiveMaterialRequest,
-} from "@/lib/api/material-requests";
+import { RequestCard } from "@/components/material-requests/MaterialRequestParts";
 import { ApiError } from "@/lib/api/client";
+import {
+  getMaterialRequestSummary,
+  listMaterialRequestOverview,
+} from "@/lib/api/material-requests";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
-import { formatDateTime } from "@/lib/orders/presentation";
 import {
-  describePendingMaterialRequestWorksheet,
-  materialRequestByline,
-} from "@/lib/worksheets/material-request-presentation";
+  MATERIAL_REQUEST_REFRESH_MS,
+  MOBILE_EMPTY_MESSAGE,
+  MOBILE_SEGMENTS,
+  MOBILE_SEGMENT_LABEL,
+  headerSummary,
+  newRequestsBanner,
+  segmentView,
+  type MobileSegment,
+} from "@/lib/material-requests/v2-presentation";
+import type { ThemeTokens } from "@/lib/theme/tokens";
+import { useAppTheme } from "@/lib/theme/useAppTheme";
 
 /**
- * A BESZERZO SAJAT LISTAJA -- "RAM VARO ANYAGIGENYEK".
+ * ANYAGIGÉNYEK, V2 LIST (Figma 404:369).
  *
- * Balazs kerese, 2026-09-22 12:15:46 UTC: "beszerzi az anyagot, majd ha
- * megvan, akkor a sajat feluleten ranyom az anyag beerkezett gombra". Ugyanaz
- * a kepernyo-szereposztas, mint a weben (`material-request-pending-page.tsx`).
+ * The three segments (active, mine, received), the header counts and the
+ * "új vár átvételre" bar all come from the server, scoped to the worksheets
+ * this user can see. A failed read is an error, never an empty list.
  *
- * === KET SZINTU KAPU, ES A MASODIK CSAK A SZERVEREN DOL EL ===
+ * Left out on purpose (owner, 2026-10-02): "+ Új igény" (a request starts
+ * only on a worksheet) and the Figma's bottom tab bar (the app has none).
  *
- * A csempe es a menupont a `SERVICE_MANAGE` jogon all (aki munkalapra irhat,
- * latja a menupontot) -- ez a `capabilities.worksheetsManage`, es a kozos
- * `packages/types/src/navigation.ts` `material-requests-pending` tetele adja
- * ki a szervernek megfelelo felhasznaloknak. A LISTA TARTALMA viszont a
- * `MATERIAL_REQUEST_MARK_RECEIVED` per-felhasznalo kepessegen all, amit a
- * telefon (a webhez hasonloan) NEM tud a szerepbol levezetni -- a szerver
- * 403-at ad annak, akinel nincs bejelolve, es ezt a lap KULON, ertelmezheto
- * uzenettel mondja ki, nem altalanos hibakent.
+ * The tile stays where the server menu puts it (`material-requests-pending`,
+ * `service.manage`); a partner technician gets the server's 403 and a
+ * readable sentence, not a list.
  */
-export default function MaterialRequestsPendingScreen() {
+export default function MaterialRequestsScreen() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { status, user } = useAuth();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const enabled = Boolean(
+    capabilities?.worksheetsView && status === "authenticated",
+  );
+  const [segment, setSegment] = useState<MobileSegment>("active");
+  const [now, setNow] = useState(() => new Date());
 
-  const pending = useQuery({
-    queryKey: ["material-requests-pending"],
-    queryFn: listPendingMaterialRequests,
-    enabled: Boolean(
-      capabilities?.worksheetsManage && status === "authenticated",
-    ),
+  const summary = useQuery({
+    queryKey: ["material-requests", "summary"],
+    queryFn: getMaterialRequestSummary,
+    enabled,
+    refetchInterval: MATERIAL_REQUEST_REFRESH_MS,
+  });
+  const list = useInfiniteQuery({
+    queryKey: ["material-requests", "overview", segment],
+    queryFn: ({ pageParam }) =>
+      listMaterialRequestOverview({
+        view: segmentView(segment),
+        cursor: pageParam ?? undefined,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.nextCursor,
+    enabled,
+    refetchInterval: MATERIAL_REQUEST_REFRESH_MS,
     retry: (failureCount, cause) =>
       !(cause instanceof ApiError && cause.status === 403) && failureCount < 2,
   });
 
-  const receive = useMutation({
-    mutationFn: (id: string) => receiveMaterialRequest(id),
-    onSuccess: (response) => {
-      queryClient.setQueryData(["material-requests-pending"], response);
-    },
-  });
+  const { refetch: refetchList } = list;
+  const { refetch: refetchSummary } = summary;
+  useFocusEffect(
+    useCallback(() => {
+      setNow(new Date());
+      void refetchList();
+      void refetchSummary();
+    }, [refetchList, refetchSummary]),
+  );
 
   if (status !== "authenticated" || !user || !capabilities)
     return <Redirect href="/login" />;
-  if (!capabilities.worksheetsManage) return <Redirect href="/" />;
+  if (!capabilities.worksheetsView) return <Redirect href="/" />;
 
-  const forbidden =
-    pending.error instanceof ApiError && pending.error.status === 403;
-  const items = pending.data?.items ?? [];
+  const forbidden = list.error instanceof ApiError && list.error.status === 403;
+  const items = list.data?.pages.flatMap((page) => page.items) ?? [];
+  const counts = summary.data ?? null;
+  const subtitle = headerSummary(counts);
+  const banner = newRequestsBanner(counts);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
@@ -85,106 +106,102 @@ export default function MaterialRequestsPendingScreen() {
         contentContainerStyle={styles.container}
         refreshControl={
           <RefreshControl
-            refreshing={pending.isRefetching && !pending.isPending}
-            onRefresh={() => void pending.refetch()}
+            refreshing={list.isRefetching && !list.isFetchingNextPage}
+            onRefresh={() => {
+              setNow(new Date());
+              void list.refetch();
+              void summary.refetch();
+            }}
             tintColor={tokens.accent}
           />
         }
       >
-        <Text style={styles.eyebrow}>SZERVIZ</Text>
-        <Text style={styles.title}>Anyagigények</Text>
-        <Text style={styles.subtitle}>
-          A rád váró, beszerzésre elküldött anyagigények.
-        </Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>Anyagigények</Text>
+          {subtitle ? <Text style={styles.muted}>{subtitle}</Text> : null}
+        </View>
 
-        {pending.isPending ? <ActivityIndicator color={tokens.accent} /> : null}
+        <View style={styles.segments} accessibilityRole="tablist">
+          {MOBILE_SEGMENTS.map((option) => {
+            const active = option === segment;
+            return (
+              <Pressable
+                key={option}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                onPress={() => setSegment(option)}
+                style={[styles.segment, active && styles.segmentActive]}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    active && styles.segmentTextActive,
+                  ]}
+                >
+                  {MOBILE_SEGMENT_LABEL[option]}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {banner ? (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{banner}</Text>
+          </View>
+        ) : null}
 
         {forbidden ? (
           <View style={styles.card}>
-            <Text style={styles.forbiddenTitle}>
-              Ehhez a listához nincs jogosultságod
+            <Text style={styles.cardTitle}>
+              Az anyagigények belsős kollégáknak érhetők el
             </Text>
             <Text style={styles.muted}>
-              Csak azok a kollégák látják, akiknél be van jelölve az „anyag
-              beérkezett” jelölés joga a felhasználói profilon.
+              Ehhez a listához nincs jogosultságod.
             </Text>
+          </View>
+        ) : list.isPending ? (
+          <ActivityIndicator color={tokens.accent} />
+        ) : list.isError ? (
+          <Text style={styles.error}>
+            Az anyagigények jelenleg nem tölthetők be. Húzd le a frissítéshez.
+          </Text>
+        ) : items.length === 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.muted}>{MOBILE_EMPTY_MESSAGE[segment]}</Text>
           </View>
         ) : (
           <>
-            {pending.isError && !forbidden ? (
-              <Text style={styles.error}>
-                {pending.error instanceof Error
-                  ? pending.error.message
-                  : "A lista nem tölthető be."}
-              </Text>
-            ) : null}
-
-            {!pending.isPending && items.length === 0 && !pending.isError ? (
-              <View style={styles.card}>
-                <Text style={styles.muted}>
-                  Nincs rád váró anyagigény. Amint egy szervizes elküld egy
-                  igényt, itt jelenik meg.
-                </Text>
-              </View>
-            ) : null}
-
             {items.map((request) => (
-              <View key={request.id} style={styles.card}>
-                <View style={styles.headerRow}>
-                  <View style={styles.headerText}>
-                    <Text style={styles.rowTitle}>
-                      {request.customerDisplayName} · {request.departmentName}
-                    </Text>
-                    <Text style={styles.muted}>
-                      {describePendingMaterialRequestWorksheet(
-                        request.worksheetNumber,
-                      )}
-                    </Text>
-                  </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() =>
-                      router.push({
-                        pathname: "/worksheets/[id]",
-                        params: { id: request.worksheetId },
-                      })
-                    }
-                  >
-                    <Text style={styles.link}>Munkalap</Text>
-                  </Pressable>
-                </View>
-
-                <Text style={styles.muted}>
-                  {materialRequestByline(request, formatDateTime)}
-                </Text>
-
-                {request.items.map((item) => (
-                  <Text key={item.id} style={styles.itemLine}>
-                    {item.name} — {item.quantity} {item.unit}
-                  </Text>
-                ))}
-
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={
-                    receive.isPending && receive.variables === request.id
-                  }
-                  onPress={() => receive.mutate(request.id)}
-                  style={[
-                    styles.receiveButton,
-                    receive.isPending &&
-                      receive.variables === request.id &&
-                      styles.disabled,
-                  ]}
-                >
-                  <Text style={styles.receiveButtonText}>
-                    {receive.isPending && receive.variables === request.id
-                      ? "Jelölés…"
-                      : "Anyag beérkezett"}
-                  </Text>
-                </Pressable>
-              </View>
+              <RequestCard
+                key={request.id}
+                request={request}
+                now={now}
+                onPress={() =>
+                  router.push({
+                    pathname: "/material-requests/request/[id]",
+                    params: { id: request.id },
+                  })
+                }
+              />
             ))}
+            {list.hasNextPage ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={list.isFetchingNextPage}
+                onPress={() => void list.fetchNextPage()}
+                style={[
+                  styles.moreButton,
+                  list.isFetchingNextPage && styles.disabled,
+                ]}
+              >
+                <Text style={styles.moreText}>
+                  {list.isFetchingNextPage
+                    ? "Betöltés…"
+                    : "Továbbiak betöltése"}
+                </Text>
+              </Pressable>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -192,65 +209,54 @@ export default function MaterialRequestsPendingScreen() {
   );
 }
 
-/**
- * A SZÍNEK 2026-09-25-TŐL A KÖZÖS `useAppTheme()`-BŐL JÖNNEK -- Figma 12.
- * kör, ugyanaz a minta, mint a `login.tsx`-en (lásd ott a teljes indokot).
- * Az `error` doboz régi hexei (`#fecaca`/`#541b2b`) NEM VÉLETLENÜL egyeznek
- * a `t.danger`/`t.dangerSoft` tokenekkel -- a `tokens.ts` saját fejléce
- * kimondja, hogy épp ennek a képernyőnek a piros hibaszíneiből lettek
- * mintázva.
- */
 function createStyles(t: ThemeTokens) {
   return StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: t.background },
-    container: { padding: 18, paddingBottom: 48, gap: 12 },
-    eyebrow: eyebrowStyle(t, {
-      fontSize: 11,
-      fontWeight: "900",
-      letterSpacing: 1.4,
-    }),
-    title: { color: t.textPrimary, fontSize: 28, fontWeight: "900" },
-    subtitle: { color: t.textSecondary },
+    container: { padding: 16, paddingBottom: 48, gap: 12 },
+    header: { gap: 2, marginBottom: 4 },
+    title: { color: t.textPrimary, fontSize: 28, fontWeight: "800" },
+    muted: { color: t.textSecondary, fontSize: 12 },
+    segments: { flexDirection: "row", gap: 6 },
+    segment: {
+      backgroundColor: t.surface,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    segmentActive: { backgroundColor: t.accentSoft },
+    segmentText: { color: t.textSecondary, fontSize: 12, fontWeight: "700" },
+    segmentTextActive: { color: t.accentSoftText },
+    banner: {
+      backgroundColor: t.warningSoft,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    bannerText: { color: t.warning, fontSize: 14, fontWeight: "700" },
     card: {
       backgroundColor: t.surface,
       borderColor: t.border,
       borderWidth: 1,
-      borderRadius: 16,
-      gap: 8,
+      borderRadius: 14,
+      gap: 6,
       padding: 14,
     },
-    headerRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      gap: 10,
-    },
-    headerText: { flex: 1, gap: 2 },
-    rowTitle: { color: t.textPrimary, fontSize: 15, fontWeight: "800" },
-    link: {
-      color: t.accentSoftText,
-      fontSize: 12,
-      fontWeight: "800",
-      textDecorationLine: "underline",
-    },
-    muted: { color: t.textMuted, fontSize: 12 },
-    itemLine: { color: t.textPrimary, fontSize: 14 },
-    forbiddenTitle: { color: t.textPrimary, fontSize: 15, fontWeight: "800" },
+    cardTitle: { color: t.textPrimary, fontSize: 15, fontWeight: "700" },
     error: {
       color: t.danger,
       backgroundColor: t.dangerSoft,
       padding: 12,
       borderRadius: 10,
     },
-    receiveButton: {
-      backgroundColor: t.accent,
+    moreButton: {
+      borderColor: t.border,
+      borderWidth: 1,
       borderRadius: 10,
-      marginTop: 4,
       padding: 12,
     },
-    receiveButtonText: {
-      color: t.textOnAccent,
-      fontWeight: "900",
+    moreText: {
+      color: t.textPrimary,
+      fontWeight: "700",
       textAlign: "center",
     },
     disabled: { opacity: 0.55 },

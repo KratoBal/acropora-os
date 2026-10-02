@@ -85,14 +85,26 @@ describe("az állapotnevek egy helyen állnak", () => {
     assert.ok(sourceFiles().includes(OWNER), "a gazda fájl nincs a keresésben");
   });
 
+  /**
+   * THE SAME WORD, ANOTHER MEANING, NAMED ONE BY ONE. "Aktív" is also the
+   * Anyagigény V2 list's segment (Figma 404:369, "Aktív · Saját ·
+   * Beérkezett"): active requests, not an asset status. Only that file and
+   * that word are let through; any other asset word there, or "Aktív" in any
+   * other file, still turns this red.
+   */
+  const OTHER_MEANING: Readonly<Record<string, readonly string[]>> = {
+    [join("src", "lib", "material-requests", "v2-presentation.ts")]: ["Aktív"],
+  };
+
   it("máshol egyetlen állapotnév sem szerepel", () => {
     const offenders = sourceFiles()
       .filter((path) => path !== OWNER && !path.endsWith(".spec.ts"))
       .flatMap((path) => {
         const source = readFileSync(path, "utf8");
-        return STATUS_WORDS.filter((word) => source.includes(word)).map(
-          (word) => `${path}: ${word}`,
-        );
+        const allowed = OTHER_MEANING[path] ?? [];
+        return STATUS_WORDS.filter(
+          (word) => source.includes(word) && !allowed.includes(word),
+        ).map((word) => `${path}: ${word}`);
       });
     assert.deepEqual(
       offenders,

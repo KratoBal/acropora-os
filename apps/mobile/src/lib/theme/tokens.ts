@@ -56,6 +56,16 @@ export interface ThemeTokens {
   warningSoft: string;
   danger: string;
   dangerSoft: string;
+  /**
+   * Status pills only (Anyagigény V2, 2026-10-02): the blue "INTÉZÉS ALATT"
+   * and the green "BEÉRKEZETT" of Figma 404:369. The values are the web's
+   * `pilot-blue-50/700` and `pilot-green-50/700` (`packages/ui/src/figma-theme.css`),
+   * light and dark.
+   */
+  info: string;
+  infoSoft: string;
+  success: string;
+  successSoft: string;
 }
 
 export const LIGHT_THEME: ThemeTokens = {
@@ -76,6 +86,10 @@ export const LIGHT_THEME: ThemeTokens = {
   warningSoft: "#fffbeb",
   danger: "#dc2626",
   dangerSoft: "#fef2f2",
+  info: "#1d4ed8",
+  infoSoft: "#eff6ff",
+  success: "#26664d",
+  successSoft: "#e5f3eb",
 };
 
 export const DARK_THEME: ThemeTokens = {
@@ -96,6 +110,11 @@ export const DARK_THEME: ThemeTokens = {
   warningSoft: "rgba(120, 70, 0, 0.25)",
   danger: "#f87171",
   dangerSoft: "rgba(153, 27, 27, 0.25)",
+  info: "#a8cdfb",
+  infoSoft: "#0d1f36",
+  // The web's dark theme has no green pair; same pattern as `warning` above.
+  success: "#6fcf9f",
+  successSoft: "rgba(38, 102, 77, 0.3)",
 };
 
 export type ColorScheme = "light" | "dark";
