@@ -89,6 +89,12 @@ export interface CandidateDocument {
    * a számla végösszege (Kia Charge: 40 086 = 21 279 + 18 807).
    */
   cardPaymentIds?: readonly string[];
+  /**
+   * A SZÁMLA FIZETÉSI MÓDJA KÁRTYA (a Számlázz.hu bejövő számlájának
+   * `fizmod`-ja; a NAV-sor nem hordozza). A 3f. szabály csak ilyen számlát
+   * párosít név nélkül (acrobot 26084, Tesland / MEDIAVOX).
+   */
+  cardPaid?: boolean;
 }
 
 export interface MatchableDebit {
@@ -1040,6 +1046,78 @@ export function matchMonth(input: {
         receivedOn: refund?.bookingDate ?? null,
       },
     });
+  }
+  // 3f. KÁRTYÁS VÁSÁRLÁS, A SZÁLLÍTÓ NEVE NÉLKÜL (acrobot 26084; Balázs: a
+  // kártyán „Tesland” áll, a számla a MEDIAVOX Multimedia Kft.-é, Apple Pay-en
+  // át). A kereskedő neve itt nem segít, ezért HÁROM független egyezés kell: a
+  // pontos összeg, a vásárlás napja (±1 nap: a kiállítás és a terhelés napja
+  // eltérhet) és a számla KÁRTYÁS fizetési módja. Csak ha EGY ilyen számla van,
+  // és arra csak EGY ilyen terhelés pályázik; különben nem találgatunk.
+  const cardFits = (debit: MatchableDebit, d: CandidateDocument) => {
+    const purchase = cardPurchaseDay(debit.narrative);
+    return (
+      purchase !== null &&
+      d.kind === "INVOICE" &&
+      d.cardPaid === true &&
+      dayDistance(d.date, purchase) <= 1 &&
+      exact(amountGap(debit, d.gross, d.currency), d.currency)
+    );
+  };
+  for (const debit of open) {
+    if (outcomes.has(debit.id)) continue;
+    const invoices = free().filter((d) => cardFits(debit, d));
+    if (invoices.length !== 1) continue;
+    const rivals = open.filter(
+      (other) => !outcomes.has(other.id) && cardFits(other, invoices[0]!),
+    );
+    if (rivals.length === 1)
+      found(
+        debit,
+        invoices,
+        `kártyás vásárlás más néven („${debit.counterpartyName ?? ""}”): az összeg, a vásárlás napja és a kártyás fizetési mód egyezik`,
+      );
+  }
+  // 3g. A MEGTANULT KERESKEDŐNÉV (acrobot 26084: „tanulja meg a Tesland ->
+  // MEDIAVOX aliast”). Ha egy kártyás kereskedő (a márkája, az első szó) egy
+  // párosításban (a 3f., kézzel, vagy bármelyik szabállyal) egy szállító
+  // számláját kapta, a
+  // kereskedő többi terhelése annak a szállítónak a pontos összegű számláját
+  // kapja a szokásos ablakban. Tárolás nélkül: minden számítás a párosításokból
+  // újra tanulja, tehát egy visszavont kézi párosítás a tanulságot is viszi.
+  const learned = new Map<string, Map<string, string>>();
+  for (const debit of input.debits) {
+    const outcome = outcomes.get(debit.id);
+    const brand = firstWord(debit.counterpartyName ?? "");
+    if (
+      !outcome ||
+      !brand ||
+      !cardPurchaseDay(debit.narrative) ||
+      (outcome.state !== "FOUND" && outcome.state !== "ORIGINAL_MISSING")
+    )
+      continue;
+    for (const d of outcome.documents) {
+      const names = learned.get(brand) ?? new Map<string, string>();
+      names.set(normalizeName(d.supplierName), d.supplierName);
+      learned.set(brand, names);
+    }
+  }
+  for (const debit of open) {
+    if (outcomes.has(debit.id) || !cardPurchaseDay(debit.narrative)) continue;
+    const brand = firstWord(debit.counterpartyName ?? "");
+    const names = brand ? learned.get(brand) : undefined;
+    if (!names) continue;
+    const invoices = window(debit).filter(
+      (d) =>
+        d.kind === "INVOICE" &&
+        names.has(normalizeName(d.supplierName)) &&
+        exact(amountGap(debit, d.gross, d.currency), d.currency),
+    );
+    if (invoices.length === 1)
+      found(
+        debit,
+        invoices,
+        `kártyás vásárlás: a kereskedő („${debit.counterpartyName ?? ""}”) egy másik párosítás szerint a(z) ${invoices[0]!.supplierName} számláját hozza`,
+      );
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;

@@ -525,6 +525,132 @@ describe("a cancelled purchase: no invoice needed, the refund is expected", () =
   });
 });
 
+/*
+  KÁRTYÁS VÁSÁRLÁS MÁS NÉVEN (acrobot 26084, Balázs 09:41 UTC): a kártyán
+  „Tesland” áll (Apple Pay), a számla a MEDIAVOX Multimedia Kft.-é, Számlázz.hu-n,
+  bankkártyás fizetési móddal. MI PIROSÍT: ha a kártyás mód, a pontos összeg
+  vagy a ±1 napos kelet nélkül is párosítana; ha két számla közül, vagy két
+  pályázó terhelés közül választana; ha a megtanult kereskedőnév nem hozná a
+  kereskedő másik terhelését, vagy tanulság nélkül is hozná.
+*/
+describe("a card purchase under another name: amount, day and the card payment", () => {
+  const tesland = (overrides: Partial<MatchableDebit> = {}) =>
+    debit({
+      bookingDate: "2026-10-01",
+      amount: D(44323),
+      counterpartyName: "Tesland",
+      narrative: "2026.09.29 7413124583 Tesland -APPLE",
+      category: "CARD_SUBSCRIPTION",
+      ...overrides,
+    });
+  const mediavox = (overrides: Partial<CandidateDocument> = {}) =>
+    doc({
+      source: "SZAMLAZZ",
+      number: "E-MDVX-2026-723",
+      date: "2026-09-29",
+      gross: D(44323),
+      supplierName: "MEDIAVOX Multimedia Kft.",
+      cardPaid: true,
+      ...overrides,
+    });
+  const outcome = (debits: MatchableDebit[], documents: CandidateDocument[]) =>
+    run(debits, documents);
+
+  it("the Tesland case: paired by amount, purchase day and the card payment", () => {
+    const d = tesland();
+    const out = outcome([d], [mediavox()]).get(d.id)!;
+    assert.equal(out.state, "FOUND");
+    assert.deepEqual(
+      out.documents.map((x) => x.number),
+      ["E-MDVX-2026-723"],
+    );
+    assert.match(out.reason, /más néven \(„Tesland”\)/);
+  });
+
+  it("not without all three, and not between two invoices or two rival charges", () => {
+    const state = (debits: MatchableDebit[], documents: CandidateDocument[]) =>
+      outcome(debits, documents).get(debits[0]!.id)!.state;
+    assert.equal(
+      state([tesland()], [mediavox({ date: "2026-09-30" })]),
+      "FOUND",
+    );
+    assert.deepEqual(
+      [
+        state([tesland()], [mediavox({ cardPaid: false })]),
+        state([tesland()], [mediavox({ gross: D(44320) })]),
+        state([tesland()], [mediavox({ date: "2026-10-01" })]),
+        state(
+          [tesland()],
+          [mediavox(), mediavox({ number: "E-MDVX-2026-724" })],
+        ),
+        // két pályázó terhelés: egyik sem kapja (a másikat lent külön nézzük)
+        state(
+          [tesland(), tesland({ id: "rival", bookingDate: "2026-09-30" })],
+          [mediavox()],
+        ),
+        // átutalás, vásárlási nap nélkül
+        state([tesland({ narrative: "Foglalás #1324" })], [mediavox()]),
+      ].map((x) => x === "FOUND"),
+      [false, false, false, false, false, false],
+    );
+  });
+
+  it("two rival charges for one invoice: neither gets it", () => {
+    const a = tesland();
+    const b = tesland({ id: "rival", bookingDate: "2026-09-30" });
+    const out = outcome([a, b], [mediavox()]);
+    assert.deepEqual(
+      [out.get(a.id)!.state, out.get(b.id)!.state].map((x) => x === "FOUND"),
+      [false, false],
+    );
+  });
+
+  it("learns the merchant: another Tesland charge gets MEDIAVOX's exact invoice, even without the card mark", () => {
+    const first = tesland();
+    const second = tesland({
+      id: "tesland-2",
+      bookingDate: "2026-09-12",
+      amount: D(12000),
+      narrative: "2026.09.10 7413124583 Tesland -APPLE",
+    });
+    const older = mediavox({
+      number: "E-MDVX-2026-650",
+      date: "2026-09-02",
+      gross: D(12000),
+      cardPaid: false,
+    });
+    const both = outcome([first, second], [mediavox(), older]);
+    assert.deepEqual(
+      [both.get(first.id)!.state, both.get(second.id)!.state],
+      ["FOUND", "FOUND"],
+    );
+    assert.match(
+      both.get(second.id)!.reason,
+      /egy másik párosítás szerint a\(z\) MEDIAVOX/,
+    );
+    // a tanulság nélkül (nincs párosított Tesland) a második nem párosodik
+    assert.notEqual(outcome([second], [older]).get(second.id)!.state, "FOUND");
+    // kézi párosításból is tanul
+    const manual = outcome(
+      [first, second],
+      [
+        mediavox({ id: "mdvx-manual", cardPaid: false, date: "2026-08-01" }),
+        older,
+      ],
+    );
+    assert.notEqual(manual.get(second.id)!.state, "FOUND");
+    const learned = run(
+      [first, second],
+      [
+        mediavox({ id: "mdvx-manual", cardPaid: false, date: "2026-08-01" }),
+        older,
+      ],
+      new Map([[first.id, ["mdvx-manual"]]]),
+    );
+    assert.equal(learned.get(second.id)!.state, "FOUND");
+  });
+});
+
 describe("sequenceRatio", () => {
   it("gives Python difflib's ratio (values measured against difflib)", () => {
     assert.deepEqual(

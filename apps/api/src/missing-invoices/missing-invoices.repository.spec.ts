@@ -55,6 +55,30 @@ describe("mergeSameInvoice", () => {
     );
   });
 
+  // MI PIROSÍT (acrobot 26084): ha a NAV-sorral összevont Számlázz.hu-számla
+  // elveszítené a kártyás fizetési módot, és a 3f. szabály nem látná.
+  it("keeps the card payment of any source of the merged invoice", () => {
+    const merged = mergeSameInvoice(
+      [
+        doc({ id: "nav-1", source: "NAV", hasOriginal: false }),
+        doc({ id: "szlz-1", source: "SZAMLAZZ", cardPaid: true }),
+        doc({ id: "nav-2", number: "SZ-2", source: "NAV" }),
+      ],
+      new Map([
+        ["nav-1", "sz-1|12345678"],
+        ["szlz-1", "sz-1|12345678"],
+        ["nav-2", "sz-2|12345678"],
+      ]),
+    );
+    assert.deepEqual(
+      merged.map((d) => [d.id, d.cardPaid ?? false]),
+      [
+        ["nav-1", true],
+        ["nav-2", false],
+      ],
+    );
+  });
+
   it("leaves apart what has no number, and two different invoices", () => {
     const merged = mergeSameInvoice(
       [doc({ id: "a" }), doc({ id: "b" }), doc({ id: "c" })],
