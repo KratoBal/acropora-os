@@ -1,6 +1,8 @@
 import { Prisma } from "@acropora/database";
 import { paymentStateOf } from "@acropora/types";
 
+import type { PaymentMarkInput } from "../szamlazz/outgoing-payment-marks.js";
+
 /**
  * WHICH OF OUR INVOICES A GLS COD TRANSFER PAID, AND MAY BE MARKED PAID IN
  * SZÁMLÁZZ.HU (Balázs, GLS thread, 2026-10-01 18:33 UTC; acrobot 25883; plan:
@@ -235,4 +237,26 @@ export function decideGlsTransfer(input: {
       .map(([invoiceNumber, reason]) => ({ invoiceNumber, reason }))
       .sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber)),
   };
+}
+
+/**
+ * The marks of the markable transfers, for the shared Számlázz.hu loop
+ * (`applyPaidMarks`). The transfer's bank credit is the source-side reference:
+ * one transfer pays an invoice once (acrobot 26001).
+ */
+export function glsPaidMarkInputs(
+  decisions: readonly GlsTransferDecision[],
+): PaymentMarkInput[] {
+  return decisions.flatMap((decision) =>
+    decision.markable
+      ? decision.marks.map((mark) => ({
+          invoiceNumber: mark.invoiceNumber,
+          date: mark.date,
+          amount: mark.amount,
+          title: mark.title,
+          note: mark.note,
+          sourceRef: decision.creditId,
+        }))
+      : [],
+  );
 }

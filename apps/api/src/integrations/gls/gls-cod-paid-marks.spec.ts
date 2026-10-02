@@ -10,6 +10,7 @@ import {
 } from "./gls-cod-paid-marks.dry-run.js";
 import {
   decideGlsTransfer,
+  glsPaidMarkInputs,
   type GlsCodReportInput,
   type OutgoingInvoiceInput,
 } from "./gls-cod-paid-marks.js";
@@ -367,6 +368,52 @@ describe("the dry run's list and switch", () => {
         "összesen: 1 számla jelölhető, 3 utalásból",
         "",
       ].join("\n"),
+    );
+  });
+});
+
+/*
+  A KÖZÖS SZÁMLÁZZ.HU-HUROK BEMENETE (acrobot 26001). MI PIROSÍT: ha egy nem
+  jelölhető utalásból jelölés lenne; ha a forrás-oldali azonosító nem az utalás
+  jóváírása lenne (akkor két utalás ugyanarra a számlára egy kulcsra esne).
+*/
+describe("glsPaidMarkInputs", () => {
+  it("the marks of the markable transfers, each with the transfer's bank credit as its reference", () => {
+    assert.deepEqual(
+      glsPaidMarkInputs([
+        {
+          transferDate: "2026-10-01",
+          markable: false,
+          refusal: "NO_CREDIT",
+          transferred: "15527",
+        },
+        {
+          transferDate: "2026-09-17",
+          markable: true,
+          transferred: "27450",
+          creditId: "bt-0917",
+          marks: [
+            {
+              invoiceNumber: "ACRW-2026/00479",
+              date: "2026-09-17",
+              amount: "27450",
+              title: "utánvét",
+              note: "GLS utánvét, 2026-09-17",
+            },
+          ],
+          skipped: [],
+        },
+      ]),
+      [
+        {
+          invoiceNumber: "ACRW-2026/00479",
+          date: "2026-09-17",
+          amount: "27450",
+          title: "utánvét",
+          note: "GLS utánvét, 2026-09-17",
+          sourceRef: "bt-0917",
+        },
+      ],
     );
   });
 });

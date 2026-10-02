@@ -9,16 +9,16 @@ import { SzamlazzConnectionRepository } from "../szamlazz/szamlazz-connection.re
 import { SzamlazzCredentialCryptoService } from "../szamlazz/szamlazz-credential-crypto.service.js";
 import { SzamlazzCredentialProvider } from "../szamlazz/szamlazz-credential.provider.js";
 import {
-  applyGlsPaidMarks,
-  applyReport,
-  prismaGlsPaidMarkStore,
-} from "./gls-cod-paid-marks.apply.js";
+  applyPaidMarks,
+  paidMarksReport,
+  prismaPaymentMarkStore,
+} from "../szamlazz/outgoing-payment-marks.js";
 import {
   glsCodMarkPaidMode,
   glsCodPaidMarksDryRun,
   loadGlsTransfers,
 } from "./gls-cod-paid-marks.dry-run.js";
-import { decideGlsTransfer } from "./gls-cod-paid-marks.js";
+import { decideGlsTransfer, glsPaidMarkInputs } from "./gls-cod-paid-marks.js";
 
 /**
  * A GLS UTÁNVÉT KIFIZETETT-JELÖLÉSÉNEK SZÁRAZ FUTÁSA (Balázs, GLS szál,
@@ -82,14 +82,15 @@ async function main(argv: readonly string[]): Promise<number> {
     process.stdout.write(
       `ÉLES írás a Számlázz.hu-ba (kulcs: ${credential.revision}), GLS utalások ${from} óta, ${approved.size} jóváhagyott számla:\n`,
     );
-    const lines = await applyGlsPaidMarks({
-      decisions,
+    const lines = await applyPaidMarks({
+      source: "GLS_COD",
+      marks: glsPaidMarkInputs(decisions),
       approved,
       agentKey: credential.agentKey,
       client: new HttpSzamlazzAgentClient(),
-      store: prismaGlsPaidMarkStore,
+      store: prismaPaymentMarkStore,
     });
-    process.stdout.write(applyReport(lines, approved));
+    process.stdout.write(paidMarksReport(lines, approved));
     return lines.some(
       (l) => l.outcome.kind === "FAILED" || l.outcome.kind === "UNKNOWN",
     )

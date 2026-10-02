@@ -1,39 +1,33 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { SzamlazzAgentResponse } from "../szamlazz/szamlazz-agent-xml.js";
 import {
-  applyGlsPaidMarks,
-  applyReport,
-  type GlsPaidMarkStore,
-  type GlsPaymentMarkState,
-} from "./gls-cod-paid-marks.apply.js";
-import type { GlsTransferDecision } from "./gls-cod-paid-marks.js";
+  applyPaidMarks,
+  paidMarksReport,
+  type PaymentMarkInput,
+  type PaymentMarkState,
+  type PaymentMarkStore,
+} from "./outgoing-payment-marks.js";
+import type { SzamlazzAgentResponse } from "./szamlazz-agent-xml.js";
 
-/** 09-17 as the dry run lists it in production (acrobot 25969). */
-const SEPTEMBER_17: Extract<GlsTransferDecision, { markable: true }> = {
-  transferDate: "2026-09-17",
-  markable: true,
-  transferred: "160880",
-  creditId: "bt-0917",
-  marks: [
-    ["ACRW-2026/00479", "27450", "GLS utánvét, 2026-09-17"],
-    [
-      "ACRW-2026/00481",
-      "105831",
-      "GLS utánvét, 2026-09-17, 5 Ft-os kerekítés: beszedve 105830",
-    ],
-    ["ACRW-2026/00485", "27600", "GLS utánvét, 2026-09-17"],
-  ].map(([invoiceNumber, amount, note]) => ({
-    invoiceNumber: invoiceNumber!,
-    date: "2026-09-17",
-    amount: amount!,
-    title: "utánvét" as const,
-    note: note!,
-  })),
-  skipped: [],
-};
-const ALL = new Set(SEPTEMBER_17.marks.map((m) => m.invoiceNumber));
+/** 09-17 as the GLS dry run lists it in production (acrobot 25969). */
+const MARKS: PaymentMarkInput[] = [
+  ["ACRW-2026/00479", "27450", "GLS utánvét, 2026-09-17"],
+  [
+    "ACRW-2026/00481",
+    "105831",
+    "GLS utánvét, 2026-09-17, 5 Ft-os kerekítés: beszedve 105830",
+  ],
+  ["ACRW-2026/00485", "27600", "GLS utánvét, 2026-09-17"],
+].map(([invoiceNumber, amount, note]) => ({
+  invoiceNumber: invoiceNumber!,
+  date: "2026-09-17",
+  amount: amount!,
+  title: "utánvét",
+  note: note!,
+  sourceRef: "bt-0917",
+}));
+const ALL = new Set(MARKS.map((m) => m.invoiceNumber));
 
 type Event = string;
 
@@ -41,17 +35,18 @@ type Event = string;
 function fakeStore(
   options: {
     invoices?: Record<string, { paidAmount: string; known?: boolean }>;
-    rows?: Record<string, GlsPaymentMarkState>;
+    rows?: Record<string, PaymentMarkState>;
     taken?: string[];
   } = {},
 ) {
   const events: Event[] = [];
-  const rows = new Map<string, { id: string; state: GlsPaymentMarkState }>();
+  const keys: string[] = [];
+  const rows = new Map<string, { id: string; state: PaymentMarkState }>();
   for (const [number, state] of Object.entries(options.rows ?? {}))
     rows.set(number, { id: `row-${number}`, state });
-  const store: GlsPaidMarkStore = {
+  const store: PaymentMarkStore = {
     async invoice(number) {
-      const mark = SEPTEMBER_17.marks.find((m) => m.invoiceNumber === number);
+      const mark = MARKS.find((m) => m.invoiceNumber === number);
       if (!mark) return null;
       const known = options.invoices?.[number];
       return {
@@ -61,10 +56,14 @@ function fakeStore(
         currency: "HUF",
       };
     },
-    async logRow(number) {
+    async logRow(source, number, sourceRef) {
+      keys.push(`${source} ${number} ${sourceRef}`);
       return rows.get(number) ?? null;
     },
     async create(row) {
+      keys.push(
+        `${row.source} ${row.invoiceNumber} ${row.sourceRef} ${row.markDate}`,
+      );
       if (options.taken?.includes(row.invoiceNumber)) return null;
       events.push(`create ${row.invoiceNumber} ${row.state}`);
       const created = { id: `row-${row.invoiceNumber}`, state: row.state };
@@ -77,7 +76,7 @@ function fakeStore(
         if (row.id === id) row.state = patch.state;
     },
   };
-  return { store, events, rows };
+  return { store, events, rows, keys };
 }
 
 function fakeClient(
@@ -113,12 +112,13 @@ const ok = (outstanding = 0): SzamlazzAgentResponse => ({
   ha a kulcs a napló lenyomatába kerülne; ha egy hálózati hiba elutasításnak
   látszana.
 */
-describe("applyGlsPaidMarks", () => {
+describe("applyPaidMarks", () => {
   it("09-17: only the approved invoices, each logged PLANNED before its call, then WRITTEN", async () => {
-    const { store, events } = fakeStore();
+    const { store, events, keys } = fakeStore();
     const { client, sent } = fakeClient(() => ok(), events);
-    const lines = await applyGlsPaidMarks({
-      decisions: [SEPTEMBER_17],
+    const lines = await applyPaidMarks({
+      source: "GLS_COD",
+      marks: MARKS,
       approved: new Set(["ACRW-2026/00479", "ACRW-2026/00485"]),
       agentKey: "secret-key",
       client,
@@ -139,6 +139,11 @@ describe("applyGlsPaidMarks", () => {
         ["ACRW-2026/00485", "WRITTEN"],
       ],
     );
+    // the log key is the source, the invoice and the source-side reference
+    assert.deepEqual(keys.slice(0, 2), [
+      "GLS_COD ACRW-2026/00479 bt-0917",
+      "GLS_COD ACRW-2026/00479 bt-0917 2026-09-17",
+    ]);
     assert.match(sent[0]!, /<additiv>true<\/additiv>/);
     assert.match(sent[0]!, /<szamlaagentkulcs>secret-key</);
     assert.match(sent[0]!, /<osszeg>27450<\/osszeg>/);
@@ -153,8 +158,9 @@ describe("applyGlsPaidMarks", () => {
         fingerprint = row.requestSha256;
         return create(row);
       };
-      await applyGlsPaidMarks({
-        decisions: [SEPTEMBER_17],
+      await applyPaidMarks({
+        source: "GLS_COD",
+        marks: MARKS,
         approved: new Set(["ACRW-2026/00479"]),
         agentKey,
         client: fakeClient(() => ok(), []).client,
@@ -172,8 +178,9 @@ describe("applyGlsPaidMarks", () => {
       invoices: { "ACRW-2026/00481": { paidAmount: "105830" } },
     });
     const { client } = fakeClient(() => ok(), events);
-    const lines = await applyGlsPaidMarks({
-      decisions: [SEPTEMBER_17],
+    const lines = await applyPaidMarks({
+      source: "GLS_COD",
+      marks: MARKS,
       approved: new Set(["ACRW-2026/00481"]),
       agentKey: "k",
       client,
@@ -191,8 +198,9 @@ describe("applyGlsPaidMarks", () => {
       },
     });
     const { client } = fakeClient(() => ok(), events);
-    const lines = await applyGlsPaidMarks({
-      decisions: [SEPTEMBER_17],
+    const lines = await applyPaidMarks({
+      source: "GLS_COD",
+      marks: MARKS,
       approved: new Set(["ACRW-2026/00479", "ACRW-2026/00485"]),
       agentKey: "k",
       client,
@@ -217,8 +225,9 @@ describe("applyGlsPaidMarks", () => {
       },
     });
     const { client } = fakeClient(() => ok(), events);
-    const lines = await applyGlsPaidMarks({
-      decisions: [SEPTEMBER_17],
+    const lines = await applyPaidMarks({
+      source: "GLS_COD",
+      marks: MARKS,
       approved: ALL,
       agentKey: "k",
       client,
@@ -239,8 +248,9 @@ describe("applyGlsPaidMarks", () => {
     ]);
     // a PLANNED row left by a crash is uncertain too
     const planned = fakeStore({ rows: { "ACRW-2026/00479": "PLANNED" } });
-    const again = await applyGlsPaidMarks({
-      decisions: [SEPTEMBER_17],
+    const again = await applyPaidMarks({
+      source: "GLS_COD",
+      marks: MARKS,
       approved: new Set(["ACRW-2026/00479"]),
       agentKey: "k",
       client: fakeClient(() => ok(), planned.events).client,
@@ -253,8 +263,9 @@ describe("applyGlsPaidMarks", () => {
   it("a key taken by a parallel runner: no call", async () => {
     const { store, events } = fakeStore({ taken: ["ACRW-2026/00479"] });
     const { client } = fakeClient(() => ok(), events);
-    const lines = await applyGlsPaidMarks({
-      decisions: [SEPTEMBER_17],
+    const lines = await applyPaidMarks({
+      source: "GLS_COD",
+      marks: MARKS,
       approved: new Set(["ACRW-2026/00479"]),
       agentKey: "k",
       client,
@@ -279,8 +290,9 @@ describe("applyGlsPaidMarks", () => {
       if (xml.includes("00481")) return new Error("fetch failed");
       return ok(150);
     }, events);
-    const lines = await applyGlsPaidMarks({
-      decisions: [SEPTEMBER_17],
+    const lines = await applyPaidMarks({
+      source: "GLS_COD",
+      marks: MARKS,
       approved: ALL,
       agentKey: "k",
       client,
@@ -294,7 +306,7 @@ describe("applyGlsPaidMarks", () => {
         "update row-ACRW-2026/00485 WRITTEN",
       ],
     );
-    const report = applyReport(lines, new Set([...ALL, "ACRW-2026/09999"]));
+    const report = paidMarksReport(lines, new Set([...ALL, "ACRW-2026/09999"]));
     assert.match(
       report,
       /ACRW-2026\/00479\t27450 Ft\t2026-09-17\tELUTASÍTVA \(7\): nincs ilyen számla/,
@@ -312,25 +324,5 @@ describe("applyGlsPaidMarks", () => {
       /ACRW-2026\/09999\tnincs a jelölhetők között, nem írtam/,
     );
     assert.match(report, /összesen: 1 beírva, 3 jóváhagyott jelölésből/);
-  });
-
-  it("an unmarkable transfer writes nothing, even for an approved number", async () => {
-    const { store, events } = fakeStore();
-    const { client } = fakeClient(() => ok(), events);
-    const lines = await applyGlsPaidMarks({
-      decisions: [
-        {
-          transferDate: "2026-10-01",
-          markable: false,
-          refusal: "NO_CREDIT",
-          transferred: "15527",
-        },
-      ],
-      approved: ALL,
-      agentKey: "k",
-      client,
-      store,
-    });
-    assert.deepEqual([events, lines], [[], []]);
   });
 });
