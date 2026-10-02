@@ -1161,6 +1161,14 @@ export class ServiceAssetsService {
       throw new ConflictException(
         "Az eszközt másik felhasználó módosította. Frissítsd az oldalt.",
       );
+    // a szülő-váltás láncában egy leszármazott új kódja már foglalt (acrobot 26046)
+    if (
+      error instanceof Error &&
+      error.message.startsWith("PARTNER_CODE_TAKEN:")
+    )
+      throw new ConflictException(
+        `A szülő-váltás után egy beépített eszköz partner belső kódja ${error.message.slice("PARTNER_CODE_TAKEN:".length)} lenne, de ez a kód már foglalt. A mozgatás nem történt meg.`,
+      );
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"

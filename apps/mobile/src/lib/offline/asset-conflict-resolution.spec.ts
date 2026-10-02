@@ -450,3 +450,51 @@ describe("a foglalt matrica a feloldásban", () => {
     assert.match(!ugyanaz.ok ? ugyanaz.message : "", /ugyanaz a kód/);
   });
 });
+
+/*
+  A SZÜLŐESZKÖZ A FELOLDÁSBAN. MI PIROSÍT: ha a sor nem „Szülőeszköz” néven
+  jelenne meg; ha az enyém oldal azonosítót mutatna a felirat helyett, vagy a
+  törlés nem „Önálló / főegység” lenne; ha a megtartott szülő nem kerülne a
+  feloldott törzsbe; ha a más által közben átírt szülő nem lenne ütköző.
+*/
+describe("a szülőeszköz a feloldásban", () => {
+  const mostSzulovel: CurrentAssetLike = {
+    ...most,
+    parent: { id: "p-9", name: "Medence", assetNumber: "ESZ-0100" },
+  };
+  const szuloTorzs: UpdateAssetInput = {
+    expectedUpdatedAt: "2026-09-04T08:00:00Z",
+    parentAssetId: "p-2",
+  };
+
+  it("named, both sides readable, and conflicting when someone else moved it", () => {
+    const [sor] = compareQueuedUpdate({
+      patch: szuloTorzs,
+      current: mostSzulovel,
+      parentLabel: "ESZ-0099 -- Gépház",
+      base: { parentAssetId: "p-1" },
+    });
+    assert.deepEqual(
+      [sor?.label, sor?.mine, sor?.theirs, sor?.conflicting],
+      ["Szülőeszköz", "ESZ-0099 -- Gépház", "Medence (ESZ-0100)", true],
+    );
+    const [torles] = compareQueuedUpdate({
+      patch: { ...szuloTorzs, parentAssetId: null },
+      current: mostSzulovel,
+      base: { parentAssetId: "p-9" },
+    });
+    assert.deepEqual(
+      [torles?.mine, torles?.conflicting],
+      ["Önálló / főegység", false],
+    );
+  });
+
+  it("kept: goes into the resolved body", () => {
+    const uj = rebuildResolvedPatch({
+      patch: szuloTorzs,
+      keepMine: ["parentAssetId"],
+      freshUpdatedAt: most.updatedAt,
+    });
+    assert.equal(uj.parentAssetId, "p-2");
+  });
+});

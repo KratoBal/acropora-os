@@ -17,6 +17,7 @@ import {
   PERMISSIONS,
   type AssetCriticality,
   type AssetKind,
+  type AssetHierarchyItem,
   type AssetListItem,
   type AssetOwnerOption,
   type AssetOwnerType,
@@ -50,6 +51,10 @@ import {
   assetKindLabel,
   assetStatusLabel,
 } from "./asset-labels";
+import {
+  parentAssetRows,
+  useParentAssetOptions,
+} from "./use-parent-asset-options";
 
 const toIsoDate = (value: string) =>
   value ? `${value}T00:00:00.000Z` : undefined;
@@ -68,10 +73,14 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   const [owners, setOwners] = useState<AssetOwnerOption[]>([]);
   const [units, setUnits] = useState<SiteOption[]>([]);
   const [departmentId, setDepartmentId] = useState("");
-  const [parentAssets, setParentAssets] = useState<AssetListItem[]>([]);
   const [selectedOwner, setSelectedOwner] = useState("");
   const [customerAddressId, setCustomerAddressId] = useState("");
   const [parentAssetId, setParentAssetId] = useState("");
+  const [parentSearch, setParentSearch] = useState("");
+  /** A választott szülő, hogy a kereső ne ejtse ki a választóból. */
+  const [parentChoice, setParentChoice] = useState<AssetHierarchyItem | null>(
+    null,
+  );
   const [kind, setKind] = useState<AssetKind>("EQUIPMENT");
   const [status, setStatus] = useState<AssetStatus>("ACTIVE");
   const [criticality, setCriticality] = useState<AssetCriticality>("NORMAL");
@@ -263,6 +272,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         );
         setDepartmentId(asset.unit?.id ?? "");
         setParentAssetId(asset.parent?.id ?? "");
+        setParentChoice(asset.parent ?? null);
         setKind(asset.kind);
         setStatus(asset.status);
         setCriticality(asset.criticality);
@@ -416,32 +426,15 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
     return () => controller.abort();
   }, [token]);
 
-  useEffect(() => {
-    setParentAssets([]);
-    if (!owner) return;
-    const controller = new AbortController();
-    const assetQuery = new URLSearchParams({
-      page: "1",
-      pageSize: "100",
-      status: "ACTIVE",
-      ownerType: owner.type,
-      ownerId: owner.id,
-    });
-    void assetsApi
-      .list(token, assetQuery, controller.signal)
-      .then((result) =>
-        setParentAssets(result.items.filter((item) => item.id !== assetId)),
-      )
-      .catch((cause) => {
-        if (!(cause instanceof DOMException && cause.name === "AbortError"))
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "A partner eszközadatai nem tölthetők be.",
-          );
-      });
-    return () => controller.abort();
-  }, [assetId, owner, token]);
+  // a felvitellel közös, szűkített lista; ő maga és a leszármazottai nélkül
+  const parentAssets = useParentAssetOptions({
+    token,
+    owner,
+    departmentId,
+    search: parentSearch,
+    excludeSubtreeOf: assetId,
+    onError: setError,
+  });
 
   useEffect(() => {
     if (assetId) return;
@@ -731,6 +724,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                   setSelectedOwner(event.target.value);
                   setCustomerAddressId("");
                   setParentAssetId("");
+                  setParentChoice(null);
                 }}
               >
                 <option value="">Válassz partnert…</option>
@@ -807,20 +801,38 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 ))}
               </Select>
             </FormField>
-            <FormField label="Szülőeszköz">
-              <Select
-                aria-label="Szülőeszköz"
-                value={parentAssetId}
-                disabled={!owner}
-                onChange={(event) => setParentAssetId(event.target.value)}
-              >
-                <option value="">Önálló / főegység</option>
-                {parentAssets.map((asset) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.name} ({asset.assetNumber})
-                  </option>
-                ))}
-              </Select>
+            <FormField
+              label="Szülőeszköz"
+              description="A partner aktív eszközei, az alegység szerint szűkítve. Keress név, kód vagy matrica szerint. Az eszköz maga és a beépített eszközei nem választhatók."
+            >
+              <div className="space-y-2">
+                <Input
+                  aria-label="Szülőeszköz keresése"
+                  value={parentSearch}
+                  disabled={!owner}
+                  placeholder="Keresés név, kód vagy matrica szerint…"
+                  onChange={(event) => setParentSearch(event.target.value)}
+                />
+                <Select
+                  aria-label="Szülőeszköz"
+                  value={parentAssetId}
+                  disabled={!owner}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setParentAssetId(value);
+                    setParentChoice(
+                      parentAssets.find((asset) => asset.id === value) ?? null,
+                    );
+                  }}
+                >
+                  <option value="">Önálló / főegység</option>
+                  {parentAssetRows(parentAssets, parentChoice).map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.name} ({asset.assetNumber})
+                    </option>
+                  ))}
+                </Select>
+              </div>
             </FormField>
             <FormField label="Típus">
               <Select
