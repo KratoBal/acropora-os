@@ -71,6 +71,12 @@ export interface BillingDocumentListItem {
   documentNumber: string | null;
   /** Kiállított sornál a vevő-pillanatképből, vázlatnál a partner mai nevéből. */
   customerName: string;
+  /**
+   * A NÉV A WEBSHOP-RENDELÉSBŐL JÖTT (Balázs, 2026-10-02 11:16 UTC): a külső,
+   * adószám nélküli (magánszemélyes) számlán a feed a nevet elrejti, a
+   * rendelés-tükör (`SalesOrder.buyerName`) viszont ismeri. Csak akkor `true`.
+   */
+  customerNameFromOrder?: boolean;
   /** `YYYY-MM-DD`; vázlatnál `null`. */
   issueDate: string | null;
   /** `YYYY-MM-DD` */
@@ -167,6 +173,8 @@ export interface BillingExternalDocumentDetail {
     name: string;
     taxNumber: string | null;
     address: string | null;
+    /** Lásd `BillingDocumentListItem.customerNameFromOrder`. */
+    nameFromOrder?: boolean;
   };
   lines: BillingExternalDocumentLine[];
   totals: {

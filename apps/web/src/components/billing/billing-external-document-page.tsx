@@ -150,6 +150,11 @@ export function BillingExternalDocumentPage({
               <p className="font-semibold text-pilot-grey-900">
                 {detail.customer.name}
               </p>
+              {detail.customer.nameFromOrder ? (
+                <p className="text-xs text-pilot-grey-500">
+                  A név a webshop-rendelésből; a számlán a NAV elrejti.
+                </p>
+              ) : null}
               <p className="text-pilot-grey-700">
                 {detail.customer.address ?? "Nincs cím"}
               </p>

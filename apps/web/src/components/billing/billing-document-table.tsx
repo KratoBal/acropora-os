@@ -82,6 +82,12 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       cell: (item) => (
         <span className="block truncate" title={item.customerName}>
           {item.customerName}
+          {/* a magánszemély neve a webshop-rendelésből (acrobot 26096) */}
+          {item.customerNameFromOrder ? (
+            <span className="block text-xs text-pilot-grey-500">
+              a rendelésből
+            </span>
+          ) : null}
         </span>
       ),
     },

@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@acropora/config": "workspace:*",
+    "@acropora/types": "workspace:*",
     "@types/node": "^26.1.1",
     "typescript": "^6.0.3"
   }
