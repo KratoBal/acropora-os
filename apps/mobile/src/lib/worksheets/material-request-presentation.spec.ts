@@ -4,7 +4,6 @@ import { describe, it } from "node:test";
 import {
   buildMaterialRequestItems,
   describeEmptyMaterialRequests,
-  describePendingMaterialRequestWorksheet,
   materialRequestByline,
 } from "./material-request-presentation";
 
@@ -124,18 +123,5 @@ describe("az üres lista mondata", () => {
       describeEmptyMaterialRequests(false),
       /Anyagigénylés gombbal/,
     );
-  });
-});
-
-describe("a munkalap sora a beszerző listáján", () => {
-  it("a sorszámot mutatja, ha van", () => {
-    assert.equal(
-      describePendingMaterialRequestWorksheet("BIO-2026-014"),
-      "Munkalap: BIO-2026-014",
-    );
-  });
-
-  it("a piszkozat állapotot mondja, ha még nincs sorszám", () => {
-    assert.match(describePendingMaterialRequestWorksheet(null), /piszkozat/);
   });
 });

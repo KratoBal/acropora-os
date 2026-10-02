@@ -273,6 +273,10 @@ function RootNavigator() {
         name="material-requests/[id]"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="material-requests/request/[id]"
+        options={{ title: "Anyagigény" }}
+      />
       <Stack.Screen name="assets/index" options={{ title: "Eszközök" }} />
       <Stack.Screen name="assets/new" options={{ title: "Új eszköz" }} />
       <Stack.Screen
