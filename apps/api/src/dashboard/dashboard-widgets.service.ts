@@ -24,6 +24,8 @@ import {
 } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
+import { UnasStockSyncOutboxRepository } from "../inventory/unas-stock-sync-outbox.repository.js";
 import { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
@@ -33,6 +35,7 @@ import { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.r
 import { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
 import { MissingInvoicesSummaryCache } from "./missing-invoices-summary.js";
 import { summarizeOverdueInvoices } from "./overdue-invoices.js";
+import { stockDiscrepancies, stockSyncOutboxState } from "./stock-widgets.js";
 import {
   DashboardServiceWidgetsRepository,
   type ServiceWidgetViewer,
@@ -74,6 +77,8 @@ export class DashboardWidgetsService {
     private readonly aquariumWidgets: DashboardAquariumWidgetsRepository,
     private readonly financeWidgets: DashboardFinanceWidgetsRepository,
     missingInvoices: MissingInvoicesService,
+    private readonly reconciliation: StockReconciliationService,
+    private readonly outbox: UnasStockSyncOutboxRepository,
     @Optional()
     @Inject(DASHBOARD_WIDGET_LOADERS)
     loaders?: Partial<Record<DashboardWidgetId, WidgetLoader>>,
@@ -209,6 +214,8 @@ export class DashboardWidgetsService {
       "missing-invoices": () => this.missingInvoicesCache.summary(),
       "incoming-invoices": () => this.financeWidgets.incomingInvoices(),
       settlements: () => this.financeWidgets.settlements(),
+      "stock-reconciliation": () => stockDiscrepancies(this.reconciliation),
+      "stock-sync-outbox": () => stockSyncOutboxState(this.outbox),
     };
   }
 

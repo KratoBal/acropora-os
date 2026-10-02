@@ -28,9 +28,10 @@ export interface ParsedFoxpostSettlementXlsx {
   collectedAmount: number;
   invoiceGrossAmount: number;
   transferredAmount: number;
-  /** What Acropora pays Foxpost ("PARTNER által utalandó összeg
-   * (számlázott)"): the fee when the week's COD does not cover it. 0 when the
-   * file does not carry the row. */
+  /** What Acropora pays Foxpost: the part of the invoice the week's COD does
+   * not cover. The file's "PARTNER által utalandó összeg (számlázott)" row is
+   * the invoice's gross, set off against the COD, so the payment is that row
+   * minus the COD, never below 0. 0 when the file does not carry the row. */
   partnerPaysAmount: number;
   currency: string;
   lines: ParsedFoxpostCodLine[];
@@ -409,10 +410,18 @@ export class FoxpostSettlementParser {
       findSummaryValue(summary, "FOXPOST által utalandó összeg:", true),
       "FOXPOST_XLSX_TRANSFER_TOTAL_INVALID",
     );
-    const partnerPaysAmount = findOptionalSummaryNumber(
+    /*
+      A "(számlázott)" SOR A SZÁMLA BRUTTÓJA, NEM A FIZETENDŐ (2026-10-02, a 26H39
+      fájl): beszedett 73 050, számlázott 5 946, utalandó 67 104 -- a számlát a
+      Foxpost beszámította, Acropora semmit nem fizet. Az utánvét nélküli héten
+      (#1218) ugyanez a sor 2 283, beszedett 0: ott az egész fizetendő. Tehát a
+      fizetendő a sor mínusz a beszedett, nulla alatt nulla.
+    */
+    const invoicedRow = findOptionalSummaryNumber(
       summary,
       "PARTNER által utalandó összeg (számlázott):",
     );
+    const partnerPaysAmount = Math.max(0, invoicedRow - collectedAmount);
     const lineTotal = lines.reduce(
       (sum, line) => sum + line.collectedAmount,
       0,

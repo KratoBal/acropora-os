@@ -213,6 +213,38 @@ describe("FoxpostSettlementParser", () => {
     );
   });
 
+  /*
+    A 26H39 ALAKJA (2026-10-02, élesen ERROR: FOXPOST_TRANSFER_TOTAL_MISMATCH):
+    a fájl a „(számlázott)” sorban a számla bruttóját hozza akkor is, ha a
+    Foxpost az utánvétből beszámította. MI PIROSÍT: ha a sor fizetendőnek
+    számítana (és a heti elszámolás kétszer vonná le a számlát), vagy ha az
+    utánvét nélküli hét fizetendője elveszne.
+  */
+  it("a normal week whose file also names the invoiced row: the invoice is set off, Acropora pays nothing", async () => {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load((await sampleXlsx()) as unknown as ExcelJS.Buffer);
+    workbook.getWorksheet("összesítés")!.getRow(46).values = [
+      "PARTNER által utalandó összeg (számlázott):",
+      8_317,
+    ];
+    const parsed = await new FoxpostSettlementParser().parseXlsx(
+      Buffer.from(await workbook.xlsx.writeBuffer()),
+    );
+    assert.deepEqual(
+      [
+        parsed.collectedAmount,
+        parsed.invoiceGrossAmount,
+        parsed.transferredAmount,
+        parsed.partnerPaysAmount,
+      ],
+      [97_500, 8_317, 89_183, 0],
+    );
+    validateFoxpostPair(parsed, {
+      ...parseFoxpostInvoiceTokens(pdfTokens),
+      invoiceGrossAmount: 8_317,
+    });
+  });
+
   it("reads 0 for what Acropora pays when a normal week's file does not carry the row", async () => {
     const parsed = await new FoxpostSettlementParser().parseXlsx(
       await sampleXlsx(),

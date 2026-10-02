@@ -188,13 +188,19 @@ export function nextFreePartnerInternalCodeSerial(
  * felismert "szám" rossz sorszámot írna egy eszközre, ez pedig a névből
  * egy pillantással ellenőrizhető kell legyen, nem találgatás.
  *
+ * CSAK I, V ÉS X BETŰ, TEHÁT 1-TŐL 39-IG (Balázs, 2026-10-02 08:46 UTC: „a C
+ * az nem szám ebben az esetben”; acrobot 26071). Egy önálló „C”, „D”, „M”
+ * vagy „L” a névvégen betűjel (változat, típus), nem sorszám, és az „XL”
+ * méret is lehet: ezek a legkisebb szabad sorszámot kapják. A sorszám-alakok
+ * (I, II, III, IV, IX, XII ... XXXIX) maradnak.
+ *
  * ÖNÁLLÓ SZÓ: a római számnak a név VÉGÉN, szóköz (vagy a név eleje) után
  * kell állnia, opcionális záró ponttal ("Lampa VI." -> "VI") -- így egy
  * összetett szó belseje (pl. egy "MIX" nevű termék közepén álló betűk) nem
  * illeszkedik véletlenül.
  */
 export function trailingRomanNumeralValue(name: string): number | null {
-  const match = /(?:^|\s)([IVXLCDM]+)\.?\s*$/.exec(name.trim());
+  const match = /(?:^|\s)([IVX]+)\.?\s*$/.exec(name.trim());
   if (!match) return null;
   return romanNumeralValue(match[1]!);
 }

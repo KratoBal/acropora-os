@@ -989,6 +989,8 @@ export type {
   DashboardOverdueInvoicesWidgetData,
   DashboardServiceTicketsWidgetData,
   DashboardSettlementsWidgetData,
+  DashboardStockReconciliationWidgetData,
+  DashboardStockSyncOutboxWidgetData,
   DashboardWaterValuesWidgetData,
   DashboardWorksheetsWidgetData,
   DashboardLayoutInputResult,

@@ -98,6 +98,7 @@ export function mergeSameInvoice(
         : primary.kind,
       payee: nav ? ("COMPANY" as const) : primary.payee,
       hasOriginal: group.some((d) => d.hasOriginal),
+      ...(group.some((d) => d.cardPaid) ? { cardPaid: true } : {}),
       supplierAccounts: [...new Set(group.flatMap((d) => d.supplierAccounts))],
       identities: [
         ...new Set(group.flatMap((d) => identified(d).identities ?? [])),
@@ -106,6 +107,9 @@ export function mergeSameInvoice(
   });
   return [...merged, ...alone.map(identified)];
 }
+
+/** A Számlázz.hu fizetési módja kártya: „Bankkártya”, „Kártya”, „Card”. */
+export const CARD_METHOD = /k[aá]rty|card/i;
 
 /**
  * A HIÁNYZÓ SZÁMLÁK OLVASÓ OLDALA: a terhelések és a jelölt dokumentumok a
@@ -354,6 +358,24 @@ export class MissingInvoicesRepository {
       }),
     ]);
 
+    // A KÁRTYÁVAL FIZETETT SZÁMLÁZZ.HU-SZÁMLÁK (acrobot 26084): a fizetési mód a
+    // Számlázás vetítésén áll, a forrás-dokumentumára mutatva
+    const feedIds = mailbox
+      .filter((d) => d.origin === "SZAMLAZZ_FEED")
+      .map((d) => d.id);
+    const cardPaidIds = new Set(
+      feedIds.length === 0
+        ? []
+        : (
+            await this.database.incomingBillingDocument.findMany({
+              where: { sourceDocumentId: { in: feedIds } },
+              select: { sourceDocumentId: true, paymentMethod: true },
+            })
+          )
+            .filter((row) => CARD_METHOD.test(row.paymentMethod ?? ""))
+            .flatMap((row) => row.sourceDocumentId ?? []),
+    );
+
     const accountsByTaxBase = new Map<string, string[]>();
     for (const supplier of suppliers) {
       const base = taxBase(supplier.taxNumber);
@@ -509,6 +531,7 @@ export class MissingInvoicesRepository {
         hasOriginal: true,
         identities: document.sha256 ? [`sha:${document.sha256}`] : [],
         ...(card?.debitIds?.length ? { cardPaymentIds: card.debitIds } : {}),
+        ...(cardPaidIds.has(document.id) ? { cardPaid: true } : {}),
       });
       keys.set(
         document.id,
