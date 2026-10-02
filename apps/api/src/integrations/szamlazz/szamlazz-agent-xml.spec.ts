@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  buildSzamlazzAgentPaymentXml,
   buildSzamlazzAgentInvoiceXml,
   parseSzamlazzAgentXmlResponse,
   SzamlazzAgentXmlError,
@@ -130,6 +131,55 @@ const ERROR_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <hibakod>3</hibakod>
 <hibauzenet><![CDATA[Bejelentkezési hiba]]></hibauzenet>
 </xmlszamlavalasz>`;
+
+/*
+  A JÓVÁÍRÁS (xmlszamlakifiz.xsd). MI PIROSÍT: ha az additiv nem true lenne (a
+  false a számla minden korábbi kifizetését törli); ha a beallitasok sorrendje
+  eltérne a sémáétól; ha a kulcs vagy a megjegyzés escapelés nélkül menne; ha
+  nulla vagy hatnál több kifizetés is kimenne.
+*/
+describe("buildSzamlazzAgentPaymentXml", () => {
+  it("additive, in the schema's order, one payment per element, escaped", () => {
+    const xml = buildSzamlazzAgentPaymentXml({
+      agentKey: "k<&>",
+      invoiceNumber: "ACRW-2026/00481",
+      payments: [
+        {
+          date: "2026-09-17",
+          title: "utánvét",
+          amount: "105831",
+          note: "GLS utánvét, 2026-09-17 & kerekítés",
+        },
+      ],
+    });
+    assert.equal(
+      xml,
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+        '<xmlszamlakifiz xmlns="http://www.szamlazz.hu/xmlszamlakifiz" ' +
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
+        'xsi:schemaLocation="http://www.szamlazz.hu/xmlszamlakifiz https://www.szamlazz.hu/szamla/docs/xsds/agentkifiz/xmlszamlakifiz.xsd">' +
+        "<beallitasok><szamlaagentkulcs>k&lt;&amp;&gt;</szamlaagentkulcs>" +
+        "<szamlaszam>ACRW-2026/00481</szamlaszam><additiv>true</additiv>" +
+        "<valaszVerzio>2</valaszVerzio></beallitasok>" +
+        "<kifizetes><datum>2026-09-17</datum><jogcim>utánvét</jogcim>" +
+        "<osszeg>105831</osszeg><leiras>GLS utánvét, 2026-09-17 &amp; kerekítés</leiras></kifizetes>" +
+        "</xmlszamlakifiz>",
+    );
+  });
+
+  it("refuses no payment and more than five", () => {
+    const payment = { date: "2026-09-17", title: "utánvét", amount: "1" };
+    const build = (n: number) =>
+      buildSzamlazzAgentPaymentXml({
+        agentKey: "k",
+        invoiceNumber: "X",
+        payments: Array.from({ length: n }, () => payment),
+      });
+    assert.throws(() => build(0));
+    assert.throws(() => build(6));
+    assert.doesNotThrow(() => build(5));
+  });
+});
 
 describe("parseSzamlazzAgentXmlResponse", () => {
   it("parses a successful preview response, decoding the PDF from base64", () => {
