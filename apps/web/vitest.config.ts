@@ -35,6 +35,7 @@ export default defineConfig({
       "src/lib/partners/**/*.test.ts",
       "src/lib/theme/**/*.test.ts",
       "src/lib/aquariums/**/*.test.ts",
+      "src/lib/dashboard/**/*.test.ts",
     ],
     setupFiles: ["./src/test/setup.ts"],
   },

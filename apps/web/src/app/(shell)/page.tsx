@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { DashboardHome } from "@/components/dashboard/dashboard-home";
 import {
   PilotAvatar,
   PilotBadge,
@@ -737,14 +738,22 @@ export default function DashboardPage() {
         (fent, a `PilotThemeRoot`-on) tovabbra is teli szelessegu, csak a
         BENNE allo doboz kap korlatot es kozepre-igazitast.
       */}
-      <div className="mx-auto w-full max-w-6xl">
-        <div className="mb-6">
-          <p className="text-sm text-pilot-grey-500">
-            {todayFormatter.format(new Date())}
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold text-pilot-grey-900">
+      <div className="mx-auto w-full max-w-[1320px]">
+        {/*
+          A TESTRESZABHATO VEZERLOPULT (Figma 382:3): fejlec, widget-racs,
+          testreszabas. Alatta a mai kartyak maradnak, amig a sajat widgetjeik
+          (a kovetkezo PR-ek) at nem veszik a helyuket -- egyik sem tunik el
+          kozben (docs/dashboard/v1-discovery.md 9. pont).
+        */}
+        <DashboardHome />
+
+        <div className="mb-4 mt-8">
+          <h2 className="text-sm font-semibold text-pilot-grey-900">
             {greetingName ? `${greeting}, ${greetingName}!` : `${greeting}!`}
-          </h1>
+          </h2>
+          <p className="text-xs text-pilot-grey-500">
+            Áttekintés · {todayFormatter.format(new Date())}
+          </p>
         </div>
 
         {loading ? <DashboardLoading /> : null}

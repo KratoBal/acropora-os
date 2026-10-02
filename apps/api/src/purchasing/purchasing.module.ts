@@ -42,5 +42,7 @@ import { SupplierCodeLearningRepository } from "./supplier-code-learning.reposit
     ExpectedArrivalScheduler,
     ExpectedArrivalService,
   ],
+  // the dashboard's "Várható beérkezések" widget reads the same list
+  exports: [ExpectedArrivalService],
 })
 export class PurchasingModule {}
