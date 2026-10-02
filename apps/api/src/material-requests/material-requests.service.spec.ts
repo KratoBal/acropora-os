@@ -357,7 +357,7 @@ describe("anyagigény elküldése", () => {
       out.warning,
       "a válasznak figyelmeztetést kellett volna hordoznia",
     );
-    assert.match(out.warning ?? "", /senki nem tudja megjelölni/);
+    assert.match(out.warning ?? "", /senki nem tudja elintézni/);
   });
 });
 

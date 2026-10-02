@@ -1,5 +1,5 @@
-import { MaterialRequestPendingPage } from "@/components/worksheets/material-request-pending-page";
+import { MaterialRequestOverviewPage } from "@/components/material-requests/material-request-overview-page";
 
 export default function MaterialRequestsPage() {
-  return <MaterialRequestPendingPage />;
+  return <MaterialRequestOverviewPage />;
 }

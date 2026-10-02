@@ -43,9 +43,14 @@ export interface ServiceCapabilityInfo {
 export const SERVICE_CAPABILITIES: readonly ServiceCapabilityInfo[] = [
   {
     value: "MATERIAL_REQUEST_MARK_RECEIVED",
-    label: "Anyag beérkezésének jelölése",
+    /*
+      V2 (docs/material-requests/v2-discovery.md §8.7): the same capability
+      now means "may handle purchases" -- claim, order, receive. The value is
+      unchanged, so nothing is migrated; only the words follow the meaning.
+    */
+    label: "Anyagbeszerzés intézése",
     description:
-      "Láthatja a rá váró anyagigényeket, és megjelölheti, ha egy elküldött igény beérkezett. Ez csak a jelölés joga -- attól függetlenül állítható, hogy kap-e értesítést az új igényekről.",
+      "Elvállalhatja az anyagigények beszerzését („Én intézem a beszerzést”), és a vállalt igényt megrendeltként, részben vagy teljesen beérkezettként jelölheti. Ez csak a beszerzés joga -- attól függetlenül állítható, hogy kap-e értesítést az új igényekről.",
     audience: "internal",
   },
   /**
