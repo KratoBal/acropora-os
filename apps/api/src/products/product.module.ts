@@ -10,6 +10,8 @@ import { ProductExtensionService } from "./product-extension.service.js";
 import { ProductShippingProfileController } from "./product-shipping-profile.controller.js";
 import { ProductShippingProfileRepository } from "./product-shipping-profile.repository.js";
 import { ProductShippingProfileService } from "./product-shipping-profile.service.js";
+import { ProductEnrichmentReviewController } from "./product-enrichment-review.controller.js";
+import { ProductEnrichmentReviewService } from "./product-enrichment-review.service.js";
 import { ProductController } from "./product.controller.js";
 import { ProductRepository } from "./product.repository.js";
 import { ProductService } from "./product.service.js";
@@ -21,6 +23,7 @@ import { ProductService } from "./product.service.js";
     ProductExtensionController,
     ProductShippingProfileController,
     CatalogOptionsController,
+    ProductEnrichmentReviewController,
   ],
   providers: [
     ProductRepository,
@@ -31,6 +34,7 @@ import { ProductService } from "./product.service.js";
     ProductShippingProfileRepository,
     ProductShippingProfileService,
     ProductExtensionService,
+    ProductEnrichmentReviewService,
   ],
   exports: [ProductService, ProductExtensionService, ProductBarcodeRepository],
 })
