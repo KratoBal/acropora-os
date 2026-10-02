@@ -451,8 +451,13 @@ that in its body.
 6. **PR 6, inventory and purchasing:** Készlet-egyeztetés (fix 5, cache) and
    the full Várható beérkezések.
 7. **PR 7, JEV, system, attention:** JEV intelligencia, Rendszerállapot,
-   Figyelmet igényel; retire the old `DashboardCards` and shrink
-   `/dashboard/summary`.
+   Figyelmet igényel. The old `DashboardCards` (Határidők, Csapatterhelés,
+   Legutóbbi aktivitások, Beszerzés) are **not** retired: they stay until a
+   tile replaces them (owner decision, 2026-10-02), and no V1 tile does yet.
+   The same decision scopes the Munkalapok tile by role: OWNER, ADMIN and
+   MANAGER count every open worksheet in their list scope, everyone else
+   only those assigned to them (and the certificates of the tickets
+   assigned to them). The tile only; the Munkalapok menu is unchanged.
 
 **Out of scope throughout:**
 

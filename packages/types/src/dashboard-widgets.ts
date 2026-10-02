@@ -131,11 +131,10 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     recommendedRoles: MANAGERS,
     defaultSize: "md",
     supportedSizes: WIDE,
-    availability: "planned",
+    availability: "active",
     priority: 0,
     dataSource:
-      "The actionable figures of the other active widgets, per permission.",
-    plannedReason: "Built with the JEV / system batch (PR 7).",
+      "The actionable figures of the other active widgets the user may see; a failed source is listed as unavailable, never zero. No shadow measurement, no webshop.",
   }),
   widget({
     id: "tasks",
@@ -477,15 +476,14 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
   widget({
     id: "jev-intelligence",
     title: "JEV intelligencia",
-    description: "Döntések és review queue",
+    description: "Döntések és árnyékmérés",
     category: "intelligence",
     requiredPermissions: [P.SETTINGS_MANAGE],
     recommendedRoles: ["OWNER", "ADMIN"],
-    availability: "planned",
+    availability: "active",
     priority: 62,
     dataSource:
       "DecisionRun groupBy; shadow runs only as a labelled shadow measurement, never as suggestions.",
-    plannedReason: "Built with the JEV / system batch (PR 7).",
   }),
   widget({
     id: "system-status",
@@ -494,11 +492,10 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "system",
     requiredPermissions: [P.SETTINGS_MANAGE],
     recommendedRoles: ["OWNER", "ADMIN"],
-    availability: "planned",
+    availability: "active",
     priority: 63,
     dataSource:
-      "Latest sync runs (NAV, mail, Foxpost, GLS, SimplePay), JEV error share; UNAS / Medusa rows frozen.",
-    plannedReason: "Built with the JEV / system batch (PR 7).",
+      "Latest sync runs (NAV, mail, Foxpost, GLS, SimplePay), the NAV verification, JEV errors today; UNAS / Medusa rows frozen.",
   }),
   widget({
     id: "live-events",
@@ -1170,4 +1167,93 @@ export interface DashboardStockSyncOutboxWidgetData {
   /** DEAD_LETTER: needs a person. */
   deadLetter: number;
   lastSuccessfulSyncAt: string | null;
+}
+
+/** One window's DecisionRun counts. */
+export interface DashboardJevCounts {
+  runs: number;
+  /** `status: ERROR` */
+  errors: number;
+  /** Runs a person saw (`exposure: SHOWN`), by how they were closed. */
+  shown: {
+    accepted: number;
+    overridden: number;
+    /** STALE or EXPIRED: closed without a decision. */
+    lapsed: number;
+    /** No resolution yet. */
+    open: number;
+  };
+  /**
+   * SHADOW MEASUREMENT (`exposure: HIDDEN`): never shown to anyone, never a
+   * suggestion. Only the agreement with the person's own decision is counted.
+   */
+  shadow: {
+    match: number;
+    mismatch: number;
+    /** Not compared yet, or lapsed. */
+    open: number;
+  };
+}
+
+/**
+ * JEV intelligencia (`settings.manage` only): the decision runs of today and
+ * of the last `windowDays` Budapest days, per policy.
+ */
+export interface DashboardJevIntelligenceWidgetData {
+  windowDays: number;
+  today: { runs: number; errors: number };
+  week: DashboardJevCounts;
+  policies: ({ policyKey: string } & DashboardJevCounts)[];
+}
+
+export const DASHBOARD_SYSTEM_SOURCES = [
+  "NAV",
+  "MAIL",
+  "FOXPOST",
+  "GLS",
+  "SIMPLEPAY",
+  "JEV",
+] as const;
+export type DashboardSystemSource = (typeof DASHBOARD_SYSTEM_SOURCES)[number];
+
+/**
+ * The state of one source, derived ONLY from what is stored: the last run's
+ * status and its own failure count, the NAV verification, JEV's errors
+ * today. No uptime, no invented staleness threshold.
+ */
+export type DashboardSystemState = "ok" | "warning" | "error" | "no-data";
+
+/** Rendszerállapot (`settings.manage` only). UNAS / Medusa are frozen: no row. */
+export interface DashboardSystemStatusWidgetData {
+  sources: {
+    source: DashboardSystemSource;
+    state: DashboardSystemState;
+    /** The last run's status (or, for JEV, null). */
+    lastRunStatus: string | null;
+    lastRunAt: string | null;
+    errorCode: string | null;
+    /** A short Hungarian reason for a warning or an error. */
+    detail: string | null;
+  }[];
+}
+
+/** One line of Figyelmet igényel: a count from a widget the user may see. */
+export interface DashboardAttentionItem {
+  /** The widget the figure comes from (its permission already checked). */
+  widgetId: DashboardWidgetId;
+  key: string;
+  label: string;
+  count: number;
+  href: string;
+  tone: "danger" | "warning" | "info";
+}
+
+/**
+ * Figyelmet igényel: the actionable figures of the other active widgets, only
+ * those the user may see. A source that failed is listed as unavailable,
+ * never as zero. Shadow measurements and the frozen webshop are never here.
+ */
+export interface DashboardAttentionWidgetData {
+  items: DashboardAttentionItem[];
+  unavailable: { widgetId: DashboardWidgetId; title: string }[];
 }

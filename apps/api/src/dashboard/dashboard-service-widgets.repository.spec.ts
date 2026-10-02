@@ -58,11 +58,13 @@ function repositoryWith(answers: Record<string, unknown> = {}) {
 
 const internal: ServiceWidgetViewer = {
   userId: "user-1",
+  role: "OWNER",
   scope: { kind: "internal" } as PartnerScope,
   assignedUnitIds: [],
 };
 const customer: ServiceWidgetViewer = {
   userId: "partner-1",
+  role: "PARTNER_SERVICE",
   scope: { kind: "customer", customerId: "customer-1" } as PartnerScope,
   assignedUnitIds: ["unit-1"],
 };
@@ -191,6 +193,47 @@ describe("Munkalapok", () => {
         .where,
     );
     assert.match(worksheetWhere, /"hiddenAt":null/);
+  });
+
+  it("the owner, the admin and the manager count every visible worksheet, not only their own", async () => {
+    for (const role of ["OWNER", "ADMIN", "MANAGER"] as const) {
+      const { repository, calls } = repositoryWith({
+        "worksheet.findMany": [],
+        "completionCertificate.count": 0,
+      });
+      await repository.worksheets({ ...internal, role });
+      for (const model of ["worksheet", "completionCertificate"])
+        assert.doesNotMatch(
+          json(
+            (calls.find((c) => c.model === model)?.args as { where: unknown })
+              .where,
+          ),
+          /"assignees"/,
+          `${role} must not be narrowed to own ${model}s`,
+        );
+    }
+  });
+
+  it("everyone else counts only the worksheets, and the certificates of the tickets, assigned to them", async () => {
+    for (const role of ["SERVICE", "SALES", "WAREHOUSE", "VIEWER"] as const) {
+      const { repository, calls } = repositoryWith({
+        "worksheet.findMany": [],
+        "completionCertificate.count": 0,
+      });
+      await repository.worksheets({ ...internal, userId: "tech-7", role });
+      for (const model of ["worksheet", "completionCertificate"]) {
+        const where = json(
+          (calls.find((c) => c.model === model)?.args as { where: unknown })
+            .where,
+        );
+        assert.match(
+          where,
+          /"assignees":\{"some":\{"userId":"tech-7"\}\}/,
+          `${role}: ${model} must be narrowed to the own assignments`,
+        );
+        assert.match(where, /"hiddenAt":null/, "the list scope still applies");
+      }
+    }
   });
 
   it("no visible worksheet: no raw query, zeros", async () => {

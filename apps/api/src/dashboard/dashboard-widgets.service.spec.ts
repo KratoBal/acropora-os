@@ -17,6 +17,7 @@ import type { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-wi
 import type { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.repository.js";
 import type { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
 import type { DashboardServiceWidgetsRepository } from "./dashboard-service-widgets.repository.js";
+import type { DashboardSystemWidgetsRepository } from "./dashboard-system-widgets.repository.js";
 import {
   DashboardWidgetsService,
   WIDGET_UNAVAILABLE_MESSAGE,
@@ -41,7 +42,7 @@ function service(
   options: {
     stored?: unknown;
     capabilities?: ServiceCapabilityValue[];
-    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[8];
+    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[9];
   } = {},
 ) {
   const store: Store = {
@@ -85,6 +86,7 @@ function service(
       {} as MissingInvoicesService,
       {} as StockReconciliationService,
       {} as UnasStockSyncOutboxRepository,
+      {} as DashboardSystemWidgetsRepository,
       options.loaders,
     ),
   };
@@ -102,6 +104,7 @@ describe("the layout", () => {
     assert.deepEqual(
       r.available.map((w) => w.id),
       [
+        "attention",
         "tasks",
         "service-tickets",
         "worksheets",
@@ -265,5 +268,97 @@ describe("the widget data endpoint (server-side authorization)", () => {
         ],
       },
     });
+  });
+});
+
+describe("Figyelmet igényel", () => {
+  const overdue = {
+    overdue: { count: 2, openAmounts: [] },
+    dueToday: 0,
+    dueWithinWeek: 0,
+    noPaymentDataPastDue: 0,
+  };
+  const tickets = { openCount: 3, byStatus: { NEW: 3 }, oldestOpenAt: null };
+
+  it("reads only the widgets the user may see; the others are not even loaded", async () => {
+    const loaded: string[] = [];
+    const track = (id: string, data: unknown) => async (): Promise<unknown> => {
+      loaded.push(id);
+      return data;
+    };
+    const { svc } = service({
+      loaders: {
+        "overdue-invoices": track("overdue-invoices", overdue),
+        "service-tickets": track("service-tickets", tickets),
+      },
+    });
+    // the attention loader is the real one
+    (svc as unknown as { loaders: Record<string, unknown> }).loaders.attention =
+      (
+        svc as unknown as {
+          defaultLoaders(): Record<string, unknown>;
+        }
+      ).defaultLoaders().attention;
+    const r = await svc.widgets(user("SERVICE"), ["attention"]);
+    assert.equal(r.results.attention?.status, "ok");
+    assert.deepEqual(loaded, ["service-tickets"]);
+    const data = (r.results.attention as { data: { items: { key: string }[] } })
+      .data;
+    assert.deepEqual(
+      data.items.map((i) => i.key),
+      ["new"],
+    );
+  });
+
+  it("a failing source is named unavailable, never counted as zero; the rest still shows", async () => {
+    const { svc } = service({
+      loaders: {
+        "overdue-invoices": async () => {
+          throw new Error("synthetic outage");
+        },
+        "service-tickets": async () => tickets,
+      },
+    });
+    (svc as unknown as { loaders: Record<string, unknown> }).loaders.attention =
+      (
+        svc as unknown as { defaultLoaders(): Record<string, unknown> }
+      ).defaultLoaders().attention;
+    const r = await svc.widgets(user("OWNER"), ["attention"]);
+    const data = (
+      r.results.attention as {
+        data: {
+          items: { widgetId: string }[];
+          unavailable: { widgetId: string; title: string }[];
+        };
+      }
+    ).data;
+    assert.deepEqual(data.unavailable, [
+      { widgetId: "overdue-invoices", title: "Lejáró számlák" },
+    ]);
+    assert.ok(!data.items.some((i) => i.widgetId === "overdue-invoices"));
+    assert.ok(data.items.some((i) => i.widgetId === "service-tickets"));
+  });
+
+  it("a card and the attention list in one request share one load", async () => {
+    let calls = 0;
+    const { svc } = service({
+      loaders: {
+        "service-tickets": async () => {
+          calls += 1;
+          return tickets;
+        },
+      },
+    });
+    (svc as unknown as { loaders: Record<string, unknown> }).loaders.attention =
+      (
+        svc as unknown as { defaultLoaders(): Record<string, unknown> }
+      ).defaultLoaders().attention;
+    const r = await svc.widgets(user("OWNER"), [
+      "service-tickets",
+      "attention",
+    ]);
+    assert.equal(r.results["service-tickets"]?.status, "ok");
+    assert.equal(r.results.attention?.status, "ok");
+    assert.equal(calls, 1);
   });
 });

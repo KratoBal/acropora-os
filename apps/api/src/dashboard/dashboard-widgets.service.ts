@@ -15,6 +15,7 @@ import {
   resolveDashboardLayout,
   sanitizeDashboardLayoutInput,
   type AuthenticatedUser,
+  type DashboardAttentionWidgetData,
   type DashboardExpectedArrivalsWidgetData,
   type DashboardLayoutResponse,
   type DashboardViewer,
@@ -30,9 +31,15 @@ import { MissingInvoicesService } from "../missing-invoices/missing-invoices.ser
 import { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { aquariumFindings } from "./aquarium-findings.js";
+import {
+  ATTENTION_SOURCES,
+  attentionItemsOf,
+  sortAttentionItems,
+} from "./attention.js";
 import { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
 import { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.repository.js";
 import { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
+import { DashboardSystemWidgetsRepository } from "./dashboard-system-widgets.repository.js";
 import { MissingInvoicesSummaryCache } from "./missing-invoices-summary.js";
 import { summarizeOverdueInvoices } from "./overdue-invoices.js";
 import { stockDiscrepancies, stockSyncOutboxState } from "./stock-widgets.js";
@@ -45,7 +52,20 @@ import {
 export const WIDGET_UNAVAILABLE_MESSAGE = "Az adat jelenleg nem elérhető.";
 const LATEST_ARRIVALS = 3;
 
-type WidgetLoader = (user: AuthenticatedUser) => Promise<unknown>;
+/**
+ * What a loader gets besides the user: the viewer, and the OTHER widgets'
+ * data, memoized for this one request (Figyelmet igényel reads the cards'
+ * own figures without querying twice).
+ */
+export interface WidgetLoadContext {
+  viewer: DashboardViewer;
+  load(id: DashboardWidgetId): Promise<unknown>;
+}
+
+type WidgetLoader = (
+  user: AuthenticatedUser,
+  context: WidgetLoadContext,
+) => Promise<unknown>;
 
 /** Replaceable in tests: a loader per ACTIVE widget id. */
 export const DASHBOARD_WIDGET_LOADERS = Symbol("DASHBOARD_WIDGET_LOADERS");
@@ -79,6 +99,7 @@ export class DashboardWidgetsService {
     missingInvoices: MissingInvoicesService,
     private readonly reconciliation: StockReconciliationService,
     private readonly outbox: UnasStockSyncOutboxRepository,
+    private readonly systemWidgets: DashboardSystemWidgetsRepository,
     @Optional()
     @Inject(DASHBOARD_WIDGET_LOADERS)
     loaders?: Partial<Record<DashboardWidgetId, WidgetLoader>>,
@@ -131,6 +152,21 @@ export class DashboardWidgetsService {
       );
     const ids = [...new Set(requested)] as DashboardWidgetId[];
     const viewer = await this.viewer(user);
+    const memo = new Map<DashboardWidgetId, Promise<unknown>>();
+    const context: WidgetLoadContext = {
+      viewer,
+      load: (id) => {
+        let pending = memo.get(id);
+        if (!pending) {
+          const loader = this.loaders[id];
+          pending = loader
+            ? loader(user, context)
+            : Promise.reject(new Error(`No loader for "${id}".`));
+          memo.set(id, pending);
+        }
+        return pending;
+      },
+    };
 
     const settled = await Promise.all(
       ids.map(
@@ -140,10 +176,9 @@ export class DashboardWidgetsService {
             return [id, { status: "unavailable" }];
           if (!isDashboardWidgetAvailable(definition, viewer))
             return [id, { status: "forbidden" }];
-          const loader = this.loaders[id];
-          if (!loader) return [id, { status: "unavailable" }];
+          if (!this.loaders[id]) return [id, { status: "unavailable" }];
           try {
-            return [id, { status: "ok", data: await loader(user) }];
+            return [id, { status: "ok", data: await context.load(id) }];
           } catch (error) {
             this.logger.warn(
               `Dashboard widget "${id}" failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -216,7 +251,45 @@ export class DashboardWidgetsService {
       settlements: () => this.financeWidgets.settlements(),
       "stock-reconciliation": () => stockDiscrepancies(this.reconciliation),
       "stock-sync-outbox": () => stockSyncOutboxState(this.outbox),
+      "jev-intelligence": () => this.systemWidgets.jevIntelligence(new Date()),
+      "system-status": () => this.systemWidgets.systemStatus(new Date()),
+      attention: (_, context) => this.attentionWidget(context),
     };
+  }
+
+  /**
+   * Figyelmet igényel: the figures of the source widgets the user may see,
+   * each through its own loader. A source that fails is named as
+   * unavailable, never counted as zero; one the user may not see is skipped
+   * without being loaded.
+   */
+  private async attentionWidget(
+    context: WidgetLoadContext,
+  ): Promise<DashboardAttentionWidgetData> {
+    const visible = ATTENTION_SOURCES.filter((id) => {
+      const definition = dashboardWidget(id);
+      return (
+        definition.availability === "active" &&
+        isDashboardWidgetAvailable(definition, context.viewer) &&
+        this.loaders[id] !== undefined
+      );
+    });
+    const settled = await Promise.allSettled(
+      visible.map((id) => context.load(id)),
+    );
+    const data: DashboardAttentionWidgetData = { items: [], unavailable: [] };
+    settled.forEach((result, index) => {
+      const id = visible[index]!;
+      if (result.status === "fulfilled")
+        data.items.push(...attentionItemsOf(id, result.value));
+      else
+        data.unavailable.push({
+          widgetId: id,
+          title: dashboardWidget(id).title,
+        });
+    });
+    data.items = sortAttentionItems(data.items);
+    return data;
   }
 
   /**
@@ -246,6 +319,7 @@ async function serviceViewer(
 ): Promise<ServiceWidgetViewer> {
   return {
     userId: user.id,
+    role: user.role,
     scope: partnerScopeOf(user),
     assignedUnitIds: await assignedUnitIdsFor(user.id),
   };

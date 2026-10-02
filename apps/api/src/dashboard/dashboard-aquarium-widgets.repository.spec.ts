@@ -52,11 +52,13 @@ function repositoryWith(answers: Record<string, unknown> = {}) {
 
 const internal: ServiceWidgetViewer = {
   userId: "u1",
+  role: "OWNER",
   scope: { kind: "internal" } as PartnerScope,
   assignedUnitIds: [],
 };
 const customer: ServiceWidgetViewer = {
   userId: "p1",
+  role: "PARTNER_SERVICE",
   scope: { kind: "customer", customerId: "customer-1" } as PartnerScope,
   assignedUnitIds: ["unit-1"],
 };
