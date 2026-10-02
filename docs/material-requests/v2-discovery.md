@@ -437,6 +437,46 @@ Q9 confirms which events notify.
 
 Each phase is branched from `main` after the previous one has merged.
 
+## Answers (owner, 2026-10-02)
+
+These answer the questions below. They override any proposal above that says
+otherwise.
+
+- **Q1, production quantities:** 5 items, all 5 `numeric_strict`, 0
+  `number_plus_text` (OPEN 1, RECEIVED 4). The strict parse rule fills
+  `quantityValue` for every existing item, so the ratio display works on all
+  of today's data.
+- **Q2, partner visibility:** no. V2 stays internal-only, as today.
+- **Q3, reassignment:** yes, also in the UI, kept simple.
+  - A leader or the current handler picks another user from a list.
+  - The change writes a REASSIGNED history row.
+  - Candidates are the active internal users who hold the purchasing
+    capability.
+- **Q4, the old receive call:** agreed. Until the OTA reaches every phone,
+  `receive` on an OPEN request by a capability holder is an implicit claim
+  and receive, writing both CLAIMED and RECEIVED rows.
+- **Q5, deadline and priority:** agreed. Both are optional and set by the
+  requester. `priority` is NORMAL, HIGH or URGENT (Normál, Magas, Sürgős).
+- **Q6, request number:** none. The worksheet number is enough.
+- **Q7, "Új anyagigény" on the overview:** left out, on desktop and mobile. A
+  request starts only from a worksheet, as today.
+- **Q9, notifications:**
+  - Claim and order notify **the requester only**, by mail and push, through
+    two new editable templates (`MATERIAL_REQUEST_CLAIMED`,
+    `MATERIAL_REQUEST_ORDERED`).
+  - Partial receiving does not notify.
+  - The existing RECEIVED recipients (the requester plus the worksheet's
+    assignees) are unchanged.
+- **Q10, history backfill:** yes, only from stored values.
+  - A SUBMITTED row from `submittedAt` and `requestedById`.
+  - A RECEIVED row from `receivedAt` and `receivedById`.
+  - No row is invented. A request without a stored timestamp gets no row for
+    that step.
+
+Still open: Q8 (withdrawal), Q11 (who sees the overview), and the "Szűrők" /
+"További műveletek" part of Q7. For the last one, the proposal stands: leave
+both out until they have content.
+
 ## Open questions
 
 1. **The production quantity counts:** please run §5's query and post the
