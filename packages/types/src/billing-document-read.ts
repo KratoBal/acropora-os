@@ -117,7 +117,9 @@ export type BillingPaymentSource =
   | "CARD_AT_ORDER"
   | "CASH_AT_ORDER"
   | "SIMPLEPAY"
-  | "SIMPLEPAY_REFUNDED";
+  | "SIMPLEPAY_REFUNDED"
+  /** Bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988). */
+  | "BANK_PAIRING";
 
 /** Egy külső bizonylat tétele, ahogy a számlán áll (szamla.xsd `tetel`). */
 export interface BillingExternalDocumentLine {

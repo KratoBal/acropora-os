@@ -53,6 +53,8 @@ const AT_ORDER: Record<string, string> = {
   // a SimplePay elszámolás-sorából (acrobot 25964, 25979)
   SIMPLEPAY: "SimplePay",
   SIMPLEPAY_REFUNDED: "SimplePay, visszatérítve",
+  // bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988)
+  BANK_PAIRING: "banki párosítás",
 };
 
 export function PaymentBadge({
@@ -60,11 +62,16 @@ export function PaymentBadge({
   paidAmount,
   lastPaymentDate,
   paymentSource = null,
+  paymentConflict = false,
   currency,
 }: Pick<
   BillingDocumentListItem,
   "paymentState" | "paidAmount" | "lastPaymentDate" | "currency"
-> & { paymentSource?: BillingDocumentListItem["paymentSource"] }) {
+> & {
+  paymentSource?: BillingDocumentListItem["paymentSource"];
+  /** A Számlázz.hu részben fizetettnek mondja, a banki párosítás teljesnek. */
+  paymentConflict?: boolean;
+}) {
   if (paymentState === null)
     return <span className="text-pilot-grey-400">—</span>;
   const atOrder = paymentSource ? AT_ORDER[paymentSource] : undefined;
@@ -88,6 +95,11 @@ export function PaymentBadge({
       {detail ? (
         <span className="text-xs tabular-nums text-pilot-grey-500">
           {detail}
+        </span>
+      ) : null}
+      {paymentConflict ? (
+        <span className="text-xs font-semibold text-pilot-amber-700">
+          Eltér a banki párosítástól
         </span>
       ) : null}
     </span>
