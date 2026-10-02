@@ -13,6 +13,7 @@ import {
   toExternalListItem,
   toListItem,
   type ExternalListRow,
+  type OwnPaymentMark,
   type SimplePaySettlementLine,
   type MergeRow,
 } from "./billing-document-list.js";
@@ -168,6 +169,7 @@ const external = (
   paymentMethodUnified: null,
   orderNumber: null,
   cancelled: false,
+  payments: [],
   ...overrides,
 });
 
@@ -536,5 +538,123 @@ describe("the external documents on the list", () => {
       [ids(0, 2), ids(2, 2), ids(4, 2)],
       [["draft", "ext-01"], ["own-30", "ext-29"], ["own-28"]],
     );
+  });
+});
+
+/*
+  A SAJÁT, A SZÁMLÁZZ.HU-BA BEÍRT JELÖLÉS A KIMENŐ NÉZETEN (acrobot 26027:
+  Balázs a három beírt GLS-fizetést nem látta, mert a feed nem küldte újra a
+  számlát). MI PIROSÍT: ha a jelölés nem tenné „Fizetve”-vé a feed szerint
+  fizetetlen vagy ismeretlen számlát; ha a feed szerinti „Fizetve” helyett a
+  jelölés lenne a forrás; ha a feed által MÁR hozott jelölés kétszer számítana;
+  ha a forrás nem a jelölésé, vagy a dátum nem a jelölés napja; ha a sztornózott
+  számla állapotot kapna.
+*/
+describe("an own paid mark on the outgoing view (acrobot 26027)", () => {
+  const gls: OwnPaymentMark = {
+    source: "GLS_COD",
+    markDate: new Date("2026-09-17T00:00:00.000Z"),
+    amount: D("29210"),
+  };
+  const pay = (overrides: Partial<ExternalListRow>, marks = [gls]) =>
+    externalPaymentFields(external(overrides), [], marks);
+
+  it("unpaid by the feed (projected, no element, transfer): paid, from the mark, on its day", () => {
+    assert.deepEqual(pay({ paymentsKnown: false }), {
+      paymentState: "PAID",
+      paidAmount: "29210",
+      lastPaymentDate: "2026-09-17",
+      paymentSource: "MARK_GLS_COD",
+    });
+  });
+
+  it("not yet projected (unknown): the mark still proves it paid", () => {
+    assert.equal(pay({ paymentsKnown: null }).paymentSource, "MARK_GLS_COD");
+  });
+
+  it("a card invoice with no feed payment: the mark wins over the at-order assumption", () => {
+    assert.deepEqual(
+      pay(
+        {
+          paymentsKnown: false,
+          paymentMethodUnified: "bankkártya",
+        },
+        [{ ...gls, source: "SIMPLEPAY" }],
+      ).paymentSource,
+      "MARK_SIMPLEPAY",
+    );
+  });
+
+  it("paid by the feed: the feed wins, the mark adds nothing", () => {
+    assert.deepEqual(
+      pay({
+        paymentsKnown: true,
+        paidAmount: D("29210"),
+        lastPaymentDate: new Date("2026-09-20T00:00:00.000Z"),
+      }),
+      {
+        paymentState: "PAID",
+        paidAmount: "29210",
+        lastPaymentDate: "2026-09-20",
+        paymentSource: "SZAMLAZZ",
+      },
+    );
+  });
+
+  it("the feed already carries the mark (same day and sum): counted once, the feed is the source", () => {
+    const fields = pay(
+      {
+        paymentsKnown: true,
+        paidAmount: D("10000"),
+        lastPaymentDate: new Date("2026-09-17T00:00:00.000Z"),
+        payments: [
+          {
+            date: "2026-09-17",
+            title: "utánvét",
+            amount: "10000.00",
+            note: null,
+            bankTransactionId: null,
+          },
+        ],
+      },
+      [{ ...gls, amount: D("10000") }],
+    );
+    assert.equal(fields.paymentState, "PARTIAL");
+    assert.equal(fields.paidAmount, "10000");
+    assert.equal(fields.paymentSource, "SZAMLAZZ");
+  });
+
+  it("a partial feed payment plus a new mark: added up, the latest mark is the source", () => {
+    const fields = pay(
+      {
+        paymentsKnown: true,
+        paidAmount: D("10000"),
+        lastPaymentDate: new Date("2026-09-10T00:00:00.000Z"),
+        payments: [
+          {
+            date: "2026-09-10",
+            title: "átutalás",
+            amount: "10000.00",
+            note: null,
+            bankTransactionId: null,
+          },
+        ],
+      },
+      [{ ...gls, amount: D("19210") }],
+    );
+    assert.deepEqual(fields, {
+      paymentState: "PAID",
+      paidAmount: "29210",
+      lastPaymentDate: "2026-09-17",
+      paymentSource: "MARK_GLS_COD",
+    });
+  });
+
+  it("a cancelled invoice: no state, mark or not", () => {
+    assert.equal(pay({ cancelled: true }).paymentState, null);
+  });
+
+  it("no mark: unchanged (the transfer invoice stays unpaid)", () => {
+    assert.equal(pay({ paymentsKnown: false }, []).paymentState, "UNPAID");
   });
 });

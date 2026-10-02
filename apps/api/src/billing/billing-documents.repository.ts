@@ -83,6 +83,7 @@ function linesData(draft: NormalizedBillingDraft, invoiceId: string) {
     kind: line.kind,
     parentLineId: line.parentLineId,
     productId: line.productId,
+    variantId: line.variantId,
     description: line.description,
     quantity: line.quantity,
     unit: line.unit,

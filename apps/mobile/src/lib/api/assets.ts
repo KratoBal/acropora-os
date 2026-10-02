@@ -325,6 +325,8 @@ export function listAssets(
   search = "",
   departmentId = "",
   status: AssetListStatusFilter = "ACTIVE",
+  /** A szülő-választóhoz: az eszköz maga és a leszármazottai kimaradnak. */
+  excludeSubtreeOf = "",
 ) {
   const query = new URLSearchParams({
     page: String(page),
@@ -334,6 +336,7 @@ export function listAssets(
   });
   if (search.trim()) query.set("search", search.trim());
   if (departmentId.trim()) query.set("departmentId", departmentId.trim());
+  if (excludeSubtreeOf) query.set("excludeSubtreeOf", excludeSubtreeOf);
   return apiRequest<AssetListResponse>(`${BASE}?${query}`);
 }
 

@@ -85,10 +85,12 @@ const line = (
   productId: string | null,
   quantity = "1",
   kind = "ITEM",
+  variantId: string | null = null,
 ) => ({
   id,
   kind,
   productId,
+  variantId,
   quantity: D(quantity),
 });
 
@@ -145,6 +147,41 @@ describe("planInvoiceStock", () => {
       none: "NO_VARIANT",
     });
     assert.deepEqual(result.movement, []);
+  });
+
+  /*
+    A SZÁMLASOR VÁLTOZATA (kártya 705768fc, Balázs 2026-09-30-i kérése). MI
+    PIROSÍT: ha a több változatú termék sora a megnevezett változat helyett
+    másikat vagy semmit nem mozgatna; ha egy idegen (más terméké) vagy inaktív
+    változat is mozogna; ha a megnevezés nélküli több változatú sor találgatna.
+  */
+  it("moves the variant the line names, and only an active one of its own product", () => {
+    const result = plan([
+      line("chosen", "p-multi", "2", "ITEM", "v-b"),
+      line("again", "p-multi", "1", "ITEM", "v-b"),
+      line("other", "p-multi", "1", "ITEM", "v-a"),
+      line("foreign", "p-multi", "1", "ITEM", "v-unas"),
+      line("inactive", "p-multi", "1", "ITEM", "v-gone"),
+      line("unnamed", "p-multi"),
+      // egyváltozatúnál a megnevezett is mozog, egy idegen nem
+      line("single", "p-unas", "1", "ITEM", "v-unas"),
+      line("single-foreign", "p-unas", "1", "ITEM", "v-a"),
+    ]);
+    assert.deepEqual(moves(result), [
+      ["M-B", "-3", true],
+      ["M-A", "-1", true],
+      ["UNAS-1", "-1", true],
+    ]);
+    assert.deepEqual(Object.fromEntries(result.outcomes), {
+      chosen: "MOVED",
+      again: "MOVED",
+      other: "MOVED",
+      foreign: "VARIANT_NOT_CHOSEN",
+      inactive: "VARIANT_NOT_CHOSEN",
+      unnamed: "VARIANT_NOT_CHOSEN",
+      single: "MOVED",
+      "single-foreign": "VARIANT_NOT_CHOSEN",
+    });
   });
 
   it("moves nothing on a source that already moved the stock", () => {

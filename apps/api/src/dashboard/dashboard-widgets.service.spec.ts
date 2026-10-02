@@ -10,7 +10,9 @@ import {
 } from "@acropora/types";
 
 import type { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
+import type { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import type { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
+import type { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.repository.js";
 import type { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
 import type { DashboardServiceWidgetsRepository } from "./dashboard-service-widgets.repository.js";
 import {
@@ -37,7 +39,7 @@ function service(
   options: {
     stored?: unknown;
     capabilities?: ServiceCapabilityValue[];
-    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[4];
+    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[6];
   } = {},
 ) {
   const store: Store = {
@@ -77,6 +79,8 @@ function service(
       expectedArrivals,
       {} as DashboardServiceWidgetsRepository,
       {} as DashboardAquariumWidgetsRepository,
+      {} as DashboardFinanceWidgetsRepository,
+      {} as MissingInvoicesService,
       options.loaders,
     ),
   };

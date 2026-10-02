@@ -11,6 +11,7 @@ import { renderMaintenanceOrderFormDocx } from "../maintenance-contracts/mainten
 import type { MaintenanceOrderFormInput } from "../maintenance-contracts/maintenance-order-form.types.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import { decideQuota } from "../service-assets/document-store/document-quota.js";
+import { sharedAncestor } from "../service-assets/unit-path.js";
 import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import { WorksheetsService } from "../worksheets/worksheets.service.js";
 
@@ -85,15 +86,13 @@ export class MaintenanceOrdersService {
       );
 
     /*
-      EGY KARBANTARTÁSI LAP EGY HELYSZÍNRE KÉSZÜL (Balázs éles hibája,
-      2026-09-24 21:48, staging, Állatkert) -- ha a kiállítás tételei
-      TÖBB helyszínen vannak, ez itt, KIÁLLÍTÁSKOR derül ki, nem csak az
-      aláírás visszaérkezésekor (`uploadSignedDocument`, ugyanez a
-      ellenőrzés). A vegyes-helyszínes eset modellje még nincs eldöntve
-      (Balázs elé megy), ezért egyelőre megállunk és megnevezzük a
-      helyszíneket.
+      EGY MEGRENDELŐLAP EGY HELYSZÍNRE KÉSZÜL, és ez a tételek KÖZÖS FELSŐ
+      HELYSZÍNE is lehet (Balázs döntése, 2026-10-02 07:36 UTC, kártya
+      1806e061; az éles eset a Capasuli és három medencéje). Tényleg
+      független helyszíneknél itt, KIÁLLÍTÁSKOR állunk meg, és megnevezzük
+      őket (`uploadSignedDocument` ugyanezt ellenőrzi).
     */
-    await this.ensureSingleDepartment(
+    await this.ensureOneSite(
       contract.items.map((item) => item.departmentId as string),
     );
 
@@ -275,7 +274,8 @@ export class MaintenanceOrdersService {
       throw new ConflictException(
         `A(z) "${helyszinNelkul.description}" tételhez időközben megszűnt a helyszín-hozzárendelés, ezért nem hozható létre hozzá munkalap. A szerződés tételét előbb rendezni kell.`,
       );
-    const departmentId = await this.ensureSingleDepartment(
+    // a hibajegy a közös helyszínre kerül, a munkalapok a tételek sajátjára
+    const departmentId = await this.ensureOneSite(
       order.items.map((item) => item.contractItem.departmentId as string),
     );
 
@@ -313,7 +313,7 @@ export class MaintenanceOrdersService {
       await this.worksheets.create(
         {
           customerId: order.contract.customerId,
-          departmentId,
+          departmentId: item.contractItem.departmentId as string,
           serviceJobId: serviceJob.id,
           subject: item.description,
           clientOperationId: `maintenance-order-${order.id}-worksheet-${item.contractItem.id}`,
@@ -340,11 +340,21 @@ export class MaintenanceOrdersService {
    * (a teljes utat, nem csak a kódot, lásd `unit-path-lookup.ts` fejlécét),
    * hogy ne kelljen találgatni, melyik tétel melyik ágon van.
    */
-  private async ensureSingleDepartment(
+  /**
+   * A MEGRENDELŐLAP HELYSZÍNE: az egyetlen helyszín, vagy ha több van, a
+   * közös felső helyszínük (`sharedAncestor`). Ha nincs közös ős, a tételek
+   * tényleg független helyszíneken vannak: a régi üzenettel megállunk.
+   */
+  private async ensureOneSite(
     departmentIds: readonly string[],
   ): Promise<string> {
     const distinct = [...new Set(departmentIds)];
     if (distinct.length === 1) return distinct[0]!;
+    const shared = sharedAncestor(
+      distinct,
+      await this.repository.departmentTree(distinct),
+    );
+    if (shared) return shared;
     const paths = await this.repository.departmentPaths(distinct);
     const names = distinct.map((id) => paths.get(id)?.join(" / ") ?? id);
     throw new BadRequestException(
