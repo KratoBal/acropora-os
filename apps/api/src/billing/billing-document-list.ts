@@ -453,10 +453,25 @@ export function externalPaymentFields(
     lastPaymentDate: calendarDay(row.lastPaymentDate),
     paymentSource: paymentsKnown ? ("SZAMLAZZ" as const) : null,
   });
-  // a feed szerinti „Fizetve” nyer; a saját jelölés csak kiegészítő adat
+  /**
+   * A FEED SZERINTI „FIZETVE” NYER: az összeg és a dátum a feedé. A FORRÁST
+   * viszont a saját, beírt jelölésünk adja, ha van (Balázs, 2026-10-02 11:14
+   * UTC: „az jo volt hogy kiirta a listaban, hogy GLS vagy Foxpost, ahogy a
+   * simplepaynel”; acrobot 26095). A feed a jóváírás után visszaküldi a
+   * számlát, és onnan a GLS- és Foxpost-számla fizetési módja „egyéb”: a
+   * forrás eddig ilyenkor eltűnt a listából.
+   */
   if (row.paymentsKnown) {
     const fromFeed = recorded(true);
-    if (fromFeed.paymentState === "PAID") return fromFeed;
+    if (fromFeed.paymentState === "PAID") {
+      const latest = marks.reduce<OwnPaymentMark | null>(
+        (a, b) => (a && a.markDate >= b.markDate ? a : b),
+        null,
+      );
+      return latest
+        ? { ...fromFeed, paymentSource: `MARK_${latest.source}` }
+        : fromFeed;
+    }
   }
   const marked = ownMarkPayment(
     { ...row, payments: row.payments ?? [] },
