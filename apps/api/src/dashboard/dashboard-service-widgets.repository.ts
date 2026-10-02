@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import {
   MATERIAL_REQUEST_ACTIVE_STATUSES,
+  type UserRole,
   type DashboardMaintenanceCalendarWidgetData,
   type DashboardMaterialRequestsWidgetData,
   type DashboardServiceTicketsWidgetData,
@@ -28,8 +29,20 @@ export const OPEN_TICKET: Prisma.ServiceJobWhereInput = {
   hiddenAt: null,
 };
 
+/**
+ * WHO SEES EVERY OPEN WORKSHEET ON THE TILE (owner decision, 2026-10-02):
+ * the owner, the admin and the manager; everyone else only the worksheets
+ * assigned to them. The tile only: the Munkalapok menu is not changed.
+ */
+export const WORKSHEET_TILE_ALL_ROLES: readonly UserRole[] = [
+  "OWNER",
+  "ADMIN",
+  "MANAGER",
+];
+
 export interface ServiceWidgetViewer {
   userId: string;
+  role: UserRole;
   scope: PartnerScope;
   /** The caller's assigned units, already expanded (may be empty). */
   assignedUnitIds: readonly string[];
@@ -101,9 +114,18 @@ export class DashboardServiceWidgetsRepository extends Repository {
       {},
       {},
     ).counts;
+    // on top of the list scope: a non-manager counts only what is theirs
+    const all = WORKSHEET_TILE_ALL_ROLES.includes(viewer.role);
     const [rows, certificatesAwaitingSignedForm] = await Promise.all([
       this.database.worksheet.findMany({
-        where: visible,
+        where: all
+          ? visible
+          : {
+              AND: [
+                visible,
+                { assignees: { some: { userId: viewer.userId } } },
+              ],
+            },
         select: { id: true },
       }),
       this.database.completionCertificate.count({
@@ -117,6 +139,7 @@ export class DashboardServiceWidgetsRepository extends Repository {
                 unitIds: viewer.assignedUnitIds,
               }),
               { hiddenAt: null },
+              all ? {} : { assignees: { some: { userId: viewer.userId } } },
             ],
           },
         },

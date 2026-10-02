@@ -7,6 +7,7 @@ import { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets
 import { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.repository.js";
 import { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
 import { DashboardServiceWidgetsRepository } from "./dashboard-service-widgets.repository.js";
+import { DashboardSystemWidgetsRepository } from "./dashboard-system-widgets.repository.js";
 import { DashboardWidgetsService } from "./dashboard-widgets.service.js";
 import { DashboardController } from "./dashboard.controller.js";
 import { DashboardRepository } from "./dashboard.repository.js";
@@ -22,6 +23,7 @@ import { DashboardService } from "./dashboard.service.js";
     DashboardServiceWidgetsRepository,
     DashboardAquariumWidgetsRepository,
     DashboardFinanceWidgetsRepository,
+    DashboardSystemWidgetsRepository,
     DashboardWidgetsService,
   ],
 })

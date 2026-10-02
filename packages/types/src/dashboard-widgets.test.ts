@@ -160,8 +160,20 @@ describe("role presets", () => {
 
   it("enables the preset's widgets in the preset's order and offers the rest disabled", () => {
     const layout = presetDashboardLayout(viewer("OWNER"));
-    // the owner preset has no service widget; tasks and arrivals are active
-    assert.deepEqual(ids(layout), ["tasks", "expected-arrivals"]);
+    // the owner preset has no service widget; approvals and deadlines are planned
+    assert.deepEqual(ids(layout), [
+      "attention",
+      "tasks",
+      "system-status",
+      "jev-intelligence",
+      "expected-arrivals",
+    ]);
+    // a manager has no settings.manage: no JEV, no system status
+    assert.deepEqual(ids(presetDashboardLayout(viewer("MANAGER"))), [
+      "attention",
+      "tasks",
+      "expected-arrivals",
+    ]);
     assert.deepEqual(
       layout.map((e) => e.order),
       layout.map((_, i) => i),
@@ -340,5 +352,35 @@ describe("write validation", () => {
     ])
       assert.ok(text.includes(needle), needle);
     assert.equal(sanitizeDashboardLayoutInput(viewer("OWNER"), {}).ok, false);
+  });
+});
+
+describe("the JEV and system widgets (owner decision, 2026-10-02)", () => {
+  it("JEV intelligencia and Rendszerállapot are for settings.manage only: owner and admin", () => {
+    for (const id of ["jev-intelligence", "system-status"] as const) {
+      const definition = dashboardWidget(id);
+      assert.equal(definition.availability, "active");
+      assert.deepEqual(definition.requiredPermissions, [
+        PERMISSIONS.SETTINGS_MANAGE,
+      ]);
+      const allowed = (
+        [
+          "OWNER",
+          "ADMIN",
+          "MANAGER",
+          "SALES",
+          "WAREHOUSE",
+          "SERVICE",
+          "VIEWER",
+        ] as const
+      ).filter((role) => isDashboardWidgetAvailable(definition, viewer(role)));
+      assert.deepEqual(allowed, ["OWNER", "ADMIN"]);
+    }
+  });
+
+  it("Figyelmet igényel needs only dashboard.view: its figures are filtered per source", () => {
+    assert.deepEqual(dashboardWidget("attention").requiredPermissions, [
+      PERMISSIONS.DASHBOARD_VIEW,
+    ]);
   });
 });

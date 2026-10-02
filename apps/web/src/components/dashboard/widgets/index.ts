@@ -1,9 +1,11 @@
 import type { DashboardWidgetId } from "@acropora/types";
 
 import { aquariumAlertsWidget } from "./aquarium-alerts-widget";
+import { attentionWidget } from "./attention-widget";
 import { aquariumEquipmentWidget } from "./aquarium-equipment-widget";
 import { expectedArrivalsWidget } from "./expected-arrivals-widget";
 import { incomingInvoicesWidget } from "./incoming-invoices-widget";
+import { jevIntelligenceWidget } from "./jev-intelligence-widget";
 import { maintenanceCalendarWidget } from "./maintenance-calendar-widget";
 import { materialRequestsWidget } from "./material-requests-widget";
 import { missingInvoicesWidget } from "./missing-invoices-widget";
@@ -12,6 +14,7 @@ import { serviceTicketsWidget } from "./service-tickets-widget";
 import { settlementsWidget } from "./settlements-widget";
 import { stockReconciliationWidget } from "./stock-reconciliation-widget";
 import { stockSyncOutboxWidget } from "./stock-sync-outbox-widget";
+import { systemStatusWidget } from "./system-status-widget";
 import { tasksWidget } from "./tasks-widget";
 import { waterValuesWidget } from "./water-values-widget";
 import { worksheetsWidget } from "./worksheets-widget";
@@ -40,4 +43,7 @@ export const DASHBOARD_WIDGET_VIEWS: Partial<
   settlements: settlementsWidget,
   "stock-reconciliation": stockReconciliationWidget,
   "stock-sync-outbox": stockSyncOutboxWidget,
+  "jev-intelligence": jevIntelligenceWidget,
+  "system-status": systemStatusWidget,
+  attention: attentionWidget,
 };
