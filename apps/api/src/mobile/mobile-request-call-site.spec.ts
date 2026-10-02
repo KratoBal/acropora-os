@@ -310,7 +310,12 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
  * `createWorksheetDepartment`) -- mindketto nevesitett tipussal megy, tehat
  * egyik sem kerul a HIVOHELYEK koze.
  */
-const IRAS_HIVASOK_A_FAN = 23;
+/**
+ * 2026-10-02: 23 -> 26, the same three Anyagigény V2 calls as in the
+ * neighbouring `mobile-request-body.spec.ts`; all named, so none of them is
+ * a call site here.
+ */
+const IRAS_HIVASOK_A_FAN = 26;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

@@ -49,6 +49,8 @@ const CONTROLLERS = [
   "src/products/product-extension.controller.ts",
   "src/products/product-shipping-profile.controller.ts",
   "src/products/catalog-options.controller.ts",
+  // JEV product enrichment, read only (2026-10-02).
+  "src/products/product-enrichment-review.controller.ts",
   /*
     A HIBAJEGY-MODUL VEZERLOI, 2026-09-14-tol.
 

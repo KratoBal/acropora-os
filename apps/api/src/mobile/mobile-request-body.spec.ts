@@ -224,6 +224,40 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  /**
+   * ANYAGIGÉNY V2 ON THE PHONE (2026-10-02): the three actions that carry a
+   * body. Each is a one-field body on both sides.
+   */
+  {
+    mit: "anyagigény részleges beérkezése",
+    mobil: "../mobile/src/lib/material-requests/types.ts",
+    mobilNev: "MaterialRequestReceiveItemsInput",
+    dto: "src/material-requests/dto/material-request.dto.ts",
+    dtoNev: "MaterialRequestReceiveItemsDto",
+    kontroll: ["items"],
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
+  {
+    mit: "anyagigény átadása",
+    mobil: "../mobile/src/lib/material-requests/types.ts",
+    mobilNev: "MaterialRequestReassignInput",
+    dto: "src/material-requests/dto/material-request.dto.ts",
+    dtoNev: "MaterialRequestReassignDto",
+    kontroll: ["handlerId"],
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
+  {
+    mit: "anyagigény megjegyzése",
+    mobil: "../mobile/src/lib/material-requests/types.ts",
+    mobilNev: "MaterialRequestCommentInput",
+    dto: "src/material-requests/dto/material-request.dto.ts",
+    dtoNev: "MaterialRequestCommentDto",
+    kontroll: ["body"],
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
   {
     /**
      * AKVARIUM FELVITELE, MOBIL SZELET (2026-09-24, murena, Balazs 13:01-i
@@ -389,7 +423,12 @@ const PAROK: readonly Par[] = [
  * `createWorksheetDepartment` (Uj alegyseg inline urlap). Mindketto
  * nevesitett tipussal megy, mindketto PAR fent.
  */
-const IRAS_HIVASOK_MA = 22;
+/**
+ * 2026-10-02: 22 -> 25. Anyagigény V2 on the phone: `receiveMaterialRequestItems`,
+ * `reassignMaterialRequest`, `commentOnMaterialRequest`. All three go with a
+ * named type, all three are PAIRS above.
+ */
+const IRAS_HIVASOK_MA = 25;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

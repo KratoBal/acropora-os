@@ -16,15 +16,20 @@ export function JevDisabledAction({
   label,
   canManage,
   variant = "secondary",
+  reason: ownReason,
 }: {
   label: string;
   /** `products.manage`: only changes the reason the user reads. */
   canManage: boolean;
   variant?: "primary" | "secondary";
+  /** A control that is not a decision (e.g. a re-run) names its own reason. */
+  reason?: string;
 }) {
-  const reason = canManage
-    ? "A döntések rögzítése még nincs engedélyezve."
-    : "A döntéshez termékkezelési jog kell.";
+  const reason =
+    ownReason ??
+    (canManage
+      ? "A döntések rögzítése még nincs engedélyezve."
+      : "A döntéshez termékkezelési jog kell.");
   return (
     <div className="flex flex-col items-start gap-1">
       <PilotButton variant={variant} size="regular" disabled title={reason}>

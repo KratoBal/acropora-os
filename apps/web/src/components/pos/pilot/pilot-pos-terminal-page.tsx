@@ -10,7 +10,7 @@ import {
   type PosSaleResult,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { posApi } from "@/lib/api/pos";
@@ -22,6 +22,8 @@ import {
   PilotCardHeader,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+
+import { scrollRowIntoContainer } from "./cart-scroll";
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- PÉNZTÁR (POS), 11. KÖR.
@@ -87,7 +89,34 @@ import {
  *    kedvezmény-mezők (soronkénti és végösszeg) ezt eddig nem kapták meg.
  *    Pótolva, a terv `suffix` mintáját követve (abszolút pozicionált
  *    span, jobbra).
+ * 8. JAVÍTVA 2026-10-02 (kártya 18c5f3a3, Balázs): több tételnél az új
+ *    sor a kosár ALJÁRA került, a látótéren kívül, és semmi nem jelezte,
+ *    hogy a kattintás hatott -- a kolléga újra kattintott, és azonos
+ *    terméknél így mindig eggyel több darab lett. Három változás:
+ *    (a) `lg` felett a kosár kártyája a látótér magasságára korlátozott
+ *    (`lg:max-h-[calc(100dvh-5rem)]`), a tétel-lista a kártyán BELÜL
+ *    görget, az összesítő, a fizetési mód és a Fizetés gomb alatta fix
+ *    helyen marad. A ragadás `lg:top-6` helyett `lg:top-16`: a héj fejléce
+ *    48px magas és szintén ragad, a régi érték alá csúsztatta a kosár
+ *    tetejét.
+ *    (b) Hozzáadáskor (új sor VAGY darabszám-növelés) az érintett sor a
+ *    listán belül a látótérbe görget, és 2 másodpercre kiemelést kap.
+ *    (c) A kereső alatt egy állandóan helyet foglaló sor kiírja, mi került
+ *    a kosárba és hány darab van belőle; a fókusz visszakerül a keresőre.
+ *    `lg` ALATT a lista NEM görget külön (különben két egymásba ágyazott
+ *    görgetés lenne), és a lap sem ugrik le a kosárhoz: a visszajelző sor
+ *    a kereső alatt mutatja a hozzáadást, ott, ahová a kolléga néz.
  */
+
+/** How long an added cart line stays highlighted (and the status line shows). */
+export const CART_ADD_HIGHLIGHT_MS = 2000;
+
+interface LastAdded {
+  variantId: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+}
 
 interface CartLine {
   variantId: string;
@@ -202,6 +231,9 @@ export function PilotPosTerminalPage() {
   const [lastResult, setLastResult] = useState<PosSaleResult | null>(null);
   const [recentSales, setRecentSales] = useState<PosSaleListItem[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
+  const [lastAdded, setLastAdded] = useState<LastAdded | null>(null);
+  const cartListRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const loadRecentSales = useCallback(() => {
     // Gate on the permission, not on having a client-readable token: in
@@ -240,7 +272,34 @@ export function PilotPosTerminalPage() {
     return () => debouncer.cancel();
   }, [canView, searchTerm, token]);
 
+  useEffect(() => {
+    if (!lastAdded) return;
+    const list = cartListRef.current;
+    const row = list
+      ? Array.from(list.children).find(
+          (child): child is HTMLElement =>
+            child instanceof HTMLElement &&
+            child.dataset.variantId === lastAdded.variantId,
+        )
+      : undefined;
+    if (list && row) scrollRowIntoContainer(list, row);
+    const timer = setTimeout(() => setLastAdded(null), CART_ADD_HIGHLIGHT_MS);
+    return () => clearTimeout(timer);
+  }, [lastAdded]);
+
   const addToCart = (product: PosProductSearchResult) => {
+    const existingLine = cart.find(
+      (line) => line.variantId === product.variantId,
+    );
+    // A fresh object on every add - also for the same line - re-runs the
+    // highlight effect, so a repeat click restarts the 2 s highlight.
+    setLastAdded({
+      variantId: product.variantId,
+      productName: product.productName,
+      quantity: (existingLine?.quantity ?? 0) + 1,
+      unit: product.unit,
+    });
+    searchInputRef.current?.focus();
     setCart((previous) => {
       const existing = previous.find(
         (line) => line.variantId === product.variantId,
@@ -333,6 +392,7 @@ export function PilotPosTerminalPage() {
       })
       .then((result) => {
         setLastResult(result);
+        setLastAdded(null);
         setCart([]);
         setDiscountPercent(0);
         setSearchTerm("");
@@ -447,21 +507,38 @@ export function PilotPosTerminalPage() {
       <div className="grid flex-1 grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_440px]">
         {/* Left column */}
         <div className="flex flex-col gap-5">
-          <div className="relative">
-            <Icon
-              name="search"
-              size={16}
-              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-pilot-grey-300"
-            />
-            <input
-              type="text"
-              autoFocus
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Keresés cikkszám, terméknév vagy vonalkód alapján…"
-              aria-label="Termék keresése"
-              className="w-full rounded-xl py-3.5 pl-11 pr-4 text-sm text-pilot-grey-900 shadow-sm ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-            />
+          <div>
+            <div className="relative">
+              <Icon
+                name="search"
+                size={16}
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-pilot-grey-300"
+              />
+              <input
+                ref={searchInputRef}
+                type="text"
+                autoFocus
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Keresés cikkszám, terméknév vagy vonalkód alapján…"
+                aria-label="Termék keresése"
+                className="w-full rounded-xl py-3.5 pl-11 pr-4 text-sm text-pilot-grey-900 shadow-sm ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+              />
+            </div>
+            {/*
+              Always rendered with a fixed height: a line that appeared only
+              on add would push the result list down under the cursor, and
+              the next click would land on a different product.
+            */}
+            <p
+              role="status"
+              aria-live="polite"
+              className="mt-1.5 h-5 truncate px-1 text-xs font-medium text-pilot-aqua-700"
+            >
+              {lastAdded
+                ? `Hozzáadva: ${lastAdded.productName}. A kosárban: ${lastAdded.quantity} ${lastAdded.unit}`
+                : ""}
+            </p>
           </div>
 
           {searching ? (
@@ -562,8 +639,8 @@ export function PilotPosTerminalPage() {
         </div>
 
         {/* Right column (cart) */}
-        <div className="lg:sticky lg:top-6">
-          <PilotCard>
+        <div className="lg:sticky lg:top-16">
+          <PilotCard className="flex flex-col lg:max-h-[calc(100dvh-5rem)]">
             <PilotCardHeader
               title="Kosár"
               action={
@@ -585,70 +662,84 @@ export function PilotPosTerminalPage() {
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-pilot-grey-50">
-                {cart.map((line) => (
-                  <div
-                    key={line.variantId}
-                    className="flex flex-col gap-3 px-5 py-4"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium leading-snug text-pilot-grey-900">
-                          {line.productName}
-                        </p>
-                        <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
-                          {line.sku}
-                        </p>
+              <div
+                ref={cartListRef}
+                data-testid="pos-cart-lines"
+                className="divide-y divide-pilot-grey-50 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
+              >
+                {cart.map((line) => {
+                  const justAdded = lastAdded?.variantId === line.variantId;
+                  return (
+                    <div
+                      key={line.variantId}
+                      data-variant-id={line.variantId}
+                      data-just-added={justAdded ? "true" : undefined}
+                      className={`flex flex-col gap-3 px-5 py-4 transition-colors duration-500 ${
+                        justAdded ? "bg-pilot-aqua-50" : "bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium leading-snug text-pilot-grey-900">
+                            {line.productName}
+                          </p>
+                          <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
+                            {line.sku}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeLine(line.variantId)}
+                          className="shrink-0 whitespace-nowrap text-xs font-medium text-red-500 transition hover:text-red-700"
+                        >
+                          Eltávolítás
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removeLine(line.variantId)}
-                        className="shrink-0 whitespace-nowrap text-xs font-medium text-red-500 transition hover:text-red-700"
-                      >
-                        Eltávolítás
-                      </button>
+                      <div className="grid grid-cols-[0.85fr_1.3fr_0.85fr] gap-2">
+                        <NumberInput
+                          label={`Mennyiség (${line.unit})`}
+                          value={line.quantity}
+                          min={0.001}
+                          onChange={(value) =>
+                            updateQuantity(line.variantId, value)
+                          }
+                        />
+                        <NumberInput
+                          label="Egységár (Ft, bruttó)"
+                          value={line.unitGross}
+                          min={0}
+                          onChange={(value) =>
+                            updateUnitGross(line.variantId, value)
+                          }
+                        />
+                        <NumberInput
+                          label="Kedvezmény (%)"
+                          value={line.discountPercent}
+                          min={0}
+                          suffix="%"
+                          ariaLabel={`${line.productName} kedvezmény`}
+                          onChange={(value) =>
+                            updateLineDiscount(line.variantId, value)
+                          }
+                        />
+                      </div>
+                      <p className="text-right font-mono text-sm font-semibold text-pilot-grey-900">
+                        {formatHuf(
+                          line.unitGross *
+                            line.quantity *
+                            (1 - line.discountPercent / 100),
+                        )}
+                      </p>
                     </div>
-                    <div className="grid grid-cols-[0.85fr_1.3fr_0.85fr] gap-2">
-                      <NumberInput
-                        label={`Mennyiség (${line.unit})`}
-                        value={line.quantity}
-                        min={0.001}
-                        onChange={(value) =>
-                          updateQuantity(line.variantId, value)
-                        }
-                      />
-                      <NumberInput
-                        label="Egységár (Ft, bruttó)"
-                        value={line.unitGross}
-                        min={0}
-                        onChange={(value) =>
-                          updateUnitGross(line.variantId, value)
-                        }
-                      />
-                      <NumberInput
-                        label="Kedvezmény (%)"
-                        value={line.discountPercent}
-                        min={0}
-                        suffix="%"
-                        ariaLabel={`${line.productName} kedvezmény`}
-                        onChange={(value) =>
-                          updateLineDiscount(line.variantId, value)
-                        }
-                      />
-                    </div>
-                    <p className="text-right font-mono text-sm font-semibold text-pilot-grey-900">
-                      {formatHuf(
-                        line.unitGross *
-                          line.quantity *
-                          (1 - line.discountPercent / 100),
-                      )}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
-            <div className="flex flex-col gap-4 border-t border-pilot-grey-100 px-5 py-5">
+            <div
+              data-testid="pos-cart-footer"
+              className="flex shrink-0 flex-col gap-4 border-t border-pilot-grey-100 px-5 py-5"
+            >
               <div className="flex items-end gap-3">
                 <div className="flex-1">
                   <NumberInput

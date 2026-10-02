@@ -26,6 +26,12 @@ const api = vi.hoisted(() => ({
   */
   getShippingProfile: vi.fn(async () => null),
   saveShippingProfile: vi.fn(),
+  // the JEV card beside the description (the server's switch off: no run)
+  enrichment: vi.fn(async () => ({
+    availability: "off",
+    lastRun: null,
+    fields: [],
+  })),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 const navigation = vi.hoisted(() => ({
@@ -276,8 +282,40 @@ describe("ProductDetailPage mirror ownership", () => {
       "Változatok és SKU-k",
       "Belső megjegyzés",
       "Termékleírás",
+      // the JEV card stands beside the description (2026-10-02, discovery Q1)
+      "JEV adatellenőrzés",
       "Képek",
     ]);
+  });
+
+  it("a JEV kártya a szerver kapcsolóját mondja, és az aloldalra visz", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    const card = (
+      await screen.findByRole("heading", { name: "JEV adatellenőrzés" })
+    ).closest("section") as HTMLElement;
+    expect(
+      await within(card).findByText(
+        "A termékadat-ellenőrzés jelenleg nem elérhető.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(card)
+        .getByRole("link", { name: "Adatellenőrzés megnyitása" })
+        .getAttribute("href"),
+    ).toBe("/products/product-1/adatellenorzes");
+    expect(api.enrichment).toHaveBeenCalledWith("token-owner", "product-1");
+  });
+
+  it("ha a JEV állapot nem jön meg, a kártya hibát mond, a termék lapja marad", async () => {
+    api.enrichment.mockRejectedValueOnce(new Error("boom"));
+    render(<ProductDetailPage productId="product-1" />);
+    const card = (
+      await screen.findByRole("heading", { name: "JEV adatellenőrzés" })
+    ).closest("section") as HTMLElement;
+    expect((await within(card).findByRole("alert")).textContent).toBe(
+      "Az ellenőrzés állapota nem tölthető be.",
+    );
+    expect(screen.getByText("UNAS terméktükör")).toBeTruthy();
   });
 
   it("egyváltozatos terméknél a belső megjegyzés egyszer áll, a meleg kártyában, és a készlet-kártya a változat értékeit mutatja", async () => {

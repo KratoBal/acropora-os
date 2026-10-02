@@ -1,10 +1,21 @@
 import { apiRequest } from "./client";
 import type {
+  MaterialRequestCommentInput,
+  MaterialRequestFullDetail,
+  MaterialRequestHandlerOption,
+  MaterialRequestPage,
+  MaterialRequestReassignInput,
+  MaterialRequestReceiveItemsInput,
+  MaterialRequestStatusCounts,
+  MaterialRequestView,
+} from "@/lib/material-requests/types";
+import type {
   MaterialRequestItemInput,
   MaterialRequestStatusValue,
 } from "@/lib/worksheets/material-request-presentation";
 
 export type { MaterialRequestItemInput };
+export type * from "@/lib/material-requests/types";
 
 /**
  * ANYAGIGENYLES A MUNKALAPROL -- A TELEFON KLIENSE.
@@ -54,20 +65,6 @@ export interface MaterialRequestListResponse {
    * ez NEM akadalyozza -- tajekoztatas, nem kapu.
    */
   warning?: string;
-}
-
-/**
- * A BESZERZO SAJAT LISTAJANAK SORA -- A MUNKALAP-KONTEXTUSSAL EGYUTT, mert a
- * beszerzo TOBB igeny kozott tajekozodik.
- */
-export interface PendingMaterialRequest extends MaterialRequestDetail {
-  worksheetNumber: string | null;
-  customerDisplayName: string;
-  departmentName: string;
-}
-
-export interface PendingMaterialRequestListResponse {
-  items: PendingMaterialRequest[];
 }
 
 /**
@@ -124,14 +121,96 @@ export function submitMaterialRequest(id: string) {
   );
 }
 
-/** A beszerző saját, "rám váró" listája -- külön képességen áll, nem jogon. */
-export function listPendingMaterialRequests() {
-  return apiRequest<PendingMaterialRequestListResponse>(REQUESTS_BASE);
+// ---------------------------------------------------------------------------
+// V2 (docs/material-requests/v2-discovery.md). The types live in
+// `lib/material-requests/types.ts` (no imports, so `node --test` can compile
+// the rules that read them). Every action returns the full, fresh request.
+
+export interface MaterialRequestOverviewQuery {
+  view: MaterialRequestView;
+  cursor?: string;
 }
 
-export function receiveMaterialRequest(id: string) {
-  return apiRequest<PendingMaterialRequestListResponse>(
-    `${REQUESTS_BASE}/${encodeURIComponent(id)}/receive`,
+/** The overview list, scoped by the server to the worksheets this user sees. */
+export function listMaterialRequestOverview(
+  query: MaterialRequestOverviewQuery,
+) {
+  const params = new URLSearchParams({ view: query.view });
+  if (query.cursor) params.set("cursor", query.cursor);
+  return apiRequest<MaterialRequestPage>(`${REQUESTS_BASE}/overview?${params}`);
+}
+
+export function getMaterialRequestSummary() {
+  return apiRequest<MaterialRequestStatusCounts>(`${REQUESTS_BASE}/summary`);
+}
+
+export function getMaterialRequest(id: string) {
+  return apiRequest<MaterialRequestFullDetail>(
+    `${REQUESTS_BASE}/${encodeURIComponent(id)}`,
+  );
+}
+
+export function listMaterialRequestHandlerOptions() {
+  return apiRequest<{ items: MaterialRequestHandlerOption[] }>(
+    `${REQUESTS_BASE}/handler-options`,
+  );
+}
+
+/** "Én intézem a beszerzést". A 409 means someone else was faster. */
+export function claimMaterialRequest(id: string) {
+  return apiRequest<MaterialRequestFullDetail>(
+    `${REQUESTS_BASE}/${encodeURIComponent(id)}/claim`,
     { method: "POST" },
+  );
+}
+
+export function orderMaterialRequest(id: string) {
+  return apiRequest<MaterialRequestFullDetail>(
+    `${REQUESTS_BASE}/${encodeURIComponent(id)}/order`,
+    { method: "POST" },
+  );
+}
+
+export function receiveAllMaterialRequest(id: string) {
+  return apiRequest<MaterialRequestFullDetail>(
+    `${REQUESTS_BASE}/${encodeURIComponent(id)}/receive-all`,
+    { method: "POST" },
+  );
+}
+
+export function cancelMaterialRequest(id: string) {
+  return apiRequest<MaterialRequestFullDetail>(
+    `${REQUESTS_BASE}/${encodeURIComponent(id)}/cancel`,
+    { method: "POST" },
+  );
+}
+
+export function receiveMaterialRequestItems(
+  id: string,
+  input: MaterialRequestReceiveItemsInput,
+) {
+  return apiRequest<MaterialRequestFullDetail>(
+    `${REQUESTS_BASE}/${encodeURIComponent(id)}/receive-items`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function reassignMaterialRequest(
+  id: string,
+  input: MaterialRequestReassignInput,
+) {
+  return apiRequest<MaterialRequestFullDetail>(
+    `${REQUESTS_BASE}/${encodeURIComponent(id)}/reassign`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function commentOnMaterialRequest(
+  id: string,
+  input: MaterialRequestCommentInput,
+) {
+  return apiRequest<MaterialRequestFullDetail>(
+    `${REQUESTS_BASE}/${encodeURIComponent(id)}/comments`,
+    { method: "POST", body: JSON.stringify(input) },
   );
 }

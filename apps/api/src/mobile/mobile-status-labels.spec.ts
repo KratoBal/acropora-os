@@ -79,3 +79,35 @@ describe("a hibajegy állapot-feliratai a két felületen", () => {
     assert.deepEqual([...web.keys()].sort(), [...mobil.keys()].sort());
   });
 });
+
+/**
+ * ANYAGIGÉNY V2 (2026-10-02): the request's pill words, web and phone. The
+ * phone copies the web's presentation rules (the Expo app cannot import the
+ * web), so a renamed pill on one side would silently leave the other behind.
+ */
+const WEB_ANYAGIGENY =
+  "../web/src/components/material-requests/material-request-v2-presentation.ts";
+const MOBIL_ANYAGIGENY =
+  "../mobile/src/lib/material-requests/v2-presentation.ts";
+
+describe("az anyagigény állapot-feliratai a két felületen", () => {
+  const web = feliratok(forras(WEB_ANYAGIGENY), "export const STATUS_LABEL");
+  const mobil = feliratok(
+    forras(MOBIL_ANYAGIGENY),
+    "export const MATERIAL_REQUEST_PILL_LABEL",
+  );
+
+  it("POZITÍV KONTROLL: mind a két térkép tele van", () => {
+    assert.ok(web.size >= 7, `gyanúsan kevés webes felirat: ${web.size}`);
+    assert.ok(mobil.size >= 7, `gyanúsan kevés mobil felirat: ${mobil.size}`);
+    assert.equal(web.get("IN_PROGRESS"), "INTÉZÉS ALATT");
+  });
+
+  it("ugyanazt a szót mondják ugyanarra az állapotra", () => {
+    assert.deepEqual(
+      [...mobil.entries()].sort(),
+      [...web.entries()].sort(),
+      "a két felület MÁST mond ugyanarra az anyagigény-állapotra",
+    );
+  });
+});

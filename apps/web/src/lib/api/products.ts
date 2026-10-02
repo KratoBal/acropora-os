@@ -4,6 +4,7 @@ import type {
   ProductBarcodeListResponse,
   ProductBarcodeSummary,
   ProductDetail,
+  ProductEnrichmentReview,
   ProductExtensionDetail,
   ProductExtensionUpdateInput,
   ProductListApiQuery,
@@ -48,6 +49,17 @@ export const productApi = {
   detail(token: string, id: string) {
     return apiRequest<ProductDetail>(
       `/products/${encodeURIComponent(id)}`,
+      token,
+    );
+  },
+  /**
+   * The JEV data review of one product, read only
+   * (docs/jev-product-intelligence/v1-discovery.md §11/1). Today it carries
+   * the server's `JEV_PRODUCT_ENRICHMENT` availability and no run.
+   */
+  enrichment(token: string, id: string) {
+    return apiRequest<ProductEnrichmentReview>(
+      `/products/${encodeURIComponent(id)}/enrichment`,
       token,
     );
   },

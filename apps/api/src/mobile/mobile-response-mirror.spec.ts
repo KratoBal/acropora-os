@@ -210,3 +210,54 @@ describe("a mobil válasz-típusai a közös csomaghoz mérve", () => {
     );
   });
 });
+
+/**
+ * ANYAGIGÉNY V2 ON THE PHONE (2026-10-02): the same check on the V2 copies.
+ *
+ * The phone's `MaterialRequestSummary` is written flat, while the shared one
+ * extends `MaterialRequestDetail`; it is compared with the union of the two.
+ * Full equality, both ways: the copies were written from the shared file on
+ * the day, so a new server field that nobody mirrors turns this red.
+ */
+const KOZOS_ANYAGIGENY =
+  "../../packages/types/src/material-request-management.ts";
+const MOBIL_ANYAGIGENY = "../mobile/src/lib/material-requests/types.ts";
+
+describe("az anyagigény V2 mobil típusai a közös csomaghoz mérve", () => {
+  const kozos = () => forras(KOZOS_ANYAGIGENY);
+  const mobil = () => forras(MOBIL_ANYAGIGENY);
+  const egyezzen = (mobilNev: string, kozosMezok: Set<string>) => {
+    const mobilMezok = mezok(mobil(), mobilNev);
+    // POZITIV KONTROLL: ket ures halmaz osszevetese zolden allna.
+    assert.ok(mobilMezok.size >= 2, `gyanúsan kevés mező: ${mobilNev}`);
+    assert.deepEqual(
+      [...mobilMezok].sort(),
+      [...kozosMezok].sort(),
+      `a telefon ${mobilNev} másolata eltér a szervertől`,
+    );
+  };
+
+  it("a tétel (MaterialRequestV2Item ↔ MaterialRequestItem)", () =>
+    egyezzen("MaterialRequestV2Item", mezok(kozos(), "MaterialRequestItem")));
+
+  it("a lista sora (a közösben a Detail és a Summary együtt)", () =>
+    egyezzen(
+      "MaterialRequestSummary",
+      new Set([
+        ...mezok(kozos(), "MaterialRequestDetail"),
+        ...mezok(kozos(), "MaterialRequestSummary"),
+      ]),
+    ));
+
+  for (const nev of [
+    "MaterialRequestFullDetail",
+    "MaterialRequestPage",
+    "MaterialRequestStatusCounts",
+    "MaterialRequestEventEntry",
+    "MaterialRequestCommentEntry",
+    "MaterialRequestActions",
+    "MaterialRequestHandlerOption",
+  ])
+    it(`a(z) ${nev} mezőnevei egyeznek`, () =>
+      egyezzen(nev, mezok(kozos(), nev)));
+});
