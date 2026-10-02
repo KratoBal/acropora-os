@@ -41,6 +41,8 @@ export interface FoxpostSettlementInput {
   /** The Foxpost invoice set off against the COD. */
   readonly invoiceGrossAmount: Prisma.Decimal | null;
   readonly transferredAmount: Prisma.Decimal | null;
+  /** Az olvasás hibakódja (ERROR állapotnál), hogy a lista megnevezze. */
+  readonly errorCode?: string | null;
   readonly lines: readonly {
     readonly referenceCode: string;
     readonly collectedAmount: Prisma.Decimal;
@@ -73,6 +75,8 @@ export type FoxpostSettlementDecision =
       readonly markable: false;
       readonly refusal: FoxpostSettlementRefusal;
       readonly transferred: string | null;
+      /** Ha az elszámolás olvasása elbukott: a hibakódja. */
+      readonly errorCode?: string;
     }
   | {
       readonly settlementCode: string;
@@ -115,6 +119,9 @@ export function decideFoxpostSettlement(input: {
     markable: false,
     refusal,
     transferred: settlement.transferredAmount?.toFixed(0) ?? null,
+    ...(refusal === "SETTLEMENT_INCOMPLETE" && settlement.errorCode
+      ? { errorCode: settlement.errorCode }
+      : {}),
   });
   const { collectedAmount, invoiceGrossAmount, transferredAmount } = settlement;
   if (
