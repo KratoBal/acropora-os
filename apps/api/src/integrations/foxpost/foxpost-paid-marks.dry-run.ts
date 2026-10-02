@@ -41,13 +41,29 @@ export async function loadFoxpostSettlements(from: string): Promise<
     invoices: Map<string, OutgoingInvoiceInput>;
   }[]
 > {
+  /*
+    A BE NEM OLVASOTT ELSZÁMOLÁS IS A LISTÁRA KERÜL (acrobot 26087, a 26H39:
+    ERROR, kód nélkül). Az olvasás hibájánál nincs se kód, se időszak, tehát
+    a beérkezés napja szerint jön, és a lista megnevezi a hibakódot; csendben
+    kimaradni nem szabad.
+  */
   const settlements = await prisma.foxpostSettlement.findMany({
     where: {
-      periodEnd: { gte: new Date(`${from}T00:00:00Z`) },
-      settlementCode: { not: null },
+      OR: [
+        {
+          periodEnd: { gte: new Date(`${from}T00:00:00Z`) },
+          settlementCode: { not: null },
+        },
+        {
+          settlementCode: null,
+          createdAt: { gte: new Date(`${from}T00:00:00Z`) },
+        },
+      ],
     },
-    orderBy: { periodEnd: "asc" },
+    orderBy: [{ periodEnd: "asc" }, { createdAt: "asc" }],
     select: {
+      errorCode: true,
+      xlsxFileName: true,
       settlementCode: true,
       partnerCode: true,
       status: true,
@@ -100,8 +116,23 @@ export async function loadFoxpostSettlements(from: string): Promise<
     ]),
   );
   const out = [];
-  for (const settlement of settlements) {
-    const code = settlement.settlementCode!;
+  for (const { xlsxFileName, ...settlement } of settlements) {
+    if (!settlement.settlementCode) {
+      // a fájl neve még megmondja, melyik hét: FOXPOST_W0166840_26H39_...
+      out.push({
+        settlement: {
+          ...settlement,
+          settlementCode:
+            /\d{2}H\d{2}/.exec(xlsxFileName)?.[0] ??
+            `(kód nélkül: ${xlsxFileName})`,
+        },
+        credits: [],
+        candidates,
+        invoices,
+      });
+      continue;
+    }
+    const code = settlement.settlementCode;
     const credits = await prisma.bankTransaction.findMany({
       where: {
         direction: "CREDIT",
@@ -153,7 +184,7 @@ export function foxpostDryRunReport(
   for (const d of decisions) {
     if (!d.markable) {
       out.push(
-        `${d.settlementCode}  utalt ${d.transferred ?? "?"} Ft  NEM JELÖLHETŐ: ${REFUSAL_TEXT[d.refusal]}`,
+        `${d.settlementCode}  utalt ${d.transferred ?? "?"} Ft  NEM JELÖLHETŐ: ${REFUSAL_TEXT[d.refusal]}${d.errorCode ? ` (${d.errorCode})` : ""}`,
       );
       continue;
     }

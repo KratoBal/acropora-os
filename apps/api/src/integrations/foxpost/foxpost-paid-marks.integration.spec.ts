@@ -26,7 +26,8 @@ async function removeLeftovers() {
 }
 
 /*
-  A FOXPOST SZÁRAZ FUTÁS BEMENETE AZ ADATBÁZISBÓL (acrobot 25993). MI PIROSÍT:
+  A FOXPOST SZÁRAZ FUTÁS BEMENETE AZ ADATBÁZISBÓL (acrobot 25993, 26087). MI PIROSÍT:
+  ha egy olvasásnál elbukott elszámolás csendben kimaradna;
   ha a 99H3 elszámoláshoz a 99H35 jóváírása is jönne (a kód utáni szóköz); ha
   a sor rendelésszáma vagy számlaszáma nem hozná a hozzá tartozó kimenő
   számlát; ha a még nem újravetített (null) számla ismert kifizetésűnek
@@ -102,6 +103,22 @@ describe(
           },
         },
       });
+      // egy olvasásnál elbukott hét: kód és időszak nélkül, csak a fájlnév
+      await prisma.foxpostSettlement.create({
+        data: {
+          gmailMessageId: `${MARK}-2`,
+          xlsxAttachmentId: "x2",
+          xlsxFileName: "FOXPOST_W0166840_99H39_Acropora Kft..xlsx",
+          xlsxContent: bytes("xlsx2"),
+          xlsxSha256: `${MARK}-xlsx2`,
+          pdfAttachmentId: "p2",
+          pdfFileName: "p2.pdf",
+          pdfContent: bytes("pdf2"),
+          pdfSha256: `${MARK}-pdf2`,
+          status: "ERROR",
+          errorCode: "FOXPOST_TRANSFER_TOTAL_MISMATCH",
+        },
+      });
       const document = (
         externalId: string,
         documentNumber: string,
@@ -134,6 +151,17 @@ describe(
 
     after(async () => {
       if (gate.mode === "run") await removeLeftovers();
+    });
+
+    it("a settlement that failed to read is listed by its file's week, with its error", async () => {
+      const failed = (await loadFoxpostSettlements("2000-01-01")).find(
+        (s) => s.settlement.settlementCode === "99H39",
+      );
+      assert.ok(failed);
+      assert.deepEqual(
+        [failed.settlement.status, failed.settlement.errorCode, failed.credits],
+        ["ERROR", "FOXPOST_TRANSFER_TOTAL_MISMATCH", []],
+      );
     });
 
     it("the settlement's own credit, and the invoices by order number and by invoice number", async () => {

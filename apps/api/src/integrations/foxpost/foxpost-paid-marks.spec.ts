@@ -182,6 +182,24 @@ describe("decideFoxpostSettlement", () => {
         "AMBIGUOUS_CREDIT",
       ],
     );
+    // az olvasásnál elbukott elszámolás (26H39: FOXPOST_TRANSFER_TOTAL_MISMATCH)
+    // a hibakódjával együtt kerül a listára
+    const failed = decideFoxpostSettlement({
+      settlement: settlement(lines, 4500, {
+        status: "ERROR",
+        errorCode: "FOXPOST_TRANSFER_TOTAL_MISMATCH",
+        collectedAmount: null,
+      }),
+      credits: [transfer],
+      candidates,
+      invoices,
+    });
+    assert.ok(!failed.markable);
+    assert.equal(failed.errorCode, "FOXPOST_TRANSFER_TOTAL_MISMATCH");
+    assert.match(
+      foxpostDryRunReport([failed]),
+      /NEM JELÖLHETŐ: az elszámolás nincs teljesen beolvasva \(FOXPOST_TRANSFER_TOTAL_MISMATCH\)/,
+    );
     // NEEDS_REVIEW is about our internal orders, not the money
     assert.equal(
       refusal(settlement(lines, 4500, { status: "NEEDS_REVIEW" })),
