@@ -49,5 +49,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
     SzamlazzFeedsRepository,
     SzamlazzFeedsService,
   ],
+  // the dashboard's "Hiányzó számlák" widget calls `months()`, read only
+  exports: [MissingInvoicesService],
 })
 export class MissingInvoicesModule {}
