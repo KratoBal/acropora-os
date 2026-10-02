@@ -14,7 +14,10 @@ import type {
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PilotPosTerminalPage } from "./pilot-pos-terminal-page";
+import {
+  CART_ADD_HIGHLIGHT_MS,
+  PilotPosTerminalPage,
+} from "./pilot-pos-terminal-page";
 
 /**
  * A `next/font/local` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA -- vitest alatt,
@@ -342,5 +345,125 @@ describe("PilotPosTerminalPage", () => {
         '[class*="grid-cols-\\[0\\.85fr_1\\.3fr_0\\.85fr\\]"]',
       ),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * KÁRTYA 18c5f3a3 (Balázs, 2026-10-02): több tételnél az új sor a lista
+   * ALJÁRA került, nem látszott, hogy a kattintás hatott, és a kolléga újra
+   * kattintott. Ez az állítás a látható visszajelzést méri: azonos termék
+   * kétszer -> EGY sor 2 darabbal, a kereső alatti állapotsor kiírja a
+   * darabszámot, a sor kiemelt, és a fókusz a keresőn marad. MI PIROSÍT:
+   * ha a hozzáadás csendben menne (nincs állapotsor, nincs kiemelés), vagy a
+   * fókusz a találat-gombon maradna.
+   */
+  it("azonos termék kétszer: egy sor 2 db, látható visszajelzés, kiemelt sor, fókusz a keresőn", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+
+    const { container } = render(createElement(PilotPosTerminalPage));
+    const search = screen.getByRole("textbox", { name: "Termék keresése" });
+    fireEvent.change(search, { target: { value: "reef" } });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+
+    const result = await screen.findByText("Red Sea ReefMat 500");
+    fireEvent.click(result);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Hozzáadva: Red Sea ReefMat 500. A kosárban: 1 db",
+    );
+
+    fireEvent.click(screen.getAllByText("Red Sea ReefMat 500")[0]!);
+
+    const rows = container.querySelectorAll("[data-variant-id]");
+    expect(rows).toHaveLength(1);
+    expect(
+      screen.getByRole("spinbutton", { name: "Mennyiség (db)" }),
+    ).toHaveValue(2);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Hozzáadva: Red Sea ReefMat 500. A kosárban: 2 db",
+    );
+    expect(rows[0]).toHaveAttribute("data-just-added", "true");
+    expect(document.activeElement).toBe(search);
+  });
+
+  /**
+   * A kiemelés és az állapotsor RÖVID ideig áll, utána eltűnik -- különben
+   * a következő hozzáadás nem lenne megkülönböztethető az előzőtől. A
+   * kattintás ELŐTT kapcsolunk ál-időzítőre, hogy a hatás által indított
+   * `setTimeout` már az ál-órára kerüljön. MI PIROSÍT: ha a kiemelés
+   * örökre a soron maradna.
+   */
+  it("a kiemelés és a visszajelzés a megadott idő után eltűnik", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+
+    const { container } = render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    const result = await screen.findByText("Red Sea ReefMat 500");
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(result);
+      const row = container.querySelector("[data-variant-id]");
+      expect(row).toHaveAttribute("data-just-added", "true");
+
+      act(() => {
+        vi.advanceTimersByTime(CART_ADD_HIGHLIGHT_MS - 1);
+      });
+      expect(row).toHaveAttribute("data-just-added", "true");
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(row).not.toHaveAttribute("data-just-added");
+      expect(screen.getByRole("status")).toHaveTextContent("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
+   * A FIX HELYŰ LÁBRÉSZ: a görgetés a tétel-listán van, a Fizetés gomb és a
+   * végösszeg a listán KÍVÜL, külön, nem zsugorodó blokkban. Az állítás a
+   * szerkezetet és az `lg` felett érvényes osztályokat méri; magát a
+   * görgetést happy-dom nem rajzolja ki (nincs elrendezés), az a kézi
+   * próba dolga. MI PIROSÍT: ha a Fizetés gomb a görgetett listába
+   * kerülne, vagy a lista nem kapna saját görgetést, vagy a kártya nem
+   * lenne a látótér magasságára korlátozva.
+   */
+  it("a tétel-lista külön görget, az összesítő és a Fizetés gomb a listán kívül, fix helyen áll", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+
+    const lines = screen.getByTestId("pos-cart-lines");
+    const footer = screen.getByTestId("pos-cart-footer");
+    const payButton = screen.getByRole("button", { name: "Fizetés" });
+
+    expect(lines.className).toContain("lg:overflow-y-auto");
+    expect(lines.className).toContain("lg:min-h-0");
+    expect(lines.className).toContain("lg:flex-1");
+    expect(lines.contains(payButton)).toBe(false);
+    expect(footer.contains(payButton)).toBe(true);
+    expect(footer.className).toContain("shrink-0");
+    expect(lines.parentElement).toBe(footer.parentElement);
+    expect(lines.parentElement?.className).toContain(
+      "lg:max-h-[calc(100dvh-5rem)]",
+    );
+    // Below lg the list must not become a second scroll area inside the
+    // scrolling page: no unprefixed overflow or height cap on it.
+    expect(lines.className).not.toMatch(/(^|\s)overflow-y-auto/);
+    expect(lines.className).not.toMatch(/(^|\s)max-h-/);
   });
 });
