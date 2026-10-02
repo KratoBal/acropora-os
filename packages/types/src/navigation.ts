@@ -59,6 +59,20 @@ export type NavigationVisibility =
       readonly retiredBy: string;
     };
 
+/**
+ * A SERVER SWITCH AN ENTRY ALSO WAITS ON, beyond the role rule.
+ *
+ * `jev-product-enrichment` is `JEV_PRODUCT_ENRICHMENT` not being `off`
+ * (docs/jev-product-intelligence/v1-discovery.md, answer 6). Only the server
+ * reads the variable; it passes the switches that are on to
+ * `visibleNavigationFor`, and the client learns them from the menu it is
+ * served (`servedNavigationFeatures`), never from an environment variable.
+ */
+export const NAVIGATION_FEATURES = ["jev-product-enrichment"] as const;
+export type NavigationFeature = (typeof NAVIGATION_FEATURES)[number];
+
+const NO_FEATURES: ReadonlySet<NavigationFeature> = new Set();
+
 export interface NavigationEntry {
   /**
    * ÁLLANDÓ KULCS, ÉS SZÁNDÉKOSAN NEM AZ ÚTVONAL. Az útvonal a megjelenés
@@ -68,6 +82,11 @@ export interface NavigationEntry {
   readonly id: string;
   readonly surfaces: readonly NavigationSurface[];
   readonly visibility: NavigationVisibility;
+  /**
+   * The entry is shown only while this switch is on, AND the role rule
+   * holds. Unknown or unsent switches count as off: the entry stays hidden.
+   */
+  readonly feature?: NavigationFeature;
 }
 
 const permission = (value: Permission): NavigationVisibility => ({
@@ -257,6 +276,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     id: "products",
     surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.PRODUCTS_VIEW),
+  },
+  {
+    /**
+     * KATALÓGUS ADATMINŐSÉG (JEV 5. fázis): a Termékek alatt, csak ha a
+     * `JEV_PRODUCT_ENRICHMENT` nem `off`, és `products.view` kell hozzá
+     * (v1-discovery.md, 6. válasz).
+     */
+    id: "product-data-quality",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.PRODUCTS_VIEW),
+    feature: "jev-product-enrichment",
   },
   {
     id: "partners",
@@ -517,9 +547,14 @@ export function navigationEntry(id: string): NavigationEntry | undefined {
  * nincs adat, hanem egyáltalán nem tétel. Igazat adni rá annyi lenne, mint egy
  * elgépelt azonosítót mindenkinek megmutatni.
  */
-export function isNavigationEntryVisible(id: string, role: UserRole): boolean {
+export function isNavigationEntryVisible(
+  id: string,
+  role: UserRole,
+  features: ReadonlySet<NavigationFeature> = NO_FEATURES,
+): boolean {
   const entry = BY_ID.get(id);
   if (!entry) return false;
+  if (entry.feature && !features.has(entry.feature)) return false;
   const rule = entry.visibility;
   return rule.kind === "roles"
     ? rule.roles.includes(role)
@@ -529,11 +564,12 @@ export function isNavigationEntryVisible(id: string, role: UserRole): boolean {
 export function navigationIdsFor(
   role: UserRole,
   surface: NavigationSurface,
+  features: ReadonlySet<NavigationFeature> = NO_FEATURES,
 ): string[] {
   return NAVIGATION_ENTRIES.filter(
     (entry) =>
       entry.surfaces.includes(surface) &&
-      isNavigationEntryVisible(entry.id, role),
+      isNavigationEntryVisible(entry.id, role, features),
   ).map((entry) => entry.id);
 }
 
@@ -560,8 +596,27 @@ export interface NavigationEntryView {
  * szinttel feljebb, es a ket oldal elterese eppolyan nema lenne, mint amilyen
  * a webes es a mobil tabla kozott volt.
  */
-export function visibleNavigationFor(role: UserRole): NavigationEntryView[] {
+export function visibleNavigationFor(
+  role: UserRole,
+  features: ReadonlySet<NavigationFeature> = NO_FEATURES,
+): NavigationEntryView[] {
   return NAVIGATION_ENTRIES.filter((entry) =>
-    isNavigationEntryVisible(entry.id, role),
+    isNavigationEntryVisible(entry.id, role, features),
   ).map((entry) => ({ id: entry.id, surfaces: entry.surfaces }));
+}
+
+/**
+ * THE SWITCHES THE SERVER HAD ON, read back from the menu it served: a switch
+ * is on when an entry that waits on it was served. The client never reads an
+ * environment variable; without a served menu every switch is off.
+ */
+export function servedNavigationFeatures(
+  served: readonly Pick<NavigationEntryView, "id">[] | null | undefined,
+): ReadonlySet<NavigationFeature> {
+  const features = new Set<NavigationFeature>();
+  for (const { id } of served ?? []) {
+    const feature = BY_ID.get(id)?.feature;
+    if (feature) features.add(feature);
+  }
+  return features;
 }

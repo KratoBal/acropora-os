@@ -274,10 +274,13 @@ export {
   navigationIdsFor,
   NAVIGATION_ENTRIES,
   visibleNavigationFor,
+  servedNavigationFeatures,
+  NAVIGATION_FEATURES,
 } from "./navigation.js";
 export type {
   NavigationEntry,
   NavigationEntryView,
+  NavigationFeature,
   NavigationSurface,
   NavigationVisibility,
 } from "./navigation.js";

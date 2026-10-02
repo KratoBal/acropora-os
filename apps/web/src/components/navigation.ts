@@ -42,6 +42,12 @@ export interface AppNavigationGroup {
   label: string;
   icon: IconName;
   children: AppNavigationItem[];
+  /**
+   * With exactly one visible child, draw that child as a plain item instead
+   * of a heading over a single page. Set where the group exists only for a
+   * switch-gated page: while the switch is off, the menu looks as before.
+   */
+  flattenWhenAlone?: boolean;
 }
 
 export type AppNavigationEntry = AppNavigationItem | AppNavigationGroup;
@@ -73,6 +79,9 @@ export function navigationItems(
 export const MISSING_INVOICES_PATH = "/penzugy/hianyzo-szamlak";
 
 export const SETTLEMENTS_PATH = "/penzugy/elszamolasok";
+
+/** A katalógus adatminőség-nézete (JEV 5. fázis, Figma 394:316). */
+export const PRODUCT_DATA_QUALITY_PATH = "/products/adatminoseg";
 
 /**
  * AZ ELSZÁMOLÁSOK FÜLEI. Az útvonalak a régiek maradtak (könyvjelzők, levélben
@@ -196,10 +205,25 @@ export const businessNavigation: AppNavigationEntry[] = [
     ],
   },
   {
-    href: "/products",
     label: "Termékek",
     icon: "package",
-    entryId: "products",
+    flattenWhenAlone: true,
+    children: [
+      {
+        href: "/products",
+        label: "Termékek",
+        icon: "package",
+        entryId: "products",
+      },
+      {
+        // JEV 5. fázis: csak ha a szerver kiadja (JEV_PRODUCT_ENRICHMENT nem
+        // off, és products.view); a böngésző a változót nem olvassa.
+        href: PRODUCT_DATA_QUALITY_PATH,
+        label: "Adatminőség",
+        icon: "shield",
+        entryId: "product-data-quality",
+      },
+    ],
   },
   {
     label: "Partnerek",

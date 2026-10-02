@@ -1,4 +1,8 @@
-import type { AuthenticatedUser, Session } from "@acropora/types";
+import type {
+  AuthenticatedUser,
+  CurrentUserResponse,
+  Session,
+} from "@acropora/types";
 import { API_PREFIX } from "../api/api-prefix";
 
 const SESSION_STORAGE_KEY = "acropora.development-session";
@@ -71,7 +75,9 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
         window.localStorage.removeItem(SESSION_STORAGE_KEY);
         return null;
       }
-      return session;
+      // the menu as the server serves it now (its switches may have changed)
+      const navigation = await servedMenu(response);
+      return navigation ? { ...session, navigation } : session;
     } catch {
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
       return null;
@@ -94,7 +100,13 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
     const session = (await response.json()) as Session;
 
     window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-    return session;
+    // the login answer has no menu; ask for it like a reload would
+    const navigation = await fetch(`${API_PREFIX}/auth/me`, {
+      headers: { Authorization: `Bearer ${session.token ?? ""}` },
+    })
+      .then((response) => (response.ok ? servedMenu(response) : undefined))
+      .catch(() => undefined);
+    return navigation ? { ...session, navigation } : session;
   }
 
   async logout(_session: Session): Promise<void> {
@@ -103,5 +115,16 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
       headers: { Authorization: `Bearer ${_session.token ?? ""}` },
     }).catch(() => undefined);
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
+  }
+}
+
+/** The menu in an `/auth/me` answer; nothing when the body has none. */
+async function servedMenu(
+  response: Response,
+): Promise<Session["navigation"] | undefined> {
+  try {
+    return ((await response.json()) as CurrentUserResponse | null)?.navigation;
+  } catch {
+    return undefined;
   }
 }

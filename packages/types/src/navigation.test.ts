@@ -6,6 +6,8 @@ import {
   navigationEntry,
   navigationIdsFor,
   NAVIGATION_ENTRIES,
+  servedNavigationFeatures,
+  visibleNavigationFor,
 } from "./navigation.js";
 
 describe("a menü közös forrása", () => {
@@ -142,5 +144,51 @@ describe("a menü közös forrása", () => {
     assert.equal(mobil.includes("dashboard"), false);
     assert.ok(mobil.includes("nav-integration-mobile"));
     assert.equal(web.includes("nav-integration-mobile"), false);
+  });
+
+  it("a kapcsolós tétel csak bekapcsolt kapcsolóval és joggal látszik", () => {
+    const on = new Set(["jev-product-enrichment"] as const);
+    // KONTROLL: a tétel létezik, és kapcsolót vár
+    assert.equal(
+      navigationEntry("product-data-quality")?.feature,
+      "jev-product-enrichment",
+    );
+    assert.equal(
+      isNavigationEntryVisible("product-data-quality", "OWNER"),
+      false,
+    );
+    assert.equal(
+      isNavigationEntryVisible("product-data-quality", "OWNER", on),
+      true,
+    );
+    // a kapcsoló nem írja felül a jogot (SERVICE: nincs products.view)
+    assert.equal(
+      isNavigationEntryVisible("product-data-quality", "SERVICE", on),
+      false,
+    );
+    assert.ok(
+      !navigationIdsFor("OWNER", "web").includes("product-data-quality"),
+    );
+    assert.ok(
+      navigationIdsFor("OWNER", "web", on).includes("product-data-quality"),
+    );
+  });
+
+  it("a kliens a kiszolgált menüből olvassa vissza a kapcsolót, máshonnan nem", () => {
+    const on = new Set(["jev-product-enrichment"] as const);
+    assert.deepEqual([...servedNavigationFeatures(undefined)], []);
+    assert.deepEqual(
+      [...servedNavigationFeatures(visibleNavigationFor("OWNER"))],
+      [],
+    );
+    assert.deepEqual(
+      [...servedNavigationFeatures(visibleNavigationFor("OWNER", on))],
+      ["jev-product-enrichment"],
+    );
+    // ismeretlen azonosító nem kapcsol be semmit
+    assert.deepEqual(
+      [...servedNavigationFeatures([{ id: "nincs-ilyen" }])],
+      [],
+    );
   });
 });

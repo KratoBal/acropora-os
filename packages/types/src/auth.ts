@@ -639,6 +639,13 @@ export interface Session {
   user: AuthenticatedUser;
   expiresAt: string;
   token?: string;
+  /**
+   * The menu the server served with the session (`/auth/me`), kept by the
+   * web client so switch-gated entries follow the server's decision
+   * (`servedNavigationFeatures`). Optional: the server's own session objects
+   * do not carry it, and a missing menu means every switch is off.
+   */
+  navigation?: readonly NavigationEntryView[];
 }
 
 export function hasPermission(

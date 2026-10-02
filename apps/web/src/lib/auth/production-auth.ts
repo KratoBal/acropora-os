@@ -1,4 +1,8 @@
-import type { AuthenticatedUser, Session } from "@acropora/types";
+import type {
+  AuthenticatedUser,
+  CurrentUserResponse,
+  Session,
+} from "@acropora/types";
 
 import { apiAuthHeaders } from "../api/client";
 import type { AuthAdapter } from "./development-auth";
@@ -31,8 +35,12 @@ export class ProductionAuthAdapter implements AuthAdapter {
       return null;
     }
     if (!response.ok) return null;
-    const user = (await response.json()) as AuthenticatedUser;
-    return toSession(user);
+    const {
+      navigation,
+      expiresAt: _expiresAt,
+      ...user
+    } = (await response.json()) as CurrentUserResponse;
+    return toSession(user, navigation);
   }
 
   async login(email: string, password?: string): Promise<Session> {
@@ -59,7 +67,7 @@ export class ProductionAuthAdapter implements AuthAdapter {
     }
 
     const { user } = (await response.json()) as { user: AuthenticatedUser };
-    return toSession(user);
+    return toSession(user, await servedNavigation());
   }
 
   async logout(_session: Session): Promise<void> {
@@ -70,10 +78,31 @@ export class ProductionAuthAdapter implements AuthAdapter {
   }
 }
 
-function toSession(user: AuthenticatedUser): Session {
+/**
+ * The menu for a fresh login: the login answer carries only the user, so the
+ * menu comes from `/auth/me`, as on a reload. Best effort: without it every
+ * server switch counts as off, and the next reload brings it.
+ */
+async function servedNavigation(): Promise<Session["navigation"]> {
+  try {
+    const response = await fetch(`${API_PREFIX}/auth/me`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return undefined;
+    return ((await response.json()) as CurrentUserResponse).navigation;
+  } catch {
+    return undefined;
+  }
+}
+
+function toSession(
+  user: AuthenticatedUser,
+  navigation?: Session["navigation"],
+): Session {
   return {
     id: user.id,
     user,
+    ...(navigation ? { navigation } : {}),
     // Real expiry is enforced server-side (the session cookie's Max-Age
     // and the API's own session TTL); nothing client-side reads this for
     // the production path.

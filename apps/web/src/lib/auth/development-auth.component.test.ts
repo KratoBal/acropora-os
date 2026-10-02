@@ -40,6 +40,19 @@ describe("DevelopmentAuthAdapter", () => {
     });
   });
 
+  it("a visszaállított session a szerver friss menüjét hordozza", async () => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(validSession));
+    const navigation = [{ id: "product-data-quality", surfaces: ["web"] }];
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...validSession.user, navigation }),
+    });
+
+    await expect(
+      new DevelopmentAuthAdapter().restoreSession(),
+    ).resolves.toEqual({ ...validSession, navigation });
+  });
+
   it("lejárt sessiont API-hívás nélkül eltávolít", async () => {
     window.localStorage.setItem(
       STORAGE_KEY,
