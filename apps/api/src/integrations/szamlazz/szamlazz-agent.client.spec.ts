@@ -49,6 +49,29 @@ describe("HttpSzamlazzAgentClient", () => {
     assert.equal(await (field as Blob).text(), "<xmlszamla></xmlszamla>");
   });
 
+  it("posts a credit entry as the multipart file field action-szamla_agent_kifiz (acrobot 25989)", async () => {
+    let seenBody: FormData | undefined;
+    const client = new HttpSzamlazzAgentClient(
+      "https://example.invalid/szamla/",
+      fakeFetch((_url, init) => {
+        seenBody = init.body as FormData;
+        return new Response(
+          `<?xml version="1.0" encoding="UTF-8"?><xmlszamlavalasz xmlns="http://www.szamlazz.hu/xmlszamlavalasz"><sikeres>true</sikeres><szamlaszam>ACRW-2026/00479</szamlaszam><szamlanetto>21614</szamlanetto><szamlabrutto>27450</szamlabrutto><kintlevoseg>0</kintlevoseg></xmlszamlavalasz>`,
+          { status: 200 },
+        );
+      }),
+    );
+
+    const result = await client.registerPayment("<xmlszamlakifiz/>");
+
+    assert.equal(seenBody!.get("action-xmlagentxmlfile"), null);
+    const field = seenBody!.get("action-szamla_agent_kifiz");
+    assert.ok(field instanceof Blob);
+    assert.equal((field as File).name, "kifizetes.xml");
+    assert.equal(await (field as Blob).text(), "<xmlszamlakifiz/>");
+    assert.deepEqual([result.successful, result.outstanding], [true, 0]);
+  });
+
   it("parses a successful 200 response", async () => {
     const client = new HttpSzamlazzAgentClient(
       "https://example.invalid/szamla/",
