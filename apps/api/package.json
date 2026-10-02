@@ -43,6 +43,7 @@
     "invoice-collection:reread": "tsc -p tsconfig.json && node --env-file=../../.env dist/missing-invoices/collection/invoice-collection-reread.cli.js",
     "billing:incoming-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/incoming-billing-backfill.cli.js",
     "gls:paid-marks": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/gls/gls-cod-paid-marks.cli.js",
+    "simplepay:paid-marks": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/simplepay/simplepay-paid-marks.cli.js",
     "billing:external-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/external-billing-backfill.cli.js",
     "worksheets:sheets": "tsc -p tsconfig.json && node --env-file=../../.env dist/worksheets/worksheet-sheet-backfill.cli.js",
     "typecheck": "tsc --noEmit",
