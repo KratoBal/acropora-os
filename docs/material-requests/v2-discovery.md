@@ -473,9 +473,34 @@ otherwise.
   - No row is invented. A request without a stored timestamp gets no row for
     that step.
 
-Still open: Q8 (withdrawal), Q11 (who sees the overview), and the "Szűrők" /
-"További műveletek" part of Q7. For the last one, the proposal stands: leave
-both out until they have content.
+- **Q8, withdrawal:** yes, in V2, kept simple.
+  - A new status value, `CANCELLED` (Visszavont).
+  - The requester or a leader may withdraw a request while it is OPEN or
+    IN_PROGRESS, that is, before it is ordered. From ORDERED onward it
+    cannot be withdrawn.
+  - The transition runs as a conditional update on the current status, and
+    writes a CANCELLED history row with the actor.
+  - The request and its history stay readable. It leaves the active lists
+    and shows under its own filter state.
+  - No notification is added for it; the brief and the answers name none.
+- **Q11, the overview:** every internal user with SERVICE_VIEW sees it,
+  scoped to the worksheets they can see (`worksheetListWheres`, hidden
+  worksheets excluded). Only the handler, leaders and capability holders may
+  change the state. The rules in §8.7 still apply.
+- **Q7, "Szűrők" and "További műveletek":** left out for now.
+
+All questions are answered. The resulting state machine, replacing §8.2's
+diagram:
+
+```text
+DRAFT ─submit─▶ OPEN ─claim─▶ IN_PROGRESS ─order─▶ ORDERED ─▶ PARTIALLY_RECEIVED ─▶ RECEIVED
+                  │                │                   └────────────────────────────▶ RECEIVED
+                  │                └─ receive (in stock / bought locally) ──────────▶ RECEIVED
+                  └───────┴─ cancel (requester or leader) ──────────────────────────▶ CANCELLED
+```
+
+Forward only; RECEIVED and CANCELLED are terminal; every arrow writes one
+history row.
 
 ## Open questions
 
