@@ -2195,7 +2195,14 @@ export class ServiceAssetsRepository extends Repository {
             payload: jsonPayload({
               fields: generalFields,
               // a régi kód visszakereshető marad: a partner táblázatában az áll
-              ...(codeChange ? { partnerInternalCode: codeChange } : {}),
+              ...(codeChange
+                ? {
+                    partnerInternalCode: {
+                      from: codeChange.from,
+                      to: codeChange.to,
+                    },
+                  }
+                : {}),
             }),
           });
         await tx.assetEvent.createMany({
