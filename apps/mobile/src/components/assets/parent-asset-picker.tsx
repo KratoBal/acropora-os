@@ -64,7 +64,8 @@ export function ParentAssetPicker({
   const query = useQuery({
     queryKey: ["szulo-eszkoz", unitId, search, page, excludeSubtreeOf ?? ""],
     queryFn: () =>
-      listAssets(page, 50, search, unitId, "ACTIVE", excludeSubtreeOf ?? ""),
+      // 100-as lap (Balázs, 2026-10-02 08:23 UTC: hosszabb lista); a lapozó marad
+      listAssets(page, 100, search, unitId, "ACTIVE", excludeSubtreeOf ?? ""),
     enabled: enabled && open && Boolean(unitId),
     placeholderData: keepPreviousData,
   });
