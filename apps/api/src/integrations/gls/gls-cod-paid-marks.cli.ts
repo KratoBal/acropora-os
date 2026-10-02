@@ -4,15 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
 
-import { HttpSzamlazzAgentClient } from "../szamlazz/szamlazz-agent.client.js";
-import { SzamlazzConnectionRepository } from "../szamlazz/szamlazz-connection.repository.js";
-import { SzamlazzCredentialCryptoService } from "../szamlazz/szamlazz-credential-crypto.service.js";
-import { SzamlazzCredentialProvider } from "../szamlazz/szamlazz-credential.provider.js";
-import {
-  applyPaidMarks,
-  paidMarksReport,
-  prismaPaymentMarkStore,
-} from "../szamlazz/outgoing-payment-marks.js";
+import { runPaidMarksApply } from "../szamlazz/paid-marks-apply.cli.js";
 import {
   glsCodMarkPaidMode,
   glsCodPaidMarksDryRun,
@@ -52,51 +44,20 @@ async function main(argv: readonly string[]): Promise<number> {
     process.stderr.write("A --from egy nap: YYYY-MM-DD.\n");
     return 2;
   }
-  if (argv.includes("--apply")) {
-    if (mode !== "live") {
-      process.stderr.write(
-        "Az éles íráshoz GLS_COD_MARK_PAID=live kell; most: " + mode + ".\n",
-      );
-      return 1;
-    }
-    const at = argv.indexOf("--invoices");
-    const approved = new Set(
-      (at >= 0 ? (argv[at + 1] ?? "") : "")
-        .split(",")
-        .map((n) => n.trim())
-        .filter(Boolean),
-    );
-    if (approved.size === 0) {
-      process.stderr.write(
-        "Az --apply csak a jóváhagyott számlákra ír: --invoices <szám,szám,...>\n",
-      );
-      return 2;
-    }
-    const decisions = (await loadGlsTransfers(from)).map((t) =>
-      decideGlsTransfer(t),
-    );
-    const credential = await new SzamlazzCredentialProvider(
-      new SzamlazzConnectionRepository(),
-      new SzamlazzCredentialCryptoService(),
-    ).resolve();
-    process.stdout.write(
-      `ÉLES írás a Számlázz.hu-ba (kulcs: ${credential.revision}), GLS utalások ${from} óta, ${approved.size} jóváhagyott számla:\n`,
-    );
-    const lines = await applyPaidMarks({
+  if (argv.includes("--apply"))
+    return runPaidMarksApply({
+      argv,
+      mode,
+      switchName: "GLS_COD_MARK_PAID",
       source: "GLS_COD",
-      marks: glsPaidMarkInputs(decisions),
-      approved,
-      agentKey: credential.agentKey,
-      client: new HttpSzamlazzAgentClient(),
-      store: prismaPaymentMarkStore,
+      what: `GLS utalások ${from} óta`,
+      loadMarks: async () =>
+        glsPaidMarkInputs(
+          (await loadGlsTransfers(from)).map((t) => decideGlsTransfer(t)),
+        ),
+      out: (text) => process.stdout.write(text),
+      err: (text) => process.stderr.write(text),
     });
-    process.stdout.write(paidMarksReport(lines, approved));
-    return lines.some(
-      (l) => l.outcome.kind === "FAILED" || l.outcome.kind === "UNKNOWN",
-    )
-      ? 3
-      : 0;
-  }
   process.stdout.write(
     `SZÁRAZ futás (semmit nem ír), GLS utalások ${from} óta:\n`,
   );

@@ -1,5 +1,6 @@
 import { Prisma } from "@acropora/database";
 
+import type { PaymentMarkInput } from "../szamlazz/outgoing-payment-marks.js";
 import {
   codInvoiceMarks,
   type CodInvoiceSkip,
@@ -188,4 +189,26 @@ export function decideFoxpostSettlement(input: {
       })),
     ].sort((a, b) => a.reference.localeCompare(b.reference)),
   };
+}
+
+/**
+ * The marks of the markable settlements, for the shared Számlázz.hu loop
+ * (`applyPaidMarks`, source FOXPOST). The settlement's bank credit is the
+ * source-side reference: one transfer pays an invoice once (acrobot 26001).
+ */
+export function foxpostPaidMarkInputs(
+  decisions: readonly FoxpostSettlementDecision[],
+): PaymentMarkInput[] {
+  return decisions.flatMap((decision) =>
+    decision.markable
+      ? decision.marks.map((mark) => ({
+          invoiceNumber: mark.invoiceNumber,
+          date: mark.date,
+          amount: mark.amount,
+          title: mark.title,
+          note: mark.note,
+          sourceRef: decision.creditId,
+        }))
+      : [],
+  );
 }

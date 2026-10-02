@@ -11,6 +11,7 @@ import {
 import {
   decideFoxpostSettlement,
   foxpostNarrativeMark,
+  foxpostPaidMarkInputs,
   type FoxpostCandidateInvoice,
   type FoxpostSettlementInput,
 } from "./foxpost-paid-marks.js";
@@ -263,6 +264,43 @@ describe("the Foxpost dry run's list and switch", () => {
         "összesen: 1 számla jelölhető, 2 elszámolásból",
         "",
       ].join("\n"),
+    );
+  });
+});
+
+/*
+  A KÖZÖS SZÁMLÁZZ.HU-HUROK BEMENETE (acrobot 26031). MI PIROSÍT: ha egy nem
+  jelölhető elszámolásból jelölés lenne; ha a forrás-oldali azonosító nem a
+  jóváírás lenne (két utalás egy számlára egy kulcsra esne).
+*/
+describe("foxpostPaidMarkInputs", () => {
+  it("the marks of the markable settlements, each with its bank credit as the reference", () => {
+    const mark = {
+      invoiceNumber: "ACRW-2026/00470",
+      date: "2026-09-23",
+      amount: "12500",
+      title: "utánvét" as const,
+      note: "Foxpost utánvét, 26H38",
+    };
+    assert.deepEqual(
+      foxpostPaidMarkInputs([
+        {
+          settlementCode: "26H35",
+          markable: false,
+          refusal: "NO_CREDIT",
+          transferred: "94338",
+        },
+        {
+          settlementCode: "26H38",
+          markable: true,
+          transferred: "78980",
+          creditId: "bt-26h38",
+          creditDate: "2026-09-23",
+          marks: [mark],
+          skipped: [],
+        },
+      ]),
+      [{ ...mark, sourceRef: "bt-26h38" }],
     );
   });
 });
