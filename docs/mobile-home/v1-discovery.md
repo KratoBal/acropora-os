@@ -3,8 +3,9 @@
 The mobile Home rebuilt around role/view presets (Figma `412:3`, frames
 `413:2` Szerviz, `413:105` Webshop, `413:208` Tulajdonos · Menedzser,
 `414:110` Partner szerviz, `414:214` Partner akvarista). This is a report and
-a plan: **no code is in this PR.** Nothing is built until the owner answers
-the questions at the end.
+a plan: **no code is in this PR.** The owner answered the questions on
+2026-10-02; the answers (section "Answers") override any proposal below that
+says otherwise.
 
 The brief is the owner's mobile Home prompt with acrobot's notes (measured on
 main, 2026-10-02). Where the two differ, the notes win. Measured on main
@@ -49,15 +50,14 @@ main, 2026-10-02). Where the two differ, the notes win. Measured on main
      which is the owner's permission decision. It also needs two scope leaks
      closed first, and a rule for retail customers who have no locations
      (§10). Per the brief: stop and report.
-- **Icons ship as an OTA update, measured.** `expo-symbols` is already in the
-  app (a dependency of `expo-router`).
-  - **iOS:** its native module is in the current build.
-  - **Android:** it draws a Material Symbols font loaded by `expo-font`, so
-    the font ships with the JS bundle.
-  - Declaring it as a direct dependency leaves the runtime fingerprint
-    unchanged on both platforms (`3f49663…` iOS, `93a68ef…` Android, before
-    and after).
-  - No `react-native-svg`, no `@expo/vector-icons`, no new build.
+- **Icons: `@expo/vector-icons` (Ionicons outline), as an OTA update,
+  measured** (owner's choice, answer 6).
+  - The package is pure JavaScript; its glyphs are fonts loaded by
+    `expo-font`.
+  - `expo-font`'s native module is already autolinked in the app on both
+    platforms.
+  - Installing it leaves the runtime fingerprint unchanged on both platforms
+    (§6).
 
 ## 1. The current Home (`apps/mobile/src/app/index.tsx`, 959 lines)
 
@@ -248,26 +248,45 @@ every preset. That is one of the calibrations.
   the avatar.
 - The app has no vector icon library (`_layout.tsx:92-94`).
 
-**Proposal: `SymbolView` from `expo-symbols`, a thin `Icon` component, and
-one name map.**
+**Decision (owner, answer 6): `@expo/vector-icons`, the Ionicons outline
+set, behind a thin `Icon` component and one name map.**
 
-- **iOS:** SF Symbols, through a native module already linked.
-- **Android:** Material Symbols, a font loaded by `expo-font` and shipped as a
-  JS asset.
+The bottom bar uses four glyphs, all present in the bundled Ionicons glyph
+map:
 
-**Delivery: OTA.** Measured with `npx fingerprint fingerprint:generate`:
+| Tab       | Glyph                      |
+| --------- | -------------------------- |
+| Kezdőlap  | `home-outline`             |
+| Feladatok | `checkmark-circle-outline` |
+| Modulok   | `grid-outline`             |
+| Profil    | `person-circle-outline`    |
 
-- `expo-symbols` already appears in the iOS fingerprint as
-  `dir:node_modules/expo-symbols/ios`;
-- adding it to `package.json` (`~57.0.2`) leaves both hashes unchanged.
+The module tiles take outline glyphs from the same map. The Figma's code
+marks (HJ, ML, AI…) are placeholders, as the brief says.
 
-**Trade-offs, for the owner to accept (Q6):**
+**Delivery: OTA, measured** with `npx fingerprint fingerprint:generate` on
+main `6dee3af`:
 
-- iOS and Android draw slightly different outline glyphs. Each is consistent
-  within its platform.
-- The Figma's "Bottom Nav SVG" shapes are not reproduced path for path.
-- The tile code marks (HJ, ML, AI…) are the Figma's own placeholders. They
-  become icons from the same map, as the brief asks.
+- **Why it can ship as an update.** `@expo/vector-icons` (`~15.0.2`, the
+  version `expo`'s `bundledNativeModules.json` names) has no dependencies and
+  no native code. It peers on `expo-font`. `expo-font` is native, and it is
+  already autolinked on both platforms: the fingerprint lists
+  `dir:node_modules/expo-font/ios` and `dir:node_modules/expo-font/android`.
+- **Fingerprint unchanged.** Installed temporarily and declared in
+  `package.json`, both hashes stayed the same:
+  - iOS `3f4966325b3b6e20f295f8da21cc45f668d1f8e9`;
+  - Android `93a68ef92e917f3ec0461b5dc56db17a33b6df10`.
+
+  The installation was reverted afterwards.
+
+- **What "unchanged" means.** With `runtimeVersion: { policy: "fingerprint" }`
+  the update targets the builds whose runtime is that fingerprint. Whether
+  the store builds in use carry exactly this runtime is visible in EAS, not
+  in the repository. Phase 1's PR states the runtime it targets, so it can
+  be checked there before publishing.
+
+The earlier `expo-symbols` proposal is dropped. It is a native module, and its
+Android side is a font-drawn fallback; the owner chose the font-only route.
 
 ## 7. The real source of each Home section
 
@@ -502,13 +521,21 @@ no mobile screen stay disabled with their reason, as today.
 
 ## Existing, UI-only, and new backend
 
-|                                 | Items                                                                                                                                                                                                                                                                               |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Existing, reused as is**      | Served navigation and tile visibility; `/dashboard/widgets` with per-widget status; the `attention` list; partner scope; `/service/jobs?scope=mine`; `/tasks/mine`; SecureStore preference pattern; SQLite cache and migrations; `HelyszinLetolto`; `expo-symbols` (already linked) |
-| **UI / preset only**            | Home shell, focus and attention cards, module tile, bottom bar, icon map, preset resolver and chip, `/feladatok` and `/modulok` screens, logout moved to Profil, "Legutóbbi rendelések" removed, Home offline snapshot                                                              |
-| **New backend, needs approval** | Unknown widget id → `unavailable` (Q3); a dashboard route partners may call (Q2); PARTNER_AQUARIST role (Q5); closing the two aquarium leaks (bug fixes, proposed as a separate PR now)                                                                                             |
+|                                             | Items                                                                                                                                                                                                                                                                            |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Existing, reused as is**                  | Served navigation and tile visibility; `/dashboard/widgets` with per-widget status; the `attention` list; partner scope; `/service/jobs?scope=mine`; `/tasks/mine`; SecureStore preference pattern; SQLite cache and migrations; `HelyszinLetolto`; `expo-font` (already linked) |
+| **UI / preset only**                        | Home shell, focus and attention cards, module tile, bottom bar, icon map, preset resolver and chip, `/feladatok` and `/modulok` screens, logout moved to Profil, "Legutóbbi rendelések" removed, Home offline snapshot                                                           |
+| **New backend (approved, each its own PR)** | Closing the two aquarium leaks (first); unknown widget id → `unavailable`, with a test; a read-only partner summary with the existing partner scope and no new permission; the PARTNER_AQUARIST role (only after the leak fix)                                                   |
 
 ## Phases (each a separate PR from `main` after the previous one merges)
+
+Before the Home phases, as their own PRs:
+
+- **A. The two aquarium leaks** (answer 5, first). The PR names each leak and
+  what a partner could see through it.
+- **B. Unknown widget id → `unavailable`** (answer 3), with a test.
+
+Then:
 
 1. **Shared framework.**
    - Shell, preset resolver (role default only, no chip yet), focus, attention
@@ -521,8 +548,12 @@ no mobile screen stay disabled with their reason, as today.
    - One `/dashboard/widgets` request per preset, the chip with SecureStore
      persistence, the SQLite snapshot with last-refresh time, `/feladatok`,
      and the left-out list in the PR.
-   - The internal presets first. Partner szerviz follows once Q2 is answered.
-3. **Partner Aquarist**, only after Q5, with the two leaks already closed.
+   - The internal presets first. Webshop tiles with no mobile screen are not
+     on the preset (answer 4).
+   - The partner summary endpoint (answer 2) and the Partner szerviz preset on
+     it, as their own PR.
+3. **Partner Aquarist role**, after PR A has merged, as its own PR, then its
+   preset.
 4. **Polish.** Loading, error and empty states for every card and tile, and
    visual parity, with fixture screenshots per preset.
 
@@ -534,7 +565,53 @@ no mobile screen stay disabled with their reason, as today.
 - offline renders from cache with the last-refresh time;
 - the bottom bar is identical for every preset.
 
-## Questions for the owner
+## Answers (owner, 2026-10-02)
+
+These answer the questions below. They override any proposal above that says
+otherwise.
+
+1. **Left-outs: agreed.** Anything with no real data source is left out, not
+   approximated. Each PR lists what was left out and why.
+2. **Partner Home data: not (a).** `/dashboard/widgets` was built for internal
+   staff. Opening it to partners with a new permission would make every
+   current and future widget a partner-safety obligation. Instead:
+   - **a separate, read-only partner summary** that filters with the existing
+     partner scope (assigned locations; no location means nothing);
+   - **no new permission.**
+
+   Design for that PR:
+   - **Route and permission.** A read-only `GET` under `service/` on
+     `service.view`, an existing permission PARTNER_SERVICE already holds. It
+     refuses an internal caller, who has the dashboard.
+   - **Shape.** Built only from the where-builders the partner list pages
+     already use:
+     - `serviceJobVisibilityWhere` (open and new tickets);
+     - the worksheet scope (awaiting signature, not sent and sent);
+     - `assetVisibilityForAndBranch` (`nextServiceAt` overdue, today, 7 days);
+     - `aquariumVisibilityWhere` (out-of-range, stale).
+   - **No locations.** The answer carries the number of assigned locations.
+     With none, the phone says "Nincs hozzád rendelt helyszín" instead of
+     showing zeros as if everything were fine.
+   - **Per section, an error is an error.** It is never zero; the same
+     per-section status as the widgets.
+   - **Calibration.** The four-of-many case: nothing outside the assigned
+     locations. A user with no assignment gets nothing.
+
+3. **Unknown widget id: yes.** Only that widget is "unavailable"; the rest of
+   the request goes through. This is good for the web too, since an older
+   phone build may send an id that no longer exists. With a test.
+4. **Webshop tiles with no screen: left out.** No tile that leads nowhere.
+5. **Partner Aquarist.**
+   - **Reach:** by assigned location, matching the earlier partner decision.
+   - **The two leaks first,** as a separate PR that names exactly what each
+     leak is and what a partner could see until now.
+   - **The new role only after that,** in its own PR.
+6. **Icons:** `@expo/vector-icons` (Ionicons outline: house, check in a
+   circle, grid, profile). It arrives as a font, so it can ship as an update
+   if the needed part is in the current build. Measured first; see §6. The
+   Phase 1 PR states: update or build.
+
+## Questions for the owner (answered above)
 
 1. **The left-outs (§7).** Is it right that V1 leaves out, rather than
    approximates, the things with no source? These are: the time-of-day
