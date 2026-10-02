@@ -303,6 +303,9 @@ importers:
       '@acropora/config':
         specifier: workspace:*
         version: link:../config
+      '@acropora/types':
+        specifier: workspace:*
+        version: link:../types
       '@types/node':
         specifier: ^26.1.1
         version: 26.1.1
