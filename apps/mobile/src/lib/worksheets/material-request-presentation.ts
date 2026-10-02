@@ -89,7 +89,20 @@ export function buildMaterialRequestItems(
   return { ok: true, items: tisztitott, message: null };
 }
 
-export type MaterialRequestStatusValue = "DRAFT" | "OPEN" | "RECEIVED";
+/**
+ * THE SERVER'S STATUSES, V2 INCLUDED (docs/material-requests/v2-discovery.md).
+ * The V2 screens come in their own phase; until then the worksheet section
+ * must still NAME a claimed or ordered request instead of showing an empty
+ * chip. JS only: it ships over the air.
+ */
+export type MaterialRequestStatusValue =
+  | "DRAFT"
+  | "OPEN"
+  | "IN_PROGRESS"
+  | "ORDERED"
+  | "PARTIALLY_RECEIVED"
+  | "RECEIVED"
+  | "CANCELLED";
 
 export const MATERIAL_REQUEST_STATUS_LABEL: Record<
   MaterialRequestStatusValue,
@@ -97,7 +110,11 @@ export const MATERIAL_REQUEST_STATUS_LABEL: Record<
 > = {
   DRAFT: "Piszkozat",
   OPEN: "Beszerzésre vár",
+  IN_PROGRESS: "Intézés alatt",
+  ORDERED: "Megrendelve",
+  PARTIALLY_RECEIVED: "Részben beérkezett",
   RECEIVED: "Beérkezett",
+  CANCELLED: "Visszavont",
 };
 
 /** Amennyit egy anyagigénylésből ez a modul olvas. */

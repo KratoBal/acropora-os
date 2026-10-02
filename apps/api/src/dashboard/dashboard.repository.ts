@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import {
+  MATERIAL_REQUEST_ACTIVE_STATUSES,
   aquariumEffectiveMeasurementTargetRange,
   aquariumMeasurementParametersFor,
   type AquariumMeasurementParameterCode,
@@ -291,7 +292,14 @@ export class DashboardRepository extends Repository {
     ] = await Promise.all([
       this.database.serviceJob.count({ where: openTicketStatus }),
       this.latestWorksheetStatusCount("AWAITING_SIGNATURE"),
-      this.database.materialRequest.count({ where: { status: "OPEN" } }),
+      // V2: every active status (claimed or ordered still waits), hidden
+      // worksheets excluded, the same set as the new tile
+      this.database.materialRequest.count({
+        where: {
+          status: { in: [...MATERIAL_REQUEST_ACTIVE_STATUSES] },
+          worksheet: { hiddenAt: null },
+        },
+      }),
       this.database.maintenanceOrder.count({ where: { status: "ISSUED" } }),
     ]);
     return {
@@ -401,7 +409,11 @@ export class DashboardRepository extends Repository {
 
   async materialRequests(): Promise<DashboardMaterialRequests> {
     const rows = await this.database.materialRequest.findMany({
-      where: { status: "OPEN" },
+      // V2: every active status, hidden worksheets excluded (as the tile)
+      where: {
+        status: { in: [...MATERIAL_REQUEST_ACTIVE_STATUSES] },
+        worksheet: { hiddenAt: null },
+      },
       orderBy: { submittedAt: "asc" },
       take: DASHBOARD_LIST_LIMIT,
       select: {
