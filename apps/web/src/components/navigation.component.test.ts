@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   hasPermission,
   isNavigationEntryVisible,
+  NAVIGATION_FEATURES,
   navigationEntry,
   USER_ROLES,
   type Permission,
@@ -35,6 +36,8 @@ import {
 // A KERET SAJAT LISTAJA, nem egy ittani masolata: ha az osszefuzes elcsuszik,
 // ennek a fajlnak MINDEN allitasa vele csuszik, tehat a halo nem hazudik.
 const shellNavigationItems = () => allNavigationPages;
+
+const ALL_FEATURES = new Set(NAVIGATION_FEATURES);
 
 function visibleLabelsFor(role: UserRole): string[] {
   return allNavigationPages
@@ -399,6 +402,9 @@ describe("navigation", () => {
     "/vevok": "customers.view",
     "/webshop/termekek": "products.view",
     "/products": "products.view",
+    // JEV 5. fázis (2026-10-02), a bevezetés UTÁN: a jog products.view; a
+    // szerver-kapcsolót (JEV_PRODUCT_ENRICHMENT) lent, bekapcsolva méri.
+    "/products/adatminoseg": "products.view",
     "/partnerek": "partners.view",
     "/partnerek/szerzodesek": "partners.manage",
     "/beszerzes": "purchasing.view",
@@ -460,8 +466,11 @@ describe("navigation", () => {
     );
 
     for (const role of USER_ROLES) {
+      // every server switch on: here only the role rule is compared
       const aForrasSzerint = items
-        .filter((item) => isNavigationEntryVisible(item.entryId, role))
+        .filter((item) =>
+          isNavigationEntryVisible(item.entryId, role, ALL_FEATURES),
+        )
         .map((item) => item.href);
       const aRegiKulcsokSzerint = items
         .filter((item) =>

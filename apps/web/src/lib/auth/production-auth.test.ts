@@ -47,6 +47,35 @@ describe("ProductionAuthAdapter", () => {
     expect(session?.token).toBeUndefined();
   });
 
+  it("keeps the served menu on the session, not on the user", async () => {
+    const navigation = [{ id: "product-data-quality", surfaces: ["web"] }];
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...owner, navigation, expiresAt: "2099-01-01" }),
+    });
+
+    const session = await new ProductionAuthAdapter().restoreSession();
+    expect(session?.user).toEqual(owner);
+    expect(session?.navigation).toEqual(navigation);
+  });
+
+  it("a fresh login asks /auth/me for the menu, like a reload", async () => {
+    const navigation = [{ id: "products", surfaces: ["web", "mobile"] }];
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ user: owner }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ...owner, navigation }),
+      });
+
+    const session = await new ProductionAuthAdapter().login(owner.email, "pw");
+    expect(globalThis.fetch).toHaveBeenLastCalledWith("/api/auth/me", {
+      headers: { Accept: "application/json" },
+    });
+    expect(session.navigation).toEqual(navigation);
+  });
+
   it("has no session to restore when /auth/me rejects the (missing) cookie", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: false });
     await expect(

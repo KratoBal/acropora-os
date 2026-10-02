@@ -319,44 +319,81 @@ describe("AuthController", () => {
    * MINDKET IRANY KELL. Az "amit lat" onmagaban akkor is teljesul, ha MINDENKI
    * MINDENT lat; a szukitest csak a masodik ciklus meri.
    */
-  it("serves each role exactly what the shared source says it may see", () => {
-    const controller = new AuthController(
-      {} as unknown as ConstructorParameters<typeof AuthController>[0],
+  it("serves the catalogue data-quality entry only with the JEV switch on and products.view", () => {
+    const served = (
+      env: NodeJS.ProcessEnv,
+      role: (typeof USER_ROLES)[number],
+    ) =>
+      new AuthController(
+        {} as unknown as ConstructorParameters<typeof AuthController>[0],
+        env,
+      )
+        .getCurrentUser({ ...testUser, role }, fakeRequest())
+        .navigation.map((entry) => entry.id)
+        .includes("product-data-quality");
+    for (const value of [undefined, "", "off", "live", "REVIEW"])
+      assert.equal(
+        served({ JEV_PRODUCT_ENRICHMENT: value }, "OWNER"),
+        false,
+        `JEV_PRODUCT_ENRICHMENT=${value}`,
+      );
+    for (const value of ["benchmark", "review", "production-review"])
+      assert.equal(served({ JEV_PRODUCT_ENRICHMENT: value }, "OWNER"), true);
+    // products.view is still needed: SERVICE has no product access
+    assert.equal(
+      served({ JEV_PRODUCT_ENRICHMENT: "review" }, "SERVICE"),
+      false,
     );
+    assert.equal(served({ JEV_PRODUCT_ENRICHMENT: "review" }, "VIEWER"), true);
+  });
+
+  it("serves each role exactly what the shared source says it may see", () => {
     let osszevetes = 0;
 
-    for (const role of USER_ROLES) {
-      const user = { ...testUser, role };
-      const kiadott = controller.getCurrentUser(user, fakeRequest()).navigation;
-      const kiadottIds = kiadott.map((entry) => entry.id);
+    // both positions of the server switch: off (unset) and on
+    for (const env of [{}, { JEV_PRODUCT_ENRICHMENT: "review" }]) {
+      const controller = new AuthController(
+        {} as unknown as ConstructorParameters<typeof AuthController>[0],
+        env,
+      );
+      const switchOn = "JEV_PRODUCT_ENRICHMENT" in env;
+      for (const role of USER_ROLES) {
+        const user = { ...testUser, role };
+        const kiadott = controller.getCurrentUser(
+          user,
+          fakeRequest(),
+        ).navigation;
+        const kiadottIds = kiadott.map((entry) => entry.id);
 
-      for (const entry of NAVIGATION_ENTRIES) {
-        osszevetes += 1;
-        const rule = entry.visibility;
-        const lathato =
-          rule.kind === "roles"
-            ? rule.roles.includes(role)
-            : hasPermission(role, rule.permission);
+        for (const entry of NAVIGATION_ENTRIES) {
+          osszevetes += 1;
+          const rule = entry.visibility;
+          const lathato =
+            (rule.kind === "roles"
+              ? rule.roles.includes(role)
+              : hasPermission(role, rule.permission)) &&
+            (entry.feature === undefined || switchOn);
 
-        assert.equal(
-          kiadottIds.includes(entry.id),
-          lathato,
-          `${role} / ${entry.id}: a kiadott válasz ${kiadottIds.includes(entry.id)}, ` +
-            `a forrás szabálya ${lathato}`,
-        );
-      }
+          assert.equal(
+            kiadottIds.includes(entry.id),
+            lathato,
+            `${role} / ${entry.id}: a kiadott válasz ${kiadottIds.includes(entry.id)}, ` +
+              `a forrás szabálya ${lathato}`,
+          );
+        }
 
-      // A FELULETEK IS ATMENNEK, nem csak az azonositok. Enelkul a telefon nem
-      // tudna megkulonboztetni a "nem ismerem" esetet a "nem nekem valo"-tol.
-      for (const entry of kiadott) {
-        const forras = NAVIGATION_ENTRIES.find((e) => e.id === entry.id);
-        assert.deepEqual(entry.surfaces, forras?.surfaces);
+        // A FELULETEK IS ATMENNEK, nem csak az azonositok. Enelkul a telefon nem
+        // tudna megkulonboztetni a "nem ismerem" esetet a "nem nekem valo"-tol.
+        for (const entry of kiadott) {
+          const forras = NAVIGATION_ENTRIES.find((e) => e.id === entry.id);
+          assert.deepEqual(entry.surfaces, forras?.surfaces);
+        }
       }
     }
 
     // KONTROLL: het szerep es huszonhet tetel. Egy ures forras vagy egy elromlott
     // ciklus nulla osszevetest adna, es a ket ciklus zolden menne vegig.
-    assert.equal(osszevetes, USER_ROLES.length * NAVIGATION_ENTRIES.length);
+    assert.equal(osszevetes, 2 * USER_ROLES.length * NAVIGATION_ENTRIES.length);
   });
 
   /**

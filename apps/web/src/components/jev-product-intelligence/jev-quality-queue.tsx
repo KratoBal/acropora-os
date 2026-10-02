@@ -57,12 +57,18 @@ export function JevQualityQueueTable({
   filter,
   now,
   hrefFor,
+  emptyMessage = "Nem találtunk ellenőrzést igénylő termékadatot.",
 }: {
   rows: readonly ProductQualityQueueRow[];
   filter: QueueFilter;
   now: Date;
   /** Where a row leads: the product's review, at the field. */
   hrefFor: (row: ProductQualityQueueRow) => string;
+  /**
+   * What an empty table says. The default ("nothing to check") is only true
+   * after a run; with no stored run the caller names the real state.
+   */
+  emptyMessage?: string;
 }) {
   const visible = filterQueue(rows, filter);
   return (
@@ -72,7 +78,7 @@ export function JevQualityQueueTable({
     >
       {visible.length === 0 ? (
         <p role="status" className="py-3 text-sm leading-5 text-pilot-grey-600">
-          Nem találtunk ellenőrzést igénylő termékadatot.
+          {emptyMessage}
         </p>
       ) : (
         <table className="w-full min-w-[720px] border-collapse text-left">

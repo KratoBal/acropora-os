@@ -1,9 +1,7 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
-import type {
-  ProductEnrichmentAvailability,
-  ProductEnrichmentReview,
-} from "@acropora/types";
+import type { ProductEnrichmentReview } from "@acropora/types";
 
+import { productEnrichmentAvailability } from "./product-enrichment-availability.js";
 import { ProductService } from "./product.service.js";
 
 /**
@@ -24,16 +22,8 @@ import { ProductService } from "./product.service.js";
  */
 export const PRODUCT_ENRICHMENT_ENV = Symbol("PRODUCT_ENRICHMENT_ENV");
 
-const AVAILABLE = ["benchmark", "review", "production-review"] as const;
-
-export function productEnrichmentAvailability(
-  raw: string | undefined,
-): ProductEnrichmentAvailability {
-  const value = raw?.trim();
-  return (AVAILABLE as readonly string[]).includes(value ?? "")
-    ? (value as ProductEnrichmentAvailability)
-    : "off";
-}
+// The parsing lives in its own pure file: the menu reads the same switch.
+export { productEnrichmentAvailability } from "./product-enrichment-availability.js";
 
 @Injectable()
 export class ProductEnrichmentReviewService {

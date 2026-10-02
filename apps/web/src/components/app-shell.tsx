@@ -3,7 +3,10 @@
 import { SutyerakWidget } from "./assistant/sutyerak-widget";
 import { AssistantPageProvider } from "./assistant/page-context";
 import { Badge, Button, Icon, useThemePreference } from "@acropora/ui";
-import { isNavigationEntryVisible } from "@acropora/types";
+import {
+  isNavigationEntryVisible,
+  servedNavigationFeatures,
+} from "@acropora/types";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -143,9 +146,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [session]);
 
+  // switch-gated entries follow the menu the server served with the session
+  const features = servedNavigationFeatures(session?.navigation);
   const canAccess = (item: AppNavigationItem) =>
     Boolean(
-      session && isNavigationEntryVisible(item.entryId, session.user.role),
+      session &&
+      isNavigationEntryVisible(item.entryId, session.user.role, features),
     );
   const isActive = (item: AppNavigationItem) =>
     isNavigationItemActive(pathname, item, ALL_NAVIGATION_ITEMS);
@@ -175,6 +181,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
     const visibleChildren = entry.children.filter(canAccess);
     if (visibleChildren.length === 0) return null;
+    if (entry.flattenWhenAlone && visibleChildren.length === 1)
+      return renderItem(visibleChildren[0]!);
 
     return (
       <NavigationGroup

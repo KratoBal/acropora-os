@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Req, Res } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Optional,
+  Post,
+  Req,
+  Res,
+} from "@nestjs/common";
 import { visibleNavigationFor } from "@acropora/types";
 import type {
   AuthenticatedUser,
@@ -7,6 +16,7 @@ import type {
 } from "@acropora/types";
 
 import { AuthService } from "./auth.service.js";
+import { NAVIGATION_ENV, navigationFeatures } from "./navigation-features.js";
 import type {
   AuthenticatedRequest,
   DevelopmentLoginDto,
@@ -24,7 +34,13 @@ import { Public } from "./decorators/public.decorator.js";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    /** Only for the menu's server switches (`navigationFeatures`). */
+    @Optional()
+    @Inject(NAVIGATION_ENV)
+    private readonly environment: NodeJS.ProcessEnv = process.env,
+  ) {}
 
   /**
    * A MUNKAMENET ES A MENU EGY VALASZBAN.
@@ -58,7 +74,10 @@ export class AuthController {
   ): CurrentUserResponse {
     return {
       ...user,
-      navigation: visibleNavigationFor(user.role),
+      navigation: visibleNavigationFor(
+        user.role,
+        navigationFeatures(this.environment),
+      ),
       expiresAt: request.sessionExpiresAt,
     };
   }
@@ -138,7 +157,10 @@ export class AuthController {
       expiresAt: session.expiresAt,
       user: {
         ...session.user,
-        navigation: visibleNavigationFor(session.user.role),
+        navigation: visibleNavigationFor(
+          session.user.role,
+          navigationFeatures(this.environment),
+        ),
       },
     };
   }

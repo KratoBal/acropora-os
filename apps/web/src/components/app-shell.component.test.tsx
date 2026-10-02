@@ -451,3 +451,79 @@ describe("AppShell global search", () => {
     expect(screen.queryByRole("searchbox", { name: "Keresés" })).toBeNull();
   });
 });
+
+// JEV 5. fázis: a katalógus adatminőség menüpontja a szerver kapcsolóját
+// követi (a munkamenettel kiadott menü), és a szerepjogot is. MI PIROSÍT: ha a
+// pont a kapcsoló nélkül is látszana; ha kapcsolóval sem; ha a kiadott menü a
+// jogot felülírná; ha kikapcsolva a Termékek csoporttá válna.
+describe("AppShell catalogue data-quality entry", () => {
+  beforeEach(() => {
+    navigation.pathname = "/";
+  });
+
+  const served = [
+    { id: "products", surfaces: ["web", "mobile"] as const },
+    { id: "product-data-quality", surfaces: ["web"] as const },
+  ];
+
+  it("switch off: Termékek stays a plain link, the page is not in the menu", () => {
+    auth.session = ownerSession;
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(screen.getByRole("link", { name: "Termékek" })).toHaveAttribute(
+      "href",
+      "/products",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Termékek" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Adatminőség" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switch on, as served: Adatminőség under Termékek", () => {
+    auth.session = { ...ownerSession, navigation: served };
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Termékek" }));
+    expect(screen.getByRole("link", { name: "Termékek" })).toHaveAttribute(
+      "href",
+      "/products",
+    );
+    expect(screen.getByRole("link", { name: "Adatminőség" })).toHaveAttribute(
+      "href",
+      "/products/adatminoseg",
+    );
+  });
+
+  it("the served switch does not override products.view", () => {
+    auth.session = {
+      ...ownerSession,
+      user: { ...ownerSession.user, role: "SERVICE" },
+      navigation: served,
+    };
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(
+      screen.queryByRole("link", { name: "Adatminőség" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Termékek" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("on the page itself only Adatminőség is current, not Termékek", () => {
+    auth.session = { ...ownerSession, navigation: served };
+    navigation.pathname = "/products/adatminoseg";
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(screen.getByRole("link", { name: "Adatminőség" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Termékek" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+});
