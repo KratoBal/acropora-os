@@ -138,19 +138,22 @@ export class DashboardWidgetsService {
   }
 
   /**
-   * The data of the requested widgets. Unknown ids are refused as a bad
-   * request (a typo is not a widget); known ones each get their own result.
+   * The data of the requested widgets, each with its own result.
+   *
+   * AN UNKNOWN ID IS "unavailable", NOT A FAILED REQUEST (owner, 2026-10-02).
+   * Clients and server are released apart: an older phone build may still ask
+   * for an id this server no longer has, and a newer one for an id this
+   * server does not have yet. Refusing the whole request then took every
+   * other widget down with it. Only that id answers "unavailable"; nothing is
+   * loaded for it.
    */
   async widgets(
     user: AuthenticatedUser,
     requested: readonly string[],
   ): Promise<DashboardWidgetsResponse> {
-    const unknown = requested.filter((id) => !isDashboardWidgetId(id));
-    if (unknown.length)
-      throw new BadRequestException(
-        `Ismeretlen widget: ${unknown.join(", ")}.`,
-      );
-    const ids = [...new Set(requested)] as DashboardWidgetId[];
+    const unique = [...new Set(requested)];
+    const unknown = unique.filter((id) => !isDashboardWidgetId(id));
+    const ids = unique.filter(isDashboardWidgetId);
     const viewer = await this.viewer(user);
     const memo = new Map<DashboardWidgetId, Promise<unknown>>();
     const context: WidgetLoadContext = {
@@ -191,7 +194,14 @@ export class DashboardWidgetsService {
         },
       ),
     );
-    return { results: Object.fromEntries(settled) };
+    return {
+      results: {
+        ...Object.fromEntries(
+          unknown.map((id) => [id, { status: "unavailable" } as const]),
+        ),
+        ...Object.fromEntries(settled),
+      },
+    };
   }
 
   private async viewer(user: AuthenticatedUser): Promise<DashboardViewer> {
