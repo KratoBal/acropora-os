@@ -3,9 +3,13 @@ import type { DashboardWidgetId } from "@acropora/types";
 import { aquariumAlertsWidget } from "./aquarium-alerts-widget";
 import { aquariumEquipmentWidget } from "./aquarium-equipment-widget";
 import { expectedArrivalsWidget } from "./expected-arrivals-widget";
+import { incomingInvoicesWidget } from "./incoming-invoices-widget";
 import { maintenanceCalendarWidget } from "./maintenance-calendar-widget";
 import { materialRequestsWidget } from "./material-requests-widget";
+import { missingInvoicesWidget } from "./missing-invoices-widget";
+import { overdueInvoicesWidget } from "./overdue-invoices-widget";
 import { serviceTicketsWidget } from "./service-tickets-widget";
+import { settlementsWidget } from "./settlements-widget";
 import { tasksWidget } from "./tasks-widget";
 import { waterValuesWidget } from "./water-values-widget";
 import { worksheetsWidget } from "./worksheets-widget";
@@ -28,4 +32,8 @@ export const DASHBOARD_WIDGET_VIEWS: Partial<
   "aquarium-alerts": aquariumAlertsWidget,
   "water-values": waterValuesWidget,
   "aquarium-equipment": aquariumEquipmentWidget,
+  "overdue-invoices": overdueInvoicesWidget,
+  "missing-invoices": missingInvoicesWidget,
+  "incoming-invoices": incomingInvoicesWidget,
+  settlements: settlementsWidget,
 };
