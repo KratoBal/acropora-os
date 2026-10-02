@@ -264,4 +264,20 @@ describe("a testreszabható vezérlőpult", () => {
     expect(api.widgets).not.toHaveBeenCalled();
     expect(screen.getByText(/Nincs bekapcsolt widget/)).toBeTruthy();
   });
+  it("a testreszabás teste maga görget, így a lista alja is elérhető (Balázs, 2026-10-02)", async () => {
+    // The drawer locks the page scroll and is a full-height flex column:
+    // without its own scroll container the bottom of the list is cut off.
+    api.layout.mockResolvedValue(layout());
+    api.widgets.mockResolvedValue({ results: {} });
+    const user = userEvent.setup();
+    await renderHome();
+    await user.click(
+      screen.getByRole("button", { name: /Vezérlőpult testreszabása/ }),
+    );
+    const body = within(screen.getByRole("dialog")).getByTestId(
+      "customize-drawer-body",
+    );
+    for (const cls of ["overflow-y-auto", "flex-1", "min-h-0"])
+      expect(body.className.split(/\s+/)).toContain(cls);
+  });
 });
