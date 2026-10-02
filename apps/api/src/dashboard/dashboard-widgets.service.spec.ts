@@ -10,6 +10,8 @@ import {
 } from "@acropora/types";
 
 import type { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
+import type { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
+import type { UnasStockSyncOutboxRepository } from "../inventory/unas-stock-sync-outbox.repository.js";
 import type { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import type { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
 import type { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.repository.js";
@@ -39,7 +41,7 @@ function service(
   options: {
     stored?: unknown;
     capabilities?: ServiceCapabilityValue[];
-    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[6];
+    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[8];
   } = {},
 ) {
   const store: Store = {
@@ -81,6 +83,8 @@ function service(
       {} as DashboardAquariumWidgetsRepository,
       {} as DashboardFinanceWidgetsRepository,
       {} as MissingInvoicesService,
+      {} as StockReconciliationService,
+      {} as UnasStockSyncOutboxRepository,
       options.loaders,
     ),
   };
@@ -169,7 +173,12 @@ describe("the layout", () => {
     assert.equal(r.source, "preset");
     assert.deepEqual(
       r.widgets.filter((w) => w.enabled).map((w) => w.widgetId),
-      ["tasks", "expected-arrivals"],
+      [
+        "tasks",
+        "expected-arrivals",
+        "stock-reconciliation",
+        "stock-sync-outbox",
+      ],
     );
   });
 });

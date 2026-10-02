@@ -134,6 +134,19 @@ export class NotificationLogRepository extends Repository {
     });
   }
 
+  /** V2: `materialRequest.claimed|ordered|cancelled.notified`, the same shape. */
+  async recordMaterialRequestStep(
+    step: "claimed" | "ordered" | "cancelled",
+    outcome: MaterialRequestNotificationOutcome,
+  ): Promise<void> {
+    await this.record({
+      eventType: `materialRequest.${step}.notified`,
+      aggregateType: "MaterialRequest",
+      aggregateId: outcome.materialRequestId,
+      attempts: outcome.attempts,
+    });
+  }
+
   /**
    * A KOZOS TORZS. A ket bejegyzes alakja beture azonos, es ez SZANDEKOS: aki a
    * munkalap-ertesitesek naplojat olvasni tudja, a jegyet is tudja, atirás

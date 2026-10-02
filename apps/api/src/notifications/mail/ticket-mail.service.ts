@@ -176,6 +176,85 @@ export const DEFAULT_MATERIAL_REQUEST_RECEIVED_TEMPLATE = {
   ].join("\n"),
 } as const;
 
+/**
+ * V2 (docs/material-requests/v2-discovery.md, owner decisions 2026-10-02):
+ * claim and order notify the REQUESTER; a withdrawal notifies the HANDLER of
+ * a claimed request. The same sending path as the two above, editable on the
+ * Levelezés page like them.
+ */
+export const MATERIAL_REQUEST_CLAIMED = "MATERIAL_REQUEST_CLAIMED";
+export const MATERIAL_REQUEST_ORDERED = "MATERIAL_REQUEST_ORDERED";
+export const MATERIAL_REQUEST_CANCELLED = "MATERIAL_REQUEST_CANCELLED";
+
+export const DEFAULT_MATERIAL_REQUEST_CLAIMED_TEMPLATE = {
+  subject: "Átvették a beszerzést: {{munkalap_szama}}",
+  body: [
+    "Kedves {{cimzett}}!",
+    "",
+    "{{kuldo_neve}} átvette a(z) {{munkalap_szama}} munkalaphoz kért anyag beszerzését.",
+    "",
+    "Kért tételek:",
+    "{{tetelek}}",
+    "",
+    "Munkalap: {{munkalap_belso_linkje}}",
+  ].join("\n"),
+} as const;
+
+export const DEFAULT_MATERIAL_REQUEST_ORDERED_TEMPLATE = {
+  subject: "Megrendelték az anyagot: {{munkalap_szama}}",
+  body: [
+    "Kedves {{cimzett}}!",
+    "",
+    "{{kuldo_neve}} megrendelte a(z) {{munkalap_szama}} munkalaphoz kért anyagot.",
+    "",
+    "Kért tételek:",
+    "{{tetelek}}",
+    "",
+    "Munkalap: {{munkalap_belso_linkje}}",
+  ].join("\n"),
+} as const;
+
+export const DEFAULT_MATERIAL_REQUEST_CANCELLED_TEMPLATE = {
+  subject: "Visszavonták az anyagigényt: {{munkalap_szama}}",
+  body: [
+    "Kedves {{cimzett}}!",
+    "",
+    "{{kuldo_neve}} visszavonta a(z) {{munkalap_szama}} munkalap anyagigényét, amelynek a beszerzését te intézted. Nincs vele további teendő.",
+    "",
+    "Kért tételek:",
+    "{{tetelek}}",
+    "",
+    "Munkalap: {{munkalap_belso_linkje}}",
+  ].join("\n"),
+} as const;
+
+export type MaterialRequestStep = "claimed" | "ordered" | "cancelled";
+
+const MATERIAL_REQUEST_STEP_MAIL: Record<
+  MaterialRequestStep,
+  {
+    eventId: string;
+    template: { subject: string; body: string };
+    label: string;
+  }
+> = {
+  claimed: {
+    eventId: MATERIAL_REQUEST_CLAIMED,
+    template: DEFAULT_MATERIAL_REQUEST_CLAIMED_TEMPLATE,
+    label: '"Beszerzés átvéve"',
+  },
+  ordered: {
+    eventId: MATERIAL_REQUEST_ORDERED,
+    template: DEFAULT_MATERIAL_REQUEST_ORDERED_TEMPLATE,
+    label: '"Anyag megrendelve"',
+  },
+  cancelled: {
+    eventId: MATERIAL_REQUEST_CANCELLED,
+    template: DEFAULT_MATERIAL_REQUEST_CANCELLED_TEMPLATE,
+    label: '"Anyagigény visszavonva"',
+  },
+};
+
 export type TicketMailOutcome =
   | { readonly kind: "sent" }
   | {
@@ -703,6 +782,45 @@ export class TicketMailService {
     void this.deliverMaterialRequestReceived(input).catch((cause: unknown) => {
       this.logger.warn(
         `Az "anyag beérkezett" levél nem sikerült (${input.materialRequestId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
+    });
+  }
+
+  /** V2: claim, order and withdrawal, through the same body as the two above. */
+  async deliverMaterialRequestStep(input: {
+    step: MaterialRequestStep;
+    materialRequestId: string;
+    worksheetNumber: string | null;
+    worksheetLink: string;
+    itemsText: string;
+    /** The colleague who took the step: `{{kuldo_neve}}`. */
+    actorName: string;
+    recipients: readonly { readonly email: string }[];
+  }): Promise<TicketMailOutcome> {
+    const mail = MATERIAL_REQUEST_STEP_MAIL[input.step];
+    return this.deliverMaterialRequestMail({
+      eventId: mail.eventId,
+      defaultTemplate: mail.template,
+      recipients: input.recipients,
+      values: {
+        cimzett: "Kolléga",
+        kuldo_neve: input.actorName,
+        munkalap_szama: input.worksheetNumber ?? "",
+        tetelek: input.itemsText,
+        munkalap_belso_linkje: input.worksheetLink,
+      },
+      logLabel: mail.label,
+    });
+  }
+
+  notifyMaterialRequestStep(
+    input: Parameters<TicketMailService["deliverMaterialRequestStep"]>[0],
+  ): void {
+    void this.deliverMaterialRequestStep(input).catch((cause: unknown) => {
+      this.logger.warn(
+        `Az anyagigény ${input.step} levele nem sikerült (${input.materialRequestId}): ${
           cause instanceof Error ? cause.message : "ismeretlen hiba"
         }`,
       );

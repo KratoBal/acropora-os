@@ -13,7 +13,49 @@
  * (ha majd a sajat tukret irja) ugyanezt a nevet fogja keresni.
  */
 
-export type MaterialRequestStatusValue = "DRAFT" | "OPEN" | "RECEIVED";
+export type MaterialRequestStatusValue =
+  | "DRAFT"
+  | "OPEN"
+  /** V2: someone claimed the purchase. */
+  | "IN_PROGRESS"
+  /** V2: the handler placed the order (a state, a user, a time; nothing else). */
+  | "ORDERED"
+  /** V2: some items arrived. */
+  | "PARTIALLY_RECEIVED"
+  | "RECEIVED"
+  /** V2: withdrawn before it was ordered. */
+  | "CANCELLED";
+
+/**
+ * The V2 statuses that still need someone (docs/material-requests/v2-discovery.md):
+ * the "Aktív igények" view, the dashboard tile and the attention list count these.
+ */
+export const MATERIAL_REQUEST_ACTIVE_STATUSES = [
+  "OPEN",
+  "IN_PROGRESS",
+  "ORDERED",
+  "PARTIALLY_RECEIVED",
+] as const satisfies readonly MaterialRequestStatusValue[];
+
+/** V2: optional, set by the requester. */
+export const MATERIAL_REQUEST_PRIORITIES = [
+  "NORMAL",
+  "HIGH",
+  "URGENT",
+] as const;
+export type MaterialRequestPriorityValue =
+  (typeof MATERIAL_REQUEST_PRIORITIES)[number];
+
+/**
+ * THE LEADERS of the V2 workflow (owner decision, 2026-10-02): besides the
+ * handler, only they may change a claimed request's state, reassign it, or
+ * withdraw someone else's request.
+ */
+export const MATERIAL_REQUEST_LEADER_ROLES = [
+  "OWNER",
+  "ADMIN",
+  "MANAGER",
+] as const;
 
 export interface MaterialRequestItem {
   id: string;
@@ -23,6 +65,18 @@ export interface MaterialRequestItem {
   quantity: string;
   /** Pl. "db" -- szabad szoveg. */
   unit: string;
+  /**
+   * V2: the quantity as a decimal string ("2.5"), only when the text is a
+   * plain number; `null` otherwise. The ratio ("12/14 db") is shown only
+   * where this exists; elsewhere the item gets a plain "megjött" mark.
+   */
+  quantityValue: string | null;
+  /** V2: how much arrived, decimal string, for a numeric item. */
+  receivedQuantity: string | null;
+  /** V2: when the item counted as arrived. */
+  receivedAt: string | null;
+  /** V2: the item has fully arrived. */
+  arrived: boolean;
 }
 
 /** Egy tetel a felviteli urlapon -- meg nincs azonositoja. */
@@ -45,6 +99,19 @@ export interface MaterialRequestDetail {
   receivedAt: string | null;
   receivedByName: string | null;
   items: MaterialRequestItem[];
+  /** V2: the current handler ("Intézi"), and since when. */
+  handlerId: string | null;
+  handlerName: string | null;
+  handlerAssignedAt: string | null;
+  orderedAt: string | null;
+  orderedByName: string | null;
+  cancelledAt: string | null;
+  cancelledByName: string | null;
+  /** V2: the requester's own short note. */
+  note: string | null;
+  /** V2: `YYYY-MM-DD`, or `null`. */
+  neededBy: string | null;
+  priority: MaterialRequestPriorityValue | null;
 }
 
 export interface MaterialRequestListResponse {
@@ -100,4 +167,122 @@ export interface MaterialRequestHistoryListResponse {
 
 export interface CreateMaterialRequestInput {
   items: MaterialRequestItemInput[];
+  /** V2, optional. */
+  note?: string;
+  /** V2, optional, `YYYY-MM-DD`. */
+  neededBy?: string;
+  /** V2, optional. */
+  priority?: MaterialRequestPriorityValue;
+}
+
+// ---------------------------------------------------------------------------
+// V2 (docs/material-requests/v2-discovery.md)
+
+/** One row of the V2 overview list: the request with its worksheet context. */
+export interface MaterialRequestSummary extends MaterialRequestDetail {
+  worksheetNumber: string | null;
+  customerDisplayName: string;
+  departmentName: string;
+}
+
+export const MATERIAL_REQUEST_VIEWS = [
+  /** OPEN, IN_PROGRESS, ORDERED, PARTIALLY_RECEIVED */
+  "active",
+  /** "Saját beszerzéseim": active, handled by the caller */
+  "mine",
+  "received",
+  "cancelled",
+] as const;
+export type MaterialRequestView = (typeof MATERIAL_REQUEST_VIEWS)[number];
+
+export interface MaterialRequestPage {
+  items: MaterialRequestSummary[];
+  /** Pass back as `cursor` for the next page; `null` on the last page. */
+  nextCursor: string | null;
+}
+
+/** The overview's status cards, scoped like the list. */
+export interface MaterialRequestStatusCounts {
+  open: number;
+  inProgress: number;
+  ordered: number;
+  partiallyReceived: number;
+  /** RECEIVED in the last 7 days (the Figma card says "utóbbi 7 nap"). */
+  receivedLast7Days: number;
+}
+
+export type MaterialRequestEventKindValue =
+  | "SUBMITTED"
+  | "CLAIMED"
+  | "REASSIGNED"
+  | "ORDERED"
+  | "ITEMS_RECEIVED"
+  | "RECEIVED"
+  | "CANCELLED";
+
+export interface MaterialRequestEventEntry {
+  id: string;
+  kind: MaterialRequestEventKindValue;
+  fromStatus: MaterialRequestStatusValue | null;
+  toStatus: MaterialRequestStatusValue | null;
+  actorName: string | null;
+  createdAt: string;
+  /** REASSIGNED: the previous and the new handler's name. */
+  previousHandlerName?: string | null;
+  newHandlerName?: string | null;
+}
+
+export interface MaterialRequestCommentEntry {
+  id: string;
+  body: string;
+  authorName: string | null;
+  createdAt: string;
+}
+
+/** What THIS caller may do now, computed by the server from the same rules it enforces. */
+export interface MaterialRequestActions {
+  claim: boolean;
+  reassign: boolean;
+  order: boolean;
+  receiveItems: boolean;
+  receive: boolean;
+  cancel: boolean;
+  comment: boolean;
+}
+
+export interface MaterialRequestFullDetail extends MaterialRequestSummary {
+  worksheetHref: string;
+  events: MaterialRequestEventEntry[];
+  comments: MaterialRequestCommentEntry[];
+  actions: MaterialRequestActions;
+}
+
+/** A 409 on a lost claim carries the authoritative current request. */
+export interface MaterialRequestConflictBody {
+  message: string;
+  current: MaterialRequestFullDetail;
+}
+
+export interface MaterialRequestReceiveItemsInput {
+  items: {
+    itemId: string;
+    /** Numeric items: the new TOTAL received (not a delta), decimal string. */
+    receivedQuantity?: string;
+    /** Text items: the "megjött" mark. */
+    arrived?: boolean;
+  }[];
+}
+
+export interface MaterialRequestReassignInput {
+  handlerId: string;
+}
+
+export interface MaterialRequestCommentInput {
+  body: string;
+}
+
+/** A user who can be chosen as handler in the reassignment list. */
+export interface MaterialRequestHandlerOption {
+  id: string;
+  displayName: string;
 }

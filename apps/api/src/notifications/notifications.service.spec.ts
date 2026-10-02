@@ -58,6 +58,7 @@ function log() {
   const written: NotificationOutcome[] = [];
   const jobs: ServiceJobNotificationOutcome[] = [];
   const materialRequests: MaterialRequestNotificationOutcome[] = [];
+  const steps: string[] = [];
   const value = {
     recordWorksheetAssignment: async (outcome: NotificationOutcome) => {
       written.push(outcome);
@@ -77,8 +78,15 @@ function log() {
     ) => {
       materialRequests.push(outcome);
     },
+    recordMaterialRequestStep: async (
+      step: string,
+      outcome: MaterialRequestNotificationOutcome,
+    ) => {
+      steps.push(step);
+      materialRequests.push(outcome);
+    },
   } as unknown as NotificationLogRepository;
-  return { log: value, written, jobs, materialRequests };
+  return { log: value, written, jobs, materialRequests, steps };
 }
 
 function tokens(
@@ -666,6 +674,24 @@ describe("az anyagigény-értesítések célpontja", () => {
    * munkalape helyett, ez az allitas fogja meg -- a `worksheet-9` es a
    * `request-1` ma szandekosan KULONBOZIK.
    */
+  it("V2: claim, order and withdrawal each say what happened, target the same worksheet, and are logged by step", async () => {
+    const titles: string[] = [];
+    for (const step of ["claimed", "ordered", "cancelled"] as const) {
+      const written = log();
+      const { service, sent } = serviceFor(written);
+      await service.deliverMaterialRequestStep({ ...receivedNotice, step });
+      assert.equal(sent[0]?.data?.targetType, "materialRequest");
+      assert.equal(sent[0]?.data?.targetId, "worksheet-9");
+      assert.deepEqual(written.steps, [step]);
+      titles.push(sent[0]?.title ?? "");
+    }
+    assert.deepEqual(titles, [
+      "Beszerzés átvéve",
+      "Anyag megrendelve",
+      "Anyagigény visszavonva",
+    ]);
+  });
+
   it("NEM az igény saját azonosítóját küldi", async () => {
     const written = log();
     const { service, sent } = serviceFor(written);
