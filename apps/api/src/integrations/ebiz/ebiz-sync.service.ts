@@ -86,6 +86,19 @@ export interface EbizSyncStore {
   ): Promise<void>;
 }
 
+/**
+ * THE FIRST ISSUE DATE WE TAKE FROM eBIZ (owner, 2026-10-02 19:44 UTC: "Ebizbol
+ * nem kellenek a regi szamlak. Csak oktober 1-tol"). The older invoices are
+ * never imported, neither on the first run nor later. `OTP_EBIZ_SINCE`
+ * (YYYY-MM-DD) can move it; anything else falls back to the owner's date.
+ */
+export const EBIZ_DEFAULT_SINCE = "2026-10-01";
+
+export function ebizSince(env: NodeJS.ProcessEnv): string {
+  const raw = env.OTP_EBIZ_SINCE?.trim() ?? "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : EBIZ_DEFAULT_SINCE;
+}
+
 export const EBIZ_SYNC_STORE = Symbol("EBIZ_SYNC_STORE");
 
 const codeOf = (error: unknown, fallback: string): string => {
@@ -125,7 +138,10 @@ export class EbizSyncService {
       failedCount: 0,
     };
     try {
-      const invoices = await this.listAll();
+      const since = ebizSince(this.env);
+      const invoices = (await this.listAll()).filter(
+        (invoice) => invoice.issueDate.slice(0, 10) >= since,
+      );
       counts.fetchedCount = invoices.length;
       const known = await this.store.existing(
         invoices.map((invoice) => String(invoice.id)),

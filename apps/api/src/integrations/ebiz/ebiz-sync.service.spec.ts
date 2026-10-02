@@ -9,7 +9,9 @@ import {
 } from "./ebiz.client.js";
 import { ebizItem } from "./ebiz-invoice.spec.js";
 import {
+  EBIZ_DEFAULT_SINCE,
   EbizSyncService,
+  ebizSince,
   type EbizSyncCounts,
   type EbizSyncStore,
 } from "./ebiz-sync.service.js";
@@ -131,7 +133,13 @@ class FakeDocuments {
   }
 }
 
-const STORE_ON = { DOCUMENT_STORE_ROOT: "/kitalalt/tar" };
+// The fixtures are issued 2026-09-30, before the owner's October 1 cutoff;
+// the paging and storing tests open the window so the cutoff is not what
+// they measure. The cutoff has its own tests below.
+const STORE_ON = {
+  DOCUMENT_STORE_ROOT: "/kitalalt/tar",
+  OTP_EBIZ_SINCE: "2000-01-01",
+};
 
 function service(
   client: FakeClient,
@@ -223,9 +231,9 @@ describe("az eBIZ napi szinkronja", () => {
   it("dokumentumtár nélkül a PDF-et le sem kéri, okkal jelöli, és később pótolja", async () => {
     const store = new FakeStore();
     const documents = new FakeDocuments();
-    await service(new FakeClient(many(1)), store, documents, {}).run(
-      "SCHEDULED",
-    );
+    await service(new FakeClient(many(1)), store, documents, {
+      OTP_EBIZ_SINCE: "2000-01-01",
+    }).run("SCHEDULED");
     assert.equal(
       store.rows.get("1")!.pdfMissingReason,
       "DOCUMENT_STORE_NOT_CONFIGURED",
@@ -263,5 +271,42 @@ describe("az eBIZ napi szinkronja", () => {
         `${perOffset}: ${client.listCalls.length} calls`,
       );
     }
+  });
+});
+
+describe("the October 1 cutoff (owner, 2026-10-02 19:44 UTC)", () => {
+  it("imports nothing issued before 2026-10-01 by default, on the first run too", async () => {
+    const client = new FakeClient([
+      ebizItem({
+        id: 1,
+        invoiceNumber: "EINV000000700",
+        issueDate: "2026-09-30",
+      }),
+      ebizItem({
+        id: 2,
+        invoiceNumber: "EINV000000812",
+        issueDate: "2026-10-01",
+      }),
+      ebizItem({
+        id: 3,
+        invoiceNumber: "EINV000000813",
+        issueDate: "2026-10-02T09:00:00",
+      }),
+    ]);
+    const store = new FakeStore();
+    const result = await service(client, store, new FakeDocuments(), {
+      DOCUMENT_STORE_ROOT: "/kitalalt/tar",
+    }).run("SCHEDULED");
+    assert.equal(result.state, "APPLIED");
+    assert.deepEqual([...store.rows.keys()].sort(), ["2", "3"]);
+    assert.equal(store.runs[0]!.counts!.fetchedCount, 2);
+  });
+
+  it("reads OTP_EBIZ_SINCE, and falls back to the owner's date on anything malformed", () => {
+    assert.equal(EBIZ_DEFAULT_SINCE, "2026-10-01");
+    assert.equal(ebizSince({}), "2026-10-01");
+    assert.equal(ebizSince({ OTP_EBIZ_SINCE: "2026-11-01" }), "2026-11-01");
+    assert.equal(ebizSince({ OTP_EBIZ_SINCE: "tegnap" }), "2026-10-01");
+    assert.equal(ebizSince({ OTP_EBIZ_SINCE: "" }), "2026-10-01");
   });
 });
