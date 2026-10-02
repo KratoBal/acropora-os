@@ -629,14 +629,30 @@ export class MissingInvoicesService {
    * A KÖNYVELŐI CSOMAG: a hónap Megvan-tételeinek eredetijei egy PDF-ben. A
    * díjbekérő, a nem a cégre szóló és a hiányzó nem Megvan, tehát nem is kerül
    * bele. Összevont számlánál a fájl az eredetit hordozó forrásé.
+   *
+   * A SZTORNÓZOTT VÁSÁRLÁS IS BEKERÜL (acrobot 25981): az eredeti számla ÉS a
+   * jóváíró (az könyvelendő bizonylat), egy sorban, jelölve, hogy összetartoznak,
+   * és mi lett a visszatérítéssel.
    */
   async accountantPackage(
     month: string,
   ): Promise<{ fileName: string; content: Buffer }> {
     const computed = await this.compute();
     const found = computed.items.filter(
-      (item) => item.month === month && item.state === "FOUND",
+      (item) =>
+        item.month === month &&
+        (item.state === "FOUND" || item.refund !== null),
     );
+    const labelOf = (item: (typeof found)[number]) =>
+      item.refund
+        ? `sztornózott vásárlás: az eredeti számla és a jóváíró együtt; ${
+            item.refund.receivedOn
+              ? `a visszatérítés megjött (${item.refund.receivedOn})`
+              : item.state === "REFUND_MISSING"
+                ? `a visszatérítés elmaradt (határidő: ${item.refund.due})`
+                : `a visszatérítés várható (határidő: ${item.refund.due})`
+          }`
+        : undefined;
     const documentsOf = (id: string) =>
       (computed.outcomes.get(id)?.documents ?? []).map((document) => ({
         number: document.number,
@@ -662,6 +678,7 @@ export class MissingInvoicesService {
         amount: item.amount,
         currency: item.currency,
         paperOriginal: item.paperOriginal,
+        ...(labelOf(item) ? { label: labelOf(item) } : {}),
         documents: documentsOf(item.id).map((d) => ({
           number: d.number,
           file: (d.originalId && files.get(d.originalId)) || null,

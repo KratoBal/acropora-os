@@ -204,6 +204,56 @@ describe("the accountant package (pdf)", () => {
   });
 });
 
+/*
+  A SZTORNÓZOTT VÁSÁRLÁS A CSOMAGBAN (acrobot 25981). MI PIROSÍT: ha a
+  jóváíró (könyvelendő bizonylat) vagy az eredeti számla kimaradna; ha a kettő
+  két külön sorba kerülne, vagy a sor nem mondaná meg, hogy összetartoznak és
+  mi lett a visszatérítéssel; ha egy számla nélküli tétel is bekerülne.
+*/
+describe("the accountant package with a cancelled purchase", () => {
+  it("the original and the credit note in one row, marked as belonging together", async () => {
+    const { missing } = service({
+      debits: [
+        debit("2026-08-21", 85000, "Tesla Inc", {
+          narrative: "2026.08.17 7413124583 Tesla Inc -APPLE",
+        }),
+        debit("2026-08-22", 4321, "Senki Bt."),
+      ],
+      documents: [
+        document({
+          id: "nav-orig",
+          source: "NAV",
+          number: "4042A0000031808",
+          date: "2026-08-17",
+          gross: D(0),
+          supplierName: "Tesla Hungary Kft.",
+          hasOriginal: false,
+        }),
+        document({
+          id: "cr",
+          source: "SZAMLAZZ",
+          number: "CR4042A0000012507",
+          date: "2026-08-25",
+          gross: D(-85000),
+          supplierName: "Tesla Hungary Kft.",
+        }),
+      ],
+      files: { cr: await pdfOfPages(1) },
+    });
+    const { content } = await missing.accountantPackage("2026-08");
+    assert.equal((await PDFDocument.load(content)).getPageCount(), 1 + 1);
+    const cover = (await pdfTextLines(new Uint8Array(content))).join("\n");
+    for (const expected of [
+      "Tesla Inc | 85 000 HUF",
+      "sztornózott vásárlás: az eredeti számla és a jóváíró együtt; a visszatérítés várható (határidő: 2026-09-24)",
+      "4042A0000031808: nincs tárolt fájl",
+      "CR4042A0000012507: csatolva",
+    ])
+      assert.ok(cover.includes(expected), `a borítón nincs: ${expected}`);
+    assert.ok(!cover.includes("Senki Bt."), "számla nélküli tétel a csomagban");
+  });
+});
+
 describe("buildAccountantPackage", () => {
   it("names on the cover what could not be attached, instead of dropping it silently", async () => {
     const { pdf, outcomes } = await buildAccountantPackage({
