@@ -43,6 +43,7 @@ function createFakeSessionRepository(): SessionRepository & {
     },
     async create(userId: string, token: string, ttlMs: number) {
       const stored: StoredSession = {
+        kind: "USER",
         id: `fake-session-${++counter}`,
         userId,
         expiresAt: new Date(Date.now() + ttlMs),

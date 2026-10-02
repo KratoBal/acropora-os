@@ -143,6 +143,17 @@ export class AuthController {
     };
   }
 
+  @Post("assistant-sessions")
+  async issueAssistant(
+    @Req() request: AuthenticatedRequest,
+    @CurrentUser() user: AuthenticatedUser,
+    @Res({ passthrough: true })
+    response: CookieResponse & { setHeader(name: string, value: string): void },
+  ): Promise<Session> {
+    response.setHeader("Cache-Control", "no-store");
+    return this.authService.issueAssistantSession(user, request.sessionKind);
+  }
+
   @Post("logout")
   async logout(
     @Req() request: AuthenticatedRequest,

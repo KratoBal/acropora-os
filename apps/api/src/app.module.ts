@@ -1,7 +1,13 @@
-import { Module } from "@nestjs/common";
+import {
+  Module,
+  type MiddlewareConsumer,
+  type NestModule,
+} from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 
 import { AppController } from "./app.controller.js";
+import { AssistantReadonlyGuard } from "./auth/guards/assistant-readonly.guard.js";
+import { AssistantAuditMiddleware } from "./auth/assistant-audit.middleware.js";
 import { AppService } from "./app.service.js";
 import { AquariumsModule } from "./aquariums/aquariums.module.js";
 import { AuthModule } from "./auth/auth.module.js";
@@ -103,7 +109,12 @@ import { SearchModule } from "./search/search.module.js";
   providers: [
     AppService,
     { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: AssistantReadonlyGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(AssistantAuditMiddleware).forRoutes("{*path}");
+  }
+}
