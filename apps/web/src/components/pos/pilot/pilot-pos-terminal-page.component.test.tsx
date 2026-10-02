@@ -372,7 +372,15 @@ describe("PilotPosTerminalPage", () => {
       "Hozzáadva: Red Sea ReefMat 500. A kosárban: 1 db",
     );
 
-    fireEvent.click(screen.getAllByText("Red Sea ReefMat 500")[0]!);
+    // A real click moves focus to the clicked button; `fireEvent.click`
+    // does not, so without this the search box would keep its autoFocus
+    // and the focus assertion below could not fail.
+    const resultButton = screen
+      .getAllByText("Red Sea ReefMat 500")[0]!
+      .closest("button")!;
+    resultButton.focus();
+    expect(document.activeElement).toBe(resultButton);
+    fireEvent.click(resultButton);
 
     const rows = container.querySelectorAll("[data-variant-id]");
     expect(rows).toHaveLength(1);
