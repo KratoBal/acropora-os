@@ -12,3 +12,6 @@ apps/mobile/assets/expo.icon/icon.json
 # byte-for-byte what the Python reference wrote, so a re-export diffs cleanly.
 packages/jev/redact-vectors
 packages/jev/src/redact-r11-data.ts
+
+# OTP eBIZ OpenAPI description, kept byte-for-byte as OTP ships it (docs/integrations).
+docs/integrations/otp-ebiz-core.yaml

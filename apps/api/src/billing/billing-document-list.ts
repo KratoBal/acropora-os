@@ -250,6 +250,8 @@ export interface ExternalListRow {
   cancelled: boolean;
   /** A Számlázz.hu kifizetései (`kifizetesek`), a saját jelölés kiszűréséhez. */
   payments: Prisma.JsonValue;
+  /** `SZAMLAZZ` vagy `EBIZ` (2026-10-02). */
+  source: string;
 }
 
 /**
@@ -428,6 +430,8 @@ export function externalPaymentFields(
     currency: string;
     cancelled: boolean;
     payments?: Prisma.JsonValue;
+    /** `SZAMLAZZ` (default) or `EBIZ`. */
+    source?: string;
   },
   simplePay: readonly SimplePaySettlementLine[] = [],
   marks: readonly OwnPaymentMark[] = [],
@@ -452,8 +456,19 @@ export function externalPaymentFields(
     }),
     paidAmount: row.paidAmount.toFixed(decimals),
     lastPaymentDate: calendarDay(row.lastPaymentDate),
-    paymentSource: paymentsKnown ? ("SZAMLAZZ" as const) : null,
+    paymentSource: paymentsKnown
+      ? row.source === "EBIZ"
+        ? ("EBIZ" as const)
+        : ("SZAMLAZZ" as const)
+      : null,
   });
+  /**
+   * AN eBIZ INVOICE IS PAID WHEN eBIZ SAYS SO (`externalPaymentStatus`,
+   * projected into `paymentsKnown` / `paidAmount` by the sync), and nothing
+   * else applies: the Számlázz.hu marks, the SimplePay lines and the
+   * payment-method guess are all about Számlázz.hu invoices.
+   */
+  if (row.source === "EBIZ") return recorded(row.paymentsKnown === true);
   /**
    * A FEED SZERINTI „FIZETVE” NYER: az összeg és a dátum a feedé. A FORRÁST
    * viszont a saját, beírt jelölésünk adja, ha van (Balázs, 2026-10-02 11:14
@@ -546,6 +561,7 @@ export function toExternalListItem(
     opens: "EXTERNAL_DETAIL",
     origin: "EXTERNAL",
     externalKindLabel: externalKindLabel(row.kindCode),
+    externalSource: row.source === "EBIZ" ? "EBIZ" : "SZAMLAZZ",
     ...externalPaymentFields(row, simplePay, marks),
   };
 }

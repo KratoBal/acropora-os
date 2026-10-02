@@ -68,6 +68,7 @@ export const EXTERNAL_LIST_SELECT = {
   customerTaxNumber: true,
   cancelled: true,
   payments: true,
+  source: true,
 } satisfies Prisma.ExternalBillingDocumentSelect;
 
 /**

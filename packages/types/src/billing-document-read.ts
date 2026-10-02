@@ -94,6 +94,11 @@ export interface BillingDocumentListItem {
    */
   externalKindLabel: string | null;
   /**
+   * Külső bizonylatnál honnan jött: a Számlázz.hu feedjéből vagy az OTP eBIZ
+   * szinkronjából (2026-10-02); a mieinknél hiányzik vagy `null`.
+   */
+  externalSource?: ExternalBillingSource | null;
+  /**
    * A KIFIZETETTSÉG (Balázs, GLS szál, 2026-10-01), a bejövő listával azonos
    * mezőnevekkel és számítással (`paymentStateOf`). `null`: nincs forrásunk
    * rá (a saját bizonylat), vagy nem fizetendő (sztornózott számla).
@@ -118,8 +123,13 @@ export interface BillingDocumentListItem {
  * meg (a rendelésszám szerint), és ha abban visszatérítés is van, azt jelöljük
  * (acrobot 25979).
  */
+/** Egy külső kimenő bizonylat forrása. */
+export type ExternalBillingSource = "SZAMLAZZ" | "EBIZ";
+
 export type BillingPaymentSource =
   | "SZAMLAZZ"
+  /** Az OTP eBIZ saját fizetési állapota (2026-10-02). */
+  | "EBIZ"
   | "CARD_AT_ORDER"
   | "CASH_AT_ORDER"
   | "SIMPLEPAY"
@@ -159,7 +169,11 @@ export interface BillingExternalDocumentLine {
 /** `GET /billing/external-documents/:id`: a külső bizonylat, csak olvasásra. */
 export interface BillingExternalDocumentDetail {
   id: string;
-  source: "SZAMLAZZ";
+  source: ExternalBillingSource;
+  /** Van-e letölthető PDF (`GET .../:id/pdf`); eBIZ-nél a szinkron tölti le. */
+  pdfAvailable: boolean;
+  /** Ha a letöltés megpróbálta és nem sikerült: a hibakód; különben `null`. */
+  pdfMissingReason: string | null;
   kindCode: string;
   kindLabel: string;
   documentNumber: string;

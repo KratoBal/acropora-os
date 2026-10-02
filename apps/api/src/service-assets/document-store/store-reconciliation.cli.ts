@@ -176,6 +176,21 @@ const OWNER_QUERIES: Record<DocumentOwner, () => Promise<RowWithSize[]>> = {
       },
       sizeBytes: null,
     })),
+  /** A külső kimenő számla PDF-je: ugyanaz a minta, mint az `invoice`-é. */
+  "external-invoice": async () =>
+    (
+      await prisma.externalBillingDocument.findMany({
+        where: { pdfStorageKey: { not: null } },
+        select: { id: true, pdfStorageKey: true },
+      })
+    ).map((sor) => ({
+      key: {
+        owner: "external-invoice" as const,
+        ownerId: sor.id,
+        documentId: sor.pdfStorageKey!.split("/").pop() ?? sor.pdfStorageKey!,
+      },
+      sizeBytes: null,
+    })),
 };
 
 const fetchFromPrisma: FetchRowsWithStorageKey = async () => {

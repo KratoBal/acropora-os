@@ -16,6 +16,7 @@ import {
   INVOICE_FORMAT_LABELS,
   PERMISSIONS,
   type BillingExternalDocumentDetail,
+  type ExternalBillingSource,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -31,11 +32,23 @@ import { OWN_MARK_SOURCE_LABELS, PaymentBadge } from "./billing-payment";
 const vatRateText = (rate: string) =>
   /^\d+(\.\d+)?$/.test(rate) ? `${trimDecimal(rate)}%` : rate;
 
+/** A külső bizonylat forrásának neve, a lapon mindenhol ugyanígy. */
+export const EXTERNAL_SOURCE_NAME: Record<ExternalBillingSource, string> = {
+  SZAMLAZZ: "Számlázz.hu",
+  EBIZ: "OTP eBIZ",
+};
+
+/** Miért nincs PDF, egy mondatban (a hibakód a lap alján marad). */
+const PDF_MISSING_TEXT: Record<string, string> = {
+  DOCUMENT_STORE_NOT_CONFIGURED:
+    "Nincs letöltve: a dokumentumtár nincs beállítva.",
+};
+
 /**
- * A SZÁMLÁZZ.HU-BÓL KAPOTT KIMENŐ SZÁMLA ADATLAPJA (acrobot 25812): ugyanaz a
- * kinézet, mint a mieinké, CSAK OLVASÁSRA. Nincs szerkesztés, sztornó,
- * újraküldés, és PDF sincs: a Számlázz.hu nem adja, a számla egy másik
- * számlázóban készült.
+ * A KÜLSŐ KIMENŐ SZÁMLA ADATLAPJA (acrobot 25812): ugyanaz a kinézet, mint a
+ * mieinké, CSAK OLVASÁSRA. Nincs szerkesztés, sztornó, újraküldés. A
+ * Számlázz.hu-ból jött számlához PDF nincs (a Számlázz.hu nem adja); az OTP
+ * eBIZ-ből jötthöz a napi szinkron letölti (2026-10-02).
  */
 export function BillingExternalDocumentPage({
   documentId,
@@ -52,6 +65,8 @@ export function BillingExternalDocumentPage({
   );
   useAssistantEntity("Külső számla", detail?.id, detail?.documentNumber);
   const [error, setError] = useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -78,6 +93,21 @@ export function BillingExternalDocumentPage({
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  const openPdf = async () => {
+    setPdfBusy(true);
+    setPdfError(null);
+    try {
+      const blob = await billingDocumentsApi.externalPdf(token, documentId);
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (cause) {
+      setPdfError(
+        cause instanceof Error ? cause.message : "A PDF nem tölthető le.",
+      );
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   if (!canView)
     return (
@@ -107,6 +137,9 @@ export function BillingExternalDocumentPage({
       </PilotThemeRoot>
     );
 
+  const sourceName = EXTERNAL_SOURCE_NAME[detail.source];
+  const ebiz = detail.source === "EBIZ";
+
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
       <Link
@@ -130,7 +163,7 @@ export function BillingExternalDocumentPage({
           </p>
         </div>
         <div className="flex flex-col items-start gap-2 lg:items-end">
-          <ExternalBadge />
+          <ExternalBadge source={detail.source} />
           {detail.cancelled ? (
             <span className="rounded-full bg-pilot-red-50 px-2.5 py-1 text-xs font-semibold text-pilot-red-700">
               Sztornózott
@@ -142,7 +175,11 @@ export function BillingExternalDocumentPage({
       <Alert
         variant="info"
         title="Külső bizonylat, csak olvasásra"
-        description="Ez a számla egy másik számlázóban készült, a Számlázz.hu továbbította. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra, és PDF sincs hozzá."
+        description={
+          ebiz
+            ? "Ez a számla az OTP eBIZ-ben készült, a napi szinkron hozta át. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra."
+            : "Ez a számla egy másik számlázóban készült, a Számlázz.hu továbbította. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra, és PDF sincs hozzá."
+        }
       />
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -221,7 +258,7 @@ export function BillingExternalDocumentPage({
         <aside className="flex flex-col gap-6">
           <PilotSection
             title="Összesítés"
-            subtitle="Ahogy a Számlázz.hu továbbította."
+            subtitle={`Ahogy a(z) ${sourceName} adta.`}
           >
             <PilotTotals
               rows={[
@@ -246,7 +283,11 @@ export function BillingExternalDocumentPage({
           </PilotSection>
           <PilotSection
             title="Kifizetés"
-            subtitle="Ahogy a Számlázz.hu nyilvántartja, a saját banki párosításával együtt."
+            subtitle={
+              ebiz
+                ? "Ahogy az OTP eBIZ nyilvántartja."
+                : "Ahogy a Számlázz.hu nyilvántartja, a saját banki párosításával együtt."
+            }
           >
             <PaymentBadge
               paymentState={detail.paymentState}
@@ -301,7 +342,10 @@ export function BillingExternalDocumentPage({
               </div>
             ) : null}
           </PilotSection>
-          <PilotSection title="Számlázz.hu" subtitle="A továbbítás adatai.">
+          <PilotSection
+            title={sourceName}
+            subtitle={ebiz ? "A szinkron adatai." : "A továbbítás adatai."}
+          >
             <PilotDataGrid>
               <PilotDataItem label="Bizonylatszám">
                 {detail.documentNumber}
@@ -311,14 +355,39 @@ export function BillingExternalDocumentPage({
                 {detail.orderNumber ?? "—"}
               </PilotDataItem>
               <PilotDataItem label="PDF">
-                Nincs (a Számlázz.hu nem adja)
+                {detail.pdfAvailable ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={pdfBusy}
+                    onClick={() => void openPdf()}
+                  >
+                    {pdfBusy ? "Megnyitás…" : "PDF megnyitása"}
+                  </Button>
+                ) : ebiz ? (
+                  detail.pdfMissingReason ? (
+                    (PDF_MISSING_TEXT[detail.pdfMissingReason] ??
+                    `Nem sikerült letölteni (${detail.pdfMissingReason}).`)
+                  ) : (
+                    "Még nincs letöltve; a következő szinkron megpróbálja."
+                  )
+                ) : (
+                  "Nincs (a Számlázz.hu nem adja)"
+                )}
               </PilotDataItem>
-              <PilotDataItem label="Változat">
-                {detail.versionCount > 1
-                  ? `a legutóbbi a ${detail.versionCount} közül`
-                  : "egy"}
-              </PilotDataItem>
+              {ebiz ? null : (
+                <PilotDataItem label="Változat">
+                  {detail.versionCount > 1
+                    ? `a legutóbbi a ${detail.versionCount} közül`
+                    : "egy"}
+                </PilotDataItem>
+              )}
             </PilotDataGrid>
+            {pdfError ? (
+              <p role="alert" className="mt-3 text-sm text-pilot-red-700">
+                {pdfError}
+              </p>
+            ) : null}
           </PilotSection>
         </aside>
       </div>
@@ -326,11 +395,18 @@ export function BillingExternalDocumentPage({
   );
 }
 
-/** A „Külső” jelölés: a listán és az adatlapon ugyanaz. */
-export function ExternalBadge() {
+/**
+ * A „Külső” jelölés: a listán és az adatlapon ugyanaz. Az OTP eBIZ-ből jött
+ * számlán a forrás is ott áll (2026-10-02); a Számlázz.hu-s marad „Külső”.
+ */
+export function ExternalBadge({
+  source = "SZAMLAZZ",
+}: {
+  source?: ExternalBillingSource | null;
+}) {
   return (
     <span className="inline-flex items-center rounded-full bg-pilot-grey-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-pilot-grey-700">
-      Külső
+      {source === "EBIZ" ? "Külső · eBIZ" : "Külső"}
     </span>
   );
 }

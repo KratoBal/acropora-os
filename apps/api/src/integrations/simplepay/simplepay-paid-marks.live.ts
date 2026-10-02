@@ -104,7 +104,10 @@ export async function loadRefundsAfterMarks(
 ): Promise<RefundAfterMark[]> {
   if (written.length === 0) return [];
   const documents = await prisma.externalBillingDocument.findMany({
-    where: { documentNumber: { in: written.map((w) => w.invoiceNumber) } },
+    where: {
+      source: "SZAMLAZZ",
+      documentNumber: { in: written.map((w) => w.invoiceNumber) },
+    },
     orderBy: { feedReceivedAt: "desc" },
     select: { documentNumber: true, orderNumber: true },
   });

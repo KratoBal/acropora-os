@@ -114,6 +114,19 @@ export function syncRunState(run: SyncRunSnapshot | null): SourceState {
   return { state: "ok", detail: null };
 }
 
+/**
+ * OTP eBIZ (2026-10-02): without `OTP_EBIZ_API_KEY` the sync never runs, and
+ * that is "not configured", not an error and not "has not run yet"; with the
+ * key it is a sync like the others.
+ */
+export function ebizState(
+  configured: boolean,
+  run: SyncRunSnapshot | null,
+): SourceState {
+  if (!configured) return { state: "no-data", detail: "Nincs beállítva." };
+  return syncRunState(run);
+}
+
 const SEVERITY: Record<DashboardSystemState, number> = {
   "no-data": 0,
   ok: 1,

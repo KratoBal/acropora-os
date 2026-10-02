@@ -1,4 +1,12 @@
-import { Controller, Get, NotFoundException, Param } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Header,
+  Inject,
+  NotFoundException,
+  Param,
+  StreamableFile,
+} from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import {
   PERMISSIONS,
@@ -20,6 +28,9 @@ import {
 } from "./billing-document-list.repository.js";
 import { UNAS_SHOP_ORDER_PREFIX } from "../integrations/simplepay/simplepay-settlement.repository.js";
 import type { ExternalInvoicePayment } from "./external-szamlazz-invoice.js";
+import { assertStorageKeyMatches } from "../service-assets/document-store/document-storage-key.js";
+import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 
 /** A lista alakjából az adatlap vevő-blokkjának neve és jelzője. */
 const customerFromOrder = (name: {
@@ -33,14 +44,19 @@ const customerFromOrder = (name: {
 const day = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 
 /**
- * A SZÁMLÁZZ.HU-BÓL KAPOTT KIMENŐ SZÁMLA ADATLAPJA, CSAK OLVASÁSRA (acrobot
- * 25812): nincs szerkesztés, sztornó, újraküldés, és PDF sincs (a Számlázz.hu
- * nem adja). A jog ugyanaz, mint a listáé: `billing.view`.
+ * A KÜLSŐ KIMENŐ SZÁMLA ADATLAPJA, CSAK OLVASÁSRA (acrobot 25812): nincs
+ * szerkesztés, sztornó, újraküldés. Forrás: a Számlázz.hu feedje (PDF-et nem
+ * ad) vagy az OTP eBIZ szinkron (2026-10-02; a PDF-et letölti és eltárolja).
+ * A jog ugyanaz, mint a listáé: `billing.view`.
  */
 @Controller("billing/external-documents")
 @RequirePermissions(PERMISSIONS.BILLING_VIEW)
 export class ExternalBillingDocumentsController {
   private readonly database = prisma;
+
+  constructor(
+    @Inject(DOCUMENT_STORE) private readonly documents: DocumentStore,
+  ) {}
 
   @Get(":id")
   async detail(
@@ -57,7 +73,9 @@ export class ExternalBillingDocumentsController {
       ) ?? [];
     return {
       id: row.id,
-      source: "SZAMLAZZ",
+      source: row.source === "EBIZ" ? "EBIZ" : "SZAMLAZZ",
+      pdfAvailable: row.pdfStorageKey !== null,
+      pdfMissingReason: row.pdfStorageKey ? null : row.pdfMissingReason,
       kindCode: row.kindCode,
       kindLabel: externalKindLabel(row.kindCode),
       documentNumber: row.documentNumber,
@@ -116,5 +134,36 @@ export class ExternalBillingDocumentsController {
       versionCount: row.versionCount,
       receivedAt: row.feedReceivedAt.toISOString(),
     };
+  }
+
+  /**
+   * THE STORED PDF, AS IT CAME FROM THE SOURCE. Only reads what the sync
+   * already stored; it never calls eBIZ, so it has no side effect (no entry
+   * in `assistant-readonly.policy.ts`). No PDF: 404.
+   */
+  @Get(":id/pdf")
+  @Header("Cache-Control", "private, no-store")
+  async pdf(@Param("id") id: string): Promise<StreamableFile> {
+    const row = await this.database.externalBillingDocument.findUnique({
+      where: { id },
+      select: { id: true, documentNumber: true, pdfStorageKey: true },
+    });
+    if (!row?.pdfStorageKey)
+      throw new NotFoundException("Ehhez a külső bizonylathoz nincs PDF.");
+    const key = {
+      owner: "external-invoice" as const,
+      ownerId: row.id,
+      documentId: row.pdfStorageKey.split("/").pop() ?? "",
+    };
+    assertStorageKeyMatches(row.pdfStorageKey, key);
+    const bytes = await this.documents.get(key);
+    if (!bytes)
+      throw new NotFoundException("A PDF nem található a dokumentumtárban.");
+    const fileName = `${row.documentNumber}.pdf`;
+    return new StreamableFile(bytes, {
+      type: "application/pdf",
+      length: bytes.length,
+      disposition: `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    });
   }
 }

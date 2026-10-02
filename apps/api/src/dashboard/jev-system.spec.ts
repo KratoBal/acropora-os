@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  ebizState,
   jevState,
   navState,
   summarizeDecisionRuns,
@@ -127,5 +128,46 @@ describe("Rendszerállapot", () => {
     assert.equal(jevState({ runs: 3, errors: 3 }).state, "error");
     assert.equal(jevState({ runs: 3, errors: 1 }).state, "warning");
     assert.equal(jevState({ runs: 3, errors: 0 }).state, "ok");
+  });
+});
+
+describe("OTP eBIZ a Rendszerállapotban", () => {
+  const at = new Date("2026-10-02T05:10:00.000Z");
+  it("kulcs nélkül „Nincs beállítva”, nem hiba és nem „még nem futott”", () => {
+    assert.deepEqual(ebizState(false, null), {
+      state: "no-data",
+      detail: "Nincs beállítva.",
+    });
+    // a régi futás sem számít, amíg nincs kulcs
+    assert.equal(
+      ebizState(false, { status: "FAILED", at, errorCode: "X" }).state,
+      "no-data",
+    );
+  });
+  it("kulccsal ugyanúgy számol, mint a többi szinkron", () => {
+    assert.equal(ebizState(true, null).detail, "Még nem futott.");
+    assert.equal(
+      ebizState(true, { status: "FAILED", at, errorCode: "EBIZ_AUTH_FAILED" })
+        .state,
+      "error",
+    );
+    assert.equal(
+      ebizState(true, {
+        status: "APPLIED",
+        at,
+        errorCode: null,
+        failedCount: 2,
+      }).state,
+      "warning",
+    );
+    assert.equal(
+      ebizState(true, {
+        status: "APPLIED",
+        at,
+        errorCode: null,
+        failedCount: 0,
+      }).state,
+      "ok",
+    );
   });
 });
