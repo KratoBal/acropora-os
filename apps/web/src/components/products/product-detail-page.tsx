@@ -32,6 +32,7 @@ import {
 import { ProductAuthorityCard } from "@/components/products/product-authority-card";
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
+import { JevProductCard } from "@/components/jev-product-intelligence/jev-product-card";
 import { productApi } from "@/lib/api/products";
 import { BarcodeEditor } from "./barcode-editor";
 
@@ -189,7 +190,11 @@ const descriptionFilter = new FilterXSS({
   },
 });
 
-const sanitizeDescriptionHtml = (html: string): string => {
+/** The description's typography, shared with the JEV review page. */
+export const DESCRIPTION_HTML_CLASS =
+  "max-w-none text-sm leading-6 text-pilot-grey-700 [&_a]:text-pilot-aqua-700 [&_a]:underline [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_td]:border [&_td]:border-pilot-grey-200 [&_td]:p-2 [&_th]:border [&_th]:border-pilot-grey-200 [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5";
+
+export const sanitizeDescriptionHtml = (html: string): string => {
   if (!html) return "";
   const sanitized = descriptionFilter.process(html);
   // Force every remaining link to open safely in a new tab. This string
@@ -1082,7 +1087,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
       {product.description ? (
         <div
           data-testid="product-description"
-          className="max-w-none text-sm leading-6 text-pilot-grey-700 [&_a]:text-pilot-aqua-700 [&_a]:underline [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_td]:border [&_td]:border-pilot-grey-200 [&_td]:p-2 [&_th]:border [&_th]:border-pilot-grey-200 [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5"
+          className={DESCRIPTION_HTML_CLASS}
           dangerouslySetInnerHTML={{ __html: descriptionHtml }}
         />
       ) : (
@@ -1195,7 +1200,15 @@ export function ProductDetailPage({ productId }: { productId: string }) {
           },
           { id: "mirror", main: mirror, side: channels },
           { id: "variants", main: variants, side: note },
-          { id: "description", main: description },
+          /*
+            JEV ADATELLENŐRZÉS (discovery Q1): a compact card beside the
+            description, with the state and a link to the review page.
+          */
+          {
+            id: "description",
+            main: description,
+            side: <JevProductCard productId={product.id} token={token} />,
+          },
           { id: "images", main: images },
         ]}
       />
