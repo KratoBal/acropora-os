@@ -104,44 +104,73 @@ export const materialRequestsApi = {
     );
   },
   claim(token: string, id: string) {
-    return action(token, id, "claim");
+    return apiRequest<MaterialRequestFullDetail>(
+      `${base}/material-requests/${encodeURIComponent(id)}/claim`,
+      token,
+      post(),
+    );
   },
   order(token: string, id: string) {
-    return action(token, id, "order");
+    return apiRequest<MaterialRequestFullDetail>(
+      `${base}/material-requests/${encodeURIComponent(id)}/order`,
+      token,
+      post(),
+    );
   },
   receiveAll(token: string, id: string) {
-    return action(token, id, "receive-all");
+    return apiRequest<MaterialRequestFullDetail>(
+      `${base}/material-requests/${encodeURIComponent(id)}/receive-all`,
+      token,
+      post(),
+    );
   },
   cancel(token: string, id: string) {
-    return action(token, id, "cancel");
+    return apiRequest<MaterialRequestFullDetail>(
+      `${base}/material-requests/${encodeURIComponent(id)}/cancel`,
+      token,
+      post(),
+    );
   },
   receiveItems(
     token: string,
     id: string,
     input: MaterialRequestReceiveItemsInput,
   ) {
-    return action(token, id, "receive-items", input);
+    return apiRequest<MaterialRequestFullDetail>(
+      `${base}/material-requests/${encodeURIComponent(id)}/receive-items`,
+      token,
+      post(input),
+    );
   },
   reassign(token: string, id: string, handlerId: string) {
-    return action(token, id, "reassign", { handlerId });
+    return apiRequest<MaterialRequestFullDetail>(
+      `${base}/material-requests/${encodeURIComponent(id)}/reassign`,
+      token,
+      post({ handlerId }),
+    );
   },
   comment(token: string, id: string, body: string) {
-    return action(token, id, "comments", { body });
+    return apiRequest<MaterialRequestFullDetail>(
+      `${base}/material-requests/${encodeURIComponent(id)}/comments`,
+      token,
+      post({ body }),
+    );
   },
 };
 
-function action(token: string, id: string, name: string, body?: unknown) {
-  return apiRequest<MaterialRequestFullDetail>(
-    `${base}/material-requests/${encodeURIComponent(id)}/${name}`,
-    token,
-    {
-      method: "POST",
-      ...(body === undefined
-        ? {}
-        : {
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-    },
-  );
+/**
+ * The init of one POST action. Each path stays written out inside its own
+ * `apiRequest` call, so the route-parity guard (mobile-api-routes.spec) reads
+ * every one and checks it against the server.
+ */
+function post(body?: unknown): RequestInit {
+  return {
+    method: "POST",
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+  };
 }
