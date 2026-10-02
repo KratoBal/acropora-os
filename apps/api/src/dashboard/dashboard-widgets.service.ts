@@ -26,6 +26,8 @@ import {
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
+import { aquariumFindings } from "./aquarium-findings.js";
+import { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
 import { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
 import {
   DashboardServiceWidgetsRepository,
@@ -64,6 +66,7 @@ export class DashboardWidgetsService {
     private readonly repository: DashboardLayoutRepository,
     private readonly expectedArrivals: ExpectedArrivalService,
     private readonly serviceWidgets: DashboardServiceWidgetsRepository,
+    private readonly aquariumWidgets: DashboardAquariumWidgetsRepository,
     @Optional()
     @Inject(DASHBOARD_WIDGET_LOADERS)
     loaders?: Partial<Record<DashboardWidgetId, WidgetLoader>>,
@@ -173,6 +176,18 @@ export class DashboardWidgetsService {
           await serviceViewer(user),
           new Date(),
         ),
+      "aquarium-alerts": async (user) =>
+        aquariumFindings(
+          await this.aquariumWidgets.readings(await serviceViewer(user)),
+          new Date(),
+        ).alerts,
+      "water-values": async (user) =>
+        aquariumFindings(
+          await this.aquariumWidgets.readings(await serviceViewer(user)),
+          new Date(),
+        ).waterValues,
+      "aquarium-equipment": async (user) =>
+        this.aquariumWidgets.equipment(await serviceViewer(user), new Date()),
     };
   }
 
