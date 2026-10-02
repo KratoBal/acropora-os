@@ -1,4 +1,5 @@
 "use client";
+import { useAssistantEntity } from "../assistant/page-context";
 
 import {
   Alert,
@@ -39,6 +40,7 @@ export function PurchaseInvoiceDetailPage({
 
   const [detail, setDetail] = useState<PurchaseInvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  useAssistantEntity("Beszerzési számla", detail?.id, detail?.documentNumber);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {

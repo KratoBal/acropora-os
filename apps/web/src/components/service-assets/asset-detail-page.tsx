@@ -1,4 +1,5 @@
 "use client";
+import { useAssistantEntity } from "@/components/assistant/page-context";
 
 import {
   Alert,
@@ -89,6 +90,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
     session && hasPermission(session.user, PERMISSIONS.SERVICE_ASSET_DELETE),
   );
   const [asset, setAsset] = useState<AssetDetail | null>(null);
+  useAssistantEntity("Eszköz", asset?.id, asset?.assetNumber);
   const [qr, setQr] = useState<AssetQrCode | null>(null);
   const [status, setStatus] = useState<AssetStatus>("ACTIVE");
   const [nextServiceAt, setNextServiceAt] = useState("");

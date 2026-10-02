@@ -1,4 +1,5 @@
 "use client";
+import { useAssistantEntity } from "@/components/assistant/page-context";
 
 import {
   Alert,
@@ -80,6 +81,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
   );
 
   const [worksheet, setWorksheet] = useState<WorksheetDetail | null>(null);
+  useAssistantEntity("Munkalap", worksheet?.id, worksheet?.number);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

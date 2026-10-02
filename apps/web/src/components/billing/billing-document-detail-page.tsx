@@ -1,4 +1,5 @@
 "use client";
+import { useAssistantEntity } from "@/components/assistant/page-context";
 
 import {
   Alert,
@@ -90,6 +91,7 @@ export function BillingDocumentDetailPage({
   );
 
   const [detail, setDetail] = useState<BillingDocumentDetail | null>(null);
+  useAssistantEntity("Számla", detail?.id, detail?.documentNumber);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

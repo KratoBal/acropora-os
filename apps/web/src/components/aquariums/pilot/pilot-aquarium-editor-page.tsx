@@ -1,4 +1,5 @@
 "use client";
+import { useAssistantEntity } from "@/components/assistant/page-context";
 import { Alert, ConfirmDialog, Icon } from "@acropora/ui";
 import {
   AQUARIUM_MEASUREMENT_TARGET_RANGE,
@@ -83,6 +84,11 @@ export function PilotAquariumEditorPage({
   const { session } = useAuth();
   const router = useRouter();
   const isEdit = Boolean(aquariumId);
+  const [assistantEntity, setAssistantEntity] = useState<{
+    id: string;
+    number: string;
+  } | null>(null);
+  useAssistantEntity("Akvárium", assistantEntity?.id, assistantEntity?.number);
   const [loading, setLoading] = useState(isEdit);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +148,7 @@ export function PilotAquariumEditorPage({
       .detail(token, aquariumId)
       .then((detail) => {
         if (!active) return;
+        setAssistantEntity({ id: detail.id, number: detail.aquariumNumber });
         setOwnershipType(detail.ownershipType);
         setCustomerSelection(
           detail.customerId

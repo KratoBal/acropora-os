@@ -1,5 +1,7 @@
 "use client";
 
+import { SutyerakWidget } from "./assistant/sutyerak-widget";
+import { AssistantPageProvider } from "./assistant/page-context";
 import { Badge, Button, Icon, useThemePreference } from "@acropora/ui";
 import { isNavigationEntryVisible } from "@acropora/types";
 import { usePathname } from "next/navigation";
@@ -314,56 +316,57 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="relative min-h-screen bg-pilot-grey-50">
-      {/*
+    <AssistantPageProvider>
+      <div className="relative min-h-screen bg-pilot-grey-50">
+        {/*
         A SIDEBAR HÁTTERE A DOKUMENTUM TELJES MAGASSÁGÁBAN. A sidebar maga
         `fixed`, tehát görgetésnél mindig kitölti a nézetet; egy teljes oldalas
         képernyőképen viszont csak egy nézetnyi magas, és alatta a tartalom
         háttere látszott (stage, 2026-09-30). Ez a sáv mögötte áll, díszként.
       */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-0 hidden w-56 border-r border-pilot-grey-200 bg-white lg:block"
-      />
-      {sidebar()}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 hidden w-56 border-r border-pilot-grey-200 bg-white lg:block"
+        />
+        {sidebar()}
 
-      {mobileNavigationOpen ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-40 bg-pilot-black/30 backdrop-blur-[2px] lg:hidden"
-            aria-label="Navigáció bezárása"
-            onClick={closeMobileNavigation}
-          />
-          {sidebar(true)}
-        </>
-      ) : null}
+        {mobileNavigationOpen ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-40 bg-pilot-black/30 backdrop-blur-[2px] lg:hidden"
+              aria-label="Navigáció bezárása"
+              onClick={closeMobileNavigation}
+            />
+            {sidebar(true)}
+          </>
+        ) : null}
 
-      <div className="lg:pl-56">
-        {/*
+        <div className="lg:pl-56">
+          {/*
           MAGASSAG 48PX (`h-12`), A TERV SZERINT (`AppShell.tsx:502`) --
           korabban `h-16` (64px).
         */}
-        <header
-          data-theme={effectiveTheme}
-          className="sticky top-0 z-20 flex h-12 items-center border-b border-pilot-grey-200 bg-white/95 px-4 font-sans backdrop-blur sm:px-6 lg:px-8"
-        >
-          <div className="flex items-center gap-3 lg:hidden">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Navigáció megnyitása"
-              onClick={() => setMobileNavigationOpen(true)}
-            >
-              <Icon name="menu" size={20} />
-            </Button>
-            <span className="text-sm font-bold text-pilot-grey-900">
-              Acropora OS
-            </span>
-          </div>
+          <header
+            data-theme={effectiveTheme}
+            className="sticky top-0 z-20 flex h-12 items-center border-b border-pilot-grey-200 bg-white/95 px-4 font-sans backdrop-blur sm:px-6 lg:px-8"
+          >
+            <div className="flex items-center gap-3 lg:hidden">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Navigáció megnyitása"
+                onClick={() => setMobileNavigationOpen(true)}
+              >
+                <Icon name="menu" size={20} />
+              </Button>
+              <span className="text-sm font-bold text-pilot-grey-900">
+                Acropora OS
+              </span>
+            </div>
 
-          <div className="mx-3 min-w-0 flex-1 lg:mx-auto lg:max-w-[480px]">
-            {/*
+            <div className="mx-3 min-w-0 flex-1 lg:mx-auto lg:max-w-[480px]">
+              {/*
               A MUNKAMENETEN MÚLIK, NEM A TOKENEN. Élesben és a stage-en a
               munkamenet httpOnly süti, a `session.token` üres, és a
               `searchApi` (mint minden hívó) a sütire támaszkodik, ha nincs
@@ -371,21 +374,23 @@ export function AppShell({ children }: { children: ReactNode }) {
               #1156 óta csak a fejlesztői belépésnél látszott (stage-en mérve,
               2026-09-30).
             */}
-            {session ? <GlobalSearch token={session.token ?? ""} /> : null}
-          </div>
+              {session ? <GlobalSearch token={session.token ?? ""} /> : null}
+            </div>
 
-          <div className="ml-auto">
-            <UserMenu
-              preference={preference}
-              onPreferenceChange={setPreference}
-            />
-          </div>
-        </header>
+            <div className="ml-auto">
+              <UserMenu
+                preference={preference}
+                onPreferenceChange={setPreference}
+              />
+            </div>
+          </header>
 
-        <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          {children}
-        </main>
+          <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            {children}
+          </main>
+        </div>
+        <SutyerakWidget />
       </div>
-    </div>
+    </AssistantPageProvider>
   );
 }
