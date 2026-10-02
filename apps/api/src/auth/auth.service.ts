@@ -11,6 +11,8 @@ import { DEVELOPMENT_USERS } from "./development-users.js";
 import { developmentLoginRefusal } from "./development-login.guard.js";
 import { AuthUserResolver } from "./auth-user-resolver.js";
 import { SessionRepository } from "./session.repository.js";
+import type { SessionKind } from "./session.repository.js";
+import { partnerScopeOf } from "./partner-scope.util.js";
 import { generateSessionToken } from "./session-token.util.js";
 
 /**
@@ -168,6 +170,7 @@ export class AuthService {
     user: AuthenticatedUser;
     expiresAt: string;
     extended: boolean;
+    kind: SessionKind;
   }> {
     const result = await this.sessions.findActive(token, ttlMsForToken(token));
 
@@ -178,8 +181,28 @@ export class AuthService {
     const user = await this.users.resolveById(result.session.userId);
     return {
       user,
+      kind: result.session.kind,
       expiresAt: result.session.expiresAt.toISOString(),
       extended: result.extended,
+    };
+  }
+
+  async issueAssistantSession(
+    user: AuthenticatedUser,
+    sourceKind: SessionKind | undefined,
+  ): Promise<Session> {
+    if (sourceKind !== "USER" || partnerScopeOf(user).kind !== "internal") {
+      throw new ForbiddenException(
+        "Csak belső dolgozó saját munkamenete adhat ki assistant-belépőt.",
+      );
+    }
+    const token = generateSessionToken();
+    const stored = await this.sessions.createAssistant(user.id, token);
+    return {
+      id: stored.id,
+      user,
+      token,
+      expiresAt: stored.expiresAt.toISOString(),
     };
   }
 

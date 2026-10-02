@@ -1,9 +1,14 @@
-import { Injectable } from "@nestjs/common";
-import { Repository } from "@acropora/database";
+import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
+import { Repository, type SessionKind } from "@acropora/database";
 
 import { hashSessionToken } from "./session-token.util.js";
 
+export type { SessionKind } from "@acropora/database";
+export const ASSISTANT_SESSION_TTL_MS = 10 * 60 * 1000;
+export const ASSISTANT_SESSION_LIMIT = 3;
+
 export interface StoredSession {
+  kind: SessionKind;
   id: string;
   userId: string;
   expiresAt: Date;
@@ -75,6 +80,7 @@ export class SessionRepository extends Repository {
       },
     });
     return {
+      kind: session.kind,
       id: session.id,
       userId: session.userId,
       expiresAt: session.expiresAt,
@@ -83,7 +89,7 @@ export class SessionRepository extends Repository {
 
   /**
    * Resolves a raw token to its session, or `null` if no such session
-   * exists or it has expired. An expired match is deleted as a side effect
+   * exists or it has expired. An expired USER match is deleted as a side effect
    * — from the caller's point of view it is indistinguishable from "never
    * existed", but this keeps stale rows from accumulating indefinitely.
    *
@@ -107,6 +113,13 @@ export class SessionRepository extends Repository {
     if (!session) return null;
 
     const now = Date.now();
+    if (session.kind === "ASSISTANT_READONLY") {
+      // Keep expired rows identifiable for audit; never extend or delete here.
+      return session.expiresAt.getTime() <= now
+        ? null
+        : { session, extended: false };
+    }
+
     if (session.expiresAt.getTime() <= now) {
       await this.database.session
         .delete({ where: { id: session.id } })
@@ -117,6 +130,7 @@ export class SessionRepository extends Repository {
     if (!shouldExtend(session.expiresAt, ttlMs, now)) {
       return {
         session: {
+          kind: session.kind,
           id: session.id,
           userId: session.userId,
           expiresAt: session.expiresAt,
@@ -132,9 +146,51 @@ export class SessionRepository extends Repository {
     });
 
     return {
-      session: { id: session.id, userId: session.userId, expiresAt },
+      session: {
+        kind: session.kind,
+        id: session.id,
+        userId: session.userId,
+        expiresAt,
+      },
       extended: true,
     };
+  }
+
+  /** A read without expiry/sliding side effects, including expired assistants. */
+  async findAssistant(token: string): Promise<StoredSession | null> {
+    const session = await this.database.session.findUnique({
+      where: { tokenHash: hashSessionToken(token) },
+    });
+    return session?.kind === "ASSISTANT_READONLY" ? session : null;
+  }
+
+  async createAssistant(userId: string, token: string): Promise<StoredSession> {
+    return this.database.$transaction(
+      async (tx) => {
+        // Lock a stable parent row: serializes issuance across API replicas,
+        // including the first issuance (where there is no session to lock).
+        await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+        const now = new Date();
+        const count = await tx.session.count({
+          where: { userId, kind: "ASSISTANT_READONLY", expiresAt: { gt: now } },
+        });
+        if (count >= ASSISTANT_SESSION_LIMIT) {
+          throw new HttpException(
+            "Legfeljebb 3 élő assistant-belépő engedélyezett.",
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+        return tx.session.create({
+          data: {
+            userId,
+            kind: "ASSISTANT_READONLY",
+            tokenHash: hashSessionToken(token),
+            expiresAt: new Date(now.getTime() + ASSISTANT_SESSION_TTL_MS),
+          },
+        });
+      },
+      { isolationLevel: "ReadCommitted" },
+    );
   }
 
   /** Idempotent: deleting an already-invalid token is a no-op, not an error. */
