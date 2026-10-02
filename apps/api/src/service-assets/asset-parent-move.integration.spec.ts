@@ -63,6 +63,12 @@ describe(
     let departmentId = "";
     let categoryId = "";
 
+    /**
+     * A NEVEK SZÁNDÉKOSAN NEM VÉGZŐDNEK RÓMAI SZÁMRA. A kód sorszámát a névvégi
+     * római szám adja, ha szabad (Balázs szabálya, `trailingRomanNumeralValue`):
+     * egy „C” nevű eszköz 100-as, egy „D” nevű 500-as sorszámot kapna. Az első
+     * CI-futás pontosan ezen bukott (01 helyett 100 és 500), és a kód helyes volt.
+     */
     const create = async (name: string, parentAssetId?: string) =>
       (
         (await assets.create(
@@ -175,10 +181,10 @@ describe(
     });
 
     it("a move re-codes the asset and its whole chain, keeps the old codes in the events, and back again", async () => {
-      const a = await create("A");
-      const b = await create("B");
-      const c = await create("C", a);
-      const d = await create("D", c);
+      const a = await create("elso");
+      const b = await create("masodik");
+      const c = await create("harmadik", a);
+      const d = await create("negyedik", c);
       assert.deepEqual(
         [await code(a), await code(b), await code(c), await code(d)],
         [
@@ -227,8 +233,8 @@ describe(
     });
 
     it("a hand-typed code outside the rule stays", async () => {
-      const parent = await create("P");
-      const manual = await create("M");
+      const parent = await create("szulo");
+      const manual = await create("kezi");
       await prisma.asset.update({
         where: { id: manual },
         data: { partnerInternalCode: "KEZI-123" },
@@ -238,8 +244,8 @@ describe(
     });
 
     it("itself or its own descendant cannot be its parent", async () => {
-      const top = await create("T");
-      const child = await create("TC", top);
+      const top = await create("felso");
+      const child = await create("also", top);
       for (const parent of [top, child])
         await assert.rejects(
           () => move(top, parent),
