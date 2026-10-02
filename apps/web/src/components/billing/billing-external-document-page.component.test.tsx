@@ -48,6 +48,8 @@ const detail = (
 ): BillingExternalDocumentDetail => ({
   id: "ext-1",
   source: "SZAMLAZZ",
+  pdfAvailable: false,
+  pdfMissingReason: null,
   kindCode: "SZ",
   kindLabel: "Számla",
   documentNumber: "ACRW-2026/00508",

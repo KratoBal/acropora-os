@@ -1,0 +1,2061 @@
+openapi: 3.0.3
+#
+# Copyright (c) 2019-2025 by OTP Bank Plc. All rights reserved.
+#
+# The copyright to the computer software herein is the property of
+# OTP Bank Plc or its licensors. The software may be used and/or
+# copied only with the written permission of OTP Bank Plc or in
+# accordance with the terms and conditions stipulated in the
+# agreement/contract under which the software has been supplied.
+#
+info:
+  title: REST API of eBIZ Service
+  description: eBIZ API is responsible to provide access to clients' documents, like invoices.
+  version: "1.1"
+  contact:
+    name: eBIZ squad
+    email: info@otpebiz.hu
+    url: https://ebiz.otpbank.hu/
+    
+tags:
+  - name: Invoice
+    description: Invoice related operations.
+  - name: Sequence
+    description: Invoice sequence related operations.
+  - name: BankAccount
+    description: Bank account related operations.
+
+security:
+  - ApiKey: []
+
+servers:
+  - url: https://app.otpebiz.hu/api/api-mock
+    description: Mock server
+  - url: https://app.otpebiz.hu/api/public-core
+    description: Production server
+    
+paths:
+
+  /v1/invoices:
+    post:
+      tags:
+        - Invoice
+      summary: Create an invoice.
+      operationId: createInvoice
+      description: It generates an invoice from the submitted input data. In case of successful invoice creation the document will be stored.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceRequest"
+        required: true
+      responses:
+        "201":
+          description: The invoice has been created.
+          headers:
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+          
+    get:
+      tags:
+        - Invoice
+      summary: Query invoices.
+      operationId: getInvoices
+      description: Returns the requested invoice list based on the specified filter parameters.
+      parameters:
+        - name: invoiceType
+          in: query
+          description: Filter invoices by invoice type (eg INVOICE).
+          required: false
+          schema:
+            $ref: "#/components/schemas/InvoiceType"
+        - name: sequenceId
+          in: query
+          description: Filter invoices by identifier of sequence.
+          required: false
+          style: form
+          explode: true
+          schema:
+           type: integer
+           format: int64
+        - name: dateFrom
+          in: query
+          description: Filtering invoices by date according to the specified date type
+          required: false
+          schema:
+            type: string
+            format: date
+            example: 2023-12-31
+        - name: dateTo
+          in: query
+          description: Filtering invoices by date according to the specified date type
+          required: false
+          schema:
+            type: string
+            format: date
+            example: 2023-12-31
+        - name: dateType
+          in: query
+          description: Filter invoices by date type.
+          required: false
+          schema:
+            $ref: "#/components/schemas/DateType"
+        - name: paymentMethod
+          in: query
+          description: Filter invoices by payment method.
+          required: false
+          schema:
+            $ref: "#/components/schemas/PaymentMethod"
+        - name: paymentStatus
+          in: query
+          description: Filter invoices by payment status.
+          required: false
+          schema:
+            $ref: "#/components/schemas/PaymentStatus"
+        - $ref: '#/components/parameters/Pageable'
+      responses:
+        "200":
+          description: List all invoice.
+          headers:     
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceList"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/invoices/id/{invoiceId}:
+    get:
+      tags:
+        - Invoice
+      summary: Query an invoice by its eBIZ identifier.
+      operationId: getInvoiceById
+      description: It returns an invoice of which id property matches the specified identifier.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        "200":
+          description: Invoice retrieved.
+          headers:   
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'          
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/invoices/number/{invoiceNumber}:
+    get:
+      tags:
+        - Invoice
+      summary: Query an invoice by its invoice number.
+      operationId: getInvoiceByInvoiceNumber
+      description: It returns an invoice whose id property matches the specified identifier.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceNumber'
+      responses:
+        "200":
+          description: Invoice retrieved.
+          headers:   
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'          
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/invoices/id/{invoiceId}/cancel:
+    post:
+      tags:
+        - Invoice
+      summary: Cancel an invoice by its eBIZ identifier.
+      operationId: cancelInvoiceById
+      description: In case of successful cancellation, it returns the cancellation invoice object.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        "201":
+          description: Cancelled invoice returned.
+          headers:
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/invoices/number/{invoiceNumber}/cancel:
+    post:
+      tags:
+        - Invoice
+      summary: Cancel an invoice by its invoice number.
+      operationId: cancelInvoiceByInvoiceNumber
+      description: In case of successful cancellation, it returns the cancellation invoice object.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceNumber'
+      responses:
+        "201":
+          description: Cancelled invoice returned.
+          headers:
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+          
+  /v1/invoices/id/{invoiceId}/download:
+    get:
+      tags:
+        - Invoice
+      summary: Download an invoice by its eBIZ identifier.
+      operationId: downloadInvoiceById
+      description: Download an invoice in PDF format.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        "200":
+          description: PDF file.
+          headers:
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'          
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+          
+  /v1/invoices/number/{invoiceNumber}/download:
+    get:
+      tags:
+        - Invoice
+      summary: Download an invoice by invoice number.
+      operationId: downloadInvoiceByInvoiceNumber
+      description: Download an invoice in PDF format.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceNumber'
+      responses:
+        "200":
+          description: PDF file.
+          headers:
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'          
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/invoices/id/{invoiceId}/send:
+    post:
+      tags:
+        - Invoice
+      summary: Send an invoice selected by its eBIZ identifier to the specified e-mail address(es).
+      operationId: sendInvoiceById
+      description: Returns the list of e-mail addresses where the invoice has been sent.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendInvoiceRequest"
+        required: true
+      responses:
+        "200":
+          description: List of e-mail addresses with delivery status.
+          headers:
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendInvoiceResponse"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/invoices/number/{invoiceNumber}/send:
+    post:
+      tags:
+        - Invoice
+      summary: Send an invoice selected by its invoice number to the specified e-mail address(es).
+      operationId: sendInvoiceByInvoiceNumber
+      description: Returns the list of e-mail addresses where the invoice has been sent.
+      parameters:
+        - $ref: '#/components/parameters/InvoiceNumber'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendInvoiceRequest"
+        required: true
+      responses:
+        "200":
+          description: List of e-mails.
+          headers:
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendInvoiceResponse"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/invoices/sequences:
+    get:
+      tags:
+        - Sequence
+      summary: List of invoice sequences recorded in the core system.
+      operationId: getInvoiceSequences
+      description: It represent the client's invoice sequence information.
+      responses:
+        "200":
+          description: The list of invoice sequences.
+          headers:
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SequenceListResponse"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'          
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+          
+  /v1/bank-accounts:
+    get:
+      tags:
+        - BankAccount
+      summary: List of bank accounts recorded in the core system.
+      operationId: getBankAccounts
+      description: It returns the client's bank account information.
+      responses:
+        "200":
+          description: List of bank accounts.
+          headers:
+            RateLimit-Limit:
+                $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+                $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+                $ref: '#/components/headers/RateLimit-Reset'
+            RateLimit-Policy:
+                $ref: '#/components/headers/RateLimit-Policy'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankAccountListResponse"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'          
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+  
+components:
+
+  securitySchemes:
+  
+    ApiKey:
+      description: API key.
+      type: apiKey
+      in: header
+      name: X-OTP-eBIZ-API-Key
+        
+  headers:
+  
+    RateLimit-Limit:
+      description: The remaining number of requests available for the client in the time window. 
+      schema:
+        type: integer
+        minimum: 0
+    RateLimit-Remaining:
+      description: The remaining quota in the current window.
+      schema:
+        type: integer
+        minimum: 0
+    RateLimit-Reset:
+      description: The time remaining in the current window, specified in seconds.
+      schema:
+        type: integer
+        minimum: 0
+    RateLimit-Policy:
+      description: Quota policy.
+      schema:
+        type: string
+        
+  schemas:
+  
+    CreateInvoiceRequest:
+      type: object
+      description: It represents the request body for an invoice POST request.
+      required:
+        - type
+        - sequenceId
+        - customer
+        - signatureType
+        - language
+        - currencyCode
+        - exchangeRate
+        - dueDate
+        - deliveryDate
+        - paymentMethod
+        - items
+      properties:
+        bankAccountId:
+         $ref: "#/components/schemas/BankAccountId"
+        type:
+          $ref: "#/components/schemas/CreateInvoiceType"
+        sequenceId:
+          $ref: "#/components/schemas/SequenceId"
+        customer:
+           $ref: "#/components/schemas/Customer" 
+        signatureType:
+          $ref: "#/components/schemas/CreateSignatureType"
+        language:
+          $ref: "#/components/schemas/InvoiceLanguage"
+        currencyCode:
+          $ref: "#/components/schemas/CurrencyCode"    
+        exchangeRate:
+          type: number
+          format: double
+          description: Exchange rate required when currency code is not HUF.
+        dueDate:
+          type: string
+          format: date
+          description: Due date of the invoice.
+          example: 2023-12-31
+        deliveryDate:
+          type: string
+          format: date
+          description: Delivery date of the invoice.
+          example: 2023-12-31
+        paymentMethod:
+          $ref: "#/components/schemas/CreateInvoicePaymentMethod"
+        orderNumber:
+          type: string
+          description: Identifier of the order related to the invoice.
+          minLength: 3
+          maxLength: 100
+          pattern: '^[^\s].*$'
+          example: ORDER_0001
+        note:
+          $ref: '#/components/schemas/Note'
+        setting:
+          $ref: "#/components/schemas/InvoiceSetting"  
+        items:
+          type: array
+          description: Items of the invoice.
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CreateInvoiceItem"
+
+    Invoice:
+      type: object
+      description: It represents the response body for an invoice.
+      required:
+        - id
+        - invoiceNumber
+        - type
+        - sequenceId
+        - customer
+        - signatureType
+        - language
+        - currencyCode
+        - exchangeRate
+        - issueDate
+        - dueDate
+        - deliveryDate
+        - paymentMethod
+        - items
+        - summary
+      properties:
+        id:
+          type: integer
+          format: int64
+          readOnly: true
+          description: Unique identifier of the invoice, generated by the core system.
+          example: 123
+        invoiceNumber:
+          $ref: '#/components/schemas/InvoiceNumber'
+        bankAccountId:
+          $ref: "#/components/schemas/BankAccountId"
+        type:
+          $ref: "#/components/schemas/InvoiceType"
+        sequenceId:
+          $ref: "#/components/schemas/SequenceId"
+        cancelled:
+          type: boolean
+          description: True if the invoice canceled
+        navResult:
+          $ref: "#/components/schemas/NavResult"
+        customer:
+           $ref: "#/components/schemas/Customer"   
+        signatureType:
+          $ref: "#/components/schemas/SignatureType"
+        language:
+          $ref: "#/components/schemas/InvoiceLanguage"
+        currencyCode:
+          $ref: "#/components/schemas/CurrencyCode"
+        exchangeRate:
+          type: number
+          format: double
+          description: Exchange rate when currency code is not HUF.
+        issueDate:
+          type: string
+          format: date
+          description: Issue date of the invoice, generated by the core system.
+          example: 2023-12-31
+        dueDate:
+          type: string
+          format: date
+          description: Due date of the invoice.
+          example: 2023-12-31
+        deliveryDate:
+          type: string
+          format: date
+          description: Delivery date of the invoice.
+          example: 2023-12-31
+        paymentMethod:
+           $ref: "#/components/schemas/PaymentMethod"  
+        paidAmount:
+          type: number
+          format: double
+          description: Total payment received.
+        orderNumber:
+          type: string
+          description: Identifier of the order related to the invoice.
+          minLength: 3
+          maxLength: 100
+          pattern: '^[^\s].*$'
+          example: ORDER_0001
+        note:
+          $ref: '#/components/schemas/Note'
+        setting:
+          $ref: "#/components/schemas/InvoiceSetting"  
+        items:
+          type: array
+          description: Line items of the invoice.
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InvoiceItem'
+        summary:
+          $ref: "#/components/schemas/InvoiceSummary"
+        issuer:
+          $ref: "#/components/schemas/Issuer"
+        invoiceReferences:
+          type: array
+          description: Unique identifiers of related invoices
+          items:
+            $ref: '#/components/schemas/ReferenceInvoiceItem'
+
+    ReferenceInvoiceItem:
+      type: integer
+      format: int64
+      description: Unique identifier of the invoice, generated by the core system.
+      example: 123
+
+    Issuer:
+      type: object
+      description: The supplier's data on the invoice.
+      required:
+        - name
+        - taxNumbers
+        - address
+      properties:
+        name:
+          type: string
+          description: Name of the supplier.
+        taxNumbers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxNumber"
+          minItems: 1
+          description: It represents the tax number(s) of the supplier.
+        taxNotes:
+          type: array
+          items:
+             $ref: "#/components/schemas/TaxNote"
+          description: Notes regarding the supplier's tax status.
+        evNumber:
+          type: string
+          description: The supplier's private entrepreneur ID number.          
+        address:
+          $ref: '#/components/schemas/Address'
+        bankAccount:
+          $ref: "#/components/schemas/BankAccount"
+
+    InvoiceList:
+      type: object
+      description: It represents the list of invoices with pagination.
+      required:
+        - data
+        - pager
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceListItem"
+          description: List of invoices.
+        pager:
+          $ref: "#/components/schemas/Pager"
+
+    InvoiceListItem:
+      type: object
+      description: It represents an invoice list element.
+      required:
+        - id
+        - invoiceNumber
+        - type
+        - cancelled
+        - currencyCode
+        - customerName
+        - issueDate
+        - dueDate
+        - deliveryDate
+        - paymentMethod
+        - summary
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier of the invoice, generated by the core system.
+        invoiceNumber:
+          $ref: '#/components/schemas/InvoiceNumber'
+        type:
+          $ref: "#/components/schemas/InvoiceType"
+        cancelled:
+          type: boolean
+          description: True if the invoice canceled
+        navResult:
+          $ref: "#/components/schemas/NavResult"
+        currencyCode:
+          $ref: "#/components/schemas/CurrencyCode"   
+        customerName:
+           $ref: "#/components/schemas/CustomerName" 
+        issueDate:
+          type: string
+          format: date
+          description: Issue date of the invoice, generated by the core system.
+          example: 2023-12-31
+        dueDate:
+          type: string
+          format: date
+          description: Due date of the invoice
+          example: 2023-12-31
+        deliveryDate:
+          type: string
+          format: date
+          description: Delivery date of the invoice
+          example: 2023-12-31
+        paymentMethod:
+           $ref: "#/components/schemas/PaymentMethod"  
+        paymentStatus:
+          $ref: "#/components/schemas/PaymentStatus"
+        summary:
+          $ref: "#/components/schemas/InvoiceListSummary"
+
+    SendInvoiceRequest:
+      type: object
+      description: Request model of send an invoice endpoint
+      required:
+        - toAddresses
+        - subject
+        - body
+        - sendInvoiceAsAttachment
+        - ccToSender
+      properties:
+        toAddresses:
+          type: array
+          description: list of e-mail addresses
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/EmailAddress'
+        subject:
+          type: string
+          description: Email subject.
+          pattern: '^[^\s].*$'
+          minLength: 3
+          maxLength: 250
+        body:
+          type: array
+          description: The email body.
+          minItems: 1
+          items:
+            type: string
+            description: Line of the email body.
+        sendInvoiceAsAttachment:
+          type: boolean
+          default: false
+          description: Send invoice as attachment. It can be true only if Simple payment is not allowed.
+        ccToSender:
+          type: boolean
+          default: false
+          description: Send a copy to sender email address.
+
+    SendInvoiceResponse:
+      type: object
+      description: response model of send an e-mail endpoint
+      properties:
+        numberOfSuccessfulDeliveries:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of successful deliveries.
+        deliveries:
+          type: array
+          description: list of email addresses and sending success status
+          minItems: 1
+          items:
+            type: object
+            required:
+              - emailAddress
+              - successfulDelivery
+            properties:
+              emailAddress:
+                $ref: '#/components/schemas/EmailAddress'
+              successfulDelivery:
+                type: boolean
+                description: True if delivery to the specified e-mail address has been succesful.
+
+    EmailAddress:
+      type: string
+      description: It represents the customer's e-mail address.
+      format: email
+      pattern: '^[a-zA-Z_\-\.\+0-9]+@([a-zA-Z_\-0-9]+\.){1,}[a-zA-Z]{2,3}$'
+
+    InvoiceNumber:   
+        type: string
+        description: public identifier of the invoice 
+        minLength: 5
+        maxLength: 255
+        pattern: '^[^\s]+$'
+        example: 'EINV000001'
+
+    Note:
+      type: array
+      description: Each list item represents a row of text on the invoice.
+      items:
+        $ref: '#/components/schemas/NoteLine'
+
+    NoteLine:
+      type: string
+      description: Public note of the invoice/items.
+      minLength: 1
+      maxLength: 800
+      pattern: '^[^\s].*$'
+
+    Customer:
+      type: object
+      description: It represents the response body for customers.
+      required:
+        - name
+        - type
+        - address
+      properties:
+        name:
+          $ref: "#/components/schemas/CustomerName"
+        type:
+          $ref: "#/components/schemas/CustomerType"
+        address:
+          $ref: "#/components/schemas/Address"
+        taxNumbers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxNumber"
+          description: It represents the tax number(s) of the customer.
+        bankAccount:
+           $ref: "#/components/schemas/BankAccount"
+
+    CustomerName:
+      type: string  
+      description: Name of the customer. 
+      pattern: '^[^\s].*$'
+      minLength: 3
+      maxLength: 200
+
+    BankAccount:
+      type: object
+      description: It represents the bank account data.
+      properties:
+        bankAccountNumber:
+          type: string
+          pattern: '^[0-9]{8}([ -]?[0-9]{8}){1,2}$'
+          example: 12345678-12345678-12345678
+          description: Bank account number.
+        swiftCode:
+          type: string
+          pattern: '^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$'
+          description: Swift code
+        ibanCode:
+          type: string
+          description: IBAN code
+
+    TaxNumber:
+      type: object
+      description: It represents the tax number(s) of the customer.
+      required:
+        - taxType
+      properties:
+        taxNumber:
+          type: string  
+          description: Tax number of the customer.
+        taxType:
+          $ref: "#/components/schemas/TaxType"
+
+    InvoiceSetting:
+      type: object
+      description: Settings of the invoice
+      properties:
+        onlinePaymentMethod:
+          $ref: "#/components/schemas/OnlinePaymentMethod"
+
+    CreateInvoiceItem:
+      type: object
+      description: Information about products or services included in the invoice.
+      required:
+        - name
+        - quantity
+        - unit
+        - netUnitAmount
+        - netAmount
+        - vat
+        - vatAmount
+      properties:
+        name:
+          type: string
+          description: The description of the item.
+          minLength: 1
+          maxLength: 250
+          pattern: '^[^\s].*$'
+          example:
+        productCode:
+          type: string
+          description: Public identifier of the item. Must be unique within the invoice.
+          maxLength: 30
+          pattern: '^[^\s].*$'
+        note:
+          $ref: '#/components/schemas/Note'
+        quantity:
+          type: number
+          format: double
+          description: Quantity of the item. 
+        unit:
+          $ref: "#/components/schemas/UnitType"
+        customUnit:
+          type: string
+          description: Custom, unique unit of measure of the item. If you enter a unique unit of measure, you must select CUSTOM enum from the unitType list.
+          minLength: 1
+          maxLength: 32
+          pattern: '^[^\s].*$'
+        netUnitAmount:
+          type: number
+          format: double
+          description: Net unit price of the item.         
+        netAmount:
+          type: number
+          format: double
+          description: Total net sales price of the item.
+        vat:
+          $ref: "#/components/schemas/VatType"          
+        vatAmount:
+          type: number
+          format: double
+          description: Total VAT value of the line item.
+        numberOfDataErasureCodes:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Number of data erasure codes.
+        depositIndicator:
+          type: boolean
+          description: NAV Deposit indicator flag.
+
+    InvoiceItem:
+      type: object
+      description: Information about the products or services included in the Invoice.
+      required:
+        - id
+        - name
+        - quantity
+        - unit
+        - netUnitAmount
+        - netAmount
+        - vat
+        - vatAmount
+        - grossAmount
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The identifier of item, generated by the core system.
+        name:
+          type: string
+          description: The description of the item.
+          pattern: '^[^\s].*$'
+        productCode:
+          type: string
+          description: Public identifier of item. Must be unique within the invoice.
+        note:
+          $ref: '#/components/schemas/Note'
+        quantity:
+          type: number
+          format: double
+          description: Quantity of the item.
+        unit:
+          $ref: "#/components/schemas/UnitType"
+        customUnit:
+          type: string
+          description: Custom, unique unit of measure of the item. If you enter a unique unit of measure, you must select CUSTOM enum from the unitType list.
+          minLength: 1
+          maxLength: 32
+          pattern: '^[^\s].*$'
+        netUnitAmount:
+          type: number
+          format: double
+          description: Net unit price of the item.
+        netAmount:
+          type: number
+          format: double
+          description: Total net sales price of the item.
+        vat:
+          $ref: "#/components/schemas/VatType"          
+        vatAmount:
+          type: number
+          format: double
+          description: Total VAT value of the line item.         
+        grossAmount:
+          type: number
+          format: double
+          description: Total gross sales price of the line item.
+        numberOfDataErasureCodes:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Number of data erasure codes.
+        depositIndicator:
+          type: boolean
+          description: NAV Deposit indicator flag.
+
+    InvoiceSummary:
+      type: object
+      description: Financial summary of the invoice.
+      required:
+        - netAmount
+        - vatAmount
+        - grossAmount
+        - vatRateSummary
+      properties:
+        netAmount:
+          type: number
+          format: double
+          description: Total net sales price of all line items.
+        vatAmount:
+          type: number
+          format: double
+          description: Total VAT value of all line items.         
+        grossAmount:
+          type: number
+          format: double
+          description: Total gross sales price of all line items.
+        roundAmount:
+          type: number
+          format: double
+          description: rounding of the sales price.          
+        vatRateSummary:
+          type: array
+          minItems: 1
+          description: VAT rate summary of the invoice.
+          items:
+            $ref: "#/components/schemas/InvoiceVatRateSummary"
+
+    InvoiceListSummary:
+      type: object
+      description: Financial summary of the invoice.
+      required:
+        - netAmount
+        - vatAmount
+        - grossAmount
+        - payableAmount
+      properties:
+        netAmount:
+          type: number
+          format: double
+          description: Total netto sales price of the items.
+        vatAmount:
+          type: number
+          format: double
+          description: Total vat of the items.
+        grossAmount:
+          type: number
+          format: double
+          description: Total gross sales price of the items.
+        payableAmount:
+          type: number
+          format: double
+          description: rounding of the sales price.
+
+    InvoiceVatRateSummary:
+      type: object
+      description: Vat rates summary of the invoice.
+      required:
+        - vat
+        - netAmount
+        - vatAmount
+        - grossAmount
+      properties:
+        vat:
+          $ref: "#/components/schemas/VatType"  
+        netAmount:
+          type: number
+          format: double
+          description: Total net sales price of the items per VAT rate.
+        vatAmount:
+          type: number
+          format: double
+          description: Total VAT value of the line items per VAT rate.    
+        grossAmount:
+          type: number
+          format: double
+          description: Total gross sales price of the line items per VAT rate.
+
+    Address:
+      type: object
+      description: The customer's address information.
+      required:
+        - countryCode
+        - zipCode
+        - address
+        - city
+      properties:
+        countryCode:
+          $ref: "#/components/schemas/CountryCode"
+        zipCode:
+          type: string
+          description: Postal code of customer. If you choose HU country code, the length of the ZIP code can be maximum 4 characters.
+          pattern: '^[^\s].*$'
+        address:
+          type: string
+          description: Additional address details of the customer.
+          minLength: 1
+          maxLength: 256
+          pattern: '^[^\s].*$'
+          example: 'Kontó u. 1/b.'
+        city:
+          type: string
+          description: Name of the settlement of the customer.
+          minLength: 1
+          maxLength: 128
+          pattern: '^[^\s].*$'
+          example: 'Budapest'
+
+#TODO egy számlához tarozhat e több tranzakciós kód?
+    NavResult:
+      type: object
+      description: NAV status and error/warning messages (if any).
+      required:
+        - status
+        - transactionId
+      properties:
+        status:
+          $ref: "#/components/schemas/NavStatus"
+        errorMessage:
+          type: string
+          description: NAV error message.
+          pattern: '^[^\s].*$'
+        transactionId:
+          type: string
+          description: Identifier of the invoice data submission.
+          pattern: '^[^\s].*$'
+
+    SequenceListResponse:
+      type: array
+      minItems: 1
+      required:
+        - items
+      items:
+        $ref: "#/components/schemas/Sequence"
+      description: List of sequences.
+
+    Sequence:
+      type: object
+      description: It represents one item of the response body for sequences.
+      required:
+        - id
+        - name
+        - prefix
+        - default
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier of the sequence, generated by the core system.
+        name:
+          type: string
+          description: Name of the sequence.
+          pattern: '^[^\s].*$'
+        prefix:
+          type: string
+          description: Public prefix of the sequence.
+          pattern: '^[^\s].*$'
+        default:
+          type: boolean
+          description: True if is this the default sequence.
+
+    BankAccountListResponse:
+      type: array
+      required:
+        - items
+      items:
+        $ref: "#/components/schemas/BankAccountItem"
+      description: List of bank accounts.
+
+    BankAccountItem:
+      type: object
+      description: It represents  one item of the response body for bank accounts.
+      required:
+        - id
+        - name
+        - accountNumber
+        - currencyCode
+        - default
+      properties:
+        id:
+          $ref: "#/components/schemas/BankAccountId"
+        name:
+          type: string
+          description: Name of the bank account.
+          pattern: '^[^\s].*$'
+        accountNumber:
+          type: string
+          description: Bank account number.
+          pattern:  '^[0-9]{8}([ -]?[0-9]{8}){1,2}$'
+        currencyCode:
+          $ref: "#/components/schemas/CurrencyCode"
+        default:
+          type: boolean
+          description: True if this is the default bank account.
+
+    BankAccountId:
+      type: string
+      pattern: '^[^\s].*$'
+      description: Identifier of client's bank account which has been registered in the core system.
+
+    ErrorMessageResponse:
+      description: The details of an error message response.
+      type: object
+      required:
+        - correlationId
+        - messages
+      properties:
+        correlationId:
+          description: Correlates HTTP requests between services and systems.
+          type: string
+          pattern: '^[^\s].*$'
+          example: 'a23b2c8c-46a1-11ee-be56-0242ac120002'
+        messages:
+          description: List of detailed error messages.
+          type: array
+          items:
+            $ref: "#/components/schemas/ErrorMessage"
+
+    ErrorMessage:
+      description: The details of an error message.
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          description: The code of the error message.
+          type: string
+          pattern: '^[^\s].*$'
+          example: 'DOCUMENTS_0001'
+        params:
+          $ref: "#/components/schemas/ErrorMessageParam"
+
+    ErrorMessageParam:
+      description: Additional properties of an error message parameter.
+      type: object
+      additionalProperties:
+        type: string
+        example:
+        maxLength: 256
+
+    Pager:
+      description: Pagination information of the result list.
+      type: object
+      properties:
+        total:
+          type: integer
+          format: int64
+          description: Number of results.
+        limit:
+          $ref: "#/components/schemas/Limit"  
+        offset:
+          $ref: "#/components/schemas/Offset"
+
+    Ordering:
+      type: string
+      description: Paging information.
+      default: ISSUE_DATE
+      enum:
+        - NONE
+        - INVOICE_NUMBER
+        - INVOICE_TYPE
+        - ISSUE_DATE
+        - DUE_DATE
+
+    Sorting:
+      type: string
+      description: sorting type of the result list
+      default: DESC
+      enum:
+        - ASC
+        - DESC
+
+    Pageable:
+      type: object
+      description: Paging information.
+      required:
+        - offset
+        - limit
+        - ordering
+        - sorting
+      properties:
+        offset:
+          $ref: "#/components/schemas/Offset" 
+        limit:
+          $ref: "#/components/schemas/Limit"         
+        ordering:
+          $ref: "#/components/schemas/Ordering"
+        sorting:
+          $ref: "#/components/schemas/Sorting"
+
+    Offset:
+      type: integer
+      minimum: 0
+      default: 0
+      description: Page number.
+
+    Limit:
+      type: integer
+      multipleOf: 10
+      minimum: 10
+      maximum: 50
+      default: 50
+      exclusiveMaximum: false 
+      description: How many results to return on a page.
+
+    TaxNote:
+      type: string
+      description: Tax status of the supplier.
+      enum:
+        - CASH_FLOW_SETTLEMENT
+
+    SequenceId:
+      type: integer
+      format: int64
+      description: Sequence identifier of the invoice. It has been created in the core system.
+
+    CreateSignatureType:
+      type: string
+      description: Invoice signature type for creation.
+      enum:
+        - PAPER
+        - ELECTRONIC
+
+    SignatureType:
+      type: string
+      description: Electronic signature and time stamp will be added to the invoice.
+      enum:
+        - PAPER
+        - ELECTRONIC
+        - EDI
+        - UNKNOWN
+
+    UnitType:
+      type: string
+      description: The collection of unit of measure types.
+      enum:
+        - PIECE
+        - KILOGRAM
+        - TON
+        - KWH 
+        - DAY 
+        - HOUR 
+        - MINUTE 
+        - MONTH 
+        - LITER 
+        - KILOMETER 
+        - CUBIC_METER 
+        - METER 
+        - LINEAR_METER 
+        - CARTON 
+        - PACK 
+        - CUSTOM
+
+    NavStatus:
+      type: string
+      description: The collection of NAV processing statuses.
+      enum:
+        - NOTHING
+        - SUCCESS
+        - ERROR
+        - UNSET
+        - WARNING
+        - SAVED
+        - DONE
+        - ABORTED
+        - OK
+        - PROCESSING
+        - RECEIVED
+        - INVALID_NAV_CREDENTIALS
+
+    InvoiceLanguage:
+      type: string
+      description: The collection of invoice languages.
+      enum:
+        - HU
+        - EN
+        - DE
+
+    CreateInvoicePaymentMethod:
+      type: string
+      description: The collection of invoice payment methods.
+      enum:
+        - CASH
+        - TRANSFER
+        - BANK_CARD
+        - DIRECT_DEBIT
+        - SZEP_CARD
+        - CASH_ON_DELIVERY
+        - HEALTH_INSURANCE
+
+    PaymentMethod:
+      type: string
+      description: The collection of invoice payment methods.
+      enum:
+        - CASH
+        - TRANSFER
+        - BANK_CARD
+        - DIRECT_DEBIT
+        - SZEP_CARD
+        - CASH_ON_DELIVERY
+        - HEALTH_INSURANCE
+        - COMPENSATION
+        - PAYPAL
+        - PAYU
+        - VOUCHER
+        - CHEQUE
+        - BARTER
+        - OTP_SIMPLE
+        - COUPON
+        - GIFT_COUPON
+        - OTHER
+
+    PaymentStatus:
+      type: string
+      description: The collection of invoice payment statuses.
+      enum:
+        - WAITING_FOR_PAYMENT
+        - EXPIRED
+        - PAID
+        - NONE
+
+    DateType:
+      type: string
+      description: The collection of invoice payment statuses.
+      enum:
+        - ISSUE_DATE
+        - DELIVERY_DATE
+        - DUE_DATE
+
+    CreateInvoiceType:
+      type: string
+      description: The collection of invoice types of POST request.
+      enum:
+        - INVOICE
+
+    InvoiceType:
+      type: string
+      description: The collection of invoice types.
+      enum:
+        - INVOICE
+        - CANCELLATION
+        - PROFORMA
+        - ADVANCE
+        - FINAL
+        - PARTIAL
+        - CORRECTIVE
+
+    CurrencyCode:
+      type: string
+      description: The collection of currency codes.
+      enum:
+        - HUF
+        - EUR
+        - USD
+        - GBP
+        - CHF
+        - CZK
+        - PLN
+        - SEK
+        - DKK
+        - CAD
+        - JPY
+        - ILS
+        - ISK
+        - RON
+        - NOK
+        - RSD
+        - RUB
+        - AUD
+        - BGN
+        - UAH
+        - CNY
+        - TRY
+        - ZAR
+
+    VatType:
+      type: string
+      description: | # The collection of VAT rates.
+        *  - AFA_5 - 5%
+        * - AFA_18 - 18%
+        * - AFA_27 - 27%
+        * - AAM - Alanyi adómentes
+        * - TAM - Tárgyi adómentes
+        * - ATK - ÁFA tárgyi hatályon kívüli
+        * - KAFA_TRAVEL_AGENCY - Különbözeti ÁFA Utazási irodák
+        * - KAFA_SECOND_HAND - Különbözeti ÁFA Használt cikkek
+        * - KAFA_ARTWORK -  Különbözeti ÁFA Műalkotások
+        * - KAFA_ANTIQUES  - Különbözeti ÁFA Gyűjteménydarabok és régiségek
+        * - FAFA_DOMESTIC - Belföldi fordított adózás
+        * - FAFA_EUFAD37 - EU-s teljesítés, Áfa tv. 37. § szerinti
+        * - FAFA_EUFADE - EU-s teljesítés, nem Áfa tv. 37. § szerint
+        * - KBAET - EU-n belüli termékértékesítés
+        * - KBAUK - EU közlekedési eszk.
+        * - EAM - EU-n kívüli termékexport
+        * - NAM - Egyéb nemzetközi ügylet
+        * - EUE - Másik tagállamban teljesített, nem fordítottan adózó ügylet
+        * - HO - Harmadik országban teljesített ügylet      
+      enum:
+        - AFA_5
+        - AFA_18
+        - AFA_27
+        - AAM
+        - TAM
+        - ATK
+        - KAFA_TRAVEL_AGENCY
+        - KAFA_SECOND_HAND
+        - KAFA_ARTWORK
+        - KAFA_ANTIQUES
+        - FAFA_DOMESTIC
+        - FAFA_EUFAD37
+        - FAFA_EUFADE
+        - KBAET
+        - KBAUK
+        - EAM
+        - NAM
+        - EUE
+        - HO
+
+    CustomerType:
+      type: string
+      description: The collection of costumer types.
+      enum:
+        - DOMESTIC
+        - PRIVATE_PERSON
+        - OTHER
+
+    TaxType:
+      type: string
+      description: The collection of tax types.
+      enum:
+        - HU
+        - GROUP
+        - EU
+        - THIRD_STATE
+
+    OnlinePaymentMethod:
+      type: string
+      description: The collection of payment methods.
+      enum:
+        - OTP_SIMPLEPAY
+
+    CountryCode:
+      type: string
+      description: The collection of country codes.
+      enum:
+        - AF
+        - AX
+        - AL
+        - DZ
+        - AS
+        - AD
+        - AO
+        - AI
+        - AQ
+        - AG
+        - AR
+        - AM
+        - AW
+        - AU
+        - AT
+        - AZ
+        - BS
+        - BH
+        - BD
+        - BB
+        - BY
+        - BE
+        - BZ
+        - BJ
+        - BM
+        - BT
+        - BO
+        - BQ
+        - BA
+        - BW
+        - BV
+        - BR
+        - IO
+        - BN
+        - BG
+        - BF
+        - BI
+        - CV
+        - KH
+        - CM
+        - CA
+        - KY
+        - CF
+        - TD
+        - CL
+        - CN
+        - CX
+        - CC
+        - CO
+        - KM
+        - CD
+        - CG
+        - CK
+        - CR
+        - CI
+        - HR
+        - CU
+        - CW
+        - CY
+        - CZ
+        - DK
+        - DJ
+        - DM
+        - DO
+        - EC
+        - EG
+        - SV
+        - GQ
+        - ER
+        - EE
+        - SZ
+        - ET
+        - FK
+        - FO
+        - FJ
+        - FI
+        - FR
+        - GF
+        - PF
+        - TF
+        - GA
+        - GM
+        - GE
+        - DE
+        - GH
+        - GI
+        - GR
+        - GL
+        - GD
+        - GP
+        - GU
+        - GT
+        - GG
+        - GN
+        - GW
+        - GY
+        - HT
+        - HM
+        - VA
+        - HN
+        - HK
+        - HU
+        - IS
+        - IN
+        - ID
+        - IR
+        - IQ
+        - IE
+        - IM
+        - IL
+        - IT
+        - JM
+        - JP
+        - JE
+        - JO
+        - KZ
+        - KE
+        - KI
+        - KP
+        - KR
+        - KW
+        - KG
+        - LA
+        - LV
+        - LB
+        - LS
+        - LR
+        - LY
+        - LI
+        - LT
+        - LU
+        - MO
+        - MK
+        - MG
+        - MW
+        - MY
+        - MV
+        - ML
+        - MT
+        - MH
+        - MQ
+        - MR
+        - MU
+        - YT
+        - MX
+        - FM
+        - MD
+        - MC
+        - MN
+        - ME
+        - MS
+        - MA
+        - MZ
+        - MM
+        - NA
+        - NR
+        - NP
+        - NL
+        - NC
+        - NZ
+        - NI
+        - NE
+        - NG
+        - NU
+        - NF
+        - MP
+        - 'NO'
+        - OM
+        - PK
+        - PW
+        - PS
+        - PA
+        - PG
+        - PY
+        - PE
+        - PH
+        - PN
+        - PL
+        - PT
+        - PR
+        - QA
+        - RE
+        - RO
+        - RU
+        - RW
+        - BL
+        - SH
+        - KN
+        - LC
+        - MF
+        - PM
+        - VC
+        - WS
+        - SM
+        - ST
+        - SA
+        - SN
+        - RS
+        - SC
+        - SL
+        - SG
+        - SX
+        - SK
+        - SI
+        - SB
+        - SO
+        - ZA
+        - GS
+        - SS
+        - ES
+        - LK
+        - SD
+        - SR
+        - SJ
+        - SE
+        - CH
+        - SY
+        - TW
+        - TJ
+        - TZ
+        - TH
+        - TL
+        - TG
+        - TK
+        - TO
+        - TT
+        - TN
+        - TR
+        - TM
+        - TC
+        - TV
+        - UG
+        - UA
+        - AE
+        - GB
+        - UM
+        - US
+        - UY
+        - UZ
+        - VU
+        - VE
+        - VN
+        - VG
+        - VI
+        - WF
+        - EH
+        - YE
+        - ZM
+        - ZW
+        - AC
+        - DG
+        - EA
+        - IC
+        - TA
+        - XK
+
+  parameters:
+  
+    Pageable:
+      name: pageable
+      in: query
+      description: Pagination information.
+      required: true
+      schema:
+        $ref: '#/components/schemas/Pageable'
+
+    InvoiceId:
+      name: invoiceId
+      in: path
+      description: Numeric ID of the invoice to be retrieved.
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+
+    InvoiceNumber:
+      name: invoiceNumber
+      in: path
+      description: Sequence number of the invoice to be retrieved.
+      required: true
+      schema:
+        $ref: '#/components/schemas/InvoiceNumber'
+      
+  responses:
+  
+    BadRequest:
+      description: Bad request.
+      headers:
+        RateLimit-Limit:
+          $ref: '#/components/headers/RateLimit-Limit'
+        RateLimit-Remaining:
+          $ref: '#/components/headers/RateLimit-Remaining'
+        RateLimit-Reset:
+          $ref: '#/components/headers/RateLimit-Reset'
+        RateLimit-Policy:
+          $ref: '#/components/headers/RateLimit-Policy'
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorMessageResponse"
+
+    Unauthorized:
+      description: The authorization token is missing or invalid.
+      headers:
+        RateLimit-Limit:
+            $ref: '#/components/headers/RateLimit-Limit'
+        RateLimit-Remaining:
+            $ref: '#/components/headers/RateLimit-Remaining'
+        RateLimit-Reset:
+            $ref: '#/components/headers/RateLimit-Reset'
+        RateLimit-Policy:
+            $ref: '#/components/headers/RateLimit-Policy'
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorMessageResponse"
+
+    NotFound:
+      description: The server understood the request, but will not fulfill it.
+      headers:
+        RateLimit-Limit:
+            $ref: '#/components/headers/RateLimit-Limit'
+        RateLimit-Remaining:
+            $ref: '#/components/headers/RateLimit-Remaining'
+        RateLimit-Reset:
+            $ref: '#/components/headers/RateLimit-Reset'
+        RateLimit-Policy:
+            $ref: '#/components/headers/RateLimit-Policy'
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorMessageResponse"
+
+    Forbidden:
+      description: The operation is not permitted.
+      headers:
+        RateLimit-Limit:
+            $ref: '#/components/headers/RateLimit-Limit'
+        RateLimit-Remaining:
+            $ref: '#/components/headers/RateLimit-Remaining'
+        RateLimit-Reset:
+            $ref: '#/components/headers/RateLimit-Reset'
+        RateLimit-Policy:
+            $ref: '#/components/headers/RateLimit-Policy'
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorMessageResponse"
+
+    InternalServerError:
+      description: An unknown error has occurred while trying to perform the request.
+      headers:
+        RateLimit-Limit:
+            $ref: '#/components/headers/RateLimit-Limit'
+        RateLimit-Remaining:
+            $ref: '#/components/headers/RateLimit-Remaining'
+        RateLimit-Reset:
+            $ref: '#/components/headers/RateLimit-Reset'
+        RateLimit-Policy:
+            $ref: '#/components/headers/RateLimit-Policy'
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorMessageResponse"
+
+    TooManyRequests:
+      description: Rate limit is reached.
+      headers:
+        RateLimit-Limit:
+            $ref: '#/components/headers/RateLimit-Limit'
+        RateLimit-Remaining:
+            $ref: '#/components/headers/RateLimit-Remaining'
+        RateLimit-Reset:
+            $ref: '#/components/headers/RateLimit-Reset'
+        RateLimit-Policy:
+            $ref: '#/components/headers/RateLimit-Policy'
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorMessageResponse"

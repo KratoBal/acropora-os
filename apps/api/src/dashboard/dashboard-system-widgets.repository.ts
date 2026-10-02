@@ -5,10 +5,12 @@ import type {
   DashboardSystemStatusWidgetData,
 } from "@acropora/types";
 
+import { ebizApiKey } from "../integrations/ebiz/ebiz.client.js";
 import { NAV_CONNECTION_ID } from "../integrations/nav/nav-connection.types.js";
 import { startOfBudapestDay } from "./budapest-day.js";
 import {
   JEV_WINDOW_DAYS,
+  ebizState,
   jevState,
   navState,
   summarizeDecisionRuns,
@@ -54,8 +56,11 @@ export class DashboardSystemWidgetsRepository extends Repository {
     );
   }
 
-  async systemStatus(now: Date): Promise<DashboardSystemStatusWidgetData> {
-    const [nav, verification, mail, foxpost, gls, simplePay, today] =
+  async systemStatus(
+    now: Date,
+    env: NodeJS.ProcessEnv = process.env,
+  ): Promise<DashboardSystemStatusWidgetData> {
+    const [nav, verification, mail, foxpost, gls, simplePay, ebiz, today] =
       await Promise.all([
         this.database.navInvoiceSyncRun.findFirst({
           orderBy: { createdAt: "desc" },
@@ -111,6 +116,16 @@ export class DashboardSystemWidgetsRepository extends Repository {
             failedCount: true,
           },
         }),
+        this.database.ebizSyncRun.findFirst({
+          orderBy: { startedAt: "desc" },
+          select: {
+            status: true,
+            startedAt: true,
+            completedAt: true,
+            errorCode: true,
+            failedCount: true,
+          },
+        }),
         this.jevToday(now),
       ]);
     const navRun: SyncRunSnapshot | null = nav
@@ -154,6 +169,7 @@ export class DashboardSystemWidgetsRepository extends Repository {
       FOXPOST: run(foxpost),
       GLS: run(gls),
       SIMPLEPAY: run(simplePay),
+      EBIZ: run(ebiz),
     };
     const jevToday = {
       runs: today.reduce((sum, r) => sum + r.count, 0),
@@ -172,6 +188,7 @@ export class DashboardSystemWidgetsRepository extends Repository {
         row("FOXPOST", runs.FOXPOST, syncRunState(runs.FOXPOST)),
         row("GLS", runs.GLS, syncRunState(runs.GLS)),
         row("SIMPLEPAY", runs.SIMPLEPAY, syncRunState(runs.SIMPLEPAY)),
+        row("EBIZ", runs.EBIZ, ebizState(ebizApiKey(env) !== null, runs.EBIZ)),
         row("JEV", null, jevState(jevToday)),
       ],
     };

@@ -94,6 +94,7 @@ export type {
   BillingPaymentSource,
   BillingExternalDocumentDetail,
   BillingExternalDocumentLine,
+  ExternalBillingSource,
   BillingDocumentSzamlazzInfo,
   BillingEmailMode,
   BillingEmailRecipients,

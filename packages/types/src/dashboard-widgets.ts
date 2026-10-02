@@ -1212,6 +1212,8 @@ export const DASHBOARD_SYSTEM_SOURCES = [
   "FOXPOST",
   "GLS",
   "SIMPLEPAY",
+  // OTP eBIZ invoice sync (2026-10-02)
+  "EBIZ",
   "JEV",
 ] as const;
 export type DashboardSystemSource = (typeof DASHBOARD_SYSTEM_SOURCES)[number];

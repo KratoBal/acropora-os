@@ -7446,61 +7446,101 @@ model SzamlazzFeedMessage {
 /// EGY SOR EGY SZÁMLA, nem egy üzenet: a Számlázz.hu ugyanazt a számlát a változásai
 /// után újraküldi (#1353), és a LEGKÉSŐBB érkezett változat adja a sort.
 model ExternalBillingDocument {
-  id                   String    @id @default(cuid())
-  /// A forrás rendszer; ma csak SZAMLAZZ.
-  source               String    @default("SZAMLAZZ")
-  /// A Számlázz.hu azonosítója (`alap.id`).
-  externalId           String
+  id                    String    @id @default(cuid())
+  /// A forrás rendszer: SZAMLAZZ (a Számlázz.hu feedje) vagy EBIZ (az OTP eBIZ
+  /// API-ja, napi, csak olvasó szinkron; 2026-10-02).
+  source                String    @default("SZAMLAZZ")
+  /// A forrás azonosítója: Számlázz.hu `alap.id`, eBIZ `id`.
+  externalId            String
   /// A sort adó (legkésőbb érkezett) változat nyers üzenete, és az érkezése.
-  feedMessageId        String
-  feedReceivedAt       DateTime
+  /// EBIZ-nél nincs feed-üzenet: `EBIZ:<id>`, és az első behúzás ideje.
+  feedMessageId         String
+  feedReceivedAt        DateTime
   /// Hány különböző változat érkezett eddig erről a számláról.
-  versionCount         Int       @default(1)
+  versionCount          Int       @default(1)
   /// A Számlázz.hu bizonylattípusa, nyersen (`alap.tipus`, például SZ).
-  kindCode             String
-  documentNumber       String
+  kindCode              String
+  documentNumber        String
   /// `alap.eszamla`: 1 elektronikus, minden más papír.
-  electronic           Boolean
-  issueDate            DateTime  @db.Date
-  fulfillmentDate      DateTime? @db.Date
-  dueDate              DateTime? @db.Date
-  paymentMethod        String?
+  electronic            Boolean
+  issueDate             DateTime  @db.Date
+  fulfillmentDate       DateTime? @db.Date
+  dueDate               DateTime? @db.Date
+  paymentMethod         String?
   /// `alap.fizmodunified`: az XSD zárt felsorolása (átutalás, bankkártya, OTP
   /// Simple, ...). A kifizetés-osztályozó előbb erre épít, a szabad szöveges
   /// `paymentMethod` csak tartalék. `null`: a sort még nem vetítettük újra.
-  paymentMethodUnified String?
+  paymentMethodUnified  String?
   /// `alap.rendelesszam`: a webshop rendelésszáma („47679-665706”); a
   /// SimplePay-elszámolás sorával ez köti össze (következő szelet).
-  orderNumber          String?
-  currency             String
-  customerName         String
-  customerTaxNumber    String?
-  customerAddress      String?
-  netAmount            Decimal   @db.Decimal(18, 2)
-  vatAmount            Decimal   @db.Decimal(18, 2)
-  grossAmount          Decimal   @db.Decimal(18, 2)
+  orderNumber           String?
+  currency              String
+  customerName          String
+  customerTaxNumber     String?
+  customerAddress       String?
+  netAmount             Decimal   @db.Decimal(18, 2)
+  vatAmount             Decimal   @db.Decimal(18, 2)
+  grossAmount           Decimal   @db.Decimal(18, 2)
   /// A tételek a számla sorrendjében: név, mennyiség, egység, nettó egységár,
   /// áfakulcs, nettó, áfa, bruttó.
-  lines                Json
+  lines                 Json
   /// `alap.sztornozott`: a Számlázz.hu szerint sztornózott.
-  cancelled            Boolean   @default(false)
+  cancelled             Boolean   @default(false)
   /// A számla kifizetései (`kifizetesek`), ahogy a legutolsó változat hozta:
   /// dátum, jogcím, összeg, megjegyzés, banki azonosító. A Számlázz.hu egy
   /// kifizetés után újraküldi a számlát, a saját banki párosítása is ide ír.
-  payments             Json      @default("[]")
+  payments              Json      @default("[]")
   /// Küldött-e a Számlázz.hu `kifizetesek` elemet. `null`: a sort még nem
   /// vetítettük a kifizetésekkel együtt (a migráció előtti sorok, az
   /// újravetítésig): ott az állapot UNKNOWN, nem UNPAID (murena review-ja).
-  paymentsKnown        Boolean?
+  paymentsKnown         Boolean?
   /// A kifizetések összege; a lista ebből számolja a kifizetettséget.
-  paidAmount           Decimal   @default(0) @db.Decimal(18, 2)
+  paidAmount            Decimal   @default(0) @db.Decimal(18, 2)
   /// A legkésőbbi kifizetés napja.
-  lastPaymentDate      DateTime? @db.Date
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  lastPaymentDate       DateTime? @db.Date
+  /// A számla PDF-je a dokumentumtárban (`external-invoice/<id>/...`); `null`:
+  /// nincs letöltve. EBIZ-nél a szinkron tölti le (2026-10-02).
+  pdfStorageKey         String?
+  /// Miért nincs PDF, ha egy letöltés megpróbálta és nem sikerült (hibakód).
+  pdfMissingReason      String?
+  /// EBIZ: a forrás saját fizetési állapota (`paymentStatus`: PAID,
+  /// WAITING_FOR_PAYMENT, EXPIRED, NONE), nyersen; a lista ebből vetít.
+  externalPaymentStatus String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@unique([source, externalId])
   @@index([issueDate])
+}
+
+enum EbizSyncRunStatus {
+  RUNNING
+  APPLIED
+  FAILED
+}
+
+/// AZ OTP EBIZ SZÁMLÁINAK NAPI, CSAK OLVASÓ SZINKRONJA (2026-10-02). Egy sor
+/// egy futás; a Rendszerállapot csempe a legutolsót mutatja. Egyszerre egy
+/// futás (`activeKey`), ugyanúgy, mint a GLS-nél.
+model EbizSyncRun {
+  id             String            @id @default(cuid())
+  activeKey      String?           @unique
+  status         EbizSyncRunStatus @default(RUNNING)
+  trigger        SyncRunTrigger?
+  startedAt      DateTime          @default(now())
+  completedAt    DateTime?
+  /// A listából olvasott számlák.
+  fetchedCount   Int               @default(0)
+  createdCount   Int               @default(0)
+  updatedCount   Int               @default(0)
+  /// Ebben a futásban letöltött és eltárolt PDF-ek.
+  pdfStoredCount Int               @default(0)
+  /// Tételek, amelyeknél a részletek vagy a PDF nem jött meg.
+  failedCount    Int               @default(0)
+  errorCode      String?
+  updatedAt      DateTime          @updatedAt
+
+  @@index([startedAt])
 }
 
 /// A SZÁMLÁZZ.HU-BÓL KAPOTT BEJÖVŐ SZÁMLÁK VETÍTÉSE A SZÁMLÁZÁS „BEJÖVŐ

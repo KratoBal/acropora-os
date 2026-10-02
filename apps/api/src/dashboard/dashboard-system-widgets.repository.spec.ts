@@ -76,7 +76,7 @@ describe("the JEV and system reads", () => {
         failedCount: 0,
       },
     });
-    const data = await repository.systemStatus(now);
+    const data = await repository.systemStatus(now, {});
     assert.deepEqual(
       data.sources.map((s) => [s.source, s.state]),
       [
@@ -85,8 +85,14 @@ describe("the JEV and system reads", () => {
         ["FOXPOST", "error"],
         ["GLS", "no-data"],
         ["SIMPLEPAY", "no-data"],
+        ["EBIZ", "no-data"],
         ["JEV", "no-data"],
       ],
+    );
+    // no OTP_EBIZ_API_KEY: "not configured", not "has not run yet"
+    assert.equal(
+      data.sources.find((s) => s.source === "EBIZ")?.detail,
+      "Nincs beállítva.",
     );
     const foxpost = data.sources.find((s) => s.source === "FOXPOST");
     assert.equal(foxpost?.errorCode, "MAILBOX_UNREACHABLE");

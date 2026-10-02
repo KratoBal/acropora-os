@@ -15,6 +15,7 @@ const NAME: Record<DashboardSystemSource, string> = {
   FOXPOST: "Foxpost",
   GLS: "GLS",
   SIMPLEPAY: "SimplePay",
+  EBIZ: "OTP eBIZ",
   JEV: "JEV",
 };
 

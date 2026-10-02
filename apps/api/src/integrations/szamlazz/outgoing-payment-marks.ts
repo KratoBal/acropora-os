@@ -291,7 +291,8 @@ const isUniqueViolation = (error: unknown) =>
 export const prismaPaymentMarkStore: PaymentMarkStore = {
   async invoice(invoiceNumber) {
     const row = await prisma.externalBillingDocument.findFirst({
-      where: { documentNumber: invoiceNumber },
+      // only Számlázz.hu's own invoices can be marked paid there (not eBIZ)
+      where: { source: "SZAMLAZZ", documentNumber: invoiceNumber },
       orderBy: { feedReceivedAt: "desc" },
       select: {
         paymentsKnown: true,

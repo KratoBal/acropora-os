@@ -67,7 +67,11 @@ export async function loadSimplePayOrders(from: string): Promise<{
 
   const lines = await loadSimplePayLinesByOrder(keys);
   const documents = await prisma.externalBillingDocument.findMany({
-    where: { orderNumber: { in: keys.map((key) => `${SHOP}${key}`) } },
+    where: {
+      // only Számlázz.hu's own invoices can be marked paid there (not eBIZ)
+      source: "SZAMLAZZ",
+      orderNumber: { in: keys.map((key) => `${SHOP}${key}`) },
+    },
     orderBy: { documentNumber: "asc" },
     select: {
       documentNumber: true,

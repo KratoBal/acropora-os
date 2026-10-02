@@ -141,6 +141,17 @@ export const billingDocumentsApi = {
       },
     );
   },
+  /**
+   * A külső bizonylat eltárolt PDF-je (az OTP eBIZ-ből jöttnél a szinkron
+   * tölti le); ahol nincs, 404.
+   */
+  async externalPdf(token: string, id: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}/billing/external-documents/${encodeURIComponent(id)}/pdf`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "A számla PDF-je nem tölthető le.");
+  },
   /** A Számlázz.hu-ból kapott külső bizonylat, csak olvasásra (acrobot 25812). */
   externalDetail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<BillingExternalDocumentDetail>(

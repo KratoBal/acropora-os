@@ -152,6 +152,7 @@ const external = (
   overrides: Partial<ExternalListRow> = {},
 ): ExternalListRow => ({
   id: "ext-1",
+  source: "SZAMLAZZ",
   kindCode: "SZ",
   documentNumber: "ACRW-2026/00508",
   electronic: false,
@@ -203,6 +204,30 @@ describe("the payment of an external document (Balázs, GLS, 2026-10-01)", () =>
       paymentSource: "SZAMLAZZ",
     });
     assert.equal(fields({ paidAmount: D("50000") }).paymentState, "PARTIAL");
+  });
+
+  it("an eBIZ invoice follows eBIZ's own status only; NONE stays unknown (2026-10-02)", () => {
+    const ebiz = (paymentsKnown: boolean | null, paid: string) =>
+      fields({
+        source: "EBIZ",
+        paymentsKnown,
+        paidAmount: D(paid),
+        lastPaymentDate: null,
+        // a card method must not make an eBIZ invoice "paid at ordering"
+        paymentMethod: "Bankkártya",
+      });
+    assert.deepEqual(
+      [ebiz(true, "105831").paymentState, ebiz(true, "105831").paymentSource],
+      ["PAID", "EBIZ"],
+    );
+    assert.deepEqual(
+      [ebiz(true, "0").paymentState, ebiz(true, "0").paymentSource],
+      ["UNPAID", "EBIZ"],
+    );
+    assert.deepEqual(
+      [ebiz(null, "0").paymentState, ebiz(null, "0").paymentSource],
+      ["UNKNOWN", null],
+    );
   });
 
   it("a row not yet re-projected is unknown; the same row projected without payment elements is unpaid (acrobot 25918)", () => {
@@ -451,6 +476,7 @@ describe("the external documents on the list", () => {
       documentType: "INVOICE",
       invoiceFormat: "PAPER",
       documentNumber: "ACRW-2026/00508",
+      externalSource: "SZAMLAZZ",
       customerName: "Teszt Akvárium Bt.",
       issueDate: "2026-09-30",
       dueDate: "2026-10-08",
@@ -584,6 +610,14 @@ describe("an own paid mark on the outgoing view (acrobot 26027)", () => {
         [{ ...gls, source: "SIMPLEPAY" }],
       ).paymentSource,
       "MARK_SIMPLEPAY",
+    );
+  });
+
+  it("an eBIZ invoice ignores our marks: they are about Számlázz.hu invoices", () => {
+    const ebiz = pay({ source: "EBIZ", paymentsKnown: null });
+    assert.deepEqual(
+      [ebiz.paymentState, ebiz.paymentSource],
+      ["UNKNOWN", null],
     );
   });
 
