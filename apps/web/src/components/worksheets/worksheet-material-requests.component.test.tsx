@@ -163,6 +163,46 @@ describe("anyagigénylés a munkalapon, a weben", () => {
     );
   });
 
+  it("V2: a határidő, a prioritás és a megjegyzés csak kitöltve megy el", async () => {
+    // the test above pins the other half: left empty, none of them is sent
+    api.create.mockResolvedValue(request({ id: "mr-uj", status: "DRAFT" }));
+    api.submit.mockResolvedValue({
+      items: [request({ id: "mr-uj", status: "OPEN" })],
+    });
+
+    render(<WorksheetMaterialRequests worksheetId="w-1" canWrite />);
+    await waitFor(() => screen.getByText(/40mm könyök/));
+    fireEvent.click(screen.getByRole("button", { name: "Anyagigénylés" }));
+    fireEvent.change(screen.getByLabelText("Tétel neve"), {
+      target: { value: "Kitalált idom" },
+    });
+    fireEvent.change(screen.getByLabelText("Mennyiség"), {
+      target: { value: "4" },
+    });
+    fireEvent.change(screen.getByLabelText("Egység"), {
+      target: { value: "db" },
+    });
+    fireEvent.change(screen.getByLabelText("Szükséges"), {
+      target: { value: "2026-10-05" },
+    });
+    fireEvent.change(screen.getByLabelText("Prioritás"), {
+      target: { value: "URGENT" },
+    });
+    fireEvent.change(screen.getByLabelText("Megjegyzés"), {
+      target: { value: "  Kitalált megjegyzés  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Küldés" }));
+
+    await waitFor(() =>
+      expect(api.create).toHaveBeenCalledWith("token-1", "w-1", {
+        items: [{ name: "Kitalált idom", quantity: "4", unit: "db" }],
+        note: "Kitalált megjegyzés",
+        neededBy: "2026-10-05",
+        priority: "URGENT",
+      }),
+    );
+  });
+
   /**
    * A `submit` VALASZANAK `warning` MEZOJE MEGJELENIK, DE NEM HIBAKENT.
    *

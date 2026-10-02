@@ -305,7 +305,7 @@ export class MaterialRequestsService {
       return {
         ...response,
         warning:
-          "Az anyagigény elküldve, de ma senki nem tudja megjelölni, ha beérkezik: az „Anyag beérkezésének jelölése” jog senkinél nincs bejelölve. Szólj valakinek, aki a felhasználókat kezeli.",
+          "Az anyagigény elküldve, de ma senki nem tudja elintézni: az „Anyagbeszerzés intézése” jog senkinél nincs bejelölve. Szólj valakinek, aki a felhasználókat kezeli.",
       };
     return response;
   }

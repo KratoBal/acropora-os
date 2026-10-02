@@ -10,10 +10,13 @@ import {
 } from "@acropora/ui";
 import {
   hasPermission,
+  MATERIAL_REQUEST_PRIORITIES,
   PERMISSIONS,
   type MaterialRequestDetail,
   type MaterialRequestItemInput,
+  type MaterialRequestPriorityValue,
 } from "@acropora/types";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -27,6 +30,13 @@ import {
 } from "./worksheet-material-request-presentation";
 
 const URES_SOR: MaterialRequestItemInput = { name: "", quantity: "", unit: "" };
+
+/** V2: the requester's optional fields (owner decision, 2026-10-02). */
+const PRIORITY_OPTION_LABEL: Record<MaterialRequestPriorityValue, string> = {
+  NORMAL: "Normál",
+  HIGH: "Magas",
+  URGENT: "Sürgős",
+};
 
 /**
  * ANYAGIGENYLES A MUNKALAPROL, A WEBEN.
@@ -73,6 +83,11 @@ export function WorksheetMaterialRequests({
   );
   const [formOpen, setFormOpen] = useState(false);
   const [rows, setRows] = useState<MaterialRequestItemInput[]>([URES_SOR]);
+  const [note, setNote] = useState("");
+  const [neededBy, setNeededBy] = useState("");
+  const [priority, setPriority] = useState<MaterialRequestPriorityValue | "">(
+    "",
+  );
   const [busy, setBusy] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -156,11 +171,18 @@ export function WorksheetMaterialRequests({
     try {
       const draft = await materialRequestsApi.create(token, worksheetId, {
         items: tisztitott,
+        // V2, all optional: nothing is sent that was not filled in
+        ...(note.trim() ? { note: note.trim() } : {}),
+        ...(neededBy ? { neededBy } : {}),
+        ...(priority ? { priority } : {}),
       });
       const response = await materialRequestsApi.submit(token, draft.id);
       setRequests(response.items);
       setNotice(response.warning ?? null);
       setRows([{ ...URES_SOR }]);
+      setNote("");
+      setNeededBy("");
+      setPriority("");
       setFormOpen(false);
     } catch (cause) {
       /*
@@ -251,6 +273,50 @@ export function WorksheetMaterialRequests({
                   ) : null}
                 </div>
               ))}
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="flex flex-col gap-1 text-xs text-dusk-500">
+                  Szükséges (nem kötelező)
+                  <Input
+                    type="date"
+                    aria-label="Szükséges"
+                    value={neededBy}
+                    onChange={(event) => setNeededBy(event.target.value)}
+                    className="w-40"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-dusk-500">
+                  Prioritás (nem kötelező)
+                  <select
+                    aria-label="Prioritás"
+                    value={priority}
+                    onChange={(event) =>
+                      setPriority(
+                        event.target.value as MaterialRequestPriorityValue | "",
+                      )
+                    }
+                    className="h-9 rounded border border-dusk-200 px-2 text-sm text-dusk-800"
+                  >
+                    <option value="">—</option>
+                    {MATERIAL_REQUEST_PRIORITIES.map((value) => (
+                      <option key={value} value={value}>
+                        {PRIORITY_OPTION_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="flex flex-col gap-1 text-xs text-dusk-500">
+                Megjegyzés (nem kötelező)
+                <textarea
+                  aria-label="Megjegyzés"
+                  value={note}
+                  maxLength={1000}
+                  rows={2}
+                  placeholder="Pl. a medence visszatérő ágához, lehetőleg péntek délelőttre."
+                  onChange={(event) => setNote(event.target.value)}
+                  className="rounded border border-dusk-200 px-2 py-1.5 text-sm text-dusk-800"
+                />
+              </label>
               <div className="flex items-center gap-2">
                 <Button variant="secondary" onClick={addRow}>
                   Új tétel
@@ -264,6 +330,9 @@ export function WorksheetMaterialRequests({
                   onClick={() => {
                     setFormOpen(false);
                     setRows([{ ...URES_SOR }]);
+                    setNote("");
+                    setNeededBy("");
+                    setPriority("");
                     setError(null);
                   }}
                 >
@@ -313,6 +382,14 @@ export function WorksheetMaterialRequests({
                   </li>
                 ))}
               </ul>
+              {request.status !== "DRAFT" ? (
+                <Link
+                  href={`/szerviz/anyagigenyek/${encodeURIComponent(request.id)}`}
+                  className="mt-2 inline-block text-xs font-semibold text-brand-700 underline"
+                >
+                  Részletek és állapot
+                </Link>
+              ) : null}
               {request.status === "DRAFT" ? (
                 <Button
                   className="mt-2"
