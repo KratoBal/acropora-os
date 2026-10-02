@@ -482,7 +482,12 @@ otherwise.
     writes a CANCELLED history row with the actor.
   - The request and its history stay readable. It leaves the active lists
     and shows under its own filter state.
-  - No notification is added for it; the brief and the answers name none.
+  - If the request already has a handler (it was IN_PROGRESS), the handler
+    is notified, by mail and push, through the existing material-request
+    notification path and one new editable template
+    (`MATERIAL_REQUEST_CANCELLED`), so they stop working on it. An OPEN
+    request has no handler, so its withdrawal notifies no one (owner,
+    2026-10-02).
 - **Q11, the overview:** every internal user with SERVICE_VIEW sees it,
   scoped to the worksheets they can see (`worksheetListWheres`, hidden
   worksheets excluded). Only the handler, leaders and capability holders may
