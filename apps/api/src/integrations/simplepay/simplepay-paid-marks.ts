@@ -76,6 +76,8 @@ export interface SimplePayPaidMark {
   readonly amount: string;
   readonly title: "bankkártya";
   readonly note: string;
+  /** The SimplePay transactions the mark rests on, ascending, comma-joined. */
+  readonly sourceRef: string;
 }
 
 export type SimplePayOrderDecision =
@@ -176,6 +178,7 @@ export function decideSimplePayOrder(input: {
       amount: invoice.grossAmount.toFixed(0),
       title: "bankkártya",
       note: `SimplePay, ${date}, tranzakció: ${ids.join(", ")}`,
+      sourceRef: ids.join(","),
     },
   };
 }
