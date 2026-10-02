@@ -40,19 +40,39 @@ export interface SzamlazzAgentClient {
   generateInvoice(xml: string): Promise<SzamlazzAgentResponse>;
 }
 
-export class HttpSzamlazzAgentClient implements SzamlazzAgentClient {
+/**
+ * A jóváírás rögzítése (`xmlszamlakifiz`). Külön felület, hogy a számla-
+ * készítés meglévő teszt-dublőreinek ne kelljen megvalósítaniuk. A mezőnév a
+ * docs.szamlazz.hu/agent/basics/sending-requests táblájából: „Register credit
+ * entry -> action-szamla_agent_kifiz” (letöltve 2026-10-01).
+ */
+export interface SzamlazzAgentPaymentClient {
+  registerPayment(xml: string): Promise<SzamlazzAgentResponse>;
+}
+
+export class HttpSzamlazzAgentClient
+  implements SzamlazzAgentClient, SzamlazzAgentPaymentClient
+{
   constructor(
     private readonly url: string = SZAMLAZZ_AGENT_URL,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  async generateInvoice(xml: string): Promise<SzamlazzAgentResponse> {
+  generateInvoice(xml: string): Promise<SzamlazzAgentResponse> {
+    return this.post("action-xmlagentxmlfile", "szamla.xml", xml);
+  }
+
+  registerPayment(xml: string): Promise<SzamlazzAgentResponse> {
+    return this.post("action-szamla_agent_kifiz", "kifizetes.xml", xml);
+  }
+
+  private async post(
+    field: string,
+    fileName: string,
+    xml: string,
+  ): Promise<SzamlazzAgentResponse> {
     const form = new FormData();
-    form.append(
-      "action-xmlagentxmlfile",
-      new Blob([xml], { type: "text/xml" }),
-      "szamla.xml",
-    );
+    form.append(field, new Blob([xml], { type: "text/xml" }), fileName);
     const response = await this.fetchImpl(this.url, {
       method: "POST",
       body: form,
