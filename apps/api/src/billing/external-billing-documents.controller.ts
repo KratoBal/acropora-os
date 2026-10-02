@@ -8,16 +8,27 @@ import {
 
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import {
+  externalCustomerName,
   externalKindLabel,
   externalPaymentFields,
   simplePayOrderKey,
 } from "./billing-document-list.js";
 import {
+  orderBuyerNamesByOrderNumber,
   ownPaymentMarksByInvoice,
   simplePayLinesByOrder,
 } from "./billing-document-list.repository.js";
 import { UNAS_SHOP_ORDER_PREFIX } from "../integrations/simplepay/simplepay-settlement.repository.js";
 import type { ExternalInvoicePayment } from "./external-szamlazz-invoice.js";
+
+/** A lista alakjából az adatlap vevő-blokkjának neve és jelzője. */
+const customerFromOrder = (name: {
+  customerName: string;
+  customerNameFromOrder?: true;
+}) =>
+  name.customerNameFromOrder
+    ? { name: name.customerName, nameFromOrder: true }
+    : { name: name.customerName };
 
 const day = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
 
@@ -57,7 +68,18 @@ export class ExternalBillingDocumentsController {
       paymentMethod: row.paymentMethod,
       currency: row.currency,
       customer: {
-        name: row.customerName,
+        ...customerFromOrder(
+          externalCustomerName(
+            row,
+            row.orderNumber
+              ? (
+                  await orderBuyerNamesByOrderNumber(this.database, [
+                    row.orderNumber,
+                  ])
+                ).get(row.orderNumber)
+              : null,
+          ),
+        ),
         taxNumber: row.customerTaxNumber,
         address: row.customerAddress,
       },
