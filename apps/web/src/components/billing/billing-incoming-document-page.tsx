@@ -163,6 +163,8 @@ export function BillingIncomingDocumentPage({
             paymentState={detail.paymentState}
             paidAmount={detail.paidAmount}
             lastPaymentDate={detail.lastPaymentDate}
+            paymentSource={detail.paymentSource}
+            paymentConflict={detail.paymentConflict}
             currency={detail.currency}
           />
           <span
@@ -362,8 +364,9 @@ export function BillingIncomingDocumentPage({
               </div>
             ) : (
               <p className="text-sm text-pilot-grey-600">
-                Nincs adat: a Számlázz.hu ehhez a számlához nem küldött
-                kifizetési adatot. Ez nem azt jelenti, hogy nincs kifizetve.
+                {detail.paymentSource === "BANK_PAIRING"
+                  ? "A Számlázz.hu ehhez a számlához nem küldött kifizetési adatot; nálunk fizetett a banki párosítás alapján (a terhelések lent)."
+                  : "Nincs adat: a Számlázz.hu ehhez a számlához nem küldött kifizetési adatot. Ez nem azt jelenti, hogy nincs kifizetve."}
               </p>
             )}
           </PilotSection>

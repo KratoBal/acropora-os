@@ -64,18 +64,7 @@ export async function loadSimplePayOrders(from: string): Promise<{
   const unkeyed = settled.filter((line) => line.orderKeySuffix === null).length;
   if (keys.length === 0) return { orders: [], unkeyed };
 
-  const lines = await prisma.simplePayTransactionLine.findMany({
-    where: { orderKeySuffix: { in: keys } },
-    orderBy: [{ transactionDate: "asc" }, { simplePayTransactionId: "asc" }],
-    select: {
-      orderKeySuffix: true,
-      simplePayTransactionId: true,
-      transactionStatus: true,
-      amount: true,
-      currency: true,
-      transactionDate: true,
-    },
-  });
+  const lines = await loadSimplePayLinesByOrder(keys);
   const documents = await prisma.externalBillingDocument.findMany({
     where: { orderNumber: { in: keys.map((key) => `${SHOP}${key}`) } },
     orderBy: { documentNumber: "asc" },
@@ -95,15 +84,7 @@ export async function loadSimplePayOrders(from: string): Promise<{
   return {
     orders: keys.map((key) => ({
       orderKey: key,
-      lines: lines
-        .filter((line) => line.orderKeySuffix === key)
-        .map((line) => ({
-          transactionId: line.simplePayTransactionId,
-          transactionStatus: line.transactionStatus,
-          amount: line.amount,
-          currency: line.currency,
-          transactionDate: day(line.transactionDate),
-        })),
+      lines: lines.get(key) ?? [],
       // invoices only: a proforma or a delivery note on the order is not paid
       invoices: documents
         .filter(
@@ -126,6 +107,40 @@ export async function loadSimplePayOrders(from: string): Promise<{
     })),
     unkeyed,
   };
+}
+
+/** Every settlement line of the orders, from any weekly report, by order key. */
+export async function loadSimplePayLinesByOrder(
+  keys: readonly string[],
+): Promise<Map<string, SimplePaySettlementLineInput[]>> {
+  const out = new Map<string, SimplePaySettlementLineInput[]>();
+  if (keys.length === 0) return out;
+  const lines = await prisma.simplePayTransactionLine.findMany({
+    where: { orderKeySuffix: { in: [...keys] } },
+    orderBy: [{ transactionDate: "asc" }, { simplePayTransactionId: "asc" }],
+    select: {
+      orderKeySuffix: true,
+      simplePayTransactionId: true,
+      transactionStatus: true,
+      amount: true,
+      currency: true,
+      transactionDate: true,
+    },
+  });
+  for (const line of lines) {
+    const key = line.orderKeySuffix!;
+    out.set(key, [
+      ...(out.get(key) ?? []),
+      {
+        transactionId: line.simplePayTransactionId,
+        transactionStatus: line.transactionStatus,
+        amount: line.amount,
+        currency: line.currency,
+        transactionDate: day(line.transactionDate),
+      },
+    ]);
+  }
+  return out;
 }
 
 const SKIP_TEXT: Record<SimplePayOrderSkip, string> = {

@@ -78,6 +78,8 @@ function incoming(
     paymentState: "PAID",
     paidAmount: "1631.19",
     lastPaymentDate: "2026-09-30",
+    paymentSource: "SZAMLAZZ",
+    paymentConflict: false,
     bankMatch: {
       state: "PAIRED",
       reason: null,

@@ -172,6 +172,30 @@ enum GlsCodResolutionSource {
   MANUAL
 }
 
+/// Egy kimenő számla kifizetett-jelölésének állapota a Számlázz.hu felé
+/// (acrobot 25989). PLANNED: a sor a hívás ELŐTT íródik; WRITTEN: a Számlázz.hu
+/// sikert adott; ALREADY_PAID: a számla már kifizetett volt, hívás nem ment;
+/// FAILED: a Számlázz.hu elutasította (semmi nem íródott, újrapróbálható);
+/// UNKNOWN: a hívás kimenete bizonytalan (hálózat, időtúllépés), vakon NEM
+/// próbálkozunk újra.
+enum OutgoingPaymentMarkState {
+  PLANNED
+  WRITTEN
+  ALREADY_PAID
+  FAILED
+  UNKNOWN
+}
+
+/// Honnan jön a kifizetés, amit a jelölés rögzít: a GLS utánvét-utalása, a
+/// Foxpost elszámolása, vagy a SimplePay kártyás fizetése (Balázs, 2026-10-01
+/// 21:35 UTC: a kifizetett jelölés minden forrásból; acrobot 26001: a bank
+/// később kerül ide).
+enum OutgoingPaymentMarkSource {
+  GLS_COD
+  SIMPLEPAY
+  FOXPOST
+}
+
 enum GlsSyncRunStatus {
   RUNNING
   APPLIED
@@ -6088,6 +6112,37 @@ model GlsInvoiceParcel {
 
   @@unique([invoiceId, parcelNumber])
   @@index([parcelNumber])
+}
+
+/// A KIMENŐ SZÁMLÁK KIFIZETETT-JELÖLÉSÉNEK NAPLÓJA, minden forrásra (acrobot
+/// 25989; terv: agents/nautilus/megosztas/gls-utanvet-kifizetett-terv-2026-10-01.md,
+/// 4. pont; a közös alakot murena javasolta, 25999). A Számlázz.hu
+/// jóváírás-rögzítése `additiv=true` mellett NEM idempotens (kétszer hívva
+/// kétszer jóváír), ezért az idempotencia itt áll: egy forrás egy kifizetése
+/// (a forrás-oldali azonosítója szerint) egy számlára egyszer, akárhány futás
+/// után is (acrobot 26001).
+model OutgoingPaymentMark {
+  id              String                    @id @default(cuid())
+  source          OutgoingPaymentMarkSource
+  invoiceNumber   String
+  /// A kifizetés napja, ahogy a Számlázz.hu-ba kerül (GLS: az utalás napja).
+  markDate        DateTime                  @db.Date
+  /// A rögzített összeg: a számla bruttója.
+  amount          Decimal                   @db.Decimal(19, 4)
+  /// A forrás-oldali azonosító, amiből a jelölés következik: GLS-nél az utalás
+  /// jóváírása a bankban (BankTransaction.id), SimplePay-nél a tranzakció.
+  sourceRef       String
+  state           OutgoingPaymentMarkState
+  /// A beküldött kérés lenyomata (a kulcs nélküli alakból).
+  requestSha256   String?
+  responseCode    String?
+  responseMessage String?
+  /// A Számlázz.hu válaszának `kintlevoseg` értéke az írás után.
+  outstanding     Decimal?                  @db.Decimal(19, 4)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@unique([source, invoiceNumber, sourceRef])
 }
 
 /// GLS "Kompenzációs értesítő" (PDF, dunning@): az utánvét-utalás napján a GLS

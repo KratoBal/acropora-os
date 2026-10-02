@@ -1,5 +1,6 @@
 import type { DecimalText } from "./billing-document-amounts.js";
 import type { InvoiceFormat } from "./billing-document.js";
+import type { BillingPaymentSource } from "./billing-document-read.js";
 
 /**
  * A SZÁMLÁZÁS „BEJÖVŐ SZÁMLÁK” NÉZETE (Balázs újraterv-promptja, acrobot 25869):
@@ -103,9 +104,21 @@ export interface IncomingDocumentListItem {
   netAmount: DecimalText;
   vatAmount: DecimalText;
   grossAmount: DecimalText;
+  /**
+   * A KIFIZETETTSÉG (acrobot 25988): ahol a Számlázz.hu kifizetést küldött, az
+   * nyer (`SZAMLAZZ`); ahol nem, de a Hiányzó számlák a számlát banki
+   * terheléshez párosította, NÁLUNK fizetett (`BANK_PAIRING`). A Számlázz.hu-ba
+   * nem írunk.
+   */
   paymentState: IncomingPaymentState;
   paidAmount: DecimalText;
   lastPaymentDate: string | null;
+  paymentSource: BillingPaymentSource | null;
+  /**
+   * ELTÉRÉS: a Számlázz.hu részben fizetettnek mondja, a banki párosítás
+   * teljesnek. Az állapot a Számlázz.hu-é marad, a jelölés ezt mutatja.
+   */
+  paymentConflict: boolean;
   bankMatch: IncomingBankMatch;
   hasPdf: boolean;
 }
