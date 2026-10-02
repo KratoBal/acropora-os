@@ -180,7 +180,8 @@ export class DashboardWidgetsService {
         this.serviceWidgets.serviceTickets(await serviceViewer(user)),
       worksheets: async (user) =>
         this.serviceWidgets.worksheets(await serviceViewer(user)),
-      "material-requests": () => this.serviceWidgets.materialRequests(),
+      "material-requests": async (user) =>
+        this.serviceWidgets.materialRequests(await serviceViewer(user)),
       "maintenance-calendar": async (user) =>
         this.serviceWidgets.maintenanceCalendar(
           await serviceViewer(user),

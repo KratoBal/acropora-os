@@ -6,8 +6,10 @@
  * (nem importalt) tukret, ez a szoveg-alak nem szamit -- csak a MEZOK.
  */
 
+import type { MaterialRequestStatusValue } from "@acropora/types";
+
 export interface MaterialRequestLike {
-  status: "DRAFT" | "OPEN" | "RECEIVED";
+  status: MaterialRequestStatusValue;
   requestedByName: string | null;
   createdAt: string;
   submittedAt: string | null;
@@ -27,17 +29,31 @@ function magyarDatum(iso: string): string {
   });
 }
 
+/**
+ * V2's statuses are named here already (docs/material-requests/v2-discovery.md):
+ * the V2 screens come in their own phase, but the worksheet section and the
+ * pending page must name a claimed or ordered request, not show an empty
+ * badge, from the moment the API can return one.
+ */
 export const MATERIAL_REQUEST_STATUS_LABEL = {
   DRAFT: "Piszkozat",
   OPEN: "Beszerzésre vár",
+  IN_PROGRESS: "Intézés alatt",
+  ORDERED: "Megrendelve",
+  PARTIALLY_RECEIVED: "Részben beérkezett",
   RECEIVED: "Beérkezett",
-} as const;
+  CANCELLED: "Visszavont",
+} as const satisfies Record<MaterialRequestStatusValue, string>;
 
 export const MATERIAL_REQUEST_STATUS_BADGE_VARIANT = {
   DRAFT: "neutral",
   OPEN: "warning",
+  IN_PROGRESS: "info",
+  ORDERED: "info",
+  PARTIALLY_RECEIVED: "warning",
   RECEIVED: "success",
-} as const;
+  CANCELLED: "neutral",
+} as const satisfies Record<MaterialRequestStatusValue, string>;
 
 /**
  * KI KERTE, MIKOR -- ES HA ELKULDVE VAGY BEERKEZETT, AZ IS.

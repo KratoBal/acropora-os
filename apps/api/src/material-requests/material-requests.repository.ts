@@ -1,5 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
+import {
+  MATERIAL_REQUEST_ACTIVE_STATUSES,
+  type MaterialRequestEventKindValue,
+  type MaterialRequestPriorityValue,
+  type MaterialRequestStatusValue,
+  type MaterialRequestView,
+} from "@acropora/types";
+
+import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
+import { parseQuantityValue } from "./material-request-workflow.js";
 
 export interface MaterialRequestItemInput {
   name: string;
@@ -12,9 +22,12 @@ export interface MaterialRequestItemRow {
   name: string;
   quantity: string;
   unit: string;
+  quantityValue: Prisma.Decimal | null;
+  receivedQuantity: Prisma.Decimal | null;
+  receivedAt: Date | null;
 }
 
-export type MaterialRequestStatus = "DRAFT" | "OPEN" | "RECEIVED";
+export type MaterialRequestStatus = MaterialRequestStatusValue;
 
 export interface MaterialRequestRow {
   id: string;
@@ -27,6 +40,40 @@ export interface MaterialRequestRow {
   receivedAt: Date | null;
   receivedByName: string | null;
   items: MaterialRequestItemRow[];
+  handlerId: string | null;
+  handlerName: string | null;
+  handlerAssignedAt: Date | null;
+  orderedAt: Date | null;
+  orderedByName: string | null;
+  cancelledAt: Date | null;
+  cancelledByName: string | null;
+  note: string | null;
+  neededBy: Date | null;
+  priority: MaterialRequestPriorityValue | null;
+}
+
+/** A row with its worksheet context: the overview's summary. */
+export type MaterialRequestContextRow = MaterialRequestRow & {
+  worksheetNumber: string | null;
+  customerDisplayName: string;
+  departmentName: string;
+};
+
+export interface MaterialRequestEventRow {
+  id: string;
+  kind: MaterialRequestEventKindValue;
+  fromStatus: MaterialRequestStatus | null;
+  toStatus: MaterialRequestStatus | null;
+  actorName: string | null;
+  createdAt: Date;
+  payload: Prisma.JsonValue | null;
+}
+
+export interface MaterialRequestCommentRow {
+  id: string;
+  body: string;
+  authorName: string | null;
+  createdAt: Date;
 }
 
 /** Ugyanaz a szuk mezo-halmaz, ami a kuldeshez kell -- lasd a hivokat. */
@@ -36,24 +83,58 @@ export interface ActiveUserContact {
   displayName: string;
 }
 
+/** One history row to write with a transition. */
+export interface MaterialRequestEventInput {
+  kind: MaterialRequestEventKindValue;
+  fromStatus: MaterialRequestStatus | null;
+  toStatus: MaterialRequestStatus | null;
+  actorUserId: string;
+  payload?: Prisma.InputJsonValue;
+}
+
+/** One item write inside a transition, conditional on the value the service read. */
+export interface MaterialRequestItemWrite {
+  id: string;
+  expectedReceivedQuantity: Prisma.Decimal | null;
+  expectedReceivedAt: Date | null;
+  receivedQuantity: Prisma.Decimal | null;
+  receivedAt: Date | null;
+  receivedById: string;
+}
+
+/** Thrown inside a transition transaction to roll it back on a lost race. */
+export class MaterialRequestRaceLost extends Error {}
+
+const LIST_PAGE_SIZE = 50;
+
 const rowInclude = {
   requestedBy: { select: { displayName: true } },
   receivedBy: { select: { displayName: true } },
+  handler: { select: { displayName: true } },
+  orderedBy: { select: { displayName: true } },
+  cancelledBy: { select: { displayName: true } },
   items: { orderBy: { position: "asc" } },
 } satisfies Prisma.MaterialRequestInclude;
 
-function toRow(row: {
-  id: string;
-  worksheetId: string;
-  status: MaterialRequestStatus;
-  requestedById: string | null;
-  requestedBy: { displayName: string } | null;
-  createdAt: Date;
-  submittedAt: Date | null;
-  receivedAt: Date | null;
-  receivedBy: { displayName: string } | null;
-  items: { id: string; name: string; quantity: string; unit: string }[];
-}): MaterialRequestRow {
+const contextInclude = {
+  ...rowInclude,
+  worksheet: {
+    select: {
+      number: true,
+      customer: { select: { displayName: true } },
+      department: { select: { name: true } },
+    },
+  },
+} satisfies Prisma.MaterialRequestInclude;
+
+type IncludedRow = Prisma.MaterialRequestGetPayload<{
+  include: typeof rowInclude;
+}>;
+type IncludedContextRow = Prisma.MaterialRequestGetPayload<{
+  include: typeof contextInclude;
+}>;
+
+function toRow(row: IncludedRow): MaterialRequestRow {
   return {
     id: row.id,
     worksheetId: row.worksheetId,
@@ -69,8 +150,45 @@ function toRow(row: {
       name: item.name,
       quantity: item.quantity,
       unit: item.unit,
+      quantityValue: item.quantityValue,
+      receivedQuantity: item.receivedQuantity,
+      receivedAt: item.receivedAt,
     })),
+    handlerId: row.handlerId,
+    handlerName: row.handler?.displayName ?? null,
+    handlerAssignedAt: row.handlerAssignedAt,
+    orderedAt: row.orderedAt,
+    orderedByName: row.orderedBy?.displayName ?? null,
+    cancelledAt: row.cancelledAt,
+    cancelledByName: row.cancelledBy?.displayName ?? null,
+    note: row.note,
+    neededBy: row.neededBy,
+    priority: row.priority,
   };
+}
+
+function toContextRow(row: IncludedContextRow): MaterialRequestContextRow {
+  return {
+    ...toRow(row),
+    worksheetNumber: row.worksheet.number,
+    customerDisplayName: row.worksheet.customer.displayName,
+    departmentName: row.worksheet.department.name,
+  };
+}
+
+/** The statuses one overview view shows. */
+export function viewStatuses(
+  view: MaterialRequestView,
+): MaterialRequestStatus[] {
+  switch (view) {
+    case "active":
+    case "mine":
+      return [...MATERIAL_REQUEST_ACTIVE_STATUSES];
+    case "received":
+      return ["RECEIVED"];
+    case "cancelled":
+      return ["CANCELLED"];
+  }
 }
 
 @Injectable()
@@ -91,17 +209,25 @@ export class MaterialRequestsRepository extends Repository {
     worksheetId: string;
     requestedById: string | null;
     items: readonly MaterialRequestItemInput[];
+    note?: string | null;
+    neededBy?: Date | null;
+    priority?: MaterialRequestPriorityValue | null;
   }): Promise<MaterialRequestRow> {
     const row = await this.database.materialRequest.create({
       data: {
         worksheetId: input.worksheetId,
         requestedById: input.requestedById,
+        note: input.note ?? null,
+        neededBy: input.neededBy ?? null,
+        priority: input.priority ?? null,
         items: {
           create: input.items.map((item, index) => ({
             position: index,
             name: item.name,
             quantity: item.quantity,
             unit: item.unit,
+            // V2: the number, only when the text is a plain number
+            quantityValue: parseQuantityValue(item.quantity),
           })),
         },
       },
@@ -120,15 +246,29 @@ export class MaterialRequestsRepository extends Repository {
     id: string;
     requestedById: string;
   }): Promise<MaterialRequestRow | null> {
-    const eredmeny = await this.database.materialRequest.updateMany({
-      where: {
-        id: input.id,
-        status: "DRAFT",
-        requestedById: input.requestedById,
-      },
-      data: { status: "OPEN", submittedAt: new Date() },
+    const submitted = await this.database.$transaction(async (tx) => {
+      const eredmeny = await tx.materialRequest.updateMany({
+        where: {
+          id: input.id,
+          status: "DRAFT",
+          requestedById: input.requestedById,
+        },
+        data: { status: "OPEN", submittedAt: new Date() },
+      });
+      if (eredmeny.count === 0) return false;
+      // V2: the first history row, in the same transaction as the transition
+      await tx.materialRequestEvent.create({
+        data: {
+          materialRequestId: input.id,
+          kind: "SUBMITTED",
+          fromStatus: "DRAFT",
+          toStatus: "OPEN",
+          actorUserId: input.requestedById,
+        },
+      });
+      return true;
     });
-    if (eredmeny.count === 0) return null;
+    if (!submitted) return null;
     return this.detail(input.id);
   }
 
@@ -170,33 +310,16 @@ export class MaterialRequestsRepository extends Repository {
    * TOBB igeny kozott tajekozodik, es egyetlen igeny onmagaban nem mondja
    * meg, MELYIK munkarol van szo.
    */
-  async listPending(): Promise<
-    (MaterialRequestRow & {
-      worksheetNumber: string | null;
-      customerDisplayName: string;
-      departmentName: string;
-    })[]
-  > {
+  async listPending(
+    visibleWorksheet: Prisma.WorksheetWhereInput,
+  ): Promise<MaterialRequestContextRow[]> {
     const rows = await this.database.materialRequest.findMany({
-      where: { status: "OPEN" },
-      include: {
-        ...rowInclude,
-        worksheet: {
-          select: {
-            number: true,
-            customer: { select: { displayName: true } },
-            department: { select: { name: true } },
-          },
-        },
-      },
+      // V2: scoped to the worksheets the caller can see (hidden excluded)
+      where: { status: "OPEN", worksheet: visibleWorksheet },
+      include: contextInclude,
       orderBy: { createdAt: "asc" },
     });
-    return rows.map((row) => ({
-      ...toRow(row),
-      worksheetNumber: row.worksheet.number,
-      customerDisplayName: row.worksheet.customer.displayName,
-      departmentName: row.worksheet.department.name,
-    }));
+    return rows.map(toContextRow);
   }
 
   /**
@@ -210,54 +333,16 @@ export class MaterialRequestsRepository extends Repository {
    * Ott a legregebben varo all elol, mert a TEENDOT mutatjuk; itt a
    * legutobb tortent esemeny erdekel, mert a MULTAT nezzuk vissza.
    */
-  async listHistory(): Promise<
-    (MaterialRequestRow & {
-      worksheetNumber: string | null;
-      customerDisplayName: string;
-      departmentName: string;
-    })[]
-  > {
+  async listHistory(
+    visibleWorksheet: Prisma.WorksheetWhereInput,
+  ): Promise<MaterialRequestContextRow[]> {
     const rows = await this.database.materialRequest.findMany({
-      where: { status: { in: ["OPEN", "RECEIVED"] } },
-      include: {
-        ...rowInclude,
-        worksheet: {
-          select: {
-            number: true,
-            customer: { select: { displayName: true } },
-            department: { select: { name: true } },
-          },
-        },
-      },
+      // V2: every submitted state (all but DRAFT), scoped like the list
+      where: { status: { not: "DRAFT" }, worksheet: visibleWorksheet },
+      include: contextInclude,
       orderBy: { submittedAt: "desc" },
     });
-    return rows.map((row) => ({
-      ...toRow(row),
-      worksheetNumber: row.worksheet.number,
-      customerDisplayName: row.worksheet.customer.displayName,
-      departmentName: row.worksheet.department.name,
-    }));
-  }
-
-  /**
-   * ATOMI, FELTETELES ATMENET: csak akkor ir, ha MEG `OPEN` -- ket egyidejű
-   * kattintas kozul csak az egyik nyerhet, es a masik `null`-t kap, nem egy
-   * masodik "beerkezett" ertesitest.
-   */
-  async markReceived(input: {
-    id: string;
-    receivedById: string;
-  }): Promise<MaterialRequestRow | null> {
-    const eredmeny = await this.database.materialRequest.updateMany({
-      where: { id: input.id, status: "OPEN" },
-      data: {
-        status: "RECEIVED",
-        receivedAt: new Date(),
-        receivedById: input.receivedById,
-      },
-    });
-    if (eredmeny.count === 0) return null;
-    return this.detail(input.id);
+    return rows.map(toContextRow);
   }
 
   /** Akiknel a `MATERIAL_REQUEST_CREATED` ertesulesi szerep be van jelolve. */
@@ -323,5 +408,278 @@ export class MaterialRequestsRepository extends Repository {
       select: { id: true, email: true, displayName: true },
       orderBy: [{ displayName: "asc" }, { id: "asc" }],
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // V2 (docs/material-requests/v2-discovery.md)
+
+  /** The caller's assigned units (expanded), for `worksheetListWheres`. */
+  async assignedUnitIds(userId: string): Promise<string[]> {
+    return assignedUnitIdsFor(userId);
+  }
+
+  /** One request with its worksheet context, only if its worksheet is visible. */
+  async findVisible(
+    id: string,
+    visibleWorksheet: Prisma.WorksheetWhereInput,
+  ): Promise<MaterialRequestContextRow | null> {
+    const row = await this.database.materialRequest.findFirst({
+      where: { id, worksheet: visibleWorksheet },
+      include: contextInclude,
+    });
+    return row ? toContextRow(row) : null;
+  }
+
+  async events(id: string): Promise<MaterialRequestEventRow[]> {
+    const rows = await this.database.materialRequestEvent.findMany({
+      where: { materialRequestId: id },
+      include: { actor: { select: { displayName: true } } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      fromStatus: row.fromStatus,
+      toStatus: row.toStatus,
+      actorName: row.actor?.displayName ?? null,
+      createdAt: row.createdAt,
+      payload: row.payload,
+    }));
+  }
+
+  async comments(id: string): Promise<MaterialRequestCommentRow[]> {
+    const rows = await this.database.materialRequestComment.findMany({
+      where: { materialRequestId: id },
+      include: { author: { select: { displayName: true } } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      body: row.body,
+      authorName: row.author?.displayName ?? null,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async addComment(input: {
+    materialRequestId: string;
+    authorId: string;
+    body: string;
+  }): Promise<void> {
+    await this.database.materialRequestComment.create({
+      data: {
+        materialRequestId: input.materialRequestId,
+        authorId: input.authorId,
+        body: input.body,
+      },
+    });
+  }
+
+  /**
+   * THE OVERVIEW LIST: one query, scoped, filtered and searched on the
+   * server, paged by a (submittedAt, id) cursor. Newest submission first.
+   */
+  async list(input: {
+    visibleWorksheet: Prisma.WorksheetWhereInput;
+    view: MaterialRequestView;
+    status: MaterialRequestStatus | null;
+    handlerId: string | null;
+    q: string | null;
+    cursor: { submittedAt: Date; id: string } | null;
+  }): Promise<{
+    rows: MaterialRequestContextRow[];
+    next: { submittedAt: Date; id: string } | null;
+  }> {
+    const statuses = viewStatuses(input.view);
+    const search: Prisma.MaterialRequestWhereInput[] = input.q
+      ? [
+          {
+            OR: [
+              {
+                worksheet: {
+                  number: { contains: input.q, mode: "insensitive" },
+                },
+              },
+              {
+                worksheet: {
+                  customer: {
+                    displayName: { contains: input.q, mode: "insensitive" },
+                  },
+                },
+              },
+              {
+                worksheet: {
+                  department: {
+                    name: { contains: input.q, mode: "insensitive" },
+                  },
+                },
+              },
+              {
+                items: {
+                  some: { name: { contains: input.q, mode: "insensitive" } },
+                },
+              },
+              {
+                requestedBy: {
+                  displayName: { contains: input.q, mode: "insensitive" },
+                },
+              },
+              {
+                handler: {
+                  displayName: { contains: input.q, mode: "insensitive" },
+                },
+              },
+            ],
+          },
+        ]
+      : [];
+    const where: Prisma.MaterialRequestWhereInput = {
+      AND: [
+        { worksheet: input.visibleWorksheet },
+        {
+          status: input.status
+            ? statuses.includes(input.status)
+              ? input.status
+              : { in: [] }
+            : { in: statuses },
+        },
+        input.handlerId ? { handlerId: input.handlerId } : {},
+        ...search,
+        input.cursor
+          ? {
+              OR: [
+                { submittedAt: { lt: input.cursor.submittedAt } },
+                {
+                  submittedAt: input.cursor.submittedAt,
+                  id: { lt: input.cursor.id },
+                },
+              ],
+            }
+          : {},
+      ],
+    };
+    const rows = await this.database.materialRequest.findMany({
+      where,
+      include: contextInclude,
+      orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+      take: LIST_PAGE_SIZE + 1,
+    });
+    const page = rows.slice(0, LIST_PAGE_SIZE).map(toContextRow);
+    const last = page[page.length - 1];
+    return {
+      rows: page,
+      next:
+        rows.length > LIST_PAGE_SIZE && last?.submittedAt
+          ? { submittedAt: last.submittedAt, id: last.id }
+          : null,
+    };
+  }
+
+  /** The overview's status cards: one grouped count, plus RECEIVED since `receivedSince`. */
+  async statusCounts(
+    visibleWorksheet: Prisma.WorksheetWhereInput,
+    receivedSince: Date,
+  ): Promise<{
+    byStatus: Partial<Record<MaterialRequestStatus, number>>;
+    receivedRecently: number;
+  }> {
+    const [groups, receivedRecently] = await Promise.all([
+      this.database.materialRequest.groupBy({
+        by: ["status"],
+        where: {
+          status: { in: [...MATERIAL_REQUEST_ACTIVE_STATUSES] },
+          worksheet: visibleWorksheet,
+        },
+        _count: { _all: true },
+      }),
+      this.database.materialRequest.count({
+        where: {
+          status: "RECEIVED",
+          receivedAt: { gte: receivedSince },
+          worksheet: visibleWorksheet,
+        },
+      }),
+    ]);
+    const byStatus: Partial<Record<MaterialRequestStatus, number>> = {};
+    for (const group of groups) byStatus[group.status] = group._count._all;
+    return { byStatus, receivedRecently };
+  }
+
+  /**
+   * EVERY V2 TRANSITION GOES THROUGH HERE, IN ONE TRANSACTION:
+   *   1. a conditional update of the request, on the status AND the handler
+   *      the service read and validated (count 0 = someone was faster);
+   *   2. each item write, conditional on the value the service read;
+   *   3. the history rows.
+   * A lost race on any step rolls everything back and returns `false`. There
+   * is no read-then-write: the conditions are the check.
+   */
+  async transition(input: {
+    id: string;
+    fromStatus: MaterialRequestStatus;
+    expectedHandlerId: string | null;
+    data: Prisma.MaterialRequestUncheckedUpdateManyInput;
+    items?: readonly MaterialRequestItemWrite[];
+    events: readonly MaterialRequestEventInput[];
+  }): Promise<boolean> {
+    try {
+      await this.database.$transaction(async (tx) => {
+        const updated = await tx.materialRequest.updateMany({
+          where: {
+            id: input.id,
+            status: input.fromStatus,
+            handlerId: input.expectedHandlerId,
+          },
+          data: input.data,
+        });
+        if (updated.count === 0) throw new MaterialRequestRaceLost();
+        for (const item of input.items ?? []) {
+          const written = await tx.materialRequestItem.updateMany({
+            where: {
+              id: item.id,
+              materialRequestId: input.id,
+              receivedQuantity: item.expectedReceivedQuantity,
+              receivedAt: item.expectedReceivedAt,
+            },
+            data: {
+              receivedQuantity: item.receivedQuantity,
+              receivedAt: item.receivedAt,
+              receivedById: item.receivedById,
+            },
+          });
+          if (written.count === 0) throw new MaterialRequestRaceLost();
+        }
+        for (const event of input.events)
+          await tx.materialRequestEvent.create({
+            data: {
+              materialRequestId: input.id,
+              kind: event.kind,
+              fromStatus: event.fromStatus,
+              toStatus: event.toStatus,
+              actorUserId: event.actorUserId,
+              ...(event.payload !== undefined
+                ? { payload: event.payload }
+                : {}),
+            },
+          });
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof MaterialRequestRaceLost) return false;
+      throw error;
+    }
+  }
+
+  /** The reassignment list: active users holding the purchasing capability. */
+  async handlerOptions(): Promise<{ id: string; displayName: string }[]> {
+    const rows = await this.database.userServiceCapability.findMany({
+      where: {
+        capability: "MATERIAL_REQUEST_MARK_RECEIVED",
+        user: { isActive: true },
+      },
+      select: { user: { select: { id: true, displayName: true } } },
+      orderBy: [{ user: { displayName: "asc" } }, { userId: "asc" }],
+    });
+    return rows.map((row) => row.user);
   }
 }

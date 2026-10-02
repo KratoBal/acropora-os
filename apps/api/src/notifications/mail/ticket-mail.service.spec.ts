@@ -773,6 +773,9 @@ function anyagigenySzolgaltatas(be: {
       TICKET_MAIL_MODE: be.mode ?? "live",
       TICKET_MAIL_MATERIAL_REQUEST_CREATED: be.created ?? "live",
       TICKET_MAIL_MATERIAL_REQUEST_RECEIVED: be.received ?? "live",
+      TICKET_MAIL_MATERIAL_REQUEST_CLAIMED: "live",
+      TICKET_MAIL_MATERIAL_REQUEST_ORDERED: "live",
+      TICKET_MAIL_MATERIAL_REQUEST_CANCELLED: "live",
       TICKET_MAIL_REDIRECT_TO: be.redirect ?? "off",
     } as NodeJS.ProcessEnv),
     kuldott,
@@ -1192,6 +1195,49 @@ describe("minden esemeny minden meghirdetett valtozojat kitolti", () => {
     assert.match(kuldott[0]!.text, /^kuldo_neve=\[Beszerző Béla\]$/m);
   });
 
+  // V2: claim, order, withdrawal (docs/material-requests/v2-discovery.md)
+  for (const [step, id] of [
+    ["claimed", "MATERIAL_REQUEST_CLAIMED"],
+    ["ordered", "MATERIAL_REQUEST_ORDERED"],
+    ["cancelled", "MATERIAL_REQUEST_CANCELLED"],
+  ] as const)
+    it(`${id}, a lepest megtevo nevevel`, async () => {
+      const { service, kuldott } = anyagigenySzolgaltatas({
+        template: minden(id),
+      });
+      kiment(
+        await service.deliverMaterialRequestStep({
+          step,
+          materialRequestId: "mr-1",
+          worksheetNumber: "BIO-2026-001",
+          worksheetLink: "",
+          itemsText: EGY_TETEL,
+          actorName: "Beszerző Béla",
+          recipients: [{ email: "kero@example.invalid" }],
+        }),
+        kuldott,
+      );
+      assert.match(kuldott[0]!.text, /^kuldo_neve=\[Beszerző Béla\]$/m);
+    });
+
+  it("V2: a lepes-levelek alapertelmezett sablonja is kimegy, ismeretlen valtozo nelkul", async () => {
+    for (const step of ["claimed", "ordered", "cancelled"] as const) {
+      const { service, kuldott } = anyagigenySzolgaltatas({});
+      kiment(
+        await service.deliverMaterialRequestStep({
+          step,
+          materialRequestId: "mr-1",
+          worksheetNumber: "BIO-2026-001",
+          worksheetLink: "",
+          itemsText: EGY_TETEL,
+          actorName: "Beszerző Béla",
+          recipients: [{ email: "kero@example.invalid" }],
+        }),
+        kuldott,
+      );
+    }
+  });
+
   it("a lista minden esemenyt lefed, ami ebben a szolgaltatasban kuld", () => {
     // the aquarium and the billing events are sent by their own services,
     // and tested there
@@ -1210,6 +1256,9 @@ describe("minden esemeny minden meghirdetett valtozojat kitolti", () => {
         "WORKSHEET_SEND_FOR_SIGNATURE",
         "MATERIAL_REQUEST_CREATED",
         "MATERIAL_REQUEST_RECEIVED",
+        "MATERIAL_REQUEST_CLAIMED",
+        "MATERIAL_REQUEST_ORDERED",
+        "MATERIAL_REQUEST_CANCELLED",
       ],
     );
   });
