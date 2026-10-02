@@ -13,7 +13,10 @@ import {
 
 import { szamlazzAmountsOfLine } from "./billing-document-issue.js";
 import type { BillingDocumentListRow } from "./billing-document-list.repository.js";
-import { EXTERNAL_KIND_LABELS } from "./external-szamlazz-invoice.js";
+import {
+  EXTERNAL_KIND_LABELS,
+  type ExternalInvoicePayment,
+} from "./external-szamlazz-invoice.js";
 import { OWN_ROWS } from "./billing-documents.repository.js";
 
 /**
@@ -244,6 +247,79 @@ export interface ExternalListRow {
   paymentMethodUnified: string | null;
   orderNumber: string | null;
   cancelled: boolean;
+  /** A Számlázz.hu kifizetései (`kifizetesek`), a saját jelölés kiszűréséhez. */
+  payments: Prisma.JsonValue;
+}
+
+/**
+ * EGY SAJÁT KIFIZETETT-JELÖLÉS, AMIT A SZÁMLÁZZ.HU ELFOGADOTT (`OutgoingPaymentMark`,
+ * WRITTEN; acrobot 26027). A forrás a jelölés oka: GLS utánvét, SimplePay,
+ * Foxpost.
+ */
+export interface OwnPaymentMark {
+  source: "GLS_COD" | "SIMPLEPAY" | "FOXPOST";
+  markDate: Date;
+  amount: Prisma.Decimal;
+}
+
+/**
+ * A SAJÁT JELÖLÉSBŐL A KIFIZETÉS, ha a feed még nem hozta (acrobot 26027:
+ * Balázs 2026-10-02-én a három beírt GLS-fizetést nem látta az OS-ben, mert a
+ * Számlázz.hu a számlát a jóváírás után nem küldte újra).
+ *
+ * A jelölés, amit a feed MÁR hordoz (ugyanaz a nap és összeg a `kifizetesek`
+ * között), nem számít még egyszer: akkor a feed a forrás. Ha minden jelölés
+ * ilyen, `null`, és a hívó a feed szerint számol. A forrás a legkésőbbi
+ * jelölésé, a dátum a legkésőbbi kifizetés napja (feed vagy jelölés).
+ */
+export function ownMarkPayment(
+  row: {
+    grossAmount: Prisma.Decimal;
+    paidAmount: Prisma.Decimal;
+    lastPaymentDate: Date | null;
+    paymentsKnown: boolean | null;
+    payments: Prisma.JsonValue;
+    currency: string;
+  },
+  marks: readonly OwnPaymentMark[],
+): Pick<
+  BillingDocumentListItem,
+  "paymentState" | "paidAmount" | "lastPaymentDate" | "paymentSource"
+> | null {
+  const feed = row.paymentsKnown
+    ? ((row.payments ?? []) as unknown as ExternalInvoicePayment[])
+    : [];
+  const fresh = marks.filter(
+    (mark) =>
+      !feed.some(
+        (payment) =>
+          payment.date === calendarDay(mark.markDate) &&
+          new Prisma.Decimal(payment.amount).equals(mark.amount),
+      ),
+  );
+  if (fresh.length === 0) return null;
+  const latest = fresh.reduce((a, b) => (a.markDate >= b.markDate ? a : b));
+  const paid = fresh.reduce(
+    (total, mark) => total.add(mark.amount),
+    row.paymentsKnown ? row.paidAmount : new Prisma.Decimal(0),
+  );
+  const lastPaid =
+    row.paymentsKnown &&
+    row.lastPaymentDate &&
+    row.lastPaymentDate > latest.markDate
+      ? row.lastPaymentDate
+      : latest.markDate;
+  return {
+    paymentState: paymentStateOf({
+      paymentsKnown: true,
+      paidAmount: paid.toFixed(),
+      grossAmount: row.grossAmount.toFixed(),
+      currency: row.currency,
+    }),
+    paidAmount: paid.toFixed(row.currency.toUpperCase() === "HUF" ? 0 : 2),
+    lastPaymentDate: calendarDay(lastPaid),
+    paymentSource: `MARK_${latest.source}`,
+  };
 }
 
 /**
@@ -350,8 +426,10 @@ export function externalPaymentFields(
     paymentMethodUnified: string | null;
     currency: string;
     cancelled: boolean;
+    payments?: Prisma.JsonValue;
   },
   simplePay: readonly SimplePaySettlementLine[] = [],
+  marks: readonly OwnPaymentMark[] = [],
 ): Pick<
   BillingDocumentListItem,
   "paymentState" | "paidAmount" | "lastPaymentDate" | "paymentSource"
@@ -375,6 +453,16 @@ export function externalPaymentFields(
     lastPaymentDate: calendarDay(row.lastPaymentDate),
     paymentSource: paymentsKnown ? ("SZAMLAZZ" as const) : null,
   });
+  // a feed szerinti „Fizetve” nyer; a saját jelölés csak kiegészítő adat
+  if (row.paymentsKnown) {
+    const fromFeed = recorded(true);
+    if (fromFeed.paymentState === "PAID") return fromFeed;
+  }
+  const marked = ownMarkPayment(
+    { ...row, payments: row.payments ?? [] },
+    marks,
+  );
+  if (marked) return marked;
   if (row.paymentsKnown === null) return recorded(false);
   if (row.paymentsKnown) return recorded(true);
   // a zárt `fizmodunified` előbb, a szabad szöveg csak tartalék (acrobot 25964)
@@ -400,6 +488,7 @@ export function externalPaymentFields(
 export function toExternalListItem(
   row: ExternalListRow,
   simplePay: readonly SimplePaySettlementLine[] = [],
+  marks: readonly OwnPaymentMark[] = [],
 ): BillingDocumentListItem {
   return {
     id: row.id,
@@ -418,7 +507,7 @@ export function toExternalListItem(
     opens: "EXTERNAL_DETAIL",
     origin: "EXTERNAL",
     externalKindLabel: externalKindLabel(row.kindCode),
-    ...externalPaymentFields(row, simplePay),
+    ...externalPaymentFields(row, simplePay, marks),
   };
 }
 
