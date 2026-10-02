@@ -24,11 +24,15 @@ import {
 } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { aquariumFindings } from "./aquarium-findings.js";
 import { DashboardAquariumWidgetsRepository } from "./dashboard-aquarium-widgets.repository.js";
+import { DashboardFinanceWidgetsRepository } from "./dashboard-finance-widgets.repository.js";
 import { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
+import { MissingInvoicesSummaryCache } from "./missing-invoices-summary.js";
+import { summarizeOverdueInvoices } from "./overdue-invoices.js";
 import {
   DashboardServiceWidgetsRepository,
   type ServiceWidgetViewer,
@@ -61,16 +65,22 @@ export const DASHBOARD_WIDGET_LOADERS = Symbol("DASHBOARD_WIDGET_LOADERS");
 export class DashboardWidgetsService {
   private readonly logger = new Logger(DashboardWidgetsService.name);
   private readonly loaders: Partial<Record<DashboardWidgetId, WidgetLoader>>;
+  private readonly missingInvoicesCache: MissingInvoicesSummaryCache;
 
   constructor(
     private readonly repository: DashboardLayoutRepository,
     private readonly expectedArrivals: ExpectedArrivalService,
     private readonly serviceWidgets: DashboardServiceWidgetsRepository,
     private readonly aquariumWidgets: DashboardAquariumWidgetsRepository,
+    private readonly financeWidgets: DashboardFinanceWidgetsRepository,
+    missingInvoices: MissingInvoicesService,
     @Optional()
     @Inject(DASHBOARD_WIDGET_LOADERS)
     loaders?: Partial<Record<DashboardWidgetId, WidgetLoader>>,
   ) {
+    this.missingInvoicesCache = new MissingInvoicesSummaryCache(() =>
+      missingInvoices.months(),
+    );
     this.loaders = loaders ?? this.defaultLoaders();
   }
 
@@ -188,6 +198,16 @@ export class DashboardWidgetsService {
         ).waterValues,
       "aquarium-equipment": async (user) =>
         this.aquariumWidgets.equipment(await serviceViewer(user), new Date()),
+      "overdue-invoices": async () => {
+        const now = new Date();
+        return summarizeOverdueInvoices(
+          await this.financeWidgets.overdueInvoiceRows(now, 7),
+          now,
+        );
+      },
+      "missing-invoices": () => this.missingInvoicesCache.summary(),
+      "incoming-invoices": () => this.financeWidgets.incomingInvoices(),
+      settlements: () => this.financeWidgets.settlements(),
     };
   }
 
