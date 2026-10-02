@@ -8,7 +8,8 @@
  * renders "3000 l/h". Changing that is a system-wide decision, not this
  * helper's. Decimals take the comma ("1,00").
  *
- * Only the JEV views use it for now; no other page's output changes.
+ * Used by the JEV views and the Anyagigény V2 quantities; no other page's
+ * output changes.
  */
 export function formatHuNumber(
   value: number | string,

@@ -7,17 +7,7 @@ import type {
   MaterialRequestView,
 } from "@acropora/types";
 
-/**
- * The system's number format, as the product pages write it
- * (`toLocaleString("hu-HU")`). The shared helper of the JEV work (#1407) is
- * not on main yet; once it is, this becomes that call.
- */
-function formatHuNumber(value: string): string {
-  const number = Number(value);
-  return Number.isFinite(number)
-    ? number.toLocaleString("hu-HU", { maximumFractionDigits: 3 })
-    : value;
-}
+import { formatHuNumber } from "@/lib/format/number";
 
 /**
  * ANYAGIGÉNY V2: WHAT A REQUEST SAYS, AND HOW (Figma 404:533,
