@@ -243,6 +243,65 @@ export function buildSzamlazzAgentInvoiceXml(
   );
 }
 
+/**
+ * A JÓVÁÍRÁS RÖGZÍTÉSE egy általunk kiállított számlán (Számla Agent,
+ * `xmlszamlakifiz`; acrobot 25989). ELSŐDLEGES FORRÁS: a hivatalos XSD
+ * (https://www.szamlazz.hu/szamla/docs/xsds/agentkifiz/xmlszamlakifiz.xsd,
+ * letöltve 2026-10-02) és a docs.szamlazz.hu/agent/credit_entry/{xml,response}
+ * oldalak. A `beallitasok` sorrendje a sémáé: szamlaagentkulcs, szamlaszam,
+ * additiv, valaszVerzio.
+ *
+ * AZ `additiv` MINDIG `true`: a `false` a számla ÖSSZES korábbi kifizetését
+ * lecseréli a miénkre, tehát egy kézzel vagy banki párosítással rögzített
+ * kifizetést csendben törölne. Ezért nem is paraméter.
+ *
+ * `valaszVerzio=2`: a válasz `xmlszamlavalasz`, ugyanaz az alak, mint a
+ * számla-készítésé, a `kintlevoseg` (a még nyitott összeg) mezővel.
+ */
+export interface SzamlazzAgentPaymentInput {
+  agentKey: string;
+  invoiceNumber: string;
+  /** Legfeljebb 5 (a séma `maxOccurs`). */
+  payments: readonly {
+    /** ÉÉÉÉ-HH-NN */
+    date: string;
+    title: string;
+    /** Tizedes szöveg, pont elválasztóval. */
+    amount: string;
+    note?: string;
+  }[];
+}
+
+export function buildSzamlazzAgentPaymentXml(
+  input: SzamlazzAgentPaymentInput,
+): string {
+  if (input.payments.length < 1 || input.payments.length > 5)
+    throw new Error("a jóváírás 1..5 kifizetést visz (xmlszamlakifiz.xsd)");
+  const settings =
+    tag("szamlaagentkulcs", input.agentKey) +
+    tag("szamlaszam", input.invoiceNumber) +
+    tag("additiv", true) +
+    tag("valaszVerzio", 2);
+  const payments = input.payments
+    .map(
+      (payment) =>
+        "<kifizetes>" +
+        tag("datum", payment.date) +
+        tag("jogcim", payment.title) +
+        tag("osszeg", payment.amount) +
+        tag("leiras", payment.note) +
+        "</kifizetes>",
+    )
+    .join("");
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<xmlszamlakifiz xmlns="http://www.szamlazz.hu/xmlszamlakifiz" ' +
+    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
+    'xsi:schemaLocation="http://www.szamlazz.hu/xmlszamlakifiz https://www.szamlazz.hu/szamla/docs/xsds/agentkifiz/xmlszamlakifiz.xsd">' +
+    `<beallitasok>${settings}</beallitasok>${payments}</xmlszamlakifiz>`
+  );
+}
+
 export const SZAMLAZZ_AGENT_XML_ERROR_CODES = [
   "SZAMLAZZ_AGENT_RESPONSE_INVALID",
 ] as const;
@@ -276,6 +335,8 @@ export interface SzamlazzAgentResponse {
   netTotal?: number;
   grossTotal?: number;
   customerAccountUrl?: string;
+  /** A jóváírás után a még nyitott összeg (`kintlevoseg`). */
+  outstanding?: number;
   /** A base64 `<pdf>` már bájtokra dekódolva. */
   pdf?: Buffer;
 }
@@ -364,6 +425,7 @@ export function parseSzamlazzAgentXmlResponse(
     netTotal: num(root, "szamlanetto"),
     grossTotal: num(root, "szamlabrutto"),
     customerAccountUrl: text(root, "vevoifiokurl"),
+    outstanding: num(root, "kintlevoseg"),
     pdf: pdfBase64 === undefined ? undefined : Buffer.from(pdfBase64, "base64"),
   };
 }
