@@ -79,7 +79,13 @@ export function DashboardCustomizeDrawer({
         </div>
       }
     >
-      <div className="flex flex-col gap-6">
+      {/* The drawer is a full-height flex column with the page scroll locked:
+          the body must scroll itself, between the header and the footer,
+          or the list below the fold cannot be reached. */}
+      <div
+        data-testid="customize-drawer-body"
+        className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5"
+      >
         {error ? (
           <p role="alert" className="text-sm text-pilot-red-700">
             {error}
