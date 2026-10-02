@@ -101,6 +101,14 @@ export interface DocumentPairing {
   payee: CandidateDocument["payee"];
   kind: CandidateDocument["kind"];
   debits: { bookingDate: string; amount: string; currency: string }[];
+  /**
+   * A TERHELÉSEK A TELJES SZÁMLÁT FIZETIK (murena lelete, 26014): minden
+   * párosított terhelés Megvan vagy Eredeti hiányzik, összeg-eltérés nélkül.
+   * A párosítás összeg-eltéréssel is megáll (a számlaszám-szabály és a kézi
+   * párosítás bármilyen összeggel párosít), és a kétszer fizetett vagy a
+   * sztornózott vásárlás jóváírója is párosított; ezek NEM teljes fizetések.
+   */
+  paidInFull: boolean;
 }
 
 interface Computed {
@@ -337,6 +345,7 @@ export class MissingInvoicesService {
         payee: document.payee,
         kind: document.kind,
         debits: [],
+        paidInFull: false,
       };
       for (const id of ids) result.set(id, pairing);
       return pairing;
@@ -344,12 +353,19 @@ export class MissingInvoicesService {
     for (const document of computed.documents) entry(document);
     for (const item of computed.items) {
       const outcome = computed.outcomes.get(item.id);
-      for (const document of outcome?.documents ?? [])
-        entry(document).debits.push({
+      const inFull =
+        (outcome?.state === "FOUND" || outcome?.state === "ORIGINAL_MISSING") &&
+        !outcome.amountDifference;
+      for (const document of outcome?.documents ?? []) {
+        const pairing = entry(document);
+        pairing.paidInFull =
+          (pairing.debits.length === 0 || pairing.paidInFull) && inFull;
+        pairing.debits.push({
           bookingDate: item.bookingDate,
           amount: item.amount,
           currency: item.currency,
         });
+      }
     }
     return result;
   }

@@ -768,6 +768,114 @@ describe("BillingDocumentEditor", () => {
       expect(screen.queryByText(/Az egységár nem töltődött ki/)).toBeNull();
     });
 
+    /*
+      A VÁLTOZAT (kártya 705768fc). MI PIROSÍT: ha a több változatú termék
+      sora nem kérdezné meg, melyik változat; ha az inaktív is választható
+      lenne; ha a választás nem menne el a mentéssel; ha az egyváltozatú
+      termék is választót kapna.
+    */
+    it("several active variants: the line asks which one, and the draft carries it", async () => {
+      const variant = (
+        id: string,
+        sku: string,
+        name: string | null,
+        isActive = true,
+      ) => ({
+        id,
+        sku,
+        name,
+        isActive,
+        vatRate: "18.00",
+        sellingGrossPrice: null,
+        sellingPriceCurrency: null,
+      });
+      products.detail.mockResolvedValue(
+        detailOf({
+          variants: [
+            variant("v-a", "SALT-1", "1 kg"),
+            variant("v-b", "SALT-5", "5 kg"),
+            variant("v-c", "SALT-OLD", null, false),
+          ],
+        }),
+      );
+      render(<BillingDocumentEditor />);
+      await pickPartner();
+      await pickProduct();
+      const select = (await screen.findByLabelText(
+        "Tengeri só változata",
+      )) as HTMLSelectElement;
+      expect([...select.options].map((o) => o.textContent)).toEqual([
+        "Válassz változatot",
+        "SALT-1 · 1 kg",
+        "SALT-5 · 5 kg",
+      ]);
+      expect(
+        screen.getByText("Változat nélkül a készlet nem csökken."),
+      ).toBeInTheDocument();
+      fireEvent.change(select, { target: { value: "v-b" } });
+      expect(
+        screen.queryByText("Változat nélkül a készlet nem csökken."),
+      ).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: /Vázlat mentése|Mentés…/ }),
+      );
+      await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+      const [, created] = api.create.mock.calls[0]!;
+      expect(created.lines[0]).toMatchObject({
+        productId: "prod-1",
+        variantId: "v-b",
+      });
+    });
+
+    it("a reopened draft loads its product line's variants and shows the saved choice", async () => {
+      products.detail.mockResolvedValue(
+        detailOf({
+          variants: [
+            { id: "v-a", sku: "SALT-1", name: "1 kg", isActive: true },
+            { id: "v-b", sku: "SALT-5", name: "5 kg", isActive: true },
+          ],
+        }),
+      );
+      api.detail.mockReset().mockResolvedValue(
+        detailFrom(
+          {
+            documentType: "INVOICE",
+            invoiceFormat: "PAPER",
+            currency: "HUF",
+            language: "hu",
+            lines: [
+              {
+                productId: "prod-1",
+                variantId: "v-b",
+                description: "Tengeri só",
+                quantity: "1.000000",
+                unit: "db",
+                unitNet: "1000.0000",
+                vatRatePercent: "18.00",
+                discountPercent: null,
+                comment: null,
+              },
+            ],
+          },
+          "draft-9",
+        ),
+      );
+      render(<BillingDocumentEditor documentId="draft-9" />);
+      const select = (await screen.findByLabelText(
+        "Tengeri só változata",
+      )) as HTMLSelectElement;
+      expect(select.value).toBe("v-b");
+      expect(products.detail).toHaveBeenCalledWith("token-1", "prod-1");
+    });
+
+    it("one active variant: nothing to choose", async () => {
+      products.detail.mockResolvedValue(detailOf({}));
+      render(<BillingDocumentEditor />);
+      await pickProduct();
+      await waitFor(() => expect(net().value).toBe("1000"));
+      expect(screen.queryByLabelText("Tengeri só változata")).toBeNull();
+    });
+
     it("a price that arrives after a hand-typed one does not overwrite it", async () => {
       let resolve!: (value: unknown) => void;
       products.detail.mockReturnValue(

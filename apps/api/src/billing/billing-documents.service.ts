@@ -144,6 +144,7 @@ function draftDetail(row: BillingDocumentRow): BillingDocumentDetail {
     kind: line.kind,
     parentLineId: line.parentLineId,
     productId: line.productId,
+    variantId: line.variantId,
     description: line.description,
     quantity: line.quantity.toFixed(6),
     unit: line.unit,

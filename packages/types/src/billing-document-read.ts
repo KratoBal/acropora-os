@@ -117,7 +117,9 @@ export type BillingPaymentSource =
   | "CARD_AT_ORDER"
   | "CASH_AT_ORDER"
   | "SIMPLEPAY"
-  | "SIMPLEPAY_REFUNDED";
+  | "SIMPLEPAY_REFUNDED"
+  /** Bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988). */
+  | "BANK_PAIRING";
 
 /** Egy külső bizonylat tétele, ahogy a számlán áll (szamla.xsd `tetel`). */
 export interface BillingExternalDocumentLine {
@@ -259,7 +261,7 @@ export interface BillingDocumentDeliveryInfo {
  * - `NOT_A_STOCK_DOCUMENT`: díjbekérő, előleg vagy szállítólevél;
  * - `MOVED_BY_SOURCE`: a forrás (webshop-rendelés, POS) már levonta;
  * - `VARIANT_NOT_CHOSEN`: a terméknek több változata van, a sor nem mondja meg,
- *   melyik;
+ *   melyik; vagy a sor változata nem a termék aktív változata;
  * - `NO_VARIANT`: a terméknek nincs aktív változata;
  * - `PACKAGE_UNRESOLVED`: csomagtermék, amelynek összetevői nem oldhatók fel.
  */

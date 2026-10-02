@@ -1,5 +1,6 @@
 import { Prisma, type IncomingBillingDocument } from "@acropora/database";
 import type {
+  BillingPaymentSource,
   IncomingBankMatch,
   IncomingDocumentDetail,
   IncomingDocumentLine,
@@ -74,10 +75,76 @@ export function bankMatchOf(
   return { state: "UNPAIRED", reason: null, debits: [] };
 }
 
+/**
+ * A KIFIZETETTSÉG A FEEDBŐL ÉS A BANKI PÁROSÍTÁSBÓL (acrobot 25988; élesen
+ * mérve: 79 bejövő számlából csak 14-nél küldött a Számlázz.hu kifizetést, az
+ * átutalásos 29-ből 3-nál, tehát a banki párosítás érdemben hozzáad):
+ *
+ *   a Számlázz.hu küldött kifizetést   az nyer (SZAMLAZZ); ha részben fizetettet
+ *                                      mond, de a számla banki terheléshez
+ *                                      párosítva van, az eltérés jelölve
+ *   nincs kifizetés, de párosítva      NÁLUNK fizetett (BANK_PAIRING): a bruttó,
+ *                                      a legutolsó terhelés napjával
+ *   egyik sem                          a feed állapota, forrás nélkül
+ *
+ * „Párosítva” CSAK akkor jelent teljes fizetést, ha minden párosított terhelés
+ * Megvan vagy Eredeti hiányzik, összeg-eltérés nélkül (`paidInFull`; murena
+ * lelete, 26014): az összeg-eltéréses, a kétszer fizetett és a sztornózott
+ * vásárlás párosítása nem fizetettség. Ilyenkor a feed állapota marad.
+ */
+export function incomingPaymentOf(
+  row: Pick<
+    IncomingBillingDocument,
+    | "paymentsKnown"
+    | "paidAmount"
+    | "grossAmount"
+    | "currency"
+    | "lastPaymentDate"
+  >,
+  bankMatch: IncomingBankMatch,
+  /** A párosított terhelések a teljes számlát fizetik (`DocumentPairing.paidInFull`). */
+  paidInFull: boolean,
+): {
+  paymentState: IncomingPaymentState;
+  paidAmount: string;
+  lastPaymentDate: string | null;
+  paymentSource: BillingPaymentSource | null;
+  paymentConflict: boolean;
+} {
+  const feed = paymentStateOf(row);
+  const paired = bankMatch.state === "PAIRED" && paidInFull;
+  if (row.paymentsKnown && !row.paidAmount.isZero())
+    return {
+      paymentState: feed,
+      paidAmount: money(row.paidAmount, row.currency),
+      lastPaymentDate: day(row.lastPaymentDate),
+      paymentSource: "SZAMLAZZ",
+      paymentConflict: paired && feed !== "PAID",
+    };
+  if (paired)
+    return {
+      paymentState: "PAID",
+      paidAmount: money(row.grossAmount, row.currency),
+      lastPaymentDate: bankMatch.debits
+        .map((d) => d.bookingDate)
+        .reduce((a, b) => (a > b ? a : b)),
+      paymentSource: "BANK_PAIRING",
+      paymentConflict: false,
+    };
+  return {
+    paymentState: feed,
+    paidAmount: money(row.paidAmount, row.currency),
+    lastPaymentDate: day(row.lastPaymentDate),
+    paymentSource: null,
+    paymentConflict: false,
+  };
+}
+
 export function toIncomingListItem(
   row: IncomingBillingDocument,
   pairings: ReadonlyMap<string, DocumentPairing>,
 ): IncomingDocumentListItem {
+  const bankMatch = bankMatchOf(row, pairings);
   return {
     id: row.id,
     documentNumber: row.documentNumber,
@@ -96,10 +163,14 @@ export function toIncomingListItem(
     netAmount: money(row.netAmount, row.currency),
     vatAmount: money(row.vatAmount, row.currency),
     grossAmount: money(row.grossAmount, row.currency),
-    paymentState: paymentStateOf(row),
-    paidAmount: money(row.paidAmount, row.currency),
-    lastPaymentDate: day(row.lastPaymentDate),
-    bankMatch: bankMatchOf(row, pairings),
+    ...incomingPaymentOf(
+      row,
+      bankMatch,
+      (row.sourceDocumentId
+        ? pairings.get(row.sourceDocumentId)?.paidInFull
+        : undefined) ?? false,
+    ),
+    bankMatch,
     hasPdf: row.hasPdf,
   };
 }
