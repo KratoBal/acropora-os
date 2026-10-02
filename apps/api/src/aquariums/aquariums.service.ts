@@ -10,6 +10,7 @@ import { Prisma } from "@acropora/database";
 import {
   AQUARIUM_MEASUREMENT_PARAMETERS,
   type AquariumDetail,
+  type AquariumSelectableCustomerListResponse,
   type AuthenticatedUser,
 } from "@acropora/types";
 
@@ -101,7 +102,18 @@ export class AquariumsService {
     return this.withCanAssignAssets(aquarium, user);
   }
 
-  searchSelectableCustomers(search?: string) {
+  /**
+   * A PARTNER NEM LÁTHATJA A TÖBBI ÜGYFELET (2026-10-02, a mobil kezdőképernyő
+   * felmérése: docs/mobile-home/v1-discovery.md §10). A lista minden aktív
+   * ügyfél nevét és városát adta hatókör nélkül, és a PARTNER_SERVICE eléri
+   * (`aquariums.view`). Partnernek üres lista: a saját akváriuma ügyfelét a
+   * szerver amúgy is a hatóköréből veszi, választania nincs miből.
+   */
+  async searchSelectableCustomers(
+    user: AuthenticatedUser,
+    search?: string,
+  ): Promise<AquariumSelectableCustomerListResponse> {
+    if (partnerScopeOf(user).kind !== "internal") return { items: [] };
     return this.repository.searchSelectableCustomers(search);
   }
 
