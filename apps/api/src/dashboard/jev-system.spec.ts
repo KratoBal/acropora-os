@@ -107,16 +107,18 @@ describe("Rendszerállapot", () => {
     );
   });
 
-  it("NAV is the worse of the last run and the stored verification", () => {
+  it("NAV: never verified is no data; only a failed verification warns; a failed run is an error", () => {
     const applied = { status: "APPLIED", at, errorCode: null };
+    const failedRun = { status: "FAILED", at, errorCode: "E" };
     assert.equal(navState(applied, "SUCCESS").state, "ok");
-    assert.equal(navState(applied, "FAILED").state, "error");
-    assert.equal(navState(applied, "NEVER").state, "warning");
-    assert.equal(navState(applied, null).state, "warning");
-    assert.equal(
-      navState({ status: "FAILED", at, errorCode: "E" }, "SUCCESS").state,
-      "error",
-    );
+    assert.equal(navState(applied, "NEVER").state, "no-data");
+    assert.equal(navState(applied, null).state, "no-data");
+    assert.equal(navState(null, "NEVER").state, "no-data");
+    assert.equal(navState(applied, "FAILED").state, "warning");
+    assert.equal(navState(null, "FAILED").state, "warning");
+    assert.equal(navState(failedRun, "SUCCESS").state, "error");
+    assert.equal(navState(failedRun, "NEVER").state, "error");
+    assert.equal(navState(failedRun, "FAILED").state, "error");
     assert.equal(navState(null, "SUCCESS").state, "no-data");
   });
 

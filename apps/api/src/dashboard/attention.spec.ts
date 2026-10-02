@@ -61,6 +61,34 @@ describe("Figyelmet igényel: the figures", () => {
     );
   });
 
+  it("missing invoices: one line per month, never summed", () => {
+    const month = (m: string, missing: number) => ({
+      month: m,
+      missing,
+      originalMissing: missing,
+      notMatched: 0,
+      noInvoice: 0,
+      missingAmountHuf: "0",
+      status: "OPEN",
+    });
+    assert.deepEqual(
+      attentionItemsOf("missing-invoices", {
+        months: [month("2026-10", 3), month("2026-09", 5)],
+      }).map((i) => [i.key, i.label, i.count]),
+      [
+        ["missing:2026-10", "Hiányzó számla – 2026. október", 3],
+        ["missing:2026-09", "Hiányzó számla – 2026. szeptember", 5],
+      ],
+    );
+    assert.deepEqual(
+      attentionItemsOf("missing-invoices", {
+        months: [month("2026-10", 0), month("2026-09", 2)],
+      }).map((i) => i.key),
+      ["missing:2026-09"],
+      "a month with nothing missing has no line",
+    );
+  });
+
   it("settlements: errors and a failed last run are danger, review a warning", () => {
     const items = attentionItemsOf("settlements", {
       sources: [

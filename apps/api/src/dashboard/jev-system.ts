@@ -121,29 +121,30 @@ const SEVERITY: Record<DashboardSystemState, number> = {
   error: 3,
 };
 
-/** NAV: the worse of the last run and the stored connection verification. */
+/**
+ * NAV: the last run and the stored connection verification (owner decision,
+ * 2026-10-02). A connection never verified is no data, not a warning: only a
+ * verification that actually failed warns. A failed run is still an error.
+ */
 export function navState(
   run: SyncRunSnapshot | null,
   verification: "NEVER" | "SUCCESS" | "FAILED" | null,
 ): SourceState {
   const fromRun = syncRunState(run);
-  const fromVerification: SourceState =
-    verification === "FAILED"
-      ? {
-          state: "error",
-          detail: "A NAV-kapcsolat ellenőrzése sikertelen.",
-        }
-      : verification === "SUCCESS"
-        ? { state: "ok", detail: null }
-        : {
-            state: "warning",
-            detail: "A NAV-kapcsolat még nincs ellenőrizve.",
-          };
-  if (fromRun.state === "no-data" && fromVerification.state === "ok")
-    return fromRun;
-  return SEVERITY[fromVerification.state] > SEVERITY[fromRun.state]
-    ? fromVerification
-    : fromRun;
+  if (verification === "FAILED") {
+    const failed: SourceState = {
+      state: "warning",
+      detail: "A NAV-kapcsolat ellenőrzése hibát adott.",
+    };
+    return SEVERITY[fromRun.state] > SEVERITY[failed.state] ? fromRun : failed;
+  }
+  if (verification === "SUCCESS") return fromRun;
+  // never verified (or no setting row): nothing to judge the connection by
+  if (fromRun.state === "error" || fromRun.state === "warning") return fromRun;
+  return {
+    state: "no-data",
+    detail: "A NAV-kapcsolat még nincs ellenőrizve.",
+  };
 }
 
 /** JEV: today's runs; all failing is an error, some failing a warning. */

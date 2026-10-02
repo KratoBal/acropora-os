@@ -215,7 +215,15 @@ describe("Munkalapok", () => {
   });
 
   it("everyone else counts only the worksheets, and the certificates of the tickets, assigned to them", async () => {
-    for (const role of ["SERVICE", "SALES", "WAREHOUSE", "VIEWER"] as const) {
+    // PARTNER_SERVICE included: a partner's technician also sees only their own
+    // on the tile (owner confirmation, 2026-10-02)
+    for (const role of [
+      "SERVICE",
+      "SALES",
+      "WAREHOUSE",
+      "VIEWER",
+      "PARTNER_SERVICE",
+    ] as const) {
       const { repository, calls } = repositoryWith({
         "worksheet.findMany": [],
         "completionCertificate.count": 0,

@@ -35,6 +35,28 @@ export const ATTENTION_SOURCES = [
 ] as const satisfies readonly DashboardWidgetId[];
 export type AttentionSource = (typeof ATTENTION_SOURCES)[number];
 
+const MONTHS = [
+  "január",
+  "február",
+  "március",
+  "április",
+  "május",
+  "június",
+  "július",
+  "augusztus",
+  "szeptember",
+  "október",
+  "november",
+  "december",
+];
+
+/** `2026-09` → `2026. szeptember` */
+export function monthLabel(month: string): string {
+  const [year, index] = month.split("-").map(Number) as [number, number];
+  const name = MONTHS[index - 1];
+  return name ? `${year}. ${name}` : month;
+}
+
 const TONE_ORDER = { danger: 0, warning: 1, info: 2 } as const;
 
 type Item = Omit<DashboardAttentionItem, "widgetId">;
@@ -78,15 +100,16 @@ function itemsOf(widgetId: AttentionSource, data: unknown): Item[] {
     }
     case "missing-invoices": {
       const d = data as DashboardMissingInvoicesWidgetData;
-      return [
-        {
-          key: "missing",
-          label: "Hiányzó számla",
-          count: d.months.reduce((sum, month) => sum + month.missing, 0),
-          href: "/penzugy/hianyzo-szamlak",
-          tone: "warning",
-        },
-      ];
+      // one line per month, never summed (owner decision, 2026-10-02): the
+      // previous month is to be closed for the accountant, the current one
+      // is still filling up
+      return d.months.map((month) => ({
+        key: `missing:${month.month}`,
+        label: `Hiányzó számla – ${monthLabel(month.month)}`,
+        count: month.missing,
+        href: "/penzugy/hianyzo-szamlak",
+        tone: "warning",
+      }));
     }
     case "incoming-invoices": {
       const d = data as DashboardIncomingInvoicesWidgetData;
