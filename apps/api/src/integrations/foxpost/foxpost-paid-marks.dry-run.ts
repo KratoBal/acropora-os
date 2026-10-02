@@ -17,13 +17,14 @@ import {
  * The switch `FOXPOST_MARK_PAID`: `off` (default), `dry`, `live`. The live
  * write goes through the shared Számlázz.hu loop once that is merged (#1386).
  */
-export type FoxpostMarkPaidMode = "off" | "dry" | "live";
+/** `auto`: a napi ütemezett futás minden jelölhetőt beír (acrobot 26101). */
+export type FoxpostMarkPaidMode = "off" | "dry" | "live" | "auto";
 
 export function foxpostMarkPaidMode(
   value: string | undefined,
 ): FoxpostMarkPaidMode {
   const v = value?.trim();
-  return v === "dry" ? "dry" : v === "live" ? "live" : "off";
+  return v === "dry" || v === "live" || v === "auto" ? v : "off";
 }
 
 const day = (value: Date) => value.toISOString().slice(0, 10);
