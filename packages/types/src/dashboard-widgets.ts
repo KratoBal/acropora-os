@@ -943,7 +943,13 @@ export type DashboardWidgetResult<T = unknown> =
   | { status: "unavailable" };
 
 export interface DashboardWidgetsResponse {
-  results: Partial<Record<DashboardWidgetId, DashboardWidgetResult>>;
+  /**
+   * One result per requested id. An id the server does not know (an older or
+   * newer client) is answered `{ status: "unavailable" }` under its own key.
+   */
+  results: Partial<Record<DashboardWidgetId, DashboardWidgetResult>> & {
+    readonly [requestedId: string]: DashboardWidgetResult | undefined;
+  };
 }
 
 /** Feladataim. `Task` has no due date: only open count and the newest. */

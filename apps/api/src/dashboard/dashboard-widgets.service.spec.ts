@@ -241,12 +241,35 @@ describe("the widget data endpoint (server-side authorization)", () => {
     });
   });
 
-  it("an unknown widget id is a bad request", async () => {
-    const { svc } = service();
-    await assert.rejects(
-      svc.widgets(user("OWNER"), ["nope"]),
-      BadRequestException,
-    );
+  // AN UNKNOWN ID IS UNAVAILABLE, AND THE REST GOES THROUGH (owner,
+  // 2026-10-02): an older phone build may ask for an id that no longer
+  // exists. What must fail: the whole request refused; the unknown id
+  // dropped silently (the client would wait for it); a loader run for it.
+  it("an unknown widget id is unavailable on its own; the known ones still answer", async () => {
+    let loaded = 0;
+    const { svc } = service({
+      loaders: {
+        "expected-arrivals": async () => {
+          loaded += 1;
+          return { count: 1 };
+        },
+      },
+    });
+    const r = await svc.widgets(user("OWNER"), [
+      "nope",
+      "expected-arrivals",
+      "nope",
+    ]);
+    assert.deepEqual(r.results["nope"], { status: "unavailable" });
+    assert.deepEqual(r.results["expected-arrivals"], {
+      status: "ok",
+      data: { count: 1 },
+    });
+    assert.deepEqual(Object.keys(r.results).sort(), [
+      "expected-arrivals",
+      "nope",
+    ]);
+    assert.equal(loaded, 1);
   });
 
   it("expected arrivals come from the purchasing list, counted by stage", async () => {
