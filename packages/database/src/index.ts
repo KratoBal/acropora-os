@@ -53,6 +53,7 @@ export type {
   ServiceJobAsset,
   ServiceToken,
   Session,
+  SessionKind,
   StockMovement,
   StockMovementLine,
   ProductDatasheet,

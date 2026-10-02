@@ -37,9 +37,8 @@ export class AuthGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (isPublic) return true;
-
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    if (isPublic && request.sessionKind !== "ASSISTANT_READONLY") return true;
     const authorization = request.headers.authorization;
     const [scheme, bearerToken] = authorization?.split(" ") ?? [];
 
@@ -48,6 +47,7 @@ export class AuthGuard implements CanActivate {
       request.user = resolved.user;
       request.authToken = bearerToken;
       request.sessionExpiresAt = resolved.expiresAt;
+      request.sessionKind = resolved.kind;
       return true;
     }
 
@@ -79,6 +79,7 @@ export class AuthGuard implements CanActivate {
     request.authToken = cookieToken;
     request.authViaCookie = true;
     request.sessionExpiresAt = resolved.expiresAt;
+    request.sessionKind = resolved.kind;
 
     /**
      * A SUTI MAXAGE-E IS CSUSZIK -- Balazs 2. pontja (2026-09-24 08:15):

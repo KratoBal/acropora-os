@@ -2,6 +2,7 @@ import { IsEmail, IsString, MinLength } from "class-validator";
 import type { AuthenticatedUser } from "@acropora/types";
 
 export interface AuthenticatedRequest {
+  sessionKind?: import("./session.repository.js").SessionKind;
   method?: string;
   headers: {
     authorization?: string;
