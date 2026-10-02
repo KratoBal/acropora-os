@@ -19,13 +19,14 @@ import { UNAS_SHOP_ORDER_PREFIX } from "./simplepay-settlement.repository.js";
  * The switch `SIMPLEPAY_MARK_PAID`: `off` (default), `dry`, `live`. This slice
  * only has the dry run; `live` is the next, separately approved slice.
  */
-export type SimplePayMarkPaidMode = "off" | "dry" | "live";
+/** `auto`: a napi ütemezett futás minden jelölhetőt beír (acrobot 26101). */
+export type SimplePayMarkPaidMode = "off" | "dry" | "live" | "auto";
 
 export function simplePayMarkPaidMode(
   value: string | undefined,
 ): SimplePayMarkPaidMode {
   const v = value?.trim();
-  return v === "dry" ? "dry" : v === "live" ? "live" : "off";
+  return v === "dry" || v === "live" || v === "auto" ? v : "off";
 }
 
 /** The feed's order number prefix ("47679-"), from the SimplePay side's. */

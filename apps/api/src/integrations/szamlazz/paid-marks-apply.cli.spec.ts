@@ -39,7 +39,7 @@ function harness(
   const err: string[] = [];
   const run = (
     argv: string[],
-    mode: "off" | "dry" | "live" = "live",
+    mode: "off" | "dry" | "live" | "auto" = "live",
     credential = async () => {
       events.push("credential");
       return { agentKey: "secret-key", revision: "db:7" };
@@ -85,7 +85,7 @@ describe("runPaidMarksApply", () => {
       const h = harness();
       assert.equal(await h.run(["--apply", "--invoices", "A"], mode), 1);
       assert.deepEqual(h.events, []);
-      assert.match(h.err.join(""), /FOXPOST_MARK_PAID=live kell/);
+      assert.match(h.err.join(""), /FOXPOST_MARK_PAID=live \(vagy auto\) kell/);
     }
     for (const argv of [
       ["--apply"],
@@ -96,6 +96,15 @@ describe("runPaidMarksApply", () => {
       assert.equal(await h.run(argv), 2, argv.join(" "));
       assert.deepEqual(h.events, []);
     }
+  });
+
+  it("auto also lets a person write the named invoices by hand", async () => {
+    const h = harness();
+    assert.equal(
+      await h.run(["--apply", "--invoices", "ACRW-2026/00470"], "auto"),
+      0,
+    );
+    assert.ok(h.events.includes("call"));
   });
 
   it("the key first, then the marks, the log before the call; the key is never printed", async () => {

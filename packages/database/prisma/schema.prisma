@@ -6219,6 +6219,30 @@ model GlsInvoiceParcel {
   @@index([parcelNumber])
 }
 
+/// A KIFIZETETT-JELÖLÉS AUTOMATIKUS FUTÁSA, forrásonként egy sor (Balázs,
+/// 2026-10-02 11:36 UTC: „ezek ugye automatikusan mennek”; acrobot 26101). A
+/// sor a futás összesítője és a kézi figyelmet kérő tételei: ami nem
+/// jelölhető vagy kimaradt (részleges visszatérítés, több jelölt,
+/// összeg-eltérés, hibás elszámolás), magától nem megy be, hanem innen látszik.
+model PaidMarkRun {
+  id             String                    @id @default(cuid())
+  source         OutgoingPaymentMarkSource
+  startedAt      DateTime                  @default(now())
+  finishedAt     DateTime?
+  writtenCount   Int                       @default(0)
+  /// FAILED vagy UNKNOWN jelölés, illetve egy korábbi bizonytalan futás.
+  failedCount    Int                       @default(0)
+  attentionCount Int                       @default(0)
+  /// Okonként a darabszám (beírva, kimaradt okonként).
+  summary        Json
+  /// A kézi figyelmet kérő tételek: { reference, reason, detail }[].
+  attention      Json
+  /// Ha a futás maga elbukott (például nincs Számlázz.hu-kulcs).
+  errorCode      String?
+
+  @@index([source, startedAt])
+}
+
 /// A KIMENŐ SZÁMLÁK KIFIZETETT-JELÖLÉSÉNEK NAPLÓJA, minden forrásra (acrobot
 /// 25989; terv: agents/nautilus/megosztas/gls-utanvet-kifizetett-terv-2026-10-01.md,
 /// 4. pont; a közös alakot murena javasolta, 25999). A Számlázz.hu

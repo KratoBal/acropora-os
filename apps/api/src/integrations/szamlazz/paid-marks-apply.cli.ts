@@ -18,7 +18,7 @@ import { SzamlazzCredentialProvider } from "./szamlazz-credential.provider.js";
  * AZ ÉLES ÍRÁS PARANCSSORI KAPUJA, minden forrásra ugyanaz (GLS, Foxpost;
  * acrobot 25989, 26031). Csak akkor ír, ha MIND A HÁROM áll:
  *
- *   1. a forrás kapcsolója `live`;
+ *   1. a forrás kapcsolója `live` (vagy `auto`);
  *   2. a parancs `--apply`-jal fut;
  *   3. a `--invoices <szám,szám,...>` lista nem üres: csak a felsorolt,
  *      Balázs által jóváhagyott számlák kapnak jóváírást.
@@ -32,7 +32,7 @@ import { SzamlazzCredentialProvider } from "./szamlazz-credential.provider.js";
  */
 export async function runPaidMarksApply(input: {
   argv: readonly string[];
-  mode: "off" | "dry" | "live";
+  mode: "off" | "dry" | "live" | "auto";
   /** A kapcsoló neve a hibaüzenethez (`FOXPOST_MARK_PAID`). */
   switchName: string;
   source: PaymentMarkSource;
@@ -48,9 +48,10 @@ export async function runPaidMarksApply(input: {
     store: PaymentMarkStore;
   };
 }): Promise<number> {
-  if (input.mode !== "live") {
+  // `auto` alatt is írhat kézzel, a megnevezett számlákra (acrobot 26101)
+  if (input.mode !== "live" && input.mode !== "auto") {
     input.err(
-      `Az éles íráshoz ${input.switchName}=live kell; most: ${input.mode}.\n`,
+      `Az éles íráshoz ${input.switchName}=live (vagy auto) kell; most: ${input.mode}.\n`,
     );
     return 1;
   }
