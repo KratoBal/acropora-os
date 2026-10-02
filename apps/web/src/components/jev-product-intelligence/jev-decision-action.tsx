@@ -25,11 +25,7 @@ export function JevDisabledAction({
   /** A control that is not a decision (e.g. a re-run) names its own reason. */
   reason?: string;
 }) {
-  const reason =
-    ownReason ??
-    (canManage
-      ? "A döntések rögzítése még nincs engedélyezve."
-      : "A döntéshez termékkezelési jog kell.");
+  const reason = ownReason ?? disabledDecisionReason(canManage);
   return (
     <div className="flex flex-col items-start gap-1">
       <PilotButton variant={variant} size="regular" disabled title={reason}>
@@ -38,4 +34,11 @@ export function JevDisabledAction({
       <p className="text-xs leading-4 text-pilot-grey-500">{reason}</p>
     </div>
   );
+}
+
+/** Why a decision cannot be recorded, for this user. */
+export function disabledDecisionReason(canManage: boolean): string {
+  return canManage
+    ? "A döntések rögzítése még nincs engedélyezve."
+    : "A döntéshez termékkezelési jog kell.";
 }

@@ -18,6 +18,7 @@ import {
 import { ApiError } from "@/lib/api/client";
 import { productApi } from "@/lib/api/products";
 
+import { conflictHref } from "./jev-conflict";
 import { JevDisabledAction } from "./jev-decision-action";
 import { JevFieldReviewRow } from "./jev-field-review-row";
 import {
@@ -231,7 +232,11 @@ export function JevProductReviewPage({ productId }: { productId: string }) {
             <>
               <JevReviewSummary lastRun={lastRun} fields={fields} />
               {fields.map((field) => (
-                <JevFieldReviewRow key={field.field} review={field} />
+                <JevFieldReviewRow
+                  key={field.field}
+                  review={field}
+                  conflictHref={conflictHref(productId, field.field)}
+                />
               ))}
             </>
           ) : (

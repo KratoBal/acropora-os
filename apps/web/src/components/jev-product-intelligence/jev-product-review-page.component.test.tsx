@@ -139,6 +139,37 @@ describe("Termékadat-ellenőrzés aloldal", () => {
     expect(await screen.findByText("DR-3300")).toBeTruthy();
   });
 
+  it("ütköző mezőnél a sor a mező ütközés-nézetére visz", async () => {
+    api.enrichment.mockResolvedValue({
+      availability: "review",
+      lastRun: {
+        at: "2026-10-01T20:41:00.000Z",
+        sourceCount: 2,
+        fieldCount: 1,
+      },
+      fields: [
+        {
+          field: "flowRate",
+          tier: "C",
+          status: "CONFLICTING_SOURCES",
+          currentValue: null,
+          value: null,
+          sourceType: null,
+          sourceRef: null,
+          retrievedAt: null,
+          confidence: null,
+          evidence: [],
+        },
+      ],
+    });
+    render(<JevProductReviewPage productId="p-1" />);
+    expect(
+      (
+        await screen.findByRole("link", { name: "Források eltérnek" })
+      ).getAttribute("href"),
+    ).toBe("/products/p-1/adatellenorzes/flowRate");
+  });
+
   it("products.view nélkül nem kér le semmit", () => {
     auth.session = session("SERVICE");
     render(<JevProductReviewPage productId="p-1" />);
