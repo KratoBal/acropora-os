@@ -9,6 +9,11 @@ import {
   dryRunReport,
   loadSimplePayOrders,
 } from "./simplepay-paid-marks.dry-run.js";
+import {
+  loadRefundsAfterMarks,
+  loadSimplePayMarkedBefore,
+  loadWrittenSimplePayMarks,
+} from "./simplepay-paid-marks.live.js";
 import { decideSimplePayOrder } from "./simplepay-paid-marks.js";
 
 const gate = integrationDatabaseGate(process.env);
@@ -19,6 +24,9 @@ const KEY = { paid: String(BASE), refunded: String(BASE + 1) };
 const D = (value: number) => new Prisma.Decimal(value);
 
 async function removeLeftovers() {
+  await prisma.outgoingPaymentMark.deleteMany({
+    where: { invoiceNumber: { startsWith: PREFIX } },
+  });
   await prisma.simplePayReport.deleteMany({
     where: { fileName: { startsWith: PREFIX } },
   });
@@ -128,6 +136,12 @@ describe(
           }),
         },
         {
+          nev: "a teszt-jelölés bent maradt a naplóban",
+          darab: await prisma.outgoingPaymentMark.count({
+            where: { invoiceNumber: { startsWith: PREFIX } },
+          }),
+        },
+        {
           nev: "a külső teszt-számla bent maradt",
           darab: await prisma.externalBillingDocument.count({
             where: { externalId: { startsWith: PREFIX } },
@@ -166,6 +180,51 @@ describe(
         new RegExp(`^${PREFIX}3\\t.*kimarad: visszatérítve`, "m"),
       );
       assert.match(report, /összesen: 1 számla jelölhető, 2 rendelésből/);
+    });
+
+    it("a written mark whose order got a refund is reported through the invoice's order number", async () => {
+      const rows = await loadRefundsAfterMarks([
+        { invoiceNumber: `${PREFIX}1`, date: "2099-03-17", amount: "29210" },
+        { invoiceNumber: `${PREFIX}3`, date: "2099-03-17", amount: "8000" },
+      ]);
+      assert.deepEqual(
+        rows.map((r) => [r.invoiceNumber, r.orderKey, r.refunded, r.full]),
+        [[`${PREFIX}3`, KEY.refunded, "8000", true]],
+      );
+    });
+
+    it("the shared log: a FAILED row does not count as marked, a WRITTEN one does and feeds the refund list", async () => {
+      const row = (invoice: string, state: "WRITTEN" | "FAILED") =>
+        prisma.outgoingPaymentMark.create({
+          data: {
+            source: "SIMPLEPAY",
+            invoiceNumber: `${PREFIX}${invoice}`,
+            markDate: new Date("2099-03-17T00:00:00.000Z"),
+            amount: D(8000),
+            sourceRef: `${PREFIX}${invoice}`,
+            state,
+          },
+        });
+      await row("1", "FAILED");
+      await row("3", "WRITTEN");
+      assert.deepEqual(
+        [
+          ...(await loadSimplePayMarkedBefore(
+            new Set([`${PREFIX}1`, `${PREFIX}3`]),
+          )),
+        ],
+        [`${PREFIX}3`],
+      );
+      const written = (await loadWrittenSimplePayMarks()).filter((w) =>
+        w.invoiceNumber.startsWith(PREFIX),
+      );
+      assert.deepEqual(written, [
+        { invoiceNumber: `${PREFIX}3`, date: "2099-03-17", amount: "8000" },
+      ]);
+      assert.deepEqual(
+        (await loadRefundsAfterMarks(written)).map((r) => r.invoiceNumber),
+        [`${PREFIX}3`],
+      );
     });
   },
 );
