@@ -11,9 +11,12 @@ import {
   externalWhere,
   mergeListRows,
   ownWhere,
+  simplePayOrderKey,
   toExternalListItem,
+  type SimplePaySettlementLine,
   toListItem,
 } from "./billing-document-list.js";
+import { UNAS_SHOP_ORDER_PREFIX } from "../integrations/simplepay/simplepay-settlement.repository.js";
 
 export const LIST_SELECT = {
   id: true,
@@ -60,6 +63,7 @@ export const EXTERNAL_LIST_SELECT = {
   paymentsKnown: true,
   paymentMethod: true,
   paymentMethodUnified: true,
+  orderNumber: true,
   cancelled: true,
 } satisfies Prisma.ExternalBillingDocumentSelect;
 
@@ -113,6 +117,18 @@ export class BillingDocumentListRepository {
           where: external ?? { id: { in: [] } },
         }),
       ]);
+    // a kártyás külső számlák SimplePay-sorai, egy lekérdezéssel a lapra
+    const simplePay = await simplePayLinesByOrder(
+      this.database,
+      externalRows.map((row) => row.orderNumber),
+    );
+    const toExternal = (row: (typeof externalRows)[number]) =>
+      toExternalListItem(
+        row,
+        simplePay.get(
+          simplePayOrderKey(row.orderNumber, UNAS_SHOP_ORDER_PREFIX) ?? "",
+        ) ?? [],
+      );
     const totalItems = ownCount + externalCount;
     const items = both
       ? mergeListRows(
@@ -126,14 +142,14 @@ export class BillingDocumentListRepository {
             issueDate: row.issueDate,
             createdAt: row.createdAt,
             id: row.id,
-            item: toExternalListItem(row),
+            item: toExternal(row),
           })),
           offset,
           query.pageSize,
         )
       : own !== null
         ? ownRows.map(toListItem)
-        : externalRows.map(toExternalListItem);
+        : externalRows.map((row) => toExternal(row));
     return {
       items,
       pagination: {
@@ -144,4 +160,37 @@ export class BillingDocumentListRepository {
       },
     };
   }
+}
+
+/**
+ * A rendelésszámokhoz tartozó SimplePay elszámolás-sorok, a 6 számjegyes
+ * kulcs szerint csoportosítva (`simplePayOrderKey`). Egy lekérdezés egy lapra.
+ */
+export async function simplePayLinesByOrder(
+  database: typeof prisma,
+  orderNumbers: readonly (string | null)[],
+): Promise<Map<string, SimplePaySettlementLine[]>> {
+  const keys = [
+    ...new Set(
+      orderNumbers
+        .map((n) => simplePayOrderKey(n, UNAS_SHOP_ORDER_PREFIX))
+        .filter((k): k is string => k !== null),
+    ),
+  ];
+  const out = new Map<string, SimplePaySettlementLine[]>();
+  if (keys.length === 0) return out;
+  const lines = await database.simplePayTransactionLine.findMany({
+    where: { orderKeySuffix: { in: keys } },
+    select: {
+      orderKeySuffix: true,
+      transactionStatus: true,
+      amount: true,
+      transactionDate: true,
+    },
+  });
+  for (const line of lines) {
+    const key = line.orderKeySuffix!;
+    out.set(key, [...(out.get(key) ?? []), line]);
+  }
+  return out;
 }
