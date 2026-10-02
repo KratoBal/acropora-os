@@ -225,6 +225,7 @@ export default function QueueResolveScreen() {
             a regebbi sorokon hianyzik, ott marad a mezonkenti dontes.
           */
           base: payload.base,
+          parentLabel: payload.parentLabel,
         })
       : [];
 

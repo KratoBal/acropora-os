@@ -112,3 +112,39 @@ describe("a sorban álló eszköz-módosítás törzse", () => {
     assert.equal(readQueuedAssetUpdate("{ nem json"), null);
   });
 });
+
+/*
+  A SZÜLŐ FELIRATA A SORBAN. MI PIROSÍT: ha a beolvasás vagy az összefésülés
+  eldobná (a feloldó akkor azonosítót mutatna a név helyett); ha a későbbi,
+  szülőt nem érintő szerkesztés elvinné a korábbi szülő feliratát.
+*/
+describe("a szülő felirata a sorban", () => {
+  it("a beolvasás megtartja", () => {
+    const olvasott = readQueuedAssetUpdate(
+      JSON.stringify({
+        ...modositas({ parentAssetId: "p-2" }),
+        parentLabel: "ESZ-0099 -- Gépház",
+      }),
+    );
+    assert.equal(olvasott?.parentLabel, "ESZ-0099 -- Gépház");
+  });
+
+  it("az összefésülés a szülővel együtt mozgatja", () => {
+    const elso = {
+      ...modositas({ parentAssetId: "p-2" }),
+      parentLabel: "ESZ-0099 -- Gépház",
+    };
+    assert.equal(
+      mergeQueuedAssetUpdate(elso, modositas({ manufacturer: "Wilo" }))
+        .parentLabel,
+      "ESZ-0099 -- Gépház",
+    );
+    assert.equal(
+      mergeQueuedAssetUpdate(elso, {
+        ...modositas({ parentAssetId: "p-3" }),
+        parentLabel: "ESZ-0100 -- Medence",
+      }).parentLabel,
+      "ESZ-0100 -- Medence",
+    );
+  });
+});

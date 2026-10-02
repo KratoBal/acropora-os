@@ -103,6 +103,40 @@ export function partnerInternalCodePrefix(input: {
 }
 
 /**
+ * A SZÜLŐ-VÁLTÁS ÉS A KÓD (Balázs, 2026-10-02 07:39 UTC: „Arra figyeljetek
+ * hogy a partner belső kódja is változzon módosításkor”; acrobot 26046).
+ *
+ * A mozgatott eszköz kódja AKKOR számolódik újra, ha a SZABÁLY SZERINT állt:
+ * üres volt, vagy pontosan `<régi előtag>-<sorszám>` alakú. Egy kézzel beírt,
+ * a szabálytól eltérő kód (a partner saját táblázatából) NEM íródik felül: ugyanaz
+ * a „kézzel beírt soha nem íródik felül” szabály, mint a létrehozásnál, és egy
+ * ilyen kódból nem is tudnánk, mi a jelentése.
+ */
+export function partnerInternalCodeFollowsRule(
+  code: string | null,
+  prefix: string | null,
+): boolean {
+  if (code === null || code.trim() === "") return true;
+  if (prefix === null) return false;
+  return new RegExp(`^${escapeRegExp(prefix)}-\\d+$`).test(code);
+}
+
+/**
+ * EGY LESZÁRMAZOTT KÓDJA A MOZGATÁS UTÁN: a szülő kódjára épülő kód
+ * (`<régi kód>-...`) eleje az új kódra cserélődik, a többi rész (a saját
+ * kategória és sorszám, mélyebb szinten a köztes tagok) marad. `null`, ha a
+ * leszármazott kódja nem a régi kódra épül (kézzel beírt): azt nem írjuk át.
+ */
+export function descendantPartnerInternalCode(
+  code: string | null,
+  from: string,
+  to: string,
+): string | null {
+  if (!code?.startsWith(`${from}-`)) return null;
+  return `${to}${code.slice(from.length)}`;
+}
+
+/**
  * A LEGKISEBB SZABAD SORSZÁM, ADOTT ELŐTAGGAL -- NEM A DARABSZÁM.
  *
  * A meglévő kódok között LYUK is lehet (kézzel beírt, törölt vagy kihagyott
