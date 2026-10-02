@@ -1009,3 +1009,21 @@ export type {
   DashboardWidgetsResponse,
   ResolvedDashboardLayout,
 } from "./dashboard-widgets.js";
+export {
+  PRODUCT_ENRICHMENT_FIELDS,
+  PRODUCT_EVIDENCE_SOURCE_TYPES,
+  PRODUCT_FIELD_STATUSES,
+  PRODUCT_INTERNAL_SOURCE_TYPES,
+} from "./product-enrichment-review.js";
+export type {
+  ProductEnrichmentAvailability,
+  ProductEnrichmentFieldKey,
+  ProductEnrichmentReview,
+  ProductEvidenceEntry,
+  ProductEvidenceSourceType,
+  ProductFieldReview,
+  ProductFieldStatus,
+  ProductFieldTier,
+  ProductFieldValue,
+  ProductQualityQueueRow,
+} from "./product-enrichment-review.js";
