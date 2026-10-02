@@ -89,9 +89,17 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
 /**
  * A DARABSZAM IS ALLITAS, A MERES DATUMAVAL -- nem `>=`, hanem PONTOS.
  *
- * UJRAMERVE 2026-09-25 (a webes kezdolap Figma-igazitasa): 15 hivasi hely
- * (service-assets 9, worksheets 4, suppliers 1, dashboard 1). A definicios
- * sorok NEM szamitanak bele.
+ * UJRAMERVE 2026-10-01 (a testreszabhato vezerlopult szerviz-widgetjei): 16
+ * hivasi hely (service-assets 9, worksheets 4, suppliers 1, dashboard 2). A
+ * definicios sorok NEM szamitanak bele.
+ *
+ * MI JOTT A LEGUTOBBI MERES (15) OTA, ES MIERT:
+ *
+ *   +1  `dashboard-service-widgets.repository.ts` `maintenanceCalendar()`: a
+ *       "Karbantartasi naptar" widget ugyanazzal az eszkoz-hatokorrel szamol
+ *       (lejart / ma / kovetkezo 7 nap), mint a regi kartya -- a partner csak
+ *       a sajat helyszinei eszkozeit szamolja. Egy `due()` segeden at, de a
+ *       hivas ott is KOZVETLENUL az `AND` tombben all.
  *
  * MI JOTT A LEGUTOBBI MERES (14) OTA, ES MIERT -- nem elegendo a szamot atirni:
  *
@@ -131,7 +139,7 @@ async function hivasiHelyek(): Promise<HivasiHely[]> {
  * es a datumot is frissitsd, kulonben a kovetkezo olvaso egy regi merESre
  * hivatkozik.
  */
-const VART_HIVASI_HELY = 15;
+const VART_HIVASI_HELY = 16;
 
 const SCOPE_HELPERS = [
   "scopeWhereForAndBranch",

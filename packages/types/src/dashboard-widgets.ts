@@ -165,11 +165,10 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "service",
     requiredPermissions: [P.SERVICE_VIEW],
     recommendedRoles: ["SERVICE", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 20,
     dataSource:
       "ServiceJob open statuses, scoped by serviceJobVisibilityWhere.",
-    plannedReason: "Built with the service batch (PR 3).",
   }),
   widget({
     id: "worksheets",
@@ -178,11 +177,10 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "service",
     requiredPermissions: [P.SERVICE_VIEW],
     recommendedRoles: ["SERVICE", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 21,
     dataSource:
       "Latest WorksheetVersion status; CompletionCertificate without SIGNED_FORM.",
-    plannedReason: "Built with the service batch (PR 3).",
   }),
   widget({
     id: "material-requests",
@@ -192,10 +190,9 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     requiredPermissions: [P.SERVICE_MANAGE],
     requiredCapability: "MATERIAL_REQUEST_MARK_RECEIVED",
     recommendedRoles: ["SERVICE", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 22,
     dataSource: "MaterialRequest status OPEN.",
-    plannedReason: "Built with the service batch (PR 3).",
   }),
   widget({
     id: "maintenance-calendar",
@@ -204,10 +201,9 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "service",
     requiredPermissions: [P.SERVICE_VIEW],
     recommendedRoles: ["SERVICE", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 23,
     dataSource: "Asset.nextServiceAt (maintained by hand).",
-    plannedReason: "Built with the service batch (PR 3).",
   }),
   widget({
     id: "today-service",
@@ -974,5 +970,72 @@ export interface DashboardExpectedArrivalsWidgetData {
     supplierName: string;
     stage: "PROFORMA" | "INVOICE" | "LATE_CORRECTION";
     arrivedAt: string | null;
+  }[];
+}
+
+/**
+ * Nyitott hibajegyek. There is NO priority or urgency field anywhere in the
+ * schema, so "N sürgős" is not shown: the status breakdown and the age of the
+ * oldest open ticket are.
+ */
+export interface DashboardServiceTicketsWidgetData {
+  openCount: number;
+  /** Open tickets per status; statuses with zero are omitted. */
+  byStatus: Partial<
+    Record<
+      | "NEW"
+      | "TRIAGED"
+      | "SCHEDULED"
+      | "IN_PROGRESS"
+      | "WAITING_FOR_PARTS"
+      | "WAITING_FOR_CUSTOMER",
+      number
+    >
+  >;
+  /** `createdAt` of the oldest open ticket, or `null` when none is open. */
+  oldestOpenAt: string | null;
+}
+
+/** Munkalapok: the administrative states that need someone to act. */
+export interface DashboardWorksheetsWidgetData {
+  /** Latest version still a DRAFT: not closed yet. */
+  draft: number;
+  /** Closed, awaiting signature, not yet sent to anyone for signing. */
+  awaitingSignatureNotSent: number;
+  /** Sent for signature, not signed yet. */
+  awaitingSignatureSent: number;
+  /** Completion certificate issued, its signed form not uploaded back yet. */
+  certificatesAwaitingSignedForm: number;
+}
+
+/** Anyagigények: open (submitted, not yet received) requests. */
+export interface DashboardMaterialRequestsWidgetData {
+  openCount: number;
+  oldestSubmittedAt: string | null;
+  latest: {
+    id: string;
+    worksheetId: string;
+    worksheetNumber: string | null;
+    customerName: string;
+    submittedAt: string;
+    itemCount: number;
+  }[];
+}
+
+/**
+ * Karbantartási naptár, from `Asset.nextServiceAt` (maintained by hand).
+ * Days are Europe/Budapest calendar days.
+ */
+export interface DashboardMaintenanceCalendarWidgetData {
+  overdue: number;
+  today: number;
+  /** Tomorrow through the 7th day from today. */
+  nextSevenDays: number;
+  /** The soonest few, overdue first; `nextServiceAt` as a `YYYY-MM-DD` day. */
+  soonest: {
+    assetId: string;
+    assetName: string;
+    placeName: string;
+    nextServiceAt: string;
   }[];
 }

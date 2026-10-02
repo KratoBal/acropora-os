@@ -23,8 +23,14 @@ import {
   type DashboardWidgetsResponse,
 } from "@acropora/types";
 
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
+import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
+import {
+  DashboardServiceWidgetsRepository,
+  type ServiceWidgetViewer,
+} from "./dashboard-service-widgets.repository.js";
 
 /** What every failed widget says instead of a number. Never a zero. */
 export const WIDGET_UNAVAILABLE_MESSAGE = "Az adat jelenleg nem elérhető.";
@@ -57,6 +63,7 @@ export class DashboardWidgetsService {
   constructor(
     private readonly repository: DashboardLayoutRepository,
     private readonly expectedArrivals: ExpectedArrivalService,
+    private readonly serviceWidgets: DashboardServiceWidgetsRepository,
     @Optional()
     @Inject(DASHBOARD_WIDGET_LOADERS)
     loaders?: Partial<Record<DashboardWidgetId, WidgetLoader>>,
@@ -156,6 +163,16 @@ export class DashboardWidgetsService {
     return {
       tasks: (user) => this.repository.tasksWidget(user.id),
       "expected-arrivals": () => this.expectedArrivalsWidget(),
+      "service-tickets": async (user) =>
+        this.serviceWidgets.serviceTickets(await serviceViewer(user)),
+      worksheets: async (user) =>
+        this.serviceWidgets.worksheets(await serviceViewer(user)),
+      "material-requests": () => this.serviceWidgets.materialRequests(),
+      "maintenance-calendar": async (user) =>
+        this.serviceWidgets.maintenanceCalendar(
+          await serviceViewer(user),
+          new Date(),
+        ),
     };
   }
 
@@ -178,4 +195,15 @@ export class DashboardWidgetsService {
       })),
     };
   }
+}
+
+/** The scope every service widget query is filtered by: the list pages' own. */
+async function serviceViewer(
+  user: AuthenticatedUser,
+): Promise<ServiceWidgetViewer> {
+  return {
+    userId: user.id,
+    scope: partnerScopeOf(user),
+    assignedUnitIds: await assignedUnitIdsFor(user.id),
+  };
 }

@@ -147,7 +147,7 @@ describe("role presets", () => {
 
   it("enables the preset's widgets in the preset's order and offers the rest disabled", () => {
     const layout = presetDashboardLayout(viewer("OWNER"));
-    // in this PR only tasks and expected arrivals are active
+    // the owner preset has no service widget; tasks and arrivals are active
     assert.deepEqual(ids(layout), ["tasks", "expected-arrivals"]);
     assert.deepEqual(
       layout.map((e) => e.order),
@@ -156,7 +156,23 @@ describe("role presets", () => {
     const warehouse = presetDashboardLayout(viewer("WAREHOUSE"));
     assert.deepEqual(ids(warehouse), ["tasks", "expected-arrivals"]);
     const service = presetDashboardLayout(viewer("SERVICE"));
-    assert.deepEqual(ids(service), ["tasks"]);
+    // Mai szerviz is planned; material requests need the capability
+    assert.deepEqual(ids(service), [
+      "service-tickets",
+      "worksheets",
+      "tasks",
+      "maintenance-calendar",
+    ]);
+    const capable = presetDashboardLayout(
+      viewer("SERVICE", ["MATERIAL_REQUEST_MARK_RECEIVED"]),
+    );
+    assert.deepEqual(ids(capable), [
+      "service-tickets",
+      "worksheets",
+      "material-requests",
+      "tasks",
+      "maintenance-calendar",
+    ]);
   });
 
   it("a role without a preset gets an empty, but offered, dashboard", () => {
@@ -205,13 +221,12 @@ describe("the user's own layout", () => {
       { widgetId: "webshop-orders", enabled: true, order: 2 },
       { widgetId: "tasks", enabled: true, order: 3 },
     ]);
-    assert.deepEqual(
-      resolved.widgets.map((e) => e.widgetId),
-      ["tasks"],
-    );
+    assert.deepEqual(ids(resolved.widgets), ["tasks"]);
+    for (const dropped of ["expected-arrivals", "nope", "webshop-orders"])
+      assert.ok(!resolved.widgets.some((e) => e.widgetId === dropped), dropped);
     assert.deepEqual(
       resolved.widgets.map((e) => e.order),
-      [0],
+      resolved.widgets.map((_, i) => i),
     );
   });
 
@@ -219,12 +234,21 @@ describe("the user's own layout", () => {
     const resolved = resolveDashboardLayout(viewer("OWNER"), [
       { widgetId: "tasks", enabled: true, order: 0 },
     ]);
+    assert.deepEqual(resolved.widgets[0], {
+      widgetId: "tasks",
+      enabled: true,
+      order: 0,
+      size: "sm",
+    });
+    const rest = resolved.widgets.slice(1);
+    assert.ok(rest.some((e) => e.widgetId === "expected-arrivals"));
+    assert.ok(
+      rest.every((e) => !e.enabled),
+      "a new widget is offered, not imposed",
+    );
     assert.deepEqual(
-      resolved.widgets.map((e) => [e.widgetId, e.enabled]),
-      [
-        ["tasks", true],
-        ["expected-arrivals", false],
-      ],
+      new Set(resolved.widgets.map((e) => e.widgetId)),
+      new Set(availableDashboardWidgets(viewer("OWNER")).map((w) => w.id)),
     );
   });
 

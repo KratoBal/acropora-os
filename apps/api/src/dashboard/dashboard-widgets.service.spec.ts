@@ -11,6 +11,7 @@ import {
 
 import type { ExpectedArrivalService } from "../purchasing/expected-arrivals/expected-arrival.service.js";
 import type { DashboardLayoutRepository } from "./dashboard-layout.repository.js";
+import type { DashboardServiceWidgetsRepository } from "./dashboard-service-widgets.repository.js";
 import {
   DashboardWidgetsService,
   WIDGET_UNAVAILABLE_MESSAGE,
@@ -35,7 +36,7 @@ function service(
   options: {
     stored?: unknown;
     capabilities?: ServiceCapabilityValue[];
-    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[2];
+    loaders?: ConstructorParameters<typeof DashboardWidgetsService>[3];
   } = {},
 ) {
   const store: Store = {
@@ -73,6 +74,7 @@ function service(
     svc: new DashboardWidgetsService(
       repository,
       expectedArrivals,
+      {} as DashboardServiceWidgetsRepository,
       options.loaders,
     ),
   };
@@ -89,7 +91,7 @@ describe("the layout", () => {
     );
     assert.deepEqual(
       r.available.map((w) => w.id),
-      ["tasks"],
+      ["tasks", "service-tickets", "worksheets", "maintenance-calendar"],
     );
     // the registry is never exposed whole
     assert.ok(!("availability" in (r.available[0] ?? {})));
@@ -105,9 +107,10 @@ describe("the layout", () => {
     const r = await svc.layout(user("SERVICE"));
     assert.equal(r.source, "custom");
     assert.deepEqual(
-      r.widgets.map((w) => w.widgetId),
+      r.widgets.filter((w) => w.enabled).map((w) => w.widgetId),
       ["tasks"],
     );
+    assert.ok(!r.widgets.some((w) => w.widgetId === "expected-arrivals"));
   });
 
   it("saves a valid layout normalized, and returns it resolved", async () => {
