@@ -16,13 +16,14 @@ import {
  * The switch `GLS_COD_MARK_PAID`: `off` (default), `dry`, `live`. This slice
  * only has the dry run; `live` is the next, separately approved slice.
  */
-export type GlsCodMarkPaidMode = "off" | "dry" | "live";
+/** `auto`: a napi ütemezett futás minden jelölhetőt beír (acrobot 26101). */
+export type GlsCodMarkPaidMode = "off" | "dry" | "live" | "auto";
 
 export function glsCodMarkPaidMode(
   value: string | undefined,
 ): GlsCodMarkPaidMode {
   const v = value?.trim();
-  return v === "dry" ? "dry" : v === "live" ? "live" : "off";
+  return v === "dry" || v === "live" || v === "auto" ? v : "off";
 }
 
 /** `YYYY-MM-DD` -> the bank narrative's `COD-YYYY.MM.DD` prefix. */

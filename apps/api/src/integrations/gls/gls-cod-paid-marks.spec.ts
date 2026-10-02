@@ -320,8 +320,8 @@ describe("decideGlsTransfer: which invoices of a proven transfer are skipped, an
 describe("the dry run's list and switch", () => {
   it("off unless switched to dry or live; the bank narrative's COD day", () => {
     assert.deepEqual(
-      [undefined, "", "on", "dry", " live "].map(glsCodMarkPaidMode),
-      ["off", "off", "off", "dry", "live"],
+      [undefined, "", "on", "dry", " live ", "auto"].map(glsCodMarkPaidMode),
+      ["off", "off", "off", "dry", "live", "auto"],
     );
     assert.equal(codNarrativePrefix("2026-09-17"), "COD-2026.09.17");
   });

@@ -241,8 +241,8 @@ describe("decideFoxpostSettlement", () => {
 describe("the Foxpost dry run's list and switch", () => {
   it("off unless dry or live; the narrative names the settlement", () => {
     assert.deepEqual(
-      [undefined, "", "on", "dry", " live "].map(foxpostMarkPaidMode),
-      ["off", "off", "off", "dry", "live"],
+      [undefined, "", "on", "dry", " live ", "auto"].map(foxpostMarkPaidMode),
+      ["off", "off", "off", "dry", "live", "auto"],
     );
     assert.equal(foxpostNarrativeMark("26H38"), "FOXPOST 26H38");
   });
