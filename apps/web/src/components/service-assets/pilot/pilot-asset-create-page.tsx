@@ -47,7 +47,10 @@ import {
   assetKindLabel,
   assetStatusLabel,
 } from "../asset-labels";
-import { useParentAssetOptions } from "../use-parent-asset-options";
+import {
+  parentAssetTruncation,
+  useParentAssetOptions,
+} from "../use-parent-asset-options";
 import {
   PilotButton,
   PilotCard,
@@ -334,13 +337,14 @@ export function PilotAssetCreatePage() {
   }, [token]);
 
   // a szülőeszköz-lista szűkítve, a szerkesztővel közös (lásd a hook jegyzetét)
-  const parentAssets = useParentAssetOptions({
-    token,
-    owner,
-    departmentId,
-    search: parentSearch,
-    onError: setError,
-  });
+  const { items: parentAssets, total: parentAssetTotal } =
+    useParentAssetOptions({
+      token,
+      owner,
+      departmentId,
+      search: parentSearch,
+      onError: setError,
+    });
 
   /**
    * AZ AKVÁRIUM CSAK VEVŐ TULAJDONOSNÁL ÉRTELMEZETT (a szerver
@@ -903,10 +907,15 @@ export function PilotAssetCreatePage() {
                       </option>
                     ))}
                   </PilotSelect>
-                  {parentAssets.length >= 100 ? (
+                  {parentAssetTruncation(
+                    parentAssets.length,
+                    parentAssetTotal,
+                  ) ? (
                     <p className="text-xs text-pilot-grey-500">
-                      Az első 100 találat látszik. Szűkíts alegységre vagy
-                      keresővel.
+                      {parentAssetTruncation(
+                        parentAssets.length,
+                        parentAssetTotal,
+                      )}
                     </p>
                   ) : null}
                 </div>
