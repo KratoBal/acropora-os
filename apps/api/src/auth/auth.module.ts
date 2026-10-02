@@ -16,6 +16,11 @@ import { SessionRepository } from "./session.repository.js";
     AssistantAuditRepository,
     AssistantAuditMiddleware,
   ],
-  exports: [AuthService, SessionRepository, AssistantAuditRepository, AssistantAuditMiddleware],
+  exports: [
+    AuthService,
+    SessionRepository,
+    AssistantAuditRepository,
+    AssistantAuditMiddleware,
+  ],
 })
 export class AuthModule {}
