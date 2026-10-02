@@ -58,6 +58,10 @@ import { enqueueAssetUpdate } from "@/lib/offline/queue-store";
 import { deviceConnectivity } from "@/lib/offline/connectivity";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { UnitPicker } from "@/components/assets/unit-picker";
+import {
+  ParentAssetPicker,
+  parentAssetLabelOf,
+} from "@/components/assets/parent-asset-picker";
 import { matricaElotoltes } from "@/lib/assets/matrica-elotoltes";
 import { CategoryPicker } from "@/components/assets/category-picker";
 import { FunctionPicker } from "@/components/assets/function-picker";
@@ -196,6 +200,8 @@ export default function AssetEditScreen() {
    * csak ellenorizni akarta, azonnal latja.
    */
   const [unitPickerOpen, setUnitPickerOpen] = useState(false);
+  /** A választott szülő felirata; a törzsbe csak az azonosító megy. */
+  const [parentLabel, setParentLabel] = useState("");
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
     [],
@@ -348,6 +354,9 @@ export default function AssetEditScreen() {
       utvonalKod,
     });
     setForm({ ...alap, labelCode: elotoltes.mezoErteke });
+    setParentLabel(
+      betoltott.parent ? parentAssetLabelOf(betoltott.parent) : "",
+    );
     setMatricaUzenet(elotoltes.uzenet ?? null);
   }
 
@@ -433,6 +442,9 @@ export default function AssetEditScreen() {
              */
             payload: {
               assetName: asset.name,
+              ...("parentAssetId" in patch && patch.parentAssetId
+                ? { parentLabel }
+                : {}),
               patch,
               base: baseValuesFor(editable(asset), patch),
             },
@@ -715,6 +727,30 @@ export default function AssetEditScreen() {
               onToggle={() => setUnitPickerOpen((nyitva) => !nyitva)}
             />
           </View>
+        ) : null}
+
+        {/*
+          SZÜLŐESZKÖZ (Balázs, 2026-10-02 07:38 UTC). Ugyanaz a választó, mint a
+          felvitelen; az eszköz maga és a leszármazottai nem kerülnek a listára.
+          Helyszín nélkül is látszik, ha van szülő: így legalább eltávolítható.
+          A helyszín váltása a szülőt NEM törli (a szerver nem köti a kettőt),
+          csak a listát állítja alaphelyzetbe.
+        */}
+        {form.unitId || form.parentAssetId ? (
+          <ParentAssetPicker
+            key={form.unitId}
+            unitId={form.unitId}
+            value={form.parentAssetId}
+            label={parentLabel}
+            onChange={(parentAssetId, label) => {
+              setForm({ ...form, parentAssetId });
+              setParentLabel(label);
+            }}
+            enabled={
+              status === "authenticated" && Boolean(capabilities?.assetsManage)
+            }
+            excludeSubtreeOf={asset.id}
+          />
         ) : null}
 
         {TEXT_FIELDS.map((field) => (

@@ -47,6 +47,7 @@ import {
   assetKindLabel,
   assetStatusLabel,
 } from "../asset-labels";
+import { useParentAssetOptions } from "../use-parent-asset-options";
 import {
   PilotButton,
   PilotCard,
@@ -137,7 +138,6 @@ export function PilotAssetCreatePage() {
   const [owners, setOwners] = useState<AssetOwnerOption[]>([]);
   const [units, setUnits] = useState<SiteOption[]>([]);
   const [departmentId, setDepartmentId] = useState("");
-  const [parentAssets, setParentAssets] = useState<AssetListItem[]>([]);
   const [selectedOwner, setSelectedOwner] = useState("");
   const [customerAddressId, setCustomerAddressId] = useState("");
   const [parentAssetId, setParentAssetId] = useState("");
@@ -333,40 +333,14 @@ export function PilotAssetCreatePage() {
     return () => controller.abort();
   }, [token]);
 
-  /**
-   * A SZÜLŐESZKÖZ-LISTA SZŰKÍTVE, NEM AZ ELSŐ SZÁZ (Balázs, 2026-10-01): a
-   * lista eddig a partner első 100 aktív eszközét hozta betűrendben, és a
-   * FANK 406 eszközéből így csak AKV kezdetűek jöttek fel. Most a kiválasztott
-   * alegység részfájára szűkít (a végpont `departmentId` szűrője a részfára
-   * szól), és a keresőmező a név, a kód és a matrica szerint keres.
-   */
-  useEffect(() => {
-    setParentAssets([]);
-    if (!owner) return;
-    const controller = new AbortController();
-    const assetQuery = new URLSearchParams({
-      page: "1",
-      pageSize: "100",
-      status: "ACTIVE",
-      ownerType: owner.type,
-      ownerId: owner.id,
-    });
-    if (departmentId) assetQuery.set("departmentId", departmentId);
-    if (parentSearch.trim().length >= 2)
-      assetQuery.set("search", parentSearch.trim());
-    void assetsApi
-      .list(token, assetQuery, controller.signal)
-      .then((result) => setParentAssets(result.items))
-      .catch((cause) => {
-        if (!(cause instanceof DOMException && cause.name === "AbortError"))
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "A partner eszközadatai nem tölthetők be.",
-          );
-      });
-    return () => controller.abort();
-  }, [owner, departmentId, parentSearch, token]);
+  // a szülőeszköz-lista szűkítve, a szerkesztővel közös (lásd a hook jegyzetét)
+  const parentAssets = useParentAssetOptions({
+    token,
+    owner,
+    departmentId,
+    search: parentSearch,
+    onError: setError,
+  });
 
   /**
    * AZ AKVÁRIUM CSAK VEVŐ TULAJDONOSNÁL ÉRTELMEZETT (a szerver

@@ -33,6 +33,8 @@ export interface EditableAsset {
   labelCode?: string;
   /** A partner alegysége, ahol az eszköz áll. Hiányzik, ha nincs megadva. */
   unit?: { id: string };
+  /** A szülőeszköz, ha van: a választó a NEVÉT mutatja, nem az azonosítóját. */
+  parent?: { id: string; name: string; assetNumber: string };
   /**
    * A MOSTANI KATEGORIA AZONOSITOJA ES NEVE.
    *
@@ -112,6 +114,12 @@ export interface EditableAsset {
  * a helyszín-választót. Egy mező, amit felvinni lehet, de javítani nem, egy
  * elgépelés után zsákutca -- a szerelő a terepen nem tud mit kezdeni magával.
  *
+ * A SZÜLŐ (`parentAssetId`) 2026-10-02 ÓTA BENNE VAN, Balázs kérésére (07:38
+ * UTC): „Meg kellene oldani hogy a webes és a mobil felületen lehessen
+ * módosítani egy eszköz szülőjét”. Az indok ugyanaz, mint az alegységnél: a
+ * felvitel már ismerte, és a választó nem hosszú lista, hanem kereshető, az
+ * alegységre szűkített, lapozott lista, ugyanaz, mint a felvitelen.
+ *
  * Dates are left out as well, and not for lack of interest: a date picker
  * is a new native dependency, and adding one is a decision of its own.
  * The web keeps them until then.
@@ -123,6 +131,8 @@ export interface AssetEditForm {
    * ténylegesen leszedi az eszközről a helyszínt.
    */
   unitId: string;
+  /** A szülő azonosítója; üres szöveg: önálló / főegység (`null` a szervernek). */
+  parentAssetId: string;
   status: AssetStatus;
   criticality: AssetCriticality;
   /**
@@ -191,6 +201,7 @@ const TEXT_FIELDS = [
 export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
   return {
     unitId: asset.unit?.id ?? "",
+    parentAssetId: asset.parent?.id ?? "",
     categoryId: asset.categoryId ?? "",
     functionId: asset.functionId ?? "",
     status: asset.status,
@@ -329,6 +340,14 @@ export function buildAssetPatch(
   if (funkcio !== (asset.functionId ?? ""))
     patch.functionId = funkcio === "" ? null : funkcio;
 
+  /**
+   * A SZÜLŐ MINDEN TULAJDONOSNÁL MEHET, ugyanaz a hármas jelentés: változatlan
+   * nem megy, üres `null` (önálló lesz), más érték az új szülő.
+   */
+  const szulo = form.parentAssetId.trim();
+  if (szulo !== (asset.parent?.id ?? ""))
+    patch.parentAssetId = szulo === "" ? null : szulo;
+
   if (asset.ownerType === "SUPPLIER") {
     const chosen = form.unitId.trim();
     const current = asset.unit?.id ?? "";
@@ -459,6 +478,7 @@ export function baseValuesFor(
   if ("status" in patch) base.status = asset.status;
   if ("criticality" in patch) base.criticality = asset.criticality;
   if ("departmentId" in patch) base.departmentId = asset.unit?.id ?? null;
+  if ("parentAssetId" in patch) base.parentAssetId = asset.parent?.id ?? null;
   /**
    * A KATEGORIA IS BEKERUL A SORBA, ugyanabbol az okbol, mint a tobbi: a
    * feloldas kulonben nem tudna, MIHEZ kepest keszult a pinceben beirt ertek,
