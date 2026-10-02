@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  externalCustomerName,
   externalWhere,
   listWhere,
   mergeListRows,
@@ -168,6 +169,7 @@ const external = (
   // a régi sor: a vetítés még nem olvasta ki (újravetítésig null)
   paymentMethodUnified: null,
   orderNumber: null,
+  customerTaxNumber: "12345678-2-42",
   cancelled: false,
   payments: [],
   ...overrides,
@@ -698,5 +700,50 @@ describe("an own paid mark on the outgoing view (acrobot 26027)", () => {
 
   it("no mark: unchanged (the transfer invoice stays unpaid)", () => {
     assert.equal(pay({ paymentsKnown: false }, []).paymentState, "UNPAID");
+  });
+});
+
+/*
+  A MAGÁNSZEMÉLYES SZÁMLA VEVŐNEVE A WEBSHOP-RENDELÉSBŐL (Balázs, 2026-10-02
+  11:16 UTC; acrobot 26096, élesen 40/46). MI PIROSÍT: ha a takart név
+  maradna, holott a rendelés ismeri a vevőt; ha egy CÉG (adószámos) számlája
+  kapná a rendelés nevét; ha rendelés nélkül vagy üres rendelés-névvel a takart
+  név helyett üres szöveg állna; ha a jelző hiányozna.
+*/
+describe("the buyer's name from the webshop order (acrobot 26096)", () => {
+  const privateRow = {
+    customerName: "Magánszemély (NAV)",
+    customerTaxNumber: null,
+  };
+
+  it("a private invoice with a named order: the order's name, marked", () => {
+    assert.deepEqual(externalCustomerName(privateRow, "Kiss Anna"), {
+      customerName: "Kiss Anna",
+      customerNameFromOrder: true,
+    });
+    const item = toExternalListItem(
+      external({ ...privateRow, orderNumber: "47679-558779" }),
+      [],
+      [],
+      "Kiss Anna",
+    );
+    assert.equal(item.customerName, "Kiss Anna");
+    assert.equal(item.customerNameFromOrder, true);
+  });
+
+  it("a company invoice keeps its own name; no order or an empty name keeps the invoice's", () => {
+    assert.deepEqual(
+      externalCustomerName(
+        { customerName: "Teszt Kft.", customerTaxNumber: "12345678-2-42" },
+        "Kiss Anna",
+      ),
+      { customerName: "Teszt Kft." },
+    );
+    assert.deepEqual(externalCustomerName(privateRow, null), {
+      customerName: "Magánszemély (NAV)",
+    });
+    assert.deepEqual(externalCustomerName(privateRow, "  "), {
+      customerName: "Magánszemély (NAV)",
+    });
   });
 });

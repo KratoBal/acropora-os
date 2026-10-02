@@ -65,6 +65,7 @@ export const EXTERNAL_LIST_SELECT = {
   paymentMethod: true,
   paymentMethodUnified: true,
   orderNumber: true,
+  customerTaxNumber: true,
   cancelled: true,
   payments: true,
 } satisfies Prisma.ExternalBillingDocumentSelect;
@@ -129,6 +130,11 @@ export class BillingDocumentListRepository {
       this.database,
       externalRows.map((row) => row.documentNumber),
     );
+    // a magánszemélyes számla vevőneve a webshop-rendelésből (acrobot 26096)
+    const buyers = await orderBuyerNamesByOrderNumber(
+      this.database,
+      externalRows.map((row) => row.orderNumber),
+    );
     const toExternal = (row: (typeof externalRows)[number]) =>
       toExternalListItem(
         row,
@@ -136,6 +142,7 @@ export class BillingDocumentListRepository {
           simplePayOrderKey(row.orderNumber, UNAS_SHOP_ORDER_PREFIX) ?? "",
         ) ?? [],
         marks.get(row.documentNumber) ?? [],
+        (row.orderNumber && buyers.get(row.orderNumber)) || null,
       );
     const totalItems = ownCount + externalCount;
     const items = both
@@ -227,5 +234,30 @@ export async function ownPaymentMarksByInvoice(
       ...(out.get(row.invoiceNumber) ?? []),
       { source: row.source, markDate: row.markDate, amount: row.amount },
     ]);
+  return out;
+}
+
+/**
+ * A WEBSHOP-RENDELÉSEK VEVŐNEVE A SZÁMLA RENDELÉSSZÁMA SZERINT (acrobot
+ * 26096): a feed rendelésszáma „47679-558779”, a rendelés-tükör kulcsa
+ * „UNAS-47679-558779”. Egy lekérdezés egy lapra, csak olvasás; új UNAS-hívás
+ * nincs, a meglévő rendelés-szinkron tükrét olvassa.
+ */
+export async function orderBuyerNamesByOrderNumber(
+  database: typeof prisma,
+  orderNumbers: readonly (string | null)[],
+): Promise<Map<string, string>> {
+  const numbers = [
+    ...new Set(orderNumbers.filter((n): n is string => Boolean(n?.trim()))),
+  ];
+  const out = new Map<string, string>();
+  if (numbers.length === 0) return out;
+  const orders = await database.salesOrder.findMany({
+    where: { orderNumber: { in: numbers.map((n) => `UNAS-${n}`) } },
+    select: { orderNumber: true, buyerName: true },
+  });
+  for (const order of orders)
+    if (order.buyerName?.trim())
+      out.set(order.orderNumber.slice("UNAS-".length), order.buyerName.trim());
   return out;
 }
