@@ -222,6 +222,11 @@ export class AssetListQueryDto {
   @IsString() @IsOptional() aquariumId?: string;
   @IsString() @IsOptional() parentAssetId?: string;
   /**
+   * A SZÜLŐ-VÁLASZTÓHOZ (acrobot 26045): az eszköz maga és minden
+   * leszármazottja kimarad a listából, mert egyik sem lehet a szülője.
+   */
+  @IsString() @MinLength(1) @IsOptional() excludeSubtreeOf?: string;
+  /**
    * AZ ALLAPOT-SZURO HAROM FAJTA ERTEKET VESZ FEL: egy konkret allapotot, az
    * `ALL` erteket, vagy az `IN_PLACE` erteket (minden, KIVEVE a kivezetettet --
    * a feluleten "Beepitett", Balazs kerese 2026-09-16). A jelentesuk az

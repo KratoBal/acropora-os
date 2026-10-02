@@ -219,6 +219,53 @@ describe("MissingInvoicesService: a cancelled purchase", () => {
   });
 });
 
+/*
+  A SZÁMLÁZÁS FELÉ KIADOTT PÁROSÍTÁS (murena lelete, 26014). MI PIROSÍT: ha egy
+  összeg-eltéréssel párosított (a közlemény a számla számát nevezi meg, de
+  kevesebbet fizettünk) vagy egy sztornózott vásárlás jóváírójához kötött
+  terhelés teljes fizetésnek számítana; ha a pontos párosítás nem annak.
+*/
+describe("MissingInvoicesService.documentPairings", () => {
+  it("paid in full only when every paired debit is found, with no amount difference", async () => {
+    const exact = nav("2026-08-01", 1000, "Alfa Kft.");
+    // a saját szám: a „NAV-” közlemény adónak sorolná a terhelést
+    const named = {
+      ...nav("2026-08-02", 5000, "Béta Kft."),
+      number: "BT-2026/0042",
+    };
+    const note = {
+      ...nav("2026-08-12", -85000, "Tesla Hungary Kft."),
+      source: "SZAMLAZZ" as const,
+    };
+    const { missing } = service({
+      debits: [
+        debit("2026-08-03", 1000, "Alfa Kft."),
+        debit("2026-08-04", 3000, "Béta Kft.", {
+          narrative: `Számla ${named.number}`,
+        }),
+        debit("2026-08-11", 85000, "Tesla Inc", {
+          bankAccountId: CARD.id,
+          narrative: "2026.08.10 7413124583 Tesla Inc -APPLE",
+        }),
+      ],
+      documents: [exact, named, note],
+      coverage: [`${MAIN.id}:2026-08`, `${CARD.id}:2026-08`],
+    });
+    const pairings = await missing.documentPairings();
+    assert.deepEqual(
+      [exact, named, note].map((d) => [
+        pairings.get(d.id)?.debits.length,
+        pairings.get(d.id)?.paidInFull,
+      ]),
+      [
+        [1, true],
+        [1, false],
+        [1, false],
+      ],
+    );
+  });
+});
+
 describe("MissingInvoicesService.months", () => {
   it("counts the tiles and the missing amount, and names the company from the one identity", async () => {
     const { missing } = service({

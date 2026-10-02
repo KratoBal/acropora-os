@@ -482,3 +482,40 @@ describe("a teljesítmény-pár a szerkesztőn", () => {
     assert.equal("performanceUnitId" in base, false);
   });
 });
+
+/*
+  A SZÜLŐESZKÖZ A SZERKESZTŐN (Balázs, 2026-10-02 07:38 UTC). MI PIROSÍT: ha a
+  változatlan szülő is a törzsbe kerülne (minden mentés PARENT_CHANGED ütközést
+  kockáztatna); ha a kiürített választás nem `null` lenne (a szerver nem venné
+  törlésnek); ha az alapérték nem kerülne a sorba (a feloldó nem látná, más is
+  hozzányúlt-e).
+*/
+describe("buildAssetPatch: the parent", () => {
+  const withParent: EditableAsset = {
+    ...asset,
+    parent: { id: "p-1", name: "Gépház szivattyú", assetNumber: "ESZ-0099" },
+  };
+
+  it("unchanged: not sent; another: its id; emptied: null; base holds the old id", () => {
+    const form = assetEditFormFrom(withParent);
+    assert.equal(form.parentAssetId, "p-1");
+    assert.equal("parentAssetId" in buildAssetPatch(withParent, form), false);
+    const moved = buildAssetPatch(withParent, {
+      ...form,
+      parentAssetId: "p-2",
+    });
+    assert.equal(moved.parentAssetId, "p-2");
+    assert.equal(
+      buildAssetPatch(withParent, { ...form, parentAssetId: "" }).parentAssetId,
+      null,
+    );
+    assert.equal(baseValuesFor(withParent, moved).parentAssetId, "p-1");
+    assert.equal(
+      buildAssetPatch(asset, {
+        ...assetEditFormFrom(asset),
+        parentAssetId: "p-2",
+      }).parentAssetId,
+      "p-2",
+    );
+  });
+});

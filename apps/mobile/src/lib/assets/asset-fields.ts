@@ -35,6 +35,12 @@ export interface UpdateAssetInput {
    * hagyja -- ugyanaz a hármas jelentés, mint a szöveges mezőknél.
    */
   departmentId?: string | null;
+  /**
+   * A SZÜLŐESZKÖZ (Balázs, 2026-10-02 07:38 UTC). `null`: önálló lesz, a mező
+   * elhagyása érintetlenül hagyja. A szerver a kört elutasítja, és a partner
+   * belső kódját a szabály szerint újraszámolja.
+   */
+  parentAssetId?: string | null;
   status?: AssetStatus;
   criticality?: AssetCriticality;
   /**

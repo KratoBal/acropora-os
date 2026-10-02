@@ -187,7 +187,8 @@ describe("role presets", () => {
     assert.ok(owner.includes("aquarium")); // tasks
     assert.deepEqual(
       ids(starterDashboardLayout(viewer("WAREHOUSE"), "finance") ?? []),
-      ["expected-arrivals"],
+      // purchasing.view, no finance.view / billing.view
+      ["incoming-invoices", "expected-arrivals"],
     );
     assert.equal(starterDashboardLayout(viewer("OWNER"), "nope"), null);
   });

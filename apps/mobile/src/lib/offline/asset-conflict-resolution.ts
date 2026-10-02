@@ -95,6 +95,8 @@ export interface CurrentAssetLike {
   performanceUnit?: { id: string; code: string } | null;
   /** A mostani helyszín, ha van. A NEVE kell, nem az azonosítója. */
   unit?: { id: string; name: string } | null;
+  /** A mostani szülő, ha van: az összevetés az azonosítón, a kiírás a nevén. */
+  parent?: { id: string; name: string; assetNumber: string } | null;
   /**
    * A MOSTANI KATEGORIA -- AZ AZONOSITO ES A NEVE IS.
    *
@@ -167,6 +169,7 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   status: "Státusz",
   criticality: "Kritikusság",
   departmentId: "Helyszín",
+  parentAssetId: "Szülőeszköz",
   categoryId: "Kategória",
   functionId: "Funkció",
   manufacturer: "Gyártó",
@@ -221,6 +224,11 @@ export function compareQueuedUpdate(input: {
    * az indok, mint felette.
    */
   functionNames?: Record<string, string>;
+  /**
+   * A VÁLASZTOTT SZÜLŐ FELIRATA, a sor-elemből (`QueuedAssetUpdate.parentLabel`):
+   * a feloldás térerő nélkül is a nevét mutassa, ne az azonosítóját.
+   */
+  parentLabel?: string;
   /** Amit a szerelő LÁTOTT. Hiányozhat: a mező előtt keletkezett sorokon nincs. */
   base?: QueuedAssetUpdateBase;
 }): ConflictFieldRow[] {
@@ -234,6 +242,7 @@ export function compareQueuedUpdate(input: {
       input.unitNames,
       input.categoryNames,
       input.functionNames,
+      input.parentLabel,
     );
     const theirs = ovek(field, input.current, input.unitNames);
     rows.push({
@@ -272,6 +281,7 @@ function nyersMost(
   if (field === "status") return current.status;
   if (field === "criticality") return current.criticality;
   if (field === "departmentId") return current.unit?.id ?? null;
+  if (field === "parentAssetId") return current.parent?.id ?? null;
   // A KATEGORIANAL IS AZ AZONOSITO dont, nem a nev: a torzsadaton a nev
   // atirhato, es egy atnevezes kulonben ugy latszana, mintha mas hozzanyult
   // volna az eszkozhoz.
@@ -457,6 +467,9 @@ function assignField(
     case "categoryId":
       target.categoryId = source.categoryId;
       return;
+    case "parentAssetId":
+      target.parentAssetId = source.parentAssetId;
+      return;
     case "functionId":
       target.functionId = source.functionId;
       return;
@@ -517,14 +530,20 @@ function kimaradtMezo(field: never): never {
   throw new Error(`nem kezelt mezo a feloldasban: ${String(field)}`);
 }
 
+/** A szülő nélküli eszköz felirata, a választóval azonos szóval. */
+const ONALLO = "Önálló / főegység";
+
 function enyem(
   field: ComparableField,
   patch: UpdateAssetInput,
   unitNames?: Record<string, string>,
   categoryNames?: Record<string, string>,
   functionNames?: Record<string, string>,
+  parentLabel?: string,
 ): string {
   if (field === "status") return szoveg(ASSET_STATUS_LABELS, patch.status);
+  if (field === "parentAssetId")
+    return patch.parentAssetId ? (parentLabel ?? patch.parentAssetId) : ONALLO;
   if (field === "criticality")
     return szoveg(ASSET_CRITICALITY_LABELS, patch.criticality);
   if (field === "departmentId") return helyszin(patch.departmentId, unitNames);
@@ -545,6 +564,10 @@ function ovek(
     return current.unit
       ? (unitNames?.[current.unit.id] ?? current.unit.name)
       : URES;
+  if (field === "parentAssetId")
+    return current.parent
+      ? `${current.parent.name} (${current.parent.assetNumber})`
+      : ONALLO;
   /**
    * A MERTEKEGYSEGNEL A JEL LATSZIK, NEM AZ AZONOSITO.
    *

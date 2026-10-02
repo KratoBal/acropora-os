@@ -41,7 +41,13 @@ export class BillingDocumentStockRepository {
         documentType: true,
         sourceType: true,
         lines: {
-          select: { id: true, kind: true, productId: true, quantity: true },
+          select: {
+            id: true,
+            kind: true,
+            productId: true,
+            variantId: true,
+            quantity: true,
+          },
         },
       },
     });

@@ -317,11 +317,10 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "finance",
     requiredPermissions: [P.BILLING_VIEW],
     recommendedRoles: ["SALES", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 40,
     dataSource:
       "ExternalBillingDocument + the existing paymentStateOf / externalPaymentFields; UNKNOWN never overdue.",
-    plannedReason: "Built with the finance batch (PR 5).",
   }),
   widget({
     id: "missing-invoices",
@@ -330,10 +329,9 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "finance",
     requiredPermissions: [P.FINANCE_VIEW],
     recommendedRoles: ["SALES", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 41,
     dataSource: "MissingInvoicesService.months() (called, not modified).",
-    plannedReason: "Built with the finance batch (PR 5).",
   }),
   widget({
     id: "incoming-invoices",
@@ -342,11 +340,10 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "purchasing",
     requiredPermissions: [P.PURCHASING_VIEW],
     recommendedRoles: ["WAREHOUSE", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 42,
     dataSource:
       "NavIncomingInvoice unbooked / ERROR; IncomingSupplierDocument FAILED / LATE_CORRECTION.",
-    plannedReason: "Built with the finance batch (PR 5).",
   }),
   widget({
     id: "expected-arrivals",
@@ -379,11 +376,10 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "finance",
     requiredPermissions: [P.FINANCE_VIEW],
     recommendedRoles: ["SALES", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 45,
     dataSource:
       "Settlement / COD report NEEDS_REVIEW and ERROR, latest sync runs.",
-    plannedReason: "Built with the finance batch (PR 5).",
   }),
   // --- webshop & inventory ---
   widget({
@@ -1091,5 +1087,61 @@ export interface DashboardAquariumEquipmentWidgetData {
     assetName: string;
     aquariumName: string;
     nextServiceAt: string;
+  }[];
+}
+
+/**
+ * Lejáró számlák: our outgoing invoices from the Számlázz.hu feed
+ * (`ExternalBillingDocument`), with the payment state of the existing
+ * `externalPaymentFields` / `paymentStateOf` -- never a second calculation.
+ * Only UNPAID and the open part of PARTIAL count; UNKNOWN is never overdue,
+ * it is its own figure. Days are Europe/Budapest calendar days.
+ */
+export interface DashboardOverdueInvoicesWidgetData {
+  overdue: {
+    count: number;
+    /** The open amount per currency, decimal strings. */
+    openAmounts: { currency: string; amount: string }[];
+  };
+  dueToday: number;
+  /** Due tomorrow through the 7th day from today. */
+  dueWithinWeek: number;
+  /** Past due, but the feed has no payment data: shown, never counted as overdue. */
+  noPaymentDataPastDue: number;
+}
+
+/** Hiányzó számlák: the two newest months of the existing missing-invoice check. */
+export interface DashboardMissingInvoicesWidgetData {
+  months: {
+    /** `YYYY-MM` */
+    month: string;
+    /** originalMissing + notMatched + noInvoice */
+    missing: number;
+    originalMissing: number;
+    notMatched: number;
+    noInvoice: number;
+    missingAmountHuf: string;
+    status: string;
+  }[];
+}
+
+/** Bejövő számlák: only what needs someone (NAV invoices and mailbox documents). */
+export interface DashboardIncomingInvoicesWidgetData {
+  /** NAV invoices (CREATE) fetched but not booked yet. */
+  navToBook: number;
+  navErrors: number;
+  /** Mailbox documents that could not be read. */
+  mailboxFailed: number;
+  /** An invoice corrected after it was booked. */
+  lateCorrections: number;
+}
+
+/** Elszámolások: the settlements that need review, and each source's last run. */
+export interface DashboardSettlementsWidgetData {
+  sources: {
+    source: "FOXPOST" | "GLS" | "SIMPLEPAY";
+    needsReview: number;
+    errors: number;
+    lastRun: { status: string; startedAt: string } | null;
   }[];
 }

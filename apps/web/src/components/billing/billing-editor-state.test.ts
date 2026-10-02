@@ -12,6 +12,7 @@ import {
   newEditorState,
   toDraftInput,
   trimDecimal,
+  variantOptionsOf,
   type EditorState,
 } from "./billing-editor-state";
 
@@ -262,5 +263,46 @@ describe("billing editor state", () => {
       grossAmount: "-7620.00",
     });
     expect(preview.totals.grossAmount).toBe("68580");
+  });
+});
+
+/*
+  A VÁLTOZAT A MENTÉS TÖRZSÉBEN (kártya 705768fc). MI PIROSÍT: ha egyedi tétel
+  is küldene változatot; ha a termék-sor választása elveszne; ha egyetlen aktív
+  változatnál (vagy az inaktívakkal együtt) választó kerülne a sorra.
+*/
+describe("the line's variant", () => {
+  it("goes with a product line only", () => {
+    const input = toDraftInput(
+      state({
+        lines: [
+          emptyLine({ productId: "p-1", variantId: "v-1" }),
+          emptyLine({ productId: null, variantId: "v-2" }),
+          emptyLine({ productId: "p-1" }),
+        ],
+      }),
+      "create",
+    );
+    expect(input.lines.map((line) => line.variantId)).toEqual([
+      "v-1",
+      null,
+      null,
+    ]);
+  });
+
+  it("offers the active variants, and only when there are two or more", () => {
+    const v = (id: string, name: string | null, isActive = true) => ({
+      id,
+      sku: id.toUpperCase(),
+      name,
+      isActive,
+    });
+    expect(variantOptionsOf([v("a", "1 kg"), v("b", null, false)])).toEqual([]);
+    expect(
+      variantOptionsOf([v("a", "1 kg"), v("b", null), v("c", null, false)]),
+    ).toEqual([
+      { id: "a", label: "A · 1 kg" },
+      { id: "b", label: "B" },
+    ]);
   });
 });

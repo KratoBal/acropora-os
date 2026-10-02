@@ -21,6 +21,12 @@ import type { UpdateAssetInput } from "../assets/asset-fields";
 export interface QueuedAssetUpdate {
   /** Az eszkoz neve, ahogy a szerelo latta. CSAK a sor-kepernyore. */
   assetName: string;
+  /**
+   * A VALASZTOTT SZULO FELIRATA (nev es szam), CSAK a feloldo kepernyore: a
+   * torzsben azonosito all, es a feloldas gyakran terero nelkul tortenik, amikor
+   * a nevet nem lehet lekerdezni.
+   */
+  parentLabel?: string;
   /** A szervernek menő torzs. Ez es semmi mas megy fel. */
   patch: UpdateAssetInput;
   /**
@@ -61,6 +67,8 @@ export interface QueuedAssetUpdateBase {
   criticality?: string;
   /** A helyszin AZONOSITOJA, nem a neve. `null`, ha nem volt beallitva. */
   departmentId?: string | null;
+  /** A szülő AZONOSITOJA, ahogy a szerkesztes kezdetekor allt; `null`: onallo. */
+  parentAssetId?: string | null;
   /**
    * A KATEGORIA AZONOSITOJA, ahogy a szerkesztes kezdetekor allt.
    *
@@ -135,6 +143,10 @@ export function readQueuedAssetUpdate(json: string): QueuedAssetUpdate | null {
       assetName: p.assetName,
       patch: patch as UpdateAssetInput,
       ...(p.base ? { base: p.base as QueuedAssetUpdateBase } : {}),
+      // a szülő felirata nélkül a feloldó az azonosítót mutatná
+      ...(typeof p.parentLabel === "string"
+        ? { parentLabel: p.parentLabel }
+        : {}),
     };
   } catch {
     return null;
@@ -182,5 +194,17 @@ export function mergeQueuedAssetUpdate(
     ...(previous.base || next.base
       ? { base: { ...next.base, ...previous.base } }
       : {}),
+    /**
+     * A SZÜLŐ FELIRATA A SZÜLŐVEL EGYÜTT MOZOG: ha a későbbi szerkesztés
+     * választott szülőt, az ő felirata; különben a korábbié marad, mert a
+     * törzsben is a korábbi szülő áll.
+     */
+    ...("parentAssetId" in next.patch
+      ? next.parentLabel !== undefined
+        ? { parentLabel: next.parentLabel }
+        : {}
+      : previous.parentLabel !== undefined
+        ? { parentLabel: previous.parentLabel }
+        : {}),
   };
 }

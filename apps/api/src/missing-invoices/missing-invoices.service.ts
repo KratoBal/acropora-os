@@ -101,6 +101,14 @@ export interface DocumentPairing {
   payee: CandidateDocument["payee"];
   kind: CandidateDocument["kind"];
   debits: { bookingDate: string; amount: string; currency: string }[];
+  /**
+   * A TERHELÉSEK A TELJES SZÁMLÁT FIZETIK (murena lelete, 26014): minden
+   * párosított terhelés Megvan vagy Eredeti hiányzik, összeg-eltérés nélkül.
+   * A párosítás összeg-eltéréssel is megáll (a számlaszám-szabály és a kézi
+   * párosítás bármilyen összeggel párosít), és a kétszer fizetett vagy a
+   * sztornózott vásárlás jóváírója is párosított; ezek NEM teljes fizetések.
+   */
+  paidInFull: boolean;
 }
 
 interface Computed {
@@ -337,6 +345,7 @@ export class MissingInvoicesService {
         payee: document.payee,
         kind: document.kind,
         debits: [],
+        paidInFull: false,
       };
       for (const id of ids) result.set(id, pairing);
       return pairing;
@@ -344,12 +353,19 @@ export class MissingInvoicesService {
     for (const document of computed.documents) entry(document);
     for (const item of computed.items) {
       const outcome = computed.outcomes.get(item.id);
-      for (const document of outcome?.documents ?? [])
-        entry(document).debits.push({
+      const inFull =
+        (outcome?.state === "FOUND" || outcome?.state === "ORIGINAL_MISSING") &&
+        !outcome.amountDifference;
+      for (const document of outcome?.documents ?? []) {
+        const pairing = entry(document);
+        pairing.paidInFull =
+          (pairing.debits.length === 0 || pairing.paidInFull) && inFull;
+        pairing.debits.push({
           bookingDate: item.bookingDate,
           amount: item.amount,
           currency: item.currency,
         });
+      }
     }
     return result;
   }
@@ -613,14 +629,30 @@ export class MissingInvoicesService {
    * A KÖNYVELŐI CSOMAG: a hónap Megvan-tételeinek eredetijei egy PDF-ben. A
    * díjbekérő, a nem a cégre szóló és a hiányzó nem Megvan, tehát nem is kerül
    * bele. Összevont számlánál a fájl az eredetit hordozó forrásé.
+   *
+   * A SZTORNÓZOTT VÁSÁRLÁS IS BEKERÜL (acrobot 25981): az eredeti számla ÉS a
+   * jóváíró (az könyvelendő bizonylat), egy sorban, jelölve, hogy összetartoznak,
+   * és mi lett a visszatérítéssel.
    */
   async accountantPackage(
     month: string,
   ): Promise<{ fileName: string; content: Buffer }> {
     const computed = await this.compute();
     const found = computed.items.filter(
-      (item) => item.month === month && item.state === "FOUND",
+      (item) =>
+        item.month === month &&
+        (item.state === "FOUND" || item.refund !== null),
     );
+    const labelOf = (item: (typeof found)[number]) =>
+      item.refund
+        ? `sztornózott vásárlás: az eredeti számla és a jóváíró együtt; ${
+            item.refund.receivedOn
+              ? `a visszatérítés megjött (${item.refund.receivedOn})`
+              : item.state === "REFUND_MISSING"
+                ? `a visszatérítés elmaradt (határidő: ${item.refund.due})`
+                : `a visszatérítés várható (határidő: ${item.refund.due})`
+          }`
+        : undefined;
     const documentsOf = (id: string) =>
       (computed.outcomes.get(id)?.documents ?? []).map((document) => ({
         number: document.number,
@@ -646,6 +678,7 @@ export class MissingInvoicesService {
         amount: item.amount,
         currency: item.currency,
         paperOriginal: item.paperOriginal,
+        ...(labelOf(item) ? { label: labelOf(item) } : {}),
         documents: documentsOf(item.id).map((d) => ({
           number: d.number,
           file: (d.originalId && files.get(d.originalId)) || null,

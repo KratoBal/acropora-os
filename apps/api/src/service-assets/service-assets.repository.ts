@@ -49,7 +49,9 @@ import {
 } from "@acropora/types";
 import { teljesitmenyEredmenye } from "./asset-performance.js";
 import {
+  descendantPartnerInternalCode,
   nextFreePartnerInternalCodeSerial,
+  partnerInternalCodeFollowsRule,
   partnerInternalCodePrefix,
 } from "./partner-internal-code.js";
 
@@ -580,6 +582,10 @@ export class ServiceAssetsRepository extends Repository {
     const departmentIds = requestedUnitIds.length
       ? await this.unitSubtreeIds(requestedUnitIds)
       : null;
+    // a szülő-választó nem kínálja fel az eszközt magát és a leszármazottait
+    const excludedAssetIds = query.excludeSubtreeOf
+      ? await assetSubtreeIds(prisma, query.excludeSubtreeOf)
+      : null;
     // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- lasd a
     // scopeWhereForAndBranch jegyzetet. Az alabbi objektum a FELHASZNALOI
     // szurot `customerId` / `supplierId` KULCSON spreadeli, es felso szintu
@@ -629,6 +635,7 @@ export class ServiceAssetsRepository extends Repository {
         assetCategoryWhere(query.category, query.categoryId),
       ),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
+      ...(excludedAssetIds ? { id: { notIn: excludedAssetIds } } : {}),
       ...(query.dueBefore
         ? { nextServiceAt: { lte: new Date(query.dueBefore) } }
         : {}),
@@ -1314,78 +1321,11 @@ export class ServiceAssetsRepository extends Repository {
                     select: { code: true },
                   });
                   if (category?.code) {
-                    let prefix: string | null;
-                    if (input.parentAssetId) {
-                      const parent = await tx.asset.findUnique({
-                        where: { id: input.parentAssetId },
-                        select: { partnerInternalCode: true },
-                      });
-                      prefix = partnerInternalCodePrefix({
-                        isBuiltIn: true,
-                        parentPartnerInternalCode:
-                          parent?.partnerInternalCode ?? null,
-                        rootLocationCode: null,
-                        ownLocationCode: null,
-                        ownIsRootLocation: false,
-                        categoryCode: category.code,
-                      });
-                    } else {
-                      /**
-                       * A HELYSZÍN-FA GYÖKERÉIG VALÓ FELFELÉ SÉTA.
-                       *
-                       * Balázs jóváhagyása (2026-09-24 11:33): a gyökér eszköz
-                       * kódjának ELSŐ tagja a LEGFELSŐ helyszín kódja, nem a
-                       * saját (esetleg mélyebb szintű) helyszíné -- és a
-                       * KÖZBÜLSŐ szintek kimaradnak (FAN-A11, nem
-                       * FAN-AKV-A11). A séma mai mélysége legfeljebb négy
-                       * szint (acrobot mérése), a ciklus ennél tovább is
-                       * helyesen működik, csak nem gyorsabb egy extra
-                       * DB-körnél szintenként -- ez a generálás ritka, és a
-                       * zár amúgy is szerializálja.
-                       */
-                      let ownLocationCode: string | null = null;
-                      let rootLocationCode: string | null = null;
-                      let ownIsRootLocation = false;
-                      if (input.departmentId) {
-                        const own = await tx.worksheetDepartment.findUnique({
-                          where: { id: input.departmentId },
-                          select: { code: true, parentId: true },
-                        });
-                        if (own) {
-                          ownLocationCode = own.code;
-                          if (own.parentId === null) {
-                            rootLocationCode = own.code;
-                            ownIsRootLocation = true;
-                          } else {
-                            let currentParentId: string | null = own.parentId;
-                            while (currentParentId) {
-                              const node: {
-                                code: string;
-                                parentId: string | null;
-                              } | null =
-                                await tx.worksheetDepartment.findUnique({
-                                  where: { id: currentParentId },
-                                  select: { code: true, parentId: true },
-                                });
-                              if (!node) break;
-                              if (node.parentId === null) {
-                                rootLocationCode = node.code;
-                                break;
-                              }
-                              currentParentId = node.parentId;
-                            }
-                          }
-                        }
-                      }
-                      prefix = partnerInternalCodePrefix({
-                        isBuiltIn: false,
-                        parentPartnerInternalCode: null,
-                        rootLocationCode,
-                        ownLocationCode,
-                        ownIsRootLocation,
-                        categoryCode: category.code,
-                      });
-                    }
+                    const prefix = await partnerInternalCodePrefixFor(tx, {
+                      parentAssetId: input.parentAssetId ?? null,
+                      departmentId: input.departmentId ?? null,
+                      categoryCode: category.code,
+                    });
                     if (prefix) {
                       const existing = await tx.asset.findMany({
                         where: {
@@ -2062,6 +2002,22 @@ export class ServiceAssetsRepository extends Repository {
           updatedById: actorUserId,
         };
         /**
+         * SZÜLŐ-VÁLTÁSKOR A PARTNER BELSŐ KÓDJA IS VÁLTOZIK (Balázs, 2026-10-02
+         * 07:39 UTC; acrobot 26046). Az új kód a létrehozás szabálya szerint
+         * számolódik (ugyanaz a függvény), és bekerül a `data`-ba, MIELŐTT az
+         * ütközés-ellenőrzés lefut: egy közben átírt kód így ütközik.
+         */
+        const codeChange = await regeneratePartnerInternalCodeOnMove(tx, {
+          id,
+          existing,
+          input,
+          finalDepartmentId:
+            data.departmentId === undefined
+              ? existing.departmentId
+              : (data.departmentId as string | null),
+        });
+        if (codeChange) data.partnerInternalCode = codeChange.to;
+        /**
          * MEZO-SZINTU UTKOZES, NEM SOR-SZINTU (acrobot dontese, 2026-09-04).
          *
          * Eddig a sor idobelyege dontott: ket ember, aki KET KULON mezot ir at,
@@ -2236,7 +2192,18 @@ export class ServiceAssetsRepository extends Repository {
         if (generalFields.length > 0 || events.length === 0)
           events.push({
             type: "UPDATED",
-            payload: jsonPayload({ fields: generalFields }),
+            payload: jsonPayload({
+              fields: generalFields,
+              // a régi kód visszakereshető marad: a partner táblázatában az áll
+              ...(codeChange
+                ? {
+                    partnerInternalCode: {
+                      from: codeChange.from,
+                      to: codeChange.to,
+                    },
+                  }
+                : {}),
+            }),
           });
         await tx.assetEvent.createMany({
           data: events.map((event) => ({
@@ -2247,6 +2214,14 @@ export class ServiceAssetsRepository extends Repository {
             payload: event.payload,
           })),
         });
+        if (codeChange?.from)
+          await renameDescendantPartnerInternalCodes(tx, {
+            rootId: id,
+            ownerId: codeChange.ownerId,
+            from: codeChange.from,
+            to: codeChange.to,
+            actorUserId,
+          });
         return id;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -2960,4 +2935,283 @@ export function documentedContentType(
     return contentType;
 
   throw new Error(`Nem támogatott tárolt dokumentumtípus: ${contentType}`);
+}
+
+/**
+ * A PARTNER BELSŐ KÓDJÁNAK ELŐTAGJA AZ ADATBÁZISBÓL: a szülő kódja (beépített
+ * eszköz), vagy a helyszín-fa gyökerének és a saját helyszínnek a kódja
+ * (gyökér eszköz), a kategória kódjával. A létrehozás és a szülő-váltás
+ * (acrobot 26046) UGYANEZT hívja, hogy a szabály egy helyen álljon. `null`, ha
+ * nem állítható elő (lásd `partnerInternalCodePrefix`).
+ */
+export async function partnerInternalCodePrefixFor(
+  tx: Prisma.TransactionClient,
+  input: {
+    parentAssetId: string | null;
+    departmentId: string | null;
+    categoryCode: string;
+  },
+): Promise<string | null> {
+  if (input.parentAssetId) {
+    const parent = await tx.asset.findUnique({
+      where: { id: input.parentAssetId },
+      select: { partnerInternalCode: true },
+    });
+    return partnerInternalCodePrefix({
+      isBuiltIn: true,
+      parentPartnerInternalCode: parent?.partnerInternalCode ?? null,
+      rootLocationCode: null,
+      ownLocationCode: null,
+      ownIsRootLocation: false,
+      categoryCode: input.categoryCode,
+    });
+  }
+  /**
+   * A HELYSZÍN-FA GYÖKERÉIG VALÓ FELFELÉ SÉTA.
+   *
+   * Balázs jóváhagyása (2026-09-24 11:33): a gyökér eszköz kódjának ELSŐ tagja
+   * a LEGFELSŐ helyszín kódja, nem a saját (esetleg mélyebb szintű)
+   * helyszíné -- és a KÖZBÜLSŐ szintek kimaradnak (FAN-A11, nem
+   * FAN-AKV-A11). A séma mai mélysége legfeljebb négy szint (acrobot mérése),
+   * a ciklus ennél tovább is helyesen működik, csak nem gyorsabb egy extra
+   * DB-körnél szintenként -- ez a generálás ritka, és a zár amúgy is
+   * szerializálja.
+   */
+  let ownLocationCode: string | null = null;
+  let rootLocationCode: string | null = null;
+  let ownIsRootLocation = false;
+  if (input.departmentId) {
+    const own = await tx.worksheetDepartment.findUnique({
+      where: { id: input.departmentId },
+      select: { code: true, parentId: true },
+    });
+    if (own) {
+      ownLocationCode = own.code;
+      if (own.parentId === null) {
+        rootLocationCode = own.code;
+        ownIsRootLocation = true;
+      } else {
+        let currentParentId: string | null = own.parentId;
+        while (currentParentId) {
+          const node: { code: string; parentId: string | null } | null =
+            await tx.worksheetDepartment.findUnique({
+              where: { id: currentParentId },
+              select: { code: true, parentId: true },
+            });
+          if (!node) break;
+          if (node.parentId === null) {
+            rootLocationCode = node.code;
+            break;
+          }
+          currentParentId = node.parentId;
+        }
+      }
+    }
+  }
+  return partnerInternalCodePrefix({
+    isBuiltIn: false,
+    parentPartnerInternalCode: null,
+    rootLocationCode,
+    ownLocationCode,
+    ownIsRootLocation,
+    categoryCode: input.categoryCode,
+  });
+}
+
+/**
+ * A MOZGATOTT ESZKÖZ ÚJ KÓDJA, vagy `null`, ha nem változik. Csak akkor
+ * számol, ha MIND áll:
+ *
+ *   - a szülő ténylegesen változik (új szülő, vagy `null`: önálló lesz);
+ *   - a végső tulajdonos szerviz partner (vevőnél kód sem generálódik);
+ *   - a hívó NEM írta át a kódot ugyanebben a kérésben (a kézzel beírt nyer;
+ *     a webes űrlap a változatlan kódot is küldi, az nem átírás);
+ *   - a kategóriának van kódja, és az új előtag előállítható (a kód nélküli
+ *     szülő alatt NEM generálunk, Balázs szabálya: akkor a régi kód marad);
+ *   - a régi kód a szabály szerint állt (`partnerInternalCodeFollowsRule`).
+ *
+ * A partnerre szűkített zár ugyanaz, mint a létrehozásnál: két párhuzamos
+ * írás nem kaphatja ugyanazt a sorszámot.
+ */
+async function regeneratePartnerInternalCodeOnMove(
+  tx: Prisma.TransactionClient,
+  input: {
+    id: string;
+    existing: {
+      parentAssetId: string | null;
+      departmentId: string | null;
+      categoryId: string | null;
+      supplierId: string | null;
+      partnerInternalCode: string | null;
+      name: string;
+    };
+    input: UpdateAssetDto;
+    finalDepartmentId: string | null;
+  },
+): Promise<{ from: string | null; to: string; ownerId: string } | null> {
+  const { existing } = input;
+  const request = input.input;
+  if (request.parentAssetId === undefined) return null;
+  const parentAssetId = request.parentAssetId ?? null;
+  if (parentAssetId === existing.parentAssetId) return null;
+  const ownerId =
+    request.ownerType === undefined
+      ? existing.supplierId
+      : request.ownerType === "SUPPLIER"
+        ? (request.ownerId ?? null)
+        : null;
+  if (!ownerId) return null;
+  const sent = optionalText(request.partnerInternalCode);
+  if (sent !== undefined && sent !== existing.partnerInternalCode) return null;
+  const categoryId =
+    request.categoryId === undefined ? existing.categoryId : request.categoryId;
+  if (!categoryId) return null;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('acropora:partner-internal-code:' || ${ownerId}))`;
+  const category = await tx.assetCategory.findUnique({
+    where: { id: categoryId },
+    select: { code: true },
+  });
+  if (!category?.code) return null;
+  const oldPrefix = existing.categoryId
+    ? await partnerInternalCodePrefixFor(tx, {
+        parentAssetId: existing.parentAssetId,
+        departmentId: existing.departmentId,
+        categoryCode:
+          existing.categoryId === categoryId
+            ? category.code
+            : ((
+                await tx.assetCategory.findUnique({
+                  where: { id: existing.categoryId },
+                  select: { code: true },
+                })
+              )?.code ?? ""),
+      })
+    : null;
+  if (!partnerInternalCodeFollowsRule(existing.partnerInternalCode, oldPrefix))
+    return null;
+  const prefix = await partnerInternalCodePrefixFor(tx, {
+    parentAssetId,
+    departmentId: input.finalDepartmentId,
+    categoryCode: category.code,
+  });
+  if (!prefix) return null;
+  const taken = await tx.asset.findMany({
+    where: {
+      supplierId: ownerId,
+      partnerInternalCode: { startsWith: `${prefix}-` },
+      id: { not: input.id },
+    },
+    select: { partnerInternalCode: true },
+  });
+  const to = nextFreePartnerInternalCodeSerial(
+    prefix,
+    taken.flatMap((row) =>
+      row.partnerInternalCode ? [row.partnerInternalCode] : [],
+    ),
+    request.name?.trim() ?? existing.name,
+  );
+  if (to === existing.partnerInternalCode) return null;
+  return { from: existing.partnerInternalCode, to, ownerId };
+}
+
+/**
+ * A LESZÁRMAZOTTAK KÓDJA A MOZGATÁS UTÁN, LÁNCBAN (acrobot 26046): akinek a
+ * kódja a mozgatott eszköz régi kódjára épül (`<régi>-...`), annak az eleje az
+ * újra cserélődik, bármilyen mélyen. A kézzel beírt, nem ráépülő kód marad.
+ *
+ * EGYEDISÉG: az új kód egyedi (a legkisebb szabad sorszám), tehát a rá épülő
+ * kódok is azok, HACSAK egy kézzel beírt kód épp nem foglalja valamelyiket. Ha
+ * igen, a teljes mozgatás elbukik (`PARTNER_CODE_TAKEN`), nem írunk duplikátumot,
+ * és nem hagyunk félkész láncot.
+ *
+ * Minden átírt leszármazott kap egy `UPDATED` eseményt a régi és az új kóddal,
+ * hogy a régi kód nála is visszakereshető maradjon.
+ */
+async function renameDescendantPartnerInternalCodes(
+  tx: Prisma.TransactionClient,
+  input: {
+    rootId: string;
+    ownerId: string;
+    from: string;
+    to: string;
+    actorUserId: string;
+  },
+): Promise<void> {
+  const renames: { id: string; from: string; to: string }[] = [];
+  const seen = new Set<string>([input.rootId]);
+  let frontier = [input.rootId];
+  while (frontier.length > 0) {
+    const children = await tx.asset.findMany({
+      where: { parentAssetId: { in: frontier } },
+      select: { id: true, partnerInternalCode: true },
+    });
+    frontier = [];
+    for (const child of children) {
+      if (seen.has(child.id)) continue;
+      seen.add(child.id);
+      frontier.push(child.id);
+      const next = descendantPartnerInternalCode(
+        child.partnerInternalCode,
+        input.from,
+        input.to,
+      );
+      if (next)
+        renames.push({
+          id: child.id,
+          from: child.partnerInternalCode!,
+          to: next,
+        });
+    }
+  }
+  if (renames.length === 0) return;
+  const clash = await tx.asset.findFirst({
+    where: {
+      supplierId: input.ownerId,
+      partnerInternalCode: { in: renames.map((r) => r.to) },
+      id: { notIn: renames.map((r) => r.id) },
+    },
+    select: { partnerInternalCode: true },
+  });
+  if (clash) throw new Error(`PARTNER_CODE_TAKEN:${clash.partnerInternalCode}`);
+  for (const rename of renames)
+    await tx.asset.update({
+      where: { id: rename.id },
+      data: { partnerInternalCode: rename.to, updatedById: input.actorUserId },
+    });
+  await tx.assetEvent.createMany({
+    data: renames.map((rename) => ({
+      id: randomUUID(),
+      assetId: rename.id,
+      actorUserId: input.actorUserId,
+      type: "UPDATED" as const,
+      payload: jsonPayload({
+        fields: ["partnerInternalCode"],
+        partnerInternalCode: { from: rename.from, to: rename.to },
+        // a változás oka egy fölötte álló eszköz mozgatása
+        cause: { type: "ANCESTOR_MOVED", assetId: input.rootId },
+      }),
+    })),
+  });
+}
+
+/**
+ * AZ ESZKÖZ ÉS MINDEN LESZÁRMAZOTTJA (acrobot 26045): ezek közül egyik sem
+ * lehet a szülője, mert kört zárna. A szülő-választó lista ezeket kihagyja; a
+ * mentés körvédelme (`wouldCreateCycle`) ettől függetlenül áll.
+ */
+export async function assetSubtreeIds(
+  database: Pick<Prisma.TransactionClient, "asset">,
+  rootId: string,
+): Promise<string[]> {
+  const seen = new Set<string>([rootId]);
+  let frontier = [rootId];
+  while (frontier.length > 0) {
+    const children = await database.asset.findMany({
+      where: { parentAssetId: { in: frontier } },
+      select: { id: true },
+    });
+    frontier = children.map((c) => c.id).filter((id) => !seen.has(id));
+    for (const id of frontier) seen.add(id);
+  }
+  return [...seen];
 }

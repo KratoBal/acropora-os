@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  descendantPartnerInternalCode,
+  partnerInternalCodeFollowsRule,
   nextFreePartnerInternalCodeSerial,
   partnerInternalCodePrefix,
   trailingRomanNumeralValue,
@@ -279,5 +281,49 @@ describe("trailingRomanNumeralValue", () => {
   it("üres vagy csak szóközből álló nevet null-lal kezel", () => {
     assert.equal(trailingRomanNumeralValue(""), null);
     assert.equal(trailingRomanNumeralValue("   "), null);
+  });
+});
+
+/*
+  A SZÜLŐ-VÁLTÁS ÉS A KÓD (acrobot 26046). MI PIROSÍT: ha egy kézzel beírt,
+  szabálytól eltérő kód felülíródna; ha a szabály szerinti (vagy üres) kód nem
+  számolódna újra; ha egy előtag-szerű, de hosszabb kód (FAN-A11-HSZ-01-VAL-05,
+  egy gyerek kódja) a szülő szabályos kódjának látszana; ha a leszármazott kódja
+  nem a régi kód TELJES tagjára illeszkedne (FAN-A11-HSZ-010 ne legyen
+  FAN-A11-HSZ-01 alatti).
+*/
+describe("partnerInternalCodeFollowsRule", () => {
+  it("empty or <prefix>-<serial> follows; a hand-typed or longer code does not", () => {
+    assert.deepEqual(
+      [
+        [null, "FAN-A11-HSZ"],
+        ["", "FAN-A11-HSZ"],
+        ["FAN-A11-HSZ-01", "FAN-A11-HSZ"],
+        ["FAN-A11-HSZ-1", "FAN-A11-HSZ"],
+        ["FAN-A11-HSZ-01-VAL-05", "FAN-A11-HSZ"],
+        ["KEZI-123", "FAN-A11-HSZ"],
+        ["FAN-A11-HSZ-01", null],
+      ].map(([code, prefix]) =>
+        partnerInternalCodeFollowsRule(code ?? null, prefix ?? null),
+      ),
+      [true, true, true, true, false, false, false],
+    );
+  });
+});
+
+describe("descendantPartnerInternalCode", () => {
+  it("swaps the moved parent's code at the front, at any depth; a code not built on it stays", () => {
+    const move = (code: string | null) =>
+      descendantPartnerInternalCode(code, "FAN-A11-HSZ-01", "BIO-HSZ-03");
+    assert.deepEqual(
+      [
+        move("FAN-A11-HSZ-01-VAL-05"),
+        move("FAN-A11-HSZ-01-VAL-05-SZE-01"),
+        move("FAN-A11-HSZ-010-VAL-01"),
+        move("KEZI-7"),
+        move(null),
+      ],
+      ["BIO-HSZ-03-VAL-05", "BIO-HSZ-03-VAL-05-SZE-01", null, null, null],
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter, useLocalSearchParams } from "expo-router";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
@@ -19,7 +19,6 @@ import {
   createAsset,
   listAssetCategories,
   listAssetFunctions,
-  listAssets,
   type AssetListItem,
   type CreateAssetInput,
   listAssetOwners,
@@ -35,6 +34,7 @@ import {
 import { listPartnerUnits, type PartnerUnit } from "@/lib/api/partners";
 import { listPerformanceUnits } from "@/lib/api/units-of-measure";
 import { selectableUnitOptions } from "@/lib/partners/site-tree";
+import { ParentAssetPicker } from "@/components/assets/parent-asset-picker";
 import { CollapsedPicker, UnitPicker } from "@/components/assets/unit-picker";
 import { CategoryPicker } from "@/components/assets/category-picker";
 import { FunctionPicker } from "@/components/assets/function-picker";
@@ -130,9 +130,6 @@ export default function NewAssetScreen() {
    */
   const [parentAssetId, setParentAssetId] = useState("");
   const [parentAssetLabel, setParentAssetLabel] = useState("");
-  const [parentPickerOpen, setParentPickerOpen] = useState(false);
-  const [parentSearch, setParentSearch] = useState("");
-  const [parentPage, setParentPage] = useState(1);
   /**
    * A SZÜLŐ AZ ALEGYSÉGHEZ KÖTÖTT VÁLASZTÁS: ha a szerelő MÁSIK helyszínt
    * választ, a korábbi szülő egy MÁSIK egység eszköze lenne, és a szerver a
@@ -147,9 +144,6 @@ export default function NewAssetScreen() {
     setCheckedUnitId(unitId);
     setParentAssetId("");
     setParentAssetLabel("");
-    setParentPickerOpen(false);
-    setParentSearch("");
-    setParentPage(1);
   }
   const [name, setName] = useState("");
   /**
@@ -324,25 +318,6 @@ export default function NewAssetScreen() {
       Boolean(capabilities?.assetsManage) &&
       owner?.type === "SUPPLIER",
   });
-
-  /**
-   * A SZÜLŐESZKÖZ-JELÖLTEK -- UGYANAZ A MINTA, MINT A HIBAJEGY "eredet-eszköz"
-   * VÁLASZTÓJÁNÁL (`service-jobs/new.tsx`): a `listAssets` a `departmentId`
-   * szerint szűr, a részfát is beleértve (a szerver oldali szabály). Nincs
-   * új végpont: ugyanaz a lekérdezés, amit a lista képernyő is használ.
-   */
-  const parentAssetsQuery = useQuery({
-    queryKey: ["uj-eszkoz-szulo", unitId, parentSearch, parentPage],
-    queryFn: () => listAssets(parentPage, 50, parentSearch, unitId),
-    enabled:
-      status === "authenticated" &&
-      Boolean(capabilities?.assetsManage) &&
-      parentPickerOpen &&
-      Boolean(unitId),
-    placeholderData: keepPreviousData,
-  });
-  const parentAssetPageCount =
-    parentAssetsQuery.data?.pagination.totalPages ?? 1;
 
   /**
    * A KET LISTA MENTESE, AMIKOR MEGJON.
@@ -1141,137 +1116,22 @@ export default function NewAssetScreen() {
                 nélkül nincs mit felkínálni.
               */}
                 {unitId ? (
-                  <View style={styles.field}>
-                    <Text style={styles.label}>Szülőeszköz (opcionális)</Text>
-                    <Text style={styles.hint}>
-                      Ha ez a gép egy másik eszköz része, válaszd ki itt a
-                      főegységet.
-                    </Text>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        parentAssetId
-                          ? `Szülőeszköz: ${parentAssetLabel}. Koppints a módosításhoz.`
-                          : "Szülőeszköz választása."
-                      }
-                      onPress={() => setParentPickerOpen((open) => !open)}
-                      style={[
-                        styles.ownerRow,
-                        parentAssetId && styles.ownerSelected,
-                      ]}
-                    >
-                      <Text style={styles.ownerName}>
-                        {parentAssetId
-                          ? parentAssetLabel
-                          : "Nincs szülőeszköz kiválasztva"}
-                      </Text>
-                      <Text style={styles.ownerMeta}>Koppints a listához</Text>
-                    </Pressable>
-                    {parentAssetId ? (
-                      <Pressable
-                        onPress={() => {
-                          setParentAssetId("");
-                          setParentAssetLabel("");
-                        }}
-                      >
-                        <Text style={styles.clearDate}>
-                          Szülőeszköz eltávolítása
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                    {!parentPickerOpen ? null : (
-                      <>
-                        <TextInput
-                          value={parentSearch}
-                          onChangeText={(value) => {
-                            setParentSearch(value);
-                            // ÚJ KÉRDÉS, ELSŐ LAP -- ugyanaz a szabály, mint a
-                            // hibajegy eredet-eszköz keresőjénél: egy szűkebb
-                            // keresésnél a harmadik lapon állnánk, ami üresként
-                            // jelenne meg, mintha nem lenne találat.
-                            setParentPage(1);
-                          }}
-                          placeholder="Keresés: azonosító, név, gyártó"
-                          placeholderTextColor={tokens.textMuted}
-                          style={styles.input}
-                          autoCorrect={false}
-                        />
-                        {parentAssetsQuery.isPending ? (
-                          <ActivityIndicator color={tokens.accent} />
-                        ) : null}
-                        {!parentAssetsQuery.isPending &&
-                        !(parentAssetsQuery.data?.items.length ?? 0) ? (
-                          <Text style={styles.hint}>
-                            Ezen a helyszínen ebben a keresésben nincs eszköz.
-                          </Text>
-                        ) : null}
-                        {(parentAssetsQuery.data?.items ?? []).map((item) => (
-                          <Pressable
-                            key={item.id}
-                            onPress={() => {
-                              setParentAssetId(item.id);
-                              setParentAssetLabel(
-                                `${item.assetNumber} -- ${item.name}`,
-                              );
-                              setParentPickerOpen(false);
-                            }}
-                            style={[
-                              styles.ownerRow,
-                              parentAssetId === item.id && styles.ownerSelected,
-                            ]}
-                          >
-                            <Text style={styles.ownerName}>
-                              {item.assetNumber} -- {item.name}
-                            </Text>
-                          </Pressable>
-                        ))}
-                        {/*
-                        A LAPOZÓ AKKOR IS OTT ÁLL, HA MA EGY LAP VAN --
-                        ugyanaz az indok, mint a hibajegy választójánál: egy
-                        "1 / 2" felirat láthatóvá teszi, hogy van tovább,
-                        mielőtt bárki hiányt keresne.
-                      */}
-                        <View style={styles.photoRow}>
-                          <Pressable
-                            disabled={parentPage <= 1}
-                            onPress={() =>
-                              setParentPage((page) => Math.max(1, page - 1))
-                            }
-                          >
-                            <Text
-                              style={[
-                                styles.clearDate,
-                                parentPage <= 1 && styles.disabled,
-                              ]}
-                            >
-                              Előző
-                            </Text>
-                          </Pressable>
-                          <Text style={styles.hint}>
-                            {parentPage} / {parentAssetPageCount}
-                          </Text>
-                          <Pressable
-                            disabled={parentPage >= parentAssetPageCount}
-                            onPress={() =>
-                              setParentPage((page) =>
-                                Math.min(parentAssetPageCount, page + 1),
-                              )
-                            }
-                          >
-                            <Text
-                              style={[
-                                styles.clearDate,
-                                parentPage >= parentAssetPageCount &&
-                                  styles.disabled,
-                              ]}
-                            >
-                              Következő
-                            </Text>
-                          </Pressable>
-                        </View>
-                      </>
-                    )}
-                  </View>
+                  // a szerkesztővel közös választó; a helyszín váltásakor
+                  // a lista, a keresés és a lap alaphelyzetbe áll
+                  <ParentAssetPicker
+                    key={unitId}
+                    unitId={unitId}
+                    value={parentAssetId}
+                    label={parentAssetLabel}
+                    onChange={(id, label) => {
+                      setParentAssetId(id);
+                      setParentAssetLabel(label);
+                    }}
+                    enabled={
+                      status === "authenticated" &&
+                      Boolean(capabilities?.assetsManage)
+                    }
+                  />
                 ) : null}
               </>
             ) : null}

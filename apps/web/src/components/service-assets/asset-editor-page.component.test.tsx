@@ -1186,3 +1186,58 @@ describe("AssetEditorPage alegység kötelezősége", () => {
     expect(api.create.mock.calls[0]?.[1]?.departmentId).toBeUndefined();
   });
 });
+
+/*
+  A SZÜLŐESZKÖZ A SZERKESZTŐN (Balázs, 2026-10-02 07:38 UTC; acrobot 26045).
+  MI PIROSÍT: ha a lista nem zárná ki az eszközt és a leszármazottait; ha nem
+  az alegységre szűkítene (a régi „első száz” lista); ha a mostani szülő, amit
+  a lista nem hoz, nem látszana kiválasztva (a mező „Önálló”-t mutatna,
+  miközben a mentés a régi szülőt küldené).
+*/
+describe("AssetEditorPage szülőeszköz-választója", () => {
+  const withParent = {
+    ...asset,
+    owner: {
+      type: "SUPPLIER",
+      id: servicePartner.id,
+      code: servicePartner.code,
+      displayName: servicePartner.displayName,
+    },
+    unit: { id: "unit-7", label: "A11" },
+    parent: {
+      id: "asset-parent",
+      assetNumber: "ESZ-0099",
+      name: "Gépház szivattyú",
+      kind: "EQUIPMENT",
+      status: "ACTIVE",
+    },
+  } as unknown as AssetDetail;
+
+  it("asks for the unit's assets without itself and its subtree", async () => {
+    api.detail.mockResolvedValue(withParent);
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    render(<AssetEditorPage assetId="asset-1" />);
+    await waitFor(() =>
+      expect(
+        api.list.mock.calls.some(
+          ([, query]) =>
+            (query as URLSearchParams).get("excludeSubtreeOf") === "asset-1" &&
+            (query as URLSearchParams).get("departmentId") === "unit-7",
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it("shows the current parent chosen even when the list does not bring it", async () => {
+    api.detail.mockResolvedValue(withParent);
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    render(<AssetEditorPage assetId="asset-1" />);
+    const select = (await screen.findByLabelText(
+      "Szülőeszköz",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("asset-parent"));
+    expect(
+      screen.getByRole("option", { name: "Gépház szivattyú (ESZ-0099)" }),
+    ).toBeInTheDocument();
+  });
+});
