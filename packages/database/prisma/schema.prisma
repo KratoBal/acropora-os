@@ -896,6 +896,13 @@ model User {
   requestedMaterialRequests  MaterialRequest[]             @relation("MaterialRequestRequestedBy")
   /// Anyagigenyek, amiket ez a kollega jelolt "beerkezett"-nek.
   receivedMaterialRequests   MaterialRequest[]             @relation("MaterialRequestReceivedBy")
+  /// Anyagigenyek, amiknek a beszerzeset ez a kollega intezi (V2).
+  handledMaterialRequests    MaterialRequest[]             @relation("MaterialRequestHandler")
+  orderedMaterialRequests    MaterialRequest[]             @relation("MaterialRequestOrderedBy")
+  cancelledMaterialRequests  MaterialRequest[]             @relation("MaterialRequestCancelledBy")
+  receivedRequestItems       MaterialRequestItem[]         @relation("MaterialRequestItemReceivedBy")
+  materialRequestEvents      MaterialRequestEvent[]        @relation("MaterialRequestEventActor")
+  materialRequestComments    MaterialRequestComment[]      @relation("MaterialRequestCommentAuthor")
   deviceTokens               DeviceToken[]
   /// A torles SZANDEKOSAN Restrict, nem SetNull. SetNull mellett egy partner
   /// torlese a fiokot csendben "sajat kollegava" tenne (mindket mezo NULL),
@@ -5229,29 +5236,79 @@ enum MaterialRequestStatus {
   /// Valaki megnyomta az "anyag beerkezett" gombot. Ekkor indul a MASODIK,
   /// tagabb ertesitesi kor.
   RECEIVED
+  /// V2 (docs/material-requests/v2-discovery.md): someone claimed the purchase
+  /// ("Én intézem a beszerzést"); `handlerId` names them.
+  IN_PROGRESS
+  /// V2: the handler placed the order. Only a state, a user and a time: no
+  /// purchase order, supplier or stock link (webshop / UNAS freeze).
+  ORDERED
+  /// V2: some items arrived, not all.
+  PARTIALLY_RECEIVED
+  /// V2: withdrawn by the requester or a leader before it was ordered. It
+  /// stays readable with its history.
+  CANCELLED
+}
+
+/// V2: optional, set by the requester (owner decision, 2026-10-02).
+enum MaterialRequestPriority {
+  NORMAL
+  HIGH
+  URGENT
+}
+
+/// V2: what one history row records. The timeline is read from these rows,
+/// never derived from the current status.
+enum MaterialRequestEventKind {
+  SUBMITTED
+  CLAIMED
+  REASSIGNED
+  ORDERED
+  ITEMS_RECEIVED
+  RECEIVED
+  CANCELLED
 }
 
 model MaterialRequest {
-  id            String                @id @default(cuid())
-  worksheetId   String
-  status        MaterialRequestStatus @default(DRAFT)
-  requestedById String?
+  id                String                   @id @default(cuid())
+  worksheetId       String
+  status            MaterialRequestStatus    @default(DRAFT)
+  requestedById     String?
   /// A PISZKOZAT LETREHOZASANAK IDEJE -- NEM AZ ELKULDESE. Lasd
   /// `submittedAt` a masik idopontert.
-  createdAt     DateTime              @default(now())
+  createdAt         DateTime                 @default(now())
   /// MIKOR NYOMTA MEG AZ "ELKULD" GOMBOT. `null`, amig DRAFT. Kulon mezo a
   /// `createdAt` mellett, ugyanazon okbol, mint a `receivedAt` a
   /// `createdAt` mellett: ket kulon esemeny, ket kulon idopont.
-  submittedAt   DateTime?
-  receivedAt    DateTime?
-  receivedById  String?
+  submittedAt       DateTime?
+  receivedAt        DateTime?
+  receivedById      String?
+  /// V2: who handles the purchase now, and since when. ONE column, not a
+  /// join table: a purchase has exactly one responsible person (the
+  /// `Task.assigneeId` convention). A reassignment overwrites both and writes
+  /// a REASSIGNED history row, so every earlier holder stays in the history.
+  handlerId         String?
+  handlerAssignedAt DateTime?
+  orderedAt         DateTime?
+  orderedById       String?
+  cancelledAt       DateTime?
+  cancelledById     String?
+  /// V2: the requester's one short note on the request (not the comments).
+  note              String?
+  /// V2: "Szükséges" -- a calendar day, optional.
+  neededBy          DateTime?                @db.Date
+  priority          MaterialRequestPriority?
 
-  worksheet   Worksheet             @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  worksheet   Worksheet                @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
   /// `SetNull`, ugyanazon okbol, mint a `WorksheetEntry.authorId`-nal: egy
   /// tavozo kollega kerese nem tunhet el, csak a neve.
-  requestedBy User?                 @relation("MaterialRequestRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
-  receivedBy  User?                 @relation("MaterialRequestReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  requestedBy User?                    @relation("MaterialRequestRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  receivedBy  User?                    @relation("MaterialRequestReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  handler     User?                    @relation("MaterialRequestHandler", fields: [handlerId], references: [id], onDelete: SetNull)
+  orderedBy   User?                    @relation("MaterialRequestOrderedBy", fields: [orderedById], references: [id], onDelete: SetNull)
+  cancelledBy User?                    @relation("MaterialRequestCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
   items       MaterialRequestItem[]
+  events      MaterialRequestEvent[]
+  comments    MaterialRequestComment[]
 
   /// A LISTA IDOREND SZERINT MEGY, es a lap az egyetlen szuro -- ugyanaz a
   /// minta, mint a `WorksheetEntry`-nel.
@@ -5259,6 +5316,8 @@ model MaterialRequest {
   /// A BESZERZO SAJAT LISTAJA EZEN FUT: "ram varo anyagigenyek", vagyis a
   /// meg nem `RECEIVED` sorok, allapot szerint szurve.
   @@index([status, createdAt])
+  /// V2: "Saját beszerzéseim".
+  @@index([handlerId, status])
 }
 
 /// EGY TETEL AZ ANYAGIGENYEN. HAROM SZABAD SZOVEGES MEZO, NEM KETTO, ES EGYIK
@@ -5272,7 +5331,7 @@ model MaterialRequest {
 /// ellenorzesrol -- keszlet-kapcsolat, termek-azonosito es
 /// egyseg-torzsadat MA nincs.
 model MaterialRequestItem {
-  id                String @id @default(cuid())
+  id                String    @id @default(cuid())
   materialRequestId String
   position          Int
   /// Pl. "40mm konyok".
@@ -5281,10 +5340,56 @@ model MaterialRequestItem {
   quantity          String
   /// Pl. "db" -- szabad szoveg.
   unit              String
+  /// V2: `quantity` as a number, filled ONLY when the text is a plain
+  /// non-negative number with at most one decimal comma or point ("2",
+  /// "0,5"). The text stays the source; `null` means "not a number", and that
+  /// item is received with a plain "megjött" mark instead of a quantity.
+  quantityValue     Decimal?  @db.Decimal(12, 3)
+  /// V2: how much arrived, for a numeric item.
+  receivedQuantity  Decimal?  @db.Decimal(12, 3)
+  /// V2: when the item counted as arrived (for a text item, the mark).
+  receivedAt        DateTime?
+  receivedById      String?
 
   materialRequest MaterialRequest @relation(fields: [materialRequestId], references: [id], onDelete: Cascade)
+  receivedBy      User?           @relation("MaterialRequestItemReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
 
   @@unique([materialRequestId, position])
+}
+
+/// V2: ONE ROW PER TRANSITION, modelled on `ServiceJobEvent`. The timeline is
+/// read from here. A status change always has a `toStatus` (DB CHECK
+/// `MaterialRequestEvent_status_change_has_to_status`).
+model MaterialRequestEvent {
+  id                String                   @id @default(cuid())
+  materialRequestId String
+  kind              MaterialRequestEventKind
+  fromStatus        MaterialRequestStatus?
+  toStatus          MaterialRequestStatus?
+  actorUserId       String?
+  /// Item deltas (ITEMS_RECEIVED) or the previous handler (REASSIGNED).
+  payload           Json?
+  createdAt         DateTime                 @default(now())
+
+  materialRequest MaterialRequest @relation(fields: [materialRequestId], references: [id], onDelete: Cascade)
+  actor           User?           @relation("MaterialRequestEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([materialRequestId, createdAt])
+}
+
+/// V2: a simple comment list on a request (text, author, time). No editing,
+/// no threads (owner decision, 2026-10-02).
+model MaterialRequestComment {
+  id                String   @id @default(cuid())
+  materialRequestId String
+  body              String
+  authorId          String?
+  createdAt         DateTime @default(now())
+
+  materialRequest MaterialRequest @relation(fields: [materialRequestId], references: [id], onDelete: Cascade)
+  author          User?           @relation("MaterialRequestCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([materialRequestId, createdAt])
 }
 
 /// Az aláírás a VERZIÓHOZ tartozik, nem a munkalaphoz. Ha egy már aláírt lap

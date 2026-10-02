@@ -246,6 +246,7 @@ export interface ExternalListRow {
   paymentMethod: string | null;
   paymentMethodUnified: string | null;
   orderNumber: string | null;
+  customerTaxNumber: string | null;
   cancelled: boolean;
   /** A Számlázz.hu kifizetései (`kifizetesek`), a saját jelölés kiszűréséhez. */
   payments: Prisma.JsonValue;
@@ -453,10 +454,25 @@ export function externalPaymentFields(
     lastPaymentDate: calendarDay(row.lastPaymentDate),
     paymentSource: paymentsKnown ? ("SZAMLAZZ" as const) : null,
   });
-  // a feed szerinti „Fizetve” nyer; a saját jelölés csak kiegészítő adat
+  /**
+   * A FEED SZERINTI „FIZETVE” NYER: az összeg és a dátum a feedé. A FORRÁST
+   * viszont a saját, beírt jelölésünk adja, ha van (Balázs, 2026-10-02 11:14
+   * UTC: „az jo volt hogy kiirta a listaban, hogy GLS vagy Foxpost, ahogy a
+   * simplepaynel”; acrobot 26095). A feed a jóváírás után visszaküldi a
+   * számlát, és onnan a GLS- és Foxpost-számla fizetési módja „egyéb”: a
+   * forrás eddig ilyenkor eltűnt a listából.
+   */
   if (row.paymentsKnown) {
     const fromFeed = recorded(true);
-    if (fromFeed.paymentState === "PAID") return fromFeed;
+    if (fromFeed.paymentState === "PAID") {
+      const latest = marks.reduce<OwnPaymentMark | null>(
+        (a, b) => (a && a.markDate >= b.markDate ? a : b),
+        null,
+      );
+      return latest
+        ? { ...fromFeed, paymentSource: `MARK_${latest.source}` }
+        : fromFeed;
+    }
   }
   const marked = ownMarkPayment(
     { ...row, payments: row.payments ?? [] },
@@ -485,17 +501,40 @@ export function externalPaymentFields(
   };
 }
 
+/**
+ * A VEVŐ NEVE A WEBSHOP-RENDELÉSBŐL, HA A SZÁMLA ELREJTI (Balázs, 2026-10-02
+ * 11:16 UTC: „ne az szerepeljen, hogy maganszemely hanem a vasarlo neve”;
+ * acrobot 26096). A magánszemély nevét a NAV elrejti, a Számlázz.hu feedje
+ * így egy általános nevet ad; a rendelés-tükör (`SalesOrder.buyerName`, a UNAS
+ * számlázási neve) ismeri a valódit. Élesen szeptemberben 46 adószám nélküli
+ * számlából 40-nél megvan (acrobot 26098); a többinek nincs rendelésszáma.
+ *
+ * A FELTÉTEL AZ ADÓSZÁM HIÁNYA, NEM A NÉV SZÖVEGE: a takart név pontos alakja
+ * a feedtől függ, az adószám hiánya viszont a magánszemély jele. Cégnél a
+ * számla saját neve marad. Csak megjelenítés: a számlát nem írja át.
+ */
+export function externalCustomerName(
+  row: { customerName: string; customerTaxNumber: string | null },
+  orderBuyerName: string | null | undefined,
+): { customerName: string; customerNameFromOrder?: true } {
+  const fromOrder = orderBuyerName?.trim();
+  return !row.customerTaxNumber?.trim() && fromOrder
+    ? { customerName: fromOrder, customerNameFromOrder: true }
+    : { customerName: row.customerName };
+}
+
 export function toExternalListItem(
   row: ExternalListRow,
   simplePay: readonly SimplePaySettlementLine[] = [],
   marks: readonly OwnPaymentMark[] = [],
+  orderBuyerName: string | null = null,
 ): BillingDocumentListItem {
   return {
     id: row.id,
     documentType: externalDocumentType(row.kindCode),
     invoiceFormat: row.electronic ? "ELECTRONIC" : "PAPER",
     documentNumber: row.documentNumber,
-    customerName: row.customerName,
+    ...externalCustomerName(row, orderBuyerName),
     issueDate: calendarDay(row.issueDate),
     dueDate: calendarDay(row.dueDate),
     grossAmount: row.grossAmount.toFixed(

@@ -181,6 +181,26 @@ describe("BillingExternalDocumentPage", () => {
     ).toBeInTheDocument();
   });
 
+  // MI PIROSÍT: ha a rendelésből jött név nem lenne megjelölve (acrobot 26096)
+  it("says when the buyer's name came from the webshop order", async () => {
+    api.externalDetail.mockResolvedValue(
+      detail({
+        customer: {
+          name: "Kiss Anna",
+          taxNumber: null,
+          address: null,
+          nameFromOrder: true,
+        },
+      }),
+    );
+    render(<BillingExternalDocumentPage documentId="ext-1" />);
+    expect(
+      await screen.findByText(
+        "A név a webshop-rendelésből; a számlán a NAV elrejti.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("says when Számlázz.hu marks it cancelled", async () => {
     api.externalDetail.mockResolvedValue(detail({ cancelled: true }));
     render(<BillingExternalDocumentPage documentId="ext-1" />);

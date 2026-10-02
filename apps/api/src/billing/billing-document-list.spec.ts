@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  externalCustomerName,
   externalWhere,
   listWhere,
   mergeListRows,
@@ -168,6 +169,7 @@ const external = (
   // a régi sor: a vetítés még nem olvasta ki (újravetítésig null)
   paymentMethodUnified: null,
   orderNumber: null,
+  customerTaxNumber: "12345678-2-42",
   cancelled: false,
   payments: [],
   ...overrides,
@@ -585,19 +587,61 @@ describe("an own paid mark on the outgoing view (acrobot 26027)", () => {
     );
   });
 
-  it("paid by the feed: the feed wins, the mark adds nothing", () => {
+  /*
+    A FEED IS FIZETETTET MOND, ÉS VAN BEÍRT JELÖLÉSÜNK (Balázs, 2026-10-02 11:14
+    UTC; acrobot 26095: élesen mind a 25 beírt számlát visszaküldte a feed).
+    MI PIROSÍT: ha a forrás „SZAMLAZZ” maradna (a GLS / Foxpost felirat
+    eltűnik); ha az összeg vagy a dátum nem a feedé lenne.
+  */
+  it("paid by the feed and marked by us: the feed's sum and day, our mark's source", () => {
     assert.deepEqual(
       pay({
         paymentsKnown: true,
         paidAmount: D("29210"),
         lastPaymentDate: new Date("2026-09-20T00:00:00.000Z"),
+        paymentMethodUnified: "egyéb",
       }),
       {
         paymentState: "PAID",
         paidAmount: "29210",
         lastPaymentDate: "2026-09-20",
-        paymentSource: "SZAMLAZZ",
+        paymentSource: "MARK_GLS_COD",
       },
+    );
+  });
+
+  it("paid by the feed, two marks: the latest mark names the source", () => {
+    assert.equal(
+      pay(
+        {
+          paymentsKnown: true,
+          paidAmount: D("29210"),
+          lastPaymentDate: new Date("2026-09-20T00:00:00.000Z"),
+        },
+        [
+          gls,
+          {
+            source: "FOXPOST",
+            markDate: new Date("2026-09-19T00:00:00.000Z"),
+            amount: D("29210"),
+          },
+        ],
+      ).paymentSource,
+      "MARK_FOXPOST",
+    );
+  });
+
+  it("paid by the feed, no mark of ours: the feed is the source", () => {
+    assert.equal(
+      pay(
+        {
+          paymentsKnown: true,
+          paidAmount: D("29210"),
+          lastPaymentDate: new Date("2026-09-20T00:00:00.000Z"),
+        },
+        [],
+      ).paymentSource,
+      "SZAMLAZZ",
     );
   });
 
@@ -656,5 +700,50 @@ describe("an own paid mark on the outgoing view (acrobot 26027)", () => {
 
   it("no mark: unchanged (the transfer invoice stays unpaid)", () => {
     assert.equal(pay({ paymentsKnown: false }, []).paymentState, "UNPAID");
+  });
+});
+
+/*
+  A MAGÁNSZEMÉLYES SZÁMLA VEVŐNEVE A WEBSHOP-RENDELÉSBŐL (Balázs, 2026-10-02
+  11:16 UTC; acrobot 26096, élesen 40/46). MI PIROSÍT: ha a takart név
+  maradna, holott a rendelés ismeri a vevőt; ha egy CÉG (adószámos) számlája
+  kapná a rendelés nevét; ha rendelés nélkül vagy üres rendelés-névvel a takart
+  név helyett üres szöveg állna; ha a jelző hiányozna.
+*/
+describe("the buyer's name from the webshop order (acrobot 26096)", () => {
+  const privateRow = {
+    customerName: "Magánszemély (NAV)",
+    customerTaxNumber: null,
+  };
+
+  it("a private invoice with a named order: the order's name, marked", () => {
+    assert.deepEqual(externalCustomerName(privateRow, "Kiss Anna"), {
+      customerName: "Kiss Anna",
+      customerNameFromOrder: true,
+    });
+    const item = toExternalListItem(
+      external({ ...privateRow, orderNumber: "47679-558779" }),
+      [],
+      [],
+      "Kiss Anna",
+    );
+    assert.equal(item.customerName, "Kiss Anna");
+    assert.equal(item.customerNameFromOrder, true);
+  });
+
+  it("a company invoice keeps its own name; no order or an empty name keeps the invoice's", () => {
+    assert.deepEqual(
+      externalCustomerName(
+        { customerName: "Teszt Kft.", customerTaxNumber: "12345678-2-42" },
+        "Kiss Anna",
+      ),
+      { customerName: "Teszt Kft." },
+    );
+    assert.deepEqual(externalCustomerName(privateRow, null), {
+      customerName: "Magánszemély (NAV)",
+    });
+    assert.deepEqual(externalCustomerName(privateRow, "  "), {
+      customerName: "Magánszemély (NAV)",
+    });
   });
 });

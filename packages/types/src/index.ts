@@ -882,6 +882,27 @@ export type {
   MaterialRequestStatusValue,
   PendingMaterialRequest,
   PendingMaterialRequestListResponse,
+  MaterialRequestActions,
+  MaterialRequestCommentEntry,
+  MaterialRequestCommentInput,
+  MaterialRequestConflictBody,
+  MaterialRequestEventEntry,
+  MaterialRequestEventKindValue,
+  MaterialRequestFullDetail,
+  MaterialRequestHandlerOption,
+  MaterialRequestPage,
+  MaterialRequestPriorityValue,
+  MaterialRequestReassignInput,
+  MaterialRequestReceiveItemsInput,
+  MaterialRequestStatusCounts,
+  MaterialRequestSummary,
+  MaterialRequestView,
+} from "./material-request-management.js";
+export {
+  MATERIAL_REQUEST_ACTIVE_STATUSES,
+  MATERIAL_REQUEST_LEADER_ROLES,
+  MATERIAL_REQUEST_PRIORITIES,
+  MATERIAL_REQUEST_VIEWS,
 } from "./material-request-management.js";
 export { ACROPORA_COMPANY } from "./company.js";
 export {
@@ -968,6 +989,8 @@ export type {
   DashboardOverdueInvoicesWidgetData,
   DashboardServiceTicketsWidgetData,
   DashboardSettlementsWidgetData,
+  DashboardStockReconciliationWidgetData,
+  DashboardStockSyncOutboxWidgetData,
   DashboardWaterValuesWidgetData,
   DashboardWorksheetsWidgetData,
   DashboardLayoutInputResult,

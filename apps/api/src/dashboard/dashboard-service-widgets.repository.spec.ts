@@ -224,7 +224,7 @@ describe("Anyagigények", () => {
         },
       ],
     });
-    const data = await repository.materialRequests();
+    const data = await repository.materialRequests(internal);
     assert.equal(data.openCount, 2);
     assert.equal(data.oldestSubmittedAt, "2026-09-25T09:00:00.000Z");
     assert.equal(data.latest[0]?.itemCount, 3);
@@ -232,7 +232,13 @@ describe("Anyagigények", () => {
       (calls.find((c) => c.method === "count")?.args as { where: unknown })
         .where,
     );
-    assert.equal(where, json({ status: "OPEN", submittedAt: { not: null } }));
+    // V2: every active status still waits for its material, not only OPEN
+    assert.match(
+      where,
+      /"status":\{"in":\["OPEN","IN_PROGRESS","ORDERED","PARTIALLY_RECEIVED"\]\}/,
+    );
+    assert.match(where, /"submittedAt":\{"not":null\}/);
+    assert.match(where, /"hiddenAt":null/, "hidden worksheets are not counted");
   });
 });
 

@@ -54,12 +54,11 @@ describe("the registry", () => {
     }
   });
 
-  it("keeps the frozen webshop / commerce / UNAS widgets and the shadow JEV pairing out of reach of every role", () => {
+  it("keeps the frozen webshop / commerce widgets and the shadow JEV pairing out of reach of every role", () => {
     for (const id of [
       "webshop-orders",
       "pos-today",
       "product-data-quality",
-      "stock-sync-outbox",
       "supplier-matching",
     ] as const) {
       assert.notEqual(dashboardWidget(id).availability, "active", id);
@@ -69,6 +68,20 @@ describe("the registry", () => {
           `${role} gets ${id}`,
         );
     }
+  });
+});
+
+describe("the read-only stock-sync outbox (owner decision 2026-10-02)", () => {
+  it("is active for inventory viewers, and only for them", () => {
+    assert.equal(dashboardWidget("stock-sync-outbox").availability, "active");
+    for (const role of USER_ROLES)
+      assert.equal(
+        availableDashboardWidgets(viewer(role)).some(
+          (w) => w.id === "stock-sync-outbox",
+        ),
+        hasAllPermissions(role, [PERMISSIONS.INVENTORY_VIEW]),
+        role,
+      );
   });
 });
 
@@ -154,7 +167,13 @@ describe("role presets", () => {
       layout.map((_, i) => i),
     );
     const warehouse = presetDashboardLayout(viewer("WAREHOUSE"));
-    assert.deepEqual(ids(warehouse), ["tasks", "expected-arrivals"]);
+    // Készletfigyelő stays planned: no reliable stock threshold
+    assert.deepEqual(ids(warehouse), [
+      "tasks",
+      "expected-arrivals",
+      "stock-reconciliation",
+      "stock-sync-outbox",
+    ]);
     const service = presetDashboardLayout(viewer("SERVICE"));
     // Mai szerviz is planned; material requests need the capability
     assert.deepEqual(ids(service), [

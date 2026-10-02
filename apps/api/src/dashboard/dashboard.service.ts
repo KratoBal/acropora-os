@@ -9,17 +9,8 @@ import {
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
-import type { ReconciliationStatus } from "../inventory/stock-reconciliation.types.js";
 import { DashboardRepository } from "./dashboard.repository.js";
-
-const DISCREPANCY_STATUSES: ReadonlySet<ReconciliationStatus> = new Set([
-  "LOCAL_LEDGER_MISMATCH",
-  "UNAS_MISMATCH_NO_PENDING_SYNC",
-  "SYNC_FAILED",
-  "PROCESSING_LEASE_EXPIRED",
-  "MISSING_STOCK_ITEM",
-  "INVALID_LEDGER_DATA",
-]);
+import { stockDiscrepancies } from "./stock-widgets.js";
 
 @Injectable()
 export class DashboardService {
@@ -82,25 +73,7 @@ export class DashboardService {
     return result;
   }
 
-  private async inventoryDiscrepancies(): Promise<DashboardInventoryDiscrepancies> {
-    const [summary, page] = await Promise.all([
-      this.reconciliation.summarize({}),
-      this.reconciliation.reconcilePage({ page: 1, pageSize: 200 }),
-    ]);
-    const items = page.items.filter((item) =>
-      DISCREPANCY_STATUSES.has(item.status),
-    );
-    return {
-      count: [...DISCREPANCY_STATUSES].reduce(
-        (total, status) => total + summary.byStatus[status],
-        0,
-      ),
-      items: items.slice(0, 5).map((item) => ({
-        variantId: item.variantId,
-        sku: item.sku,
-        warehouseCode: item.warehouseCode,
-        status: item.status,
-      })),
-    };
+  private inventoryDiscrepancies(): Promise<DashboardInventoryDiscrepancies> {
+    return stockDiscrepancies(this.reconciliation);
   }
 }
