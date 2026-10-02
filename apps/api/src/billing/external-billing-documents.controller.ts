@@ -12,7 +12,10 @@ import {
   externalPaymentFields,
   simplePayOrderKey,
 } from "./billing-document-list.js";
-import { simplePayLinesByOrder } from "./billing-document-list.repository.js";
+import {
+  ownPaymentMarksByInvoice,
+  simplePayLinesByOrder,
+} from "./billing-document-list.repository.js";
 import { UNAS_SHOP_ORDER_PREFIX } from "../integrations/simplepay/simplepay-settlement.repository.js";
 import type { ExternalInvoicePayment } from "./external-szamlazz-invoice.js";
 
@@ -37,6 +40,10 @@ export class ExternalBillingDocumentsController {
     });
     if (!row) throw new NotFoundException("Nincs ilyen külső bizonylat.");
     const decimals = row.currency.toUpperCase() === "HUF" ? 0 : 2;
+    const marks =
+      (await ownPaymentMarksByInvoice(this.database, [row.documentNumber])).get(
+        row.documentNumber,
+      ) ?? [];
     return {
       id: row.id,
       source: "SZAMLAZZ",
@@ -66,6 +73,7 @@ export class ExternalBillingDocumentsController {
         (await simplePayLinesByOrder(this.database, [row.orderNumber])).get(
           simplePayOrderKey(row.orderNumber, UNAS_SHOP_ORDER_PREFIX) ?? "",
         ) ?? [],
+        marks,
       ),
       paymentsKnown: row.paymentsKnown === true,
       payments: (row.payments as unknown as ExternalInvoicePayment[]).map(
@@ -76,6 +84,11 @@ export class ExternalBillingDocumentsController {
           note: p.note,
         }),
       ),
+      ownPaymentMarks: marks.map((mark) => ({
+        source: mark.source,
+        date: day(mark.markDate)!,
+        amount: mark.amount.toFixed(decimals),
+      })),
       orderNumber: row.orderNumber,
       paymentMethodUnified: row.paymentMethodUnified,
       versionCount: row.versionCount,

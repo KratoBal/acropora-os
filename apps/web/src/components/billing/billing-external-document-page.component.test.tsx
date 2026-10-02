@@ -82,6 +82,7 @@ const detail = (
   paymentSource: null,
   paymentsKnown: false,
   payments: [],
+  ownPaymentMarks: [],
   orderNumber: "47679-665706",
   paymentMethodUnified: "átutalás",
   versionCount: 2,
@@ -149,6 +150,35 @@ describe("BillingExternalDocumentPage", () => {
       screen.getByText("Automatikus banki tranzakció párosítás"),
     ).toBeInTheDocument();
     expect(screen.getByText(/2026\. 09\. 28\. · átutalás/)).toBeInTheDocument();
+  });
+
+  /*
+    A SAJÁT, BEÍRT JELÖLÉS (acrobot 26027). MI PIROSÍT: ha a jelölésből számolt
+    „Fizetve” nem mondaná a forrását; ha a jelölés sora nem látszana az adatlapon.
+  */
+  it("shows our own written mark: the source on the state, and the mark's line", async () => {
+    api.externalDetail.mockResolvedValue(
+      detail({
+        paymentState: "PAID",
+        paidAmount: "29210",
+        lastPaymentDate: "2026-09-17",
+        paymentSource: "MARK_GLS_COD",
+        paymentsKnown: false,
+        ownPaymentMarks: [
+          { source: "GLS_COD", date: "2026-09-17", amount: "29210" },
+        ],
+      }),
+    );
+    render(<BillingExternalDocumentPage documentId="ext-1" />);
+    expect(
+      await screen.findByText("Fizetve (GLS utánvét)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Általunk beírva a Számlázz.hu-ba"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/2026\. 09\. 17\. · GLS utánvét/),
+    ).toBeInTheDocument();
   });
 
   it("says when Számlázz.hu marks it cancelled", async () => {

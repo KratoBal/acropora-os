@@ -10,6 +10,11 @@ export interface AccountantPackageEntry {
   amount: string;
   currency: string;
   paperOriginal: boolean;
+  /**
+   * A sor jelölése a borítón, ha nem sima Megvan-tétel: a sztornózott vásárlás
+   * eredetije és jóváírója EGY sorban (acrobot 25981).
+   */
+  label?: string;
   documents: readonly {
     number: string;
     file: { fileName: string; content: Uint8Array } | null;
@@ -104,7 +109,7 @@ export async function buildAccountantPackage(input: {
   const outcomes: PackageDocumentOutcome[] = [];
   const lines: { entry: AccountantPackageEntry; notes: string[] }[] = [];
   for (const entry of input.entries) {
-    const notes: string[] = [];
+    const notes: string[] = entry.label ? [entry.label] : [];
     if (entry.documents.length === 0 && entry.paperOriginal) {
       outcomes.push("PAPER");
       notes.push(NOTE.PAPER);

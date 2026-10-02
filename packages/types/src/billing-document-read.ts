@@ -118,8 +118,24 @@ export type BillingPaymentSource =
   | "CASH_AT_ORDER"
   | "SIMPLEPAY"
   | "SIMPLEPAY_REFUNDED"
+  // a saját, a Számlázz.hu-ba beírt jelölésünk (OutgoingPaymentMark), amíg a
+  // feed nem hozza a fizetést (acrobot 26027)
+  | "MARK_GLS_COD"
+  | "MARK_SIMPLEPAY"
+  | "MARK_FOXPOST"
   /** Bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988). */
   | "BANK_PAIRING";
+
+/**
+ * EGY SAJÁT KIFIZETETT-JELÖLÉS, AMIT A SZÁMLÁZZ.HU ELFOGADOTT (acrobot 26027).
+ * Az adatlap mindig mutatja; ha a feed már kifizetettet mond, kiegészítő adat.
+ */
+export interface BillingOwnPaymentMark {
+  source: "GLS_COD" | "SIMPLEPAY" | "FOXPOST";
+  /** `YYYY-MM-DD`, a kifizetés napja, ahogy a Számlázz.hu-ba került. */
+  date: string;
+  amount: DecimalText;
+}
 
 /** Egy külső bizonylat tétele, ahogy a számlán áll (szamla.xsd `tetel`). */
 export interface BillingExternalDocumentLine {
@@ -174,6 +190,8 @@ export interface BillingExternalDocumentDetail {
     amount: DecimalText;
     note: string | null;
   }[];
+  /** A saját, a Számlázz.hu-ba beírt kifizetett-jelölések, napjuk szerint. */
+  ownPaymentMarks: BillingOwnPaymentMark[];
   /** `alap.rendelesszam`: a webshop rendelésszáma; `null`, ha nincs. */
   orderNumber: string | null;
   /** `alap.fizmodunified`: a Számlázz.hu egységesített fizetési módja. */
