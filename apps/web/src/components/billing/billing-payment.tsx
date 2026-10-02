@@ -47,12 +47,28 @@ export const PAYMENT_STATE_TONE: Readonly<
  * rendeléskor kártyával vagy készpénzzel fizetett, és a Számlázz.hu-ban nincs
  * rögzítve. A felirat ezt megmondja, hogy látsszon, mire épül a „Fizetve”.
  */
+/**
+ * A SAJÁT, A SZÁMLÁZZ.HU-BA BEÍRT JELÖLÉS FORRÁSA (acrobot 26027): a listán a
+ * „Fizetve (GLS utánvét)” és az adatlap jelölés-sora ugyanazt mondja.
+ */
+export const OWN_MARK_SOURCE_LABELS: Record<
+  "GLS_COD" | "SIMPLEPAY" | "FOXPOST",
+  string
+> = {
+  GLS_COD: "GLS utánvét",
+  SIMPLEPAY: "SimplePay",
+  FOXPOST: "Foxpost",
+};
+
 const AT_ORDER: Record<string, string> = {
   CARD_AT_ORDER: "kártya, a rendeléskor",
   CASH_AT_ORDER: "készpénz, a rendeléskor",
   // a SimplePay elszámolás-sorából (acrobot 25964, 25979)
   SIMPLEPAY: "SimplePay",
   SIMPLEPAY_REFUNDED: "SimplePay, visszatérítve",
+  MARK_GLS_COD: OWN_MARK_SOURCE_LABELS.GLS_COD,
+  MARK_SIMPLEPAY: OWN_MARK_SOURCE_LABELS.SIMPLEPAY,
+  MARK_FOXPOST: OWN_MARK_SOURCE_LABELS.FOXPOST,
 };
 
 export function PaymentBadge({

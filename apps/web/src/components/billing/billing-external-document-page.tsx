@@ -24,7 +24,7 @@ import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
-import { PaymentBadge } from "./billing-payment";
+import { OWN_MARK_SOURCE_LABELS, PaymentBadge } from "./billing-payment";
 
 /** Az áfakulcs, ahogy a számlán áll: szám mellé %, a jelölés (AAM, TAM) magában. */
 const vatRateText = (rate: string) =>
@@ -269,6 +269,29 @@ export function BillingExternalDocumentPage({
                   </li>
                 ))}
               </ul>
+            ) : null}
+            {detail.ownPaymentMarks.length > 0 ? (
+              <div className="mt-3 border-t border-pilot-grey-100 pt-3">
+                <p className="text-xs font-semibold text-pilot-grey-500">
+                  Általunk beírva a Számlázz.hu-ba
+                </p>
+                <ul className="mt-2 space-y-2 text-sm">
+                  {detail.ownPaymentMarks.map((mark, index) => (
+                    <li
+                      key={`${mark.source}-${mark.date}-${index}`}
+                      className="flex items-baseline justify-between gap-3"
+                    >
+                      <span className="text-pilot-grey-700">
+                        {formatDay(mark.date)} ·{" "}
+                        {OWN_MARK_SOURCE_LABELS[mark.source]}
+                      </span>
+                      <span className="whitespace-nowrap font-semibold tabular-nums text-pilot-grey-900">
+                        {formatMoney(mark.amount, detail.currency)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
           </PilotSection>
           <PilotSection title="Számlázz.hu" subtitle="A továbbítás adatai.">
