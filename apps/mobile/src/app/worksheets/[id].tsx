@@ -2344,7 +2344,21 @@ export default function WorksheetDetailScreen() {
                         : "Küldés"}
                     </Text>
                   </Pressable>
-                ) : null}
+                ) : (
+                  <Pressable
+                    accessibilityRole="link"
+                    onPress={() =>
+                      router.push({
+                        pathname: "/material-requests/request/[id]",
+                        params: { id: request.id },
+                      })
+                    }
+                  >
+                    <Text style={styles.materialRequestLink}>
+                      Részletek és állapot
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             ))}
 
@@ -2699,6 +2713,12 @@ function createStyles(t: ThemeTokens) {
       borderTopColor: t.border,
     },
     materialRequestItem: { color: t.textPrimary, fontSize: 14 },
+    materialRequestLink: {
+      color: t.accentSoftText,
+      fontSize: 13,
+      fontWeight: "700",
+      marginTop: 4,
+    },
     disabled: { opacity: 0.55 },
     pressed: { opacity: 0.75 },
   });
