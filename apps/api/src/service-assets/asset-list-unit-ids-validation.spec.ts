@@ -68,3 +68,16 @@ describe("the unit filter on the real validation path", () => {
     assert.equal(errors[0]?.property, "departmentId");
   });
 });
+
+/*
+  A LAPMÉRET FELSŐ HATÁRA 500 (Balázs, 2026-10-02 08:23 UTC; acrobot 26061).
+  MI PIROSÍT: ha a szülő-választó 500-as kérése elbukna (a régi 100-as határ);
+  ha a határ eltűnne (egy 501-es vagy nagyobb kérés átmenne).
+*/
+describe("the page size limit on the real validation path", () => {
+  it("takes 500, refuses 501, and the default stays 25", () => {
+    assert.deepEqual(parse({ pageSize: 500 }).errors, []);
+    assert.equal(parse({ pageSize: 501 }).errors.length, 1);
+    assert.equal(parse({}).dto.pageSize, 25);
+  });
+});

@@ -1228,6 +1228,34 @@ describe("AssetEditorPage szülőeszköz-választója", () => {
     );
   });
 
+  it("asks for 500 at once, and says so when there are more", async () => {
+    api.detail.mockResolvedValue(withParent);
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    api.list.mockResolvedValue({
+      items: [
+        {
+          id: "asset-9",
+          assetNumber: "ESZ-0900",
+          name: "Növényvályú 1",
+          kind: "EQUIPMENT",
+          status: "ACTIVE",
+        },
+      ],
+      pagination: { page: 1, pageSize: 500, totalItems: 640, totalPages: 2 },
+    });
+    render(<AssetEditorPage assetId="asset-1" />);
+    expect(
+      await screen.findByText(
+        "640 találatból az első 1 látszik. Szűkíts alegységre vagy keresővel.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      api.list.mock.calls.some(
+        ([, query]) => (query as URLSearchParams).get("pageSize") === "500",
+      ),
+    ).toBe(true);
+  });
+
   it("shows the current parent chosen even when the list does not bring it", async () => {
     api.detail.mockResolvedValue(withParent);
     api.owners.mockResolvedValue(owners([servicePartner]));

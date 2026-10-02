@@ -4,15 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
 
-import {
-  applyPaidMarks,
-  paidMarksReport,
-  prismaPaymentMarkStore,
-} from "../szamlazz/outgoing-payment-marks.js";
-import { HttpSzamlazzAgentClient } from "../szamlazz/szamlazz-agent.client.js";
-import { SzamlazzConnectionRepository } from "../szamlazz/szamlazz-connection.repository.js";
-import { SzamlazzCredentialCryptoService } from "../szamlazz/szamlazz-credential-crypto.service.js";
-import { SzamlazzCredentialProvider } from "../szamlazz/szamlazz-credential.provider.js";
+import { runPaidMarksApply } from "../szamlazz/paid-marks-apply.cli.js";
 import {
   loadSimplePayOrders,
   simplePayMarkPaidMode,
@@ -65,65 +57,38 @@ async function main(argv: readonly string[]): Promise<number> {
     return 2;
   }
   if (argv.includes("--apply")) {
-    if (mode !== "live") {
-      process.stderr.write(
-        "Az éles íráshoz SIMPLEPAY_MARK_PAID=live kell; most: " + mode + ".\n",
-      );
-      return 1;
-    }
-    const at = argv.indexOf("--invoices");
-    const approved = new Set(
-      (at >= 0 ? (argv[at + 1] ?? "") : "")
-        .split(",")
-        .map((n) => n.trim())
-        .filter(Boolean),
-    );
-    if (approved.size === 0) {
-      process.stderr.write(
-        "Az --apply csak a jóváhagyott számlákra ír: --invoices <szám,szám,...>\n",
-      );
-      return 2;
-    }
-    const decisions = (await loadSimplePayOrders(from)).orders.map((order) =>
-      decideSimplePayOrder(order),
-    );
-    const { marks, markedBefore } = simplePayMarksToWrite({
-      decisions,
-      approved,
-      markedBefore: await loadSimplePayMarkedBefore(approved),
-    });
-    const credential = await new SzamlazzCredentialProvider(
-      new SzamlazzConnectionRepository(),
-      new SzamlazzCredentialCryptoService(),
-    ).resolve();
-    process.stdout.write(
-      `ÉLES írás a Számlázz.hu-ba (kulcs: ${credential.revision}), SimplePay-fizetések ${from} óta, ${approved.size} jóváhagyott számla:\n`,
-    );
-    const lines = await applyPaidMarks({
+    // the shared gate (#1388): live switch, --invoices, key before the log
+    const code = await runPaidMarksApply({
+      argv,
+      mode,
+      switchName: "SIMPLEPAY_MARK_PAID",
       source: "SIMPLEPAY",
-      marks,
-      approved,
-      agentKey: credential.agentKey,
-      client: new HttpSzamlazzAgentClient(),
-      store: prismaPaymentMarkStore,
+      what: `SimplePay-fizetések ${from} óta`,
+      loadMarks: async () => {
+        const decisions = (await loadSimplePayOrders(from)).orders.map(
+          (order) => decideSimplePayOrder(order),
+        );
+        const markable = new Set(
+          decisions.flatMap((d) => (d.markable ? [d.mark.invoiceNumber] : [])),
+        );
+        const { marks, markedBefore } = simplePayMarksToWrite({
+          decisions,
+          approved: markable,
+          markedBefore: await loadSimplePayMarkedBefore(markable),
+        });
+        for (const number of markedBefore)
+          process.stdout.write(
+            `  ${number}\tkimarad: korábban már kapott SimplePay-jelölést, nem írtam\n`,
+          );
+        return marks;
+      },
+      out: (text) => process.stdout.write(text),
+      err: (text) => process.stderr.write(text),
     });
-    for (const number of markedBefore)
-      process.stdout.write(
-        `  ${number}\tkimarad: korábban már kapott SimplePay-jelölést, nem írtam\n`,
-      );
-    const before = new Set(markedBefore);
-    process.stdout.write(
-      paidMarksReport(
-        lines,
-        new Set([...approved].filter((n) => !before.has(n))),
-      ),
-    );
-    process.stdout.write(await refundsAfterWrittenMarks());
-    return lines.some(
-      (l) => l.outcome.kind === "FAILED" || l.outcome.kind === "UNKNOWN",
-    )
-      ? 3
-      : 0;
+    // 1 and 2: the gate stopped before anything ran
+    if (code === 0 || code === 3)
+      process.stdout.write(await refundsAfterWrittenMarks());
+    return code;
   }
   process.stdout.write(
     `SZÁRAZ futás (semmit nem ír), SimplePay-fizetések ${from} óta:\n`,
