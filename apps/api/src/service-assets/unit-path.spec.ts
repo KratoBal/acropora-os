@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildUnitPaths } from "./unit-path.js";
+import { buildUnitPaths, sharedAncestor } from "./unit-path.js";
 
 describe("the unit's full path", () => {
   /**
@@ -71,5 +71,41 @@ describe("the unit's full path", () => {
 
     assert.deepEqual(paths.get("a"), ["B", "A"]);
     assert.deepEqual(paths.get("b"), ["A", "B"]);
+  });
+});
+
+/*
+  A KÖZÖS FELSŐ HELYSZÍN (kártya 1806e061). MI PIROSÍT: ha a legalsó helyett
+  egy feljebb álló közös őst adna; ha a megnevezett egység maga nem lehetne a
+  közös helyszín; ha két külön gyökér vagy egy ismeretlen egység közös ősnek
+  látszana; ha egy kör végtelen ciklust adna.
+*/
+describe("sharedAncestor", () => {
+  const units = [
+    { id: "zoo", name: "Állatkert", parentId: null },
+    { id: "capasuli", name: "Cápasuli", parentId: "zoo" },
+    { id: "karanten", name: "Karantén medence", parentId: "capasuli" },
+    { id: "nagymedence", name: "Nagymedence", parentId: "capasuli" },
+    { id: "trop", name: "Trópusi ház", parentId: "zoo" },
+    { id: "other", name: "Másik ügyfél telephelye", parentId: null },
+    { id: "loop-a", name: "A", parentId: "loop-b" },
+    { id: "loop-b", name: "B", parentId: "loop-a" },
+  ];
+  it("the lowest shared ancestor, itself included", () => {
+    assert.equal(
+      sharedAncestor(["karanten", "nagymedence"], units),
+      "capasuli",
+    );
+    assert.equal(sharedAncestor(["capasuli", "karanten"], units), "capasuli");
+    assert.equal(sharedAncestor(["karanten", "trop"], units), "zoo");
+    assert.equal(sharedAncestor(["karanten"], units), "karanten");
+  });
+  it("none for separate roots, an unknown unit, or nothing", () => {
+    assert.equal(sharedAncestor(["karanten", "other"], units), null);
+    assert.equal(sharedAncestor(["karanten", "gone"], units), null);
+    assert.equal(sharedAncestor([], units), null);
+  });
+  it("a cycle stops instead of looping", () => {
+    assert.equal(sharedAncestor(["loop-a", "karanten"], units), null);
   });
 });

@@ -39,3 +39,43 @@ export function buildUnitPaths(
 
   return paths;
 }
+
+/**
+ * A KÖZÖS FELSŐ HELYSZÍN (Balázs, 2026-10-02 07:36 UTC; kártya 1806e061): a
+ * megnevezett egységek legalsó közös őse, akár maga is a megnevezettek egyike.
+ * A Capasuli három medencéje és maga a Capasuli: a Capasuli. Ha nincs közös
+ * ős (külön gyökér alatt állnak, vagy egy egység nem ismert), `null`: azok
+ * tényleg független helyszínek.
+ *
+ * Egy hiányzó szülő vagy egy kör az utat ott elvágja, ahogy a `buildUnitPaths`
+ * is; egy csonka út rövidebb közös részt ad, soha nem hamisat.
+ */
+export function sharedAncestor(
+  ids: readonly string[],
+  units: readonly UnitRow[],
+): string | null {
+  const byId = new Map(units.map((unit) => [unit.id, unit]));
+  const chainOf = (id: string): string[] | null => {
+    if (!byId.has(id)) return null;
+    const chain: string[] = [];
+    const seen = new Set<string>();
+    let current = byId.get(id);
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      chain.unshift(current.id);
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+    }
+    return chain;
+  };
+  const distinct = [...new Set(ids)];
+  if (distinct.length === 0) return null;
+  const chains = distinct.map(chainOf);
+  if (chains.some((chain) => chain === null)) return null;
+  let shared: string | null = null;
+  for (let depth = 0; ; depth++) {
+    const step = chains[0]![depth];
+    if (step === undefined || chains.some((chain) => chain![depth] !== step))
+      return shared;
+    shared = step;
+  }
+}

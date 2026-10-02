@@ -198,9 +198,9 @@ export class MaintenanceOrdersPortalService {
    * A SOROK, AMIKET A HÍVÓ TÉNYLEG LÁTHAT -- lásd `maintenance-order-
    * visibility.ts` fejlécét a szabályért. A `customerFullyCoveredByUnits`
    * hívása LUSTA: csak akkor fut, ha VAN olyan sor, aminek szüksége van rá
-   * (helyszín nélküli tétel) -- ma ez az ág `ensureSingleDepartment` miatt
-   * nem is fordulhat elő, tehát a lusta hívás a gyakori esetben egyetlen
-   * felesleges lekérdezést sem indít.
+   * (helyszín nélküli tétel) -- ma ezt a kiállítás kizárja (a helyszín
+   * nélküli tételből nem lesz megrendelőlap), tehát a lusta hívás a gyakori
+   * esetben egyetlen felesleges lekérdezést sem indít.
    */
   private async filterVisible(
     rows: readonly PortalMaintenanceOrderRow[],
