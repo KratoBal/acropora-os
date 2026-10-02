@@ -12,6 +12,10 @@ import { beszurLathatosagShim } from "./visibility-shim.js";
  * elem szamitott stilus nelkul LATHATONAK szamit -- merve 2026-09-22.
  * A shim indoka es a hatara a `visibility-shim.ts` fejlecen all.
  */
-beforeAll(() => beszurLathatosagShim());
+// Server route tests use real Node Request/Response (including Cookie headers).
+// The visibility shim applies only to browser component tests.
+beforeAll(() => {
+  if (typeof document !== "undefined") beszurLathatosagShim();
+});
 
 afterEach(() => cleanup());

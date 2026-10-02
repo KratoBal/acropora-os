@@ -25,6 +25,8 @@ const apiUrl = resolveApiUrl({ env: process.env, readRootEnvFile });
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Same build-time API destination as the rewrite, for the unbuffered assistant route.
+  env: { ACROPORA_API_PROXY_URL: apiUrl },
 
   /**
    * The rewrite proxy's own timeout, raised above the limits inside the chain.

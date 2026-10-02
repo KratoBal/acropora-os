@@ -340,6 +340,12 @@ export function callsInSource(
        * STATIKUSAN eldönthető, nem ítélet kérdése.
        */
       if (isAbsoluteUrl(raw)) continue;
+      // A dedikált szerverproxy ugyanarra az API-ra továbbít; a hoszt
+      // konfiguráció, de a mögötte álló végpontot továbbra is mérjük.
+      raw = raw.replace(
+        /^\$\{process\.env\.ACROPORA_API_PROXY_URL \?\? process\.env\.API_URL\}/,
+        "",
+      );
       // A fájlon belüli konstansok behelyettesítése; ami marad, azt a toPattern
       // teszi `:param` alakúvá.
       let resolved = raw.replace(
@@ -1085,5 +1091,16 @@ describe("a mobil kliensek egy helyen tartják az előtagot", () => {
       'export const a = () => apiRequest("/worksheets/b");',
     ].join("\n");
     assert.deepEqual(repeatedPrefixes(writtenPrefixes(source, "c.ts")), []);
+  });
+});
+
+describe("web server proxy route inventory", () => {
+  it("keeps the assistant API destination visible instead of skipping the proxy", () => {
+    const calls = callsInSource(
+      "fetch(`${process.env.ACROPORA_API_PROXY_URL ?? process.env.API_URL}/assistant/ask`, {});",
+      "proxy",
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.pattern, "assistant/ask");
   });
 });

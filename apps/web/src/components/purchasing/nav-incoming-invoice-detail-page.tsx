@@ -1,4 +1,5 @@
 "use client";
+import { useAssistantEntity } from "../assistant/page-context";
 import {
   Alert,
   Badge,
@@ -46,6 +47,7 @@ export function NavIncomingInvoiceDetailPage({
 
   const [detail, setDetail] = useState<NavIncomingInvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  useAssistantEntity("NAV számla", detail?.id, detail?.navInvoiceNumber);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {

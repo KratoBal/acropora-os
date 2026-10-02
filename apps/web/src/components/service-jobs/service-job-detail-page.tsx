@@ -1,4 +1,5 @@
 "use client";
+import { useAssistantEntity } from "@/components/assistant/page-context";
 
 import {
   Alert,
@@ -115,6 +116,7 @@ function timelineLine(entry: ServiceJobTimelineEntry): string {
 export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const { session } = useAuth();
   const [job, setJob] = useState<ServiceJobDetail | null>(null);
+  useAssistantEntity("Hibajegy", job?.id, job?.jobNumber);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);

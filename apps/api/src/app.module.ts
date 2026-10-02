@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 
+import { AssistantModule } from "./assistant/assistant.module.js";
 import { AppController } from "./app.controller.js";
 import { AssistantReadonlyGuard } from "./auth/guards/assistant-readonly.guard.js";
 import { AssistantAuditMiddleware } from "./auth/assistant-audit.middleware.js";
@@ -59,6 +60,7 @@ import { SearchModule } from "./search/search.module.js";
 
 @Module({
   imports: [
+    AssistantModule,
     AssetCategoriesModule,
     AssetFunctionsModule,
     UnitsModule,

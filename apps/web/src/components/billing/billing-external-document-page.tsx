@@ -1,4 +1,5 @@
 "use client";
+import { useAssistantEntity } from "../assistant/page-context";
 
 import {
   Alert,
@@ -49,6 +50,7 @@ export function BillingExternalDocumentPage({
   const [detail, setDetail] = useState<BillingExternalDocumentDetail | null>(
     null,
   );
+  useAssistantEntity("Külső számla", detail?.id, detail?.documentNumber);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
