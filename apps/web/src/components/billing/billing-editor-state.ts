@@ -33,6 +33,17 @@ export interface EditorLine {
   key: string;
   id?: string;
   productId: string | null;
+  /**
+   * A TERMÉK VÁLTOZATA (kártya 705768fc): több változatú terméknél ez mondja
+   * meg, melyik készlete csökken a kiállításkor. Egyváltozatú terméknél és
+   * egyedi tételnél üres.
+   */
+  variantId?: string | null;
+  /**
+   * A termék aktív változatai, ha egynél több van (a termék adataiból töltődik);
+   * csak a felületé, nem megy el. `undefined`: még nincs betöltve.
+   */
+  variantOptions?: { id: string; label: string }[];
   /** A termék-sor alcíme (cikkszám); egyedi tételnél `null`. */
   productLabel: string | null;
   description: string;
@@ -199,6 +210,7 @@ export function fromDetail(detail: BillingDocumentDetail): EditorState {
         key: newLineKey(),
         id: line.id,
         productId: line.productId,
+        variantId: line.variantId ?? null,
         productLabel: null,
         description: line.description,
         quantity: trimDecimal(line.quantity),
@@ -211,6 +223,27 @@ export function fromDetail(detail: BillingDocumentDetail): EditorState {
         comment: line.comment ?? "",
       })),
   };
+}
+
+/**
+ * A termék aktív változatai a választóhoz: csak ha egynél több van, mert
+ * egyetlen változatnál nincs mit választani (a kiállítás azt mozgatja).
+ */
+export function variantOptionsOf(
+  variants: readonly {
+    id: string;
+    sku: string;
+    name: string | null;
+    isActive: boolean;
+  }[],
+): { id: string; label: string }[] {
+  const active = variants.filter((variant) => variant.isActive);
+  return active.length > 1
+    ? active.map((variant) => ({
+        id: variant.id,
+        label: variant.name ? `${variant.sku} · ${variant.name}` : variant.sku,
+      }))
+    : [];
 }
 
 /** "12.500000" -> "12.5", "0.0000" -> "0": a mező ne a tárolás skáláját mutassa. */
@@ -251,6 +284,7 @@ export function toDraftInput(
     lines: state.lines.map((line) => ({
       ...(line.id ? { id: line.id } : {}),
       productId: line.productId,
+      variantId: line.productId ? (line.variantId ?? null) : null,
       description: line.description.trim(),
       quantity: line.quantity.trim(),
       unit: blank(line.unit),

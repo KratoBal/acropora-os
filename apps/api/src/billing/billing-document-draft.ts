@@ -27,6 +27,7 @@ export interface NormalizedBillingLine {
   parentLineId: string | null;
   position: number;
   productId: string | null;
+  variantId: string | null;
   description: string;
   quantity: DecimalText;
   unit: string | null;
@@ -133,6 +134,8 @@ export function normalizeBillingDraft(
       parentLineId: null,
       position: lines.length + 1,
       productId: text(line.productId),
+      // a változat csak a termékhez tartozik: termék nélkül eldobjuk
+      variantId: text(line.productId) ? text(line.variantId) : null,
       description: line.description.trim(),
       quantity: line.quantity.trim().replace(",", "."),
       unit: text(line.unit),
@@ -151,6 +154,7 @@ export function normalizeBillingDraft(
         parentLineId: itemId,
         position: lines.length + 1,
         productId: null,
+        variantId: null,
         description: `Kedvezmény (${computed.discount.discountPercent.replace(/\.?0+$/, "")}%)`,
         quantity: "1",
         unit: null,

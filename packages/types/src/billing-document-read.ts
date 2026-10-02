@@ -259,7 +259,7 @@ export interface BillingDocumentDeliveryInfo {
  * - `NOT_A_STOCK_DOCUMENT`: díjbekérő, előleg vagy szállítólevél;
  * - `MOVED_BY_SOURCE`: a forrás (webshop-rendelés, POS) már levonta;
  * - `VARIANT_NOT_CHOSEN`: a terméknek több változata van, a sor nem mondja meg,
- *   melyik;
+ *   melyik; vagy a sor változata nem a termék aktív változata;
  * - `NO_VARIANT`: a terméknek nincs aktív változata;
  * - `PACKAGE_UNRESOLVED`: csomagtermék, amelynek összetevői nem oldhatók fel.
  */
