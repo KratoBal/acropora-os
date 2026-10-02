@@ -585,19 +585,61 @@ describe("an own paid mark on the outgoing view (acrobot 26027)", () => {
     );
   });
 
-  it("paid by the feed: the feed wins, the mark adds nothing", () => {
+  /*
+    A FEED IS FIZETETTET MOND, ÉS VAN BEÍRT JELÖLÉSÜNK (Balázs, 2026-10-02 11:14
+    UTC; acrobot 26095: élesen mind a 25 beírt számlát visszaküldte a feed).
+    MI PIROSÍT: ha a forrás „SZAMLAZZ” maradna (a GLS / Foxpost felirat
+    eltűnik); ha az összeg vagy a dátum nem a feedé lenne.
+  */
+  it("paid by the feed and marked by us: the feed's sum and day, our mark's source", () => {
     assert.deepEqual(
       pay({
         paymentsKnown: true,
         paidAmount: D("29210"),
         lastPaymentDate: new Date("2026-09-20T00:00:00.000Z"),
+        paymentMethodUnified: "egyéb",
       }),
       {
         paymentState: "PAID",
         paidAmount: "29210",
         lastPaymentDate: "2026-09-20",
-        paymentSource: "SZAMLAZZ",
+        paymentSource: "MARK_GLS_COD",
       },
+    );
+  });
+
+  it("paid by the feed, two marks: the latest mark names the source", () => {
+    assert.equal(
+      pay(
+        {
+          paymentsKnown: true,
+          paidAmount: D("29210"),
+          lastPaymentDate: new Date("2026-09-20T00:00:00.000Z"),
+        },
+        [
+          gls,
+          {
+            source: "FOXPOST",
+            markDate: new Date("2026-09-19T00:00:00.000Z"),
+            amount: D("29210"),
+          },
+        ],
+      ).paymentSource,
+      "MARK_FOXPOST",
+    );
+  });
+
+  it("paid by the feed, no mark of ours: the feed is the source", () => {
+    assert.equal(
+      pay(
+        {
+          paymentsKnown: true,
+          paidAmount: D("29210"),
+          lastPaymentDate: new Date("2026-09-20T00:00:00.000Z"),
+        },
+        [],
+      ).paymentSource,
+      "SZAMLAZZ",
     );
   });
 
