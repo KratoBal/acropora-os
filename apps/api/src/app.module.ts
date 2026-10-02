@@ -29,6 +29,7 @@ import { ViesVatModule } from "./integrations/vies/vies-vat.module.js";
 import { FoxpostSettlementModule } from "./integrations/foxpost/foxpost-settlement.module.js";
 import { GlsSettlementModule } from "./integrations/gls/gls-settlement.module.js";
 import { PaidMarksModule } from "./billing/paid-marks/paid-marks.module.js";
+import { EbizModule } from "./integrations/ebiz/ebiz.module.js";
 import { SimplePaySettlementModule } from "./integrations/simplepay/simplepay-settlement.module.js";
 import { InventoryModule } from "./inventory/inventory.module.js";
 import { AssetCategoriesModule } from "./asset-categories/asset-categories.module.js";
@@ -84,6 +85,7 @@ import { SearchModule } from "./search/search.module.js";
     FoxpostSettlementModule,
     GlsSettlementModule,
     PaidMarksModule,
+    EbizModule,
     SimplePaySettlementModule,
     SuppliersModule,
     PurchasingModule,

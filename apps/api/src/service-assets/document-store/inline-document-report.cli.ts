@@ -122,6 +122,8 @@ const LEKERDEZESEK: Record<DocumentOwner, () => Promise<SorOsszegzes | null>> =
      * nem értelmezhető rá.
      */
     invoice: async () => null,
+    /** A külső kimenő számla PDF-je: ugyanaz, mint a számláé. */
+    "external-invoice": async () => null,
   };
 
 export async function inlineDokumentumJelentes() {

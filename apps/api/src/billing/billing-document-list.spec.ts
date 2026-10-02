@@ -152,6 +152,7 @@ const external = (
   overrides: Partial<ExternalListRow> = {},
 ): ExternalListRow => ({
   id: "ext-1",
+  source: "SZAMLAZZ",
   kindCode: "SZ",
   documentNumber: "ACRW-2026/00508",
   electronic: false,
@@ -451,6 +452,7 @@ describe("the external documents on the list", () => {
       documentType: "INVOICE",
       invoiceFormat: "PAPER",
       documentNumber: "ACRW-2026/00508",
+      externalSource: "SZAMLAZZ",
       customerName: "Teszt Akvárium Bt.",
       issueDate: "2026-09-30",
       dueDate: "2026-10-08",

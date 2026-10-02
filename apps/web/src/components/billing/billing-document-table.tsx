@@ -72,7 +72,9 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
           <span className="font-semibold text-pilot-grey-900">
             {item.documentNumber ?? "Piszkozat"}
           </span>
-          {item.origin === "EXTERNAL" ? <ExternalBadge /> : null}
+          {item.origin === "EXTERNAL" ? (
+            <ExternalBadge source={item.externalSource} />
+          ) : null}
         </span>
       ),
     },

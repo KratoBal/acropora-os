@@ -75,7 +75,8 @@ export async function loadGlsTransfers(from: string): Promise<
   const invoices = new Map<string, OutgoingInvoiceInput>(
     (
       await prisma.externalBillingDocument.findMany({
-        where: { documentNumber: { in: numbers } },
+        // only Számlázz.hu's own invoices can be marked paid there (not eBIZ)
+        where: { source: "SZAMLAZZ", documentNumber: { in: numbers } },
         select: {
           documentNumber: true,
           grossAmount: true,

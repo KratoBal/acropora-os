@@ -82,6 +82,8 @@ export async function loadFoxpostSettlements(from: string): Promise<
   ];
   const rows = await prisma.externalBillingDocument.findMany({
     where: {
+      // only Számlázz.hu's own invoices can be marked paid there (not eBIZ)
+      source: "SZAMLAZZ",
       OR: [
         { orderNumber: { in: references } },
         { documentNumber: { in: references } },
