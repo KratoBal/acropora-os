@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
-import type {
-  DashboardMaintenanceCalendarWidgetData,
-  DashboardMaterialRequestsWidgetData,
-  DashboardServiceTicketsWidgetData,
-  DashboardWorksheetsWidgetData,
+import {
+  MATERIAL_REQUEST_ACTIVE_STATUSES,
+  type DashboardMaintenanceCalendarWidgetData,
+  type DashboardMaterialRequestsWidgetData,
+  type DashboardServiceTicketsWidgetData,
+  type DashboardWorksheetsWidgetData,
 } from "@acropora/types";
 
 import {
@@ -168,13 +169,24 @@ export class DashboardServiceWidgetsRepository extends Repository {
   }
 
   /**
-   * Open material requests: the same set the "pending" page lists to those
-   * who may mark them received (permission + capability, checked upstream).
+   * Open material requests: submitted and not yet received. Since V2 that is
+   * every active status (new, claimed, ordered, partly arrived), not only
+   * OPEN: a claimed request still waits for its material. Scoped like the
+   * material-request overview, by the worksheets the caller can see (hidden
+   * ones excluded).
    */
-  async materialRequests(): Promise<DashboardMaterialRequestsWidgetData> {
+  async materialRequests(
+    viewer: ServiceWidgetViewer,
+  ): Promise<DashboardMaterialRequestsWidgetData> {
     const where: Prisma.MaterialRequestWhereInput = {
-      status: "OPEN",
+      status: { in: [...MATERIAL_REQUEST_ACTIVE_STATUSES] },
       submittedAt: { not: null },
+      worksheet: worksheetListWheres(
+        viewer.scope,
+        viewer.assignedUnitIds,
+        {},
+        {},
+      ).counts,
     };
     const [openCount, rows] = await Promise.all([
       this.database.materialRequest.count({ where }),

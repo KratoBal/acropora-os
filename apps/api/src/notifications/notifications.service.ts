@@ -119,6 +119,24 @@ export interface MaterialRequestReceivedNotice {
   userIds: readonly string[];
 }
 
+/** V2: claim, order and withdrawal of a material request (one notice shape). */
+export interface MaterialRequestStepNotice {
+  step: "claimed" | "ordered" | "cancelled";
+  materialRequestId: string;
+  worksheetId: string;
+  worksheetLabel: string;
+  userIds: readonly string[];
+}
+
+const MATERIAL_REQUEST_STEP_TITLE: Record<
+  MaterialRequestStepNotice["step"],
+  string
+> = {
+  claimed: "Beszerzés átvéve",
+  ordered: "Anyag megrendelve",
+  cancelled: "Anyagigény visszavonva",
+};
+
 /**
  * UJ VIZMERES ERKEZETT -- a karbantartoknak, AZ ERTESITO KIVETELEVEL.
  *
@@ -432,6 +450,42 @@ export class NotificationsService {
     void this.deliverMaterialRequestReceived(notice).catch((cause: unknown) => {
       this.logger.warn(
         `Az "anyag beérkezett" értesítés nem sikerült (${notice.materialRequestId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
+    });
+  }
+
+  /**
+   * V2: claim and order (to the requester), withdrawal (to the handler). The
+   * same body and the same push target as the two above.
+   */
+  async deliverMaterialRequestStep(
+    notice: MaterialRequestStepNotice,
+  ): Promise<AssignmentSummary> {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: MATERIAL_REQUEST_STEP_TITLE[notice.step],
+      body: notice.worksheetLabel,
+      data: {
+        targetType: "materialRequest",
+        targetId: notice.worksheetId,
+        worksheetId: notice.worksheetId,
+      },
+      record: (attempts) =>
+        this.log.recordMaterialRequestStep(notice.step, {
+          materialRequestId: notice.materialRequestId,
+          attempts,
+        }),
+      failureLine: (summary) =>
+        `Anyagigény (${notice.step}) értesítése: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.materialRequestId}).`,
+    });
+  }
+
+  notifyMaterialRequestStep(notice: MaterialRequestStepNotice): void {
+    void this.deliverMaterialRequestStep(notice).catch((cause: unknown) => {
+      this.logger.warn(
+        `Az anyagigény (${notice.step}) értesítése nem sikerült (${notice.materialRequestId}): ${
           cause instanceof Error ? cause.message : "ismeretlen hiba"
         }`,
       );

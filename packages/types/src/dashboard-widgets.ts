@@ -423,23 +423,22 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetDefinition[] = [
     category: "inventory",
     requiredPermissions: [P.INVENTORY_VIEW],
     recommendedRoles: ["WAREHOUSE", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 53,
     dataSource:
       "StockReconciliationService, actionable statuses only (today's dashboard block).",
-    plannedReason: "Moved into the framework with the inventory batch (PR 6).",
   }),
   widget({
     id: "stock-sync-outbox",
     title: "Készlet-kimenősor",
-    description: "UNAS stock sync",
+    description: "UNAS készletszinkron · csak olvasás",
     category: "inventory",
     requiredPermissions: [P.INVENTORY_VIEW],
     recommendedRoles: ["WAREHOUSE", ...MANAGERS],
-    availability: "planned",
+    availability: "active",
     priority: 54,
-    plannedReason:
-      "UNAS sync health; UNAS / commerce health checks are frozen (open question in the discovery report).",
+    dataSource:
+      "UnasStockSyncOutboxRepository countsByStatus / lastSuccessfulPublishAt: read-only, no UNAS call (owner decision 2026-10-02).",
   }),
   widget({
     id: "product-data-quality",
@@ -1144,4 +1143,31 @@ export interface DashboardSettlementsWidgetData {
     errors: number;
     lastRun: { status: string; startedAt: string } | null;
   }[];
+}
+
+/** Készlet-egyeztetés: today's dashboard block, moved into the framework unchanged. */
+export interface DashboardStockReconciliationWidgetData {
+  /** Items in an actionable discrepancy status. */
+  count: number;
+  items: {
+    variantId: string;
+    sku: string;
+    warehouseCode: string;
+    status: string;
+  }[];
+}
+
+/**
+ * Készlet-kimenősor: a READ-ONLY state of the UNAS stock-sync outbox
+ * (owner decision, 2026-10-02): no write, no UNAS call, successful rows never
+ * counted.
+ */
+export interface DashboardStockSyncOutboxWidgetData {
+  /** PENDING + PROCESSING */
+  queued: number;
+  /** FAILED: will be retried with backoff. */
+  retrying: number;
+  /** DEAD_LETTER: needs a person. */
+  deadLetter: number;
+  lastSuccessfulSyncAt: string | null;
 }

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ForbiddenException, ConflictException } from "@nestjs/common";
+import {
+  ForbiddenException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
+import { Prisma } from "@acropora/database";
 
 import type { MaterialRequestsRepository } from "./material-requests.repository.js";
 import { MaterialRequestsService } from "./material-requests.service.js";
@@ -29,6 +34,20 @@ const WORKSHEET = {
   ],
 };
 
+/** The V2 columns, empty, as on every request from before V2. */
+const V2_EMPTY = {
+  handlerId: null,
+  handlerName: null,
+  handlerAssignedAt: null,
+  orderedAt: null,
+  orderedByName: null,
+  cancelledAt: null,
+  cancelledByName: null,
+  note: null,
+  neededBy: null,
+  priority: null,
+};
+
 const DRAFT_ROW = {
   id: "mr-1",
   worksheetId: "worksheet-1",
@@ -39,7 +58,24 @@ const DRAFT_ROW = {
   submittedAt: null,
   receivedAt: null,
   receivedByName: null,
-  items: [{ id: "item-1", name: "40mm könyök", quantity: "2", unit: "db" }],
+  items: [
+    {
+      id: "item-1",
+      name: "40mm könyök",
+      quantity: "2",
+      unit: "db",
+      quantityValue: new Prisma.Decimal(2),
+      receivedQuantity: null,
+      receivedAt: null,
+    },
+  ],
+  ...V2_EMPTY,
+};
+
+const CONTEXT = {
+  worksheetNumber: "BIO-2026-001",
+  customerDisplayName: "Kovács Kft.",
+  departmentName: "Biodom",
 };
 
 /** A `receive()` tesztek alapallapota: mar elkuldve, meg nem beerkezve. */
@@ -49,12 +85,26 @@ const REQUEST_ROW = {
   submittedAt: CREATED,
 };
 
+/** The row as `detail` reads it after a successful receive (for the notification). */
+const RECEIVED_ROW = {
+  ...REQUEST_ROW,
+  status: "RECEIVED" as const,
+  receivedAt: CREATED,
+  receivedByName: "Beszerző Béla",
+};
+
 function repository(overrides: Record<string, unknown> = {}) {
   return {
     create: async () => DRAFT_ROW,
     submit: async () => REQUEST_ROW,
     listForWorksheet: async () => [REQUEST_ROW],
-    detail: async () => REQUEST_ROW,
+    detail: async () => RECEIVED_ROW,
+    // V2: the visible row, the transition, the history and the scope
+    findVisible: async () => ({ ...REQUEST_ROW, ...CONTEXT }),
+    transition: async () => true,
+    events: async () => [],
+    comments: async () => [],
+    assignedUnitIds: async () => [],
     listPending: async () => [
       {
         ...REQUEST_ROW,
@@ -81,12 +131,6 @@ function repository(overrides: Record<string, unknown> = {}) {
         departmentName: "LSS",
       },
     ],
-    markReceived: async () => ({
-      ...REQUEST_ROW,
-      status: "RECEIVED" as const,
-      receivedAt: CREATED,
-      receivedByName: "Beszerző Béla",
-    }),
     notificationRecipients: async () => [
       {
         id: "notif-1",
@@ -436,18 +480,24 @@ describe("a beérkezés jelölése", () => {
     );
   });
 
-  it("nem létező igényre ConflictException, nem csendes null", async () => {
-    const { service: s } = service({ repo: { detail: async () => null } });
+  it("nem létező (vagy nem látható) igényre 404, nem csendes null", async () => {
+    // V2: the request is looked up through the caller's worksheet scope, so
+    // "does not exist" and "not yours to see" are the same answer
+    const { service: s } = service({ repo: { findVisible: async () => null } });
     await assert.rejects(
       s.receive("mr-x", belsos("beszerzo-1")),
-      ConflictException,
+      NotFoundException,
     );
   });
 
   it("már beérkezettként jelölt igényre ConflictException", async () => {
     const { service: s } = service({
       repo: {
-        detail: async () => ({ ...REQUEST_ROW, status: "RECEIVED" as const }),
+        findVisible: async () => ({
+          ...REQUEST_ROW,
+          ...CONTEXT,
+          status: "RECEIVED" as const,
+        }),
       },
     });
     await assert.rejects(
@@ -456,12 +506,19 @@ describe("a beérkezés jelölése", () => {
     );
   });
 
-  it("még el sem küldött (DRAFT) igényre ConflictException, nem sikeres jelölés", async () => {
+  it("még el sem küldött (DRAFT) igényre nincs sikeres jelölés", async () => {
     const { service: s } = service({
-      repo: { detail: async () => DRAFT_ROW },
+      repo: { findVisible: async () => ({ ...DRAFT_ROW, ...CONTEXT }) },
     });
+    // V2: someone else's draft is not visible at all (a draft is the
+    // requester's own working state), so it is 404, not 409
     await assert.rejects(
       s.receive("mr-1", belsos("beszerzo-1")),
+      NotFoundException,
+    );
+    // the requester's own draft is visible, and still cannot be received
+    await assert.rejects(
+      s.receive("mr-1", belsos("kero-1")),
       ConflictException,
     );
   });

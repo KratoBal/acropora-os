@@ -368,6 +368,45 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "munkalap_belso_linkje",
     ],
   },
+  {
+    id: "MATERIAL_REQUEST_CLAIMED",
+    name: "Anyagigény beszerzése átvéve",
+    description:
+      "Akkor megy ki, amikor egy kolléga átveszi az anyagigény beszerzését („Én intézem a beszerzést”). Címzettje az igényt kérő kolléga.",
+    variables: [
+      "cimzett",
+      "kuldo_neve",
+      "munkalap_szama",
+      "tetelek",
+      "munkalap_belso_linkje",
+    ],
+  },
+  {
+    id: "MATERIAL_REQUEST_ORDERED",
+    name: "Anyag megrendelve",
+    description:
+      "Akkor megy ki, amikor a beszerzés felelőse rögzíti, hogy megrendelte az anyagot. Címzettje az igényt kérő kolléga.",
+    variables: [
+      "cimzett",
+      "kuldo_neve",
+      "munkalap_szama",
+      "tetelek",
+      "munkalap_belso_linkje",
+    ],
+  },
+  {
+    id: "MATERIAL_REQUEST_CANCELLED",
+    name: "Anyagigény visszavonva",
+    description:
+      "Akkor megy ki, amikor egy már átvett anyagigényt visszavonnak. Címzettje a beszerzés felelőse. Ha még senki nem vette át, nem megy ki.",
+    variables: [
+      "cimzett",
+      "kuldo_neve",
+      "munkalap_szama",
+      "tetelek",
+      "munkalap_belso_linkje",
+    ],
+  },
   /**
    * Balazs kerese, 2026-09-24 17:03 UTC (Akvariumok szal, message_id
    * 1552727165714563153): a vizmeres-level "keszuljon hozza sablon, mint a
