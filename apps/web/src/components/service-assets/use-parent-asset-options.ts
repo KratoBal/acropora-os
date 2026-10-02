@@ -6,6 +6,13 @@ import { useEffect, useState } from "react";
 import { assetsApi } from "@/lib/api/assets";
 
 /**
+ * EGY LAP, LEGFELJEBB 500 (Balázs, 2026-10-02 08:23 UTC: „mondjuk 350”; a
+ * végpont felső határa is 500). Ha a találat több, a választó kiírja, és a
+ * kereső szűkít.
+ */
+export const PARENT_PICKER_LIMIT = 500;
+
+/**
  * A SZÜLŐESZKÖZ-VÁLASZTÓ LISTÁJA, A FELVITELEN ÉS A SZERKESZTŐN UGYANAZ
  * (acrobot 26045: „ugyanazzal a választóval, mint létrehozáskor”).
  *
@@ -28,19 +35,21 @@ export function useParentAssetOptions(input: {
   /** A szerkesztett eszköz: ő és a leszármazottai kimaradnak. */
   excludeSubtreeOf?: string;
   onError: (message: string) => void;
-}): AssetListItem[] {
+}): { items: AssetListItem[]; total: number } {
   const [items, setItems] = useState<AssetListItem[]>([]);
+  const [total, setTotal] = useState(0);
   const { token, owner, departmentId, search, excludeSubtreeOf, onError } =
     input;
   const ownerType = owner?.type ?? "";
   const ownerId = owner?.id ?? "";
   useEffect(() => {
     setItems([]);
+    setTotal(0);
     if (!ownerType || !ownerId) return;
     const controller = new AbortController();
     const query = new URLSearchParams({
       page: "1",
-      pageSize: "100",
+      pageSize: String(PARENT_PICKER_LIMIT),
       status: "ACTIVE",
       ownerType,
       ownerId,
@@ -50,7 +59,10 @@ export function useParentAssetOptions(input: {
     if (excludeSubtreeOf) query.set("excludeSubtreeOf", excludeSubtreeOf);
     void assetsApi
       .list(token, query, controller.signal)
-      .then((result) => setItems(result.items))
+      .then((result) => {
+        setItems(result.items);
+        setTotal(result.pagination.totalItems);
+      })
       .catch((cause) => {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
           onError(
@@ -64,7 +76,17 @@ export function useParentAssetOptions(input: {
     // függvény, és a lista attól nem változik
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, ownerType, ownerId, departmentId, search, excludeSubtreeOf]);
-  return items;
+  return { items, total };
+}
+
+/** A csonkolás felirata, vagy `null`, ha minden jelölt látszik. */
+export function parentAssetTruncation(
+  shown: number,
+  total: number,
+): string | null {
+  return total > shown
+    ? `${total} találatból az első ${shown} látszik. Szűkíts alegységre vagy keresővel.`
+    : null;
 }
 
 /**

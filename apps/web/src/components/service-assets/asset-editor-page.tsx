@@ -53,6 +53,7 @@ import {
 } from "./asset-labels";
 import {
   parentAssetRows,
+  parentAssetTruncation,
   useParentAssetOptions,
 } from "./use-parent-asset-options";
 
@@ -427,14 +428,15 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   }, [token]);
 
   // a felvitellel közös, szűkített lista; ő maga és a leszármazottai nélkül
-  const parentAssets = useParentAssetOptions({
-    token,
-    owner,
-    departmentId,
-    search: parentSearch,
-    excludeSubtreeOf: assetId,
-    onError: setError,
-  });
+  const { items: parentAssets, total: parentAssetTotal } =
+    useParentAssetOptions({
+      token,
+      owner,
+      departmentId,
+      search: parentSearch,
+      excludeSubtreeOf: assetId,
+      onError: setError,
+    });
 
   useEffect(() => {
     if (assetId) return;
@@ -832,6 +834,17 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                     </option>
                   ))}
                 </Select>
+                {parentAssetTruncation(
+                  parentAssets.length,
+                  parentAssetTotal,
+                ) ? (
+                  <p className="text-xs text-pilot-grey-500">
+                    {parentAssetTruncation(
+                      parentAssets.length,
+                      parentAssetTotal,
+                    )}
+                  </p>
+                ) : null}
               </div>
             </FormField>
             <FormField label="Típus">

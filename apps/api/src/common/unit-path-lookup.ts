@@ -1,4 +1,4 @@
-import { buildUnitPaths } from "../service-assets/unit-path.js";
+import { buildUnitPaths, type UnitRow } from "../service-assets/unit-path.js";
 
 /**
  * EGY ALEGYSEG TELJES UTJA, A GYOKERTOL LEFELE -- ADATBAZISBOL.
@@ -121,39 +121,7 @@ export async function unitPathsFor(
     ...new Set(departmentIds.filter((id): id is string => Boolean(id))),
   ];
   if (kertek.length === 0) return new Map();
-
-  const gazdak = await client.worksheetDepartment.findMany({
-    where: { id: { in: kertek } },
-    select: { id: true, customerId: true },
-  });
-  const customerIds = [
-    ...new Set(
-      gazdak
-        .map((sor) => sor.customerId)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
-  if (customerIds.length === 0) return new Map();
-
-  const nyers = await client.worksheetDepartment.findMany({
-    where: { customerId: { in: customerIds } },
-    select: { id: true, name: true, parentId: true },
-  });
-  /**
-   * A NEV NELKULI SOR KIMARAD, NEM URES NEVVEL KERUL BE. A kliens felulete
-   * elhagyhatonak irja le a mezot (lasd fent, miert), a valosagban viszont
-   * kotelezo -- egy ures nevvel beengedett sor CSENDBEN rovidebb utat adna.
-   */
-  const sorok = nyers
-    .filter(
-      (sor): sor is { id: string; name: string; parentId: string | null } =>
-        typeof sor.name === "string",
-    )
-    .map((sor) => ({
-      id: sor.id,
-      name: sor.name,
-      parentId: sor.parentId ?? null,
-    }));
+  const sorok = await unitRowsFor(client, kertek);
 
   /**
    * TOBB PARTNER FAJA EGY HIVASBAN: BIZTONSAGOS, ES EZT MEG KELL INDOKOLNI.
@@ -176,4 +144,48 @@ export async function unitPathsFor(
     if (ut) eredmeny.set(id, ut);
   }
   return eredmeny;
+}
+
+/**
+ * A KERT EGYSEGEK GAZDAINAK TELJES FAI, SOROKKENT (a `unitPathsFor` elso fele;
+ * a kozos felso helyszin is ebbol szamol, `sharedAncestor`). Ket kerdes,
+ * akarhany egyseg.
+ */
+export async function unitRowsFor(
+  client: UnitPathListClient,
+  kertek: readonly string[],
+): Promise<UnitRow[]> {
+  if (kertek.length === 0) return [];
+  const gazdak = await client.worksheetDepartment.findMany({
+    where: { id: { in: [...kertek] } },
+    select: { id: true, customerId: true },
+  });
+  const customerIds = [
+    ...new Set(
+      gazdak
+        .map((sor) => sor.customerId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (customerIds.length === 0) return [];
+
+  const nyers = await client.worksheetDepartment.findMany({
+    where: { customerId: { in: customerIds } },
+    select: { id: true, name: true, parentId: true },
+  });
+  /**
+   * A NEV NELKULI SOR KIMARAD, NEM URES NEVVEL KERUL BE. A kliens felulete
+   * elhagyhatonak irja le a mezot (lasd fent, miert), a valosagban viszont
+   * kotelezo -- egy ures nevvel beengedett sor CSENDBEN rovidebb utat adna.
+   */
+  return nyers
+    .filter(
+      (sor): sor is { id: string; name: string; parentId: string | null } =>
+        typeof sor.name === "string",
+    )
+    .map((sor) => ({
+      id: sor.id,
+      name: sor.name,
+      parentId: sor.parentId ?? null,
+    }));
 }

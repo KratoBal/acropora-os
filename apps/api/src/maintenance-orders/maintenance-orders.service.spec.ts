@@ -90,6 +90,9 @@ function fakeRepository(overrides: Partial<Record<string, unknown>> = {}) {
     detail: async () => null,
     departmentPaths: async (ids: readonly string[]) =>
       new Map(ids.map((id) => [id, [id]])),
+    // alapból minden helyszín külön gyökér: nincs közös felső helyszín
+    departmentTree: async (ids: readonly string[]) =>
+      ids.map((id) => ({ id, name: id, parentId: null })),
     saveSignedDocumentAndMarkSigned: async () => undefined,
     attachServiceJob: async () => ({ id: "order-1", status: "SIGNED" }),
     markRevoked: async () => ({ id: "order-1", status: "REVOKED" }),
@@ -314,6 +317,116 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
       })),
     };
   }
+
+  /*
+    A KÖZÖS FELSŐ HELYSZÍN (Balázs, 2026-10-02 07:36 UTC; kártya 1806e061; az
+    éles eset: a Cápasuli és három medencéje). MI PIROSÍT: ha a közös felső
+    helyszín alatti tételek nem kaphatnának egy megrendelőlapot; ha a hibajegy
+    nem a közös helyszínre kerülne; ha a munkalapok elveszítenék a saját
+    medencéjüket, és mind a közösre kerülnének.
+  */
+  const CAPASULI = [
+    { id: "capasuli", name: "Cápasuli", parentId: null },
+    { id: "karanten", name: "Karantén medence", parentId: "capasuli" },
+    { id: "kismedence", name: "Kismedence", parentId: "capasuli" },
+    { id: "nagymedence", name: "Nagymedence", parentId: "capasuli" },
+    { id: "fokamedence", name: "Fókamedence", parentId: null },
+  ];
+
+  it("a Cápasuli medencéi és maga a Cápasuli: egy megrendelőlap", async () => {
+    const item = (id: string, departmentId: string, position: number) => ({
+      id,
+      position,
+      description: `${departmentId} karbantartás`,
+      unitNet: "100000",
+      quantity: "1",
+      occasionsPerYear: 4,
+      vatRatePercent: "27",
+      departmentId,
+    });
+    let issued = 0;
+    const { service } = makeService({
+      departmentTree: async () => CAPASULI,
+      contractForIssuance: async () =>
+        contractRow({
+          items: [
+            item("i-1", "capasuli", 1),
+            item("i-2", "karanten", 2),
+            item("i-3", "nagymedence", 3),
+          ],
+        }),
+      issue: async (input: unknown) => {
+        issued += 1;
+        return { id: "order-1", ...(input as object) };
+      },
+    });
+    await service.issue(
+      { contractId: "contract-1", itemIds: ["i-1", "i-2", "i-3"] },
+      ACTOR,
+    );
+    assert.equal(issued, 1);
+  });
+
+  it("aláíráskor a hibajegy a Cápasulira, a munkalapok a saját medencéjükre kerülnek", async () => {
+    let jobDepartment: string | undefined;
+    const worksheetDepartments: string[] = [];
+    const wired = new MaintenanceOrdersService(
+      fakeRepository({
+        departmentTree: async () => CAPASULI,
+        detail: async () =>
+          orderRow("ISSUED", ["karanten", "kismedence", "nagymedence"]),
+      }) as never,
+      {
+        create: async (input: { departmentId?: string }) => {
+          jobDepartment = input.departmentId;
+          return { id: "job-1" };
+        },
+      } as never,
+      {
+        create: async (input: { departmentId: string }) => {
+          worksheetDepartments.push(input.departmentId);
+          return { id: "worksheet-1" };
+        },
+      } as never,
+    );
+    await wired.uploadSignedDocument(
+      "order-1",
+      {
+        mimetype: "application/pdf",
+        buffer: Buffer.from("%PDF-1.4 ..."),
+        originalname: "alairt.pdf",
+        size: 10,
+      } as Express.Multer.File,
+      ACTOR,
+    );
+    assert.equal(jobDepartment, "capasuli");
+    assert.deepEqual(worksheetDepartments, [
+      "karanten",
+      "kismedence",
+      "nagymedence",
+    ]);
+  });
+
+  it("egy Cápasuli-medence és a független Fókamedence: marad a 400, a helyszínek nevével", async () => {
+    const { service } = makeService({
+      departmentTree: async () => CAPASULI,
+      detail: async () => orderRow("ISSUED", ["karanten", "fokamedence"]),
+    });
+    await assert.rejects(
+      () =>
+        service.uploadSignedDocument(
+          "order-1",
+          {
+            mimetype: "application/pdf",
+            buffer: Buffer.from("%PDF-1.4 ..."),
+            originalname: "alairt.pdf",
+            size: 10,
+          } as Express.Multer.File,
+          ACTOR,
+        ),
+      /különböző helyszínen vannak \(karanten, fokamedence\)/,
+    );
+  });
 
   it("aláírt PDF csak ISSUED állapotú rendeléshez tölthető fel", async () => {
     const { service } = makeService({ detail: async () => orderRow("SIGNED") });

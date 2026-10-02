@@ -111,7 +111,13 @@ export function toStoredLabelCode(value: unknown): unknown {
 
 export class AssetListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() page = 1;
-  @Type(() => Number) @IsInt() @Min(10) @Max(100) @IsOptional() pageSize = 25;
+  /**
+   * A FELSŐ HATÁR 500 (Balázs, 2026-10-02 08:23 UTC: „a szülőeszköz lista
+   * hosszát ki kell bővíteni mondjuk 350-re”; acrobot 26061). A szülő-választó
+   * egy lapot kér; a BIO/OSV alatt ma 600 új eszköz áll, tehát 100-nál csonkolt.
+   * Az alapérték 25 marad: a többi hívó nem változik.
+   */
+  @Type(() => Number) @IsInt() @Min(10) @Max(500) @IsOptional() pageSize = 25;
   @IsString() @IsOptional() search?: string;
   @IsIn(ASSET_OWNER_TYPES)
   @IsOptional()

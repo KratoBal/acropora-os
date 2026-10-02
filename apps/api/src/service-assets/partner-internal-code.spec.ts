@@ -251,8 +251,28 @@ describe("trailingRomanNumeralValue", () => {
 
   it("kisebb és nagyobb értékeket is helyesen ismer fel (szubtraktív alak)", () => {
     assert.equal(trailingRomanNumeralValue("Szelep IX"), 9);
-    assert.equal(trailingRomanNumeralValue("Szelep XL"), 40);
-    assert.equal(trailingRomanNumeralValue("Szelep MCMXCIV"), 1994);
+    assert.equal(trailingRomanNumeralValue("Szelep XII"), 12);
+    assert.equal(trailingRomanNumeralValue("Szelep XXXIX"), 39);
+  });
+
+  /*
+    CSAK I, V, X (Balázs, 2026-10-02 08:46 UTC: „a C az nem szám ebben az
+    esetben”). MI PIROSÍT: ha egy önálló C, D, M vagy L névvég (betűjel)
+    sorszámnak számítana (Lámpa C -> 100); ha az XL (méret) 40 lenne; ha
+    egy L, C, D vagy M betűt tartalmazó alak bármilyen értéket adna.
+  */
+  it("az L, C, D, M betű soha nem szám, az XL sem", () => {
+    assert.deepEqual(
+      [
+        "Lámpa C",
+        "Lámpa D",
+        "Lámpa M",
+        "Lámpa L",
+        "Szelep XL",
+        "Szelep MCMXCIV",
+      ].map(trailingRomanNumeralValue),
+      [null, null, null, null, null, null],
+    );
   });
 
   it("ha a név nem végződik római számra, null-t ad", () => {
