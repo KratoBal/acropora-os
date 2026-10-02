@@ -9,6 +9,7 @@ import {
   bankMatchOf,
   filterIncoming,
   incomingListResponse,
+  incomingPaymentOf,
   paymentStateOf,
   toIncomingDetail,
   toIncomingListItem,
@@ -69,6 +70,7 @@ const pairing = (over: Partial<DocumentPairing> = {}): DocumentPairing => ({
   payee: "COMPANY",
   kind: "INVOICE",
   debits: [debit],
+  paidInFull: true,
   ...over,
 });
 
@@ -164,6 +166,114 @@ describe("bankMatchOf", () => {
 // MI PIROSÍT: ha egy összeg rossz tizedesre kerekedne (forint egészre, deviza
 // két tizedesre); ha a kifizetés banki tranzakció-azonosítója kiszivárogna az
 // adatlapra; ha az e-számla jelölés vagy a párosítás nem a sorból jönne.
+/*
+  A KIFIZETETTSÉG A FEEDBŐL ÉS A BANKI PÁROSÍTÁSBÓL (acrobot 25988). MI PIROSÍT:
+  ha a Számlázz.hu kifizetése nem nyerne a párosítás fölött; ha a részben
+  fizetett feed és a párosítás eltérése nem lenne jelölve; ha egy fizetés
+  nélküli, de párosított számla nem lenne nálunk fizetett, a legutolsó terhelés
+  napjával; ha egy nem párosítandó (díjbekérő, nem a cégre szóló) számla a
+  párosítás miatt fizetettnek látszana.
+*/
+describe("incomingPaymentOf", () => {
+  const paired = bankMatchOf(
+    row(),
+    new Map([
+      [
+        "doc-1",
+        pairing({
+          debits: [debit, { ...debit, bookingDate: "2026-10-02", amount: "0" }],
+        }),
+      ],
+    ]),
+  );
+  const unpaired = bankMatchOf(row(), new Map());
+  const result = (
+    over: Partial<IncomingBillingDocument>,
+    match = paired,
+    paidInFull = true,
+  ) => {
+    const r = incomingPaymentOf(row(over), match, paidInFull);
+    return [
+      r.paymentState,
+      r.paymentSource,
+      r.paidAmount,
+      r.lastPaymentDate,
+      r.paymentConflict,
+    ];
+  };
+
+  it("the feed's payment wins; a part payment against a full pairing is flagged", () => {
+    assert.deepEqual(
+      result({ paidAmount: D(12700), lastPaymentDate: day("2026-09-29") }),
+      ["PAID", "SZAMLAZZ", "12700", "2026-09-29", false],
+    );
+    assert.deepEqual(
+      result({ paidAmount: D(5000), lastPaymentDate: day("2026-09-29") }),
+      ["PARTIAL", "SZAMLAZZ", "5000", "2026-09-29", true],
+    );
+    assert.deepEqual(
+      result(
+        { paidAmount: D(5000), lastPaymentDate: day("2026-09-29") },
+        unpaired,
+      ),
+      ["PARTIAL", "SZAMLAZZ", "5000", "2026-09-29", false],
+    );
+  });
+
+  it("no payment in the feed, paired: paid with us, the gross, the latest debit's day", () => {
+    assert.deepEqual(result({}), [
+      "PAID",
+      "BANK_PAIRING",
+      "12700",
+      "2026-10-02",
+      false,
+    ]);
+    // a feed version without payments at all is the same
+    assert.deepEqual(result({ paymentsKnown: false }), [
+      "PAID",
+      "BANK_PAIRING",
+      "12700",
+      "2026-10-02",
+      false,
+    ]);
+  });
+
+  it("a pairing that is not a full payment (an amount difference, paid twice, a refund) is not paid", () => {
+    assert.deepEqual(result({}, paired, false), [
+      "UNPAID",
+      null,
+      "0",
+      null,
+      false,
+    ]);
+    // nor does it raise a conflict against a part payment in the feed
+    assert.deepEqual(
+      result(
+        { paidAmount: D(5000), lastPaymentDate: day("2026-09-29") },
+        paired,
+        false,
+      ),
+      ["PARTIAL", "SZAMLAZZ", "5000", "2026-09-29", false],
+    );
+  });
+
+  it("neither: the feed's state, no source; not to pair is not paired", () => {
+    assert.deepEqual(result({}, unpaired), ["UNPAID", null, "0", null, false]);
+    assert.deepEqual(result({ paymentsKnown: false }, unpaired), [
+      "UNKNOWN",
+      null,
+      "0",
+      null,
+      false,
+    ]);
+    const proforma = bankMatchOf(
+      row({ kindCode: "D" }),
+      new Map([["doc-1", pairing()]]),
+    );
+    assert.deepEqual(result({ kindCode: "D" }, proforma)[0], "UNPAID");
+  });
+});
+
 describe("toIncomingListItem and toIncomingDetail", () => {
   it("formats amounts per currency and derives the states", () => {
     const pairings = new Map([["doc-1", pairing()]]);

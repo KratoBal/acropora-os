@@ -132,6 +132,8 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
             paymentState={item.paymentState}
             paidAmount={item.paidAmount}
             lastPaymentDate={item.lastPaymentDate}
+            paymentSource={item.paymentSource}
+            paymentConflict={item.paymentConflict}
             currency={item.currency}
           />
         </span>
