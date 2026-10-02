@@ -58,6 +58,7 @@ export function JevQualityQueueTable({
   now,
   hrefFor,
   emptyMessage = "Nem találtunk ellenőrzést igénylő termékadatot.",
+  emptyRole = "status",
 }: {
   rows: readonly ProductQualityQueueRow[];
   filter: QueueFilter;
@@ -69,6 +70,8 @@ export function JevQualityQueueTable({
    * after a run; with no stored run the caller names the real state.
    */
   emptyMessage?: string;
+  /** An error is announced as an alert, every other empty state as status. */
+  emptyRole?: "status" | "alert";
 }) {
   const visible = filterQueue(rows, filter);
   return (
@@ -77,7 +80,10 @@ export function JevQualityQueueTable({
       className="flex flex-col overflow-x-auto rounded-[14px] border border-pilot-grey-200 bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
     >
       {visible.length === 0 ? (
-        <p role="status" className="py-3 text-sm leading-5 text-pilot-grey-600">
+        <p
+          role={emptyRole}
+          className="py-3 text-sm leading-5 text-pilot-grey-600"
+        >
           {emptyMessage}
         </p>
       ) : (

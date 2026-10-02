@@ -22,8 +22,13 @@ Council has to decide whether to build a reviewed draft-product workflow.
 
 The code lives in `packages/jev/src/product-enrichment/`. It is **not
 re-exported** from `@acropora/jev`'s main entry point, because the API imports
-that entry point. V0 has no live call path, and keeping it out of the main
-entry point means the API cannot reach it by accident.
+that entry point, and keeping it out means the API cannot reach it by accident.
+
+Since PD-013 (the first live round, 2026-10-02; see
+[`product-enrichment-pd013.md`](product-enrichment-pd013.md)) the directory has
+one named entry, `@acropora/jev/product-enrichment`. Only the API's shadow run
+imports it. The model itself stays pure: it does not fetch, write a product or
+call Jev.
 
 ## Inventory: what already exists
 

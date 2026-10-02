@@ -1,8 +1,12 @@
 /**
  * Product Enrichment & Verification V0 (ACD-021 / PD-011).
  *
- * DELIBERATELY NOT RE-EXPORTED from `../index.ts`: the API imports
- * `@acropora/jev`, and V0 has no live call path. The offline harness imports
+ * NOT RE-EXPORTED from `../index.ts`, so nothing that imports `@acropora/jev`
+ * reaches it by accident. Since PD-013 (2026-10-02, the first live round) it
+ * has ONE named entry, `@acropora/jev/product-enrichment`, imported only by the
+ * API's shadow run (`apps/api/src/products/enrichment/`). That run reconciles
+ * fetched page values with this model and stores the results; nothing in this
+ * directory writes a product. The offline harness keeps importing
  * `dist/product-enrichment/index.js` directly.
  */
 export {

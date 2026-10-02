@@ -1,11 +1,18 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import type { Session } from "@acropora/types";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import type { ProductQualityQueuePage, Session } from "@acropora/types";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { JevCatalogQualityPage } from "./jev-catalog-quality-page";
-import { catalogQueueState } from "./jev-catalog-quality";
+import { catalogQueueState, queueRowHref } from "./jev-catalog-quality";
 
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
+const api = vi.hoisted(() => ({ qualityQueue: vi.fn() }));
 
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
@@ -13,6 +20,7 @@ vi.mock("next/font/local", () => ({
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
+vi.mock("@/lib/api/products", () => ({ productApi: api }));
 
 function session(
   role: Session["user"]["role"],
@@ -35,123 +43,196 @@ function session(
   };
 }
 
-/** The menu as a server with JEV_PRODUCT_ENRICHMENT on would serve it. */
-const SWITCH_ON: Session["navigation"] = [
+/** The menu as a server serves it to a pilot user with the switch on. */
+const SERVED: Session["navigation"] = [
   { id: "products", surfaces: ["web", "mobile"] },
   { id: "product-data-quality", surfaces: ["web"] },
 ];
 
-const FILTERS = [
-  "Összes",
-  "Kritikus",
-  "Ütközés",
-  "Hiányzó adat",
-  "Javaslat",
-  "Ellenőrzött",
-];
+const SUMMARY = {
+  all: 2,
+  critical: 1,
+  conflict: 1,
+  missing: 1,
+  suggestion: 0,
+  verified: 0,
+};
 
-const fetchSpy = vi.fn();
-const originalFetch = globalThis.fetch;
+/** Invented rows only. */
+function page(
+  over: Partial<ProductQualityQueuePage> = {},
+): ProductQualityQueuePage {
+  return {
+    availability: "review",
+    filter: "all",
+    rows: [
+      {
+        productId: "p-1",
+        productName: "Kitalált pumpa",
+        field: "flowRate",
+        tier: "C",
+        status: "CONFLICTING_SOURCES",
+        lastCheckedAt: "2026-10-02T21:00:00.000Z",
+      },
+      {
+        productId: "p-2",
+        productName: "Kitalált adalék",
+        field: "ean",
+        tier: "C",
+        status: "MISSING",
+        lastCheckedAt: "2026-10-02T21:00:00.000Z",
+      },
+    ],
+    nextCursor: null,
+    summary: SUMMARY,
+    checkedProducts: 2,
+    ...over,
+  };
+}
+
 beforeEach(() => {
-  fetchSpy.mockReset();
-  globalThis.fetch = fetchSpy as unknown as typeof fetch;
-});
-afterEach(() => {
-  globalThis.fetch = originalFetch;
+  api.qualityQueue.mockReset();
 });
 
-// MI PIROSÍT: ha a kikapcsolt kapcsolónál a sor nyugodt üres állapotot
-// mondana ("nincs ellenőrizendő"); ha a két "nem elérhető" ok összemosódna;
-// ha egy szűrő hiányozna; ha az indítás vagy az export engedélyezett lenne; ha
-// a lap bármit lekérne; ha jog nélkül is megnyílna.
+// MI PIROSÍT: ha a kikapcsolt vagy próba-listán kívüli felhasználónál kérés
+// menne ki, vagy nyugodt üres állapotot mondana; ha a hiba üres táblának
+// látszana; ha a szűrő nem a szerverhez menne; ha az indítás vagy az export
+// engedélyezett lenne; ha jog nélkül is megnyílna.
 describe("JevCatalogQualityPage", () => {
-  it("switch off: the six filters over an empty queue that says it is unavailable", () => {
+  it("a menüben nem kiszolgált kapcsoló: nem kér semmit, és nem elérhetőt mond", async () => {
     auth.session = session("OWNER");
     render(<JevCatalogQualityPage />);
-
-    expect(
-      screen.getByRole("heading", { name: "Katalógus adatminőség" }),
-    ).toBeInTheDocument();
-    const filters = within(screen.getByRole("group", { name: "Szűrés" }))
-      .getAllByRole("button")
-      .map((button) => button.textContent);
-    expect(filters).toEqual(FILTERS);
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(await screen.findByRole("status")).toHaveTextContent(
       "A katalógus adatminőség-ellenőrzése jelenleg nem elérhető.",
+    );
+    expect(api.qualityQueue).not.toHaveBeenCalled();
+  });
+
+  it("a szerver off-ot mond (nincs a próba-listán): nem elérhető", async () => {
+    auth.session = session("OWNER", SERVED);
+    api.qualityQueue.mockResolvedValue(
+      page({ availability: "off", rows: [], checkedProducts: 0 }),
+    );
+    render(<JevCatalogQualityPage />);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "jelenleg nem elérhető",
+    );
+  });
+
+  it("tárolt ellenőrzés nélkül ezt mondja ki, nem azt, hogy minden rendben", async () => {
+    auth.session = session("VIEWER", SERVED);
+    api.qualityQueue.mockResolvedValue(
+      page({ rows: [], checkedProducts: 0, summary: { ...SUMMARY, all: 0 } }),
+    );
+    render(<JevCatalogQualityPage />);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "nincs tárolt JEV ellenőrzés",
     );
     expect(
       screen.queryByText("Nem találtunk ellenőrzést igénylő termékadatot."),
     ).not.toBeInTheDocument();
+  });
+
+  it("a sorok a tárolt ellenőrzésből; az ütközés a mező nézetére, a többi az ellenőrzésre visz", async () => {
+    auth.session = session("OWNER", SERVED);
+    api.qualityQueue.mockResolvedValue(page());
+    render(<JevCatalogQualityPage />);
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("Kitalált pumpa")).toBeInTheDocument();
+    const links = within(table)
+      .getAllByRole("link")
+      .map((a) => a.getAttribute("href"));
+    expect(links).toEqual([
+      "/products/p-1/adatellenorzes/flowRate",
+      "/products/p-2/adatellenorzes",
+    ]);
+    expect(api.qualityQueue).toHaveBeenCalledWith("token-1", "all", null);
+  });
+
+  it("a szűrő a szerverhez megy", async () => {
+    auth.session = session("OWNER", SERVED);
+    api.qualityQueue.mockResolvedValue(page());
+    render(<JevCatalogQualityPage />);
+    await screen.findByRole("table");
+    api.qualityQueue.mockResolvedValue(page({ filter: "conflict", rows: [] }));
+    fireEvent.click(screen.getByRole("button", { name: "Ütközés" }));
+    await waitFor(() =>
+      expect(api.qualityQueue).toHaveBeenLastCalledWith(
+        "token-1",
+        "conflict",
+        null,
+      ),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Ebben a szűrőben nincs tétel.",
+    );
+  });
+
+  it("a kérés hibája riasztás szövegben, nem üres tábla", async () => {
+    auth.session = session("OWNER", SERVED);
+    api.qualityQueue.mockRejectedValue(new Error("nem érhető el"));
+    render(<JevCatalogQualityPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Az adatok jelenleg nem frissíthetők.",
+    );
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    expect(screen.getByText("0 elem megjelenítve")).toBeInTheDocument();
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("switch on, as served: still no rows, and it says there is no stored run", () => {
-    auth.session = session("VIEWER", SWITCH_ON);
+  it("a következő lapot a kapott kurzorral kéri, és hozzáfűzi", async () => {
+    auth.session = session("OWNER", SERVED);
+    api.qualityQueue.mockResolvedValueOnce(page({ nextCursor: "c-2" }));
     render(<JevCatalogQualityPage />);
-
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Az ellenőrzési sor még nem elérhető: nincs tárolt JEV ellenőrzés.",
+    await screen.findByRole("table");
+    api.qualityQueue.mockResolvedValueOnce(
+      page({
+        rows: [
+          {
+            ...page().rows[1]!,
+            productId: "p-3",
+            productName: "Kitalált harmadik",
+          },
+        ],
+        nextCursor: null,
+      }),
     );
-    expect(fetchSpy).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Továbbiak betöltése" }),
+    );
+    expect(await screen.findByText("Kitalált harmadik")).toBeInTheDocument();
+    expect(api.qualityQueue).toHaveBeenLastCalledWith("token-1", "all", "c-2");
+    expect(screen.getByText("Kitalált pumpa")).toBeInTheDocument();
   });
 
-  it("a filter can be chosen, and the empty state does not change its meaning", () => {
-    auth.session = session("OWNER", SWITCH_ON);
+  it("az indítás és az export letiltva, az okuk szövegben", async () => {
+    auth.session = session("OWNER", SERVED);
+    api.qualityQueue.mockResolvedValue(page());
     render(<JevCatalogQualityPage />);
-
-    const conflict = screen.getByRole("button", { name: "Ütközés" });
-    expect(conflict).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(conflict);
-    expect(conflict).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Összes" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "nincs tárolt JEV ellenőrzés",
-    );
-  });
-
-  it("starting a check and the export are disabled, with the reason in words", () => {
-    auth.session = session("OWNER", SWITCH_ON);
-    render(<JevCatalogQualityPage />);
-
+    await screen.findByRole("table");
     expect(
       screen.getByRole("button", { name: "Új ellenőrzés indítása" }),
     ).toBeDisabled();
     expect(
-      screen.getByText("Ellenőrzés indítása még nincs engedélyezve."),
+      screen.getByText("Az ellenőrzést egyelőre kézzel, a szerveren indítjuk."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export" })).toBeDisabled();
-    expect(
-      screen.getByText("Az export még nincs engedélyezve."),
-    ).toBeInTheDocument();
-    // no KPI cards and no catalogue-wide total until designed and backed
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/ellenőrzendő rekord/)).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Összes megtekintése" }),
-    ).not.toBeInTheDocument();
   });
 
-  it("without products.view it does not open, even with the switch on", () => {
-    auth.session = session("SERVICE", SWITCH_ON);
+  it("products.view nélkül nem nyílik meg, és nem kér semmit", () => {
+    auth.session = session("SERVICE", SERVED);
     render(<JevCatalogQualityPage />);
-
     expect(
       screen.getByText("Nincs hozzáférésed a termékekhez"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("group", { name: "Szűrés" }),
-    ).not.toBeInTheDocument();
+    expect(api.qualityQueue).not.toHaveBeenCalled();
   });
 
-  it("the state follows only the served switch", () => {
+  it("az állapot és a sor-hivatkozás szabálya", () => {
+    const on = new Set(["jev-product-enrichment"] as const);
     expect(catalogQueueState(new Set())).toBe("unavailable");
-    expect(catalogQueueState(new Set(["jev-product-enrichment"]))).toBe(
-      "no-stored-run",
-    );
+    expect(catalogQueueState(on, { kind: "loading" })).toBe("loading");
+    expect(catalogQueueState(on, { kind: "error" })).toBe("error");
+    expect(catalogQueueState(on, { kind: "ready", page: page() })).toBe("rows");
+    expect(queueRowHref(page().rows[1]!)).toBe("/products/p-2/adatellenorzes");
   });
 });

@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./product-enrichment": {
+      "types": "./src/product-enrichment/index.ts",
+      "default": "./dist/product-enrichment/index.js"
     }
   },
   "scripts": {

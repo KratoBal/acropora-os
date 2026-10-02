@@ -2,8 +2,8 @@
  * PRODUCT ENRICHMENT V0: THE PROVENANCE-FIRST FIELD MODEL (P-033).
  *
  * Contract: KratoBal/acropora-os #1199, ACD-021 / PD-011 (comment 5938327176).
- * Offline only: nothing in the API imports this directory, nothing here writes
- * a product, and nothing here calls Jev.
+ * Pure: nothing here fetches, writes a product, or calls Jev. Since PD-013 the
+ * API's shadow run imports it through `@acropora/jev/product-enrichment`.
  *
  * Every proposed or verified value carries where it came from. A value that
  * cannot say where it came from is not a value here: it is a rejected

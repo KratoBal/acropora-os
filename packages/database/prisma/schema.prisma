@@ -784,20 +784,22 @@ enum InvoiceSyncStatus {
 }
 
 model User {
-  id                String         @id @default(cuid())
+  id                    String                 @id @default(cuid())
   /// A gépi tokenek, amik ennek a felhasználónak a nevében járnak el.
-  serviceTokens     ServiceToken[] @relation("ServiceTokenUser")
-  email             String         @unique
+  serviceTokens         ServiceToken[]         @relation("ServiceTokenUser")
+  /// Az általa kézzel indított JEV termékellenőrzések (PD-013).
+  productEnrichmentRuns ProductEnrichmentRun[]
+  email                 String                 @unique
   /// A hivatalos, teljes név. Dokumentumon (munkalap, aláírás) ez szerepel,
   /// akkor is, ha a felületek a becenevet mutatják.
-  displayName       String
+  displayName           String
   /// Ahogy a kollégát a csapatban szólítják. A felületek ezt írják ki a
   /// teljes név helyett, ha ki van töltve. Nem egyedi, és nem azonosító.
-  nickname          String?
-  firstName         String         @default("")
-  lastName          String         @default("")
-  passwordHash      String?
-  passwordUpdatedAt DateTime?
+  nickname              String?
+  firstName             String                 @default("")
+  lastName              String                 @default("")
+  passwordHash          String?
+  passwordUpdatedAt     DateTime?
   /// AZ ALAIROKOD HASHE -- amit az ugyfel embere ir be a munkalap alairasakor.
   ///
   /// Balazs kerese, 2026-09-04: a szerelo kivalasztja az alairot a listarol, es
@@ -815,10 +817,10 @@ model User {
   /// alapertelmezett kod `0000`, es a valtoztatas a ticketing feluleté lesz,
   /// ami meg nem letezik. Balazs ezt szo szerint tudomasul vette -- az elso
   /// idoszakban az alairas ettol FORMALIS, es ez nem mulasztas.
-  signatureCodeHash String?
-  role              UserRole
-  isActive          Boolean        @default(true)
-  avatarUrl         String?
+  signatureCodeHash     String?
+  role                  UserRole
+  isActive              Boolean                @default(true)
+  avatarUrl             String?
   /// MELYIK PARTNER NEVEBEN lep be ez a fiok. Sajat kollegan mindketto NULL.
   ///
   /// A ketto kozul LEGFELJEBB az egyik lehet kitoltve (adatbazis CHECK
@@ -829,10 +831,10 @@ model User {
   /// A ketto EGYUTT ertelmezhetetlen lenne: a szures ilyenkor nem tudna,
   /// melyik partner soraira szukitsen, es barmelyik valasztas idegen adatot
   /// engedne at. Ezert a tiltas adatbazis-szinten all, nem csak a kodban.
-  customerId        String?
-  supplierId        String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  customerId            String?
+  supplierId            String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
   sessions                   Session[]
   /// A LATHATOSAGI HOZZARENDELESEI: melyik alegysegeket latja (a reszfaval egyutt).
@@ -1073,6 +1075,8 @@ model Product {
   datasheet                  ProductDatasheet?
   shippingProfile            ProductShippingProfile?
   invoiceLines               InvoiceLine[]
+  /// JEV termékellenőrzés, árnyékban (PD-013): csak olvasott eredmények.
+  enrichmentChecks           ProductEnrichmentRunProduct[]
 
   @@index([brandId])
   @@index([categoryId])
@@ -1440,6 +1444,10 @@ model Supplier {
   /// ISO 3166-1 alpha-2 országkód; a "HU"-tól eltérő érték jelöli az EU-n belüli beszerzést.
   country              String    @default("HU") @db.VarChar(2)
   email                String?
+  /// A beszállító saját weboldala (PD-013, 2026-10-02). A JEV termékellenőrzés
+  /// beszállítói oldalt CSAK ezen a hoszton (vagy aldomainjén) olvas; kézzel
+  /// töltött, opcionális.
+  websiteUrl           String?
   phone                String?
   /// What kind of partner this is. The two are independent, because one
   /// company can be both: we order from it AND we do service work for it.
@@ -7692,4 +7700,110 @@ model UserDashboardLayout {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// JEV TERMÉKELLENŐRZÉS, AZ ELSŐ ÉLES KÖR, ÁRNYÉKBAN (PD-013, 2026-10-02)
+//
+// Egy kézzel indított futás publikus termékoldalakat olvas a négy engedélyezett
+// forrásfajtából (beszállító, gyártó, Bulk Reef Supply, marine-aquatics.eu), és
+// mezőnként tárolja, mit talált, honnan, mikor, milyen bizonyítékkal. A
+// termékadathoz NEM nyúl: ezek a táblák csak olvasott eredményt tartanak, és
+// nincs út, amin egy eredmény a termékbe, az UNAS-ba vagy a Medusába jutna.
+
+enum ProductEnrichmentRunStatus {
+  RUNNING
+  COMPLETED
+  /// A termék- vagy lekérés-korlát elérésekor a futás megáll, és ezt jelzi.
+  LIMIT_REACHED
+  FAILED
+}
+
+enum ProductEnrichmentFetchOutcome {
+  /// Az oldal letöltve; `fieldCount` mező jött belőle.
+  FETCHED
+  /// A forrás nem elérhető: elutasított, captcha, robots.txt tiltja, hiba.
+  UNAVAILABLE
+  /// Nem engedélyezett hoszt: le sem kértük.
+  REFUSED
+}
+
+model ProductEnrichmentRun {
+  id            String                     @id @default(cuid())
+  status        ProductEnrichmentRunStatus @default(RUNNING)
+  requestedById String
+  requestedBy   User                       @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+  /// A futás felső korlátjai, ahogy indításkor megadták.
+  productLimit  Int
+  requestLimit  Int
+  productCount  Int                        @default(0)
+  requestCount  Int                        @default(0)
+  errorCode     String?
+  startedAt     DateTime                   @default(now())
+  completedAt   DateTime?
+
+  products ProductEnrichmentRunProduct[]
+
+  @@index([startedAt])
+}
+
+/// Egy termék egy futásban: mikor ellenőriztük, hány forrás és mező jött.
+model ProductEnrichmentRunProduct {
+  id          String               @id @default(cuid())
+  runId       String
+  run         ProductEnrichmentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  checkedAt   DateTime
+  sourceCount Int
+  fieldCount  Int
+
+  fetches ProductEnrichmentSourceFetch[]
+  fields  ProductEnrichmentFieldResult[]
+
+  @@unique([runId, productId])
+  @@index([productId, checkedAt])
+}
+
+/// Egy forrásoldal egy termékhez: mi lett vele, és miért.
+model ProductEnrichmentSourceFetch {
+  id         String                        @id @default(cuid())
+  checkId    String
+  check      ProductEnrichmentRunProduct   @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  /// MANUFACTURER | SUPPLIER | BULK_REEF_SUPPLY | MARINE_AQUATICS
+  sourceKind String                        @db.VarChar(32)
+  url        String
+  outcome    ProductEnrichmentFetchOutcome
+  /// Az ok kódja, ha nem FETCHED (pl. ROBOTS_DISALLOWED, CHALLENGE, HTTP_403).
+  reason     String?                       @db.VarChar(64)
+  httpStatus Int?
+  fetchedAt  DateTime
+  fieldCount Int                           @default(0)
+
+  @@index([checkId])
+}
+
+/// Egy mező eredménye egy termék egy ellenőrzésében (a V0 `FieldResult`).
+model ProductEnrichmentFieldResult {
+  id           String                      @id @default(cuid())
+  checkId      String
+  check        ProductEnrichmentRunProduct @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  field        String                      @db.VarChar(48)
+  tier         String                      @db.VarChar(1)
+  /// VERIFIED | SUGGESTED | MISSING | CONFLICTING_SOURCES | UNVERIFIED | POSSIBLE_WRONG_VALUE
+  status       String                      @db.VarChar(32)
+  /// A V0 normalizált értéke (pl. "3000 l/h"); csak VERIFIED/SUGGESTED mellett.
+  value        String?
+  sourceType   String?                     @db.VarChar(32)
+  sourceRef    String?
+  retrievedAt  DateTime?
+  confidence   Float?
+  /// A saját (OS) érték, normalizálva, ahogy az ellenőrzéskor állt.
+  currentValue String?
+  /// A bizonyítékok: forrás, URL, idő, a nyers érték és a kivonat, ahonnan jött.
+  evidence     Json
+  conflicts    Json?
+
+  @@unique([checkId, field])
+  @@index([status])
 }

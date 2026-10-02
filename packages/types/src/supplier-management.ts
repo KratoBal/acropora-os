@@ -17,6 +17,9 @@ export interface SupplierSummary {
   country: string;
   email?: string;
   phone?: string;
+  /** A beszállító saját weboldala (PD-013): a JEV termékellenőrzés csak ezen
+   * a hoszton olvas beszállítói oldalt. */
+  websiteUrl?: string;
   /** EU-s (nem "HU") beszállítónál a nemzetközi bankszámlaszám. */
   iban?: string;
   /** EU-s (nem "HU") beszállítónál a bank SWIFT/BIC kódja. */
@@ -57,6 +60,7 @@ export interface CreateSupplierInput {
   country?: string;
   email?: string;
   phone?: string;
+  websiteUrl?: string;
   iban?: string;
   swiftCode?: string;
   bankAccountNumber?: string;
@@ -78,6 +82,7 @@ export interface UpdateSupplierInput {
   country?: string;
   email?: string | null;
   phone?: string | null;
+  websiteUrl?: string | null;
   iban?: string | null;
   swiftCode?: string | null;
   bankAccountNumber?: string | null;

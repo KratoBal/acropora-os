@@ -10,6 +10,11 @@ import { ProductExtensionService } from "./product-extension.service.js";
 import { ProductShippingProfileController } from "./product-shipping-profile.controller.js";
 import { ProductShippingProfileRepository } from "./product-shipping-profile.repository.js";
 import { ProductShippingProfileService } from "./product-shipping-profile.service.js";
+import {
+  ENRICHMENT_READER,
+  PrismaEnrichmentReader,
+} from "./enrichment/enrichment-read.repository.js";
+import { ProductEnrichmentQueueController } from "./product-enrichment-queue.controller.js";
 import { ProductEnrichmentReviewController } from "./product-enrichment-review.controller.js";
 import { ProductEnrichmentReviewService } from "./product-enrichment-review.service.js";
 import { ProductController } from "./product.controller.js";
@@ -24,6 +29,7 @@ import { ProductService } from "./product.service.js";
     ProductShippingProfileController,
     CatalogOptionsController,
     ProductEnrichmentReviewController,
+    ProductEnrichmentQueueController,
   ],
   providers: [
     ProductRepository,
@@ -35,6 +41,7 @@ import { ProductService } from "./product.service.js";
     ProductShippingProfileService,
     ProductExtensionService,
     ProductEnrichmentReviewService,
+    { provide: ENRICHMENT_READER, useClass: PrismaEnrichmentReader },
   ],
   exports: [ProductService, ProductExtensionService, ProductBarcodeRepository],
 })

@@ -135,3 +135,32 @@ export interface ProductQualityQueueRow {
   status: ProductFieldStatus;
   lastCheckedAt: string;
 }
+
+/**
+ * The queue's filters, as the catalogue page names them (Figma 394:394). The
+ * server filters with the same definitions (`apps/api/src/products/
+ * enrichment/quality-queue.ts`), so a count and its list cannot disagree.
+ */
+export const PRODUCT_QUALITY_QUEUE_FILTERS = [
+  "all",
+  "critical",
+  "conflict",
+  "missing",
+  "suggestion",
+  "verified",
+] as const;
+export type ProductQualityQueueFilter =
+  (typeof PRODUCT_QUALITY_QUEUE_FILTERS)[number];
+
+/** `GET /products/enrichment/queue`: one page, filtered on the server. */
+export interface ProductQualityQueuePage {
+  availability: ProductEnrichmentAvailability;
+  filter: ProductQualityQueueFilter;
+  rows: ProductQualityQueueRow[];
+  /** Pass back as `cursor` for the next page; `null` on the last one. */
+  nextCursor: string | null;
+  /** How many rows each filter holds, over the latest check of each product. */
+  summary: Record<ProductQualityQueueFilter, number>;
+  /** How many products have a stored check at all. */
+  checkedProducts: number;
+}

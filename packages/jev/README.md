@@ -108,8 +108,9 @@ memóriájában, adatbázisból építve. A keresés ugyanaz az egyenlőség.
 
 A terv: [`docs/jev/product-enrichment-v0.md`](../../docs/jev/product-enrichment-v0.md). A kód a
 `src/product-enrichment/` mappában van, és **a csomag fő belépési pontja nem exportálja**, mert az
-API azt importálja, a V0-nak pedig nincs éles hívási útja. Nem ír terméket, nem publikál, nem hívja
-a Jevet, és nem kér környezeti változót.
+API azt importálja. A PD-013 óta (az első éles kör) egy névvel ellátott belépési pontja van,
+`@acropora/jev/product-enrichment`, és ezt csak az API árnyék-futása importálja. Maga a modell nem
+tölt le semmit, nem ír terméket, nem publikál, nem hívja a Jevet, és nem kér környezeti változót.
 
 | Fájl                                         | Mit csinál                                                                                            |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
