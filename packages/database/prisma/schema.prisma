@@ -1157,6 +1157,7 @@ model ProductVariant {
   stockItems                 StockItem[]
   movementLines              StockMovementLine[]
   salesOrderLines            SalesOrderLine[]
+  invoiceLines               InvoiceLine[]
   purchaseLines              PurchaseOrderLine[]
   receiptLines               GoodsReceiptLine[]
   purchaseInvoiceLines       PurchaseInvoiceLine[]
@@ -2918,15 +2919,21 @@ model InvoiceLine {
   /// a `@acropora/types` BILLING_LINE_STOCK_OUTCOMES listája). A kiállítás
   /// készletkönyvelése írja; vázlatnál és a modul előtti soroknál NULL.
   stockOutcome    String?
+  /// A tétel változata (acrobot, kártya 705768fc; Balázs 2026-09-30-i kérése):
+  /// több változatú terméknél ez mondja meg, melyik változat készlete csökken a
+  /// kiállításkor. NULL: nincs megadva; egyváltozatú terméknél nem is kell.
+  variantId       String?
 
-  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  parentLine    InvoiceLine?  @relation("InvoiceLineDiscount", fields: [parentLineId], references: [id], onDelete: Cascade)
-  discountLines InvoiceLine[] @relation("InvoiceLineDiscount")
-  product       Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  invoice       Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  parentLine    InvoiceLine?    @relation("InvoiceLineDiscount", fields: [parentLineId], references: [id], onDelete: Cascade)
+  discountLines InvoiceLine[]   @relation("InvoiceLineDiscount")
+  product       Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([parentLineId])
   @@index([productId])
+  @@index([variantId])
 }
 
 /// Egy bizonylat egy e-mailes kiküldési kísérlete (brief 20., 21. és 28.

@@ -142,6 +142,36 @@ describe("normalizeBillingDraft", () => {
     );
   });
 
+  // A VÁLTOZAT (kártya 705768fc). MI PIROSÍT: ha a termék-sor változata
+  // elveszne; ha termék nélkül, vagy a kedvezmény-soron is maradna egy; ha a
+  // régebbi, változatot nem küldő kliens sora hibát adna.
+  it("a termék-sor változata megmarad, termék nélkül és a kedvezmény-soron nincs", () => {
+    const item = input().lines[0]!;
+    const draft = ok(
+      input({
+        lines: [
+          {
+            ...item,
+            productId: "p-1",
+            variantId: " v-1 ",
+            discountPercent: "10",
+          },
+          { ...item, productId: null, variantId: "v-2" },
+          { ...item, productId: "p-1" },
+        ],
+      }),
+    );
+    assert.deepEqual(
+      draft.lines.map((line) => [line.kind, line.productId, line.variantId]),
+      [
+        ["ITEM", "p-1", "v-1"],
+        ["DISCOUNT", null, null],
+        ["ITEM", null, null],
+        ["ITEM", "p-1", null],
+      ],
+    );
+  });
+
   it("a hibás összeg-mezőt a tétel sorszámával nevezi meg", () => {
     const result = normalizeBillingDraft(
       input({

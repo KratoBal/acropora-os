@@ -52,6 +52,8 @@ export interface StockPlanLine {
   id: string;
   kind: string;
   productId: string | null;
+  /** A sor változata (kártya 705768fc); több változatú terméknél ez dönt. */
+  variantId: string | null;
   quantity: Prisma.Decimal;
 }
 
@@ -114,13 +116,19 @@ export function planInvoiceStock(input: {
       outcomes.set(line.id, "NO_VARIANT");
       continue;
     }
-    if (product.variants.length > 1) {
-      // acrobot (c): a sor csak terméket hordoz; ahol több változat van, nem
-      // találgatunk, hanem látható okkal kihagyjuk.
+    // A SOR VÁLTOZATA DÖNT (kártya 705768fc, Balázs 2026-09-30-i kérése): ha
+    // a sor megnevez egyet, és az a termék aktív változata, az mozog. Ha nem
+    // nevez meg, és egynél több van, nem találgatunk (acrobot (c)); egy idegen
+    // vagy inaktív változat sem mozog, ugyanazzal az okkal.
+    const variant = line.variantId
+      ? product.variants.find((v) => v.id === line.variantId)
+      : product.variants.length === 1
+        ? product.variants[0]
+        : undefined;
+    if (!variant) {
       outcomes.set(line.id, "VARIANT_NOT_CHOSEN");
       continue;
     }
-    const variant = product.variants[0]!;
     const sold = line.quantity.negated();
 
     if (product.isPackageProduct) {
