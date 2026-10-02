@@ -16,7 +16,14 @@ export class AquariumMaintainersService {
     private readonly aquariums: AquariumsRepository,
   ) {}
 
-  selectable() {
+  /**
+   * A KOLLÉGA-LISTA BELSŐ ADAT (2026-10-02, docs/mobile-home/v1-discovery.md
+   * §10): a PARTNER_SERVICE `aquariums.manage`-dzsel elérte, és a belső
+   * dolgozók listáját kapta. A karbantartó belső kolléga, a kiosztás is
+   * belsős lépés (lásd `set`), tehát a választó is az.
+   */
+  selectable(user: AuthenticatedUser) {
+    requireInternalWriter(user, "A karbantartó-választó");
     return this.repository.selectable();
   }
 

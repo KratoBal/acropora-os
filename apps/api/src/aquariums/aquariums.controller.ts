@@ -58,8 +58,11 @@ export class AquariumsController {
    */
   @Get("customers")
   @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
-  selectableCustomers(@Query() query: AquariumSelectableCustomerQueryDto) {
-    return this.service.searchSelectableCustomers(query.search);
+  selectableCustomers(
+    @Query() query: AquariumSelectableCustomerQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.searchSelectableCustomers(user, query.search);
   }
 
   /**
@@ -69,8 +72,8 @@ export class AquariumsController {
    */
   @Get("maintainers/selectable")
   @RequirePermissions(PERMISSIONS.AQUARIUMS_MANAGE)
-  selectableMaintainers() {
-    return this.maintainers.selectable();
+  selectableMaintainers(@CurrentUser() user: AuthenticatedUser) {
+    return this.maintainers.selectable(user);
   }
 
   @Get(":id")
