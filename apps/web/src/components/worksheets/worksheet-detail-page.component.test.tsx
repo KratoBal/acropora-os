@@ -62,7 +62,10 @@ const api = vi.hoisted(() => ({
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => navigation,
+  usePathname: () => "/szerviz/munkalapok/worksheet-1",
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
