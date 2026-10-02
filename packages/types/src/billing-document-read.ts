@@ -122,7 +122,9 @@ export type BillingPaymentSource =
   // feed nem hozza a fizetést (acrobot 26027)
   | "MARK_GLS_COD"
   | "MARK_SIMPLEPAY"
-  | "MARK_FOXPOST";
+  | "MARK_FOXPOST"
+  /** Bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988). */
+  | "BANK_PAIRING";
 
 /**
  * EGY SAJÁT KIFIZETETT-JELÖLÉS, AMIT A SZÁMLÁZZ.HU ELFOGADOTT (acrobot 26027).
@@ -277,7 +279,7 @@ export interface BillingDocumentDeliveryInfo {
  * - `NOT_A_STOCK_DOCUMENT`: díjbekérő, előleg vagy szállítólevél;
  * - `MOVED_BY_SOURCE`: a forrás (webshop-rendelés, POS) már levonta;
  * - `VARIANT_NOT_CHOSEN`: a terméknek több változata van, a sor nem mondja meg,
- *   melyik;
+ *   melyik; vagy a sor változata nem a termék aktív változata;
  * - `NO_VARIANT`: a terméknek nincs aktív változata;
  * - `PACKAGE_UNRESOLVED`: csomagtermék, amelynek összetevői nem oldhatók fel.
  */

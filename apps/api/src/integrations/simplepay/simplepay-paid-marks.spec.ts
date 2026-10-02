@@ -72,6 +72,7 @@ describe("decideSimplePayOrder: a settled card invoice is marked", () => {
         amount: "29210",
         title: "bankkártya",
         note: "SimplePay, 2026-09-28, tranzakció: 504312345",
+        sourceRef: "504312345",
       },
     });
   });
@@ -90,6 +91,7 @@ describe("decideSimplePayOrder: a settled card invoice is marked", () => {
       decision.mark.note,
       "SimplePay, 2026-09-29, tranzakció: 504311111, 504399999",
     );
+    assert.equal(decision.mark.sourceRef, "504311111,504399999");
   });
 
   it("a cancelled invoice next to the live one on the same order: the live one is marked", () => {

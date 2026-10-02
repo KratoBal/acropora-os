@@ -110,9 +110,11 @@ describe(
     // a saját raktáruk helyett: a CI-ben pontosan így bukott el két tesztjük.
     let warehousesBefore: string[] = [];
     const variantIds: Record<string, string> = {};
+    /** Minden változat SKU szerint (a több változatú termék másodikáé is). */
+    const variantBySku: Record<string, string> = {};
 
     const draft = (
-      lines: [string, string][],
+      lines: ([string, string] | [string, string, string])[],
       sourceType: BillingDocumentDraftDto["sourceType"] = null,
     ) =>
       drafts.create(
@@ -129,8 +131,9 @@ describe(
           note: null,
           sourceType,
           sourceId: sourceType ? `${PREFIX}-forras` : null,
-          lines: lines.map(([key, quantity]) => ({
+          lines: lines.map(([key, quantity, variantSku]) => ({
             productId: productIds[key]!,
+            variantId: variantSku ? variantBySku[variantSku]! : null,
             description: key,
             quantity,
             unit: "db",
@@ -146,7 +149,7 @@ describe(
     const onHand = async (key: string) =>
       (
         await prisma.stockItem.findMany({
-          where: { variantId: variantIds[key]! },
+          where: { variantId: variantIds[key] ?? variantBySku[key]! },
           select: { onHand: true },
         })
       ).map((item) => item.onHand.toString());
@@ -204,6 +207,7 @@ describe(
             select: { id: true },
           });
           variantIds[key] ??= variant.id;
+          variantBySku[sku] = variant.id;
         }
       }
     });
@@ -271,6 +275,27 @@ describe(
             ["multi", "VARIANT_NOT_CHOSEN"],
           ],
         );
+    });
+
+    // A SZÁMLASOR VÁLTOZATA (kártya 705768fc). MI PIROSÍT: ha a mentett
+    // változat nem jutna el a készlet-könyvelésig (a vázlat vagy a
+    // kiállítás olvasása elhagyná), és a sor továbbra is kimaradna.
+    it("books the variant the line names out, through the same UNAS outbox", async () => {
+      const created = await draft([["multi", "1", "M2"]]);
+      const issued = await issuing.issue(created.id, created.updatedAt, user);
+      assert.deepEqual(
+        issued.lines.map((line) => [line.variantId, line.stockOutcome]),
+        [[variantBySku.M2, "MOVED"]],
+      );
+      assert.deepEqual(await onHand("M2"), ["-1"]);
+      assert.deepEqual(await onHand("multi"), []);
+      assert.deepEqual(
+        await prisma.unasStockSyncOutbox.findMany({
+          where: { variantId: variantBySku.M2 },
+          select: { sourceProcess: true },
+        }),
+        [{ sourceProcess: "BILLING_INVOICE" }],
+      );
     });
 
     it("does not book out an invoice made from a webshop order again", async () => {
