@@ -90,6 +90,7 @@ export type {
   BillingDocumentListTarget,
   BillingDocumentOrigin,
   BillingDocumentPdfInfo,
+  BillingOwnPaymentMark,
   BillingPaymentSource,
   BillingExternalDocumentDetail,
   BillingExternalDocumentLine,

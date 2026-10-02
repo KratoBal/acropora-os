@@ -1,5 +1,16 @@
 import { Prisma } from "@acropora/database";
-import { paymentStateOf } from "@acropora/types";
+
+import {
+  COD_ROUNDING as ROUNDING,
+  codInvoiceMarks,
+  type CodInvoiceSkip,
+  type CodPaidMark,
+  type OutgoingInvoiceInput,
+} from "../szamlazz/cod-invoice-marks.js";
+
+export type { OutgoingInvoiceInput };
+
+import type { PaymentMarkInput } from "../szamlazz/outgoing-payment-marks.js";
 
 /**
  * WHICH OF OUR INVOICES A GLS COD TRANSFER PAID, AND MAY BE MARKED PAID IN
@@ -29,9 +40,6 @@ import { paymentStateOf } from "@acropora/types";
  * of the gross is the gross, and the note says what was collected.
  */
 
-/** 2 Ft: the 5 Ft cash rounding (barracuda, 105 830 collected on 105 831). */
-const ROUNDING = new Prisma.Decimal(2);
-
 export interface GlsCodReportInput {
   readonly transferDate: string;
   readonly total: Prisma.Decimal;
@@ -53,20 +61,6 @@ export interface GlsCompensationInput {
 /** A GLS invoice number, as the compensation letter names it (`HU00912382`). */
 const GLS_INVOICE = /^HU\d{8}$/;
 
-/** What we know of one of our invoices (Számlázz.hu's feed or its Agent). */
-export interface OutgoingInvoiceInput {
-  readonly grossAmount: Prisma.Decimal;
-  readonly currency: string;
-  readonly cancelled: boolean;
-  /**
-   * Whether its payments are known: projected from a feed version (a missing
-   * `kifizetesek` element there is "unpaid", acrobot 25910) or read from the
-   * Agent. Unknown cannot prove "not paid yet", so it is never marked.
-   */
-  readonly paymentsKnown: boolean;
-  readonly paidAmount: Prisma.Decimal;
-}
-
 export type GlsTransferRefusal =
   | "REPORT_NEEDS_REVIEW"
   | "COMPENSATION_MISMATCH"
@@ -74,24 +68,9 @@ export type GlsTransferRefusal =
   | "NO_CREDIT"
   | "AMBIGUOUS_CREDIT";
 
-export type GlsInvoiceSkip =
-  | "NOT_FOUND"
-  | "CANCELLED"
-  | "FOREIGN_CURRENCY"
-  | "AMOUNT_MISMATCH"
-  | "MULTI_INVOICE_LINE"
-  | "PAYMENTS_UNKNOWN"
-  | "ALREADY_PAID"
-  | "PARTLY_PAID";
+export type GlsInvoiceSkip = CodInvoiceSkip | "MULTI_INVOICE_LINE";
 
-export interface GlsPaidMark {
-  readonly invoiceNumber: string;
-  readonly date: string;
-  /** The invoice's gross, as Számlázz.hu's `osszeg`. */
-  readonly amount: string;
-  readonly title: "utánvét";
-  readonly note: string;
-}
+export type GlsPaidMark = CodPaidMark;
 
 export type GlsTransferDecision =
   | {
@@ -182,57 +161,44 @@ export function decideGlsTransfer(input: {
     );
   }
 
-  const marks: GlsPaidMark[] = [];
-  for (const [number, amount] of collected) {
-    if (skipped.has(number)) continue;
-    const invoice = input.invoices.get(number);
-    const skip = !invoice
-      ? "NOT_FOUND"
-      : invoice.cancelled || invoice.grossAmount.lte(0)
-        ? "CANCELLED"
-        : invoice.currency.toUpperCase() !== "HUF"
-          ? "FOREIGN_CURRENCY"
-          : amount.minus(invoice.grossAmount).abs().gt(ROUNDING)
-            ? "AMOUNT_MISMATCH"
-            : !invoice.paymentsKnown
-              ? "PAYMENTS_UNKNOWN"
-              : null;
-    if (skip) {
-      skipped.set(number, skip);
-      continue;
-    }
-    // already paid by any source (Számlázz.hu's own bank pairing too): never
-    // a second payment next to it; partly paid is a question, not a mark
-    const state = paymentStateOf({
-      paymentsKnown: true,
-      paidAmount: invoice!.paidAmount.toFixed(),
-      grossAmount: invoice!.grossAmount.toFixed(),
-      currency: invoice!.currency,
-    });
-    if (state === "PAID" || state === "PARTIAL") {
-      skipped.set(number, state === "PAID" ? "ALREADY_PAID" : "PARTLY_PAID");
-      continue;
-    }
-    const gross = invoice!.grossAmount;
-    const rounded = !amount.equals(gross);
-    marks.push({
-      invoiceNumber: number,
-      date: report.transferDate,
-      amount: gross.toFixed(0),
-      title: "utánvét",
-      note: rounded
-        ? `GLS utánvét, ${report.transferDate}, 5 Ft-os kerekítés: beszedve ${amount.toFixed(0)}`
-        : `GLS utánvét, ${report.transferDate}`,
-    });
-  }
+  for (const number of skipped.keys()) collected.delete(number);
+  const { marks, skipped: invoiceSkips } = codInvoiceMarks({
+    collected,
+    invoices: input.invoices,
+    date: report.transferDate,
+    label: `GLS utánvét, ${report.transferDate}`,
+  });
+  for (const skip of invoiceSkips) skipped.set(skip.invoiceNumber, skip.reason);
   return {
     transferDate: report.transferDate,
     markable: true,
     transferred: transferred.toFixed(0),
     creditId: credits[0]!.id,
-    marks: marks.sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber)),
+    marks,
     skipped: [...skipped]
       .map(([invoiceNumber, reason]) => ({ invoiceNumber, reason }))
       .sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber)),
   };
+}
+
+/**
+ * The marks of the markable transfers, for the shared Számlázz.hu loop
+ * (`applyPaidMarks`). The transfer's bank credit is the source-side reference:
+ * one transfer pays an invoice once (acrobot 26001).
+ */
+export function glsPaidMarkInputs(
+  decisions: readonly GlsTransferDecision[],
+): PaymentMarkInput[] {
+  return decisions.flatMap((decision) =>
+    decision.markable
+      ? decision.marks.map((mark) => ({
+          invoiceNumber: mark.invoiceNumber,
+          date: mark.date,
+          amount: mark.amount,
+          title: mark.title,
+          note: mark.note,
+          sourceRef: decision.creditId,
+        }))
+      : [],
+  );
 }

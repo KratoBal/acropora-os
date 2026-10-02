@@ -64,6 +64,8 @@ const detail = (
   paymentState: "PAID",
   paidAmount: "12700",
   lastPaymentDate: "2026-09-30",
+  paymentSource: "SZAMLAZZ",
+  paymentConflict: false,
   bankMatch: {
     state: "PAIRED",
     reason: null,

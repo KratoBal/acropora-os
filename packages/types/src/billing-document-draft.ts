@@ -31,6 +31,12 @@ export interface BillingDocumentLineInput {
   /** A meglévő sor azonosítója; új sornál elhagyható. */
   id?: string;
   productId: string | null;
+  /**
+   * A termék változata (kártya 705768fc): több változatú terméknél ez mondja
+   * meg, melyik készlete csökken a kiállításkor. Termék nélkül nincs értelme,
+   * és a szerver eldobja. Elhagyható: a régebbi kliens nem küldi.
+   */
+  variantId?: string | null;
   description: string;
   quantity: DecimalText;
   unit: string | null;
@@ -92,6 +98,8 @@ export interface BillingDocumentLine extends BillingAmounts {
   /** A kedvezmény-sor tétele; tételnél `null`. */
   parentLineId: string | null;
   productId: string | null;
+  /** A sor változata; választható, mert a régebbi API nem küldi. */
+  variantId?: string | null;
   description: string;
   quantity: DecimalText;
   unit: string | null;

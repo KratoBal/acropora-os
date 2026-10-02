@@ -13,6 +13,7 @@ import {
   ownWhere,
   simplePayOrderKey,
   toExternalListItem,
+  type OwnPaymentMark,
   type SimplePaySettlementLine,
   toListItem,
 } from "./billing-document-list.js";
@@ -65,6 +66,7 @@ export const EXTERNAL_LIST_SELECT = {
   paymentMethodUnified: true,
   orderNumber: true,
   cancelled: true,
+  payments: true,
 } satisfies Prisma.ExternalBillingDocumentSelect;
 
 /**
@@ -122,12 +124,18 @@ export class BillingDocumentListRepository {
       this.database,
       externalRows.map((row) => row.orderNumber),
     );
+    // a saját, a Számlázz.hu-ba beírt jelölések (acrobot 26027), a lapra
+    const marks = await ownPaymentMarksByInvoice(
+      this.database,
+      externalRows.map((row) => row.documentNumber),
+    );
     const toExternal = (row: (typeof externalRows)[number]) =>
       toExternalListItem(
         row,
         simplePay.get(
           simplePayOrderKey(row.orderNumber, UNAS_SHOP_ORDER_PREFIX) ?? "",
         ) ?? [],
+        marks.get(row.documentNumber) ?? [],
       );
     const totalItems = ownCount + externalCount;
     const items = both
@@ -192,5 +200,32 @@ export async function simplePayLinesByOrder(
     const key = line.orderKeySuffix!;
     out.set(key, [...(out.get(key) ?? []), line]);
   }
+  return out;
+}
+
+/**
+ * A SAJÁT KIFIZETETT-JELÖLÉSEK, AMIKET A SZÁMLÁZZ.HU ELFOGADOTT (WRITTEN), a
+ * számlaszám szerint (acrobot 26027). Egy lekérdezés egy lapra. Csak a WRITTEN
+ * számít: a PLANNED, UNKNOWN és FAILED sorról nem tudjuk, hogy beíródott.
+ */
+export async function ownPaymentMarksByInvoice(
+  database: typeof prisma,
+  documentNumbers: readonly string[],
+): Promise<Map<string, OwnPaymentMark[]>> {
+  const out = new Map<string, OwnPaymentMark[]>();
+  if (documentNumbers.length === 0) return out;
+  const rows = await database.outgoingPaymentMark.findMany({
+    where: {
+      invoiceNumber: { in: [...new Set(documentNumbers)] },
+      state: "WRITTEN",
+    },
+    orderBy: { markDate: "asc" },
+    select: { invoiceNumber: true, source: true, markDate: true, amount: true },
+  });
+  for (const row of rows)
+    out.set(row.invoiceNumber, [
+      ...(out.get(row.invoiceNumber) ?? []),
+      { source: row.source, markDate: row.markDate, amount: row.amount },
+    ]);
   return out;
 }

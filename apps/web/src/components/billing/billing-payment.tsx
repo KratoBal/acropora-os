@@ -47,12 +47,30 @@ export const PAYMENT_STATE_TONE: Readonly<
  * rendeléskor kártyával vagy készpénzzel fizetett, és a Számlázz.hu-ban nincs
  * rögzítve. A felirat ezt megmondja, hogy látsszon, mire épül a „Fizetve”.
  */
+/**
+ * A SAJÁT, A SZÁMLÁZZ.HU-BA BEÍRT JELÖLÉS FORRÁSA (acrobot 26027): a listán a
+ * „Fizetve (GLS utánvét)” és az adatlap jelölés-sora ugyanazt mondja.
+ */
+export const OWN_MARK_SOURCE_LABELS: Record<
+  "GLS_COD" | "SIMPLEPAY" | "FOXPOST",
+  string
+> = {
+  GLS_COD: "GLS utánvét",
+  SIMPLEPAY: "SimplePay",
+  FOXPOST: "Foxpost",
+};
+
 const AT_ORDER: Record<string, string> = {
   CARD_AT_ORDER: "kártya, a rendeléskor",
   CASH_AT_ORDER: "készpénz, a rendeléskor",
   // a SimplePay elszámolás-sorából (acrobot 25964, 25979)
   SIMPLEPAY: "SimplePay",
   SIMPLEPAY_REFUNDED: "SimplePay, visszatérítve",
+  MARK_GLS_COD: OWN_MARK_SOURCE_LABELS.GLS_COD,
+  MARK_SIMPLEPAY: OWN_MARK_SOURCE_LABELS.SIMPLEPAY,
+  MARK_FOXPOST: OWN_MARK_SOURCE_LABELS.FOXPOST,
+  // bejövő számla: a Hiányzó számlák banki párosítása (acrobot 25988)
+  BANK_PAIRING: "banki párosítás",
 };
 
 export function PaymentBadge({
@@ -60,11 +78,16 @@ export function PaymentBadge({
   paidAmount,
   lastPaymentDate,
   paymentSource = null,
+  paymentConflict = false,
   currency,
 }: Pick<
   BillingDocumentListItem,
   "paymentState" | "paidAmount" | "lastPaymentDate" | "currency"
-> & { paymentSource?: BillingDocumentListItem["paymentSource"] }) {
+> & {
+  paymentSource?: BillingDocumentListItem["paymentSource"];
+  /** A Számlázz.hu részben fizetettnek mondja, a banki párosítás teljesnek. */
+  paymentConflict?: boolean;
+}) {
   if (paymentState === null)
     return <span className="text-pilot-grey-400">—</span>;
   const atOrder = paymentSource ? AT_ORDER[paymentSource] : undefined;
@@ -88,6 +111,11 @@ export function PaymentBadge({
       {detail ? (
         <span className="text-xs tabular-nums text-pilot-grey-500">
           {detail}
+        </span>
+      ) : null}
+      {paymentConflict ? (
+        <span className="text-xs font-semibold text-pilot-amber-700">
+          Eltér a banki párosítástól
         </span>
       ) : null}
     </span>

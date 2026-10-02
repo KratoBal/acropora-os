@@ -336,9 +336,10 @@ describe("a cancelled purchase: no invoice needed, the refund is expected", () =
       decide([d], [original(), note], asOf ? { asOf } : {}).get(d.id)!;
     const expected = at("2026-09-30");
     assert.equal(expected.state, "REFUND_EXPECTED");
+    // az eredeti számla is, a jóváíró előtt (acrobot 25981)
     assert.deepEqual(
       expected.documents.map((x) => x.number),
-      ["CR4042A0000012507"],
+      ["4042A0000031808", "CR4042A0000012507"],
     );
     assert.deepEqual(
       { ...expected.refund, amount: expected.refund?.amount.toFixed(0) },
@@ -473,6 +474,36 @@ describe("a cancelled purchase: no invoice needed, the refund is expected", () =
           .state.startsWith("REFUND"),
       ),
       [true, false],
+    );
+  });
+
+  // AZ EREDETI A JÓVÁÍRÓ MELLÉ (acrobot 25981). MI PIROSÍT: ha két aznapi
+  // jelöltből választana; ha más eladó, más nap vagy más összeg számláját
+  // tenné az eredeti helyére.
+  it("the original joins the credit note only when exactly one fits", () => {
+    const numbers = (documents: CandidateDocument[]) => {
+      const d = tesla();
+      return decide([d], [creditNote(), ...documents])
+        .get(d.id)!
+        .documents.map((x) => x.number);
+    };
+    const another = (overrides: Partial<CandidateDocument>) =>
+      doc({
+        number: "4042A0000031809",
+        date: "2026-09-17",
+        gross: D(0),
+        supplierName: "Tesla Hungary Kft.",
+        hasOriginal: false,
+        ...overrides,
+      });
+    assert.deepEqual(numbers([original(), another({})]), ["CR4042A0000012507"]);
+    assert.deepEqual(
+      [
+        numbers([another({ supplierName: "Alza.hu Kft." })]),
+        numbers([another({ date: "2026-09-18" })]),
+        numbers([another({ gross: D(4400) })]),
+      ],
+      [["CR4042A0000012507"], ["CR4042A0000012507"], ["CR4042A0000012507"]],
     );
   });
 

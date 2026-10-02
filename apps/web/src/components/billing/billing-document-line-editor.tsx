@@ -6,9 +6,10 @@ import {
   PilotCallout,
   PilotInput,
   PilotSection,
+  PilotSelect,
 } from "@acropora/ui";
 import { billingProductPrice, type ProductListItem } from "@acropora/types";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { productApi } from "@/lib/api/products";
 import {
@@ -17,6 +18,7 @@ import {
   formatMoneyExact,
   grossInputMismatch,
   trimDecimal,
+  variantOptionsOf,
   withGrossInput,
   withProductPrice,
   type BillingPreview,
@@ -73,6 +75,40 @@ export function BillingDocumentLineEditor({
   disabled?: boolean;
 }) {
   const [productSearch, setProductSearch] = useState<string | null>(null);
+  /** A sorok, amelyek termék-változatait már kértük (soronként egyszer). */
+  const variantsRequested = useRef(new Set<string>());
+
+  /*
+    A TERMÉK VÁLTOZATAI (kártya 705768fc): a megnyitott vázlat termék-sorainál
+    is, nem csak az új termékénél, mert a változat-választó enélkül nem látszik,
+    és a sor készlete nem csökkenne.
+  */
+  useEffect(() => {
+    for (const line of lines) {
+      if (
+        !line.productId ||
+        line.variantOptions !== undefined ||
+        variantsRequested.current.has(line.key)
+      )
+        continue;
+      variantsRequested.current.add(line.key);
+      productApi
+        .detail(token, line.productId)
+        .then((detail) =>
+          onLineUpdate(line.key, (current) => ({
+            ...current,
+            variantOptions: variantOptionsOf(detail.variants),
+          })),
+        )
+        .catch(() =>
+          onLineUpdate(line.key, (current) => ({
+            ...current,
+            variantOptions: [],
+          })),
+        );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, token]);
 
   const update = (key: string, field: LineField, value: string) =>
     onChange(
@@ -110,23 +146,25 @@ export function BillingDocumentLineEditor({
         : "termék",
       description: product.name,
     });
+    variantsRequested.current.add(line.key);
     onChange([...lines, line]);
     setProductSearch(null);
     productApi
       .detail(token, product.id)
       .then((detail) =>
-        onLineUpdate(line.key, (current) =>
-          withProductPrice(
+        onLineUpdate(line.key, (current) => ({
+          ...withProductPrice(
             current,
             billingProductPrice(detail, currency),
             currency,
           ),
-        ),
+          variantOptions: variantOptionsOf(detail.variants),
+        })),
       )
       .catch((cause: unknown) =>
         onLineUpdate(line.key, (current) =>
           withProductPrice(
-            current,
+            { ...current, variantOptions: [] },
             {
               kind: "NONE",
               reason:
@@ -222,6 +260,37 @@ export function BillingDocumentLineEditor({
                         {line.productLabel ??
                           (line.productId ? "termék" : "Egyedi tétel")}
                       </p>
+                      {line.variantOptions && line.variantOptions.length > 0 ? (
+                        <div className="mt-1">
+                          <PilotSelect
+                            chevron
+                            aria-label={`${label} változata`}
+                            value={line.variantId ?? ""}
+                            onChange={(value) =>
+                              onChange(
+                                lines.map((current) =>
+                                  current.key === line.key
+                                    ? { ...current, variantId: value || null }
+                                    : current,
+                                ),
+                              )
+                            }
+                            disabled={disabled}
+                          >
+                            <option value="">Válassz változatot</option>
+                            {line.variantOptions.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </PilotSelect>
+                          {line.variantId ? null : (
+                            <p className="mt-1 text-xs text-pilot-amber-700">
+                              Változat nélkül a készlet nem csökken.
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
                     </td>
                     {(
                       [

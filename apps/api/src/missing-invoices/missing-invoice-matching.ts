@@ -984,6 +984,22 @@ export function matchMonth(input: {
     if (notes.length !== 1) continue;
     const note = notes[0]!;
     used.add(note.id);
+    // AZ EREDETI SZÁMLA a jóváíró mellé (acrobot 25981: a könyvelőnek mindkettő
+    // kell, egy sorban): ugyanattól az eladótól, a vásárlás napján kelt, és a
+    // bruttója 0, mert a NAV-sor a sztornó után így áll (mérve: Tesla
+    // 4042A0000031808). A teljes összegű eredetit ide nem keresi: azt a 3. és a
+    // 3d. szabály már előbb párosította volna. Csak ha EGY ilyen van; különben a
+    // jóváíró egyedül.
+    const originals = free().filter(
+      (d) =>
+        d.kind === "INVOICE" &&
+        d.date === purchase &&
+        d.gross !== null &&
+        d.gross.isZero() &&
+        sameSeller(d.supplierName),
+    );
+    const original = originals.length === 1 ? originals[0]! : null;
+    if (original) used.add(original.id);
     const refund = (input.credits ?? [])
       .filter(
         (c) =>
@@ -1008,7 +1024,7 @@ export function matchMonth(input: {
         : late
           ? "REFUND_MISSING"
           : "REFUND_EXPECTED",
-      documents: [note],
+      documents: original ? [original, note] : [note],
       matchedBy: "RULE",
       reason: refund
         ? `sztornózva (${note.number}), a visszatérítés megjött: ${refund.bookingDate}`
