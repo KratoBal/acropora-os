@@ -7780,7 +7780,7 @@ model ProductEnrichmentSourceFetch {
   id         String                        @id @default(cuid())
   checkId    String
   check      ProductEnrichmentRunProduct   @relation(fields: [checkId], references: [id], onDelete: Cascade)
-  /// MANUFACTURER | SUPPLIER | BULK_REEF_SUPPLY | MARINE_AQUATICS
+  /// MANUFACTURER | SUPPLIER | BULK_REEF_SUPPLY | MARINE_AQUATICS | OLIBETTA
   sourceKind String                        @db.VarChar(32)
   url        String
   outcome    ProductEnrichmentFetchOutcome
