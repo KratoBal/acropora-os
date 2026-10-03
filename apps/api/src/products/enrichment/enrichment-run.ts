@@ -7,6 +7,7 @@ import {
   type SourcedValue,
 } from "@acropora/jev/product-enrichment";
 
+import { extractMarineAquaticsStatement } from "./marine-aquatics-extract.js";
 import {
   ENRICHED_FIELDS,
   extractPageStatement,
@@ -310,7 +311,12 @@ async function checkProduct(
       });
       continue;
     }
-    const statement = extractPageStatement(page.html);
+    const structured = extractPageStatement(page.html);
+    // marine-aquatics.eu states its data in labelled rows, not JSON-LD.
+    const statement =
+      source.kind === "MARINE_AQUATICS" && structured.values.length === 0
+        ? extractMarineAquaticsStatement(page.html)
+        : structured;
     fetches.push({
       sourceKind: source.kind,
       url: page.url,
@@ -407,8 +413,13 @@ export function fieldOutcome(
     };
   }
 
+  // Our title is Hungarian and editorial, a page's is the shop's own (mostly
+  // English) name: comparing the two always "conflicts" (first live round,
+  // 2026-10-03). So the title is checked page against page only; our value is
+  // still stored as the current one.
+  const compareOwn = own !== null && field !== "title";
   const candidates = [
-    ...(own ? [own] : []),
+    ...(compareOwn ? [own] : []),
     ...fromPages.map((p) => p.candidate),
   ];
   let result = reconcileField(field, candidates, { reconciledAt });

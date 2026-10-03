@@ -34,11 +34,19 @@ list. For each product:
    page publishes as JSON-LD. Free text and tables are not read. The fields
    are EAN, manufacturer part number, brand, name, weight, dimensions, and the
    named properties flow rate, power, voltage, volume and capacity.
+   One exception (Balázs, 2026-10-03 06:45 UTC): marine-aquatics.eu has no
+   JSON-LD, so on its pages the fixed labelled row list (`ul.data-row`) is read
+   by exact label, and only `EAN` and the net `Hmotnost` (weight) are taken.
+   Its catalogue number is the shop's own code and its `Výrobce` is sometimes
+   the company, so neither is used.
 5. **Reconciliation.** Every field is reconciled with the V0 model
    (`reconcileField` and the Tier C guard) against our own current value:
    - agreeing independent sources give **VERIFIED**;
    - disagreeing ones give **CONFLICTING_SOURCES**, with no value picked;
    - our own value alone gives **UNVERIFIED**;
+   - the name is compared page against page only: ours is Hungarian and
+     editorial, so against a shop's name it would always conflict;
+   - a brand is the same value in any letter case ("TUNZE", "Tunze");
    - no value at all gives **MISSING**.
 6. **Storage.** Each field is stored with its source, the source URL, the read
    time, the raw value and an excerpt saying where on the page it was.

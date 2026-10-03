@@ -147,6 +147,45 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(checks[0]!.sourceCount, 2);
   });
 
+  // First live round, 2026-10-03: our Hungarian title against a shop's English
+  // name was always a conflict. The title is now compared page to page only.
+  it("a saját magyar címünket nem veti össze a bolt nevével; a marine-aquatics.eu sorait olvassa", async () => {
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [
+            { kind: "BULK_REEF_SUPPLY", url: `${BRS}/p/1` },
+            { kind: "MARINE_AQUATICS", url: `${MA}/p/1` },
+          ],
+        },
+      ],
+      {
+        [`${BRS}/p/1`]: {
+          status: 200,
+          body: productPage({ name: "Invented Pump 3000" }),
+        },
+        [`${MA}/p/1`]: {
+          status: 200,
+          body: `<html><ul class="data-row"><li><span>EAN:</span> <strong>5901234123457</strong></li><li><span>Hmotnost: </span> <strong>1,2 kg</strong></li></ul></html>`,
+        },
+      },
+    );
+    const fields = Object.fromEntries(
+      checks[0]!.fields.map((f) => [f.field, f]),
+    );
+    assert.equal(fields.title!.status, "VERIFIED");
+    assert.equal(fields.title!.currentValue, "Kitalált pumpa");
+    assert.equal(fields.ean!.status, "VERIFIED");
+    assert.equal(fields.ean!.sourceRef, `${MA}/p/1`);
+    assert.equal(fields.weight!.status, "VERIFIED");
+    const ma = checks[0]!.fetches.find(
+      (f) => f.sourceKind === "MARINE_AQUATICS",
+    )!;
+    assert.equal(ma.fieldCount, 2);
+    assert.equal(ma.reason, null);
+  });
+
   // PD-013 calibration: a URL outside the four sources is refused, never requested.
   it("a négy forráson kívüli URL-t elutasítja, és le sem kéri", async () => {
     const { checks, network } = await run(

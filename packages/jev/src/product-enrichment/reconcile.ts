@@ -30,7 +30,12 @@
  * Only VERIFIED and SUGGESTED carry a value.
  */
 
-import { fieldSpec, normalizeFieldValue, type FieldKey } from "./fields.js";
+import {
+  comparisonKey,
+  fieldSpec,
+  normalizeFieldValue,
+  type FieldKey,
+} from "./fields.js";
 import { candidateProvenanceProblem } from "./guard.js";
 import {
   INDEPENDENT_SOURCES,
@@ -56,6 +61,8 @@ export function reconcileField(
   const tier = fieldSpec(field).tier;
   const rejected: RejectedCandidate[] = [];
   const groups = new Map<string, SourcedValue[]>();
+  // comparison key -> the group's value (the first, highest-precedence spelling)
+  const groupOf = new Map<string, string>();
 
   for (const candidate of byPrecedence(candidates)) {
     const problem = candidateProvenanceProblem(field, candidate);
@@ -73,9 +80,13 @@ export function reconcileField(
       });
       continue;
     }
-    const group = groups.get(n.value);
-    if (group) group.push(candidate);
-    else groups.set(n.value, [candidate]);
+    const key = comparisonKey(field, n.value);
+    const existing = groupOf.get(key);
+    if (existing !== undefined) groups.get(existing)!.push(candidate);
+    else {
+      groupOf.set(key, n.value);
+      groups.set(n.value, [candidate]);
+    }
   }
 
   const evidence = [...groups.values()].flat();
@@ -108,7 +119,7 @@ export function reconcileField(
   const contradicting = rejected.flatMap((r) => {
     if (r.kind !== "UNSUPPORTED") return [];
     const n = normalizeFieldValue(field, r.candidate.value);
-    return n.ok && !groups.has(n.value)
+    return n.ok && !groupOf.has(comparisonKey(field, n.value))
       ? [{ rejected: r, value: n.value }]
       : [];
   });

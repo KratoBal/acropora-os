@@ -44,6 +44,12 @@ export interface FieldSpec {
   claims: ClaimPolicy;
   /** The decision placed it in this tier; `false` = the safe default. */
   tierFromDecision: boolean;
+  /**
+   * Two values that differ only in letter case are the same value (a brand:
+   * "TUNZE" and "Tunze"). The stored value keeps the spelling of the
+   * highest-precedence source.
+   */
+  caseInsensitive?: true;
 }
 
 const text = { kind: "text" } as const;
@@ -196,7 +202,13 @@ export const FIELD_SPECS = {
     tierFromDecision: true,
   },
   // Not placed by the decision: strictest tier by default.
-  brand: { tier: "C", kind: text, claims: "value", tierFromDecision: false },
+  brand: {
+    tier: "C",
+    kind: text,
+    claims: "value",
+    tierFromDecision: false,
+    caseInsensitive: true,
+  },
   capacity: {
     tier: "C",
     kind: q("volume"),
@@ -293,6 +305,18 @@ export function normalizeFieldValue(
       return v === "" ? { ok: false, reason: "empty" } : { ok: true, value: v };
     }
   }
+}
+
+/**
+ * The key two normalised values are compared by: the value itself, or its
+ * lower-case form for a case-insensitive field (first live round, 2026-10-03:
+ * "TUNZE" from the manufacturer and "Tunze" from a retailer came out as a
+ * conflict).
+ */
+export function comparisonKey(field: FieldKey, normalized: string): string {
+  return fieldSpec(field).caseInsensitive
+    ? normalized.toLocaleLowerCase("hu")
+    : normalized;
 }
 
 function collapse(raw: string): string {
