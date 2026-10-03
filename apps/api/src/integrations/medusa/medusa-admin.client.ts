@@ -31,6 +31,7 @@
  * (`create`, `update`, `probe` - ott nincs `fields` szűkítés). Ha a keresés
  * egyszer több mezőt kér, ez a típus és a `fields` sor EGYÜTT változik.
  */
+import type { KnowledgeProjection } from "../../products/knowledge/knowledge.policy.js";
 import type { MedusaShippingFlags } from "./medusa-shipping-attributes.policy.js";
 
 export interface MedusaProductLookupRow {
@@ -644,6 +645,23 @@ export interface MedusaAdminClient {
     productId: string,
     flags: MedusaShippingFlags,
   ): Promise<MedusaShippingAttributeRow>;
+  /**
+   * A TERMEKISMERET A BOLT OLDALAN, OLVASASRA (#1431, a PR A / PR B
+   * szerzodese: `GET /admin/product-knowledge/:product_id`).
+   *
+   * `null`, ha a boltnak nincs rekordja (404): az "nincs ismeret", nem hiba.
+   * Minden mas hiba tovabb szall, mert egy lejart kulcs nem azt jelenti, hogy
+   * a termekrol nincs mit tudni.
+   */
+  fetchProductKnowledge(productId: string): Promise<KnowledgeProjection | null>;
+  /**
+   * A TELJES CSERE egy termekre (`PUT`): ami nincs a torzsben, az eltunik.
+   * Ures `facts` es `copy` torli a rekordot. EZ IR A BOLTI OLDALRA.
+   */
+  setProductKnowledge(
+    productId: string,
+    knowledge: KnowledgeProjection,
+  ): Promise<KnowledgeProjection>;
   /**
    * A csatornához tartozó készlethelyek - MINDEN FUTÁSKOR, azonosító
    * beégetése nélkül.
@@ -1314,6 +1332,34 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       body: JSON.stringify(flags),
     });
     return body.shipping_attribute;
+  }
+
+  async fetchProductKnowledge(
+    productId: string,
+  ): Promise<KnowledgeProjection | null> {
+    try {
+      const body = await this.request<{
+        product_knowledge: KnowledgeProjection | null;
+      }>(`/admin/product-knowledge/${encodeURIComponent(productId)}`);
+      return body.product_knowledge ?? null;
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return null;
+      throw error;
+    }
+  }
+
+  async setProductKnowledge(
+    productId: string,
+    knowledge: KnowledgeProjection,
+  ): Promise<KnowledgeProjection> {
+    const body = await this.request<{
+      product_knowledge: KnowledgeProjection;
+    }>(`/admin/product-knowledge/${encodeURIComponent(productId)}`, {
+      method: "PUT",
+      body: JSON.stringify(knowledge),
+    });
+    return body.product_knowledge;
   }
 
   async fetchMetadata(id: string): Promise<Record<string, unknown> | null> {

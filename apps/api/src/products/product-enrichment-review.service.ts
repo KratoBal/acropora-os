@@ -89,11 +89,12 @@ export class ProductEnrichmentReviewService {
       checkedProducts: 0,
     };
     if (availability === "off") return empty;
-    const checkIds = await this.reader.latestCheckIds();
-    if (checkIds.length === 0) return empty;
+    const latest = await this.reader.latestFieldResults();
+    if (latest.length === 0) return empty;
+    const resultIds = latest.map((row) => row.id);
     const [counts, rows] = await Promise.all([
-      this.reader.queueCounts(checkIds),
-      this.reader.queueRows(checkIds, filter, cursor, QUEUE_PAGE_SIZE + 1),
+      this.reader.queueCounts(resultIds),
+      this.reader.queueRows(resultIds, filter, cursor, QUEUE_PAGE_SIZE + 1),
     ]);
     const page = rows.slice(0, QUEUE_PAGE_SIZE);
     return {
@@ -109,7 +110,7 @@ export class ProductEnrichmentReviewService {
       })),
       nextCursor: rows.length > QUEUE_PAGE_SIZE ? page.at(-1)!.id : null,
       summary: queueSummary(counts),
-      checkedProducts: checkIds.length,
+      checkedProducts: new Set(latest.map((row) => row.productId)).size,
     };
   }
 }

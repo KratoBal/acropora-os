@@ -74,6 +74,14 @@ import {
   isWysiwygProduct,
   wysiwygSubtreeIds,
 } from "./medusa-wysiwyg.policy.js";
+import {
+  currentRevisions,
+  projectedCopy,
+} from "../../products/knowledge/knowledge.policy.js";
+import {
+  MedusaProductKnowledgeService,
+  knowledgeRowsFor,
+} from "./medusa-product-knowledge.service.js";
 import { copyProductImages } from "./product-image-copier.js";
 import { publishProductImages } from "./product-image-publisher.js";
 import {
@@ -405,6 +413,13 @@ export type ProjectionDatabase = Pick<
   | "category"
   /** A gondozott termek-termek kapcsolatok (`ProductRelation`). */
   | "productRelation"
+  /**
+   * A TERMEKISMERET (#1431): az elfogadott tenyek es a jovahagyott szoveg.
+   * Termekenkent ket lekerdezes, es csak olvasas: az iras a bolti oldalra
+   * megy, az OS-ben semmi nem valtozik tole.
+   */
+  | "productKnowledgeFact"
+  | "productCopy"
 >;
 
 export async function runProjectionCli(
@@ -517,6 +532,8 @@ export async function runProjectionCli(
   }
 
   let service: MedusaProductProjectionService | null = null;
+  /** A termekismeret vetitese (#1431); ugyanazzal a klienssel. */
+  let knowledge: MedusaProductKnowledgeService | null = null;
   /**
    * A KEP-OLDALI VARRATOK KULON ALLNAK, MERT MAS AZ ELETUK.
    *
@@ -564,6 +581,7 @@ export async function runProjectionCli(
         imageClient,
         storefrontSalesChannelId(env),
       );
+      knowledge = new MedusaProductKnowledgeService(productLinks, imageClient);
     } catch (error) {
       /**
        * A KÉT HIÁNY KÜLÖN SORT KAP, mert a teendő is más: a kulcs a
@@ -1197,10 +1215,22 @@ export async function runProjectionCli(
         )}\n`,
       );
 
+    /**
+     * A TERMEKISMERET (#1431): a jovahagyott, nem elavult OS-szoveg a leiras
+     * es a SEO helyere, de CSAK a mi torzsadatunkon (ACROPORA). Ha nincs mit
+     * mondania, `null`, es a leiras pontosan a mai marad.
+     */
+    const tudas = await knowledgeRowsFor(db, product.id);
+    const tudasSzoveg = projectedCopy(
+      tudas.copy,
+      currentRevisions(tudas.facts),
+      product.catalogAuthority,
+    );
     const outcome = await service!.project(
       {
         id: product.id,
         name: product.name,
+        knowledgeCopy: tudasSzoveg,
         description: product.description,
         descriptionLong: product.descriptionLong,
         primarySku: product.variants[0]?.sku ?? null,
@@ -1323,6 +1353,43 @@ export async function runProjectionCli(
         describeKepMasolas(masolas) +
         describeCimValtozas(outcome.cim),
     );
+
+    /**
+     * A TERMEKISMERET KULON IRAS, A TERMEK UTAN, ES A HIBAJA KULON SOR.
+     *
+     * A termek mar kint van; ha az ismeret-vegpont elhasal (peldaul a bolt
+     * oldalan meg nincs kint a modul), az NEM vonja vissza a termeket, de a
+     * futas hibakoddal zarul, hogy ne latszodjon zoldnek.
+     */
+    try {
+      const tudasKimenet = await knowledge!.project(
+        product.id,
+        tudas,
+        true,
+        outcome.medusaProductId,
+      );
+      if (tudasKimenet.action !== "skipped")
+        out.stdout(
+          `      termékismeret: ${
+            tudasKimenet.action === "unchanged"
+              ? "már így állt"
+              : "most állítottuk be"
+          } (${tudasKimenet.summary})\n`,
+        );
+      else if (tudasKimenet.reason === "no-link")
+        out.stdout("      termékismeret: kihagyva, nincs bolti leképezés\n");
+    } catch (error) {
+      out.stderr(
+        `${productId}: a termékismeret vetítése nem sikerült (${
+          error instanceof MedusaAdminHttpError
+            ? describeMedusaFailure(error)
+            : error instanceof Error
+              ? error.message
+              : String(error)
+        })\n`,
+      );
+      failed += 1;
+    }
   }
 
   /**

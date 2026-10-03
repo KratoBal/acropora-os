@@ -62,6 +62,21 @@ export interface ProjectableProduct {
    */
   descriptionLong: string | null;
   /**
+   * A JOVAHAGYOTT OS-SZOVEG (termekismeret, #1431), vagy `null`/hianyzo.
+   *
+   * Ha a `description` itt nem `null`, AZ megy a bolt leirasaba, a ket UNAS
+   * leiras helyett, es a ket `unas_*_description` metaadat-kulcs nem megy ki:
+   * azok a UNAS szovegerol szolnak, nem errol. A SEO-cim es a meta-leiras
+   * kulon-kulon ir felul, csak ha van ertekuk. A dontes (mi jovahagyott, mi
+   * elavult, kie a torzsadat) a hivonal all: `products/knowledge/
+   * knowledge.policy.ts` `projectedCopy`.
+   */
+  knowledgeCopy?: {
+    description: string | null;
+    seoTitle: string | null;
+    seoDescription: string | null;
+  } | null;
+  /**
    * A vetítendő változat cikkszáma, vagy `null`, ha nincs.
    *
    * A HÍVÓ SZERZŐDÉSE, és ki van írva, mert az adatbázisban a `sku` oszlop NEM
@@ -673,10 +688,12 @@ export class MedusaProductProjectionService {
      * ket-mezosbol, es a TOBBSEG a forditott irany (66-nal a HOSSZU van benne a
      * ROVIDBEN). Egy egyiranyu vizsgalat 66 lapon hagyna ott a duplikatumot.
      */
-    const descriptions = buildProductDescription(
-      product.description,
-      product.descriptionLong,
-    );
+    const descriptions = product.knowledgeCopy?.description
+      ? { description: product.knowledgeCopy.description, metadata: {} }
+      : buildProductDescription(product.description, product.descriptionLong);
+    const seoTitle = product.knowledgeCopy?.seoTitle ?? product.seoTitle;
+    const seoDescription =
+      product.knowledgeCopy?.seoDescription ?? product.seoDescription;
 
     /**
      * A METAADAT MINDEN DARABJA KULON FELTETELES, ES EZ NEM STILUS.
@@ -688,10 +705,8 @@ export class MedusaProductProjectionService {
      */
     const seoMetadata = {
       ...(product.seoRobots ? { seo_robots: product.seoRobots } : {}),
-      ...(product.seoTitle ? { seo_title: product.seoTitle } : {}),
-      ...(product.seoDescription
-        ? { seo_description: product.seoDescription }
-        : {}),
+      ...(seoTitle ? { seo_title: seoTitle } : {}),
+      ...(seoDescription ? { seo_description: seoDescription } : {}),
       ...(product.seoKeywords ? { seo_keywords: product.seoKeywords } : {}),
       ...(product.unasProductUrl
         ? { unas_product_url: product.unasProductUrl }

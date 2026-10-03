@@ -241,19 +241,21 @@ describe(
       assert.equal(fields.manufacturerSku!.status, "VERIFIED");
       assert.equal(fields.flowRate!.status, "CONFLICTING_SOURCES");
 
-      const ids = await reader.latestCheckIds();
-      assert.ok(ids.length >= 1);
-      const ours = (await prisma.productEnrichmentRunProduct.findFirst({
-        where: { productId },
-        select: { id: true },
-      }))!.id;
-      assert.ok(ids.includes(ours));
-      const critical = await reader.queueRows([ours], "critical", null, 10);
+      const latest = await reader.latestFieldResults();
+      const ours = latest
+        .filter((row) => row.productId === productId)
+        .map((row) => row.id);
+      assert.deepEqual(
+        [...ours].sort(),
+        check.fields.map((f) => f.id).sort(),
+        "the queue reads exactly the review's rows",
+      );
+      const critical = await reader.queueRows(ours, "critical", null, 10);
       assert.deepEqual(
         critical.map((r) => [r.field, r.status]),
         [["flowRate", "CONFLICTING_SOURCES"]],
       );
-      const counts = await reader.queueCounts([ours]);
+      const counts = await reader.queueCounts(ours);
       assert.equal(
         counts.reduce((sum, c) => sum + c.count, 0),
         check.fields.length,

@@ -247,6 +247,11 @@ export const PERMISSIONS = {
   /// körnek szól, mint az INVENTORY_RECONCILIATION_REPAIR (lásd
   /// ROLE_PERMISSIONS lent: csak OWNER/ADMIN, még a MANAGER sem).
   PRODUCTS_CATALOG_AUTHORITY_TRANSFER: "products.catalog-authority.transfer",
+  /// A termékismeret elfogadása és a vevői szöveg jóváhagyása (KZ Amino
+  /// szelet, #1431). Ugyanolyan szűk kör, mint az átvétel: ami itt elfogadott
+  /// és jóváhagyott, az a webshop termékoldalára vetül, tehát a vevő olvassa.
+  /// Csak OWNER/ADMIN, a MANAGER sem (lásd ROLE_PERMISSIONS lent).
+  PRODUCTS_KNOWLEDGE_APPROVE: "products.knowledge.approve",
   /// A belső AI teszt-felület. Minden szerepkör megkapja, mert Balázs döntése
   /// szó szerint az volt, hogy "most kapja meg mindenki" (2026-08-26), és a
   /// szűkítés feltételét is ő mondta ki: amikor a felhasználói jogosultságokat
@@ -299,6 +304,7 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         // helyes valasznak nez ki.
         permission !== PERMISSIONS.SERVICE_VISIBILITY_ASSIGN &&
         permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER &&
+        permission !== PERMISSIONS.PRODUCTS_KNOWLEDGE_APPROVE &&
         // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
         // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
         // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --

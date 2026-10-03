@@ -27,15 +27,26 @@ export interface QueueRowRecord {
   checkedAt: Date;
 }
 
+/**
+ * THE LATEST RESULT PER FIELD, NOT THE LATEST CHECK.
+ *
+ * Until the Product Knowledge slice (#1431) every check was a crawl run that
+ * stored every enriched field, so "the latest check" and "the latest result
+ * of each field" were the same rows. A MANUAL evidence entry is its own
+ * one-field check: read by check, it would hide every other field of the
+ * product behind it. So both the review and the queue read the newest
+ * finished result of each (product, field) pair; `lastRun` still describes
+ * the newest check.
+ */
 export interface EnrichmentReader {
   latestCheck(productId: string): Promise<LatestCheck | null>;
-  /** The latest finished check of every product that has one. */
-  latestCheckIds(): Promise<string[]>;
+  /** The newest finished result of every (product, field) pair. */
+  latestFieldResults(): Promise<{ id: string; productId: string }[]>;
   queueCounts(
-    checkIds: readonly string[],
+    fieldResultIds: readonly string[],
   ): Promise<{ status: string; tier: string; count: number }[]>;
   queueRows(
-    checkIds: readonly string[],
+    fieldResultIds: readonly string[],
     filter: ProductQualityQueueFilter,
     after: string | null,
     take: number,
@@ -49,31 +60,39 @@ export class PrismaEnrichmentReader implements EnrichmentReader {
     const check = await prisma.productEnrichmentRunProduct.findFirst({
       where: { productId, run: { status: { in: [...FINISHED] } } },
       orderBy: { checkedAt: "desc" },
-      select: {
-        checkedAt: true,
-        sourceCount: true,
-        fieldCount: true,
-        fields: { orderBy: { field: "asc" } },
-      },
+      select: { checkedAt: true, sourceCount: true, fieldCount: true },
     });
-    return check;
+    if (!check) return null;
+    const ids = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT DISTINCT ON (f.field) f.id
+      FROM "ProductEnrichmentFieldResult" f
+      JOIN "ProductEnrichmentRunProduct" c ON c.id = f."checkId"
+      JOIN "ProductEnrichmentRun" r ON r.id = c."runId"
+      WHERE c."productId" = ${productId}
+        AND r.status IN ('COMPLETED', 'LIMIT_REACHED')
+      ORDER BY f.field, c."checkedAt" DESC, f.id DESC`;
+    const fields = await prisma.productEnrichmentFieldResult.findMany({
+      where: { id: { in: ids.map((row) => row.id) } },
+      orderBy: { field: "asc" },
+    });
+    return { ...check, fields };
   }
 
-  async latestCheckIds(): Promise<string[]> {
-    const rows = await prisma.$queryRaw<{ id: string }[]>`
-      SELECT DISTINCT ON (c."productId") c.id
-      FROM "ProductEnrichmentRunProduct" c
+  async latestFieldResults(): Promise<{ id: string; productId: string }[]> {
+    return prisma.$queryRaw<{ id: string; productId: string }[]>`
+      SELECT DISTINCT ON (c."productId", f.field) f.id, c."productId"
+      FROM "ProductEnrichmentFieldResult" f
+      JOIN "ProductEnrichmentRunProduct" c ON c.id = f."checkId"
       JOIN "ProductEnrichmentRun" r ON r.id = c."runId"
       WHERE r.status IN ('COMPLETED', 'LIMIT_REACHED')
-      ORDER BY c."productId", c."checkedAt" DESC`;
-    return rows.map((row) => row.id);
+      ORDER BY c."productId", f.field, c."checkedAt" DESC, f.id DESC`;
   }
 
-  async queueCounts(checkIds: readonly string[]) {
-    if (checkIds.length === 0) return [];
+  async queueCounts(fieldResultIds: readonly string[]) {
+    if (fieldResultIds.length === 0) return [];
     const groups = await prisma.productEnrichmentFieldResult.groupBy({
       by: ["status", "tier"],
-      where: { checkId: { in: [...checkIds] } },
+      where: { id: { in: [...fieldResultIds] } },
       _count: { _all: true },
     });
     return groups.map((group) => ({
@@ -84,15 +103,15 @@ export class PrismaEnrichmentReader implements EnrichmentReader {
   }
 
   async queueRows(
-    checkIds: readonly string[],
+    fieldResultIds: readonly string[],
     filter: ProductQualityQueueFilter,
     after: string | null,
     take: number,
   ): Promise<QueueRowRecord[]> {
-    if (checkIds.length === 0) return [];
+    if (fieldResultIds.length === 0) return [];
     const rows = await prisma.productEnrichmentFieldResult.findMany({
       where: {
-        checkId: { in: [...checkIds] },
+        id: { in: [...fieldResultIds] },
         ...queueFilterWhere(filter),
         ...(after ? { id: { gt: after } } : {}),
       },

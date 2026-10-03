@@ -103,6 +103,8 @@ export interface ProductEvidenceEntry {
 
 /** One reviewed field. `value` is `null` unless VERIFIED or SUGGESTED (jev `reconcileField`). */
 export interface ProductFieldReview {
+  /** The stored JEV result; what "Elfogad" points the knowledge fact at. */
+  fieldResultId: string;
   field: ProductEnrichmentFieldKey;
   tier: ProductFieldTier;
   status: ProductFieldStatus;

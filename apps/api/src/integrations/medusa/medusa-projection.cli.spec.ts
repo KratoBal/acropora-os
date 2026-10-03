@@ -1182,6 +1182,14 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
           return [];
         },
       },
+      /**
+       * A TERMEKISMERET (#1431). URES az alapertelmezes: a legtobb termeknek
+       * nincs, es ilyenkor a leiras a mai marad, ismeret-iras nem indul. A
+       * hivas NEM kerul a listaba, hogy a meglevo hivas-sorrend allitasok
+       * valtozatlanok maradjanak; az ismeret agat kulon teszt meri.
+       */
+      productKnowledgeFact: { findMany: async () => [] },
+      productCopy: { findMany: async () => [] },
       ...overrides,
     } as unknown as ProjectionDatabase;
     return { db, hivasok };
@@ -1539,6 +1547,126 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
      */
     assert.equal(metadata?.unas_similar_ids, "m-hasonlo-2,m-hasonlo-1");
     assert.equal(metadata?.unas_accessory_ids, "m-kieg-1");
+  });
+
+  /**
+   * A TERMEKISMERET A FUTTATOBAN (#1431): a jovahagyott szoveg a leirasba
+   * megy, az ismeret pedig a termek UTAN, kulon `PUT` keresben.
+   *
+   * MI PIROSITJA: ha a futtato nem olvasna az ismeret-tablakat (a leiras a
+   * UNAS-e maradna, `PUT` nem menne), vagy ha a UNAS torzsadatu termeken is
+   * felulirna a leirast.
+   */
+  function tudasAdatbazis(catalogAuthority: string) {
+    return adatbazis(termek({ catalogAuthority }), {
+      productKnowledgeFact: {
+        findMany: async () => [
+          {
+            field: "packSize",
+            value: "100 ml",
+            unit: null,
+            status: "VERIFIED",
+            revision: 1,
+            fieldResult: { sourceType: "MANUFACTURER_PAGE" },
+          },
+        ],
+      },
+      productCopy: {
+        findMany: async () =>
+          (["lead", "body"] as const).map((block) => ({
+            block,
+            body: block === "lead" ? "Bevezető." : "Törzs.",
+            status: "APPROVED",
+            revision: 1,
+            basedOn: { packSize: 1 },
+          })),
+      },
+    });
+  }
+
+  it("termekismeret: a jovahagyott szoveg a leirasba megy, es az ismeret PUT-tal kimegy", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = tudasAdatbazis("ACROPORA");
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.equal(
+      (letrehozas?.body as { description?: string }).description,
+      "<p>Bevezető.</p>\n<p>Törzs.</p>",
+    );
+    const tudas = keresek.filter((k) =>
+      k.url.includes("/admin/product-knowledge/"),
+    );
+    assert.deepEqual(
+      tudas.map((k) => [k.method, k.url.split("/admin/")[1]]),
+      [
+        ["GET", "product-knowledge/prod_medusa_1"],
+        ["PUT", "product-knowledge/prod_medusa_1"],
+      ],
+    );
+    assert.deepEqual(tudas[1]!.body, {
+      facts: [
+        {
+          field: "packSize",
+          value: "100 ml",
+          unit: null,
+          status: "VERIFIED",
+          source_type: "MANUFACTURER_PAGE",
+          revision: 1,
+        },
+      ],
+      copy: [
+        { block: "lead", body: "Bevezető.", revision: 1 },
+        { block: "body", body: "Törzs.", revision: 1 },
+      ],
+    });
+    assert.match(stdout.join(""), /termékismeret: most állítottuk be/);
+  });
+
+  it("termekismeret: UNAS torzsadatu termeken a leiras a mai marad, az ismeret attol meg kimegy", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = tudasAdatbazis("UNAS");
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.equal(
+      (letrehozas?.body as { description?: string | null }).description,
+      null,
+    );
+    assert.ok(
+      keresek.some(
+        (k) =>
+          k.method === "PUT" && k.url.includes("/admin/product-knowledge/"),
+      ),
+    );
   });
 
   /**

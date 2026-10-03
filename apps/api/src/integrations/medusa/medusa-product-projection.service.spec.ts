@@ -658,6 +658,60 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
     assert.ok(!("handle" in (torzs ?? {})));
   });
 
+  /**
+   * A JOVAHAGYOTT OS-SZOVEG (termekismeret, #1431) A UNAS LEIRAS HELYETT.
+   *
+   * MI PIROSITJA: ha a leiras tovabbra is a UNAS mezokbol allna ossze, ha a
+   * ket `unas_*_description` kulcs kimenne a mi szovegunk mellett (a kirakat
+   * kulon slotba tenne, tehat a vevo ketszer latna), vagy ha a jovahagyott
+   * SEO-cim nem irna felul.
+   */
+  it("a jovahagyott OS-szoveg a leirasba megy, a UNAS kulcsok nelkul, es a SEO-t felulirja", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(
+      {
+        ...product,
+        description: "<p>Rovid</p>",
+        descriptionLong: "<p>Hosszu</p>",
+        seoTitle: "UNAS cim",
+        seoDescription: "UNAS meta",
+        knowledgeCopy: {
+          description: "<p>Bevezető</p>\n<p>Törzs</p>",
+          seoTitle: "OS cim",
+          seoDescription: null,
+        },
+      },
+      now,
+    );
+    const torzs = f.createdWith[0];
+    assert.equal(torzs?.description, "<p>Bevezető</p>\n<p>Törzs</p>");
+    assert.ok(!("unas_short_description" in (torzs?.metadata ?? {})));
+    assert.ok(!("unas_long_description" in (torzs?.metadata ?? {})));
+    assert.equal(torzs?.metadata?.seo_title, "OS cim");
+    // Ami nincs jovahagyva, az a mai erteket hagyja.
+    assert.equal(torzs?.metadata?.seo_description, "UNAS meta");
+  });
+
+  it("jovahagyott leiras nelkul (null) a leiras pontosan a mai marad", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(
+      {
+        ...product,
+        description: "<p>Rovid</p>",
+        descriptionLong: null,
+        knowledgeCopy: {
+          description: null,
+          seoTitle: "OS cim",
+          seoDescription: null,
+        },
+      },
+      now,
+    );
+    const torzs = f.createdWith[0];
+    assert.equal(torzs?.description, "<p>Rovid</p>");
+    assert.equal(torzs?.metadata?.unas_short_description, "<p>Rovid</p>");
+  });
+
   it("a harom tovabbi SEO mezo kulon kulcsot kap a metaadatban", async () => {
     const f = fakes({ link: null, found: [] });
 

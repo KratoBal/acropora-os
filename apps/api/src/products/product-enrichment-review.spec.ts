@@ -35,6 +35,7 @@ const CHECK: LatestCheck = {
   fieldCount: 1,
   fields: [
     {
+      id: "fr-flow",
       field: "flowRate",
       tier: "C",
       status: "VERIFIED",
@@ -75,8 +76,8 @@ function reader(over: Partial<EnrichmentReader> = {}) {
       calls.push(`latestCheck:${id}`);
       return null;
     },
-    latestCheckIds: async () => {
-      calls.push("latestCheckIds");
+    latestFieldResults: async () => {
+      calls.push("latestFieldResults");
       return [];
     },
     queueCounts: async () => [],
@@ -224,7 +225,14 @@ describe("a katalógus-sor (GET /products/enrichment/queue)", () => {
   it("lapoz, a szűrőt továbbadja, és a szerver számolja az összesítőt", async () => {
     const asked: unknown[] = [];
     const read = reader({
-      latestCheckIds: async () => ["c-1", "c-2"],
+      // Two results of one product and one of another: the count is of
+      // PRODUCTS, not of results (a manual check adds one result, not one
+      // product).
+      latestFieldResults: async () => [
+        { id: "f-1", productId: "p-1" },
+        { id: "f-2", productId: "p-1" },
+        { id: "f-3", productId: "p-2" },
+      ],
       queueCounts: async () => [
         { status: "CONFLICTING_SOURCES", tier: "C", count: 3 },
         { status: "VERIFIED", tier: "C", count: 4 },
@@ -238,7 +246,7 @@ describe("a katalógus-sor (GET /products/enrichment/queue)", () => {
     const page = await service(ON, read).queue(PILOT, "critical", "r-000");
     assert.deepEqual(asked, [
       {
-        ids: ["c-1", "c-2"],
+        ids: ["f-1", "f-2", "f-3"],
         filter: "critical",
         after: "r-000",
         take: QUEUE_PAGE_SIZE + 1,

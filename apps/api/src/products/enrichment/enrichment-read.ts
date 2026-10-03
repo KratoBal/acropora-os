@@ -19,6 +19,7 @@ import { PRODUCT_EVIDENCE_SOURCE_TYPES } from "@acropora/types";
  * Pure: the stored row in, the contract shape out.
  */
 export interface StoredFieldRow {
+  id: string;
   field: string;
   tier: string;
   status: string;
@@ -88,6 +89,7 @@ export function toFieldReview(row: StoredFieldRow): ProductFieldReview {
       ];
     });
   return {
+    fieldResultId: row.id,
     field: row.field as ProductEnrichmentFieldKey,
     tier: row.tier as ProductFieldTier,
     status: row.status as ProductFieldStatus,

@@ -17,6 +17,12 @@ import {
 import { ProductEnrichmentQueueController } from "./product-enrichment-queue.controller.js";
 import { ProductEnrichmentReviewController } from "./product-enrichment-review.controller.js";
 import { ProductEnrichmentReviewService } from "./product-enrichment-review.service.js";
+import {
+  KNOWLEDGE_STORE,
+  PrismaKnowledgeStore,
+} from "./knowledge/knowledge.repository.js";
+import { ProductKnowledgeController } from "./knowledge/knowledge.controller.js";
+import { ProductKnowledgeService } from "./knowledge/knowledge.service.js";
 import { ProductController } from "./product.controller.js";
 import { ProductRepository } from "./product.repository.js";
 import { ProductService } from "./product.service.js";
@@ -30,6 +36,7 @@ import { ProductService } from "./product.service.js";
     CatalogOptionsController,
     ProductEnrichmentReviewController,
     ProductEnrichmentQueueController,
+    ProductKnowledgeController,
   ],
   providers: [
     ProductRepository,
@@ -42,6 +49,8 @@ import { ProductService } from "./product.service.js";
     ProductExtensionService,
     ProductEnrichmentReviewService,
     { provide: ENRICHMENT_READER, useClass: PrismaEnrichmentReader },
+    ProductKnowledgeService,
+    { provide: KNOWLEDGE_STORE, useClass: PrismaKnowledgeStore },
   ],
   exports: [ProductService, ProductExtensionService, ProductBarcodeRepository],
 })
