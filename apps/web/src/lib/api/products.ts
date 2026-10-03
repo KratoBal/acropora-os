@@ -5,6 +5,8 @@ import type {
   ProductBarcodeSummary,
   ProductDetail,
   ProductEnrichmentReview,
+  ProductQualityQueueFilter,
+  ProductQualityQueuePage,
   ProductExtensionDetail,
   ProductExtensionUpdateInput,
   ProductListApiQuery,
@@ -52,10 +54,23 @@ export const productApi = {
       token,
     );
   },
+  /** The catalogue data-quality queue (PD-013): one page, filtered on the server. */
+  qualityQueue(
+    token: string,
+    filter: ProductQualityQueueFilter,
+    cursor: string | null,
+  ) {
+    const query = new URLSearchParams({ filter });
+    if (cursor) query.set("cursor", cursor);
+    return apiRequest<ProductQualityQueuePage>(
+      `/products/enrichment/queue?${query}`,
+      token,
+    );
+  },
   /**
    * The JEV data review of one product, read only
-   * (docs/jev-product-intelligence/v1-discovery.md §11/1). Today it carries
-   * the server's `JEV_PRODUCT_ENRICHMENT` availability and no run.
+   * (docs/jev-product-intelligence/v1-discovery.md §11/1): the availability
+   * for this user and the latest stored shadow run (PD-013).
    */
   enrichment(token: string, id: string) {
     return apiRequest<ProductEnrichmentReview>(

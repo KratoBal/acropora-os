@@ -51,6 +51,8 @@ const CONTROLLERS = [
   "src/products/catalog-options.controller.ts",
   // JEV product enrichment, read only (2026-10-02).
   "src/products/product-enrichment-review.controller.ts",
+  // JEV catalogue queue (PD-013): read only, products.view.
+  "src/products/product-enrichment-queue.controller.ts",
   /*
     A HIBAJEGY-MODUL VEZERLOI, 2026-09-14-tol.
 

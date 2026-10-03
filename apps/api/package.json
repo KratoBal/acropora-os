@@ -26,6 +26,7 @@
     "medusa:pricing": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-pricing.cli.js",
     "brands:merge": "tsc -p tsconfig.json && node --env-file=../../.env dist/brands/brand-merge.cli.js",
     "unas:brand-master": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-brand-master.cli.js",
+    "jev:enrich": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/enrichment/enrichment-run.cli.js",
     "unas:brand-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-brand-backfill.cli.js",
     "medusa:image-addresses": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-image-audit.cli.js",
     "medusa:image-blocks": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-image-block-audit.cli.js",

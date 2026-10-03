@@ -1026,6 +1026,7 @@ export {
   PRODUCT_EVIDENCE_SOURCE_TYPES,
   PRODUCT_FIELD_STATUSES,
   PRODUCT_INTERNAL_SOURCE_TYPES,
+  PRODUCT_QUALITY_QUEUE_FILTERS,
 } from "./product-enrichment-review.js";
 export type {
   ProductEnrichmentAvailability,
@@ -1038,4 +1039,6 @@ export type {
   ProductFieldTier,
   ProductFieldValue,
   ProductQualityQueueRow,
+  ProductQualityQueueFilter,
+  ProductQualityQueuePage,
 } from "./product-enrichment-review.js";

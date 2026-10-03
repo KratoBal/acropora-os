@@ -65,6 +65,7 @@ export function PilotSupplierEditorPage({
   const [country, setCountry] = useState("HU");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
   /** A new record starts as a supplier, the same way the column defaults, so
    * that recording a supplier stays a matter of typing the name. */
   const [isSupplier, setIsSupplier] = useState(true);
@@ -123,6 +124,7 @@ export function PilotSupplierEditorPage({
         setCountry(next.country);
         setEmail(next.email ?? "");
         setPhone(next.phone ?? "");
+        setWebsiteUrl(next.websiteUrl ?? "");
         setIsSupplier(next.isSupplier);
         setIsService(next.isService);
         setWorksheetPartnerCode(next.worksheetPartnerCode ?? "");
@@ -245,6 +247,7 @@ export function PilotSupplierEditorPage({
       country: country.trim().toUpperCase(),
       email: email.trim() || undefined,
       phone: phone.trim() || undefined,
+      websiteUrl: websiteUrl.trim() || undefined,
       iban: isEu ? iban.trim() || undefined : undefined,
       swiftCode: isEu ? swiftCode.trim() || undefined : undefined,
       bankAccountNumber: isEu
@@ -284,6 +287,7 @@ export function PilotSupplierEditorPage({
             taxNumber: payload.taxNumber ?? null,
             email: payload.email ?? null,
             phone: payload.phone ?? null,
+            websiteUrl: payload.websiteUrl ?? null,
             iban: payload.iban ?? null,
             swiftCode: payload.swiftCode ?? null,
             bankAccountNumber: payload.bankAccountNumber ?? null,
@@ -542,6 +546,15 @@ export function PilotSupplierEditorPage({
                     aria-label="Telefonszám"
                     value={phone}
                     onChange={setPhone}
+                  />
+                </PilotFormField>
+                <PilotFormField label="Weboldal">
+                  <PilotInput
+                    type="url"
+                    aria-label="Weboldal"
+                    placeholder="https://"
+                    value={websiteUrl}
+                    onChange={setWebsiteUrl}
                   />
                 </PilotFormField>
               </div>

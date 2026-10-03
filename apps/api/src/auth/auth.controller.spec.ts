@@ -331,27 +331,66 @@ describe("AuthController", () => {
         .getCurrentUser({ ...testUser, role }, fakeRequest())
         .navigation.map((entry) => entry.id)
         .includes("product-data-quality");
+    const pilot = { JEV_PILOT_USER_IDS: testUser.id };
     for (const value of [undefined, "", "off", "live", "REVIEW"])
       assert.equal(
-        served({ JEV_PRODUCT_ENRICHMENT: value }, "OWNER"),
+        served({ JEV_PRODUCT_ENRICHMENT: value, ...pilot }, "OWNER"),
         false,
         `JEV_PRODUCT_ENRICHMENT=${value}`,
       );
     for (const value of ["benchmark", "review", "production-review"])
-      assert.equal(served({ JEV_PRODUCT_ENRICHMENT: value }, "OWNER"), true);
+      assert.equal(
+        served({ JEV_PRODUCT_ENRICHMENT: value, ...pilot }, "OWNER"),
+        true,
+      );
     // products.view is still needed: SERVICE has no product access
     assert.equal(
-      served({ JEV_PRODUCT_ENRICHMENT: "review" }, "SERVICE"),
+      served({ JEV_PRODUCT_ENRICHMENT: "review", ...pilot }, "SERVICE"),
       false,
     );
-    assert.equal(served({ JEV_PRODUCT_ENRICHMENT: "review" }, "VIEWER"), true);
+    assert.equal(
+      served({ JEV_PRODUCT_ENRICHMENT: "review", ...pilot }, "VIEWER"),
+      true,
+    );
+  });
+
+  // PD-013: in benchmark/review mode only the pilot list sees the entry; a
+  // colleague not on it does not, however the switch stands. In
+  // production-review the list no longer narrows.
+  it("serves the entry in review mode only to the pilot list", () => {
+    const served = (env: NodeJS.ProcessEnv) =>
+      new AuthController(
+        {} as unknown as ConstructorParameters<typeof AuthController>[0],
+        env,
+      )
+        .getCurrentUser(testUser, fakeRequest())
+        .navigation.some((entry) => entry.id === "product-data-quality");
+    assert.equal(served({ JEV_PRODUCT_ENRICHMENT: "review" }), false);
+    assert.equal(
+      served({
+        JEV_PRODUCT_ENRICHMENT: "review",
+        JEV_PILOT_USER_IDS: "masik-kollega",
+      }),
+      false,
+    );
+    assert.equal(
+      served({
+        JEV_PRODUCT_ENRICHMENT: "review",
+        JEV_PILOT_USER_IDS: `masik-kollega, ${testUser.id}`,
+      }),
+      true,
+    );
+    assert.equal(served({ JEV_PRODUCT_ENRICHMENT: "production-review" }), true);
   });
 
   it("serves each role exactly what the shared source says it may see", () => {
     let osszevetes = 0;
 
     // both positions of the server switch: off (unset) and on
-    for (const env of [{}, { JEV_PRODUCT_ENRICHMENT: "review" }]) {
+    for (const env of [
+      {},
+      { JEV_PRODUCT_ENRICHMENT: "review", JEV_PILOT_USER_IDS: testUser.id },
+    ]) {
       const controller = new AuthController(
         {} as unknown as ConstructorParameters<typeof AuthController>[0],
         env,

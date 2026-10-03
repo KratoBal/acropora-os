@@ -5,8 +5,10 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   Max,
+  MaxLength,
   Min,
   MinLength,
 } from "class-validator";
@@ -27,6 +29,14 @@ export const PARTNER_CODE = /^[A-Z][A-Z0-9]{3}$/;
 export const PARTNER_CODE_MESSAGE =
   "A partnerkód pontosan négy karakter, betűvel kezdődik, utána nagybetű vagy számjegy állhat (például FANK).";
 
+/** The supplier's own website: an http(s) address with the scheme written. */
+export const SUPPLIER_WEBSITE_URL = {
+  protocols: ["https", "http"],
+  require_protocol: true,
+};
+export const SUPPLIER_WEBSITE_URL_MESSAGE =
+  "A weboldal teljes címe kell, https://-sel kezdve (például https://beszallito.hu).";
+
 export class CreateSupplierDto {
   @IsString() @MinLength(1) name!: string;
   /** Left out means "as the column defaults": supplier yes, service no. The
@@ -46,6 +56,12 @@ export class CreateSupplierDto {
   @IsString() @IsOptional() country?: string;
   @IsString() @IsOptional() email?: string;
   @IsString() @IsOptional() phone?: string;
+  /** The supplier's own site (PD-013): the only host a supplier page is read
+   * from. https or http, with the scheme written out. */
+  @IsUrl(SUPPLIER_WEBSITE_URL, { message: SUPPLIER_WEBSITE_URL_MESSAGE })
+  @MaxLength(300)
+  @IsOptional()
+  websiteUrl?: string;
   @IsString() @IsOptional() iban?: string;
   @IsString() @IsOptional() swiftCode?: string;
   @IsString() @IsOptional() bankAccountNumber?: string;
@@ -72,6 +88,11 @@ export class UpdateSupplierDto {
   @IsString() @IsOptional() country?: string;
   @IsString() @IsOptional() email?: string | null;
   @IsString() @IsOptional() phone?: string | null;
+  /** `null` clears it. */
+  @IsUrl(SUPPLIER_WEBSITE_URL, { message: SUPPLIER_WEBSITE_URL_MESSAGE })
+  @MaxLength(300)
+  @IsOptional()
+  websiteUrl?: string | null;
   @IsString() @IsOptional() iban?: string | null;
   @IsString() @IsOptional() swiftCode?: string | null;
   @IsString() @IsOptional() bankAccountNumber?: string | null;

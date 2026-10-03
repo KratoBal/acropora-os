@@ -47,6 +47,7 @@ function toSummary(supplier: Supplier): SupplierSummary {
     country: supplier.country,
     email: supplier.email ?? undefined,
     phone: supplier.phone ?? undefined,
+    websiteUrl: supplier.websiteUrl ?? undefined,
     iban: supplier.iban ?? undefined,
     swiftCode: supplier.swiftCode ?? undefined,
     bankAccountNumber: supplier.bankAccountNumber ?? undefined,
@@ -620,6 +621,7 @@ export class SuppliersRepository extends Repository {
                 country: (input.country ?? "HU").trim().toUpperCase(),
                 email: input.email?.trim() || undefined,
                 phone: input.phone?.trim() || undefined,
+                websiteUrl: input.websiteUrl?.trim() || undefined,
                 iban: input.iban?.trim() || undefined,
                 swiftCode: input.swiftCode?.trim() || undefined,
                 bankAccountNumber: input.bankAccountNumber?.trim() || undefined,
@@ -726,6 +728,8 @@ export class SuppliersRepository extends Repository {
               country: input.country?.trim().toUpperCase(),
               email: input.email === null ? null : input.email?.trim(),
               phone: input.phone === null ? null : input.phone?.trim(),
+              websiteUrl:
+                input.websiteUrl === null ? null : input.websiteUrl?.trim(),
               iban: input.iban === null ? null : input.iban?.trim(),
               swiftCode:
                 input.swiftCode === null ? null : input.swiftCode?.trim(),
