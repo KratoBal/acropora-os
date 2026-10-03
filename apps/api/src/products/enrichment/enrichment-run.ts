@@ -7,6 +7,7 @@ import {
   type SourcedValue,
 } from "@acropora/jev/product-enrichment";
 
+import { withBulkReefSupplyTable } from "./bulk-reef-supply-extract.js";
 import { extractMarineAquaticsStatement } from "./marine-aquatics-extract.js";
 import {
   ENRICHED_FIELDS,
@@ -313,10 +314,13 @@ async function checkProduct(
     }
     const structured = extractPageStatement(page.html);
     // marine-aquatics.eu states its data in labelled rows, not JSON-LD.
+    // bulkreefsupply.com states its barcode only in a labelled table.
     const statement =
       source.kind === "MARINE_AQUATICS" && structured.values.length === 0
         ? extractMarineAquaticsStatement(page.html)
-        : structured;
+        : source.kind === "BULK_REEF_SUPPLY"
+          ? withBulkReefSupplyTable(structured, page.html)
+          : structured;
     fetches.push({
       sourceKind: source.kind,
       url: page.url,
