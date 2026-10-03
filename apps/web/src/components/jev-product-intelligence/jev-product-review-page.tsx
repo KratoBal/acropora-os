@@ -24,7 +24,7 @@ import { productApi } from "@/lib/api/products";
 import { conflictHref } from "./jev-conflict";
 import { JevDisabledAction } from "./jev-decision-action";
 import { JevFieldReviewRow } from "./jev-field-review-row";
-import { factFor } from "./jev-knowledge";
+import { conflictingFields, factFor } from "./jev-knowledge";
 import {
   JevAcceptAction,
   JevCopyPanel,
@@ -322,6 +322,7 @@ export function JevProductReviewPage({ productId }: { productId: string }) {
           {knowledge && (canApprove || knowledge.copy.length > 0) ? (
             <JevCopyPanel
               copy={knowledge.copy}
+              conflicts={conflictingFields(fields, knowledge.facts)}
               canApprove={canApprove}
               busy={busy}
               onSave={saveCopy}

@@ -1,7 +1,13 @@
-import type { ProductKnowledgeFact } from "@acropora/types";
+import type { ProductFieldReview, ProductKnowledgeFact } from "@acropora/types";
 import { describe, expect, it } from "vitest";
 
-import { acceptedLine, canApproveCopy, isAcceptable } from "./jev-knowledge";
+import {
+  acceptedLine,
+  canApproveCopy,
+  conflictMentions,
+  conflictingFields,
+  isAcceptable,
+} from "./jev-knowledge";
 
 /** Invented values only. */
 const fact = (over: Partial<ProductKnowledgeFact>): ProductKnowledgeFact => ({
@@ -53,5 +59,98 @@ describe("termékismeret a felülvizsgálati soron", () => {
       false,
     );
     expect(canApproveCopy(undefined)).toBe(false);
+  });
+});
+
+/** Invented values only. */
+const review = (over: Partial<ProductFieldReview>): ProductFieldReview => ({
+  fieldResultId: "fr-1",
+  field: "dosing",
+  tier: "C",
+  status: "CONFLICTING_SOURCES",
+  currentValue: null,
+  value: null,
+  sourceType: null,
+  sourceRef: null,
+  retrievedAt: null,
+  confidence: null,
+  evidence: [
+    {
+      sourceType: "MANUFACTURER_PAGE",
+      value: { kind: "text", text: "1 drop/100 L/day" },
+      sourceRef: "https://gyarto.example",
+      retrievedAt: null,
+    },
+    {
+      sourceType: "MANUFACTURER_DOCUMENT",
+      value: { kind: "text", text: "1 drop/100 L, 1-2/week" },
+      sourceRef: "doc",
+      retrievedAt: null,
+    },
+  ],
+  ...over,
+});
+
+describe("az ütköző érték a vevői szövegben (figyelmeztetés, nem tiltás)", () => {
+  const conflicts = conflictingFields(
+    [
+      review({}),
+      review({
+        field: "packSize",
+        status: "VERIFIED",
+        evidence: [
+          {
+            sourceType: "MANUFACTURER_PAGE",
+            value: { kind: "text", text: "100 ml" },
+            sourceRef: null,
+            retrievedAt: null,
+          },
+        ],
+      }),
+    ],
+    [],
+  );
+
+  it("csak az ütköző mező kerül a listára, minden értékével", () => {
+    expect(conflicts).toEqual([
+      {
+        field: "dosing",
+        values: ["1 drop/100 L/day", "1 drop/100 L, 1-2/week"],
+      },
+    ]);
+  });
+
+  it("az ütközésként elfogadott tény mezője akkor is, ha az újabb eredmény más", () => {
+    expect(
+      conflictingFields(
+        [review({ status: "VERIFIED" })],
+        [fact({ field: "dosing", status: "CONFLICTING_SOURCES", value: null })],
+      ).map((c) => c.field),
+    ).toEqual(["dosing"]);
+  });
+
+  // KZ Amino stage run (#1431 comment 5972125293, finding 7): the first
+  // approved body named both frequencies.
+  it("a szövegben álló ütköző értéket megnevezi, betűmérettől és szóköztől függetlenül", () => {
+    expect(
+      conflictMentions(
+        "Adagolás: 1 DROP/100 L/day,  vagy a lap szerint 1 drop/100 L, 1-2/week.",
+        conflicts,
+      ),
+    ).toEqual([
+      {
+        field: "dosing",
+        values: ["1 drop/100 L/day", "1 drop/100 L, 1-2/week"],
+      },
+    ]);
+  });
+
+  it("ha a szöveg nem nevez meg értéket, nincs találat", () => {
+    expect(
+      conflictMentions(
+        "A gyártó forrásai az adagolásban nem egyeznek, ezért most nem adunk ajánlott adagot.",
+        conflicts,
+      ),
+    ).toEqual([]);
   });
 });

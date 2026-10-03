@@ -27,8 +27,10 @@ import {
   MANUAL_SOURCE_LABEL,
   acceptedLine,
   canApproveCopy,
+  conflictMentions,
   copyStateLabel,
   isAcceptable,
+  type ConflictingField,
 } from "./jev-knowledge";
 import { FIELD_LABEL } from "./jev-presentation";
 
@@ -216,12 +218,15 @@ export function JevManualEvidenceForm({
  */
 export function JevCopyPanel({
   copy,
+  conflicts = [],
   canApprove,
   busy,
   onSave,
   onApprove,
 }: {
   copy: readonly ProductCopyEntry[];
+  /** Fields whose sources disagree: the lead and the body warn about them. */
+  conflicts?: readonly ConflictingField[];
   canApprove: boolean;
   busy: boolean;
   onSave: (block: ProductCopyBlock, body: string) => void;
@@ -238,6 +243,7 @@ export function JevCopyPanel({
             key={block}
             block={block}
             entry={copy.find((entry) => entry.block === block)}
+            conflicts={block === "lead" || block === "body" ? conflicts : []}
             canApprove={canApprove}
             busy={busy}
             onSave={onSave}
@@ -252,6 +258,7 @@ export function JevCopyPanel({
 function CopyBlockEditor({
   block,
   entry,
+  conflicts,
   canApprove,
   busy,
   onSave,
@@ -259,6 +266,7 @@ function CopyBlockEditor({
 }: {
   block: ProductCopyBlock;
   entry: ProductCopyEntry | undefined;
+  conflicts: readonly ConflictingField[];
   canApprove: boolean;
   busy: boolean;
   onSave: (block: ProductCopyBlock, body: string) => void;
@@ -292,6 +300,7 @@ function CopyBlockEditor({
         readOnly={!canApprove}
         className={TEXTAREA_CLASS}
       />
+      <CopyConflictWarning text={draft} conflicts={conflicts} />
       {canApprove ? (
         <div className="flex flex-wrap gap-2">
           <PilotButton
@@ -313,5 +322,45 @@ function CopyBlockEditor({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * THE COPY RULE, AS A WARNING (KZ Amino stage run, finding 7). Where the
+ * sources disagree, the copy must not state a value: it would carry the
+ * conflict into the shop. The text names a value of such a field: an amber
+ * line quoting it. It names none: a quiet line naming the fields, because a
+ * paraphrase in other words is not something a match can see. Never blocks.
+ */
+function CopyConflictWarning({
+  text,
+  conflicts,
+}: {
+  text: string;
+  conflicts: readonly ConflictingField[];
+}) {
+  if (conflicts.length === 0) return null;
+  const named = conflictMentions(text, conflicts);
+  if (named.length > 0)
+    return (
+      <p role="alert" className="text-xs leading-4 text-pilot-amber-700">
+        {`Figyelem: a szöveg ütköző értéket nevez meg (${named
+          .map(
+            (conflict) =>
+              `${FIELD_LABEL[conflict.field]}: ${conflict.values.join(", ")}`,
+          )
+          .join(
+            "; ",
+          )}). A források ebben nem egyeznek, a szöveg ne állítson értéket.`}
+      </p>
+    );
+  return (
+    <p className="text-xs leading-4 text-pilot-grey-500">
+      {`Ütköző mező: ${conflicts
+        .map((conflict) => FIELD_LABEL[conflict.field])
+        .join(
+          ", ",
+        )}. A szöveg ne nevezzen meg belőle értéket, a saját szavaival sem.`}
+    </p>
   );
 }

@@ -4,8 +4,11 @@ import {
   type ProductCopyEntry,
   type ProductFieldReview,
   type ProductKnowledgeFact,
+  type ProductEnrichmentFieldKey,
   type ProductManualEvidenceSourceType,
 } from "@acropora/types";
+
+import { formatFieldValue } from "./jev-presentation";
 
 /**
  * PRODUCT KNOWLEDGE ON THE JEV REVIEW PAGE (#1431): what a reviewer may do
@@ -77,4 +80,70 @@ export function copyStateLabel(entry: ProductCopyEntry | undefined): string {
 /** Approval needs a saved, fresh draft; an approved fresh block has nothing left. */
 export function canApproveCopy(entry: ProductCopyEntry | undefined): boolean {
   return entry !== undefined && !entry.stale && entry.status === "DRAFT";
+}
+
+/** A field whose sources disagree, with every value they state. */
+export interface ConflictingField {
+  field: ProductEnrichmentFieldKey;
+  values: string[];
+}
+
+/**
+ * THE FIELDS THE COPY MUST NOT STATE A VALUE OF: the ones whose sources
+ * disagree, by the latest result or by the accepted fact. The values are the
+ * ones the review shows, so a warning quotes what the reviewer can see.
+ */
+export function conflictingFields(
+  reviews: readonly ProductFieldReview[],
+  facts: readonly ProductKnowledgeFact[],
+): ConflictingField[] {
+  return reviews
+    .filter(
+      (review) =>
+        review.status === "CONFLICTING_SOURCES" ||
+        factFor(facts, review)?.status === "CONFLICTING_SOURCES",
+    )
+    .map((review) => ({
+      field: review.field,
+      values: [
+        ...new Set(
+          review.evidence
+            .map((entry) => formatFieldValue(entry.value))
+            .filter((value) => value !== "—"),
+        ),
+      ],
+    }));
+}
+
+function comparable(text: string): string {
+  return text
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("hu");
+}
+
+/**
+ * WHICH CONFLICTING VALUES THE TEXT NAMES, field by field (KZ Amino stage
+ * run, #1431 comment 5972125293, finding 7: the first approved body named
+ * both dosing frequencies, and the copy carried the conflict into the shop).
+ * A warning, never a block: the editor decides. Letter case and spacing do
+ * not hide a value; a paraphrase in other words does, which is why the panel
+ * also names the conflicting fields when nothing matches.
+ */
+export function conflictMentions(
+  text: string,
+  conflicts: readonly ConflictingField[],
+): ConflictingField[] {
+  const haystack = comparable(text);
+  if (haystack === "") return [];
+  return conflicts
+    .map((conflict) => ({
+      field: conflict.field,
+      values: conflict.values.filter((value) => {
+        const needle = comparable(value);
+        return needle !== "" && haystack.includes(needle);
+      }),
+    }))
+    .filter((conflict) => conflict.values.length > 0);
 }
