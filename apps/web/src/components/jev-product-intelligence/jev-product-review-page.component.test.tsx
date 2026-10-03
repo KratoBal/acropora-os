@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ProductDetail, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,7 +6,15 @@ import { ApiError } from "@/lib/api/client";
 
 import { JevProductReviewPage } from "./jev-product-review-page";
 
-const api = vi.hoisted(() => ({ detail: vi.fn(), enrichment: vi.fn() }));
+const api = vi.hoisted(() => ({
+  detail: vi.fn(),
+  enrichment: vi.fn(),
+  knowledge: vi.fn(),
+  addKnowledgeEvidence: vi.fn(),
+  acceptKnowledge: vi.fn(),
+  saveKnowledgeCopy: vi.fn(),
+  approveKnowledgeCopy: vi.fn(),
+}));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
 vi.mock("next/font/local", () => ({
@@ -62,6 +70,16 @@ beforeEach(() => {
   api.enrichment
     .mockReset()
     .mockResolvedValue({ availability: "off", lastRun: null, fields: [] });
+  api.knowledge
+    .mockReset()
+    .mockResolvedValue({ productId: "p-1", facts: [], copy: [] });
+  for (const write of [
+    api.addKnowledgeEvidence,
+    api.acceptKnowledge,
+    api.saveKnowledgeCopy,
+    api.approveKnowledgeCopy,
+  ])
+    write.mockReset().mockResolvedValue({});
 });
 
 describe("Termékadat-ellenőrzés aloldal", () => {
@@ -149,6 +167,7 @@ describe("Termékadat-ellenőrzés aloldal", () => {
       },
       fields: [
         {
+          fieldResultId: "fr-flow",
           field: "flowRate",
           tier: "C",
           status: "CONFLICTING_SOURCES",
@@ -176,5 +195,163 @@ describe("Termékadat-ellenőrzés aloldal", () => {
     expect(screen.getByText("Nincs hozzáférésed a termékhez")).toBeTruthy();
     expect(api.detail).not.toHaveBeenCalled();
     expect(api.enrichment).not.toHaveBeenCalled();
+  });
+
+  describe("termékismeret (#1431)", () => {
+    const conflictReview = {
+      availability: "review",
+      lastRun: {
+        at: "2026-10-03T19:00:00.000Z",
+        sourceCount: 1,
+        fieldCount: 1,
+      },
+      fields: [
+        {
+          fieldResultId: "fr-dosing-2",
+          field: "dosing",
+          tier: "C",
+          status: "CONFLICTING_SOURCES",
+          currentValue: null,
+          value: null,
+          sourceType: null,
+          sourceRef: null,
+          retrievedAt: null,
+          confidence: null,
+          evidence: [],
+        },
+      ],
+    };
+    const acceptedConflict = {
+      field: "dosing",
+      value: null,
+      unit: null,
+      status: "CONFLICTING_SOURCES",
+      revision: 1,
+      acceptedAt: "2026-10-03T19:01:00.000Z",
+      acceptedBy: { id: "u", displayName: "Teszt Kolléga" },
+      fieldResultId: "fr-dosing-2",
+      source: { sourceType: null, sourceRef: null, retrievedAt: null },
+    };
+
+    /**
+     * MI PIROSÍTJA: ha az "Elfogad" nem a sor saját eredményére mutatna, ha
+     * a lap az írás után nem olvasná újra a tényeket (a sor nem mondaná, mi
+     * lett elfogadva), vagy ha az ütközés értékkel jelenne meg elfogadottként.
+     */
+    it("ütközést érték nélkül fogad el, a sor saját eredményére mutatva, és újraolvas", async () => {
+      api.enrichment.mockResolvedValue(conflictReview);
+      api.knowledge
+        .mockResolvedValueOnce({ productId: "p-1", facts: [], copy: [] })
+        .mockResolvedValue({
+          productId: "p-1",
+          facts: [acceptedConflict],
+          copy: [],
+        });
+      render(<JevProductReviewPage productId="p-1" />);
+
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Elfogad ütközésként" }),
+      );
+      expect(
+        await screen.findByText(
+          "Elfogadva ütközésként, érték nélkül (1. változat)",
+        ),
+      ).toBeTruthy();
+      expect(api.acceptKnowledge).toHaveBeenCalledWith(
+        "token-1",
+        "p-1",
+        "fr-dosing-2",
+      );
+      expect(api.knowledge).toHaveBeenCalledTimes(2);
+      expect(api.enrichment).toHaveBeenCalledTimes(2);
+      expect(
+        screen.queryByRole("button", { name: "Elfogad ütközésként" }),
+      ).toBeNull();
+    });
+
+    it("termékismeret-jog nélkül nincs Elfogad gomb és nincs kézi bizonyíték", async () => {
+      auth.session = session("MANAGER");
+      api.enrichment.mockResolvedValue(conflictReview);
+      render(<JevProductReviewPage productId="p-1" />);
+      expect(
+        await screen.findByRole("link", { name: "Források eltérnek" }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Elfogad/ })).toBeNull();
+      expect(
+        screen.queryByRole("form", { name: "Kézi bizonyíték" }),
+      ).toBeNull();
+    });
+
+    it("a kézi bizonyíték a beírt idézettel, értékkel és forrással megy ki", async () => {
+      render(<JevProductReviewPage productId="p-1" />);
+      const form = await screen.findByRole("form", { name: "Kézi bizonyíték" });
+      fireEvent.change(within(form).getByLabelText("Forrás fajtája"), {
+        target: { value: "MANUFACTURER_DOCUMENT" },
+      });
+      fireEvent.change(within(form).getByLabelText("A forrás címe"), {
+        target: { value: "https://gyarto.example.invalid/dosage.pdf" },
+      });
+      fireEvent.change(within(form).getByLabelText("Szó szerinti idézet"), {
+        target: { value: "1-2 x/week 1 drop/100L" },
+      });
+      fireEvent.change(within(form).getByLabelText("Érték"), {
+        target: { value: "1 drop/100 L, 1-2/week" },
+      });
+      fireEvent.click(
+        within(form).getByRole("button", { name: "Bizonyíték rögzítése" }),
+      );
+      expect(
+        await screen.findByText(
+          "A bizonyíték rögzítve, a mező újra egyeztetve.",
+        ),
+      ).toBeTruthy();
+      expect(api.addKnowledgeEvidence).toHaveBeenCalledWith("token-1", "p-1", {
+        field: "dosing",
+        sourceType: "MANUFACTURER_DOCUMENT",
+        url: "https://gyarto.example.invalid/dosage.pdf",
+        raw: "1-2 x/week 1 drop/100L",
+        value: "1 drop/100 L, 1-2/week",
+      });
+    });
+
+    it("az elavult szöveg ezt mondja, és nem hagyható jóvá; a friss piszkozat igen", async () => {
+      api.knowledge.mockResolvedValue({
+        productId: "p-1",
+        facts: [],
+        copy: [
+          {
+            block: "lead",
+            body: "Régi bevezető.",
+            status: "APPROVED",
+            stale: true,
+            editedAt: "2026-10-03T18:00:00.000Z",
+            approvedAt: "2026-10-03T18:01:00.000Z",
+          },
+          {
+            block: "body",
+            body: "Friss törzs.",
+            status: "DRAFT",
+            stale: false,
+            editedAt: "2026-10-03T19:00:00.000Z",
+            approvedAt: null,
+          },
+        ],
+      });
+      render(<JevProductReviewPage productId="p-1" />);
+      expect(
+        await screen.findByText("Elavult: a tények változtak a mentés óta"),
+      ).toBeTruthy();
+      const lead = screen.getByRole("button", { name: "Bevezető jóváhagyása" });
+      const body = screen.getByRole("button", { name: "Leírás jóváhagyása" });
+      expect((lead as HTMLButtonElement).disabled).toBe(true);
+      expect((body as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(body);
+      expect(await screen.findByText("A szöveg jóváhagyva.")).toBeTruthy();
+      expect(api.approveKnowledgeCopy).toHaveBeenCalledWith(
+        "token-1",
+        "p-1",
+        "body",
+      );
+    });
   });
 });

@@ -78,6 +78,9 @@ export const PRODUCT_ENRICHMENT_FIELDS = {
   capacity: "C",
   packSize: "C",
   packageContents: "C",
+  dosing: "C",
+  manufacturerClaims: "C",
+  manufacturerInfo: "C",
 } as const satisfies Record<string, ProductFieldTier>;
 export type ProductEnrichmentFieldKey = keyof typeof PRODUCT_ENRICHMENT_FIELDS;
 
@@ -100,6 +103,8 @@ export interface ProductEvidenceEntry {
 
 /** One reviewed field. `value` is `null` unless VERIFIED or SUGGESTED (jev `reconcileField`). */
 export interface ProductFieldReview {
+  /** The stored JEV result; what "Elfogad" points the knowledge fact at. */
+  fieldResultId: string;
   field: ProductEnrichmentFieldKey;
   tier: ProductFieldTier;
   status: ProductFieldStatus;

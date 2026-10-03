@@ -3,6 +3,7 @@ import {
   guardFieldResult,
   normalizeFieldValue,
   reconcileField,
+  type FieldKey,
   type FieldResult,
   type SourcedValue,
 } from "@acropora/jev/product-enrichment";
@@ -72,7 +73,7 @@ export interface ProductFacts {
 }
 
 export interface StoredFetch {
-  sourceKind: EnrichmentSourceKind;
+  sourceKind: EnrichmentSourceKind | "MANUAL";
   url: string;
   outcome: "FETCHED" | "UNAVAILABLE" | "REFUSED";
   reason: string | null;
@@ -81,19 +82,36 @@ export interface StoredFetch {
   fieldCount: number;
 }
 
+/**
+ * Where an evidence entry came from: a page read by a run, our own value, or
+ * a reviewer who entered it by hand (`products/knowledge/manual-evidence.ts`).
+ */
+export type EvidenceSourceKind = EnrichmentSourceKind | "OS" | "MANUAL";
+
 export interface StoredEvidence {
   sourceType: string;
-  sourceKind: EnrichmentSourceKind | "OS";
+  sourceKind: EvidenceSourceKind;
   sourceRef: string | null;
   retrievedAt: string | null;
   raw: string;
   excerpt: string | null;
   accepted: boolean;
   reason?: string;
+  /** Entered by a reviewer, not read by a run; who entered it. */
+  manual?: true;
+  enteredById?: string;
+}
+
+/** A page's (or a reviewer's) statement of one field, before reconciliation. */
+export interface FieldStatement {
+  candidate: SourcedValue;
+  excerpt: string;
+  kind: EnrichmentSourceKind | "MANUAL";
+  manual?: { enteredById: string };
 }
 
 export interface StoredField {
-  field: EnrichedField;
+  field: FieldKey;
   tier: "A" | "B" | "C";
   status: FieldResult["status"];
   value: string | null;
@@ -366,7 +384,7 @@ async function checkProduct(
   };
 }
 
-function normalised(field: EnrichedField, raw: string): string | null {
+function normalised(field: FieldKey, raw: string): string | null {
   const result = normalizeFieldValue(field, raw);
   return result.ok ? result.value : null;
 }
@@ -377,17 +395,15 @@ function normalised(field: EnrichedField, raw: string): string | null {
  * at all is MISSING. Tier C goes through the V0 guard as well.
  */
 export function fieldOutcome(
-  field: EnrichedField,
+  field: FieldKey,
   facts: ProductFacts,
-  fromPages: readonly {
-    candidate: SourcedValue;
-    excerpt: string;
-    kind: EnrichmentSourceKind;
-  }[],
+  fromPages: readonly FieldStatement[],
   reconciledAt: string,
 ): StoredField {
   const tier = fieldSpec(field).tier;
-  const currentRaw = facts.current[field] ?? null;
+  // Only the run's fields have a current value; any other field has none.
+  const currentRaw =
+    (facts.current as Partial<Record<FieldKey, string>>)[field] ?? null;
   const currentValue =
     currentRaw === null ? null : (normalised(field, currentRaw) ?? currentRaw);
   const own: SourcedValue | null =
@@ -440,14 +456,14 @@ export function fieldOutcome(
     ...result.evidence.map((candidate) => {
       const page = excerptOf(candidate);
       return page
-        ? pageEvidence(candidate, page.kind, page.excerpt, true)
+        ? pageEvidence(candidate, page, true)
         : ownEvidence(candidate, true);
     }),
     ...result.rejected.map((rejected) => {
       const page = excerptOf(rejected.candidate);
       return {
         ...(page
-          ? pageEvidence(rejected.candidate, page.kind, page.excerpt, false)
+          ? pageEvidence(rejected.candidate, page, false)
           : ownEvidence(rejected.candidate, false)),
         reason: rejected.code ?? rejected.kind,
       };
@@ -485,17 +501,19 @@ function ownEvidence(
 
 function pageEvidence(
   candidate: SourcedValue,
-  kind: EnrichmentSourceKind,
-  excerpt: string,
+  statement: FieldStatement,
   accepted: boolean,
 ): StoredEvidence {
   return {
     sourceType: candidate.sourceType,
-    sourceKind: kind,
+    sourceKind: statement.kind,
     sourceRef: candidate.sourceRef,
     retrievedAt: candidate.retrievedAt,
     raw: candidate.value,
-    excerpt,
+    excerpt: statement.excerpt,
     accepted,
+    ...(statement.manual
+      ? { manual: true as const, enteredById: statement.manual.enteredById }
+      : {}),
   };
 }

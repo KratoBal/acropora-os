@@ -784,22 +784,27 @@ enum InvoiceSyncStatus {
 }
 
 model User {
-  id                    String                 @id @default(cuid())
+  id                     String                 @id @default(cuid())
   /// A gépi tokenek, amik ennek a felhasználónak a nevében járnak el.
-  serviceTokens         ServiceToken[]         @relation("ServiceTokenUser")
+  serviceTokens          ServiceToken[]         @relation("ServiceTokenUser")
   /// Az általa kézzel indított JEV termékellenőrzések (PD-013).
-  productEnrichmentRuns ProductEnrichmentRun[]
-  email                 String                 @unique
+  productEnrichmentRuns  ProductEnrichmentRun[]
+  /// A termékismeret-tények, amiket ő fogadott el (#1431).
+  acceptedKnowledgeFacts ProductKnowledgeFact[] @relation("ProductKnowledgeFactAcceptedBy")
+  /// A termékszöveg-blokkok, amiket utoljára ő szerkesztett, illetve hagyott jóvá.
+  editedCopyBlocks       ProductCopy[]          @relation("ProductCopyEditedBy")
+  approvedCopyBlocks     ProductCopy[]          @relation("ProductCopyApprovedBy")
+  email                  String                 @unique
   /// A hivatalos, teljes név. Dokumentumon (munkalap, aláírás) ez szerepel,
   /// akkor is, ha a felületek a becenevet mutatják.
-  displayName           String
+  displayName            String
   /// Ahogy a kollégát a csapatban szólítják. A felületek ezt írják ki a
   /// teljes név helyett, ha ki van töltve. Nem egyedi, és nem azonosító.
-  nickname              String?
-  firstName             String                 @default("")
-  lastName              String                 @default("")
-  passwordHash          String?
-  passwordUpdatedAt     DateTime?
+  nickname               String?
+  firstName              String                 @default("")
+  lastName               String                 @default("")
+  passwordHash           String?
+  passwordUpdatedAt      DateTime?
   /// AZ ALAIROKOD HASHE -- amit az ugyfel embere ir be a munkalap alairasakor.
   ///
   /// Balazs kerese, 2026-09-04: a szerelo kivalasztja az alairot a listarol, es
@@ -817,10 +822,10 @@ model User {
   /// alapertelmezett kod `0000`, es a valtoztatas a ticketing feluleté lesz,
   /// ami meg nem letezik. Balazs ezt szo szerint tudomasul vette -- az elso
   /// idoszakban az alairas ettol FORMALIS, es ez nem mulasztas.
-  signatureCodeHash     String?
-  role                  UserRole
-  isActive              Boolean                @default(true)
-  avatarUrl             String?
+  signatureCodeHash      String?
+  role                   UserRole
+  isActive               Boolean                @default(true)
+  avatarUrl              String?
   /// MELYIK PARTNER NEVEBEN lep be ez a fiok. Sajat kollegan mindketto NULL.
   ///
   /// A ketto kozul LEGFELJEBB az egyik lehet kitoltve (adatbazis CHECK
@@ -831,10 +836,10 @@ model User {
   /// A ketto EGYUTT ertelmezhetetlen lenne: a szures ilyenkor nem tudna,
   /// melyik partner soraira szukitsen, es barmelyik valasztas idegen adatot
   /// engedne at. Ezert a tiltas adatbazis-szinten all, nem csak a kodban.
-  customerId            String?
-  supplierId            String?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  customerId             String?
+  supplierId             String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
 
   sessions                   Session[]
   /// A LATHATOSAGI HOZZARENDELESEI: melyik alegysegeket latja (a reszfaval egyutt).
@@ -1077,6 +1082,10 @@ model Product {
   invoiceLines               InvoiceLine[]
   /// JEV termékellenőrzés, árnyékban (PD-013): csak olvasott eredmények.
   enrichmentChecks           ProductEnrichmentRunProduct[]
+  /// Az elfogadott termékismeret (KZ Amino szelet, #1431): a JEV-re mutat.
+  knowledgeFacts             ProductKnowledgeFact[]
+  /// A vevőnek szóló, OS-ben szerkesztett és jóváhagyott szöveg blokkonként.
+  copyBlocks                 ProductCopy[]
 
   @@index([brandId])
   @@index([categoryId])
@@ -7719,7 +7728,10 @@ model UserDashboardLayout {
 // forrásfajtából (beszállító, gyártó, Bulk Reef Supply, marine-aquatics.eu), és
 // mezőnként tárolja, mit talált, honnan, mikor, milyen bizonyítékkal. A
 // termékadathoz NEM nyúl: ezek a táblák csak olvasott eredményt tartanak, és
-// nincs út, amin egy eredmény a termékbe, az UNAS-ba vagy a Medusába jutna.
+// nincs út, amin egy eredmény a termékbe vagy az UNAS-ba jutna. A Medusába
+// SEM közvetlenül: a #1431 óta egy ember ELFOGADHAT egy eredményt
+// (`ProductKnowledgeFact`), és csak az elfogadott tény vetül ki, a lenti
+// termékismeret-táblákon át.
 
 enum ProductEnrichmentRunStatus {
   RUNNING
@@ -7814,6 +7826,88 @@ model ProductEnrichmentFieldResult {
   evidence     Json
   conflicts    Json?
 
+  /// Az elfogadott tények, amik erre az eredményre mutatnak (Restrict).
+  knowledgeFacts ProductKnowledgeFact[]
+
   @@unique([checkId, field])
   @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// TERMÉKISMERET: AZ ELFOGADOTT ÁLLAPOT ÉS A VEVŐI SZÖVEG (KZ Amino szelet)
+//
+// Balázs döntései a #1431-en (2026-10-03 16:27 és 16:33 UTC): a kanonikus
+// termékismeret az OS-ben él, a Medusa csak vetített olvasási modell, és az
+// irány KIZÁRÓLAG OS -> Medusa. A JEV marad a bizonyíték- és ütközés-réteg: a
+// tény CSAK az elfogadott állapotot tartja, a források és az ütköző értékek a
+// `ProductEnrichmentFieldResult`-ban maradnak, és a tény arra mutat.
+
+/// Egy mező elfogadott állapota egy terméken.
+///
+/// CONFLICTING_SOURCES esetén `value` NULL, és a két érték a forrásaival
+/// együtt CSAK a mutatott JEV eredményben áll. Nincs `sourceType`/`sourceRef`
+/// oszlop: a forrás a mutatón át olvasható, így semmi nincs két helyen.
+model ProductKnowledgeFact {
+  id            String                       @id @default(cuid())
+  productId     String
+  product       Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// A JEV mezőkulcs (`packages/jev/src/product-enrichment/fields.ts`).
+  field         String                       @db.VarChar(48)
+  /// Csak VERIFIED/SUGGESTED (vagy emberi feloldás) mellett; ütközésnél NULL.
+  value         String?
+  /// Mennyiségnél a kanonikus egység (pl. "ml"), egyébként NULL.
+  unit          String?                      @db.VarChar(16)
+  /// A JEV státusz változatlanul (VERIFIED, SUGGESTED, CONFLICTING_SOURCES).
+  status        String                       @db.VarChar(32)
+  /// Az a JEV eredmény, amiből elfogadtuk. RESTRICT: lásd a migrációt.
+  fieldResultId String
+  fieldResult   ProductEnrichmentFieldResult @relation(fields: [fieldResultId], references: [id], onDelete: Restrict)
+  acceptedById  String
+  acceptedBy    User                         @relation("ProductKnowledgeFactAcceptedBy", fields: [acceptedById], references: [id], onDelete: Restrict)
+  acceptedAt    DateTime
+  /// Minden elfogadás és feloldás növeli; a szöveg elavultsága ehhez mér.
+  revision      Int
+  updatedAt     DateTime                     @updatedAt
+
+  @@unique([productId, field])
+  @@index([fieldResultId])
+}
+
+enum ProductCopyBlock {
+  lead
+  body
+  seoTitle
+  metaDescription
+}
+
+enum ProductCopyStatus {
+  DRAFT
+  APPROVED
+}
+
+/// A vevőnek szóló szöveg egy blokkja, az OS-ben szerkesztve és jóváhagyva.
+///
+/// Az ELAVULTSÁG NINCS TÁROLVA: olvasáskor számoljuk a `basedOn` és a tények
+/// jelenlegi revíziói közül. Egy tárolt jelző elcsúszhatna a tényektől.
+model ProductCopy {
+  id           String            @id @default(cuid())
+  productId    String
+  product      Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  block        ProductCopyBlock
+  /// Sima szöveg; a bekezdéseket üres sor (`\n\n`) választja el.
+  body         String            @db.Text
+  status       ProductCopyStatus @default(DRAFT)
+  /// Minden mentés növeli; a vetítési szerződés blokkonként viszi.
+  revision     Int
+  /// `{ mezőkulcs: revízió }`, a mentés pillanatában a termék összes tényéről.
+  basedOn      Json
+  editedById   String
+  editedBy     User              @relation("ProductCopyEditedBy", fields: [editedById], references: [id], onDelete: Restrict)
+  approvedById String?
+  approvedBy   User?             @relation("ProductCopyApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  approvedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([productId, block])
 }

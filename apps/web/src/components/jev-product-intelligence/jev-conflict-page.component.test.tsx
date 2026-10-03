@@ -36,6 +36,7 @@ function session(role: Session["user"]["role"]): Session {
 
 /** Invented readings only. */
 const conflict: ProductFieldReview = {
+  fieldResultId: "fr-flow",
   field: "flowRate",
   tier: "C",
   status: "CONFLICTING_SOURCES",

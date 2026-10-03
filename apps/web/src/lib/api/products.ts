@@ -3,8 +3,12 @@ import type {
   CatalogOption,
   ProductBarcodeListResponse,
   ProductBarcodeSummary,
+  ProductCopyBlock,
   ProductDetail,
   ProductEnrichmentReview,
+  ProductKnowledge,
+  ProductManualEvidenceInput,
+  ProductManualEvidenceResult,
   ProductQualityQueueFilter,
   ProductQualityQueuePage,
   ProductExtensionDetail,
@@ -76,6 +80,53 @@ export const productApi = {
     return apiRequest<ProductEnrichmentReview>(
       `/products/${encodeURIComponent(id)}/enrichment`,
       token,
+    );
+  },
+  /**
+   * PRODUCT KNOWLEDGE (#1431): the accepted facts and the customer copy. The
+   * writes need `products.knowledge.approve`; the server checks it.
+   */
+  knowledge(token: string, id: string) {
+    return apiRequest<ProductKnowledge>(
+      `/products/${encodeURIComponent(id)}/knowledge`,
+      token,
+    );
+  },
+  addKnowledgeEvidence(
+    token: string,
+    id: string,
+    input: ProductManualEvidenceInput,
+  ) {
+    return apiRequest<ProductManualEvidenceResult>(
+      `/products/${encodeURIComponent(id)}/knowledge/evidence`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  acceptKnowledge(token: string, id: string, fieldResultId: string) {
+    return apiRequest<ProductKnowledge>(
+      `/products/${encodeURIComponent(id)}/knowledge/accept`,
+      token,
+      { method: "POST", body: JSON.stringify({ fieldResultId }) },
+    );
+  },
+  saveKnowledgeCopy(
+    token: string,
+    id: string,
+    block: ProductCopyBlock,
+    body: string,
+  ) {
+    return apiRequest<ProductKnowledge>(
+      `/products/${encodeURIComponent(id)}/knowledge/copy/${block}`,
+      token,
+      { method: "PUT", body: JSON.stringify({ body }) },
+    );
+  },
+  approveKnowledgeCopy(token: string, id: string, block: ProductCopyBlock) {
+    return apiRequest<ProductKnowledge>(
+      `/products/${encodeURIComponent(id)}/knowledge/copy/${block}/approve`,
+      token,
+      { method: "POST" },
     );
   },
   /**

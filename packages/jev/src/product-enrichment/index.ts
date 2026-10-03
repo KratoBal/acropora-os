@@ -34,8 +34,10 @@ export {
 } from "./gtin.js";
 export {
   CANONICAL_UNIT,
+  parseDose,
   parseQuantity,
   type Dimension,
+  type DoseResult,
   type QuantityResult,
 } from "./units.js";
 export {

@@ -24,16 +24,20 @@ import {
  *     conflict view when there is one;
  *   - a Tier C suggestion as a value;
  *   - a confidence that does not exist (no "Biztonság: —").
- * No per-row action: the design has none, and no decision is written yet.
+ * The one per-row action is the knowledge slice's "Elfogad" (#1431), passed
+ * in by the page: the row itself writes nothing.
  * Stacks the two values on narrow screens.
  */
 export function JevFieldReviewRow({
   review,
   conflictHref,
+  knowledge,
 }: {
   review: ProductFieldReview;
   /** The conflict view of this field, when the route exists. */
   conflictHref?: string;
+  /** The accepted state and the "Elfogad" action (#1431), when the page has one. */
+  knowledge?: ReactNode;
 }) {
   const column = jevColumn(review);
   const confidence = confidenceLine(review);
@@ -77,6 +81,7 @@ export function JevFieldReviewRow({
           <p className="text-pilot-aqua-700">{confidence}</p>
         ) : null}
       </footer>
+      {knowledge}
     </article>
   );
 }

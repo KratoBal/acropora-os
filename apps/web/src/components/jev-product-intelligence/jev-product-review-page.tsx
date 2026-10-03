@@ -4,10 +4,13 @@ import { Alert, PilotPageHeader, PilotSection } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
+  type ProductCopyBlock,
   type ProductDetail,
+  type ProductKnowledge,
+  type ProductManualEvidenceInput,
 } from "@acropora/types";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
@@ -21,6 +24,12 @@ import { productApi } from "@/lib/api/products";
 import { conflictHref } from "./jev-conflict";
 import { JevDisabledAction } from "./jev-decision-action";
 import { JevFieldReviewRow } from "./jev-field-review-row";
+import { factFor } from "./jev-knowledge";
+import {
+  JevAcceptAction,
+  JevCopyPanel,
+  JevManualEvidenceForm,
+} from "./jev-knowledge-panel";
 import {
   JevHealthChips,
   JevReviewStateMessage,
@@ -61,8 +70,18 @@ export function JevProductReviewPage({ productId }: { productId: string }) {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
   );
+  const canApprove = Boolean(
+    session &&
+    hasPermission(session.user, PERMISSIONS.PRODUCTS_KNOWLEDGE_APPROVE),
+  );
   const [product, setProduct] = useState<ProductLoad>({ kind: "loading" });
   const [review, setReview] = useState<ReviewLoad>({ kind: "loading" });
+  const [knowledge, setKnowledge] = useState<ProductKnowledge | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{
+    tone: "success" | "danger";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!canView) return;
@@ -86,11 +105,75 @@ export function JevProductReviewPage({ productId }: { productId: string }) {
       .enrichment(token, productId)
       .then((result) => active && setReview({ kind: "ready", review: result }))
       .catch(() => active && setReview({ kind: "error" }));
+    productApi
+      .knowledge(token, productId)
+      .then((result) => active && setKnowledge(result))
+      .catch(() => active && setKnowledge(null));
     return () => {
       active = false;
     };
     // `token` is read, not watched: the session object changes identity
   }, [canView, productId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * ONE WRITE AT A TIME, AND THE REVIEW IS READ AGAIN AFTER IT: a manual
+   * entry adds a new JEV result (the row's status may change to a conflict),
+   * and the next "Elfogad" must point at THAT result, not the one shown
+   * before. The server refuses an older one anyway; reading again keeps the
+   * button honest.
+   */
+  const write = useCallback(
+    async (
+      action: () => Promise<unknown>,
+      success: string,
+    ): Promise<boolean> => {
+      setBusy(true);
+      setNotice(null);
+      try {
+        await action();
+        const [nextReview, nextKnowledge] = await Promise.all([
+          productApi.enrichment(token, productId),
+          productApi.knowledge(token, productId),
+        ]);
+        setReview({ kind: "ready", review: nextReview });
+        setKnowledge(nextKnowledge);
+        setNotice({ tone: "success", text: success });
+        return true;
+      } catch (cause: unknown) {
+        setNotice({
+          tone: "danger",
+          text:
+            cause instanceof Error && cause.message
+              ? cause.message
+              : "A művelet nem sikerült.",
+        });
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [token, productId],
+  );
+  const accept = (fieldResultId: string) =>
+    void write(
+      () => productApi.acceptKnowledge(token, productId, fieldResultId),
+      "Elfogadva.",
+    );
+  const addEvidence = (input: ProductManualEvidenceInput) =>
+    write(
+      () => productApi.addKnowledgeEvidence(token, productId, input),
+      "A bizonyíték rögzítve, a mező újra egyeztetve.",
+    );
+  const saveCopy = (block: ProductCopyBlock, body: string) =>
+    void write(
+      () => productApi.saveKnowledgeCopy(token, productId, block, body),
+      "A szöveg mentve, piszkozatként.",
+    );
+  const approveCopy = (block: ProductCopyBlock) =>
+    void write(
+      () => productApi.approveKnowledgeCopy(token, productId, block),
+      "A szöveg jóváhagyva.",
+    );
 
   const descriptionHtml = useMemo(
     () =>
@@ -135,6 +218,17 @@ export function JevProductReviewPage({ productId }: { productId: string }) {
           </div>
         }
       />
+
+      {notice ? (
+        <p
+          role={notice.tone === "danger" ? "alert" : "status"}
+          className={`text-sm ${
+            notice.tone === "danger" ? "text-red-700" : "text-pilot-aqua-700"
+          }`}
+        >
+          {notice.text}
+        </p>
+      ) : null}
 
       {product.kind === "error" ? (
         <Alert
@@ -225,6 +319,15 @@ export function JevProductReviewPage({ productId }: { productId: string }) {
               </p>
             )}
           </PilotSection>
+          {knowledge && (canApprove || knowledge.copy.length > 0) ? (
+            <JevCopyPanel
+              copy={knowledge.copy}
+              canApprove={canApprove}
+              busy={busy}
+              onSave={saveCopy}
+              onApprove={approveCopy}
+            />
+          ) : null}
         </div>
 
         <div className="flex min-w-0 flex-col gap-3">
@@ -236,6 +339,15 @@ export function JevProductReviewPage({ productId }: { productId: string }) {
                   key={field.field}
                   review={field}
                   conflictHref={conflictHref(productId, field.field)}
+                  knowledge={
+                    <JevAcceptAction
+                      review={field}
+                      fact={factFor(knowledge?.facts ?? [], field)}
+                      canApprove={canApprove}
+                      busy={busy}
+                      onAccept={accept}
+                    />
+                  }
                 />
               ))}
             </>
@@ -250,6 +362,9 @@ export function JevProductReviewPage({ productId }: { productId: string }) {
               <JevReviewStateMessage state={state ?? "loading"} />
             </section>
           )}
+          {canApprove ? (
+            <JevManualEvidenceForm busy={busy} onSubmit={addEvidence} />
+          ) : null}
         </div>
       </div>
     </PilotThemeRoot>

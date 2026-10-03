@@ -51,6 +51,11 @@
  *   3. A BOLT OLDALAN TORTENT VALTOZAST. Ha valaki a Medusaban ir at egy mezot,
  *      a mi idobelyegeink nem mozdulnak. Ezt csak visszaolvasas mutatna meg, es
  *      az mas feladat.
+ *   4. A TERMEKISMERET VALTOZASAT (#1431, KZ Amino szelet). Egy elfogadott tény
+ *      vagy egy jovahagyott szoveg a `ProductKnowledgeFact` es a `ProductCopy`
+ *      tablaban all, es egyik sem tag a fenti maximumban. A szeletben a vetitest
+ *      kezzel inditjuk a termekre; ha a minta tobb termekre terjed, a ket tabla
+ *      `updatedAt` mezoje ide kerul.
  */
 
 /** A vetites bemeneti tablaibol vett legkesobbi idobelyeg egy termekre. */

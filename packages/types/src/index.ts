@@ -1042,3 +1042,19 @@ export type {
   ProductQualityQueueFilter,
   ProductQualityQueuePage,
 } from "./product-enrichment-review.js";
+export {
+  PRODUCT_COPY_BLOCKS,
+  PRODUCT_COPY_STATUSES,
+  PRODUCT_KNOWLEDGE_ACCEPTABLE_STATUSES,
+  PRODUCT_MANUAL_EVIDENCE_SOURCE_TYPES,
+} from "./product-knowledge.js";
+export type {
+  ProductCopyBlock,
+  ProductCopyEntry,
+  ProductCopyStatus,
+  ProductKnowledge,
+  ProductKnowledgeFact,
+  ProductManualEvidenceInput,
+  ProductManualEvidenceResult,
+  ProductManualEvidenceSourceType,
+} from "./product-knowledge.js";

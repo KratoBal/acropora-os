@@ -1,0 +1,80 @@
+import {
+  PRODUCT_KNOWLEDGE_ACCEPTABLE_STATUSES,
+  type ProductCopyBlock,
+  type ProductCopyEntry,
+  type ProductFieldReview,
+  type ProductKnowledgeFact,
+  type ProductManualEvidenceSourceType,
+} from "@acropora/types";
+
+/**
+ * PRODUCT KNOWLEDGE ON THE JEV REVIEW PAGE (#1431): what a reviewer may do
+ * with a field, and how the accepted state reads. Pure, so each rule can be
+ * tested without rendering.
+ */
+
+export const COPY_BLOCK_LABEL: Record<ProductCopyBlock, string> = {
+  lead: "Bevezető",
+  body: "Leírás",
+  seoTitle: "SEO cím",
+  metaDescription: "Meta leírás",
+};
+
+export const MANUAL_SOURCE_LABEL: Record<
+  ProductManualEvidenceSourceType,
+  string
+> = {
+  MANUFACTURER_PAGE: "Gyártói termékoldal",
+  MANUFACTURER_DOCUMENT: "Gyártói dokumentum",
+  SUPPLIER_PAGE: "Beszállítói oldal",
+};
+
+/** Can this field's result be accepted as knowledge at all? */
+export function isAcceptable(
+  review: Pick<ProductFieldReview, "status">,
+): boolean {
+  return (PRODUCT_KNOWLEDGE_ACCEPTABLE_STATUSES as readonly string[]).includes(
+    review.status,
+  );
+}
+
+/** The fact of this field, if one was accepted. */
+export function factFor(
+  facts: readonly ProductKnowledgeFact[],
+  review: Pick<ProductFieldReview, "field">,
+): ProductKnowledgeFact | null {
+  return facts.find((fact) => fact.field === review.field) ?? null;
+}
+
+/**
+ * WHAT THE ROW SAYS ABOUT THE ACCEPTED STATE.
+ *
+ * A fact accepted from an OLDER result than the one shown says so: newer
+ * evidence arrived after the acceptance, and the reviewer must see that the
+ * row and the knowledge no longer describe the same result.
+ */
+export function acceptedLine(
+  fact: ProductKnowledgeFact | null,
+  review: Pick<ProductFieldReview, "fieldResultId">,
+): string | null {
+  if (!fact) return null;
+  const what =
+    fact.status === "CONFLICTING_SOURCES"
+      ? "Elfogadva ütközésként, érték nélkül"
+      : `Elfogadva: ${fact.value ?? "—"}${fact.unit ? ` ${fact.unit}` : ""}`;
+  return fact.fieldResultId === review.fieldResultId
+    ? `${what} (${fact.revision}. változat)`
+    : `${what}, egy korábbi ellenőrzésből. Újabb bizonyíték érkezett azóta.`;
+}
+
+/** The label of a copy block's state, stale before anything else. */
+export function copyStateLabel(entry: ProductCopyEntry | undefined): string {
+  if (!entry) return "Még nincs szöveg";
+  if (entry.stale) return "Elavult: a tények változtak a mentés óta";
+  return entry.status === "APPROVED" ? "Jóváhagyva" : "Piszkozat";
+}
+
+/** Approval needs a saved, fresh draft; an approved fresh block has nothing left. */
+export function canApproveCopy(entry: ProductCopyEntry | undefined): boolean {
+  return entry !== undefined && !entry.stale && entry.status === "DRAFT";
+}

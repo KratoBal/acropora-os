@@ -135,3 +135,149 @@ function scaleDecimal(int: string, fraction: string, exponent: number): string {
   const frac = s.slice(-scale).replace(/0+$/, "");
   return frac ? `${whole}.${frac}` : whole;
 }
+
+/**
+ * A DOSING INSTRUCTION: an amount per water volume per period, e.g. the
+ * manufacturer's "1 Tropfen je 100 Liter /Tag" entered as `1 drop/100 L/day`.
+ *
+ * Accepted forms (the evidence value a reviewer types, not the page text;
+ * the verbatim page text travels separately as the excerpt):
+ *
+ *   1 drop/100 L/day            once per period
+ *   5 ml/100 L/week             a volume amount (ml or l)
+ *   1 drop/100 L, 1-2/week      a frequency, or a frequency range, per period
+ *
+ * The amount is a count of drops or a volume; the water volume is a volume;
+ * the period is a day or a week. Like `parseQuantity`, anything a human
+ * would have to interpret is rejected: a range in the amount ("1-2 drop"),
+ * a qualifier ("max."), an unknown unit or period, an ambiguous thousands
+ * group. Only the FREQUENCY may be a range, because that is how the 2013
+ * dosage table states the manufacturer's own regime.
+ *
+ * Canonical form: drops as `drop`, a volume amount in `ml`, the water volume
+ * in `L`, and a frequency of exactly 1 folded into the plain form, so
+ * `1 drop/100 L, 1/day` and `1 drop/100 L/day` are the same value.
+ */
+export type DoseResult =
+  | {
+      ok: true;
+      amount: string;
+      unit: "drop" | "ml";
+      perVolumeLitres: string;
+      frequency: { min: number; max: number };
+      period: "day" | "week";
+      canonical: string;
+    }
+  | { ok: false; reason: string };
+
+const DOSE_AMOUNT_UNITS: Record<string, "drop" | "ml" | "l"> = {
+  drop: "drop",
+  drops: "drop",
+  ml: "ml",
+  mL: "ml",
+  l: "l",
+  L: "l",
+};
+const DOSE_PERIODS: Record<string, "day" | "week"> = {
+  day: "day",
+  d: "day",
+  week: "week",
+  wk: "week",
+};
+const DOSE_NUMBER = "(\\d+)(?:([.,])(\\d+))?";
+const DOSE = new RegExp(
+  `^${DOSE_NUMBER}\\s*([A-Za-z]+)\\s*\\/\\s*${DOSE_NUMBER}\\s*([A-Za-z]+)\\s*` +
+    `(?:\\/\\s*([A-Za-z]+)|,\\s*(\\d+)(?:\\s*-\\s*(\\d+))?\\s*\\/\\s*([A-Za-z]+))$`,
+);
+
+export function parseDose(raw: string): DoseResult {
+  const text = raw.normalize("NFC").trim().replace(/\s+/g, " ");
+  if (text === "") return { ok: false, reason: "empty" };
+  if (
+    /(^|\s)(~|ca\.?|approx\.?|max\.?|min\.?|up to)(\s|$)|[~<>≤≥±]/i.test(text)
+  )
+    return { ok: false, reason: "qualified value (max/min/approx): ambiguous" };
+
+  const m = DOSE.exec(text);
+  if (!m)
+    return {
+      ok: false,
+      reason:
+        'not a dose: expected "<amount> drop|ml/<volume> L/day|week" or "..., <n>[-<m>]/day|week"',
+    };
+  const [
+    ,
+    amountInt = "",
+    amountSep,
+    amountFrac,
+    amountUnitRaw = "",
+    perInt = "",
+    perSep,
+    perFrac,
+    perUnitRaw = "",
+    plainPeriod,
+    freqMin,
+    freqMax,
+    freqPeriod,
+  ] = m;
+
+  const amountUnit = DOSE_AMOUNT_UNITS[amountUnitRaw];
+  if (!amountUnit)
+    return { ok: false, reason: `unknown dose unit "${amountUnitRaw}"` };
+  const perUnit = UNITS[perUnitRaw];
+  if (!perUnit || perUnit.dimension !== "volume")
+    return {
+      ok: false,
+      reason: `the water volume needs a volume unit, got "${perUnitRaw}"`,
+    };
+  const periodRaw = plainPeriod ?? freqPeriod ?? "";
+  const period = DOSE_PERIODS[periodRaw.toLowerCase()];
+  if (!period) return { ok: false, reason: `unknown period "${periodRaw}"` };
+
+  for (const [int, sep, frac] of [
+    [amountInt, amountSep, amountFrac],
+    [perInt, perSep, perFrac],
+  ] as const)
+    if (sep && frac?.length === 3 && !/^0+$/.test(int))
+      return {
+        ok: false,
+        reason: `"${int}${sep}${frac}" may be a decimal or a thousands group: ambiguous`,
+      };
+
+  if (amountUnit === "drop" && amountFrac)
+    return { ok: false, reason: "a number of drops is a whole number" };
+  const amount =
+    amountUnit === "drop"
+      ? scaleDecimal(amountInt, "", 0)
+      : scaleDecimal(amountInt, amountFrac ?? "", amountUnit === "l" ? 3 : 0);
+  // The water volume in litres: ml is 10^-3 of a litre, a litre is itself.
+  const perVolumeLitres = scaleDecimal(
+    perInt,
+    perFrac ?? "",
+    perUnit.exponent - 3,
+  );
+  if (/^0(\.0+)?$/.test(amount) || /^0(\.0+)?$/.test(perVolumeLitres))
+    return { ok: false, reason: "zero is not a dose" };
+
+  const min = freqMin === undefined ? 1 : Number(freqMin);
+  const max = freqMax === undefined ? min : Number(freqMax);
+  if (min < 1) return { ok: false, reason: "a frequency starts at 1" };
+  if (max < min)
+    return { ok: false, reason: `frequency range ${min}-${max} is reversed` };
+
+  const unit = amountUnit === "drop" ? "drop" : "ml";
+  const base = `${amount} ${unit}/${perVolumeLitres} L`;
+  const canonical =
+    min === 1 && max === 1
+      ? `${base}/${period}`
+      : `${base}, ${min === max ? min : `${min}-${max}`}/${period}`;
+  return {
+    ok: true,
+    amount,
+    unit,
+    perVolumeLitres,
+    frequency: { min, max },
+    period,
+    canonical,
+  };
+}

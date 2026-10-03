@@ -76,6 +76,9 @@ export const FIELD_LABEL: Record<ProductEnrichmentFieldKey, string> = {
   capacity: "Kapacitás",
   packSize: "Kiszerelés",
   packageContents: "A csomag tartalma",
+  dosing: "Adagolási rend",
+  manufacturerClaims: "A gyártó állításai",
+  manufacturerInfo: "Gyártó (GPSR)",
 };
 
 export const SOURCE_LABEL: Record<ProductEvidenceSourceType, string> = {
