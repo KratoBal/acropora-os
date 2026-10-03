@@ -142,6 +142,61 @@ describe("udvarias olvasás", () => {
     assert.equal(!b.ok && b.reason, "ROBOTS_UNREADABLE");
   });
 
+  // First live round, 2026-10-03: tunze.com sends www -> bare, and every page
+  // was ROBOTS_UNREADABLE because the robots.txt redirect was not followed.
+  it("a robots.txt ugyanazon az oldalon belüli átirányítását követi (www és csupasz gazda)", async () => {
+    const TUNZE = "https://www.tunze.com";
+    const { fetcher: f, network } = fetcher({
+      [`${TUNZE}/robots.txt`]: {
+        status: 301,
+        headers: { location: "https://tunze.com/robots.txt" },
+      },
+      ["https://tunze.com/robots.txt"]: {
+        status: 200,
+        body: "User-agent: *\nDisallow: /checkout/\n",
+      },
+      [`${TUNZE}/p/1`]: { status: 200, body: productPage({}) },
+    });
+    const page = await f.page(`${TUNZE}/p/1`, anyHost);
+    assert.equal(page.ok, true);
+    const blocked = await f.page(`${TUNZE}/checkout/x`, anyHost);
+    assert.equal(!blocked.ok && blocked.reason, "ROBOTS_DISALLOWED");
+    assert.deepEqual(
+      network.requests.map((r) => r.url),
+      [`${TUNZE}/robots.txt`, "https://tunze.com/robots.txt", `${TUNZE}/p/1`],
+    );
+  });
+
+  it("a robots.txt más oldalra vagy http-re mutató átirányítását nem követi", async () => {
+    for (const location of [
+      "https://masik.example.invalid/robots.txt",
+      "http://bulkreefsupply.com/robots.txt",
+    ]) {
+      const { fetcher: f, network } = fetcher({
+        [`${BRS}/robots.txt`]: { status: 301, headers: { location } },
+      });
+      const page = await f.page(`${BRS}/p/1`, anyHost);
+      assert.equal(!page.ok && page.reason, "ROBOTS_UNREADABLE");
+      assert.equal(network.requests.length, 1);
+    }
+  });
+
+  it("a robots.txt átirányítási láncát a korlátnál elvágja", async () => {
+    const { fetcher: f, network } = fetcher({
+      [`${BRS}/robots.txt`]: {
+        status: 301,
+        headers: { location: "https://bulkreefsupply.com/robots.txt" },
+      },
+      ["https://bulkreefsupply.com/robots.txt"]: {
+        status: 301,
+        headers: { location: `${BRS}/robots.txt` },
+      },
+    });
+    const page = await f.page(`${BRS}/p/1`, anyHost);
+    assert.equal(!page.ok && page.reason, "ROBOTS_UNREADABLE");
+    assert.equal(network.requests.length, 4);
+  });
+
   it("más oldalra mutató átirányítást nem követ", async () => {
     const { fetcher: f, network } = fetcher({
       [`${BRS}/p/1`]: {
